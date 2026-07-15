@@ -6,6 +6,7 @@
 
   const state = {
     tab: "vocal",
+    tierFilter: "all", // all | basic | advanced
     view: "home", // home | exercise | history | plan
     exercise: null,
     structured: false,
@@ -22,7 +23,9 @@
     holdSeconds: 0,
     holdTimer: null,
     holdRunning: false,
-    reviewChecks: { auditory: false, visual: false, transcription: false }
+    reviewChecks: { auditory: false, visual: false, transcription: false },
+    pitchViz: null,
+    pitchRunning: false
   };
 
   const $ = (sel, el = document) => el.querySelector(sel);
@@ -91,21 +94,43 @@
     $("#btn-session-pause").hidden = s.status !== "active";
   }
 
+  function filteredExercises() {
+    const all = VT_EXERCISES[state.tab] || [];
+    if (state.tierFilter === "all") return all;
+    return all.filter((ex) => (ex.tier || "basic") === state.tierFilter);
+  }
+
   function renderExerciseList() {
     const list = $("#exercise-list");
-    const exercises = VT_EXERCISES[state.tab] || [];
+    const exercises = filteredExercises();
     list.innerHTML = "";
     list.className = `grid track-${state.tab}`;
 
+    $$(".tier-chip").forEach((c) =>
+      c.classList.toggle("selected", c.dataset.tier === state.tierFilter)
+    );
+
+    const basicCount = (VT_EXERCISES[state.tab] || []).filter((e) => (e.tier || "basic") === "basic")
+      .length;
+    const advCount = (VT_EXERCISES[state.tab] || []).filter((e) => e.tier === "advanced").length;
+    const countEl = $("#tier-counts");
+    if (countEl) {
+      countEl.textContent = `${basicCount} basic · ${advCount} advanced · showing ${exercises.length}`;
+    }
+
     exercises.forEach((ex) => {
       const prog = progressFor(ex.id);
+      const tier = ex.tier || "basic";
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "card card-ex";
       btn.innerHTML = `
-        <span class="num">${ex.number}</span>
+        <div class="card-ex-top">
+          <span class="num">${ex.number}</span>
+          <span class="badge tier-${tier}">${tier}</span>
+        </div>
         <h3>${ex.title}</h3>
-        <p class="meta">~${ex.durationMin} min · ${ex.audio.piano ? "Piano · " : ""}${ex.audio.record ? "Record" : "Practice"}</p>
+        <p class="meta">~${ex.durationMin} min · ${ex.audio.piano ? "Piano · " : ""}${ex.audio.pitchViz ? "Pitch viz · " : ""}${ex.audio.record ? "Record" : "Practice"}</p>
         <span class="badge ${prog && prog.completedCount ? "done" : ""}">
           ${prog && prog.completedCount ? `✓ ${prog.completedCount} session${prog.completedCount > 1 ? "s" : ""}` : "Not yet practiced"}
         </span>
@@ -118,8 +143,8 @@
       state.tab === "vocal" ? "Vocal Training" : "Singing Training";
     $("#home-track-sub").textContent =
       state.tab === "vocal"
-        ? "Vinh Giang–inspired speaking foundations — diction, volume, presence, and deliberate growth."
-        : "Live Music School–inspired singing — closure, air dosing, solfège, and song work in a male mid-lower range.";
+        ? "Basic: Vinh Giang homework spine. Advanced: pause, fillers, tonality, gestures, storytelling, concision & more."
+        : "Basic: Live Music School spine. Advanced: SOVT, sirens, pitch match, scales, dynamics & complementary technique.";
   }
 
   function openExercise(id, fromStructured) {
@@ -130,6 +155,7 @@
     state.reviewChecks = { auditory: false, visual: false, transcription: false };
     stopTimer(false);
     stopHold();
+    stopPitchViz();
     state.recorder.clear();
     VTPiano.stopAll();
     renderExercise();
@@ -142,9 +168,15 @@
     if (!ex) return;
 
     $("#ex-title").textContent = `${ex.number}. ${ex.title}`;
-    $("#ex-track-badge").textContent = ex.track === "vocal" ? "Vocal" : "Singing";
+    const tier = ex.tier || "basic";
+    $("#ex-track-badge").textContent = `${ex.track === "vocal" ? "Vocal" : "Singing"} · ${tier}`;
     $("#ex-track-badge").style.borderColor = ex.track === "vocal" ? "var(--vocal)" : "var(--singing)";
     $("#ex-original").textContent = ex.original;
+    const researchEl = $("#ex-research");
+    if (researchEl) {
+      researchEl.textContent = ex.research || "";
+      researchEl.hidden = !ex.research;
+    }
     $("#ex-steps").innerHTML = ex.steps.map((s) => `<li>${s}</li>`).join("");
     $("#ex-tips").innerHTML = ex.tips.map((t) => `<li>${t}</li>`).join("");
     $("#ex-mistakes").innerHTML = ex.mistakes.map((m) => `<li>${m}</li>`).join("");
@@ -168,6 +200,22 @@
     pianoBlock.hidden = !ex.audio.piano;
     if (ex.audio.piano) {
       renderPianoControls(ex);
+    }
+
+    // Pitch visualizer
+    const pitchBlock = $("#pitch-block");
+    pitchBlock.hidden = !ex.audio.pitchViz;
+    if (ex.audio.pitchViz) {
+      ensurePitchViz();
+      if (ex.audio.refPitch && window.VT_NOTE_FREQ) {
+        state.pitchViz.setTargetNoteName(ex.audio.refPitch, VT_NOTE_FREQ);
+      }
+      updatePitchStatsLabel({
+        targetName: ex.audio.refPitch || "C3",
+        voiceName: "—",
+        accuracyCents: 0,
+        precisionCents: 0
+      });
     }
 
     // Hold logger
@@ -281,24 +329,127 @@
     }
   }
 
+  function pianoOptions() {
+    const sustain = $("#chk-sustain")?.checked;
+    const sustainSec = Number($("#sustain-sec")?.value || 4);
+    return {
+      arpeggio: $("#chk-arpeggio")?.checked,
+      sustain: !!sustain,
+      sustainSec: sustain ? sustainSec : 2.2,
+      chordSec: sustain ? sustainSec : 2.2
+    };
+  }
+
   async function playSelectedProgression(loop) {
     try {
+      const opts = pianoOptions();
       VTPiano.onChordChange = (ch) => {
         $("#chord-now").textContent = ch.name;
+        if (state.pitchViz && state.exercise?.audio?.pitchViz) {
+          state.pitchViz.setTargetFromChord(ch);
+        }
       };
       const prog = await VTPiano.playProgression(state.selectedProg, {
         loop: !!loop,
-        chordSec: 2.2,
-        arpeggio: $("#chk-arpeggio").checked
+        chordSec: opts.chordSec,
+        arpeggio: opts.arpeggio,
+        sustain: opts.sustain,
+        sustainSec: opts.sustainSec
       });
       if (prog) {
-        $("#chord-desc").textContent = prog.description;
-        toast(loop ? "Looping progression…" : "Playing progression once");
+        $("#chord-desc").textContent =
+          prog.description +
+          (opts.sustain ? ` · sustain ${opts.sustainSec}s per chord` : "");
+        toast(
+          loop
+            ? opts.sustain
+              ? `Looping with ${opts.sustainSec}s sustain…`
+              : "Looping progression…"
+            : opts.sustain
+              ? `Playing with ${opts.sustainSec}s sustain`
+              : "Playing progression once"
+        );
       }
     } catch (e) {
       toast("Could not start audio — interact with the page and try again.");
       console.error(e);
     }
+  }
+
+  function ensurePitchViz() {
+    const canvas = $("#pitch-canvas");
+    if (!canvas) return null;
+    if (!state.pitchViz) {
+      state.pitchViz = new VTPitchVisualizer(canvas);
+      state.pitchViz.onStats = updatePitchStatsLabel;
+      state.pitchViz._drawIdle();
+    }
+    return state.pitchViz;
+  }
+
+  function updatePitchStatsLabel(stats) {
+    const el = $("#pitch-stats");
+    if (!el || !stats) return;
+    const acc = stats.accuracyCents != null ? Math.round(stats.accuracyCents) : 0;
+    const prec = stats.precisionCents != null ? Math.round(stats.precisionCents) : 0;
+    const accWord =
+      Math.abs(acc) <= 25 ? "on target" : acc > 0 ? "a bit sharp" : "a bit flat";
+    const precWord = prec <= 30 ? "stable (precise)" : prec <= 60 ? "settling" : "variable";
+    el.innerHTML = `
+      <span><strong>Target</strong> ${stats.targetName || "—"}</span>
+      <span><strong>You</strong> ${stats.voiceName || "—"}</span>
+      <span><strong>Accuracy</strong> ${acc > 0 ? "+" : ""}${acc}¢ · ${accWord}</span>
+      <span><strong>Precision</strong> ±${prec}¢ · ${precWord}</span>
+    `;
+    // Auto-fill metrics if present
+    const accInput = $('#metrics-form [name="accuracy"]');
+    const precInput = $('#metrics-form [name="precision"]');
+    if (accInput && !accInput.dataset.touched) {
+      const score = Math.abs(acc) <= 20 ? 5 : Math.abs(acc) <= 40 ? 4 : Math.abs(acc) <= 70 ? 3 : 2;
+      // don't force range inputs constantly - only when stopping
+    }
+    if (precInput && !precInput.dataset.touched) {
+      /* filled on stop */
+    }
+  }
+
+  async function startPitchViz() {
+    try {
+      const viz = ensurePitchViz();
+      if (!viz) return;
+      await viz.start();
+      state.pitchRunning = true;
+      $("#btn-pitch-start").disabled = true;
+      $("#btn-pitch-stop").disabled = false;
+      toast("Pitch visualizer listening — sing toward the amber target");
+    } catch (e) {
+      console.error(e);
+      toast("Microphone needed for pitch visualizer");
+    }
+  }
+
+  function stopPitchViz() {
+    if (state.pitchViz && state.pitchRunning) {
+      const snap = state.pitchViz.getSnapshotMetrics();
+      const accInput = $('#metrics-form [name="accuracy"]');
+      const precInput = $('#metrics-form [name="precision"]');
+      if (accInput && accInput.type === "range") {
+        const a = Math.abs(snap.accuracyCents || 0);
+        accInput.value = a <= 20 ? 5 : a <= 40 ? 4 : a <= 70 ? 3 : a <= 100 ? 2 : 1;
+        accInput.dispatchEvent(new Event("input"));
+      }
+      if (precInput && precInput.type === "range") {
+        const p = snap.precisionCents || 50;
+        precInput.value = p <= 25 ? 5 : p <= 45 ? 4 : p <= 70 ? 3 : p <= 100 ? 2 : 1;
+        precInput.dispatchEvent(new Event("input"));
+      }
+    }
+    if (state.pitchViz) state.pitchViz.stop();
+    state.pitchRunning = false;
+    const startBtn = $("#btn-pitch-start");
+    const stopBtn = $("#btn-pitch-stop");
+    if (startBtn) startBtn.disabled = false;
+    if (stopBtn) stopBtn.disabled = true;
   }
 
   function renderMetricsForm(ex) {
@@ -351,6 +502,7 @@
   function completeExercise() {
     const ex = state.exercise;
     if (!ex) return;
+    if (state.pitchRunning) stopPitchViz();
     const { values, notes } = collectMetrics();
     if (ex.audio.reviewWorkflow) {
       values.stepsDone = Object.values(state.reviewChecks).filter(Boolean).length;
@@ -721,12 +873,15 @@
   }
 
   /* —— Structured session —— */
-  function startStructured() {
-    const session = VTSession.start(state.tab);
+  function startStructured(path) {
+    const p = path || $("#session-path")?.value || "basic";
+    const session = VTSession.start(state.tab, p);
     updateSessionBanner();
     const id = VTSession.currentExerciseId();
     if (id) openExercise(id, true);
-    toast(`${state.tab === "vocal" ? "Vocal" : "Singing"} structured session started`);
+    toast(
+      `${state.tab === "vocal" ? "Vocal" : "Singing"} · ${p} structured session (${session.order.length} exercises)`
+    );
     return session;
   }
 
@@ -762,7 +917,14 @@
   function bind() {
     $$(".tab").forEach((t) => t.addEventListener("click", () => setTab(t.dataset.tab)));
 
-    $("#btn-structured").addEventListener("click", startStructured);
+    $$(".tier-chip").forEach((c) => {
+      c.addEventListener("click", () => {
+        state.tierFilter = c.dataset.tier;
+        renderExerciseList();
+      });
+    });
+
+    $("#btn-structured").addEventListener("click", () => startStructured());
     $("#btn-history").addEventListener("click", renderHistory);
     $("#btn-plan").addEventListener("click", renderPlan);
     $("#btn-session-pause").addEventListener("click", pauseStructured);
@@ -773,6 +935,7 @@
       VTPiano.stopAll();
       stopTimer(false);
       stopHold();
+      stopPitchViz();
       state.recorder.clear();
       setView("home");
       renderExerciseList();
@@ -793,13 +956,19 @@
       toast("Piano stopped");
     });
     $("#btn-ref-pitch").addEventListener("click", async () => {
-      await VTPiano.playRefPitch(state.exercise?.audio?.refPitch || "A2", 2.5);
-      toast("Reference A (male mid-low)");
+      const note = state.exercise?.audio?.refPitch || "A2";
+      const sustain = $("#chk-sustain")?.checked;
+      const sec = sustain ? Number($("#sustain-sec")?.value || 4) : 2.5;
+      const f = await VTPiano.playRefPitch(note, sec, true);
+      if (state.pitchViz && f) state.pitchViz.setTargetFreq(f);
+      toast(`Reference ${note} (${sec}s)`);
     });
     $("#btn-inhale-ticks").addEventListener("click", async () => {
       await VTPiano.playInhaleTicks(3);
       toast("3-second inhale ticks");
     });
+    $("#btn-pitch-start")?.addEventListener("click", startPitchViz);
+    $("#btn-pitch-stop")?.addEventListener("click", stopPitchViz);
 
     $("#btn-hold-start").addEventListener("click", startHold);
     $("#btn-hold-stop").addEventListener("click", stopHold);

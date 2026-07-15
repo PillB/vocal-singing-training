@@ -119,7 +119,7 @@
     /**
      * Additive piano-like partials with hammer noise burst + exponential decay.
      */
-    playNote(freq, when, duration = 1.4, velocity = 0.45) {
+    playNote(freq, when, duration = 1.4, velocity = 0.45, sustain = false) {
       const ctx = this.ctx;
       const t0 = when;
       const partials = [
@@ -136,8 +136,16 @@
       noteGain.connect(this.master);
       noteGain.gain.setValueAtTime(0.0001, t0);
       noteGain.gain.exponentialRampToValueAtTime(velocity, t0 + 0.012);
-      noteGain.gain.exponentialRampToValueAtTime(velocity * 0.55, t0 + 0.08);
-      noteGain.gain.exponentialRampToValueAtTime(0.0001, t0 + duration);
+      if (sustain && duration >= 2.5) {
+        // Hold near full level so students can home in for 3–5s, then gentle release
+        const holdEnd = t0 + Math.max(0.2, duration - 0.45);
+        noteGain.gain.exponentialRampToValueAtTime(velocity * 0.72, t0 + 0.06);
+        noteGain.gain.setValueAtTime(velocity * 0.68, holdEnd);
+        noteGain.gain.exponentialRampToValueAtTime(0.0001, t0 + duration);
+      } else {
+        noteGain.gain.exponentialRampToValueAtTime(velocity * 0.55, t0 + 0.08);
+        noteGain.gain.exponentialRampToValueAtTime(0.0001, t0 + duration);
+      }
 
       const nodes = [];
       for (const p of partials) {
@@ -181,20 +189,25 @@
       return noteGain;
     }
 
-    playChord(noteNames, duration = 1.6, when = null, velocity = 0.4) {
+    playChord(noteNames, duration = 1.6, when = null, velocity = 0.4, sustain = false) {
       const t = when != null ? when : this.ctx.currentTime + 0.02;
       noteNames.forEach((n, i) => {
         const f = NOTE_FREQ[n];
         if (!f) return;
         // slight roll from low to high for realism
-        this.playNote(f, t + i * 0.012, duration, velocity * (1 - i * 0.04));
+        this.playNote(f, t + i * 0.012, duration, velocity * (1 - i * 0.04), sustain);
       });
     }
 
-    async playRefPitch(noteName = "A2", duration = 2.0) {
+    async playRefPitch(noteName = "A2", duration = 2.0, sustain = true) {
       await this.ensure();
       const f = NOTE_FREQ[noteName] || NOTE_FREQ.A2;
-      this.playNote(f, this.ctx.currentTime + 0.02, duration, 0.5);
+      this.playNote(f, this.ctx.currentTime + 0.02, duration, 0.5, sustain);
+      return f;
+    }
+
+    async playSustainedNote(noteName = "C3", duration = 4.0) {
+      return this.playRefPitch(noteName, duration, true);
     }
 
     async playInhaleTicks(seconds = 3) {
@@ -226,24 +239,39 @@
       return PROGRESSIONS;
     }
 
-    async playProgression(progId, { loop = false, chordSec = 2.0, arpeggio = false } = {}) {
+    async playProgression(
+      progId,
+      { loop = false, chordSec = 2.0, arpeggio = false, sustain = false, sustainSec = 4.0 } = {}
+    ) {
       await this.ensure();
       this.stopAll();
       const prog = PROGRESSIONS[progId];
       if (!prog) return;
 
+      // Sustain mode: hold each harmony 3–5s so newbies can lock pitch before the next change
+      let stepSec = chordSec;
+      if (sustain) {
+        stepSec = Math.max(3, Math.min(5.5, Number(sustainSec) || 4));
+      }
+
       const playOnce = () => {
         if (!this.loopActive && loop) return;
         const t0 = this.ctx.currentTime + 0.05;
         prog.chords.forEach((ch, idx) => {
-          const when = t0 + idx * chordSec;
+          const when = t0 + idx * stepSec;
           if (arpeggio) {
+            const noteStep = sustain ? Math.min(0.35, stepSec / (ch.notes.length + 1)) : 0.18;
             ch.notes.forEach((n, ni) => {
               const f = NOTE_FREQ[n];
-              if (f) this.playNote(f, when + ni * 0.18, chordSec - ni * 0.1, 0.38);
+              if (f) {
+                const dur = sustain
+                  ? stepSec - ni * noteStep * 0.15
+                  : stepSec - ni * 0.1;
+                this.playNote(f, when + ni * noteStep, Math.max(0.4, dur), 0.38, sustain);
+              }
             });
           } else {
-            this.playChord(ch.notes, chordSec * 0.95, when, 0.42);
+            this.playChord(ch.notes, stepSec * (sustain ? 0.98 : 0.95), when, 0.42, sustain);
           }
           if (this.onChordChange) {
             const delay = Math.max(0, (when - this.ctx.currentTime) * 1000);
@@ -252,7 +280,7 @@
             }, delay);
           }
         });
-        const total = prog.chords.length * chordSec * 1000 + 50;
+        const total = prog.chords.length * stepSec * 1000 + 50;
         if (loop) {
           this.loopTimer = setTimeout(() => {
             if (this.loopActive) playOnce();

@@ -56,7 +56,24 @@
           </button>
         </div>
 
+        <div class="toolbar tier-toolbar">
+          <div class="tier-filters" role="group" aria-label="Exercise tier">
+            <button type="button" class="chip tier-chip selected" data-tier="all">All</button>
+            <button type="button" class="chip tier-chip" data-tier="basic">Basic</button>
+            <button type="button" class="chip tier-chip" data-tier="advanced">Advanced</button>
+          </div>
+          <span class="muted" id="tier-counts" style="font-size: 0.85rem"></span>
+        </div>
+
         <div class="toolbar">
+          <label class="muted" style="font-size: 0.88rem; display: flex; gap: 0.4rem; align-items: center">
+            Session path
+            <select id="session-path" class="select-inline">
+              <option value="basic">Basic (homework spine)</option>
+              <option value="advanced">Advanced only</option>
+              <option value="full">Full track</option>
+            </select>
+          </label>
           <button type="button" class="btn btn-primary" id="btn-structured">
             Start structured session
           </button>
@@ -82,6 +99,7 @@
         <div class="card section">
           <h3>Original spirit</h3>
           <div class="original-box" id="ex-original"></div>
+          <p class="research-note" id="ex-research" hidden></p>
         </div>
 
         <div class="two-col">
@@ -120,8 +138,19 @@
               <button type="button" class="btn btn-singing btn-sm" id="btn-play-prog">Play once</button>
               <button type="button" class="btn btn-singing btn-sm" id="btn-loop-prog">Loop</button>
               <button type="button" class="btn btn-sm" id="btn-stop-piano">Stop</button>
-              <label class="muted" style="display: flex; gap: 0.35rem; align-items: center; font-size: 0.88rem">
+              <label class="muted piano-opt" title="Broken chord notes">
                 <input type="checkbox" id="chk-arpeggio" /> Arpeggio
+              </label>
+              <label class="muted piano-opt" title="Hold each harmony 3–5 seconds so you can lock the pitch before the next change">
+                <input type="checkbox" id="chk-sustain" checked /> Sustain note
+              </label>
+              <label class="muted piano-opt" title="How long each chord/note rings when Sustain is on">
+                Hold
+                <select id="sustain-sec" class="select-inline">
+                  <option value="3">3s</option>
+                  <option value="4" selected>4s</option>
+                  <option value="5">5s</option>
+                </select>
               </label>
             </div>
             <div class="controls-row" id="ref-pitch-row" hidden>
@@ -129,6 +158,22 @@
               <button type="button" class="btn btn-sm" id="btn-inhale-ticks">3s inhale ticks</button>
             </div>
             <div id="songs-row" class="two-col" hidden></div>
+          </div>
+        </div>
+
+        <div class="card section" id="pitch-block" hidden>
+          <h3>Pitch visualizer · accuracy &amp; precision</h3>
+          <p class="muted" style="margin-top: 0">
+            <strong style="color: #f0c9a0">Amber</strong> = target note (glowing trail).
+            <strong style="color: #9aecc4">Green</strong> = your voice.
+            Soft blue band = moving-average deviation (how precise/stable you are).
+            Center the green dot on amber and shrink the band over time.
+          </p>
+          <canvas id="pitch-canvas" class="pitch-canvas" width="640" height="220" aria-label="Pitch match graph"></canvas>
+          <div class="pitch-stats" id="pitch-stats"></div>
+          <div class="controls-row" style="margin-top: 0.65rem">
+            <button type="button" class="btn btn-primary btn-sm" id="btn-pitch-start">Start listening</button>
+            <button type="button" class="btn btn-sm" id="btn-pitch-stop" disabled>Stop</button>
           </div>
         </div>
 
@@ -257,6 +302,7 @@
     <script src="js/exercises-data.js"></script>
     <script src="js/storage.js"></script>
     <script src="js/piano.js"></script>
+    <script src="js/pitch-visualizer.js"></script>
     <script src="js/recorder.js"></script>
     <script src="js/metrics.js"></script>
     <script src="js/session.js"></script>

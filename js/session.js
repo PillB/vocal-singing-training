@@ -5,11 +5,20 @@
   "use strict";
 
   const Session = {
-    start(track) {
-      const order = (global.VT_STRUCTURED && global.VT_STRUCTURED[track]) || [];
+    /**
+     * @param {string} track vocal | singing
+     * @param {string} path basic | advanced | full
+     */
+    start(track, path = "basic") {
+      const key = `${track}_${path}`;
+      const legacy = track;
+      const order =
+        (global.VT_STRUCTURED && (global.VT_STRUCTURED[key] || global.VT_STRUCTURED[legacy])) ||
+        [];
       const session = {
         mode: "structured",
         track,
+        path,
         order,
         index: 0,
         status: "active", // active | paused | completed
@@ -73,7 +82,8 @@
     progressLabel() {
       const s = this.get();
       if (!s) return "";
-      return `Exercise ${Math.min(s.index + 1, s.order.length)} of ${s.order.length}`;
+      const path = s.path ? ` · ${s.path}` : "";
+      return `Exercise ${Math.min(s.index + 1, s.order.length)} of ${s.order.length}${path}`;
     }
   };
 

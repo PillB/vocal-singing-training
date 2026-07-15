@@ -7,13 +7,15 @@ Self-paced practice website for **Vocal Training** (Vinh Giang–inspired speaki
 ## Features
 
 - **Two main tabs:** Vocal Training · Singing Training  
-- **Individual exercises** or **structured sessions** (in order)  
+- **Basic + Advanced tiers** — homework spine kept as basic; 11+ research-backed advanced exercises per track  
+- **Individual exercises** or **structured sessions** (basic / advanced / full paths)  
 - **Pause / resume** session state (localStorage)  
 - **Recording + playback** with local history (IndexedDB)  
 - **Record & Review** 3-step workflow (Auditory → Visual → Transcription)  
 - **Exercise metrics** with transparent 0–10 practice scores  
 - **12-week plan** dashboard (one focus element, check-ins, improve-or-continue)  
-- **Piano chord generation** — realistic multi-partial piano in a **mid-lower male range** (C2–E4) for solfège and song progressions  
+- **Piano chords** — mid-lower male range (C2–E4) with **Arpeggio** and **Sustain note** (3–5s hold)  
+- **Pitch visualizer** — target trail, live voice dot, moving-average deviation band (accuracy + precision)  
 
 ## Run locally
 

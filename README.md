@@ -26,9 +26,14 @@ npx serve .
 
 Microphone access requires a secure context (`localhost` or HTTPS).
 
+## Live site
+
+**https://pillb.github.io/vocal-singing-training/**
+
 ## GitHub Pages
 
-This repo is configured for GitHub Pages from the `main` branch root (`/`).
+This repo is configured for GitHub Pages from the `main` branch root (`/`).  
+Repository: https://github.com/PillB/vocal-singing-training
 
 ## Tech
 

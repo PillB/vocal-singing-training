@@ -1,8 +1,8 @@
 /**
- * Real-time pitch visualizer:
- * - Target note = glowing center trail
- * - Voice = live pitch dot
- * - Soft band = moving-average deviation (precision envelope)
+ * Real-time pitch visualizer (game-inspired):
+ * SingStar-style center target highway, Yousician-like hit feedback,
+ * Singing Carrots-style keyboard strip, precision MA band.
+ * - Amber target trail · green voice · green "in-tune" lane
  */
 (function (global) {
   "use strict";
@@ -118,16 +118,23 @@
       this.precisionCents = 40; // rolling std-ish spread
       this.accuracyCents = 0;
       this.onStats = null;
+      this.game = null; // optional VTPitchGame
+      this.lastIngestAt = 0;
+      this.hitZoneCents = 35; // "good" zone width for highway
 
       this._resize();
       window.addEventListener("resize", () => this._resize());
+    }
+
+    attachGame(game) {
+      this.game = game;
     }
 
     _resize() {
       const dpr = window.devicePixelRatio || 1;
       const rect = this.canvas.getBoundingClientRect();
       const w = Math.max(320, rect.width || 640);
-      const h = Math.max(180, rect.height || 220);
+      const h = Math.max(200, rect.height || 260);
       this.canvas.width = Math.floor(w * dpr);
       this.canvas.height = Math.floor(h * dpr);
       this.ctx2d.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -172,6 +179,7 @@
       this.running = true;
       this.history = [];
       this.devWindow = [];
+      this.lastIngestAt = performance.now();
       this._drawIdle();
     }
 
@@ -182,7 +190,10 @@
       if (!this.running) return;
       if (targetFreq) this.targetFreq = targetFreq;
       this.voiceFreq = voiceFreq || null;
-      this._ingest(voiceFreq || null);
+      const now = performance.now();
+      const dt = Math.min(50, now - (this.lastIngestAt || now));
+      this.lastIngestAt = now;
+      this._ingest(voiceFreq || null, dt);
       this._draw();
     }
 
@@ -240,7 +251,7 @@
       this._drawIdle();
     }
 
-    _ingest(f) {
+    _ingest(f, dtMs = 16) {
       const targetMidi = freqToMidi(this.targetFreq);
       let voiceMidi = null;
       let cents = null;
@@ -259,6 +270,11 @@
         this.accuracyCents = mean;
       }
 
+      let gameSnap = null;
+      if (this.game) {
+        gameSnap = this.game.tick(cents, f != null, dtMs);
+      }
+
       this.history.push({
         targetMidi,
         voiceMidi,
@@ -275,7 +291,8 @@
           voiceName: f ? midiToName(freqToMidi(f)) : "—",
           accuracyCents: this.accuracyCents,
           precisionCents: this.precisionCents,
-          maAbs: this.maAbs
+          maAbs: this.maAbs,
+          game: gameSnap || (this.game && this.game.snapshot())
         });
       }
     }
@@ -290,28 +307,90 @@
       this.raf = requestAnimationFrame(() => this._loop());
     }
 
-    _midiToY(midi, centerMidi) {
-      // Map ±12 semitones around target to canvas height
-      const span = 12; // semitones full scale half? full ±6 better for precision
+    _midiToY(midi, centerMidi, graphH) {
       const half = 6;
+      const gh = graphH != null ? graphH : this.h - 44;
       const delta = midi - centerMidi;
       const clamped = Math.max(-half, Math.min(half, delta));
-      const mid = this.h / 2;
-      return mid - (clamped / half) * (this.h * 0.4);
+      const mid = gh / 2;
+      return mid - (clamped / half) * (gh * 0.4);
+    }
+
+    _drawKeyboard(ctx, w, h, targetMidi, voiceMidi) {
+      const y0 = h - 40;
+      const kh = 36;
+      // white keys C2–C4-ish 15 keys
+      const whites = [];
+      for (let m = 36; m <= 60; m++) {
+        const name = NOTE_NAMES[((m % 12) + 12) % 12];
+        if (!name.includes("#")) whites.push(m);
+      }
+      const ww = w / whites.length;
+      whites.forEach((m, i) => {
+        const x = i * ww;
+        const isTarget = targetMidi != null && Math.round(targetMidi) === m;
+        const isVoice = voiceMidi != null && Math.round(voiceMidi) === m;
+        ctx.fillStyle = isTarget
+          ? "rgba(240,201,160,0.55)"
+          : isVoice
+            ? "rgba(125,222,176,0.45)"
+            : "#1a2433";
+        ctx.strokeStyle = "#2f3d52";
+        ctx.lineWidth = 1;
+        ctx.fillRect(x + 0.5, y0, ww - 1, kh);
+        ctx.strokeRect(x + 0.5, y0, ww - 1, kh);
+        if (isTarget || isVoice) {
+          ctx.fillStyle = isTarget ? "#f0c9a0" : "#9aecc4";
+          ctx.font = "9px system-ui,sans-serif";
+          ctx.textAlign = "center";
+          ctx.fillText(midiToName(m).replace(/\d/, ""), x + ww / 2, y0 + kh - 8);
+        }
+      });
+      // black keys
+      whites.forEach((m, i) => {
+        const pc = ((m % 12) + 12) % 12;
+        // black after C D F G A (0,2,5,7,9)
+        if ([0, 2, 5, 7, 9].includes(pc) && m + 1 <= 60) {
+          const bm = m + 1;
+          const x = (i + 1) * ww - ww * 0.3;
+          const isTarget = targetMidi != null && Math.round(targetMidi) === bm;
+          const isVoice = voiceMidi != null && Math.round(voiceMidi) === bm;
+          ctx.fillStyle = isTarget
+            ? "rgba(240,201,160,0.9)"
+            : isVoice
+              ? "rgba(125,222,176,0.85)"
+              : "#0a0e14";
+          ctx.fillRect(x, y0, ww * 0.55, kh * 0.62);
+        }
+      });
     }
 
     _drawIdle() {
       const ctx = this.ctx2d;
       if (!ctx) return;
       const w = this.w || 640;
-      const h = this.h || 220;
+      const h = this.h || 260;
       ctx.clearRect(0, 0, w, h);
-      ctx.fillStyle = "#141c28";
+      ctx.fillStyle = "#101822";
       ctx.fillRect(0, 0, w, h);
-      ctx.fillStyle = "#6a7c94";
-      ctx.font = "13px system-ui,sans-serif";
+      // preview highway
+      const mid = h * 0.42;
+      ctx.fillStyle = "rgba(61,186,122,0.12)";
+      ctx.fillRect(0, mid - 18, w, 36);
+      ctx.strokeStyle = "rgba(240,201,160,0.5)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(0, mid);
+      ctx.lineTo(w, mid);
+      ctx.stroke();
+      ctx.fillStyle = "#9aabc0";
+      ctx.font = "600 13px system-ui,sans-serif";
       ctx.textAlign = "center";
-      ctx.fillText("Start pitch visualizer · sing toward the glowing target", w / 2, h / 2);
+      ctx.fillText("Pitch highway · Start practice & sing into the green lane", w / 2, h / 2 + 20);
+      ctx.font = "11px system-ui,sans-serif";
+      ctx.fillStyle = "#6a7c94";
+      ctx.fillText("Like SingStar / Yousician: stay in the lane · build combo · lock notes", w / 2, h / 2 + 40);
+      this._drawKeyboard(ctx, w, h, null, null);
     }
 
     _draw() {
@@ -319,160 +398,208 @@
       const w = this.w;
       const h = this.h;
       const centerMidi = freqToMidi(this.targetFreq);
+      const game = this.game ? this.game.snapshot() : null;
+      const zones = (game && game.zones) || { perfect: 15, good: 35, close: 60 };
 
       // Background
       const g = ctx.createLinearGradient(0, 0, 0, h);
-      g.addColorStop(0, "#101822");
-      g.addColorStop(0.5, "#152030");
-      g.addColorStop(1, "#101822");
+      g.addColorStop(0, "#0c121a");
+      g.addColorStop(0.45, "#121c2a");
+      g.addColorStop(1, "#0c121a");
       ctx.fillStyle = g;
       ctx.fillRect(0, 0, w, h);
 
-      // Grid
-      ctx.strokeStyle = "rgba(80,100,130,0.25)";
+      // Graph area (leave bottom for keyboard)
+      const graphH = h - 44;
+      const midY = graphH / 2;
+
+      // Semitone grid
+      ctx.strokeStyle = "rgba(80,100,130,0.2)";
       ctx.lineWidth = 1;
       for (let s = -6; s <= 6; s++) {
-        const y = this._midiToY(centerMidi + s, centerMidi);
+        const y = this._midiToY(centerMidi + s, centerMidi, graphH);
         ctx.beginPath();
         ctx.moveTo(0, y);
         ctx.lineTo(w, y);
         ctx.stroke();
       }
 
+      // HIT LANE (SingStar-style) — good zone around target
+      const goodHalf = (zones.good / 100) * (graphH * 0.4 / 6);
+      const perfectHalf = (zones.perfect / 100) * (graphH * 0.4 / 6);
+      ctx.fillStyle = "rgba(61,186,122,0.1)";
+      ctx.fillRect(0, midY - goodHalf, w, goodHalf * 2);
+      ctx.fillStyle = "rgba(61,186,122,0.18)";
+      ctx.fillRect(0, midY - perfectHalf, w, perfectHalf * 2);
+      // lane edges
+      ctx.strokeStyle = "rgba(61,186,122,0.45)";
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([6, 6]);
+      ctx.beginPath();
+      ctx.moveTo(0, midY - goodHalf);
+      ctx.lineTo(w, midY - goodHalf);
+      ctx.moveTo(0, midY + goodHalf);
+      ctx.lineTo(w, midY + goodHalf);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
       // Labels
       ctx.fillStyle = "#6a7c94";
       ctx.font = "11px ui-monospace,monospace";
       ctx.textAlign = "left";
-      ctx.fillText("+6 st", 6, this._midiToY(centerMidi + 6, centerMidi) + 4);
-      ctx.fillText("target", 6, h / 2 - 6);
-      ctx.fillText("−6 st", 6, this._midiToY(centerMidi - 6, centerMidi) + 4);
+      ctx.fillText("+6", 6, this._midiToY(centerMidi + 6, centerMidi, graphH) + 4);
+      ctx.fillText("−6", 6, this._midiToY(centerMidi - 6, centerMidi, graphH) + 4);
+      ctx.fillStyle = "#f0c9a0";
+      ctx.fillText(midiToName(centerMidi), 6, midY - 8);
 
       const n = this.history.length;
-      if (!n) return;
+      const lastVoiceMidi = n ? this.history[n - 1].voiceMidi : null;
 
-      // Soft deviation band (moving average ± precision) — precision envelope
-      const bandPtsTop = [];
-      const bandPtsBot = [];
-      for (let i = 0; i < n; i++) {
-        const x = (i / (this.maxPoints - 1)) * (w - 24) + 12;
-        // Use rolling local deviation estimate: ma + precision spread around target line
-        // Show band around target shifted by ma (accuracy bias) with width = precision
-        const ma = this.maCents / 100; // in semitones
-        const halfW = Math.max(0.15, Math.min(3, this.precisionCents / 100));
-        bandPtsTop.push({ x, y: this._midiToY(centerMidi + ma + halfW, centerMidi) });
-        bandPtsBot.push({ x, y: this._midiToY(centerMidi + ma - halfW, centerMidi) });
-      }
-      ctx.beginPath();
-      bandPtsTop.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
-      for (let i = bandPtsBot.length - 1; i >= 0; i--) {
-        ctx.lineTo(bandPtsBot[i].x, bandPtsBot[i].y);
-      }
-      ctx.closePath();
-      const bandGrad = ctx.createLinearGradient(0, 0, 0, h);
-      bandGrad.addColorStop(0, "rgba(124,108,240,0.05)");
-      bandGrad.addColorStop(0.5, "rgba(91,159,212,0.22)");
-      bandGrad.addColorStop(1, "rgba(124,108,240,0.05)");
-      ctx.fillStyle = bandGrad;
-      ctx.fill();
-
-      // Target glowing trail (center)
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = "rgba(240,201,160,0.35)";
-      ctx.shadowColor = "rgba(240,201,160,0.85)";
-      ctx.shadowBlur = 12;
-      ctx.beginPath();
-      for (let i = 0; i < n; i++) {
-        const x = (i / (this.maxPoints - 1)) * (w - 24) + 12;
-        const y = this._midiToY(this.history[i].targetMidi, centerMidi);
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      }
-      ctx.stroke();
-      ctx.shadowBlur = 0;
-
-      // Target dots trail
-      for (let i = 0; i < n; i++) {
-        const x = (i / (this.maxPoints - 1)) * (w - 24) + 12;
-        const y = this._midiToY(this.history[i].targetMidi, centerMidi);
-        const alpha = 0.15 + (i / n) * 0.85;
-        ctx.beginPath();
-        ctx.fillStyle = `rgba(240,201,160,${alpha})`;
-        ctx.arc(x, y, i === n - 1 ? 7 : 2.2, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      // Outer glow on latest target
-      const tx = ((n - 1) / (this.maxPoints - 1)) * (w - 24) + 12;
-      const ty = this._midiToY(this.history[n - 1].targetMidi, centerMidi);
-      ctx.beginPath();
-      ctx.fillStyle = "rgba(240,201,160,0.2)";
-      ctx.arc(tx, ty, 14, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Voice trail
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = "rgba(125,222,176,0.55)";
-      ctx.beginPath();
-      let started = false;
-      for (let i = 0; i < n; i++) {
-        const pt = this.history[i];
-        if (pt.voiceMidi == null) {
-          started = false;
-          continue;
+      if (n) {
+        // Precision MA band
+        const bandPtsTop = [];
+        const bandPtsBot = [];
+        for (let i = 0; i < n; i++) {
+          const x = (i / (this.maxPoints - 1)) * (w - 24) + 12;
+          const ma = this.maCents / 100;
+          const halfW = Math.max(0.15, Math.min(3, this.precisionCents / 100));
+          bandPtsTop.push({
+            x,
+            y: this._midiToY(centerMidi + ma + halfW, centerMidi, graphH)
+          });
+          bandPtsBot.push({
+            x,
+            y: this._midiToY(centerMidi + ma - halfW, centerMidi, graphH)
+          });
         }
-        const x = (i / (this.maxPoints - 1)) * (w - 24) + 12;
-        const y = this._midiToY(pt.voiceMidi, centerMidi);
-        if (!started) {
-          ctx.moveTo(x, y);
-          started = true;
-        } else ctx.lineTo(x, y);
-      }
-      ctx.stroke();
-
-      // Voice dots
-      for (let i = 0; i < n; i++) {
-        const pt = this.history[i];
-        if (pt.voiceMidi == null) continue;
-        const x = (i / (this.maxPoints - 1)) * (w - 24) + 12;
-        const y = this._midiToY(pt.voiceMidi, centerMidi);
-        const alpha = 0.2 + (i / n) * 0.8;
         ctx.beginPath();
-        ctx.fillStyle = `rgba(125,222,176,${alpha})`;
-        ctx.arc(x, y, i === n - 1 ? 7 : 2.4, 0, Math.PI * 2);
+        bandPtsTop.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+        for (let i = bandPtsBot.length - 1; i >= 0; i--) {
+          ctx.lineTo(bandPtsBot[i].x, bandPtsBot[i].y);
+        }
+        ctx.closePath();
+        ctx.fillStyle = "rgba(91,159,212,0.16)";
         ctx.fill();
+
+        // Target trail
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = "rgba(240,201,160,0.4)";
+        ctx.shadowColor = "rgba(240,201,160,0.9)";
+        ctx.shadowBlur = 14;
+        ctx.beginPath();
+        for (let i = 0; i < n; i++) {
+          const x = (i / (this.maxPoints - 1)) * (w - 24) + 12;
+          const y = this._midiToY(this.history[i].targetMidi, centerMidi, graphH);
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+
+        for (let i = 0; i < n; i++) {
+          const x = (i / (this.maxPoints - 1)) * (w - 24) + 12;
+          const y = this._midiToY(this.history[i].targetMidi, centerMidi, graphH);
+          const alpha = 0.15 + (i / n) * 0.85;
+          ctx.beginPath();
+          ctx.fillStyle = `rgba(240,201,160,${alpha})`;
+          ctx.arc(x, y, i === n - 1 ? 6 : 2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // Voice trail colored by zone
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        let started = false;
+        for (let i = 0; i < n; i++) {
+          const pt = this.history[i];
+          if (pt.voiceMidi == null) {
+            started = false;
+            continue;
+          }
+          const x = (i / (this.maxPoints - 1)) * (w - 24) + 12;
+          const y = this._midiToY(pt.voiceMidi, centerMidi, graphH);
+          if (!started) {
+            ctx.moveTo(x, y);
+            started = true;
+          } else ctx.lineTo(x, y);
+        }
+        ctx.strokeStyle = "rgba(125,222,176,0.65)";
+        ctx.stroke();
+
+        for (let i = 0; i < n; i++) {
+          const pt = this.history[i];
+          if (pt.voiceMidi == null) continue;
+          const x = (i / (this.maxPoints - 1)) * (w - 24) + 12;
+          const y = this._midiToY(pt.voiceMidi, centerMidi, graphH);
+          const absC = pt.cents != null ? Math.abs(pt.cents) : 99;
+          let col = "rgba(224,108,117,0.7)";
+          if (absC <= zones.perfect) col = "rgba(125,222,176,0.95)";
+          else if (absC <= zones.good) col = "rgba(159,208,240,0.9)";
+          else if (absC <= zones.close) col = "rgba(224,168,74,0.85)";
+          ctx.beginPath();
+          ctx.fillStyle = col;
+          ctx.arc(x, y, i === n - 1 ? 7 : 2.2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        const last = this.history[n - 1];
+        if (last.voiceMidi != null) {
+          const vx = ((n - 1) / (this.maxPoints - 1)) * (w - 24) + 12;
+          const vy = this._midiToY(last.voiceMidi, centerMidi, graphH);
+          // lock-on ring (Yousician hold-to-clear)
+          if (game && game.lockProgress > 0) {
+            ctx.beginPath();
+            ctx.strokeStyle = "rgba(125,222,176,0.9)";
+            ctx.lineWidth = 3;
+            ctx.arc(vx, vy, 18, -Math.PI / 2, -Math.PI / 2 + game.lockProgress * Math.PI * 2);
+            ctx.stroke();
+          }
+          ctx.beginPath();
+          ctx.fillStyle = "rgba(125,222,176,0.2)";
+          ctx.arc(vx, vy, 16, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.fillStyle = "#b8f0d4";
+          ctx.arc(vx, vy, 6, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
 
-      // Latest voice glow
-      const last = this.history[n - 1];
-      if (last.voiceMidi != null) {
-        const vx = ((n - 1) / (this.maxPoints - 1)) * (w - 24) + 12;
-        const vy = this._midiToY(last.voiceMidi, centerMidi);
-        ctx.beginPath();
-        ctx.fillStyle = "rgba(125,222,176,0.25)";
-        ctx.arc(vx, vy, 16, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.beginPath();
-        ctx.fillStyle = "#9aecc4";
-        ctx.arc(vx, vy, 6, 0, Math.PI * 2);
-        ctx.fill();
+      // Score HUD
+      if (game) {
+        ctx.fillStyle = "rgba(12,18,26,0.72)";
+        ctx.fillRect(w - 148, 6, 140, 58);
+        ctx.textAlign = "right";
+        ctx.fillStyle = "#e8eef6";
+        ctx.font = "700 16px system-ui,sans-serif";
+        ctx.fillText(`${game.score}`, w - 14, 26);
+        ctx.font = "11px system-ui,sans-serif";
+        ctx.fillStyle = "#9aabc0";
+        ctx.fillText("SCORE", w - 14, 40);
+        ctx.fillStyle = game.combo > 5 ? "#7ddeb0" : "#9aabc0";
+        ctx.fillText(`×${game.combo} combo`, w - 14, 56);
+        if (game.challengeMode) {
+          ctx.textAlign = "left";
+          ctx.fillStyle = "#f0c9a0";
+          ctx.font = "600 12px system-ui,sans-serif";
+          ctx.fillText(
+            `Match ${game.challengeNote || "—"}  (${game.challengeCleared}/${game.challengeTotal})`,
+            10,
+            20
+          );
+        }
+        if (game.flash) {
+          ctx.textAlign = "center";
+          ctx.font = "800 28px system-ui,sans-serif";
+          ctx.fillStyle = game.flash.color;
+          ctx.shadowColor = game.flash.color;
+          ctx.shadowBlur = 18;
+          ctx.fillText(game.flash.text, w / 2, graphH * 0.35);
+          ctx.shadowBlur = 0;
+        }
       }
 
-      // Legend chip
-      ctx.fillStyle = "rgba(20,28,40,0.75)";
-      ctx.fillRect(w - 168, 8, 156, 52);
-      ctx.fillStyle = "#f0c9a0";
-      ctx.beginPath();
-      ctx.arc(w - 152, 24, 5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "#c5d0de";
-      ctx.font = "11px system-ui,sans-serif";
-      ctx.textAlign = "left";
-      ctx.fillText("Target note", w - 142, 28);
-      ctx.fillStyle = "#9aecc4";
-      ctx.beginPath();
-      ctx.arc(w - 152, 44, 5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "#c5d0de";
-      ctx.fillText("Your voice", w - 142, 48);
+      this._drawKeyboard(ctx, w, h, centerMidi, lastVoiceMidi);
     }
 
     getSnapshotMetrics() {

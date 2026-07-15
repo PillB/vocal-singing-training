@@ -98,15 +98,27 @@ test.describe("Integrated practice cockpit validation", () => {
     await expect(page.locator("#exercise-list .card-ex")).toHaveCount(14);
   });
 
-  test("VTPracticeEngine and pitch utils load", async ({ page }) => {
+  test("VTPracticeEngine and pitch game load", async ({ page }) => {
     await page.goto(BASE);
     const ok = await page.evaluate(() => {
       return (
         typeof window.VTPracticeEngine === "function" &&
         typeof window.VTPitchVisualizer === "function" &&
+        typeof window.VTPitchGame === "function" &&
         typeof window.VTPitchUtils?.detectPitch === "function"
       );
     });
     expect(ok).toBeTruthy();
+  });
+
+  test("pitch highway HUD and challenge option on singing exercise", async ({ page }) => {
+    await page.goto(BASE);
+    await page.click('.tab[data-tab="singing"]');
+    await page.click('.tier-chip[data-tier="basic"]');
+    await page.locator("#exercise-list .card-ex").first().click();
+    await expect(page.locator("#pitch-game-hud")).toBeVisible();
+    await expect(page.locator("#hud-score")).toBeVisible();
+    await expect(page.locator("#chk-pitch-challenge")).toBeVisible();
+    await expect(page.locator("#pitch-canvas")).toBeVisible();
   });
 });

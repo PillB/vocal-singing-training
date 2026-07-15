@@ -28,6 +28,7 @@
     reviewChecks: { auditory: false, visual: false, transcription: false },
     pitchViz: null,
     pitchRunning: false,
+    pitchGame: null,
     guideOpen: true
   };
 
@@ -451,7 +452,56 @@
       state.pitchViz.onStats = updatePitchStatsLabel;
       state.pitchViz._drawIdle();
     }
+    if (!state.pitchGame) {
+      state.pitchGame = new VTPitchGame();
+      state.pitchGame.onUpdate = updateGameHud;
+      state.pitchGame.onLock = onChallengeNoteLocked;
+    }
+    state.pitchViz.attachGame(state.pitchGame);
     return state.pitchViz;
+  }
+
+  function updateGameHud(snap) {
+    if (!snap) return;
+    const score = $("#hud-score");
+    const combo = $("#hud-combo");
+    const acc = $("#hud-acc");
+    const q = $("#hud-quality");
+    if (score) score.textContent = String(snap.score);
+    if (combo) combo.textContent = `×${snap.combo}`;
+    if (acc) acc.textContent = `${snap.accuracyPct}%`;
+    if (q) {
+      const labels = {
+        perfect: "PERFECT",
+        good: "GOOD",
+        close: "CLOSE",
+        off: "FIND IT",
+        "—": "—"
+      };
+      q.textContent = labels[snap.quality] || snap.quality;
+      q.className = "hud-quality " + (snap.quality === "—" ? "" : snap.quality);
+    }
+  }
+
+  async function onChallengeNoteLocked(prevNote, nextNote) {
+    toast(nextNote ? `Locked ${prevNote} → next ${nextNote}` : `Locked ${prevNote} · round done!`);
+    if (nextNote && VT_NOTE_FREQ[nextNote]) {
+      state.practice.setTargetFreq(VT_NOTE_FREQ[nextNote]);
+      if (state.pitchViz) state.pitchViz.setTargetNoteName(nextNote, VT_NOTE_FREQ);
+      try {
+        const sec = $("#chk-sustain")?.checked ? Number($("#sustain-sec")?.value || 4) : 2.5;
+        await VTPiano.playRefPitch(nextNote, sec, true);
+      } catch {
+        /* piano optional */
+      }
+    }
+    // fill accuracy metric from game
+    const accInput = $('#metrics-form [name="accuracy"]');
+    if (accInput && accInput.type === "range" && state.pitchGame) {
+      const pct = state.pitchGame.accuracyPct();
+      accInput.value = pct >= 80 ? 5 : pct >= 60 ? 4 : pct >= 40 ? 3 : 2;
+      accInput.dispatchEvent(new Event("input"));
+    }
   }
 
   function setPracticeUI(live) {
@@ -507,9 +557,19 @@
 
       if (ex.audio.pitchViz) {
         ensurePitchViz();
+        state.pitchGame.reset();
+        updateGameHud(state.pitchGame.snapshot());
+        const wantChallenge = $("#chk-pitch-challenge")?.checked !== false;
+        let challengeNote = null;
+        if (wantChallenge) {
+          challengeNote = state.pitchGame.startChallenge(8);
+        }
         state.pitchViz.startExternal();
         state.pitchRunning = true;
-        if (ex.audio.refPitch && VT_NOTE_FREQ[ex.audio.refPitch]) {
+        if (challengeNote && VT_NOTE_FREQ[challengeNote]) {
+          state.practice.setTargetFreq(VT_NOTE_FREQ[challengeNote]);
+          state.pitchViz.setTargetFreq(VT_NOTE_FREQ[challengeNote]);
+        } else if (ex.audio.refPitch && VT_NOTE_FREQ[ex.audio.refPitch]) {
           state.practice.setTargetFreq(VT_NOTE_FREQ[ex.audio.refPitch]);
           state.pitchViz.setTargetFreq(VT_NOTE_FREQ[ex.audio.refPitch]);
         }
@@ -523,9 +583,18 @@
         startTimer();
       }
 
-      // Piano auto
+      // Piano auto — challenge mode uses sequential single notes (Vocal Match style)
+      const inChallenge = !!(ex.audio.pitchViz && state.pitchGame?.challengeMode);
       if (wantPiano && ex.audio.piano) {
-        if (ex.audio.refPitch && !ex.progressions && !ex.songs) {
+        if (inChallenge) {
+          const note = state.pitchGame.currentChallengeNote();
+          if (note) {
+            const sec = $("#chk-sustain")?.checked
+              ? Number($("#sustain-sec")?.value || 4)
+              : 2.5;
+            await VTPiano.playRefPitch(note, sec, true);
+          }
+        } else if (ex.audio.refPitch && !ex.progressions && !ex.songs) {
           const sec = $("#chk-sustain")?.checked
             ? Number($("#sustain-sec")?.value || 4)
             : 2.5;
@@ -537,8 +606,7 @@
         } else {
           await playSelectedProgression(true);
         }
-      } else if (ex.audio.refPitch && ex.audio.piano) {
-        // still set target even if piano not auto
+      } else if (ex.audio.refPitch && ex.audio.piano && !inChallenge) {
         const f = VT_NOTE_FREQ[ex.audio.refPitch];
         if (f) state.practice.setTargetFreq(f);
       }
@@ -610,22 +678,15 @@
     const accWord =
       Math.abs(acc) <= 25 ? "on target" : acc > 0 ? "a bit sharp" : "a bit flat";
     const precWord = prec <= 30 ? "stable (precise)" : prec <= 60 ? "settling" : "variable";
+    const g = stats.game;
     el.innerHTML = `
       <span><strong>Target</strong> ${stats.targetName || "—"}</span>
       <span><strong>You</strong> ${stats.voiceName || "—"}</span>
-      <span><strong>Accuracy</strong> ${acc > 0 ? "+" : ""}${acc}¢ · ${accWord}</span>
+      <span><strong>Cents</strong> ${acc > 0 ? "+" : ""}${acc}¢ · ${accWord}</span>
       <span><strong>Precision</strong> ±${prec}¢ · ${precWord}</span>
+      ${g ? `<span><strong>Game</strong> ${g.score} pts · ${g.accuracyPct}% lane</span>` : ""}
     `;
-    // Auto-fill metrics if present
-    const accInput = $('#metrics-form [name="accuracy"]');
-    const precInput = $('#metrics-form [name="precision"]');
-    if (accInput && !accInput.dataset.touched) {
-      const score = Math.abs(acc) <= 20 ? 5 : Math.abs(acc) <= 40 ? 4 : Math.abs(acc) <= 70 ? 3 : 2;
-      // don't force range inputs constantly - only when stopping
-    }
-    if (precInput && !precInput.dataset.touched) {
-      /* filled on stop */
-    }
+    if (g) updateGameHud(g);
   }
 
   async function startPitchViz() {
@@ -712,6 +773,22 @@
     if (best > 0) {
       const input = $('#metrics-form [name="maxHold"]');
       if (input && !(Number(input.value) > best)) input.value = best;
+    }
+    // Pitch game → self-scores
+    if (state.pitchGame && state.exercise?.audio?.pitchViz) {
+      const snap = state.pitchGame.snapshot();
+      const accInput = $('#metrics-form [name="accuracy"]');
+      const precInput = $('#metrics-form [name="precision"]');
+      if (accInput && accInput.type === "range") {
+        accInput.value =
+          snap.accuracyPct >= 80 ? 5 : snap.accuracyPct >= 60 ? 4 : snap.accuracyPct >= 40 ? 3 : 2;
+        accInput.dispatchEvent(new Event("input"));
+      }
+      if (precInput && precInput.type === "range") {
+        precInput.value =
+          snap.maxCombo >= 40 ? 5 : snap.maxCombo >= 20 ? 4 : snap.maxCombo >= 10 ? 3 : 2;
+        precInput.dispatchEvent(new Event("input"));
+      }
     }
     const { values, notes } = collectMetrics();
     if (ex.audio.reviewWorkflow) {

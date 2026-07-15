@@ -148,12 +148,24 @@
           <div class="level-meter practice-meter" aria-hidden="true"><span id="level-fill"></span></div>
 
           <div id="pitch-block" class="pitch-inline" hidden>
-            <canvas id="pitch-canvas" class="pitch-canvas" width="640" height="220" aria-label="Pitch match graph"></canvas>
+            <div class="pitch-game-hud" id="pitch-game-hud" aria-live="polite">
+              <div class="hud-score"><span class="hud-label">Score</span><strong id="hud-score">0</strong></div>
+              <div class="hud-combo"><span class="hud-label">Combo</span><strong id="hud-combo">×0</strong></div>
+              <div class="hud-acc"><span class="hud-label">In-lane</span><strong id="hud-acc">0%</strong></div>
+              <div class="hud-quality" id="hud-quality">—</div>
+            </div>
+            <canvas id="pitch-canvas" class="pitch-canvas" width="640" height="260" aria-label="Pitch match highway game"></canvas>
             <div class="pitch-stats" id="pitch-stats"></div>
+            <div class="controls-row pitch-game-opts">
+              <label class="muted piano-opt" title="Vocal Match style: clear 8 notes by holding each in the green lane">
+                <input type="checkbox" id="chk-pitch-challenge" checked /> Note challenge (lock 8 targets)
+              </label>
+            </div>
             <p class="muted pitch-legend">
+              <strong style="color:#3dba7a">Green lane</strong> = in tune (SingStar-style) ·
               <strong style="color:#f0c9a0">Amber</strong> target ·
-              <strong style="color:#9aecc4">Green</strong> your voice ·
-              soft band = precision (stability)
+              <strong style="color:#9aecc4">Voice</strong> dot ·
+              keyboard strip · combo &amp; score like Yousician / Singing Carrots
             </p>
           </div>
 
@@ -313,6 +325,7 @@
     <script src="js/storage.js"></script>
     <script src="js/piano.js"></script>
     <script src="js/pitch-visualizer.js"></script>
+    <script src="js/pitch-game.js"></script>
     <script src="js/practice-engine.js"></script>
     <script src="js/recorder.js"></script>
     <script src="js/metrics.js"></script>

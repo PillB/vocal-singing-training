@@ -715,11 +715,78 @@ a {
 
 .pitch-canvas {
   width: 100%;
-  height: 220px;
+  height: 260px;
   display: block;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   background: #101822;
+}
+
+.pitch-game-hud {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.45rem;
+  margin-bottom: 0.55rem;
+}
+
+.pitch-game-hud > div {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.4rem 0.55rem;
+  text-align: center;
+}
+
+.pitch-game-hud .hud-label {
+  display: block;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+.pitch-game-hud strong {
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.hud-quality {
+  font-weight: 800;
+  font-size: 0.95rem !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.4rem;
+  color: var(--text-muted);
+}
+
+.hud-quality.perfect {
+  color: #7ddeb0;
+  border-color: rgba(61, 186, 122, 0.45);
+}
+.hud-quality.good {
+  color: #9fd0f0;
+}
+.hud-quality.close {
+  color: #e0a84a;
+}
+.hud-quality.off {
+  color: #e06c75;
+}
+
+.pitch-game-opts {
+  margin-top: 0.45rem;
+}
+
+@media (max-width: 520px) {
+  .pitch-game-hud {
+    grid-template-columns: 1fr 1fr;
+  }
+  .pitch-canvas {
+    height: 220px;
+  }
 }
 
 .pitch-stats {

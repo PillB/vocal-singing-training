@@ -65,21 +65,19 @@
           <span class="muted" id="tier-counts" style="font-size: 0.85rem"></span>
         </div>
 
-        <div class="toolbar">
-          <label class="muted" style="font-size: 0.88rem; display: flex; gap: 0.4rem; align-items: center">
-            Session path
-            <select id="session-path" class="select-inline">
-              <option value="basic">Basic (homework spine)</option>
-              <option value="advanced">Advanced only</option>
-              <option value="full">Full track</option>
-            </select>
-          </label>
+        <div class="toolbar continue-toolbar">
+          <button type="button" class="btn btn-practice" id="btn-continue">▶ Continue practice</button>
           <button type="button" class="btn btn-primary" id="btn-structured">
             Start structured session
           </button>
-          <span class="muted" style="font-size: 0.9rem">
-            Or open any exercise below one at a time. Progress saves in this browser.
-          </span>
+          <label class="muted" style="font-size: 0.88rem; display: flex; gap: 0.4rem; align-items: center">
+            Path
+            <select id="session-path" class="select-inline">
+              <option value="basic">Basic</option>
+              <option value="advanced">Advanced</option>
+              <option value="full">Full</option>
+            </select>
+          </label>
         </div>
 
         <div id="exercise-list" class="grid" aria-live="polite"></div>
@@ -96,55 +94,83 @@
           <button type="button" class="btn btn-ghost" id="btn-back-home">← All exercises</button>
         </div>
 
-        <div class="card section">
-          <h3>Original spirit</h3>
-          <div class="original-box" id="ex-original"></div>
-          <p class="research-note" id="ex-research" hidden></p>
+        <!-- 1 · GUIDE (compact) -->
+        <div class="card section guide-card">
+          <div class="guide-header">
+            <h3 style="margin:0">How to practice</h3>
+            <button type="button" class="btn btn-ghost btn-sm" id="btn-toggle-guide" aria-expanded="true">Hide details</button>
+          </div>
+          <div id="guide-body">
+            <div class="original-box" id="ex-original"></div>
+            <p class="research-note" id="ex-research" hidden></p>
+            <div class="two-col" style="margin-top:0.85rem">
+              <div>
+                <h3>Steps</h3>
+                <ol class="steps" id="ex-steps"></ol>
+              </div>
+              <div>
+                <h3>Tips</h3>
+                <ul class="tips" id="ex-tips"></ul>
+                <h3 style="margin-top: 0.75rem">Avoid</h3>
+                <ul class="mistakes" id="ex-mistakes"></ul>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <div class="two-col">
-          <div class="card section">
-            <h3>Steps</h3>
-            <ol class="steps" id="ex-steps"></ol>
+        <!-- 2 · PRACTICE COCKPIT (one primary action) -->
+        <div class="card section practice-cockpit" id="practice-cockpit">
+          <div class="cockpit-top">
+            <div>
+              <h3 style="margin:0">Practice</h3>
+              <p class="muted cockpit-hint" id="practice-hint" style="margin:0.25rem 0 0">
+                One button starts listening, pitch feedback, hold auto-log, timer, and piano when needed.
+              </p>
+            </div>
+            <div class="cockpit-primary">
+              <button type="button" class="btn btn-practice" id="btn-practice-start">▶ Start practice</button>
+              <button type="button" class="btn btn-danger" id="btn-practice-stop" hidden>■ Stop practice</button>
+            </div>
           </div>
-          <div class="card section">
-            <h3>Tips &amp; research-backed cues</h3>
-            <ul class="tips" id="ex-tips"></ul>
-            <h3 style="margin-top: 1rem">Common mistakes</h3>
-            <ul class="mistakes" id="ex-mistakes"></ul>
-          </div>
-        </div>
 
-        <div class="card section" id="timer-block">
-          <h3>Timer</h3>
-          <div class="controls-row">
+          <div class="practice-status-row" id="practice-status-row">
+            <span class="status-pill" id="practice-status">Ready</span>
             <span class="timer-display" id="timer-display">05:00</span>
-            <button type="button" class="btn btn-primary btn-sm" id="btn-timer-start">Start</button>
-            <button type="button" class="btn btn-sm" id="btn-timer-pause">Pause</button>
-            <button type="button" class="btn btn-sm btn-ghost" id="btn-timer-reset">Reset</button>
+            <span class="hold-live" id="hold-display" hidden>Hold 0.0s</span>
+            <span class="chord-now" id="chord-now">—</span>
           </div>
-        </div>
 
-        <div class="card section" id="piano-block" hidden>
-          <h3>Piano · mid-lower male range</h3>
-          <p class="muted" style="margin-top: 0">
-            Realistic multi-partial piano chords (roughly C2–E4) for comfortable speaking-to-singing practice.
-          </p>
-          <div class="piano-panel">
+          <div class="controls-row" style="margin-bottom:0.5rem">
+            <label class="muted piano-opt" id="opt-auto-record">
+              <input type="checkbox" id="chk-auto-record" /> Also record this practice
+            </label>
+          </div>
+          <div class="level-meter practice-meter" aria-hidden="true"><span id="level-fill"></span></div>
+
+          <div id="pitch-block" class="pitch-inline" hidden>
+            <canvas id="pitch-canvas" class="pitch-canvas" width="640" height="220" aria-label="Pitch match graph"></canvas>
+            <div class="pitch-stats" id="pitch-stats"></div>
+            <p class="muted pitch-legend">
+              <strong style="color:#f0c9a0">Amber</strong> target ·
+              <strong style="color:#9aecc4">Green</strong> your voice ·
+              soft band = precision (stability)
+            </p>
+          </div>
+
+          <div id="hold-block" class="hold-inline" hidden>
+            <div class="hold-pills" id="hold-history"></div>
+            <p class="muted" style="margin:0.35rem 0 0;font-size:0.82rem">
+              Auto-logs when you sustain voice ≥ 2s then stop (or pause). No extra buttons.
+            </p>
+          </div>
+
+          <div id="piano-block" class="piano-inline" hidden>
             <div class="prog-list" id="prog-buttons"></div>
-            <p class="muted" id="chord-desc"></p>
-            <div class="chord-now" id="chord-now" aria-live="polite">—</div>
-            <div class="controls-row">
-              <button type="button" class="btn btn-singing btn-sm" id="btn-play-prog">Play once</button>
-              <button type="button" class="btn btn-singing btn-sm" id="btn-loop-prog">Loop</button>
-              <button type="button" class="btn btn-sm" id="btn-stop-piano">Stop</button>
-              <label class="muted piano-opt" title="Broken chord notes">
-                <input type="checkbox" id="chk-arpeggio" /> Arpeggio
-              </label>
-              <label class="muted piano-opt" title="Hold each harmony 3–5 seconds so you can lock the pitch before the next change">
-                <input type="checkbox" id="chk-sustain" checked /> Sustain note
-              </label>
-              <label class="muted piano-opt" title="How long each chord/note rings when Sustain is on">
+            <p class="muted" id="chord-desc" style="margin:0.35rem 0"></p>
+            <div class="controls-row piano-opts-row">
+              <label class="muted piano-opt"><input type="checkbox" id="chk-arpeggio" /> Arpeggio</label>
+              <label class="muted piano-opt"><input type="checkbox" id="chk-sustain" checked /> Sustain note</label>
+              <label class="muted piano-opt">
                 Hold
                 <select id="sustain-sec" class="select-inline">
                   <option value="3">3s</option>
@@ -152,66 +178,36 @@
                   <option value="5">5s</option>
                 </select>
               </label>
+              <label class="muted piano-opt" id="opt-auto-piano">
+                <input type="checkbox" id="chk-auto-piano" checked /> Auto piano on start
+              </label>
             </div>
-            <div class="controls-row" id="ref-pitch-row" hidden>
-              <button type="button" class="btn btn-sm" id="btn-ref-pitch">Play reference A2</button>
-              <button type="button" class="btn btn-sm" id="btn-inhale-ticks">3s inhale ticks</button>
+            <div class="controls-row" style="margin-top:0.45rem">
+              <button type="button" class="btn btn-singing btn-sm" id="btn-play-prog">Play once</button>
+              <button type="button" class="btn btn-singing btn-sm" id="btn-loop-prog">Loop</button>
+              <button type="button" class="btn btn-sm" id="btn-stop-piano">Stop piano</button>
+              <button type="button" class="btn btn-sm" id="btn-ref-pitch" hidden>Ref pitch</button>
+              <button type="button" class="btn btn-sm" id="btn-inhale-ticks" hidden>3s inhale</button>
             </div>
-            <div id="songs-row" class="two-col" hidden></div>
+            <div id="songs-row" class="two-col" hidden style="margin-top:0.65rem"></div>
           </div>
+
+          <div id="playback-area" class="playback-inline"></div>
         </div>
 
-        <div class="card section" id="pitch-block" hidden>
-          <h3>Pitch visualizer · accuracy &amp; precision</h3>
-          <p class="muted" style="margin-top: 0">
-            <strong style="color: #f0c9a0">Amber</strong> = target note (glowing trail).
-            <strong style="color: #9aecc4">Green</strong> = your voice.
-            Soft blue band = moving-average deviation (how precise/stable you are).
-            Center the green dot on amber and shrink the band over time.
-          </p>
-          <canvas id="pitch-canvas" class="pitch-canvas" width="640" height="220" aria-label="Pitch match graph"></canvas>
-          <div class="pitch-stats" id="pitch-stats"></div>
-          <div class="controls-row" style="margin-top: 0.65rem">
-            <button type="button" class="btn btn-primary btn-sm" id="btn-pitch-start">Start listening</button>
-            <button type="button" class="btn btn-sm" id="btn-pitch-stop" disabled>Stop</button>
-          </div>
-        </div>
-
-        <div class="card section" id="hold-block" hidden>
-          <h3>Hold logger</h3>
-          <div class="hold-log">
-            <span class="timer-display" id="hold-display" style="font-size: 1.35rem">0.0s</span>
-            <button type="button" class="btn btn-primary btn-sm" id="btn-hold-start">Start hold</button>
-            <button type="button" class="btn btn-sm" id="btn-hold-stop">Stop &amp; log</button>
-          </div>
-          <div class="hold-pills" id="hold-history" style="margin-top: 0.65rem"></div>
-        </div>
-
-        <div class="card section" id="record-block">
-          <h3>Record &amp; playback</h3>
-          <p class="muted" style="margin-top: 0">
-            Audio stays on this device (IndexedDB). Grant microphone access when prompted.
-          </p>
-          <div class="level-meter" aria-hidden="true"><span id="level-fill"></span></div>
-          <div class="controls-row" style="margin-top: 0.65rem">
-            <button type="button" class="btn btn-primary btn-sm" id="btn-rec-start">● Record</button>
-            <button type="button" class="btn btn-danger btn-sm" id="btn-rec-stop" disabled>■ Stop</button>
-          </div>
-          <div id="playback-area"></div>
-        </div>
-
+        <!-- 3 · REFLECT -->
         <div class="card section" id="review-block" hidden></div>
 
         <div class="card section" id="week-plan-cta" hidden>
           <h3>12-week plan</h3>
-          <p class="muted">Open the full dashboard to pick your weekly element, check in daily, and record/review.</p>
+          <p class="muted">Pick weekly focus, check in, record &amp; review.</p>
           <button type="button" class="btn btn-primary" id="btn-open-plan">Open 12-week dashboard</button>
         </div>
 
         <div class="card section">
-          <h3>Metrics &amp; reflection</h3>
+          <h3>Reflect &amp; save</h3>
           <p class="muted" style="margin-top: 0">
-            Self-scores are a compass, not a judgment. Rate honestly — growth loves data.
+            Rate after practice. Scores are a compass, not a judgment.
           </p>
           <form id="metrics-form" class="metrics-form" onsubmit="return false;"></form>
           <div class="controls-row" style="margin-top: 1rem">
@@ -222,6 +218,20 @@
 
         <div class="controls-row" id="structured-nav" hidden style="margin-top: 1rem">
           <button type="button" class="btn btn-primary" id="btn-next-structured">Next exercise →</button>
+        </div>
+
+        <!-- Legacy hidden hooks kept for compatibility / tests may not need timer buttons -->
+        <div id="timer-block" hidden></div>
+        <div id="record-block" hidden>
+          <button type="button" id="btn-rec-start" hidden></button>
+          <button type="button" id="btn-rec-stop" hidden></button>
+          <button type="button" id="btn-timer-start" hidden></button>
+          <button type="button" id="btn-timer-pause" hidden></button>
+          <button type="button" id="btn-timer-reset" hidden></button>
+          <button type="button" id="btn-hold-start" hidden></button>
+          <button type="button" id="btn-hold-stop" hidden></button>
+          <button type="button" id="btn-pitch-start" hidden></button>
+          <button type="button" id="btn-pitch-stop" hidden></button>
         </div>
       </section>
 
@@ -303,6 +313,7 @@
     <script src="js/storage.js"></script>
     <script src="js/piano.js"></script>
     <script src="js/pitch-visualizer.js"></script>
+    <script src="js/practice-engine.js"></script>
     <script src="js/recorder.js"></script>
     <script src="js/metrics.js"></script>
     <script src="js/session.js"></script>

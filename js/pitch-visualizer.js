@@ -105,6 +105,7 @@
       this.source = null;
       this.raf = null;
       this.running = false;
+      this.external = false; // driven by PracticeEngine frames
       this.buf = null;
 
       this.targetFreq = 130.81; // C3 default
@@ -162,9 +163,33 @@
       if (map[pick]) this.setTargetFreq(map[pick]);
     }
 
+    /**
+     * Slave mode: PracticeEngine pushes frames — no second mic stream.
+     */
+    startExternal() {
+      this._resize();
+      this.external = true;
+      this.running = true;
+      this.history = [];
+      this.devWindow = [];
+      this._drawIdle();
+    }
+
+    /**
+     * Push one analysis frame from the unified practice engine.
+     */
+    pushFrame(voiceFreq, targetFreq) {
+      if (!this.running) return;
+      if (targetFreq) this.targetFreq = targetFreq;
+      this.voiceFreq = voiceFreq || null;
+      this._ingest(voiceFreq || null);
+      this._draw();
+    }
+
     async start() {
       if (this.running) return;
       this._resize();
+      this.external = false;
       try {
         this.stream = await navigator.mediaDevices.getUserMedia({
           audio: {
@@ -193,6 +218,7 @@
 
     stop() {
       this.running = false;
+      this.external = false;
       if (this.raf) cancelAnimationFrame(this.raf);
       this.raf = null;
       if (this.source) {
@@ -214,12 +240,7 @@
       this._drawIdle();
     }
 
-    _loop() {
-      if (!this.running) return;
-      this.analyser.getFloatTimeDomainData(this.buf);
-      const f = detectPitch(this.buf, this.audioCtx.sampleRate);
-      this.voiceFreq = f;
-
+    _ingest(f) {
       const targetMidi = freqToMidi(this.targetFreq);
       let voiceMidi = null;
       let cents = null;
@@ -234,7 +255,7 @@
           this.devWindow.reduce((a, b) => a + (b - mean) * (b - mean), 0) / n;
         this.maCents = mean;
         this.maAbs = Math.abs(mean);
-        this.precisionCents = Math.sqrt(variance) * 2 || 8; // soft band half-height scale
+        this.precisionCents = Math.sqrt(variance) * 2 || 8;
         this.accuracyCents = mean;
       }
 
@@ -257,7 +278,14 @@
           maAbs: this.maAbs
         });
       }
+    }
 
+    _loop() {
+      if (!this.running || this.external) return;
+      this.analyser.getFloatTimeDomainData(this.buf);
+      const f = detectPitch(this.buf, this.audioCtx.sampleRate);
+      this.voiceFreq = f;
+      this._ingest(f);
       this._draw();
       this.raf = requestAnimationFrame(() => this._loop());
     }

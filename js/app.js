@@ -31,7 +31,15 @@
     pitchGame: null,
     modeInstance: null,
     guideOpen: true,
-    pianoOpen: false
+    pianoOpen: false,
+    /** Per-open exercise practice clock (for leave save/discard prompt) */
+    sessionPractice: {
+      everStarted: false,
+      liveSince: null,
+      accumulatedMs: 0,
+      saved: false
+    },
+    leavePromptOpen: false
   };
 
   const $ = (sel, el = document) => el.querySelector(sel);
@@ -245,21 +253,208 @@
     );
   }
 
-  function openExercise(id, fromStructured) {
+  function resetSessionPractice() {
+    state.sessionPractice = {
+      everStarted: false,
+      liveSince: null,
+      accumulatedMs: 0,
+      saved: false
+    };
+  }
+
+  function getExerciseTargetSec(ex) {
+    if (!ex) return 300;
+    if (ex.timerDefaultSec > 0) return ex.timerDefaultSec;
+    if (ex.durationMin > 0) return Math.round(ex.durationMin * 60);
+    return 300;
+  }
+
+  function flushPracticeClock() {
+    if (state.sessionPractice.liveSince != null) {
+      state.sessionPractice.accumulatedMs +=
+        performance.now() - state.sessionPractice.liveSince;
+      state.sessionPractice.liveSince = null;
+    }
+  }
+
+  function getPracticedSec() {
+    let ms = state.sessionPractice.accumulatedMs || 0;
+    if (state.sessionPractice.liveSince != null) {
+      ms += performance.now() - state.sessionPractice.liveSince;
+    }
+    return ms / 1000;
+  }
+
+  function formatDurationShort(sec) {
+    sec = Math.max(0, Math.round(sec));
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    if (m <= 0) return `${s}s`;
+    return `${m}:${String(s).padStart(2, "0")}`;
+  }
+
+  /** True if user practiced ≥10% of planned exercise length and hasn't saved */
+  function shouldPromptOnLeave() {
+    if (state.leavePromptOpen) return false;
+    if (!state.exercise || state.view !== "exercise") return false;
+    if (state.sessionPractice.saved) return false;
+    if (!state.sessionPractice.everStarted) return false;
+    const target = getExerciseTargetSec(state.exercise);
+    if (target <= 0) return false;
+    return getPracticedSec() >= target * 0.1;
+  }
+
+  /**
+   * Ask save / discard / stay. Resolves:
+   *  "save" | "discard" | "stay"
+   */
+  function promptLeaveExercise() {
+    return new Promise((resolve) => {
+      const modal = $("#leave-modal");
+      if (!modal) {
+        resolve("discard");
+        return;
+      }
+      state.leavePromptOpen = true;
+      const practiced = getPracticedSec();
+      const target = getExerciseTargetSec(state.exercise);
+      const pct = Math.min(100, Math.round((practiced / target) * 100));
+      const stats = $("#leave-modal-stats");
+      if (stats) {
+        stats.textContent = tt("leave.stats", {
+          done: formatDurationShort(practiced),
+          total: formatDurationShort(target),
+          pct: String(pct)
+        });
+      }
+      // Refresh i18n titles if available
+      if (window.VTI18n?.apply) {
+        try {
+          VTI18n.apply(modal);
+        } catch {
+          /* optional */
+        }
+      }
+      const title = $("#leave-modal-title");
+      const body = $("#leave-modal-body");
+      const btnSave = $("#leave-save");
+      const btnDiscard = $("#leave-discard");
+      const btnStay = $("#leave-cancel");
+      if (title) title.textContent = tt("leave.title");
+      if (body) body.textContent = tt("leave.body");
+      if (btnSave) btnSave.textContent = tt("leave.save");
+      if (btnDiscard) btnDiscard.textContent = tt("leave.discard");
+      if (btnStay) btnStay.textContent = tt("leave.stay");
+
+      modal.hidden = false;
+      btnSave?.focus();
+
+      const finish = (choice) => {
+        modal.hidden = true;
+        state.leavePromptOpen = false;
+        btnSave?.removeEventListener("click", onSave);
+        btnDiscard?.removeEventListener("click", onDiscard);
+        btnStay?.removeEventListener("click", onStay);
+        modal.removeEventListener("keydown", onKey);
+        resolve(choice);
+      };
+      const onSave = () => finish("save");
+      const onDiscard = () => finish("discard");
+      const onStay = () => finish("stay");
+      const onKey = (e) => {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          finish("stay");
+        }
+      };
+      btnSave?.addEventListener("click", onSave);
+      btnDiscard?.addEventListener("click", onDiscard);
+      btnStay?.addEventListener("click", onStay);
+      modal.addEventListener("keydown", onKey);
+    });
+  }
+
+  async function leaveExercise(destination) {
+    // destination: { type: "home"|"exercise"|"history"|"plan"|"next", id? }
+    if (shouldPromptOnLeave()) {
+      const choice = await promptLeaveExercise();
+      if (choice === "stay") return false;
+      if (choice === "save") {
+        // Stop audio, keep user on exercise to complete metrics
+        stopPractice(true);
+        VTPiano.stopAll();
+        const metrics = $("#metrics-form") || $("#btn-complete");
+        metrics?.scrollIntoView({ behavior: "smooth", block: "center" });
+        $("#btn-complete")?.focus();
+        toast(tt("leave.scrollSave"));
+        // Stash intended destination after save
+        state.pendingLeave = destination;
+        return false;
+      }
+      // discard
+      stopPractice(true);
+      VTPiano.stopAll();
+      stopTimer(false);
+      stopHold();
+      stopPitchViz();
+      state.recorder.clear();
+      resetSessionPractice();
+      toast(tt("leave.discarded"));
+    } else {
+      stopPractice(true);
+      VTPiano.stopAll();
+      stopTimer(false);
+      stopHold();
+      stopPitchViz();
+      state.recorder.clear();
+    }
+
+    if (destination?.type === "home") {
+      setView("home");
+      renderExerciseList();
+    } else if (destination?.type === "history") {
+      renderHistory();
+    } else if (destination?.type === "plan") {
+      renderPlan();
+    } else if (destination?.type === "exercise" && destination.id) {
+      forceOpenExercise(destination.id, destination.fromStructured);
+    } else if (destination?.type === "next") {
+      // handled by caller after return true
+    }
+    return true;
+  }
+
+  function forceOpenExercise(id, fromStructured) {
     const ex = findExercise(id);
     if (!ex) return;
     stopPractice(true);
     state.exercise = ex;
     state.structured = !!fromStructured;
     state.reviewChecks = { auditory: false, visual: false, transcription: false };
+    state.pendingLeave = null;
     stopTimer(false);
     stopHold();
     stopPitchViz();
     state.recorder.clear();
     VTPiano.stopAll();
+    resetSessionPractice();
     renderExercise();
     setView("exercise");
     window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function openExercise(id, fromStructured) {
+    // Switching away from current exercise with meaningful practice
+    if (
+      state.view === "exercise" &&
+      state.exercise &&
+      state.exercise.id !== id &&
+      shouldPromptOnLeave()
+    ) {
+      leaveExercise({ type: "exercise", id, fromStructured: !!fromStructured });
+      return;
+    }
+    forceOpenExercise(id, fromStructured);
   }
 
   function renderExercise() {
@@ -698,6 +893,15 @@
     if (pill) {
       pill.textContent = live ? tt("practice.live") : tt("practice.ready");
       pill.classList.toggle("live", live);
+    }
+    // Practice clock for leave-prompt (≥10% of exercise)
+    if (live) {
+      state.sessionPractice.everStarted = true;
+      if (state.sessionPractice.liveSince == null) {
+        state.sessionPractice.liveSince = performance.now();
+      }
+    } else {
+      flushPracticeClock();
     }
   }
 
@@ -1216,6 +1420,7 @@
     if (!ex) return;
     if (state.practiceLive) stopPractice(true);
     else if (state.pitchRunning) stopPitchViz();
+    flushPracticeClock();
     // Prefer best auto-hold into metrics
     const best = state.practice.bestHold?.() || 0;
     if (best > 0) {
@@ -1242,9 +1447,24 @@
     if (ex.audio.reviewWorkflow) {
       values.stepsDone = Object.values(state.reviewChecks).filter(Boolean).length;
     }
+    // Prefer actual practice clock over timer-only elapsed
+    const practicedSec = Math.round(getPracticedSec());
+    if (values.duration == null || values.duration === "" || Number(values.duration) === 0) {
+      const durInput = $('#metrics-form [name="duration"]');
+      if (durInput && practicedSec > 0) {
+        // store minutes for duration metric when present
+        const mins = Math.max(1, Math.round(practicedSec / 60));
+        if (durInput.type === "number") durInput.value = mins;
+        values.duration = durInput.value;
+      }
+    }
     const result = VTMetrics.compute(ex.metrics, values);
     const elapsed =
-      state.timer.total > 0 ? state.timer.total - state.timer.remaining : 0;
+      practicedSec > 0
+        ? practicedSec
+        : state.timer.total > 0
+          ? state.timer.total - state.timer.remaining
+          : 0;
 
     VTStorage.saveExerciseResult(ex.id, {
       metrics: values,
@@ -1252,6 +1472,9 @@
       notes,
       durationSec: elapsed
     });
+
+    state.sessionPractice.saved = true;
+    state.pendingLeave = null;
 
     const box = $("#score-result");
     box.hidden = false;
@@ -1675,21 +1898,20 @@
     });
 
     $("#btn-structured").addEventListener("click", () => startStructured());
-    $("#btn-history").addEventListener("click", renderHistory);
-    $("#btn-plan").addEventListener("click", renderPlan);
+    $("#btn-history").addEventListener("click", () => {
+      if (state.view === "exercise") leaveExercise({ type: "history" });
+      else renderHistory();
+    });
+    $("#btn-plan").addEventListener("click", () => {
+      if (state.view === "exercise") leaveExercise({ type: "plan" });
+      else renderPlan();
+    });
     $("#btn-session-pause").addEventListener("click", pauseStructured);
     $("#btn-session-resume").addEventListener("click", resumeStructured);
     $("#btn-session-end").addEventListener("click", endStructured);
 
     $("#btn-back-home").addEventListener("click", () => {
-      stopPractice(true);
-      VTPiano.stopAll();
-      stopTimer(false);
-      stopHold();
-      stopPitchViz();
-      state.recorder.clear();
-      setView("home");
-      renderExerciseList();
+      leaveExercise({ type: "home" });
     });
 
     $("#btn-practice-start")?.addEventListener("click", startPractice);
@@ -1763,23 +1985,47 @@
     $("#btn-hold-stop")?.addEventListener("click", () => stopPractice(false));
 
     $("#btn-complete").addEventListener("click", completeExercise);
-    $("#btn-next-structured").addEventListener("click", () => {
+    $("#btn-next-structured").addEventListener("click", async () => {
       if (!state.structured) return;
-      // save is optional — user may complete first
       const s = VTSession.get();
       if (!s) return;
-      // if still on current, advance
-      if (!s.completedIds.includes(state.exercise.id)) {
-        VTSession.markCurrentComplete();
+      const next = () => {
+        if (!s.completedIds.includes(state.exercise.id)) {
+          VTSession.markCurrentComplete();
+        }
+        updateSessionBanner();
+        const nid = VTSession.currentExerciseId();
+        if (nid) forceOpenExercise(nid, true);
+        else {
+          toast("Structured session complete — excellent work!");
+          resetSessionPractice();
+          setView("home");
+          renderExerciseList();
+        }
+      };
+      if (shouldPromptOnLeave()) {
+        const choice = await promptLeaveExercise();
+        if (choice === "stay") return;
+        if (choice === "save") {
+          stopPractice(true);
+          VTPiano.stopAll();
+          $("#metrics-form")?.scrollIntoView({ behavior: "smooth", block: "center" });
+          $("#btn-complete")?.focus();
+          toast(tt("leave.scrollSave"));
+          return;
+        }
+        // discard then advance
+        stopPractice(true);
+        VTPiano.stopAll();
+        stopTimer(false);
+        stopHold();
+        stopPitchViz();
+        state.recorder.clear();
+        resetSessionPractice();
+        next();
+        return;
       }
-      updateSessionBanner();
-      const next = VTSession.currentExerciseId();
-      if (next) openExercise(next, true);
-      else {
-        toast("Structured session complete — excellent work!");
-        setView("home");
-        renderExerciseList();
-      }
+      next();
     });
 
     $("#btn-open-plan").addEventListener("click", renderPlan);
@@ -1795,7 +2041,26 @@
       setView("home");
       renderExerciseList();
     });
+
+    // Warn on tab close if meaningful unsaved practice
+    window.addEventListener("beforeunload", (e) => {
+      if (shouldPromptOnLeave()) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    });
   }
+
+  // Test / debug helpers
+  window.VTApp = {
+    getState: () => state,
+    shouldPromptOnLeave,
+    getPracticedSec,
+    getExerciseTargetSec,
+    promptLeaveExercise,
+    leaveExercise,
+    resetSessionPractice
+  };
 
   function init() {
     if (window.VTI18n) {

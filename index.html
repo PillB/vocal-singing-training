@@ -322,6 +322,22 @@
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
+    <!-- Leave exercise: save or discard after meaningful practice -->
+    <div id="leave-modal" class="modal-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="leave-modal-title">
+      <div class="modal-card">
+        <h3 id="leave-modal-title" data-i18n="leave.title">¿Guardar esta práctica?</h3>
+        <p id="leave-modal-body" class="muted" data-i18n="leave.body">
+          Practicaste una parte significativa de este ejercicio. Puedes guardar el progreso o descartarlo.
+        </p>
+        <p id="leave-modal-stats" class="leave-stats"></p>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-success" id="leave-save" data-i18n="leave.save">Guardar progreso</button>
+          <button type="button" class="btn btn-danger" id="leave-discard" data-i18n="leave.discard">Descartar</button>
+          <button type="button" class="btn btn-ghost" id="leave-cancel" data-i18n="leave.stay">Seguir practicando</button>
+        </div>
+      </div>
+    </div>
+
     <script src="js/i18n.js"></script>
     <script src="js/exercises-data.js"></script>
     <script src="js/practice-profiles.js"></script>

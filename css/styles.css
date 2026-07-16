@@ -77,6 +77,25 @@ a {
   border-bottom: 1px solid var(--border);
 }
 
+/* Exercise view: compact chrome so sticky highway keeps fold space */
+body.view-exercise .app-header .brand p,
+body.view-exercise .app-header .brand-mark {
+  display: none;
+}
+body.view-exercise .header-inner {
+  padding: 0.45rem 1rem;
+  gap: 0.45rem 0.75rem;
+}
+body.view-exercise .app-header .brand h1 {
+  font-size: 0.95rem;
+}
+body.view-exercise {
+  --header-h: 52px;
+}
+body.view-exercise .main {
+  padding-top: 0.65rem;
+}
+
 .header-inner {
   max-width: var(--max);
   margin: 0 auto;
@@ -1185,35 +1204,80 @@ a {
 /* Non-pitch focus area inside sticky stage — center safe zone only */
 .mode-focus {
   position: absolute;
-  inset: var(--hud-safe-t) 10% var(--hud-safe-b);
+  /* Stay clear of TL/TR/BL/BR game corners (timer can wrap ~3 lines) */
+  top: 4.75rem;
+  right: 0.85rem;
+  bottom: 3.55rem;
+  left: 0.85rem;
   display: flex;
   align-items: center;
   justify-content: center;
   pointer-events: none;
   z-index: 2;
+  overflow: hidden;
 }
 
-.mode-focus-card {
-  max-width: 34rem;
-  text-align: center;
-  padding: 0.85rem 1rem;
-  background: rgba(12, 18, 26, 0.72);
+/* Live practice mode mounted inside sticky stage (speech exercises) */
+.mode-focus.mode-focus-live {
+  pointer-events: auto;
+  align-items: stretch;
+  justify-content: stretch;
+}
+.mode-focus.mode-focus-live .mode-panel {
+  width: 100%;
+  max-height: 100%;
+  overflow: auto;
+  margin: 0;
+  background: rgba(12, 18, 26, 0.88);
   border: 1px solid var(--border);
   border-radius: 12px;
-  pointer-events: none;
+  padding: 0.4rem 0.65rem;
+  box-sizing: border-box;
+}
+.mode-focus.mode-focus-live .mode-big {
+  font-size: 1.2rem;
+}
+.mode-focus.mode-focus-live .mode-meta {
+  font-size: 0.74rem;
+  margin: 0.2rem 0;
+}
+.mode-focus.mode-focus-live .mode-title {
+  font-size: 0.88rem;
+}
+.mode-focus.mode-focus-live .btn {
+  padding: 0.3rem 0.55rem;
+  font-size: 0.78rem;
 }
 
-.mode-focus-goal {
-  margin: 0 0 0.35rem;
-  font-size: 0.95rem;
-  font-weight: 600;
-  line-height: 1.35;
-  color: var(--text);
+/* Speech stage: taller sticky frame so mode panel fits between TL and BL */
+.highway-stage:has(.mode-focus-live) {
+  min-height: 320px;
+  max-height: min(64dvh, 480px);
+}
+/* Compact TL on speech so more room for live mode */
+.highway-stage:has(.mode-focus-live) .hud-tl {
+  max-width: 9rem;
+  gap: 0.08rem;
+}
+.highway-stage:has(.mode-focus-live) .hud-tl .timer-display {
+  font-size: 1rem;
+}
+.highway-stage:has(.mode-focus-live) .hud-tl .chord-now {
+  display: none; /* no chord on speech modes */
 }
 
-.mode-focus-cta {
-  margin: 0;
-  font-size: 0.8rem;
+/* Cents-only pitch corner (non-challenge): repurpose score/combo as note labels */
+.hud-cents-only .hud-score .hud-label::after {
+  content: none;
+}
+.hud-cents-only .hud-score .hud-label {
+  font-size: 0.55rem;
+}
+.hud-cents-only .hud-combo .hud-label {
+  font-size: 0.55rem;
+}
+body.view-exercise .hud-cents-only .hud-score .hud-label {
+  /* Target note sits in strong; keep compact */
 }
 
 .hold-live.is-grace {
@@ -1272,7 +1336,11 @@ a {
 }
 
 .hold-inline .hold-help {
-  display: none; /* save space; grace is UX not copy */
+  display: block;
+  margin: 0.25rem 0 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  max-width: 52ch;
 }
 
 .metrics-card-collapsible.collapsed .metrics-body {

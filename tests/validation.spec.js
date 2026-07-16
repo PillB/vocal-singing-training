@@ -128,7 +128,8 @@ test.describe("Exercise-specific practice modes", () => {
     await page.locator("#exercise-list .card-ex").first().click();
     await expect(page.locator("#btn-practice-start")).toBeVisible();
     await expect(page.locator("#btn-pitch-start")).toBeHidden();
-    await expect(page.locator("#mode-hud")).not.toBeEmpty();
+    // Speech modes mount into sticky #mode-focus; pitch modes keep #mode-hud
+    await expect(page.locator("#mode-focus .mode-panel, #mode-hud .mode-panel")).toBeVisible();
   });
 
   test("structured session + continue still work", async ({ page }) => {
@@ -136,7 +137,7 @@ test.describe("Exercise-specific practice modes", () => {
     await page.selectOption("#session-path", "basic");
     await page.click("#btn-structured");
     await expect(page.locator("#session-banner")).toHaveClass(/visible/);
-    await expect(page.locator("#mode-hud .mode-panel")).toBeVisible();
+    await expect(page.locator("#mode-focus .mode-panel, #mode-hud .mode-panel")).toBeVisible();
     await page.click("#btn-session-end");
     await page.click("#btn-continue");
     await expect(page.locator("#view-exercise")).toHaveClass(/active/);

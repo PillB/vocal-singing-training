@@ -132,8 +132,8 @@
         <div class="metro-dot" data-metro aria-hidden="true"></div>
         <div class="mode-big" data-remain>—</div>
         <div class="mode-bar"><span data-bar style="width:0%"></span></div>
-        <p class="mode-meta">Pace cue <strong data-bpm>~72 BPM</strong> · over-articulate · speech on: <strong data-act>0%</strong></p>
-        <p class="mode-meta muted">Keep consonants crisp as the pulse speeds up each phase.</p>
+        <p class="mode-meta">${L("Ritmo <strong data-bpm>~72 BPM</strong> · sobre-articula · hablando: <strong data-act>0%</strong>", "Pace cue <strong data-bpm>~72 BPM</strong> · over-articulate · speech on: <strong data-act>0%</strong>")}</p>
+        <p class="mode-meta muted">${L("Mantén las consonantes claras al subir el ritmo en cada fase.", "Keep consonants crisp as the pulse speeds up each phase.")}</p>
       `;
     },
     onFrame(frame) {
@@ -197,8 +197,8 @@
         <div class="mode-phase" data-phase>${phases[0]?.label || "Topic"}</div>
         <div class="mode-big" data-remain>—</div>
         <button type="button" class="btn btn-primary btn-sm" data-log>I spoke a metaphor ✓</button>
-        <p class="mode-meta">Metaphors logged: <strong data-n>0</strong> / ${phases.length}</p>
-        <p class="mode-meta muted">One concrete image per topic — say it out loud, then tap.</p>
+        <p class="mode-meta">${L("Metáforas: <strong data-n>0</strong> / " + phases.length, "Metaphors logged: <strong data-n>0</strong> / " + phases.length)}</p>
+        <p class="mode-meta muted">${L("Una imagen concreta por tema — dilo en voz alta y toca.", "One concrete image per topic — say it out loud, then tap.")}</p>
       `;
       this.$("[data-log]")?.addEventListener("click", () => {
         this.state.logged++;
@@ -241,7 +241,7 @@
           <div class="volume-band"></div>
           <div class="volume-needle" data-needle style="left:50%"></div>
         </div>
-        <p class="mode-meta">Live level · aim for the center band · breath cycles: <strong data-cyc>0</strong></p>
+        <p class="mode-meta">${L("Nivel en vivo · apunta a la franja central · ciclos de aire: <strong data-cyc>0</strong>", "Live level · aim for the center band · breath cycles: <strong data-cyc>0</strong>")}</p>
         <p class="mode-meta" data-fade>—</p>
       `;
     },
@@ -306,8 +306,8 @@
           <div class="volume-needle" data-needle style="left:10%"></div>
         </div>
         <div class="mode-big" data-remain>${this.profile.stepSec || 8}s</div>
-        <p class="mode-meta">Step <strong data-step>1</strong>/${ladder.length} · Credited steps: <strong data-cr>0</strong> · Climbs: <strong data-cyc>0</strong></p>
-        <p class="mode-meta muted">Step only credits if you stay in the band ≥50% of the step.</p>
+        <p class="mode-meta">${L("Paso <strong data-step>1</strong>/" + ladder.length + " · Pasos contados: <strong data-cr>0</strong> · Subidas: <strong data-cyc>0</strong>", "Step <strong data-step>1</strong>/" + ladder.length + " · Credited steps: <strong data-cr>0</strong> · Climbs: <strong data-cyc>0</strong>")}</p>
+        <p class="mode-meta muted">${L("El paso solo cuenta si te mantienes en la franja ≥50% del tiempo.", "Step only credits if you stay in the band ≥50% of the step.")}</p>
       `;
     },
     onFrame(frame) {
@@ -376,8 +376,8 @@
           <button type="button" class="btn btn-primary btn-sm" data-plus>+1 count</button>
           <button type="button" class="btn btn-sm" data-plus5>+5</button>
         </div>
-        <p class="mode-meta">Time <strong data-t>0:00</strong> · Target 60 · tall space, tongue gently out</p>
-        <p class="mode-meta" data-nudge>Tap as you count — or +5 every few numbers.</p>
+        <p class="mode-meta">${L("Tiempo <strong data-t>0:00</strong> · Meta 60 · espacio alto, lengua suave afuera", "Time <strong data-t>0:00</strong> · Target 60 · tall space, tongue gently out")}</p>
+        <p class="mode-meta" data-nudge>${L("Toca al contar — o +5 cada pocos números.", "Tap as you count — or +5 every few numbers.")}</p>
       `;
       this.$("[data-plus]")?.addEventListener("click", () => {
         this.state.count++;
@@ -433,11 +433,11 @@
         <div class="mode-big" data-remain>${phases[0].sec}s</div>
         <div class="mode-bar"><span data-bar style="width:0%"></span></div>
         <div data-rate hidden>
-          <p class="mode-meta">Rate clarity after each phase:</p>
-          <label class="mode-meta">With pen (1–5)
+          <p class="mode-meta">${L("Califica la claridad después de cada fase:", "Rate clarity after each phase:")}</p>
+          <label class="mode-meta">${L("Con bolígrafo (1–5)", "With pen (1–5)")}
             <input type="range" min="1" max="5" value="3" data-pen />
           </label>
-          <label class="mode-meta">After pen (1–5)
+          <label class="mode-meta">${L("Sin bolígrafo (1–5)", "After pen (1–5)")}
             <input type="range" min="1" max="5" value="3" data-after />
           </label>
         </div>
@@ -488,7 +488,7 @@
         <div class="mode-title">${L("Toma de actuación · persona", "Performance take · persona")}</div>
         <div class="mode-phase" data-pr>${prompts[0]}</div>
         <div class="mode-big" data-t>0:00</div>
-        <p class="mode-meta">Prompts rotate every ~25s. Don't judge mid-take — review later.</p>
+        <p class="mode-meta">${L("Las pistas rotan cada ~25s. No te juzgues a mitad — revisa después.", "Prompts rotate every ~25s. Don't judge mid-take — review later.")}</p>
       `;
     },
     onFrame() {
@@ -517,7 +517,7 @@
         <div class="mode-title">${L("Expresión facial", "Facial expressiveness")}</div>
         <div class="mode-phase" data-phase>${phases[0]?.label || "Face"}</div>
         <div class="mode-big" data-remain>—</div>
-        <p class="mode-meta">Change the face with the phase. Review muted after stop.</p>
+        <p class="mode-meta">${L("Cambia la cara con la fase. Revisa en silencio al detener.", "Change the face with the phase. Review muted after stop.")}</p>
       `;
     },
     onFrame() {
@@ -559,8 +559,8 @@
         <div class="listen-bars">
           <div class="listen-speak" data-speak style="width:50%"></div>
         </div>
-        <p class="mode-meta">You speaking <strong data-sp>50%</strong> · silence/listen slots <strong data-si>50%</strong></p>
-        <p class="mode-meta muted" data-tip>Imagine their answer — stay quiet in THEIR slot. Rate presence yourself after.</p>
+        <p class="mode-meta">${L("Tú hablas <strong data-sp>50%</strong> · silencio/escucha <strong data-si>50%</strong>", "You speaking <strong data-sp>50%</strong> · silence/listen slots <strong data-si>50%</strong>")}</p>
+        <p class="mode-meta muted" data-tip>${L("Imagina su respuesta — cállate en SU turno. Califica presencia al final.", "Imagine their answer — stay quiet in THEIR slot. Rate presence yourself after.")}</p>
       `;
     },
     onFrame(frame) {
@@ -608,7 +608,7 @@
       this.hud.innerHTML = `
         <div class="mode-title">${L("Grabar y revisar", "Record &amp; review take")}</div>
         <div class="mode-big" data-t>0:00</div>
-        <p class="mode-meta mode-warn">Leave <strong>1 full day</strong> before Auditory → Visual → Transcription.</p>
+        <p class="mode-meta mode-warn">${L("Espera <strong>1 día completo</strong> antes de Audición → Visual → Transcripción.", "Leave <strong>1 full day</strong> before Auditory → Visual → Transcription.")}</p>
       `;
     },
     onFrame() {
@@ -632,7 +632,7 @@
     render() {
       this.hud.innerHTML = `
         <div class="mode-title">${L("Foco de 12 semanas", "12-week focus")}</div>
-        <p class="mode-meta">Practice lives in the weekly dashboard. Open it to pick an element and check in.</p>
+        <p class="mode-meta">${L("La práctica está en el panel semanal. Ábrelo para elegir un elemento y registrar el día.", "Practice lives in the weekly dashboard. Open it to pick an element and check in.")}</p>
         <button type="button" class="btn btn-primary btn-sm" data-open-plan>Open 12-week plan</button>
       `;
       this.$("[data-open-plan]")?.addEventListener("click", () => {
@@ -658,9 +658,9 @@
       this.hud.innerHTML = `
         <div class="mode-title">${L("Detector de pausas de poder", "Power pause detector")}</div>
         <div class="mode-big" data-p>0</div>
-        <p class="mode-meta">Silences ≥ ${this.profile.minPauseSec || 0.8}s <em>after speech</em> (not idle quiet)</p>
+        <p class="mode-meta">${L("Silencios ≥ " + (this.profile.minPauseSec || 0.8) + "s <em>después de hablar</em> (no silencio vacío)", "Silences ≥ " + (this.profile.minPauseSec || 0.8) + "s <em>after speech</em> (not idle quiet)")}</p>
         <div class="silence-timeline" data-tl></div>
-        <p class="mode-meta" data-status>Speak a point… then land in silence.</p>
+        <p class="mode-meta" data-status>${L("Di un punto… y aterriza en silencio.", "Speak a point… then land in silence.")}</p>
       `;
     },
     onFrame(frame) {
@@ -716,8 +716,8 @@
           <button type="button" class="btn btn-danger btn-sm" data-fill>Caught an um/like +</button>
           <button type="button" class="btn btn-success btn-sm" data-rep>Paused instead +</button>
         </div>
-        <p class="mode-meta">Fillers noted <strong data-f>0</strong> · Replacements <strong data-r>0</strong> · Auto pauses <strong data-p>0</strong></p>
-        <p class="mode-meta muted">Tap when you notice a filler. Prefer “Paused instead” when you catch yourself.</p>
+        <p class="mode-meta">${L("Rellenos <strong data-f>0</strong> · Reemplazos <strong data-r>0</strong> · Pausas auto <strong data-p>0</strong>", "Fillers noted <strong data-f>0</strong> · Replacements <strong data-r>0</strong> · Auto pauses <strong data-p>0</strong>")}</p>
+        <p class="mode-meta muted">${L("Toca al notar un relleno. Prefiere “Pausé en su lugar” si te atrapas a tiempo.", "Tap when you notice a filler. Prefer “Paused instead” when you catch yourself.")}</p>
       `;
       this.$("[data-fill]")?.addEventListener("click", () => {
         this.state.fillers++;
@@ -774,7 +774,7 @@
         <div class="mode-title">${L("Ritmo con impacto", "Pace for impact")}</div>
         <div class="mode-big" data-k>0 / 3 confirmed</div>
         <button type="button" class="btn btn-primary btn-sm" data-key>Mark key point — then slow 1s</button>
-        <p class="mode-meta" data-st>Tap, then drop pace/energy ~1 second to confirm.</p>
+        <p class="mode-meta" data-st>${L("Toca y baja ritmo/energía ~1s para confirmar.", "Tap, then drop pace/energy ~1 second to confirm.")}</p>
       `;
       this.$("[data-key]")?.addEventListener("click", () => {
         this.state.keys++;
@@ -820,7 +820,7 @@
           <button type="button" class="btn btn-sm" data-g="count">Count +</button>
           <button type="button" class="btn btn-sm" data-g="location">Location +</button>
         </div>
-        <p class="mode-meta">Size <strong data-s>0</strong> · Count <strong data-c>0</strong> · Location <strong data-l>0</strong></p>
+        <p class="mode-meta">${L("Tamaño <strong data-s>0</strong> · Cuenta <strong data-c>0</strong> · Lugar <strong data-l>0</strong>", "Size <strong data-s>0</strong> · Count <strong data-c>0</strong> · Location <strong data-l>0</strong>")}</p>
         <label class="mode-meta" style="display:flex;gap:0.4rem;align-items:center;margin-top:0.5rem;">
           <input type="checkbox" data-muted /> I reviewed the take muted first
         </label>
@@ -863,7 +863,7 @@
         <div class="mode-title">${L("Puerta de concisión", "Concision gate")}</div>
         <div class="mode-phase" data-phase>Q1 · Receive the question</div>
         <div class="mode-big" data-g>Breathe</div>
-        <p class="mode-meta">Gates passed: <strong data-ok>0</strong>/${this.state.maxQ}</p>
+        <p class="mode-meta">${L("Puertas pasadas: <strong data-ok>0</strong>/" + this.state.maxQ, "Gates passed: <strong data-ok>0</strong>/" + this.state.maxQ)}</p>
         <button type="button" class="btn btn-sm" data-next>Next question</button>
       `;
       this.$("[data-next]")?.addEventListener("click", () => {
@@ -922,7 +922,7 @@
         <div class="mode-phase" data-phase>${phases[0]?.label}</div>
         <div class="mode-big" data-remain>—</div>
         <button type="button" class="btn btn-singing btn-sm" data-peak>Mark PEAK now</button>
-        <p class="mode-meta" data-peak-st>Peak not marked yet</p>
+        <p class="mode-meta" data-peak-st>${L("Pico aún no marcado", "Peak not marked yet")}</p>
       `;
       this.$("[data-peak]")?.addEventListener("click", () => {
         this.state.peakMarked = true;
@@ -962,7 +962,7 @@
         <div class="mode-title">${L("Cierres con autoridad", "Authority landings")}</div>
         <div class="mode-big" data-l>0 / ${this.profile.claims || 5}</div>
         <button type="button" class="btn btn-primary btn-sm" data-claim>I stated a claim — now land</button>
-        <p class="mode-meta" data-st>State claim, then hold silence ~1s (no “you know?”)</p>
+        <p class="mode-meta" data-st>${L("Di la afirmación y guarda silencio ~1s (sin “¿sabes?”)", "State claim, then hold silence ~1s (no “you know?”)")}</p>
       `;
       this.$("[data-claim]")?.addEventListener("click", () => {
         this.state.waitingLand = true;
@@ -1011,8 +1011,8 @@
         <div class="mode-phase" data-phase>Low energy</div>
         <div class="mode-big" data-remain>30s</div>
         <div class="volume-lane"><div class="volume-band" data-band></div><div class="volume-needle" data-n style="left:20%"></div></div>
-        <p class="mode-meta">Volume is one channel — also match pace &amp; face. Cycles: <strong data-c>0</strong></p>
-        <p class="mode-meta muted" data-tip>Low: calm eyes, slower pace. High: brighter face, quicker (not shout).</p>
+        <p class="mode-meta">${L("El volumen es un canal — también ritmo y cara. Ciclos: <strong data-c>0</strong>", "Volume is one channel — also match pace &amp; face. Cycles: <strong data-c>0</strong>")}</p>
+        <p class="mode-meta muted" data-tip>${L("Bajo: ojos calmados, más lento. Alto: cara viva, más rápido (sin gritar).", "Low: calm eyes, slower pace. High: brighter face, quicker (not shout).")}</p>
       `;
     },
     onFrame(frame) {
@@ -1063,8 +1063,8 @@
       this.hud.innerHTML = `
         <div class="mode-title">${L("Rango melódico (habla)", "Melodic range (speech)")}</div>
         <div class="mode-big" data-r>— st</div>
-        <p class="mode-meta">Min–max pitch span while you speak. Variety without note drills.</p>
-        <p class="mode-meta" data-d>Start speaking with color…</p>
+        <p class="mode-meta">${L("Rango mín–máx al hablar. Variedad sin ejercicios de nota.", "Min–max pitch span while you speak. Variety without note drills.")}</p>
+        <p class="mode-meta" data-d>${L("Empieza a hablar con color…", "Start speaking with color…")}</p>
       `;
     },
     onFrame(frame) {
@@ -1100,13 +1100,13 @@
         <div class="mode-title">${fry ? L("Fry → /A/ clara sostenida", "Fry → clear /A/ hold") : L("Sostén y mantén", "Sustain & hold")}</div>
         <div class="mode-phase" data-phase>${fry ? "Phase 1 · gentle fry (finder)" : "Sustain"}</div>
         <div class="mode-big" data-h>0.0s</div>
-        <p class="mode-meta">Best clear hold: <strong data-best>0s</strong> · logs: <strong data-n>0</strong></p>
+        <p class="mode-meta">${L("Mejor sostenido: <strong data-best>0s</strong> · registros: <strong data-n>0</strong>", "Best clear hold: <strong data-best>0s</strong> · logs: <strong data-n>0</strong>")}</p>
         ${
           fry
             ? `<button type="button" class="btn btn-sm btn-singing" data-clear>Move to clear /A/</button>`
             : ""
         }
-        <p class="mode-meta muted">Auto-logs holds ≥2s after release. Not a note-challenge game.</p>
+        <p class="mode-meta muted">${L("Registra sostenidos ≥2s al soltar. No es un juego de notas.", "Auto-logs holds ≥2s after release. Not a note-challenge game.")}</p>
       `;
       this.$("[data-clear]")?.addEventListener("click", () => {
         this.state.phase = "hold";
@@ -1215,8 +1215,8 @@
           <button type="button" class="btn btn-sm" data-feel>Feel +1</button>
           <button type="button" class="btn btn-sm" data-better>Better Man +1</button>
         </div>
-        <p class="mode-meta">Feel <strong data-f>0</strong>/5 · Better Man <strong data-b>0</strong>/5 · In-lane <strong data-lane>0%</strong></p>
-        <p class="mode-meta muted">Piano under your stanzas — watch pitch graph for note centers.</p>
+        <p class="mode-meta">${L("Sentir <strong data-f>0</strong>/5 · Better Man <strong data-b>0</strong>/5 · En carril <strong data-lane>0%</strong>", "Feel <strong data-f>0</strong>/5 · Better Man <strong data-b>0</strong>/5 · In-lane <strong data-lane>0%</strong>")}</p>
+        <p class="mode-meta muted">${L("Piano bajo tus estrofas — mira la gráfica de afinación.", "Piano under your stanzas — watch pitch graph for note centers.")}</p>
       `;
       this.$("[data-feel]")?.addEventListener("click", () => {
         this.state.feel++;
@@ -1228,19 +1228,23 @@
       });
     },
     onFrame(frame) {
-      if (frame.voiceFreq && frame.targetFreq && global.VTPitchUtils) {
-        this.state.samples++;
-        const cents = Math.abs(
+      if (!frame.voiceFreq) return;
+      this.state.samples++;
+      let cents = Infinity;
+      const near = global.VTGetPitchViz?.()?.nearestActiveLane?.(frame.voiceFreq);
+      if (near) cents = Math.abs(near.cents);
+      else if (frame.targetFreq && global.VTPitchUtils) {
+        cents = Math.abs(
           (global.VTPitchUtils.freqToMidi(frame.voiceFreq) -
             global.VTPitchUtils.freqToMidi(frame.targetFreq)) *
             100
         );
-        if (cents <= 50) this.state.inBand++;
-        if (this.$("[data-lane]") && this.state.samples > 5) {
-          this.$("[data-lane]").textContent = `${Math.round(
-            (this.state.inBand / this.state.samples) * 100
-          )}%`;
-        }
+      }
+      if (cents <= 50) this.state.inBand++;
+      if (this.$("[data-lane]") && this.state.samples > 5) {
+        this.$("[data-lane]").textContent = `${Math.round(
+          (this.state.inBand / this.state.samples) * 100
+        )}%`;
       }
     },
     onStop() {
@@ -1261,8 +1265,8 @@
     render() {
       this.hud.innerHTML = `
         <div class="mode-title">${L("Juego de afinación", "Pitch match game")}</div>
-        <p class="mode-meta">Full highway + score + lock 8 notes. Stay in the green lane.</p>
-        <p class="mode-meta" data-s>Score updates in the pitch HUD above.</p>
+        <p class="mode-meta">${L("Autopista + puntos + bloquea 8 notas. Quédate en el carril verde.", "Full highway + score + lock 8 notes. Stay in the green lane.")}</p>
+        <p class="mode-meta" data-s>${L("El puntaje se actualiza en el HUD de arriba.", "Score updates in the pitch HUD above.")}</p>
       `;
     },
     onStop(ctx) {
@@ -1288,14 +1292,14 @@
       this.hud.innerHTML = `
         <div class="mode-title">${straw ? L("Fonación con pajita · SOVT", "Straw phonation · SOVT") : L("Trinos de labios · SOVT", "Lip trills · SOVT")}</div>
         <div class="mode-bar thick"><span data-bar style="width:0%"></span></div>
-        <p class="mode-meta">Evenness: <strong data-ev>—</strong></p>
+        <p class="mode-meta">${L("Uniformidad: <strong data-ev>—</strong>", "Evenness: <strong data-ev>—</strong>")}</p>
         <p class="mode-meta muted">${
           straw
             ? "Air only through straw; cheeks soft. Transfer to /u/ then /A/ after."
             : "Steady bubbles — jaw free. Transfer same ease to open /A/ after."
         }</p>
         <button type="button" class="btn btn-sm" data-xfer>Mark transfer to open vowel ✓</button>
-        <p class="mode-meta">Transfer marked: <strong data-x>no</strong></p>
+        <p class="mode-meta">${L("Transferencia marcada: <strong data-x>no</strong>", "Transfer marked: <strong data-x>no</strong>")}</p>
       `;
       this.$("[data-xfer]")?.addEventListener("click", () => {
         this.state.transfer = true;
@@ -1345,9 +1349,9 @@
       this.state.inBand = 0;
       this.hud.innerHTML = `
         <div class="mode-title">${L("Tarareo · objetivos suaves", "Humming · soft targets")}</div>
-        <div class="mode-phase" data-n>Target: ${this.state.notes[0]}</div>
+        <div class="mode-phase" data-n>${L("Objetivo: ", "Target: ")}${this.state.notes[0]}</div>
         <div class="mode-big" data-l>0 / 10</div>
-        <p class="mode-meta">Hold hum near target ~0.9s to advance. Feel lip buzz.</p>
+        <p class="mode-meta">${L("Mantén el tarareo cerca del objetivo ~0,9s para avanzar. Siente el zumbido en los labios.", "Hold hum near target ~0.9s to advance. Feel lip buzz.")}</p>
       `;
       // set first target
       if (global.VT_NOTE_FREQ && global.VT_NOTE_FREQ[this.state.notes[0]]) {
@@ -1622,25 +1626,27 @@
     }
   });
 
-  /** s14 sung staccato vs legato — note length contrast */
+  /** s14 sung staccato vs legato — note length contrast via onset/offset (not ≥2s holds) */
   Modes.staccatoLegato = baseMode({
     id: "staccatoLegato",
     render() {
       const phases = this.profile.phases || [
-        { label: "Staccato", sec: 90 },
-        { label: "Legato", sec: 90 }
+        { label: L("Staccato", "Staccato"), sec: 90 },
+        { label: L("Legato", "Legato"), sec: 90 }
       ];
       this.state.runner = createPhaseRunner(phases, (i, p) => {
         if (global.VTToast) global.VTToast(p.label);
       });
       this.state.shortHolds = 0;
       this.state.longHolds = 0;
+      this.state.noteOn = false;
+      this.state.noteStart = 0;
       this.hud.innerHTML = `
         <div class="mode-title">${L("Staccato vs legato (cantado)", "Staccato vs legato (sung)")}</div>
         <div class="mode-phase" data-phase>${phases[0].label}</div>
         <div class="mode-big" data-remain>—</div>
-        <p class="mode-meta">Short notes (&lt;0.45s): <strong data-sh>0</strong> · Long (≥1.2s): <strong data-lg>0</strong></p>
-        <p class="mode-meta muted">Staccato = bounce air. Legato = connect with steady air.</p>
+        <p class="mode-meta">${L("Notas cortas (&lt;0,45s):", "Short notes (&lt;0.45s):")} <strong data-sh>0</strong> · ${L("Largas (≥1,2s):", "Long (≥1.2s):")} <strong data-lg>0</strong></p>
+        <p class="mode-meta muted">${L("Staccato = aire con rebote. Legato = línea conectada con aire estable.", "Staccato = bounce air. Legato = connect with steady air.")}</p>
       `;
     },
     onFrame(frame) {
@@ -1648,22 +1654,33 @@
       r.tick(performance.now());
       if (this.$("[data-phase]"))
         this.$("[data-phase]").textContent =
-          r.index < r.count ? r.label : "Contrast complete";
+          r.index < r.count ? r.label : L("Contraste listo", "Contrast complete");
       if (this.$("[data-remain]"))
         this.$("[data-remain]").textContent =
           r.index < r.count ? `${Math.ceil(r.remaining)}s` : "✓";
-      // detect note ends
-      const holds = frame.holds || [];
-      if (holds.length > (this.state.seen || 0)) {
-        const h = holds[0];
-        this.state.seen = holds.length;
-        if (h.seconds < 0.45) this.state.shortHolds++;
-        if (h.seconds >= 1.2) this.state.longHolds++;
+      // Note events from RMS (works for short staccato; hold logger only keeps ≥2s)
+      const voiced = !!frame.voiced || (frame.rms || 0) >= 0.018;
+      const now = performance.now();
+      if (voiced && !this.state.noteOn) {
+        this.state.noteOn = true;
+        this.state.noteStart = now;
+      } else if (!voiced && this.state.noteOn) {
+        this.state.noteOn = false;
+        const sec = (now - this.state.noteStart) / 1000;
+        if (sec >= 0.08 && sec < 0.45) this.state.shortHolds++;
+        if (sec >= 1.2) this.state.longHolds++;
         if (this.$("[data-sh]")) this.$("[data-sh]").textContent = String(this.state.shortHolds);
         if (this.$("[data-lg]")) this.$("[data-lg]").textContent = String(this.state.longHolds);
       }
     },
     onStop() {
+      // flush open note
+      if (this.state.noteOn) {
+        const sec = (performance.now() - this.state.noteStart) / 1000;
+        if (sec >= 0.08 && sec < 0.45) this.state.shortHolds++;
+        if (sec >= 1.2) this.state.longHolds++;
+        this.state.noteOn = false;
+      }
       const patches = { rounds: this.state.runner?.index || 0 };
       if (this.state.shortHolds + this.state.longHolds > 0) {
         patches.staccatoEase = this.state.shortHolds >= 4 ? 4 : 3;

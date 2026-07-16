@@ -245,8 +245,17 @@
       this.clearChordLanes();
       this.history = [];
       this.devWindow = [];
-      this.targetFreq = null;
+      this.targetFreq = 130.81;
       this.targetName = "";
+      this.maCents = 0;
+      this.maAbs = 0;
+      this.precisionCents = 0;
+      this.accuracyCents = 0;
+      try {
+        this._drawIdle();
+      } catch {
+        /* canvas may not be sized yet */
+      }
     }
 
     /**
@@ -352,7 +361,17 @@
     }
 
     _ingest(f, dtMs = 16) {
-      const targetMidi = freqToMidi(this.targetFreq);
+      // Multi-lane truth: score vs nearest active chord tone when lanes exist
+      let scoreFreq = this.targetFreq;
+      let scoreName = null;
+      if (f && this.chordLanes && this.chordLanes.length) {
+        const near = this.nearestActiveLane(f);
+        if (near && near.freq) {
+          scoreFreq = near.freq;
+          scoreName = near.name;
+        }
+      }
+      const targetMidi = freqToMidi(scoreFreq || this.targetFreq || 130.81);
       let voiceMidi = null;
       let cents = null;
       if (f) {
@@ -385,8 +404,8 @@
 
       if (this.onStats) {
         this.onStats({
-          targetFreq: this.targetFreq,
-          targetName: midiToName(targetMidi),
+          targetFreq: scoreFreq || this.targetFreq,
+          targetName: scoreName || midiToName(targetMidi),
           voiceFreq: f,
           voiceName: f ? midiToName(freqToMidi(f)) : "—",
           accuracyCents: this.accuracyCents,
@@ -608,13 +627,23 @@
         ctx.lineTo(w, y);
         ctx.stroke();
         ctx.shadowBlur = 0;
+        const esLane =
+          (global.VTI18n && global.VTI18n.lang === "es") ||
+          document.documentElement.lang === "es";
         ctx.fillStyle = isPrimary ? "#b8f0d4" : "#f5d7b0";
         ctx.font = isPrimary
           ? "800 12px system-ui,sans-serif"
           : "700 11px system-ui,sans-serif";
         ctx.textAlign = "left";
         ctx.fillText(
-          (lane.name || "") + (isPrimary ? " ● canta aquí" : " · activo"),
+          (lane.name || "") +
+            (isPrimary
+              ? esLane
+                ? " ● canta aquí"
+                : " ● sing here"
+              : esLane
+                ? " · activo"
+                : " · active"),
           8,
           y - laneHalf - 2
         );

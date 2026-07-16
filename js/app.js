@@ -123,6 +123,7 @@
     };
     const target = $(map[name]);
     if (target) target.classList.add("active");
+    document.body.classList.toggle("view-exercise", name === "exercise");
     updateSessionBanner();
   }
 
@@ -305,12 +306,39 @@
       state.modeInstance = null;
     }
     const modeHud = $("#mode-hud");
+    const modeFocus = $("#mode-focus");
     if (modeHud) modeHud.innerHTML = "";
-    if (window.VTPracticeModes) {
-      state.modeInstance = VTPracticeModes.get(profile.mode);
-      state.modeInstance.mount(modeHud, profile);
+    if (modeFocus) modeFocus.innerHTML = "";
+    // Non-pitch: mount live mode into sticky stage (less scroll). Pitch: mode below highway.
+    const mountTarget = !profile.showPitch && modeFocus ? modeFocus : modeHud;
+    if (modeFocus) {
+      if (!profile.showPitch) {
+        modeFocus.hidden = false;
+        modeFocus.setAttribute("aria-hidden", "false");
+        modeFocus.classList.add("mode-focus-live");
+      } else {
+        modeFocus.hidden = true;
+        modeFocus.setAttribute("aria-hidden", "true");
+        modeFocus.classList.remove("mode-focus-live");
+      }
     }
-    if ($("#mode-cue")) $("#mode-cue").textContent = profile.cue || "";
+    if (window.VTPracticeModes && mountTarget) {
+      state.modeInstance = VTPracticeModes.get(profile.mode);
+      state.modeInstance.mount(mountTarget, profile);
+    }
+    if ($("#mode-cue")) {
+      const es =
+        (window.VTI18n && VTI18n.lang === "es") ||
+        (document.documentElement.lang || "").startsWith("es");
+      $("#mode-cue").textContent =
+        (es && profile.cueEs) || profile.cue || tt("practice.hint");
+      // Cue already lives in sticky stage for speech; hide duplicate below
+      $("#mode-cue").hidden = !profile.showPitch;
+    }
+    // Hide empty mode-hud shell when mode lives in sticky focus
+    if (modeHud) {
+      modeHud.hidden = !profile.showPitch && mountTarget === modeFocus;
+    }
 
     // Pitch visualizer only when profile asks
     const pitchBlock = $("#pitch-block");
@@ -343,15 +371,17 @@
     if (ch) ch.checked = !!profile.pitchChallenge;
     if (chRow) chRow.hidden = !profile.pitchChallenge;
 
-    // Game score HUD only for challenge modes (not fry/sirens/hold)
+    // Pitch corner: always on for pitch (cents/quality); full score only for challenge
     const gameHud = $("#pitch-game-hud");
-    const showGameHud = !!(profile.showPitch && profile.pitchChallenge);
+    const showPitchHud = !!profile.showPitch;
     if (gameHud) {
-      gameHud.style.display = showGameHud ? "" : "none";
+      gameHud.style.display = showPitchHud ? "" : "none";
       gameHud.style.opacity = "1";
+      gameHud.classList.toggle("hud-challenge", !!profile.pitchChallenge);
+      gameHud.classList.toggle("hud-cents-only", showPitchHud && !profile.pitchChallenge);
     }
     const tr = $(".hud-tr");
-    if (tr) tr.style.display = showGameHud ? "" : "none";
+    if (tr) tr.style.display = showPitchHud ? "" : "none";
 
     // Hold strip
     const showHold = !!profile.showHold;
@@ -363,23 +393,6 @@
     // Level meter
     const lvl = $("#level-meter-wrap");
     if (lvl) lvl.style.display = profile.showLevel === false ? "none" : "";
-
-    // Non-pitch: put goal strip inside sticky stage so highway isn't empty
-    const modeFocus = $("#mode-focus");
-    if (modeFocus) {
-      if (!profile.showPitch) {
-        modeFocus.hidden = false;
-        modeFocus.setAttribute("aria-hidden", "false");
-        modeFocus.innerHTML = `<div class="mode-focus-card">
-          <p class="mode-focus-goal">${escapeHtml(profile.cue || tt("practice.hint"))}</p>
-          <p class="mode-focus-cta muted">${escapeHtml(tt("practice.focusCta"))}</p>
-        </div>`;
-      } else {
-        modeFocus.hidden = true;
-        modeFocus.setAttribute("aria-hidden", "true");
-        modeFocus.innerHTML = "";
-      }
-    }
 
     // Piano: mini opts in HUD; full panel collapsed/hidden by default
     const pianoBlock = $("#piano-block");
@@ -411,17 +424,20 @@
     const reviewBlock = $("#review-block");
     reviewBlock.hidden = !ex.audio.reviewWorkflow;
     if (ex.reviewSteps) {
+      const esRev =
+        (window.VTI18n && VTI18n.lang === "es") ||
+        (document.documentElement.lang || "").startsWith("es");
       reviewBlock.innerHTML = `
-        <h3>3-step review (wait 1 full day after recording)</h3>
-        <p class="muted">Mark each step as you complete it. Be kind — note 3 strengths and 3 growth points first.</p>
+        <h3>${esRev ? "Revisión en 3 pasos (espera 1 día completo tras grabar)" : "3-step review (wait 1 full day after recording)"}</h3>
+        <p class="muted">${esRev ? "Marca cada paso al terminarlo. Sé amable: anota 3 fortalezas y 3 puntos de crecimiento primero." : "Mark each step as you complete it. Be kind — note 3 strengths and 3 growth points first."}</p>
         ${ex.reviewSteps
           .map(
             (step) => `
           <div class="review-step">
-            <h4>${step.title}</h4>
-            <ul>${step.prompts.map((p) => `<li>${p}</li>`).join("")}</ul>
+            <h4>${step.titleEs && esRev ? step.titleEs : step.title}</h4>
+            <ul>${step.prompts.map((p) => `<li>${typeof p === "object" ? (esRev && p.es) || p.en || p : p}</li>`).join("")}</ul>
             <label style="display:flex;gap:0.4rem;align-items:center;margin-top:0.55rem;font-size:0.9rem;">
-              <input type="checkbox" data-review="${step.id}" /> Step complete
+              <input type="checkbox" data-review="${step.id}" /> ${esRev ? "Paso listo" : "Step complete"}
             </label>
           </div>`
           )
@@ -630,13 +646,12 @@
     if (combo) combo.textContent = `×${snap.combo}`;
     if (acc) acc.textContent = `${snap.accuracyPct}%`;
     if (q) {
-      const labels = {
-        perfect: "PERFECT",
-        good: "GOOD",
-        close: "CLOSE",
-        off: "FIND IT",
-        "—": "—"
-      };
+      const es =
+        (window.VTI18n && VTI18n.lang === "es") ||
+        (document.documentElement.lang || "").startsWith("es");
+      const labels = es
+        ? { perfect: "PERFECTO", good: "BIEN", close: "CERCA", off: "BÚSCALA", "—": "—" }
+        : { perfect: "PERFECT", good: "GOOD", close: "CLOSE", off: "FIND IT", "—": "—" };
       q.textContent = labels[snap.quality] || snap.quality;
       q.className = "hud-quality " + (snap.quality === "—" ? "" : snap.quality);
     }
@@ -708,9 +723,12 @@
         }
       }
       const modeHud = $("#mode-hud");
-      if (modeHud && window.VTPracticeModes) {
+      const modeFocus = $("#mode-focus");
+      const mountTarget =
+        !profile.showPitch && modeFocus ? modeFocus : modeHud;
+      if (mountTarget && window.VTPracticeModes) {
         state.modeInstance = VTPracticeModes.get(profile.mode);
-        state.modeInstance.mount(modeHud, profile);
+        state.modeInstance.mount(mountTarget, profile);
         state.modeInstance.onStart();
       }
 
@@ -903,19 +921,64 @@
   function updatePitchStatsLabel(stats) {
     const el = $("#pitch-stats");
     if (!el || !stats) return;
+    const es =
+      (window.VTI18n && VTI18n.lang === "es") ||
+      (document.documentElement.lang || "").startsWith("es");
     const acc = stats.accuracyCents != null ? Math.round(stats.accuracyCents) : 0;
     const prec = stats.precisionCents != null ? Math.round(stats.precisionCents) : 0;
-    const accWord =
-      Math.abs(acc) <= 25 ? "on target" : acc > 0 ? "a bit sharp" : "a bit flat";
-    const precWord = prec <= 30 ? "stable (precise)" : prec <= 60 ? "settling" : "variable";
+    const accWord = es
+      ? Math.abs(acc) <= 25
+        ? "en el tono"
+        : acc > 0
+          ? "un poco agudo"
+          : "un poco grave"
+      : Math.abs(acc) <= 25
+        ? "on target"
+        : acc > 0
+          ? "a bit sharp"
+          : "a bit flat";
+    const precWord = es
+      ? prec <= 30
+        ? "estable (preciso)"
+        : prec <= 60
+          ? "ajustando"
+          : "variable"
+      : prec <= 30
+        ? "stable (precise)"
+        : prec <= 60
+          ? "settling"
+          : "variable";
     const g = stats.game;
     el.innerHTML = `
-      <span><strong>Target</strong> ${stats.targetName || "—"}</span>
-      <span><strong>You</strong> ${stats.voiceName || "—"}</span>
+      <span><strong>${es ? "Objetivo" : "Target"}</strong> ${stats.targetName || "—"}</span>
+      <span><strong>${es ? "Tú" : "You"}</strong> ${stats.voiceName || "—"}</span>
       <span><strong>Cents</strong> ${acc > 0 ? "+" : ""}${acc}¢ · ${accWord}</span>
-      <span><strong>Precision</strong> ±${prec}¢ · ${precWord}</span>
-      ${g ? `<span><strong>Game</strong> ${g.score} pts · ${g.accuracyPct}% lane</span>` : ""}
+      <span><strong>${es ? "Precisión" : "Precision"}</strong> ±${prec}¢ · ${precWord}</span>
+      ${g ? `<span><strong>${es ? "Juego" : "Game"}</strong> ${g.score} pts · ${g.accuracyPct}%</span>` : ""}
     `;
+    // Live cents in TR corner for non-challenge pitch modes
+    const profile = state.exercise ? getProfile(state.exercise) : null;
+    if (profile?.showPitch && !profile?.pitchChallenge) {
+      const q = $("#hud-quality");
+      const accEl = $("#hud-acc");
+      if (q) {
+        q.textContent = `${acc > 0 ? "+" : ""}${acc}¢`;
+        q.className =
+          "hud-quality " +
+          (Math.abs(acc) <= 15
+            ? "perfect"
+            : Math.abs(acc) <= 35
+              ? "good"
+              : Math.abs(acc) <= 60
+                ? "close"
+                : "off");
+      }
+      if (accEl) accEl.textContent = accWord;
+      const score = $("#hud-score");
+      const combo = $("#hud-combo");
+      if (score) score.textContent = stats.targetName || "—";
+      if (combo) combo.textContent = stats.voiceName || "—";
+    }
     if (g) updateGameHud(g);
   }
 
@@ -946,21 +1009,86 @@
     state.pitchRunning = false;
   }
 
+  function metricLabel(m) {
+    const es =
+      (window.VTI18n && VTI18n.lang === "es") ||
+      (document.documentElement.lang || "").startsWith("es");
+    if (es && m.labelEs) return m.labelEs;
+    // Common id fallbacks (clear LatAm Spanish)
+    const byId = {
+      duration: "Minutos practicados",
+      clarity: "Claridad (autoevaluación)",
+      rateControl: "Control del ritmo",
+      cycles: "Ciclos 1–10 completos",
+      consistency: "Consistencia de volumen",
+      countReached: "Conteo más alto",
+      openness: "Apertura de resonancia",
+      comfort: "Comodidad",
+      clarityPen: "Claridad con bolígrafo",
+      clarityAfter: "Claridad sin bolígrafo",
+      personaReady: "Listo con la persona",
+      storyStructure: "Estructura de la historia",
+      confidence: "Confianza al entregar",
+      questionQuality: "Calidad de la pregunta",
+      presence: "Presencia al escuchar",
+      fillerCount: "Palabras de relleno",
+      stepsDone: "Revisión en 3 pasos (0–3)",
+      metaphorCount: "Metáforas dichas",
+      vividness: "Viveza",
+      daysPracticed: "Días practicados esta semana",
+      improvement: "Mejora percibida",
+      pauseCount: "Pausas intencionales",
+      fillerReduction: "Control de rellenos",
+      authority: "Autoridad percibida",
+      awareness: "Conciencia de rellenos",
+      replacement: "Éxito al pausar en su lugar",
+      variety: "Variedad de tono",
+      naturalness: "¿Sigue natural?",
+      engagement: "Sensación de interés",
+      ladderReps: "Repeticiones de escalera",
+      control: "Control dinámico",
+      ease: "Facilidad / sin tensión",
+      keySlowdowns: "Bajadas de ritmo clave",
+      maxHold: "Mejor sostenido",
+      reps: "Repeticiones",
+      accuracy: "Exactitud",
+      precision: "Precisión",
+      progressions: "Progresiones",
+      sirens: "Sirenas",
+      smoothness: "Suavidad",
+      questions: "Preguntas",
+      pauseBefore: "Pausa antes de responder",
+      landed: "Aterrizajes"
+    };
+    if (es && byId[m.id]) return byId[m.id];
+    return m.label;
+  }
+
   function renderMetricsForm(ex) {
     const form = $("#metrics-form");
     form.innerHTML = "";
+    const es =
+      (window.VTI18n && VTI18n.lang === "es") ||
+      (document.documentElement.lang || "").startsWith("es");
     (ex.metrics || []).forEach((m) => {
       const field = document.createElement("div");
       field.className = "field";
+      const lab = metricLabel(m);
       if (m.type === "scale") {
         field.innerHTML = `
-          <label for="m-${m.id}">${m.label} (1–${m.max || 5})</label>
+          <label for="m-${m.id}">${lab} (1–${m.max || 5})</label>
           <input type="range" id="m-${m.id}" name="${m.id}" min="${m.min || 1}" max="${m.max || 5}" value="3" />
           <span class="muted scale-val" data-for="${m.id}">3</span>
         `;
       } else {
+        const tgt =
+          m.target != null
+            ? es
+              ? ` · meta ${m.target}`
+              : ` · target ${m.target}`
+            : "";
         field.innerHTML = `
-          <label for="m-${m.id}">${m.label}${m.unit ? ` (${m.unit})` : ""}${m.target != null ? ` · target ${m.target}` : ""}</label>
+          <label for="m-${m.id}">${lab}${m.unit ? ` (${m.unit})` : ""}${tgt}</label>
           <input type="number" id="m-${m.id}" name="${m.id}" min="0" step="1" placeholder="0" />
         `;
       }
@@ -970,8 +1098,8 @@
     const notes = document.createElement("div");
     notes.className = "field";
     notes.innerHTML = `
-      <label for="m-notes">Session notes</label>
-      <textarea id="m-notes" name="notes" placeholder="What felt good? What will you try next time?"></textarea>
+      <label for="m-notes">${tt("metrics.notes")}</label>
+      <textarea id="m-notes" name="notes" placeholder="${tt("metrics.notesPh")}"></textarea>
     `;
     form.appendChild(notes);
 

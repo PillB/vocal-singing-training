@@ -65,7 +65,7 @@
       "practice.hold": "Sostenido {s}s",
       "pitch.title": "Afinación · precisión y exactitud",
       "pitch.legend":
-        "Carril verde = afinado · Ámbar = nota objetivo · Verde = tu voz · teclado · combo y puntaje",
+        "Carriles grises = notas de la progresión · Ámbar = acordes activos · Verde = nota principal · Tu voz se mueve entre carriles",
       "pitch.challenge": "Reto de notas (bloquear 8 objetivos)",
       "pitch.score": "Puntaje",
       "pitch.combo": "Combo",

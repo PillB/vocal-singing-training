@@ -946,6 +946,31 @@ a {
   background: #7ddeb0;
 }
 
+.metro-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--border);
+  margin: 0.35rem 0;
+  opacity: 0.5;
+}
+
+.metro-dot.pulse {
+  animation: metroPulse 0.15s ease-out;
+  background: #9fd0f0;
+  box-shadow: 0 0 12px rgba(159, 208, 240, 0.9);
+  opacity: 1;
+}
+
+@keyframes metroPulse {
+  from {
+    transform: scale(0.7);
+  }
+  to {
+    transform: scale(1.15);
+  }
+}
+
 /* —— Integrated practice cockpit —— */
 .practice-cockpit {
   border-color: rgba(91, 159, 212, 0.45);

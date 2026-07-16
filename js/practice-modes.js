@@ -110,16 +110,21 @@
     id: "rateLadder",
     render() {
       const phases = this.profile.phases || [];
+      // BPM rises each phase: 72 → 96 → 120 → 144
+      this.state.bpms = phases.map((_, i) => 72 + i * 24);
       this.state.runner = createPhaseRunner(phases, (i, p) => {
-        if (global.VTToast) global.VTToast(`Phase: ${p.label}`);
+        if (global.VTToast) global.VTToast(`${p.label} · ~${this.state.bpms[i]} BPM feel`);
       });
+      this.state.beatMs = 0;
+      this.state.flash = false;
       this.hud.innerHTML = `
         <div class="mode-title">Diction · rate ladder</div>
         <div class="mode-phase" data-phase>—</div>
+        <div class="metro-dot" data-metro aria-hidden="true"></div>
         <div class="mode-big" data-remain>—</div>
         <div class="mode-bar"><span data-bar style="width:0%"></span></div>
-        <p class="mode-meta">Over-articulate now · speech on: <strong data-act>0%</strong> · phases: <strong data-done>0</strong>/${phases.length}</p>
-        <p class="mode-meta muted">Imagine a metronome clicking faster each phase — keep consonants crisp.</p>
+        <p class="mode-meta">Pace cue <strong data-bpm>~72 BPM</strong> · over-articulate · speech on: <strong data-act>0%</strong></p>
+        <p class="mode-meta muted">Keep consonants crisp as the pulse speeds up each phase.</p>
       `;
     },
     onFrame(frame) {
@@ -129,6 +134,20 @@
       const phase = this.profile.phases[r.index];
       const total = phase?.sec || 1;
       const pct = phase ? clamp(((total - r.remaining) / total) * 100, 0, 100) : 100;
+      const bpm = this.state.bpms[Math.min(r.index, this.state.bpms.length - 1)] || 72;
+      const beatPeriod = 60000 / bpm;
+      this.state.beatMs = (this.state.beatMs || 0) + (frame.dtMs || 16);
+      if (this.state.beatMs >= beatPeriod) {
+        this.state.beatMs = 0;
+        const dot = this.$("[data-metro]");
+        if (dot) {
+          dot.classList.remove("pulse");
+          // reflow
+          void dot.offsetWidth;
+          dot.classList.add("pulse");
+        }
+      }
+      if (this.$("[data-bpm]")) this.$("[data-bpm]").textContent = `~${bpm} BPM`;
       if (this.$("[data-phase]"))
         this.$("[data-phase]").textContent =
           r.index < r.count ? r.label : "Ladder complete — free mix";
@@ -140,7 +159,6 @@
       if (frame.voiced || frame.rms > 0.02) this.state.active = (this.state.active || 0) + 1;
       const act = Math.round(((this.state.active || 0) / this.state.samples) * 100);
       if (this.$("[data-act]")) this.$("[data-act]").textContent = `${act}%`;
-      if (this.$("[data-done]")) this.$("[data-done]").textContent = String(Math.min(r.index, r.count));
     },
     onStop() {
       const r = this.state.runner;
@@ -268,6 +286,9 @@
       this.state.step = 0;
       this.state.stepStarted = performance.now();
       this.state.cycles = 0;
+      this.state.inBandMs = 0;
+      this.state.stepMs = 0;
+      this.state.creditedSteps = 0;
       this.hud.innerHTML = `
         <div class="mode-title">Volume / energy ladder</div>
         <div class="mode-phase" data-phase>${ladder[0]?.label || "—"}</div>
@@ -276,7 +297,8 @@
           <div class="volume-needle" data-needle style="left:10%"></div>
         </div>
         <div class="mode-big" data-remain>${this.profile.stepSec || 8}s</div>
-        <p class="mode-meta">Step <strong data-step>1</strong>/${ladder.length} · Full climbs: <strong data-cyc>0</strong></p>
+        <p class="mode-meta">Step <strong data-step>1</strong>/${ladder.length} · Credited steps: <strong data-cr>0</strong> · Climbs: <strong data-cyc>0</strong></p>
+        <p class="mode-meta muted">Step only credits if you stay in the band ≥50% of the step.</p>
       `;
     },
     onFrame(frame) {
@@ -294,12 +316,25 @@
         this.$("[data-band]").style.left = `${bandLeft}%`;
         this.$("[data-band]").style.width = "16%";
       }
+      const dt = frame.dtMs || 16;
+      this.state.stepMs += dt;
+      if (Math.abs(this.state.smooth - target) < 0.1) this.state.inBandMs += dt;
+
       if (elapsed >= stepSec) {
+        const ratio = this.state.stepMs ? this.state.inBandMs / this.state.stepMs : 0;
+        if (ratio >= 0.5) {
+          this.state.creditedSteps++;
+          if (this.$("[data-cr]")) this.$("[data-cr]").textContent = String(this.state.creditedSteps);
+        }
+        this.state.inBandMs = 0;
+        this.state.stepMs = 0;
         this.state.step++;
         if (this.state.step >= ladder.length) {
-          this.state.cycles++;
+          if (this.state.creditedSteps >= ladder.length) this.state.cycles++;
           this.state.step = 0;
+          this.state.creditedSteps = 0;
           if (this.$("[data-cyc]")) this.$("[data-cyc]").textContent = String(this.state.cycles);
+          if (this.$("[data-cr]")) this.$("[data-cr]").textContent = "0";
         }
         this.state.stepStarted = performance.now();
         if (this.$("[data-phase]"))
@@ -308,13 +343,14 @@
       }
     },
     onStop() {
+      const patches = {};
+      if (this.state.cycles > 0) {
+        patches.ladderReps = this.state.cycles;
+        patches.control = clamp(2 + this.state.cycles, 1, 5);
+      }
       return {
-        patches: {
-          ladderReps: Math.max(1, this.state.cycles),
-          flexibility: clamp(this.state.cycles + 2, 1, 5),
-          control: clamp(2 + this.state.cycles, 1, 5)
-        },
-        summary: `${this.state.cycles} full ladder climb(s)`
+        patches,
+        summary: `${this.state.cycles} band-credited climb(s)`
       };
     }
   });
@@ -373,17 +409,29 @@
     id: "articulationContrast",
     render() {
       const phases = this.profile.phases || [
-        { label: "Phase A", sec: 90 },
-        { label: "Phase B", sec: 45 }
+        { label: "With pen · count 1–60", sec: 90 },
+        { label: "Pen off · feel the ease", sec: 45 }
       ];
       this.state.runner = createPhaseRunner(phases, (i, p) => {
         if (global.VTToast) global.VTToast(p.label);
+        if (i === 1 && this.$("[data-rate]")) this.$("[data-rate]").hidden = false;
       });
+      this.state.clarityPen = null;
+      this.state.clarityAfter = null;
       this.hud.innerHTML = `
-        <div class="mode-title">Contrast phases</div>
+        <div class="mode-title">Pen articulation contrast</div>
         <div class="mode-phase" data-phase>${phases[0].label}</div>
         <div class="mode-big" data-remain>${phases[0].sec}s</div>
         <div class="mode-bar"><span data-bar style="width:0%"></span></div>
+        <div data-rate hidden>
+          <p class="mode-meta">Rate clarity after each phase:</p>
+          <label class="mode-meta">With pen (1–5)
+            <input type="range" min="1" max="5" value="3" data-pen />
+          </label>
+          <label class="mode-meta">After pen (1–5)
+            <input type="range" min="1" max="5" value="3" data-after />
+          </label>
+        </div>
       `;
     },
     onFrame() {
@@ -392,7 +440,7 @@
       const phase = this.profile.phases[r.index];
       if (this.$("[data-phase]"))
         this.$("[data-phase]").textContent =
-          r.index < r.count ? r.label : "Contrast complete";
+          r.index < r.count ? r.label : "Contrast complete — rate both";
       if (this.$("[data-remain]"))
         this.$("[data-remain]").textContent =
           r.index < r.count ? `${Math.ceil(r.remaining)}s` : "✓";
@@ -400,12 +448,17 @@
         const pct = clamp(((phase.sec - r.remaining) / phase.sec) * 100, 0, 100);
         this.$("[data-bar]").style.width = `${pct}%`;
       }
+      if (r.index >= 1 && this.$("[data-rate]")) this.$("[data-rate]").hidden = false;
     },
     onStop() {
-      const r = this.state.runner;
+      const pen = Number(this.$("[data-pen]")?.value || 0);
+      const after = Number(this.$("[data-after]")?.value || 0);
+      const patches = {};
+      if (pen) patches.clarityPen = pen;
+      if (after) patches.clarityAfter = after;
       return {
-        patches: { rounds: Math.min(r.count, r.index + 1), phaseCount: r.index },
-        summary: "Contrast phases done"
+        patches,
+        summary: after ? `Clarity pen ${pen} → after ${after}` : "Contrast phases done"
       };
     }
   });
@@ -413,20 +466,34 @@
   Modes.recordOnly = baseMode({
     id: "recordOnly",
     render() {
+      const prompts = this.profile.prompts || [
+        "Open as Motivator — genuine compliment",
+        "Shift to Coach — one clear tip",
+        "Friend energy — warm story beat",
+        "Educator — land the takeaway"
+      ];
+      this.state.prompts = prompts;
+      this.state.pi = 0;
+      this.state.lastSwap = performance.now();
       this.hud.innerHTML = `
-        <div class="mode-title">Performance take</div>
+        <div class="mode-title">Performance take · persona</div>
+        <div class="mode-phase" data-pr>${prompts[0]}</div>
         <div class="mode-big" data-t>0:00</div>
-        <p class="mode-meta">Recording is the practice. One clean take beats five anxious ones.</p>
-        <p class="mode-meta muted">Persona · story · presence — deliver without mid-take judgment.</p>
+        <p class="mode-meta">Prompts rotate every ~25s. Don't judge mid-take — review later.</p>
       `;
     },
     onFrame() {
       const sec = Math.floor((performance.now() - this.state.startedAt) / 1000);
       if (this.$("[data-t]"))
         this.$("[data-t]").textContent = `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
+      if (performance.now() - this.state.lastSwap > 25000) {
+        this.state.lastSwap = performance.now();
+        this.state.pi = (this.state.pi + 1) % this.state.prompts.length;
+        if (this.$("[data-pr]")) this.$("[data-pr]").textContent = this.state.prompts[this.state.pi];
+      }
     },
     onStop() {
-      return { patches: {}, summary: "Take captured" };
+      return { patches: {}, summary: "Take captured — review with neutral ears" };
     }
   });
 
@@ -474,17 +541,33 @@
       }
       this.state.voice = 0;
       this.state.silent = 0;
+      this.state.slot = "you"; // you speak | they speak (scripted silence window)
+      this.state.slotT = performance.now();
       this.hud.innerHTML = `
-        <div class="mode-title">Speaking vs listening</div>
+        <div class="mode-title">Connection · curiosity loops</div>
         <div class="mode-phase" data-phase>${phases?.[0]?.label || "Conversation practice"}</div>
+        <div class="mode-big" data-slot>YOU ask / speak</div>
         <div class="listen-bars">
           <div class="listen-speak" data-speak style="width:50%"></div>
         </div>
-        <p class="mode-meta">You speaking <strong data-sp>50%</strong> · silence/listen <strong data-si>50%</strong></p>
-        <p class="mode-meta muted">For connection drills, lean toward more silence.</p>
+        <p class="mode-meta">You speaking <strong data-sp>50%</strong> · silence/listen slots <strong data-si>50%</strong></p>
+        <p class="mode-meta muted" data-tip>Imagine their answer — stay quiet in THEIR slot. Rate presence yourself after.</p>
       `;
     },
     onFrame(frame) {
+      // Alternate 20s you / 25s they (scripted listen)
+      if (performance.now() - this.state.slotT > (this.state.slot === "you" ? 20000 : 25000)) {
+        this.state.slot = this.state.slot === "you" ? "them" : "you";
+        this.state.slotT = performance.now();
+        if (this.$("[data-slot]"))
+          this.$("[data-slot]").textContent =
+            this.state.slot === "you" ? "YOU ask / speak" : "THEIR turn — listen (stay quiet)";
+        if (this.$("[data-tip]"))
+          this.$("[data-tip]").textContent =
+            this.state.slot === "them"
+              ? "Scripted listen window — don't monologue."
+              : "Open question → reflect one detail → deeper question.";
+      }
       if (frame.voiced || frame.rms > 0.025) this.state.voice++;
       else this.state.silent++;
       const t = this.state.voice + this.state.silent || 1;
@@ -502,8 +585,11 @@
     onStop() {
       const t = this.state.voice + this.state.silent || 1;
       const listenBias = this.state.silent / t;
-      const presence = listenBias >= 0.55 ? 5 : listenBias >= 0.4 ? 4 : 3;
-      return { patches: { presence }, summary: `Listen/silence share ~${Math.round(listenBias * 100)}%` };
+      // Honest: show data only — do not auto-score presence from silence
+      return {
+        patches: {},
+        summary: `Speak ${Math.round((1 - listenBias) * 100)}% · silence ${Math.round(listenBias * 100)}% — rate presence yourself`
+      };
     }
   });
 
@@ -672,21 +758,43 @@
     id: "keyPointPace",
     render() {
       this.state.keys = 0;
+      this.state.confirmed = 0;
+      this.state.slowUntil = 0;
+      this.state.quietMs = 0;
       this.hud.innerHTML = `
         <div class="mode-title">Pace for impact</div>
-        <div class="mode-big" data-k>0 / 3</div>
-        <button type="button" class="btn btn-primary btn-sm" data-key>Mark key point (slow down)</button>
-        <p class="mode-meta">Tap when you deliberately slow for a key idea.</p>
+        <div class="mode-big" data-k>0 / 3 confirmed</div>
+        <button type="button" class="btn btn-primary btn-sm" data-key>Mark key point — then slow 1s</button>
+        <p class="mode-meta" data-st>Tap, then drop pace/energy ~1 second to confirm.</p>
       `;
       this.$("[data-key]")?.addEventListener("click", () => {
         this.state.keys++;
-        if (this.$("[data-k]")) this.$("[data-k]").textContent = `${this.state.keys} / 3`;
+        this.state.slowUntil = performance.now() + 1200;
+        this.state.quietMs = 0;
+        if (this.$("[data-st]"))
+          this.$("[data-st]").textContent = "Slow window open — ease off for ~1s…";
       });
     },
+    onFrame(frame) {
+      if (performance.now() < this.state.slowUntil) {
+        // confirm if speech is softer or sparse
+        if ((frame.rms || 0) < 0.04 || !frame.voiced) {
+          this.state.quietMs += frame.dtMs || 16;
+          if (this.state.quietMs >= 600 && this.state.confirming !== this.state.keys) {
+            this.state.confirming = this.state.keys;
+            this.state.confirmed++;
+            if (this.$("[data-k]"))
+              this.$("[data-k]").textContent = `${this.state.confirmed} / 3 confirmed`;
+            if (this.$("[data-st]")) this.$("[data-st]").textContent = "Slow-down confirmed ✓";
+          }
+        }
+      }
+    },
     onStop() {
+      const n = this.state.confirmed || 0;
       return {
-        patches: { keySlowdowns: this.state.keys, paceCraft: clamp(this.state.keys + 1, 1, 5) },
-        summary: `${this.state.keys} key slow-downs marked`
+        patches: n > 0 ? { keySlowdowns: n, paceCraft: clamp(n + 1, 1, 5) } : { keySlowdowns: this.state.keys || 0 },
+        summary: `${n} confirmed slow-downs (${this.state.keys} marked)`
       };
     }
   });
@@ -695,6 +803,7 @@
     id: "gestureReps",
     render() {
       this.state.reps = { size: 0, count: 0, location: 0 };
+      this.state.mutedReview = false;
       this.hud.innerHTML = `
         <div class="mode-title">Gesture reps</div>
         <div class="controls-row">
@@ -703,7 +812,9 @@
           <button type="button" class="btn btn-sm" data-g="location">Location +</button>
         </div>
         <p class="mode-meta">Size <strong data-s>0</strong> · Count <strong data-c>0</strong> · Location <strong data-l>0</strong></p>
-        <p class="mode-meta">After stop: review the take muted first.</p>
+        <label class="mode-meta" style="display:flex;gap:0.4rem;align-items:center;margin-top:0.5rem;">
+          <input type="checkbox" data-muted /> I reviewed the take muted first
+        </label>
       `;
       this.hud.querySelectorAll("[data-g]").forEach((b) => {
         b.addEventListener("click", () => {
@@ -714,11 +825,17 @@
           if (this.$("[data-l]")) this.$("[data-l]").textContent = this.state.reps.location;
         });
       });
+      this.$("[data-muted]")?.addEventListener("change", (e) => {
+        this.state.mutedReview = e.target.checked;
+      });
     },
     onStop() {
       const t = this.state.reps.size + this.state.reps.count + this.state.reps.location;
+      if (!this.state.mutedReview && global.VTToast) {
+        global.VTToast("Tip: check muted review before scoring congruence");
+      }
       return {
-        patches: { purposeful: clamp(1 + Math.floor(t / 2), 1, 5) },
+        patches: t > 0 ? { purposeful: clamp(1 + Math.floor(t / 2), 1, 5) } : {},
         summary: `${t} gesture reps`
       };
     }
@@ -1054,13 +1171,16 @@
     render() {
       this.state.feel = 0;
       this.state.better = 0;
+      this.state.inBand = 0;
+      this.state.samples = 0;
       this.hud.innerHTML = `
         <div class="mode-title">Song stanza reps</div>
         <div class="controls-row">
           <button type="button" class="btn btn-sm" data-feel>Feel +1</button>
           <button type="button" class="btn btn-sm" data-better>Better Man +1</button>
         </div>
-        <p class="mode-meta">Feel <strong data-f>0</strong>/5 · Better Man <strong data-b>0</strong>/5</p>
+        <p class="mode-meta">Feel <strong data-f>0</strong>/5 · Better Man <strong data-b>0</strong>/5 · In-lane <strong data-lane>0%</strong></p>
+        <p class="mode-meta muted">Piano under your stanzas — watch pitch graph for note centers.</p>
       `;
       this.$("[data-feel]")?.addEventListener("click", () => {
         this.state.feel++;
@@ -1071,9 +1191,30 @@
         if (this.$("[data-b]")) this.$("[data-b]").textContent = this.state.better;
       });
     },
+    onFrame(frame) {
+      if (frame.voiceFreq && frame.targetFreq && global.VTPitchUtils) {
+        this.state.samples++;
+        const cents = Math.abs(
+          (global.VTPitchUtils.freqToMidi(frame.voiceFreq) -
+            global.VTPitchUtils.freqToMidi(frame.targetFreq)) *
+            100
+        );
+        if (cents <= 50) this.state.inBand++;
+        if (this.$("[data-lane]") && this.state.samples > 5) {
+          this.$("[data-lane]").textContent = `${Math.round(
+            (this.state.inBand / this.state.samples) * 100
+          )}%`;
+        }
+      }
+    },
     onStop() {
+      const patches = { repsFeel: this.state.feel, repsBetter: this.state.better };
+      if (this.state.samples > 20) {
+        const pct = Math.round((this.state.inBand / this.state.samples) * 100);
+        patches.accuracy = pct >= 70 ? 5 : pct >= 50 ? 4 : pct >= 30 ? 3 : 2;
+      }
       return {
-        patches: { repsFeel: this.state.feel, repsBetter: this.state.better },
+        patches,
         summary: `Feel ${this.state.feel} · Better Man ${this.state.better}`
       };
     }

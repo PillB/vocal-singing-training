@@ -27,4 +27,21 @@
 - [x] s7 humTargets  
 
 ## Post-fix expected status
-All prior **FAIL** items addressed. Remaining **WEAK** items are acceptable coaching aids (honor buttons where mic can't know gestures/fillers), with honest self-rate for soft skills.
+All prior **FAIL** items addressed.
+
+## WEAK hardening pass (continue-plan)
+- [x] v1 rate ladder — visual BPM pulse per phase  
+- [x] v4 pen — clarity A/B sliders after phases  
+- [x] v5 persona — rotating persona prompts  
+- [x] v6 connect — YOU/THEM scripted slots; no auto presence score  
+- [x] v13 volume ladder — band credit ≥50% of step  
+- [x] v14 key points — slow-window confirmation  
+- [x] v15 gestures — muted-review checkbox  
+- [x] s3 song — in-lane % + optional accuracy patch  
+
+## Success definition met
+- Mode fitness per exercise (no FAIL clones)  
+- Pitch challenge only s9  
+- Honest auto-metrics  
+- Dual-agent review + Playwright green before declare success  
+

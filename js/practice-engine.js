@@ -23,6 +23,7 @@
     constructor() {
       this.running = false;
       this.audioCtx = null;
+      this._ownsAudioCtx = false;
       this.stream = null;
       this.source = null;
       this.inputGain = null;
@@ -105,9 +106,37 @@
           autoGainControl: false
         }
       });
-      const AC = window.AudioContext || window.webkitAudioContext;
-      this.audioCtx = new AC();
-      if (this.audioCtx.state === "suspended") await this.audioCtx.resume();
+      // Prefer the shared piano AudioContext so getUserMedia never orphans
+      // a second suspended context (classic "piano silent after mic" bug).
+      const shared =
+        (global.VTPiano && global.VTPiano.ctx && global.VTPiano.ctx.state !== "closed"
+          ? global.VTPiano.ctx
+          : null) ||
+        (global.VTSharedAudioCtx && global.VTSharedAudioCtx.state !== "closed"
+          ? global.VTSharedAudioCtx
+          : null);
+      if (shared) {
+        this.audioCtx = shared;
+        this._ownsAudioCtx = false;
+      } else {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        this.audioCtx = new AC();
+        this._ownsAudioCtx = true;
+        global.VTSharedAudioCtx = this.audioCtx;
+      }
+      if (this.audioCtx.state === "suspended") {
+        try {
+          await this.audioCtx.resume();
+        } catch (e) {
+          console.warn("PracticeEngine resume failed", e);
+        }
+      }
+      // Also nudge piano if it shares this context
+      try {
+        await global.VTPiano?.resume?.();
+      } catch {
+        /* ignore */
+      }
       this.source = this.audioCtx.createMediaStreamSource(this.stream);
       this.inputGain = this.audioCtx.createGain();
       this.inputGain.gain.value = this._gainFromSens(this.sensitivity);
@@ -221,10 +250,11 @@
         }
         this.inputGain = null;
       }
-      if (this.audioCtx) {
-        this.audioCtx.close().catch(() => {});
-        this.audioCtx = null;
-      }
+      // Never close AudioContext here. Even when PracticeEngine created it, the
+      // piano may later adopt VTSharedAudioCtx — close() leaves VTPiano.ctx
+      // permanently "closed" (silent piano until hard reload). Disconnect only.
+      this.audioCtx = null;
+      this._ownsAudioCtx = false;
       if (this.stream) {
         this.stream.getTracks().forEach((t) => t.stop());
         this.stream = null;

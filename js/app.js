@@ -57,12 +57,60 @@
       .replace(/"/g, "&quot;");
   }
 
-  function toast(msg) {
+  function toast(msg, opts = {}) {
     const el = $("#toast");
-    el.textContent = msg;
+    if (!el) return;
+    const text = String(msg || "");
+    // Debounce identical / hot-apply spam (rapid option flips)
+    const now = performance.now();
+    if (
+      opts.debounceMs &&
+      toast._lastText === text &&
+      now - (toast._lastAt || 0) < opts.debounceMs
+    ) {
+      return;
+    }
+    toast._lastText = text;
+    toast._lastAt = now;
+    el.textContent = text;
     el.classList.add("show");
     clearTimeout(toast._t);
-    toast._t = setTimeout(() => el.classList.remove("show"), 2800);
+    toast._t = setTimeout(() => el.classList.remove("show"), opts.durationMs || 2800);
+  }
+
+  /** Global error surfacing — fail visibly (vibe-code silent-failure defense). */
+  function installGlobalErrorHandlers() {
+    if (installGlobalErrorHandlers._done) return;
+    installGlobalErrorHandlers._done = true;
+    let lastKey = "";
+    let lastAt = 0;
+    const report = (kind, detail) => {
+      console.error("[VT]", kind, detail);
+      // Quiet during automated e2e unless explicitly debugging
+      if (sessionStorage.getItem("vt_e2e") === "1" && sessionStorage.getItem("vt_debug") !== "1") {
+        return;
+      }
+      const key = kind + ":" + String(detail).slice(0, 80);
+      const now = Date.now();
+      if (key === lastKey && now - lastAt < 5000) return;
+      lastKey = key;
+      lastAt = now;
+      const es =
+        (window.VTI18n && VTI18n.lang === "es") ||
+        (document.documentElement.lang || "").startsWith("es");
+      toast(
+        es
+          ? "Algo falló · mira la consola o pulsa Empezar de nuevo"
+          : "Something failed · check console or press Start again",
+        { debounceMs: 5000 }
+      );
+    };
+    window.addEventListener("error", (ev) => {
+      report("error", ev?.error || ev?.message || ev);
+    });
+    window.addEventListener("unhandledrejection", (ev) => {
+      report("unhandledrejection", ev?.reason || ev);
+    });
   }
   // modes can toast / set pitch target
   window.VTToast = toast;
@@ -652,6 +700,9 @@
       pianoBlock.hidden = true; // closed until toggle
       if (showPiano && (ex.audio.piano || ex.progressions || ex.songs)) {
         renderPianoControls(ex);
+      } else {
+        const bar = $("#hud-prog-bar");
+        if (bar) bar.hidden = true;
       }
       if (profile.autoArpeggio && $("#chk-arpeggio")) $("#chk-arpeggio").checked = true;
       // Auto piano ON by default whenever this exercise can play sound
@@ -659,6 +710,7 @@
         $("#chk-auto-piano").checked = exerciseWantsSound(ex, profile);
       }
       if ($("#chk-sustain")) $("#chk-sustain").checked = true; // sustain on by default
+      syncSustainSecLabel();
     }
     if (pianoMini) pianoMini.style.display = showPiano || exerciseWantsSound(ex, profile) ? "" : "none";
     // Piano more button lives in BR HUD (no extra row = less scroll)
@@ -759,23 +811,155 @@
     if (recOpt) recOpt.style.display = ex.audio.record ? "" : "none";
   }
 
-  function renderPianoControls(ex) {
-    const progWrap = $("#prog-buttons");
-    progWrap.innerHTML = "";
-    const progs = VTPiano.getProgressions();
-
+  /** Progression keys available for the open exercise */
+  function progressionKeysFor(ex) {
+    if (!ex) return [];
     let keys = [];
     if (ex.progressions) keys = ex.progressions.slice();
     else if (ex.songs)
       keys = [...new Set(ex.songs.map((s) => s.prog).concat(["prog1", "progJump1", "progJump2"]))];
-    else if (ex.audio.refPitch) keys = [];
+    else if (ex.audio?.refPitch) keys = [];
     else keys = ["prog1", "prog2", "prog3", "prog4", "prog5", "progJump1", "progJump2", "progJump3"];
-    // Chord exercises always expose wide-jump progressions
-    if (ex.audio.progressions || ex.practice?.mode === "pitchChord" || ex.practice?.mode === "pitchSong") {
+    if (ex.audio?.progressions || ex.practice?.mode === "pitchChord" || ex.practice?.mode === "pitchSong") {
       ["progJump1", "progJump2", "progJump3", "progJump4"].forEach((k) => {
         if (!keys.includes(k)) keys.push(k);
       });
     }
+    return keys.filter((id) => !!(VTPiano?.getProgressions?.() || {})[id] || !!VT_PROGRESSIONS?.[id]);
+  }
+
+  function currentPlayMode() {
+    if ($("#chk-one-note")?.checked) return "oneNote";
+    if ($("#chk-arpeggio")?.checked) return "arpeggio";
+    return "chords";
+  }
+
+  function setPlayMode(mode, { silent } = {}) {
+    const one = $("#chk-one-note");
+    const arp = $("#chk-arpeggio");
+    const sel = $("#sel-play-mode");
+    if (mode === "oneNote") {
+      if (one) one.checked = true;
+      if (arp) arp.checked = false;
+    } else if (mode === "arpeggio") {
+      if (one) one.checked = false;
+      if (arp) arp.checked = true;
+    } else {
+      if (one) one.checked = false;
+      if (arp) arp.checked = false;
+    }
+    if (sel && sel.value !== mode) sel.value = mode;
+    syncSustainSecLabel();
+    if (!silent) applyPianoOptionsHot(mode);
+  }
+
+  function syncPlayModeSelect() {
+    const sel = $("#sel-play-mode");
+    if (!sel) return;
+    const mode = currentPlayMode();
+    if (sel.value !== mode) sel.value = mode;
+  }
+
+  function fillProgressionSelect(keys) {
+    const sel = $("#sel-progression");
+    const bar = $("#hud-prog-bar");
+    const progs = VTPiano?.getProgressions?.() || VT_PROGRESSIONS || {};
+    if (!sel || !bar) return;
+    if (!keys.length) {
+      bar.hidden = true;
+      sel.innerHTML = "";
+      return;
+    }
+    bar.hidden = false;
+    const cur = keys.includes(state.selectedProg) ? state.selectedProg : keys[0];
+    state.selectedProg = cur;
+    sel.innerHTML = keys
+      .map((id) => {
+        const p = progs[id];
+        if (!p) return "";
+        const label = p.name || id;
+        return `<option value="${id}" title="${(p.description || "").replace(/"/g, "&quot;")}">${label}</option>`;
+      })
+      .join("");
+    sel.value = cur;
+  }
+
+  function selectProgression(id, { silent, fromUi } = {}) {
+    const progs = VTPiano?.getProgressions?.() || VT_PROGRESSIONS || {};
+    const p = progs[id];
+    if (!p) return;
+    state.selectedProg = id;
+    const sel = $("#sel-progression");
+    if (sel && sel.value !== id) sel.value = id;
+    $$(".prog-btn").forEach((b) => {
+      b.classList.toggle("active", b.dataset.progId === id);
+    });
+    if ($("#chord-desc")) {
+      $("#chord-desc").textContent = p.description || p.name || "";
+    }
+    if (state.exercise?.audio?.pitchViz || state.exercise?.practice?.showPitch) {
+      lockHighwayForProgression(id);
+    }
+    if (!silent) applyPianoOptionsHot("prog:" + (p.name || id));
+  }
+
+  /**
+   * Hot-apply piano / highway options while practice is running.
+   * Always updates range lock; restarts loop when Auto piano is on.
+   * Returns a Promise (also stored on VTApp._hotApplyPromise) so tests can await settle.
+   */
+  function applyPianoOptionsHot(what) {
+    const run = async () => {
+      const ex = state.exercise;
+      if (!ex) return false;
+      const profile = getProfile(ex);
+      syncSustainSecLabel();
+      syncPlayModeSelect();
+
+      // Highway range + ghost lanes follow the selected progression immediately
+      if (profile?.showPitch || ex.audio?.pitchViz) {
+        if (state.selectedProg) lockHighwayForProgression(state.selectedProg);
+      }
+
+      if (!state.practiceLive) return false;
+      if (!autoPianoChecked()) return false;
+      if (!exerciseWantsSound(ex, profile)) return false;
+
+      try {
+        await VTPiano.resume?.();
+        await VTPiano.ensure?.();
+        const ok = await startExerciseSound(ex, profile);
+        if (ok && what) {
+          const label =
+            typeof what === "string" && what.startsWith("prog:")
+              ? what.slice(5)
+              : what === "oneNote"
+                ? tt("piano.modeOneNote")
+                : what === "arpeggio"
+                  ? tt("piano.modeArpeggio")
+                  : what === "chords"
+                    ? tt("piano.modeChords")
+                    : String(what);
+          toast(tt("piano.hotApplied", { what: label }), { debounceMs: 450 });
+        }
+        return !!ok;
+      } catch (e) {
+        console.warn("Hot-apply piano options failed", e);
+        return false;
+      }
+    };
+    // Serialize rapid option flips so stopAll/play don't race
+    const prev = state._hotApplyPromise || Promise.resolve();
+    const next = prev.catch(() => {}).then(run);
+    state._hotApplyPromise = next;
+    return next;
+  }
+
+  function renderPianoControls(ex) {
+    const progWrap = $("#prog-buttons");
+    progWrap.innerHTML = "";
+    const progs = VTPiano.getProgressions();
+    const keys = progressionKeysFor(ex);
 
     keys.forEach((id) => {
       const p = progs[id];
@@ -783,28 +967,22 @@
       const b = document.createElement("button");
       b.type = "button";
       b.className = "prog-btn" + (state.selectedProg === id ? " active" : "");
+      b.dataset.progId = id;
       b.textContent = p.name;
       b.title = p.description;
-      b.addEventListener("click", () => {
-        state.selectedProg = id;
-        $$(".prog-btn", progWrap).forEach((x) => x.classList.remove("active"));
-        b.classList.add("active");
-        $("#chord-desc").textContent = p.description;
-        // Lock highway to this option's full max range (stable while chords cycle)
-        if (state.exercise?.audio?.pitchViz || state.exercise?.practice?.showPitch) {
-          lockHighwayForProgression(id);
-        }
-      });
+      b.addEventListener("click", () => selectProgression(id));
       progWrap.appendChild(b);
     });
 
+    fillProgressionSelect(keys);
+    syncPlayModeSelect();
+
     if (keys[0]) {
       state.selectedProg = keys.includes(state.selectedProg) ? state.selectedProg : keys[0];
-      $("#chord-desc").textContent = progs[state.selectedProg]?.description || "";
-      // Initial lock for currently selected progression
-      if (state.exercise?.audio?.pitchViz || state.exercise?.practice?.showPitch) {
-        lockHighwayForProgression(state.selectedProg);
-      }
+      selectProgression(state.selectedProg, { silent: true });
+    } else {
+      const bar = $("#hud-prog-bar");
+      if (bar) bar.hidden = true;
     }
 
     const refBtn = $("#btn-ref-pitch");
@@ -825,8 +1003,7 @@
         .join("");
       $$("[data-song-prog]").forEach((btn) => {
         btn.addEventListener("click", async () => {
-          state.selectedProg = btn.dataset.songProg;
-          await playSelectedProgression(true);
+          selectProgression(btn.dataset.songProg);
         });
       });
     }
@@ -836,13 +1013,42 @@
     const sustain = $("#chk-sustain")?.checked;
     const sustainSec = Number($("#sustain-sec")?.value || 4);
     const oneNote = !!$("#chk-one-note")?.checked;
+    // 3s/4s/5s combobox: per chord when stacked; per individual note when "1 nota"
+    const holdSec = sustain || oneNote ? sustainSec : 2.2;
     return {
       arpeggio: $("#chk-arpeggio")?.checked,
       oneNote,
       sustain: !!sustain,
-      sustainSec: sustain ? sustainSec : 2.2,
-      chordSec: sustain ? sustainSec : 2.2
+      sustainSec: holdSec,
+      chordSec: holdSec
     };
+  }
+
+  /** Keep sustain-sec label honest for one-note vs chord hold */
+  function syncSustainSecLabel() {
+    const sel = $("#sustain-sec");
+    if (!sel) return;
+    const one = !!$("#chk-one-note")?.checked;
+    const es =
+      (window.VTI18n && VTI18n.lang === "es") ||
+      (document.documentElement.lang || "").startsWith("es");
+    sel.title = one
+      ? es
+        ? "Duración de cada nota (1 nota a la vez)"
+        : "Hold duration for each note (one at a time)"
+      : es
+        ? "Duración de cada acorde / sostenido"
+        : "Hold duration per chord / sustain";
+    sel.setAttribute(
+      "aria-label",
+      one
+        ? es
+          ? "Segundos por nota"
+          : "Seconds per note"
+        : es
+          ? "Segundos de sostenido"
+          : "Sustain seconds"
+    );
   }
 
   function dualNoteLabel(noteName) {
@@ -917,23 +1123,27 @@
             : isEsLang()
               ? " · acordes"
               : " · chords";
-        $("#chord-desc").textContent =
-          prog.description +
-          modeHint +
-          (opts.sustain ? ` · sustain ${opts.sustainSec}s` : "");
+        const holdHint = opts.oneNote
+          ? isEsLang()
+            ? ` · ${opts.sustainSec}s por nota`
+            : ` · ${opts.sustainSec}s per note`
+          : opts.sustain
+            ? ` · sustain ${opts.sustainSec}s`
+            : "";
+        $("#chord-desc").textContent = prog.description + modeHint + holdHint;
         toast(
           loop
             ? opts.oneNote
               ? isEsLang()
-                ? "Bucle: una nota a la vez…"
-                : "Looping one note at a time…"
+                ? `Bucle: 1 nota a la vez · ${opts.sustainSec}s c/u…`
+                : `Looping one note at a time · ${opts.sustainSec}s each…`
               : opts.sustain
                 ? `Looping with ${opts.sustainSec}s sustain…`
                 : "Looping progression…"
             : opts.oneNote
               ? isEsLang()
-                ? "Una nota a la vez"
-                : "One note at a time"
+                ? `1 nota a la vez · ${opts.sustainSec}s c/u`
+                : `One note at a time · ${opts.sustainSec}s each`
               : opts.sustain
                 ? `Playing with ${opts.sustainSec}s sustain`
                 : "Playing progression once"
@@ -1054,8 +1264,12 @@
     if (!autoPianoChecked()) return false;
     if (!exerciseWantsSound(ex, profile)) return false;
 
-    // Unlock Web Audio on the user gesture (must not wait on mic)
+    // Unlock Web Audio (recreates if context was closed by a prior mic stop)
     await VTPiano.ensure();
+    await VTPiano.resume?.();
+    if (VTPiano.ctx?.state !== "running") {
+      await VTPiano.unlock?.();
+    }
 
     if (profile.autoArpeggio && $("#chk-arpeggio")) {
       $("#chk-arpeggio").checked = true;
@@ -1077,34 +1291,54 @@
       else state.selectedProg = "prog1";
     }
 
+    let started = false;
+
     if (inChallenge) {
       const note = state.pitchGame?.currentChallengeNote?.() || profile.refPitch || ex.audio?.refPitch;
-      if (note) await VTPiano.playRefPitch(note, sec, true);
-      return true;
-    }
-
-    if (hasProg && ex.audio?.piano !== false) {
-      await playSelectedProgression(true);
-      return true;
-    }
-
-    const note = profile.refPitch || ex.audio?.refPitch;
-    if (note) {
-      const f = await VTPiano.playRefPitch(note, sec, true);
-      if (f) {
-        state.practice.setTargetFreq(f);
-        if (state.pitchViz) state.pitchViz.setTargetFreq(f);
+      if (note) {
+        await VTPiano.playRefPitch(note, sec, true);
+        started = true;
       }
-      return true;
+    } else if (hasProg && ex.audio?.piano !== false) {
+      await playSelectedProgression(true);
+      started = !!(VTPiano.loopActive || (VTPiano.playing && VTPiano.playing.length));
+    } else {
+      const note = profile.refPitch || ex.audio?.refPitch;
+      if (note) {
+        const f = await VTPiano.playRefPitch(note, sec, true);
+        if (f) {
+          state.practice.setTargetFreq(f);
+          if (state.pitchViz) state.pitchViz.setTargetFreq(f);
+        }
+        started = true;
+      } else if (ex.audio?.piano) {
+        // Piano flagged without specific ref — still play default mid progression
+        if (!state.selectedProg) state.selectedProg = "prog1";
+        await playSelectedProgression(true);
+        started = !!(VTPiano.loopActive || (VTPiano.playing && VTPiano.playing.length));
+      }
     }
 
-    // Piano flagged without specific ref — still play default mid progression
-    if (ex.audio?.piano) {
-      if (!state.selectedProg) state.selectedProg = "prog1";
-      await playSelectedProgression(true);
-      return true;
+    // If still silent/suspended, hard-recover: recreate graph + replay once
+    if (started && VTPiano.ctx && VTPiano.ctx.state !== "running") {
+      try {
+        await VTPiano.unlock?.();
+        await VTPiano.resume?.();
+        if (hasProg) await playSelectedProgression(true);
+        else if (profile.refPitch || ex.audio?.refPitch) {
+          await VTPiano.playRefPitch(profile.refPitch || ex.audio.refPitch, sec, true);
+        }
+      } catch (e) {
+        console.warn("Piano recover failed", e);
+      }
     }
-    return false;
+
+    return !!(
+      started &&
+      VTPiano.ctx &&
+      VTPiano.ctx.state !== "closed" &&
+      (VTPiano.isLive?.() || (VTPiano.playing && VTPiano.playing.length > 0) || VTPiano.loopActive)
+    );
   }
 
   async function startPractice() {
@@ -1128,9 +1362,11 @@
       const wantPiano = exerciseWantsSound(ex, profile) && autoPianoChecked();
       const showHold = !!profile.showHold;
 
-      // Unlock audio on the Start click (user gesture) — required by browsers
+      // Unlock audio on the Start click (user gesture) — required by browsers.
+      // Must happen before any await that yields (getUserMedia breaks the gesture).
       if (wantPiano) {
         try {
+          await VTPiano.unlock?.();
           await VTPiano.ensure();
         } catch (e) {
           console.warn("Piano unlock failed", e);
@@ -1263,14 +1499,26 @@
         try {
           await VTPiano.resume?.();
           await VTPiano.ensure();
+          if (VTPiano.ctx?.state !== "running") await VTPiano.unlock?.();
           soundOk = await startExerciseSound(ex, profile);
-          // If still silent (suspended), one more resume + replay
-          if (VTPiano.ctx && VTPiano.ctx.state === "suspended") {
+          // If still silent (suspended/closed/no voices), recover + replay
+          if (
+            !soundOk ||
+            (VTPiano.ctx && VTPiano.ctx.state !== "running") ||
+            (VTPiano.playing && VTPiano.playing.length === 0 && !VTPiano.loopActive)
+          ) {
             await VTPiano.resume?.();
+            if (VTPiano.ctx?.state === "closed" || !VTPiano.ctx) {
+              // Force new graph
+              VTPiano.ctx = null;
+            }
+            await VTPiano.ensure();
+            await VTPiano.unlock?.();
             soundOk = await startExerciseSound(ex, profile);
           }
         } catch (e) {
           console.error("Piano start failed", e);
+          soundOk = false;
         }
       }
 
@@ -2199,6 +2447,39 @@
 
     $("#btn-play-prog")?.addEventListener("click", () => playSelectedProgression(false));
     $("#btn-loop-prog")?.addEventListener("click", () => playSelectedProgression(true));
+    $("#sel-progression")?.addEventListener("change", (e) => {
+      selectProgression(e.target.value);
+    });
+    $("#sel-play-mode")?.addEventListener("change", (e) => {
+      setPlayMode(e.target.value);
+    });
+    $("#chk-one-note")?.addEventListener("change", () => {
+      // Mutual exclusivity with arpeggio when enabling 1-nota
+      if ($("#chk-one-note")?.checked && $("#chk-arpeggio")) {
+        $("#chk-arpeggio").checked = false;
+      }
+      syncPlayModeSelect();
+      syncSustainSecLabel();
+      applyPianoOptionsHot(currentPlayMode());
+    });
+    $("#chk-arpeggio")?.addEventListener("change", () => {
+      if ($("#chk-arpeggio")?.checked && $("#chk-one-note")) {
+        $("#chk-one-note").checked = false;
+      }
+      syncPlayModeSelect();
+      applyPianoOptionsHot(currentPlayMode());
+    });
+    $("#chk-sustain")?.addEventListener("change", () => applyPianoOptionsHot("sustain"));
+    $("#sustain-sec")?.addEventListener("change", () => applyPianoOptionsHot($("#sustain-sec")?.value + "s"));
+    $("#chk-auto-piano")?.addEventListener("change", () => {
+      if ($("#chk-auto-piano")?.checked) applyPianoOptionsHot("auto");
+      else if (state.practiceLive) {
+        VTPiano.stopAll();
+        toast(tt("piano.stop"));
+      }
+    });
+    syncSustainSecLabel();
+    syncPlayModeSelect();
     $("#btn-stop-piano")?.addEventListener("click", () => {
       VTPiano.stopAll();
       $("#chord-now").textContent = "—";
@@ -2638,6 +2919,10 @@
 
   // Test / debug helpers
   window.VTApp = {
+    applyPianoOptionsHot,
+    get _hotApplyPromise() {
+      return state._hotApplyPromise;
+    },
     getState: () => state,
     shouldPromptOnLeave,
     getPracticedSec,
@@ -2655,6 +2940,7 @@
   };
 
   function init() {
+    installGlobalErrorHandlers();
     if (window.VTI18n) {
       VTI18n.init();
       VTI18n.onChange = () => {

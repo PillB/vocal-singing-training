@@ -151,6 +151,16 @@
     return { minMidi: min - 1, maxMidi: max + 1, notes: all };
   }
 
+  /** One shared AudioContext for piano + mic analysis (avoids post-mic silence). */
+  function getSharedAudioContext() {
+    const existing = global.VTSharedAudioCtx;
+    if (existing && existing.state !== "closed") return existing;
+    const AC = global.AudioContext || global.webkitAudioContext;
+    if (!AC) throw new Error("Web Audio API not available");
+    global.VTSharedAudioCtx = new AC();
+    return global.VTSharedAudioCtx;
+  }
+
   class PianoEngine {
     constructor() {
       this.ctx = null;
@@ -160,22 +170,40 @@
       this.loopTimer = null;
       this.loopActive = false;
       this.onChordChange = null;
+      this._monitor = null; // AnalyserNode on master for audibility checks
+    }
+
+    _wireGraph(ctx) {
+      this.ctx = ctx;
+      global.VTSharedAudioCtx = ctx;
+      this.master = ctx.createGain();
+      this.master.gain.value = 0.7;
+      this.comp = ctx.createDynamicsCompressor();
+      this.comp.threshold.value = -18;
+      this.comp.knee.value = 12;
+      this.comp.ratio.value = 4;
+      this.comp.attack.value = 0.003;
+      this.comp.release.value = 0.25;
+      this.master.connect(this.comp);
+      this.comp.connect(ctx.destination);
+      this._monitor = ctx.createAnalyser();
+      this._monitor.fftSize = 1024;
+      try {
+        this.master.connect(this._monitor);
+      } catch {
+        /* already connected */
+      }
     }
 
     async ensure() {
-      if (!this.ctx) {
-        const AC = window.AudioContext || window.webkitAudioContext;
-        this.ctx = new AC();
-        this.master = this.ctx.createGain();
-        this.master.gain.value = 0.7;
-        this.comp = this.ctx.createDynamicsCompressor();
-        this.comp.threshold.value = -18;
-        this.comp.knee.value = 12;
-        this.comp.ratio.value = 4;
-        this.comp.attack.value = 0.003;
-        this.comp.release.value = 0.25;
-        this.master.connect(this.comp);
-        this.comp.connect(this.ctx.destination);
+      // Recreate when missing OR closed (PracticeEngine used to close a twin ctx;
+      // a closed context stays non-null and permanently silences the piano).
+      if (!this.ctx || this.ctx.state === "closed") {
+        this.playing = [];
+        this.master = null;
+        this.comp = null;
+        this._monitor = null;
+        this._wireGraph(getSharedAudioContext());
       }
       if (this.ctx.state === "suspended") {
         try {
@@ -184,10 +212,68 @@
           console.warn("Piano ensure resume failed", e);
         }
       }
+      // Graph may have been lost if context was recreated mid-session
+      if (!this.master || !this.comp) {
+        this._wireGraph(this.ctx);
+      }
       if (this.master && this.master.gain.value < 0.2) {
         this.master.gain.setValueAtTime(0.7, this.ctx.currentTime);
       }
       return this.ctx;
+    }
+
+    /**
+     * Call inside a user-gesture handler to unlock Web Audio (Safari/Chrome).
+     * Plays a near-silent blip so the output path is fully primed.
+     */
+    async unlock() {
+      await this.ensure();
+      try {
+        if (this.ctx.state === "suspended") await this.ctx.resume();
+      } catch {
+        /* ignore */
+      }
+      try {
+        const t = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const g = this.ctx.createGain();
+        g.gain.setValueAtTime(0.0001, t);
+        osc.frequency.setValueAtTime(440, t);
+        osc.connect(g);
+        g.connect(this.master);
+        osc.start(t);
+        osc.stop(t + 0.03);
+      } catch (e) {
+        console.warn("Piano unlock blip failed", e);
+      }
+      return this.ctx?.state === "running";
+    }
+
+    /** Peak absolute sample on master bus (0 if silent / not ready). */
+    outputPeak() {
+      if (!this._monitor) return 0;
+      const buf = new Float32Array(this._monitor.fftSize);
+      try {
+        this._monitor.getFloatTimeDomainData(buf);
+      } catch {
+        return 0;
+      }
+      let peak = 0;
+      for (let i = 0; i < buf.length; i++) {
+        const v = Math.abs(buf[i]);
+        if (v > peak) peak = v;
+      }
+      return peak;
+    }
+
+    /** True if context running and we recently scheduled voices. */
+    isLive() {
+      return !!(
+        this.ctx &&
+        this.ctx.state === "running" &&
+        this.master &&
+        (this.loopActive || (this.playing && this.playing.length > 0))
+      );
     }
 
     /**
@@ -359,9 +445,22 @@
     ) {
       await this.ensure();
       await this.resume();
+      // If still not running (autoplay policy), try unlock path once
+      if (this.ctx && this.ctx.state !== "running") {
+        await this.unlock();
+      }
       this.stopAll();
       // Ensure context is running after stopAll
-      if (this.ctx.state === "suspended") await this.ctx.resume();
+      if (this.ctx.state === "suspended") {
+        try {
+          await this.ctx.resume();
+        } catch {
+          /* ignore */
+        }
+      }
+      if (this.ctx.state === "closed") {
+        await this.ensure();
+      }
       if (this.master) this.master.gain.setValueAtTime(0.7, this.ctx.currentTime);
       const prog = PROGRESSIONS[progId];
       if (!prog) {
@@ -369,10 +468,11 @@
         return null;
       }
 
-      // Sustain mode: hold each harmony 3–5s so newbies can lock pitch before the next change
-      let stepSec = chordSec;
-      if (sustain) {
-        stepSec = Math.max(3, Math.min(5.5, Number(sustainSec) || 4));
+      // Hold duration from combobox (3–5s) or chordSec when sustain is off
+      let stepSec = Number(chordSec) || 2.2;
+      if (sustain || oneNote) {
+        // one-note mode always uses the 3s/4s/5s control (per note, not per chord)
+        stepSec = Math.max(1.5, Math.min(5.5, Number(sustainSec) || Number(chordSec) || 4));
       }
 
       // Flatten to sequential note events when oneNote (or arpeggio for audio + single targets)
@@ -384,23 +484,22 @@
         const t0 = this.ctx.currentTime + 0.05;
 
         if (melodic) {
-          // Strict one-note-at-a-time timeline across the whole progression
-          let cursor = 0;
+          // Strict one-note-at-a-time: combobox duration applies to EACH note
+          // (not divided across tones of a chord)
           const events = [];
           prog.chords.forEach((ch, cidx) => {
             (ch.notes || []).forEach((n) => {
               events.push({ note: n, chord: ch, cidx });
             });
           });
-          const noteSec = Math.max(
-            0.55,
-            stepSec / Math.max(2, (prog.chords[0]?.notes?.length || 3))
-          );
+          const noteSec = Math.max(0.55, stepSec);
+          const holdEnv = sustain || noteSec >= 2.5;
           events.forEach((ev, ei) => {
             const when = t0 + ei * noteSec;
             const f = NOTE_FREQ[ev.note];
             if (f) {
-              this.playNote(f, when, Math.max(0.45, noteSec * 0.92), 0.42, sustain);
+              // Slightly hotter than stacked chord voices so 1-nota stays clearly audible
+              this.playNote(f, when, Math.max(0.45, noteSec * 0.95), 0.55, holdEnv);
             }
             if (this.onChordChange || this.onNoteChange) {
               const delay = Math.max(0, (when - this.ctx.currentTime) * 1000);
@@ -461,4 +560,5 @@
   global.VT_PROGRESSIONS = PROGRESSIONS;
   global.VT_NOTE_FREQ = NOTE_FREQ;
   global.VTProgressionRange = progressionMidiRange;
+  global.VTGetSharedAudioContext = getSharedAudioContext;
 })(window);

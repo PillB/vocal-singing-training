@@ -110,6 +110,21 @@
               <span class="hold-live" id="hold-display" hidden title="Hold">↓0.0s</span>
               <span class="chord-now" id="chord-now">—</span>
             </div>
+            <!-- Top-center: pick progression (acordes) + play mode — always visible, hot-applies -->
+            <div class="hud-corner hud-tm" id="hud-prog-bar" hidden>
+              <label class="hud-prog-field" for="sel-progression">
+                <span class="hud-prog-k" data-i18n="piano.chords">Acordes</span>
+                <select id="sel-progression" class="select-inline hud-prog-select" aria-label="Progresión de acordes"></select>
+              </label>
+              <label class="hud-prog-field" for="sel-play-mode">
+                <span class="hud-prog-k" data-i18n="piano.playMode">Modo</span>
+                <select id="sel-play-mode" class="select-inline hud-prog-select" aria-label="Modo de piano">
+                  <option value="chords" data-i18n="piano.modeChords">Acordes</option>
+                  <option value="arpeggio" data-i18n="piano.modeArpeggio">Arpegio</option>
+                  <option value="oneNote" data-i18n="piano.modeOneNote">1 nota</option>
+                </select>
+              </label>
+            </div>
             <div class="hud-corner hud-tr" id="pitch-game-hud" aria-live="polite">
               <div class="hud-score"><span class="hud-label" data-i18n="pitch.score">Pts</span><strong id="hud-score">0</strong></div>
               <div class="hud-combo"><span class="hud-label" data-i18n="pitch.combo">Combo</span><strong id="hud-combo">×0</strong></div>
@@ -121,60 +136,61 @@
                 <span data-i18n="pitch.challengeShort">Reto</span>
               </label>
             </div>
-            <div class="hud-corner hud-bl">
-              <button type="button" class="btn btn-practice btn-sm" id="btn-practice-start" data-i18n="practice.start">▶ Empezar</button>
-              <button type="button" class="btn btn-danger btn-sm" id="btn-practice-stop" hidden data-i18n="practice.stop">■ Detener</button>
-              <label class="muted piano-opt hud-check" id="opt-auto-record">
-                <input type="checkbox" id="chk-auto-record" />
-                <span data-i18n="practice.recordAlso">Grabar</span>
-              </label>
-            </div>
-            <div class="hud-corner hud-br" id="piano-mini-opts">
-              <label class="muted piano-opt" title="One note at a time">
-                <input type="checkbox" id="chk-one-note" />
-                <span data-i18n="piano.oneNote">1n</span>
-              </label>
-              <label class="muted piano-opt piano-opt-arp" title="Arpeggio / Arpegio">
-                <input type="checkbox" id="chk-arpeggio" aria-label="Arpeggio" />
-                <span class="sr-only" data-i18n="piano.arpeggio">Arp.</span>
-              </label>
-              <label class="muted piano-opt" title="Sustain / Sostener">
-                <input type="checkbox" id="chk-sustain" checked />
-                <span data-i18n="piano.sustain">Sost.</span>
-              </label>
-              <label class="muted piano-opt">
-                <select id="sustain-sec" class="select-inline" aria-label="Sustain seconds">
-                  <option value="3">3s</option>
-                  <option value="4" selected>4s</option>
-                  <option value="5">5s</option>
-                </select>
-              </label>
-              <label class="muted piano-opt" id="opt-auto-piano" title="Auto piano">
-                <input type="checkbox" id="chk-auto-piano" checked />
-                <span data-i18n="piano.auto">Auto</span>
-              </label>
-              <button type="button" class="btn btn-ghost btn-xs hud-piano-more" id="btn-toggle-piano" aria-expanded="false" aria-controls="piano-block" data-i18n="piano.more" title="Piano y progresiones">🎹+</button>
-            </div>
-
-            <!-- Bottom-center game HUD: level + mic sensitivity (always visible in stage) -->
-            <div class="hud-corner hud-bc" id="mic-sens-hud">
-              <div class="level-meter practice-meter" id="level-meter-wrap" aria-hidden="true"><span id="level-fill"></span></div>
-              <label class="mic-sens-label" for="mic-sensitivity">
-                <span class="mic-sens-title" data-i18n="mic.sens">Mic</span>
-                <input
-                  type="range"
-                  id="mic-sensitivity"
-                  min="1"
-                  max="10"
-                  step="1"
-                  value="7"
-                  aria-valuemin="1"
-                  aria-valuemax="10"
-                  aria-valuenow="7"
-                  aria-label="Sensibilidad del micrófono"
-                />
-                <span class="mic-sens-val" id="mic-sens-val">7</span>
-              </label>
+            <!-- Full-width bottom rail: Start | Mic (flex) | Piano opts — uses X space, no overflow clip -->
+            <div class="hud-bottom-rail" id="hud-bottom-rail">
+              <div class="hud-corner hud-bl">
+                <button type="button" class="btn btn-practice btn-sm" id="btn-practice-start" data-i18n="practice.start">▶ Empezar</button>
+                <button type="button" class="btn btn-danger btn-sm" id="btn-practice-stop" hidden data-i18n="practice.stop">■ Detener</button>
+                <label class="muted piano-opt hud-check" id="opt-auto-record">
+                  <input type="checkbox" id="chk-auto-record" />
+                  <span data-i18n="practice.recordAlso">Grabar</span>
+                </label>
+              </div>
+              <div class="hud-corner hud-bc" id="mic-sens-hud">
+                <div class="level-meter practice-meter" id="level-meter-wrap" aria-hidden="true"><span id="level-fill"></span></div>
+                <label class="mic-sens-label" for="mic-sensitivity">
+                  <span class="mic-sens-title" data-i18n="mic.sens">Mic</span>
+                  <input
+                    type="range"
+                    id="mic-sensitivity"
+                    min="1"
+                    max="10"
+                    step="1"
+                    value="7"
+                    aria-valuemin="1"
+                    aria-valuemax="10"
+                    aria-valuenow="7"
+                    aria-label="Sensibilidad del micrófono"
+                  />
+                  <span class="mic-sens-val" id="mic-sens-val">7</span>
+                </label>
+              </div>
+              <div class="hud-corner hud-br" id="piano-mini-opts">
+                <label class="muted piano-opt" title="One note at a time / 1 nota a la vez">
+                  <input type="checkbox" id="chk-one-note" />
+                  <span data-i18n="piano.oneNote">1 nota</span>
+                </label>
+                <label class="muted piano-opt piano-opt-arp" title="Arpeggio / Arpegio">
+                  <input type="checkbox" id="chk-arpeggio" aria-label="Arpeggio" />
+                  <span data-i18n="piano.arpeggio">Arpegio</span>
+                </label>
+                <label class="muted piano-opt" title="Sustain / Sostener">
+                  <input type="checkbox" id="chk-sustain" checked />
+                  <span data-i18n="piano.sustain">Sostener</span>
+                </label>
+                <label class="muted piano-opt piano-opt-sec">
+                  <select id="sustain-sec" class="select-inline" aria-label="Segundos de sostenido">
+                    <option value="3">3s</option>
+                    <option value="4" selected>4s</option>
+                    <option value="5">5s</option>
+                  </select>
+                </label>
+                <label class="muted piano-opt" id="opt-auto-piano" title="Auto piano">
+                  <input type="checkbox" id="chk-auto-piano" checked />
+                  <span data-i18n="piano.auto">Auto</span>
+                </label>
+                <button type="button" class="btn btn-ghost btn-xs hud-piano-more" id="btn-toggle-piano" aria-expanded="false" aria-controls="piano-block" data-i18n="piano.more" title="Piano y progresiones">🎹+</button>
+              </div>
             </div>
 
             <div id="pitch-block" class="pitch-inline pitch-stage" hidden>

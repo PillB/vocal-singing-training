@@ -1273,6 +1273,94 @@ button:focus-visible,
   padding: 0.05rem 0.25rem;
 }
 
+/* Top-center progression + play mode (always visible when chords exist) */
+.hud-tm {
+  top: 0.2rem;
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+  z-index: 8;
+  max-width: min(48%, 26rem);
+  width: max-content;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.35rem 0.55rem;
+  background: rgba(8, 12, 18, 0.9);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.14rem 0.4rem;
+  overflow: visible;
+  max-height: none;
+  pointer-events: auto;
+}
+.hud-tm[hidden] {
+  display: none !important;
+}
+.hud-prog-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  min-width: 0;
+  pointer-events: auto;
+  margin: 0;
+}
+.hud-prog-k {
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  flex: 0 0 auto;
+}
+.hud-prog-select {
+  min-width: 6.5rem;
+  max-width: 12rem;
+  padding: 0.2rem 0.35rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text);
+  background: rgba(16, 24, 36, 0.95);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+#sel-progression.hud-prog-select {
+  max-width: 14rem;
+  min-width: 8rem;
+}
+@media (max-width: 900px) {
+  .hud-tm {
+    max-width: min(72%, 20rem);
+    top: 2.55rem; /* under TL/TR on narrow stages */
+    gap: 0.25rem;
+    padding: 0.12rem 0.3rem;
+  }
+  .hud-prog-k {
+    display: none; /* selects only — title via aria */
+  }
+  .hud-prog-select {
+    min-width: 5.5rem;
+    max-width: 9.5rem;
+    font-size: 0.72rem;
+  }
+}
+@media (max-width: 520px) {
+  .hud-tm {
+    left: 0.35rem;
+    right: 0.35rem;
+    transform: none;
+    max-width: none;
+    width: auto;
+    justify-content: space-between;
+  }
+  .hud-prog-select {
+    flex: 1 1 auto;
+    max-width: none;
+    min-width: 0;
+  }
+}
+
 .status-pill {
   font-size: 0.72rem;
   font-weight: 700;
@@ -1360,11 +1448,43 @@ button:focus-visible,
   flex: 0 0 auto;
 }
 
-/* Bottom horizontal rail: Start | mic | piano — leave right gutter for keys */
-.hud-bl {
-  bottom: 0.2rem;
+/*
+ * Bottom rail: one flex strip across the stage (minus right key gutter).
+ * Start | Mic (grows into free X) | Piano opts — no absolute fight / overflow clip.
+ */
+.hud-bottom-rail {
+  position: absolute;
+  /* Bottom band sits under the keyboard strip — use nearly full stage width
+     (right key gutter is for canvas note labels, not this rail). */
   left: 0.3rem;
-  max-width: min(36%, 13rem);
+  right: 0.35rem;
+  bottom: 0.18rem;
+  z-index: 7;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.5rem;
+  max-height: calc(var(--hud-band, 10%) + 0.6rem);
+  min-height: 2.5rem;
+  pointer-events: none; /* children re-enable */
+  box-sizing: border-box;
+}
+
+.hud-bottom-rail > .hud-corner {
+  position: relative;
+  top: auto;
+  left: auto;
+  right: auto;
+  bottom: auto;
+  max-height: none;
+  max-width: none;
+  pointer-events: auto;
+  overflow: visible;
+}
+
+.hud-bl {
+  flex: 0 0 auto;
   z-index: 7;
   background: rgba(8, 12, 18, 0.88);
   border-radius: 10px;
@@ -1373,6 +1493,7 @@ button:focus-visible,
   border: 1px solid var(--border);
   flex-direction: row;
   flex-wrap: nowrap;
+  align-items: center;
 }
 
 .hud-bl .btn-sm {
@@ -1382,21 +1503,71 @@ button:focus-visible,
   font-weight: 700;
 }
 
-.hud-br {
-  bottom: 0.2rem;
-  right: var(--hud-safe-r);
-  left: auto;
-  justify-content: flex-end;
-  /* Cap so BR never collides with center mic (BC); wide enough for full short labels */
-  max-width: min(42%, 17rem);
-  width: max-content;
-  max-height: 2.75rem;
-  overflow: hidden;
-  background: rgba(8, 12, 18, 0.9);
-  border-radius: 10px;
-  padding: 0.12rem 0.28rem;
+/* Mic grows into free center space on the X axis */
+.hud-bc {
+  flex: 1 1 16rem;
+  min-width: 14rem;
+  max-width: none;
+  width: auto;
+  transform: none;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+  z-index: 7;
+  background: rgba(6, 10, 16, 0.82);
   border: 1px solid var(--border);
-  gap: 0.22rem;
+  border-radius: 10px;
+  padding: 0.22rem 0.65rem;
+  overflow: hidden; /* keep range track inside its own box */
+}
+
+.hud-bc .mic-sens-label,
+.hud-bc .practice-meter {
+  pointer-events: auto;
+}
+.hud-bc .practice-meter {
+  position: relative;
+  left: auto;
+  transform: none;
+  bottom: auto;
+  width: 100%;
+  flex: 0 0 20%;
+  min-width: 2.75rem;
+  max-width: 4.5rem;
+  margin: 0;
+  height: 7px;
+}
+.hud-bc .mic-sens-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  gap: 0.4rem;
+  width: 100%;
+}
+.hud-bc .mic-sens-title {
+  font-size: 0.75rem;
+}
+.hud-bc #mic-sensitivity {
+  flex: 1 1 auto;
+  min-width: 5.5rem;
+  width: 100%;
+  max-width: none;
+  height: 1.35rem;
+}
+
+/* Piano opts: fit content; never clip labels with overflow:hidden */
+.hud-br {
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  min-width: 0;
+  max-width: none;
+  width: max-content;
+  max-height: none;
+  overflow: visible;
+  background: rgba(8, 12, 18, 0.92);
+  border-radius: 10px;
+  padding: 0.16rem 0.4rem;
+  border: 1px solid var(--border);
+  gap: 0.35rem;
   z-index: 7;
   flex-direction: row;
   flex-wrap: nowrap;
@@ -1404,8 +1575,8 @@ button:focus-visible,
 }
 .hud-br .hud-piano-more {
   pointer-events: auto;
-  min-height: 30px;
-  padding: 0.15rem 0.4rem;
+  min-height: 32px;
+  padding: 0.18rem 0.45rem;
   font-size: 0.74rem;
   border-radius: 8px;
   border: 1px solid var(--border);
@@ -1419,34 +1590,30 @@ button:focus-visible,
 }
 
 .hud-br .piano-opt {
-  font-size: 0.7rem;
-  padding: 0.1rem 0.14rem;
+  font-size: 0.74rem;
+  padding: 0.12rem 0.2rem;
   color: var(--text-muted);
-  min-height: 1.75rem;
+  min-height: 1.85rem;
   align-items: center;
   white-space: nowrap;
   flex: 0 0 auto;
   display: inline-flex;
-  gap: 0.16rem;
+  gap: 0.22rem;
   overflow: visible;
+  max-width: none;
 }
 .hud-br .piano-opt span {
   flex: 0 0 auto;
+  overflow: visible;
+  text-overflow: clip;
+  max-width: none;
 }
-/* Arpeggio: checkbox only (title tooltip) — saves width, stays accessible */
 .hud-br .piano-opt-arp {
-  padding-inline: 0.1rem;
+  padding-inline: 0.12rem;
 }
-.hud-br .piano-opt-arp .sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
+.hud-br #sustain-sec {
+  min-width: 3.1rem;
+  font-size: 0.74rem;
 }
 
 .hud-check {
@@ -1484,63 +1651,44 @@ button:focus-visible,
   background: #0a1018;
 }
 
-/* Mic bar: bottom band center, not covering right key column */
-.hud-bc {
-  left: 38%;
-  right: auto;
-  bottom: 0.2rem;
-  transform: none;
-  flex-direction: row;
-  align-items: center;
-  gap: 0.35rem;
-  max-width: min(24%, 11rem);
-  width: min(24%, 11rem);
-  z-index: 7;
-  pointer-events: none;
-  background: rgba(6, 10, 16, 0.78);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 0.15rem 0.4rem;
-}
-.hud-bc .mic-sens-label,
-.hud-bc .practice-meter {
-  pointer-events: auto;
-}
-.hud-bc .practice-meter {
-  position: relative;
-  left: auto;
-  transform: none;
-  bottom: auto;
-  width: 100%;
-  flex: 1 1 auto;
-  min-width: 2.5rem;
-  margin: 0;
-  height: 6px;
-}
-.hud-bc .mic-sens-label {
-  flex: 1 1 auto;
-  min-width: 0;
-  gap: 0.2rem;
-}
-.hud-bc .mic-sens-title {
-  font-size: 0.65rem;
-}
-
-/* After base .hud-bc so cascade wins: raise mic above bottom rail on mid widths */
+/* Mid: if full labels + wide mic can't share one row, stack mic on top */
 @media (max-width: 1100px) {
-  .hud-bc {
-    bottom: 2.9rem;
-    left: 50%;
-    right: auto;
-    transform: translateX(-50%);
-    width: min(36%, 11rem);
-    max-width: min(36%, 11rem);
+  .hud-bottom-rail {
+    gap: 0.35rem;
+    left: 0.2rem;
+    flex-wrap: wrap;
+    max-height: none;
   }
-  .hud-br {
-    max-width: min(46%, 15.5rem);
+  .hud-bc {
+    order: -1;
+    flex: 1 1 100%;
+    min-width: 0;
+    width: 100%;
+    max-width: none;
   }
   .hud-bl {
-    max-width: min(34%, 11rem);
+    flex: 0 0 auto;
+  }
+  .hud-br {
+    flex: 1 1 auto;
+    justify-content: flex-end;
+    min-width: 0;
+  }
+  .hud-br .piano-opt {
+    font-size: 0.72rem;
+    gap: 0.18rem;
+  }
+}
+
+/* Slightly tighter than desktop but still one row when wide enough */
+@media (min-width: 1101px) and (max-width: 1280px) {
+  .hud-bc {
+    min-width: 10rem;
+    flex: 1 1 12rem;
+  }
+  .hud-br .piano-opt {
+    font-size: 0.72rem;
+    gap: 0.2rem;
   }
 }
 
@@ -1872,52 +2020,49 @@ body.view-exercise .mode-hud-compact {
   .hud-cents-only .hud-score strong::before {
     content: "";
   }
-  /* Bottom: BL | BC | BR without overlap; right gutter free */
-  .hud-bl {
-    max-width: min(38%, 8.25rem);
-    bottom: 0.12rem;
+  /* Phone: wrap bottom rail into 2 rows — mic full width, then start + compact piano */
+  .hud-bottom-rail {
     left: 0.15rem;
-  }
-  .hud-br {
-    max-width: min(36%, 7.5rem);
-    max-height: 2.2rem;
-    overflow: hidden;
+    right: max(0.35rem, calc(var(--hud-safe-r, 14%) - 2%));
     bottom: 0.12rem;
-    right: var(--hud-safe-r);
-    left: auto;
-    padding: 0.08rem 0.12rem;
-    gap: 0.05rem;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    max-height: none;
+    min-height: 0;
   }
   .hud-bc {
-    bottom: 3.1rem; /* clear BL/BR row on phone (avoid 1px touch) */
-    left: 50%;
-    transform: translateX(-50%);
-    width: min(48%, 10rem);
-    max-width: min(48%, 10rem);
-    padding: 0.08rem 0.25rem;
+    order: -1;
+    flex: 1 1 100%;
+    min-width: 0;
+    width: 100%;
+    max-width: none;
+    padding: 0.12rem 0.4rem;
   }
-  .hud-br .piano-opt:not(:has(#chk-one-note)) {
-    display: none;
+  .hud-bl {
+    flex: 0 1 auto;
   }
-  .hud-br .piano-opt:has(#chk-one-note) {
-    display: flex !important;
-  }
-  .hud-br .hud-piano-more {
-    display: none; /* open piano panel from menu only on phone — avoid nest bleed */
-  }
-  .mic-sens-title {
-    font-size: 0.65rem;
+  .hud-br {
+    flex: 1 1 auto;
+    justify-content: flex-end;
+    padding: 0.1rem 0.25rem;
+    gap: 0.2rem;
+    min-width: 0;
   }
   .hud-br .piano-opt span {
-    display: none; /* checkboxes only on tiny screens */
+    display: none; /* checkboxes + titles on phone */
   }
-  /* Phone: only Auto + open panel — full opts in piano panel (avoids TR∩BR) */
-  .hud-br .piano-opt:not(#opt-auto-piano) {
-    display: none;
+  .hud-br .piano-opt:not(:has(#chk-one-note)):not(#opt-auto-piano):not(:has(#sustain-sec)) {
+    /* keep 1n, auto, sustain sec; hide arpeggio/sustain text labels already via span */
+  }
+  .hud-br .piano-opt-arp {
+    display: none; /* arpeggio via piano panel on phone */
   }
   .hud-br .hud-piano-more {
     min-height: 30px;
     padding: 0.15rem 0.35rem;
+  }
+  .mic-sens-title {
+    font-size: 0.65rem;
   }
   .hud-bl .btn-sm {
     min-height: 40px;
@@ -1925,7 +2070,7 @@ body.view-exercise .mode-hud-compact {
     font-size: 0.85rem;
   }
   .hud-bl #opt-auto-record {
-    display: none; /* save width on phone — still available when piano panel opens */
+    display: none; /* save width on phone */
   }
   .pitch-stage .pitch-canvas {
     min-height: 220px;

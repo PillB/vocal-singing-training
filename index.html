@@ -136,7 +136,26 @@
               </label>
             </div>
 
-            <div class="level-meter practice-meter" id="level-meter-wrap" aria-hidden="true"><span id="level-fill"></span></div>
+            <!-- Bottom-center game HUD: level + mic sensitivity (always visible in stage) -->
+            <div class="hud-corner hud-bc" id="mic-sens-hud">
+              <div class="level-meter practice-meter" id="level-meter-wrap" aria-hidden="true"><span id="level-fill"></span></div>
+              <label class="mic-sens-label" for="mic-sensitivity">
+                <span class="mic-sens-title" data-i18n="mic.sens">Mic</span>
+                <input
+                  type="range"
+                  id="mic-sensitivity"
+                  min="1"
+                  max="10"
+                  step="1"
+                  value="7"
+                  aria-valuemin="1"
+                  aria-valuemax="10"
+                  aria-valuenow="7"
+                  aria-label="Sensibilidad del micrófono"
+                />
+                <span class="mic-sens-val" id="mic-sens-val">7</span>
+              </label>
+            </div>
 
             <div id="pitch-block" class="pitch-inline pitch-stage" hidden>
               <canvas

@@ -8,13 +8,16 @@
 
   const HOLD_MIN_SEC = 2.0; // auto-log only if voiced continuously ≥ 2s
   /** Gap allowed mid-hold before ending (retroactive grace for pitch/RMS dropouts) */
-  const SILENCE_END_MS = 900;
+  const SILENCE_END_MS = 1100;
   /** Brief dropouts under this ms never end the hold; timer keeps running */
-  const HOLD_GRACE_MS = 700;
-  const VOICE_RMS = 0.016;
-  const HOLD_RMS = 0.012; // looser once a hold has started
-  const PITCH_MIN = 60;
-  const PITCH_MAX = 500;
+  const HOLD_GRACE_MS = 900;
+  /** Base thresholds at sensitivity = 5 (mid). Higher sensitivity lowers them. */
+  const VOICE_RMS_BASE = 0.012;
+  const HOLD_RMS_BASE = 0.008;
+  const PITCH_MIN = 55;
+  const PITCH_MAX = 520;
+  /** Default 7/10 — more sensitive than legacy fixed 0.016 (fewer false cutoffs) */
+  const DEFAULT_SENS = 7;
 
   class PracticeEngine {
     constructor() {
@@ -22,6 +25,7 @@
       this.audioCtx = null;
       this.stream = null;
       this.source = null;
+      this.inputGain = null;
       this.analyser = null;
       this.buf = null;
       this.raf = null;
@@ -43,13 +47,52 @@
       this.voiceFreq = null;
       this.targetFreq = 130.81;
 
+      /** 1–10 interactive mic sensitivity (persisted by app) */
+      this.sensitivity = DEFAULT_SENS;
+
       // Callbacks
-      this.onFrame = null; // { rms, voiceFreq, holdSec, voiced, holds }
+      this.onFrame = null; // { rms, voiceFreq, holdSec, voiced, holds, sensitivity }
       this.onHoldLogged = null; // seconds
       this.onStatus = null;
       this.onRecordingReady = null;
 
       this.startedAt = 0;
+    }
+
+    /**
+     * @param {number} level 1–10 (1 = least sensitive / quiet room noise rejection, 10 = softest voices)
+     */
+    setSensitivity(level) {
+      const n = Math.max(1, Math.min(10, Number(level) || DEFAULT_SENS));
+      this.sensitivity = n;
+      if (this.inputGain && this.audioCtx) {
+        this.inputGain.gain.setTargetAtTime(this._gainFromSens(n), this.audioCtx.currentTime, 0.05);
+      }
+      return n;
+    }
+
+    getSensitivity() {
+      return this.sensitivity;
+    }
+
+    /** Input gain: ~0.7 at sens1 → ~2.6 at sens10 */
+    _gainFromSens(s) {
+      const t = (s - 1) / 9;
+      return 0.7 + t * 1.9;
+    }
+
+    /** Threshold scale: higher sensitivity → lower RMS bar */
+    _threshScale() {
+      const t = (this.sensitivity - 1) / 9; // 0..1
+      return 1.55 - t * 1.15; // ~1.55 → ~0.40
+    }
+
+    _voiceRms() {
+      return VOICE_RMS_BASE * this._threshScale();
+    }
+
+    _holdRms() {
+      return HOLD_RMS_BASE * this._threshScale();
     }
 
     async start({ record = false } = {}) {
@@ -58,6 +101,7 @@
         audio: {
           echoCancellation: false,
           noiseSuppression: false,
+          // Leave browser AGC off — we control gain via sensitivity slider
           autoGainControl: false
         }
       });
@@ -65,10 +109,13 @@
       this.audioCtx = new AC();
       if (this.audioCtx.state === "suspended") await this.audioCtx.resume();
       this.source = this.audioCtx.createMediaStreamSource(this.stream);
+      this.inputGain = this.audioCtx.createGain();
+      this.inputGain.gain.value = this._gainFromSens(this.sensitivity);
       this.analyser = this.audioCtx.createAnalyser();
       this.analyser.fftSize = 2048;
-      this.analyser.smoothingTimeConstant = 0.15;
-      this.source.connect(this.analyser);
+      this.analyser.smoothingTimeConstant = 0.12;
+      this.source.connect(this.inputGain);
+      this.inputGain.connect(this.analyser);
       this.buf = new Float32Array(this.analyser.fftSize);
 
       this.voiced = false;
@@ -146,6 +193,14 @@
           /* ignore */
         }
       }
+      if (this.inputGain) {
+        try {
+          this.inputGain.disconnect();
+        } catch {
+          /* ignore */
+        }
+        this.inputGain = null;
+      }
       if (this.audioCtx) {
         this.audioCtx.close().catch(() => {});
         this.audioCtx = null;
@@ -220,20 +275,30 @@
       const freq = this._detectPitch(this.buf, this.audioCtx.sampleRate);
       const now = performance.now();
 
+      const voiceRms = this._voiceRms();
+      const holdRms = this._holdRms();
+      // Slightly longer grace when mic is very sensitive (soft voices drop more)
+      const graceMs = HOLD_GRACE_MS + Math.max(0, this.sensitivity - 5) * 40;
+      const silenceEndMs = SILENCE_END_MS + Math.max(0, this.sensitivity - 5) * 50;
+
       const hasPitch =
         freq != null && freq >= PITCH_MIN && freq <= PITCH_MAX;
       // Start a hold only with energy + pitch; continue a hold with energy alone
-      // (pitch detectors flake mid-sustain — competitors punish that; we give grace)
-      const strongVoice = rms >= VOICE_RMS && hasPitch;
+      // (pitch detectors flake mid-sustain — we give grace + sensitivity)
+      const strongVoice = rms >= voiceRms && hasPitch;
+      // Soft-voice path: energy alone can open a hold at high sensitivity
+      const softOpen =
+        this.holdStart == null &&
+        rms >= holdRms * 1.15 &&
+        (hasPitch || this.sensitivity >= 7);
       const continueVoice =
         this.holdStart != null &&
-        (rms >= HOLD_RMS || hasPitch || now - this.lastVoiceAt < HOLD_GRACE_MS);
+        (rms >= holdRms || hasPitch || now - this.lastVoiceAt < graceMs);
 
-      if (strongVoice || continueVoice) {
+      if (strongVoice || softOpen || continueVoice) {
         if (hasPitch) this.voiceFreq = freq;
         // Refresh lastVoiceAt on real energy OR clean pitch (not bare grace alone)
-        // so low-energy noise without energy doesn't pin holds forever
-        if (strongVoice || rms >= HOLD_RMS || (hasPitch && rms >= HOLD_RMS * 0.65)) {
+        if (strongVoice || softOpen || rms >= holdRms || (hasPitch && rms >= holdRms * 0.55)) {
           this.lastVoiceAt = now;
         }
         if (!this.holdStart) {
@@ -244,7 +309,7 @@
         this.currentHoldSec = (now - this.holdStart) / 1000;
       } else {
         if (now - this.lastVoiceAt > 180) this.voiceFreq = null;
-        if (this.holdStart && now - this.lastVoiceAt >= SILENCE_END_MS) {
+        if (this.holdStart && now - this.lastVoiceAt >= silenceEndMs) {
           this._maybeEndHold(false);
         } else if (this.holdStart) {
           // Still inside outer silence window — keep counting for UX continuity
@@ -256,22 +321,23 @@
       this._lastFrameAt = now;
       // Grace UI spans full silence window so green/amber doesn't drop before hold ends
       const inGraceWindow =
-        !!this.holdStart && now - this.lastVoiceAt < SILENCE_END_MS;
+        !!this.holdStart && now - this.lastVoiceAt < silenceEndMs;
       const activelyHolding =
-        !!this.holdStart && now - this.lastVoiceAt < HOLD_GRACE_MS;
+        !!this.holdStart && now - this.lastVoiceAt < graceMs;
       if (this.onFrame) {
         this.onFrame({
           rms,
           voiceFreq: this.voiceFreq,
           targetFreq: this.targetFreq,
           holdSec: this.currentHoldSec,
-          voiced: inGraceWindow || strongVoice,
+          voiced: inGraceWindow || strongVoice || softOpen,
           holds: this.holds,
           recording: this.recording,
           elapsedMs: now - this.startedAt,
           dtMs,
           holdGrace: !!this.holdStart && !strongVoice && inGraceWindow,
-          holdSolid: activelyHolding || strongVoice
+          holdSolid: activelyHolding || strongVoice || softOpen,
+          sensitivity: this.sensitivity
         });
       }
 
@@ -283,4 +349,5 @@
   global.VT_HOLD_MIN_SEC = HOLD_MIN_SEC;
   global.VT_HOLD_GRACE_MS = HOLD_GRACE_MS;
   global.VT_SILENCE_END_MS = SILENCE_END_MS;
+  global.VT_DEFAULT_MIC_SENS = DEFAULT_SENS;
 })(window);

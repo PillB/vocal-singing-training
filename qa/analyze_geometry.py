@@ -19,6 +19,8 @@ PEER_SELECTORS = {
     ".hud-tr",
     ".hud-bl",
     ".hud-br",
+    ".hud-bc",
+    "#mic-sensitivity",
     "#btn-practice-start",
     "#btn-practice-stop",
     "#btn-back-home",

@@ -1036,7 +1036,10 @@
 
       state.practice.onFrame = (frame) => {
         if (profile.showLevel !== false) {
-          $("#level-fill").style.width = `${Math.round(Math.min(1, frame.rms * 4) * 100)}%`;
+          // Scale meter with sensitivity so soft voices still fill the bar
+          const sens = state.practice.getSensitivity?.() || 7;
+          const boost = 3.2 + (sens - 5) * 0.35;
+          $("#level-fill").style.width = `${Math.round(Math.min(1, frame.rms * boost) * 100)}%`;
         }
         if (showHold) {
           const holdEl = $("#hold-display");
@@ -1950,6 +1953,34 @@
     $("#btn-practice-start")?.addEventListener("click", startPractice);
     $("#btn-practice-stop")?.addEventListener("click", () => stopPractice(false));
     $("#btn-continue")?.addEventListener("click", continuePractice);
+
+    // Mic sensitivity (1–10) — persists + applies live while practicing
+    const micRange = $("#mic-sensitivity");
+    const micVal = $("#mic-sens-val");
+    const applyMicSens = (raw) => {
+      const n = state.practice.setSensitivity?.(raw) ?? Number(raw);
+      if (micVal) micVal.textContent = String(n);
+      if (micRange) {
+        micRange.value = String(n);
+        micRange.setAttribute("aria-valuenow", String(n));
+        micRange.title = tt("mic.sensHint");
+      }
+      try {
+        localStorage.setItem("vt_mic_sens", String(n));
+      } catch {
+        /* ignore */
+      }
+    };
+    if (micRange) {
+      let saved = 7;
+      try {
+        saved = Number(localStorage.getItem("vt_mic_sens")) || window.VT_DEFAULT_MIC_SENS || 7;
+      } catch {
+        saved = window.VT_DEFAULT_MIC_SENS || 7;
+      }
+      applyMicSens(saved);
+      micRange.addEventListener("input", () => applyMicSens(micRange.value));
+    }
     $("#btn-toggle-guide")?.addEventListener("click", () => {
       state.guideOpen = !state.guideOpen;
       const card = document.querySelector(".guide-card");

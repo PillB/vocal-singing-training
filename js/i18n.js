@@ -106,6 +106,8 @@
       "practice.recordAlso": "Grabar",
       "practice.hold": "Sostenido {s}s",
       "practice.focusCta": "Pulsa Empezar · el micrófono escucha solo",
+      "mic.sens": "Mic",
+      "mic.sensHint": "Sensibilidad del micrófono (1 baja · 10 alta)",
       "pitch.title": "Afinación · precisión y exactitud",
       "pitch.legend":
         "Carriles grises = notas de la progresión · Ámbar = acordes activos · Verde = nota principal · Tu voz se mueve entre carriles",
@@ -316,6 +318,8 @@
       "practice.recordAlso": "Record",
       "practice.hold": "Hold {s}s",
       "practice.focusCta": "Press Start · the mic listens for you",
+      "mic.sens": "Mic",
+      "mic.sensHint": "Microphone sensitivity (1 low · 10 high)",
       "pitch.title": "Pitch visualizer · accuracy & precision",
       "pitch.legend":
         "Gray lanes = full progression · Amber = active chord tones · Green = primary note · Your voice moves between lanes",

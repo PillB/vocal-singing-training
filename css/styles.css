@@ -1224,10 +1224,10 @@ button:focus-visible,
 }
 
 .pitch-stage .pitch-canvas {
-  /* Taller highway: note channels more legible for low vision */
-  height: min(62vh, 480px);
-  min-height: 300px;
-  max-height: calc(72dvh - 0.5rem);
+  /* Tall for note lanes, but leaves room for corner HUDs + mic bar */
+  height: min(58vh, 440px);
+  min-height: 280px;
+  max-height: calc(68dvh - 0.5rem);
   border-radius: 12px;
   display: block;
   width: 100%;
@@ -1236,24 +1236,80 @@ button:focus-visible,
   background: #0a1018;
 }
 
-.highway-stage .practice-meter {
-  position: absolute;
+/* Bottom-center mic + level HUD */
+.hud-bc {
   left: 50%;
+  right: auto;
+  bottom: 0.45rem;
   transform: translateX(-50%);
-  bottom: 3.35rem;
-  width: min(40%, 12rem);
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  max-width: min(52%, 16rem);
+  width: min(52%, 16rem);
+  z-index: 7;
+  pointer-events: none;
+  background: rgba(6, 10, 16, 0.72);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.28rem 0.55rem 0.35rem;
+}
+.hud-bc .mic-sens-label,
+.hud-bc .practice-meter {
+  pointer-events: auto;
+}
+.hud-bc .practice-meter {
+  position: relative;
+  left: auto;
+  transform: none;
+  bottom: auto;
+  width: 100%;
   margin: 0;
-  z-index: 5;
-  opacity: 0.85;
+  height: 8px;
+}
+.mic-sens-label {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  width: 100%;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.mic-sens-title {
+  flex: 0 0 auto;
+  color: var(--text);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.mic-sens-val {
+  flex: 0 0 1.2rem;
+  font-family: var(--mono);
+  font-weight: 800;
+  color: var(--accent);
+  text-align: right;
+}
+#mic-sensitivity {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 1.25rem;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+/* Legacy absolute meter rules superseded by .hud-bc — keep no-op safe */
+.highway-stage > .practice-meter {
+  display: none;
 }
 
 /* Non-pitch focus area inside sticky stage — center safe zone only */
 .mode-focus {
   position: absolute;
-  /* Stay clear of TL/TR/BL/BR game corners (timer can wrap ~3 lines) */
+  /* Stay clear of TL/TR/BL/BR + bottom mic bar */
   top: 4.75rem;
   right: 0.85rem;
-  bottom: 3.55rem;
+  bottom: 5.5rem;
   left: 0.85rem;
   display: flex;
   align-items: center;
@@ -1428,11 +1484,20 @@ body.view-exercise .hud-cents-only .hud-score .hud-label {
     left: 0.3rem;
   }
   .hud-br {
-    max-width: min(70%, 11rem);
-    /* BL height ≈ 44–90px + gap → keep BR clear of Start */
-    bottom: 5.75rem;
+    max-width: min(55%, 9.5rem);
+    /* Fully above mic bar + Start (stacked: BR → mic → Start) */
+    bottom: 7.5rem;
     right: 0.3rem;
     left: auto;
+  }
+  .hud-bc {
+    bottom: 3.55rem; /* above Start, below piano opts */
+    width: min(58%, 12rem);
+    max-width: min(58%, 12rem);
+    padding: 0.18rem 0.35rem;
+  }
+  .mic-sens-title {
+    font-size: 0.65rem;
   }
   .hud-br .piano-opt span {
     display: none; /* checkboxes only on tiny screens */

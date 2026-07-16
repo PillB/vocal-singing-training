@@ -8,6 +8,7 @@
     "test:catalog": "node qa/check-catalog.mjs",
     "test:geometry": "node qa/capture-geometry.mjs && python3 qa/analyze_geometry.py",
     "catalog:rebuild": "node qa/rebuild-catalog-snapshot.mjs",
+    "accounts:generate": "node qa/generate-test-accounts.mjs",
     "serve": "python3 -m http.server 8765",
     "start": "python3 -m http.server 8765"
   },

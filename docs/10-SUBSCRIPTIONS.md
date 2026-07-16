@@ -161,6 +161,12 @@ Documented path; not required to start charging.
 
 ---
 
+## Internal test accounts
+
+Friends/family + admins use **client auth** (see `docs/11-AUTH-AND-HARDENING.md`).  
+Plaintext credentials: **`docs/INTERNAL-TEST-ACCOUNTS.md`** (gitignored).  
+Generate: `npm run accounts:generate`
+
 ## File map
 
 | File | Purpose |

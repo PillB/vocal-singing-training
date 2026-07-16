@@ -135,7 +135,10 @@ const snap = {
     "#btn-pricing",
     "#pricing-modal",
     "#pricing-grid",
-    "#billing-pill"
+    "#billing-pill",
+    "#btn-account",
+    "#account-modal",
+    "#login-form"
   ],
   requiredI18nKeys: [
     "brand.title",
@@ -147,6 +150,8 @@ const snap = {
     "nav.history",
     "nav.plan",
     "nav.pro",
+    "nav.account",
+    "auth.signIn",
     "metrics.save",
     "metrics.show",
     "ex.guide",
@@ -170,7 +175,9 @@ const snap = {
     "VTPracticeModes",
     "VT_PROGRESSIONS",
     "VTBilling",
-    "VT_BILLING_CONFIG"
+    "VT_BILLING_CONFIG",
+    "VTAuth",
+    "VT_AUTH_USERS"
   ]
 };
 

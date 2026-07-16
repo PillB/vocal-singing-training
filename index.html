@@ -25,6 +25,7 @@
         </div>
         <div class="header-actions">
           <button type="button" class="btn btn-ghost btn-sm" id="btn-tour" data-i18n="nav.tour" title="Tour guiado">Tour</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="btn-account" data-i18n="nav.account" title="Account">Cuenta</button>
           <button type="button" class="btn btn-pro btn-sm" id="btn-pricing" data-i18n="nav.pro" title="Pro">Pro</button>
           <span class="billing-pill" id="billing-pill" hidden>Pro</span>
           <button type="button" class="btn btn-ghost btn-sm" id="btn-lang" aria-label="Language" data-i18n="nav.lang">English</button>
@@ -373,6 +374,52 @@
       </div>
     </div>
 
+    <!-- Account / login overlay (internal admins + F&F testers) -->
+    <div id="account-modal" class="modal-overlay account-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="account-title">
+      <div class="modal-card account-card">
+        <div class="pricing-head">
+          <div>
+            <h3 id="account-title" data-i18n="auth.title">Cuenta</h3>
+            <p class="muted pricing-sub" data-i18n="auth.sub">
+              Inicia sesión con una cuenta de prueba interna. La práctica gratuita no requiere cuenta.
+            </p>
+          </div>
+          <button type="button" class="btn btn-ghost btn-sm" id="account-close" aria-label="Close">✕</button>
+        </div>
+        <div id="account-logged-out">
+          <form id="login-form" class="login-form" autocomplete="on">
+            <label class="field">
+              <span data-i18n="auth.username">Usuario</span>
+              <input type="text" id="login-username" name="username" autocomplete="username" maxlength="64" required />
+            </label>
+            <label class="field">
+              <span data-i18n="auth.password">Contraseña</span>
+              <input type="password" id="login-password" name="password" autocomplete="current-password" maxlength="128" required />
+            </label>
+            <p class="auth-error" id="login-error" hidden></p>
+            <button type="submit" class="btn btn-primary btn-sm" id="login-submit" data-i18n="auth.signIn">Entrar</button>
+          </form>
+        </div>
+        <div id="account-logged-in" hidden>
+          <p class="account-who" id="account-who"></p>
+          <div class="account-actions controls-row">
+            <button type="button" class="btn btn-sm" id="btn-account-pricing" data-i18n="nav.pro">Pro</button>
+            <button type="button" class="btn btn-ghost btn-sm" id="btn-logout" data-i18n="auth.signOut">Salir</button>
+          </div>
+          <div id="admin-panel" class="admin-panel" hidden>
+            <h4 data-i18n="auth.adminTitle">Herramientas admin</h4>
+            <div class="controls-row">
+              <button type="button" class="btn btn-sm" id="admin-force-pro" data-i18n="auth.forcePro">Forzar Pro (demo)</button>
+              <button type="button" class="btn btn-sm" id="admin-clear-billing" data-i18n="auth.clearBilling">Quitar Pro local</button>
+              <button type="button" class="btn btn-danger btn-sm" id="admin-clear-progress" data-i18n="auth.clearProgress">Borrar progreso local</button>
+            </div>
+            <p class="muted" data-i18n="auth.adminUsers">Cuentas internas (sin contraseñas):</p>
+            <ul class="admin-user-list" id="admin-user-list"></ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Pricing / subscription overlay (game-style; no page scroll required) -->
     <div id="pricing-modal" class="modal-overlay pricing-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="pricing-title">
       <div class="modal-card pricing-card">
@@ -409,6 +456,8 @@
     <script src="js/storage.js"></script>
     <script src="js/billing-config.js"></script>
     <script src="js/billing.js"></script>
+    <script src="js/auth-users.generated.js"></script>
+    <script src="js/auth.js"></script>
     <script src="js/piano.js"></script>
     <script src="js/pitch-visualizer.js"></script>
     <script src="js/pitch-game.js"></script>

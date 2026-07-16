@@ -4,7 +4,15 @@ playwright-report/
 test-results/
 .cache/
 *.log
+.env
+.env.*
 
 # QA captures (regenerate locally)
 qa/screenshots/
 qa/geometry/
+
+# Secrets — never commit plaintext test/admin passwords
+docs/INTERNAL-TEST-ACCOUNTS.md
+docs/**/*SECRET*
+docs/**/*password*
+docs/**/*PASSWORD*

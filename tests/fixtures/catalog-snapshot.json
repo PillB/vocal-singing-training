@@ -991,7 +991,10 @@
     "#btn-pricing",
     "#pricing-modal",
     "#pricing-grid",
-    "#billing-pill"
+    "#billing-pill",
+    "#btn-account",
+    "#account-modal",
+    "#login-form"
   ],
   "requiredI18nKeys": [
     "brand.title",
@@ -1003,6 +1006,8 @@
     "nav.history",
     "nav.plan",
     "nav.pro",
+    "nav.account",
+    "auth.signIn",
     "metrics.save",
     "metrics.show",
     "ex.guide",
@@ -1026,7 +1031,9 @@
     "VTPracticeModes",
     "VT_PROGRESSIONS",
     "VTBilling",
-    "VT_BILLING_CONFIG"
+    "VT_BILLING_CONFIG",
+    "VTAuth",
+    "VT_AUTH_USERS"
   ],
   "i18nTitleKeys": {
     "missingEs": [],

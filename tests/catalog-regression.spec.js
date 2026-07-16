@@ -65,7 +65,9 @@ test.describe("Catalog & structure regression", () => {
           "VTPracticeModes",
           "VT_PROGRESSIONS",
           "VTBilling",
-          "VT_BILLING_CONFIG"
+          "VT_BILLING_CONFIG",
+          "VTAuth",
+          "VT_AUTH_USERS"
         ].map((k) => [k, typeof window[k] !== "undefined"])
       };
     });

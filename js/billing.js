@@ -174,22 +174,28 @@
 
   function activate(planId, meta) {
     const plan = planId || "pro_monthly";
+    // Only allow known plan ids (open-redirect / injection hygiene)
+    const allowed = new Set(["pro_monthly", "pro_yearly", "trial"]);
+    const safePlan = allowed.has(plan) ? plan : "pro_monthly";
     const region = (meta && meta.region) || detectRegion();
     const provider = (meta && meta.provider) || preferredRail(region);
+    const source = (meta && meta.source) || "paid";
     const state = {
       status: "active",
-      plan,
+      plan: safePlan,
       provider,
       region,
-      source: (meta && meta.source) || "paid",
+      source,
       activatedAt: new Date().toISOString(),
       expiresAt: meta && meta.expiresAt ? meta.expiresAt : null,
-      sessionId: (meta && meta.sessionId) || null
+      sessionId: meta && meta.sessionId ? String(meta.sessionId).slice(0, 128) : null
     };
-    // Yearly local fallback expiry if not provided by webhook
-    if (!state.expiresAt && plan === "pro_yearly") {
+    // Internal accounts / demo: long-lived soft expiry
+    if (!state.expiresAt && (source === "internal_account" || source === "demo")) {
       state.expiresAt = new Date(nowMs() + 365 * 86400000).toISOString();
-    } else if (!state.expiresAt && plan === "pro_monthly") {
+    } else if (!state.expiresAt && safePlan === "pro_yearly") {
+      state.expiresAt = new Date(nowMs() + 365 * 86400000).toISOString();
+    } else if (!state.expiresAt && safePlan === "pro_monthly") {
       state.expiresAt = new Date(nowMs() + 31 * 86400000).toISOString();
     }
     write(state);

@@ -1518,10 +1518,15 @@
 
     const notes = document.createElement("div");
     notes.className = "field";
-    notes.innerHTML = `
-      <label for="m-notes">${tt("metrics.notes")}</label>
-      <textarea id="m-notes" name="notes" placeholder="${tt("metrics.notesPh")}"></textarea>
-    `;
+    const notesLab = document.createElement("label");
+    notesLab.htmlFor = "m-notes";
+    notesLab.textContent = tt("metrics.notes");
+    const notesTa = document.createElement("textarea");
+    notesTa.id = "m-notes";
+    notesTa.name = "notes";
+    notesTa.placeholder = tt("metrics.notesPh");
+    notes.appendChild(notesLab);
+    notes.appendChild(notesTa);
     form.appendChild(notes);
 
     $$('input[type="range"]', form).forEach((r) => {
@@ -2378,6 +2383,148 @@
     document.body.classList.remove("pricing-open");
   }
 
+  function refreshAccountUI() {
+    const A = window.VTAuth;
+    const session = A?.current?.() || null;
+    const out = $("#account-logged-out");
+    const inn = $("#account-logged-in");
+    const admin = $("#admin-panel");
+    const who = $("#account-who");
+    const btnAcc = $("#btn-account");
+    if (btnAcc) {
+      if (session) {
+        btnAcc.textContent = session.username.split(".")[0] || tt("nav.account");
+      } else {
+        btnAcc.textContent = tt("nav.account");
+      }
+    }
+    if (!out || !inn) return;
+    if (session) {
+      out.hidden = true;
+      inn.hidden = false;
+      if (who) {
+        who.textContent = tt("auth.welcome", {
+          name: session.displayName || session.username,
+          role: session.role
+        });
+      }
+      if (admin) {
+        admin.hidden = session.role !== "admin";
+        if (session.role === "admin") {
+          const list = $("#admin-user-list");
+          if (list && A.listPublicUsers) {
+            list.innerHTML = A.listPublicUsers()
+              .map(
+                (u) =>
+                  `<li><code>${A.escapeHtml(u.username)}</code> · ${A.escapeHtml(u.role)} · ${A.escapeHtml(u.displayName || "")}</li>`
+              )
+              .join("");
+          }
+        }
+      }
+    } else {
+      out.hidden = false;
+      inn.hidden = true;
+      if (admin) admin.hidden = true;
+    }
+  }
+
+  function openAccount() {
+    const modal = $("#account-modal");
+    if (!modal) return;
+    refreshAccountUI();
+    const err = $("#login-error");
+    if (err) {
+      err.hidden = true;
+      err.textContent = "";
+    }
+    modal.hidden = false;
+    document.body.classList.add("account-open");
+    if (!window.VTAuth?.isLoggedIn?.()) $("#login-username")?.focus();
+  }
+
+  function closeAccount() {
+    const modal = $("#account-modal");
+    if (modal) modal.hidden = true;
+    document.body.classList.remove("account-open");
+  }
+
+  function bindAuth() {
+    $("#btn-account")?.addEventListener("click", openAccount);
+    $("#account-close")?.addEventListener("click", closeAccount);
+    $("#account-modal")?.addEventListener("click", (e) => {
+      if (e.target === $("#account-modal")) closeAccount();
+    });
+    $("#btn-logout")?.addEventListener("click", () => {
+      window.VTAuth?.logout?.();
+      toast(tt("auth.toast.out"));
+      refreshAccountUI();
+      updateBillingChrome();
+    });
+    $("#btn-account-pricing")?.addEventListener("click", () => {
+      closeAccount();
+      openPricing();
+    });
+    $("#login-form")?.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const err = $("#login-error");
+      const user = $("#login-username")?.value || "";
+      const pass = $("#login-password")?.value || "";
+      if (!window.VTAuth) return;
+      const res = await VTAuth.login(user, pass);
+      if (!res.ok) {
+        if (err) {
+          err.hidden = false;
+          const map = {
+            empty: "auth.err.empty",
+            credentials: "auth.err.credentials",
+            locked: "auth.err.locked",
+            invalid: "auth.err.invalid"
+          };
+          err.textContent = tt(map[res.error] || "auth.err.credentials");
+        }
+        return;
+      }
+      if ($("#login-password")) $("#login-password").value = "";
+      toast(tt("auth.toast.in"));
+      refreshAccountUI();
+      updateBillingChrome();
+    });
+    $("#admin-force-pro")?.addEventListener("click", () => {
+      if (!window.VTAuth?.isAdmin?.()) return;
+      window.VTBilling?.activateDemo?.("pro_monthly");
+      toast(tt("pricing.toast.demo"));
+      updateBillingChrome();
+    });
+    $("#admin-clear-billing")?.addEventListener("click", () => {
+      if (!window.VTAuth?.isAdmin?.()) return;
+      window.VTBilling?.clearEntitlement?.();
+      updateBillingChrome();
+    });
+    $("#admin-clear-progress")?.addEventListener("click", () => {
+      if (!window.VTAuth?.isAdmin?.()) return;
+      try {
+        localStorage.removeItem("vt_progress_v1");
+        localStorage.removeItem("vt_session_v1");
+        localStorage.removeItem("vt_hold_logs_v1");
+      } catch {
+        /* ignore */
+      }
+      toast(tt("auth.toast.cleared"));
+      renderExerciseList();
+    });
+    window.VTAuth?.onChange?.(() => {
+      refreshAccountUI();
+      updateBillingChrome();
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && $("#account-modal") && !$("#account-modal").hidden) {
+        closeAccount();
+      }
+    });
+    refreshAccountUI();
+  }
+
   function bindBilling() {
     $("#btn-pricing")?.addEventListener("click", openPricing);
     $("#pricing-close")?.addEventListener("click", closePricing);
@@ -2437,7 +2584,9 @@
     setView,
     setTab,
     openPricing,
-    closePricing
+    closePricing,
+    openAccount,
+    closeAccount
   };
 
   function init() {
@@ -2451,6 +2600,7 @@
         const tb = $("#btn-tour");
         if (tb) tb.textContent = tt("nav.tour");
         updateBillingChrome();
+        refreshAccountUI();
         if ($("#pricing-modal") && !$("#pricing-modal").hidden) renderPricingModal();
       };
     }
@@ -2458,6 +2608,7 @@
     state.tab = settings.lastTab || "vocal";
     bind();
     bindBilling();
+    bindAuth();
     setTab(state.tab);
     updateSessionBanner();
 

@@ -17,6 +17,7 @@ Self-paced practice website for **Vocal Training** (speaking foundations) and **
 - **Piano chords** — mid-lower male range (C2–E4) with **Arpeggio** and **Sustain note** (3–5s hold) 
 - **Pitch visualizer** — target trail, live voice dot, moving-average deviation band (accuracy + precision) 
 - **Subscriptions (Pro)** — Stripe (global) + Mercado Pago (Perú/LATAM); 7-day trial; see [docs/10-SUBSCRIPTIONS.md](docs/10-SUBSCRIPTIONS.md)
+- **Internal auth** — 2 admin + 10 F&F tester accounts (hashes in repo; plaintext sheet gitignored); see [docs/11-AUTH-AND-HARDENING.md](docs/11-AUTH-AND-HARDENING.md)
 
 ## Run locally
 
@@ -50,7 +51,8 @@ Vanilla HTML / CSS / JS — no build step. Web Audio API (piano), MediaRecorder 
 - [UI/UX](docs/03-UI-UX.md) 
 - [Final report](docs/FINAL_REPORT.md) 
 - [Gap registry](docs/GAP-REGISTRY.md) 
-- [Subscriptions (Peru + worldwide)](docs/10-SUBSCRIPTIONS.md) 
+- [Subscriptions (Peru + worldwide)](docs/10-SUBSCRIPTIONS.md)
+- [Auth & hardening](docs/11-AUTH-AND-HARDENING.md) 
 
 ## Privacy
 

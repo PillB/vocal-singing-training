@@ -11,6 +11,13 @@
   const SILENCE_END_MS = 1100;
   /** Brief dropouts under this ms never end the hold; timer keeps running */
   const HOLD_GRACE_MS = 900;
+  /**
+   * After Space keyup (or apparent release), keep manual sound inject this long.
+   * A11y: motor tremor, OS Filter/Sticky Keys, and missed key events should not
+   * reset SH/speech counters. Re-press within grace = continuous hold.
+   * Research: game key-state sets + hold grace (no reliable web keyboard poll).
+   */
+  const MANUAL_GRACE_MS = 550;
   /** Base thresholds at sensitivity = 5 (mid). Higher sensitivity lowers them. */
   const VOICE_RMS_BASE = 0.012;
   const HOLD_RMS_BASE = 0.008;
@@ -54,8 +61,10 @@
       /**
        * Manual sound assist (Space hold) — supplements autodetection for non-highway modes.
        * kind: "voice" | "air" (air = unvoiced energy for SH/S ladders)
+       * Grace: after keyup, inject continues for MANUAL_GRACE_MS (a11y continuous count).
        */
-      this._manualSound = false;
+      this._manualKeyDown = false;
+      this._lastManualActiveAt = 0;
       this._manualKind = "voice";
       this._manualRmsFloor = 0.06;
 
@@ -85,20 +94,68 @@
       return this.sensitivity;
     }
 
+    _manualGraceMs() {
+      // Slightly longer grace for soft-motor / high-sensitivity users
+      return MANUAL_GRACE_MS + Math.max(0, this.sensitivity - 5) * 25;
+    }
+
     /**
-     * Hold-key assist: while active, inject energy (and optionally voice flags) into frames.
+     * True if Space is down OR we are still inside the post-keyup grace window.
+     * @param {number} [now]
+     */
+    isManualEffective(now) {
+      const t = now != null ? now : performance.now();
+      if (this._manualKeyDown) return true;
+      if (this._lastManualActiveAt > 0 && t - this._lastManualActiveAt < this._manualGraceMs()) {
+        return true;
+      }
+      return false;
+    }
+
+    /**
+     * Hold-key assist API (level-triggered from app key state).
+     * active=true  → key down (or re-down): refresh timestamp, inject immediately.
+     * active=false → key up: do NOT cut inject; grace keeps counting until timeout.
+     * forceClear=true → blur / stop: end key + grace immediately.
      * @param {boolean} active
      * @param {"voice"|"air"} [kind]
+     * @param {{ forceClear?: boolean }} [opts]
      */
-    setManualSound(active, kind) {
-      this._manualSound = !!active;
+    setManualSound(active, kind, opts) {
       if (kind === "air" || kind === "voice") this._manualKind = kind;
-      if (!active) return false;
-      return true;
+      const now = performance.now();
+      if (opts && opts.forceClear) {
+        this._manualKeyDown = false;
+        this._lastManualActiveAt = 0;
+        return false;
+      }
+      if (active) {
+        this._manualKeyDown = true;
+        this._lastManualActiveAt = now;
+        return true;
+      }
+      // keyup: start grace from last active moment (keep counting)
+      this._manualKeyDown = false;
+      if (this._lastManualActiveAt <= 0) this._lastManualActiveAt = now;
+      // Do not zero _lastManualActiveAt — grace window uses it
+      return this.isManualEffective(now);
+    }
+
+    /** Alias for clarity from app layer */
+    setManualKeyDown(down, kind) {
+      return this.setManualSound(!!down, kind);
     }
 
     getManualSound() {
-      return { active: !!this._manualSound, kind: this._manualKind || "voice" };
+      const now = performance.now();
+      const effective = this.isManualEffective(now);
+      return {
+        active: effective,
+        keyDown: !!this._manualKeyDown,
+        grace: effective && !this._manualKeyDown,
+        kind: this._manualKind || "voice",
+        graceMs: this._manualGraceMs()
+      };
     }
 
     /**
@@ -309,6 +366,9 @@
     stop() {
       // Finalize open hold if long enough
       this._maybeEndHold(true);
+      // End Space assist immediately (no grace after stop)
+      this._manualKeyDown = false;
+      this._lastManualActiveAt = 0;
 
       if (this.raf) cancelAnimationFrame(this.raf);
       this.raf = null;
@@ -427,8 +487,12 @@
       let freq = this._detectPitch(this.buf, this.audioCtx.sampleRate);
       const now = performance.now();
 
-      // Manual assist (Space): supplement energy; air = unvoiced; voice = speech/holds
-      const manual = !!this._manualSound;
+      // Manual assist (Space): key down OR post-keyup grace (a11y continuous count)
+      if (this._manualKeyDown) {
+        this._lastManualActiveAt = now;
+      }
+      const manual = this.isManualEffective(now);
+      const manualInGrace = manual && !this._manualKeyDown;
       const manualKind = this._manualKind === "air" ? "air" : "voice";
       if (manual) {
         rms = Math.max(rms, this._manualRmsFloor || 0.06);
@@ -533,6 +597,7 @@
             (manual && manualKind === "voice"),
           sensitivity: this.sensitivity,
           manualSound: manual,
+          manualGrace: manualInGrace,
           manualKind: manual ? manualKind : null,
           airRmsThreshold: this._airRms()
         });
@@ -545,6 +610,7 @@
   global.VTPracticeEngine = PracticeEngine;
   global.VT_HOLD_MIN_SEC = HOLD_MIN_SEC;
   global.VT_HOLD_GRACE_MS = HOLD_GRACE_MS;
+  global.VT_MANUAL_GRACE_MS = MANUAL_GRACE_MS;
   global.VT_SILENCE_END_MS = SILENCE_END_MS;
   global.VT_DEFAULT_MIC_SENS = DEFAULT_SENS;
 })(window);

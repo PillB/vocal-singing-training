@@ -1703,6 +1703,14 @@ button:focus-visible,
 .hud-bc.is-manual .mic-sens-title {
   color: #8ee0b5;
 }
+/* Post-keyup grace: still counting — soft amber so a11y hold feels continuous */
+.hud-bc.is-manual-grace {
+  border-color: rgba(240, 184, 80, 0.7);
+  box-shadow: 0 0 0 1px rgba(240, 184, 80, 0.35);
+}
+.hud-bc.is-manual-grace .mic-sens-title {
+  color: #e0b84a;
+}
 
 /* Vocal range octave strip (− / label / + / Auto) */
 .hud-oct {

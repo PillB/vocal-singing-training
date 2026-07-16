@@ -1709,7 +1709,9 @@
     state.practiceLive = live;
     if (!live) {
       try {
-        state.practice?.setManualSound?.(false);
+        state.practice?.setManualSound?.(false, null, { forceClear: true });
+        state._spaceDown = false;
+        $("#mic-sens-hud")?.classList.remove("is-manual", "is-manual-grace");
       } catch {
         /* ignore */
       }
@@ -1941,9 +1943,12 @@
           const boost = 2.4 + (sens - 5) * 0.22;
           $("#level-fill").style.width = `${Math.round(Math.min(1, frame.rms * boost) * 100)}%`;
         }
-        // Manual assist: border highlight on mic chip (no extra text row)
+        // Manual assist (+ grace): border on mic chip; grace = softer ring
         const micChip = $("#mic-sens-hud");
-        if (micChip) micChip.classList.toggle("is-manual", !!frame.manualSound);
+        if (micChip) {
+          micChip.classList.toggle("is-manual", !!frame.manualSound && !frame.manualGrace);
+          micChip.classList.toggle("is-manual-grace", !!frame.manualGrace);
+        }
         if (showHold) {
           const holdEl = $("#hold-display");
           if (holdEl) {
@@ -2193,7 +2198,9 @@
     }
     if (state.practiceLive || state.practice.running) {
       try {
-        state.practice.setManualSound?.(false);
+        state.practice.setManualSound?.(false, null, { forceClear: true });
+        state._spaceDown = false;
+        $("#mic-sens-hud")?.classList.remove("is-manual", "is-manual-grace");
       } catch {
         /* ignore */
       }
@@ -3217,28 +3224,52 @@
       }
       if (chip && !ok) chip.classList.remove("is-manual");
     };
-    const setManualFromKey = (down) => {
+    /**
+     * Space hold state + a11y grace (engine keeps inject ~550ms after keyup;
+     * re-press within grace continues the same count — Filter Keys / tremor).
+     */
+    const setManualFromKey = (down, opts) => {
+      const chip = $("#mic-sens-hud");
       if (!manualSoundAllowed()) {
-        state.practice?.setManualSound?.(false);
-        $("#mic-sens-hud")?.classList.remove("is-manual");
+        state.practice?.setManualSound?.(false, null, { forceClear: true });
+        state._spaceDown = false;
+        chip?.classList.remove("is-manual", "is-manual-grace");
         return;
       }
       const profile = getProfile(state.exercise);
       const kind = manualKindForProfile(profile);
-      state.practice?.setManualSound?.(!!down, kind);
-      const chip = $("#mic-sens-hud");
-      if (chip) chip.classList.toggle("is-manual", !!down);
+      if (down) {
+        state._spaceDown = true;
+        // refresh timestamp even on key-repeat (OS key repeat = still held)
+        state.practice?.setManualSound?.(true, kind);
+      } else if (opts && opts.forceClear) {
+        state._spaceDown = false;
+        state.practice?.setManualSound?.(false, kind, { forceClear: true });
+      } else {
+        // keyup → grace (do not forceClear)
+        state._spaceDown = false;
+        state.practice?.setManualSound?.(false, kind);
+      }
+      const st = state.practice?.getManualSound?.() || {};
+      if (chip) {
+        chip.classList.toggle("is-manual", !!st.active && !st.grace);
+        chip.classList.toggle("is-manual-grace", !!st.grace);
+      }
       const range = $("#mic-sensitivity");
       if (range) {
-        range.title = down ? tt("mic.manualActive") : tt("mic.manualHint") + " · " + tt("mic.sensHint");
+        range.title = st.active
+          ? st.grace
+            ? tt("mic.manualActive") + "…"
+            : tt("mic.manualActive")
+          : tt("mic.manualHint") + " · " + tt("mic.sensHint");
       }
     };
     document.addEventListener("keydown", (e) => {
       if (e.code !== "Space" && e.key !== " ") return;
-      if (e.repeat) return;
       if (isTypingTarget(e.target)) return;
       if (!manualSoundAllowed()) return;
       e.preventDefault(); // avoid page scroll while assisting
+      // Allow e.repeat to refresh hold timestamp (continuous hold, not a new press)
       setManualFromKey(true);
     });
     document.addEventListener("keyup", (e) => {
@@ -3246,7 +3277,10 @@
       if (isTypingTarget(e.target)) return;
       setManualFromKey(false);
     });
-    window.addEventListener("blur", () => setManualFromKey(false));
+    window.addEventListener("blur", () => setManualFromKey(false, { forceClear: true }));
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) setManualFromKey(false, { forceClear: true });
+    });
     // Expose for practice start/stop
     state._updateManualHintVisibility = updateManualHintVisibility;
     $("#btn-toggle-guide")?.addEventListener("click", () => {

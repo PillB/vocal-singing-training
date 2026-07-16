@@ -3339,6 +3339,58 @@ footer a {
   font-size: 0.92rem;
 }
 
+/* —— Next-step habit card (home) —— */
+.next-step {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 0.5rem 0 1rem;
+  padding: 0.85rem 1rem;
+  flex-wrap: wrap;
+}
+.next-step-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+  flex: 1;
+}
+.next-step-k {
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted, #94a3b8);
+}
+.next-step strong {
+  font-size: 1rem;
+}
+.next-step p {
+  margin: 0;
+  font-size: 0.85rem;
+}
+.first-win-card {
+  margin-top: 0.85rem;
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius-sm, 10px);
+  border: 1px solid rgba(61, 186, 122, 0.35);
+  background: rgba(61, 186, 122, 0.08);
+}
+.first-win-card h4 {
+  margin: 0 0 0.35rem;
+  font-size: 1rem;
+}
+.first-win-card p {
+  margin: 0 0 0.65rem;
+  font-size: 0.9rem;
+  color: var(--text-muted, #94a3b8);
+}
+.first-win-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
 /* —— Native / ad slots (free tier only; never over practice stage) —— */
 .ad-slot {
   margin: 0.75rem 0 1rem;

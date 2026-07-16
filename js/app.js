@@ -400,6 +400,7 @@
     if (name === "home") {
       renderValuePulse();
       renderRetentionChrome();
+      renderNextStepCard();
       // Gentle trial/progress prompts only on home (never during live practice)
       setTimeout(() => showValueMoment(), 400);
       try {
@@ -437,6 +438,66 @@
     VTStorage.setSettings(settings);
     renderExerciseList();
     setView("home");
+  }
+
+  /** Total saved sessions across all exercises (for first-win loop). */
+  function totalSessionsSaved() {
+    const prog = VTStorage.getProgress() || {};
+    return Object.values(prog).reduce((n, row) => n + (Number(row?.completedCount) || 0), 0);
+  }
+
+  /**
+   * Next best exercise for habit path (UI research: small next action).
+   * Prefer structured current → incomplete basic → first list item.
+   */
+  function suggestNextExercise(opts = {}) {
+    const excludeId = opts.excludeId || null;
+    const s = VTSession.get();
+    if (s && s.status !== "completed" && s.order?.length) {
+      const cur = VTSession.currentExerciseId();
+      if (cur && cur !== excludeId) {
+        const ex = findExercise(cur);
+        if (ex) return { ex, reason: "structured" };
+      }
+    }
+    const progress = VTStorage.getProgress() || {};
+    const list = VT_EXERCISES[state.tab] || [];
+    const basic = list.filter((e) => (e.tier || "basic") === "basic");
+    const pick =
+      basic.find((e) => e.id !== excludeId && !(progress[e.id]?.completedCount)) ||
+      list.find((e) => e.id !== excludeId && !(progress[e.id]?.completedCount)) ||
+      basic.find((e) => e.id !== excludeId) ||
+      list.find((e) => e.id !== excludeId) ||
+      list[0];
+    if (!pick) return null;
+    return { ex: pick, reason: progress[pick.id]?.completedCount ? "repeat" : "new" };
+  }
+
+  function findExercise(id) {
+    for (const track of ["vocal", "singing"]) {
+      const hit = (VT_EXERCISES[track] || []).find((e) => e.id === id);
+      if (hit) return hit;
+    }
+    return null;
+  }
+
+  function renderNextStepCard() {
+    const card = $("#next-step-card");
+    const titleEl = $("#next-step-title");
+    const whyEl = $("#next-step-why");
+    const btn = $("#btn-next-step");
+    if (!card || !titleEl || !btn) return;
+    // Hide on empty catalog
+    const sug = suggestNextExercise();
+    if (!sug?.ex) {
+      card.hidden = true;
+      return;
+    }
+    card.hidden = false;
+    const name = window.VTI18n ? VTI18n.exTitle(sug.ex) : sug.ex.title;
+    titleEl.textContent = `${sug.ex.number}. ${name}`;
+    if (whyEl) whyEl.textContent = tt("home.nextStepWhy");
+    btn.onclick = () => openExercise(sug.ex.id, false);
   }
 
   /** Continue: resume structured session or open first incomplete basic exercise */
@@ -542,6 +603,7 @@
     $("#home-track-sub").textContent = tt(
       state.tab === "vocal" ? "home.vocalSub" : "home.singingSub"
     );
+    renderNextStepCard();
   }
 
   function resetSessionPractice() {
@@ -2375,18 +2437,22 @@
       notes,
       durationSec: elapsed
     });
+    const sessionsAfter = totalSessionsSaved();
+    const isFirstWin = sessionsAfter === 1;
     try {
       window.VTAnalytics?.track?.("session_save", {
         exerciseId: ex.id,
         score: result.score,
-        durationSec: elapsed
+        durationSec: elapsed,
+        firstWin: isFirstWin
       });
+      if (isFirstWin) window.VTAnalytics?.track?.("first_win", { exerciseId: ex.id });
     } catch {
       /* ignore */
     }
     renderValuePulse();
-    // Success → soft upgrade moment (never blocks practice)
-    setTimeout(() => showValueMoment(), 600);
+    // Success → soft moment (first_win prioritized via sessions===1)
+    setTimeout(() => showValueMoment(isFirstWin ? "first_save" : undefined), 600);
 
     state.sessionPractice.saved = true;
     state.microSession = false;
@@ -2407,6 +2473,35 @@
         arrow
       })}</p>`;
     }
+    const nextSug = suggestNextExercise({ excludeId: ex.id });
+    const nextName = nextSug?.ex
+      ? (window.VTI18n ? VTI18n.exTitle(nextSug.ex) : nextSug.ex.title)
+      : "";
+    const firstWinHtml = isFirstWin
+      ? `<div class="first-win-card" id="first-win-card">
+          <h4>${tt("retain.firstWinTitle")}</h4>
+          <p>${tt("retain.firstWinBody")}</p>
+          <div class="first-win-actions">
+            <button type="button" class="btn btn-primary btn-sm" id="fw-micro">${tt("retain.firstWinMicro")}</button>
+            <button type="button" class="btn btn-sm" id="fw-remind">${tt("retain.firstWinRemind")}</button>
+            <button type="button" class="btn btn-sm" id="fw-same">${tt("retain.firstWinSame")}</button>
+            ${
+              nextSug?.ex
+                ? `<button type="button" class="btn btn-ghost btn-sm" id="fw-next">${tt("retain.firstWinNext")}: ${nextName}</button>`
+                : ""
+            }
+          </div>
+        </div>`
+      : nextSug?.ex
+        ? `<div class="first-win-card" id="post-session-next">
+            <h4>${tt("home.nextStepLabel")}</h4>
+            <p class="muted">${tt("home.nextStepWhy")}</p>
+            <div class="first-win-actions">
+              <button type="button" class="btn btn-primary btn-sm" id="ps-next">${tt("home.nextStepCta")}: ${nextName}</button>
+              <button type="button" class="btn btn-sm" id="ps-same">${tt("retain.firstWinSame")}</button>
+            </div>
+          </div>`
+        : "";
     box.innerHTML = `
       <div class="score-big">${VTMetrics.formatScore(result)}</div>
       ${compareHtml}
@@ -2421,7 +2516,37 @@
           .join("")}
       </ul>
       <div class="encourage">${tt("toast.sessionEncourage")}</div>
+      ${firstWinHtml}
     `;
+
+    // Wire first-win / next-step CTAs (habit loop — kind only)
+    $("#fw-micro")?.addEventListener("click", () => {
+      try {
+        window.VTAnalytics?.track?.("first_win_micro");
+      } catch {
+        /* ignore */
+      }
+      state.microSession = true;
+      openExercise(ex.id, false);
+    });
+    $("#fw-remind")?.addEventListener("click", () => {
+      setView("home");
+      const chk = $("#chk-reminders");
+      if (chk && !chk.checked) {
+        chk.checked = true;
+        chk.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+      $("#retain-panel")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      toast(tt("retain.firstWinRemind"));
+    });
+    $("#fw-same")?.addEventListener("click", () => openExercise(ex.id, false));
+    $("#fw-next")?.addEventListener("click", () => {
+      if (nextSug?.ex) openExercise(nextSug.ex.id, false);
+    });
+    $("#ps-next")?.addEventListener("click", () => {
+      if (nextSug?.ex) openExercise(nextSug.ex.id, false);
+    });
+    $("#ps-same")?.addEventListener("click", () => openExercise(ex.id, false));
 
     toast(tt("toast.sessionSaved"));
 

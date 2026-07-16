@@ -333,3 +333,56 @@ No recommendation conflicts with primary sources. Shipped retention suite matche
 
 ### Phase 7 retrospection
 Full Phases 0–7 complete for **Vocal Studio**. Prompt references to Python/CodePlayground remapped. Highest-ROI **new** work is heatmap + analytics + audio compare—not more reminders (done).
+
+---
+
+# Validation pass 2 (2026-07-16) — re-orchestration Phases 0–7
+
+### Phase 0 preamble
+Refresh methods: mine praise + pain; first-lesson / D1 retention dominates edtech; habit > motivation; kind cues only.
+
+### Phase 0–2 research deltas
+
+| Finding | Evidence | Type |
+|---------|----------|------|
+| ~85% edtech abandon before week 3; loop breaks before habit | [Digia EdTech engagement](https://www.digia.tech/post/edtech-app-engagement-why-85-percent-abandon-before-week-3/) | Expected |
+| Education app D1 ~18.8% vs Duo ~55% | [loyalty.cx retention](https://loyalty.cx/edtech-retention-problem/) | Expected |
+| Singers: binge then fall off; 15 min daily > long rare sessions | [r/singing consistency](https://www.reddit.com/r/singing/comments/1aumx9i/), [schedule](https://www.reddit.com/r/singing/comments/1eezmzr/) | Expected |
+| Habits outlast motivation | X/lang discourse 2026 | Reinforced |
+| Streak engineering = retention engine *and* backlash | Duo case discourse | Surprising intensity already UI-04/05 |
+
+### Phase 1 baseline (current product)
+
+| Free forever | Pro / trial |
+|--------------|-------------|
+| All exercises, Empezar, highway, piano, range auto | Export coach pack |
+| Value pulse, heatmap, kind reminders, ICS, freezes (1) | Multi-profile, goals, extra freezes/reminders |
+| Tours, micro-5, welcome-back | Insights sparkline, ad-free when ads on |
+| First-win + next-step (this pass) | Portal manage |
+
+### Phases 3–5 prioritization (this pass)
+
+| Priority | Feature | Free/Pro | Status |
+|----------|---------|----------|--------|
+| P0 | **First-win loop** after 1st save | Free | **Shipped** — celebration + micro / remind / same / next |
+| P0 | **Next-step card** on home | Free | **Shipped** — `suggestNextExercise` |
+| P1 | True Web Push | Free opt-in | Blocked — needs Worker (UI-13) |
+| P1 | Pause subscription path | Pro ops | Documented Stripe portal |
+| P2 | Weekly recap narrative | Free / Pro deeper | Later |
+
+### Phase 6 validation
+- First-win does **not** hard-sell Pro (copy: habit tomorrow).  
+- Next-step reduces choice overload without paywall.  
+- Aligns with r/singing consistency + edtech first-session retention.
+
+### Phase 7 implementation
+- `index.html` `#next-step-card`, first-win in score result  
+- `app.js` `suggestNextExercise`, `totalSessionsSaved`, CTAs  
+- i18n ES/EN · CSS · `tests/insights-first-win.spec.js`  
+- Registry UI-09 → shipped; UI-17/18/19  
+
+### Sources added
+14. https://www.digia.tech/post/edtech-app-engagement-why-85-percent-abandon-before-week-3/  
+15. https://loyalty.cx/edtech-retention-problem/  
+16. https://www.reddit.com/r/singing/comments/1eezmzr/  
+17. https://journals.kmanpub.com/index.php/aitechbesosci/article/view/4724

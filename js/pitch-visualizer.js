@@ -121,6 +121,12 @@
       this.game = null; // optional VTPitchGame
       this.lastIngestAt = 0;
       this.hitZoneCents = 35; // "good" zone width for highway
+      /** Active chord tones as lanes [{name,freq,midi,active}] */
+      this.chordLanes = [];
+      /** Full progression pitch window for multi-note highway */
+      this.rangeMinMidi = null;
+      this.rangeMaxMidi = null;
+      this.activeChordName = "";
 
       this._resize();
       window.addEventListener("resize", () => this._resize());
@@ -134,7 +140,8 @@
       const dpr = window.devicePixelRatio || 1;
       const rect = this.canvas.getBoundingClientRect();
       const w = Math.max(320, rect.width || 640);
-      const h = Math.max(200, rect.height || 260);
+      // Taller highway for multi-lane chord view (game stage)
+      const h = Math.max(240, rect.height || 300);
       this.canvas.width = Math.floor(w * dpr);
       this.canvas.height = Math.floor(h * dpr);
       this.ctx2d.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -152,22 +159,64 @@
     }
 
     /**
-     * Prefer chord root (first note) as target for matching practice.
+     * Set full progression pitch span so highway shows all chord tones.
+     */
+    setProgressionRange(prog) {
+      if (!prog || !global.VTProgressionRange) return;
+      const r = global.VTProgressionRange(prog, global.VT_NOTE_FREQ);
+      this.rangeMinMidi = r.minMidi;
+      this.rangeMaxMidi = r.maxMidi;
+    }
+
+    /**
+     * Activate all chord-tone lanes; highlight primary match note.
      */
     setTargetFromChord(chord) {
       if (!chord || !chord.notes || !chord.notes.length) return;
-      // Prefer mid-register chord tone (often index 1 or 2) else root
       const map = global.VT_NOTE_FREQ || {};
+      const lanes = [];
+      chord.notes.forEach((n) => {
+        const f = map[n];
+        if (!f) return;
+        const midi = freqToMidi(f);
+        lanes.push({ name: n, freq: f, midi, active: true });
+      });
+      // unique by rounded midi
+      const seen = new Set();
+      this.chordLanes = lanes.filter((L) => {
+        const k = Math.round(L.midi * 2) / 2;
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      });
+      this.activeChordName = chord.name || "";
+
+      // Primary target: mid-register singing tone
       let pick = chord.notes[1] || chord.notes[0];
-      // Prefer a note in C3-A3 for singing comfort if present
       for (const n of chord.notes) {
         const f = map[n];
-        if (f && f >= 120 && f <= 230) {
+        if (f && f >= 120 && f <= 280) {
           pick = n;
           break;
         }
       }
       if (map[pick]) this.setTargetFreq(map[pick]);
+
+      // Expand range to include these lanes
+      if (this.chordLanes.length) {
+        const midis = this.chordLanes.map((L) => L.midi);
+        const lo = Math.min(...midis);
+        const hi = Math.max(...midis);
+        if (this.rangeMinMidi == null) this.rangeMinMidi = lo - 1;
+        else this.rangeMinMidi = Math.min(this.rangeMinMidi, lo - 1);
+        if (this.rangeMaxMidi == null) this.rangeMaxMidi = hi + 1;
+        else this.rangeMaxMidi = Math.max(this.rangeMaxMidi, hi + 1);
+      }
+    }
+
+    clearChordLanes() {
+      this.chordLanes = [];
+      this.activeChordName = "";
     }
 
     /**
@@ -307,13 +356,28 @@
       this.raf = requestAnimationFrame(() => this._loop());
     }
 
+    /**
+     * Map MIDI → Y. When progression range is set, use full span so all chord
+     * tones fit on the highway (not just ±6 around one note).
+     */
     _midiToY(midi, centerMidi, graphH) {
-      const half = 6;
       const gh = graphH != null ? graphH : this.h - 44;
+      const pad = 0.08 * gh;
+      if (
+        this.rangeMinMidi != null &&
+        this.rangeMaxMidi != null &&
+        this.rangeMaxMidi > this.rangeMinMidi
+      ) {
+        const span = this.rangeMaxMidi - this.rangeMinMidi;
+        const t = (midi - this.rangeMinMidi) / span;
+        const clamped = Math.max(0, Math.min(1, t));
+        return gh - pad - clamped * (gh - pad * 2);
+      }
+      const half = 6;
       const delta = midi - centerMidi;
-      const clamped = Math.max(-half, Math.min(half, delta));
+      const c = Math.max(-half, Math.min(half, delta));
       const mid = gh / 2;
-      return mid - (clamped / half) * (gh * 0.4);
+      return mid - (c / half) * (gh * 0.4);
     }
 
     _drawKeyboard(ctx, w, h, targetMidi, voiceMidi) {
@@ -411,46 +475,82 @@
 
       // Graph area (leave bottom for keyboard)
       const graphH = h - 44;
-      const midY = graphH / 2;
+      const midY = this._midiToY(centerMidi, centerMidi, graphH);
 
-      // Semitone grid
-      ctx.strokeStyle = "rgba(80,100,130,0.2)";
+      // Range-aware grid
+      const lo =
+        this.rangeMinMidi != null ? Math.floor(this.rangeMinMidi) : Math.floor(centerMidi - 6);
+      const hi =
+        this.rangeMaxMidi != null ? Math.ceil(this.rangeMaxMidi) : Math.ceil(centerMidi + 6);
+      ctx.strokeStyle = "rgba(80,100,130,0.18)";
       ctx.lineWidth = 1;
-      for (let s = -6; s <= 6; s++) {
-        const y = this._midiToY(centerMidi + s, centerMidi, graphH);
+      for (let m = lo; m <= hi; m++) {
+        const y = this._midiToY(m, centerMidi, graphH);
         ctx.beginPath();
         ctx.moveTo(0, y);
         ctx.lineTo(w, y);
         ctx.stroke();
       }
 
-      // HIT LANE (SingStar-style) — good zone around target
-      const goodHalf = (zones.good / 100) * (graphH * 0.4 / 6);
-      const perfectHalf = (zones.perfect / 100) * (graphH * 0.4 / 6);
-      ctx.fillStyle = "rgba(61,186,122,0.1)";
-      ctx.fillRect(0, midY - goodHalf, w, goodHalf * 2);
-      ctx.fillStyle = "rgba(61,186,122,0.18)";
-      ctx.fillRect(0, midY - perfectHalf, w, perfectHalf * 2);
-      // lane edges
-      ctx.strokeStyle = "rgba(61,186,122,0.45)";
-      ctx.lineWidth = 1.5;
-      ctx.setLineDash([6, 6]);
-      ctx.beginPath();
-      ctx.moveTo(0, midY - goodHalf);
-      ctx.lineTo(w, midY - goodHalf);
-      ctx.moveTo(0, midY + goodHalf);
-      ctx.lineTo(w, midY + goodHalf);
-      ctx.stroke();
-      ctx.setLineDash([]);
+      // Multi-lane: all active chord tones as horizontal highways
+      // Inactive-looking dim lanes for full progression span notes would clutter;
+      // show active chord tones strongly + primary target strongest.
+      const laneHalf = Math.max(4, (zones.good / 100) * (graphH / Math.max(8, hi - lo)) * 0.9);
+      (this.chordLanes || []).forEach((lane) => {
+        const y = this._midiToY(lane.midi, centerMidi, graphH);
+        const isPrimary = Math.abs(lane.freq - this.targetFreq) < 0.5;
+        ctx.fillStyle = isPrimary
+          ? "rgba(61,186,122,0.22)"
+          : "rgba(240,201,160,0.12)";
+        ctx.fillRect(0, y - laneHalf, w, laneHalf * 2);
+        ctx.strokeStyle = isPrimary
+          ? "rgba(61,186,122,0.75)"
+          : "rgba(240,201,160,0.45)";
+        ctx.lineWidth = isPrimary ? 2 : 1;
+        ctx.setLineDash(isPrimary ? [] : [4, 5]);
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(w, y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = isPrimary ? "#9aecc4" : "#f0c9a0";
+        ctx.font = isPrimary ? "700 11px system-ui,sans-serif" : "600 10px system-ui,sans-serif";
+        ctx.textAlign = "left";
+        ctx.fillText(lane.name + (isPrimary ? " ●" : ""), 8, y - laneHalf - 2);
+      });
 
-      // Labels
+      // Fallback single lane when no chord context
+      if (!this.chordLanes.length) {
+        const goodHalf = (zones.good / 100) * (graphH * 0.4 / 6);
+        const perfectHalf = (zones.perfect / 100) * (graphH * 0.4 / 6);
+        ctx.fillStyle = "rgba(61,186,122,0.1)";
+        ctx.fillRect(0, midY - goodHalf, w, goodHalf * 2);
+        ctx.fillStyle = "rgba(61,186,122,0.18)";
+        ctx.fillRect(0, midY - perfectHalf, w, perfectHalf * 2);
+        ctx.strokeStyle = "rgba(61,186,122,0.45)";
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([6, 6]);
+        ctx.beginPath();
+        ctx.moveTo(0, midY - goodHalf);
+        ctx.lineTo(w, midY - goodHalf);
+        ctx.moveTo(0, midY + goodHalf);
+        ctx.lineTo(w, midY + goodHalf);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
+      // Range labels + active chord badge
       ctx.fillStyle = "#6a7c94";
       ctx.font = "11px ui-monospace,monospace";
       ctx.textAlign = "left";
-      ctx.fillText("+6", 6, this._midiToY(centerMidi + 6, centerMidi, graphH) + 4);
-      ctx.fillText("−6", 6, this._midiToY(centerMidi - 6, centerMidi, graphH) + 4);
-      ctx.fillStyle = "#f0c9a0";
-      ctx.fillText(midiToName(centerMidi), 6, midY - 8);
+      ctx.fillText(midiToName(hi), 6, this._midiToY(hi, centerMidi, graphH) + 4);
+      ctx.fillText(midiToName(lo), 6, this._midiToY(lo, centerMidi, graphH) + 4);
+      if (this.activeChordName) {
+        ctx.fillStyle = "rgba(240,201,160,0.95)";
+        ctx.font = "800 13px system-ui,sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText(this.activeChordName, w / 2, 16);
+      }
 
       const n = this.history.length;
       const lastVoiceMidi = n ? this.history[n - 1].voiceMidi : null;

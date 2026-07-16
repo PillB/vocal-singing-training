@@ -980,6 +980,139 @@ a {
   position: relative;
 }
 
+/* Game-stage: highway first, overlays in corners (less scroll) */
+.exercise-header-compact {
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.25rem;
+}
+
+.exercise-header-compact h2 {
+  font-size: 1.15rem;
+  margin: 0.15rem 0 0;
+}
+
+.game-stage {
+  position: sticky;
+  top: 56px;
+  z-index: 20;
+  margin-bottom: 0.75rem;
+}
+
+.highway-stage {
+  position: relative;
+  min-height: 200px;
+}
+
+.hud-corner {
+  position: absolute;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+  max-width: 48%;
+  pointer-events: none;
+}
+
+.hud-corner .btn,
+.hud-corner label,
+.hud-corner input,
+.hud-corner select {
+  pointer-events: auto;
+}
+
+.hud-tl {
+  top: 0.4rem;
+  left: 0.4rem;
+}
+
+.hud-tr {
+  top: 0.4rem;
+  right: 0.4rem;
+  justify-content: flex-end;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.25rem;
+  max-width: min(220px, 46%);
+  background: rgba(12, 18, 26, 0.72);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.35rem;
+}
+
+.hud-tr .hud-score,
+.hud-tr .hud-combo,
+.hud-tr .hud-acc,
+.hud-tr .hud-quality {
+  background: transparent;
+  border: none;
+  padding: 0.15rem;
+  font-size: 0.72rem;
+}
+
+.hud-tr strong {
+  font-size: 0.95rem;
+}
+
+.hud-bl {
+  bottom: 0.45rem;
+  left: 0.4rem;
+}
+
+.hud-br {
+  bottom: 0.45rem;
+  right: 0.4rem;
+  justify-content: flex-end;
+  background: rgba(12, 18, 26, 0.65);
+  border-radius: 10px;
+  padding: 0.3rem 0.45rem;
+  border: 1px solid var(--border);
+}
+
+.hud-check {
+  background: rgba(12, 18, 26, 0.55);
+  border-radius: 999px;
+  padding: 0.2rem 0.5rem;
+}
+
+.pitch-stage {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+.pitch-stage .pitch-canvas {
+  height: min(42vh, 320px);
+  min-height: 240px;
+  border-radius: 12px;
+}
+
+.mode-hud-compact .mode-panel {
+  margin-top: 0.5rem;
+  padding: 0.55rem 0.75rem;
+}
+
+.mode-hud-compact .mode-big {
+  font-size: 1.35rem;
+}
+
+@media (max-width: 640px) {
+  .hud-tr {
+    max-width: 42%;
+    font-size: 0.7rem;
+  }
+  .hud-br {
+    max-width: 55%;
+  }
+  .pitch-stage .pitch-canvas {
+    height: 36vh;
+    min-height: 200px;
+  }
+  .game-stage {
+    top: 48px;
+  }
+}
+
 .cockpit-top {
   display: flex;
   flex-wrap: wrap;

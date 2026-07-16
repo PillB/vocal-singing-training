@@ -705,7 +705,17 @@ window.VT_EXERCISES = {
       ],
       audio: { timer: true, record: true, piano: true, progressions: true, pitchViz: true },
       timerDefaultSec: 900,
-      progressions: ["prog1", "prog2", "prog3", "prog4", "prog5"]
+      progressions: [
+        "prog1",
+        "prog2",
+        "prog3",
+        "prog4",
+        "prog5",
+        "progJump1",
+        "progJump2",
+        "progJump3",
+        "progJump4"
+      ]
     },
     {
       id: "s3-song-stanzas",
@@ -1056,7 +1066,17 @@ window.VT_EXERCISES = {
       ],
       audio: { timer: true, record: true, piano: true, progressions: true, pitchViz: true },
       timerDefaultSec: 600,
-      progressions: ["prog1", "prog2", "prog3", "prog4", "prog5"]
+      progressions: [
+        "prog1",
+        "prog2",
+        "prog3",
+        "prog4",
+        "prog5",
+        "progJump1",
+        "progJump2",
+        "progJump3",
+        "progJump4"
+      ]
     },
     {
       id: "s14-staccato-legato",

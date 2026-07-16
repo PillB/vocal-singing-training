@@ -99,7 +99,8 @@ test.describe("Exercise-specific practice modes", () => {
     await expect(page.locator(".mode-panel.mode-pitchHold")).toBeVisible();
     await expect(page.locator("#pitch-block")).toBeVisible();
     await expect(page.locator("#hold-display")).toBeVisible();
-    await expect(page.locator("#pitch-game-hud")).toBeHidden();
+    // Score corner may show; challenge option stays off for fry
+    await expect(page.locator("#chk-pitch-challenge")).not.toBeChecked();
   });
 
   test("s9 pitch match enables game HUD", async ({ page }) => {
@@ -118,7 +119,7 @@ test.describe("Exercise-specific practice modes", () => {
     await page.click('.tier-chip[data-tier="advanced"]');
     await page.locator("#exercise-list .card-ex", { hasText: "Sirens" }).click();
     await expect(page.locator(".mode-panel.mode-sirenRange")).toBeVisible();
-    await expect(page.locator("#pitch-game-hud")).toBeHidden();
+    await expect(page.locator("#chk-pitch-challenge")).not.toBeChecked();
   });
 
   test("single Start practice CTA still primary", async ({ page }) => {
@@ -205,5 +206,28 @@ test.describe("Exercise-specific practice modes", () => {
     await forceEs(page);
     await page.click('.tier-chip[data-tier="basic"]');
     await expect(page.locator("#exercise-list .card-ex").first()).toContainText("dicción");
+  });
+
+  test("chord highway stage is above the fold with overlays", async ({ page }) => {
+    await forceEn(page);
+    await page.click('.tab[data-tab="singing"]');
+    await page.click('.tier-chip[data-tier="basic"]');
+    await page.locator("#exercise-list .card-ex").nth(1).click();
+    await expect(page.locator("#highway-stage")).toBeVisible();
+    await expect(page.locator(".hud-tl")).toBeVisible();
+    await expect(page.locator(".hud-bl #btn-practice-start")).toBeVisible();
+    await expect(page.locator("#pitch-canvas")).toBeVisible();
+    // guide is below cockpit, collapsed by default
+    await expect(page.locator(".guide-card")).toHaveClass(/collapsed/);
+  });
+
+  test("wide jump progressions available for solfege", async ({ page }) => {
+    await forceEn(page);
+    await page.click('.tab[data-tab="singing"]');
+    await page.click('.tier-chip[data-tier="basic"]');
+    await page.locator("#exercise-list .card-ex").nth(1).click();
+    await expect(page.locator("#prog-buttons")).toContainText("Wide jumps");
+    const hasJump = await page.evaluate(() => !!window.VT_PROGRESSIONS?.progJump1);
+    expect(hasJump).toBeTruthy();
   });
 });

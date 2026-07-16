@@ -83,8 +83,73 @@
         { name: "Am", notes: ["A2", "C3", "E3", "A3"] },
         { name: "F", notes: ["F2", "C3", "F3", "A3"] }
       ]
+    },
+    /** Wider root jumps — trains larger intonation moves on the highway */
+    progJump1: {
+      name: "Wide jumps · C–E–Am–G",
+      description: "C – E – Am – G · bigger root leaps (3rds–5ths)",
+      wide: true,
+      chords: [
+        { name: "C", notes: ["C2", "C3", "E3", "G3"] },
+        { name: "E", notes: ["E2", "B2", "E3", "G3"] },
+        { name: "Am", notes: ["A2", "C3", "E3", "A3"] },
+        { name: "G", notes: ["G2", "B2", "D3", "G3"] }
+      ]
+    },
+    progJump2: {
+      name: "Wide jumps · Am–F–C–E",
+      description: "Am – F – C – E · pop leap progression",
+      wide: true,
+      chords: [
+        { name: "Am", notes: ["A2", "C3", "E3", "A3"] },
+        { name: "F", notes: ["F2", "C3", "F3", "A3"] },
+        { name: "C", notes: ["C2", "E3", "G3", "C4"] },
+        { name: "E", notes: ["E2", "B2", "E3", "G3"] }
+      ]
+    },
+    progJump3: {
+      name: "Wide jumps · D–Bb–F–C",
+      description: "D – Bb – F – C · larger horizontal jumps",
+      wide: true,
+      chords: [
+        { name: "D", notes: ["D2", "A2", "D3", "F3"] },
+        { name: "Bb", notes: ["Bb2", "D3", "F3", "Bb3"] },
+        { name: "F", notes: ["F2", "C3", "F3", "A3"] },
+        { name: "C", notes: ["C2", "G2", "C3", "E3"] }
+      ]
+    },
+    progJump4: {
+      name: "Octave span · G–Em–C–D",
+      description: "G – Em – C – D with open voicings (wide range on highway)",
+      wide: true,
+      chords: [
+        { name: "G", notes: ["G2", "B2", "D3", "G3", "B3"] },
+        { name: "Em", notes: ["E2", "B2", "E3", "G3", "B3"] },
+        { name: "C", notes: ["C2", "G2", "C3", "E3", "G3"] },
+        { name: "D", notes: ["D2", "A2", "D3", "F3", "A3"] }
+      ]
     }
   };
+
+  function progressionMidiRange(prog, noteMap) {
+    const map = noteMap || NOTE_FREQ;
+    let min = Infinity;
+    let max = -Infinity;
+    const all = [];
+    (prog.chords || []).forEach((ch) => {
+      (ch.notes || []).forEach((n) => {
+        const f = map[n];
+        if (!f) return;
+        const midi = 69 + 12 * Math.log2(f / 440);
+        min = Math.min(min, midi);
+        max = Math.max(max, midi);
+        all.push({ name: n, freq: f, midi });
+      });
+    });
+    if (!isFinite(min)) return { minMidi: 48, maxMidi: 60, notes: [] };
+    // pad half step each side
+    return { minMidi: min - 1, maxMidi: max + 1, notes: all };
+  }
 
   class PianoEngine {
     constructor() {
@@ -297,4 +362,5 @@
   global.VTPiano = new PianoEngine();
   global.VT_PROGRESSIONS = PROGRESSIONS;
   global.VT_NOTE_FREQ = NOTE_FREQ;
+  global.VTProgressionRange = progressionMidiRange;
 })(window);

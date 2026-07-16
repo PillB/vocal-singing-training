@@ -325,10 +325,14 @@
     if (ch) {
       ch.checked = !!profile.pitchChallenge;
       const lab = ch.closest("label");
-      if (lab) lab.style.display = profile.showPitch ? "" : "none";
+      if (lab) lab.style.display = profile.pitchChallenge ? "" : "none";
     }
     const gameHud = $("#pitch-game-hud");
-    if (gameHud) gameHud.style.display = profile.pitchChallenge ? "" : "none";
+    if (gameHud) {
+      // Show compact score corner whenever pitch is on; full challenge labels when pitchChallenge
+      gameHud.style.display = profile.showPitch ? "" : "none";
+      gameHud.style.opacity = profile.pitchChallenge ? "1" : "0.85";
+    }
 
     // Hold strip
     const showHold = !!profile.showHold;
@@ -343,13 +347,18 @@
 
     // Piano block: show if exercise has piano OR profile autoPiano
     const pianoBlock = $("#piano-block");
+    const pianoMini = $("#piano-mini-opts");
+    const showPiano = !!(ex.audio.piano || profile.autoPiano);
     if (pianoBlock) {
-      const showPiano = !!(ex.audio.piano || profile.autoPiano);
       pianoBlock.hidden = !showPiano;
       if (showPiano && ex.audio.piano) renderPianoControls(ex);
       if (profile.autoArpeggio && $("#chk-arpeggio")) $("#chk-arpeggio").checked = true;
       if ($("#chk-auto-piano")) $("#chk-auto-piano").checked = profile.autoPiano !== false;
     }
+    if (pianoMini) pianoMini.style.display = showPiano ? "" : "none";
+    // Pitch HUD corner only when pitch/game relevant
+    const tr = $(".hud-tr");
+    if (tr) tr.style.display = profile.showPitch ? "" : "none";
 
     // Practice hint
     $("#practice-hint").textContent = `Mode: ${profile.mode} · one Start arms this exercise only. Stop ends everything.`;
@@ -424,10 +433,17 @@
     const progs = VTPiano.getProgressions();
 
     let keys = [];
-    if (ex.progressions) keys = ex.progressions;
-    else if (ex.songs) keys = [...new Set(ex.songs.map((s) => s.prog).concat(["prog1", "prog2", "prog3"]))];
+    if (ex.progressions) keys = ex.progressions.slice();
+    else if (ex.songs)
+      keys = [...new Set(ex.songs.map((s) => s.prog).concat(["prog1", "progJump1", "progJump2"]))];
     else if (ex.audio.refPitch) keys = [];
-    else keys = ["prog1", "prog2", "prog3", "prog4", "prog5"];
+    else keys = ["prog1", "prog2", "prog3", "prog4", "prog5", "progJump1", "progJump2", "progJump3"];
+    // Chord exercises always expose wide-jump progressions
+    if (ex.audio.progressions || ex.practice?.mode === "pitchChord" || ex.practice?.mode === "pitchSong") {
+      ["progJump1", "progJump2", "progJump3", "progJump4"].forEach((k) => {
+        if (!keys.includes(k)) keys.push(k);
+      });
+    }
 
     keys.forEach((id) => {
       const p = progs[id];
@@ -492,14 +508,14 @@
       const opts = pianoOptions();
       VTPiano.onChordChange = (ch) => {
         $("#chord-now").textContent = ch.name;
-        if (state.exercise?.audio?.pitchViz) {
+        if (state.exercise?.audio?.pitchViz || state.exercise?.practice?.showPitch) {
           if (state.pitchViz) state.pitchViz.setTargetFromChord(ch);
-          // Sync practice engine target to chord tone
+          // Sync practice engine target to primary singing tone
           const map = VT_NOTE_FREQ || {};
           let pick = ch.notes?.[1] || ch.notes?.[0];
           for (const n of ch.notes || []) {
             const f = map[n];
-            if (f && f >= 120 && f <= 230) {
+            if (f && f >= 120 && f <= 280) {
               pick = n;
               break;
             }
@@ -507,6 +523,12 @@
           if (map[pick]) state.practice.setTargetFreq(map[pick]);
         }
       };
+      // Full progression range on highway before first chord
+      const progMeta = VT_PROGRESSIONS[state.selectedProg];
+      if (progMeta && state.pitchViz) {
+        state.pitchViz.setProgressionRange(progMeta);
+        if (progMeta.chords?.[0]) state.pitchViz.setTargetFromChord(progMeta.chords[0]);
+      }
       const prog = await VTPiano.playProgression(state.selectedProg, {
         loop: !!loop,
         chordSec: opts.chordSec,
@@ -515,6 +537,7 @@
         sustainSec: opts.sustainSec
       });
       if (prog) {
+        if (state.pitchViz) state.pitchViz.setProgressionRange(prog);
         $("#chord-desc").textContent =
           prog.description +
           (opts.sustain ? ` · sustain ${opts.sustainSec}s per chord` : "");

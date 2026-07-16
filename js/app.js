@@ -30,7 +30,8 @@
     pitchRunning: false,
     pitchGame: null,
     modeInstance: null,
-    guideOpen: true
+    guideOpen: true,
+    pianoOpen: false
   };
 
   const $ = (sel, el = document) => el.querySelector(sel);
@@ -38,6 +39,14 @@
 
   function tt(key, vars) {
     return typeof globalThis.t === "function" ? globalThis.t(key, vars) : key;
+  }
+
+  function escapeHtml(s) {
+    return String(s ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
   }
 
   function toast(msg) {
@@ -306,8 +315,16 @@
     // Pitch visualizer only when profile asks
     const pitchBlock = $("#pitch-block");
     pitchBlock.hidden = !profile.showPitch;
+    if (state.pitchViz) {
+      // Prevent multi-lane leak across exercises
+      if (typeof state.pitchViz.resetLanes === "function") state.pitchViz.resetLanes();
+      else state.pitchViz.clearChordLanes?.();
+    }
     if (profile.showPitch) {
       ensurePitchViz();
+      if (state.pitchViz && typeof state.pitchViz.resetLanes === "function") {
+        state.pitchViz.resetLanes();
+      }
       const ref = profile.refPitch || ex.audio.refPitch;
       if (ref && window.VT_NOTE_FREQ) {
         state.pitchViz.setTargetNoteName(ref, VT_NOTE_FREQ);
@@ -320,48 +337,75 @@
         precisionCents: 0
       });
     }
-    // Challenge only for pitchMatch-style
+    // Challenge only for pitchMatch-style (row lives below highway)
     const ch = $("#chk-pitch-challenge");
-    if (ch) {
-      ch.checked = !!profile.pitchChallenge;
-      const lab = ch.closest("label");
-      if (lab) lab.style.display = profile.pitchChallenge ? "" : "none";
-    }
+    const chRow = $("#pitch-challenge-row");
+    if (ch) ch.checked = !!profile.pitchChallenge;
+    if (chRow) chRow.hidden = !profile.pitchChallenge;
+
+    // Game score HUD only for challenge modes (not fry/sirens/hold)
     const gameHud = $("#pitch-game-hud");
+    const showGameHud = !!(profile.showPitch && profile.pitchChallenge);
     if (gameHud) {
-      // Show compact score corner whenever pitch is on; full challenge labels when pitchChallenge
-      gameHud.style.display = profile.showPitch ? "" : "none";
-      gameHud.style.opacity = profile.pitchChallenge ? "1" : "0.85";
+      gameHud.style.display = showGameHud ? "" : "none";
+      gameHud.style.opacity = "1";
     }
+    const tr = $(".hud-tr");
+    if (tr) tr.style.display = showGameHud ? "" : "none";
 
     // Hold strip
     const showHold = !!profile.showHold;
     $("#hold-block").hidden = !showHold;
     $("#hold-display").hidden = !showHold;
-    $("#hold-display").textContent = "Hold 0.0s";
+    $("#hold-display").textContent = tt("practice.hold", { s: "0.0" });
     renderHoldHistory();
 
     // Level meter
     const lvl = $("#level-meter-wrap");
     if (lvl) lvl.style.display = profile.showLevel === false ? "none" : "";
 
-    // Piano block: show if exercise has piano OR profile autoPiano
+    // Non-pitch: put goal strip inside sticky stage so highway isn't empty
+    const modeFocus = $("#mode-focus");
+    if (modeFocus) {
+      if (!profile.showPitch) {
+        modeFocus.hidden = false;
+        modeFocus.setAttribute("aria-hidden", "false");
+        modeFocus.innerHTML = `<div class="mode-focus-card">
+          <p class="mode-focus-goal">${escapeHtml(profile.cue || tt("practice.hint"))}</p>
+          <p class="mode-focus-cta muted">${escapeHtml(tt("practice.focusCta"))}</p>
+        </div>`;
+      } else {
+        modeFocus.hidden = true;
+        modeFocus.setAttribute("aria-hidden", "true");
+        modeFocus.innerHTML = "";
+      }
+    }
+
+    // Piano: mini opts in HUD; full panel collapsed/hidden by default
     const pianoBlock = $("#piano-block");
     const pianoMini = $("#piano-mini-opts");
+    const pianoToggleRow = $("#piano-toggle-row");
     const showPiano = !!(ex.audio.piano || profile.autoPiano);
+    state.pianoOpen = false;
     if (pianoBlock) {
-      pianoBlock.hidden = !showPiano;
+      pianoBlock.classList.remove("is-open");
+      pianoBlock.hidden = true; // closed until toggle
       if (showPiano && ex.audio.piano) renderPianoControls(ex);
       if (profile.autoArpeggio && $("#chk-arpeggio")) $("#chk-arpeggio").checked = true;
       if ($("#chk-auto-piano")) $("#chk-auto-piano").checked = profile.autoPiano !== false;
     }
     if (pianoMini) pianoMini.style.display = showPiano ? "" : "none";
-    // Pitch HUD corner only when pitch/game relevant
-    const tr = $(".hud-tr");
-    if (tr) tr.style.display = profile.showPitch ? "" : "none";
+    if (pianoToggleRow) {
+      pianoToggleRow.hidden = !showPiano;
+      const tbtn = $("#btn-toggle-piano");
+      if (tbtn) {
+        tbtn.setAttribute("aria-expanded", "false");
+        tbtn.textContent = tt("piano.showPanel");
+      }
+    }
 
-    // Practice hint
-    $("#practice-hint").textContent = `Mode: ${profile.mode} · one Start arms this exercise only. Stop ends everything.`;
+    // Practice hint (i18n)
+    $("#practice-hint").textContent = tt("practice.hint");
 
     // Review workflow
     const reviewBlock = $("#review-block");
@@ -573,6 +617,8 @@
     state.pitchViz.attachGame(state.pitchGame);
     return state.pitchViz;
   }
+  // Modes may resolve nearest multi-lane tone via this hook
+  window.VTGetPitchViz = () => state.pitchViz;
 
   function updateGameHud(snap) {
     if (!snap) return;
@@ -673,14 +719,19 @@
           $("#level-fill").style.width = `${Math.round(Math.min(1, frame.rms * 4) * 100)}%`;
         }
         if (showHold) {
-          $("#hold-display").textContent = tt("practice.hold", {
-            s: frame.holdSec.toFixed(1)
-          });
-          // Stay green through grace dropouts while hold is active
-          $("#hold-display").style.color =
-            frame.holdSec >= 0.3 && (frame.voiced || frame.holdGrace || frame.holdSec >= 2)
-              ? "#8ee0b5"
-              : "";
+          const holdEl = $("#hold-display");
+          if (holdEl) {
+            holdEl.textContent = tt("practice.hold", {
+              s: frame.holdSec.toFixed(1)
+            });
+            holdEl.classList.toggle("is-grace", !!frame.holdGrace && !frame.holdSolid);
+            // Solid green when energy/pitch solid; amber during grace bridge
+            if (frame.holdSec >= 0.3 && (frame.holdSolid || frame.voiced || frame.holdGrace)) {
+              holdEl.style.color = frame.holdGrace && !frame.holdSolid ? "#e0a84a" : "#8ee0b5";
+            } else {
+              holdEl.style.color = "";
+            }
+          }
         }
         if (profile.showPitch && state.pitchViz) {
           state.pitchViz.pushFrame(frame.voiceFreq, frame.targetFreq);
@@ -1436,6 +1487,27 @@
         btn.setAttribute("aria-expanded", String(state.guideOpen));
       }
     });
+    $("#btn-toggle-piano")?.addEventListener("click", () => {
+      state.pianoOpen = !state.pianoOpen;
+      const block = $("#piano-block");
+      if (block) {
+        if (state.pianoOpen) {
+          block.hidden = false;
+          // next frame so max-height transition can run
+          requestAnimationFrame(() => block.classList.add("is-open"));
+        } else {
+          block.classList.remove("is-open");
+          setTimeout(() => {
+            if (!state.pianoOpen) block.hidden = true;
+          }, 220);
+        }
+      }
+      const btn = $("#btn-toggle-piano");
+      if (btn) {
+        btn.textContent = state.pianoOpen ? tt("piano.hidePanel") : tt("piano.showPanel");
+        btn.setAttribute("aria-expanded", String(!!state.pianoOpen));
+      }
+    });
 
     $("#btn-timer-start")?.addEventListener("click", startTimer);
     $("#btn-timer-pause")?.addEventListener("click", pauseTimer);
@@ -1466,13 +1538,11 @@
       await VTPiano.playInhaleTicks(3);
       toast("3-second inhale ticks");
     });
-    $("#btn-pitch-start")?.addEventListener("click", startPitchViz);
+    // Legacy stub buttons (if present in DOM) — only unified practice path
+    $("#btn-pitch-start")?.addEventListener("click", startPractice);
     $("#btn-pitch-stop")?.addEventListener("click", () => stopPractice(false));
     $("#btn-hold-start")?.addEventListener("click", startPractice);
     $("#btn-hold-stop")?.addEventListener("click", () => stopPractice(false));
-
-    $("#btn-hold-start").addEventListener("click", startHold);
-    $("#btn-hold-stop").addEventListener("click", stopHold);
 
     $("#btn-complete").addEventListener("click", completeExercise);
     $("#btn-next-structured").addEventListener("click", () => {

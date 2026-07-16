@@ -4,3 +4,7 @@ playwright-report/
 test-results/
 .cache/
 *.log
+
+# QA captures (regenerate locally)
+qa/screenshots/
+qa/geometry/

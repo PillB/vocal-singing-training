@@ -15,6 +15,15 @@
     return Math.max(a, Math.min(b, n));
   }
 
+  /** ES default (Peruvian-clear) / EN when toggle — no heavy jargon */
+  function isEs() {
+    if (global.VTI18n && global.VTI18n.lang) return global.VTI18n.lang === "es";
+    return (document.documentElement.lang || "es").startsWith("es");
+  }
+  function L(es, en) {
+    return isEs() ? es : en;
+  }
+
   /** Shared phase runner for multi-step timers */
   function createPhaseRunner(phases, onPhase) {
     let idx = 0;
@@ -118,7 +127,7 @@
       this.state.beatMs = 0;
       this.state.flash = false;
       this.hud.innerHTML = `
-        <div class="mode-title">Diction · rate ladder</div>
+        <div class="mode-title">${L("Dicción · escalera de ritmo", "Diction · rate ladder")}</div>
         <div class="mode-phase" data-phase>—</div>
         <div class="metro-dot" data-metro aria-hidden="true"></div>
         <div class="mode-big" data-remain>—</div>
@@ -184,7 +193,7 @@
       });
       this.state.logged = 0;
       this.hud.innerHTML = `
-        <div class="mode-title">Metaphor fluency</div>
+        <div class="mode-title">${L("Fluidez con metáforas", "Metaphor fluency")}</div>
         <div class="mode-phase" data-phase>${phases[0]?.label || "Topic"}</div>
         <div class="mode-big" data-remain>—</div>
         <button type="button" class="btn btn-primary btn-sm" data-log>I spoke a metaphor ✓</button>
@@ -227,7 +236,7 @@
       this.state.peakRms = 0;
       this.state.samples = [];
       this.hud.innerHTML = `
-        <div class="mode-title">Volume lane · steady energy</div>
+        <div class="mode-title">${L("Carril de volumen · energía estable", "Volume lane · steady energy")}</div>
         <div class="volume-lane">
           <div class="volume-band"></div>
           <div class="volume-needle" data-needle style="left:50%"></div>
@@ -290,7 +299,7 @@
       this.state.stepMs = 0;
       this.state.creditedSteps = 0;
       this.hud.innerHTML = `
-        <div class="mode-title">Volume / energy ladder</div>
+        <div class="mode-title">${L("Escalera de volumen / energía", "Volume / energy ladder")}</div>
         <div class="mode-phase" data-phase>${ladder[0]?.label || "—"}</div>
         <div class="volume-lane">
           <div class="volume-band" data-band></div>
@@ -361,7 +370,7 @@
       this.state.count = 0;
       this.state.lastNudge = 0;
       this.hud.innerHTML = `
-        <div class="mode-title">Soft palate · count to 60</div>
+        <div class="mode-title">${L("Paladar blando · cuenta hasta 60", "Soft palate · count to 60")}</div>
         <div class="mode-big" data-c>0</div>
         <div class="controls-row">
           <button type="button" class="btn btn-primary btn-sm" data-plus>+1 count</button>
@@ -419,7 +428,7 @@
       this.state.clarityPen = null;
       this.state.clarityAfter = null;
       this.hud.innerHTML = `
-        <div class="mode-title">Pen articulation contrast</div>
+        <div class="mode-title">${L("Contraste de articulación con bolígrafo", "Pen articulation contrast")}</div>
         <div class="mode-phase" data-phase>${phases[0].label}</div>
         <div class="mode-big" data-remain>${phases[0].sec}s</div>
         <div class="mode-bar"><span data-bar style="width:0%"></span></div>
@@ -476,7 +485,7 @@
       this.state.pi = 0;
       this.state.lastSwap = performance.now();
       this.hud.innerHTML = `
-        <div class="mode-title">Performance take · persona</div>
+        <div class="mode-title">${L("Toma de actuación · persona", "Performance take · persona")}</div>
         <div class="mode-phase" data-pr>${prompts[0]}</div>
         <div class="mode-big" data-t>0:00</div>
         <p class="mode-meta">Prompts rotate every ~25s. Don't judge mid-take — review later.</p>
@@ -505,7 +514,7 @@
         if (global.VTToast) global.VTToast(p.label);
       });
       this.hud.innerHTML = `
-        <div class="mode-title">Facial expressiveness</div>
+        <div class="mode-title">${L("Expresión facial", "Facial expressiveness")}</div>
         <div class="mode-phase" data-phase>${phases[0]?.label || "Face"}</div>
         <div class="mode-big" data-remain>—</div>
         <p class="mode-meta">Change the face with the phase. Review muted after stop.</p>
@@ -544,7 +553,7 @@
       this.state.slot = "you"; // you speak | they speak (scripted silence window)
       this.state.slotT = performance.now();
       this.hud.innerHTML = `
-        <div class="mode-title">Connection · curiosity loops</div>
+        <div class="mode-title">${L("Conexión · bucles de curiosidad", "Connection · curiosity loops")}</div>
         <div class="mode-phase" data-phase>${phases?.[0]?.label || "Conversation practice"}</div>
         <div class="mode-big" data-slot>YOU ask / speak</div>
         <div class="listen-bars">
@@ -597,7 +606,7 @@
     id: "reviewSession",
     render() {
       this.hud.innerHTML = `
-        <div class="mode-title">Record &amp; review take</div>
+        <div class="mode-title">${L("Grabar y revisar", "Record &amp; review take")}</div>
         <div class="mode-big" data-t>0:00</div>
         <p class="mode-meta mode-warn">Leave <strong>1 full day</strong> before Auditory → Visual → Transcription.</p>
       `;
@@ -622,7 +631,7 @@
     id: "weekPlan",
     render() {
       this.hud.innerHTML = `
-        <div class="mode-title">12-week focus</div>
+        <div class="mode-title">${L("Foco de 12 semanas", "12-week focus")}</div>
         <p class="mode-meta">Practice lives in the weekly dashboard. Open it to pick an element and check in.</p>
         <button type="button" class="btn btn-primary btn-sm" data-open-plan>Open 12-week plan</button>
       `;
@@ -647,7 +656,7 @@
       this.state.hadSpeech = false;
       this.state.minP = (this.profile.minPauseSec || 0.8) * 1000;
       this.hud.innerHTML = `
-        <div class="mode-title">Power pause detector</div>
+        <div class="mode-title">${L("Detector de pausas de poder", "Power pause detector")}</div>
         <div class="mode-big" data-p>0</div>
         <p class="mode-meta">Silences ≥ ${this.profile.minPauseSec || 0.8}s <em>after speech</em> (not idle quiet)</p>
         <div class="silence-timeline" data-tl></div>
@@ -702,7 +711,7 @@
       this.state.inSilence = false;
       this.state.minP = (this.profile.minPauseSec || 0.7) * 1000;
       this.hud.innerHTML = `
-        <div class="mode-title">Kill the fillers</div>
+        <div class="mode-title">${L("Elimina rellenos", "Kill the fillers")}</div>
         <div class="controls-row">
           <button type="button" class="btn btn-danger btn-sm" data-fill>Caught an um/like +</button>
           <button type="button" class="btn btn-success btn-sm" data-rep>Paused instead +</button>
@@ -762,7 +771,7 @@
       this.state.slowUntil = 0;
       this.state.quietMs = 0;
       this.hud.innerHTML = `
-        <div class="mode-title">Pace for impact</div>
+        <div class="mode-title">${L("Ritmo con impacto", "Pace for impact")}</div>
         <div class="mode-big" data-k>0 / 3 confirmed</div>
         <button type="button" class="btn btn-primary btn-sm" data-key>Mark key point — then slow 1s</button>
         <p class="mode-meta" data-st>Tap, then drop pace/energy ~1 second to confirm.</p>
@@ -805,7 +814,7 @@
       this.state.reps = { size: 0, count: 0, location: 0 };
       this.state.mutedReview = false;
       this.hud.innerHTML = `
-        <div class="mode-title">Gesture reps</div>
+        <div class="mode-title">${L("Repeticiones de gestos", "Gesture reps")}</div>
         <div class="controls-row">
           <button type="button" class="btn btn-sm" data-g="size">Size +</button>
           <button type="button" class="btn btn-sm" data-g="count">Count +</button>
@@ -851,7 +860,7 @@
       this.state.silenceAcc = 0;
       this.state.gates = 0;
       this.hud.innerHTML = `
-        <div class="mode-title">Concision gate</div>
+        <div class="mode-title">${L("Puerta de concisión", "Concision gate")}</div>
         <div class="mode-phase" data-phase>Q1 · Receive the question</div>
         <div class="mode-big" data-g>Breathe</div>
         <p class="mode-meta">Gates passed: <strong data-ok>0</strong>/${this.state.maxQ}</p>
@@ -909,7 +918,7 @@
       this.state.runner = createPhaseRunner(phases);
       this.state.peakMarked = false;
       this.hud.innerHTML = `
-        <div class="mode-title">Story arc</div>
+        <div class="mode-title">${L("Arco de historia", "Story arc")}</div>
         <div class="mode-phase" data-phase>${phases[0]?.label}</div>
         <div class="mode-big" data-remain>—</div>
         <button type="button" class="btn btn-singing btn-sm" data-peak>Mark PEAK now</button>
@@ -950,7 +959,7 @@
       this.state.waitingLand = false;
       this.state.silenceAcc = 0;
       this.hud.innerHTML = `
-        <div class="mode-title">Authority landings</div>
+        <div class="mode-title">${L("Cierres con autoridad", "Authority landings")}</div>
         <div class="mode-big" data-l>0 / ${this.profile.claims || 5}</div>
         <button type="button" class="btn btn-primary btn-sm" data-claim>I stated a claim — now land</button>
         <p class="mode-meta" data-st>State claim, then hold silence ~1s (no “you know?”)</p>
@@ -998,7 +1007,7 @@
       this.state.stepStarted = performance.now();
       this.state.stepSec = (this.profile.stepSec || 30) * 1000;
       this.hud.innerHTML = `
-        <div class="mode-title">Energy match · triad</div>
+        <div class="mode-title">${L("Ajuste de energía · trío", "Energy match · triad")}</div>
         <div class="mode-phase" data-phase>Low energy</div>
         <div class="mode-big" data-remain>30s</div>
         <div class="volume-lane"><div class="volume-band" data-band></div><div class="volume-needle" data-n style="left:20%"></div></div>
@@ -1052,7 +1061,7 @@
       this.state.minM = 999;
       this.state.maxM = 0;
       this.hud.innerHTML = `
-        <div class="mode-title">Melodic range (speech)</div>
+        <div class="mode-title">${L("Rango melódico (habla)", "Melodic range (speech)")}</div>
         <div class="mode-big" data-r>— st</div>
         <p class="mode-meta">Min–max pitch span while you speak. Variety without note drills.</p>
         <p class="mode-meta" data-d>Start speaking with color…</p>
@@ -1088,7 +1097,7 @@
       this.state.phase = fry ? "fry" : "hold";
       this.state.best = 0;
       this.hud.innerHTML = `
-        <div class="mode-title">${fry ? "Fry → clear /A/ hold" : "Sustain & hold"}</div>
+        <div class="mode-title">${fry ? L("Fry → /A/ clara sostenida", "Fry → clear /A/ hold") : L("Sostén y mantén", "Sustain & hold")}</div>
         <div class="mode-phase" data-phase>${fry ? "Phase 1 · gentle fry (finder)" : "Sustain"}</div>
         <div class="mode-big" data-h>0.0s</div>
         <p class="mode-meta">Best clear hold: <strong data-best>0s</strong> · logs: <strong data-n>0</strong></p>
@@ -1129,12 +1138,15 @@
     render() {
       this.state.reps = 0;
       this.state.inBandMs = 0;
+      const title = this.profile.autoArpeggio
+        ? L("Arpegio · tonos del acorde", "Arpeggio chord tones")
+        : L("Acorde / solfeo", "Chord / solfège");
       this.hud.innerHTML = `
-        <div class="mode-title">${this.profile.autoArpeggio ? "Arpeggio chord tones" : "Chord / solfège"}</div>
+        <div class="mode-title">${title}</div>
         <div class="mode-big" data-r>0</div>
-        <p class="mode-meta">Auto-rep when you stay near target ~1.2s · or tap +1</p>
-        <button type="button" class="btn btn-sm btn-singing" data-rep>+1 rep</button>
-        <p class="mode-meta" data-st>Sing into the pitch graph when piano changes.</p>
+        <p class="mode-meta">${L("Rep auto si te quedas ~1,2s en cualquier tono activo del acorde · o +1", "Auto-rep when ~1.2s near any active chord tone · or tap +1")}</p>
+        <button type="button" class="btn btn-sm btn-singing" data-rep>+1</button>
+        <p class="mode-meta" data-st>${L("Canta en los carriles cuando el piano cambie de acorde.", "Sing into the lanes when the piano changes chords.")}</p>
       `;
       this.$("[data-rep]")?.addEventListener("click", () => {
         this.state.reps++;
@@ -1142,21 +1154,45 @@
       });
     },
     onFrame(frame) {
-      // Auto-credit: voiced + pitch within ~50 cents of target for 1.2s
-      if (frame.voiceFreq && frame.targetFreq && global.VTPitchUtils) {
+      // Multi-lane: any active chord tone within ~50¢ counts (not only primary)
+      if (!frame.voiceFreq || !frame.voiced) {
+        this.state.inBandMs = 0;
+        return;
+      }
+      let cents = Infinity;
+      const viz = global.VTPitchVizInstance || null;
+      // Prefer visualizer nearest active lane when available via app singleton
+      const appViz = document.getElementById("pitch-canvas") && global.VTGetPitchViz
+        ? global.VTGetPitchViz()
+        : null;
+      const nearest =
+        appViz?.nearestActiveLane?.(frame.voiceFreq) ||
+        viz?.nearestActiveLane?.(frame.voiceFreq);
+      if (nearest) {
+        cents = Math.abs(nearest.cents);
+      } else if (frame.targetFreq && global.VTPitchUtils) {
         const vm = global.VTPitchUtils.freqToMidi(frame.voiceFreq);
         const tm = global.VTPitchUtils.freqToMidi(frame.targetFreq);
-        const cents = Math.abs((vm - tm) * 100);
-        if (cents <= 50 && frame.voiced) {
-          this.state.inBandMs += frame.dtMs || 16;
-          if (this.state.inBandMs >= 1200) {
-            this.state.reps++;
-            this.state.inBandMs = 0;
-            if (this.$("[data-r]")) this.$("[data-r]").textContent = String(this.state.reps);
-            if (this.$("[data-st]")) this.$("[data-st]").textContent = "Rep credited (in-band) ✓";
-          }
-        } else this.state.inBandMs = 0;
+        cents = Math.abs((vm - tm) * 100);
       }
+      if (cents <= 50) {
+        this.state.inBandMs += frame.dtMs || 16;
+        const fill = Math.min(1, this.state.inBandMs / 1200);
+        if (this.$("[data-st]")) {
+          this.$("[data-st]").textContent = L(
+            `En carril · ${(fill * 100).toFixed(0)}%`,
+            `In-lane · ${(fill * 100).toFixed(0)}%`
+          );
+        }
+        if (this.state.inBandMs >= 1200) {
+          this.state.reps++;
+          this.state.inBandMs = 0;
+          if (this.$("[data-r]")) this.$("[data-r]").textContent = String(this.state.reps);
+          if (this.$("[data-st]")) {
+            this.$("[data-st]").textContent = L("Rep contada ✓", "Rep credited ✓");
+          }
+        }
+      } else this.state.inBandMs = 0;
     },
     onStop() {
       return {
@@ -1174,7 +1210,7 @@
       this.state.inBand = 0;
       this.state.samples = 0;
       this.hud.innerHTML = `
-        <div class="mode-title">Song stanza reps</div>
+        <div class="mode-title">${L("Repeticiones de estrofa", "Song stanza reps")}</div>
         <div class="controls-row">
           <button type="button" class="btn btn-sm" data-feel>Feel +1</button>
           <button type="button" class="btn btn-sm" data-better>Better Man +1</button>
@@ -1224,7 +1260,7 @@
     id: "pitchMatch",
     render() {
       this.hud.innerHTML = `
-        <div class="mode-title">Pitch match game</div>
+        <div class="mode-title">${L("Juego de afinación", "Pitch match game")}</div>
         <p class="mode-meta">Full highway + score + lock 8 notes. Stay in the green lane.</p>
         <p class="mode-meta" data-s>Score updates in the pitch HUD above.</p>
       `;
@@ -1250,7 +1286,7 @@
       this.state.samples = [];
       const straw = this.profile.variant === "straw";
       this.hud.innerHTML = `
-        <div class="mode-title">${straw ? "Straw phonation · SOVT" : "Lip trills · SOVT"}</div>
+        <div class="mode-title">${straw ? L("Fonación con pajita · SOVT", "Straw phonation · SOVT") : L("Trinos de labios · SOVT", "Lip trills · SOVT")}</div>
         <div class="mode-bar thick"><span data-bar style="width:0%"></span></div>
         <p class="mode-meta">Evenness: <strong data-ev>—</strong></p>
         <p class="mode-meta muted">${
@@ -1308,7 +1344,7 @@
       this.state.locked = 0;
       this.state.inBand = 0;
       this.hud.innerHTML = `
-        <div class="mode-title">Humming · soft targets</div>
+        <div class="mode-title">${L("Tarareo · objetivos suaves", "Humming · soft targets")}</div>
         <div class="mode-phase" data-n>Target: ${this.state.notes[0]}</div>
         <div class="mode-big" data-l>0 / 10</div>
         <p class="mode-meta">Hold hum near target ~0.9s to advance. Feel lip buzz.</p>
@@ -1372,7 +1408,7 @@
       this.state.sirens = 0;
       this.state.voicedLong = 0;
       this.hud.innerHTML = `
-        <div class="mode-title">Siren range rope</div>
+        <div class="mode-title">${L("Sirena · cuerda de rango", "Siren range rope")}</div>
         <div class="mode-big" data-r>— st</div>
         <p class="mode-meta">Sirens counted: <strong data-s>0</strong> (long glides ≥1.5s)</p>
         <p class="mode-meta">Not a single-note lock game — ride the rope smooth.</p>
@@ -1418,7 +1454,7 @@
       this.state.bestA = 0;
       this.state.cur = 0;
       this.hud.innerHTML = `
-        <div class="mode-title">Breath support · S then /A/</div>
+        <div class="mode-title">${L("Soporte de aire · S y luego /A/", "Breath support · S then /A/")}</div>
         <div class="mode-phase" data-phase>Phase 1 · even S (unvoiced)</div>
         <div class="mode-big" data-h>0.0s</div>
         <p class="mode-meta">Best S <strong data-s>0</strong>s · Best /A/ <strong data-a>0</strong>s</p>
@@ -1467,7 +1503,7 @@
       this.state.roots = 0;
       this.state.inBand = 0;
       this.hud.innerHTML = `
-        <div class="mode-title">Five-note scale · pitch-gated</div>
+        <div class="mode-title">${L("Escala de 5 notas · con afinación", "Five-note scale · pitch-gated")}</div>
         <div class="mode-big" data-step>Step 1 / 9</div>
         <p class="mode-meta">Hold near step (~40¢) for 0.7s to advance · Roots: <strong data-r>0</strong></p>
         <p class="mode-meta muted" data-st>Sing the step — no free skip.</p>
@@ -1528,7 +1564,7 @@
       this.state.phaseT = performance.now();
       this.state.midiSamples = [];
       this.hud.innerHTML = `
-        <div class="mode-title">Dynamic swell</div>
+        <div class="mode-title">${L("Crescendo dinámico", "Dynamic swell")}</div>
         <div class="mode-phase" data-phase>Soft</div>
         <div class="volume-lane"><div class="volume-band" data-band></div><div class="volume-needle" data-n style="left:20%"></div></div>
         <p class="mode-meta">Swells: <strong data-s>0</strong> · Pitch wobble: <strong data-w>—</strong></p>
@@ -1600,7 +1636,7 @@
       this.state.shortHolds = 0;
       this.state.longHolds = 0;
       this.hud.innerHTML = `
-        <div class="mode-title">Staccato vs legato (sung)</div>
+        <div class="mode-title">${L("Staccato vs legato (cantado)", "Staccato vs legato (sung)")}</div>
         <div class="mode-phase" data-phase>${phases[0].label}</div>
         <div class="mode-big" data-remain>—</div>
         <p class="mode-meta">Short notes (&lt;0.45s): <strong data-sh>0</strong> · Long (≥1.2s): <strong data-lg>0</strong></p>
@@ -1647,7 +1683,7 @@
       this.state.hard = 0;
       this.state.wasQuiet = true;
       this.hud.innerHTML = `
-        <div class="mode-title">Easy onset reps</div>
+        <div class="mode-title">${L("Repeticiones de ataque suave", "Easy onset reps")}</div>
         <div class="mode-big" data-e>0 / ${this.profile.targetReps || 10}</div>
         <p class="mode-meta">Hard attacks flagged: <strong data-h>0</strong></p>
         <p class="mode-meta">Start from silence; spikey onsets count as hard.</p>

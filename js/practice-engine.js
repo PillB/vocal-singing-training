@@ -231,12 +231,10 @@
 
       if (strongVoice || continueVoice) {
         if (hasPitch) this.voiceFreq = freq;
-        // Retroactive bridge: if we were in a short gap, do NOT reset holdStart
-        if (strongVoice || rms >= HOLD_RMS) {
+        // Refresh lastVoiceAt on real energy OR clean pitch (not bare grace alone)
+        // so low-energy noise without energy doesn't pin holds forever
+        if (strongVoice || rms >= HOLD_RMS || (hasPitch && rms >= HOLD_RMS * 0.65)) {
           this.lastVoiceAt = now;
-          this._gapStart = null;
-        } else if (!this._gapStart) {
-          this._gapStart = now;
         }
         if (!this.holdStart) {
           this.holdStart = now;
@@ -256,6 +254,9 @@
 
       const dtMs = Math.min(50, now - (this._lastFrameAt || now));
       this._lastFrameAt = now;
+      // Grace UI spans full silence window so green/amber doesn't drop before hold ends
+      const inGraceWindow =
+        !!this.holdStart && now - this.lastVoiceAt < SILENCE_END_MS;
       const activelyHolding =
         !!this.holdStart && now - this.lastVoiceAt < HOLD_GRACE_MS;
       if (this.onFrame) {
@@ -264,12 +265,13 @@
           voiceFreq: this.voiceFreq,
           targetFreq: this.targetFreq,
           holdSec: this.currentHoldSec,
-          voiced: activelyHolding || strongVoice,
+          voiced: inGraceWindow || strongVoice,
           holds: this.holds,
           recording: this.recording,
           elapsedMs: now - this.startedAt,
           dtMs,
-          holdGrace: !!this.holdStart && !strongVoice && activelyHolding
+          holdGrace: !!this.holdStart && !strongVoice && inGraceWindow,
+          holdSolid: activelyHolding || strongVoice
         });
       }
 

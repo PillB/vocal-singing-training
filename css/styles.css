@@ -53,6 +53,11 @@ textarea {
   color: inherit;
 }
 
+/* Author display rules (e.g. .btn { display:inline-flex }) must not override [hidden] */
+[hidden] {
+  display: none !important;
+}
+
 button {
   cursor: pointer;
   border: none;
@@ -980,38 +985,56 @@ a {
   position: relative;
 }
 
-/* Game-stage: highway first, overlays in corners (less scroll) */
+/* Game-stage: sticky highway + corner HUDs (less scroll) */
+:root {
+  /* Matches measured app-header height (~74px with brand + padding) */
+  --header-h: 74px;
+}
+
 .exercise-header-compact {
-  margin-bottom: 0.5rem;
-  padding-bottom: 0.25rem;
+  margin-bottom: 0.35rem;
+  padding-bottom: 0.15rem;
 }
 
 .exercise-header-compact h2 {
-  font-size: 1.15rem;
-  margin: 0.15rem 0 0;
+  font-size: 1.05rem;
+  margin: 0.1rem 0 0;
 }
 
+/* Sticky only the highway frame — not piano/metrics */
 .game-stage {
-  position: sticky;
-  top: 56px;
-  z-index: 20;
-  margin-bottom: 0.75rem;
+  position: relative;
+  z-index: auto;
+  margin-bottom: 0.65rem;
+  padding: 0.55rem 0.65rem 0.65rem;
 }
 
 .highway-stage {
-  position: relative;
+  position: sticky;
+  top: var(--header-h, 74px);
+  z-index: 20;
   min-height: 200px;
+  max-height: min(58dvh, 420px);
+  overflow: hidden;
+  border-radius: 12px;
+  background: rgba(10, 14, 20, 0.45);
+  border: 1px solid var(--border);
+  /* Safe inset so canvas labels aren't under HUDs */
+  --hud-safe-t: 3.25rem;
+  --hud-safe-b: 3.1rem;
+  --hud-safe-l: 0.5rem;
+  --hud-safe-r: 0.5rem;
 }
 
 .hud-corner {
   position: absolute;
-  z-index: 5;
+  z-index: 6;
   display: flex;
   flex-wrap: wrap;
-  gap: 0.35rem;
+  gap: 0.28rem;
   align-items: center;
-  max-width: 48%;
   pointer-events: none;
+  max-width: calc(50% - 0.5rem);
 }
 
 .hud-corner .btn,
@@ -1024,6 +1047,32 @@ a {
 .hud-tl {
   top: 0.4rem;
   left: 0.4rem;
+  max-width: min(40%, 11rem);
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  z-index: 7;
+}
+
+.hud-tl .timer-display {
+  font-size: clamp(0.95rem, 3.2vw, 1.25rem);
+  min-width: 4rem;
+  font-family: var(--mono);
+  font-weight: 700;
+  background: rgba(12, 18, 26, 0.72);
+  border-radius: 8px;
+  padding: 0.1rem 0.4rem;
+}
+
+.hud-tl .chord-now {
+  font-size: 0.88rem;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: rgba(12, 18, 26, 0.65);
+  border-radius: 8px;
+  padding: 0.1rem 0.35rem;
 }
 
 .hud-tr {
@@ -1032,12 +1081,13 @@ a {
   justify-content: flex-end;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 0.25rem;
-  max-width: min(220px, 46%);
-  background: rgba(12, 18, 26, 0.72);
+  gap: 0.15rem;
+  max-width: min(36%, 8.75rem);
+  background: rgba(12, 18, 26, 0.82);
   border: 1px solid var(--border);
   border-radius: 10px;
-  padding: 0.35rem;
+  padding: 0.28rem;
+  z-index: 7;
 }
 
 .hud-tr .hud-score,
@@ -1046,70 +1096,235 @@ a {
 .hud-tr .hud-quality {
   background: transparent;
   border: none;
-  padding: 0.15rem;
-  font-size: 0.72rem;
+  padding: 0.08rem;
+  font-size: 0.62rem;
+  min-height: auto;
 }
 
 .hud-tr strong {
-  font-size: 0.95rem;
+  font-size: 0.85rem;
+}
+
+.hud-tr .hud-quality {
+  grid-column: 1 / -1;
+  min-height: 1.4rem;
+  font-size: 0.75rem !important;
 }
 
 .hud-bl {
-  bottom: 0.45rem;
+  bottom: 0.4rem;
   left: 0.4rem;
+  max-width: min(44%, 12.5rem);
+  z-index: 7;
+  background: rgba(12, 18, 26, 0.55);
+  border-radius: 10px;
+  padding: 0.2rem;
+  gap: 0.25rem;
+}
+
+.hud-bl .btn-sm {
+  padding: 0.4rem 0.7rem;
 }
 
 .hud-br {
-  bottom: 0.45rem;
+  bottom: 0.4rem;
   right: 0.4rem;
   justify-content: flex-end;
-  background: rgba(12, 18, 26, 0.65);
+  max-width: min(48%, 11.5rem);
+  background: rgba(12, 18, 26, 0.78);
   border-radius: 10px;
-  padding: 0.3rem 0.45rem;
+  padding: 0.2rem 0.35rem;
   border: 1px solid var(--border);
+  gap: 0.15rem;
+  z-index: 7;
+}
+
+.hud-br .piano-opt {
+  font-size: 0.68rem;
+  padding: 0.12rem 0.28rem;
 }
 
 .hud-check {
   background: rgba(12, 18, 26, 0.55);
   border-radius: 999px;
-  padding: 0.2rem 0.5rem;
+  padding: 0.12rem 0.4rem;
+  font-size: 0.72rem;
 }
 
 .pitch-stage {
-  margin-top: 0;
-  padding-top: 0;
-  border-top: none;
+  margin: 0;
+  padding: 0;
+  border: none;
+  height: 100%;
+  min-height: 200px;
 }
 
 .pitch-stage .pitch-canvas {
-  height: min(42vh, 320px);
-  min-height: 240px;
+  height: min(48vh, 360px);
+  min-height: 220px;
+  max-height: calc(58dvh - 0.5rem);
   border-radius: 12px;
+  display: block;
+  width: 100%;
+  border: none;
+  /* Leave room under corner HUDs for drawn labels */
+  box-sizing: border-box;
+}
+
+.highway-stage .practice-meter {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 3.35rem;
+  width: min(40%, 12rem);
+  margin: 0;
+  z-index: 5;
+  opacity: 0.85;
+}
+
+/* Non-pitch focus area inside sticky stage — center safe zone only */
+.mode-focus {
+  position: absolute;
+  inset: var(--hud-safe-t) 10% var(--hud-safe-b);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.mode-focus-card {
+  max-width: 34rem;
+  text-align: center;
+  padding: 0.85rem 1rem;
+  background: rgba(12, 18, 26, 0.72);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  pointer-events: none;
+}
+
+.mode-focus-goal {
+  margin: 0 0 0.35rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--text);
+}
+
+.mode-focus-cta {
+  margin: 0;
+  font-size: 0.8rem;
+}
+
+.hold-live.is-grace {
+  color: #e0a84a !important;
+}
+
+.stage-below {
+  margin-top: 0.55rem;
+  min-width: 0;
+}
+
+.mode-shell {
+  min-width: 0;
+}
+
+.mode-shell:empty,
+.mode-shell:has(#mode-hud:empty):has(#mode-cue:empty) {
+  display: none;
+}
+
+#mode-cue:empty {
+  display: none;
+}
+
+.pitch-stats:empty {
+  display: none;
+}
+
+/* Fold secondary chrome to cut scroll */
+.piano-inline {
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+  transition: max-height 0.25s ease, opacity 0.2s ease, margin 0.2s ease;
+}
+
+.piano-inline.is-open {
+  max-height: 420px;
+  overflow: auto;
+  opacity: 1;
+  margin-top: 0.45rem !important;
+  padding-top: 0.45rem !important;
+  border-top: 1px solid var(--border) !important;
+}
+
+.piano-toggle-row {
+  margin-top: 0.35rem;
+}
+
+.hold-inline {
+  font-size: 0.8rem;
+  margin-top: 0.4rem;
+}
+
+.hold-inline .hold-help {
+  display: none; /* save space; grace is UX not copy */
+}
+
+.metrics-card-collapsible.collapsed .metrics-body {
+  display: none;
 }
 
 .mode-hud-compact .mode-panel {
-  margin-top: 0.5rem;
-  padding: 0.55rem 0.75rem;
+  margin-top: 0.25rem;
+  padding: 0.45rem 0.65rem;
 }
 
 .mode-hud-compact .mode-big {
-  font-size: 1.35rem;
+  font-size: 1.15rem;
+}
+
+.mode-cue {
+  font-size: 0.8rem;
+  margin: 0.25rem 0;
+  max-height: 2.4em;
+  overflow: hidden;
+  color: var(--text-muted);
 }
 
 @media (max-width: 640px) {
+  :root {
+    --header-h: 58px;
+  }
+  .hud-tl {
+    max-width: min(44%, 9.5rem);
+  }
   .hud-tr {
-    max-width: 42%;
-    font-size: 0.7rem;
+    max-width: min(40%, 8rem);
+    font-size: 0.6rem;
+  }
+  .hud-bl {
+    max-width: min(52%, 11rem);
   }
   .hud-br {
-    max-width: 55%;
+    max-width: min(50%, 9.5rem);
+  }
+  .hud-br .piano-opt span {
+    display: none; /* checkboxes only on tiny screens */
   }
   .pitch-stage .pitch-canvas {
-    height: 36vh;
-    min-height: 200px;
+    height: 38vh;
+    min-height: 180px;
   }
-  .game-stage {
-    top: 48px;
+  .app-header .brand p {
+    display: none;
+  }
+  .highway-stage {
+    max-height: min(52dvh, 360px);
   }
 }
 
@@ -1196,13 +1411,19 @@ a {
   margin-bottom: 0.75rem;
 }
 
-.pitch-inline,
-.hold-inline,
-.piano-inline {
-  margin-top: 0.85rem;
-  padding-top: 0.75rem;
+.pitch-inline {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+.hold-inline:not([hidden]) {
+  margin-top: 0.45rem;
+  padding-top: 0.4rem;
   border-top: 1px solid var(--border);
 }
+
+/* .piano-inline open/closed handled above — do not re-add margins here */
 
 .pitch-legend {
   margin: 0.4rem 0 0;

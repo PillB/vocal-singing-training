@@ -94,10 +94,10 @@
           <button type="button" class="btn btn-ghost btn-sm" id="btn-back-home" data-i18n="ex.back">← Todos los ejercicios</button>
         </div>
 
-        <!-- GAME STAGE: highway first (minimal scroll) -->
+        <!-- GAME STAGE: sticky highway + corner HUDs (minimal scroll) -->
         <div class="card section practice-cockpit game-stage" id="practice-cockpit">
           <div class="highway-stage" id="highway-stage">
-            <!-- Corner overlays like games -->
+            <!-- Corner overlays like games — only inside sticky frame -->
             <div class="hud-corner hud-tl">
               <span class="status-pill" id="practice-status" data-i18n="practice.ready">Listo</span>
               <span class="timer-display" id="timer-display">05:00</span>
@@ -122,7 +122,7 @@
               <label class="muted piano-opt"><input type="checkbox" id="chk-arpeggio" /> <span data-i18n="piano.arpeggio">Arpegio</span></label>
               <label class="muted piano-opt"><input type="checkbox" id="chk-sustain" checked /> <span data-i18n="piano.sustain">Sostener</span></label>
               <label class="muted piano-opt">
-                <select id="sustain-sec" class="select-inline">
+                <select id="sustain-sec" class="select-inline" aria-label="Segundos de sostenido">
                   <option value="3">3s</option>
                   <option value="4" selected>4s</option>
                   <option value="5">5s</option>
@@ -137,42 +137,54 @@
 
             <div id="pitch-block" class="pitch-inline pitch-stage" hidden>
               <canvas id="pitch-canvas" class="pitch-canvas" width="640" height="300" aria-label="Pitch highway"></canvas>
-              <div class="pitch-stats" id="pitch-stats"></div>
-              <div class="controls-row pitch-game-opts">
-                <label class="muted piano-opt">
-                  <input type="checkbox" id="chk-pitch-challenge" checked />
-                  <span data-i18n="pitch.challenge">Reto de notas (bloquear 8 objetivos)</span>
-                </label>
+            </div>
+
+            <!-- Non-pitch: compact focus panel inside sticky stage (safe zone under TL, above BL) -->
+            <div id="mode-focus" class="mode-focus" hidden aria-hidden="true"></div>
+          </div>
+
+          <!-- Below sticky highway: mode HUD, stats, challenge, hold, piano -->
+          <div class="stage-below">
+            <div id="mode-shell" class="mode-shell">
+              <div id="mode-hud" class="mode-hud mode-hud-compact" aria-live="polite"></div>
+              <p class="mode-cue" id="mode-cue"></p>
+            </div>
+            <div class="pitch-stats" id="pitch-stats"></div>
+            <div class="controls-row pitch-game-opts" id="pitch-challenge-row" hidden>
+              <label class="muted piano-opt">
+                <input type="checkbox" id="chk-pitch-challenge" checked />
+                <span data-i18n="pitch.challenge">Reto de notas (bloquear 8 objetivos)</span>
+              </label>
+            </div>
+
+            <div id="hold-block" class="hold-inline" hidden>
+              <div class="hold-pills" id="hold-history"></div>
+              <p class="muted hold-help" data-i18n="hold.auto">
+                Se registra solo si sostienes la voz ≥ 2s y luego sueltas (con margen si hay cortes breves).
+              </p>
+            </div>
+
+            <div class="piano-toggle-row" id="piano-toggle-row" hidden>
+              <button type="button" class="btn btn-ghost btn-sm" id="btn-toggle-piano" aria-expanded="false" data-i18n="piano.showPanel">
+                Mostrar piano y progresiones
+              </button>
+            </div>
+            <div id="piano-block" class="piano-inline" hidden>
+              <div class="prog-list" id="prog-buttons"></div>
+              <p class="muted" id="chord-desc" style="margin:0.35rem 0"></p>
+              <div class="controls-row" style="margin-top:0.45rem">
+                <button type="button" class="btn btn-singing btn-sm" id="btn-play-prog" data-i18n="piano.playOnce">Reproducir una vez</button>
+                <button type="button" class="btn btn-singing btn-sm" id="btn-loop-prog" data-i18n="piano.loop">Bucle</button>
+                <button type="button" class="btn btn-sm" id="btn-stop-piano" data-i18n="piano.stop">Detener piano</button>
+                <button type="button" class="btn btn-sm" id="btn-ref-pitch" hidden data-i18n="piano.ref">Nota de referencia</button>
+                <button type="button" class="btn btn-sm" id="btn-inhale-ticks" hidden data-i18n="piano.inhale">Inspiración 3s</button>
               </div>
+              <div id="songs-row" class="two-col" hidden style="margin-top:0.65rem"></div>
             </div>
 
-            <!-- Non-pitch exercises still need a compact focus area -->
-            <div id="mode-hud" class="mode-hud mode-hud-compact" aria-live="polite"></div>
-            <p class="mode-cue" id="mode-cue"></p>
+            <div id="playback-area" class="playback-inline"></div>
+            <p class="muted cockpit-hint" id="practice-hint" style="margin:0.5rem 0 0;font-size:0.82rem" data-i18n="practice.hint"></p>
           </div>
-
-          <div id="hold-block" class="hold-inline" hidden>
-            <div class="hold-pills" id="hold-history"></div>
-            <p class="muted" style="margin:0.35rem 0 0;font-size:0.82rem" data-i18n="hold.auto">
-              Se registra solo si sostienes la voz ≥ 2s y luego sueltas (con margen si hay cortes breves).
-            </p>
-          </div>
-
-          <div id="piano-block" class="piano-inline" hidden>
-            <div class="prog-list" id="prog-buttons"></div>
-            <p class="muted" id="chord-desc" style="margin:0.35rem 0"></p>
-            <div class="controls-row" style="margin-top:0.45rem">
-              <button type="button" class="btn btn-singing btn-sm" id="btn-play-prog" data-i18n="piano.playOnce">Reproducir una vez</button>
-              <button type="button" class="btn btn-singing btn-sm" id="btn-loop-prog" data-i18n="piano.loop">Bucle</button>
-              <button type="button" class="btn btn-sm" id="btn-stop-piano" data-i18n="piano.stop">Detener piano</button>
-              <button type="button" class="btn btn-sm" id="btn-ref-pitch" hidden data-i18n="piano.ref">Nota de referencia</button>
-              <button type="button" class="btn btn-sm" id="btn-inhale-ticks" hidden data-i18n="piano.inhale">Inspiración 3s</button>
-            </div>
-            <div id="songs-row" class="two-col" hidden style="margin-top:0.65rem"></div>
-          </div>
-
-          <div id="playback-area" class="playback-inline"></div>
-          <p class="muted cockpit-hint" id="practice-hint" style="margin:0.5rem 0 0;font-size:0.82rem" data-i18n="practice.hint"></p>
         </div>
 
         <!-- Guide below the fold -->

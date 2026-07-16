@@ -226,6 +226,8 @@ test.describe("Exercise-specific practice modes", () => {
     await page.click('.tab[data-tab="singing"]');
     await page.click('.tier-chip[data-tier="basic"]');
     await page.locator("#exercise-list .card-ex").nth(1).click();
+    // Piano panel is collapsed by default — open it for progression list
+    await page.locator("#btn-toggle-piano").click();
     await expect(page.locator("#prog-buttons")).toContainText("Wide jumps");
     const hasJump = await page.evaluate(() => !!window.VT_PROGRESSIONS?.progJump1);
     expect(hasJump).toBeTruthy();

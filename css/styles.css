@@ -6,8 +6,8 @@
   --bg-soft: #243041;
   --border: #3d4f68;
   /* WCAG-leaning light-on-dark: body ≥ ~7:1, muted ≥ ~4.5:1 on card */
-  --text: #f2f6fc;
-  --text-muted: #b6c5d8;
+  --text: #f5f8fd;
+  --text-muted: #c5d2e4;
   --accent: #6eb4e8;
   --accent-2: #9b8ff5;
   --vocal: #6eb4e8;
@@ -39,13 +39,28 @@ body {
   margin: 0;
   min-height: 100vh;
   font-family: var(--font);
+  font-size: 16.5px;
   background:
     radial-gradient(1200px 600px at 10% -10%, rgba(91, 159, 212, 0.18), transparent 55%),
     radial-gradient(900px 500px at 100% 0%, rgba(124, 108, 240, 0.14), transparent 50%),
     radial-gradient(800px 400px at 50% 100%, rgba(196, 139, 90, 0.1), transparent 50%),
     var(--bg);
   color: var(--text);
-  line-height: 1.55;
+  line-height: 1.58;
+}
+
+/* Primary interactive controls: minimum touch target */
+.btn,
+.btn-sm,
+.tab,
+.tier-chip,
+.card-ex {
+  min-height: var(--min-tap);
+}
+.btn-xs,
+.oct-btn {
+  min-height: 36px;
+  min-width: 36px;
 }
 
 button,
@@ -826,9 +841,7 @@ button:focus-visible,
 }
 
 .research-note::before {
-  content: "Research · ";
-  font-weight: 700;
-  color: #a8b8cc;
+  content: none;
 }
 
 .select-inline {
@@ -856,11 +869,13 @@ button:focus-visible,
 
 .pitch-canvas {
   width: 100%;
-  height: 260px;
+  /* Low-vision: taller note channels (~30% more than 260) */
+  height: 340px;
+  min-height: 300px;
   display: block;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
-  background: #101822;
+  background: #0c121a;
 }
 
 .pitch-game-hud {
@@ -880,7 +895,7 @@ button:focus-visible,
 
 .pitch-game-hud .hud-label {
   display: block;
-  font-size: 0.68rem;
+  font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--text-muted);
@@ -888,7 +903,7 @@ button:focus-visible,
 }
 
 .pitch-game-hud strong {
-  font-size: 1.15rem;
+  font-size: 1.22rem;
   font-weight: 800;
   letter-spacing: -0.02em;
 }
@@ -926,7 +941,8 @@ button:focus-visible,
     grid-template-columns: 1fr 1fr;
   }
   .pitch-canvas {
-    height: 220px;
+    height: 280px;
+    min-height: 260px;
   }
 }
 
@@ -1198,20 +1214,20 @@ button:focus-visible,
   position: sticky;
   top: var(--header-h, 74px);
   z-index: 20;
-  /* ~30% taller than prior 560px band → clearer lanes */
-  min-height: min(72dvh, 560px);
-  max-height: min(88dvh, 780px);
-  height: min(80dvh, 728px);
+  /* Low-vision: taller stage so note channels + labels read clearly */
+  min-height: min(76dvh, 620px);
+  max-height: min(90dvh, 860px);
+  height: min(84dvh, 780px);
   overflow: hidden;
   border-radius: 12px;
-  background: rgba(8, 12, 18, 0.72);
+  background: rgba(6, 10, 16, 0.88);
   border: 1px solid var(--border);
   /* 10% top/bottom negative space for horizontal HUD rails; right free for note keys */
   --hud-band: 10%;
   --hud-safe-t: 10%;
   --hud-safe-b: 10%;
   --hud-safe-l: 0.35rem;
-  --hud-safe-r: 14%; /* dual letter+solfège labels live here */
+  --hud-safe-r: 15%; /* dual letter+solfège labels — slightly wider for large type */
 }
 
 /* Horizontal game HUDs sit in the 10% bands — keep right edge clear for keys */
@@ -2247,15 +2263,16 @@ body.view-exercise .stage-below.is-fitted {
     display: none; /* save width on phone */
   }
   .pitch-stage .pitch-canvas {
-    min-height: 220px;
+    min-height: 280px;
+    height: min(42dvh, 320px);
   }
   .app-header .brand p {
     display: none;
   }
   .highway-stage {
-    min-height: min(54dvh, 360px);
-    max-height: min(68dvh, 480px);
-    height: min(58dvh, 400px);
+    min-height: min(58dvh, 400px);
+    max-height: min(72dvh, 520px);
+    height: min(62dvh, 440px);
   }
   .exercise-header-compact h2 {
     font-size: 0.88rem;

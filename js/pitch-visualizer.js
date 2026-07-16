@@ -202,8 +202,8 @@
       const dpr = window.devicePixelRatio || 1;
       const rect = this.canvas.getBoundingClientRect();
       const w = Math.max(320, rect.width || 640);
-      // Taller highway for multi-lane chord view (game stage)
-      const h = Math.max(240, rect.height || 300);
+      // Taller highway for multi-lane + low-vision note channels
+      const h = Math.max(300, rect.height || 340);
       this.canvas.width = Math.floor(w * dpr);
       this.canvas.height = Math.floor(h * dpr);
       this.ctx2d.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -709,10 +709,10 @@
       ctx.fillRect(0, 0, w, h);
       // preview highway — wider band for low vision
       const mid = h * 0.42;
-      ctx.fillStyle = "rgba(79, 212, 146, 0.18)";
-      ctx.fillRect(0, mid - 28, w, 56);
-      ctx.strokeStyle = "rgba(240, 201, 160, 0.75)";
-      ctx.lineWidth = 3;
+      ctx.fillStyle = "rgba(79, 212, 146, 0.28)";
+      ctx.fillRect(0, mid - 36, w, 72);
+      ctx.strokeStyle = "rgba(255, 230, 170, 0.9)";
+      ctx.lineWidth = 4;
       ctx.beginPath();
       ctx.moveTo(0, mid);
       ctx.lineTo(w, mid);
@@ -720,8 +720,8 @@
       const es =
         (global.VTI18n && global.VTI18n.lang === "es") ||
         document.documentElement.lang === "es";
-      ctx.fillStyle = "#e8eef6";
-      ctx.font = "700 14px system-ui,sans-serif";
+      ctx.fillStyle = "#f2f6fc";
+      ctx.font = "700 16px system-ui,sans-serif";
       ctx.textAlign = "center";
       const idle1 = es
         ? "Autopista · canta en el carril verde"
@@ -730,13 +730,13 @@
         ? "Mantente en el carril · gana precisión"
         : "Stay in lane · build precision";
       const maxIdle = w * 0.88;
-      const f1 = fitCanvasLabel(ctx, idle1, maxIdle, "700 14px system-ui,sans-serif");
+      const f1 = fitCanvasLabel(ctx, idle1, maxIdle, "700 16px system-ui,sans-serif");
       ctx.font = f1.font;
-      ctx.fillText(f1.text, w / 2, h / 2 + 22);
-      const f2 = fitCanvasLabel(ctx, idle2, maxIdle, "600 12px system-ui,sans-serif");
+      ctx.fillText(f1.text, w / 2, h / 2 + 26);
+      const f2 = fitCanvasLabel(ctx, idle2, maxIdle, "600 14px system-ui,sans-serif");
       ctx.font = f2.font;
-      ctx.fillStyle = "#c5d4e8";
-      ctx.fillText(f2.text, w / 2, h / 2 + 42);
+      ctx.fillStyle = "#d0dceb";
+      ctx.fillText(f2.text, w / 2, h / 2 + 48);
       this._drawKeyboard(ctx, w, h, null, null);
     }
 
@@ -757,7 +757,7 @@
       ctx.fillRect(0, 0, w, h);
 
       // Graph area (leave bottom for keyboard) — taller canvas = thicker channels
-      const graphH = h - 52;
+      const graphH = h - 58;
       const midY = this._midiToY(centerMidi, centerMidi, graphH);
 
       // Range-aware grid (higher contrast for channel readability)
@@ -765,8 +765,8 @@
         this.rangeMinMidi != null ? Math.floor(this.rangeMinMidi) : Math.floor(centerMidi - 6);
       const hi =
         this.rangeMaxMidi != null ? Math.ceil(this.rangeMaxMidi) : Math.ceil(centerMidi + 6);
-      ctx.strokeStyle = "rgba(150, 175, 210, 0.28)";
-      ctx.lineWidth = 1.25;
+      ctx.strokeStyle = "rgba(170, 195, 230, 0.38)";
+      ctx.lineWidth = 1.5;
       for (let m = lo; m <= hi; m++) {
         const y = this._midiToY(m, centerMidi, graphH);
         ctx.beginPath();
@@ -781,7 +781,7 @@
       // 3) Primary singing target = green active lane
       const spanSt = Math.max(6, hi - lo);
       // Thicker lanes when canvas is tall (low-vision friendly)
-      const laneHalf = Math.max(6, (zones.good / 100) * (graphH / spanSt) * 1.35);
+      const laneHalf = Math.max(8, (zones.good / 100) * (graphH / spanSt) * 1.55);
       const activeMidis = new Set(
         (this.chordLanes || []).map((L) => Math.round(L.midi * 2) / 2)
       );
@@ -796,21 +796,23 @@
       const usedLabelYs = [];
       const canPlaceLabel = (y) => {
         for (let i = 0; i < usedLabelYs.length; i++) {
-          if (Math.abs(usedLabelYs[i] - y) < 13) return false;
+          if (Math.abs(usedLabelYs[i] - y) < 16) return false;
         }
         usedLabelYs.push(y);
         return true;
       };
       const paintRightLabel = (y, text, preferFont, fill, showDot) => {
         if (!canPlaceLabel(y)) return;
-        const fitted = fitCanvasLabel(ctx, text, labelMaxW - (showDot ? 12 : 0), preferFont);
+        // Prefer slightly larger type for low vision; fitCanvasLabel shrinks if needed
+        const prefer = preferFont.replace(/(\d+)px/, (_, n) => `${Math.max(12, Number(n) + 1)}px`);
+        const fitted = fitCanvasLabel(ctx, text, labelMaxW - (showDot ? 12 : 0), prefer);
         ctx.font = fitted.font;
         ctx.textAlign = "right";
         const tw = ctx.measureText(fitted.text).width;
-        const boxW = tw + (showDot ? 18 : 10);
+        const boxW = tw + (showDot ? 20 : 12);
         const boxX = Math.max(laneRight + 2, w - labelPadR - boxW);
-        ctx.fillStyle = "rgba(6, 10, 16, 0.82)";
-        ctx.fillRect(boxX, y - 9, Math.min(boxW, gutter - 4), 16);
+        ctx.fillStyle = "rgba(4, 8, 14, 0.9)";
+        ctx.fillRect(boxX, y - 11, Math.min(boxW, gutter - 4), 20);
         if (showDot) {
           ctx.beginPath();
           ctx.fillStyle = fill;

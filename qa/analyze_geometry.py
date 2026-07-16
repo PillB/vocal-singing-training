@@ -269,6 +269,28 @@ def analyze_file(path: Path) -> dict:
                     }
                 )
 
+    # Low-vision: pitch highway canvas should be tall enough when visible
+    a11y = []
+    for el in items:
+        if el.get("sel") == "#pitch-canvas" and el.get("visible") and el.get("h", 0) > 0:
+            if el["h"] < 280:
+                a11y.append(
+                    {
+                        "sel": "#pitch-canvas",
+                        "msg": f"highway height {el['h']:.0f}px < 280px (low-vision target)",
+                        "box": [el["x"], el["y"], el["w"], el["h"]],
+                    }
+                )
+        if el.get("sel") == "#highway-stage" and el.get("visible") and el.get("h", 0) > 0:
+            if el["h"] < 360:
+                a11y.append(
+                    {
+                        "sel": "#highway-stage",
+                        "msg": f"stage height {el['h']:.0f}px < 360px",
+                        "box": [el["x"], el["y"], el["w"], el["h"]],
+                    }
+                )
+
     return {
         "label": data.get("label"),
         "viewport": [vw, vh],
@@ -276,9 +298,11 @@ def analyze_file(path: Path) -> dict:
         "overlaps": overlaps,
         "overflows": overflows,
         "fold_issues": fold_issues,
+        "a11y": a11y,
         "critical": len(overlaps)
         + len([o for o in overflows if "overflow" in o["msg"]])
-        + len(fold_issues),
+        + len(fold_issues)
+        + len(a11y),
     }
 
 
@@ -294,6 +318,7 @@ def main() -> int:
         "total_overlaps": 0,
         "total_overflows": 0,
         "total_fold_issues": 0,
+        "total_a11y": 0,
         "total_critical": 0,
     }
     for f in files:
@@ -302,6 +327,7 @@ def main() -> int:
         report["total_overlaps"] += len(r["overlaps"])
         report["total_overflows"] += len(r["overflows"])
         report["total_fold_issues"] += len(r.get("fold_issues") or [])
+        report["total_a11y"] += len(r.get("a11y") or [])
         report["total_critical"] += r.get("critical") or 0
 
     out = GEO / "_analysis_report.json"
@@ -313,13 +339,14 @@ def main() -> int:
     print(f"Peer overlaps: {report['total_overlaps']}")
     print(f"Overlay overflows: {report['total_overflows']}")
     print(f"Fold (above-the-fold) issues: {report['total_fold_issues']}")
+    print(f"A11y highway height: {report['total_a11y']}")
     print(f"Critical total: {report['total_critical']}")
     bad = [
         p
         for p in report["pages"]
-        if p["overlaps"] or p["overflows"] or p.get("fold_issues")
+        if p["overlaps"] or p["overflows"] or p.get("fold_issues") or p.get("a11y")
     ]
-    for p in bad[:30]:
+    for p in bad[:40]:
         print(f"\n## {p['label']}")
         for o in p["overlaps"][:8]:
             print(f"  OVERLAP area={o['area']} {o['a']} ∩ {o['b']} z={o['z']}")
@@ -328,15 +355,18 @@ def main() -> int:
             print(f"  OVERFLOW {o['sel']}: {o['msg']}")
         for o in (p.get("fold_issues") or [])[:8]:
             print(f"  FOLD {o['sel']}: {o['msg']}")
+        for o in (p.get("a11y") or [])[:8]:
+            print(f"  A11Y {o['sel']}: {o['msg']}")
 
-    # Exit 1 if critical peer HUD overlaps or fold issues on exercise pages
+    # Exit 1 if critical peer HUD overlaps, fold issues, or short highway
     critical = 0
     for p in report["pages"]:
         for o in p["overlaps"]:
             if ".hud-" in o["a"] or ".hud-" in o["b"] or "practice" in o["a"] or "practice" in o["b"]:
                 critical += 1
         critical += len(p.get("fold_issues") or [])
-    print(f"\nCritical HUD/control overlaps + fold: {critical}")
+        critical += len(p.get("a11y") or [])
+    print(f"\nCritical HUD/control overlaps + fold + a11y: {critical}")
     print("Report:", out)
     return 1 if critical > 0 else 0
 

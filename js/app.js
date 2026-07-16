@@ -716,8 +716,111 @@
     setView("exercise");
     // Instant jump to top so game stage is the first viewport (no smooth lag)
     window.scrollTo(0, 0);
-    requestAnimationFrame(() => window.scrollTo(0, 0));
+    requestAnimationFrame(() => {
+      window.scrollTo(0, 0);
+      fitStageBelowContent();
+    });
+    // After layout paints: size cue strip + first-time UI tour for this layout family
+    setTimeout(() => {
+      fitStageBelowContent();
+      const profile = getProfile(ex);
+      if (window.VTTour?.maybeExerciseTour) VTTour.maybeExerciseTour(profile);
+    }, 80);
   }
+
+  function keysHaveProg(ex) {
+    try {
+      return progressionKeysFor(ex).length > 0;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Size .stage-below so mode cue / HUD / pitch-stats fit without internal Y-scroll.
+   * Measures rendered text + window width (wrap changes height).
+   */
+  function fitStageBelowContent() {
+    const below = document.querySelector(".stage-below");
+    if (!below || !document.body.classList.contains("view-exercise")) return;
+    const cue = $("#mode-cue");
+    const hud = $("#mode-hud");
+    const stats = $("#pitch-stats");
+    const hold = $("#hold-block");
+    const shell = $("#mode-shell");
+
+    // Clear previous locks so we can remeasure
+    [below, cue, hud, stats, shell].forEach((el) => {
+      if (!el) return;
+      el.style.maxHeight = "";
+      el.style.height = "";
+      el.style.minHeight = "";
+      el.style.overflow = "";
+    });
+
+    if (cue && !cue.hidden) {
+      cue.style.maxHeight = "none";
+      cue.style.overflow = "visible";
+      cue.style.whiteSpace = "normal";
+      cue.style.height = "auto";
+      // Force reflow then lock min-height to full wrapped text
+      void cue.offsetHeight;
+      const need = Math.ceil(cue.scrollHeight);
+      if (need > 0) cue.style.minHeight = `${need}px`;
+    }
+    if (hud && !hud.hidden) {
+      hud.style.maxHeight = "none";
+      hud.style.overflow = "visible";
+      hud.querySelectorAll(".mode-panel, .mode-big, .mode-meta").forEach((p) => {
+        p.style.maxHeight = "none";
+        p.style.overflow = "visible";
+      });
+      void hud.offsetHeight;
+      const needH = Math.ceil(hud.scrollHeight);
+      if (needH > 0) hud.style.minHeight = `${needH}px`;
+    }
+    if (stats && stats.childElementCount) {
+      stats.style.maxHeight = "none";
+      stats.style.overflow = "visible";
+      void stats.offsetHeight;
+      const needS = Math.ceil(stats.scrollHeight);
+      if (needS > 0) stats.style.minHeight = `${needS}px`;
+    }
+
+    // Sum visible children heights + vertical margins for container min-height
+    let total = 0;
+    [...below.children].forEach((ch) => {
+      if (ch.hidden) return;
+      const st = getComputedStyle(ch);
+      if (st.display === "none" || st.visibility === "hidden") return;
+      const r = ch.getBoundingClientRect();
+      if (r.height < 1) return;
+      const mt = parseFloat(st.marginTop) || 0;
+      const mb = parseFloat(st.marginBottom) || 0;
+      total += r.height + mt + mb;
+    });
+    // Small padding so last line isn't flush against next card
+    const pad = 12;
+    if (total > 0) {
+      below.style.minHeight = `${Math.ceil(total + pad)}px`;
+      below.classList.add("is-fitted");
+    } else {
+      below.style.minHeight = "";
+      below.classList.remove("is-fitted");
+    }
+  }
+
+  // Recalc when wrap width changes
+  let _fitBelowRaf = 0;
+  window.addEventListener(
+    "resize",
+    () => {
+      if (!document.body.classList.contains("view-exercise")) return;
+      cancelAnimationFrame(_fitBelowRaf);
+      _fitBelowRaf = requestAnimationFrame(() => fitStageBelowContent());
+    },
+    { passive: true }
+  );
 
   function openExercise(id, fromStructured) {
     // Switching away from current exercise with meaningful practice
@@ -895,7 +998,12 @@
         const bar = $("#hud-prog-bar");
         if (bar) bar.hidden = true;
       }
-      if (profile.autoArpeggio && $("#chk-arpeggio")) $("#chk-arpeggio").checked = true;
+      // Default play mode: 1-nota (easiest). Profile autoArpeggio can override.
+      if (profile.autoArpeggio) {
+        setPlayMode("arpeggio", { silent: true });
+      } else if (showPiano && (ex.audio.piano || ex.progressions || ex.songs || keysHaveProg(ex))) {
+        setPlayMode("oneNote", { silent: true });
+      }
       // Auto piano follows profile.autoPiano (explicit pedagogy), not merely "can make sound".
       // e.g. v12 melodic speech has piano available but Auto off — variety, not note drills.
       if ($("#chk-auto-piano")) {
@@ -903,6 +1011,7 @@
       }
       if ($("#chk-sustain")) $("#chk-sustain").checked = true; // sustain on by default
       syncSustainSecLabel();
+      syncPlayModeSelect();
     }
     if (pianoMini) pianoMini.style.display = showPiano || exerciseWantsSound(ex, profile) ? "" : "none";
     // Piano more button lives in BR HUD (no extra row = less scroll)
@@ -921,6 +1030,9 @@
       hint.hidden = true;
       hint.textContent = tt("practice.hint");
     }
+
+    // Fit cue / mode strip under highway to full text height (no inner scroll)
+    requestAnimationFrame(() => fitStageBelowContent());
 
     // Review workflow
     const reviewBlock = $("#review-block");
@@ -3229,6 +3341,8 @@
     getOctaveShift: () => state.octaveShift,
     applyOctaveShift,
     getRangeSnapshot: () => ensureRangeAdapter()?.getSnapshot?.() || null,
+    getProfile,
+    fitStageBelowContent,
     applyPianoOptionsHot,
     get _hotApplyPromise() {
       return state._hotApplyPromise;
@@ -3297,8 +3411,11 @@
     // Interactive intro tour (first visit or header Tour button)
     if (window.VTTour) {
       VTTour.bindReplayButton();
+      VTTour.bindUiHelpButton?.();
       VTTour.maybeAutoStart();
     }
+    // Ensure default 1-nota is reflected in select even before first exercise
+    setPlayMode("oneNote", { silent: true });
   }
 
   document.addEventListener("DOMContentLoaded", init);

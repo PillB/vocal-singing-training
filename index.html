@@ -97,7 +97,10 @@
             <h2 id="ex-title">Ejercicio</h2>
             <p class="sub" id="structured-progress" hidden></p>
           </div>
-          <button type="button" class="btn btn-ghost btn-sm btn-back-compact" id="btn-back-home" data-i18n="ex.back">← Atrás</button>
+          <div class="ex-header-actions">
+            <button type="button" class="btn btn-ghost btn-sm btn-ui-help" id="btn-ui-help" data-i18n="uiTour.help" title="Cómo usar esta pantalla">?</button>
+            <button type="button" class="btn btn-ghost btn-sm btn-back-compact" id="btn-back-home" data-i18n="ex.back">← Atrás</button>
+          </div>
         </div>
 
         <!-- GAME STAGE: sticky highway + corner HUDs (minimal scroll) -->
@@ -119,9 +122,9 @@
                 <label class="hud-prog-field" for="sel-play-mode">
                   <span class="hud-prog-k" data-i18n="piano.playMode">Modo</span>
                   <select id="sel-play-mode" class="select-inline hud-prog-select" aria-label="Modo de piano">
-                    <option value="chords" data-i18n="piano.modeChords">Acordes</option>
+                    <option value="oneNote" data-i18n="piano.modeOneNote" selected>1 nota</option>
                     <option value="arpeggio" data-i18n="piano.modeArpeggio">Arpegio</option>
-                    <option value="oneNote" data-i18n="piano.modeOneNote">1 nota</option>
+                    <option value="chords" data-i18n="piano.modeChords">Acordes</option>
                   </select>
                 </label>
               </div>
@@ -176,7 +179,7 @@
                   </label>
                 </div>
                 <label class="muted piano-opt" title="One note at a time / 1 nota a la vez">
-                  <input type="checkbox" id="chk-one-note" />
+                  <input type="checkbox" id="chk-one-note" checked />
                   <span data-i18n="piano.oneNote">1 nota</span>
                 </label>
                 <label class="muted piano-opt piano-opt-arp" title="Arpeggio / Arpegio">

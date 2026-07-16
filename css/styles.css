@@ -1136,6 +1136,13 @@ button:focus-visible,
   padding: 0;
   min-height: 0;
 }
+.exercise-header-compact .ex-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
 .exercise-header-compact .ex-title-row {
   display: flex;
   flex-wrap: nowrap;
@@ -1951,15 +1958,37 @@ html[lang^="es"] .hud-cents-only .hud-combo strong::before {
 }
 
 .stage-below {
-  margin-top: 0.25rem;
+  margin-top: 0.35rem;
   min-width: 0;
+  /* Grow with cue / mode / stats — never force an inner scrollbar by default */
+  overflow: visible;
+  box-sizing: border-box;
+  padding: 0.1rem 0 0.25rem;
 }
 /* Hide empty secondary chrome so no phantom scroll height */
 .stage-below:empty,
 .stage-below:not(:has(:not([hidden]):not(:empty))) {
   margin: 0;
   min-height: 0;
+  padding: 0;
   display: none;
+}
+
+.ex-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex: 0 0 auto;
+}
+.btn-ui-help {
+  min-width: 2rem;
+  min-height: 2rem;
+  padding: 0.2rem 0.45rem;
+  font-weight: 800;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(40, 70, 110, 0.35);
+  color: #b8d8ff;
 }
 .metrics-card-collapsible {
   margin-top: 0.35rem;
@@ -2064,17 +2093,40 @@ body.view-exercise .metrics-card-collapsible.collapsed .metrics-sub-compact {
   font-size: 1.05rem;
 }
 
+/* Below-highway cue: full text, wrap, no Y-clip (was max-height:2.2em + scroll) */
 .mode-cue {
-  font-size: 0.78rem;
-  margin: 0.15rem 0;
-  max-height: 2.2em;
-  overflow: hidden;
+  font-size: 0.86rem;
+  margin: 0.25rem 0 0.35rem;
+  max-height: none !important;
+  height: auto !important;
+  overflow: visible !important;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.4;
   color: var(--text-muted);
 }
-/* Pitch modes: keep secondary mode strip short so user rarely scrolls past stage */
+.mode-shell {
+  overflow: visible;
+  max-height: none;
+}
+/* Pitch modes: show full mode panel + cue without internal scrollbars */
 body.view-exercise .mode-hud-compact {
-  max-height: 7.5rem;
-  overflow: auto;
+  max-height: none !important;
+  overflow: visible !important;
+}
+body.view-exercise .mode-hud-compact .mode-panel {
+  max-height: none;
+  overflow: visible;
+}
+body.view-exercise #pitch-stats {
+  max-height: none;
+  overflow: visible;
+  line-height: 1.35;
+}
+body.view-exercise .stage-below.is-fitted {
+  /* min-height set in JS from measured content */
+  overflow: visible;
 }
 
 @media (max-width: 640px) {

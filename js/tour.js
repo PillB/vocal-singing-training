@@ -1,11 +1,17 @@
 /**
- * Interactive intro tour — spotlight steps with bilingual copy.
- * First visit auto-starts; replay from header "Tour" button.
+ * Interactive tours — home product tour + per-UI-type exercise coach-marks.
+ *
+ * UX (NN/g + product-tour patterns):
+ *  - Spotlight + short steps (≤7) only on visible UI
+ *  - First-time per layout family; always Skip; Esc / arrows
+ *  - Replay via header Tour (home) or exercise "?" button
+ *  - Never trap e2e (Headless / vt_e2e / ?e2e)
  */
 (function (global) {
   "use strict";
 
   const STORAGE_KEY = "vt_tour_v1";
+  const UI_SEEN_KEY = "vt_ui_tour_seen_v1";
 
   function t(key, vars) {
     if (typeof global.t === "function") return global.t(key, vars);
@@ -42,8 +48,45 @@
     }
   }
 
-  /** Step definitions: selectors + optional navigation */
-  function steps() {
+  function readUiSeen() {
+    try {
+      return JSON.parse(localStorage.getItem(UI_SEEN_KEY) || "{}") || {};
+    } catch {
+      return {};
+    }
+  }
+
+  function markUiSeen(family) {
+    if (!family) return;
+    try {
+      const o = readUiSeen();
+      o[family] = 1;
+      localStorage.setItem(UI_SEEN_KEY, JSON.stringify(o));
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function clearUiSeen(family) {
+    try {
+      if (!family) {
+        localStorage.removeItem(UI_SEEN_KEY);
+        return;
+      }
+      const o = readUiSeen();
+      delete o[family];
+      localStorage.setItem(UI_SEEN_KEY, JSON.stringify(o));
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function isUiSeen(family) {
+    return !!readUiSeen()[family];
+  }
+
+  /** Home / product tour steps */
+  function homeSteps() {
     return [
       {
         id: "welcome",
@@ -145,10 +188,215 @@
     ];
   }
 
+  /**
+   * Exercise UI packs — only steps whose targets are visible are shown.
+   * Families: highway | speech | hold
+   */
+  function packSteps(family) {
+    const common = [
+      {
+        id: "ex-start",
+        titleKey: "uiTour.start.title",
+        bodyKey: "uiTour.start.body",
+        target: "#btn-practice-start",
+        place: "top"
+      },
+      {
+        id: "ex-mic",
+        titleKey: "uiTour.mic.title",
+        bodyKey: "uiTour.mic.body",
+        target: "#mic-sens-hud",
+        place: "top"
+      },
+      {
+        id: "ex-guide",
+        titleKey: "uiTour.guide.title",
+        bodyKey: "uiTour.guide.body",
+        target: ".guide-card",
+        place: "top",
+        scrollTarget: true
+      }
+    ];
+
+    if (family === "highway") {
+      return [
+        {
+          id: "hw-intro",
+          titleKey: "uiTour.hw.intro.title",
+          bodyKey: "uiTour.hw.intro.body",
+          target: "#practice-cockpit",
+          place: "bottom"
+        },
+        {
+          id: "hw-canvas",
+          titleKey: "uiTour.hw.canvas.title",
+          bodyKey: "uiTour.hw.canvas.body",
+          target: "#pitch-canvas",
+          place: "bottom"
+        },
+        {
+          id: "hw-top",
+          titleKey: "uiTour.hw.top.title",
+          bodyKey: "uiTour.hw.top.body",
+          target: "#hud-top-rail",
+          place: "bottom"
+        },
+        {
+          id: "hw-prog",
+          titleKey: "uiTour.hw.prog.title",
+          bodyKey: "uiTour.hw.prog.body",
+          target: "#hud-prog-bar",
+          place: "bottom",
+          requireVisible: true
+        },
+        {
+          id: "hw-score",
+          titleKey: "uiTour.hw.score.title",
+          bodyKey: "uiTour.hw.score.body",
+          target: "#pitch-game-hud",
+          place: "bottom"
+        },
+        {
+          id: "hw-start",
+          titleKey: "uiTour.start.title",
+          bodyKey: "uiTour.start.body",
+          target: "#btn-practice-start",
+          place: "top"
+        },
+        {
+          id: "hw-oct",
+          titleKey: "uiTour.hw.oct.title",
+          bodyKey: "uiTour.hw.oct.body",
+          target: "#oct-controls",
+          place: "top",
+          requireVisible: true
+        },
+        {
+          id: "hw-mode",
+          titleKey: "uiTour.hw.mode.title",
+          bodyKey: "uiTour.hw.mode.body",
+          target: "#sel-play-mode",
+          place: "top",
+          requireVisible: true
+        },
+        {
+          id: "hw-cue",
+          titleKey: "uiTour.hw.cue.title",
+          bodyKey: "uiTour.hw.cue.body",
+          target: "#mode-cue",
+          place: "top",
+          requireVisible: true
+        },
+        {
+          id: "hw-done",
+          titleKey: "uiTour.done.title",
+          bodyKey: "uiTour.done.body",
+          target: null,
+          place: "center"
+        }
+      ];
+    }
+
+    if (family === "hold") {
+      return [
+        {
+          id: "hold-intro",
+          titleKey: "uiTour.hold.intro.title",
+          bodyKey: "uiTour.hold.intro.body",
+          target: "#practice-cockpit",
+          place: "bottom"
+        },
+        {
+          id: "hold-live",
+          titleKey: "uiTour.hold.live.title",
+          bodyKey: "uiTour.hold.live.body",
+          target: "#hold-display",
+          place: "bottom",
+          requireVisible: true
+        },
+        ...common,
+        {
+          id: "hold-block",
+          titleKey: "uiTour.hold.block.title",
+          bodyKey: "uiTour.hold.block.body",
+          target: "#hold-block",
+          place: "top",
+          requireVisible: true
+        },
+        {
+          id: "hold-done",
+          titleKey: "uiTour.done.title",
+          bodyKey: "uiTour.done.body",
+          target: null,
+          place: "center"
+        }
+      ];
+    }
+
+    // speech / generic non-pitch
+    return [
+      {
+        id: "sp-intro",
+        titleKey: "uiTour.sp.intro.title",
+        bodyKey: "uiTour.sp.intro.body",
+        target: "#practice-cockpit",
+        place: "bottom"
+      },
+      {
+        id: "sp-focus",
+        titleKey: "uiTour.sp.focus.title",
+        bodyKey: "uiTour.sp.focus.body",
+        target: "#mode-focus",
+        place: "bottom",
+        requireVisible: true
+      },
+      ...common,
+      {
+        id: "sp-done",
+        titleKey: "uiTour.done.title",
+        bodyKey: "uiTour.done.body",
+        target: null,
+        place: "center"
+      }
+    ];
+  }
+
+  /** Infer UI family from live exercise profile + DOM */
+  function detectUiFamily(profile) {
+    if (profile?.showPitch) return "highway";
+    if (profile?.showHold) return "hold";
+    return "speech";
+  }
+
+  function isVisible(el) {
+    if (!el) return false;
+    if (el.hidden) return false;
+    const st = getComputedStyle(el);
+    if (st.display === "none" || st.visibility === "hidden" || Number(st.opacity) === 0) {
+      return false;
+    }
+    const r = el.getBoundingClientRect();
+    return r.width > 2 && r.height > 2;
+  }
+
+  function filterSteps(list) {
+    return (list || []).filter((step) => {
+      if (!step.target) return true;
+      const el = document.querySelector(step.target);
+      if (step.requireVisible) return isVisible(el);
+      // Soft: skip if totally missing
+      if (!el) return false;
+      if (el.hidden) return false;
+      return true;
+    });
+  }
+
   let ui = null;
   let index = 0;
   let active = false;
-  let resizeObs = null;
+  let currentPack = null; // null = home tour
+  let stayOnEnd = false;
+  let stepList = [];
 
   function ensureUI() {
     if (ui) return ui;
@@ -187,11 +435,11 @@
     ui.skip.addEventListener("click", () => end(true));
     ui.prev.addEventListener("click", () => go(index - 1));
     ui.next.addEventListener("click", () => {
-      if (index >= steps().length - 1) end(true);
+      if (index >= stepList.length - 1) end(true);
       else go(index + 1);
     });
     root.querySelector("[data-tour-backdrop]")?.addEventListener("click", () => {
-      /* don't dismiss on backdrop — force intentional skip */
+      /* intentional skip only */
     });
     document.addEventListener("keydown", onKey);
     window.addEventListener("resize", onResize);
@@ -214,7 +462,7 @@
   }
 
   function onResize() {
-    if (active) positionStep(steps()[index]);
+    if (active && stepList[index]) positionStep(stepList[index]);
   }
 
   function goHome() {
@@ -222,10 +470,8 @@
     const ex = document.getElementById("view-exercise");
     if (home && !home.classList.contains("active")) {
       document.getElementById("btn-back-home")?.click();
-      // if leave modal appears, cancel stay
       const leave = document.getElementById("leave-cancel");
       if (leave && !document.getElementById("leave-modal")?.hidden) leave.click();
-      // force home if still stuck
       home.classList.add("active");
       ex?.classList.remove("active");
       document.body.classList.remove("view-exercise");
@@ -233,7 +479,6 @@
   }
 
   function openSample(preferSinging) {
-    // Prefer first singing exercise with pitch if preferSinging, else first vocal basic card
     if (preferSinging) {
       const singingTab = document.querySelector('.tab[data-tab="singing"]');
       if (singingTab && !singingTab.classList.contains("active")) singingTab.click();
@@ -252,7 +497,6 @@
   function prepare(step) {
     if (step.ensureHome) {
       goHome();
-      // ensure vocal tab visible for early steps
       if (step.id === "tabs" || step.id === "tiers" || step.id === "cards") {
         const vocal = document.querySelector('.tab[data-tab="vocal"]');
         if (vocal && !vocal.classList.contains("active")) vocal.click();
@@ -288,13 +532,13 @@
       u.card.style.top = "50%";
       u.card.style.left = "50%";
       u.card.style.transform = "translate(-50%, -50%)";
+      u.card.style.width = `${Math.min(400, window.innerWidth - 24)}px`;
       return;
     }
 
     u.card.classList.remove("tour-card-center");
     const el = document.querySelector(step.target);
-    if (!el || el.offsetParent === null && getComputedStyle(el).display === "none") {
-      // fallback center
+    if (!el || !isVisible(el)) {
       u.card.classList.add("tour-card-center");
       u.card.style.top = "50%";
       u.card.style.left = "50%";
@@ -313,9 +557,9 @@
     u.spot.style.width = `${Math.min(window.innerWidth - 8, r.width + pad * 2)}px`;
     u.spot.style.height = `${Math.min(window.innerHeight - 8, r.height + pad * 2)}px`;
 
-    // Place card near target without going off-screen
     const cardW = Math.min(400, window.innerWidth - 24);
-    const cardH = 220;
+    // Measure actual card after content set — use generous estimate then clamp
+    const cardH = Math.min(280, Math.max(160, u.card.offsetHeight || 220));
     let top = r.bottom + 12;
     let left = Math.min(Math.max(12, r.left), window.innerWidth - cardW - 12);
     if (step.place === "top" || top + cardH > window.innerHeight - 12) {
@@ -331,81 +575,162 @@
   }
 
   function render() {
-    const list = steps();
-    const step = list[index];
+    const step = stepList[index];
     if (!step) return end(true);
     const u = ensureUI();
     prepare(step);
-    // allow layout to settle after navigation
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         u.title.textContent = t(step.titleKey);
         u.body.textContent = t(step.bodyKey);
         u.progress.textContent = t("tour.progress", {
           n: String(index + 1),
-          total: String(list.length)
+          total: String(stepList.length)
         });
         u.skip.textContent = t("tour.skip");
         u.prev.textContent = t("tour.prev");
         u.next.textContent =
-          index >= list.length - 1 ? t("tour.finish") : t("tour.next");
+          index >= stepList.length - 1 ? t("tour.finish") : t("tour.next");
         u.prev.disabled = index === 0;
         u.prev.setAttribute("aria-disabled", String(index === 0));
         positionStep(step);
-        u.next.focus();
+        try {
+          u.next.focus({ preventScroll: true });
+        } catch {
+          u.next.focus();
+        }
       });
     });
   }
 
   function go(i) {
-    const list = steps();
-    index = Math.max(0, Math.min(list.length - 1, i));
+    index = Math.max(0, Math.min(stepList.length - 1, i));
+    render();
+  }
+
+  function beginTour(steps, { fromButton, pack, stay } = {}) {
+    ensureUI();
+    stepList = filterSteps(steps);
+    if (!stepList.length) {
+      stepList = steps.filter((s) => !s.target);
+    }
+    if (!stepList.length) return;
+    active = true;
+    index = 0;
+    currentPack = pack || null;
+    stayOnEnd = !!stay;
+    ui.root.hidden = false;
+    document.body.classList.add("tour-active");
+    if (fromButton && !pack) goHome();
     render();
   }
 
   function start(fromButton) {
-    ensureUI();
-    active = true;
-    index = 0;
-    ui.root.hidden = false;
-    document.body.classList.add("tour-active");
-    if (fromButton) {
-      // replay: start from home welcome
-      goHome();
+    beginTour(homeSteps(), { fromButton: !!fromButton, pack: null, stay: false });
+  }
+
+  /**
+   * Start exercise UI pack for a layout family.
+   * @param {string} family highway|speech|hold
+   * @param {{ force?: boolean }} opts
+   */
+  function startUiPack(family, opts = {}) {
+    const fam = family || "speech";
+    if (!opts.force && isUiSeen(fam)) return false;
+    if (active) return false;
+    // Auto-start respects e2e/headless block; forced replay ("?") always runs
+    if (!opts.force && shouldBlockAuto()) return false;
+    beginTour(packSteps(fam), { pack: fam, stay: true, fromButton: false });
+    return true;
+  }
+
+  function shouldBlockAuto() {
+    try {
+      if (global.navigator && /Headless|Playwright|Puppeteer/i.test(navigator.userAgent)) {
+        return true;
+      }
+      if (sessionStorage.getItem("vt_e2e") === "1") return true;
+      if (new URLSearchParams(location.search).has("e2e")) return true;
+    } catch {
+      /* ignore */
     }
-    render();
+    return false;
+  }
+
+  /**
+   * After opening an exercise — auto-run pack for first-time UI family.
+   * Debounced so layout (pitch canvas, mode mount) is ready.
+   */
+  function maybeExerciseTour(profile) {
+    if (shouldBlockAuto()) return;
+    if (active) return;
+    // Don't stack on first-visit home tour
+    if (!done()) return;
+    const family = detectUiFamily(profile);
+    if (isUiSeen(family)) return;
+    setTimeout(() => {
+      if (active) return;
+      if (!document.body.classList.contains("view-exercise")) return;
+      startUiPack(family, { force: false });
+    }, 700);
   }
 
   function end(mark) {
+    const pack = currentPack;
+    const stay = stayOnEnd;
     active = false;
     clearHighlight();
     if (ui) ui.root.hidden = true;
     document.body.classList.remove("tour-active");
-    if (mark) markDone();
-    // Return home after tour so user can pick an exercise
-    goHome();
+    if (mark) {
+      if (pack) markUiSeen(pack);
+      else markDone();
+    }
+    currentPack = null;
+    stayOnEnd = false;
+    stepList = [];
+    if (!stay) goHome();
   }
 
   function maybeAutoStart() {
     if (done()) return;
-    // Never interrupt automated e2e / CI
-    try {
-      if (global.navigator && /Headless|Playwright|Puppeteer/i.test(navigator.userAgent)) return;
-      if (sessionStorage.getItem("vt_e2e") === "1") return;
-      if (new URLSearchParams(location.search).has("e2e")) return;
-    } catch {
-      /* ignore */
-    }
-    // slight delay so home list is painted
+    if (shouldBlockAuto()) return;
     setTimeout(() => start(false), 600);
   }
 
   function bindReplayButton() {
     const btn = document.getElementById("btn-tour");
-    if (!btn) return;
+    if (!btn || btn.dataset.tourBound) return;
+    btn.dataset.tourBound = "1";
     btn.addEventListener("click", () => {
       clearDone();
       start(true);
+    });
+  }
+
+  function bindUiHelpButton() {
+    const btn = document.getElementById("btn-ui-help");
+    if (!btn || btn.dataset.tourBound) return;
+    btn.dataset.tourBound = "1";
+    btn.addEventListener("click", () => {
+      // Force replay current exercise family
+      let family = "speech";
+      try {
+        const ex = global.VTApp?.getState?.()?.exercise;
+        const profile =
+          ex && global.VTApp?.getProfile
+            ? global.VTApp.getProfile(ex)
+            : ex?.practice || null;
+        // Fallback: DOM sniff
+        if (profile) family = detectUiFamily(profile);
+        else if (!document.getElementById("pitch-block")?.hidden) family = "highway";
+        else if (!document.getElementById("hold-block")?.hidden) family = "hold";
+      } catch {
+        /* ignore */
+      }
+      if (active) end(false);
+      clearUiSeen(family);
+      startUiPack(family, { force: true });
     });
   }
 
@@ -414,12 +739,19 @@
     end,
     maybeAutoStart,
     bindReplayButton,
+    bindUiHelpButton,
     isDone: done,
-    reset: clearDone
+    reset: clearDone,
+    startUiPack,
+    maybeExerciseTour,
+    detectUiFamily,
+    isUiSeen,
+    clearUiSeen,
+    markUiSeen
   };
 
   document.addEventListener("DOMContentLoaded", () => {
     bindReplayButton();
-    // App init also calls maybeAutoStart after list render
+    bindUiHelpButton();
   });
 })(window);

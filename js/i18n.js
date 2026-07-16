@@ -112,6 +112,58 @@
       "tour.s12.title": "Listo: a practicar",
       "tour.s12.body":
         "Elige un ejercicio básico de vocal o de canto y pulsa Empezar. Permite el micrófono cuando el navegador lo pida. ¡Consistencia gana a intensidad!",
+      "uiTour.help": "?",
+      "uiTour.start.title": "Empezar / Detener",
+      "uiTour.start.body":
+        "Un solo botón enciende el micrófono, el medidor y (si aplica) el piano. Detener apaga todo. Puedes cambiar opciones en vivo.",
+      "uiTour.mic.title": "Micrófono y nivel",
+      "uiTour.mic.body":
+        "La barra muestra tu energía. Sube o baja la sensibilidad si el mic te corta o capta ruido de fondo.",
+      "uiTour.guide.title": "Pasos y consejos",
+      "uiTour.guide.body":
+        "Abre «Cómo practicar» para la guía del ejercicio, pasos, tips y qué evitar. Las métricas se guardan al final.",
+      "uiTour.done.title": "Listo en esta pantalla",
+      "uiTour.done.body":
+        "Pulsa Empezar cuando quieras. El botón «?» arriba repite este mini-tour si lo necesitas.",
+      "uiTour.hw.intro.title": "Escenario de afinación",
+      "uiTour.hw.intro.body":
+        "Esta pantalla es como un juego: la autopista de notas en el centro y controles en las esquinas. Menos scroll, más práctica.",
+      "uiTour.hw.canvas.title": "Autopista de notas",
+      "uiTour.hw.canvas.body":
+        "Carriles grises = mapa de la progresión; ámbar = acorde activo; verde = nota a cantar. Tu voz es el punto que deja rastro — apunta al carril correcto.",
+      "uiTour.hw.top.title": "Barra superior",
+      "uiTour.hw.top.body":
+        "Estado, tiempo y acorde actual a la izquierda. En el centro: progresión y modo (1 nota / arpegio / acordes). A la derecha: puntuación o cents.",
+      "uiTour.hw.prog.title": "Acordes y modo",
+      "uiTour.hw.prog.body":
+        "Elige la progresión y el modo. Por defecto es «1 nota» (más fácil): oyes y apuntas a una nota a la vez. Luego prueba arpegio o acordes.",
+      "uiTour.hw.score.title": "Tu afinación en vivo",
+      "uiTour.hw.score.body":
+        "Ves si estás en el tono (PERFECTO / BIEN / CERCA) o cuántos cents te faltan. En modo reto también hay puntos y combo.",
+      "uiTour.hw.oct.title": "Registro (octava)",
+      "uiTour.hw.oct.body":
+        "Si las notas quedan muy graves o agudas para tu voz, usa − / + o deja «Rango» auto: si intentas y no alcanzas, mueve una octava.",
+      "uiTour.hw.mode.title": "1 nota por defecto",
+      "uiTour.hw.mode.body":
+        "«1 nota» suena una nota y te da un objetivo claro. «Arpegio» desglosa el acorde. «Acordes» apila todas las voces — más avanzado.",
+      "uiTour.hw.cue.title": "Pista del ejercicio",
+      "uiTour.hw.cue.body":
+        "Justo bajo la autopista ves la consigna corta del modo (qué hacer ahora). El texto se muestra completo, sin recortes.",
+      "uiTour.sp.intro.title": "Escenario de voz hablada",
+      "uiTour.sp.intro.body":
+        "Aquí no hay autopista de notas: el panel central guía el ejercicio (pausas, volumen, dicción…). Los controles siguen en las esquinas.",
+      "uiTour.sp.focus.title": "Panel del ejercicio",
+      "uiTour.sp.focus.body":
+        "Lee la consigna grande y reacciona en voz alta. El medidor de nivel confirma que el mic te oye.",
+      "uiTour.hold.intro.title": "Sostenidos de voz",
+      "uiTour.hold.intro.body":
+        "Este ejercicio mide cuánto mantienes la voz con energía. Empieza, canta o habla sostenido, y suelta al terminar.",
+      "uiTour.hold.live.title": "Contador en vivo",
+      "uiTour.hold.live.body":
+        "El reloj de sostenido sube mientras hay voz. Hay un pequeño margen si el mic parpadea — no te cortes al primer silencio breve.",
+      "uiTour.hold.block.title": "Historial de holds",
+      "uiTour.hold.block.body":
+        "Los sostenidos ≥2s se registran solos. Revisa la racha y apunta a mejorar tu máximo con calma.",
       "session.banner": "Sesión guiada",
       "session.pause": "Pausar",
       "session.resume": "Reanudar",
@@ -404,6 +456,58 @@
       "tour.s12.title": "You’re ready",
       "tour.s12.body":
         "Pick a basic vocal or singing exercise and press Start. Allow the microphone when the browser asks. Consistency beats intensity!",
+      "uiTour.help": "?",
+      "uiTour.start.title": "Start / Stop",
+      "uiTour.start.body":
+        "One button turns on the mic, level meter, and piano when needed. Stop shuts everything down. You can change options live.",
+      "uiTour.mic.title": "Mic and level",
+      "uiTour.mic.body":
+        "The bar shows your energy. Raise or lower sensitivity if the mic cuts out or picks up room noise.",
+      "uiTour.guide.title": "Steps and tips",
+      "uiTour.guide.body":
+        "Open “How to practice” for steps, tips, and what to avoid. Save metrics when you’re done.",
+      "uiTour.done.title": "You’re set on this screen",
+      "uiTour.done.body":
+        "Hit Start when ready. The “?” button above replays this mini-tour anytime.",
+      "uiTour.hw.intro.title": "Pitch stage",
+      "uiTour.hw.intro.body":
+        "This layout is game-like: pitch highway in the center, controls in the corners. Less scrolling, more singing.",
+      "uiTour.hw.canvas.title": "Note highway",
+      "uiTour.hw.canvas.body":
+        "Grey lanes = progression map; amber = active chord; green = target note. Your voice is the glowing trail — aim for the right lane.",
+      "uiTour.hw.top.title": "Top rail",
+      "uiTour.hw.top.body":
+        "Status, timer, and current chord on the left. Center: progression + mode (1 note / arpeggio / chords). Right: score or cents.",
+      "uiTour.hw.prog.title": "Chords and mode",
+      "uiTour.hw.prog.body":
+        "Pick a progression and play mode. Default is “1 note” (easiest): one target at a time. Later try arpeggio or full chords.",
+      "uiTour.hw.score.title": "Live pitch feedback",
+      "uiTour.hw.score.body":
+        "See if you’re on pitch (PERFECT / GOOD / CLOSE) or how many cents off. Challenge mode adds points and combo.",
+      "uiTour.hw.oct.title": "Range (octave)",
+      "uiTour.hw.oct.body":
+        "If notes sit too low or high for your voice, use − / + or leave Range auto on: when you try and plateau short, it shifts an octave.",
+      "uiTour.hw.mode.title": "1 note by default",
+      "uiTour.hw.mode.body":
+        "“1 note” plays and targets a single pitch — clearest for learning. Arpeggio breaks the chord; Chords stack voices — more advanced.",
+      "uiTour.hw.cue.title": "Exercise cue",
+      "uiTour.hw.cue.body":
+        "Just under the highway is the short mode prompt (what to do now). The text shows in full — no clipping.",
+      "uiTour.sp.intro.title": "Speech stage",
+      "uiTour.sp.intro.body":
+        "No pitch highway here: the center panel guides the drill (pauses, volume, diction…). Corner controls still run the session.",
+      "uiTour.sp.focus.title": "Exercise panel",
+      "uiTour.sp.focus.body":
+        "Read the big prompt and respond out loud. The level meter confirms the mic hears you.",
+      "uiTour.hold.intro.title": "Voice holds",
+      "uiTour.hold.intro.body":
+        "This exercise times how long you keep voiced energy. Start, sustain, then release when done.",
+      "uiTour.hold.live.title": "Live hold timer",
+      "uiTour.hold.live.body":
+        "The hold clock rises while you have voice. Brief mic dropouts get a little grace — don’t cut off at the first flicker.",
+      "uiTour.hold.block.title": "Hold history",
+      "uiTour.hold.block.body":
+        "Holds ≥2s log automatically. Check your streak and gently push your max.",
       "session.banner": "Structured session",
       "session.pause": "Pause",
       "session.resume": "Resume",

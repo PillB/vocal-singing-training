@@ -388,6 +388,14 @@
 
   function maybeAutoStart() {
     if (done()) return;
+    // Never interrupt automated e2e / CI
+    try {
+      if (global.navigator && /Headless|Playwright|Puppeteer/i.test(navigator.userAgent)) return;
+      if (sessionStorage.getItem("vt_e2e") === "1") return;
+      if (new URLSearchParams(location.search).has("e2e")) return;
+    } catch {
+      /* ignore */
+    }
     // slight delay so home list is painted
     setTimeout(() => start(false), 600);
   }

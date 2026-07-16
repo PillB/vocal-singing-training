@@ -2,8 +2,20 @@ const { test, expect } = require("@playwright/test");
 
 const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";
 
+async function dismissTour(page) {
+  await page.addInitScript(() => {
+    try {
+      localStorage.setItem("vt_tour_v1", "1");
+      sessionStorage.setItem("vt_e2e", "1");
+    } catch {
+      /* ignore */
+    }
+  });
+}
+
 /** Ensure English for tests that assert English mode copy; default app is Spanish */
 async function forceEn(page) {
+  await dismissTour(page);
   await page.goto(BASE);
   const lang = await page.locator("html").getAttribute("lang");
   if (lang === "es") await page.click("#btn-lang");
@@ -11,6 +23,7 @@ async function forceEn(page) {
 }
 
 async function forceEs(page) {
+  await dismissTour(page);
   await page.goto(BASE);
   const lang = await page.locator("html").getAttribute("lang");
   if (lang === "en") await page.click("#btn-lang");
@@ -18,6 +31,10 @@ async function forceEs(page) {
 }
 
 test.describe("Exercise-specific practice modes", () => {
+  test.beforeEach(async ({ page }) => {
+    await dismissTour(page);
+  });
+
   test("profiles and modes load for all exercises", async ({ page }) => {
     await page.goto(BASE);
     const report = await page.evaluate(() => {

@@ -520,6 +520,9 @@
       multi_profile: false,
       pro_insights: false,
       coach_pack: false,
+      studio_goals: false,
+      pro_progressions: false,
+      achievements_export: false,
       priority_progressions: false,
       no_limits: false,
       lesson_anchor: false,
@@ -533,6 +536,9 @@
       multi_profile: pro,
       pro_insights: pro,
       coach_pack: pro,
+      studio_goals: pro,
+      pro_progressions: pro,
+      achievements_export: pro,
       priority_progressions: pro,
       no_limits: pro,
       lesson_anchor: pro,
@@ -552,12 +558,31 @@
       typeof global.VTValuePulse?.narrative === "function"
         ? global.VTValuePulse.narrative(pulse, isEs)
         : null;
+    try {
+      const flags = global.VTStorage?.getAchievementFlags?.() || {};
+      flags.exported = true;
+      global.VTStorage?.setAchievementFlags?.(flags);
+    } catch {
+      /* ignore */
+    }
+    const achievements =
+      typeof global.VTValuePulse?.achievements === "function"
+        ? global.VTValuePulse.achievements(pulse)
+        : [];
+    const coachFocus =
+      typeof global.VTValuePulse?.coachFocus === "function"
+        ? global.VTValuePulse.coachFocus(pulse, isEs)
+        : null;
     const payload = {
       exportedAt: new Date().toISOString(),
       product: "Vocal Studio Pro",
+      profile: global.VTStorage?.getActiveProfile?.() || null,
       entitlement: getEntitlement(),
       valuePulse: pulse,
       coachSummary: narrative,
+      coachFocus,
+      achievements,
+      goals: global.VTStorage?.getGoals?.() || null,
       progress: global.VTStorage?.getProgress?.() || {},
       holdLogs: global.VTStorage?.getHoldLogs?.() || [],
       weekPlan: global.VTStorage?.getWeekPlan?.() || null,

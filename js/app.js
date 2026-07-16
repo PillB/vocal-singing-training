@@ -1130,11 +1130,18 @@
     else if (ex.audio?.refPitch) keys = [];
     else keys = ["prog1", "prog2", "prog3", "prog4", "prog5", "progJump1", "progJump2", "progJump3"];
     if (ex.audio?.progressions || ex.practice?.mode === "pitchChord" || ex.practice?.mode === "pitchSong") {
-      ["progJump1", "progJump2", "progJump3", "progJump4"].forEach((k) => {
+      ["progJump1", "progJump2", "progJump3", "progJump4", "progPro1", "progPro2"].forEach((k) => {
         if (!keys.includes(k)) keys.push(k);
       });
     }
-    return keys.filter((id) => !!(VTPiano?.getProgressions?.() || {})[id] || !!VT_PROGRESSIONS?.[id]);
+    const progs = VTPiano?.getProgressions?.() || VT_PROGRESSIONS || {};
+    const canProProg = window.VTBilling?.can?.("pro_progressions");
+    return keys.filter((id) => {
+      const p = progs[id];
+      if (!p) return false;
+      if (p.proOnly && !canProProg) return false;
+      return true;
+    });
   }
 
   function currentPlayMode() {
@@ -3052,7 +3059,10 @@
       minutes: 0,
       streak: 0,
       bestHoldSec: 0,
-      exercisesTouched: 0
+      exercisesTouched: 0,
+      sessionsThisWeek: 0,
+      weeklyTarget: 3,
+      spark: []
     };
     const set = (id, v) => {
       const el = $(id);
@@ -3069,6 +3079,7 @@
 
     const B = window.VTBilling;
     const ent = B?.getEntitlement?.() || { pro: false, status: "free" };
+    const isProUser = !!(ent.pro || ent.status === "trial");
     const tag = $("#value-pulse-tag");
     if (tag) {
       tag.hidden = false;
@@ -3087,7 +3098,7 @@
 
     const insights = $("#value-insights");
     if (insights && window.VTValuePulse?.narrative) {
-      if (ent.pro || ent.status === "trial") {
+      if (isProUser) {
         insights.hidden = false;
         insights.textContent =
           tt("value.insightsPro") + " · " + VTValuePulse.narrative(pulse, isEsLang());
@@ -3099,6 +3110,142 @@
         insights.textContent = "";
       }
     }
+
+    renderProStudio(pulse, isProUser);
+  }
+
+  function renderProStudio(pulse, isProUser) {
+    const es = isEsLang();
+    // Profiles
+    const sel = $("#sel-profile");
+    if (sel && window.VTStorage?.getProfiles) {
+      const { activeId, list } = VTStorage.getProfiles();
+      const prev = sel.value;
+      sel.innerHTML = list
+        .map(
+          (p) =>
+            `<option value="${escapeHtml(p.id)}"${p.id === activeId ? " selected" : ""}>${escapeHtml(p.name || p.id)}</option>`
+        )
+        .join("");
+      if (list.some((p) => p.id === prev)) sel.value = prev;
+      else sel.value = activeId;
+    }
+    const goalSel = $("#sel-week-goal");
+    if (goalSel) {
+      const g = VTStorage?.getGoals?.() || { weeklySessionsTarget: 3 };
+      const t = String(g.weeklySessionsTarget || 3);
+      if (["3", "5", "7"].includes(t)) goalSel.value = t;
+      goalSel.disabled = !isProUser && !window.VTBilling?.can?.("studio_goals");
+      // Free can see default goal progress but not change
+      if (!window.VTBilling?.can?.("studio_goals")) goalSel.disabled = true;
+    }
+    const gp = $("#pro-goal-progress");
+    if (gp) {
+      gp.textContent = `${pulse.sessionsThisWeek || 0}/${pulse.weeklyTarget || 3}`;
+      gp.classList.toggle("is-met", !!pulse.goalMet);
+    }
+
+    // Insights panel
+    const lock = $("#pro-insights-lock");
+    const panel = $("#pro-insights-panel");
+    if (lock) lock.hidden = isProUser;
+    if (panel) panel.classList.toggle("is-locked", !isProUser);
+    const focus = $("#pro-coach-focus");
+    if (focus) {
+      focus.textContent = isProUser
+        ? VTValuePulse?.coachFocus?.(pulse, es) || ""
+        : tt("pro.insightsTeaser");
+    }
+    const spark = $("#pro-spark");
+    if (spark) {
+      const arr = pulse.spark || [];
+      const max = Math.max(1, ...arr);
+      spark.innerHTML = arr
+        .map((n) => {
+          const h = Math.max(2, Math.round((n / max) * 28));
+          return `<span class="pro-spark-bar" style="height:${h}px" title="${n}"></span>`;
+        })
+        .join("");
+      spark.classList.toggle("is-dim", !isProUser);
+    }
+    const ht = $("#pro-hold-trend");
+    if (ht) {
+      if (isProUser && pulse.holdTrend?.length) {
+        ht.textContent =
+          tt("pro.holdTrend") +
+          ": " +
+          pulse.holdTrend.map((s) => s.toFixed(1) + "s").join(" → ");
+      } else {
+        ht.textContent = isProUser ? "" : tt("pro.unlockInsights");
+      }
+    }
+
+    // Achievements (earn free; labels always)
+    const grid = $("#pro-ach-grid");
+    if (grid && VTValuePulse?.achievements) {
+      const ach = VTValuePulse.achievements(pulse);
+      grid.innerHTML = ach
+        .map((a) => {
+          const title = tt("pro.ach." + a.id);
+          return `<span class="pro-ach-badge${a.unlocked ? " is-on" : ""}" title="${escapeHtml(title)}">${a.unlocked ? "★" : "☆"} <small>${escapeHtml(title)}</small></span>`;
+        })
+        .join("");
+    }
+  }
+
+  function bindProStudio() {
+    $("#sel-profile")?.addEventListener("change", (e) => {
+      const id = e.target.value;
+      VTStorage?.setActiveProfile?.(id);
+      renderValuePulse();
+      toast(tt("pro.profileSwitched"), { durationMs: 1600, debounceMs: 200 });
+    });
+    $("#btn-profile-add")?.addEventListener("click", () => {
+      const can = window.VTBilling?.can?.("multi_profile");
+      const bag = VTStorage?.getProfiles?.();
+      const count = bag?.list?.length || 1;
+      const max = can ? VTStorage.MAX_PROFILES_PRO : VTStorage.MAX_PROFILES_FREE;
+      if (!can && count >= 1) {
+        toast(tt("pro.profileNeedPro"));
+        openPricing();
+        return;
+      }
+      if (count >= max) {
+        toast(tt("pro.profileLimit", { n: String(max) }));
+        return;
+      }
+      const name = window.prompt(tt("pro.profileNamePrompt"), tt("pro.profileDefaultName"));
+      if (name == null) return;
+      const res = VTStorage.createProfile(name, { maxSlots: max });
+      if (!res.ok) {
+        toast(tt("pro.profileLimit", { n: String(max) }));
+        return;
+      }
+      renderValuePulse();
+      toast(tt("pro.profileCreated"));
+    });
+    $("#btn-profile-rename")?.addEventListener("click", () => {
+      const p = VTStorage?.getActiveProfile?.();
+      if (!p) return;
+      const name = window.prompt(tt("pro.profileNamePrompt"), p.name || "");
+      if (name == null) return;
+      VTStorage.renameProfile(p.id, name);
+      renderValuePulse();
+    });
+    $("#sel-week-goal")?.addEventListener("change", (e) => {
+      if (!window.VTBilling?.can?.("studio_goals")) {
+        toast(tt("pro.goalsNeedPro"));
+        openPricing();
+        e.target.value = String(VTStorage?.getGoals?.()?.weeklySessionsTarget || 3);
+        return;
+      }
+      const n = Number(e.target.value) || 3;
+      const g = VTStorage.getGoals() || {};
+      g.weeklySessionsTarget = n;
+      VTStorage.setGoals(g);
+      renderValuePulse();
+      toast(tt("pro.goalSet", { n: String(n) }), { durationMs: 1500 });
+    });
   }
 
   function showValueMoment(forceId) {
@@ -3418,6 +3565,7 @@
   function bindBilling() {
     $("#btn-pricing")?.addEventListener("click", openPricing);
     $("#btn-value-pro")?.addEventListener("click", openPricing);
+    bindProStudio();
     $("#value-banner-cta")?.addEventListener("click", () => {
       hideValueBanner();
       openPricing();

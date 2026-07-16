@@ -146,7 +146,20 @@ VTBilling.trialDaysLeft()
 | Feature | Free | Pro (paid/demo/trial) |
 |---------|------|------------------------|
 | all_exercises, pitch_highway, local_record, basic_plan, value_pulse | ✅ | ✅ |
-| export_progress, pro_insights, coach_pack | ❌ | ✅ |
+| export_progress, coach_pack, pro_insights | ❌ | ✅ |
+| multi_profile (≤3), studio_goals | ❌ | ✅ |
+| pro_progressions (progPro1/2), achievements_export | ❌ | ✅ |
+
+### What’s in Pro (shipped features)
+
+| Feature | Description |
+|---------|-------------|
+| **Coach pack** | JSON + `.txt` summary + achievements + coach focus |
+| **Multi-profile** | Up to 3 named practice slots (family / roles) |
+| **Insights v2** | 28-day sparkline, hold trend, rule-based coach focus |
+| **Weekly goals** | Set 3/5/7 sessions per week |
+| **Pro progressions** | Extra piano packs `progPro1`, `progPro2` |
+| **Achievements** | Earn free; export in coach pack (Pro) |
 
 ---
 

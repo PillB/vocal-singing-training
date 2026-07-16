@@ -75,6 +75,40 @@
               Una clase particular ≈ el año de Pro. Practica gratis siempre.
             </p>
           </div>
+
+          <!-- Pro studio: profiles, goals, insights, achievements -->
+          <div class="pro-studio" id="pro-studio">
+            <div class="pro-studio-row">
+              <label class="pro-profile-field" for="sel-profile">
+                <span class="pro-k" data-i18n="pro.profile">Perfil</span>
+                <select id="sel-profile" class="select-inline" aria-label="Practice profile"></select>
+              </label>
+              <button type="button" class="btn btn-ghost btn-xs" id="btn-profile-add" data-i18n="pro.profileAdd">+ Perfil</button>
+              <button type="button" class="btn btn-ghost btn-xs" id="btn-profile-rename" data-i18n="pro.profileRename">Renombrar</button>
+              <label class="pro-goal-field" for="sel-week-goal">
+                <span class="pro-k" data-i18n="pro.weekGoal">Meta semanal</span>
+                <select id="sel-week-goal" class="select-inline" aria-label="Weekly session goal">
+                  <option value="3">3</option>
+                  <option value="5">5</option>
+                  <option value="7">7</option>
+                </select>
+              </label>
+              <span class="pro-goal-progress muted" id="pro-goal-progress">0/3</span>
+            </div>
+            <div class="pro-insights" id="pro-insights-panel">
+              <div class="pro-insights-head">
+                <strong data-i18n="pro.insightsTitle">Insights Pro</strong>
+                <span class="pro-lock" id="pro-insights-lock" hidden data-i18n="pro.locked">Pro</span>
+              </div>
+              <div class="pro-spark" id="pro-spark" aria-hidden="true" title="28 days"></div>
+              <p class="pro-focus" id="pro-coach-focus"></p>
+              <p class="muted pro-hold-trend" id="pro-hold-trend"></p>
+            </div>
+            <div class="pro-achievements" id="pro-achievements">
+              <strong class="pro-ach-title" data-i18n="pro.achievements">Logros</strong>
+              <div class="pro-ach-grid" id="pro-ach-grid"></div>
+            </div>
+          </div>
         </div>
 
         <div class="value-banner" id="value-banner" hidden role="status">

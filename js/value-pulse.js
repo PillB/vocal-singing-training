@@ -78,6 +78,64 @@
     const minutes = Math.round(totalSec / 60);
     const avgScore = lastScoreN ? lastScoreSum / lastScoreN : null;
 
+    // Metric averages from recent history (for weakest-skill tip)
+    const metricSums = {};
+    const metricNs = {};
+    Object.keys(progress).forEach((exId) => {
+      (progress[exId].history || []).slice(0, 8).forEach((h) => {
+        const m = h.metrics || {};
+        Object.keys(m).forEach((k) => {
+          const v = Number(m[k]);
+          if (!Number.isFinite(v) || v < 1 || v > 5) return;
+          metricSums[k] = (metricSums[k] || 0) + v;
+          metricNs[k] = (metricNs[k] || 0) + 1;
+        });
+      });
+    });
+    let weakestMetric = null;
+    let weakestAvg = 6;
+    Object.keys(metricNs).forEach((k) => {
+      const avg = metricSums[k] / metricNs[k];
+      if (avg < weakestAvg) {
+        weakestAvg = avg;
+        weakestMetric = k;
+      }
+    });
+
+    // 28-day sparkline buckets (sessions per day)
+    const spark = [];
+    const dayCounts = {};
+    Object.keys(progress).forEach((exId) => {
+      (progress[exId].history || []).forEach((h) => {
+        const d = dayKey(h.at);
+        if (d) dayCounts[d] = (dayCounts[d] || 0) + 1;
+      });
+    });
+    for (let i = 27; i >= 0; i--) {
+      const d = dayKey(new Date(Date.now() - i * 86400000).toISOString());
+      spark.push(dayCounts[d] || 0);
+    }
+
+    const holdTrend = holds
+      .slice(0, 5)
+      .map((h) => Number(h.seconds) || 0)
+      .reverse();
+
+    // Sessions this ISO week (Mon-start approx via UTC day)
+    const now = new Date();
+    const day = (now.getUTCDay() + 6) % 7; // Mon=0
+    const weekStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - day));
+    const weekKey = weekStart.toISOString().slice(0, 10);
+    let sessionsThisWeek = 0;
+    Object.keys(progress).forEach((exId) => {
+      (progress[exId].history || []).forEach((h) => {
+        if (h.at && h.at >= weekStart.toISOString()) sessionsThisWeek += 1;
+      });
+    });
+
+    const goals = global.VTStorage?.getGoals?.() || { weeklySessionsTarget: 3 };
+    const weeklyTarget = Math.max(1, Math.min(14, Number(goals.weeklySessionsTarget) || 3));
+
     return {
       sessions,
       minutes,
@@ -92,8 +150,70 @@
       planWeek: plan?.weekNumber || null,
       planStatus: plan?.status || "idle",
       checkIns: (plan?.checkIns || []).length,
-      completedElements: (plan?.completedElements || []).length
+      completedElements: (plan?.completedElements || []).length,
+      spark,
+      holdTrend,
+      weakestMetric,
+      weakestAvg: weakestMetric != null ? weakestAvg : null,
+      sessionsThisWeek,
+      weeklyTarget,
+      weekKey,
+      goalMet: sessionsThisWeek >= weeklyTarget
     };
+  }
+
+  function coachFocus(stats, isEs) {
+    const s = stats || compute();
+    if (s.sessions === 0) {
+      return isEs
+        ? "Empieza con un ejercicio básico y guarda la sesión para construir tu línea base."
+        : "Start a basic exercise and save the session to build your baseline.";
+    }
+    if (s.streak < 2) {
+      return isEs
+        ? "Foco: practica 2 días seguidos — la consistencia supera la intensidad."
+        : "Focus: practice 2 days in a row — consistency beats intensity.";
+    }
+    if (s.bestHoldSec > 0 && s.bestHoldSec < 5) {
+      return isEs
+        ? "Foco: sostenidos suaves ≥5s (aire libre, sin empujar)."
+        : "Focus: easy holds ≥5s (free air, no push).";
+    }
+    if (s.weakestMetric) {
+      return isEs
+        ? `Foco: tu métrica más baja reciente es «${s.weakestMetric}» (~${s.weakestAvg.toFixed(1)}/5). Repite ese ejercicio con calma.`
+        : `Focus: your lowest recent metric is “${s.weakestMetric}” (~${s.weakestAvg.toFixed(1)}/5). Revisit that drill calmly.`;
+    }
+    if (!s.goalMet) {
+      return isEs
+        ? `Foco: ${s.sessionsThisWeek}/${s.weeklyTarget} sesiones esta semana — completa el objetivo.`
+        : `Focus: ${s.sessionsThisWeek}/${s.weeklyTarget} sessions this week — finish the goal.`;
+    }
+    return isEs
+      ? "Buen ritmo. Exporta el pack coach o sube un peldaño (arpegio / progresión Pro)."
+      : "Solid pace. Export the coach pack or step up (arpeggio / Pro progression).";
+  }
+
+  /**
+   * Achievements — earned free; export/share is Pro.
+   * @returns {{ id: string, unlocked: boolean, progress?: number }[]}
+   */
+  function achievements(stats) {
+    const s = stats || compute();
+    const plan = global.VTStorage?.getWeekPlan?.() || {};
+    const flags = global.VTStorage?.getAchievementFlags?.() || {};
+    const list = [
+      { id: "first_save", unlocked: s.sessions >= 1 },
+      { id: "sessions_5", unlocked: s.sessions >= 5 },
+      { id: "streak_3", unlocked: s.streak >= 3 },
+      { id: "hold_5", unlocked: s.bestHoldSec >= 5 },
+      { id: "hold_10", unlocked: s.bestHoldSec >= 10 },
+      { id: "exercises_5", unlocked: s.exercisesTouched >= 5 },
+      { id: "plan_checkin", unlocked: (plan.checkIns || []).length >= 1 },
+      { id: "goal_week", unlocked: !!s.goalMet },
+      { id: "export_once", unlocked: !!flags.exported }
+    ];
+    return list;
   }
 
   /** Human narrative for Pro Insights / export (ES|EN via isEs flag). */
@@ -204,6 +324,8 @@
   global.VTValuePulse = {
     compute,
     narrative,
+    coachFocus,
+    achievements,
     suggestUpgradeMoment,
     isDismissed,
     dismiss

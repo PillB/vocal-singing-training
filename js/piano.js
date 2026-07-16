@@ -198,6 +198,31 @@
         { name: "C", notes: ["C2", "G2", "C3", "E3", "G3"] },
         { name: "D", notes: ["D2", "A2", "D3", "F3", "A3"] }
       ]
+    },
+    /** Pro-only packs — new content (does not lock free progressions) */
+    progPro1: {
+      name: "Pro · Modal colors (Am–F–G–Em)",
+      description: "Am – F – G – Em · color changes for expressive singing (Pro)",
+      proOnly: true,
+      wide: true,
+      chords: [
+        { name: "Am", notes: ["A2", "C3", "E3", "A3"] },
+        { name: "F", notes: ["F2", "A2", "C3", "F3"] },
+        { name: "G", notes: ["G2", "B2", "D3", "G3"] },
+        { name: "Em", notes: ["E2", "G2", "B2", "E3"] }
+      ]
+    },
+    progPro2: {
+      name: "Pro · Ladder leaps (C–G–Am–Em)",
+      description: "C – G – Am – Em · larger horizontal jumps for pitch agility (Pro)",
+      proOnly: true,
+      wide: true,
+      chords: [
+        { name: "C", notes: ["C2", "E3", "G3", "C4"] },
+        { name: "G", notes: ["G2", "B2", "D3", "G3"] },
+        { name: "Am", notes: ["A2", "C3", "E3", "A3"] },
+        { name: "Em", notes: ["E2", "B2", "E3", "G3"] }
+      ]
     }
   };
 

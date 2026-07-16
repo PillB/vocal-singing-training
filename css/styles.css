@@ -2440,6 +2440,129 @@ body.view-exercise .stage-below.is-fitted {
   }
 }
 
+/* ── Pro studio (profiles, goals, insights, achievements) ── */
+.pro-studio {
+  margin-top: 0.75rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid rgba(100, 150, 200, 0.2);
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+.pro-studio-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.55rem;
+}
+.pro-profile-field,
+.pro-goal-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.78rem;
+}
+.pro-k {
+  color: var(--text-muted);
+  font-weight: 650;
+  white-space: nowrap;
+}
+.pro-goal-progress.is-met {
+  color: #8ee0b5;
+  font-weight: 700;
+}
+.pro-insights {
+  position: relative;
+  padding: 0.45rem 0.55rem;
+  border-radius: 10px;
+  background: rgba(10, 18, 30, 0.65);
+  border: 1px solid rgba(90, 140, 200, 0.22);
+}
+.pro-insights.is-locked {
+  opacity: 0.85;
+}
+.pro-insights-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  margin-bottom: 0.35rem;
+  font-size: 0.82rem;
+}
+.pro-lock {
+  font-size: 0.65rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  padding: 0.1rem 0.35rem;
+  border-radius: 6px;
+  background: rgba(80, 120, 180, 0.35);
+  color: #b8d4ff;
+}
+.pro-spark {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 32px;
+  margin-bottom: 0.35rem;
+}
+.pro-spark.is-dim {
+  opacity: 0.35;
+  filter: blur(0.5px);
+}
+.pro-spark-bar {
+  flex: 1 1 0;
+  min-width: 2px;
+  background: linear-gradient(180deg, #7ec8ff, #3a7ab8);
+  border-radius: 2px 2px 0 0;
+  opacity: 0.85;
+}
+.pro-focus {
+  margin: 0;
+  font-size: 0.84rem;
+  line-height: 1.4;
+  color: #e0ecff;
+}
+.pro-hold-trend {
+  margin: 0.25rem 0 0;
+  font-size: 0.75rem;
+}
+.pro-achievements {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.pro-ach-title {
+  font-size: 0.8rem;
+}
+.pro-ach-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+.pro-ach-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.15rem 0.4rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  background: rgba(0, 0, 0, 0.2);
+}
+.pro-ach-badge.is-on {
+  color: #f0d78c;
+  border-color: rgba(220, 180, 80, 0.45);
+  background: rgba(60, 45, 10, 0.35);
+}
+.pro-ach-badge small {
+  font-size: 0.65rem;
+  max-width: 7rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ── Value pulse (home progress proof) ── */
 .value-pulse {
   margin: 0.65rem 0 0.85rem;

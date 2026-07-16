@@ -109,8 +109,12 @@
         features: [
           "all_free",
           "export_progress",
+          "coach_pack",
           "pro_insights",
-          "coach_pack"
+          "multi_profile",
+          "studio_goals",
+          "pro_progressions",
+          "achievements_export"
         ],
         cta: "subscribe"
       },

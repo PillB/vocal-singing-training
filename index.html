@@ -140,12 +140,16 @@
             <span class="chord-now" id="chord-now">—</span>
           </div>
 
+          <p class="mode-cue" id="mode-cue">Start practice to begin the exercise-specific coach UI.</p>
+
+          <div id="mode-hud" class="mode-hud" aria-live="polite"></div>
+
           <div class="controls-row" style="margin-bottom:0.5rem">
             <label class="muted piano-opt" id="opt-auto-record">
               <input type="checkbox" id="chk-auto-record" /> Also record this practice
             </label>
           </div>
-          <div class="level-meter practice-meter" aria-hidden="true"><span id="level-fill"></span></div>
+          <div class="level-meter practice-meter" id="level-meter-wrap" aria-hidden="true"><span id="level-fill"></span></div>
 
           <div id="pitch-block" class="pitch-inline" hidden>
             <div class="pitch-game-hud" id="pitch-game-hud" aria-live="polite">
@@ -322,11 +326,13 @@
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
     <script src="js/exercises-data.js"></script>
+    <script src="js/practice-profiles.js"></script>
     <script src="js/storage.js"></script>
     <script src="js/piano.js"></script>
     <script src="js/pitch-visualizer.js"></script>
     <script src="js/pitch-game.js"></script>
     <script src="js/practice-engine.js"></script>
+    <script src="js/practice-modes.js"></script>
     <script src="js/recorder.js"></script>
     <script src="js/metrics.js"></script>
     <script src="js/session.js"></script>

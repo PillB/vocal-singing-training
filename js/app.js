@@ -29,6 +29,7 @@
     pitchViz: null,
     pitchRunning: false,
     pitchGame: null,
+    modeInstance: null,
     guideOpen: true
   };
 
@@ -41,6 +42,38 @@
     el.classList.add("show");
     clearTimeout(toast._t);
     toast._t = setTimeout(() => el.classList.remove("show"), 2800);
+  }
+  // modes can toast
+  window.VTToast = toast;
+
+  function getProfile(ex) {
+    return (
+      ex?.practice || {
+        mode: "recordOnly",
+        showPitch: !!ex?.audio?.pitchViz,
+        showHold: !!ex?.holdLogger,
+        showLevel: true,
+        pitchChallenge: false,
+        autoPiano: !!ex?.audio?.piano,
+        autoRecord: false,
+        cue: "Start practice to begin."
+      }
+    );
+  }
+
+  function applyMetricPatches(patches) {
+    if (!patches) return;
+    Object.entries(patches).forEach(([k, v]) => {
+      const input = $(`#metrics-form [name="${k}"]`);
+      if (!input || v == null) return;
+      if (input.type === "range") {
+        input.value = String(v);
+        input.dispatchEvent(new Event("input"));
+      } else {
+        const cur = Number(input.value);
+        if (!input.value || Number.isNaN(cur) || v > cur) input.value = v;
+      }
+    });
   }
 
   function findExercise(id) {
@@ -224,45 +257,74 @@
     $("#level-fill").style.width = "0%";
     setPracticeUI(false);
 
-    // Piano
-    const pianoBlock = $("#piano-block");
-    pianoBlock.hidden = !ex.audio.piano;
-    if (ex.audio.piano) {
-      renderPianoControls(ex);
+    // Exercise-specific practice profile
+    const profile = getProfile(ex);
+    if (state.modeInstance) {
+      try {
+        state.modeInstance.unmount();
+      } catch {
+        /* ignore */
+      }
+      state.modeInstance = null;
     }
-    // Pitch visualizer (shown for pitchViz exercises; activated by Start practice)
+    const modeHud = $("#mode-hud");
+    if (modeHud) modeHud.innerHTML = "";
+    if (window.VTPracticeModes) {
+      state.modeInstance = VTPracticeModes.get(profile.mode);
+      state.modeInstance.mount(modeHud, profile);
+    }
+    if ($("#mode-cue")) $("#mode-cue").textContent = profile.cue || "";
+
+    // Pitch visualizer only when profile asks
     const pitchBlock = $("#pitch-block");
-    pitchBlock.hidden = !ex.audio.pitchViz;
-    if (ex.audio.pitchViz) {
+    pitchBlock.hidden = !profile.showPitch;
+    if (profile.showPitch) {
       ensurePitchViz();
-      if (ex.audio.refPitch && window.VT_NOTE_FREQ) {
-        state.pitchViz.setTargetNoteName(ex.audio.refPitch, VT_NOTE_FREQ);
-        state.practice.setTargetFreq(VT_NOTE_FREQ[ex.audio.refPitch]);
+      const ref = profile.refPitch || ex.audio.refPitch;
+      if (ref && window.VT_NOTE_FREQ) {
+        state.pitchViz.setTargetNoteName(ref, VT_NOTE_FREQ);
+        state.practice.setTargetFreq(VT_NOTE_FREQ[ref]);
       }
       updatePitchStatsLabel({
-        targetName: ex.audio.refPitch || "C3",
+        targetName: ref || "C3",
         voiceName: "—",
         accuracyCents: 0,
         precisionCents: 0
       });
     }
+    // Challenge only for pitchMatch-style
+    const ch = $("#chk-pitch-challenge");
+    if (ch) {
+      ch.checked = !!profile.pitchChallenge;
+      const lab = ch.closest("label");
+      if (lab) lab.style.display = profile.showPitch ? "" : "none";
+    }
+    const gameHud = $("#pitch-game-hud");
+    if (gameHud) gameHud.style.display = profile.pitchChallenge ? "" : "none";
 
-    // Auto-hold UI for holdLogger OR any pitchViz singing exercise
-    const showHold = !!(ex.holdLogger || (ex.track === "singing" && ex.audio.pitchViz));
+    // Hold strip
+    const showHold = !!profile.showHold;
     $("#hold-block").hidden = !showHold;
     $("#hold-display").hidden = !showHold;
     $("#hold-display").textContent = "Hold 0.0s";
     renderHoldHistory();
 
-    // Practice hint tailored to exercise tools
-    const tools = [];
-    tools.push("mic listen");
-    if (ex.audio.pitchViz) tools.push("pitch graph");
-    if (showHold) tools.push("auto-hold log (≥2s)");
-    if (ex.audio.timer && timerSec) tools.push("timer");
-    if (ex.audio.piano) tools.push("piano");
-    if (ex.audio.record) tools.push("optional record");
-    $("#practice-hint").textContent = `Start practice runs: ${tools.join(" · ")}. Stop ends everything.`;
+    // Level meter
+    const lvl = $("#level-meter-wrap");
+    if (lvl) lvl.style.display = profile.showLevel === false ? "none" : "";
+
+    // Piano block: show if exercise has piano OR profile autoPiano
+    const pianoBlock = $("#piano-block");
+    if (pianoBlock) {
+      const showPiano = !!(ex.audio.piano || profile.autoPiano);
+      pianoBlock.hidden = !showPiano;
+      if (showPiano && ex.audio.piano) renderPianoControls(ex);
+      if (profile.autoArpeggio && $("#chk-arpeggio")) $("#chk-arpeggio").checked = true;
+      if ($("#chk-auto-piano")) $("#chk-auto-piano").checked = profile.autoPiano !== false;
+    }
+
+    // Practice hint
+    $("#practice-hint").textContent = `Mode: ${profile.mode} · one Start arms this exercise only. Stop ends everything.`;
 
     // Review workflow
     const reviewBlock = $("#review-block");
@@ -520,24 +582,44 @@
   async function startPractice() {
     const ex = state.exercise;
     if (!ex || state.practiceLive) return;
+    const profile = getProfile(ex);
     try {
-      const wantRecord = !!(ex.audio.record && $("#chk-auto-record")?.checked);
-      const wantPiano = !!(ex.audio.piano && $("#chk-auto-piano")?.checked !== false);
-      const showHold = !!(ex.holdLogger || (ex.track === "singing" && ex.audio.pitchViz));
+      // weekPlan: open dashboard instead of forcing mic
+      if (profile.mode === "weekPlan") {
+        state.modeInstance?.onStart?.();
+        document.getElementById("btn-plan")?.click();
+        toast("12-week plan opened");
+        return;
+      }
 
-      // Wire practice engine callbacks
+      const wantRecord = !!(
+        profile.autoRecord ||
+        (ex.audio.record && $("#chk-auto-record")?.checked)
+      );
+      const wantPiano =
+        profile.autoPiano &&
+        (ex.audio.piano || profile.refPitch) &&
+        $("#chk-auto-piano")?.checked !== false;
+      const showHold = !!profile.showHold;
+
+      if (state.modeInstance) state.modeInstance.onStart();
+
       state.practice.onFrame = (frame) => {
-        $("#level-fill").style.width = `${Math.round(Math.min(1, frame.rms * 4) * 100)}%`;
+        if (profile.showLevel !== false) {
+          $("#level-fill").style.width = `${Math.round(Math.min(1, frame.rms * 4) * 100)}%`;
+        }
         if (showHold) {
           $("#hold-display").textContent = `Hold ${frame.holdSec.toFixed(1)}s`;
-          if (frame.voiced && frame.holdSec >= 2) {
-            $("#hold-display").style.color = "#8ee0b5";
-          } else {
-            $("#hold-display").style.color = "";
-          }
+          $("#hold-display").style.color =
+            frame.voiced && frame.holdSec >= 2 ? "#8ee0b5" : "";
         }
-        if (ex.audio.pitchViz && state.pitchViz) {
+        if (profile.showPitch && state.pitchViz) {
           state.pitchViz.pushFrame(frame.voiceFreq, frame.targetFreq);
+        }
+        try {
+          state.modeInstance?.onFrame?.(frame);
+        } catch (err) {
+          console.warn(err);
         }
       };
       state.practice.onHoldLogged = (sec) => {
@@ -551,41 +633,52 @@
         toast(`Hold logged: ${sec}s`);
       };
       state.practice.onRecordingReady = (result) => {
-        if (!result) return;
-        showPlayback(result);
+        if (result) showPlayback(result);
       };
 
-      if (ex.audio.pitchViz) {
+      if (profile.showPitch) {
         ensurePitchViz();
         state.pitchGame.reset();
         updateGameHud(state.pitchGame.snapshot());
-        const wantChallenge = $("#chk-pitch-challenge")?.checked !== false;
+        const wantChallenge =
+          profile.pitchChallenge && $("#chk-pitch-challenge")?.checked !== false;
         let challengeNote = null;
-        if (wantChallenge) {
-          challengeNote = state.pitchGame.startChallenge(8);
-        }
+        if (wantChallenge) challengeNote = state.pitchGame.startChallenge(8);
         state.pitchViz.startExternal();
         state.pitchRunning = true;
+        const ref = profile.refPitch || ex.audio.refPitch;
         if (challengeNote && VT_NOTE_FREQ[challengeNote]) {
           state.practice.setTargetFreq(VT_NOTE_FREQ[challengeNote]);
           state.pitchViz.setTargetFreq(VT_NOTE_FREQ[challengeNote]);
-        } else if (ex.audio.refPitch && VT_NOTE_FREQ[ex.audio.refPitch]) {
-          state.practice.setTargetFreq(VT_NOTE_FREQ[ex.audio.refPitch]);
-          state.pitchViz.setTargetFreq(VT_NOTE_FREQ[ex.audio.refPitch]);
+        } else if (ref && VT_NOTE_FREQ[ref]) {
+          state.practice.setTargetFreq(VT_NOTE_FREQ[ref]);
+          state.pitchViz.setTargetFreq(VT_NOTE_FREQ[ref]);
         }
       }
 
-      await state.practice.start({ record: wantRecord });
-      setPracticeUI(true);
+      // Needs mic?
+      const needsMic =
+        profile.showLevel !== false ||
+        profile.showPitch ||
+        profile.showHold ||
+        wantRecord ||
+        ["pauseDetect", "volumeSteady", "volumeLadder", "speechEnergy", "breathS", "sovtFlow", "sirenRange", "onsetReps", "concisionGate", "authorityLand", "pitchContour"].includes(
+          profile.mode
+        );
 
-      // Timer auto-start
-      if (ex.audio.timer && state.timer.total > 0) {
-        startTimer();
+      if (needsMic) {
+        await state.practice.start({ record: wantRecord });
+      } else if (wantRecord) {
+        await state.practice.start({ record: true });
       }
 
-      // Piano auto — challenge mode uses sequential single notes (Vocal Match style)
-      const inChallenge = !!(ex.audio.pitchViz && state.pitchGame?.challengeMode);
-      if (wantPiano && ex.audio.piano) {
+      setPracticeUI(true);
+
+      if (ex.audio.timer && state.timer.total > 0) startTimer();
+
+      const inChallenge = !!(profile.pitchChallenge && state.pitchGame?.challengeMode);
+      if (wantPiano) {
+        if (profile.autoArpeggio && $("#chk-arpeggio")) $("#chk-arpeggio").checked = true;
         if (inChallenge) {
           const note = state.pitchGame.currentChallengeNote();
           if (note) {
@@ -594,51 +687,59 @@
               : 2.5;
             await VTPiano.playRefPitch(note, sec, true);
           }
-        } else if (ex.audio.refPitch && !ex.progressions && !ex.songs) {
+        } else if (
+          (profile.refPitch || ex.audio.refPitch) &&
+          !ex.progressions &&
+          !ex.songs
+        ) {
+          const note = profile.refPitch || ex.audio.refPitch;
           const sec = $("#chk-sustain")?.checked
             ? Number($("#sustain-sec")?.value || 4)
             : 2.5;
-          const f = await VTPiano.playRefPitch(ex.audio.refPitch, sec, true);
+          const f = await VTPiano.playRefPitch(note, sec, true);
           if (f) {
             state.practice.setTargetFreq(f);
             if (state.pitchViz) state.pitchViz.setTargetFreq(f);
           }
-        } else {
+        } else if (ex.audio.piano) {
           await playSelectedProgression(true);
         }
-      } else if (ex.audio.refPitch && ex.audio.piano && !inChallenge) {
-        const f = VT_NOTE_FREQ[ex.audio.refPitch];
-        if (f) state.practice.setTargetFreq(f);
       }
 
-      toast(
-        wantRecord
-          ? "Practice live · recording on"
-          : "Practice live · sing or speak — holds auto-log at ≥2s"
-      );
+      toast(wantRecord ? `Live · ${profile.mode} · recording` : `Live · ${profile.mode}`);
     } catch (e) {
       console.error(e);
       setPracticeUI(false);
-      toast("Microphone permission needed to practice");
+      toast("Microphone permission needed for this exercise");
     }
   }
 
   function stopPractice(silent) {
+    let modeResult = null;
+    try {
+      if (state.modeInstance) modeResult = state.modeInstance.onStop();
+    } catch (e) {
+      console.warn(e);
+    }
+    if (state.pitchGame) {
+      window.VTAppPitchGameSnap = state.pitchGame.snapshot();
+    }
     if (state.practiceLive || state.practice.running) {
       state.practice.stop();
     }
     pauseTimer();
     VTPiano.stopAll();
     if (state.pitchViz && state.pitchRunning) {
-      // keep last graph; mark not running
       state.pitchViz.stop();
       state.pitchRunning = false;
-      // redraw idle after brief
-      ensurePitchViz();
+      if (getProfile(state.exercise).showPitch) ensurePitchViz();
     }
+    if (modeResult?.patches) applyMetricPatches(modeResult.patches);
     setPracticeUI(false);
     $("#level-fill").style.width = "0%";
-    if (!silent) toast("Practice stopped");
+    if (!silent) {
+      toast(modeResult?.summary ? `Stopped · ${modeResult.summary}` : "Practice stopped");
+    }
   }
 
   function showPlayback(result) {

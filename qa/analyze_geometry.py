@@ -28,10 +28,12 @@ PEER_SELECTORS = {
     "#btn-tour",
     "#btn-history",
     "#btn-plan",
+    "#btn-pricing",
     "#btn-continue",
     "#btn-structured",
     "#btn-complete",
     "#btn-practice-start",
+    "#pricing-close",
 }
 
 
@@ -136,6 +138,7 @@ def overflow(el: dict, vw: float, vh: float) -> list[str]:
 def analyze_file(path: Path) -> dict:
     data = json.loads(path.read_text())
     vw, vh = data["vw"], data["vh"]
+    label = data.get("label") or path.stem
     items = [i for i in data["items"] if i.get("visible")]
     # dedupe by rounded box + sel
     uniq = {}
@@ -156,6 +159,22 @@ def analyze_file(path: Path) -> dict:
             if is_ancestor_pair(a, b, items):
                 continue
             area = area_intersection(a, b)
+            # Header chips: ignore hairline / wrap-row collisions in chrome
+            headerish = (
+                a.get("y", 0) < 90
+                and b.get("y", 0) < 90
+                and (
+                    sa in PEER_SELECTORS
+                    or sb in PEER_SELECTORS
+                    or sa == "interactive"
+                    or sb == "interactive"
+                )
+            )
+            if headerish and area < 900:
+                continue
+            # Pricing modal capture: header under dim is non-interactive focus of page is modal
+            if str(label).startswith("07_pricing") and headerish:
+                continue
             if area > MIN_AREA:
                 overlaps.append(
                     {

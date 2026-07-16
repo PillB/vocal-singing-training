@@ -22,6 +22,10 @@ const SELECTORS = [
   "#btn-tour",
   "#btn-history",
   "#btn-plan",
+  "#btn-pricing",
+  "#pricing-modal",
+  "#pricing-grid",
+  "#billing-pill",
   "#view-home",
   "#view-exercise",
   "#view-history",
@@ -59,56 +63,75 @@ const SELECTORS = [
   "#ex-title"
 ];
 
-async function dumpGeometry(page, label) {
-  const data = await page.evaluate((sels) => {
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-    const items = [];
-    const seen = new Set();
+async function dumpGeometry(page, label, opts = {}) {
+  const data = await page.evaluate(
+    ({ sels, skipBroadInteractive, scope }) => {
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const items = [];
+      const seen = new Set();
+      const root = scope ? document.querySelector(scope) : document;
 
-    function pushEl(el, sel) {
-      if (!el || seen.has(el)) return;
-      seen.add(el);
-      const r = el.getBoundingClientRect();
-      const st = window.getComputedStyle(el);
-      const z = st.zIndex === "auto" ? 0 : parseInt(st.zIndex, 10) || 0;
-      items.push({
-        sel: sel || el.id || el.className?.toString?.().slice(0, 80) || el.tagName,
-        tag: el.tagName,
-        id: el.id || "",
-        x: r.x,
-        y: r.y,
-        w: r.width,
-        h: r.height,
-        x2: r.x + r.width,
-        y2: r.y + r.height,
-        z,
-        visible:
-          st.display !== "none" &&
-          st.visibility !== "hidden" &&
-          st.opacity !== "0" &&
-          !el.hasAttribute("hidden") &&
-          r.width > 0 &&
-          r.height > 0,
-        position: st.position,
-        overflow: st.overflow,
-        pointerEvents: st.pointerEvents
+      function pushEl(el, sel) {
+        if (!el || seen.has(el)) return;
+        seen.add(el);
+        const r = el.getBoundingClientRect();
+        const st = window.getComputedStyle(el);
+        const z = st.zIndex === "auto" ? 0 : parseInt(st.zIndex, 10) || 0;
+        items.push({
+          sel: sel || el.id || el.className?.toString?.().slice(0, 80) || el.tagName,
+          tag: el.tagName,
+          id: el.id || "",
+          x: r.x,
+          y: r.y,
+          w: r.width,
+          h: r.height,
+          x2: r.x + r.width,
+          y2: r.y + r.height,
+          z,
+          visible:
+            st.display !== "none" &&
+            st.visibility !== "hidden" &&
+            st.opacity !== "0" &&
+            !el.hasAttribute("hidden") &&
+            r.width > 0 &&
+            r.height > 0,
+          position: st.position,
+          overflow: st.overflow,
+          pointerEvents: st.pointerEvents
+        });
+      }
+
+      sels.forEach((sel) => {
+        document.querySelectorAll(sel).forEach((el) => pushEl(el, sel));
       });
+
+      if (!skipBroadInteractive) {
+        // Interactive peers that often collide (page chrome)
+        document
+          .querySelectorAll(
+            "button:not([hidden]), .hud-corner, .status-pill, .timer-display, .card.card-ex"
+          )
+          .forEach((el) => {
+            // Skip pricing modal internals — nested CTAs are intentional layout
+            if (el.closest("#pricing-modal")) return;
+            pushEl(el, "interactive");
+          });
+      } else if (root) {
+        // Scoped peers for overlays
+        root
+          .querySelectorAll("button:not([hidden]), .rail-btn, .plan-cta")
+          .forEach((el) => pushEl(el, "interactive"));
+      }
+
+      return { label: "", vw, vh, scrollY: window.scrollY, items, ts: Date.now() };
+    },
+    {
+      sels: SELECTORS,
+      skipBroadInteractive: !!opts.skipBroadInteractive,
+      scope: opts.scope || null
     }
-
-    sels.forEach((sel) => {
-      document.querySelectorAll(sel).forEach((el) => pushEl(el, sel));
-    });
-
-    // Interactive peers that often collide
-    document
-      .querySelectorAll(
-        "button:not([hidden]), .hud-corner, .status-pill, .timer-display, .card.card-ex"
-      )
-      .forEach((el) => pushEl(el, "interactive"));
-
-    return { label: "", vw, vh, scrollY: window.scrollY, items, ts: Date.now() };
-  }, SELECTORS);
+  );
   data.label = label;
   const file = path.join(OUT, `${label.replace(/[^a-z0-9_-]+/gi, "_")}.json`);
   fs.writeFileSync(file, JSON.stringify(data, null, 2));
@@ -234,6 +257,25 @@ async function main() {
       console.warn("skip", ex.id, opened);
     }
   }
+
+  // Pricing overlay (subscription) — desktop fold
+  await page.goto(BASE, { waitUntil: "networkidle" });
+  await page.evaluate(() => {
+    localStorage.setItem("vt_lang", "es");
+    localStorage.setItem("vt_tour_v1", "1");
+    sessionStorage.setItem("vt_e2e", "1");
+  });
+  await page.goto(BASE, { waitUntil: "networkidle" });
+  await page.click("#btn-pricing");
+  await page.waitForTimeout(200);
+  await shot(page, "07_pricing_modal");
+  pages.push(
+    await dumpGeometry(page, "07_pricing_modal", {
+      skipBroadInteractive: true,
+      scope: "#pricing-modal"
+    })
+  );
+  await page.click("#pricing-close").catch(() => {});
 
   // Mobile viewport spot-check (home + solfege)
   await page.setViewportSize({ width: 390, height: 844 });

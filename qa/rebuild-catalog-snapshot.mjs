@@ -131,7 +131,11 @@ const snap = {
     "#btn-plan",
     "#leave-modal",
     "#btn-back-home",
-    "#session-banner"
+    "#session-banner",
+    "#btn-pricing",
+    "#pricing-modal",
+    "#pricing-grid",
+    "#billing-pill"
   ],
   requiredI18nKeys: [
     "brand.title",
@@ -142,6 +146,7 @@ const snap = {
     "nav.tour",
     "nav.history",
     "nav.plan",
+    "nav.pro",
     "metrics.save",
     "metrics.show",
     "ex.guide",
@@ -149,7 +154,10 @@ const snap = {
     "leave.title",
     "leave.save",
     "leave.discard",
-    "piano.more"
+    "piano.more",
+    "pricing.title",
+    "pricing.subscribe",
+    "pricing.export"
   ],
   requiredGlobals: [
     "VT_EXERCISES",
@@ -160,7 +168,9 @@ const snap = {
     "VTTour",
     "VTI18n",
     "VTPracticeModes",
-    "VT_PROGRESSIONS"
+    "VT_PROGRESSIONS",
+    "VTBilling",
+    "VT_BILLING_CONFIG"
   ]
 };
 

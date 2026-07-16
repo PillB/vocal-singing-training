@@ -2222,6 +2222,208 @@
     });
   }
 
+  // ── Billing / pricing overlay (Stripe + Mercado Pago) ──
+  let pricingRail = null;
+
+  function isEsLang() {
+    return (
+      (window.VTI18n && VTI18n.lang === "es") ||
+      (document.documentElement.lang || "").startsWith("es")
+    );
+  }
+
+  function updateBillingChrome() {
+    const B = window.VTBilling;
+    if (!B) return;
+    const ent = B.getEntitlement();
+    const pill = $("#billing-pill");
+    const btn = $("#btn-pricing");
+    if (pill) {
+      pill.classList.remove("is-trial", "is-free");
+      // Only show pill when trial/pro — avoids header button overlap with Free label
+      if (ent.status === "trial") {
+        pill.hidden = false;
+        pill.textContent = isEsLang() ? "Prueba" : "Trial";
+        pill.classList.add("is-trial");
+      } else if (ent.pro) {
+        pill.hidden = false;
+        pill.textContent = "Pro";
+      } else {
+        pill.hidden = true;
+        pill.textContent = "";
+        pill.classList.add("is-free");
+      }
+    }
+    if (btn) btn.textContent = tt("nav.pro");
+    const exp = $("#btn-export-progress");
+    if (exp) exp.hidden = !B.can("export_progress");
+    const demo = $("#btn-demo-pro");
+    if (demo) {
+      const cfg = B.cfg?.() || {};
+      demo.hidden = !cfg.demoUnlockEnabled || ent.source === "demo" || (ent.pro && ent.source === "paid");
+    }
+  }
+
+  function renderPricingModal() {
+    const B = window.VTBilling;
+    if (!B) return;
+    const es = isEsLang();
+    const region = B.detectRegion();
+    const market = B.marketFor(region);
+    if (!pricingRail) pricingRail = B.preferredRail(region);
+    const cfg = B.cfg() || {};
+    const regionEl = $("#pricing-region-label");
+    if (regionEl) {
+      regionEl.textContent = `${tt("pricing.region")}: ${market.name} · ${market.currency}`;
+    }
+    const status = $("#pricing-status");
+    if (status) {
+      const ent = B.getEntitlement();
+      if (ent.status === "trial") {
+        status.textContent = `${tt("pricing.trial")}${ent.expiresAt ? ` · ${new Date(ent.expiresAt).toLocaleDateString()}` : ""}`;
+      } else if (ent.pro) {
+        status.textContent = `${tt("pricing.proActive")} · ${ent.plan}${ent.source === "demo" ? " (demo)" : ""}`;
+      } else {
+        status.textContent = tt("pricing.free");
+      }
+    }
+    const rails = $("#pricing-rails");
+    if (rails) {
+      const stripeLab = es ? (cfg.providers?.stripe?.labelEs || tt("pricing.railStripe")) : (cfg.providers?.stripe?.label || tt("pricing.railStripe"));
+      const mpLab = es ? (cfg.providers?.mercadopago?.labelEs || tt("pricing.railMp")) : (cfg.providers?.mercadopago?.label || tt("pricing.railMp"));
+      rails.innerHTML = `
+        <button type="button" class="rail-btn${pricingRail === "stripe" ? " active" : ""}" data-rail="stripe">${stripeLab}</button>
+        <button type="button" class="rail-btn${pricingRail === "mercadopago" ? " active" : ""}" data-rail="mercadopago">${mpLab}</button>
+      `;
+      $$(".rail-btn", rails).forEach((b) => {
+        b.addEventListener("click", () => {
+          pricingRail = b.dataset.rail;
+          renderPricingModal();
+        });
+      });
+    }
+    const grid = $("#pricing-grid");
+    if (grid) {
+      const plans = cfg.plans || [];
+      const ent = B.getEntitlement();
+      grid.innerHTML = plans
+        .map((p) => {
+          const price = B.formatPrice(p, region);
+          const interval =
+            p.interval === "month" ? tt("pricing.month") : p.interval === "year" ? tt("pricing.year") : "";
+          const name = es ? p.nameEs || p.name : p.name;
+          const feats = (p.features || [])
+            .map((f) => `<li>${tt("pricing.feat." + f)}</li>`)
+            .join("");
+          const badge =
+            p.badge === "save20"
+              ? `<span class="plan-badge">${tt("pricing.save20")}</span>`
+              : p.popular
+                ? `<span class="plan-badge">★</span>`
+                : "";
+          let ctaLabel = tt("pricing.subscribe");
+          let disabled = false;
+          if (p.id === "free") {
+            ctaLabel = tt("pricing.current");
+            disabled = true;
+          } else if (ent.pro && (ent.plan === p.id || (ent.plan === "trial" && p.id !== "free"))) {
+            if (ent.plan === p.id || ent.source === "demo") {
+              ctaLabel = tt("pricing.current");
+              disabled = ent.plan === p.id || ent.source === "paid";
+            }
+          }
+          return `
+            <article class="plan-card${p.popular ? " is-popular" : ""}" data-plan="${p.id}">
+              ${badge}
+              <h4>${name}</h4>
+              <div class="plan-price">${price.text}<span>${interval}</span></div>
+              <ul class="plan-features">${feats}</ul>
+              <button type="button" class="btn ${p.id === "free" ? "btn-ghost" : "btn-primary"} btn-sm plan-cta" data-plan="${p.id}" ${disabled ? "disabled" : ""}>
+                ${ctaLabel}
+              </button>
+            </article>`;
+        })
+        .join("");
+      $$(".plan-cta", grid).forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const planId = btn.dataset.plan;
+          if (!planId || planId === "free") return;
+          const res = B.startCheckout(planId, pricingRail);
+          if (res.mode === "demo") {
+            toast(tt("pricing.toast.demo"));
+            updateBillingChrome();
+            renderPricingModal();
+          } else if (res.mode === "unconfigured") {
+            toast(tt("pricing.toast.unconfigured"));
+          }
+          // redirect mode navigates away
+        });
+      });
+    }
+    updateBillingChrome();
+  }
+
+  function openPricing() {
+    const modal = $("#pricing-modal");
+    if (!modal) return;
+    renderPricingModal();
+    modal.hidden = false;
+    document.body.classList.add("pricing-open");
+    $("#pricing-close")?.focus();
+  }
+
+  function closePricing() {
+    const modal = $("#pricing-modal");
+    if (modal) modal.hidden = true;
+    document.body.classList.remove("pricing-open");
+  }
+
+  function bindBilling() {
+    $("#btn-pricing")?.addEventListener("click", openPricing);
+    $("#pricing-close")?.addEventListener("click", closePricing);
+    $("#pricing-modal")?.addEventListener("click", (e) => {
+      if (e.target === $("#pricing-modal")) closePricing();
+    });
+    $("#btn-demo-pro")?.addEventListener("click", () => {
+      if (!window.VTBilling) return;
+      VTBilling.activateDemo("pro_monthly");
+      toast(tt("pricing.toast.demo"));
+      updateBillingChrome();
+      renderPricingModal();
+    });
+    $("#btn-export-progress")?.addEventListener("click", () => {
+      if (!window.VTBilling?.can("export_progress")) {
+        toast(tt("pricing.toast.exportNeedPro"));
+        openPricing();
+        return;
+      }
+      const json = VTBilling.exportProgressJson();
+      if (!json) return;
+      const blob = new Blob([json], { type: "application/json" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `vocal-studio-progress-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      toast(tt("pricing.toast.exported"));
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && $("#pricing-modal") && !$("#pricing-modal").hidden) {
+        closePricing();
+      }
+    });
+    if (window.VTBilling) {
+      VTBilling.onChange(() => {
+        updateBillingChrome();
+        if ($("#pricing-modal") && !$("#pricing-modal").hidden) renderPricingModal();
+      });
+      const ret = VTBilling.handleReturnFromCheckout();
+      if (ret?.event === "success") toast(tt("pricing.toast.success"));
+      if (ret?.event === "cancel") toast(tt("pricing.toast.cancel"));
+    }
+    updateBillingChrome();
+  }
+
   // Test / debug helpers
   window.VTApp = {
     getState: () => state,
@@ -2233,7 +2435,9 @@
     resetSessionPractice,
     openExercise: forceOpenExercise,
     setView,
-    setTab
+    setTab,
+    openPricing,
+    closePricing
   };
 
   function init() {
@@ -2246,11 +2450,14 @@
         // Refresh tour button label
         const tb = $("#btn-tour");
         if (tb) tb.textContent = tt("nav.tour");
+        updateBillingChrome();
+        if ($("#pricing-modal") && !$("#pricing-modal").hidden) renderPricingModal();
       };
     }
     const settings = VTStorage.getSettings();
     state.tab = settings.lastTab || "vocal";
     bind();
+    bindBilling();
     setTab(state.tab);
     updateSessionBanner();
 

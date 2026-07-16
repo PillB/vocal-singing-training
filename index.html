@@ -25,6 +25,8 @@
         </div>
         <div class="header-actions">
           <button type="button" class="btn btn-ghost btn-sm" id="btn-tour" data-i18n="nav.tour" title="Tour guiado">Tour</button>
+          <button type="button" class="btn btn-pro btn-sm" id="btn-pricing" data-i18n="nav.pro" title="Pro">Pro</button>
+          <span class="billing-pill" id="billing-pill" hidden>Pro</span>
           <button type="button" class="btn btn-ghost btn-sm" id="btn-lang" aria-label="Language" data-i18n="nav.lang">English</button>
           <button type="button" class="btn btn-ghost btn-sm" id="btn-history" data-i18n="nav.history">Historial</button>
           <button type="button" class="btn btn-ghost btn-sm" id="btn-plan" data-i18n="nav.plan">Plan de 12 semanas</button>
@@ -371,10 +373,42 @@
       </div>
     </div>
 
+    <!-- Pricing / subscription overlay (game-style; no page scroll required) -->
+    <div id="pricing-modal" class="modal-overlay pricing-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="pricing-title">
+      <div class="modal-card pricing-card">
+        <div class="pricing-head">
+          <div>
+            <p class="pricing-kicker" id="pricing-region-label">—</p>
+            <h3 id="pricing-title" data-i18n="pricing.title">Vocal Studio Pro</h3>
+            <p class="muted pricing-sub" data-i18n="pricing.sub">
+              Practica gratis. Pro desbloquea exportar progreso, perfiles y herramientas de coach.
+            </p>
+          </div>
+          <button type="button" class="btn btn-ghost btn-sm" id="pricing-close" aria-label="Close">✕</button>
+        </div>
+        <div class="pricing-status" id="pricing-status"></div>
+        <div class="pricing-rails" id="pricing-rails" role="group" aria-label="Payment method"></div>
+        <div class="pricing-grid" id="pricing-grid"></div>
+        <div class="pricing-foot">
+          <button type="button" class="btn btn-sm" id="btn-export-progress" data-i18n="pricing.export" hidden>
+            Exportar progreso (Pro)
+          </button>
+          <button type="button" class="btn btn-ghost btn-sm" id="btn-demo-pro" data-i18n="pricing.demo">
+            Activar demo Pro
+          </button>
+          <p class="muted pricing-note" data-i18n="pricing.note">
+            Pagos seguros vía Stripe (global) o Mercado Pago (Perú / LATAM). Cancela cuando quieras en el portal del proveedor.
+          </p>
+        </div>
+      </div>
+    </div>
+
     <script src="js/i18n.js"></script>
     <script src="js/exercises-data.js"></script>
     <script src="js/practice-profiles.js"></script>
     <script src="js/storage.js"></script>
+    <script src="js/billing-config.js"></script>
+    <script src="js/billing.js"></script>
     <script src="js/piano.js"></script>
     <script src="js/pitch-visualizer.js"></script>
     <script src="js/pitch-game.js"></script>

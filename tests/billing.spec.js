@@ -127,10 +127,44 @@ test.describe("Billing & subscriptions", () => {
     expect(Array.isArray(r.h.issues)).toBe(true);
     // Empty links + demo on → not production-ok
     expect(r.h.ok).toBe(false);
+    expect(r.h.productionReady).toBe(false);
     expect(r.h.portalConfigured).toBe(false);
     expect(r.bad.ok).toBe(false);
     expect(r.good.ok).toBe(true);
     expect(r.http.ok).toBe(false);
+  });
+
+  test("ad_free feature maps to Pro only", async ({ page }) => {
+    await boot(page);
+    const free = await page.evaluate(() => {
+      try {
+        localStorage.removeItem("vt_billing_v1");
+        localStorage.removeItem("vt_billing_trial_started_v1");
+        window.VT_BILLING_CONFIG.freeTrialDays = 0;
+      } catch {
+        /* ignore */
+      }
+      return {
+        adFree: VTBilling.can("ad_free"),
+        export: VTBilling.can("export_progress"),
+        pro: VTBilling.isPro()
+      };
+    });
+    expect(free.pro).toBe(false);
+    expect(free.adFree).toBe(false);
+    expect(free.export).toBe(false);
+
+    const pro = await page.evaluate(() => {
+      VTBilling.activateDemo("pro_monthly");
+      return {
+        adFree: VTBilling.can("ad_free"),
+        export: VTBilling.can("export_progress"),
+        pro: VTBilling.isPro()
+      };
+    });
+    expect(pro.pro).toBe(true);
+    expect(pro.adFree).toBe(true);
+    expect(pro.export).toBe(true);
   });
 
   test("customer portal URL validation and manage-billing UI", async ({ page }) => {

@@ -223,9 +223,53 @@ Vocal Studio monetization is a **static-SPA soft entitlement** over **hosted che
 ### Sources (current / non-deprecated)
 1. https://docs.stripe.com/payment-links  
 2. https://docs.stripe.com/webhooks  
-3. https://docs.stripe.com/payment-links/post-payment  
-4. https://docs.stripe.com/customer-management/activate-no-code-customer-portal  
-5. https://docs.stripe.com/customer-management  
-6. https://docs.stripe.com/no-code/customer-portal  
-7. https://www.globalsolo.global/blog/stripe-vs-paddle-vs-lemon-squeezy-2026  
-8. https://blog.vibecoder.me/stripe-vs-lemon-squeezy-vs-paddle  
+3. https://docs.stripe.com/webhooks/signature  
+4. https://docs.stripe.com/payment-links/post-payment  
+5. https://docs.stripe.com/customer-management/activate-no-code-customer-portal  
+6. https://docs.stripe.com/customer-management  
+7. https://docs.stripe.com/no-code/customer-portal  
+8. https://www.mercadopago.com.pe/developers/en/docs/your-integrations/notifications/webhooks  
+9. https://www.globalsolo.global/blog/stripe-vs-paddle-vs-lemon-squeezy-2026  
+10. https://blog.vibecoder.me/stripe-vs-lemon-squeezy-vs-paddle  
+
+---
+
+# Validation pass — full re-orchestration (2026-07-16)
+
+### Phase 0 preamble (refresh)
+Confirm Payment Links + optional Worker remain the correct stack for GH Pages. Official post-payment still uses `{CHECKOUT_SESSION_ID}`. Webhook verification still requires **raw body** + `constructEvent`. MP prefers **Webhooks** over IPN.
+
+### Phase 1 audit (current code)
+
+| Flow | Status |
+|------|--------|
+| Trial 7-day soft | OK |
+| Demo unlock | OK when flag true |
+| Checkout host allowlist | OK |
+| Success + session_id strict | OK when demo off |
+| Customer Portal button | Wired; URL empty ops |
+| Health strip in pricing | OK |
+| Worker template | Documented only |
+
+### Phase 2 gaps (this pass)
+
+| ID | Action |
+|----|--------|
+| ST-01/02 | Remain **ops open** |
+| ST-08 | **Docs closed** — full MP webhook/return section |
+| ST-10 | **Closed** — `productionReady` on health |
+| ST-11 | **Closed** — strip MP query params |
+| ST-12 | **Closed** — `can("ad_free")` |
+
+### Phase 4 changes applied
+- `billing.js`: `productionReady`, MP cleanUrlParams, `ad_free` feature  
+- `10-SUBSCRIPTIONS.md`: operator one-pager + MP expansion  
+- `workers/stripe-webhook/README.md`: 2026 verify rules  
+- Gap registry updated  
+
+### Phase 5 validation
+- Playwright `tests/billing.spec.js` (+ health productionReady assertion)  
+- Manual matrix unchanged: demo / strict session / portal unconfigured  
+
+### Phase 6 executive summary
+System is **engineering-ready** for hosted checkout + soft entitlement + portal wire. **Revenue-ready** only after operator pastes Payment Links, portal URL, and sets `demoUnlockEnabled: false`. Hard anti-forgery still requires Worker deploy (ST-04).  

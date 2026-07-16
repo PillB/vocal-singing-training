@@ -4,10 +4,31 @@
 **Code:** `js/billing-config.js`, `js/billing.js` · **Hardening path:** `workers/stripe-webhook/`  
 **Deep audit:** [`16-SUBSCRIPTION-TECHNICAL-ORCHESTRATION.md`](./16-SUBSCRIPTION-TECHNICAL-ORCHESTRATION.md) · [`SUBSCRIPTION-TECH-GAP-REGISTRY.md`](./SUBSCRIPTION-TECH-GAP-REGISTRY.md)
 
-> Official (non-deprecated):  
+> Official (non-deprecated, 2025–2026):  
 > - Payment Links: https://docs.stripe.com/payment-links  
-> - Webhooks + signatures: https://docs.stripe.com/webhooks  
-> - Post-payment: https://docs.stripe.com/payment-links/post-payment  
+> - Post-payment + `{CHECKOUT_SESSION_ID}`: https://docs.stripe.com/payment-links/post-payment  
+> - Webhooks + signatures: https://docs.stripe.com/webhooks · https://docs.stripe.com/webhooks/signature  
+> - Customer Portal (no-code): https://docs.stripe.com/customer-management/activate-no-code-customer-portal  
+> - MP Webhooks (prefer over IPN): https://www.mercadopago.com.pe/developers/en/docs/your-integrations/notifications/webhooks  
+
+---
+
+## Operator one-pager (go live in order)
+
+| Step | Action | Done when |
+|------|--------|-----------|
+| 1 | Stripe product + recurring prices | Prices visible in Dashboard |
+| 2 | Two Payment Links (monthly / yearly) | `buy.stripe.com/…` URLs |
+| 3 | Success URL with `session_id={CHECKOUT_SESSION_ID}` | Template on each link |
+| 4 | Paste links into `billing-config.js` → `providers.stripe.links` | Non-empty strings |
+| 5 | Activate Customer Portal login link → `customerPortalUrl` | `billing.stripe.com/p/login/…` |
+| 6 | Set `demoUnlockEnabled: false` | Demo button gone |
+| 7 | Commit → push `main` → Pages deploy | Live site uses new config |
+| 8 | Test card checkout → Pro pill + export | Real return works |
+| 9 | `VTBilling.getBillingHealth()` | `ok: true` (ideally `productionReady: true`) |
+| 10 | (Later) Deploy Worker webhook | Hard renewals/cancels |
+
+**Revenue is blocked** while ST-01 (empty links) or ST-02 (demo on) remain.
 
 ---
 
@@ -110,21 +131,41 @@ Commit → push `main` → wait for Pages build.
 
 ## Go-live checklist (Mercado Pago · Perú / LATAM)
 
-1. [Mercado Pago Developers](https://www.mercadopago.com.pe/developers) app (Peru).  
-2. Create **subscription / preapproval plan** or Checkout Pro preference for monthly/yearly amounts (S/ 35, S/ 279 or your list).  
-3. Set back/success URLs similarly:
+Official: [Subscriptions](https://www.mercadopago.com.pe/developers/en/docs/subscriptions/overview) · [Webhooks](https://www.mercadopago.com.pe/developers/en/docs/your-integrations/notifications/webhooks) · [Back URLs](https://www.mercadopago.com.ar/developers/en/docs/checkout-pro/configure-back-urls)
+
+> Prefer **Webhooks** over legacy **IPN** (MP documents IPN as discontinued path). Webhooks include a **secret signature** for origin validation.
+
+### Step by step
+
+1. Create a [Mercado Pago Developers](https://www.mercadopago.com.pe/developers) application (Peru / your country).  
+2. Create a **subscription plan** (preapproval) or Checkout preference for monthly/yearly (display hints: S/ 35, S/ 279).  
+3. Configure **return / back URLs** to your site (HTTPS; no localhost in production):
 
 ```text
-https://pillb.github.io/vocal-singing-training/?billing=success&plan=pro_monthly&provider=mercadopago&payment_id=… 
+success → https://pillb.github.io/vocal-singing-training/?billing=success&plan=pro_monthly&provider=mercadopago
+failure → https://pillb.github.io/vocal-singing-training/?billing=cancel
+pending → same as success or a “pending” page (soft Pro only after approved)
 ```
 
-(Use MP’s documented return parameters; app also accepts `preapproval_id`.)  
+4. App accepts on return: `payment_id`, `preapproval_id`, or (with demo off) any of those as session-like ids. MP may also append `collection_id`, `status`, `preference_id`, etc. — `billing.js` strips common MP query keys after handling.  
+5. Paste `init_point` / subscription checkout URLs into `providers.mercadopago.links` (`pro_monthly`, `pro_yearly`).  
+6. Hosts must match allowlist (`www.mercadopago.com.pe`, `mpago.la`, …) or set `allowedCheckoutHosts`.  
+7. **Sandbox first**, then production credentials.  
+8. **Webhooks (hard path, recommended when PE revenue matters):**  
+   - Dashboard → Your integrations → Webhooks  
+   - Topics: `subscription_preapproval`, `subscription_authorized_payment`, payment status as applicable  
+   - Validate MP secret signature server-side (never in SPA)  
+   - Do **not** treat browser return alone as proof of payment  
 
-4. Paste `init_point` / checkout URLs into `providers.mercadopago.links`.  
-5. Test sandbox first.  
-6. Later: configure **IPN/webhooks** with secret validation (do not trust return URL alone).
+### MP vs Stripe (this product)
 
-Hosts must be on the allowlist in `billing.js` (`buy.stripe.com`, `*.mercadopago.com*`, etc.). Override via `allowedCheckoutHosts` if needed.
+| | Stripe | Mercado Pago |
+|--|--------|--------------|
+| Primary markets | US/EU/global cards | PE + LATAM |
+| Hosted checkout | Payment Links | Subscriptions / Checkout Pro |
+| Soft return param | `session_id` | `payment_id` / `preapproval_id` |
+| Self-serve portal | Customer Portal login | MP account / bill emails |
+| Hard verify | Stripe-Signature Worker | MP Webhooks + signature |
 
 ---
 
@@ -135,7 +176,8 @@ VTBilling.getEntitlement()     // { pro, plan, status, source, expiresAt, … }
 VTBilling.isPro()
 VTBilling.can("export_progress")
 VTBilling.startCheckout("pro_monthly", "stripe")
-VTBilling.getBillingHealth()   // { ok, demoUnlock, links, portalConfigured, issues[] }
+VTBilling.getBillingHealth()   // { ok, productionReady, demoUnlock, links, portalConfigured, issues[] }
+// ok = !demo && linksConfigured; productionReady = ok && portalConfigured
 VTBilling.validateCheckoutUrl(url)
 VTBilling.openCustomerPortal() // redirect to billing.stripe.com portal login
 VTBilling.isPortalUrl(url)

@@ -312,8 +312,12 @@
     } else {
       issues.push("customerPortalUrl empty — customers cannot self-serve cancel/update");
     }
+    // ok = minimum for real checkout (links live, demo off). Portal is recommended, not required.
+    // productionReady = ok + portal for self-serve cancel (Stripe).
+    const ok = !demoUnlock && links;
     return {
-      ok: !demoUnlock && links,
+      ok,
+      productionReady: ok && portalOk,
       demoUnlock,
       links,
       stripeConfigured: !stripeEmpty,
@@ -518,7 +522,18 @@
         "provider",
         "session_id",
         "payment_id",
-        "preapproval_id"
+        "preapproval_id",
+        // Mercado Pago / Checkout Pro common return params
+        "collection_id",
+        "collection_status",
+        "payment_type",
+        "merchant_order_id",
+        "preference_id",
+        "status",
+        "external_reference",
+        "site_id",
+        "processing_mode",
+        "merchant_account_id"
       ].forEach((k) => u.searchParams.delete(k));
       window.history.replaceState({}, "", u.pathname + u.search + u.hash);
     } catch {
@@ -577,6 +592,7 @@
       no_limits: false,
       lesson_anchor: false,
       yearly_savings: false,
+      ad_free: false,
       all_free: true,
       all_pro_monthly: pro
     };
@@ -594,7 +610,8 @@
       priority_progressions: pro,
       no_limits: pro,
       lesson_anchor: pro,
-      yearly_savings: pro
+      yearly_savings: pro,
+      ad_free: pro
     };
     return !!map[feature];
   }

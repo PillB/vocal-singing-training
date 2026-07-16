@@ -125,9 +125,14 @@
       this.chordLanes = [];
       /** All unique tones across progression (ghost lanes) */
       this.progressionLanes = [];
-      /** Full progression pitch window for multi-note highway */
+      /**
+       * Fixed pitch window for the highway (MIDI).
+       * Once locked for a progression / note option, Y mapping must NOT
+       * re-center or re-scale when the active target changes — that was confusing.
+       */
       this.rangeMinMidi = null;
       this.rangeMaxMidi = null;
+      this.rangeLocked = false;
       this.activeChordName = "";
 
       this._resize();
@@ -151,7 +156,108 @@
       this.h = h;
     }
 
+    /**
+     * Normalize a MIDI span: pad sides, enforce minimum width so a single
+     * note still has room for voice deviation without recentering.
+     */
+    _normalizeRange(minMidi, maxMidi, pad = 1.25, minSpan = 10) {
+      let lo = Number(minMidi);
+      let hi = Number(maxMidi);
+      if (!Number.isFinite(lo) || !Number.isFinite(hi)) {
+        return { minMidi: 48, maxMidi: 60 };
+      }
+      if (hi < lo) {
+        const t = lo;
+        lo = hi;
+        hi = t;
+      }
+      lo -= pad;
+      hi += pad;
+      const span = hi - lo;
+      if (span < minSpan) {
+        const mid = (lo + hi) / 2;
+        lo = mid - minSpan / 2;
+        hi = mid + minSpan / 2;
+      }
+      return { minMidi: lo, maxMidi: hi };
+    }
+
+    /**
+     * Lock the highway Y-axis to a fixed MIDI window.
+     * Subsequent chord/note changes only move the active target — not the grid.
+     */
+    lockMidiRange(minMidi, maxMidi, opts = {}) {
+      const pad = opts.pad != null ? opts.pad : 1.25;
+      const minSpan = opts.minSpan != null ? opts.minSpan : 10;
+      const r = this._normalizeRange(minMidi, maxMidi, pad, minSpan);
+      this.rangeMinMidi = r.minMidi;
+      this.rangeMaxMidi = r.maxMidi;
+      this.rangeLocked = true;
+      return r;
+    }
+
+    /**
+     * Lock range from note names (e.g. challenge pool, scale steps).
+     * Builds optional ghost lanes when opts.ghostLanes is true (default true).
+     */
+    lockRangeFromNoteNames(names, noteFreqMap, opts = {}) {
+      const map = noteFreqMap || global.VT_NOTE_FREQ || {};
+      const list = (names || []).filter(Boolean);
+      const midis = [];
+      const notes = [];
+      list.forEach((n) => {
+        const f = typeof n === "number" ? n : map[n];
+        if (!f || f < 40 || f > 2000) return;
+        const midi = freqToMidi(f);
+        midis.push(midi);
+        notes.push({
+          name: typeof n === "string" ? n : midiToName(midi),
+          freq: f,
+          midi
+        });
+      });
+      if (!midis.length) return null;
+      const r = this.lockMidiRange(Math.min(...midis), Math.max(...midis), opts);
+      if (opts.ghostLanes !== false) {
+        const seen = new Set();
+        this.progressionLanes = [];
+        notes.forEach((n) => {
+          const k = Math.round(n.midi * 2) / 2;
+          if (seen.has(k)) return;
+          seen.add(k);
+          this.progressionLanes.push({
+            name: n.name,
+            freq: n.freq,
+            midi: n.midi,
+            active: false
+          });
+        });
+        this.progressionLanes.sort((a, b) => a.midi - b.midi);
+      }
+      return r;
+    }
+
+    /** Lock a fixed window around a center frequency in Hz (ref / hold exercises). */
+    lockWindowAroundFreq(freqHz, halfSpan = 6) {
+      const f = Number(freqHz);
+      const midi = f > 40 && f < 2000 ? freqToMidi(f) : freqToMidi(130.81);
+      return this.lockMidiRange(midi - halfSpan, midi + halfSpan, {
+        pad: 0,
+        minSpan: halfSpan * 2
+      });
+    }
+
+    /** Lock a fixed window around a MIDI note number. */
+    lockWindowAroundMidi(midi, halfSpan = 6) {
+      const m = Number.isFinite(midi) ? midi : 48;
+      return this.lockMidiRange(m - halfSpan, m + halfSpan, {
+        pad: 0,
+        minSpan: halfSpan * 2
+      });
+    }
+
     setTargetFreq(freq) {
+      // Target only — never re-scale the highway when the singing note changes
       if (freq && freq > 40 && freq < 2000) this.targetFreq = freq;
     }
 
@@ -161,14 +267,14 @@
     }
 
     /**
-     * Set full progression pitch span so highway shows all chord tones.
-     * Also builds ghost lanes for every unique note in the progression.
+     * Lock highway to the full max range of a progression (all chords/tones).
+     * Call once when the user picks a progression — range stays fixed while chords cycle.
      */
     setProgressionRange(prog) {
       if (!prog || !global.VTProgressionRange) return;
       const r = global.VTProgressionRange(prog, global.VT_NOTE_FREQ);
-      this.rangeMinMidi = r.minMidi;
-      this.rangeMaxMidi = r.maxMidi;
+      // Lock to full progression span (do not grow/shrink per chord)
+      this.lockMidiRange(r.minMidi + 1, r.maxMidi - 1, { pad: 1.25, minSpan: 12 });
       // Ghost lanes: every unique pitch in the progression (dim until chord activates)
       const seen = new Set();
       this.progressionLanes = [];
@@ -188,6 +294,7 @@
 
     /**
      * Activate all chord-tone lanes; highlight primary match note.
+     * Does NOT change a locked range (stable highway while chords move).
      */
     setTargetFromChord(chord) {
       if (!chord || !chord.notes || !chord.notes.length) return;
@@ -220,15 +327,13 @@
       }
       if (map[pick]) this.setTargetFreq(map[pick]);
 
-      // Expand range to include these lanes
-      if (this.chordLanes.length) {
+      // Only set range from this chord when nothing is locked yet (fallback)
+      if (!this.rangeLocked && this.chordLanes.length) {
         const midis = this.chordLanes.map((L) => L.midi);
-        const lo = Math.min(...midis);
-        const hi = Math.max(...midis);
-        if (this.rangeMinMidi == null) this.rangeMinMidi = lo - 1;
-        else this.rangeMinMidi = Math.min(this.rangeMinMidi, lo - 1);
-        if (this.rangeMaxMidi == null) this.rangeMaxMidi = hi + 1;
-        else this.rangeMaxMidi = Math.max(this.rangeMaxMidi, hi + 1);
+        this.lockMidiRange(Math.min(...midis), Math.max(...midis), {
+          pad: 1.25,
+          minSpan: 10
+        });
       }
     }
 
@@ -238,6 +343,7 @@
       this.progressionLanes = [];
       this.rangeMinMidi = null;
       this.rangeMaxMidi = null;
+      this.rangeLocked = false;
     }
 
     /** Full reset when switching exercises (no stale multi-lane highway). */

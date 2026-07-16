@@ -1353,6 +1353,10 @@
         <div class="mode-big" data-l>0 / 10</div>
         <p class="mode-meta">${L("Mantén el tarareo cerca del objetivo ~0,9s para avanzar. Siente el zumbido en los labios.", "Hold hum near target ~0.9s to advance. Feel lip buzz.")}</p>
       `;
+      // Lock highway to full note set so steps don't re-scale the Y-axis
+      if (typeof global.VTLockHighwayNotes === "function") {
+        global.VTLockHighwayNotes(this.state.notes);
+      }
       // set first target
       if (global.VT_NOTE_FREQ && global.VT_NOTE_FREQ[this.state.notes[0]]) {
         // app practice engine target set via onFrame consumer — set on window for app
@@ -1360,6 +1364,9 @@
       }
     },
     onStart() {
+      if (typeof global.VTLockHighwayNotes === "function") {
+        global.VTLockHighwayNotes(this.state.notes);
+      }
       this._pushTarget();
     },
     _pushTarget() {
@@ -1512,7 +1519,36 @@
         <p class="mode-meta">Hold near step (~40¢) for 0.7s to advance · Roots: <strong data-r>0</strong></p>
         <p class="mode-meta muted" data-st>Sing the step — no free skip.</p>
       `;
+      this._lockScaleRange();
       this._setStepTarget();
+    },
+    _lockScaleRange() {
+      // Max span of the full 5-note pattern — fixed for the whole option
+      if (global.VTPitchUtils && global.VTGetPitchViz) {
+        const viz = global.VTGetPitchViz();
+        if (viz?.lockMidiRange) {
+          const midis = this.state.pattern.map((s) => this.state.rootMidi + s);
+          viz.lockMidiRange(Math.min(...midis), Math.max(...midis), {
+            pad: 1.5,
+            minSpan: 10
+          });
+          // Ghost lanes for each unique step
+          const seen = new Set();
+          viz.progressionLanes = [];
+          midis.forEach((m) => {
+            const k = Math.round(m * 2) / 2;
+            if (seen.has(k)) return;
+            seen.add(k);
+            viz.progressionLanes.push({
+              name: global.VTPitchUtils.midiToName(m),
+              freq: global.VTPitchUtils.midiToFreq(m),
+              midi: m,
+              active: false
+            });
+          });
+          viz.progressionLanes.sort((a, b) => a.midi - b.midi);
+        }
+      }
     },
     _setStepTarget() {
       const semi = this.state.pattern[this.state.i];
@@ -1522,6 +1558,7 @@
         const name = global.VTPitchUtils.midiToName(midi);
         this.state.wantFreq = f;
         this.state.wantName = name;
+        // Retarget only — range already locked to full scale span
         if (typeof global.VTSetPracticeTarget === "function") {
           global.VTSetPracticeTarget(f, name);
         }
@@ -1538,6 +1575,7 @@
       }
     },
     onStart() {
+      this._lockScaleRange();
       this._setStepTarget();
     },
     onFrame(frame) {

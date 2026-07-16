@@ -68,11 +68,49 @@
   window.VTToast = toast;
   window.VTSetPracticeTarget = function (freq, name) {
     if (freq) state.practice.setTargetFreq(freq);
+    // Move target only — highway Y-range stays locked for the current option
     if (state.pitchViz && freq) {
       state.pitchViz.setTargetFreq(freq);
     }
     if (name && $("#chord-now")) $("#chord-now").textContent = name;
   };
+
+  /**
+   * Lock pitch highway to the max range of a progression/option.
+   * Range stays fixed while chords/notes inside that option change.
+   */
+  function lockHighwayForProgression(progId) {
+    if (!state.pitchViz) ensurePitchViz();
+    const id = progId || state.selectedProg;
+    const prog = (window.VT_PROGRESSIONS || VTPiano?.getProgressions?.() || {})[id];
+    if (!prog || !state.pitchViz) return false;
+    state.pitchViz.setProgressionRange(prog);
+    if (prog.chords?.[0]) state.pitchViz.setTargetFromChord(prog.chords[0]);
+    try {
+      state.pitchViz._draw?.();
+    } catch {
+      /* ignore */
+    }
+    return true;
+  }
+
+  /** Lock highway for a flat list of note names (scales, challenges, hum steps). */
+  function lockHighwayForNotes(noteNames, opts) {
+    if (!state.pitchViz) ensurePitchViz();
+    if (!state.pitchViz || !noteNames?.length) return false;
+    state.pitchViz.lockRangeFromNoteNames(noteNames, window.VT_NOTE_FREQ, opts);
+    const first = noteNames[0];
+    if (first && VT_NOTE_FREQ?.[first]) state.pitchViz.setTargetNoteName(first, VT_NOTE_FREQ);
+    try {
+      state.pitchViz._draw?.();
+    } catch {
+      /* ignore */
+    }
+    return true;
+  }
+
+  window.VTLockHighwayNotes = lockHighwayForNotes;
+  window.VTLockHighwayProg = lockHighwayForProgression;
 
   function getProfile(ex) {
     return (
@@ -553,6 +591,18 @@
         state.pitchViz.setTargetNoteName(ref, VT_NOTE_FREQ);
         state.practice.setTargetFreq(VT_NOTE_FREQ[ref]);
       }
+      // Prefer full progression span when exercise has chords; else fixed window on ref
+      const wantsProg =
+        !!(ex.progressions?.length ||
+          ex.songs?.length ||
+          ex.audio?.progressions ||
+          profile.mode === "pitchChord" ||
+          profile.mode === "pitchSong");
+      if (wantsProg) {
+        lockHighwayForProgression(state.selectedProg || "prog1");
+      } else if (ref && VT_NOTE_FREQ?.[ref]) {
+        state.pitchViz.lockWindowAroundFreq(VT_NOTE_FREQ[ref], 6);
+      }
       updatePitchStatsLabel({
         targetName: ref || "C3",
         voiceName: "—",
@@ -719,6 +769,10 @@
         $$(".prog-btn", progWrap).forEach((x) => x.classList.remove("active"));
         b.classList.add("active");
         $("#chord-desc").textContent = p.description;
+        // Lock highway to this option's full max range (stable while chords cycle)
+        if (state.exercise?.audio?.pitchViz || state.exercise?.practice?.showPitch) {
+          lockHighwayForProgression(id);
+        }
       });
       progWrap.appendChild(b);
     });
@@ -726,6 +780,10 @@
     if (keys[0]) {
       state.selectedProg = keys.includes(state.selectedProg) ? state.selectedProg : keys[0];
       $("#chord-desc").textContent = progs[state.selectedProg]?.description || "";
+      // Initial lock for currently selected progression
+      if (state.exercise?.audio?.pitchViz || state.exercise?.practice?.showPitch) {
+        lockHighwayForProgression(state.selectedProg);
+      }
     }
 
     const refBtn = $("#btn-ref-pitch");
@@ -791,12 +849,8 @@
           if (map[pick]) state.practice.setTargetFreq(map[pick]);
         }
       };
-      // Full progression range on highway before first chord
-      const progMeta = VT_PROGRESSIONS[state.selectedProg];
-      if (progMeta && state.pitchViz) {
-        state.pitchViz.setProgressionRange(progMeta);
-        if (progMeta.chords?.[0]) state.pitchViz.setTargetFromChord(progMeta.chords[0]);
-      }
+      // Full progression max range — locked for this option (chords must not re-scale)
+      lockHighwayForProgression(state.selectedProg);
       const prog = await VTPiano.playProgression(state.selectedProg, {
         loop: !!loop,
         chordSec: opts.chordSec,
@@ -805,6 +859,7 @@
         sustainSec: opts.sustainSec
       });
       if (prog) {
+        // Re-apply same lock (same option) — never shrink to current chord
         if (state.pitchViz) state.pitchViz.setProgressionRange(prog);
         $("#chord-desc").textContent =
           prog.description +
@@ -867,6 +922,7 @@
 
   async function onChallengeNoteLocked(prevNote, nextNote) {
     toast(nextNote ? `Locked ${prevNote} → next ${nextNote}` : `Locked ${prevNote} · round done!`);
+    // Only retarget — highway range already locked to full challenge pool
     if (nextNote && VT_NOTE_FREQ[nextNote]) {
       state.practice.setTargetFreq(VT_NOTE_FREQ[nextNote]);
       if (state.pitchViz) state.pitchViz.setTargetNoteName(nextNote, VT_NOTE_FREQ);
@@ -1090,6 +1146,20 @@
         state.pitchViz.startExternal();
         state.pitchRunning = true;
         const ref = profile.refPitch || ex.audio.refPitch;
+        if (wantChallenge && state.pitchGame.challengeNotes?.length) {
+          // Lock once to full challenge set so notes don't jump the Y-axis
+          lockHighwayForNotes(state.pitchGame.challengeNotes);
+        } else if (
+          ex.progressions?.length ||
+          ex.songs?.length ||
+          ex.audio?.progressions ||
+          profile.mode === "pitchChord" ||
+          profile.mode === "pitchSong"
+        ) {
+          lockHighwayForProgression(state.selectedProg);
+        } else if (ref && VT_NOTE_FREQ[ref]) {
+          state.pitchViz.lockWindowAroundFreq(VT_NOTE_FREQ[ref], 6);
+        }
         if (challengeNote && VT_NOTE_FREQ[challengeNote]) {
           state.practice.setTargetFreq(VT_NOTE_FREQ[challengeNote]);
           state.pitchViz.setTargetFreq(VT_NOTE_FREQ[challengeNote]);

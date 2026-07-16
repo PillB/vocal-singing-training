@@ -77,7 +77,8 @@
           "all_exercises",
           "pitch_highway",
           "local_record",
-          "basic_plan"
+          "basic_plan",
+          "value_pulse"
         ],
         cta: "current"
       },
@@ -93,10 +94,10 @@
         features: [
           "all_free",
           "export_progress",
-          "multi_profile",
           "pro_insights",
-          "priority_progressions",
-          "no_limits"
+          "multi_profile",
+          "coach_pack",
+          "priority_progressions"
         ],
         cta: "subscribe"
       },
@@ -109,9 +110,12 @@
         pricePen: 279,
         priceEur: 79,
         badge: "save20",
+        popular: false,
+        hero: true,
         features: [
           "all_pro_monthly",
-          "yearly_savings"
+          "yearly_savings",
+          "lesson_anchor"
         ],
         cta: "subscribe"
       }

@@ -340,33 +340,62 @@
       pitch_highway: true,
       local_record: true,
       basic_plan: true,
+      value_pulse: true,
       export_progress: false,
       multi_profile: false,
       pro_insights: false,
+      coach_pack: false,
       priority_progressions: false,
-      no_limits: false
+      no_limits: false,
+      lesson_anchor: false,
+      yearly_savings: false,
+      all_free: true,
+      all_pro_monthly: pro
     };
     const map = {
       ...free,
       export_progress: pro,
       multi_profile: pro,
       pro_insights: pro,
+      coach_pack: pro,
       priority_progressions: pro,
-      no_limits: pro
+      no_limits: pro,
+      lesson_anchor: pro,
+      yearly_savings: pro
     };
     return !!map[feature];
   }
 
   function exportProgressJson() {
     if (!can("export_progress")) return null;
+    const pulse =
+      typeof global.VTValuePulse?.compute === "function" ? global.VTValuePulse.compute() : null;
+    const isEs =
+      (global.VTI18n && global.VTI18n.lang === "es") ||
+      (typeof document !== "undefined" && (document.documentElement.lang || "").startsWith("es"));
+    const narrative =
+      typeof global.VTValuePulse?.narrative === "function"
+        ? global.VTValuePulse.narrative(pulse, isEs)
+        : null;
     const payload = {
       exportedAt: new Date().toISOString(),
+      product: "Vocal Studio Pro",
       entitlement: getEntitlement(),
+      valuePulse: pulse,
+      coachSummary: narrative,
       progress: global.VTStorage?.getProgress?.() || {},
+      holdLogs: global.VTStorage?.getHoldLogs?.() || [],
       weekPlan: global.VTStorage?.getWeekPlan?.() || null,
       settings: global.VTStorage?.getSettings?.() || {}
     };
     return JSON.stringify(payload, null, 2);
+  }
+
+  function trialDaysLeft() {
+    if (!trialActive()) return 0;
+    const end = trialEndsAt();
+    if (!end) return 0;
+    return Math.max(0, Math.ceil((Date.parse(end) - nowMs()) / 86400000));
   }
 
   // Start trial clock early
@@ -390,6 +419,7 @@
     exportProgressJson,
     onChange,
     trialEndsAt,
-    trialActive
+    trialActive,
+    trialDaysLeft
   };
 })(window);

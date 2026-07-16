@@ -53,6 +53,38 @@
           </p>
         </div>
 
+        <!-- Value pulse: prove progress (competence) before asking for Pro -->
+        <div class="value-pulse card" id="value-pulse" aria-live="polite">
+          <div class="value-pulse-head">
+            <h3 class="value-pulse-title" data-i18n="value.pulseTitle">Tu estudio</h3>
+            <span class="value-pulse-tag" id="value-pulse-tag" hidden></span>
+          </div>
+          <div class="value-pulse-grid" id="value-pulse-grid">
+            <div class="value-stat"><strong id="vp-sessions">0</strong><span data-i18n="value.sessions">Sesiones</span></div>
+            <div class="value-stat"><strong id="vp-minutes">0</strong><span data-i18n="value.minutes">Minutos</span></div>
+            <div class="value-stat"><strong id="vp-streak">0</strong><span data-i18n="value.streak">Racha (días)</span></div>
+            <div class="value-stat"><strong id="vp-hold">—</strong><span data-i18n="value.bestHold">Mejor hold</span></div>
+            <div class="value-stat"><strong id="vp-ex">0</strong><span data-i18n="value.exercises">Ejercicios</span></div>
+          </div>
+          <p class="value-insights muted" id="value-insights" hidden></p>
+          <div class="value-pulse-cta" id="value-pulse-cta">
+            <button type="button" class="btn btn-sm btn-primary" id="btn-value-pro" data-i18n="value.ctaPro">
+              Pro: exportar y coach
+            </button>
+            <p class="muted value-anchor" data-i18n="value.anchor">
+              Una clase particular ≈ el año de Pro. Practica gratis siempre.
+            </p>
+          </div>
+        </div>
+
+        <div class="value-banner" id="value-banner" hidden role="status">
+          <p id="value-banner-text"></p>
+          <div class="value-banner-actions">
+            <button type="button" class="btn btn-sm btn-primary" id="value-banner-cta" data-i18n="value.bannerCta">Ver Pro</button>
+            <button type="button" class="btn btn-ghost btn-sm" id="value-banner-dismiss" data-i18n="value.bannerDismiss">Ahora no</button>
+          </div>
+        </div>
+
         <div class="tabs" role="tablist" aria-label="Training track">
           <button type="button" class="tab active" role="tab" data-tab="vocal" aria-selected="true" data-i18n="tab.vocal">
             Entrenamiento vocal
@@ -473,6 +505,17 @@
           <button type="button" class="btn btn-ghost btn-sm" id="pricing-close" aria-label="Close">✕</button>
         </div>
         <div class="pricing-status" id="pricing-status"></div>
+        <div class="pricing-value-stack" id="pricing-value-stack">
+          <p class="pricing-dream" data-i18n="pricing.dream">
+            Resultado: voz clara y afinada, con un plan que se sostiene semana a semana.
+          </p>
+          <ul class="pricing-proof" data-i18n-list="pricing.proof">
+            <li data-i18n="pricing.proof1">Autopista + piano + mic ilimitados en Gratis</li>
+            <li data-i18n="pricing.proof2">Pro = exportar prueba, varios perfiles e insights de coach</li>
+            <li data-i18n="pricing.proof3">Ancla: Pro anual ≈ menos que 1 clase particular</li>
+          </ul>
+          <p class="pricing-personal muted" id="pricing-personal" hidden></p>
+        </div>
         <div class="pricing-rails" id="pricing-rails" role="group" aria-label="Payment method"></div>
         <div class="pricing-grid" id="pricing-grid"></div>
         <div class="pricing-foot">
@@ -495,6 +538,7 @@
     <script src="js/storage.js"></script>
     <script src="js/billing-config.js"></script>
     <script src="js/billing.js"></script>
+    <script src="js/value-pulse.js"></script>
     <script src="js/auth-users.generated.js"></script>
     <script src="js/auth.js"></script>
     <script src="js/piano.js"></script>

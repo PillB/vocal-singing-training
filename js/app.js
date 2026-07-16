@@ -400,6 +400,11 @@
     if (target) target.classList.add("active");
     document.body.classList.toggle("view-exercise", name === "exercise");
     updateSessionBanner();
+    if (name === "home") {
+      renderValuePulse();
+      // Gentle trial/progress prompts only on home (never during live practice)
+      setTimeout(() => showValueMoment(), 400);
+    }
   }
 
   function setTab(tab) {
@@ -1782,6 +1787,10 @@
           if (sec > prev) input.value = sec;
         }
         toast(tt("toast.hold", { s: sec }));
+        if (sec >= 8) {
+          renderValuePulse();
+          setTimeout(() => showValueMoment("hold_pr"), 500);
+        }
       };
       state.practice.onRecordingReady = (result) => {
         if (result) showPlayback(result);
@@ -2314,6 +2323,9 @@
       notes,
       durationSec: elapsed
     });
+    renderValuePulse();
+    // Success → soft upgrade moment (never blocks practice)
+    setTimeout(() => showValueMoment(), 600);
 
     state.sessionPractice.saved = true;
     const pending = state.pendingLeave;
@@ -3034,6 +3046,101 @@
     }
   }
 
+  function renderValuePulse() {
+    const pulse = window.VTValuePulse?.compute?.() || {
+      sessions: 0,
+      minutes: 0,
+      streak: 0,
+      bestHoldSec: 0,
+      exercisesTouched: 0
+    };
+    const set = (id, v) => {
+      const el = $(id);
+      if (el) el.textContent = v;
+    };
+    set("#vp-sessions", String(pulse.sessions || 0));
+    set("#vp-minutes", String(pulse.minutes || 0));
+    set("#vp-streak", String(pulse.streak || 0));
+    set(
+      "#vp-hold",
+      pulse.bestHoldSec >= 0.5 ? `${Number(pulse.bestHoldSec).toFixed(1)}s` : "—"
+    );
+    set("#vp-ex", String(pulse.exercisesTouched || 0));
+
+    const B = window.VTBilling;
+    const ent = B?.getEntitlement?.() || { pro: false, status: "free" };
+    const tag = $("#value-pulse-tag");
+    if (tag) {
+      tag.hidden = false;
+      if (ent.status === "trial") {
+        const n = B.trialDaysLeft?.() ?? 0;
+        tag.textContent = tt("value.tagTrial", { n: String(n) });
+        tag.className = "value-pulse-tag is-trial";
+      } else if (ent.pro) {
+        tag.textContent = tt("value.tagPro");
+        tag.className = "value-pulse-tag is-pro";
+      } else {
+        tag.textContent = tt("value.tagFree");
+        tag.className = "value-pulse-tag is-free";
+      }
+    }
+
+    const insights = $("#value-insights");
+    if (insights && window.VTValuePulse?.narrative) {
+      if (ent.pro || ent.status === "trial") {
+        insights.hidden = false;
+        insights.textContent =
+          tt("value.insightsPro") + " · " + VTValuePulse.narrative(pulse, isEsLang());
+      } else if (pulse.sessions > 0) {
+        insights.hidden = false;
+        insights.textContent = tt("value.insightsLocked");
+      } else {
+        insights.hidden = true;
+        insights.textContent = "";
+      }
+    }
+  }
+
+  function showValueMoment(forceId) {
+    const B = window.VTBilling;
+    const VP = window.VTValuePulse;
+    if (!VP?.suggestUpgradeMoment) return;
+    // Don't interrupt e2e / tours
+    try {
+      if (sessionStorage.getItem("vt_e2e") === "1") return;
+      if (document.body.classList.contains("tour-active")) return;
+    } catch {
+      /* ignore */
+    }
+    const ent = B?.getEntitlement?.() || { pro: false };
+    const stats = VP.compute();
+    let moment = forceId
+      ? { id: forceId, priority: 99, sessions: stats.sessions, bestHoldSec: stats.bestHoldSec, trialDaysLeft: B?.trialDaysLeft?.() }
+      : VP.suggestUpgradeMoment(stats, ent);
+    if (!moment || VP.isDismissed(moment.id)) return;
+    // If already full pro (paid/demo), skip soft upsells except trial ending
+    if (ent.pro && ent.source !== "trial" && moment.id !== "trial_ending") return;
+
+    const banner = $("#value-banner");
+    const text = $("#value-banner-text");
+    if (!banner || !text) return;
+    const vars = {
+      n: String(moment.sessions ?? moment.trialDaysLeft ?? 0),
+      s: moment.bestHoldSec != null ? Number(moment.bestHoldSec).toFixed(1) : "0"
+    };
+    text.textContent = tt("value.moment." + moment.id, vars);
+    banner.hidden = false;
+    banner.dataset.momentId = moment.id;
+  }
+
+  function hideValueBanner() {
+    const banner = $("#value-banner");
+    if (!banner) return;
+    const id = banner.dataset.momentId;
+    if (id && window.VTValuePulse?.dismiss) VTValuePulse.dismiss(id);
+    banner.hidden = true;
+  }
+
   function renderPricingModal() {
     const B = window.VTBilling;
     if (!B) return;
@@ -3050,11 +3157,28 @@
     if (status) {
       const ent = B.getEntitlement();
       if (ent.status === "trial") {
-        status.textContent = `${tt("pricing.trial")}${ent.expiresAt ? ` · ${new Date(ent.expiresAt).toLocaleDateString()}` : ""}`;
+        const left = B.trialDaysLeft?.() ?? 0;
+        status.textContent = `${tt("pricing.trial")} · ${tt("pricing.trialLeft", { n: String(left) })}`;
       } else if (ent.pro) {
         status.textContent = `${tt("pricing.proActive")} · ${ent.plan}${ent.source === "demo" ? " (demo)" : ""}`;
       } else {
         status.textContent = tt("pricing.free");
+      }
+    }
+    // Personal proof line (Hormozi likelihood × investment)
+    const personal = $("#pricing-personal");
+    if (personal && window.VTValuePulse?.compute) {
+      const p = VTValuePulse.compute();
+      personal.hidden = false;
+      if (!p.sessions && p.bestHoldSec < 0.5) {
+        personal.textContent = tt("pricing.personalEmpty");
+      } else {
+        personal.textContent = tt("pricing.personalHave", {
+          sessions: String(p.sessions || 0),
+          minutes: String(p.minutes || 0),
+          streak: String(p.streak || 0),
+          hold: p.bestHoldSec >= 0.5 ? Number(p.bestHoldSec).toFixed(1) : "0"
+        });
       }
     }
     const rails = $("#pricing-rails");
@@ -3102,8 +3226,9 @@
               disabled = ent.plan === p.id || ent.source === "paid";
             }
           }
+          const hero = p.hero || p.id === "pro_yearly" ? " is-hero" : "";
           return `
-            <article class="plan-card${p.popular ? " is-popular" : ""}" data-plan="${p.id}">
+            <article class="plan-card${p.popular ? " is-popular" : ""}${hero}" data-plan="${p.id}">
               ${badge}
               <h4>${name}</h4>
               <div class="plan-price">${price.text}<span>${interval}</span></div>
@@ -3292,6 +3417,12 @@
 
   function bindBilling() {
     $("#btn-pricing")?.addEventListener("click", openPricing);
+    $("#btn-value-pro")?.addEventListener("click", openPricing);
+    $("#value-banner-cta")?.addEventListener("click", () => {
+      hideValueBanner();
+      openPricing();
+    });
+    $("#value-banner-dismiss")?.addEventListener("click", hideValueBanner);
     $("#pricing-close")?.addEventListener("click", closePricing);
     $("#pricing-modal")?.addEventListener("click", (e) => {
       if (e.target === $("#pricing-modal")) closePricing();
@@ -3334,6 +3465,7 @@
       if (ret?.event === "cancel") toast(tt("pricing.toast.cancel"));
     }
     updateBillingChrome();
+    renderValuePulse();
   }
 
   // Test / debug helpers
@@ -3343,6 +3475,8 @@
     getRangeSnapshot: () => ensureRangeAdapter()?.getSnapshot?.() || null,
     getProfile,
     fitStageBelowContent,
+    renderValuePulse,
+    showValueMoment,
     applyPianoOptionsHot,
     get _hotApplyPromise() {
       return state._hotApplyPromise;
@@ -3383,6 +3517,7 @@
         if (tb) tb.textContent = tt("nav.tour");
         updateBillingChrome();
         refreshAccountUI();
+        renderValuePulse();
         if ($("#pricing-modal") && !$("#pricing-modal").hidden) renderPricingModal();
       };
     }

@@ -181,6 +181,17 @@ Generate: `npm run accounts:generate`
 
 ---
 
+## Value marketing (research-backed)
+
+See **`docs/14-VALUE-MARKETING-AND-SUBSCRIPTIONS.md`** for Hormozi value equation, freemium benchmarks, ethical game psychology, Reddit competitive insights, feature validation, and funnel.
+
+| Surface | Role |
+|---------|------|
+| Home **Tu estudio** | Free progress proof (competence) |
+| Soft **value banner** | Milestone upgrade after success (never blocks Empezar) |
+| Pricing **value stack** | Dream outcome + proof + lesson anchor + personal stats |
+| Export pack | Pro: JSON + coach narrative |
+
 ## Recommended next 90 days
 
 1. Live Stripe + MP links; disable demo unlock  
@@ -188,3 +199,4 @@ Generate: `npm run accounts:generate`
 3. Webhook → optional license code email  
 4. Promo codes (Stripe coupons) for PE launch (e.g. `PERU20`)  
 5. Compare Paddle MoR if EU VAT overhead grows  
+6. Measure trial→paid and soft-banner→pricing open rate  

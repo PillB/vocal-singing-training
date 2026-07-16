@@ -94,6 +94,19 @@ test.describe("Billing & subscriptions", () => {
     expect(page.url()).not.toContain("billing=success");
   });
 
+  test("value pulse board and pricing value stack are present", async ({ page }) => {
+    await page.goto(BASE + "/?e2e=1&t=" + Date.now(), { waitUntil: "networkidle" });
+    await expect(page.locator("#value-pulse")).toBeVisible();
+    await expect(page.locator("#vp-sessions")).toBeVisible();
+    await page.click("#btn-pricing");
+    await expect(page.locator("#pricing-modal")).toBeVisible();
+    await expect(page.locator("#pricing-value-stack")).toBeVisible();
+    await expect(page.locator("#pricing-personal")).toBeVisible();
+    const pulse = await page.evaluate(() => window.VTValuePulse?.compute?.());
+    expect(pulse).toBeTruthy();
+    expect(typeof pulse.sessions).toBe("number");
+  });
+
   test("trial or free entitlement always defined", async ({ page }) => {
     await boot(page);
     const e = await page.evaluate(() => VTBilling.getEntitlement());

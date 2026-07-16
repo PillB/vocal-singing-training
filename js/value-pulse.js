@@ -1,0 +1,211 @@
+/**
+ * Value pulse — aggregate practice proof for home + pricing + Pro insights.
+ * Competence / investment signals (SDT + ethical “show progress before ask”).
+ */
+(function (global) {
+  "use strict";
+
+  function dayKey(iso) {
+    try {
+      return new Date(iso).toISOString().slice(0, 10);
+    } catch {
+      return null;
+    }
+  }
+
+  function compute() {
+    const progress = global.VTStorage?.getProgress?.() || {};
+    const holds = global.VTStorage?.getHoldLogs?.() || [];
+    const plan = global.VTStorage?.getWeekPlan?.() || null;
+
+    let sessions = 0;
+    let totalSec = 0;
+    let exercisesTouched = 0;
+    let lastScoreSum = 0;
+    let lastScoreN = 0;
+    const days = new Set();
+    let lastAt = null;
+
+    Object.keys(progress).forEach((exId) => {
+      const row = progress[exId];
+      if (!row) return;
+      const count = Number(row.completedCount) || (row.history || []).length || 0;
+      if (count > 0) exercisesTouched += 1;
+      sessions += count;
+      (row.history || []).forEach((h) => {
+        totalSec += Number(h.durationSec) || 0;
+        if (h.at) {
+          const d = dayKey(h.at);
+          if (d) days.add(d);
+          if (!lastAt || h.at > lastAt) lastAt = h.at;
+        }
+        if (h.score != null && Number.isFinite(Number(h.score))) {
+          lastScoreSum += Number(h.score);
+          lastScoreN += 1;
+        }
+      });
+      if (row.lastAt && (!lastAt || row.lastAt > lastAt)) lastAt = row.lastAt;
+    });
+
+    let bestHold = 0;
+    holds.forEach((h) => {
+      const s = Number(h.seconds) || 0;
+      if (s > bestHold) bestHold = s;
+      if (h.at) {
+        const d = dayKey(h.at);
+        if (d) days.add(d);
+      }
+    });
+
+    // Streak: consecutive calendar days ending today or yesterday with activity
+    const sortedDays = [...days].sort();
+    let streak = 0;
+    if (sortedDays.length) {
+      const today = dayKey(new Date().toISOString());
+      const yest = dayKey(new Date(Date.now() - 86400000).toISOString());
+      let cursor = sortedDays.includes(today) ? today : sortedDays.includes(yest) ? yest : null;
+      if (cursor) {
+        const set = new Set(sortedDays);
+        while (cursor && set.has(cursor)) {
+          streak += 1;
+          const prev = new Date(cursor + "T12:00:00Z");
+          prev.setUTCDate(prev.getUTCDate() - 1);
+          cursor = prev.toISOString().slice(0, 10);
+        }
+      }
+    }
+
+    const minutes = Math.round(totalSec / 60);
+    const avgScore = lastScoreN ? lastScoreSum / lastScoreN : null;
+
+    return {
+      sessions,
+      minutes,
+      totalSec,
+      exercisesTouched,
+      bestHoldSec: bestHold,
+      activeDays: days.size,
+      streak,
+      lastAt,
+      avgScore,
+      planElement: plan?.element || null,
+      planWeek: plan?.weekNumber || null,
+      planStatus: plan?.status || "idle",
+      checkIns: (plan?.checkIns || []).length,
+      completedElements: (plan?.completedElements || []).length
+    };
+  }
+
+  /** Human narrative for Pro Insights / export (ES|EN via isEs flag). */
+  function narrative(stats, isEs) {
+    const s = stats || compute();
+    if (!s.sessions && !s.bestHoldSec) {
+      return isEs
+        ? "Aún no hay sesiones guardadas. Completa un ejercicio y guarda métricas para ver tu progreso."
+        : "No saved sessions yet. Finish an exercise and save metrics to see your progress.";
+    }
+    const parts = [];
+    if (isEs) {
+      parts.push(
+        `Has completado ${s.sessions} sesión${s.sessions === 1 ? "" : "es"} en ${s.exercisesTouched} ejercicio${s.exercisesTouched === 1 ? "" : "s"}` +
+          (s.minutes ? ` (~${s.minutes} min de práctica registrada)` : "") +
+          "."
+      );
+      if (s.streak > 1) parts.push(`Racha activa: ${s.streak} días seguidos.`);
+      else if (s.activeDays > 0) parts.push(`Días con práctica: ${s.activeDays}.`);
+      if (s.bestHoldSec >= 2) {
+        parts.push(`Mejor sostenido: ${s.bestHoldSec.toFixed(1)}s.`);
+      }
+      if (s.avgScore != null) {
+        parts.push(`Puntaje medio reciente: ${s.avgScore.toFixed(1)}/5.`);
+      }
+      if (s.planElement) {
+        parts.push(
+          `Plan 12 semanas: semana ${s.planWeek || "—"}, foco «${s.planElement}» (${s.checkIns} registros).`
+        );
+      }
+      parts.push(
+        "Siguiente paso de coach: exporta este progreso o usa varios perfiles si entrenas a más de una voz."
+      );
+    } else {
+      parts.push(
+        `You've completed ${s.sessions} session${s.sessions === 1 ? "" : "s"} across ${s.exercisesTouched} exercise${s.exercisesTouched === 1 ? "" : "s"}` +
+          (s.minutes ? ` (~${s.minutes} min logged)` : "") +
+          "."
+      );
+      if (s.streak > 1) parts.push(`Active streak: ${s.streak} days.`);
+      else if (s.activeDays > 0) parts.push(`Days with practice: ${s.activeDays}.`);
+      if (s.bestHoldSec >= 2) parts.push(`Best hold: ${s.bestHoldSec.toFixed(1)}s.`);
+      if (s.avgScore != null) parts.push(`Recent avg score: ${s.avgScore.toFixed(1)}/5.`);
+      if (s.planElement) {
+        parts.push(
+          `12-week plan: week ${s.planWeek || "—"}, focus “${s.planElement}” (${s.checkIns} check-ins).`
+        );
+      }
+      parts.push(
+        "Coach next step: export this progress or use multi-profile if you train more than one voice."
+      );
+    }
+    return parts.join(" ");
+  }
+
+  /**
+   * Soft upgrade moment type after meaningful success.
+   * Returns null if no prompt or already Pro / recently dismissed.
+   */
+  function suggestUpgradeMoment(stats, entitlement) {
+    if (entitlement?.pro && entitlement?.source !== "trial") return null;
+    const s = stats || compute();
+    let trialDaysLeft = null;
+    if (entitlement?.status === "trial" && entitlement.expiresAt) {
+      trialDaysLeft = Math.max(
+        0,
+        Math.ceil((Date.parse(entitlement.expiresAt) - Date.now()) / 86400000)
+      );
+    }
+    if (trialDaysLeft != null && trialDaysLeft <= 2) {
+      return { id: "trial_ending", priority: 10, trialDaysLeft };
+    }
+    if (s.sessions >= 3 && s.sessions < 20) {
+      return { id: "sessions_3", priority: 5, sessions: s.sessions };
+    }
+    if (s.bestHoldSec >= 8) {
+      return { id: "hold_pr", priority: 4, bestHoldSec: s.bestHoldSec };
+    }
+    if (s.checkIns >= 2) {
+      return { id: "plan_active", priority: 3 };
+    }
+    if (s.sessions === 1) {
+      return { id: "first_save", priority: 2 };
+    }
+    return null;
+  }
+
+  function dismissedKey(id) {
+    return `vt_value_prompt_${id}`;
+  }
+
+  function isDismissed(id) {
+    try {
+      return sessionStorage.getItem(dismissedKey(id)) === "1";
+    } catch {
+      return false;
+    }
+  }
+
+  function dismiss(id) {
+    try {
+      sessionStorage.setItem(dismissedKey(id), "1");
+    } catch {
+      /* ignore */
+    }
+  }
+
+  global.VTValuePulse = {
+    compute,
+    narrative,
+    suggestUpgradeMoment,
+    isDismissed,
+    dismiss
+  };
+})(window);

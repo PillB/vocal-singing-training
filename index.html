@@ -7,6 +7,8 @@
       name="description"
       content="Práctica en casa: entrenamiento vocal y de canto, grabación, métricas, piano y plan de 12 semanas."
     />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#0c1118" />
     <title>Entrenamiento vocal y de canto</title>
     <link rel="stylesheet" href="css/styles.css" />
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎤</text></svg>" />
@@ -136,7 +138,14 @@
             <div class="level-meter practice-meter" id="level-meter-wrap" aria-hidden="true"><span id="level-fill"></span></div>
 
             <div id="pitch-block" class="pitch-inline pitch-stage" hidden>
-              <canvas id="pitch-canvas" class="pitch-canvas" width="640" height="300" aria-label="Pitch highway"></canvas>
+              <canvas
+                id="pitch-canvas"
+                class="pitch-canvas"
+                width="960"
+                height="480"
+                role="img"
+                aria-label="Autopista de afinación: carriles de notas y tu voz en tiempo real"
+              ></canvas>
             </div>
 
             <!-- Non-pitch: compact focus panel inside sticky stage (safe zone under TL, above BL) -->

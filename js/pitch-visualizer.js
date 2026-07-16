@@ -505,14 +505,14 @@
       const w = this.w || 640;
       const h = this.h || 260;
       ctx.clearRect(0, 0, w, h);
-      ctx.fillStyle = "#101822";
+      ctx.fillStyle = "#0a1018";
       ctx.fillRect(0, 0, w, h);
-      // preview highway
+      // preview highway — wider band for low vision
       const mid = h * 0.42;
-      ctx.fillStyle = "rgba(61,186,122,0.12)";
-      ctx.fillRect(0, mid - 18, w, 36);
-      ctx.strokeStyle = "rgba(240,201,160,0.5)";
-      ctx.lineWidth = 2;
+      ctx.fillStyle = "rgba(79, 212, 146, 0.18)";
+      ctx.fillRect(0, mid - 28, w, 56);
+      ctx.strokeStyle = "rgba(240, 201, 160, 0.75)";
+      ctx.lineWidth = 3;
       ctx.beginPath();
       ctx.moveTo(0, mid);
       ctx.lineTo(w, mid);
@@ -520,24 +520,24 @@
       const es =
         (global.VTI18n && global.VTI18n.lang === "es") ||
         document.documentElement.lang === "es";
-      ctx.fillStyle = "#9aabc0";
-      ctx.font = "600 13px system-ui,sans-serif";
+      ctx.fillStyle = "#e8eef6";
+      ctx.font = "700 15px system-ui,sans-serif";
       ctx.textAlign = "center";
       ctx.fillText(
         es
           ? "Autopista de afinación · Empieza y canta en el carril verde"
           : "Pitch highway · Start practice & sing into the green lane",
         w / 2,
-        h / 2 + 20
+        h / 2 + 22
       );
-      ctx.font = "11px system-ui,sans-serif";
-      ctx.fillStyle = "#6a7c94";
+      ctx.font = "600 13px system-ui,sans-serif";
+      ctx.fillStyle = "#c5d4e8";
       ctx.fillText(
         es
           ? "Mantente en el carril · gana precisión · bloquea notas"
           : "Stay in the lane · build precision · lock notes",
         w / 2,
-        h / 2 + 40
+        h / 2 + 44
       );
       this._drawKeyboard(ctx, w, h, null, null);
     }
@@ -558,17 +558,17 @@
       ctx.fillStyle = g;
       ctx.fillRect(0, 0, w, h);
 
-      // Graph area (leave bottom for keyboard)
-      const graphH = h - 44;
+      // Graph area (leave bottom for keyboard) — taller canvas = thicker channels
+      const graphH = h - 52;
       const midY = this._midiToY(centerMidi, centerMidi, graphH);
 
-      // Range-aware grid
+      // Range-aware grid (higher contrast for channel readability)
       const lo =
         this.rangeMinMidi != null ? Math.floor(this.rangeMinMidi) : Math.floor(centerMidi - 6);
       const hi =
         this.rangeMaxMidi != null ? Math.ceil(this.rangeMaxMidi) : Math.ceil(centerMidi + 6);
-      ctx.strokeStyle = "rgba(80,100,130,0.18)";
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = "rgba(150, 175, 210, 0.28)";
+      ctx.lineWidth = 1.25;
       for (let m = lo; m <= hi; m++) {
         const y = this._midiToY(m, centerMidi, graphH);
         ctx.beginPath();
@@ -582,7 +582,8 @@
       // 2) Active chord tones = bright lanes
       // 3) Primary singing target = green active lane
       const spanSt = Math.max(6, hi - lo);
-      const laneHalf = Math.max(3.5, (zones.good / 100) * (graphH / spanSt) * 1.1);
+      // Thicker lanes when canvas is tall (low-vision friendly)
+      const laneHalf = Math.max(6, (zones.good / 100) * (graphH / spanSt) * 1.35);
       const activeMidis = new Set(
         (this.chordLanes || []).map((L) => Math.round(L.midi * 2) / 2)
       );
@@ -592,35 +593,35 @@
         // mode: ghost | active | primary
         const y = this._midiToY(lane.midi, centerMidi, graphH);
         if (mode === "ghost") {
-          ctx.fillStyle = "rgba(90,110,140,0.06)";
-          ctx.fillRect(0, y - laneHalf * 0.65, w, laneHalf * 1.3);
-          ctx.strokeStyle = "rgba(120,140,170,0.28)";
-          ctx.lineWidth = 1;
-          ctx.setLineDash([2, 6]);
+          ctx.fillStyle = "rgba(120, 150, 190, 0.12)";
+          ctx.fillRect(0, y - laneHalf * 0.75, w, laneHalf * 1.5);
+          ctx.strokeStyle = "rgba(180, 200, 230, 0.45)";
+          ctx.lineWidth = 1.5;
+          ctx.setLineDash([3, 5]);
           ctx.beginPath();
           ctx.moveTo(0, y);
           ctx.lineTo(w, y);
           ctx.stroke();
           ctx.setLineDash([]);
-          ctx.fillStyle = "rgba(140,160,185,0.55)";
-          ctx.font = "500 9px system-ui,sans-serif";
+          ctx.fillStyle = "#c8d6ea";
+          ctx.font = "600 12px system-ui,sans-serif";
           ctx.textAlign = "right";
-          ctx.fillText(lane.name, w - 8, y - 2);
+          ctx.fillText(lane.name, w - 10, y - 3);
           return;
         }
         const isPrimary = mode === "primary";
         ctx.fillStyle = isPrimary
-          ? "rgba(61,186,122,0.26)"
-          : "rgba(240,201,160,0.18)";
+          ? "rgba(79, 212, 146, 0.32)"
+          : "rgba(240, 184, 80, 0.26)";
         ctx.fillRect(0, y - laneHalf, w, laneHalf * 2);
         ctx.strokeStyle = isPrimary
-          ? "rgba(125,222,176,0.95)"
-          : "rgba(240,201,160,0.75)";
-        ctx.lineWidth = isPrimary ? 2.5 : 1.75;
+          ? "rgba(160, 255, 210, 1)"
+          : "rgba(255, 220, 150, 0.95)";
+        ctx.lineWidth = isPrimary ? 3.5 : 2.5;
         ctx.shadowColor = isPrimary
-          ? "rgba(125,222,176,0.55)"
-          : "rgba(240,201,160,0.4)";
-        ctx.shadowBlur = isPrimary ? 10 : 6;
+          ? "rgba(79, 212, 146, 0.65)"
+          : "rgba(240, 184, 80, 0.5)";
+        ctx.shadowBlur = isPrimary ? 14 : 8;
         ctx.setLineDash([]);
         ctx.beginPath();
         ctx.moveTo(0, y);
@@ -630,23 +631,26 @@
         const esLane =
           (global.VTI18n && global.VTI18n.lang === "es") ||
           document.documentElement.lang === "es";
-        ctx.fillStyle = isPrimary ? "#b8f0d4" : "#f5d7b0";
-        ctx.font = isPrimary
-          ? "800 12px system-ui,sans-serif"
-          : "700 11px system-ui,sans-serif";
-        ctx.textAlign = "left";
-        ctx.fillText(
+        // Label with dark pill for contrast on any lane color
+        const label =
           (lane.name || "") +
-            (isPrimary
-              ? esLane
-                ? " ● canta aquí"
-                : " ● sing here"
-              : esLane
-                ? " · activo"
-                : " · active"),
-          8,
-          y - laneHalf - 2
-        );
+          (isPrimary
+            ? esLane
+              ? " ● canta aquí"
+              : " ● sing here"
+            : esLane
+              ? " · activo"
+              : " · active");
+        ctx.font = isPrimary
+          ? "800 14px system-ui,sans-serif"
+          : "700 13px system-ui,sans-serif";
+        ctx.textAlign = "left";
+        const tw = ctx.measureText(label).width;
+        const ly = y - laneHalf - 4;
+        ctx.fillStyle = "rgba(6, 10, 16, 0.78)";
+        ctx.fillRect(4, ly - 14, tw + 12, 18);
+        ctx.fillStyle = isPrimary ? "#d4ffe8" : "#ffe8b8";
+        ctx.fillText(label, 10, ly);
       };
 
       // Ghost: all progression tones not currently active
@@ -663,13 +667,20 @@
 
       // Fallback single lane when no chord context
       if (!this.chordLanes.length && !this.progressionLanes.length) {
-        const goodHalf = (zones.good / 100) * (graphH * 0.4 / 6);
-        const perfectHalf = (zones.perfect / 100) * (graphH * 0.4 / 6);
-        ctx.fillStyle = "rgba(61,186,122,0.1)";
+        const goodHalf = Math.max(14, (zones.good / 100) * (graphH * 0.45 / 6));
+        const perfectHalf = Math.max(8, (zones.perfect / 100) * (graphH * 0.45 / 6));
+        ctx.fillStyle = "rgba(79, 212, 146, 0.16)";
         ctx.fillRect(0, midY - goodHalf, w, goodHalf * 2);
-        ctx.fillStyle = "rgba(61,186,122,0.18)";
+        ctx.fillStyle = "rgba(79, 212, 146, 0.28)";
         ctx.fillRect(0, midY - perfectHalf, w, perfectHalf * 2);
-        ctx.strokeStyle = "rgba(61,186,122,0.45)";
+        ctx.strokeStyle = "rgba(160, 255, 210, 0.85)";
+        ctx.lineWidth = 2.5;
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.moveTo(0, midY);
+        ctx.lineTo(w, midY);
+        ctx.stroke();
+        ctx.strokeStyle = "rgba(160, 255, 210, 0.55)";
         ctx.lineWidth = 1.5;
         ctx.setLineDash([6, 6]);
         ctx.beginPath();
@@ -681,17 +692,26 @@
         ctx.setLineDash([]);
       }
 
-      // Range labels + active chord badge
-      ctx.fillStyle = "#6a7c94";
-      ctx.font = "11px ui-monospace,monospace";
+      // Range labels + active chord badge (high contrast)
+      ctx.font = "700 13px ui-monospace,monospace";
       ctx.textAlign = "left";
-      ctx.fillText(midiToName(hi), 6, this._midiToY(hi, centerMidi, graphH) + 4);
-      ctx.fillText(midiToName(lo), 6, this._midiToY(lo, centerMidi, graphH) + 4);
+      const hiY = this._midiToY(hi, centerMidi, graphH) + 4;
+      const loY = this._midiToY(lo, centerMidi, graphH) + 4;
+      ctx.fillStyle = "rgba(6, 10, 16, 0.75)";
+      ctx.fillRect(2, hiY - 12, 42, 16);
+      ctx.fillRect(2, loY - 12, 42, 16);
+      ctx.fillStyle = "#e8eef6";
+      ctx.fillText(midiToName(hi), 6, hiY);
+      ctx.fillText(midiToName(lo), 6, loY);
       if (this.activeChordName) {
-        ctx.fillStyle = "rgba(240,201,160,0.95)";
-        ctx.font = "800 13px system-ui,sans-serif";
+        ctx.font = "800 15px system-ui,sans-serif";
         ctx.textAlign = "center";
-        ctx.fillText(this.activeChordName, w / 2, 16);
+        const cn = this.activeChordName;
+        const cw = ctx.measureText(cn).width;
+        ctx.fillStyle = "rgba(6, 10, 16, 0.8)";
+        ctx.fillRect(w / 2 - cw / 2 - 8, 6, cw + 16, 22);
+        ctx.fillStyle = "#ffe8b8";
+        ctx.fillText(cn, w / 2, 22);
       }
 
       const n = this.history.length;

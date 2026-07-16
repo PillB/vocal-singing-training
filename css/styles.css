@@ -3339,6 +3339,25 @@ footer a {
   font-size: 0.92rem;
 }
 
+/* Mic manual assist hint (non-highway exercises) */
+.mic-manual-hint {
+  margin: 0.2rem 0 0;
+  font-size: 0.68rem;
+  line-height: 1.25;
+  max-width: 11rem;
+  text-align: center;
+}
+.mic-manual-hint.is-active {
+  color: #8ee0b5;
+  font-weight: 600;
+}
+.mic-sens-label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.4rem;
+}
+
 /* —— Next-step habit card (home) —— */
 .next-step {
   display: flex;

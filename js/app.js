@@ -1632,6 +1632,18 @@
 
   function setPracticeUI(live) {
     state.practiceLive = live;
+    if (!live) {
+      try {
+        state.practice?.setManualSound?.(false);
+      } catch {
+        /* ignore */
+      }
+    }
+    try {
+      state._updateManualHintVisibility?.();
+    } catch {
+      /* ignore */
+    }
     if (live) state.practiceStarting = false;
     const start = $("#btn-practice-start");
     const stop = $("#btn-practice-stop");
@@ -1849,9 +1861,18 @@
       state.practice.onFrame = (frame) => {
         if (profile.showLevel !== false) {
           // Scale meter with sensitivity so soft voices still fill the bar
+          // (retuned with ~3× max sens — slightly lower boost at top to avoid always-full bar)
           const sens = state.practice.getSensitivity?.() || 7;
-          const boost = 3.2 + (sens - 5) * 0.35;
+          const boost = 2.4 + (sens - 5) * 0.22;
           $("#level-fill").style.width = `${Math.round(Math.min(1, frame.rms * boost) * 100)}%`;
+        }
+        // Manual assist chip
+        const mh = $("#mic-manual-hint");
+        if (mh && !mh.hidden) {
+          mh.classList.toggle("is-active", !!frame.manualSound);
+          mh.textContent = frame.manualSound
+            ? tt("mic.manualActive")
+            : tt("mic.manualHint");
         }
         if (showHold) {
           const holdEl = $("#hold-display");
@@ -2101,6 +2122,11 @@
       console.warn(e);
     }
     if (state.practiceLive || state.practice.running) {
+      try {
+        state.practice.setManualSound?.(false);
+      } catch {
+        /* ignore */
+      }
       state.practice.stop();
     }
     pauseTimer();
@@ -3054,6 +3080,7 @@
     $("#btn-continue")?.addEventListener("click", continuePractice);
 
     // Mic sensitivity (1–10) — persists + applies live while practicing
+    // Level 10 ≈ 3× more sensitive than legacy max (soft SH/air)
     const micRange = $("#mic-sensitivity");
     const micVal = $("#mic-sens-val");
     const applyMicSens = (raw) => {
@@ -3080,6 +3107,72 @@
       applyMicSens(saved);
       micRange.addEventListener("input", () => applyMicSens(micRange.value));
     }
+
+    // Hold Space to supplement sound autodetection (non-highway exercises only)
+    const isTypingTarget = (el) => {
+      if (!el || !el.tagName) return false;
+      const tag = el.tagName.toLowerCase();
+      if (tag === "input" || tag === "textarea" || tag === "select") return true;
+      if (el.isContentEditable) return true;
+      return false;
+    };
+    const manualSoundAllowed = () => {
+      if (!state.practiceLive || !state.practice?.running) return false;
+      const profile = state.exercise ? getProfile(state.exercise) : null;
+      if (!profile) return false;
+      // Never on pitch highway exercises
+      if (profile.showPitch) return false;
+      if (profile.allowManualSound === false) return false;
+      return true;
+    };
+    const manualKindForProfile = (profile) => {
+      if (profile?.manualSoundKind === "air" || profile?.manualSoundKind === "voice") {
+        return profile.manualSoundKind;
+      }
+      const mode = profile?.mode || "";
+      // Unvoiced air modes (SH ladder, similar)
+      if (mode === "shAirLadder" || mode === "breathS") return "air";
+      return "voice";
+    };
+    const updateManualHintVisibility = () => {
+      const mh = $("#mic-manual-hint");
+      if (!mh) return;
+      const ok = manualSoundAllowed();
+      mh.hidden = !ok;
+      if (ok && !mh.classList.contains("is-active")) {
+        mh.textContent = tt("mic.manualHint");
+      }
+    };
+    const setManualFromKey = (down) => {
+      if (!manualSoundAllowed()) {
+        state.practice?.setManualSound?.(false);
+        return;
+      }
+      const profile = getProfile(state.exercise);
+      const kind = manualKindForProfile(profile);
+      state.practice?.setManualSound?.(!!down, kind);
+      const mh = $("#mic-manual-hint");
+      if (mh && !mh.hidden) {
+        mh.classList.toggle("is-active", !!down);
+        mh.textContent = down ? tt("mic.manualActive") : tt("mic.manualHint");
+      }
+    };
+    document.addEventListener("keydown", (e) => {
+      if (e.code !== "Space" && e.key !== " ") return;
+      if (e.repeat) return;
+      if (isTypingTarget(e.target)) return;
+      if (!manualSoundAllowed()) return;
+      e.preventDefault(); // avoid page scroll while assisting
+      setManualFromKey(true);
+    });
+    document.addEventListener("keyup", (e) => {
+      if (e.code !== "Space" && e.key !== " ") return;
+      if (isTypingTarget(e.target)) return;
+      setManualFromKey(false);
+    });
+    window.addEventListener("blur", () => setManualFromKey(false));
+    // Expose for practice start/stop
+    state._updateManualHintVisibility = updateManualHintVisibility;
     $("#btn-toggle-guide")?.addEventListener("click", () => {
       state.guideOpen = !state.guideOpen;
       const card = document.querySelector(".guide-card");

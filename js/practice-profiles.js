@@ -341,9 +341,12 @@
       pitchChallenge: false,
       autoPiano: false,
       autoRecord: false,
+      /** Soft unvoiced SH — Space hold supplements air detection; max mic sens helps */
+      allowManualSound: true,
+      manualSoundKind: "air",
       rungs: [5, 10, 20, 25, 30],
-      cue: "Nose inhale → even SH. Clear 5→10→20→25→30s rungs. Air only, no pitch.",
-      cueEs: "Inhala nariz → SH pareja. Peldaños 5→10→20→25→30s. Solo aire, sin tono.",
+      cue: "Nose inhale → even SH. Clear 5→10→20→25→30s rungs. Air only, no pitch. Raise Mic or hold Space if undetected.",
+      cueEs: "Inhala nariz → SH pareja. Peldaños 5→10→20→25→30s. Solo aire. Sube Mic o mantén Espacio si no te detecta.",
       metricHints: { rungs: "cleared", maxSH: "best" }
     },
     "s16-major-scale-coord": {

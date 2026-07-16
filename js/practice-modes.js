@@ -1489,11 +1489,15 @@
       });
     },
     onFrame(frame) {
-      // S phase: unvoiced but air (rms without solid pitch)
+      // S phase: unvoiced but air (rms without solid pitch); scales with mic sensitivity
+      const thr = frame.airRmsThreshold != null ? frame.airRmsThreshold * 1.1 : 0.02;
       const air =
         this.state.phase === "S"
-          ? (frame.rms || 0) > 0.02 && !frame.voiceFreq
-          : frame.voiced || (frame.rms || 0) > 0.025;
+          ? (frame.manualSound && frame.manualKind === "air") ||
+            ((frame.rms || 0) > thr && !frame.voiceFreq)
+          : frame.voiced ||
+            (frame.manualSound && frame.manualKind === "voice") ||
+            (frame.rms || 0) > thr * 1.2;
       if (air) {
         this.state.cur += 0.016;
         if (this.state.phase === "S") this.state.bestS = Math.max(this.state.bestS, this.state.cur);
@@ -1535,7 +1539,11 @@
       `;
     },
     onFrame(frame) {
-      const air = (frame.rms || 0) > 0.018 && !frame.voiceFreq;
+      // Soft SH/air: sensitivity-aware threshold + Space manual air assist
+      const thr = frame.airRmsThreshold != null ? frame.airRmsThreshold : 0.018;
+      const air =
+        (frame.manualSound && frame.manualKind === "air") ||
+        ((frame.rms || 0) > thr && !frame.voiceFreq);
       const target = this.state.rungs[this.state.i] || this.state.rungs[this.state.rungs.length - 1];
       if (air) {
         this.state.cur += (frame.dtMs || 16) / 1000;

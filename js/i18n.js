@@ -324,7 +324,9 @@
       "practice.hold": "↓{s}s",
       "practice.focusCta": "Pulsa Empezar · el micrófono escucha solo",
       "mic.sens": "Mic",
-      "mic.sensHint": "Sensibilidad del micrófono (1 baja · 10 alta)",
+      "mic.sensHint": "Sensibilidad (1 = menos ruido · 10 = muy sensible, aire SH suave)",
+      "mic.manualHint": "Mantén Espacio si el mic no te oye",
+      "mic.manualActive": "Espacio · señal manual",
       "pitch.title": "Afinación · precisión y exactitud",
       "pitch.legend":
         "Carriles grises = notas de la progresión · Ámbar = acordes activos · Verde = nota principal · Tu voz se mueve entre carriles",
@@ -822,7 +824,9 @@
       "practice.hold": "↓{s}s",
       "practice.focusCta": "Press Start · the mic listens for you",
       "mic.sens": "Mic",
-      "mic.sensHint": "Microphone sensitivity (1 low · 10 high)",
+      "mic.sensHint": "Sensitivity (1 = less noise · 10 = very soft air/SH)",
+      "mic.manualHint": "Hold Space if the mic misses you",
+      "mic.manualActive": "Space · manual signal",
       "pitch.title": "Pitch visualizer · accuracy & precision",
       "pitch.legend":
         "Gray lanes = full progression · Amber = active chord tones · Green = primary note · Your voice moves between lanes",

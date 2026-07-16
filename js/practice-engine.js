@@ -51,8 +51,16 @@
       /** 1–10 interactive mic sensitivity (persisted by app) */
       this.sensitivity = DEFAULT_SENS;
 
+      /**
+       * Manual sound assist (Space hold) — supplements autodetection for non-highway modes.
+       * kind: "voice" | "air" (air = unvoiced energy for SH/S ladders)
+       */
+      this._manualSound = false;
+      this._manualKind = "voice";
+      this._manualRmsFloor = 0.06;
+
       // Callbacks
-      this.onFrame = null; // { rms, voiceFreq, holdSec, voiced, holds, sensitivity }
+      this.onFrame = null; // { rms, voiceFreq, holdSec, voiced, holds, sensitivity, manualSound }
       this.onHoldLogged = null; // seconds
       this.onStatus = null;
       this.onRecordingReady = null;
@@ -61,7 +69,8 @@
     }
 
     /**
-     * @param {number} level 1–10 (1 = least sensitive / quiet room noise rejection, 10 = softest voices)
+     * @param {number} level 1–10 (1 = least sensitive / quiet room noise rejection, 10 = softest air/voice)
+     * Level 10 is ~3× more sensitive than the pre-2026 max (gain + lower RMS bars).
      */
     setSensitivity(level) {
       const n = Math.max(1, Math.min(10, Number(level) || DEFAULT_SENS));
@@ -76,16 +85,47 @@
       return this.sensitivity;
     }
 
-    /** Input gain: ~0.7 at sens1 → ~2.6 at sens10 */
-    _gainFromSens(s) {
-      const t = (s - 1) / 9;
-      return 0.7 + t * 1.9;
+    /**
+     * Hold-key assist: while active, inject energy (and optionally voice flags) into frames.
+     * @param {boolean} active
+     * @param {"voice"|"air"} [kind]
+     */
+    setManualSound(active, kind) {
+      this._manualSound = !!active;
+      if (kind === "air" || kind === "voice") this._manualKind = kind;
+      if (!active) return false;
+      return true;
     }
 
-    /** Threshold scale: higher sensitivity → lower RMS bar */
+    getManualSound() {
+      return { active: !!this._manualSound, kind: this._manualKind || "voice" };
+    }
+
+    /**
+     * Input gain: ~0.7 at sens1 → ~7.8 at sens10 (~3× old max of ~2.6).
+     * Slightly exponential in the upper half so 8–10 reach soft SH/air.
+     */
+    _gainFromSens(s) {
+      const t = (s - 1) / 9; // 0..1
+      // Old curve was 0.7 + t*1.9. New: triple the lift above baseline.
+      const linear = 0.7 + t * 5.7; // 0.7 → 6.4
+      const boost = t * t * 1.4; // extra at high end → ~7.8
+      return Math.min(8, linear + boost);
+    }
+
+    /**
+     * Threshold scale: higher sensitivity → lower RMS bar.
+     * Old: ~1.55 → ~0.40. New max ~0.13 so soft air crosses hold/voice floors.
+     */
     _threshScale() {
       const t = (this.sensitivity - 1) / 9; // 0..1
-      return 1.55 - t * 1.15; // ~1.55 → ~0.40
+      return 1.55 - t * 1.42; // ~1.55 → ~0.13
+    }
+
+    /** Unvoiced-air detection floor (SH ladder); scales with sensitivity */
+    _airRms() {
+      // At sens 7 ≈ 0.014; at sens 10 ≈ 0.006; at sens 1 ≈ 0.028
+      return 0.018 * this._threshScale() * 0.85;
     }
 
     _voiceRms() {
@@ -383,9 +423,20 @@
     _loop() {
       if (!this.running || !this.analyser) return;
       this.analyser.getFloatTimeDomainData(this.buf);
-      const rms = this._rms(this.buf);
-      const freq = this._detectPitch(this.buf, this.audioCtx.sampleRate);
+      let rms = this._rms(this.buf);
+      let freq = this._detectPitch(this.buf, this.audioCtx.sampleRate);
       const now = performance.now();
+
+      // Manual assist (Space): supplement energy; air = unvoiced; voice = speech/holds
+      const manual = !!this._manualSound;
+      const manualKind = this._manualKind === "air" ? "air" : "voice";
+      if (manual) {
+        rms = Math.max(rms, this._manualRmsFloor || 0.06);
+        if (manualKind === "air") {
+          // Unvoiced fricative assist (SH/S) — clear pitch so modes use air path
+          freq = null;
+        }
+      }
 
       const voiceRms = this._voiceRms();
       const holdRms = this._holdRms();
@@ -397,20 +448,38 @@
         freq != null && freq >= PITCH_MIN && freq <= PITCH_MAX;
       // Start a hold only with energy + pitch; continue a hold with energy alone
       // (pitch detectors flake mid-sustain — we give grace + sensitivity)
-      const strongVoice = rms >= voiceRms && hasPitch;
+      let strongVoice = rms >= voiceRms && hasPitch;
       // Soft-voice path: energy alone can open a hold at high sensitivity
-      const softOpen =
+      let softOpen =
         this.holdStart == null &&
         rms >= holdRms * 1.15 &&
-        (hasPitch || this.sensitivity >= 7);
+        (hasPitch || this.sensitivity >= 7 || (manual && manualKind === "voice"));
+      if (manual && manualKind === "voice") {
+        strongVoice = true;
+        softOpen = softOpen || this.holdStart == null;
+      }
+      // Manual air must not open pitched holds
+      if (manual && manualKind === "air") {
+        strongVoice = false;
+        softOpen = false;
+      }
       const continueVoice =
         this.holdStart != null &&
-        (rms >= holdRms || hasPitch || now - this.lastVoiceAt < graceMs);
+        (rms >= holdRms ||
+          hasPitch ||
+          (manual && manualKind === "voice") ||
+          now - this.lastVoiceAt < graceMs);
 
       if (strongVoice || softOpen || continueVoice) {
         if (hasPitch) this.voiceFreq = freq;
         // Refresh lastVoiceAt on real energy OR clean pitch (not bare grace alone)
-        if (strongVoice || softOpen || rms >= holdRms || (hasPitch && rms >= holdRms * 0.55)) {
+        if (
+          strongVoice ||
+          softOpen ||
+          rms >= holdRms ||
+          (hasPitch && rms >= holdRms * 0.55) ||
+          (manual && manualKind === "voice")
+        ) {
           this.lastVoiceAt = now;
         }
         if (!this.holdStart) {
@@ -429,6 +498,10 @@
         }
       }
 
+      // Frame pitch: air-manual forces null; else use detected
+      const frameFreq =
+        manual && manualKind === "air" ? null : this.voiceFreq;
+
       const dtMs = Math.min(50, now - (this._lastFrameAt || now));
       this._lastFrameAt = now;
       // Grace UI spans full silence window so green/amber doesn't drop before hold ends
@@ -436,20 +509,32 @@
         !!this.holdStart && now - this.lastVoiceAt < silenceEndMs;
       const activelyHolding =
         !!this.holdStart && now - this.lastVoiceAt < graceMs;
+      const voicedOut =
+        (manual && manualKind === "voice") ||
+        inGraceWindow ||
+        strongVoice ||
+        softOpen;
       if (this.onFrame) {
         this.onFrame({
           rms,
-          voiceFreq: this.voiceFreq,
+          voiceFreq: frameFreq,
           targetFreq: this.targetFreq,
           holdSec: this.currentHoldSec,
-          voiced: inGraceWindow || strongVoice || softOpen,
+          voiced: voicedOut,
           holds: this.holds,
           recording: this.recording,
           elapsedMs: now - this.startedAt,
           dtMs,
           holdGrace: !!this.holdStart && !strongVoice && inGraceWindow,
-          holdSolid: activelyHolding || strongVoice || softOpen,
-          sensitivity: this.sensitivity
+          holdSolid:
+            activelyHolding ||
+            strongVoice ||
+            softOpen ||
+            (manual && manualKind === "voice"),
+          sensitivity: this.sensitivity,
+          manualSound: manual,
+          manualKind: manual ? manualKind : null,
+          airRmsThreshold: this._airRms()
         });
       }
 

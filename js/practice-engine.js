@@ -270,17 +270,20 @@
       const floor = this._airRms();
       const bandFloor = this._airBandFloor();
       const band = bandHf != null ? bandHf : 0;
-      // Sibilant / fricative: FFT band OR first-diff HF
+      // Hard noise floor: ambient room must NOT auto-start SH/S counters
+      const minRms = Math.max(floor * 0.85, 0.006);
+      const minHf = Math.max(floor * 0.55, 0.004);
+      // Sibilant / fricative: strong FFT band (SH energy) OR first-diff HF
       const sibilant =
-        band >= bandFloor ||
-        (hfRms >= floor * 0.22 && (hfRms >= rms * 0.3 || hfRms >= floor * 0.35));
-      // Soft steady air / SH after AGC — prefer detect (Space must not be required)
+        band >= Math.max(bandFloor, 0.12) ||
+        (band >= bandFloor && rms >= minRms * 0.35) ||
+        (hfRms >= minHf && (hfRms >= rms * 0.35 || hfRms >= floor * 0.55));
+      // Steady air / soft SH — requires clear energy above ambient
       const energy =
-        rms >= floor * 0.28 ||
-        hfRms >= floor * 0.22 ||
-        band >= bandFloor * 0.65;
+        rms >= minRms ||
+        hfRms >= minHf * 1.15 ||
+        (band >= bandFloor * 0.95 && rms >= minRms * 0.5);
       // Only exclude *loud* clear singing/speech (not soft SH + false pitch).
-      // v1 used voiceRms*0.8 which blocked real soft SH when autocorr locked.
       const loudVoiced =
         hasPitch &&
         rms >= Math.max(this._voiceRms() * 2.2, floor * 5) &&

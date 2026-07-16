@@ -1237,6 +1237,7 @@ button:focus-visible,
    */
   --stage-gap: 4px;
   --stage-avail: calc(100dvh - var(--header-h, 74px) - var(--stage-gap));
+  --rail-h: 6rem; /* bottom control row (fitHighway measures real height) */
   min-height: min(48dvh, 340px, var(--stage-avail));
   max-height: var(--stage-avail);
   height: min(76dvh, 700px, var(--stage-avail));
@@ -1332,7 +1333,7 @@ button:focus-visible,
   left: 0.3rem;
   right: 0.35rem; /* top band sits above keyboard strip — use full width */
   top: 0.18rem;
-  z-index: 8;
+  z-index: 40; /* above mode-focus / canvas — controls always clickable */
   display: flex;
   flex-direction: row;
   flex-wrap: nowrap;
@@ -1589,7 +1590,8 @@ button:focus-visible,
   left: 0.3rem;
   right: 0.35rem;
   bottom: 0.2rem;
-  z-index: 7;
+  /* Above mode-focus / canvas so Start·Mic never miss clicks */
+  z-index: 40;
   display: flex;
   flex-direction: row;
   flex-wrap: nowrap;
@@ -1616,7 +1618,7 @@ button:focus-visible,
 
 .hud-bl {
   flex: 0 0 auto;
-  z-index: 7;
+  z-index: 41;
   background: rgba(8, 12, 18, 0.88);
   border-radius: 10px;
   padding: 0.18rem 0.3rem;
@@ -1625,13 +1627,19 @@ button:focus-visible,
   flex-direction: row;
   flex-wrap: nowrap;
   align-items: center;
+  position: relative;
 }
 
-.hud-bl .btn-sm {
+.hud-bl .btn-sm,
+.hud-bl .btn-practice {
+  position: relative;
+  z-index: 42;
   padding: 0.4rem 0.7rem;
   min-height: 40px;
   font-size: 0.85rem;
   font-weight: 700;
+  /* Keep hit box = painted box (shadow is visual only) */
+  touch-action: manipulation;
 }
 
 /* Mic: single compact row [meter | MIC | slider | 7] — never wrap / never past stage */
@@ -1645,7 +1653,7 @@ button:focus-visible,
   flex-wrap: nowrap;
   align-items: center;
   gap: 0.4rem;
-  z-index: 7;
+  z-index: 41;
   background: rgba(6, 10, 16, 0.9);
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -1955,10 +1963,10 @@ button:focus-visible,
 /* Non-pitch focus area inside sticky stage — center safe zone only */
 .mode-focus {
   position: absolute;
-  /* Stay clear of top/bottom 10% HUD bands + right key gutter */
+  /* Stay clear of top HUD + full bottom control rail (never cover Start) */
   top: calc(var(--hud-safe-t, 10%) + 0.15rem);
   right: max(0.5rem, var(--hud-safe-r, 14%));
-  bottom: calc(var(--hud-safe-b, 10%) + 0.15rem);
+  bottom: max(var(--rail-h, 6rem), calc(var(--hud-safe-b, 10%) + 0.75rem));
   left: 0.5rem;
   display: flex;
   align-items: center;
@@ -1970,11 +1978,15 @@ button:focus-visible,
 
 /* Live practice mode mounted inside sticky stage (speech exercises) */
 .mode-focus.mode-focus-live {
-  pointer-events: auto;
+  /* Panel only receives clicks — empty inset must not steal rail hits */
+  pointer-events: none;
   align-items: stretch;
   justify-content: stretch;
+  /* Clear full measured bottom rail (+ gap); never cover Start/Mic */
+  bottom: max(var(--rail-h, 6rem), 5.5rem);
 }
 .mode-focus.mode-focus-live .mode-panel {
+  pointer-events: auto;
   width: 100%;
   max-height: 100%;
   overflow: auto;
@@ -1984,6 +1996,8 @@ button:focus-visible,
   border-radius: 12px;
   padding: 0.4rem 0.65rem;
   box-sizing: border-box;
+  position: relative;
+  z-index: 1;
 }
 .mode-focus.mode-focus-live .mode-big {
   font-size: 1.2rem;

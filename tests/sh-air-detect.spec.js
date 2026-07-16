@@ -248,7 +248,57 @@ test.describe("SH air auto-detect", () => {
       test.skip();
       return;
     }
-    expect(r.cur).toBeGreaterThan(0.4);
+    expect(r.cur).toBeGreaterThan(0.35);
+  });
+
+  test("silence / low rms alone does not start SH count", async ({ page }) => {
+    await boot(page);
+    const r = await page.evaluate(() => {
+      const Modes = window.VTPracticeModes;
+      const mode = Modes.get("shAirLadder");
+      const host = document.createElement("div");
+      document.body.appendChild(host);
+      mode.mount(host, { rungs: [5, 10], mode: "shAirLadder" });
+      mode.onStart?.();
+      // Ambient-like frames: modest rms, no airDetected, no Space
+      for (let i = 0; i < 40; i++) {
+        mode.onFrame({
+          rms: 0.012,
+          voiceFreq: null,
+          dtMs: 16,
+          airDetected: false,
+          manualSound: false,
+          airRmsThreshold: 0.01
+        });
+      }
+      const silentCur = mode.state.cur;
+      // Onset gate: first 4 positive frames must not count yet
+      for (let i = 0; i < 4; i++) {
+        mode.onFrame({
+          rms: 0.05,
+          dtMs: 16,
+          airDetected: true,
+          manualSound: false
+        });
+      }
+      const beforeLatch = mode.state.cur;
+      // 5th+ latch
+      for (let i = 0; i < 10; i++) {
+        mode.onFrame({
+          rms: 0.05,
+          dtMs: 16,
+          airDetected: true,
+          manualSound: false
+        });
+      }
+      const afterLatch = mode.state.cur;
+      mode.unmount?.();
+      host.remove();
+      return { silentCur, beforeLatch, afterLatch };
+    });
+    expect(r.silentCur).toBe(0);
+    expect(r.beforeLatch).toBe(0);
+    expect(r.afterLatch).toBeGreaterThan(0.1);
   });
 
   test("air grace keeps airDetected after brief dropout", async ({ page }) => {
@@ -309,7 +359,7 @@ test.describe("SH air auto-detect", () => {
       document.body.appendChild(host);
       mode.mount(host, { rungs: [30], mode: "shAirLadder" });
       mode.onStart?.();
-      for (let i = 0; i < 10; i++) {
+      for (let i = 0; i < 20; i++) {
         mode.onFrame({
           rms: 0.02,
           dtMs: 16,
@@ -338,7 +388,7 @@ test.describe("SH air auto-detect", () => {
       test.skip();
       return;
     }
-    expect(r.mid).toBeGreaterThan(0.1);
+    expect(r.mid).toBeGreaterThan(0.15);
     expect(r.after).toBeGreaterThan(r.mid);
   });
 });

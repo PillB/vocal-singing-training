@@ -1476,6 +1476,7 @@
       this.state.bestA = 0;
       this.state.cur = 0;
       this.state._airHoldFrames = 0;
+      this.state._airOnset = 0;
       this.hud.innerHTML = `
         <div class="mode-title">${L("Soporte de aire · S y luego /A/", "Breath support · S then /A/")}</div>
         <div class="mode-phase" data-phase>${L("Paso 1 · S pareja (sin voz)", "Step 1 · even S (no voice)")}</div>
@@ -1493,26 +1494,34 @@
       });
     },
     onFrame(frame) {
-      // S phase: unvoiced air — engine airDetected + frame hysteresis; Space backup
+      // S phase: ONLY engine airDetected or Space — never bare RMS (room noise).
+      // Onset gate: several consecutive positive frames before counting.
       const thr = frame.airRmsThreshold != null ? frame.airRmsThreshold * 1.1 : 0.02;
       let airNow =
         this.state.phase === "S"
           ? !!frame.airDetected ||
-            (frame.manualSound && frame.manualKind === "air") ||
-            ((frame.rms || 0) > thr * 0.85 && !frame.voiceFreq) ||
-            (frame.rms || 0) > thr * 0.55
+            !!(frame.manualSound && frame.manualKind === "air")
           : frame.voiced ||
-            (frame.manualSound && frame.manualKind === "voice") ||
+            !!(frame.manualSound && frame.manualKind === "voice") ||
             !!frame.airDetected ||
-            (frame.rms || 0) > thr * 1.2;
+            (frame.rms || 0) > thr * 1.4;
       if (this.state.phase === "S") {
-        if (airNow) this.state._airHoldFrames = 16;
-        else if (this.state._airHoldFrames > 0) this.state._airHoldFrames -= 1;
+        if (airNow) {
+          this.state._airOnset = (this.state._airOnset || 0) + 1;
+        } else {
+          this.state._airOnset = 0;
+          if (this.state._airHoldFrames > 0) this.state._airHoldFrames -= 1;
+        }
+        const latched = (this.state._airOnset || 0) >= 5; // ~80ms
+        if (latched) this.state._airHoldFrames = 16;
       } else {
+        this.state._airOnset = 0;
         this.state._airHoldFrames = 0;
       }
       const air =
-        airNow || (this.state.phase === "S" && this.state._airHoldFrames > 0);
+        this.state.phase === "S"
+          ? (this.state._airOnset || 0) >= 5 || this.state._airHoldFrames > 0
+          : airNow;
       if (air) {
         this.state.cur += (frame.dtMs || 16) / 1000;
         if (this.state.phase === "S") this.state.bestS = Math.max(this.state.bestS, this.state.cur);
@@ -1544,8 +1553,10 @@
       this.state.best = 0;
       this.state.cur = 0;
       this.state.holdOk = 0;
-      /** Frame-based hold-off (~280ms @ 60fps) — not wall-clock (tests fire many frames/ms) */
+      /** Frame-based hold-off after a real latch — not wall-clock */
       this.state._airHoldFrames = 0;
+      /** Consecutive positive frames before count starts (reject ambient blips) */
+      this.state._airOnset = 0;
       const target = this.state.rungs[0];
       this.hud.innerHTML = `
         <div class="mode-title">${L("Escalera de aire SH", "SH air-dosing ladder")}</div>
@@ -1556,16 +1567,20 @@
       `;
     },
     onFrame(frame) {
-      // Soft SH/air: engine airDetected (FFT+HF+grace) · Space is backup · mode hysteresis
-      const thr = frame.airRmsThreshold != null ? frame.airRmsThreshold : 0.018;
+      // ONLY real airDetected or Space — never bare RMS (starts counting on room noise).
+      // Onset gate (~5 frames) then short hold-off so micro-gaps don't zero the ladder.
       const airNow =
         !!frame.airDetected ||
-        (frame.manualSound && frame.manualKind === "air") ||
-        ((frame.rms || 0) > thr * 0.85 && !frame.voiceFreq) ||
-        ((frame.rms || 0) > thr * 0.55);
-      if (airNow) this.state._airHoldFrames = 16; // ~260ms
-      else if (this.state._airHoldFrames > 0) this.state._airHoldFrames -= 1;
-      const air = airNow || this.state._airHoldFrames > 0;
+        !!(frame.manualSound && frame.manualKind === "air");
+      if (airNow) {
+        this.state._airOnset = (this.state._airOnset || 0) + 1;
+      } else {
+        this.state._airOnset = 0;
+        if (this.state._airHoldFrames > 0) this.state._airHoldFrames -= 1;
+      }
+      const latched = (this.state._airOnset || 0) >= 5;
+      if (latched) this.state._airHoldFrames = 16;
+      const air = latched || this.state._airHoldFrames > 0;
       const target = this.state.rungs[this.state.i] || this.state.rungs[this.state.rungs.length - 1];
       if (air) {
         this.state.cur += (frame.dtMs || 16) / 1000;

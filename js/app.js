@@ -435,6 +435,18 @@
         stage.style.maxHeight = `${fix}px`;
         stage.style.height = `${fix}px`;
       }
+      // Measure bottom rail so mode-focus never covers Start/Mic (hit-target safety)
+      try {
+        const rail = document.getElementById("hud-bottom-rail");
+        if (rail) {
+          const rh = Math.ceil(rail.getBoundingClientRect().height || 0);
+          // +12px gap so mode-focus bottom stays above rail top
+          const clear = Math.max(72, rh + 12);
+          stage.style.setProperty("--rail-h", `${clear}px`);
+        }
+      } catch {
+        /* ignore */
+      }
       // Resize pitch canvas to new stage box
       try {
         if (state.pitchViz && typeof state.pitchViz._resize === "function") {

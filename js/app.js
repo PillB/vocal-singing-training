@@ -2059,7 +2059,10 @@
     getExerciseTargetSec,
     promptLeaveExercise,
     leaveExercise,
-    resetSessionPractice
+    resetSessionPractice,
+    openExercise: forceOpenExercise,
+    setView,
+    setTab
   };
 
   function init() {
@@ -2069,6 +2072,9 @@
         renderExerciseList();
         if (state.view === "exercise" && state.exercise) renderExercise();
         updateSessionBanner();
+        // Refresh tour button label
+        const tb = $("#btn-tour");
+        if (tb) tb.textContent = tt("nav.tour");
       };
     }
     const settings = VTStorage.getSettings();
@@ -2089,6 +2095,12 @@
           ? "Tienes una sesión pausada — reanuda desde el aviso superior"
           : "You have a paused structured session — resume from the banner"
       );
+    }
+
+    // Interactive intro tour (first visit or header Tour button)
+    if (window.VTTour) {
+      VTTour.bindReplayButton();
+      VTTour.maybeAutoStart();
     }
   }
 

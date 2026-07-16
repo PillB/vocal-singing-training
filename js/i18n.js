@@ -15,6 +15,48 @@
       "nav.history": "Historial",
       "nav.plan": "Plan de 12 semanas",
       "nav.lang": "English",
+      "nav.tour": "Tour",
+      "tour.skip": "Saltar tour",
+      "tour.prev": "Atrás",
+      "tour.next": "Siguiente",
+      "tour.finish": "Empezar a practicar",
+      "tour.progress": "Paso {n} de {total}",
+      "tour.s1.title": "Bienvenido a tu estudio de voz",
+      "tour.s1.body":
+        "Aquí practicas oratoria (estilo Vinh Giang) y canto en casa: micrófono, piano, métricas y un plan de 12 semanas. Todo se guarda en este navegador.",
+      "tour.s2.title": "Dos caminos de entrenamiento",
+      "tour.s2.body":
+        "Cambia entre Entrenamiento vocal (hablar con claridad y presencia) y Entrenamiento de canto (cierre, aire, afinación). Cada uno tiene su lista de ejercicios.",
+      "tour.s3.title": "Básico y avanzado",
+      "tour.s3.body":
+        "Básico = la base de la tarea. Avanzado = ejercicios extra de investigación (pausas, rellenos, SOVT, sirenas, escalas…). Filtra cuando quieras enfocarte.",
+      "tour.s4.title": "Elige un ejercicio",
+      "tour.s4.body":
+        "Cada tarjeta resume el objetivo y el tiempo. Toca una para abrir el «escenario de práctica» con instrucciones y herramientas.",
+      "tour.s5.title": "Continuar o sesión guiada",
+      "tour.s5.body":
+        "Continuar retoma lo que dejaste. Sesión guiada recorre una ruta (básica, avanzada o completa) con pausa y progreso. Ideal si no quieres decidir el orden.",
+      "tour.s6.title": "Historial, plan e idioma",
+      "tour.s6.body":
+        "Historial: grabaciones y puntajes. Plan de 12 semanas: un foco a la vez. English/Español: cambia el idioma de la interfaz. Tour: vuelve a ver esta guía cuando quieras.",
+      "tour.s7.title": "Escenario de práctica",
+      "tour.s7.body":
+        "Arriba tienes el escenario (como un juego): estado, temporizador y controles. Abajo, la guía del ejercicio (pasos y consejos) y las métricas al terminar.",
+      "tour.s8.title": "Un solo botón: Empezar",
+      "tour.s8.body":
+        "Empezar activa el micrófono, el medidor de nivel, la afinación (si aplica), los sostenidos automáticos y el piano cuando el ejercicio lo necesita. Detener lo apaga todo.",
+      "tour.s9.title": "Autopista de afinación",
+      "tour.s9.body":
+        "En canto verás carriles de notas: grises = mapa de la progresión, ámbar = acorde activo, verde = nota principal. Tu voz es el punto que deja rastro. Apunta al carril correcto.",
+      "tour.s10.title": "Controles en las esquinas",
+      "tour.s10.body":
+        "Como en un juego: arriba-izquierda estado y tiempo; abajo-izquierda Empezar/Detener; abajo-derecha piano (arpegio, sostener 3–5s, auto piano). Menos scroll, más práctica.",
+      "tour.s11.title": "Reflexiona y guarda",
+      "tour.s11.body":
+        "Al terminar, califica con honestidad y pulsa Guardar sesión. Las notas son una brújula, no un juicio. Si sales tras practicar ≥10% del tiempo, te preguntaremos si guardar o descartar.",
+      "tour.s12.title": "Listo: a practicar",
+      "tour.s12.body":
+        "Elige un ejercicio básico de vocal o de canto y pulsa Empezar. Permite el micrófono cuando el navegador lo pida. ¡Consistencia gana a intensidad!",
       "session.banner": "Sesión guiada",
       "session.pause": "Pausar",
       "session.resume": "Reanudar",
@@ -179,9 +221,51 @@
         "Self-paced vocal and singing practice with recording, metrics, piano chords, and a 12-week plan.",
       "brand.title": "Vocal & Singing Training",
       "brand.tag": "Home practice · Record · Review · Grow",
-      "nav.history": "History / Audit",
+      "nav.history": "History",
       "nav.plan": "12-Week Plan",
       "nav.lang": "Español",
+      "nav.tour": "Tour",
+      "tour.skip": "Skip tour",
+      "tour.prev": "Back",
+      "tour.next": "Next",
+      "tour.finish": "Start practicing",
+      "tour.progress": "Step {n} of {total}",
+      "tour.s1.title": "Welcome to your voice studio",
+      "tour.s1.body":
+        "Practice speaking (Vinh Giang–inspired) and singing at home: mic, piano, metrics, and a 12-week plan. Everything stays in this browser.",
+      "tour.s2.title": "Two training tracks",
+      "tour.s2.body":
+        "Switch between Vocal training (clarity and presence) and Singing training (closure, air, pitch). Each has its own exercise list.",
+      "tour.s3.title": "Basic and advanced",
+      "tour.s3.body":
+        "Basic = homework spine. Advanced = research-backed extras (pauses, fillers, SOVT, sirens, scales…). Filter when you want focus.",
+      "tour.s4.title": "Pick an exercise",
+      "tour.s4.body":
+        "Each card shows the goal and time. Tap one to open the practice stage with guidance and tools.",
+      "tour.s5.title": "Continue or guided session",
+      "tour.s5.body":
+        "Continue resumes where you left off. Guided session walks a path (basic, advanced, or full) with pause and progress — great when you don’t want to choose the order.",
+      "tour.s6.title": "History, plan, and language",
+      "tour.s6.body":
+        "History: recordings and scores. 12-week plan: one focus at a time. Language toggle for English/Spanish. Tour replays this guide anytime.",
+      "tour.s7.title": "Practice stage",
+      "tour.s7.body":
+        "Up top is the game-like stage: status, timer, and controls. Below: how-to steps and post-practice metrics.",
+      "tour.s8.title": "One button: Start",
+      "tour.s8.body":
+        "Start arms the mic, level meter, pitch (when needed), auto-hold logging, and piano when the exercise uses it. Stop ends everything.",
+      "tour.s9.title": "Pitch highway",
+      "tour.s9.body":
+        "In singing you’ll see note lanes: gray = progression map, amber = active chord, green = primary note. Your voice is the trail dot — home in on the right lane.",
+      "tour.s10.title": "Corner controls",
+      "tour.s10.body":
+        "Like a game HUD: top-left status and time; bottom-left Start/Stop; bottom-right piano (arpeggio, 3–5s sustain, auto piano). Less scrolling, more practice.",
+      "tour.s11.title": "Reflect and save",
+      "tour.s11.body":
+        "When finished, rate honestly and tap Save session. Scores are a compass, not a judgment. If you leave after ≥10% of the exercise time, we’ll ask save or discard.",
+      "tour.s12.title": "You’re ready",
+      "tour.s12.body":
+        "Pick a basic vocal or singing exercise and press Start. Allow the microphone when the browser asks. Consistency beats intensity!",
       "session.banner": "Structured session",
       "session.pause": "Pause",
       "session.resume": "Resume",

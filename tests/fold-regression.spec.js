@@ -88,7 +88,8 @@ test.describe("First-viewport game stage (fold)", () => {
       expect(fold.bcIn).toBe(true);
       expect(fold.guideCollapsed).toBe(true);
       expect(fold.metricsCollapsed).toBe(true);
-      expect(fold.stageH / fold.vh).toBeGreaterThanOrEqual(0.5);
+      // Game stage should dominate the first viewport (less-scroll product goal)
+      expect(fold.stageH / fold.vh).toBeGreaterThanOrEqual(0.55);
       expect(fold.stageBottom).toBeLessThanOrEqual(fold.vh + 16);
     });
   }

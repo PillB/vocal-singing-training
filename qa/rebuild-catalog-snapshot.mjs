@@ -138,7 +138,10 @@ const snap = {
     "#billing-pill",
     "#btn-account",
     "#account-modal",
-    "#login-form"
+    "#login-form",
+    "#chk-one-note",
+    "#chk-arpeggio",
+    "#chk-sustain"
   ],
   requiredI18nKeys: [
     "brand.title",

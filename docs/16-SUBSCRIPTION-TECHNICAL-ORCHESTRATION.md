@@ -106,7 +106,7 @@ Implementation is coherent for SPA soft-monetization; not production-hard withou
 | ST-02 | demoUnlockEnabled true | P0 | QA default | Fake Pro / confusion |
 | ST-03 | Soft success URL entitlement | P0 | No server secrets on GH Pages | Forge Pro without pay |
 | ST-04 | No webhook / signature verify | P1 | No backend | Renewals/cancels not synced |
-| ST-05 | No Customer Portal link | P2 | Not wired | Cancel UX via Stripe only email |
+| ST-05 | No Customer Portal link | P2 | Was not wired → **fixed** | Cancel UX self-serve via portal login |
 | ST-06 | No proration UI | P2 | Payment Links product-level | Acceptable early |
 | ST-07 | Docs incomplete on session_id | P1 | Doc lag | Operator misconfig |
 | ST-08 | MP webhook path undetailed | P2 | Focus on Stripe first | PE risk later |
@@ -123,8 +123,9 @@ ST-03 cannot be fully closed on pure static hosting; mitigated + Worker path.
 | ST-01/02 | Operator checklist; health API; docs | Config hygiene |
 | ST-03 | `requireCheckoutSessionId` when demo off; host allowlist; never trust bare success | Stripe post-payment + security hygiene |
 | ST-04 | Worker template + event list + CLI test | [Stripe webhooks](https://docs.stripe.com/webhooks) |
-| ST-05 | Doc: enable Customer Portal in Dashboard | Stripe Billing |
+| ST-05 | Config `customerPortalUrl` + in-app **Manage subscription** + `isPortalUrl` allowlist | [No-code portal](https://docs.stripe.com/customer-management/activate-no-code-customer-portal) |
 | ST-07 | Rewrite 10-SUBSCRIPTIONS step-by-step | Operator UX |
+| ST-09 | Pricing modal health strip when `!getBillingHealth().ok` | Operator UX |
 
 ### Phase 3 retrospection
 Design stays non-deprecated (Payment Links + webhooks). No Elements/PCI expansion.
@@ -133,48 +134,98 @@ Design stays non-deprecated (Payment Links + webhooks). No Elements/PCI expansio
 
 # Phase 4 — Implementation (applied)
 
-### Code
+### Code (pass 1 — hardening)
 - `billing.js`: host allowlist, `validateCheckoutUrl`, `getBillingHealth`, `linksConfigured`, strict session_id when demo off, demo revoked if flag false, safer activate metadata  
 - `billing-config.js`: `requireCheckoutSessionId`, success URL with `{CHECKOUT_SESSION_ID}` documented  
 - `app.js`: toast on checkout error; health log  
 - `workers/stripe-webhook/README.md`: hard-verify path  
 - Tests: host validation, health, strict success without session  
 
+### Code (pass 2 — ST-05 / ST-09 Customer Portal + health UI)
+- `billing-config.js`: `customerPortalUrl` (paste Stripe portal login link)  
+- `billing.js`: `isPortalUrl`, `openCustomerPortal`, `getBillingHealth().portalConfigured`  
+- `app.js`: `#btn-manage-billing` when Pro/trial + portal URL; `#pricing-health-note` when `!ok`  
+- `index.html`: manage button + health note nodes  
+- `i18n.js`: `pricing.manage`, portal toasts, health prefix (ES/EN)  
+- Tests: portal allowlist + manage UI + health note  
+
 ### Docs
 - This orchestration report  
-- Gap registry  
-- Updated `10-SUBSCRIPTIONS.md`  
+- Gap registry (ST-05/ST-09 closed in wire)  
+- Updated `10-SUBSCRIPTIONS.md` (portal step-by-step)  
 
 ### Phase 4 retrospection
-Backward compatible when `demoUnlockEnabled: true` (default QA).
+Backward compatible when `demoUnlockEnabled: true` (default QA). Portal button stays hidden until operator pastes URL. Empty portal is a health **issue** but does not flip `ok` alone (still driven by demo + links).
 
 ---
 
 # Phase 5 — Validation
 
-- Playwright `tests/billing.spec.js`  
+- Playwright `tests/billing.spec.js` (incl. portal + health UI)  
 - Manual matrix:  
   - demo on + empty links → demo activate  
   - demo off + empty links → unconfigured toast  
   - success without session_id + demo off → error  
   - success with session_id → Pro  
+  - Pro + portal URL → Manage subscription visible; `openCustomerPortal()` redirects  
+  - Pricing open + `!health.ok` → health note visible  
 
 ### Phase 5 retrospection
-Iterate until suite green.
+Iterate until suite green. Ops gaps ST-01/ST-02 remain intentional until live Payment Links.
 
 ---
 
-# Phase 6 — Final recommendations
+# Phase 6 — Final report & recommendations
 
-1. **This week:** Create Stripe products + Payment Links; paste URLs; set success URL with `session_id`; `demoUnlockEnabled: false`.  
-2. **This month:** Deploy Cloudflare Worker webhook; store `customer`/`subscription` ids.  
-3. **When EU tax hurts:** Evaluate Paddle/Lemon Squeezy MoR.  
-4. **Never** ship secret keys to client.  
-5. Monitor: Checkout conversion, failed invoices, forged success attempts (logs).
+### Executive summary
+Vocal Studio monetization is a **static-SPA soft entitlement** over **hosted checkout** (Stripe Payment Links + Mercado Pago). Hard anti-piracy requires the optional Worker webhook path. Code now enforces host allowlists, optional strict `session_id` returns, billing health diagnostics in UI, and an in-app Stripe Customer Portal entry point (config-driven).
 
-### Sources
+### Gaps status
+
+| ID | Status |
+|----|--------|
+| ST-01 Payment links empty | **Open (ops)** |
+| ST-02 demoUnlockEnabled true | **Open (ops)** |
+| ST-03 Soft forgeable return | **Mitigated** (session_id + allowlist) |
+| ST-04 Live webhook | **Documented** (Worker template) |
+| ST-05 Customer Portal | **Closed (wire)** — paste live URL |
+| ST-06 Proration UI | Accepted (Portal / product-level) |
+| ST-07 session_id docs | **Closed** |
+| ST-08 MP webhooks detail | Open when PE warrants |
+| ST-09 Health in UI | **Closed** |
+
+### Before → after (this pass)
+
+| Area | Before | After |
+|------|--------|-------|
+| Cancel / manage | Docs only | `#btn-manage-billing` → portal login |
+| Portal config | Missing | `customerPortalUrl` + host checks |
+| Health | Console only | `#pricing-health-note` in pricing modal |
+
+### Operator sequence (this week)
+1. Create Stripe products + Payment Links; success URL with `session_id`.  
+2. Activate [no-code Customer Portal](https://docs.stripe.com/customer-management/activate-no-code-customer-portal); paste login link into `customerPortalUrl`.  
+3. Set `demoUnlockEnabled: false`.  
+4. Deploy Pages; verify `VTBilling.getBillingHealth().ok === true`.  
+5. This month: Cloudflare Worker webhook for renewals/cancels.  
+6. If VAT ops hurt: evaluate Paddle / Lemon Squeezy MoR.  
+
+### Never
+- Ship `sk_live` / `whsec` in client JS.  
+- Treat `localStorage` Pro as hard DRM.
+
+### Monitoring
+- Checkout conversion (Stripe Dashboard)  
+- Failed invoices / Smart Retries  
+- `getBillingHealth().ok` false in production = misconfig  
+- Portal usage (Dashboard)  
+
+### Sources (current / non-deprecated)
 1. https://docs.stripe.com/payment-links  
 2. https://docs.stripe.com/webhooks  
 3. https://docs.stripe.com/payment-links/post-payment  
-4. https://www.globalsolo.global/blog/stripe-vs-paddle-vs-lemon-squeezy-2026  
-5. https://blog.vibecoder.me/stripe-vs-lemon-squeezy-vs-paddle  
+4. https://docs.stripe.com/customer-management/activate-no-code-customer-portal  
+5. https://docs.stripe.com/customer-management  
+6. https://docs.stripe.com/no-code/customer-portal  
+7. https://www.globalsolo.global/blog/stripe-vs-paddle-vs-lemon-squeezy-2026  
+8. https://blog.vibecoder.me/stripe-vs-lemon-squeezy-vs-paddle  

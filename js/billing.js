@@ -303,14 +303,62 @@
       !String(c.providers?.mercadopago?.links?.pro_yearly || "").trim();
     if (stripeEmpty) issues.push("Stripe links empty");
     if (mpEmpty) issues.push("Mercado Pago links empty");
+    const portalRaw = String(c.customerPortalUrl || "").trim();
+    let portalOk = false;
+    if (portalRaw) {
+      // Portal hosts are billing.stripe.com (not checkout hosts)
+      portalOk = isPortalUrl(portalRaw);
+      if (!portalOk) issues.push("customerPortalUrl host not recognized (expect billing.stripe.com)");
+    } else {
+      issues.push("customerPortalUrl empty — customers cannot self-serve cancel/update");
+    }
     return {
       ok: !demoUnlock && links,
       demoUnlock,
       links,
       stripeConfigured: !stripeEmpty,
       mercadopagoConfigured: !mpEmpty,
+      portalConfigured: portalOk,
       issues
     };
+  }
+
+  function isPortalUrl(url) {
+    try {
+      const u = new URL(String(url).trim());
+      if (u.protocol !== "https:") return false;
+      const h = u.hostname.toLowerCase();
+      return (
+        h === "billing.stripe.com" ||
+        h.endsWith(".billing.stripe.com") ||
+        h === "billing.stripe.me" ||
+        // some portal login links
+        (h.includes("stripe.com") && u.pathname.includes("billing"))
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Open Stripe Customer Portal (no-code link or API session URL).
+   * @see https://docs.stripe.com/customer-management
+   */
+  function openCustomerPortal() {
+    const raw = String(cfg().customerPortalUrl || "").trim();
+    if (!raw) {
+      return {
+        ok: false,
+        mode: "unconfigured",
+        message:
+          "Customer portal URL not set. Activate no-code portal in Stripe Dashboard (Settings → Billing → Customer portal)."
+      };
+    }
+    if (!isPortalUrl(raw)) {
+      return { ok: false, mode: "invalid_url", message: "Portal URL host not allowlisted" };
+    }
+    window.open(raw, "_blank", "noopener,noreferrer");
+    return { ok: true, mode: "redirect", url: raw };
   }
 
   function allowedHosts() {
@@ -621,6 +669,8 @@
     trialEndsAt,
     trialActive,
     trialDaysLeft,
-    DEFAULT_CHECKOUT_HOSTS
+    DEFAULT_CHECKOUT_HOSTS,
+    openCustomerPortal,
+    isPortalUrl
   };
 })(window);

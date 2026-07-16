@@ -135,8 +135,10 @@ VTBilling.getEntitlement()     // { pro, plan, status, source, expiresAt, … }
 VTBilling.isPro()
 VTBilling.can("export_progress")
 VTBilling.startCheckout("pro_monthly", "stripe")
-VTBilling.getBillingHealth()   // { ok, demoUnlock, links, issues[] }
+VTBilling.getBillingHealth()   // { ok, demoUnlock, links, portalConfigured, issues[] }
 VTBilling.validateCheckoutUrl(url)
+VTBilling.openCustomerPortal() // redirect to billing.stripe.com portal login
+VTBilling.isPortalUrl(url)
 VTBilling.linksConfigured()
 VTBilling.trialDaysLeft()
 ```
@@ -177,11 +179,29 @@ VTBilling.trialDaysLeft()
 
 ---
 
-## Customer cancel / upgrade
+## Customer cancel / upgrade (Customer Portal)
 
-- Early stage: customer uses **Stripe Customer Portal** or email receipts (enable Portal in Dashboard).  
-- In-app portal link: not yet wired (ST-05).  
-- Local “Clear Pro” only for internal admin accounts.
+Official no-code portal: https://docs.stripe.com/customer-management/activate-no-code-customer-portal
+
+### Step-by-step
+
+1. Stripe Dashboard → **Settings → Billing → Customer portal**  
+   (`https://dashboard.stripe.com/settings/billing/portal`).  
+2. Click **Activate link** under “Ways to get started”.  
+3. Configure cancel, payment-method update, invoice history as needed.  
+4. Copy the **portal login link** (`https://billing.stripe.com/p/login/...`).  
+5. Paste into `js/billing-config.js`:
+
+```js
+customerPortalUrl: "https://billing.stripe.com/p/login/YOUR_LINK",
+```
+
+6. Commit → push → open **Pro** pricing → **Gestionar suscripción / Manage subscription** (visible when Pro/trial + URL set).  
+7. Customers log in with email + one-time code (Stripe-hosted).  
+
+**API:** `VTBilling.openCustomerPortal()` · `VTBilling.isPortalUrl(url)` · health field `portalConfigured`.
+
+Local “Clear Pro” remains internal-admin only (not a cancel path).
 
 ---
 
@@ -236,8 +256,8 @@ See `markets[]` in `billing-config.js` (PE→MP, US/EU→Stripe, …).
 ## Recommended sequence
 
 1. Live Stripe links + success URL with `session_id`  
-2. `demoUnlockEnabled: false`  
-3. Live MP for PE  
-4. Webhook Worker for renewals/cancels  
-5. Customer Portal link in Account modal  
+2. Activate Customer Portal login link → `customerPortalUrl`  
+3. `demoUnlockEnabled: false`  
+4. Live MP for PE  
+5. Webhook Worker for renewals/cancels  
 6. Evaluate MoR (Paddle/Lemon Squeezy) if tax ops exceed bandwidth  

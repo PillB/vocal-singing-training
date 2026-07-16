@@ -34,6 +34,13 @@
     successPath: "./?billing=success",
     cancelPath: "./?billing=cancel",
     /**
+     * Stripe Customer Portal (cancel / update payment / switch plan).
+     * No-code: Dashboard → Settings → Billing → Customer portal → Activate link
+     * https://docs.stripe.com/customer-management/activate-no-code-customer-portal
+     * Paste the shareable portal login link (or leave empty until configured).
+     */
+    customerPortalUrl: "",
+    /**
      * Optional extra checkout hosts (in addition to defaults in billing.js).
      * Only https hosts are accepted.
      */

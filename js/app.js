@@ -3120,6 +3120,7 @@
     const B = window.VTBilling;
     if (!B) return;
     const ent = B.getEntitlement();
+    const cfg = B.cfg?.() || {};
     const pill = $("#billing-pill");
     const btn = $("#btn-pricing");
     if (pill) {
@@ -3143,8 +3144,31 @@
     if (exp) exp.hidden = !B.can("export_progress");
     const demo = $("#btn-demo-pro");
     if (demo) {
-      const cfg = B.cfg?.() || {};
       demo.hidden = !cfg.demoUnlockEnabled || ent.source === "demo" || (ent.pro && ent.source === "paid");
+    }
+    // Customer Portal: show for Pro/trial when a valid portal URL is configured
+    const manage = $("#btn-manage-billing");
+    if (manage) {
+      const portalRaw = String(cfg.customerPortalUrl || "").trim();
+      const portalOk = portalRaw && (B.isPortalUrl ? B.isPortalUrl(portalRaw) : true);
+      manage.hidden = !(portalOk && (ent.pro || ent.status === "trial"));
+    }
+    // Operator-facing health strip inside pricing foot (misconfig only)
+    const healthNote = $("#pricing-health-note");
+    if (healthNote && B.getBillingHealth) {
+      try {
+        const h = B.getBillingHealth();
+        if (h && !h.ok && Array.isArray(h.issues) && h.issues.length) {
+          healthNote.hidden = false;
+          const head = tt("pricing.healthPrefix");
+          healthNote.textContent = head + " " + h.issues.slice(0, 2).join(" · ");
+        } else {
+          healthNote.hidden = true;
+          healthNote.textContent = "";
+        }
+      } catch {
+        healthNote.hidden = true;
+      }
     }
   }
 
@@ -3852,6 +3876,15 @@
       toast(tt("pricing.toast.demo"));
       updateBillingChrome();
       renderPricingModal();
+    });
+    $("#btn-manage-billing")?.addEventListener("click", () => {
+      if (!window.VTBilling?.openCustomerPortal) return;
+      const res = VTBilling.openCustomerPortal();
+      if (!res?.ok) {
+        toast(res?.message || tt("pricing.toast.portalUnconfigured"), { durationMs: 4200 });
+        return;
+      }
+      toast(tt("pricing.toast.portalOpened"));
     });
     $("#btn-export-progress")?.addEventListener("click", () => {
       if (!window.VTBilling?.can("export_progress")) {

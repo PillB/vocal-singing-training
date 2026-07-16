@@ -127,9 +127,46 @@ test.describe("Billing & subscriptions", () => {
     expect(Array.isArray(r.h.issues)).toBe(true);
     // Empty links + demo on → not production-ok
     expect(r.h.ok).toBe(false);
+    expect(r.h.portalConfigured).toBe(false);
     expect(r.bad.ok).toBe(false);
     expect(r.good.ok).toBe(true);
     expect(r.http.ok).toBe(false);
+  });
+
+  test("customer portal URL validation and manage-billing UI", async ({ page }) => {
+    await boot(page);
+    const portal = await page.evaluate(() => {
+      const good = VTBilling.isPortalUrl("https://billing.stripe.com/p/login/test_abc");
+      const badHost = VTBilling.isPortalUrl("https://evil.example/billing");
+      const http = VTBilling.isPortalUrl("http://billing.stripe.com/p/login/x");
+      const empty = VTBilling.openCustomerPortal();
+      return { good, badHost, http, empty };
+    });
+    expect(portal.good).toBe(true);
+    expect(portal.badHost).toBe(false);
+    expect(portal.http).toBe(false);
+    expect(portal.empty.ok).toBe(false);
+    expect(portal.empty.mode).toBe("unconfigured");
+
+    // Manage button hidden without portal URL
+    await page.click("#btn-pricing");
+    await expect(page.locator("#btn-manage-billing")).toBeHidden();
+    // Health note visible when not production-ok
+    await expect(page.locator("#pricing-health-note")).toBeVisible();
+
+    // Configure portal + activate Pro → manage button appears
+    await page.evaluate(() => {
+      window.VT_BILLING_CONFIG.customerPortalUrl =
+        "https://billing.stripe.com/p/login/test_abc";
+      VTBilling.activateDemo("pro_monthly");
+    });
+    await page.click("#pricing-close");
+    await page.click("#btn-pricing");
+    await expect(page.locator("#btn-manage-billing")).toBeVisible();
+
+    const openRes = await page.evaluate(() => VTBilling.openCustomerPortal());
+    expect(openRes.ok).toBe(true);
+    expect(openRes.mode).toBe("redirect");
   });
 
   test("strict mode rejects success return without session_id", async ({ page }) => {

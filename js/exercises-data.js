@@ -650,14 +650,14 @@ window.VT_EXERCISES = {
       title: "Vocal Fry → Sustained /A/",
       durationMin: 5,
       original:
-        "Class-1 style: use gentle vocal fry to feel cord closure, then transition to a clean /A/ with dosed air (not force).",
+        "Use a gentle vocal fry to feel cord closure, then ease into a clear /A/ with steady air (no force).",
       research:
-        "Vocal fry can help learners feel efficient glottal closure before clear tone; pair with air dosing to avoid breathiness and strain.",
+        "A soft fry can help you feel efficient cord contact before clear tone; keep air steady so the sound stays free, not breathy or pressed.",
       steps: [
         "Inhale gently through the nose (~3 seconds) — enough air, not a huge gasp.",
         "Start a soft vocal fry on /A/ (creaky-door feel) to sense cord closure.",
         "Without pushing, transition to a clear speaking-pitch /A/ with steady air.",
-        "Hold as long as comfortable; the app logs solid holds ≥2s when you release.",
+        "Hold as long as comfortable; solid holds of 2+ seconds are logged when you release.",
         "Rest; repeat aiming for +1–2 seconds. Prefer clean tone over volume. ~5 minutes."
       ],
       tips: [
@@ -776,9 +776,9 @@ window.VT_EXERCISES = {
       title: "SH Air-Dosing Ladder",
       durationMin: 8,
       original:
-        "Class-1 breath foundation: inhale through the nose; exhale on steady SH for 5→10→20→25→30 seconds with even airflow.",
+        "Inhale through the nose; exhale on a steady SH for 5→10→20→25→30 seconds with even airflow.",
       research:
-        "Unvoiced fricative holds train air administration — the ‘raw material’ of singing — before adding pitch and closure load.",
+        "Holding a smooth SH (no pitch) trains how you dose air — the raw material of singing — before you add tone and pitch.",
       steps: [
         "Inhale calmly through the nose (not a huge gasp).",
         "Exhale on a steady SH — smooth, even, no pulses.",
@@ -814,9 +814,9 @@ window.VT_EXERCISES = {
       title: "Major Scale Coordination",
       durationMin: 8,
       original:
-        "Class-1 major scale: coordinate breath dosing, sound production, and intonation on /A/ with piano — not volume by force.",
+        "Coordinate breath, clear tone, and intonation on a major scale with /A/ and piano — ease, not forced volume.",
       research:
-        "Major-scale patterns integrate air management, onset, and pitch accuracy as simultaneous coordination tasks.",
+        "Slow major-scale patterns train air, onset, and pitch together — the full skill, not isolated “hit the note” practice.",
       steps: [
         "Warm with a soft fry→/A/ if helpful; pick a mid-low root (e.g. C3).",
         "Listen to the piano reference before each step.",
@@ -981,11 +981,11 @@ window.VT_EXERCISES = {
       title: "Breath Support (Sustained S)",
       durationMin: 5,
       original:
-        "Steady appoggio-style air with unvoiced S (or SH) then transfer to voiced /A/ — after Class-1 SH ladder warm-up.",
+        "Steady support air on unvoiced S (or SH), then the same feel on voiced /A/ — great after the SH ladder warm-up.",
       research:
-        "Steady airflow underpins non-breathy tone. Unvoiced S/SH drills isolate support before adding phonation.",
+        "Steady airflow underpins free, non-breathy tone. Unvoiced S/SH drills isolate support before you add voice.",
       steps: [
-        "Optional warm-up: complete the SH air-dosing ladder first.",
+        "Warm-up option: complete the SH air-dosing ladder first.",
         "Inhale 3 counts (low, quiet expansion through the nose).",
         "Exhale on a steady ‘ssss’ (or SH) as long as even — not blasts.",
         "Log seconds of even S. Rest. Repeat aiming +1–2s.",
@@ -1014,9 +1014,9 @@ window.VT_EXERCISES = {
       title: "Single-Note Pitch Match",
       durationMin: 8,
       original:
-        "Class-1 intonation: piano plays a note; you reproduce it on /A/ — train ear first, then production.",
+        "The piano plays a note; you match it on /A/ — listen fully first, then sing.",
       research:
-        "Intonation is reproducing a pitch correctly; difficulties can be auditory perception or technical production — both improve with deliberate matching practice.",
+        "Matching pitch trains both your ear and your production. Difficulties often improve when you slow down and listen before you phonate.",
       steps: [
         "Turn on Sustain (3–5s) and the pitch highway.",
         "Play a single reference; listen fully before you sing.",

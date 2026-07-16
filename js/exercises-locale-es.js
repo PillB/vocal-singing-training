@@ -413,23 +413,26 @@
     ]
   },
   "s1-vocal-fry": {
-    "original": "De vocal fry a /A/ sostenida: encuentra cierre suave y tono fácil.",
-    "research": "El fry puede ayudar a sentir contacto de pliegues; luego se pasa a tono libre sin apretar.",
+    "original": "De un fry suave a una /A/ clara: siente el cierre y canta sin forzar.",
+    "research": "Un fry suave ayuda a sentir el contacto de las cuerdas; luego pasas a tono libre con aire parejo, sin apretar ni soplar.",
     "steps": [
-      "Encuentra un fry suave y corto (como puerta crujiente suave), sin forzar.",
-      "Desliza del fry a una /A/ cómoda en registro medio-bajo.",
-      "Sostén la /A/ 3–5 s con piano (sostener activado) y mira la autopista.",
-      "Repite 8–10 deslizamientos fáciles; descansa si hay esfuerzo."
+      "Inhala suave por la nariz (~3 s): aire suficiente, no un jadeo grande.",
+      "Empieza un fry suave en /A/ (sensación de puerta crujiente) para notar el cierre.",
+      "Sin empujar, pasa a una /A/ clara en tono de habla, con aire estable.",
+      "Sostén lo que sea cómodo; los sostenidos firmes de 2+ s se registran al soltar.",
+      "Descansa; repite buscando +1–2 s. Prefiere tono limpio a volumen. ~5 minutos."
     ],
     "tips": [
-      "Fry suave, no rasposo ni ruidoso.",
-      "La /A/ debe sentirse más fácil que “empujar” la nota.",
-      "Si hay molestia, para y vuelve a aire/SOVT."
+      "El fry es un buscador de cierre, no el objetivo artístico.",
+      "Cierre pobre se siente como mucho aire, esfuerzo o fatiga rápida: baja la presión.",
+      "Empieza en un tono de habla cómodo (p. ej. zona media-baja).",
+      "Construye desde la comodidad, no desde la fuerza; la repetición paciente suma."
     ],
     "mistakes": [
-      "Forzar el fry",
-      "Saltar a gritos en el /A/",
-      "Tensión de cuello"
+      "Forzar el fry con fuerza",
+      "Tono soplado o flotante después del paso a /A/",
+      "Apretar la garganta en el sostenido",
+      "Buscar volumen empujando"
     ]
   },
   "s2-solfege-chords": {
@@ -437,8 +440,9 @@
     "research": "Cantar tonos de acorde entrena oído y coordinación con armonía real.",
     "steps": [
       "Elige una progresión en el piano de la app.",
-      "Escucha el acorde; canta la raíz (o el tono que indiques) en /A/ o solfeo.",
-      "Sigue la progresión despacio con sostener/arpegio según prefieras.",
+      "Escucha el acorde completo antes de cantar.",
+      "Canta la raíz (o el tono que indiques) en /A/ o solfeo.",
+      "Sigue la progresión despacio con sostener o arpegio, según prefieras.",
       "Mantén el punto de voz cerca del carril objetivo en la autopista."
     ],
     "tips": [
@@ -457,56 +461,62 @@
     "research": "Transferir la técnica a canciones reales es donde se consolida el aprendizaje.",
     "steps": [
       "Elige 4–8 compases de una canción tuya (rango cómodo).",
-      "Canta a tempo lento con apoyo parejo y onsets fáciles.",
+      "Canta a tempo lento con apoyo parejo e inicios fáciles.",
       "Marca 1 problema técnico (aire, afinación, inicio) y repite solo ese foco.",
+      "Repite la frase 3–5 veces limpia antes de alargar el fragmento.",
       "Graba una toma “limpia” al final de la sesión."
     ],
     "tips": [
       "Fragmentos cortos > canción entera al principio.",
       "Si fallas el agudo, baja un tono o cambia de frase.",
-      "La grabación revela lo que el ensayo oculta."
+      "La grabación revela lo que el ensayo oculta.",
+      "Prioriza aire y cierre claros; el “bonito” llega después."
     ],
     "mistakes": [
       "Empujar el agudo por ego",
       "Ignorar la respiración de la frase",
-      "Nunca grabar"
+      "Nunca grabar",
+      "Intentar la canción entera con técnica inestable"
     ]
   },
   "s15-sh-air-ladder": {
-    "original": "Escalera de aire en SH: dosifica el aire de suave a firme sin soplar de golpe.",
-    "research": "Dosificar el aire es la base del apoyo; SH sin voz aísla el control antes de cantar.",
+    "original": "Inhala por la nariz y exhala SH pareja en peldaños 5→10→20→25→30 s.",
+    "research": "Sostener un SH suave (sin voz) entrena cómo dosificas el aire — la materia prima del canto — antes de añadir tono.",
     "steps": [
-      "Inhala suave por la nariz (expansión baja).",
-      "Exhala en SH en peldaños: muy suave → medio → más firme, siempre pareja.",
-      "Cuenta o cronometra cada peldaño; busca control, no máximo volumen de aire.",
-      "Baja la escalera otra vez.",
-      "Transfiere: misma sensación a una /A/ suave sostenida."
+      "Inhala suave por la nariz (expansión baja, sin jadeo).",
+      "Exhala en un SH constante: liso, parejo, sin pulsos.",
+      "Mantén SH pareja 5 s, descansa; luego 10, 20, 25 y 30 s (escalera).",
+      "Si el final se derrumba, la próxima vez empieza un poco más suave.",
+      "Opcional: después, misma sensación de apoyo en una /A/ suave."
     ],
     "tips": [
-      "El pecho no se hunde al final del SH.",
-      "Si sisea a ráfagas, reduce y alarga.",
-      "Ideal antes de sostener S o /A/."
+      "El aire es la materia prima de la voz: aprende a dosificarlo para toda la frase.",
+      "El flujo uniforme importa más que el récord de segundos el primer día.",
+      "Practica la escalera a diario como calentamiento corto.",
+      "Para si hay mareo; siéntate; no fuerces los últimos segundos."
     ],
     "mistakes": [
-      "Soplar todo el aire de una vez",
-      "Inhalar con hombros altos",
-      "Saltar la transferencia a voz"
+      "Inhalación de jadeo grande",
+      "SH a pulsos o a trozos",
+      "Empujar cuello/mandíbula al final",
+      "Saltar el descanso entre peldaños"
     ]
   },
   "s16-major-scale-coord": {
-    "original": "Coordinación de escala mayor en /A/: aire + cierre + afinación juntos.",
-    "research": "La escala mayor lenta entrena la coordinación completa, no solo “pegar notas”.",
+    "original": "Coordina aire, tono claro y afinación en escala mayor con /A/ y piano — con facilidad, no a gritos.",
+    "research": "La escala mayor lenta entrena aire, inicio y afinación juntos: la habilidad completa, no solo “pegar la nota”.",
     "steps": [
-      "Elige una tónica cómoda en zona media-baja.",
-      "Escucha la escala en el piano; canta 1–8–1 en /A/ con aire parejo.",
+      "Si te ayuda, calienta con fry → /A/ suave; elige tónica media-baja (p. ej. C3).",
+      "Escucha la referencia del piano antes de cada paso.",
+      "Canta un patrón de escala mayor en /A/ (sube y baja) con aire parejo.",
       "Evita gastar todo el aire en las primeras notas.",
-      "Completa al menos 3 tónicas; misma facilidad al subir y bajar.",
-      "Usa la autopista para asentar cada grado antes de seguir."
+      "Completa al menos 3 tónicas; misma facilidad al subir y bajar."
     ],
     "tips": [
-      "Técnica = coordinación de aire + cierre + afinación.",
+      "Técnica = aire + cierre + afinación a la vez.",
       "No fuerces volumen para “pegar” una nota: oye, luego canta.",
-      "Paciencia: el cuerpo se adapta con repetición consciente."
+      "Paciencia: el cuerpo se adapta con repetición consciente.",
+      "Usa la autopista para asentar cada grado antes de seguir."
     ],
     "mistakes": [
       "Gastar el aire al inicio",
@@ -620,8 +630,8 @@
     ]
   },
   "s9-pitch-match": {
-    "original": "Afinación clase 1: el piano da una nota; tú la reproduces en /A/.",
-    "research": "Afinar es reproducir un tono con precisión; el oído y la producción mejoran con emparejamiento deliberado.",
+    "original": "El piano da una nota; tú la igualas en /A/ — primero escucha, luego canta.",
+    "research": "Igualar el tono entrena oído y producción. Suele mejorar si bajas la prisa y escuchas antes de fonar.",
     "steps": [
       "Activa Sostener (3–5 s) y la autopista de pitch.",
       "Toca una referencia; escucha completa antes de cantar.",
@@ -655,7 +665,8 @@
     "tips": [
       "No empujes la nota más aguda — aligera si hace falta.",
       "Autopista: cada escalón debe asentarse antes de seguir.",
-      "Legato: conecta con aire, no con golpes glotales."
+      "Legato: conecta con aire, no con golpes glotales.",
+      "Si un grado se va, detente, oye de nuevo y rehaz solo ese paso."
     ],
     "mistakes": [
       "Gritar la 5ª",

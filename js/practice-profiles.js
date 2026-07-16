@@ -345,8 +345,8 @@
       allowManualSound: true,
       manualSoundKind: "air",
       rungs: [5, 10, 20, 25, 30],
-      cue: "Nose inhale → even SH. Clear 5→10→20→25→30s rungs. Air only, no pitch. Raise Mic or hold Space if undetected.",
-      cueEs: "Inhala nariz → SH pareja. Peldaños 5→10→20→25→30s. Solo aire. Sube Mic o mantén Espacio si no te detecta.",
+      cue: "Nose inhale → even SH. Climb 5→10→20→25→30s. Air only. Raise Mic or hold Space if the timer doesn’t move.",
+      cueEs: "Inhala por la nariz → SH pareja. Peldaños 5→10→20→25→30 s. Solo aire. Si el contador no se mueve, sube Mic o mantén Espacio.",
       metricHints: { rungs: "cleared", maxSH: "best" }
     },
     "s16-major-scale-coord": {

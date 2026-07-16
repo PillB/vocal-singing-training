@@ -861,10 +861,10 @@
       this.state.gates = 0;
       this.hud.innerHTML = `
         <div class="mode-title">${L("Puerta de concisión", "Concision gate")}</div>
-        <div class="mode-phase" data-phase>Q1 · Receive the question</div>
-        <div class="mode-big" data-g>Breathe</div>
+        <div class="mode-phase" data-phase>${L("P1 · Recibe la pregunta", "Q1 · Receive the question")}</div>
+        <div class="mode-big" data-g>${L("Respira", "Breathe")}</div>
         <p class="mode-meta">${L("Puertas pasadas: <strong data-ok>0</strong>/" + this.state.maxQ, "Gates passed: <strong data-ok>0</strong>/" + this.state.maxQ)}</p>
-        <button type="button" class="btn btn-sm" data-next>Next question</button>
+        <button type="button" class="btn btn-sm" data-next>${L("Siguiente pregunta", "Next question")}</button>
       `;
       this.$("[data-next]")?.addEventListener("click", () => {
         if (this.state.q < this.state.maxQ) {
@@ -1098,19 +1098,20 @@
       this.state.best = 0;
       this.hud.innerHTML = `
         <div class="mode-title">${fry ? L("Fry → /A/ clara sostenida", "Fry → clear /A/ hold") : L("Sostén y mantén", "Sustain & hold")}</div>
-        <div class="mode-phase" data-phase>${fry ? "Phase 1 · gentle fry (finder)" : "Sustain"}</div>
+        <div class="mode-phase" data-phase>${fry ? L("Paso 1 · fry suave (buscador)", "Step 1 · gentle fry (finder)") : L("Sostén", "Sustain")}</div>
         <div class="mode-big" data-h>0.0s</div>
         <p class="mode-meta">${L("Mejor sostenido: <strong data-best>0s</strong> · registros: <strong data-n>0</strong>", "Best clear hold: <strong data-best>0s</strong> · logs: <strong data-n>0</strong>")}</p>
         ${
           fry
-            ? `<button type="button" class="btn btn-sm btn-singing" data-clear>Move to clear /A/</button>`
+            ? `<button type="button" class="btn btn-sm btn-singing" data-clear>${L("Pasar a /A/ clara", "Move to clear /A/")}</button>`
             : ""
         }
-        <p class="mode-meta muted">${L("Registra sostenidos ≥2s al soltar. No es un juego de notas.", "Auto-logs holds ≥2s after release. Not a note-challenge game.")}</p>
+        <p class="mode-meta muted">${L("Los sostenidos de 2+ s se registran al soltar. No es un juego de notas.", "Holds of 2+ s are logged when you release. Not a note-challenge game.")}</p>
       `;
       this.$("[data-clear]")?.addEventListener("click", () => {
         this.state.phase = "hold";
-        if (this.$("[data-phase]")) this.$("[data-phase]").textContent = "Phase 2 · clear /A/ hold";
+        if (this.$("[data-phase]"))
+          this.$("[data-phase]").textContent = L("Paso 2 · /A/ clara sostenida", "Step 2 · clear /A/ hold");
       });
     },
     onFrame(frame) {
@@ -1477,16 +1478,18 @@
       this.state._airHoldFrames = 0;
       this.hud.innerHTML = `
         <div class="mode-title">${L("Soporte de aire · S y luego /A/", "Breath support · S then /A/")}</div>
-        <div class="mode-phase" data-phase>Phase 1 · even S (unvoiced)</div>
+        <div class="mode-phase" data-phase>${L("Paso 1 · S pareja (sin voz)", "Step 1 · even S (no voice)")}</div>
         <div class="mode-big" data-h>0.0s</div>
-        <p class="mode-meta">Best S <strong data-s>0</strong>s · Best /A/ <strong data-a>0</strong>s</p>
-        <button type="button" class="btn btn-sm" data-sw>Switch to /A/ phase</button>
+        <p class="mode-meta">${L("Mejor S <strong data-s>0</strong>s · Mejor /A/ <strong data-a>0</strong>s", "Best S <strong data-s>0</strong>s · Best /A/ <strong data-a>0</strong>s")}</p>
+        <button type="button" class="btn btn-sm" data-sw>${L("Pasar a fase /A/", "Switch to /A/ phase")}</button>
       `;
       this.$("[data-sw]")?.addEventListener("click", () => {
         this.state.phase = this.state.phase === "S" ? "A" : "S";
         if (this.$("[data-phase]"))
           this.$("[data-phase]").textContent =
-            this.state.phase === "S" ? "Phase 1 · even S (unvoiced)" : "Phase 2 · /A/ with same support";
+            this.state.phase === "S"
+              ? L("Paso 1 · S pareja (sin voz)", "Step 1 · even S (no voice)")
+              : L("Paso 2 · /A/ con el mismo apoyo", "Step 2 · /A/ with same support");
       });
     },
     onFrame(frame) {
@@ -1863,8 +1866,8 @@
       this.hud.innerHTML = `
         <div class="mode-title">${L("Repeticiones de ataque suave", "Easy onset reps")}</div>
         <div class="mode-big" data-e>0 / ${this.profile.targetReps || 10}</div>
-        <p class="mode-meta">Hard attacks flagged: <strong data-h>0</strong></p>
-        <p class="mode-meta">Start from silence; spikey onsets count as hard.</p>
+        <p class="mode-meta">${L("Ataques duros marcados: <strong data-h>0</strong>", "Hard attacks flagged: <strong data-h>0</strong>")}</p>
+        <p class="mode-meta muted">${L("Parte del silencio; un inicio brusco cuenta como duro.", "Start from silence; a spiky onset counts as hard.")}</p>
       `;
     },
     onFrame(frame) {

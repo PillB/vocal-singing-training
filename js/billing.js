@@ -354,12 +354,11 @@
       return {
         ok: false,
         mode: "unconfigured",
-        message:
-          "Customer portal URL not set. Activate no-code portal in Stripe Dashboard (Settings → Billing → Customer portal)."
+        message: null // app maps mode → i18n pricing.toast.portalUnconfigured
       };
     }
     if (!isPortalUrl(raw)) {
-      return { ok: false, mode: "invalid_url", message: "Portal URL host not allowlisted" };
+      return { ok: false, mode: "invalid_url", message: null };
     }
     window.open(raw, "_blank", "noopener,noreferrer");
     return { ok: true, mode: "redirect", url: raw };
@@ -496,8 +495,7 @@
         return {
           event: "error",
           reason: "missing_session",
-          message:
-            "Checkout return missing session_id. Configure Payment Link success URL to append session_id, or enable webhooks."
+          message: null // app maps → i18n pricing.toast.checkoutError
         };
       }
 

@@ -35,9 +35,21 @@ npm run serve                 # :8765
 npm run test:catalog          # inventory freeze
 npx playwright test tests/audio-regression.spec.js   # piano + hot-apply matrix
 npx playwright test tests/full-journey.spec.js       # every exercise Start + flows
+# All 36 exercises × Empezar × master-bus peak (repeat N rounds):
+VT_SOUND_ROUNDS=5 npx playwright test tests/sound-all-exercises.spec.js
 npm test                      # catalog check + all Playwright
 npm run test:geometry         # AABB HUD forensics (optional after CSS)
 ```
+
+### Sound contract (per exercise)
+
+| Kind | Expect on Empezar |
+|------|-------------------|
+| `VTApp.wantsSound()` true (autoPiano / piano / progressions / ref) | `ctx === running`, voices scheduled, `outputPeak() > ~0.004` |
+| Speech / air-only (e.g. `s15-sh-air-ladder` SH ladder) | Live practice; **no** piano required; ctx must not end `closed` |
+| `weekPlan` | May open plan UI without live mic |
+
+Do **not** infer piano from mode name alone (`shAirLadder` is unvoiced air).
 
 ## Change method
 

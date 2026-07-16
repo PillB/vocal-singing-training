@@ -1319,6 +1319,20 @@
       }
     }
 
+    // Safety net: profile said sound wanted but nothing scheduled (misconfigured exercise)
+    if (!started && exerciseWantsSound(ex, profile)) {
+      try {
+        const fallback = profile.refPitch || ex.audio?.refPitch || "C3";
+        await VTPiano.playRefPitch(fallback, sec, true);
+        started = !!(VTPiano.playing && VTPiano.playing.length);
+        if (started) {
+          console.warn("[VT] startExerciseSound fallback ref", fallback, ex.id);
+        }
+      } catch (e) {
+        console.warn("Piano fallback failed", e);
+      }
+    }
+
     // If still silent/suspended, hard-recover: recreate graph + replay once
     if (started && VTPiano.ctx && VTPiano.ctx.state !== "running") {
       try {
@@ -2924,6 +2938,11 @@
       return state._hotApplyPromise;
     },
     getState: () => state,
+    /** True if current (or given) exercise should start piano/ref on Empezar when Auto is on. */
+    wantsSound: (ex) => {
+      const e = ex || state.exercise;
+      return exerciseWantsSound(e, e ? getProfile(e) : null);
+    },
     shouldPromptOnLeave,
     getPracticedSec,
     getExerciseTargetSec,

@@ -7,6 +7,9 @@ Client-only GH Pages app. Prefer **fail visibly**, **idempotent Start/Stop**, an
 | Mode | Symptom | Defense |
 |------|---------|---------|
 | Closed / suspended `AudioContext` after mic | Silent piano | Shared `VTSharedAudioCtx`; PracticeEngine never closes piano ctx; `ensure()` recreates if `closed`; `unlock()` on Start gesture |
+| Double-click Empezar / leave during Start | Zombie live audio | `practiceGen` token + `practiceStarting` disables Start until settle; Stop bumps gen |
+| End structured while live | Mic/piano on home | `endStructured` always `stopPractice` + piano stop |
+| Leave → Save then metrics | Destination forgotten | `pendingLeave` honored after `completeExercise` |
 | Rapid option flips | Race stopAll vs schedule | `applyPianoOptionsHot` serializes via `_hotApplyPromise` |
 | Empty catch / silent fail | UI “En vivo” without sound | Toasts on piano fail; `outputPeak` / `isLive` probes; audio regression suite |
 | Catalog regression | Missing exercises | `qa/check-catalog.mjs` + `tests/catalog-regression.spec.js` |

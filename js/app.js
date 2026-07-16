@@ -21,6 +21,10 @@
     recorder: new VTRecorder(),
     practice: new VTPracticeEngine(),
     practiceLive: false,
+    /** Bumped on Stop/leave/open to abort in-flight Start after awaits */
+    practiceGen: 0,
+    practiceStarting: false,
+    pendingLeave: null,
     selectedProg: "prog1",
     holdSeconds: 0,
     holdTimer: null,
@@ -414,9 +418,9 @@
         });
       }
       // Refresh i18n titles if available
-      if (window.VTI18n?.apply) {
+      if (window.VTI18n?.applyDom) {
         try {
-          VTI18n.apply(modal);
+          VTI18n.applyDom();
         } catch {
           /* optional */
         }
@@ -495,19 +499,26 @@
       state.recorder.clear();
     }
 
-    if (destination?.type === "home") {
-      setView("home");
-      renderExerciseList();
-    } else if (destination?.type === "history") {
-      renderHistory();
-    } else if (destination?.type === "plan") {
-      renderPlan();
-    } else if (destination?.type === "exercise" && destination.id) {
-      forceOpenExercise(destination.id, destination.fromStructured);
-    } else if (destination?.type === "next") {
+    if (destination?.type === "next") {
       // handled by caller after return true
+    } else {
+      navigateDestination(destination);
     }
     return true;
+  }
+
+  function navigateDestination(destination) {
+    if (!destination) return;
+    if (destination.type === "home") {
+      setView("home");
+      renderExerciseList();
+    } else if (destination.type === "history") {
+      renderHistory();
+    } else if (destination.type === "plan") {
+      renderPlan();
+    } else if (destination.type === "exercise" && destination.id) {
+      forceOpenExercise(destination.id, destination.fromStructured);
+    }
   }
 
   function forceOpenExercise(id, fromStructured) {
@@ -1219,9 +1230,14 @@
 
   function setPracticeUI(live) {
     state.practiceLive = live;
+    if (live) state.practiceStarting = false;
     const start = $("#btn-practice-start");
     const stop = $("#btn-practice-stop");
-    if (start) start.hidden = live;
+    if (start) {
+      start.hidden = live || state.practiceStarting;
+      start.disabled = !!(live || state.practiceStarting);
+      start.setAttribute("aria-busy", state.practiceStarting ? "true" : "false");
+    }
     if (stop) stop.hidden = !live;
     const pill = $("#practice-status");
     if (pill) {
@@ -1357,8 +1373,12 @@
 
   async function startPractice() {
     const ex = state.exercise;
-    if (!ex || state.practiceLive) return;
+    if (!ex || state.practiceLive || state.practiceStarting) return;
     const profile = getProfile(ex);
+    // Generation token: Stop / leave / exercise switch aborts in-flight Start
+    const gen = ++state.practiceGen;
+    const stillThisStart = () => gen === state.practiceGen && state.exercise === ex;
+
     try {
       // weekPlan: open dashboard instead of forcing mic
       if (profile.mode === "weekPlan") {
@@ -1367,6 +1387,9 @@
         toast("12-week plan opened");
         return;
       }
+
+      state.practiceStarting = true;
+      setPracticeUI(false); // hides/disables Start while bootstrapping
 
       const wantRecord = !!(
         profile.autoRecord ||
@@ -1386,6 +1409,7 @@
           console.warn("Piano unlock failed", e);
         }
       }
+      if (!stillThisStart()) return;
 
       // Fresh mode instance every Start (reviews: restart must reset phases/reps)
       if (state.modeInstance) {
@@ -1506,6 +1530,18 @@
           micOk = false;
         }
       }
+      if (!stillThisStart()) {
+        // Aborted mid-start — ensure we don't leave mic running without UI
+        try {
+          if (state.practice.running) state.practice.stop();
+        } catch {
+          /* ignore */
+        }
+        VTPiano.stopAll();
+        state.practiceStarting = false;
+        setPracticeUI(false);
+        return;
+      }
 
       // Resume + start piano AFTER mic so context is running again
       let soundOk = false;
@@ -1535,8 +1571,20 @@
           soundOk = false;
         }
       }
+      if (!stillThisStart()) {
+        try {
+          if (state.practice.running) state.practice.stop();
+        } catch {
+          /* ignore */
+        }
+        VTPiano.stopAll();
+        state.practiceStarting = false;
+        setPracticeUI(false);
+        return;
+      }
 
       if (!micOk && !soundOk) {
+        state.practiceStarting = false;
         setPracticeUI(false);
         toast(tt("toast.mic"));
         return;
@@ -1551,12 +1599,15 @@
         state._pianoKeepAlive = setInterval(() => {
           if (!state.practiceLive) return;
           if (window.VTPiano?.ctx?.state === "suspended") {
-            VTPiano.resume?.().then(() => {
-              // restart loop if it died while suspended
-              if (!VTPiano.loopActive && exerciseWantsSound(ex, profile)) {
-                startExerciseSound(ex, profile).catch(() => {});
-              }
-            });
+            VTPiano.resume?.()
+              .then(() => {
+                if (!VTPiano.loopActive && exerciseWantsSound(ex, profile)) {
+                  startExerciseSound(ex, profile).catch((err) =>
+                    console.warn("[VT] keepAlive sound", err)
+                  );
+                }
+              })
+              .catch((err) => console.warn("[VT] keepAlive resume", err));
           }
         }, 2000);
       }
@@ -1574,12 +1625,16 @@
       }
     } catch (e) {
       console.error(e);
+      state.practiceStarting = false;
       setPracticeUI(false);
       toast(tt("toast.mic"));
     }
   }
 
   function stopPractice(silent) {
+    // Invalidate any in-flight Start
+    state.practiceGen = (state.practiceGen || 0) + 1;
+    state.practiceStarting = false;
     if (state._pianoKeepAlive) {
       clearInterval(state._pianoKeepAlive);
       state._pianoKeepAlive = null;
@@ -1933,6 +1988,7 @@
     });
 
     state.sessionPractice.saved = true;
+    const pending = state.pendingLeave;
     state.pendingLeave = null;
 
     const box = $("#score-result");
@@ -1957,6 +2013,11 @@
     if (state.structured) {
       VTSession.markCurrentComplete();
       updateSessionBanner();
+    }
+
+    // Honor leave destination stashed when user chose Save on the leave modal
+    if (pending && pending.type && pending.type !== "next") {
+      setTimeout(() => navigateDestination(pending), 400);
     }
   }
 
@@ -2339,9 +2400,18 @@
   }
 
   function endStructured() {
+    // Always kill live audio/mic — previously left piano/mic running on home
+    stopPractice(true);
+    VTPiano.stopAll();
+    stopTimer(false);
+    stopHold();
+    stopPitchViz();
+    state.recorder.clear();
+    resetSessionPractice();
     VTSession.clear();
     updateSessionBanner();
     setView("home");
+    renderExerciseList();
     toast("Structured session cleared");
   }
 

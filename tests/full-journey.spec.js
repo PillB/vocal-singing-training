@@ -323,6 +323,84 @@ test.describe("Full journey: core user flows", () => {
     expect(errs).toEqual([]);
   });
 
+  test("double-click Empezar does not leave zombie live state", async ({ page }) => {
+    test.setTimeout(90_000);
+    await boot(page);
+    await openExercise(page, snap.catalog.find((e) => e.id === "s2-solfege-chords") || snap.catalog[0]);
+    // DOM double-fire (Playwright click waits for enabled; Start disables mid-start)
+    await page.evaluate(() => {
+      const b = document.querySelector("#btn-practice-start");
+      b?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      b?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    });
+    await expect(page.locator("#btn-practice-stop")).toBeVisible({ timeout: 15000 });
+    const st = await page.evaluate(() => {
+      const s = window.VTApp?.getState?.();
+      return {
+        live: !!s?.practiceLive,
+        starting: !!s?.practiceStarting,
+        gen: s?.practiceGen
+      };
+    });
+    expect(st.live).toBe(true);
+    expect(st.starting).toBe(false);
+    expect(st.gen).toBeGreaterThanOrEqual(1);
+    await page.locator("#btn-practice-stop").click({ force: true });
+    await expect(page.locator("#btn-practice-start")).toBeVisible({ timeout: 10000 });
+    const after = await page.evaluate(() => {
+      const s = window.VTApp?.getState?.();
+      return { live: !!s?.practiceLive, starting: !!s?.practiceStarting };
+    });
+    expect(after.live).toBe(false);
+    expect(after.starting).toBe(false);
+  });
+
+  test("end structured session stops live practice", async ({ page }) => {
+    await boot(page);
+    await page.click('.tab[data-tab="vocal"]');
+    const structured = page.locator("#btn-structured");
+    if (!(await structured.isVisible().catch(() => false))) {
+      test.skip();
+      return;
+    }
+    await structured.click();
+    await page.waitForTimeout(200);
+    // Open current structured exercise if any
+    const opened = await page.evaluate(() => {
+      const id = window.VTSession?.currentExerciseId?.();
+      if (id && window.VTApp?.openExercise) {
+        window.VTApp.openExercise(id, true);
+        return id;
+      }
+      return null;
+    });
+    if (!opened) {
+      // still end structured — must not throw
+      await page.locator("#btn-session-end").click().catch(() => {});
+      return;
+    }
+    await page.waitForTimeout(300);
+    if (await page.locator("#btn-practice-start").isVisible()) {
+      await page.click("#btn-practice-start");
+      await page.waitForTimeout(500);
+    }
+    await page.locator("#btn-session-end").click();
+    await page.waitForTimeout(300);
+    const st = await page.evaluate(() => {
+      const s = window.VTApp?.getState?.();
+      return {
+        live: !!s?.practiceLive,
+        practiceRunning: !!s?.practice?.running,
+        view: s?.view,
+        loop: !!window.VTPiano?.loopActive
+      };
+    });
+    expect(st.live).toBe(false);
+    expect(st.practiceRunning).toBe(false);
+    expect(st.loop).toBe(false);
+    expect(st.view).toBe("home");
+  });
+
   test("option sync: mode select ↔ checkboxes", async ({ page }) => {
     await boot(page);
     await openExercise(page, snap.catalog.find((e) => e.id === "s2-solfege-chords") || snap.catalog[0]);

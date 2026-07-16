@@ -99,4 +99,28 @@ test.describe("Ads scaffold", () => {
     await expect(page.locator("#ad-slot-history")).toHaveCount(1);
     await expect(page.locator("#ad-slot-post-session")).toHaveCount(1);
   });
+
+  test("practiceLive blocks home slot even when ads enabled", async ({ page }) => {
+    await boot(page);
+    const r = await page.evaluate(() => {
+      window.VT_ADS_CONFIG.adsEnabled = true;
+      window.VT_BILLING_CONFIG.freeTrialDays = 0;
+      localStorage.removeItem("vt_billing_v1");
+      localStorage.removeItem("vt_billing_trial_started_v1");
+      localStorage.removeItem("vt_ads_last_home_v1");
+      // Simulate live practice state
+      const st = VTApp.getState();
+      st.practiceLive = true;
+      document.body.classList.add("view-exercise");
+      document.getElementById("view-exercise")?.classList.add("active");
+      document.getElementById("view-home")?.classList.remove("active");
+      const out = VTAds.renderSlot("home");
+      const practice = VTAds.isPracticeActive();
+      st.practiceLive = false;
+      return { out, practice };
+    });
+    expect(r.practice).toBe(true);
+    expect(r.out.ok).toBe(false);
+    expect(r.out.reason).toBe("practice_active");
+  });
 });

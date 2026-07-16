@@ -52,7 +52,7 @@
       "pricing.railMp": "Mercado Pago (Perú / LATAM)",
       "pricing.dream": "Resultado: voz clara y afinada, con un plan que se sostiene semana a semana.",
       "pricing.proof1": "Autopista + piano + mic ilimitados en Gratis (el aha no se paga)",
-      "pricing.proof2": "Pro = exportar prueba, varios perfiles e insights de coach",
+      "pricing.proof2": "Pro = sin anuncios/consejos, exportar prueba, perfiles e insights de coach",
       "pricing.proof3": "Ancla: Pro anual ≈ menos que 1 clase particular típica",
       "pricing.personalEmpty": "Aún sin sesiones guardadas — prueba un ejercicio gratis y vuelve a ver tu progreso aquí.",
       "pricing.personalHave": "Tu prueba: {sessions} sesiones · ~{minutes} min · racha {streak}d · mejor hold {hold}s",
@@ -388,6 +388,7 @@
       "plan.completed": "Elementos mejorados",
       "plan.reviews": "Historial de revisiones",
       "footer.base": "Basado en",
+      "footer.privacy": "Privacidad",
       "footer.rest":
         "· Material de práctica personal · Piano en el navegador (registro medio-bajo) · Los datos se quedan en tu dispositivo.",
       "next": "Siguiente ejercicio →",
@@ -496,7 +497,7 @@
       "pricing.railMp": "Mercado Pago (Peru / LATAM)",
       "pricing.dream": "Outcome: a clear, in-tune voice with a plan that sticks week to week.",
       "pricing.proof1": "Unlimited highway + piano + mic on Free (the aha isn’t paywalled)",
-      "pricing.proof2": "Pro = export proof, multi-profiles, and coach insights",
+      "pricing.proof2": "Pro = ad-free, export proof, multi-profiles, and coach insights",
       "pricing.proof3": "Anchor: yearly Pro ≈ less than one typical private lesson",
       "pricing.personalEmpty": "No saved sessions yet — try a free exercise, then see your progress here.",
       "pricing.personalHave": "Your proof: {sessions} sessions · ~{minutes} min · {streak}d streak · best hold {hold}s",
@@ -831,6 +832,7 @@
       "plan.completed": "Elements improved",
       "plan.reviews": "Review history",
       "footer.base": "Based on",
+      "footer.privacy": "Privacy",
       "footer.rest":
         "· Personal practice material · In-browser piano (mid-lower range) · Data stays on your device.",
       "next": "Next exercise →",

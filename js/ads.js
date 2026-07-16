@@ -35,25 +35,43 @@
     }
   }
 
-  /** Practice / live session views must never host ads. */
+  /**
+   * Practice / live session must never host ads.
+   * View id is #view-exercise (not view-practice). Live flag is practiceLive.
+   */
   function isPracticeActive() {
-    const practice = document.getElementById("view-practice");
-    if (practice && practice.classList.contains("active") && !practice.hidden) {
-      return true;
+    const exercise = document.getElementById("view-exercise");
+    if (exercise && exercise.classList.contains("active")) {
+      // On exercise view: block new ad renders except post-session slot after save
+      // (post-session is opt-in via onPostSession after metrics save, practice stopped)
+      if (global.VTApp?.getState) {
+        try {
+          const st = global.VTApp.getState();
+          if (st && (st.practiceLive || st.practiceStarting || st.running || st.recording)) {
+            return true;
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+      // If still live practice UI (stop button visible) treat as active
+      const stopBtn = document.getElementById("btn-practice-stop");
+      if (stopBtn && !stopBtn.hidden) return true;
     }
-    const banner = document.getElementById("session-banner");
-    if (banner && !banner.hidden && getComputedStyle(banner).display !== "none") {
-      // session banner visible often means guided session
-      const text = document.getElementById("session-banner-text");
-      if (text && banner.offsetParent !== null) {
-        /* allow home-level; block if practice view active only */
+    if (document.body.classList.contains("view-exercise")) {
+      try {
+        const st = global.VTApp?.getState?.();
+        if (st && (st.practiceLive || st.practiceStarting)) return true;
+      } catch {
+        /* ignore */
       }
     }
-    // Explicit live engines
     if (global.VTApp?.getState) {
       try {
         const st = global.VTApp.getState();
-        if (st && (st.running || st.recording || st.practiceActive)) return true;
+        if (st && (st.practiceLive || st.practiceStarting || st.running || st.recording)) {
+          return true;
+        }
       } catch {
         /* ignore */
       }
@@ -181,6 +199,15 @@
     };
     const el = document.getElementById(map[slotId] || "");
     if (!el) return { ok: false, reason: "no_element" };
+
+    // Post-session is only allowed after completeExercise (practice already stopped).
+    // Home/history still fully blocked when practice is live.
+    const practiceLive = isPracticeActive();
+    if (practiceLive && slotId !== "post-session") {
+      clearSlot(el);
+      track("ad_suppressed_practice", { slot: slotId });
+      return { ok: false, reason: "practice_active" };
+    }
 
     if (!shouldShowAds()) {
       clearSlot(el);

@@ -22,13 +22,14 @@ Product: **Vocal Studio / PillB** · Updated with orchestration Phases 0–7 (20
 | AD-01 | No live native affiliates filled | P2 | Open (ops) | Paste real partner URLs in `ads-config.js` |
 | AD-02 | `adsEnabled: false` | P2 | **By design** | Set true after review |
 | AD-03 | No AdSense account / units | P3 | Deferred | After traffic + privacy policy |
-| AD-04 | No A/B measurement of ad impact on retention | P2 | Open | Use VTAnalytics events |
-| AD-05 | No public privacy policy page for AdSense | P2 | Open if AdSense | Static `privacy.html` |
+| AD-04 | No A/B measurement of ad impact on retention | P2 | Open | Events: `ad_impression` / `ad_click` / `ad_suppressed_*` |
+| AD-05 | No public privacy policy page for AdSense | P2 | **Closed** | `privacy.html` + footer link |
 | AD-06 | GH Pages commercial-primary risk if over-monetized | P2 | Monitor | Keep education primary |
-| AD-07 | Pro CTA copy not yet “ad-free” framed | P3 | Partial | i18n when ads enabled |
+| AD-07 | Pro CTA copy not yet “ad-free” framed | P3 | **Closed** | `pricing.proof2` + `feat.ad_free` ES/EN |
 
 ## Change log
 
 | Date | Note |
 |------|------|
 | 2026-07-16 | Registry created; strategy + scaffold shipped off-by-default |
+| 2026-07-16 | Validation pass: practiceLive detection fix; privacy.html; AD-05/07 closed |

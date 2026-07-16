@@ -341,3 +341,44 @@ Strategy increases **total** monetization potential without sacrificing learning
 
 ### Phase 7 retrospection
 Research complete; strategy actionable; code scaffold ready; **enablement is an operator decision** after subscription links live.
+
+---
+
+# Validation pass (2026-07-16 · re-orchestration)
+
+### Preamble
+Re-run Phases 0–7 against live code after initial ship (`3bfd3ed`). Goal: fresh evidence, harden practice-path ban, close AD-05/AD-07 without enabling ads.
+
+### Fresh research deltas (no strategy flip)
+
+| Topic | 2026 signal | Impact |
+|-------|-------------|--------|
+| Education AdSense RPM | Still mid-tier: ~$1–6 (Inno Panda) to ~$4–12 in some niche tables; not finance-level | Keep native-first early |
+| Online learning as niche | Publift/Monetag: education pays via **affiliates + own premium**, not ads alone | Affirms AD-D01/D03 |
+| User sentiment (X Jul 2026) | “I genuinely hate anything ads” → urge Super; “no more annoying Duo ads” after pay | Affirms **ad-free Pro** stick |
+| Super marketing | “Learn without ads” is primary Super sell | Keep `ad_free` on Pro plan |
+
+### Code audit findings & fixes
+
+| Issue | Fix |
+|-------|-----|
+| `isPracticeActive()` looked for `#view-practice` (wrong id) and `practiceActive` (wrong flag) | Use `#view-exercise` + `practiceLive` / `practiceStarting` / stop button |
+| Privacy page missing (AD-05) | Added `privacy.html` + footer link |
+| Pro framing weak (AD-07) | `pricing.proof2` mentions ad-free ES/EN |
+| Practice suppress not tracked | `ad_suppressed_practice` analytics event |
+
+### Operator enable checklist (native tips — 5 steps)
+
+1. Fill `nativeCards[].href` with real affiliate or partner URLs in `js/ads-config.js`.  
+2. Confirm FTC-style labels (`labelEs` / `disclosureEs`) are accurate.  
+3. Set `adsEnabled: true`, keep `mode: "native"`.  
+4. Commit → push → hard-refresh Pages.  
+5. Verify: free user (no trial) sees home card; Pro hides it; Empezar never shows ads mid-session.
+
+**Still recommended first:** live Stripe/MP links + `demoUnlockEnabled: false` (one Pro ≫ early ad RPM).
+
+### Decisions reaffirmed
+AD-D01–D08 remain **locked**. No change to kill-switch default (`false`).
+
+### Tests
+- `tests/ads.spec.js` — includes practiceLive block assertion.

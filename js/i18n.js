@@ -23,7 +23,7 @@
       "tour.progress": "Paso {n} de {total}",
       "tour.s1.title": "Bienvenido a tu estudio de voz",
       "tour.s1.body":
-        "Aquí practicas oratoria (estilo Vinh Giang) y canto en casa: micrófono, piano, métricas y un plan de 12 semanas. Todo se guarda en este navegador.",
+        "Aquí practicas oratoria y canto en casa: micrófono, piano, métricas y un plan de 12 semanas. Todo se guarda en este navegador.",
       "tour.s2.title": "Dos caminos de entrenamiento",
       "tour.s2.body":
         "Cambia entre Entrenamiento vocal (hablar con claridad y presencia) y Entrenamiento de canto (cierre, aire, afinación). Cada uno tiene su lista de ejercicios.",
@@ -63,10 +63,10 @@
       "session.end": "Terminar",
       "home.vocalTitle": "Entrenamiento vocal",
       "home.vocalSub":
-        "Básico: base de oratoria (estilo Vinh Giang). Avanzado: pausa, rellenos, tono, gestos, historias y más.",
+        "Básico: bases de oratoria clara. Avanzado: pausa, rellenos, tono, gestos, historias y más.",
       "home.singingTitle": "Entrenamiento de canto",
       "home.singingSub":
-        "Básico: cierre y aire (estilo Live Music School). Avanzado: SOVT, sirenas, afinación, escalas y dinámica.",
+        "Básico: cierre y aire. Avanzado: SOVT, sirenas, afinación, escalas y dinámica.",
       "tab.vocal": "Entrenamiento vocal",
       "tab.singing": "Entrenamiento de canto",
       "tier.all": "Todos",
@@ -232,7 +232,7 @@
       "tour.progress": "Step {n} of {total}",
       "tour.s1.title": "Welcome to your voice studio",
       "tour.s1.body":
-        "Practice speaking (Vinh Giang–inspired) and singing at home: mic, piano, metrics, and a 12-week plan. Everything stays in this browser.",
+        "Practice speaking and singing at home: mic, piano, metrics, and a 12-week plan. Everything stays in this browser.",
       "tour.s2.title": "Two training tracks",
       "tour.s2.body":
         "Switch between Vocal training (clarity and presence) and Singing training (closure, air, pitch). Each has its own exercise list.",
@@ -272,10 +272,10 @@
       "session.end": "End",
       "home.vocalTitle": "Vocal Training",
       "home.vocalSub":
-        "Basic: speaking foundations (Vinh Giang–inspired). Advanced: pause, fillers, tonality, gestures, storytelling, and more.",
+        "Basic: clear speaking foundations. Advanced: pause, fillers, tonality, gestures, storytelling, and more.",
       "home.singingTitle": "Singing Training",
       "home.singingSub":
-        "Basic: closure and air (Live Music School–inspired). Advanced: SOVT, sirens, pitch match, scales, and dynamics.",
+        "Basic: closure and air. Advanced: SOVT, sirens, pitch match, scales, and dynamics.",
       "tab.vocal": "Vocal Training",
       "tab.singing": "Singing Training",
       "tier.all": "All",
@@ -410,7 +410,7 @@
       "ex.v20-energy-match": "Energy Match & Charisma",
       "ex.s1-vocal-fry": "Vocal Fry → Sustained /A/",
       "ex.s2-solfege-chords": "/A/ Solfège on Chord Progressions",
-      "ex.s3-song-stanzas": "Song Stanzas (Feel / Better Man)",
+      "ex.s3-song-stanzas": "Song stanzas (your songs)",
       "ex.s4-lip-trills": "Lip Trills (SOVT Warm-up)",
       "ex.s5-sirens": "Sirens / Pitch Glides",
       "ex.s6-straw": "Straw Phonation (SOVT)",

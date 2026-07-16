@@ -1212,10 +1212,10 @@
       this.hud.innerHTML = `
         <div class="mode-title">${L("Repeticiones de estrofa", "Song stanza reps")}</div>
         <div class="controls-row">
-          <button type="button" class="btn btn-sm" data-feel>Feel +1</button>
-          <button type="button" class="btn btn-sm" data-better>Better Man +1</button>
+          <button type="button" class="btn btn-sm" data-feel>${L("Canción A +1", "Song A +1")}</button>
+          <button type="button" class="btn btn-sm" data-better>${L("Canción B +1", "Song B +1")}</button>
         </div>
-        <p class="mode-meta">${L("Sentir <strong data-f>0</strong>/5 · Better Man <strong data-b>0</strong>/5 · En carril <strong data-lane>0%</strong>", "Feel <strong data-f>0</strong>/5 · Better Man <strong data-b>0</strong>/5 · In-lane <strong data-lane>0%</strong>")}</p>
+        <p class="mode-meta">${L("Canción A <strong data-f>0</strong>/5 · Canción B <strong data-b>0</strong>/5 · En carril <strong data-lane>0%</strong>", "Song A <strong data-f>0</strong>/5 · Song B <strong data-b>0</strong>/5 · In-lane <strong data-lane>0%</strong>")}</p>
         <p class="mode-meta muted">${L("Piano bajo tus estrofas — mira la gráfica de afinación.", "Piano under your stanzas — watch pitch graph for note centers.")}</p>
       `;
       this.$("[data-feel]")?.addEventListener("click", () => {
@@ -1255,7 +1255,7 @@
       }
       return {
         patches,
-        summary: `Feel ${this.state.feel} · Better Man ${this.state.better}`
+        summary: `Song A ${this.state.feel} · Song B ${this.state.better}`
       };
     }
   });

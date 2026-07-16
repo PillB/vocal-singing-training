@@ -65,7 +65,7 @@
       ]
     },
     songFeel: {
-      name: "Feel-friendly (G area)",
+      name: "Song A progression (G area)",
       description: "G – Em – C – D · mid-low male",
       chords: [
         { name: "G", notes: ["G2", "B2", "D3", "G3"] },
@@ -75,7 +75,7 @@
       ]
     },
     songBetter: {
-      name: "Better Man-friendly (C area)",
+      name: "Song B progression (C area)",
       description: "C – G – Am – F · mid-low male",
       chords: [
         { name: "C", notes: ["C2", "G2", "C3", "E3"] },

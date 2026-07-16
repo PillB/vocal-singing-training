@@ -1,8 +1,8 @@
 # Exercise Expansion Research Notes
 
-## Vocal / speaking (Vinh Giang–aligned)
+## Vocal / speaking (Speaking foundations)
 
-Public themes from Vinh Giang’s teaching (STAGE programs, talks, and posts) that shaped **advanced** exercises:
+Public themes from speaking pedagogy’s teaching (public teaching materials) that shaped **advanced** exercises:
 
 | Theme | Exercise ID | Practice focus |
 |-------|-------------|----------------|
@@ -22,7 +22,7 @@ Public themes from Vinh Giang’s teaching (STAGE programs, talks, and posts) th
 
 ## Singing (complementary pedagogy)
 
-Beyond Live Music School homework (s1–s3), advanced drills draw on standard contemporary voice science & pedagogy:
+Beyond singing pedagogy homework (s1–s3), advanced drills draw on standard contemporary voice science & pedagogy:
 
 | Theme | Exercise ID | Notes |
 |-------|-------------|-------|
@@ -40,13 +40,13 @@ Beyond Live Music School homework (s1–s3), advanced drills draw on standard co
 
 ## Product features from this expansion
 
-1. **Tier filters** — Basic / Advanced / All  
-2. **Structured paths** — basic · advanced · full  
-3. **Sustain notes** — hold harmony 3–5s before next chord  
+1. **Tier filters** — Basic / Advanced / All 
+2. **Structured paths** — basic · advanced · full 
+3. **Sustain notes** — hold harmony 3–5s before next chord 
 4. **Pitch visualizer** — target trail, voice dot, moving-average deviation band (accuracy + precision)
 
 ## References (anchors)
 
-- Vinh Giang public content on pause, fillers, volume, storytelling (askvinh / vinhgiang.com).  
-- SOVT literature & clinic guides: lip trills, straw phonation, humming.  
+- speaking pedagogy public content on pause, fillers, volume, storytelling (public speaking resources). 
+- SOVT literature & clinic guides: lip trills, straw phonation, humming. 
 - Original homework: `Vocal training and Singing training Homework.md`.

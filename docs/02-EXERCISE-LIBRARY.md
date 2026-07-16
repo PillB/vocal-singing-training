@@ -2,13 +2,13 @@
 
 ## Preamble
 
-Deepen each homework exercise with clarity, research-backed tips, metrics, and audio affordances while preserving original intent from Vinh Giang (speaking) and Live Music School (singing).
+Deepen each homework exercise with clarity, research-backed tips, metrics, and audio affordances while preserving original intent from speaking pedagogy (speaking) and singing pedagogy (singing).
 
 **Source:** `Vocal training and Singing training Homework.md`
 
 ---
 
-## A. Vocal Training (Vinh Giang)
+## A. Vocal Training (speaking pedagogy)
 
 ### V1 — Better Diction
 
@@ -100,7 +100,7 @@ Deepen each homework exercise with clarity, research-backed tips, metrics, and a
 
 ---
 
-## B. Singing Training (Live Music School)
+## B. Singing Training (singing pedagogy)
 
 ### S1 — Vocal Fry → Sustained /A/
 
@@ -119,7 +119,7 @@ Deepen each homework exercise with clarity, research-backed tips, metrics, and a
 |-------|---------|
 | **Original** | Good closure (fry optional); dosify air; sing A in solfège; 4–5 chord progressions; each ×5. |
 | **Enhanced** | Five progressions (men’s mid-low piano). On each chord, sing /A/ on the chord tones (do–mi–sol patterns or root-focused solfège). 5 reps per progression. Prioritize **closure + steady air** over volume. |
-| **Progressions** (roots ~C3 range): 1) C–Am–F–G  2) Am–F–C–G  3) G–Em–C–D  4) F–C–Dm–Bb  5) Dm–Bb–F–C |
+| **Progressions** (roots ~C3 range): 1) C–Am–F–G 2) Am–F–C–G 3) G–Em–C–D 4) F–C–Dm–Bb 5) Dm–Bb–F–C |
 | **Metrics** | Reps completed /25; pitch comfort 1–5; closure 1–5; breathiness 1–5 (lower better). |
 | **Audio** | **Play realistic piano chords** for each progression; loopable. |
 
@@ -127,8 +127,8 @@ Deepen each homework exercise with clarity, research-backed tips, metrics, and a
 
 | Field | Content |
 |-------|---------|
-| **Original** | Like S2 but 2 stanzas of user songs (Feel; Better Man — Robbie Williams); solfège every couple of words changing note; good closure; sing-like-you-speak; ×5 each; stay on notes; mix song-appropriate + other progressions. |
-| **Enhanced** | User practices two stanzas of *Feel* and *Better Man*. Sing lyrics **solfège-style** (or on /A/ if lyrics distract): change pitch every couple of words with piano progression underneath. 5 reps each song. Some reps in song-friendly key; some in alternate progressions for flexibility. |
+| **Original** | Like S2 but 2 stanzas of user songs (Feel; Canción B (registro medio-bajo)); solfège every couple of words changing note; good closure; sing-like-you-speak; ×5 each; stay on notes; mix song-appropriate + other progressions. |
+| **Enhanced** | User practices two stanzas of two user-chosen songs. Sing lyrics **solfège-style** (or on /A/ if lyrics distract): change pitch every couple of words with piano progression underneath. 5 reps each song. Some reps in song-friendly key; some in alternate progressions for flexibility. |
 | **Tips** | Text first spoken; then spoken on pitch; then sung. Never sacrifice closure for melody. |
 | **Metrics** | Reps per song; note accuracy self 1–5; closure 1–5; enjoyment 1–5. |
 | **Audio** | Piano progressions in male-friendly keys (e.g., G/C area for Feel-like material). |
@@ -137,20 +137,20 @@ Deepen each homework exercise with clarity, research-backed tips, metrics, and a
 
 ## C. Cross-cutting pedagogical principles
 
-1. **Preserve spirit** — homework steps remain the core; we only clarify and scaffold.  
-2. **Non-judgmental metrics** — growth language.  
-3. **One focus at a time** — mirrors 12-week plan.  
-4. **Record to learn** — especially V7 and weekly reviews.  
-5. **Air + closure** — unifying singing principle from LMS homework.
+1. **Preserve spirit** — homework steps remain the core; we only clarify and scaffold. 
+2. **Non-judgmental metrics** — growth language. 
+3. **One focus at a time** — mirrors 12-week plan. 
+4. **Record to learn** — especially V7 and weekly reviews. 
+5. **Air + closure** — unifying singing principle from singing curriculum homework.
 
 ---
 
 ## Phase 2 Retrospection
 
 ### Done
-- All 9 vocal + 3 singing exercises enhanced with tips, mistakes, metrics, audio notes.  
-- 12-week logic formalized.  
-- Male mid-low chord set defined.  
+- All 9 vocal + 3 singing exercises enhanced with tips, mistakes, metrics, audio notes. 
+- 12-week logic formalized. 
+- Male mid-low chord set defined. 
 
 ### Gaps
 | ID | Gap | Plan |

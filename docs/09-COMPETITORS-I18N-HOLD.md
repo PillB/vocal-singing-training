@@ -4,9 +4,9 @@
 
 | Source | Does well | Does poorly | We double down |
 |--------|-----------|-------------|----------------|
-| Yousician | Game streaks, real-time pitch color | Unclear *why* off-pitch; fixed drills | Cents + lane + precision band |
-| Singing Carrots | Pitch diagnostics, customizable drills | Timing UI confusion | One Start practice, clear cues |
-| Simply Sing | Fun karaoke XP | Little technique teaching | Technique modes (SOVT, breath, pause) |
+| popular pitch apps | Game streaks, real-time pitch color | Unclear *why* off-pitch; fixed drills | Cents + lane + precision band |
+| pitch training apps | Pitch diagnostics, customizable drills | Timing UI confusion | One Start practice, clear cues |
+| karaoke-style apps | Fun karaoke XP | Little technique teaching | Technique modes (SOVT, breath, pause) |
 | AI-built apps (common) | Feature volume | Feature museum, EN-only, judgmental scores | Single CTA, dual lang, honest metrics |
 
 ## AI-agent pitfalls avoided

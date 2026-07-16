@@ -9,7 +9,7 @@ Define the complete requirement set recovered from the user brief and homework f
 ## 1. Recovered Requirements
 
 ### 1.1 Structure
-- [R1] Two main tabs: **Vocal Training** (Vinh Giang) and **Singing Training** (Live Music School).
+- [R1] Two main tabs: **Vocal Training** (speaking pedagogy) and **Singing Training** (singing pedagogy).
 - [R2] Individual exercise mode *and* structured session mode (exercises in order).
 - [R3] Pause and resume with progress persistence.
 - [R4] User-enabled recording + audit/review (history of past takes).
@@ -22,20 +22,20 @@ Define the complete requirement set recovered from the user brief and homework f
 - [R11] Deploy to **GitHub Pages**; reference original homework MD.
 
 ### 1.2 Vocal exercises (from homework)
-1. Better diction  
-2. Maintain volume  
-3. Lift soft palate  
-4. Improve articulation (pen)  
-5. Neutral ears (persona + story)  
-6. How to connect  
-7. Record & Review (3-step, 1-day delay guidance)  
-8. Improve fluency (metaphors)  
-9. 12-week plan  
+1. Better diction 
+2. Maintain volume 
+3. Lift soft palate 
+4. Improve articulation (pen) 
+5. Neutral ears (persona + story) 
+6. How to connect 
+7. Record & Review (3-step, 1-day delay guidance) 
+8. Improve fluency (metaphors) 
+9. 12-week plan 
 
 ### 1.3 Singing exercises (from homework)
-1. Vocal fry → /A/ hold (log duration)  
-2. /A/ on solfège over 4–5 chord progressions ×5  
-3. Song stanzas (Feel, Better Man) solfège note changes ×5  
+1. Vocal fry → /A/ hold (log duration) 
+2. /A/ on solfège over 4–5 chord progressions ×5 
+3. Song stanzas (user-chosen songs) solfège note changes ×5 
 
 ---
 
@@ -43,68 +43,68 @@ Define the complete requirement set recovered from the user brief and homework f
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  index.html  ·  single-page app shell                   │
+│ index.html · single-page app shell │
 ├─────────────────────────────────────────────────────────┤
-│  css/styles.css     visual system, responsive layout    │
+│ css/styles.css visual system, responsive layout │
 ├─────────────────────────────────────────────────────────┤
-│  js/exercises-data.js   enhanced library + metrics      │
-│  js/storage.js          localStorage + IndexedDB        │
-│  js/piano.js            Web Audio piano + progressions   │
-│  js/recorder.js         MediaRecorder + playback        │
-│  js/metrics.js          rubrics + duration helpers      │
-│  js/session.js          structured session + pause      │
-│  js/app.js              routing, UI, orchestration      │
+│ js/exercises-data.js enhanced library + metrics │
+│ js/storage.js localStorage + IndexedDB │
+│ js/piano.js Web Audio piano + progressions │
+│ js/recorder.js MediaRecorder + playback │
+│ js/metrics.js rubrics + duration helpers │
+│ js/session.js structured session + pause │
+│ js/app.js routing, UI, orchestration │
 └─────────────────────────────────────────────────────────┘
-         │                         │
-         ▼                         ▼
-   localStorage              IndexedDB
-   progress, plan,           recordings (blobs)
-   session snapshot
+ │ │
+ ▼ ▼
+ localStorage IndexedDB
+ progress, plan, recordings (blobs)
+ session snapshot
 ```
 
 ### 2.1 State model
 
 ```js
 // localStorage keys
-VT_PROGRESS      // { exerciseId: { completedCount, lastScore, notes, history[] } }
-VT_SESSION       // { mode, track, index, startedAt, pausedAt, status }
-VT_WEEK_PLAN     // { week, element, status, reviews[], startedAt }
-VT_SETTINGS      // { name?, maleRange: true, lastTab }
+VT_PROGRESS // { exerciseId: { completedCount, lastScore, notes, history[] } }
+VT_SESSION // { mode, track, index, startedAt, pausedAt, status }
+VT_WEEK_PLAN // { week, element, status, reviews[], startedAt }
+VT_SETTINGS // { name?, maleRange: true, lastTab }
 ```
 
 ### 2.2 Views
-1. Home / tab switcher  
-2. Exercise list (per track)  
-3. Exercise player (instructions, tips, audio, timer, record, metrics)  
-4. Structured session runner  
-5. Record & Review workflow  
-6. History / audit  
-7. 12-week plan dashboard  
+1. Home / tab switcher 
+2. Exercise list (per track) 
+3. Exercise player (instructions, tips, audio, timer, record, metrics) 
+4. Structured session runner 
+5. Record & Review workflow 
+6. History / audit 
+7. 12-week plan dashboard 
 
 ### 2.3 Audio stack
-- `AudioContext` master gain  
-- Piano: multi-partial synthesis, soft hammer envelope  
-- Chord player: voicings in C2–C4 for men  
-- Recorder: `getUserMedia` → `MediaRecorder` → blob → IndexedDB  
-- Optional `AnalyserNode` for rough level meter during record  
+- `AudioContext` master gain 
+- Piano: multi-partial synthesis, soft hammer envelope 
+- Chord player: voicings in C2–C4 for men 
+- Recorder: `getUserMedia` → `MediaRecorder` → blob → IndexedDB 
+- Optional `AnalyserNode` for rough level meter during record 
 
 ---
 
 ## 3. Non-functional
 
-- Works offline after first load (static assets).  
-- Mobile-responsive.  
-- Encouraging, non-judgmental copy.  
-- No backend required.  
-- Accessible: keyboard focus, labels, sufficient contrast.  
+- Works offline after first load (static assets). 
+- Mobile-responsive. 
+- Encouraging, non-judgmental copy. 
+- No backend required. 
+- Accessible: keyboard focus, labels, sufficient contrast. 
 
 ---
 
 ## 4. Phase 1 Retrospection
 
 ### Done
-- All requirements recovered and ID’d.  
-- Architecture and storage design locked.  
+- All requirements recovered and ID’d. 
+- Architecture and storage design locked. 
 
 ### Gaps
 | ID | Gap | Plan |

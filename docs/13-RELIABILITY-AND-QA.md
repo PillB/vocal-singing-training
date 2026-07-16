@@ -60,8 +60,30 @@ Do **not** infer piano from mode name alone (`shAirLadder` is unvoiced air).
 2. Minimal fix; watch blast radius (speech modes must not require piano)  
 3. Targeted test → full suite → deploy  
 
+## Cross-browser audio (Chrome / Safari / Firefox / Edge / Opera / mobile)
+
+| Engine | Covered by | Notes |
+|--------|------------|--------|
+| Chrome / Edge / Opera | Playwright `chromium` (+ Chromium mobile) | Blink; standard AudioContext |
+| Firefox | Playwright `firefox` | Progressive getUserMedia fallbacks |
+| Safari / iOS | Playwright `webkit` + `mobile-safari` | `webkitAudioContext`, `interrupted` state, visibility resume, safe gain ramps |
+| Android Chrome | `mobile-chrome` project | Same Blink path |
+
+**Hardening in `js/piano.js` / `js/practice-engine.js`:**
+- Shared context + never close on Stop  
+- `unlock()` buffer + oscillator prime; resume on `visibilitychange` / `pageshow` / pointer  
+- Safe exponential gain (never ramp to 0 — Safari mute bug)  
+- getUserMedia constraint cascade → `{ audio: true }`  
+
+```bash
+# All engines in playwright.config.js projects:
+npx playwright test tests/cross-browser-audio.spec.js
+# Single engine:
+npx playwright test tests/cross-browser-audio.spec.js --project=webkit
+```
+
 ## Deploy gate
 
-- All Playwright green  
+- All Playwright green (at least chromium; ideally webkit + firefox for audio)  
 - No secrets in commit  
 - `main` pushed; GH Pages status `built` for the commit SHA  

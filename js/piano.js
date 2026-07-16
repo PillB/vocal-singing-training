@@ -152,13 +152,56 @@
   }
 
   /** One shared AudioContext for piano + mic analysis (avoids post-mic silence). */
+  function getAudioContextCtor() {
+    return global.AudioContext || global.webkitAudioContext || null;
+  }
+
   function getSharedAudioContext() {
     const existing = global.VTSharedAudioCtx;
     if (existing && existing.state !== "closed") return existing;
-    const AC = global.AudioContext || global.webkitAudioContext;
+    const AC = getAudioContextCtor();
     if (!AC) throw new Error("Web Audio API not available");
-    global.VTSharedAudioCtx = new AC();
-    return global.VTSharedAudioCtx;
+    // Prefer default latency; Safari iOS is picky about options
+    let ctx;
+    try {
+      ctx = new AC({ latencyHint: "interactive" });
+    } catch {
+      ctx = new AC();
+    }
+    global.VTSharedAudioCtx = ctx;
+    return ctx;
+  }
+
+  /** Safari rejects exponentialRamp if value ≤ 0; keep a tiny floor. */
+  const GAIN_EPS = 0.0001;
+  function safeExpRamp(param, value, time) {
+    const v = Math.max(GAIN_EPS, Number(value) || GAIN_EPS);
+    try {
+      param.exponentialRampToValueAtTime(v, time);
+    } catch {
+      try {
+        param.linearRampToValueAtTime(v, time);
+      } catch {
+        try {
+          param.setValueAtTime(v, time);
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+  }
+
+  function uaFlags() {
+    const ua = (global.navigator && navigator.userAgent) || "";
+    return {
+      safari: /Safari/i.test(ua) && !/Chrome|CriOS|Chromium|Edg|OPR|Firefox/i.test(ua),
+      ios: /iPhone|iPad|iPod/i.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1),
+      firefox: /Firefox/i.test(ua),
+      edge: /Edg/i.test(ua),
+      opera: /OPR|Opera/i.test(ua),
+      chrome: /Chrome|CriOS|Chromium/i.test(ua) && !/Edg|OPR/i.test(ua),
+      android: /Android/i.test(ua)
+    };
   }
 
   class PianoEngine {
@@ -171,6 +214,7 @@
       this.loopActive = false;
       this.onChordChange = null;
       this._monitor = null; // AnalyserNode on master for audibility checks
+      this._visibilityBound = false;
     }
 
     _wireGraph(ctx) {
@@ -193,6 +237,32 @@
       } catch {
         /* already connected */
       }
+      this._bindVisibilityResume();
+    }
+
+    /**
+     * iOS Safari / mobile Chrome suspend or "interrupt" AudioContext on tab
+     * background / silent switch / lock — resume on foreground.
+     */
+    _bindVisibilityResume() {
+      if (this._visibilityBound || typeof document === "undefined") return;
+      this._visibilityBound = true;
+      const nudge = () => {
+        this.resume().catch(() => {});
+      };
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") nudge();
+      });
+      // pageshow fires on bfcache restore (Safari)
+      global.addEventListener?.("pageshow", nudge);
+      // iOS audio session interruptions
+      global.addEventListener?.("focus", nudge);
+      document.addEventListener("pointerdown", () => {
+        // Opportunistic unlock on any user gesture (Safari policy)
+        if (this.ctx && (this.ctx.state === "suspended" || this.ctx.state === "interrupted")) {
+          this.resume().catch(() => {});
+        }
+      }, { passive: true });
     }
 
     async ensure() {
@@ -205,7 +275,8 @@
         this._monitor = null;
         this._wireGraph(getSharedAudioContext());
       }
-      if (this.ctx.state === "suspended") {
+      // Safari iOS: "suspended" | "interrupted"; both need resume()
+      if (this.ctx.state === "suspended" || this.ctx.state === "interrupted") {
         try {
           await this.ctx.resume();
         } catch (e) {
@@ -217,36 +288,68 @@
         this._wireGraph(this.ctx);
       }
       if (this.master && this.master.gain.value < 0.2) {
-        this.master.gain.setValueAtTime(0.7, this.ctx.currentTime);
+        try {
+          this.master.gain.cancelScheduledValues(this.ctx.currentTime);
+          this.master.gain.setValueAtTime(0.7, this.ctx.currentTime);
+        } catch {
+          this.master.gain.value = 0.7;
+        }
       }
       return this.ctx;
     }
 
     /**
-     * Call inside a user-gesture handler to unlock Web Audio (Safari/Chrome).
-     * Plays a near-silent blip so the output path is fully primed.
+     * Call inside a user-gesture handler to unlock Web Audio
+     * (Safari, Chrome, Firefox, Edge, Opera, mobile WebViews).
+     * Buffer-source blip is more reliable than oscillator-only on some WebKit builds.
      */
     async unlock() {
       await this.ensure();
       try {
-        if (this.ctx.state === "suspended") await this.ctx.resume();
+        if (this.ctx.state === "suspended" || this.ctx.state === "interrupted") {
+          await this.ctx.resume();
+        }
       } catch {
         /* ignore */
+      }
+      // Dual prime: silent buffer + tiny oscillator (covers WebKit + Gecko quirks)
+      try {
+        const t = this.ctx.currentTime;
+        const frames = Math.max(1, Math.floor(this.ctx.sampleRate * 0.02));
+        const buf = this.ctx.createBuffer(1, frames, this.ctx.sampleRate);
+        const data = buf.getChannelData(0);
+        for (let i = 0; i < frames; i++) data[i] = (i < 8 ? 0.0003 : 0);
+        const src = this.ctx.createBufferSource();
+        src.buffer = buf;
+        const g = this.ctx.createGain();
+        g.gain.setValueAtTime(0.001, t);
+        src.connect(g);
+        g.connect(this.master || this.ctx.destination);
+        src.start(t);
+        src.stop(t + 0.02);
+      } catch (e) {
+        console.warn("Piano unlock buffer blip failed", e);
       }
       try {
         const t = this.ctx.currentTime;
         const osc = this.ctx.createOscillator();
         const g = this.ctx.createGain();
-        g.gain.setValueAtTime(0.0001, t);
+        g.gain.setValueAtTime(GAIN_EPS, t);
         osc.frequency.setValueAtTime(440, t);
         osc.connect(g);
-        g.connect(this.master);
+        g.connect(this.master || this.ctx.destination);
         osc.start(t);
         osc.stop(t + 0.03);
       } catch (e) {
-        console.warn("Piano unlock blip failed", e);
+        console.warn("Piano unlock osc blip failed", e);
       }
-      return this.ctx?.state === "running";
+      // Second resume after scheduling (Safari sometimes needs it)
+      try {
+        if (this.ctx.state !== "running") await this.ctx.resume();
+      } catch {
+        /* ignore */
+      }
+      return this.ctx?.state === "running" || this.ctx?.state === "suspended";
     }
 
     /** Peak absolute sample on master bus (0 if silent / not ready). */
@@ -298,17 +401,27 @@
 
       const noteGain = ctx.createGain();
       noteGain.connect(this.master);
-      noteGain.gain.setValueAtTime(0.0001, t0);
-      noteGain.gain.exponentialRampToValueAtTime(velocity, t0 + 0.012);
+      // Cross-browser envelope: never ramp to 0 (Safari throws / mutes)
+      try {
+        noteGain.gain.setValueAtTime(GAIN_EPS, t0);
+      } catch {
+        noteGain.gain.value = GAIN_EPS;
+      }
+      const vel = Math.max(GAIN_EPS, velocity || 0.4);
+      safeExpRamp(noteGain.gain, vel, t0 + 0.012);
       if (sustain && duration >= 2.5) {
         // Hold near full level so students can home in for 3–5s, then gentle release
         const holdEnd = t0 + Math.max(0.2, duration - 0.45);
-        noteGain.gain.exponentialRampToValueAtTime(velocity * 0.72, t0 + 0.06);
-        noteGain.gain.setValueAtTime(velocity * 0.68, holdEnd);
-        noteGain.gain.exponentialRampToValueAtTime(0.0001, t0 + duration);
+        safeExpRamp(noteGain.gain, vel * 0.72, t0 + 0.06);
+        try {
+          noteGain.gain.setValueAtTime(Math.max(GAIN_EPS, vel * 0.68), holdEnd);
+        } catch {
+          /* ignore */
+        }
+        safeExpRamp(noteGain.gain, GAIN_EPS, t0 + duration);
       } else {
-        noteGain.gain.exponentialRampToValueAtTime(velocity * 0.55, t0 + 0.08);
-        noteGain.gain.exponentialRampToValueAtTime(0.0001, t0 + duration);
+        safeExpRamp(noteGain.gain, vel * 0.55, t0 + 0.08);
+        safeExpRamp(noteGain.gain, GAIN_EPS, t0 + duration);
       }
 
       const nodes = [];
@@ -412,7 +525,7 @@
     /** Resume context after mic prompt / tab blur (common silent-piano bug). */
     async resume() {
       if (!this.ctx) return this.ensure();
-      if (this.ctx.state === "suspended") {
+      if (this.ctx.state === "suspended" || this.ctx.state === "interrupted") {
         try {
           await this.ctx.resume();
         } catch (e) {
@@ -421,10 +534,31 @@
       }
       if (this.master) {
         const t = this.ctx.currentTime;
-        this.master.gain.cancelScheduledValues(t);
-        this.master.gain.setValueAtTime(0.7, t);
+        try {
+          this.master.gain.cancelScheduledValues(t);
+          this.master.gain.setValueAtTime(0.7, t);
+        } catch {
+          try {
+            this.master.gain.value = 0.7;
+          } catch {
+            /* ignore */
+          }
+        }
       }
       return this.ctx;
+    }
+
+    /** Browser capability snapshot for diagnostics / e2e. */
+    capabilities() {
+      const flags = uaFlags();
+      return {
+        ...flags,
+        hasAudioContext: !!getAudioContextCtor(),
+        hasMediaDevices: !!(global.navigator && navigator.mediaDevices && navigator.mediaDevices.getUserMedia),
+        hasMediaRecorder: typeof global.MediaRecorder !== "undefined",
+        ctxState: this.ctx?.state || "none",
+        sampleRate: this.ctx?.sampleRate || null
+      };
     }
 
     getProgressions() {
@@ -561,4 +695,5 @@
   global.VT_NOTE_FREQ = NOTE_FREQ;
   global.VTProgressionRange = progressionMidiRange;
   global.VTGetSharedAudioContext = getSharedAudioContext;
+  global.VTAudioUaFlags = uaFlags;
 })(window);

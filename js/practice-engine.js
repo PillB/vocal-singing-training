@@ -96,16 +96,59 @@
       return HOLD_RMS_BASE * this._threshScale();
     }
 
+    /**
+     * Cross-browser mic acquisition.
+     * Safari/Firefox may reject advanced constraints; fall back to simple audio:true.
+     * Each attempt is time-bounded so a hung permission dialog cannot block piano forever.
+     */
+    async _acquireMic() {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error("getUserMedia not available");
+      }
+      const attempts = [
+        {
+          audio: {
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false
+          }
+        },
+        {
+          audio: {
+            echoCancellation: { ideal: false },
+            noiseSuppression: { ideal: false },
+            autoGainControl: { ideal: false }
+          }
+        },
+        { audio: true }
+      ];
+      let lastErr;
+      const withTimeout = (p, ms) =>
+        Promise.race([
+          p,
+          new Promise((_, rej) =>
+            setTimeout(() => rej(new Error("getUserMedia timeout")), ms)
+          )
+        ]);
+      for (const constraints of attempts) {
+        try {
+          return await withTimeout(
+            navigator.mediaDevices.getUserMedia(constraints),
+            // Shorter bound: piano can still start if mic is denied/hangs
+            4000
+          );
+        } catch (e) {
+          lastErr = e;
+          console.warn("[VT] getUserMedia attempt failed", e?.name || e?.message || e);
+        }
+      }
+      throw lastErr || new Error("getUserMedia failed");
+    }
+
     async start({ record = false } = {}) {
       if (this.running) return;
-      this.stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: false,
-          noiseSuppression: false,
-          // Leave browser AGC off — we control gain via sensitivity slider
-          autoGainControl: false
-        }
-      });
+      // Progressive constraints: Safari/Firefox reject some ideal combinations
+      this.stream = await this._acquireMic();
       // Prefer the shared piano AudioContext so getUserMedia never orphans
       // a second suspended context (classic "piano silent after mic" bug).
       const shared =
@@ -124,7 +167,7 @@
         this._ownsAudioCtx = true;
         global.VTSharedAudioCtx = this.audioCtx;
       }
-      if (this.audioCtx.state === "suspended") {
+      if (this.audioCtx.state === "suspended" || this.audioCtx.state === "interrupted") {
         try {
           await this.audioCtx.resume();
         } catch (e) {
@@ -137,14 +180,33 @@
       } catch {
         /* ignore */
       }
-      this.source = this.audioCtx.createMediaStreamSource(this.stream);
       this.inputGain = this.audioCtx.createGain();
       this.inputGain.gain.value = this._gainFromSens(this.sensitivity);
       this.analyser = this.audioCtx.createAnalyser();
       this.analyser.fftSize = 2048;
       this.analyser.smoothingTimeConstant = 0.12;
-      this.source.connect(this.inputGain);
-      this.inputGain.connect(this.analyser);
+      // WebKit can throw/hang if stream was produced by a different AudioContext
+      try {
+        this.source = this.audioCtx.createMediaStreamSource(this.stream);
+        this.source.connect(this.inputGain);
+        this.inputGain.connect(this.analyser);
+      } catch (e) {
+        console.warn("[VT] createMediaStreamSource failed — level/pitch may be flat", e);
+        this.source = null;
+        // Keep analyser graph alive with silence so RMS reads stay defined
+        try {
+          const silent = this.audioCtx.createBufferSource();
+          const buf = this.audioCtx.createBuffer(1, 1, this.audioCtx.sampleRate);
+          silent.buffer = buf;
+          silent.loop = true;
+          silent.connect(this.inputGain);
+          this.inputGain.connect(this.analyser);
+          silent.start();
+          this._silentSource = silent;
+        } catch {
+          /* ignore */
+        }
+      }
       this.buf = new Float32Array(this.analyser.fftSize);
 
       this.voiced = false;

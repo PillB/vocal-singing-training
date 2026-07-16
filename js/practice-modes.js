@@ -1364,17 +1364,17 @@
     },
     _pushTarget() {
       const n = this.state.notes[this.state.i];
-      if (global.VT_NOTE_FREQ?.[n] && global.VTPiano) {
-        // soft ref
-      }
       this.state.wantFreq = global.VT_NOTE_FREQ?.[n];
-      if (this.state.wantFreq && global.VTPracticeEngine) {
-        /* app sets via mode callback */
-      }
       if (typeof global.VTSetPracticeTarget === "function" && this.state.wantFreq) {
         global.VTSetPracticeTarget(this.state.wantFreq, n);
       }
-      if (this.$("[data-n]")) this.$("[data-n]").textContent = `Target: ${n}`;
+      // Audible reference each step (soft sustain) — default sound for this mode
+      if (this.state.wantFreq && global.VTPiano?.playRefPitch) {
+        global.VTPiano.playRefPitch(n, 2.2, true).catch(() => {});
+      }
+      if (this.$("[data-n]")) {
+        this.$("[data-n]").textContent = L(`Objetivo: ${n}`, `Target: ${n}`);
+      }
     },
     onFrame(frame) {
       if (this.state.wantFreq && frame.voiceFreq && global.VTPitchUtils) {
@@ -1519,9 +1519,21 @@
       const midi = this.state.rootMidi + semi;
       if (global.VTPitchUtils) {
         const f = global.VTPitchUtils.midiToFreq(midi);
+        const name = global.VTPitchUtils.midiToName(midi);
         this.state.wantFreq = f;
+        this.state.wantName = name;
         if (typeof global.VTSetPracticeTarget === "function") {
-          global.VTSetPracticeTarget(f, global.VTPitchUtils.midiToName(midi));
+          global.VTSetPracticeTarget(f, name);
+        }
+        // Play the step note so the student hears the target
+        if (global.VTPiano?.playRefPitch && name) {
+          global.VTPiano.playRefPitch(name, 1.8, true).catch(() => {});
+        } else if (global.VTPiano?.playNote && f && global.VTPiano.ctx) {
+          try {
+            global.VTPiano.playNote(f, global.VTPiano.ctx.currentTime + 0.02, 1.8, 0.45, true);
+          } catch {
+            /* ignore */
+          }
         }
       }
     },

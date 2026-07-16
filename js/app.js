@@ -403,11 +403,17 @@
     if (pianoBlock) {
       pianoBlock.classList.remove("is-open");
       pianoBlock.hidden = true; // closed until toggle
-      if (showPiano && ex.audio.piano) renderPianoControls(ex);
+      if (showPiano && (ex.audio.piano || ex.progressions || ex.songs)) {
+        renderPianoControls(ex);
+      }
       if (profile.autoArpeggio && $("#chk-arpeggio")) $("#chk-arpeggio").checked = true;
-      if ($("#chk-auto-piano")) $("#chk-auto-piano").checked = profile.autoPiano !== false;
+      // Auto piano ON by default whenever this exercise can play sound
+      if ($("#chk-auto-piano")) {
+        $("#chk-auto-piano").checked = exerciseWantsSound(ex, profile);
+      }
+      if ($("#chk-sustain")) $("#chk-sustain").checked = true; // sustain on by default
     }
-    if (pianoMini) pianoMini.style.display = showPiano ? "" : "none";
+    if (pianoMini) pianoMini.style.display = showPiano || exerciseWantsSound(ex, profile) ? "" : "none";
     if (pianoToggleRow) {
       pianoToggleRow.hidden = !showPiano;
       const tbtn = $("#btn-toggle-piano");
@@ -565,7 +571,11 @@
 
   async function playSelectedProgression(loop) {
     try {
+      await VTPiano.ensure();
+      if (!state.selectedProg) state.selectedProg = "prog1";
       const opts = pianoOptions();
+      // Sustain default ON for practice loops (helps newbies home in)
+      if (opts.sustain == null) opts.sustain = true;
       VTPiano.onChordChange = (ch) => {
         $("#chord-now").textContent = ch.name;
         if (state.exercise?.audio?.pitchViz || state.exercise?.practice?.showPitch) {
@@ -691,6 +701,84 @@
     }
   }
 
+  /** Exercises that use piano/ref pitch should play sound by default on Start */
+  function exerciseWantsSound(ex, profile) {
+    if (!ex) return false;
+    return !!(
+      profile?.autoPiano ||
+      ex.audio?.piano ||
+      profile?.refPitch ||
+      ex.audio?.refPitch ||
+      ex.progressions ||
+      ex.audio?.progressions ||
+      ex.songs
+    );
+  }
+
+  function autoPianoChecked() {
+    const el = $("#chk-auto-piano");
+    // Default ON when checkbox missing or when it is checked
+    return !el || el.checked !== false;
+  }
+
+  async function startExerciseSound(ex, profile) {
+    if (!ex || !window.VTPiano) return false;
+    if (!autoPianoChecked()) return false;
+    if (!exerciseWantsSound(ex, profile)) return false;
+
+    // Unlock Web Audio on the user gesture (must not wait on mic)
+    await VTPiano.ensure();
+
+    if (profile.autoArpeggio && $("#chk-arpeggio")) {
+      $("#chk-arpeggio").checked = true;
+    }
+
+    const sustainOn = $("#chk-sustain")?.checked !== false; // sustain default ON
+    if ($("#chk-sustain") && $("#chk-sustain").checked === false && profile.autoPiano) {
+      // keep user choice if they turned it off; otherwise leave as-is
+    }
+    const sec = sustainOn ? Number($("#sustain-sec")?.value || 4) : 2.5;
+    const inChallenge = !!(profile.pitchChallenge && state.pitchGame?.challengeMode);
+    const hasProg =
+      !!(ex.progressions?.length || ex.songs?.length || ex.audio?.progressions);
+
+    // Ensure a progression is selected before looping
+    if (hasProg && !state.selectedProg) {
+      if (ex.progressions?.length) state.selectedProg = ex.progressions[0];
+      else if (ex.songs?.length) state.selectedProg = ex.songs[0].prog || "prog1";
+      else state.selectedProg = "prog1";
+    }
+
+    if (inChallenge) {
+      const note = state.pitchGame?.currentChallengeNote?.() || profile.refPitch || ex.audio?.refPitch;
+      if (note) await VTPiano.playRefPitch(note, sec, true);
+      return true;
+    }
+
+    if (hasProg && ex.audio?.piano !== false) {
+      await playSelectedProgression(true);
+      return true;
+    }
+
+    const note = profile.refPitch || ex.audio?.refPitch;
+    if (note) {
+      const f = await VTPiano.playRefPitch(note, sec, true);
+      if (f) {
+        state.practice.setTargetFreq(f);
+        if (state.pitchViz) state.pitchViz.setTargetFreq(f);
+      }
+      return true;
+    }
+
+    // Piano flagged without specific ref — still play default mid progression
+    if (ex.audio?.piano) {
+      if (!state.selectedProg) state.selectedProg = "prog1";
+      await playSelectedProgression(true);
+      return true;
+    }
+    return false;
+  }
+
   async function startPractice() {
     const ex = state.exercise;
     if (!ex || state.practiceLive) return;
@@ -708,11 +796,18 @@
         profile.autoRecord ||
         (ex.audio.record && $("#chk-auto-record")?.checked)
       );
-      const wantPiano =
-        profile.autoPiano &&
-        (ex.audio.piano || profile.refPitch) &&
-        $("#chk-auto-piano")?.checked !== false;
+      // Sound on by default for any piano/ref exercise (checkbox defaults checked)
+      const wantPiano = exerciseWantsSound(ex, profile) && autoPianoChecked();
       const showHold = !!profile.showHold;
+
+      // Unlock audio immediately on the Start click (before mic permission prompt)
+      if (wantPiano) {
+        try {
+          await VTPiano.ensure();
+        } catch (e) {
+          console.warn("Piano unlock failed", e);
+        }
+      }
 
       // Fresh mode instance every Start (reviews: restart must reset phases/reps)
       if (state.modeInstance) {
@@ -804,51 +899,46 @@
           profile.mode
         );
 
-      if (needsMic) {
-        await state.practice.start({ record: wantRecord });
-      } else if (wantRecord) {
-        await state.practice.start({ record: true });
+      // Piano/ref sound FIRST so audio is audible even if mic is denied
+      let soundOk = false;
+      if (wantPiano) {
+        try {
+          soundOk = await startExerciseSound(ex, profile);
+        } catch (e) {
+          console.error("Piano start failed", e);
+        }
+      }
+
+      let micOk = !needsMic && !wantRecord;
+      if (needsMic || wantRecord) {
+        try {
+          await state.practice.start({ record: wantRecord });
+          micOk = true;
+        } catch (e) {
+          console.error(e);
+          micOk = false;
+        }
+      }
+
+      if (!micOk && !soundOk) {
+        setPracticeUI(false);
+        toast(tt("toast.mic"));
+        return;
       }
 
       setPracticeUI(true);
 
-      if (ex.audio.timer && state.timer.total > 0) startTimer();
+      if (ex.audio.timer && state.timer.total > 0 && micOk) startTimer();
 
-      const inChallenge = !!(profile.pitchChallenge && state.pitchGame?.challengeMode);
-      if (wantPiano) {
-        if (profile.autoArpeggio && $("#chk-arpeggio")) $("#chk-arpeggio").checked = true;
-        if (inChallenge) {
-          const note = state.pitchGame.currentChallengeNote();
-          if (note) {
-            const sec = $("#chk-sustain")?.checked
-              ? Number($("#sustain-sec")?.value || 4)
-              : 2.5;
-            await VTPiano.playRefPitch(note, sec, true);
-          }
-        } else if (
-          (profile.refPitch || ex.audio.refPitch) &&
-          !ex.progressions &&
-          !ex.songs
-        ) {
-          const note = profile.refPitch || ex.audio.refPitch;
-          const sec = $("#chk-sustain")?.checked
-            ? Number($("#sustain-sec")?.value || 4)
-            : 2.5;
-          const f = await VTPiano.playRefPitch(note, sec, true);
-          if (f) {
-            state.practice.setTargetFreq(f);
-            if (state.pitchViz) state.pitchViz.setTargetFreq(f);
-          }
-        } else if (ex.audio.piano) {
-          await playSelectedProgression(true);
-        }
+      if (!micOk && soundOk) {
+        toast(tt("toast.pianoOnly"));
+      } else {
+        toast(
+          wantRecord
+            ? tt("toast.liveRec", { mode: profile.mode })
+            : tt("toast.live", { mode: profile.mode })
+        );
       }
-
-      toast(
-        wantRecord
-          ? tt("toast.liveRec", { mode: profile.mode })
-          : tt("toast.live", { mode: profile.mode })
-      );
     } catch (e) {
       console.error(e);
       setPracticeUI(false);

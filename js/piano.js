@@ -289,15 +289,27 @@
         clearTimeout(this.loopTimer);
         this.loopTimer = null;
       }
-      // fade master briefly
+      // Stop scheduled oscillators without muting master for a long time
+      // (a long mute race was killing the first notes of the next Start)
+      try {
+        (this.playing || []).forEach((n) => {
+          try {
+            if (n.stop) n.stop(0);
+          } catch {
+            /* already stopped */
+          }
+        });
+      } catch {
+        /* ignore */
+      }
+      this.playing = [];
       if (this.ctx && this.master) {
         const now = this.ctx.currentTime;
         this.master.gain.cancelScheduledValues(now);
-        this.master.gain.setValueAtTime(this.master.gain.value, now);
-        this.master.gain.linearRampToValueAtTime(0.0001, now + 0.08);
-        this.master.gain.setValueAtTime(0.55, now + 0.1);
+        // brief duck only — restore immediately so new notes are audible
+        this.master.gain.setValueAtTime(Math.max(0.001, this.master.gain.value), now);
+        this.master.gain.linearRampToValueAtTime(0.62, now + 0.04);
       }
-      this.playing = [];
     }
 
     getProgressions() {
@@ -310,8 +322,14 @@
     ) {
       await this.ensure();
       this.stopAll();
+      // Ensure context is running after stopAll
+      if (this.ctx.state === "suspended") await this.ctx.resume();
+      if (this.master) this.master.gain.setValueAtTime(0.62, this.ctx.currentTime);
       const prog = PROGRESSIONS[progId];
-      if (!prog) return;
+      if (!prog) {
+        console.warn("Unknown progression", progId);
+        return;
+      }
 
       // Sustain mode: hold each harmony 3–5s so newbies can lock pitch before the next change
       let stepSec = chordSec;

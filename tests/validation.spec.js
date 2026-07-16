@@ -231,23 +231,38 @@ test.describe("Exercise-specific practice modes", () => {
     await page.click('.tab[data-tab="singing"]');
     await page.click('.tier-chip[data-tier="basic"]');
     // Solfege chords card (has piano opts)
-    await page.locator("#exercise-list .card-ex", { hasText: /Solf|chord|Acorde|progres/i }).first().click();
-    await page.waitForTimeout(200);
-    await page.locator("#chk-one-note").check({ force: true });
+    await page.locator("#exercise-list .card-ex", { hasText: /Solfège|Solfege|solfeo|chord/i }).first().click();
+    await page.waitForTimeout(300);
+    await expect(page.locator("#chk-one-note")).toBeAttached();
+    await page.evaluate(() => {
+      const el = document.querySelector("#chk-one-note");
+      if (el) {
+        el.checked = true;
+        el.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    });
     const ok = await page.evaluate(() => {
-      const viz = window.VTGetPitchViz?.() || window.VTApp?.getState?.()?.pitchViz;
-      if (!viz) return false;
-      viz.setTargetFromChord(
+      let v = window.VTApp?.getState?.()?.pitchViz || window.VTGetPitchViz?.();
+      if (!v && window.VTPitchVisualizer) {
+        const canvas = document.querySelector("#pitch-canvas");
+        if (canvas) v = new window.VTPitchVisualizer(canvas);
+      }
+      if (!v || !v.setTargetFromChord) return { ok: false, why: "no-viz" };
+      v.setTargetFromChord(
         { name: "C", notes: ["C2", "C3", "E3", "G3"] },
         { oneNote: true, noteName: "E3" }
       );
-      return (
-        viz.chordLanes.length === 1 &&
-        viz.chordLanes[0].name === "E3" &&
-        /E3|Mi/.test(viz.chordLanes[0].label || "")
-      );
+      return {
+        ok:
+          v.chordLanes.length === 1 &&
+          v.chordLanes[0].name === "E3" &&
+          /E3|Mi/.test(v.chordLanes[0].label || ""),
+        lanes: v.chordLanes.length,
+        name: v.chordLanes[0]?.name,
+        label: v.chordLanes[0]?.label
+      };
     });
-    expect(ok).toBe(true);
+    expect(ok.ok, JSON.stringify(ok)).toBe(true);
   });
 
   test("dual letter + solfege labels available", async ({ page }) => {

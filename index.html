@@ -295,7 +295,7 @@
                   <span data-i18n="practice.recordAlso">Grabar</span>
                 </label>
               </div>
-              <div class="hud-corner hud-bc" id="mic-sens-hud">
+              <div class="hud-corner hud-bc" id="mic-sens-hud" title="">
                 <div class="level-meter practice-meter" id="level-meter-wrap" aria-hidden="true"><span id="level-fill"></span></div>
                 <label class="mic-sens-label" for="mic-sensitivity">
                   <span class="mic-sens-title" data-i18n="mic.sens">Mic</span>
@@ -310,12 +310,11 @@
                     aria-valuemax="10"
                     aria-valuenow="7"
                     aria-label="Sensibilidad del micrófono"
+                    data-i18n-title="mic.sensHint"
                   />
-                  <span class="mic-sens-val" id="mic-sens-val">7</span>
+                  <span class="mic-sens-val" id="mic-sens-val" aria-hidden="true">7</span>
                 </label>
-                <p class="mic-manual-hint muted" id="mic-manual-hint" hidden data-i18n="mic.manualHint">
-                  Mantén Espacio si el mic no te oye
-                </p>
+                <p class="mic-manual-hint muted" id="mic-manual-hint" hidden aria-hidden="true"></p>
               </div>
               <div class="hud-corner hud-br" id="piano-mini-opts">
                 <div class="hud-oct" id="oct-controls" role="group" aria-label="Registro / Octave" title="Ajusta octava a tu rango vocal">

@@ -414,20 +414,27 @@
       }
       const r = stage.getBoundingClientRect();
       const vh = window.innerHeight || document.documentElement.clientHeight || 600;
-      const gap = 4;
+      const gap = 6;
       // If sticky has not stuck yet, r.top is natural flow Y — remaining space under it
       const avail = Math.floor(vh - Math.max(0, r.top) - gap);
-      const maxH = Math.max(160, avail);
+      let maxH = Math.max(160, avail);
       // Prefer tall for low vision but never past viewport bottom
       const prefer = Math.min(
         maxH,
-        Math.round(vh * (vh < 500 ? 0.92 : 0.78)),
-        vh < 700 ? 480 : 720
+        Math.round(vh * (vh < 500 ? 0.9 : 0.76)),
+        vh < 700 ? 460 : 700
       );
-      const h = Math.max(160, Math.min(prefer, maxH));
+      let h = Math.max(160, Math.min(prefer, maxH));
+      stage.style.minHeight = "0";
       stage.style.maxHeight = `${maxH}px`;
       stage.style.height = `${h}px`;
-      stage.style.minHeight = `${Math.min(200, maxH)}px`;
+      // Second pass: remeasure (bottom rail / padding can push y2 past vh)
+      const r2 = stage.getBoundingClientRect();
+      if (r2.bottom > vh - 1) {
+        const fix = Math.max(140, Math.floor(vh - r2.top - 4));
+        stage.style.maxHeight = `${fix}px`;
+        stage.style.height = `${fix}px`;
+      }
       // Resize pitch canvas to new stage box
       try {
         if (state.pitchViz && typeof state.pitchViz._resize === "function") {
@@ -1934,14 +1941,9 @@
           const boost = 2.4 + (sens - 5) * 0.22;
           $("#level-fill").style.width = `${Math.round(Math.min(1, frame.rms * boost) * 100)}%`;
         }
-        // Manual assist chip
-        const mh = $("#mic-manual-hint");
-        if (mh && !mh.hidden) {
-          mh.classList.toggle("is-active", !!frame.manualSound);
-          mh.textContent = frame.manualSound
-            ? tt("mic.manualActive")
-            : tt("mic.manualHint");
-        }
+        // Manual assist: border highlight on mic chip (no extra text row)
+        const micChip = $("#mic-sens-hud");
+        if (micChip) micChip.classList.toggle("is-manual", !!frame.manualSound);
         if (showHold) {
           const holdEl = $("#hold-display");
           if (holdEl) {
@@ -3203,26 +3205,32 @@
       return "voice";
     };
     const updateManualHintVisibility = () => {
+      const chip = $("#mic-sens-hud");
+      const range = $("#mic-sensitivity");
       const mh = $("#mic-manual-hint");
-      if (!mh) return;
+      if (mh) mh.hidden = true; // layout never shows multi-line hint
       const ok = manualSoundAllowed();
-      mh.hidden = !ok;
-      if (ok && !mh.classList.contains("is-active")) {
-        mh.textContent = tt("mic.manualHint");
+      if (range) {
+        range.title = ok
+          ? tt("mic.manualHint") + " · " + tt("mic.sensHint")
+          : tt("mic.sensHint");
       }
+      if (chip && !ok) chip.classList.remove("is-manual");
     };
     const setManualFromKey = (down) => {
       if (!manualSoundAllowed()) {
         state.practice?.setManualSound?.(false);
+        $("#mic-sens-hud")?.classList.remove("is-manual");
         return;
       }
       const profile = getProfile(state.exercise);
       const kind = manualKindForProfile(profile);
       state.practice?.setManualSound?.(!!down, kind);
-      const mh = $("#mic-manual-hint");
-      if (mh && !mh.hidden) {
-        mh.classList.toggle("is-active", !!down);
-        mh.textContent = down ? tt("mic.manualActive") : tt("mic.manualHint");
+      const chip = $("#mic-sens-hud");
+      if (chip) chip.classList.toggle("is-manual", !!down);
+      const range = $("#mic-sensitivity");
+      if (range) {
+        range.title = down ? tt("mic.manualActive") : tt("mic.manualHint") + " · " + tt("mic.sensHint");
       }
     };
     document.addEventListener("keydown", (e) => {

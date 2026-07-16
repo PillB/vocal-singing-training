@@ -1574,15 +1574,16 @@ button:focus-visible,
      (right key gutter is for canvas note labels, not this rail). */
   left: 0.3rem;
   right: 0.35rem;
-  bottom: 0.18rem;
+  bottom: 0.2rem;
   z-index: 7;
   display: flex;
   flex-direction: row;
   flex-wrap: nowrap;
   align-items: center;
-  gap: 0.5rem;
-  max-height: calc(var(--hud-band, 10%) + 0.6rem);
-  min-height: 2.5rem;
+  gap: 0.45rem;
+  /* One control row tall enough for Start + compact mic (no wrap) */
+  max-height: none;
+  min-height: 2.75rem;
   pointer-events: none; /* children re-enable */
   box-sizing: border-box;
 }
@@ -1619,22 +1620,26 @@ button:focus-visible,
   font-weight: 700;
 }
 
-/* Mic grows into free center space on the X axis */
+/* Mic: single compact row [meter | MIC | slider | 7] — never wrap / never past stage */
 .hud-bc {
-  flex: 1 1 16rem;
-  min-width: 14rem;
-  max-width: none;
+  flex: 1 1 12rem;
+  min-width: 10rem;
+  max-width: min(22rem, 42%);
   width: auto;
   transform: none;
   flex-direction: row;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.4rem;
   z-index: 7;
-  background: rgba(6, 10, 16, 0.82);
+  background: rgba(6, 10, 16, 0.9);
   border: 1px solid var(--border);
   border-radius: 10px;
-  padding: 0.22rem 0.65rem;
-  overflow: hidden; /* keep range track inside its own box */
+  padding: 0.28rem 0.55rem;
+  overflow: hidden;
+  max-height: 2.85rem;
+  box-sizing: border-box;
+  position: relative;
 }
 
 .hud-bc .mic-sens-label,
@@ -1646,28 +1651,57 @@ button:focus-visible,
   left: auto;
   transform: none;
   bottom: auto;
-  width: 100%;
-  flex: 0 0 20%;
-  min-width: 2.75rem;
-  max-width: 4.5rem;
+  flex: 0 0 auto;
+  width: 2.75rem;
+  min-width: 2.5rem;
+  max-width: 3.25rem;
   margin: 0;
-  height: 7px;
+  height: 11px;
+  border-radius: 999px;
+  align-self: center;
 }
 .hud-bc .mic-sens-label {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap !important;
+  align-items: center;
   flex: 1 1 auto;
   min-width: 0;
-  gap: 0.4rem;
-  width: 100%;
+  gap: 0.35rem;
+  width: auto;
+  max-width: 100%;
+  margin: 0;
 }
 .hud-bc .mic-sens-title {
-  font-size: 0.75rem;
+  font-size: 0.72rem;
+  flex: 0 0 auto;
+  line-height: 1;
+}
+.hud-bc .mic-sens-val {
+  flex: 0 0 1.15rem;
+  font-size: 0.8rem;
+  line-height: 1;
+  order: 3; /* after slider */
 }
 .hud-bc #mic-sensitivity {
   flex: 1 1 auto;
-  min-width: 5.5rem;
-  width: 100%;
+  min-width: 3.5rem;
+  width: auto;
   max-width: none;
   height: 1.35rem;
+  margin: 0;
+  order: 2;
+}
+/* Space-assist: class on chip, no extra row that grows height */
+.hud-bc #mic-manual-hint {
+  display: none !important;
+}
+.hud-bc.is-manual {
+  border-color: rgba(79, 212, 146, 0.65);
+  box-shadow: 0 0 0 1px rgba(79, 212, 146, 0.35);
+}
+.hud-bc.is-manual .mic-sens-title {
+  color: #8ee0b5;
 }
 
 /* Vocal range octave strip (− / label / + / Auto) */
@@ -1861,9 +1895,10 @@ button:focus-visible,
 
 .mic-sens-label {
   display: flex;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 0.35rem;
-  width: 100%;
+  width: auto;
   font-size: 0.72rem;
   font-weight: 700;
   color: var(--text-muted);
@@ -2284,7 +2319,16 @@ body.view-exercise .stage-below.is-fitted {
     min-width: 0;
     width: 100%;
     max-width: none;
-    padding: 0.12rem 0.4rem;
+    max-height: 2.75rem;
+    padding: 0.2rem 0.45rem;
+    flex-wrap: nowrap;
+  }
+  .hud-bc .mic-sens-label {
+    flex-wrap: nowrap !important;
+  }
+  .hud-bc .practice-meter {
+    height: 10px;
+    width: 2.4rem;
   }
   .hud-bl {
     flex: 0 1 auto;
@@ -3470,22 +3514,9 @@ footer a {
 }
 
 /* Mic manual assist hint (non-highway exercises) */
+/* Hint text hidden in layout — use .hud-bc.is-manual + title/aria instead */
 .mic-manual-hint {
-  margin: 0.2rem 0 0;
-  font-size: 0.68rem;
-  line-height: 1.25;
-  max-width: 11rem;
-  text-align: center;
-}
-.mic-manual-hint.is-active {
-  color: #8ee0b5;
-  font-weight: 600;
-}
-.mic-sens-label {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.25rem 0.4rem;
+  display: none !important;
 }
 
 /* —— Next-step habit card (home) —— */

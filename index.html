@@ -87,14 +87,14 @@
       </section>
 
       <section id="view-exercise" class="view">
-        <!-- Compact header -->
+        <!-- Ultra-compact title row — practice stage is the main screen -->
         <div class="panel-header exercise-header-compact">
-          <div>
+          <div class="ex-title-row">
             <span class="badge" id="ex-track-badge">Vocal</span>
             <h2 id="ex-title">Ejercicio</h2>
-            <p class="sub" id="structured-progress"></p>
+            <p class="sub" id="structured-progress" hidden></p>
           </div>
-          <button type="button" class="btn btn-ghost btn-sm" id="btn-back-home" data-i18n="ex.back">← Todos los ejercicios</button>
+          <button type="button" class="btn btn-ghost btn-sm btn-back-compact" id="btn-back-home" data-i18n="ex.back">← Atrás</button>
         </div>
 
         <!-- GAME STAGE: sticky highway + corner HUDs (minimal scroll) -->
@@ -112,6 +112,11 @@
               <div class="hud-combo"><span class="hud-label" data-i18n="pitch.combo">Combo</span><strong id="hud-combo">×0</strong></div>
               <div class="hud-acc"><span class="hud-label" data-i18n="pitch.inLane">En el carril</span><strong id="hud-acc">0%</strong></div>
               <div class="hud-quality" id="hud-quality">—</div>
+              <!-- Challenge toggle lives in TR so it never needs scroll -->
+              <label class="muted piano-opt hud-challenge" id="pitch-challenge-row" hidden>
+                <input type="checkbox" id="chk-pitch-challenge" checked />
+                <span data-i18n="pitch.challengeShort">Reto</span>
+              </label>
             </div>
             <div class="hud-corner hud-bl">
               <button type="button" class="btn btn-practice btn-sm" id="btn-practice-start" data-i18n="practice.start">▶ Empezar</button>
@@ -134,6 +139,7 @@
               <label class="muted piano-opt" id="opt-auto-piano">
                 <input type="checkbox" id="chk-auto-piano" checked /> <span data-i18n="piano.auto">Auto piano</span>
               </label>
+              <button type="button" class="btn btn-ghost btn-xs hud-piano-more" id="btn-toggle-piano" aria-expanded="false" aria-controls="piano-block" data-i18n="piano.more" title="Piano y progresiones">🎹+</button>
             </div>
 
             <!-- Bottom-center game HUD: level + mic sensitivity (always visible in stage) -->
@@ -172,19 +178,13 @@
             <div id="mode-focus" class="mode-focus" hidden aria-hidden="true"></div>
           </div>
 
-          <!-- Below sticky highway: mode HUD, stats, challenge, hold, piano -->
+          <!-- Below sticky highway: only secondary chrome (collapsed by default) -->
           <div class="stage-below">
             <div id="mode-shell" class="mode-shell">
               <div id="mode-hud" class="mode-hud mode-hud-compact" aria-live="polite"></div>
               <p class="mode-cue" id="mode-cue"></p>
             </div>
             <div class="pitch-stats" id="pitch-stats"></div>
-            <div class="controls-row pitch-game-opts" id="pitch-challenge-row" hidden>
-              <label class="muted piano-opt">
-                <input type="checkbox" id="chk-pitch-challenge" checked />
-                <span data-i18n="pitch.challenge">Reto de notas (bloquear 8 objetivos)</span>
-              </label>
-            </div>
 
             <div id="hold-block" class="hold-inline" hidden>
               <div class="hold-pills" id="hold-history"></div>
@@ -193,11 +193,8 @@
               </p>
             </div>
 
-            <div class="piano-toggle-row" id="piano-toggle-row" hidden>
-              <button type="button" class="btn btn-ghost btn-sm" id="btn-toggle-piano" aria-expanded="false" aria-controls="piano-block" data-i18n="piano.showPanel">
-                Mostrar piano y progresiones
-              </button>
-            </div>
+            <!-- piano-toggle-row kept for a11y fallback; primary toggle is in BR HUD -->
+            <div class="piano-toggle-row" id="piano-toggle-row" hidden></div>
             <div id="piano-block" class="piano-inline" hidden>
               <div class="prog-list" id="prog-buttons"></div>
               <p class="muted" id="chord-desc" style="margin:0.35rem 0"></p>
@@ -212,11 +209,11 @@
             </div>
 
             <div id="playback-area" class="playback-inline"></div>
-            <p class="muted cockpit-hint" id="practice-hint" style="margin:0.5rem 0 0;font-size:0.82rem" data-i18n="practice.hint"></p>
+            <p class="muted cockpit-hint" id="practice-hint" hidden data-i18n="practice.hint"></p>
           </div>
         </div>
 
-        <!-- Guide below the fold -->
+        <!-- Guide + metrics folded below fold — open only when user needs them -->
         <div class="card section guide-card collapsed">
           <div class="guide-header">
             <h3 style="margin:0" data-i18n="ex.guide">Cómo practicar</h3>
@@ -248,16 +245,23 @@
           <button type="button" class="btn btn-primary" id="btn-open-plan" data-i18n="week.open">Abrir panel de 12 semanas</button>
         </div>
 
-        <div class="card section">
-          <h3 data-i18n="metrics.title">Reflexionar y guardar</h3>
-          <p class="muted" style="margin-top: 0" data-i18n="metrics.sub">
-            Califica después de practicar. Las notas son una brújula, no un juicio.
-          </p>
-          <form id="metrics-form" class="metrics-form" onsubmit="return false;"></form>
-          <div class="controls-row" style="margin-top: 1rem">
-            <button type="button" class="btn btn-success" id="btn-complete" data-i18n="metrics.save">Guardar sesión y puntaje</button>
+        <div class="card section metrics-card-collapsible collapsed" id="metrics-card">
+          <div class="guide-header metrics-header">
+            <div>
+              <h3 style="margin:0" data-i18n="metrics.title">Reflexionar y guardar</h3>
+              <p class="muted metrics-sub-compact" data-i18n="metrics.sub">
+                Califica después de practicar.
+              </p>
+            </div>
+            <button type="button" class="btn btn-ghost btn-sm" id="btn-toggle-metrics" aria-expanded="false" data-i18n="metrics.show">Mostrar métricas</button>
           </div>
-          <div id="score-result" class="score-card" style="margin-top: 1rem" hidden></div>
+          <div class="metrics-body" id="metrics-body">
+            <form id="metrics-form" class="metrics-form" onsubmit="return false;"></form>
+            <div class="controls-row" style="margin-top: 1rem">
+              <button type="button" class="btn btn-success" id="btn-complete" data-i18n="metrics.save">Guardar sesión y puntaje</button>
+            </div>
+            <div id="score-result" class="score-card" style="margin-top: 1rem" hidden></div>
+          </div>
         </div>
 
         <div class="controls-row" id="structured-nav" hidden style="margin-top: 1rem">

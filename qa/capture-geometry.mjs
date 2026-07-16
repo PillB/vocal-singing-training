@@ -193,26 +193,21 @@ async function main() {
 
   for (const ex of exerciseIds) {
     await page.goto(BASE, { waitUntil: "domcontentloaded" });
-    await page.evaluate((t) => {
+    await page.evaluate(() => {
       localStorage.setItem("vt_lang", "es");
-      // open via app state
-      const all = [...window.VT_EXERCISES.vocal, ...window.VT_EXERCISES.singing];
-      const found = all.find((e) => e.id === t);
-      if (!found) return;
-    }, ex.id);
+      localStorage.setItem("vt_tour_v1", "1");
+      sessionStorage.setItem("vt_e2e", "1");
+    });
     // Navigate UI
     await page.click(`.tab[data-tab="${ex.track}"]`);
     await page.click(`.tier-chip[data-tier="${ex.tier}"]`);
     await page.waitForTimeout(100);
-    // Click card by number badge + open first matching - use evaluate click
+    // Click card by number badge
     const opened = await page.evaluate((id) => {
       const all = [...VT_EXERCISES.vocal, ...VT_EXERCISES.singing];
       const found = all.find((e) => e.id === id);
       if (!found) return false;
-      // trigger same as card click via DOM
       const cards = [...document.querySelectorAll("#exercise-list .card-ex")];
-      const card = cards.find((c) => c.querySelector("h3")?.textContent);
-      // better: find by number
       for (const c of cards) {
         const num = c.querySelector(".num")?.textContent?.trim();
         if (num === String(found.number)) {
@@ -226,7 +221,8 @@ async function main() {
       }
       return false;
     }, ex.id);
-    await page.waitForTimeout(250);
+    await page.waitForTimeout(280);
+    await page.evaluate(() => window.scrollTo(0, 0));
     const active = await page.locator("#view-exercise").evaluate((el) =>
       el.classList.contains("active")
     );
@@ -238,6 +234,27 @@ async function main() {
       console.warn("skip", ex.id, opened);
     }
   }
+
+  // Mobile viewport spot-check (home + solfege)
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(BASE, { waitUntil: "networkidle" });
+  await page.evaluate(() => {
+    localStorage.setItem("vt_lang", "es");
+    localStorage.setItem("vt_tour_v1", "1");
+    sessionStorage.setItem("vt_e2e", "1");
+  });
+  await page.goto(BASE, { waitUntil: "networkidle" });
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await shot(page, "mobile_home");
+  pages.push(await dumpGeometry(page, "mobile_home"));
+  await page.click('.tab[data-tab="singing"]');
+  await page.click('.tier-chip[data-tier="basic"]');
+  await page.waitForTimeout(120);
+  await page.locator("#exercise-list .card-ex").nth(1).click();
+  await page.waitForTimeout(280);
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await shot(page, "mobile_solfege");
+  pages.push(await dumpGeometry(page, "mobile_solfege"));
 
   // Index
   fs.writeFileSync(

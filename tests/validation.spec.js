@@ -175,7 +175,8 @@ test.describe("Exercise-specific practice modes", () => {
     await forceEs(page);
     await page.click('.tier-chip[data-tier="basic"]');
     await page.locator("#exercise-list .card-ex").first().click();
-    await page.click("#btn-toggle-guide");
+    // Metrics folded by default (less scroll) — expand then save
+    await page.click("#btn-toggle-metrics");
     await page.fill('#metrics-form [name="duration"]', "5");
     await page.click("#btn-complete");
     await expect(page.locator("#score-result .score-big")).toContainText("/ 10");
@@ -235,8 +236,23 @@ test.describe("Exercise-specific practice modes", () => {
     await expect(page.locator(".hud-tl")).toBeVisible();
     await expect(page.locator(".hud-bl #btn-practice-start")).toBeVisible();
     await expect(page.locator("#pitch-canvas")).toBeVisible();
-    // guide is below cockpit, collapsed by default
+    // guide + metrics below fold, collapsed by default
     await expect(page.locator(".guide-card")).toHaveClass(/collapsed/);
+    await expect(page.locator("#metrics-card")).toHaveClass(/collapsed/);
+    // Start control center is in first viewport (game HUD)
+    const fold = await page.evaluate(() => {
+      const b = document.querySelector("#btn-practice-start")?.getBoundingClientRect();
+      const h = document.querySelector("#highway-stage")?.getBoundingClientRect();
+      return {
+        startY: b ? b.top + b.height / 2 : null,
+        stageBottom: h ? h.bottom : null,
+        vh: window.innerHeight,
+        scrollY: window.scrollY
+      };
+    });
+    expect(fold.scrollY).toBe(0);
+    expect(fold.startY).toBeLessThan(fold.vh);
+    expect(fold.stageBottom).toBeLessThanOrEqual(fold.vh + 8);
   });
 
   test("wide jump progressions available for solfege", async ({ page }) => {

@@ -659,17 +659,22 @@
       if ($("#chk-sustain")) $("#chk-sustain").checked = true; // sustain on by default
     }
     if (pianoMini) pianoMini.style.display = showPiano || exerciseWantsSound(ex, profile) ? "" : "none";
-    if (pianoToggleRow) {
-      pianoToggleRow.hidden = !showPiano;
-      const tbtn = $("#btn-toggle-piano");
-      if (tbtn) {
-        tbtn.setAttribute("aria-expanded", "false");
-        tbtn.textContent = tt("piano.showPanel");
-      }
+    // Piano more button lives in BR HUD (no extra row = less scroll)
+    if (pianoToggleRow) pianoToggleRow.hidden = true;
+    const tbtn = $("#btn-toggle-piano");
+    if (tbtn) {
+      tbtn.hidden = !showPiano;
+      tbtn.setAttribute("aria-expanded", "false");
+      tbtn.textContent = tt("piano.more");
+      tbtn.title = tt("piano.showPanel");
     }
 
-    // Practice hint (i18n)
-    $("#practice-hint").textContent = tt("practice.hint");
+    // Practice hint stays hidden in stage (hint is in tour / guide)
+    const hint = $("#practice-hint");
+    if (hint) {
+      hint.hidden = true;
+      hint.textContent = tt("practice.hint");
+    }
 
     // Review workflow
     const reviewBlock = $("#review-block");
@@ -718,19 +723,33 @@
 
     // Structured nav
     $("#structured-nav").hidden = !state.structured;
-    if (state.structured) {
-      $("#structured-progress").textContent = VTSession.progressLabel();
+    const sp = $("#structured-progress");
+    if (sp) {
+      if (state.structured) {
+        sp.hidden = false;
+        sp.textContent = VTSession.progressLabel();
+      } else {
+        sp.hidden = true;
+        sp.textContent = "";
+      }
     }
 
     $("#score-result").hidden = true;
 
-    // Doing > reading: collapse coach notes by default
+    // Doing > reading: collapse coach notes + metrics by default (less scroll)
     state.guideOpen = false;
     document.querySelector(".guide-card")?.classList.add("collapsed");
     const guideBtn = $("#btn-toggle-guide");
     if (guideBtn) {
       guideBtn.textContent = tt("ex.showGuide");
       guideBtn.setAttribute("aria-expanded", "false");
+    }
+    state.metricsOpen = false;
+    document.querySelector("#metrics-card")?.classList.add("collapsed");
+    const metricsBtn = $("#btn-toggle-metrics");
+    if (metricsBtn) {
+      metricsBtn.textContent = tt("metrics.show");
+      metricsBtn.setAttribute("aria-expanded", "false");
     }
 
     // Record opt only when exercise supports record
@@ -2069,6 +2088,8 @@
           block.hidden = false;
           // next frame so max-height transition can run
           requestAnimationFrame(() => block.classList.add("is-open"));
+          // Bring progressions into view only when user asked
+          block.scrollIntoView({ behavior: "smooth", block: "nearest" });
         } else {
           block.classList.remove("is-open");
           setTimeout(() => {
@@ -2078,8 +2099,22 @@
       }
       const btn = $("#btn-toggle-piano");
       if (btn) {
-        btn.textContent = state.pianoOpen ? tt("piano.hidePanel") : tt("piano.showPanel");
+        btn.textContent = state.pianoOpen ? tt("piano.less") : tt("piano.more");
+        btn.title = state.pianoOpen ? tt("piano.hidePanel") : tt("piano.showPanel");
         btn.setAttribute("aria-expanded", String(!!state.pianoOpen));
+      }
+    });
+    $("#btn-toggle-metrics")?.addEventListener("click", () => {
+      state.metricsOpen = !state.metricsOpen;
+      const card = document.querySelector("#metrics-card");
+      card?.classList.toggle("collapsed", !state.metricsOpen);
+      const btn = $("#btn-toggle-metrics");
+      if (btn) {
+        btn.textContent = state.metricsOpen ? tt("metrics.hide") : tt("metrics.show");
+        btn.setAttribute("aria-expanded", String(!!state.metricsOpen));
+      }
+      if (state.metricsOpen) {
+        card?.scrollIntoView({ behavior: "smooth", block: "nearest" });
       }
     });
 

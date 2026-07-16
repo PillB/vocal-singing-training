@@ -184,13 +184,68 @@ def analyze_file(path: Path) -> dict:
         and i.get("w", 0) == 0
     ]
 
+    # Fold / game-HUD: critical controls should sit in first viewport
+    fold_issues = []
+    fold_sels = {
+        "#btn-practice-start",
+        ".hud-tl",
+        ".hud-bl",
+        ".hud-br",
+        ".hud-bc",
+        "#highway-stage",
+    }
+    for el in items:
+        sa = el.get("sel", "")
+        if sa not in fold_sels or not el.get("visible"):
+            continue
+        # Center of control must be in viewport (game overlay principle)
+        cy = el["y"] + el["h"] / 2
+        cx = el["x"] + el["w"] / 2
+        if cy > vh + EPS or cy < -EPS:
+            fold_issues.append(
+                {
+                    "sel": sa,
+                    "msg": f"center y={cy:.1f} outside viewport h={vh}",
+                    "box": [el["x"], el["y"], el["w"], el["h"]],
+                }
+            )
+        if cx > vw + EPS or cx < -EPS:
+            fold_issues.append(
+                {
+                    "sel": sa,
+                    "msg": f"center x={cx:.1f} outside viewport w={vw}",
+                    "box": [el["x"], el["y"], el["w"], el["h"]],
+                }
+            )
+
+    # Peer HUD corners must not overlap each other (explicit AABB)
+    hud_corners = [i for i in items if i.get("sel") in {".hud-tl", ".hud-tr", ".hud-bl", ".hud-br", ".hud-bc"} and i.get("visible")]
+    for i, a in enumerate(hud_corners):
+        for b in hud_corners[i + 1 :]:
+            area = area_intersection(a, b)
+            if area > MIN_AREA:
+                overlaps.append(
+                    {
+                        "a": a["sel"],
+                        "b": b["sel"],
+                        "area": round(area, 1),
+                        "a_box": [round(a["x"], 1), round(a["y"], 1), round(a["w"], 1), round(a["h"], 1)],
+                        "b_box": [round(b["x"], 1), round(b["y"], 1), round(b["w"], 1), round(b["h"], 1)],
+                        "z": [a.get("z", 0), b.get("z", 0)],
+                        "kind": "hud_corner",
+                    }
+                )
+
     return {
         "label": data.get("label"),
         "viewport": [vw, vh],
         "n_visible": len(items),
         "overlaps": overlaps,
         "overflows": overflows,
-        "critical": len(overlaps) + len([o for o in overflows if "overflow" in o["msg"]]),
+        "fold_issues": fold_issues,
+        "critical": len(overlaps)
+        + len([o for o in overflows if "overflow" in o["msg"]])
+        + len(fold_issues),
     }
 
 
@@ -201,12 +256,20 @@ def main() -> int:
         print("No geometry files in", GEO)
         return 2
 
-    report = {"pages": [], "total_overlaps": 0, "total_overflows": 0}
+    report = {
+        "pages": [],
+        "total_overlaps": 0,
+        "total_overflows": 0,
+        "total_fold_issues": 0,
+        "total_critical": 0,
+    }
     for f in files:
         r = analyze_file(f)
         report["pages"].append(r)
         report["total_overlaps"] += len(r["overlaps"])
         report["total_overflows"] += len(r["overflows"])
+        report["total_fold_issues"] += len(r.get("fold_issues") or [])
+        report["total_critical"] += r.get("critical") or 0
 
     out = GEO / "_analysis_report.json"
     out.write_text(json.dumps(report, indent=2))
@@ -216,7 +279,13 @@ def main() -> int:
     print(f"Pages analyzed: {len(report['pages'])}")
     print(f"Peer overlaps: {report['total_overlaps']}")
     print(f"Overlay overflows: {report['total_overflows']}")
-    bad = [p for p in report["pages"] if p["overlaps"] or p["overflows"]]
+    print(f"Fold (above-the-fold) issues: {report['total_fold_issues']}")
+    print(f"Critical total: {report['total_critical']}")
+    bad = [
+        p
+        for p in report["pages"]
+        if p["overlaps"] or p["overflows"] or p.get("fold_issues")
+    ]
     for p in bad[:30]:
         print(f"\n## {p['label']}")
         for o in p["overlaps"][:8]:
@@ -224,14 +293,17 @@ def main() -> int:
             print(f"    A{o['a_box']} B{o['b_box']}")
         for o in p["overflows"][:8]:
             print(f"  OVERFLOW {o['sel']}: {o['msg']}")
+        for o in (p.get("fold_issues") or [])[:8]:
+            print(f"  FOLD {o['sel']}: {o['msg']}")
 
-    # Exit 1 if critical peer HUD overlaps on exercise pages
+    # Exit 1 if critical peer HUD overlaps or fold issues on exercise pages
     critical = 0
     for p in report["pages"]:
         for o in p["overlaps"]:
             if ".hud-" in o["a"] or ".hud-" in o["b"] or "practice" in o["a"] or "practice" in o["b"]:
                 critical += 1
-    print(f"\nCritical HUD/control overlaps: {critical}")
+        critical += len(p.get("fold_issues") or [])
+    print(f"\nCritical HUD/control overlaps + fold: {critical}")
     print("Report:", out)
     return 1 if critical > 0 else 0
 

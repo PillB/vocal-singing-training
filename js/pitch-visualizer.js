@@ -8,6 +8,8 @@
   "use strict";
 
   const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+  /** Fixed-Do solfège (Spanish/LATAM: Si not Ti) — C=Do */
+  const SOLFEGE = ["Do", "Do♯", "Re", "Re♯", "Mi", "Fa", "Fa♯", "Sol", "Sol♯", "La", "La♯", "Si"];
 
   function freqToMidi(freq) {
     return 69 + 12 * Math.log2(freq / 440);
@@ -22,6 +24,42 @@
     const name = NOTE_NAMES[((rounded % 12) + 12) % 12];
     const oct = Math.floor(rounded / 12) - 1;
     return `${name}${oct}`;
+  }
+
+  function midiToSolfege(midi) {
+    const rounded = Math.round(midi);
+    const sol = SOLFEGE[((rounded % 12) + 12) % 12];
+    const oct = Math.floor(rounded / 12) - 1;
+    return `${sol}${oct}`;
+  }
+
+  /** Dual label: letter + solfège e.g. "C3 · Do" */
+  function midiToDualLabel(midi, withOct = true) {
+    const rounded = Math.round(midi);
+    const letter = NOTE_NAMES[((rounded % 12) + 12) % 12];
+    const sol = SOLFEGE[((rounded % 12) + 12) % 12];
+    if (!withOct) return `${letter} · ${sol}`;
+    const oct = Math.floor(rounded / 12) - 1;
+    return `${letter}${oct} · ${sol}`;
+  }
+
+  /** Parse note name like C3 / Bb2 → dual label */
+  function noteNameToDual(name) {
+    if (!name) return "";
+    if (typeof name === "number") return midiToDualLabel(name);
+    const map = global.VT_NOTE_FREQ || {};
+    const f = map[name];
+    if (f) return midiToDualLabel(freqToMidi(f));
+    const m = String(name).match(/^([A-Ga-g])([#b]?)(-?\d)?$/);
+    if (!m) return String(name);
+    let letter = m[1].toUpperCase() + (m[2] || "");
+    const flatMap = { Bb: "A#", Eb: "D#", Ab: "G#", Db: "C#", Gb: "F#" };
+    if (flatMap[letter]) letter = flatMap[letter];
+    const idx = NOTE_NAMES.indexOf(letter);
+    if (idx < 0) return String(name);
+    const sol = SOLFEGE[idx];
+    const display = m[1].toUpperCase() + (m[2] || "") + (m[3] || "");
+    return m[3] != null ? `${display} · ${sol}` : `${display} · ${sol}`;
   }
 
   /**
@@ -227,6 +265,7 @@
           seen.add(k);
           this.progressionLanes.push({
             name: n.name,
+            label: noteNameToDual(n.name),
             freq: n.freq,
             midi: n.midi,
             active: false
@@ -284,6 +323,7 @@
         seen.add(k);
         this.progressionLanes.push({
           name: n.name,
+          label: noteNameToDual(n.name),
           freq: n.freq,
           midi: n.midi,
           active: false
@@ -293,18 +333,40 @@
     }
 
     /**
-     * Activate all chord-tone lanes; highlight primary match note.
-     * Does NOT change a locked range (stable highway while chords move).
+     * Activate chord-tone lanes.
+     * opts.oneNote: show only a single target note (melodic / one-at-a-time mode).
+     * opts.noteName: which note when oneNote (default: mid singing register pick).
      */
-    setTargetFromChord(chord) {
+    setTargetFromChord(chord, opts = {}) {
       if (!chord || !chord.notes || !chord.notes.length) return;
       const map = global.VT_NOTE_FREQ || {};
+      const oneNote = !!opts.oneNote;
+      let noteList = chord.notes.slice();
+      if (oneNote) {
+        let pick = opts.noteName || chord.notes[0];
+        if (!opts.noteName) {
+          for (const n of chord.notes) {
+            const f = map[n];
+            if (f && f >= 120 && f <= 280) {
+              pick = n;
+              break;
+            }
+          }
+        }
+        noteList = [pick];
+      }
       const lanes = [];
-      chord.notes.forEach((n) => {
+      noteList.forEach((n) => {
         const f = map[n];
         if (!f) return;
         const midi = freqToMidi(f);
-        lanes.push({ name: n, freq: f, midi, active: true });
+        lanes.push({
+          name: n,
+          label: noteNameToDual(n),
+          freq: f,
+          midi,
+          active: true
+        });
       });
       // unique by rounded midi
       const seen = new Set();
@@ -314,15 +376,21 @@
         seen.add(k);
         return true;
       });
-      this.activeChordName = chord.name || "";
+      const dual = noteList[0] ? noteNameToDual(noteList[0]) : "";
+      this.activeChordName = oneNote
+        ? `${chord.name || ""} · ${dual}`.replace(/^ · /, "")
+        : chord.name || "";
 
-      // Primary target: mid-register singing tone
-      let pick = chord.notes[1] || chord.notes[0];
-      for (const n of chord.notes) {
-        const f = map[n];
-        if (f && f >= 120 && f <= 280) {
-          pick = n;
-          break;
+      // Primary target
+      let pick = noteList[0];
+      if (!oneNote) {
+        pick = chord.notes[1] || chord.notes[0];
+        for (const n of chord.notes) {
+          const f = map[n];
+          if (f && f >= 120 && f <= 280) {
+            pick = n;
+            break;
+          }
         }
       }
       if (map[pick]) this.setTargetFreq(map[pick]);
@@ -335,6 +403,15 @@
           minSpan: 10
         });
       }
+    }
+
+    /** Single melodic target (one note at a time) */
+    setTargetFromNote(noteName, chordName) {
+      if (!noteName) return;
+      this.setTargetFromChord(
+        { name: chordName || noteName, notes: [noteName] },
+        { oneNote: true, noteName }
+      );
     }
 
     clearChordLanes() {
@@ -709,17 +786,24 @@
           ctx.lineTo(w, y);
           ctx.stroke();
           ctx.setLineDash([]);
+          // Right-edge dual labels (letter + solfège) — keep clear of HUD rails
+          const gLab = lane.label || noteNameToDual(lane.midi);
+          ctx.font = "600 11px system-ui,sans-serif";
+          const gw = ctx.measureText(gLab).width;
+          ctx.fillStyle = "rgba(6, 10, 16, 0.72)";
+          ctx.fillRect(w - gw - 14, y - 10, gw + 10, 16);
           ctx.fillStyle = "#c8d6ea";
-          ctx.font = "600 12px system-ui,sans-serif";
           ctx.textAlign = "right";
-          ctx.fillText(lane.name, w - 10, y - 3);
+          ctx.fillText(gLab, w - 8, y + 2);
           return;
         }
         const isPrimary = mode === "primary";
+        // Leave right ~14% free for dual note labels (no HUD there)
+        const laneRight = w * 0.86;
         ctx.fillStyle = isPrimary
           ? "rgba(79, 212, 146, 0.32)"
           : "rgba(240, 184, 80, 0.26)";
-        ctx.fillRect(0, y - laneHalf, w, laneHalf * 2);
+        ctx.fillRect(0, y - laneHalf, laneRight, laneHalf * 2);
         ctx.strokeStyle = isPrimary
           ? "rgba(160, 255, 210, 1)"
           : "rgba(255, 220, 150, 0.95)";
@@ -731,32 +815,31 @@
         ctx.setLineDash([]);
         ctx.beginPath();
         ctx.moveTo(0, y);
-        ctx.lineTo(w, y);
+        ctx.lineTo(laneRight, y);
         ctx.stroke();
         ctx.shadowBlur = 0;
         const esLane =
           (global.VTI18n && global.VTI18n.lang === "es") ||
           document.documentElement.lang === "es";
-        // Label with dark pill for contrast on any lane color
-        const label =
-          (lane.name || "") +
-          (isPrimary
-            ? esLane
-              ? " ● canta aquí"
-              : " ● sing here"
-            : esLane
-              ? " · activo"
-              : " · active");
+        const dual = lane.label || noteNameToDual(lane.midi);
+        const cue = isPrimary
+          ? esLane
+            ? " ● canta"
+            : " ● sing"
+          : esLane
+            ? " · on"
+            : " · on";
+        // Label on the RIGHT (keys), not under top/bottom HUD rails
+        const label = dual + cue;
         ctx.font = isPrimary
-          ? "800 14px system-ui,sans-serif"
-          : "700 13px system-ui,sans-serif";
-        ctx.textAlign = "left";
+          ? "800 12px system-ui,sans-serif"
+          : "700 11px system-ui,sans-serif";
+        ctx.textAlign = "right";
         const tw = ctx.measureText(label).width;
-        const ly = y - laneHalf - 4;
-        ctx.fillStyle = "rgba(6, 10, 16, 0.78)";
-        ctx.fillRect(4, ly - 14, tw + 12, 18);
+        ctx.fillStyle = "rgba(6, 10, 16, 0.82)";
+        ctx.fillRect(w - tw - 14, y - 9, tw + 10, 16);
         ctx.fillStyle = isPrimary ? "#d4ffe8" : "#ffe8b8";
-        ctx.fillText(label, 10, ly);
+        ctx.fillText(label, w - 8, y + 3);
       };
 
       // Ghost: all progression tones not currently active
@@ -803,21 +886,27 @@
       ctx.textAlign = "left";
       const hiY = this._midiToY(hi, centerMidi, graphH) + 4;
       const loY = this._midiToY(lo, centerMidi, graphH) + 4;
+      // Range labels bottom-left of graph (not under top HUD band)
+      ctx.font = "600 10px ui-monospace,monospace";
+      ctx.textAlign = "left";
+      const hiLab = midiToDualLabel(hi, false);
+      const loLab = midiToDualLabel(lo, false);
       ctx.fillStyle = "rgba(6, 10, 16, 0.75)";
-      ctx.fillRect(2, hiY - 12, 42, 16);
-      ctx.fillRect(2, loY - 12, 42, 16);
+      ctx.fillRect(2, hiY - 10, ctx.measureText(hiLab).width + 8, 14);
+      ctx.fillRect(2, loY - 10, ctx.measureText(loLab).width + 8, 14);
       ctx.fillStyle = "#e8eef6";
-      ctx.fillText(midiToName(hi), 6, hiY);
-      ctx.fillText(midiToName(lo), 6, loY);
+      ctx.fillText(hiLab, 6, hiY);
+      ctx.fillText(loLab, 6, loY);
+      // Chord/note badge sits in top safe band center — short so HUDs stay horizontal
       if (this.activeChordName) {
-        ctx.font = "800 15px system-ui,sans-serif";
+        ctx.font = "700 12px system-ui,sans-serif";
         ctx.textAlign = "center";
         const cn = this.activeChordName;
-        const cw = ctx.measureText(cn).width;
-        ctx.fillStyle = "rgba(6, 10, 16, 0.8)";
-        ctx.fillRect(w / 2 - cw / 2 - 8, 6, cw + 16, 22);
+        const cw = Math.min(ctx.measureText(cn).width, w * 0.4);
+        ctx.fillStyle = "rgba(6, 10, 16, 0.75)";
+        ctx.fillRect(w / 2 - cw / 2 - 6, graphH * 0.02, cw + 12, 16);
         ctx.fillStyle = "#ffe8b8";
-        ctx.fillText(cn, w / 2, 22);
+        ctx.fillText(cn, w / 2, graphH * 0.02 + 12);
       }
 
       const n = this.history.length;
@@ -976,5 +1065,13 @@
   }
 
   global.VTPitchVisualizer = PitchVisualizer;
-  global.VTPitchUtils = { freqToMidi, midiToFreq, midiToName, detectPitch };
+  global.VTPitchUtils = {
+    freqToMidi,
+    midiToFreq,
+    midiToName,
+    midiToSolfege,
+    midiToDualLabel,
+    noteNameToDual,
+    detectPitch
+  };
 })(window);

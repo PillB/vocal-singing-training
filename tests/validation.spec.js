@@ -216,13 +216,54 @@ test.describe("Exercise-specific practice modes", () => {
     expect(grace.min).toBe(2);
   });
 
-  test("sustain checkbox still present with arpeggio", async ({ page }) => {
+  test("sustain checkbox still present with arpeggio and one-note mode", async ({ page }) => {
     await forceEn(page);
     await page.click('.tab[data-tab="singing"]');
     await page.click('.tier-chip[data-tier="basic"]');
     await page.locator("#exercise-list .card-ex").nth(1).click();
     await expect(page.locator("#chk-sustain")).toBeVisible();
     await expect(page.locator("#chk-arpeggio")).toBeVisible();
+    await expect(page.locator("#chk-one-note")).toBeVisible();
+  });
+
+  test("one-note mode sets single highway target from progression", async ({ page }) => {
+    await forceEn(page);
+    await page.click('.tab[data-tab="singing"]');
+    await page.click('.tier-chip[data-tier="basic"]');
+    // Solfege chords card (has piano opts)
+    await page.locator("#exercise-list .card-ex", { hasText: /Solf|chord|Acorde|progres/i }).first().click();
+    await page.waitForTimeout(200);
+    await page.locator("#chk-one-note").check({ force: true });
+    const ok = await page.evaluate(() => {
+      const viz = window.VTGetPitchViz?.() || window.VTApp?.getState?.()?.pitchViz;
+      if (!viz) return false;
+      viz.setTargetFromChord(
+        { name: "C", notes: ["C2", "C3", "E3", "G3"] },
+        { oneNote: true, noteName: "E3" }
+      );
+      return (
+        viz.chordLanes.length === 1 &&
+        viz.chordLanes[0].name === "E3" &&
+        /E3|Mi/.test(viz.chordLanes[0].label || "")
+      );
+    });
+    expect(ok).toBe(true);
+  });
+
+  test("dual letter + solfege labels available", async ({ page }) => {
+    await page.goto(BASE);
+    const dual = await page.evaluate(() => {
+      const U = window.VTPitchUtils;
+      return {
+        c: U.midiToDualLabel(U.freqToMidi(261.63)),
+        do: U.midiToSolfege(U.freqToMidi(261.63)),
+        a: U.noteNameToDual("A3")
+      };
+    });
+    expect(dual.c).toMatch(/C4|C/);
+    expect(dual.c).toMatch(/Do/);
+    expect(dual.do).toMatch(/Do/);
+    expect(dual.a).toMatch(/La/);
   });
 
   test("Spanish exercise titles on cards", async ({ page }) => {

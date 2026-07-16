@@ -347,7 +347,15 @@
 
     async playProgression(
       progId,
-      { loop = false, chordSec = 2.0, arpeggio = false, sustain = false, sustainSec = 4.0 } = {}
+      {
+        loop = false,
+        chordSec = 2.0,
+        arpeggio = false,
+        /** oneNote: melodic — play & target one pitch at a time (not stacked chords) */
+        oneNote = false,
+        sustain = false,
+        sustainSec = 4.0
+      } = {}
     ) {
       await this.ensure();
       await this.resume();
@@ -367,12 +375,54 @@
         stepSec = Math.max(3, Math.min(5.5, Number(sustainSec) || 4));
       }
 
+      // Flatten to sequential note events when oneNote (or arpeggio for audio + single targets)
+      const melodic = !!oneNote;
+      const broken = melodic || !!arpeggio;
+
       const playOnce = () => {
         if (!this.loopActive && loop) return;
         const t0 = this.ctx.currentTime + 0.05;
+
+        if (melodic) {
+          // Strict one-note-at-a-time timeline across the whole progression
+          let cursor = 0;
+          const events = [];
+          prog.chords.forEach((ch, cidx) => {
+            (ch.notes || []).forEach((n) => {
+              events.push({ note: n, chord: ch, cidx });
+            });
+          });
+          const noteSec = Math.max(
+            0.55,
+            stepSec / Math.max(2, (prog.chords[0]?.notes?.length || 3))
+          );
+          events.forEach((ev, ei) => {
+            const when = t0 + ei * noteSec;
+            const f = NOTE_FREQ[ev.note];
+            if (f) {
+              this.playNote(f, when, Math.max(0.45, noteSec * 0.92), 0.42, sustain);
+            }
+            if (this.onChordChange || this.onNoteChange) {
+              const delay = Math.max(0, (when - this.ctx.currentTime) * 1000);
+              setTimeout(() => {
+                const mini = { name: ev.chord.name, notes: [ev.note], oneNote: true };
+                if (this.onNoteChange) this.onNoteChange(ev.note, ev.chord, ei, prog);
+                if (this.onChordChange) this.onChordChange(mini, ev.cidx, prog, { oneNote: true, noteName: ev.note });
+              }, delay);
+            }
+          });
+          const total = events.length * noteSec * 1000 + 50;
+          if (loop) {
+            this.loopTimer = setTimeout(() => {
+              if (this.loopActive) playOnce();
+            }, total);
+          }
+          return;
+        }
+
         prog.chords.forEach((ch, idx) => {
           const when = t0 + idx * stepSec;
-          if (arpeggio) {
+          if (broken) {
             const noteStep = sustain ? Math.min(0.35, stepSec / (ch.notes.length + 1)) : 0.18;
             ch.notes.forEach((n, ni) => {
               const f = NOTE_FREQ[n];
@@ -389,7 +439,7 @@
           if (this.onChordChange) {
             const delay = Math.max(0, (when - this.ctx.currentTime) * 1000);
             setTimeout(() => {
-              if (this.onChordChange) this.onChordChange(ch, idx, prog);
+              if (this.onChordChange) this.onChordChange(ch, idx, prog, { oneNote: false });
             }, delay);
           }
         });

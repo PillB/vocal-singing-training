@@ -835,12 +835,19 @@
   function pianoOptions() {
     const sustain = $("#chk-sustain")?.checked;
     const sustainSec = Number($("#sustain-sec")?.value || 4);
+    const oneNote = !!$("#chk-one-note")?.checked;
     return {
       arpeggio: $("#chk-arpeggio")?.checked,
+      oneNote,
       sustain: !!sustain,
       sustainSec: sustain ? sustainSec : 2.2,
       chordSec: sustain ? sustainSec : 2.2
     };
+  }
+
+  function dualNoteLabel(noteName) {
+    if (window.VTPitchUtils?.noteNameToDual) return VTPitchUtils.noteNameToDual(noteName);
+    return noteName || "";
   }
 
   async function playSelectedProgression(loop) {
@@ -853,18 +860,34 @@
       const opts = pianoOptions();
       // Sustain default ON for practice loops (helps newbies home in)
       if (opts.sustain == null) opts.sustain = true;
-      VTPiano.onChordChange = (ch) => {
-        $("#chord-now").textContent = ch.name;
+      // One-note mode: highway + target follow a single pitch at a time
+      VTPiano.onChordChange = (ch, idx, prog, meta) => {
+        const one = !!(meta?.oneNote || opts.oneNote || ch?.oneNote);
+        const noteName = meta?.noteName || ch?.notes?.[0];
+        if (one && noteName) {
+          $("#chord-now").textContent = `${ch.name || ""} · ${dualNoteLabel(noteName)}`.replace(
+            /^ · /,
+            ""
+          );
+        } else {
+          $("#chord-now").textContent = ch.name || "—";
+        }
         if (state.exercise?.audio?.pitchViz || state.exercise?.practice?.showPitch) {
-          if (state.pitchViz) state.pitchViz.setTargetFromChord(ch);
-          // Sync practice engine target to primary singing tone
+          if (state.pitchViz) {
+            state.pitchViz.setTargetFromChord(ch, {
+              oneNote: one,
+              noteName: one ? noteName : undefined
+            });
+          }
           const map = VT_NOTE_FREQ || {};
-          let pick = ch.notes?.[1] || ch.notes?.[0];
-          for (const n of ch.notes || []) {
-            const f = map[n];
-            if (f && f >= 120 && f <= 280) {
-              pick = n;
-              break;
+          let pick = noteName || ch.notes?.[1] || ch.notes?.[0];
+          if (!one) {
+            for (const n of ch.notes || []) {
+              const f = map[n];
+              if (f && f >= 120 && f <= 280) {
+                pick = n;
+                break;
+              }
             }
           }
           if (map[pick]) state.practice.setTargetFreq(map[pick]);
@@ -876,23 +899,44 @@
         loop: !!loop,
         chordSec: opts.chordSec,
         arpeggio: opts.arpeggio,
+        oneNote: opts.oneNote,
         sustain: opts.sustain,
         sustainSec: opts.sustainSec
       });
       if (prog) {
         // Re-apply same lock (same option) — never shrink to current chord
         if (state.pitchViz) state.pitchViz.setProgressionRange(prog);
+        const modeHint = opts.oneNote
+          ? isEsLang()
+            ? " · 1 nota a la vez"
+            : " · one note at a time"
+          : opts.arpeggio
+            ? isEsLang()
+              ? " · arpegio"
+              : " · arpeggio"
+            : isEsLang()
+              ? " · acordes"
+              : " · chords";
         $("#chord-desc").textContent =
           prog.description +
-          (opts.sustain ? ` · sustain ${opts.sustainSec}s per chord` : "");
+          modeHint +
+          (opts.sustain ? ` · sustain ${opts.sustainSec}s` : "");
         toast(
           loop
-            ? opts.sustain
-              ? `Looping with ${opts.sustainSec}s sustain…`
-              : "Looping progression…"
-            : opts.sustain
-              ? `Playing with ${opts.sustainSec}s sustain`
-              : "Playing progression once"
+            ? opts.oneNote
+              ? isEsLang()
+                ? "Bucle: una nota a la vez…"
+                : "Looping one note at a time…"
+              : opts.sustain
+                ? `Looping with ${opts.sustainSec}s sustain…`
+                : "Looping progression…"
+            : opts.oneNote
+              ? isEsLang()
+                ? "Una nota a la vez"
+                : "One note at a time"
+              : opts.sustain
+                ? `Playing with ${opts.sustainSec}s sustain`
+                : "Playing progression once"
         );
       }
     } catch (e) {

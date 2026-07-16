@@ -78,6 +78,20 @@ def is_ancestor_pair(a: dict, b: dict, items: list) -> bool:
         return True
     if sb in hud and (sa in hud_kids or sa == "interactive") and contains(b, a):
         return True
+    # Nested interactive inside HUD with hairline bleed still counts as nest
+    def soft_contains(outer, inner):
+        return (
+            outer["x"] <= inner["x"] + 8
+            and outer["y"] <= inner["y"] + 8
+            and outer["x2"] + 8 >= inner["x2"]
+            and outer["y2"] + 10 >= inner["y2"]
+            and outer["w"] * outer["h"] > inner["w"] * inner["h"] * 0.5
+        )
+
+    if sa in hud and sb == "interactive" and soft_contains(a, b):
+        return True
+    if sb in hud and sa == "interactive" and soft_contains(b, a):
+        return True
     # Start/stop never overlap each other when one is hidden; if both boxes nest ignore
     if {sa, sb} == {"#btn-practice-start", "#btn-practice-stop"}:
         return True

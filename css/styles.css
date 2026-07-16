@@ -1191,30 +1191,34 @@ button:focus-visible,
   position: sticky;
   top: var(--header-h, 74px);
   z-index: 20;
-  /* Claim more of the first viewport (game stage first) */
-  min-height: min(62dvh, 460px);
-  max-height: min(78dvh, 620px);
-  height: min(70dvh, 560px);
+  /* ~30% taller than prior 560px band → clearer lanes */
+  min-height: min(72dvh, 560px);
+  max-height: min(88dvh, 780px);
+  height: min(80dvh, 728px);
   overflow: hidden;
   border-radius: 12px;
   background: rgba(8, 12, 18, 0.72);
   border: 1px solid var(--border);
-  /* Safe inset so canvas labels aren't under HUDs */
-  --hud-safe-t: 3.35rem;
-  --hud-safe-b: 3.5rem;
-  --hud-safe-l: 0.45rem;
-  --hud-safe-r: 0.45rem;
+  /* 10% top/bottom negative space for horizontal HUD rails; right free for note keys */
+  --hud-band: 10%;
+  --hud-safe-t: 10%;
+  --hud-safe-b: 10%;
+  --hud-safe-l: 0.35rem;
+  --hud-safe-r: 14%; /* dual letter+solfège labels live here */
 }
 
+/* Horizontal game HUDs sit in the 10% bands — keep right edge clear for keys */
 .hud-corner {
   position: absolute;
   z-index: 6;
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  flex-direction: row;
   gap: 0.28rem;
   align-items: center;
   pointer-events: none;
-  max-width: calc(50% - 0.5rem);
+  max-height: var(--hud-band);
+  overflow: hidden;
 }
 
 .hud-corner .btn,
@@ -1225,74 +1229,86 @@ button:focus-visible,
 }
 
 .hud-tl {
-  top: 0.4rem;
-  left: 0.4rem;
-  max-width: min(40%, 11rem);
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.15rem;
+  top: 0.2rem;
+  left: 0.3rem;
+  right: auto;
+  max-width: 48%;
+  width: auto;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.2rem 0.35rem;
   z-index: 7;
+  background: rgba(6, 10, 16, 0.82);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.18rem 0.35rem;
 }
 
 .hud-tl .timer-display {
-  font-size: clamp(1.05rem, 3.5vw, 1.4rem);
-  min-width: 4.4rem;
+  font-size: clamp(0.95rem, 2.8vw, 1.2rem);
+  min-width: 3.6rem;
   font-family: var(--mono);
   font-weight: 750;
   color: var(--text);
-  background: rgba(6, 10, 16, 0.88);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 0.2rem 0.5rem;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0.05rem 0.25rem;
 }
 
 .hud-tl .chord-now {
-  font-size: 0.95rem;
+  font-size: 0.82rem;
   font-weight: 700;
   color: var(--warn);
-  max-width: 100%;
+  max-width: 11rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  background: rgba(6, 10, 16, 0.88);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 0.15rem 0.4rem;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0.05rem 0.25rem;
 }
 
 .status-pill {
-  font-size: 0.82rem;
-  font-weight: 700;
-  color: var(--text);
-  background: rgba(6, 10, 16, 0.88);
-  border: 1px solid var(--border);
-}
-
-.hud-tr {
-  top: 0.35rem;
-  right: 0.35rem;
-  justify-content: flex-end;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.12rem;
-  max-width: min(38%, 9.25rem);
-  background: rgba(12, 18, 26, 0.88);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 0.28rem;
-  z-index: 7;
-}
-.hud-tr .hud-challenge {
-  grid-column: 1 / -1;
-  display: flex;
-  align-items: center;
-  gap: 0.3rem;
   font-size: 0.72rem;
   font-weight: 700;
   color: var(--text);
-  padding: 0.12rem 0.2rem;
+  background: rgba(20, 28, 40, 0.9);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.12rem 0.4rem;
+}
+
+/* Score strip: top band, stops before right key gutter */
+.hud-tr {
+  top: 0.2rem;
+  right: var(--hud-safe-r);
+  left: auto;
+  justify-content: flex-end;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  gap: 0.25rem;
+  max-width: min(40%, 16rem);
+  background: rgba(12, 18, 26, 0.88);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.18rem 0.35rem;
+  z-index: 7;
+}
+.hud-tr .hud-challenge {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--text);
+  padding: 0 0.15rem;
   pointer-events: auto;
   margin: 0;
+  white-space: nowrap;
 }
 
 .hud-tr .hud-score,
@@ -1301,60 +1317,73 @@ button:focus-visible,
 .hud-tr .hud-quality {
   background: transparent;
   border: none;
-  padding: 0.12rem;
-  font-size: 0.72rem;
+  padding: 0.05rem 0.2rem;
+  font-size: 0.65rem;
   min-height: auto;
   color: var(--text-muted);
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 0.2rem;
+  white-space: nowrap;
 }
 
 .hud-tr strong {
-  font-size: 0.95rem;
+  font-size: 0.85rem;
   color: var(--text);
 }
 
 .hud-tr .hud-quality {
-  grid-column: 1 / -1;
-  min-height: 1.55rem;
-  font-size: 0.85rem !important;
+  min-height: auto;
+  font-size: 0.75rem !important;
   font-weight: 800;
 }
 
+/* Bottom horizontal rail: Start | mic | piano — leave right gutter for keys */
 .hud-bl {
-  bottom: 0.4rem;
-  left: 0.4rem;
-  max-width: min(44%, 12.5rem);
+  bottom: 0.2rem;
+  left: 0.3rem;
+  max-width: min(36%, 13rem);
   z-index: 7;
-  background: rgba(8, 12, 18, 0.82);
+  background: rgba(8, 12, 18, 0.88);
   border-radius: 10px;
-  padding: 0.25rem;
-  gap: 0.3rem;
+  padding: 0.18rem 0.3rem;
+  gap: 0.25rem;
   border: 1px solid var(--border);
+  flex-direction: row;
+  flex-wrap: nowrap;
 }
 
 .hud-bl .btn-sm {
-  padding: 0.5rem 0.85rem;
-  min-height: var(--min-tap);
-  font-size: 0.9rem;
+  padding: 0.4rem 0.7rem;
+  min-height: 40px;
+  font-size: 0.85rem;
   font-weight: 700;
 }
 
 .hud-br {
-  bottom: 0.4rem;
-  right: 0.4rem;
+  bottom: 0.2rem;
+  right: var(--hud-safe-r);
+  left: auto;
   justify-content: flex-end;
-  max-width: min(50%, 13rem);
+  max-width: min(38%, 15rem);
+  max-height: 2.75rem;
+  overflow: hidden;
   background: rgba(8, 12, 18, 0.9);
   border-radius: 10px;
-  padding: 0.28rem 0.4rem;
+  padding: 0.12rem 0.28rem;
   border: 1px solid var(--border);
-  gap: 0.2rem;
+  gap: 0.12rem;
   z-index: 7;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
 }
 .hud-br .hud-piano-more {
   pointer-events: auto;
-  min-height: 32px;
-  padding: 0.2rem 0.45rem;
-  font-size: 0.78rem;
+  min-height: 30px;
+  padding: 0.15rem 0.4rem;
+  font-size: 0.74rem;
   border-radius: 8px;
   border: 1px solid var(--border);
   background: rgba(20, 28, 40, 0.9);
@@ -1366,24 +1395,29 @@ button:focus-visible,
 }
 
 .hud-br .piano-opt {
-  font-size: 0.78rem;
-  padding: 0.2rem 0.35rem;
+  font-size: 0.72rem;
+  padding: 0.12rem 0.28rem;
   color: var(--text-muted);
-  min-height: 2rem;
+  min-height: 1.75rem;
   align-items: center;
+  white-space: nowrap;
 }
 
 .hud-check {
   background: rgba(12, 18, 26, 0.7);
   border-radius: 999px;
-  padding: 0.2rem 0.5rem;
-  font-size: 0.8rem;
+  padding: 0.15rem 0.4rem;
+  font-size: 0.75rem;
   color: var(--text);
 }
 
+/* Canvas lives in middle 80% — HUDs use top/bottom 10% only */
 .pitch-stage {
   position: absolute;
-  inset: 0;
+  top: var(--hud-safe-t);
+  bottom: var(--hud-safe-b);
+  left: 0;
+  right: 0;
   z-index: 1;
   margin: 0;
   padding: 0;
@@ -1393,11 +1427,10 @@ button:focus-visible,
 }
 
 .pitch-stage .pitch-canvas {
-  /* Fill sticky stage so practice is above the fold */
   height: 100%;
   min-height: 100%;
   max-height: none;
-  border-radius: 12px;
+  border-radius: 8px;
   display: block;
   width: 100%;
   border: none;
@@ -1405,23 +1438,23 @@ button:focus-visible,
   background: #0a1018;
 }
 
-/* Bottom-center mic + level HUD */
+/* Mic bar: bottom band center, not covering right key column */
 .hud-bc {
-  left: 50%;
+  left: 38%;
   right: auto;
-  bottom: 0.45rem;
-  transform: translateX(-50%);
-  flex-direction: column;
+  bottom: 0.2rem;
+  transform: none;
+  flex-direction: row;
   align-items: center;
-  gap: 0.2rem;
-  max-width: min(52%, 16rem);
-  width: min(52%, 16rem);
+  gap: 0.35rem;
+  max-width: min(24%, 11rem);
+  width: min(24%, 11rem);
   z-index: 7;
   pointer-events: none;
-  background: rgba(6, 10, 16, 0.72);
+  background: rgba(6, 10, 16, 0.78);
   border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 0.28rem 0.55rem 0.35rem;
+  border-radius: 10px;
+  padding: 0.15rem 0.4rem;
 }
 .hud-bc .mic-sens-label,
 .hud-bc .practice-meter {
@@ -1433,8 +1466,18 @@ button:focus-visible,
   transform: none;
   bottom: auto;
   width: 100%;
+  flex: 1 1 auto;
+  min-width: 2.5rem;
   margin: 0;
-  height: 8px;
+  height: 6px;
+}
+.hud-bc .mic-sens-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  gap: 0.2rem;
+}
+.hud-bc .mic-sens-title {
+  font-size: 0.65rem;
 }
 .mic-sens-label {
   display: flex;
@@ -1475,11 +1518,11 @@ button:focus-visible,
 /* Non-pitch focus area inside sticky stage — center safe zone only */
 .mode-focus {
   position: absolute;
-  /* Stay clear of TL/TR/BL/BR + bottom mic bar */
-  top: 4.75rem;
-  right: 0.85rem;
-  bottom: 5.5rem;
-  left: 0.85rem;
+  /* Stay clear of top/bottom 10% HUD bands + right key gutter */
+  top: calc(var(--hud-safe-t, 10%) + 0.15rem);
+  right: max(0.5rem, var(--hud-safe-r, 14%));
+  bottom: calc(var(--hud-safe-b, 10%) + 0.15rem);
+  left: 0.5rem;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1522,9 +1565,9 @@ button:focus-visible,
 
 /* Speech stage: fill fold with live mode panel between TL and BL */
 .highway-stage:has(.mode-focus-live) {
-  min-height: min(62dvh, 460px);
-  max-height: min(78dvh, 600px);
-  height: min(70dvh, 560px);
+  min-height: min(72dvh, 560px);
+  max-height: min(88dvh, 780px);
+  height: min(80dvh, 728px);
 }
 /* Compact TL on speech so more room for live mode */
 .highway-stage:has(.mode-focus-live) .hud-tl {
@@ -1687,53 +1730,65 @@ body.view-exercise .mode-hud-compact {
   :root {
     --header-h: 58px;
   }
+  .highway-stage {
+    --hud-safe-r: 18%;
+  }
   .hud-tl {
-    max-width: min(42%, 8.5rem);
+    max-width: min(42%, 9rem);
   }
   .hud-tr {
-    /* Keep TR short so it never collides with BR on phones */
-    max-width: min(40%, 8.25rem);
-    max-height: 6.5rem;
+    max-width: min(32%, 7.25rem);
+    max-height: 2.2rem;
     overflow: hidden;
-    font-size: 0.68rem;
-    padding: 0.18rem;
-    gap: 0.08rem;
+    font-size: 0.6rem;
+    padding: 0.08rem 0.14rem;
+    gap: 0.05rem;
+    right: var(--hud-safe-r);
   }
   .hud-tr .hud-score,
   .hud-tr .hud-combo,
   .hud-tr .hud-acc {
-    padding: 0.05rem;
+    padding: 0.04rem;
   }
   .hud-tr .hud-quality {
-    min-height: 1.2rem;
-    font-size: 0.75rem !important;
+    min-height: auto;
+    font-size: 0.65rem !important;
   }
   .hud-tr .hud-challenge {
-    font-size: 0.65rem;
-    padding: 0.05rem 0.1rem;
+    display: none; /* reclaim top band on phone */
   }
-  /* Stack BR fully above BL (Start row can be ~3rem tall) */
+  /* Bottom: BL | BC | BR without overlap; right gutter free */
   .hud-bl {
-    max-width: min(58%, 10.5rem);
-    bottom: 0.3rem;
-    left: 0.3rem;
+    max-width: min(38%, 8.25rem);
+    bottom: 0.12rem;
+    left: 0.15rem;
   }
   .hud-br {
-    /* Compact strip above mic — must not climb into TR */
-    max-width: min(48%, 8.75rem);
-    max-height: 3.6rem;
+    max-width: min(28%, 6.25rem);
+    max-height: 2.2rem;
     overflow: hidden;
-    bottom: 6.6rem;
-    right: 0.3rem;
+    bottom: 0.12rem;
+    right: var(--hud-safe-r);
     left: auto;
-    padding: 0.18rem 0.28rem;
-    gap: 0.12rem;
+    padding: 0.08rem 0.12rem;
+    gap: 0.05rem;
   }
   .hud-bc {
-    bottom: 3.4rem; /* above Start, below piano opts */
-    width: min(56%, 11.5rem);
-    max-width: min(56%, 11.5rem);
-    padding: 0.15rem 0.3rem;
+    bottom: 2.55rem; /* above BL/BR row on phone */
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(42%, 9rem);
+    max-width: min(42%, 9rem);
+    padding: 0.08rem 0.25rem;
+  }
+  .hud-br .piano-opt:not(:has(#chk-one-note)) {
+    display: none;
+  }
+  .hud-br .piano-opt:has(#chk-one-note) {
+    display: flex !important;
+  }
+  .hud-br .hud-piano-more {
+    display: none; /* open piano panel from menu only on phone — avoid nest bleed */
   }
   .mic-sens-title {
     font-size: 0.65rem;

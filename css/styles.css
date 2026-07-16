@@ -1421,14 +1421,29 @@ body.view-exercise .hud-cents-only .hud-score .hud-label {
     max-width: min(42%, 9rem);
     font-size: 0.7rem;
   }
+  /* Stack BR fully above BL (Start row can be ~3rem tall) */
   .hud-bl {
-    max-width: min(52%, 11rem);
+    max-width: min(62%, 11rem);
+    bottom: 0.3rem;
+    left: 0.3rem;
   }
   .hud-br {
-    max-width: min(50%, 9.5rem);
+    max-width: min(70%, 11rem);
+    /* BL height ≈ 44–90px + gap → keep BR clear of Start */
+    bottom: 5.75rem;
+    right: 0.3rem;
+    left: auto;
   }
   .hud-br .piano-opt span {
     display: none; /* checkboxes only on tiny screens */
+  }
+  .hud-bl .btn-sm {
+    min-height: 40px;
+    padding: 0.4rem 0.65rem;
+    font-size: 0.85rem;
+  }
+  .hud-bl #opt-auto-record {
+    display: none; /* save width on phone — still available when piano panel opens */
   }
   .pitch-stage .pitch-canvas {
     height: min(52vh, 380px);
@@ -1440,6 +1455,17 @@ body.view-exercise .hud-cents-only .hud-score .hud-label {
   .highway-stage {
     min-height: 240px;
     max-height: min(62dvh, 440px);
+  }
+  /* Header actions wrap cleanly; no horizontal overflow */
+  .header-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    max-width: 100%;
+  }
+  .header-actions .btn-sm {
+    min-height: 36px;
+    padding: 0.35rem 0.55rem;
+    font-size: 0.78rem;
   }
 }
 

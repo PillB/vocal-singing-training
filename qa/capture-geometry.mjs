@@ -19,6 +19,7 @@ const SELECTORS = [
   "header.app-header",
   ".header-actions",
   "#btn-lang",
+  "#btn-tour",
   "#btn-history",
   "#btn-plan",
   "#view-home",
@@ -124,10 +125,20 @@ async function main() {
   const page = await browser.newPage({ viewport: VIEWPORT });
   page.on("pageerror", (e) => console.error("PAGEERROR", e.message));
 
-  // Force Spanish clean
+  // Force Spanish clean; suppress intro tour for stable geometry
   await page.goto(BASE);
-  await page.evaluate(() => localStorage.setItem("vt_lang", "es"));
+  await page.evaluate(() => {
+    localStorage.setItem("vt_lang", "es");
+    localStorage.setItem("vt_tour_v1", "1");
+    sessionStorage.setItem("vt_e2e", "1");
+  });
   await page.goto(BASE, { waitUntil: "networkidle" });
+  // Close tour if it still appeared
+  await page.evaluate(() => {
+    const root = document.getElementById("tour-root");
+    if (root) root.hidden = true;
+    document.body.classList.remove("tour-active");
+  });
 
   const pages = [];
 

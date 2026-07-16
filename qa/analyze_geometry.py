@@ -23,11 +23,13 @@ PEER_SELECTORS = {
     "#btn-practice-stop",
     "#btn-back-home",
     "#btn-lang",
+    "#btn-tour",
     "#btn-history",
     "#btn-plan",
     "#btn-continue",
     "#btn-structured",
     "#btn-complete",
+    "#btn-practice-start",
 }
 
 

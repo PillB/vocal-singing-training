@@ -33,14 +33,14 @@
     return `${sol}${oct}`;
   }
 
-  /** Dual label: letter + solfège e.g. "C3 · Do" */
+  /** Dual label: letter + solfège e.g. "C3 Do" (compact — fits right gutter) */
   function midiToDualLabel(midi, withOct = true) {
     const rounded = Math.round(midi);
     const letter = NOTE_NAMES[((rounded % 12) + 12) % 12];
     const sol = SOLFEGE[((rounded % 12) + 12) % 12];
-    if (!withOct) return `${letter} · ${sol}`;
+    if (!withOct) return `${letter} ${sol}`;
     const oct = Math.floor(rounded / 12) - 1;
-    return `${letter}${oct} · ${sol}`;
+    return `${letter}${oct} ${sol}`;
   }
 
   /** Parse note name like C3 / Bb2 → dual label */
@@ -59,7 +59,24 @@
     if (idx < 0) return String(name);
     const sol = SOLFEGE[idx];
     const display = m[1].toUpperCase() + (m[2] || "") + (m[3] || "");
-    return m[3] != null ? `${display} · ${sol}` : `${display} · ${sol}`;
+    return `${display} ${sol}`;
+  }
+
+  /** Fit label into max width: shrink font, then truncate with … */
+  function fitCanvasLabel(ctx, text, maxW, preferFont) {
+    let font = preferFont;
+    let t = String(text || "");
+    ctx.font = font;
+    if (ctx.measureText(t).width <= maxW) return { text: t, font };
+    // Drop size once
+    font = font.replace(/(\d+)px/, (_, n) => `${Math.max(9, Number(n) - 2)}px`);
+    ctx.font = font;
+    if (ctx.measureText(t).width <= maxW) return { text: t, font };
+    // Truncate
+    while (t.length > 2 && ctx.measureText(t + "…").width > maxW) {
+      t = t.slice(0, -1);
+    }
+    return { text: t.length < String(text || "").length ? t + "…" : t, font };
   }
 
   /**
@@ -704,24 +721,22 @@
         (global.VTI18n && global.VTI18n.lang === "es") ||
         document.documentElement.lang === "es";
       ctx.fillStyle = "#e8eef6";
-      ctx.font = "700 15px system-ui,sans-serif";
+      ctx.font = "700 14px system-ui,sans-serif";
       ctx.textAlign = "center";
-      ctx.fillText(
-        es
-          ? "Autopista de afinación · Empieza y canta en el carril verde"
-          : "Pitch highway · Start practice & sing into the green lane",
-        w / 2,
-        h / 2 + 22
-      );
-      ctx.font = "600 13px system-ui,sans-serif";
+      const idle1 = es
+        ? "Autopista · canta en el carril verde"
+        : "Highway · sing in the green lane";
+      const idle2 = es
+        ? "Mantente en el carril · gana precisión"
+        : "Stay in lane · build precision";
+      const maxIdle = w * 0.88;
+      const f1 = fitCanvasLabel(ctx, idle1, maxIdle, "700 14px system-ui,sans-serif");
+      ctx.font = f1.font;
+      ctx.fillText(f1.text, w / 2, h / 2 + 22);
+      const f2 = fitCanvasLabel(ctx, idle2, maxIdle, "600 12px system-ui,sans-serif");
+      ctx.font = f2.font;
       ctx.fillStyle = "#c5d4e8";
-      ctx.fillText(
-        es
-          ? "Mantente en el carril · gana precisión · bloquea notas"
-          : "Stay in the lane · build precision · lock notes",
-        w / 2,
-        h / 2 + 44
-      );
+      ctx.fillText(f2.text, w / 2, h / 2 + 42);
       this._drawKeyboard(ctx, w, h, null, null);
     }
 
@@ -772,34 +787,56 @@
       );
       const primaryMidi = Math.round(freqToMidi(this.targetFreq) * 2) / 2;
 
-      const drawLane = (lane, mode) => {
-        // mode: ghost | active | primary
+      // Right gutter for dual labels (~14%); never paint past canvas edge
+      const gutter = Math.max(72, Math.min(w * 0.14, 140));
+      const laneRight = Math.max(8, w - gutter);
+      const labelMaxW = gutter - 12;
+      const labelPadR = 6;
+      // Label Ys reserved by priority paint (primary > active > ghost)
+      const usedLabelYs = [];
+      const canPlaceLabel = (y) => {
+        for (let i = 0; i < usedLabelYs.length; i++) {
+          if (Math.abs(usedLabelYs[i] - y) < 13) return false;
+        }
+        usedLabelYs.push(y);
+        return true;
+      };
+      const paintRightLabel = (y, text, preferFont, fill, showDot) => {
+        if (!canPlaceLabel(y)) return;
+        const fitted = fitCanvasLabel(ctx, text, labelMaxW - (showDot ? 12 : 0), preferFont);
+        ctx.font = fitted.font;
+        ctx.textAlign = "right";
+        const tw = ctx.measureText(fitted.text).width;
+        const boxW = tw + (showDot ? 18 : 10);
+        const boxX = Math.max(laneRight + 2, w - labelPadR - boxW);
+        ctx.fillStyle = "rgba(6, 10, 16, 0.82)";
+        ctx.fillRect(boxX, y - 9, Math.min(boxW, gutter - 4), 16);
+        if (showDot) {
+          ctx.beginPath();
+          ctx.fillStyle = fill;
+          ctx.arc(boxX + 8, y - 1, 3.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.fillStyle = fill;
+        ctx.fillText(fitted.text, w - labelPadR - 4, y + 3);
+      };
+
+      const drawLaneBand = (lane, mode) => {
         const y = this._midiToY(lane.midi, centerMidi, graphH);
         if (mode === "ghost") {
           ctx.fillStyle = "rgba(120, 150, 190, 0.12)";
-          ctx.fillRect(0, y - laneHalf * 0.75, w, laneHalf * 1.5);
+          ctx.fillRect(0, y - laneHalf * 0.75, laneRight, laneHalf * 1.5);
           ctx.strokeStyle = "rgba(180, 200, 230, 0.45)";
           ctx.lineWidth = 1.5;
           ctx.setLineDash([3, 5]);
           ctx.beginPath();
           ctx.moveTo(0, y);
-          ctx.lineTo(w, y);
+          ctx.lineTo(laneRight, y);
           ctx.stroke();
           ctx.setLineDash([]);
-          // Right-edge dual labels (letter + solfège) — keep clear of HUD rails
-          const gLab = lane.label || noteNameToDual(lane.midi);
-          ctx.font = "600 11px system-ui,sans-serif";
-          const gw = ctx.measureText(gLab).width;
-          ctx.fillStyle = "rgba(6, 10, 16, 0.72)";
-          ctx.fillRect(w - gw - 14, y - 10, gw + 10, 16);
-          ctx.fillStyle = "#c8d6ea";
-          ctx.textAlign = "right";
-          ctx.fillText(gLab, w - 8, y + 2);
-          return;
+          return y;
         }
         const isPrimary = mode === "primary";
-        // Leave right ~14% free for dual note labels (no HUD there)
-        const laneRight = w * 0.86;
         ctx.fillStyle = isPrimary
           ? "rgba(79, 212, 146, 0.32)"
           : "rgba(240, 184, 80, 0.26)";
@@ -818,40 +855,54 @@
         ctx.lineTo(laneRight, y);
         ctx.stroke();
         ctx.shadowBlur = 0;
-        const esLane =
-          (global.VTI18n && global.VTI18n.lang === "es") ||
-          document.documentElement.lang === "es";
-        const dual = lane.label || noteNameToDual(lane.midi);
-        const cue = isPrimary
-          ? esLane
-            ? " ● canta"
-            : " ● sing"
-          : esLane
-            ? " · on"
-            : " · on";
-        // Label on the RIGHT (keys), not under top/bottom HUD rails
-        const label = dual + cue;
-        ctx.font = isPrimary
-          ? "800 12px system-ui,sans-serif"
-          : "700 11px system-ui,sans-serif";
-        ctx.textAlign = "right";
-        const tw = ctx.measureText(label).width;
-        ctx.fillStyle = "rgba(6, 10, 16, 0.82)";
-        ctx.fillRect(w - tw - 14, y - 9, tw + 10, 16);
-        ctx.fillStyle = isPrimary ? "#d4ffe8" : "#ffe8b8";
-        ctx.fillText(label, w - 8, y + 3);
+        return y;
       };
 
-      // Ghost: all progression tones not currently active
+      const ghostLanes = [];
       (this.progressionLanes || []).forEach((lane) => {
         const k = Math.round(lane.midi * 2) / 2;
         if (activeMidis.has(k)) return;
-        drawLane(lane, "ghost");
+        const y = drawLaneBand(lane, "ghost");
+        ghostLanes.push({ lane, y });
       });
-      // Active chord tones
+      const activeDrawn = [];
       (this.chordLanes || []).forEach((lane) => {
         const k = Math.round(lane.midi * 2) / 2;
-        drawLane(lane, k === primaryMidi ? "primary" : "active");
+        const mode = k === primaryMidi ? "primary" : "active";
+        const y = drawLaneBand(lane, mode);
+        activeDrawn.push({ lane, y, mode });
+      });
+      // Labels by priority so sing target always wins dense stacks
+      activeDrawn
+        .filter((d) => d.mode === "primary")
+        .forEach((d) => {
+          paintRightLabel(
+            d.y,
+            d.lane.label || noteNameToDual(d.lane.midi),
+            "800 11px system-ui,sans-serif",
+            "#d4ffe8",
+            true
+          );
+        });
+      activeDrawn
+        .filter((d) => d.mode === "active")
+        .forEach((d) => {
+          paintRightLabel(
+            d.y,
+            d.lane.label || noteNameToDual(d.lane.midi),
+            "700 10px system-ui,sans-serif",
+            "#ffe8b8",
+            false
+          );
+        });
+      ghostLanes.forEach((d) => {
+        paintRightLabel(
+          d.y,
+          d.lane.label || noteNameToDual(d.lane.midi),
+          "600 10px system-ui,sans-serif",
+          "#c8d6ea",
+          false
+        );
       });
 
       // Fallback single lane when no chord context
@@ -881,32 +932,40 @@
         ctx.setLineDash([]);
       }
 
-      // Range labels + active chord badge (high contrast)
-      ctx.font = "700 13px ui-monospace,monospace";
-      ctx.textAlign = "left";
-      const hiY = this._midiToY(hi, centerMidi, graphH) + 4;
-      const loY = this._midiToY(lo, centerMidi, graphH) + 4;
-      // Range labels bottom-left of graph (not under top HUD band)
-      ctx.font = "600 10px ui-monospace,monospace";
+      // Range labels left edge (compact dual, clamp into graph)
+      const hiY = Math.max(12, Math.min(graphH - 4, this._midiToY(hi, centerMidi, graphH) + 4));
+      const loY = Math.max(12, Math.min(graphH - 4, this._midiToY(lo, centerMidi, graphH) + 4));
       ctx.textAlign = "left";
       const hiLab = midiToDualLabel(hi, false);
       const loLab = midiToDualLabel(lo, false);
-      ctx.fillStyle = "rgba(6, 10, 16, 0.75)";
-      ctx.fillRect(2, hiY - 10, ctx.measureText(hiLab).width + 8, 14);
-      ctx.fillRect(2, loY - 10, ctx.measureText(loLab).width + 8, 14);
-      ctx.fillStyle = "#e8eef6";
-      ctx.fillText(hiLab, 6, hiY);
-      ctx.fillText(loLab, 6, loY);
-      // Chord/note badge sits in top safe band center — short so HUDs stay horizontal
+      const leftMax = Math.min(96, w * 0.2);
+      const paintLeft = (lab, y) => {
+        const f = fitCanvasLabel(ctx, lab, leftMax, "600 10px ui-monospace,monospace");
+        ctx.font = f.font;
+        const tw = ctx.measureText(f.text).width;
+        ctx.fillStyle = "rgba(6, 10, 16, 0.75)";
+        ctx.fillRect(2, y - 10, tw + 8, 14);
+        ctx.fillStyle = "#e8eef6";
+        ctx.fillText(f.text, 6, y);
+      };
+      paintLeft(hiLab, hiY);
+      if (Math.abs(loY - hiY) >= 14) paintLeft(loLab, loY);
+      // Chord/note badge — clamp width so it never clips under TR/TL
       if (this.activeChordName) {
-        ctx.font = "700 12px system-ui,sans-serif";
         ctx.textAlign = "center";
-        const cn = this.activeChordName;
-        const cw = Math.min(ctx.measureText(cn).width, w * 0.4);
+        const cnMax = Math.min(w * 0.36, 200);
+        const f = fitCanvasLabel(
+          ctx,
+          this.activeChordName,
+          cnMax,
+          "700 11px system-ui,sans-serif"
+        );
+        ctx.font = f.font;
+        const cw = ctx.measureText(f.text).width;
         ctx.fillStyle = "rgba(6, 10, 16, 0.75)";
         ctx.fillRect(w / 2 - cw / 2 - 6, graphH * 0.02, cw + 12, 16);
         ctx.fillStyle = "#ffe8b8";
-        ctx.fillText(cn, w / 2, graphH * 0.02 + 12);
+        ctx.fillText(f.text, w / 2, graphH * 0.02 + 12);
       }
 
       const n = this.history.length;

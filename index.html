@@ -107,13 +107,13 @@
             <div class="hud-corner hud-tl">
               <span class="status-pill" id="practice-status" data-i18n="practice.ready">Listo</span>
               <span class="timer-display" id="timer-display">05:00</span>
-              <span class="hold-live" id="hold-display" hidden>Sostenido 0.0s</span>
+              <span class="hold-live" id="hold-display" hidden title="Hold">↓0.0s</span>
               <span class="chord-now" id="chord-now">—</span>
             </div>
             <div class="hud-corner hud-tr" id="pitch-game-hud" aria-live="polite">
-              <div class="hud-score"><span class="hud-label" data-i18n="pitch.score">Puntaje</span><strong id="hud-score">0</strong></div>
+              <div class="hud-score"><span class="hud-label" data-i18n="pitch.score">Pts</span><strong id="hud-score">0</strong></div>
               <div class="hud-combo"><span class="hud-label" data-i18n="pitch.combo">Combo</span><strong id="hud-combo">×0</strong></div>
-              <div class="hud-acc"><span class="hud-label" data-i18n="pitch.inLane">En el carril</span><strong id="hud-acc">0%</strong></div>
+              <div class="hud-acc"><span class="hud-label" data-i18n="pitch.inLane">Carril</span><strong id="hud-acc">0%</strong></div>
               <div class="hud-quality" id="hud-quality">—</div>
               <!-- Challenge toggle lives in TR so it never needs scroll -->
               <label class="muted piano-opt hud-challenge" id="pitch-challenge-row" hidden>
@@ -130,21 +130,28 @@
               </label>
             </div>
             <div class="hud-corner hud-br" id="piano-mini-opts">
-              <label class="muted piano-opt" title="One note at a time (not full chords)">
+              <label class="muted piano-opt" title="One note at a time">
                 <input type="checkbox" id="chk-one-note" />
-                <span data-i18n="piano.oneNote">1 nota</span>
+                <span data-i18n="piano.oneNote">1n</span>
               </label>
-              <label class="muted piano-opt"><input type="checkbox" id="chk-arpeggio" /> <span data-i18n="piano.arpeggio">Arpegio</span></label>
-              <label class="muted piano-opt"><input type="checkbox" id="chk-sustain" checked /> <span data-i18n="piano.sustain">Sostener</span></label>
+              <label class="muted piano-opt piano-opt-arp" title="Arpeggio / Arpegio">
+                <input type="checkbox" id="chk-arpeggio" aria-label="Arpeggio" />
+                <span class="sr-only" data-i18n="piano.arpeggio">Arp.</span>
+              </label>
+              <label class="muted piano-opt" title="Sustain / Sostener">
+                <input type="checkbox" id="chk-sustain" checked />
+                <span data-i18n="piano.sustain">Sost.</span>
+              </label>
               <label class="muted piano-opt">
-                <select id="sustain-sec" class="select-inline" aria-label="Segundos de sostenido">
+                <select id="sustain-sec" class="select-inline" aria-label="Sustain seconds">
                   <option value="3">3s</option>
                   <option value="4" selected>4s</option>
                   <option value="5">5s</option>
                 </select>
               </label>
-              <label class="muted piano-opt" id="opt-auto-piano">
-                <input type="checkbox" id="chk-auto-piano" checked /> <span data-i18n="piano.auto">Auto piano</span>
+              <label class="muted piano-opt" id="opt-auto-piano" title="Auto piano">
+                <input type="checkbox" id="chk-auto-piano" checked />
+                <span data-i18n="piano.auto">Auto</span>
               </label>
               <button type="button" class="btn btn-ghost btn-xs hud-piano-more" id="btn-toggle-piano" aria-expanded="false" aria-controls="piano-block" data-i18n="piano.more" title="Piano y progresiones">🎹+</button>
             </div>

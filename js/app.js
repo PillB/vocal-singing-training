@@ -1391,7 +1391,19 @@
       (document.documentElement.lang || "").startsWith("es");
     const acc = stats.accuracyCents != null ? Math.round(stats.accuracyCents) : 0;
     const prec = stats.precisionCents != null ? Math.round(stats.precisionCents) : 0;
+    // Short HUD words (long phrases overflow the TR corner)
     const accWord = es
+      ? Math.abs(acc) <= 25
+        ? "tono"
+        : acc > 0
+          ? "↑ agudo"
+          : "↓ grave"
+      : Math.abs(acc) <= 25
+        ? "in"
+        : acc > 0
+          ? "↑ sharp"
+          : "↓ flat";
+    const accWordLong = es
       ? Math.abs(acc) <= 25
         ? "en el tono"
         : acc > 0
@@ -1417,7 +1429,7 @@
     el.innerHTML = `
       <span><strong>${es ? "Objetivo" : "Target"}</strong> ${stats.targetName || "—"}</span>
       <span><strong>${es ? "Tú" : "You"}</strong> ${stats.voiceName || "—"}</span>
-      <span><strong>Cents</strong> ${acc > 0 ? "+" : ""}${acc}¢ · ${accWord}</span>
+      <span><strong>Cents</strong> ${acc > 0 ? "+" : ""}${acc}¢ · ${accWordLong}</span>
       <span><strong>${es ? "Precisión" : "Precision"}</strong> ±${prec}¢ · ${precWord}</span>
       ${g ? `<span><strong>${es ? "Juego" : "Game"}</strong> ${g.score} pts · ${g.accuracyPct}%</span>` : ""}
     `;
@@ -1441,8 +1453,17 @@
       if (accEl) accEl.textContent = accWord;
       const score = $("#hud-score");
       const combo = $("#hud-combo");
-      if (score) score.textContent = stats.targetName || "—";
-      if (combo) combo.textContent = stats.voiceName || "—";
+      // Prefer short letter form in the tight TR strip
+      if (score) {
+        const t = stats.targetName || "—";
+        score.textContent = String(t).split(" ")[0] || t;
+        score.title = t;
+      }
+      if (combo) {
+        const v = stats.voiceName || "—";
+        combo.textContent = String(v).split(" ")[0] || v;
+        combo.title = v;
+      }
     }
     if (g) updateGameHud(g);
   }

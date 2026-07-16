@@ -71,8 +71,10 @@
       this.holdStart = null;
       this.currentHoldSec = 0;
       this.lastVoiceAt = 0;
+      this.holds = []; // clear prior session holds on restart
       this.startedAt = performance.now();
       this.running = true;
+      this._lastFrameAt = performance.now();
 
       if (record) await this._startRecorder();
 
@@ -235,16 +237,19 @@
         }
       }
 
+      const dtMs = Math.min(50, now - (this._lastFrameAt || now));
+      this._lastFrameAt = now;
       if (this.onFrame) {
         this.onFrame({
           rms,
           voiceFreq: this.voiceFreq,
           targetFreq: this.targetFreq,
           holdSec: this.currentHoldSec,
-          voiced: !!this.holdStart,
+          voiced: !!(this.holdStart && hasVoice),
           holds: this.holds,
           recording: this.recording,
-          elapsedMs: now - this.startedAt
+          elapsedMs: now - this.startedAt,
+          dtMs
         });
       }
 

@@ -58,7 +58,7 @@
 
   /** Base helpers for all modes */
   function baseMode(spec) {
-    return {
+    const mode = {
       id: spec.id,
       state: {},
       profile: null,
@@ -82,14 +82,26 @@
       onFrame(frame) {
         if (spec.onFrame) spec.onFrame.call(this, frame);
       },
-      onStop() {
-        if (spec.onStop) return spec.onStop.call(this) || { patches: this.state.patches };
+      onStop(ctx) {
+        if (spec.onStop) return spec.onStop.call(this, ctx) || { patches: this.state.patches };
         return { patches: this.state.patches || {}, summary: "" };
       },
       $(sel) {
         return this.hud ? this.hud.querySelector(sel) : null;
       }
     };
+    // Bind helper methods from spec (e.g. _setStepTarget, _pushTarget)
+    Object.keys(spec).forEach((k) => {
+      if (
+        typeof spec[k] === "function" &&
+        !["render", "onStart", "onFrame", "onStop"].includes(k)
+      ) {
+        mode[k] = function (...args) {
+          return spec[k].apply(this, args);
+        };
+      }
+    });
+    return mode;
   }
 
   // ——— VOCAL ———
@@ -102,11 +114,12 @@
         if (global.VTToast) global.VTToast(`Phase: ${p.label}`);
       });
       this.hud.innerHTML = `
-        <div class="mode-title">Rate ladder</div>
+        <div class="mode-title">Diction · rate ladder</div>
         <div class="mode-phase" data-phase>—</div>
         <div class="mode-big" data-remain>—</div>
         <div class="mode-bar"><span data-bar style="width:0%"></span></div>
-        <p class="mode-meta">Speech activity: <strong data-act>0%</strong> · Phases done: <strong data-done>0</strong>/${phases.length}</p>
+        <p class="mode-meta">Over-articulate now · speech on: <strong data-act>0%</strong> · phases: <strong data-done>0</strong>/${phases.length}</p>
+        <p class="mode-meta muted">Imagine a metronome clicking faster each phase — keep consonants crisp.</p>
       `;
     },
     onFrame(frame) {
@@ -118,36 +131,75 @@
       const pct = phase ? clamp(((total - r.remaining) / total) * 100, 0, 100) : 100;
       if (this.$("[data-phase]"))
         this.$("[data-phase]").textContent =
-          r.index < r.count ? r.label : "Ladder complete";
+          r.index < r.count ? r.label : "Ladder complete — free mix";
       if (this.$("[data-remain]"))
         this.$("[data-remain]").textContent =
           r.index < r.count ? `${Math.ceil(r.remaining)}s` : "✓";
       if (this.$("[data-bar]")) this.$("[data-bar]").style.width = `${pct}%`;
-      // activity
       this.state.samples = (this.state.samples || 0) + 1;
       if (frame.voiced || frame.rms > 0.02) this.state.active = (this.state.active || 0) + 1;
       const act = Math.round(((this.state.active || 0) / this.state.samples) * 100);
       if (this.$("[data-act]")) this.$("[data-act]").textContent = `${act}%`;
       if (this.$("[data-done]")) this.$("[data-done]").textContent = String(Math.min(r.index, r.count));
-      this.state.patches.phaseCount = Math.min(r.index + (r.remaining <= 0 ? 0 : 0), r.count);
-      if (r.index >= r.count) this.state.patches.phaseCount = r.count;
     },
     onStop() {
       const r = this.state.runner;
-      const done = r ? Math.min(r.index + (r.remaining < (this.profile.phases[r.index]?.sec || 1) * 0.5 ? 1 : 0), r.count) : 0;
+      const done = r ? Math.min(r.count, r.index + (r.remaining <= 0 ? 0 : 1)) : 0;
+      const mins = Math.max(1, Math.round((performance.now() - this.state.startedAt) / 60000));
       return {
         patches: {
-          duration: Math.round((performance.now() - this.state.startedAt) / 60000) || 1,
-          metaphorCount: done,
-          rounds: done,
-          phaseCount: done
+          duration: mins,
+          rateControl: clamp(1 + done, 1, 5)
         },
-        summary: `Completed ${done} phase(s)`
+        summary: `${done}/${r?.count || 0} rate phases · ${mins} min`
       };
     }
   });
 
-  Modes.metronomeSpeech = Modes.rateLadder; // same runner, different labels from profile
+  /** v8 — distinct from rate ladder: log metaphors per topic */
+  Modes.metronomeSpeech = baseMode({
+    id: "metronomeSpeech",
+    render() {
+      const phases = this.profile.phases || [];
+      this.state.runner = createPhaseRunner(phases, (i, p) => {
+        if (global.VTToast) global.VTToast(p.label);
+      });
+      this.state.logged = 0;
+      this.hud.innerHTML = `
+        <div class="mode-title">Metaphor fluency</div>
+        <div class="mode-phase" data-phase>${phases[0]?.label || "Topic"}</div>
+        <div class="mode-big" data-remain>—</div>
+        <button type="button" class="btn btn-primary btn-sm" data-log>I spoke a metaphor ✓</button>
+        <p class="mode-meta">Metaphors logged: <strong data-n>0</strong> / ${phases.length}</p>
+        <p class="mode-meta muted">One concrete image per topic — say it out loud, then tap.</p>
+      `;
+      this.$("[data-log]")?.addEventListener("click", () => {
+        this.state.logged++;
+        if (this.$("[data-n]")) this.$("[data-n]").textContent = String(this.state.logged);
+      });
+    },
+    onFrame() {
+      const r = this.state.runner;
+      if (!r) return;
+      r.tick(performance.now());
+      if (this.$("[data-phase]"))
+        this.$("[data-phase]").textContent =
+          r.index < r.count ? r.label : "All topics done";
+      if (this.$("[data-remain]"))
+        this.$("[data-remain]").textContent =
+          r.index < r.count ? `${Math.ceil(r.remaining)}s` : "✓";
+    },
+    onStop() {
+      const n = this.state.logged || 0;
+      return {
+        patches: {
+          metaphorCount: n,
+          vividness: n >= 5 ? 5 : n >= 3 ? 4 : n >= 1 ? 3 : 2
+        },
+        summary: `${n} metaphors logged`
+      };
+    }
+  });
 
   Modes.volumeSteady = baseMode({
     id: "volumeSteady",
@@ -270,29 +322,50 @@
   Modes.countPace = baseMode({
     id: "countPace",
     render() {
-      this.hud.innerHTML = `
-        <div class="mode-title">Count pace</div>
-        <div class="mode-big" data-t>0:00</div>
-        <p class="mode-meta">Keep a tall oral space. Nudge every 15s.</p>
-        <p class="mode-meta" data-nudge>Ready when you are.</p>
-      `;
+      this.state.count = 0;
       this.state.lastNudge = 0;
+      this.hud.innerHTML = `
+        <div class="mode-title">Soft palate · count to 60</div>
+        <div class="mode-big" data-c>0</div>
+        <div class="controls-row">
+          <button type="button" class="btn btn-primary btn-sm" data-plus>+1 count</button>
+          <button type="button" class="btn btn-sm" data-plus5>+5</button>
+        </div>
+        <p class="mode-meta">Time <strong data-t>0:00</strong> · Target 60 · tall space, tongue gently out</p>
+        <p class="mode-meta" data-nudge>Tap as you count — or +5 every few numbers.</p>
+      `;
+      this.$("[data-plus]")?.addEventListener("click", () => {
+        this.state.count++;
+        if (this.$("[data-c]")) this.$("[data-c]").textContent = String(this.state.count);
+      });
+      this.$("[data-plus5]")?.addEventListener("click", () => {
+        this.state.count += 5;
+        if (this.$("[data-c]")) this.$("[data-c]").textContent = String(this.state.count);
+      });
     },
     onFrame() {
       const sec = Math.floor((performance.now() - this.state.startedAt) / 1000);
-      const m = Math.floor(sec / 60);
-      const s = sec % 60;
       if (this.$("[data-t]"))
-        this.$("[data-t]").textContent = `${m}:${String(s).padStart(2, "0")}`;
+        this.$("[data-t]").textContent = `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
       if (sec > 0 && sec % 15 === 0 && sec !== this.state.lastNudge) {
         this.state.lastNudge = sec;
         if (this.$("[data-nudge]"))
           this.$("[data-nudge]").textContent =
-            sec < 60 ? "Keep counting — soft palate lifted." : "Almost there — stay free in the jaw.";
+            this.state.count < 30
+              ? "Rose-smell lift — keep counting."
+              : "Past 30 — stay free in the jaw.";
       }
     },
     onStop() {
-      return { patches: {}, summary: "Count session complete" };
+      const c = this.state.count || 0;
+      return {
+        patches: {
+          countReached: c,
+          openness: c >= 60 ? 4 : c >= 30 ? 3 : 2,
+          comfort: 3
+        },
+        summary: `Counted to ${c}`
+      };
     }
   });
 
@@ -344,6 +417,7 @@
         <div class="mode-title">Performance take</div>
         <div class="mode-big" data-t>0:00</div>
         <p class="mode-meta">Recording is the practice. One clean take beats five anxious ones.</p>
+        <p class="mode-meta muted">Persona · story · presence — deliver without mid-take judgment.</p>
       `;
     },
     onFrame() {
@@ -353,6 +427,39 @@
     },
     onStop() {
       return { patches: {}, summary: "Take captured" };
+    }
+  });
+
+  Modes.facePhases = baseMode({
+    id: "facePhases",
+    render() {
+      const phases = this.profile.phases || [];
+      this.state.runner = createPhaseRunner(phases, (i, p) => {
+        if (global.VTToast) global.VTToast(p.label);
+      });
+      this.hud.innerHTML = `
+        <div class="mode-title">Facial expressiveness</div>
+        <div class="mode-phase" data-phase>${phases[0]?.label || "Face"}</div>
+        <div class="mode-big" data-remain>—</div>
+        <p class="mode-meta">Change the face with the phase. Review muted after stop.</p>
+      `;
+    },
+    onFrame() {
+      const r = this.state.runner;
+      if (!r) return;
+      r.tick(performance.now());
+      if (this.$("[data-phase]"))
+        this.$("[data-phase]").textContent =
+          r.index < r.count ? r.label : "Done — review muted";
+      if (this.$("[data-remain]"))
+        this.$("[data-remain]").textContent =
+          r.index < r.count ? `${Math.ceil(r.remaining)}s` : "✓";
+    },
+    onStop() {
+      return {
+        patches: {},
+        summary: "Face phases done — review muted for congruence"
+      };
     }
   });
 
@@ -451,50 +558,112 @@
       this.state.pauses = 0;
       this.state.inSilence = false;
       this.state.silenceStart = 0;
+      this.state.hadSpeech = false;
       this.state.minP = (this.profile.minPauseSec || 0.8) * 1000;
-      this.state.timeline = [];
       this.hud.innerHTML = `
-        <div class="mode-title">Pause detector</div>
+        <div class="mode-title">Power pause detector</div>
         <div class="mode-big" data-p>0</div>
-        <p class="mode-meta">Intentional silences ≥ ${this.profile.minPauseSec || 0.8}s</p>
+        <p class="mode-meta">Silences ≥ ${this.profile.minPauseSec || 0.8}s <em>after speech</em> (not idle quiet)</p>
         <div class="silence-timeline" data-tl></div>
-        <p class="mode-meta" data-status>Speak… then pause on purpose.</p>
+        <p class="mode-meta" data-status>Speak a point… then land in silence.</p>
       `;
     },
     onFrame(frame) {
       const now = performance.now();
       const quiet = !frame.voiced && (frame.rms || 0) < 0.02;
-      if (quiet) {
-        if (!this.state.inSilence) {
-          this.state.inSilence = true;
-          this.state.silenceStart = now;
-        } else if (now - this.state.silenceStart >= this.state.minP && !this.state.countedThis) {
-          this.state.pauses++;
-          this.state.countedThis = true;
-          this.state.timeline.push(1);
-          if (this.$("[data-p]")) this.$("[data-p]").textContent = String(this.state.pauses);
-          if (this.$("[data-status]")) this.$("[data-status]").textContent = "Pause counted ✓";
-          if (this.$("[data-tl]")) {
-            const bit = document.createElement("span");
-            bit.className = "tl-pause";
-            this.$("[data-tl]").appendChild(bit);
-          }
-        }
-      } else {
+      if (!quiet) {
+        this.state.hadSpeech = true;
         this.state.inSilence = false;
         this.state.countedThis = false;
         if (this.$("[data-status]")) this.$("[data-status]").textContent = "Speaking…";
+        return;
+      }
+      if (!this.state.hadSpeech) return; // don't score pre-speech silence
+      if (!this.state.inSilence) {
+        this.state.inSilence = true;
+        this.state.silenceStart = now;
+      } else if (now - this.state.silenceStart >= this.state.minP && !this.state.countedThis) {
+        this.state.pauses++;
+        this.state.countedThis = true;
+        this.state.hadSpeech = false; // need speech again before next pause
+        if (this.$("[data-p]")) this.$("[data-p]").textContent = String(this.state.pauses);
+        if (this.$("[data-status]")) this.$("[data-status]").textContent = "Pause counted ✓";
+        if (this.$("[data-tl]")) {
+          const bit = document.createElement("span");
+          bit.className = "tl-pause";
+          this.$("[data-tl]").appendChild(bit);
+        }
       }
     },
     onStop() {
       const n = this.state.pauses || 0;
+      // Only fill pauseCount — do not invent filler-reduction scores
+      return {
+        patches: { pauseCount: n, authority: n >= 4 ? 4 : n >= 2 ? 3 : 2 },
+        summary: `${n} intentional pauses (after speech)`
+      };
+    }
+  });
+
+  /** v11 — distinct from power pause: user flags fillers + replaces with pause */
+  Modes.fillerDetect = baseMode({
+    id: "fillerDetect",
+    render() {
+      this.state.fillers = 0;
+      this.state.replacements = 0;
+      this.state.pauses = 0;
+      this.state.hadSpeech = false;
+      this.state.inSilence = false;
+      this.state.minP = (this.profile.minPauseSec || 0.7) * 1000;
+      this.hud.innerHTML = `
+        <div class="mode-title">Kill the fillers</div>
+        <div class="controls-row">
+          <button type="button" class="btn btn-danger btn-sm" data-fill>Caught an um/like +</button>
+          <button type="button" class="btn btn-success btn-sm" data-rep>Paused instead +</button>
+        </div>
+        <p class="mode-meta">Fillers noted <strong data-f>0</strong> · Replacements <strong data-r>0</strong> · Auto pauses <strong data-p>0</strong></p>
+        <p class="mode-meta muted">Tap when you notice a filler. Prefer “Paused instead” when you catch yourself.</p>
+      `;
+      this.$("[data-fill]")?.addEventListener("click", () => {
+        this.state.fillers++;
+        if (this.$("[data-f]")) this.$("[data-f]").textContent = String(this.state.fillers);
+      });
+      this.$("[data-rep]")?.addEventListener("click", () => {
+        this.state.replacements++;
+        if (this.$("[data-r]")) this.$("[data-r]").textContent = String(this.state.replacements);
+      });
+    },
+    onFrame(frame) {
+      const now = performance.now();
+      const quiet = !frame.voiced && (frame.rms || 0) < 0.02;
+      if (!quiet) {
+        this.state.hadSpeech = true;
+        this.state.inSilence = false;
+        this.state.countedThis = false;
+        return;
+      }
+      if (!this.state.hadSpeech) return;
+      if (!this.state.inSilence) {
+        this.state.inSilence = true;
+        this.state.silenceStart = now;
+      } else if (now - this.state.silenceStart >= this.state.minP && !this.state.countedThis) {
+        this.state.pauses++;
+        this.state.countedThis = true;
+        this.state.hadSpeech = false;
+        if (this.$("[data-p]")) this.$("[data-p]").textContent = String(this.state.pauses);
+      }
+    },
+    onStop() {
+      const f = this.state.fillers;
+      const r = this.state.replacements;
+      // Honest: filler count is user-logged; replacement scale from user taps only
       return {
         patches: {
-          pauseCount: n,
-          replacement: clamp(1 + Math.floor(n / 2), 1, 5),
-          fillerReduction: clamp(1 + Math.floor(n / 2), 1, 5)
+          fillerCount: f,
+          awareness: f + r >= 3 ? 4 : 3,
+          replacement: r >= 3 ? 5 : r >= 1 ? 4 : 2
         },
-        summary: `${n} intentional pauses detected`
+        summary: `${f} fillers noted · ${r} pause-replacements · ${this.state.pauses} auto pauses`
       };
     }
   });
@@ -560,7 +729,7 @@
     render() {
       this.state.q = 1;
       this.state.maxQ = this.profile.questions || 5;
-      this.state.phase = "receive"; // receive | silence | answer
+      this.state.phase = "receive";
       this.state.silenceNeed = (this.profile.preSilenceSec || 2.5) * 1000;
       this.state.silenceAcc = 0;
       this.state.gates = 0;
@@ -584,10 +753,11 @@
     },
     onFrame(frame) {
       const quiet = !frame.voiced && (frame.rms || 0) < 0.02;
+      const dt = frame.dtMs || 16;
       if (this.state.phase === "receive" || this.state.phase === "silence") {
         if (quiet) {
           this.state.phase = "silence";
-          this.state.silenceAcc += 16;
+          this.state.silenceAcc += dt;
           const left = Math.max(0, (this.state.silenceNeed - this.state.silenceAcc) / 1000);
           if (this.$("[data-g]"))
             this.$("[data-g]").textContent =
@@ -599,7 +769,7 @@
             if (this.$("[data-g]")) this.$("[data-g]").textContent = "Answer ≤3 sentences";
           }
         } else if (this.state.phase === "silence") {
-          this.state.silenceAcc = Math.max(0, this.state.silenceAcc - 40);
+          this.state.silenceAcc = Math.max(0, this.state.silenceAcc - dt * 2);
         }
       }
     },
@@ -666,7 +836,7 @@
         <div class="mode-title">Authority landings</div>
         <div class="mode-big" data-l>0 / ${this.profile.claims || 5}</div>
         <button type="button" class="btn btn-primary btn-sm" data-claim>I stated a claim — now land</button>
-        <p class="mode-meta" data-st>State claim, then hold silence ~1s</p>
+        <p class="mode-meta" data-st>State claim, then hold silence ~1s (no “you know?”)</p>
       `;
       this.$("[data-claim]")?.addEventListener("click", () => {
         this.state.waitingLand = true;
@@ -677,8 +847,9 @@
     onFrame(frame) {
       if (!this.state.waitingLand) return;
       const quiet = !frame.voiced && (frame.rms || 0) < 0.02;
+      const dt = frame.dtMs || 16;
       if (quiet) {
-        this.state.silenceAcc += 16;
+        this.state.silenceAcc += dt;
         if (this.state.silenceAcc >= this.state.need) {
           this.state.lands++;
           this.state.waitingLand = false;
@@ -692,10 +863,68 @@
       return {
         patches: {
           landed: this.state.lands,
-          authority: clamp(1 + this.state.lands, 1, 5),
-          noTag: 4
+          authority: clamp(1 + this.state.lands, 1, 5)
+          // noTag left for honest self-rate
         },
         summary: `${this.state.lands} clean landings`
+      };
+    }
+  });
+
+  /** v20 — energy triad (not pure volume ladder) */
+  Modes.energyMatch = baseMode({
+    id: "energyMatch",
+    render() {
+      this.state.levels = ["Low", "Medium", "High"];
+      this.state.i = 0;
+      this.state.completed = 0;
+      this.state.stepStarted = performance.now();
+      this.state.stepSec = (this.profile.stepSec || 30) * 1000;
+      this.hud.innerHTML = `
+        <div class="mode-title">Energy match · triad</div>
+        <div class="mode-phase" data-phase>Low energy</div>
+        <div class="mode-big" data-remain>30s</div>
+        <div class="volume-lane"><div class="volume-band" data-band></div><div class="volume-needle" data-n style="left:20%"></div></div>
+        <p class="mode-meta">Volume is one channel — also match pace &amp; face. Cycles: <strong data-c>0</strong></p>
+        <p class="mode-meta muted" data-tip>Low: calm eyes, slower pace. High: brighter face, quicker (not shout).</p>
+      `;
+    },
+    onFrame(frame) {
+      const targets = [0.2, 0.38, 0.58];
+      const elapsed = performance.now() - this.state.stepStarted;
+      const left = Math.max(0, (this.state.stepSec - elapsed) / 1000);
+      if (this.$("[data-remain]")) this.$("[data-remain]").textContent = `${Math.ceil(left)}s`;
+      this.state.smooth = (this.state.smooth || 0) * 0.8 + (frame.rms || 0) * 0.2;
+      if (this.$("[data-n]")) this.$("[data-n]").style.left = `${clamp(this.state.smooth * 160, 2, 98)}%`;
+      if (this.$("[data-band]")) {
+        const t = targets[this.state.i];
+        this.$("[data-band]").style.left = `${clamp(t * 160 - 8, 5, 85)}%`;
+        this.$("[data-band]").style.width = "16%";
+      }
+      if (elapsed >= this.state.stepSec) {
+        this.state.i++;
+        if (this.state.i >= 3) {
+          this.state.i = 0;
+          this.state.completed++;
+          if (this.$("[data-c]")) this.$("[data-c]").textContent = String(this.state.completed);
+        }
+        this.state.stepStarted = performance.now();
+        const tips = [
+          "Low: calm eyes, slower pace.",
+          "Medium: conversational body + voice.",
+          "High: brighter face, quicker (not shout)."
+        ];
+        if (this.$("[data-phase]"))
+          this.$("[data-phase]").textContent = `${this.state.levels[this.state.i]} energy`;
+        if (this.$("[data-tip]")) this.$("[data-tip]").textContent = tips[this.state.i];
+      }
+    },
+    onStop() {
+      // flexibility only if they completed cycles — still modest autofill
+      const c = this.state.completed;
+      return {
+        patches: c > 0 ? { flexibility: clamp(2 + c, 1, 5) } : {},
+        summary: `${c} full L/M/H energy cycle(s) — rate authenticity yourself`
       };
     }
   });
@@ -738,30 +967,43 @@
   Modes.pitchHold = baseMode({
     id: "pitchHold",
     render() {
+      const fry = this.profile.fryPhase !== false && this.profile.modeCue !== "hum";
+      this.state.phase = fry ? "fry" : "hold";
+      this.state.best = 0;
       this.hud.innerHTML = `
-        <div class="mode-title">Sustain &amp; hold</div>
+        <div class="mode-title">${fry ? "Fry → clear /A/ hold" : "Sustain & hold"}</div>
+        <div class="mode-phase" data-phase>${fry ? "Phase 1 · gentle fry (finder)" : "Sustain"}</div>
         <div class="mode-big" data-h>0.0s</div>
-        <p class="mode-meta">Best: <strong data-best>0s</strong> · Holds logged: <strong data-n>0</strong></p>
-        <p class="mode-meta">Auto-logs when you sustain ≥2s then release. Not a note-challenge game.</p>
+        <p class="mode-meta">Best clear hold: <strong data-best>0s</strong> · logs: <strong data-n>0</strong></p>
+        ${
+          fry
+            ? `<button type="button" class="btn btn-sm btn-singing" data-clear>Move to clear /A/</button>`
+            : ""
+        }
+        <p class="mode-meta muted">Auto-logs holds ≥2s after release. Not a note-challenge game.</p>
       `;
+      this.$("[data-clear]")?.addEventListener("click", () => {
+        this.state.phase = "hold";
+        if (this.$("[data-phase]")) this.$("[data-phase]").textContent = "Phase 2 · clear /A/ hold";
+      });
     },
     onFrame(frame) {
       if (this.$("[data-h]")) this.$("[data-h]").textContent = `${(frame.holdSec || 0).toFixed(1)}s`;
       if (this.$("[data-n]")) this.$("[data-n]").textContent = String((frame.holds || []).length);
-      const best = (frame.holds || []).reduce((m, h) => Math.max(m, h.seconds), 0);
-      this.state.best = Math.max(this.state.best || 0, best, frame.holdSec >= 2 ? frame.holdSec : 0);
-      if (this.$("[data-best]")) this.$("[data-best]").textContent = `${(this.state.best || 0).toFixed(1)}s`;
+      // Only track best during clear hold phase (or always if hum)
+      if (this.state.phase === "hold" || this.profile.modeCue === "hum") {
+        const best = (frame.holds || []).reduce((m, h) => Math.max(m, h.seconds), 0);
+        this.state.best = Math.max(this.state.best || 0, best, frame.holdSec >= 2 ? frame.holdSec : 0);
+        if (this.$("[data-best]"))
+          this.$("[data-best]").textContent = `${(this.state.best || 0).toFixed(1)}s`;
+      }
     },
     onStop() {
       const best = Math.round((this.state.best || 0) * 10) / 10;
-      return {
-        patches: {
-          maxHold: best,
-          holdCount: 1,
-          targets: Math.max(1, Math.floor(best / 2))
-        },
-        summary: `Best hold ${best}s`
-      };
+      const patches = {};
+      if (best > 0) patches.maxHold = best;
+      // do not invent targets/holdCount
+      return { patches, summary: `Best hold ${best}s` };
     }
   });
 
@@ -769,17 +1011,35 @@
     id: "pitchChord",
     render() {
       this.state.reps = 0;
+      this.state.inBandMs = 0;
       this.hud.innerHTML = `
-        <div class="mode-title">Chord / solfège track</div>
+        <div class="mode-title">${this.profile.autoArpeggio ? "Arpeggio chord tones" : "Chord / solfège"}</div>
         <div class="mode-big" data-r>0</div>
-        <p class="mode-meta">Reps (tap when you finish a progression loop)</p>
+        <p class="mode-meta">Auto-rep when you stay near target ~1.2s · or tap +1</p>
         <button type="button" class="btn btn-sm btn-singing" data-rep>+1 rep</button>
-        <p class="mode-meta">Pitch follows the piano chord. Challenge game is off.</p>
+        <p class="mode-meta" data-st>Sing into the pitch graph when piano changes.</p>
       `;
       this.$("[data-rep]")?.addEventListener("click", () => {
         this.state.reps++;
         if (this.$("[data-r]")) this.$("[data-r]").textContent = String(this.state.reps);
       });
+    },
+    onFrame(frame) {
+      // Auto-credit: voiced + pitch within ~50 cents of target for 1.2s
+      if (frame.voiceFreq && frame.targetFreq && global.VTPitchUtils) {
+        const vm = global.VTPitchUtils.freqToMidi(frame.voiceFreq);
+        const tm = global.VTPitchUtils.freqToMidi(frame.targetFreq);
+        const cents = Math.abs((vm - tm) * 100);
+        if (cents <= 50 && frame.voiced) {
+          this.state.inBandMs += frame.dtMs || 16;
+          if (this.state.inBandMs >= 1200) {
+            this.state.reps++;
+            this.state.inBandMs = 0;
+            if (this.$("[data-r]")) this.$("[data-r]").textContent = String(this.state.reps);
+            if (this.$("[data-st]")) this.$("[data-st]").textContent = "Rep credited (in-band) ✓";
+          }
+        } else this.state.inBandMs = 0;
+      }
     },
     onStop() {
       return {
@@ -828,16 +1088,17 @@
         <p class="mode-meta" data-s>Score updates in the pitch HUD above.</p>
       `;
     },
-    onStop() {
-      const g = global.VTAppPitchGameSnap || null;
+    onStop(ctx) {
+      const g = (ctx && ctx.pitchGame) || global.VTAppPitchGameSnap || null;
       if (!g) return { patches: {}, summary: "Pitch match session" };
+      const patches = { matches: g.challengeCleared || 0 };
+      if (g.totalSamples > 30) {
+        patches.accuracy = g.accuracyPct >= 80 ? 5 : g.accuracyPct >= 60 ? 4 : g.accuracyPct >= 40 ? 3 : 2;
+        patches.precision = g.maxCombo >= 40 ? 5 : g.maxCombo >= 20 ? 4 : g.maxCombo >= 10 ? 3 : 2;
+      }
       return {
-        patches: {
-          matches: g.challengeCleared || 0,
-          accuracy: g.accuracyPct >= 80 ? 5 : g.accuracyPct >= 60 ? 4 : 3,
-          precision: g.maxCombo >= 30 ? 5 : 3
-        },
-        summary: `Score ${g.score} · ${g.accuracyPct}% in-lane`
+        patches,
+        summary: `Score ${g.score} · ${g.accuracyPct}% in-lane · ${g.challengeCleared} locks`
       };
     }
   });
@@ -846,12 +1107,23 @@
     id: "sovtFlow",
     render() {
       this.state.samples = [];
+      const straw = this.profile.variant === "straw";
       this.hud.innerHTML = `
-        <div class="mode-title">SOVT · steady air</div>
+        <div class="mode-title">${straw ? "Straw phonation · SOVT" : "Lip trills · SOVT"}</div>
         <div class="mode-bar thick"><span data-bar style="width:0%"></span></div>
-        <p class="mode-meta">Evenness: <strong data-ev>—</strong> (lower variance = steadier air)</p>
-        <p class="mode-meta">No pitch scoring — flow and ease first.</p>
+        <p class="mode-meta">Evenness: <strong data-ev>—</strong></p>
+        <p class="mode-meta muted">${
+          straw
+            ? "Air only through straw; cheeks soft. Transfer to /u/ then /A/ after."
+            : "Steady bubbles — jaw free. Transfer same ease to open /A/ after."
+        }</p>
+        <button type="button" class="btn btn-sm" data-xfer>Mark transfer to open vowel ✓</button>
+        <p class="mode-meta">Transfer marked: <strong data-x>no</strong></p>
       `;
+      this.$("[data-xfer]")?.addEventListener("click", () => {
+        this.state.transfer = true;
+        if (this.$("[data-x]")) this.$("[data-x]").textContent = "yes";
+      });
     },
     onFrame(frame) {
       const rms = frame.rms || 0;
@@ -871,11 +1143,82 @@
       }
     },
     onStop() {
-      const s = this.state.steadyScore || 0.4;
-      const scale = s > 0.75 ? 5 : s > 0.55 ? 4 : 3;
+      const s = this.state.steadyScore || 0;
+      const patches = {};
+      if (s > 0.2) {
+        const scale = s > 0.75 ? 5 : s > 0.55 ? 4 : 3;
+        patches.ease = scale;
+        patches.steadiness = scale;
+      }
+      if (this.state.transfer) patches.transfer = 4;
       return {
-        patches: { ease: scale, steadiness: scale, steadyAir: scale },
-        summary: "SOVT flow session"
+        patches,
+        summary: this.state.transfer ? "SOVT + transfer marked" : "SOVT flow (mark transfer next time)"
+      };
+    }
+  });
+
+  /** s7 humming — soft multi-target, not fry hold clone */
+  Modes.humTargets = baseMode({
+    id: "humTargets",
+    render() {
+      this.state.notes = ["C3", "D3", "E3", "F3", "G3", "A3", "G3", "E3", "C3", "D3"];
+      this.state.i = 0;
+      this.state.locked = 0;
+      this.state.inBand = 0;
+      this.hud.innerHTML = `
+        <div class="mode-title">Humming · soft targets</div>
+        <div class="mode-phase" data-n>Target: ${this.state.notes[0]}</div>
+        <div class="mode-big" data-l>0 / 10</div>
+        <p class="mode-meta">Hold hum near target ~0.9s to advance. Feel lip buzz.</p>
+      `;
+      // set first target
+      if (global.VT_NOTE_FREQ && global.VT_NOTE_FREQ[this.state.notes[0]]) {
+        // app practice engine target set via onFrame consumer — set on window for app
+        this.state.wantFreq = global.VT_NOTE_FREQ[this.state.notes[0]];
+      }
+    },
+    onStart() {
+      this._pushTarget();
+    },
+    _pushTarget() {
+      const n = this.state.notes[this.state.i];
+      if (global.VT_NOTE_FREQ?.[n] && global.VTPiano) {
+        // soft ref
+      }
+      this.state.wantFreq = global.VT_NOTE_FREQ?.[n];
+      if (this.state.wantFreq && global.VTPracticeEngine) {
+        /* app sets via mode callback */
+      }
+      if (typeof global.VTSetPracticeTarget === "function" && this.state.wantFreq) {
+        global.VTSetPracticeTarget(this.state.wantFreq, n);
+      }
+      if (this.$("[data-n]")) this.$("[data-n]").textContent = `Target: ${n}`;
+    },
+    onFrame(frame) {
+      if (this.state.wantFreq && frame.voiceFreq && global.VTPitchUtils) {
+        const cents = Math.abs(
+          (global.VTPitchUtils.freqToMidi(frame.voiceFreq) -
+            global.VTPitchUtils.freqToMidi(this.state.wantFreq)) *
+            100
+        );
+        if (cents <= 45 && frame.voiced) {
+          this.state.inBand += frame.dtMs || 16;
+          if (this.state.inBand >= 900) {
+            this.state.locked++;
+            this.state.inBand = 0;
+            this.state.i = Math.min(this.state.i + 1, this.state.notes.length - 1);
+            if (this.state.locked < 10) this._pushTarget();
+            if (this.$("[data-l]")) this.$("[data-l]").textContent = `${this.state.locked} / 10`;
+          }
+        } else this.state.inBand = 0;
+      }
+    },
+    onStop() {
+      const n = this.state.locked;
+      return {
+        patches: n > 0 ? { targets: n, buzz: n >= 6 ? 4 : 3 } : {},
+        summary: `${n} hum targets held`
       };
     }
   });
@@ -977,28 +1320,62 @@
   Modes.scaleSteps = baseMode({
     id: "scaleSteps",
     render() {
-      this.state.pattern = [0, 2, 4, 5, 7, 5, 4, 2, 0]; // semitone steps from root
+      this.state.pattern = [0, 2, 4, 5, 7, 5, 4, 2, 0];
+      this.state.rootMidi = 48; // C3
       this.state.i = 0;
       this.state.roots = 0;
+      this.state.inBand = 0;
       this.hud.innerHTML = `
-        <div class="mode-title">Five-note scale steps</div>
+        <div class="mode-title">Five-note scale · pitch-gated</div>
         <div class="mode-big" data-step>Step 1 / 9</div>
-        <button type="button" class="btn btn-sm btn-singing" data-next>Next step (locked)</button>
-        <p class="mode-meta">Roots completed: <strong data-r>0</strong></p>
+        <p class="mode-meta">Hold near step (~40¢) for 0.7s to advance · Roots: <strong data-r>0</strong></p>
+        <p class="mode-meta muted" data-st>Sing the step — no free skip.</p>
       `;
-      this.$("[data-next]")?.addEventListener("click", () => {
-        this.state.i++;
-        if (this.state.i >= this.state.pattern.length) {
-          this.state.i = 0;
-          this.state.roots++;
-          if (this.$("[data-r]")) this.$("[data-r]").textContent = String(this.state.roots);
+      this._setStepTarget();
+    },
+    _setStepTarget() {
+      const semi = this.state.pattern[this.state.i];
+      const midi = this.state.rootMidi + semi;
+      if (global.VTPitchUtils) {
+        const f = global.VTPitchUtils.midiToFreq(midi);
+        this.state.wantFreq = f;
+        if (typeof global.VTSetPracticeTarget === "function") {
+          global.VTSetPracticeTarget(f, global.VTPitchUtils.midiToName(midi));
         }
-        if (this.$("[data-step]"))
-          this.$("[data-step]").textContent = `Step ${this.state.i + 1} / ${this.state.pattern.length}`;
-      });
+      }
+    },
+    onStart() {
+      this._setStepTarget();
+    },
+    onFrame(frame) {
+      if (!this.state.wantFreq || !frame.voiceFreq || !global.VTPitchUtils) return;
+      const cents = Math.abs(
+        (global.VTPitchUtils.freqToMidi(frame.voiceFreq) -
+          global.VTPitchUtils.freqToMidi(this.state.wantFreq)) *
+          100
+      );
+      if (cents <= 40 && frame.voiced) {
+        this.state.inBand += frame.dtMs || 16;
+        if (this.state.inBand >= 700) {
+          this.state.inBand = 0;
+          this.state.i++;
+          if (this.state.i >= this.state.pattern.length) {
+            this.state.i = 0;
+            this.state.roots++;
+            if (this.$("[data-r]")) this.$("[data-r]").textContent = String(this.state.roots);
+          }
+          this._setStepTarget();
+          if (this.$("[data-step]"))
+            this.$("[data-step]").textContent = `Step ${this.state.i + 1} / ${this.state.pattern.length}`;
+          if (this.$("[data-st]")) this.$("[data-st]").textContent = "Step locked ✓";
+        }
+      } else this.state.inBand = 0;
     },
     onStop() {
-      return { patches: { roots: Math.max(1, this.state.roots) }, summary: `${this.state.roots} roots` };
+      return {
+        patches: this.state.roots > 0 ? { roots: this.state.roots } : {},
+        summary: `${this.state.roots} roots completed (pitch-gated)`
+      };
     }
   });
 
@@ -1006,37 +1383,118 @@
     id: "dynamicSwell",
     render() {
       this.state.swells = 0;
-      this.state.phase = 0; // 0 soft 1 med 2 soft
+      this.state.phase = 0;
       this.state.phaseT = performance.now();
-      this.state.centsVar = [];
+      this.state.midiSamples = [];
       this.hud.innerHTML = `
         <div class="mode-title">Dynamic swell</div>
         <div class="mode-phase" data-phase>Soft</div>
-        <div class="volume-lane"><div class="volume-band"></div><div class="volume-needle" data-n style="left:20%"></div></div>
-        <p class="mode-meta">Swells: <strong data-s>0</strong> · Keep pitch steady while level moves</p>
+        <div class="volume-lane"><div class="volume-band" data-band></div><div class="volume-needle" data-n style="left:20%"></div></div>
+        <p class="mode-meta">Swells: <strong data-s>0</strong> · Pitch wobble: <strong data-w>—</strong></p>
       `;
     },
     onFrame(frame) {
+      const targets = [0.18, 0.42, 0.18];
       const elapsed = performance.now() - this.state.phaseT;
-      if (elapsed > 2500) {
+      // advance only if roughly in band for half a second cumulative
+      this.state.bandMs = this.state.bandMs || 0;
+      const rms = frame.rms || 0;
+      if (Math.abs(rms - targets[this.state.phase]) < 0.12) this.state.bandMs += frame.dtMs || 16;
+      else this.state.bandMs = Math.max(0, (this.state.bandMs || 0) - 10);
+
+      if (elapsed > 2000 && this.state.bandMs > 400) {
         this.state.phase = (this.state.phase + 1) % 3;
         this.state.phaseT = performance.now();
+        this.state.bandMs = 0;
         if (this.state.phase === 0) this.state.swells++;
         if (this.$("[data-phase]"))
           this.$("[data-phase]").textContent = ["Soft", "Medium", "Soft"][this.state.phase];
         if (this.$("[data-s]")) this.$("[data-s]").textContent = String(this.state.swells);
       }
-      const rms = frame.rms || 0;
       if (this.$("[data-n]")) this.$("[data-n]").style.left = `${clamp(rms * 160, 2, 98)}%`;
+      if (this.$("[data-band]")) {
+        const t = targets[this.state.phase];
+        this.$("[data-band]").style.left = `${clamp(t * 160 - 8, 5, 85)}%`;
+        this.$("[data-band]").style.width = "18%";
+      }
+      if (frame.voiceFreq && global.VTPitchUtils) {
+        this.state.midiSamples.push(global.VTPitchUtils.freqToMidi(frame.voiceFreq));
+        if (this.state.midiSamples.length > 80) this.state.midiSamples.shift();
+        if (this.state.midiSamples.length > 20) {
+          const arr = this.state.midiSamples;
+          const mean = arr.reduce((a, b) => a + b, 0) / arr.length;
+          const v = Math.sqrt(arr.reduce((a, b) => a + (b - mean) ** 2, 0) / arr.length);
+          this.state.wobble = v;
+          if (this.$("[data-w]"))
+            this.$("[data-w]").textContent =
+              v < 0.15 ? "stable" : v < 0.35 ? "ok" : "wandering";
+        }
+      }
     },
     onStop() {
+      const patches = {};
+      if (this.state.swells > 0) {
+        patches.swells = this.state.swells;
+        patches.dynamicControl = clamp(2 + this.state.swells, 1, 5);
+      }
+      if (this.state.wobble != null) {
+        patches.pitchStable =
+          this.state.wobble < 0.15 ? 5 : this.state.wobble < 0.35 ? 4 : this.state.wobble < 0.55 ? 3 : 2;
+      }
+      return { patches, summary: `${this.state.swells} swells` };
+    }
+  });
+
+  /** s14 sung staccato vs legato — note length contrast */
+  Modes.staccatoLegato = baseMode({
+    id: "staccatoLegato",
+    render() {
+      const phases = this.profile.phases || [
+        { label: "Staccato", sec: 90 },
+        { label: "Legato", sec: 90 }
+      ];
+      this.state.runner = createPhaseRunner(phases, (i, p) => {
+        if (global.VTToast) global.VTToast(p.label);
+      });
+      this.state.shortHolds = 0;
+      this.state.longHolds = 0;
+      this.hud.innerHTML = `
+        <div class="mode-title">Staccato vs legato (sung)</div>
+        <div class="mode-phase" data-phase>${phases[0].label}</div>
+        <div class="mode-big" data-remain>—</div>
+        <p class="mode-meta">Short notes (&lt;0.45s): <strong data-sh>0</strong> · Long (≥1.2s): <strong data-lg>0</strong></p>
+        <p class="mode-meta muted">Staccato = bounce air. Legato = connect with steady air.</p>
+      `;
+    },
+    onFrame(frame) {
+      const r = this.state.runner;
+      r.tick(performance.now());
+      if (this.$("[data-phase]"))
+        this.$("[data-phase]").textContent =
+          r.index < r.count ? r.label : "Contrast complete";
+      if (this.$("[data-remain]"))
+        this.$("[data-remain]").textContent =
+          r.index < r.count ? `${Math.ceil(r.remaining)}s` : "✓";
+      // detect note ends
+      const holds = frame.holds || [];
+      if (holds.length > (this.state.seen || 0)) {
+        const h = holds[0];
+        this.state.seen = holds.length;
+        if (h.seconds < 0.45) this.state.shortHolds++;
+        if (h.seconds >= 1.2) this.state.longHolds++;
+        if (this.$("[data-sh]")) this.$("[data-sh]").textContent = String(this.state.shortHolds);
+        if (this.$("[data-lg]")) this.$("[data-lg]").textContent = String(this.state.longHolds);
+      }
+    },
+    onStop() {
+      const patches = { rounds: this.state.runner?.index || 0 };
+      if (this.state.shortHolds + this.state.longHolds > 0) {
+        patches.staccatoEase = this.state.shortHolds >= 4 ? 4 : 3;
+        patches.legatoLine = this.state.longHolds >= 3 ? 4 : 3;
+      }
       return {
-        patches: {
-          swells: Math.max(1, this.state.swells),
-          pitchStable: 3,
-          dynamicControl: clamp(2 + this.state.swells, 1, 5)
-        },
-        summary: `${this.state.swells} swells`
+        patches,
+        summary: `short ${this.state.shortHolds} · long ${this.state.longHolds}`
       };
     }
   });

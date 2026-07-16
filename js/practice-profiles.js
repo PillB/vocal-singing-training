@@ -142,7 +142,7 @@
       metricHints: { pauseCount: "pauseEvents" }
     },
     "v11-kill-fillers": {
-      mode: "pauseDetect",
+      mode: "fillerDetect",
       showPitch: false,
       showHold: false,
       showLevel: true,
@@ -150,8 +150,8 @@
       autoPiano: false,
       autoRecord: true,
       minPauseSec: 0.7,
-      cue: "When ‘um’ rises, close your mouth and pause instead. Silence events = wins.",
-      metricHints: { replacement: "pauseEventsScale" }
+      cue: "Tap when you catch a filler. Prefer “Paused instead.” Auto pauses are secondary.",
+      metricHints: {}
     },
     "v12-melodic-speech": {
       mode: "pitchContour",
@@ -206,14 +206,19 @@
       metricHints: {}
     },
     "v16-facial-expression": {
-      mode: "recordOnly",
+      mode: "facePhases",
       showPitch: false,
       showHold: false,
       showLevel: true,
       pitchChallenge: false,
       autoPiano: false,
       autoRecord: true,
-      cue: "Curiosity → surprise → resolve on your face. Record and review muted video.",
+      phases: [
+        { label: "Curiosity face", sec: 40 },
+        { label: "Surprise face", sec: 40 },
+        { label: "Resolve / warmth", sec: 40 }
+      ],
+      cue: "Curiosity → surprise → resolve on your face. Review muted after.",
       metricHints: {}
     },
     "v17-strategic-concision": {
@@ -259,21 +264,16 @@
       metricHints: { landed: "landCount" }
     },
     "v20-energy-match": {
-      mode: "volumeLadder",
+      mode: "energyMatch",
       showPitch: false,
       showHold: false,
       showLevel: true,
       pitchChallenge: false,
       autoPiano: false,
       autoRecord: true,
-      ladder: [
-        { label: "Low energy", target: 0.2 },
-        { label: "Medium energy", target: 0.38 },
-        { label: "High energy", target: 0.58 }
-      ],
       stepSec: 30,
-      cue: "Same message, three energies. Match the band, stay authentic.",
-      metricHints: { flexibility: "ladderCycles" }
+      cue: "Same message at Low → Medium → High. Volume + pace + face — not just loudness.",
+      metricHints: {}
     },
     /* —— Singing basic —— */
     "s1-vocal-fry": {
@@ -313,14 +313,15 @@
     /* —— Singing advanced —— */
     "s4-lip-trills": {
       mode: "sovtFlow",
+      variant: "trill",
       showPitch: false,
       showHold: false,
       showLevel: true,
       pitchChallenge: false,
       autoPiano: true,
       autoRecord: false,
-      cue: "Steady air for lip bubbles. Evenness bar rewards consistent flow — not pitch scores.",
-      metricHints: { ease: "steadyAir" }
+      cue: "Steady air for lip bubbles. Evenness bar — mark transfer to /A/ after.",
+      metricHints: {}
     },
     "s5-sirens": {
       mode: "sirenRange",
@@ -335,17 +336,18 @@
     },
     "s6-straw": {
       mode: "sovtFlow",
+      variant: "straw",
       showPitch: false,
       showHold: false,
       showLevel: true,
       pitchChallenge: false,
       autoPiano: true,
       autoRecord: false,
-      cue: "Phonate through straw with steady air. Transfer to open vowels after.",
-      metricHints: { steadiness: "steadyAir" }
+      cue: "Straw only — steady air, soft cheeks. Mark transfer to open vowel after.",
+      metricHints: {}
     },
     "s7-humming": {
-      mode: "pitchHold",
+      mode: "humTargets",
       showPitch: true,
       showHold: true,
       showLevel: true,
@@ -353,8 +355,9 @@
       autoPiano: true,
       autoRecord: false,
       refPitch: "D3",
-      cue: "Gentle hum on targets. Soft holds — no aggressive challenge scoring.",
-      metricHints: { targets: "holdCount" }
+      modeCue: "hum",
+      cue: "Hum through soft pitch targets. Lip buzz, no challenge scoring.",
+      metricHints: {}
     },
     "s8-breath-support": {
       mode: "breathS",
@@ -425,7 +428,7 @@
       metricHints: { progressions: "repCount" }
     },
     "s14-staccato-legato": {
-      mode: "articulationContrast",
+      mode: "staccatoLegato",
       showPitch: true,
       showHold: true,
       showLevel: true,
@@ -438,8 +441,8 @@
         { label: "Staccato again", sec: 60 },
         { label: "Legato again", sec: 60 }
       ],
-      cue: "Alternate short bounce vs connected line. Hold log helps hear the difference.",
-      metricHints: { rounds: "phaseCount" }
+      cue: "Short bounce vs connected line — note lengths auto-classify after holds.",
+      metricHints: {}
     }
   };
 

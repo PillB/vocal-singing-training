@@ -811,12 +811,14 @@ a {
   font-weight: 600;
 }
 
-.mode-hud:empty {
-  display: none;
+.mode-hud {
+  display: block;
+  margin-bottom: 0.85rem;
 }
 
-.mode-hud:not(:empty) {
-  margin-bottom: 0.85rem;
+.mode-hud:empty {
+  display: none;
+  margin-bottom: 0;
 }
 
 .mode-panel {

@@ -36,6 +36,47 @@ test.describe("Exercise-specific practice modes", () => {
     await expect(page.locator("#pitch-block")).toBeHidden();
   });
 
+  test("v11 fillers is distinct from pause mode", async ({ page }) => {
+    await page.goto(BASE);
+    await page.click('.tier-chip[data-tier="advanced"]');
+    await page.locator("#exercise-list .card-ex", { hasText: "Kill the Fillers" }).click();
+    await expect(page.locator(".mode-panel.mode-fillerDetect")).toBeVisible();
+    await expect(page.locator(".mode-panel.mode-pauseDetect")).toHaveCount(0);
+  });
+
+  test("v8 metaphors is not rate ladder", async ({ page }) => {
+    await page.goto(BASE);
+    await page.click('.tier-chip[data-tier="basic"]');
+    await page.locator("#exercise-list .card-ex", { hasText: "Metaphors" }).click();
+    await expect(page.locator(".mode-panel.mode-metronomeSpeech")).toBeVisible();
+    await expect(page.locator(".mode-title")).toContainText("Metaphor");
+  });
+
+  test("v3 soft palate has count logger", async ({ page }) => {
+    await page.goto(BASE);
+    await page.click('.tier-chip[data-tier="basic"]');
+    await page.locator("#exercise-list .card-ex", { hasText: "Soft Palate" }).click();
+    await expect(page.locator(".mode-panel.mode-countPace")).toBeVisible();
+    await expect(page.locator("[data-plus]")).toBeVisible();
+  });
+
+  test("s14 staccato is not pen contrast shell", async ({ page }) => {
+    await page.goto(BASE);
+    await page.click('.tab[data-tab="singing"]');
+    await page.click('.tier-chip[data-tier="advanced"]');
+    await page.locator("#exercise-list .card-ex", { hasText: "Staccato" }).click();
+    await expect(page.locator(".mode-panel.mode-staccatoLegato")).toBeVisible();
+  });
+
+  test("s10 scale is pitch-gated wording", async ({ page }) => {
+    await page.goto(BASE);
+    await page.click('.tab[data-tab="singing"]');
+    await page.click('.tier-chip[data-tier="advanced"]');
+    await page.getByRole("button", { name: /Five-Note Scale/i }).click();
+    await expect(page.locator("#view-exercise")).toHaveClass(/active/);
+    await expect(page.locator("#mode-hud")).toContainText("pitch-gated");
+  });
+
   test("s1 fry is pitchHold without forcing challenge game hud", async ({ page }) => {
     await page.goto(BASE);
     await page.click('.tab[data-tab="singing"]');

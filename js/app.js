@@ -43,8 +43,15 @@
     clearTimeout(toast._t);
     toast._t = setTimeout(() => el.classList.remove("show"), 2800);
   }
-  // modes can toast
+  // modes can toast / set pitch target
   window.VTToast = toast;
+  window.VTSetPracticeTarget = function (freq, name) {
+    if (freq) state.practice.setTargetFreq(freq);
+    if (state.pitchViz && freq) {
+      state.pitchViz.setTargetFreq(freq);
+    }
+    if (name && $("#chord-now")) $("#chord-now").textContent = name;
+  };
 
   function getProfile(ex) {
     return (
@@ -602,7 +609,20 @@
         $("#chk-auto-piano")?.checked !== false;
       const showHold = !!profile.showHold;
 
-      if (state.modeInstance) state.modeInstance.onStart();
+      // Fresh mode instance every Start (reviews: restart must reset phases/reps)
+      if (state.modeInstance) {
+        try {
+          state.modeInstance.unmount();
+        } catch {
+          /* ignore */
+        }
+      }
+      const modeHud = $("#mode-hud");
+      if (modeHud && window.VTPracticeModes) {
+        state.modeInstance = VTPracticeModes.get(profile.mode);
+        state.modeInstance.mount(modeHud, profile);
+        state.modeInstance.onStart();
+      }
 
       state.practice.onFrame = (frame) => {
         if (profile.showLevel !== false) {
@@ -715,14 +735,19 @@
   }
 
   function stopPractice(silent) {
-    let modeResult = null;
-    try {
-      if (state.modeInstance) modeResult = state.modeInstance.onStop();
-    } catch (e) {
-      console.warn(e);
-    }
+    // Snapshot pitch game BEFORE mode onStop (architecture review critical fix)
     if (state.pitchGame) {
       window.VTAppPitchGameSnap = state.pitchGame.snapshot();
+    }
+    let modeResult = null;
+    try {
+      if (state.modeInstance) {
+        modeResult = state.modeInstance.onStop({
+          pitchGame: window.VTAppPitchGameSnap || null
+        });
+      }
+    } catch (e) {
+      console.warn(e);
     }
     if (state.practiceLive || state.practice.running) {
       state.practice.stop();

@@ -1,16 +1,86 @@
 /**
  * Realistic multi-partial piano for mid-lower male practice range.
- * Roots and voicings sit roughly C2–E4 (baritone-friendly).
+ * Roots and voicings sit roughly C2–E4 (baritone-friendly) by default;
+ * octave shift (±2) can move material into other singers' ranges.
  */
 (function (global) {
   "use strict";
 
-  const NOTE_FREQ = {
-    C2: 65.41, D2: 73.42, E2: 82.41, F2: 87.31, G2: 98.0, A2: 110.0, B2: 123.47,
-    C3: 130.81, D3: 146.83, Eb3: 155.56, E3: 164.81, F3: 174.61, G3: 196.0,
-    A3: 220.0, Bb3: 233.08, B3: 246.94, C4: 261.63, D4: 293.66, E4: 329.63,
-    F4: 349.23, G4: 392.0, A4: 440.0
-  };
+  /** Build chromatic map C1–C6 so octave-shifted progressions always resolve. */
+  function buildNoteFreqMap() {
+    const sharp = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+    const flatPrefer = {
+      "C#": "Db",
+      "D#": "Eb",
+      "F#": "Gb",
+      "G#": "Ab",
+      "A#": "Bb"
+    };
+    const map = {};
+    for (let oct = 1; oct <= 6; oct++) {
+      for (let i = 0; i < 12; i++) {
+        // MIDI: C4 = 60 → 12*(oct+1)+i with C=0
+        const midi = 12 * (oct + 1) + i;
+        const freq = +(440 * Math.pow(2, (midi - 69) / 12)).toFixed(2);
+        const sn = sharp[i] + oct;
+        map[sn] = freq;
+        const flatBase = flatPrefer[sharp[i]];
+        if (flatBase) map[flatBase + oct] = freq;
+      }
+    }
+    return map;
+  }
+
+  const NOTE_FREQ = buildNoteFreqMap();
+
+  /** Shift a note name by whole octaves: "C3" + 1 → "C4". */
+  function shiftNoteName(name, octaves) {
+    const n = Math.round(Number(octaves) || 0);
+    if (!n || name == null) return name;
+    const m = String(name).match(/^([A-G](?:#|b)?)(-?\d+)$/i);
+    if (!m) return name;
+    return m[1] + (parseInt(m[2], 10) + n);
+  }
+
+  function shiftNoteNames(names, octaves) {
+    const n = Math.round(Number(octaves) || 0);
+    if (!n) return (names || []).slice();
+    return (names || []).map((nm) => shiftNoteName(nm, n));
+  }
+
+  /** Deep-clone progression with every chord tone shifted by octaves. */
+  function transposeProgression(prog, octaves) {
+    if (!prog) return null;
+    const n = Math.round(Number(octaves) || 0);
+    if (!n) {
+      return {
+        name: prog.name,
+        description: prog.description,
+        wide: prog.wide,
+        chords: (prog.chords || []).map((ch) => ({
+          name: ch.name,
+          notes: (ch.notes || []).slice(),
+          oneNote: ch.oneNote
+        }))
+      };
+    }
+    return {
+      name: prog.name,
+      description: prog.description,
+      wide: prog.wide,
+      octaveShift: n,
+      chords: (prog.chords || []).map((ch) => ({
+        name: ch.name,
+        notes: shiftNoteNames(ch.notes, n),
+        oneNote: ch.oneNote
+      }))
+    };
+  }
+
+  function freqForNote(name, octaveShift) {
+    const shifted = shiftNoteName(name, octaveShift);
+    return NOTE_FREQ[shifted] || NOTE_FREQ[name] || null;
+  }
 
   /** Chord progressions in mid-lower piano range for men */
   const PROGRESSIONS = {
@@ -574,7 +644,9 @@
         /** oneNote: melodic — play & target one pitch at a time (not stacked chords) */
         oneNote = false,
         sustain = false,
-        sustainSec = 4.0
+        sustainSec = 4.0,
+        /** Whole-octave transpose for singer range (−2…+2 typical) */
+        octaveShift = 0
       } = {}
     ) {
       await this.ensure();
@@ -596,11 +668,15 @@
         await this.ensure();
       }
       if (this.master) this.master.gain.setValueAtTime(0.7, this.ctx.currentTime);
-      const prog = PROGRESSIONS[progId];
-      if (!prog) {
+      const baseProg = PROGRESSIONS[progId];
+      if (!baseProg) {
         console.warn("Unknown progression", progId);
         return null;
       }
+      const oct = Math.round(Number(octaveShift) || 0);
+      this._lastOctaveShift = oct;
+      // Play + callbacks use transposed copy so highway targets match audio
+      const prog = transposeProgression(baseProg, oct);
 
       // Hold duration from combobox (3–5s) or chordSec when sustain is off
       let stepSec = Number(chordSec) || 2.2;
@@ -694,6 +770,10 @@
   global.VT_PROGRESSIONS = PROGRESSIONS;
   global.VT_NOTE_FREQ = NOTE_FREQ;
   global.VTProgressionRange = progressionMidiRange;
+  global.VTShiftNoteName = shiftNoteName;
+  global.VTShiftNoteNames = shiftNoteNames;
+  global.VTTransposeProgression = transposeProgression;
+  global.VTFreqForNote = freqForNote;
   global.VTGetSharedAudioContext = getSharedAudioContext;
   global.VTAudioUaFlags = uaFlags;
 })(window);

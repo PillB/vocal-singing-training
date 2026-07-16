@@ -16,6 +16,26 @@ Client-only GH Pages app. Prefer **fail visibly**, **idempotent Start/Stop**, an
 | Layout collisions | Overlapping HUD | Fold/geometry QA + less-scroll locks |
 | Secrets in repo | Leaked passwords | Gitignored `INTERNAL-TEST-ACCOUNTS.md`; hashes only in repo |
 | Client auth bypass | Soft gate only | Documented in `11-AUTH-AND-HARDENING.md` — not production multi-tenant |
+| Fixed mid-male octave for all singers | Targets unreachable → strain / zero hits | `VTRangeAdapter`: voiced + directed pitch attempt + plateau ≥5 semi short → ±1 oct (max ±2); manual −/+; Auto toggle; 10s cooldown |
+| Silence mistaken for “can’t reach” | Spurious octave thrash | Require RMS + pitch + motion toward target (not grace-only / no sound) |
+| Missing note freqs after ±oct | Silent shifted piano | `NOTE_FREQ` chromatic C1–C6; `VTTransposeProgression` / `playProgression({ octaveShift })` |
+| Highway vs piano desync after shift | Lanes in old octave | `lockHighwayForProgression/Notes` always apply `state.octaveShift`; hot-apply restarts loop |
+
+## Adaptive vocal range (competitors + design)
+
+- **Yousician**: calibrate range + song transpose — we continuous-adapt mid-practice + manual ±oct.
+- **Sing Sharp**: personalise to measured range — we infer edges from plateau short of target while trying.
+- **UX**: bottom-rail `− | 0 | + | Rango`; toast on auto shift; prefs in `localStorage` (`vt_octave_shift`, `vt_range_auto`).
+
+```bash
+npx playwright test tests/range-adapter.spec.js
+```
+
+```js
+VTGetOctaveShift()                 // −2…+2
+VTApplyOctaveShift(1)              // raise material one octave
+VTApp.getRangeSnapshot?.()         // auto / pending / session min·max midi
+```
 
 ## Health checks (console / e2e)
 

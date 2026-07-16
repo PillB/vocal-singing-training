@@ -1589,6 +1589,57 @@ button:focus-visible,
   height: 1.35rem;
 }
 
+/* Vocal range octave strip (− / label / + / Auto) */
+.hud-oct {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.18rem;
+  flex: 0 0 auto;
+  padding: 0.05rem 0.2rem 0.05rem 0.1rem;
+  border-radius: 8px;
+  border: 1px solid rgba(120, 160, 220, 0.28);
+  background: rgba(28, 48, 78, 0.45);
+  pointer-events: auto;
+}
+.hud-oct .oct-btn {
+  min-width: 1.55rem;
+  min-height: 1.55rem;
+  padding: 0 0.28rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1;
+  border-radius: 6px;
+  color: #c8e0ff;
+}
+.hud-oct .oct-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.hud-oct .oct-label {
+  min-width: 1.35rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  font-size: 0.78rem;
+  color: #9fd0ff;
+  letter-spacing: 0.02em;
+}
+.hud-oct .oct-auto {
+  margin-left: 0.12rem;
+  gap: 0.18rem;
+  font-size: 0.72rem;
+}
+.hud-oct .oct-auto span {
+  white-space: nowrap;
+}
+#chord-now[data-oct]::after {
+  content: " · " attr(data-oct) "oct";
+  font-size: 0.72em;
+  opacity: 0.75;
+  font-weight: 600;
+  color: #8ec8ff;
+}
+
 /* Piano opts: fit content; never clip labels with overflow:hidden */
 .hud-br {
   flex: 0 0 auto;

@@ -166,6 +166,15 @@
                 </label>
               </div>
               <div class="hud-corner hud-br" id="piano-mini-opts">
+                <div class="hud-oct" id="oct-controls" role="group" aria-label="Registro / Octave" title="Ajusta octava a tu rango vocal">
+                  <button type="button" class="btn btn-ghost btn-xs oct-btn" id="btn-oct-down" aria-label="Bajar una octava" title="−1 oct">−</button>
+                  <span class="oct-label" id="oct-label" title="Octava">0</span>
+                  <button type="button" class="btn btn-ghost btn-xs oct-btn" id="btn-oct-up" aria-label="Subir una octava" title="+1 oct">+</button>
+                  <label class="muted piano-opt oct-auto" title="Detecta si no alcanzas y mueve los acordes">
+                    <input type="checkbox" id="chk-range-auto" checked />
+                    <span data-i18n="range.auto">Rango</span>
+                  </label>
+                </div>
                 <label class="muted piano-opt" title="One note at a time / 1 nota a la vez">
                   <input type="checkbox" id="chk-one-note" />
                   <span data-i18n="piano.oneNote">1 nota</span>
@@ -486,6 +495,7 @@
     <script src="js/auth-users.generated.js"></script>
     <script src="js/auth.js"></script>
     <script src="js/piano.js"></script>
+    <script src="js/range-adapter.js"></script>
     <script src="js/pitch-visualizer.js"></script>
     <script src="js/pitch-game.js"></script>
     <script src="js/practice-engine.js"></script>

@@ -36,6 +36,10 @@
     modeInstance: null,
     guideOpen: true,
     pianoOpen: false,
+    /** Whole-octave material shift for singer range (−2…+2) */
+    octaveShift: 0,
+    rangeAuto: true,
+    rangeAdapter: null,
     /** Per-open exercise practice clock (for leave save/discard prompt) */
     sessionPractice: {
       everStarted: false,
@@ -127,15 +131,175 @@
     if (name && $("#chord-now")) $("#chord-now").textContent = name;
   };
 
+  function ensureRangeAdapter() {
+    if (state.rangeAdapter) return state.rangeAdapter;
+    if (typeof VTRangeAdapter !== "function") return null;
+    let savedShift = 0;
+    let savedAuto = true;
+    try {
+      const s = localStorage.getItem("vt_octave_shift");
+      if (s != null && s !== "") savedShift = Math.max(-2, Math.min(2, parseInt(s, 10) || 0));
+      const a = localStorage.getItem("vt_range_auto");
+      if (a === "0") savedAuto = false;
+      if (a === "1") savedAuto = true;
+    } catch {
+      /* private mode */
+    }
+    state.octaveShift = savedShift;
+    state.rangeAuto = savedAuto;
+    state.rangeAdapter = new VTRangeAdapter({
+      auto: savedAuto,
+      octaveShift: savedShift,
+      onShift: (dec) => {
+        applyOctaveShift(dec.shift, { source: "auto", decision: dec });
+      }
+    });
+    return state.rangeAdapter;
+  }
+
+  function persistRangePrefs() {
+    try {
+      localStorage.setItem("vt_octave_shift", String(state.octaveShift));
+      localStorage.setItem("vt_range_auto", state.rangeAuto ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function formatOctLabel(shift) {
+    const n = Math.round(Number(shift) || 0);
+    if (n === 0) return "0";
+    return n > 0 ? `+${n}` : String(n);
+  }
+
+  function updateOctaveUI() {
+    const lab = $("#oct-label");
+    if (lab) {
+      lab.textContent = formatOctLabel(state.octaveShift);
+      lab.title =
+        state.octaveShift === 0
+          ? tt("range.octZero")
+          : tt("range.octValue", { n: formatOctLabel(state.octaveShift) });
+    }
+    const chk = $("#chk-range-auto");
+    if (chk) chk.checked = !!state.rangeAuto;
+    const down = $("#btn-oct-down");
+    const up = $("#btn-oct-up");
+    if (down) down.disabled = state.octaveShift <= -2;
+    if (up) up.disabled = state.octaveShift >= 2;
+    // Reflect shift on chord badge lightly
+    const cn = $("#chord-now");
+    if (cn && state.octaveShift !== 0) {
+      cn.dataset.oct = formatOctLabel(state.octaveShift);
+    } else if (cn) {
+      delete cn.dataset.oct;
+    }
+  }
+
+  /**
+   * Apply whole-octave material shift. Re-locks highway + retargets + hot-applies piano.
+   * @param {number} newShift
+   * @param {{ source?: string, decision?: object, silent?: boolean }} opts
+   */
+  function applyOctaveShift(newShift, opts = {}) {
+    const next = Math.max(-2, Math.min(2, Math.round(Number(newShift) || 0)));
+    const prev = state.octaveShift;
+    if (next === prev) {
+      // still refresh adapter + UI (e.g. re-sync after external notify)
+      ensureRangeAdapter()?.notifyShifted(next);
+      updateOctaveUI();
+      return false;
+    }
+    state.octaveShift = next;
+    ensureRangeAdapter()?.notifyShifted(next);
+    persistRangePrefs();
+    updateOctaveUI();
+
+    // Re-lock highway / targets for current exercise context
+    const ex = state.exercise;
+    const profile = ex ? getProfile(ex) : null;
+    if (ex && (profile?.showPitch || ex.audio?.pitchViz)) {
+      if (
+        ex.progressions?.length ||
+        ex.songs?.length ||
+        ex.audio?.progressions ||
+        profile?.mode === "pitchChord" ||
+        profile?.mode === "pitchSong"
+      ) {
+        lockHighwayForProgression(state.selectedProg);
+      } else if (state.pitchGame?.challengeMode && state.pitchGame.challengeNotes?.length) {
+        lockHighwayForNotes(state.pitchGame.challengeNotes);
+        const ch = state.pitchGame.currentChallengeNote?.();
+        if (ch) {
+          const nm = window.VTShiftNoteName ? VTShiftNoteName(ch, next) : ch;
+          if (VT_NOTE_FREQ?.[nm]) {
+            state.practice.setTargetFreq(VT_NOTE_FREQ[nm]);
+            state.pitchViz?.setTargetFreq(VT_NOTE_FREQ[nm]);
+          }
+        }
+      } else {
+        const ref = profile?.refPitch || ex.audio?.refPitch;
+        if (ref) {
+          const nm = window.VTShiftNoteName ? VTShiftNoteName(ref, next) : ref;
+          if (VT_NOTE_FREQ?.[nm] && state.pitchViz) {
+            state.pitchViz.lockWindowAroundFreq(VT_NOTE_FREQ[nm], 6);
+            state.practice.setTargetFreq(VT_NOTE_FREQ[nm]);
+            state.pitchViz.setTargetFreq(VT_NOTE_FREQ[nm]);
+          }
+        }
+      }
+    }
+
+    // Restart piano loop / progression so audio matches highway
+    if (state.practiceLive && ex) {
+      applyPianoOptionsHot("oct:" + formatOctLabel(next));
+    }
+
+    if (!opts.silent) {
+      const side = opts.decision?.side;
+      if (opts.source === "auto" && side === "high") {
+        toast(tt("range.shiftedDown"), { durationMs: 3200 });
+      } else if (opts.source === "auto" && side === "low") {
+        toast(tt("range.shiftedUp"), { durationMs: 3200 });
+      } else {
+        toast(tt("range.shiftedManual", { n: formatOctLabel(next) }), {
+          durationMs: 2200,
+          debounceMs: 400
+        });
+      }
+    }
+    return true;
+  }
+
+  function nudgeOctave(delta) {
+    applyOctaveShift(state.octaveShift + delta, { source: "manual" });
+  }
+
+  function setRangeAuto(on) {
+    state.rangeAuto = !!on;
+    ensureRangeAdapter()?.setAuto(state.rangeAuto);
+    persistRangePrefs();
+    updateOctaveUI();
+    toast(
+      state.rangeAuto ? tt("range.autoOn") : tt("range.autoOff"),
+      { durationMs: 1800, debounceMs: 300 }
+    );
+  }
+
   /**
    * Lock pitch highway to the max range of a progression/option.
    * Range stays fixed while chords/notes inside that option change.
+   * Applies current octaveShift so material sits in the singer's range.
    */
   function lockHighwayForProgression(progId) {
     if (!state.pitchViz) ensurePitchViz();
     const id = progId || state.selectedProg;
-    const prog = (window.VT_PROGRESSIONS || VTPiano?.getProgressions?.() || {})[id];
-    if (!prog || !state.pitchViz) return false;
+    const base = (window.VT_PROGRESSIONS || VTPiano?.getProgressions?.() || {})[id];
+    if (!base || !state.pitchViz) return false;
+    const prog =
+      typeof VTTransposeProgression === "function"
+        ? VTTransposeProgression(base, state.octaveShift)
+        : base;
     state.pitchViz.setProgressionRange(prog);
     if (prog.chords?.[0]) state.pitchViz.setTargetFromChord(prog.chords[0]);
     try {
@@ -150,8 +314,12 @@
   function lockHighwayForNotes(noteNames, opts) {
     if (!state.pitchViz) ensurePitchViz();
     if (!state.pitchViz || !noteNames?.length) return false;
-    state.pitchViz.lockRangeFromNoteNames(noteNames, window.VT_NOTE_FREQ, opts);
-    const first = noteNames[0];
+    const shifted =
+      state.octaveShift && typeof VTShiftNoteNames === "function"
+        ? VTShiftNoteNames(noteNames, state.octaveShift)
+        : noteNames;
+    state.pitchViz.lockRangeFromNoteNames(shifted, window.VT_NOTE_FREQ, opts);
+    const first = shifted[0];
     if (first && VT_NOTE_FREQ?.[first]) state.pitchViz.setTargetNoteName(first, VT_NOTE_FREQ);
     try {
       state.pitchViz._draw?.();
@@ -163,6 +331,15 @@
 
   window.VTLockHighwayNotes = lockHighwayForNotes;
   window.VTLockHighwayProg = lockHighwayForProgression;
+  window.VTApplyOctaveShift = applyOctaveShift;
+  window.VTGetOctaveShift = () => state.octaveShift;
+
+  /** Note name after current octave shift (for ref/challenge/target). */
+  function effectiveNoteName(name) {
+    if (!name) return name;
+    if (!state.octaveShift || typeof VTShiftNoteName !== "function") return name;
+    return VTShiftNoteName(name, state.octaveShift);
+  }
 
   function getProfile(ex) {
     return (
@@ -644,13 +821,16 @@
     }
     if (profile.showPitch) {
       ensurePitchViz();
+      ensureRangeAdapter();
+      updateOctaveUI();
       if (state.pitchViz && typeof state.pitchViz.resetLanes === "function") {
         state.pitchViz.resetLanes();
       }
       const ref = profile.refPitch || ex.audio.refPitch;
-      if (ref && window.VT_NOTE_FREQ) {
-        state.pitchViz.setTargetNoteName(ref, VT_NOTE_FREQ);
-        state.practice.setTargetFreq(VT_NOTE_FREQ[ref]);
+      const refS = effectiveNoteName(ref);
+      if (refS && window.VT_NOTE_FREQ?.[refS]) {
+        state.pitchViz.setTargetNoteName(refS, VT_NOTE_FREQ);
+        state.practice.setTargetFreq(VT_NOTE_FREQ[refS]);
       }
       // Prefer full progression span when exercise has chords; else fixed window on ref
       const wantsProg =
@@ -661,11 +841,11 @@
           profile.mode === "pitchSong");
       if (wantsProg) {
         lockHighwayForProgression(state.selectedProg || "prog1");
-      } else if (ref && VT_NOTE_FREQ?.[ref]) {
-        state.pitchViz.lockWindowAroundFreq(VT_NOTE_FREQ[ref], 6);
+      } else if (refS && VT_NOTE_FREQ?.[refS]) {
+        state.pitchViz.lockWindowAroundFreq(VT_NOTE_FREQ[refS], 6);
       }
       updatePitchStatsLabel({
-        targetName: ref || "C3",
+        targetName: refS || ref || "C3",
         voiceName: "—",
         accuracyCents: 0,
         precisionCents: 0
@@ -1119,10 +1299,12 @@
         arpeggio: opts.arpeggio,
         oneNote: opts.oneNote,
         sustain: opts.sustain,
-        sustainSec: opts.sustainSec
+        sustainSec: opts.sustainSec,
+        octaveShift: state.octaveShift || 0
       });
       if (prog) {
         // Re-apply same lock (same option) — never shrink to current chord
+        // prog is already transposed by playProgression
         if (state.pitchViz) state.pitchViz.setProgressionRange(prog);
         const modeHint = opts.oneNote
           ? isEsLang()
@@ -1210,12 +1392,13 @@
   async function onChallengeNoteLocked(prevNote, nextNote) {
     toast(nextNote ? `Locked ${prevNote} → next ${nextNote}` : `Locked ${prevNote} · round done!`);
     // Only retarget — highway range already locked to full challenge pool
-    if (nextNote && VT_NOTE_FREQ[nextNote]) {
-      state.practice.setTargetFreq(VT_NOTE_FREQ[nextNote]);
-      if (state.pitchViz) state.pitchViz.setTargetNoteName(nextNote, VT_NOTE_FREQ);
+    const nextS = effectiveNoteName(nextNote);
+    if (nextS && VT_NOTE_FREQ[nextS]) {
+      state.practice.setTargetFreq(VT_NOTE_FREQ[nextS]);
+      if (state.pitchViz) state.pitchViz.setTargetNoteName(nextS, VT_NOTE_FREQ);
       try {
         const sec = $("#chk-sustain")?.checked ? Number($("#sustain-sec")?.value || 4) : 2.5;
-        await VTPiano.playRefPitch(nextNote, sec, true);
+        await VTPiano.playRefPitch(nextS, sec, true);
       } catch {
         /* piano optional */
       }
@@ -1311,7 +1494,9 @@
     let started = false;
 
     if (inChallenge) {
-      const note = state.pitchGame?.currentChallengeNote?.() || profile.refPitch || ex.audio?.refPitch;
+      const note = effectiveNoteName(
+        state.pitchGame?.currentChallengeNote?.() || profile.refPitch || ex.audio?.refPitch
+      );
       if (note) {
         await VTPiano.playRefPitch(note, sec, true);
         started = true;
@@ -1320,7 +1505,7 @@
       await playSelectedProgression(true);
       started = !!(VTPiano.loopActive || (VTPiano.playing && VTPiano.playing.length));
     } else {
-      const note = profile.refPitch || ex.audio?.refPitch;
+      const note = effectiveNoteName(profile.refPitch || ex.audio?.refPitch);
       if (note) {
         const f = await VTPiano.playRefPitch(note, sec, true);
         if (f) {
@@ -1339,7 +1524,7 @@
     // Safety net: profile said sound wanted but nothing scheduled (misconfigured exercise)
     if (!started && exerciseWantsSound(ex, profile)) {
       try {
-        const fallback = profile.refPitch || ex.audio?.refPitch || "C3";
+        const fallback = effectiveNoteName(profile.refPitch || ex.audio?.refPitch || "C3");
         await VTPiano.playRefPitch(fallback, sec, true);
         started = !!(VTPiano.playing && VTPiano.playing.length);
         if (started) {
@@ -1357,7 +1542,11 @@
         await VTPiano.resume?.();
         if (hasProg) await playSelectedProgression(true);
         else if (profile.refPitch || ex.audio?.refPitch) {
-          await VTPiano.playRefPitch(profile.refPitch || ex.audio.refPitch, sec, true);
+          await VTPiano.playRefPitch(
+            effectiveNoteName(profile.refPitch || ex.audio.refPitch),
+            sec,
+            true
+          );
         }
       } catch (e) {
         console.warn("Piano recover failed", e);
@@ -1455,6 +1644,17 @@
         if (profile.showPitch && state.pitchViz) {
           state.pitchViz.pushFrame(frame.voiceFreq, frame.targetFreq);
         }
+        // Adaptive range: detect plateau short of target while trying (not silence)
+        if (profile.showPitch && state.rangeAuto) {
+          const adapter = ensureRangeAdapter();
+          if (adapter) {
+            try {
+              adapter.feed(frame);
+            } catch (err) {
+              console.warn("[range]", err);
+            }
+          }
+        }
         try {
           state.modeInstance?.onFrame?.(frame);
         } catch (err) {
@@ -1477,6 +1677,8 @@
 
       if (profile.showPitch) {
         ensurePitchViz();
+        ensureRangeAdapter()?.resetSession();
+        updateOctaveUI();
         state.pitchGame.reset();
         updateGameHud(state.pitchGame.snapshot());
         const wantChallenge =
@@ -1486,6 +1688,10 @@
         state.pitchViz.startExternal();
         state.pitchRunning = true;
         const ref = profile.refPitch || ex.audio.refPitch;
+        const shiftNote = (nm) =>
+          nm && state.octaveShift && typeof VTShiftNoteName === "function"
+            ? VTShiftNoteName(nm, state.octaveShift)
+            : nm;
         if (wantChallenge && state.pitchGame.challengeNotes?.length) {
           // Lock once to full challenge set so notes don't jump the Y-axis
           lockHighwayForNotes(state.pitchGame.challengeNotes);
@@ -1497,15 +1703,24 @@
           profile.mode === "pitchSong"
         ) {
           lockHighwayForProgression(state.selectedProg);
-        } else if (ref && VT_NOTE_FREQ[ref]) {
-          state.pitchViz.lockWindowAroundFreq(VT_NOTE_FREQ[ref], 6);
+        } else if (ref) {
+          const refS = shiftNote(ref);
+          if (refS && VT_NOTE_FREQ[refS]) {
+            state.pitchViz.lockWindowAroundFreq(VT_NOTE_FREQ[refS], 6);
+          }
         }
-        if (challengeNote && VT_NOTE_FREQ[challengeNote]) {
-          state.practice.setTargetFreq(VT_NOTE_FREQ[challengeNote]);
-          state.pitchViz.setTargetFreq(VT_NOTE_FREQ[challengeNote]);
-        } else if (ref && VT_NOTE_FREQ[ref]) {
-          state.practice.setTargetFreq(VT_NOTE_FREQ[ref]);
-          state.pitchViz.setTargetFreq(VT_NOTE_FREQ[ref]);
+        if (challengeNote) {
+          const chS = shiftNote(challengeNote);
+          if (chS && VT_NOTE_FREQ[chS]) {
+            state.practice.setTargetFreq(VT_NOTE_FREQ[chS]);
+            state.pitchViz.setTargetFreq(VT_NOTE_FREQ[chS]);
+          }
+        } else if (ref) {
+          const refS = shiftNote(ref);
+          if (refS && VT_NOTE_FREQ[refS]) {
+            state.practice.setTargetFreq(VT_NOTE_FREQ[refS]);
+            state.pitchViz.setTargetFreq(VT_NOTE_FREQ[refS]);
+          }
         }
       }
 
@@ -2570,8 +2785,15 @@
       $("#chord-now").textContent = "—";
       toast("Piano stopped");
     });
+    // Vocal range octave controls (− / + / Auto)
+    $("#btn-oct-down")?.addEventListener("click", () => nudgeOctave(-1));
+    $("#btn-oct-up")?.addEventListener("click", () => nudgeOctave(1));
+    $("#chk-range-auto")?.addEventListener("change", (e) => {
+      setRangeAuto(!!e.target.checked);
+    });
+
     $("#btn-ref-pitch")?.addEventListener("click", async () => {
-      const note = state.exercise?.audio?.refPitch || "A2";
+      const note = effectiveNoteName(state.exercise?.audio?.refPitch || "A2");
       const sustain = $("#chk-sustain")?.checked;
       const sec = sustain ? Number($("#sustain-sec")?.value || 4) : 2.5;
       const f = await VTPiano.playRefPitch(note, sec, true);
@@ -3004,6 +3226,9 @@
 
   // Test / debug helpers
   window.VTApp = {
+    getOctaveShift: () => state.octaveShift,
+    applyOctaveShift,
+    getRangeSnapshot: () => ensureRangeAdapter()?.getSnapshot?.() || null,
     applyPianoOptionsHot,
     get _hotApplyPromise() {
       return state._hotApplyPromise;
@@ -3030,6 +3255,8 @@
   };
 
   function init() {
+    ensureRangeAdapter();
+    updateOctaveUI();
     installGlobalErrorHandlers();
     if (window.VTI18n) {
       VTI18n.init();

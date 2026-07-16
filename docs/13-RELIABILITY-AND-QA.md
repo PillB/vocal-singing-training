@@ -48,9 +48,22 @@ npm run test:geometry         # AABB HUD forensics (optional after CSS)
 
 | Kind | Expect on Empezar |
 |------|-------------------|
-| `VTApp.wantsSound()` true (autoPiano / piano / progressions / ref) | `ctx === running`, voices scheduled, `outputPeak() > ~0.004` |
-| Speech / air-only (e.g. `s15-sh-air-ladder` SH ladder) | Live practice; **no** piano required; ctx must not end `closed` |
+| `profile.autoPiano` + Auto checked | Piano/ref/progression audio |
+| Speech / air-only (e.g. `s15-sh-air-ladder`) | Live practice; **no** piano required |
 | `weekPlan` | May open plan UI without live mic |
+
+**Auto piano checkbox** defaults from `profile.autoPiano` only (not merely “can make sound”). Piano mini still shows when `audio.piano` / progressions exist so user can enable.
+
+### Feature matrix (all 36 exercises)
+
+Playwright: `tests/exercise-features.spec.js` asserts for each exercise:
+- Registered mode + non-empty title + Start  
+- `showPitch` ↔ pitch block + game HUD  
+- `showHold` ↔ hold display  
+- `pitchChallenge` ↔ challenge row  
+- Chord/song + piano data ↔ progression bar  
+- Non-pitch modes ↔ mode-focus/mode-hud content  
+- Start goes live; sound when Auto on and wants piano  
 
 Do **not** infer piano from mode name alone (`shAirLadder` is unvoiced air).
 

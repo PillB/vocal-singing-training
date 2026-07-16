@@ -379,7 +379,9 @@
       showHold: false,
       showLevel: true,
       pitchChallenge: false,
-      autoPiano: false,
+      // Piano on so Empezar plays mid-range ref (G2) under the glide
+      autoPiano: true,
+      refPitch: "G2",
       autoRecord: false,
       cue: "Smooth glides. We track pitch range rope and siren count — not single-note locks.",
       cueEs: "Deslizamientos suaves. Seguimos el rango y el conteo de sirenas — no bloqueos de nota única.",

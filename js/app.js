@@ -716,9 +716,10 @@
         if (bar) bar.hidden = true;
       }
       if (profile.autoArpeggio && $("#chk-arpeggio")) $("#chk-arpeggio").checked = true;
-      // Auto piano ON by default whenever this exercise can play sound
+      // Auto piano follows profile.autoPiano (explicit pedagogy), not merely "can make sound".
+      // e.g. v12 melodic speech has piano available but Auto off — variety, not note drills.
       if ($("#chk-auto-piano")) {
-        $("#chk-auto-piano").checked = exerciseWantsSound(ex, profile);
+        $("#chk-auto-piano").checked = !!profile.autoPiano;
       }
       if ($("#chk-sustain")) $("#chk-sustain").checked = true; // sustain on by default
       syncSustainSecLabel();

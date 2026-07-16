@@ -18,6 +18,11 @@
    * Research: game key-state sets + hold grace (no reliable web keyboard poll).
    */
   const MANUAL_GRACE_MS = 550;
+  /**
+   * Unvoiced SH/S air detection grace: brief RMS dips / pitch false-positives
+   * must not zero the ladder counter (same idea as HOLD_GRACE for voiced holds).
+   */
+  const AIR_GRACE_MS = 420;
   /** Base thresholds at sensitivity = 5 (mid). Higher sensitivity lowers them. */
   const VOICE_RMS_BASE = 0.012;
   const HOLD_RMS_BASE = 0.008;
@@ -67,9 +72,11 @@
       this._lastManualActiveAt = 0;
       this._manualKind = "voice";
       this._manualRmsFloor = 0.06;
+      /** Last time unvoiced-air (SH/S) was detected — for AIR_GRACE_MS */
+      this._lastAirAt = 0;
 
       // Callbacks
-      this.onFrame = null; // { rms, voiceFreq, holdSec, voiced, holds, sensitivity, manualSound }
+      this.onFrame = null; // { rms, voiceFreq, holdSec, voiced, holds, sensitivity, manualSound, airDetected }
       this.onHoldLogged = null; // seconds
       this.onStatus = null;
       this.onRecordingReady = null;
@@ -181,8 +188,49 @@
 
     /** Unvoiced-air detection floor (SH ladder); scales with sensitivity */
     _airRms() {
-      // At sens 7 ≈ 0.014; at sens 10 ≈ 0.006; at sens 1 ≈ 0.028
-      return 0.018 * this._threshScale() * 0.85;
+      // More permissive for soft SH on laptop mics:
+      // sens 7 ≈ 0.007; sens 10 ≈ 0.003; sens 1 ≈ 0.019
+      return 0.014 * this._threshScale() * 0.85;
+    }
+
+    _airGraceMs() {
+      return AIR_GRACE_MS + Math.max(0, this.sensitivity - 5) * 30;
+    }
+
+    /**
+     * High-frequency energy proxy (first-difference high-pass).
+     * Unvoiced fricatives (SH/S) have strong HF; low-pitch vowels less so.
+     * Avoids needing a second AnalyserNode FFT path.
+     */
+    _hfRms(buf) {
+      if (!buf || buf.length < 2) return 0;
+      let sum = 0;
+      const n = buf.length;
+      for (let i = 1; i < n; i++) {
+        const d = buf[i] - buf[i - 1];
+        sum += d * d;
+      }
+      return Math.sqrt(sum / (n - 1));
+    }
+
+    /**
+     * Raw unvoiced-air decision for one frame (no grace).
+     * Space manual air always counts; else RMS and/or HF energy, without
+     * rejecting when autocorrelation false-pitches a fricative.
+     */
+    _airRaw(rms, hfRms, hasPitch, manualAir) {
+      if (manualAir) return true;
+      const floor = this._airRms();
+      // Sibilant / fricative signature: elevated high-pass energy
+      const sibilant =
+        hfRms >= floor * 0.32 &&
+        (hfRms >= rms * 0.45 || hfRms >= floor * 0.48);
+      // Soft steady air: broadband or HF above lowered floor
+      const energy = rms >= floor * 0.5 || hfRms >= floor * 0.38;
+      // Block only clear phonation (real pitch + strong energy, not fricative-like)
+      const clearVoice =
+        hasPitch && rms >= this._voiceRms() * 0.8 && !sibilant;
+      return (energy && !clearVoice) || sibilant;
     }
 
     _voiceRms() {
@@ -369,6 +417,7 @@
       // End Space assist immediately (no grace after stop)
       this._manualKeyDown = false;
       this._lastManualActiveAt = 0;
+      this._lastAirAt = 0;
 
       if (this.raf) cancelAnimationFrame(this.raf);
       this.raf = null;
@@ -484,6 +533,8 @@
       if (!this.running || !this.analyser) return;
       this.analyser.getFloatTimeDomainData(this.buf);
       let rms = this._rms(this.buf);
+      // HF before any manual RMS inject — true fricative signature from the mic
+      const hfRms = this._hfRms(this.buf);
       let freq = this._detectPitch(this.buf, this.audioCtx.sampleRate);
       const now = performance.now();
 
@@ -510,6 +561,14 @@
 
       const hasPitch =
         freq != null && freq >= PITCH_MIN && freq <= PITCH_MAX;
+
+      // Unvoiced SH/S air: HF energy + lowered floor; grace bridges micro-gaps
+      const manualAir = !!(manual && manualKind === "air");
+      const airRaw = this._airRaw(rms, hfRms, hasPitch, manualAir);
+      if (airRaw) this._lastAirAt = now;
+      const airDetected =
+        airRaw ||
+        (this._lastAirAt > 0 && now - this._lastAirAt < this._airGraceMs());
       // Start a hold only with energy + pitch; continue a hold with energy alone
       // (pitch detectors flake mid-sustain — we give grace + sensitivity)
       let strongVoice = rms >= voiceRms && hasPitch;
@@ -599,7 +658,11 @@
           manualSound: manual,
           manualGrace: manualInGrace,
           manualKind: manual ? manualKind : null,
-          airRmsThreshold: this._airRms()
+          airRmsThreshold: this._airRms(),
+          /** True when unvoiced SH/S air is detected (or inside air grace) */
+          airDetected,
+          airRaw,
+          hfRms
         });
       }
 
@@ -611,6 +674,7 @@
   global.VT_HOLD_MIN_SEC = HOLD_MIN_SEC;
   global.VT_HOLD_GRACE_MS = HOLD_GRACE_MS;
   global.VT_MANUAL_GRACE_MS = MANUAL_GRACE_MS;
+  global.VT_AIR_GRACE_MS = AIR_GRACE_MS;
   global.VT_SILENCE_END_MS = SILENCE_END_MS;
   global.VT_DEFAULT_MIC_SENS = DEFAULT_SENS;
 })(window);

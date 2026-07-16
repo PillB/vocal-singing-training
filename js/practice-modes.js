@@ -1489,14 +1489,16 @@
       });
     },
     onFrame(frame) {
-      // S phase: unvoiced but air (rms without solid pitch); scales with mic sensitivity
+      // S phase: unvoiced air — prefer engine airDetected (HF + grace); Space is backup
       const thr = frame.airRmsThreshold != null ? frame.airRmsThreshold * 1.1 : 0.02;
       const air =
         this.state.phase === "S"
-          ? (frame.manualSound && frame.manualKind === "air") ||
+          ? !!frame.airDetected ||
+            (frame.manualSound && frame.manualKind === "air") ||
             ((frame.rms || 0) > thr && !frame.voiceFreq)
           : frame.voiced ||
             (frame.manualSound && frame.manualKind === "voice") ||
+            !!frame.airDetected ||
             (frame.rms || 0) > thr * 1.2;
       if (air) {
         this.state.cur += 0.016;
@@ -1539,9 +1541,10 @@
       `;
     },
     onFrame(frame) {
-      // Soft SH/air: sensitivity-aware threshold + Space manual air assist
+      // Soft SH/air: engine airDetected (HF energy + grace) · Space is backup assist
       const thr = frame.airRmsThreshold != null ? frame.airRmsThreshold : 0.018;
       const air =
+        !!frame.airDetected ||
         (frame.manualSound && frame.manualKind === "air") ||
         ((frame.rms || 0) > thr && !frame.voiceFreq);
       const target = this.state.rungs[this.state.i] || this.state.rungs[this.state.rungs.length - 1];

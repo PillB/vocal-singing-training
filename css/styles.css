@@ -93,41 +93,56 @@ body.view-exercise .app-header .brand h1 {
   font-size: 0.88rem;
 }
 body.view-exercise {
-  --header-h: 46px;
+  --header-h: 42px;
 }
 body.view-exercise .main {
-  padding-top: 0.4rem;
-  padding-bottom: 2rem;
+  padding-top: 0.3rem;
+  padding-bottom: 1.25rem;
 }
 body.view-exercise .header-actions .btn-sm {
-  min-height: 34px;
-  padding: 0.28rem 0.55rem;
-  font-size: 0.76rem;
+  min-height: 32px;
+  padding: 0.24rem 0.5rem;
+  font-size: 0.74rem;
+}
+/* Exercise: hide low-priority chrome so stage owns the fold */
+body.view-exercise #btn-history,
+body.view-exercise #btn-plan,
+body.view-exercise #btn-tour {
+  display: none;
+}
+body.view-exercise .app-footer {
+  display: none;
 }
 /* Home: denser list — more cards in first viewport */
 body:not(.view-exercise) .hero {
-  padding: 0.55rem 0 0.65rem;
+  padding: 0.4rem 0 0.45rem;
 }
 body:not(.view-exercise) .hero h2 {
-  font-size: clamp(1.2rem, 2.6vw, 1.55rem);
+  font-size: clamp(1.15rem, 2.5vw, 1.45rem);
+  margin-bottom: 0.2rem;
 }
 body:not(.view-exercise) .hero p {
-  font-size: 0.9rem;
+  font-size: 0.86rem;
   max-width: 62ch;
+  line-height: 1.4;
 }
 body:not(.view-exercise) .tabs {
-  margin-bottom: 0.65rem;
+  margin-bottom: 0.5rem;
 }
 body:not(.view-exercise) .toolbar {
-  margin-bottom: 0.65rem;
-  gap: 0.45rem;
+  margin-bottom: 0.5rem;
+  gap: 0.4rem;
 }
 body:not(.view-exercise) .grid {
-  gap: 0.65rem;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 0.55rem;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
 }
 body:not(.view-exercise) .card-ex {
-  padding: 0.75rem 0.85rem;
+  padding: 0.65rem 0.75rem;
+}
+body:not(.view-exercise) .main {
+  padding-top: 0.7rem;
+  padding-bottom: 2rem;
 }
 body:not(.view-exercise) .card-ex h3 {
   font-size: 0.95rem;
@@ -1116,67 +1131,79 @@ button:focus-visible,
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.5rem;
-  margin-bottom: 0.25rem;
+  gap: 0.4rem;
+  margin-bottom: 0.15rem;
   padding: 0;
   min-height: 0;
 }
 .exercise-header-compact .ex-title-row {
   display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.35rem 0.55rem;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.35rem 0.45rem;
   min-width: 0;
   flex: 1 1 auto;
+  overflow: hidden;
 }
 .exercise-header-compact h2 {
-  font-size: 0.98rem;
+  font-size: 0.92rem;
   margin: 0;
-  line-height: 1.25;
+  line-height: 1.2;
   letter-spacing: -0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: min(52vw, 28rem);
 }
 .exercise-header-compact .sub {
   margin: 0;
-  font-size: 0.75rem;
-  width: 100%;
+  font-size: 0.72rem;
+  /* keep structured progress on one line when present */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 12rem;
 }
 .exercise-header-compact .badge {
   flex: 0 0 auto;
+  font-size: 0.68rem;
+  padding: 0.12rem 0.4rem;
 }
 .btn-back-compact {
   flex: 0 0 auto;
   white-space: nowrap;
-  min-height: 36px;
-  padding: 0.3rem 0.65rem;
+  min-height: 32px;
+  padding: 0.25rem 0.55rem;
+  font-size: 0.78rem;
 }
 
 /* Sticky only the highway frame — not piano/metrics */
 .game-stage {
   position: relative;
   z-index: auto;
-  margin-bottom: 0.45rem;
-  padding: 0.35rem 0.45rem 0.45rem;
+  margin-bottom: 0.3rem;
+  padding: 0.28rem 0.35rem 0.35rem;
   /* Fill first viewport: stage is the product */
-  border-radius: 14px;
+  border-radius: 12px;
 }
 
 .highway-stage {
   position: sticky;
   top: var(--header-h, 74px);
   z-index: 20;
-  /* Maximize practice surface in the first viewport */
-  min-height: min(58dvh, 420px);
-  max-height: min(74dvh, 580px);
-  height: min(62dvh, 480px);
+  /* Claim more of the first viewport (game stage first) */
+  min-height: min(62dvh, 460px);
+  max-height: min(78dvh, 620px);
+  height: min(70dvh, 560px);
   overflow: hidden;
   border-radius: 12px;
   background: rgba(8, 12, 18, 0.72);
   border: 1px solid var(--border);
   /* Safe inset so canvas labels aren't under HUDs */
-  --hud-safe-t: 3.5rem;
+  --hud-safe-t: 3.35rem;
   --hud-safe-b: 3.5rem;
-  --hud-safe-l: 0.5rem;
-  --hud-safe-r: 0.5rem;
+  --hud-safe-l: 0.45rem;
+  --hud-safe-r: 0.45rem;
 }
 
 .hud-corner {
@@ -1493,10 +1520,11 @@ button:focus-visible,
   font-size: 0.78rem;
 }
 
-/* Speech stage: taller sticky frame so mode panel fits between TL and BL */
+/* Speech stage: fill fold with live mode panel between TL and BL */
 .highway-stage:has(.mode-focus-live) {
-  min-height: 340px;
-  max-height: min(68dvh, 520px);
+  min-height: min(62dvh, 460px);
+  max-height: min(78dvh, 600px);
+  height: min(70dvh, 560px);
 }
 /* Compact TL on speech so more room for live mode */
 .highway-stage:has(.mode-focus-live) .hud-tl {
@@ -1529,7 +1557,7 @@ body.view-exercise .hud-cents-only .hud-score .hud-label {
 }
 
 .stage-below {
-  margin-top: 0.35rem;
+  margin-top: 0.25rem;
   min-width: 0;
 }
 /* Hide empty secondary chrome so no phantom scroll height */
@@ -1537,9 +1565,27 @@ body.view-exercise .hud-cents-only .hud-score .hud-label {
 .stage-below:not(:has(:not([hidden]):not(:empty))) {
   margin: 0;
   min-height: 0;
+  display: none;
 }
 .metrics-card-collapsible {
-  margin-top: 0.45rem;
+  margin-top: 0.35rem;
+}
+/* Collapsed guide/metrics = one-line chips under the stage */
+body.view-exercise .guide-card.collapsed,
+body.view-exercise .metrics-card-collapsible.collapsed {
+  padding: 0.45rem 0.65rem;
+  margin-top: 0.3rem;
+}
+body.view-exercise .guide-card.collapsed .guide-header,
+body.view-exercise .metrics-card-collapsible.collapsed .metrics-header {
+  margin: 0;
+}
+body.view-exercise .guide-card.collapsed h3,
+body.view-exercise .metrics-card-collapsible.collapsed h3 {
+  font-size: 0.88rem;
+}
+body.view-exercise .metrics-card-collapsible.collapsed .metrics-sub-compact {
+  display: none;
 }
 .metrics-card-collapsible .metrics-sub-compact {
   margin: 0.15rem 0 0;
@@ -1616,20 +1662,25 @@ body.view-exercise .hud-cents-only .hud-score .hud-label {
 }
 
 .mode-hud-compact .mode-panel {
-  margin-top: 0.25rem;
-  padding: 0.45rem 0.65rem;
+  margin-top: 0.15rem;
+  padding: 0.35rem 0.55rem;
 }
 
 .mode-hud-compact .mode-big {
-  font-size: 1.15rem;
+  font-size: 1.05rem;
 }
 
 .mode-cue {
-  font-size: 0.8rem;
-  margin: 0.25rem 0;
-  max-height: 2.4em;
+  font-size: 0.78rem;
+  margin: 0.15rem 0;
+  max-height: 2.2em;
   overflow: hidden;
   color: var(--text-muted);
+}
+/* Pitch modes: keep secondary mode strip short so user rarely scrolls past stage */
+body.view-exercise .mode-hud-compact {
+  max-height: 7.5rem;
+  overflow: auto;
 }
 
 @media (max-width: 640px) {
@@ -1713,9 +1764,9 @@ body.view-exercise .hud-cents-only .hud-score .hud-label {
     display: none;
   }
   .highway-stage {
-    min-height: min(50dvh, 320px);
-    max-height: min(62dvh, 440px);
-    height: min(52dvh, 360px);
+    min-height: min(54dvh, 360px);
+    max-height: min(68dvh, 480px);
+    height: min(58dvh, 400px);
   }
   .exercise-header-compact h2 {
     font-size: 0.88rem;

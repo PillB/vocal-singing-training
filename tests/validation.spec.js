@@ -243,20 +243,28 @@ test.describe("Exercise-specific practice modes", () => {
     // guide + metrics below fold, collapsed by default
     await expect(page.locator(".guide-card")).toHaveClass(/collapsed/);
     await expect(page.locator("#metrics-card")).toHaveClass(/collapsed/);
-    // Start control center is in first viewport (game HUD)
+    // Game stage owns most of the first viewport
     const fold = await page.evaluate(() => {
+      window.scrollTo(0, 0);
       const b = document.querySelector("#btn-practice-start")?.getBoundingClientRect();
       const h = document.querySelector("#highway-stage")?.getBoundingClientRect();
       return {
         startY: b ? b.top + b.height / 2 : null,
+        startBottom: b ? b.bottom : null,
         stageBottom: h ? h.bottom : null,
+        stageTop: h ? h.top : null,
+        stageH: h ? h.height : null,
         vh: window.innerHeight,
         scrollY: window.scrollY
       };
     });
     expect(fold.scrollY).toBe(0);
     expect(fold.startY).toBeLessThan(fold.vh);
-    expect(fold.stageBottom).toBeLessThanOrEqual(fold.vh + 8);
+    expect(fold.startBottom).toBeLessThanOrEqual(fold.vh + 8);
+    expect(fold.stageBottom).toBeLessThanOrEqual(fold.vh + 12);
+    // Stage should claim a large share of viewport height (less scroll product goal)
+    expect(fold.stageH / fold.vh).toBeGreaterThanOrEqual(0.55);
+    expect(fold.stageTop).toBeLessThan(fold.vh * 0.2);
   });
 
   test("wide jump progressions available for solfege", async ({ page }) => {

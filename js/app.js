@@ -767,7 +767,10 @@
   async function playSelectedProgression(loop) {
     try {
       await VTPiano.ensure();
-      if (!state.selectedProg) state.selectedProg = "prog1";
+      await VTPiano.resume?.();
+      if (!state.selectedProg || !VT_PROGRESSIONS?.[state.selectedProg]) {
+        state.selectedProg = "prog1";
+      }
       const opts = pianoOptions();
       // Sustain default ON for practice loops (helps newbies home in)
       if (opts.sustain == null) opts.sustain = true;
@@ -1004,7 +1007,7 @@
       const wantPiano = exerciseWantsSound(ex, profile) && autoPianoChecked();
       const showHold = !!profile.showHold;
 
-      // Unlock audio immediately on the Start click (before mic permission prompt)
+      // Unlock audio on the Start click (user gesture) — required by browsers
       if (wantPiano) {
         try {
           await VTPiano.ensure();
@@ -1103,16 +1106,8 @@
           profile.mode
         );
 
-      // Piano/ref sound FIRST so audio is audible even if mic is denied
-      let soundOk = false;
-      if (wantPiano) {
-        try {
-          soundOk = await startExerciseSound(ex, profile);
-        } catch (e) {
-          console.error("Piano start failed", e);
-        }
-      }
-
+      // Mic first: getUserMedia dialog often suspends AudioContext if piano
+      // already started — then solfege/ref sound goes silent for the whole session.
       let micOk = !needsMic && !wantRecord;
       if (needsMic || wantRecord) {
         try {
@@ -1121,6 +1116,23 @@
         } catch (e) {
           console.error(e);
           micOk = false;
+        }
+      }
+
+      // Resume + start piano AFTER mic so context is running again
+      let soundOk = false;
+      if (wantPiano) {
+        try {
+          await VTPiano.resume?.();
+          await VTPiano.ensure();
+          soundOk = await startExerciseSound(ex, profile);
+          // If still silent (suspended), one more resume + replay
+          if (VTPiano.ctx && VTPiano.ctx.state === "suspended") {
+            await VTPiano.resume?.();
+            soundOk = await startExerciseSound(ex, profile);
+          }
+        } catch (e) {
+          console.error("Piano start failed", e);
         }
       }
 
@@ -1134,8 +1146,25 @@
 
       if (ex.audio.timer && state.timer.total > 0 && micOk) startTimer();
 
+      // Keep piano awake while practicing (tab blur / OS audio policies)
+      if (wantPiano && soundOk) {
+        state._pianoKeepAlive = setInterval(() => {
+          if (!state.practiceLive) return;
+          if (window.VTPiano?.ctx?.state === "suspended") {
+            VTPiano.resume?.().then(() => {
+              // restart loop if it died while suspended
+              if (!VTPiano.loopActive && exerciseWantsSound(ex, profile)) {
+                startExerciseSound(ex, profile).catch(() => {});
+              }
+            });
+          }
+        }, 2000);
+      }
+
       if (!micOk && soundOk) {
         toast(tt("toast.pianoOnly"));
+      } else if (wantPiano && !soundOk) {
+        toast(tt("toast.pianoFail"));
       } else {
         toast(
           wantRecord
@@ -1151,6 +1180,10 @@
   }
 
   function stopPractice(silent) {
+    if (state._pianoKeepAlive) {
+      clearInterval(state._pianoKeepAlive);
+      state._pianoKeepAlive = null;
+    }
     // Snapshot pitch game BEFORE mode onStop (architecture review critical fix)
     if (state.pitchGame) {
       window.VTAppPitchGameSnap = state.pitchGame.snapshot();

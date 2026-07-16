@@ -167,7 +167,7 @@
         const AC = window.AudioContext || window.webkitAudioContext;
         this.ctx = new AC();
         this.master = this.ctx.createGain();
-        this.master.gain.value = 0.55;
+        this.master.gain.value = 0.7;
         this.comp = this.ctx.createDynamicsCompressor();
         this.comp.threshold.value = -18;
         this.comp.knee.value = 12;
@@ -177,16 +177,29 @@
         this.master.connect(this.comp);
         this.comp.connect(this.ctx.destination);
       }
-      if (this.ctx.state === "suspended") await this.ctx.resume();
+      if (this.ctx.state === "suspended") {
+        try {
+          await this.ctx.resume();
+        } catch (e) {
+          console.warn("Piano ensure resume failed", e);
+        }
+      }
+      if (this.master && this.master.gain.value < 0.2) {
+        this.master.gain.setValueAtTime(0.7, this.ctx.currentTime);
+      }
       return this.ctx;
     }
 
     /**
      * Additive piano-like partials with hammer noise burst + exponential decay.
      */
-    playNote(freq, when, duration = 1.4, velocity = 0.45, sustain = false) {
+    playNote(freq, when, duration = 1.4, velocity = 0.48, sustain = false) {
       const ctx = this.ctx;
-      const t0 = when;
+      if (!ctx || !this.master) {
+        console.warn("Piano playNote: context not ready");
+        return null;
+      }
+      const t0 = when != null ? when : ctx.currentTime + 0.02;
       const partials = [
         { mul: 1, gain: 1.0, type: "sine" },
         { mul: 2, gain: 0.42, type: "sine" },
@@ -289,14 +302,14 @@
         clearTimeout(this.loopTimer);
         this.loopTimer = null;
       }
-      // Stop scheduled oscillators without muting master for a long time
-      // (a long mute race was killing the first notes of the next Start)
+      // Stop scheduled oscillators at *now* (stop(0) is wrong once context time > 0)
+      const now = this.ctx ? this.ctx.currentTime : 0;
       try {
         (this.playing || []).forEach((n) => {
           try {
-            if (n.stop) n.stop(0);
+            if (n.stop) n.stop(now);
           } catch {
-            /* already stopped */
+            /* already stopped / invalid when */
           }
         });
       } catch {
@@ -304,12 +317,28 @@
       }
       this.playing = [];
       if (this.ctx && this.master) {
-        const now = this.ctx.currentTime;
         this.master.gain.cancelScheduledValues(now);
-        // brief duck only — restore immediately so new notes are audible
-        this.master.gain.setValueAtTime(Math.max(0.001, this.master.gain.value), now);
-        this.master.gain.linearRampToValueAtTime(0.62, now + 0.04);
+        // Keep master audible for the next Start
+        this.master.gain.setValueAtTime(0.7, now);
       }
+    }
+
+    /** Resume context after mic prompt / tab blur (common silent-piano bug). */
+    async resume() {
+      if (!this.ctx) return this.ensure();
+      if (this.ctx.state === "suspended") {
+        try {
+          await this.ctx.resume();
+        } catch (e) {
+          console.warn("Piano resume failed", e);
+        }
+      }
+      if (this.master) {
+        const t = this.ctx.currentTime;
+        this.master.gain.cancelScheduledValues(t);
+        this.master.gain.setValueAtTime(0.7, t);
+      }
+      return this.ctx;
     }
 
     getProgressions() {
@@ -321,14 +350,15 @@
       { loop = false, chordSec = 2.0, arpeggio = false, sustain = false, sustainSec = 4.0 } = {}
     ) {
       await this.ensure();
+      await this.resume();
       this.stopAll();
       // Ensure context is running after stopAll
       if (this.ctx.state === "suspended") await this.ctx.resume();
-      if (this.master) this.master.gain.setValueAtTime(0.62, this.ctx.currentTime);
+      if (this.master) this.master.gain.setValueAtTime(0.7, this.ctx.currentTime);
       const prog = PROGRESSIONS[progId];
       if (!prog) {
         console.warn("Unknown progression", progId);
-        return;
+        return null;
       }
 
       // Sustain mode: hold each harmony 3–5s so newbies can lock pitch before the next change

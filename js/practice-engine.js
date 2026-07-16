@@ -21,8 +21,9 @@
   /**
    * Unvoiced SH/S air detection grace: brief RMS dips / pitch false-positives
    * must not zero the ladder counter (same idea as HOLD_GRACE for voiced holds).
+   * Longer than v1 (420) so soft real-mic SH can “catch” and hold the count.
    */
-  const AIR_GRACE_MS = 420;
+  const AIR_GRACE_MS = 700;
   /** Base thresholds at sensitivity = 5 (mid). Higher sensitivity lowers them. */
   const VOICE_RMS_BASE = 0.012;
   const HOLD_RMS_BASE = 0.008;
@@ -41,6 +42,8 @@
       this.inputGain = null;
       this.analyser = null;
       this.buf = null;
+      /** Byte frequency data for sibilant band (2–8 kHz) */
+      this._freqBytes = null;
       this.raf = null;
 
       this.mediaRecorder = null;
@@ -188,19 +191,24 @@
 
     /** Unvoiced-air detection floor (SH ladder); scales with sensitivity */
     _airRms() {
-      // More permissive for soft SH on laptop mics:
-      // sens 7 ≈ 0.007; sens 10 ≈ 0.003; sens 1 ≈ 0.019
-      return 0.014 * this._threshScale() * 0.85;
+      // Soft SH on laptop mics after OS processing is quiet:
+      // sens 7 ≈ 0.005; sens 10 ≈ 0.002; sens 1 ≈ 0.014
+      return 0.011 * this._threshScale() * 0.85;
+    }
+
+    /** FFT byte mean threshold for 2–8 kHz band (0–1), scales with sensitivity */
+    _airBandFloor() {
+      // sens 7 ≈ 0.06; sens 10 ≈ 0.03; sens 1 ≈ 0.12 (byte/255)
+      return 0.09 * this._threshScale() * 0.75;
     }
 
     _airGraceMs() {
-      return AIR_GRACE_MS + Math.max(0, this.sensitivity - 5) * 30;
+      return AIR_GRACE_MS + Math.max(0, this.sensitivity - 5) * 40;
     }
 
     /**
      * High-frequency energy proxy (first-difference high-pass).
      * Unvoiced fricatives (SH/S) have strong HF; low-pitch vowels less so.
-     * Avoids needing a second AnalyserNode FFT path.
      */
     _hfRms(buf) {
       if (!buf || buf.length < 2) return 0;
@@ -214,23 +222,72 @@
     }
 
     /**
-     * Raw unvoiced-air decision for one frame (no grace).
-     * Space manual air always counts; else RMS and/or HF energy, without
-     * rejecting when autocorrelation false-pitches a fricative.
+     * Mean energy in ~2–8 kHz (sibilant / fricative band), normalized 0–1.
+     * Uses getByteFrequencyData on the existing AnalyserNode.
      */
-    _airRaw(rms, hfRms, hasPitch, manualAir) {
+    _bandHf(sampleRate) {
+      if (!this.analyser || !sampleRate) return 0;
+      const n = this.analyser.frequencyBinCount;
+      if (!n) return 0;
+      if (!this._freqBytes || this._freqBytes.length !== n) {
+        this._freqBytes = new Uint8Array(n);
+      }
+      try {
+        this.analyser.getByteFrequencyData(this._freqBytes);
+      } catch {
+        return 0;
+      }
+      // bin i ≈ i * sampleRate / fftSize
+      const fftSize = this.analyser.fftSize || n * 2;
+      const hzPerBin = sampleRate / fftSize;
+      const i0 = Math.max(1, Math.floor(2000 / hzPerBin));
+      const i1 = Math.min(n - 1, Math.ceil(8000 / hzPerBin));
+      if (i1 <= i0) return 0;
+      let sum = 0;
+      let count = 0;
+      // Prefer upper half of sibilant band (less vowel formant bleed)
+      const mid = Math.floor((i0 + i1) / 2);
+      for (let i = mid; i <= i1; i++) {
+        sum += this._freqBytes[i];
+        count++;
+      }
+      if (!count) return 0;
+      return sum / count / 255;
+    }
+
+    /**
+     * Raw unvoiced-air decision for one frame (no grace).
+     * Prefer detecting soft SH; only exclude clear voiced singing/speech.
+     * v1 bug: clearVoice at voiceRms*0.8 + false pitch blocked real SH.
+     * @param {number} rms
+     * @param {number} hfRms
+     * @param {boolean} hasPitch
+     * @param {boolean} manualAir
+     * @param {number} [bandHf] 0–1 FFT sibilant band
+     */
+    _airRaw(rms, hfRms, hasPitch, manualAir, bandHf) {
       if (manualAir) return true;
       const floor = this._airRms();
-      // Sibilant / fricative signature: elevated high-pass energy
+      const bandFloor = this._airBandFloor();
+      const band = bandHf != null ? bandHf : 0;
+      // Sibilant / fricative: FFT band OR first-diff HF
       const sibilant =
-        hfRms >= floor * 0.32 &&
-        (hfRms >= rms * 0.45 || hfRms >= floor * 0.48);
-      // Soft steady air: broadband or HF above lowered floor
-      const energy = rms >= floor * 0.5 || hfRms >= floor * 0.38;
-      // Block only clear phonation (real pitch + strong energy, not fricative-like)
-      const clearVoice =
-        hasPitch && rms >= this._voiceRms() * 0.8 && !sibilant;
-      return (energy && !clearVoice) || sibilant;
+        band >= bandFloor ||
+        (hfRms >= floor * 0.22 && (hfRms >= rms * 0.3 || hfRms >= floor * 0.35));
+      // Soft steady air / SH after AGC — prefer detect (Space must not be required)
+      const energy =
+        rms >= floor * 0.28 ||
+        hfRms >= floor * 0.22 ||
+        band >= bandFloor * 0.65;
+      // Only exclude *loud* clear singing/speech (not soft SH + false pitch).
+      // v1 used voiceRms*0.8 which blocked real soft SH when autocorr locked.
+      const loudVoiced =
+        hasPitch &&
+        rms >= Math.max(this._voiceRms() * 2.2, floor * 5) &&
+        !sibilant &&
+        band < bandFloor * 0.65 &&
+        hfRms < Math.max(floor * 0.45, rms * 0.32);
+      return sibilant || (energy && !loudVoiced);
     }
 
     _voiceRms() {
@@ -353,11 +410,13 @@
         }
       }
       this.buf = new Float32Array(this.analyser.fftSize);
+      this._freqBytes = new Uint8Array(this.analyser.frequencyBinCount);
 
       this.voiced = false;
       this.holdStart = null;
       this.currentHoldSec = 0;
       this.lastVoiceAt = 0;
+      this._lastAirAt = 0;
       this.holds = []; // clear prior session holds on restart
       this.startedAt = performance.now();
       this.running = true;
@@ -533,9 +592,11 @@
       if (!this.running || !this.analyser) return;
       this.analyser.getFloatTimeDomainData(this.buf);
       let rms = this._rms(this.buf);
-      // HF before any manual RMS inject — true fricative signature from the mic
+      // HF / band before any manual RMS inject — true fricative signature from the mic
       const hfRms = this._hfRms(this.buf);
-      let freq = this._detectPitch(this.buf, this.audioCtx.sampleRate);
+      const sampleRate = this.audioCtx.sampleRate || 48000;
+      const bandHf = this._bandHf(sampleRate);
+      let freq = this._detectPitch(this.buf, sampleRate);
       const now = performance.now();
 
       // Manual assist (Space): key down OR post-keyup grace (a11y continuous count)
@@ -562,9 +623,9 @@
       const hasPitch =
         freq != null && freq >= PITCH_MIN && freq <= PITCH_MAX;
 
-      // Unvoiced SH/S air: HF energy + lowered floor; grace bridges micro-gaps
+      // Unvoiced SH/S air: FFT band + HF + lowered floor; grace bridges micro-gaps
       const manualAir = !!(manual && manualKind === "air");
-      const airRaw = this._airRaw(rms, hfRms, hasPitch, manualAir);
+      const airRaw = this._airRaw(rms, hfRms, hasPitch, manualAir, bandHf);
       if (airRaw) this._lastAirAt = now;
       const airDetected =
         airRaw ||
@@ -662,7 +723,8 @@
           /** True when unvoiced SH/S air is detected (or inside air grace) */
           airDetected,
           airRaw,
-          hfRms
+          hfRms,
+          airBand: bandHf
         });
       }
 

@@ -56,9 +56,96 @@ test.describe("SH air auto-detect", () => {
         AIR_GRACE: window.VT_AIR_GRACE_MS
       };
     });
-    expect(r.AIR_GRACE).toBeGreaterThanOrEqual(300);
+    expect(r.AIR_GRACE).toBeGreaterThanOrEqual(600);
     expect(r.manual).toBeFalsy();
     expect(r.hfRms).toBeGreaterThan(0.01);
+    expect(r.airRaw).toBe(true);
+    expect(r.airDetected).toBe(true);
+  });
+
+  test("soft broadband + false pitch still airDetects (real-mic SH bug)", async ({ page }) => {
+    await boot(page);
+    const r = await page.evaluate(() => {
+      const eng = new VTPracticeEngine();
+      eng.sensitivity = 7;
+      eng.running = true;
+      eng.buf = new Float32Array(2048);
+      // Soft broadband noise (not alternating) — like quiet SH after AGC
+      for (let i = 0; i < eng.buf.length; i++) {
+        eng.buf[i] = (Math.random() - 0.5) * 0.04; // rms ~0.01–0.015
+      }
+      eng.analyser = {
+        getFloatTimeDomainData(buf) {
+          for (let i = 0; i < buf.length; i++) buf[i] = eng.buf[i];
+        },
+        getByteFrequencyData(bytes) {
+          bytes.fill(8); // weak spectrum
+        },
+        frequencyBinCount: 1024,
+        fftSize: 2048
+      };
+      eng.audioCtx = { sampleRate: 48000 };
+      // Autocorr often locks on soft fricatives
+      eng._detectPitch = () => 200;
+      let frame = null;
+      eng.onFrame = (f) => {
+        frame = f;
+      };
+      eng._loop();
+      eng.running = false;
+      if (eng.raf) cancelAnimationFrame(eng.raf);
+      // v1 clearVoice at voiceRms*0.8 would often block this
+      return {
+        airDetected: frame.airDetected,
+        airRaw: frame.airRaw,
+        rms: frame.rms,
+        thr: frame.airRmsThreshold,
+        voiceRms: eng._voiceRms()
+      };
+    });
+    expect(r.rms).toBeGreaterThan(0.005);
+    expect(r.airRaw).toBe(true);
+    expect(r.airDetected).toBe(true);
+  });
+
+  test("FFT sibilant band alone can trigger air", async ({ page }) => {
+    await boot(page);
+    const r = await page.evaluate(() => {
+      const eng = new VTPracticeEngine();
+      eng.sensitivity = 7;
+      eng.running = true;
+      eng.buf = new Float32Array(2048);
+      // Very soft time-domain
+      for (let i = 0; i < eng.buf.length; i++) eng.buf[i] = (Math.random() - 0.5) * 0.004;
+      eng.analyser = {
+        getFloatTimeDomainData(buf) {
+          for (let i = 0; i < buf.length; i++) buf[i] = eng.buf[i];
+        },
+        getByteFrequencyData(bytes) {
+          bytes.fill(0);
+          // Peak in upper sibilant half (~4–8 kHz at 48k / 2048)
+          // bin ≈ hz * 2048 / 48000 → 4000 Hz ≈ bin 170
+          for (let i = 160; i < 340; i++) bytes[i] = 90;
+        },
+        frequencyBinCount: 1024,
+        fftSize: 2048
+      };
+      eng.audioCtx = { sampleRate: 48000 };
+      eng._detectPitch = () => null;
+      let frame = null;
+      eng.onFrame = (f) => {
+        frame = f;
+      };
+      eng._loop();
+      eng.running = false;
+      if (eng.raf) cancelAnimationFrame(eng.raf);
+      return {
+        airDetected: frame.airDetected,
+        airBand: frame.airBand,
+        airRaw: frame.airRaw
+      };
+    });
+    expect(r.airBand).toBeGreaterThan(0.2);
     expect(r.airRaw).toBe(true);
     expect(r.airDetected).toBe(true);
   });
@@ -209,6 +296,49 @@ test.describe("SH air auto-detect", () => {
     expect(r.during.raw).toBe(true);
     expect(r.after.raw).toBe(false);
     expect(r.after.air).toBe(true); // grace keeps detected
-    expect(r.graceMs).toBeGreaterThanOrEqual(400);
+    expect(r.graceMs).toBeGreaterThanOrEqual(600);
+  });
+
+  test("mode keeps cur across brief air miss (hysteresis)", async ({ page }) => {
+    await boot(page);
+    const r = await page.evaluate(() => {
+      const Modes = window.VTPracticeModes;
+      if (!Modes?.get) return { skip: true };
+      const mode = Modes.get("shAirLadder");
+      const host = document.createElement("div");
+      document.body.appendChild(host);
+      mode.mount(host, { rungs: [30], mode: "shAirLadder" });
+      mode.onStart?.();
+      for (let i = 0; i < 10; i++) {
+        mode.onFrame({
+          rms: 0.02,
+          dtMs: 16,
+          airDetected: true,
+          manualSound: false,
+          airRmsThreshold: 0.01
+        });
+      }
+      const mid = mode.state.cur;
+      // miss frames — hysteresis should keep counting briefly
+      for (let i = 0; i < 8; i++) {
+        mode.onFrame({
+          rms: 0.001,
+          dtMs: 16,
+          airDetected: false,
+          manualSound: false,
+          airRmsThreshold: 0.01
+        });
+      }
+      const after = mode.state.cur;
+      mode.unmount?.();
+      host.remove();
+      return { mid, after, skip: false };
+    });
+    if (r.skip) {
+      test.skip();
+      return;
+    }
+    expect(r.mid).toBeGreaterThan(0.1);
+    expect(r.after).toBeGreaterThan(r.mid);
   });
 });

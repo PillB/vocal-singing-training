@@ -1011,6 +1011,20 @@ button:focus-visible,
   margin: 0.25rem 0;
 }
 
+/* SH ladder: auto air detected (mic) */
+.mode-big.is-air {
+  color: #8ee0b5;
+  text-shadow: 0 0 12px rgba(79, 212, 146, 0.35);
+}
+.mode-panel.is-air,
+.mode-hud.is-air {
+  border-color: rgba(79, 212, 146, 0.45);
+}
+.mode-panel.is-manual-air .mode-big,
+.mode-hud.is-manual-air .mode-big.is-air {
+  color: #8ee0b5;
+}
+
 .mode-meta {
   margin: 0.35rem 0 0;
   font-size: 0.88rem;

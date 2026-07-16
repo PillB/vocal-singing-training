@@ -1474,6 +1474,7 @@
       this.state.bestS = 0;
       this.state.bestA = 0;
       this.state.cur = 0;
+      this.state._airHoldFrames = 0;
       this.hud.innerHTML = `
         <div class="mode-title">${L("Soporte de aire · S y luego /A/", "Breath support · S then /A/")}</div>
         <div class="mode-phase" data-phase>Phase 1 · even S (unvoiced)</div>
@@ -1489,19 +1490,28 @@
       });
     },
     onFrame(frame) {
-      // S phase: unvoiced air — prefer engine airDetected (HF + grace); Space is backup
+      // S phase: unvoiced air — engine airDetected + frame hysteresis; Space backup
       const thr = frame.airRmsThreshold != null ? frame.airRmsThreshold * 1.1 : 0.02;
-      const air =
+      let airNow =
         this.state.phase === "S"
           ? !!frame.airDetected ||
             (frame.manualSound && frame.manualKind === "air") ||
-            ((frame.rms || 0) > thr && !frame.voiceFreq)
+            ((frame.rms || 0) > thr * 0.85 && !frame.voiceFreq) ||
+            (frame.rms || 0) > thr * 0.55
           : frame.voiced ||
             (frame.manualSound && frame.manualKind === "voice") ||
             !!frame.airDetected ||
             (frame.rms || 0) > thr * 1.2;
+      if (this.state.phase === "S") {
+        if (airNow) this.state._airHoldFrames = 16;
+        else if (this.state._airHoldFrames > 0) this.state._airHoldFrames -= 1;
+      } else {
+        this.state._airHoldFrames = 0;
+      }
+      const air =
+        airNow || (this.state.phase === "S" && this.state._airHoldFrames > 0);
       if (air) {
-        this.state.cur += 0.016;
+        this.state.cur += (frame.dtMs || 16) / 1000;
         if (this.state.phase === "S") this.state.bestS = Math.max(this.state.bestS, this.state.cur);
         else this.state.bestA = Math.max(this.state.bestA, this.state.cur);
       } else this.state.cur = 0;
@@ -1531,22 +1541,28 @@
       this.state.best = 0;
       this.state.cur = 0;
       this.state.holdOk = 0;
+      /** Frame-based hold-off (~280ms @ 60fps) — not wall-clock (tests fire many frames/ms) */
+      this.state._airHoldFrames = 0;
       const target = this.state.rungs[0];
       this.hud.innerHTML = `
         <div class="mode-title">${L("Escalera de aire SH", "SH air-dosing ladder")}</div>
         <div class="mode-phase" data-ph>${L("Meta", "Target")}: <strong data-t>${target}</strong>s · SH pareja</div>
         <div class="mode-big" data-h>0.0s</div>
         <p class="mode-meta">${L("Peldaños", "Rungs")} <strong data-c>0</strong>/${this.state.rungs.length} · ${L("Mejor", "Best")} <strong data-b>0</strong>s</p>
-        <p class="mode-meta muted">${L("Inhala por la nariz · exhala SH constante · sin pulsos.", "Nose inhale · steady SH · no pulses.")}</p>
+        <p class="mode-meta muted" data-airhint>${L("Inhala por la nariz · exhala SH constante · sin pulsos. Si no cuenta, sube Mic o mantén Espacio.", "Nose inhale · steady SH · no pulses. If it won’t count, raise Mic or hold Space.")}</p>
       `;
     },
     onFrame(frame) {
-      // Soft SH/air: engine airDetected (HF energy + grace) · Space is backup assist
+      // Soft SH/air: engine airDetected (FFT+HF+grace) · Space is backup · mode hysteresis
       const thr = frame.airRmsThreshold != null ? frame.airRmsThreshold : 0.018;
-      const air =
+      const airNow =
         !!frame.airDetected ||
         (frame.manualSound && frame.manualKind === "air") ||
-        ((frame.rms || 0) > thr && !frame.voiceFreq);
+        ((frame.rms || 0) > thr * 0.85 && !frame.voiceFreq) ||
+        ((frame.rms || 0) > thr * 0.55);
+      if (airNow) this.state._airHoldFrames = 16; // ~260ms
+      else if (this.state._airHoldFrames > 0) this.state._airHoldFrames -= 1;
+      const air = airNow || this.state._airHoldFrames > 0;
       const target = this.state.rungs[this.state.i] || this.state.rungs[this.state.rungs.length - 1];
       if (air) {
         this.state.cur += (frame.dtMs || 16) / 1000;
@@ -1569,6 +1585,16 @@
       }
       if (this.$("[data-h]")) this.$("[data-h]").textContent = `${this.state.cur.toFixed(1)}s`;
       if (this.$("[data-b]")) this.$("[data-b]").textContent = this.state.best.toFixed(1);
+      // Visual: hearing air (auto) vs Space assist
+      const panel = this.hud?.querySelector?.(".mode-panel") || this.hud;
+      if (panel) {
+        panel.classList.toggle("is-air", !!air && !frame.manualSound);
+        panel.classList.toggle("is-manual-air", !!(frame.manualSound && frame.manualKind === "air"));
+      }
+      const big = this.$("[data-h]");
+      if (big) {
+        big.classList.toggle("is-air", !!air);
+      }
     },
     onStop() {
       return {

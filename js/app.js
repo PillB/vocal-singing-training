@@ -2057,7 +2057,7 @@
         profile.showPitch ||
         profile.showHold ||
         wantRecord ||
-        ["pauseDetect", "volumeSteady", "volumeLadder", "speechEnergy", "breathS", "sovtFlow", "sirenRange", "onsetReps", "concisionGate", "authorityLand", "pitchContour"].includes(
+        ["pauseDetect", "volumeSteady", "volumeLadder", "speechEnergy", "breathS", "shAirLadder", "sovtFlow", "sirenRange", "onsetReps", "concisionGate", "authorityLand", "pitchContour"].includes(
           profile.mode
         );
 

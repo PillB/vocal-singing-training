@@ -146,13 +146,16 @@ test.describe("Manual Space grace (a11y)", () => {
         });
       }
       const afterGrace = mode.state.cur;
-      // real silence after grace would reset
-      mode.onFrame({
-        rms: 0.001,
-        voiceFreq: null,
-        dtMs: 16,
-        manualSound: false
-      });
+      // Real silence past mode hysteresis (~280ms) must reset
+      for (let i = 0; i < 25; i++) {
+        mode.onFrame({
+          rms: 0.001,
+          voiceFreq: null,
+          dtMs: 16,
+          manualSound: false,
+          airDetected: false
+        });
+      }
       const afterSilent = mode.state.cur;
       mode.unmount?.();
       host.remove();

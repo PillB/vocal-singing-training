@@ -1207,16 +1207,18 @@
     render() {
       this.state.feel = 0;
       this.state.better = 0;
+      this.state.phraseOk = 0;
       this.state.inBand = 0;
       this.state.samples = 0;
       this.hud.innerHTML = `
-        <div class="mode-title">${L("Repeticiones de estrofa", "Song stanza reps")}</div>
+        <div class="mode-title">${L("Frases de canción · sin respirar a mitad", "Song phrases · no mid-breath")}</div>
         <div class="controls-row">
           <button type="button" class="btn btn-sm" data-feel>${L("Canción A +1", "Song A +1")}</button>
           <button type="button" class="btn btn-sm" data-better>${L("Canción B +1", "Song B +1")}</button>
+          <button type="button" class="btn btn-sm btn-primary" data-phrase>${L("Frase completa ✓", "Phrase complete ✓")}</button>
         </div>
-        <p class="mode-meta">${L("Canción A <strong data-f>0</strong>/5 · Canción B <strong data-b>0</strong>/5 · En carril <strong data-lane>0%</strong>", "Song A <strong data-f>0</strong>/5 · Song B <strong data-b>0</strong>/5 · In-lane <strong data-lane>0%</strong>")}</p>
-        <p class="mode-meta muted">${L("Piano bajo tus estrofas — mira la gráfica de afinación.", "Piano under your stanzas — watch pitch graph for note centers.")}</p>
+        <p class="mode-meta">${L("A <strong data-f>0</strong>/5 · B <strong data-b>0</strong>/5 · Frases OK <strong data-p>0</strong> · Carril <strong data-lane>0%</strong>", "A <strong data-f>0</strong>/5 · B <strong data-b>0</strong>/5 · Phrases OK <strong data-p>0</strong> · Lane <strong data-lane>0%</strong>")}</p>
+        <p class="mode-meta muted">${L("Respira entre frases · dosifica el aire · no fuerces el volumen.", "Breathe between phrases · dose air · don’t force volume.")}</p>
       `;
       this.$("[data-feel]")?.addEventListener("click", () => {
         this.state.feel++;
@@ -1225,6 +1227,10 @@
       this.$("[data-better]")?.addEventListener("click", () => {
         this.state.better++;
         if (this.$("[data-b]")) this.$("[data-b]").textContent = this.state.better;
+      });
+      this.$("[data-phrase]")?.addEventListener("click", () => {
+        this.state.phraseOk++;
+        if (this.$("[data-p]")) this.$("[data-p]").textContent = this.state.phraseOk;
       });
     },
     onFrame(frame) {
@@ -1248,14 +1254,18 @@
       }
     },
     onStop() {
-      const patches = { repsFeel: this.state.feel, repsBetter: this.state.better };
+      const patches = {
+        repsFeel: this.state.feel,
+        repsBetter: this.state.better,
+        phraseBreath: this.state.phraseOk >= 5 ? 5 : this.state.phraseOk >= 3 ? 4 : this.state.phraseOk >= 1 ? 3 : 2
+      };
       if (this.state.samples > 20) {
         const pct = Math.round((this.state.inBand / this.state.samples) * 100);
         patches.accuracy = pct >= 70 ? 5 : pct >= 50 ? 4 : pct >= 30 ? 3 : 2;
       }
       return {
         patches,
-        summary: `Song A ${this.state.feel} · Song B ${this.state.better}`
+        summary: `A ${this.state.feel} · B ${this.state.better} · phrases ${this.state.phraseOk}`
       };
     }
   });
@@ -1505,19 +1515,83 @@
     }
   });
 
+  /** Class-1 SH air ladder: 5→10→20→25→30s even unvoiced fricative */
+  Modes.shAirLadder = baseMode({
+    id: "shAirLadder",
+    render() {
+      this.state.rungs = this.profile.rungs || [5, 10, 20, 25, 30];
+      this.state.i = 0;
+      this.state.cleared = 0;
+      this.state.best = 0;
+      this.state.cur = 0;
+      this.state.holdOk = 0;
+      const target = this.state.rungs[0];
+      this.hud.innerHTML = `
+        <div class="mode-title">${L("Escalera de aire SH", "SH air-dosing ladder")}</div>
+        <div class="mode-phase" data-ph>${L("Meta", "Target")}: <strong data-t>${target}</strong>s · SH pareja</div>
+        <div class="mode-big" data-h>0.0s</div>
+        <p class="mode-meta">${L("Peldaños", "Rungs")} <strong data-c>0</strong>/${this.state.rungs.length} · ${L("Mejor", "Best")} <strong data-b>0</strong>s</p>
+        <p class="mode-meta muted">${L("Inhala por la nariz · exhala SH constante · sin pulsos.", "Nose inhale · steady SH · no pulses.")}</p>
+      `;
+    },
+    onFrame(frame) {
+      const air = (frame.rms || 0) > 0.018 && !frame.voiceFreq;
+      const target = this.state.rungs[this.state.i] || this.state.rungs[this.state.rungs.length - 1];
+      if (air) {
+        this.state.cur += (frame.dtMs || 16) / 1000;
+        this.state.best = Math.max(this.state.best, this.state.cur);
+        if (this.state.cur >= target && this.state.i < this.state.rungs.length) {
+          // credit rung once when held continuously
+          if (this.state.holdOk !== this.state.i + 1) {
+            this.state.holdOk = this.state.i + 1;
+            this.state.cleared = Math.max(this.state.cleared, this.state.i + 1);
+            this.state.i = Math.min(this.state.i + 1, this.state.rungs.length - 1);
+            const next = this.state.rungs[this.state.i];
+            if (this.$("[data-t]")) this.$("[data-t]").textContent = String(next);
+            if (this.$("[data-c]")) this.$("[data-c]").textContent = String(this.state.cleared);
+            // reset hold for next rung after short release expectation
+            this.state.cur = 0;
+          }
+        }
+      } else {
+        this.state.cur = 0;
+      }
+      if (this.$("[data-h]")) this.$("[data-h]").textContent = `${this.state.cur.toFixed(1)}s`;
+      if (this.$("[data-b]")) this.$("[data-b]").textContent = this.state.best.toFixed(1);
+    },
+    onStop() {
+      return {
+        patches: {
+          rungs: this.state.cleared,
+          maxSH: Math.round(this.state.best),
+          evenness: this.state.cleared >= 4 ? 5 : this.state.cleared >= 2 ? 4 : 3
+        },
+        summary: `SH ladder ${this.state.cleared}/${this.state.rungs.length} · best ${this.state.best.toFixed(1)}s`
+      };
+    }
+  });
+
   Modes.scaleSteps = baseMode({
     id: "scaleSteps",
     render() {
-      this.state.pattern = [0, 2, 4, 5, 7, 5, 4, 2, 0];
-      this.state.rootMidi = 48; // C3
+      // Major scale (profile.majorScale) or classic 5-note
+      this.state.pattern = this.profile.pattern ||
+        (this.profile.majorScale
+          ? [0, 2, 4, 5, 7, 9, 11, 12, 11, 9, 7, 5, 4, 2, 0]
+          : [0, 2, 4, 5, 7, 5, 4, 2, 0]);
+      this.state.rootMidi = this.profile.rootMidi || 48; // C3
       this.state.i = 0;
       this.state.roots = 0;
       this.state.inBand = 0;
+      const nSteps = this.state.pattern.length;
+      const title = this.profile.majorScale
+        ? L("Escala mayor · coordinación", "Major scale · coordination")
+        : L("Escala de 5 notas · con afinación", "Five-note scale · pitch-gated");
       this.hud.innerHTML = `
-        <div class="mode-title">${L("Escala de 5 notas · con afinación", "Five-note scale · pitch-gated")}</div>
-        <div class="mode-big" data-step>Step 1 / 9</div>
-        <p class="mode-meta">Hold near step (~40¢) for 0.7s to advance · Roots: <strong data-r>0</strong></p>
-        <p class="mode-meta muted" data-st>Sing the step — no free skip.</p>
+        <div class="mode-title">${title}</div>
+        <div class="mode-big" data-step>Step 1 / ${nSteps}</div>
+        <p class="mode-meta">${L("Mantén el paso (~40¢) 0,7s · Raíces:", "Hold near step (~40¢) 0.7s · Roots:")} <strong data-r>0</strong></p>
+        <p class="mode-meta muted" data-st>${L("Escucha, luego canta — sin saltar.", "Listen, then sing — no free skip.")}</p>
       `;
       this._lockScaleRange();
       this._setStepTarget();

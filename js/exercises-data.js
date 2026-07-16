@@ -650,21 +650,28 @@ window.VT_EXERCISES = {
       title: "Vocal Fry → Sustained /A/",
       durationMin: 5,
       original:
-        "Breath in 3s; vocal fry on A with closure + air dosing; transition to clean A; hold max; log; try +1–2s; 5 min.",
-      research: "Fry finds closure; sustained /A/ trains dosed air without breathiness.",
+        "Class-1 style: use gentle vocal fry to feel cord closure, then transition to a clean /A/ with dosed air (not force).",
+      research:
+        "Vocal fry can help learners feel efficient glottal closure before clear tone; pair with air dosing to avoid breathiness and strain.",
       steps: [
-        "Inhale gently for 3 seconds.",
-        "Start a gentle vocal fry on /A/ (creaky-door feel).",
-        "Transition smoothly to a clear speaking-pitch /A/ with steady air.",
-        "Hold as long as comfortable; log the seconds.",
-        "Rest; repeat aiming for +1–2 seconds. About 5 minutes total."
+        "Inhale gently through the nose (~3 seconds) — enough air, not a huge gasp.",
+        "Start a soft vocal fry on /A/ (creaky-door feel) to sense cord closure.",
+        "Without pushing, transition to a clear speaking-pitch /A/ with steady air.",
+        "Hold as long as comfortable; the app logs solid holds ≥2s when you release.",
+        "Rest; repeat aiming for +1–2 seconds. Prefer clean tone over volume. ~5 minutes."
       ],
       tips: [
         "Fry is a finder for closure, not the artistic goal.",
+        "Poor closure often feels like excess air, effort, or quick fatigue — ease pressure.",
         "Men: start around comfortable speaking pitch (A2–D3).",
-        "Hydrate; moderate volume; stop if strain."
+        "Build from comfort, not force; progress needs patient repetition."
       ],
-      mistakes: ["Pushing fry hard", "Breathy floating tone", "Throat squeeze on the hold"],
+      mistakes: [
+        "Pushing fry hard",
+        "Breathy floating tone after the transition",
+        "Throat squeeze on the hold",
+        "Trying to get loud by pressing"
+      ],
       metrics: [
         { id: "maxHold", label: "Longest hold (seconds)", type: "number", target: 15, unit: "s" },
         { id: "closure", label: "Closure quality", type: "scale", min: 1, max: 5 },
@@ -725,25 +732,34 @@ window.VT_EXERCISES = {
       title: "Song Stanzas (your songs)",
       durationMin: 20,
       original:
-        "Two stanzas of songs you know, in solfège; change the note every couple of words; ×5 each song.",
-      research: "Transfer closure + air skills into repertoire with flexible progressions.",
+        "Apply technique to song phrases you know: finish each phrase without mid-phrase gasps; dose air; keep intonation.",
+      research:
+        "Early song work should prioritize breath between phrases, air dosing, and clean sound — not ‘pretty’ volume.",
       steps: [
-        "Pick two short stanzas from songs you know well.",
-        "Speak → speak-on-pitch → sing.",
-        "Change pitch every couple of words with piano underneath.",
-        "5 reps each song; mix song-friendly and alternate progressions.",
-        "Use Sustain + pitch graph to settle each target note."
+        "Pick two short phrases/stanzas from songs you know (public-domain or your own lyrics).",
+        "Speak → speak-on-pitch → sing, with piano under you.",
+        "Goal: complete each musical phrase without breathing in the middle.",
+        "Change pitch every couple of words when practicing flexibility; keep closure.",
+        "Log 5 phrase-complete reps per song; use Sustain + pitch graph to settle notes."
       ],
       tips: [
-        "Never sacrifice closure for melody.",
-        "Mid-lower keys protect the voice while building skill."
+        "Priority is correct tools (air, closure, pitch) — not sounding ‘pretty’ yet.",
+        "Breathe between phrases; don’t dump all air on the first word.",
+        "Never sacrifice closure for melody; mid-lower keys protect the voice.",
+        "Discover comfortable body sensations — your voice is a personal instrument."
       ],
-      mistakes: ["Pushing chest too high", "Only memorizing pitch without closure"],
+      mistakes: [
+        "Breathing mid-phrase from poor air dosing",
+        "Pushing chest too high",
+        "Only memorizing pitch without closure",
+        "Forcing volume with throat instead of support"
+      ],
       metrics: [
-        { id: "repsFeel", label: "Song A reps", type: "number", target: 5, unit: "" },
-        { id: "repsBetter", label: "Song B reps", type: "number", target: 5, unit: "" },
+        { id: "repsFeel", label: "Song A phrase-complete reps", type: "number", target: 5, unit: "" },
+        { id: "repsBetter", label: "Song B phrase-complete reps", type: "number", target: 5, unit: "" },
         { id: "accuracy", label: "Note accuracy (self)", type: "scale", min: 1, max: 5 },
-        { id: "closure", label: "Closure quality", type: "scale", min: 1, max: 5 }
+        { id: "closure", label: "Closure quality", type: "scale", min: 1, max: 5 },
+        { id: "phraseBreath", label: "Phrase without mid-breath", type: "scale", min: 1, max: 5 }
       ],
       audio: { timer: true, record: true, piano: true, progressions: true, songs: true, pitchViz: true },
       timerDefaultSec: 1200,
@@ -751,6 +767,84 @@ window.VT_EXERCISES = {
         { id: "feel", title: "Song A (mid-low range)", keyHint: "Male mid-low friendly key", prog: "songFeel" },
         { id: "better", title: "Song B (mid-low range)", keyHint: "Male mid-low friendly key", prog: "songBetter" }
       ]
+    },
+    {
+      id: "s15-sh-air-ladder",
+      track: "singing",
+      tier: "basic",
+      number: 15,
+      title: "SH Air-Dosing Ladder",
+      durationMin: 8,
+      original:
+        "Class-1 breath foundation: inhale through the nose; exhale on steady SH for 5→10→20→25→30 seconds with even airflow.",
+      research:
+        "Unvoiced fricative holds train air administration — the ‘raw material’ of singing — before adding pitch and closure load.",
+      steps: [
+        "Inhale calmly through the nose (not a huge gasp).",
+        "Exhale on a steady SH — smooth, even, no pulses.",
+        "Hold even SH for 5s, then rest; then 10s, 20s, 25s, 30s (ladder).",
+        "If the end collapses, start slightly softer next time.",
+        "Optional: after the ladder, transfer the same support idea to a soft /A/ (see Breath Support exercise)."
+      ],
+      tips: [
+        "Air is the raw material of the voice — learn to dose it for a whole phrase.",
+        "Uniform flow matters more than maximum seconds on day one.",
+        "Practice the ladder daily as a short warm-up.",
+        "Stop if dizzy; sit; never force the last seconds."
+      ],
+      mistakes: [
+        "Big gasp inhale",
+        "Pulsing or chopping the SH",
+        "Neck/jaw push at the end",
+        "Skipping rests between rungs"
+      ],
+      metrics: [
+        { id: "rungs", label: "Ladder rungs cleared (5–30s)", type: "number", target: 5, unit: "" },
+        { id: "maxSH", label: "Longest even SH (sec)", type: "number", target: 30, unit: "s" },
+        { id: "evenness", label: "Air evenness", type: "scale", min: 1, max: 5 }
+      ],
+      audio: { timer: true, record: true, piano: false, pitchViz: false },
+      timerDefaultSec: 480
+    },
+    {
+      id: "s16-major-scale-coord",
+      track: "singing",
+      tier: "basic",
+      number: 16,
+      title: "Major Scale Coordination",
+      durationMin: 8,
+      original:
+        "Class-1 major scale: coordinate breath dosing, sound production, and intonation on /A/ with piano — not volume by force.",
+      research:
+        "Major-scale patterns integrate air management, onset, and pitch accuracy as simultaneous coordination tasks.",
+      steps: [
+        "Warm with a soft fry→/A/ if helpful; pick a mid-low root (e.g. C3).",
+        "Listen to the piano reference before each step.",
+        "Sing a major-scale pattern on /A/ (up and down) with steady air.",
+        "Avoid dumping air on the first notes of a phrase.",
+        "Complete at least 3 roots; keep the same ease ascending and descending."
+      ],
+      tips: [
+        "Technique is coordination of breath + closure + intonation together.",
+        "Don’t force loudness to ‘hit’ a note — listen, then sing.",
+        "Patience: the body adapts with conscious repetition.",
+        "Use the highway to settle each step before moving on."
+      ],
+      mistakes: [
+        "Spending all air at the start of the scale",
+        "Forcing volume with throat",
+        "Sliding through notes without centers",
+        "Expecting instant results"
+      ],
+      metrics: [
+        { id: "roots", label: "Roots completed", type: "number", target: 3, unit: "" },
+        { id: "evenness", label: "Scale evenness", type: "scale", min: 1, max: 5 },
+        { id: "closure", label: "Closure", type: "scale", min: 1, max: 5 },
+        { id: "intonation", label: "Intonation", type: "scale", min: 1, max: 5 }
+      ],
+      audio: { timer: true, record: true, piano: true, pitchViz: true, progressions: true },
+      timerDefaultSec: 480,
+      progressions: ["prog1", "prog3"]
     },
 
     /* ─── ADVANCED TIER (complementary singing pedagogy) ─── */
@@ -886,20 +980,21 @@ window.VT_EXERCISES = {
       number: 8,
       title: "Breath Support (Sustained S)",
       durationMin: 5,
-      original: "Train steady appoggio-style air with silent then voiced sustain.",
+      original:
+        "Steady appoggio-style air with unvoiced S (or SH) then transfer to voiced /A/ — after Class-1 SH ladder warm-up.",
       research:
-        "Steady airflow underpins non-breathy tone. Unvoiced S/hiss drills isolate support before adding phonation.",
+        "Steady airflow underpins non-breathy tone. Unvoiced S/SH drills isolate support before adding phonation.",
       steps: [
-        "Inhale 3 counts (low, quiet expansion).",
-        "Exhale on a steady ‘ssss’ as long as even — not blasts.",
-        "Log seconds of even S. Rest. Repeat 5 times aiming +1–2s.",
-        "Then: same inhale → sustained /A/ with same steady air feel.",
-        "Compare: is the /A/ as even as the S?"
+        "Optional warm-up: complete the SH air-dosing ladder first.",
+        "Inhale 3 counts (low, quiet expansion through the nose).",
+        "Exhale on a steady ‘ssss’ (or SH) as long as even — not blasts.",
+        "Log seconds of even S. Rest. Repeat aiming +1–2s.",
+        "Then: same inhale → sustained /A/ with the same support feel."
       ],
       tips: [
         "Ribs stay buoyant; don’t collapse chest at the end.",
         "Start softer to finish even.",
-        "Pair with hold logger on the voiced set."
+        "Air dosing for whole phrases starts here — not only loud singing."
       ],
       mistakes: ["Big gasp inhale", "Pushing last air with neck", "Breathy dump on /A/"],
       metrics: [
@@ -918,22 +1013,29 @@ window.VT_EXERCISES = {
       number: 9,
       title: "Single-Note Pitch Match",
       durationMin: 8,
-      original: "Home in on one target at a time with eyes + ears (visual equalizer).",
+      original:
+        "Class-1 intonation: piano plays a note; you reproduce it on /A/ — train ear first, then production.",
       research:
-        "Pitch-matching drills with sustained reference tones help beginners lock frequency; visual feedback accelerates accuracy and precision.",
+        "Intonation is reproducing a pitch correctly; difficulties can be auditory perception or technical production — both improve with deliberate matching practice.",
       steps: [
-        "Turn on Sustain (3–5s) and Pitch visualizer.",
-        "Play a single reference (or slow progression).",
-        "Sing the target; watch your voice dot vs glowing target trail.",
-        "Aim: voice dot near center AND narrow soft deviation band (precision).",
-        "Log 8 successful matches across mid-low notes."
+        "Turn on Sustain (3–5s) and the pitch highway.",
+        "Play a single reference; listen fully before you sing.",
+        "Reproduce the note on /A/; watch the voice dot vs the target lane.",
+        "Aim: near center (accuracy) and stable band (precision).",
+        "Lock 8 solid matches across mid-low notes."
       ],
       tips: [
+        "The ear can be trained — listen carefully before you phonate.",
         "Accuracy = average near target; precision = low wobble.",
-        "If sharp/flat, adjust with small mental ‘lift/drop’ not throat shove.",
-        "Quiet practice room helps the detector."
+        "If sharp/flat, small mental lift/drop — not throat shove.",
+        "Don’t fix pitch by singing louder."
       ],
-      mistakes: ["Chasing every micro-wobble", "Singing louder to ‘fix’ pitch", "Ignoring sustain time"],
+      mistakes: [
+        "Singing before finishing listening",
+        "Chasing every micro-wobble",
+        "Singing louder to ‘fix’ pitch",
+        "Ignoring sustain time"
+      ],
       metrics: [
         { id: "matches", label: "Solid matches", type: "number", target: 8, unit: "" },
         { id: "accuracy", label: "Accuracy feel", type: "scale", min: 1, max: 5 },
@@ -950,12 +1052,13 @@ window.VT_EXERCISES = {
       number: 10,
       title: "Five-Note Scale (/A/)",
       durationMin: 8,
-      original: "Ascending/descending 5-note patterns with closure and even air.",
+      original:
+        "Ascending/descending 5-note patterns with closure and even air — shorter sibling of major-scale coordination.",
       research:
         "Pentascale patterns are staple coordination drills for pitch accuracy and legato in mid range.",
       steps: [
         "Choose starting pitch in mid-low male range (e.g. C3).",
-        "Sing 1-2-3-4-5-4-3-2-1 on /A/ with piano reference.",
+        "Listen to the piano step, then sing 1-2-3-4-5-4-3-2-1 on /A/.",
         "Use arpeggio or sustain modes as needed.",
         "Keep same volume and closure ascending and descending.",
         "Repeat starting on 3 different roots."
@@ -963,7 +1066,8 @@ window.VT_EXERCISES = {
       tips: [
         "Don’t push the top note — lighter if needed.",
         "Visualizer: each step should settle near the line before moving on.",
-        "Legato: connect notes with air, not glottal hits."
+        "Legato: connect notes with air, not glottal hits.",
+        "For full major-scale focus see Major Scale Coordination (basic)."
       ],
       mistakes: ["Yelling the 5th", "Sliding through all notes without centers", "Breathless rush"],
       metrics: [
@@ -1159,7 +1263,13 @@ window.VT_STRUCTURED = {
     "v20-energy-match"
   ],
   vocal_full: null, // filled below
-  singing_basic: ["s1-vocal-fry", "s2-solfege-chords", "s3-song-stanzas"],
+  singing_basic: [
+    "s15-sh-air-ladder",
+    "s1-vocal-fry",
+    "s16-major-scale-coord",
+    "s2-solfege-chords",
+    "s3-song-stanzas"
+  ],
   singing_advanced: [
     "s4-lip-trills",
     "s5-sirens",

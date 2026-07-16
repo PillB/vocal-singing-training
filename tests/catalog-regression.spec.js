@@ -75,7 +75,7 @@ test.describe("Catalog & structure regression", () => {
     expect(live.total).toBeGreaterThanOrEqual(snap.totals.exercises);
     expect(live.vocal).toBeGreaterThanOrEqual(snap.totals.vocal);
     expect(live.singing).toBeGreaterThanOrEqual(snap.totals.singing);
-    expect(live.total).toBe(34);
+    expect(live.total).toBeGreaterThanOrEqual(snap.totals.exercises);
     expect(live.ids).toEqual([...snap.exerciseIds].sort());
 
     for (const id of snap.exerciseIds) {

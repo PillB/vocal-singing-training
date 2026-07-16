@@ -329,9 +329,35 @@
       pitchChallenge: false,
       autoPiano: true,
       autoRecord: true,
-      cue: "Stanzas under song progressions. Change pitch every couple of words — not challenge mode.",
-      cueEs: "Estrofas con progresiones de canción. Cambia el tono cada pocas palabras — no modo reto.",
-      metricHints: {}
+      cue: "Finish each phrase without mid-breath. Dose air; piano under you; mark phrase-complete.",
+      cueEs: "Termina cada frase sin respirar a mitad. Dosifica el aire; marca frase completa.",
+      metricHints: { phraseBreath: "phraseOk" }
+    },
+    "s15-sh-air-ladder": {
+      mode: "shAirLadder",
+      showPitch: false,
+      showHold: false,
+      showLevel: true,
+      pitchChallenge: false,
+      autoPiano: false,
+      autoRecord: false,
+      rungs: [5, 10, 20, 25, 30],
+      cue: "Nose inhale → even SH. Clear 5→10→20→25→30s rungs. Air only, no pitch.",
+      cueEs: "Inhala nariz → SH pareja. Peldaños 5→10→20→25→30s. Solo aire, sin tono.",
+      metricHints: { rungs: "cleared", maxSH: "best" }
+    },
+    "s16-major-scale-coord": {
+      mode: "scaleSteps",
+      majorScale: true,
+      showPitch: true,
+      showHold: false,
+      showLevel: true,
+      pitchChallenge: false,
+      autoPiano: true,
+      autoRecord: false,
+      cue: "Major scale on /A/: listen, then sing each step. Coordinate air + closure + pitch.",
+      cueEs: "Escala mayor en /A/: escucha, luego canta cada paso. Coordina aire + cierre + afinación.",
+      metricHints: { roots: "rootCount" }
     },
     /* —— Singing advanced —— */
     "s4-lip-trills": {
@@ -394,8 +420,8 @@
       pitchChallenge: false,
       autoPiano: true,
       autoRecord: false,
-      cue: "Phase 1: even S (air only). Phase 2: transfer same support to /A/.",
-      cueEs: "Fase 1: S pareja (solo aire). Fase 2: lleva el mismo soporte a /A/.",
+      cue: "Phase 1: even S (or SH). Phase 2: same support on /A/. Pair with SH ladder warm-up.",
+      cueEs: "Fase 1: S (o SH) pareja. Fase 2: mismo soporte en /A/. Combina con escalera SH.",
       metricHints: { maxS: "bestS", transferA: "bestA" }
     },
     "s9-pitch-match": {
@@ -406,8 +432,8 @@
       pitchChallenge: true,
       autoPiano: true,
       autoRecord: false,
-      cue: "Lock 8 notes in the green lane. Score + combo — full pitch game.",
-      cueEs: "Bloquea 8 notas en el carril verde. Puntos + combo — juego de afinación completo.",
+      cue: "Listen first, then match. Lock 8 notes in the green lane — full pitch game.",
+      cueEs: "Escucha primero, luego afina. Bloquea 8 notas en el carril verde.",
       metricHints: { matches: "locks", accuracy: "gameAccuracy", precision: "gameCombo" }
     },
     "s10-five-note": {

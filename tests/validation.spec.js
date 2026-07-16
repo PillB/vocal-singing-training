@@ -43,7 +43,7 @@ test.describe("Exercise-specific practice modes", () => {
       const modes = typeof VTPracticeModes !== "undefined" ? VTPracticeModes.ids() : [];
       return { total: all.length, missing, modeCount: modes.length };
     });
-    expect(report.total).toBe(34);
+    expect(report.total).toBeGreaterThanOrEqual(36);
     expect(report.missing).toEqual([]);
     expect(report.modeCount).toBeGreaterThan(10);
   });
@@ -160,15 +160,19 @@ test.describe("Exercise-specific practice modes", () => {
     await expect(page.locator("#view-exercise")).toHaveClass(/active/);
   });
 
-  test("tier counts unchanged", async ({ page }) => {
+  test("tier counts match catalog", async ({ page }) => {
     await page.goto(BASE);
     await page.click('.tier-chip[data-tier="basic"]');
     await expect(page.locator("#exercise-list .card-ex")).toHaveCount(9);
     await page.click('.tier-chip[data-tier="advanced"]');
     await expect(page.locator("#exercise-list .card-ex")).toHaveCount(11);
     await page.click('.tab[data-tab="singing"]');
+    await page.click('.tier-chip[data-tier="basic"]');
+    await expect(page.locator("#exercise-list .card-ex")).toHaveCount(5);
+    await page.click('.tier-chip[data-tier="advanced"]');
+    await expect(page.locator("#exercise-list .card-ex")).toHaveCount(11);
     await page.click('.tier-chip[data-tier="all"]');
-    await expect(page.locator("#exercise-list .card-ex")).toHaveCount(14);
+    await expect(page.locator("#exercise-list .card-ex")).toHaveCount(16);
   });
 
   test("save metrics still works", async ({ page }) => {

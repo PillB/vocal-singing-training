@@ -276,7 +276,9 @@
       "ex.s11-dynamics": "Crecendo en una nota",
       "ex.s12-easy-onset": "Ataque suave",
       "ex.s13-arpeggio-match": "Arpegios afinados",
-      "ex.s14-staccato-legato": "Staccato vs legato"
+      "ex.s14-staccato-legato": "Staccato vs legato",
+      "ex.s15-sh-air-ladder": "Escalera de aire SH",
+      "ex.s16-major-scale-coord": "Coordinación en escala mayor"
     },
     en: {
       "meta.title": "Vocal & Singing Training",
@@ -547,7 +549,9 @@
       "ex.s11-dynamics": "Dynamic Swells on One Note",
       "ex.s12-easy-onset": "Easy Onset Coordination",
       "ex.s13-arpeggio-match": "Arpeggio Pitch Match",
-      "ex.s14-staccato-legato": "Staccato vs Legato Control"
+      "ex.s14-staccato-legato": "Staccato vs Legato Control",
+      "ex.s15-sh-air-ladder": "SH Air-Dosing Ladder",
+      "ex.s16-major-scale-coord": "Major Scale Coordination"
     }
   };
 

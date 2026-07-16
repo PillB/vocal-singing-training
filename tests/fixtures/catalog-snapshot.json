@@ -2,15 +2,15 @@
   "version": 2,
   "generatedNote": "Frozen catalog for regression — update intentionally when content is added/removed",
   "totals": {
-    "exercises": 34,
+    "exercises": 36,
     "vocal": 20,
-    "singing": 14,
-    "practiceModes": 32
+    "singing": 16,
+    "practiceModes": 33
   },
   "tiers": {
     "vocal_basic": 9,
     "vocal_advanced": 11,
-    "singing_basic": 3,
+    "singing_basic": 5,
     "singing_advanced": 11
   },
   "exerciseIds": [
@@ -20,6 +20,8 @@
     "s12-easy-onset",
     "s13-arpeggio-match",
     "s14-staccato-legato",
+    "s15-sh-air-ladder",
+    "s16-major-scale-coord",
     "s2-solfege-chords",
     "s3-song-stanzas",
     "s4-lip-trills",
@@ -74,6 +76,7 @@
     "recordOnly",
     "reviewSession",
     "scaleSteps",
+    "shAirLadder",
     "sirenRange",
     "sovtFlow",
     "speechEnergy",
@@ -605,8 +608,8 @@
       "showHold": true,
       "pitchChallenge": false,
       "steps": 5,
-      "tips": 3,
-      "mistakes": 3,
+      "tips": 4,
+      "mistakes": 4,
       "metrics": [
         "maxHold",
         "closure",
@@ -656,19 +659,71 @@
       "showHold": false,
       "pitchChallenge": false,
       "steps": 5,
-      "tips": 2,
-      "mistakes": 2,
+      "tips": 4,
+      "mistakes": 4,
       "metrics": [
         "repsFeel",
         "repsBetter",
         "accuracy",
-        "closure"
+        "closure",
+        "phraseBreath"
       ],
       "hasOriginal": true,
       "hasPiano": true,
       "hasPitchViz": true,
       "hasRecord": true,
       "durationMin": 20
+    },
+    {
+      "id": "s15-sh-air-ladder",
+      "track": "singing",
+      "tier": "basic",
+      "number": 15,
+      "titleEn": "SH Air-Dosing Ladder",
+      "titleEs": "Escalera de aire SH",
+      "mode": "shAirLadder",
+      "showPitch": false,
+      "showHold": false,
+      "pitchChallenge": false,
+      "steps": 5,
+      "tips": 4,
+      "mistakes": 4,
+      "metrics": [
+        "rungs",
+        "maxSH",
+        "evenness"
+      ],
+      "hasOriginal": true,
+      "hasPiano": false,
+      "hasPitchViz": false,
+      "hasRecord": true,
+      "durationMin": 8
+    },
+    {
+      "id": "s16-major-scale-coord",
+      "track": "singing",
+      "tier": "basic",
+      "number": 16,
+      "titleEn": "Major Scale Coordination",
+      "titleEs": "Coordinación en escala mayor",
+      "mode": "scaleSteps",
+      "showPitch": true,
+      "showHold": false,
+      "pitchChallenge": false,
+      "steps": 5,
+      "tips": 4,
+      "mistakes": 4,
+      "metrics": [
+        "roots",
+        "evenness",
+        "closure",
+        "intonation"
+      ],
+      "hasOriginal": true,
+      "hasPiano": true,
+      "hasPitchViz": true,
+      "hasRecord": true,
+      "durationMin": 8
     },
     {
       "id": "s4-lip-trills",
@@ -807,8 +862,8 @@
       "showHold": false,
       "pitchChallenge": true,
       "steps": 5,
-      "tips": 3,
-      "mistakes": 3,
+      "tips": 4,
+      "mistakes": 4,
       "metrics": [
         "matches",
         "accuracy",
@@ -832,7 +887,7 @@
       "showHold": false,
       "pitchChallenge": false,
       "steps": 5,
-      "tips": 3,
+      "tips": 4,
       "mistakes": 3,
       "metrics": [
         "roots",
@@ -1034,9 +1089,5 @@
     "VT_BILLING_CONFIG",
     "VTAuth",
     "VT_AUTH_USERS"
-  ],
-  "i18nTitleKeys": {
-    "missingEs": [],
-    "missingEn": []
-  }
+  ]
 }

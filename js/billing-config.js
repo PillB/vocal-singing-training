@@ -115,6 +115,7 @@
         // Only list features actually delivered in product (trust > feature stack theater)
         features: [
           "all_free",
+          "ad_free",
           "export_progress",
           "coach_pack",
           "pro_insights",

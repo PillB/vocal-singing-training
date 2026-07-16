@@ -151,6 +151,9 @@ VTBilling.trialDaysLeft()
 | export_progress, coach_pack, pro_insights | ❌ | ✅ |
 | multi_profile (≤3), studio_goals | ❌ | ✅ |
 | pro_progressions (progPro1/2), achievements_export | ❌ | ✅ |
+| ad_free (no studio tips / ads when ads layer on) | ❌ | ✅ |
+
+> Ads / native tips: off by default. See [`19-AD-MONETIZATION-ORCHESTRATION.md`](./19-AD-MONETIZATION-ORCHESTRATION.md) and `js/ads-config.js`.
 
 ### What’s in Pro (shipped features)
 

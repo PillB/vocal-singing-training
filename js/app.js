@@ -407,6 +407,27 @@
       renderRetentionChrome();
       // Gentle trial/progress prompts only on home (never during live practice)
       setTimeout(() => showValueMoment(), 400);
+      try {
+        window.VTAds?.renderSlot?.("home");
+      } catch {
+        /* ignore */
+      }
+    }
+    if (name === "history") {
+      try {
+        window.VTAds?.renderSlot?.("history");
+      } catch {
+        /* ignore */
+      }
+    }
+    if (name === "exercise") {
+      // Never show home/history ads on exercise; clear post-session until complete
+      try {
+        window.VTAds?.clearSlot?.(document.getElementById("ad-slot-home"));
+        window.VTAds?.clearSlot?.(document.getElementById("ad-slot-history"));
+      } catch {
+        /* ignore */
+      }
     }
   }
 
@@ -2397,6 +2418,13 @@
 
     toast("Session saved to progress");
 
+    // Post-session native tip (free only; never mid-practice) — research: end-of-task ads only
+    try {
+      setTimeout(() => window.VTAds?.onPostSession?.(), 700);
+    } catch {
+      /* ignore */
+    }
+
     if (state.structured) {
       VTSession.markCurrentComplete();
       updateSessionBanner();
@@ -3152,6 +3180,12 @@
       const portalRaw = String(cfg.customerPortalUrl || "").trim();
       const portalOk = portalRaw && (B.isPortalUrl ? B.isPortalUrl(portalRaw) : true);
       manage.hidden = !(portalOk && (ent.pro || ent.status === "trial"));
+    }
+    // Ads: Pro suppresses; free may refresh home slot
+    try {
+      window.VTAds?.refreshAllSafe?.();
+    } catch {
+      /* ignore */
     }
     // Operator-facing health strip inside pricing foot (misconfig only)
     const healthNote = $("#pricing-health-note");

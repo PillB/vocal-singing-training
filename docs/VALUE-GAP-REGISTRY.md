@@ -19,9 +19,11 @@ Product: **Vocal Studio / PillB**.
 | VG-12 | No product analytics | P1 | Open | Plausible/GA4 events | Funnel optimization |
 | VG-13 | Home hero is track name not dream outcome | P2 | Open | Outcome line i18n | Hormozi dream outcome |
 | VG-14 | Coach pack was name-only | P1 | **Closed** | JSON + .txt dual download | Fixer 2026-07-16 |
+| VG-15 | No passive free-tier monetization beyond Pro | P2 | **Strategy + scaffold** | Native ads off-by-default; see `19-AD-…` | Ad orchestration 2026-07-16 |
 
 ## Change log
 | Date | Change |
 |------|--------|
 | 2026-07-16 | Registry created from orchestration Phases 0–8 |
 | 2026-07-16 | VG-02 mitigated; VG-14 closed; coach .txt export |
+| 2026-07-16 | VG-15 ad strategy + scaffold (adsEnabled false) |

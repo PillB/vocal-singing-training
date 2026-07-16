@@ -3338,3 +3338,52 @@ footer a {
   color: #b8eccF;
   font-size: 0.92rem;
 }
+
+/* —— Native / ad slots (free tier only; never over practice stage) —— */
+.ad-slot {
+  margin: 0.75rem 0 1rem;
+  max-width: 100%;
+}
+.ad-slot[hidden] {
+  display: none !important;
+}
+.ad-native-card {
+  border: 1px dashed rgba(148, 163, 184, 0.35);
+  border-radius: var(--radius-sm, 10px);
+  padding: 0.85rem 1rem;
+  background: rgba(15, 23, 42, 0.55);
+}
+.ad-native-label {
+  display: inline-block;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted, #94a3b8);
+  margin-bottom: 0.35rem;
+}
+.ad-native-title {
+  display: block;
+  font-size: 0.98rem;
+  margin: 0.15rem 0 0.35rem;
+  color: var(--text, #e2e8f0);
+}
+.ad-native-body {
+  margin: 0 0 0.65rem;
+  font-size: 0.88rem;
+  color: var(--text-muted, #94a3b8);
+  line-height: 1.4;
+}
+.ad-native-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.ad-native-disc {
+  margin: 0.5rem 0 0;
+  font-size: 0.75rem;
+}
+.ad-slot--adsense {
+  min-height: 90px;
+  overflow: hidden;
+}

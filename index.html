@@ -119,6 +119,9 @@
           </div>
         </div>
 
+        <!-- Free-tier native tip / ad slot (never during practice; off until adsEnabled) -->
+        <aside id="ad-slot-home" class="ad-slot" hidden aria-label="Studio tip"></aside>
+
         <div class="value-banner" id="value-banner" hidden role="status">
           <p id="value-banner-text"></p>
           <div class="value-banner-actions">
@@ -432,6 +435,7 @@
               <button type="button" class="btn btn-success" id="btn-complete" data-i18n="metrics.save">Guardar sesión y puntaje</button>
             </div>
             <div id="score-result" class="score-card" style="margin-top: 1rem" hidden></div>
+            <aside id="ad-slot-post-session" class="ad-slot" hidden aria-label="Studio tip"></aside>
           </div>
         </div>
 
@@ -462,6 +466,7 @@
           <button type="button" class="btn btn-ghost" id="btn-history-back" data-i18n="history.back">← Volver</button>
         </div>
         <div class="card" id="history-list"></div>
+        <aside id="ad-slot-history" class="ad-slot" hidden aria-label="Studio tip"></aside>
       </section>
 
       <section id="view-plan" class="view">
@@ -639,6 +644,8 @@
     <script src="js/storage.js"></script>
     <script src="js/billing-config.js"></script>
     <script src="js/billing.js"></script>
+    <script src="js/ads-config.js"></script>
+    <script src="js/ads.js"></script>
     <script src="js/value-pulse.js"></script>
     <script src="js/analytics.js"></script>
     <script src="js/reminders.js"></script>

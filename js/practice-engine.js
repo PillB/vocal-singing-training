@@ -127,7 +127,16 @@
       this.running = true;
       this._lastFrameAt = performance.now();
 
-      if (record) await this._startRecorder();
+      // Recording is optional — never fail the whole practice session if MediaRecorder is unsupported
+      if (record) {
+        try {
+          await this._startRecorder();
+        } catch (e) {
+          console.warn("MediaRecorder unavailable; practice continues without file recording", e);
+          this.recording = false;
+          this.mediaRecorder = null;
+        }
+      }
 
       this._status("listening");
       this._loop();
@@ -140,14 +149,25 @@
         URL.revokeObjectURL(this.recUrl);
         this.recUrl = null;
       }
-      const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-        ? "audio/webm;codecs=opus"
-        : MediaRecorder.isTypeSupported("audio/webm")
-          ? "audio/webm"
-          : "";
-      this.mediaRecorder = mime
-        ? new MediaRecorder(this.stream, { mimeType: mime })
-        : new MediaRecorder(this.stream);
+      if (typeof MediaRecorder === "undefined") {
+        throw new Error("MediaRecorder not available");
+      }
+      let mime = "";
+      try {
+        if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) mime = "audio/webm;codecs=opus";
+        else if (MediaRecorder.isTypeSupported("audio/webm")) mime = "audio/webm";
+        else if (MediaRecorder.isTypeSupported("audio/mp4")) mime = "audio/mp4";
+      } catch {
+        mime = "";
+      }
+      try {
+        this.mediaRecorder = mime
+          ? new MediaRecorder(this.stream, { mimeType: mime })
+          : new MediaRecorder(this.stream);
+      } catch (e) {
+        // Last resort: no options
+        this.mediaRecorder = new MediaRecorder(this.stream);
+      }
       this.mediaRecorder.ondataavailable = (e) => {
         if (e.data && e.data.size) this.recChunks.push(e.data);
       };

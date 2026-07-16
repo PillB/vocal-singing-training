@@ -1684,10 +1684,12 @@ body.view-exercise .hud-cents-only .hud-score .hud-label {
 }
 
 /* ── Interactive product tour ── */
+/* Tour chrome must sit above page targets (.tour-highlight used to raise
+   #exercise-list above the whole tour-root, stealing clicks from Skip/Next). */
 .tour-root {
   position: fixed;
   inset: 0;
-  z-index: 120;
+  z-index: 10000;
   pointer-events: none;
 }
 .tour-root[hidden] {
@@ -1708,11 +1710,11 @@ body.view-exercise .hud-cents-only .hud-score .hud-label {
     0 12px 40px rgba(0, 0, 0, 0.45);
   pointer-events: none;
   transition: left 0.25s ease, top 0.25s ease, width 0.25s ease, height 0.25s ease, opacity 0.2s ease;
-  z-index: 121;
+  z-index: 10001;
 }
 .tour-card {
   position: fixed;
-  z-index: 140; /* always above spotlight + highlighted page chrome */
+  z-index: 10002; /* always above spotlight + page chrome */
   max-width: min(400px, calc(100vw - 24px));
   background: var(--bg-card);
   border: 1px solid var(--border);
@@ -1721,6 +1723,7 @@ body.view-exercise .hud-cents-only .hud-score .hud-label {
   padding: 1.1rem 1.2rem 1rem;
   pointer-events: auto;
   color: var(--text);
+  isolation: isolate;
 }
 .tour-card-center {
   /* position set in JS */
@@ -1759,9 +1762,15 @@ body.view-exercise .hud-cents-only .hud-score .hud-label {
 }
 .tour-highlight {
   position: relative;
-  z-index: 122 !important;
+  /* Do NOT raise above .tour-root — hole cutout shows the target; outline only */
+  z-index: auto;
   outline: 2px solid rgba(110, 180, 232, 0.55);
+  outline-offset: 2px;
   /* Page targets must not steal clicks from tour controls */
+  pointer-events: none !important;
+}
+.tour-highlight,
+.tour-highlight * {
   pointer-events: none !important;
 }
 body.tour-active {
@@ -1771,7 +1780,12 @@ body.tour-active .app-header,
 body.tour-active .main,
 body.tour-active .app-footer {
   /* Keep layout visible under dim; interaction blocked by backdrop */
-  pointer-events: none;
+  pointer-events: none !important;
+}
+body.tour-active .app-header *,
+body.tour-active .main *,
+body.tour-active .app-footer * {
+  pointer-events: none !important;
 }
 @media (max-width: 520px) {
   .tour-card {

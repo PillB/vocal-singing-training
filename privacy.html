@@ -1,10 +1,13 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content="Privacy policy for Vocal Studio / PillB vocal training app." />
-    <title>Privacy · Vocal Studio</title>
+    <meta
+      name="description"
+      content="Privacidad de Estudio Vocal: práctica en el navegador, micrófono local, pagos seguros."
+    />
+    <title>Privacidad · Estudio Vocal</title>
     <link rel="stylesheet" href="css/styles.css" />
     <style>
       .privacy-wrap {
@@ -20,6 +23,7 @@
       .privacy-wrap h2 {
         font-size: 1.05rem;
         margin-top: 1.5rem;
+        color: var(--text, #e2e8f0);
       }
       .privacy-wrap p,
       .privacy-wrap li {
@@ -29,6 +33,10 @@
       .privacy-wrap a {
         color: var(--accent, #7dd3fc);
       }
+      .lang-switch {
+        font-size: 0.85rem;
+        margin-bottom: 1rem;
+      }
     </style>
   </head>
   <body>
@@ -37,8 +45,8 @@
         <div class="brand">
           <div class="brand-mark" aria-hidden="true">♪</div>
           <div>
-            <h1>Vocal Studio</h1>
-            <p>Privacy policy</p>
+            <h1>Estudio Vocal</h1>
+            <p>Privacidad</p>
           </div>
         </div>
         <div class="header-actions">
@@ -47,81 +55,72 @@
       </div>
     </header>
     <main class="privacy-wrap">
-      <h1>Privacy policy</h1>
-      <p><strong>Last updated:</strong> 2026-07-16 · Product: Vocal Studio (PillB) · Host: GitHub Pages</p>
+      <p class="lang-switch muted"><a href="#en">English</a> · <strong>Español</strong></p>
+      <h1>Tu privacidad, en claro</h1>
+      <p><strong>Actualizado:</strong> 16 jul 2026</p>
 
-      <h2>1. What this app is</h2>
+      <h2>Qué es esta app</h2>
       <p>
-        Vocal Studio is a browser-based vocal and singing practice tool. Core practice runs
-        locally in your browser. There is no account server for everyday practice data.
+        Estudio Vocal es una herramienta de práctica de voz y canto en el navegador.
+        Puedes entrenar sin crear una cuenta en un servidor central.
       </p>
 
-      <h2>2. Data stored on your device</h2>
-      <p>We store practice progress, settings, and optional billing entitlement flags in
-        <strong>localStorage / sessionStorage</strong> on your device (for example progress,
-        streaks, language, soft Pro trial). Clearing site data removes it. We do not operate
-        a central database of your exercise scores.</p>
-
-      <h2>3. Microphone &amp; audio</h2>
+      <h2>Qué se guarda en tu dispositivo</h2>
       <p>
-        The microphone is used only when you start practice, for pitch feedback and optional
-        recording. Audio processing happens in the browser. We do not upload your voice to our
-        servers (there is no such backend on the static site).
+        Tu progreso, ajustes, rachas y (si aplica) el estado Pro de prueba o pago se
+        guardan en <strong>este navegador</strong> (almacenamiento local). Si borras
+        los datos del sitio, se pierden. No subimos tu historial de ejercicios a un
+        servidor propio.
       </p>
 
-      <h2>4. Payments</h2>
+      <h2>Micrófono y audio</h2>
       <p>
-        Paid Pro checkout is handled by <strong>Stripe</strong> and/or
-        <strong>Mercado Pago</strong> on their hosted pages. Card details never touch our
-        origin. See provider privacy policies for payment data.
+        El micrófono solo se usa cuando tú pulsas Empezar, para afinación y
+        grabación opcional. El audio se procesa en tu dispositivo. No enviamos tu
+        voz a nuestros servidores (esta web es estática).
       </p>
 
-      <h2>5. Optional ads / studio tips (free tier)</h2>
+      <h2>Pagos</h2>
       <p>
-        Free-tier <strong>studio tips</strong> (native cards or, if enabled later, display ads)
-        may appear only outside live practice. They are <strong>off by default</strong> until
-        the operator enables them. Pro and trial users do not see these tips/ads.
-      </p>
-      <p>
-        If Google AdSense or similar networks are enabled later, those third parties may set
-        cookies or use device identifiers for ad delivery and measurement under their own
-        policies. Affiliate links may be labeled as sponsored.
+        Si contratas Pro, el pago lo gestiona <strong>Stripe</strong> o
+        <strong>Mercado Pago</strong> en sus páginas seguras. Los datos de tarjeta
+        no pasan por nuestro sitio.
       </p>
 
-      <h2>6. Analytics</h2>
+      <h2>Consejos de estudio o anuncios (plan gratis)</h2>
       <p>
-        Optional local analytics events may be recorded in the browser for product improvement
-        (for example session counts). No personal identity is required to practice.
+        En el plan gratis pueden mostrarse consejos de estudio o, en el futuro,
+        anuncios ligeros — <strong>nunca durante</strong> Empezar / micrófono /
+        piano en vivo. Pro y la prueba Pro no los muestran. Si hay enlaces de
+        afiliados, se etiquetan como tal.
       </p>
 
-      <h2>7. Third-party links</h2>
+      <h2>Enlaces externos</h2>
       <p>
-        Links to external sites (payment providers, affiliate partners, documentation) are
-        governed by those sites’ policies. We are not responsible for their content.
+        Los enlaces a pagos u otros sitios tienen sus propias políticas de
+        privacidad.
       </p>
 
-      <h2>8. Children</h2>
+      <h2>Contacto</h2>
       <p>
-        The app is a general skill practice tool. If you are a parent/guardian, supervise use
-        of the microphone and any external links.
+        Dudas: repositorio del proyecto
+        <a href="https://github.com/PillB/vocal-singing-training">PillB/vocal-singing-training</a>.
       </p>
 
-      <h2>9. Contact</h2>
+      <hr style="margin: 2.5rem 0; border-color: rgba(148, 163, 184, 0.2)" />
+
+      <h1 id="en">Privacy (English)</h1>
+      <p><strong>Updated:</strong> 2026-07-16</p>
       <p>
-        Questions about this policy: open an issue on the project repository
-        (<a href="https://github.com/PillB/vocal-singing-training">PillB/vocal-singing-training</a>)
-        or contact the site operator via the repository profile.
+        Vocal Studio is a browser practice tool. Progress stays in
+        <strong>local storage</strong> on your device. The microphone is used only
+        when you start practice; audio is processed in the browser. Paid checkout
+        uses Stripe or Mercado Pago hosted pages — card data never hits our origin.
+        Free-tier studio tips or ads (if enabled) never appear during live practice;
+        Pro is ad-free. Questions: GitHub repository above.
       </p>
 
-      <h2>10. Changes</h2>
-      <p>
-        We may update this page when monetization, hosting, or data practices change. The
-        “Last updated” date will move when material changes are made.
-      </p>
-
-      <p style="margin-top: 2rem">
-        <a href="./">← Back to Vocal Studio</a>
-      </p>
+      <p style="margin-top: 2rem"><a href="./">← Volver a la app</a></p>
     </main>
   </body>
 </html>

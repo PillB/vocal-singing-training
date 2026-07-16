@@ -196,7 +196,7 @@
         <div class="mode-title">${L("Fluidez con metáforas", "Metaphor fluency")}</div>
         <div class="mode-phase" data-phase>${phases[0]?.label || "Topic"}</div>
         <div class="mode-big" data-remain>—</div>
-        <button type="button" class="btn btn-primary btn-sm" data-log>I spoke a metaphor ✓</button>
+        <button type="button" class="btn btn-primary btn-sm" data-log>${L("Dije una metáfora ✓", "I spoke a metaphor ✓")}</button>
         <p class="mode-meta">${L("Metáforas: <strong data-n>0</strong> / " + phases.length, "Metaphors logged: <strong data-n>0</strong> / " + phases.length)}</p>
         <p class="mode-meta muted">${L("Una imagen concreta por tema — dilo en voz alta y toca.", "One concrete image per topic — say it out loud, then tap.")}</p>
       `;
@@ -670,7 +670,7 @@
         this.state.hadSpeech = true;
         this.state.inSilence = false;
         this.state.countedThis = false;
-        if (this.$("[data-status]")) this.$("[data-status]").textContent = "Speaking…";
+        if (this.$("[data-status]")) this.$("[data-status]").textContent = L("Hablando…", "Speaking…");
         return;
       }
       if (!this.state.hadSpeech) return; // don't score pre-speech silence
@@ -682,7 +682,7 @@
         this.state.countedThis = true;
         this.state.hadSpeech = false; // need speech again before next pause
         if (this.$("[data-p]")) this.$("[data-p]").textContent = String(this.state.pauses);
-        if (this.$("[data-status]")) this.$("[data-status]").textContent = "Pause counted ✓";
+        if (this.$("[data-status]")) this.$("[data-status]").textContent = L("Pausa contada ✓", "Pause counted ✓");
         if (this.$("[data-tl]")) {
           const bit = document.createElement("span");
           bit.className = "tl-pause";
@@ -781,7 +781,7 @@
         this.state.slowUntil = performance.now() + 1200;
         this.state.quietMs = 0;
         if (this.$("[data-st]"))
-          this.$("[data-st]").textContent = "Slow window open — ease off for ~1s…";
+          this.$("[data-st]").textContent = L("Ventana lenta — suaviza ~1 s…", "Slow window — ease off ~1s…");
       });
     },
     onFrame(frame) {
@@ -794,7 +794,7 @@
             this.state.confirmed++;
             if (this.$("[data-k]"))
               this.$("[data-k]").textContent = `${this.state.confirmed} / 3 confirmed`;
-            if (this.$("[data-st]")) this.$("[data-st]").textContent = "Slow-down confirmed ✓";
+            if (this.$("[data-st]")) this.$("[data-st]").textContent = L("Bajada confirmada ✓", "Slow-down confirmed ✓");
           }
         }
       }
@@ -872,8 +872,8 @@
           this.state.phase = "receive";
           this.state.silenceAcc = 0;
           if (this.$("[data-phase]"))
-            this.$("[data-phase]").textContent = `Q${this.state.q} · Receive the question`;
-          if (this.$("[data-g]")) this.$("[data-g]").textContent = "Breathe";
+            this.$("[data-phase]").textContent = L(`P${this.state.q} · Recibe la pregunta`, `Q${this.state.q} · Receive the question`);
+          if (this.$("[data-g]")) this.$("[data-g]").textContent = L("Respira", "Breathe");
         }
       });
     },
@@ -892,7 +892,7 @@
             this.state.phase = "answer";
             this.state.gates++;
             if (this.$("[data-ok]")) this.$("[data-ok]").textContent = String(this.state.gates);
-            if (this.$("[data-g]")) this.$("[data-g]").textContent = "Answer ≤3 sentences";
+            if (this.$("[data-g]")) this.$("[data-g]").textContent = L("Responde en ≤3 oraciones", "Answer ≤3 sentences");
           }
         } else if (this.state.phase === "silence") {
           this.state.silenceAcc = Math.max(0, this.state.silenceAcc - dt * 2);
@@ -927,7 +927,7 @@
       this.$("[data-peak]")?.addEventListener("click", () => {
         this.state.peakMarked = true;
         if (this.$("[data-peak-st]"))
-          this.$("[data-peak-st]").textContent = `Peak marked in “${this.state.runner.label}”`;
+          this.$("[data-peak-st]").textContent = L(`Pico marcado en “${this.state.runner.label}”`, `Peak marked in “${this.state.runner.label}”`);
       });
     },
     onFrame() {
@@ -967,7 +967,7 @@
       this.$("[data-claim]")?.addEventListener("click", () => {
         this.state.waitingLand = true;
         this.state.silenceAcc = 0;
-        if (this.$("[data-st]")) this.$("[data-st]").textContent = "Hold silence to land…";
+        if (this.$("[data-st]")) this.$("[data-st]").textContent = L("Mantén el silencio para aterrizar…", "Hold silence to land…");
       });
     },
     onFrame(frame) {
@@ -981,7 +981,7 @@
           this.state.waitingLand = false;
           if (this.$("[data-l]"))
             this.$("[data-l]").textContent = `${this.state.lands} / ${this.profile.claims || 5}`;
-          if (this.$("[data-st]")) this.$("[data-st]").textContent = "Landed ✓";
+          if (this.$("[data-st]")) this.$("[data-st]").textContent = L("Aterrizado ✓", "Landed ✓");
         }
       } else this.state.silenceAcc = 0;
     },
@@ -1041,7 +1041,7 @@
           "High: brighter face, quicker (not shout)."
         ];
         if (this.$("[data-phase]"))
-          this.$("[data-phase]").textContent = `${this.state.levels[this.state.i]} energy`;
+          this.$("[data-phase]").textContent = L(`${this.state.levels[this.state.i]} de energía`, `${this.state.levels[this.state.i]} energy`);
         if (this.$("[data-tip]")) this.$("[data-tip]").textContent = tips[this.state.i];
       }
     },

@@ -162,7 +162,7 @@
       "pricing.toast.demo": "Demo Pro activado en este navegador",
       "pricing.toast.success": "¡Suscripción activada! Gracias.",
       "pricing.toast.cancel": "Pago cancelado — sigue practicando gratis",
-      "pricing.toast.unconfigured": "Enlaces de pago aún no configurados (ver docs/10-SUBSCRIPTIONS.md)",
+      "pricing.toast.unconfigured": "Los pagos aún no están públicos. Sigue practicando gratis; Pro se activará cuando estén listos.",
       "pricing.toast.portalUnconfigured": "Portal de cliente no configurado (Stripe → Billing → Customer portal)",
       "pricing.toast.portalOpened": "Abriendo portal de facturación…",
       "pricing.toast.exportNeedPro": "Exportar requiere Pro o prueba",
@@ -184,7 +184,7 @@
         "Cambia entre Entrenamiento vocal (hablar con claridad y presencia) y Entrenamiento de canto (cierre, aire, afinación). Cada uno tiene su lista de ejercicios.",
       "tour.s3.title": "Básico y avanzado",
       "tour.s3.body":
-        "Básico = la base de la tarea. Avanzado = ejercicios extra de investigación (pausas, rellenos, SOVT, sirenas, escalas…). Filtra cuando quieras enfocarte.",
+        "Básico = la base para empezar con buena técnica. Avanzado = retos extra (pausas, rellenos, calentamientos SOVT, sirenas, escalas…). Filtra cuando quieras enfocarte.",
       "tour.s4.title": "Elige un ejercicio",
       "tour.s4.body":
         "Cada tarjeta resume el objetivo y el tiempo. Toca una para abrir el «escenario de práctica» con instrucciones y herramientas.",
@@ -301,8 +301,8 @@
       "ex.steps": "Pasos",
       "ex.tips": "Consejos",
       "ex.avoid": "Evitar",
-      "ex.original": "Espíritu original",
-      "ex.research": "Investigación · ",
+      "ex.original": "En pocas palabras",
+      "ex.research": "Por qué ayuda · ",
       "practice.title": "Práctica",
       "practice.hint":
         "Un botón inicia escucha, afinación, sostenidos, temporizador y piano cuando corresponde.",
@@ -387,10 +387,10 @@
       "plan.continue": "Aún no → mismo elemento",
       "plan.completed": "Elementos mejorados",
       "plan.reviews": "Historial de revisiones",
-      "footer.base": "Basado en",
+      "footer.base": "Estudio de voz en casa",
       "footer.privacy": "Privacidad",
       "footer.rest":
-        "· Material de práctica personal · Piano en el navegador (registro medio-bajo) · Los datos se quedan en tu dispositivo.",
+        "· Ejercicios de oratoria y canto · Piano en el navegador · Tu progreso se guarda en este dispositivo.",
       "next": "Siguiente ejercicio →",
       "toast.mic": "Se necesita permiso de micrófono",
       "toast.pianoOnly": "Piano en marcha · permite el micrófono para escuchar tu voz",
@@ -398,6 +398,49 @@
       "toast.live": "En vivo · {mode}",
       "toast.liveRec": "En vivo · {mode} · grabando",
       "toast.stopped": "Práctica detenida",
+      "toast.noExercises": "No hay ejercicios en esta vista",
+      "toast.audioStartFail": "No se pudo iniciar el audio. Toca la página e inténtalo de nuevo.",
+      "toast.planOpened": "Plan de 12 semanas abierto",
+      "toast.recordingSaved": "Grabación guardada en este dispositivo",
+      "toast.recordingFail": "No se pudo guardar la grabación",
+      "toast.sessionSaved": "Sesión guardada en tu progreso",
+      "toast.sessionEncourage": "Practicaste con intención. La constancia gana a la intensidad.",
+      "toast.timerDone": "Temporizador listo — buen trabajo",
+      "toast.recording": "Grabando…",
+      "toast.micRecordNeed": "Se necesita permiso de micrófono para grabar",
+      "toast.deleted": "Eliminado",
+      "toast.pickElement": "Elige primero un elemento de foco",
+      "toast.weekStarted": "Semana {n} iniciada: {element}",
+      "toast.startWeekFirst": "Primero inicia la semana",
+      "toast.alreadyCheckin": "Ya registraste el día de hoy",
+      "toast.checkinSaved": "Registro del día guardado",
+      "toast.elementImproved": "¡Bien! Elemento mejorado. Elige un nuevo foco para la próxima semana.",
+      "toast.elementContinue": "Sigue con el mismo elemento — la profundidad gana.",
+      "toast.sessionAlreadyDone": "La sesión ya está completada",
+      "toast.noCurrentEx": "No hay ejercicio actual",
+      "toast.sessionPaused": "Sesión en pausa — reanuda cuando quieras",
+      "toast.sessionCleared": "Sesión guiada limpiada",
+      "toast.pianoStopped": "Piano detenido",
+      "toast.refPitch": "Referencia {note} ({sec}s)",
+      "toast.inhaleTicks": "Marcas de inspiración 3 s",
+      "toast.structuredDone": "Sesión guiada completa — excelente trabajo",
+      "toast.holdLogged": "Sostenido: {s}s",
+      "toast.genericFail": "Algo falló · pulsa Empezar de nuevo",
+      "toast.lockedNext": "Fijado {prev} → siguiente {next}",
+      "toast.lockedDone": "Fijado {prev} · ronda lista",
+      "toast.structuredStart": "Sesión guiada {track} · {path} ({n} ejercicios)",
+      "toast.pausedSession": "Tienes una sesión en pausa — reanuda desde el aviso superior",
+      "toast.loopOneNote": "Bucle: 1 nota a la vez · {sec}s c/u…",
+      "toast.loopSustain": "Bucle con sostenido de {sec}s…",
+      "toast.loopProg": "Bucle de progresión…",
+      "toast.playOneNote": "1 nota a la vez · {sec}s c/u",
+      "toast.playSustain": "Reproduciendo con sostenido de {sec}s",
+      "toast.playOnce": "Progresión una vez",
+      "track.vocalShort": "Vocal",
+      "track.singingShort": "Canto",
+      "path.basic": "básica",
+      "path.advanced": "avanzada",
+      "path.full": "completa",
       "leave.title": "¿Guardar esta práctica?",
       "leave.body":
         "Practicaste una parte importante de este ejercicio. ¿Quieres guardar el progreso o descartarlo?",
@@ -607,7 +650,7 @@
       "pricing.toast.demo": "Demo Pro unlocked in this browser",
       "pricing.toast.success": "Subscription activated — thank you!",
       "pricing.toast.cancel": "Checkout canceled — keep practicing free",
-      "pricing.toast.unconfigured": "Payment links not set yet (see docs/10-SUBSCRIPTIONS.md)",
+      "pricing.toast.unconfigured": "Checkout isn’t live yet. Keep practicing free — Pro unlocks when payments are ready.",
       "pricing.toast.portalUnconfigured": "Customer portal not configured (Stripe → Billing → Customer portal)",
       "pricing.toast.portalOpened": "Opening billing portal…",
       "pricing.toast.exportNeedPro": "Export needs Pro or trial",
@@ -629,7 +672,7 @@
         "Switch between Vocal training (clarity and presence) and Singing training (closure, air, pitch). Each has its own exercise list.",
       "tour.s3.title": "Basic and advanced",
       "tour.s3.body":
-        "Basic = homework spine. Advanced = research-backed extras (pauses, fillers, SOVT, sirens, scales…). Filter when you want focus.",
+        "Basic = a solid technical start. Advanced = extra challenges (pauses, fillers, SOVT warm-ups, sirens, scales…). Filter when you want focus.",
       "tour.s4.title": "Pick an exercise",
       "tour.s4.body":
         "Each card shows the goal and time. Tap one to open the practice stage with guidance and tools.",
@@ -746,8 +789,8 @@
       "ex.steps": "Steps",
       "ex.tips": "Tips",
       "ex.avoid": "Avoid",
-      "ex.original": "Original spirit",
-      "ex.research": "Research · ",
+      "ex.original": "In short",
+      "ex.research": "Why this helps · ",
       "practice.title": "Practice",
       "practice.hint":
         "One button starts listening, pitch feedback, hold auto-log, timer, and piano when needed.",
@@ -831,10 +874,10 @@
       "plan.continue": "Not yet → same element",
       "plan.completed": "Elements improved",
       "plan.reviews": "Review history",
-      "footer.base": "Based on",
+      "footer.base": "Home voice studio",
       "footer.privacy": "Privacy",
       "footer.rest":
-        "· Personal practice material · In-browser piano (mid-lower range) · Data stays on your device.",
+        "· Speaking & singing exercises · In-browser piano · Your progress stays on this device.",
       "next": "Next exercise →",
       "toast.mic": "Microphone permission needed",
       "toast.pianoOnly": "Piano playing · allow the mic to hear your voice",
@@ -842,6 +885,49 @@
       "toast.live": "Live · {mode}",
       "toast.liveRec": "Live · {mode} · recording",
       "toast.stopped": "Practice stopped",
+      "toast.noExercises": "No exercises in this view",
+      "toast.audioStartFail": "Could not start audio. Tap the page and try again.",
+      "toast.planOpened": "12-week plan opened",
+      "toast.recordingSaved": "Recording saved on this device",
+      "toast.recordingFail": "Could not save recording",
+      "toast.sessionSaved": "Session saved to your progress",
+      "toast.sessionEncourage": "You practiced with intention. Consistency beats intensity.",
+      "toast.timerDone": "Timer done — nice work",
+      "toast.recording": "Recording…",
+      "toast.micRecordNeed": "Microphone permission needed to record",
+      "toast.deleted": "Deleted",
+      "toast.pickElement": "Pick a focus element first",
+      "toast.weekStarted": "Week {n} started: {element}",
+      "toast.startWeekFirst": "Start the week first",
+      "toast.alreadyCheckin": "Already checked in today",
+      "toast.checkinSaved": "Daily check-in saved",
+      "toast.elementImproved": "Great — element improved. Pick a new focus for next week.",
+      "toast.elementContinue": "Keep going on the same element — depth wins.",
+      "toast.sessionAlreadyDone": "Session already completed",
+      "toast.noCurrentEx": "No current exercise",
+      "toast.sessionPaused": "Session paused — resume anytime",
+      "toast.sessionCleared": "Guided session cleared",
+      "toast.pianoStopped": "Piano stopped",
+      "toast.refPitch": "Reference {note} ({sec}s)",
+      "toast.inhaleTicks": "3-second inhale ticks",
+      "toast.structuredDone": "Guided session complete — excellent work",
+      "toast.holdLogged": "Hold logged: {s}s",
+      "toast.genericFail": "Something failed · press Start again",
+      "toast.lockedNext": "Locked {prev} → next {next}",
+      "toast.lockedDone": "Locked {prev} · round done",
+      "toast.structuredStart": "Guided session · {track} · {path} ({n} exercises)",
+      "toast.pausedSession": "You have a paused session — resume from the top banner",
+      "toast.loopOneNote": "Looping one note at a time · {sec}s each…",
+      "toast.loopSustain": "Looping with {sec}s sustain…",
+      "toast.loopProg": "Looping progression…",
+      "toast.playOneNote": "One note at a time · {sec}s each",
+      "toast.playSustain": "Playing with {sec}s sustain",
+      "toast.playOnce": "Playing progression once",
+      "track.vocalShort": "Vocal",
+      "track.singingShort": "Singing",
+      "path.basic": "basic",
+      "path.advanced": "advanced",
+      "path.full": "full",
       "leave.title": "Save this practice?",
       "leave.body":
         "You practiced a meaningful part of this exercise. Save your progress or discard it?",
@@ -915,6 +1001,25 @@
       const key = "ex." + ex.id;
       const tr = this.t(key);
       return tr === key ? ex.title : tr;
+    },
+    /**
+     * Locale-aware exercise guide field (steps, tips, mistakes, original, research).
+     * Spanish: VT_EXERCISE_LOCALE_ES[id] or *Es fields on the exercise object.
+     */
+    exField(ex, field) {
+      if (!ex || !field) return field === "steps" || field === "tips" || field === "mistakes" ? [] : "";
+      const isEs = this.lang === "es";
+      if (isEs) {
+        const pack = (global.VT_EXERCISE_LOCALE_ES || {})[ex.id];
+        if (pack && pack[field] != null) return pack[field];
+        const esKey = field + "Es";
+        if (ex[esKey] != null) return ex[esKey];
+      }
+      const v = ex[field];
+      if (field === "steps" || field === "tips" || field === "mistakes") {
+        return Array.isArray(v) ? v : [];
+      }
+      return v == null ? "" : v;
     },
     setLang(lang) {
       this.lang = lang === "en" ? "en" : "es";

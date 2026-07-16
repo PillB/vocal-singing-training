@@ -108,12 +108,7 @@
       const es =
         (window.VTI18n && VTI18n.lang === "es") ||
         (document.documentElement.lang || "").startsWith("es");
-      toast(
-        es
-          ? "Algo falló · mira la consola o pulsa Empezar de nuevo"
-          : "Something failed · check console or press Start again",
-        { debounceMs: 5000 }
-      );
+      toast(tt("toast.genericFail"), { debounceMs: 5000 });
     };
     window.addEventListener("error", (ev) => {
       report("error", ev?.error || ev?.message || ev);
@@ -465,7 +460,7 @@
       basic[0] ||
       list[0];
     if (next) openExercise(next.id, false);
-    else toast("No exercises available");
+    else toast(tt("toast.noExercises"));
   }
 
   function updateSessionBanner() {
@@ -877,15 +872,26 @@
       ex.track === "vocal" ? "badge.vocal" : "badge.singing"
     )} · ${tt("badge." + tier)}`;
     $("#ex-track-badge").style.borderColor = ex.track === "vocal" ? "var(--vocal)" : "var(--singing)";
-    $("#ex-original").textContent = ex.original;
+    const I = window.VTI18n;
+    const original = I?.exField ? I.exField(ex, "original") : ex.original;
+    const research = I?.exField ? I.exField(ex, "research") : ex.research;
+    const steps = I?.exField ? I.exField(ex, "steps") : ex.steps || [];
+    const tips = I?.exField ? I.exField(ex, "tips") : ex.tips || [];
+    const mistakes = I?.exField ? I.exField(ex, "mistakes") : ex.mistakes || [];
+    const origEl = $("#ex-original");
+    if (origEl) {
+      const label = tt("ex.original");
+      origEl.textContent = original ? `${label}: ${original}` : "";
+      origEl.hidden = !original;
+    }
     const researchEl = $("#ex-research");
     if (researchEl) {
-      researchEl.textContent = ex.research || "";
-      researchEl.hidden = !ex.research;
+      researchEl.textContent = research ? `${tt("ex.research")}${research}` : "";
+      researchEl.hidden = !research;
     }
-    $("#ex-steps").innerHTML = ex.steps.map((s) => `<li>${s}</li>`).join("");
-    $("#ex-tips").innerHTML = ex.tips.map((t) => `<li>${t}</li>`).join("");
-    $("#ex-mistakes").innerHTML = ex.mistakes.map((m) => `<li>${m}</li>`).join("");
+    $("#ex-steps").innerHTML = (steps || []).map((s) => `<li>${s}</li>`).join("");
+    $("#ex-tips").innerHTML = (tips || []).map((t) => `<li>${t}</li>`).join("");
+    $("#ex-mistakes").innerHTML = (mistakes || []).map((m) => `<li>${m}</li>`).join("");
 
     // Timer (integrated into cockpit — always show display when timer exists)
     // Micro-session: 5 min soft cap for comeback practice
@@ -1474,26 +1480,23 @@
             ? ` · sustain ${opts.sustainSec}s`
             : "";
         $("#chord-desc").textContent = prog.description + modeHint + holdHint;
+        const sec = String(opts.sustainSec);
         toast(
           loop
             ? opts.oneNote
-              ? isEsLang()
-                ? `Bucle: 1 nota a la vez · ${opts.sustainSec}s c/u…`
-                : `Looping one note at a time · ${opts.sustainSec}s each…`
+              ? tt("toast.loopOneNote", { sec })
               : opts.sustain
-                ? `Looping with ${opts.sustainSec}s sustain…`
-                : "Looping progression…"
+                ? tt("toast.loopSustain", { sec })
+                : tt("toast.loopProg")
             : opts.oneNote
-              ? isEsLang()
-                ? `1 nota a la vez · ${opts.sustainSec}s c/u`
-                : `One note at a time · ${opts.sustainSec}s each`
+              ? tt("toast.playOneNote", { sec })
               : opts.sustain
-                ? `Playing with ${opts.sustainSec}s sustain`
-                : "Playing progression once"
+                ? tt("toast.playSustain", { sec })
+                : tt("toast.playOnce")
         );
       }
     } catch (e) {
-      toast("Could not start audio — interact with the page and try again.");
+      toast(tt("toast.audioStartFail"));
       console.error(e);
     }
   }
@@ -1539,7 +1542,11 @@
   }
 
   async function onChallengeNoteLocked(prevNote, nextNote) {
-    toast(nextNote ? `Locked ${prevNote} → next ${nextNote}` : `Locked ${prevNote} · round done!`);
+    toast(
+      nextNote
+        ? tt("toast.lockedNext", { prev: prevNote, next: nextNote })
+        : tt("toast.lockedDone", { prev: prevNote })
+    );
     // Only retarget — highway range already locked to full challenge pool
     const nextS = effectiveNoteName(nextNote);
     if (nextS && VT_NOTE_FREQ[nextS]) {
@@ -1723,7 +1730,7 @@
       if (profile.mode === "weekPlan") {
         state.modeInstance?.onStart?.();
         document.getElementById("btn-plan")?.click();
-        toast("12-week plan opened");
+        toast(tt("toast.planOpened"));
         return;
       }
 
@@ -2067,10 +2074,10 @@
           label: `${state.exercise.title} · ${new Date().toLocaleString()}`,
           meta: { durationMs: result.durationMs }
         });
-        toast("Recording saved in this browser");
+        toast(tt("toast.recordingSaved"));
       } catch (e) {
         console.error(e);
-        toast("Could not save recording");
+        toast(tt("toast.recordingFail"));
       }
     });
     $("#btn-discard-rec")?.addEventListener("click", () => {
@@ -2413,10 +2420,10 @@
           )
           .join("")}
       </ul>
-      <div class="encourage">You practiced with intention. Save that feeling — consistency beats intensity.</div>
+      <div class="encourage">${tt("toast.sessionEncourage")}</div>
     `;
 
-    toast("Session saved to progress");
+    toast(tt("toast.sessionSaved"));
 
     // Post-session native tip (free only; never mid-practice) — research: end-of-task ads only
     try {
@@ -2455,7 +2462,7 @@
     $("#timer-display").textContent = formatTime(left);
     if (left <= 0) {
       stopTimer(true);
-      toast("Timer complete — nice work");
+      toast(tt("toast.timerDone"));
       if (state.practiceLive) {
         // Soft cue only — don't force stop voice mid-rep
       }
@@ -2513,7 +2520,7 @@
         if (sec > prev) input.value = sec;
       }
       renderHoldHistory();
-      toast(`Logged hold: ${sec}s`);
+      toast(tt("toast.holdLogged", { s: String(sec) }));
     }
   }
 
@@ -2539,10 +2546,10 @@
       await state.recorder.start();
       $("#btn-rec-start").disabled = true;
       $("#btn-rec-stop").disabled = false;
-      toast("Recording…");
+      toast(tt("toast.recording"));
     } catch (e) {
       console.error(e);
-      toast("Microphone permission needed for recording");
+      toast(tt("toast.micRecordNeed"));
     }
   }
 
@@ -2569,10 +2576,10 @@
           label: `${state.exercise.title} · ${new Date().toLocaleString()}`,
           meta: { durationMs: result.durationMs }
         });
-        toast("Recording saved in this browser");
+        toast(tt("toast.recordingSaved"));
       } catch (e) {
         console.error(e);
-        toast("Could not save recording");
+        toast(tt("toast.recordingFail"));
       }
     });
     $("#btn-discard-rec").addEventListener("click", () => {
@@ -2673,7 +2680,7 @@
           if (!confirm("Delete this recording?")) return;
           await VTStorage.deleteRecording(btn.dataset.del);
           renderHistory();
-          toast("Deleted");
+          toast(tt("toast.deleted"));
         });
       });
       $$("[data-ab-old]", list).forEach((btn) => {
@@ -2764,38 +2771,38 @@
   function startWeekPlan() {
     const plan = VTStorage.getWeekPlan();
     if (!plan.element) {
-      toast("Select a focus element first");
+      toast(tt("toast.pickElement"));
       return;
     }
     plan.status = "active";
     plan.startedAt = plan.startedAt || new Date().toISOString();
     VTStorage.setWeekPlan(plan);
     renderPlan();
-    toast(`Week ${plan.weekNumber} started: ${plan.element}`);
+    toast(tt("toast.weekStarted", { n: String(plan.weekNumber), element: plan.element }));
   }
 
   function checkInDay() {
     const plan = VTStorage.getWeekPlan();
     if (plan.status === "idle") {
-      toast("Start the week first");
+      toast(tt("toast.startWeekFirst"));
       return;
     }
     const date = new Date().toISOString().slice(0, 10);
     plan.checkIns = plan.checkIns || [];
     if (plan.checkIns.some((c) => c.date === date)) {
-      toast("Already checked in today");
+      toast(tt("toast.alreadyCheckin"));
       return;
     }
     plan.checkIns.push({ date });
     VTStorage.setWeekPlan(plan);
     renderPlan();
-    toast("Daily check-in saved");
+    toast(tt("toast.checkinSaved"));
   }
 
   function submitWeekReview(improved) {
     const plan = VTStorage.getWeekPlan();
     if (!plan.element) {
-      toast("Pick an element first");
+      toast(tt("toast.pickElement"));
       return;
     }
     const notes = $("#plan-review-notes")?.value || "";
@@ -2821,13 +2828,13 @@
       plan.status = "idle";
       plan.checkIns = [];
       plan.startedAt = null;
-      toast("Great — element improved. Pick a new focus for next week.");
+      toast(tt("toast.elementImproved"));
     } else {
       plan.weekNumber += 1;
       plan.status = "active";
       plan.checkIns = [];
       plan.startedAt = new Date().toISOString();
-      toast("Keep going on the same element — depth wins.");
+      toast(tt("toast.elementContinue"));
     }
     VTStorage.setWeekPlan(plan);
     if ($("#plan-review-notes")) $("#plan-review-notes").value = "";
@@ -2842,7 +2849,11 @@
     const id = VTSession.currentExerciseId();
     if (id) openExercise(id, true);
     toast(
-      `${state.tab === "vocal" ? "Vocal" : "Singing"} · ${p} structured session (${session.order.length} exercises)`
+      tt("toast.structuredStart", {
+        track: tt(state.tab === "vocal" ? "track.vocalShort" : "track.singingShort"),
+        path: tt("path." + (p === "advanced" ? "advanced" : p === "full" ? "full" : "basic")),
+        n: String(session.order.length)
+      })
     );
     return session;
   }
@@ -2852,12 +2863,12 @@
     updateSessionBanner();
     if (!s) return;
     if (s.status === "completed") {
-      toast("Session already completed");
+      toast(tt("toast.sessionAlreadyDone"));
       return;
     }
     const id = VTSession.currentExerciseId();
     if (id) openExercise(id, true);
-    else toast("No current exercise");
+    else toast(tt("toast.noCurrentEx"));
   }
 
   function pauseStructured() {
@@ -2866,7 +2877,7 @@
     pauseTimer();
     VTPiano.stopAll();
     updateSessionBanner();
-    toast("Session paused — resume anytime");
+    toast(tt("toast.sessionPaused"));
   }
 
   function endStructured() {
@@ -2882,7 +2893,7 @@
     updateSessionBanner();
     setView("home");
     renderExerciseList();
-    toast("Structured session cleared");
+    toast(tt("toast.sessionCleared"));
   }
 
   /* —— Bindings —— */
@@ -3037,7 +3048,7 @@
     $("#btn-stop-piano")?.addEventListener("click", () => {
       VTPiano.stopAll();
       $("#chord-now").textContent = "—";
-      toast("Piano stopped");
+      toast(tt("toast.pianoStopped"));
     });
     // Vocal range octave controls (− / + / Auto)
     $("#btn-oct-down")?.addEventListener("click", () => nudgeOctave(-1));
@@ -3055,11 +3066,11 @@
         state.practice.setTargetFreq(f);
         if (state.pitchViz) state.pitchViz.setTargetFreq(f);
       }
-      toast(`Reference ${note} (${sec}s)`);
+      toast(tt("toast.refPitch", { note, sec: String(sec) }));
     });
     $("#btn-inhale-ticks")?.addEventListener("click", async () => {
       await VTPiano.playInhaleTicks(3);
-      toast("3-second inhale ticks");
+      toast(tt("toast.inhaleTicks"));
     });
     // Legacy stub buttons (if present in DOM) — only unified practice path
     $("#btn-pitch-start")?.addEventListener("click", startPractice);
@@ -3080,7 +3091,7 @@
         const nid = VTSession.currentExerciseId();
         if (nid) forceOpenExercise(nid, true);
         else {
-          toast("Structured session complete — excellent work!");
+          toast(tt("toast.structuredDone"));
           resetSessionPractice();
           setView("home");
           renderExerciseList();
@@ -3187,15 +3198,17 @@
     } catch {
       /* ignore */
     }
-    // Operator-facing health strip inside pricing foot (misconfig only)
+    // Soft note for free users when checkout not live (no developer/issue jargon)
     const healthNote = $("#pricing-health-note");
     if (healthNote && B.getBillingHealth) {
       try {
         const h = B.getBillingHealth();
-        if (h && !h.ok && Array.isArray(h.issues) && h.issues.length) {
+        if (h && !h.ok && h.demoUnlock) {
           healthNote.hidden = false;
-          const head = tt("pricing.healthPrefix");
-          healthNote.textContent = head + " " + h.issues.slice(0, 2).join(" · ");
+          healthNote.textContent = tt("pricing.toast.unconfigured");
+        } else if (h && !h.ok && !h.links) {
+          healthNote.hidden = false;
+          healthNote.textContent = tt("pricing.toast.unconfigured");
         } else {
           healthNote.hidden = true;
           healthNote.textContent = "";
@@ -4053,11 +4066,7 @@
 
     const s = VTSession.get();
     if (s && s.status === "paused") {
-      toast(
-        VTI18n?.lang === "es"
-          ? "Tienes una sesión pausada — reanuda desde el aviso superior"
-          : "You have a paused structured session — resume from the banner"
-      );
+      toast(tt("toast.pausedSession"));
     }
 
     // Interactive intro tour (first visit or header Tour button)

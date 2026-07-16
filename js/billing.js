@@ -441,7 +441,7 @@
       ok: false,
       mode: "unconfigured",
       message:
-        "Payment links not configured or URL host not allowlisted. See docs/10-SUBSCRIPTIONS.md."
+        "Checkout isn’t available yet. Keep practicing free."
     };
   }
 

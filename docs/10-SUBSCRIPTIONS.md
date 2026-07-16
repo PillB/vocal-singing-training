@@ -183,7 +183,7 @@ Generate: `npm run accounts:generate`
 
 ## Value marketing (research-backed)
 
-See **`docs/14-VALUE-MARKETING-AND-SUBSCRIPTIONS.md`** for Hormozi value equation, freemium benchmarks, ethical game psychology, Reddit competitive insights, feature validation, and funnel.
+See **`docs/14-VALUE-MARKETING-AND-SUBSCRIPTIONS.md`** and the full multi-phase **`docs/15-SUBSCRIPTION-VALUE-ORCHESTRATION-REPORT.md`** (+ living **`docs/VALUE-GAP-REGISTRY.md`**) for Hormozi value equation, freemium benchmarks, ethical game psychology, Reddit competitive insights, feature validation, and funnel.
 
 | Surface | Role |
 |---------|------|

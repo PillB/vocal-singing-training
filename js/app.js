@@ -3442,12 +3442,32 @@
       }
       const json = VTBilling.exportProgressJson();
       if (!json) return;
+      const day = new Date().toISOString().slice(0, 10);
+      // JSON pack
       const blob = new Blob([json], { type: "application/json" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
-      a.download = `vocal-studio-progress-${new Date().toISOString().slice(0, 10)}.json`;
+      a.download = `vocal-studio-progress-${day}.json`;
       a.click();
       URL.revokeObjectURL(a.href);
+      // Human coach summary (.txt) — “coach pack” that is actually delivered
+      try {
+        const pulse = window.VTValuePulse?.compute?.();
+        const summary =
+          (window.VTValuePulse?.narrative?.(pulse, isEsLang()) || "") +
+          "\n\n---\n" +
+          (isEsLang()
+            ? "Exportado desde Estudio Vocal Pro · comparte este resumen con tu coach."
+            : "Exported from Vocal Studio Pro · share this summary with your coach.");
+        const tb = new Blob([summary], { type: "text/plain;charset=utf-8" });
+        const at = document.createElement("a");
+        at.href = URL.createObjectURL(tb);
+        at.download = `vocal-studio-coach-summary-${day}.txt`;
+        at.click();
+        URL.revokeObjectURL(at.href);
+      } catch {
+        /* ignore */
+      }
       toast(tt("pricing.toast.exported"));
     });
     document.addEventListener("keydown", (e) => {

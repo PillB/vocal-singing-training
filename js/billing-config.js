@@ -91,13 +91,12 @@
         pricePen: 35,
         priceEur: 9.99,
         popular: true,
+        // Only list features actually delivered in product (trust > feature stack theater)
         features: [
           "all_free",
           "export_progress",
           "pro_insights",
-          "multi_profile",
-          "coach_pack",
-          "priority_progressions"
+          "coach_pack"
         ],
         cta: "subscribe"
       },

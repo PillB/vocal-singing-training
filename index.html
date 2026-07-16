@@ -103,38 +103,38 @@
         <!-- GAME STAGE: sticky highway + corner HUDs (minimal scroll) -->
         <div class="card section practice-cockpit game-stage" id="practice-cockpit">
           <div class="highway-stage" id="highway-stage">
-            <!-- Corner overlays like games — only inside sticky frame -->
-            <div class="hud-corner hud-tl">
-              <span class="status-pill" id="practice-status" data-i18n="practice.ready">Listo</span>
-              <span class="timer-display" id="timer-display">05:00</span>
-              <span class="hold-live" id="hold-display" hidden title="Hold">↓0.0s</span>
-              <span class="chord-now" id="chord-now">—</span>
-            </div>
-            <!-- Top-center: pick progression (acordes) + play mode — always visible, hot-applies -->
-            <div class="hud-corner hud-tm" id="hud-prog-bar" hidden>
-              <label class="hud-prog-field" for="sel-progression">
-                <span class="hud-prog-k" data-i18n="piano.chords">Acordes</span>
-                <select id="sel-progression" class="select-inline hud-prog-select" aria-label="Progresión de acordes"></select>
-              </label>
-              <label class="hud-prog-field" for="sel-play-mode">
-                <span class="hud-prog-k" data-i18n="piano.playMode">Modo</span>
-                <select id="sel-play-mode" class="select-inline hud-prog-select" aria-label="Modo de piano">
-                  <option value="chords" data-i18n="piano.modeChords">Acordes</option>
-                  <option value="arpeggio" data-i18n="piano.modeArpeggio">Arpegio</option>
-                  <option value="oneNote" data-i18n="piano.modeOneNote">1 nota</option>
-                </select>
-              </label>
-            </div>
-            <div class="hud-corner hud-tr" id="pitch-game-hud" aria-live="polite">
-              <div class="hud-score"><span class="hud-label" data-i18n="pitch.score">Pts</span><strong id="hud-score">0</strong></div>
-              <div class="hud-combo"><span class="hud-label" data-i18n="pitch.combo">Combo</span><strong id="hud-combo">×0</strong></div>
-              <div class="hud-acc"><span class="hud-label" data-i18n="pitch.inLane">Carril</span><strong id="hud-acc">0%</strong></div>
-              <div class="hud-quality" id="hud-quality">—</div>
-              <!-- Challenge toggle lives in TR so it never needs scroll -->
-              <label class="muted piano-opt hud-challenge" id="pitch-challenge-row" hidden>
-                <input type="checkbox" id="chk-pitch-challenge" checked />
-                <span data-i18n="pitch.challengeShort">Reto</span>
-              </label>
+            <!-- Full-width top rail: status | acordes/modo (flex) | score/quality — no overlap -->
+            <div class="hud-top-rail" id="hud-top-rail">
+              <div class="hud-corner hud-tl">
+                <span class="status-pill" id="practice-status" data-i18n="practice.ready">Listo</span>
+                <span class="timer-display" id="timer-display">05:00</span>
+                <span class="hold-live" id="hold-display" hidden title="Hold">↓0.0s</span>
+                <span class="chord-now" id="chord-now">—</span>
+              </div>
+              <div class="hud-corner hud-tm" id="hud-prog-bar" hidden>
+                <label class="hud-prog-field" for="sel-progression">
+                  <span class="hud-prog-k" data-i18n="piano.chords">Acordes</span>
+                  <select id="sel-progression" class="select-inline hud-prog-select" aria-label="Progresión de acordes"></select>
+                </label>
+                <label class="hud-prog-field" for="sel-play-mode">
+                  <span class="hud-prog-k" data-i18n="piano.playMode">Modo</span>
+                  <select id="sel-play-mode" class="select-inline hud-prog-select" aria-label="Modo de piano">
+                    <option value="chords" data-i18n="piano.modeChords">Acordes</option>
+                    <option value="arpeggio" data-i18n="piano.modeArpeggio">Arpegio</option>
+                    <option value="oneNote" data-i18n="piano.modeOneNote">1 nota</option>
+                  </select>
+                </label>
+              </div>
+              <div class="hud-corner hud-tr" id="pitch-game-hud" aria-live="polite">
+                <div class="hud-score"><span class="hud-label" data-i18n="pitch.score">Pts</span><strong id="hud-score">0</strong></div>
+                <div class="hud-combo"><span class="hud-label" data-i18n="pitch.combo">Combo</span><strong id="hud-combo">×0</strong></div>
+                <div class="hud-acc"><span class="hud-label" data-i18n="pitch.inLane">Carril</span><strong id="hud-acc">0%</strong></div>
+                <div class="hud-quality" id="hud-quality">—</div>
+                <label class="muted piano-opt hud-challenge" id="pitch-challenge-row" hidden>
+                  <input type="checkbox" id="chk-pitch-challenge" checked />
+                  <span data-i18n="pitch.challengeShort">Reto</span>
+                </label>
+              </div>
             </div>
             <!-- Full-width bottom rail: Start | Mic (flex) | Piano opts — uses X space, no overflow clip -->
             <div class="hud-bottom-rail" id="hud-bottom-rail">

@@ -269,24 +269,36 @@ def analyze_file(path: Path) -> dict:
                     }
                 )
 
-    # Low-vision: pitch highway canvas should be tall enough when visible
+    # Low-vision: pitch highway tall enough for viewport class (never force overflow)
     a11y = []
+    # Desktop/tablet target taller; phone may be shorter to stay on-screen
+    canvas_min = 220 if vw < 700 else 280
+    stage_min = 280 if vw < 700 else 360
     for el in items:
         if el.get("sel") == "#pitch-canvas" and el.get("visible") and el.get("h", 0) > 0:
-            if el["h"] < 280:
+            if el["h"] < canvas_min:
                 a11y.append(
                     {
                         "sel": "#pitch-canvas",
-                        "msg": f"highway height {el['h']:.0f}px < 280px (low-vision target)",
+                        "msg": f"highway height {el['h']:.0f}px < {canvas_min}px (vw={vw:.0f})",
                         "box": [el["x"], el["y"], el["w"], el["h"]],
                     }
                 )
         if el.get("sel") == "#highway-stage" and el.get("visible") and el.get("h", 0) > 0:
-            if el["h"] < 360:
+            if el["h"] < stage_min:
                 a11y.append(
                     {
                         "sel": "#highway-stage",
-                        "msg": f"stage height {el['h']:.0f}px < 360px",
+                        "msg": f"stage height {el['h']:.0f}px < {stage_min}px (vw={vw:.0f})",
+                        "box": [el["x"], el["y"], el["w"], el["h"]],
+                    }
+                )
+            # Critical: sticky stage must not extend past viewport bottom
+            if el.get("y2", 0) > vh + 2:
+                a11y.append(
+                    {
+                        "sel": "#highway-stage",
+                        "msg": f"stage y2={el['y2']:.0f} overflows vh={vh:.0f}",
                         "box": [el["x"], el["y"], el["w"], el["h"]],
                     }
                 )

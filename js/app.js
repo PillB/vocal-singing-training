@@ -384,6 +384,63 @@
     return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
   }
 
+  /** Keep sticky highway under real header height (prevents bottom overflow). */
+  function syncHeaderHeightVar() {
+    try {
+      const h = document.querySelector("header.app-header");
+      if (!h) return;
+      const hh = Math.max(40, Math.ceil(h.getBoundingClientRect().height));
+      document.documentElement.style.setProperty("--header-h", `${hh}px`);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  /**
+   * Fit #highway-stage to remaining viewport below its current top (title+header).
+   * CSS max-height alone cannot know layout Y; explicit geometry avoids bottom overflow.
+   */
+  function fitHighwayToViewport() {
+    try {
+      syncHeaderHeightVar();
+      const stage = document.getElementById("highway-stage");
+      if (!stage || !document.body.classList.contains("view-exercise")) {
+        if (stage) {
+          stage.style.height = "";
+          stage.style.maxHeight = "";
+          stage.style.minHeight = "";
+        }
+        return;
+      }
+      const r = stage.getBoundingClientRect();
+      const vh = window.innerHeight || document.documentElement.clientHeight || 600;
+      const gap = 4;
+      // If sticky has not stuck yet, r.top is natural flow Y — remaining space under it
+      const avail = Math.floor(vh - Math.max(0, r.top) - gap);
+      const maxH = Math.max(160, avail);
+      // Prefer tall for low vision but never past viewport bottom
+      const prefer = Math.min(
+        maxH,
+        Math.round(vh * (vh < 500 ? 0.92 : 0.78)),
+        vh < 700 ? 480 : 720
+      );
+      const h = Math.max(160, Math.min(prefer, maxH));
+      stage.style.maxHeight = `${maxH}px`;
+      stage.style.height = `${h}px`;
+      stage.style.minHeight = `${Math.min(200, maxH)}px`;
+      // Resize pitch canvas to new stage box
+      try {
+        if (state.pitchViz && typeof state.pitchViz._resize === "function") {
+          state.pitchViz._resize();
+        }
+      } catch {
+        /* ignore */
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
   function setView(name) {
     state.view = name;
     $$(".view").forEach((v) => v.classList.remove("active"));
@@ -396,7 +453,14 @@
     const target = $(map[name]);
     if (target) target.classList.add("active");
     document.body.classList.toggle("view-exercise", name === "exercise");
+    syncHeaderHeightVar();
     updateSessionBanner();
+    if (name === "exercise") {
+      requestAnimationFrame(() => fitHighwayToViewport());
+      setTimeout(fitHighwayToViewport, 80);
+    } else {
+      fitHighwayToViewport(); // clears inline sizes off exercise
+    }
     if (name === "home") {
       renderValuePulse();
       renderRetentionChrome();
@@ -1130,7 +1194,11 @@
     }
 
     // Fit cue / mode strip under highway to full text height (no inner scroll)
-    requestAnimationFrame(() => fitStageBelowContent());
+    requestAnimationFrame(() => {
+      fitStageBelowContent();
+      fitHighwayToViewport();
+    });
+    setTimeout(fitHighwayToViewport, 100);
 
     // Review workflow
     const reviewBlock = $("#review-block");
@@ -4223,6 +4291,8 @@
     getRangeSnapshot: () => ensureRangeAdapter()?.getSnapshot?.() || null,
     getProfile,
     fitStageBelowContent,
+    fitHighwayToViewport,
+    syncHeaderHeightVar,
     renderValuePulse,
     showValueMoment,
     applyPianoOptionsHot,
@@ -4295,6 +4365,23 @@
     }
     // Ensure default 1-nota is reflected in select even before first exercise
     setPlayMode("oneNote", { silent: true });
+    syncHeaderHeightVar();
+    fitHighwayToViewport();
+    window.addEventListener("resize", () => {
+      syncHeaderHeightVar();
+      fitHighwayToViewport();
+      try {
+        ensurePitchViz()?.["_resize"]?.();
+      } catch {
+        /* ignore */
+      }
+    });
+    window.addEventListener("orientationchange", () => {
+      setTimeout(() => {
+        syncHeaderHeightVar();
+        fitHighwayToViewport();
+      }, 120);
+    });
   }
 
   document.addEventListener("DOMContentLoaded", init);

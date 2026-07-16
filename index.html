@@ -119,6 +119,61 @@
           </div>
         </div>
 
+        <!-- Comeback tools: kind reminders, calendar, welcome-back (research: no guilt) -->
+        <div class="retain-panel card" id="retain-panel">
+          <div class="retain-head">
+            <h3 class="retain-title" data-i18n="retain.title">Volver a practicar</h3>
+            <label class="retain-toggle muted">
+              <input type="checkbox" id="chk-reminders" />
+              <span data-i18n="retain.enable">Recordatorio amable</span>
+            </label>
+          </div>
+          <div class="retain-row">
+            <label class="retain-field" for="rem-time-1">
+              <span data-i18n="retain.time">Hora</span>
+              <input type="time" id="rem-time-1" value="18:00" />
+            </label>
+            <label class="retain-field" for="rem-time-2" id="rem-time-2-wrap" hidden>
+              <span data-i18n="retain.time2">2ª hora (Pro)</span>
+              <input type="time" id="rem-time-2" value="09:00" />
+            </label>
+            <label class="retain-check muted">
+              <input type="checkbox" id="chk-browser-notify" />
+              <span data-i18n="retain.browserNotify">Notificación del navegador</span>
+            </label>
+          </div>
+          <div class="retain-actions">
+            <button type="button" class="btn btn-sm btn-ghost" id="btn-ics-daily" data-i18n="retain.icsDaily">📅 Diario (calendario)</button>
+            <button type="button" class="btn btn-sm btn-ghost" id="btn-ics-weekly" data-i18n="retain.icsWeekly">📅 Semanal</button>
+            <button type="button" class="btn btn-sm btn-primary" id="btn-micro-5" data-i18n="retain.micro5">▶ 5 min</button>
+            <span class="muted retain-freeze" id="retain-freeze-label"></span>
+          </div>
+          <p class="muted retain-hint" data-i18n="retain.hint">
+            Sin culpa: el recordatorio es amable. También puedes añadir un evento a tu calendario.
+          </p>
+        </div>
+
+        <div class="welcome-back card" id="welcome-back" hidden>
+          <h3 data-i18n="retain.welcomeTitle">Bienvenido de nuevo</h3>
+          <p id="welcome-back-body" data-i18n="retain.welcomeBody">
+            Llevas unos días sin practicar. 5 minutos bastan para retomar el hábito — sin presión.
+          </p>
+          <div class="welcome-back-actions">
+            <button type="button" class="btn btn-primary btn-sm" id="wb-micro" data-i18n="retain.micro5">▶ 5 min</button>
+            <button type="button" class="btn btn-sm" id="wb-air" data-i18n="retain.wbAir">Aire SH</button>
+            <button type="button" class="btn btn-sm" id="wb-last" data-i18n="retain.wbLast">Último ejercicio</button>
+            <button type="button" class="btn btn-ghost btn-sm" id="wb-dismiss" data-i18n="retain.wbDismiss">Cerrar</button>
+          </div>
+        </div>
+
+        <div class="remind-due card" id="remind-due" hidden role="status">
+          <p id="remind-due-text"></p>
+          <div class="welcome-back-actions">
+            <button type="button" class="btn btn-primary btn-sm" id="rd-start" data-i18n="retain.micro5">▶ 5 min</button>
+            <button type="button" class="btn btn-ghost btn-sm" id="rd-dismiss" data-i18n="retain.wbDismiss">Cerrar</button>
+          </div>
+        </div>
+
         <div class="tabs" role="tablist" aria-label="Training track">
           <button type="button" class="tab active" role="tab" data-tab="vocal" aria-selected="true" data-i18n="tab.vocal">
             Entrenamiento vocal
@@ -573,6 +628,7 @@
     <script src="js/billing-config.js"></script>
     <script src="js/billing.js"></script>
     <script src="js/value-pulse.js"></script>
+    <script src="js/reminders.js"></script>
     <script src="js/auth-users.generated.js"></script>
     <script src="js/auth.js"></script>
     <script src="js/piano.js"></script>

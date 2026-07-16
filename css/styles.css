@@ -2440,6 +2440,99 @@ body.view-exercise .stage-below.is-fitted {
   }
 }
 
+/* ── Retention / come-back tools (kind reminders) ── */
+.retain-panel {
+  margin: 0.65rem 0;
+  padding: 0.7rem 0.85rem;
+  border-radius: 14px;
+  border: 1px solid rgba(100, 160, 140, 0.28);
+  background: linear-gradient(145deg, rgba(14, 32, 28, 0.9), rgba(10, 16, 22, 0.95));
+}
+.retain-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
+  margin-bottom: 0.45rem;
+}
+.retain-title {
+  margin: 0;
+  font-size: 0.95rem;
+}
+.retain-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+}
+.retain-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  align-items: center;
+  margin-bottom: 0.45rem;
+}
+.retain-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.78rem;
+}
+.retain-field input[type="time"] {
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--text);
+  padding: 0.2rem 0.35rem;
+}
+.retain-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.78rem;
+}
+.retain-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+  margin-bottom: 0.35rem;
+}
+.retain-hint {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+.welcome-back,
+.remind-due {
+  margin: 0.55rem 0;
+  padding: 0.7rem 0.85rem;
+  border-radius: 14px;
+  border: 1px solid rgba(120, 170, 220, 0.35);
+  background: rgba(20, 40, 60, 0.55);
+}
+.welcome-back h3 {
+  margin: 0 0 0.35rem;
+  font-size: 0.95rem;
+}
+.welcome-back p,
+.remind-due p {
+  margin: 0 0 0.5rem;
+  font-size: 0.86rem;
+  line-height: 1.4;
+}
+.welcome-back-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+.score-compare {
+  font-weight: 700;
+  color: #9fd0ff;
+  margin: 0.25rem 0 0.5rem;
+}
+
 /* ── Pro studio (profiles, goals, insights, achievements) ── */
 .pro-studio {
   margin-top: 0.75rem;

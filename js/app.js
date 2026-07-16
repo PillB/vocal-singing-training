@@ -47,7 +47,9 @@
       accumulatedMs: 0,
       saved: false
     },
-    leavePromptOpen: false
+    leavePromptOpen: false,
+    /** 5-minute micro-session mode (retention research) */
+    microSession: false
   };
 
   const $ = (sel, el = document) => el.querySelector(sel);
@@ -402,6 +404,7 @@
     updateSessionBanner();
     if (name === "home") {
       renderValuePulse();
+      renderRetentionChrome();
       // Gentle trial/progress prompts only on home (never during live practice)
       setTimeout(() => showValueMoment(), 400);
     }
@@ -864,7 +867,8 @@
     $("#ex-mistakes").innerHTML = ex.mistakes.map((m) => `<li>${m}</li>`).join("");
 
     // Timer (integrated into cockpit — always show display when timer exists)
-    const timerSec = ex.timerDefaultSec || 0;
+    // Micro-session: 5 min soft cap for comeback practice
+    let timerSec = state.microSession ? 5 * 60 : ex.timerDefaultSec || 0;
     state.timer.total = timerSec;
     state.timer.remaining = timerSec;
     $("#timer-display").textContent = timerSec ? formatTime(timerSec) : "—";
@@ -2324,6 +2328,10 @@
           ? state.timer.total - state.timer.remaining
           : 0;
 
+    // Progress compare (before/after emotion — r/singing "same song later")
+    const prevRow = VTStorage.getProgress()?.[ex.id];
+    const prevScore = prevRow?.lastScore;
+
     VTStorage.saveExerciseResult(ex.id, {
       metrics: values,
       score: result.score,
@@ -2335,13 +2343,27 @@
     setTimeout(() => showValueMoment(), 600);
 
     state.sessionPractice.saved = true;
+    state.microSession = false;
     const pending = state.pendingLeave;
     state.pendingLeave = null;
 
     const box = $("#score-result");
     box.hidden = false;
+    let compareHtml = "";
+    if (prevScore != null && result.score != null && Number.isFinite(Number(prevScore))) {
+      const a = Number(prevScore);
+      const b = Number(result.score);
+      const delta = b - a;
+      const arrow = delta > 0.05 ? "↑" : delta < -0.05 ? "↓" : "→";
+      compareHtml = `<p class="score-compare">${tt("retain.compare", {
+        prev: a.toFixed(1),
+        next: b.toFixed(1),
+        arrow
+      })}</p>`;
+    }
     box.innerHTML = `
       <div class="score-big">${VTMetrics.formatScore(result)}</div>
+      ${compareHtml}
       <p>${result.summary}</p>
       <p class="muted" style="font-size:0.85rem;">${result.how}</p>
       <ul class="breakdown">
@@ -3193,6 +3215,157 @@
     }
   }
 
+  function startMicroSession(exerciseId) {
+    state.microSession = true;
+    const id =
+      exerciseId ||
+      state.exercise?.id ||
+      "s15-sh-air-ladder";
+    openExercise(id);
+    toast(tt("retain.microStarted"), { durationMs: 2200 });
+  }
+
+  function renderRetentionChrome() {
+    if (!window.VTReminders) return;
+    const isEs = isEsLang();
+    const isPro = !!window.VTBilling?.can?.("extra_reminders") || !!window.VTBilling?.isPro?.();
+    const cfg = VTReminders.getConfig();
+    const chk = $("#chk-reminders");
+    if (chk) chk.checked = !!cfg.enabled;
+    const t1 = $("#rem-time-1");
+    if (t1 && cfg.times[0]) t1.value = cfg.times[0];
+    const wrap2 = $("#rem-time-2-wrap");
+    const t2 = $("#rem-time-2");
+    if (wrap2) wrap2.hidden = !isPro;
+    if (t2 && cfg.times[1]) t2.value = cfg.times[1];
+    const bn = $("#chk-browser-notify");
+    if (bn) bn.checked = !!cfg.browserNotify;
+
+    // Streak freeze
+    const fl = $("#retain-freeze-label");
+    if (fl) {
+      const proFreeze = !!window.VTBilling?.can?.("extra_freezes") || !!window.VTBilling?.isPro?.();
+      const left = VTReminders.freezesLeft(proFreeze);
+      fl.textContent = tt("retain.freezesLeft", { n: String(left) });
+      // Try apply freeze silently when returning after 1 missed day
+      const fr = VTReminders.tryApplyFreeze(proFreeze);
+      if (fr.applied) {
+        toast(tt("retain.freezeUsed", { n: String(fr.left) }), { durationMs: 3200 });
+        fl.textContent = tt("retain.freezesLeft", { n: String(fr.left) });
+      }
+    }
+
+    // Welcome back after ≥2 days
+    const days = VTReminders.daysSinceLastPractice();
+    const wb = $("#welcome-back");
+    if (wb) {
+      const dismissed =
+        sessionStorage.getItem("vt_wb_dismiss") === dayKeyLocal();
+      const show = days != null && days >= 2 && !dismissed;
+      wb.hidden = !show;
+      if (show) {
+        const body = $("#welcome-back-body");
+        if (body) body.textContent = tt("retain.welcomeBodyDays", { n: String(days) });
+      }
+    }
+
+    // Due reminder banner
+    const ev = VTReminders.evaluate(isEs);
+    const rd = $("#remind-due");
+    if (rd) {
+      if (ev.due && cfg.enabled) {
+        rd.hidden = false;
+        const tx = $("#remind-due-text");
+        if (tx) tx.textContent = ev.message;
+        VTReminders.markNotified();
+      } else {
+        rd.hidden = true;
+      }
+    }
+  }
+
+  function dayKeyLocal() {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  function bindRetention() {
+    const saveTimes = () => {
+      const isPro = !!window.VTBilling?.can?.("extra_reminders");
+      const times = [$("#rem-time-1")?.value || "18:00"];
+      if (isPro && $("#rem-time-2")?.value) times.push($("#rem-time-2").value);
+      VTReminders.setConfig({
+        enabled: !!$("#chk-reminders")?.checked,
+        times,
+        browserNotify: !!$("#chk-browser-notify")?.checked
+      });
+    };
+    $("#chk-reminders")?.addEventListener("change", async (e) => {
+      if (e.target.checked) {
+        // Kind copy only — never guilt
+        toast(tt("retain.enabledToast"), { durationMs: 2200 });
+      }
+      saveTimes();
+      renderRetentionChrome();
+    });
+    $("#rem-time-1")?.addEventListener("change", saveTimes);
+    $("#rem-time-2")?.addEventListener("change", () => {
+      if (!window.VTBilling?.can?.("extra_reminders")) {
+        toast(tt("retain.proTime"));
+        openPricing();
+        return;
+      }
+      saveTimes();
+    });
+    $("#chk-browser-notify")?.addEventListener("change", async (e) => {
+      if (e.target.checked) {
+        const perm = await VTReminders.requestBrowserPermission();
+        if (perm !== "granted") {
+          e.target.checked = false;
+          toast(tt("retain.notifyDenied"));
+        }
+      }
+      saveTimes();
+    });
+    $("#btn-ics-daily")?.addEventListener("click", () => {
+      VTReminders.downloadIcs({ freq: "DAILY", time: $("#rem-time-1")?.value, isEs: isEsLang() });
+      toast(tt("retain.icsDownloaded"));
+    });
+    $("#btn-ics-weekly")?.addEventListener("click", () => {
+      VTReminders.downloadIcs({ freq: "WEEKLY", time: $("#rem-time-1")?.value, isEs: isEsLang() });
+      toast(tt("retain.icsDownloaded"));
+    });
+    $("#btn-micro-5")?.addEventListener("click", () => startMicroSession("s15-sh-air-ladder"));
+    $("#wb-micro")?.addEventListener("click", () => startMicroSession("s15-sh-air-ladder"));
+    $("#wb-air")?.addEventListener("click", () => startMicroSession("s15-sh-air-ladder"));
+    $("#wb-last")?.addEventListener("click", () => {
+      const prog = VTStorage.getProgress() || {};
+      let lastId = null;
+      let lastAt = "";
+      Object.keys(prog).forEach((id) => {
+        if (prog[id].lastAt && prog[id].lastAt > lastAt) {
+          lastAt = prog[id].lastAt;
+          lastId = id;
+        }
+      });
+      startMicroSession(lastId || "v2-volume");
+    });
+    $("#wb-dismiss")?.addEventListener("click", () => {
+      sessionStorage.setItem("vt_wb_dismiss", dayKeyLocal());
+      const wb = $("#welcome-back");
+      if (wb) wb.hidden = true;
+    });
+    $("#rd-start")?.addEventListener("click", () => startMicroSession("s15-sh-air-ladder"));
+    $("#rd-dismiss")?.addEventListener("click", () => {
+      const rd = $("#remind-due");
+      if (rd) rd.hidden = true;
+    });
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible" && state.view === "home") {
+        renderRetentionChrome();
+      }
+    });
+  }
+
   function bindProStudio() {
     $("#sel-profile")?.addEventListener("change", (e) => {
       const id = e.target.value;
@@ -3566,6 +3739,7 @@
     $("#btn-pricing")?.addEventListener("click", openPricing);
     $("#btn-value-pro")?.addEventListener("click", openPricing);
     bindProStudio();
+    bindRetention();
     $("#value-banner-cta")?.addEventListener("click", () => {
       hideValueBanner();
       openPricing();
@@ -3644,6 +3818,7 @@
     }
     updateBillingChrome();
     renderValuePulse();
+    renderRetentionChrome();
   }
 
   // Test / debug helpers

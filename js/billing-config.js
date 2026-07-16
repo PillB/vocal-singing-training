@@ -114,7 +114,9 @@
           "multi_profile",
           "studio_goals",
           "pro_progressions",
-          "achievements_export"
+          "achievements_export",
+          "extra_reminders",
+          "extra_freezes"
         ],
         cta: "subscribe"
       },

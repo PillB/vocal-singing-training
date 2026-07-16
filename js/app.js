@@ -478,7 +478,9 @@
     resetSessionPractice();
     renderExercise();
     setView("exercise");
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    // Instant jump to top so game stage is the first viewport (no smooth lag)
+    window.scrollTo(0, 0);
+    requestAnimationFrame(() => window.scrollTo(0, 0));
   }
 
   function openExercise(id, fromStructured) {

@@ -3,7 +3,11 @@
   "version": "1.0.0",
   "description": "Self-paced Vocal & Singing Training practice site",
   "scripts": {
-    "test": "playwright test",
+    "test": "node qa/check-catalog.mjs && playwright test",
+    "test:e2e": "playwright test",
+    "test:catalog": "node qa/check-catalog.mjs",
+    "test:geometry": "node qa/capture-geometry.mjs && python3 qa/analyze_geometry.py",
+    "catalog:rebuild": "node qa/rebuild-catalog-snapshot.mjs",
     "serve": "python3 -m http.server 8765",
     "start": "python3 -m http.server 8765"
   },

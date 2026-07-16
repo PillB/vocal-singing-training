@@ -123,6 +123,8 @@
       this.hitZoneCents = 35; // "good" zone width for highway
       /** Active chord tones as lanes [{name,freq,midi,active}] */
       this.chordLanes = [];
+      /** All unique tones across progression (ghost lanes) */
+      this.progressionLanes = [];
       /** Full progression pitch window for multi-note highway */
       this.rangeMinMidi = null;
       this.rangeMaxMidi = null;
@@ -160,12 +162,28 @@
 
     /**
      * Set full progression pitch span so highway shows all chord tones.
+     * Also builds ghost lanes for every unique note in the progression.
      */
     setProgressionRange(prog) {
       if (!prog || !global.VTProgressionRange) return;
       const r = global.VTProgressionRange(prog, global.VT_NOTE_FREQ);
       this.rangeMinMidi = r.minMidi;
       this.rangeMaxMidi = r.maxMidi;
+      // Ghost lanes: every unique pitch in the progression (dim until chord activates)
+      const seen = new Set();
+      this.progressionLanes = [];
+      (r.notes || []).forEach((n) => {
+        const k = Math.round(n.midi * 2) / 2;
+        if (seen.has(k)) return;
+        seen.add(k);
+        this.progressionLanes.push({
+          name: n.name,
+          freq: n.freq,
+          midi: n.midi,
+          active: false
+        });
+      });
+      this.progressionLanes.sort((a, b) => a.midi - b.midi);
     }
 
     /**
@@ -217,6 +235,7 @@
     clearChordLanes() {
       this.chordLanes = [];
       this.activeChordName = "";
+      // keep progressionLanes + range for full-map view
     }
 
     /**
@@ -492,35 +511,82 @@
         ctx.stroke();
       }
 
-      // Multi-lane: all active chord tones as horizontal highways
-      // Inactive-looking dim lanes for full progression span notes would clutter;
-      // show active chord tones strongly + primary target strongest.
-      const laneHalf = Math.max(4, (zones.good / 100) * (graphH / Math.max(8, hi - lo)) * 0.9);
-      (this.chordLanes || []).forEach((lane) => {
+      // Multi-lane highway:
+      // 1) Ghost lanes = full progression note set (dim)
+      // 2) Active chord tones = bright lanes
+      // 3) Primary singing target = green active lane
+      const spanSt = Math.max(6, hi - lo);
+      const laneHalf = Math.max(3.5, (zones.good / 100) * (graphH / spanSt) * 1.1);
+      const activeMidis = new Set(
+        (this.chordLanes || []).map((L) => Math.round(L.midi * 2) / 2)
+      );
+      const primaryMidi = Math.round(freqToMidi(this.targetFreq) * 2) / 2;
+
+      const drawLane = (lane, mode) => {
+        // mode: ghost | active | primary
         const y = this._midiToY(lane.midi, centerMidi, graphH);
-        const isPrimary = Math.abs(lane.freq - this.targetFreq) < 0.5;
+        if (mode === "ghost") {
+          ctx.fillStyle = "rgba(90,110,140,0.06)";
+          ctx.fillRect(0, y - laneHalf * 0.65, w, laneHalf * 1.3);
+          ctx.strokeStyle = "rgba(120,140,170,0.28)";
+          ctx.lineWidth = 1;
+          ctx.setLineDash([2, 6]);
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(w, y);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.fillStyle = "rgba(140,160,185,0.55)";
+          ctx.font = "500 9px system-ui,sans-serif";
+          ctx.textAlign = "right";
+          ctx.fillText(lane.name, w - 8, y - 2);
+          return;
+        }
+        const isPrimary = mode === "primary";
         ctx.fillStyle = isPrimary
-          ? "rgba(61,186,122,0.22)"
-          : "rgba(240,201,160,0.12)";
+          ? "rgba(61,186,122,0.26)"
+          : "rgba(240,201,160,0.18)";
         ctx.fillRect(0, y - laneHalf, w, laneHalf * 2);
         ctx.strokeStyle = isPrimary
-          ? "rgba(61,186,122,0.75)"
-          : "rgba(240,201,160,0.45)";
-        ctx.lineWidth = isPrimary ? 2 : 1;
-        ctx.setLineDash(isPrimary ? [] : [4, 5]);
+          ? "rgba(125,222,176,0.95)"
+          : "rgba(240,201,160,0.75)";
+        ctx.lineWidth = isPrimary ? 2.5 : 1.75;
+        ctx.shadowColor = isPrimary
+          ? "rgba(125,222,176,0.55)"
+          : "rgba(240,201,160,0.4)";
+        ctx.shadowBlur = isPrimary ? 10 : 6;
+        ctx.setLineDash([]);
         ctx.beginPath();
         ctx.moveTo(0, y);
         ctx.lineTo(w, y);
         ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.fillStyle = isPrimary ? "#9aecc4" : "#f0c9a0";
-        ctx.font = isPrimary ? "700 11px system-ui,sans-serif" : "600 10px system-ui,sans-serif";
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = isPrimary ? "#b8f0d4" : "#f5d7b0";
+        ctx.font = isPrimary
+          ? "800 12px system-ui,sans-serif"
+          : "700 11px system-ui,sans-serif";
         ctx.textAlign = "left";
-        ctx.fillText(lane.name + (isPrimary ? " ●" : ""), 8, y - laneHalf - 2);
+        ctx.fillText(
+          (lane.name || "") + (isPrimary ? " ● canta aquí" : " · activo"),
+          8,
+          y - laneHalf - 2
+        );
+      };
+
+      // Ghost: all progression tones not currently active
+      (this.progressionLanes || []).forEach((lane) => {
+        const k = Math.round(lane.midi * 2) / 2;
+        if (activeMidis.has(k)) return;
+        drawLane(lane, "ghost");
+      });
+      // Active chord tones
+      (this.chordLanes || []).forEach((lane) => {
+        const k = Math.round(lane.midi * 2) / 2;
+        drawLane(lane, k === primaryMidi ? "primary" : "active");
       });
 
       // Fallback single lane when no chord context
-      if (!this.chordLanes.length) {
+      if (!this.chordLanes.length && !this.progressionLanes.length) {
         const goodHalf = (zones.good / 100) * (graphH * 0.4 / 6);
         const perfectHalf = (zones.perfect / 100) * (graphH * 0.4 / 6);
         ctx.fillStyle = "rgba(61,186,122,0.1)";

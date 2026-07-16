@@ -10,7 +10,7 @@
   /** Gap allowed mid-hold before ending (retroactive grace for pitch/RMS dropouts) */
   const SILENCE_END_MS = 900;
   /** Brief dropouts under this ms never end the hold; timer keeps running */
-  const HOLD_GRACE_MS = 550;
+  const HOLD_GRACE_MS = 700;
   const VOICE_RMS = 0.016;
   const HOLD_RMS = 0.012; // looser once a hold has started
   const PITCH_MIN = 60;

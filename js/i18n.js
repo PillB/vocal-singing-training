@@ -219,7 +219,7 @@
       "practice.hold": "Hold {s}s",
       "pitch.title": "Pitch visualizer · accuracy & precision",
       "pitch.legend":
-        "Green lane = in tune · Amber = target · Green = your voice · keyboard · combo & score",
+        "Gray lanes = full progression · Amber = active chord tones · Green = primary note · Your voice moves between lanes",
       "pitch.challenge": "Note challenge (lock 8 targets)",
       "pitch.score": "Score",
       "pitch.combo": "Combo",

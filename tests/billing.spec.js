@@ -113,4 +113,82 @@ test.describe("Billing & subscriptions", () => {
     expect(["free", "trial", "active", "expired"]).toContain(e.status);
     expect(typeof e.pro).toBe("boolean");
   });
+
+  test("billing health and checkout URL host allowlist", async ({ page }) => {
+    await boot(page);
+    const r = await page.evaluate(() => {
+      const h = VTBilling.getBillingHealth();
+      const bad = VTBilling.validateCheckoutUrl("https://evil.example/pay");
+      const good = VTBilling.validateCheckoutUrl("https://buy.stripe.com/test_abc");
+      const http = VTBilling.validateCheckoutUrl("http://buy.stripe.com/x");
+      return { h, bad, good, http, links: VTBilling.linksConfigured() };
+    });
+    expect(r.h).toBeTruthy();
+    expect(Array.isArray(r.h.issues)).toBe(true);
+    // Empty links + demo on → not production-ok
+    expect(r.h.ok).toBe(false);
+    expect(r.bad.ok).toBe(false);
+    expect(r.good.ok).toBe(true);
+    expect(r.http.ok).toBe(false);
+  });
+
+  test("strict mode rejects success return without session_id", async ({ page }) => {
+    await page.addInitScript(() => {
+      try {
+        localStorage.setItem("vt_tour_v1", "1");
+        sessionStorage.setItem("vt_e2e", "1");
+        localStorage.removeItem("vt_billing_v1");
+      } catch {
+        /* ignore */
+      }
+    });
+    await page.goto(BASE, { waitUntil: "domcontentloaded" });
+    const res = await page.evaluate(() => {
+      // Simulate production flags without reloading config object permanently
+      const c = window.VT_BILLING_CONFIG;
+      const prevDemo = c.demoUnlockEnabled;
+      const prevReq = c.requireCheckoutSessionId;
+      c.demoUnlockEnabled = false;
+      c.requireCheckoutSessionId = true;
+      // Forge success params
+      history.replaceState({}, "", "?billing=success&plan=pro_monthly&provider=stripe");
+      const out = VTBilling.handleReturnFromCheckout();
+      c.demoUnlockEnabled = prevDemo;
+      c.requireCheckoutSessionId = prevReq;
+      return out;
+    });
+    expect(res?.event).toBe("error");
+    expect(res?.reason).toBe("missing_session");
+  });
+
+  test("strict mode accepts success with session_id", async ({ page }) => {
+    await page.addInitScript(() => {
+      try {
+        localStorage.setItem("vt_tour_v1", "1");
+        sessionStorage.setItem("vt_e2e", "1");
+        localStorage.removeItem("vt_billing_v1");
+      } catch {
+        /* ignore */
+      }
+    });
+    await page.goto(
+      `${BASE}/?billing=success&plan=pro_monthly&provider=stripe&session_id=cs_test_fake`,
+      { waitUntil: "domcontentloaded" }
+    );
+    // Force strict flags then re-handle would clean URL already on load with demo true.
+    // Explicit activate path check:
+    const ent = await page.evaluate(() => {
+      const c = window.VT_BILLING_CONFIG;
+      c.demoUnlockEnabled = false;
+      c.requireCheckoutSessionId = true;
+      VTBilling.activate("pro_monthly", {
+        source: "checkout_return",
+        provider: "stripe",
+        sessionId: "cs_test_fake"
+      });
+      return VTBilling.getEntitlement();
+    });
+    expect(ent.pro).toBe(true);
+    expect(ent.plan).toBe("pro_monthly");
+  });
 });

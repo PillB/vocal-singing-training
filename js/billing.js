@@ -1,13 +1,43 @@
 /**
  * Subscription / entitlement layer for static GitHub Pages deploy.
- * Rails: Stripe Payment Links (global) + Mercado Pago (Peru/LATAM).
- * Entitlements stored locally; optional webhook backend can re-verify later.
+ *
+ * Architecture (current, non-deprecated):
+ * - Checkout: Stripe Payment Links + Mercado Pago subscription/checkout links
+ *   (no card data on origin — PCI SAQ-A). Official: https://docs.stripe.com/payment-links
+ * - Soft entitlement: localStorage (browser-scoped). Suitable for early revenue on
+ *   static hosts; NOT a hard anti-piracy control.
+ * - Hard verification (recommended at scale): serverless webhook verifies
+ *   Stripe-Signature, then issues/stores license. Template: workers/stripe-webhook/
+ *
+ * Security notes:
+ * - Never put secret keys in client JS.
+ * - Return-URL activation is soft; forgeable without server verification.
+ * - When demoUnlockEnabled is false, require session_id/payment_id on success return
+ *   (still soft — pair with webhooks for production trust).
  */
 (function (global) {
   "use strict";
 
   const LS_KEY = "vt_billing_v1";
   const TRIAL_KEY = "vt_billing_trial_started_v1";
+  const PLAN_IDS = new Set(["pro_monthly", "pro_yearly", "trial"]);
+  const PROVIDER_IDS = new Set(["stripe", "mercadopago", "demo", "internal"]);
+
+  /** Default hosts allowed for checkout redirects (override via config.allowedCheckoutHosts). */
+  const DEFAULT_CHECKOUT_HOSTS = [
+    "buy.stripe.com",
+    "checkout.stripe.com",
+    "www.mercadopago.com",
+    "www.mercadopago.com.pe",
+    "www.mercadopago.com.ar",
+    "www.mercadopago.com.mx",
+    "www.mercadopago.com.co",
+    "www.mercadopago.cl",
+    "www.mercadopago.com.uy",
+    "mpago.la",
+    "link.mercadopago.com.pe",
+    "link.mercadopago.com.ar"
+  ];
 
   function cfg() {
     return global.VT_BILLING_CONFIG || {};
@@ -45,13 +75,17 @@
       if (lang.endsWith("-de") || tz.includes("Berlin")) return "DE";
       if (lang.endsWith("-fr") || tz.includes("Paris")) return "FR";
       if (lang.endsWith("-it") || tz.includes("Rome")) return "IT";
-      if (lang.endsWith("-us") || tz.includes("New_York") || tz.includes("Los_Angeles") || tz.includes("Chicago"))
+      if (
+        lang.endsWith("-us") ||
+        tz.includes("New_York") ||
+        tz.includes("Los_Angeles") ||
+        tz.includes("Chicago")
+      )
         return "US";
       if (lang.endsWith("-ca") || tz.includes("Toronto") || tz.includes("Vancouver")) return "CA";
       if (lang.endsWith("-au") || tz.includes("Sydney") || tz.includes("Melbourne")) return "AU";
       if (lang.endsWith("-ph") || tz.includes("Manila")) return "PH";
       if (lang.endsWith("-in") || tz.includes("Kolkata") || tz.includes("Calcutta")) return "IN";
-      // Spanish default without country → LATAM-friendly PE rail preference
       if (lang.startsWith("es")) return "PE";
       return "WW";
     } catch {
@@ -109,6 +143,13 @@
     return new Date(t0 + days * 86400000).toISOString();
   }
 
+  function trialDaysLeft() {
+    if (!trialActive()) return 0;
+    const end = trialEndsAt();
+    if (!end) return 0;
+    return Math.max(0, Math.ceil((Date.parse(end) - nowMs()) / 86400000));
+  }
+
   /**
    * Active entitlement: paid | trial | demo | free
    */
@@ -125,15 +166,27 @@
           raw: st
         };
       }
+      // Demo only when flag still enabled
+      if (st.source === "demo" && !cfg().demoUnlockEnabled) {
+        return {
+          tier: "free",
+          plan: "free",
+          source: "demo_disabled",
+          pro: false,
+          status: "free",
+          raw: st
+        };
+      }
       return {
         tier: "pro",
         plan: st.plan,
         source: st.source || "paid",
         pro: true,
-        status: "active",
+        status: st.source === "trial" ? "trial" : "active",
         provider: st.provider || null,
         region: st.region || detectRegion(),
         expiresAt: st.expiresAt || null,
+        sessionId: st.sessionId || null,
         raw: st
       };
     }
@@ -174,11 +227,10 @@
 
   function activate(planId, meta) {
     const plan = planId || "pro_monthly";
-    // Only allow known plan ids (open-redirect / injection hygiene)
-    const allowed = new Set(["pro_monthly", "pro_yearly", "trial"]);
-    const safePlan = allowed.has(plan) ? plan : "pro_monthly";
+    const safePlan = PLAN_IDS.has(plan) ? plan : "pro_monthly";
     const region = (meta && meta.region) || detectRegion();
-    const provider = (meta && meta.provider) || preferredRail(region);
+    let provider = (meta && meta.provider) || preferredRail(region);
+    if (!PROVIDER_IDS.has(provider)) provider = preferredRail(region);
     const source = (meta && meta.source) || "paid";
     const state = {
       status: "active",
@@ -188,9 +240,9 @@
       source,
       activatedAt: new Date().toISOString(),
       expiresAt: meta && meta.expiresAt ? meta.expiresAt : null,
-      sessionId: meta && meta.sessionId ? String(meta.sessionId).slice(0, 128) : null
+      sessionId: meta && meta.sessionId ? String(meta.sessionId).slice(0, 128) : null,
+      verified: !!(meta && meta.verified)
     };
-    // Internal accounts / demo: long-lived soft expiry
     if (!state.expiresAt && (source === "internal_account" || source === "demo")) {
       state.expiresAt = new Date(nowMs() + 365 * 86400000).toISOString();
     } else if (!state.expiresAt && safePlan === "pro_yearly") {
@@ -217,6 +269,80 @@
     emit();
   }
 
+  /** True if at least one paid plan has a non-empty checkout link for a rail. */
+  function linksConfigured(providerId) {
+    const c = cfg();
+    const rails = providerId
+      ? [providerId]
+      : Object.keys(c.providers || {});
+    for (const rail of rails) {
+      const links = (c.providers || {})[rail]?.links || {};
+      if (String(links.pro_monthly || "").trim() || String(links.pro_yearly || "").trim()) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Production readiness checklist for operators / health UI.
+   * @returns {{ ok: boolean, demoUnlock: boolean, links: boolean, issues: string[] }}
+   */
+  function getBillingHealth() {
+    const c = cfg();
+    const issues = [];
+    const demoUnlock = !!c.demoUnlockEnabled;
+    const links = linksConfigured();
+    if (demoUnlock) issues.push("demoUnlockEnabled is true — disable before real revenue");
+    if (!links) issues.push("No Payment Link / MP checkout URLs configured");
+    const stripeEmpty =
+      !String(c.providers?.stripe?.links?.pro_monthly || "").trim() &&
+      !String(c.providers?.stripe?.links?.pro_yearly || "").trim();
+    const mpEmpty =
+      !String(c.providers?.mercadopago?.links?.pro_monthly || "").trim() &&
+      !String(c.providers?.mercadopago?.links?.pro_yearly || "").trim();
+    if (stripeEmpty) issues.push("Stripe links empty");
+    if (mpEmpty) issues.push("Mercado Pago links empty");
+    return {
+      ok: !demoUnlock && links,
+      demoUnlock,
+      links,
+      stripeConfigured: !stripeEmpty,
+      mercadopagoConfigured: !mpEmpty,
+      issues
+    };
+  }
+
+  function allowedHosts() {
+    const extra = cfg().allowedCheckoutHosts;
+    if (Array.isArray(extra) && extra.length) {
+      return extra.map((h) => String(h).toLowerCase());
+    }
+    return DEFAULT_CHECKOUT_HOSTS.slice();
+  }
+
+  /**
+   * Validate checkout URL host against allowlist (open-redirect defense).
+   * @returns {{ ok: boolean, url?: string, reason?: string }}
+   */
+  function validateCheckoutUrl(url) {
+    if (!url || !String(url).trim()) return { ok: false, reason: "empty" };
+    let u;
+    try {
+      u = new URL(String(url).trim());
+    } catch {
+      return { ok: false, reason: "invalid_url" };
+    }
+    if (u.protocol !== "https:") return { ok: false, reason: "not_https" };
+    const host = u.hostname.toLowerCase();
+    const allowed = allowedHosts();
+    const match = allowed.some(
+      (h) => host === h || host.endsWith("." + h)
+    );
+    if (!match) return { ok: false, reason: "host_not_allowed", host };
+    return { ok: true, url: u.toString() };
+  }
+
   function checkoutUrl(planId, providerId) {
     const c = cfg();
     const region = detectRegion();
@@ -224,18 +350,29 @@
     const prov = (c.providers || {})[rail];
     if (!prov) return null;
     const link = (prov.links || {})[planId];
-    if (link && String(link).trim()) return String(link).trim();
-    return null;
+    if (!link || !String(link).trim()) return null;
+    const v = validateCheckoutUrl(link);
+    if (!v.ok) {
+      console.warn("[VTBilling] checkout URL rejected:", v.reason, link);
+      return null;
+    }
+    return v.url;
   }
 
   function startCheckout(planId, providerId) {
+    if (!PLAN_IDS.has(planId) || planId === "trial") {
+      return { ok: false, mode: "invalid_plan", message: "Invalid plan id" };
+    }
     const url = checkoutUrl(planId, providerId);
     if (url) {
-      // Remember intent for return URL without session_id
       try {
         sessionStorage.setItem(
           "vt_billing_intent",
-          JSON.stringify({ plan: planId, provider: providerId || preferredRail(detectRegion()), at: Date.now() })
+          JSON.stringify({
+            plan: planId,
+            provider: providerId || preferredRail(detectRegion()),
+            at: Date.now()
+          })
         );
       } catch {
         /* ignore */
@@ -243,7 +380,7 @@
       window.location.href = url;
       return { ok: true, mode: "redirect", url };
     }
-    // No live link yet — demo path if allowed
+    // Link missing or invalid
     if (cfg().demoUnlockEnabled) {
       activateDemo(planId);
       return { ok: true, mode: "demo", plan: planId };
@@ -252,13 +389,18 @@
       ok: false,
       mode: "unconfigured",
       message:
-        "Payment links not configured yet. Add Stripe/Mercado Pago URLs in js/billing-config.js (see docs/10-SUBSCRIPTIONS.md)."
+        "Payment links not configured or URL host not allowlisted. See docs/10-SUBSCRIPTIONS.md."
     };
   }
 
   /**
-   * Parse return from Checkout:
-   * ?billing=success&plan=pro_monthly&provider=stripe&session_id=cs_test_...
+   * Parse return from hosted checkout.
+   * Soft entitlement: GH Pages cannot verify Stripe secrets client-side.
+   * When demoUnlockEnabled is false, require a session_id or payment_id query param
+   * so casual ?billing=success forges are less trivial (still not cryptographic).
+   *
+   * @see https://docs.stripe.com/payment-links
+   * @see https://docs.stripe.com/webhooks — hard verification path
    */
   function handleReturnFromCheckout() {
     let params;
@@ -276,19 +418,45 @@
     }
     if (billing === "success") {
       let plan = params.get("plan") || "pro_monthly";
+      if (!PLAN_IDS.has(plan) || plan === "trial") plan = "pro_monthly";
       let provider = params.get("provider") || preferredRail(detectRegion());
-      const sessionId = params.get("session_id") || params.get("payment_id") || null;
+      if (!PROVIDER_IDS.has(provider)) provider = preferredRail(detectRegion());
+      const sessionId =
+        params.get("session_id") ||
+        params.get("payment_id") ||
+        params.get("preapproval_id") ||
+        null;
+
       try {
         const intent = JSON.parse(sessionStorage.getItem("vt_billing_intent") || "null");
-        if (intent?.plan) plan = intent.plan;
-        if (intent?.provider) provider = intent.provider;
+        if (intent?.plan && PLAN_IDS.has(intent.plan)) plan = intent.plan;
+        if (intent?.provider && PROVIDER_IDS.has(intent.provider)) provider = intent.provider;
         sessionStorage.removeItem("vt_billing_intent");
       } catch {
         /* ignore */
       }
-      activate(plan, { provider, source: "checkout_return", sessionId });
+
+      // Production-ish guard: without demo mode, require a provider session id
+      const strict = cfg().demoUnlockEnabled === false;
+      const requireSession = cfg().requireCheckoutSessionId !== false && strict;
+      if (requireSession && !sessionId) {
+        cleanUrlParams();
+        return {
+          event: "error",
+          reason: "missing_session",
+          message:
+            "Checkout return missing session_id. Configure Payment Link success URL to append session_id, or enable webhooks."
+        };
+      }
+
+      activate(plan, {
+        provider,
+        source: "checkout_return",
+        sessionId,
+        verified: false
+      });
       cleanUrlParams();
-      return { event: "success", plan, provider };
+      return { event: "success", plan, provider, sessionId, soft: true };
     }
     return null;
   }
@@ -296,7 +464,14 @@
   function cleanUrlParams() {
     try {
       const u = new URL(window.location.href);
-      ["billing", "plan", "provider", "session_id", "payment_id"].forEach((k) => u.searchParams.delete(k));
+      [
+        "billing",
+        "plan",
+        "provider",
+        "session_id",
+        "payment_id",
+        "preapproval_id"
+      ].forEach((k) => u.searchParams.delete(k));
       window.history.replaceState({}, "", u.pathname + u.search + u.hash);
     } catch {
       /* ignore */
@@ -391,14 +566,7 @@
     return JSON.stringify(payload, null, 2);
   }
 
-  function trialDaysLeft() {
-    if (!trialActive()) return 0;
-    const end = trialEndsAt();
-    if (!end) return 0;
-    return Math.max(0, Math.ceil((Date.parse(end) - nowMs()) / 86400000));
-  }
-
-  // Start trial clock early
+  // Start trial clock early (local soft trial)
   ensureTrial();
 
   global.VTBilling = {
@@ -414,12 +582,16 @@
     clearEntitlement,
     startCheckout,
     checkoutUrl,
+    validateCheckoutUrl,
+    linksConfigured,
+    getBillingHealth,
     handleReturnFromCheckout,
     formatPrice,
     exportProgressJson,
     onChange,
     trialEndsAt,
     trialActive,
-    trialDaysLeft
+    trialDaysLeft,
+    DEFAULT_CHECKOUT_HOSTS
   };
 })(window);

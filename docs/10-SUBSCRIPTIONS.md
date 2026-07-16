@@ -1,202 +1,230 @@
-# Subscriptions — Peru + Worldwide (ready to use)
+# Subscriptions & payments — operator guide (current)
 
-## Strategy summary
+**Stack:** Static SPA (GitHub Pages) · **Stripe Payment Links** (global) · **Mercado Pago** (Perú/LATAM) · soft local entitlement  
+**Code:** `js/billing-config.js`, `js/billing.js` · **Hardening path:** `workers/stripe-webhook/`  
+**Deep audit:** [`16-SUBSCRIPTION-TECHNICAL-ORCHESTRATION.md`](./16-SUBSCRIPTION-TECHNICAL-ORCHESTRATION.md) · [`SUBSCRIPTION-TECH-GAP-REGISTRY.md`](./SUBSCRIPTION-TECH-GAP-REGISTRY.md)
 
-This app is a **static SPA on GitHub Pages** (no server). The most straightforward, production-proven path is:
-
-| Rail | Role | Best for |
-|------|------|----------|
-| **Stripe Payment Links** (recurring) | Primary global checkout | **US, EU (ES/DE/FR/IT), UK, CA, AU, MX, BR**, rest of world cards |
-| **Mercado Pago** (Peru + LATAM) | Primary local rail | **Perú** (cards + local methods), AR/CL/CO/UY |
-
-**Why not only one provider?**  
-Peruvian and LATAM conversion is often higher with **Mercado Pago** (local UX, currency, trust). US/EU/UK coaches and learners expect **Stripe**. Supporting both maximizes revenue without building a custom PCI stack.
-
-**Why Payment Links / Checkout (not custom Elements first)?**  
-- Zero PCI burden on GH Pages  
-- Subscriptions configured in dashboard UI  
-- Success URL returns users to the app for local entitlement  
-- Can add webhooks + serverless later for hard verification  
-
-Optional later upgrade: **Paddle / Lemon Squeezy** as Merchant of Record if you want tax/VAT handled for you (higher fee).
+> Official (non-deprecated):  
+> - Payment Links: https://docs.stripe.com/payment-links  
+> - Webhooks + signatures: https://docs.stripe.com/webhooks  
+> - Post-payment: https://docs.stripe.com/payment-links/post-payment  
 
 ---
 
-## Market prioritization (vocal / singing online demand)
+## Architecture (what is / is not guaranteed)
 
-Based on online singing/vocal coaching demand patterns (YouTube/TikTok singing content consumption, English + Spanish creator economies, and LATAM mobile payment adoption):
+| Layer | Behavior | Trust level |
+|-------|----------|-------------|
+| Hosted checkout | Card data never hits our origin (PCI SAQ-A style) | High (provider) |
+| Return URL `?billing=success` | Client marks Pro in `localStorage` | **Soft** (forgeable without webhooks) |
+| `session_id` on return | Required when `demoUnlockEnabled: false` | Soft mitigation |
+| Webhook Worker (optional) | Verifies `Stripe-Signature`; source of truth | **Hard** |
 
-### Tier 1 (launch first)
-| Market | Why |
-|--------|-----|
-| **Perú (PE)** | Home market; MP local checkout; Spanish UX already default |
-| **United States (US)** | Largest paid digital music-education ARPU |
-| **México (MX)** | Large Spanish singing audience; Stripe + OXXO options |
-| **España (ES)** | EU Spanish; strong amateur singing / theater market |
-| **United Kingdom (GB)** | High willingness to pay for voice apps |
-
-### Tier 2
-Germany, France, Italy (EU EUR), Brazil, Argentina, Chile, Colombia, Canada, Australia.
-
-### Tier 3 (English-language coach niches)
-Philippines, India — large English online creator audiences; price sensitivity → yearly plan + trial.
-
-Implementation maps each market → preferred **rail** in `js/billing-config.js`.
+**Never** put `sk_live_…` or `whsec_…` in client JavaScript.
 
 ---
 
-## Plans (default marketing prices)
+## Plans (display)
 
-| Plan | USD | PEN (hint) | EUR (hint) | Notes |
-|------|-----|------------|------------|-------|
-| Free | 0 | 0 | 0 | All core exercises, highway, mic, local record |
-| **Pro Monthly** | **$9.99** | **S/ 35** | **€9.99** | Export, multi-profile, Pro insights |
-| **Pro Yearly** | **$79** (~20% off) | **S/ 279** | **€79** | Best LTV |
+| Plan | USD | PEN hint | EUR | Features (shipped) |
+|------|-----|----------|-----|--------------------|
+| Free | 0 | 0 | 0 | All exercises, highway, piano, plan, value pulse |
+| Pro monthly | 9.99 | 35 | 9.99 | + export JSON, coach .txt, insights narrative |
+| Pro yearly | 79 | 279 | 79 | Same + ~20% save + lesson-price positioning |
 
-Adjust amounts in Stripe/MP products; keep display numbers in `billing-config.js` in sync.
-
-### Free vs Pro (product)
-
-| Feature | Free | Pro |
-|---------|------|-----|
-| All vocal + singing exercises | ✅ | ✅ |
-| Pitch highway / piano / mic | ✅ | ✅ |
-| 12-week plan | ✅ | ✅ |
-| **7-day Pro trial** (local) | ✅ once | — |
-| Export progress JSON | — | ✅ |
-| Multi-profile practice slots | — | ✅ |
-| Pro insights badge + export tools | — | ✅ |
-| Priority progression packs UX | soft | ✅ |
-
-Core practice stays free so learners convert on outcomes, not paywalls on “Empezar”.
+Prices in config are **display**; real charge = Stripe/MP product prices.
 
 ---
 
-## Setup checklist (go live in ~30–60 min)
+## Go-live checklist (Stripe) — step by step
 
-### A. Stripe (global)
+### 1. Account & product
 
-1. Create account at [stripe.com](https://stripe.com) and activate country that can sell to your buyers.  
-2. **Products →** create *Vocal Studio Pro* monthly + yearly recurring prices.  
-3. **Payment Links →** create two links (monthly / yearly).  
-4. Set **After payment →** redirect to:  
-   `https://pillb.github.io/vocal-singing-training/?billing=success&plan=pro_monthly&provider=stripe`  
-   (and yearly plan id accordingly).  
-5. Paste URLs into `js/billing-config.js` → `providers.stripe.links`.  
-6. Set `demoUnlockEnabled: false` when real links work.  
-7. (Optional) Webhook `checkout.session.completed` → serverless function that stores customer email; client remains local-first for GH Pages.
+1. Create/login [Stripe Dashboard](https://dashboard.stripe.com).  
+2. **Product catalog →** create product `Vocal Studio Pro`.  
+3. Add **recurring** prices:  
+   - Monthly (e.g. $9.99 / month)  
+   - Yearly (e.g. $79 / year)  
+4. Copy Price IDs if needed for later API work (not required for Payment Links alone).
 
-### B. Mercado Pago (Perú / LATAM)
+### 2. Payment Links
 
-1. Create [Mercado Pago Developers](https://www.mercadopago.com.pe/developers) application (Peru).  
-2. Create a **subscription / preapproval plan** or Checkout Pro preference for monthly/yearly.  
-3. Set back_urls / success to the same `?billing=success&plan=...&provider=mercadopago` pattern.  
-4. Paste `init_point` or plan checkout URL into `providers.mercadopago.links`.  
-5. Test with MP sandbox credentials first.
+1. **Payment Links → Create** ([docs](https://docs.stripe.com/payment-links/create)).  
+2. Select the **monthly** recurring price → create link.  
+3. Repeat for **yearly**.  
+4. Note the URLs (`https://buy.stripe.com/...`).
 
-### C. App config
+### 3. After payment (success URL)
+
+Configure each Payment Link → **After payment**:
+
+**Recommended success URL pattern:**
+
+```text
+https://pillb.github.io/vocal-singing-training/?billing=success&plan=pro_monthly&provider=stripe&session_id={CHECKOUT_SESSION_ID}
+```
+
+Yearly:
+
+```text
+https://pillb.github.io/vocal-singing-training/?billing=success&plan=pro_yearly&provider=stripe&session_id={CHECKOUT_SESSION_ID}
+```
+
+Cancel / abandoned (optional):
+
+```text
+https://pillb.github.io/vocal-singing-training/?billing=cancel
+```
+
+- Enable “Pass the session ID” / `{CHECKOUT_SESSION_ID}` per [post-payment docs](https://docs.stripe.com/payment-links/post-payment).  
+- App requires `session_id` (or `payment_id`) when `demoUnlockEnabled: false`.
+
+### 4. Wire the app
+
+Edit `js/billing-config.js`:
 
 ```js
-// js/billing-config.js
 demoUnlockEnabled: false,
+requireCheckoutSessionId: true,
 providers: {
-  stripe: { links: { pro_monthly: "https://buy.stripe.com/...", pro_yearly: "..." } },
-  mercadopago: { links: { pro_monthly: "https://www.mercadopago.com.pe/...", pro_yearly: "..." } }
+  stripe: {
+    links: {
+      pro_monthly: "https://buy.stripe.com/YOUR_MONTHLY",
+      pro_yearly: "https://buy.stripe.com/YOUR_YEARLY"
+    }
+  }
 }
 ```
 
-Redeploy GH Pages (`main`).
+Commit → push `main` → wait for Pages build.
+
+### 5. Verify
+
+1. Open site → Pro → Subscribe (Stripe rail).  
+2. Use [test cards](https://docs.stripe.com/testing) in test mode.  
+3. Confirm return unlocks Pro pill + export.  
+4. In DevTools: `VTBilling.getBillingHealth()` → `ok: true`.  
+5. Run: `npx playwright test tests/billing.spec.js`.
 
 ---
 
-## How entitlement works (current)
+## Go-live checklist (Mercado Pago · Perú / LATAM)
 
+1. [Mercado Pago Developers](https://www.mercadopago.com.pe/developers) app (Peru).  
+2. Create **subscription / preapproval plan** or Checkout Pro preference for monthly/yearly amounts (S/ 35, S/ 279 or your list).  
+3. Set back/success URLs similarly:
+
+```text
+https://pillb.github.io/vocal-singing-training/?billing=success&plan=pro_monthly&provider=mercadopago&payment_id=… 
 ```
-User opens Pricing → chooses plan + rail
-  → Stripe/MP Payment Link (hosted)
-  → success URL ?billing=success&plan=pro_monthly
-  → VTBilling.activate() → localStorage vt_billing_v1
-  → Pro features unlock in this browser
-```
 
-**Trial:** first visit starts a **7-day local trial** (`vt_billing_trial_started_v1`).  
-**Demo unlock:** while `demoUnlockEnabled: true`, “Activar demo Pro” unlocks without payment (for QA).
+(Use MP’s documented return parameters; app also accepts `preapproval_id`.)  
 
-### Security note (honest)
+4. Paste `init_point` / checkout URLs into `providers.mercadopago.links`.  
+5. Test sandbox first.  
+6. Later: configure **IPN/webhooks** with secret validation (do not trust return URL alone).
 
-LocalStorage entitlements are **soft gates** (fine for early revenue + GH Pages).  
-For hard enforcement (anti-share):
-
-1. Cloudflare Workers / Vercel serverless webhook from Stripe/MP  
-2. Issue signed JWT or license code  
-3. App verifies signature before `export_progress` / multi-profile  
-
-Documented path; not required to start charging.
+Hosts must be on the allowlist in `billing.js` (`buy.stripe.com`, `*.mercadopago.com*`, etc.). Override via `allowedCheckoutHosts` if needed.
 
 ---
 
-## UI entry points
+## Runtime API (browser)
 
-- Header **Pro** button (`#btn-pricing`) — always one click, no scroll  
-- Pricing modal overlay (game-style, centered)  
-- Region auto-detected; user can switch rail (Stripe vs Mercado Pago)  
-- Status pill: Free / Trial / Pro  
+```js
+VTBilling.getEntitlement()     // { pro, plan, status, source, expiresAt, … }
+VTBilling.isPro()
+VTBilling.can("export_progress")
+VTBilling.startCheckout("pro_monthly", "stripe")
+VTBilling.getBillingHealth()   // { ok, demoUnlock, links, issues[] }
+VTBilling.validateCheckoutUrl(url)
+VTBilling.linksConfigured()
+VTBilling.trialDaysLeft()
+```
+
+### Feature flags (`can`)
+
+| Feature | Free | Pro (paid/demo/trial) |
+|---------|------|------------------------|
+| all_exercises, pitch_highway, local_record, basic_plan, value_pulse | ✅ | ✅ |
+| export_progress, pro_insights, coach_pack | ❌ | ✅ |
+
+---
+
+## Security model (honest)
+
+| Attack | Mitigation |
+|--------|------------|
+| Open redirect on checkout | HTTPS + host allowlist |
+| Plan id injection | Allowlist `pro_monthly` / `pro_yearly` |
+| Forge `?billing=success` | Require `session_id` when demo off; **still soft** |
+| Stolen Pro (localStorage) | Soft product; webhook + account for hard control |
+| Secret key leak | Never ship secrets in SPA |
+
+**Production upgrade path:** Cloudflare Worker webhook → verify signature → issue license / store status → client redeems. See `workers/stripe-webhook/README.md`.
+
+---
+
+## Customer cancel / upgrade
+
+- Early stage: customer uses **Stripe Customer Portal** or email receipts (enable Portal in Dashboard).  
+- In-app portal link: not yet wired (ST-05).  
+- Local “Clear Pro” only for internal admin accounts.
+
+---
+
+## QA / demo mode
+
+| Flag | Effect |
+|------|--------|
+| `demoUnlockEnabled: true` | Empty links → demo Pro; success URL works without session_id |
+| `demoUnlockEnabled: false` | Real links required; success needs session_id |
+
+Internal auth can force Pro for testers (`docs/11-AUTH-AND-HARDENING.md`).
 
 ---
 
 ## Tests
 
-- Catalog regression includes billing DOM (`#btn-pricing`, `#pricing-modal`)  
-- Unit-style entitlement checks in Playwright  
-- Geometry capture includes pricing modal open state  
+```bash
+npm run serve   # :8765
+npx playwright test tests/billing.spec.js
+```
 
 ---
 
-## Ops / metrics to watch
+## Ops metrics
 
-- Trial → paid conversion by region  
-- Stripe vs MP share in PE/MX  
-- Yearly attach rate  
-- Churn (from Stripe dashboard)
+- Checkout start → success rate (Stripe Dashboard)  
+- Trial → paid (manual or later analytics)  
+- Failed invoices / dunning (Stripe Billing)  
+- `getBillingHealth().ok` false in production = misconfig  
 
 ---
 
-## Internal test accounts
+## Markets → preferred rail
 
-Friends/family + admins use **client auth** (see `docs/11-AUTH-AND-HARDENING.md`).  
-Plaintext credentials: **`docs/INTERNAL-TEST-ACCOUNTS.md`** (gitignored).  
-Generate: `npm run accounts:generate`
+See `markets[]` in `billing-config.js` (PE→MP, US/EU→Stripe, …).
+
+---
 
 ## File map
 
-| File | Purpose |
+| Path | Purpose |
 |------|---------|
-| `js/billing-config.js` | Plans, markets, payment link placeholders |
-| `js/billing.js` | Entitlement, checkout, trial, export |
-| `docs/10-SUBSCRIPTIONS.md` | This document |
-| `index.html` | Pricing modal + Pro button |
-| `css/styles.css` | Pricing modal (compact overlay) |
-| `js/i18n.js` | ES/EN copy |
-| `js/app.js` | Wire UI + soft gates |
+| `js/billing-config.js` | Plans, links, flags |
+| `js/billing.js` | Entitlement engine |
+| `workers/stripe-webhook/` | Optional hard verification |
+| `docs/16-…ORCHESTRATION.md` | Full technical audit |
+| `docs/SUBSCRIPTION-TECH-GAP-REGISTRY.md` | Living gaps |
+| `tests/billing.spec.js` | Regression |
 
 ---
 
-## Value marketing (research-backed)
+## Recommended sequence
 
-See **`docs/14-VALUE-MARKETING-AND-SUBSCRIPTIONS.md`** and the full multi-phase **`docs/15-SUBSCRIPTION-VALUE-ORCHESTRATION-REPORT.md`** (+ living **`docs/VALUE-GAP-REGISTRY.md`**) for Hormozi value equation, freemium benchmarks, ethical game psychology, Reddit competitive insights, feature validation, and funnel.
-
-| Surface | Role |
-|---------|------|
-| Home **Tu estudio** | Free progress proof (competence) |
-| Soft **value banner** | Milestone upgrade after success (never blocks Empezar) |
-| Pricing **value stack** | Dream outcome + proof + lesson anchor + personal stats |
-| Export pack | Pro: JSON + coach narrative |
-
-## Recommended next 90 days
-
-1. Live Stripe + MP links; disable demo unlock  
-2. Email receipt via Stripe  
-3. Webhook → optional license code email  
-4. Promo codes (Stripe coupons) for PE launch (e.g. `PERU20`)  
-5. Compare Paddle MoR if EU VAT overhead grows  
-6. Measure trial→paid and soft-banner→pricing open rate  
+1. Live Stripe links + success URL with `session_id`  
+2. `demoUnlockEnabled: false`  
+3. Live MP for PE  
+4. Webhook Worker for renewals/cancels  
+5. Customer Portal link in Account modal  
+6. Evaluate MoR (Paddle/Lemon Squeezy) if tax ops exceed bandwidth  

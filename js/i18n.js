@@ -99,6 +99,8 @@
       "pricing.toast.unconfigured": "Enlaces de pago aún no configurados (ver docs/10-SUBSCRIPTIONS.md)",
       "pricing.toast.exportNeedPro": "Exportar requiere Pro o prueba",
       "pricing.toast.exported": "Progreso exportado",
+      "pricing.toast.checkoutError":
+        "No se pudo confirmar el pago (falta session_id). Revisa la URL de éxito de Stripe o contacta soporte.",
       "nav.lang": "English",
       "nav.tour": "Tour",
       "tour.skip": "Saltar tour",
@@ -473,6 +475,8 @@
       "pricing.toast.unconfigured": "Payment links not set yet (see docs/10-SUBSCRIPTIONS.md)",
       "pricing.toast.exportNeedPro": "Export needs Pro or trial",
       "pricing.toast.exported": "Progress exported",
+      "pricing.toast.checkoutError":
+        "Could not confirm checkout (missing session_id). Check your Stripe success URL or contact support.",
       "nav.lang": "Español",
       "nav.tour": "Tour",
       "tour.skip": "Skip tour",

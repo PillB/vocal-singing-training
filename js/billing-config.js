@@ -13,17 +13,31 @@
     productNameEs: "Estudio Vocal Pro",
     /**
      * When true, all Pro features unlock without payment (local QA / demo).
-     * Set false in production once Payment Links are live.
+     * **Production:** set false after Payment Links are live.
+     * Official Payment Links: https://docs.stripe.com/payment-links
      */
     demoUnlockEnabled: true,
+    /**
+     * When demoUnlockEnabled is false, require session_id (or payment_id) on
+     * ?billing=success return. Still a soft client gate — pair with webhooks
+     * for hard verification (see workers/stripe-webhook/ and docs/10-SUBSCRIPTIONS.md).
+     */
+    requireCheckoutSessionId: true,
     /** Free trial days granted once per browser (local entitlement) */
     freeTrialDays: 7,
     /**
-     * Success / cancel return paths (relative to site root).
-     * Stripe Payment Links: set success URL to .../?billing=success&plan=pro_monthly
+     * Success URL for Stripe Payment Links (Dashboard → after payment):
+     * https://pillb.github.io/vocal-singing-training/?billing=success&plan=pro_monthly&provider=stripe&session_id={CHECKOUT_SESSION_ID}
+     * Stripe docs: append session_id via “Pass the checkout session ID” / URL template.
+     * https://docs.stripe.com/payment-links/post-payment
      */
     successPath: "./?billing=success",
     cancelPath: "./?billing=cancel",
+    /**
+     * Optional extra checkout hosts (in addition to defaults in billing.js).
+     * Only https hosts are accepted.
+     */
+    allowedCheckoutHosts: null,
     /**
      * Primary rails:
      * - stripe: US, EU, UK, CA, AU, MX, most of world (card + local methods by country)

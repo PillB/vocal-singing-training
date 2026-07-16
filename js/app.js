@@ -3483,6 +3483,16 @@
       const ret = VTBilling.handleReturnFromCheckout();
       if (ret?.event === "success") toast(tt("pricing.toast.success"));
       if (ret?.event === "cancel") toast(tt("pricing.toast.cancel"));
+      if (ret?.event === "error") {
+        toast(ret.message || tt("pricing.toast.checkoutError"), { durationMs: 4200 });
+      }
+      // Operator console health (not shown to casual users)
+      try {
+        const h = VTBilling.getBillingHealth?.();
+        if (h && !h.ok) console.info("[VTBilling] health:", h);
+      } catch {
+        /* ignore */
+      }
     }
     updateBillingChrome();
     renderValuePulse();

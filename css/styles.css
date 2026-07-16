@@ -2532,6 +2532,49 @@ body.view-exercise .stage-below.is-fitted {
   color: #9fd0ff;
   margin: 0.25rem 0 0.5rem;
 }
+.practice-heatmap-wrap {
+  margin-top: 0.35rem;
+}
+.practice-heatmap-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.35rem;
+  margin-bottom: 0.35rem;
+  font-size: 0.8rem;
+}
+.practice-heatmap {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(7, 9px);
+  grid-auto-columns: 9px;
+  gap: 2px;
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 0.2rem 0;
+}
+.hm-cell {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  background: rgba(40, 55, 70, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+.hm-cell.l1 { background: rgba(56, 120, 90, 0.55); }
+.hm-cell.l2 { background: rgba(60, 150, 100, 0.7); }
+.hm-cell.l3 { background: rgba(70, 190, 120, 0.85); }
+.hm-cell.l4 { background: #6eec9a; }
+.ab-player {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin-top: 0.5rem;
+}
+.ab-player audio {
+  width: 100%;
+  max-width: 28rem;
+}
 
 /* ── Pro studio (profiles, goals, insights, achievements) ── */
 .pro-studio {

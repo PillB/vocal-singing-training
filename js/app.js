@@ -1708,6 +1708,15 @@
 
       state.practiceStarting = true;
       setPracticeUI(false); // hides/disables Start while bootstrapping
+      try {
+        window.VTAnalytics?.track?.("practice_start", {
+          exerciseId: ex.id,
+          mode: profile.mode,
+          micro: !!state.microSession
+        });
+      } catch {
+        /* ignore */
+      }
 
       const wantRecord = !!(
         profile.autoRecord ||
@@ -2338,6 +2347,15 @@
       notes,
       durationSec: elapsed
     });
+    try {
+      window.VTAnalytics?.track?.("session_save", {
+        exerciseId: ex.id,
+        score: result.score,
+        durationSec: elapsed
+      });
+    } catch {
+      /* ignore */
+    }
     renderValuePulse();
     // Success → soft upgrade moment (never blocks practice)
     setTimeout(() => showValueMoment(), 600);
@@ -2549,6 +2567,12 @@
       if (!recs.length) {
         html += `<p class="empty-state">No recordings yet. Open an exercise and use Record.</p>`;
       } else {
+        // Group by exercise for A/B compare (progress proof users love)
+        const byEx = {};
+        recs.forEach((r) => {
+          if (!byEx[r.exerciseId]) byEx[r.exerciseId] = [];
+          byEx[r.exerciseId].push(r);
+        });
         html += `<div class="history-list">`;
         for (const r of recs) {
           const ex = findExercise(r.exerciseId);
@@ -2564,7 +2588,27 @@
               </div>
             </div>`;
         }
-        html += `</div><div id="history-player"></div>`;
+        html += `</div>`;
+        // A/B compare blocks
+        const pairs = Object.entries(byEx).filter(([, arr]) => arr.length >= 2);
+        if (pairs.length) {
+          html += `<h3 style="margin-top:1.25rem;">${tt("retain.audioCompare")}</h3><div class="history-list">`;
+          pairs.forEach(([exId, arr]) => {
+            const sorted = arr.slice().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+            const newer = sorted[0];
+            const older = sorted[1];
+            const ex = findExercise(exId);
+            html += `<div class="history-item">
+              <div><strong>${ex ? ex.title : exId}</strong>
+              <div class="meta">${tt("retain.audioCompareMeta")}</div></div>
+              <div class="controls-row">
+                <button type="button" class="btn btn-sm" data-ab-old="${older.id}" data-ab-new="${newer.id}">${tt("retain.audioCompareBtn")}</button>
+              </div>
+            </div>`;
+          });
+          html += `</div>`;
+        }
+        html += `<div id="history-player"></div>`;
       }
 
       html += `<h3 style="margin-top:1.5rem;">Exercise completions</h3><div class="history-list">`;
@@ -2602,6 +2646,35 @@
           await VTStorage.deleteRecording(btn.dataset.del);
           renderHistory();
           toast("Deleted");
+        });
+      });
+      $$("[data-ab-old]", list).forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const oldId = btn.dataset.abOld;
+          const newId = btn.dataset.abNew;
+          const [bOld, bNew] = await Promise.all([
+            VTStorage.getRecordingBlob(oldId),
+            VTStorage.getRecordingBlob(newId)
+          ]);
+          if (!bOld || !bNew) {
+            toast(tt("retain.audioCompareFail"));
+            return;
+          }
+          const uOld = URL.createObjectURL(bOld);
+          const uNew = URL.createObjectURL(bNew);
+          const player = $("#history-player");
+          player.innerHTML = `
+            <div class="ab-player">
+              <div><span class="muted">${tt("retain.audioOlder")}</span>
+                <audio class="audio-player" controls src="${uOld}"></audio></div>
+              <div><span class="muted">${tt("retain.audioNewer")}</span>
+                <audio class="audio-player" controls src="${uNew}"></audio></div>
+            </div>`;
+          try {
+            window.VTAnalytics?.track?.("audio_compare", {});
+          } catch {
+            /* ignore */
+          }
         });
       });
     } catch (e) {
@@ -3213,6 +3286,19 @@
         })
         .join("");
     }
+
+    // Practice heatmap (26 weeks)
+    const hm = $("#practice-heatmap");
+    if (hm && VTValuePulse?.heatmap) {
+      const data = VTValuePulse.heatmap(26);
+      hm.innerHTML = data.cells
+        .map((c) => {
+          const level =
+            c.count === 0 ? 0 : c.count === 1 ? 1 : c.count <= 3 ? 2 : c.count <= 6 ? 3 : 4;
+          return `<span class="hm-cell l${level}" title="${escapeHtml(c.date)} · ${c.count}" data-date="${escapeHtml(c.date)}"></span>`;
+        })
+        .join("");
+    }
   }
 
   function startMicroSession(exerciseId) {
@@ -3303,6 +3389,17 @@
       if (e.target.checked) {
         // Kind copy only — never guilt
         toast(tt("retain.enabledToast"), { durationMs: 2200 });
+        try {
+          window.VTAnalytics?.track?.("reminder_enable", { enabled: true });
+        } catch {
+          /* ignore */
+        }
+      } else {
+        try {
+          window.VTAnalytics?.track?.("reminder_enable", { enabled: false });
+        } catch {
+          /* ignore */
+        }
       }
       saveTimes();
       renderRetentionChrome();

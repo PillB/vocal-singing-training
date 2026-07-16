@@ -170,10 +170,11 @@ Expand from reminders to adjacent retention features; tag **shipped vs next**.
 | F-08 | Insights sparkline + coach focus | Analytics praise | Pro | **Shipped** |
 | F-09 | Weekly goals | Flexible consistency | Free view / Pro set | **Shipped** |
 | F-10 | Achievements | Competence | Free earn / Pro export | **Shipped** |
-| F-11 | Year heatmap of practice | Habit apps | Free | **Next** |
+| F-11 | Year heatmap of practice | Habit apps | Free | **Shipped** (26-week map) |
 | F-12 | Pause subscription UX | EdTech pause study | Billing | **Next** (ops) |
 | F-13 | True Web Push (PWA) | Airship | Free opt-in | **Next** (needs Worker) |
-| F-14 | “Same exercise A/B audio” | Theme B | Pro | **Next** |
+| F-14 | “Same exercise A/B audio” | Theme B | Free in History | **Shipped** |
+| F-18 | Local analytics events | Measure D1/D7 | Free | **Shipped** (`VTAnalytics`) |
 | F-15 | Soft accountability share link | Polarized social | Pro optional | **Later** |
 | F-16 | AI coach roleplay | Duolingo Max | High tier | **Later** (API) |
 | F-17 | Email weekly digest | Lifecycle marketing | Pro | **Later** (backend) |
@@ -291,9 +292,9 @@ No recommendation conflicts with primary sources. Shipped retention suite matche
 |----------|--------|--------|
 | P0 | Keep free Empezar/highway; live Stripe/MP links | Ops open |
 | P0 | Keep kind-only reminder copy | Shipped |
-| P1 | Practice **year heatmap** on home | Next build |
-| P1 | **Analytics**: practice_start, session_save, reminder_enable | Next |
-| P1 | **Audio A/B** last two recordings per exercise | Next |
+| P1 | Practice **year heatmap** on home | **Shipped** |
+| P1 | **Analytics**: practice_start, session_save, reminder_enable | **Shipped** |
+| P1 | **Audio A/B** last two recordings per exercise | **Shipped** (History) |
 | P2 | Web Push via Worker | When infra ready |
 | P2 | Pause-not-cancel messaging when payments live | Billing ops |
 | P3 | Optional accountability share | Later |

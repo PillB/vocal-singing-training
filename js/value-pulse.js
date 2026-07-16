@@ -216,6 +216,46 @@
     return list;
   }
 
+  /**
+   * GitHub-style year heatmap: last 52 weeks × 7 days of practice intensity.
+   * @returns {{ cells: { date: string, count: number }[], weeks: number, max: number }}
+   */
+  function heatmap(weeks = 26) {
+    const progress = global.VTStorage?.getProgress?.() || {};
+    const holds = global.VTStorage?.getHoldLogs?.() || [];
+    const counts = {};
+    Object.keys(progress).forEach((exId) => {
+      (progress[exId].history || []).forEach((h) => {
+        const d = dayKey(h.at);
+        if (d) counts[d] = (counts[d] || 0) + 1;
+      });
+    });
+    holds.forEach((h) => {
+      const d = dayKey(h.at);
+      if (d) counts[d] = (counts[d] || 0) + 1;
+    });
+
+    const cells = [];
+    const nDays = Math.max(7, Math.min(52, weeks) * 7);
+    // Align to start of week (Mon) ending today
+    const today = new Date();
+    const dow = (today.getUTCDay() + 6) % 7;
+    const end = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+    const start = new Date(end);
+    start.setUTCDate(start.getUTCDate() - (nDays - 1 - (6 - dow)));
+
+    let max = 0;
+    for (let i = 0; i < nDays; i++) {
+      const d = new Date(start);
+      d.setUTCDate(start.getUTCDate() + i);
+      const key = d.toISOString().slice(0, 10);
+      const c = counts[key] || 0;
+      if (c > max) max = c;
+      cells.push({ date: key, count: c, dow: (d.getUTCDay() + 6) % 7 });
+    }
+    return { cells, weeks: Math.ceil(nDays / 7), max: Math.max(1, max) };
+  }
+
   /** Human narrative for Pro Insights / export (ES|EN via isEs flag). */
   function narrative(stats, isEs) {
     const s = stats || compute();
@@ -326,6 +366,7 @@
     narrative,
     coachFocus,
     achievements,
+    heatmap,
     suggestUpgradeMoment,
     isDismissed,
     dismiss

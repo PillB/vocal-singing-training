@@ -94,6 +94,22 @@ test.describe("Retention features", () => {
     await expect(page.locator("#welcome-back")).toBeVisible();
   });
 
+  test("practice heatmap and analytics exist", async ({ page }) => {
+    await boot(page);
+    await expect(page.locator("#practice-heatmap")).toBeVisible();
+    const r = await page.evaluate(() => {
+      const hm = VTValuePulse.heatmap(4);
+      VTAnalytics.track("test_event", { x: 1 });
+      return {
+        cells: hm.cells.length,
+        weeks: hm.weeks,
+        total: VTAnalytics.summary().total
+      };
+    });
+    expect(r.cells).toBeGreaterThanOrEqual(28);
+    expect(r.total).toBeGreaterThanOrEqual(1);
+  });
+
   test("due evaluation kind messages only", async ({ page }) => {
     await boot(page);
     const msg = await page.evaluate(() => {

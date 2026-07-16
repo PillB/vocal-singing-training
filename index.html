@@ -1,13 +1,13 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
       name="description"
-      content="Self-paced Vocal Training (Vinh Giang foundations) and Singing Training (Live Music School) with recording, metrics, piano chords, and a 12-week plan."
+      content="Práctica en casa: entrenamiento vocal y de canto, grabación, métricas, piano y plan de 12 semanas."
     />
-    <title>Vocal &amp; Singing Training</title>
+    <title>Entrenamiento vocal y de canto</title>
     <link rel="stylesheet" href="css/styles.css" />
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎤</text></svg>" />
   </head>
@@ -17,65 +17,65 @@
         <div class="brand">
           <div class="brand-mark" aria-hidden="true">♪</div>
           <div>
-            <h1>Vocal &amp; Singing Training</h1>
-            <p>Home practice · Record · Review · Grow</p>
+            <h1 data-i18n="brand.title">Entrenamiento vocal y de canto</h1>
+            <p data-i18n="brand.tag">Práctica en casa · Grabar · Revisar · Crecer</p>
           </div>
         </div>
         <div class="header-actions">
-          <button type="button" class="btn btn-ghost btn-sm" id="btn-history">History / Audit</button>
-          <button type="button" class="btn btn-ghost btn-sm" id="btn-plan">12-Week Plan</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="btn-lang" aria-label="Language">English</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="btn-history" data-i18n="nav.history">Historial</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="btn-plan" data-i18n="nav.plan">Plan de 12 semanas</button>
         </div>
       </div>
     </header>
 
     <main class="main">
       <div id="session-banner" class="session-banner" role="status">
-        <span id="session-banner-text">Structured session</span>
+        <span id="session-banner-text" data-i18n="session.banner">Sesión guiada</span>
         <div class="controls-row">
-          <button type="button" class="btn btn-sm" id="btn-session-pause">Pause</button>
-          <button type="button" class="btn btn-sm btn-primary" id="btn-session-resume" hidden>Resume</button>
-          <button type="button" class="btn btn-sm btn-ghost" id="btn-session-end">End</button>
+          <button type="button" class="btn btn-sm" id="btn-session-pause" data-i18n="session.pause">Pausar</button>
+          <button type="button" class="btn btn-sm btn-primary" id="btn-session-resume" hidden data-i18n="session.resume">Reanudar</button>
+          <button type="button" class="btn btn-sm btn-ghost" id="btn-session-end" data-i18n="session.end">Terminar</button>
         </div>
       </div>
 
-      <!-- HOME -->
       <section id="view-home" class="view active">
         <div class="hero">
-          <h2 id="home-track-title">Vocal Training</h2>
-          <p id="home-track-sub">
-            Vinh Giang–inspired speaking foundations — diction, volume, presence, and deliberate growth.
+          <h2 id="home-track-title" data-i18n="home.vocalTitle">Entrenamiento vocal</h2>
+          <p id="home-track-sub" data-i18n="home.vocalSub">
+            Básico: base de oratoria. Avanzado: pausa, rellenos, tono, gestos y más.
           </p>
         </div>
 
         <div class="tabs" role="tablist" aria-label="Training track">
-          <button type="button" class="tab active" role="tab" data-tab="vocal" aria-selected="true">
-            Vocal Training
+          <button type="button" class="tab active" role="tab" data-tab="vocal" aria-selected="true" data-i18n="tab.vocal">
+            Entrenamiento vocal
           </button>
-          <button type="button" class="tab" role="tab" data-tab="singing" aria-selected="false">
-            Singing Training
+          <button type="button" class="tab" role="tab" data-tab="singing" aria-selected="false" data-i18n="tab.singing">
+            Entrenamiento de canto
           </button>
         </div>
 
         <div class="toolbar tier-toolbar">
           <div class="tier-filters" role="group" aria-label="Exercise tier">
-            <button type="button" class="chip tier-chip selected" data-tier="all">All</button>
-            <button type="button" class="chip tier-chip" data-tier="basic">Basic</button>
-            <button type="button" class="chip tier-chip" data-tier="advanced">Advanced</button>
+            <button type="button" class="chip tier-chip selected" data-tier="all" data-i18n="tier.all">Todos</button>
+            <button type="button" class="chip tier-chip" data-tier="basic" data-i18n="tier.basic">Básico</button>
+            <button type="button" class="chip tier-chip" data-tier="advanced" data-i18n="tier.advanced">Avanzado</button>
           </div>
           <span class="muted" id="tier-counts" style="font-size: 0.85rem"></span>
         </div>
 
         <div class="toolbar continue-toolbar">
-          <button type="button" class="btn btn-practice" id="btn-continue">▶ Continue practice</button>
-          <button type="button" class="btn btn-primary" id="btn-structured">
-            Start structured session
+          <button type="button" class="btn btn-practice" id="btn-continue" data-i18n="home.continue">▶ Continuar práctica</button>
+          <button type="button" class="btn btn-primary" id="btn-structured" data-i18n="home.structured">
+            Iniciar sesión guiada
           </button>
           <label class="muted" style="font-size: 0.88rem; display: flex; gap: 0.4rem; align-items: center">
-            Path
+            <span data-i18n="home.path">Ruta</span>
             <select id="session-path" class="select-inline">
-              <option value="basic">Basic</option>
-              <option value="advanced">Advanced</option>
-              <option value="full">Full</option>
+              <option value="basic" data-i18n="home.path.basic">Básica</option>
+              <option value="advanced" data-i18n="home.path.advanced">Avanzada</option>
+              <option value="full" data-i18n="home.path.full">Completa</option>
             </select>
           </label>
         </div>
@@ -83,100 +83,95 @@
         <div id="exercise-list" class="grid" aria-live="polite"></div>
       </section>
 
-      <!-- EXERCISE -->
       <section id="view-exercise" class="view">
         <div class="panel-header">
           <div>
             <span class="badge" id="ex-track-badge">Vocal</span>
-            <h2 id="ex-title">Exercise</h2>
+            <h2 id="ex-title">Ejercicio</h2>
             <p class="sub" id="structured-progress"></p>
           </div>
-          <button type="button" class="btn btn-ghost" id="btn-back-home">← All exercises</button>
+          <button type="button" class="btn btn-ghost" id="btn-back-home" data-i18n="ex.back">← Todos los ejercicios</button>
         </div>
 
-        <!-- 1 · GUIDE (compact) -->
         <div class="card section guide-card">
           <div class="guide-header">
-            <h3 style="margin:0">How to practice</h3>
-            <button type="button" class="btn btn-ghost btn-sm" id="btn-toggle-guide" aria-expanded="true">Hide details</button>
+            <h3 style="margin:0" data-i18n="ex.guide">Cómo practicar</h3>
+            <button type="button" class="btn btn-ghost btn-sm" id="btn-toggle-guide" aria-expanded="true" data-i18n="ex.hideGuide">Ocultar detalles</button>
           </div>
           <div id="guide-body">
             <div class="original-box" id="ex-original"></div>
             <p class="research-note" id="ex-research" hidden></p>
             <div class="two-col" style="margin-top:0.85rem">
               <div>
-                <h3>Steps</h3>
+                <h3 data-i18n="ex.steps">Pasos</h3>
                 <ol class="steps" id="ex-steps"></ol>
               </div>
               <div>
-                <h3>Tips</h3>
+                <h3 data-i18n="ex.tips">Consejos</h3>
                 <ul class="tips" id="ex-tips"></ul>
-                <h3 style="margin-top: 0.75rem">Avoid</h3>
+                <h3 style="margin-top: 0.75rem" data-i18n="ex.avoid">Evitar</h3>
                 <ul class="mistakes" id="ex-mistakes"></ul>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- 2 · PRACTICE COCKPIT (one primary action) -->
         <div class="card section practice-cockpit" id="practice-cockpit">
           <div class="cockpit-top">
             <div>
-              <h3 style="margin:0">Practice</h3>
-              <p class="muted cockpit-hint" id="practice-hint" style="margin:0.25rem 0 0">
-                One button starts listening, pitch feedback, hold auto-log, timer, and piano when needed.
+              <h3 style="margin:0" data-i18n="practice.title">Práctica</h3>
+              <p class="muted cockpit-hint" id="practice-hint" style="margin:0.25rem 0 0" data-i18n="practice.hint">
+                Un botón inicia escucha, afinación, sostenidos, temporizador y piano cuando corresponde.
               </p>
             </div>
             <div class="cockpit-primary">
-              <button type="button" class="btn btn-practice" id="btn-practice-start">▶ Start practice</button>
-              <button type="button" class="btn btn-danger" id="btn-practice-stop" hidden>■ Stop practice</button>
+              <button type="button" class="btn btn-practice" id="btn-practice-start" data-i18n="practice.start">▶ Empezar práctica</button>
+              <button type="button" class="btn btn-danger" id="btn-practice-stop" hidden data-i18n="practice.stop">■ Detener práctica</button>
             </div>
           </div>
 
           <div class="practice-status-row" id="practice-status-row">
-            <span class="status-pill" id="practice-status">Ready</span>
+            <span class="status-pill" id="practice-status" data-i18n="practice.ready">Listo</span>
             <span class="timer-display" id="timer-display">05:00</span>
-            <span class="hold-live" id="hold-display" hidden>Hold 0.0s</span>
+            <span class="hold-live" id="hold-display" hidden>Sostenido 0.0s</span>
             <span class="chord-now" id="chord-now">—</span>
           </div>
 
-          <p class="mode-cue" id="mode-cue">Start practice to begin the exercise-specific coach UI.</p>
-
+          <p class="mode-cue" id="mode-cue"></p>
           <div id="mode-hud" class="mode-hud" aria-live="polite"></div>
 
           <div class="controls-row" style="margin-bottom:0.5rem">
             <label class="muted piano-opt" id="opt-auto-record">
-              <input type="checkbox" id="chk-auto-record" /> Also record this practice
+              <input type="checkbox" id="chk-auto-record" />
+              <span data-i18n="practice.recordAlso">También grabar esta práctica</span>
             </label>
           </div>
           <div class="level-meter practice-meter" id="level-meter-wrap" aria-hidden="true"><span id="level-fill"></span></div>
 
           <div id="pitch-block" class="pitch-inline" hidden>
             <div class="pitch-game-hud" id="pitch-game-hud" aria-live="polite">
-              <div class="hud-score"><span class="hud-label">Score</span><strong id="hud-score">0</strong></div>
-              <div class="hud-combo"><span class="hud-label">Combo</span><strong id="hud-combo">×0</strong></div>
-              <div class="hud-acc"><span class="hud-label">In-lane</span><strong id="hud-acc">0%</strong></div>
+              <div class="hud-score"><span class="hud-label" data-i18n="pitch.score">Puntaje</span><strong id="hud-score">0</strong></div>
+              <div class="hud-combo"><span class="hud-label" data-i18n="pitch.combo">Combo</span><strong id="hud-combo">×0</strong></div>
+              <div class="hud-acc"><span class="hud-label" data-i18n="pitch.inLane">En el carril</span><strong id="hud-acc">0%</strong></div>
               <div class="hud-quality" id="hud-quality">—</div>
             </div>
             <canvas id="pitch-canvas" class="pitch-canvas" width="640" height="260" aria-label="Pitch match highway game"></canvas>
             <div class="pitch-stats" id="pitch-stats"></div>
             <div class="controls-row pitch-game-opts">
-              <label class="muted piano-opt" title="Vocal Match style: clear 8 notes by holding each in the green lane">
-                <input type="checkbox" id="chk-pitch-challenge" checked /> Note challenge (lock 8 targets)
+              <label class="muted piano-opt">
+                <input type="checkbox" id="chk-pitch-challenge" checked />
+                <span data-i18n="pitch.challenge">Reto de notas (bloquear 8 objetivos)</span>
               </label>
             </div>
-            <p class="muted pitch-legend">
-              <strong style="color:#3dba7a">Green lane</strong> = in tune (SingStar-style) ·
-              <strong style="color:#f0c9a0">Amber</strong> target ·
-              <strong style="color:#9aecc4">Voice</strong> dot ·
-              keyboard strip · combo &amp; score like Yousician / Singing Carrots
+            <p class="muted pitch-legend" data-i18n="pitch.legend">
+              Carril verde = afinado · Ámbar = objetivo · Verde = tu voz
             </p>
           </div>
 
           <div id="hold-block" class="hold-inline" hidden>
             <div class="hold-pills" id="hold-history"></div>
-            <p class="muted" style="margin:0.35rem 0 0;font-size:0.82rem">
-              Auto-logs when you sustain voice ≥ 2s then stop (or pause). No extra buttons.
+            <p class="muted" style="margin:0.35rem 0 0;font-size:0.82rem" data-i18n="hold.auto">
+              Se registra solo si sostienes la voz ≥ 2s y luego sueltas (con margen si hay cortes breves).
             </p>
           </div>
 
@@ -184,10 +179,10 @@
             <div class="prog-list" id="prog-buttons"></div>
             <p class="muted" id="chord-desc" style="margin:0.35rem 0"></p>
             <div class="controls-row piano-opts-row">
-              <label class="muted piano-opt"><input type="checkbox" id="chk-arpeggio" /> Arpeggio</label>
-              <label class="muted piano-opt"><input type="checkbox" id="chk-sustain" checked /> Sustain note</label>
+              <label class="muted piano-opt"><input type="checkbox" id="chk-arpeggio" /> <span data-i18n="piano.arpeggio">Arpegio</span></label>
+              <label class="muted piano-opt"><input type="checkbox" id="chk-sustain" checked /> <span data-i18n="piano.sustain">Sostener nota</span></label>
               <label class="muted piano-opt">
-                Hold
+                <span data-i18n="piano.hold">Duración</span>
                 <select id="sustain-sec" class="select-inline">
                   <option value="3">3s</option>
                   <option value="4" selected>4s</option>
@@ -195,15 +190,15 @@
                 </select>
               </label>
               <label class="muted piano-opt" id="opt-auto-piano">
-                <input type="checkbox" id="chk-auto-piano" checked /> Auto piano on start
+                <input type="checkbox" id="chk-auto-piano" checked /> <span data-i18n="piano.auto">Piano al empezar</span>
               </label>
             </div>
             <div class="controls-row" style="margin-top:0.45rem">
-              <button type="button" class="btn btn-singing btn-sm" id="btn-play-prog">Play once</button>
-              <button type="button" class="btn btn-singing btn-sm" id="btn-loop-prog">Loop</button>
-              <button type="button" class="btn btn-sm" id="btn-stop-piano">Stop piano</button>
-              <button type="button" class="btn btn-sm" id="btn-ref-pitch" hidden>Ref pitch</button>
-              <button type="button" class="btn btn-sm" id="btn-inhale-ticks" hidden>3s inhale</button>
+              <button type="button" class="btn btn-singing btn-sm" id="btn-play-prog" data-i18n="piano.playOnce">Reproducir una vez</button>
+              <button type="button" class="btn btn-singing btn-sm" id="btn-loop-prog" data-i18n="piano.loop">Bucle</button>
+              <button type="button" class="btn btn-sm" id="btn-stop-piano" data-i18n="piano.stop">Detener piano</button>
+              <button type="button" class="btn btn-sm" id="btn-ref-pitch" hidden data-i18n="piano.ref">Nota de referencia</button>
+              <button type="button" class="btn btn-sm" id="btn-inhale-ticks" hidden data-i18n="piano.inhale">Inspiración 3s</button>
             </div>
             <div id="songs-row" class="two-col" hidden style="margin-top:0.65rem"></div>
           </div>
@@ -211,32 +206,30 @@
           <div id="playback-area" class="playback-inline"></div>
         </div>
 
-        <!-- 3 · REFLECT -->
         <div class="card section" id="review-block" hidden></div>
 
         <div class="card section" id="week-plan-cta" hidden>
-          <h3>12-week plan</h3>
-          <p class="muted">Pick weekly focus, check in, record &amp; review.</p>
-          <button type="button" class="btn btn-primary" id="btn-open-plan">Open 12-week dashboard</button>
+          <h3 data-i18n="week.cta">Plan de 12 semanas</h3>
+          <p class="muted" data-i18n="week.ctaSub">Elige el foco semanal, registra el día y revisa al final.</p>
+          <button type="button" class="btn btn-primary" id="btn-open-plan" data-i18n="week.open">Abrir panel de 12 semanas</button>
         </div>
 
         <div class="card section">
-          <h3>Reflect &amp; save</h3>
-          <p class="muted" style="margin-top: 0">
-            Rate after practice. Scores are a compass, not a judgment.
+          <h3 data-i18n="metrics.title">Reflexionar y guardar</h3>
+          <p class="muted" style="margin-top: 0" data-i18n="metrics.sub">
+            Califica después de practicar. Las notas son una brújula, no un juicio.
           </p>
           <form id="metrics-form" class="metrics-form" onsubmit="return false;"></form>
           <div class="controls-row" style="margin-top: 1rem">
-            <button type="button" class="btn btn-success" id="btn-complete">Save session &amp; score</button>
+            <button type="button" class="btn btn-success" id="btn-complete" data-i18n="metrics.save">Guardar sesión y puntaje</button>
           </div>
           <div id="score-result" class="score-card" style="margin-top: 1rem" hidden></div>
         </div>
 
         <div class="controls-row" id="structured-nav" hidden style="margin-top: 1rem">
-          <button type="button" class="btn btn-primary" id="btn-next-structured">Next exercise →</button>
+          <button type="button" class="btn btn-primary" id="btn-next-structured" data-i18n="next">Siguiente ejercicio →</button>
         </div>
 
-        <!-- Legacy hidden hooks kept for compatibility / tests may not need timer buttons -->
         <div id="timer-block" hidden></div>
         <div id="record-block" hidden>
           <button type="button" id="btn-rec-start" hidden></button>
@@ -251,64 +244,62 @@
         </div>
       </section>
 
-      <!-- HISTORY -->
       <section id="view-history" class="view">
         <div class="panel-header">
           <div>
-            <h2>History / Audit</h2>
-            <p class="sub">Past recordings and completion stats stored locally in this browser.</p>
+            <h2 data-i18n="history.title">Historial</h2>
+            <p class="sub" data-i18n="history.sub">Grabaciones y progreso en este navegador.</p>
           </div>
-          <button type="button" class="btn btn-ghost" id="btn-history-back">← Back</button>
+          <button type="button" class="btn btn-ghost" id="btn-history-back" data-i18n="history.back">← Volver</button>
         </div>
         <div class="card" id="history-list"></div>
       </section>
 
-      <!-- 12 WEEK PLAN -->
       <section id="view-plan" class="view">
         <div class="panel-header">
           <div>
-            <h2>12-Week Improvement Plan</h2>
-            <p class="sub">One element at a time. Record &amp; review weekly. Continue or advance.</p>
+            <h2 data-i18n="plan.title">Plan de mejora de 12 semanas</h2>
+            <p class="sub" data-i18n="plan.sub">Un elemento a la vez. Graba y revisa cada semana.</p>
           </div>
-          <button type="button" class="btn btn-ghost" id="btn-plan-back">← Back</button>
+          <button type="button" class="btn btn-ghost" id="btn-plan-back" data-i18n="history.back">← Volver</button>
         </div>
 
         <div class="plan-grid">
           <div class="card">
-            <h3>Current week</h3>
-            <p style="font-size: 1.4rem; font-weight: 800; margin: 0.25rem 0" id="plan-week-num">Week 1</p>
-            <p class="muted" id="plan-status">Not started</p>
-            <p>Focus element: <strong id="plan-element-label">—</strong></p>
-            <h3 style="margin-top: 1rem">Pick element</h3>
+            <h3 data-i18n="plan.current">Semana actual</h3>
+            <p style="font-size: 1.4rem; font-weight: 800; margin: 0.25rem 0" id="plan-week-num">Semana 1</p>
+            <p class="muted" id="plan-status"></p>
+            <p>Foco: <strong id="plan-element-label">—</strong></p>
+            <h3 style="margin-top: 1rem" data-i18n="plan.pick">Elige el elemento</h3>
             <div class="element-chips" id="element-chips"></div>
             <div class="controls-row" style="margin-top: 1rem">
-              <button type="button" class="btn btn-primary" id="btn-plan-start">Start / continue week</button>
-              <button type="button" class="btn btn-sm" id="btn-plan-checkin">Daily check-in</button>
+              <button type="button" class="btn btn-primary" id="btn-plan-start" data-i18n="plan.start">Iniciar / continuar semana</button>
+              <button type="button" class="btn btn-sm" id="btn-plan-checkin" data-i18n="plan.checkin">Registro del día</button>
             </div>
-            <h3 style="margin-top: 1.25rem">Check-ins</h3>
+            <h3 style="margin-top: 1.25rem" data-i18n="plan.checkins">Registros</h3>
             <div class="hold-pills" id="plan-checkins"></div>
           </div>
 
           <div class="card">
-            <h3>End-of-week record &amp; review</h3>
-            <p class="muted">
-              After ~7 days of focus, record a short sample, review it (auditory → visual → notes), then decide:
+            <h3 data-i18n="plan.review">Grabar y revisar al final de la semana</h3>
+            <p class="muted" data-i18n="plan.reviewSub">
+              Tras ~7 días, graba una muestra corta, revísala y decide:
             </p>
             <div class="field">
-              <label for="plan-review-notes">Review notes</label>
-              <textarea id="plan-review-notes" placeholder="What improved? What still needs work?"></textarea>
+              <label for="plan-review-notes" data-i18n="plan.notes">Notas de revisión</label>
+              <textarea id="plan-review-notes" data-i18n-placeholder="plan.notesPh" placeholder="¿Qué mejoró?"></textarea>
             </div>
             <div class="controls-row" style="margin-top: 0.75rem">
-              <button type="button" class="btn btn-success" id="btn-plan-improved">It improved → new element</button>
-              <button type="button" class="btn" id="btn-plan-continue">Not yet → same element</button>
+              <button type="button" class="btn btn-success" id="btn-plan-improved" data-i18n="plan.improved">Mejoró → nuevo elemento</button>
+              <button type="button" class="btn" id="btn-plan-continue" data-i18n="plan.continue">Aún no → mismo elemento</button>
             </div>
-            <h3 style="margin-top: 1.25rem">Elements improved</h3>
+            <h3 style="margin-top: 1.25rem" data-i18n="plan.completed">Elementos mejorados</h3>
             <div id="plan-completed-elements"></div>
           </div>
         </div>
 
         <div class="card" style="margin-top: 1rem">
-          <h3>Review history</h3>
+          <h3 data-i18n="plan.reviews">Historial de revisiones</h3>
           <div id="plan-reviews"></div>
         </div>
       </section>
@@ -316,15 +307,17 @@
 
     <footer class="app-footer">
       <p>
-        Based on
+        <span data-i18n="footer.base">Basado en</span>
         <a href="Vocal%20training%20and%20Singing%20training%20Homework.md">Vocal training and Singing training Homework.md</a>
-        · Practice material for personal growth · Piano tones synthesized in-browser (mid-lower range for men) ·
-        Data stays on your device.
+        <span data-i18n="footer.rest">
+          · Material de práctica personal · Piano en el navegador · Los datos se quedan en tu dispositivo.
+        </span>
       </p>
     </footer>
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
+    <script src="js/i18n.js"></script>
     <script src="js/exercises-data.js"></script>
     <script src="js/practice-profiles.js"></script>
     <script src="js/storage.js"></script>

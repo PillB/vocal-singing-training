@@ -7,8 +7,12 @@
   "use strict";
 
   const HOLD_MIN_SEC = 2.0; // auto-log only if voiced continuously ≥ 2s
-  const SILENCE_END_MS = 450; // gap that ends a hold
-  const VOICE_RMS = 0.018;
+  /** Gap allowed mid-hold before ending (retroactive grace for pitch/RMS dropouts) */
+  const SILENCE_END_MS = 900;
+  /** Brief dropouts under this ms never end the hold; timer keeps running */
+  const HOLD_GRACE_MS = 550;
+  const VOICE_RMS = 0.016;
+  const HOLD_RMS = 0.012; // looser once a hold has started
   const PITCH_MIN = 60;
   const PITCH_MAX = 500;
 
@@ -188,10 +192,12 @@
 
     _maybeEndHold(force) {
       if (!this.holdStart) return;
-      const sec = (performance.now() - this.holdStart) / 1000;
-      const silenceLong =
-        force || performance.now() - this.lastVoiceAt >= SILENCE_END_MS;
+      const now = performance.now();
+      const silenceLong = force || now - this.lastVoiceAt >= SILENCE_END_MS;
       if (!silenceLong && !force) return;
+      // Credit through last real voice, not trailing silence window
+      const endAt = this.lastVoiceAt > this.holdStart ? this.lastVoiceAt : now;
+      const sec = (endAt - this.holdStart) / 1000;
       if (sec >= HOLD_MIN_SEC) {
         const entry = {
           seconds: Math.round(sec * 10) / 10,
@@ -204,6 +210,7 @@
       this.holdStart = null;
       this.voiced = false;
       this.currentHoldSec = 0;
+      this._gapStart = null;
     }
 
     _loop() {
@@ -213,43 +220,56 @@
       const freq = this._detectPitch(this.buf, this.audioCtx.sampleRate);
       const now = performance.now();
 
-      const hasVoice =
-        rms >= VOICE_RMS &&
-        freq != null &&
-        freq >= PITCH_MIN &&
-        freq <= PITCH_MAX;
+      const hasPitch =
+        freq != null && freq >= PITCH_MIN && freq <= PITCH_MAX;
+      // Start a hold only with energy + pitch; continue a hold with energy alone
+      // (pitch detectors flake mid-sustain — competitors punish that; we give grace)
+      const strongVoice = rms >= VOICE_RMS && hasPitch;
+      const continueVoice =
+        this.holdStart != null &&
+        (rms >= HOLD_RMS || hasPitch || now - this.lastVoiceAt < HOLD_GRACE_MS);
 
-      if (hasVoice) {
-        this.voiceFreq = freq;
-        this.lastVoiceAt = now;
+      if (strongVoice || continueVoice) {
+        if (hasPitch) this.voiceFreq = freq;
+        // Retroactive bridge: if we were in a short gap, do NOT reset holdStart
+        if (strongVoice || rms >= HOLD_RMS) {
+          this.lastVoiceAt = now;
+          this._gapStart = null;
+        } else if (!this._gapStart) {
+          this._gapStart = now;
+        }
         if (!this.holdStart) {
           this.holdStart = now;
           this.voiced = true;
         }
+        // Hold clock keeps running through brief dropouts (grace)
         this.currentHoldSec = (now - this.holdStart) / 1000;
       } else {
-        // keep last pitch briefly for viz smoothness only if recent
-        if (now - this.lastVoiceAt > 120) this.voiceFreq = null;
+        if (now - this.lastVoiceAt > 180) this.voiceFreq = null;
         if (this.holdStart && now - this.lastVoiceAt >= SILENCE_END_MS) {
           this._maybeEndHold(false);
         } else if (this.holdStart) {
+          // Still inside outer silence window — keep counting for UX continuity
           this.currentHoldSec = (now - this.holdStart) / 1000;
         }
       }
 
       const dtMs = Math.min(50, now - (this._lastFrameAt || now));
       this._lastFrameAt = now;
+      const activelyHolding =
+        !!this.holdStart && now - this.lastVoiceAt < HOLD_GRACE_MS;
       if (this.onFrame) {
         this.onFrame({
           rms,
           voiceFreq: this.voiceFreq,
           targetFreq: this.targetFreq,
           holdSec: this.currentHoldSec,
-          voiced: !!(this.holdStart && hasVoice),
+          voiced: activelyHolding || strongVoice,
           holds: this.holds,
           recording: this.recording,
           elapsedMs: now - this.startedAt,
-          dtMs
+          dtMs,
+          holdGrace: !!this.holdStart && !strongVoice && activelyHolding
         });
       }
 
@@ -259,4 +279,6 @@
 
   global.VTPracticeEngine = PracticeEngine;
   global.VT_HOLD_MIN_SEC = HOLD_MIN_SEC;
+  global.VT_HOLD_GRACE_MS = HOLD_GRACE_MS;
+  global.VT_SILENCE_END_MS = SILENCE_END_MS;
 })(window);

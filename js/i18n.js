@@ -1,0 +1,393 @@
+/**
+ * Localization: Spanish (LatAm / Perú, clear international) default + English toggle.
+ * Best practices: native language names, no flags, localStorage persistence, full UI parity.
+ */
+(function (global) {
+  "use strict";
+
+  const STRINGS = {
+    es: {
+      "meta.title": "Entrenamiento vocal y de canto",
+      "meta.desc":
+        "Práctica en casa: entrenamiento vocal y de canto, grabación, métricas, piano y plan de 12 semanas.",
+      "brand.title": "Entrenamiento vocal y de canto",
+      "brand.tag": "Práctica en casa · Grabar · Revisar · Crecer",
+      "nav.history": "Historial",
+      "nav.plan": "Plan de 12 semanas",
+      "nav.lang": "English",
+      "session.banner": "Sesión guiada",
+      "session.pause": "Pausar",
+      "session.resume": "Reanudar",
+      "session.end": "Terminar",
+      "home.vocalTitle": "Entrenamiento vocal",
+      "home.vocalSub":
+        "Básico: base de oratoria (estilo Vinh Giang). Avanzado: pausa, rellenos, tono, gestos, historias y más.",
+      "home.singingTitle": "Entrenamiento de canto",
+      "home.singingSub":
+        "Básico: cierre y aire (estilo Live Music School). Avanzado: SOVT, sirenas, afinación, escalas y dinámica.",
+      "tab.vocal": "Entrenamiento vocal",
+      "tab.singing": "Entrenamiento de canto",
+      "tier.all": "Todos",
+      "tier.basic": "Básico",
+      "tier.advanced": "Avanzado",
+      "tier.counts": "{basic} básico · {advanced} avanzado · mostrando {showing}",
+      "home.continue": "▶ Continuar práctica",
+      "home.structured": "Iniciar sesión guiada",
+      "home.path": "Ruta",
+      "home.path.basic": "Básica",
+      "home.path.advanced": "Avanzada",
+      "home.path.full": "Completa",
+      "card.notPracticed": "Aún no practicado",
+      "card.sessions": "✓ {n} sesión",
+      "card.sessions_plural": "✓ {n} sesiones",
+      "card.meta": "~{min} min · {tools}",
+      "card.piano": "Piano · ",
+      "card.pitch": "Afinación · ",
+      "card.record": "Grabar",
+      "card.practice": "Practicar",
+      "ex.back": "← Todos los ejercicios",
+      "ex.guide": "Cómo practicar",
+      "ex.hideGuide": "Ocultar detalles",
+      "ex.showGuide": "Mostrar pasos y consejos",
+      "ex.steps": "Pasos",
+      "ex.tips": "Consejos",
+      "ex.avoid": "Evitar",
+      "ex.original": "Espíritu original",
+      "ex.research": "Investigación · ",
+      "practice.title": "Práctica",
+      "practice.hint":
+        "Un botón inicia escucha, afinación, sostenidos, temporizador y piano cuando corresponde.",
+      "practice.start": "▶ Empezar práctica",
+      "practice.stop": "■ Detener práctica",
+      "practice.ready": "Listo",
+      "practice.live": "En vivo · escuchando",
+      "practice.recordAlso": "También grabar esta práctica",
+      "practice.hold": "Sostenido {s}s",
+      "pitch.title": "Afinación · precisión y exactitud",
+      "pitch.legend":
+        "Carril verde = afinado · Ámbar = nota objetivo · Verde = tu voz · teclado · combo y puntaje",
+      "pitch.challenge": "Reto de notas (bloquear 8 objetivos)",
+      "pitch.score": "Puntaje",
+      "pitch.combo": "Combo",
+      "pitch.inLane": "En el carril",
+      "piano.title": "Piano · registro medio-bajo",
+      "piano.arpeggio": "Arpegio",
+      "piano.sustain": "Sostener nota",
+      "piano.hold": "Duración",
+      "piano.auto": "Piano al empezar",
+      "piano.playOnce": "Reproducir una vez",
+      "piano.loop": "Bucle",
+      "piano.stop": "Detener piano",
+      "piano.ref": "Nota de referencia",
+      "piano.inhale": "Inspiración 3s",
+      "hold.auto":
+        "Se registra solo si sostienes la voz ≥ 2s y luego sueltas (con un poco de margen si hay cortes breves).",
+      "metrics.title": "Reflexionar y guardar",
+      "metrics.sub": "Califica después de practicar. Las notas son una brújula, no un juicio.",
+      "metrics.save": "Guardar sesión y puntaje",
+      "metrics.notes": "Notas de la sesión",
+      "metrics.notesPh": "¿Qué salió bien? ¿Qué probarás la próxima vez?",
+      "review.title": "Revisión en 3 pasos (espera 1 día completo tras grabar)",
+      "week.cta": "Plan de 12 semanas",
+      "week.ctaSub": "Elige el foco semanal, registra el día y revisa al final.",
+      "week.open": "Abrir panel de 12 semanas",
+      "history.title": "Historial",
+      "history.sub": "Grabaciones y progreso guardados en este navegador.",
+      "history.back": "← Volver",
+      "plan.title": "Plan de mejora de 12 semanas",
+      "plan.sub": "Un elemento a la vez. Graba y revisa cada semana. Continúa o avanza.",
+      "plan.current": "Semana actual",
+      "plan.pick": "Elige el elemento",
+      "plan.start": "Iniciar / continuar semana",
+      "plan.checkin": "Registro del día",
+      "plan.checkins": "Registros",
+      "plan.review": "Grabar y revisar al final de la semana",
+      "plan.reviewSub":
+        "Tras ~7 días de foco, graba una muestra corta, revísala y decide:",
+      "plan.notes": "Notas de revisión",
+      "plan.notesPh": "¿Qué mejoró? ¿Qué sigue pendiente?",
+      "plan.improved": "Mejoró → nuevo elemento",
+      "plan.continue": "Aún no → mismo elemento",
+      "plan.completed": "Elementos mejorados",
+      "plan.reviews": "Historial de revisiones",
+      "footer.base": "Basado en",
+      "footer.rest":
+        "· Material de práctica personal · Piano en el navegador (registro medio-bajo) · Los datos se quedan en tu dispositivo.",
+      "next": "Siguiente ejercicio →",
+      "toast.mic": "Se necesita permiso de micrófono",
+      "toast.live": "En vivo · {mode}",
+      "toast.liveRec": "En vivo · {mode} · grabando",
+      "toast.stopped": "Práctica detenida",
+      "toast.hold": "Sostenido registrado: {s}s",
+      "toast.saved": "Sesión guardada",
+      "toast.pianoStop": "Piano detenido",
+      "badge.vocal": "Vocal",
+      "badge.singing": "Canto",
+      "badge.basic": "básico",
+      "badge.advanced": "avanzado",
+      "ex.v1-diction": "Mejor dicción",
+      "ex.v2-volume": "Mantener el volumen",
+      "ex.v3-soft-palate": "Elevar el velo del paladar",
+      "ex.v4-articulation-pen": "Articulación (con bolígrafo)",
+      "ex.v5-neutral-ears": "Oídos neutros (persona e historia)",
+      "ex.v6-connect": "Cómo conectar",
+      "ex.v7-record-review": "Grabar y revisar",
+      "ex.v8-fluency-metaphors": "Fluidez (metáforas)",
+      "ex.v9-12-week": "Plan de 12 semanas",
+      "ex.v10-power-pause": "El poder de la pausa",
+      "ex.v11-kill-fillers": "Eliminar rellenos",
+      "ex.v12-melodic-speech": "Habla melódica y tono",
+      "ex.v13-volume-ladder": "Escalera de volumen",
+      "ex.v14-pace-variation": "Variar el ritmo",
+      "ex.v15-gestures": "Gestos y lenguaje corporal",
+      "ex.v16-facial-expression": "Expresión facial",
+      "ex.v17-strategic-concision": "Concisión estratégica",
+      "ex.v18-story-peak": "Historia: pico emocional",
+      "ex.v19-authority-close": "Cierre con autoridad",
+      "ex.v20-energy-match": "Energía y carisma",
+      "ex.s1-vocal-fry": "Fry vocal → /A/ sostenida",
+      "ex.s2-solfege-chords": "/A/ en progresiones (solfeo)",
+      "ex.s3-song-stanzas": "Estrofas de canción",
+      "ex.s4-lip-trills": "Trinos de labios (SOVT)",
+      "ex.s5-sirens": "Sirenas / deslizamientos",
+      "ex.s6-straw": "Fonación con pajita (SOVT)",
+      "ex.s7-humming": "Resonancia con hum",
+      "ex.s8-breath-support": "Apoyo del aire (S sostenida)",
+      "ex.s9-pitch-match": "Afinar una nota",
+      "ex.s10-five-note": "Escala de cinco notas (/A/)",
+      "ex.s11-dynamics": "Crecendo en una nota",
+      "ex.s12-easy-onset": "Ataque suave",
+      "ex.s13-arpeggio-match": "Arpegios afinados",
+      "ex.s14-staccato-legato": "Staccato vs legato"
+    },
+    en: {
+      "meta.title": "Vocal & Singing Training",
+      "meta.desc":
+        "Self-paced vocal and singing practice with recording, metrics, piano chords, and a 12-week plan.",
+      "brand.title": "Vocal & Singing Training",
+      "brand.tag": "Home practice · Record · Review · Grow",
+      "nav.history": "History / Audit",
+      "nav.plan": "12-Week Plan",
+      "nav.lang": "Español",
+      "session.banner": "Structured session",
+      "session.pause": "Pause",
+      "session.resume": "Resume",
+      "session.end": "End",
+      "home.vocalTitle": "Vocal Training",
+      "home.vocalSub":
+        "Basic: speaking foundations (Vinh Giang–inspired). Advanced: pause, fillers, tonality, gestures, storytelling, and more.",
+      "home.singingTitle": "Singing Training",
+      "home.singingSub":
+        "Basic: closure and air (Live Music School–inspired). Advanced: SOVT, sirens, pitch match, scales, and dynamics.",
+      "tab.vocal": "Vocal Training",
+      "tab.singing": "Singing Training",
+      "tier.all": "All",
+      "tier.basic": "Basic",
+      "tier.advanced": "Advanced",
+      "tier.counts": "{basic} basic · {advanced} advanced · showing {showing}",
+      "home.continue": "▶ Continue practice",
+      "home.structured": "Start structured session",
+      "home.path": "Path",
+      "home.path.basic": "Basic",
+      "home.path.advanced": "Advanced",
+      "home.path.full": "Full",
+      "card.notPracticed": "Not yet practiced",
+      "card.sessions": "✓ {n} session",
+      "card.sessions_plural": "✓ {n} sessions",
+      "card.meta": "~{min} min · {tools}",
+      "card.piano": "Piano · ",
+      "card.pitch": "Pitch · ",
+      "card.record": "Record",
+      "card.practice": "Practice",
+      "ex.back": "← All exercises",
+      "ex.guide": "How to practice",
+      "ex.hideGuide": "Hide details",
+      "ex.showGuide": "Show steps & tips",
+      "ex.steps": "Steps",
+      "ex.tips": "Tips",
+      "ex.avoid": "Avoid",
+      "ex.original": "Original spirit",
+      "ex.research": "Research · ",
+      "practice.title": "Practice",
+      "practice.hint":
+        "One button starts listening, pitch feedback, hold auto-log, timer, and piano when needed.",
+      "practice.start": "▶ Start practice",
+      "practice.stop": "■ Stop practice",
+      "practice.ready": "Ready",
+      "practice.live": "Live · listening",
+      "practice.recordAlso": "Also record this practice",
+      "practice.hold": "Hold {s}s",
+      "pitch.title": "Pitch visualizer · accuracy & precision",
+      "pitch.legend":
+        "Green lane = in tune · Amber = target · Green = your voice · keyboard · combo & score",
+      "pitch.challenge": "Note challenge (lock 8 targets)",
+      "pitch.score": "Score",
+      "pitch.combo": "Combo",
+      "pitch.inLane": "In-lane",
+      "piano.title": "Piano · mid-lower male range",
+      "piano.arpeggio": "Arpeggio",
+      "piano.sustain": "Sustain note",
+      "piano.hold": "Hold",
+      "piano.auto": "Auto piano on start",
+      "piano.playOnce": "Play once",
+      "piano.loop": "Loop",
+      "piano.stop": "Stop piano",
+      "piano.ref": "Ref pitch",
+      "piano.inhale": "3s inhale",
+      "hold.auto":
+        "Auto-logs when you sustain voice ≥ 2s then stop (with short-dropout grace so holds don’t cut off early).",
+      "metrics.title": "Reflect & save",
+      "metrics.sub": "Rate after practice. Scores are a compass, not a judgment.",
+      "metrics.save": "Save session & score",
+      "metrics.notes": "Session notes",
+      "metrics.notesPh": "What felt good? What will you try next time?",
+      "review.title": "3-step review (wait 1 full day after recording)",
+      "week.cta": "12-week plan",
+      "week.ctaSub": "Pick weekly focus, check in daily, record & review.",
+      "week.open": "Open 12-week dashboard",
+      "history.title": "History / Audit",
+      "history.sub": "Past recordings and completion stats stored locally in this browser.",
+      "history.back": "← Back",
+      "plan.title": "12-Week Improvement Plan",
+      "plan.sub": "One element at a time. Record & review weekly. Continue or advance.",
+      "plan.current": "Current week",
+      "plan.pick": "Pick element",
+      "plan.start": "Start / continue week",
+      "plan.checkin": "Daily check-in",
+      "plan.checkins": "Check-ins",
+      "plan.review": "End-of-week record & review",
+      "plan.reviewSub": "After ~7 days of focus, record a short sample, review it, then decide:",
+      "plan.notes": "Review notes",
+      "plan.notesPh": "What improved? What still needs work?",
+      "plan.improved": "It improved → new element",
+      "plan.continue": "Not yet → same element",
+      "plan.completed": "Elements improved",
+      "plan.reviews": "Review history",
+      "footer.base": "Based on",
+      "footer.rest":
+        "· Personal practice material · In-browser piano (mid-lower range) · Data stays on your device.",
+      "next": "Next exercise →",
+      "toast.mic": "Microphone permission needed",
+      "toast.live": "Live · {mode}",
+      "toast.liveRec": "Live · {mode} · recording",
+      "toast.stopped": "Practice stopped",
+      "toast.hold": "Hold logged: {s}s",
+      "toast.saved": "Session saved",
+      "toast.pianoStop": "Piano stopped",
+      "badge.vocal": "Vocal",
+      "badge.singing": "Singing",
+      "badge.basic": "basic",
+      "badge.advanced": "advanced",
+      "ex.v1-diction": "Better Diction",
+      "ex.v2-volume": "Maintain Volume",
+      "ex.v3-soft-palate": "Lift Soft Palate",
+      "ex.v4-articulation-pen": "Improve Articulation (Pen)",
+      "ex.v5-neutral-ears": "Neutral Ears (Persona & Story)",
+      "ex.v6-connect": "How to Connect",
+      "ex.v7-record-review": "Record & Review",
+      "ex.v8-fluency-metaphors": "Improve Fluency (Metaphors)",
+      "ex.v9-12-week": "12-Week Improvement Plan",
+      "ex.v10-power-pause": "Power of the Pause",
+      "ex.v11-kill-fillers": "Kill the Fillers",
+      "ex.v12-melodic-speech": "Melodic Speech & Tonality",
+      "ex.v13-volume-ladder": "Volume Ladder",
+      "ex.v14-pace-variation": "Pace Variation for Impact",
+      "ex.v15-gestures": "Hand Gestures & Body Language",
+      "ex.v16-facial-expression": "Facial Expressiveness",
+      "ex.v17-strategic-concision": "Strategic Concision",
+      "ex.v18-story-peak": "Storytelling Peak Emotion",
+      "ex.v19-authority-close": "Authority Close (Cadence)",
+      "ex.v20-energy-match": "Energy Match & Charisma",
+      "ex.s1-vocal-fry": "Vocal Fry → Sustained /A/",
+      "ex.s2-solfege-chords": "/A/ Solfège on Chord Progressions",
+      "ex.s3-song-stanzas": "Song Stanzas (Feel / Better Man)",
+      "ex.s4-lip-trills": "Lip Trills (SOVT Warm-up)",
+      "ex.s5-sirens": "Sirens / Pitch Glides",
+      "ex.s6-straw": "Straw Phonation (SOVT)",
+      "ex.s7-humming": "Humming Resonance",
+      "ex.s8-breath-support": "Breath Support (Sustained S)",
+      "ex.s9-pitch-match": "Single-Note Pitch Match",
+      "ex.s10-five-note": "Five-Note Scale (/A/)",
+      "ex.s11-dynamics": "Dynamic Swells on One Note",
+      "ex.s12-easy-onset": "Easy Onset Coordination",
+      "ex.s13-arpeggio-match": "Arpeggio Pitch Match",
+      "ex.s14-staccato-legato": "Staccato vs Legato Control"
+    }
+  };
+
+  const I18n = {
+    lang: "es",
+    strings: STRINGS,
+    t(key, vars) {
+      const table = this.strings[this.lang] || this.strings.es;
+      let s = table[key] ?? this.strings.en[key] ?? this.strings.es[key] ?? key;
+      if (vars) {
+        Object.keys(vars).forEach((k) => {
+          s = s.replace(new RegExp(`\\{${k}\\}`, "g"), String(vars[k]));
+        });
+      }
+      return s;
+    },
+    exTitle(ex) {
+      if (!ex) return "";
+      const key = "ex." + ex.id;
+      const tr = this.t(key);
+      return tr === key ? ex.title : tr;
+    },
+    setLang(lang) {
+      this.lang = lang === "en" ? "en" : "es";
+      try {
+        localStorage.setItem("vt_lang", this.lang);
+      } catch {
+        /* ignore */
+      }
+      document.documentElement.lang = this.lang === "es" ? "es" : "en";
+      this.applyDom();
+      if (typeof this.onChange === "function") this.onChange(this.lang);
+    },
+    init() {
+      let saved = "es";
+      try {
+        saved = localStorage.getItem("vt_lang") || "es";
+      } catch {
+        /* ignore */
+      }
+      this.lang = saved === "en" ? "en" : "es";
+      document.documentElement.lang = this.lang === "es" ? "es" : "en";
+      this.applyDom();
+    },
+    applyDom() {
+      document.querySelectorAll("[data-i18n]").forEach((el) => {
+        const key = el.getAttribute("data-i18n");
+        if (!key) return;
+        const val = this.t(key);
+        if (el.tagName === "OPTION") {
+          el.textContent = val;
+        } else if (el.tagName === "INPUT" || el.tagName === "TEXTAREA") {
+          if (el.hasAttribute("data-i18n-placeholder")) el.placeholder = val;
+        } else if (el.hasAttribute("data-i18n-html")) {
+          el.innerHTML = val;
+        } else {
+          el.textContent = val;
+        }
+      });
+      document.querySelectorAll("[data-i18n-placeholder]").forEach((el) => {
+        const key = el.getAttribute("data-i18n-placeholder");
+        if (key) el.placeholder = this.t(key);
+      });
+      document.querySelectorAll("[data-i18n-title]").forEach((el) => {
+        const key = el.getAttribute("data-i18n-title");
+        if (key) el.title = this.t(key);
+      });
+      const title = this.t("meta.title");
+      if (title) document.title = title;
+      const meta = document.querySelector('meta[name="description"]');
+      if (meta) meta.setAttribute("content", this.t("meta.desc"));
+      const langBtn = document.getElementById("btn-lang");
+      if (langBtn) langBtn.textContent = this.t("nav.lang");
+    }
+  };
+
+  global.VTI18n = I18n;
+  global.t = (k, v) => I18n.t(k, v);
+})(window);

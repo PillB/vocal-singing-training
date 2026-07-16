@@ -36,6 +36,10 @@
   const $ = (sel, el = document) => el.querySelector(sel);
   const $$ = (sel, el = document) => [...el.querySelectorAll(sel)];
 
+  function tt(key, vars) {
+    return typeof globalThis.t === "function" ? globalThis.t(key, vars) : key;
+  }
+
   function toast(msg) {
     const el = $("#toast");
     el.textContent = msg;
@@ -186,36 +190,49 @@
     const advCount = (VT_EXERCISES[state.tab] || []).filter((e) => e.tier === "advanced").length;
     const countEl = $("#tier-counts");
     if (countEl) {
-      countEl.textContent = `${basicCount} basic · ${advCount} advanced · showing ${exercises.length}`;
+      countEl.textContent = tt("tier.counts", {
+        basic: basicCount,
+        advanced: advCount,
+        showing: exercises.length
+      });
     }
 
     exercises.forEach((ex) => {
       const prog = progressFor(ex.id);
       const tier = ex.tier || "basic";
+      const tools =
+        (ex.audio.piano ? tt("card.piano") : "") +
+        (ex.audio.pitchViz || ex.practice?.showPitch ? tt("card.pitch") : "") +
+        (ex.audio.record ? tt("card.record") : tt("card.practice"));
+      const sessions = prog?.completedCount || 0;
+      const sessLabel =
+        sessions === 0
+          ? tt("card.notPracticed")
+          : sessions === 1
+            ? tt("card.sessions", { n: sessions })
+            : tt("card.sessions_plural", { n: sessions });
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "card card-ex";
       btn.innerHTML = `
         <div class="card-ex-top">
           <span class="num">${ex.number}</span>
-          <span class="badge tier-${tier}">${tier}</span>
+          <span class="badge tier-${tier}">${tt("badge." + tier)}</span>
         </div>
-        <h3>${ex.title}</h3>
-        <p class="meta">~${ex.durationMin} min · ${ex.audio.piano ? "Piano · " : ""}${ex.audio.pitchViz ? "Pitch viz · " : ""}${ex.audio.record ? "Record" : "Practice"}</p>
-        <span class="badge ${prog && prog.completedCount ? "done" : ""}">
-          ${prog && prog.completedCount ? `✓ ${prog.completedCount} session${prog.completedCount > 1 ? "s" : ""}` : "Not yet practiced"}
-        </span>
+        <h3>${window.VTI18n ? VTI18n.exTitle(ex) : ex.title}</h3>
+        <p class="meta">${tt("card.meta", { min: ex.durationMin, tools })}</p>
+        <span class="badge ${sessions ? "done" : ""}">${sessLabel}</span>
       `;
       btn.addEventListener("click", () => openExercise(ex.id, false));
       list.appendChild(btn);
     });
 
-    $("#home-track-title").textContent =
-      state.tab === "vocal" ? "Vocal Training" : "Singing Training";
-    $("#home-track-sub").textContent =
-      state.tab === "vocal"
-        ? "Basic: Vinh Giang homework spine. Advanced: pause, fillers, tonality, gestures, storytelling, concision & more."
-        : "Basic: Live Music School spine. Advanced: SOVT, sirens, pitch match, scales, dynamics & complementary technique.";
+    $("#home-track-title").textContent = tt(
+      state.tab === "vocal" ? "home.vocalTitle" : "home.singingTitle"
+    );
+    $("#home-track-sub").textContent = tt(
+      state.tab === "vocal" ? "home.vocalSub" : "home.singingSub"
+    );
   }
 
   function openExercise(id, fromStructured) {
@@ -239,9 +256,13 @@
     const ex = state.exercise;
     if (!ex) return;
 
-    $("#ex-title").textContent = `${ex.number}. ${ex.title}`;
+    $("#ex-title").textContent = `${ex.number}. ${
+      window.VTI18n ? VTI18n.exTitle(ex) : ex.title
+    }`;
     const tier = ex.tier || "basic";
-    $("#ex-track-badge").textContent = `${ex.track === "vocal" ? "Vocal" : "Singing"} · ${tier}`;
+    $("#ex-track-badge").textContent = `${tt(
+      ex.track === "vocal" ? "badge.vocal" : "badge.singing"
+    )} · ${tt("badge." + tier)}`;
     $("#ex-track-badge").style.borderColor = ex.track === "vocal" ? "var(--vocal)" : "var(--singing)";
     $("#ex-original").textContent = ex.original;
     const researchEl = $("#ex-research");
@@ -388,7 +409,7 @@
     document.querySelector(".guide-card")?.classList.add("collapsed");
     const guideBtn = $("#btn-toggle-guide");
     if (guideBtn) {
-      guideBtn.textContent = "Show steps & tips";
+      guideBtn.textContent = tt("ex.showGuide");
       guideBtn.setAttribute("aria-expanded", "false");
     }
 
@@ -581,7 +602,7 @@
     if (stop) stop.hidden = !live;
     const pill = $("#practice-status");
     if (pill) {
-      pill.textContent = live ? "Live · listening" : "Ready";
+      pill.textContent = live ? tt("practice.live") : tt("practice.ready");
       pill.classList.toggle("live", live);
     }
   }
@@ -629,9 +650,14 @@
           $("#level-fill").style.width = `${Math.round(Math.min(1, frame.rms * 4) * 100)}%`;
         }
         if (showHold) {
-          $("#hold-display").textContent = `Hold ${frame.holdSec.toFixed(1)}s`;
+          $("#hold-display").textContent = tt("practice.hold", {
+            s: frame.holdSec.toFixed(1)
+          });
+          // Stay green through grace dropouts while hold is active
           $("#hold-display").style.color =
-            frame.voiced && frame.holdSec >= 2 ? "#8ee0b5" : "";
+            frame.holdSec >= 0.3 && (frame.voiced || frame.holdGrace || frame.holdSec >= 2)
+              ? "#8ee0b5"
+              : "";
         }
         if (profile.showPitch && state.pitchViz) {
           state.pitchViz.pushFrame(frame.voiceFreq, frame.targetFreq);
@@ -650,7 +676,7 @@
           const prev = Number(input.value) || 0;
           if (sec > prev) input.value = sec;
         }
-        toast(`Hold logged: ${sec}s`);
+        toast(tt("toast.hold", { s: sec }));
       };
       state.practice.onRecordingReady = (result) => {
         if (result) showPlayback(result);
@@ -726,11 +752,15 @@
         }
       }
 
-      toast(wantRecord ? `Live · ${profile.mode} · recording` : `Live · ${profile.mode}`);
+      toast(
+        wantRecord
+          ? tt("toast.liveRec", { mode: profile.mode })
+          : tt("toast.live", { mode: profile.mode })
+      );
     } catch (e) {
       console.error(e);
       setPracticeUI(false);
-      toast("Microphone permission needed for this exercise");
+      toast(tt("toast.mic"));
     }
   }
 
@@ -763,7 +793,7 @@
     setPracticeUI(false);
     $("#level-fill").style.width = "0%";
     if (!silent) {
-      toast(modeResult?.summary ? `Stopped · ${modeResult.summary}` : "Practice stopped");
+      toast(modeResult?.summary ? `⏹ ${modeResult.summary}` : tt("toast.stopped"));
     }
   }
 
@@ -1379,7 +1409,7 @@
       card?.classList.toggle("collapsed", !state.guideOpen);
       const btn = $("#btn-toggle-guide");
       if (btn) {
-        btn.textContent = state.guideOpen ? "Hide details" : "Show steps & tips";
+        btn.textContent = state.guideOpen ? tt("ex.hideGuide") : tt("ex.showGuide");
         btn.setAttribute("aria-expanded", String(state.guideOpen));
       }
     });
@@ -1457,16 +1487,32 @@
   }
 
   function init() {
+    if (window.VTI18n) {
+      VTI18n.init();
+      VTI18n.onChange = () => {
+        renderExerciseList();
+        if (state.view === "exercise" && state.exercise) renderExercise();
+        updateSessionBanner();
+      };
+    }
     const settings = VTStorage.getSettings();
     state.tab = settings.lastTab || "vocal";
     bind();
     setTab(state.tab);
     updateSessionBanner();
 
-    // Resume paused structured session hint
+    $("#btn-lang")?.addEventListener("click", () => {
+      const next = (window.VTI18n?.lang || "es") === "es" ? "en" : "es";
+      VTI18n.setLang(next);
+    });
+
     const s = VTSession.get();
     if (s && s.status === "paused") {
-      toast("You have a paused structured session — resume from the banner");
+      toast(
+        VTI18n?.lang === "es"
+          ? "Tienes una sesión pausada — reanuda desde el aviso superior"
+          : "You have a paused structured session — resume from the banner"
+      );
     }
   }
 

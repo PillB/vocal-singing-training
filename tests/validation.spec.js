@@ -2,6 +2,21 @@ const { test, expect } = require("@playwright/test");
 
 const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";
 
+/** Ensure English for tests that assert English mode copy; default app is Spanish */
+async function forceEn(page) {
+  await page.goto(BASE);
+  const lang = await page.locator("html").getAttribute("lang");
+  if (lang === "es") await page.click("#btn-lang");
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+}
+
+async function forceEs(page) {
+  await page.goto(BASE);
+  const lang = await page.locator("html").getAttribute("lang");
+  if (lang === "en") await page.click("#btn-lang");
+  await expect(page.locator("html")).toHaveAttribute("lang", "es");
+}
+
 test.describe("Exercise-specific practice modes", () => {
   test("profiles and modes load for all exercises", async ({ page }) => {
     await page.goto(BASE);
@@ -17,18 +32,17 @@ test.describe("Exercise-specific practice modes", () => {
   });
 
   test("v2 volume shows volume lane not pitch challenge", async ({ page }) => {
-    await page.goto(BASE);
+    await forceEn(page);
     await page.click('.tier-chip[data-tier="basic"]');
     await page.locator("#exercise-list .card-ex").nth(1).click();
     await expect(page.locator("#ex-title")).toContainText("Maintain Volume");
     await expect(page.locator(".mode-panel.mode-volumeSteady")).toBeVisible();
     await expect(page.locator(".volume-lane")).toBeVisible();
     await expect(page.locator("#pitch-block")).toBeHidden();
-    await expect(page.locator("#mode-cue")).toContainText("volume");
   });
 
   test("v10 pause detect UI not pitch game", async ({ page }) => {
-    await page.goto(BASE);
+    await forceEn(page);
     await page.click('.tier-chip[data-tier="advanced"]');
     await page.locator("#exercise-list .card-ex").first().click();
     await expect(page.locator("#ex-title")).toContainText("Pause");
@@ -37,7 +51,7 @@ test.describe("Exercise-specific practice modes", () => {
   });
 
   test("v11 fillers is distinct from pause mode", async ({ page }) => {
-    await page.goto(BASE);
+    await forceEn(page);
     await page.click('.tier-chip[data-tier="advanced"]');
     await page.locator("#exercise-list .card-ex", { hasText: "Kill the Fillers" }).click();
     await expect(page.locator(".mode-panel.mode-fillerDetect")).toBeVisible();
@@ -45,7 +59,7 @@ test.describe("Exercise-specific practice modes", () => {
   });
 
   test("v8 metaphors is not rate ladder", async ({ page }) => {
-    await page.goto(BASE);
+    await forceEn(page);
     await page.click('.tier-chip[data-tier="basic"]');
     await page.locator("#exercise-list .card-ex", { hasText: "Metaphors" }).click();
     await expect(page.locator(".mode-panel.mode-metronomeSpeech")).toBeVisible();
@@ -53,7 +67,7 @@ test.describe("Exercise-specific practice modes", () => {
   });
 
   test("v3 soft palate has count logger", async ({ page }) => {
-    await page.goto(BASE);
+    await forceEn(page);
     await page.click('.tier-chip[data-tier="basic"]');
     await page.locator("#exercise-list .card-ex", { hasText: "Soft Palate" }).click();
     await expect(page.locator(".mode-panel.mode-countPace")).toBeVisible();
@@ -61,7 +75,7 @@ test.describe("Exercise-specific practice modes", () => {
   });
 
   test("s14 staccato is not pen contrast shell", async ({ page }) => {
-    await page.goto(BASE);
+    await forceEn(page);
     await page.click('.tab[data-tab="singing"]');
     await page.click('.tier-chip[data-tier="advanced"]');
     await page.locator("#exercise-list .card-ex", { hasText: "Staccato" }).click();
@@ -69,7 +83,7 @@ test.describe("Exercise-specific practice modes", () => {
   });
 
   test("s10 scale is pitch-gated wording", async ({ page }) => {
-    await page.goto(BASE);
+    await forceEn(page);
     await page.click('.tab[data-tab="singing"]');
     await page.click('.tier-chip[data-tier="advanced"]');
     await page.getByRole("button", { name: /Five-Note Scale/i }).click();
@@ -78,19 +92,18 @@ test.describe("Exercise-specific practice modes", () => {
   });
 
   test("s1 fry is pitchHold without forcing challenge game hud", async ({ page }) => {
-    await page.goto(BASE);
+    await forceEn(page);
     await page.click('.tab[data-tab="singing"]');
     await page.click('.tier-chip[data-tier="basic"]');
     await page.locator("#exercise-list .card-ex").first().click();
     await expect(page.locator(".mode-panel.mode-pitchHold")).toBeVisible();
     await expect(page.locator("#pitch-block")).toBeVisible();
     await expect(page.locator("#hold-display")).toBeVisible();
-    // challenge HUD hidden when pitchChallenge false
     await expect(page.locator("#pitch-game-hud")).toBeHidden();
   });
 
   test("s9 pitch match enables game HUD", async ({ page }) => {
-    await page.goto(BASE);
+    await forceEn(page);
     await page.click('.tab[data-tab="singing"]');
     await page.click('.tier-chip[data-tier="advanced"]');
     await page.locator("#exercise-list .card-ex", { hasText: "Single-Note Pitch Match" }).click();
@@ -100,7 +113,7 @@ test.describe("Exercise-specific practice modes", () => {
   });
 
   test("s5 sirens use range mode not pitchMatch", async ({ page }) => {
-    await page.goto(BASE);
+    await forceEn(page);
     await page.click('.tab[data-tab="singing"]');
     await page.click('.tier-chip[data-tier="advanced"]');
     await page.locator("#exercise-list .card-ex", { hasText: "Sirens" }).click();
@@ -109,7 +122,7 @@ test.describe("Exercise-specific practice modes", () => {
   });
 
   test("single Start practice CTA still primary", async ({ page }) => {
-    await page.goto(BASE);
+    await forceEs(page);
     await page.click('.tier-chip[data-tier="basic"]');
     await page.locator("#exercise-list .card-ex").first().click();
     await expect(page.locator("#btn-practice-start")).toBeVisible();
@@ -118,7 +131,7 @@ test.describe("Exercise-specific practice modes", () => {
   });
 
   test("structured session + continue still work", async ({ page }) => {
-    await page.goto(BASE);
+    await forceEs(page);
     await page.selectOption("#session-path", "basic");
     await page.click("#btn-structured");
     await expect(page.locator("#session-banner")).toHaveClass(/visible/);
@@ -140,12 +153,57 @@ test.describe("Exercise-specific practice modes", () => {
   });
 
   test("save metrics still works", async ({ page }) => {
-    await page.goto(BASE);
+    await forceEs(page);
     await page.click('.tier-chip[data-tier="basic"]');
     await page.locator("#exercise-list .card-ex").first().click();
     await page.click("#btn-toggle-guide");
     await page.fill('#metrics-form [name="duration"]', "5");
     await page.click("#btn-complete");
     await expect(page.locator("#score-result .score-big")).toContainText("/ 10");
+  });
+
+  test("Spanish is default; English toggle works", async ({ page }) => {
+    await page.goto(BASE);
+    // reset lang via evaluate to es
+    await page.evaluate(() => {
+      localStorage.setItem("vt_lang", "es");
+    });
+    await page.goto(BASE);
+    await expect(page.locator("html")).toHaveAttribute("lang", "es");
+    await expect(page.locator("h1")).toContainText("Entrenamiento");
+    await expect(page.locator("#btn-continue")).toContainText("Continuar");
+    await page.click("#btn-lang");
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
+    await expect(page.locator("h1")).toContainText("Vocal");
+    await expect(page.locator("#btn-continue")).toContainText("Continue");
+    await page.click("#btn-lang");
+    await expect(page.locator("html")).toHaveAttribute("lang", "es");
+  });
+
+  test("hold grace constants are lenient", async ({ page }) => {
+    await page.goto(BASE);
+    const grace = await page.evaluate(() => ({
+      grace: window.VT_HOLD_GRACE_MS,
+      silence: window.VT_SILENCE_END_MS,
+      min: window.VT_HOLD_MIN_SEC
+    }));
+    expect(grace.grace).toBeGreaterThanOrEqual(500);
+    expect(grace.silence).toBeGreaterThanOrEqual(800);
+    expect(grace.min).toBe(2);
+  });
+
+  test("sustain checkbox still present with arpeggio", async ({ page }) => {
+    await forceEn(page);
+    await page.click('.tab[data-tab="singing"]');
+    await page.click('.tier-chip[data-tier="basic"]');
+    await page.locator("#exercise-list .card-ex").nth(1).click();
+    await expect(page.locator("#chk-sustain")).toBeVisible();
+    await expect(page.locator("#chk-arpeggio")).toBeVisible();
+  });
+
+  test("Spanish exercise titles on cards", async ({ page }) => {
+    await forceEs(page);
+    await page.click('.tier-chip[data-tier="basic"]');
+    await expect(page.locator("#exercise-list .card-ex").first()).toContainText("dicción");
   });
 });

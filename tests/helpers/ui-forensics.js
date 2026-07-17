@@ -241,6 +241,83 @@ function hoverFeedback(before, after) {
   };
 }
 
+/**
+ * List visible interactive controls inside the exercise view (buttons, checkboxes, ranges, selects).
+ * @param {import('@playwright/test').Page} page
+ * @returns {Promise<Array<{id:string,tag:string,role:string,label:string,kind:string}>>}
+ */
+async function listExerciseControls(page) {
+  return page.evaluate(() => {
+    const root = document.getElementById("view-exercise") || document.body;
+    const nodes = root.querySelectorAll(
+      [
+        "button:not([hidden])",
+        "input[type=checkbox]:not([hidden])",
+        "input[type=range]:not([hidden])",
+        "select:not([hidden])",
+        "a.btn:not([hidden])",
+        "#mode-focus button",
+        "#mode-hud button",
+        "#prog-buttons button"
+      ].join(",")
+    );
+    const out = [];
+    const seen = new Set();
+    for (const el of nodes) {
+      if (el.closest("[hidden]")) continue;
+      const st = getComputedStyle(el);
+      if (st.display === "none" || st.visibility === "hidden" || st.pointerEvents === "none") continue;
+      const r = el.getBoundingClientRect();
+      if (r.width < 2 || r.height < 2) continue;
+      // Skip truly disabled
+      if (el.disabled) continue;
+      let id = el.id || "";
+      if (!id) {
+        // stable synthetic id for mode/prog buttons without id
+        const text = (el.textContent || "").trim().slice(0, 24).replace(/\s+/g, "_");
+        id = `anon-${el.tagName.toLowerCase()}-${text || out.length}`;
+      }
+      if (seen.has(id)) continue;
+      seen.add(id);
+      const tag = el.tagName;
+      let kind = "button";
+      if (tag === "INPUT") kind = el.type || "input";
+      else if (tag === "SELECT") kind = "select";
+      const label = (
+        el.getAttribute("aria-label") ||
+        el.getAttribute("title") ||
+        el.textContent ||
+        el.id ||
+        ""
+      )
+        .trim()
+        .replace(/\s+/g, " ")
+        .slice(0, 60);
+      out.push({
+        id,
+        tag,
+        role: el.getAttribute("role") || "",
+        label,
+        kind,
+        hasDomId: !!el.id
+      });
+    }
+    return out;
+  });
+}
+
+/**
+ * CSS selector for a control returned by listExerciseControls.
+ * @param {{id:string,hasDomId?:boolean}} c
+ */
+function controlSelector(c) {
+  if (c.hasDomId !== false && c.id && !c.id.startsWith("anon-")) {
+    return `#${CSS.escape ? CSS.escape(c.id) : c.id.replace(/([^a-zA-Z0-9_-])/g, "\\$1")}`;
+  }
+  // fallback: match by text in mode panels
+  return null;
+}
+
 function writeReport(data) {
   ensureDir(path.dirname(REPORT_JSON));
   fs.writeFileSync(REPORT_JSON, JSON.stringify(data, null, 2));
@@ -262,5 +339,7 @@ module.exports = {
   practiceProbe,
   styleSnapshot,
   hoverFeedback,
+  listExerciseControls,
+  controlSelector,
   writeReport
 };

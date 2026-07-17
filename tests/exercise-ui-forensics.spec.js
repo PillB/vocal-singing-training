@@ -1,13 +1,17 @@
 /**
- * Forensic UI interactivity — REAL mouse path, click (down/up), drag, Space hold.
- * Screenshots: qa/screenshots/exercise-ui/{id}/
- * Report JSON: qa/geometry/exercise-ui-report.json
+ * Forensic UI interactivity — ALL visible exercise controls + Space hold when live.
  *
- * Emulation (not CSS-only hover):
- *  - page.mouse.move({ steps }) into targets
- *  - page.mouse.down / up for press
- *  - page.mouse drag on mic slider
- *  - page.keyboard.down/up("Space") hold while live (focus on Stop)
+ * Emulation:
+ *  - page.mouse.move({ steps }) hover path on every control
+ *  - page.mouse.click for buttons / checkbox toggles (restore after)
+ *  - mic range drag
+ *  - keyboard.down/up("Space") hold while live (Stop focused) — always for non-weekPlan
+ *
+ * Screenshots: qa/screenshots/exercise-ui/{id}/
+ * Report: qa/geometry/exercise-ui-report.json
+ *
+ * Always headed (never headless). Pink cursor overlay + slowMo.
+ * Env: SLOWMO=100 (default), FORENSICS_LIMIT / FORENSICS_IDS for subset demo
  */
 const { test, expect } = require("@playwright/test");
 const path = require("path");
@@ -21,62 +25,286 @@ const {
   realHover,
   realClick,
   realDragX,
-  spaceHold,
   practiceProbe,
-  scrollIntoView
+  scrollIntoView,
+  listExerciseControls
 } = require("./helpers/ui-forensics");
 const { boot, openExercise } = require("./helpers/e2e");
 
+// Always show a real Chromium window (never headless shell).
+const SLOWMO = Number(process.env.SLOWMO || 100) || 100;
+test.use({
+  headless: false,
+  viewport: { width: 1280, height: 800 },
+  launchOptions: {
+    slowMo: SLOWMO,
+    args: ["--start-maximized"]
+  }
+});
+
 test.describe.configure({ mode: "serial" });
 
-test("forensic UI matrix: real pointer + Space on all exercises", async ({ page }) => {
-  test.setTimeout(900000);
-  ensureDir(SHOT_ROOT);
-  // Headless by default (CI). For a visible Chromium window + slow mouse:
-  //   npm run test:ui-forensics:watch
-  // Env: HEADED=1 SLOWMO=120 FORENSICS_LIMIT=2 FORENSICS_IDS=v1-diction,s15-sh-air-ladder
-  await boot(page, { lang: "es", tourDone: true, mic: "silent" });
+/** Controls we only hover (don't click — would leave exercise / save / open heavy UI) */
+const HOVER_ONLY = new Set([
+  "btn-back-home",
+  "btn-complete",
+  "btn-next-structured",
+  "btn-pricing",
+  "btn-account",
+  "btn-history",
+  "btn-plan",
+  "btn-lang",
+  "btn-tour"
+]);
 
-  // Visible browser + fake pointer dot (Playwright mouse is easy to miss without it)
-  const headed =
-    process.env.HEADED === "1" ||
-    process.env.HEADED === "true" ||
-    !!process.env.SLOWMO;
-  if (headed) {
-    page.setDefaultTimeout(30000);
-    await page.addStyleTag({
-      content: `
-        #vt-forensics-cursor {
-          position: fixed; z-index: 2147483647; width: 18px; height: 18px;
-          margin: -9px 0 0 -9px; border-radius: 50%;
-          background: radial-gradient(circle at 35% 35%, #fff 0 18%, #ff2d55 22% 100%);
-          box-shadow: 0 0 0 2px #fff, 0 0 12px 3px rgba(255,45,85,.85);
-          pointer-events: none; left: 0; top: 0;
+/** Skip entirely (hidden legacy / not exercise UI) */
+const SKIP_IDS = new Set([
+  "btn-rec-start",
+  "btn-rec-stop",
+  "btn-timer-start",
+  "btn-timer-pause",
+  "btn-timer-reset",
+  "btn-hold-start",
+  "btn-hold-stop",
+  "btn-pitch-start",
+  "btn-pitch-stop",
+  "btn-practice-stop" // only when not live; exercised in live phase
+]);
+
+/** Click twice to restore (toggles) */
+const TOGGLE_RESTORE = new Set([
+  "chk-auto-record",
+  "chk-one-note",
+  "chk-arpeggio",
+  "chk-sustain",
+  "chk-auto-piano",
+  "chk-range-auto",
+  "chk-pitch-challenge",
+  "btn-toggle-guide",
+  "btn-toggle-metrics",
+  "btn-toggle-piano"
+]);
+
+/** Pink cursor overlay + warm-up path (always on — suite is always headed). */
+async function ensureForensicsCursor(page) {
+  page.setDefaultTimeout(30000);
+  await page.addStyleTag({
+    content: `
+      #vt-forensics-cursor {
+        position: fixed; z-index: 2147483647; width: 18px; height: 18px;
+        margin: -9px 0 0 -9px; border-radius: 50%;
+        background: radial-gradient(circle at 35% 35%, #fff 0 18%, #ff2d55 22% 100%);
+        box-shadow: 0 0 0 2px #fff, 0 0 12px 3px rgba(255,45,85,.85);
+        pointer-events: none; left: 0; top: 0;
+      }
+    `
+  });
+  await page.evaluate(() => {
+    if (document.getElementById("vt-forensics-cursor")) return;
+    const d = document.createElement("div");
+    d.id = "vt-forensics-cursor";
+    document.documentElement.appendChild(d);
+    window.addEventListener(
+      "mousemove",
+      (e) => {
+        d.style.left = e.clientX + "px";
+        d.style.top = e.clientY + "px";
+      },
+      true
+    );
+  });
+  await page.mouse.move(40, 40);
+  await page.waitForTimeout(150);
+  await page.mouse.move(480, 160, { steps: 20 });
+  await page.waitForTimeout(100);
+  await page.mouse.move(220, 400, { steps: 16 });
+  await page.waitForTimeout(120);
+}
+
+/**
+ * Interact with one control: hover always; click/toggle when safe.
+ */
+async function exerciseControl(page, ctrl, shotRel, entry) {
+  const id = ctrl.id;
+  if (SKIP_IDS.has(id)) return { skipped: true, id };
+
+  const result = {
+    id,
+    kind: ctrl.kind,
+    label: ctrl.label,
+    hovered: false,
+    clicked: false,
+    error: null
+  };
+
+  // Prefer real DOM id; anon buttons need text locator
+  let sel = ctrl.hasDomId && !id.startsWith("anon-") ? `#${id}` : null;
+
+  try {
+    if (sel) {
+      const visible = await page.locator(sel).isVisible().catch(() => false);
+      if (!visible) {
+        result.skipped = true;
+        result.reason = "not_visible";
+        return result;
+      }
+      await realHover(page, sel, { steps: 10 });
+      result.hovered = true;
+      await page.waitForTimeout(40);
+
+      // Snapshot first few + primary CTAs
+      if (
+        [
+          "btn-practice-start",
+          "btn-toggle-guide",
+          "btn-toggle-metrics",
+          "btn-ui-help",
+          "btn-oct-up",
+          "btn-oct-down",
+          "btn-toggle-piano",
+          "btn-play-prog",
+          "mic-sensitivity"
+        ].includes(id)
+      ) {
+        await shot(page, shotRel(`ctrl_${id}_hover.png`));
+      }
+
+      if (HOVER_ONLY.has(id) || id === "btn-practice-start") {
+        // Start clicked later in live phase; back last
+        await page.mouse.move(8, 8, { steps: 4 });
+        return result;
+      }
+
+      if (ctrl.kind === "range" || id === "mic-sensitivity") {
+        const before = await page.evaluate(
+          (s) => document.querySelector(s)?.value ?? null,
+          sel
+        );
+        await realDragX(page, sel, -40);
+        await page.waitForTimeout(50);
+        const after = await page.evaluate(
+          (s) => document.querySelector(s)?.value ?? null,
+          sel
+        );
+        await realDragX(page, sel, 40).catch(() => {});
+        result.clicked = true;
+        result.drag = { before, after, changed: String(before) !== String(after) };
+        await shot(page, shotRel(`ctrl_${id}_drag.png`));
+        return result;
+      }
+
+      if (ctrl.kind === "select") {
+        // Cycle to next option and restore
+        const prev = await page.evaluate((s) => {
+          const el = document.querySelector(s);
+          return el ? el.selectedIndex : -1;
+        }, sel);
+        await realClick(page, sel, { steps: 8 });
+        await page.keyboard.press("ArrowDown").catch(() => {});
+        await page.keyboard.press("Enter").catch(() => {});
+        await page.waitForTimeout(60);
+        if (prev >= 0) {
+          await page.evaluate(
+            ({ s, i }) => {
+              const el = document.querySelector(s);
+              if (el) el.selectedIndex = i;
+              el?.dispatchEvent(new Event("change", { bubbles: true }));
+            },
+            { s: sel, i: prev }
+          );
         }
-      `
+        result.clicked = true;
+        return result;
+      }
+
+      // checkbox or button
+      const checkedBefore =
+        ctrl.kind === "checkbox"
+          ? await page.evaluate((s) => document.querySelector(s)?.checked ?? null, sel)
+          : null;
+
+      await realClick(page, sel, { steps: 10, delayMs: 35 });
+      result.clicked = true;
+      await page.waitForTimeout(80);
+
+      // Close help overlay if opened
+      if (id === "btn-ui-help") {
+        await page.keyboard.press("Escape").catch(() => {});
+        await page.mouse.click(20, 20).catch(() => {});
+        await page.waitForTimeout(60);
+      }
+
+      // Restore toggles
+      if (TOGGLE_RESTORE.has(id) || ctrl.kind === "checkbox") {
+        if (ctrl.kind === "checkbox") {
+          const checkedAfter = await page.evaluate(
+            (s) => document.querySelector(s)?.checked ?? null,
+            sel
+          );
+          if (checkedBefore != null && checkedAfter !== checkedBefore) {
+            await realClick(page, sel, { steps: 6 });
+            await page.waitForTimeout(40);
+          }
+        } else if (id === "btn-toggle-guide" || id === "btn-toggle-metrics") {
+          // leave collapsed for later explicit tests — re-click if expanded
+          const cardSel = id === "btn-toggle-guide" ? ".guide-card" : "#metrics-card";
+          const open = await page.locator(cardSel).evaluate((el) => !el.classList.contains("collapsed"));
+          if (open) {
+            await realClick(page, sel, { steps: 6 });
+            await page.waitForTimeout(40);
+          }
+        } else if (id === "btn-toggle-piano") {
+          // leave piano closed if it was closed: if open, close
+          const pianoOpen = await page.evaluate(() => {
+            const b = document.getElementById("piano-block");
+            return b && !b.hidden;
+          });
+          if (pianoOpen) {
+            await realClick(page, sel, { steps: 6 });
+            await page.waitForTimeout(40);
+          }
+        }
+      }
+
+      await page.mouse.move(8, 8, { steps: 4 });
+      return result;
+    }
+
+    // Anon mode/prog buttons: first matching text in mode panels
+    const loc = page
+      .locator("#mode-focus button, #mode-hud button, #prog-buttons button")
+      .filter({ hasText: ctrl.label.slice(0, 20) })
+      .first();
+    if (await loc.isVisible().catch(() => false)) {
+      await loc.scrollIntoViewIfNeeded().catch(() => {});
+      const box = await loc.boundingBox();
+      if (box) {
+        const cx = box.x + box.width / 2;
+        const cy = box.y + box.height / 2;
+        await page.mouse.move(cx - 12, cy, { steps: 6 });
+        await page.mouse.move(cx, cy, { steps: 8 });
+        result.hovered = true;
+        await page.mouse.click(cx, cy, { delay: 35 });
+        result.clicked = true;
+        await page.waitForTimeout(80);
+      }
+    }
+  } catch (e) {
+    result.error = String(e.message || e).slice(0, 120);
+    entry.issues.push({
+      code: "control_error",
+      sev: "P2",
+      msg: `${id}: ${result.error}`
     });
-    await page.evaluate(() => {
-      if (document.getElementById("vt-forensics-cursor")) return;
-      const d = document.createElement("div");
-      d.id = "vt-forensics-cursor";
-      document.documentElement.appendChild(d);
-      window.addEventListener(
-        "mousemove",
-        (e) => {
-          d.style.left = e.clientX + "px";
-          d.style.top = e.clientY + "px";
-        },
-        true
-      );
-    });
-    // Warm-up path so the pink dot is obvious immediately
-    await page.mouse.move(40, 40);
-    await page.waitForTimeout(250);
-    await page.mouse.move(520, 180, { steps: 28 });
-    await page.waitForTimeout(200);
-    await page.mouse.move(220, 420, { steps: 22 });
-    await page.waitForTimeout(250);
   }
+  return result;
+}
+
+test("forensic UI matrix: all controls + Space on all exercises", async ({ page }) => {
+  test.setTimeout(1200000);
+  ensureDir(SHOT_ROOT);
+  await boot(page, { lang: "es", tourDone: true, mic: "silent" });
+  await ensureForensicsCursor(page);
 
   let catalog = await page.evaluate(() => {
     const v = (window.VT_EXERCISES?.vocal || []).map((e) => ({
@@ -94,30 +322,24 @@ test("forensic UI matrix: real pointer + Space on all exercises", async ({ page 
     return [...v, ...s];
   });
 
-  // Optional watch/demo filters (full catalog still default)
   const onlyIds = (process.env.FORENSICS_IDS || "")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
-  if (onlyIds.length) {
-    catalog = catalog.filter((e) => onlyIds.includes(e.id));
-  }
+  if (onlyIds.length) catalog = catalog.filter((e) => onlyIds.includes(e.id));
   const limit = Number(process.env.FORENSICS_LIMIT || 0);
-  if (limit > 0) {
-    catalog = catalog.slice(0, limit);
-  }
+  if (limit > 0) catalog = catalog.slice(0, limit);
 
   expect(catalog.length).toBeGreaterThanOrEqual(onlyIds.length || limit ? 1 : 36);
 
   const report = {
     generatedAt: new Date().toISOString(),
     base: process.env.BASE_URL || "http://127.0.0.1:8765",
-    mode: "real-pointer-keyboard",
+    mode: "all-controls+space",
     exercises: [],
     summary: { total: 0, withIssues: 0, issues: [] }
   };
 
-  // Park pointer top-left between exercises
   await page.mouse.move(4, 4);
 
   for (const ex of catalog) {
@@ -127,22 +349,21 @@ test("forensic UI matrix: real pointer + Space on all exercises", async ({ page 
       number: ex.number,
       title: ex.title,
       actions: {},
+      controls: [],
       issues: [],
       profile: null
     };
-    const dir = path.join(SHOT_ROOT, ex.id);
-    ensureDir(dir);
+    ensureDir(path.join(SHOT_ROOT, ex.id));
     const rel = (name) => path.join(ex.id, name);
 
     try {
       await openExercise(page, ex.id);
-      await page.waitForTimeout(120);
+      await page.waitForTimeout(100);
       await page.evaluate(() => {
         window.VTApp?.fitHighwayToViewport?.();
         window.scrollTo(0, 0);
       });
-      await page.waitForTimeout(80);
-      await page.mouse.move(8, 8, { steps: 4 });
+      await page.waitForTimeout(60);
 
       entry.profile = await page.evaluate(() => {
         const st = window.VTApp?.getState?.();
@@ -163,13 +384,7 @@ test("forensic UI matrix: real pointer + Space on all exercises", async ({ page 
       entry.actions.open = {
         title: await page.locator("#ex-title").textContent(),
         startVisible: !!start0?.visible,
-        startHit: !!start0?.hitSelf,
-        guideCollapsed: await page.locator(".guide-card").evaluate((el) =>
-          el.classList.contains("collapsed")
-        ),
-        metricsCollapsed: await page.locator("#metrics-card").evaluate((el) =>
-          el.classList.contains("collapsed")
-        )
+        startHit: !!start0?.hitSelf
       };
       if (!start0?.visible && entry.profile?.mode !== "weekPlan") {
         entry.issues.push({ code: "hidden_cta", sev: "P0", msg: "Start not visible" });
@@ -183,51 +398,21 @@ test("forensic UI matrix: real pointer + Space on all exercises", async ({ page 
         });
       }
 
-      entry.actions.chrome = await page.evaluate(() => {
-        const focus = document.getElementById("mode-focus");
-        const hud = document.getElementById("mode-hud");
-        const canvas = document.getElementById("pitch-canvas");
-        const pitchBlock = document.getElementById("pitch-block");
-        return {
-          modeFocusLive: focus?.classList.contains("mode-focus-live") && !focus.hidden,
-          modeFocusKids: focus?.children?.length || 0,
-          modeHudKids: hud?.children?.length || 0,
-          pitchVisible:
-            pitchBlock &&
-            !pitchBlock.hidden &&
-            canvas &&
-            canvas.getBoundingClientRect().height > 0
-        };
-      });
-
-      // --- 01 REAL mouse path hover Start ---
+      // --- 01 Hover Start (dedicated before/after) ---
       if (start0?.visible) {
         await shot(page, rel("01_hover_start_before.png"));
         const beforeH = await styleSnapshot(page, "#btn-practice-start");
-        const hover = await realHover(page, "#btn-practice-start", { steps: 16 });
-        await page.waitForTimeout(120);
+        await realHover(page, "#btn-practice-start", { steps: 16 });
+        await page.waitForTimeout(100);
         const afterH = await styleSnapshot(page, "#btn-practice-start");
         await shot(page, rel("01_hover_start_after.png"));
         const hf = hoverFeedback(beforeH, afterH);
-        entry.actions.hoverStart = {
-          ...hf,
-          pointer: hover,
-          method: "mouse.move.steps",
-          before: beforeH,
-          after: afterH
-        };
+        entry.actions.hoverStart = { ...hf, method: "mouse.move.steps" };
         if (!hf.ok) {
           entry.issues.push({
             code: "no_hover_style",
             sev: "P2",
-            msg: "Start hover produced no style/cursor feedback"
-          });
-        }
-        if (hf.layoutShift) {
-          entry.issues.push({
-            code: "layout_shift",
-            sev: "P1",
-            msg: "Start moved on hover (>3px)"
+            msg: "Start hover no style feedback"
           });
         }
         if (!hf.hitSelfAfter) {
@@ -237,326 +422,260 @@ test("forensic UI matrix: real pointer + Space on all exercises", async ({ page 
             msg: "Start not hit-testable under hover"
           });
         }
-        // Leave target so :hover clears
-        await page.mouse.move(10, 10, { steps: 8 });
-        await page.waitForTimeout(40);
-      }
-
-      // --- 02 REAL hover mic + drag slider ---
-      const micHud = "#mic-sens-hud";
-      const micInput = "#mic-sensitivity";
-      if (await page.locator(micHud).isVisible().catch(() => false)) {
-        await shot(page, rel("02_hover_mic_before.png"));
-        const bMic = await styleSnapshot(page, micHud);
-        await realHover(page, micInput, { steps: 12 }).catch(async () => {
-          await realHover(page, micHud, { steps: 12 });
-        });
-        await page.waitForTimeout(80);
-        const aMic = await styleSnapshot(page, micHud);
-        await shot(page, rel("02_hover_mic_after.png"));
-
-        const valBefore = await page.evaluate(
-          () => document.querySelector("#mic-sensitivity")?.value ?? null
-        );
-        await shot(page, rel("02_drag_mic_before.png"));
-        const drag = await realDragX(page, micInput, -48);
-        await page.waitForTimeout(80);
-        const valAfter = await page.evaluate(
-          () => document.querySelector("#mic-sensitivity")?.value ?? null
-        );
-        await shot(page, rel("02_drag_mic_after.png"));
-        // restore roughly
-        await realDragX(page, micInput, 48).catch(() => {});
-
-        entry.actions.hoverMic = {
-          method: "mouse.move.steps",
-          before: bMic,
-          after: aMic,
-          hitSelf: !!aMic?.hitSelf
-        };
-        entry.actions.dragMic = {
-          method: "mouse.down+move+up",
-          drag,
-          valBefore,
-          valAfter,
-          changed: valBefore != null && valAfter != null && String(valBefore) !== String(valAfter)
-        };
-        if (aMic && !aMic.hitSelf && aMic.hitTop?.id !== "mic-sensitivity") {
-          // hitTop on the range input is OK
-          if (aMic.hitTop?.tag !== "INPUT") {
-            entry.issues.push({
-              code: "mic_hit_mismatch",
-              sev: "P1",
-              msg: "Mic HUD center not hit-testable",
-              hit: aMic.hitTop
-            });
-          }
-        }
         await page.mouse.move(10, 10, { steps: 6 });
       }
 
-      // --- 03 guide: real click ---
-      const guideBtnSel = "#btn-toggle-guide";
-      if (await page.locator(guideBtnSel).isVisible().catch(() => false)) {
+      // --- 02 Sweep ALL visible controls ---
+      const controls = await listExerciseControls(page);
+      entry.actions.controlInventory = controls.map((c) => ({
+        id: c.id,
+        kind: c.kind,
+        label: c.label
+      }));
+
+      for (const ctrl of controls) {
+        // Don't Start or Stop here
+        if (ctrl.id === "btn-practice-start" || ctrl.id === "btn-practice-stop") {
+          entry.controls.push({ id: ctrl.id, deferred: true });
+          continue;
+        }
+        if (ctrl.id === "btn-back-home") {
+          entry.controls.push({ id: ctrl.id, deferred: true });
+          continue;
+        }
+        const r = await exerciseControl(page, ctrl, rel, entry);
+        entry.controls.push(r);
+      }
+
+      // --- 03 Explicit guide expand (assert) ---
+      if (await page.locator("#btn-toggle-guide").isVisible().catch(() => false)) {
         await shot(page, rel("03_guide_before.png"));
-        const collapsedBefore = await page.locator(".guide-card").evaluate((el) =>
+        const c0 = await page.locator(".guide-card").evaluate((el) =>
           el.classList.contains("collapsed")
         );
-        await realClick(page, guideBtnSel, { steps: 12 });
-        await page.waitForTimeout(160);
+        await realClick(page, "#btn-toggle-guide", { steps: 12 });
+        await page.waitForTimeout(140);
         await shot(page, rel("03_guide_after.png"));
-        const collapsedAfter = await page.locator(".guide-card").evaluate((el) =>
+        const c1 = await page.locator(".guide-card").evaluate((el) =>
           el.classList.contains("collapsed")
         );
         const stepN = await page.evaluate(
           () => document.querySelectorAll("#ex-steps li").length
         );
         entry.actions.guideToggle = {
-          method: "mouse.move+down+up",
-          collapsedBefore,
-          collapsedAfter,
-          toggled: collapsedBefore !== collapsedAfter,
-          stepN
+          toggled: c0 !== c1,
+          stepN,
+          method: "scroll+mouse.click"
         };
-        if (collapsedBefore === collapsedAfter) {
-          entry.issues.push({
-            code: "no_expand",
-            sev: "P0",
-            msg: "Guide toggle did not change collapsed state"
-          });
+        if (c0 === c1) {
+          entry.issues.push({ code: "no_expand", sev: "P0", msg: "Guide toggle no-op" });
         }
-        if (!collapsedAfter && stepN < 1 && entry.profile?.mode !== "weekPlan") {
-          entry.issues.push({
-            code: "empty_guide",
-            sev: "P1",
-            msg: "Guide open but no steps"
-          });
-        }
-        if (!collapsedAfter) {
-          await realClick(page, guideBtnSel, { steps: 8 });
-          await page.waitForTimeout(80);
-        }
-        await page.mouse.move(10, 10, { steps: 4 });
+        if (!c1) await realClick(page, "#btn-toggle-guide", { steps: 6 });
       }
 
-      // --- 04 metrics: real click ---
-      const metBtnSel = "#btn-toggle-metrics";
-      if (await page.locator(metBtnSel).isVisible().catch(() => false)) {
+      // --- 04 Explicit metrics expand ---
+      if (await page.locator("#btn-toggle-metrics").isVisible().catch(() => false)) {
         await shot(page, rel("04_metrics_before.png"));
-        const mBefore = await page.locator("#metrics-card").evaluate((el) =>
+        const m0 = await page.locator("#metrics-card").evaluate((el) =>
           el.classList.contains("collapsed")
         );
-        await realClick(page, metBtnSel, { steps: 12 });
-        await page.waitForTimeout(160);
+        await realClick(page, "#btn-toggle-metrics", { steps: 12 });
+        await page.waitForTimeout(140);
         await shot(page, rel("04_metrics_after.png"));
-        const mAfter = await page.locator("#metrics-card").evaluate((el) =>
+        const m1 = await page.locator("#metrics-card").evaluate((el) =>
           el.classList.contains("collapsed")
-        );
-        const fieldN = await page.evaluate(
-          () =>
-            document.querySelectorAll(
-              "#metrics-form input, #metrics-form select, #metrics-form textarea"
-            ).length
         );
         entry.actions.metricsToggle = {
-          method: "scroll+mouse.click",
-          collapsedBefore: mBefore,
-          collapsedAfter: mAfter,
-          toggled: mBefore !== mAfter,
-          fieldN
+          toggled: m0 !== m1,
+          method: "scroll+mouse.click"
         };
-        if (mBefore === mAfter) {
+        if (m0 === m1) {
           entry.issues.push({
             code: "no_metrics_toggle",
             sev: "P0",
             msg: "Metrics toggle no-op"
           });
         }
-        if (!mAfter && fieldN < 1 && entry.profile?.mode !== "weekPlan") {
-          entry.issues.push({
-            code: "empty_metrics",
-            sev: "P1",
-            msg: "Metrics open but no fields"
-          });
-        }
-        if (!mAfter) {
-          await realClick(page, metBtnSel, { steps: 8 });
-          await page.waitForTimeout(80);
-        }
-        await page.mouse.move(10, 10, { steps: 4 });
+        if (!m1) await realClick(page, "#btn-toggle-metrics", { steps: 6 });
       }
 
-      // --- 05 pitch: real hover octave ---
-      if (entry.profile?.showPitch) {
-        if (await page.locator("#btn-oct-up").isVisible().catch(() => false)) {
-          await shot(page, rel("05_pitch_chrome_before.png"));
-          const b = await styleSnapshot(page, "#btn-oct-up");
-          await realHover(page, "#btn-oct-up", { steps: 12 });
-          await page.waitForTimeout(70);
-          const a = await styleSnapshot(page, "#btn-oct-up");
-          await shot(page, rel("05_hover_oct_after.png"));
-          entry.actions.hoverOct = {
-            method: "mouse.move.steps",
-            ...hoverFeedback(b, a)
-          };
-          await page.mouse.move(10, 10, { steps: 6 });
-        }
-        try {
-          const hasOne = await page.evaluate(() => !!document.querySelector("#chk-one-note"));
-          if (hasOne) {
-            const before = await page.evaluate(
-              () => document.querySelector("#chk-one-note")?.checked ?? null
-            );
-            await realHover(page, "#chk-one-note", { steps: 10 }).catch(() => {});
-            await shot(page, rel("05_piano_opt_hover.png"));
-            // click toggle then restore
-            await realClick(page, "#chk-one-note", { steps: 8 }).catch(() => {});
-            await page.waitForTimeout(50);
-            const mid = await page.evaluate(
-              () => document.querySelector("#chk-one-note")?.checked ?? null
-            );
-            if (mid !== before) {
-              await realClick(page, "#chk-one-note", { steps: 6 }).catch(() => {});
+      // --- 05 Pitch rail: octaves + every piano checkbox again if shown ---
+      if (entry.profile?.showPitch || entry.actions.controlInventory?.some((c) => c.id === "btn-oct-up")) {
+        for (const pid of [
+          "btn-oct-down",
+          "btn-oct-up",
+          "chk-range-auto",
+          "chk-one-note",
+          "chk-arpeggio",
+          "chk-sustain",
+          "chk-auto-piano",
+          "btn-toggle-piano"
+        ]) {
+          if (await page.locator(`#${pid}`).isVisible().catch(() => false)) {
+            await realHover(page, `#${pid}`, { steps: 8 });
+            await page.waitForTimeout(30);
+            if (pid.startsWith("btn-oct")) {
+              await realClick(page, `#${pid}`, { steps: 8 });
+              await page.waitForTimeout(40);
             }
-            entry.actions.oneNoteChecked = { before, mid, method: "mouse.click" };
-            await page.mouse.move(10, 10, { steps: 4 });
           }
-        } catch (pe) {
-          entry.actions.pitchExtras = { error: String(pe.message || pe).slice(0, 100) };
         }
+        // Open piano panel and click play/stop if available
+        if (await page.locator("#btn-toggle-piano").isVisible().catch(() => false)) {
+          await realClick(page, "#btn-toggle-piano", { steps: 8 });
+          await page.waitForTimeout(100);
+          await shot(page, rel("05_piano_open.png"));
+          for (const pb of ["btn-play-prog", "btn-loop-prog", "btn-stop-piano", "btn-ref-pitch", "btn-inhale-ticks"]) {
+            if (await page.locator(`#${pb}`).isVisible().catch(() => false)) {
+              await realHover(page, `#${pb}`, { steps: 8 });
+              await realClick(page, `#${pb}`, { steps: 8 });
+              await page.waitForTimeout(120);
+              entry.controls.push({ id: pb, hovered: true, clicked: true, phase: "piano" });
+            }
+          }
+          // stop any loop
+          if (await page.locator("#btn-stop-piano").isVisible().catch(() => false)) {
+            await realClick(page, "#btn-stop-piano", { steps: 6 }).catch(() => {});
+          }
+          // close piano
+          await realClick(page, "#btn-toggle-piano", { steps: 6 }).catch(() => {});
+        }
+        entry.actions.pitchRail = { ok: true };
       }
 
-      // --- 06 mode buttons: real hover + press ---
-      try {
-        const modeSel = await page.evaluate(() => {
-          const b = document.querySelector(
-            "#mode-focus button.btn, #mode-hud button.btn, #mode-focus button, #mode-hud button"
-          );
-          if (!b) return null;
-          const r = b.getBoundingClientRect();
-          if (r.width < 1 || r.height < 1) return null;
-          if (b.id) return `#${CSS.escape(b.id)}`;
-          // fallback: first button
-          return null;
-        });
-        const hasModeBtn = await page.evaluate(() => {
-          const b = document.querySelector(
-            "#mode-focus button.btn, #mode-hud button.btn, #mode-focus button, #mode-hud button"
-          );
-          if (!b) return false;
-          const r = b.getBoundingClientRect();
-          return r.width > 0 && r.height > 0;
-        });
-        if (hasModeBtn) {
-          const modeBtn = page.locator("#mode-focus button, #mode-hud button").first();
-          await modeBtn.scrollIntoViewIfNeeded().catch(() => {});
-          const labelBefore = await modeBtn.textContent().catch(() => "");
-          await shot(page, rel("06_mode_btn_before.png"));
-          const box = await modeBtn.boundingBox();
-          if (box) {
-            const cx = box.x + box.width / 2;
-            const cy = box.y + box.height / 2;
-            await page.mouse.move(cx - 20, cy, { steps: 8 });
-            await page.mouse.move(cx, cy, { steps: 10 });
-            await page.waitForTimeout(50);
-            await shot(page, rel("06_mode_btn_hover.png"));
-            await page.mouse.click(cx, cy, { delay: 40 });
-            await page.waitForTimeout(100);
-            await shot(page, rel("06_mode_btn_after_click.png"));
-          }
-          entry.actions.modeButton = {
-            method: "scroll+mouse.click",
-            label: labelBefore?.trim(),
-            clicked: true,
-            modeSel
-          };
-          await page.mouse.move(10, 10, { steps: 4 });
-        }
-      } catch (mbErr) {
-        entry.actions.modeButton = { error: String(mbErr.message || mbErr).slice(0, 120) };
+      // --- 06 Mode buttons: click EVERY visible mode/hud button ---
+      const modeBtns = page.locator(
+        "#mode-focus button:visible, #mode-hud button:visible"
+      );
+      const modeN = await modeBtns.count();
+      entry.actions.modeButtons = { count: modeN, clicked: [] };
+      for (let i = 0; i < Math.min(modeN, 12); i++) {
+        const btn = modeBtns.nth(i);
+        const label = ((await btn.textContent()) || "").trim().slice(0, 40);
+        await btn.scrollIntoViewIfNeeded().catch(() => {});
+        const box = await btn.boundingBox();
+        if (!box) continue;
+        const cx = box.x + box.width / 2;
+        const cy = box.y + box.height / 2;
+        await page.mouse.move(cx - 10, cy, { steps: 6 });
+        await page.mouse.move(cx, cy, { steps: 8 });
+        await page.mouse.click(cx, cy, { delay: 35 });
+        await page.waitForTimeout(70);
+        entry.actions.modeButtons.clicked.push(label);
       }
+      if (modeN > 0) await shot(page, rel("06_mode_buttons.png"));
 
-      // --- 07 REAL click Start → Space hold → release → Stop ---
+      // --- 07 Live: Start + Space holds + Stop (all non-weekPlan) ---
       if (entry.profile?.mode !== "weekPlan" && start0?.visible) {
         try {
-          // real press on Start
+          // Space on focused Start is allowed to start (product design) — we use click for clarity
           await shot(page, rel("07_start_press_before.png"));
           await realClick(page, "#btn-practice-start", { steps: 14, delayMs: 45 });
-          await page.waitForTimeout(700);
+          await page.waitForTimeout(650);
           let probe = await practiceProbe(page);
           await shot(page, rel("07_after_start.png"));
           entry.actions.startPractice = {
-            method: "mouse.move+down+up",
+            method: "mouse.click",
             live: probe.live,
             status: probe.status
           };
 
           if (probe.live) {
-            // Focus Stop then Space-hold (must NOT activate Stop; may latch manual)
+            // Live control sweep: hover Stop, mic, any still-visible rail controls
+            if (await page.locator("#btn-practice-stop").isVisible().catch(() => false)) {
+              await realHover(page, "#btn-practice-stop", { steps: 12 });
+              await shot(page, rel("07_hover_stop.png"));
+            }
+
+            // Focus Stop — Space must NOT activate button
             await page.evaluate(() => {
               document.querySelector("#btn-practice-stop")?.focus();
             });
             await page.waitForTimeout(40);
-            const beforeSpace = await practiceProbe(page);
-            await shot(page, rel("07_space_before.png"));
 
+            // --- Space hold #1 (primary assist) ---
+            await shot(page, rel("07_space_before.png"));
+            const beforeSpace = await practiceProbe(page);
             await page.keyboard.down("Space");
-            await page.waitForTimeout(720);
+            await page.waitForTimeout(800);
             const midSpace = await practiceProbe(page);
             await shot(page, rel("07_space_hold.png"));
-
             await page.keyboard.up("Space");
-            await page.waitForTimeout(120);
+            await page.waitForTimeout(150);
             const afterSpace = await practiceProbe(page);
             await shot(page, rel("07_space_after.png"));
 
+            // --- Space hold #2 (pulse / re-press) ---
+            await page.keyboard.down("Space");
+            await page.waitForTimeout(500);
+            const midSpace2 = await practiceProbe(page);
+            await shot(page, rel("07_space_hold_2.png"));
+            await page.keyboard.up("Space");
+            await page.waitForTimeout(100);
+            const afterSpace2 = await practiceProbe(page);
+
+            // --- Space while focus on body (not button) ---
+            await page.evaluate(() => {
+              document.activeElement?.blur?.();
+              document.body.focus?.();
+            });
+            await page.keyboard.down("Space");
+            await page.waitForTimeout(450);
+            const midSpace3 = await practiceProbe(page);
+            await shot(page, rel("07_space_hold_body.png"));
+            await page.keyboard.up("Space");
+            await page.waitForTimeout(80);
+
             entry.actions.spaceHold = {
-              method: "keyboard.down/up Space",
+              method: "keyboard.down/up Space ×3",
+              relevant: entry.profile?.allowManualSound !== false,
               focusedStop: beforeSpace.focusedId === "btn-practice-stop",
-              before: {
-                live: beforeSpace.live,
-                isManual: beforeSpace.isManual,
-                holdVal: beforeSpace.holdVal,
-                status: beforeSpace.status
+              hold1: {
+                midLive: midSpace.live,
+                midManual: midSpace.isManual,
+                midHold: midSpace.holdVal,
+                afterLive: afterSpace.live
               },
-              mid: {
-                live: midSpace.live,
-                isManual: midSpace.isManual,
-                holdVal: midSpace.holdVal,
-                status: midSpace.status,
-                manualSound: midSpace.manualSound
+              hold2: {
+                midLive: midSpace2.live,
+                midManual: midSpace2.isManual,
+                afterLive: afterSpace2.live
               },
-              after: {
-                live: afterSpace.live,
-                isManual: afterSpace.isManual,
-                holdVal: afterSpace.holdVal,
-                status: afterSpace.status
+              hold3_body: {
+                midLive: midSpace3.live,
+                midManual: midSpace3.isManual
               },
-              // P0: Space must not stop practice while Stop focused
-              didNotStop: midSpace.live === true && afterSpace.live === true
+              didNotStop:
+                midSpace.live &&
+                afterSpace.live &&
+                midSpace2.live &&
+                afterSpace2.live &&
+                midSpace3.live
             };
 
-            if (!midSpace.live || !afterSpace.live) {
+            if (!entry.actions.spaceHold.didNotStop) {
               entry.issues.push({
                 code: "space_stopped_practice",
                 sev: "P0",
-                msg: "Space activated Stop or ended live while focused on Stop"
+                msg: "Space ended live practice (button activation leak)"
               });
             }
 
-            // Optional soft signal: manual chip / hold advance when allowManualSound
-            // Not all modes show is-manual or data-h — do not hard-fail
+            // Hover complete if visible while live (usually not)
+            if (await page.locator("#btn-complete").isVisible().catch(() => false)) {
+              await realHover(page, "#btn-complete", { steps: 8 });
+            }
 
-            // Stop via real mouse press
+            // Stop
             await realClick(page, "#btn-practice-stop", { steps: 12, delayMs: 40 });
-            await page.waitForTimeout(320);
+            await page.waitForTimeout(300);
             await shot(page, rel("07_after_stop.png"));
             const metricsOpen = await page.evaluate(
               () => !document.querySelector("#metrics-card")?.classList.contains("collapsed")
             );
             const post = await practiceProbe(page);
             entry.actions.stopPractice = {
-              method: "mouse.move+down+up",
+              method: "mouse.click",
               metricsOpen,
               live: post.live
             };
@@ -571,88 +690,89 @@ test("forensic UI matrix: real pointer + Space on all exercises", async ({ page 
               entry.issues.push({
                 code: "stop_failed",
                 sev: "P0",
-                msg: "Still live after Stop click"
+                msg: "Still live after Stop"
               });
             }
+
+            // Hover Save complete (don't force-save)
+            if (await page.locator("#btn-complete").isVisible().catch(() => false)) {
+              await realHover(page, "#btn-complete", { steps: 10 });
+              await shot(page, rel("07_hover_complete.png"));
+              entry.controls.push({ id: "btn-complete", hovered: true, clicked: false });
+            }
           } else {
-            entry.actions.startPractice = {
-              method: "mouse.move+down+up",
-              live: false,
-              note: "did_not_go_live",
-              status: probe.status
-            };
             entry.issues.push({
               code: "start_not_live",
               sev: "P1",
-              msg: "Start click did not enter live state"
+              msg: "Start did not enter live"
             });
           }
         } catch (e) {
-          entry.actions.startPractice = {
-            method: "mouse.move+down+up",
-            error: String(e.message || e)
-          };
           entry.issues.push({
             code: "start_stop_error",
             sev: "P1",
             msg: String(e.message || e).slice(0, 160)
           });
-          // ensure Space released
           await page.keyboard.up("Space").catch(() => {});
+        }
+      } else if (entry.profile?.mode === "weekPlan") {
+        // Week plan: click open plan if present
+        if (await page.locator("#btn-open-plan").isVisible().catch(() => false)) {
+          await realHover(page, "#btn-open-plan", { steps: 10 });
+          await realClick(page, "#btn-open-plan", { steps: 10 });
+          await page.waitForTimeout(200);
+          await shot(page, rel("07_week_plan.png"));
+          entry.actions.weekPlan = { opened: true };
+          // back from plan if navigated
+          if (await page.locator("#btn-plan-back").isVisible().catch(() => false)) {
+            await realClick(page, "#btn-plan-back", { steps: 8 });
+            await page.waitForTimeout(100);
+          }
+          // re-open exercise if needed
+          const onEx = await page.locator("#view-exercise").evaluate((el) =>
+            el.classList.contains("active")
+          );
+          if (!onEx) await openExercise(page, ex.id);
         }
       }
 
-      // --- 08 back: scroll top, real hover + click ---
+      // --- 08 Back home ---
       if (await page.locator("#btn-back-home").isVisible().catch(() => false)) {
         await page.evaluate(() => {
           window.scrollTo(0, 0);
-          document.scrollingElement?.scrollTo?.(0, 0);
         });
-        await page.waitForTimeout(60);
         await scrollIntoView(page, "#btn-back-home");
         const bBack = await styleSnapshot(page, "#btn-back-home");
         await realHover(page, "#btn-back-home", { steps: 12 });
-        await page.waitForTimeout(60);
         const aBack = await styleSnapshot(page, "#btn-back-home");
         await shot(page, rel("08_hover_back.png"));
-        entry.actions.hoverBack = {
-          method: "mouse.move.steps",
-          ...hoverFeedback(bBack, aBack)
-        };
-        // Hit mismatch on Back is P1 (overlay) only if not hitSelf after hover
-        if (aBack && !aBack.hitSelf) {
-          entry.issues.push({
-            code: "back_hit_mismatch",
-            sev: "P1",
-            msg: "Back center not hit-testable",
-            hit: aBack.hitTop
-          });
-        }
+        entry.actions.hoverBack = hoverFeedback(bBack, aBack);
         await realClick(page, "#btn-back-home", { steps: 10 });
-        await page.waitForTimeout(150);
+        await page.waitForTimeout(120);
         let onHome = await page.locator("#view-home").evaluate((el) =>
           el.classList.contains("active")
         );
-        // One retry with direct click if mouse path still fails (document forensics)
         if (!onHome) {
-          await page.locator("#btn-back-home").click({ timeout: 3000 }).catch(() => {});
-          await page.waitForTimeout(100);
+          await page.locator("#btn-back-home").click().catch(() => {});
+          await page.waitForTimeout(80);
           onHome = await page.locator("#view-home").evaluate((el) =>
             el.classList.contains("active")
           );
-          entry.actions.backHome = {
-            method: "mouse.click then locator.retry",
-            onHome,
-            retried: true
-          };
-        } else {
-          entry.actions.backHome = { method: "mouse.click", onHome };
         }
+        entry.actions.backHome = { onHome };
         if (!onHome) {
           entry.issues.push({ code: "back_fail", sev: "P0", msg: "Back did not return home" });
           await page.evaluate(() => window.VTApp?.setView?.("home")).catch(() => {});
         }
       }
+
+      // Summary counts
+      entry.actions.controlStats = {
+        inventoried: entry.actions.controlInventory?.length || 0,
+        hovered: entry.controls.filter((c) => c.hovered).length,
+        clicked: entry.controls.filter((c) => c.clicked).length,
+        errors: entry.controls.filter((c) => c.error).length
+      };
     } catch (err) {
       entry.issues.push({
         code: "exception",
@@ -665,11 +785,7 @@ test("forensic UI matrix: real pointer + Space on all exercises", async ({ page 
         /* ignore */
       }
       await page.keyboard.up("Space").catch(() => {});
-      await page
-        .evaluate(() => {
-          window.VTApp?.setView?.("home");
-        })
-        .catch(() => {});
+      await page.evaluate(() => window.VTApp?.setView?.("home")).catch(() => {});
     }
 
     report.exercises.push(entry);
@@ -684,11 +800,7 @@ test("forensic UI matrix: real pointer + Space on all exercises", async ({ page 
 
   const out = writeReport(report);
   const p0 = report.summary.issues.filter((i) => i.sev === "P0");
-  expect(
-    p0,
-    `P0 issues:\n${JSON.stringify(p0, null, 2)}\nReport: ${out}`
-  ).toEqual([]);
-  // Full catalog expects 36; demo/watch may run a subset via FORENSICS_LIMIT / FORENSICS_IDS
+  expect(p0, `P0 issues:\n${JSON.stringify(p0, null, 2)}\nReport: ${out}`).toEqual([]);
   if (!process.env.FORENSICS_LIMIT && !process.env.FORENSICS_IDS) {
     expect(report.summary.total).toBeGreaterThanOrEqual(36);
   } else {

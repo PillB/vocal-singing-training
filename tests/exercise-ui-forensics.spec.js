@@ -32,10 +32,53 @@ test.describe.configure({ mode: "serial" });
 test("forensic UI matrix: real pointer + Space on all exercises", async ({ page }) => {
   test.setTimeout(900000);
   ensureDir(SHOT_ROOT);
-  // headed if HEADED=1 (still works headless — real CDP mouse/keyboard events)
+  // Headless by default (CI). For a visible Chromium window + slow mouse:
+  //   npm run test:ui-forensics:watch
+  // Env: HEADED=1 SLOWMO=120 FORENSICS_LIMIT=2 FORENSICS_IDS=v1-diction,s15-sh-air-ladder
   await boot(page, { lang: "es", tourDone: true, mic: "silent" });
 
-  const catalog = await page.evaluate(() => {
+  // Visible browser + fake pointer dot (Playwright mouse is easy to miss without it)
+  const headed =
+    process.env.HEADED === "1" ||
+    process.env.HEADED === "true" ||
+    !!process.env.SLOWMO;
+  if (headed) {
+    page.setDefaultTimeout(30000);
+    await page.addStyleTag({
+      content: `
+        #vt-forensics-cursor {
+          position: fixed; z-index: 2147483647; width: 18px; height: 18px;
+          margin: -9px 0 0 -9px; border-radius: 50%;
+          background: radial-gradient(circle at 35% 35%, #fff 0 18%, #ff2d55 22% 100%);
+          box-shadow: 0 0 0 2px #fff, 0 0 12px 3px rgba(255,45,85,.85);
+          pointer-events: none; left: 0; top: 0;
+        }
+      `
+    });
+    await page.evaluate(() => {
+      if (document.getElementById("vt-forensics-cursor")) return;
+      const d = document.createElement("div");
+      d.id = "vt-forensics-cursor";
+      document.documentElement.appendChild(d);
+      window.addEventListener(
+        "mousemove",
+        (e) => {
+          d.style.left = e.clientX + "px";
+          d.style.top = e.clientY + "px";
+        },
+        true
+      );
+    });
+    // Warm-up path so the pink dot is obvious immediately
+    await page.mouse.move(40, 40);
+    await page.waitForTimeout(250);
+    await page.mouse.move(520, 180, { steps: 28 });
+    await page.waitForTimeout(200);
+    await page.mouse.move(220, 420, { steps: 22 });
+    await page.waitForTimeout(250);
+  }
+
+  let catalog = await page.evaluate(() => {
     const v = (window.VT_EXERCISES?.vocal || []).map((e) => ({
       id: e.id,
       track: "vocal",
@@ -50,7 +93,21 @@ test("forensic UI matrix: real pointer + Space on all exercises", async ({ page 
     }));
     return [...v, ...s];
   });
-  expect(catalog.length).toBeGreaterThanOrEqual(36);
+
+  // Optional watch/demo filters (full catalog still default)
+  const onlyIds = (process.env.FORENSICS_IDS || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (onlyIds.length) {
+    catalog = catalog.filter((e) => onlyIds.includes(e.id));
+  }
+  const limit = Number(process.env.FORENSICS_LIMIT || 0);
+  if (limit > 0) {
+    catalog = catalog.slice(0, limit);
+  }
+
+  expect(catalog.length).toBeGreaterThanOrEqual(onlyIds.length || limit ? 1 : 36);
 
   const report = {
     generatedAt: new Date().toISOString(),
@@ -631,5 +688,10 @@ test("forensic UI matrix: real pointer + Space on all exercises", async ({ page 
     p0,
     `P0 issues:\n${JSON.stringify(p0, null, 2)}\nReport: ${out}`
   ).toEqual([]);
-  expect(report.summary.total).toBeGreaterThanOrEqual(36);
+  // Full catalog expects 36; demo/watch may run a subset via FORENSICS_LIMIT / FORENSICS_IDS
+  if (!process.env.FORENSICS_LIMIT && !process.env.FORENSICS_IDS) {
+    expect(report.summary.total).toBeGreaterThanOrEqual(36);
+  } else {
+    expect(report.summary.total).toBeGreaterThanOrEqual(1);
+  }
 });

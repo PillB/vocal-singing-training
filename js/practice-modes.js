@@ -121,16 +121,35 @@
       const phases = this.profile.phases || [];
       // BPM rises each phase: 72 → 96 → 120 → 144
       this.state.bpms = phases.map((_, i) => 72 + i * 24);
+      // Localize phase labels (profiles store English keys / EN copy)
+      const phaseLabel = (p, i) => {
+        if (!p) return "—";
+        if (p.labelEs || p.label) {
+          return L(p.labelEs || p.label, p.label || p.labelEs);
+        }
+        const fallbacks = [
+          L("Ritmo 5 · cómodo", "Rate 5 · comfortable"),
+          L("Ritmo 6 · un poco más rápido", "Rate 6 · slightly faster"),
+          L("Ritmo 7 · ágil", "Rate 7 · brisk"),
+          L("Ritmo 8 · reto", "Rate 8 · challenge")
+        ];
+        return fallbacks[i] || p.label || "—";
+      };
+      this.state.phaseLabel = phaseLabel;
       this.state.runner = createPhaseRunner(phases, (i, p) => {
-        if (global.VTToast) global.VTToast(`${p.label} · ~${this.state.bpms[i]} BPM feel`);
+        if (global.VTToast)
+          global.VTToast(`${phaseLabel(p, i)} · ~${this.state.bpms[i]} BPM`);
       });
       this.state.beatMs = 0;
       this.state.flash = false;
+      const p0 = phases[0];
+      const idlePhase = phaseLabel(p0, 0);
+      const idleRemain = p0?.sec != null ? `${p0.sec}s` : "—";
       this.hud.innerHTML = `
         <div class="mode-title">${L("Dicción · escalera de ritmo", "Diction · rate ladder")}</div>
-        <div class="mode-phase" data-phase>—</div>
+        <div class="mode-phase" data-phase>${idlePhase}</div>
         <div class="metro-dot" data-metro aria-hidden="true"></div>
-        <div class="mode-big" data-remain>—</div>
+        <div class="mode-big" data-remain>${idleRemain}</div>
         <div class="mode-bar"><span data-bar style="width:0%"></span></div>
         <p class="mode-meta">${L("Ritmo <strong data-bpm>~72 BPM</strong> · sobre-articula · hablando: <strong data-act>0%</strong>", "Pace cue <strong data-bpm>~72 BPM</strong> · over-articulate · speech on: <strong data-act>0%</strong>")}</p>
         <p class="mode-meta muted">${L("Mantén las consonantes claras al subir el ritmo en cada fase.", "Keep consonants crisp as the pulse speeds up each phase.")}</p>
@@ -157,9 +176,13 @@
         }
       }
       if (this.$("[data-bpm]")) this.$("[data-bpm]").textContent = `~${bpm} BPM`;
-      if (this.$("[data-phase]"))
-        this.$("[data-phase]").textContent =
-          r.index < r.count ? r.label : "Ladder complete — free mix";
+      if (this.$("[data-phase]")) {
+        const lab =
+          r.index < r.count
+            ? this.state.phaseLabel?.(phase, r.index) || r.label
+            : L("Escalera lista — mezcla libre", "Ladder complete — free mix");
+        this.$("[data-phase]").textContent = lab;
+      }
       if (this.$("[data-remain]"))
         this.$("[data-remain]").textContent =
           r.index < r.count ? `${Math.ceil(r.remaining)}s` : "✓";
@@ -178,7 +201,10 @@
           duration: mins,
           rateControl: clamp(1 + done, 1, 5)
         },
-        summary: `${done}/${r?.count || 0} rate phases · ${mins} min`
+        summary: L(
+          `${done}/${r?.count || 0} fases de ritmo · ${mins} min`,
+          `${done}/${r?.count || 0} rate phases · ${mins} min`
+        )
       };
     }
   });

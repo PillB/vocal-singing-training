@@ -1634,12 +1634,17 @@ button:focus-visible,
 .hud-bl .btn-practice {
   position: relative;
   z-index: 42;
-  padding: 0.4rem 0.7rem;
+  padding: 0.4rem 0.75rem;
   min-height: 40px;
+  min-width: 6.25rem; /* U3: "Detener" / "Empezar" must not ellipsize */
   font-size: 0.85rem;
   font-weight: 700;
+  white-space: nowrap;
   /* Keep hit box = painted box (shadow is visual only) */
   touch-action: manipulation;
+}
+.hud-bl .btn-danger {
+  min-width: 6.5rem;
 }
 
 /* Mic: single compact row [meter | MIC | slider | 7] — never wrap / never past stage */
@@ -1714,16 +1719,27 @@ button:focus-visible,
   margin: 0;
   order: 2;
 }
-/* Space-assist: class on chip, no extra row that grows height */
+/* Space-assist: compact chip (no multi-line hint row) */
 .hud-bc #mic-manual-hint {
   display: none !important;
 }
 .hud-bc.is-manual {
-  border-color: rgba(79, 212, 146, 0.65);
-  box-shadow: 0 0 0 1px rgba(79, 212, 146, 0.35);
+  border-color: rgba(79, 212, 146, 0.75);
+  box-shadow: 0 0 0 1px rgba(79, 212, 146, 0.4), 0 0 12px rgba(79, 212, 146, 0.25);
 }
 .hud-bc.is-manual .mic-sens-title {
   color: #8ee0b5;
+}
+/* U9: short badge when Space assist is latched */
+.hud-bc.is-manual .mic-sens-title::after {
+  content: " · ⌨";
+  font-weight: 600;
+  opacity: 0.9;
+}
+html[lang^="es"] .hud-bc.is-manual .mic-sens-title::after {
+  content: " · Espacio";
+  font-size: 0.68rem;
+  letter-spacing: 0.01em;
 }
 /* Post-keyup grace: still counting — soft amber so a11y hold feels continuous */
 .hud-bc.is-manual-grace {

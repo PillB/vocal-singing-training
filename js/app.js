@@ -1161,6 +1161,16 @@
     }
     const tr = $(".hud-tr");
     if (tr) tr.style.display = showPitchHud ? "" : "none";
+    // U12: clear pitch-stats footer when leaving pitch exercises
+    const pitchStats = $("#pitch-stats");
+    if (pitchStats) {
+      if (!showPitchHud) {
+        pitchStats.innerHTML = "";
+        pitchStats.hidden = true;
+      } else {
+        pitchStats.hidden = false;
+      }
+    }
 
     // Hold strip
     const showHold = !!profile.showHold;
@@ -1726,6 +1736,38 @@
     }
   }
 
+  /** Human label for practice mode ids (toasts / chips — never show camelCase). */
+  function modeDisplayName(modeId) {
+    const es =
+      (window.VTI18n && VTI18n.lang === "es") ||
+      (document.documentElement.lang || "").startsWith("es");
+    const map = {
+      rateLadder: es ? "Escalera de ritmo" : "Rate ladder",
+      volumeSteady: es ? "Volumen estable" : "Steady volume",
+      volumeLadder: es ? "Escalera de volumen" : "Volume ladder",
+      shAirLadder: es ? "Escalera de aire SH" : "SH air ladder",
+      breathS: es ? "Soporte de aire" : "Breath support",
+      pitchHold: es ? "Sostén de tono" : "Pitch hold",
+      pitchMatch: es ? "Afinar nota" : "Pitch match",
+      pitchChord: es ? "Acordes / solfeo" : "Chords / solfege",
+      pitchSong: es ? "Canción" : "Song stanzas",
+      scaleSteps: es ? "Escala" : "Scale steps",
+      sirenRange: es ? "Sirenas" : "Sirens",
+      sovtFlow: es ? "Flujo SOVT" : "SOVT flow",
+      humTargets: es ? "Tarareo" : "Hum targets",
+      onsetReps: es ? "Ataques suaves" : "Easy onset",
+      staccatoLegato: es ? "Staccato / legato" : "Staccato / legato",
+      dynamicSwell: es ? "Dinámica" : "Dynamics",
+      pitchContour: es ? "Contorno" : "Pitch contour",
+      weekPlan: es ? "Plan 12 semanas" : "12-week plan",
+      recordOnly: es ? "Grabar y revisar" : "Record & review",
+      pauseDetect: es ? "Pausas" : "Pauses",
+      fillerDetect: es ? "Muletillas" : "Fillers"
+    };
+    if (!modeId) return es ? "práctica" : "practice";
+    return map[modeId] || String(modeId).replace(/([A-Z])/g, " $1").trim();
+  }
+
   function setPracticeUI(live) {
     state.practiceLive = live;
     if (!live) {
@@ -2202,8 +2244,8 @@
       } else {
         toast(
           wantRecord
-            ? tt("toast.liveRec", { mode: profile.mode })
-            : tt("toast.live", { mode: profile.mode })
+            ? tt("toast.liveRec", { mode: modeDisplayName(profile.mode) })
+            : tt("toast.live", { mode: modeDisplayName(profile.mode) })
         );
       }
     } catch (e) {
@@ -2313,7 +2355,16 @@
 
   function updatePitchStatsLabel(stats) {
     const el = $("#pitch-stats");
-    if (!el || !stats) return;
+    if (!el) return;
+    // U12: never show residual pitch footer on non-pitch exercises
+    const pitchProfile = state.exercise ? getProfile(state.exercise) : null;
+    if (!pitchProfile?.showPitch && !state.exercise?.audio?.pitchViz) {
+      el.innerHTML = "";
+      el.hidden = true;
+      return;
+    }
+    el.hidden = false;
+    if (!stats) return;
     const es =
       (window.VTI18n && VTI18n.lang === "es") ||
       (document.documentElement.lang || "").startsWith("es");

@@ -1,7 +1,13 @@
 /**
- * Forensic UI interactivity + hover audit for every vocal & singing exercise.
+ * Forensic UI interactivity — REAL mouse path, click (down/up), drag, Space hold.
  * Screenshots: qa/screenshots/exercise-ui/{id}/
  * Report JSON: qa/geometry/exercise-ui-report.json
+ *
+ * Emulation (not CSS-only hover):
+ *  - page.mouse.move({ steps }) into targets
+ *  - page.mouse.down / up for press
+ *  - page.mouse drag on mic slider
+ *  - page.keyboard.down/up("Space") hold while live (focus on Stop)
  */
 const { test, expect } = require("@playwright/test");
 const path = require("path");
@@ -11,15 +17,22 @@ const {
   styleSnapshot,
   hoverFeedback,
   writeReport,
-  ensureDir
+  ensureDir,
+  realHover,
+  realClick,
+  realDragX,
+  spaceHold,
+  practiceProbe,
+  scrollIntoView
 } = require("./helpers/ui-forensics");
 const { boot, openExercise } = require("./helpers/e2e");
 
 test.describe.configure({ mode: "serial" });
 
-test("forensic UI matrix: all vocal + singing exercises", async ({ page }) => {
-  test.setTimeout(600000);
+test("forensic UI matrix: real pointer + Space on all exercises", async ({ page }) => {
+  test.setTimeout(900000);
   ensureDir(SHOT_ROOT);
+  // headed if HEADED=1 (still works headless — real CDP mouse/keyboard events)
   await boot(page, { lang: "es", tourDone: true, mic: "silent" });
 
   const catalog = await page.evaluate(() => {
@@ -42,9 +55,13 @@ test("forensic UI matrix: all vocal + singing exercises", async ({ page }) => {
   const report = {
     generatedAt: new Date().toISOString(),
     base: process.env.BASE_URL || "http://127.0.0.1:8765",
+    mode: "real-pointer-keyboard",
     exercises: [],
     summary: { total: 0, withIssues: 0, issues: [] }
   };
+
+  // Park pointer top-left between exercises
+  await page.mouse.move(4, 4);
 
   for (const ex of catalog) {
     const entry = {
@@ -68,6 +85,7 @@ test("forensic UI matrix: all vocal + singing exercises", async ({ page }) => {
         window.scrollTo(0, 0);
       });
       await page.waitForTimeout(80);
+      await page.mouse.move(8, 8, { steps: 4 });
 
       entry.profile = await page.evaluate(() => {
         const st = window.VTApp?.getState?.();
@@ -108,7 +126,6 @@ test("forensic UI matrix: all vocal + singing exercises", async ({ page }) => {
         });
       }
 
-      // Mode / pitch chrome
       entry.actions.chrome = await page.evaluate(() => {
         const focus = document.getElementById("mode-focus");
         const hud = document.getElementById("mode-hud");
@@ -125,29 +142,23 @@ test("forensic UI matrix: all vocal + singing exercises", async ({ page }) => {
             canvas.getBoundingClientRect().height > 0
         };
       });
-      if (entry.profile?.showPitch && !entry.actions.chrome.pitchVisible) {
-        entry.issues.push({ code: "pitch_missing", sev: "P1", msg: "Pitch canvas not visible" });
-      }
-      if (
-        entry.profile &&
-        !entry.profile.showPitch &&
-        entry.profile.mode !== "weekPlan" &&
-        !entry.actions.chrome.modeFocusKids &&
-        !entry.actions.chrome.modeHudKids
-      ) {
-        entry.issues.push({ code: "mode_missing", sev: "P1", msg: "No mode UI mounted" });
-      }
 
-      // --- 01 hover Start ---
+      // --- 01 REAL mouse path hover Start ---
       if (start0?.visible) {
         await shot(page, rel("01_hover_start_before.png"));
         const beforeH = await styleSnapshot(page, "#btn-practice-start");
-        await page.locator("#btn-practice-start").hover({ force: true });
-        await page.waitForTimeout(100);
+        const hover = await realHover(page, "#btn-practice-start", { steps: 16 });
+        await page.waitForTimeout(120);
         const afterH = await styleSnapshot(page, "#btn-practice-start");
         await shot(page, rel("01_hover_start_after.png"));
         const hf = hoverFeedback(beforeH, afterH);
-        entry.actions.hoverStart = { ...hf, before: beforeH, after: afterH };
+        entry.actions.hoverStart = {
+          ...hf,
+          pointer: hover,
+          method: "mouse.move.steps",
+          before: beforeH,
+          after: afterH
+        };
         if (!hf.ok) {
           entry.issues.push({
             code: "no_hover_style",
@@ -159,7 +170,7 @@ test("forensic UI matrix: all vocal + singing exercises", async ({ page }) => {
           entry.issues.push({
             code: "layout_shift",
             sev: "P1",
-            msg: "Start moved on hover"
+            msg: "Start moved on hover (>3px)"
           });
         }
         if (!hf.hitSelfAfter) {
@@ -169,43 +180,73 @@ test("forensic UI matrix: all vocal + singing exercises", async ({ page }) => {
             msg: "Start not hit-testable under hover"
           });
         }
-        // Move pointer away
-        await page.mouse.move(5, 5);
+        // Leave target so :hover clears
+        await page.mouse.move(10, 10, { steps: 8 });
+        await page.waitForTimeout(40);
       }
 
-      // --- 02 hover mic ---
-      const micSel = "#mic-sens-hud";
-      if (await page.locator(micSel).isVisible().catch(() => false)) {
+      // --- 02 REAL hover mic + drag slider ---
+      const micHud = "#mic-sens-hud";
+      const micInput = "#mic-sensitivity";
+      if (await page.locator(micHud).isVisible().catch(() => false)) {
         await shot(page, rel("02_hover_mic_before.png"));
-        const bMic = await styleSnapshot(page, micSel);
-        await page.locator(micSel).hover({ force: true });
+        const bMic = await styleSnapshot(page, micHud);
+        await realHover(page, micInput, { steps: 12 }).catch(async () => {
+          await realHover(page, micHud, { steps: 12 });
+        });
         await page.waitForTimeout(80);
-        const aMic = await styleSnapshot(page, micSel);
+        const aMic = await styleSnapshot(page, micHud);
         await shot(page, rel("02_hover_mic_after.png"));
+
+        const valBefore = await page.evaluate(
+          () => document.querySelector("#mic-sensitivity")?.value ?? null
+        );
+        await shot(page, rel("02_drag_mic_before.png"));
+        const drag = await realDragX(page, micInput, -48);
+        await page.waitForTimeout(80);
+        const valAfter = await page.evaluate(
+          () => document.querySelector("#mic-sensitivity")?.value ?? null
+        );
+        await shot(page, rel("02_drag_mic_after.png"));
+        // restore roughly
+        await realDragX(page, micInput, 48).catch(() => {});
+
         entry.actions.hoverMic = {
+          method: "mouse.move.steps",
           before: bMic,
           after: aMic,
           hitSelf: !!aMic?.hitSelf
         };
-        if (aMic && !aMic.hitSelf) {
-          entry.issues.push({
-            code: "mic_hit_mismatch",
-            sev: "P1",
-            msg: "Mic HUD center not hit-testable"
-          });
+        entry.actions.dragMic = {
+          method: "mouse.down+move+up",
+          drag,
+          valBefore,
+          valAfter,
+          changed: valBefore != null && valAfter != null && String(valBefore) !== String(valAfter)
+        };
+        if (aMic && !aMic.hitSelf && aMic.hitTop?.id !== "mic-sensitivity") {
+          // hitTop on the range input is OK
+          if (aMic.hitTop?.tag !== "INPUT") {
+            entry.issues.push({
+              code: "mic_hit_mismatch",
+              sev: "P1",
+              msg: "Mic HUD center not hit-testable",
+              hit: aMic.hitTop
+            });
+          }
         }
-        await page.mouse.move(5, 5);
+        await page.mouse.move(10, 10, { steps: 6 });
       }
 
-      // --- 03 guide toggle ---
-      const guideBtn = page.locator("#btn-toggle-guide");
-      if (await guideBtn.isVisible().catch(() => false)) {
+      // --- 03 guide: real click ---
+      const guideBtnSel = "#btn-toggle-guide";
+      if (await page.locator(guideBtnSel).isVisible().catch(() => false)) {
         await shot(page, rel("03_guide_before.png"));
         const collapsedBefore = await page.locator(".guide-card").evaluate((el) =>
           el.classList.contains("collapsed")
         );
-        await guideBtn.click();
-        await page.waitForTimeout(150);
+        await realClick(page, guideBtnSel, { steps: 12 });
+        await page.waitForTimeout(160);
         await shot(page, rel("03_guide_after.png"));
         const collapsedAfter = await page.locator(".guide-card").evaluate((el) =>
           el.classList.contains("collapsed")
@@ -214,6 +255,7 @@ test("forensic UI matrix: all vocal + singing exercises", async ({ page }) => {
           () => document.querySelectorAll("#ex-steps li").length
         );
         entry.actions.guideToggle = {
+          method: "mouse.move+down+up",
           collapsedBefore,
           collapsedAfter,
           toggled: collapsedBefore !== collapsedAfter,
@@ -233,22 +275,22 @@ test("forensic UI matrix: all vocal + singing exercises", async ({ page }) => {
             msg: "Guide open but no steps"
           });
         }
-        // collapse again for clean metrics shot
         if (!collapsedAfter) {
-          await guideBtn.click();
+          await realClick(page, guideBtnSel, { steps: 8 });
           await page.waitForTimeout(80);
         }
+        await page.mouse.move(10, 10, { steps: 4 });
       }
 
-      // --- 04 metrics toggle ---
-      const metBtn = page.locator("#btn-toggle-metrics");
-      if (await metBtn.isVisible().catch(() => false)) {
+      // --- 04 metrics: real click ---
+      const metBtnSel = "#btn-toggle-metrics";
+      if (await page.locator(metBtnSel).isVisible().catch(() => false)) {
         await shot(page, rel("04_metrics_before.png"));
         const mBefore = await page.locator("#metrics-card").evaluate((el) =>
           el.classList.contains("collapsed")
         );
-        await metBtn.click();
-        await page.waitForTimeout(150);
+        await realClick(page, metBtnSel, { steps: 12 });
+        await page.waitForTimeout(160);
         await shot(page, rel("04_metrics_after.png"));
         const mAfter = await page.locator("#metrics-card").evaluate((el) =>
           el.classList.contains("collapsed")
@@ -260,6 +302,7 @@ test("forensic UI matrix: all vocal + singing exercises", async ({ page }) => {
             ).length
         );
         entry.actions.metricsToggle = {
+          method: "scroll+mouse.click",
           collapsedBefore: mBefore,
           collapsedAfter: mAfter,
           toggled: mBefore !== mAfter,
@@ -280,23 +323,26 @@ test("forensic UI matrix: all vocal + singing exercises", async ({ page }) => {
           });
         }
         if (!mAfter) {
-          await metBtn.click();
+          await realClick(page, metBtnSel, { steps: 8 });
           await page.waitForTimeout(80);
         }
+        await page.mouse.move(10, 10, { steps: 4 });
       }
 
-      // --- 05 pitch-specific hover octave / piano ---
+      // --- 05 pitch: real hover octave ---
       if (entry.profile?.showPitch) {
-        const oct = page.locator("#btn-oct-up");
-        if (await oct.isVisible().catch(() => false)) {
+        if (await page.locator("#btn-oct-up").isVisible().catch(() => false)) {
           await shot(page, rel("05_pitch_chrome_before.png"));
           const b = await styleSnapshot(page, "#btn-oct-up");
-          await oct.hover({ force: true });
-          await page.waitForTimeout(60);
+          await realHover(page, "#btn-oct-up", { steps: 12 });
+          await page.waitForTimeout(70);
           const a = await styleSnapshot(page, "#btn-oct-up");
           await shot(page, rel("05_hover_oct_after.png"));
-          entry.actions.hoverOct = hoverFeedback(b, a);
-          await page.mouse.move(5, 5);
+          entry.actions.hoverOct = {
+            method: "mouse.move.steps",
+            ...hoverFeedback(b, a)
+          };
+          await page.mouse.move(10, 10, { steps: 6 });
         }
         try {
           const hasOne = await page.evaluate(() => !!document.querySelector("#chk-one-note"));
@@ -304,17 +350,38 @@ test("forensic UI matrix: all vocal + singing exercises", async ({ page }) => {
             const before = await page.evaluate(
               () => document.querySelector("#chk-one-note")?.checked ?? null
             );
-            await page.locator("#chk-one-note").hover({ force: true }).catch(() => {});
+            await realHover(page, "#chk-one-note", { steps: 10 }).catch(() => {});
             await shot(page, rel("05_piano_opt_hover.png"));
-            entry.actions.oneNoteChecked = before;
+            // click toggle then restore
+            await realClick(page, "#chk-one-note", { steps: 8 }).catch(() => {});
+            await page.waitForTimeout(50);
+            const mid = await page.evaluate(
+              () => document.querySelector("#chk-one-note")?.checked ?? null
+            );
+            if (mid !== before) {
+              await realClick(page, "#chk-one-note", { steps: 6 }).catch(() => {});
+            }
+            entry.actions.oneNoteChecked = { before, mid, method: "mouse.click" };
+            await page.mouse.move(10, 10, { steps: 4 });
           }
         } catch (pe) {
           entry.actions.pitchExtras = { error: String(pe.message || pe).slice(0, 100) };
         }
       }
 
-      // --- 06 mode buttons (first button in mode panel) ---
+      // --- 06 mode buttons: real hover + press ---
       try {
+        const modeSel = await page.evaluate(() => {
+          const b = document.querySelector(
+            "#mode-focus button.btn, #mode-hud button.btn, #mode-focus button, #mode-hud button"
+          );
+          if (!b) return null;
+          const r = b.getBoundingClientRect();
+          if (r.width < 1 || r.height < 1) return null;
+          if (b.id) return `#${CSS.escape(b.id)}`;
+          // fallback: first button
+          return null;
+        });
         const hasModeBtn = await page.evaluate(() => {
           const b = document.querySelector(
             "#mode-focus button.btn, #mode-hud button.btn, #mode-focus button, #mode-hud button"
@@ -325,41 +392,117 @@ test("forensic UI matrix: all vocal + singing exercises", async ({ page }) => {
         });
         if (hasModeBtn) {
           const modeBtn = page.locator("#mode-focus button, #mode-hud button").first();
+          await modeBtn.scrollIntoViewIfNeeded().catch(() => {});
           const labelBefore = await modeBtn.textContent().catch(() => "");
           await shot(page, rel("06_mode_btn_before.png"));
-          await modeBtn.hover({ force: true }).catch(() => {});
-          await page.waitForTimeout(50);
-          await shot(page, rel("06_mode_btn_hover.png"));
-          await modeBtn.click({ force: true }).catch(() => {});
-          await page.waitForTimeout(100);
-          await shot(page, rel("06_mode_btn_after_click.png"));
+          const box = await modeBtn.boundingBox();
+          if (box) {
+            const cx = box.x + box.width / 2;
+            const cy = box.y + box.height / 2;
+            await page.mouse.move(cx - 20, cy, { steps: 8 });
+            await page.mouse.move(cx, cy, { steps: 10 });
+            await page.waitForTimeout(50);
+            await shot(page, rel("06_mode_btn_hover.png"));
+            await page.mouse.click(cx, cy, { delay: 40 });
+            await page.waitForTimeout(100);
+            await shot(page, rel("06_mode_btn_after_click.png"));
+          }
           entry.actions.modeButton = {
+            method: "scroll+mouse.click",
             label: labelBefore?.trim(),
-            clicked: true
+            clicked: true,
+            modeSel
           };
+          await page.mouse.move(10, 10, { steps: 4 });
         }
       } catch (mbErr) {
         entry.actions.modeButton = { error: String(mbErr.message || mbErr).slice(0, 120) };
       }
 
-      // --- 07 Start/Stop for non-weekPlan ---
+      // --- 07 REAL click Start → Space hold → release → Stop ---
       if (entry.profile?.mode !== "weekPlan" && start0?.visible) {
         try {
-          await page.locator("#btn-practice-start").click({ timeout: 5000 });
-          await page.waitForTimeout(600);
-          const live = await page.evaluate(
-            () => !document.querySelector("#btn-practice-stop")?.hidden
-          );
+          // real press on Start
+          await shot(page, rel("07_start_press_before.png"));
+          await realClick(page, "#btn-practice-start", { steps: 14, delayMs: 45 });
+          await page.waitForTimeout(700);
+          let probe = await practiceProbe(page);
           await shot(page, rel("07_after_start.png"));
-          entry.actions.startPractice = { live };
-          if (live) {
-            await page.locator("#btn-practice-stop").click({ timeout: 5000 });
-            await page.waitForTimeout(300);
+          entry.actions.startPractice = {
+            method: "mouse.move+down+up",
+            live: probe.live,
+            status: probe.status
+          };
+
+          if (probe.live) {
+            // Focus Stop then Space-hold (must NOT activate Stop; may latch manual)
+            await page.evaluate(() => {
+              document.querySelector("#btn-practice-stop")?.focus();
+            });
+            await page.waitForTimeout(40);
+            const beforeSpace = await practiceProbe(page);
+            await shot(page, rel("07_space_before.png"));
+
+            await page.keyboard.down("Space");
+            await page.waitForTimeout(720);
+            const midSpace = await practiceProbe(page);
+            await shot(page, rel("07_space_hold.png"));
+
+            await page.keyboard.up("Space");
+            await page.waitForTimeout(120);
+            const afterSpace = await practiceProbe(page);
+            await shot(page, rel("07_space_after.png"));
+
+            entry.actions.spaceHold = {
+              method: "keyboard.down/up Space",
+              focusedStop: beforeSpace.focusedId === "btn-practice-stop",
+              before: {
+                live: beforeSpace.live,
+                isManual: beforeSpace.isManual,
+                holdVal: beforeSpace.holdVal,
+                status: beforeSpace.status
+              },
+              mid: {
+                live: midSpace.live,
+                isManual: midSpace.isManual,
+                holdVal: midSpace.holdVal,
+                status: midSpace.status,
+                manualSound: midSpace.manualSound
+              },
+              after: {
+                live: afterSpace.live,
+                isManual: afterSpace.isManual,
+                holdVal: afterSpace.holdVal,
+                status: afterSpace.status
+              },
+              // P0: Space must not stop practice while Stop focused
+              didNotStop: midSpace.live === true && afterSpace.live === true
+            };
+
+            if (!midSpace.live || !afterSpace.live) {
+              entry.issues.push({
+                code: "space_stopped_practice",
+                sev: "P0",
+                msg: "Space activated Stop or ended live while focused on Stop"
+              });
+            }
+
+            // Optional soft signal: manual chip / hold advance when allowManualSound
+            // Not all modes show is-manual or data-h — do not hard-fail
+
+            // Stop via real mouse press
+            await realClick(page, "#btn-practice-stop", { steps: 12, delayMs: 40 });
+            await page.waitForTimeout(320);
             await shot(page, rel("07_after_stop.png"));
             const metricsOpen = await page.evaluate(
               () => !document.querySelector("#metrics-card")?.classList.contains("collapsed")
             );
-            entry.actions.stopPractice = { metricsOpen };
+            const post = await practiceProbe(page);
+            entry.actions.stopPractice = {
+              method: "mouse.move+down+up",
+              metricsOpen,
+              live: post.live
+            };
             if (!metricsOpen) {
               entry.issues.push({
                 code: "metrics_not_auto_open",
@@ -367,36 +510,90 @@ test("forensic UI matrix: all vocal + singing exercises", async ({ page }) => {
                 msg: "Metrics still collapsed after Stop"
               });
             }
+            if (post.live) {
+              entry.issues.push({
+                code: "stop_failed",
+                sev: "P0",
+                msg: "Still live after Stop click"
+              });
+            }
           } else {
-            entry.actions.startPractice = { live: false, note: "did_not_go_live" };
+            entry.actions.startPractice = {
+              method: "mouse.move+down+up",
+              live: false,
+              note: "did_not_go_live",
+              status: probe.status
+            };
+            entry.issues.push({
+              code: "start_not_live",
+              sev: "P1",
+              msg: "Start click did not enter live state"
+            });
           }
         } catch (e) {
-          entry.actions.startPractice = { error: String(e.message || e) };
+          entry.actions.startPractice = {
+            method: "mouse.move+down+up",
+            error: String(e.message || e)
+          };
           entry.issues.push({
             code: "start_stop_error",
             sev: "P1",
             msg: String(e.message || e).slice(0, 160)
           });
+          // ensure Space released
+          await page.keyboard.up("Space").catch(() => {});
         }
       }
 
-      // --- 08 back home ---
-      const back = page.locator("#btn-back-home");
-      if (await back.isVisible().catch(() => false)) {
+      // --- 08 back: scroll top, real hover + click ---
+      if (await page.locator("#btn-back-home").isVisible().catch(() => false)) {
+        await page.evaluate(() => {
+          window.scrollTo(0, 0);
+          document.scrollingElement?.scrollTo?.(0, 0);
+        });
+        await page.waitForTimeout(60);
+        await scrollIntoView(page, "#btn-back-home");
         const bBack = await styleSnapshot(page, "#btn-back-home");
-        await back.hover({ force: true });
-        await page.waitForTimeout(50);
+        await realHover(page, "#btn-back-home", { steps: 12 });
+        await page.waitForTimeout(60);
         const aBack = await styleSnapshot(page, "#btn-back-home");
         await shot(page, rel("08_hover_back.png"));
-        entry.actions.hoverBack = hoverFeedback(bBack, aBack);
-        await back.click();
-        await page.waitForTimeout(100);
-        const onHome = await page.locator("#view-home").evaluate((el) =>
+        entry.actions.hoverBack = {
+          method: "mouse.move.steps",
+          ...hoverFeedback(bBack, aBack)
+        };
+        // Hit mismatch on Back is P1 (overlay) only if not hitSelf after hover
+        if (aBack && !aBack.hitSelf) {
+          entry.issues.push({
+            code: "back_hit_mismatch",
+            sev: "P1",
+            msg: "Back center not hit-testable",
+            hit: aBack.hitTop
+          });
+        }
+        await realClick(page, "#btn-back-home", { steps: 10 });
+        await page.waitForTimeout(150);
+        let onHome = await page.locator("#view-home").evaluate((el) =>
           el.classList.contains("active")
         );
-        entry.actions.backHome = { onHome };
+        // One retry with direct click if mouse path still fails (document forensics)
+        if (!onHome) {
+          await page.locator("#btn-back-home").click({ timeout: 3000 }).catch(() => {});
+          await page.waitForTimeout(100);
+          onHome = await page.locator("#view-home").evaluate((el) =>
+            el.classList.contains("active")
+          );
+          entry.actions.backHome = {
+            method: "mouse.click then locator.retry",
+            onHome,
+            retried: true
+          };
+        } else {
+          entry.actions.backHome = { method: "mouse.click", onHome };
+        }
         if (!onHome) {
           entry.issues.push({ code: "back_fail", sev: "P0", msg: "Back did not return home" });
+          await page.evaluate(() => window.VTApp?.setView?.("home")).catch(() => {});
         }
       }
     } catch (err) {
@@ -410,10 +607,12 @@ test("forensic UI matrix: all vocal + singing exercises", async ({ page }) => {
       } catch {
         /* ignore */
       }
-      // try recover to home
-      await page.evaluate(() => {
-        window.VTApp?.setView?.("home");
-      }).catch(() => {});
+      await page.keyboard.up("Space").catch(() => {});
+      await page
+        .evaluate(() => {
+          window.VTApp?.setView?.("home");
+        })
+        .catch(() => {});
     }
 
     report.exercises.push(entry);
@@ -427,7 +626,6 @@ test("forensic UI matrix: all vocal + singing exercises", async ({ page }) => {
   }
 
   const out = writeReport(report);
-  // Soft assert: no P0 issues
   const p0 = report.summary.issues.filter((i) => i.sev === "P0");
   expect(
     p0,

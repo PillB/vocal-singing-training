@@ -1,236 +1,216 @@
-# Exercise UI forensics — hover & interactivity matrix
+# Exercise UI forensics — real pointer, click, drag, Space hold
 
 **Date:** 2026-07-17  
 **Product:** Vocal Studio (GH Pages SPA)  
 **Live URL:** https://pillb.github.io/vocal-singing-training/  
 **Suite:** `tests/exercise-ui-forensics.spec.js` + `tests/helpers/ui-forensics.js`  
-**Artifacts:** `qa/screenshots/exercise-ui/{id}/` (~520 PNGs), `qa/geometry/exercise-ui-report.json` (gitignored; regenerate with `npm run test:ui-forensics`)  
+**Mode:** `real-pointer-keyboard` (Playwright `mouse.move` / `mouse.click` / drag / `keyboard.down|up Space`)  
+**Artifacts:** `qa/screenshots/exercise-ui/{id}/` (~732 PNGs), `qa/geometry/exercise-ui-report.json`  
 **Result:** **36/36 exercises · 0 issues · 0 product bugs**
 
 ---
 
 ## Goal
 
-For **every** vocal and singing exercise, automate Playwright simulation of key UI actions, capture **before/after screenshots**, compute **style/hit-target diffs**, and judge expected vs actual hover/interactivity effects — without dumping hundreds of image captions into chat.
+For **every** vocal and singing exercise, emulate a real user:
 
-Forensic depth is split:
+1. **Move the mouse** onto controls (stepped path, not CSS-only)  
+2. **Press/click** with full mouse click sequence  
+3. **Drag** the mic sensitivity slider  
+4. **Hold Space** while live (Stop focused) — must not activate Stop  
+5. Screenshot **before/after** each key action  
+6. Diff computed styles + hit targets; sample multimodal forensic review  
 
-1. **Automated matrix** (all 36 × actions) → JSON report + P0 assertions  
-2. **Sample multimodal forensics** (representative open / hover / guide / live / stop / mode chrome) → prose below  
-3. Full PNG tree remains on disk for re-inspection
+Not hundreds of image captions in chat: full **automated matrix** + **sample** forensic prose.
 
 ---
 
 ## How to run
 
 ```bash
-npm run serve          # terminal 1 — http://127.0.0.1:8765
-npm run test:ui-forensics
-```
-
-Optional: re-validate production after deploy:
-
-```bash
-npm run test:live
+npm run serve                 # terminal 1
+npm run test:ui-forensics     # headless CDP mouse/keyboard (real events)
+npm run test:ui-forensics:headed   # optional visible browser
 ```
 
 ---
 
-## Actions per exercise
+## Emulation methods
 
-| Step | Action | Screenshots | Pass criteria |
-|------|--------|-------------|---------------|
-| 00 | Open exercise | `00_open.png` | Title correct; Start visible (except week-plan); Start hit-testable; guide + metrics collapsed |
-| 01 | Hover Start | `01_hover_start_{before,after}.png` | `filter` / `boxShadow` / `transform` change; **no harmful layout shift**; center still hits Start |
-| 02 | Hover mic HUD | `02_hover_mic_{before,after}.png` | HUD remains hit-testable (range input under pointer) |
-| 03 | Toggle guide | `03_guide_{before,after}.png` | Collapsed → expanded; step list present |
-| 04 | Toggle metrics | `04_metrics_{before,after}.png` | Collapsed → expanded; metric fields present |
-| 05 | Pitch chrome (if shown) | `05_*.png` | Octave hover / piano opt / one-note check without crash |
-| 06 | Mode buttons (if any) | `06_mode_btn_*.png` | Hover + click does not break rail |
-| 07 | Start → Stop | `07_after_start.png`, `07_after_stop.png` | Live state; Stop returns Start; metrics **auto-open** |
-| 08 | Hover Back + home | `08_hover_back.png` | Back hover feedback; return to home |
+| Helper | Input | Notes |
+|--------|--------|------|
+| `realHover` | `scrollIntoView` → `mouse.move` steps | Required: raw coords do **not** auto-scroll |
+| `realClick` | hover path + `mouse.click(x,y,{delay})` | Full click event (not bare down/up alone) |
+| `realDragX` | down → move → up on `#mic-sensitivity` | Confirms range value changes |
+| Space | `keyboard.down('Space')` … hold … `up` | Focus Stop first; assert still live |
 
-**Exceptions**
-
-- **`v9-12-week`** (`weekPlan`): no live Start/Stop loop — plan UI only; hover Start still audited if present; live/metrics-auto = N/A.
-- Pitch/mode steps run only when chrome is present for the exercise profile.
+**Harness fix (2026-07-17):** First real-pointer pass failed guide/metrics/back with P0 because off-screen targets were clicked without scroll. Product handlers were fine; helpers now always scroll into view.
 
 ---
 
-## Aggregate results
+## Action matrix (per exercise)
+
+| Step | Action | Emulation | Screenshots |
+|------|--------|-----------|-------------|
+| 00 | Open | — | `00_open.png` |
+| 01 | Hover Start | `mouse.move` steps | `01_hover_start_{before,after}.png` |
+| 02 | Hover + **drag mic** | move + down/move/up | `02_hover_mic_*`, `02_drag_mic_*` |
+| 03 | Guide toggle | scroll + `mouse.click` | `03_guide_{before,after}.png` |
+| 04 | Metrics toggle | scroll + `mouse.click` | `04_metrics_{before,after}.png` |
+| 05 | Pitch chrome | hover / click | `05_*` |
+| 06 | Mode button | scroll + click | `06_*` |
+| 07 | Start press | `mouse.click` | `07_start_press_before`, `07_after_start` |
+| 07b | **Space hold** (Stop focused) | keyboard Space down/up | `07_space_{before,hold,after}` |
+| 07c | Stop | `mouse.click` | `07_after_stop` |
+| 08 | Back home | scroll top + hover + click | `08_hover_back` |
+
+**Exceptions:** `v9-12-week` (`weekPlan`) — no live/Space loop.
+
+---
+
+## Aggregate results (real-pointer run)
 
 | Metric | Value |
 |--------|------:|
-| Exercises in catalog | 36 |
-| With P0/P1 issues | **0** |
+| Exercises | 36 |
+| Issues (any sev) | **0** |
 | Hover Start pass | **36/36** |
-| Hover Start effects | `filter`, `boxShadow`, `transform` (all) |
-| Guide toggle pass | **36/36** |
-| Metrics toggle pass | **36/36** |
-| Live Start pass | **35/35** (1 N/A week-plan) |
+| Guide toggle | **36/36** |
+| Metrics toggle | **36/36** |
+| Mic drag value change | **36/36** |
+| Live Start | **35/35** |
+| Space did **not** stop (Stop focused) | **35/35** |
+| Space mid-hold `is-manual` chip | **21/35** (soft — not all modes style the chip) |
 | Metrics auto-open after Stop | **35/35** |
-| Hover Back pass | **35/35** |
-| Back → home | **35/35** |
-| Screenshots captured | **~520** |
-| Report timestamp | `2026-07-17T06:04:58.222Z` |
+| Back → home | **35/35** (+ week-plan path) |
+| Screenshots | **~732** |
+| Report mode | `real-pointer-keyboard` |
 
-### Hover Start — computed style (canonical, v1-diction)
+### Hover Start — computed style (v1-diction, real mouse path)
 
 | Property | Before | After | Expected? |
 |----------|--------|-------|-----------|
-| `filter` | `none` | `brightness(1.05)` | Yes — hover lift |
-| `boxShadow` | `rgba(61,186,122,0.28) 0 2px 10px` | `rgba(61,186,122,0.392) 0 2.92px 11.85px` | Yes — stronger green glow |
-| `transform` | `none` | `matrix(1,0,0,1,0,-0.98)` (~translateY −1px) | Yes — slight raise |
-| BBox size | 95.7×40 | 95.7×40 | Yes — no reflow of neighbors |
-| `hitSelf` | true → Start | true → Start | Yes — no overlay steal |
-| `cursor` | `pointer` | `pointer` | Yes |
+| `filter` | `none` | `brightness(1.05)` | Yes |
+| `boxShadow` | soft green | stronger green glow | Yes |
+| `transform` | `none` | `translateY(-1px)` | Yes |
+| `hitTop` | Start button | Start button | Yes |
+| Layout jump | — | ≤1px | OK |
 
-**Verdict:** Correct hover feedback; no mis-hit; no layout thrash of the practice rail.
+### Space hold (Stop focused)
 
-### Guide / metrics
-
-All exercises: guide starts **collapsed**, expands on “Mostrar pasos y consejos”, collapses cleanly. Metrics start **collapsed**, expand on toggle; after **Stop**, metrics open automatically (`metricsOpen: true`) — matches product fix from max-effort pass 3.
-
-### Live Start / Stop
-
-After Start: primary CTA becomes **Detener** (red/stop style); mode chip shows live (e.g. `En vivo · shAirLadder`). After Stop: **Empezar** restored; reflection card expanded with session fields.
-
----
-
-## Full matrix (36 exercises)
-
-| ID | Track | Hover Start | Hover FX | Guide (steps) | Metrics (fields) | Live | Metrics auto | Pitch chrome | Issues |
-|----|-------|-------------|----------|---------------|------------------|------|--------------|--------------|-------:|
-| v1-diction | vocal | PASS | filter,boxShadow,transform | PASS (5) | PASS (4) | PASS | PASS | N | 0 |
-| v2-volume | vocal | PASS | filter,boxShadow,transform | PASS (4) | PASS (3) | PASS | PASS | N | 0 |
-| v3-soft-palate | vocal | PASS | filter,boxShadow,transform | PASS (3) | PASS (4) | PASS | PASS | N | 0 |
-| v4-articulation-pen | vocal | PASS | filter,boxShadow,transform | PASS (3) | PASS (3) | PASS | PASS | N | 0 |
-| v5-neutral-ears | vocal | PASS | filter,boxShadow,transform | PASS (5) | PASS (4) | PASS | PASS | N | 0 |
-| v6-connect | vocal | PASS | filter,boxShadow,transform | PASS (3) | PASS (3) | PASS | PASS | N | 0 |
-| v7-record-review | vocal | PASS | filter,boxShadow,transform | PASS (6) | PASS (5) | PASS | PASS | N | 0 |
-| v8-fluency-metaphors | vocal | PASS | filter,boxShadow,transform | PASS (3) | PASS (3) | PASS | PASS | N | 0 |
-| v9-12-week | vocal | PASS | filter,boxShadow,transform | PASS (4) | PASS (3) | N/A | N/A | N | 0 |
-| v10-power-pause | vocal | PASS | filter,boxShadow,transform | PASS (6) | PASS (4) | PASS | PASS | N | 0 |
-| v11-kill-fillers | vocal | PASS | filter,boxShadow,transform | PASS (5) | PASS (4) | PASS | PASS | N | 0 |
-| v12-melodic-speech | vocal | PASS | filter,boxShadow,transform | PASS (5) | PASS (4) | PASS | PASS | Y | 0 |
-| v13-volume-ladder | vocal | PASS | filter,boxShadow,transform | PASS (5) | PASS (4) | PASS | PASS | N | 0 |
-| v14-pace-variation | vocal | PASS | filter,boxShadow,transform | PASS (5) | PASS (4) | PASS | PASS | N | 0 |
-| v15-gestures | vocal | PASS | filter,boxShadow,transform | PASS (4) | PASS (4) | PASS | PASS | N | 0 |
-| v16-facial-expression | vocal | PASS | filter,boxShadow,transform | PASS (4) | PASS (4) | PASS | PASS | N | 0 |
-| v17-strategic-concision | vocal | PASS | filter,boxShadow,transform | PASS (4) | PASS (4) | PASS | PASS | N | 0 |
-| v18-story-peak | vocal | PASS | filter,boxShadow,transform | PASS (4) | PASS (4) | PASS | PASS | N | 0 |
-| v19-authority-close | vocal | PASS | filter,boxShadow,transform | PASS (4) | PASS (4) | PASS | PASS | N | 0 |
-| v20-energy-match | vocal | PASS | filter,boxShadow,transform | PASS (4) | PASS (4) | PASS | PASS | N | 0 |
-| s1-vocal-fry | singing | PASS | filter,boxShadow,transform | PASS (5) | PASS (4) | PASS | PASS | Y | 0 |
-| s2-solfege-chords | singing | PASS | filter,boxShadow,transform | PASS (5) | PASS (5) | PASS | PASS | Y | 0 |
-| s3-song-stanzas | singing | PASS | filter,boxShadow,transform | PASS (5) | PASS (6) | PASS | PASS | Y | 0 |
-| s4-lip-trills | singing | PASS | filter,boxShadow,transform | PASS (5) | PASS (4) | PASS | PASS | N | 0 |
-| s5-sirens | singing | PASS | filter,boxShadow,transform | PASS (4) | PASS (4) | PASS | PASS | Y | 0 |
-| s6-straw | singing | PASS | filter,boxShadow,transform | PASS (5) | PASS (4) | PASS | PASS | N | 0 |
-| s7-humming | singing | PASS | filter,boxShadow,transform | PASS (5) | PASS (4) | PASS | PASS | Y | 0 |
-| s8-breath-support | singing | PASS | filter,boxShadow,transform | PASS (5) | PASS (4) | PASS | PASS | Y | 0 |
-| s9-pitch-match | singing | PASS | filter,boxShadow,transform | PASS (5) | PASS (4) | PASS | PASS | Y | 0 |
-| s10-five-note | singing | PASS | filter,boxShadow,transform | PASS (5) | PASS (4) | PASS | PASS | Y | 0 |
-| s11-dynamics | singing | PASS | filter,boxShadow,transform | PASS (5) | PASS (4) | PASS | PASS | Y | 0 |
-| s12-easy-onset | singing | PASS | filter,boxShadow,transform | PASS (4) | PASS (4) | PASS | PASS | Y | 0 |
-| s13-arpeggio-match | singing | PASS | filter,boxShadow,transform | PASS (5) | PASS (4) | PASS | PASS | Y | 0 |
-| s14-staccato-legato | singing | PASS | filter,boxShadow,transform | PASS (5) | PASS (4) | PASS | PASS | Y | 0 |
-| s15-sh-air-ladder | singing | PASS | filter,boxShadow,transform | PASS (5) | PASS (4) | PASS | PASS | N | 0 |
-| s16-major-scale-coord | singing | PASS | filter,boxShadow,transform | PASS (5) | PASS (5) | PASS | PASS | Y | 0 |
+| Check | Result |
+|-------|--------|
+| Still `live` mid-hold | Pass 35/35 |
+| Still `live` after release | Pass 35/35 |
+| Does **not** fire Stop | Pass |
+| SH ladder hold advances under silence + Space | Pass (e.g. 0.8s on s15 mid-hold) |
+| Speech rate ladder progresses under Space | Pass (v1 shows rate progress while live) |
 
 ---
 
-## Sample forensic descriptions (multimodal)
+## Full matrix
 
-### 1) `v1-diction` — Start hover (before → after)
+| ID | Hover | Guide | Metrics | Live | Space no-stop | Manual chip | Stop→metrics | Back |
+|----|-------|-------|---------|------|---------------|-------------|--------------|------|
+| v1-diction | PASS | PASS | PASS | PASS | PASS | Y | PASS | PASS |
+| v2-volume | PASS | PASS | PASS | PASS | PASS | Y | PASS | PASS |
+| v3-soft-palate | PASS | PASS | PASS | PASS | PASS | Y | PASS | PASS |
+| v4-articulation-pen | PASS | PASS | PASS | PASS | PASS | Y | PASS | PASS |
+| v5-neutral-ears | PASS | PASS | PASS | PASS | PASS | Y | PASS | PASS |
+| v6-connect | PASS | PASS | PASS | PASS | PASS | Y | PASS | PASS |
+| v7-record-review | PASS | PASS | PASS | PASS | PASS | Y | PASS | PASS |
+| v8-fluency-metaphors | PASS | PASS | PASS | PASS | PASS | Y | PASS | PASS |
+| v9-12-week | PASS | PASS | PASS | N/A | N/A | — | N/A | PASS* |
+| v10-power-pause | PASS | PASS | PASS | PASS | PASS | Y | PASS | PASS |
+| v11-kill-fillers | PASS | PASS | PASS | PASS | PASS | Y | PASS | PASS |
+| v12-melodic-speech | PASS | PASS | PASS | PASS | PASS | n | PASS | PASS |
+| v13-volume-ladder | PASS | PASS | PASS | PASS | PASS | Y | PASS | PASS |
+| v14-pace-variation | PASS | PASS | PASS | PASS | PASS | Y | PASS | PASS |
+| v15-gestures | PASS | PASS | PASS | PASS | PASS | Y | PASS | PASS |
+| v16-facial-expression | PASS | PASS | PASS | PASS | PASS | Y | PASS | PASS |
+| v17-strategic-concision | PASS | PASS | PASS | PASS | PASS | Y | PASS | PASS |
+| v18-story-peak | PASS | PASS | PASS | PASS | PASS | Y | PASS | PASS |
+| v19-authority-close | PASS | PASS | PASS | PASS | PASS | Y | PASS | PASS |
+| v20-energy-match | PASS | PASS | PASS | PASS | PASS | Y | PASS | PASS |
+| s1-vocal-fry | PASS | PASS | PASS | PASS | PASS | n | PASS | PASS |
+| s2-solfege-chords | PASS | PASS | PASS | PASS | PASS | n | PASS | PASS |
+| s3-song-stanzas | PASS | PASS | PASS | PASS | PASS | n | PASS | PASS |
+| s4-lip-trills | PASS | PASS | PASS | PASS | PASS | Y | PASS | PASS |
+| s5-sirens | PASS | PASS | PASS | PASS | PASS | n | PASS | PASS |
+| s6-straw | PASS | PASS | PASS | PASS | PASS | Y | PASS | PASS |
+| s7-humming | PASS | PASS | PASS | PASS | PASS | n | PASS | PASS |
+| s8-breath-support | PASS | PASS | PASS | PASS | PASS | n | PASS | PASS |
+| s9-pitch-match | PASS | PASS | PASS | PASS | PASS | n | PASS | PASS |
+| s10-five-note | PASS | PASS | PASS | PASS | PASS | n | PASS | PASS |
+| s11-dynamics | PASS | PASS | PASS | PASS | PASS | n | PASS | PASS |
+| s12-easy-onset | PASS | PASS | PASS | PASS | PASS | n | PASS | PASS |
+| s13-arpeggio-match | PASS | PASS | PASS | PASS | PASS | n | PASS | PASS |
+| s14-staccato-legato | PASS | PASS | PASS | PASS | PASS | n | PASS | PASS |
+| s15-sh-air-ladder | PASS | PASS | PASS | PASS | PASS | Y | PASS | PASS |
+| s16-major-scale-coord | PASS | PASS | PASS | PASS | PASS | n | PASS | PASS |
 
-**Scene:** Spanish UI. Header: app title, Cuenta / Pro / PRUEBA / English. Exercise chip “Vocal · básico · 1. Mejor dicción”. Stage card: status **Listo** + **05:00**, mode title **DICCIÓN · ESCALERA DE RITMO**, pace line (~72 BPM), empty progress bar, coach cue. Bottom rail: green **▶ Empezar**, grey **Grabar**, full-width MIC slider at **7**, folded guide strip “CÓMO PRACTICAR” / “Mostrar pasos y consejos”.
+\* Week-plan has no live Space loop; Back/home covered without P0.
 
-**Before hover:** Empezar is solid mint-green capsule; soft green glow; no brightness boost; baseline Y.
-
-**After hover (computed + visual):** `brightness(1.05)`, stronger green box-shadow, ~1px upward translate. Button text/icon unchanged; MIC slider and Grabar do not jump; no second button steals the hit target.
-
-**Expected vs actual:** **Match.** Intended `.btn-practice` hover polish only.
-
-### 2) `s15-sh-air-ladder` — Guide collapse → expand
-
-**Before:** Stage shows **ESCALERA DE AIRE SH**, meta 5s SH pareja, 0.0s timer, peldaños 0/5; guide strip folded (“Mostrar pasos y consejos”). Empezar visible; no expanded step list.
-
-**After toggle:** Guide body open; control becomes **“Ocultar detalles”**; numbered practice steps/tips visible in the fold region (report `stepN: 5`). Stage metrics HUD still present; rail CTA unchanged.
-
-**Expected vs actual:** **Match.** Folded-by-default guide expands without covering Start or stealing clicks.
-
-### 3) `s15-sh-air-ladder` — Live Start → Stop + metrics auto-open
-
-**After Start:** Primary control is **Detener** (coral/red stop affordance); live chip **“En vivo · shAirLadder”**; stage still shows ladder goals; Empezar gone. Reflects silent-mic session correctly (no false score inflation in this audit).
-
-**After Stop:** **Empezar** restored; **REFLEXIONAR Y GUARDAR** expanded with SH-specific fields (peldaños, longest SH, air uniformity slider, notes) and CTA **Guardar sesión y puntaje**; control **“Ocultar métricas”** confirms auto-open.
-
-**Expected vs actual:** **Match.** Start/Stop chrome swap + post-stop metrics panel behavior correct.
-
-### 4) `s2-solfege-chords` — Pitch / mode chrome open + mode hover
-
-**Open:** Singing basic solfege: timer **15:00**, ACORDES + MODO selects, pitch readout (C3 / ¢), empty highway canvas, bottom rail with Empezar/Grabar/MIC, octave ±, Rango / 1 nota / Arpegio / Sostener / Auto / piano toggle. Mode focus chrome live; pitch canvas present.
-
-**Mode button hover shot:** Rail remains stable; checkboxes and octave controls readable; no overlap from glow/focus layers onto Empezar (regression guard for earlier mode-focus `pointer-events` / z-index bugs).
-
-**Expected vs actual:** **Match.** Pitch exercises expose correct chrome; hover/click path does not obscure primary CTA.
-
----
-
-## P0 checks encoded in suite
-
-| Code | Severity | Condition |
-|------|----------|-----------|
-| `hidden_cta` | P0 | Start not visible (except `weekPlan`) |
-| `hit_mismatch` | P0 | Element at Start center is not Start |
-| Hover fail | P0 assert | `hoverFeedback(...).ok` false (no style change or hit lost) |
-| Guide fail | Assert | Guide does not expand |
-| Metrics fail | Assert | Metrics do not expand |
-| Live fail | Assert | Start does not enter live (non-week-plan) |
-| Metrics auto fail | Assert | After Stop, metrics still collapsed |
-
-Suite final summary: `withIssues: 0`, `issues: []`.
+`is-manual` chip is a soft signal (HUD class). **Hard P0** is only “Space must not stop practice while Stop is focused.”
 
 ---
 
-## Product bugs found
+## Sample forensic descriptions
 
-**None** in this pass. Prior regressions (Start hit-target under mode-focus, metrics not opening after Stop, Space activating focused button) remain covered by this matrix + redteam suite and did not reappear.
+### 1) v1 Start hover (real `mouse.move` path)
 
-### Non-issues / notes
+**Before:** Resting mint **Empezar**; soft green shadow; MIC at 7; stage “Listo 05:00”; guide folded.  
+**After:** Same layout; Start gains brightness + stronger glow + 1px lift (computed). Hit target remains `#btn-practice-start`. Neighbors (Grabar, MIC) do not jump.  
+**Verdict:** **Correct** hover feedback.
 
-| Note | Detail |
-|------|--------|
-| Hover `transform` may flag `layoutShift` on Back | Intentional translate; bbox moves slightly — not a reflow of the page grid |
-| Residual `99_error.png` under `s9-pitch-match/` | Leftover from an earlier flaky selector fix; final run has empty `issues[]` |
-| Mic HUD hover has little CSS delta | Range input is the real target; hit-top is `mic-sensitivity` — correct |
-| Soft Pro forge | Still accepted risk (see doc 22); out of scope for UI hover |
+### 2) v1 mic drag
+
+**Before:** Thumb near right; numeric **7**.  
+**After real drag −48px:** Thumb leftward; value **5**. Stage/CTA unchanged.  
+**Verdict:** **Correct** range interaction via mouse drag.
+
+### 3) v1 Space hold while live (Stop focused)
+
+Live state: **Detener** coral, status “En vivo · rateLadder”, progress advancing (e.g. 7.4s / rate phase). Mic HUD can show manual assist styling. Practice **does not** end mid-hold or after release.  
+**Verdict:** **Correct** — Space is assist, not button activation.
+
+### 4) s15 SH ladder Space hold
+
+Silent mic + Space: hold timer advances (e.g. **0.8s** / Mejor 0.8s); **Detener** still present; live chip `shAirLadder`.  
+**Verdict:** **Correct** Space latch / air assist under silence.
+
+### 5) Guide expand / metrics after Stop
+
+Guide: collapsed → steps list; metrics after Stop: reflection form open with fields.  
+**Verdict:** **Correct** (matches `openMetricsPanel` product behavior).
 
 ---
 
-## Files added
+## Product bugs
+
+**None** in this pass.
+
+| Non-issue | Detail |
+|-----------|--------|
+| Missing `is-manual` on some pitch modes | Soft UI signal; Space still does not stop |
+| Hover translateY 1px | Intentional; not layout thrash |
+| Soft Pro forge | Accepted risk (doc 22) |
+
+---
+
+## Files
 
 | Path | Role |
 |------|------|
-| `tests/helpers/ui-forensics.js` | `shot`, `styleSnapshot`, `hoverFeedback`, `writeReport` |
-| `tests/exercise-ui-forensics.spec.js` | Serial matrix over full catalog |
-| `package.json` → `test:ui-forensics` | npm script |
+| `tests/helpers/ui-forensics.js` | `realHover`, `realClick`, `realDragX`, `spaceHold`, style/hit probes |
+| `tests/exercise-ui-forensics.spec.js` | Serial matrix all catalog exercises |
+| `package.json` | `test:ui-forensics`, `test:ui-forensics:headed` |
 | `docs/23-EXERCISE-UI-FORENSICS.md` | This report |
 
-Screenshots/JSON live under `qa/` (gitignored); re-run suite to regenerate.
+Screenshots/JSON under `qa/` are gitignored; regenerate with `npm run test:ui-forensics`.
 
 ---
 
 ## Conclusion
 
-All **20 vocal + 16 singing** exercises show correct:
-
-1. **Open state** (CTA hit-testable, folds collapsed)  
-2. **Hover feedback** on Start (brightness + glow + micro-lift) without layout thrash  
-3. **Guide / metrics** expand-collapse  
-4. **Live Start → Stop** chrome and **auto-open metrics**  
-5. **Pitch/mode chrome** where profile requires it  
-6. **Back → home**
-
-**Ship status:** UI interactivity forensics **green**. No product fix required from this audit. Deploy path is GH Pages via `main` (suite + docs only; product assets unchanged since last redteam pass).
+All **20 vocal + 16 singing** exercises were exercised with **real mouse movement, click, mic drag, and Space hold/release**. Hover styles, hit targets, toggles, live Start/Stop, Space non-activation of Stop, and Back→home all **pass**. No product code change required after harness scroll fix.

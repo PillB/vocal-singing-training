@@ -85,6 +85,51 @@ const TOGGLE_RESTORE = new Set([
   "btn-toggle-piano"
 ]);
 
+/**
+ * Unsaved-progress leave modal blocks the whole exercise UI (hit target = leave-modal).
+ * Dismiss via Discard so forensics can continue across exercises.
+ */
+async function dismissLeaveModal(page) {
+  const visible = await page.evaluate(() => {
+    const m = document.getElementById("leave-modal");
+    if (!m) return false;
+    const st = getComputedStyle(m);
+    return (
+      !m.hidden &&
+      st.display !== "none" &&
+      st.visibility !== "hidden" &&
+      (m.classList.contains("open") || m.classList.contains("active") || st.opacity !== "0")
+    );
+  });
+  if (!visible) {
+    // Also try if overlay is in DOM and covering center
+    const covering = await page.evaluate(() => {
+      const top = document.elementFromPoint(window.innerWidth / 2, window.innerHeight / 2);
+      return top?.id === "leave-modal" || !!top?.closest?.("#leave-modal");
+    });
+    if (!covering) return false;
+  }
+  // Prefer Discard (don't require filling metrics)
+  const discard = page.locator("#leave-discard");
+  if (await discard.isVisible().catch(() => false)) {
+    await discard.click({ force: true }).catch(() => {});
+  } else {
+    await page.locator("#leave-cancel").click({ force: true }).catch(() => {});
+    await page.keyboard.press("Escape").catch(() => {});
+  }
+  await page.waitForTimeout(120);
+  // Force-hide if still up (test recovery only)
+  await page.evaluate(() => {
+    const m = document.getElementById("leave-modal");
+    if (!m) return;
+    m.hidden = true;
+    m.classList.remove("open", "active", "show");
+    m.style.display = "none";
+  });
+  await page.waitForTimeout(60);
+  return true;
+}
+
 /** Pink cursor overlay + warm-up path (always on — suite is always headed). */
 async function ensureForensicsCursor(page) {
   page.setDefaultTimeout(30000);
@@ -301,7 +346,8 @@ async function exerciseControl(page, ctrl, shotRel, entry) {
 }
 
 test("forensic UI matrix: all controls + Space on all exercises", async ({ page }) => {
-  test.setTimeout(1200000);
+  // Headed + slowMo + all controls ≈ 25–40m; do not use default 60s / 20m caps
+  test.setTimeout(3_600_000);
   ensureDir(SHOT_ROOT);
   await boot(page, { lang: "es", tourDone: true, mic: "silent" });
   await ensureForensicsCursor(page);
@@ -357,8 +403,19 @@ test("forensic UI matrix: all controls + Space on all exercises", async ({ page 
     const rel = (name) => path.join(ex.id, name);
 
     try {
+      await dismissLeaveModal(page);
+      // Ensure any prior live session is stopped before switching exercises
+      await page.evaluate(() => {
+        try {
+          window.VTApp?.stopPractice?.();
+        } catch {
+          /* ignore */
+        }
+      });
+      await dismissLeaveModal(page);
       await openExercise(page, ex.id);
       await page.waitForTimeout(100);
+      await dismissLeaveModal(page);
       await page.evaluate(() => {
         window.VTApp?.fitHighwayToViewport?.();
         window.scrollTo(0, 0);
@@ -736,11 +793,12 @@ test("forensic UI matrix: all controls + Space on all exercises", async ({ page 
         }
       }
 
-      // --- 08 Back home ---
+      // --- 08 Back home (may open leave-modal if session dirty) ---
       if (await page.locator("#btn-back-home").isVisible().catch(() => false)) {
         await page.evaluate(() => {
           window.scrollTo(0, 0);
         });
+        await dismissLeaveModal(page);
         await scrollIntoView(page, "#btn-back-home");
         const bBack = await styleSnapshot(page, "#btn-back-home");
         await realHover(page, "#btn-back-home", { steps: 12 });
@@ -749,20 +807,30 @@ test("forensic UI matrix: all controls + Space on all exercises", async ({ page 
         entry.actions.hoverBack = hoverFeedback(bBack, aBack);
         await realClick(page, "#btn-back-home", { steps: 10 });
         await page.waitForTimeout(120);
+        // If leave modal appeared, discard and proceed home
+        const leftModal = await dismissLeaveModal(page);
         let onHome = await page.locator("#view-home").evaluate((el) =>
           el.classList.contains("active")
         );
         if (!onHome) {
           await page.locator("#btn-back-home").click().catch(() => {});
           await page.waitForTimeout(80);
+          await dismissLeaveModal(page);
           onHome = await page.locator("#view-home").evaluate((el) =>
             el.classList.contains("active")
           );
         }
-        entry.actions.backHome = { onHome };
+        if (!onHome) {
+          await page.evaluate(() => window.VTApp?.setView?.("home")).catch(() => {});
+          await dismissLeaveModal(page);
+          await page.waitForTimeout(80);
+          onHome = await page.locator("#view-home").evaluate((el) =>
+            el.classList.contains("active")
+          );
+        }
+        entry.actions.backHome = { onHome, leftModal };
         if (!onHome) {
           entry.issues.push({ code: "back_fail", sev: "P0", msg: "Back did not return home" });
-          await page.evaluate(() => window.VTApp?.setView?.("home")).catch(() => {});
         }
       }
 

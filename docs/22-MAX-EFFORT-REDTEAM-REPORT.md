@@ -1,10 +1,10 @@
 # Max-effort dual-agent review & red team report
 
-**Date:** 2026-07-17 (pass 3 — full suite + product fixes)  
+**Date:** 2026-07-17 (pass 4 — live Pages validation)  
 **Product:** Vocal Studio (GH Pages SPA)  
-**Method:** Dual personas (first-principles UX + adversarial scale/security), Playwright interactive journeys, client-side stress, static secret scan.  
-**Research anchors:** Playwright user-facing tests, frontend chaos (offline/latency), SPA security (soft entitlement, XSS sinks, allowlists).  
-**Latest:** full suite triage (catalog ES step counts, fold assertions), auto-open metrics after Stop (F3).
+**Live URL:** https://pillb.github.io/vocal-singing-training/  
+**Method:** Dual personas (first-principles UX + adversarial scale/security), Playwright interactive journeys, client-side stress, static secret scan, **production URL e2e**.  
+**Research anchors:** Playwright user-facing tests, frontend chaos (offline/latency), SPA security (soft entitlement, XSS sinks, allowlists).
 
 ---
 
@@ -20,7 +20,23 @@
 ```bash
 npm run serve   # terminal 1
 npm run test:redteam
+npm run test:live    # production GitHub Pages
 ```
+
+---
+
+## Live Pages validation (2026-07-17)
+
+| Check | Result |
+|-------|--------|
+| Home + cards on production | Pass |
+| SH ladder silence 0 + Space assist | Pass |
+| Metrics open after Stop | Pass |
+| Start hit-testable | Pass |
+| No `sk_live_` in shipped scripts | Pass |
+| Privacy page | Pass |
+
+Suite: `tests/live-pages.spec.js` (`LIVE_PAGES=1`).
 
 ---
 

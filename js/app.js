@@ -414,24 +414,26 @@
       }
       const r = stage.getBoundingClientRect();
       const vh = window.innerHeight || document.documentElement.clientHeight || 600;
-      const gap = 6;
+      // Extra gap on short/landscape viewports (borders + subpixel paint)
+      const gap = vh < 500 ? 10 : 8;
       // If sticky has not stuck yet, r.top is natural flow Y — remaining space under it
       const avail = Math.floor(vh - Math.max(0, r.top) - gap);
-      let maxH = Math.max(160, avail);
+      let maxH = Math.max(140, avail);
       // Prefer tall for low vision but never past viewport bottom
       const prefer = Math.min(
         maxH,
-        Math.round(vh * (vh < 500 ? 0.9 : 0.76)),
+        Math.round(vh * (vh < 500 ? 0.88 : 0.76)),
         vh < 700 ? 460 : 700
       );
-      let h = Math.max(160, Math.min(prefer, maxH));
+      let h = Math.max(140, Math.min(prefer, maxH));
       stage.style.minHeight = "0";
       stage.style.maxHeight = `${maxH}px`;
       stage.style.height = `${h}px`;
-      // Second pass: remeasure (bottom rail / padding can push y2 past vh)
-      const r2 = stage.getBoundingClientRect();
-      if (r2.bottom > vh - 1) {
-        const fix = Math.max(140, Math.floor(vh - r2.top - 4));
+      // Second + third pass: borders/subpixels can push y2 a few px past vh
+      for (let pass = 0; pass < 2; pass++) {
+        const rb = stage.getBoundingClientRect();
+        if (rb.bottom <= vh - 1) break;
+        const fix = Math.max(120, Math.floor(vh - rb.top - (pass === 0 ? 6 : 8)));
         stage.style.maxHeight = `${fix}px`;
         stage.style.height = `${fix}px`;
       }

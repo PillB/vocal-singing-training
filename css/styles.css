@@ -1647,6 +1647,27 @@ button:focus-visible,
   min-width: 6.5rem;
 }
 
+/* U8 progressive disclosure: octave + Auto always; note opts when expanded */
+#piano-mini-opts.piano-opts-compact > .piano-opt:not(.oct-auto),
+#piano-mini-opts.piano-opts-compact > label.piano-opt:not(.oct-auto),
+#piano-mini-opts.piano-opts-compact > .piano-opt-sec {
+  display: none !important;
+}
+#piano-mini-opts.piano-opts-compact > .hud-oct {
+  display: inline-flex;
+}
+#piano-mini-opts.piano-opts-expanded > .piano-opt,
+#piano-mini-opts.piano-opts-expanded > .piano-opt-sec {
+  display: inline-flex;
+}
+/* Pitch canvas: avoid 0-height before fitHighway */
+.pitch-inline:not([hidden]) .pitch-canvas,
+#pitch-block:not([hidden]) #pitch-canvas {
+  min-height: 220px;
+  width: 100%;
+  display: block;
+}
+
 /* Mic: single compact row [meter | MIC | slider | 7] — never wrap / never past stage */
 .hud-bc {
   flex: 1 1 12rem;
@@ -1996,24 +2017,29 @@ html[lang^="es"] .hud-bc.is-manual .mic-sens-title::after {
 .mode-focus.mode-focus-live {
   /* Panel only receives clicks — empty inset must not steal rail hits */
   pointer-events: none;
-  align-items: stretch;
-  justify-content: stretch;
+  /* U2: top-align coach panel — avoid empty “theater” filling the stage */
+  align-items: flex-start;
+  justify-content: flex-start;
+  padding-top: 0.15rem;
   /* Clear full measured bottom rail (+ gap); never cover Start/Mic */
   bottom: max(var(--rail-h, 6rem), 5.5rem);
 }
 .mode-focus.mode-focus-live .mode-panel {
   pointer-events: auto;
   width: 100%;
-  max-height: 100%;
+  /* Content-sized panel; scroll only if phase list grows long */
+  max-height: min(100%, 14rem);
   overflow: auto;
   margin: 0;
-  background: rgba(12, 18, 26, 0.88);
+  background: rgba(12, 18, 26, 0.92);
   border: 1px solid var(--border);
   border-radius: 12px;
-  padding: 0.4rem 0.65rem;
+  padding: 0.45rem 0.7rem 0.55rem;
   box-sizing: border-box;
   position: relative;
   z-index: 1;
+  /* Soft depth so sparse modes still feel intentional */
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
 }
 .mode-focus.mode-focus-live .mode-big {
   font-size: 1.2rem;
@@ -2544,9 +2570,9 @@ body.view-exercise .stage-below.is-fitted {
 }
 
 .btn-practice:hover {
-  /* Avoid translateY — shifts painted control vs hit target */
-  filter: brightness(1.05);
-  box-shadow: 0 3px 12px rgba(61, 186, 122, 0.4);
+  /* U10: clearer primary CTA feedback without layout shift (no translateY) */
+  filter: brightness(1.09);
+  box-shadow: 0 4px 16px rgba(61, 186, 122, 0.5);
 }
 
 .practice-status-row {

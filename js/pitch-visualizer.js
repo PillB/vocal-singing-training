@@ -699,30 +699,82 @@
       });
     }
 
+    /**
+     * Public: remeasure canvas after layout and paint idle empty-state.
+     * Critical: resetLanes often runs before stage height is set → blank buffer.
+     */
+    redrawIdle() {
+      try {
+        this._resize();
+        this._drawIdle();
+      } catch {
+        /* canvas may be detached */
+      }
+    }
+
     _drawIdle() {
       const ctx = this.ctx2d;
       if (!ctx) return;
-      const w = this.w || 640;
-      const h = this.h || 260;
+      // Prefer live layout size (after fitHighway); never draw 0×0
+      if (!this.w || !this.h || this.w < 32 || this.h < 32) {
+        try {
+          this._resize();
+        } catch {
+          /* ignore */
+        }
+      }
+      const w = Math.max(320, this.w || this.canvas?.clientWidth || 640);
+      const h = Math.max(220, this.h || this.canvas?.clientHeight || 300);
+      this.w = w;
+      this.h = h;
       ctx.clearRect(0, 0, w, h);
-      ctx.fillStyle = "#0a1018";
+      // Richer empty state (research: tuners/pitch apps show lanes before audio)
+      const bg = ctx.createLinearGradient(0, 0, 0, h);
+      bg.addColorStop(0, "#0e1622");
+      bg.addColorStop(0.5, "#121c2c");
+      bg.addColorStop(1, "#0c121a");
+      ctx.fillStyle = bg;
       ctx.fillRect(0, 0, w, h);
-      // preview highway — wider band for low vision
-      const mid = h * 0.42;
-      ctx.fillStyle = "rgba(79, 212, 146, 0.28)";
-      ctx.fillRect(0, mid - 36, w, 72);
-      ctx.strokeStyle = "rgba(255, 230, 170, 0.9)";
-      ctx.lineWidth = 4;
+      const graphH = h - 58;
+      const mid = graphH * 0.45;
+      // Faint horizontal guides (like staff / pitch channels)
+      ctx.strokeStyle = "rgba(140, 175, 220, 0.22)";
+      ctx.lineWidth = 1;
+      for (let i = -3; i <= 3; i++) {
+        if (i === 0) continue;
+        const y = mid + i * (graphH * 0.09);
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(w, y);
+        ctx.stroke();
+      }
+      // Target lane — higher contrast so idle is never “black void”
+      ctx.fillStyle = "rgba(79, 212, 146, 0.22)";
+      ctx.fillRect(0, mid - 40, w, 80);
+      ctx.fillStyle = "rgba(79, 212, 146, 0.38)";
+      ctx.fillRect(0, mid - 22, w, 44);
+      ctx.strokeStyle = "rgba(255, 230, 170, 0.95)";
+      ctx.lineWidth = 3;
+      ctx.setLineDash([10, 8]);
       ctx.beginPath();
       ctx.moveTo(0, mid);
       ctx.lineTo(w, mid);
       ctx.stroke();
+      ctx.setLineDash([]);
+      // Edge glow on lane
+      ctx.strokeStyle = "rgba(79, 212, 146, 0.55)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(0, mid - 22);
+      ctx.lineTo(w, mid - 22);
+      ctx.moveTo(0, mid + 22);
+      ctx.lineTo(w, mid + 22);
+      ctx.stroke();
       const es =
         (global.VTI18n && global.VTI18n.lang === "es") ||
         document.documentElement.lang === "es";
-      ctx.fillStyle = "#f2f6fc";
-      ctx.font = "700 16px system-ui,sans-serif";
       ctx.textAlign = "center";
+      const idle0 = es ? "Pulsa Empezar" : "Press Start";
       const idle1 = es
         ? "Autopista · canta en el carril verde"
         : "Highway · sing in the green lane";
@@ -730,13 +782,18 @@
         ? "Mantente en el carril · gana precisión"
         : "Stay in lane · build precision";
       const maxIdle = w * 0.88;
+      ctx.fillStyle = "#8ee0b5";
+      const f0 = fitCanvasLabel(ctx, idle0, maxIdle, "700 15px system-ui,sans-serif");
+      ctx.font = f0.font;
+      ctx.fillText(f0.text, w / 2, mid - 52);
+      ctx.fillStyle = "#f2f6fc";
       const f1 = fitCanvasLabel(ctx, idle1, maxIdle, "700 16px system-ui,sans-serif");
       ctx.font = f1.font;
-      ctx.fillText(f1.text, w / 2, h / 2 + 26);
-      const f2 = fitCanvasLabel(ctx, idle2, maxIdle, "600 14px system-ui,sans-serif");
+      ctx.fillText(f1.text, w / 2, mid + 52);
+      const f2 = fitCanvasLabel(ctx, idle2, maxIdle, "600 13px system-ui,sans-serif");
       ctx.font = f2.font;
-      ctx.fillStyle = "#d0dceb";
-      ctx.fillText(f2.text, w / 2, h / 2 + 48);
+      ctx.fillStyle = "#b8c8dc";
+      ctx.fillText(f2.text, w / 2, mid + 74);
       this._drawKeyboard(ctx, w, h, null, null);
     }
 

@@ -9,14 +9,24 @@
 
 ## Executive summary
 
-Interaction forensics (hover, Start/Stop, mic drag, Space, silence gate) **pass**. Graphical and layout review of the same before/after frames finds **no P0 hit-target regressions**, but several **P1–P2 polish issues**: empty pitch highway, speech panel waste, Detener truncation, raw mode ids in toasts, EN labels in ES UI, and residual pitch-stats on non-pitch exercises.
+Interaction forensics (hover, Start/Stop, mic drag, Space, silence gate) **pass**. Graphical review of forensics before/after frames found polish issues; **research-backed fixes** shipped for empty highway idle wiring, speech panel theater, piano density, and CTA hover.
 
-| Severity | Count | Theme |
-|----------|------:|-------|
-| P1 | 3 | Empty highway, empty speech stage, Detener clip |
-| P2 | 6 | Copy/i18n, density, idle placeholders, Space feedback |
-| P3 | 3 | Subtle hover, metrics scroll jump, pitch footer on SH |
-| Info | 1 | Forensic pink cursor (test-only) |
+| Severity | Count | Theme | Status |
+|----------|------:|-------|--------|
+| P1 | 3 | Empty highway, speech void, Detener clip | **Fixed** (U1/U2/U3) |
+| P2 | 6 | Copy/i18n, density, idle labels, Space badge | **Fixed** (U4–U6, U8–U9 partial) |
+| P3 | 3 | Hover, metrics jump, pitch footer | **Partial** (U10/U12 done; U11 open) |
+| Info | 1 | Forensic pink cursor | Test-only |
+
+### Research applied
+
+| Practice | Source | Application |
+|----------|--------|-------------|
+| Empty states teach next action | Pitch/tuner apps show lanes before audio | `_drawIdle` + post-layout `redrawIdle` |
+| Progressive disclosure | NN/g primary vs secondary | Piano secondary opts behind 🎹+ |
+| Touch targets | WCAG 2.5.8 / ~44px primary | Practice CTA min-height 40 + min-width |
+| Primary CTA emphasis | NN/g | Stronger `.btn-practice:hover` without translateY |
+| Coach focus, not empty theater | Speech practice UIs | Top-align content-sized mode panel |
 
 ---
 
@@ -132,9 +142,22 @@ Test-only `#vt-forensics-cursor` in Playwright suite — ignore for product desi
 
 ---
 
-## Quick wins shipped with this review (if in same commit)
+## Fixes shipped
 
-See changelog on `main`: CSS stop button, mode label map for toasts, rateLadder idle seed, pitch-stats gate.
+| ID | Change | Files |
+|----|--------|-------|
+| U1 | `redrawIdle()` after layout; brighter idle lane + “Pulsa Empezar”; fitHighway redraws idle | `pitch-visualizer.js`, `app.js` |
+| U2 | Top-align content-sized `.mode-focus-live` panel | `styles.css` |
+| U3 | min-width + nowrap Start/Stop | `styles.css` |
+| U4 | `modeDisplayName()` in live toasts | `app.js` |
+| U5/U6 | ES phase labels + idle duration seed | `practice-modes.js` |
+| U8 | `.piano-opts-compact` until 🎹+ expands | `app.js`, `styles.css` |
+| U9 | Mic “Espacio” badge when manual | `styles.css` |
+| U10 | Stronger practice hover | `styles.css` |
+| U12 | Clear/hide `#pitch-stats` when `!showPitch` | `app.js` |
+
+**Verify U1:** center canvas pixel greenish after open pitch exercise (idle lane).  
+**Open:** U7 top HUD density (optional further collapse); U11 metrics scroll jump.
 
 ---
 

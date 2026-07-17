@@ -449,10 +449,15 @@
       } catch {
         /* ignore */
       }
-      // Resize pitch canvas to new stage box
+      // Resize pitch canvas to new stage box; redraw idle if not live
+      // (resetLanes often painted before stage height existed → black void)
       try {
-        if (state.pitchViz && typeof state.pitchViz._resize === "function") {
-          state.pitchViz._resize();
+        if (state.pitchViz) {
+          if (!state.practiceLive && typeof state.pitchViz.redrawIdle === "function") {
+            state.pitchViz.redrawIdle();
+          } else if (typeof state.pitchViz._resize === "function") {
+            state.pitchViz._resize();
+          }
         }
       } catch {
         /* ignore */
@@ -1213,7 +1218,12 @@
       syncSustainSecLabel();
       syncPlayModeSelect();
     }
-    if (pianoMini) pianoMini.style.display = showPiano || exerciseWantsSound(ex, profile) ? "" : "none";
+    if (pianoMini) {
+      pianoMini.style.display = showPiano || exerciseWantsSound(ex, profile) ? "" : "none";
+      // U8 progressive disclosure: secondary piano opts collapsed until 🎹+
+      pianoMini.classList.toggle("piano-opts-compact", !!showPiano);
+      pianoMini.classList.toggle("piano-opts-expanded", false);
+    }
     // Piano more button lives in BR HUD (no extra row = less scroll)
     if (pianoToggleRow) pianoToggleRow.hidden = true;
     const tbtn = $("#btn-toggle-piano");
@@ -1675,7 +1685,6 @@
     if (!state.pitchViz) {
       state.pitchViz = new VTPitchVisualizer(canvas);
       state.pitchViz.onStats = updatePitchStatsLabel;
-      state.pitchViz._drawIdle();
     }
     if (!state.pitchGame) {
       state.pitchGame = new VTPitchGame();
@@ -1683,6 +1692,18 @@
       state.pitchGame.onLock = onChallengeNoteLocked;
     }
     state.pitchViz.attachGame(state.pitchGame);
+    // Paint after layout: double rAF so clientWidth reflects fitted stage
+    if (!state.practiceLive) {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          try {
+            state.pitchViz?.redrawIdle?.();
+          } catch {
+            /* ignore */
+          }
+        });
+      });
+    }
     return state.pitchViz;
   }
   // Modes may resolve nearest multi-lane tone via this hook
@@ -3491,6 +3512,7 @@
     $("#btn-toggle-piano")?.addEventListener("click", () => {
       state.pianoOpen = !state.pianoOpen;
       const block = $("#piano-block");
+      const mini = $("#piano-mini-opts");
       if (block) {
         if (state.pianoOpen) {
           block.hidden = false;
@@ -3504,6 +3526,11 @@
             if (!state.pianoOpen) block.hidden = true;
           }, 220);
         }
+      }
+      // Expand secondary BR opts when piano panel open (progressive disclosure)
+      if (mini) {
+        mini.classList.toggle("piano-opts-expanded", !!state.pianoOpen);
+        mini.classList.toggle("piano-opts-compact", !state.pianoOpen);
       }
       const btn = $("#btn-toggle-piano");
       if (btn) {

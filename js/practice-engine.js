@@ -270,19 +270,20 @@
       const floor = this._airRms();
       const bandFloor = this._airBandFloor();
       const band = bandHf != null ? bandHf : 0;
-      // Hard noise floor: ambient room must NOT auto-start SH/S counters
-      const minRms = Math.max(floor * 0.85, 0.006);
-      const minHf = Math.max(floor * 0.55, 0.004);
-      // Sibilant / fricative: strong FFT band (SH energy) OR first-diff HF
+      // Reject pure ambient, but allow soft SH (laptop mics after AGC are quiet).
+      // Space path uses manualAir and never reaches these gates.
+      const minRms = Math.max(floor * 0.65, 0.0045);
+      const minHf = Math.max(floor * 0.4, 0.0032);
+      // Sibilant / fricative: FFT band OR first-diff HF (soft SH signature)
       const sibilant =
-        band >= Math.max(bandFloor, 0.12) ||
-        (band >= bandFloor && rms >= minRms * 0.35) ||
-        (hfRms >= minHf && (hfRms >= rms * 0.35 || hfRms >= floor * 0.55));
-      // Steady air / soft SH — requires clear energy above ambient
+        band >= bandFloor ||
+        (band >= bandFloor * 0.85 && rms >= minRms * 0.3) ||
+        (hfRms >= minHf && (hfRms >= rms * 0.32 || hfRms >= floor * 0.45));
+      // Steady air / soft SH — clear energy above noise floor
       const energy =
         rms >= minRms ||
-        hfRms >= minHf * 1.15 ||
-        (band >= bandFloor * 0.95 && rms >= minRms * 0.5);
+        hfRms >= minHf * 1.05 ||
+        (band >= bandFloor * 0.85 && rms >= minRms * 0.4);
       // Only exclude *loud* clear singing/speech (not soft SH + false pitch).
       const loudVoiced =
         hasPitch &&

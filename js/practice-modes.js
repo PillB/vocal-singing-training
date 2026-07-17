@@ -1494,33 +1494,37 @@
       });
     },
     onFrame(frame) {
-      // S phase: ONLY engine airDetected or Space — never bare RMS (room noise).
-      // Onset gate: several consecutive positive frames before counting.
+      // S phase: ONLY airDetected or Space — never bare RMS (room noise free-run).
+      // Space latches immediately; mic needs a short onset to reject blips.
       const thr = frame.airRmsThreshold != null ? frame.airRmsThreshold * 1.1 : 0.02;
+      const manualAir = !!(frame.manualSound && frame.manualKind === "air");
       let airNow =
         this.state.phase === "S"
-          ? !!frame.airDetected ||
-            !!(frame.manualSound && frame.manualKind === "air")
+          ? !!frame.airDetected || manualAir
           : frame.voiced ||
             !!(frame.manualSound && frame.manualKind === "voice") ||
             !!frame.airDetected ||
             (frame.rms || 0) > thr * 1.4;
       if (this.state.phase === "S") {
-        if (airNow) {
+        if (manualAir) {
+          this.state._airOnset = 5;
+          this.state._airHoldFrames = 16;
+        } else if (airNow) {
           this.state._airOnset = (this.state._airOnset || 0) + 1;
+          if ((this.state._airOnset || 0) >= 4) this.state._airHoldFrames = 16;
         } else {
           this.state._airOnset = 0;
           if (this.state._airHoldFrames > 0) this.state._airHoldFrames -= 1;
         }
-        const latched = (this.state._airOnset || 0) >= 5; // ~80ms
-        if (latched) this.state._airHoldFrames = 16;
       } else {
         this.state._airOnset = 0;
         this.state._airHoldFrames = 0;
       }
       const air =
         this.state.phase === "S"
-          ? (this.state._airOnset || 0) >= 5 || this.state._airHoldFrames > 0
+          ? manualAir ||
+            (this.state._airOnset || 0) >= 4 ||
+            this.state._airHoldFrames > 0
           : airNow;
       if (air) {
         this.state.cur += (frame.dtMs || 16) / 1000;
@@ -1567,20 +1571,22 @@
       `;
     },
     onFrame(frame) {
-      // ONLY real airDetected or Space — never bare RMS (starts counting on room noise).
-      // Onset gate (~5 frames) then short hold-off so micro-gaps don't zero the ladder.
-      const airNow =
-        !!frame.airDetected ||
-        !!(frame.manualSound && frame.manualKind === "air");
-      if (airNow) {
+      // ONLY airDetected or Space — never bare RMS (room noise free-run).
+      // Space → count immediately; mic needs ~4 frames onset then short hold-off.
+      const manualAir = !!(frame.manualSound && frame.manualKind === "air");
+      const airNow = !!frame.airDetected || manualAir;
+      if (manualAir) {
+        this.state._airOnset = 5;
+        this.state._airHoldFrames = 16;
+      } else if (airNow) {
         this.state._airOnset = (this.state._airOnset || 0) + 1;
+        if ((this.state._airOnset || 0) >= 4) this.state._airHoldFrames = 16;
       } else {
         this.state._airOnset = 0;
         if (this.state._airHoldFrames > 0) this.state._airHoldFrames -= 1;
       }
-      const latched = (this.state._airOnset || 0) >= 5;
-      if (latched) this.state._airHoldFrames = 16;
-      const air = latched || this.state._airHoldFrames > 0;
+      const air =
+        manualAir || (this.state._airOnset || 0) >= 4 || this.state._airHoldFrames > 0;
       const target = this.state.rungs[this.state.i] || this.state.rungs[this.state.rungs.length - 1];
       if (air) {
         this.state.cur += (frame.dtMs || 16) / 1000;

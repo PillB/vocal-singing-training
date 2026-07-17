@@ -1753,6 +1753,25 @@
       if (state.sessionPractice.liveSince == null) {
         state.sessionPractice.liveSince = performance.now();
       }
+      // Blur Start/Stop so Space is not consumed as button activation (browser default)
+      try {
+        start?.blur?.();
+        stop?.blur?.();
+        const stage = document.getElementById("highway-stage");
+        if (stage) {
+          if (!stage.hasAttribute("tabindex")) stage.setAttribute("tabindex", "-1");
+          stage.focus({ preventScroll: true });
+        } else {
+          document.body?.focus?.({ preventScroll: true });
+        }
+      } catch {
+        /* ignore */
+      }
+      // Remeasure bottom rail after live layout (mode panel may reflow)
+      requestAnimationFrame(() => {
+        fitHighwayToViewport();
+        setTimeout(fitHighwayToViewport, 60);
+      });
     } else {
       flushPracticeClock();
     }
@@ -3319,19 +3338,42 @@
           : tt("mic.manualHint") + " · " + tt("mic.sensHint");
       }
     };
-    document.addEventListener("keydown", (e) => {
-      if (e.code !== "Space" && e.key !== " ") return;
-      if (isTypingTarget(e.target)) return;
-      if (!manualSoundAllowed()) return;
-      e.preventDefault(); // avoid page scroll while assisting
-      // Allow e.repeat to refresh hold timestamp (continuous hold, not a new press)
-      setManualFromKey(true);
-    });
-    document.addEventListener("keyup", (e) => {
-      if (e.code !== "Space" && e.key !== " ") return;
-      if (isTypingTarget(e.target)) return;
-      setManualFromKey(false);
-    });
+    /**
+     * Capture-phase Space: while practice is live, block browser default
+     * (Space activates focused <button> = Start/Stop) and drive manual assist.
+     * See MDN/a11y: Space on button fires click — must preventDefault early.
+     */
+    const isSpaceKey = (e) => e.code === "Space" || e.key === " ";
+    document.addEventListener(
+      "keydown",
+      (e) => {
+        if (!isSpaceKey(e)) return;
+        if (isTypingTarget(e.target)) return;
+        // Live practice: always claim Space (assist + don't toggle Stop/Start)
+        if (state.practiceLive || manualSoundAllowed()) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (!manualSoundAllowed()) return;
+          setManualFromKey(true);
+          return;
+        }
+        // Not live: if focus is Start, let click happen (user starting with Space is OK)
+      },
+      true
+    );
+    document.addEventListener(
+      "keyup",
+      (e) => {
+        if (!isSpaceKey(e)) return;
+        if (isTypingTarget(e.target)) return;
+        if (state.practiceLive || state._spaceDown || manualSoundAllowed()) {
+          e.preventDefault();
+          e.stopPropagation();
+          setManualFromKey(false);
+        }
+      },
+      true
+    );
     window.addEventListener("blur", () => setManualFromKey(false, { forceClear: true }));
     document.addEventListener("visibilitychange", () => {
       if (document.hidden) setManualFromKey(false, { forceClear: true });

@@ -272,8 +272,8 @@ test.describe("SH air auto-detect", () => {
         });
       }
       const silentCur = mode.state.cur;
-      // Onset gate: first 4 positive frames must not count yet
-      for (let i = 0; i < 4; i++) {
+      // Onset gate: first 3 mic frames must not count yet
+      for (let i = 0; i < 3; i++) {
         mode.onFrame({
           rms: 0.05,
           dtMs: 16,
@@ -282,7 +282,7 @@ test.describe("SH air auto-detect", () => {
         });
       }
       const beforeLatch = mode.state.cur;
-      // 5th+ latch
+      // 4th+ latches
       for (let i = 0; i < 10; i++) {
         mode.onFrame({
           rms: 0.05,
@@ -292,13 +292,26 @@ test.describe("SH air auto-detect", () => {
         });
       }
       const afterLatch = mode.state.cur;
+      // Space latches immediately
+      mode.state.cur = 0;
+      mode.state._airOnset = 0;
+      mode.state._airHoldFrames = 0;
+      mode.onFrame({
+        rms: 0.001,
+        dtMs: 16,
+        airDetected: false,
+        manualSound: true,
+        manualKind: "air"
+      });
+      const spaceInstant = mode.state.cur;
       mode.unmount?.();
       host.remove();
-      return { silentCur, beforeLatch, afterLatch };
+      return { silentCur, beforeLatch, afterLatch, spaceInstant };
     });
     expect(r.silentCur).toBe(0);
     expect(r.beforeLatch).toBe(0);
     expect(r.afterLatch).toBeGreaterThan(0.1);
+    expect(r.spaceInstant).toBeGreaterThan(0);
   });
 
   test("air grace keeps airDetected after brief dropout", async ({ page }) => {

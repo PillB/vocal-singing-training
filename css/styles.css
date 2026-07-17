@@ -2523,12 +2523,14 @@ body.view-exercise .stage-below.is-fitted {
   font-weight: 750;
   padding: 0.75rem 1.35rem;
   border-radius: 999px;
-  box-shadow: 0 8px 28px rgba(61, 186, 122, 0.35);
+  /* Tight shadow — large glow made users click outside the real hit box */
+  box-shadow: 0 2px 10px rgba(61, 186, 122, 0.28);
 }
 
 .btn-practice:hover {
-  transform: translateY(-1px);
+  /* Avoid translateY — shifts painted control vs hit target */
   filter: brightness(1.05);
+  box-shadow: 0 3px 12px rgba(61, 186, 122, 0.4);
 }
 
 .practice-status-row {

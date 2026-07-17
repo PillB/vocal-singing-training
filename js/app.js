@@ -1034,9 +1034,16 @@
       researchEl.textContent = research ? `${tt("ex.research")}${research}` : "";
       researchEl.hidden = !research;
     }
-    $("#ex-steps").innerHTML = (steps || []).map((s) => `<li>${s}</li>`).join("");
-    $("#ex-tips").innerHTML = (tips || []).map((t) => `<li>${t}</li>`).join("");
-    $("#ex-mistakes").innerHTML = (mistakes || []).map((m) => `<li>${m}</li>`).join("");
+    // Escape catalog strings (trusted, but never treat as raw HTML — red-team F2)
+    $("#ex-steps").innerHTML = (steps || [])
+      .map((s) => `<li>${escapeHtml(s)}</li>`)
+      .join("");
+    $("#ex-tips").innerHTML = (tips || [])
+      .map((t) => `<li>${escapeHtml(t)}</li>`)
+      .join("");
+    $("#ex-mistakes").innerHTML = (mistakes || [])
+      .map((m) => `<li>${escapeHtml(m)}</li>`)
+      .join("");
 
     // Timer (integrated into cockpit — always show display when timer exists)
     // Micro-session: 5 min soft cap for comeback practice
@@ -2974,7 +2981,14 @@
           if (!blob) return;
           const url = URL.createObjectURL(blob);
           const player = $("#history-player");
-          player.innerHTML = `<audio class="audio-player" controls autoplay src="${url}"></audio>`;
+          // Object URL only — escape if ever concatenated with user text
+          player.replaceChildren();
+          const audio = document.createElement("audio");
+          audio.className = "audio-player";
+          audio.controls = true;
+          audio.autoplay = true;
+          audio.src = url;
+          player.appendChild(audio);
         });
       });
       $$("[data-del]", list).forEach((btn) => {

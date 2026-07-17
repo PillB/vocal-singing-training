@@ -121,6 +121,54 @@ test.describe("Max-effort journeys (Musk)", () => {
     await expect(page.locator("#exercise-list .card-ex").first()).toBeVisible();
   });
 
+  test("keyboard: Enter on focused Start begins practice; Space assist while live", async ({
+    page
+  }) => {
+    await boot(page, { mic: "silent" });
+    await openExercise(page, "s15-sh-air-ladder");
+    await page.locator("#btn-practice-start").focus();
+    await page.keyboard.press("Enter");
+    await page.waitForFunction(
+      () => !document.querySelector("#btn-practice-stop")?.hidden,
+      { timeout: 12000 }
+    );
+    await page.waitForTimeout(500);
+    const silent = parseFloat(await page.locator("[data-h]").first().textContent());
+    expect(silent).toBe(0);
+    await page.keyboard.down("Space");
+    await page.waitForTimeout(500);
+    const mid = parseFloat(await page.locator("[data-h]").first().textContent());
+    expect(mid).toBeGreaterThan(0.2);
+    await page.keyboard.up("Space");
+    await stopPractice(page);
+  });
+
+  test("concurrent: live practice + pricing modal + account modal", async ({ page }) => {
+    await boot(page, { mic: "silent" });
+    await openExercise(page, "v1-diction");
+    await startPractice(page);
+    await page.locator("#btn-pricing").click();
+    await expect(page.locator("#pricing-modal")).toBeVisible();
+    await page.locator("#pricing-close").click();
+    await page.locator("#btn-account").click();
+    await expect(page.locator("#account-modal")).toBeVisible();
+    await page.locator("#account-close, #account-modal [data-close], .modal-close").first().click({ force: true }).catch(async () => {
+      await page.keyboard.press("Escape");
+    });
+    // Practice still live
+    await expect(page.locator("#btn-practice-stop")).toBeVisible();
+    await stopPractice(page);
+  });
+
+  test("privacy page loads", async ({ page }) => {
+    await boot(page);
+    await page.goto((process.env.BASE_URL || "http://127.0.0.1:8765") + "/privacy.html", {
+      waitUntil: "domcontentloaded"
+    });
+    await expect(page.locator("body")).toBeVisible();
+    await expect(page.locator("h1, h2").first()).toBeVisible();
+  });
+
   test("stress: open/close 12 exercises without pageerror", async ({ page }) => {
     const errors = [];
     page.on("pageerror", (e) => errors.push(String(e)));

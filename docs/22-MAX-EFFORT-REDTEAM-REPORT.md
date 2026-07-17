@@ -1,9 +1,10 @@
 # Max-effort dual-agent review & red team report
 
-**Date:** 2026-07-16 (session)  
+**Date:** 2026-07-17 (re-run + harden)  
 **Product:** Vocal Studio (GH Pages SPA)  
 **Method:** Dual personas (first-principles UX + adversarial scale/security), Playwright interactive journeys, client-side stress, static secret scan.  
-**Research anchors:** Playwright user-facing tests, frontend chaos (offline/latency), SPA security (soft entitlement, XSS sinks, allowlists).
+**Research anchors:** Playwright user-facing tests, frontend chaos (offline/latency), SPA security (soft entitlement, XSS sinks, allowlists).  
+**Latest commit batch:** expanded journeys (keyboard, concurrent modals, privacy, mic deny) + guide HTML escape harden.
 
 ---
 
@@ -55,7 +56,7 @@ Prior locks also green in redteam script: Space assist, hit-targets, SH air, bil
 | ID | Sev | Agent | Finding | Status |
 |----|-----|-------|---------|--------|
 | F1 | **P1 accepted** | Zuck | **Soft Pro entitlement is forgeable** via `localStorage` (`vt_billing_v1`). Expected on static GH Pages without webhook verification. | **Accept** — document; harden with Worker webhook when revenue matters (`workers/stripe-webhook`) |
-| F2 | P2 | Zuck | `innerHTML` concatenations in `app.js` (guide steps, some UI). Currently fed from locale packs, not raw user HTML. | Monitor; prefer `textContent` / escape if user notes ever render HTML |
+| F2 | P2 | Zuck | `innerHTML` for guide steps/tips/mistakes | **Fixed 2026-07-17** — `escapeHtml()` on catalog strings; history audio via `createElement` |
 | F3 | P2 | Musk | Metrics form often **collapsed** after Stop — easy to miss for learners. | Product polish (not blocking practice) |
 | F4 | P0 fixed earlier | Both | Space activated focused Start/Stop; SH silence free-run | Fixed in `63bd484` + locked by tests |
 | F5 | Info | Zuck | No private “backend” on Pages — stress target is browser storage + mic + soft billing only | Design constraint |

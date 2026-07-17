@@ -1,6 +1,6 @@
 # Max-effort dual-agent review & red team report
 
-**Date:** 2026-07-17 (pass 4 — live Pages validation)  
+**Date:** 2026-07-17 (pass 5 — full re-run + multi-tab + expanded live)  
 **Product:** Vocal Studio (GH Pages SPA)  
 **Live URL:** https://pillb.github.io/vocal-singing-training/  
 **Method:** Dual personas (first-principles UX + adversarial scale/security), Playwright interactive journeys, client-side stress, static secret scan, **production URL e2e**.  
@@ -25,7 +25,7 @@ npm run test:live    # production GitHub Pages
 
 ---
 
-## Live Pages validation (2026-07-17)
+## Live Pages validation (2026-07-17 pass 5)
 
 | Check | Result |
 |-------|--------|
@@ -35,8 +35,12 @@ npm run test:live    # production GitHub Pages
 | Start hit-testable | Pass |
 | No `sk_live_` in shipped scripts | Pass |
 | Privacy page | Pass |
+| Lang toggle + singing tab | Pass |
+| History view | Pass |
 
-Suite: `tests/live-pages.spec.js` (`LIVE_PAGES=1`).
+Suite: `tests/live-pages.spec.js` — **7/7** on production (`npm run test:live`).
+
+**Local dual-agent:** `npm run test:redteam` — **80/80** (+ multi-tab storage stress in redteam-client).
 
 ---
 

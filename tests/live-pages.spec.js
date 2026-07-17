@@ -157,4 +157,22 @@ describeLive("Live Pages validation", () => {
     await expect(page.locator("body")).toBeVisible();
     await expect(page.locator("h1, h2").first()).toBeVisible();
   });
+
+  test("lang toggle + singing tab on production", async ({ page }) => {
+    await bootLive(page);
+    await page.locator("#btn-lang").click();
+    await page.waitForTimeout(150);
+    await page.locator('.tab[data-tab="singing"]').click();
+    await expect(page.locator("#exercise-list .card-ex").first()).toBeVisible();
+    // Toggle back
+    await page.locator("#btn-lang").click();
+    await page.waitForTimeout(100);
+    await expect(page.locator("body")).toBeVisible();
+  });
+
+  test("history view opens on production", async ({ page }) => {
+    await bootLive(page);
+    await page.locator("#btn-history").click();
+    await expect(page.locator("#view-history")).toHaveClass(/active/, { timeout: 8000 });
+  });
 });

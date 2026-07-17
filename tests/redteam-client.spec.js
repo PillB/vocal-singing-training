@@ -232,4 +232,59 @@ test.describe("Red team client (Zuck)", () => {
     }
     await expect(page.locator("#exercise-list .card-ex").first()).toBeVisible();
   });
+
+  test("multi-tab: concurrent localStorage progress writes do not crash", async ({
+    browser
+  }) => {
+    const context = await browser.newContext();
+    const pageA = await context.newPage();
+    const pageB = await context.newPage();
+    for (const page of [pageA, pageB]) {
+      await page.addInitScript(() => {
+        try {
+          localStorage.setItem("vt_tour_v1", "1");
+          localStorage.setItem("vt_lang", "es");
+          sessionStorage.setItem("vt_e2e", "1");
+        } catch {
+          /* ignore */
+        }
+      });
+      await page.goto(BASE + "/?t=" + Date.now(), { waitUntil: "domcontentloaded" });
+    }
+    // Both tabs write progress
+    await Promise.all([
+      pageA.evaluate(() => {
+        const k = "vt_progress_v1";
+        let p = {};
+        try {
+          p = JSON.parse(localStorage.getItem(k) || "{}") || {};
+        } catch {
+          p = {};
+        }
+        p.tabA = (p.tabA || 0) + 1;
+        p.sessions = p.sessions || [];
+        p.sessions.push({ id: "a" + Date.now(), exerciseId: "v1-diction" });
+        localStorage.setItem(k, JSON.stringify(p));
+      }),
+      pageB.evaluate(() => {
+        const k = "vt_progress_v1";
+        let p = {};
+        try {
+          p = JSON.parse(localStorage.getItem(k) || "{}") || {};
+        } catch {
+          p = {};
+        }
+        p.tabB = (p.tabB || 0) + 1;
+        p.sessions = p.sessions || [];
+        p.sessions.push({ id: "b" + Date.now(), exerciseId: "s15-sh-air-ladder" });
+        localStorage.setItem(k, JSON.stringify(p));
+      })
+    ]);
+    await pageA.reload({ waitUntil: "domcontentloaded" });
+    await expect(pageA.locator("body")).toBeVisible();
+    await expect(pageA.locator("#exercise-list .card-ex").first()).toBeVisible({
+      timeout: 8000
+    });
+    await context.close();
+  });
 });

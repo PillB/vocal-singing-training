@@ -144,7 +144,7 @@ async function spaceHold(page, holdMs = 650) {
 }
 
 /**
- * Probe practice engine / UI state useful for Space + live checks.
+ * Probe practice engine / UI state useful for Space + live + count checks.
  * @param {import('@playwright/test').Page} page
  */
 async function practiceProbe(page) {
@@ -155,25 +155,70 @@ async function practiceProbe(page) {
     const status = document.querySelector("#practice-status")?.textContent || "";
     const chip = document.querySelector("#mic-sens-hud")?.className || "";
     const holdEl = document.querySelector("[data-h]");
+    const big = document.querySelector(".mode-big, .mode-focus .mode-big, #mode-focus .mode-big");
+    const mic = document.querySelector("#mic-sensitivity");
+    const modeFocus = document.getElementById("mode-focus");
+    const pitchCanvas = document.getElementById("pitch-canvas");
     const manual =
       typeof eng?.manualSound === "boolean"
         ? eng.manualSound
         : typeof eng?._manualSound === "boolean"
           ? eng._manualSound
           : null;
+    const holdText = holdEl?.textContent || big?.textContent || null;
+    const holdNum = holdText != null ? parseFloat(String(holdText).replace(/[^\d.-]/g, "")) : null;
+    // Collect any numeric chips that look like counters
+    const nums = [...document.querySelectorAll("#mode-focus [data-h], #mode-focus .mode-big, #mode-hud [data-h]")]
+      .map((el) => ({
+        t: (el.textContent || "").trim().slice(0, 40),
+        v: parseFloat(String(el.textContent || "").replace(/[^\d.-]/g, ""))
+      }))
+      .filter((x) => Number.isFinite(x.v));
     return {
+      t: Date.now(),
       live: !!(stop && !stop.hidden),
       startVisible: !!(start && !start.hidden),
-      status,
+      status: (status || "").trim().slice(0, 80),
       micClass: chip,
       isManual: /is-manual/.test(chip),
-      holdText: holdEl?.textContent || null,
-      holdVal: holdEl ? parseFloat(holdEl.textContent) : null,
+      holdText: holdText ? String(holdText).trim().slice(0, 40) : null,
+      holdVal: Number.isFinite(holdNum) ? holdNum : null,
+      counters: nums.slice(0, 6),
       manualSound: manual,
+      micValue: mic ? mic.value : null,
+      modeKids: modeFocus?.children?.length || 0,
+      pitchH: pitchCanvas ? pitchCanvas.getBoundingClientRect().height : 0,
       focusedId: document.activeElement?.id || null,
-      focusedTag: document.activeElement?.tagName || null
+      focusedTag: document.activeElement?.tagName || null,
+      airDetected: eng?.airDetected ?? eng?._airDetected ?? null,
+      rms: typeof eng?._hfRms === "number" ? eng._hfRms : eng?.rms ?? null
     };
   });
+}
+
+/**
+ * Modes where score/count/hold must NOT advance on pure silence (needs mic air or Space).
+ * Timers / speech UX modes are excluded (they may tick wall-clock).
+ */
+const SOUND_GATED_MODES = new Set([
+  "shAirLadder",
+  "breathS",
+  "pitchHold",
+  "sovtFlow",
+  "humTargets",
+  "pitchMatch",
+  "pitchChord",
+  "scaleSteps",
+  "sirenRange",
+  "onsetReps",
+  "dynamicSwell",
+  "staccatoLegato",
+  "pitchSong",
+  "pitchContour"
+]);
+
+function isSoundGated(mode) {
+  return SOUND_GATED_MODES.has(mode);
 }
 
 /**
@@ -324,6 +369,96 @@ function writeReport(data) {
   return REPORT_JSON;
 }
 
+/**
+ * Write markdown forensic report with image index + issue findings.
+ * @param {object} data same shape as JSON report
+ * @param {string} [outPath]
+ */
+function writeMarkdownReport(data, outPath) {
+  const mdPath =
+    outPath ||
+    path.join(ROOT, "docs", "24-LIVE-EXERCISE-FORENSICS.md");
+  ensureDir(path.dirname(mdPath));
+  const lines = [];
+  lines.push("# Live exercise UI forensics (headed, mouse, Space, mic)");
+  lines.push("");
+  lines.push(`**Generated:** ${data.generatedAt || ""}`);
+  lines.push(`**Mode:** ${data.mode || "live-forensics"}`);
+  lines.push(`**Live duration:** ${data.liveSeconds || 10}s per exercise`);
+  lines.push(`**Result:** ${data.summary?.total || 0} exercises · **${data.summary?.withIssues || 0} with issues** · P0=${(data.summary?.issues || []).filter((i) => i.sev === "P0").length}`);
+  lines.push("");
+  lines.push("## Aggregate");
+  lines.push("");
+  lines.push("| Metric | Value |");
+  lines.push("|--------|------:|");
+  const s = data.summary || {};
+  for (const [k, v] of Object.entries(s.metrics || {})) {
+    lines.push(`| ${k} | ${v} |`);
+  }
+  lines.push(`| total | ${s.total ?? ""} |`);
+  lines.push(`| withIssues | ${s.withIssues ?? ""} |`);
+  lines.push("");
+  lines.push("## Findings / improvements");
+  lines.push("");
+  const issues = s.issues || [];
+  if (!issues.length) {
+    lines.push("_No automated P0/P1 issues._ Soft improvements listed per exercise when relevant.");
+  } else {
+    lines.push("| Exercise | Sev | Code | Message |");
+    lines.push("|----------|-----|------|---------|");
+    for (const i of issues) {
+      lines.push(`| ${i.exerciseId} | ${i.sev} | ${i.code} | ${String(i.msg || "").replace(/\|/g, "/")} |`);
+    }
+  }
+  lines.push("");
+  lines.push("## Per-exercise image index + forensic notes");
+  lines.push("");
+  for (const e of data.exercises || []) {
+    lines.push(`### ${e.id} — ${e.title || ""} (\`${e.profile?.mode || "?"}\`)`);
+    lines.push("");
+    if (e.issues?.length) {
+      lines.push("**Issues:**");
+      for (const i of e.issues) lines.push(`- **${i.sev}** \`${i.code}\`: ${i.msg}`);
+      lines.push("");
+    }
+    if (e.forensicNotes?.length) {
+      lines.push("**Notes:**");
+      for (const n of e.forensicNotes) lines.push(`- ${n}`);
+      lines.push("");
+    }
+    const imgs = e.images || [];
+    if (imgs.length) {
+      lines.push("| # | File | Action | Expected | Actual / verdict |");
+      lines.push("|---|------|--------|----------|------------------|");
+      imgs.forEach((im, idx) => {
+        lines.push(
+          `| ${idx + 1} | \`${im.file}\` | ${im.action || ""} | ${im.expected || ""} | ${im.verdict || im.actual || ""} |`
+        );
+      });
+      lines.push("");
+    }
+    if (e.actions?.silenceGate) {
+      lines.push(
+        `Silence gate: soundGated=${e.actions.silenceGate.soundGated} hold0=${e.actions.silenceGate.holdBefore} hold1=${e.actions.silenceGate.holdAfter} **${e.actions.silenceGate.ok ? "PASS" : "FAIL"}**`
+      );
+      lines.push("");
+    }
+    if (e.actions?.space) {
+      const sp = e.actions.space;
+      lines.push(
+        `Space: longHold didNotStop=${sp.longHold?.didNotStop} isManual=${sp.longHold?.midManual} shortPulse didNotStop=${sp.shortPulse?.didNotStop}`
+      );
+      lines.push("");
+    }
+  }
+  lines.push("---");
+  lines.push("");
+  lines.push("Screenshots root: `qa/screenshots/exercise-ui/{id}/`");
+  lines.push("");
+  fs.writeFileSync(mdPath, lines.join("\n"));
+  return mdPath;
+}
+
 module.exports = {
   SHOT_ROOT,
   REPORT_JSON,
@@ -337,9 +472,12 @@ module.exports = {
   realDragX,
   spaceHold,
   practiceProbe,
+  isSoundGated,
+  SOUND_GATED_MODES,
   styleSnapshot,
   hoverFeedback,
   listExerciseControls,
   controlSelector,
-  writeReport
+  writeReport,
+  writeMarkdownReport
 };

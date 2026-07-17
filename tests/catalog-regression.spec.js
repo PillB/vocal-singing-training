@@ -264,9 +264,11 @@ test.describe("Per-exercise open + HUD regression", () => {
       expect(fold.startInView, JSON.stringify(fold)).toBe(true);
       expect(fold.stageTop, JSON.stringify(fold)).toBeLessThan(fold.vh * 0.45);
 
-      // Expand guide → steps/tips/mistakes still rendered (content regression)
+      // Expand guide → steps/tips/mistakes still rendered (content regression).
+      // ES locale packs may be longer than EN snapshot counts — require ≥ snapshot.
       await page.click("#btn-toggle-guide");
-      await expect(page.locator("#ex-steps li")).toHaveCount(ex.steps, { timeout: 5000 });
+      const stepCount = await page.locator("#ex-steps li").count();
+      expect(stepCount, `${ex.id} steps`).toBeGreaterThanOrEqual(ex.steps);
       const tipCount = await page.locator("#ex-tips li").count();
       const mistCount = await page.locator("#ex-mistakes li").count();
       expect(tipCount).toBeGreaterThanOrEqual(ex.tips);

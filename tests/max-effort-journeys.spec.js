@@ -28,17 +28,11 @@ test.describe("Max-effort journeys (Musk)", () => {
     await startPractice(page);
     await page.waitForTimeout(400);
     await stopPractice(page);
-    // Metrics may be inside a collapsed card — expand if needed
-    const metrics = page.locator("#metrics-form");
-    if (!(await metrics.isVisible().catch(() => false))) {
-      await page.locator("#btn-toggle-metrics, .metrics-card summary, [data-i18n='ex.metrics']").first().click({ force: true }).catch(() => {});
-      await page.evaluate(() => {
-        document.querySelector(".metrics-card")?.classList.remove("collapsed");
-        const f = document.querySelector("#metrics-form");
-        if (f) f.hidden = false;
-      });
-    }
-    await expect(page.locator("#metrics-form .field, #metrics-form input, #metrics-form label").first()).toBeAttached();
+    // After stop, metrics card should auto-expand (learner next step)
+    await expect(page.locator("#metrics-card")).not.toHaveClass(/collapsed/, { timeout: 3000 });
+    await expect(
+      page.locator("#metrics-form .field, #metrics-form input, #metrics-form label").first()
+    ).toBeVisible({ timeout: 3000 });
   });
 
   test("SH ladder: silence stays 0; Space raises; Stop stays live during Space", async ({

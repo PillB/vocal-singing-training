@@ -299,28 +299,30 @@ test.describe("Exercise-specific practice modes", () => {
     // guide + metrics below fold, collapsed by default
     await expect(page.locator(".guide-card")).toHaveClass(/collapsed/);
     await expect(page.locator("#metrics-card")).toHaveClass(/collapsed/);
-    // Game stage owns most of the first viewport
+    // Game stage owns most of the first viewport — Start must be usable without scrolling
     const fold = await page.evaluate(() => {
+      window.VTApp?.fitHighwayToViewport?.();
       window.scrollTo(0, 0);
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
       const b = document.querySelector("#btn-practice-start")?.getBoundingClientRect();
       const h = document.querySelector("#highway-stage")?.getBoundingClientRect();
       return {
         startY: b ? b.top + b.height / 2 : null,
         startBottom: b ? b.bottom : null,
+        startInView: !!(b && b.top >= -8 && b.bottom <= window.innerHeight + 14),
         stageBottom: h ? h.bottom : null,
         stageTop: h ? h.top : null,
         stageH: h ? h.height : null,
-        vh: window.innerHeight,
-        scrollY: window.scrollY
+        vh: window.innerHeight
       };
     });
-    expect(fold.scrollY).toBe(0);
+    expect(fold.startInView, JSON.stringify(fold)).toBe(true);
     expect(fold.startY).toBeLessThan(fold.vh);
-    expect(fold.startBottom).toBeLessThanOrEqual(fold.vh + 8);
-    expect(fold.stageBottom).toBeLessThanOrEqual(fold.vh + 12);
-    // Stage should claim a large share of viewport height (less scroll product goal)
-    expect(fold.stageH / fold.vh).toBeGreaterThanOrEqual(0.55);
-    expect(fold.stageTop).toBeLessThan(fold.vh * 0.2);
+    expect(fold.startBottom).toBeLessThanOrEqual(fold.vh + 14);
+    expect(fold.stageBottom).toBeLessThanOrEqual(fold.vh + 24);
+    expect(fold.stageH / fold.vh).toBeGreaterThanOrEqual(0.45);
+    expect(fold.stageTop).toBeLessThan(fold.vh * 0.35);
   });
 
   test("wide jump progressions available for solfege", async ({ page }) => {

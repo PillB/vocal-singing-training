@@ -2256,6 +2256,27 @@
     $("#level-fill").style.width = "0%";
     if (!silent) {
       toast(modeResult?.summary ? `⏹ ${modeResult.summary}` : tt("toast.stopped"));
+      // Musk-mode UX: after a real stop, open reflect/save so metrics aren't hidden
+      openMetricsPanel(true);
+    }
+  }
+
+  /** Expand or collapse the post-practice metrics card */
+  function openMetricsPanel(open) {
+    state.metricsOpen = !!open;
+    const card = document.querySelector("#metrics-card");
+    card?.classList.toggle("collapsed", !state.metricsOpen);
+    const btn = $("#btn-toggle-metrics");
+    if (btn) {
+      btn.textContent = state.metricsOpen
+        ? tt("metrics.hide")
+        : tt("metrics.show");
+      btn.setAttribute("aria-expanded", String(!!state.metricsOpen));
+    }
+    if (state.metricsOpen) {
+      requestAnimationFrame(() => {
+        card?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      });
     }
   }
 
@@ -3429,17 +3450,7 @@
       }
     });
     $("#btn-toggle-metrics")?.addEventListener("click", () => {
-      state.metricsOpen = !state.metricsOpen;
-      const card = document.querySelector("#metrics-card");
-      card?.classList.toggle("collapsed", !state.metricsOpen);
-      const btn = $("#btn-toggle-metrics");
-      if (btn) {
-        btn.textContent = state.metricsOpen ? tt("metrics.hide") : tt("metrics.show");
-        btn.setAttribute("aria-expanded", String(!!state.metricsOpen));
-      }
-      if (state.metricsOpen) {
-        card?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-      }
+      openMetricsPanel(!state.metricsOpen);
     });
 
     $("#btn-timer-start")?.addEventListener("click", startTimer);

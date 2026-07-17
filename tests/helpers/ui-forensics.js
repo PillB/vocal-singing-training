@@ -144,81 +144,172 @@ async function spaceHold(page, holdMs = 650) {
 }
 
 /**
- * Probe practice engine / UI state useful for Space + live + count checks.
+ * Probe practice UI + engine. Prefer mode-specific selectors — never treat
+ * wall-clock [data-remain] countdown as "hold count".
  * @param {import('@playwright/test').Page} page
  */
 async function practiceProbe(page) {
   return page.evaluate(() => {
-    const eng = window.VTApp?.engine || window.practiceEngine || null;
+    const st = window.VTApp?.getState?.() || {};
+    const eng = st.practice || window.VTApp?.engine || null;
     const stop = document.querySelector("#btn-practice-stop");
     const start = document.querySelector("#btn-practice-start");
     const status = document.querySelector("#practice-status")?.textContent || "";
     const chip = document.querySelector("#mic-sens-hud")?.className || "";
-    const holdEl = document.querySelector("[data-h]");
-    const big = document.querySelector(".mode-big, .mode-focus .mode-big, #mode-focus .mode-big");
+    const focus = document.getElementById("mode-focus");
+    const hud = document.getElementById("mode-hud");
+    // Pitch exercises mount mode UI in #mode-hud; speech modes use #mode-focus
+    const roots = [focus, hud].filter(Boolean);
+    const q = (sel) => {
+      for (const r of roots) {
+        const el = r.querySelector(sel);
+        if (el) return el;
+      }
+      return null;
+    };
     const mic = document.querySelector("#mic-sensitivity");
-    const modeFocus = document.getElementById("mode-focus");
     const pitchCanvas = document.getElementById("pitch-canvas");
-    const manual =
-      typeof eng?.manualSound === "boolean"
-        ? eng.manualSound
-        : typeof eng?._manualSound === "boolean"
-          ? eng._manualSound
+
+    // Hold seconds: ONLY .mode-big[data-h] (not meta [data-h] hard-attack counters)
+    const holdEl = q(".mode-big[data-h]");
+    const remainEl = q(".mode-big[data-remain], [data-remain]");
+    const clearedEl = q("[data-c]");
+    const bestEl = q("[data-b], [data-best]");
+    const shortEl = q("[data-sh]");
+    const longEl = q("[data-lg]");
+    const easyEl = q("[data-e]");
+
+    const parseNum = (el) => {
+      if (!el) return null;
+      const v = parseFloat(String(el.textContent || "").replace(/[^\d.-]/g, ""));
+      return Number.isFinite(v) ? v : null;
+    };
+
+    const holdText = holdEl ? String(holdEl.textContent || "").trim().slice(0, 40) : null;
+    const holdVal = parseNum(holdEl);
+
+    // Engine live fields (preferred truth for pitch/hold)
+    const engHold =
+      typeof eng?.currentHoldSec === "number"
+        ? eng.currentHoldSec
+        : typeof eng?._currentHoldSec === "number"
+          ? eng._currentHoldSec
           : null;
-    const holdText = holdEl?.textContent || big?.textContent || null;
-    const holdNum = holdText != null ? parseFloat(String(holdText).replace(/[^\d.-]/g, "")) : null;
-    // Collect any numeric chips that look like counters
-    const nums = [...document.querySelectorAll("#mode-focus [data-h], #mode-focus .mode-big, #mode-hud [data-h]")]
-      .map((el) => ({
-        t: (el.textContent || "").trim().slice(0, 40),
-        v: parseFloat(String(el.textContent || "").replace(/[^\d.-]/g, ""))
-      }))
-      .filter((x) => Number.isFinite(x.v));
+    const manSt = eng?.getManualSound?.() || null;
+    const manualActive = !!(manSt && manSt.active);
+    const manualGrace = !!(manSt && manSt.grace);
+
+    const profile = st.exercise ? window.VTApp?.getProfile?.(st.exercise) : null;
+    const showPitch = !!profile?.showPitch;
+    const mode = profile?.mode || null;
+    // Mirror product rules: air modes always; else non-highway only
+    const airAssist =
+      profile?.manualSoundKind === "air" ||
+      mode === "shAirLadder" ||
+      mode === "breathS";
+    const spaceAssistAllowed = !!(
+      st.practiceLive &&
+      profile &&
+      profile.allowManualSound !== false &&
+      (airAssist || !showPitch)
+    );
+
     return {
       t: Date.now(),
       live: !!(stop && !stop.hidden),
       startVisible: !!(start && !start.hidden),
       status: (status || "").trim().slice(0, 80),
       micClass: chip,
-      isManual: /is-manual/.test(chip),
-      holdText: holdText ? String(holdText).trim().slice(0, 40) : null,
-      holdVal: Number.isFinite(holdNum) ? holdNum : null,
-      counters: nums.slice(0, 6),
-      manualSound: manual,
+      isManual: /is-manual(?:\s|$)/.test(chip) && !/is-manual-grace/.test(chip),
+      isManualGrace: /is-manual-grace/.test(chip),
+      holdText,
+      /** Seconds from mode-big[data-h] only — null if N/A */
+      holdVal,
+      remainSec: parseNum(remainEl),
+      cleared: parseNum(clearedEl),
+      bestHold: parseNum(bestEl),
+      shortNotes: parseNum(shortEl),
+      longNotes: parseNum(longEl),
+      easyOnsets: parseNum(easyEl),
+      engHoldSec: engHold,
+      manualSound: manualActive,
+      manualGrace,
+      manualKind: manSt?.kind || null,
+      spaceAssistAllowed,
+      showPitch,
+      mode,
       micValue: mic ? mic.value : null,
-      modeKids: modeFocus?.children?.length || 0,
+      modeKids: focus?.children?.length || 0,
       pitchH: pitchCanvas ? pitchCanvas.getBoundingClientRect().height : 0,
       focusedId: document.activeElement?.id || null,
-      focusedTag: document.activeElement?.tagName || null,
-      airDetected: eng?.airDetected ?? eng?._airDetected ?? null,
-      rms: typeof eng?._hfRms === "number" ? eng._hfRms : eng?.rms ?? null
+      focusedTag: document.activeElement?.tagName || null
     };
   });
 }
 
 /**
- * Modes where score/count/hold must NOT advance on pure silence (needs mic air or Space).
- * Timers / speech UX modes are excluded (they may tick wall-clock).
+ * Air/hold modes where the primary progress number must stay ~0 on pure silence
+ * and should advance when Space assist is allowed (non-highway).
  */
+const AIR_HOLD_MODES = new Set(["shAirLadder", "breathS"]);
+
+/** Pitch hold UI (engine holdSec / data-h) — silence must not free-run */
+const PITCH_HOLD_UI_MODES = new Set(["pitchHold", "humTargets"]);
+
+/**
+ * Modes where wall-clock phase timers tick without sound (not a silence bug).
+ * Do NOT treat [data-remain] as sound-gated count.
+ */
+const WALL_CLOCK_PHASE_MODES = new Set([
+  "rateLadder",
+  "metronomeSpeech",
+  "staccatoLegato",
+  "volumeLadder",
+  "volumeSteady",
+  "storyTimer",
+  "keyPointPace",
+  "facePhases",
+  "countPace",
+  "dynamicSwell"
+]);
+
+/** Broader set: silence should not inflate *sound progress* counters */
 const SOUND_GATED_MODES = new Set([
-  "shAirLadder",
-  "breathS",
-  "pitchHold",
+  ...AIR_HOLD_MODES,
+  ...PITCH_HOLD_UI_MODES,
   "sovtFlow",
-  "humTargets",
   "pitchMatch",
   "pitchChord",
   "scaleSteps",
   "sirenRange",
   "onsetReps",
-  "dynamicSwell",
-  "staccatoLegato",
   "pitchSong",
   "pitchContour"
 ]);
 
 function isSoundGated(mode) {
   return SOUND_GATED_MODES.has(mode);
+}
+
+function isAirHoldMode(mode) {
+  return AIR_HOLD_MODES.has(mode);
+}
+
+function isWallClockPhase(mode) {
+  return WALL_CLOCK_PHASE_MODES.has(mode);
+}
+
+/** Best numeric proxy for "sound progress" for silence assertions */
+function soundProgress(probe) {
+  if (!probe) return null;
+  if (probe.holdVal != null) return probe.holdVal;
+  if (probe.engHoldSec != null) return probe.engHoldSec;
+  if (probe.shortNotes != null || probe.longNotes != null) {
+    return (probe.shortNotes || 0) + (probe.longNotes || 0);
+  }
+  if (probe.easyOnsets != null) return probe.easyOnsets;
+  if (probe.cleared != null) return probe.cleared;
+  return null;
 }
 
 /**
@@ -473,7 +564,13 @@ module.exports = {
   spaceHold,
   practiceProbe,
   isSoundGated,
+  isAirHoldMode,
+  isWallClockPhase,
+  soundProgress,
   SOUND_GATED_MODES,
+  AIR_HOLD_MODES,
+  PITCH_HOLD_UI_MODES,
+  WALL_CLOCK_PHASE_MODES,
   styleSnapshot,
   hoverFeedback,
   listExerciseControls,

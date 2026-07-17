@@ -29,6 +29,9 @@ const {
   realDragX,
   practiceProbe,
   isSoundGated,
+  isAirHoldMode,
+  isWallClockPhase,
+  soundProgress,
   scrollIntoView
 } = require("./helpers/ui-forensics");
 const { boot, openExercise } = require("./helpers/e2e");
@@ -223,9 +226,11 @@ test("headed live forensics: mouse, mic, Space, 10s play, image index", async ({
       });
       const mode = entry.profile?.mode || "";
       const soundGated = isSoundGated(mode);
+      const airHold = isAirHoldMode(mode);
+      const wallClock = isWallClockPhase(mode);
       note(
         entry,
-        `Profile mode=${mode} showPitch=${!!entry.profile?.showPitch} soundGated=${soundGated} allowManual=${entry.profile?.allowManualSound !== false}`
+        `Profile mode=${mode} showPitch=${!!entry.profile?.showPitch} soundGated=${soundGated} airHold=${airHold} wallClockPhase=${wallClock} allowManual=${entry.profile?.allowManualSound !== false}`
       );
 
       // --- 00 open ---
@@ -378,43 +383,71 @@ test("headed live forensics: mouse, mic, Space, 10s play, image index", async ({
         } else {
           report.summary.metrics.liveOk++;
 
-          // --- 05 SILENCE GATE (2s): count must not auto-start for sound-gated ---
+          // --- 05 SILENCE GATE (2s): sound progress must not free-run ---
+          // Wall-clock [data-remain] is ALLOWED to tick — not a silence bug.
           const silenceBefore = await practiceProbe(page);
           await shotF(
             "05_silence_before.png",
             "Silence gate t=0 (silent mic, no Space)",
-            soundGated
-              ? "hold/count stays ~0 without air/Space"
-              : "timer modes may tick; no crash",
-            `hold=${silenceBefore.holdVal}`
+            airHold || soundGated
+              ? "hold/progress stays ~0 without air/Space"
+              : wallClock
+                ? "phase timer may tick; not sound-count"
+                : "stable live",
+            `hold=${silenceBefore.holdVal} remain=${silenceBefore.remainSec} engHold=${silenceBefore.engHoldSec}`
           );
           await page.waitForTimeout(2000);
           const silenceAfter = await practiceProbe(page);
           await shotF(
             "05_silence_after_2s.png",
             "Silence gate t=2s still silent",
-            soundGated ? "hold/count still ~0" : "stable live",
-            `hold=${silenceAfter.holdVal} live=${silenceAfter.live}`
+            airHold || soundGated ? "hold/progress still ~0" : "stable live",
+            `hold=${silenceAfter.holdVal} remain=${silenceAfter.remainSec} live=${silenceAfter.live}`
           );
 
           let silenceOk = true;
-          if (soundGated) {
+          const p0 = soundProgress(silenceBefore);
+          const p1 = soundProgress(silenceAfter);
+          // Strict: air-hold modes (SH / breath S) — data-h hold must stay ~0
+          if (airHold) {
             const h0 = silenceBefore.holdVal ?? 0;
             const h1 = silenceAfter.holdVal ?? 0;
-            // Allow tiny float noise; fail if advanced > 0.35s of “sound count”
-            silenceOk = h1 <= h0 + 0.35 && silenceAfter.live;
+            silenceOk = h1 <= 0.35 && h1 <= h0 + 0.2 && silenceAfter.live;
             if (!silenceOk) {
               entry.issues.push({
                 code: "silence_auto_count",
                 sev: "P0",
-                msg: `Sound-gated mode advanced on silence: hold ${h0}→${h1}`
+                msg: `Air-hold mode advanced on silence: hold ${h0}→${h1}`
               });
             }
+          } else if (soundGated && p0 != null && p1 != null) {
+            // Progress proxy (not remainSec) must not jump > 0.5
+            silenceOk = p1 <= p0 + 0.5 && silenceAfter.live;
+            if (!silenceOk) {
+              entry.issues.push({
+                code: "silence_auto_count",
+                sev: "P0",
+                msg: `Sound-gated progress advanced on silence: ${p0}→${p1}`
+              });
+            }
+          } else if (!silenceAfter.live) {
+            silenceOk = false;
+            entry.issues.push({
+              code: "silence_dropped_live",
+              sev: "P0",
+              msg: "Left live during silence gate"
+            });
           }
           entry.actions.silenceGate = {
             soundGated,
+            airHold,
+            wallClock,
             holdBefore: silenceBefore.holdVal,
             holdAfter: silenceAfter.holdVal,
+            remainBefore: silenceBefore.remainSec,
+            remainAfter: silenceAfter.remainSec,
+            progressBefore: p0,
+            progressAfter: p1,
             live: silenceAfter.live,
             ok: silenceOk
           };
@@ -422,7 +455,7 @@ test("headed live forensics: mouse, mic, Space, 10s play, image index", async ({
           if (silenceOk) report.summary.metrics.silenceGateOk++;
           note(
             entry,
-            `Silence 2s: gated=${soundGated} hold ${silenceBefore.holdVal}→${silenceAfter.holdVal} ${silenceOk ? "PASS" : "FAIL"}`
+            `Silence 2s: airHold=${airHold} gated=${soundGated} hold ${silenceBefore.holdVal}→${silenceAfter.holdVal} remain ${silenceBefore.remainSec}→${silenceAfter.remainSec} progress ${p0}→${p1} ${silenceOk ? "PASS" : "FAIL"}`
           );
 
           // --- 06 SPACE long hold + short release ---
@@ -465,7 +498,48 @@ test("headed live forensics: mouse, mic, Space, 10s play, image index", async ({
             });
           } else report.summary.metrics.spaceLongOk++;
 
-          // --- 07 SPACE short press (tap) ---
+          // Product: Space assist off on pure pitch highway; on for air modes (incl. breathS+pitch)
+          const spaceAllowed = !!spMid.spaceAssistAllowed || !!sp0.spaceAssistAllowed;
+          if (spaceAllowed) {
+            if (!spMid.isManual && !spMid.manualSound) {
+              entry.issues.push({
+                code: "space_no_manual_flag",
+                sev: "P1",
+                msg: "Space hold did not set is-manual / engine manualSound when assist allowed"
+              });
+            }
+          } else {
+            if (spMid.isManual || spMid.manualSound) {
+              entry.issues.push({
+                code: "space_manual_on_highway",
+                sev: "P1",
+                msg: "Space set manual assist on pure pitch highway (product forbids)"
+              });
+            }
+            note(entry, "Space assist disabled on pure pitch highway (product)");
+          }
+
+          // Air-hold modes (SH / breath S): Space must advance hold counter
+          if (airHold) {
+            if (!spaceAllowed) {
+              entry.issues.push({
+                code: "space_blocked_air_mode",
+                sev: "P0",
+                msg: "Air-hold mode has Space assist blocked (showPitch/manual gate bug)"
+              });
+            } else {
+              const midH = spMid.holdVal ?? 0;
+              if (midH < 0.45) {
+                entry.issues.push({
+                  code: "space_no_air_progress",
+                  sev: "P0",
+                  msg: `SH/breath Space hold did not advance count (hold=${midH})`
+                });
+              }
+            }
+          }
+
+          // --- 07 SPACE short press (tap) + short release ---
           await shotF(
             "07_space_short_before.png",
             "Before short Space tap",
@@ -478,7 +552,7 @@ test("headed live forensics: mouse, mic, Space, 10s play, image index", async ({
           await shotF(
             "07_space_short_hold.png",
             "Space short hold 200ms",
-            "Still live",
+            "Still live; short press still prevents button activation",
             `live=${spTap.live} manual=${spTap.isManual}`
           );
           await page.keyboard.up("Space");
@@ -500,9 +574,11 @@ test("headed live forensics: mouse, mic, Space, 10s play, image index", async ({
           } else report.summary.metrics.spaceShortOk++;
 
           entry.actions.space = {
+            spaceAssistAllowed: spaceAllowed,
             longHold: {
               didNotStop: longOk,
               midManual: spMid.isManual,
+              midManualSound: spMid.manualSound,
               midHold: spMid.holdVal,
               afterHold: spAfter.holdVal
             },
@@ -513,7 +589,7 @@ test("headed live forensics: mouse, mic, Space, 10s play, image index", async ({
           };
           note(
             entry,
-            `Space long: live mid/after=${spMid.live}/${spAfter.live} manual=${spMid.isManual}; short tap live=${spTap.live}`
+            `Space long: live mid/after=${spMid.live}/${spAfter.live} manualChip=${spMid.isManual} engManual=${spMid.manualSound} hold=${spMid.holdVal}; short tap live=${spTap.live}; assistAllowed=${spaceAllowed}`
           );
 
           // --- 08 LIVE 10s: every second before + after shot + probe ---
@@ -526,8 +602,8 @@ test("headed live forensics: mouse, mic, Space, 10s play, image index", async ({
               "Still live; highway/mode UI updating",
               `hold=${pBefore.holdVal} status=${pBefore.status} manual=${pBefore.isManual}`
             );
-            // Mid window: brief Space assist on some seconds for gated modes (~1s total)
-            if (soundGated && sec % 3 === 1) {
+            // Mid window: brief Space only on non-highway air-hold modes (a11y path)
+            if (airHold && !entry.profile?.showPitch && sec % 3 === 1) {
               await page.keyboard.down("Space");
               await page.waitForTimeout(350);
               await page.keyboard.up("Space");

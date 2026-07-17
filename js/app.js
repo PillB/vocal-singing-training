@@ -3308,9 +3308,19 @@
       if (!state.practiceLive || !state.practice?.running) return false;
       const profile = state.exercise ? getProfile(state.exercise) : null;
       if (!profile) return false;
-      // Never on pitch highway exercises
-      if (profile.showPitch) return false;
       if (profile.allowManualSound === false) return false;
+      // Air a11y modes (SH ladder, breath S→A) need Space even when pitch canvas is on
+      // for the voiced /A/ phase. Blocking all showPitch broke s8 breath support Space.
+      const mode = profile.mode || "";
+      if (
+        profile.manualSoundKind === "air" ||
+        mode === "shAirLadder" ||
+        mode === "breathS"
+      ) {
+        return true;
+      }
+      // Pure pitch-highway games: no Space-as-sound (would fake pitch locks)
+      if (profile.showPitch) return false;
       return true;
     };
     const manualKindForProfile = (profile) => {

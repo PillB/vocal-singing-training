@@ -425,6 +425,9 @@
       pitchChallenge: false,
       autoPiano: true,
       autoRecord: false,
+      /** Space / air assist for unvoiced S phase (a11y) — allowed even with pitch canvas */
+      manualSoundKind: "air",
+      allowManualSound: true,
       cue: "Phase 1: even S (or SH). Phase 2: same support on /A/. Pair with SH ladder warm-up.",
       cueEs: "Fase 1: S (o SH) pareja. Fase 2: mismo soporte en /A/. Combina con escalera SH.",
       metricHints: { maxS: "bestS", transferA: "bestA" }

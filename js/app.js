@@ -82,6 +82,10 @@
     }
     toast._lastText = text;
     toast._lastAt = now;
+    // Quiet toast UI during e2e (still logs); avoids covering Start/Stop on small viewports
+    if (sessionStorage.getItem("vt_e2e") === "1" && sessionStorage.getItem("vt_debug") !== "1") {
+      return;
+    }
     el.textContent = text;
     el.classList.add("show");
     clearTimeout(toast._t);
@@ -397,8 +401,34 @@
   }
 
   /**
+   * Visual / layout viewport height (mobile chrome + fullscreen robust).
+   * Prefer visualViewport when present (MDN: layout vs visual viewport).
+   */
+  function getViewportMetrics() {
+    const vv = window.visualViewport;
+    const ih = window.innerHeight || document.documentElement.clientHeight || 600;
+    const iw = window.innerWidth || document.documentElement.clientWidth || 360;
+    // visualViewport.height is the *visible* area; offsetTop when address bar shifts
+    const vh = vv && vv.height > 0 ? vv.height : ih;
+    const offsetTop = vv && typeof vv.offsetTop === "number" ? vv.offsetTop : 0;
+    // Safe-area (notch / home indicator) — CSS also pads; include in measure gap
+    let safeBottom = 0;
+    try {
+      const probe = getComputedStyle(document.documentElement).getPropertyValue(
+        "--safe-bottom"
+      );
+      const n = parseFloat(probe);
+      if (Number.isFinite(n)) safeBottom = n;
+    } catch {
+      /* ignore */
+    }
+    return { vh, iw, offsetTop, safeBottom, layoutVh: ih };
+  }
+
+  /**
    * Fit #highway-stage to remaining viewport below its current top (title+header).
    * CSS max-height alone cannot know layout Y; explicit geometry avoids bottom overflow.
+   * Multi-format: visualViewport + safe-area + multi-pass clamp so Start stays clickable.
    */
   function fitHighwayToViewport() {
     try {
@@ -412,28 +442,45 @@
         }
         return;
       }
+      // Keep stage top in view so sticky geometry matches measure
+      try {
+        const title = document.getElementById("ex-title");
+        const cock = document.getElementById("practice-cockpit");
+        const anchor = title || cock || stage;
+        const ar = anchor.getBoundingClientRect();
+        if (ar.top < 0 || ar.top > (window.innerHeight || 600) * 0.35) {
+          anchor.scrollIntoView({ block: "start", behavior: "auto" });
+        }
+      } catch {
+        /* ignore */
+      }
       const r = stage.getBoundingClientRect();
-      const vh = window.innerHeight || document.documentElement.clientHeight || 600;
-      // Extra gap on short/landscape viewports (borders + subpixel paint)
-      const gap = vh < 500 ? 10 : 8;
-      // If sticky has not stuck yet, r.top is natural flow Y — remaining space under it
-      const avail = Math.floor(vh - Math.max(0, r.top) - gap);
-      let maxH = Math.max(140, avail);
-      // Prefer tall for low vision but never past viewport bottom
+      const { vh, offsetTop, safeBottom } = getViewportMetrics();
+      // Gap: short/landscape + safe-area (home indicator)
+      const gap = (vh < 500 ? 12 : 8) + Math.max(0, safeBottom);
+      // Visual bottom of the usable screen (visualViewport may be offset)
+      const visualBottom = offsetTop + vh;
+      // Remaining space under stage top within the *visual* viewport
+      const avail = Math.floor(visualBottom - Math.max(0, r.top) - gap);
+      let maxH = Math.max(120, avail);
+      // Prefer tall for low vision but never past visual bottom
       const prefer = Math.min(
         maxH,
-        Math.round(vh * (vh < 500 ? 0.88 : 0.76)),
-        vh < 700 ? 460 : 700
+        Math.round(vh * (vh < 500 ? 0.9 : vh < 700 ? 0.8 : 0.76)),
+        vh < 500 ? 360 : vh < 700 ? 460 : 720
       );
-      let h = Math.max(140, Math.min(prefer, maxH));
+      let h = Math.max(120, Math.min(prefer, maxH));
       stage.style.minHeight = "0";
       stage.style.maxHeight = `${maxH}px`;
       stage.style.height = `${h}px`;
-      // Second + third pass: borders/subpixels can push y2 a few px past vh
-      for (let pass = 0; pass < 2; pass++) {
+      // Multi-pass: borders/subpixels / sticky can push y2 past visual bottom
+      for (let pass = 0; pass < 3; pass++) {
         const rb = stage.getBoundingClientRect();
-        if (rb.bottom <= vh - 1) break;
-        const fix = Math.max(120, Math.floor(vh - rb.top - (pass === 0 ? 6 : 8)));
+        if (rb.bottom <= visualBottom - 1) break;
+        const fix = Math.max(
+          100,
+          Math.floor(visualBottom - rb.top - (pass === 0 ? 6 : pass === 1 ? 10 : 14))
+        );
         stage.style.maxHeight = `${fix}px`;
         stage.style.height = `${fix}px`;
       }
@@ -443,14 +490,31 @@
         if (rail) {
           const rh = Math.ceil(rail.getBoundingClientRect().height || 0);
           // +12px gap so mode-focus bottom stays above rail top
-          const clear = Math.max(72, rh + 12);
+          const clear = Math.max(72, rh + 12 + Math.min(12, safeBottom));
           stage.style.setProperty("--rail-h", `${clear}px`);
         }
       } catch {
         /* ignore */
       }
+      // Ensure Start is fully inside visual viewport (critical for short + land)
+      try {
+        const start = document.getElementById("btn-practice-start");
+        if (start && !start.hidden) {
+          const sb = start.getBoundingClientRect();
+          if (sb.bottom > visualBottom - 2 || sb.height < 1) {
+            const rb = stage.getBoundingClientRect();
+            const over = sb.bottom - (visualBottom - 4);
+            if (over > 0) {
+              const nh = Math.max(100, Math.floor(rb.height - over - 4));
+              stage.style.maxHeight = `${nh}px`;
+              stage.style.height = `${nh}px`;
+            }
+          }
+        }
+      } catch {
+        /* ignore */
+      }
       // Resize pitch canvas to new stage box; redraw idle if not live
-      // (resetLanes often painted before stage height existed → black void)
       try {
         if (state.pitchViz) {
           if (!state.practiceLive && typeof state.pitchViz.redrawIdle === "function") {
@@ -465,6 +529,16 @@
     } catch {
       /* ignore */
     }
+  }
+
+  /** Debounced fit for resize / visualViewport / orientation / fullscreen */
+  let _fitHighwayTimer = null;
+  function scheduleFitHighway() {
+    if (_fitHighwayTimer) clearTimeout(_fitHighwayTimer);
+    _fitHighwayTimer = setTimeout(() => {
+      _fitHighwayTimer = null;
+      fitHighwayToViewport();
+    }, 50);
   }
 
   function setView(name) {
@@ -4648,18 +4722,25 @@
     fitHighwayToViewport();
     window.addEventListener("resize", () => {
       syncHeaderHeightVar();
-      fitHighwayToViewport();
-      try {
-        ensurePitchViz()?.["_resize"]?.();
-      } catch {
-        /* ignore */
-      }
+      scheduleFitHighway();
     });
     window.addEventListener("orientationchange", () => {
       setTimeout(() => {
         syncHeaderHeightVar();
         fitHighwayToViewport();
       }, 120);
+    });
+    // Mobile browser chrome show/hide + pinch-zoom visual viewport
+    try {
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener("resize", scheduleFitHighway);
+        window.visualViewport.addEventListener("scroll", scheduleFitHighway);
+      }
+    } catch {
+      /* ignore */
+    }
+    document.addEventListener("fullscreenchange", () => {
+      scheduleFitHighway();
     });
   }
 

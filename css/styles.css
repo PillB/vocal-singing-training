@@ -23,6 +23,11 @@
   --max: 1100px;
   --focus-ring: 0 0 0 3px rgba(110, 180, 232, 0.55);
   --min-tap: 44px;
+  /* Multi-format / notched phones — JS fitHighway reads --safe-bottom */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
 }
 
 *,
@@ -38,6 +43,7 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
+  min-height: 100dvh;
   font-family: var(--font);
   font-size: 16.5px;
   background:
@@ -1629,7 +1635,8 @@ body.view-exercise.practice-live #pitch-game-hud {
      (right key gutter is for canvas note labels, not this rail). */
   left: 0.3rem;
   right: 0.35rem;
-  bottom: 0.2rem;
+  /* Safe-area so Start stays above home indicator on notched phones */
+  bottom: max(0.2rem, var(--safe-bottom, 0px));
   /* Above mode-focus / canvas so Start·Mic never miss clicks */
   z-index: 40;
   display: flex;
@@ -3547,9 +3554,11 @@ body.account-open {
 
 .toast {
   position: fixed;
-  bottom: 1.25rem;
+  /* Top placement: never cover bottom Start/Stop rail (mobile hit-target bug) */
+  top: max(0.75rem, var(--safe-top, 0px));
+  bottom: auto;
   left: 50%;
-  transform: translateX(-50%) translateY(120%);
+  transform: translateX(-50%) translateY(-120%);
   background: var(--bg-card);
   border: 1px solid var(--border);
   color: var(--text);
@@ -3563,11 +3572,18 @@ body.account-open {
   text-align: center;
   font-weight: 600;
   font-size: 0.9rem;
+  /* Non-interactive: must never steal elementFromPoint / clicks (Harvard hit-area practice) */
+  pointer-events: none;
 }
 
 .toast.show {
   transform: translateX(-50%) translateY(0);
   opacity: 1;
+}
+
+/* On exercise view, sit just under sticky header */
+body.view-exercise .toast.show {
+  top: max(calc(var(--header-h, 58px) + 0.35rem), var(--safe-top, 0px));
 }
 
 .muted {

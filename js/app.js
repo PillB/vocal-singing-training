@@ -479,6 +479,9 @@
     const target = $(map[name]);
     if (target) target.classList.add("active");
     document.body.classList.toggle("view-exercise", name === "exercise");
+    if (name !== "exercise") {
+      document.body.classList.remove("practice-live");
+    }
     syncHeaderHeightVar();
     updateSessionBanner();
     if (name === "exercise") {
@@ -1791,6 +1794,12 @@
 
   function setPracticeUI(live) {
     state.practiceLive = live;
+    // U7: body class drives compact vs expanded pitch score strip
+    try {
+      document.body.classList.toggle("practice-live", !!live);
+    } catch {
+      /* ignore */
+    }
     if (!live) {
       try {
         state.practice?.setManualSound?.(false, null, { forceClear: true });
@@ -2338,9 +2347,25 @@
         : tt("metrics.show");
       btn.setAttribute("aria-expanded", String(!!state.metricsOpen));
     }
-    if (state.metricsOpen) {
+    // U11: reveal metrics without yanking sticky stage off-screen
+    if (state.metricsOpen && card) {
       requestAnimationFrame(() => {
-        card?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        try {
+          const vh = window.innerHeight || 600;
+          const cr = card.getBoundingClientRect();
+          const stage = document.getElementById("highway-stage");
+          const stageBottom = stage ? stage.getBoundingClientRect().bottom : 0;
+          // Ideal: metrics top sits just under stage (or mid-lower viewport)
+          const targetTop = Math.max(stageBottom + 8, vh * 0.42);
+          if (cr.top > targetTop + 24 || cr.bottom > vh - 12) {
+            const delta = cr.top - targetTop;
+            if (Math.abs(delta) > 12) {
+              window.scrollBy({ top: delta, behavior: "smooth" });
+            }
+          }
+        } catch {
+          card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }
       });
     }
   }
@@ -3643,7 +3668,7 @@
         if (choice === "save") {
           stopPractice(true);
           VTPiano.stopAll();
-          $("#metrics-form")?.scrollIntoView({ behavior: "smooth", block: "center" });
+          openMetricsPanel(true);
           $("#btn-complete")?.focus();
           toast(tt("leave.scrollSave"));
           return;

@@ -1580,6 +1580,46 @@ button:focus-visible,
 }
 
 /*
+ * U7 — Top pitch HUD density (progressive disclosure)
+ * At rest: hide Pts/Combo/Carril (zero noise); keep quality + Reto compact.
+ * Live: full strip for scoring feedback.
+ */
+body.view-exercise:not(.practice-live) #pitch-game-hud:not(.hud-challenge) .hud-score,
+body.view-exercise:not(.practice-live) #pitch-game-hud:not(.hud-challenge) .hud-combo,
+body.view-exercise:not(.practice-live) #pitch-game-hud:not(.hud-challenge) .hud-acc {
+  display: none;
+}
+body.view-exercise:not(.practice-live) #pitch-game-hud.hud-challenge .hud-score .hud-label,
+body.view-exercise:not(.practice-live) #pitch-game-hud.hud-challenge .hud-combo .hud-label,
+body.view-exercise:not(.practice-live) #pitch-game-hud.hud-challenge .hud-acc .hud-label {
+  display: none;
+}
+body.view-exercise:not(.practice-live) #pitch-game-hud.hud-challenge .hud-score,
+body.view-exercise:not(.practice-live) #pitch-game-hud.hud-challenge .hud-combo,
+body.view-exercise:not(.practice-live) #pitch-game-hud.hud-challenge .hud-acc {
+  opacity: 0.55;
+}
+body.view-exercise:not(.practice-live) #pitch-game-hud {
+  gap: 0.25rem 0.35rem;
+  padding: 0.14rem 0.4rem;
+  max-width: min(42vw, 14rem);
+}
+body.view-exercise.practice-live #pitch-game-hud {
+  max-width: none;
+  opacity: 1;
+}
+/* Prog bar: hide uppercase labels on medium screens too (density) */
+@media (max-width: 1100px) {
+  .hud-prog-k {
+    display: none;
+  }
+  .hud-tm {
+    gap: 0.35rem;
+    padding: 0.12rem 0.4rem;
+  }
+}
+
+/*
  * Bottom rail: one flex strip across the stage (minus right key gutter).
  * Start | Mic (grows into free X) | Piano opts — no absolute fight / overflow clip.
  */

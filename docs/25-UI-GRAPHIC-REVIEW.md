@@ -155,9 +155,11 @@ Test-only `#vt-forensics-cursor` in Playwright suite — ignore for product desi
 | U9 | Mic “Espacio” badge when manual | `styles.css` |
 | U10 | Stronger practice hover | `styles.css` |
 | U12 | Clear/hide `#pitch-stats` when `!showPitch` | `app.js` |
+| U7 | At rest hide/de-emphasize Pts·Combo·Carril; denser prog labels only on wide | `styles.css` + `body.practice-live` |
+| U11 | Soft scroll metrics under stage (no center yank) | `openMetricsPanel` |
 
 **Verify U1:** center canvas pixel greenish after open pitch exercise (idle lane).  
-**Open:** U7 top HUD density (optional further collapse); U11 metrics scroll jump.
+**Open:** none (U7/U11 closed).
 
 ---
 

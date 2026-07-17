@@ -7,6 +7,7 @@
     "test:e2e": "playwright test",
     "test:catalog": "node qa/check-catalog.mjs",
     "test:geometry": "node qa/capture-geometry.mjs && python3 qa/analyze_geometry.py",
+    "test:redteam": "node qa/redteam-static.mjs && playwright test tests/max-effort-journeys.spec.js tests/redteam-client.spec.js tests/space-assist.spec.js tests/hit-targets.spec.js tests/sh-air-detect.spec.js tests/billing.spec.js tests/auth.spec.js --reporter=line",
     "catalog:rebuild": "node qa/rebuild-catalog-snapshot.mjs",
     "accounts:generate": "node qa/generate-test-accounts.mjs",
     "serve": "python3 -m http.server 8765",

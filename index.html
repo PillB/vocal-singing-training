@@ -10,7 +10,7 @@
     <meta name="color-scheme" content="dark" />
     <meta name="theme-color" content="#0c1118" />
     <title>Entrenamiento vocal y de canto</title>
-    <link rel="stylesheet" href="css/styles.css?v=20260717h" />
+    <link rel="stylesheet" href="css/styles.css?v=20260718a" />
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎤</text></svg>" />
   </head>
   <body>
@@ -52,6 +52,98 @@
             Básico: base de oratoria. Avanzado: pausa, rellenos, tono, gestos y más.
           </p>
         </div>
+
+        <!-- Catalog: primary IA (track switch + filters + list) — high contrast, above dense studio chrome when collapsed -->
+        <section class="catalog-panel" id="catalog-panel" aria-labelledby="catalog-heading">
+          <div class="catalog-head">
+            <div class="catalog-head-text">
+              <h3 id="catalog-heading" data-i18n="home.catalog">Catálogo de ejercicios</h3>
+              <p class="muted catalog-pick" data-i18n="home.catalogPick">Elige tu camino: vocal u canto</p>
+            </div>
+          </div>
+
+          <div
+            class="track-switch tabs"
+            role="tablist"
+            aria-label="Training track"
+            id="track-switch"
+          >
+            <button
+              type="button"
+              class="tab track-tab active"
+              role="tab"
+              data-tab="vocal"
+              aria-selected="true"
+              aria-controls="exercise-list"
+              id="tab-vocal"
+              data-i18n-aria="tab.vocal"
+              aria-label="Entrenamiento vocal"
+            >
+              <span class="track-ico" aria-hidden="true">🎙</span>
+              <span class="track-label">
+                <span class="track-label-short" data-i18n="tab.vocalShort">Vocal</span>
+                <span class="track-label-full" data-i18n="tab.vocal">Entrenamiento vocal</span>
+              </span>
+            </button>
+            <button
+              type="button"
+              class="tab track-tab"
+              role="tab"
+              data-tab="singing"
+              aria-selected="false"
+              aria-controls="exercise-list"
+              id="tab-singing"
+              data-i18n-aria="tab.singing"
+              aria-label="Entrenamiento de canto"
+            >
+              <span class="track-ico" aria-hidden="true">♪</span>
+              <span class="track-label">
+                <span class="track-label-short" data-i18n="tab.singingShort">Canto</span>
+                <span class="track-label-full" data-i18n="tab.singing">Entrenamiento de canto</span>
+              </span>
+            </button>
+          </div>
+
+          <div class="toolbar tier-toolbar">
+            <div class="tier-filters" role="group" aria-label="Exercise tier">
+              <button type="button" class="chip tier-chip selected" data-tier="all" data-i18n="tier.all">Todos</button>
+              <button type="button" class="chip tier-chip" data-tier="basic" data-i18n="tier.basic">Básico</button>
+              <button type="button" class="chip tier-chip" data-tier="advanced" data-i18n="tier.advanced">Avanzado</button>
+            </div>
+            <span class="muted" id="tier-counts" style="font-size: 0.85rem"></span>
+          </div>
+
+          <div class="toolbar continue-toolbar">
+            <button type="button" class="btn btn-practice" id="btn-continue" data-i18n="home.continue">▶ Continuar práctica</button>
+            <button type="button" class="btn btn-primary" id="btn-structured" data-i18n="home.structured">
+              Iniciar sesión guiada
+            </button>
+            <label class="muted" style="font-size: 0.88rem; display: flex; gap: 0.4rem; align-items: center">
+              <span data-i18n="home.path">Ruta</span>
+              <select id="session-path" class="select-inline">
+                <option value="basic" data-i18n="home.path.basic">Básica</option>
+                <option value="advanced" data-i18n="home.path.advanced">Avanzada</option>
+                <option value="full" data-i18n="home.path.full">Completa</option>
+              </select>
+            </label>
+          </div>
+
+          <!-- Next best exercise (habit path — research: small next action) -->
+          <div class="next-step card" id="next-step-card" hidden>
+            <div class="next-step-body">
+              <span class="next-step-k" data-i18n="home.nextStepLabel">Siguiente paso</span>
+              <strong id="next-step-title">—</strong>
+              <p class="muted" id="next-step-why" data-i18n="home.nextStepWhy">
+                Un ejercicio corto para mantener el hábito — sin presión.
+              </p>
+            </div>
+            <button type="button" class="btn btn-primary btn-sm" id="btn-next-step" data-i18n="home.nextStepCta">
+              Abrir
+            </button>
+          </div>
+
+          <div id="exercise-list" class="grid" aria-live="polite"></div>
+        </section>
 
         <!-- Value pulse: prove progress (competence) before asking for Pro -->
         <div class="value-pulse card" id="value-pulse" aria-live="polite">
@@ -184,64 +276,24 @@
             <button type="button" class="btn btn-ghost btn-sm" id="rd-dismiss" data-i18n="retain.wbDismiss">Cerrar</button>
           </div>
         </div>
-
-        <div class="tabs" role="tablist" aria-label="Training track">
-          <button type="button" class="tab active" role="tab" data-tab="vocal" aria-selected="true" data-i18n="tab.vocal">
-            Entrenamiento vocal
-          </button>
-          <button type="button" class="tab" role="tab" data-tab="singing" aria-selected="false" data-i18n="tab.singing">
-            Entrenamiento de canto
-          </button>
-        </div>
-
-        <div class="toolbar tier-toolbar">
-          <div class="tier-filters" role="group" aria-label="Exercise tier">
-            <button type="button" class="chip tier-chip selected" data-tier="all" data-i18n="tier.all">Todos</button>
-            <button type="button" class="chip tier-chip" data-tier="basic" data-i18n="tier.basic">Básico</button>
-            <button type="button" class="chip tier-chip" data-tier="advanced" data-i18n="tier.advanced">Avanzado</button>
-          </div>
-          <span class="muted" id="tier-counts" style="font-size: 0.85rem"></span>
-        </div>
-
-        <div class="toolbar continue-toolbar">
-          <button type="button" class="btn btn-practice" id="btn-continue" data-i18n="home.continue">▶ Continuar práctica</button>
-          <button type="button" class="btn btn-primary" id="btn-structured" data-i18n="home.structured">
-            Iniciar sesión guiada
-          </button>
-          <label class="muted" style="font-size: 0.88rem; display: flex; gap: 0.4rem; align-items: center">
-            <span data-i18n="home.path">Ruta</span>
-            <select id="session-path" class="select-inline">
-              <option value="basic" data-i18n="home.path.basic">Básica</option>
-              <option value="advanced" data-i18n="home.path.advanced">Avanzada</option>
-              <option value="full" data-i18n="home.path.full">Completa</option>
-            </select>
-          </label>
-        </div>
-
-        <!-- Next best exercise (habit path — research: small next action) -->
-        <div class="next-step card" id="next-step-card" hidden>
-          <div class="next-step-body">
-            <span class="next-step-k" data-i18n="home.nextStepLabel">Siguiente paso</span>
-            <strong id="next-step-title">—</strong>
-            <p class="muted" id="next-step-why" data-i18n="home.nextStepWhy">
-              Un ejercicio corto para mantener el hábito — sin presión.
-            </p>
-          </div>
-          <button type="button" class="btn btn-primary btn-sm" id="btn-next-step" data-i18n="home.nextStepCta">
-            Abrir
-          </button>
-        </div>
-
-        <div id="exercise-list" class="grid" aria-live="polite"></div>
       </section>
 
       <section id="view-exercise" class="view">
         <!-- Ultra-compact title row — practice stage is the main screen -->
         <div class="panel-header exercise-header-compact">
-          <div class="ex-title-row">
-            <span class="badge" id="ex-track-badge">Vocal</span>
-            <h2 id="ex-title">Ejercicio</h2>
-            <p class="sub" id="structured-progress" hidden></p>
+          <div class="ex-header-main">
+            <nav class="ex-breadcrumb" id="ex-breadcrumb" data-i18n-aria="bc.nav" aria-label="Ruta de navegación">
+              <button type="button" class="ex-bc-link" id="bc-home" data-i18n="bc.home">Inicio</button>
+              <span class="ex-bc-sep" aria-hidden="true">›</span>
+              <button type="button" class="ex-bc-link" id="bc-track" data-track="vocal">Vocal</button>
+              <span class="ex-bc-sep" aria-hidden="true">›</span>
+              <span class="ex-bc-current" id="bc-current" aria-current="page">Ejercicio</span>
+            </nav>
+            <div class="ex-title-row">
+              <span class="badge" id="ex-track-badge">Vocal</span>
+              <h2 id="ex-title">Ejercicio</h2>
+              <p class="sub" id="structured-progress" hidden></p>
+            </div>
           </div>
           <div class="ex-header-actions">
             <button type="button" class="btn btn-ghost btn-sm btn-ui-help" id="btn-ui-help" data-i18n="uiTour.help" title="Cómo usar esta pantalla">?</button>
@@ -654,7 +706,7 @@
       </div>
     </div>
 
-    <script src="js/i18n.js?v=20260716c"></script>
+    <script src="js/i18n.js?v=20260718a"></script>
     <script src="js/exercises-data.js?v=20260716c"></script>
     <script src="js/exercises-locale-es.js?v=20260716c"></script>
     <script src="js/practice-profiles.js?v=20260717e"></script>
@@ -678,6 +730,6 @@
     <script src="js/metrics.js"></script>
     <script src="js/session.js"></script>
     <script src="js/tour.js"></script>
-    <script src="js/app.js?v=20260717h"></script>
+    <script src="js/app.js?v=20260718a"></script>
   </body>
 </html>

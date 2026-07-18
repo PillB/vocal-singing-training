@@ -759,7 +759,9 @@
             : tt("card.sessions_plural", { n: sessions });
       const btn = document.createElement("button");
       btn.type = "button";
-      btn.className = "card card-ex";
+      const track = ex.track || state.tab || "vocal";
+      btn.className = `card card-ex track-${track}`;
+      btn.dataset.track = track;
       btn.innerHTML = `
         <div class="card-ex-top">
           <span class="num">${ex.number}</span>
@@ -779,7 +781,42 @@
     $("#home-track-sub").textContent = tt(
       state.tab === "vocal" ? "home.vocalSub" : "home.singingSub"
     );
+    // Sync track switcher a11y + active paint
+    $$(".tab[data-tab], .track-tab[data-tab]").forEach((t) => {
+      const on = t.dataset.tab === state.tab;
+      t.classList.toggle("active", on);
+      t.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    updateHomeZeroClass();
     renderNextStepCard();
+  }
+
+  /** Progressive disclosure: zero sessions → collapse empty studio chrome */
+  function updateHomeZeroClass() {
+    try {
+      const sessions = Number($("#vp-sessions")?.textContent || 0) || 0;
+      const zero =
+        sessions === 0 &&
+        !(window.VTStorage?.getSessions?.() || []).length;
+      document.body.classList.toggle("home-zero", zero);
+    } catch {
+      document.body.classList.remove("home-zero");
+    }
+  }
+
+  function updateExerciseBreadcrumb(ex) {
+    const track = ex?.track || state.tab || "vocal";
+    const trackLabel = tt(track === "vocal" ? "tab.vocalShort" : "tab.singingShort");
+    const title = ex
+      ? `${ex.number}. ${window.VTI18n ? VTI18n.exTitle(ex) : ex.title}`
+      : "—";
+    const bcTrack = $("#bc-track");
+    const bcCur = $("#bc-current");
+    if (bcTrack) {
+      bcTrack.textContent = trackLabel;
+      bcTrack.dataset.track = track;
+    }
+    if (bcCur) bcCur.textContent = title;
   }
 
   function resetSessionPractice() {
@@ -1113,6 +1150,7 @@
       ex.track === "vocal" ? "badge.vocal" : "badge.singing"
     )} · ${tt("badge." + tier)}`;
     $("#ex-track-badge").style.borderColor = ex.track === "vocal" ? "var(--vocal)" : "var(--singing)";
+    updateExerciseBreadcrumb(ex);
     const I = window.VTI18n;
     const original = I?.exField ? I.exField(ex, "original") : ex.original;
     const research = I?.exField ? I.exField(ex, "research") : ex.research;
@@ -3445,6 +3483,15 @@
     $("#btn-back-home").addEventListener("click", () => {
       leaveExercise({ type: "home" });
     });
+    // Breadcrumbs: Inicio → home; track → home with that tab selected
+    $("#bc-home")?.addEventListener("click", () => {
+      leaveExercise({ type: "home" });
+    });
+    $("#bc-track")?.addEventListener("click", async () => {
+      const track = $("#bc-track")?.dataset?.track || state.tab || "vocal";
+      const left = await leaveExercise({ type: "home" });
+      if (left || state.view === "home") setTab(track);
+    });
 
     $("#btn-practice-start")?.addEventListener("click", startPractice);
     $("#btn-practice-stop")?.addEventListener("click", () => stopPractice(false));
@@ -4021,6 +4068,7 @@
         })
         .join("");
     }
+    updateHomeZeroClass();
   }
 
   function startMicroSession(exerciseId) {

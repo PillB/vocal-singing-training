@@ -369,32 +369,208 @@ button:focus-visible,
   max-width: 58ch;
 }
 
-.tabs {
+/* —— Catalog panel: primary wayfinding (NN/g hierarchy + segmented control) —— */
+.catalog-panel {
+  margin: 0.5rem 0 1.5rem;
+  padding: 1rem 1rem 1.15rem;
+  border-radius: calc(var(--radius) + 4px);
+  border: 1px solid rgba(140, 170, 210, 0.28);
+  background:
+    linear-gradient(165deg, rgba(40, 70, 110, 0.22), rgba(12, 16, 24, 0.55));
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
+}
+.catalog-head {
   display: flex;
-  gap: 0.5rem;
-  padding: 0.3rem;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  width: fit-content;
-  margin-bottom: 1.25rem;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+.catalog-head h3 {
+  margin: 0;
+  font-size: 1.05rem;
+  letter-spacing: -0.02em;
+}
+.catalog-pick {
+  margin: 0.2rem 0 0;
+  font-size: 0.85rem;
 }
 
-.tab {
-  padding: 0.55rem 1.15rem;
-  border-radius: 999px;
-  font-weight: 650;
+/* Segmented track switch — high contrast (not a chip twin) */
+.tabs,
+.track-switch {
+  display: flex;
+  gap: 0.35rem;
+  padding: 0.35rem;
+  background: rgba(6, 10, 16, 0.72);
+  border: 1px solid rgba(160, 190, 230, 0.35);
+  border-radius: 14px;
+  width: 100%;
+  max-width: 36rem;
+  margin-bottom: 0.9rem;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+.track-switch {
+  max-width: none;
+}
+
+.tab,
+.track-tab {
+  flex: 1 1 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  min-height: 48px;
+  padding: 0.55rem 0.85rem;
+  border-radius: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.12s ease;
+}
+.track-ico {
+  font-size: 1.15rem;
+  line-height: 1;
+  opacity: 0.85;
+}
+.track-label {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.05rem;
+  text-align: left;
+  min-width: 0;
+}
+.track-label-short {
+  font-size: 0.95rem;
+  letter-spacing: 0.01em;
+}
+.track-label-full {
+  font-size: 0.68rem;
+  font-weight: 600;
+  opacity: 0.72;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 14rem;
+}
+.tab:hover:not(.active),
+.track-tab:hover:not(.active) {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+}
+.tab.active[data-tab="vocal"],
+.track-tab.active[data-tab="vocal"] {
+  background: linear-gradient(145deg, rgba(70, 150, 220, 0.95), rgba(50, 110, 180, 0.88));
+  color: #f2f9ff;
+  border-color: rgba(160, 210, 255, 0.55);
+  box-shadow: 0 0 0 1px rgba(90, 170, 240, 0.35), 0 6px 18px rgba(40, 100, 180, 0.35);
+}
+.tab.active[data-tab="singing"],
+.track-tab.active[data-tab="singing"] {
+  background: linear-gradient(145deg, rgba(210, 140, 80, 0.95), rgba(170, 100, 50, 0.9));
+  color: #fff8f0;
+  border-color: rgba(255, 200, 150, 0.5);
+  box-shadow: 0 0 0 1px rgba(230, 160, 100, 0.35), 0 6px 18px rgba(140, 80, 30, 0.35);
+}
+.tab.active .track-ico,
+.track-tab.active .track-ico {
+  opacity: 1;
+}
+.tab.active .track-label-full,
+.track-tab.active .track-label-full {
+  opacity: 0.9;
+}
+
+/* Zero-session home: collapse empty Insights/heatmap so catalog wins the fold */
+body.home-zero #pro-insights-panel .pro-spark,
+body.home-zero #practice-heatmap-wrap {
+  display: none;
+}
+body.home-zero #pro-insights-panel {
+  padding-bottom: 0.35rem;
+}
+
+/* Exercise breadcrumbs (NN/g wayfinding) */
+.ex-header-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.ex-breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.2rem 0.35rem;
+  font-size: 0.75rem;
+  line-height: 1.2;
   color: var(--text-muted);
 }
-
-.tab.active[data-tab="vocal"] {
-  background: rgba(91, 159, 212, 0.2);
-  color: #b7dbf5;
+.ex-bc-link {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: #9ec8ee;
+  font: inherit;
+  font-weight: 650;
+  padding: 0.15rem 0.25rem;
+  border-radius: 6px;
+  cursor: pointer;
+  text-decoration: none;
+}
+.ex-bc-link:hover {
+  color: #d7ecff;
+  background: rgba(100, 160, 220, 0.12);
+}
+.ex-bc-sep {
+  opacity: 0.45;
+  user-select: none;
+}
+.ex-bc-current {
+  color: var(--text);
+  font-weight: 650;
+  max-width: min(52vw, 18rem);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.tab.active[data-tab="singing"] {
-  background: rgba(196, 139, 90, 0.22);
-  color: #f0d0b0;
+/* Card track accent */
+.card-ex.track-vocal {
+  border-left: 3px solid rgba(90, 160, 220, 0.85);
+}
+.card-ex.track-singing {
+  border-left: 3px solid rgba(210, 140, 80, 0.9);
+}
+.grid.track-vocal .card-ex .num {
+  color: #9ec8ee;
+}
+.grid.track-singing .card-ex .num {
+  color: #f0c090;
+}
+
+@media (max-width: 560px) {
+  .track-label-full {
+    display: none;
+  }
+  .track-tab,
+  .tab.track-tab {
+    min-height: 46px;
+    padding: 0.5rem 0.55rem;
+  }
+  .catalog-panel {
+    padding: 0.85rem 0.75rem 1rem;
+  }
 }
 
 .toolbar {

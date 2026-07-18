@@ -388,13 +388,22 @@
     return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
   }
 
-  /** Keep sticky highway under real header height (prevents bottom overflow). */
+  /** Keep sticky highway under real header + exercise chrome (Back row). */
   function syncHeaderHeightVar() {
     try {
       const h = document.querySelector("header.app-header");
-      if (!h) return;
-      const hh = Math.max(40, Math.ceil(h.getBoundingClientRect().height));
-      document.documentElement.style.setProperty("--header-h", `${hh}px`);
+      if (h) {
+        const hh = Math.max(40, Math.ceil(h.getBoundingClientRect().height));
+        document.documentElement.style.setProperty("--header-h", `${hh}px`);
+      }
+      // Sticky ← Atrás row height — stage must stick below it so hits never land on stage/header
+      const ex = document.querySelector(".exercise-header-compact");
+      if (ex && !ex.hidden && getComputedStyle(ex).display !== "none") {
+        const eh = Math.max(36, Math.ceil(ex.getBoundingClientRect().height));
+        document.documentElement.style.setProperty("--ex-chrome-h", `${eh}px`);
+      } else {
+        document.documentElement.style.setProperty("--ex-chrome-h", "0px");
+      }
     } catch {
       /* ignore */
     }
@@ -867,6 +876,9 @@
       if (btnStay) btnStay.textContent = tt("leave.stay");
 
       modal.hidden = false;
+      // Clear any test/tooling inline display:none so modal paints + receives hits
+      modal.style.display = "";
+      modal.style.visibility = "";
       btnSave?.focus();
 
       const finish = (choice) => {

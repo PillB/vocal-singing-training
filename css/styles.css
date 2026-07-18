@@ -114,7 +114,9 @@ body.view-exercise .app-header .brand h1 {
   font-size: 0.88rem;
 }
 body.view-exercise {
-  --header-h: 42px;
+  /* Must match real sticky .app-header height (compact brand). Was 42px → Back sat under header hits. */
+  --header-h: 56px;
+  --ex-chrome-h: 2.75rem;
 }
 body.view-exercise .main {
   padding-top: 0.3rem;
@@ -1172,8 +1174,15 @@ button:focus-visible,
   justify-content: space-between;
   gap: 0.4rem;
   margin-bottom: 0.15rem;
-  padding: 0;
-  min-height: 0;
+  padding: 0.2rem 0.15rem;
+  min-height: 2.5rem;
+  /* Stick under app-header so ← Atrás never scrolls under chrome or stage */
+  position: sticky;
+  top: var(--header-h, 74px);
+  z-index: 30; /* above sticky #highway-stage (20) */
+  isolation: isolate;
+  background: var(--bg, #0b1018);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
 }
 .exercise-header-compact .ex-header-actions {
   display: flex;
@@ -1218,9 +1227,20 @@ button:focus-visible,
 .btn-back-compact {
   flex: 0 0 auto;
   white-space: nowrap;
-  min-height: 32px;
-  padding: 0.25rem 0.55rem;
+  min-height: 40px;
+  min-width: 2.75rem;
+  padding: 0.3rem 0.65rem;
   font-size: 0.78rem;
+  position: relative;
+  z-index: 31;
+  pointer-events: auto;
+  /* Hit box = paint box; avoid thin slivers that force mm-offset taps */
+  touch-action: manipulation;
+}
+#btn-back-home {
+  position: relative;
+  z-index: 32;
+  pointer-events: auto;
 }
 
 /* Sticky only the highway frame — not piano/metrics */
@@ -1235,14 +1255,17 @@ button:focus-visible,
 
 .highway-stage {
   position: sticky;
-  top: var(--header-h, 74px);
+  /* Sit below app-header + sticky exercise chrome (Back row) */
+  top: calc(var(--header-h, 74px) + var(--ex-chrome-h, 2.75rem));
   z-index: 20;
   /*
-   * Hard viewport fit: height ≤ remaining space under sticky header.
+   * Hard viewport fit: height ≤ remaining space under sticky headers.
    * Prefer dvh; fall back via 100vh in older engines. Never y2 > vh.
    */
   --stage-gap: 4px;
-  --stage-avail: calc(100dvh - var(--header-h, 74px) - var(--stage-gap));
+  --stage-avail: calc(
+    100dvh - var(--header-h, 74px) - var(--ex-chrome-h, 2.75rem) - var(--stage-gap)
+  );
   --rail-h: 6rem; /* bottom control row (fitHighway measures real height) */
   min-height: min(48dvh, 340px, var(--stage-avail));
   max-height: var(--stage-avail);
@@ -1283,8 +1306,11 @@ button:focus-visible,
   }
   .highway-stage {
     --header-h: 48px;
-    --stage-avail: calc(100dvh - var(--header-h) - 2px);
-    top: var(--header-h);
+    /* Keep stage below sticky exercise chrome (Back) even on short landscape */
+    --stage-avail: calc(
+      100dvh - var(--header-h) - var(--ex-chrome-h, 2.5rem) - 2px
+    );
+    top: calc(var(--header-h) + var(--ex-chrome-h, 2.5rem));
     min-height: 0;
     height: var(--stage-avail);
     max-height: var(--stage-avail);
@@ -1306,6 +1332,49 @@ button:focus-visible,
   }
   .hud-bottom-rail {
     bottom: 0.06rem;
+    /* Always wrap on short landscape so mic never covers Start/Stop */
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    max-height: none;
+  }
+  .hud-bc {
+    order: -1;
+    flex: 1 1 100%;
+    min-width: 0;
+    width: 100%;
+    max-width: none;
+    max-height: 2.5rem;
+  }
+  .hud-bl {
+    z-index: 46;
+    flex: 0 0 auto;
+  }
+  .hud-br {
+    flex: 1 1 auto;
+    min-width: 0;
+    justify-content: flex-end;
+  }
+  /* Compact piano strip — leave room for Start hit box */
+  #piano-mini-opts {
+    max-width: min(55%, 22rem);
+    overflow: hidden;
+  }
+  #piano-mini-opts .piano-opt:not(.oct-auto) {
+    display: none;
+  }
+  /* Keep Start paint box clear of mic on short landscape */
+  .hud-bl {
+    z-index: 55;
+    position: relative;
+  }
+  .hud-bc {
+    z-index: 40;
+  }
+  #btn-practice-start,
+  #btn-practice-stop {
+    position: relative;
+    z-index: 56;
+    pointer-events: auto;
   }
 }
 
@@ -1665,7 +1734,8 @@ body.view-exercise.practice-live #pitch-game-hud {
 
 .hud-bl {
   flex: 0 0 auto;
-  z-index: 41;
+  /* Above mic chip so Start/Stop center never loses hit tests when rail wraps tight */
+  z-index: 50;
   background: rgba(8, 12, 18, 0.88);
   border-radius: 10px;
   padding: 0.18rem 0.3rem;
@@ -1726,7 +1796,7 @@ body.view-exercise.practice-live #pitch-game-hud {
   flex-wrap: nowrap;
   align-items: center;
   gap: 0.4rem;
-  z-index: 41;
+  z-index: 40; /* below Start/Stop (.hud-bl = 45) for hit priority */
   background: rgba(6, 10, 16, 0.9);
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -1783,9 +1853,45 @@ body.view-exercise.practice-live #pitch-game-hud {
   min-width: 3.5rem;
   width: auto;
   max-width: none;
-  height: 1.35rem;
+  /* Taller hit box (thumb + track) so mouse/touch drag registers reliably */
+  height: 1.75rem;
+  min-height: 28px;
   margin: 0;
   order: 2;
+  pointer-events: auto;
+  touch-action: none; /* keep horizontal drag for range, avoid scroll steal */
+  cursor: pointer;
+}
+/* Expand visual + hit thumb so center-of-control drags move value */
+.hud-bc #mic-sensitivity::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent, #5ad4a0);
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25);
+  cursor: grab;
+}
+.hud-bc #mic-sensitivity::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent, #5ad4a0);
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25);
+  cursor: grab;
+}
+.hud-bc #mic-sensitivity::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(120, 160, 200, 0.35);
+}
+.hud-bc #mic-sensitivity::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(120, 160, 200, 0.35);
 }
 /* Space-assist: compact chip (no multi-line hint row) */
 .hud-bc #mic-manual-hint {
@@ -2034,9 +2140,12 @@ html[lang^="es"] .hud-bc.is-manual .mic-sens-title::after {
 #mic-sensitivity {
   flex: 1 1 auto;
   min-width: 0;
-  height: 1.25rem;
+  height: 1.75rem;
+  min-height: 28px;
   accent-color: var(--accent);
   cursor: pointer;
+  pointer-events: auto;
+  touch-action: none;
 }
 
 /* Legacy absolute meter rules superseded by .hud-bc — keep no-op safe */

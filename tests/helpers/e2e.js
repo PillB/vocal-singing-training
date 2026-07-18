@@ -1,19 +1,70 @@
 /**
  * Shared Playwright helpers for max-effort / red-team suites.
  */
+const { execSync } = require("child_process");
 const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";
 
 /**
+ * Alert the human when mic permission may need a manual click.
+ * Plays a system beep, waits `waitMs` (default 5s), beeps again.
+ * Env: MIC_HELP_WAIT_MS=5000 · MIC_HELP=0 to skip · REAL_MIC=1 forces help cue
+ */
+async function alertMicHelp(reason = "microphone permission", waitMs) {
+  if (process.env.MIC_HELP === "0" || process.env.MIC_HELP === "false") return;
+  const ms = Number(
+    waitMs != null ? waitMs : process.env.MIC_HELP_WAIT_MS || 5000
+  );
+  const play = (sound) => {
+    try {
+      execSync(
+        `afplay ${sound} 2>/dev/null || osascript -e 'beep 2' 2>/dev/null || printf '\\a'`,
+        { stdio: "ignore", timeout: 4000 }
+      );
+    } catch {
+      try {
+        process.stdout.write("\x07\x07\x07");
+      } catch {
+        /* ignore */
+      }
+    }
+  };
+  console.log(`\n🔔 MIC HELP: ${reason} — allow mic in the browser if prompted (${ms}ms)…\n`);
+  play("/System/Library/Sounds/Glass.aiff");
+  await new Promise((r) => setTimeout(r, Math.max(0, ms)));
+  play("/System/Library/Sounds/Ping.aiff");
+  console.log("🔔 MIC HELP: wait done\n");
+}
+
+/**
  * @param {import('@playwright/test').Page} page
- * @param {{ lang?: 'es'|'en', tourDone?: boolean, mic?: 'silent'|'tone'|'deny', clearBilling?: boolean }} [opts]
+ * @param {{ lang?: 'es'|'en', tourDone?: boolean, mic?: 'silent'|'tone'|'deny'|'real', clearBilling?: boolean, micHelp?: boolean }} [opts]
  */
 async function boot(page, opts = {}) {
   const lang = opts.lang || "es";
   const tourDone = opts.tourDone !== false;
   const mic = opts.mic || "silent";
   const clearBilling = opts.clearBilling !== false;
+  const headed =
+    process.env.HEADED === "1" ||
+    process.env.HEADED === "true" ||
+    process.argv.includes("--headed");
+  const wantRealMic = mic === "real" || process.env.REAL_MIC === "1";
+  // Headed runs: always cue the human (beep + 5s) so they can click Allow on mic.
+  // Skip with MIC_HELP=0. Force with MIC_HELP=1 even headless.
+  const wantHelp =
+    opts.micHelp === true ||
+    process.env.MIC_HELP === "1" ||
+    (headed && process.env.MIC_HELP !== "0" && process.env.MIC_HELP !== "false");
 
-  await page.context().grantPermissions(["microphone"]).catch(() => {});
+  if (wantHelp) {
+    await alertMicHelp("Chrome may ask for microphone — click Allow if prompted");
+  }
+
+  await page.context().grantPermissions(["microphone"]).catch(async () => {
+    if (wantHelp) {
+      await alertMicHelp("mic still blocked — please Allow microphone, then tests continue");
+    }
+  });
 
   await page.addInitScript(
     ({ lang, tourDone, mic, clearBilling }) => {
@@ -38,6 +89,9 @@ async function boot(page, opts = {}) {
         return;
       }
 
+      // Real mic (browser prompt) — do not mock getUserMedia
+      if (mic === "real") return;
+
       const AC = window.AudioContext || window.webkitAudioContext;
       if (!navigator.mediaDevices || !AC) return;
       navigator.mediaDevices.getUserMedia = async () => {
@@ -53,7 +107,7 @@ async function boot(page, opts = {}) {
         return dest.stream;
       };
     },
-    { lang, tourDone, mic, clearBilling }
+    { lang, tourDone, mic: wantRealMic ? "real" : mic, clearBilling }
   );
 
   await page.goto(BASE + "/?t=" + Date.now(), { waitUntil: "domcontentloaded" });
@@ -90,6 +144,23 @@ async function openExercise(page, exerciseId) {
   }, exerciseId);
   if (!ok) throw new Error("openExercise failed: " + exerciseId);
   await page.waitForSelector("#view-exercise.active", { timeout: 8000 });
+  // Wait until Start has real layout (not 0×0) — critical after format/fullscreen reflow
+  await page
+    .waitForFunction(
+      () => {
+        const b = document.getElementById("btn-practice-start");
+        if (!b) return false;
+        const r = b.getBoundingClientRect();
+        return r.width >= 8 && r.height >= 8;
+      },
+      { timeout: 10000 }
+    )
+    .catch(() => {});
+  await page.evaluate(() => {
+    window.VTApp?.syncHeaderHeightVar?.();
+    window.VTApp?.fitHighwayToViewport?.();
+  });
+  await page.waitForTimeout(50);
 }
 
 /**
@@ -141,5 +212,6 @@ module.exports = {
   openExercise,
   startPractice,
   stopPractice,
-  centerHitsSelf
+  centerHitsSelf,
+  alertMicHelp
 };

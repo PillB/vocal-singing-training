@@ -505,6 +505,25 @@
       } catch {
         /* ignore */
       }
+      // Fit the in-stage guidance into whatever is left between the mode panel
+      // and the bottom rail, so it never rides over either.
+      try {
+        const guide = document.getElementById("stage-guide");
+        // dataset.on, not .hidden: a rotate back into portrait must be able to
+        // bring the guide back after a short viewport hid it.
+        if (guide && guide.dataset.on === "1") {
+          const sr = stage.getBoundingClientRect();
+          const panel = stage.querySelector(".mode-panel");
+          const panelBottom = panel ? panel.getBoundingClientRect().bottom : sr.top;
+          const railPx = parseFloat(getComputedStyle(stage).getPropertyValue("--rail-h")) || 88;
+          const room = Math.floor(sr.bottom - railPx - 8 - Math.max(panelBottom, sr.top) - 8);
+          // Below ~92px only a heading would fit, which is worse than nothing
+          guide.hidden = room < 92;
+          guide.style.maxHeight = room > 0 ? `${room}px` : "";
+        }
+      } catch {
+        /* ignore */
+      }
       // Ensure Start is fully inside visual viewport (critical for short + land)
       try {
         const start = document.getElementById("btn-practice-start");
@@ -550,6 +569,17 @@
     }, 50);
   }
 
+  /** Paint the header nav so the current section is always identifiable. */
+  function syncHeaderNav(name) {
+    const current = name === "exercise" ? "home" : name;
+    $$("#header-nav .nav-link").forEach((link) => {
+      const on = link.dataset.view === current;
+      link.classList.toggle("active", on);
+      if (on) link.setAttribute("aria-current", "page");
+      else link.removeAttribute("aria-current");
+    });
+  }
+
   function setView(name) {
     state.view = name;
     $$(".view").forEach((v) => v.classList.remove("active"));
@@ -562,6 +592,7 @@
     const target = $(map[name]);
     if (target) target.classList.add("active");
     document.body.classList.toggle("view-exercise", name === "exercise");
+    syncHeaderNav(name);
     if (name !== "exercise") {
       document.body.classList.remove("practice-live");
     }
@@ -672,8 +703,34 @@
     card.hidden = false;
     const name = window.VTI18n ? VTI18n.exTitle(sug.ex) : sug.ex.title;
     titleEl.textContent = `${sug.ex.number}. ${name}`;
-    if (whyEl) whyEl.textContent = tt("home.nextStepWhy");
+    if (whyEl) whyEl.textContent = tt(sug.reason === "structured" ? "home.nextStepWhyGuided" : "home.nextStepWhy");
     btn.onclick = () => openExercise(sug.ex.id, false);
+    renderStartPanel(sug);
+  }
+
+  /**
+   * Start panel copy. One decision point on home: a first visit is told what the
+   * site is and what a session looks like; a returning visitor is told what to
+   * resume. The CTA is the same button either way, so there is only one primary.
+   */
+  function renderStartPanel(sug) {
+    const kicker = $("#start-kicker");
+    const title = $("#start-title");
+    const sub = $("#start-sub");
+    const label = $("#next-step-label");
+    const cta = $("#btn-next-step");
+    if (!kicker || !title || !sub) return;
+    const saved = totalSessionsSaved();
+    const guided = sug?.reason === "structured";
+    const returning = saved > 0 || guided;
+    const key = guided ? "Guided" : returning ? "Back" : "New";
+    kicker.textContent = tt("start.kicker" + key);
+    title.textContent = returning
+      ? tt("start.titleBack", { n: saved })
+      : tt("start.titleNew");
+    sub.textContent = tt("start.sub" + key);
+    if (label) label.textContent = tt(guided ? "home.nextStepLabelGuided" : "home.nextStepLabel");
+    if (cta) cta.textContent = tt("start.cta" + key);
   }
 
   /** Continue: resume structured session or open first incomplete basic exercise */
@@ -736,16 +793,33 @@
     const advCount = (VT_EXERCISES[state.tab] || []).filter((e) => e.tier === "advanced").length;
     const countEl = $("#tier-counts");
     if (countEl) {
-      countEl.textContent = tt("tier.counts", {
-        basic: basicCount,
-        advanced: advCount,
-        showing: exercises.length
-      });
+      // With level group headers carrying their own counts, the summary line is
+      // noise on the unfiltered view — it only earns its place once filtered.
+      countEl.textContent =
+        state.tierFilter === "all"
+          ? ""
+          : tt("tier.counts", {
+              basic: basicCount,
+              advanced: advCount,
+              showing: exercises.length
+            });
     }
 
+    // Group by tier when nothing is filtered: 20+ identical cards in one run are
+    // unscannable, two labelled groups are. Headers span the grid, so the
+    // "#exercise-list .card-ex" contract used across the suite is unchanged.
+    let lastTier = null;
     exercises.forEach((ex) => {
       const prog = progressFor(ex.id);
       const tier = ex.tier || "basic";
+      if (state.tierFilter === "all" && tier !== lastTier) {
+        lastTier = tier;
+        const head = document.createElement("h4");
+        head.className = `grid-group-head tier-${tier}`;
+        const n = (VT_EXERCISES[state.tab] || []).filter((e) => (e.tier || "basic") === tier).length;
+        head.innerHTML = `<span>${tt("badge." + tier)}</span><span class="grid-group-n">${tt("group.count", { n })}</span>`;
+        list.appendChild(head);
+      }
       const tools =
         (ex.audio.piano ? tt("card.piano") : "") +
         (ex.audio.pitchViz || ex.practice?.showPitch ? tt("card.pitch") : "") +
@@ -802,6 +876,32 @@
     } catch {
       document.body.classList.remove("home-zero");
     }
+  }
+
+  /**
+   * Fill the dead middle of the stage with the exercise's own first steps when
+   * no pitch canvas occupies it. The stage has to stay tall enough to hold the
+   * HUD rails in the first viewport, so the choice is guidance or empty space.
+   */
+  function renderStageGuide(steps, enabled) {
+    const wrap = $("#stage-guide");
+    const list = $("#stage-guide-steps");
+    if (!wrap || !list) return;
+    const items = (steps || []).slice(0, 3);
+    if (!enabled || !items.length) {
+      wrap.hidden = true;
+      delete wrap.dataset.on;
+      list.innerHTML = "";
+      return;
+    }
+    list.innerHTML = items.map((step) => `<li>${escapeHtml(step)}</li>`).join("");
+    wrap.style.maxHeight = "";
+    const label = $(".stage-guide-k", wrap);
+    if (label) label.textContent = tt("ex.stageGuideLabel");
+    const more = $("#btn-stage-guide-more");
+    if (more) more.textContent = tt("ex.stageGuideMore");
+    wrap.dataset.on = "1";
+    wrap.hidden = false;
   }
 
   function updateExerciseBreadcrumb(ex) {
@@ -1239,6 +1339,7 @@
     // Pitch visualizer only when profile asks
     const pitchBlock = $("#pitch-block");
     pitchBlock.hidden = !profile.showPitch;
+    renderStageGuide(steps, !profile.showPitch);
     if (state.pitchViz) {
       // Prevent multi-lane leak across exercises
       if (typeof state.pitchViz.resetLanes === "function") state.pitchViz.resetLanes();
@@ -3151,9 +3252,9 @@
       const progress = VTStorage.getProgress();
       const reviews = VTStorage.getReviews();
 
-      let html = "<h3>Recordings (this device)</h3>";
+      let html = `<h3>${tt("history.recordings")}</h3>`;
       if (!recs.length) {
-        html += `<p class="empty-state">No recordings yet. Open an exercise and use Record.</p>`;
+        html += `<p class="empty-state">${tt("history.noRecordings")}</p>`;
       } else {
         // Group by exercise for A/B compare (progress proof users love)
         const byEx = {};
@@ -3199,9 +3300,11 @@
         html += `<div id="history-player"></div>`;
       }
 
-      html += `<h3 style="margin-top:1.5rem;">Exercise completions</h3><div class="history-list">`;
+      html += `<h3 style="margin-top:1.5rem;">${tt("history.completions")}</h3><div class="history-list">`;
       const entries = Object.entries(progress);
-      if (!entries.length) html += `<p class="muted">No completed sessions yet.</p>`;
+      if (!entries.length)
+        html += `<p class="muted">${tt("history.noSessions")}</p>
+          <p><button type="button" class="btn btn-practice btn-sm" id="history-empty-cta">${tt("history.emptyCta")}</button></p>`;
       else {
         entries.forEach(([id, p]) => {
           const ex = findExercise(id);
@@ -3235,9 +3338,13 @@
           player.appendChild(audio);
         });
       });
+      $("#history-empty-cta", list)?.addEventListener("click", () => {
+        setView("home");
+        continuePractice();
+      });
       $$("[data-del]", list).forEach((btn) => {
         btn.addEventListener("click", async () => {
-          if (!confirm("Delete this recording?")) return;
+          if (!confirm(tt("history.confirmDelete"))) return;
           await VTStorage.deleteRecording(btn.dataset.del);
           renderHistory();
           toast(tt("toast.deleted"));
@@ -3274,22 +3381,42 @@
       });
     } catch (e) {
       console.error(e);
-      list.innerHTML = `<p class="muted">Could not load history.</p>`;
+      list.innerHTML = `<p class="muted">${tt("history.loadError")}</p>`;
     }
   }
 
   /* —— 12-week plan —— */
+
+  /**
+   * Display label for a week element. The stored value stays the English key so
+   * plans saved before this change keep working; only the label is localized.
+   */
+  function weekElementLabel(el) {
+    if (!el) return "—";
+    const slug = String(el)
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "");
+    const key = `plan.el.${slug}`;
+    const out = tt(key);
+    return out === key ? el : out;
+  }
+
   function renderPlan() {
     setView("plan");
     const plan = VTStorage.getWeekPlan();
-    $("#plan-week-num").textContent = `Week ${plan.weekNumber}`;
+    renderPlanWeekRail(plan);
+    $("#plan-week-num").textContent = tt("plan.weekN", { n: plan.weekNumber });
     $("#plan-status").textContent =
       plan.status === "idle"
-        ? "Not started — pick an element to begin."
+        ? tt("plan.statusIdle")
         : plan.status === "active"
-          ? `Focus: ${plan.element}`
-          : `Ready to review: ${plan.element}`;
-    $("#plan-element-label").textContent = plan.element || "—";
+          ? tt("plan.statusActive", { element: weekElementLabel(plan.element) })
+          : tt("plan.statusReview", { element: weekElementLabel(plan.element) });
+    $("#plan-element-label").textContent = weekElementLabel(plan.element);
+    // The week review only makes sense once a week is under way.
+    const reviewCard = $("#plan-review-card");
+    if (reviewCard) reviewCard.classList.toggle("is-waiting", plan.status === "idle");
 
     const chips = $("#element-chips");
     chips.innerHTML = "";
@@ -3297,7 +3424,7 @@
       const b = document.createElement("button");
       b.type = "button";
       b.className = "chip" + (plan.element === el ? " selected" : "");
-      b.textContent = el;
+      b.textContent = weekElementLabel(el);
       b.addEventListener("click", () => {
         const p = VTStorage.getWeekPlan();
         p.element = el;
@@ -3311,21 +3438,41 @@
     const days = plan.checkIns || [];
     checkins.innerHTML = days.length
       ? days.map((d) => `<span class="pill">${d.date} ✓</span>`).join("")
-      : `<span class="muted">No daily check-ins yet</span>`;
+      : `<span class="muted">${tt("plan.noCheckins")}</span>`;
 
     const completed = $("#plan-completed-elements");
     completed.innerHTML = (plan.completedElements || []).length
-      ? plan.completedElements.map((e) => `<span class="pill">${e}</span>`).join(" ")
-      : `<span class="muted">None yet — finish a week review with “improved”</span>`;
+      ? plan.completedElements.map((e) => `<span class="pill">${weekElementLabel(e)}</span>`).join(" ")
+      : `<span class="muted">${tt("plan.noImproved")}</span>`;
 
     const reviews = $("#plan-reviews");
     reviews.innerHTML = (plan.reviews || [])
       .slice(0, 8)
       .map(
         (r) =>
-          `<div class="history-item"><div><strong>Week ${r.week}: ${r.element}</strong><div class="meta">${r.verdict} · ${new Date(r.at).toLocaleDateString()} · ${r.notes || ""}</div></div></div>`
+          `<div class="history-item"><div><strong>${tt("plan.weekN", { n: r.week })}: ${weekElementLabel(r.element)}</strong><div class="meta">${r.verdict} · ${new Date(r.at).toLocaleDateString()} · ${r.notes || ""}</div></div></div>`
       )
-      .join("") || `<p class="muted">No weekly reviews yet.</p>`;
+      .join("") || `<p class="muted">${tt("plan.noReviews")}</p>`;
+  }
+
+  /**
+   * Twelve-week rail. The panel is called "12 semanas" but only ever showed the
+   * current week, so the shape of the plan was invisible.
+   */
+  function renderPlanWeekRail(plan) {
+    const rail = $("#plan-week-rail");
+    if (!rail) return;
+    const current = Number(plan.weekNumber) || 1;
+    const done = (plan.reviews || []).length;
+    rail.innerHTML = "";
+    for (let w = 1; w <= 12; w += 1) {
+      const dot = document.createElement("span");
+      const stateCls = w < current || w <= done ? "done" : w === current ? "current" : "todo";
+      dot.className = `plan-week-dot ${stateCls}`;
+      dot.textContent = String(w);
+      dot.title = tt("plan.weekN", { n: w });
+      rail.appendChild(dot);
+    }
   }
 
   function startWeekPlan() {
@@ -3475,6 +3622,10 @@
     $("#btn-plan").addEventListener("click", () => {
       if (state.view === "exercise") leaveExercise({ type: "plan" });
       else renderPlan();
+    });
+    $("#btn-nav-home")?.addEventListener("click", () => {
+      if (state.view === "exercise") leaveExercise({ type: "home" });
+      else setView("home");
     });
     $("#btn-session-pause").addEventListener("click", pauseStructured);
     $("#btn-session-resume").addEventListener("click", resumeStructured);
@@ -3657,6 +3808,12 @@
     });
     // Expose for practice start/stop
     state._updateManualHintVisibility = updateManualHintVisibility;
+    $("#btn-stage-guide-more")?.addEventListener("click", () => {
+      const btn = $("#btn-toggle-guide");
+      if (!btn) return;
+      if (!state.guideOpen) btn.click();
+      document.querySelector(".guide-card")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
     $("#btn-toggle-guide")?.addEventListener("click", () => {
       state.guideOpen = !state.guideOpen;
       const card = document.querySelector(".guide-card");
@@ -4393,9 +4550,21 @@
           const interval =
             p.interval === "month" ? tt("pricing.month") : p.interval === "year" ? tt("pricing.year") : "";
           const name = es ? p.nameEs || p.name : p.name;
-          const feats = (p.features || [])
+          // Eleven bullets pushed every plan's button off the modal. Show the
+          // five that decide the purchase, keep the rest one click away.
+          const featList = p.features || [];
+          const FEAT_MAX = 5;
+          const feats = featList
+            .slice(0, FEAT_MAX)
             .map((f) => `<li>${tt("pricing.feat." + f)}</li>`)
             .join("");
+          const restFeats = featList
+            .slice(FEAT_MAX)
+            .map((f) => `<li>${tt("pricing.feat." + f)}</li>`)
+            .join("");
+          const moreFeats = restFeats
+            ? `<details class="plan-more"><summary>${tt("pricing.moreFeatures", { n: featList.length - FEAT_MAX })}</summary><ul class="plan-features">${restFeats}</ul></details>`
+            : "";
           const badge =
             p.badge === "save20"
               ? `<span class="plan-badge">${tt("pricing.save20")}</span>`
@@ -4420,6 +4589,7 @@
               <h4>${name}</h4>
               <div class="plan-price">${price.text}<span>${interval}</span></div>
               <ul class="plan-features">${feats}</ul>
+              ${moreFeats}
               <button type="button" class="btn ${p.id === "free" ? "btn-ghost" : "btn-primary"} btn-sm plan-cta" data-plan="${p.id}" ${disabled ? "disabled" : ""}>
                 ${ctaLabel}
               </button>
@@ -4742,6 +4912,10 @@
       VTI18n.onChange = () => {
         renderExerciseList();
         if (state.view === "exercise" && state.exercise) renderExercise();
+        // Plan and history build their copy at render time, so a language
+        // switch has to re-render them or they stay in the old language.
+        if (state.view === "plan") renderPlan();
+        if (state.view === "history") renderHistory();
         updateSessionBanner();
         // Refresh tour button label
         const tb = $("#btn-tour");

@@ -24,6 +24,58 @@
     return isEs() ? es : en;
   }
 
+  /**
+   * Phase labels live on the practice profiles in English only, so every mode
+   * printed them untranslated in the middle of the Spanish practice screen.
+   * Localize once, where the profile is mounted, rather than at each read.
+   */
+  const PHASE_ES = {
+    "1 Whisper": "1 Susurro",
+    "2 Soft": "2 Suave",
+    "3 Conversational": "3 Conversacional",
+    "4 Projected": "4 Proyectada",
+    "5 Full room": "5 Toda la sala",
+    "Curiosity face": "Cara de curiosidad",
+    "Legato again": "Legato otra vez",
+    "Legato line": "Línea legato",
+    "Peak emotion": "Pico emocional",
+    "Pen off · feel the ease": "Sin bolígrafo · siente la soltura",
+    "Point / takeaway": "Idea / conclusión",
+    "Rate 5 · comfortable": "Ritmo 5 · cómodo",
+    "Rate 6 · slightly faster": "Ritmo 6 · un poco más rápido",
+    "Rate 7 · brisk": "Ritmo 7 · ágil",
+    "Rate 8 · challenge": "Ritmo 8 · reto",
+    "Resolve / warmth": "Resolución / calidez",
+    "Scenario 1 · colleague": "Situación 1 · colega",
+    "Scenario 2 · acquaintance": "Situación 2 · conocido",
+    "Scenario 3 · new contact": "Situación 3 · contacto nuevo",
+    Setup: "Planteamiento",
+    "Staccato again": "Staccato otra vez",
+    "Staccato rounds": "Rondas de staccato",
+    "Surprise face": "Cara de sorpresa",
+    "Topic 1 · metaphor": "Tema 1 · metáfora",
+    "Topic 2 · metaphor": "Tema 2 · metáfora",
+    "Topic 3 · metaphor": "Tema 3 · metáfora",
+    "Topic 4 · metaphor": "Tema 4 · metáfora",
+    "Topic 5 · metaphor": "Tema 5 · metáfora",
+    "With pen · count 1–60": "Con bolígrafo · cuenta 1–60"
+  };
+
+  function phaseLabelFor(phase) {
+    if (!phase) return "—";
+    if (isEs()) return phase.labelEs || PHASE_ES[phase.label] || phase.label || "—";
+    return phase.label || phase.labelEs || "—";
+  }
+
+  /** Profiles are shared objects — clone before localizing so a language switch
+   *  does not leave the previous language baked into them. */
+  function localizeProfile(profile) {
+    if (!profile || !Array.isArray(profile.phases)) return profile;
+    return Object.assign({}, profile, {
+      phases: profile.phases.map((p) => Object.assign({}, p, { label: phaseLabelFor(p) }))
+    });
+  }
+
   /** Shared phase runner for multi-step timers */
   function createPhaseRunner(phases, onPhase) {
     let idx = 0;
@@ -73,7 +125,7 @@
       profile: null,
       hud: null,
       mount(container, profile) {
-        this.profile = profile;
+        this.profile = localizeProfile(profile);
         this.state = { startedAt: performance.now(), patches: {}, extras: {} };
         container.innerHTML = "";
         this.hud = el(`<div class="mode-panel mode-${spec.id}"></div>`);
@@ -122,19 +174,7 @@
       // BPM rises each phase: 72 → 96 → 120 → 144
       this.state.bpms = phases.map((_, i) => 72 + i * 24);
       // Localize phase labels (profiles store English keys / EN copy)
-      const phaseLabel = (p, i) => {
-        if (!p) return "—";
-        if (p.labelEs || p.label) {
-          return L(p.labelEs || p.label, p.label || p.labelEs);
-        }
-        const fallbacks = [
-          L("Ritmo 5 · cómodo", "Rate 5 · comfortable"),
-          L("Ritmo 6 · un poco más rápido", "Rate 6 · slightly faster"),
-          L("Ritmo 7 · ágil", "Rate 7 · brisk"),
-          L("Ritmo 8 · reto", "Rate 8 · challenge")
-        ];
-        return fallbacks[i] || p.label || "—";
-      };
+      const phaseLabel = (p) => phaseLabelFor(p);
       this.state.phaseLabel = phaseLabel;
       this.state.runner = createPhaseRunner(phases, (i, p) => {
         if (global.VTToast)
@@ -220,7 +260,7 @@
       this.state.logged = 0;
       this.hud.innerHTML = `
         <div class="mode-title">${L("Fluidez con metáforas", "Metaphor fluency")}</div>
-        <div class="mode-phase" data-phase>${phases[0]?.label || "Topic"}</div>
+        <div class="mode-phase" data-phase>${phases[0]?.label || L("Tema", "Topic")}</div>
         <div class="mode-big" data-remain>—</div>
         <button type="button" class="btn btn-primary btn-sm" data-log>${L("Dije una metáfora ✓", "I spoke a metaphor ✓")}</button>
         <p class="mode-meta">${L("Metáforas: <strong data-n>0</strong> / " + phases.length, "Metaphors logged: <strong data-n>0</strong> / " + phases.length)}</p>
@@ -237,7 +277,7 @@
       r.tick(performance.now());
       if (this.$("[data-phase]"))
         this.$("[data-phase]").textContent =
-          r.index < r.count ? r.label : "All topics done";
+          r.index < r.count ? r.label : L("Todos los temas listos", "All topics done");
       if (this.$("[data-remain]"))
         this.$("[data-remain]").textContent =
           r.index < r.count ? `${Math.ceil(r.remaining)}s` : "✓";
@@ -475,7 +515,7 @@
       const phase = this.profile.phases[r.index];
       if (this.$("[data-phase]"))
         this.$("[data-phase]").textContent =
-          r.index < r.count ? r.label : "Contrast complete — rate both";
+          r.index < r.count ? r.label : L("Contraste listo — valora ambos", "Contrast complete — rate both");
       if (this.$("[data-remain]"))
         this.$("[data-remain]").textContent =
           r.index < r.count ? `${Math.ceil(r.remaining)}s` : "✓";
@@ -541,7 +581,7 @@
       });
       this.hud.innerHTML = `
         <div class="mode-title">${L("Expresión facial", "Facial expressiveness")}</div>
-        <div class="mode-phase" data-phase>${phases[0]?.label || "Face"}</div>
+        <div class="mode-phase" data-phase>${phases[0]?.label || L("Gesto", "Face")}</div>
         <div class="mode-big" data-remain>—</div>
         <p class="mode-meta">${L("Cambia la cara con la fase. Revisa en silencio al detener.", "Change the face with the phase. Review muted after stop.")}</p>
       `;
@@ -552,7 +592,7 @@
       r.tick(performance.now());
       if (this.$("[data-phase]"))
         this.$("[data-phase]").textContent =
-          r.index < r.count ? r.label : "Done — review muted";
+          r.index < r.count ? r.label : L("Listo — revisa sin sonido", "Done — review muted");
       if (this.$("[data-remain]"))
         this.$("[data-remain]").textContent =
           r.index < r.count ? `${Math.ceil(r.remaining)}s` : "✓";
@@ -580,7 +620,7 @@
       this.state.slotT = performance.now();
       this.hud.innerHTML = `
         <div class="mode-title">${L("Conexión · bucles de curiosidad", "Connection · curiosity loops")}</div>
-        <div class="mode-phase" data-phase>${phases?.[0]?.label || "Conversation practice"}</div>
+        <div class="mode-phase" data-phase>${phases?.[0]?.label || L("Práctica de conversación", "Conversation practice")}</div>
         <div class="mode-big" data-slot>YOU ask / speak</div>
         <div class="listen-bars">
           <div class="listen-speak" data-speak style="width:50%"></div>
@@ -961,7 +1001,7 @@
       r.tick(performance.now());
       if (this.$("[data-phase]"))
         this.$("[data-phase]").textContent =
-          r.index < r.count ? r.label : "Story complete";
+          r.index < r.count ? r.label : L("Historia completa", "Story complete");
       if (this.$("[data-remain]"))
         this.$("[data-remain]").textContent =
           r.index < r.count ? `${Math.ceil(r.remaining)}s` : "✓";

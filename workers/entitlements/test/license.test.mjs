@@ -12,9 +12,12 @@ import {
   generateLicenseId,
   isLicenseIdShape,
   isTokenIssuable,
+  PLAN_INTERVAL_SECONDS,
+  periodEndForPlan,
   resolveKeyId,
   resolveTtlSeconds,
   signPayload,
+  STATUS_IDS,
   stringToBase64Url,
   timingSafeEqual,
   verifyLicenseToken
@@ -139,7 +142,7 @@ test("wrong audience and malformed tokens are rejected", async () => {
   assert.equal(result.reason, "bad_header");
 });
 
-test("a canceled entitlement never outlives its paid period", () => {
+test("no token ever outlives the period that was paid for", () => {
   const now = 1770000000;
   const canceled = createEntitlement({ status: "canceled", periodEnd: now + 100 });
   assert.equal(computeExpiry(canceled, now, 3600), now + 100);
@@ -147,12 +150,39 @@ test("a canceled entitlement never outlives its paid period", () => {
   assert.equal(isTokenIssuable({ ...canceled, periodEnd: now - 1 }, now), false);
   assert.equal(isTokenIssuable({ ...canceled, periodEnd: null }, now), false);
 
+  // An *active* record is capped too: a one-off payment with no renewal behind
+  // it must not become lifetime Pro.
   const active = createEntitlement({ status: "active", periodEnd: now + 100 });
-  assert.equal(computeExpiry(active, now, 3600), now + 3600);
+  assert.equal(computeExpiry(active, now, 3600), now + 100);
   assert.equal(isTokenIssuable(active, now), true);
+  assert.equal(isTokenIssuable({ ...active, periodEnd: now }, now), false);
+  assert.equal(isTokenIssuable({ ...active, periodEnd: now - 1 }, now), false);
+  assert.equal(isTokenIssuable({ ...active, status: "past_due", periodEnd: now - 1 }, now), false);
+
+  // A far-off or unknown period end leaves the TTL in charge.
+  assert.equal(computeExpiry({ ...active, periodEnd: now + 99999 }, now, 3600), now + 3600);
+  assert.equal(computeExpiry({ ...active, periodEnd: null }, now, 3600), now + 3600);
+
   assert.equal(isTokenIssuable({ ...active, status: "past_due" }, now), true);
   assert.equal(isTokenIssuable(null, now), false);
   assert.equal(isTokenIssuable({ status: "bogus" }, now), false);
+});
+
+test("a pending entitlement never issues a token", () => {
+  const now = 1770000000;
+  const pending = createEntitlement({ status: "pending", periodEnd: null });
+  assert.equal(isTokenIssuable(pending, now), false);
+  assert.equal(isTokenIssuable({ ...pending, periodEnd: now + 99999 }, now), false);
+  assert.equal(STATUS_IDS.includes("pending"), true);
+});
+
+test("periodEndForPlan turns a charge into one paid interval", () => {
+  const now = 1770000000;
+  assert.equal(periodEndForPlan("pro_monthly", now), now + 2678400);
+  assert.equal(periodEndForPlan("pro_yearly", now), now + 31536000);
+  assert.equal(periodEndForPlan("free", now), null);
+  assert.equal(periodEndForPlan("pro_monthly", null), null);
+  assert.equal(PLAN_INTERVAL_SECONDS.pro_yearly, 31536000);
 });
 
 test("buildTokenPayload normalises a missing period end to null", () => {

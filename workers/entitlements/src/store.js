@@ -13,7 +13,7 @@
 
 "use strict";
 
-import { generateLicenseId } from "./license.js";
+import { generateLicenseId, periodEndForPlan } from "./license.js";
 
 /** Idempotency markers live 30 days — well past any provider retry window. */
 export const EVENT_TTL_SECONDS = 2592000;
@@ -228,17 +228,37 @@ function applyIfPresent(target, field, value) {
 }
 
 /**
+ * True when an update describes an older world than the record already holds.
+ * @param {Object} record Stored entitlement record.
+ * @param {Object} update Entitlement update descriptor.
+ * @returns {boolean} Whether the update must not change state.
+ */
+export function isStaleUpdate(record, update) {
+  return Number.isFinite(update.occurredAt)
+    && Number.isFinite(record.occurredAt)
+    && update.occurredAt < record.occurredAt;
+}
+
+/**
  * Idempotently create or update the entitlement an update descriptor refers to.
  *
  * Reuses the license id already indexed for the subscription (or for the
  * checkout session) instead of minting a new one, so a subscription keeps one
  * stable license across its whole lifetime.
  *
+ * Providers deliver out of order and retry, so an update whose `occurredAt` is
+ * older than the stored one may not touch plan/status/periodEnd — otherwise a
+ * late `invoice.paid` resurrects a subscription that was already deleted.
+ * Identity fields and the claim/subscription indexes are order-independent and
+ * are still applied.
+ *
  * @param {Object} kv KV namespace.
  * @param {Object} update Descriptor: provider, plan, status, customerId,
- *   subscriptionId, periodEnd, claimId, planSource.
+ *   subscriptionId, periodEnd, periodEndFromCharge, claimId, planSource,
+ *   occurredAt.
  * @param {{now?: number, generateId?: function(): string}} [options] Injectables for tests.
- * @returns {Promise<{record: Object, created: boolean}>} Stored record and whether it was new.
+ * @returns {Promise<{record: Object, created: boolean, stale: boolean}>} Stored
+ *   record, whether it was new, and whether state was refused as out of order.
  */
 export async function upsertEntitlement(kv, update, options) {
   const opts = options || {};
@@ -259,29 +279,45 @@ export async function upsertEntitlement(kv, update, options) {
       customerId: null,
       subscriptionId: null,
       periodEnd: null,
+      occurredAt: null,
       createdAt: now,
       updatedAt: now
     };
 
+  // Identity is order-independent: a late event may still teach us which
+  // customer or subscription a license belongs to.
   applyIfPresent(record, "provider", update.provider);
-  applyIfPresent(record, "plan", update.plan);
-  applyIfPresent(record, "status", update.status);
   applyIfPresent(record, "customerId", update.customerId);
   applyIfPresent(record, "subscriptionId", update.subscriptionId);
-  applyIfPresent(record, "planSource", update.planSource);
-  if (update.periodEnd !== undefined) {
-    record.periodEnd = Number.isFinite(update.periodEnd) ? Math.floor(update.periodEnd) : record.periodEnd;
+
+  const stale = isStaleUpdate(record, update);
+  if (!stale) {
+    applyIfPresent(record, "plan", update.plan);
+    applyIfPresent(record, "status", update.status);
+    applyIfPresent(record, "planSource", update.planSource);
+    if (update.periodEnd !== undefined && Number.isFinite(update.periodEnd)) {
+      record.periodEnd = Math.floor(update.periodEnd);
+    }
+    // A single charge with no subscription lifecycle behind it: entitle for one
+    // plan interval from the charge. Never shortens an existing period.
+    const charged = periodEndForPlan(record.plan, update.periodEndFromCharge);
+    if (charged !== null && (!Number.isFinite(record.periodEnd) || charged > record.periodEnd)) {
+      record.periodEnd = charged;
+    }
+    if (Number.isFinite(update.occurredAt)) {
+      record.occurredAt = Math.floor(update.occurredAt);
+    }
+    record.updatedAt = now;
   }
   if (!Number.isFinite(record.createdAt)) {
     record.createdAt = now;
   }
-  record.updatedAt = now;
 
   await putEntitlement(kv, record);
   await putClaimIndex(kv, update.provider, update.claimId, licenseId);
   await putSubscriptionIndex(kv, update.provider, record.subscriptionId, licenseId);
 
-  return { record, created: !existing };
+  return { record, created: !existing, stale };
 }
 
 /**

@@ -19,6 +19,8 @@ export const SIGNATURE_TOLERANCE_SECONDS = 300;
 /** Event types this worker acts on. Anything else is acknowledged and ignored. */
 export const HANDLED_EVENT_TYPES = [
   "checkout.session.completed",
+  "checkout.session.async_payment_succeeded",
+  "checkout.session.async_payment_failed",
   "customer.subscription.created",
   "customer.subscription.updated",
   "customer.subscription.deleted",
@@ -32,7 +34,10 @@ const STATUS_MAP = {
   trialing: "active",
   past_due: "past_due",
   unpaid: "past_due",
-  incomplete: "past_due",
+  // "incomplete" is a subscription whose FIRST payment never succeeded: the
+  // same "money has not arrived" case as an unpaid checkout session, so it must
+  // not fall into the entitling "past_due" grace state.
+  incomplete: "pending",
   canceled: "canceled",
   incomplete_expired: "canceled",
   paused: "past_due"
@@ -243,12 +248,26 @@ function subscriptionPeriodEnd(subscription) {
 }
 
 /**
- * Map a checkout.session.completed event to an entitlement update.
+ * True when a checkout session's money has actually arrived.
+ * `status: "complete"` is NOT enough: with a delayed payment method (bank
+ * debit, boleto, OXXO, …) `checkout.session.completed` fires while
+ * `payment_status` is still "unpaid", and the funds may never arrive.
+ * @param {Object} session Stripe checkout session.
+ * @returns {boolean} Whether the session entitles.
+ */
+export function isCheckoutSessionPaid(session) {
+  const status = session && session.payment_status;
+  return status === "paid" || status === "no_payment_required";
+}
+
+/**
+ * Map a checkout.session.* event to an entitlement update.
  * @param {Object} session Stripe checkout session.
  * @param {Object} env Worker env bindings.
+ * @param {string} [statusOverride] Status to force (async payment outcomes).
  * @returns {Object} Entitlement update descriptor.
  */
-function mapCheckoutSession(session, env) {
+function mapCheckoutSession(session, env, statusOverride) {
   const lineItem = session && session.line_items && Array.isArray(session.line_items.data)
     ? session.line_items.data[0]
     : null;
@@ -256,9 +275,7 @@ function mapCheckoutSession(session, env) {
   const byMetadata = normalizePlanId(session && session.metadata && session.metadata.plan);
   const plan = byPrice || byMetadata || "pro_monthly";
   const planSource = byPrice ? "price_id" : (byMetadata ? "metadata" : "default");
-  const paid = session.payment_status === "paid"
-    || session.payment_status === "no_payment_required"
-    || session.status === "complete";
+  const status = statusOverride || (isCheckoutSessionPaid(session) ? "active" : "pending");
   return {
     provider: "stripe",
     claimId: idOf(session && session.id),
@@ -266,7 +283,7 @@ function mapCheckoutSession(session, env) {
     customerId: idOf(session && session.customer),
     plan,
     planSource,
-    status: paid ? "active" : "past_due",
+    status,
     // A checkout session carries no period end; leave whatever the
     // subscription events recorded untouched.
     periodEnd: undefined
@@ -327,6 +344,9 @@ function mapInvoice(invoice, env, paid) {
 /**
  * Map a verified Stripe event onto an entitlement update descriptor.
  *
+ * The descriptor carries `occurredAt` (the event's own `created` timestamp) so
+ * the store can refuse to apply state that is older than what it already has.
+ *
  * Returns `handled: false` (with a safe reason) for event types we subscribe to
  * but cannot key onto a license; the caller still answers 200 so Stripe stops
  * retrying.
@@ -348,6 +368,14 @@ export function mapStripeEvent(event, env) {
     case "checkout.session.completed":
       update = mapCheckoutSession(object, env);
       break;
+    case "checkout.session.async_payment_succeeded":
+      update = mapCheckoutSession(object, env, "active");
+      break;
+    case "checkout.session.async_payment_failed":
+      // The money never arrived: the record stays on file (so /v1/claim can
+      // explain itself) but never entitles.
+      update = mapCheckoutSession(object, env, "canceled");
+      break;
     case "customer.subscription.created":
     case "customer.subscription.updated":
       update = mapSubscription(object, env, false);
@@ -367,5 +395,8 @@ export function mapStripeEvent(event, env) {
   if (!update.subscriptionId && !update.claimId) {
     return { handled: false, reason: "no_license_identity" };
   }
+  // When the event was emitted, so a delayed or retried delivery cannot undo a
+  // newer one. Stripe guarantees neither ordering nor exactly-once delivery.
+  update.occurredAt = unixOrNull(event.created);
   return { handled: true, update };
 }

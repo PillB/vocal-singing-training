@@ -110,7 +110,8 @@ function parseJsonObject(text) {
 }
 
 /**
- * Issue a fresh token for an entitlement, or explain why we will not.
+ * Issue a fresh token for an entitlement, or explain why we will not:
+ * 202 while an async payment is still settling, 403 once it is not entitled.
  * @param {Object} record Stored entitlement record.
  * @param {Object} env Worker env bindings.
  * @param {Object} cors CORS headers.
@@ -118,6 +119,10 @@ function parseJsonObject(text) {
  */
 async function respondWithToken(record, env, cors) {
   const now = Math.floor(Date.now() / 1000);
+  if (record.status === "pending") {
+    // A delayed payment method has not settled yet; the browser keeps polling.
+    return json({ ok: false, reason: "pending", entitlement: toPublicEntitlement(record) }, 202, cors);
+  }
   if (!isTokenIssuable(record, now)) {
     return json({ ok: false, reason: "inactive", entitlement: toPublicEntitlement(record) }, 403, cors);
   }

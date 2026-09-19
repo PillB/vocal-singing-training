@@ -48,18 +48,21 @@ async function signedStripeRequest(event, env) {
  * A completed Stripe checkout event for a session id.
  * @param {string} sessionId Checkout session id.
  * @param {string} eventId Event id.
+ * @param {Object} [overrides] Session/event overrides.
  * @returns {Object} Stripe event.
  */
-function checkoutEvent(sessionId, eventId) {
+function checkoutEvent(sessionId, eventId, overrides) {
+  const opts = overrides || {};
   return {
     id: eventId,
-    type: "checkout.session.completed",
+    type: opts.type || "checkout.session.completed",
+    created: opts.created,
     data: {
       object: {
         id: sessionId,
         customer: "cus_router",
         subscription: "sub_router",
-        payment_status: "paid",
+        payment_status: opts.paymentStatus || "paid",
         metadata: { plan: "pro_yearly" }
       }
     }
@@ -235,6 +238,193 @@ test("a cancellation mid-period still serves a token until the period ends", asy
   assert.equal(verified.valid, true);
   assert.equal(verified.payload.status, "canceled");
   assert.equal(verified.payload.exp, periodEnd, "the token must not outlive the paid period");
+});
+
+test("an unpaid checkout session yields no token until the async payment lands", async () => {
+  const env = createTestEnv();
+  await handleRequest(
+    await signedStripeRequest(checkoutEvent("cs_async", "evt_a1", { paymentStatus: "unpaid" }), env),
+    env
+  );
+
+  // Recorded, findable, but not entitling: the browser keeps polling.
+  const pending = await handleRequest(
+    postJson("/v1/claim", { provider: "stripe", sessionId: "cs_async" }),
+    env
+  );
+  assert.equal(pending.status, 202);
+  const pendingBody = await pending.json();
+  assert.equal(pendingBody.ok, false);
+  assert.equal(pendingBody.reason, "pending");
+  assert.equal(pendingBody.token, undefined);
+  assert.equal(pendingBody.entitlement.status, "pending");
+
+  const licenseId = await env.ENTITLEMENTS.get("claim:stripe:cs_async");
+  const direct = await handleRequest(postJson("/v1/license", { licenseId }), env);
+  assert.equal(direct.status, 202, "a pending license is not a 403 either");
+
+  // The money arrives.
+  await handleRequest(
+    await signedStripeRequest(
+      checkoutEvent("cs_async", "evt_a2", { type: "checkout.session.async_payment_succeeded" }),
+      env
+    ),
+    env
+  );
+  const settled = await handleRequest(
+    postJson("/v1/claim", { provider: "stripe", sessionId: "cs_async" }),
+    env
+  );
+  assert.equal(settled.status, 200);
+  const body = await settled.json();
+  assert.equal(body.entitlement.status, "active");
+  assert.equal(body.licenseId, licenseId, "the same license, not a second one");
+  assert.equal((await verifyLicenseToken(body.token, env)).valid, true);
+});
+
+test("an async payment failure leaves the session unentitled", async () => {
+  const env = createTestEnv();
+  await handleRequest(
+    await signedStripeRequest(checkoutEvent("cs_fail", "evt_f1", { paymentStatus: "unpaid" }), env),
+    env
+  );
+  await handleRequest(
+    await signedStripeRequest(
+      checkoutEvent("cs_fail", "evt_f2", {
+        type: "checkout.session.async_payment_failed",
+        paymentStatus: "unpaid"
+      }),
+      env
+    ),
+    env
+  );
+  const response = await handleRequest(
+    postJson("/v1/claim", { provider: "stripe", sessionId: "cs_fail" }),
+    env
+  );
+  assert.equal(response.status, 403);
+  assert.equal((await response.json()).reason, "inactive");
+});
+
+test("a subscription whose first payment failed issues no token", async () => {
+  const env = createTestEnv();
+  const now = Math.floor(Date.now() / 1000);
+  await handleRequest(
+    await signedStripeRequest(checkoutEvent("cs_inc", "evt_i1", { paymentStatus: "unpaid" }), env),
+    env
+  );
+  await handleRequest(await signedStripeRequest({
+    id: "evt_i2",
+    type: "customer.subscription.created",
+    created: now,
+    data: { object: { id: "sub_router", status: "incomplete", current_period_end: now + 99999 } }
+  }, env), env);
+
+  const response = await handleRequest(
+    postJson("/v1/claim", { provider: "stripe", sessionId: "cs_inc" }),
+    env
+  );
+  assert.equal(response.status, 202, "an incomplete subscription must not fall into the past_due grace");
+  assert.equal((await response.json()).entitlement.status, "pending");
+});
+
+test("a late event delivered after a cancellation cannot bring Pro back", async () => {
+  const env = createTestEnv();
+  const now = Math.floor(Date.now() / 1000);
+
+  await handleRequest(
+    await signedStripeRequest(checkoutEvent("cs_order", "evt_o1", { created: now - 100 }), env),
+    env
+  );
+  const { licenseId } = await (await handleRequest(
+    postJson("/v1/claim", { provider: "stripe", sessionId: "cs_order" }),
+    env
+  )).json();
+
+  await handleRequest(await signedStripeRequest({
+    id: "evt_o2",
+    type: "customer.subscription.deleted",
+    created: now - 10,
+    data: { object: { id: "sub_router", status: "canceled", current_period_end: now - 5 } }
+  }, env), env);
+  assert.equal((await handleRequest(postJson("/v1/license", { licenseId }), env)).status, 403);
+
+  // Stripe retries an invoice.paid that was emitted before the cancellation.
+  const late = await handleRequest(await signedStripeRequest({
+    id: "evt_o3",
+    type: "invoice.paid",
+    created: now - 50,
+    data: {
+      object: {
+        id: "in_late",
+        subscription: "sub_router",
+        lines: { data: [{ period: { end: now + 999999 } }] }
+      }
+    }
+  }, env), env);
+  assert.equal(late.status, 200);
+
+  const stored = await getEntitlement(env.ENTITLEMENTS, licenseId);
+  assert.equal(stored.status, "canceled");
+  assert.equal(stored.periodEnd, now - 5);
+  const refused = await handleRequest(postJson("/v1/license", { licenseId }), env);
+  assert.equal(refused.status, 403, "a stale event must not renew a dead license");
+});
+
+test("a one-time Mercado Pago payment expires at the end of its interval", async () => {
+  const env = createTestEnv();
+  // Approved a minute ago, so the one-month period is genuinely live.
+  const approvedUnix = Math.floor(Date.now() / 1000) - 60;
+  const approved = new Date(approvedUnix * 1000).toISOString();
+  const notification = { id: 950, type: "payment", action: "payment.created", data: { id: "PAY-1" } };
+  const raw = JSON.stringify(notification);
+  const ts = String(Math.floor(Date.now() / 1000));
+  const v1 = await hmacSha256Hex(
+    env.MP_WEBHOOK_SECRET,
+    buildMercadoPagoManifest({ dataId: "pay-1", requestId: "req-p", ts })
+  );
+  const fetchImpl = async () => ({
+    ok: true,
+    status: 200,
+    async json() {
+      return {
+        id: "PAY-1",
+        status: "approved",
+        date_approved: approved,
+        date_last_updated: approved,
+        payer: { id: 3 }
+      };
+    }
+  });
+
+  const response = await handleRequest(
+    postJson("/v1/webhooks/mercadopago", raw, {
+      headers: { "x-signature": `ts=${ts},v1=${v1}`, "x-request-id": "req-p" }
+    }),
+    env,
+    { fetchImpl }
+  );
+  assert.equal(response.status, 200);
+
+  const claim = await handleRequest(
+    postJson("/v1/claim", { provider: "mercadopago", sessionId: "PAY-1" }),
+    env
+  );
+  assert.equal(claim.status, 200);
+  const body = await claim.json();
+  assert.equal(body.entitlement.status, "active");
+  assert.equal(body.entitlement.periodEnd, approvedUnix + 2678400, "one month from approval, not forever");
+
+  const verified = await verifyLicenseToken(body.token, env);
+  assert.equal(verified.valid, true);
+  assert.equal(verified.payload.periodEnd, approvedUnix + 2678400);
+
+  // Once that interval is over, no further token is issued.
+  const expired = { ...(await getEntitlement(env.ENTITLEMENTS, body.licenseId)), periodEnd: 1 };
+  await env.ENTITLEMENTS.put(`lic:${body.licenseId}`, JSON.stringify(expired));
+  const refused = await handleRequest(postJson("/v1/license", { licenseId: body.licenseId }), env);
+  assert.equal(refused.status, 403);
+  assert.equal((await refused.json()).reason, "inactive");
 });
 
 test("claim answers 202 while the webhook is still in flight and 400 on garbage", async () => {

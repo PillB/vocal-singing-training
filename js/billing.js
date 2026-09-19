@@ -605,6 +605,12 @@
 
   /** How long we keep retrying a checkout whose webhook never showed up. */
   const PENDING_CLAIM_MAX_AGE_MS = 7 * 86400000;
+  /**
+   * Answers that mean "this checkout will never become a license": the payment
+   * failed or the entitlement behind it is over. Anything else (a 202 while a
+   * delayed payment settles, a network error) is worth retrying.
+   */
+  const TERMINAL_CLAIM_REASONS = new Set(["inactive", "not_found"]);
 
   /**
    * Ask the worker for the license behind a checkout, and store it on success.
@@ -631,6 +637,12 @@
             sessionId: sessionId ? String(sessionId).slice(0, 128) : null,
             verified: true
           });
+        }
+        if (!res.ok && TERMINAL_CLAIM_REASONS.has(res.reason)) {
+          const st = read();
+          if (st && (st.status === "pending" || st.status === "unclaimed")) {
+            write({ ...st, status: "unclaimed", claimReason: res.reason });
+          }
         }
         emit();
         return res;

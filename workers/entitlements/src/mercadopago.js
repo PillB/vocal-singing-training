@@ -318,6 +318,23 @@ export function planForPreapproval(preapproval, env) {
 }
 
 /**
+ * When a resource last changed, as unix seconds.
+ * Two notifications about the same resource can still land out of order, so the
+ * store needs a timestamp even though the API read is authoritative for state.
+ * @param {Object} resource API resource.
+ * @returns {number|null} Unix seconds or null.
+ */
+export function resourceOccurredAt(resource) {
+  if (!resource || typeof resource !== "object") {
+    return null;
+  }
+  return isoToUnixSeconds(resource.date_last_updated)
+    || isoToUnixSeconds(resource.last_modified)
+    || isoToUnixSeconds(resource.date_approved)
+    || isoToUnixSeconds(resource.date_created);
+}
+
+/**
  * Map a confirmed payment resource to an entitlement update.
  * @param {Object} payment Payment resource from the API.
  * @param {Object} env Worker env bindings.
@@ -329,6 +346,11 @@ export function mapPaymentResource(payment, env) {
     || planFromText(metadata.plan)
     || planFromText(payment && payment.description);
   const subscriptionId = (payment && (payment.preapproval_id || metadata.preapproval_id)) || null;
+  // Checkout Pro / payment links have no subscription lifecycle behind them, so
+  // nothing would ever expire this record. Entitle for one plan interval from
+  // the approval instead; a renewal payment extends it.
+  const chargedAt = isoToUnixSeconds(payment && payment.date_approved)
+    || isoToUnixSeconds(payment && payment.date_created);
   return {
     provider: "mercadopago",
     claimId: payment && payment.id !== undefined && payment.id !== null ? String(payment.id) : null,
@@ -337,7 +359,9 @@ export function mapPaymentResource(payment, env) {
     plan: byText || "pro_monthly",
     planSource: byText ? "payment_text" : "default(payment)",
     status: mapPaymentStatus(payment && payment.status),
-    periodEnd: isoToUnixSeconds(payment && payment.date_of_expiration)
+    periodEnd: isoToUnixSeconds(payment && payment.date_of_expiration),
+    periodEndFromCharge: chargedAt,
+    occurredAt: resourceOccurredAt(payment)
   };
 }
 
@@ -360,7 +384,8 @@ export function mapPreapprovalResource(preapproval, env) {
     plan,
     planSource,
     status: mapPreapprovalStatus(preapproval && preapproval.status),
-    periodEnd: isoToUnixSeconds(preapproval && preapproval.next_payment_date)
+    periodEnd: isoToUnixSeconds(preapproval && preapproval.next_payment_date),
+    occurredAt: resourceOccurredAt(preapproval)
   };
 }
 
@@ -378,6 +403,14 @@ export function mapAuthorizedPaymentResource(authorized, env) {
     ? mapPaymentStatus(paymentStatus)
     : (String(authorized && authorized.status) === "processed" ? "active" : "past_due");
   const subscriptionId = authorized && authorized.preapproval_id ? String(authorized.preapproval_id) : null;
+  const payment = (authorized && authorized.payment) || {};
+  // A recurring charge extends the period by one interval of whatever plan the
+  // license already holds (the store knows it; this resource does not).
+  const chargedAt = status === "active"
+    ? (isoToUnixSeconds(payment.date_approved)
+      || isoToUnixSeconds(authorized && authorized.debit_date)
+      || isoToUnixSeconds(authorized && authorized.date_created))
+    : null;
   return {
     provider: "mercadopago",
     claimId: authorized && authorized.id !== undefined && authorized.id !== null
@@ -388,7 +421,11 @@ export function mapAuthorizedPaymentResource(authorized, env) {
     plan: undefined,
     planSource: undefined,
     status,
-    periodEnd: isoToUnixSeconds(authorized && authorized.next_retry_date)
+    // `next_retry_date` is a dunning date, not a paid-through date: never let it
+    // become the period end.
+    periodEnd: undefined,
+    periodEndFromCharge: chargedAt,
+    occurredAt: resourceOccurredAt(authorized)
   };
 }
 

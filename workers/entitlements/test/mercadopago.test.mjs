@@ -9,6 +9,7 @@ import {
   isoToUnixSeconds,
   mapAuthorizedPaymentResource,
   mapMercadoPagoResource,
+  mapPaymentResource,
   mapPaymentStatus,
   mapPreapprovalStatus,
   normalizeTimestampSeconds,
@@ -17,6 +18,7 @@ import {
   planFromAutoRecurring,
   planFromText,
   resolveNotificationTarget,
+  resourceOccurredAt,
   verifyMercadoPagoSignature
 } from "../src/mercadopago.js";
 
@@ -312,6 +314,67 @@ test("an API failure is reported instead of trusted", async () => {
   assert.equal(parsed.reason, "api_bad_json");
 
   assert.equal((await confirmAndMapNotification(null, env, {})).reason, "missing_target");
+});
+
+test("a one-time payment entitles for one interval, not forever", () => {
+  const approved = "2026-03-01T10:00:00.000-05:00";
+  const approvedUnix = isoToUnixSeconds(approved);
+  const monthly = mapPaymentResource({
+    id: 12345,
+    status: "approved",
+    date_approved: approved,
+    date_created: approved,
+    date_last_updated: approved
+  }, {});
+  assert.equal(monthly.status, "active");
+  assert.equal(monthly.plan, "pro_monthly");
+  assert.equal(monthly.periodEndFromCharge, approvedUnix);
+  assert.equal(monthly.occurredAt, approvedUnix);
+
+  const yearly = mapPaymentResource({
+    id: 12346,
+    status: "approved",
+    external_reference: "pro_yearly",
+    date_created: approved
+  }, {});
+  assert.equal(yearly.plan, "pro_yearly");
+  assert.equal(yearly.periodEndFromCharge, approvedUnix, "falls back to date_created");
+});
+
+test("a dunning retry date never becomes the paid-through date", () => {
+  const charged = mapAuthorizedPaymentResource({
+    id: "ap_x",
+    preapproval_id: "pre_x",
+    status: "processed",
+    date_created: "2026-03-01T10:00:00.000-05:00",
+    payment: { status: "approved", date_approved: "2026-03-01T10:05:00.000-05:00" }
+  }, {});
+  assert.equal(charged.periodEnd, undefined);
+  assert.equal(charged.periodEndFromCharge, isoToUnixSeconds("2026-03-01T10:05:00.000-05:00"));
+
+  const failed = mapAuthorizedPaymentResource({
+    id: "ap_y",
+    preapproval_id: "pre_x",
+    status: "recycling",
+    next_retry_date: "2026-03-05T10:00:00.000-05:00",
+    payment: { status: "rejected" }
+  }, {});
+  assert.equal(failed.status, "past_due");
+  assert.equal(failed.periodEnd, undefined);
+  assert.equal(failed.periodEndFromCharge, null, "a failed charge buys no time");
+});
+
+test("resourceOccurredAt prefers the most specific timestamp", () => {
+  assert.equal(
+    resourceOccurredAt({ date_last_updated: "2026-03-02T00:00:00Z", date_created: "2026-01-01T00:00:00Z" }),
+    isoToUnixSeconds("2026-03-02T00:00:00Z")
+  );
+  assert.equal(
+    resourceOccurredAt({ last_modified: "2026-03-03T00:00:00Z" }),
+    isoToUnixSeconds("2026-03-03T00:00:00Z")
+  );
+  assert.equal(resourceOccurredAt({}), null);
+  assert.equal(resourceOccurredAt(null), null);
 });
 
 test("preapproval and authorized payment resources key on the preapproval id", () => {

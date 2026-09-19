@@ -442,6 +442,56 @@ test.describe("Billing & subscriptions", () => {
     await expect.poll(() => claimed, { timeout: 8000 }).toBeGreaterThan(0);
   });
 
+  test("a payment the provider rejects stops being retried", async ({ page }) => {
+    const license = await mintLicense({ origin: BASE });
+    await boot(page);
+    await patchBillingConfig(page, {
+      verification: {
+        apiBaseUrl: "https://entitlements.invalid",
+        publicKeyJwk: license.publicKeyJwk,
+        required: true
+      }
+    });
+    await page.addInitScript(() => {
+      try {
+        localStorage.setItem(
+          "vt_billing_v1",
+          JSON.stringify({
+            status: "pending",
+            plan: "pro_monthly",
+            provider: "stripe",
+            source: "checkout_return",
+            activatedAt: new Date().toISOString(),
+            sessionId: "cs_test_failed_payment",
+            verified: false
+          })
+        );
+      } catch {
+        /* ignore */
+      }
+    });
+    // What the worker answers once an async payment has failed.
+    await page.route("**/v1/claim", (route) =>
+      route.fulfill({
+        status: 403,
+        contentType: "application/json",
+        body: JSON.stringify({ ok: false, reason: "inactive" })
+      })
+    );
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForFunction(
+      () => VTBilling.getEntitlement().status === "unverified",
+      null,
+      { timeout: 8000 }
+    );
+    const r = await page.evaluate(() => ({
+      ent: VTBilling.getEntitlement(),
+      stored: JSON.parse(localStorage.getItem("vt_billing_v1") || "null")
+    }));
+    expect(r.ent.pro).toBe(false);
+    expect(r.stored.status).toBe("unclaimed");
+  });
+
   test("checkout return waits for the worker instead of granting Pro", async ({ page }) => {
     await page.addInitScript(() => {
       try {

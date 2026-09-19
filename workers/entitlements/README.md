@@ -39,8 +39,15 @@ Compact JWS-like, three base64url parts joined by `.`:
 
 `sub` (the license id) is 32 random bytes as base64url. It doubles as the bearer
 "license key" the client stores. Lifetime is `LICENSE_TTL_SECONDS` (default
-`259200` = 72h), except that a **canceled** entitlement's token never outlives
-its already-paid `periodEnd`.
+`259200` = 72h), **capped at `periodEnd` whenever the record has one** — see
+"Access ends at the end of what was paid for" below.
+
+Stored records have a fourth status, `pending`: a checkout completed but the
+money has not arrived yet (delayed payment methods — bank debit, boleto, OXXO).
+It never issues a token, so `pending` never appears in a payload; the routes
+answer **202 `{ok:false,reason:"pending"}`** and the browser keeps polling until
+`checkout.session.async_payment_succeeded` (→ `active`) or
+`async_payment_failed` (→ not entitled) settles it.
 
 ## Routes
 
@@ -48,8 +55,8 @@ its already-paid `periodEnd`.
 |--------|------|---------|
 | POST | `/v1/webhooks/stripe` | Signed Stripe events. 400 on a bad signature. |
 | POST | `/v1/webhooks/mercadopago` | Signed Mercado Pago notifications; state is then re-read from the MP API. |
-| POST | `/v1/claim` | `{provider, sessionId}` → `200 {ok, licenseId, token, entitlement}`, `202 {ok:false,reason:"pending"}` while the webhook is still in flight, `404` for garbage. |
-| POST | `/v1/license` | `{licenseId}` → a fresh token from live KV state. `404` unknown, `403 {reason:"inactive"}` once a canceled period has ended. |
+| POST | `/v1/claim` | `{provider, sessionId}` → `200 {ok, licenseId, token, entitlement}`, `202 {ok:false,reason:"pending"}` while the webhook is still in flight *or* while an async payment settles, `404` for garbage. |
+| POST | `/v1/license` | `{licenseId}` → a fresh token from live KV state. `404` unknown, `202 {reason:"pending"}` while an async payment settles, `403 {reason:"inactive"}` once the paid period has ended. |
 | GET | `/v1/jwks` | The public key as a JWK set, with `kid`. |
 | GET | `/v1/health` | `{ok, stripeConfigured, mercadopagoConfigured, signingKeyConfigured, siteOrigin}` — booleans only. |
 
@@ -136,6 +143,35 @@ site has the new JWK, so expect a wave of re-checks (the client just calls
 `/v1/license` again). Rotate immediately if the private key ever leaves the
 secret store.
 
+## Access ends at the end of what was paid for
+
+A token's `exp` is capped at the record's `periodEnd` for **every** status, not
+just cancellations, and `/v1/license` refuses once `periodEnd` has passed. That
+is what stops a Mercado Pago Checkout Pro payment — a one-off charge with no
+subscription lifecycle behind it — from becoming lifetime Pro: a payment-derived
+record is entitled for one plan interval from its approval date (31 days for
+`pro_monthly`, 365 for `pro_yearly`), and each renewal charge extends it.
+A charge never *shortens* an existing period.
+
+Consequences worth understanding before you ship:
+
+- **A missed renewal webhook ends access at `periodEnd`, by design.** We prefer
+  a paying customer briefly losing Pro (one `/v1/license` call after the
+  provider catches up restores it) over a cancelled customer keeping it forever.
+- **The providers' own retries are what keep `periodEnd` moving.** Stripe
+  retries a failing endpoint for up to ~3 days and `invoice.paid` /
+  `customer.subscription.updated` carry the new period; Mercado Pago retries
+  too, and `subscription_authorized_payment` extends by one interval. If the
+  worker is down for longer than a billing period, expect expiries — watch for
+  repeated non-2xx in the Stripe/MP dashboards, and replay events from there.
+- **Out-of-order delivery cannot resurrect a dead entitlement.** Every update
+  carries `occurredAt` (Stripe's `event.created`; Mercado Pago's
+  `date_last_updated`/`last_modified`), stored on the record. An update older
+  than the stored one may not change plan, status or `periodEnd` — so a late or
+  retried `invoice.paid` arriving after `customer.subscription.deleted` is
+  filed, not applied. Identity fields and the claim/subscription indexes are
+  order-independent and are still written.
+
 ## Registering the webhooks
 
 ### Stripe
@@ -147,7 +183,9 @@ Subscribe exactly these events:
 
 | Event | Why |
 |-------|-----|
-| `checkout.session.completed` | Payment Link / Checkout finished — this is what `/v1/claim` looks up |
+| `checkout.session.completed` | Payment Link / Checkout finished — this is what `/v1/claim` looks up. Only `payment_status` `paid` / `no_payment_required` entitles; anything else is stored `pending` |
+| `checkout.session.async_payment_succeeded` | A delayed payment method finally cleared → `active` |
+| `checkout.session.async_payment_failed` | It never cleared → not entitled |
 | `customer.subscription.created` | First subscription state |
 | `customer.subscription.updated` | Plan change, renewal, status change |
 | `customer.subscription.deleted` | Cancellation |
@@ -164,8 +202,11 @@ https://pillb.github.io/vocal-singing-training/?billing=success&plan=pro_monthly
 ```
 
 Yearly: `plan=pro_yearly`. Status mapping: `active`/`trialing` → `active`;
-`past_due`/`unpaid`/`incomplete` → `past_due`; `canceled`/`incomplete_expired` →
-`canceled`. Plan mapping: price id → `session.metadata.plan` → subscription
+`past_due`/`unpaid` → `past_due` (a grace state that still entitles);
+`incomplete` → `pending`, because that is a subscription whose *first* payment
+never succeeded — the same "money has not arrived" case as an unpaid session, so
+it must not get the grace that an existing subscriber gets;
+`canceled`/`incomplete_expired` → `canceled`. Plan mapping: price id → `session.metadata.plan` → subscription
 interval (`month` → `pro_monthly`, `year` → `pro_yearly`).
 
 ### Mercado Pago
@@ -189,7 +230,10 @@ value is absent are omitted). After that the notification body is treated as a
 | `subscription_authorized_payment` | `GET /authorized_payments/{id}` |
 
 Payment `approved` / preapproval `authorized` → `active`; `paused`/`cancelled` →
-`canceled`; anything else → `past_due`. The plan comes from
+`canceled`; anything else → `past_due`. An approved payment sets the period to
+one plan interval from its approval date; a preapproval's `next_payment_date`
+sets it directly. `next_retry_date` is a dunning date and is never used as a
+paid-through date. The plan comes from
 `MP_PLAN_PRO_MONTHLY`/`MP_PLAN_PRO_YEARLY`, else the preapproval `reason` or
 `external_reference`, else `auto_recurring`; when nothing says, it defaults to
 `pro_monthly` and records what it saw in the record's `planSource`.
@@ -221,9 +265,10 @@ node --test workers/entitlements/test     # or: npm test --prefix workers/entitl
 
 They cover signature accept/reject for both providers (bad digest, stale
 timestamp, multiple `v1`s, swapped data id), the token sign → verify round trip,
-tampered and expired tokens, the KV upsert/idempotency logic against an
-in-memory fake, plan/status mapping, and the whole webhook → claim → token flow
-through the router with a fake `fetch`.
+tampered and expired tokens, the KV upsert/idempotency and out-of-order logic
+against an in-memory fake, plan/status mapping, period-end enforcement for
+one-off payments, the pending → async-settled checkout flow, and the whole
+webhook → claim → token flow through the router with a fake `fetch`.
 
 ## Official references
 
@@ -266,7 +311,12 @@ through the router with a fake `fetch`.
   re-issued only from live KV state.
 - **Cancellations and failed renewals lingering.** `customer.subscription.deleted`,
   `invoice.payment_failed` and a paused Mercado Pago preapproval all flip the
-  stored status; the next `/v1/license` call refuses or downgrades.
+  stored status; the next `/v1/license` call refuses or downgrades. Even with no
+  event at all, access stops at `periodEnd`.
+- **Unpaid "completed" checkouts.** A delayed payment method that never clears
+  never yields a token.
+- **One-off payments becoming lifetime access**, and **stale events
+  resurrecting a cancelled subscription** (see above).
 - **Spoofed webhooks.** No signature, no state change — and Mercado Pago
   notifications are re-confirmed against the API, so a valid-looking body
   claiming `status: "approved"` changes nothing.

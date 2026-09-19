@@ -29,8 +29,36 @@ const MAX_TTL_SECONDS = 2592000;
 /** Plan ids this worker is willing to issue. */
 export const PLAN_IDS = ["pro_monthly", "pro_yearly"];
 
-/** Entitlement status values. */
-export const STATUS_IDS = ["active", "past_due", "canceled"];
+/**
+ * Entitlement status values.
+ * "pending" means a checkout completed but the money has not arrived yet
+ * (delayed payment methods); it never entitles.
+ */
+export const STATUS_IDS = ["active", "past_due", "canceled", "pending"];
+
+/**
+ * How long one paid interval lasts, used to give payment-only records (no
+ * subscription lifecycle to follow) an enforceable period end.
+ * Monthly gets 31 days so a 31-day month never expires early.
+ */
+export const PLAN_INTERVAL_SECONDS = {
+  pro_monthly: 2678400,
+  pro_yearly: 31536000
+};
+
+/**
+ * Period end for a single charge: when it was paid plus one plan interval.
+ * @param {string} plan Plan id.
+ * @param {number} chargedAt Unix seconds the charge was approved.
+ * @returns {number|null} Unix seconds, or null when either input is unusable.
+ */
+export function periodEndForPlan(plan, chargedAt) {
+  const interval = PLAN_INTERVAL_SECONDS[plan];
+  if (!interval || !Number.isFinite(chargedAt)) {
+    return null;
+  }
+  return Math.floor(chargedAt) + interval;
+}
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
@@ -218,24 +246,36 @@ export async function buildJwks(env) {
 
 /**
  * Compute the token expiry for an entitlement.
- * A canceled entitlement never outlives the period it already paid for.
+ *
+ * A token never outlives the period that was actually paid for, whatever the
+ * status: that is what stops a one-off payment (no subscription lifecycle to
+ * follow) from becoming lifetime Pro. A renewal moves `periodEnd` forward and
+ * the next token follows it.
+ *
  * @param {Object} entitlement Stored entitlement record.
  * @param {number} issuedAt Unix seconds.
  * @param {number} ttlSeconds Configured lifetime.
  * @returns {number} Unix seconds.
  */
 export function computeExpiry(entitlement, issuedAt, ttlSeconds) {
-  let exp = issuedAt + ttlSeconds;
+  const exp = issuedAt + ttlSeconds;
   const periodEnd = entitlement && Number.isFinite(entitlement.periodEnd) ? entitlement.periodEnd : null;
-  if (entitlement && entitlement.status === "canceled" && periodEnd !== null && periodEnd < exp) {
-    exp = periodEnd;
+  if (periodEnd !== null && periodEnd < exp) {
+    return periodEnd;
   }
   return exp;
 }
 
 /**
  * True when an entitlement still deserves a token.
- * Canceled entitlements stay valid until the period they paid for ends.
+ *
+ * Rules, in order:
+ *   - an unknown status, or "pending" (money not in yet), never entitles;
+ *   - a known period end that has passed never entitles, whatever the status —
+ *     access stops at the end of what was paid for until a renewal moves it;
+ *   - "canceled" needs a future period end, so it stops at once when we have
+ *     no period to run out.
+ *
  * @param {Object} entitlement Stored entitlement record.
  * @param {number} nowSeconds Unix seconds.
  * @returns {boolean} Whether a token may be issued.
@@ -244,14 +284,17 @@ export function isTokenIssuable(entitlement, nowSeconds) {
   if (!entitlement || typeof entitlement !== "object") {
     return false;
   }
-  if (!STATUS_IDS.includes(entitlement.status)) {
+  if (!STATUS_IDS.includes(entitlement.status) || entitlement.status === "pending") {
     return false;
   }
-  if (entitlement.status !== "canceled") {
-    return true;
-  }
   const periodEnd = Number.isFinite(entitlement.periodEnd) ? entitlement.periodEnd : null;
-  return periodEnd !== null && periodEnd > nowSeconds;
+  if (periodEnd !== null && periodEnd <= nowSeconds) {
+    return false;
+  }
+  if (entitlement.status === "canceled") {
+    return periodEnd !== null;
+  }
+  return true;
 }
 
 /**

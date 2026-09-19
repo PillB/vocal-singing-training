@@ -10,6 +10,7 @@ import {
   getEntitlement,
   getLicenseIdForClaim,
   getLicenseIdForSubscription,
+  isStaleUpdate,
   licenseKey,
   markEventSeen,
   resolveExistingLicenseId,
@@ -199,6 +200,141 @@ test("corrupt stored JSON reads back as missing rather than throwing", async () 
   const kv = createFakeKv();
   await kv.put(licenseKey("lic_bad"), "{not json");
   assert.equal(await getEntitlement(kv, "lic_bad"), null);
+});
+
+test("a stale event cannot resurrect a deleted subscription", async () => {
+  const kv = createFakeKv();
+  const generateId = idSequence("lic_");
+  await upsertEntitlement(kv, {
+    provider: "stripe",
+    claimId: "cs_s",
+    subscriptionId: "sub_s",
+    plan: "pro_monthly",
+    status: "active",
+    periodEnd: NOW + 1000,
+    occurredAt: NOW
+  }, { now: NOW, generateId });
+
+  const deleted = await upsertEntitlement(kv, {
+    provider: "stripe",
+    subscriptionId: "sub_s",
+    status: "canceled",
+    periodEnd: NOW + 20,
+    occurredAt: NOW + 100
+  }, { now: NOW + 100, generateId });
+  assert.equal(deleted.record.status, "canceled");
+  assert.equal(deleted.stale, false);
+
+  // A late invoice.paid, emitted BEFORE the deletion but delivered after it.
+  const late = await upsertEntitlement(kv, {
+    provider: "stripe",
+    subscriptionId: "sub_s",
+    status: "active",
+    plan: "pro_yearly",
+    periodEnd: NOW + 99999,
+    occurredAt: NOW + 50
+  }, { now: NOW + 200, generateId });
+
+  assert.equal(late.stale, true);
+  assert.equal(late.record.status, "canceled", "a stale event must not reactivate");
+  assert.equal(late.record.plan, "pro_monthly");
+  assert.equal(late.record.periodEnd, NOW + 20);
+  assert.equal(late.record.occurredAt, NOW + 100, "the newest event still owns the state");
+  assert.equal(late.record.updatedAt, NOW + 100, "a refused update does not touch updatedAt");
+  assert.deepEqual(await getEntitlement(kv, late.record.licenseId), late.record);
+});
+
+test("a stale event still records identity and indexes", async () => {
+  const kv = createFakeKv();
+  const generateId = idSequence("lic_");
+  await upsertEntitlement(kv, {
+    provider: "stripe",
+    subscriptionId: "sub_i",
+    status: "canceled",
+    occurredAt: NOW + 100
+  }, { now: NOW, generateId });
+
+  const late = await upsertEntitlement(kv, {
+    provider: "stripe",
+    claimId: "cs_i",
+    subscriptionId: "sub_i",
+    customerId: "cus_i",
+    status: "active",
+    occurredAt: NOW
+  }, { now: NOW + 1, generateId });
+
+  assert.equal(late.stale, true);
+  assert.equal(late.record.status, "canceled");
+  assert.equal(late.record.customerId, "cus_i", "identity is order-independent");
+  assert.equal(await getLicenseIdForClaim(kv, "stripe", "cs_i"), "lic_1");
+});
+
+test("updates without timestamps are never treated as stale", async () => {
+  const kv = createFakeKv();
+  const generateId = idSequence("lic_");
+  await upsertEntitlement(kv, {
+    provider: "stripe",
+    subscriptionId: "sub_n",
+    status: "canceled",
+    occurredAt: NOW + 100
+  }, { now: NOW, generateId });
+  const undated = await upsertEntitlement(kv, {
+    provider: "stripe",
+    subscriptionId: "sub_n",
+    status: "active"
+  }, { now: NOW + 1, generateId });
+  assert.equal(undated.stale, false);
+  assert.equal(undated.record.status, "active");
+  assert.equal(undated.record.occurredAt, NOW + 100, "an undated event cannot rewind the clock");
+
+  assert.equal(isStaleUpdate({ occurredAt: 10 }, { occurredAt: 9 }), true);
+  assert.equal(isStaleUpdate({ occurredAt: 10 }, { occurredAt: 10 }), false);
+  assert.equal(isStaleUpdate({ occurredAt: null }, { occurredAt: 9 }), false);
+  assert.equal(isStaleUpdate({ occurredAt: 10 }, {}), false);
+});
+
+test("a charge without a subscription behind it entitles for exactly one interval", async () => {
+  const kv = createFakeKv();
+  const generateId = idSequence("lic_");
+  const monthly = await upsertEntitlement(kv, {
+    provider: "mercadopago",
+    claimId: "pay_1",
+    plan: "pro_monthly",
+    status: "active",
+    periodEndFromCharge: NOW,
+    occurredAt: NOW
+  }, { now: NOW, generateId });
+  assert.equal(monthly.record.periodEnd, NOW + 2678400);
+
+  const yearly = await upsertEntitlement(kv, {
+    provider: "mercadopago",
+    claimId: "pay_2",
+    plan: "pro_yearly",
+    status: "active",
+    periodEndFromCharge: NOW,
+    occurredAt: NOW
+  }, { now: NOW, generateId });
+  assert.equal(yearly.record.periodEnd, NOW + 31536000);
+
+  // A renewal charge extends the period; an older one never shortens it.
+  const renewed = await upsertEntitlement(kv, {
+    provider: "mercadopago",
+    claimId: "pay_1",
+    status: "active",
+    periodEndFromCharge: NOW + 2678400,
+    occurredAt: NOW + 2678400
+  }, { now: NOW + 2678400, generateId });
+  assert.equal(renewed.record.licenseId, monthly.record.licenseId);
+  assert.equal(renewed.record.periodEnd, NOW + 2678400 * 2);
+
+  const shorter = await upsertEntitlement(kv, {
+    provider: "mercadopago",
+    claimId: "pay_1",
+    status: "active",
+    periodEndFromCharge: NOW + 10,
+    occurredAt: NOW + 2678401
+  }, { now: NOW + 2678401, generateId });
+  assert.equal(shorter.record.periodEnd, NOW + 2678400 * 2, "a charge never shortens the period");
 });
 
 test("the client view carries no provider-internal ids", () => {

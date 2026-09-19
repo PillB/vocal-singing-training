@@ -579,20 +579,22 @@
     if (!step) return end(true);
     const u = ensureUI();
     prepare(step);
+    // Copy is written synchronously: beginTour unhides the popover before this
+    // runs, so deferring the text showed an empty card for two frames.
+    u.title.textContent = t(step.titleKey);
+    u.body.textContent = t(step.bodyKey);
+    u.progress.textContent = t("tour.progress", {
+      n: String(index + 1),
+      total: String(stepList.length)
+    });
+    u.skip.textContent = t("tour.skip");
+    u.prev.textContent = t("tour.prev");
+    u.next.textContent = index >= stepList.length - 1 ? t("tour.finish") : t("tour.next");
+    u.prev.disabled = index === 0;
+    u.prev.setAttribute("aria-disabled", String(index === 0));
+    // Placement still waits for layout to settle after prepare()'s scroll.
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        u.title.textContent = t(step.titleKey);
-        u.body.textContent = t(step.bodyKey);
-        u.progress.textContent = t("tour.progress", {
-          n: String(index + 1),
-          total: String(stepList.length)
-        });
-        u.skip.textContent = t("tour.skip");
-        u.prev.textContent = t("tour.prev");
-        u.next.textContent =
-          index >= stepList.length - 1 ? t("tour.finish") : t("tour.next");
-        u.prev.disabled = index === 0;
-        u.prev.setAttribute("aria-disabled", String(index === 0));
         positionStep(step);
         try {
           u.next.focus({ preventScroll: true });

@@ -2359,8 +2359,9 @@ html[lang^="es"] .hud-bc.is-manual .mic-sens-title::after {
 .mode-focus.mode-focus-live .mode-panel {
   pointer-events: auto;
   width: 100%;
-  /* Content-sized panel; scroll only if phase list grows long */
-  max-height: min(100%, 14rem);
+  /* Content-sized panel; scroll only if phase list grows long.
+     14rem clipped the last line of the coaching cue on phones. */
+  max-height: min(100%, 18rem);
   overflow: auto;
   margin: 0;
   background: rgba(12, 18, 26, 0.92);
@@ -4041,11 +4042,407 @@ footer a {
   overflow: hidden;
 }
 
-.nav-label-short {
+/* ══════════════════════════════════════════════════════════════════════
+   Flow overhaul — start panel, header nav, grouped catalog, plan rail
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* —— Header: two tiers instead of seven equal chips ——
+   Destinations (Practicar / Plan / Historial) read as navigation and show
+   where you are; Pro / Cuenta / idioma / Tour stay reachable but quieter. */
+.header-actions {
+  max-width: none;
+  flex: 1 1 auto;
+  gap: 0.4rem 0.7rem;
+}
+@media (min-width: 1100px) {
+  .header-actions {
+    flex-wrap: nowrap;
+  }
+}
+.header-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  align-items: center;
+  padding: 0.18rem;
+  border-radius: 999px;
+  background: rgba(140, 170, 210, 0.08);
+  border: 1px solid rgba(140, 170, 210, 0.16);
+}
+.header-nav .nav-link {
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-weight: 650;
+  white-space: nowrap;
+}
+.header-nav .nav-link:hover {
+  color: var(--text);
+  background: rgba(140, 170, 210, 0.14);
+}
+.header-nav .nav-link.active {
+  color: var(--text);
+  background: rgba(110, 180, 232, 0.2);
+  box-shadow: inset 0 0 0 1px rgba(110, 180, 232, 0.5);
+}
+.header-utils {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+.header-utils .btn-util {
+  color: var(--text-muted);
+  font-weight: 600;
+  opacity: 0.92;
+}
+.header-utils .btn-util:hover {
+  color: var(--text);
+  opacity: 1;
+}
+
+/* —— Start panel: the one decision point on home —— */
+#start-panel.start-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+  gap: 1.25rem 1.75rem;
+  align-items: start;
+  padding: 1rem 1.3rem 1.15rem;
+  margin: 0.5rem 0 0.9rem;
+  border-radius: calc(var(--radius) + 4px);
+  border: 1px solid rgba(140, 170, 210, 0.3);
+  background:
+    radial-gradient(120% 140% at 0% 0%, rgba(110, 180, 232, 0.16), transparent 60%),
+    linear-gradient(165deg, rgba(40, 70, 110, 0.3), rgba(12, 16, 24, 0.6));
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.3);
+}
+.start-main {
+  min-width: 0;
+}
+#start-panel .start-kicker {
+  margin: 0 0 0.3rem;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+#start-panel .start-title {
+  margin: 0 0 0.35rem;
+  font-size: clamp(1.3rem, 2.6vw, 1.75rem);
+  line-height: 1.18;
+  letter-spacing: -0.03em;
+}
+#start-panel .start-sub {
+  margin: 0;
+  color: var(--text-muted);
+  max-width: 52ch;
+}
+
+/* The recommended exercise carries the single primary button */
+#start-panel .next-step {
+  margin: 0.8rem 0 0.6rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: var(--radius);
+  border: 1px solid rgba(110, 180, 232, 0.4);
+  background: rgba(12, 18, 28, 0.6);
+}
+#start-panel .next-step strong {
+  font-size: 1.08rem;
+  line-height: 1.3;
+}
+.next-step-cta {
+  flex: 0 0 auto;
+  font-size: 1rem;
+  padding-inline: 1.25rem;
+}
+
+/* Alternatives are deliberately quiet: one primary per screen */
+.start-alt {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.6rem;
+}
+.start-path {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+}
+
+/* First visit only: what a session actually looks like */
+.start-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0.8rem 0.9rem;
+  display: grid;
+  gap: 0.6rem;
+  border-radius: var(--radius);
+  background: rgba(12, 18, 28, 0.45);
+  border: 1px solid rgba(140, 170, 210, 0.18);
+}
+.start-steps li {
+  display: grid;
+  grid-template-columns: 1.6rem minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  column-gap: 0.65rem;
+  align-items: baseline;
+}
+.start-step-n {
+  grid-row: 1 / span 2;
+  width: 1.6rem;
+  height: 1.6rem;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: #0b1017;
+  background: linear-gradient(135deg, var(--vocal), var(--accent-2));
+}
+.start-steps strong {
+  font-size: 0.92rem;
+}
+.start-steps .muted {
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+/* Once there is a saved session the explainer has done its job */
+body:not(.home-zero) .start-steps {
   display: none;
 }
-.nav-label-full {
+body:not(.home-zero) #start-panel.start-panel {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* —— Catalog: level groups so 20 cards read as two scannable sets —— */
+.track-blurb {
+  margin: 0.75rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  max-width: 62ch;
+}
+/* Track name is still announced, but the switch above already shows it */
+.sr-title {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+.grid-group-head {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  margin: 0.4rem 0 -0.2rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid rgba(140, 170, 210, 0.2);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.grid-group-head.tier-basic {
+  color: var(--vocal);
+}
+.grid-group-head.tier-advanced {
+  color: var(--accent-2);
+}
+.grid-group-n {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--text-muted);
+}
+
+/* —— Plan: make the twelve weeks visible —— */
+.plan-rail {
+  margin: 0 0 1rem;
+  padding: 0.85rem 1rem;
+}
+.plan-rail-label {
+  margin: 0 0 0.55rem;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.plan-week-rail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.plan-week-dot {
+  width: 2rem;
+  height: 2rem;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+.plan-week-dot.done {
+  color: #0b1017;
+  background: var(--success);
+  border-color: transparent;
+}
+.plan-week-dot.current {
+  color: var(--text);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(110, 180, 232, 0.3);
+}
+.plan-week-num {
+  font-size: 1.4rem;
+  font-weight: 800;
+  margin: 0.25rem 0;
+}
+/* The week review asks you to judge a week you have not run yet */
+.plan-waiting-note {
+  display: none;
+  margin: 0 0 0.75rem;
+  font-size: 0.85rem;
+  color: var(--warn);
+}
+#plan-review-card.is-waiting .plan-waiting-note {
+  display: block;
+}
+#plan-review-card.is-waiting .field,
+#plan-review-card.is-waiting .controls-row {
+  opacity: 0.55;
+}
+
+/* —— Empty states point back at practice instead of dead-ending —— */
+#history-empty-cta {
+  margin-top: 0.5rem;
+}
+
+@media (max-width: 860px) {
+  #start-panel.start-panel {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 1.1rem 1rem 1.25rem;
+  }
+  .header-nav,
+  .header-utils {
+    max-width: 100%;
+  }
+}
+
+/* Exercise view keeps its compact chrome: nav tiering must not add height */
+body.view-exercise .header-nav {
+  background: none;
+  border-color: transparent;
+  padding: 0;
+}
+
+/* —— Exercise stage: guidance instead of dead space —— */
+.stage-guide {
+  position: absolute;
+  /* Anchored just above the bottom control rail, so it fills the gap under the
+     mode panel and never covers Start or the mic slider. */
+  left: 0.5rem;
+  right: max(0.5rem, var(--hud-safe-r, 14%));
+  bottom: calc(max(var(--rail-h, 6rem), 5.5rem) + 0.4rem);
+  max-height: 44%; /* JS narrows this to the real gap under the mode panel */
+  overflow: auto;
+  z-index: 1;
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(140, 170, 210, 0.22);
+  background: rgba(12, 18, 28, 0.72);
+  text-align: left;
+  pointer-events: auto;
+}
+.stage-guide-k {
+  margin: 0 0 0.45rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.stage-guide-steps {
+  margin: 0;
+  padding-left: 1.15rem;
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+.stage-guide-more {
+  margin-top: 0.6rem;
+  padding-inline: 0;
+  color: var(--accent);
+}
+/* Once practice is live the stage belongs to the exercise, not the reading */
+body.practice-live .stage-guide {
+  display: none;
+}
+@media (max-height: 560px) {
+  .stage-guide {
+    display: none;
+  }
+}
+
+/* Mode cue was clipped mid-sentence on phone */
+.mode-focus .mode-meta,
+.mode-focus .mode-note {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+/* Pricing: plan CTAs were pushed past the modal edge by long feature lists */
+.plan-card {
+  display: flex;
+  flex-direction: column;
+}
+.plan-card .plan-cta {
+  margin-top: auto;
+}
+.plan-more {
+  margin: 0.35rem 0 0.6rem;
+  font-size: 0.85rem;
+}
+.plan-more summary {
+  cursor: pointer;
+  color: var(--accent);
+  list-style: none;
+}
+.plan-more summary::marker,
+.plan-more summary::-webkit-details-marker {
+  display: none;
+}
+.plan-more summary::after {
+  content: " ▾";
+}
+.plan-more[open] summary::after {
+  content: " ▴";
+}
+.plan-more .plan-features {
+  margin-top: 0.35rem;
+}
+
+/* "Plan de 12 semanas" never fits the 1100px header row, and wrapping the
+   header onto a second row costs ~56px of the first screen. The short label
+   shows; the full one stays as the button's accessible name. */
+.header-nav .nav-full {
+  display: none;
+}
+.header-nav .nav-short {
   display: inline;
+}
+
+/* The three-step strip already says what the intro sentence says */
+body.home-zero #start-panel .start-sub {
+  display: none;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -4091,14 +4488,6 @@ footer a {
     font-size: 0.8rem;
     white-space: nowrap;
   }
-  /* "Plan de 12 semanas" alone was 162px wide and forced a third header row */
-  body:not(.view-exercise) .header-actions .nav-label-full {
-    display: none;
-  }
-  body:not(.view-exercise) .header-actions .nav-label-short {
-    display: inline;
-  }
-
   /* ── Tap targets ──────────────────────────────────────────────────────
      --min-tap is 44px, but several phone controls rendered at 13–36px. */
   body:not(.view-exercise) .chip,

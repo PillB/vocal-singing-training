@@ -82,8 +82,16 @@
     progressLabel() {
       const s = this.get();
       if (!s) return "";
-      const path = s.path ? ` · ${s.path}` : "";
-      return `Exercise ${Math.min(s.index + 1, s.order.length)} of ${s.order.length}${path}`;
+      const t = (k, vars) => global.VTI18n?.t?.(k, vars) ?? k;
+      const pathKey = `home.path.${s.path}`;
+      const pathName = s.path ? t(pathKey) : "";
+      const path = pathName && pathName !== pathKey ? ` · ${pathName}` : s.path ? ` · ${s.path}` : "";
+      return (
+        t("session.progress", {
+          n: Math.min(s.index + 1, s.order.length),
+          total: s.order.length
+        }) + path
+      );
     }
   };
 

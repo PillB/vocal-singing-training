@@ -10,7 +10,7 @@
     <meta name="color-scheme" content="dark" />
     <meta name="theme-color" content="#0c1118" />
     <title>Entrenamiento vocal y de canto</title>
-    <link rel="stylesheet" href="css/styles.css?v=20260919a" />
+    <link rel="stylesheet" href="css/styles.css?v=20260919b" />
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎤</text></svg>" />
   </head>
   <body>
@@ -24,13 +24,18 @@
           </div>
         </div>
         <div class="header-actions">
-          <button type="button" class="btn btn-ghost btn-sm" id="btn-tour" data-i18n="nav.tour" title="Tour guiado">Tour</button>
-          <button type="button" class="btn btn-ghost btn-sm" id="btn-account" data-i18n="nav.account" title="Account">Cuenta</button>
-          <button type="button" class="btn btn-pro btn-sm" id="btn-pricing" data-i18n="nav.pro" title="Pro">Pro</button>
-          <span class="billing-pill" id="billing-pill" hidden>Pro</span>
-          <button type="button" class="btn btn-ghost btn-sm" id="btn-lang" aria-label="Language" data-i18n="nav.lang">English</button>
-          <button type="button" class="btn btn-ghost btn-sm" id="btn-history" data-i18n="nav.history">Historial</button>
-          <button type="button" class="btn btn-ghost btn-sm" id="btn-plan" data-i18n-title="nav.plan" title="Plan de 12 semanas"><span class="nav-label-short" data-i18n="nav.planShort">Plan</span><span class="nav-label-full" data-i18n="nav.plan">Plan de 12 semanas</span></button>
+          <nav class="header-nav" id="header-nav" data-i18n-aria="nav.sections" aria-label="Secciones">
+            <button type="button" class="btn btn-ghost btn-sm nav-link" id="btn-nav-home" data-view="home" data-i18n="nav.practice">Practicar</button>
+            <button type="button" class="btn btn-ghost btn-sm nav-link" id="btn-plan" data-view="plan" data-i18n-aria="nav.plan" aria-label="Plan de 12 semanas"><span class="nav-full" data-i18n="nav.plan">Plan de 12 semanas</span><span class="nav-short" data-i18n="nav.planShort">Plan</span></button>
+            <button type="button" class="btn btn-ghost btn-sm nav-link" id="btn-history" data-view="history" data-i18n="nav.history">Historial</button>
+          </nav>
+          <div class="header-utils">
+            <button type="button" class="btn btn-pro btn-sm" id="btn-pricing" data-i18n="nav.pro" title="Pro">Pro</button>
+            <span class="billing-pill" id="billing-pill" hidden>Pro</span>
+            <button type="button" class="btn btn-ghost btn-sm btn-util" id="btn-account" data-i18n="nav.account" title="Account">Cuenta</button>
+            <button type="button" class="btn btn-ghost btn-sm btn-util" id="btn-lang" aria-label="Language" data-i18n="nav.lang">English</button>
+            <button type="button" class="btn btn-ghost btn-sm btn-util" id="btn-tour" data-i18n="nav.tour" title="Tour guiado">Tour</button>
+          </div>
         </div>
       </div>
     </header>
@@ -46,19 +51,72 @@
       </div>
 
       <section id="view-home" class="view active">
-        <div class="hero">
-          <h2 id="home-track-title" data-i18n="home.vocalTitle">Entrenamiento vocal</h2>
-          <p id="home-track-sub" data-i18n="home.vocalSub">
-            Básico: base de oratoria. Avanzado: pausa, rellenos, tono, gestos y más.
-          </p>
-        </div>
+        <!-- Start panel: the single decision point on home. One primary action,
+             a first-visit explainer, and the guided session as the quiet alternative. -->
+        <section class="hero start-panel" id="start-panel" aria-labelledby="start-title">
+          <div class="start-main">
+            <p class="start-kicker" id="start-kicker" data-i18n="start.kickerNew">Empieza aquí</p>
+            <h2 class="start-title" id="start-title" data-i18n="start.titleNew">Tu primera práctica, en 5 minutos</h2>
+            <p class="start-sub" id="start-sub" data-i18n="start.subNew">
+              Un estudio de voz en el navegador: elige un ejercicio, practica con el micrófono y guarda cómo te fue.
+            </p>
+
+            <!-- Next best exercise — the recommended single action -->
+            <div class="next-step" id="next-step-card" hidden>
+              <div class="next-step-body">
+                <span class="next-step-k" id="next-step-label" data-i18n="home.nextStepLabel">Siguiente paso</span>
+                <strong id="next-step-title">—</strong>
+                <p class="muted" id="next-step-why" data-i18n="home.nextStepWhy">
+                  Un ejercicio corto para mantener el hábito — sin presión.
+                </p>
+              </div>
+              <button type="button" class="btn btn-practice next-step-cta" id="btn-next-step" data-i18n="start.ctaNew">
+                ▶ Empezar
+              </button>
+            </div>
+
+            <div class="start-alt">
+              <button type="button" class="btn btn-ghost btn-sm" id="btn-continue" data-i18n="home.continue">▶ Continuar práctica</button>
+              <button type="button" class="btn btn-ghost btn-sm" id="btn-structured" data-i18n="home.structured">
+                Iniciar sesión guiada
+              </button>
+              <label class="start-path muted">
+                <span data-i18n="home.path">Ruta</span>
+                <select id="session-path" class="select-inline">
+                  <option value="basic" data-i18n="home.path.basic">Básica</option>
+                  <option value="advanced" data-i18n="home.path.advanced">Avanzada</option>
+                  <option value="full" data-i18n="home.path.full">Completa</option>
+                </select>
+              </label>
+            </div>
+          </div>
+
+          <!-- First-visit only: what a session actually looks like -->
+          <ol class="start-steps" id="start-steps">
+            <li>
+              <span class="start-step-n" aria-hidden="true">1</span>
+              <strong data-i18n="start.step1">Elige un ejercicio</strong>
+              <span class="muted" data-i18n="start.step1sub">Vocal para hablar en público, Canto para cantar.</span>
+            </li>
+            <li>
+              <span class="start-step-n" aria-hidden="true">2</span>
+              <strong data-i18n="start.step2">Practica con el micrófono</strong>
+              <span class="muted" data-i18n="start.step2sub">El piano y el afinador te guían en pantalla.</span>
+            </li>
+            <li>
+              <span class="start-step-n" aria-hidden="true">3</span>
+              <strong data-i18n="start.step3">Guarda y revisa</strong>
+              <span class="muted" data-i18n="start.step3sub">Tu progreso se queda en este navegador.</span>
+            </li>
+          </ol>
+        </section>
 
         <!-- Catalog: primary IA (track switch + filters + list) — high contrast, above dense studio chrome when collapsed -->
         <section class="catalog-panel" id="catalog-panel" aria-labelledby="catalog-heading">
           <div class="catalog-head">
             <div class="catalog-head-text">
               <h3 id="catalog-heading" data-i18n="home.catalog">Catálogo de ejercicios</h3>
-              <p class="muted catalog-pick" data-i18n="home.catalogPick">Elige tu camino: vocal u canto</p>
+              <p class="muted catalog-pick" data-i18n="home.catalogPick">Elige tu camino: vocal o canto</p>
             </div>
           </div>
 
@@ -104,6 +162,11 @@
             </button>
           </div>
 
+          <p class="track-blurb" id="home-track-sub" data-i18n="home.vocalSub">
+            Básico: base de oratoria. Avanzado: pausa, rellenos, tono, gestos y más.
+          </p>
+          <h4 class="track-title sr-title" id="home-track-title" data-i18n="home.vocalTitle">Entrenamiento vocal</h4>
+
           <div class="toolbar tier-toolbar">
             <div class="tier-filters" role="group" aria-label="Exercise tier">
               <button type="button" class="chip tier-chip selected" data-tier="all" data-i18n="tier.all">Todos</button>
@@ -113,34 +176,6 @@
             <span class="muted" id="tier-counts" style="font-size: 0.85rem"></span>
           </div>
 
-          <div class="toolbar continue-toolbar">
-            <button type="button" class="btn btn-practice" id="btn-continue" data-i18n="home.continue">▶ Continuar práctica</button>
-            <button type="button" class="btn btn-primary" id="btn-structured" data-i18n="home.structured">
-              Iniciar sesión guiada
-            </button>
-            <label class="muted" style="font-size: 0.88rem; display: flex; gap: 0.4rem; align-items: center">
-              <span data-i18n="home.path">Ruta</span>
-              <select id="session-path" class="select-inline">
-                <option value="basic" data-i18n="home.path.basic">Básica</option>
-                <option value="advanced" data-i18n="home.path.advanced">Avanzada</option>
-                <option value="full" data-i18n="home.path.full">Completa</option>
-              </select>
-            </label>
-          </div>
-
-          <!-- Next best exercise (habit path — research: small next action) -->
-          <div class="next-step card" id="next-step-card" hidden>
-            <div class="next-step-body">
-              <span class="next-step-k" data-i18n="home.nextStepLabel">Siguiente paso</span>
-              <strong id="next-step-title">—</strong>
-              <p class="muted" id="next-step-why" data-i18n="home.nextStepWhy">
-                Un ejercicio corto para mantener el hábito — sin presión.
-              </p>
-            </div>
-            <button type="button" class="btn btn-primary btn-sm" id="btn-next-step" data-i18n="home.nextStepCta">
-              Abrir
-            </button>
-          </div>
 
           <div id="exercise-list" class="grid" aria-live="polite"></div>
         </section>
@@ -418,6 +453,15 @@
 
             <!-- Non-pitch: compact focus panel inside sticky stage (safe zone under TL, above BL) -->
             <div id="mode-focus" class="mode-focus" hidden aria-hidden="true"></div>
+            <!-- Exercises without a pitch canvas left the middle of the stage empty
+                 while the "how to practise" steps sat collapsed below the fold. -->
+            <div id="stage-guide" class="stage-guide" hidden>
+              <p class="stage-guide-k" data-i18n="ex.stageGuideLabel">Qué vas a hacer</p>
+              <ol class="stage-guide-steps" id="stage-guide-steps"></ol>
+              <button type="button" class="btn btn-ghost btn-xs stage-guide-more" id="btn-stage-guide-more" data-i18n="ex.stageGuideMore">
+                Ver todos los pasos y consejos
+              </button>
+            </div>
           </div>
 
           <!-- Below sticky highway: only secondary chrome (collapsed by default) -->
@@ -546,12 +590,18 @@
           <button type="button" class="btn btn-ghost" id="btn-plan-back" data-i18n="history.back">← Volver</button>
         </div>
 
+        <!-- The panel is named "12 semanas" but only ever showed week 1 -->
+        <div class="plan-rail card" aria-hidden="true">
+          <p class="plan-rail-label" data-i18n="plan.railLabel">Las 12 semanas</p>
+          <div class="plan-week-rail" id="plan-week-rail"></div>
+        </div>
+
         <div class="plan-grid">
           <div class="card">
             <h3 data-i18n="plan.current">Semana actual</h3>
-            <p style="font-size: 1.4rem; font-weight: 800; margin: 0.25rem 0" id="plan-week-num">Semana 1</p>
+            <p class="plan-week-num" id="plan-week-num">Semana 1</p>
             <p class="muted" id="plan-status"></p>
-            <p>Foco: <strong id="plan-element-label">—</strong></p>
+            <p><span data-i18n="plan.focus">Foco</span>: <strong id="plan-element-label">—</strong></p>
             <h3 style="margin-top: 1rem" data-i18n="plan.pick">Elige el elemento</h3>
             <div class="element-chips" id="element-chips"></div>
             <div class="controls-row" style="margin-top: 1rem">
@@ -562,8 +612,11 @@
             <div class="hold-pills" id="plan-checkins"></div>
           </div>
 
-          <div class="card">
+          <div class="card" id="plan-review-card">
             <h3 data-i18n="plan.review">Grabar y revisar al final de la semana</h3>
+            <p class="plan-waiting-note" data-i18n="plan.reviewWaiting">
+              Disponible cuando lleves una semana en marcha. Elige un elemento y empieza.
+            </p>
             <p class="muted" data-i18n="plan.reviewSub">
               Tras ~7 días, graba una muestra corta, revísala y decide:
             </p>
@@ -713,7 +766,7 @@
     </div>
 
     <script src="js/focus-trap.js?v=20260919a"></script>
-    <script src="js/i18n.js?v=20260919a"></script>
+    <script src="js/i18n.js?v=20260919b"></script>
     <script src="js/exercises-data.js?v=20260716c"></script>
     <script src="js/exercises-locale-es.js?v=20260716c"></script>
     <script src="js/practice-profiles.js?v=20260717e"></script>
@@ -733,11 +786,11 @@
     <script src="js/pitch-visualizer.js?v=20260717f"></script>
     <script src="js/pitch-game.js"></script>
     <script src="js/practice-engine.js?v=20260717d"></script>
-    <script src="js/practice-modes.js?v=20260717f"></script>
+    <script src="js/practice-modes.js?v=20260919b"></script>
     <script src="js/recorder.js"></script>
     <script src="js/metrics.js"></script>
-    <script src="js/session.js"></script>
-    <script src="js/tour.js?v=20260919a"></script>
-    <script src="js/app.js?v=20260919a"></script>
+    <script src="js/session.js?v=20260919b"></script>
+    <script src="js/tour.js?v=20260919b"></script>
+    <script src="js/app.js?v=20260919b"></script>
   </body>
 </html>

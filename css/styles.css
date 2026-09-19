@@ -4153,7 +4153,8 @@ footer a {
   .next-step-k,
   .pricing-kicker,
   .plan-badge,
-  .pro-ach-badge {
+  .pro-ach-badge,
+  .pro-lock {
     font-size: 0.75rem;
   }
   .value-stat span,

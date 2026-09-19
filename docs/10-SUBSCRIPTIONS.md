@@ -251,6 +251,12 @@ check is that entitlements cannot be *forged, shared, or kept after cancellation
 not that a static site becomes tamper-proof. Anything that must be truly protected
 has to move behind the worker.
 
+**If the worker is unreachable:** the browser keeps the token it already holds
+until that token expires (≤72h), then drops to free. A paying customer therefore
+survives a short outage; a longer one costs them Pro until the worker is back.
+Raise `verification.revalidateHours` / the worker's `LICENSE_TTL_SECONDS` to widen
+that cushion, at the cost of cancellations taking longer to bite.
+
 `verification.required: false` turns all of this off and goes back to the old
 forgeable behaviour. `getBillingHealth()` reports it as an issue.
 

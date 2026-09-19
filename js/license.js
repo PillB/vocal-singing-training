@@ -25,6 +25,12 @@
   const ISSUER = "vocal-studio-entitlements";
   const CLOCK_SKEW_S = 300;
   const DEFAULT_REVALIDATE_HOURS = 24;
+  /**
+   * Statuses the worker is willing to sign. A cancelled subscription keeps the
+   * period it paid for (the worker caps `exp` at `periodEnd`); a past_due one
+   * keeps access while the provider retries, until the provider cancels it.
+   */
+  const ENTITLED_STATUSES = new Set(["active", "past_due", "canceled"]);
   const CLAIM_RETRY_DELAYS_MS = [1500, 3000, 5000, 8000];
 
   /** In-memory result of the last signature check — billing reads this synchronously. */
@@ -185,7 +191,7 @@
     if (aud && claims.aud && claims.aud !== aud) return null;
     if (typeof claims.exp !== "number" || claims.exp + CLOCK_SKEW_S < now) return null;
     if (typeof claims.iat === "number" && claims.iat - CLOCK_SKEW_S > now) return null;
-    if (claims.status !== "active") return null;
+    if (!ENTITLED_STATUSES.has(claims.status)) return null;
     if (claims.plan !== "pro_monthly" && claims.plan !== "pro_yearly") return null;
     return claims;
   }
@@ -303,6 +309,11 @@
         clear();
         return { ok: false, reason: "revoked" };
       }
+      if (res.status === 403) {
+        // Subscription cancelled or past its period end — stop claiming Pro now.
+        clear();
+        return { ok: false, reason: res.data?.reason || "inactive" };
+      }
       return { ok: false, reason: res.data?.reason || "error" };
     } finally {
       refreshing = false;
@@ -343,6 +354,7 @@
       state,
       pro: !!claims,
       plan: claims?.plan || null,
+      licenseStatus: claims?.status || null,
       provider: claims?.provider || null,
       expiresAt: claims?.exp ? new Date(claims.exp * 1000).toISOString() : null,
       periodEndsAt: claims?.periodEnd ? new Date(claims.periodEnd * 1000).toISOString() : null,

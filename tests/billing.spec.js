@@ -197,17 +197,97 @@ test.describe("Billing & subscriptions", () => {
     expect(results.garbage).toBe(false);
   });
 
-  test("cancelled license stops Pro on the next check", async ({ page }) => {
+  test("a token minted by the worker verifies in the browser", async ({ page }) => {
+    // Pins the wire format across the seam: the worker's own signer against the
+    // browser's own verifier, no test-only encoding in between.
+    const { webcrypto } = require("crypto");
+    const importEsm = new Function("p", "return import(p)");
+    const { createLicenseToken } = await importEsm(
+      require("url").pathToFileURL(
+        require("path").join(__dirname, "../workers/entitlements/src/license.js")
+      ).href
+    );
+    const pair = await webcrypto.subtle.generateKey(
+      { name: "ECDSA", namedCurve: "P-256" },
+      true,
+      ["sign", "verify"]
+    );
+    const privateKeyPkcs8B64 = Buffer.from(
+      new Uint8Array(await webcrypto.subtle.exportKey("pkcs8", pair.privateKey))
+    ).toString("base64");
+    const publicKeyJwk = await webcrypto.subtle.exportKey("jwk", pair.publicKey);
+    delete publicKeyJwk.ext;
+    delete publicKeyJwk.key_ops;
+
+    const { token } = await createLicenseToken(
+      {
+        licenseId: "lic_cross_seam_0001",
+        plan: "pro_monthly",
+        status: "active",
+        provider: "stripe",
+        periodEnd: Math.floor(Date.now() / 1000) + 30 * 86400
+      },
+      {
+        LICENSE_PRIVATE_KEY_PKCS8_B64: privateKeyPkcs8B64,
+        SITE_ORIGIN: BASE,
+        LICENSE_KEY_ID: "k1",
+        LICENSE_TTL_SECONDS: "259200"
+      }
+    );
+
+    await boot(page);
+    await installLicense(page, { token, publicKeyJwk, licenseId: "lic_cross_seam_0001" });
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await waitForLicenseState(page, "ok");
+    const r = await page.evaluate(() => {
+      const e = VTBilling.getEntitlement();
+      return { pro: e.pro, plan: e.plan, source: e.source };
+    });
+    expect(r.pro).toBe(true);
+    expect(r.plan).toBe("pro_monthly");
+    expect(r.source).toBe("license");
+  });
+
+  test("a cancelled subscription keeps the period it paid for", async ({ page }) => {
+    // The worker signs "canceled" with exp capped at the period end; access
+    // should run out with the token, not the moment someone cancels.
     const license = await mintLicense({ origin: BASE, status: "canceled" });
     await boot(page);
     await installLicense(page, license);
     await page.reload({ waitUntil: "domcontentloaded" });
-    await waitForLicenseState(page, "invalid");
+    await waitForLicenseState(page, "ok");
     const r = await page.evaluate(() => {
       const e = VTBilling.getEntitlement();
-      return { pro: e.pro, status: e.status };
+      return { pro: e.pro, licenseStatus: e.licenseStatus };
     });
+    expect(r.pro).toBe(true);
+    expect(r.licenseStatus).toBe("canceled");
+  });
+
+  test("a revoked license is dropped on refresh", async ({ page }) => {
+    // Minted a minute ago so the staleness window below has already passed.
+    const license = await mintLicense({ origin: BASE, iatOffsetSeconds: -60 });
+    await boot(page);
+    await page.route("**/v1/license", (route) =>
+      route.fulfill({
+        status: 403,
+        contentType: "application/json",
+        body: JSON.stringify({ ok: false, reason: "inactive" })
+      })
+    );
+    // revalidateHours ~0 makes the stored token stale immediately, so boot
+    // re-checks it with the worker.
+    await installLicense(page, { ...license, revalidateHours: 0.0001 });
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => window.VTLicense?.getStatus?.().hasToken === false, null, {
+      timeout: 5000
+    });
+    const r = await page.evaluate(() => ({
+      pro: VTBilling.isPro(),
+      canExport: VTBilling.can("export_progress")
+    }));
     expect(r.pro).toBe(false);
+    expect(r.canExport).toBe(false);
   });
 
   test("pricing modal opens from header without leaving home", async ({ page }) => {

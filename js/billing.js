@@ -246,6 +246,9 @@
         source: "license",
         pro: true,
         status: "active",
+        // "past_due" / "canceled" still carry access to the end of the paid
+        // period; the token's own expiry is what ends it.
+        licenseStatus: claims.status,
         verified: true,
         provider: claims.provider || st?.provider || null,
         region: st?.region || detectRegion(),

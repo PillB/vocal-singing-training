@@ -121,8 +121,8 @@ async function installLicense(page, license) {
       apiBaseUrl,
       publicKeyJwk: license.publicKeyJwk,
       required: true,
-      // Keep the test offline: never let init() decide the token is stale.
-      revalidateHours: 24 * 365
+      // Keep the test offline unless it asks for a refresh round trip.
+      revalidateHours: license.revalidateHours || 24 * 365
     }
   });
   await page.addInitScript(

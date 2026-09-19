@@ -106,22 +106,35 @@ test.describe("First-viewport game stage (fold)", () => {
   test("home keeps primary chrome in first screen", async ({ page }) => {
     await boot(page);
     const r = await page.evaluate(() => {
-      // Prefer always-visible first-screen anchors (continue may be lower when pulse is tall)
+      // Primary chrome is the start panel's single CTA. Before the start panel
+      // existed the track switch was the first actionable thing on home, so it
+      // led this list; it now sits under the panel and is checked separately.
       const cands = [
+        document.querySelector("#btn-next-step"),
+        document.querySelector("#btn-continue"),
+        document.querySelector(".hero"),
         document.querySelector(".tabs"),
         document.querySelector("#exercise-list"),
-        document.querySelector(".hero"),
-        document.querySelector("#value-pulse"),
-        document.querySelector("#btn-continue")
+        document.querySelector("#value-pulse")
       ].filter(Boolean);
       const boxes = cands.map((el) => {
         const b = el.getBoundingClientRect();
         return { id: el.id || el.className?.toString?.().slice(0, 24), top: b.top, bottom: b.bottom };
       });
       const first = boxes.find((b) => b.top >= 0 && b.top < innerHeight);
-      return { boxes, firstTop: first?.top ?? null, vh: innerHeight };
+      const tabs = document.querySelector(".tabs")?.getBoundingClientRect();
+      return {
+        boxes,
+        firstTop: first?.top ?? null,
+        tabsBottom: tabs?.bottom ?? null,
+        vh: innerHeight
+      };
     });
     expect(r.firstTop).not.toBeNull();
     expect(r.firstTop).toBeLessThan(r.vh * 0.55);
+    // The catalog must still be reachable without hunting: the track switch
+    // stays inside the first screen under the start panel.
+    expect(r.tabsBottom, JSON.stringify(r.boxes)).not.toBeNull();
+    expect(r.tabsBottom).toBeLessThanOrEqual(r.vh);
   });
 });

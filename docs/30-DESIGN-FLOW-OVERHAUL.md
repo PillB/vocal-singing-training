@@ -106,9 +106,43 @@ saved before this change keep working.
 
 ---
 
+## Test changes
+
+Two specs moved, and both are worth reading before merging.
+
+**`tests/fold-regression.spec.js` — "home keeps primary chrome in first screen".**
+The candidate list led with `.tabs` because the track switch used to be the
+first actionable thing on home. It now sits under the start panel, so the list
+leads with `#btn-next-step`, the panel's single CTA, and the 55 % threshold is
+unchanged. A second assertion was added: the track switch must still have its
+bottom edge inside the first screen, so the catalog stays reachable without
+hunting. At 1280×720 the CTA lands at 28 % of the viewport and the track switch
+at 61 %.
+
+Getting `.tabs` itself back under 55 % would have meant cutting the "Catálogo de
+ejercicios" heading, which [29-UI-UX-REDTEAM](29-UI-UX-REDTEAM.md) added as a
+deliberate P0 fix (R1). Shortening the Plan nav label to fit the header on one
+row and dropping the intro line the three-step strip already covers took the
+switch from 577px to 439px instead.
+
+**`js/tour.js` — `render()` writes its copy synchronously.**
+`beginTour` unhides the popover and only then calls `render()`, which filled the
+text inside a double `requestAnimationFrame` — so the card showed empty for two
+frames. The layout changes here widened that window enough that
+`ui-tour-and-layout.spec.js:152` failed two runs in three. Placement still waits
+for layout to settle; only the text moved earlier.
+
+---
+
 ## Verification
 
 - `node qa/check-catalog.mjs` — 36 exercises · 33 modes · 13 progressions.
 - Full Chromium Playwright suite.
 - Screenshots at 1440×900, 390×844 and 844×390 across home, exercise, plan,
   history and the pricing modal.
+
+Three specs fail on `main` as well and are untouched here:
+`pro-features.spec.js:24` and `retention.spec.js:97` expect `#pro-spark` and
+`#practice-heatmap` visible, which `body.home-zero` hides by design (R4 in
+doc 29); `validation.spec.js:219` expects `#chk-sustain` visible on the second
+basic vocal exercise.

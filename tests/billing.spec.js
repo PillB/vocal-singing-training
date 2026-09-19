@@ -347,6 +347,101 @@ test.describe("Billing & subscriptions", () => {
     await expect(page.locator("#btn-start-trial")).toBeHidden();
   });
 
+  test("a stranded checkout claim is resumed on the next visit", async ({ page }) => {
+    // The webhook can land after the return page has given up. The pending
+    // record, not the (already cleaned) URL, is what we retry from.
+    const license = await mintLicense({ origin: BASE });
+    await boot(page);
+    await patchBillingConfig(page, {
+      verification: {
+        apiBaseUrl: "https://entitlements.invalid",
+        publicKeyJwk: license.publicKeyJwk,
+        required: true,
+        revalidateHours: 24 * 365
+      }
+    });
+    await page.addInitScript(() => {
+      try {
+        localStorage.setItem(
+          "vt_billing_v1",
+          JSON.stringify({
+            status: "pending",
+            plan: "pro_monthly",
+            provider: "stripe",
+            source: "checkout_return",
+            activatedAt: new Date().toISOString(),
+            sessionId: "cs_test_stranded",
+            verified: false
+          })
+        );
+      } catch {
+        /* ignore */
+      }
+    });
+    let claimed = 0;
+    await page.route("**/v1/claim", (route) => {
+      claimed += 1;
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ ok: true, licenseId: "lic_test_0001", token: license.token })
+      });
+    });
+
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => window.VTBilling?.isPro?.() === true, null, { timeout: 8000 });
+    expect(claimed).toBeGreaterThan(0);
+    const ent = await page.evaluate(() => VTBilling.getEntitlement());
+    expect(ent.pro).toBe(true);
+    expect(ent.source).toBe("license");
+  });
+
+  test("a checkout that never confirms stops retrying and says so", async ({ page }) => {
+    await boot(page);
+    await patchBillingConfig(page, {
+      verification: {
+        apiBaseUrl: "https://entitlements.invalid",
+        publicKeyJwk: { kty: "EC", crv: "P-256", x: "AA", y: "AA" },
+        required: true
+      }
+    });
+    await page.addInitScript(() => {
+      try {
+        localStorage.setItem(
+          "vt_billing_v1",
+          JSON.stringify({
+            status: "pending",
+            plan: "pro_monthly",
+            provider: "stripe",
+            source: "checkout_return",
+            // Older than the retry window
+            activatedAt: new Date(Date.now() - 30 * 86400000).toISOString(),
+            sessionId: "cs_test_ancient",
+            verified: false
+          })
+        );
+      } catch {
+        /* ignore */
+      }
+    });
+    let claimed = 0;
+    await page.route("**/v1/claim", (route) => {
+      claimed += 1;
+      route.fulfill({ status: 202, contentType: "application/json", body: "{}" });
+    });
+    await page.reload({ waitUntil: "domcontentloaded" });
+    const ent = await page.evaluate(() => VTBilling.getEntitlement());
+    expect(claimed).toBe(0);
+    expect(ent.pro).toBe(false);
+    expect(ent.status).toBe("unverified");
+
+    // ...but the customer can still force a re-check from the pricing modal.
+    await page.click("#btn-pricing");
+    await expect(page.locator("#btn-recheck-payment")).toBeVisible();
+    await page.click("#btn-recheck-payment");
+    await expect.poll(() => claimed, { timeout: 8000 }).toBeGreaterThan(0);
+  });
+
   test("checkout return waits for the worker instead of granting Pro", async ({ page }) => {
     await page.addInitScript(() => {
       try {

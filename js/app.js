@@ -3883,6 +3883,15 @@
     if (demo) {
       demo.hidden = !cfg.demoUnlockEnabled || ent.source === "demo" || (ent.pro && ent.source === "paid");
     }
+    // Recovery for a checkout whose license never arrived.
+    const recheck = $("#btn-recheck-payment");
+    if (recheck) {
+      recheck.hidden = !(
+        !ent.pro &&
+        !!B.hasPendingClaim?.() &&
+        !!B.verificationConfigured?.()
+      );
+    }
     // Free trial is opt-in: offer it only while this browser still has one.
     const trialBtn = $("#btn-start-trial");
     if (trialBtn) {
@@ -4633,6 +4642,21 @@
     $("#pricing-close")?.addEventListener("click", closePricing);
     $("#pricing-modal")?.addEventListener("click", (e) => {
       if (e.target === $("#pricing-modal")) closePricing();
+    });
+    $("#btn-recheck-payment")?.addEventListener("click", () => {
+      const claiming = window.VTBilling?.resumePendingClaim?.({ force: true });
+      if (!claiming) {
+        toast(tt("pricing.toast.verifyFailed"), { durationMs: 5200 });
+        return;
+      }
+      toast(tt("pricing.toast.verifyPending"), { durationMs: 3600 });
+      claiming.then((res) => {
+        toast(res?.ok ? tt("pricing.toast.verifyOk") : tt("pricing.toast.verifyFailed"), {
+          durationMs: res?.ok ? 3600 : 6000
+        });
+        updateBillingChrome();
+        renderPricingModal();
+      });
     });
     $("#btn-start-trial")?.addEventListener("click", () => {
       if (!window.VTBilling?.startTrial) return;

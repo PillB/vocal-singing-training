@@ -251,6 +251,13 @@ check is that entitlements cannot be *forged, shared, or kept after cancellation
 not that a static site becomes tamper-proof. Anything that must be truly protected
 has to move behind the worker.
 
+**If the webhook is slow:** the return page claims the license with a short
+retry, and if that runs out the pending record is retried on every later visit
+for 7 days before the site gives up and shows "payment not confirmed". A customer
+who paid and closed the tab therefore gets Pro on their next visit without doing
+anything. Delayed-payment methods (bank debit, boleto) sit in that pending state
+until the provider confirms the payment.
+
 **If the worker is unreachable:** the browser keeps the token it already holds
 until that token expires (≤72h), then drops to free. A paying customer therefore
 survives a short outage; a longer one costs them Pro until the worker is back.

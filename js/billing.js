@@ -143,6 +143,12 @@
     return started;
   }
 
+  /** True when a checkout is still waiting on its license and can be retried. */
+  function hasPendingClaim() {
+    const st = read();
+    return !!(st && (st.status === "pending" || st.status === "unclaimed") && st.sessionId);
+  }
+
   /** True when this browser still has its one free trial. */
   function canStartTrial() {
     return Number(cfg().freeTrialDays || 0) > 0 && !trialStartedAt();
@@ -314,9 +320,10 @@
 
     // A paid-looking local record with no verified license behind it.
     const unverified = active && !OVERRIDE_SOURCES.has(active.source);
-    if (unverified || st?.status === "pending") {
+    if (unverified || st?.status === "pending" || st?.status === "unclaimed") {
       const licenseState = getLicenseStatus()?.state;
-      const waiting = licenseState === "checking" || st?.status === "pending";
+      const waiting =
+        st?.status !== "unclaimed" && (licenseState === "checking" || st?.status === "pending");
       return {
         tier: "free",
         plan: "free",
@@ -596,6 +603,73 @@
     };
   }
 
+  /** How long we keep retrying a checkout whose webhook never showed up. */
+  const PENDING_CLAIM_MAX_AGE_MS = 7 * 86400000;
+
+  /**
+   * Ask the worker for the license behind a checkout, and store it on success.
+   * @param {{plan: string, provider: string, sessionId: string}} intent
+   * @returns {Promise<{ok: boolean, reason?: string, claims?: object}>}
+   */
+  function claimLicense(intent) {
+    const plan = intent.plan;
+    const provider = intent.provider;
+    const sessionId = intent.sessionId;
+    return global.VTLicense.claim({ provider, sessionId })
+      .then((res) => {
+        if (res.ok) {
+          write({
+            status: "active",
+            plan: res.claims?.plan || plan,
+            provider: res.claims?.provider || provider,
+            region: detectRegion(),
+            source: "license",
+            activatedAt: new Date().toISOString(),
+            expiresAt: res.claims?.periodEnd
+              ? new Date(res.claims.periodEnd * 1000).toISOString()
+              : null,
+            sessionId: sessionId ? String(sessionId).slice(0, 128) : null,
+            verified: true
+          });
+        }
+        emit();
+        return res;
+      })
+      .catch(() => {
+        emit();
+        return { ok: false, reason: "error" };
+      });
+  }
+
+  /**
+   * Pick up a checkout whose license never arrived. The webhook can land after
+   * the return page has given up (or while the customer was offline), and the
+   * URL parameters are gone by then — so the pending record is what we retry
+   * from, on every load, until it succeeds or gets too old to be worth it.
+   * @returns {Promise<{ok: boolean, reason?: string}>|null}
+   */
+  function resumePendingClaim(options) {
+    const force = !!(options && options.force);
+    const st = read();
+    const claimable = st && (st.status === "pending" || (force && st.status === "unclaimed"));
+    if (!claimable || !st.sessionId || !st.provider) return null;
+    if (!verificationRequired() || !verificationConfigured()) return null;
+    if (licenseClaims()) {
+      // A license already landed; the pending record is stale bookkeeping.
+      write({ ...st, status: "superseded" });
+      return null;
+    }
+    const startedAt = Date.parse(st.activatedAt || "");
+    if (!force && Number.isFinite(startedAt) && nowMs() - startedAt > PENDING_CLAIM_MAX_AGE_MS) {
+      // Stop retrying forever; the UI drops to "not confirmed" and the customer
+      // can contact support with their receipt.
+      write({ ...st, status: "unclaimed" });
+      emit();
+      return null;
+    }
+    return claimLicense({ plan: st.plan, provider: st.provider, sessionId: st.sessionId });
+  }
+
   /**
    * Parse return from hosted checkout.
    * Soft entitlement: GH Pages cannot verify Stripe secrets client-side.
@@ -671,33 +745,9 @@
         sessionId: sessionId ? String(sessionId).slice(0, 128) : null,
         verified: false
       });
-      let claiming = null;
-      if (verificationConfigured()) {
-        claiming = global.VTLicense.claim({ provider, sessionId })
-          .then((res) => {
-            if (res.ok) {
-              write({
-                status: "active",
-                plan: res.claims?.plan || plan,
-                provider: res.claims?.provider || provider,
-                region: detectRegion(),
-                source: "license",
-                activatedAt: new Date().toISOString(),
-                expiresAt: res.claims?.periodEnd
-                  ? new Date(res.claims.periodEnd * 1000).toISOString()
-                  : null,
-                sessionId: sessionId ? String(sessionId).slice(0, 128) : null,
-                verified: true
-              });
-            }
-            emit();
-            return res;
-          })
-          .catch(() => {
-            emit();
-            return { ok: false, reason: "error" };
-          });
-      }
+      const claiming = verificationConfigured()
+        ? claimLicense({ plan, provider, sessionId })
+        : null;
       emit();
       cleanUrlParams();
       return {
@@ -863,11 +913,28 @@
 
   // No auto-start: the trial clock only runs once the visitor opts in (startTrial).
   // A license landing, refreshing or being revoked moves the entitlement.
+  // A paid checkout whose webhook was slow must not strand the customer, but
+  // wait for the stored token to be checked first so we do not claim twice.
+  let resumeAttempted = false;
+  function maybeResumePendingClaim() {
+    if (resumeAttempted) return;
+    if (getLicenseStatus()?.state === "checking") return;
+    resumeAttempted = true;
+    try {
+      resumePendingClaim();
+    } catch {
+      /* ignore */
+    }
+  }
   try {
-    global.VTLicense?.onChange?.(() => emit());
+    global.VTLicense?.onChange?.(() => {
+      emit();
+      maybeResumePendingClaim();
+    });
   } catch {
     /* ignore */
   }
+  maybeResumePendingClaim();
 
   global.VTBilling = {
     cfg,
@@ -886,6 +953,8 @@
     linksConfigured,
     getBillingHealth,
     handleReturnFromCheckout,
+    resumePendingClaim,
+    hasPendingClaim,
     formatPrice,
     exportProgressJson,
     onChange,

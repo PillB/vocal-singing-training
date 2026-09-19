@@ -667,6 +667,11 @@
         if (ex) return { ex, reason: "structured" };
       }
     }
+    if (shouldSuggestDaily()) {
+      const d = dailySession();
+      const first = findExercise(d.order[0]);
+      if (first && first.id !== excludeId) return { ex: first, reason: "daily" };
+    }
     const progress = VTStorage.getProgress() || {};
     const list = VT_EXERCISES[state.tab] || [];
     const basic = list.filter((e) => (e.tier || "basic") === "basic");
@@ -678,6 +683,35 @@
       list[0];
     if (!pick) return null;
     return { ex: pick, reason: progress[pick.id]?.completedCount ? "repeat" : "new" };
+  }
+
+  /* —— Prepared daily session (class sequence, one press) —— */
+
+  /** The daily session definition, or null when the catalog has none. */
+  function dailySession() {
+    const d = window.VT_DAILY_SESSION;
+    const order = d && window.VT_STRUCTURED?.[d.id];
+    return d && order?.length ? { def: d, order } : null;
+  }
+
+  /**
+   * The daily session is the recommendation on the singing track whenever no
+   * guided session is already open: the whole point of it is that the user
+   * never has to browse and pick. Vocal keeps the per-exercise suggestion.
+   */
+  function shouldSuggestDaily() {
+    if (state.tab !== "singing") return false;
+    const s = VTSession.get();
+    if (s && s.status !== "completed" && s.order?.length) return false;
+    return !!dailySession();
+  }
+
+  /** Start the daily class session from step one (switches to Canto if needed). */
+  function startDaily() {
+    const d = dailySession();
+    if (!d) return null;
+    if (state.tab !== d.def.track) setTab(d.def.track);
+    return startStructured("daily");
   }
 
   function findExercise(id) {
@@ -701,15 +735,31 @@
       return;
     }
     card.hidden = false;
-    const name = window.VTI18n ? VTI18n.exTitle(sug.ex) : sug.ex.title;
-    titleEl.textContent = `${sug.ex.number}. ${name}`;
-    if (whyEl) whyEl.textContent = tt(sug.reason === "structured" ? "home.nextStepWhyGuided" : "home.nextStepWhy");
+    const daily = sug.reason === "daily";
+    const d = daily ? dailySession() : null;
+    if (daily && d) {
+      // The card names the session, not its first exercise: the user is choosing
+      // the whole prepared run, which is the point of it.
+      titleEl.textContent = tt("daily.cardTitle", {
+        n: String(d.order.length),
+        min: String(d.def.totalMin)
+      });
+      if (whyEl) whyEl.textContent = tt("daily.why");
+    } else {
+      const name = window.VTI18n ? VTI18n.exTitle(sug.ex) : sug.ex.title;
+      titleEl.textContent = `${sug.ex.number}. ${name}`;
+      if (whyEl)
+        whyEl.textContent = tt(
+          sug.reason === "structured" ? "home.nextStepWhyGuided" : "home.nextStepWhy"
+        );
+    }
     // A structured suggestion resumes the guided session: continuePractice un-pauses
     // it and opens with fromStructured, so completing the exercise advances the
     // session instead of suggesting the same one again.
     const structured = sug.reason === "structured";
     btn.onclick = () => {
-      if (structured) continuePractice();
+      if (daily) startDaily();
+      else if (structured) continuePractice();
       else openExercise(sug.ex.id, false);
     };
     renderStartPanel(sug);
@@ -729,6 +779,22 @@
     if (!kicker || !title || !sub) return;
     const saved = totalSessionsSaved();
     const guided = sug?.reason === "structured";
+    const daily = sug?.reason === "daily";
+    // The first-visit explainer opens with "pick an exercise", which contradicts a
+    // prepared session whose whole pitch is that there is nothing to pick.
+    const step1 = $("#start-steps li:first-child strong");
+    const step1sub = $("#start-steps li:first-child .muted");
+    if (step1) step1.textContent = tt(daily ? "daily.step1" : "start.step1");
+    if (step1sub) step1sub.textContent = tt(daily ? "daily.step1sub" : "start.step1sub");
+    if (daily) {
+      const d = dailySession();
+      kicker.textContent = tt("daily.kicker");
+      title.textContent = tt("daily.title", { min: String(d?.def.totalMin ?? 30) });
+      sub.textContent = tt("daily.sub");
+      if (label) label.textContent = tt("daily.label");
+      if (cta) cta.textContent = tt("daily.cta");
+      return;
+    }
     const returning = saved > 0 || guided;
     const key = guided ? "Guided" : returning ? "Back" : "New";
     kicker.textContent = tt("start.kicker" + key);
@@ -774,7 +840,9 @@
     banner.classList.add("visible");
     const trackLabel = tt(s.track === "vocal" ? "tab.vocalShort" : "tab.singingShort");
     const status = tt(s.status === "paused" ? "session.statusPaused" : "session.statusActive");
-    $("#session-banner-text").textContent = `${tt("session.bannerTitle", { track: trackLabel })} · ${status} · ${VTSession.progressLabel()}`;
+    const name =
+      s.path === "daily" ? tt("daily.banner") : tt("session.bannerTitle", { track: trackLabel });
+    $("#session-banner-text").textContent = `${name} · ${status} · ${VTSession.progressLabel()}`;
     $("#btn-session-resume").hidden = s.status !== "paused";
     $("#btn-session-pause").hidden = s.status !== "active";
   }
@@ -856,6 +924,7 @@
       list.appendChild(btn);
     });
 
+    syncSessionPathOptions();
     $("#home-track-title").textContent = tt(
       state.tab === "vocal" ? "home.vocalTitle" : "home.singingTitle"
     );
@@ -870,6 +939,21 @@
     });
     updateHomeZeroClass();
     renderNextStepCard();
+  }
+
+  /**
+   * The daily route only exists for the track its sequence was written for, so
+   * the option is hidden elsewhere rather than silently falling back to Basic.
+   */
+  function syncSessionPathOptions() {
+    const sel = $("#session-path");
+    const opt = sel?.querySelector('option[value="daily"]');
+    if (!sel || !opt) return;
+    const d = dailySession();
+    const ok = !!d && state.tab === d.def.track;
+    opt.hidden = !ok;
+    opt.disabled = !ok;
+    if (!ok && sel.value === "daily") sel.value = "basic";
   }
 
   /** Progressive disclosure: zero sessions → collapse empty studio chrome */
@@ -1291,6 +1375,13 @@
     // Timer (integrated into cockpit — always show display when timer exists)
     // Micro-session: 5 min soft cap for comeback practice
     let timerSec = state.microSession ? 5 * 60 : ex.timerDefaultSec || 0;
+    // The prepared daily session runs short per-step timers so the whole class
+    // sequence fits one sitting instead of summing every exercise's own default.
+    if (!state.microSession && state.structured) {
+      const ds = VTSession.get();
+      const step = window.VT_DAILY_SESSION?.sec?.[ex.id];
+      if (ds && ds.path === "daily" && step) timerSec = step;
+    }
     state.timer.total = timerSec;
     state.timer.remaining = timerSec;
     $("#timer-display").textContent = timerSec ? formatTime(timerSec) : "—";
@@ -2481,7 +2572,11 @@
 
       setPracticeUI(true);
 
-      if (ex.audio.timer && state.timer.total > 0 && micOk) startTimer();
+      // The practice engine only starts when the mic or the recorder is wanted;
+      // without it nothing calls onFrame, so drive the mode ourselves.
+      if (!needsMic && !wantRecord) startModeTicker();
+
+      if (ex.audio.timer && state.timer.total > 0 && (micOk || state._modeTicker)) startTimer();
 
       // Keep piano awake while practicing (tab blur / OS audio policies)
       if (wantPiano && soundOk) {
@@ -2520,10 +2615,43 @@
     }
   }
 
+  /**
+   * Silent, time-driven modes (guided release phases) ask for no microphone, so
+   * the practice engine never starts and never delivers frames — their phase
+   * runner would sit frozen on its first paint. Drive those from a frame loop of
+   * our own, with a zeroed frame so nothing reads it as detected sound.
+   */
+  function startModeTicker() {
+    stopModeTicker();
+    let last = performance.now();
+    const tick = () => {
+      if (!state.practiceLive || !state.modeInstance) {
+        state._modeTicker = null;
+        return;
+      }
+      const now = performance.now();
+      const dtMs = now - last;
+      last = now;
+      try {
+        state.modeInstance.onFrame({ dtMs, rms: 0, voiced: false, voiceFreq: 0, holdSec: 0 });
+      } catch (err) {
+        console.warn(err);
+      }
+      state._modeTicker = requestAnimationFrame(tick);
+    };
+    state._modeTicker = requestAnimationFrame(tick);
+  }
+
+  function stopModeTicker() {
+    if (state._modeTicker) cancelAnimationFrame(state._modeTicker);
+    state._modeTicker = null;
+  }
+
   function stopPractice(silent) {
     // Invalidate any in-flight Start
     state.practiceGen = (state.practiceGen || 0) + 1;
     state.practiceStarting = false;
+    stopModeTicker();
     if (state._pianoKeepAlive) {
       clearInterval(state._pianoKeepAlive);
       state._pianoKeepAlive = null;
@@ -3577,7 +3705,10 @@
     toast(
       tt("toast.structuredStart", {
         track: tt(state.tab === "vocal" ? "track.vocalShort" : "track.singingShort"),
-        path: tt("path." + (p === "advanced" ? "advanced" : p === "full" ? "full" : "basic")),
+        path: tt(
+          "path." +
+            (p === "advanced" ? "advanced" : p === "full" ? "full" : p === "daily" ? "daily" : "basic")
+        ),
         n: String(session.order.length)
       })
     );
@@ -4993,6 +5124,8 @@
     openExercise: forceOpenExercise,
     setView,
     setTab,
+    startDaily,
+    dailySession,
     openPricing,
     closePricing,
     openAccount,

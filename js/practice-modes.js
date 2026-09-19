@@ -1987,6 +1987,536 @@
     }
   });
 
+  // ——— CLASS MODES (placement / resonance course) ———
+
+  /** Per-phase cue text, localized like the phase label itself. */
+  function phaseCueFor(phase) {
+    if (!phase) return "";
+    return (isEs() ? phase.cueEs || phase.cue : phase.cue) || "";
+  }
+
+  /**
+   * s17 jaw & neck release — silent guided phases. Nothing to detect: the value
+   * is being walked through the four releases instead of skipping them because
+   * they make no sound.
+   */
+  Modes.releaseFlow = baseMode({
+    id: "releaseFlow",
+    render() {
+      const phases = this.profile.phases || [];
+      this.state.phases = phases;
+      this.state.runner = createPhaseRunner(phases, (i, p) => {
+        if (global.VTToast) global.VTToast(p.label);
+        const cueEl = this.$("[data-cue]");
+        if (cueEl) cueEl.textContent = phaseCueFor(p);
+      });
+      this.hud.innerHTML = `
+        <div class="mode-title">${L("Soltar mandíbula y cuello", "Jaw & neck release")}</div>
+        <div class="mode-phase" data-phase>${phases[0]?.label || L("Suelta", "Release")}</div>
+        <div class="mode-big" data-remain>—</div>
+        <div class="mode-bar"><span data-bar style="width:0%"></span></div>
+        <p class="mode-meta" data-cue>${phaseCueFor(phases[0])}</p>
+        <p class="mode-meta muted">${L(
+          "Sin sonido y sin prisa. Si algo tira o duele, hazlo más pequeño.",
+          "No sound, no hurry. If anything pulls or hurts, make it smaller."
+        )}</p>
+      `;
+    },
+    onFrame() {
+      const r = this.state.runner;
+      if (!r) return;
+      r.tick(performance.now());
+      const done = r.index >= r.count;
+      this.state.done = Math.min(r.index, r.count);
+      if (this.$("[data-phase]")) {
+        this.$("[data-phase]").textContent = done
+          ? L("Listo — cuello y mandíbula sueltos", "Done — jaw and neck free")
+          : r.label;
+      }
+      if (this.$("[data-remain]"))
+        this.$("[data-remain]").textContent = done ? "✓" : `${Math.ceil(r.remaining)}s`;
+      if (this.$("[data-bar]"))
+        this.$("[data-bar]").style.width = `${(this.state.done / Math.max(1, r.count)) * 100}%`;
+    },
+    onStop() {
+      const n = this.state.done || 0;
+      return {
+        patches: n > 0 ? { phasesDone: n } : {},
+        summary: `${n}/${this.state.phases?.length || 0} release phases`
+      };
+    }
+  });
+
+  /**
+   * s18 costo-abdominal breath — paced inhale / retention / exhale. The belt bar
+   * is the low expansion: it fills on the inhale, holds, then empties slowly so
+   * the ribs have something to resist against (apoyo).
+   */
+  Modes.breathCycle = baseMode({
+    id: "breathCycle",
+    render() {
+      const p = this.profile.pattern || {};
+      this.state.inSec = p.in || 4;
+      this.state.holdSec = p.hold != null ? p.hold : 2;
+      this.state.outSec = p.out || 8;
+      this.state.stage = 0; // 0 in · 1 hold · 2 out
+      this.state.t = 0;
+      this.state.cycles = 0;
+      this.state.last = performance.now();
+      this.hud.innerHTML = `
+        <div class="mode-title">${L("Respiración costo-abdominal", "Low rib & belly breath")}</div>
+        <div class="mode-phase" data-stage>${L("Inhala por la nariz", "Inhale through the nose")}</div>
+        <div class="mode-big" data-count>${this.state.inSec}</div>
+        <div class="mode-bar thick"><span data-belt style="width:0%"></span></div>
+        <p class="mode-meta">${L("Ciclos", "Cycles")} <strong data-cy>0</strong> · ${this.state
+          .inSec}–${this.state.holdSec}–${this.state.outSec}</p>
+        <p class="mode-meta muted">${L(
+          "Manos en costillas bajas y abdomen. Los hombros no suben.",
+          "Hands on the low ribs and belly. The shoulders do not rise."
+        )}</p>
+      `;
+    },
+    onStart() {
+      this.state.last = performance.now();
+      this.state.stage = 0;
+      this.state.t = 0;
+    },
+    onFrame() {
+      const now = performance.now();
+      const dt = Math.min(0.25, (now - this.state.last) / 1000);
+      this.state.last = now;
+      this.state.t += dt;
+      const lens = [this.state.inSec, this.state.holdSec, this.state.outSec];
+      while (this.state.t >= lens[this.state.stage] && lens[this.state.stage] > 0) {
+        this.state.t -= lens[this.state.stage];
+        this.state.stage = (this.state.stage + 1) % 3;
+        if (this.state.stage === 0) {
+          this.state.cycles += 1;
+          if (this.$("[data-cy]")) this.$("[data-cy]").textContent = String(this.state.cycles);
+        }
+        // Skip a zero-length stage rather than looping forever on it
+        if (lens[this.state.stage] <= 0) continue;
+      }
+      const len = lens[this.state.stage] || 1;
+      const frac = clamp(this.state.t / len, 0, 1);
+      const labels = [
+        L("Inhala por la nariz", "Inhale through the nose"),
+        L("Retén — listo para sonar", "Hold — ready to sound"),
+        L("Espira pareja — costillas anchas", "Even exhale — ribs wide")
+      ];
+      const belt = this.state.stage === 0 ? frac : this.state.stage === 1 ? 1 : 1 - frac;
+      if (this.$("[data-stage]")) this.$("[data-stage]").textContent = labels[this.state.stage];
+      if (this.$("[data-count]"))
+        this.$("[data-count]").textContent = String(Math.max(1, Math.ceil(len - this.state.t)));
+      if (this.$("[data-belt]")) this.$("[data-belt]").style.width = `${belt * 100}%`;
+    },
+    onStop() {
+      const n = this.state.cycles || 0;
+      return {
+        patches: n > 0 ? { cycles: n } : {},
+        summary: `${n} breath cycles ${this.state.inSec}–${this.state.holdSec}–${this.state.outSec}`
+      };
+    }
+  });
+
+  /**
+   * s19 soft palate — surprise / pre-yawn phases, then sound in that space.
+   * A sustained voiced hold during a sounding phase is what counts, so the
+   * exercise rewards singing from the open space rather than just opening.
+   */
+  Modes.openSpace = baseMode({
+    id: "openSpace",
+    render() {
+      const phases = this.profile.phases || [];
+      this.state.phases = phases;
+      this.state.holds = 0;
+      this.state.voiced = 0;
+      this.state.minHoldMs = this.profile.minHoldMs || 1500;
+      this.state.runner = createPhaseRunner(phases, (i, p) => {
+        if (global.VTToast) global.VTToast(p.label);
+        const cueEl = this.$("[data-cue]");
+        if (cueEl) cueEl.textContent = phaseCueFor(p);
+        this.state.voiced = 0;
+      });
+      this.hud.innerHTML = `
+        <div class="mode-title">${L("Paladar blando · espacio interno", "Soft palate · inner space")}</div>
+        <div class="mode-phase" data-phase>${phases[0]?.label || L("Sorpresa", "Surprise")}</div>
+        <div class="mode-big" data-h>0 ${L("abiertos", "open")}</div>
+        <p class="mode-meta" data-cue>${phaseCueFor(phases[0])}</p>
+        <p class="mode-meta muted">${L(
+          "Sostén ≥1,5 s en las fases con sonido para sumar un espacio abierto.",
+          "Hold ≥1.5s during the sounding phases to log an open space."
+        )}</p>
+      `;
+    },
+    onFrame(frame) {
+      const r = this.state.runner;
+      if (!r) return;
+      r.tick(performance.now());
+      const done = r.index >= r.count;
+      const phase = this.state.phases[r.index];
+      if (this.$("[data-phase]")) {
+        this.$("[data-phase]").textContent = done
+          ? L("Listo — guarda ese espacio", "Done — keep that space")
+          : r.label;
+      }
+      // Only sounding phases log holds; the silent ones are the setup
+      if (!done && phase && phase.sound && frame.voiced) {
+        this.state.voiced += frame.dtMs || 16;
+        if (this.state.voiced >= this.state.minHoldMs) {
+          this.state.holds += 1;
+          this.state.voiced = 0;
+          if (this.$("[data-h]"))
+            this.$("[data-h]").textContent = `${this.state.holds} ${L("abiertos", "open")}`;
+        }
+      } else if (!frame.voiced) {
+        this.state.voiced = 0;
+      }
+    },
+    onStop() {
+      const n = this.state.holds || 0;
+      return {
+        patches: n > 0 ? { openHolds: n } : {},
+        summary: `${n} open-space holds`
+      };
+    }
+  });
+
+  /**
+   * s20 five vowels — I E A O U on one pitch. Each vowel gets its own steadiness
+   * reading, so the closed vowels that usually collapse show up as the weak ones
+   * instead of being hidden inside one average.
+   */
+  Modes.vowelLadder = baseMode({
+    id: "vowelLadder",
+    render() {
+      this.state.vowels = this.profile.vowels || ["I", "E", "A", "O", "U"];
+      this.state.secPer = this.profile.secPerVowel || 4;
+      this.state.i = 0;
+      this.state.t = 0;
+      this.state.rounds = 0;
+      this.state.last = performance.now();
+      this.state.samples = [];
+      this.state.scores = this.state.vowels.map(() => []);
+      const chips = this.state.vowels
+        .map(
+          (v, i) =>
+            `<span class="vowel-chip${i === 0 ? " is-on" : ""}" data-v="${i}">${v}</span>`
+        )
+        .join("");
+      this.hud.innerHTML = `
+        <div class="mode-title">${L("Cinco vocales · I E A O U", "Five vowels · I E A O U")}</div>
+        <div class="vowel-row" data-chips>${chips}</div>
+        <div class="mode-big" data-cur>${this.state.vowels[0]}</div>
+        <div class="mode-bar thick"><span data-bar style="width:0%"></span></div>
+        <p class="mode-meta">${L("Vueltas", "Rounds")} <strong data-r>0</strong> · ${L(
+          "Uniformidad",
+          "Evenness"
+        )} <strong data-ev>—</strong></p>
+        <p class="mode-meta muted">${L(
+          "Mismo espacio en todas. La vocal cambia de forma, no de tamaño.",
+          "Same space on all of them. The vowel changes shape, not size."
+        )}</p>
+      `;
+      if (this.profile.refPitch && global.VT_NOTE_FREQ?.[this.profile.refPitch]) {
+        this.state.refName = this.profile.refPitch;
+      }
+    },
+    onStart() {
+      this.state.last = performance.now();
+      this._ref();
+    },
+    _ref() {
+      const n = this.state.refName;
+      if (!n) return;
+      if (typeof global.VTSetPracticeTarget === "function" && global.VT_NOTE_FREQ?.[n]) {
+        global.VTSetPracticeTarget(global.VT_NOTE_FREQ[n], n);
+      }
+      if (global.VTPiano?.playRefPitch) global.VTPiano.playRefPitch(n, 2.2, true).catch(() => {});
+    },
+    onFrame(frame) {
+      const now = performance.now();
+      const dt = Math.min(0.25, (now - this.state.last) / 1000);
+      this.state.last = now;
+      this.state.t += dt;
+      // Steadiness of the current vowel from loudness variance
+      const rms = frame.rms || 0;
+      if (rms > 0.01) {
+        this.state.samples.push(rms);
+        if (this.state.samples.length > 90) this.state.samples.shift();
+      }
+      let steady = 0;
+      const arr = this.state.samples;
+      if (arr.length > 10) {
+        const mean = arr.reduce((a, b) => a + b, 0) / arr.length;
+        const v = arr.reduce((a, b) => a + (b - mean) ** 2, 0) / arr.length;
+        steady = clamp(1 - Math.sqrt(v) * 8, 0, 1);
+        if (this.$("[data-bar]")) this.$("[data-bar]").style.width = `${steady * 100}%`;
+        if (this.$("[data-ev]"))
+          this.$("[data-ev]").textContent =
+            steady > 0.7 ? L("pareja", "steady") : steady > 0.4 ? L("ok", "ok") : L("irregular", "uneven");
+      }
+      if (this.state.t >= this.state.secPer) {
+        this.state.t = 0;
+        if (steady > 0) this.state.scores[this.state.i].push(steady);
+        this.state.samples = [];
+        this.state.i += 1;
+        if (this.state.i >= this.state.vowels.length) {
+          this.state.i = 0;
+          this.state.rounds += 1;
+          if (this.$("[data-r]")) this.$("[data-r]").textContent = String(this.state.rounds);
+          this._ref();
+        }
+        const cur = this.state.vowels[this.state.i];
+        if (this.$("[data-cur]")) this.$("[data-cur]").textContent = cur;
+        this.hud?.querySelectorAll?.(".vowel-chip").forEach((c, idx) => {
+          c.classList.toggle("is-on", idx === this.state.i);
+        });
+      }
+    },
+    onStop() {
+      const rounds = this.state.rounds || 0;
+      const means = this.state.scores.map((a) =>
+        a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0
+      );
+      const seen = means.filter((m) => m > 0);
+      const patches = {};
+      if (rounds > 0) patches.rounds = rounds;
+      if (seen.length >= 3) {
+        const worst = Math.min(...seen);
+        patches.evenVowels = worst > 0.7 ? 5 : worst > 0.55 ? 4 : worst > 0.35 ? 3 : 2;
+      }
+      const weakIdx = means.findIndex((m) => m > 0 && m === Math.min(...seen));
+      const weak = weakIdx >= 0 ? this.state.vowels[weakIdx] : null;
+      return {
+        patches,
+        summary: weak ? `${rounds} rounds · weakest vowel ${weak}` : `${rounds} vowel rounds`
+      };
+    }
+  });
+
+  /**
+   * s21–s25 resonance zones — low / middle / high. One mode, configured with the
+   * zones each exercise works: a single zone for the focused drills, all three
+   * for the tour. Targets are held by pitch like the hum mode, zones advance on
+   * time, and the zone strip shows where the voice actually is versus where the
+   * exercise asked for it.
+   */
+  Modes.resonanceZone = baseMode({
+    id: "resonanceZone",
+    render() {
+      const zones = this.profile.zones || [];
+      this.state.zones = zones;
+      this.state.z = 0;
+      this.state.t = 0;
+      this.state.last = performance.now();
+      this.state.ni = 0;
+      this.state.held = 0;
+      this.state.inBand = 0;
+      this.state.inZoneMs = 0;
+      this.state.voicedMs = 0;
+      this.state.zoneHits = zones.map(() => 0);
+      const allNotes = zones.reduce((a, z) => a.concat(z.notes || []), []);
+      this.state.allNotes = allNotes;
+      const strip = zones
+        .map(
+          (z, i) =>
+            `<span class="zone-chip${i === 0 ? " is-on" : ""}" data-z="${i}">${
+              isEs() ? z.labelEs || z.label : z.label
+            }</span>`
+        )
+        .join("");
+      this.hud.innerHTML = `
+        <div class="mode-title">${L("Zonas de resonancia", "Resonance zones")}</div>
+        <div class="zone-row" data-zones>${strip}</div>
+        <div class="mode-phase" data-zn>${
+          isEs() ? zones[0]?.labelEs || zones[0]?.label || "" : zones[0]?.label || ""
+        }</div>
+        <div class="mode-big" data-t>${allNotes[0] || "—"}</div>
+        <p class="mode-meta">${L("Objetivos", "Targets")} <strong data-h>0</strong> · ${L(
+          "En zona",
+          "In zone"
+        )} <strong data-iz>0%</strong></p>
+        <p class="mode-meta" data-cue>${phaseCueFor(zones[0])}</p>
+      `;
+      if (typeof global.VTLockHighwayNotes === "function" && allNotes.length) {
+        global.VTLockHighwayNotes(allNotes);
+      }
+    },
+    onStart() {
+      this.state.last = performance.now();
+      if (typeof global.VTLockHighwayNotes === "function" && this.state.allNotes?.length) {
+        global.VTLockHighwayNotes(this.state.allNotes);
+      }
+      this._pushTarget();
+    },
+    _zoneNotes() {
+      return this.state.zones[this.state.z]?.notes || [];
+    },
+    _pushTarget() {
+      const notes = this._zoneNotes();
+      const n = notes[this.state.ni % Math.max(1, notes.length)];
+      if (!n) return;
+      this.state.wantName = n;
+      this.state.wantFreq = global.VT_NOTE_FREQ?.[n];
+      if (typeof global.VTSetPracticeTarget === "function" && this.state.wantFreq) {
+        global.VTSetPracticeTarget(this.state.wantFreq, n);
+      }
+      if (global.VTPiano?.playRefPitch) global.VTPiano.playRefPitch(n, 2.2, true).catch(() => {});
+      if (this.$("[data-t]")) this.$("[data-t]").textContent = n;
+    },
+    _setZone(i) {
+      this.state.z = i;
+      this.state.ni = 0;
+      this.state.inBand = 0;
+      const z = this.state.zones[i];
+      if (this.$("[data-zn]"))
+        this.$("[data-zn]").textContent = isEs() ? z.labelEs || z.label : z.label;
+      if (this.$("[data-cue]")) this.$("[data-cue]").textContent = phaseCueFor(z);
+      this.hud?.querySelectorAll?.(".zone-chip").forEach((c, idx) => {
+        c.classList.toggle("is-on", idx === i);
+      });
+      if (global.VTToast) global.VTToast(isEs() ? z.labelEs || z.label : z.label);
+      this._pushTarget();
+    },
+    /** Which configured zone the detected pitch actually falls in, or -1. */
+    _zoneOf(freq) {
+      if (!freq || !global.VTPitchUtils || !global.VT_NOTE_FREQ) return -1;
+      const m = global.VTPitchUtils.freqToMidi(freq);
+      for (let i = 0; i < this.state.zones.length; i++) {
+        const notes = this.state.zones[i].notes || [];
+        const mids = notes
+          .map((n) => global.VT_NOTE_FREQ[n])
+          .filter(Boolean)
+          .map((f) => global.VTPitchUtils.freqToMidi(f));
+        if (!mids.length) continue;
+        if (m >= Math.min(...mids) - 1.5 && m <= Math.max(...mids) + 1.5) return i;
+      }
+      return -1;
+    },
+    onFrame(frame) {
+      const now = performance.now();
+      const dt = Math.min(0.25, (now - this.state.last) / 1000);
+      this.state.last = now;
+      const zone = this.state.zones[this.state.z];
+      // Zone advances on time (single-zone exercises simply never advance)
+      if (zone && zone.sec && this.state.zones.length > 1) {
+        this.state.t += dt;
+        if (this.state.t >= zone.sec) {
+          this.state.t = 0;
+          this._setZone((this.state.z + 1) % this.state.zones.length);
+        }
+      }
+      // Target lock inside the zone
+      if (this.state.wantFreq && frame.voiceFreq && global.VTPitchUtils) {
+        const cents = Math.abs(
+          (global.VTPitchUtils.freqToMidi(frame.voiceFreq) -
+            global.VTPitchUtils.freqToMidi(this.state.wantFreq)) *
+            100
+        );
+        if (cents <= 45 && frame.voiced) {
+          this.state.inBand += frame.dtMs || 16;
+          if (this.state.inBand >= 900) {
+            this.state.inBand = 0;
+            this.state.held += 1;
+            this.state.zoneHits[this.state.z] += 1;
+            this.state.ni += 1;
+            this._pushTarget();
+            if (this.$("[data-h]")) this.$("[data-h]").textContent = String(this.state.held);
+          }
+        } else this.state.inBand = 0;
+      }
+      // How much of your sung time landed in the zone the exercise asked for
+      if (frame.voiced && frame.voiceFreq) {
+        this.state.voicedMs += frame.dtMs || 16;
+        if (this._zoneOf(frame.voiceFreq) === this.state.z)
+          this.state.inZoneMs += frame.dtMs || 16;
+        if (this.$("[data-iz]")) {
+          const pct = this.state.voicedMs
+            ? Math.round((this.state.inZoneMs / this.state.voicedMs) * 100)
+            : 0;
+          this.$("[data-iz]").textContent = `${pct}%`;
+        }
+      }
+    },
+    onStop() {
+      const held = this.state.held || 0;
+      const pct = this.state.voicedMs
+        ? Math.round((this.state.inZoneMs / this.state.voicedMs) * 100)
+        : 0;
+      const patches = {};
+      if (held > 0) patches.zoneTargets = held;
+      if (this.state.voicedMs > 3000) {
+        const scale = pct >= 80 ? 5 : pct >= 60 ? 4 : pct >= 40 ? 3 : 2;
+        // Every zone exercise self-scores the quality metric its own way
+        if (this.state.zones.length > 1) patches.transitions = scale;
+        else patches.steadiness = scale;
+      }
+      const spread = this.state.zoneHits
+        .map((n, i) => `${isEs() ? this.state.zones[i].labelEs : this.state.zones[i].label}:${n}`)
+        .join(" · ");
+      return { patches, summary: `${held} targets · ${pct}% in zone · ${spread}` };
+    }
+  });
+
+  /**
+   * s26 placement A/B — two takes of the same phrase, plain then placed. There is
+   * nothing to detect here that the ear cannot do better, so the mode's job is to
+   * hold the protocol: same key, same melody, both takes marked, then listen.
+   */
+  Modes.placementAB = baseMode({
+    id: "placementAB",
+    render() {
+      const phases = this.profile.phases || [];
+      this.state.phases = phases;
+      this.state.takes = 0;
+      this.state.runner = createPhaseRunner(phases, (i, p) => {
+        if (global.VTToast) global.VTToast(p.label);
+        const cueEl = this.$("[data-cue]");
+        if (cueEl) cueEl.textContent = phaseCueFor(p);
+      });
+      this.hud.innerHTML = `
+        <div class="mode-title">${L("Comparar colocaciones · A/B", "Placement compare · A/B")}</div>
+        <div class="mode-phase" data-phase>${phases[0]?.label || L("Toma A", "Take A")}</div>
+        <div class="mode-big" data-remain>—</div>
+        <p class="mode-meta" data-cue>${phaseCueFor(phases[0])}</p>
+        <div class="controls-row">
+          <button type="button" class="btn btn-sm" data-take>${L(
+            "Marcar toma ✓",
+            "Mark take ✓"
+          )}</button>
+        </div>
+        <p class="mode-meta">${L("Tomas marcadas", "Takes marked")} <strong data-n>0</strong>/2 · ${L(
+          "misma tonalidad en las dos",
+          "same key in both"
+        )}</p>
+      `;
+      this.$("[data-take]")?.addEventListener("click", () => {
+        this.state.takes = Math.min(2, this.state.takes + 1);
+        if (this.$("[data-n]")) this.$("[data-n]").textContent = String(this.state.takes);
+      });
+    },
+    onFrame() {
+      const r = this.state.runner;
+      if (!r) return;
+      r.tick(performance.now());
+      const done = r.index >= r.count;
+      if (this.$("[data-phase]"))
+        this.$("[data-phase]").textContent = done
+          ? L("Escucha las dos y quédate con una", "Play both back and keep one")
+          : r.label;
+      if (this.$("[data-remain]"))
+        this.$("[data-remain]").textContent = done ? "✓" : `${Math.ceil(r.remaining)}s`;
+    },
+    onStop() {
+      const n = this.state.takes || 0;
+      return {
+        patches: n > 0 ? { takes: n } : {},
+        summary: n >= 2 ? "A/B takes marked — compare the playback" : `${n}/2 takes marked`
+      };
+    }
+  });
+
   // API
   const Registry = {
     get(modeId) {

@@ -847,6 +847,391 @@ window.VT_EXERCISES = {
       progressions: ["prog1", "prog3"]
     },
 
+    /* ─── CLASS TIER (Bruno Gotelli basic course, months 1–2) ───
+       Placement, resonance zones and the pre-warm-up work the class notes drill
+       but the homework spine never covered. These are the spine of the prepared
+       daily session (VT_STRUCTURED.singing_daily). */
+    {
+      id: "s17-jaw-neck-release",
+      track: "singing",
+      tier: "basic",
+      number: 17,
+      title: "Jaw & Neck Release",
+      durationMin: 2,
+      original:
+        "Before vocalising, release the jaw and neck so they cannot interfere with placement.",
+      research:
+        "Muscular relaxation lowers resistance to muscle lengthening and improves the response to motor commands, so it is the standard opener before breath and placement work.",
+      steps: [
+        "Stand tall, shoulders down, nothing tight at the waist or the collar.",
+        "Let the jaw hang: place two fingers on the hinge and let the mouth fall open with no push.",
+        "Small slow circles with the head — half to one side, half to the other, never rolled back.",
+        "Chew an imaginary gum with a loose tongue, lips closed, humming a soft sound.",
+        "Finish with three silent pre-yawns; the inside grows, the face stays calm."
+      ],
+      tips: [
+        "Release is not stretching — nothing here should be a strong pull.",
+        "If the jaw clicks or hurts, do smaller movements only.",
+        "Ending here relaxed is worth more than a bigger range today.",
+        "Do this every day before the ladder — a tight jaw undoes every placement cue later."
+      ],
+      mistakes: [
+        "Forcing the mouth open with the hands",
+        "Rolling the head fully backwards",
+        "Holding the breath while releasing",
+        "Skipping it because it does not make sound"
+      ],
+      metrics: [
+        { id: "phasesDone", label: "Release phases completed", labelEs: "Fases de soltura completadas", type: "number", target: 4, unit: "" },
+        { id: "jawEase", label: "Jaw ease after", labelEs: "Mandíbula suelta después", type: "scale", min: 1, max: 5 },
+        { id: "neckEase", label: "Neck ease after", labelEs: "Cuello suelto después", type: "scale", min: 1, max: 5 }
+      ],
+      audio: { timer: true, record: false, piano: false, pitchViz: false },
+      timerDefaultSec: 120
+    },
+    {
+      id: "s18-costal-breath",
+      track: "singing",
+      tier: "basic",
+      number: 18,
+      title: "Low Rib & Belly Breath (Apoyo)",
+      durationMin: 4,
+      original:
+        "Costo-abdominal breathing: inhale low through the nose, hold briefly, then spend the air slowly and evenly on a controlled exhale.",
+      research:
+        "Of the three breathing patterns, only the costo-abdominal one lets the diaphragm descend fully (roughly 60% of capacity vs about 25% for clavicular). The diaphragm is not under direct voluntary control — the ribs and abdominal wall are, and that is what apoyo trains.",
+      steps: [
+        "Stand, or sit on the edge of the chair with the legs open — nothing tight at the waist.",
+        "One hand on the lowest ribs, one on the belly. Shoulders must NOT rise.",
+        "Inhale through the nose for 4 counts — the hands move out, the collarbones stay still.",
+        "Hold 2 counts to set the fold closure, ready to sing.",
+        "Exhale for 8 counts, evenly, keeping the ribs wide as long as you can — that resistance is the apoyo.",
+        "Repeat the cycle; do not fill to bursting and do not empty to the vacuum feeling."
+      ],
+      tips: [
+        "Chi sa ben respirare, sa ben cantare — air control is the base of every other technique here.",
+        "High notes and loud passages cost more air, so build the reserve before you need it.",
+        "The initial impulse is a light abdominal push, like a small cough, then you hold that pressure.",
+        "Lying down or half asleep you already breathe this way — you are recovering it, not learning it."
+      ],
+      mistakes: [
+        "Lifting the shoulders and collarbones (clavicular breathing)",
+        "Only widening the chest and ribs (intercostal breathing)",
+        "Overfilling until the neck tightens",
+        "Collapsing the ribs on the first count of the exhale"
+      ],
+      metrics: [
+        { id: "cycles", label: "Complete breath cycles", labelEs: "Ciclos de respiración completos", type: "number", target: 8, unit: "" },
+        { id: "lowExpansion", label: "Low expansion (ribs/belly)", labelEs: "Expansión baja (costillas/abdomen)", type: "scale", min: 1, max: 5 },
+        { id: "support", label: "Even exhale (apoyo)", labelEs: "Espiración pareja (apoyo)", type: "scale", min: 1, max: 5 }
+      ],
+      audio: { timer: true, record: false, piano: false, pitchViz: false },
+      timerDefaultSec: 240
+    },
+    {
+      id: "s19-soft-palate-surprise",
+      track: "singing",
+      tier: "basic",
+      number: 19,
+      title: "Soft Palate: Surprise & Pre-Yawn",
+      durationMin: 4,
+      original:
+        "Find the soft palate with a surprised face and the instant before a yawn, then sing from that inner space.",
+      research:
+        "The soft palate is the first placement handle a beginner can actually feel: raising it adds width and resonance and stops the tone going flat — the class image is the difference between speaking outdoors and speaking inside a chapel.",
+      steps: [
+        "Imagine you just heard surprising news — the jaw drops on its own, the space grows.",
+        "Find the instant just before a yawn and stop there; that is the position, not the yawn itself.",
+        "Keep that inner space and sing a comfortable /A/ — mark the hold when it feels wide.",
+        "Alternate: one phrase with the space closed, one with it open. Listen to the difference.",
+        "Finish on a short sung phrase you know, keeping the pre-yawn space through it."
+      ],
+      tips: [
+        "The opening comes from surprise, not from force — a forced jaw is tension, not space.",
+        "Aim for a comfortable, natural position you could hold for a whole song.",
+        "More resonance is not more pressure: do not confuse resonance with pushing.",
+        "A classical singer uses this obviously, pop uses it moderately — you are building the option, not one fixed sound."
+      ],
+      mistakes: [
+        "Prying the jaw open with force",
+        "Actually yawning instead of stopping before it",
+        "Adding volume instead of space",
+        "Letting the tongue block the exit"
+      ],
+      metrics: [
+        { id: "openHolds", label: "Open-space holds marked", labelEs: "Sostenidos con espacio abierto", type: "number", target: 6, unit: "" },
+        { id: "openness", label: "Space / width felt", labelEs: "Espacio / amplitud que sentiste", type: "scale", min: 1, max: 5 },
+        { id: "jawFree", label: "Jaw free (no tension)", labelEs: "Mandíbula libre (sin tensión)", type: "scale", min: 1, max: 5 }
+      ],
+      audio: { timer: true, record: true, piano: true, pitchViz: true, refPitch: "C3" },
+      timerDefaultSec: 240
+    },
+    {
+      id: "s20-five-vowels",
+      track: "singing",
+      tier: "basic",
+      number: 20,
+      title: "Five Vowels (I–E–A–O–U)",
+      durationMin: 5,
+      original:
+        "Vocalise I – E – A – O – U on one comfortable pitch, keeping the soft palate up and adjusting the shape of each vowel.",
+      research:
+        "Consonants join words but vowels carry the sung sound, so resonance and placement are trained on them. Each vowel needs its own opening to resonate, which is why a good /A/ does not guarantee a good /I/.",
+      steps: [
+        "Set the pre-yawn space from the previous exercise and keep it.",
+        "On one comfortable pitch, sing I – E – A – O – U, a few seconds each.",
+        "Look for the same width on every vowel — the shape changes, the space does not collapse.",
+        "The closed vowels (I, U) are the hard ones: open the inside without spreading the lips.",
+        "Repeat the round on two or three neighbouring pitches, never pushing the volume."
+      ],
+      tips: [
+        "Do not simply pronounce the vowel as you do when speaking — look for the version with more room.",
+        "The order I–E–A–O–U runs closed to open and back: use I to keep the sound forward and A to open it.",
+        "Listen to where each vowel loses ring and fix that one on its own.",
+        "Comfort and quality first, intensity later."
+      ],
+      mistakes: [
+        "Letting the jaw close on I and U",
+        "Spreading the lips sideways to reach I",
+        "Changing pitch when the vowel changes",
+        "Getting louder to make a vowel 'work'"
+      ],
+      metrics: [
+        { id: "rounds", label: "Complete I–E–A–O–U rounds", labelEs: "Vueltas completas I–E–A–O–U", type: "number", target: 5, unit: "" },
+        { id: "evenVowels", label: "Evenness across vowels", labelEs: "Uniformidad entre vocales", type: "scale", min: 1, max: 5 },
+        { id: "space", label: "Space kept on closed vowels", labelEs: "Espacio en las vocales cerradas", type: "scale", min: 1, max: 5 }
+      ],
+      audio: { timer: true, record: true, piano: true, pitchViz: true, refPitch: "D3" },
+      timerDefaultSec: 300
+    },
+    {
+      id: "s21-chest-resonance",
+      track: "singing",
+      tier: "basic",
+      number: 21,
+      title: "Low Notes: Chest Resonance",
+      durationMin: 4,
+      original:
+        "Low notes with more body: aim the sound at a lower place, with the soft palate open, without pushing the voice down.",
+      research:
+        "Low notes benefit from a lower resonance reference and the sensation of weight near the chest. The gain comes from where the sound is aimed, not from pressing it downwards.",
+      steps: [
+        "Open the pre-yawn space first — the low zone still needs the soft palate.",
+        "Speak a low phrase with body, for example 'Buenas noches, mucho gusto', not your everyday voice.",
+        "Sing the low targets on /A/ or on that phrase, imagining the sound travelling to a lower place.",
+        "Compare: the same phrase in your plain speaking voice, then with the low resonance. Keep the second.",
+        "Stay in the comfortable low band; never dig for notes under it."
+      ],
+      tips: [
+        "Imagine the direction of the sound — do not physically push the larynx down.",
+        "Weight is resonance, not volume; a heavy low note that hurts is a pressed note.",
+        "The soft palate is used in every zone, the low one included.",
+        "If it rattles or scrapes, you have gone below your comfortable low range."
+      ],
+      mistakes: [
+        "Pressing the voice down to fake depth",
+        "Dropping the soft palate because the note is low",
+        "Adding air instead of resonance",
+        "Chasing notes below your comfortable range"
+      ],
+      metrics: [
+        { id: "zoneTargets", label: "Low targets held", labelEs: "Objetivos graves sostenidos", type: "number", target: 6, unit: "" },
+        { id: "body", label: "Body / weight in the low zone", labelEs: "Cuerpo / peso en la zona grave", type: "scale", min: 1, max: 5 },
+        { id: "comfort", label: "Comfort (no pressing)", labelEs: "Comodidad (sin apretar)", type: "scale", min: 1, max: 5 }
+      ],
+      audio: { timer: true, record: true, piano: true, pitchViz: true, refPitch: "A2" },
+      timerDefaultSec: 240
+    },
+    {
+      id: "s22-mid-voice-hola",
+      track: "singing",
+      tier: "basic",
+      number: 22,
+      title: "Middle Voice (\"Hola\")",
+      durationMin: 3,
+      original:
+        "The middle zone is the one closest to everyday speech: repeat 'Hola, hola' on the given notes, natural and relaxed.",
+      research:
+        "The middle register sits near the pharynx and near the speaking voice, which is why it is the easiest zone to find and the best reference for how little effort singing should take.",
+      steps: [
+        "Say 'Hola, ¿qué tal?' the way you would to someone in the room. That is the target colour.",
+        "Sing 'Hola, hola' on the middle targets with the same easy production.",
+        "Do not add intention or weight — this zone is meant to feel ordinary.",
+        "Alternate spoken 'Hola' and sung 'Hola' until they feel like the same voice.",
+        "Keep the air calm: a short phrase should need no respiratory effort."
+      ],
+      tips: [
+        "Singing should progress towards the ease of talking — this zone is where you feel that.",
+        "If the middle feels heavy, you are carrying low-zone weight up into it.",
+        "Middle is the bridge: recognising it is what stops you singing everything from one place.",
+        "Keep the soft palate up even here, or the tone goes flat."
+      ],
+      mistakes: [
+        "Over-colouring a zone that should sound ordinary",
+        "Carrying chest weight up into the middle",
+        "Excess air pressure on short phrases",
+        "Making it breathy because it feels easy"
+      ],
+      metrics: [
+        { id: "zoneTargets", label: "Middle targets held", labelEs: "Objetivos medios sostenidos", type: "number", target: 6, unit: "" },
+        { id: "speechLike", label: "Speech-like ease", labelEs: "Facilidad parecida al habla", type: "scale", min: 1, max: 5 },
+        { id: "steadiness", label: "Steadiness", labelEs: "Estabilidad", type: "scale", min: 1, max: 5 }
+      ],
+      audio: { timer: true, record: true, piano: true, pitchViz: true, refPitch: "D3" },
+      timerDefaultSec: 180
+    },
+    {
+      id: "s23-mask-ya",
+      track: "singing",
+      tier: "basic",
+      number: 23,
+      title: "Mask Finder (\"YA\")",
+      durationMin: 3,
+      original:
+        "Deliberately nasal and bright 'YA, YA, YA' to locate the upper mask: nose, front of the face, sinuses, forehead.",
+      research:
+        "An exaggerated nasal sound is the quickest way to locate the upper resonance area. The exaggeration is the finder, not the final tone — once the place is found the sound is balanced back.",
+      steps: [
+        "Exaggerate on purpose: 'YA, YA, YA' as nasal and bright as you can make it.",
+        "Notice where it buzzes — nose, cheekbones, forehead. That is the place you are learning.",
+        "Repeat it on rising targets keeping that same buzzing address.",
+        "Once the place is clear, take some of the brightness out while staying in the same spot.",
+        "End with a couple of 'YA' rounds at a normal colour, still in the mask."
+      ],
+      tips: [
+        "It is supposed to sound ugly at this stage — the exercise is a finder, not the sound you will perform with.",
+        "Find → stabilise → repeat → balance the colour. In that order.",
+        "Loud is not the goal: the buzz appears at low volume too.",
+        "If you lose the place, exaggerate again rather than pushing harder."
+      ],
+      mistakes: [
+        "Pushing volume instead of brightness",
+        "Judging the exercise by how pretty it sounds",
+        "Tightening the throat to get the buzz",
+        "Stopping at the exaggeration and never balancing it"
+      ],
+      metrics: [
+        { id: "zoneTargets", label: "Mask targets held", labelEs: "Objetivos de máscara sostenidos", type: "number", target: 6, unit: "" },
+        { id: "buzz", label: "Mask buzz located", labelEs: "Zumbido de máscara localizado", type: "scale", min: 1, max: 5 },
+        { id: "balanced", label: "Balanced back after finding", labelEs: "Equilibraste el color después", type: "scale", min: 1, max: 5 }
+      ],
+      audio: { timer: true, record: true, piano: true, pitchViz: true, refPitch: "G3" },
+      timerDefaultSec: 180
+    },
+    {
+      id: "s24-nana-high",
+      track: "singing",
+      tier: "basic",
+      number: 24,
+      title: "High Notes on \"NANA\"",
+      durationMin: 5,
+      original:
+        "'NANA, NANA' on rising notes: lean on the N to keep the high placement, start soft, add intensity only once the note is stable.",
+      research:
+        "A high note is not a pushed middle note — it is another placement. The N carries the sound into the mask, and building the note at minimum pressure first is what stops the reflex to squeeze, over-pressurise or shout.",
+      steps: [
+        "Start above your comfortable middle, softer than you would ever sing it.",
+        "'NANA, NANA' on each target — feel the N first, then let the A open from it.",
+        "If a note does not come out, lean harder on the N and try again rather than pushing more air.",
+        "Repeat each target until the body recognises the place; only then add body and volume.",
+        "Finish by taking a real phrase from a song onto NANA, then back to the words."
+      ],
+      tips: [
+        "Create the note from up there — do not drag the middle voice up to it.",
+        "Position first, power second: force becomes an expressive choice, not a requirement.",
+        "The chest voice has a weight limit; above it the voice must switch to a lighter coordination.",
+        "Never end a session hoarse. If it scrapes, stop that target for today."
+      ],
+      mistakes: [
+        "Pushing air to reach the note",
+        "Squeezing the throat closed",
+        "Turning a high note into a shout",
+        "Practising a limit note over and over at full force"
+      ],
+      metrics: [
+        { id: "zoneTargets", label: "High targets held", labelEs: "Objetivos agudos sostenidos", type: "number", target: 6, unit: "" },
+        { id: "stability", label: "Stability at low pressure", labelEs: "Estabilidad con poca presión", type: "scale", min: 1, max: 5 },
+        { id: "noPush", label: "Reached without pushing", labelEs: "Llegaste sin empujar", type: "scale", min: 1, max: 5 }
+      ],
+      audio: { timer: true, record: true, piano: true, pitchViz: true, refPitch: "G3" },
+      timerDefaultSec: 300
+    },
+    {
+      id: "s25-zone-tour",
+      track: "singing",
+      tier: "basic",
+      number: 25,
+      title: "Three-Zone Tour (Low–Mid–High)",
+      durationMin: 5,
+      original:
+        "Walk the three resonance zones in one pass — low, middle, high — noticing how the placement changes with the height of the sound.",
+      research:
+        "Practising the zones separately is only the first half; the point of the month is recognising and switching between them inside real music instead of solving a whole song from one place.",
+      steps: [
+        "Low phase: low targets with body and the soft palate open.",
+        "Middle phase: the same line near your speaking voice, no extra weight.",
+        "High phase: lean on the N, light and forward, minimum pressure.",
+        "Pay attention to the handover between zones — that seam is the exercise.",
+        "Second pass: same tour, now trying to make the seams inaudible."
+      ],
+      tips: [
+        "Do not sing every register from the same place — that is the habit this undoes.",
+        "Find it, lose it, find it again, memorise the sensation: that repetition is how the path sticks.",
+        "The point where chest hands over to a lighter coordination is the passaggio — go through it softly.",
+        "If one zone is much worse than the others, give it its own exercise tomorrow rather than forcing it here."
+      ],
+      mistakes: [
+        "Dragging chest weight through the whole tour",
+        "Jumping zones with a volume increase",
+        "Only ever practising the zone you like",
+        "Rushing the pass — slow and controlled first"
+      ],
+      metrics: [
+        { id: "zoneTargets", label: "Targets held across zones", labelEs: "Objetivos sostenidos en las zonas", type: "number", target: 9, unit: "" },
+        { id: "transitions", label: "Smooth zone transitions", labelEs: "Transiciones suaves entre zonas", type: "scale", min: 1, max: 5 },
+        { id: "comfort", label: "Comfort across the tour", labelEs: "Comodidad en todo el recorrido", type: "scale", min: 1, max: 5 }
+      ],
+      audio: { timer: true, record: true, piano: true, pitchViz: true, refPitch: "C3" },
+      timerDefaultSec: 300
+    },
+    {
+      id: "s26-placement-compare",
+      track: "singing",
+      tier: "basic",
+      number: 26,
+      title: "Placement A/B (Compare Two Takes)",
+      durationMin: 4,
+      original:
+        "Sing the same phrase twice — once plain, once with the placement you have been training — and listen back to the difference.",
+      research:
+        "The same note sung by the same person can sound completely different depending on placement, so the ear, not the feeling, is the judge. Recording and comparing is what turns a sensation into a repeatable choice.",
+      steps: [
+        "Pick one short phrase you know well — a line of a song, or 'Cumpleaños feliz'.",
+        "Take A: sing it plainly, the way it comes out with no intention.",
+        "Take B: same melody, same key, now with the open space and the placement for that zone.",
+        "Play both back. Do not judge which is prettier — find which has more ring and width.",
+        "Keep whichever won and note in one line what you did differently."
+      ],
+      tips: [
+        "Record yourself to compare placements — you cannot hear this fairly from the inside.",
+        "Same melody and same key in both takes, or you are comparing two different things.",
+        "Do not sing along with the original artist here; it hides your own placement.",
+        "A voice does not have one way to sound — you are building options to choose from."
+      ],
+      mistakes: [
+        "Changing key or tempo between takes",
+        "Singing take B louder instead of better placed",
+        "Judging by prettiness instead of resonance",
+        "Never listening back"
+      ],
+      metrics: [
+        { id: "takes", label: "A/B takes recorded", labelEs: "Tomas A/B grabadas", type: "number", target: 2, unit: "" },
+        { id: "audibleDiff", label: "Difference you could hear", labelEs: "Diferencia que pudiste oír", type: "scale", min: 1, max: 5 },
+        { id: "preferred", label: "Placed take was better", labelEs: "La toma colocada fue mejor", type: "scale", min: 1, max: 5 }
+      ],
+      audio: { timer: true, record: true, piano: true, pitchViz: false },
+      timerDefaultSec: 240
+    },
     /* ─── ADVANCED TIER (complementary singing pedagogy) ─── */
     {
       id: "s4-lip-trills",
@@ -1283,7 +1668,59 @@ window.VT_STRUCTURED = {
     "s13-arpeggio-match",
     "s14-staccato-legato"
   ],
-  singing_full: null
+  singing_full: null,
+
+  /**
+   * Prepared daily session — the class sequence, in order, in one press.
+   * Release → breath → SOVT warm-ups → closure → placement → the three
+   * resonance zones → application. Steps carry their own short timer
+   * (see DAILY_SEC) so the whole run is ~30 minutes rather than the sum of
+   * each exercise's own full-length default.
+   */
+  singing_daily: [
+    "s17-jaw-neck-release",
+    "s18-costal-breath",
+    "s15-sh-air-ladder",
+    "s7-humming",
+    "s4-lip-trills",
+    "s1-vocal-fry",
+    "s19-soft-palate-surprise",
+    "s20-five-vowels",
+    "s2-solfege-chords",
+    "s21-chest-resonance",
+    "s22-mid-voice-hola",
+    "s23-mask-ya",
+    "s24-nana-high",
+    "s25-zone-tour",
+    "s26-placement-compare",
+    "s3-song-stanzas"
+  ]
+};
+
+/** Per-step timer (seconds) for the prepared daily session. */
+window.VT_DAILY_SESSION = {
+  id: "singing_daily",
+  track: "singing",
+  path: "daily",
+  totalMin: 30,
+  sec: {
+    "s17-jaw-neck-release": 105,
+    "s18-costal-breath": 105,
+    "s15-sh-air-ladder": 120,
+    "s7-humming": 105,
+    "s4-lip-trills": 75,
+    "s1-vocal-fry": 105,
+    "s19-soft-palate-surprise": 150,
+    "s20-five-vowels": 135,
+    "s2-solfege-chords": 150,
+    "s21-chest-resonance": 105,
+    "s22-mid-voice-hola": 75,
+    "s23-mask-ya": 75,
+    "s24-nana-high": 105,
+    "s25-zone-tour": 135,
+    "s26-placement-compare": 120,
+    "s3-song-stanzas": 180
+  }
 };
 
 window.VT_STRUCTURED.vocal_full = window.VT_STRUCTURED.vocal_basic.concat(

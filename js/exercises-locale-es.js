@@ -756,6 +756,237 @@
       "Legato que emborrona la afinación",
       "Sin descanso entre rondas"
     ]
+  },
+  "s17-jaw-neck-release": {
+    "original": "Antes de vocalizar, suelta mandíbula y cuello para que no interfieran con la colocación.",
+    "research": "La relajación muscular baja la resistencia al alargamiento del músculo y mejora la respuesta a las órdenes motoras: por eso va antes del trabajo de aire y de colocación.",
+    "steps": [
+      "De pie, hombros bajos, nada apretado en la cintura ni en el cuello.",
+      "Deja colgar la mandíbula: dos dedos en la bisagra y que la boca caiga sola, sin empujar.",
+      "Medios círculos lentos de cabeza — la mitad hacia un lado, la mitad hacia el otro, nunca hacia atrás.",
+      "Mastica un chicle imaginario con la lengua floja, labios cerrados, tarareando suave.",
+      "Termina con tres pre-bostezos en silencio: el interior crece y la cara se queda tranquila."
+    ],
+    "tips": [
+      "Soltar no es estirar: aquí nada debería tirar fuerte.",
+      "Si la mandíbula suena o duele, haz movimientos más pequeños.",
+      "Terminar relajado vale más hoy que ganar un semitono de rango.",
+      "Hazlo todos los días antes de la escalera: una mandíbula tensa arruina cualquier indicación de colocación."
+    ],
+    "mistakes": [
+      "Abrir la boca a la fuerza con las manos",
+      "Echar la cabeza completamente hacia atrás",
+      "Aguantar la respiración mientras sueltas",
+      "Saltártelo porque no suena"
+    ]
+  },
+  "s18-costal-breath": {
+    "original": "Respiración costo-abdominal: inhala bajo por la nariz, retén un momento y gasta el aire despacio y parejo en la espiración.",
+    "research": "De los tres tipos de respiración, solo la costo-abdominal permite que el diafragma descienda del todo (cerca del 60 % de capacidad frente a un 25 % de la clavicular). El diafragma no se controla de forma voluntaria; los intercostales y los abdominales sí, y eso es lo que entrena el apoyo.",
+    "steps": [
+      "De pie, o en el borde de la silla con las piernas abiertas — nada apretado en la cintura.",
+      "Una mano en las costillas bajas y otra en el abdomen. Los hombros NO suben.",
+      "Inhala por la nariz en 4 tiempos: las manos se abren, las clavículas se quedan quietas.",
+      "Retén 2 tiempos para preparar el cierre de las cuerdas, en posición activa para la fonación.",
+      "Espira en 8 tiempos, parejo, manteniendo las costillas anchas todo lo que puedas — esa resistencia es el apoyo.",
+      "Repite el ciclo; ni hinchar hasta reventar ni vaciar hasta la sensación de vacío."
+    ],
+    "tips": [
+      "Chi sa ben respirare, sa ben cantare: el control del aire es la base de toda la técnica vocal.",
+      "Los agudos y los pasajes fuertes gastan más aire, así que la reserva se construye antes de necesitarla.",
+      "El impulso inicial es un empujón abdominal ligero, parecido a una tos, y luego se mantiene esa presión.",
+      "Tumbado o dormido ya respiras así: lo estás recuperando, no aprendiéndolo de cero."
+    ],
+    "mistakes": [
+      "Levantar hombros y clavículas (respiración clavicular)",
+      "Ensanchar solo el tórax y las costillas (respiración intercostal)",
+      "Llenar de más hasta que se tensa el cuello",
+      "Dejar caer las costillas en el primer tiempo de la espiración"
+    ]
+  },
+  "s19-soft-palate-surprise": {
+    "original": "Encuentra el paladar blando con cara de sorpresa y con el instante previo al bostezo, y luego canta desde ese espacio.",
+    "research": "El paladar blando es la primera herramienta de colocación que un principiante puede sentir de verdad: elevarlo da amplitud y resonancia y evita un sonido plano. La imagen de clase es la diferencia entre hablar al aire libre y hablar dentro de una capilla.",
+    "steps": [
+      "Imagina que te dan una noticia sorprendente: la mandíbula cae sola y el espacio crece.",
+      "Busca el instante justo antes de bostezar y párate ahí: esa es la posición, no el bostezo.",
+      "Mantén ese espacio interno y canta una /A/ cómoda — marca el sostenido cuando se sienta amplio.",
+      "Alterna: una frase con el espacio cerrado y otra con el espacio abierto. Escucha la diferencia.",
+      "Termina con una frase corta que sepas, manteniendo el espacio de pre-bostezo de principio a fin."
+    ],
+    "tips": [
+      "La apertura viene de la sorpresa, no de la fuerza: una mandíbula forzada es tensión, no espacio.",
+      "Busca una posición cómoda y natural que podrías sostener una canción entera.",
+      "Más resonancia no es más presión: no confundas resonancia con empujar.",
+      "Un cantante lírico lo usa de forma evidente y la música popular de forma moderada: estás creando la opción, no un único sonido."
+    ],
+    "mistakes": [
+      "Abrir la mandíbula a la fuerza",
+      "Bostezar de verdad en vez de pararte antes",
+      "Subir el volumen en lugar de abrir el espacio",
+      "Dejar que la lengua tape la salida"
+    ]
+  },
+  "s20-five-vowels": {
+    "original": "Vocaliza I – E – A – O – U en una nota cómoda, con el paladar blando arriba y ajustando la forma de cada vocal.",
+    "research": "Las consonantes unen las palabras, pero las vocales son las que sostienen el sonido cantado, así que la resonancia y la colocación se trabajan sobre ellas. Cada vocal necesita su propia apertura para resonar, y por eso una buena /A/ no garantiza una buena /I/.",
+    "steps": [
+      "Coloca el espacio de pre-bostezo del ejercicio anterior y no lo sueltes.",
+      "Sobre una nota cómoda canta I – E – A – O – U, unos segundos cada una.",
+      "Busca la misma amplitud en todas: la vocal cambia de forma, no de tamaño.",
+      "Las cerradas (I, U) son las difíciles: abre por dentro sin estirar los labios hacia los lados.",
+      "Repite la vuelta en dos o tres notas vecinas, sin subir nunca el volumen a la fuerza."
+    ],
+    "tips": [
+      "No pronuncies la vocal como al hablar: busca la versión con más espacio.",
+      "El orden I–E–A–O–U va de cerrada a abierta: usa la I para mantener el sonido adelante y la A para abrirlo.",
+      "Escucha en qué vocal pierdes brillo y trabaja esa por separado.",
+      "Primero comodidad y calidad; la intensidad, después."
+    ],
+    "mistakes": [
+      "Cerrar la mandíbula en la I y en la U",
+      "Estirar los labios de lado para llegar a la I",
+      "Cambiar de nota al cambiar de vocal",
+      "Cantar más fuerte para que una vocal «salga»"
+    ]
+  },
+  "s21-chest-resonance": {
+    "original": "Notas graves con más cuerpo: dirige el sonido a una zona más baja, con el paladar blando abierto, sin empujar la voz hacia abajo.",
+    "research": "Los sonidos graves se benefician de una referencia de resonancia más baja y de una sensación de peso cercana al pecho. La ganancia viene de hacia dónde diriges el sonido, no de presionarlo hacia abajo.",
+    "steps": [
+      "Abre primero el espacio de pre-bostezo: la zona grave también necesita paladar blando.",
+      "Habla una frase grave con cuerpo, por ejemplo «Buenas noches, mucho gusto», no con tu voz de todos los días.",
+      "Canta los objetivos graves en /A/ o con esa frase, imaginando que el sonido va hacia una zona más baja.",
+      "Compara: la misma frase con tu voz hablada normal y luego con resonancia grave. Quédate con la segunda.",
+      "Quédate en la franja grave cómoda; no vayas a buscar notas por debajo."
+    ],
+    "tips": [
+      "Imagina la dirección del sonido: no bajes físicamente la laringe.",
+      "El peso es resonancia, no volumen; un grave pesado que molesta es un grave apretado.",
+      "El paladar blando se usa en todas las zonas, también en la grave.",
+      "Si raspa o suena a cascabeleo, ya estás por debajo de tu grave cómodo."
+    ],
+    "mistakes": [
+      "Empujar la voz hacia abajo para fingir profundidad",
+      "Bajar el paladar blando porque la nota es grave",
+      "Añadir aire en lugar de resonancia",
+      "Perseguir notas por debajo de tu rango cómodo"
+    ]
+  },
+  "s22-mid-voice-hola": {
+    "original": "La zona media es la más cercana al habla cotidiana: repite «Hola, hola» sobre las notas indicadas, natural y relajado.",
+    "research": "El registro medio se sitúa cerca de la faringe y de la voz hablada, y por eso es la zona más fácil de encontrar y la mejor referencia de lo poco que debería costar cantar.",
+    "steps": [
+      "Di «Hola, ¿qué tal?, ¿cómo estás?» como se lo dirías a alguien en la sala. Ese es el color objetivo.",
+      "Canta «Hola, hola» sobre los objetivos medios con esa misma producción cómoda.",
+      "No añadas intención ni peso: esta zona debe sentirse ordinaria.",
+      "Alterna «Hola» hablado y «Hola» cantado hasta que parezcan la misma voz.",
+      "Mantén el aire tranquilo: en frases cortas no deberías sentir esfuerzo respiratorio."
+    ],
+    "tips": [
+      "Cantar debería avanzar hacia la facilidad de hablar, y esta zona es donde se nota.",
+      "Si la zona media se siente pesada, estás subiendo peso de la zona grave.",
+      "Los medios son el puente: reconocerlos es lo que evita cantarlo todo desde un único lugar.",
+      "Mantén el paladar blando arriba también aquí, o el sonido se vuelve plano."
+    ],
+    "mistakes": [
+      "Colorear de más una zona que debe sonar normal",
+      "Subir peso de pecho a la zona media",
+      "Exceso de presión de aire en frases cortas",
+      "Volverla aireada porque resulta fácil"
+    ]
+  },
+  "s23-mask-ya": {
+    "original": "«YA, YA, YA» deliberadamente nasal y brillante para localizar la máscara superior: nariz, frente, senos paranasales.",
+    "research": "Un sonido nasal exagerado es la forma más rápida de localizar la zona de resonancia superior. La exageración es el buscador, no el sonido final: una vez encontrado el lugar, el color se equilibra.",
+    "steps": [
+      "Exagera a propósito: «YA, YA, YA» lo más nasal y brillante que puedas.",
+      "Fíjate dónde zumba — nariz, pómulos, frente. Ese es el lugar que estás aprendiendo.",
+      "Repítelo sobre objetivos que suben, manteniendo esa misma dirección de zumbido.",
+      "Cuando el lugar esté claro, quita algo de brillo sin moverte de ese sitio.",
+      "Termina con un par de vueltas de «YA» con color normal, todavía en la máscara."
+    ],
+    "tips": [
+      "Se supone que suena feo en esta fase: el ejercicio es un buscador, no el sonido con el que vas a interpretar.",
+      "Encontrar → estabilizar → repetir → equilibrar el color. En ese orden.",
+      "Fuerte no es el objetivo: el zumbido también aparece a bajo volumen.",
+      "Si pierdes el lugar, vuelve a exagerar en vez de empujar más."
+    ],
+    "mistakes": [
+      "Subir el volumen en lugar del brillo",
+      "Juzgar el ejercicio por lo bonito que suena",
+      "Apretar la garganta para conseguir el zumbido",
+      "Quedarte en la exageración y no equilibrarla nunca"
+    ]
+  },
+  "s24-nana-high": {
+    "original": "«NANA, NANA» en notas que suben: apóyate en la N para mantener la colocación alta, empieza suave y añade intensidad solo cuando la nota ya esté estable.",
+    "research": "Una nota aguda no es una nota media empujada: es otra colocación. La N lleva el sonido a la máscara, y construir la nota primero con la mínima presión es lo que desactiva el reflejo de apretar, meter presión o gritar.",
+    "steps": [
+      "Empieza por encima de tu zona media cómoda y más suave de lo que la cantarías nunca.",
+      "«NANA, NANA» en cada objetivo: siente primero la N y deja que la A se abra desde ahí.",
+      "Si una nota no sale, apóyate más en la N y vuelve a intentarlo en vez de meter más aire.",
+      "Repite cada objetivo hasta que el cuerpo reconozca el lugar; solo entonces añade cuerpo y volumen.",
+      "Termina llevando una frase real de una canción a NANA y luego de vuelta a la letra."
+    ],
+    "tips": [
+      "Crea la nota desde arriba: no arrastres la voz media hacia el agudo.",
+      "Primero la posición y después la potencia: así la fuerza es un recurso expresivo y no una obligación.",
+      "La voz de pecho tiene un límite de peso; por encima, la voz pasa a una coordinación más ligera.",
+      "No termines nunca ronco. Si raspa, deja ese objetivo por hoy."
+    ],
+    "mistakes": [
+      "Meter presión de aire para llegar a la nota",
+      "Cerrar la garganta con demasiada fuerza",
+      "Convertir el agudo en un grito",
+      "Practicar una nota límite una y otra vez a plena fuerza"
+    ]
+  },
+  "s25-zone-tour": {
+    "original": "Recorre las tres zonas de resonancia en una sola pasada — graves, medios y agudos — notando cómo cambia la colocación según la altura del sonido.",
+    "research": "Practicar las zonas por separado es solo la mitad; el objetivo del mes es reconocerlas y cambiar entre ellas dentro de la música real, en vez de resolver toda una canción desde un único lugar.",
+    "steps": [
+      "Fase grave: objetivos bajos con cuerpo y el paladar blando abierto.",
+      "Fase media: la misma línea cerca de tu voz hablada, sin peso extra.",
+      "Fase aguda: apóyate en la N, ligero y adelante, con la mínima presión.",
+      "Presta atención al cambio entre zonas: esa costura es el ejercicio.",
+      "Segunda pasada: el mismo recorrido, ahora intentando que las costuras no se oigan."
+    ],
+    "tips": [
+      "No cantes todos los registros desde el mismo lugar: ese es el hábito que esto deshace.",
+      "Encontrarlo, perderlo, volver a encontrarlo y memorizar la sensación: así se fija el camino.",
+      "El punto donde el pecho cede a una coordinación más ligera es el pasaje: atraviésalo suave.",
+      "Si una zona está mucho peor que las otras, dale mañana su propio ejercicio en vez de forzarla aquí."
+    ],
+    "mistakes": [
+      "Arrastrar peso de pecho por todo el recorrido",
+      "Cambiar de zona subiendo el volumen",
+      "Practicar siempre solo la zona que te gusta",
+      "Correr la pasada: primero lento y controlado"
+    ]
+  },
+  "s26-placement-compare": {
+    "original": "Canta la misma frase dos veces — una sin intención y otra con la colocación que estás entrenando — y escucha la diferencia.",
+    "research": "La misma nota cantada por la misma persona puede sonar completamente distinta según la colocación, así que el juez es el oído y no la sensación. Grabar y comparar es lo que convierte una sensación en una decisión repetible.",
+    "steps": [
+      "Elige una frase corta que te sepas — un verso de una canción, o «Cumpleaños feliz».",
+      "Toma A: cántala plana, tal como te sale sin ninguna intención.",
+      "Toma B: misma melodía y misma tonalidad, ahora con el espacio abierto y la colocación de esa zona.",
+      "Escucha las dos. No juzgues cuál es más bonita: busca cuál tiene más resonancia y amplitud.",
+      "Quédate con la que ganó y anota en una línea qué hiciste distinto."
+    ],
+    "tips": [
+      "Grábate para comparar colocaciones: desde dentro no puedes oír esto con justicia.",
+      "Misma melodía y misma tonalidad en las dos tomas, o estarás comparando dos cosas distintas.",
+      "No cantes junto a la voz original aquí: tapa tu propia colocación.",
+      "Una voz no tiene una única forma de sonar: estás construyendo opciones para poder elegir."
+    ],
+    "mistakes": [
+      "Cambiar de tonalidad o de tempo entre tomas",
+      "Cantar la toma B más fuerte en vez de mejor colocada",
+      "Juzgar por lo bonito en vez de por la resonancia",
+      "No escuchar nunca la grabación"
+    ]
   }
 };
 })(window);

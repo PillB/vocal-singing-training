@@ -511,6 +511,300 @@
       cue: "Short bounce vs connected line — note lengths auto-classify after holds.",
       cueEs: "Rebote corto vs línea conectada — las duraciones se clasifican solas.",
       metricHints: {}
+    },
+    /* —— Singing · class course (placement & resonance) —— */
+    "s17-jaw-neck-release": {
+      mode: "releaseFlow",
+      showPitch: false,
+      showHold: false,
+      showLevel: false,
+      pitchChallenge: false,
+      autoPiano: false,
+      autoRecord: false,
+      phases: [
+        {
+          label: "Jaw hangs",
+          labelEs: "Mandíbula suelta",
+          sec: 25,
+          cue: "Two fingers on the hinge — let the mouth fall open with no push.",
+          cueEs: "Dos dedos en la bisagra — deja caer la boca sin empujar."
+        },
+        {
+          label: "Slow neck half-circles",
+          labelEs: "Medios círculos de cuello",
+          sec: 30,
+          cue: "Half circles, one side then the other. Never roll the head back.",
+          cueEs: "Medios círculos, un lado y luego el otro. Nunca eches la cabeza atrás."
+        },
+        {
+          label: "Loose chewing hum",
+          labelEs: "Masticar y tararear",
+          sec: 25,
+          cue: "Chew an imaginary gum, lips closed, soft hum, tongue loose.",
+          cueEs: "Mastica un chicle imaginario, labios cerrados, tarareo suave, lengua floja."
+        },
+        {
+          label: "Three silent pre-yawns",
+          labelEs: "Tres pre-bostezos en silencio",
+          sec: 20,
+          cue: "The inside grows, the face stays calm. Stop before the yawn.",
+          cueEs: "El interior crece, la cara tranquila. Párate antes del bostezo."
+        }
+      ],
+      cue: "Silent release before you sing. Phases advance on their own.",
+      cueEs: "Soltar en silencio antes de cantar. Las fases avanzan solas.",
+      metricHints: {}
+    },
+    "s18-costal-breath": {
+      mode: "breathCycle",
+      showPitch: false,
+      showHold: false,
+      showLevel: true,
+      pitchChallenge: false,
+      autoPiano: false,
+      autoRecord: false,
+      pattern: { in: 4, hold: 2, out: 8 },
+      cue: "Inhale 4 · hold 2 · even exhale 8. Low ribs and belly move, shoulders do not.",
+      cueEs: "Inhala 4 · retén 2 · espira pareja 8. Costillas bajas y abdomen se mueven, los hombros no.",
+      metricHints: {}
+    },
+    "s19-soft-palate-surprise": {
+      mode: "openSpace",
+      showPitch: true,
+      showHold: true,
+      showLevel: true,
+      pitchChallenge: false,
+      autoPiano: true,
+      autoRecord: false,
+      refPitch: "C3",
+      minHoldMs: 1500,
+      phases: [
+        {
+          label: "Surprise face",
+          labelEs: "Cara de sorpresa",
+          sec: 20,
+          cue: "Surprising news — the jaw drops on its own. No sound yet.",
+          cueEs: "Una noticia sorprendente — la mandíbula cae sola. Todavía sin sonido."
+        },
+        {
+          label: "Stop before the yawn",
+          labelEs: "Párate antes del bostezo",
+          sec: 20,
+          cue: "The instant before a yawn. Hold that inner space.",
+          cueEs: "El instante antes de bostezar. Sostén ese espacio interno."
+        },
+        {
+          label: "Sing in that space",
+          labelEs: "Canta en ese espacio",
+          sec: 45,
+          sound: true,
+          cue: "Comfortable /A/ from inside the chapel. Hold ≥1.5s to log it.",
+          cueEs: "/A/ cómoda desde dentro de la capilla. Sostén ≥1,5 s para registrarlo."
+        },
+        {
+          label: "Closed, then open",
+          labelEs: "Cerrado, luego abierto",
+          sec: 25,
+          sound: true,
+          cue: "One phrase with the space closed, one with it open. Hear the difference.",
+          cueEs: "Una frase con el espacio cerrado, otra abierto. Escucha la diferencia."
+        },
+        {
+          label: "Phrase with the space",
+          labelEs: "Una frase con el espacio",
+          sec: 35,
+          sound: true,
+          cue: "A line you know, keeping the pre-yawn space all the way through.",
+          cueEs: "Una frase que sepas, manteniendo el espacio de pre-bostezo hasta el final."
+        }
+      ],
+      cue: "Surprise → pre-yawn → sound from that space. Holds log while a sounding phase runs.",
+      cueEs: "Sorpresa → pre-bostezo → sonido desde ese espacio. Los sostenidos cuentan en las fases con sonido.",
+      metricHints: { openHolds: "holds" }
+    },
+    "s20-five-vowels": {
+      mode: "vowelLadder",
+      showPitch: true,
+      showHold: false,
+      showLevel: true,
+      pitchChallenge: false,
+      autoPiano: true,
+      autoRecord: false,
+      refPitch: "D3",
+      vowels: ["I", "E", "A", "O", "U"],
+      secPerVowel: 4,
+      cue: "I–E–A–O–U on one pitch. The vowel changes shape, not the space.",
+      cueEs: "I–E–A–O–U en una sola nota. La vocal cambia de forma, no el espacio.",
+      metricHints: { rounds: "roundCount" }
+    },
+    "s21-chest-resonance": {
+      mode: "resonanceZone",
+      showPitch: true,
+      showHold: false,
+      showLevel: true,
+      pitchChallenge: false,
+      autoPiano: true,
+      autoRecord: false,
+      refPitch: "A2",
+      zones: [
+        {
+          key: "low",
+          label: "Low · chest",
+          labelEs: "Graves · pecho",
+          notes: ["C3", "B2", "A2", "G2", "A2", "B2"],
+          cue: "Aim the sound lower, soft palate open. Do not press the voice down.",
+          cueEs: "Dirige el sonido más abajo, paladar blando abierto. No empujes la voz hacia abajo."
+        }
+      ],
+      cue: "Low targets with body. Aim lower — never press.",
+      cueEs: "Objetivos graves con cuerpo. Dirige más abajo — nunca aprietes.",
+      metricHints: { zoneTargets: "targets" }
+    },
+    "s22-mid-voice-hola": {
+      mode: "resonanceZone",
+      showPitch: true,
+      showHold: false,
+      showLevel: true,
+      pitchChallenge: false,
+      autoPiano: true,
+      autoRecord: false,
+      refPitch: "D3",
+      zones: [
+        {
+          key: "mid",
+          label: "Middle · speech",
+          labelEs: "Medios · habla",
+          notes: ["C3", "D3", "E3", "F3", "E3", "D3"],
+          cue: "'Hola, hola' the way you would say it in the room. Nothing added.",
+          cueEs: "«Hola, hola» como lo dirías en la sala. Sin añadir nada."
+        }
+      ],
+      cue: "Middle zone on 'Hola'. It should feel as easy as talking.",
+      cueEs: "Zona media con «Hola». Debe sentirse tan fácil como hablar.",
+      metricHints: { zoneTargets: "targets" }
+    },
+    "s23-mask-ya": {
+      mode: "resonanceZone",
+      showPitch: true,
+      showHold: false,
+      showLevel: true,
+      pitchChallenge: false,
+      autoPiano: true,
+      autoRecord: false,
+      refPitch: "G3",
+      zones: [
+        {
+          key: "mask",
+          label: "Mask · bright",
+          labelEs: "Máscara · brillante",
+          notes: ["E3", "G3", "A3", "G3", "B3", "A3"],
+          cue: "'YA, YA' deliberately nasal. Find the buzz in the nose and forehead.",
+          cueEs: "«YA, YA» a propósito nasal. Encuentra el zumbido en nariz y frente."
+        }
+      ],
+      cue: "Exaggerate the nasal 'YA' to find the mask, then balance the colour back.",
+      cueEs: "Exagera el «YA» nasal para encontrar la máscara, luego equilibra el color.",
+      metricHints: { zoneTargets: "targets" }
+    },
+    "s24-nana-high": {
+      mode: "resonanceZone",
+      showPitch: true,
+      showHold: false,
+      showLevel: true,
+      pitchChallenge: false,
+      autoPiano: true,
+      autoRecord: false,
+      refPitch: "G3",
+      zones: [
+        {
+          key: "high",
+          label: "High · NANA",
+          labelEs: "Agudos · NANA",
+          notes: ["G3", "A3", "B3", "C4", "B3", "A3"],
+          cue: "Lean on the N, start softer than you think. Position first, power later.",
+          cueEs: "Apóyate en la N, empieza más suave de lo que crees. Primero el lugar, después la fuerza."
+        }
+      ],
+      cue: "'NANA' on rising targets, minimum pressure. If a note misses, lean on the N.",
+      cueEs: "«NANA» en objetivos ascendentes, mínima presión. Si falla una nota, apóyate en la N.",
+      metricHints: { zoneTargets: "targets" }
+    },
+    "s25-zone-tour": {
+      mode: "resonanceZone",
+      showPitch: true,
+      showHold: false,
+      showLevel: true,
+      pitchChallenge: false,
+      autoPiano: true,
+      autoRecord: false,
+      refPitch: "C3",
+      zones: [
+        {
+          key: "low",
+          label: "Low",
+          labelEs: "Graves",
+          sec: 45,
+          notes: ["C3", "B2", "A2", "G2"],
+          cue: "Body and space. Aim lower without pressing.",
+          cueEs: "Cuerpo y espacio. Dirige más abajo sin apretar."
+        },
+        {
+          key: "mid",
+          label: "Middle",
+          labelEs: "Medios",
+          sec: 45,
+          notes: ["C3", "D3", "E3", "F3"],
+          cue: "Back to the speaking voice. No extra weight.",
+          cueEs: "Vuelve a la voz hablada. Sin peso extra."
+        },
+        {
+          key: "high",
+          label: "High",
+          labelEs: "Agudos",
+          sec: 45,
+          notes: ["G3", "A3", "B3", "C4"],
+          cue: "Light and forward on the N. Do not drag the middle up.",
+          cueEs: "Ligero y adelante con la N. No arrastres la voz media hacia arriba."
+        }
+      ],
+      cue: "Low → middle → high in one pass. The seam between zones is the exercise.",
+      cueEs: "Graves → medios → agudos en una pasada. La costura entre zonas es el ejercicio.",
+      metricHints: { zoneTargets: "targets" }
+    },
+    "s26-placement-compare": {
+      mode: "placementAB",
+      showPitch: false,
+      showHold: false,
+      showLevel: true,
+      pitchChallenge: false,
+      autoPiano: true,
+      autoRecord: true,
+      phases: [
+        {
+          label: "Take A · plain",
+          labelEs: "Toma A · sin intención",
+          sec: 45,
+          cue: "Sing the phrase the way it comes out. Mark the take when you finish it.",
+          cueEs: "Canta la frase como te salga. Marca la toma al terminarla."
+        },
+        {
+          label: "Take B · placed",
+          labelEs: "Toma B · colocada",
+          sec: 45,
+          cue: "Same melody, same key, now with the open space and the zone placement.",
+          cueEs: "Misma melodía, misma tonalidad, ahora con el espacio abierto y la colocación de la zona."
+        },
+        {
+          label: "Listen back",
+          labelEs: "Escucha las dos",
+          sec: 30,
+          cue: "Not which is prettier — which has more ring and width.",
+          cueEs: "No cuál es más bonita — cuál tiene más resonancia y amplitud."
+        }
+      ],
+      cue: "Two takes of one phrase, plain then placed, then listen back and keep one.",
+      cueEs: "Dos tomas de una frase, sin intención y colocada, luego escucha y quédate con una.",
+      metricHints: {}
     }
   };
 

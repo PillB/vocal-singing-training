@@ -4040,3 +4040,218 @@ footer a {
   min-height: 90px;
   overflow: hidden;
 }
+
+.nav-label-short {
+  display: none;
+}
+.nav-label-full {
+  display: inline;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Phone layout pass — plan / history / pricing
+   Audited with `node qa/capture-mobile.mjs` at 390×844, 360×740 and 320×640.
+   Everything here is scoped away from .view-exercise, whose sticky-highway
+   chrome is tuned separately (and covered by tests/viewport-overflow.spec.js).
+   ══════════════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 640px) {
+  /* ── Header ───────────────────────────────────────────────────────────
+     Seven actions were right-aligned inside a 11.5rem cage, so they wrapped
+     into a ragged 2–4 row staircase that ate up to 170px of a sticky header
+     and shrank labels to ~10.9px on a 34px target. Give the actions their own
+     full-width row that wraps left-to-right, and drop the decorative brand
+     mark and tagline on a phone to pay for the taller, readable buttons. */
+  body:not(.view-exercise) .header-inner {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.45rem;
+    padding: 0.5rem 0.9rem 0.6rem;
+  }
+  body:not(.view-exercise) .app-header .brand-mark,
+  body:not(.view-exercise) .app-header .brand p {
+    display: none;
+  }
+  body:not(.view-exercise) .brand {
+    min-width: 0;
+  }
+  body:not(.view-exercise) .brand h1 {
+    font-size: 0.95rem;
+    line-height: 1.25;
+  }
+  body:not(.view-exercise) .header-actions {
+    max-width: none;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 0.35rem;
+  }
+  body:not(.view-exercise) .header-actions .btn-sm {
+    min-height: var(--min-tap);
+    padding: 0.35rem 0.7rem;
+    font-size: 0.8rem;
+    white-space: nowrap;
+  }
+  /* "Plan de 12 semanas" alone was 162px wide and forced a third header row */
+  body:not(.view-exercise) .header-actions .nav-label-full {
+    display: none;
+  }
+  body:not(.view-exercise) .header-actions .nav-label-short {
+    display: inline;
+  }
+
+  /* ── Tap targets ──────────────────────────────────────────────────────
+     --min-tap is 44px, but several phone controls rendered at 13–36px. */
+  body:not(.view-exercise) .chip,
+  body:not(.view-exercise) .select-inline {
+    min-height: var(--min-tap);
+  }
+  body:not(.view-exercise) .select-inline {
+    padding: 0.5rem 0.6rem;
+  }
+  body:not(.view-exercise) .btn-xs {
+    min-height: var(--min-tap);
+    padding: 0.35rem 0.65rem;
+  }
+  body:not(.view-exercise) input[type="time"],
+  body:not(.view-exercise) input[type="text"],
+  body:not(.view-exercise) input[type="password"],
+  body:not(.view-exercise) input[type="email"],
+  body:not(.view-exercise) input[type="number"] {
+    min-height: var(--min-tap);
+  }
+  body:not(.view-exercise) input[type="checkbox"] {
+    width: 22px;
+    height: 22px;
+    flex: 0 0 auto;
+  }
+  /* The checkbox is the hit target only in theory — give its label the area */
+  body:not(.view-exercise) .retain-toggle,
+  body:not(.view-exercise) .retain-check,
+  body:not(.view-exercise) .retain-field {
+    min-height: var(--min-tap);
+  }
+  /* Modal dismiss was 37px wide — square it off to the tap floor */
+  #pricing-close,
+  #account-close,
+  .modal-card .btn-ghost[aria-label="Close"] {
+    min-width: var(--min-tap);
+    min-height: var(--min-tap);
+  }
+  /* Footer privacy link was a 68×15 target inside a paragraph */
+  footer.app-footer a {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--min-tap);
+    padding: 0 0.2rem;
+  }
+
+  /* ── Readability ──────────────────────────────────────────────────────
+     Nothing that carries meaning should render below 12px on a phone. */
+  .badge,
+  .billing-pill,
+  .value-pulse-tag,
+  .next-step-k,
+  .pricing-kicker,
+  .plan-badge,
+  .pro-ach-badge {
+    font-size: 0.75rem;
+  }
+  .value-stat span,
+  .pro-ach-badge small {
+    font-size: 0.75rem;
+  }
+  .pro-ach-badge small {
+    max-width: 9rem;
+  }
+
+  /* ── Pricing modal ────────────────────────────────────────────────────
+     The plan cards — the only part of this dialog anyone opens it for —
+     started ~780px down a 574px scroll box, behind the value copy. Put the
+     rails and the plans first on a phone and let the "why" follow. */
+  .pricing-card {
+    display: flex;
+    flex-direction: column;
+  }
+  .pricing-head {
+    order: 0;
+  }
+  .pricing-status {
+    order: 1;
+  }
+  .pricing-rails {
+    order: 2;
+  }
+  .pricing-grid {
+    order: 3;
+    margin-bottom: 0.65rem;
+  }
+  .pricing-value-stack {
+    order: 4;
+  }
+  .pricing-foot {
+    order: 5;
+  }
+  .pricing-rails .rail-btn {
+    min-height: var(--min-tap);
+    font-size: 0.82rem;
+  }
+
+  /* The ✕ sat in the header's flex row and took ~22% of the line, so the
+     title and subtitle wrapped two words early. Pin it to the corner and
+     clear only the lines it actually covers. */
+  .pricing-card,
+  .account-card {
+    position: relative;
+  }
+  #pricing-close,
+  #account-close {
+    position: absolute;
+    top: 0.55rem;
+    right: 0.55rem;
+    z-index: 2;
+  }
+  #pricing-modal .pricing-head > div:first-child,
+  #account-modal .pricing-head > div:first-child {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+  #pricing-modal .pricing-kicker,
+  #pricing-title,
+  #account-title {
+    padding-right: 3rem;
+  }
+
+  /* ── History rows ─────────────────────────────────────────────────────
+     Long recording labels could push the Play/Delete pair off the row;
+     let the text column shrink and keep the buttons on their own line. */
+  .history-item > div:first-child {
+    min-width: 0;
+    flex: 1 1 100%;
+    overflow-wrap: anywhere;
+  }
+  .history-item .controls-row {
+    flex: 1 1 100%;
+  }
+}
+
+/* Very narrow phones: keep the header legible instead of caging it */
+@media (max-width: 400px) {
+  body:not(.view-exercise) .header-actions {
+    max-width: none;
+    gap: 0.3rem;
+  }
+  body:not(.view-exercise) .header-actions .btn-sm {
+    min-height: var(--min-tap);
+    padding: 0.35rem 0.6rem;
+    font-size: 0.78rem;
+  }
+  body:not(.view-exercise) .brand h1 {
+    font-size: 0.9rem;
+    max-width: none;
+    white-space: normal;
+  }
+  body:not(.view-exercise) .header-inner {
+    padding-left: 0.7rem;
+    padding-right: 0.7rem;
+  }
+}

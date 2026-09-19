@@ -704,7 +704,14 @@
     const name = window.VTI18n ? VTI18n.exTitle(sug.ex) : sug.ex.title;
     titleEl.textContent = `${sug.ex.number}. ${name}`;
     if (whyEl) whyEl.textContent = tt(sug.reason === "structured" ? "home.nextStepWhyGuided" : "home.nextStepWhy");
-    btn.onclick = () => openExercise(sug.ex.id, false);
+    // A structured suggestion resumes the guided session: continuePractice un-pauses
+    // it and opens with fromStructured, so completing the exercise advances the
+    // session instead of suggesting the same one again.
+    const structured = sug.reason === "structured";
+    btn.onclick = () => {
+      if (structured) continuePractice();
+      else openExercise(sug.ex.id, false);
+    };
     renderStartPanel(sug);
   }
 
@@ -765,9 +772,9 @@
       return;
     }
     banner.classList.add("visible");
-    const trackLabel = s.track === "vocal" ? "Vocal" : "Singing";
-    const status = s.status === "paused" ? "Paused" : "Active";
-    $("#session-banner-text").textContent = `${trackLabel} structured session · ${status} · ${VTSession.progressLabel()}`;
+    const trackLabel = tt(s.track === "vocal" ? "tab.vocalShort" : "tab.singingShort");
+    const status = tt(s.status === "paused" ? "session.statusPaused" : "session.statusActive");
+    $("#session-banner-text").textContent = `${tt("session.bannerTitle", { track: trackLabel })} · ${status} · ${VTSession.progressLabel()}`;
     $("#btn-session-resume").hidden = s.status !== "paused";
     $("#btn-session-pause").hidden = s.status !== "active";
   }
@@ -3415,8 +3422,13 @@
           : tt("plan.statusReview", { element: weekElementLabel(plan.element) });
     $("#plan-element-label").textContent = weekElementLabel(plan.element);
     // The week review only makes sense once a week is under way.
+    const waiting = plan.status === "idle";
     const reviewCard = $("#plan-review-card");
-    if (reviewCard) reviewCard.classList.toggle("is-waiting", plan.status === "idle");
+    if (reviewCard) reviewCard.classList.toggle("is-waiting", waiting);
+    ["#plan-review-notes", "#btn-plan-improved", "#btn-plan-continue"].forEach((sel) => {
+      const el = $(sel);
+      if (el) el.disabled = waiting;
+    });
 
     const chips = $("#element-chips");
     chips.innerHTML = "";
@@ -3510,6 +3522,11 @@
     const plan = VTStorage.getWeekPlan();
     if (!plan.element) {
       toast(tt("toast.pickElement"));
+      return;
+    }
+    // Reviewing a week that never started would advance weekNumber for nothing
+    if (plan.status === "idle") {
+      toast(tt("toast.startWeekFirst"));
       return;
     }
     const notes = $("#plan-review-notes")?.value || "";

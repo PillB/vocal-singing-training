@@ -134,6 +134,30 @@ for layout to settle; only the text moved earlier.
 
 ---
 
+## Review round 1
+
+Two findings from the Codex bot on the first push, both real, both fixed:
+
+- **P1 — the resume CTA did not resume.** `renderStartPanel` relabels the button
+  to *Seguir la sesión* when a guided session is open, but the handler still ran
+  `openExercise(id, false)`, so `state.structured` stayed false, the structured
+  nav stayed hidden, and finishing the exercise never called
+  `VTSession.markCurrentComplete()` — home then recommended the same exercise
+  again. The structured case now routes through `continuePractice()`, which
+  un-pauses the session and opens with `fromStructured`.
+- **P2 — the plan's waiting state was cosmetic.** `.is-waiting` only lowered the
+  controls' opacity, so with an element picked but the week not started a click
+  on *Mejoró* filed a review and advanced `weekNumber`. The textarea and both
+  buttons are now disabled while idle, and `submitWeekReview()` refuses an idle
+  plan outright.
+
+While confirming the first fix, the guided-session banner and the exercise
+progress line turned out to be English too (`Vocal structured session · Active ·
+Exercise 1 of 9 · basic`). Both now go through i18n, and the path name resolves
+through the existing `home.path.*` keys.
+
+---
+
 ## Verification
 
 - `node qa/check-catalog.mjs` — 36 exercises · 33 modes · 13 progressions.

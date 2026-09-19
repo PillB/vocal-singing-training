@@ -58,6 +58,12 @@
       "pricing.personalEmpty": "Aún sin sesiones guardadas — prueba un ejercicio gratis y vuelve a ver tu progreso aquí.",
       "pricing.personalHave": "Tu prueba: {sessions} sesiones · ~{minutes} min · racha {streak}d · mejor hold {hold}s",
       "pricing.trialLeft": "Te quedan {n} día(s) de prueba Pro",
+      "pricing.startTrial": "Empezar prueba Pro de {n} días",
+      "pricing.recheck": "Comprobar mi pago",
+      "pricing.trialUsed": "Ya usaste la prueba en este navegador",
+      "pricing.verifying": "Confirmando tu pago con el proveedor…",
+      "pricing.unverified": "Pago aún sin confirmar",
+      "pricing.verifyUnavailable": "Los pagos están en pausa hasta que la verificación esté activa.",
       "pricing.feat.all_exercises": "Todos los ejercicios (la práctica siempre es gratis)",
       "pricing.feat.pitch_highway": "Autopista + piano + rango auto",
       "pricing.feat.local_record": "Grabación y métricas locales",
@@ -181,6 +187,15 @@
       "pricing.toast.exported": "Progreso exportado",
       "pricing.toast.checkoutError":
         "No pudimos confirmar el pago en este navegador. Si cobraron, escribe a soporte con el comprobante; mientras, puedes seguir practicando gratis.",
+      "pricing.toast.trialStarted": "Prueba Pro activada · {n} días",
+      "pricing.toast.trialUsed": "Ya usaste tu prueba gratis en este navegador",
+      "pricing.toast.verifyUnavailable":
+        "Aún no abrimos los pagos: solo activamos Pro cuando el cobro queda verificado de extremo a extremo. Sigue practicando gratis.",
+      "pricing.toast.verifyPending":
+        "Confirmando tu pago… Pro se activa en cuanto el proveedor nos confirme.",
+      "pricing.toast.verifyOk": "¡Pago verificado! Pro activo en este navegador.",
+      "pricing.toast.verifyFailed":
+        "Todavía no podemos confirmar el pago. Seguimos reintentando; si ya te cobraron, escribe a soporte con el comprobante.",
       "nav.lang": "English",
       "nav.tour": "Tour",
       "tour.skip": "Saltar tour",
@@ -566,6 +581,12 @@
       "pricing.personalEmpty": "No saved sessions yet — try a free exercise, then see your progress here.",
       "pricing.personalHave": "Your proof: {sessions} sessions · ~{minutes} min · {streak}d streak · best hold {hold}s",
       "pricing.trialLeft": "{n} day(s) left on Pro trial",
+      "pricing.startTrial": "Start {n}-day Pro trial",
+      "pricing.recheck": "Check my payment",
+      "pricing.trialUsed": "Trial already used in this browser",
+      "pricing.verifying": "Confirming your payment with the provider…",
+      "pricing.unverified": "Payment not confirmed yet",
+      "pricing.verifyUnavailable": "Checkout is paused until payment verification is live.",
       "pricing.feat.all_exercises": "All exercises (practice is always free)",
       "pricing.feat.pitch_highway": "Highway + piano + auto range",
       "pricing.feat.local_record": "Local recording & metrics",
@@ -689,6 +710,15 @@
       "pricing.toast.exported": "Progress exported",
       "pricing.toast.checkoutError":
         "We couldn’t confirm payment in this browser. If you were charged, contact support with your receipt — you can keep practicing free meanwhile.",
+      "pricing.toast.trialStarted": "Pro trial started · {n} days",
+      "pricing.toast.trialUsed": "You already used the free trial in this browser",
+      "pricing.toast.verifyUnavailable":
+        "Checkout isn’t open yet: we only switch Pro on once a payment is verified end to end. Keep practicing free.",
+      "pricing.toast.verifyPending":
+        "Confirming your payment… Pro switches on as soon as the provider confirms.",
+      "pricing.toast.verifyOk": "Payment verified — Pro is active in this browser.",
+      "pricing.toast.verifyFailed":
+        "We can’t confirm the payment yet. We’ll keep retrying; if you were charged, contact support with your receipt.",
       "nav.lang": "Español",
       "nav.tour": "Tour",
       "tour.skip": "Skip tour",

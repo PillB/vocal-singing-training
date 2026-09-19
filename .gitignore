@@ -6,6 +6,9 @@ test-results/
 *.log
 .env
 .env.*
+# Wrangler local secrets for workers/entitlements
+.dev.vars
+.dev.vars.*
 
 # QA captures (regenerate locally)
 qa/screenshots/

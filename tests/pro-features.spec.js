@@ -2,10 +2,13 @@
  * Pro feature expansion: multi-profile, goals, insights, progressions.
  */
 const { test, expect } = require("@playwright/test");
+const { enableQaPro } = require("./helpers/billing");
 
 const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";
 
 async function boot(page) {
+  // Pro here comes from the QA unlock; public builds need a signed license.
+  await enableQaPro(page);
   await page.addInitScript(() => {
     try {
       localStorage.setItem("vt_tour_v1", "1");

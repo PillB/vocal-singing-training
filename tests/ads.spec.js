@@ -2,10 +2,13 @@
  * Ad / native monetization scaffold — off by default, Pro suppresses, never mid-practice rules.
  */
 const { test, expect } = require("@playwright/test");
+const { enableQaPro } = require("./helpers/billing");
 
 const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";
 
 async function boot(page) {
+  // Ad suppression is checked against Pro; use the QA unlock to get there.
+  await enableQaPro(page);
   await page.addInitScript(() => {
     try {
       localStorage.setItem("vt_tour_v1", "1");
@@ -52,7 +55,7 @@ test.describe("Ads scaffold", () => {
         c.nativeCards[0].action = "open-pricing";
         c.nativeCards[0].slots = ["home", "post-session", "history"];
       }
-      // Auto trial makes isPro() true — force pure free for ad visibility
+      // Belt and braces: no trial clock, no entitlement — pure free
       try {
         localStorage.removeItem("vt_billing_v1");
         localStorage.removeItem("vt_billing_trial_started_v1");

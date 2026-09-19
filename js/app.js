@@ -3883,6 +3883,26 @@
     if (demo) {
       demo.hidden = !cfg.demoUnlockEnabled || ent.source === "demo" || (ent.pro && ent.source === "paid");
     }
+    // Recovery for a checkout whose license never arrived.
+    const recheck = $("#btn-recheck-payment");
+    if (recheck) {
+      recheck.hidden = !(
+        !ent.pro &&
+        !!B.hasPendingClaim?.() &&
+        !!B.verificationConfigured?.()
+      );
+    }
+    // Free trial is opt-in: offer it only while this browser still has one.
+    const trialBtn = $("#btn-start-trial");
+    if (trialBtn) {
+      const canTrial = !!B.canStartTrial?.() && !ent.pro;
+      trialBtn.hidden = !canTrial;
+      if (canTrial) {
+        trialBtn.textContent = tt("pricing.startTrial", {
+          n: String(Number(cfg.freeTrialDays || 0))
+        });
+      }
+    }
     // Customer Portal: show for Pro/trial when a valid portal URL is configured
     const manage = $("#btn-manage-billing");
     if (manage) {
@@ -3901,10 +3921,11 @@
     if (healthNote && B.getBillingHealth) {
       try {
         const h = B.getBillingHealth();
-        if (h && !h.ok && h.demoUnlock) {
+        if (h && !h.ok && h.links && h.verificationRequired && !h.verificationConfigured) {
+          // Links are live but entitlements cannot be verified — checkout is held.
           healthNote.hidden = false;
-          healthNote.textContent = tt("pricing.toast.unconfigured");
-        } else if (h && !h.ok && !h.links) {
+          healthNote.textContent = tt("pricing.verifyUnavailable");
+        } else if (h && !h.ok) {
           healthNote.hidden = false;
           healthNote.textContent = tt("pricing.toast.unconfigured");
         } else {
@@ -4348,6 +4369,10 @@
         status.textContent = `${tt("pricing.trial")} · ${tt("pricing.trialLeft", { n: String(left) })}`;
       } else if (ent.pro) {
         status.textContent = `${tt("pricing.proActive")} · ${ent.plan}${ent.source === "demo" ? " (demo)" : ""}`;
+      } else if (ent.status === "pending") {
+        status.textContent = tt("pricing.verifying");
+      } else if (ent.status === "unverified") {
+        status.textContent = tt("pricing.unverified");
       } else {
         status.textContent = tt("pricing.free");
       }
@@ -4435,6 +4460,8 @@
             toast(tt("pricing.toast.demo"));
             updateBillingChrome();
             renderPricingModal();
+          } else if (res.mode === "verification_unavailable") {
+            toast(tt("pricing.toast.verifyUnavailable"), { durationMs: 5200 });
           } else if (res.mode === "unconfigured") {
             toast(tt("pricing.toast.unconfigured"));
           }
@@ -4616,6 +4643,32 @@
     $("#pricing-modal")?.addEventListener("click", (e) => {
       if (e.target === $("#pricing-modal")) closePricing();
     });
+    $("#btn-recheck-payment")?.addEventListener("click", () => {
+      const claiming = window.VTBilling?.resumePendingClaim?.({ force: true });
+      if (!claiming) {
+        toast(tt("pricing.toast.verifyFailed"), { durationMs: 5200 });
+        return;
+      }
+      toast(tt("pricing.toast.verifyPending"), { durationMs: 3600 });
+      claiming.then((res) => {
+        toast(res?.ok ? tt("pricing.toast.verifyOk") : tt("pricing.toast.verifyFailed"), {
+          durationMs: res?.ok ? 3600 : 6000
+        });
+        updateBillingChrome();
+        renderPricingModal();
+      });
+    });
+    $("#btn-start-trial")?.addEventListener("click", () => {
+      if (!window.VTBilling?.startTrial) return;
+      const res = VTBilling.startTrial();
+      if (!res.ok) {
+        toast(tt("pricing.toast.trialUsed"), { durationMs: 4200 });
+      } else {
+        toast(tt("pricing.toast.trialStarted", { n: String(VTBilling.trialDaysLeft?.() ?? 0) }));
+      }
+      updateBillingChrome();
+      renderPricingModal();
+    });
     $("#btn-demo-pro")?.addEventListener("click", () => {
       if (!window.VTBilling) return;
       VTBilling.activateDemo("pro_monthly");
@@ -4679,7 +4732,19 @@
         if ($("#pricing-modal") && !$("#pricing-modal").hidden) renderPricingModal();
       });
       const ret = VTBilling.handleReturnFromCheckout();
-      if (ret?.event === "success") toast(tt("pricing.toast.success"));
+      if (ret?.event === "success" && ret.pendingVerification) {
+        // Payment recorded; Pro waits on the entitlement worker's signed license.
+        toast(tt("pricing.toast.verifyPending"), { durationMs: 4600 });
+        ret.claiming?.then((res) => {
+          toast(res?.ok ? tt("pricing.toast.verifyOk") : tt("pricing.toast.verifyFailed"), {
+            durationMs: res?.ok ? 3600 : 6000
+          });
+          updateBillingChrome();
+          if ($("#pricing-modal") && !$("#pricing-modal").hidden) renderPricingModal();
+        });
+      } else if (ret?.event === "success") {
+        toast(tt("pricing.toast.success"));
+      }
       if (ret?.event === "cancel") toast(tt("pricing.toast.cancel"));
       if (ret?.event === "error") {
         toast(ret.message || tt("pricing.toast.checkoutError"), { durationMs: 4200 });

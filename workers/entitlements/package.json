@@ -1,0 +1,10 @@
+{
+  "name": "vocal-studio-entitlements",
+  "private": true,
+  "type": "module",
+  "description": "Cloudflare Worker: Stripe/Mercado Pago webhooks -> KV entitlements -> signed license tokens. No dependencies.",
+  "scripts": {
+    "test": "node --test test",
+    "keys": "node scripts/generate-keys.mjs"
+  }
+}

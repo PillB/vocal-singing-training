@@ -125,8 +125,11 @@
     };
     writeSession(session);
 
-    // Internal accounts get Pro for QA (soft entitlement, tagged source)
-    if (session.pro && global.VTBilling?.activate) {
+    // Internal accounts get Pro for QA builds only. In a public build
+    // demoUnlockEnabled is false, so this grants nothing and we skip it rather
+    // than leaving a "paid" record the entitlement layer will ignore anyway.
+    const qaUnlock = !!global.VT_BILLING_CONFIG?.demoUnlockEnabled;
+    if (qaUnlock && session.pro && global.VTBilling?.activate) {
       try {
         global.VTBilling.activate("pro_monthly", {
           source: "internal_account",

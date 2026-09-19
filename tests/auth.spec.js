@@ -5,11 +5,14 @@ const { test, expect } = require("@playwright/test");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const { enableQaPro } = require("./helpers/billing");
 
 const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";
 const ROOT = path.join(__dirname, "..");
 
 async function boot(page) {
+  // Internal accounts only carry Pro in QA builds (demoUnlockEnabled).
+  await enableQaPro(page);
   await page.addInitScript(() => {
     try {
       localStorage.setItem("vt_tour_v1", "1");

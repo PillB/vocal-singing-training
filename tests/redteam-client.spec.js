@@ -10,7 +10,7 @@ const ROOT = path.join(__dirname, "..");
 const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";
 
 test.describe("Red team client (Zuck)", () => {
-  test("forge Pro via localStorage — soft gate; Start still available", async ({ page }) => {
+  test("forge Pro via localStorage — rejected; Start still available", async ({ page }) => {
     await page.addInitScript(() => {
       try {
         localStorage.setItem("vt_tour_v1", "1");
@@ -38,8 +38,10 @@ test.describe("Red team client (Zuck)", () => {
       const e = B.getEntitlement?.() || {};
       return { pro: !!e.pro, canExport: !!B.can?.("export_progress") };
     });
-    // Soft gate may honor forge (accepted risk) or not
-    expect(ent.missing === true || typeof ent.pro === "boolean").toBe(true);
+    // Entitlements are server-signed: a hand-written record grants nothing.
+    expect(ent.missing).toBeFalsy();
+    expect(ent.pro).toBe(false);
+    expect(ent.canExport).toBe(false);
     await openExercise(page, "v1-diction");
     await expect(page.locator("#btn-practice-start")).toBeVisible();
   });

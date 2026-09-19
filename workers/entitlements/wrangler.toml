@@ -1,0 +1,39 @@
+name = "vocal-studio-entitlements"
+main = "src/index.js"
+compatibility_date = "2025-09-01"
+
+# --- KV -----------------------------------------------------------------
+# Create the namespaces first, then paste the ids printed by:
+#   wrangler kv namespace create ENTITLEMENTS
+#   wrangler kv namespace create ENTITLEMENTS --preview
+[[kv_namespaces]]
+binding = "ENTITLEMENTS"
+id = "TODO_REPLACE_WITH_KV_NAMESPACE_ID"
+preview_id = "TODO_REPLACE_WITH_KV_PREVIEW_NAMESPACE_ID"
+
+# --- Public configuration (safe to commit) ------------------------------
+[vars]
+# Exact origin of the site, used as the token audience and as the only
+# allowed CORS origin. No trailing slash.
+SITE_ORIGIN = "https://pillb.github.io"
+# Key id advertised in the token header and in /v1/jwks. Bump on rotation.
+LICENSE_KEY_ID = "k1"
+# Token lifetime in seconds (72h). Clamped to 60..2592000 by the worker.
+LICENSE_TTL_SECONDS = "259200"
+# Optional: map provider price/plan ids onto our plan ids. Leave empty to fall
+# back to checkout metadata, then to the subscription interval.
+STRIPE_PRICE_PRO_MONTHLY = ""
+STRIPE_PRICE_PRO_YEARLY = ""
+MP_PLAN_PRO_MONTHLY = ""
+MP_PLAN_PRO_YEARLY = ""
+
+# --- Secrets (NEVER put values in this file) ----------------------------
+# Set each one with `wrangler secret put <NAME>`:
+#   STRIPE_WEBHOOK_SECRET          whsec_... for THIS endpoint (test and live differ)
+#   MP_WEBHOOK_SECRET              Mercado Pago webhook signing secret
+#   MP_ACCESS_TOKEN                Mercado Pago access token (server-side API reads)
+#   LICENSE_PRIVATE_KEY_PKCS8_B64  base64 PKCS#8 P-256 private key
+#                                  (scripts/generate-keys.mjs prints it)
+
+[observability]
+enabled = true

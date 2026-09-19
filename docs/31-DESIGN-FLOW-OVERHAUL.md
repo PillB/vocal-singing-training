@@ -1,4 +1,4 @@
-# 30 — Site design & user-flow overhaul
+# 31 — Site design & user-flow overhaul
 
 **Date:** 2026-09-19
 **Code:** `index.html`, `css/styles.css`, `js/app.js`, `js/i18n.js`, `js/practice-modes.js`

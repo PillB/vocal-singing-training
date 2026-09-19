@@ -611,6 +611,7 @@
   }
 
   function beginTour(steps, { fromButton, pack, stay } = {}) {
+    const opener = document.activeElement;
     ensureUI();
     stepList = filterSteps(steps);
     if (!stepList.length) {
@@ -624,6 +625,8 @@
     ui.root.hidden = false;
     document.body.classList.add("tour-active");
     if (fromButton && !pack) goHome();
+    // Keep Tab inside the tour card; steps may click page chrome behind it.
+    window.VTFocusTrap?.activate(ui.card, { initialFocus: ui.next, returnFocus: opener });
     render();
   }
 
@@ -682,7 +685,10 @@
     const stay = stayOnEnd;
     active = false;
     clearHighlight();
-    if (ui) ui.root.hidden = true;
+    if (ui) {
+      ui.root.hidden = true;
+      window.VTFocusTrap?.release(ui.card);
+    }
     document.body.classList.remove("tour-active");
     if (mark) {
       if (pack) markUiSeen(pack);

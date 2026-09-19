@@ -1,7 +1,7 @@
 # Subscriptions & payments — operator guide (current)
 
-**Stack:** Static SPA (GitHub Pages) · **Stripe Payment Links** (global) · **Mercado Pago** (Perú/LATAM) · soft local entitlement  
-**Code:** `js/billing-config.js`, `js/billing.js` · **Hardening path:** `workers/stripe-webhook/`  
+**Stack:** Static SPA (GitHub Pages) · **Stripe Payment Links** (global) · **Mercado Pago** (Perú/LATAM) · **server-checked entitlements**  
+**Code:** `js/billing-config.js`, `js/billing.js`, `js/license.js` · **Entitlement server:** `workers/entitlements/`  
 **Deep audit:** [`16-SUBSCRIPTION-TECHNICAL-ORCHESTRATION.md`](./16-SUBSCRIPTION-TECHNICAL-ORCHESTRATION.md) · [`SUBSCRIPTION-TECH-GAP-REGISTRY.md`](./SUBSCRIPTION-TECH-GAP-REGISTRY.md)
 
 > Official (non-deprecated, 2025–2026):  
@@ -20,15 +20,21 @@
 | 1 | Stripe product + recurring prices | Prices visible in Dashboard |
 | 2 | Two Payment Links (monthly / yearly) | `buy.stripe.com/…` URLs |
 | 3 | Success URL with `session_id={CHECKOUT_SESSION_ID}` | Template on each link |
-| 4 | Paste links into `billing-config.js` → `providers.stripe.links` | Non-empty strings |
-| 5 | Activate Customer Portal login link → `customerPortalUrl` | `billing.stripe.com/p/login/…` |
-| 6 | Set `demoUnlockEnabled: false` | Demo button gone |
-| 7 | Commit → push `main` → Pages deploy | Live site uses new config |
-| 8 | Test card checkout → Pro pill + export | Real return works |
-| 9 | `VTBilling.getBillingHealth()` | `ok: true` (ideally `productionReady: true`) |
-| 10 | (Later) Deploy Worker webhook | Hard renewals/cancels |
+| 4 | Deploy `workers/entitlements/` (KV + secrets) | `GET /v1/health` returns `ok: true` |
+| 5 | Register the webhook endpoints in Stripe and Mercado Pago | Test event delivers 200 |
+| 6 | `node workers/entitlements/scripts/generate-keys.mjs` → private key as worker secret, public JWK into `verification.publicKeyJwk` | Keys in place, private key never committed |
+| 7 | Worker URL into `verification.apiBaseUrl` | `VTBilling.verificationConfigured()` true |
+| 8 | Paste links into `billing-config.js` → `providers.*.links` | Non-empty strings |
+| 9 | Activate Customer Portal login link → `customerPortalUrl` | `billing.stripe.com/p/login/…` |
+| 10 | Commit → push `main` → Pages deploy | Live site uses new config |
+| 11 | Real test-card checkout → Pro pill + export | Return shows “confirming”, then Pro |
+| 12 | `VTBilling.getBillingHealth()` | `ok: true` (ideally `productionReady: true`) |
 
-**Revenue is blocked** while ST-01 (empty links) or ST-02 (demo on) remain.
+`demoUnlockEnabled` already ships `false`; leave it that way in anything public.
+
+**Checkout stays closed** until steps 4–7 are done: `startCheckout()` refuses with
+`mode: "verification_unavailable"` when links exist but entitlements cannot be verified,
+so nobody pays for an account we cannot switch to Pro.
 
 ---
 
@@ -37,9 +43,22 @@
 | Layer | Behavior | Trust level |
 |-------|----------|-------------|
 | Hosted checkout | Card data never hits our origin (PCI SAQ-A style) | High (provider) |
-| Return URL `?billing=success` | Client marks Pro in `localStorage` | **Soft** (forgeable without webhooks) |
-| `session_id` on return | Required when `demoUnlockEnabled: false` | Soft mitigation |
-| Webhook Worker (optional) | Verifies `Stripe-Signature`; source of truth | **Hard** |
+| Provider webhook → `workers/entitlements/` | Signature verified, entitlement stored in KV | **Hard** (source of truth) |
+| Return URL `?billing=success&session_id=…` | Starts a license claim; grants nothing by itself | Hint only |
+| License token (ES256, ≤72h) | Browser verifies the signature against `verification.publicKeyJwk` | **Hard** |
+| `localStorage` entitlement record | Plan/provider for the UI; ignored unless a valid license backs it | None |
+| Local free trial | Opt-in, per browser, no payment involved | Local by design |
+
+Flow:
+
+```
+Stripe / Mercado Pago checkout
+  → signed webhook → worker verifies → entitlement in KV
+  → browser returns with session_id → POST /v1/claim → signed license token
+  → js/license.js verifies signature, iss, aud, exp, status
+  → VTBilling.getEntitlement() reports Pro
+  → token re-fetched every 24h → cancel / dunning / revocation land within a day
+```
 
 **Never** put `sk_live_…` or `whsec_…` in client JavaScript.
 
@@ -171,6 +190,9 @@ pending → same as success or a “pending” page (soft Pro only after approve
 
 ## Runtime API (browser)
 
+`VTBilling.startTrial()` · `canStartTrial()` · `verificationConfigured()` · `getLicenseStatus()` · `refreshLicense()`
+`VTLicense.claim({provider, sessionId})` · `refresh()` · `verifyToken(token)` · `getStatus()`
+
 ```js
 VTBilling.getEntitlement()     // { pro, plan, status, source, expiresAt, … }
 VTBilling.isPro()
@@ -216,11 +238,34 @@ VTBilling.trialDaysLeft()
 |--------|------------|
 | Open redirect on checkout | HTTPS + host allowlist |
 | Plan id injection | Allowlist `pro_monthly` / `pro_yearly` |
-| Forge `?billing=success` | Require `session_id` when demo off; **still soft** |
-| Stolen Pro (localStorage) | Soft product; webhook + account for hard control |
-| Secret key leak | Never ship secrets in SPA |
+| Forge `?billing=success` | Return URL grants nothing; a license must be claimed and verified |
+| Hand-write `vt_billing_v1` in localStorage | Ignored — Pro needs a token signed by the worker's key |
+| Copy a license token to another browser | Works until it expires (≤72h); the license id can be revoked server-side |
+| Replayed / spoofed webhook | `Stripe-Signature` and MP `x-signature` verified over the raw body, 300s window, idempotent by event id |
+| Spoofed Mercado Pago notification body | Body is never trusted; state is re-read from the MP API |
+| Secret key leak | Secrets live only in worker bindings, never in the SPA |
 
-**Production upgrade path:** Cloudflare Worker webhook → verify signature → issue license / store status → client redeems. See `workers/stripe-webhook/README.md`.
+**What this does not fix:** every Pro feature is computed in the browser, so someone
+running devtools on their own machine can still reach them. The point of the server
+check is that entitlements cannot be *forged, shared, or kept after cancellation* —
+not that a static site becomes tamper-proof. Anything that must be truly protected
+has to move behind the worker.
+
+**If the webhook is slow:** the return page claims the license with a short
+retry, and if that runs out the pending record is retried on every later visit
+for 7 days before the site gives up and shows "payment not confirmed". A customer
+who paid and closed the tab therefore gets Pro on their next visit without doing
+anything. Delayed-payment methods (bank debit, boleto) sit in that pending state
+until the provider confirms the payment.
+
+**If the worker is unreachable:** the browser keeps the token it already holds
+until that token expires (≤72h), then drops to free. A paying customer therefore
+survives a short outage; a longer one costs them Pro until the worker is back.
+Raise `verification.revalidateHours` / the worker's `LICENSE_TTL_SECONDS` to widen
+that cushion, at the cost of cancellations taking longer to bite.
+
+`verification.required: false` turns all of this off and goes back to the old
+forgeable behaviour. `getBillingHealth()` reports it as an issue.
 
 ---
 
@@ -254,10 +299,16 @@ Local “Clear Pro” remains internal-admin only (not a cancel path).
 
 | Flag | Effect |
 |------|--------|
-| `demoUnlockEnabled: true` | Empty links → demo Pro; success URL works without session_id |
-| `demoUnlockEnabled: false` | Real links required; success needs session_id |
+| `demoUnlockEnabled: false` (shipped) | No demo button, internal accounts get no Pro, checkout needs a verified license |
+| `demoUnlockEnabled: true` | Local QA build: demo Pro button, internal auth accounts carry Pro |
+| `verification.required: false` | Legacy soft mode — the `?billing=success` return activates Pro directly (forgeable) |
+| `trialRequiresOptIn: false` | Trial clock starts on first visit again (every browser silently Pro) |
 
-Internal auth can force Pro for testers (`docs/11-AUTH-AND-HARDENING.md`).
+Playwright uses neither switch in the shipped code: `tests/helpers/billing.js` either
+mints a real ES256 license with a throwaway keypair or flips `demoUnlockEnabled` for
+the page under test.
+
+Internal auth can force Pro for testers in QA builds only (`docs/11-AUTH-AND-HARDENING.md`).
 
 ---
 
@@ -291,7 +342,8 @@ See `markets[]` in `billing-config.js` (PE→MP, US/EU→Stripe, …).
 |------|---------|
 | `js/billing-config.js` | Plans, links, flags |
 | `js/billing.js` | Entitlement engine |
-| `workers/stripe-webhook/` | Optional hard verification |
+| `js/license.js` | License token verification + refresh |
+| `workers/entitlements/` | Webhooks, entitlement store, license signing |
 | `docs/16-…ORCHESTRATION.md` | Full technical audit |
 | `docs/SUBSCRIPTION-TECH-GAP-REGISTRY.md` | Living gaps |
 | `tests/billing.spec.js` | Regression |
@@ -300,9 +352,9 @@ See `markets[]` in `billing-config.js` (PE→MP, US/EU→Stripe, …).
 
 ## Recommended sequence
 
-1. Live Stripe links + success URL with `session_id`  
-2. Activate Customer Portal login link → `customerPortalUrl`  
-3. `demoUnlockEnabled: false`  
-4. Live MP for PE  
-5. Webhook Worker for renewals/cancels  
+1. Deploy `workers/entitlements/` + keys → `verification.apiBaseUrl` / `publicKeyJwk`  
+2. Live Stripe links + success URL with `session_id`, webhook endpoint registered  
+3. Activate Customer Portal login link → `customerPortalUrl`  
+4. Live MP for PE (webhook endpoint + access token)  
+5. Watch `getBillingHealth()` and the worker's 400-rate on signature failures  
 6. Evaluate MoR (Paddle/Lemon Squeezy) if tax ops exceed bandwidth  

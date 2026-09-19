@@ -4,16 +4,19 @@
  * Architecture (current, non-deprecated):
  * - Checkout: Stripe Payment Links + Mercado Pago subscription/checkout links
  *   (no card data on origin — PCI SAQ-A). Official: https://docs.stripe.com/payment-links
- * - Soft entitlement: localStorage (browser-scoped). Suitable for early revenue on
- *   static hosts; NOT a hard anti-piracy control.
- * - Hard verification (recommended at scale): serverless webhook verifies
- *   Stripe-Signature, then issues/stores license. Template: workers/stripe-webhook/
+ * - Entitlement: decided by workers/entitlements/, which verifies the provider
+ *   webhook signature and issues a short-lived ES256 license token. The browser
+ *   verifies that signature (js/license.js) before granting Pro.
+ * - localStorage still carries plan/provider for the UI, but on its own it grants
+ *   nothing: `verification.required` makes an unsigned "paid" record worthless.
  *
  * Security notes:
  * - Never put secret keys in client JS.
- * - Return-URL activation is soft; forgeable without server verification.
- * - When demoUnlockEnabled is false, require session_id/payment_id on success return
- *   (still soft — pair with webhooks for production trust).
+ * - A ?billing=success return is only a hint: it starts a license claim, it does
+ *   not grant Pro.
+ * - Demo unlock and internal-account Pro are QA switches, off in public builds.
+ * - Honest limit: every Pro feature here runs in the browser, so devtools can
+ *   still reach them. This closes forged and shared entitlements, not devtools.
  */
 (function (global) {
   "use strict";
@@ -21,7 +24,9 @@
   const LS_KEY = "vt_billing_v1";
   const TRIAL_KEY = "vt_billing_trial_started_v1";
   const PLAN_IDS = new Set(["pro_monthly", "pro_yearly", "trial"]);
-  const PROVIDER_IDS = new Set(["stripe", "mercadopago", "demo", "internal"]);
+  const PROVIDER_IDS = new Set(["stripe", "mercadopago", "demo", "internal", "auth"]);
+  /** Sources that unlock Pro without payment — QA only, gated by demoUnlockEnabled. */
+  const OVERRIDE_SOURCES = new Set(["demo", "internal_account"]);
 
   /** Default hosts allowed for checkout redirects (override via config.allowedCheckoutHosts). */
   const DEFAULT_CHECKOUT_HOSTS = [
@@ -107,14 +112,27 @@
     return Date.now();
   }
 
-  function ensureTrial() {
-    let started = null;
+  function trialRequiresOptIn() {
+    return cfg().trialRequiresOptIn !== false;
+  }
+
+  function trialStartedAt() {
     try {
-      started = localStorage.getItem(TRIAL_KEY);
+      return localStorage.getItem(TRIAL_KEY);
     } catch {
-      started = null;
+      return null;
     }
-    if (!started) {
+  }
+
+  /**
+   * Trial clock. With `trialRequiresOptIn` (the default) it only starts when the
+   * visitor asks for it — otherwise every fresh browser would silently be Pro.
+   * @param {boolean} [start] start the clock when it has never run
+   * @returns {string|null} ISO start time, or null while unstarted
+   */
+  function ensureTrial(start) {
+    let started = trialStartedAt();
+    if (!started && (start === true || !trialRequiresOptIn())) {
       started = new Date().toISOString();
       try {
         localStorage.setItem(TRIAL_KEY, started);
@@ -125,19 +143,47 @@
     return started;
   }
 
+  /** True when a checkout is still waiting on its license and can be retried. */
+  function hasPendingClaim() {
+    const st = read();
+    return !!(st && (st.status === "pending" || st.status === "unclaimed") && st.sessionId);
+  }
+
+  /** True when this browser still has its one free trial. */
+  function canStartTrial() {
+    return Number(cfg().freeTrialDays || 0) > 0 && !trialStartedAt();
+  }
+
+  /**
+   * Start the local free trial (explicit opt-in).
+   * @returns {{ ok: boolean, reason?: string, endsAt?: string|null }}
+   */
+  function startTrial() {
+    if (!Number(cfg().freeTrialDays || 0)) return { ok: false, reason: "disabled" };
+    if (trialStartedAt()) {
+      return trialActive()
+        ? { ok: true, reason: "already_active", endsAt: trialEndsAt() }
+        : { ok: false, reason: "used" };
+    }
+    ensureTrial(true);
+    emit();
+    return { ok: true, endsAt: trialEndsAt() };
+  }
+
   function trialActive() {
     const days = Number(cfg().freeTrialDays || 0);
     if (!days) return false;
     const started = ensureTrial();
+    if (!started) return false;
     const t0 = Date.parse(started);
     if (!Number.isFinite(t0)) return false;
-    const end = t0 + days * 86400000;
-    return nowMs() < end;
+    return nowMs() < t0 + days * 86400000;
   }
 
   function trialEndsAt() {
     const days = Number(cfg().freeTrialDays || 0);
     const started = ensureTrial();
+    if (!started) return null;
     const t0 = Date.parse(started);
     if (!Number.isFinite(t0)) return null;
     return new Date(t0 + days * 86400000).toISOString();
@@ -150,56 +196,111 @@
     return Math.max(0, Math.ceil((Date.parse(end) - nowMs()) / 86400000));
   }
 
+  /** Server verification is the rule unless an operator deliberately turns it off. */
+  function verificationRequired() {
+    return (cfg().verification || {}).required !== false;
+  }
+
+  /** True once the entitlements worker URL and its public key are both configured. */
+  function verificationConfigured() {
+    try {
+      return !!global.VTLicense?.isConfigured?.();
+    } catch {
+      return false;
+    }
+  }
+
+  /** QA-only switch: demo / internal-account Pro without payment. Off in public builds. */
+  function localOverridesAllowed() {
+    return !!cfg().demoUnlockEnabled;
+  }
+
+  /** Verified license claims from the entitlements worker, or null. */
+  function licenseClaims() {
+    try {
+      const claims = global.VTLicense?.getClaims?.() || null;
+      if (!claims) return null;
+      return PLAN_IDS.has(claims.plan) && claims.plan !== "trial" ? claims : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function getLicenseStatus() {
+    try {
+      return global.VTLicense?.getStatus?.() || null;
+    } catch {
+      return null;
+    }
+  }
+
   /**
-   * Active entitlement: paid | trial | demo | free
+   * Active entitlement, in priority order:
+   *   1. a server-signed license — the only thing that counts as paid
+   *   2. a QA override (demo / internal account) while demoUnlockEnabled is on
+   *   3. an opted-in local trial
+   *   4. free — including a stored "paid" record we could not verify
+   * @returns {{ tier: string, plan: string, source: string, pro: boolean, status: string }}
    */
   function getEntitlement() {
     const st = read();
-    if (st && st.status === "active" && st.plan && st.plan !== "free") {
-      if (st.expiresAt && Date.parse(st.expiresAt) < nowMs()) {
-        return {
-          tier: "free",
-          plan: "free",
-          source: "expired",
-          pro: false,
-          status: "expired",
-          raw: st
-        };
-      }
-      // Demo only when flag still enabled
-      if (st.source === "demo" && !cfg().demoUnlockEnabled) {
-        return {
-          tier: "free",
-          plan: "free",
-          source: "demo_disabled",
-          pro: false,
-          status: "free",
-          raw: st
-        };
-      }
+    const claims = licenseClaims();
+    if (claims) {
       return {
         tier: "pro",
-        plan: st.plan,
-        source: st.source || "paid",
-        pro: true,
-        status: st.source === "trial" ? "trial" : "active",
-        provider: st.provider || null,
-        region: st.region || detectRegion(),
-        expiresAt: st.expiresAt || null,
-        sessionId: st.sessionId || null,
-        raw: st
-      };
-    }
-    if (cfg().demoUnlockEnabled && st && st.source === "demo" && st.status === "active") {
-      return {
-        tier: "pro",
-        plan: st.plan || "pro_monthly",
-        source: "demo",
+        plan: claims.plan,
+        source: "license",
         pro: true,
         status: "active",
+        // "past_due" / "canceled" still carry access to the end of the paid
+        // period; the token's own expiry is what ends it.
+        licenseStatus: claims.status,
+        verified: true,
+        provider: claims.provider || st?.provider || null,
+        region: st?.region || detectRegion(),
+        expiresAt: claims.periodEnd ? new Date(claims.periodEnd * 1000).toISOString() : null,
+        licenseExpiresAt: claims.exp ? new Date(claims.exp * 1000).toISOString() : null,
+        sessionId: st?.sessionId || null,
         raw: st
       };
     }
+
+    const active = st && st.status === "active" && st.plan && st.plan !== "free" ? st : null;
+    const expired = !!(active && active.expiresAt && Date.parse(active.expiresAt) < nowMs());
+
+    if (active && !expired && OVERRIDE_SOURCES.has(active.source) && localOverridesAllowed()) {
+      return {
+        tier: "pro",
+        plan: active.plan,
+        source: active.source,
+        pro: true,
+        status: "active",
+        verified: false,
+        provider: active.provider || null,
+        region: active.region || detectRegion(),
+        expiresAt: active.expiresAt || null,
+        raw: active
+      };
+    }
+
+    if (active && !expired && !verificationRequired()) {
+      // Operator opted out of server checks: the local record is taken at face
+      // value, forgeable and all. Off by default.
+      return {
+        tier: "pro",
+        plan: active.plan,
+        source: active.source || "paid",
+        pro: true,
+        status: "active",
+        verified: !!active.verified,
+        provider: active.provider || null,
+        region: active.region || detectRegion(),
+        expiresAt: active.expiresAt || null,
+        sessionId: active.sessionId || null,
+        raw: active
+      };
+    }
+
     if (trialActive()) {
       return {
         tier: "pro",
@@ -207,10 +308,46 @@
         source: "trial",
         pro: true,
         status: "trial",
+        verified: false,
         expiresAt: trialEndsAt(),
         raw: st
       };
     }
+
+    if (expired) {
+      return { tier: "free", plan: "free", source: "expired", pro: false, status: "expired", raw: st };
+    }
+
+    // A paid-looking local record with no verified license behind it.
+    const unverified = active && !OVERRIDE_SOURCES.has(active.source);
+    if (unverified || st?.status === "pending" || st?.status === "unclaimed") {
+      const licenseState = getLicenseStatus()?.state;
+      const waiting =
+        st?.status !== "unclaimed" && (licenseState === "checking" || st?.status === "pending");
+      return {
+        tier: "free",
+        plan: "free",
+        source: (st && st.source) || "checkout_return",
+        pro: false,
+        status: waiting ? "pending" : "unverified",
+        verified: false,
+        awaitingVerification: !!waiting,
+        plannedPlan: (st && st.plan) || null,
+        raw: st
+      };
+    }
+
+    if (active && OVERRIDE_SOURCES.has(active.source)) {
+      return {
+        tier: "free",
+        plan: "free",
+        source: active.source === "demo" ? "demo_disabled" : "override_disabled",
+        pro: false,
+        status: "free",
+        raw: st
+      };
+    }
+
     return {
       tier: "free",
       plan: "free",
@@ -255,6 +392,7 @@
     return state;
   }
 
+  /** QA unlock. No-op unless demoUnlockEnabled is on, which public builds do not set. */
   function activateDemo(planId) {
     if (!cfg().demoUnlockEnabled) return null;
     return activate(planId || "pro_monthly", { source: "demo", provider: "demo" });
@@ -263,6 +401,11 @@
   function clearEntitlement() {
     try {
       localStorage.removeItem(LS_KEY);
+    } catch {
+      /* ignore */
+    }
+    try {
+      global.VTLicense?.clear?.();
     } catch {
       /* ignore */
     }
@@ -312,14 +455,25 @@
     } else {
       issues.push("customerPortalUrl empty — customers cannot self-serve cancel/update");
     }
-    // ok = minimum for real checkout (links live, demo off). Portal is recommended, not required.
+    const verifyRequired = verificationRequired();
+    const verifyReady = verificationConfigured();
+    if (!verifyRequired) {
+      issues.push("verification.required is false — entitlements are forgeable");
+    } else if (!verifyReady) {
+      issues.push(
+        "Entitlement worker not configured (verification.apiBaseUrl / publicKeyJwk) — checkout stays closed"
+      );
+    }
+    // ok = safe to take real money: links live, demo off, entitlements server-checked.
     // productionReady = ok + portal for self-serve cancel (Stripe).
-    const ok = !demoUnlock && links;
+    const ok = !demoUnlock && links && verifyRequired && verifyReady;
     return {
       ok,
       productionReady: ok && portalOk,
       demoUnlock,
       links,
+      verificationRequired: verifyRequired,
+      verificationConfigured: verifyReady,
       stripeConfigured: !stripeEmpty,
       mercadopagoConfigured: !mpEmpty,
       portalConfigured: portalOk,
@@ -416,6 +570,11 @@
     }
     const url = checkoutUrl(planId, providerId);
     if (url) {
+      if (verificationRequired() && !verificationConfigured()) {
+        // Never send someone to pay when we cannot turn that payment into a
+        // verifiable entitlement — they would come back to a free account.
+        return { ok: false, mode: "verification_unavailable", message: null };
+      }
       try {
         sessionStorage.setItem(
           "vt_billing_intent",
@@ -442,6 +601,85 @@
       message:
         "Checkout isn’t available yet. Keep practicing free."
     };
+  }
+
+  /** How long we keep retrying a checkout whose webhook never showed up. */
+  const PENDING_CLAIM_MAX_AGE_MS = 7 * 86400000;
+  /**
+   * Answers that mean "this checkout will never become a license": the payment
+   * failed or the entitlement behind it is over. Anything else (a 202 while a
+   * delayed payment settles, a network error) is worth retrying.
+   */
+  const TERMINAL_CLAIM_REASONS = new Set(["inactive", "not_found"]);
+
+  /**
+   * Ask the worker for the license behind a checkout, and store it on success.
+   * @param {{plan: string, provider: string, sessionId: string}} intent
+   * @returns {Promise<{ok: boolean, reason?: string, claims?: object}>}
+   */
+  function claimLicense(intent) {
+    const plan = intent.plan;
+    const provider = intent.provider;
+    const sessionId = intent.sessionId;
+    return global.VTLicense.claim({ provider, sessionId })
+      .then((res) => {
+        if (res.ok) {
+          write({
+            status: "active",
+            plan: res.claims?.plan || plan,
+            provider: res.claims?.provider || provider,
+            region: detectRegion(),
+            source: "license",
+            activatedAt: new Date().toISOString(),
+            expiresAt: res.claims?.periodEnd
+              ? new Date(res.claims.periodEnd * 1000).toISOString()
+              : null,
+            sessionId: sessionId ? String(sessionId).slice(0, 128) : null,
+            verified: true
+          });
+        }
+        if (!res.ok && TERMINAL_CLAIM_REASONS.has(res.reason)) {
+          const st = read();
+          if (st && (st.status === "pending" || st.status === "unclaimed")) {
+            write({ ...st, status: "unclaimed", claimReason: res.reason });
+          }
+        }
+        emit();
+        return res;
+      })
+      .catch(() => {
+        emit();
+        return { ok: false, reason: "error" };
+      });
+  }
+
+  /**
+   * Pick up a checkout whose license never arrived. The webhook can land after
+   * the return page has given up (or while the customer was offline), and the
+   * URL parameters are gone by then — so the pending record is what we retry
+   * from, on every load, until it succeeds or gets too old to be worth it.
+   * @returns {Promise<{ok: boolean, reason?: string}>|null}
+   */
+  function resumePendingClaim(options) {
+    const force = !!(options && options.force);
+    const st = read();
+    const claimable = st && (st.status === "pending" || (force && st.status === "unclaimed"));
+    if (!claimable || !st.sessionId || !st.provider) return null;
+    if (!verificationRequired() || !verificationConfigured()) return null;
+    if (licenseClaims()) {
+      // A license already landed; the pending record is stale bookkeeping.
+      write({ ...st, status: "superseded" });
+      return null;
+    }
+    const startedAt = Date.parse(st.activatedAt || "");
+    if (!force && Number.isFinite(startedAt) && nowMs() - startedAt > PENDING_CLAIM_MAX_AGE_MS) {
+      // Stop retrying forever; the UI drops to "not confirmed" and the customer
+      // can contact support with their receipt.
+      write({ ...st, status: "unclaimed" });
+      emit();
+      return null;
+    }
+    return claimLicense({ plan: st.plan, provider: st.provider, sessionId: st.sessionId });
   }
 
   /**
@@ -499,14 +737,41 @@
         };
       }
 
-      activate(plan, {
+      if (!verificationRequired()) {
+        // Operator opted out of server checks: legacy soft (forgeable) activation.
+        activate(plan, { provider, source: "checkout_return", sessionId, verified: false });
+        cleanUrlParams();
+        return { event: "success", plan, provider, sessionId, soft: true, verified: false };
+      }
+
+      // The return URL proves nothing. Record the intent, then ask the worker for
+      // a signed license — Pro turns on only when that signature verifies.
+      write({
+        status: "pending",
+        plan,
         provider,
+        region: detectRegion(),
         source: "checkout_return",
-        sessionId,
+        activatedAt: new Date().toISOString(),
+        expiresAt: null,
+        sessionId: sessionId ? String(sessionId).slice(0, 128) : null,
         verified: false
       });
+      const claiming = verificationConfigured()
+        ? claimLicense({ plan, provider, sessionId })
+        : null;
+      emit();
       cleanUrlParams();
-      return { event: "success", plan, provider, sessionId, soft: true };
+      return {
+        event: "success",
+        plan,
+        provider,
+        sessionId,
+        soft: false,
+        verified: false,
+        pendingVerification: true,
+        claiming
+      };
     }
     return null;
   }
@@ -658,8 +923,30 @@
     return JSON.stringify(payload, null, 2);
   }
 
-  // Start trial clock early (local soft trial)
-  ensureTrial();
+  // No auto-start: the trial clock only runs once the visitor opts in (startTrial).
+  // A license landing, refreshing or being revoked moves the entitlement.
+  // A paid checkout whose webhook was slow must not strand the customer, but
+  // wait for the stored token to be checked first so we do not claim twice.
+  let resumeAttempted = false;
+  function maybeResumePendingClaim() {
+    if (resumeAttempted) return;
+    if (getLicenseStatus()?.state === "checking") return;
+    resumeAttempted = true;
+    try {
+      resumePendingClaim();
+    } catch {
+      /* ignore */
+    }
+  }
+  try {
+    global.VTLicense?.onChange?.(() => {
+      emit();
+      maybeResumePendingClaim();
+    });
+  } catch {
+    /* ignore */
+  }
+  maybeResumePendingClaim();
 
   global.VTBilling = {
     cfg,
@@ -678,12 +965,21 @@
     linksConfigured,
     getBillingHealth,
     handleReturnFromCheckout,
+    resumePendingClaim,
+    hasPendingClaim,
     formatPrice,
     exportProgressJson,
     onChange,
     trialEndsAt,
     trialActive,
     trialDaysLeft,
+    trialStartedAt,
+    canStartTrial,
+    startTrial,
+    verificationRequired,
+    verificationConfigured,
+    getLicenseStatus,
+    refreshLicense: () => global.VTLicense?.refresh?.() || Promise.resolve({ ok: false }),
     DEFAULT_CHECKOUT_HOSTS,
     openCustomerPortal,
     isPortalUrl

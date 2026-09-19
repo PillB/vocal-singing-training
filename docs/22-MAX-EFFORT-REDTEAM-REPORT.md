@@ -75,7 +75,7 @@ Prior locks also green in redteam script: Space assist, hit-targets, SH air, bil
 
 | ID | Sev | Agent | Finding | Status |
 |----|-----|-------|---------|--------|
-| F1 | **P1 accepted** | Zuck | **Soft Pro entitlement is forgeable** via `localStorage` (`vt_billing_v1`). Expected on static GH Pages without webhook verification. | **Accept** — document; harden with Worker webhook when revenue matters (`workers/stripe-webhook`) |
+| F1 | **P1 closed 2026-09-19** | Zuck | **Soft Pro entitlement is forgeable** via `localStorage` (`vt_billing_v1`). Expected on static GH Pages without webhook verification. | **Fixed** — entitlements are now server-signed licenses from `workers/entitlements/`, verified in `js/license.js`; a hand-written record grants nothing |
 | F2 | P2 | Zuck | `innerHTML` for guide steps/tips/mistakes | **Fixed 2026-07-17** — `escapeHtml()` on catalog strings; history audio via `createElement` |
 | F3 | P2 | Musk | Metrics form often **collapsed** after Stop — easy to miss for learners. | **Fixed 2026-07-17** — `openMetricsPanel(true)` on non-silent `stopPractice` |
 | F4 | P0 fixed earlier | Both | Space activated focused Start/Stop; SH silence free-run | Fixed in `63bd484` + locked by tests |

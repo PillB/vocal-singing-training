@@ -1,7 +1,19 @@
 /**
  * Subscription / billing regression — rails, entitlement, pricing overlay.
+ *
+ * The shipped build unlocks Pro only for a license signed by the entitlements
+ * worker, so anything that needs Pro here either mints a real signed token or
+ * switches on the QA unlock explicitly (tests/helpers/billing.js).
  */
 const { test, expect } = require("@playwright/test");
+const {
+  mintLicense,
+  tamperToken,
+  patchBillingConfig,
+  enableQaPro,
+  installLicense,
+  waitForLicenseState
+} = require("./helpers/billing");
 
 const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";
 
@@ -12,6 +24,8 @@ async function boot(page) {
       localStorage.setItem("vt_lang", "es");
       sessionStorage.setItem("vt_e2e", "1");
       localStorage.removeItem("vt_billing_v1");
+      localStorage.removeItem("vt_billing_trial_started_v1");
+      localStorage.removeItem("vt_license_v1");
     } catch {
       /* ignore */
     }
@@ -28,6 +42,7 @@ test.describe("Billing & subscriptions", () => {
       return {
         hasConfig: !!c,
         hasBilling: !!B,
+        hasLicense: !!window.VTLicense,
         plans: (c?.plans || []).map((p) => p.id),
         markets: (c?.markets || []).map((m) => m.code),
         hasStripe: !!c?.providers?.stripe,
@@ -38,12 +53,161 @@ test.describe("Billing & subscriptions", () => {
     });
     expect(info.hasConfig).toBe(true);
     expect(info.hasBilling).toBe(true);
+    expect(info.hasLicense).toBe(true);
     expect(info.plans).toEqual(expect.arrayContaining(["free", "pro_monthly", "pro_yearly"]));
     expect(info.markets).toEqual(expect.arrayContaining(["PE", "US", "ES", "GB", "MX", "DE", "BR"]));
     expect(info.hasStripe).toBe(true);
     expect(info.hasMp).toBe(true);
     expect(info.pe?.rail).toBe("mercadopago");
     expect(info.us?.rail).toBe("stripe");
+  });
+
+  test("shipped config hands out nothing for free", async ({ page }) => {
+    await boot(page);
+    const r = await page.evaluate(() => {
+      const c = window.VT_BILLING_CONFIG;
+      const e = VTBilling.getEntitlement();
+      return {
+        demoUnlockEnabled: c.demoUnlockEnabled,
+        verificationRequired: VTBilling.verificationRequired(),
+        verificationConfigured: VTBilling.verificationConfigured(),
+        trialRequiresOptIn: c.trialRequiresOptIn,
+        trialStarted: VTBilling.trialStartedAt(),
+        canStartTrial: VTBilling.canStartTrial(),
+        pro: e.pro,
+        status: e.status,
+        canExport: VTBilling.can("export_progress"),
+        demoNoop: VTBilling.activateDemo("pro_monthly")
+      };
+    });
+    expect(r.demoUnlockEnabled).toBe(false);
+    expect(r.verificationRequired).toBe(true);
+    expect(r.verificationConfigured).toBe(false);
+    expect(r.trialRequiresOptIn).toBe(true);
+    // No trial clock starts on its own — a fresh browser is plain free.
+    expect(r.trialStarted).toBeFalsy();
+    expect(r.canStartTrial).toBe(true);
+    expect(r.pro).toBe(false);
+    expect(r.status).toBe("free");
+    expect(r.canExport).toBe(false);
+    expect(r.demoNoop).toBeNull();
+  });
+
+  test("forged localStorage entitlement does not grant Pro", async ({ page }) => {
+    await page.addInitScript(() => {
+      try {
+        localStorage.setItem("vt_tour_v1", "1");
+        sessionStorage.setItem("vt_e2e", "1");
+        localStorage.removeItem("vt_billing_trial_started_v1");
+        localStorage.setItem(
+          "vt_billing_v1",
+          JSON.stringify({
+            status: "active",
+            plan: "pro_yearly",
+            provider: "stripe",
+            source: "paid",
+            verified: true,
+            activatedAt: new Date().toISOString(),
+            expiresAt: new Date(Date.now() + 365 * 86400000).toISOString()
+          })
+        );
+        // A forged license token is not signed by the configured key either.
+        localStorage.setItem(
+          "vt_license_v1",
+          JSON.stringify({ licenseId: "lic_forged", token: "aaa.bbb.ccc" })
+        );
+      } catch {
+        /* ignore */
+      }
+    });
+    await page.goto(BASE, { waitUntil: "domcontentloaded" });
+    const r = await page.evaluate(() => {
+      const e = VTBilling.getEntitlement();
+      return { pro: e.pro, status: e.status, canExport: VTBilling.can("export_progress") };
+    });
+    expect(r.pro).toBe(false);
+    expect(["unverified", "pending"]).toContain(r.status);
+    expect(r.canExport).toBe(false);
+    await expect(page.locator("#btn-export-progress")).toBeHidden();
+  });
+
+  test("worker-signed license unlocks Pro and survives reload", async ({ page }) => {
+    const license = await mintLicense({ origin: BASE, plan: "pro_yearly" });
+    await boot(page);
+    await installLicense(page, license);
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await waitForLicenseState(page, "ok");
+    const r = await page.evaluate(() => {
+      const e = VTBilling.getEntitlement();
+      return {
+        pro: e.pro,
+        plan: e.plan,
+        source: e.source,
+        verified: e.verified,
+        canExport: VTBilling.can("export_progress")
+      };
+    });
+    expect(r.pro).toBe(true);
+    expect(r.plan).toBe("pro_yearly");
+    expect(r.source).toBe("license");
+    expect(r.verified).toBe(true);
+    expect(r.canExport).toBe(true);
+    await expect(page.locator("#billing-pill")).toContainText(/Pro/i);
+
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await waitForLicenseState(page, "ok");
+    expect(await page.evaluate(() => VTBilling.isPro())).toBe(true);
+  });
+
+  test("tampered, expired and wrong-audience licenses are rejected", async ({ page }) => {
+    const license = await mintLicense({ origin: BASE });
+    await boot(page);
+    await installLicense(page, license);
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await waitForLicenseState(page, "ok");
+
+    const results = await page.evaluate(
+      async ({ tampered, expired, wrongAud, other }) => {
+        const check = async (token) => !!(await VTLicense.verifyToken(token));
+        return {
+          tampered: await check(tampered),
+          expired: await check(expired),
+          wrongAud: await check(wrongAud),
+          otherKey: await check(other),
+          garbage: await check("not-a-token")
+        };
+      },
+      {
+        tampered: tamperToken(license.token, { plan: "pro_yearly" }),
+        // Same trusted key, but the claims themselves must still hold up.
+        expired: await license.sign({
+          ...license.claims,
+          iat: license.claims.iat - 100000,
+          exp: license.claims.iat - 90000
+        }),
+        wrongAud: await license.sign({ ...license.claims, aud: "https://evil.example" }),
+        other: (await mintLicense({ origin: BASE })).token
+      }
+    );
+    expect(results.tampered).toBe(false);
+    expect(results.expired).toBe(false);
+    expect(results.wrongAud).toBe(false);
+    // Signed by a different keypair than the one this page trusts.
+    expect(results.otherKey).toBe(false);
+    expect(results.garbage).toBe(false);
+  });
+
+  test("cancelled license stops Pro on the next check", async ({ page }) => {
+    const license = await mintLicense({ origin: BASE, status: "canceled" });
+    await boot(page);
+    await installLicense(page, license);
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await waitForLicenseState(page, "invalid");
+    const r = await page.evaluate(() => {
+      const e = VTBilling.getEntitlement();
+      return { pro: e.pro, status: e.status };
+    });
+    expect(r.pro).toBe(false);
   });
 
   test("pricing modal opens from header without leaving home", async ({ page }) => {
@@ -59,7 +223,14 @@ test.describe("Billing & subscriptions", () => {
     await expect(page.locator("#view-home")).toHaveClass(/active/);
   });
 
-  test("demo Pro unlock enables export feature flag", async ({ page }) => {
+  test("demo unlock button is hidden in a public build", async ({ page }) => {
+    await boot(page);
+    await page.click("#btn-pricing");
+    await expect(page.locator("#btn-demo-pro")).toBeHidden();
+  });
+
+  test("QA builds can still demo-unlock Pro", async ({ page }) => {
+    await enableQaPro(page);
     await boot(page);
     await page.click("#btn-pricing");
     await page.click("#btn-demo-pro");
@@ -74,7 +245,52 @@ test.describe("Billing & subscriptions", () => {
     await expect(page.locator("#btn-export-progress")).toBeVisible();
   });
 
-  test("checkout return URL activates entitlement", async ({ page }) => {
+  test("free trial is opt-in", async ({ page }) => {
+    await boot(page);
+    const before = await page.evaluate(() => VTBilling.getEntitlement());
+    expect(before.pro).toBe(false);
+    expect(before.status).toBe("free");
+
+    await page.click("#btn-pricing");
+    await expect(page.locator("#btn-start-trial")).toBeVisible();
+    await page.click("#btn-start-trial");
+
+    const after = await page.evaluate(() => ({
+      ent: VTBilling.getEntitlement(),
+      daysLeft: VTBilling.trialDaysLeft(),
+      canStartAgain: VTBilling.canStartTrial()
+    }));
+    expect(after.ent.pro).toBe(true);
+    expect(after.ent.status).toBe("trial");
+    expect(after.daysLeft).toBeGreaterThan(0);
+    expect(after.canStartAgain).toBe(false);
+    await expect(page.locator("#btn-start-trial")).toBeHidden();
+  });
+
+  test("checkout return waits for the worker instead of granting Pro", async ({ page }) => {
+    await page.addInitScript(() => {
+      try {
+        localStorage.setItem("vt_tour_v1", "1");
+        sessionStorage.setItem("vt_e2e", "1");
+        localStorage.removeItem("vt_billing_v1");
+        localStorage.removeItem("vt_billing_trial_started_v1");
+      } catch {
+        /* ignore */
+      }
+    });
+    await page.goto(
+      `${BASE}/?billing=success&plan=pro_yearly&provider=stripe&session_id=cs_test_fake`,
+      { waitUntil: "domcontentloaded" }
+    );
+    const ent = await page.evaluate(() => VTBilling.getEntitlement());
+    expect(ent.pro).toBe(false);
+    expect(["pending", "unverified"]).toContain(ent.status);
+    // URL cleaned either way
+    expect(page.url()).not.toContain("billing=success");
+  });
+
+  test("operators can opt out of verification for a soft (forgeable) return", async ({ page }) => {
+    await patchBillingConfig(page, { verification: { required: false } });
     await page.addInitScript(() => {
       try {
         localStorage.setItem("vt_tour_v1", "1");
@@ -84,14 +300,49 @@ test.describe("Billing & subscriptions", () => {
         /* ignore */
       }
     });
-    await page.goto(`${BASE}/?billing=success&plan=pro_yearly&provider=stripe`, {
-      waitUntil: "domcontentloaded"
-    });
+    await page.goto(
+      `${BASE}/?billing=success&plan=pro_yearly&provider=stripe&session_id=cs_test_fake`,
+      { waitUntil: "domcontentloaded" }
+    );
     const ent = await page.evaluate(() => VTBilling.getEntitlement());
     expect(ent.pro).toBe(true);
     expect(ent.plan).toBe("pro_yearly");
-    // URL cleaned
-    expect(page.url()).not.toContain("billing=success");
+    expect(ent.verified).toBe(false);
+  });
+
+  test("checkout is held closed while entitlements cannot be verified", async ({ page }) => {
+    await patchBillingConfig(page, {
+      providers: {
+        stripe: {
+          id: "stripe",
+          label: "Stripe Checkout",
+          labelEs: "Stripe",
+          regions: ["US"],
+          links: { pro_monthly: "https://buy.stripe.com/test_live_link", pro_yearly: "" }
+        },
+        mercadopago: {
+          id: "mercadopago",
+          label: "Mercado Pago",
+          labelEs: "Mercado Pago",
+          regions: ["PE"],
+          links: { pro_monthly: "", pro_yearly: "" }
+        }
+      }
+    });
+    await boot(page);
+    const r = await page.evaluate(() => {
+      const res = VTBilling.startCheckout("pro_monthly", "stripe");
+      const h = VTBilling.getBillingHealth();
+      return { res, health: h, url: location.href, pro: VTBilling.isPro() };
+    });
+    expect(r.res.ok).toBe(false);
+    expect(r.res.mode).toBe("verification_unavailable");
+    expect(r.health.links).toBe(true);
+    expect(r.health.verificationConfigured).toBe(false);
+    expect(r.health.ok).toBe(false);
+    expect(r.pro).toBe(false);
+    // No redirect to the payment link happened
+    expect(r.url).not.toContain("buy.stripe.com");
   });
 
   test("value pulse board and pricing value stack are present", async ({ page }) => {
@@ -107,10 +358,10 @@ test.describe("Billing & subscriptions", () => {
     expect(typeof pulse.sessions).toBe("number");
   });
 
-  test("trial or free entitlement always defined", async ({ page }) => {
+  test("entitlement status is always one of the known states", async ({ page }) => {
     await boot(page);
     const e = await page.evaluate(() => VTBilling.getEntitlement());
-    expect(["free", "trial", "active", "expired"]).toContain(e.status);
+    expect(["free", "trial", "active", "expired", "pending", "unverified"]).toContain(e.status);
     expect(typeof e.pro).toBe("boolean");
   });
 
@@ -125,16 +376,20 @@ test.describe("Billing & subscriptions", () => {
     });
     expect(r.h).toBeTruthy();
     expect(Array.isArray(r.h.issues)).toBe(true);
-    // Empty links + demo on → not production-ok
+    // Empty links + no worker → not production-ok
     expect(r.h.ok).toBe(false);
     expect(r.h.productionReady).toBe(false);
     expect(r.h.portalConfigured).toBe(false);
+    expect(r.h.demoUnlock).toBe(false);
+    expect(r.h.verificationRequired).toBe(true);
+    expect(r.h.verificationConfigured).toBe(false);
     expect(r.bad.ok).toBe(false);
     expect(r.good.ok).toBe(true);
     expect(r.http.ok).toBe(false);
   });
 
   test("ad_free feature maps to Pro only", async ({ page }) => {
+    await enableQaPro(page);
     await boot(page);
     const free = await page.evaluate(() => {
       try {
@@ -168,6 +423,7 @@ test.describe("Billing & subscriptions", () => {
   });
 
   test("customer portal URL validation and manage-billing UI", async ({ page }) => {
+    await enableQaPro(page);
     await boot(page);
     const portal = await page.evaluate(() => {
       const good = VTBilling.isPortalUrl("https://billing.stripe.com/p/login/test_abc");
@@ -203,7 +459,7 @@ test.describe("Billing & subscriptions", () => {
     expect(openRes.mode).toBe("redirect");
   });
 
-  test("strict mode rejects success return without session_id", async ({ page }) => {
+  test("success return without session_id is rejected", async ({ page }) => {
     await page.addInitScript(() => {
       try {
         localStorage.setItem("vt_tour_v1", "1");
@@ -215,51 +471,26 @@ test.describe("Billing & subscriptions", () => {
     });
     await page.goto(BASE, { waitUntil: "domcontentloaded" });
     const res = await page.evaluate(() => {
-      // Simulate production flags without reloading config object permanently
-      const c = window.VT_BILLING_CONFIG;
-      const prevDemo = c.demoUnlockEnabled;
-      const prevReq = c.requireCheckoutSessionId;
-      c.demoUnlockEnabled = false;
-      c.requireCheckoutSessionId = true;
-      // Forge success params
       history.replaceState({}, "", "?billing=success&plan=pro_monthly&provider=stripe");
-      const out = VTBilling.handleReturnFromCheckout();
-      c.demoUnlockEnabled = prevDemo;
-      c.requireCheckoutSessionId = prevReq;
-      return out;
+      return VTBilling.handleReturnFromCheckout();
     });
     expect(res?.event).toBe("error");
     expect(res?.reason).toBe("missing_session");
+    expect(await page.evaluate(() => VTBilling.isPro())).toBe(false);
   });
 
-  test("strict mode accepts success with session_id", async ({ page }) => {
-    await page.addInitScript(() => {
-      try {
-        localStorage.setItem("vt_tour_v1", "1");
-        sessionStorage.setItem("vt_e2e", "1");
-        localStorage.removeItem("vt_billing_v1");
-      } catch {
-        /* ignore */
-      }
-    });
-    await page.goto(
-      `${BASE}/?billing=success&plan=pro_monthly&provider=stripe&session_id=cs_test_fake`,
-      { waitUntil: "domcontentloaded" }
-    );
-    // Force strict flags then re-handle would clean URL already on load with demo true.
-    // Explicit activate path check:
+  test("local activate() alone never grants Pro", async ({ page }) => {
+    await boot(page);
     const ent = await page.evaluate(() => {
-      const c = window.VT_BILLING_CONFIG;
-      c.demoUnlockEnabled = false;
-      c.requireCheckoutSessionId = true;
       VTBilling.activate("pro_monthly", {
         source: "checkout_return",
         provider: "stripe",
-        sessionId: "cs_test_fake"
+        sessionId: "cs_test_fake",
+        verified: true
       });
       return VTBilling.getEntitlement();
     });
-    expect(ent.pro).toBe(true);
-    expect(ent.plan).toBe("pro_monthly");
+    expect(ent.pro).toBe(false);
+    expect(["unverified", "pending"]).toContain(ent.status);
   });
 });

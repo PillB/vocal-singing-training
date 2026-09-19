@@ -3,7 +3,7 @@
 
 **Product:** Static SPA on GitHub Pages · Soft client entitlement + hosted checkout  
 **Date:** 2026-07-16  
-**Related:** [`10-SUBSCRIPTIONS.md`](./10-SUBSCRIPTIONS.md) · [`SUBSCRIPTION-TECH-GAP-REGISTRY.md`](./SUBSCRIPTION-TECH-GAP-REGISTRY.md) · `workers/stripe-webhook/`
+**Related:** [`10-SUBSCRIPTIONS.md`](./10-SUBSCRIPTIONS.md) · [`SUBSCRIPTION-TECH-GAP-REGISTRY.md`](./SUBSCRIPTION-TECH-GAP-REGISTRY.md) · `workers/entitlements/`
 
 ---
 
@@ -67,7 +67,7 @@ Map code paths for subscription, tiers, checkout, docs.
 | `js/billing.js` | Entitlement, trial, checkout, health, host allowlist, export |
 | `js/app.js` | Pricing modal, return URL handling, export dual-file |
 | `docs/10-SUBSCRIPTIONS.md` | Operator go-live |
-| `workers/stripe-webhook/` | Optional hard-verify template |
+| `workers/entitlements/` | Webhooks + entitlement store + license signing |
 | `tests/billing.spec.js` | Regression |
 
 ### Flows (as implemented)
@@ -138,7 +138,7 @@ Design stays non-deprecated (Payment Links + webhooks). No Elements/PCI expansio
 - `billing.js`: host allowlist, `validateCheckoutUrl`, `getBillingHealth`, `linksConfigured`, strict session_id when demo off, demo revoked if flag false, safer activate metadata  
 - `billing-config.js`: `requireCheckoutSessionId`, success URL with `{CHECKOUT_SESSION_ID}` documented  
 - `app.js`: toast on checkout error; health log  
-- `workers/stripe-webhook/README.md`: hard-verify path  
+- `workers/entitlements/README.md`: hard-verify path  
 - Tests: host validation, health, strict success without session  
 
 ### Code (pass 2 — ST-05 / ST-09 Customer Portal + health UI)
@@ -264,7 +264,7 @@ Confirm Payment Links + optional Worker remain the correct stack for GH Pages. O
 ### Phase 4 changes applied
 - `billing.js`: `productionReady`, MP cleanUrlParams, `ad_free` feature  
 - `10-SUBSCRIPTIONS.md`: operator one-pager + MP expansion  
-- `workers/stripe-webhook/README.md`: 2026 verify rules  
+- `workers/entitlements/README.md`: 2026 verify rules  
 - Gap registry updated  
 
 ### Phase 5 validation

@@ -12,19 +12,52 @@
     productName: "Vocal Studio Pro",
     productNameEs: "Estudio Vocal Pro",
     /**
-     * When true, all Pro features unlock without payment (local QA / demo).
-     * **Production:** set false after Payment Links are live.
+     * When true, all Pro features unlock without payment (local QA / demo only).
+     * Ships **false**: a public build must never hand out the paid tier.
      * Official Payment Links: https://docs.stripe.com/payment-links
      */
-    demoUnlockEnabled: true,
+    demoUnlockEnabled: false,
     /**
-     * When demoUnlockEnabled is false, require session_id (or payment_id) on
-     * ?billing=success return. Still a soft client gate — pair with webhooks
-     * for hard verification (see workers/stripe-webhook/ and docs/10-SUBSCRIPTIONS.md).
+     * Require session_id (or payment_id) on the ?billing=success return before we
+     * even try to claim a license. Cheap first filter; the real check is the
+     * signed license issued by workers/entitlements/.
      */
     requireCheckoutSessionId: true,
-    /** Free trial days granted once per browser (local entitlement) */
+    /**
+     * Server-checked entitlements (see workers/entitlements/ and docs/10-SUBSCRIPTIONS.md).
+     *
+     * `required: true` means a stored "paid" entitlement only counts when it is
+     * backed by a license token this site can verify against `publicKeyJwk`.
+     * Forged or copied localStorage no longer grants Pro, and cancellations stop
+     * it at the next refresh.
+     *
+     * Operator setup:
+     *   1. Deploy workers/entitlements/ and put its base URL in `apiBaseUrl`.
+     *   2. Run `node workers/entitlements/scripts/generate-keys.mjs`, keep the
+     *      private key as a worker secret, paste the public JWK below.
+     *   3. Leave `required: true`.
+     * Until apiBaseUrl and publicKeyJwk are set, checkout stays closed on purpose —
+     * we do not take money we cannot turn into a verifiable entitlement.
+     */
+    verification: {
+      /** Base URL of the entitlements worker, e.g. https://entitlements.example.workers.dev */
+      apiBaseUrl: "",
+      /** Public half of the worker's signing key (ECDSA P-256 / ES256 JWK). */
+      publicKeyJwk: null,
+      /** Token audience; defaults to this site's origin when empty. */
+      audience: "",
+      /** Ask the worker for a fresh token once a stored one is this old. */
+      revalidateHours: 24,
+      /** Never grant Pro from an unverified local entitlement. */
+      required: true
+    },
+    /**
+     * Free trial days, granted once per browser when the visitor asks for it.
+     * The trial is a local entitlement by design (no payment, nothing to verify);
+     * `trialRequiresOptIn` keeps it from silently making every visitor Pro.
+     */
     freeTrialDays: 7,
+    trialRequiresOptIn: true,
     /**
      * Success URL for Stripe Payment Links (Dashboard → after payment):
      * https://pillb.github.io/vocal-singing-training/?billing=success&plan=pro_monthly&provider=stripe&session_id={CHECKOUT_SESSION_ID}

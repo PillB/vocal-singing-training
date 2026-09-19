@@ -515,6 +515,8 @@
     /* —— Singing · class course (placement & resonance) —— */
     "s17-jaw-neck-release": {
       mode: "releaseFlow",
+      // Clock-driven and silent: runs with or without a microphone
+      timeDriven: true,
       showPitch: false,
       showHold: false,
       showLevel: false,
@@ -557,6 +559,8 @@
     },
     "s18-costal-breath": {
       mode: "breathCycle",
+      // The level lane is feedback when a mic is there, never a requirement
+      timeDriven: true,
       showPitch: false,
       showHold: false,
       showLevel: true,
@@ -624,6 +628,7 @@
     },
     "s20-five-vowels": {
       mode: "vowelLadder",
+      ownsTarget: true,
       showPitch: true,
       showHold: false,
       showLevel: true,
@@ -639,6 +644,9 @@
     },
     "s21-chest-resonance": {
       mode: "resonanceZone",
+      // The mode walks its own note list; keep the generic refPitch off the target
+      ownsTarget: true,
+      qualityMetric: "body",
       showPitch: true,
       showHold: false,
       showLevel: true,
@@ -662,6 +670,9 @@
     },
     "s22-mid-voice-hola": {
       mode: "resonanceZone",
+      // The mode walks its own note list; keep the generic refPitch off the target
+      ownsTarget: true,
+      qualityMetric: "steadiness",
       showPitch: true,
       showHold: false,
       showLevel: true,
@@ -685,6 +696,9 @@
     },
     "s23-mask-ya": {
       mode: "resonanceZone",
+      // The mode walks its own note list; keep the generic refPitch off the target
+      ownsTarget: true,
+      qualityMetric: "buzz",
       showPitch: true,
       showHold: false,
       showLevel: true,
@@ -708,6 +722,9 @@
     },
     "s24-nana-high": {
       mode: "resonanceZone",
+      // The mode walks its own note list; keep the generic refPitch off the target
+      ownsTarget: true,
+      qualityMetric: "stability",
       showPitch: true,
       showHold: false,
       showLevel: true,
@@ -731,6 +748,9 @@
     },
     "s25-zone-tour": {
       mode: "resonanceZone",
+      // The mode walks its own note list; keep the generic refPitch off the target
+      ownsTarget: true,
+      qualityMetric: "transitions",
       showPitch: true,
       showHold: false,
       showLevel: true,

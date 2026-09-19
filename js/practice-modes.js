@@ -1989,6 +1989,18 @@
 
   // ——— CLASS MODES (placement / resonance course) ———
 
+  /**
+   * Note name after the app's active octave shift. `VTLockHighwayNotes` shifts
+   * the names it is given and the piano reference is shifted too, so a mode that
+   * picks its own targets must look them up at the same octave or the user is
+   * chasing a note the highway never shows.
+   */
+  function shiftedNote(name) {
+    const n = global.VTGetOctaveShift ? global.VTGetOctaveShift() : 0;
+    if (!name || !n || typeof global.VTShiftNoteName !== "function") return name;
+    return global.VTShiftNoteName(name, n) || name;
+  }
+
   /** Per-phase cue text, localized like the phase label itself. */
   function phaseCueFor(phase) {
     if (!phase) return "";
@@ -2220,6 +2232,7 @@
       `;
       if (this.profile.refPitch && global.VT_NOTE_FREQ?.[this.profile.refPitch]) {
         this.state.refName = this.profile.refPitch;
+        this.state.wantName = this.profile.refPitch;
       }
     },
     onStart() {
@@ -2227,7 +2240,10 @@
       this._ref();
     },
     _ref() {
-      const n = this.state.refName;
+      // Published for the app: an ownsTarget mode's current note is what the
+      // piano reference should sound, in place of the generic refPitch.
+      this.state.wantName = this.state.refName;
+      const n = shiftedNote(this.state.refName);
       if (!n) return;
       if (typeof global.VTSetPracticeTarget === "function" && global.VT_NOTE_FREQ?.[n]) {
         global.VTSetPracticeTarget(global.VT_NOTE_FREQ[n], n);
@@ -2357,13 +2373,15 @@
       const notes = this._zoneNotes();
       const n = notes[this.state.ni % Math.max(1, notes.length)];
       if (!n) return;
+      const sounded = shiftedNote(n);
       this.state.wantName = n;
-      this.state.wantFreq = global.VT_NOTE_FREQ?.[n];
+      this.state.wantFreq = global.VT_NOTE_FREQ?.[sounded];
       if (typeof global.VTSetPracticeTarget === "function" && this.state.wantFreq) {
-        global.VTSetPracticeTarget(this.state.wantFreq, n);
+        global.VTSetPracticeTarget(this.state.wantFreq, sounded);
       }
-      if (global.VTPiano?.playRefPitch) global.VTPiano.playRefPitch(n, 2.2, true).catch(() => {});
-      if (this.$("[data-t]")) this.$("[data-t]").textContent = n;
+      if (global.VTPiano?.playRefPitch)
+        global.VTPiano.playRefPitch(sounded, 2.2, true).catch(() => {});
+      if (this.$("[data-t]")) this.$("[data-t]").textContent = sounded;
     },
     _setZone(i) {
       this.state.z = i;
@@ -2379,18 +2397,28 @@
       if (global.VTToast) global.VTToast(isEs() ? z.labelEs || z.label : z.label);
       this._pushTarget();
     },
-    /** Which configured zone the detected pitch actually falls in, or -1. */
+    /**
+     * Which configured zone the detected pitch falls in, or -1. Neighbouring
+     * zones share boundary notes on purpose (C3 is the top of the low zone and
+     * the bottom of the middle one), so the zone the exercise is currently
+     * asking for is checked first — otherwise singing exactly what was asked
+     * would score as the wrong zone.
+     */
     _zoneOf(freq) {
       if (!freq || !global.VTPitchUtils || !global.VT_NOTE_FREQ) return -1;
       const m = global.VTPitchUtils.freqToMidi(freq);
-      for (let i = 0; i < this.state.zones.length; i++) {
-        const notes = this.state.zones[i].notes || [];
+      const inZone = (i) => {
+        const notes = this.state.zones[i]?.notes || [];
         const mids = notes
-          .map((n) => global.VT_NOTE_FREQ[n])
+          .map((n) => global.VT_NOTE_FREQ[shiftedNote(n)])
           .filter(Boolean)
           .map((f) => global.VTPitchUtils.freqToMidi(f));
-        if (!mids.length) continue;
-        if (m >= Math.min(...mids) - 1.5 && m <= Math.max(...mids) + 1.5) return i;
+        if (!mids.length) return false;
+        return m >= Math.min(...mids) - 1.5 && m <= Math.max(...mids) + 1.5;
+      };
+      if (inZone(this.state.z)) return this.state.z;
+      for (let i = 0; i < this.state.zones.length; i++) {
+        if (i !== this.state.z && inZone(i)) return i;
       }
       return -1;
     },
@@ -2448,9 +2476,11 @@
       if (held > 0) patches.zoneTargets = held;
       if (this.state.voicedMs > 3000) {
         const scale = pct >= 80 ? 5 : pct >= 60 ? 4 : pct >= 40 ? 3 : 2;
-        // Every zone exercise self-scores the quality metric its own way
-        if (this.state.zones.length > 1) patches.transitions = scale;
-        else patches.steadiness = scale;
+        // Each zone exercise names its own quality metric ("body", "buzz",
+        // "stability"…): a patch under any other key is silently dropped.
+        const key =
+          this.profile.qualityMetric || (this.state.zones.length > 1 ? "transitions" : "steadiness");
+        patches[key] = scale;
       }
       const spread = this.state.zoneHits
         .map((n, i) => `${isEs() ? this.state.zones[i].labelEs : this.state.zones[i].label}:${n}`)

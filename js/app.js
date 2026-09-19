@@ -2249,7 +2249,12 @@
       await playSelectedProgression(true);
       started = !!(VTPiano.loopActive || (VTPiano.playing && VTPiano.playing.length));
     } else {
-      const note = effectiveNoteName(profile.refPitch || ex.audio?.refPitch);
+      // A mode that owns its targets (profile.ownsTarget) already chose the first
+      // note in onStart(). Sound that one, not the generic refPitch: otherwise the
+      // reference the user hears — and the target this sets — is a different note
+      // from the one the mode is waiting for, so no hold can ever be credited.
+      const owned = profile.ownsTarget ? state.modeInstance?.state?.wantName : null;
+      const note = effectiveNoteName(owned || profile.refPitch || ex.audio?.refPitch);
       if (note) {
         const f = await VTPiano.playRefPitch(note, sec, true);
         if (f) {
@@ -2467,7 +2472,7 @@
           profile.mode === "pitchSong"
         ) {
           lockHighwayForProgression(state.selectedProg);
-        } else if (ref) {
+        } else if (ref && !profile.ownsTarget) {
           const refS = shiftNote(ref);
           if (refS && VT_NOTE_FREQ[refS]) {
             state.pitchViz.lockWindowAroundFreq(VT_NOTE_FREQ[refS], 6);
@@ -2479,7 +2484,11 @@
             state.practice.setTargetFreq(VT_NOTE_FREQ[chS]);
             state.pitchViz.setTargetFreq(VT_NOTE_FREQ[chS]);
           }
-        } else if (ref) {
+        } else if (ref && !profile.ownsTarget) {
+          // profile.ownsTarget: the mode walks its own note list and has already
+          // set the first one in onStart(). The generic refPitch bootstrap runs
+          // after that, so without this guard it would point the highway and the
+          // engine at a different note than the one the mode is waiting for.
           const refS = shiftNote(ref);
           if (refS && VT_NOTE_FREQ[refS]) {
             state.practice.setTargetFreq(VT_NOTE_FREQ[refS]);
@@ -2563,7 +2572,9 @@
         return;
       }
 
-      if (!micOk && !soundOk) {
+      // A time-driven mode (paced breathing, guided release) advances on the
+      // clock alone, so a refused mic must not make the exercise unusable.
+      if (!micOk && !soundOk && !profile.timeDriven) {
         state.practiceStarting = false;
         setPracticeUI(false);
         toast(tt("toast.mic"));
@@ -2572,9 +2583,11 @@
 
       setPracticeUI(true);
 
-      // The practice engine only starts when the mic or the recorder is wanted;
-      // without it nothing calls onFrame, so drive the mode ourselves.
-      if (!needsMic && !wantRecord) startModeTicker();
+      // Frames come from the practice engine, which only runs when the mic or the
+      // recorder was wanted AND actually started. Whenever it did not, drive a
+      // time-driven mode ourselves so its phases and timer still advance.
+      const engineLive = (needsMic || wantRecord) && micOk;
+      if (!engineLive && (profile.timeDriven || (!needsMic && !wantRecord))) startModeTicker();
 
       if (ex.audio.timer && state.timer.total > 0 && (micOk || state._modeTicker)) startTimer();
 

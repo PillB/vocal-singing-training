@@ -414,6 +414,149 @@ test.describe("Prepared daily class session", () => {
     expect(ab.patches.takes).toBe(2);
   });
 
+  test("zone targets follow the octave shift and the highway", async ({ page }) => {
+    await boot(page);
+    await page.evaluate(() => window.VTApp.openExercise("s21-chest-resonance"));
+    await expect(page.locator("#view-exercise")).toHaveClass(/active/);
+
+    // With a shift applied, the mode must aim at the note the highway and the
+    // piano reference actually play, not at the raw-octave lookup.
+    const res = await page.evaluate(() => {
+      window.VTApp.applyOctaveShift(1); // the shift is in octaves, clamped to ±2
+      const m = window.VTPracticeModes.get("resonanceZone");
+      const host = document.createElement("div");
+      document.body.appendChild(host);
+      m.mount(host, { zones: [{ key: "low", label: "Low", labelEs: "Graves", notes: ["C3"] }] });
+      m.onStart();
+      const out = {
+        shift: window.VTApp.getOctaveShift(),
+        wantFreq: m.state.wantFreq,
+        rawC3: window.VT_NOTE_FREQ.C3,
+        shiftedC3: window.VT_NOTE_FREQ.C4
+      };
+      host.remove();
+      window.VTApp.applyOctaveShift(0);
+      return out;
+    });
+    expect(res.shift).toBe(1);
+    expect(res.wantFreq, "target follows the shift").toBeCloseTo(res.shiftedC3, 1);
+    expect(res.wantFreq).not.toBeCloseTo(res.rawC3, 1);
+
+    // And the generic refPitch bootstrap must not move the target the mode set:
+    // s21's refPitch is A2 while its first zone target is C3.
+    await page.evaluate(() => window.VTApp.openExercise("s21-chest-resonance"));
+    await page.locator("#btn-practice-start").click();
+    await page.waitForTimeout(600);
+    const live = await page.evaluate(() => {
+      const st = window.VTApp.getState();
+      return {
+        modeWants: st.modeInstance?.state?.wantName,
+        modeFreq: st.modeInstance?.state?.wantFreq,
+        engineTarget: st.practice?.getTargetFreq?.() ?? st.practice?.targetFreq ?? null,
+        c3: window.VT_NOTE_FREQ.C3,
+        a2: window.VT_NOTE_FREQ.A2
+      };
+    });
+    expect(live.modeWants).toBe("C3");
+    if (live.engineTarget != null) {
+      expect(live.engineTarget, "engine follows the mode, not refPitch").toBeCloseTo(live.c3, 1);
+      expect(live.engineTarget).not.toBeCloseTo(live.a2, 1);
+    }
+    await page.locator("#btn-practice-stop").click().catch(() => {});
+  });
+
+  test("each zone exercise scores the metric it actually defines", async ({ page }) => {
+    await boot(page);
+    const report = await page.evaluate(() => {
+      const out = [];
+      const byId = Object.fromEntries(VT_EXERCISES.singing.map((e) => [e.id, e]));
+      for (const id of ["s21-chest-resonance", "s22-mid-voice-hola", "s23-mask-ya", "s24-nana-high", "s25-zone-tour"]) {
+        const ex = byId[id];
+        const m = window.VTPracticeModes.get("resonanceZone");
+        const host = document.createElement("div");
+        document.body.appendChild(host);
+        m.mount(host, ex.practice);
+        m.onStart();
+        // Over three seconds of on-pitch singing, which is what unlocks the score
+        for (let i = 0; i < 260; i++) {
+          m.onFrame({ dtMs: 16, rms: 0.2, voiced: true, voiceFreq: m.state.wantFreq });
+        }
+        const patches = m.onStop({}).patches || {};
+        host.remove();
+        out.push({
+          id,
+          patchKeys: Object.keys(patches),
+          metricIds: (ex.metrics || []).map((x) => x.id)
+        });
+      }
+      return out;
+    });
+
+    for (const r of report) {
+      expect(r.patchKeys.length, `${r.id} scored something`).toBeGreaterThan(0);
+      for (const k of r.patchKeys) {
+        // A patch under a key the metrics form does not have is dropped silently,
+        // so the user's saved result would keep the form default.
+        expect(r.metricIds, `${r.id} patches a metric it defines (${k})`).toContain(k);
+      }
+    }
+  });
+
+  test("a shared boundary note counts for the zone being asked for", async ({ page }) => {
+    await boot(page);
+    // In the tour C3 is the top of the low zone and the bottom of the middle one.
+    const res = await page.evaluate(() => {
+      const m = window.VTPracticeModes.get("resonanceZone");
+      const host = document.createElement("div");
+      document.body.appendChild(host);
+      m.mount(host, {
+        zones: [
+          { key: "low", label: "Low", labelEs: "Graves", sec: 45, notes: ["C3", "B2", "A2"] },
+          { key: "mid", label: "Middle", labelEs: "Medios", sec: 45, notes: ["C3", "D3", "E3"] }
+        ]
+      });
+      m.onStart();
+      const c3 = window.VT_NOTE_FREQ.C3;
+      const lowSaysLow = m._zoneOf(c3);
+      m._setZone(1); // the exercise now asks for the middle zone
+      const midSaysMid = m._zoneOf(c3);
+      host.remove();
+      return { lowSaysLow, midSaysMid };
+    });
+    expect(res.lowSaysLow, "C3 is the low zone while low is asked for").toBe(0);
+    expect(res.midSaysMid, "and the middle zone once middle is asked for").toBe(1);
+  });
+
+  test("time-driven exercises still run when the mic is refused", async ({ page }) => {
+    await boot(page);
+    // No microphone at all — the paced breathing exercise must still pace.
+    await page.evaluate(() => {
+      navigator.mediaDevices.getUserMedia = () => Promise.reject(new Error("NotAllowedError"));
+    });
+    await page.evaluate(() => window.VTApp.openExercise("s18-costal-breath"));
+    await expect(page.locator("#view-exercise")).toHaveClass(/active/);
+    const count = page.locator("#mode-hud [data-count], #mode-focus [data-count]").first();
+    await expect(count).toBeAttached();
+
+    await page.locator("#btn-practice-start").click();
+    await page.waitForTimeout(2200);
+    const after = await page.evaluate(() => {
+      const st = window.VTApp.getState();
+      return {
+        ticking: !!st._modeTicker,
+        stage: (
+          document.querySelector("#mode-hud [data-stage], #mode-focus [data-stage]")?.textContent ||
+          ""
+        ).trim(),
+        timerMoved: st.timer?.remaining < st.timer?.total
+      };
+    });
+    expect(after.ticking, "the mode is driven without the engine").toBe(true);
+    expect(after.stage.length, "the breath stage still renders").toBeGreaterThan(0);
+    expect(after.timerMoved, "and the exercise timer still runs").toBe(true);
+    await page.locator("#btn-practice-stop").click().catch(() => {});
+  });
+
   test("the daily route is offered on Canto only", async ({ page }) => {
     await boot(page);
     const sel = page.locator("#session-path");

@@ -875,6 +875,7 @@
    *  "save" | "discard" | "stay"
    */
   function promptLeaveExercise() {
+    const opener = document.activeElement;
     return new Promise((resolve) => {
       const modal = $("#leave-modal");
       if (!modal) {
@@ -916,10 +917,11 @@
       // Clear any test/tooling inline display:none so modal paints + receives hits
       modal.style.display = "";
       modal.style.visibility = "";
-      btnSave?.focus();
+      window.VTFocusTrap?.activate(modal, { initialFocus: btnSave, returnFocus: opener });
 
       const finish = (choice) => {
         modal.hidden = true;
+        window.VTFocusTrap?.release(modal);
         state.leavePromptOpen = false;
         btnSave?.removeEventListener("click", onSave);
         btnDiscard?.removeEventListener("click", onDiscard);
@@ -4475,15 +4477,20 @@
   function openPricing() {
     const modal = $("#pricing-modal");
     if (!modal) return;
+    // Remember the trigger before renderPricingModal() rebuilds the card.
+    const opener = document.activeElement;
     renderPricingModal();
     modal.hidden = false;
     document.body.classList.add("pricing-open");
-    $("#pricing-close")?.focus();
+    window.VTFocusTrap?.activate(modal, { initialFocus: "#pricing-close", returnFocus: opener });
   }
 
   function closePricing() {
     const modal = $("#pricing-modal");
-    if (modal) modal.hidden = true;
+    if (modal) {
+      modal.hidden = true;
+      window.VTFocusTrap?.release(modal);
+    }
     document.body.classList.remove("pricing-open");
   }
 
@@ -4536,6 +4543,7 @@
   function openAccount() {
     const modal = $("#account-modal");
     if (!modal) return;
+    const opener = document.activeElement;
     refreshAccountUI();
     const err = $("#login-error");
     if (err) {
@@ -4544,12 +4552,18 @@
     }
     modal.hidden = false;
     document.body.classList.add("account-open");
-    if (!window.VTAuth?.isLoggedIn?.()) $("#login-username")?.focus();
+    window.VTFocusTrap?.activate(modal, {
+      initialFocus: window.VTAuth?.isLoggedIn?.() ? "#account-close" : "#login-username",
+      returnFocus: opener
+    });
   }
 
   function closeAccount() {
     const modal = $("#account-modal");
-    if (modal) modal.hidden = true;
+    if (modal) {
+      modal.hidden = true;
+      window.VTFocusTrap?.release(modal);
+    }
     document.body.classList.remove("account-open");
   }
 

@@ -30,7 +30,7 @@
 | R4 | **P1** | Zero-session Insights/heatmap steal attention | phone home | `#pro-insights-panel`, heatmap | `body.home-zero` hides spark + heatmap | **Done** |
 | R5 | **P2** | Cards lack track cue | card grid | `renderExerciseList` | `card-ex track-{vocal\|singing}` left border | **Done** |
 | R6 | **P2** | Live toast raw mode ids (prior U4) | docs/25 | `modeDisplayName` already maps common modes | Keep / extend map as needed | **Prior done** |
-| R7 | **P2** | Dense header actions (Tour/Cuenta/Pro…) compete | home header | app-header | Split into `.header-nav` destinations + `.header-utils`, with an active state per view — see [31-DESIGN-FLOW-OVERHAUL](31-DESIGN-FLOW-OVERHAUL.md) | **Done** |
+| R7 | **P2** | Dense header actions (Tour/Cuenta/Pro…) compete | home header | app-header | Split into `.header-nav` destinations + `.header-utils`, with an active state per view — see [32-DESIGN-FLOW-OVERHAUL](32-DESIGN-FLOW-OVERHAUL.md) | **Done** |
 | R8 | **P3** | Continue + structured still secondary to Pro CTA in studio | value-pulse | Studio block | Catalog now above studio | **Mitigated** |
 
 ---

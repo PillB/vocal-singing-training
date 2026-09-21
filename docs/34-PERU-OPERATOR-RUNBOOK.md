@@ -21,9 +21,9 @@ hard-codes them.
 
 | Decision | Recommendation | Why |
 |---|---|---|
-| Price in Peru | S/ 19–25 per month | Below a gym membership, above "not serious". Round numbers read better than S/ 19.90. |
-| Price abroad | USD 5–7 per month | A merchant of record's fixed fee per transaction hurts badly below $5. |
-| Annual option | Yes, at ~10 months' price | Fewer charges means fewer fees and fewer failed renewals. |
+| Price in Peru | S/ 25–30 per month | Below a gym membership, above "not serious". Note the fee cliffs in stage 5: at S/ 19.90 a Culqi charge costs 17.6% in commission alone. |
+| Price abroad | USD 7–10 per month | The fixed fee per charge dominates below $7. The same provider that takes 7.9% at $10 takes 11.9% at $5. |
+| Annual option | Yes, at ~10 months' price | **The biggest lever you have.** One charge a year pays the fixed fee once instead of twelve times, on every rail. |
 | Trial | One month, one per account | Already built. `TRIAL_DAYS` in `wrangler.toml`. |
 
 Write these down. They become the Mercado Pago plan, the merchant-of-record
@@ -158,32 +158,82 @@ gateway and no fees. Only charging strangers does.
 This is the first step that cannot be undone in an evening, and the first that
 a Peruvian payment gateway will ask for.
 
-> Everything in this section is the shape of the process, not advice. Take the
-> specifics to a contador — one consultation is cheap next to getting the
-> régimen wrong for a year.
+> Not advice. Peruvian tax law changes often and SUNAT's own pages contradict
+> each other in places. Take this to a contador colegiado — one paid hour is
+> cheap next to being in the wrong régimen for a year.
 
-1. **Get a RUC as *persona natural con negocio***, or form a company. For a
-   solo developer testing a product, persona natural con negocio is the
-   lighter path: it is done at a SUNAT office or online with a DNI, and it does
-   not require capital, a notary or a company name.
-2. **Choose a régimen tributario.** The realistic candidates for a small
-   digital-services business are Nuevo RUS, Régimen Especial (RER) and Régimen
-   MYPE Tributario (RMT). They differ in the rate, in what you may deduct, and
-   critically in **which comprobantes you may issue** — Nuevo RUS cannot issue
-   facturas, which matters if a Peruvian business ever wants one.
-3. **Get your Clave SOL**, which is how you declare and how you issue
-   comprobantes electrónicos through SUNAT's own free system.
-4. **Ask the contador specifically about:**
-   - Whether a monthly digital subscription sold to a Peruvian consumer carries
-     IGV at 18%, and whether the price you set is with IGV included.
-   - Whether income from a merchant of record paying you from abroad is an
-     **exportación de servicios** and how it is declared.
-   - Whether you must issue a **boleta electrónica** for every monthly charge,
-     and if so, whether to do it through SUNAT's free SEE-SOL or a paid PSE.
-     This is the single biggest hidden workload in charging Peruvians monthly —
-     find out before you have subscribers, not after.
-   - Which monthly declarations you owe from the month the RUC exists, even
-     with zero income.
+### The régimen is decided for you, and it is the RMT
+
+SUNAT requires you to **choose the régimen before you register**, not during.
+For this business the choice is narrower than the usual four:
+
+| Régimen | Verdict for a SaaS |
+|---|---|
+| **Nuevo RUS** | **Cannot issue facturas** — only boletas. So you could never invoice a merchant of record abroad. Also capped at S/ 8,000 a month of income. Out. |
+| **RER** | **Legally excluded.** Article 118 of the Ley del Impuesto a la Renta names "programación informática, consultoría de informática y actividades conexas" and "edición de programas de informática y de software en línea" among the activities barred from the RER. Out. |
+| **RMT (Régimen MYPE Tributario)** | **This one.** Ceiling is 1,700 UIT of net annual income — with UIT 2026 at S/ 5,500 that is S/ 9,350,000, which you will not hit. Monthly pago a cuenta is 1.0% of net income while annual net income stays under 300 UIT. Annual income tax is 10% up to 15 UIT and 29.5% above. |
+| Régimen General | The fallback only if you exceed 1,700 UIT. 29.5%, no ceiling. |
+
+Declare the CIIU activity accurately — the software CIIU is precisely what
+triggers the RER exclusion, so getting it "helpfully" wrong to stay in the RER
+is not a shortcut, it is a misdeclaration.
+
+### Registering
+
+1. **Get the RUC "con negocio"** (rentas de tercera categoría — *not* a
+   trabajador-independiente RUC issuing recibos por honorarios). Online 24/7 at
+   SUNAT Virtual or through the App Personas SUNAT with your DNI, or in person
+   at a Centro de Servicios al Contribuyente with your RENIEC DNI plus proof of
+   the domicilio fiscal if it differs from the DNI address.
+2. **Get your Clave SOL.** It is the key to every later filing: Declara Fácil
+   621, the free invoicing portal, and SIRE.
+3. **You are an electronic issuer from day one.** Resolución de
+   Superintendencia N° 000075-2026/SUNAT, in force 1 June 2026, designates new
+   RUC registrants in RMT, RER or Régimen General as emisores electrónicos from
+   the day of inscription, and requires the sales and purchase registers in
+   SIRE from the moment the obligation arises. There is no grace period to plan
+   around.
+
+### Invoicing, which is the real workload
+
+- **Peruvian customers → a boleta de venta electrónica for every charge**, with
+  18% IGV in the price. Capture the buyer's document type and number on any
+  charge over S/ 700. Only charges of S/ 5.00 or less may be consolidated.
+- **Foreign customers, or the merchant of record → a factura de exportación**,
+  no IGV. Exports of services are not affected by IGV under Article 33 of the
+  Ley del IGV, but only when four requirements hold at once: the service is
+  provided for consideration from Peru to abroad and evidenced by the
+  comprobante, the exporter is domiciled in Peru, the user is non-domiciled,
+  and the use of the service happens abroad.
+- **Issuing options**: SEE-SOL is SUNAT's free web portal, needs only your
+  Clave SOL and no digital certificate, and can invoice a buyer with no RUC —
+  so it covers the export invoice. It is one invoice at a time. Automating a
+  boleta per subscription charge realistically means SEE del Contribuyente
+  (buy a digital certificate) or an OSE/PSE you call from the billing webhook.
+- **Keep every purchase factura with IGV** — hosting, domain, laptop, internet,
+  the contador. As an exporter that input IGV becomes your Saldo a Favor del
+  Exportador and can be offset against other taxes rather than lost.
+
+### Monthly, forever
+
+- **Declara Fácil 621** (IGV–Renta mensual) through SOL, on the cronograma for
+  your last RUC digit. One form covers the IGV and the RMT pago a cuenta.
+- **SIRE** (sales and purchase registers) is a separate monthly filing on top.
+- **An annual return**, which the RMT requires and the RER and NRUS do not.
+
+### Three questions to put to the contador, in these words
+
+1. When a merchant of record resells my subscription to somebody **in Peru**,
+   is that slice still an exportación de servicios? Requirement (d) says the
+   service must be used abroad, and no SUNAT pronouncement on merchant-of-record
+   resale of SaaS was found. This is the genuinely unsettled one.
+2. Do I invoice the merchant of record for the **gross** subscription value or
+   the **net** payout after its fees? Neither SUNAT nor the providers address it.
+3. Is prior inscription in the **Registro de Exportadores de Servicios** still
+   required? The phrase is absent from the Article 33 text currently published
+   on SUNAT's legislation site, but SUNAT's own orientation pages and the
+   PromPerú guide still describe it as a requirement. Registration is free and
+   immediate, so doing it removes the risk either way.
 
 **What this unblocks**: Mercado Pago Perú, and every local gateway.
 
@@ -220,13 +270,18 @@ What is confirmed from Mercado Pago's own documentation:
   integration mistake. Any flow that saves a card must tokenize it with
   CardForm or the Card Payment Brick; never collect raw card numbers.
 
+Its fee in Peru is **3.29% + S/ 1 + IGV** with the money released after 14
+business days, or **3.49% + S/ 1 + IGV** released instantly. No affiliation fee,
+no monthly fee.
+
 Not confirmed, so check it when you register: **whether a *persona natural con
 negocio* (RUC tipo 10) can open the seller account.** The Peru signup offers a
 personal account with DNI and a business account with RUC, and the link-de-pago
 product page says a free account is all you need — but no official page names
 RUC-10 as an accepted seller profile, and several Mercado Pago Peru help pages
-refuse to load from outside the country, so this could not be settled from the
-documentation. Culqi, by contrast, documents accepting both RUC 10 and RUC 20.
+refuse to load from outside the country. Culqi and Openpay both state plainly
+that they take a RUC 10, so if Mercado Pago turns out not to, they are the
+fallback.
 
 One thing that will bite if you miss it: **the bank account you withdraw to must
 be in your own name** — the Mercado Pago account holder and the bank account
@@ -246,6 +301,48 @@ Steps:
 5. Create a subscription plan at your soles price, put its checkout URL into
    `js/billing-config.js` under the `mercadopago` rail, and its plan id into
    `MP_PLAN_PRO_MONTHLY`.
+
+### The other Peruvian gateways, and why your price decides
+
+Mercado Pago is not the only local rail, and at a S/ 20–30 ticket the choice is
+decided by **fixed fees, not percentages**.
+
+| Gateway | Cost | Recurring? | Gets a RUC 10? | Note |
+|---|---|---|---|---|
+| **Mercado Pago** | 3.29% + S/ 1 + IGV at 14 business days, or 3.49% + S/ 1 + IGV instant. No affiliation or monthly fee. | Yes, `preapproval` | Peru accepts DNI/CE/RUC; RUC-10 not confirmed | Cheapest per charge below about S/ 60. |
+| **Culqi** | 3.44% + USD 0.20, IGV-exempt — **but a minimum of S/ 3.50 on anything under S/ 87.72**. S/ 0 affiliation, T+2. | Yes, Plans + Suscripciones, charged on Culqi's own daily batch | Yes — its price list has separate RUC 10 rows, and its contract names *persona natural* | That S/ 3.50 floor is **11.7% on S/ 29.90 and 17.6% on S/ 19.90**. Only worth it above S/ 88, or billed annually. |
+| **Openpay (BBVA)** | Max 3.44% + IGV, S/ 0 affiliation and maintenance, daily deposits including weekends | Yes, Plans + Subscriptions | Yes — BBVA says outright "con tu RUC y DNI" | The best fallback. Worth getting approved before you need it. |
+| **Izipay** | 3.44% + IGV, S/ 0 to start, next business day | Tokenized recurring exists but **support has to enable it on your account** | Reported yes | Not self-serve for recurring, so not a day-one choice. |
+| **dLocal Go** | 2.99% + 18% local tax ≈ 3.53%, **no fixed fee at all**, no setup, no monthly | Yes, built-in Subscriptions | Yes — explicit sole-proprietor document path | Lowest rate with no fixed fee, so best on small tickets. But funds are held 7 days and it settles in your company country's currency: verify both before committing. |
+| **Niubiz** | Reported ≈ S/ 300 setup + S/ 50/month before a single sale | "Pago Programado" exists | Reported yes | A fixed S/ 900 a year is wrong at your size. |
+| **Kushki** | Not published, and it imposes a **monthly minimum billing** | Yes, well documented | — | The minimum disqualifies a sub-100-subscriber operator. |
+
+Two consequences worth acting on:
+
+1. **Below about S/ 60 a month, Mercado Pago is cheaper per charge than Culqi**,
+   because Culqi's S/ 3.50 floor bites. Above S/ 88, Culqi wins. If you price at
+   S/ 25, do not reach for Culqi first.
+2. **Bill annually wherever you can.** One S/ 250 charge pays the fixed fee once
+   instead of twelve times. At these price points that is the single biggest
+   lever you have, bigger than the choice of gateway.
+
+### Yape and Plin cannot carry a subscription
+
+This is the fact most likely to break a plan built on how Peruvians actually
+pay. **None of Yape, Plin or PagoEfectivo can be tokenized and re-charged**:
+
+- Yape through Culqi is single-use, the approval code lives two minutes, and it
+  caps at S/ 2,000 per operation. There is no direct public Yape merchant API.
+- Plin has no merchant API at all — it is a feature inside each bank's app, not
+  a service with merchant infrastructure.
+- PagoEfectivo issues a one-time CIP code the customer pays manually, and its
+  own integration docs list only one-off payments.
+
+So they are **renewal channels, not subscription rails**. If you want to accept
+them you have to build the reminder-and-chase flow yourself: a notice before the
+month ends, a link, and a grace period. Decide deliberately whether that is
+worth it, or whether card-only with an annual option is the honest first
+version.
 
 ### Why not just Stripe
 
@@ -336,9 +433,11 @@ later.
 3. Paste the worker URL and public JWK into `js/billing-config.js`; test
    sign-in, gifting and revocation end to end.
 4. Run the beta on gifted months. No paperwork needed.
-5. RUC + régimen + Clave SOL, with a contador.
-6. Mercado Pago Perú seller account, plan, webhook, secrets.
-7. Merchant of record for the rest of the world.
+5. RUC "con negocio" in the **RMT** + Clave SOL, with a contador. Electronic
+   invoicing from day one — there is no grace period.
+6. Mercado Pago Perú seller account, plan, webhook, secrets. Openpay BBVA as
+   the fallback if Mercado Pago will not take a RUC 10.
+7. Merchant of record for the rest of the world: Creem first, Polar in parallel.
 8. Custom domain, portal link, trial live.
 
 Steps 1–4 cost nothing and need no paperwork. Do not start step 5 until step 4

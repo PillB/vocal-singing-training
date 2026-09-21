@@ -167,19 +167,27 @@ that unlocks anything.
 The rails decision, and everything Pablo must register for, is in
 [34-PERU-OPERATOR-RUNBOOK.md](34-PERU-OPERATOR-RUNBOOK.md). In short:
 
-- **Peru and LATAM → Mercado Pago Perú.** It is registerable from Peru with a
-  RUC and a Peruvian bank account, pays out in soles, and supports real
-  recurring subscriptions. The worker already verifies its webhooks.
-- **Rest of the world → a merchant of record.** Somebody else is the seller,
-  handles VAT, and pays Pablo. Stripe is not an option as the merchant, because
-  Peru is not a Stripe merchant country — and Polar and Lemon Squeezy pay out
-  through Stripe Connect, so they inherit that.
+- **Peru and LATAM → Mercado Pago Perú.** Its Suscripciones product is
+  available in Peru, prices in soles, charges a saved card automatically each
+  month, and retries a failed charge four times over ten days before giving up.
+  The worker already verifies its webhooks.
+- **Rest of the world → a merchant of record.** Somebody else is the legal
+  seller, owes the VAT wherever the customer is, and pays Pablo. Stripe cannot
+  be that seller: Peru is not a Stripe merchant country. Stripe *payouts* to
+  Peru are a different thing and do work, which is why merchants of record can
+  pay a Peruvian seller — see the runbook for which ones say so in writing.
 
 Both sit behind the single provider interface already in the repo. Adding a
 third is a webhook handler and a config entry, not a redesign.
 
 An anonymous visitor who pays and then signs up is not stranded:
 `POST /v1/me/link` attaches a checkout they paid for before they had an account.
+
+**Gifting does not depend on the payment provider.** A gifted month is a row in
+our own database, not a 100%-off coupon at Paddle or Polar — which matters more
+than it sounds, because not one of those providers documents whether a
+100%-off coupon is even possible. Whichever rail Pablo ends up on, and if he
+changes rails later, gifting works the same way.
 
 ---
 

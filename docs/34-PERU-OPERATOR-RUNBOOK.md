@@ -191,53 +191,128 @@ a Peruvian payment gateway will ask for.
 
 ## Stage 5 — Payments
 
-### Why not just Stripe
+Two rails: Mercado Pago for Peru and LATAM, a merchant of record for everyone
+else. Both sit behind the single provider interface already in the repo, so
+adding or swapping one is a webhook handler and a config entry.
 
-Stripe does not open merchant accounts to sellers registered in Peru; in Latin
-America its merchant countries are Brazil and Mexico. Being the Stripe merchant
-would mean forming a US company (Stripe Atlas is the usual route), which brings
-a large up-front cost, an annual franchise tax and registered-agent fee, and US
-federal filing obligations with serious penalties for getting them wrong. At
-tens of subscribers, that fixed cost dwarfs the revenue. Do not do it yet.
+### Peru and LATAM → Mercado Pago Perú
 
-This also rules out the resellers that pay out **through Stripe Connect** —
-Polar and Lemon Squeezy among them — because they inherit Stripe's country
-list. It is easy to sign up for one of these, build the whole checkout, and only
-discover the problem at payout.
+This is the one to set up first, because it is the market you know and the one
+you can be paid in soles from.
 
-### The two rails to set up instead
+What is confirmed from Mercado Pago's own documentation:
 
-**Peru and LATAM → Mercado Pago Perú.** Registerable from Peru with a RUC and a
-Peruvian bank account, pays out in soles to a local bank, and supports genuine
-recurring subscriptions (a saved card charged automatically each month) rather
-than a payment link somebody has to click again. The worker already verifies
-its webhook signatures.
+- **Suscripciones is available in Peru.** The developer docs list Peru in the
+  supported set (AR, BR, CL, CO, MX, **PE**, UY), and the Peru reference for
+  `POST /preapproval_plan` shows `"currency_id": "PEN"` in both the request and
+  the response.
+- **Charging really is automatic.** Mercado Pago's Peru page says it outright:
+  *"Nos encargamos de los cobros y si algún pago es rechazado, hacemos nuevos
+  intentos."* A rejected instalment is retried up to four times over ten days,
+  and three consecutive failures cancel the subscription and email you.
+- **The buyer needs no Mercado Pago account and you need no website** for the
+  hosted flow.
+- **Peru accepts DNI, CE and RUC** as payer document types.
+- The API is `POST/GET/PUT https://api.mercadopago.com/preapproval` and
+  `.../preapproval_plan`, plus authorized-payment endpoints for reading each
+  generated charge. There are three mutually exclusive contracts — with-plan,
+  without-plan-authorized, without-plan-pending — and mixing them is the classic
+  integration mistake. Any flow that saves a card must tokenize it with
+  CardForm or the Card Payment Brick; never collect raw card numbers.
+
+Not confirmed, so check it when you register: **whether a *persona natural con
+negocio* (RUC tipo 10) can open the seller account.** The Peru signup offers a
+personal account with DNI and a business account with RUC, and the link-de-pago
+product page says a free account is all you need — but no official page names
+RUC-10 as an accepted seller profile, and several Mercado Pago Peru help pages
+refuse to load from outside the country, so this could not be settled from the
+documentation. Culqi, by contrast, documents accepting both RUC 10 and RUC 20.
+
+One thing that will bite if you miss it: **the bank account you withdraw to must
+be in your own name** — the Mercado Pago account holder and the bank account
+holder have to be the same person.
 
 Steps:
-1. Create a seller account at mercadopago.com.pe with your RUC and DNI.
-2. Add your Peruvian bank account (CCI) for payouts.
-3. In the developer panel, create an **application**, then take its
-   **Access Token** and **Public Key**, and configure the **webhook** pointing
-   at `https://<your-worker>.workers.dev/v1/webhooks/mercadopago`.
+1. Create a seller account at mercadopago.com.pe.
+2. Add your Peruvian bank account (CCI) for payouts, in your own name.
+3. In the developer panel, create an **application**, take its **Access Token**
+   and **Public Key**, and point a **webhook** at
+   `https://<your-worker>.workers.dev/v1/webhooks/mercadopago`.
 4. Store the secrets:
    ```bash
    wrangler secret put MP_ACCESS_TOKEN
    wrangler secret put MP_WEBHOOK_SECRET
    ```
-5. Create a subscription plan at your chosen soles price, and put its checkout
-   URL into `js/billing-config.js` under the `mercadopago` rail. Put the plan id
-   into `MP_PLAN_PRO_MONTHLY`.
+5. Create a subscription plan at your soles price, put its checkout URL into
+   `js/billing-config.js` under the `mercadopago` rail, and its plan id into
+   `MP_PLAN_PRO_MONTHLY`.
 
-**Rest of the world → a merchant of record.** A merchant of record is the legal
-seller: they take the money, they owe the VAT in whatever country the customer
-is in, and they pay you. For a one-person business selling worldwide, that is
-the difference between a viable product and a tax problem in twenty
-jurisdictions. The fee is higher than a raw gateway's, and that gap is what you
-are buying.
+### Why not just Stripe
+
+Stripe does not open **merchant** accounts to sellers registered in Peru; in
+Latin America its merchant countries are Brazil and Mexico. Being the Stripe
+merchant would mean forming a US company, which brings a large up-front cost, an
+annual franchise tax and registered-agent fee, and US federal filings with
+serious penalties for getting them wrong. At tens of subscribers that fixed cost
+dwarfs the revenue. Do not do it.
+
+**This does not rule out the resellers.** Stripe added Peru as a cross-border
+*payout* destination on 2026-02-25, which is a different thing from acquiring.
+So a merchant of record can be the seller in a country Stripe supports and still
+pay a Peruvian bank account. Several of them name Peru outright.
+
+### The rest of the world → a merchant of record
+
+A merchant of record is the legal seller: they take the money, they owe the VAT
+in whatever country the customer is in, and they pay you. For a one-person
+business selling worldwide that is the difference between a viable product and a
+tax problem in twenty jurisdictions. Their fee is higher than a raw gateway's,
+and that gap is what you are buying.
 
 The deciding question is not the fee, it is **"do they accept a seller based in
-Peru, and how do they pay one?"** — which is exactly where most of them fail.
-See the comparison below.
+Peru, and how do they pay one?"**
+
+| Provider | Peru | Fee | On $10 / on $5 | Payout | Verdict |
+|---|---|---|---|---|---|
+| **Creem** | Named in [their list](https://docs.creem.io/merchant-of-record/supported-countries) | 3.9% + $0.40 | 7.9% / 11.9% | Local bank transfer, max($7, 1%); $50 minimum | **Apply first.** Cheapest, and its payout does not touch Stripe. |
+| **Polar** | Named in [their list](https://polar.sh/docs/merchant-of-record/supported-countries) | 5% + 50¢, +1.5% non-US card | 11.5% / 16.5% | $2/month + 0.25% + $0.25, up to 1% FX | **Apply in parallel.** Good trial and discount primitives; $15 per dispute stings at this price. |
+| **Paddle** | Only *absent* from a sanctions exclusion list — not confirmed | 5% + 50¢ | 10% / 15% | Wire or Payoneer, $100 minimum, possible $15 SWIFT | Strongest institution, and Payoneer avoids Stripe entirely. Their pricing page sends sub-$10 products to sales, so get a rate in writing. |
+| **Gumroad** | [Named](https://gumroad.gumroad.com/p/local-bank-account-support-in-more-countries) | 10% + $0.50 | 15% / 20% | Direct deposit or PayPal | Works, but you are giving away a sixth of the revenue. |
+| **FastSpring** | Only absent from an exclusion list | Contact sales | unknown | $100 minimum, 14-day settlement, **45-day hold on the first payout** | Wrong shape for a solo developer at this price. |
+| **Lemon Squeezy** | Named today | 7% + 50¢ for an international subscription | 12% / 17% | Bank, $50 minimum, +1% international | **Do not build on it.** Being folded into Stripe Managed Payments, which covers ~35 countries not including Peru. |
+| **Payhip** | Not an MoR for your case | 5% free plan | — | Your own gateway | Only partial VAT cover, and it needs a gateway you cannot get. |
+| **Ko-fi** | — | — | — | — | Says plainly it is *not* the merchant of record and does not remit VAT. Disqualified. |
+
+Two things that fall out of this table:
+
+1. **At $5 the fixed fee per charge is the whole story.** The same provider that
+   costs 7.9% at $10 costs 11.9% at $5. Price abroad at $7 or more, and push the
+   annual plan, which pays the fixed fee once instead of twelve times.
+2. **A country on a docs page is not an approved account.** Before you build
+   anything, write to Creem and Polar from your Peru address and ask them to
+   confirm in writing that a Peru-registered seller can complete onboarding *and*
+   receive payouts. Apply to both at once so a rejection does not cost weeks.
+
+**Gifting does not depend on any of this.** Not one of these providers documents
+whether a 100%-off coupon is even possible — and it does not matter, because a
+gifted month is a row in our own database. That stays true if you change rails
+later.
+
+### What to do, in order
+
+1. Open a **Payoneer** account registered in Peru. It is the one payout route
+   among the candidates that does not touch Stripe at all, so it is your hedge.
+2. Confirm your Peruvian bank accepts inbound USD wires; get its SWIFT/BIC and
+   the exact account format, and ask what it charges to receive one. None of the
+   providers discloses your bank's own commission.
+3. Put the site on a real domain with visible pricing, a refund policy, terms and
+   a working contact address **before** applying. Paddle runs a domain review and
+   thin sites are the usual rejection.
+4. Apply to Creem, and to Polar in parallel.
+5. In sandbox, before committing: run a free trial through to a paid charge, and
+   cancel a subscription as a customer would, without emailing yourself.
+6. Set the payout cadence to monthly rather than twice monthly, so you pay the
+   fixed payout fee once.
 
 ---
 

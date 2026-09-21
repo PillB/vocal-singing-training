@@ -23,7 +23,7 @@ const DAY = 86400;
 function createWorkerStub(options) {
   const opts = options || {};
   return {
-    methods: { email: true, google: true, googleClientId: "test.apps.googleusercontent.com", ...(opts.methods || {}) },
+    methods: { email: true, google: true, googleClientId: "test.apps.googleusercontent.com", trialDays: 30, ...(opts.methods || {}) },
     account: {
       id: "acct_test",
       email: "pablo@example.test",
@@ -547,5 +547,36 @@ test.describe("Accounts, gifted months and saved progress", () => {
       return out;
     });
     expect(small).toEqual([]);
+  });
+
+  test("the pricing trial leads to sign-in rather than a per-browser trial", async ({ page }) => {
+    const license = await mintLicense({ origin: BASE });
+    const stub = createWorkerStub();
+    await installWorker(page, stub, license);
+    await boot(page);
+
+    await page.evaluate(() => window.VTApp.openPricing());
+    const trial = page.locator("#btn-start-trial");
+    await expect(trial).toBeVisible();
+    // The length comes from the worker (30), not from billing-config's local 7.
+    await expect(trial).toHaveText(/30/);
+
+    await trial.click();
+    // Pricing gives way to the account panel; no local trial was started.
+    await expect(page.locator("#account-modal")).toBeVisible();
+    const local = await page.evaluate(() => localStorage.getItem("vt_billing_trial_started_v1"));
+    expect(local).toBeNull();
+  });
+
+  test("an account that already used its month is not offered another", async ({ page }) => {
+    const license = await mintLicense({ origin: BASE });
+    const stub = createWorkerStub({ trialUsed: true });
+    await installWorker(page, stub, license);
+    await boot(page);
+    await signIn(page);
+    await page.click("#account-close");
+
+    await page.evaluate(() => window.VTApp.openPricing());
+    await expect(page.locator("#btn-start-trial")).toBeHidden();
   });
 });

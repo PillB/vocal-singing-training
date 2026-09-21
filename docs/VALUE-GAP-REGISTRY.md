@@ -20,6 +20,10 @@ Product: **Vocal Studio / PillB**.
 | VG-13 | Home hero is track name not dream outcome | P2 | Open | Outcome line i18n | Hormozi dream outcome |
 | VG-14 | Coach pack was name-only | P1 | **Closed** | JSON + .txt dual download | Fixer 2026-07-16 |
 | VG-15 | No passive free-tier monetization beyond Pro | P2 | **Strategy + scaffold** | Native ads off-by-default; privacy + ad-free Pro framing; see `19-AD-…` | Validated 2026-07-16 |
+| VG-16 | No accounts: progress lived and died in one browser | P0 | **Closed (code)** | Email-code + Google sign-in, D1-backed; Pablo still to create the D1 database and set the keys | Shipped 2026-09-21, `docs/33-…` |
+| VG-17 | No way to gift a free month, or take one back | P1 | **Closed (code)** | Trial/gift/comp are one grant row with `revoked_at`; codes and direct grants; admin panel | Shipped 2026-09-21, `docs/33-…` |
+| VG-18 | Trial was per-browser, so it could be farmed by clearing storage | P1 | **Closed (code)** | Once accounts are configured the trial is one per account, ever (`trial_used_at`) | Shipped 2026-09-21 |
+| VG-19 | Peru cannot be a Stripe merchant, so "international payments" had no rail | P0 | **Decided, not executed** | Mercado Pago Perú + a merchant of record; Pablo to register | `docs/34-PERU-OPERATOR-RUNBOOK.md` |
 
 ## Change log
 | Date | Change |
@@ -30,3 +34,5 @@ Product: **Vocal Studio / PillB**.
 | 2026-09-19 | VG-08 closed: entitlements worker (Stripe + MP webhooks, KV, ES256 licenses) and browser-side verification |
 | 2026-09-19 | VG-06 closed: free trial is opt-in; no browser is silently Pro |
 | 2026-09-19 | VG-01 mitigated: `demoUnlockEnabled:false`, checkout refuses to run until verification is configured. Remaining: live payment links + worker deploy (operator) |
+| 2026-09-21 | VG-16/17/18 closed in code: accounts, saved progress across devices, and one grant mechanism for trial, gift and comp. All optional — with no D1 binding the worker behaves exactly as before |
+| 2026-09-21 | VG-19 opened and decided: Peru is not a Stripe merchant country, and Polar and Lemon Squeezy pay out through Stripe Connect, so they inherit that. Direction is Mercado Pago Perú plus a merchant of record for the rest of the world |

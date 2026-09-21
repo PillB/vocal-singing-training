@@ -195,15 +195,22 @@ export async function buildMePayload(env, account, now) {
 
 /**
  * Which sign-in methods this deployment can actually offer.
+ *
+ * `trialDays` rides along because the pricing panel has to name the length of
+ * the free month before anybody signs in, and this is the only public route
+ * that answers before a session exists.
+ *
  * @param {Object} env Worker env bindings.
- * @returns {{email: boolean, google: boolean, googleClientId: string|null}} Availability.
+ * @returns {{email: boolean, google: boolean, googleClientId: string|null,
+ *            trialDays: number}} Availability.
  */
 export function authMethods(env) {
   const ids = String((env && env.GOOGLE_CLIENT_ID) || "").split(",").map((s) => s.trim()).filter(Boolean);
   return {
     email: emailConfigured(env),
     google: googleConfigured(env),
-    googleClientId: ids[0] || null
+    googleClientId: ids[0] || null,
+    trialDays: Math.round(trialSeconds(env) / 86400)
   };
 }
 

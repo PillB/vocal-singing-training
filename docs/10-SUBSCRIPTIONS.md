@@ -4,6 +4,20 @@
 **Code:** `js/billing-config.js`, `js/billing.js`, `js/license.js` · **Entitlement server:** `workers/entitlements/`  
 **Deep audit:** [`16-SUBSCRIPTION-TECHNICAL-ORCHESTRATION.md`](./16-SUBSCRIPTION-TECHNICAL-ORCHESTRATION.md) · [`SUBSCRIPTION-TECH-GAP-REGISTRY.md`](./SUBSCRIPTION-TECH-GAP-REGISTRY.md)
 
+> ### Read this before following the Stripe steps
+>
+> This guide was written assuming Stripe could be the global rail. **A seller
+> registered in Peru cannot open a Stripe merchant account** — in Latin America
+> Stripe's merchant countries are Brazil and Mexico. Everything below about
+> Stripe is still accurate *as an integration*, and the worker's Stripe webhook
+> handling is tested and ready, so it applies unchanged the day there is a US or
+> EU entity. It is not something Pablo can sign up for today.
+>
+> For what to do instead, and in what order:
+> [`34-PERU-OPERATOR-RUNBOOK.md`](./34-PERU-OPERATOR-RUNBOOK.md).
+> For accounts, saved progress and gifted months:
+> [`33-ACCOUNTS-AND-PAYMENTS.md`](./33-ACCOUNTS-AND-PAYMENTS.md).
+
 > Official (non-deprecated, 2025–2026):  
 > - Payment Links: https://docs.stripe.com/payment-links  
 > - Post-payment + `{CHECKOUT_SESSION_ID}`: https://docs.stripe.com/payment-links/post-payment  

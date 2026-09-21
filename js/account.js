@@ -177,7 +177,8 @@
 
   /**
    * Which sign-in methods the deployment offers. Cached for the page's life.
-   * @returns {Promise<{email: boolean, google: boolean, googleClientId: string|null}>} Methods.
+   * @returns {Promise<{email: boolean, google: boolean, googleClientId: string|null,
+   *                    trialDays: number}>} Methods.
    */
   async function getMethods() {
     if (methods) return methods;
@@ -186,9 +187,10 @@
       ? {
         email: !!res.data.email,
         google: !!res.data.google,
-        googleClientId: res.data.googleClientId || null
+        googleClientId: res.data.googleClientId || null,
+        trialDays: Number(res.data.trialDays) > 0 ? Number(res.data.trialDays) : 30
       }
-      : { email: false, google: false, googleClientId: null };
+      : { email: false, google: false, googleClientId: null, trialDays: 30 };
     return methods;
   }
 
@@ -412,6 +414,9 @@
       account: snapshot?.account || null,
       entitlement: snapshot?.entitlement || null,
       grants: snapshot?.grants || [],
+      // Null until the first /v1/auth/methods answer lands, so read it
+      // defensively: the pricing panel may open before anyone signs in.
+      methods,
       // Pro is whatever the signature check says, never what this JSON claims.
       pro: !!global.VTLicense?.getClaims?.()
     };
@@ -428,7 +433,16 @@
    */
   async function init() {
     session = readSession();
-    if (!isConfigured() || !session?.token) {
+    if (!isConfigured()) {
+      emit();
+      return getState();
+    }
+    // Ask what this deploy offers even when nobody is signed in: the pricing
+    // panel needs the trial length to name it, and the answer is cached.
+    getMethods().then(emit).catch(() => {
+      /* offline; the panel falls back to the local trial wording */
+    });
+    if (!session?.token) {
       emit();
       return getState();
     }

@@ -4215,15 +4215,22 @@
         !!B.verificationConfigured?.()
       );
     }
-    // Free trial is opt-in: offer it only while this browser still has one.
+    // Free trial is opt-in. Once accounts exist the trial belongs to the
+    // account, not the browser — one per person rather than one per cleared
+    // localStorage — so the button leads to sign-in when nobody is signed in.
     const trialBtn = $("#btn-start-trial");
     if (trialBtn) {
-      const canTrial = !!B.canStartTrial?.() && !ent.pro;
+      const acct = window.VTAccount?.getState?.() || null;
+      const accounts = !!acct?.configured;
+      const canTrial = accounts
+        ? !ent.pro && !(acct.signedIn && acct.account?.trialUsed)
+        : !!B.canStartTrial?.() && !ent.pro;
       trialBtn.hidden = !canTrial;
       if (canTrial) {
-        trialBtn.textContent = tt("pricing.startTrial", {
-          n: String(Number(cfg.freeTrialDays || 0))
-        });
+        const days = accounts
+          ? Number(acct.methods?.trialDays || 30)
+          : Number(cfg.freeTrialDays || 0);
+        trialBtn.textContent = tt("pricing.startTrial", { n: String(days) });
       }
     }
     // Customer Portal: show for Pro/trial when a valid portal URL is configured
@@ -5321,7 +5328,27 @@
         renderPricingModal();
       });
     });
-    $("#btn-start-trial")?.addEventListener("click", () => {
+    $("#btn-start-trial")?.addEventListener("click", async () => {
+      const acct = window.VTAccount?.getState?.() || null;
+      if (acct?.configured) {
+        // Not signed in: send them to the panel rather than starting a trial
+        // this browser would forget and the next one would hand out again.
+        if (!acct.signedIn) {
+          toast(tt("pricing.trialNeedsAccount"), { durationMs: 4200 });
+          closePricing();
+          openAccount();
+          return;
+        }
+        const res = await window.VTAccount.startTrial();
+        if (res && res.ok) {
+          toast(tt("pricing.toast.trialStarted", { n: String(res.days ?? "") }));
+        } else {
+          toast(tt("pricing.toast.trialUsed"), { durationMs: 4200 });
+        }
+        updateBillingChrome();
+        renderPricingModal();
+        return;
+      }
       if (!window.VTBilling?.startTrial) return;
       const res = VTBilling.startTrial();
       if (!res.ok) {

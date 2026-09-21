@@ -458,7 +458,11 @@
         const anchor = title || cock || stage;
         const ar = anchor.getBoundingClientRect();
         if (ar.top < 0 || ar.top > (window.innerHeight || 600) * 0.35) {
-          anchor.scrollIntoView({ block: "start", behavior: "auto" });
+          // "instant", not "auto": html{scroll-behavior:smooth} makes "auto"
+          // animate, and every measurement below would then read a sticky
+          // stage that is still travelling, sizing it for a position it is
+          // about to leave. The stage then lands past the viewport bottom.
+          anchor.scrollIntoView({ block: "start", behavior: "instant" });
         }
       } catch {
         /* ignore */
@@ -1209,10 +1213,14 @@
     resetSessionPractice();
     renderExercise();
     setView("exercise");
-    // Instant jump to top so game stage is the first viewport (no smooth lag)
-    window.scrollTo(0, 0);
+    // Instant jump to top so game stage is the first viewport (no smooth lag).
+    // behavior:"instant" is load-bearing: html{scroll-behavior:smooth} turns a
+    // bare scrollTo into an animation, and the fits below would then measure a
+    // sticky stage still travelling — it lands past the viewport bottom once
+    // the scroll settles, pushing Start off a short screen.
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
     requestAnimationFrame(() => {
-      window.scrollTo(0, 0);
+      window.scrollTo({ top: 0, left: 0, behavior: "instant" });
       fitStageBelowContent();
     });
     // After layout paints: size cue strip + first-time UI tour for this layout family

@@ -33,7 +33,9 @@ async function boot(page) {
   });
 }
 
-async function openPitchExercise(page) {
+/** Click the pitch-matching card and nothing else, so the page is left in
+ *  exactly the state openExercise() puts it in. */
+async function clickPitchExercise(page) {
   await page.click('.tab[data-tab="singing"]');
   await page.waitForTimeout(120);
   await page.evaluate(() => {
@@ -52,6 +54,10 @@ async function openPitchExercise(page) {
     cards[0]?.click();
   });
   await page.waitForTimeout(280);
+}
+
+async function openPitchExercise(page) {
+  await clickPitchExercise(page);
   await page.evaluate(() => {
     window.scrollTo(0, 0);
     window.VTApp?.syncHeaderHeightVar?.();
@@ -132,6 +138,28 @@ for (const vp of VIEWPORTS) {
       }
       if (m.start?.visible) {
         expect(m.start.y2).toBeLessThanOrEqual(m.vh + 3);
+      }
+    });
+
+    // openExercise() jumps to the top and sizes the sticky stage from that
+    // measurement straight away. html{scroll-behavior:smooth} used to turn that
+    // jump into an animation, so the stage was sized for a position it was
+    // still travelling through and settled up to ~17px lower, past the bottom
+    // of a short screen and taking Start with it. This opens the exercise the
+    // way the app does, with no corrective scroll from the harness.
+    test("opening an exercise lands at the top and the stage stays put", async ({ page }) => {
+      await boot(page);
+      await clickPitchExercise(page);
+      await expect(page.locator("#view-exercise")).toHaveClass(/active/);
+      expect(await page.evaluate(() => window.scrollY)).toBeLessThanOrEqual(1);
+      const first = await measure(page);
+      await page.waitForTimeout(400);
+      const settled = await measure(page);
+      // Nothing may still be in flight once the view is up
+      expect(Math.abs(settled.stage.y2 - first.stage.y2)).toBeLessThanOrEqual(1);
+      expect(settled.stage.y2).toBeLessThanOrEqual(settled.vh + 2);
+      if (settled.start?.visible) {
+        expect(settled.start.y2).toBeLessThanOrEqual(settled.vh + 3);
       }
     });
   });

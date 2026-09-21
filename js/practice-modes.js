@@ -2547,6 +2547,273 @@
     }
   });
 
+  /**
+   * s27 lip-trill solfège — a scale carried on the bubble, root walking up and
+   * back down. This is deliberately NOT `scaleSteps` with a different cue.
+   *
+   * Two things make a trill different from a vowel scale, and both were measured
+   * against the shipped detector rather than guessed:
+   *
+   * 1. `detectPitch` reads a lip trill SHARP. The lips flutter at 25–30 Hz, which
+   *    is below the 65 Hz search floor in js/pitch-visualizer.js, so the flap
+   *    lands inside the analysis window instead of being resolved, and the
+   *    autocorrelation peak drifts up — of the order of +30…+60 cents at C3–D3,
+   *    less as pitch rises. A symmetric ±40¢ band (what `scaleSteps` uses) sits
+   *    below a correctly sung trill and never advances. So the acceptance window
+   *    here is ASYMMETRIC: tolerant sharp, tight flat. Tight on the flat side
+   *    matters — a wide-open flat side would lock on the note before it at the
+   *    two half steps in the pattern.
+   * 2. A trill scatters frame to frame, so a hard `else acc = 0` reset (again
+   *    what `scaleSteps` does) throws away the whole accumulator on one stray
+   *    frame. The accumulator bleeds at half fill rate instead, which needs
+   *    about 1.2s of continuously bad frames to undo a full 600ms lock.
+   *
+   * The sharp-side figure comes from simulating trills through the real
+   * `detectPitch`, not from recordings of actual students, so every constant is
+   * overridable from the profile.
+   */
+  Modes.trillSolfege = baseMode({
+    id: "trillSolfege",
+    render() {
+      const p = this.profile;
+      this.state.pattern = p.pattern || [0, 2, 4, 5, 7, 5, 4, 2, 0];
+      this.state.syllables = p.syllables || ["DO", "RE", "MI", "FA", "SOL", "FA", "MI", "RE", "DO"];
+      this.state.baseMidi = p.rootMidi || 48; // C3
+      this.state.topMidi = p.topRootMidi || this.state.baseMidi + 7; // walk up a fifth
+      this.state.rootMidi = this.state.baseMidi;
+      this.state.dir = 1;
+      this.state.i = 0;
+      this.state.patterns = 0;
+      this.state.acc = 0;
+      this.state.hist = [];
+      this.state.lastFreq = null;
+      this.state.refBlank = 0;
+      this.state.levels = [];
+      this.state.steadyScore = 0;
+      this.hud.innerHTML = `
+        <div class="mode-title">${L("Solfeo en trino de labios", "Lip-trill solfège")}</div>
+        <div class="trill-row">
+          <span class="trill-syl" data-syl>${this.state.syllables[0]}</span>
+          <span class="trill-note" data-note>—</span>
+        </div>
+        <div class="mode-bar thick"><span data-bar style="width:0%"></span></div>
+        <p class="mode-meta">${L("Uniformidad del trino:", "Trill evenness:")} <strong data-ev>—</strong></p>
+        <p class="mode-meta">${L("Paso", "Step")} <strong data-step>1</strong>/${
+          this.state.pattern.length
+        } · ${L("Pasadas", "Patterns")} <strong data-p>0</strong> · ${L(
+          "Raíz",
+          "Root"
+        )} <strong data-root>—</strong></p>
+        <p class="mode-meta muted">${L(
+          "No dejes que el burbujeo se pare entre notas. La raíz sube sola al completar la pasada.",
+          "Do not let the bubble stop between notes. The root moves up on its own once the pattern lands."
+        )}</p>
+      `;
+      this._lockLadder();
+      this._pushTarget();
+    },
+    /** Real sounding MIDI: the highway plots detected pitch, not written pitch. */
+    _shift() {
+      return 12 * (global.VTGetOctaveShift ? global.VTGetOctaveShift() : 0);
+    },
+    /**
+     * Lock the highway once over the whole ladder — base root to the top note of
+     * the highest pattern — so the Y axis does not jump every time the root moves.
+     */
+    _lockLadder() {
+      if (!global.VTPitchUtils || typeof global.VTGetPitchViz !== "function") return;
+      const viz = global.VTGetPitchViz();
+      if (!viz?.lockMidiRange) return;
+      const sh = this._shift();
+      viz.lockMidiRange(
+        this.state.baseMidi + Math.min(...this.state.pattern) + sh,
+        this.state.topMidi + Math.max(...this.state.pattern) + sh,
+        { pad: 1.5, minSpan: 10 }
+      );
+      this._drawLanes();
+    },
+    /**
+     * Ghost lanes for the pattern at the CURRENT root only. The ladder spans
+     * fifteen semitones, and a lane on every one of them is a chromatic wall
+     * that buries the five notes the student is actually being asked for.
+     */
+    _drawLanes() {
+      if (!global.VTPitchUtils || typeof global.VTGetPitchViz !== "function") return;
+      const viz = global.VTGetPitchViz();
+      if (!viz) return;
+      const sh = this._shift();
+      const seen = new Set();
+      viz.progressionLanes = [];
+      this.state.pattern.forEach((step) => {
+        const m = this.state.rootMidi + step + sh;
+        if (seen.has(m)) return;
+        seen.add(m);
+        viz.progressionLanes.push({
+          name: global.VTPitchUtils.midiToName(m),
+          freq: global.VTPitchUtils.midiToFreq(m),
+          midi: m,
+          active: false
+        });
+      });
+      viz.progressionLanes.sort((a, b) => a.midi - b.midi);
+      try {
+        viz._draw?.();
+      } catch {
+        /* ignore */
+      }
+    },
+    _pushTarget() {
+      if (!global.VTPitchUtils) return;
+      const midi = this.state.rootMidi + this.state.pattern[this.state.i];
+      const name = global.VTPitchUtils.midiToName(midi);
+      const sounded = shiftedNote(name);
+      this.state.wantName = name;
+      this.state.wantFreq =
+        global.VT_NOTE_FREQ?.[sounded] ?? global.VTPitchUtils.midiToFreq(midi);
+      this.state.hist = [];
+      this.state.lastFreq = null;
+      if (typeof global.VTSetPracticeTarget === "function" && this.state.wantFreq) {
+        global.VTSetPracticeTarget(this.state.wantFreq, sounded);
+      }
+      // The reference note bleeds into the mic (the app asks for no echo
+      // cancellation), so the gate stays shut while it rings. Counted down in
+      // frame time like everything else here, not against the wall clock.
+      this.state.refBlank = this.profile.refBlankMs == null ? 250 : this.profile.refBlankMs;
+      if (global.VTPiano?.playRefPitch && sounded) {
+        global.VTPiano.playRefPitch(sounded, 1.2, true).catch(() => {});
+      }
+      if (this.$("[data-syl]"))
+        this.$("[data-syl]").textContent = this.state.syllables[this.state.i] || "";
+      if (this.$("[data-note]")) this.$("[data-note]").textContent = sounded;
+      if (this.$("[data-step]")) this.$("[data-step]").textContent = String(this.state.i + 1);
+      if (this.$("[data-root]"))
+        this.$("[data-root]").textContent = shiftedNote(
+          global.VTPitchUtils.midiToName(this.state.rootMidi)
+        );
+    },
+    onStart() {
+      this._lockLadder();
+      this._pushTarget();
+    },
+    /** Median of the accepted pitch history — one stray frame cannot move it. */
+    _median() {
+      const a = this.state.hist.slice().sort((x, y) => x - y);
+      if (!a.length) return null;
+      const m = a.length >> 1;
+      return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
+    },
+    /** Advance one step; at the end of a pattern the root walks up, then back down. */
+    _advance() {
+      this.state.acc = 0;
+      this.state.i += 1;
+      if (this.state.i >= this.state.pattern.length) {
+        this.state.i = 0;
+        this.state.patterns += 1;
+        if (this.$("[data-p]")) this.$("[data-p]").textContent = String(this.state.patterns);
+        const next = this.state.rootMidi + this.state.dir;
+        if (next > this.state.topMidi) {
+          this.state.dir = -1;
+          this.state.rootMidi = Math.max(this.state.baseMidi, this.state.rootMidi - 1);
+        } else if (next < this.state.baseMidi) {
+          this.state.dir = 1;
+          this.state.rootMidi = Math.min(this.state.topMidi, this.state.rootMidi + 1);
+        } else {
+          this.state.rootMidi = next;
+        }
+        this._drawLanes();
+      }
+      this._pushTarget();
+    },
+    /**
+     * Trill evenness as a coefficient of variation rather than a bare standard
+     * deviation: the same trill would otherwise score differently at different
+     * input gains. The window is short enough to stay inside one scale step, so
+     * the legitimate level change between notes is not counted as unevenness.
+     */
+    _evenness(rms) {
+      if (!(rms > 0)) return;
+      const win = this.profile.evenWindow || 40;
+      this.state.levels.push(rms);
+      if (this.state.levels.length > win) this.state.levels.shift();
+      const a = this.state.levels;
+      if (a.length < 12) return;
+      const mean = a.reduce((x, y) => x + y, 0) / a.length;
+      if (!(mean > 0)) return;
+      const sd = Math.sqrt(a.reduce((x, y) => x + (y - mean) ** 2, 0) / a.length);
+      const steady = clamp(1 - (sd / mean) * (this.profile.evenK || 6), 0, 1);
+      this.state.steadyScore = steady;
+      if (this.$("[data-bar]")) this.$("[data-bar]").style.width = `${Math.round(steady * 100)}%`;
+      if (this.$("[data-ev]"))
+        this.$("[data-ev]").textContent =
+          steady > 0.7
+            ? L("estable", "steady")
+            : steady > 0.4
+              ? L("aceptable", "ok")
+              : L("irregular", "uneven");
+    },
+    onFrame(frame) {
+      const dt = frame.dtMs || 16;
+      const rms = frame.rms || 0;
+      this._evenness(rms);
+      if (!this.state.wantFreq || !global.VTPitchUtils) return;
+      // The clock-only fallback frame carries voiceFreq 0, not null.
+      const f = frame.voiceFreq || 0;
+      // `voiced` stays true through a grace window after the sound stops, and
+      // `voiceFreq` repeats its last value bit for bit while it does. Require
+      // real energy, and ignore a pitch that has not changed at all.
+      const floor = Math.max(0.02, (frame.airRmsThreshold || 0.006) * 3);
+      const live = !!frame.voiced && rms >= floor && f > 0 && f !== this.state.lastFreq;
+      const blanked = this.state.refBlank > 0;
+      if (blanked) this.state.refBlank -= dt;
+      if (!live || blanked) {
+        if (!blanked && f <= 0) this.state.acc = Math.max(0, this.state.acc - dt * 0.5);
+        return;
+      }
+      this.state.lastFreq = f;
+      const n = this.profile.smoothN || 7;
+      this.state.hist.push(f);
+      if (this.state.hist.length > n) this.state.hist.shift();
+      const med = this._median();
+      if (med == null) return;
+      const cents =
+        (global.VTPitchUtils.freqToMidi(med) -
+          global.VTPitchUtils.freqToMidi(this.state.wantFreq)) *
+        100;
+      const lo = this.profile.centsLo == null ? -40 : this.profile.centsLo;
+      const hi = this.profile.centsHi == null ? 120 : this.profile.centsHi;
+      if (cents >= lo && cents <= hi) {
+        this.state.acc += dt;
+        if (this.state.acc >= (this.profile.holdMs || 600)) this._advance();
+      } else {
+        this.state.acc = Math.max(0, this.state.acc - dt * 0.5);
+      }
+    },
+    onStop() {
+      const p = this.state.patterns || 0;
+      const s = this.state.steadyScore || 0;
+      const patches = {};
+      if (p > 0) patches.patterns = p;
+      if (this.state.levels.length >= 12 && s > 0.2) {
+        patches.trillSteady = s > 0.75 ? 5 : s > 0.55 ? 4 : 3;
+      }
+      const top = global.VTPitchUtils
+        ? global.VTPitchUtils.midiToName(this.state.rootMidi)
+        : "—";
+      return {
+        patches,
+        summary: p
+          ? L(
+              `${p} ${p === 1 ? "pasada" : "pasadas"} · raíz alcanzada ${top}`,
+              `${p} ${p === 1 ? "pattern" : "patterns"} · root reached ${top}`
+            )
+          : L(
+              "Ninguna pasada completa todavía — mantén el burbujeo por las nueve notas",
+              "No pattern completed yet — keep the bubble going through all nine notes"
+            )
+      };
+    }
+  });
+
   // API
   const Registry = {
     get(modeId) {

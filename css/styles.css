@@ -4696,9 +4696,36 @@ body.home-zero #start-panel .start-sub {
   margin-top: 0.5rem;
 }
 
+/* Lip-trill solfège: the syllable is what the student reads from a stand, the
+   note name is the reference beside it — same weight would make neither win. */
+.trill-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.55rem;
+  margin: 0.25rem 0;
+}
+
+.trill-syl {
+  font-family: var(--mono);
+  font-size: 1.75rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.trill-note {
+  font-family: var(--mono);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
 @media (max-width: 480px) {
   .zone-chip {
     font-size: 0.78rem;
     padding: 0.2rem 0.5rem;
+  }
+
+  .trill-syl {
+    font-size: 1.5rem;
   }
 }

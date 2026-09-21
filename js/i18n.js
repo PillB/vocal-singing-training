@@ -614,7 +614,8 @@
       "ex.s23-mask-ya": "Buscar la máscara («YA»)",
       "ex.s24-nana-high": "Agudos con «NANA»",
       "ex.s25-zone-tour": "Recorrido por las tres zonas",
-      "ex.s26-placement-compare": "Comparar colocaciones (A/B)"
+      "ex.s26-placement-compare": "Comparar colocaciones (A/B)",
+      "ex.s27-lip-trill-solfege": "Solfeo en trino de labios"
     },
     en: {
       "meta.title": "Vocal & Singing Training",
@@ -1223,7 +1224,8 @@
       "ex.s23-mask-ya": "Mask Finder (\u201cYA\u201d)",
       "ex.s24-nana-high": "High Notes on \u201cNANA\u201d",
       "ex.s25-zone-tour": "Three-Zone Tour (Low\u2013Mid\u2013High)",
-      "ex.s26-placement-compare": "Placement A/B (Compare Two Takes)"
+      "ex.s26-placement-compare": "Placement A/B (Compare Two Takes)",
+      "ex.s27-lip-trill-solfege": "Lip Trill Solf\u00e8ge (Scale on the Bubble)"
     }
   };
 

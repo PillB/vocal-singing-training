@@ -987,6 +987,31 @@
       "Juzgar por lo bonito en vez de por la resonancia",
       "No escuchar nunca la grabación"
     ]
+  },
+  "s27-lip-trill-solfege": {
+    "original": "El mismo trino de labios, ahora con una escala encima: 1-2-3-4-5-4-3-2-1 sobre el burbujeo, y después toda la pasada sube medio tono y la repites.",
+    "research": "Estrechar el tracto en los labios devuelve contrapresión a las cuerdas: baja la presión necesaria para arrancar la nota y suaviza el choque entre pliegues. Así la escala cuesta esfuerzo de calentamiento y no esfuerzo de canto, y la mejora medida es mayor en voces sin entrenar. Con los labios burbujeando no puedes pronunciar do-re-mi, así que el solfeo vive en el oído y en la afinación, y se traspasa a la vocal abierta justo después.",
+    "steps": [
+      "Primero el burbujeo sin nota: labios sueltos, aire constante, mandíbula colgando.",
+      "Añade la primera nota por debajo del burbujeo sin que los labios se paren.",
+      "Trina la pasada 1-2-3-4-5-4-3-2-1 — una nota por objetivo, una respiración por pasada.",
+      "Respira entre pasadas, nunca en mitad de una.",
+      "Tras cada pasada limpia la raíz sube medio tono; arriba da la vuelta y baja otra vez. Síguela, no te adelantes.",
+      "Termina cantando la última pasada en /A/ abierta con la misma facilidad que tenía el burbujeo."
+    ],
+    "tips": [
+      "Si los labios se paran, manda más aire en vez de apretar más — o apoya dos dedos en las mejillas.",
+      "El burbujeo debe ir al mismo ritmo mientras subes. Si se acelera o se corta, estás empujando.",
+      "Mantén el volumen parejo en toda la pasada: subir de volumen al subir de nota es justo el hábito que esto quita.",
+      "Con el trino llegarás honestamente dos o tres semitonos por encima de tu rango en vocal abierta. Ese margen es el objetivo del ejercicio, no tu nota más aguda nueva."
+    ],
+    "mistakes": [
+      "Dejar que el trino se pare entre notas",
+      "Subir de volumen según sube la pasada",
+      "Respirar en mitad de una pasada",
+      "Perseguir la nota más aguda en vez de una pasada limpia",
+      "Apretar los labios en vez de mandar más aire"
+    ]
   }
 };
 })(window);

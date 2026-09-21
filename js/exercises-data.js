@@ -1232,6 +1232,47 @@ window.VT_EXERCISES = {
       audio: { timer: true, record: true, piano: true, pitchViz: false },
       timerDefaultSec: 240
     },
+    {
+      id: "s27-lip-trill-solfege",
+      track: "singing",
+      tier: "basic",
+      number: 27,
+      title: "Lip Trill Solfège (Scale on the Bubble)",
+      durationMin: 5,
+      original:
+        "The same lip trill, now carrying a scale: 1-2-3-4-5-4-3-2-1 on the bubble, then the whole pattern moves up a semitone and you do it again.",
+      research:
+        "Narrowing the tract at the lips sends back pressure down to the folds, which lowers the pressure needed to start a note and softens how hard the folds collide — so a scale costs warm-up effort instead of singing effort, and the measured gain is largest in untrained voices. You cannot pronounce do-re-mi with the lips buzzing, so the solfège lives in the ear and in the pitch, and it transfers to the open vowel straight afterwards.",
+      steps: [
+        "Bubble first with no pitch at all: loose lips, steady air, jaw hanging.",
+        "Add the first note underneath the bubble without letting the lips stop.",
+        "Trill the pattern 1-2-3-4-5-4-3-2-1 — one note per target, one breath per pattern.",
+        "Breathe between patterns, never in the middle of one.",
+        "After each clean pattern the root moves up a semitone; near the top it turns around and walks back down. Follow it, do not push past it.",
+        "Finish by singing the last pattern on open /A/ with the same ease the bubble had."
+      ],
+      tips: [
+        "If the lips stall, send more air rather than pressing harder — or rest two fingers on the cheeks.",
+        "The buzz rate should stay the same as you climb. If it speeds up or stops, you are pushing.",
+        "Keep the volume level across the pattern — getting louder on the way up is the habit this removes.",
+        "The trill honestly reaches two or three semitones above your open-vowel range. That headroom is the point of it, not your new top note."
+      ],
+      mistakes: [
+        "Letting the trill stop between notes",
+        "Getting louder as the pattern rises",
+        "Breathing in the middle of a pattern",
+        "Chasing the top of the range instead of a clean pattern",
+        "Pressing the lips together instead of sending more air"
+      ],
+      metrics: [
+        { id: "patterns", label: "Patterns completed", labelEs: "Pasadas completas", type: "number", target: 8, unit: "" },
+        { id: "trillSteady", label: "Trill steadiness", labelEs: "Estabilidad del trino", type: "scale", min: 1, max: 5 },
+        { id: "pitchEase", label: "Ease of the pattern", labelEs: "Facilidad de la pasada", type: "scale", min: 1, max: 5 },
+        { id: "transfer", label: "Transfer to open /A/", labelEs: "Paso a /A/ abierta", type: "scale", min: 1, max: 5 }
+      ],
+      audio: { timer: true, record: false, piano: true, pitchViz: true, refPitch: "C3" },
+      timerDefaultSec: 300
+    },
     /* ─── ADVANCED TIER (complementary singing pedagogy) ─── */
     {
       id: "s4-lip-trills",
@@ -1259,6 +1300,7 @@ window.VT_EXERCISES = {
       metrics: [
         { id: "duration", label: "Minutes of trills", type: "number", target: 5, unit: "min" },
         { id: "ease", label: "Ease of phonation", type: "scale", min: 1, max: 5 },
+        { id: "steadiness", label: "Trill steadiness", labelEs: "Estabilidad del trino", type: "scale", min: 1, max: 5 },
         { id: "transfer", label: "Transfer to /A/", type: "scale", min: 1, max: 5 }
       ],
       audio: { timer: true, record: true, piano: true, pitchViz: true, refPitch: "C3" },
@@ -1683,6 +1725,7 @@ window.VT_STRUCTURED = {
     "s15-sh-air-ladder",
     "s7-humming",
     "s4-lip-trills",
+    "s27-lip-trill-solfege",
     "s1-vocal-fry",
     "s19-soft-palate-surprise",
     "s20-five-vowels",
@@ -1702,21 +1745,22 @@ window.VT_DAILY_SESSION = {
   id: "singing_daily",
   track: "singing",
   path: "daily",
-  totalMin: 30,
+  totalMin: 32,
   sec: {
     "s17-jaw-neck-release": 105,
     "s18-costal-breath": 105,
     "s15-sh-air-ladder": 120,
-    "s7-humming": 105,
-    "s4-lip-trills": 75,
-    "s1-vocal-fry": 105,
+    "s7-humming": 90,
+    "s4-lip-trills": 120,
+    "s27-lip-trill-solfege": 120,
+    "s1-vocal-fry": 90,
     "s19-soft-palate-surprise": 150,
-    "s20-five-vowels": 135,
-    "s2-solfege-chords": 150,
+    "s20-five-vowels": 120,
+    "s2-solfege-chords": 120,
     "s21-chest-resonance": 105,
     "s22-mid-voice-hola": 75,
     "s23-mask-ya": 75,
-    "s24-nana-high": 105,
+    "s24-nana-high": 90,
     "s25-zone-tour": 135,
     "s26-placement-compare": 120,
     "s3-song-stanzas": 180

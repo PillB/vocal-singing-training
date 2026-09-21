@@ -825,6 +825,28 @@
       cue: "Two takes of one phrase, plain then placed, then listen back and keep one.",
       cueEs: "Dos tomas de una frase, sin intención y colocada, luego escucha y quédate con una.",
       metricHints: {}
+    },
+    /*
+     * The mode picks every target itself and walks the root, so `ownsTarget`
+     * is not optional here: this exercise declares `audio.refPitch`, and
+     * without the flag both the highway bootstrap and the reference sound in
+     * js/app.js would pull the target back to C3 on every step.
+     */
+    "s27-lip-trill-solfege": {
+      mode: "trillSolfege",
+      showPitch: true,
+      showHold: false,
+      showLevel: true,
+      pitchChallenge: false,
+      autoPiano: true,
+      autoRecord: false,
+      refPitch: "C3",
+      ownsTarget: true,
+      rootMidi: 48,
+      topRootMidi: 55,
+      cue: "Trill 1-2-3-4-5-4-3-2-1 on the bubble. The root walks up after each clean pattern and back down at the top.",
+      cueEs: "Trina 1-2-3-4-5-4-3-2-1 sobre el burbujeo. La raíz sube tras cada pasada limpia y baja al llegar arriba.",
+      metricHints: { patterns: "patternCount" }
     }
   };
 

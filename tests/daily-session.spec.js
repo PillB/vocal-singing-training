@@ -21,7 +21,8 @@ const CLASS_EXERCISES = [
   { id: "s23-mask-ya", mode: "resonanceZone" },
   { id: "s24-nana-high", mode: "resonanceZone" },
   { id: "s25-zone-tour", mode: "resonanceZone" },
-  { id: "s26-placement-compare", mode: "placementAB" }
+  { id: "s26-placement-compare", mode: "placementAB" },
+  { id: "s27-lip-trill-solfege", mode: "trillSolfege" }
 ];
 
 async function boot(page, lang = "es") {
@@ -92,9 +93,19 @@ test.describe("Prepared daily class session", () => {
     expect(report.missingMode, "every step mounts a registered practice mode").toEqual([]);
     expect(report.duplicates, "no exercise appears twice in the sequence").toEqual([]);
 
-    // The class warm-ups the session was asked to open with
+    // The class warm-ups the session was asked to open with. Both lip-trill
+    // steps are part of the mandatory block, and the solfège one follows the
+    // free trill rather than floating somewhere later in the run.
     expect(report.order.slice(0, 6)).toEqual(
-      expect.arrayContaining(["s15-sh-air-ladder", "s7-humming", "s4-lip-trills"])
+      expect.arrayContaining([
+        "s15-sh-air-ladder",
+        "s7-humming",
+        "s4-lip-trills",
+        "s27-lip-trill-solfege"
+      ])
+    );
+    expect(report.order.indexOf("s27-lip-trill-solfege")).toBe(
+      report.order.indexOf("s4-lip-trills") + 1
     );
     // Solfège and song application are in the run
     expect(report.order).toContain("s2-solfege-chords");
@@ -112,7 +123,10 @@ test.describe("Prepared daily class session", () => {
     const card = page.locator("#next-step-card");
     await expect(card).toBeVisible();
     await expect(page.locator("#next-step-label")).toHaveText(/Sesión diaria/i);
-    await expect(page.locator("#next-step-title")).toHaveText(/16 ejercicios/i);
+    const stepCount = await page.evaluate(() => window.VT_STRUCTURED.singing_daily.length);
+    await expect(page.locator("#next-step-title")).toHaveText(
+      new RegExp(`${stepCount} ejercicios`, "i")
+    );
     const cta = page.locator("#btn-next-step");
     await expect(cta).toHaveText(/sesión diaria/i);
     // Home must still have exactly one primary action (the IA rule for this panel)
@@ -144,7 +158,7 @@ test.describe("Prepared daily class session", () => {
     expect(started.path).toBe("daily");
     expect(started.track).toBe("singing");
     expect(started.status).toBe("active");
-    expect(started.len).toBe(16);
+    expect(started.len).toBe(stepCount);
     expect(started.openId).toBe(started.first);
     expect(started.structured, "opened as part of the session, so Next advances").toBe(true);
 
@@ -155,7 +169,7 @@ test.describe("Prepared daily class session", () => {
     await expect(page.locator("#btn-next-structured")).toBeVisible();
   });
 
-  test("sequence: Next walks all 16 steps in order and finishes", async ({ page }) => {
+  test("sequence: Next walks every step in order and finishes", async ({ page }) => {
     await boot(page);
     await page.evaluate(() => window.VTApp.startDaily());
     await expect(page.locator("#view-exercise")).toHaveClass(/active/);
@@ -250,6 +264,11 @@ test.describe("Prepared daily class session", () => {
           mistakes: document.querySelectorAll("#ex-mistakes li").length,
           metricLabels: (document.querySelector("#metrics-form")?.textContent || "").trim(),
           metricCount: (ex?.metrics || []).length,
+          metrics: (ex?.metrics || []).map((m) => ({
+            id: m.id,
+            label: m.label,
+            labelEs: m.labelEs || null
+          })),
           esTitle: es,
           enTitle: en,
           esStepsTranslated: Array.isArray(esSteps) && esSteps.length > 0 && esSteps !== ex.steps
@@ -267,11 +286,19 @@ test.describe("Prepared daily class session", () => {
       expect(r.tips, `${r.id} tips`).toBeGreaterThanOrEqual(3);
       expect(r.mistakes, `${r.id} mistakes`).toBeGreaterThanOrEqual(3);
       expect(r.metricCount, `${r.id} has metrics to log`).toBeGreaterThanOrEqual(3);
-      // Metric labels are learner-facing: in Spanish they must not fall back to English
+      // Metric labels are learner-facing: in Spanish they must not fall back to
+      // English. Checked against each metric's own declared pair rather than a
+      // frozen list of phrases, so a new metric cannot ship untranslated.
       expect(r.metricLabels.length, `${r.id} renders its metrics form`).toBeGreaterThan(0);
-      expect(r.metricLabels, `${r.id} metric labels are translated`).not.toMatch(
-        /Release phases|Complete breath cycles|Open-space holds|Rounds|targets held|takes recorded/i
-      );
+      for (const m of r.metrics) {
+        expect(m.labelEs, `${r.id}.${m.id} declares a Spanish label`).toBeTruthy();
+        expect(r.metricLabels, `${r.id}.${m.id} renders in Spanish`).toContain(m.labelEs);
+        if (m.label !== m.labelEs) {
+          expect(r.metricLabels, `${r.id}.${m.id} does not fall back to English`).not.toContain(
+            m.label
+          );
+        }
+      }
       expect(r.esTitle, `${r.id} Spanish title`).not.toMatch(/^ex\./);
       expect(r.enTitle, `${r.id} English title`).not.toMatch(/^ex\./);
       expect(r.esTitle).not.toBe(r.enTitle);
@@ -525,6 +552,153 @@ test.describe("Prepared daily class session", () => {
     });
     expect(res.lowSaysLow, "C3 is the low zone while low is asked for").toBe(0);
     expect(res.midSaysMid, "and the middle zone once middle is asked for").toBe(1);
+  });
+
+  test("the lip-trill scale tolerates a trill without tolerating the wrong note", async ({
+    page
+  }) => {
+    await boot(page);
+
+    const r = await page.evaluate(() => {
+      // A lip trill reads sharp through this app's detector and scatters frame
+      // to frame, so the gate is asymmetric and bleeds instead of resetting.
+      // Drive it with frames shaped like a real trill rather than a clean tone.
+      function run(centsOff, frames, opts = {}) {
+        const m = window.VTPracticeModes.get("trillSolfege");
+        const host = document.createElement("div");
+        document.body.appendChild(host);
+        m.mount(host, { mode: "trillSolfege", rootMidi: 48, topRootMidi: 55 });
+        m.onStart();
+        const first = m.state.wantName;
+        const firstRoot = m.state.rootMidi;
+        for (let i = 0; i < frames; i++) {
+          const bad = opts.badAt && i >= opts.badAt[0] && i < opts.badAt[1];
+          const off = bad ? -400 : centsOff;
+          // ±1 cent of jitter, the way a bubbling trill actually arrives
+          const jitter = ((i % 3) - 1) * 0.0005;
+          const f = m.state.wantFreq * Math.pow(2, off / 1200) * (1 + jitter);
+          m.onFrame({ dtMs: 16, rms: 0.2, voiced: true, voiceFreq: f, airRmsThreshold: 0.006 });
+        }
+        const out = m.onStop({});
+        const res = {
+          first,
+          firstRoot,
+          step: m.state.i,
+          patterns: m.state.patterns,
+          root: m.state.rootMidi,
+          note: m.state.wantName,
+          patches: out.patches,
+          summary: out.summary
+        };
+        host.remove();
+        return res;
+      }
+
+      // One step is ~250ms of reference blanking plus 600ms in band ≈ 54 frames.
+      const STEP = 60;
+      return {
+        onPitch: run(0, STEP * 9 + 40),
+        sharp: run(60, STEP * 2),
+        flat: run(-80, STEP * 4),
+        wayOff: run(300, STEP * 4),
+        dropout: run(0, 76, { badAt: [50, 56] }),
+        silent: (() => {
+          const m = window.VTPracticeModes.get("trillSolfege");
+          const host = document.createElement("div");
+          document.body.appendChild(host);
+          m.mount(host, { mode: "trillSolfege" });
+          m.onStart();
+          // The clock-only fallback frame: no mic, voiceFreq 0, no energy.
+          for (let i = 0; i < 400; i++)
+            m.onFrame({ dtMs: 16, rms: 0, voiced: false, voiceFreq: 0 });
+          const out = { step: m.state.i, patches: m.onStop({}).patches };
+          host.remove();
+          return out;
+        })(),
+        stale: (() => {
+          const m = window.VTPracticeModes.get("trillSolfege");
+          const host = document.createElement("div");
+          document.body.appendChild(host);
+          m.mount(host, { mode: "trillSolfege" });
+          m.onStart();
+          // `voiced` stays true through a grace window after the sound stops and
+          // `voiceFreq` repeats its last value exactly. That must not advance.
+          const f = m.state.wantFreq;
+          for (let i = 0; i < 400; i++)
+            m.onFrame({ dtMs: 16, rms: 0.2, voiced: true, voiceFreq: f });
+          const out = { step: m.state.i, patterns: m.state.patterns };
+          host.remove();
+          return out;
+        })()
+      };
+    });
+
+    expect(r.onPitch.first, "the ladder starts on the profile root").toBe("C3");
+    expect(r.onPitch.firstRoot).toBe(48);
+    expect(r.onPitch.patterns, "trilling the whole pattern completes it").toBe(1);
+    expect(r.onPitch.root, "and the root walks up a semitone for the next pass").toBe(49);
+    expect(r.onPitch.patches.patterns).toBe(1);
+    // The summary lands in a toast and the results panel, so it is Spanish here
+    expect(r.onPitch.summary).toMatch(/1 pasada · raíz alcanzada C#3/i);
+
+    expect(r.sharp.step, "a trill read sharp still counts — that is the point").toBeGreaterThan(0);
+    expect(r.flat.step, "but a note this flat is the note below, not a sharp trill").toBe(0);
+    expect(r.wayOff.step, "and a target missed by a third never counts").toBe(0);
+
+    // The gate bleeds at half the fill rate, so a burst of bad frames costs some
+    // progress without throwing the whole hold away. A hard reset would leave
+    // only the frames after the burst, which is not enough to advance here.
+    expect(r.dropout.step, "a dropout mid-hold does not wipe the hold").toBe(1);
+
+    expect(r.silent.step, "the clock-only fallback frame never advances the scale").toBe(0);
+    expect(r.silent.patches.patterns, "and scores nothing").toBeUndefined();
+    expect(r.stale.step, "a repeated stale pitch is not singing").toBe(0);
+    expect(r.stale.patterns).toBe(0);
+
+    // Live: the mode owns the target, and the highway shows the pattern it is
+    // asking for rather than every semitone the ladder will eventually visit.
+    await page.evaluate(() => window.VTApp.openExercise("s27-lip-trill-solfege"));
+    await page.locator("#btn-practice-start").click();
+    await page.waitForTimeout(700);
+    const live = await page.evaluate(() => {
+      const st = window.VTApp.getState();
+      return {
+        wantName: st.modeInstance?.state?.wantName,
+        engineTarget: st.practice?.getTargetFreq?.() ?? st.practice?.targetFreq ?? null,
+        c3: window.VT_NOTE_FREQ.C3,
+        lanes: (window.VTGetPitchViz?.()?.progressionLanes || []).map((l) => l.name)
+      };
+    });
+    expect(live.wantName).toBe("C3");
+    if (live.engineTarget != null) {
+      expect(live.engineTarget, "the mode's target survives the refPitch bootstrap").toBeCloseTo(
+        live.c3,
+        1
+      );
+    }
+    expect(live.lanes, "one lane per note of the current pattern").toEqual([
+      "C3",
+      "D3",
+      "E3",
+      "F3",
+      "G3"
+    ]);
+
+    // The root walks, and the lanes walk with it inside the same locked range.
+    const walked = await page.evaluate(() => {
+      const m = window.VTApp.getState().modeInstance;
+      m.state.rootMidi = 52; // E3
+      m._drawLanes();
+      return (window.VTGetPitchViz?.()?.progressionLanes || []).map((l) => l.name);
+    });
+    expect(walked, "the pattern transposes with the root").toEqual([
+      "E3",
+      "F#3",
+      "G#3",
+      "A3",
+      "B3"
+    ]);
+    await page.locator("#btn-practice-stop").click().catch(() => {});
   });
 
   test("time-driven exercises still run when the mic is refused", async ({ page }) => {

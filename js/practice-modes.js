@@ -1987,6 +1987,833 @@
     }
   });
 
+  // ——— CLASS MODES (placement / resonance course) ———
+
+  /**
+   * Note name after the app's active octave shift. `VTLockHighwayNotes` shifts
+   * the names it is given and the piano reference is shifted too, so a mode that
+   * picks its own targets must look them up at the same octave or the user is
+   * chasing a note the highway never shows.
+   */
+  function shiftedNote(name) {
+    const n = global.VTGetOctaveShift ? global.VTGetOctaveShift() : 0;
+    if (!name || !n || typeof global.VTShiftNoteName !== "function") return name;
+    return global.VTShiftNoteName(name, n) || name;
+  }
+
+  /** Per-phase cue text, localized like the phase label itself. */
+  function phaseCueFor(phase) {
+    if (!phase) return "";
+    return (isEs() ? phase.cueEs || phase.cue : phase.cue) || "";
+  }
+
+  /**
+   * s17 jaw & neck release — silent guided phases. Nothing to detect: the value
+   * is being walked through the four releases instead of skipping them because
+   * they make no sound.
+   */
+  Modes.releaseFlow = baseMode({
+    id: "releaseFlow",
+    render() {
+      const phases = this.profile.phases || [];
+      this.state.phases = phases;
+      this.state.runner = createPhaseRunner(phases, (i, p) => {
+        if (global.VTToast) global.VTToast(p.label);
+        const cueEl = this.$("[data-cue]");
+        if (cueEl) cueEl.textContent = phaseCueFor(p);
+      });
+      this.hud.innerHTML = `
+        <div class="mode-title">${L("Soltar mandíbula y cuello", "Jaw & neck release")}</div>
+        <div class="mode-phase" data-phase>${phases[0]?.label || L("Suelta", "Release")}</div>
+        <div class="mode-big" data-remain>—</div>
+        <div class="mode-bar"><span data-bar style="width:0%"></span></div>
+        <p class="mode-meta" data-cue>${phaseCueFor(phases[0])}</p>
+        <p class="mode-meta muted">${L(
+          "Sin sonido y sin prisa. Si algo tira o duele, hazlo más pequeño.",
+          "No sound, no hurry. If anything pulls or hurts, make it smaller."
+        )}</p>
+      `;
+    },
+    onFrame() {
+      const r = this.state.runner;
+      if (!r) return;
+      r.tick(performance.now());
+      const done = r.index >= r.count;
+      this.state.done = Math.min(r.index, r.count);
+      if (this.$("[data-phase]")) {
+        this.$("[data-phase]").textContent = done
+          ? L("Listo — cuello y mandíbula sueltos", "Done — jaw and neck free")
+          : r.label;
+      }
+      if (this.$("[data-remain]"))
+        this.$("[data-remain]").textContent = done ? "✓" : `${Math.ceil(r.remaining)}s`;
+      if (this.$("[data-bar]"))
+        this.$("[data-bar]").style.width = `${(this.state.done / Math.max(1, r.count)) * 100}%`;
+    },
+    onStop() {
+      const n = this.state.done || 0;
+      return {
+        patches: n > 0 ? { phasesDone: n } : {},
+        summary: `${n}/${this.state.phases?.length || 0} release phases`
+      };
+    }
+  });
+
+  /**
+   * s18 costo-abdominal breath — paced inhale / retention / exhale. The belt bar
+   * is the low expansion: it fills on the inhale, holds, then empties slowly so
+   * the ribs have something to resist against (apoyo).
+   */
+  Modes.breathCycle = baseMode({
+    id: "breathCycle",
+    render() {
+      const p = this.profile.pattern || {};
+      this.state.inSec = p.in || 4;
+      this.state.holdSec = p.hold != null ? p.hold : 2;
+      this.state.outSec = p.out || 8;
+      this.state.stage = 0; // 0 in · 1 hold · 2 out
+      this.state.t = 0;
+      this.state.cycles = 0;
+      this.state.last = performance.now();
+      this.hud.innerHTML = `
+        <div class="mode-title">${L("Respiración costo-abdominal", "Low rib & belly breath")}</div>
+        <div class="mode-phase" data-stage>${L("Inhala por la nariz", "Inhale through the nose")}</div>
+        <div class="mode-big" data-count>${this.state.inSec}</div>
+        <div class="mode-bar thick"><span data-belt style="width:0%"></span></div>
+        <p class="mode-meta">${L("Ciclos", "Cycles")} <strong data-cy>0</strong> · ${this.state
+          .inSec}–${this.state.holdSec}–${this.state.outSec}</p>
+        <p class="mode-meta muted">${L(
+          "Manos en costillas bajas y abdomen. Los hombros no suben.",
+          "Hands on the low ribs and belly. The shoulders do not rise."
+        )}</p>
+      `;
+    },
+    onStart() {
+      this.state.last = performance.now();
+      this.state.stage = 0;
+      this.state.t = 0;
+    },
+    onFrame() {
+      const now = performance.now();
+      const dt = Math.min(0.25, (now - this.state.last) / 1000);
+      this.state.last = now;
+      this.state.t += dt;
+      const lens = [this.state.inSec, this.state.holdSec, this.state.outSec];
+      while (this.state.t >= lens[this.state.stage] && lens[this.state.stage] > 0) {
+        this.state.t -= lens[this.state.stage];
+        this.state.stage = (this.state.stage + 1) % 3;
+        if (this.state.stage === 0) {
+          this.state.cycles += 1;
+          if (this.$("[data-cy]")) this.$("[data-cy]").textContent = String(this.state.cycles);
+        }
+        // Skip a zero-length stage rather than looping forever on it
+        if (lens[this.state.stage] <= 0) continue;
+      }
+      const len = lens[this.state.stage] || 1;
+      const frac = clamp(this.state.t / len, 0, 1);
+      const labels = [
+        L("Inhala por la nariz", "Inhale through the nose"),
+        L("Retén — listo para sonar", "Hold — ready to sound"),
+        L("Espira pareja — costillas anchas", "Even exhale — ribs wide")
+      ];
+      const belt = this.state.stage === 0 ? frac : this.state.stage === 1 ? 1 : 1 - frac;
+      if (this.$("[data-stage]")) this.$("[data-stage]").textContent = labels[this.state.stage];
+      if (this.$("[data-count]"))
+        this.$("[data-count]").textContent = String(Math.max(1, Math.ceil(len - this.state.t)));
+      if (this.$("[data-belt]")) this.$("[data-belt]").style.width = `${belt * 100}%`;
+    },
+    onStop() {
+      const n = this.state.cycles || 0;
+      return {
+        patches: n > 0 ? { cycles: n } : {},
+        summary: `${n} breath cycles ${this.state.inSec}–${this.state.holdSec}–${this.state.outSec}`
+      };
+    }
+  });
+
+  /**
+   * s19 soft palate — surprise / pre-yawn phases, then sound in that space.
+   * A sustained voiced hold during a sounding phase is what counts, so the
+   * exercise rewards singing from the open space rather than just opening.
+   */
+  Modes.openSpace = baseMode({
+    id: "openSpace",
+    render() {
+      const phases = this.profile.phases || [];
+      this.state.phases = phases;
+      this.state.holds = 0;
+      this.state.voiced = 0;
+      this.state.minHoldMs = this.profile.minHoldMs || 1500;
+      this.state.runner = createPhaseRunner(phases, (i, p) => {
+        if (global.VTToast) global.VTToast(p.label);
+        const cueEl = this.$("[data-cue]");
+        if (cueEl) cueEl.textContent = phaseCueFor(p);
+        this.state.voiced = 0;
+      });
+      this.hud.innerHTML = `
+        <div class="mode-title">${L("Paladar blando · espacio interno", "Soft palate · inner space")}</div>
+        <div class="mode-phase" data-phase>${phases[0]?.label || L("Sorpresa", "Surprise")}</div>
+        <div class="mode-big" data-h>0 ${L("abiertos", "open")}</div>
+        <p class="mode-meta" data-cue>${phaseCueFor(phases[0])}</p>
+        <p class="mode-meta muted">${L(
+          "Sostén ≥1,5 s en las fases con sonido para sumar un espacio abierto.",
+          "Hold ≥1.5s during the sounding phases to log an open space."
+        )}</p>
+      `;
+    },
+    onFrame(frame) {
+      const r = this.state.runner;
+      if (!r) return;
+      r.tick(performance.now());
+      const done = r.index >= r.count;
+      const phase = this.state.phases[r.index];
+      if (this.$("[data-phase]")) {
+        this.$("[data-phase]").textContent = done
+          ? L("Listo — guarda ese espacio", "Done — keep that space")
+          : r.label;
+      }
+      // Only sounding phases log holds; the silent ones are the setup
+      if (!done && phase && phase.sound && frame.voiced) {
+        this.state.voiced += frame.dtMs || 16;
+        if (this.state.voiced >= this.state.minHoldMs) {
+          this.state.holds += 1;
+          this.state.voiced = 0;
+          if (this.$("[data-h]"))
+            this.$("[data-h]").textContent = `${this.state.holds} ${L("abiertos", "open")}`;
+        }
+      } else if (!frame.voiced) {
+        this.state.voiced = 0;
+      }
+    },
+    onStop() {
+      const n = this.state.holds || 0;
+      return {
+        patches: n > 0 ? { openHolds: n } : {},
+        summary: `${n} open-space holds`
+      };
+    }
+  });
+
+  /**
+   * s20 five vowels — I E A O U on one pitch. Each vowel gets its own steadiness
+   * reading, so the closed vowels that usually collapse show up as the weak ones
+   * instead of being hidden inside one average.
+   */
+  Modes.vowelLadder = baseMode({
+    id: "vowelLadder",
+    render() {
+      this.state.vowels = this.profile.vowels || ["I", "E", "A", "O", "U"];
+      this.state.secPer = this.profile.secPerVowel || 4;
+      this.state.i = 0;
+      this.state.t = 0;
+      this.state.rounds = 0;
+      this.state.last = performance.now();
+      this.state.samples = [];
+      this.state.scores = this.state.vowels.map(() => []);
+      const chips = this.state.vowels
+        .map(
+          (v, i) =>
+            `<span class="vowel-chip${i === 0 ? " is-on" : ""}" data-v="${i}">${v}</span>`
+        )
+        .join("");
+      this.hud.innerHTML = `
+        <div class="mode-title">${L("Cinco vocales · I E A O U", "Five vowels · I E A O U")}</div>
+        <div class="vowel-row" data-chips>${chips}</div>
+        <div class="mode-big" data-cur>${this.state.vowels[0]}</div>
+        <div class="mode-bar thick"><span data-bar style="width:0%"></span></div>
+        <p class="mode-meta">${L("Vueltas", "Rounds")} <strong data-r>0</strong> · ${L(
+          "Uniformidad",
+          "Evenness"
+        )} <strong data-ev>—</strong></p>
+        <p class="mode-meta muted">${L(
+          "Mismo espacio en todas. La vocal cambia de forma, no de tamaño.",
+          "Same space on all of them. The vowel changes shape, not size."
+        )}</p>
+      `;
+      if (this.profile.refPitch && global.VT_NOTE_FREQ?.[this.profile.refPitch]) {
+        this.state.refName = this.profile.refPitch;
+        this.state.wantName = this.profile.refPitch;
+      }
+    },
+    onStart() {
+      this.state.last = performance.now();
+      this._ref();
+    },
+    _ref() {
+      // Published for the app: an ownsTarget mode's current note is what the
+      // piano reference should sound, in place of the generic refPitch.
+      this.state.wantName = this.state.refName;
+      const n = shiftedNote(this.state.refName);
+      if (!n) return;
+      if (typeof global.VTSetPracticeTarget === "function" && global.VT_NOTE_FREQ?.[n]) {
+        global.VTSetPracticeTarget(global.VT_NOTE_FREQ[n], n);
+      }
+      if (global.VTPiano?.playRefPitch) global.VTPiano.playRefPitch(n, 2.2, true).catch(() => {});
+    },
+    onFrame(frame) {
+      const now = performance.now();
+      const dt = Math.min(0.25, (now - this.state.last) / 1000);
+      this.state.last = now;
+      this.state.t += dt;
+      // Steadiness of the current vowel from loudness variance
+      const rms = frame.rms || 0;
+      if (rms > 0.01) {
+        this.state.samples.push(rms);
+        if (this.state.samples.length > 90) this.state.samples.shift();
+      }
+      let steady = 0;
+      const arr = this.state.samples;
+      if (arr.length > 10) {
+        const mean = arr.reduce((a, b) => a + b, 0) / arr.length;
+        const v = arr.reduce((a, b) => a + (b - mean) ** 2, 0) / arr.length;
+        steady = clamp(1 - Math.sqrt(v) * 8, 0, 1);
+        if (this.$("[data-bar]")) this.$("[data-bar]").style.width = `${steady * 100}%`;
+        if (this.$("[data-ev]"))
+          this.$("[data-ev]").textContent =
+            steady > 0.7 ? L("pareja", "steady") : steady > 0.4 ? L("ok", "ok") : L("irregular", "uneven");
+      }
+      if (this.state.t >= this.state.secPer) {
+        this.state.t = 0;
+        if (steady > 0) this.state.scores[this.state.i].push(steady);
+        this.state.samples = [];
+        this.state.i += 1;
+        if (this.state.i >= this.state.vowels.length) {
+          this.state.i = 0;
+          this.state.rounds += 1;
+          if (this.$("[data-r]")) this.$("[data-r]").textContent = String(this.state.rounds);
+          this._ref();
+        }
+        const cur = this.state.vowels[this.state.i];
+        if (this.$("[data-cur]")) this.$("[data-cur]").textContent = cur;
+        this.hud?.querySelectorAll?.(".vowel-chip").forEach((c, idx) => {
+          c.classList.toggle("is-on", idx === this.state.i);
+        });
+      }
+    },
+    onStop() {
+      const rounds = this.state.rounds || 0;
+      const means = this.state.scores.map((a) =>
+        a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0
+      );
+      const seen = means.filter((m) => m > 0);
+      const patches = {};
+      if (rounds > 0) patches.rounds = rounds;
+      if (seen.length >= 3) {
+        const worst = Math.min(...seen);
+        patches.evenVowels = worst > 0.7 ? 5 : worst > 0.55 ? 4 : worst > 0.35 ? 3 : 2;
+      }
+      const weakIdx = means.findIndex((m) => m > 0 && m === Math.min(...seen));
+      const weak = weakIdx >= 0 ? this.state.vowels[weakIdx] : null;
+      return {
+        patches,
+        summary: weak ? `${rounds} rounds · weakest vowel ${weak}` : `${rounds} vowel rounds`
+      };
+    }
+  });
+
+  /**
+   * s21–s25 resonance zones — low / middle / high. One mode, configured with the
+   * zones each exercise works: a single zone for the focused drills, all three
+   * for the tour. Targets are held by pitch like the hum mode, zones advance on
+   * time, and the zone strip shows where the voice actually is versus where the
+   * exercise asked for it.
+   */
+  Modes.resonanceZone = baseMode({
+    id: "resonanceZone",
+    render() {
+      const zones = this.profile.zones || [];
+      this.state.zones = zones;
+      this.state.z = 0;
+      this.state.t = 0;
+      this.state.last = performance.now();
+      this.state.ni = 0;
+      this.state.held = 0;
+      this.state.inBand = 0;
+      this.state.inZoneMs = 0;
+      this.state.voicedMs = 0;
+      this.state.zoneHits = zones.map(() => 0);
+      const allNotes = zones.reduce((a, z) => a.concat(z.notes || []), []);
+      this.state.allNotes = allNotes;
+      const strip = zones
+        .map(
+          (z, i) =>
+            `<span class="zone-chip${i === 0 ? " is-on" : ""}" data-z="${i}">${
+              isEs() ? z.labelEs || z.label : z.label
+            }</span>`
+        )
+        .join("");
+      this.hud.innerHTML = `
+        <div class="mode-title">${L("Zonas de resonancia", "Resonance zones")}</div>
+        <div class="zone-row" data-zones>${strip}</div>
+        <div class="mode-phase" data-zn>${
+          isEs() ? zones[0]?.labelEs || zones[0]?.label || "" : zones[0]?.label || ""
+        }</div>
+        <div class="mode-big" data-t>${allNotes[0] || "—"}</div>
+        <p class="mode-meta">${L("Objetivos", "Targets")} <strong data-h>0</strong> · ${L(
+          "En zona",
+          "In zone"
+        )} <strong data-iz>0%</strong></p>
+        <p class="mode-meta" data-cue>${phaseCueFor(zones[0])}</p>
+      `;
+      if (typeof global.VTLockHighwayNotes === "function" && allNotes.length) {
+        global.VTLockHighwayNotes(allNotes);
+      }
+    },
+    onStart() {
+      this.state.last = performance.now();
+      if (typeof global.VTLockHighwayNotes === "function" && this.state.allNotes?.length) {
+        global.VTLockHighwayNotes(this.state.allNotes);
+      }
+      this._pushTarget();
+    },
+    _zoneNotes() {
+      return this.state.zones[this.state.z]?.notes || [];
+    },
+    _pushTarget() {
+      const notes = this._zoneNotes();
+      const n = notes[this.state.ni % Math.max(1, notes.length)];
+      if (!n) return;
+      const sounded = shiftedNote(n);
+      this.state.wantName = n;
+      this.state.wantFreq = global.VT_NOTE_FREQ?.[sounded];
+      if (typeof global.VTSetPracticeTarget === "function" && this.state.wantFreq) {
+        global.VTSetPracticeTarget(this.state.wantFreq, sounded);
+      }
+      if (global.VTPiano?.playRefPitch)
+        global.VTPiano.playRefPitch(sounded, 2.2, true).catch(() => {});
+      if (this.$("[data-t]")) this.$("[data-t]").textContent = sounded;
+    },
+    _setZone(i) {
+      this.state.z = i;
+      this.state.ni = 0;
+      this.state.inBand = 0;
+      const z = this.state.zones[i];
+      if (this.$("[data-zn]"))
+        this.$("[data-zn]").textContent = isEs() ? z.labelEs || z.label : z.label;
+      if (this.$("[data-cue]")) this.$("[data-cue]").textContent = phaseCueFor(z);
+      this.hud?.querySelectorAll?.(".zone-chip").forEach((c, idx) => {
+        c.classList.toggle("is-on", idx === i);
+      });
+      if (global.VTToast) global.VTToast(isEs() ? z.labelEs || z.label : z.label);
+      this._pushTarget();
+    },
+    /**
+     * Which configured zone the detected pitch falls in, or -1. Neighbouring
+     * zones share boundary notes on purpose (C3 is the top of the low zone and
+     * the bottom of the middle one), so the zone the exercise is currently
+     * asking for is checked first — otherwise singing exactly what was asked
+     * would score as the wrong zone.
+     */
+    _zoneOf(freq) {
+      if (!freq || !global.VTPitchUtils || !global.VT_NOTE_FREQ) return -1;
+      const m = global.VTPitchUtils.freqToMidi(freq);
+      const inZone = (i) => {
+        const notes = this.state.zones[i]?.notes || [];
+        const mids = notes
+          .map((n) => global.VT_NOTE_FREQ[shiftedNote(n)])
+          .filter(Boolean)
+          .map((f) => global.VTPitchUtils.freqToMidi(f));
+        if (!mids.length) return false;
+        return m >= Math.min(...mids) - 1.5 && m <= Math.max(...mids) + 1.5;
+      };
+      if (inZone(this.state.z)) return this.state.z;
+      for (let i = 0; i < this.state.zones.length; i++) {
+        if (i !== this.state.z && inZone(i)) return i;
+      }
+      return -1;
+    },
+    onFrame(frame) {
+      const now = performance.now();
+      const dt = Math.min(0.25, (now - this.state.last) / 1000);
+      this.state.last = now;
+      const zone = this.state.zones[this.state.z];
+      // Zone advances on time (single-zone exercises simply never advance)
+      if (zone && zone.sec && this.state.zones.length > 1) {
+        this.state.t += dt;
+        if (this.state.t >= zone.sec) {
+          this.state.t = 0;
+          this._setZone((this.state.z + 1) % this.state.zones.length);
+        }
+      }
+      // Target lock inside the zone
+      if (this.state.wantFreq && frame.voiceFreq && global.VTPitchUtils) {
+        const cents = Math.abs(
+          (global.VTPitchUtils.freqToMidi(frame.voiceFreq) -
+            global.VTPitchUtils.freqToMidi(this.state.wantFreq)) *
+            100
+        );
+        if (cents <= 45 && frame.voiced) {
+          this.state.inBand += frame.dtMs || 16;
+          if (this.state.inBand >= 900) {
+            this.state.inBand = 0;
+            this.state.held += 1;
+            this.state.zoneHits[this.state.z] += 1;
+            this.state.ni += 1;
+            this._pushTarget();
+            if (this.$("[data-h]")) this.$("[data-h]").textContent = String(this.state.held);
+          }
+        } else this.state.inBand = 0;
+      }
+      // How much of your sung time landed in the zone the exercise asked for
+      if (frame.voiced && frame.voiceFreq) {
+        this.state.voicedMs += frame.dtMs || 16;
+        if (this._zoneOf(frame.voiceFreq) === this.state.z)
+          this.state.inZoneMs += frame.dtMs || 16;
+        if (this.$("[data-iz]")) {
+          const pct = this.state.voicedMs
+            ? Math.round((this.state.inZoneMs / this.state.voicedMs) * 100)
+            : 0;
+          this.$("[data-iz]").textContent = `${pct}%`;
+        }
+      }
+    },
+    onStop() {
+      const held = this.state.held || 0;
+      const pct = this.state.voicedMs
+        ? Math.round((this.state.inZoneMs / this.state.voicedMs) * 100)
+        : 0;
+      const patches = {};
+      if (held > 0) patches.zoneTargets = held;
+      if (this.state.voicedMs > 3000) {
+        const scale = pct >= 80 ? 5 : pct >= 60 ? 4 : pct >= 40 ? 3 : 2;
+        // Each zone exercise names its own quality metric ("body", "buzz",
+        // "stability"…): a patch under any other key is silently dropped.
+        const key =
+          this.profile.qualityMetric || (this.state.zones.length > 1 ? "transitions" : "steadiness");
+        patches[key] = scale;
+      }
+      const spread = this.state.zoneHits
+        .map((n, i) => `${isEs() ? this.state.zones[i].labelEs : this.state.zones[i].label}:${n}`)
+        .join(" · ");
+      return { patches, summary: `${held} targets · ${pct}% in zone · ${spread}` };
+    }
+  });
+
+  /**
+   * s26 placement A/B — two takes of the same phrase, plain then placed. There is
+   * nothing to detect here that the ear cannot do better, so the mode's job is to
+   * hold the protocol: same key, same melody, both takes marked, then listen.
+   */
+  Modes.placementAB = baseMode({
+    id: "placementAB",
+    render() {
+      const phases = this.profile.phases || [];
+      this.state.phases = phases;
+      this.state.takes = 0;
+      this.state.runner = createPhaseRunner(phases, (i, p) => {
+        if (global.VTToast) global.VTToast(p.label);
+        const cueEl = this.$("[data-cue]");
+        if (cueEl) cueEl.textContent = phaseCueFor(p);
+      });
+      this.hud.innerHTML = `
+        <div class="mode-title">${L("Comparar colocaciones · A/B", "Placement compare · A/B")}</div>
+        <div class="mode-phase" data-phase>${phases[0]?.label || L("Toma A", "Take A")}</div>
+        <div class="mode-big" data-remain>—</div>
+        <p class="mode-meta" data-cue>${phaseCueFor(phases[0])}</p>
+        <div class="controls-row">
+          <button type="button" class="btn btn-sm" data-take>${L(
+            "Marcar toma ✓",
+            "Mark take ✓"
+          )}</button>
+        </div>
+        <p class="mode-meta">${L("Tomas marcadas", "Takes marked")} <strong data-n>0</strong>/2 · ${L(
+          "misma tonalidad en las dos",
+          "same key in both"
+        )}</p>
+      `;
+      this.$("[data-take]")?.addEventListener("click", () => {
+        this.state.takes = Math.min(2, this.state.takes + 1);
+        if (this.$("[data-n]")) this.$("[data-n]").textContent = String(this.state.takes);
+      });
+    },
+    onFrame() {
+      const r = this.state.runner;
+      if (!r) return;
+      r.tick(performance.now());
+      const done = r.index >= r.count;
+      if (this.$("[data-phase]"))
+        this.$("[data-phase]").textContent = done
+          ? L("Escucha las dos y quédate con una", "Play both back and keep one")
+          : r.label;
+      if (this.$("[data-remain]"))
+        this.$("[data-remain]").textContent = done ? "✓" : `${Math.ceil(r.remaining)}s`;
+    },
+    onStop() {
+      const n = this.state.takes || 0;
+      return {
+        patches: n > 0 ? { takes: n } : {},
+        summary: n >= 2 ? "A/B takes marked — compare the playback" : `${n}/2 takes marked`
+      };
+    }
+  });
+
+  /**
+   * s27 lip-trill solfège — a scale carried on the bubble, root walking up and
+   * back down. This is deliberately NOT `scaleSteps` with a different cue.
+   *
+   * Two things make a trill different from a vowel scale, and both were measured
+   * against the shipped detector rather than guessed:
+   *
+   * 1. `detectPitch` reads a lip trill SHARP. The lips flutter at 25–30 Hz, which
+   *    is below the 65 Hz search floor in js/pitch-visualizer.js, so the flap
+   *    lands inside the analysis window instead of being resolved, and the
+   *    autocorrelation peak drifts up — of the order of +30…+60 cents at C3–D3,
+   *    less as pitch rises. A symmetric ±40¢ band (what `scaleSteps` uses) sits
+   *    below a correctly sung trill and never advances. So the acceptance window
+   *    here is ASYMMETRIC: tolerant sharp, tight flat. Tight on the flat side
+   *    matters — a wide-open flat side would lock on the note before it at the
+   *    two half steps in the pattern.
+   * 2. A trill scatters frame to frame, so a hard `else acc = 0` reset (again
+   *    what `scaleSteps` does) throws away the whole accumulator on one stray
+   *    frame. The accumulator bleeds at half fill rate instead, which needs
+   *    about 1.2s of continuously bad frames to undo a full 600ms lock.
+   *
+   * The sharp-side figure comes from simulating trills through the real
+   * `detectPitch`, not from recordings of actual students, so every constant is
+   * overridable from the profile.
+   */
+  Modes.trillSolfege = baseMode({
+    id: "trillSolfege",
+    render() {
+      const p = this.profile;
+      this.state.pattern = p.pattern || [0, 2, 4, 5, 7, 5, 4, 2, 0];
+      this.state.syllables = p.syllables || ["DO", "RE", "MI", "FA", "SOL", "FA", "MI", "RE", "DO"];
+      this.state.baseMidi = p.rootMidi || 48; // C3
+      this.state.topMidi = p.topRootMidi || this.state.baseMidi + 7; // walk up a fifth
+      this.state.rootMidi = this.state.baseMidi;
+      this.state.dir = 1;
+      this.state.i = 0;
+      this.state.patterns = 0;
+      this.state.acc = 0;
+      this.state.hist = [];
+      this.state.lastFreq = null;
+      this.state.refBlank = 0;
+      this.state.levels = [];
+      this.state.steadyScore = 0;
+      this.hud.innerHTML = `
+        <div class="mode-title">${L("Solfeo en trino de labios", "Lip-trill solfège")}</div>
+        <div class="trill-row">
+          <span class="trill-syl" data-syl>${this.state.syllables[0]}</span>
+          <span class="trill-note" data-note>—</span>
+        </div>
+        <div class="mode-bar thick"><span data-bar style="width:0%"></span></div>
+        <p class="mode-meta">${L("Uniformidad del trino:", "Trill evenness:")} <strong data-ev>—</strong></p>
+        <p class="mode-meta">${L("Paso", "Step")} <strong data-step>1</strong>/${
+          this.state.pattern.length
+        } · ${L("Pasadas", "Patterns")} <strong data-p>0</strong> · ${L(
+          "Raíz",
+          "Root"
+        )} <strong data-root>—</strong></p>
+        <p class="mode-meta muted">${L(
+          "No dejes que el burbujeo se pare entre notas. La raíz sube sola al completar la pasada.",
+          "Do not let the bubble stop between notes. The root moves up on its own once the pattern lands."
+        )}</p>
+      `;
+      this._lockLadder();
+      this._pushTarget();
+    },
+    /** Real sounding MIDI: the highway plots detected pitch, not written pitch. */
+    _shift() {
+      return 12 * (global.VTGetOctaveShift ? global.VTGetOctaveShift() : 0);
+    },
+    /**
+     * Lock the highway once over the whole ladder — base root to the top note of
+     * the highest pattern — so the Y axis does not jump every time the root moves.
+     */
+    _lockLadder() {
+      if (!global.VTPitchUtils || typeof global.VTGetPitchViz !== "function") return;
+      const viz = global.VTGetPitchViz();
+      if (!viz?.lockMidiRange) return;
+      const sh = this._shift();
+      viz.lockMidiRange(
+        this.state.baseMidi + Math.min(...this.state.pattern) + sh,
+        this.state.topMidi + Math.max(...this.state.pattern) + sh,
+        { pad: 1.5, minSpan: 10 }
+      );
+      this._drawLanes();
+    },
+    /**
+     * Ghost lanes for the pattern at the CURRENT root only. The ladder spans
+     * fifteen semitones, and a lane on every one of them is a chromatic wall
+     * that buries the five notes the student is actually being asked for.
+     */
+    _drawLanes() {
+      if (!global.VTPitchUtils || typeof global.VTGetPitchViz !== "function") return;
+      const viz = global.VTGetPitchViz();
+      if (!viz) return;
+      const sh = this._shift();
+      const seen = new Set();
+      viz.progressionLanes = [];
+      this.state.pattern.forEach((step) => {
+        const m = this.state.rootMidi + step + sh;
+        if (seen.has(m)) return;
+        seen.add(m);
+        viz.progressionLanes.push({
+          name: global.VTPitchUtils.midiToName(m),
+          freq: global.VTPitchUtils.midiToFreq(m),
+          midi: m,
+          active: false
+        });
+      });
+      viz.progressionLanes.sort((a, b) => a.midi - b.midi);
+      try {
+        viz._draw?.();
+      } catch {
+        /* ignore */
+      }
+    },
+    _pushTarget() {
+      if (!global.VTPitchUtils) return;
+      const midi = this.state.rootMidi + this.state.pattern[this.state.i];
+      const name = global.VTPitchUtils.midiToName(midi);
+      const sounded = shiftedNote(name);
+      this.state.wantName = name;
+      this.state.wantFreq =
+        global.VT_NOTE_FREQ?.[sounded] ?? global.VTPitchUtils.midiToFreq(midi);
+      this.state.hist = [];
+      this.state.lastFreq = null;
+      if (typeof global.VTSetPracticeTarget === "function" && this.state.wantFreq) {
+        global.VTSetPracticeTarget(this.state.wantFreq, sounded);
+      }
+      // The reference note bleeds into the mic (the app asks for no echo
+      // cancellation), so the gate stays shut while it rings. Counted down in
+      // frame time like everything else here, not against the wall clock.
+      this.state.refBlank = this.profile.refBlankMs == null ? 250 : this.profile.refBlankMs;
+      if (global.VTPiano?.playRefPitch && sounded) {
+        global.VTPiano.playRefPitch(sounded, 1.2, true).catch(() => {});
+      }
+      if (this.$("[data-syl]"))
+        this.$("[data-syl]").textContent = this.state.syllables[this.state.i] || "";
+      if (this.$("[data-note]")) this.$("[data-note]").textContent = sounded;
+      if (this.$("[data-step]")) this.$("[data-step]").textContent = String(this.state.i + 1);
+      if (this.$("[data-root]"))
+        this.$("[data-root]").textContent = shiftedNote(
+          global.VTPitchUtils.midiToName(this.state.rootMidi)
+        );
+    },
+    onStart() {
+      this._lockLadder();
+      this._pushTarget();
+    },
+    /** Median of the accepted pitch history — one stray frame cannot move it. */
+    _median() {
+      const a = this.state.hist.slice().sort((x, y) => x - y);
+      if (!a.length) return null;
+      const m = a.length >> 1;
+      return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
+    },
+    /** Advance one step; at the end of a pattern the root walks up, then back down. */
+    _advance() {
+      this.state.acc = 0;
+      this.state.i += 1;
+      if (this.state.i >= this.state.pattern.length) {
+        this.state.i = 0;
+        this.state.patterns += 1;
+        if (this.$("[data-p]")) this.$("[data-p]").textContent = String(this.state.patterns);
+        const next = this.state.rootMidi + this.state.dir;
+        if (next > this.state.topMidi) {
+          this.state.dir = -1;
+          this.state.rootMidi = Math.max(this.state.baseMidi, this.state.rootMidi - 1);
+        } else if (next < this.state.baseMidi) {
+          this.state.dir = 1;
+          this.state.rootMidi = Math.min(this.state.topMidi, this.state.rootMidi + 1);
+        } else {
+          this.state.rootMidi = next;
+        }
+        this._drawLanes();
+      }
+      this._pushTarget();
+    },
+    /**
+     * Trill evenness as a coefficient of variation rather than a bare standard
+     * deviation: the same trill would otherwise score differently at different
+     * input gains. The window is short enough to stay inside one scale step, so
+     * the legitimate level change between notes is not counted as unevenness.
+     */
+    _evenness(rms) {
+      if (!(rms > 0)) return;
+      const win = this.profile.evenWindow || 40;
+      this.state.levels.push(rms);
+      if (this.state.levels.length > win) this.state.levels.shift();
+      const a = this.state.levels;
+      if (a.length < 12) return;
+      const mean = a.reduce((x, y) => x + y, 0) / a.length;
+      if (!(mean > 0)) return;
+      const sd = Math.sqrt(a.reduce((x, y) => x + (y - mean) ** 2, 0) / a.length);
+      const steady = clamp(1 - (sd / mean) * (this.profile.evenK || 6), 0, 1);
+      this.state.steadyScore = steady;
+      if (this.$("[data-bar]")) this.$("[data-bar]").style.width = `${Math.round(steady * 100)}%`;
+      if (this.$("[data-ev]"))
+        this.$("[data-ev]").textContent =
+          steady > 0.7
+            ? L("estable", "steady")
+            : steady > 0.4
+              ? L("aceptable", "ok")
+              : L("irregular", "uneven");
+    },
+    onFrame(frame) {
+      const dt = frame.dtMs || 16;
+      const rms = frame.rms || 0;
+      this._evenness(rms);
+      if (!this.state.wantFreq || !global.VTPitchUtils) return;
+      // The clock-only fallback frame carries voiceFreq 0, not null.
+      const f = frame.voiceFreq || 0;
+      // `voiced` stays true through a grace window after the sound stops, and
+      // `voiceFreq` repeats its last value bit for bit while it does. Require
+      // real energy, and ignore a pitch that has not changed at all.
+      const floor = Math.max(0.02, (frame.airRmsThreshold || 0.006) * 3);
+      const live = !!frame.voiced && rms >= floor && f > 0 && f !== this.state.lastFreq;
+      const blanked = this.state.refBlank > 0;
+      if (blanked) this.state.refBlank -= dt;
+      if (!live || blanked) {
+        if (!blanked && f <= 0) this.state.acc = Math.max(0, this.state.acc - dt * 0.5);
+        return;
+      }
+      this.state.lastFreq = f;
+      const n = this.profile.smoothN || 7;
+      this.state.hist.push(f);
+      if (this.state.hist.length > n) this.state.hist.shift();
+      const med = this._median();
+      if (med == null) return;
+      const cents =
+        (global.VTPitchUtils.freqToMidi(med) -
+          global.VTPitchUtils.freqToMidi(this.state.wantFreq)) *
+        100;
+      const lo = this.profile.centsLo == null ? -40 : this.profile.centsLo;
+      const hi = this.profile.centsHi == null ? 120 : this.profile.centsHi;
+      if (cents >= lo && cents <= hi) {
+        this.state.acc += dt;
+        if (this.state.acc >= (this.profile.holdMs || 600)) this._advance();
+      } else {
+        this.state.acc = Math.max(0, this.state.acc - dt * 0.5);
+      }
+    },
+    onStop() {
+      const p = this.state.patterns || 0;
+      const s = this.state.steadyScore || 0;
+      const patches = {};
+      if (p > 0) patches.patterns = p;
+      if (this.state.levels.length >= 12 && s > 0.2) {
+        patches.trillSteady = s > 0.75 ? 5 : s > 0.55 ? 4 : 3;
+      }
+      const top = global.VTPitchUtils
+        ? global.VTPitchUtils.midiToName(this.state.rootMidi)
+        : "—";
+      return {
+        patches,
+        summary: p
+          ? L(
+              `${p} ${p === 1 ? "pasada" : "pasadas"} · raíz alcanzada ${top}`,
+              `${p} ${p === 1 ? "pattern" : "patterns"} · root reached ${top}`
+            )
+          : L(
+              "Ninguna pasada completa todavía — mantén el burbujeo por las nueve notas",
+              "No pattern completed yet — keep the bubble going through all nine notes"
+            )
+      };
+    }
+  });
+
   // API
   const Registry = {
     get(modeId) {

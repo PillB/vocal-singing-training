@@ -162,17 +162,36 @@ test.describe("Exercise-specific practice modes", () => {
 
   test("tier counts match catalog", async ({ page }) => {
     await page.goto(BASE);
+    // Counts come from the live catalog rather than being frozen here: the
+    // contract this test owns is that each filter shows exactly the exercises of
+    // that tier. Inventory shrinkage is caught by the catalog snapshot instead,
+    // so adding exercises does not mean hand-editing numbers in two places.
+    const counts = await page.evaluate(() => {
+      const n = (track, tier) =>
+        (window.VT_EXERCISES[track] || []).filter((e) => (e.tier || "basic") === tier).length;
+      return {
+        vocalBasic: n("vocal", "basic"),
+        vocalAdvanced: n("vocal", "advanced"),
+        singingBasic: n("singing", "basic"),
+        singingAdvanced: n("singing", "advanced"),
+        singingAll: (window.VT_EXERCISES.singing || []).length
+      };
+    });
+    expect(counts.vocalBasic).toBeGreaterThan(0);
+    expect(counts.singingBasic).toBeGreaterThan(0);
+
     await page.click('.tier-chip[data-tier="basic"]');
-    await expect(page.locator("#exercise-list .card-ex")).toHaveCount(9);
+    await expect(page.locator("#exercise-list .card-ex")).toHaveCount(counts.vocalBasic);
     await page.click('.tier-chip[data-tier="advanced"]');
-    await expect(page.locator("#exercise-list .card-ex")).toHaveCount(11);
+    await expect(page.locator("#exercise-list .card-ex")).toHaveCount(counts.vocalAdvanced);
     await page.click('.tab[data-tab="singing"]');
     await page.click('.tier-chip[data-tier="basic"]');
-    await expect(page.locator("#exercise-list .card-ex")).toHaveCount(5);
+    await expect(page.locator("#exercise-list .card-ex")).toHaveCount(counts.singingBasic);
     await page.click('.tier-chip[data-tier="advanced"]');
-    await expect(page.locator("#exercise-list .card-ex")).toHaveCount(11);
+    await expect(page.locator("#exercise-list .card-ex")).toHaveCount(counts.singingAdvanced);
     await page.click('.tier-chip[data-tier="all"]');
-    await expect(page.locator("#exercise-list .card-ex")).toHaveCount(16);
+    await expect(page.locator("#exercise-list .card-ex")).toHaveCount(counts.singingAll);
+    expect(counts.singingBasic + counts.singingAdvanced).toBe(counts.singingAll);
   });
 
   test("save metrics still works", async ({ page }) => {

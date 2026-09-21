@@ -4645,3 +4645,87 @@ body.home-zero #start-panel .start-sub {
     padding-right: 0.7rem;
   }
 }
+
+/* ── Class course modes: vowel ladder + resonance zones ──
+   Chip strips that name where you are in a sequence. Both mount inside
+   .mode-panel, so they inherit its spacing and only add the strip itself. */
+.vowel-row,
+.zone-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0.15rem 0 0.4rem;
+}
+
+.vowel-chip,
+.zone-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0.2rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-soft);
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.vowel-chip {
+  min-width: 34px;
+  font-family: var(--mono);
+}
+
+.vowel-chip.is-on,
+.zone-chip.is-on {
+  background: rgba(110, 180, 232, 0.22);
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+/* The mode panel is the live surface during practice, so the current step has
+   to read at a glance from a stand: the active chip gets the only strong mark. */
+.vowel-chip.is-on {
+  box-shadow: 0 0 0 1px var(--accent) inset;
+}
+
+.mode-placementAB .controls-row {
+  margin-top: 0.5rem;
+}
+
+/* Lip-trill solfège: the syllable is what the student reads from a stand, the
+   note name is the reference beside it — same weight would make neither win. */
+.trill-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.55rem;
+  margin: 0.25rem 0;
+}
+
+.trill-syl {
+  font-family: var(--mono);
+  font-size: 1.75rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.trill-note {
+  font-family: var(--mono);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+@media (max-width: 480px) {
+  .zone-chip {
+    font-size: 0.78rem;
+    padding: 0.2rem 0.5rem;
+  }
+
+  .trill-syl {
+    font-size: 1.5rem;
+  }
+}

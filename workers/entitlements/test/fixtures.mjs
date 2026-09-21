@@ -5,6 +5,8 @@
 
 import { webcrypto } from "node:crypto";
 
+import { createD1 } from "./d1-fake.mjs";
+
 /**
  * Generate a throwaway PKCS#8 P-256 private key as base64.
  * @returns {Promise<string>} base64 PKCS#8 key material.
@@ -116,6 +118,27 @@ export function createEntitlement(overrides) {
     periodEnd: now + 86400,
     createdAt: now,
     updatedAt: now,
+    ...(overrides || {})
+  };
+}
+
+/**
+ * Env bindings with the account layer wired up: a fresh D1 fake plus the vars
+ * the auth routes read.
+ * @param {Object} [overrides] Fields to override.
+ * @returns {Object} Env bindings including `DB`.
+ */
+export function createAccountEnv(overrides) {
+  return {
+    ...createTestEnv(),
+    DB: createD1(),
+    ADMIN_EMAILS: "admin@example.test",
+    TRIAL_DAYS: "30",
+    GOOGLE_CLIENT_ID: "test-client-id.apps.googleusercontent.com",
+    EMAIL_PROVIDER: "resend",
+    RESEND_API_KEY: "re_unit_test_key",
+    EMAIL_FROM: "hola@vocalstudio.test",
+    EMAIL_FROM_NAME: "Vocal Studio",
     ...(overrides || {})
   };
 }

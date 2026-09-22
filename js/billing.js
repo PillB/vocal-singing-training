@@ -804,17 +804,29 @@
     }
   }
 
+  /**
+   * Money as a person writes it: a whole number stays whole, anything else gets
+   * both decimals. Interpolating the raw number prints "S/ 19.9" for a price of
+   * 19.90, which reads as a typo on a page asking somebody to pay.
+   *
+   * @param {number} n
+   * @returns {string}
+   */
+  function money(n) {
+    return Number.isInteger(n) ? String(n) : n.toFixed(2);
+  }
+
   function formatPrice(plan, region) {
     const m = marketFor(region || detectRegion());
     const cur = m.currency || "USD";
     if (plan.priceUsd === 0) return { text: "0", currency: cur };
     if (cur === "PEN" && plan.pricePen != null) {
-      return { text: `S/ ${plan.pricePen}`, currency: "PEN", amount: plan.pricePen };
+      return { text: `S/ ${money(plan.pricePen)}`, currency: "PEN", amount: plan.pricePen };
     }
     if (cur === "EUR" && plan.priceEur != null) {
-      return { text: `€${plan.priceEur}`, currency: "EUR", amount: plan.priceEur };
+      return { text: `€${money(plan.priceEur)}`, currency: "EUR", amount: plan.priceEur };
     }
-    return { text: `$${plan.priceUsd}`, currency: "USD", amount: plan.priceUsd };
+    return { text: `$${money(plan.priceUsd)}`, currency: "USD", amount: plan.priceUsd };
   }
 
   /**

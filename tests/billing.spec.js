@@ -749,6 +749,27 @@ test.describe("Billing & subscriptions", () => {
     expect(await badge.innerText()).toMatch(new RegExp(`\\b${math.shown}\\s*%`));
   });
 
+  // A price of 19.90 interpolated straight into a template prints "S/ 19.9",
+  // which reads as a typo on the one screen that asks somebody to pay.
+  test("prices with centimos keep both decimals", async ({ page }) => {
+    await boot(page);
+    const out = await page.evaluate(() => {
+      const f = (pen, usd) =>
+        window.VTBilling.formatPrice({ pricePen: pen, priceUsd: usd, priceEur: usd }, "PE").text;
+      return {
+        centimos: f(19.9, 6.99),
+        whole: f(169, 59),
+        real: window.VTBilling.formatPrice(
+          (window.VT_BILLING_CONFIG.plans || []).find((p) => p.interval === "month"),
+          "PE"
+        ).text
+      };
+    });
+    expect(out.centimos).toBe("S/ 19.90");
+    expect(out.whole).toBe("S/ 169");
+    expect(out.real).not.toMatch(/\.\d$/);
+  });
+
   // Two prices for the same plan can drift apart silently. They are one
   // product, so the discount a Peruvian is offered and the one an American is
   // offered should not differ by more than rounding.

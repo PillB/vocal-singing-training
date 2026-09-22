@@ -38,6 +38,13 @@
   /** @type {"idle"|"checking"|"ok"|"invalid"|"none"} */
   let state = "idle";
   let refreshing = false;
+  /**
+   * When an account is signed in, its session — not a bare license id — is what
+   * a fresh token is fetched with, so a revoked gift or a cancelled plan stops
+   * Pro on the next re-check. `js/account.js` installs this.
+   * @type {null | (() => Promise<{ok: boolean, reason?: string}>)}
+   */
+  let refresher = null;
   let publicKeyPromise = null;
   let publicKeyJwkSource = null;
 
@@ -291,9 +298,19 @@
    */
   async function refresh() {
     if (refreshing) return { ok: false, reason: "busy" };
+    if (!isConfigured()) return { ok: false, reason: "unconfigured" };
+    if (refresher) {
+      refreshing = true;
+      try {
+        return await refresher();
+      } catch {
+        return { ok: false, reason: "error" };
+      } finally {
+        refreshing = false;
+      }
+    }
     const rec = read();
     if (!rec?.licenseId) return { ok: false, reason: "no_license" };
-    if (!isConfigured()) return { ok: false, reason: "unconfigured" };
     refreshing = true;
     try {
       const res = await postJson("/v1/license", { licenseId: rec.licenseId });
@@ -392,9 +409,21 @@
     return getStatus();
   }
 
+  /**
+   * Install (or clear) the account-aware refresher.
+   * @param {null | (() => Promise<object>)} fn Refresher, or null to restore
+   *   the plain license-id path.
+   * @returns {void}
+   */
+  function setRefresher(fn) {
+    refresher = typeof fn === "function" ? fn : null;
+  }
+
   global.VTLicense = {
     isConfigured,
     verifyToken,
+    adopt,
+    setRefresher,
     claim,
     refresh,
     clear,

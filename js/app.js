@@ -3116,6 +3116,9 @@
       notes,
       durationSec: elapsed
     });
+    // Ask for a sync rather than doing one: the scheduler collapses a whole
+    // practice session's saves into a single write.
+    window.VTSync?.schedule?.();
     const sessionsAfter = totalSessionsSaved();
     const isFirstWin = sessionsAfter === 1;
     try {
@@ -4212,15 +4215,22 @@
         !!B.verificationConfigured?.()
       );
     }
-    // Free trial is opt-in: offer it only while this browser still has one.
+    // Free trial is opt-in. Once accounts exist the trial belongs to the
+    // account, not the browser — one per person rather than one per cleared
+    // localStorage — so the button leads to sign-in when nobody is signed in.
     const trialBtn = $("#btn-start-trial");
     if (trialBtn) {
-      const canTrial = !!B.canStartTrial?.() && !ent.pro;
+      const acct = window.VTAccount?.getState?.() || null;
+      const accounts = !!acct?.configured;
+      const canTrial = accounts
+        ? !ent.pro && !(acct.signedIn && acct.account?.trialUsed)
+        : !!B.canStartTrial?.() && !ent.pro;
       trialBtn.hidden = !canTrial;
       if (canTrial) {
-        trialBtn.textContent = tt("pricing.startTrial", {
-          n: String(Number(cfg.freeTrialDays || 0))
-        });
+        const days = accounts
+          ? Number(acct.methods?.trialDays || 30)
+          : Number(cfg.freeTrialDays || 0);
+        trialBtn.textContent = tt("pricing.startTrial", { n: String(days) });
       }
     }
     // Customer Portal: show for Pro/trial when a valid portal URL is configured
@@ -4825,49 +4835,184 @@
     document.body.classList.remove("pricing-open");
   }
 
+  /** Map a worker `reason` code onto a translated line. */
+  const ACCOUNT_ERROR_KEYS = {
+    bad_email: "auth.err.email",
+    bad_code: "auth.err.code",
+    no_code: "auth.err.code",
+    expired: "auth.err.code",
+    too_many_attempts: "auth.err.rate",
+    rate_limited: "auth.err.rate",
+    offline: "auth.err.offline",
+    not_found: "auth.err.giftNotFound",
+    already_redeemed: "auth.err.giftUsed",
+    exhausted: "auth.err.giftExhausted",
+    revoked: "auth.err.giftRevoked",
+    trial_used: "auth.err.trialUsed",
+    email_not_configured: "auth.err.emailUnavailable"
+  };
+
+  function accountError(message) {
+    const el = $("#account-error");
+    if (!el) return;
+    if (!message) {
+      el.hidden = true;
+      el.textContent = "";
+      return;
+    }
+    el.hidden = false;
+    el.textContent = message;
+  }
+
+  function accountErrorFor(reason) {
+    accountError(tt(ACCOUNT_ERROR_KEYS[reason] || "auth.err.generic"));
+  }
+
+  /** Format a unix-seconds period end the way the rest of the UI writes dates. */
+  function accountDate(unixSeconds) {
+    if (!Number.isFinite(unixSeconds)) return "";
+    try {
+      return new Date(unixSeconds * 1000).toLocaleDateString(
+        window.VTI18n?.lang === "en" ? "en" : "es",
+        { day: "numeric", month: "long" }
+      );
+    } catch {
+      return "";
+    }
+  }
+
+  /**
+   * One line describing what the account currently holds. The wording follows
+   * where the access came from, because "your friend gave you this until the
+   * 20th" and "this renews on the 20th" are different facts to a reader.
+   */
+  function accountPlanLine(entitlement) {
+    if (!entitlement || !entitlement.pro) return tt("auth.planFree");
+    const date = accountDate(entitlement.periodEnd);
+    if (entitlement.status === "canceled" && date) return tt("auth.planCanceled", { date });
+    if (entitlement.source === "trial") return tt("auth.planTrial", { date });
+    if (entitlement.source === "gift" || entitlement.source === "comp") {
+      return tt("auth.planGift", { date });
+    }
+    return date ? tt("auth.planPaid", { date }) : tt("auth.planPaidOpen");
+  }
+
+  function accountSyncLine() {
+    const status = window.VTSync?.getStatus?.();
+    if (!status || !status.available) return "";
+    if (status.syncing) return tt("auth.syncing");
+    if (status.lastError) return tt("auth.syncError");
+    return status.lastSyncedAt ? tt("auth.syncOk") : tt("auth.syncNever");
+  }
+
   function refreshAccountUI() {
     const A = window.VTAuth;
+    const account = window.VTAccount?.getState?.() || null;
     const session = A?.current?.() || null;
+    const signedIn = !!(account && account.signedIn) || !!session;
     const out = $("#account-logged-out");
     const inn = $("#account-logged-in");
     const admin = $("#admin-panel");
     const who = $("#account-who");
     const btnAcc = $("#btn-account");
+
     if (btnAcc) {
-      if (session) {
+      if (account && account.signedIn && account.account) {
+        btnAcc.textContent = (account.account.displayName || account.account.email || "").split("@")[0]
+          || tt("nav.account");
+      } else if (session) {
         btnAcc.textContent = session.username.split(".")[0] || tt("nav.account");
       } else {
         btnAcc.textContent = tt("nav.account");
       }
     }
     if (!out || !inn) return;
-    if (session) {
-      out.hidden = true;
-      inn.hidden = false;
-      if (who) {
+
+    // Signed out: offer real sign-in when an operator has wired the worker up,
+    // and say so plainly when they have not, rather than showing a form that
+    // cannot work.
+    const signIn = $("#account-signin");
+    const unconfigured = $("#account-unconfigured");
+    const configured = !!(account && account.configured);
+    if (signIn) signIn.hidden = !configured;
+    if (unconfigured) unconfigured.hidden = configured;
+    // Internal QA access hides behind a disclosure only once there is a real
+    // sign-in to lead with. Until the worker is wired up it is the only way in,
+    // so collapsing it would leave the panel with nothing to do.
+    const internal = document.querySelector(".account-internal");
+    if (internal && !configured) internal.open = true;
+
+    if (!signedIn) {
+      out.hidden = false;
+      inn.hidden = true;
+      if (admin) admin.hidden = true;
+      const serverAdmin = $("#account-admin");
+      if (serverAdmin) serverAdmin.hidden = true;
+      return;
+    }
+
+    out.hidden = true;
+    inn.hidden = false;
+
+    if (who) {
+      if (account && account.signedIn && account.account) {
+        who.textContent = tt("auth.signedInAs", { email: account.account.email });
+      } else if (session) {
         who.textContent = tt("auth.welcome", {
           name: session.displayName || session.username,
           role: session.role
         });
       }
-      if (admin) {
-        admin.hidden = session.role !== "admin";
-        if (session.role === "admin") {
-          const list = $("#admin-user-list");
-          if (list && A.listPublicUsers) {
-            list.innerHTML = A.listPublicUsers()
-              .map(
-                (u) =>
-                  `<li><code>${A.escapeHtml(u.username)}</code> · ${A.escapeHtml(u.role)} · ${A.escapeHtml(u.displayName || "")}</li>`
-              )
-              .join("");
-          }
+    }
+
+    const planEl = $("#account-plan");
+    if (planEl) {
+      planEl.hidden = !(account && account.signedIn);
+      if (account && account.signedIn) planEl.textContent = accountPlanLine(account.entitlement);
+    }
+
+    const syncEl = $("#account-sync");
+    if (syncEl) {
+      const line = accountSyncLine();
+      syncEl.hidden = !line;
+      syncEl.textContent = line;
+    }
+
+    // The trial is offered only to a signed-in account that has never used it.
+    const trialBtn = $("#btn-account-trial");
+    if (trialBtn) {
+      trialBtn.hidden = !(
+        account &&
+        account.signedIn &&
+        account.account &&
+        !account.account.trialUsed &&
+        !(account.entitlement && account.entitlement.pro)
+      );
+    }
+    const redeemForm = $("#account-redeem-form");
+    if (redeemForm) redeemForm.hidden = !(account && account.signedIn);
+    const syncBtn = $("#btn-account-sync");
+    if (syncBtn) syncBtn.hidden = !(account && account.signedIn);
+
+    // Studio gifting tools, for an account the worker itself calls an admin.
+    const serverAdmin = $("#account-admin");
+    if (serverAdmin) {
+      serverAdmin.hidden = !(account && account.account && account.account.role === "admin");
+    }
+
+    if (admin) {
+      admin.hidden = !session || session.role !== "admin";
+      if (session && session.role === "admin") {
+        const list = $("#admin-user-list");
+        if (list && A.listPublicUsers) {
+          list.innerHTML = A.listPublicUsers()
+            .map(
+              (u) =>
+                `<li><code>${A.escapeHtml(u.username)}</code> · ${A.escapeHtml(u.role)} · ${A.escapeHtml(u.displayName || "")}</li>`
+            )
+            .join("");
         }
       }
-    } else {
-      out.hidden = false;
-      inn.hidden = true;
-      if (admin) admin.hidden = true;
     }
   }
 
@@ -4881,10 +5026,32 @@
       err.hidden = true;
       err.textContent = "";
     }
+    accountError(null);
+    // Google's button can only be drawn once its script is in; do it on open so
+    // a visitor who never opens this panel never loads it at all.
+    const googleSlot = $("#account-google");
+    if (googleSlot && window.VTAccount?.isConfigured?.() && !window.VTAccount.getState().signedIn) {
+      window.VTAccount.renderGoogleButton(googleSlot, {
+        onResult: (res) => {
+          if (res && res.ok) {
+            toast(tt("auth.toast.in"));
+            refreshAccountUI();
+            updateBillingChrome();
+          } else if (res) {
+            accountErrorFor(res.reason);
+          }
+        }
+      }).then((res) => {
+        const or = $("#account-or");
+        if (or) or.hidden = !(res && res.ok);
+      });
+    }
     modal.hidden = false;
     document.body.classList.add("account-open");
+    const signedIn = !!window.VTAuth?.isLoggedIn?.() || !!window.VTAccount?.getState?.().signedIn;
+    const hasAccountForm = !!$("#account-signin") && !$("#account-signin").hidden;
     window.VTFocusTrap?.activate(modal, {
-      initialFocus: window.VTAuth?.isLoggedIn?.() ? "#account-close" : "#login-username",
+      initialFocus: signedIn ? "#account-close" : hasAccountForm ? "#account-email" : "#login-username",
       returnFocus: opener
     });
   }
@@ -4904,8 +5071,12 @@
     $("#account-modal")?.addEventListener("click", (e) => {
       if (e.target === $("#account-modal")) closeAccount();
     });
-    $("#btn-logout")?.addEventListener("click", () => {
+    $("#btn-logout")?.addEventListener("click", async () => {
+      // One button, both layers: an internal QA session and a real account can
+      // both be live, and "Salir" has to mean signed out of everything.
       window.VTAuth?.logout?.();
+      await window.VTAccount?.signOut?.();
+      accountError(null);
       toast(tt("auth.toast.out"));
       refreshAccountUI();
       updateBillingChrome();
@@ -4971,7 +5142,161 @@
         closeAccount();
       }
     });
+    bindAccount();
     refreshAccountUI();
+  }
+
+  /** Everything in the account panel that talks to the entitlements worker. */
+  function bindAccount() {
+    /** Swap between the "enter your email" and "enter the code" steps. */
+    function showCodeStep(email) {
+      const emailForm = $("#account-email-form");
+      const codeForm = $("#account-code-form");
+      if (emailForm) emailForm.hidden = true;
+      if (codeForm) {
+        codeForm.hidden = false;
+        codeForm.dataset.email = email;
+      }
+      accountError(null);
+      const sent = $("#account-or");
+      if (sent) sent.hidden = true;
+      const google = $("#account-google");
+      if (google) google.hidden = true;
+      toast(tt("auth.codeSent", { email }));
+      $("#account-code")?.focus();
+    }
+
+    function showEmailStep() {
+      const emailForm = $("#account-email-form");
+      const codeForm = $("#account-code-form");
+      if (emailForm) emailForm.hidden = false;
+      if (codeForm) codeForm.hidden = true;
+      const google = $("#account-google");
+      if (google) google.hidden = false;
+      accountError(null);
+    }
+
+    $("#account-email-form")?.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const email = ($("#account-email")?.value || "").trim();
+      accountError(null);
+      const res = await window.VTAccount?.startEmailSignIn?.(email);
+      if (res && res.ok) showCodeStep(email);
+      else accountErrorFor(res && res.reason);
+    });
+
+    $("#account-code-form")?.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const email = $("#account-code-form")?.dataset.email || "";
+      const code = ($("#account-code")?.value || "").trim();
+      accountError(null);
+      const res = await window.VTAccount?.verifyEmailCode?.(email, code);
+      if (res && res.ok) {
+        if ($("#account-code")) $("#account-code").value = "";
+        showEmailStep();
+        toast(tt("auth.toast.in"));
+        refreshAccountUI();
+        updateBillingChrome();
+      } else {
+        accountErrorFor(res && res.reason);
+      }
+    });
+
+    $("#account-code-back")?.addEventListener("click", showEmailStep);
+
+    $("#btn-account-trial")?.addEventListener("click", async () => {
+      const res = await window.VTAccount?.startTrial?.();
+      if (res && res.ok) {
+        toast(tt("pricing.toast.trialStarted", { n: res.days ?? "" }));
+        refreshAccountUI();
+        updateBillingChrome();
+      } else {
+        accountErrorFor(res && res.reason);
+      }
+    });
+
+    $("#account-redeem-form")?.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const code = ($("#account-redeem-code")?.value || "").trim();
+      accountError(null);
+      const res = await window.VTAccount?.redeem?.(code);
+      if (res && res.ok) {
+        if ($("#account-redeem-code")) $("#account-redeem-code").value = "";
+        toast(tt("auth.redeemed", { days: res.days ?? "" }));
+        refreshAccountUI();
+        updateBillingChrome();
+      } else {
+        accountErrorFor(res && res.reason);
+      }
+    });
+
+    $("#btn-account-sync")?.addEventListener("click", async () => {
+      const res = await window.VTSync?.syncNow?.();
+      refreshAccountUI();
+      if (res && !res.ok) accountErrorFor(res.reason);
+      else renderExerciseList();
+    });
+
+    function giftResult(text) {
+      const el = $("#gift-result");
+      if (!el) return;
+      el.hidden = !text;
+      el.textContent = text || "";
+    }
+
+    $("#gift-grant-form")?.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const email = ($("#gift-grant-email")?.value || "").trim();
+      const days = Number($("#gift-grant-days")?.value || 30);
+      const note = ($("#gift-grant-note")?.value || "").trim();
+      const res = await window.VTAccount?.request?.("POST", "/v1/admin/grants", { email, days, note });
+      if (res && res.ok) {
+        giftResult(tt("auth.giftGranted", { days, email }));
+        if ($("#gift-grant-email")) $("#gift-grant-email").value = "";
+        if ($("#gift-grant-note")) $("#gift-grant-note").value = "";
+      } else {
+        giftResult(tt(ACCOUNT_ERROR_KEYS[res?.data?.reason] || "auth.err.generic"));
+      }
+    });
+
+    $("#gift-code-form")?.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const days = Number($("#gift-code-days")?.value || 30);
+      const maxRedemptions = Number($("#gift-code-uses")?.value || 1);
+      const res = await window.VTAccount?.request?.("POST", "/v1/admin/gift-codes", {
+        days,
+        maxRedemptions
+      });
+      if (res && res.ok && res.data?.giftCode) {
+        giftResult(tt("auth.giftMinted", { code: res.data.giftCode.code }));
+        renderGiftCodes();
+      } else {
+        giftResult(tt("auth.err.generic"));
+      }
+    });
+
+    /** List the codes an admin has minted, newest first. */
+    async function renderGiftCodes() {
+      const list = $("#gift-list");
+      if (!list) return;
+      const res = await window.VTAccount?.request?.("GET", "/v1/admin/gift-codes", null);
+      if (!res || !res.ok) return;
+      const esc = window.VTAuth?.escapeHtml || ((v) => String(v ?? ""));
+      list.innerHTML = (res.data?.giftCodes || [])
+        .map((g) => {
+          const state = g.revokedAt
+            ? tt("auth.giftRevoked")
+            : `${g.redeemedCount}/${g.maxRedemptions}`;
+          return `<li><code>${esc(g.code)}</code> · ${esc(String(g.days))}d · ${esc(state)}</li>`;
+        })
+        .join("");
+    }
+
+    window.VTAccount?.onChange?.(() => {
+      refreshAccountUI();
+      updateBillingChrome();
+    });
+    window.VTSync?.onChange?.(() => refreshAccountUI());
   }
 
   function bindBilling() {
@@ -5003,7 +5328,27 @@
         renderPricingModal();
       });
     });
-    $("#btn-start-trial")?.addEventListener("click", () => {
+    $("#btn-start-trial")?.addEventListener("click", async () => {
+      const acct = window.VTAccount?.getState?.() || null;
+      if (acct?.configured) {
+        // Not signed in: send them to the panel rather than starting a trial
+        // this browser would forget and the next one would hand out again.
+        if (!acct.signedIn) {
+          toast(tt("pricing.trialNeedsAccount"), { durationMs: 4200 });
+          closePricing();
+          openAccount();
+          return;
+        }
+        const res = await window.VTAccount.startTrial();
+        if (res && res.ok) {
+          toast(tt("pricing.toast.trialStarted", { n: String(res.days ?? "") }));
+        } else {
+          toast(tt("pricing.toast.trialUsed"), { durationMs: 4200 });
+        }
+        updateBillingChrome();
+        renderPricingModal();
+        return;
+      }
       if (!window.VTBilling?.startTrial) return;
       const res = VTBilling.startTrial();
       if (!res.ok) {
@@ -5077,6 +5422,21 @@
         if ($("#pricing-modal") && !$("#pricing-modal").hidden) renderPricingModal();
       });
       const ret = VTBilling.handleReturnFromCheckout();
+      // Somebody who was signed in when they paid should own the subscription,
+      // not just the browser they happened to pay in. Attaching it here is what
+      // makes it show up on their phone afterwards.
+      if (ret?.event === "success" && ret.sessionId && ret.provider) {
+        window.VTAccount?.linkCheckout?.({ provider: ret.provider, sessionId: ret.sessionId })
+          .then((res) => {
+            if (res?.ok) {
+              updateBillingChrome();
+              refreshAccountUI();
+            }
+          })
+          .catch(() => {
+            /* the anonymous claim path still grants Pro in this browser */
+          });
+      }
       if (ret?.event === "success" && ret.pendingVerification) {
         // Payment recorded; Pro waits on the entitlement worker's signed license.
         toast(tt("pricing.toast.verifyPending"), { durationMs: 4600 });

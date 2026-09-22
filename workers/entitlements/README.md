@@ -58,7 +58,36 @@ answer **202 `{ok:false,reason:"pending"}`** and the browser keeps polling until
 | POST | `/v1/claim` | `{provider, sessionId}` → `200 {ok, licenseId, token, entitlement}`, `202 {ok:false,reason:"pending"}` while the webhook is still in flight *or* while an async payment settles, `404` for garbage. |
 | POST | `/v1/license` | `{licenseId}` → a fresh token from live KV state. `404` unknown, `202 {reason:"pending"}` while an async payment settles, `403 {reason:"inactive"}` once the paid period has ended. |
 | GET | `/v1/jwks` | The public key as a JWK set, with `kid`. |
-| GET | `/v1/health` | `{ok, stripeConfigured, mercadopagoConfigured, signingKeyConfigured, siteOrigin}` — booleans only. |
+| GET | `/v1/health` | `{ok, stripeConfigured, mercadopagoConfigured, signingKeyConfigured, siteOrigin, accountsConfigured, authMethods}` — booleans and the public Google client id only. |
+
+Accounts, grants and saved progress (all of these need the `DB` binding; without
+it every one of them answers `503 {reason:"accounts_not_configured"}` and the
+routes above are untouched):
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/v1/auth/methods` | Which sign-in methods this deploy actually has. |
+| POST | `/v1/auth/email/start` | `{email}` → emails a 6-digit code. Always `200` with the same body, known address or not. |
+| POST | `/v1/auth/email/verify` | `{email, code}` → `{token, account, entitlement, licenseToken}`. |
+| POST | `/v1/auth/google` | `{credential}` — a Google ID token, verified against Google's JWKS. |
+| POST | `/v1/auth/logout` | Drops the bearer session. |
+| GET | `/v1/me` | The account, its entitlement, and a fresh license token when entitled. |
+| POST | `/v1/me/link` | `{provider, sessionId}` — attaches a checkout the visitor paid for anonymously. |
+| POST | `/v1/me/trial` | Starts the one free month. `409 {reason:"trial_used"}` the second time. |
+| POST | `/v1/me/redeem` | `{code}` — redeems a gift code. |
+| GET/PUT/DELETE | `/v1/me/progress` | Saved progress for one profile. `PUT` takes `{profileId, doc, baseRev}` and answers `409` with the server's copy when the revision moved. |
+| POST/GET | `/v1/admin/gift-codes` | Mint or list gift codes. |
+| POST | `/v1/admin/gift-codes/revoke` | Stop a code being redeemed again. |
+| POST/GET | `/v1/admin/grants` | Gift months straight to an email, or list an account's grants. |
+| POST | `/v1/admin/grants/revoke` | Take a gifted month back. |
+| GET | `/v1/admin/account` | Look an account up by email. |
+| POST | `/v1/admin/sweep` | Delete expired sessions, codes and rate-limit rows. |
+
+Admin routes require a session whose email is in `ADMIN_EMAILS`; that list is
+read per request, so removing an address revokes it on the next deploy.
+
+Sessions are bearer tokens in the `Authorization` header, not cookies:
+`github.io` → `workers.dev` is cross-site, and third-party cookies are gone.
 
 CORS is restricted to `SITE_ORIGIN` (with `OPTIONS` preflight). Bodies over
 1 MiB are refused with 413. Non-`POST` on a webhook route is 405.
@@ -74,6 +103,11 @@ Public, committed in `wrangler.toml`:
 | `LICENSE_TTL_SECONDS` | Token lifetime (clamped to 60…2592000). |
 | `STRIPE_PRICE_PRO_MONTHLY` / `STRIPE_PRICE_PRO_YEARLY` | Optional price → plan mapping. |
 | `MP_PLAN_PRO_MONTHLY` / `MP_PLAN_PRO_YEARLY` | Optional `preapproval_plan_id` → plan mapping. |
+| `TRIAL_DAYS` | Length of the free trial. One per account, ever. Default 30. |
+| `ADMIN_EMAILS` | Comma-separated emails allowed to gift and revoke months. |
+| `GOOGLE_CLIENT_ID` | Google Sign-In client id. Public by design. Empty disables Google sign-in. |
+| `EMAIL_PROVIDER` | `resend`, `brevo` or `mailersend`. Empty disables email sign-in rather than dropping codes silently. |
+| `EMAIL_FROM` / `EMAIL_FROM_NAME` | Sender of the code emails. Must be a verified sender at the provider. |
 
 Secrets — **never** in this repo, only `wrangler secret put`:
 
@@ -83,6 +117,7 @@ Secrets — **never** in this repo, only `wrangler secret put`:
 | `MP_WEBHOOK_SECRET` | Mercado Pago webhook signing secret. |
 | `MP_ACCESS_TOKEN` | Mercado Pago access token, used only for server-side reads. |
 | `LICENSE_PRIVATE_KEY_PKCS8_B64` | base64 PKCS#8 P-256 private key. |
+| `RESEND_API_KEY` / `BREVO_API_KEY` / `MAILERSEND_API_KEY` | Only the one named by `EMAIL_PROVIDER`. |
 
 KV: one namespace bound as `ENTITLEMENTS`.
 
@@ -93,6 +128,26 @@ claim:<provider>:<sessionOrPaymentId> licenseId    90d TTL   ?billing=success lo
 sub:<provider>:<subscriptionId>       licenseId              keeps one license per subscription
 ```
 
+D1: one database bound as `DB`, optional. The schema is created on first use
+(`ensureSchema`, every statement `IF NOT EXISTS`), so there is no migration step
+to forget — deploying is enough.
+
+| Table | Holds |
+|-------|-------|
+| `accounts` | One row per person. `email_normalized` is unique; `trial_used_at` is why a revoked trial does not hand out a second. |
+| `identities` | `(provider, subject)` → account. `email` and `google` can both point at one account. |
+| `sessions` | Only a SHA-256 of the bearer token, never the token. |
+| `login_codes` | One-time codes, hashed, with an attempt counter. |
+| `grants` | **Trial, gift and comp are the same row.** `revoked_at` is how any of them is taken back. |
+| `gift_codes` / `gift_redemptions` | Codes and who used them. A unique index makes double redemption impossible. |
+| `license_links` | Which paid licenses belong to which account. |
+| `progress` | One document per `(account, profile)` with a `rev` for compare-and-swap. |
+| `rate_limits` | Per-IP and per-email counters for the sign-in routes. |
+
+`resolveEntitlement` reads the D1 grants **and** the KV paid records and returns
+whichever access runs longest, so nothing is mirrored between the two and
+nothing can drift. An open-ended paid subscription outranks any dated grant.
+
 ## Deploy
 
 ```bash
@@ -102,6 +157,10 @@ cd workers/entitlements
 wrangler kv namespace create ENTITLEMENTS
 wrangler kv namespace create ENTITLEMENTS --preview
 
+# 1b. Accounts database — paste the printed id into wrangler.toml.
+#     Skip this and the worker keeps working; accounts simply stay off.
+wrangler d1 create vocal-studio-accounts
+
 # 2. Signing key (prints the private key and the public JWK)
 node scripts/generate-keys.mjs k1
 
@@ -110,6 +169,7 @@ wrangler secret put STRIPE_WEBHOOK_SECRET
 wrangler secret put MP_WEBHOOK_SECRET
 wrangler secret put MP_ACCESS_TOKEN
 wrangler secret put LICENSE_PRIVATE_KEY_PKCS8_B64
+wrangler secret put RESEND_API_KEY        # accounts only, matching EMAIL_PROVIDER
 
 # 4. Ship
 wrangler deploy

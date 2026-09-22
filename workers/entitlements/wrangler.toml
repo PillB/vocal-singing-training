@@ -11,6 +11,17 @@ binding = "ENTITLEMENTS"
 id = "TODO_REPLACE_WITH_KV_NAMESPACE_ID"
 preview_id = "TODO_REPLACE_WITH_KV_PREVIEW_NAMESPACE_ID"
 
+# --- D1 (accounts, grants, saved progress) ------------------------------
+# Optional. Without this binding the worker still serves the anonymous
+# pay -> claim -> license flow exactly as before; every /v1/auth, /v1/me and
+# /v1/admin route answers 503 accounts_not_configured instead.
+# Create it first, then paste the id printed by:
+#   wrangler d1 create vocal-studio-accounts
+[[d1_databases]]
+binding = "DB"
+database_name = "vocal-studio-accounts"
+database_id = "TODO_REPLACE_WITH_D1_DATABASE_ID"
+
 # --- Public configuration (safe to commit) ------------------------------
 [vars]
 # Exact origin of the site, used as the token audience and as the only
@@ -26,6 +37,18 @@ STRIPE_PRICE_PRO_MONTHLY = ""
 STRIPE_PRICE_PRO_YEARLY = ""
 MP_PLAN_PRO_MONTHLY = ""
 MP_PLAN_PRO_YEARLY = ""
+# Length of the free trial, in days. One per account, ever.
+TRIAL_DAYS = "30"
+# Comma-separated emails allowed to gift and revoke months. Read on every
+# request, so removing an address here takes effect on the next deploy.
+ADMIN_EMAILS = ""
+# Google Sign-In client id (public by design). Empty disables Google sign-in.
+GOOGLE_CLIENT_ID = ""
+# Transactional email for the one-time sign-in codes: resend | brevo | mailersend.
+# Empty disables email sign-in rather than silently dropping codes.
+EMAIL_PROVIDER = ""
+EMAIL_FROM = ""
+EMAIL_FROM_NAME = "Vocal Studio"
 
 # --- Secrets (NEVER put values in this file) ----------------------------
 # Set each one with `wrangler secret put <NAME>`:
@@ -34,6 +57,10 @@ MP_PLAN_PRO_YEARLY = ""
 #   MP_ACCESS_TOKEN                Mercado Pago access token (server-side API reads)
 #   LICENSE_PRIVATE_KEY_PKCS8_B64  base64 PKCS#8 P-256 private key
 #                                  (scripts/generate-keys.mjs prints it)
+# Accounts only, and only for the provider named in EMAIL_PROVIDER:
+#   RESEND_API_KEY                 re_...
+#   BREVO_API_KEY                  xkeysib-...
+#   MAILERSEND_API_KEY             mlsn....
 
 [observability]
 enabled = true

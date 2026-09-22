@@ -10,7 +10,7 @@
     <meta name="color-scheme" content="dark" />
     <meta name="theme-color" content="#0c1118" />
     <title>Entrenamiento vocal y de canto</title>
-    <link rel="stylesheet" href="css/styles.css?v=20260920a" />
+    <link rel="stylesheet" href="css/styles.css?v=20260921a" />
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎤</text></svg>" />
   </head>
   <body>
@@ -669,38 +669,125 @@
       </div>
     </div>
 
-    <!-- Account / login overlay (internal admins + F&F testers) -->
+    <!-- Account overlay: sign in, saved progress, gifted months -->
     <div id="account-modal" class="modal-overlay account-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="account-title">
       <div class="modal-card account-card">
         <div class="pricing-head">
           <div>
             <h3 id="account-title" data-i18n="auth.title">Cuenta</h3>
             <p class="muted pricing-sub" data-i18n="auth.sub">
-              Inicia sesión con una cuenta de prueba interna. La práctica gratuita no requiere cuenta.
+              Entra para guardar tu progreso y llevarlo a cualquier dispositivo. Practicar gratis nunca pide cuenta.
             </p>
           </div>
           <button type="button" class="btn btn-ghost btn-sm" id="account-close" aria-label="Close">✕</button>
         </div>
+
+        <!-- Outside both panels: errors are reported signed out (a bad code)
+             and signed in (a gift code that does not exist) alike. -->
+        <p class="auth-error" id="account-error" hidden></p>
+
         <div id="account-logged-out">
-          <form id="login-form" class="login-form" autocomplete="on">
-            <label class="field">
-              <span data-i18n="auth.username">Usuario</span>
-              <input type="text" id="login-username" name="username" autocomplete="username" maxlength="64" required />
-            </label>
-            <label class="field">
-              <span data-i18n="auth.password">Contraseña</span>
-              <input type="password" id="login-password" name="password" autocomplete="current-password" maxlength="128" required />
-            </label>
-            <p class="auth-error" id="login-error" hidden></p>
-            <button type="submit" class="btn btn-primary btn-sm" id="login-submit" data-i18n="auth.signIn">Entrar</button>
-          </form>
+          <!-- Shown only once an operator has pointed the site at the worker. -->
+          <div id="account-signin" hidden>
+            <div id="account-google" class="account-google"></div>
+            <p class="account-or" id="account-or" hidden><span data-i18n="auth.or">o</span></p>
+
+            <form id="account-email-form" class="login-form" autocomplete="on">
+              <label class="field">
+                <span data-i18n="auth.email">Correo</span>
+                <input type="email" id="account-email" name="email" autocomplete="email" inputmode="email" maxlength="254" required />
+              </label>
+              <button type="submit" class="btn btn-primary btn-sm" id="account-email-submit" data-i18n="auth.sendCode">Enviar código</button>
+            </form>
+
+            <form id="account-code-form" class="login-form" hidden autocomplete="one-time-code">
+              <label class="field">
+                <span data-i18n="auth.code">Código de 6 dígitos</span>
+                <input type="text" id="account-code" name="code" autocomplete="one-time-code" inputmode="numeric" pattern="[0-9]*" maxlength="6" required />
+              </label>
+              <div class="controls-row">
+                <button type="submit" class="btn btn-primary btn-sm" id="account-code-submit" data-i18n="auth.signIn">Entrar</button>
+                <button type="button" class="btn btn-ghost btn-sm" id="account-code-back" data-i18n="auth.useAnotherEmail">Usar otro correo</button>
+              </div>
+            </form>
+          </div>
+
+          <p class="muted" id="account-unconfigured" hidden data-i18n="auth.unconfigured">
+            Las cuentas todavía no están activas en este sitio. Tu práctica se guarda en este navegador.
+          </p>
+
+          <details class="account-internal">
+            <summary data-i18n="auth.internalTitle">Acceso interno</summary>
+            <form id="login-form" class="login-form" autocomplete="on">
+              <label class="field">
+                <span data-i18n="auth.username">Usuario</span>
+                <input type="text" id="login-username" name="username" autocomplete="username" maxlength="64" required />
+              </label>
+              <label class="field">
+                <span data-i18n="auth.password">Contraseña</span>
+                <input type="password" id="login-password" name="password" autocomplete="current-password" maxlength="128" required />
+              </label>
+              <p class="auth-error" id="login-error" hidden></p>
+              <button type="submit" class="btn btn-sm" id="login-submit" data-i18n="auth.signIn">Entrar</button>
+            </form>
+          </details>
         </div>
+
         <div id="account-logged-in" hidden>
           <p class="account-who" id="account-who"></p>
+          <p class="account-plan" id="account-plan"></p>
+          <p class="muted account-sync" id="account-sync"></p>
+
           <div class="account-actions controls-row">
+            <button type="button" class="btn btn-primary btn-sm" id="btn-account-trial" hidden data-i18n="auth.startTrial">Empezar mes de prueba</button>
             <button type="button" class="btn btn-sm" id="btn-account-pricing" data-i18n="nav.pro">Pro</button>
+            <button type="button" class="btn btn-sm" id="btn-account-sync" data-i18n="auth.syncNow">Guardar ahora</button>
             <button type="button" class="btn btn-ghost btn-sm" id="btn-logout" data-i18n="auth.signOut">Salir</button>
           </div>
+
+          <form id="account-redeem-form" class="login-form account-redeem">
+            <label class="field">
+              <span data-i18n="auth.giftCode">¿Tienes un código de regalo?</span>
+              <input type="text" id="account-redeem-code" name="giftCode" maxlength="32" autocomplete="off" placeholder="VOCAL-XXXX-XXXX" />
+            </label>
+            <button type="submit" class="btn btn-sm" id="account-redeem-submit" data-i18n="auth.redeem">Canjear</button>
+          </form>
+
+          <!-- Studio tools: only drawn for an account the worker calls an admin. -->
+          <div id="account-admin" class="admin-panel" hidden>
+            <h4 data-i18n="auth.giftTitle">Regalar meses</h4>
+            <form id="gift-grant-form" class="login-form">
+              <label class="field">
+                <span data-i18n="auth.giftEmail">Correo de la persona</span>
+                <input type="email" id="gift-grant-email" maxlength="254" autocomplete="off" required />
+              </label>
+              <label class="field">
+                <span data-i18n="auth.giftDays">Días</span>
+                <input type="number" id="gift-grant-days" min="1" max="3650" value="30" required />
+              </label>
+              <label class="field">
+                <span data-i18n="auth.giftNote">Nota (para ti)</span>
+                <input type="text" id="gift-grant-note" maxlength="200" autocomplete="off" />
+              </label>
+              <button type="submit" class="btn btn-primary btn-sm" data-i18n="auth.giftGrant">Regalar</button>
+            </form>
+
+            <form id="gift-code-form" class="login-form">
+              <label class="field">
+                <span data-i18n="auth.giftCodeDays">Código de regalo · días</span>
+                <input type="number" id="gift-code-days" min="1" max="3650" value="30" required />
+              </label>
+              <label class="field">
+                <span data-i18n="auth.giftCodeUses">Usos</span>
+                <input type="number" id="gift-code-uses" min="1" max="1000" value="1" required />
+              </label>
+              <button type="submit" class="btn btn-sm" data-i18n="auth.giftMint">Crear código</button>
+            </form>
+
+            <p class="gift-result" id="gift-result" hidden></p>
+            <ul class="admin-user-list" id="gift-list"></ul>
+          </div>
+
           <div id="admin-panel" class="admin-panel" hidden>
             <h4 data-i18n="auth.adminTitle">Herramientas admin</h4>
             <div class="controls-row">
@@ -767,13 +854,13 @@
     </div>
 
     <script src="js/focus-trap.js?v=20260919a"></script>
-    <script src="js/i18n.js?v=20260920a"></script>
+    <script src="js/i18n.js?v=20260921a"></script>
     <script src="js/exercises-data.js?v=20260920a"></script>
     <script src="js/exercises-locale-es.js?v=20260920a"></script>
     <script src="js/practice-profiles.js?v=20260920a"></script>
-    <script src="js/storage.js"></script>
+    <script src="js/storage.js?v=20260921a"></script>
     <script src="js/billing-config.js"></script>
-    <script src="js/license.js?v=20260919a"></script>
+    <script src="js/license.js?v=20260921a"></script>
     <script src="js/billing.js?v=20260919a"></script>
     <script src="js/ads-config.js"></script>
     <script src="js/ads.js"></script>
@@ -782,6 +869,8 @@
     <script src="js/reminders.js"></script>
     <script src="js/auth-users.generated.js"></script>
     <script src="js/auth.js"></script>
+    <script src="js/account.js?v=20260921a"></script>
+    <script src="js/sync.js?v=20260921a"></script>
     <script src="js/piano.js"></script>
     <script src="js/range-adapter.js"></script>
     <script src="js/pitch-visualizer.js?v=20260717f"></script>
@@ -792,6 +881,6 @@
     <script src="js/metrics.js"></script>
     <script src="js/session.js?v=20260919b"></script>
     <script src="js/tour.js?v=20260919b"></script>
-    <script src="js/app.js?v=20260920a"></script>
+    <script src="js/app.js?v=20260921a"></script>
   </body>
 </html>

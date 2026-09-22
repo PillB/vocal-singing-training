@@ -5,19 +5,29 @@
  * issues short-lived ECDSA-signed license tokens the browser can verify against
  * the published JWKS.
  *
+ * Accounts, saved progress and granted months live alongside it in D1 (see
+ * api.js). Both halves issue the same signed token, so the browser has one
+ * thing to verify whether the access was bought or given.
+ *
  * Bindings (see wrangler.toml and README.md):
  *   KV   ENTITLEMENTS
+ *   D1   DB                (optional: without it the account routes answer 503
+ *                           and the paid-only flow keeps working untouched)
  *   vars SITE_ORIGIN, LICENSE_KEY_ID, LICENSE_TTL_SECONDS,
  *        STRIPE_PRICE_PRO_MONTHLY, STRIPE_PRICE_PRO_YEARLY,
- *        MP_PLAN_PRO_MONTHLY, MP_PLAN_PRO_YEARLY
+ *        MP_PLAN_PRO_MONTHLY, MP_PLAN_PRO_YEARLY,
+ *        ADMIN_EMAILS, TRIAL_DAYS, GOOGLE_CLIENT_ID,
+ *        EMAIL_PROVIDER, EMAIL_FROM, EMAIL_FROM_NAME
  *   secrets STRIPE_WEBHOOK_SECRET, MP_WEBHOOK_SECRET, MP_ACCESS_TOKEN,
- *        LICENSE_PRIVATE_KEY_PKCS8_B64
+ *        LICENSE_PRIVATE_KEY_PKCS8_B64,
+ *        RESEND_API_KEY | BREVO_API_KEY | MAILERSEND_API_KEY
  *
  * Nothing in this file logs a secret, a token or a raw webhook body.
  */
 
 "use strict";
 
+import { routeAccountApi, authMethods } from "./api.js";
 import { buildJwks, createLicenseToken, isLicenseIdShape, isTokenIssuable } from "./license.js";
 import { mapStripeEvent, verifyStripeSignature } from "./stripe.js";
 import { confirmAndMapNotification, resolveNotificationTarget, verifyMercadoPagoSignature } from "./mercadopago.js";
@@ -52,8 +62,8 @@ export function corsHeaders(request, env) {
   return {
     ...headers,
     "access-control-allow-origin": allowed,
-    "access-control-allow-methods": "GET, POST, OPTIONS",
-    "access-control-allow-headers": "content-type",
+    "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
+    "access-control-allow-headers": "content-type, authorization",
     "access-control-max-age": "86400"
   };
 }
@@ -301,6 +311,8 @@ function handleHealth(env, cors) {
       stripeConfigured: Boolean(env.STRIPE_WEBHOOK_SECRET),
       mercadopagoConfigured: Boolean(env.MP_WEBHOOK_SECRET && env.MP_ACCESS_TOKEN),
       signingKeyConfigured: Boolean(env.LICENSE_PRIVATE_KEY_PKCS8_B64),
+      accountsConfigured: Boolean(env.DB),
+      authMethods: authMethods(env),
       siteOrigin: env.SITE_ORIGIN || ""
     },
     200,
@@ -347,6 +359,16 @@ export async function handleRequest(request, env, options) {
     const jwks = await buildJwks(env);
     // The public key is public: let browsers and CDNs cache it.
     return json(jwks, 200, { ...cors, "cache-control": "public, max-age=600" });
+  }
+
+  const accountResponse = await routeAccountApi(request, env, url, path, {
+    json,
+    cors,
+    now: options && options.now,
+    fetchImpl: options && options.fetchImpl
+  });
+  if (accountResponse) {
+    return accountResponse;
   }
 
   if (path === "/v1/health") {

@@ -3838,6 +3838,84 @@ body.account-open {
   margin: 0.15rem 0;
 }
 
+/* --- Account panel: sign-in, plan state and gifting ------------------- */
+
+/* Google draws its own button here; the slot just centres whatever size it
+   picks and reserves no height when the script is blocked. */
+.account-google {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 0.55rem;
+}
+.account-google:empty {
+  display: none;
+}
+
+/* A rule with the word "o" sitting in the gap, between the two sign-in ways. */
+.account-or {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0.55rem 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+.account-or::before,
+.account-or::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.account-internal {
+  margin-top: 1rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--border);
+}
+.account-internal > summary {
+  cursor: pointer;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  /* A 44px row so the disclosure is a real tap target on a phone. */
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+.account-internal > summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+.account-internal .login-form {
+  margin-top: 0.5rem;
+}
+
+.account-plan {
+  margin: 0 0 0.35rem;
+  font-size: 0.92rem;
+  font-weight: 650;
+  color: var(--accent);
+}
+.account-sync {
+  margin: 0 0 0.75rem;
+  font-size: 0.8rem;
+}
+.account-redeem {
+  margin-top: 0.85rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--border);
+}
+.gift-result {
+  margin: 0.55rem 0 0;
+  font-size: 0.85rem;
+  font-weight: 650;
+  color: var(--accent);
+  /* A minted code has to survive being read aloud and retyped, so let it wrap
+     rather than clipping. */
+  overflow-wrap: anywhere;
+}
+
 .toast {
   position: fixed;
   /* Top placement: never cover bottom Start/Stop rail (mobile hit-target bug) */

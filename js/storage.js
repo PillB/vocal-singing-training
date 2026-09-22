@@ -237,6 +237,54 @@
       write(scopedKey(LS.achievements), f || {});
     },
 
+    /**
+     * Everything about the active profile that is worth carrying to another
+     * device, as one plain object.
+     *
+     * Recordings are deliberately left out: they live in IndexedDB, run to
+     * megabytes each, and belong to a storage tier this sync is not.
+     *
+     * @returns {object} Sync bag for the active profile.
+     */
+    readSyncBag() {
+      return {
+        v: 1,
+        profileId: this.getActiveProfileId(),
+        progress: this.getProgress(),
+        weekPlan: this.getWeekPlan(),
+        reviews: this.getReviews(),
+        holdLogs: this.getHoldLogs(),
+        goals: this.getGoals(),
+        achievements: this.getAchievementFlags()
+      };
+    },
+
+    /**
+     * Write a sync bag back over the active profile.
+     *
+     * Each section is written only when the bag actually carries it, so a bag
+     * from an older build cannot blank out a section it never knew about.
+     *
+     * @param {object} bag Sync bag, as produced by readSyncBag.
+     * @returns {{ ok: boolean }} Result.
+     */
+    writeSyncBag(bag) {
+      if (!bag || typeof bag !== "object") return { ok: false };
+      if (bag.progress && typeof bag.progress === "object") {
+        write(scopedKey(LS.progress), bag.progress);
+      }
+      if (bag.weekPlan && typeof bag.weekPlan === "object") {
+        write(scopedKey(LS.weekPlan), bag.weekPlan);
+      }
+      if (Array.isArray(bag.reviews)) write(scopedKey(LS.reviews), bag.reviews.slice(0, 40));
+      if (Array.isArray(bag.holdLogs)) write(scopedKey(LS.holdLogs), bag.holdLogs.slice(0, 100));
+      if (bag.goals && typeof bag.goals === "object") write(scopedKey(LS.goals), bag.goals);
+      if (bag.achievements && typeof bag.achievements === "object") {
+        write(scopedKey(LS.achievements), bag.achievements);
+      }
+      return { ok: true };
+    },
+
     openDb() {
       return new Promise((resolve, reject) => {
         const req = indexedDB.open(DB_NAME, DB_VERSION);

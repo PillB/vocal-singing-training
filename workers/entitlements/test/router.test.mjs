@@ -79,6 +79,11 @@ test("health reports booleans and the site origin, never key material", async ()
     stripeConfigured: true,
     mercadopagoConfigured: true,
     signingKeyConfigured: true,
+    // The account layer reports itself here too. `createTestEnv` has no D1
+    // binding and no auth configuration, which is exactly the shape a
+    // payments-only deployment has.
+    accountsConfigured: false,
+    authMethods: { email: false, google: false, googleClientId: null, trialDays: 30 },
     siteOrigin: TEST_ORIGIN
   });
   const text = JSON.stringify(body);

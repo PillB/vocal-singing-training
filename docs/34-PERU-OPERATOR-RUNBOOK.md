@@ -24,7 +24,7 @@ hard-codes them.
 
 | Decision | Recommendation | Why |
 |---|---|---|
-| Price in Peru | S/ 25–30 per month | Below a gym membership, above "not serious". Note the fee cliffs in stage 5: at S/ 19.90 a Culqi charge costs 17.6% in commission alone. |
+| Price in Peru | S/ 20–25 per month | Streaming set the anchor and people compare against it: Spotify Individual S/ 18.90–20.90, YouTube Premium S/ 20.90, Netflix Básico S/ 28.90. S/ 20 is the number Peruvians already pay monthly without thinking about it. See [what operators report](#what-peruvian-operators-actually-report) for why this moved down from S/ 25–30. Note the fee cliffs in stage 5: at S/ 19.90 a Culqi charge costs 17.6% in commission alone. |
 | Price abroad | USD 7–10 per month | The fixed fee per charge dominates below $7. The same provider that takes 7.9% at $10 takes 11.9% at $5. |
 | Annual option | Yes, at ~10 months' price | **The biggest lever you have.** One charge a year pays the fixed fee once instead of twelve times, on every rail. |
 | Trial | One month, one per account | Already built. `TRIAL_DAYS` in `wrangler.toml`. |
@@ -80,6 +80,12 @@ into it.
    ```
    The health response should say `accountsConfigured: true`. It prints
    booleans only, never key material.
+9. **Set a billing alert**, in the Cloudflare dashboard under Billing →
+   Notifications, at a number that would alarm you — $20 is plenty. This takes
+   two minutes and it is the only protection against a loop in a deploy running
+   up a bill on a per-operation-priced database. See [what operators
+   report](#what-peruvian-operators-actually-report) for the $30,356-in-72-hours
+   version of that story.
 
 **What this unblocks**: nothing works without it. After this step the worker is
 live but has no way to sign anybody in and no way to take money.
@@ -110,6 +116,12 @@ Two things follow from that:
    errors under load, this is the first thing to check, and the fix is the $5
    plan rather than a code change. Everything else here fits the free tier
    comfortably at your size.
+3. ⚠ **D1 has a long latency tail**, separately from any of this. Several
+   operators report occasional multi-second round trips unrelated to query
+   complexity — see [what operators report](#what-peruvian-operators-actually-report).
+   It is survivable here because the only thing that syncs often is progress,
+   which retries in the background. It would stop being survivable if sign-in
+   were built to make several sequential D1 calls, so do not build it that way.
 
 Also: the daily free counters reset at **00:00 UTC, which is 7pm in Peru**.
 
@@ -436,7 +448,9 @@ What is confirmed from Mercado Pago's own documentation:
 Its fee in Peru is **3.29% + S/ 1 + IGV** with the money released after 14
 business days, or **3.49% + S/ 1 + IGV** released instantly. No affiliation fee,
 no monthly fee. On a S/ 25 subscription at the instant tier that is about
-S/ 2.21 all-in, an effective take of roughly 8.8%.
+S/ 2.21 all-in, an effective take of roughly 8.8%; on a S/ 20 one it is S/ 2.00,
+or 10.0%. That is the fixed S/ 1 making itself felt, and it is the reason the
+annual plan matters more than the gateway choice does.
 
 One thing that changes how you test: **Mercado Pago has removed its sandbox.**
 There is no staging URL — everything runs against the production API, and
@@ -490,7 +504,10 @@ Two consequences worth acting on:
 
 1. **Below about S/ 60 a month, Mercado Pago is cheaper per charge than Culqi**,
    because Culqi's S/ 3.50 floor bites. Above S/ 88, Culqi wins. If you price at
-   S/ 25, do not reach for Culqi first.
+   S/ 20–25, do not reach for Culqi first — and there is a second, independent
+   reason not to, in [what operators report](#what-peruvian-operators-actually-report):
+   its own subscription tooling looks unmaintained and merchants rate it worst on
+   fraud. **Openpay BBVA is the fallback, not Culqi.**
 2. **Bill annually wherever you can.** One S/ 250 charge pays the fixed fee once
    instead of twelve times. At these price points that is the single biggest
    lever you have, bigger than the choice of gateway.
@@ -526,6 +543,17 @@ dwarfs the revenue. Do not do it.
 *payout* destination on 2026-02-25, which is a different thing from acquiring.
 So a merchant of record can be the seller in a country Stripe supports and still
 pay a Peruvian bank account. Several of them name Peru outright.
+
+Two things from people who tried the other way, because this gets asked
+constantly in Latin American developer forums. **In the accounts that could be
+verified, not one Latin American founder obtained a Stripe merchant account from
+their own country** — every working setup went through a foreign entity, and some
+through another person's identity in a supported country, which you should not
+do. And the Stripe Atlas route costs several times its sticker price: founders
+who have done it report **about $1,400 all-in** for the first year, and a Stripe
+insider's own estimate is *"$1k to about $2k"* once the Delaware franchise tax,
+the registered agent and the US filings are counted. At a beta's size that is
+several years of revenue.
 
 ### The rest of the world → a merchant of record
 
@@ -568,6 +596,12 @@ later.
 
 1. Open a **Payoneer** account registered in Peru. It is the one payout route
    among the candidates that does not touch Stripe at all, so it is your hedge.
+   Peruvian users report withdrawals landing in **2–4 business days with no
+   commission charged by the local bank** — the real cost is Payoneer's FX
+   spread, not a fee line. ⚠ Accounts disagree on whether the receiving bank
+   account must be in soles: one says soles only, another reports associating a
+   Scotiabank **dollar** account successfully. Ask Payoneer before you rely on
+   receiving USD without a conversion.
 2. Confirm your Peruvian bank accepts inbound USD wires; get its SWIFT/BIC and
    the exact account format, and ask what it charges to receive one. None of the
    providers discloses your bank's own commission.
@@ -582,6 +616,120 @@ later.
 
 ---
 
+## What Peruvian operators actually report
+
+Everything above this point comes from an official source — a tariff page, an
+API reference, a law. This section is the other kind of evidence: what people
+who have actually shipped and charged money from Peru say happened to them,
+gathered from forums, articles and testimonials. It is weaker evidence and it is
+marked as such, but it contradicts the official picture in two places that
+change a decision.
+
+**Read the dates.** The transaction statistics are 2025. Most of the merchant
+and developer accounts are 2018–2021 forum threads and blog posts, and a
+gateway's support quality in 2019 is not a promise about 2026. Where an account
+is old and still load-bearing, it is flagged ⚠.
+
+### Cards are a minority of transactions but most of the money
+
+CAPECE's figures for January to September 2025: **credit cards were 5.5% of
+e-commerce transactions and debit cards 32.8%, while wallets were 59.2%.** By
+*value* the order inverts — the average credit-card ticket was S/ 324 against
+S/ 50 for a wallet.
+
+So a card-only subscription is reachable by a minority of the people
+transacting, but it is the minority with the higher spend, which is the half
+that buys a S/ 20 monthly product anyway.
+
+It also sharpens the Yape finding above rather than softening it. Yape's own
+help centre does document an automatic monthly deduction after a one-time
+authorization, bounded by an S/ 2,000 daily limit — so wallet recurring is not
+fiction. But Netflix, Spotify and Google Play all take cards only in Peru. The
+companies with the most to gain from wallet recurring have not shipped it. Take
+that as the honest signal about how hard it is to get.
+
+### Charging Peruvian cards from abroad gets them declined
+
+This is the finding most worth acting on. Practitioner accounts converge on a
+wide gap in authorization rates on the same Peruvian cards: **roughly 70–90% for
+a local acquirer against 30–50% for an international one.** Peruvian issuers
+decline foreign-acquired transactions far more often, and many cards are not
+enabled for international purchases at all until the holder turns it on.
+
+That is worth far more than a percentage point of commission, and it is the
+strongest argument for the Mercado Pago-first decision in stage 5. A merchant of
+record billing a Peruvian customer from abroad is not merely more expensive; a
+large share of the charges simply will not go through.
+
+### Culqi: the fee floor is not the only reason to look past it
+
+Two findings, neither from Culqi's marketing and neither visible on the SEO
+comparison pages that dominate a search for Peruvian gateways:
+
+- **Its official developer tooling looks unmaintained.** Every one of the twelve
+  issues on the first page of Culqi's own WooCommerce plugin repository is open.
+  The issue asking for subscription support — *"el flujo de pago solo considera
+  un cargo único"* — has gone unanswered for five and a half years.
+- ⚠ **Merchants rate it worst on fraud.** In practitioner threads Peruvian
+  sellers put Niubiz/Visanet and Mercado Pago at the top and Culqi at the
+  bottom, the complaint being that it *"no tiene integrado un sistema
+  anti-fraude y se deslindan totalmente"*. These are merchant opinions rather
+  than audited data, and the loudest of them are from 2019–2021.
+
+This does not change the recommendation, which already put Mercado Pago first on
+cost. It changes the **fallback**: use Openpay BBVA, not Culqi.
+
+### A metered database turns one code mistake into a catastrophic bill
+
+The cautionary account worth carrying into stage 1: Vaki, a Colombian
+crowdfunding startup, burned **$30,356.56 in 72 hours** on roughly 46 billion
+Firestore requests caused by a single misplaced call in a constructor. This
+stack is Cloudflare rather than Firebase, but the shape of the risk is identical
+— a per-operation-priced database plus an accidental loop is an unbounded
+liability, and free tiers do not protect you once you are on a paid plan.
+
+Two responses, both free:
+
+1. **Put a billing alert on the Cloudflare account the day you create it**, not
+   the day you take your first payment.
+2. The 8-second debounce on progress sync in `js/sync.js` is there for this as
+   much as for the free tier. Do not remove it to make saving feel snappier.
+
+### D1's long tail is real
+
+Several operators report **sporadic multi-second D1 round trips unrelated to
+query complexity** — one logged a 39-second wall clock against a reported
+`sql_duration_ms` of 0.2163, another 23 seconds. It is a tail, not a median, and
+it is a different problem from the 10 ms CPU ceiling, because CPU time does not
+count waiting on I/O. ⚠ Community reports, not a documented service level.
+
+It is tolerable here: the only thing that touches D1 often is progress sync,
+which is debounced, retried and invisible. Keep it that way.
+
+### Three smaller ones
+
+- **A backend platform's built-in email cannot carry sign-in codes.** Supabase's
+  own documentation caps its built-in SMTP at 2 messages per hour, best effort,
+  no service level. That is why stage 2 sets up a real transactional provider
+  instead of using whatever ships with the stack.
+- **Resend routes its API traffic through Cloudflare**, so the sign-in emails
+  and the worker share a dependency. It has not caused trouble, but if sign-in
+  fails wholesale one day, check Cloudflare's status page before Resend's.
+- **From Peru, a São Paulo edge buys essentially nothing over US-East**, and
+  LATAM traffic routinely lands on US edges anyway. Do not pay for or engineer
+  around regional placement.
+
+### What this does and does not change
+
+The stack does not move: Cloudflare for the backend, Mercado Pago for Peru, a
+merchant of record for abroad, gifted months from our own database. What the
+practitioner evidence did change is four things — it **reinforced Mercado Pago
+first** on approval rates rather than fees, **moved the Peru price down** to
+S/ 20–25, **demoted Culqi** from fallback to last resort in favour of Openpay,
+and **added a billing alert** to stage 1.
+
+---
+
 ## Stage 6 — Polish
 
 1. **Custom domain.** Point the domain you bought in stage 2 at GitHub Pages.
@@ -590,7 +738,9 @@ later.
    check.
 2. **Customer portal link** in `js/billing-config.js`, so people can cancel
    without emailing you. A subscription somebody cannot cancel is a chargeback
-   waiting to happen.
+   waiting to happen — and Peruvian consumer law requires that a subscription be
+   cancellable through the same channel it was bought in, an obligation that
+   reaches sellers outside Peru too. Build the cancel link before the pay link.
 3. **Turn the trial on in the pricing panel** and announce it.
 
 ---
@@ -599,7 +749,8 @@ later.
 
 **Costs nothing, needs no paperwork — do it this week:**
 
-1. Cloudflare account, KV namespace, D1 database, signing key, deploy.
+1. Cloudflare account, KV namespace, D1 database, signing key, deploy, and a
+   billing alert.
 2. Buy a domain. Transactional email on it (Resend), and a Google OAuth client.
 3. Paste the worker URL and public JWK into `js/billing-config.js`. Test
    sign-in, gifting and revocation end to end.
@@ -637,6 +788,8 @@ and each is one look away for somebody in Peru:
 | Whether **Creem and Polar actually approve** a Peru-registered seller | Write and ask before building. A country on a docs page is not an approved account. |
 | Whether a **100%-off coupon** is possible at any merchant of record | Nobody documents it — and it does not matter here, because gifted months come from our own database. |
 | **Niubiz and Izipay** exact tariffs | Neither publishes a complete public tarifario; the figures circulating are third-party. Both are ruled out on other grounds anyway. |
+| Whether **Payoneer** will pay out to a Peruvian **dollar** account, or soles only | Ask Payoneer support. Two practitioner accounts contradict each other; it decides whether you eat an FX conversion on every payout. |
+| Everything in [what operators report](#what-peruvian-operators-actually-report) | It is practitioner testimony, not documentation, and much of it is 2018–2021. It is marked as such throughout and none of it is load-bearing for the plan. |
 
 ## Keys and where each one lives
 

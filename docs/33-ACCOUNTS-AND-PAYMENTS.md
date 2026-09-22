@@ -170,7 +170,9 @@ The rails decision, and everything Pablo must register for, is in
 - **Peru and LATAM → Mercado Pago Perú.** Its Suscripciones product is
   available in Peru, prices in soles, charges a saved card automatically each
   month, and retries a failed charge four times over ten days before giving up.
-  The worker already verifies its webhooks.
+  The worker already verifies its webhooks. The deciding reason is not its fee:
+  Peruvian issuers decline foreign-acquired charges far more often than local
+  ones, so billing a Peruvian card from abroad loses transactions outright.
 - **Rest of the world → a merchant of record.** Somebody else is the legal
   seller, owes the VAT wherever the customer is, and pays Pablo. Stripe cannot
   be that seller: Peru is not a Stripe merchant country. Stripe *payouts* to

@@ -389,8 +389,14 @@ reported to require a **virtual Libro de Reclamaciones reachable in two clicks
 from the home page**, a visible notice at checkout, available 24/7, with 15
 working days to answer a complaint. Fines are reported to start at 1 UIT
 (S/ 5,500) and reach 10 UIT. This is the one item in this runbook that is a
-*code* task rather than a paperwork task, and it is not built yet — say the word
-and it is a short piece of work.
+*code* task rather than a paperwork task.
+
+**Deferred on purpose, by Pablo, on 2026-09-22.** It is not built. The
+obligation attaches to selling, so the friends-and-family beta on gifted months
+does not trigger it — but it has to exist before the first stranger is charged,
+which means before stage 5 goes live and not after. It is a short piece of work
+when the time comes: a page, a form that posts to the worker, a reply within 15
+working days, and a link in the footer.
 
 ### Marca at INDECOPI
 
@@ -765,7 +771,8 @@ and **added a billing alert** to stage 1.
 6. Check your district's TUPA for the licencia de funcionamiento. A home office
    is not exempt.
 7. Put a virtual Libro de Reclamaciones on the site, two clicks from the home
-   page. *(Not built yet — ask and it gets built.)*
+   page. *(Deferred by Pablo on 2026-09-22; must exist before the first stranger
+   is charged, so it belongs before step 8, not after.)*
 8. Mercado Pago Perú seller account, plan, webhook, secrets. Openpay BBVA as the
    fallback if Mercado Pago will not take a RUC 10.
 9. Merchant of record for abroad: Creem first, Polar in parallel. Open a

@@ -24,6 +24,8 @@ Product: **Vocal Studio / PillB**.
 | VG-17 | No way to gift a free month, or take one back | P1 | **Closed (code)** | Trial/gift/comp are one grant row with `revoked_at`; codes and direct grants; admin panel | Shipped 2026-09-21, `docs/33-…` |
 | VG-18 | Trial was per-browser, so it could be farmed by clearing storage | P1 | **Closed (code)** | Once accounts are configured the trial is one per account, ever (`trial_used_at`) | Shipped 2026-09-21 |
 | VG-19 | Peru cannot be a Stripe merchant, so "international payments" had no rail | P0 | **Decided, not executed** | Mercado Pago Perú + a merchant of record (Creem first, Polar in parallel); Pablo to register | `docs/34-PERU-OPERATOR-RUNBOOK.md` |
+| VG-20 | The client can only check out through Stripe or Mercado Pago, but the chosen international rail is a merchant of record | P0 | Open | `PROVIDER_IDS`, the checkout host allowlist, `preferredRail()` and every `markets[].rail` still say `stripe`, and the worker's claim route rejects any other provider. Pasting a Creem link into the config would be refused by our own validation. Needs a Creem rail end to end: host allowlist, provider id, webhook handler and signature check | `js/billing.js:27,33,108`, `workers/entitlements/src/index.js:259` |
+| VG-21 | The yearly badge asserted a discount the prices did not give | P2 | **Closed** | Said "Save 20%" against a real 34%. Derived from the prices now, with two tests | Shipped 2026-09-22, `js/billing.js` `annualSavingPct` |
 
 ## Change log
 | Date | Change |

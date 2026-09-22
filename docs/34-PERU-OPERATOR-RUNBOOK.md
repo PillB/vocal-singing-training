@@ -212,29 +212,50 @@ payment gateway will ask for.
 > contador colegiado. One paid hour is cheap next to being in the wrong régimen
 > for a year.
 
-### Do you need a company? Probably not, yet
+### Do you need a company? No — and you could not form one alone anyway
 
-| Route | Cost to set up | What it takes | When it is right |
+Start as a **persona natural con negocio**. It is free, 100% online, same day,
+and there is a fact that settles it: **a solo founder cannot form an S.A.C., an
+S.R.L. or an S.A.C.S. at all.** The Decreto Legislativo 1409 says it word for
+word — "la SACS se constituye por el acuerdo privado de **dos (02)** o hasta
+veinte (20) personas naturales." The only one-owner company is the E.I.R.L., and
+it buys you little at your stage.
+
+| Route | Cost to set up | Owners | When it is right |
 |---|---|---|---|
-| **Persona natural con negocio** (RUC 10) | **S/ 0** | 100% online through SUNAT Virtual or the App Personas, with RENIEC fingerprint validation. Same day, 24/7, and it issues your Clave SOL in the same flow. No notary, no capital, no SUNARP. | **Start here.** One person, no partners, no employees, small revenue, nothing to shield. |
-| **E.I.R.L. / S.A.C. / S.R.L.** via SID-SUNARP with a notary | Calificación S/ 46 + inscripción (capital × 3 ÷ 1000) + S/ 25 per administrator + notary fees. Optional name reservation S/ 20. | 24–72 h through sid.sunarp.gob.pe: pick an affiliated notary, fill in the objeto social and capital, sign the escritura. | When you take on a partner, hire, or want your personal assets separated. |
-| **S.A.C.S.** via SID-SUNARP, no notary | The same registral fees, no notary | The only company form that skips the notary entirely — but **every shareholder, director and the gerente general needs an activated digital certificate** (DNI electrónico) plus a card reader or token. | Only if everyone involved already has one. |
-| **Via a CDE (PRODUCE)** | **Registral fees waived** | Start the formation through an authorised Centro de Desarrollo Empresarial instead of going direct. Requires capital of no more than 1 UIT (S/ 5,500 in 2026). Extended to 28 May 2029. | If you do form a company, this is the cheap way. |
+| **Persona natural con negocio** (RUC 10) | **S/ 0**, online, same day, issues your Clave SOL in the same flow | 1 (you) | **Start here.** One person, small revenue, nothing to shield. |
+| **E.I.R.L.** via SID-SUNARP | Registral fees (below) + notary | 1 | The only single-owner *company*. Limited liability, but adds a company's whole compliance load. Worth it only when you have real assets to separate. |
+| **S.A.C. / S.R.L.** | Registral fees + notary | **2–20** | Needs a genuine second shareholder. When you take on a partner or an investor. |
+| **S.A.C.S.** via SID-SUNARP, no notary | Registral fees ≈ S/ 100, ~24 h | **2–20** | The only form that skips the notary, but every shareholder, director and the gerente general needs an activated DNI electrónico plus a card reader. And it still needs two people. |
+| **Via a CDE (PRODUCE)** | **Registral fees waived** (E.I.R.L./S.A./S.R.L., capital ≤ 1 UIT, to 28 May 2029) | — | If you do form a company, this is the cheap way. |
 
-Two things worth knowing before you choose:
+**Why not incorporate "to look serious":** a company adds, at near-zero revenue,
+a contador at roughly **S/ 1,800–3,000 a year**, twelve monthly declarations
+whether or not you sell, an annual return, a Declaración de Beneficiario Final,
+and — when you pay yourself — **5% dividend tax** the persona natural does not
+pay. Incorporating does not lower your income tax: the RMT rate is the same 10% /
+29.5% either way. What it adds is cost.
 
-- The company RUC created through SID-SUNARP arrives **inactive**. SUNARP emails
-  you the constancia, but until you activate it in SUNAT with your Clave SOL you
-  cannot issue a single comprobante.
-- **Do not inflate the capital "to look serious."** The inscription fee is
-  capital × 3 ÷ 1000, so S/ 50,000 of capital costs S/ 150 instead of S/ 3, and
-  it breaks the 1-UIT ceiling that makes the CDE route free.
+**You can start a company later without losing much** — an S.A.C.S. can convert
+to an S.A.C. keeping the same RUC. But going from persona natural to a company is
+*not* a conversion: the company is a new taxpayer with its own RUC, its own
+gateway account with fresh KYC, and — the one that bites a subscription business
+— **the saved-card tokens do not migrate**, so every subscriber has to re-enter
+their card. That is a strong reason to pick the entity you can live with now.
 
-Gateways do not force your hand here: **Culqi's own contract names a *persona
-natural*** and its price list has separate RUC 10 rows, and **BBVA's Openpay
-says outright "con tu RUC y DNI"**. Whether Mercado Pago takes a RUC 10 is the
-one that could not be settled from the documentation — if it turns out not to,
-those two are the fallback.
+Two more things:
+
+- The company RUC created through SID-SUNARP arrives **inactive**; you activate
+  it in SUNAT with your Clave SOL before you can issue anything.
+- **Do not inflate the capital.** The inscription fee is capital × 3 ÷ 1000, and
+  a capital over 1 UIT loses the free CDE route.
+
+Gateways do not force your hand: **Culqi's contract names a *persona natural***
+and has RUC 10 rows, and **BBVA's Openpay says "con tu RUC y DNI"**. The RUC 20's
+real friction is at the bank, not the gateway — it wants a copia literal under 30
+days old and a vigencia de poder (~S/ 25, and it expires). A persona natural has
+none of that. Whether Mercado Pago takes a RUC 10 is the one open question; Culqi
+and Openpay are the fallback.
 
 ### The régimen, which is decided for you
 
@@ -243,20 +264,17 @@ SUNAT requires the régimen to be chosen **before** registering, not during.
 | Régimen | Verdict for a SaaS |
 |---|---|
 | **Nuevo RUS** | **Cannot issue facturas** — only boletas and tickets, which carry no crédito fiscal. So you could never invoice a merchant of record abroad, and no Peruvian company would buy from you. Capped at S/ 8,000 a month and S/ 96,000 a year. Out. |
-| **RER** | 1.5% of monthly gross, no annual return, ceiling S/ 525,000. **But probably excluded** — see the flag below. |
+| **RER** | 1.5% of monthly gross, no annual return, ceiling S/ 525,000. **Closed to software** — see below. |
 | **RMT** | **The recommendation.** Ceiling 1,700 UIT = S/ 9,350,000 at the 2026 UIT of S/ 5,500. Monthly pago a cuenta 1% of net income while annual net stays under 300 UIT (S/ 1,650,000). Annual tax 10% on net up to 15 UIT (S/ 82,500), 29.5% above. Monthly *and* annual returns. Issues every kind of comprobante. |
 | Régimen General | The fallback above 1,700 UIT. 29.5%, no ceiling. |
 
-> ⚠ **Ask the contador: is software excluded from the RER?** One reading of
-> Article 118 of the Ley del Impuesto a la Renta lists "programación
-> informática, consultoría de informática y actividades conexas" and "edición de
-> programas de informática y de software en línea" among the barred activities,
-> which would close the RER to you completely. Another reading of the same
-> article finds only the professional-services exclusions (legal, accounting,
-> medical, veterinary, architecture). **The two readings disagree and this is
-> not a detail** — being wrongly enrolled in the RER gets you moved to the
-> Régimen General de oficio. The RMT is safe either way, which is the practical
-> reason to take it.
+**The RER is closed to you.** SUNAT's own exclusion list names it word for word —
+"programación informática, consultoría de informática y actividades conexas" and
+"edición de programas de informática y de software en línea." Enrolling in it
+anyway gets you moved to the Régimen General de oficio. That leaves the RMT, and
+the earlier doubt about this is resolved: the exclusion is textual, not a
+reading. (Nuevo RUS is technically open to software by absence, but it cannot
+issue facturas, so it is out for the export side regardless.)
 
 Declare the CIIU activity accurately. It is exactly what triggers the RER
 question, so "helpfully" mis-picking one is a misdeclaration, not a shortcut.
@@ -270,7 +288,12 @@ question, so "helpfully" mis-picking one is a misdeclaration, not a shortcut.
   no IGV. Exports of services escape IGV under Article 33 of the Ley del IGV,
   but only when four things hold at once: provided for consideration from Peru
   to abroad and evidenced by the comprobante, the exporter domiciled in Peru,
-  the user non-domiciled, and the service used abroad.
+  the user non-domiciled, and the service used abroad. **You must be inscribed
+  in the Registro de Exportadores de Servicios first** — SUNAT lists the
+  no-registration exceptions as hotels and ship repair, not software. It is done
+  in SUNAT Operaciones en Línea (Mis trámites y consultas → Empresas → Mi RUC y
+  otros Registros → Exportadores de Servicios) and ends in a constancia de
+  aprobación.
 - **Issue it free.** SEE-SOL (the SUNAT portal) and the **APP Emprender** both
   issue facturas and boletas at no cost, with no digital certificate and no OSE
   or PSE contract. Do not pay a provider on day one. One limit to know: a
@@ -283,13 +306,12 @@ question, so "helpfully" mis-picking one is a misdeclaration, not a shortcut.
   the contador. As an exporter that input IGV becomes your Saldo a Favor del
   Exportador and offsets other taxes instead of being lost.
 
-> ⚠ **When does electronic issuing become compulsory?** The standing rule is the
-> first calendar day of the **third month** after the month you registered.
-> A 2026 resolution (R.S. N° 000075-2026/SUNAT, in force 1 June 2026) is
-> reported to move that to **the day of inscription** for new registrants in
-> RMT, RER or Régimen General, with SIRE from the same moment. Since 1 June 2026
-> has passed, assume day one and set it up immediately — but confirm, because
-> arriving at the deadline without a system is a classic way to get stuck.
+**When does electronic issuing become compulsory?** You get a grace period:
+the obligation starts on the **first calendar day of the third month** after the
+month you registered — roughly two months to get invoicing running, not zero.
+Set it up early anyway; arriving at the deadline without a system is a classic
+way to get stuck. (SEE-SOL and the APP Emprender need nothing bought, so there
+is no reason to leave it late.)
 
 ### Monthly, forever
 
@@ -309,7 +331,7 @@ question, so "helpfully" mis-picking one is a misdeclaration, not a shortcut.
 - If you ever pause, **suspensión temporal de actividades** is 100% online and
   lasts up to twelve months. Better than going quiet and becoming *no habido*.
 
-### Three questions to put to the contador, in these words
+### Two questions to put to the contador, in these words
 
 1. When a merchant of record resells my subscription to somebody **in Peru**, is
    that slice still an exportación de servicios? Article 33 requires the service
@@ -317,11 +339,10 @@ question, so "helpfully" mis-picking one is a misdeclaration, not a shortcut.
    SaaS was found.
 2. Do I invoice the merchant of record for the **gross** subscription value or
    the **net** payout after its fees? Neither SUNAT nor the providers address it.
-3. Is prior inscription in the **Registro de Exportadores de Servicios** still
-   required? The phrase is absent from the Article 33 text currently published
-   on SUNAT's legislation site, but SUNAT's own orientation pages and the
-   PromPerú guide still describe it as required. It is free and immediate, so
-   registering removes the risk either way.
+
+(The third question from an earlier draft — whether the Registro de Exportadores
+de Servicios is mandatory — is now answered: for software it is required, so it
+is a step above, not a question.)
 
 ---
 
@@ -603,8 +624,6 @@ and each is one look away for somebody in Peru:
 | Question | Where to look |
 |---|---|
 | Does Mercado Pago Perú accept a **RUC 10** seller? | Ask at registration. Culqi and Openpay both say they do, so there is a fallback either way. |
-| Is **software excluded from the RER**? | Your contador. The RMT is safe regardless, which is why it is the recommendation. |
-| Is electronic invoicing compulsory from **day one** or the **third month**? | Your contador. Assume day one. |
 | The **Libro de Reclamaciones** rules for e-commerce (two clicks, 24/7, 15 days) | [indecopi.gob.pe](https://www.indecopi.gob.pe/). The obligation itself is certain; the exact e-commerce requirements come from a reported 2024 precedent. |
 | Current **free-tier email** allowances | [Resend](https://resend.com/pricing), [Brevo](https://www.brevo.com/pricing/), [MailerSend](https://www.mailersend.com/pricing). Does not affect the choice at this volume. |
 | Whether **Creem and Polar actually approve** a Peru-registered seller | Write and ask before building. A country on a docs page is not an approved account. |

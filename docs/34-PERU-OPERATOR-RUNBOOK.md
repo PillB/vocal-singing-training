@@ -1,16 +1,19 @@
 # Peru operator runbook — trámites, accounts and keys, in order
 
 Everything Pablo has to do himself, in the order it has to happen, with what
-each step unblocks. The code is already written and tested; nothing in this
-document is a coding task.
+each step unblocks. The code is written and tested; one item here is a code
+task and it is flagged as such.
 
-Work top to bottom. Stages 1–3 need no Peruvian paperwork and can be done in an
-evening. Stage 4 is where the trámites start.
+**The shape of it: stages 1 to 3 cost nothing and need no Peruvian paperwork at
+all, and they get you to a working product with sign-in, saved progress and
+gifted months. You can run the whole friends-and-family beta from there.** Only
+charging strangers needs the RUC, and that is stage 4.
 
-> **Status of the numbers in this document.** Fees, tax rates and free-tier
-> limits change. Each one is marked with where it came from and when it was
-> checked. Anything unverified says so. Do not treat the tax section as tax
-> advice — it is a list of things to ask a contador about.
+> **About the numbers.** Fees, tax rates and free-tier limits change, and
+> Peruvian ones change yearly. Everything here was checked against an official
+> source on 21–22 September 2026 unless it is marked ⚠, which means the source
+> could not be read or two sources disagree. There is a table of every
+> unconfirmed item at the end. Nothing here is tax or legal advice.
 
 ---
 
@@ -81,6 +84,39 @@ into it.
 **What this unblocks**: nothing works without it. After this step the worker is
 live but has no way to sign anybody in and no way to take money.
 
+### What the free plan gives you, and the one thing to watch
+
+Checked on Cloudflare's own docs, 21 September 2026. Cloudflare changes these
+tables without notice, so re-check before you rely on them.
+
+| | Free | Paid ($5/month minimum) |
+|---|---|---|
+| Worker requests | 100,000 / day | 10 million / month, then $0.30 per million |
+| **CPU per request** | **10 ms** | up to 5 minutes |
+| D1 rows read / written | 5,000,000 and 100,000 per day | 25 billion and 50 million per month |
+| D1 storage | 5 GB, 500 MB per database | 10 GB per database |
+| KV reads / writes | 100,000 and **1,000** per day | 10 million and 1 million per month |
+| Cron triggers | 5 per account | 250 |
+
+Two things follow from that:
+
+1. **KV's 1,000 writes a day is the tightest limit on the free plan**, by a wide
+   margin. This design is already on the right side of it: KV only gets written
+   when a payment webhook arrives, and everything that changes often — sessions,
+   progress, grants — is in D1.
+2. ⚠ **The 10 ms CPU ceiling is the one that could bite.** Signing a licence
+   token and verifying a Google ID token are both real cryptography, and Google
+   verification also fetches and parses a JWKS. If sign-in starts returning
+   errors under load, this is the first thing to check, and the fix is the $5
+   plan rather than a code change. Everything else here fits the free tier
+   comfortably at your size.
+
+Also: the daily free counters reset at **00:00 UTC, which is 7pm in Peru**.
+
+Cloudflare says plainly that `workers.dev` is "intended for personal or hobby
+projects that aren't business-critical" and recommends a custom domain for
+production — which stage 6 does anyway.
+
 ---
 
 ## Stage 2 — Sign-in: email codes and Google
@@ -91,6 +127,19 @@ Free. No Peruvian paperwork.
 
 The worker speaks Resend, Brevo and MailerSend — one HTTP call, no SMTP, which
 is what a Worker can do.
+
+**Use Resend.** It is the one the worker treats as its primary path, its API is
+a single JSON POST, and the volume here is tiny: a sign-in code per person per
+device, not a newsletter. The alternatives, if Resend does not suit you:
+[Brevo](https://www.brevo.com/pricing/) and
+[MailerSend](https://www.mailersend.com/pricing) — both are wired up and both
+need only a different secret and one line in `wrangler.toml`.
+
+⚠ I could not read any of the three pricing pages to confirm their current free
+allowances, so check the figure yourself on the page you sign up to. It will not
+change the choice: at a handful of sign-in codes a day, every one of them is
+free. What matters more is the domain verification in step 2, which all three
+require.
 
 1. Create an account with one of them.
 2. **Verify a sending domain.** You need a domain you control. If you do not
@@ -153,89 +202,179 @@ gateway and no fees. Only charging strangers does.
 
 ---
 
-## Stage 4 — SUNAT: RUC and régimen
+## Stage 4 — Formalizing: entity, RUC, régimen
 
-This is the first step that cannot be undone in an evening, and the first that
-a Peruvian payment gateway will ask for.
+The first step that cannot be undone in an evening, and the first a Peruvian
+payment gateway will ask for.
 
 > Not advice. Peruvian tax law changes often and SUNAT's own pages contradict
-> each other in places. Take this to a contador colegiado — one paid hour is
-> cheap next to being in the wrong régimen for a year.
+> each other in places — this document says so where they do. Take it to a
+> contador colegiado. One paid hour is cheap next to being in the wrong régimen
+> for a year.
 
-### The régimen is decided for you, and it is the RMT
+### Do you need a company? Probably not, yet
 
-SUNAT requires you to **choose the régimen before you register**, not during.
-For this business the choice is narrower than the usual four:
+| Route | Cost to set up | What it takes | When it is right |
+|---|---|---|---|
+| **Persona natural con negocio** (RUC 10) | **S/ 0** | 100% online through SUNAT Virtual or the App Personas, with RENIEC fingerprint validation. Same day, 24/7, and it issues your Clave SOL in the same flow. No notary, no capital, no SUNARP. | **Start here.** One person, no partners, no employees, small revenue, nothing to shield. |
+| **E.I.R.L. / S.A.C. / S.R.L.** via SID-SUNARP with a notary | Calificación S/ 46 + inscripción (capital × 3 ÷ 1000) + S/ 25 per administrator + notary fees. Optional name reservation S/ 20. | 24–72 h through sid.sunarp.gob.pe: pick an affiliated notary, fill in the objeto social and capital, sign the escritura. | When you take on a partner, hire, or want your personal assets separated. |
+| **S.A.C.S.** via SID-SUNARP, no notary | The same registral fees, no notary | The only company form that skips the notary entirely — but **every shareholder, director and the gerente general needs an activated digital certificate** (DNI electrónico) plus a card reader or token. | Only if everyone involved already has one. |
+| **Via a CDE (PRODUCE)** | **Registral fees waived** | Start the formation through an authorised Centro de Desarrollo Empresarial instead of going direct. Requires capital of no more than 1 UIT (S/ 5,500 in 2026). Extended to 28 May 2029. | If you do form a company, this is the cheap way. |
+
+Two things worth knowing before you choose:
+
+- The company RUC created through SID-SUNARP arrives **inactive**. SUNARP emails
+  you the constancia, but until you activate it in SUNAT with your Clave SOL you
+  cannot issue a single comprobante.
+- **Do not inflate the capital "to look serious."** The inscription fee is
+  capital × 3 ÷ 1000, so S/ 50,000 of capital costs S/ 150 instead of S/ 3, and
+  it breaks the 1-UIT ceiling that makes the CDE route free.
+
+Gateways do not force your hand here: **Culqi's own contract names a *persona
+natural*** and its price list has separate RUC 10 rows, and **BBVA's Openpay
+says outright "con tu RUC y DNI"**. Whether Mercado Pago takes a RUC 10 is the
+one that could not be settled from the documentation — if it turns out not to,
+those two are the fallback.
+
+### The régimen, which is decided for you
+
+SUNAT requires the régimen to be chosen **before** registering, not during.
 
 | Régimen | Verdict for a SaaS |
 |---|---|
-| **Nuevo RUS** | **Cannot issue facturas** — only boletas. So you could never invoice a merchant of record abroad. Also capped at S/ 8,000 a month of income. Out. |
-| **RER** | **Legally excluded.** Article 118 of the Ley del Impuesto a la Renta names "programación informática, consultoría de informática y actividades conexas" and "edición de programas de informática y de software en línea" among the activities barred from the RER. Out. |
-| **RMT (Régimen MYPE Tributario)** | **This one.** Ceiling is 1,700 UIT of net annual income — with UIT 2026 at S/ 5,500 that is S/ 9,350,000, which you will not hit. Monthly pago a cuenta is 1.0% of net income while annual net income stays under 300 UIT. Annual income tax is 10% up to 15 UIT and 29.5% above. |
-| Régimen General | The fallback only if you exceed 1,700 UIT. 29.5%, no ceiling. |
+| **Nuevo RUS** | **Cannot issue facturas** — only boletas and tickets, which carry no crédito fiscal. So you could never invoice a merchant of record abroad, and no Peruvian company would buy from you. Capped at S/ 8,000 a month and S/ 96,000 a year. Out. |
+| **RER** | 1.5% of monthly gross, no annual return, ceiling S/ 525,000. **But probably excluded** — see the flag below. |
+| **RMT** | **The recommendation.** Ceiling 1,700 UIT = S/ 9,350,000 at the 2026 UIT of S/ 5,500. Monthly pago a cuenta 1% of net income while annual net stays under 300 UIT (S/ 1,650,000). Annual tax 10% on net up to 15 UIT (S/ 82,500), 29.5% above. Monthly *and* annual returns. Issues every kind of comprobante. |
+| Régimen General | The fallback above 1,700 UIT. 29.5%, no ceiling. |
 
-Declare the CIIU activity accurately — the software CIIU is precisely what
-triggers the RER exclusion, so getting it "helpfully" wrong to stay in the RER
-is not a shortcut, it is a misdeclaration.
+> ⚠ **Ask the contador: is software excluded from the RER?** One reading of
+> Article 118 of the Ley del Impuesto a la Renta lists "programación
+> informática, consultoría de informática y actividades conexas" and "edición de
+> programas de informática y de software en línea" among the barred activities,
+> which would close the RER to you completely. Another reading of the same
+> article finds only the professional-services exclusions (legal, accounting,
+> medical, veterinary, architecture). **The two readings disagree and this is
+> not a detail** — being wrongly enrolled in the RER gets you moved to the
+> Régimen General de oficio. The RMT is safe either way, which is the practical
+> reason to take it.
 
-### Registering
+Declare the CIIU activity accurately. It is exactly what triggers the RER
+question, so "helpfully" mis-picking one is a misdeclaration, not a shortcut.
 
-1. **Get the RUC "con negocio"** (rentas de tercera categoría — *not* a
-   trabajador-independiente RUC issuing recibos por honorarios). Online 24/7 at
-   SUNAT Virtual or through the App Personas SUNAT with your DNI, or in person
-   at a Centro de Servicios al Contribuyente with your RENIEC DNI plus proof of
-   the domicilio fiscal if it differs from the DNI address.
-2. **Get your Clave SOL.** It is the key to every later filing: Declara Fácil
-   621, the free invoicing portal, and SIRE.
-3. **You are an electronic issuer from day one.** Resolución de
-   Superintendencia N° 000075-2026/SUNAT, in force 1 June 2026, designates new
-   RUC registrants in RMT, RER or Régimen General as emisores electrónicos from
-   the day of inscription, and requires the sales and purchase registers in
-   SIRE from the moment the obligation arises. There is no grace period to plan
-   around.
-
-### Invoicing, which is the real workload
+### Invoicing, which is the real ongoing workload
 
 - **Peruvian customers → a boleta de venta electrónica for every charge**, with
-  18% IGV in the price. Capture the buyer's document type and number on any
-  charge over S/ 700. Only charges of S/ 5.00 or less may be consolidated.
-- **Foreign customers, or the merchant of record → a factura de exportación**,
-  no IGV. Exports of services are not affected by IGV under Article 33 of the
-  Ley del IGV, but only when four requirements hold at once: the service is
-  provided for consideration from Peru to abroad and evidenced by the
-  comprobante, the exporter is domiciled in Peru, the user is non-domiciled,
-  and the use of the service happens abroad.
-- **Issuing options**: SEE-SOL is SUNAT's free web portal, needs only your
-  Clave SOL and no digital certificate, and can invoice a buyer with no RUC —
-  so it covers the export invoice. It is one invoice at a time. Automating a
-  boleta per subscription charge realistically means SEE del Contribuyente
-  (buy a digital certificate) or an OSE/PSE you call from the billing webhook.
+  18% IGV in the price. Capture the buyer's document type and number above
+  S/ 700; only charges of S/ 5.00 or less may be consolidated.
+- **Foreign customers or the merchant of record → a factura de exportación**,
+  no IGV. Exports of services escape IGV under Article 33 of the Ley del IGV,
+  but only when four things hold at once: provided for consideration from Peru
+  to abroad and evidenced by the comprobante, the exporter domiciled in Peru,
+  the user non-domiciled, and the service used abroad.
+- **Issue it free.** SEE-SOL (the SUNAT portal) and the **APP Emprender** both
+  issue facturas and boletas at no cost, with no digital certificate and no OSE
+  or PSE contract. Do not pay a provider on day one. One limit to know: a
+  factura through SEE-SOL can only be issued to a receptor **with a RUC**, and
+  your own RUC must be active and *habido*.
+- Automating a boleta per charge, when the volume justifies it, means SEE del
+  Contribuyente (buy a digital certificate) or an OSE/PSE called from the
+  billing webhook.
 - **Keep every purchase factura with IGV** — hosting, domain, laptop, internet,
   the contador. As an exporter that input IGV becomes your Saldo a Favor del
-  Exportador and can be offset against other taxes rather than lost.
+  Exportador and offsets other taxes instead of being lost.
+
+> ⚠ **When does electronic issuing become compulsory?** The standing rule is the
+> first calendar day of the **third month** after the month you registered.
+> A 2026 resolution (R.S. N° 000075-2026/SUNAT, in force 1 June 2026) is
+> reported to move that to **the day of inscription** for new registrants in
+> RMT, RER or Régimen General, with SIRE from the same moment. Since 1 June 2026
+> has passed, assume day one and set it up immediately — but confirm, because
+> arriving at the deadline without a system is a classic way to get stuck.
 
 ### Monthly, forever
 
-- **Declara Fácil 621** (IGV–Renta mensual) through SOL, on the cronograma for
+- **Declara Fácil 621** (IGV–Renta mensual) through SOL on the cronograma for
   your last RUC digit. One form covers the IGV and the RMT pago a cuenta.
-- **SIRE** (sales and purchase registers) is a separate monthly filing on top.
-- **An annual return**, which the RMT requires and the RER and NRUS do not.
+- **SIRE** (electronic sales and purchase registers) is a separate monthly
+  filing on top.
+- **An annual return**, which the RMT requires.
+- **File even in months with no sales.** A zero return is still a return, and
+  missing it is the infraction under article 176.1 of the Código Tributario.
+  Fixing it **voluntarily, before SUNAT notifies you, wipes 100% of the fine** —
+  so if you miss one, file it the moment you notice rather than waiting.
+- Give the contador a **secondary Clave SOL user** (SOL → Administración de
+  Usuarios → Crear Usuario) with only the profiles they need, rather than your
+  own password. SUNAT's warning is worth reading twice: whatever a secondary
+  user does counts as done by you.
+- If you ever pause, **suspensión temporal de actividades** is 100% online and
+  lasts up to twelve months. Better than going quiet and becoming *no habido*.
 
 ### Three questions to put to the contador, in these words
 
-1. When a merchant of record resells my subscription to somebody **in Peru**,
-   is that slice still an exportación de servicios? Requirement (d) says the
-   service must be used abroad, and no SUNAT pronouncement on merchant-of-record
-   resale of SaaS was found. This is the genuinely unsettled one.
+1. When a merchant of record resells my subscription to somebody **in Peru**, is
+   that slice still an exportación de servicios? Article 33 requires the service
+   to be used abroad, and no SUNAT pronouncement on merchant-of-record resale of
+   SaaS was found.
 2. Do I invoice the merchant of record for the **gross** subscription value or
    the **net** payout after its fees? Neither SUNAT nor the providers address it.
 3. Is prior inscription in the **Registro de Exportadores de Servicios** still
    required? The phrase is absent from the Article 33 text currently published
    on SUNAT's legislation site, but SUNAT's own orientation pages and the
-   PromPerú guide still describe it as a requirement. Registration is free and
-   immediate, so doing it removes the risk either way.
+   PromPerú guide still describe it as required. It is free and immediate, so
+   registering removes the risk either way.
 
-**What this unblocks**: Mercado Pago Perú, and every local gateway.
+---
+
+## Stage 4b — The registrations nobody mentions
+
+Three obligations that are easy to miss and carry real fines.
+
+### Licencia de funcionamiento municipal
+
+**A business run from home is not exempt.** Ley 28976 defines an
+*establecimiento* as "the property, part of it, or installation where economic
+activities are carried out", and its only exemptions are state entities,
+embassies and consulates, the Cuerpo General de Bomberos, and temples,
+monasteries and convents. There is no exemption for working from your flat.
+
+Check your **district** municipality's TUPA before assuming anything — the fee
+and the risk classification are set per district. For a low or medium risk
+activity the maximum is **2 working days with automatic approval**, with the
+safety inspection afterwards; high risk is 8 working days with the inspection
+first. A software business with no customers visiting should classify low.
+
+### Libro de Reclamaciones — and this one needs a change to the site
+
+The complaints book is obligatory in every commercial establishment **and on
+online sales platforms**. It may be physical or virtual.
+
+⚠ For e-commerce specifically, a 2024 INDECOPI precedent and a Casación are
+reported to require a **virtual Libro de Reclamaciones reachable in two clicks
+from the home page**, a visible notice at checkout, available 24/7, with 15
+working days to answer a complaint. Fines are reported to start at 1 UIT
+(S/ 5,500) and reach 10 UIT. This is the one item in this runbook that is a
+*code* task rather than a paperwork task, and it is not built yet — say the word
+and it is a short piece of work.
+
+### Marca at INDECOPI
+
+Optional, but cheap insurance on a name you are about to print on things.
+
+- **Search first, free**: INDECOPI's "Busca tu marca" before you file.
+- **Tasa: S/ 534.90 per class**, or **S/ 401.20 per class** with a valid REMYPE
+  constancia. Filing goes through the Mesa de Partes Virtual.
+- **It takes 4 to 6 months.**
+- A vocal-training web app plausibly needs class 41 (education and training) and
+  class 42 (software services) — confirm the classes with INDECOPI's own
+  classifier, since each class is charged separately.
+- **The company name at SUNARP is not a trademark.** They are different
+  registers: a razón social stops another company registering the same name, it
+  does not stop anyone using it as a brand.
+
+**REMYPE**, which unlocks that discount, **requires at least one employee on the
+planilla** — and the owner does not count. So with no staff, no REMYPE, and no
+discount. Do not register for it prematurely; SUNAFIL sanctions false
+declarations.
 
 ---
 
@@ -428,22 +567,49 @@ later.
 
 ## The order, in one list
 
-1. Cloudflare account, KV, D1, signing key, deploy.
-2. Domain + transactional email + Google OAuth client.
-3. Paste the worker URL and public JWK into `js/billing-config.js`; test
-   sign-in, gifting and revocation end to end.
-4. Run the beta on gifted months. No paperwork needed.
-5. RUC "con negocio" in the **RMT** + Clave SOL, with a contador. Electronic
-   invoicing from day one — there is no grace period.
-6. Mercado Pago Perú seller account, plan, webhook, secrets. Openpay BBVA as
-   the fallback if Mercado Pago will not take a RUC 10.
-7. Merchant of record for the rest of the world: Creem first, Polar in parallel.
-8. Custom domain, portal link, trial live.
+**Costs nothing, needs no paperwork — do it this week:**
 
-Steps 1–4 cost nothing and need no paperwork. Do not start step 5 until step 4
-has told you people want this.
+1. Cloudflare account, KV namespace, D1 database, signing key, deploy.
+2. Buy a domain. Transactional email on it (Resend), and a Google OAuth client.
+3. Paste the worker URL and public JWK into `js/billing-config.js`. Test
+   sign-in, gifting and revocation end to end.
+4. **Run the beta on gifted months.** No RUC, no gateway, no fees. This is where
+   you find out whether people want it.
+
+**Only once step 4 says yes:**
+
+5. RUC "con negocio" as persona natural — free, online, same day — in the
+   **RMT**, with a contador's blessing. Set up free electronic invoicing
+   (SEE-SOL or the APP Emprender) immediately.
+6. Check your district's TUPA for the licencia de funcionamiento. A home office
+   is not exempt.
+7. Put a virtual Libro de Reclamaciones on the site, two clicks from the home
+   page. *(Not built yet — ask and it gets built.)*
+8. Mercado Pago Perú seller account, plan, webhook, secrets. Openpay BBVA as the
+   fallback if Mercado Pago will not take a RUC 10.
+9. Merchant of record for abroad: Creem first, Polar in parallel. Open a
+   Payoneer account in Peru as the hedge.
+10. Custom domain, customer portal link, trial live.
+
+**Later, optional:** marca at INDECOPI (S/ 534.90 per class, 4–6 months).
 
 ---
+
+## What is still unconfirmed
+
+Everything else in this document comes from an official source. These do not,
+and each is one look away for somebody in Peru:
+
+| Question | Where to look |
+|---|---|
+| Does Mercado Pago Perú accept a **RUC 10** seller? | Ask at registration. Culqi and Openpay both say they do, so there is a fallback either way. |
+| Is **software excluded from the RER**? | Your contador. The RMT is safe regardless, which is why it is the recommendation. |
+| Is electronic invoicing compulsory from **day one** or the **third month**? | Your contador. Assume day one. |
+| The **Libro de Reclamaciones** rules for e-commerce (two clicks, 24/7, 15 days) | [indecopi.gob.pe](https://www.indecopi.gob.pe/). The obligation itself is certain; the exact e-commerce requirements come from a reported 2024 precedent. |
+| Current **free-tier email** allowances | [Resend](https://resend.com/pricing), [Brevo](https://www.brevo.com/pricing/), [MailerSend](https://www.mailersend.com/pricing). Does not affect the choice at this volume. |
+| Whether **Creem and Polar actually approve** a Peru-registered seller | Write and ask before building. A country on a docs page is not an approved account. |
+| Whether a **100%-off coupon** is possible at any merchant of record | Nobody documents it — and it does not matter here, because gifted months come from our own database. |
+| **Niubiz and Izipay** exact tariffs | Neither publishes a complete public tarifario; the figures circulating are third-party. Both are ruled out on other grounds anyway. |
 
 ## Keys and where each one lives
 

@@ -169,7 +169,7 @@
         priceUsd: 79,
         pricePen: 279,
         priceEur: 79,
-        badge: "save20",
+        badge: "saveAnnual",
         popular: false,
         hero: true,
         features: [

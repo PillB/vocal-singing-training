@@ -817,6 +817,30 @@
     return { text: `$${plan.priceUsd}`, currency: "USD", amount: plan.priceUsd };
   }
 
+  /**
+   * How much the yearly plan saves against twelve monthly charges, as a whole
+   * percent, in the currency actually on screen.
+   *
+   * This is derived rather than written down because a hard-coded badge drifts
+   * the moment a price moves: the shipped one said 20% while the real figure
+   * was 34%, which was wrong and undersold the plan at the same time.
+   *
+   * @param {Array} plans
+   * @param {string} [region]
+   * @returns {number|null} whole percent saved, or null when there is nothing to claim
+   */
+  function annualSavingPct(plans, region) {
+    const list = Array.isArray(plans) ? plans : [];
+    const monthly = list.find((p) => p && p.interval === "month");
+    const yearly = list.find((p) => p && p.interval === "year");
+    if (!monthly || !yearly) return null;
+    const m = formatPrice(monthly, region).amount;
+    const y = formatPrice(yearly, region).amount;
+    if (!(m > 0) || !(y > 0)) return null;
+    const pct = Math.round((1 - y / (m * 12)) * 100);
+    return pct > 0 ? pct : null;
+  }
+
   const listeners = new Set();
   function onChange(fn) {
     listeners.add(fn);
@@ -968,6 +992,7 @@
     resumePendingClaim,
     hasPendingClaim,
     formatPrice,
+    annualSavingPct,
     exportProgressJson,
     onChange,
     trialEndsAt,

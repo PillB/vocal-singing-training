@@ -718,4 +718,49 @@ test.describe("Billing & subscriptions", () => {
     expect(ent.pro).toBe(false);
     expect(["unverified", "pending"]).toContain(ent.status);
   });
+
+  // The shipped badge said "Save 20%" while the prices gave 34%, and nothing
+  // caught it because the number was a translation string. It is derived now,
+  // and this is what stops it being written down again.
+  test("the annual badge states the saving the prices actually give", async ({ page }) => {
+    await boot(page);
+    const math = await page.evaluate(() => {
+      const plans = window.VT_BILLING_CONFIG.plans || [];
+      const monthly = plans.find((p) => p.interval === "month");
+      const yearly = plans.find((p) => p.interval === "year");
+      return {
+        badgeKey: yearly.badge,
+        shown: window.VTBilling.annualSavingPct(plans),
+        usd: window.VTBilling.annualSavingPct(plans, "US"),
+        usdExpected: Math.round((1 - yearly.priceUsd / (monthly.priceUsd * 12)) * 100),
+        pen: window.VTBilling.annualSavingPct(plans, "PE"),
+        penExpected: Math.round((1 - yearly.pricePen / (monthly.pricePen * 12)) * 100)
+      };
+    });
+    expect(math.badgeKey).toBe("saveAnnual");
+    expect(math.usd).toBe(math.usdExpected);
+    expect(math.pen).toBe(math.penExpected);
+    expect(math.shown).toBeGreaterThan(0);
+
+    await page.click("#btn-pricing");
+    await expect(page.locator("#pricing-modal")).toBeVisible();
+    const badge = page.locator('.plan-card[data-plan="pro_yearly"] .plan-badge');
+    await expect(badge).toBeVisible();
+    expect(await badge.innerText()).toMatch(new RegExp(`\\b${math.shown}\\s*%`));
+  });
+
+  // Two prices for the same plan can drift apart silently. They are one
+  // product, so the discount a Peruvian is offered and the one an American is
+  // offered should not differ by more than rounding.
+  test("the yearly discount is the same offer in soles as in dollars", async ({ page }) => {
+    await boot(page);
+    const { usd, pen } = await page.evaluate(() => {
+      const plans = window.VT_BILLING_CONFIG.plans || [];
+      return {
+        usd: window.VTBilling.annualSavingPct(plans, "US"),
+        pen: window.VTBilling.annualSavingPct(plans, "PE")
+      };
+    });
+    expect(Math.abs(usd - pen)).toBeLessThanOrEqual(2);
+  });
 });

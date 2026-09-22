@@ -3,7 +3,7 @@
 **Date:** 22 September 2026
 **Code:** `js/tour.js`, `js/experiments.js`, `js/experiments-config.js`, `guide.html`, `css/styles.css`, `js/i18n.js`, `js/app.js`, `index.html`
 **Scope:** onboarding and documentation only. No exercise, audio, scoring, billing or account behaviour was changed.
-**Tests:** `tests/tour-geometry.spec.js` (new, 10 cases), `tests/tour-behaviour.spec.js` (new, 21 cases), plus guide cases added to `tests/max-effort-journeys.spec.js`, `tests/viewport-overflow.spec.js` and `tests/live-pages.spec.js`.
+**Tests:** `tests/tour-geometry.spec.js` (new, 10 cases), `tests/tour-behaviour.spec.js` (new, 25 cases), plus guide cases added to `tests/max-effort-journeys.spec.js`, `tests/viewport-overflow.spec.js` and `tests/live-pages.spec.js`.
 
 The site had a tour that described a home page deleted in the September
 redesign, and no written documentation of any kind. This is what was measured,
@@ -191,13 +191,103 @@ VG-26 (the microphone primer).
 
 ---
 
+## The browser pass, and what it found
+
+Everything above was written, tested and merged. Then all eight flows were
+driven again in a real Chromium with a genuine Chrome user agent — not the
+headless agent the suite uses, which the tour deliberately hides from — and
+every finding was re-reproduced independently before it was believed. Of 29
+raised, **28 confirmed and 1 refuted**.
+
+The test suite had not caught any of them, and it is worth being precise about
+why: every one is a question the specs were not asking. The geometry spec
+proves the card does not cover its target; nothing asked what happens when you
+*touch* the target. The behaviour spec proves the primer appears; nothing asked
+whether what it says is true of the exercise it appears on.
+
+**The one that mattered, VG-31 — the spotlight was a trap.** The tour draws a
+ring around the thing it is describing, which is an invitation to touch it.
+Touching it closed the tour. `.tour-backdrop` covers the hole in the dim and
+`.tour-highlight` carries `pointer-events: none !important`, so the lit element
+can never receive the click; it lands on the backdrop, which called
+`end("skip")`. That writes `dismissed`, and `dismissed` also suppresses every
+per-screen coach-mark on the site. So the single most inviting pixel on the
+screen silently declined all of the product's onboarding, with no way back
+except a header button the tour had not explained yet. On a 390px phone the dim
+is about 64% of the screen, so it was easy to hit without meaning to at all.
+
+Now a click inside the ring advances the step — which is what the gesture meant
+— and a click on the dim does nothing. Leaving is Skip, the close button or
+Escape: three deliberate acts, none of them a stray tap.
+
+**VG-32 — every link into the guide landed under the header.** All 40 contents
+links, every inline cross-reference and all four of the tour's "full guide"
+links. `.app-header` is sticky at ~74px and no heading had `scroll-margin-top`,
+so `document.elementFromPoint()` at each heading's position returned
+`.app-header`. You arrived mid-paragraph, in both languages.
+
+**VG-33 and VG-34 — the primer was wrong, then rude.** One string was shown for
+all 45 microphone exercises: the piano keeps playing, only the pitch readout is
+lost. That is false for 23 of them, `v1-diction` among them — which is the
+exercise the home page's own first-practice button opens. So the first sentence
+the product says to a new user was about a screen they were not looking at.
+Worse, answering "Ahora no" abandoned the `startPractice()` they had just
+pressed and said nothing, while still setting `vt_mic_primed_v1` — so the
+primary button of the product did nothing the first time it was pressed and
+something different the second. The copy is now chosen by
+`exerciseWantsSound()`, and declining says what it did.
+
+**VG-35 and VG-36 — the English site was not English.** `renderTourInvite()`
+returned early when the row already existed, so its four phrases kept whatever
+language the page first loaded in, and the site defaults to Spanish. Nine
+controls carried hard-coded Spanish `aria-label` and `title` text, so a blind
+English user heard "Bajar una octava". And because `guide.html` holds both
+languages in one file, every bare `guide.html` link landed an English reader on
+the Spanish half.
+
+### Two measurements worth keeping
+
+**The phone card was positioned from a scroll position that had not happened
+yet.** Stepping *backwards* on a 320px screen parked the card on top of the
+control the step was describing — 70% and 55% coverage on two steps. The
+placement code measured, scrolled, and re-measured to score each candidate. But
+`window.scrollY` in this Chromium does not update until the next frame: a probe
+that calls `window.scrollBy(0, 150)` and reads `scrollY` immediately gets `0`,
+and `150` about 300ms later. So every re-measurement read the *pre-scroll*
+position, scored both candidates as failures, and kept the first one tried. The
+fix is to stop reading and start predicting: the post-scroll geometry is
+computed from the target's document offset and the clamped scroll target, and
+nothing is measured after a scroll. Coverage is 0% on all four steps, both
+directions, at 390×844 and 320×640.
+
+**The home page grows under you, and the browser moves you with it.** While
+testing the restore, a measurement 300ms after load said `scrollY` was 662 and
+the document 1462px; a moment later, with nobody touching anything, `scrollY`
+was 933 and the document 2368px. The lower sections render lazily and
+Chromium's scroll anchoring keeps the visual position steady by moving the
+scroll offset. Any test that scrolls and then measures has to let that settle
+first, or it compares two different pages.
+
+Ten more findings of the 28 were small: the last step pointing at the same
+guide section as the first, an auto-started tour reopening on every reload, a
+forced `?ab_` view spending the browser's one exposure. They are VG-31 to VG-39
+in [VALUE-GAP-REGISTRY.md](VALUE-GAP-REGISTRY.md).
+
+**What was found and deliberately not fixed** is VG-40: the saved-sessions list
+is untranslated and its count placeholder reads `sesion(es)`, and a microphone
+denied mid-session leaves the session bar up with no control that advances it.
+Both are pre-existing `js/app.js` behaviour with their own blast radius, which
+is the same reason VG-27 to VG-29 were left alone.
+
+---
+
 ## Verification
 
 ```bash
 # serve the site
 python3 -m http.server 8765
 
-# the two new specs — 31 cases across 1280x800, 390x844 and 320x640
+# the two new specs — 35 cases across 1280x800, 390x844 and 320x640
 npx playwright test tests/tour-geometry.spec.js tests/tour-behaviour.spec.js --reporter=line
 
 # the guide's smoke cases inside the existing suites

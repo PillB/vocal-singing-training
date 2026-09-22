@@ -4742,6 +4742,9 @@
     if (grid) {
       const plans = cfg.plans || [];
       const ent = B.getEntitlement();
+      // Computed from the two prices on the cards, so the badge can never
+      // disagree with the numbers printed next to it.
+      const savingPct = B.annualSavingPct(plans, region);
       grid.innerHTML = plans
         .map((p) => {
           const price = B.formatPrice(p, region);
@@ -4764,8 +4767,8 @@
             ? `<details class="plan-more"><summary>${tt("pricing.moreFeatures", { n: featList.length - FEAT_MAX })}</summary><ul class="plan-features">${restFeats}</ul></details>`
             : "";
           const badge =
-            p.badge === "save20"
-              ? `<span class="plan-badge">${tt("pricing.save20")}</span>`
+            p.badge === "saveAnnual" && savingPct
+              ? `<span class="plan-badge">${tt("pricing.savePct", { n: String(savingPct) })}</span>`
               : p.popular
                 ? `<span class="plan-badge">★</span>`
                 : "";

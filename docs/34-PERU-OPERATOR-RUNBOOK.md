@@ -24,13 +24,21 @@ hard-codes them.
 
 | Decision | Recommendation | Why |
 |---|---|---|
-| Price in Peru | S/ 20–25 per month | Streaming set the anchor and people compare against it: Spotify Individual S/ 18.90–20.90, YouTube Premium S/ 20.90, Netflix Básico S/ 28.90. S/ 20 is the number Peruvians already pay monthly without thinking about it. See [what operators report](#what-peruvian-operators-actually-report) for why this moved down from S/ 25–30. Note the fee cliffs in stage 5: at S/ 19.90 a Culqi charge costs 17.6% in commission alone. |
-| Price abroad | USD 7–10 per month | The fixed fee per charge dominates below $7. The same provider that takes 7.9% at $10 takes 11.9% at $5. |
-| Annual option | Yes, at ~10 months' price | **The biggest lever you have.** One charge a year pays the fixed fee once instead of twelve times, on every rail. |
-| Trial | One month, one per account | Already built. `TRIAL_DAYS` in `wrangler.toml`. |
+| Price in Peru | **S/ 19.90 per month, S/ 119.90 per year** | Decided, not a range — the evidence is in [35-PRICING.md](35-PRICING.md). Under Spotify's S/ 20.90, and well under what Yousician (S/ 30.90) and Duolingo (S/ 32.90) charge Peruvians. Note the fee cliffs in stage 5: at S/ 19.90 a Culqi charge costs 17.6% in commission alone, against 10.0% on Mercado Pago. |
+| Price abroad | **USD 7.99 per month, USD 49 per year** | Decided in [35-PRICING.md](35-PRICING.md). The fixed fee per charge dominates below $7, so $7.99 is the floor worth using. The old $79 annual was double the category median of $38–45. |
+| Annual option | Yes, at 6 months' price (50% off) | **The biggest lever you have.** One charge a year pays the fixed fee once instead of twelve times, halving the take to about 5%, and an annual subscriber beats a monthly one on net revenue until month 6.4. |
+| Trial | One month, one per account | Already built. `TRIAL_DAYS` in `wrangler.toml`. Mercado Pago's seller UI only offers 7 and 14 day presets, so a 30-day trial may need the API. |
 
-Write these down. They become the Mercado Pago plan, the merchant-of-record
-product, and the strings in `js/billing-config.js`.
+These are already in `js/billing-config.js`. They become the Mercado Pago plan
+and the merchant-of-record products.
+
+**One rule that comes out of the rail documentation and will cost you if you
+miss it: never edit a live Mercado Pago plan's price.** Its docs describe a
+plan change as synchronizing the amount to existing subscribers, and whether
+that reprices them is not documented anywhere readable. Create a new plan for
+each price point instead. The merchants of record are the opposite — Creem and
+Polar both grandfather existing subscribers explicitly — so changing the dollar
+price later is safe.
 
 ---
 
@@ -389,8 +397,14 @@ reported to require a **virtual Libro de Reclamaciones reachable in two clicks
 from the home page**, a visible notice at checkout, available 24/7, with 15
 working days to answer a complaint. Fines are reported to start at 1 UIT
 (S/ 5,500) and reach 10 UIT. This is the one item in this runbook that is a
-*code* task rather than a paperwork task, and it is not built yet — say the word
-and it is a short piece of work.
+*code* task rather than a paperwork task.
+
+**Deferred on purpose, by Pablo, on 2026-09-22.** It is not built. The
+obligation attaches to selling, so the friends-and-family beta on gifted months
+does not trigger it — but it has to exist before the first stranger is charged,
+which means before stage 5 goes live and not after. It is a short piece of work
+when the time comes: a page, a form that posts to the worker, a reply within 15
+working days, and a link in the footer.
 
 ### Marca at INDECOPI
 
@@ -765,7 +779,8 @@ and **added a billing alert** to stage 1.
 6. Check your district's TUPA for the licencia de funcionamiento. A home office
    is not exempt.
 7. Put a virtual Libro de Reclamaciones on the site, two clicks from the home
-   page. *(Not built yet — ask and it gets built.)*
+   page. *(Deferred by Pablo on 2026-09-22; must exist before the first stranger
+   is charged, so it belongs before step 8, not after.)*
 8. Mercado Pago Perú seller account, plan, webhook, secrets. Openpay BBVA as the
    fallback if Mercado Pago will not take a RUC 10.
 9. Merchant of record for abroad: Creem first, Polar in parallel. Open a

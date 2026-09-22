@@ -19,6 +19,15 @@ Self-paced practice website for **Vocal Training** (speaking foundations) and **
 - **Subscriptions (Pro)** — Stripe (global) + Mercado Pago (Perú/LATAM); opt-in 7-day trial; entitlements signed by [`workers/entitlements/`](workers/entitlements/); see [docs/10-SUBSCRIPTIONS.md](docs/10-SUBSCRIPTIONS.md)
 - **Internal auth** — 2 admin + 10 F&F tester accounts (hashes in repo; plaintext sheet gitignored); see [docs/11-AUTH-AND-HARDENING.md](docs/11-AUTH-AND-HARDENING.md)
 
+## Using it
+
+The written manual is [`guide.html`](guide.html), published alongside the site
+at <https://pillb.github.io/vocal-singing-training/guide.html>. It is in Spanish
+and English and covers the parts of the interface that cannot be guessed: what
+the colours on the pitch highway mean, what each number is, which exercises need
+the microphone, and what a denied microphone looks like. It is also linked from
+the footer of every page and from each step of the in-app tour.
+
 ## Run locally
 
 Open `index.html` in a modern browser, or:
@@ -53,6 +62,7 @@ Vanilla HTML / CSS / JS — no build step. Web Audio API (piano), MediaRecorder 
 - [Gap registry](docs/GAP-REGISTRY.md) 
 - [Subscriptions (Peru + worldwide)](docs/10-SUBSCRIPTIONS.md)
 - [Auth & hardening](docs/11-AUTH-AND-HARDENING.md) 
+- [The tour, the user guide and the A/B machinery](docs/36-TOUR-AND-USER-GUIDE.md)
 
 ## Privacy
 

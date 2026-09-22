@@ -163,6 +163,35 @@ test.describe("Max-effort journeys (Musk)", () => {
     await expect(page.locator("h1, h2").first()).toBeVisible();
   });
 
+  test("guide: reachable from the footer, every table-of-contents link lands", async ({
+    page
+  }) => {
+    await boot(page);
+    await page.locator('.app-footer a[href="guide.html"]').first().click();
+    await expect(page).toHaveURL(/guide\.html/);
+    await expect(page.locator("h1").first()).toBeVisible();
+    // A dead anchor in a manual is worse than no manual: the reader clicks,
+    // nothing moves, and they conclude the section is missing.
+    const dead = await page.evaluate(() =>
+      [...document.querySelectorAll('a[href^="#"]')]
+        .map((a) => a.getAttribute("href").slice(1))
+        .filter((id) => id && !document.getElementById(id))
+    );
+    expect(dead).toEqual([]);
+    // Both languages are on the page, and every Spanish section has its
+    // English twin — a half-translated manual is the one people complain about.
+    const halves = await page.evaluate(() => {
+      const ids = [...document.querySelectorAll("h2[id], h3[id]")].map((h) => h.id);
+      const es = ids.filter((id) => !id.endsWith("-en") && id !== "en");
+      return { es, missing: es.filter((id) => !ids.includes(`${id}-en`)) };
+    });
+    expect(halves.es.length).toBeGreaterThan(8);
+    expect(halves.missing).toEqual([]);
+    // And it leads back to the app, or it is a cul-de-sac.
+    await page.locator('.guide-back a').first().click();
+    await expect(page.locator("#view-home")).toHaveClass(/active/);
+  });
+
   test("stress: open/close 12 exercises without pageerror", async ({ page }) => {
     const errors = [];
     page.on("pageerror", (e) => errors.push(String(e)));

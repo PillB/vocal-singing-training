@@ -65,6 +65,23 @@ describeLive("Live Pages validation", () => {
     expect(shipped.hasManualGrace).toBe(true);
   });
 
+  test("the user guide is published alongside the app", async ({ page }) => {
+    // guide.html is a separate file: it can be missing from a deploy without
+    // anything on the home page looking wrong.
+    const res = await page.goto(`${LIVE.replace(/\/$/, "")}/guide.html`, {
+      waitUntil: "domcontentloaded",
+      timeout: 60000
+    });
+    expect(res?.status()).toBeLessThan(400);
+    await expect(page.locator("h1").first()).toBeVisible();
+    const dead = await page.evaluate(() =>
+      [...document.querySelectorAll('a[href^="#"]')]
+        .map((a) => a.getAttribute("href").slice(1))
+        .filter((id) => id && !document.getElementById(id))
+    );
+    expect(dead).toEqual([]);
+  });
+
   test("open SH ladder, Start, silence count 0, Space counts", async ({ page }) => {
     await bootLive(page);
     await page.locator('.tab[data-tab="singing"]').click();

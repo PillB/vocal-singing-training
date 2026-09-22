@@ -8,7 +8,7 @@
       content="Guía de uso de Estudio Vocal: cómo practicar, cómo leer la autopista de afinación, qué significan los números y cómo guardar tu progreso."
     />
     <title>Guía de uso · Estudio Vocal</title>
-    <link rel="stylesheet" href="css/styles.css?v=20260922b" />
+    <link rel="stylesheet" href="css/styles.css?v=20260923a" />
     <style>
       .guide-wrap {
         max-width: 46rem;
@@ -34,6 +34,23 @@
         margin-top: 2.5rem;
         padding-top: 1.25rem;
         border-top: 1px solid var(--border);
+      }
+      /* Every heading here is an anchor target, and .app-header is sticky at
+         ~74px (~70px on a phone). Without this, every one of the 40 contents
+         links, every inline cross-reference, every tour "full guide" link and
+         every shared deep link landed with the section title underneath the
+         header — you arrived mid-paragraph with no idea which section you were
+         in. */
+      .guide-wrap :where(h1, h2, h3, h4)[id],
+      .guide-wrap :where(h1, h2, h3, h4) {
+        scroll-margin-top: 92px;
+      }
+      /* The phone header rule hides `.app-header .brand p` to buy room for the
+         taller buttons. This page's site name is a <p>, because its single <h1>
+         is the guide's own title, so the header came out empty except for the
+         back button. */
+      body:not(.view-exercise) .app-header .brand .brand-name {
+        display: block;
       }
       .guide-wrap h3 {
         font-size: 1.05rem;
@@ -683,6 +700,7 @@
 
       <p class="guide-back"><a href="./">← Volver a la app</a></p>
 
+      <section lang="en">
       <h2 id="en">User guide (English)</h2>
       <p class="guide-lang"><a href="#que-es">Español</a> · <strong>English</strong></p>
       <p>
@@ -711,7 +729,7 @@
         </ol>
       </nav>
 
-      <h3 id="que-es-en">1 · What this site is</h3>
+      <h2 id="que-es-en">1 · What this site is</h2>
       <p>
         A voice studio that runs inside your browser. Nothing to install, and no account needed
         to practise. It gives you exercises with instructions, a piano to play along with, a
@@ -739,7 +757,7 @@
         and <strong>Tour</strong>, which replays the short walkthrough of the home screen.
       </p>
 
-      <h3 id="primera-en">2 · Your first practice, in five minutes</h3>
+      <h2 id="primera-en">2 · Your first practice, in five minutes</h2>
       <ol>
         <li>Open the site. The card at the top has an exercise already chosen, and a button.</li>
         <li>Press that button. The practice screen opens.</li>
@@ -762,7 +780,7 @@
         do. Showing up matters more than choosing well.
       </p>
 
-      <h3 id="inicio-en">3 · The home screen</h3>
+      <h2 id="inicio-en">3 · The home screen</h2>
       <h4>The panel at the top</h4>
       <p>
         The only place you have to decide anything, built so the decision is a single one. It
@@ -798,7 +816,7 @@
         to show.
       </p>
 
-      <h3 id="rutas-en">4 · Routes and guided sessions</h3>
+      <h2 id="rutas-en">4 · Routes and guided sessions</h2>
       <p>
         A guided session chains several exercises in order and keeps count for you. You can
         pause it and pick it up another day; while it is open, a bar at the top tells you where
@@ -843,7 +861,7 @@
         <strong>Save session</strong> before moving on.
       </p>
 
-      <h3 id="practica-en">5 · The practice screen</h3>
+      <h2 id="practica-en">5 · The practice screen</h2>
       <p>
         The middle of the screen is the stage and the corners hold the controls, so you do not
         have to scroll while practising. There are three variants depending on the exercise.
@@ -913,7 +931,7 @@
         session's attempts so you can compare the first with the last.
       </p>
 
-      <h3 id="autopista-en">6 · Reading the pitch highway</h3>
+      <h2 id="autopista-en">6 · Reading the pitch highway</h2>
       <p>
         The thing people look at most and have explained least. It runs left to right: the right
         edge is <em>now</em>, and everything to the left already happened.
@@ -996,7 +1014,7 @@
         drop an octave with the octave control and it will draw again.
       </p>
 
-      <h3 id="numeros-en">7 · What the numbers mean</h3>
+      <h2 id="numeros-en">7 · What the numbers mean</h2>
       <h4>While practising</h4>
       <ul>
         <li>
@@ -1025,7 +1043,7 @@
         thing that makes it useful.
       </p>
 
-      <h3 id="guardar-en">8 · Saving, scoring and history</h3>
+      <h2 id="guardar-en">8 · Saving, scoring and history</h2>
       <p>
         A session counts when you press <strong>Save session</strong> on the metrics card. That
         is what feeds your streak, your minutes, the heatmap and the next-step suggestion.
@@ -1045,7 +1063,7 @@
         </li>
       </ul>
 
-      <h3 id="plan-en">9 · The 12-week plan</h3>
+      <h2 id="plan-en">9 · The 12-week plan</h2>
       <p>
         This is the answer to "what do I focus on?". You pick <strong>one</strong> element — one
         single thing: pauses, breath, diction, closure — and work it for a week. At the end of
@@ -1060,7 +1078,7 @@
         voice more than twelve weeks trying everything.
       </p>
 
-      <h3 id="micro-en">10 · Microphone: permissions and problems</h3>
+      <h2 id="micro-en">10 · Microphone: permissions and problems</h2>
       <h4>The permission</h4>
       <p>
         Your browser asks the first time you press Start on an exercise that needs it. Audio is
@@ -1092,7 +1110,7 @@
         sensitive.
       </p>
 
-      <h3 id="trucos-en">11 · Hidden shortcuts</h3>
+      <h2 id="trucos-en">11 · Hidden shortcuts</h2>
       <ul>
         <li>
           <strong>Space bar</strong> — assists breath exercises, as above. It is not written
@@ -1117,7 +1135,7 @@
         <li><strong>Arrow keys ← →</strong> and <strong>Esc</strong> move and close the tour.</li>
       </ul>
 
-      <h3 id="confunde-en">12 · Things that confuse people (and what to do)</h3>
+      <h2 id="confunde-en">12 · Things that confuse people (and what to do)</h2>
       <h4>I did a whole guided session and it is not in my history</h4>
       <p>
         <strong>Next exercise</strong> advances the session but does not save the practice. For it
@@ -1155,7 +1173,7 @@
         top left and navigate from there.
       </p>
 
-      <h3 id="pro-en">13 · Account and Pro</h3>
+      <h2 id="pro-en">13 · Account and Pro</h2>
       <p>
         <strong>Practising is free and needs no account.</strong> Everything in this guide works
         without signing up.
@@ -1171,7 +1189,7 @@
         in the free plan.
       </p>
 
-      <h3 id="privacidad-en">14 · Where your data lives</h3>
+      <h2 id="privacidad-en">14 · Where your data lives</h2>
       <p>
         Your progress, settings and recordings are stored in <strong>this browser</strong>. They
         are not uploaded to any server of ours. Two consequences worth knowing:
@@ -1186,6 +1204,7 @@
       </p>
 
       <p class="guide-back"><a href="./">← Back to the app</a></p>
+      </section>
     </main>
   </body>
 </html>

@@ -167,7 +167,9 @@ test.describe("Max-effort journeys (Musk)", () => {
     page
   }) => {
     await boot(page);
-    await page.locator('.app-footer a[href="guide.html"]').first().click();
+    // href^=, not href=: the link carries a language anchor when the page is
+    // in English, and the footer link is rewritten at runtime to match.
+    await page.locator('.app-footer a[href^="guide.html"]').first().click();
     await expect(page).toHaveURL(/guide\.html/);
     await expect(page.locator("h1").first()).toBeVisible();
     // A dead anchor in a manual is worse than no manual: the reader clicks,

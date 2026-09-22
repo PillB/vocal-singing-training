@@ -817,9 +817,14 @@
    */
   function syncGuideLinks() {
     const href = window.VTTour?.guideHref?.() || "guide.html";
+    // The Spanish half starts the document, so `#que-es` points at the top of
+    // a page that already opens there. Keep the plain link in Spanish and add
+    // the anchor only when it does some work — and set it either way, so
+    // switching back to Spanish takes the anchor off again.
+    const clean = href === "guide.html#que-es" ? "guide.html" : href;
     $$('a[href^="guide.html"]').forEach((a) => {
       if (a.hasAttribute("data-guide-anchor")) return;
-      a.href = href;
+      a.href = clean;
     });
   }
 

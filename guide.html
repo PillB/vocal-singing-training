@@ -1,0 +1,1186 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Guía de uso de Estudio Vocal: cómo practicar, cómo leer la autopista de afinación, qué significan los números y cómo guardar tu progreso."
+    />
+    <title>Guía de uso · Estudio Vocal</title>
+    <link rel="stylesheet" href="css/styles.css?v=20260922b" />
+    <style>
+      .guide-wrap {
+        max-width: 46rem;
+        margin: 2rem auto;
+        padding: 0 1.25rem 4rem;
+        line-height: 1.6;
+      }
+      /* The header carries the site name as text, not a heading, so the page has
+         exactly one <h1> — privacy.html ended up with three. */
+      .brand .brand-name {
+        font-size: 1.05rem;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        color: var(--text);
+      }
+      .guide-wrap h1 {
+        font-size: 1.6rem;
+        margin-bottom: 0.35rem;
+        letter-spacing: -0.02em;
+      }
+      .guide-wrap h2 {
+        font-size: 1.25rem;
+        margin-top: 2.5rem;
+        padding-top: 1.25rem;
+        border-top: 1px solid var(--border);
+      }
+      .guide-wrap h3 {
+        font-size: 1.05rem;
+        margin-top: 1.9rem;
+        color: var(--text);
+      }
+      .guide-wrap h4 {
+        font-size: 0.95rem;
+        margin: 1.2rem 0 0.3rem;
+        color: var(--text);
+      }
+      .guide-wrap p,
+      .guide-wrap li,
+      .guide-wrap td,
+      .guide-wrap th {
+        color: var(--text-muted);
+        font-size: 0.95rem;
+      }
+      .guide-wrap strong {
+        color: var(--text);
+      }
+      .guide-wrap a {
+        color: var(--accent);
+      }
+      .guide-lang {
+        font-size: 0.9rem;
+        margin-bottom: 1.25rem;
+      }
+      .guide-toc {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 0.9rem 1.1rem;
+        margin: 1.5rem 0 0;
+      }
+      .guide-toc ol {
+        margin: 0.4rem 0 0;
+        padding-left: 1.2rem;
+        columns: 2;
+        column-gap: 1.5rem;
+      }
+      .guide-toc li {
+        margin: 0.15rem 0;
+        break-inside: avoid;
+      }
+      .guide-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 0.8rem 0;
+        font-size: 0.92rem;
+      }
+      .guide-table th,
+      .guide-table td {
+        text-align: left;
+        vertical-align: top;
+        padding: 0.45rem 0.6rem 0.45rem 0;
+        border-bottom: 1px solid var(--border);
+      }
+      .guide-table th {
+        color: var(--text);
+        font-weight: 650;
+      }
+      .swatch {
+        display: inline-block;
+        width: 0.7rem;
+        height: 0.7rem;
+        border-radius: 3px;
+        margin-right: 0.35rem;
+        vertical-align: -1px;
+      }
+      .sw-green {
+        background: rgb(79, 212, 146);
+      }
+      .sw-amber {
+        background: rgb(240, 184, 80);
+      }
+      .sw-ghost {
+        background: rgb(180, 200, 230);
+      }
+      .sw-blue {
+        background: rgb(159, 208, 240);
+      }
+      .sw-red {
+        background: rgb(224, 108, 117);
+      }
+      .guide-note {
+        border-left: 3px solid var(--accent);
+        padding: 0.1rem 0 0.1rem 0.85rem;
+        margin: 1rem 0;
+      }
+      .guide-back {
+        margin-top: 2.5rem;
+      }
+      @media (max-width: 640px) {
+        .guide-toc ol {
+          columns: 1;
+        }
+        .guide-wrap {
+          margin-top: 1rem;
+        }
+        /* Every link is a touch target, including the ones inside a sentence. */
+        .guide-toc a,
+        .guide-lang a,
+        .guide-back a {
+          display: inline-flex;
+          align-items: center;
+          min-height: 44px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="header-inner">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">♪</div>
+          <div>
+            <p class="brand-name">Estudio Vocal</p>
+            <p>Guía de uso</p>
+          </div>
+        </div>
+        <div class="header-actions">
+          <a class="btn btn-ghost btn-sm" href="./">← App</a>
+        </div>
+      </div>
+    </header>
+
+    <main class="guide-wrap">
+      <p class="guide-lang"><strong>Español</strong> · <a href="#en">English</a></p>
+
+      <h1>Guía de uso</h1>
+      <p>
+        Todo lo que hace este sitio, explicado en orden. Si solo quieres empezar, lee
+        <a href="#primera">Tu primera práctica</a> y vuelve cuando algo no se entienda.
+      </p>
+
+      <nav class="guide-toc" aria-label="Contenido">
+        <strong>Contenido</strong>
+        <ol>
+          <li><a href="#que-es">Qué es este sitio</a></li>
+          <li><a href="#primera">Tu primera práctica</a></li>
+          <li><a href="#inicio">La pantalla de inicio</a></li>
+          <li><a href="#rutas">Las rutas y la sesión guiada</a></li>
+          <li><a href="#practica">La pantalla de práctica</a></li>
+          <li><a href="#autopista">Leer la autopista</a></li>
+          <li><a href="#numeros">Qué significan los números</a></li>
+          <li><a href="#guardar">Guardar, puntuar, historial</a></li>
+          <li><a href="#plan">El plan de 12 semanas</a></li>
+          <li><a href="#micro">Micrófono y problemas</a></li>
+          <li><a href="#trucos">Atajos poco visibles</a></li>
+          <li><a href="#confunde">Cosas que confunden</a></li>
+          <li><a href="#pro">Cuenta y Pro</a></li>
+          <li><a href="#privacidad">Dónde viven tus datos</a></li>
+        </ol>
+      </nav>
+
+      <h2 id="que-es">1 · Qué es este sitio</h2>
+      <p>
+        Un estudio de voz que funciona dentro del navegador. No hay nada que instalar y no
+        necesitas cuenta para practicar. Te da ejercicios con instrucciones, un piano para
+        acompañarte, un afinador que dibuja tu voz en pantalla y un sitio donde anotar cómo
+        te fue.
+      </p>
+      <p>Hay <strong>dos entrenamientos</strong>, y son distintos:</p>
+      <ul>
+        <li>
+          <strong>Entrenamiento vocal</strong> — la voz hablada: dicción, volumen, ritmo,
+          pausas, presencia. Sirve para exponer, enseñar, grabar o hablar en público.
+        </li>
+        <li>
+          <strong>Entrenamiento de canto</strong> — afinación, aire, cierre, resonancia y
+          registro. Aquí es donde aparecen el piano y la autopista de notas.
+        </li>
+      </ul>
+      <p>
+        Dentro de cada uno, los ejercicios están en <strong>Básico</strong> (la base, por
+        donde se empieza) y <strong>Avanzado</strong> (retos y variantes). No hay que
+        terminar el básico para tocar el avanzado, pero ayuda.
+      </p>
+      <p>
+        Arriba, en la cabecera: <strong>Practicar</strong>, <strong>Plan de 12 semanas</strong>,
+        <strong>Historial</strong>, <strong>Pro</strong>, <strong>Cuenta</strong>, el idioma y
+        <strong>Tour</strong>, que repite el recorrido corto de la pantalla de inicio.
+      </p>
+
+      <h2 id="primera">2 · Tu primera práctica, en cinco minutos</h2>
+      <ol>
+        <li>Abre el sitio. En la tarjeta de arriba hay un ejercicio ya elegido y un botón.</li>
+        <li>Pulsa ese botón. Se abre la pantalla de práctica.</li>
+        <li>
+          Lee las dos o tres líneas de la consigna. Si quieres el detalle, abre
+          <strong>Mostrar pasos y consejos</strong>.
+        </li>
+        <li>
+          Pulsa <strong>Empezar</strong>. El navegador te pedirá permiso para el micrófono:
+          acéptalo. El audio se analiza en tu dispositivo.
+        </li>
+        <li>Practica mirando la pantalla. No busques la perfección: busca terminar.</li>
+        <li>
+          Pulsa <strong>Detener</strong>, abre <strong>Mostrar métricas</strong>, califica con
+          honestidad y pulsa <strong>Guardar sesión</strong>.
+        </li>
+      </ol>
+      <p class="guide-note">
+        Si es tu primera vez y no quieres decidir nada, sirve cualquier ejercicio básico. La
+        constancia pesa más que la elección.
+      </p>
+
+      <h2 id="inicio">3 · La pantalla de inicio</h2>
+      <h3>El panel de arriba</h3>
+      <p>
+        Es el único sitio donde tienes que decidir algo, y está hecho para que la decisión sea
+        una sola. Contiene:
+      </p>
+      <ul>
+        <li>
+          <strong>La tarjeta de siguiente paso</strong>, con un ejercicio propuesto y su
+          porqué. Cambia cada vez que guardas una sesión. En Canto, si hay una clase diaria
+          preparada, esta tarjeta ofrece la clase entera en vez de un ejercicio suelto.
+        </li>
+        <li>
+          <strong>Continuar práctica</strong> — retoma lo último que dejaste a medias, o el
+          primer básico sin terminar.
+        </li>
+        <li>
+          <strong>Iniciar sesión guiada</strong> con el selector <strong>Ruta</strong> al lado.
+          Ver <a href="#rutas">las rutas</a>.
+        </li>
+      </ul>
+      <h3>El catálogo</h3>
+      <p>
+        Debajo: el cambio entre Vocal y Canto, los filtros Básico / Avanzado y las tarjetas de
+        ejercicio. Cada tarjeta lleva su número, su nivel, los minutos que dura, las
+        herramientas que usa y cuántas veces la has hecho. Sin filtro, las tarjetas se agrupan
+        por nivel con su cuenta en la cabecera del grupo.
+      </p>
+      <h3>Lo que aparece con el tiempo</h3>
+      <p>
+        Debajo del catálogo crecen tu resumen (sesiones, minutos, racha, mejor sostenido), los
+        recordatorios y, si tienes Pro, el estudio con perfiles, metas semanales, logros y el
+        mapa de calor de práctica. En una primera visita casi nada de esto se muestra: aparece
+        cuando hay algo que mostrar.
+      </p>
+
+      <h2 id="rutas">4 · Las rutas y la sesión guiada</h2>
+      <p>
+        Una sesión guiada encadena varios ejercicios en orden y lleva la cuenta por ti. Puedes
+        pausarla y retomarla otro día; mientras esté abierta, una barra arriba te dice dónde
+        vas y te deja pausar o terminarla.
+      </p>
+      <table class="guide-table">
+        <thead>
+          <tr>
+            <th>Ruta</th>
+            <th>Qué recorre</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Básica</strong></td>
+            <td>Solo los ejercicios básicos del entrenamiento en el que estés.</td>
+          </tr>
+          <tr>
+            <td><strong>Avanzada</strong></td>
+            <td>Solo los avanzados.</td>
+          </tr>
+          <tr>
+            <td><strong>Completa</strong></td>
+            <td>
+              Básicos y avanzados seguidos. El selector dice cuántos ejercicios son y cuántos
+              tiene el entrenamiento, porque en Canto no son lo mismo: los ejercicios de clase
+              viven solo en la ruta Diaria.
+            </td>
+          </tr>
+          <tr>
+            <td><strong>Diaria (clase)</strong></td>
+            <td>
+              Solo en Canto: la clase completa en orden, con tiempos cortos por paso, alrededor
+              de media hora. Es la opción para practicar sin elegir nada.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="guide-note">
+        Dentro de una sesión guiada, el botón <strong>Siguiente ejercicio</strong> te lleva al
+        siguiente paso. Si quieres que esa práctica cuente en tu historial y tu racha, guarda
+        la sesión con <strong>Guardar sesión</strong> antes de avanzar.
+      </p>
+
+      <h2 id="practica">5 · La pantalla de práctica</h2>
+      <p>
+        El centro de la pantalla es el escenario y las esquinas llevan los controles, para que
+        no tengas que desplazarte mientras practicas. Hay tres variantes según el ejercicio.
+      </p>
+
+      <h3>Controles que están siempre</h3>
+      <ul>
+        <li>
+          <strong>Empezar / Detener</strong> (abajo a la izquierda) — un solo botón enciende el
+          micrófono, el medidor, la afinación y el piano cuando hace falta. Detener lo apaga
+          todo. Puedes cambiar las opciones en vivo.
+        </li>
+        <li>
+          <strong>Nivel y sensibilidad del micrófono</strong> (abajo al centro) — la barra
+          muestra tu energía. Sube la sensibilidad si no te oye; bájala si capta ruido de
+          fondo. Ver <a href="#micro">micrófono</a>.
+        </li>
+        <li>
+          <strong>Estado y tiempo</strong> (arriba a la izquierda) — si estás en vivo y el
+          cronómetro del ejercicio.
+        </li>
+        <li>
+          <strong>Cómo practicar</strong> (debajo del escenario) — los pasos, los consejos y lo
+          que conviene evitar, escritos para ese ejercicio.
+        </li>
+        <li>
+          <strong>Métricas</strong> — al terminar, la ficha donde te calificas y guardas.
+        </li>
+        <li>
+          <strong>?</strong> (arriba a la derecha) — repite las indicaciones de esta pantalla.
+        </li>
+      </ul>
+
+      <h3>Ejercicios de canto con afinación</h3>
+      <p>
+        Llevan la <a href="#autopista">autopista de notas</a> en el centro y, a la derecha
+        abajo, los controles de piano:
+      </p>
+      <ul>
+        <li>
+          <strong>Octava − / +</strong> y <strong>Rango auto</strong> — si las notas te quedan
+          muy graves o muy agudas, mueve la octava. Con Rango auto, el sitio la mueve por ti
+          cuando ve que no llegas. El control se detiene a dos octavas de distancia.
+        </li>
+        <li>
+          <strong>Modo</strong> — <strong>1 nota</strong> (el que viene puesto: suena una nota y
+          apuntas a una), <strong>Arpegio</strong> (desglosa el acorde) y
+          <strong>Acordes</strong> (todas las voces a la vez, más difícil).
+        </li>
+        <li><strong>Progresión</strong> — la serie de acordes sobre la que trabajas.</li>
+        <li>
+          <strong>Sostener</strong> y sus segundos, <strong>Piano automático</strong>, y el
+          botón <strong>🎹+</strong>, que despliega el piano completo: tocar la progresión,
+          repetirla en bucle, parar, una <strong>nota de referencia</strong> y un
+          <strong>conteo de inhalación</strong>. Esos dos últimos son de los controles más
+          útiles y los más fáciles de no encontrar.
+        </li>
+      </ul>
+
+      <h3>Ejercicios de voz hablada</h3>
+      <p>
+        No hay autopista. En el centro va el panel del ejercicio, con la consigna grande y las
+        fases por las que te va llevando (por ejemplo, subir y bajar volumen, o cambiar de
+        ritmo). Lees o hablas en voz alta y el medidor confirma que el micrófono te oye.
+      </p>
+
+      <h3>Ejercicios de sostenido</h3>
+      <p>
+        Algunos ejercicios miden cuánto aguantas la voz con energía pareja. Entonces aparece un
+        <strong>contador en vivo</strong> arriba, que corre mientras mantienes el sonido y se
+        para cuando sueltas, y una <strong>tira de sostenidos</strong> más abajo con los
+        intentos de la sesión, para comparar el primero con el último.
+      </p>
+
+      <h2 id="autopista">6 · Cómo leer la autopista de afinación</h2>
+      <p>
+        Es lo que más se mira y lo que menos se explica. Va de izquierda a derecha: el borde
+        derecho es <em>ahora</em> y lo de la izquierda es lo que ya pasó.
+      </p>
+      <table class="guide-table">
+        <thead>
+          <tr>
+            <th>Lo que ves</th>
+            <th>Qué significa</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="swatch sw-green"></span><strong>Carril verde</strong></td>
+            <td>
+              <strong>La nota que toca cantar ahora.</strong> Es el único carril al que tienes
+              que apuntar.
+            </td>
+          </tr>
+          <tr>
+            <td><span class="swatch sw-amber"></span><strong>Carril ámbar</strong></td>
+            <td>Otra nota del acorde que está sonando. Suena, pero no es tu objetivo.</td>
+          </tr>
+          <tr>
+            <td><span class="swatch sw-ghost"></span><strong>Carril gris punteado</strong></td>
+            <td>
+              Una nota de la progresión que no suena ahora: el mapa de por dónde vas a pasar.
+            </td>
+          </tr>
+          <tr>
+            <td><strong>El grosor del carril</strong></td>
+            <td>
+              El margen que cuenta como acertado. Si estás dentro de la banda, estás en el
+              tono.
+            </td>
+          </tr>
+          <tr>
+            <td><strong>El punto claro del borde derecho</strong></td>
+            <td>Tu voz, en este instante.</td>
+          </tr>
+          <tr>
+            <td><strong>El rastro de puntos</strong></td>
+            <td>
+              Por dónde ha ido tu voz. El color de cada punto dice cuán cerca estabas:
+              <span class="swatch sw-green"></span>verde muy cerca,
+              <span class="swatch sw-blue"></span>azul cerca,
+              <span class="swatch sw-amber"></span>ámbar algo lejos,
+              <span class="swatch sw-red"></span>rojo fuera.
+            </td>
+          </tr>
+          <tr>
+            <td><strong>La cinta azul ancha</strong></td>
+            <td>
+              Tu estabilidad reciente. <strong>Ancha = te tiembla; estrecha = estás firme.</strong>
+            </td>
+          </tr>
+          <tr>
+            <td><strong>El anillo alrededor del punto</strong></td>
+            <td>
+              Se va cerrando mientras te mantienes en el carril. Cuando da la vuelta entera,
+              esa nota queda conseguida.
+            </td>
+          </tr>
+          <tr>
+            <td><strong>Nombres a la derecha</strong></td>
+            <td>
+              Cada carril lleva su nombre en las dos formas: letra y solfeo (por ejemplo
+              <em>G3 Sol</em>), porque no todo el mundo aprendió con el mismo sistema.
+            </td>
+          </tr>
+          <tr>
+            <td><strong>El teclado de abajo</strong></td>
+            <td>
+              Ámbar es la nota que se te pide, verde es la que estás haciendo. Es el sitio más
+              rápido para ver si vas por encima o por debajo.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="guide-note">
+        <strong>Si tu voz no aparece nunca.</strong> El detector escucha aproximadamente entre
+        un Do grave y un Sol agudo (65–400 Hz). Una voz muy aguda cantando arriba puede quedar
+        fuera de ese rango: baja una octava con el control de octava y volverá a dibujarse.
+      </p>
+
+      <h2 id="numeros">7 · Qué significan los números</h2>
+      <h4>Durante la práctica</h4>
+      <ul>
+        <li>
+          <strong>PERFECTO / BIEN / CERCA / BÚSCALA</strong> — lo cerca que estás del tono
+          ahora mismo, de más a menos.
+        </li>
+        <li>
+          <strong>Cents</strong> — la misma idea con número. Un semitono son 100 cents; por
+          debajo de 15 se considera afinado. El signo dice si vas alto o bajo.
+        </li>
+        <li>
+          <strong>Puntos y racha</strong> — solo en los ejercicios de reto: suman mientras
+          aciertas seguido y se cortan cuando fallas. No entran en tu puntaje guardado.
+        </li>
+        <li><strong>Contador de sostenido</strong> — segundos que llevas manteniendo el sonido.</li>
+      </ul>
+      <h4>Al terminar</h4>
+      <p>
+        Te pide unas pocas valoraciones y números (cuánto aguantaste, cuántas repeticiones,
+        cuán cómodo se sintió) y los convierte en una nota sobre 10. Sale de lo que tú mismo
+        pones comparado con el objetivo del ejercicio.
+      </p>
+      <p class="guide-note">
+        Esa nota es una brújula, no una calificación de talento. Sirve para comparar tu semana
+        pasada con esta, y para nada más. Si te sientes tentado de inflarla, le estás quitando
+        lo único que la hace útil.
+      </p>
+
+      <h2 id="guardar">8 · Guardar, puntuar y el historial</h2>
+      <p>
+        Una sesión cuenta cuando pulsas <strong>Guardar sesión</strong> en la ficha de métricas.
+        Eso es lo que alimenta tu racha, tus minutos, el mapa de calor y la propuesta de
+        siguiente paso.
+      </p>
+      <ul>
+        <li>
+          <strong>Grabarte</strong> es opcional. Puedes activarlo antes de empezar o grabar
+          aparte; al terminar decides si lo guardas o lo descartas.
+        </li>
+        <li>
+          <strong>Historial</strong> lista tus sesiones con su fecha y su nota, y tus
+          grabaciones para volver a escucharlas o borrarlas.
+        </li>
+        <li>
+          <strong>Si sales a mitad</strong> de una práctica ya empezada, el sitio te pregunta si
+          quieres guardar o descartar.
+        </li>
+      </ul>
+
+      <h2 id="plan">9 · El plan de 12 semanas</h2>
+      <p>
+        Es la respuesta a «¿en qué me concentro?». Eliges <strong>un</strong> elemento — una
+        sola cosa: las pausas, el aire, la dicción, el cierre — y lo trabajas una semana.
+        Al final de la semana lo revisas y decides:
+      </p>
+      <ul>
+        <li><strong>Mejoré</strong> — pasas a un elemento nuevo.</li>
+        <li><strong>Todavía no</strong> — repites el mismo otra semana, sin penalización.</li>
+      </ul>
+      <p>
+        La gracia está en no trabajar cinco cosas a la vez. Doce semanas con un foco cada una
+        cambian más una voz que doce semanas intentándolo todo.
+      </p>
+
+      <h2 id="micro">10 · Micrófono: permisos y problemas</h2>
+      <h4>El permiso</h4>
+      <p>
+        El navegador pide permiso la primera vez que pulsas Empezar en un ejercicio que lo
+        necesita. Se analiza en tu dispositivo y no se sube a ningún sitio. Si dices que no, el
+        permiso queda guardado por el navegador y hay que cambiarlo en los ajustes del sitio
+        (el candado o el icono junto a la dirección) — el sitio ya no puede volver a
+        preguntártelo.
+      </p>
+      <h4>Si no te oye</h4>
+      <ul>
+        <li>Sube la sensibilidad y comprueba que la barra de nivel se mueve al hablar.</li>
+        <li>
+          Cierra otras pestañas o programas que estén usando el micrófono; suele bastar con eso.
+        </li>
+        <li>Con auriculares con micro, elige ese micrófono en los ajustes del navegador.</li>
+        <li>
+          El micrófono solo funciona en conexiones seguras. Si abriste el archivo directamente
+          desde tu disco, usa la dirección web del sitio.
+        </li>
+      </ul>
+      <h4>Si el piano suena pero tu voz no se dibuja</h4>
+      <p>
+        Casi siempre es el permiso denegado: la práctica arranca igual porque el piano no lo
+        necesita. Revisa el permiso del sitio en el navegador. Si el permiso está bien, mira el
+        aviso sobre el rango de notas en <a href="#autopista">leer la autopista</a>.
+      </p>
+      <h4>Aire sin voz</h4>
+      <p>
+        En los ejercicios de aire (soplos, «sh», apoyo) el sonido no tiene una nota que detectar
+        y a veces no engancha. Mantén pulsada la <strong>barra espaciadora</strong> mientras
+        haces el sonido: cuenta como si te oyera. Es la única forma de hacer esos ejercicios si
+        tu micrófono es poco sensible.
+      </p>
+
+      <h2 id="trucos">11 · Atajos y cosas poco visibles</h2>
+      <ul>
+        <li>
+          <strong>Barra espaciadora</strong> — asiste los ejercicios de aire, como acabamos de
+          decir. No está escrito en la pantalla.
+        </li>
+        <li>
+          <strong>🎹+</strong> — despliega la nota de referencia, el conteo de inhalación y el
+          bucle de la progresión. Merece un vistazo aunque no toques el piano.
+        </li>
+        <li>
+          <strong>Rango auto</strong> — deja que el sitio mueva la octava cuando ve que una nota
+          te queda fuera, en vez de ajustarla tú.
+        </li>
+        <li>
+          <strong>El botón «?»</strong> de la pantalla de práctica repite las indicaciones de
+          esa pantalla concreta, que son distintas para canto, voz hablada y sostenidos.
+        </li>
+        <li>
+          <strong>Tour</strong>, en la cabecera, repite el recorrido corto de la pantalla de
+          inicio cuando quieras.
+        </li>
+        <li>
+          <strong>Flechas ← →</strong> y <strong>Esc</strong> mueven y cierran el tour sin ratón.
+        </li>
+      </ul>
+
+      <h2 id="confunde">12 · Cosas que confunden (y qué hacer)</h2>
+      <h4>Hice la sesión guiada entera y no aparece en mi historial</h4>
+      <p>
+        <strong>Siguiente ejercicio</strong> avanza la sesión pero no guarda la práctica. Para
+        que cuente, abre las métricas y pulsa <strong>Guardar sesión</strong> en cada ejercicio
+        antes de pasar al siguiente.
+      </p>
+      <h4>Dije «Guardar progreso» al salir y no pasó nada</h4>
+      <p>
+        Esa opción te lleva a la ficha de métricas, pero puede dejarla plegada. Pulsa
+        <strong>Mostrar métricas</strong> y luego <strong>Guardar sesión</strong>.
+      </p>
+      <h4>Todos mis ejercicios duran cinco minutos</h4>
+      <p>
+        Empezaste una micro-sesión de 5 minutos desde la tarjeta de vuelta. Se queda puesta
+        hasta que guardes una sesión; guarda una y los tiempos vuelven a los de cada ejercicio.
+      </p>
+      <h4>El cronómetro llegó a cero y no pasó nada</h4>
+      <p>
+        Es a propósito: es un aviso, no un corte. Nunca se te va a parar la voz a mitad de una
+        repetición. Termina y pulsa Detener.
+      </p>
+      <h4>Elegí la ruta «Completa» en Canto y faltan ejercicios</h4>
+      <p>
+        Los ejercicios de clase están solo en la ruta <strong>Diaria</strong>. El selector dice
+        cuántos recorre cada ruta.
+      </p>
+      <h4>La pantalla de puntaje está en inglés</h4>
+      <p>
+        El resumen y el desglose de la nota todavía no están traducidos. La nota sobre 10 y lo
+        que escribas sí se guardan bien; es solo el texto.
+      </p>
+      <h4>Desde el ejercicio no puedo ir al Historial ni al Plan</h4>
+      <p>
+        Mientras practicas, la cabecera se reduce a propósito. Vuelve a inicio con la flecha de
+        arriba a la izquierda y desde ahí ve donde quieras.
+      </p>
+
+      <h2 id="pro">13 · Cuenta y Pro</h2>
+      <p>
+        <strong>Practicar es gratis y no pide cuenta.</strong> Todo lo de esta guía funciona sin
+        registrarte.
+      </p>
+      <p>
+        Una <strong>cuenta</strong> sirve para una sola cosa: llevar tu progreso a otro
+        dispositivo. Si practicas siempre en el mismo, no te hace falta.
+      </p>
+      <p>
+        <strong>Pro</strong> añade el estudio: perfiles de práctica, metas por semana, análisis
+        e indicadores, logros, el mapa de calor y la práctica sin consejos patrocinados. No
+        añade ejercicios ni cambia el afinador: la parte que enseña a cantar está entera en el
+        plan gratis.
+      </p>
+
+      <h2 id="privacidad">14 · Dónde viven tus datos</h2>
+      <p>
+        Tu progreso, tus ajustes y tus grabaciones se guardan en
+        <strong>este navegador</strong>. No se suben a ningún servidor nuestro. Eso tiene dos
+        consecuencias que conviene saber:
+      </p>
+      <ul>
+        <li>Si borras los datos del sitio, o usas modo incógnito, se pierden.</li>
+        <li>En otro dispositivo empiezas de cero, salvo que uses una cuenta.</li>
+      </ul>
+      <p>
+        El audio del micrófono se procesa en tu dispositivo y no se envía a ningún sitio. El
+        detalle completo está en <a href="privacy.html">Privacidad</a>.
+      </p>
+
+      <p class="guide-back"><a href="./">← Volver a la app</a></p>
+
+      <h2 id="en">User guide (English)</h2>
+      <p class="guide-lang"><a href="#que-es">Español</a> · <strong>English</strong></p>
+      <p>
+        Everything this site does, in order. If you only want to start, read
+        <a href="#primera-en">Your first practice</a> and come back when something does not
+        make sense.
+      </p>
+
+      <nav class="guide-toc" aria-label="Contents">
+        <strong>Contents</strong>
+        <ol>
+          <li><a href="#que-es-en">What this site is</a></li>
+          <li><a href="#primera-en">Your first practice</a></li>
+          <li><a href="#inicio-en">The home screen</a></li>
+          <li><a href="#rutas-en">Routes and guided sessions</a></li>
+          <li><a href="#practica-en">The practice screen</a></li>
+          <li><a href="#autopista-en">Reading the pitch highway</a></li>
+          <li><a href="#numeros-en">What the numbers mean</a></li>
+          <li><a href="#guardar-en">Saving, scoring, history</a></li>
+          <li><a href="#plan-en">The 12-week plan</a></li>
+          <li><a href="#micro-en">Microphone and problems</a></li>
+          <li><a href="#trucos-en">Hidden shortcuts</a></li>
+          <li><a href="#confunde-en">Things that confuse people</a></li>
+          <li><a href="#pro-en">Account and Pro</a></li>
+          <li><a href="#privacidad-en">Where your data lives</a></li>
+        </ol>
+      </nav>
+
+      <h3 id="que-es-en">1 · What this site is</h3>
+      <p>
+        A voice studio that runs inside your browser. Nothing to install, and no account needed
+        to practise. It gives you exercises with instructions, a piano to play along with, a
+        tuner that draws your voice on screen, and somewhere to note how it went.
+      </p>
+      <p>There are <strong>two trainings</strong>, and they are different:</p>
+      <ul>
+        <li>
+          <strong>Vocal training</strong> — the speaking voice: diction, volume, pace, pauses,
+          presence. For presenting, teaching, recording or speaking in public.
+        </li>
+        <li>
+          <strong>Singing training</strong> — pitch, breath, closure, resonance and range. This
+          is where the piano and the note highway appear.
+        </li>
+      </ul>
+      <p>
+        Within each, exercises are <strong>Basic</strong> (the foundation, where you start) and
+        <strong>Advanced</strong> (challenges and variations). You do not have to finish basic
+        before touching advanced, but it helps.
+      </p>
+      <p>
+        In the header: <strong>Practice</strong>, <strong>12-Week Plan</strong>,
+        <strong>History</strong>, <strong>Pro</strong>, <strong>Account</strong>, the language,
+        and <strong>Tour</strong>, which replays the short walkthrough of the home screen.
+      </p>
+
+      <h3 id="primera-en">2 · Your first practice, in five minutes</h3>
+      <ol>
+        <li>Open the site. The card at the top has an exercise already chosen, and a button.</li>
+        <li>Press that button. The practice screen opens.</li>
+        <li>
+          Read the two or three lines of the prompt. For the detail, open
+          <strong>Show steps and tips</strong>.
+        </li>
+        <li>
+          Press <strong>Start</strong>. Your browser will ask for microphone permission: accept.
+          The audio is analysed on your device.
+        </li>
+        <li>Practise, watching the screen. Do not chase perfection: chase finishing.</li>
+        <li>
+          Press <strong>Stop</strong>, open <strong>Show metrics</strong>, rate yourself
+          honestly, and press <strong>Save session</strong>.
+        </li>
+      </ol>
+      <p class="guide-note">
+        If it is your first time and you do not want to decide anything, any basic exercise will
+        do. Showing up matters more than choosing well.
+      </p>
+
+      <h3 id="inicio-en">3 · The home screen</h3>
+      <h4>The panel at the top</h4>
+      <p>
+        The only place you have to decide anything, built so the decision is a single one. It
+        holds:
+      </p>
+      <ul>
+        <li>
+          <strong>The next-step card</strong>, with a suggested exercise and why. It changes
+          every time you save a session. On Singing, if a daily class is prepared, this card
+          offers the whole class rather than a single exercise.
+        </li>
+        <li>
+          <strong>Continue practice</strong> — picks up whatever you left unfinished, or the
+          first basic you have not done.
+        </li>
+        <li>
+          <strong>Start guided session</strong> with the <strong>Route</strong> selector beside
+          it. See <a href="#rutas-en">routes</a>.
+        </li>
+      </ul>
+      <h4>The catalog</h4>
+      <p>
+        Below: the switch between Vocal and Singing, the Basic / Advanced filters, and the
+        exercise cards. Each card carries its number, level, how many minutes it takes, the
+        tools it uses, and how many times you have done it. With no filter, cards are grouped by
+        level with counts in the group heading.
+      </p>
+      <h4>What appears over time</h4>
+      <p>
+        Below the catalog, your summary (sessions, minutes, streak, best hold), reminders, and —
+        with Pro — the studio: practice profiles, weekly goals, achievements and the practice
+        heatmap. On a first visit almost none of this shows: it appears once there is something
+        to show.
+      </p>
+
+      <h3 id="rutas-en">4 · Routes and guided sessions</h3>
+      <p>
+        A guided session chains several exercises in order and keeps count for you. You can
+        pause it and pick it up another day; while it is open, a bar at the top tells you where
+        you are and lets you pause or end it.
+      </p>
+      <table class="guide-table">
+        <thead>
+          <tr>
+            <th>Route</th>
+            <th>What it covers</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Basic</strong></td>
+            <td>Only the basic exercises of whichever training you are in.</td>
+          </tr>
+          <tr>
+            <td><strong>Advanced</strong></td>
+            <td>Only the advanced ones.</td>
+          </tr>
+          <tr>
+            <td><strong>Full</strong></td>
+            <td>
+              Basic and advanced back to back. The selector says how many exercises that is and
+              how many the training has, because on Singing they are not the same: the class
+              exercises live only in the Daily route.
+            </td>
+          </tr>
+          <tr>
+            <td><strong>Daily (class)</strong></td>
+            <td>
+              Singing only: the whole class in order, with short times per step, around half an
+              hour. This is the option for practising without choosing anything.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="guide-note">
+        Inside a guided session, <strong>Next exercise</strong> moves you to the next step. If
+        you want that practice to count towards your history and your streak, save it with
+        <strong>Save session</strong> before moving on.
+      </p>
+
+      <h3 id="practica-en">5 · The practice screen</h3>
+      <p>
+        The middle of the screen is the stage and the corners hold the controls, so you do not
+        have to scroll while practising. There are three variants depending on the exercise.
+      </p>
+
+      <h4>Controls that are always there</h4>
+      <ul>
+        <li>
+          <strong>Start / Stop</strong> (bottom left) — one button turns on the microphone, the
+          level meter, pitch detection and the piano when needed. Stop turns it all off. You can
+          change options while live.
+        </li>
+        <li>
+          <strong>Microphone level and sensitivity</strong> (bottom centre) — the bar shows your
+          energy. Raise sensitivity if it cannot hear you; lower it if it picks up background
+          noise. See <a href="#micro-en">microphone</a>.
+        </li>
+        <li>
+          <strong>Status and time</strong> (top left) — whether you are live, and the exercise
+          timer.
+        </li>
+        <li>
+          <strong>How to practise</strong> (below the stage) — the steps, tips and what to avoid,
+          written for that exercise.
+        </li>
+        <li><strong>Metrics</strong> — when you finish, the card where you rate and save.</li>
+        <li><strong>?</strong> (top right) — replays the coach-marks for this screen.</li>
+      </ul>
+
+      <h4>Singing exercises with pitch</h4>
+      <p>
+        These carry the <a href="#autopista-en">note highway</a> in the middle and, bottom right,
+        the piano controls:
+      </p>
+      <ul>
+        <li>
+          <strong>Octave − / +</strong> and <strong>Auto range</strong> — if the notes sit too
+          low or too high for you, move the octave. With Auto range, the site moves it for you
+          when it sees you cannot reach. The control stops two octaves out.
+        </li>
+        <li>
+          <strong>Mode</strong> — <strong>1 note</strong> (the default: one note sounds, you aim
+          at one), <strong>Arpeggio</strong> (breaks the chord up) and <strong>Chords</strong>
+          (all voices at once, harder).
+        </li>
+        <li><strong>Progression</strong> — the series of chords you are working over.</li>
+        <li>
+          <strong>Hold</strong> and its seconds, <strong>Auto piano</strong>, and the
+          <strong>🎹+</strong> button, which opens the full piano: play the progression, loop it,
+          stop, a <strong>reference pitch</strong> and an <strong>inhale count-in</strong>. Those
+          last two are among the most useful controls and the easiest to never find.
+        </li>
+      </ul>
+
+      <h4>Speaking-voice exercises</h4>
+      <p>
+        No highway. The middle holds the exercise panel, with the prompt in large type and the
+        phases it walks you through (raising and lowering volume, say, or changing pace). You
+        read or speak aloud and the level meter confirms the microphone hears you.
+      </p>
+
+      <h4>Hold exercises</h4>
+      <p>
+        Some exercises measure how long you sustain the voice with even energy. A
+        <strong>live counter</strong> appears at the top, running while you hold the sound and
+        stopping when you let go, and a <strong>hold strip</strong> lower down keeps this
+        session's attempts so you can compare the first with the last.
+      </p>
+
+      <h3 id="autopista-en">6 · Reading the pitch highway</h3>
+      <p>
+        The thing people look at most and have explained least. It runs left to right: the right
+        edge is <em>now</em>, and everything to the left already happened.
+      </p>
+      <table class="guide-table">
+        <thead>
+          <tr>
+            <th>What you see</th>
+            <th>What it means</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="swatch sw-green"></span><strong>Green lane</strong></td>
+            <td>
+              <strong>The note to sing right now.</strong> It is the only lane you have to aim
+              at.
+            </td>
+          </tr>
+          <tr>
+            <td><span class="swatch sw-amber"></span><strong>Amber lane</strong></td>
+            <td>Another note of the chord currently sounding. It plays, but it is not your target.</td>
+          </tr>
+          <tr>
+            <td><span class="swatch sw-ghost"></span><strong>Grey dashed lane</strong></td>
+            <td>A note in the progression that is not sounding now: the map of where you are headed.</td>
+          </tr>
+          <tr>
+            <td><strong>Lane thickness</strong></td>
+            <td>The margin that counts as on-target. Inside the band, you are in tune.</td>
+          </tr>
+          <tr>
+            <td><strong>The bright dot at the right edge</strong></td>
+            <td>Your voice, this instant.</td>
+          </tr>
+          <tr>
+            <td><strong>The trail of dots</strong></td>
+            <td>
+              Where your voice has been. Each dot's colour says how close you were:
+              <span class="swatch sw-green"></span>green very close,
+              <span class="swatch sw-blue"></span>blue close,
+              <span class="swatch sw-amber"></span>amber a little off,
+              <span class="swatch sw-red"></span>red out.
+            </td>
+          </tr>
+          <tr>
+            <td><strong>The wide blue ribbon</strong></td>
+            <td>Your recent steadiness. <strong>Wide = wobbly; narrow = steady.</strong></td>
+          </tr>
+          <tr>
+            <td><strong>The ring around the dot</strong></td>
+            <td>
+              It closes while you stay in the lane. When it completes a full circle, that note is
+              cleared.
+            </td>
+          </tr>
+          <tr>
+            <td><strong>Names on the right</strong></td>
+            <td>
+              Each lane carries its name both ways: letter and solfège (for example
+              <em>G3 Sol</em>), because not everyone learned with the same system.
+            </td>
+          </tr>
+          <tr>
+            <td><strong>The keyboard at the bottom</strong></td>
+            <td>
+              Amber is the note being asked for, green is the one you are making. The fastest
+              place to see whether you are above or below.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="guide-note">
+        <strong>If your voice never appears.</strong> The detector listens roughly between a low
+        C and a high G (65–400 Hz). A very high voice singing up top can fall outside that range:
+        drop an octave with the octave control and it will draw again.
+      </p>
+
+      <h3 id="numeros-en">7 · What the numbers mean</h3>
+      <h4>While practising</h4>
+      <ul>
+        <li>
+          <strong>PERFECT / GOOD / CLOSE / FIND IT</strong> — how close to the note you are right
+          now, best to worst.
+        </li>
+        <li>
+          <strong>Cents</strong> — the same idea as a number. A semitone is 100 cents; under 15
+          counts as in tune. The sign says whether you are sharp or flat.
+        </li>
+        <li>
+          <strong>Points and combo</strong> — challenge exercises only: they build while you hit
+          notes in a row and break when you miss. They do not go into your saved score.
+        </li>
+        <li><strong>Hold counter</strong> — seconds you have sustained the sound.</li>
+      </ul>
+      <h4>When you finish</h4>
+      <p>
+        You are asked for a few ratings and numbers (how long you held, how many repetitions, how
+        comfortable it felt) and they become a score out of 10. It comes from what you entered,
+        compared with the exercise's own target.
+      </p>
+      <p class="guide-note">
+        That score is a compass, not a grade for talent. It is for comparing your last week with
+        this one, and nothing else. If you are tempted to inflate it, you are removing the only
+        thing that makes it useful.
+      </p>
+
+      <h3 id="guardar-en">8 · Saving, scoring and history</h3>
+      <p>
+        A session counts when you press <strong>Save session</strong> on the metrics card. That
+        is what feeds your streak, your minutes, the heatmap and the next-step suggestion.
+      </p>
+      <ul>
+        <li>
+          <strong>Recording</strong> is optional. Turn it on before starting, or record
+          separately; when you finish you decide whether to keep it.
+        </li>
+        <li>
+          <strong>History</strong> lists your sessions with date and score, and your recordings
+          to play back or delete.
+        </li>
+        <li>
+          <strong>If you leave partway</strong> through a practice you already started, the site
+          asks whether to save or discard.
+        </li>
+      </ul>
+
+      <h3 id="plan-en">9 · The 12-week plan</h3>
+      <p>
+        This is the answer to "what do I focus on?". You pick <strong>one</strong> element — one
+        single thing: pauses, breath, diction, closure — and work it for a week. At the end of
+        the week you review and decide:
+      </p>
+      <ul>
+        <li><strong>Improved</strong> — move to a new element.</li>
+        <li><strong>Not yet</strong> — repeat the same one another week, no penalty.</li>
+      </ul>
+      <p>
+        The point is not working five things at once. Twelve weeks with one focus each change a
+        voice more than twelve weeks trying everything.
+      </p>
+
+      <h3 id="micro-en">10 · Microphone: permissions and problems</h3>
+      <h4>The permission</h4>
+      <p>
+        Your browser asks the first time you press Start on an exercise that needs it. Audio is
+        analysed on your device and is not uploaded anywhere. If you say no, the browser
+        remembers that and you have to change it in the site's settings (the padlock or icon
+        next to the address) — the site can no longer ask you again.
+      </p>
+      <h4>If it cannot hear you</h4>
+      <ul>
+        <li>Raise the sensitivity and check the level bar moves when you speak.</li>
+        <li>Close other tabs or programs using the microphone; that is usually enough.</li>
+        <li>With a headset, pick that microphone in your browser's settings.</li>
+        <li>
+          Microphones only work on secure connections. If you opened the file straight from your
+          disk, use the site's web address instead.
+        </li>
+      </ul>
+      <h4>If the piano plays but your voice is not drawn</h4>
+      <p>
+        Nearly always a denied permission: practice starts anyway because the piano does not need
+        it. Check the site's microphone permission in your browser. If the permission is fine, see
+        the note about note range in <a href="#autopista-en">reading the highway</a>.
+      </p>
+      <h4>Breath without voice</h4>
+      <p>
+        In breath exercises (blows, "sh", support) the sound has no note to detect and sometimes
+        will not latch. Hold the <strong>space bar</strong> while you make the sound: it counts as
+        if it heard you. It is the only way to do those exercises if your microphone is not very
+        sensitive.
+      </p>
+
+      <h3 id="trucos-en">11 · Hidden shortcuts</h3>
+      <ul>
+        <li>
+          <strong>Space bar</strong> — assists breath exercises, as above. It is not written
+          anywhere on screen.
+        </li>
+        <li>
+          <strong>🎹+</strong> — opens the reference pitch, the inhale count-in and the
+          progression loop. Worth a look even if you do not play piano.
+        </li>
+        <li>
+          <strong>Auto range</strong> — lets the site move the octave when a note falls outside
+          your range, instead of you adjusting it.
+        </li>
+        <li>
+          <strong>The "?" button</strong> on the practice screen replays the coach-marks for that
+          specific screen, which differ for singing, speaking and hold exercises.
+        </li>
+        <li>
+          <strong>Tour</strong>, in the header, replays the short home walkthrough whenever you
+          like.
+        </li>
+        <li><strong>Arrow keys ← →</strong> and <strong>Esc</strong> move and close the tour.</li>
+      </ul>
+
+      <h3 id="confunde-en">12 · Things that confuse people (and what to do)</h3>
+      <h4>I did a whole guided session and it is not in my history</h4>
+      <p>
+        <strong>Next exercise</strong> advances the session but does not save the practice. For it
+        to count, open the metrics and press <strong>Save session</strong> on each exercise before
+        moving on.
+      </p>
+      <h4>I chose "Save progress" on the way out and nothing happened</h4>
+      <p>
+        That option takes you to the metrics card, but can leave it folded. Press
+        <strong>Show metrics</strong> and then <strong>Save session</strong>.
+      </p>
+      <h4>All my exercises last five minutes</h4>
+      <p>
+        You started a 5-minute micro-session from the welcome-back card. It stays on until you
+        save a session; save one and timers go back to each exercise's own.
+      </p>
+      <h4>The timer hit zero and nothing happened</h4>
+      <p>
+        That is deliberate: it is a cue, not a cut-off. Your voice will never be stopped mid
+        repetition. Finish and press Stop.
+      </p>
+      <h4>I picked the "Full" route on Singing and exercises are missing</h4>
+      <p>
+        The class exercises are only in the <strong>Daily</strong> route. The selector says how
+        many each route covers.
+      </p>
+      <h4>The score screen is in English</h4>
+      <p>
+        The summary and score breakdown are not translated yet. The score out of 10 and anything
+        you write are stored correctly; it is only the wording.
+      </p>
+      <h4>I cannot reach History or the Plan from an exercise</h4>
+      <p>
+        While you practise, the header is deliberately reduced. Go back home with the arrow at the
+        top left and navigate from there.
+      </p>
+
+      <h3 id="pro-en">13 · Account and Pro</h3>
+      <p>
+        <strong>Practising is free and needs no account.</strong> Everything in this guide works
+        without signing up.
+      </p>
+      <p>
+        An <strong>account</strong> does exactly one thing: carries your progress to another
+        device. If you always practise on the same one, you do not need it.
+      </p>
+      <p>
+        <strong>Pro</strong> adds the studio: practice profiles, weekly goals, analytics and
+        insights, achievements, the practice heatmap, and practice without sponsored tips. It adds
+        no exercises and does not change the tuner: the part that teaches you to sing is entirely
+        in the free plan.
+      </p>
+
+      <h3 id="privacidad-en">14 · Where your data lives</h3>
+      <p>
+        Your progress, settings and recordings are stored in <strong>this browser</strong>. They
+        are not uploaded to any server of ours. Two consequences worth knowing:
+      </p>
+      <ul>
+        <li>If you clear the site's data, or use private browsing, they are gone.</li>
+        <li>On another device you start from zero, unless you use an account.</li>
+      </ul>
+      <p>
+        Microphone audio is processed on your device and is not sent anywhere. The full detail is
+        in <a href="privacy.html">Privacy</a>.
+      </p>
+
+      <p class="guide-back"><a href="./">← Back to the app</a></p>
+    </main>
+  </body>
+</html>

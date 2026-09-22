@@ -763,9 +763,8 @@
 
   function guideHref(anchor) {
     const en = global.VTI18n?.lang === "en";
-    const fallback = en ? "what-en" : "que-es";
-    const a = anchor ? (en ? `${anchor}-en` : anchor) : fallback;
-    return `guide.html#${a}`;
+    const base = anchor || "que-es";
+    return `guide.html#${en ? `${base}-en` : base}`;
   }
 
   function go(i) {

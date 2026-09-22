@@ -80,14 +80,19 @@
     allowedCheckoutHosts: null,
     /**
      * Primary rails:
-     * - stripe: US, EU, UK, CA, AU, MX, most of world (card + local methods by country)
-     * - mercadopago: Peru + LATAM (cards, Yape/Plin ecosystem where available)
+     * - stripe (id only): the international card rail. The seller will be a
+     *   merchant of record, not Stripe — see docs/34-PERU-OPERATOR-RUNBOOK.md.
+     * - mercadopago: Peru + LATAM, in soles, with automatic monthly charging.
      */
     providers: {
+      // The internal id stays "stripe" because the worker's claim route and the
+      // checkout host allowlist are still written around it (VG-20). The label
+      // no longer promises Stripe, because a Peru-registered seller cannot be a
+      // Stripe merchant — the international rail will be a merchant of record.
       stripe: {
         id: "stripe",
-        label: "Stripe Checkout",
-        labelEs: "Stripe (tarjeta internacional)",
+        label: "International card",
+        labelEs: "Tarjeta internacional",
         /** Regions where we recommend this rail first */
         regions: ["US", "EU", "GB", "CA", "AU", "MX", "BR", "WW"],
         /**
@@ -115,8 +120,15 @@
       }
     },
     /**
-     * Plans — display prices are marketing defaults (not charged until links are set).
-     * USD list + regional display hints for PE (PEN) and EU (EUR).
+     * Plans. Prices are display-only until the checkout links are set.
+     *
+     * Each currency is priced on its own merits rather than converted, for two
+     * reasons that are not preference: Peru's consumer code requires the price
+     * shown to a Peruvian to be in soles and to be the final IGV-inclusive
+     * figure, and the merchant of record that bills the rest of the world
+     * cannot charge soles at all. The soles line therefore answers to the
+     * Peruvian market and the dollar line to the category. The reasoning and
+     * the evidence behind each number are in docs/35-PRICING.md.
      */
     plans: [
       {
@@ -141,9 +153,12 @@
         name: "Pro Monthly",
         nameEs: "Pro mensual",
         interval: "month",
-        priceUsd: 9.99,
-        pricePen: 35,
-        priceEur: 9.99,
+        // Set on their own merits per market, not converted from one another —
+        // Peruvian law makes the sol price the operative one at home, and the
+        // merchant of record cannot bill soles at all. See docs/35-PRICING.md.
+        priceUsd: 7.99,
+        pricePen: 19.9,
+        priceEur: 7.99,
         popular: true,
         // Only list features actually delivered in product (trust > feature stack theater)
         features: [
@@ -166,9 +181,9 @@
         name: "Pro Yearly",
         nameEs: "Pro anual",
         interval: "year",
-        priceUsd: 79,
-        pricePen: 279,
-        priceEur: 79,
+        priceUsd: 49,
+        pricePen: 119.9,
+        priceEur: 49,
         badge: "saveAnnual",
         popular: false,
         hero: true,

@@ -24,13 +24,21 @@ hard-codes them.
 
 | Decision | Recommendation | Why |
 |---|---|---|
-| Price in Peru | S/ 20–25 per month | Streaming set the anchor and people compare against it: Spotify Individual S/ 18.90–20.90, YouTube Premium S/ 20.90, Netflix Básico S/ 28.90. S/ 20 is the number Peruvians already pay monthly without thinking about it. See [what operators report](#what-peruvian-operators-actually-report) for why this moved down from S/ 25–30. Note the fee cliffs in stage 5: at S/ 19.90 a Culqi charge costs 17.6% in commission alone. |
-| Price abroad | USD 7–10 per month | The fixed fee per charge dominates below $7. The same provider that takes 7.9% at $10 takes 11.9% at $5. |
-| Annual option | Yes, at ~10 months' price | **The biggest lever you have.** One charge a year pays the fixed fee once instead of twelve times, on every rail. |
-| Trial | One month, one per account | Already built. `TRIAL_DAYS` in `wrangler.toml`. |
+| Price in Peru | **S/ 19.90 per month, S/ 119.90 per year** | Decided, not a range — the evidence is in [35-PRICING.md](35-PRICING.md). Under Spotify's S/ 20.90, and well under what Yousician (S/ 30.90) and Duolingo (S/ 32.90) charge Peruvians. Note the fee cliffs in stage 5: at S/ 19.90 a Culqi charge costs 17.6% in commission alone, against 10.0% on Mercado Pago. |
+| Price abroad | **USD 7.99 per month, USD 49 per year** | Decided in [35-PRICING.md](35-PRICING.md). The fixed fee per charge dominates below $7, so $7.99 is the floor worth using. The old $79 annual was double the category median of $38–45. |
+| Annual option | Yes, at 6 months' price (50% off) | **The biggest lever you have.** One charge a year pays the fixed fee once instead of twelve times, halving the take to about 5%, and an annual subscriber beats a monthly one on net revenue until month 6.4. |
+| Trial | One month, one per account | Already built. `TRIAL_DAYS` in `wrangler.toml`. Mercado Pago's seller UI only offers 7 and 14 day presets, so a 30-day trial may need the API. |
 
-Write these down. They become the Mercado Pago plan, the merchant-of-record
-product, and the strings in `js/billing-config.js`.
+These are already in `js/billing-config.js`. They become the Mercado Pago plan
+and the merchant-of-record products.
+
+**One rule that comes out of the rail documentation and will cost you if you
+miss it: never edit a live Mercado Pago plan's price.** Its docs describe a
+plan change as synchronizing the amount to existing subscribers, and whether
+that reprices them is not documented anywhere readable. Create a new plan for
+each price point instead. The merchants of record are the opposite — Creem and
+Polar both grandfather existing subscribers explicitly — so changing the dollar
+price later is safe.
 
 ---
 

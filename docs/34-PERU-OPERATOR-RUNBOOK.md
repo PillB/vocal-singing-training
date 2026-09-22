@@ -786,6 +786,7 @@ and each is one look away for somebody in Peru:
 | Does Mercado Pago Perú accept a **RUC 10** seller? | Ask at registration. Culqi and Openpay both say they do, so there is a fallback either way. |
 | The **Libro de Reclamaciones** rules for e-commerce (two clicks, 24/7, 15 days) | [indecopi.gob.pe](https://www.indecopi.gob.pe/). The obligation itself is certain; the exact e-commerce requirements come from a reported 2024 precedent. |
 | Whether **Creem and Polar actually approve** a Peru-registered seller | Write and ask before building. A country on a docs page is not an approved account. |
+| Whether **Paddle** takes a Peru-registered seller at all | Paddle publishes an exclusion list rather than an inclusion list, so Peru's absence from it is not a yes. Ask [paddle.com](https://www.paddle.com/) directly if you ever need them — they are not in the recommended stack, so this is only worth chasing if Creem and Polar both reject you. |
 | Whether a **100%-off coupon** is possible at any merchant of record | Nobody documents it — and it does not matter here, because gifted months come from our own database. |
 | **Niubiz and Izipay** exact tariffs | Neither publishes a complete public tarifario; the figures circulating are third-party. Both are ruled out on other grounds anyway. |
 | Whether **Payoneer** will pay out to a Peruvian **dollar** account, or soles only | Ask Payoneer support. Two practitioner accounts contradict each other; it decides whether you eat an FX conversion on every payout. |

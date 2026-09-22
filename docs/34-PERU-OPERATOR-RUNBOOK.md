@@ -126,29 +126,32 @@ Free. No Peruvian paperwork.
 ### 2a. Transactional email (the six-digit codes)
 
 The worker speaks Resend, Brevo and MailerSend — one HTTP call, no SMTP, which
-is what a Worker can do.
+is what a Worker can do. Free-tier headroom, checked 22 September 2026:
 
-**Use Resend.** It is the one the worker treats as its primary path, its API is
-a single JSON POST, and the volume here is tiny: a sign-in code per person per
-device, not a newsletter. The alternatives, if Resend does not suit you:
-[Brevo](https://www.brevo.com/pricing/) and
-[MailerSend](https://www.mailersend.com/pricing) — both are wired up and both
-need only a different secret and one line in `wrangler.toml`.
+| Provider | Free tier | Notes |
+|---|---|---|
+| **Resend** | 3,000 / month, **100 / day** | Cloudflare publishes an official Worker tutorial for it. Requires a verified domain. |
+| **Brevo** | **300 / day** (~9,000 / month) | The most free headroom, and the only one that can start from a single verified *sender* with no DNS access. |
+| **MailerSend** | 500 / month, 100 / day, and only 100 API calls / day | The tightest of the three. |
 
-⚠ I could not read any of the three pricing pages to confirm their current free
-allowances, so check the figure yourself on the page you sign up to. It will not
-change the choice: at a handful of sign-in codes a day, every one of them is
-free. What matters more is the domain verification in step 2, which all three
-require.
+**Use Resend** — it is the worker's primary path, its API is a single JSON POST,
+and Cloudflare has a step-by-step Worker guide for it. 100 codes a day is plenty
+for a beta; a sign-in code goes out once per person per new device, not per
+session. If you outgrow that or want to skip DNS on day one, **Brevo** is the
+drop-in alternative (300/day, and it can verify a single sender address without
+touching DNS) — one different secret and one line in `wrangler.toml`.
 
-1. Create an account with one of them.
+1. Create an account. (Amazon SES is deliberately not on this list: as of July
+   2026 it has no free tier for new accounts and starts in a send-only sandbox.)
 2. **Verify a sending domain.** You need a domain you control. If you do not
    own one yet, buy one now (a `.com` is roughly USD 10–15 a year) — it is also
    what stage 6 uses to make the site look like a product rather than a GitHub
-   URL.
-3. Add the DNS records the provider gives you: SPF, DKIM, and ideally DMARC.
-   Codes that land in spam are the single most common reason sign-in "doesn't
-   work".
+   URL. (Brevo lets you skip this at first with a verified sender address, but a
+   verified domain is what keeps codes out of spam, so do it before launch.)
+3. Add the DNS records the provider gives you. For Resend that is an MX record
+   on the send subdomain, an SPF TXT, and a DKIM TXT; DMARC is optional but
+   worth adding. Codes landing in spam are the most common reason sign-in
+   "doesn't work".
 4. Create an API key.
 5. Set it:
    ```bash
@@ -432,7 +435,13 @@ What is confirmed from Mercado Pago's own documentation:
 
 Its fee in Peru is **3.29% + S/ 1 + IGV** with the money released after 14
 business days, or **3.49% + S/ 1 + IGV** released instantly. No affiliation fee,
-no monthly fee.
+no monthly fee. On a S/ 25 subscription at the instant tier that is about
+S/ 2.21 all-in, an effective take of roughly 8.8%.
+
+One thing that changes how you test: **Mercado Pago has removed its sandbox.**
+There is no staging URL — everything runs against the production API, and
+whether a call is a test or a real charge depends only on which account owns the
+credentials. Use a separate test account with test credentials while you build.
 
 Not confirmed, so check it when you register: **whether a *persona natural con
 negocio* (RUC tipo 10) can open the seller account.** The Peru signup offers a
@@ -625,7 +634,6 @@ and each is one look away for somebody in Peru:
 |---|---|
 | Does Mercado Pago Perú accept a **RUC 10** seller? | Ask at registration. Culqi and Openpay both say they do, so there is a fallback either way. |
 | The **Libro de Reclamaciones** rules for e-commerce (two clicks, 24/7, 15 days) | [indecopi.gob.pe](https://www.indecopi.gob.pe/). The obligation itself is certain; the exact e-commerce requirements come from a reported 2024 precedent. |
-| Current **free-tier email** allowances | [Resend](https://resend.com/pricing), [Brevo](https://www.brevo.com/pricing/), [MailerSend](https://www.mailersend.com/pricing). Does not affect the choice at this volume. |
 | Whether **Creem and Polar actually approve** a Peru-registered seller | Write and ask before building. A country on a docs page is not an approved account. |
 | Whether a **100%-off coupon** is possible at any merchant of record | Nobody documents it — and it does not matter here, because gifted months come from our own database. |
 | **Niubiz and Izipay** exact tariffs | Neither publishes a complete public tarifario; the figures circulating are third-party. Both are ruled out on other grounds anyway. |

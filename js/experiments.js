@@ -121,6 +121,19 @@
    */
   function exposeOnce(key) {
     const a = assignment(key);
+    // A forced `?ab_<key>=...` link is somebody looking at the other arm on
+    // purpose. Recording it as this browser's one exposure dropped that visitor
+    // out of the experiment for good — and left the stored exposure disagreeing
+    // with the arm they are actually served on every later visit. Report the
+    // forced view, but do not spend the exposure on it.
+    if (a.forced) {
+      global.VTAnalytics?.track?.("experiment_forced_view", {
+        experiment: key,
+        variant: a.variant,
+        enabled: a.enabled
+      });
+      return a.variant;
+    }
     const bag = readBag() || {};
     bag.seen = bag.seen && typeof bag.seen === "object" ? bag.seen : {};
     if (!bag.seen[key]) {
@@ -129,7 +142,7 @@
       global.VTAnalytics?.track?.("experiment_expose", {
         experiment: key,
         variant: a.variant,
-        forced: a.forced,
+        forced: false,
         enabled: a.enabled
       });
     }

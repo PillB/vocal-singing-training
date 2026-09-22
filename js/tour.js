@@ -26,6 +26,7 @@
   const STORAGE_KEY = "vt_tour_v1";
   const UI_SEEN_KEY = "vt_ui_tour_seen_v1";
   const MIC_PRIMED_KEY = "vt_mic_primed_v1";
+  const AUTO_KEY = "vt_tour_auto_v1";
   const EXPERIMENT = "tour_shape_2026_10";
 
   /** Widths at or under this get the bottom-sheet card; CSS owns its position. */
@@ -180,7 +181,10 @@
         bodyKey: "tour.s6.body",
         target: ".header-actions",
         place: "bottom",
-        guideAnchor: "que-es"
+        // The header carries Plan, History, Pro and Account. Sending this step
+        // to the guide's introduction, which is where step 1 already goes, told
+        // a reader who clicked it nothing about the buttons it just described.
+        guideAnchor: "guardar"
       }
     ];
   }
@@ -435,6 +439,8 @@
   let active = false;
   let currentPack = null; // null = home tour
   let stayOnEnd = false;
+  let resumeAt = null;
+  let positioning = false;
   let stepList = [];
   let listening = false;
 
@@ -489,9 +495,22 @@
     ui.guide.addEventListener("click", () => {
       track("tour_guide_open", { stepId: stepList[index]?.id || null, pack: currentPack });
     });
-    // A click on the dim used to be swallowed in silence. It is the commonest
-    // way people dismiss an overlay, so let it dismiss.
-    root.querySelector("[data-tour-backdrop]")?.addEventListener("click", () => end("skip"));
+    // The backdrop covers the spotlight hole too, and .tour-highlight carries
+    // `pointer-events: none`, so the lit element cannot receive the click. That
+    // made the one thing the tour is pointing at the worst thing to touch: it
+    // dismissed the tour, wrote "dismissed", and took the per-screen coach-marks
+    // with it. On a phone the dim is most of the screen, so it was easy to hit
+    // by accident and there was no way back except a header button the tour had
+    // not explained yet.
+    //
+    // So: a click inside the lit ring acknowledges the step and moves on, and a
+    // click on the dim does nothing. Leaving is still Skip, the close button or
+    // Escape — three deliberate acts, none of them a stray tap.
+    root.querySelector("[data-tour-backdrop]")?.addEventListener("click", (e) => {
+      if (!inSpotlight(e.clientX, e.clientY)) return;
+      if (index >= stepList.length - 1) end("complete");
+      else go(index + 1);
+    });
     return ui;
   }
 
@@ -539,6 +558,7 @@
     // Layout only. Scrolling here would fight the corrective scroll below:
     // moving the page fires this listener, which re-centred the target and
     // undid the correction, every time.
+    if (positioning) return;
     if (active && stepList[index]) positionStep(stepList[index], { scroll: false });
   }
 
@@ -556,11 +576,14 @@
   }
 
   function prepare(step) {
-    if (step.scrollTarget && step.target) {
-      document
-        .querySelector(step.target)
-        ?.scrollIntoView({ behavior: scrollBehavior(), block: "center" });
-    }
+    // Deliberately does not scroll. It used to start a *smooth* scroll to the
+    // same target positionStep then scrolled to instantly; the smooth one was
+    // still running while positionStep measured, and every frame of it fired
+    // the scroll listener, whose re-layout runs without the corrective scroll.
+    // The last word therefore went to a pass that could not correct anything,
+    // which is why stepping *backwards* on a narrow phone parked the card on
+    // top of the control the step was describing.
+    void step;
   }
 
   function clearHighlight() {
@@ -585,6 +608,8 @@
     u.card.style.top = "";
     u.card.style.left = "";
   }
+
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
   function intersects(a, b) {
     return !(
@@ -649,7 +674,52 @@
     return false;
   }
 
+  /**
+   * Is this viewport point inside the drawn spotlight ring? False whenever no
+   * ring is drawn, which is what makes a click on a plain dimmed step a no-op.
+   */
+  function inSpotlight(x, y) {
+    if (!ui || !ui.spot) return false;
+    if (!document.body.classList.contains("tour-spot-on")) return false;
+    const r = ui.spot.getBoundingClientRect();
+    if (r.width < 2 || r.height < 2) return false;
+    return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+  }
+
+  /**
+   * The lowest edge of whatever is pinned to the top of the screen. Both the
+   * site header and the exercise screen's own compact header are sticky, so a
+   * target scrolled to the top of the document is not necessarily visible.
+   */
+  function stickyBottom() {
+    let low = 0;
+    [".app-header", ".exercise-header-compact"].forEach((sel) => {
+      document.querySelectorAll(sel).forEach((el) => {
+        const st = getComputedStyle(el);
+        if (st.position !== "sticky" && st.position !== "fixed") return;
+        if (st.display === "none" || st.visibility === "hidden") return;
+        const r = el.getBoundingClientRect();
+        if (r.top <= 2 && r.bottom > low) low = r.bottom;
+      });
+    });
+    return low;
+  }
+
   function positionStep(step, { scroll = true } = {}) {
+    if (positioning) return;
+    positioning = true;
+    try {
+      placeStep(step, scroll);
+    } finally {
+      // Our own scrollBy calls fire the scroll listener; let them settle before
+      // it is allowed to re-enter, or the correction fights itself.
+      requestAnimationFrame(() => {
+        positioning = false;
+      });
+    }
+  }
+
+  function placeStep(step, scroll) {
     const u = ensureUI();
     clearHighlight();
     hideSpot();
@@ -658,6 +728,10 @@
     const el = step.target ? document.querySelector(step.target) : null;
 
     if (!step.target || step.place === "center" || !isVisible(el)) {
+      // A step with no target is about the page as a whole, so it should open
+      // against the top of it. Replaying from the bottom used to put "Welcome
+      // to your voice studio" over the reminder settings.
+      if (scroll) window.scrollTo({ top: 0, behavior: "auto" });
       centerCard();
       return;
     }
@@ -665,7 +739,15 @@
     el.classList.add("tour-highlight");
     // Instant, not smooth: every measurement below is taken straight after
     // this, and a smooth scroll is still moving when they are read.
-    if (scroll) el.scrollIntoView({ behavior: "auto", block: "center", inline: "nearest" });
+    if (scroll) {
+      el.scrollIntoView({ behavior: "auto", block: "center", inline: "nearest" });
+      // scrollIntoView cannot centre a target near the end of the page, so it
+      // can leave it under the sticky header — which on the practice screen is
+      // exactly what happened to the top-rail step: the ring was drawn around a
+      // rail whose first line the header was covering.
+      const under = stickyBottom() - el.getBoundingClientRect().top;
+      if (under > 0) window.scrollBy({ top: -under - 8, behavior: "auto" });
+    }
 
     let r = el.getBoundingClientRect();
     const vh = window.innerHeight;
@@ -680,21 +762,43 @@
       u.card.classList.remove("tour-card-center");
       u.card.style.left = "";
       u.card.style.top = "";
-      // The sheet defaults to the bottom, which is exactly where the practice
-      // screen keeps its controls. Flip it to the top when the bottom would
-      // cover the target, and only then try scrolling the target clear.
-      u.card.classList.remove("tour-sheet-top");
-      if (intersects(u.card.getBoundingClientRect(), r)) {
-        u.card.classList.add("tour-sheet-top");
-        if (intersects(u.card.getBoundingClientRect(), r)) {
-          u.card.classList.remove("tour-sheet-top");
-          const cardTop = u.card.getBoundingClientRect().top;
-          const delta = r.bottom - (cardTop - 10);
-          if (scroll && delta > 0) {
-            window.scrollBy({ top: delta, behavior: "auto" });
-            r = el.getBoundingClientRect();
-          }
-        }
+      // The sheet spans the screen, so the only way to keep it off the target is
+      // to scroll the target into the band the sheet leaves free. Both sides are
+      // costed and the better one wins; if neither can clear it — a target
+      // taller than the band — the one that covers least does. Costing both on
+      // every pass, rather than only when a step first opens, is what makes
+      // stepping backwards behave like stepping forwards.
+      //
+      // Everything here is PREDICTED, never measured after scrolling.
+      // `window.scrollY` does not update until the next frame, so the earlier
+      // measure-scroll-remeasure version read the pre-scroll position back every
+      // time, scored both candidates as failures and kept the first. That is
+      // what put the card on top of the control the step was describing.
+      const startY = window.scrollY;
+      const maxY = Math.max(0, document.documentElement.scrollHeight - vh);
+      const docTop = r.top + startY;
+      let best = null;
+      for (const top of [r.top > vh - r.bottom, r.top <= vh - r.bottom]) {
+        u.card.classList.toggle("tour-sheet-top", top);
+        const c = u.card.getBoundingClientRect(); // fixed: independent of scroll
+        const b0 = top ? c.bottom + 10 : 8;
+        const b1 = top ? vh - 8 : c.top - 10;
+        // Centre the target in the free band, then keep it inside it.
+        const wantTop = clamp((b0 + b1 - r.height) / 2, b0, Math.max(b0, b1 - r.height));
+        const y = scroll ? clamp(docTop - wantTop, 0, maxY) : startY;
+        const vTop = docTop - y;
+        const over =
+          Math.max(0, Math.min(c.right, r.right) - Math.max(c.left, r.left)) *
+          Math.max(0, Math.min(c.bottom, vTop + r.height) - Math.max(c.top, vTop));
+        if (!best || over < best.over) best = { top, y, over };
+        if (over === 0) break;
+      }
+      u.card.classList.toggle("tour-sheet-top", best.top);
+      if (scroll && Math.abs(best.y - startY) > 0.5) {
+        window.scrollTo({ top: best.y, behavior: "auto" });
+        // Predicted, for the spotlight below; the scroll listener repositions
+        // everything again once the browser has actually applied it.
+        r = new DOMRect(r.left, docTop - best.y, r.width, r.height);
       }
     }
 
@@ -708,7 +812,14 @@
     const right = Math.min(vw - 4, r.right + pad);
     const h = bottom - top;
     const w = right - left;
-    if (h <= 0 || w <= 0 || r.height > vh * MAX_SPOT_FRACTION) return;
+    if (h <= 0 || w <= 0 || r.height > vh * MAX_SPOT_FRACTION) {
+      // No ring is drawn, so the backdrop's own dim takes over — and on the
+      // step that teaches the pitch highway, the thing being taught is the
+      // target, so the dim landed on it. With nothing to contrast against,
+      // drop the dim rather than veil the subject.
+      document.body.classList.add("tour-spot-on");
+      return;
+    }
 
     u.spot.style.opacity = "1";
     u.spot.style.left = `${left}px`;
@@ -787,6 +898,12 @@
 
   function beginTour(steps, { fromButton, pack, stay } = {}) {
     const opener = document.activeElement;
+    // Where the user was before we moved them. The home tour scrolls the page
+    // and switches to the home view to do its job; leaving them there when it
+    // ends means a one-minute tour costs them their place.
+    resumeAt = stay
+      ? null
+      : { view: global.VTApp?.getState?.().view || null, scrollY: window.scrollY || 0 };
     ensureUI();
     stepList = filterSteps(steps);
     if (!stepList.length) {
@@ -899,7 +1016,41 @@
     currentPack = null;
     stayOnEnd = false;
     stepList = [];
-    if (!stay) goHome();
+    if (!stay) restorePlace();
+    // The start panel's invitation is built once and only re-read when the
+    // panel re-renders, so without this the page the tour drops you back onto
+    // is still asking whether you would like a tour.
+    if (reason && !pack) global.VTApp?.refreshStartPanel?.();
+  }
+
+  /**
+   * Put the page back where the tour found it: the view the user was reading
+   * and the scroll position they were at. Falls back to home, which is what it
+   * used to do unconditionally.
+   */
+  function restorePlace() {
+    const at = resumeAt;
+    resumeAt = null;
+    if (at && at.view && at.view !== "exercise") {
+      global.VTApp?.setView?.(at.view);
+    } else {
+      goHome();
+    }
+    if (at && typeof at.scrollY === "number") {
+      // "instant", not "auto": `html { scroll-behavior: smooth }` in the
+      // stylesheet turns an "auto" restore into a one-second glide across the
+      // whole page, which reads as the page running away from you rather than
+      // as being put back. Going back to where you already were should not be
+      // a journey.
+      //
+      // Twice, a frame apart, because the home page renders its lower sections
+      // lazily: at the moment the tour closes the document can still be shorter
+      // than it was when the tour opened, and the browser clamps the scroll to
+      // the shorter page. The second pass runs once that layout has caught up.
+      const back = () => window.scrollTo({ top: at.scrollY, behavior: "instant" });
+      back();
+      requestAnimationFrame(() => requestAnimationFrame(back));
+    }
   }
 
   /**
@@ -912,9 +1063,31 @@
     if (shouldBlockAuto()) return;
     const variant = global.VTExperiments?.exposeOnce?.(EXPERIMENT) || "invite";
     if (variant !== "auto") return;
+    // Only ever once per browser. `done()` is written when the tour is finished
+    // or explicitly dismissed, so without this an auto-opened tour that the
+    // visitor simply reloaded past reopened itself on every single load.
+    if (autoFired()) return;
     setTimeout(() => {
-      if (!active && !done()) start(false);
+      if (active || done() || autoFired()) return;
+      markAutoFired();
+      start(false);
     }, 600);
+  }
+
+  function autoFired() {
+    try {
+      return localStorage.getItem(AUTO_KEY) === "1";
+    } catch {
+      return false;
+    }
+  }
+
+  function markAutoFired() {
+    try {
+      localStorage.setItem(AUTO_KEY, "1");
+    } catch {
+      /* ignore */
+    }
   }
 
   /* ── Microphone primer ────────────────────────────────────────────────── */
@@ -950,8 +1123,12 @@
    * @param {() => void} onContinue runs when the user accepts; the caller
    *   re-enters whatever it was doing.
    */
-  function showMicPrimer(onContinue) {
+  function showMicPrimer(onContinue, opts = {}) {
     const opener = document.activeElement;
+    // One string for every exercise was wrong for about half of them: it
+    // promised a piano and a pitch readout, and the exercise the home page's
+    // own first-practice button opens has neither. Say what is true here.
+    const bodyKey = opts.piano ? "tour.mic.bodyPiano" : "tour.mic.body";
     let modal = document.getElementById("mic-primer");
     if (!modal) {
       modal = document.createElement("div");
@@ -976,15 +1153,23 @@
       window.VTFocusTrap?.release(modal);
       document.removeEventListener("keydown", onPrimerKey);
     };
+    const decline = (how) => {
+      track(`mic_primer_${how}`, {});
+      markMicPrimed();
+      close();
+      // Saying no here cancels the Start the user just pressed. Without this the
+      // product's one primary button was a silent no-op the first time anybody
+      // pressed it, and pressing it again went straight through with no
+      // explanation of why the first press did nothing.
+      if (typeof opts.onDecline === "function") opts.onDecline();
+    };
     function onPrimerKey(e) {
       if (e.key !== "Escape" || modal.hidden) return;
       e.preventDefault();
-      track("mic_primer_dismiss", {});
-      markMicPrimed();
-      close();
+      decline("dismiss");
     }
     modal.querySelector("[data-primer-title]").textContent = t("tour.mic.title");
-    modal.querySelector("[data-primer-body]").textContent = t("tour.mic.body");
+    modal.querySelector("[data-primer-body]").textContent = t(bodyKey);
     const ok = modal.querySelector("[data-primer-ok]");
     const no = modal.querySelector("[data-primer-no]");
     ok.textContent = t("tour.mic.ok");
@@ -995,11 +1180,7 @@
       close();
       if (typeof onContinue === "function") onContinue();
     };
-    no.onclick = () => {
-      track("mic_primer_decline", {});
-      markMicPrimed();
-      close();
-    };
+    no.onclick = () => decline("decline");
     modal.hidden = false;
     document.body.classList.add("modal-open");
     document.addEventListener("keydown", onPrimerKey);

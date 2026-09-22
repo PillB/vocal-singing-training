@@ -2500,9 +2500,12 @@ html[lang^="es"] .hud-cents-only .hud-combo strong::before {
   gap: 0.35rem;
   flex: 0 0 auto;
 }
+/* The only way back to the per-screen coach-marks. It lives under
+   body.view-exercise, which the phone tap-target block below is scoped out
+   of (body:not(.view-exercise)), so the 44px floor has to be set here. */
 .btn-ui-help {
-  min-width: 2rem;
-  min-height: 2rem;
+  min-width: var(--min-tap);
+  min-height: var(--min-tap);
   padding: 0.2rem 0.45rem;
   font-weight: 800;
   border-radius: 999px;
@@ -3458,27 +3461,50 @@ body.view-exercise .stage-below.is-fitted {
 .tour-root[hidden] {
   display: none !important;
 }
+/* #tour-root also carries .modal-overlay so qa/capture-mobile.mjs's layer()
+   treats the card's buttons as their own layer instead of comparing them with
+   the page buttons behind the dim. It is not a centred dialog box, so undo the
+   parts of .modal-overlay that assume one. */
+.tour-root.modal-overlay {
+  z-index: 10000;
+  display: block;
+  place-items: initial;
+  padding: 0;
+  background: none;
+  backdrop-filter: none;
+}
+/* The dim is the spotlight's own outer shadow, so the hole is a real hole.
+   A filled backdrop here painted over the element being pointed at — the
+   highlighted control lost two thirds of its brightness. */
 .tour-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(4, 8, 14, 0.62);
+  background: none;
   pointer-events: auto;
 }
 .tour-spotlight {
   position: fixed;
   border-radius: 14px;
   box-shadow:
-    0 0 0 9999px rgba(4, 8, 14, 0.58),
+    0 0 0 9999px rgba(4, 8, 14, 0.62),
     0 0 0 3px rgba(110, 180, 232, 0.85),
     0 12px 40px rgba(0, 0, 0, 0.45);
   pointer-events: none;
   transition: left 0.25s ease, top 0.25s ease, width 0.25s ease, height 0.25s ease, opacity 0.2s ease;
   z-index: 10001;
 }
+/* With no spotlight drawn (a centred step, or a target too big to ring) the
+   dim has to come from somewhere. */
+body.tour-active .tour-backdrop {
+  background: rgba(4, 8, 14, 0.62);
+}
+body.tour-active.tour-spot-on .tour-backdrop {
+  background: none;
+}
 .tour-card {
   position: fixed;
   z-index: 10002; /* always above spotlight + page chrome */
-  max-width: min(400px, calc(100vw - 24px));
+  width: min(400px, calc(100vw - 24px));
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -3489,7 +3515,63 @@ body.view-exercise .stage-below.is-fitted {
   isolation: isolate;
 }
 .tour-card-center {
-  /* position set in JS */
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+.tour-close {
+  position: absolute;
+  top: 0.15rem;
+  right: 0.15rem;
+  min-width: var(--min-tap, 44px);
+  min-height: var(--min-tap, 44px);
+  display: grid;
+  place-items: center;
+  background: none;
+  border: 0;
+  border-radius: var(--radius-sm, 8px);
+  color: var(--text-muted);
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.tour-close:hover,
+.tour-close:focus-visible {
+  color: var(--text);
+}
+.tour-guide-link {
+  text-decoration: none;
+}
+
+/* First-visit invitation in the start panel, and the route from an exercise's
+   own guide card into the written one. Both carry the 44px floor at every
+   width: qa/capture-mobile.mjs measures every <button> and <a href> on home,
+   and neither of these sits under a selector the phone block already covers. */
+.start-invite {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0.9rem 0 0;
+  font-size: 0.86rem;
+}
+.start-invite .muted {
+  flex: 0 0 auto;
+}
+.start-invite .btn {
+  min-height: var(--min-tap);
+  min-width: var(--min-tap);
+}
+.guide-site-link {
+  margin: 0.9rem 0 0;
+  font-size: 0.86rem;
+}
+.guide-site-link a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--min-tap);
+  padding: 0 0.2rem;
+  color: var(--accent);
 }
 .tour-progress {
   font-size: 0.75rem;
@@ -3536,8 +3618,13 @@ body.view-exercise .stage-below.is-fitted {
 .tour-highlight * {
   pointer-events: none !important;
 }
+/* Deliberately NOT `overflow: hidden`. That locked the scroll container, so
+   every scrollIntoView the tour made was a silent no-op and any step whose
+   target sat below the fold was described against an off-screen rectangle.
+   The backdrop already absorbs clicks; letting the page scroll also lets
+   people look around, and the spotlight follows on scroll. */
 body.tour-active {
-  overflow: hidden;
+  overscroll-behavior: contain;
 }
 body.tour-active .app-header,
 body.tour-active .main,
@@ -3550,16 +3637,26 @@ body.tour-active .main *,
 body.tour-active .app-footer * {
   pointer-events: none !important;
 }
+/* Phone: a bottom sheet. Both anchors are pinned, so the card spans the width
+   instead of shrink-wrapping — `width: auto` with only `left` set used to
+   collapse the centred card to ~209px, which is what a first-time mobile
+   visitor met on the welcome step. JS leaves position alone at this width. */
 @media (max-width: 520px) {
-  .tour-card {
+  .tour-card,
+  .tour-card-center {
     left: 12px !important;
-    right: 12px;
+    right: 12px !important;
     width: auto !important;
     max-width: none;
+    top: auto !important;
+    bottom: 16px !important;
+    transform: none !important;
   }
-  .tour-card-center {
-    left: 50% !important;
-    right: auto;
+  /* The practice screen keeps Start, the octave controls and the guide card in
+     the bottom rail — precisely where the sheet sits. JS flips it up there. */
+  .tour-card.tour-sheet-top {
+    top: 12px !important;
+    bottom: auto !important;
   }
 }
 

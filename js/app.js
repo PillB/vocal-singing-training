@@ -770,7 +770,42 @@
    * site is and what a session looks like; a returning visitor is told what to
    * resume. The CTA is the same button either way, so there is only one primary.
    */
+  /**
+   * First visit only: offer the tour instead of launching it unasked. A tour
+   * that opens itself is the trigger people abandon most, and the written
+   * guide is the better answer for anyone who wants detail rather than a
+   * walkthrough. Lives in .start-main, deliberately not inside .start-steps,
+   * which is removed once a session has been saved.
+   */
+  function renderTourInvite() {
+    const main = $("#start-panel .start-main");
+    if (!main) return;
+    const existing = $("#home-tour-invite");
+    if (window.VTTour?.isDone?.()) {
+      existing?.remove();
+      return;
+    }
+    if (existing) return;
+    const p = document.createElement("p");
+    p.className = "start-invite";
+    p.id = "home-tour-invite";
+    p.innerHTML = `
+      <span class="muted">${tt("home.tourInvite")}</span>
+      <button type="button" class="btn btn-ghost btn-sm" data-tour-invite-start></button>
+      <a class="btn btn-ghost btn-sm" href="guide.html" data-tour-invite-guide></a>
+      <button type="button" class="btn btn-ghost btn-sm" data-tour-invite-dismiss></button>
+    `;
+    p.querySelector("[data-tour-invite-start]").textContent = tt("home.tourInviteGo");
+    const guideLink = p.querySelector("[data-tour-invite-guide]");
+    guideLink.textContent = tt("home.tourInviteGuide");
+    guideLink.href = window.VTTour?.guideHref?.() || "guide.html";
+    p.querySelector("[data-tour-invite-dismiss]").textContent = tt("home.tourInviteDismiss");
+    main.appendChild(p);
+    window.VTTour?.bindInvite?.();
+  }
+
   function renderStartPanel(sug) {
+    renderTourInvite();
     const kicker = $("#start-kicker");
     const title = $("#start-title");
     const sub = $("#start-sub");
@@ -954,6 +989,25 @@
     opt.hidden = !ok;
     opt.disabled = !ok;
     if (!ok && sel.value === "daily") sel.value = "basic";
+
+    // Say how many exercises each route actually covers. "Completa" is the
+    // whole Vocal track but only 16 of Canto's 27 — the eleven class
+    // exercises live solely in the daily route — and the bare label reads as
+    // a promise it does not keep.
+    const total = (window.VT_EXERCISES?.[state.tab] || []).length;
+    sel.querySelectorAll("option").forEach((o) => {
+      const base = tt(o.dataset.i18n || "") || o.value;
+      const seq = window.VT_STRUCTURED?.[`${state.tab}_${o.value}`];
+      const n = Array.isArray(seq) ? seq.length : 0;
+      if (!n) {
+        o.textContent = base;
+        return;
+      }
+      o.textContent =
+        o.value === "full" && total && n < total
+          ? `${base} (${tt("home.path.ofTotal", { n, total })})`
+          : `${base} (${n})`;
+    });
   }
 
   /** Progressive disclosure: zero sessions → collapse empty studio chrome */
@@ -2324,6 +2378,18 @@
         state.modeInstance?.onStart?.();
         document.getElementById("btn-plan")?.click();
         toast(tt("toast.planOpened"));
+        return;
+      }
+
+      // Say what the browser is about to ask, once per browser, before it
+      // asks. A denial is only undoable in browser settings, and on a pitch
+      // exercise it currently reads as success — the piano plays and the
+      // highway moves with only the voice line missing. This sits before
+      // setPracticeUI(false) so #btn-practice-start is still focusable for
+      // the focus trap to return to.
+      const wantsMic = profile.showPitch || profile.showLevel || profile.showHold;
+      if (wantsMic && window.VTTour?.needsMicPrimer?.()) {
+        window.VTTour.showMicPrimer(() => startPractice());
         return;
       }
 
@@ -5525,6 +5591,9 @@
         // Refresh tour button label
         const tb = $("#btn-tour");
         if (tb) tb.textContent = tt("nav.tour");
+        // The tour card is built in JS and its copy resolved once per step, so
+        // without this an open tour stays in the language it opened in.
+        if (window.VTTour?.isActive?.()) window.VTTour.rerender();
         updateBillingChrome();
         refreshAccountUI();
         renderValuePulse();

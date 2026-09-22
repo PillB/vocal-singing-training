@@ -1,17 +1,37 @@
 /**
- * Interactive tours — home product tour + per-UI-type exercise coach-marks.
+ * Interactive tours — a short home tour plus per-UI-type exercise coach-marks,
+ * and the microphone primer that runs before the browser's own permission
+ * prompt.
  *
- * UX (NN/g + product-tour patterns):
- *  - Spotlight + short steps (≤7) only on visible UI
- *  - First-time per layout family; always Skip; Esc / arrows
- *  - Replay via header Tour (home) or exercise "?" button
- *  - Never trap e2e (Headless / vt_e2e / ?e2e)
+ * Shape, and why:
+ *  - The home tour is four steps. Long tours are abandoned, and everything the
+ *    old twelve steps narrated about the practice screen is better said on the
+ *    practice screen, which is what the exercise packs do.
+ *  - It does not open itself by default. The start panel offers it; the
+ *    `tour_shape_2026_10` experiment (js/experiments-config.js) can put a share
+ *    of visitors on the old auto-start behaviour to compare.
+ *  - Steps only ever point at what is already on screen, and the popover is
+ *    placed so it never covers the thing it is describing.
+ *  - Everything durable lives in the written guide (guide.html), which every
+ *    step links to, because most people leave a tour partway through.
+ *
+ * Contract other files depend on — do not rename: `#tour-root`, `.tour-card`,
+ * `body.tour-active`, `[data-tour-title|body|progress|skip|prev|next]`, and
+ * `window.VTTour`. Roughly fifteen specs and QA scripts hide the tour by those
+ * literals before measuring layout.
  */
 (function (global) {
   "use strict";
 
   const STORAGE_KEY = "vt_tour_v1";
   const UI_SEEN_KEY = "vt_ui_tour_seen_v1";
+  const MIC_PRIMED_KEY = "vt_mic_primed_v1";
+  const EXPERIMENT = "tour_shape_2026_10";
+
+  /** Widths at or under this get the bottom-sheet card; CSS owns its position. */
+  const SHEET_MAX_W = 520;
+  /** A "spotlight" over most of the screen highlights nothing — drop it instead. */
+  const MAX_SPOT_FRACTION = 0.6;
 
   function t(key, vars) {
     if (typeof global.t === "function") return global.t(key, vars);
@@ -19,25 +39,58 @@
     return key;
   }
 
-  function isEs() {
-    if (global.VTI18n && global.VTI18n.lang) return global.VTI18n.lang === "es";
-    return (document.documentElement.lang || "es").startsWith("es");
+  function track(name, props) {
+    try {
+      global.VTAnalytics?.track?.(name, props || {});
+    } catch {
+      /* analytics must never break the tour */
+    }
   }
 
-  function done() {
+  function reduceMotion() {
     try {
-      return localStorage.getItem(STORAGE_KEY) === "1";
+      return !!global.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
     } catch {
       return false;
     }
   }
 
-  function markDone() {
+  function scrollBehavior() {
+    return reduceMotion() ? "auto" : "smooth";
+  }
+
+  /* ── State the tour remembers ─────────────────────────────────────────── */
+
+  /**
+   * `finished` and `dismissed` both mean "do not open by itself again", but
+   * only `finished` unlocks the per-screen packs — somebody who skipped the
+   * home tour is telling us they do not want coach-marks either. Legacy "1"
+   * reads as finished: ~15 test and QA files write it to suppress the tour.
+   */
+  function readState() {
     try {
-      localStorage.setItem(STORAGE_KEY, "1");
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw === "1") return "finished";
+      return raw === "finished" || raw === "dismissed" ? raw : "";
+    } catch {
+      return "";
+    }
+  }
+
+  function writeState(value) {
+    try {
+      localStorage.setItem(STORAGE_KEY, value);
     } catch {
       /* private mode */
     }
+  }
+
+  function done() {
+    return readState() !== "";
+  }
+
+  function finished() {
+    return readState() === "finished";
   }
 
   function clearDone() {
@@ -85,7 +138,17 @@
     return !!readUiSeen()[family];
   }
 
-  /** Home / product tour steps */
+  /* ── Steps ────────────────────────────────────────────────────────────── */
+
+  /**
+   * Home tour. Four steps, all on the home view, all pointing at something in
+   * the first screen of a cold visit.
+   *
+   * The order follows the page: the recommended exercise first, because that is
+   * the single decision the start panel was built to present, then the two
+   * quieter ways in, then where everything else lives. The catalog narration
+   * the old tour led with pointed below the fold and is now the guide's job.
+   */
   function homeSteps() {
     return [
       {
@@ -96,36 +159,20 @@
         place: "center"
       },
       {
-        id: "tabs",
-        titleKey: "tour.s2.title",
-        bodyKey: "tour.s2.body",
-        target: ".tabs",
+        id: "nextstep",
+        titleKey: "tour.s2b.title",
+        bodyKey: "tour.s2b.body",
+        target: "#next-step-card",
         place: "bottom",
-        ensureHome: true
-      },
-      {
-        id: "tiers",
-        titleKey: "tour.s3.title",
-        bodyKey: "tour.s3.body",
-        target: ".tier-filters",
-        place: "bottom",
-        ensureHome: true
-      },
-      {
-        id: "cards",
-        titleKey: "tour.s4.title",
-        bodyKey: "tour.s4.body",
-        target: "#exercise-list",
-        place: "top",
-        ensureHome: true
+        guideAnchor: "inicio"
       },
       {
         id: "session",
         titleKey: "tour.s5.title",
         bodyKey: "tour.s5.body",
-        target: ".continue-toolbar",
+        target: ".start-alt",
         place: "bottom",
-        ensureHome: true
+        guideAnchor: "rutas"
       },
       {
         id: "nav",
@@ -133,80 +180,25 @@
         bodyKey: "tour.s6.body",
         target: ".header-actions",
         place: "bottom",
-        ensureHome: true
-      },
-      {
-        id: "cockpit",
-        titleKey: "tour.s7.title",
-        bodyKey: "tour.s7.body",
-        target: "#practice-cockpit",
-        place: "bottom",
-        openSampleExercise: true
-      },
-      {
-        id: "start",
-        titleKey: "tour.s8.title",
-        bodyKey: "tour.s8.body",
-        target: "#btn-practice-start",
-        place: "top",
-        openSampleExercise: true
-      },
-      {
-        id: "highway",
-        titleKey: "tour.s9.title",
-        bodyKey: "tour.s9.body",
-        target: "#highway-stage",
-        place: "bottom",
-        openSampleExercise: true,
-        preferSinging: true
-      },
-      {
-        id: "hud",
-        titleKey: "tour.s10.title",
-        bodyKey: "tour.s10.body",
-        target: ".hud-bl",
-        place: "top",
-        openSampleExercise: true
-      },
-      {
-        id: "metrics",
-        titleKey: "tour.s11.title",
-        bodyKey: "tour.s11.body",
-        target: "#btn-complete",
-        place: "top",
-        openSampleExercise: true,
-        scrollTarget: true
-      },
-      {
-        id: "done",
-        titleKey: "tour.s12.title",
-        bodyKey: "tour.s12.body",
-        target: null,
-        place: "center",
-        ensureHome: true
+        guideAnchor: "que-es"
       }
     ];
   }
 
   /**
-   * Exercise UI packs — only steps whose targets are visible are shown.
+   * Exercise UI packs — only steps whose targets are really on screen run.
    * Families: highway | speech | hold
    */
   function packSteps(family) {
     const common = [
       {
-        id: "ex-start",
-        titleKey: "uiTour.start.title",
-        bodyKey: "uiTour.start.body",
-        target: "#btn-practice-start",
-        place: "top"
-      },
-      {
         id: "ex-mic",
         titleKey: "uiTour.mic.title",
         bodyKey: "uiTour.mic.body",
         target: "#mic-sens-hud",
-        place: "top"
+        place: "top",
+        requireVisible: true,
+        guideAnchor: "micro"
       },
       {
         id: "ex-guide",
@@ -214,7 +206,9 @@
         bodyKey: "uiTour.guide.body",
         target: ".guide-card",
         place: "top",
-        scrollTarget: true
+        requireVisible: true,
+        scrollTarget: true,
+        guideAnchor: "practica"
       }
     ];
 
@@ -225,21 +219,26 @@
           titleKey: "uiTour.hw.intro.title",
           bodyKey: "uiTour.hw.intro.body",
           target: "#practice-cockpit",
-          place: "bottom"
+          place: "bottom",
+          requireVisible: true,
+          guideAnchor: "practica"
         },
         {
           id: "hw-canvas",
           titleKey: "uiTour.hw.canvas.title",
           bodyKey: "uiTour.hw.canvas.body",
           target: "#pitch-canvas",
-          place: "bottom"
+          place: "bottom",
+          requireVisible: true,
+          guideAnchor: "autopista"
         },
         {
           id: "hw-top",
           titleKey: "uiTour.hw.top.title",
           bodyKey: "uiTour.hw.top.body",
           target: "#hud-top-rail",
-          place: "bottom"
+          place: "bottom",
+          requireVisible: true
         },
         {
           id: "hw-prog",
@@ -254,14 +253,30 @@
           titleKey: "uiTour.hw.score.title",
           bodyKey: "uiTour.hw.score.body",
           target: "#pitch-game-hud",
-          place: "bottom"
+          place: "bottom",
+          requireVisible: true,
+          guideAnchor: "numeros"
+        },
+        // Eight pitch exercises also log sustained notes. They show the hold
+        // readout and the hold strip on screen, and before this the highway
+        // pack never named either — detectUiFamily answers "highway" for all
+        // of them, so the hold pack below never ran for anybody.
+        {
+          id: "hw-hold",
+          titleKey: "uiTour.hold.live.title",
+          bodyKey: "uiTour.hold.live.body",
+          target: "#hold-display",
+          place: "bottom",
+          requireVisible: true,
+          guideAnchor: "numeros"
         },
         {
           id: "hw-start",
           titleKey: "uiTour.start.title",
           bodyKey: "uiTour.start.body",
           target: "#btn-practice-start",
-          place: "top"
+          place: "top",
+          requireVisible: true
         },
         {
           id: "hw-oct",
@@ -276,7 +291,7 @@
           titleKey: "uiTour.hw.mode.title",
           bodyKey: "uiTour.hw.mode.body",
           target: "#sel-play-mode",
-          place: "top",
+          place: "bottom",
           requireVisible: true
         },
         {
@@ -287,6 +302,7 @@
           place: "top",
           requireVisible: true
         },
+        ...common,
         {
           id: "hw-done",
           titleKey: "uiTour.done.title",
@@ -304,7 +320,8 @@
           titleKey: "uiTour.hold.intro.title",
           bodyKey: "uiTour.hold.intro.body",
           target: "#practice-cockpit",
-          place: "bottom"
+          place: "bottom",
+          requireVisible: true
         },
         {
           id: "hold-live",
@@ -312,6 +329,15 @@
           bodyKey: "uiTour.hold.live.body",
           target: "#hold-display",
           place: "bottom",
+          requireVisible: true,
+          guideAnchor: "numeros"
+        },
+        {
+          id: "hold-start",
+          titleKey: "uiTour.start.title",
+          bodyKey: "uiTour.start.body",
+          target: "#btn-practice-start",
+          place: "top",
           requireVisible: true
         },
         ...common,
@@ -340,7 +366,9 @@
         titleKey: "uiTour.sp.intro.title",
         bodyKey: "uiTour.sp.intro.body",
         target: "#practice-cockpit",
-        place: "bottom"
+        place: "bottom",
+        requireVisible: true,
+        guideAnchor: "practica"
       },
       {
         id: "sp-focus",
@@ -348,6 +376,14 @@
         bodyKey: "uiTour.sp.focus.body",
         target: "#mode-focus",
         place: "bottom",
+        requireVisible: true
+      },
+      {
+        id: "sp-start",
+        titleKey: "uiTour.start.title",
+        bodyKey: "uiTour.start.body",
+        target: "#btn-practice-start",
+        place: "top",
         requireVisible: true
       },
       ...common,
@@ -379,17 +415,20 @@
     return r.width > 2 && r.height > 2;
   }
 
+  /**
+   * Keep only steps that will actually have something to point at. Every
+   * anchored step is checked strictly: a step whose element exists but is
+   * `display:none` used to survive and then render as a bare centered card
+   * describing a control that was nowhere on screen.
+   */
   function filterSteps(list) {
     return (list || []).filter((step) => {
       if (!step.target) return true;
-      const el = document.querySelector(step.target);
-      if (step.requireVisible) return isVisible(el);
-      // Soft: skip if totally missing
-      if (!el) return false;
-      if (el.hidden) return false;
-      return true;
+      return isVisible(document.querySelector(step.target));
     });
   }
+
+  /* ── Overlay ──────────────────────────────────────────────────────────── */
 
   let ui = null;
   let index = 0;
@@ -397,22 +436,28 @@
   let currentPack = null; // null = home tour
   let stayOnEnd = false;
   let stepList = [];
+  let listening = false;
 
   function ensureUI() {
     if (ui) return ui;
     const root = document.createElement("div");
     root.id = "tour-root";
-    root.className = "tour-root";
+    // `modal-overlay` is also what qa/capture-mobile.mjs uses to tell which
+    // layer a control belongs to; without it the card's buttons are compared
+    // against the page buttons behind the backdrop and reported as overlaps.
+    root.className = "tour-root modal-overlay";
     root.hidden = true;
     root.innerHTML = `
       <div class="tour-backdrop" data-tour-backdrop></div>
       <div class="tour-spotlight" data-tour-spot aria-hidden="true"></div>
-      <div class="tour-card" role="dialog" aria-modal="true" aria-labelledby="tour-title" data-tour-card>
-        <div class="tour-progress" data-tour-progress></div>
-        <h3 id="tour-title" data-tour-title></h3>
-        <p class="tour-body" data-tour-body></p>
+      <div class="tour-card" role="dialog" aria-modal="true" aria-labelledby="tour-title" aria-describedby="tour-body" data-tour-card>
+        <button type="button" class="tour-close" data-tour-close aria-label="Cerrar">&times;</button>
+        <div class="tour-progress" data-tour-progress role="status"></div>
+        <h3 id="tour-title" tabindex="-1" data-tour-title></h3>
+        <p class="tour-body" id="tour-body" data-tour-body></p>
         <div class="tour-actions">
           <button type="button" class="btn btn-ghost btn-sm" data-tour-skip></button>
+          <a class="btn btn-ghost btn-sm tour-guide-link" data-tour-guide href="guide.html" target="_blank" rel="noopener"></a>
           <div class="tour-nav">
             <button type="button" class="btn btn-sm" data-tour-prev></button>
             <button type="button" class="btn btn-primary btn-sm" data-tour-next></button>
@@ -428,31 +473,60 @@
       title: root.querySelector("[data-tour-title]"),
       body: root.querySelector("[data-tour-body]"),
       progress: root.querySelector("[data-tour-progress]"),
+      close: root.querySelector("[data-tour-close]"),
+      guide: root.querySelector("[data-tour-guide]"),
       skip: root.querySelector("[data-tour-skip]"),
       prev: root.querySelector("[data-tour-prev]"),
       next: root.querySelector("[data-tour-next]")
     };
-    ui.skip.addEventListener("click", () => end(true));
+    ui.skip.addEventListener("click", () => end("skip"));
+    ui.close.addEventListener("click", () => end("skip"));
     ui.prev.addEventListener("click", () => go(index - 1));
     ui.next.addEventListener("click", () => {
-      if (index >= stepList.length - 1) end(true);
+      if (index >= stepList.length - 1) end("complete");
       else go(index + 1);
     });
-    root.querySelector("[data-tour-backdrop]")?.addEventListener("click", () => {
-      /* intentional skip only */
+    ui.guide.addEventListener("click", () => {
+      track("tour_guide_open", { stepId: stepList[index]?.id || null, pack: currentPack });
     });
+    // A click on the dim used to be swallowed in silence. It is the commonest
+    // way people dismiss an overlay, so let it dismiss.
+    root.querySelector("[data-tour-backdrop]")?.addEventListener("click", () => end("skip"));
+    return ui;
+  }
+
+  function bindListeners() {
+    if (listening) return;
     document.addEventListener("keydown", onKey);
     window.addEventListener("resize", onResize);
     window.addEventListener("scroll", onResize, true);
-    return ui;
+    listening = true;
+  }
+
+  function unbindListeners() {
+    if (!listening) return;
+    document.removeEventListener("keydown", onKey);
+    window.removeEventListener("resize", onResize);
+    window.removeEventListener("scroll", onResize, true);
+    listening = false;
   }
 
   function onKey(e) {
     if (!active) return;
     if (e.key === "Escape") {
       e.preventDefault();
-      end(true);
-    } else if (e.key === "ArrowRight" || e.key === "Enter") {
+      end("dismiss");
+      return;
+    }
+    // Enter used to be captured globally, so a keyboard user who tabbed to
+    // "Skip" and pressed Enter was pushed forward instead of out. Let a
+    // focused control in the card handle its own activation.
+    const onOwnControl =
+      ui &&
+      ui.card.contains(document.activeElement) &&
+      /^(BUTTON|A)$/.test(document.activeElement.tagName || "");
+    if (e.key === "Enter" && onOwnControl) return;
+    if (e.key === "ArrowRight" || e.key === "Enter") {
       e.preventDefault();
       ui.next.click();
     } else if (e.key === "ArrowLeft") {
@@ -462,7 +536,10 @@
   }
 
   function onResize() {
-    if (active && stepList[index]) positionStep(stepList[index]);
+    // Layout only. Scrolling here would fight the corrective scroll below:
+    // moving the page fires this listener, which re-centred the target and
+    // undid the correction, every time.
+    if (active && stepList[index]) positionStep(stepList[index], { scroll: false });
   }
 
   function goHome() {
@@ -478,39 +555,11 @@
     }
   }
 
-  function openSample(preferSinging) {
-    if (preferSinging) {
-      const singingTab = document.querySelector('.tab[data-tab="singing"]');
-      if (singingTab && !singingTab.classList.contains("active")) singingTab.click();
-      const basic = document.querySelector('.tier-chip[data-tier="basic"]');
-      if (basic) basic.click();
-    } else {
-      const vocalTab = document.querySelector('.tab[data-tab="vocal"]');
-      if (vocalTab && !vocalTab.classList.contains("active")) vocalTab.click();
-      const basic = document.querySelector('.tier-chip[data-tier="basic"]');
-      if (basic) basic.click();
-    }
-    const card = document.querySelector("#exercise-list .card-ex");
-    if (card) card.click();
-  }
-
   function prepare(step) {
-    if (step.ensureHome) {
-      goHome();
-      if (step.id === "tabs" || step.id === "tiers" || step.id === "cards") {
-        const vocal = document.querySelector('.tab[data-tab="vocal"]');
-        if (vocal && !vocal.classList.contains("active")) vocal.click();
-      }
-    }
-    if (step.openSampleExercise) {
-      const onEx = document.getElementById("view-exercise")?.classList.contains("active");
-      if (!onEx || step.preferSinging) {
-        openSample(!!step.preferSinging);
-      }
-    }
     if (step.scrollTarget && step.target) {
-      const el = document.querySelector(step.target);
-      el?.scrollIntoView({ behavior: "smooth", block: "center" });
+      document
+        .querySelector(step.target)
+        ?.scrollIntoView({ behavior: scrollBehavior(), block: "center" });
     }
   }
 
@@ -520,63 +569,158 @@
     });
   }
 
-  function positionStep(step) {
+  function hideSpot() {
+    if (!ui) return;
+    ui.spot.style.opacity = "0";
+    ui.spot.style.width = "0";
+    ui.spot.style.height = "0";
+    // With no ring drawn the dim moves back onto the backdrop, or the step
+    // would show over an undimmed page.
+    document.body.classList.remove("tour-spot-on");
+  }
+
+  function centerCard() {
+    const u = ensureUI();
+    u.card.classList.add("tour-card-center");
+    u.card.style.top = "";
+    u.card.style.left = "";
+  }
+
+  function intersects(a, b) {
+    return !(
+      a.left >= b.right ||
+      a.right <= b.left ||
+      a.top >= b.bottom ||
+      a.bottom <= b.top
+    );
+  }
+
+  /**
+   * Pick a placement that keeps the popover fully on screen and clear of the
+   * element it describes. The old code pinned the card to the target's left
+   * edge and, for `place:"top"`, never checked that the result cleared the
+   * target — which is how the step explaining the play-mode select covered it
+   * completely.
+   */
+  function placeCard(step, r) {
+    const u = ui;
+    const cw = u.card.offsetWidth;
+    const ch = u.card.offsetHeight;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const M = 12;
+    const GAP = 12;
+
+    const clampX = (x) => Math.max(M, Math.min(x, vw - cw - M));
+    const clampY = (y) => Math.max(M, Math.min(y, vh - ch - M));
+    const midX = clampX(r.left + r.width / 2 - cw / 2);
+    const midY = clampY(r.top + r.height / 2 - ch / 2);
+
+    const byPlace = {
+      bottom: { left: midX, top: r.bottom + GAP },
+      top: { left: midX, top: r.top - GAP - ch },
+      right: { left: r.right + GAP, top: midY },
+      left: { left: r.left - GAP - cw, top: midY }
+    };
+    const order = [step.place, "bottom", "top", "right", "left"].filter(
+      (p, i, a) => byPlace[p] && a.indexOf(p) === i
+    );
+
+    for (const place of order) {
+      const c = byPlace[place];
+      const box = {
+        left: c.left,
+        top: c.top,
+        right: c.left + cw,
+        bottom: c.top + ch
+      };
+      const onScreen =
+        box.left >= M - 0.5 &&
+        box.top >= M - 0.5 &&
+        box.right <= vw - M + 0.5 &&
+        box.bottom <= vh - M + 0.5;
+      if (onScreen && !intersects(box, r)) {
+        u.card.classList.remove("tour-card-center");
+        u.card.style.left = `${Math.round(c.left)}px`;
+        u.card.style.top = `${Math.round(c.top)}px`;
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function positionStep(step, { scroll = true } = {}) {
     const u = ensureUI();
     clearHighlight();
-    u.spot.style.opacity = "0";
-    u.spot.style.width = "0";
-    u.spot.style.height = "0";
+    hideSpot();
 
-    if (!step.target || step.place === "center") {
-      u.card.classList.add("tour-card-center");
-      u.card.style.top = "50%";
-      u.card.style.left = "50%";
-      u.card.style.transform = "translate(-50%, -50%)";
-      u.card.style.width = `${Math.min(400, window.innerWidth - 24)}px`;
-      return;
-    }
+    const sheet = window.innerWidth <= SHEET_MAX_W;
+    const el = step.target ? document.querySelector(step.target) : null;
 
-    u.card.classList.remove("tour-card-center");
-    const el = document.querySelector(step.target);
-    if (!el || !isVisible(el)) {
-      u.card.classList.add("tour-card-center");
-      u.card.style.top = "50%";
-      u.card.style.left = "50%";
-      u.card.style.transform = "translate(-50%, -50%)";
+    if (!step.target || step.place === "center" || !isVisible(el)) {
+      centerCard();
       return;
     }
 
     el.classList.add("tour-highlight");
-    el.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+    // Instant, not smooth: every measurement below is taken straight after
+    // this, and a smooth scroll is still moving when they are read.
+    if (scroll) el.scrollIntoView({ behavior: "auto", block: "center", inline: "nearest" });
 
-    const r = el.getBoundingClientRect();
+    let r = el.getBoundingClientRect();
+    const vh = window.innerHeight;
+    const vw = window.innerWidth;
+
+    // On a phone the card is a bottom sheet positioned by CSS; JS only decides
+    // whether a spotlight is worth drawing.
+    if (!sheet) {
+      const placed = placeCard(step, r);
+      if (!placed) centerCard();
+    } else {
+      u.card.classList.remove("tour-card-center");
+      u.card.style.left = "";
+      u.card.style.top = "";
+      // The sheet defaults to the bottom, which is exactly where the practice
+      // screen keeps its controls. Flip it to the top when the bottom would
+      // cover the target, and only then try scrolling the target clear.
+      u.card.classList.remove("tour-sheet-top");
+      if (intersects(u.card.getBoundingClientRect(), r)) {
+        u.card.classList.add("tour-sheet-top");
+        if (intersects(u.card.getBoundingClientRect(), r)) {
+          u.card.classList.remove("tour-sheet-top");
+          const cardTop = u.card.getBoundingClientRect().top;
+          const delta = r.bottom - (cardTop - 10);
+          if (scroll && delta > 0) {
+            window.scrollBy({ top: delta, behavior: "auto" });
+            r = el.getBoundingClientRect();
+          }
+        }
+      }
+    }
+
+    // A ring around something taller than most of the screen points at
+    // nothing — the exercise list is 3000px tall. Leave it unlit rather than
+    // outlining the whole viewport.
     const pad = 8;
-    u.spot.style.opacity = "1";
-    u.spot.style.left = `${Math.max(4, r.left - pad)}px`;
-    u.spot.style.top = `${Math.max(4, r.top - pad)}px`;
-    u.spot.style.width = `${Math.min(window.innerWidth - 8, r.width + pad * 2)}px`;
-    u.spot.style.height = `${Math.min(window.innerHeight - 8, r.height + pad * 2)}px`;
+    const top = Math.max(4, r.top - pad);
+    const bottom = Math.min(vh - 4, r.bottom + pad);
+    const left = Math.max(4, r.left - pad);
+    const right = Math.min(vw - 4, r.right + pad);
+    const h = bottom - top;
+    const w = right - left;
+    if (h <= 0 || w <= 0 || r.height > vh * MAX_SPOT_FRACTION) return;
 
-    const cardW = Math.min(400, window.innerWidth - 24);
-    // Measure actual card after content set — use generous estimate then clamp
-    const cardH = Math.min(280, Math.max(160, u.card.offsetHeight || 220));
-    let top = r.bottom + 12;
-    let left = Math.min(Math.max(12, r.left), window.innerWidth - cardW - 12);
-    if (step.place === "top" || top + cardH > window.innerHeight - 12) {
-      top = Math.max(12, r.top - cardH - 12);
-    }
-    if (step.place === "bottom" && r.bottom + cardH + 24 < window.innerHeight) {
-      top = r.bottom + 14;
-    }
-    u.card.style.transform = "none";
-    u.card.style.left = `${left}px`;
-    u.card.style.top = `${Math.max(12, Math.min(top, window.innerHeight - cardH - 12))}px`;
-    u.card.style.width = `${cardW}px`;
+    u.spot.style.opacity = "1";
+    u.spot.style.left = `${left}px`;
+    u.spot.style.top = `${top}px`;
+    u.spot.style.width = `${w}px`;
+    u.spot.style.height = `${h}px`;
+    document.body.classList.add("tour-spot-on");
   }
 
   function render() {
     const step = stepList[index];
-    if (!step) return end(true);
+    if (!step) return end("complete");
     const u = ensureUI();
     prepare(step);
     // Copy is written synchronously: beginTour unhides the popover before this
@@ -587,27 +731,58 @@
       n: String(index + 1),
       total: String(stepList.length)
     });
+    u.close.setAttribute("aria-label", t("tour.close"));
     u.skip.textContent = t("tour.skip");
     u.prev.textContent = t("tour.prev");
+    u.guide.textContent = t("tour.guideLink");
+    u.guide.href = guideHref(step.guideAnchor);
     u.next.textContent = index >= stepList.length - 1 ? t("tour.finish") : t("tour.next");
     u.prev.disabled = index === 0;
     u.prev.setAttribute("aria-disabled", String(index === 0));
-    // Placement still waits for layout to settle after prepare()'s scroll.
+    track("tour_step", { pack: currentPack, stepId: step.id, n: index + 1, total: stepList.length });
+    // Placement waits for layout to settle after prepare()'s scroll, and reads
+    // the card's real height — the old estimate was written before the copy.
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         positionStep(step);
+        // Focus the heading, not Next: an AT user used to hear "Next, button"
+        // on every step and never the step itself.
         try {
-          u.next.focus({ preventScroll: true });
+          u.title.focus({ preventScroll: true });
         } catch {
-          u.next.focus();
+          u.title.focus();
         }
       });
     });
   }
 
+  /** Re-render the open step, e.g. after a language switch. */
+  function rerender() {
+    if (active) render();
+  }
+
+  function guideHref(anchor) {
+    const en = global.VTI18n?.lang === "en";
+    const base = anchor || "que-es";
+    return `guide.html#${en ? `${base}-en` : base}`;
+  }
+
   function go(i) {
     index = Math.max(0, Math.min(stepList.length - 1, i));
     render();
+  }
+
+  function setPageInert(on) {
+    // `aria-modal` alone is a promise the page does not keep: without this a
+    // screen reader can still walk the whole dimmed page behind the card.
+    ["#view-home", "#view-exercise", "#view-history", "#view-plan", ".app-header", ".app-footer"].forEach(
+      (sel) => {
+        document.querySelectorAll(sel).forEach((el) => {
+          if (on) el.setAttribute("inert", "");
+          else el.removeAttribute("inert");
+        });
+      }
+    );
   }
 
   function beginTour(steps, { fromButton, pack, stay } = {}) {
@@ -624,8 +799,17 @@
     stayOnEnd = !!stay;
     ui.root.hidden = false;
     document.body.classList.add("tour-active");
+    setPageInert(true);
+    bindListeners();
     if (fromButton && !pack) goHome();
-    // Keep Tab inside the tour card; steps may click page chrome behind it.
+    track("tour_start", {
+      pack: currentPack,
+      steps: stepList.length,
+      authored: steps.length,
+      fromButton: !!fromButton,
+      variant: global.VTExperiments?.variant?.(EXPERIMENT) || null
+    });
+    // Keep Tab inside the tour card.
     window.VTFocusTrap?.activate(ui.card, { initialFocus: ui.next, returnFocus: opener });
     render();
   }
@@ -669,8 +853,8 @@
   function maybeExerciseTour(profile) {
     if (shouldBlockAuto()) return;
     if (active) return;
-    // Don't stack on first-visit home tour
-    if (!done()) return;
+    // Somebody who skipped the home tour does not want coach-marks either.
+    if (!finished()) return;
     const family = detectUiFamily(profile);
     if (isUiSeen(family)) return;
     setTimeout(() => {
@@ -680,19 +864,37 @@
     }, 700);
   }
 
-  function end(mark) {
+  /**
+   * @param {"complete"|"skip"|"dismiss"|false} reason how the tour ended.
+   *   Anything truthy stops it opening again; only "complete" counts as
+   *   finished. `false` closes without recording anything, for a replay that
+   *   is being restarted.
+   */
+  function end(reason) {
     const pack = currentPack;
     const stay = stayOnEnd;
+    const step = stepList[index];
     active = false;
     clearHighlight();
+    document.body.classList.remove("tour-active");
+    document.body.classList.remove("tour-spot-on");
+    // Lift inert before releasing the trap, or focus cannot return to the
+    // button that opened the tour — it is in the header we just made inert.
+    setPageInert(false);
+    unbindListeners();
     if (ui) {
       ui.root.hidden = true;
       window.VTFocusTrap?.release(ui.card);
     }
-    document.body.classList.remove("tour-active");
-    if (mark) {
+    if (reason) {
+      track(`tour_${reason}`, {
+        pack,
+        lastStepId: step?.id || null,
+        n: index + 1,
+        total: stepList.length
+      });
       if (pack) markUiSeen(pack);
-      else markDone();
+      else writeState(reason === "complete" ? "finished" : "dismissed");
     }
     currentPack = null;
     stayOnEnd = false;
@@ -700,18 +902,121 @@
     if (!stay) goHome();
   }
 
+  /**
+   * First visit: either open the tour, or leave the start panel's invitation to
+   * do the asking. Which one is the `tour_shape_2026_10` experiment; with it
+   * disabled everybody gets the invitation.
+   */
   function maybeAutoStart() {
     if (done()) return;
     if (shouldBlockAuto()) return;
-    setTimeout(() => start(false), 600);
+    const variant = global.VTExperiments?.exposeOnce?.(EXPERIMENT) || "invite";
+    if (variant !== "auto") return;
+    setTimeout(() => {
+      if (!active && !done()) start(false);
+    }, 600);
   }
+
+  /* ── Microphone primer ────────────────────────────────────────────────── */
+
+  function micPrimed() {
+    try {
+      return localStorage.getItem(MIC_PRIMED_KEY) === "1";
+    } catch {
+      return false;
+    }
+  }
+
+  function needsMicPrimer() {
+    if (micPrimed()) return false;
+    if (shouldBlockAuto()) return false;
+    return true;
+  }
+
+  function markMicPrimed() {
+    try {
+      localStorage.setItem(MIC_PRIMED_KEY, "1");
+    } catch {
+      /* ignore */
+    }
+  }
+
+  /**
+   * Say what the browser is about to ask, before it asks. A denial is only
+   * undoable in browser settings, and on a pitch exercise a denied microphone
+   * currently looks like success — the piano plays, the highway moves, and
+   * only the voice line is missing.
+   *
+   * @param {() => void} onContinue runs when the user accepts; the caller
+   *   re-enters whatever it was doing.
+   */
+  function showMicPrimer(onContinue) {
+    const opener = document.activeElement;
+    let modal = document.getElementById("mic-primer");
+    if (!modal) {
+      modal = document.createElement("div");
+      modal.id = "mic-primer";
+      modal.className = "modal-overlay mic-primer";
+      modal.hidden = true;
+      modal.innerHTML = `
+        <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="mic-primer-title">
+          <h3 id="mic-primer-title" data-primer-title></h3>
+          <p class="muted" data-primer-body></p>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-ghost" data-primer-no></button>
+            <button type="button" class="btn btn-primary" data-primer-ok></button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+    }
+    const close = () => {
+      modal.hidden = true;
+      document.body.classList.remove("modal-open");
+      window.VTFocusTrap?.release(modal);
+      document.removeEventListener("keydown", onPrimerKey);
+    };
+    function onPrimerKey(e) {
+      if (e.key !== "Escape" || modal.hidden) return;
+      e.preventDefault();
+      track("mic_primer_dismiss", {});
+      markMicPrimed();
+      close();
+    }
+    modal.querySelector("[data-primer-title]").textContent = t("tour.mic.title");
+    modal.querySelector("[data-primer-body]").textContent = t("tour.mic.body");
+    const ok = modal.querySelector("[data-primer-ok]");
+    const no = modal.querySelector("[data-primer-no]");
+    ok.textContent = t("tour.mic.ok");
+    no.textContent = t("tour.mic.no");
+    ok.onclick = () => {
+      track("mic_primer_accept", {});
+      markMicPrimed();
+      close();
+      if (typeof onContinue === "function") onContinue();
+    };
+    no.onclick = () => {
+      track("mic_primer_decline", {});
+      markMicPrimed();
+      close();
+    };
+    modal.hidden = false;
+    document.body.classList.add("modal-open");
+    document.addEventListener("keydown", onPrimerKey);
+    track("mic_primer_show", {});
+    window.VTFocusTrap?.activate(modal, { initialFocus: ok, returnFocus: opener });
+  }
+
+  /* ── Wiring ───────────────────────────────────────────────────────────── */
 
   function bindReplayButton() {
     const btn = document.getElementById("btn-tour");
     if (!btn || btn.dataset.tourBound) return;
     btn.dataset.tourBound = "1";
     btn.addEventListener("click", () => {
-      clearDone();
+      // Deliberately does NOT clear the stored state first: doing so meant
+      // skipping a replay re-armed the auto-start on the next visit.
+      if (active) end(false);
       start(true);
     });
   }
@@ -742,24 +1047,54 @@
     });
   }
 
+  /** Wire the start panel's invitation, which renderStartPanel() emits. */
+  function bindInvite() {
+    const start_ = document.querySelector("[data-tour-invite-start]");
+    if (start_ && !start_.dataset.tourBound) {
+      start_.dataset.tourBound = "1";
+      start_.addEventListener("click", (e) => {
+        e.preventDefault();
+        track("tour_invite_accept", {});
+        start(true);
+      });
+    }
+    const dismiss = document.querySelector("[data-tour-invite-dismiss]");
+    if (dismiss && !dismiss.dataset.tourBound) {
+      dismiss.dataset.tourBound = "1";
+      dismiss.addEventListener("click", () => {
+        track("tour_invite_dismiss", {});
+        writeState("dismissed");
+        document.getElementById("home-tour-invite")?.remove();
+      });
+    }
+  }
+
   global.VTTour = {
     start,
     end,
     maybeAutoStart,
     bindReplayButton,
     bindUiHelpButton,
+    bindInvite,
     isDone: done,
+    isFinished: finished,
+    isActive: () => active,
+    rerender,
     reset: clearDone,
     startUiPack,
     maybeExerciseTour,
     detectUiFamily,
     isUiSeen,
     clearUiSeen,
-    markUiSeen
+    markUiSeen,
+    needsMicPrimer,
+    showMicPrimer,
+    guideHref
   };
 
   document.addEventListener("DOMContentLoaded", () => {
     bindReplayButton();
     bindUiHelpButton();
+    bindInvite();
   });
 })(window);

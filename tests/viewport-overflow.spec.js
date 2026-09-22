@@ -113,6 +113,15 @@ for (const vp of VIEWPORTS) {
       expect(m.scrollW).toBeLessThanOrEqual(m.clientW + 2);
     });
 
+    test("user guide has no horizontal page scroll", async ({ page }) => {
+      await page.goto(`${BASE}/guide.html`, { waitUntil: "domcontentloaded" });
+      const m = await page.evaluate(() => ({
+        scrollW: document.documentElement.scrollWidth,
+        clientW: document.documentElement.clientWidth
+      }));
+      expect(m.scrollW).toBeLessThanOrEqual(m.clientW + 2);
+    });
+
     test("pitch exercise: stage + start stay inside viewport", async ({ page }) => {
       await boot(page);
       await openPitchExercise(page);

@@ -14,6 +14,12 @@
  * `<worker URL>/v1/events`; results are then in the account panel for an
  * admin, and at GET /v1/admin/experiments/results?experiment=<key>. Run
  * `aa_2026_10` first. The whole procedure is in docs/38-AB-TESTING.md.
+ *
+ * The worker keeps the other half of each entry: EXPERIMENT_PRESETS in
+ * workers/entitlements/src/events.js lists the same keys, arm ids and weights
+ * (a test fails if they differ), what each test is judged on, and its plan —
+ * how many people per arm and how many days before the result opens. An
+ * experiment missing there splits the audience but records no exposures.
  */
 (function (global) {
   "use strict";
@@ -30,10 +36,12 @@
 
   global.VT_EXPERIMENTS = {
     /**
-     * A/A check: two identical arms. Switch this on alone, first, for a week
-     * or two after the endpoint is live. The split should be even (no SRM
-     * flag) and the arms should not differ; if either fails, assignment or
-     * logging is broken and no real test result can be trusted yet.
+     * A/A check: two identical arms. Switch this on alone, first, after the
+     * endpoint is live. Plan: 150 per arm, at least 14 days. The split should
+     * be even (no SRM flag), no event should be flagged as counted differently,
+     * and the arms should not differ; if any of that fails, assignment or
+     * logging is broken and no real test result can be trusted yet. One A/A
+     * in twenty shows p < 0.05 by chance: run it again before digging.
      */
     aa_2026_10: {
       enabled: false,
@@ -51,8 +59,11 @@
      *   line offering the tour or the written guide.
      * treatment "auto" — the tour opens itself ~600ms after a first visit.
      *
-     * Compare `tour_complete` / `tour_start` between arms, and `first_win`
-     * (js/app.js) as the outcome that actually matters.
+     * Primary: share with a `first_win` (the first rated save, js/app.js) in
+     * their first 7 days. Guardrails: share with a practice day in the first
+     * 7 days, and on the first day. The tour's own events (`tour_start`,
+     * `tour_dismiss`...) are what the arms change, so they are never compared.
+     * Plan: 160 per arm, at least 14 days.
      */
     tour_shape_2026_10: {
       enabled: false,
@@ -82,10 +93,14 @@
      * treatment "classic" — the panel as it was: next exercise or daily class.
      *   The loop's data still records in both arms, and the bug fixes under it
      *   (practice kept on every exit, local days, rest days) apply to both.
+     *   `practice_day` is sent in both arms too; the loop's own events
+     *   (`basics_complete`...) exist only in the loop arm, so they are never
+     *   compared.
      *
-     * Primary: share who practise on some day in days 22-28 after their first
-     * practice day (`practice_day` events). Guardrail: `basics_complete` per
-     * person must not fall in the loop arm.
+     * Primary: share with a `practice_day` in the fourth week after first
+     * seeing the start panel (days 21-27). Guardrails: practice days in the
+     * first 28, and the share who refuse the microphone.
+     * Plan: 355 per arm (30% -> 40%), at least 28 days.
      * Control is listed first because it is what ships.
      */
     loop_home_2026_10: {
@@ -103,10 +118,14 @@
      *   a comeback and after seven without one.
      * treatment "none" — the same loop with no surprises at all.
      *
+     * Primary: practice days in the 28 after the first finished routine.
+     * Guardrail: finished routines (`basics_complete` days) in the same 28.
+     * Plan: 250 per arm (+1.5 days), at least 28 days.
+     *
      * Surprises fire repeatedly, so this is a natural micro-randomised trial:
-     * when an endpoint exists, randomise per finished routine instead of per
-     * browser, and the outcome becomes "practised again within 48 hours".
-     * That design needs roughly 40 people, not hundreds (Klasnja et al. 2015).
+     * randomising per finished routine instead of per browser, with the
+     * outcome "practised again within 48 hours", would need roughly 40 people,
+     * not hundreds (Klasnja et al. 2015). The worker does not do that yet.
      */
     loop_surprise_2026_10: {
       enabled: false,
@@ -122,9 +141,10 @@
      * control "three" — trills and trill solfège, 90 s each.
      * treatment "five" — the same two, 150 s each.
      *
-     * Primary: practice days in the first 28 days. Expect a small effect
-     * either way; this is only worth running with an endpoint and ~500+
-     * people per arm.
+     * Primary: practice days in the 28 after first starting the Mínimo.
+     * Guardrail: the share who leave a Mínimo unfinished (`basics_incomplete`).
+     * Plan: 565 per arm (+1 day), at least 28 days. Expect a small effect
+     * either way; this is only worth running with that many people.
      */
     loop_minimo_len_2026_10: {
       enabled: false,

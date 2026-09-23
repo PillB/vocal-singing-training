@@ -81,10 +81,72 @@ routes above are untouched):
 | POST/GET | `/v1/admin/grants` | Gift months straight to an email, or list an account's grants. |
 | POST | `/v1/admin/grants/revoke` | Take a gifted month back. |
 | GET | `/v1/admin/account` | Look an account up by email. |
-| POST | `/v1/admin/sweep` | Delete expired sessions, codes and rate-limit rows. |
+| POST | `/v1/admin/sweep` | Delete expired sessions, codes and rate-limit rows, and events, exposures and ingest counters past 180 days. |
+
+Anonymous usage events and A/B results (`src/events.js`; also need `DB`):
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| POST | `/v1/events` | A batch of up to 25 events from the site's beacon (`text/plain` JSON). `200 {ok, accepted, dropped}`; `202` and nothing stored for GPC/DNT, automated user agents, or `EVENTS_ENABLED=false`; `403` from any origin but `SITE_ORIGIN`; `429` past a limit (below). |
+| POST | `/v1/events/forget` | `{cid}` → deletes every event and exposure for that browser id: `200 {ok, deleted: {events, exposures}}`. Sent by the guide's opt-out switch. Always allowed (GPC, DNT and the kill switch do not stop a deletion); origin-checked, 30 per address per hour. |
+| GET | `/v1/admin/experiments` | Every registered experiment with exposures per arm and the sample-ratio check, plus `ingest`: the last 7 days of ingest counters and when the last event arrived. |
+| GET | `/v1/admin/experiments/results?experiment=KEY` | The preset primary metric and guardrails per arm, the sample-ratio check, the instrumentation check (`eventMix`), where the test stands against its plan (`horizon`), and a one-word `readMe`. `event`/`kind`/`from`/`to` ask for one exploratory metric instead; `control` and `weights` override the registry's. `404` for a key not in the registry. |
 
 Admin routes require a session whose email is in `ADMIN_EMAILS`; that list is
 read per request, so removing an address revokes it on the next deploy.
+
+### Reading an A/B result
+
+`EXPERIMENT_PRESETS` in `src/events.js` is the registry: for each experiment
+its arms and weights (the same as `js/experiments-config.js`; a test fails if
+they differ), what it is judged on, and its **plan** — `nPerArm` people per arm
+and at least `minDays` days since the first exposure. An exposure for a key or
+an arm not in the registry is kept as a plain event and never counted.
+
+- **Fixed horizon.** The result is read on the people exposed up to the moment
+  the last arm reached `nPerArm`, once all of them are past their longest
+  metric window and `minDays` have passed (`horizon.readyAt`). Before that the
+  answer has each arm's counts and intervals but no differences and no
+  p-values (`withheld: true`), and `readyAt` is an estimate from the arrival
+  rate (`estimated: true`). After it the answer no longer changes, so looking
+  again cannot move it.
+- **`readMe`**, most serious first: `srm` (the split does not match the
+  weights, chi-square p < 0.001), `instrumentation` (an arm does not send an
+  event the result reads, or `app_open` arrives at different rates per arm),
+  `too_early`, `small_sample` (an arm under 30), `ok`. The sample-ratio and
+  instrumentation checks are always in the answer.
+- **Metrics must be sent by every arm.** Each preset lists, per arm, the events
+  that come from the screens the arms differ in (`armEvents`); none of them may
+  be a metric (`presetProblems`, run by the tests). `tests/ab-events.spec.js`
+  runs the real site in every arm of every experiment and checks that each
+  metric's event is sent the same number of times in each.
+- **Exposures are re-asserted.** Every `app_open` carries `x_<key>: <arm>` for
+  each switched-on experiment the browser has been exposed to. The first
+  exposure the worker receives is kept (`INSERT OR IGNORE`), so this only fills
+  in exposures whose own beacon never arrived.
+
+### Event limits
+
+| Limit | Value | Why |
+|-------|-------|-----|
+| Requests per browser id | 180 / hour | The site sends about 65 in an hour of practice; this only stops one browser stuck in a loop. |
+| Requests per address | 3000 / hour | A backstop. A class of twelve on one wifi sends about 780. |
+| New exposures per address | 100 / UTC day | Fabricated exposures are what could move a result. Events over the cap are kept, and the next `app_open` re-asserts. |
+| Body | 16 KB, 25 events | A full batch is about 6 KB. |
+
+### What the events tables hold, and for how long
+
+| Table | Holds | Kept |
+|-------|-------|------|
+| `events` | Event name (from a fixed list), flat id-like props (no free text), the random browser id, the visitor's local day and time-zone offset, and when it arrived. | 180 days |
+| `exposures` | Experiment, browser id, arm, when and on which local day the first exposure arrived. | 180 days |
+| `ingest_daily` | UTC day, a reason from a fixed list (`accepted`, `unknown_event`, `origin_not_allowed`, `rate_limited`, `exposure_new`, `exposure_recovered`, …), a count. No id, no address. | 180 days |
+| `rate_limits` | `ev:` and `exn:` buckets keyed by an HMAC of the address and the UTC day under a secret key (not reversible without it); `evc:` buckets keyed by the browser id. | Deleted by the daily sweep, within two days |
+
+No IP address, user agent, account id or email is stored with any of it. The
+daily cron (`17 9 * * *`) runs the sweep, and `/v1/events/forget` deletes one
+browser's rows at once. privacy.html and the guide's section 14 say exactly
+this; `tests/ab-events.spec.js` fails if the fields sent and the text drift.
 
 Sessions are bearer tokens in the `Authorization` header, not cookies:
 `github.io` → `workers.dev` is cross-site, and third-party cookies are gone.
@@ -104,10 +166,11 @@ Public, committed in `wrangler.toml`:
 | `STRIPE_PRICE_PRO_MONTHLY` / `STRIPE_PRICE_PRO_YEARLY` | Optional price → plan mapping. |
 | `MP_PLAN_PRO_MONTHLY` / `MP_PLAN_PRO_YEARLY` | Optional `preapproval_plan_id` → plan mapping. |
 | `TRIAL_DAYS` | Length of the free trial. One per account, ever. Default 30. |
-| `ADMIN_EMAILS` | Comma-separated emails allowed to gift and revoke months. |
+| `ADMIN_EMAILS` | Comma-separated emails allowed to gift and revoke months, and to read A/B results. |
 | `GOOGLE_CLIENT_ID` | Google Sign-In client id. Public by design. Empty disables Google sign-in. |
 | `EMAIL_PROVIDER` | `resend`, `brevo` or `mailersend`. Empty disables email sign-in rather than dropping codes silently. |
 | `EMAIL_FROM` / `EMAIL_FROM_NAME` | Sender of the code emails. Must be a verified sender at the provider. |
+| `EVENTS_ENABLED` | `"false"` stops recording anonymous events at once (nothing is stored, not even counters). Deletions still work. |
 
 Secrets — **never** in this repo, only `wrangler secret put`:
 
@@ -118,6 +181,7 @@ Secrets — **never** in this repo, only `wrangler secret put`:
 | `MP_ACCESS_TOKEN` | Mercado Pago access token, used only for server-side reads. |
 | `LICENSE_PRIVATE_KEY_PKCS8_B64` | base64 PKCS#8 P-256 private key. |
 | `RESEND_API_KEY` / `BREVO_API_KEY` / `MAILERSEND_API_KEY` | Only the one named by `EMAIL_PROVIDER`. |
+| `EVENTS_IP_KEY` | Optional. The key the rate-limit buckets are an HMAC under. Without it a key derived from `LICENSE_PRIVATE_KEY_PKCS8_B64` is used; with neither, `/v1/events` answers `503`. Any long random string. |
 
 KV: one namespace bound as `ENTITLEMENTS`.
 
@@ -142,7 +206,8 @@ to forget — deploying is enough.
 | `gift_codes` / `gift_redemptions` | Codes and who used them. A unique index makes double redemption impossible. |
 | `license_links` | Which paid licenses belong to which account. |
 | `progress` | One document per `(account, profile)` with a `rev` for compare-and-swap. |
-| `rate_limits` | Per-IP and per-email counters for the sign-in routes. |
+| `rate_limits` | Per-IP and per-email counters for the sign-in routes, and the event route's buckets. |
+| `events` / `exposures` / `ingest_daily` | Anonymous usage events and A/B exposures; see "What the events tables hold" above. |
 
 `resolveEntitlement` reads the D1 grants **and** the KV paid records and returns
 whichever access runs longest, so nothing is mirrored between the two and
@@ -170,6 +235,7 @@ wrangler secret put MP_WEBHOOK_SECRET
 wrangler secret put MP_ACCESS_TOKEN
 wrangler secret put LICENSE_PRIVATE_KEY_PKCS8_B64
 wrangler secret put RESEND_API_KEY        # accounts only, matching EMAIL_PROVIDER
+wrangler secret put EVENTS_IP_KEY         # optional: its own key for the event route's address buckets
 
 # 4. Ship
 wrangler deploy

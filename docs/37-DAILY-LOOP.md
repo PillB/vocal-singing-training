@@ -158,27 +158,45 @@ explicitly:
 ## Experiments
 
 Three tests ship switched off in `js/experiments-config.js`, with the arithmetic
-beside them:
+beside them. The worker's registry (`EXPERIMENT_PRESETS` in
+`workers/entitlements/src/events.js`) holds the same keys and arms, what each is
+judged on, and its plan; a test fails if the two disagree.
 
-| Key | Control | Treatment | Primary outcome |
-|---|---|---|---|
-| `loop_home_2026_10` | `loop` | `classic` (the old panel) | Practising on some day in days 22–28 after the first practice day |
-| `loop_surprise_2026_10` | `surprises` | `none` | Best run as a micro-randomised trial: practised again within 48 h |
-| `loop_minimo_len_2026_10` | `three` | `five` (150 s steps) | Practice days in the first 28 days |
+| Key | Control | Treatment | Primary outcome | Plan per arm |
+|---|---|---|---|---|
+| `loop_home_2026_10` | `loop` | `classic` (the old panel) | Share with a practice day in the fourth week after first seeing the start panel (days 21–27) | 355 people, 28 days |
+| `loop_surprise_2026_10` | `surprises` | `none` | Practice days in the 28 after the first finished routine | 250 people, 28 days |
+| `loop_minimo_len_2026_10` | `three` | `five` (150 s steps) | Practice days in the 28 after first starting the Mínimo | 565 people, 28 days |
+
+Guardrails: practice days in the first 28 and the share who refuse the
+microphone (`loop_home`), finished routines (`loop_surprise`), and the share who
+leave a Mínimo unfinished (`loop_minimo_len`).
+
+**Only events every arm sends can be a metric.** `practice_day` and `comeback`
+are tracked in `onPractice` before the loop decides whether to show anything, so
+the classic arm sends them too. The loop's own events (`basics_start`,
+`basics_complete`, `milestone`, `surprise_shown`…) exist only where the loop is
+on, so they are never compared across `loop_home`'s arms: a readout on them
+would crown the loop whatever people did. `tests/ab-events.spec.js` runs the
+same script in every arm of every experiment and checks that each metric's
+event is sent the same number of times.
 
 At the traffic a friends-and-family beta can bring, only large effects are
 visible: per arm, 30% → 45% needs about 160 people, 30% → 40% about 355, 30% →
 36% about 960. So:
 
 - **Nothing can be read without an endpoint.** Events land in `localStorage`
-  on each visitor's own device. `VT_ANALYTICS_ENDPOINT` now sends a client id,
+  on each visitor's own device. `VT_ANALYTICS_ENDPOINT` sends a client id,
   the local day and the time zone, which is what a result needs.
-- Run an **A/A test** first and check the arms split evenly before trusting
-  anything.
-- Write the sample size and the stop date down before starting, and decide only
-  then. Report "no detectable difference", not "no difference".
-- Guardrails: microphone refusals, `basics_incomplete` per person, and very long
-  sessions as a strain proxy.
+- Run the **A/A test** (`aa_2026_10`) first and check the arms split evenly
+  and no event is flagged before trusting anything.
+- The sample size and the minimum run are **written in the registry before
+  starting**, and the worker holds the comparison back until both are met
+  (`readMe: "too_early"`, with the date it opens). Report "no detectable
+  difference", not "no difference".
+- Every `app_open` repeats the arms this browser was exposed to, so an exposure
+  whose own beacon was lost (offline, no endpoint yet) is recorded late rather
+  than dropped from the test.
 - Colours, button hues and themes are **not** worth a test at this size.
 
 `?ab_<key>=<variant>` shows either arm without joining the experiment.

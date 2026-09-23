@@ -64,10 +64,14 @@ EVENTS_ENABLED = "true"
 #   RESEND_API_KEY                 re_...
 #   BREVO_API_KEY                  xkeysib-...
 #   MAILERSEND_API_KEY             mlsn....
+# Optional, for the event route's per-address rate-limit buckets (an HMAC
+# under this key; without it one derived from the license key is used):
+#   EVENTS_IP_KEY                  any long random string
 
 # Daily housekeeping at 09:17 UTC (04:17 in Lima): deletes expired sign-in
-# codes and sessions, stale rate-limit rows, and usage events older than 180
-# days. The privacy page promises that deletion, so keep this trigger.
+# codes and sessions, stale rate-limit rows, and usage events, A/B exposures
+# and ingest counters older than 180 days. The privacy page promises that
+# deletion, so keep this trigger.
 [triggers]
 crons = ["17 9 * * *"]
 

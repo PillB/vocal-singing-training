@@ -5981,9 +5981,12 @@
     $("#ab-results-load")?.addEventListener("click", renderAbResults);
 
     /**
-     * A/B results for an admin: exposures per arm, the preset metrics with
-     * 95% intervals, and the two warnings that mean "do not read this yet".
-     * The numbers come from the worker; nothing is computed here.
+     * A/B results for an admin: how events are arriving, exposures per arm,
+     * where each test stands against its plan, the preset metrics with 95%
+     * intervals, and the warnings that mean "do not read this yet". The
+     * numbers and verdicts come from the worker; nothing is computed here.
+     * Differences and p-values appear only once the worker says the plan is
+     * met (horizon.reached): until then the arms' own counts, and the date.
      */
     async function renderAbResults() {
       const box = $("#ab-results");
@@ -5996,16 +5999,20 @@
         box.textContent = tt("ab.error");
         return;
       }
+      const locale = window.VTI18n?.lang === "en" ? "en-GB" : "es-PE";
+      const count = (v) => Number(v || 0).toLocaleString(locale);
+      const date = (sec) => new Date(sec * 1000).toLocaleDateString(locale, { day: "numeric", month: "short", year: "numeric" });
+      const pct = (v) => (v === null || v === undefined ? "–" : `${(v * 100).toFixed(1)} %`);
+      const num = (v) => (v === null || v === undefined ? "–" : v.toFixed(2));
+      const pval = (p) => (p === null || p === undefined ? "p = –" : p < 0.001 ? "p < 0.001" : `p = ${p.toFixed(3)}`);
+      const parts = [ingestHtml(list.data?.ingest, { esc, count, date })];
       const all = list.data?.experiments || [];
       const live = all.filter((x) => (x.arms || []).length);
       if (!live.length) {
-        box.textContent = tt("ab.none");
+        parts.push(`<p class="muted">${esc(tt("ab.none"))}</p>`);
+        box.innerHTML = parts.join("");
         return;
       }
-      const pct = (v) => (v === null || v === undefined ? "–" : `${(v * 100).toFixed(1)} %`);
-      const num = (v) => (v === null || v === undefined ? "–" : v.toFixed(2));
-      const pval = (p) => (p === null || p === undefined ? "–" : p < 0.001 ? "< 0.001" : p.toFixed(3));
-      const parts = [];
       for (const x of live) {
         const res = await window.VTAccount.request(
           "GET",
@@ -6018,8 +6025,25 @@
           parts.push(`${html}<p class="muted">${esc(tt("ab.error"))}</p></section>`);
           continue;
         }
+        // An older worker sends no horizon; treat it as open, as it was.
+        const h = d.horizon || { reached: true };
+        if (h.nPerArm) html += `<p class="muted">${esc(tt("ab.plan", { n: count(h.nPerArm), days: h.minDays }))}</p>`;
+        if (h.reached) {
+          if (h.readyAt) html += `<p class="ab-plan">${esc(tt("ab.ready", { date: date(h.readyAt) }))}</p>`;
+        } else {
+          const when = !h.readyAt
+            ? tt("ab.readyUnknown")
+            : tt(h.estimated ? "ab.readyAround" : "ab.readyOn", { date: date(h.readyAt) });
+          html += `<p class="ab-plan">${esc(tt("ab.tooEarly", { have: count(h.counted), n: count(h.nPerArm) }))} ${esc(when)}</p>`;
+        }
+        // The split check is shown every time, flagged or not.
         if (d.srm?.flagged) html += `<p class="ab-warn">${esc(tt("ab.srm", { p: pval(d.srm.p) }))}</p>`;
-        else if (d.readMe === "small_sample") html += `<p class="muted">${esc(tt("ab.small"))}</p>`;
+        else if (d.srm && d.srm.p !== null && d.srm.p !== undefined) html += `<p class="muted">${esc(tt("ab.srmOk", { p: pval(d.srm.p) }))}</p>`;
+        for (const e of d.eventMix?.events || []) {
+          if (!e.flagged) continue;
+          html += `<p class="ab-warn">${esc(tt(e.reason === "missing" ? "ab.mixMissing" : "ab.mixDiffers", { event: e.event, p: pval(e.p) }))}</p>`;
+        }
+        if (h.reached && d.readMe === "small_sample") html += `<p class="muted">${esc(tt("ab.small"))}</p>`;
         for (const m of d.metrics || []) {
           const share = m.kind === "share";
           const role = tt(m.role === "primary" ? "ab.primary" : "ab.guardrail");
@@ -6031,8 +6055,9 @@
           const exposed = Object.fromEntries((d.exposed || []).map((a) => [a.variant, a.n]));
           const rows = m.arms
             .map((a) => {
-              const val = share ? `${pct(a.rate)} (${pct(a.lo)}–${pct(a.hi)})` : `${num(a.mean)} (${num(a.lo)}–${num(a.hi)})`;
-              return `<tr><td><code>${esc(a.variant)}</code></td><td>${esc(String(exposed[a.variant] ?? a.n))} · ${esc(String(a.n))}</td><td>${esc(val)}</td></tr>`;
+              const val = share ? pct(a.rate) : num(a.mean);
+              const ci = share ? `${pct(a.lo)}–${pct(a.hi)}` : `${num(a.lo)}–${num(a.hi)}`;
+              return `<tr><td><code>${esc(a.variant)}</code></td><td>${esc(count(exposed[a.variant] ?? a.n))} · ${esc(count(a.n))}</td><td>${esc(val)} <span class="ab-ci">(${esc(ci)})</span></td></tr>`;
             })
             .join("");
           html += `<div class="ab-table-wrap"><table class="ab-table"><thead><tr><th>${esc(tt("ab.arm"))}</th><th>${esc(tt("ab.exposed"))}</th><th>${esc(tt("ab.value"))}</th></tr></thead><tbody>${rows}</tbody></table></div>`;
@@ -6044,6 +6069,29 @@
         parts.push(`${html}</section>`);
       }
       box.innerHTML = parts.join("");
+    }
+
+    /**
+     * One line on how events are arriving: the client posts no-cors and never
+     * sees a refusal, so a wrong origin or a stuck limit shows up here or
+     * nowhere.
+     */
+    function ingestHtml(ingest, { esc, count, date }) {
+      if (!ingest) return "";
+      const t = ingest.totals || {};
+      const sum = (keys) => keys.reduce((n, k) => n + (Number(t[k]) || 0), 0);
+      const dropped = sum(["unknown_event", "bad_cid", "not_an_object"]);
+      const refusedKeys = ["origin_not_allowed", "rate_limited", "opted_out", "automated", "body_too_large", "bad_request"];
+      const refused = sum(refusedKeys);
+      if (!t.accepted && !dropped && !refused) return `<p class="muted ab-ingest">${esc(tt("ab.ingestNone"))}</p>`;
+      let line = tt("ab.ingest", { accepted: count(t.accepted), dropped: count(dropped), refused: count(refused) });
+      const reasons = refusedKeys.filter((k) => t[k]).map((k) => `${k} ${count(t[k])}`);
+      if (reasons.length) line += ` ${tt("ab.ingestReasons", { list: reasons.join(", ") })}`;
+      if (ingest.lastAcceptedAt) line += ` ${tt("ab.ingestLast", { when: date(ingest.lastAcceptedAt) })}`;
+      // A wrong origin or a stuck limit is a broken pipeline; opted-out and
+      // automated refusals are the system working.
+      const broken = sum(["origin_not_allowed", "rate_limited"]) > 0;
+      return `<p class="${broken ? "ab-warn" : "muted"} ab-ingest">${esc(line)}</p>`;
     }
 
     window.VTAccount?.onChange?.(() => {

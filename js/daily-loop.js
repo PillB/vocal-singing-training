@@ -499,6 +499,27 @@
     }
   }
 
+  /**
+   * `x_<key>: <arm>` for every switched-on experiment this browser has already
+   * been exposed to, carried on each app_open. The device marks an exposure as
+   * spent when it happens, but the beacon carrying it can be lost (offline, no
+   * endpoint yet, an opt-out since lifted), and a browser the worker never
+   * heard expose is left out of the result for good. Saying it again on every
+   * open costs a few bytes; the worker keeps the first arm it receives.
+   */
+  function reassertedArms() {
+    const out = {};
+    try {
+      const arms = global.VTExperiments?.exposedArms?.() || {};
+      Object.keys(arms).forEach((key) => {
+        out[`x_${key}`] = arms[key];
+      });
+    } catch {
+      /* ignore */
+    }
+    return out;
+  }
+
   /* —— Routines —— */
 
   function tierMinutes(track, tier) {
@@ -691,10 +712,16 @@
   /**
    * Called whenever practice is recorded. The first record of a day is the one
    * worth marking: it may be a comeback, it may cross a milestone.
+   *
+   * The day and the comeback are recorded in every arm of every experiment,
+   * before the loop decides whether to show anything: they are outcomes an A/B
+   * result reads, and a result can only compare what every arm sends. When
+   * they sat behind the loop check, the classic arm sent no practice_day at all
+   * and a readout would have crowned the loop whatever people did.
    * @param {{ exerciseId?: string, source?: string, day?: { becameDay: boolean }, structured?: boolean }} ev
    */
   function onPractice(ev = {}) {
-    if (!ev.day?.becameDay || !loopEnabled()) return;
+    if (!ev.day?.becameDay) return;
     const D = days();
     if (!D) return;
     const sum = D.summary();
@@ -706,6 +733,8 @@
       track("comeback", { daysAway: sum.daysAway, restBank: sum.rest.bank });
     }
     track("practice_day", { n: sum.practiceDays, source: ev.source || null, structured: !!ev.structured });
+    // Everything below is the loop's own screen.
+    if (!loopEnabled()) return;
     // Inside a routine the completion card carries the moment; outside one,
     // a short line is enough.
     if (ev.structured) return;
@@ -1194,7 +1223,7 @@
       refresh();
     });
     $("#loop-cards-btn")?.addEventListener("click", openCards);
-    track("app_open", { day: today(), loop: loopEnabled() });
+    track("app_open", { day: today(), loop: loopEnabled(), ...reassertedArms() });
     // Both arms see a start panel, which is the thing under test, so both are
     // exposed here. Exposing only the loop arm (as this once did) left the
     // classic arm with no exposures at all: a guaranteed sample-ratio

@@ -14,7 +14,10 @@ import { SCHEMA_STATEMENTS, SCHEMA_VERSION } from "./schema.js";
 /** Isolate-local memo so a warm worker does not re-check the schema per request. */
 let schemaReady = new WeakSet();
 
-/** Usage events older than this are deleted by `sweepExpired` (180 days). */
+/**
+ * Usage events, exposures and ingest counters older than this are deleted by
+ * `sweepExpired` (180 days). privacy.html and the guide promise this number.
+ */
 export const EVENT_RETENTION_SECONDS = 180 * 86400;
 
 /**
@@ -60,6 +63,31 @@ export function mintToken() {
 export async function sha256Hex(value) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(String(value)));
   const bytes = new Uint8Array(digest);
+  let hex = "";
+  for (let i = 0; i < bytes.length; i += 1) {
+    hex += bytes[i].toString(16).padStart(2, "0");
+  }
+  return hex;
+}
+
+/**
+ * HMAC-SHA256 a string under a secret key, as lowercase hex. Unlike a salted
+ * hash with the salt in this repo, nobody can reverse it by trying every
+ * input without also holding the key.
+ * @param {string} key Secret key.
+ * @param {string} value Text to authenticate.
+ * @returns {Promise<string>} Lowercase hex digest.
+ */
+export async function hmacSha256Hex(key, value) {
+  const encoder = new TextEncoder();
+  const cryptoKey = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(String(key)),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const bytes = new Uint8Array(await crypto.subtle.sign("HMAC", cryptoKey, encoder.encode(String(value))));
   let hex = "";
   for (let i = 0; i < bytes.length; i += 1) {
     hex += bytes[i].toString(16).padStart(2, "0");
@@ -136,26 +164,32 @@ export function normalizeEmail(value) {
  * @param {number} limit Maximum hits per window.
  * @param {number} windowSeconds Window length.
  * @param {number} [now] Injected clock.
+ * @param {number} [cost] How many hits this call spends (default 1); a call
+ *   that would take the count past the limit spends nothing and is refused.
  * @returns {Promise<{ok: boolean, count: number, retryAfter: number}>} Decision.
  */
-export async function hitRateLimit(db, bucket, limit, windowSeconds, now) {
+export async function hitRateLimit(db, bucket, limit, windowSeconds, now, cost) {
   const at = nowSec(now);
+  const step = Number.isFinite(cost) && cost >= 1 ? Math.floor(cost) : 1;
   const windowStart = at - (at % Math.max(1, Math.floor(windowSeconds)));
   const row = await db
     .prepare("SELECT count, window_start FROM rate_limits WHERE bucket = ?1")
     .bind(bucket)
     .first();
   if (!row || Number(row.window_start) !== windowStart) {
+    if (step > limit) {
+      return { ok: false, count: 0, retryAfter: windowStart + windowSeconds - at };
+    }
     await db
       .prepare(
-        `INSERT INTO rate_limits (bucket, count, window_start) VALUES (?1, 1, ?2)
-         ON CONFLICT(bucket) DO UPDATE SET count = 1, window_start = ?2`
+        `INSERT INTO rate_limits (bucket, count, window_start) VALUES (?1, ?3, ?2)
+         ON CONFLICT(bucket) DO UPDATE SET count = ?3, window_start = ?2`
       )
-      .bind(bucket, windowStart)
+      .bind(bucket, windowStart, step)
       .run();
-    return { ok: true, count: 1, retryAfter: 0 };
+    return { ok: true, count: step, retryAfter: 0 };
   }
-  const count = Number(row.count) + 1;
+  const count = Number(row.count) + step;
   if (count > limit) {
     return { ok: false, count: Number(row.count), retryAfter: windowStart + windowSeconds - at };
   }
@@ -183,7 +217,8 @@ export function callerIp(request) {
 
 /**
  * Delete rows that have aged out: consumed or expired login codes, dead
- * sessions, stale rate-limit buckets and usage events past their retention.
+ * sessions, stale rate-limit buckets, and usage events, exposures and ingest
+ * counters past their retention.
  *
  * Called opportunistically (never on the hot path of a login) so the free tier
  * is not slowly filled with garbage.
@@ -198,8 +233,12 @@ export async function sweepExpired(db, now) {
     db.prepare("DELETE FROM login_codes WHERE expires_at < ?1 OR consumed_at IS NOT NULL").bind(at - 3600),
     db.prepare("DELETE FROM sessions WHERE expires_at < ?1").bind(at - 86400),
     db.prepare("DELETE FROM rate_limits WHERE window_start < ?1").bind(at - 86400),
-    // Usage events are only worth keeping as long as an experiment reads
-    // them; exposures are one small row per browser and stay.
-    db.prepare("DELETE FROM events WHERE received_at < ?1").bind(at - EVENT_RETENTION_SECONDS)
+    // Everything the statistics keep goes at the same age, exposures too:
+    // the privacy page says 180 days, and an exposure holds the browser id.
+    db.prepare("DELETE FROM events WHERE received_at < ?1").bind(at - EVENT_RETENTION_SECONDS),
+    db.prepare("DELETE FROM exposures WHERE first_at < ?1").bind(at - EVENT_RETENTION_SECONDS),
+    db
+      .prepare("DELETE FROM ingest_daily WHERE day < ?1")
+      .bind(new Date((at - EVENT_RETENTION_SECONDS) * 1000).toISOString().slice(0, 10))
   ]);
 }

@@ -5034,6 +5034,15 @@ body.loop-on .start-steps {
 #start-panel .next-step.is-done {
   border-color: rgba(79, 212, 146, 0.5);
   background: rgba(20, 60, 44, 0.35);
+  /* The quiet button keeps its natural width, so in a row it squeezed the
+     text to 51px at 390 (one word per line). Stack it instead. */
+  flex-direction: column;
+  align-items: stretch;
+}
+@media (max-width: 640px) {
+  #start-panel .next-step.is-done .next-step-cta {
+    width: 100%;
+  }
 }
 #start-panel .next-step.is-done .next-step-k {
   color: #9fecc6;
@@ -5085,7 +5094,8 @@ body.loop-on .start-steps {
   display: grid;
   justify-items: center;
   gap: 0.25rem;
-  font-size: 0.72rem;
+  /* 12px: the text floor qa/capture-mobile.mjs holds everything else to. */
+  font-size: 0.75rem;
   font-weight: 700;
   color: var(--text-muted);
 }
@@ -5131,8 +5141,10 @@ body.loop-on .start-steps {
 .loop-day.is-today {
   color: var(--text);
 }
-.loop-day.is-future {
-  opacity: 0.5;
+/* Days still to come recede through the dot, not the letter: fading the
+   whole cell took the letter to 3.8:1. */
+.loop-day.is-future .loop-day-dot {
+  opacity: 0.55;
 }
 
 .loop-goal {

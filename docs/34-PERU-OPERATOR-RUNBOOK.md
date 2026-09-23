@@ -219,6 +219,10 @@ registration effort.
    goes away on reload.
 6. Mint a gift code and give it to a tester. This is the friends-and-family
    flow, working, with no payment provider involved at all.
+7. Optional, for A/B tests: in `js/experiments-config.js` set
+   `VT_ANALYTICS_ENDPOINT` to the worker URL plus `/v1/events`, switch on
+   `aa_2026_10` alone, and after a week check **Cuenta → Experimentos** shows an
+   even split. [docs/38-AB-TESTING.md](38-AB-TESTING.md) has the rest.
 
 **You can run the whole beta from here.** Gifted months need no RUC, no
 gateway and no fees. Only charging strangers does.

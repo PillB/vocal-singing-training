@@ -182,6 +182,13 @@
     return counts(bag.days[key]) || bag.rest.used.includes(key);
   }
 
+  /** What a day was: done, rest, missed, today (still open) or future. */
+  function dayState(bag, key, today) {
+    if (key < today) return counts(bag.days[key]) ? "done" : bag.rest.used.includes(key) ? "rest" : "missed";
+    if (key === today) return counts(bag.days[key]) ? "done" : "today";
+    return "future";
+  }
+
   function lastPracticeBefore(bag, key) {
     let best = null;
     Object.keys(bag.days).forEach((k) => {
@@ -315,10 +322,7 @@
     const week = [];
     for (let i = 0; i < 7; i += 1) {
       const k = addDays(ws, i);
-      let st = "future";
-      if (k < today) st = counts(bag.days[k]) ? "done" : bag.rest.used.includes(k) ? "rest" : "missed";
-      else if (k === today) st = todayDone ? "done" : "today";
-      week.push({ key: k, state: st, isToday: k === today, basics: Number(bag.days[k]?.basics) > 0 });
+      week.push({ key: k, state: dayState(bag, k, today), isToday: k === today, basics: Number(bag.days[k]?.basics) > 0 });
     }
 
     const totalSec = practiced.reduce((n, k) => n + (Number(bag.days[k].sec) || 0), 0);
@@ -343,6 +347,26 @@
       comeback: !!prevDay && diffDays(prevDay, today) >= 2 && !covered(bag, addDays(today, -1)),
       firstDay: practiced[0] || null
     };
+  }
+
+  /**
+   * Every day from `from` to `to`, both included, with its state — the long
+   * view History draws. Capped at a year so a bad key cannot spin.
+   * @returns {{ key: string, state: string, isToday: boolean }[]}
+   */
+  function span(from, to, opts = {}) {
+    const bag = read(opts);
+    const today = opts.today || dayKey();
+    const out = [];
+    for (let k = from; k && k <= to && out.length < 366; k = addDays(k, 1)) {
+      out.push({ key: k, state: dayState(bag, k, today), isToday: k === today });
+    }
+    return out;
+  }
+
+  /** Practice days from `from` to `to`, both included (the Plan's week). */
+  function countDays(from, to, opts = {}) {
+    return span(from, to, opts).filter((d) => d.state === "done").length;
   }
 
   /** Clear the "rest day just used" note once it has been shown. */
@@ -419,6 +443,8 @@
     markBasics,
     basicsDoneToday,
     summary,
+    span,
+    countDays,
     ackRest,
     pendingMilestone,
     nextMilestone,

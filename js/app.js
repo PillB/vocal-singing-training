@@ -3771,6 +3771,138 @@
   }
 
   /* —— History —— */
+
+  /** The track History and the Plan speak to: the one picked on home. */
+  function pageTrack() {
+    return state.tab === "vocal" ? "vocal" : "singing";
+  }
+
+  /** Loop copy for a track ("días cantados" / "días de práctica"), see js/daily-loop.js. */
+  function trackText(key, vars, track) {
+    return window.VTLoop?.tl ? VTLoop.tl(key, vars, track) : tt(key, vars);
+  }
+
+  /** How long ago, in words: "hoy", "ayer", "hace 3 días", then a date. */
+  function relativeDay(iso) {
+    const D = window.VTDays;
+    const d = new Date(iso);
+    if (!D || !Number.isFinite(d.getTime())) return "";
+    const n = Math.max(0, D.diffDays(D.dayKey(d), D.dayKey()));
+    if (n < 7 && typeof Intl.RelativeTimeFormat === "function") {
+      return new Intl.RelativeTimeFormat(locale(), { numeric: "auto" }).format(-n, "day");
+    }
+    const opts = { day: "numeric", month: "short" };
+    if (d.getFullYear() !== new Date().getFullYear()) opts.year = "numeric";
+    return d.toLocaleDateString(locale(), opts);
+  }
+
+  /** The months a span of days covers, as a caption: "agosto–setiembre de 2026". */
+  function monthRangeLabel(a, b) {
+    try {
+      const f = new Intl.DateTimeFormat(locale(), { month: "long", year: "numeric" });
+      return typeof f.formatRange === "function" ? f.formatRange(a, b) : `${f.format(a)} – ${f.format(b)}`;
+    } catch {
+      return "";
+    }
+  }
+
+  /**
+   * A row that opens an exercise: the Plan's exercises and History's recent
+   * list. The whole row is the button; "Abrir →" says what it does (a ▶ read
+   * as "play a recording").
+   */
+  function openRowHtml(ex, meta, cls = "") {
+    // Each part of the meta stays on one line ("último puntaje 7/10" never splits).
+    const parts = meta
+      .filter(Boolean)
+      .map((m) => `<span>${escapeHtml(m)}</span>`)
+      .join(" · ");
+    return `<button type="button" class="open-row${cls ? " " + cls : ""}" data-open-ex="${escapeHtml(ex.id)}">
+        <span class="open-row-text"><strong>${escapeHtml(exName(ex))}</strong><span class="meta">${parts}</span></span>
+        <span class="open-row-go" aria-hidden="true">${escapeHtml(tt("history.open"))} →</span>
+      </button>`;
+  }
+
+  /**
+   * The days practised: how many in the last five weeks, and those weeks as a
+   * Monday-first calendar with today outlined. Empty until there is a day.
+   */
+  function historyDaysHtml(track) {
+    const D = window.VTDays;
+    if (!D?.span) return "";
+    const sum = D.summary();
+    if (!sum.practiceDays) return "";
+    const monday = D.weekStart(sum.today);
+    const from = D.addDays(monday, -28);
+    const days = D.span(from, D.addDays(monday, 6));
+    const n = days.filter((d) => d.state === "done").length;
+    const names = tt("loop.weekdayFull").split(",");
+    const head = tt("loop.weekLetters")
+      .split(",")
+      .map(
+        (l, i) =>
+          `<th scope="col"><span aria-hidden="true">${escapeHtml(l.trim())}</span><span class="sr-only">${escapeHtml((names[i] || "").trim())}</span></th>`
+      )
+      .join("");
+    let rows = "";
+    for (let w = 0; w < 5; w += 1) {
+      rows += "<tr>";
+      for (let i = 0; i < 7; i += 1) {
+        const d = days[w * 7 + i];
+        if (!d || d.state === "future") {
+          rows += `<td class="is-future"></td>`;
+          continue;
+        }
+        // Practised and rest days carry a mark as well as a colour.
+        const mark = d.state === "done" ? "✓" : d.state === "rest" ? "☾" : "";
+        const label = d.state === "missed" ? "" : trackText("loop.dayState." + d.state, null, track);
+        rows += `<td class="is-${d.state}${d.isToday ? " is-today" : ""}">${Number(d.key.slice(8))}${
+          mark ? `<span class="hist-mark" aria-hidden="true">${mark}</span>` : ""
+        }${label ? `<span class="sr-only">: ${escapeHtml(label)}</span>` : ""}</td>`;
+      }
+      rows += "</tr>";
+    }
+    const first = sum.firstDay ? D.parseDay(sum.firstDay) : null;
+    const firstLabel = first
+      ? first.toLocaleDateString(locale(), {
+          day: "numeric",
+          month: "long",
+          ...(first.getFullYear() !== new Date().getFullYear() ? { year: "numeric" } : {})
+        })
+      : "";
+    const total =
+      sum.practiceDays > n && firstLabel
+        ? `<p class="muted hist-total">${escapeHtml(tt("history.daysTotal", { n: sum.practiceDays, date: firstLabel }))}</p>`
+        : "";
+    const legend = days.some((d) => d.state === "rest")
+      ? `<p class="muted hist-legend">✓ ${escapeHtml(trackText("loop.day1", null, track))} · ☾ ${escapeHtml(tt("loop.dayState.rest"))}</p>`
+      : "";
+    return `<section class="hist-days" aria-labelledby="hist-days-count">
+        <h3 class="hist-count" id="hist-days-count"><strong>${n}</strong> ${escapeHtml(
+          n === 1 ? trackText("loop.day1", null, track) : trackText("loop.days", null, track)
+        )} <span class="hist-period">${escapeHtml(tt("history.daysPeriod"))}</span></h3>
+        ${total}
+        <table class="hist-cal">
+          <caption>${escapeHtml(monthRangeLabel(D.parseDay(from), D.parseDay(sum.today)))}</caption>
+          <thead><tr>${head}</tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+        ${legend}
+      </section>`;
+  }
+
+  /** ["hoy", "3 veces", "último puntaje 7/10"] */
+  function historyRowMeta(p) {
+    const n = Number(p.completedCount) || 0;
+    const parts = [p.lastAt ? relativeDay(p.lastAt) : ""];
+    if (n) parts.push(n === 1 ? tt("history.times1") : tt("history.timesN", { n }));
+    if (p.lastScore != null && Number.isFinite(Number(p.lastScore))) {
+      const score = Number(p.lastScore).toLocaleString(locale(), { maximumFractionDigits: 1 });
+      parts.push(tt("history.lastScore", { score: `${score}/10` }));
+    }
+    return parts;
+  }
+
   async function renderHistory() {
     setView("history");
     const list = $("#history-list");
@@ -3782,11 +3914,33 @@
       const recs = await VTStorage.listRecordings();
       const progress = VTStorage.getProgress();
       const reviews = VTStorage.getReviews();
+      const track = pageTrack();
 
-      let html = `<h3>${tt("history.recordings")}</h3>`;
-      if (!recs.length) {
-        html += `<p class="empty-state">${tt("history.noRecordings")}</p>`;
+      // Most recent first. An exercise that has left the catalogue cannot be
+      // opened again, and its id is not a name, so it is left out.
+      const recent = Object.entries(progress)
+        .map(([id, p]) => ({ ex: findExercise(id), p }))
+        .filter((r) => r.ex && r.p)
+        .sort((a, b) => String(b.p.lastAt || "").localeCompare(String(a.p.lastAt || "")));
+      const daysHtml = historyDaysHtml(track);
+
+      let html = "";
+      if (!daysHtml && !recent.length) {
+        html += `<p class="muted">${tt("history.noSessions")}</p>
+          <p><button type="button" class="btn btn-practice btn-sm" id="history-empty-cta">${tt("history.emptyCta")}</button></p>`;
       } else {
+        html += `<div class="hist-top">${daysHtml}`;
+        if (recent.length) {
+          html += `<section class="hist-recent" aria-labelledby="hist-recent-h">
+            <h3 id="hist-recent-h">${tt("history.recent")}</h3>
+            <div class="history-list">${recent.map((r) => openRowHtml(r.ex, historyRowMeta(r.p), "history-item")).join("")}</div>
+          </section>`;
+        }
+        html += `</div>`;
+      }
+
+      if (recs.length) {
+        html += `<h3 style="margin-top:1.5rem;">${tt("history.recordings")}</h3>`;
         // Group by exercise for A/B compare (progress proof users love)
         const byEx = {};
         recs.forEach((r) => {
@@ -3831,31 +3985,21 @@
         html += `<div id="history-player"></div>`;
       }
 
-      html += `<h3 style="margin-top:1.5rem;">${tt("history.completions")}</h3><div class="history-list">`;
-      const entries = Object.entries(progress);
-      if (!entries.length)
-        html += `<p class="muted">${tt("history.noSessions")}</p>
-          <p><button type="button" class="btn btn-practice btn-sm" id="history-empty-cta">${tt("history.emptyCta")}</button></p>`;
-      else {
-        entries.forEach(([id, p]) => {
-          const ex = findExercise(id);
-          html += `<div class="history-item">
-            <div><strong>${ex ? exName(ex) : id}</strong>
-            <div class="meta">${tt("history.meta", {
-              n: p.completedCount,
-              score: p.lastScore != null ? p.lastScore + "/10" : "—",
-              when: p.lastAt ? new Date(p.lastAt).toLocaleString(locale()) : ""
-            })}</div></div>
-          </div>`;
-        });
-      }
-      html += `</div>`;
-
       if (reviews.length) {
-        html += `<h3 style="margin-top:1.5rem;">${tt("history.reviews")}</h3>`;
+        html += `<h3 style="margin-top:1.5rem;">${tt("history.reviews")}</h3>
+          <div class="history-list">${reviews.slice(0, 12).map(planReviewRow).join("")}</div>`;
+      }
+
+      // No recordings: one quiet line at the end, not an empty block on top.
+      if (!recs.length && (daysHtml || recent.length)) {
+        html += `<p class="muted hist-rec-empty">${tt("history.noRecordings")}</p>`;
       }
 
       list.innerHTML = html;
+
+      $$("[data-open-ex]", list).forEach((btn) => {
+        btn.addEventListener("click", () => openExercise(btn.dataset.openEx));
+      });
 
       $$("[data-play]", list).forEach((btn) => {
         btn.addEventListener("click", async () => {
@@ -3944,76 +4088,158 @@
     return out === key ? String(verdict || "") : out;
   }
 
-  /** A check-in's stored local day ("2026-09-23") as a date in the interface language. */
-  function planDayLabel(key) {
-    const [y, m, d] = String(key || "").split("-").map(Number);
-    if (!y || !m || !d) return String(key || "");
-    // Built from parts, not parsed: new Date("2026-09-23") is UTC midnight,
-    // which is the day before in Lima.
-    return new Date(y, m - 1, d).toLocaleDateString(locale(), { day: "numeric", month: "short" });
+  /** One saved week review, on the Plan and in History. */
+  function planReviewRow(r) {
+    const when = r.at ? new Date(r.at).toLocaleDateString(locale()) : "";
+    const meta = [planVerdictLabel(r.verdict), when, r.notes].filter(Boolean).join(" · ");
+    return `<div class="history-item"><div><strong>${escapeHtml(tt("plan.weekN", { n: r.week ?? r.weekNumber ?? "" }))}: ${escapeHtml(
+      weekElementLabel(r.element)
+    )}</strong><div class="meta">${escapeHtml(meta)}</div></div></div>`;
+  }
+
+  /** "Ver otros" stays open across the re-render a pick causes. */
+  let planShowAllElements = false;
+
+  /** The exercises that train an element: this track's, or the other's when it has none. */
+  function planExercisesFor(el, track) {
+    const m = window.VT_WEEK_ELEMENT_EXERCISES?.[el];
+    if (!m) return [];
+    const ids = m[track]?.length ? m[track] : m[track === "vocal" ? "singing" : "vocal"] || [];
+    return ids.map(findExercise).filter(Boolean);
+  }
+
+  /** Local day the plan's week started, or null before it has. */
+  function planStartDay(plan) {
+    if (plan.status === "idle" || !plan.startedAt) return null;
+    return window.VTDays?.dayKey?.(new Date(plan.startedAt)) || null;
+  }
+
+  /** Days practised in the plan's week, counted from the practice-day ledger. */
+  function planWeekDays(plan) {
+    const D = window.VTDays;
+    const start = planStartDay(plan);
+    if (!start || !D?.countDays) return 0;
+    return D.countDays(start, D.addDays(start, 6));
   }
 
   function renderPlan() {
     setView("plan");
     const plan = VTStorage.getWeekPlan();
+    const track = pageTrack();
+    const idle = plan.status === "idle";
     renderPlanWeekRail(plan);
     $("#plan-week-num").textContent = tt("plan.weekN", { n: plan.weekNumber });
-    $("#plan-status").textContent =
-      plan.status === "idle"
-        ? tt("plan.statusIdle")
-        : plan.status === "active"
-          ? tt("plan.statusActive", { element: weekElementLabel(plan.element) })
-          : tt("plan.statusReview", { element: weekElementLabel(plan.element) });
-    $("#plan-element-label").textContent = weekElementLabel(plan.element);
-    // The week review only makes sense once a week is under way.
-    const waiting = plan.status === "idle";
-    const reviewCard = $("#plan-review-card");
-    if (reviewCard) reviewCard.classList.toggle("is-waiting", waiting);
-    ["#plan-review-notes", "#btn-plan-improved", "#btn-plan-continue"].forEach((sel) => {
-      const el = $(sel);
-      if (el) el.disabled = waiting;
+    // Before the week starts, "Elige el elemento" and the start button say it all.
+    const status = $("#plan-status");
+    status.hidden = idle;
+    status.textContent = idle
+      ? ""
+      : plan.status === "active"
+        ? tt("plan.statusActive", { element: weekElementLabel(plan.element) })
+        : tt("plan.statusReview", { element: weekElementLabel(plan.element) });
+
+    renderPlanChips(plan, track);
+
+    const exs = plan.element ? planExercisesFor(plan.element, track) : [];
+    const exList = $("#plan-exercise-list");
+    $("#plan-exercises").hidden = !exs.length;
+    exList.innerHTML = exs
+      .map((ex) => {
+        // An exercise from the other track says which one it is.
+        const other = ex.track !== track ? tt(ex.track === "vocal" ? "badge.vocal" : "badge.singing") : "";
+        return openRowHtml(ex, [other, tt("plan.exMeta", { min: ex.durationMin })]);
+      })
+      .join("");
+    $$("[data-open-ex]", exList).forEach((btn) => {
+      btn.addEventListener("click", () => openPlanExercise(btn.dataset.openEx));
     });
 
-    const chips = $("#element-chips");
-    chips.innerHTML = "";
-    VT_WEEK_ELEMENTS.forEach((el) => {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "chip" + (plan.element === el ? " selected" : "");
-      b.textContent = weekElementLabel(el);
-      b.addEventListener("click", () => {
-        const p = VTStorage.getWeekPlan();
-        p.element = el;
-        VTStorage.setWeekPlan(p);
-        renderPlan();
-      });
-      chips.appendChild(b);
-    });
+    // Days are counted from practice, not logged by hand.
+    const days = $("#plan-days");
+    days.hidden = idle;
+    days.textContent = idle ? "" : tt("plan.days", { n: planWeekDays(plan) });
+    // Once the week is under way its exercises are the next step, not this button.
+    $("#plan-start-row").hidden = !idle;
 
-    const checkins = $("#plan-checkins");
-    const days = plan.checkIns || [];
-    checkins.innerHTML = days.length
-      ? days.map((d) => `<span class="pill">${escapeHtml(planDayLabel(d.date))} ✓</span>`).join("")
-      : `<span class="muted">${tt("plan.noCheckins")}</span>`;
-
-    const completed = $("#plan-completed-elements");
-    completed.innerHTML = (plan.completedElements || []).length
-      ? plan.completedElements.map((e) => `<span class="pill">${weekElementLabel(e)}</span>`).join(" ")
-      : `<span class="muted">${tt("plan.noImproved")}</span>`;
-
-    const reviews = $("#plan-reviews");
-    reviews.innerHTML = (plan.reviews || [])
-      .slice(0, 8)
-      .map(
-        (r) =>
-          `<div class="history-item"><div><strong>${tt("plan.weekN", { n: r.week })}: ${weekElementLabel(r.element)}</strong><div class="meta">${planVerdictLabel(r.verdict)} · ${new Date(r.at).toLocaleDateString(locale())} · ${r.notes || ""}</div></div></div>`
-      )
-      .join("") || `<p class="muted">${tt("plan.noReviews")}</p>`;
+    renderPlanReview(plan);
   }
 
   /**
-   * Twelve-week rail. The panel is called "12 semanas" but only ever showed the
-   * current week, so the shape of the plan was invisible.
+   * Focus chips: the current track's first, the rest behind "Ver otros N".
+   * The picked chip says so with a check mark and aria-pressed, not colour.
+   */
+  function renderPlanChips(plan, track) {
+    const first = (window.VT_WEEK_ELEMENTS_FIRST?.[track] || []).filter((el) => VT_WEEK_ELEMENTS.includes(el));
+    const rest = VT_WEEK_ELEMENTS.filter((el) => !first.includes(el));
+    const box = $("#element-chips");
+    box.innerHTML = "";
+    [...first, ...rest].forEach((el) => {
+      const on = plan.element === el;
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "chip" + (on ? " selected" : "");
+      b.setAttribute("aria-pressed", on ? "true" : "false");
+      b.textContent = weekElementLabel(el);
+      b.hidden = !planShowAllElements && !on && !first.includes(el);
+      b.addEventListener("click", () => pickPlanElement(el));
+      box.appendChild(b);
+    });
+    const more = $("#plan-focus-more");
+    const extra = rest.filter((el) => el !== plan.element).length;
+    more.hidden = !extra;
+    more.setAttribute("aria-expanded", planShowAllElements ? "true" : "false");
+    more.textContent = planShowAllElements ? tt("plan.less") : tt("plan.more", { n: extra });
+  }
+
+  function pickPlanElement(el) {
+    const p = VTStorage.getWeekPlan();
+    p.element = el;
+    VTStorage.setWeekPlan(p);
+    renderPlan();
+    // The chips were rebuilt: keep keyboard focus on the one just picked.
+    $("#element-chips .chip.selected")?.focus();
+  }
+
+  function togglePlanElements() {
+    planShowAllElements = !planShowAllElements;
+    renderPlanChips(VTStorage.getWeekPlan(), pageTrack());
+  }
+
+  /**
+   * The review opens seven days after the week starts; until then the card
+   * says when, instead of showing a form that cannot be used yet.
+   */
+  function renderPlanReview(plan) {
+    const D = window.VTDays;
+    const start = planStartDay(plan);
+    const opensOn = start && D?.addDays ? D.addDays(start, 7) : null;
+    const open =
+      plan.status === "review" || (plan.status === "active" && (!opensOn || (D?.dayKey?.() || "") >= opensOn));
+    const when = $("#plan-review-when");
+    when.hidden = open;
+    when.textContent = open
+      ? ""
+      : opensOn
+        ? tt("plan.reviewOpensOn", {
+            date: D.parseDay(opensOn).toLocaleDateString(locale(), { weekday: "long", day: "numeric", month: "long" })
+          })
+        : tt("plan.reviewWaiting");
+    $("#plan-review-body").hidden = !open;
+
+    const improved = plan.completedElements || [];
+    $("#plan-completed-wrap").hidden = !improved.length;
+    $("#plan-completed-elements").innerHTML = improved
+      .map((e) => `<span class="pill">${escapeHtml(weekElementLabel(e))}</span>`)
+      .join(" ");
+
+    const reviews = (plan.reviews || []).slice(0, 8);
+    $("#plan-reviews-card").hidden = !reviews.length;
+    $("#plan-reviews").innerHTML = reviews.map(planReviewRow).join("");
+  }
+
+  /**
+   * Twelve-week rail: a progress strip (done, this week, still to come), drawn
+   * so it does not read as twelve buttons and never wraps a lone week.
    */
   function renderPlanWeekRail(plan) {
     const rail = $("#plan-week-rail");
@@ -4022,13 +4248,20 @@
     const done = (plan.reviews || []).length;
     rail.innerHTML = "";
     for (let w = 1; w <= 12; w += 1) {
-      const dot = document.createElement("span");
+      const li = document.createElement("li");
       const stateCls = w < current || w <= done ? "done" : w === current ? "current" : "todo";
-      dot.className = `plan-week-dot ${stateCls}`;
-      dot.textContent = String(w);
-      dot.title = tt("plan.weekN", { n: w });
-      rail.appendChild(dot);
+      li.className = `plan-week-dot ${stateCls}`;
+      li.textContent = String(w);
+      rail.appendChild(li);
     }
+  }
+
+  /** Start the plan's week (status and start date); the element is already picked. */
+  function beginPlanWeek(plan) {
+    plan.status = "active";
+    plan.startedAt = plan.startedAt || new Date().toISOString();
+    VTStorage.setWeekPlan(plan);
+    toast(tt("toast.weekStarted", { n: String(plan.weekNumber), element: weekElementLabel(plan.element) }));
   }
 
   function startWeekPlan() {
@@ -4037,30 +4270,17 @@
       toast(tt("toast.pickElement"));
       return;
     }
-    plan.status = "active";
-    plan.startedAt = plan.startedAt || new Date().toISOString();
-    VTStorage.setWeekPlan(plan);
+    beginPlanWeek(plan);
     renderPlan();
-    toast(tt("toast.weekStarted", { n: String(plan.weekNumber), element: weekElementLabel(plan.element) }));
+    // The start button is gone now; the week's first exercise is the next step.
+    $("#plan-exercise-list [data-open-ex]")?.focus();
   }
 
-  function checkInDay() {
+  /** Opening one of the week's exercises starts the week if it has not started. */
+  function openPlanExercise(id) {
     const plan = VTStorage.getWeekPlan();
-    if (plan.status === "idle") {
-      toast(tt("toast.startWeekFirst"));
-      return;
-    }
-    // Local day: in Lima a UTC date turned over at 19:00.
-    const date = window.VTDays?.dayKey?.() || new Date().toISOString().slice(0, 10);
-    plan.checkIns = plan.checkIns || [];
-    if (plan.checkIns.some((c) => c.date === date)) {
-      toast(tt("toast.alreadyCheckin"));
-      return;
-    }
-    plan.checkIns.push({ date });
-    VTStorage.setWeekPlan(plan);
-    renderPlan();
-    toast(tt("toast.checkinSaved"));
+    if (plan.status === "idle" && plan.element) beginPlanWeek(plan);
+    openExercise(id);
   }
 
   function submitWeekReview(improved) {
@@ -4081,7 +4301,8 @@
       verdict: improved ? "improved" : "continue",
       notes,
       at: new Date().toISOString(),
-      checkInCount: (plan.checkIns || []).length
+      // Days practised that week: hand-logged check-ins before, the ledger now.
+      checkInCount: Math.max((plan.checkIns || []).length, planWeekDays(plan))
     };
     plan.reviews = plan.reviews || [];
     plan.reviews.unshift(review);
@@ -4551,7 +4772,7 @@
 
     $("#btn-open-plan").addEventListener("click", renderPlan);
     $("#btn-plan-start").addEventListener("click", startWeekPlan);
-    $("#btn-plan-checkin").addEventListener("click", checkInDay);
+    $("#plan-focus-more").addEventListener("click", togglePlanElements);
     $("#btn-plan-improved").addEventListener("click", () => submitWeekReview(true));
     $("#btn-plan-continue").addEventListener("click", () => submitWeekReview(false));
     $("#btn-plan-back").addEventListener("click", () => {

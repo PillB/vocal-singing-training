@@ -123,8 +123,14 @@
         continue;
       }
       const byId = new Map();
+      // The same id can differ between devices when an automatically recorded
+      // take was rated later on one of them; the newer copy is the rated one.
       for (const entry of [...(b.history || []), ...(a.history || [])]) {
-        if (entry && entry.id && !byId.has(entry.id)) byId.set(entry.id, entry);
+        if (!entry || !entry.id) continue;
+        const prev = byId.get(entry.id);
+        if (!prev || ms(entry.updatedAt || entry.at) > ms(prev.updatedAt || prev.at)) {
+          byId.set(entry.id, entry);
+        }
       }
       const history = Array.from(byId.values())
         .sort((x, y) => ms(y.at) - ms(x.at))
@@ -213,7 +219,9 @@
       achievements: {
         ...(remote.achievements || {}),
         ...(local.achievements || {})
-      }
+      },
+      days: global.VTDays?.merge ? global.VTDays.merge(local.days, remote.days) : local.days || remote.days || null,
+      loop: global.VTLoop?.merge ? global.VTLoop.merge(local.loop, remote.loop) : local.loop || remote.loop || null
     };
   }
 

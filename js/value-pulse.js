@@ -5,9 +5,16 @@
 (function (global) {
   "use strict";
 
+  /**
+   * Local calendar day. This used to be the UTC date, which in Lima turns over
+   * at 19:00 — evening practice landed on "tomorrow" and broke real streaks.
+   */
   function dayKey(iso) {
     try {
-      return new Date(iso).toISOString().slice(0, 10);
+      const d = new Date(iso);
+      if (!Number.isFinite(d.getTime())) return null;
+      if (global.VTDays?.dayKey) return global.VTDays.dayKey(d);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     } catch {
       return null;
     }
@@ -57,21 +64,29 @@
       }
     });
 
-    // Streak: consecutive calendar days ending today or yesterday with activity
-    const sortedDays = [...days].sort();
+    // Streak, practice days and rest days come from the local-day ledger
+    // (js/practice-days.js), which also counts guided steps that were never
+    // rated and is not capped at 50 takes per exercise.
     let streak = 0;
-    if (sortedDays.length) {
-      const today = dayKey(new Date().toISOString());
-      const yest = dayKey(new Date(Date.now() - 86400000).toISOString());
-      let cursor = sortedDays.includes(today) ? today : sortedDays.includes(yest) ? yest : null;
-      if (cursor) {
-        const set = new Set(sortedDays);
-        while (cursor && set.has(cursor)) {
-          streak += 1;
-          const prev = new Date(cursor + "T12:00:00Z");
-          prev.setUTCDate(prev.getUTCDate() - 1);
-          cursor = prev.toISOString().slice(0, 10);
-        }
+    let bestStreak = 0;
+    let practiceDays = days.size;
+    let restBank = 0;
+    let daysAway = null;
+    let todayDone = false;
+    const ledger = global.VTDays?.summary?.();
+    if (ledger) {
+      streak = ledger.streak;
+      bestStreak = ledger.best;
+      practiceDays = ledger.practiceDays;
+      restBank = ledger.rest.bank;
+      daysAway = ledger.daysAway;
+      todayDone = ledger.todayDone;
+      if (ledger.lastDay && (!lastAt || dayKey(lastAt) < ledger.lastDay)) {
+        // Practice the ledger saw but progress did not (an unrated guided step
+        // from before this fix, a held note): noon of that day is close enough
+        // for "when did you last practise".
+        const d = global.VTDays.parseDay(ledger.lastDay);
+        if (d) lastAt = d.toISOString();
       }
     }
 
@@ -112,8 +127,10 @@
       });
     });
     for (let i = 27; i >= 0; i--) {
-      const d = dayKey(new Date(Date.now() - i * 86400000).toISOString());
-      spark.push(dayCounts[d] || 0);
+      const at = new Date();
+      at.setHours(12, 0, 0, 0);
+      at.setDate(at.getDate() - i);
+      spark.push(dayCounts[dayKey(at)] || 0);
     }
 
     const holdTrend = holds
@@ -121,11 +138,11 @@
       .map((h) => Number(h.seconds) || 0)
       .reverse();
 
-    // Sessions this ISO week (Mon-start approx via UTC day)
+    // Sessions this week, from local Monday 00:00
     const now = new Date();
-    const day = (now.getUTCDay() + 6) % 7; // Mon=0
-    const weekStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - day));
-    const weekKey = weekStart.toISOString().slice(0, 10);
+    const day = (now.getDay() + 6) % 7; // Mon=0
+    const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - day, 0, 0, 0, 0);
+    const weekKey = dayKey(weekStart);
     let sessionsThisWeek = 0;
     Object.keys(progress).forEach((exId) => {
       (progress[exId].history || []).forEach((h) => {
@@ -142,8 +159,13 @@
       totalSec,
       exercisesTouched,
       bestHoldSec: bestHold,
-      activeDays: days.size,
+      activeDays: practiceDays,
+      practiceDays,
       streak,
+      bestStreak,
+      restBank,
+      daysAway,
+      todayDone,
       lastAt,
       avgScore,
       planElement: plan?.element || null,
@@ -235,23 +257,30 @@
       if (d) counts[d] = (counts[d] || 0) + 1;
     });
 
+    // Guided steps recorded in the day ledger count too, a day at a time.
+    const ledgerDays = global.VTDays?.read?.()?.days || {};
+    Object.keys(ledgerDays).forEach((k) => {
+      if (!counts[k] && global.VTDays.counts(ledgerDays[k])) counts[k] = Math.max(1, Number(ledgerDays[k].n) || 1);
+    });
+
     const cells = [];
     const nDays = Math.max(7, Math.min(52, weeks) * 7);
-    // Align to start of week (Mon) ending today
+    // Local weeks, Monday first, ending on the Sunday of this week
     const today = new Date();
-    const dow = (today.getUTCDay() + 6) % 7;
-    const end = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
-    const start = new Date(end);
-    start.setUTCDate(start.getUTCDate() - (nDays - 1 - (6 - dow)));
+    today.setHours(12, 0, 0, 0);
+    const dow = (today.getDay() + 6) % 7;
+    const start = new Date(today);
+    start.setDate(start.getDate() - (nDays - 1 - (6 - dow)));
+    const todayKey = dayKey(today);
 
     let max = 0;
     for (let i = 0; i < nDays; i++) {
       const d = new Date(start);
-      d.setUTCDate(start.getUTCDate() + i);
-      const key = d.toISOString().slice(0, 10);
+      d.setDate(start.getDate() + i);
+      const key = dayKey(d);
       const c = counts[key] || 0;
       if (c > max) max = c;
-      cells.push({ date: key, count: c, dow: (d.getUTCDay() + 6) % 7 });
+      cells.push({ date: key, count: c, dow: (d.getDay() + 6) % 7, future: key > todayKey });
     }
     return { cells, weeks: Math.ceil(nDays / 7), max: Math.max(1, max) };
   }

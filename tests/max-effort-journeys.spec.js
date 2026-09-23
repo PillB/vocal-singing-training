@@ -182,8 +182,10 @@ test.describe("Max-effort journeys (Musk)", () => {
     expect(dead).toEqual([]);
     // Both languages are on the page, and every Spanish section has its
     // English twin — a half-translated manual is the one people complain about.
+    // The English half sets its subsections one level lower (h4 where the
+    // Spanish has h3), so a twin may be any heading level.
     const halves = await page.evaluate(() => {
-      const ids = [...document.querySelectorAll("h2[id], h3[id]")].map((h) => h.id);
+      const ids = [...document.querySelectorAll("h2[id], h3[id], h4[id]")].map((h) => h.id);
       const es = ids.filter((id) => !id.endsWith("-en") && id !== "en");
       return { es, missing: es.filter((id) => !ids.includes(`${id}-en`)) };
     });

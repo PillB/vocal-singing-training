@@ -46,10 +46,23 @@
     try {
       const ep = global.VT_ANALYTICS_ENDPOINT;
       if (ep && typeof fetch === "function") {
+        // An event nobody can tie to a browser, an arm or a local day cannot
+        // answer an A/B question, so the beacon carries all three. The id is
+        // the random one js/experiments.js already keeps; nothing personal.
+        const now = new Date();
         fetch(ep, {
           method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ name, props, t: new Date().toISOString() }),
+          // no-cors only allows "simple" content types; a JSON header was
+          // silently dropped, so say what actually arrives.
+          headers: { "content-type": "text/plain" },
+          body: JSON.stringify({
+            name,
+            props,
+            t: now.toISOString(),
+            cid: global.VTExperiments?.clientId?.() || null,
+            day: global.VTDays?.dayKey?.(now) || null,
+            tz: -now.getTimezoneOffset()
+          }),
           keepalive: true,
           mode: "no-cors"
         }).catch(() => {});

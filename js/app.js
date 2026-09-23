@@ -45,11 +45,20 @@
       everStarted: false,
       liveSince: null,
       accumulatedMs: 0,
-      saved: false
+      saved: false,
+      // The history entry this open already wrote, so a later record or Save
+      // updates one take instead of adding a second (see recordPracticeIfDue).
+      entryId: null,
+      // Seconds of this open already credited to today's practice-day row.
+      creditedSec: 0
     },
     leavePromptOpen: false,
     /** 5-minute micro-session mode (retention research) */
-    microSession: false
+    microSession: false,
+    /** Set by a "5 min" button; applies to the next exercise opened, only. */
+    pendingMicro: false,
+    /** The reminder shown today, kept until dismissed (renderRetentionChrome). */
+    remindDue: null
   };
 
   const $ = (sel, el = document) => el.querySelector(sel);
@@ -57,6 +66,16 @@
 
   function tt(key, vars) {
     return typeof globalThis.t === "function" ? globalThis.t(key, vars) : key;
+  }
+
+  /** Date locale for the interface language, so dates read like the rest of the page. */
+  function locale() {
+    return window.VTI18n?.lang === "en" ? "en-US" : "es-PE";
+  }
+
+  /** An exercise's name in the interface language. */
+  function exName(ex) {
+    return window.VTI18n ? VTI18n.exTitle(ex) : ex.title;
   }
 
   function escapeHtml(s) {
@@ -653,6 +672,19 @@
     return Object.values(prog).reduce((n, row) => n + (Number(row?.completedCount) || 0), 0);
   }
 
+  /** Rated takes (not the ones kept automatically), counted up to 2. */
+  function ratedSessionsSaved() {
+    const prog = VTStorage.getProgress() || {};
+    let n = 0;
+    for (const row of Object.values(prog)) {
+      for (const h of row?.history || []) {
+        if (h && !h.auto) n += 1;
+        if (n > 1) return n;
+      }
+    }
+    return n;
+  }
+
   /**
    * Next best exercise for habit path (UI research: small next action).
    * Prefer structured current → incomplete basic → first list item.
@@ -730,11 +762,23 @@
     if (!card || !titleEl || !btn) return;
     // Hide on empty catalog
     const sug = suggestNextExercise();
+    // Once there is a day sung, today's basics are the recommendation: the
+    // loop writes the panel (js/daily-loop.js). An open guided session keeps
+    // its own copy below.
+    if (window.VTLoop?.renderHome?.()) {
+      renderTourInvite();
+      return;
+    }
     if (!sug?.ex) {
       card.hidden = true;
       return;
     }
     card.hidden = false;
+    // The loop may have left the CTA quiet ("done for today"); this panel has one primary.
+    btn.classList.add("btn-practice");
+    btn.classList.remove("btn-ghost");
+    card.classList.remove("is-done");
+    delete card.dataset.loop;
     const daily = sug.reason === "daily";
     const d = daily ? dailySession() : null;
     if (daily && d) {
@@ -858,7 +902,7 @@
     const key = guided ? "Guided" : returning ? "Back" : "New";
     kicker.textContent = tt("start.kicker" + key);
     title.textContent = returning
-      ? tt("start.titleBack", { n: saved })
+      ? tt(saved === 1 ? "start.titleBack1" : "start.titleBack", { n: saved })
       : tt("start.titleNew");
     sub.textContent = tt("start.sub" + key);
     if (label) label.textContent = tt(guided ? "home.nextStepLabelGuided" : "home.nextStepLabel");
@@ -900,7 +944,11 @@
     const trackLabel = tt(s.track === "vocal" ? "tab.vocalShort" : "tab.singingShort");
     const status = tt(s.status === "paused" ? "session.statusPaused" : "session.statusActive");
     const name =
-      s.path === "daily" ? tt("daily.banner") : tt("session.bannerTitle", { track: trackLabel });
+      s.path === "daily"
+        ? tt("daily.banner")
+        : s.path === "basics"
+          ? tt("loop.banner", { tier: tt("loop.tier." + (s.tier || "min")) })
+          : tt("session.bannerTitle", { track: trackLabel });
     $("#session-banner-text").textContent = `${name} · ${status} · ${VTSession.progressLabel()}`;
     $("#btn-session-resume").hidden = s.status !== "paused";
     $("#btn-session-pause").hidden = s.status !== "active";
@@ -1093,7 +1141,9 @@
       everStarted: false,
       liveSince: null,
       accumulatedMs: 0,
-      saved: false
+      saved: false,
+      entryId: null,
+      creditedSec: 0
     };
   }
 
@@ -1128,15 +1178,95 @@
     return `${m}:${String(s).padStart(2, "0")}`;
   }
 
-  /** True if user practiced ≥10% of planned exercise length and hasn't saved */
+  /**
+   * The length this open was actually asked for: the running timer (a daily or
+   * basics step, a 5-minute micro-session) before the exercise's own default.
+   * Measuring a 1:45 guided step against a 20-minute default made the leave
+   * prompt say "14s of 20:00".
+   */
+  function stepTargetSec(ex = state.exercise) {
+    if (state.timer?.total > 0) return state.timer.total;
+    return getExerciseTargetSec(ex);
+  }
+
+  /**
+   * Live seconds after which an unrated run counts as practice: a third of the
+   * step, never less than 15 s and never more than 45 s. Pressing Start and
+   * then Next is not practice; a real minute of lip trills is.
+   */
+  function practiceCreditSec(ex = state.exercise) {
+    const target = stepTargetSec(ex);
+    return Math.min(45, Math.max(15, Math.round(target * 0.3)));
+  }
+
+  /** True once this open holds practice worth keeping and nothing is saved yet. */
   function shouldPromptOnLeave() {
     if (state.leavePromptOpen) return false;
     if (!state.exercise || state.view !== "exercise") return false;
     if (state.sessionPractice.saved) return false;
     if (!state.sessionPractice.everStarted) return false;
-    const target = getExerciseTargetSec(state.exercise);
-    if (target <= 0) return false;
-    return getPracticedSec() >= target * 0.1;
+    return getPracticedSec() >= practiceCreditSec();
+  }
+
+  /**
+   * Record this open as practice, if it was practice (VG-27).
+   *
+   * Every way out of an exercise used to lose the work unless the learner
+   * pressed Save: Next in a guided session, "Descartar", "Terminar", opening
+   * another exercise, closing the tab. A whole daily class could finish with
+   * `vt_progress_v1` still null and no streak day. This is the one choke point
+   * all of those now pass through.
+   *
+   * Idempotent per open: the first call inserts an unrated take and credits
+   * today's practice-day row; later calls update that same take and credit only
+   * the new seconds. A rated Save afterwards replaces it (completeExercise).
+   *
+   * @param {string} source what ended or interrupted the run, for analytics
+   * @returns {object|null} the history entry, or null when nothing was due
+   */
+  function recordPracticeIfDue(source) {
+    const ex = state.exercise;
+    const sp = state.sessionPractice;
+    if (!ex || !sp || sp.saved || !sp.everStarted) return null;
+    const sec = Math.round(getPracticedSec());
+    if (sec < practiceCreditSec(ex)) return null;
+    if (sp.entryId && sec <= (sp.creditedSec || 0)) return null;
+    let entry = null;
+    try {
+      entry = VTStorage.saveExerciseResult(ex.id, {
+        replaceId: sp.entryId,
+        metrics: {},
+        score: null,
+        notes: "",
+        durationSec: sec,
+        auto: true
+      });
+    } catch (e) {
+      console.warn("[VT] practice record", e);
+      return null;
+    }
+    const inserted = !sp.entryId;
+    const delta = Math.max(0, sec - (sp.creditedSec || 0));
+    sp.entryId = entry.id;
+    sp.creditedSec = sec;
+    const day = window.VTDays?.record?.({ exerciseId: ex.id, sec: delta, bump: inserted, source });
+    if (inserted) {
+      window.VTSync?.schedule?.();
+      try {
+        window.VTAnalytics?.track?.("practice_recorded", {
+          exerciseId: ex.id,
+          source,
+          durationSec: sec,
+          structured: !!state.structured,
+          micro: !!state.microSession,
+          firstOfDay: !!day?.becameDay
+        });
+      } catch {
+        /* ignore */
+      }
+    }
+    window.VTLoop?.onPractice?.({ exerciseId: ex.id, source, day, structured: !!state.structured });
+    return entry;
   }
 
   /**
@@ -1153,7 +1283,7 @@
       }
       state.leavePromptOpen = true;
       const practiced = getPracticedSec();
-      const target = getExerciseTargetSec(state.exercise);
+      const target = stepTargetSec();
       const pct = Math.min(100, Math.round((practiced / target) * 100));
       const stats = $("#leave-modal-stats");
       if (stats) {
@@ -1163,14 +1293,9 @@
           pct: String(pct)
         });
       }
-      // Refresh i18n titles if available
-      if (window.VTI18n?.applyDom) {
-        try {
-          VTI18n.applyDom();
-        } catch {
-          /* optional */
-        }
-      }
+      // The modal's own strings are set below. It used to run VTI18n.applyDom()
+      // here, which reset every data-i18n element on the page to its default —
+      // the session banner read "Sesión guiada" from then on.
       const title = $("#leave-modal-title");
       const body = $("#leave-modal-body");
       const btnSave = $("#leave-save");
@@ -1218,11 +1343,15 @@
     // destination: { type: "home"|"exercise"|"history"|"plan"|"next", id? }
     if (shouldPromptOnLeave()) {
       const choice = await promptLeaveExercise();
+      if (choice === "stay" || choice === "save") state.pendingMicro = false;
       if (choice === "stay") return false;
       if (choice === "save") {
         // Stop audio, keep user on exercise to complete metrics
         stopPractice(true);
         VTPiano.stopAll();
+        // The silent stop skips the metrics reveal a normal stop does, so the
+        // button below could be inside a collapsed card (VG-28).
+        openMetricsPanel(true);
         const metrics = $("#metrics-form") || $("#btn-complete");
         metrics?.scrollIntoView({ behavior: "smooth", block: "center" });
         $("#btn-complete")?.focus();
@@ -1231,7 +1360,9 @@
         state.pendingLeave = destination;
         return false;
       }
-      // discard
+      // "Leave without rating": the practice still happened, so it still
+      // counts. Only the rating and the take are dropped.
+      recordPracticeIfDue("leave");
       stopPractice(true);
       VTPiano.stopAll();
       stopTimer(false);
@@ -1241,6 +1372,7 @@
       resetSessionPractice();
       toast(tt("leave.discarded"));
     } else {
+      recordPracticeIfDue("leave");
       stopPractice(true);
       VTPiano.stopAll();
       stopTimer(false);
@@ -1274,6 +1406,13 @@
   function forceOpenExercise(id, fromStructured) {
     const ex = findExercise(id);
     if (!ex) return;
+    // Whatever was running is kept before it is torn down.
+    recordPracticeIfDue("switch");
+    // A 5-minute micro-session applies to the open that asked for it, not to
+    // every exercise after it: the flag used to stick until the next Save and
+    // gave each later daily step a 5:00 timer.
+    state.microSession = !!state.pendingMicro;
+    state.pendingMicro = false;
     stopPractice(true);
     state.exercise = ex;
     state.structured = !!fromStructured;
@@ -1412,6 +1551,7 @@
   function renderExercise() {
     const ex = state.exercise;
     if (!ex) return;
+    hideMicBlocked();
 
     $("#ex-title").textContent = `${ex.number}. ${
       window.VTI18n ? VTI18n.exTitle(ex) : ex.title
@@ -1453,12 +1593,16 @@
     // Timer (integrated into cockpit — always show display when timer exists)
     // Micro-session: 5 min soft cap for comeback practice
     let timerSec = state.microSession ? 5 * 60 : ex.timerDefaultSec || 0;
-    // The prepared daily session runs short per-step timers so the whole class
-    // sequence fits one sitting instead of summing every exercise's own default.
+    // Prepared routines (the daily class, today's basics) run short per-step
+    // timers so the whole sequence fits one sitting instead of summing every
+    // exercise's own default. A routine carries its own map; the daily class
+    // still falls back to the catalog's.
     if (!state.microSession && state.structured) {
       const ds = VTSession.get();
-      const step = window.VT_DAILY_SESSION?.sec?.[ex.id];
-      if (ds && ds.path === "daily" && step) timerSec = step;
+      const step =
+        Number(ds?.sec?.[ex.id]) ||
+        (ds?.path === "daily" ? Number(window.VT_DAILY_SESSION?.sec?.[ex.id]) : 0);
+      if (ds && step > 0) timerSec = step;
     }
     state.timer.total = timerSec;
     state.timer.remaining = timerSec;
@@ -2674,7 +2818,7 @@
       if (!micOk && !soundOk && !profile.timeDriven) {
         state.practiceStarting = false;
         setPracticeUI(false);
-        toast(tt("toast.mic"));
+        showMicBlocked(false);
         return;
       }
 
@@ -2686,7 +2830,12 @@
       const engineLive = (needsMic || wantRecord) && micOk;
       if (!engineLive && (profile.timeDriven || (!needsMic && !wantRecord))) startModeTicker();
 
-      if (ex.audio.timer && state.timer.total > 0 && (micOk || state._modeTicker)) startTimer();
+      // The step clock runs whenever the step is live. It used to wait for the
+      // mic, so with the mic refused and the piano playing the timer sat still
+      // and a guided step could never end (VG-40).
+      if (ex.audio.timer && state.timer.total > 0) startTimer();
+      if ((needsMic || wantRecord) && !micOk) showMicBlocked(true);
+      else hideMicBlocked();
 
       // Keep piano awake while practicing (tab blur / OS audio policies)
       if (wantPiano && soundOk) {
@@ -2750,6 +2899,46 @@
       state._modeTicker = requestAnimationFrame(tick);
     };
     state._modeTicker = requestAnimationFrame(tick);
+  }
+
+  /**
+   * A refused microphone, said where the learner is looking and kept there:
+   * how to allow it, a retry, and — inside a guided routine — a way on.
+   * @param {boolean} canRun true when the piano or the clock still runs
+   */
+  function showMicBlocked(canRun) {
+    const box = $("#mic-blocked");
+    if (!box) {
+      toast(tt("toast.mic"));
+      return;
+    }
+    $("#mic-blocked-text").textContent = tt(canRun ? "mic.blocked.partial" : "mic.blocked.none");
+    const retry = $("#btn-mic-retry");
+    const skip = $("#btn-mic-skip");
+    if (retry) {
+      retry.textContent = tt("mic.blocked.retry");
+      retry.onclick = () => {
+        hideMicBlocked();
+        stopPractice(true);
+        startPractice();
+      };
+    }
+    if (skip) {
+      skip.textContent = tt("mic.blocked.skip");
+      skip.hidden = !state.structured;
+      skip.onclick = () => advanceStructured("skip");
+    }
+    box.hidden = false;
+    try {
+      window.VTAnalytics?.track?.("mic_blocked", { exerciseId: state.exercise?.id, canRun: !!canRun });
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function hideMicBlocked() {
+    const box = $("#mic-blocked");
+    if (box) box.hidden = true;
   }
 
   function stopModeTicker() {
@@ -3207,17 +3396,41 @@
     const prevRow = VTStorage.getProgress()?.[ex.id];
     const prevScore = prevRow?.lastScore;
 
-    VTStorage.saveExerciseResult(ex.id, {
+    // A take this open already recorded automatically is the same take: rate
+    // it in place rather than adding a second one.
+    const sp = state.sessionPractice;
+    const wasSaved = !!sp.saved;
+    const insertedNow = !sp.entryId;
+    const savedEntry = VTStorage.saveExerciseResult(ex.id, {
+      replaceId: sp.entryId,
       metrics: values,
       score: result.score,
       notes,
       durationSec: elapsed
     });
+    const elapsedSec = Math.max(0, Math.round(Number(elapsed) || 0));
+    const dayRec = window.VTDays?.record?.({
+      exerciseId: ex.id,
+      sec: Math.max(0, elapsedSec - (sp.creditedSec || 0)),
+      saved: true,
+      bump: insertedNow,
+      source: "save"
+    });
+    sp.entryId = savedEntry.id;
+    sp.creditedSec = Math.max(sp.creditedSec || 0, elapsedSec);
     // Ask for a sync rather than doing one: the scheduler collapses a whole
     // practice session's saves into a single write.
     window.VTSync?.schedule?.();
     const sessionsAfter = totalSessionsSaved();
-    const isFirstWin = sessionsAfter === 1;
+    // First *rated* take: automatically kept steps are practice, but the
+    // first-win card is about the first time somebody reviewed their own work.
+    const isFirstWin = !wasSaved && ratedSessionsSaved() === 1;
+    window.VTLoop?.onPractice?.({
+      exerciseId: ex.id,
+      source: "save",
+      day: dayRec,
+      structured: !!state.structured
+    });
     try {
       window.VTAnalytics?.track?.("session_save", {
         exerciseId: ex.id,
@@ -3230,8 +3443,11 @@
       /* ignore */
     }
     renderValuePulse();
-    // Success → soft moment (first_win prioritized via sessions===1)
-    setTimeout(() => showValueMoment(isFirstWin ? "first_save" : undefined), 600);
+    // Success → soft moment (first_win prioritized via sessions===1). Never in
+    // the middle of a guided routine: the reward there is the next step.
+    if (!state.structured) {
+      setTimeout(() => showValueMoment(isFirstWin ? "first_save" : undefined), 600);
+    }
 
     state.sessionPractice.saved = true;
     state.microSession = false;
@@ -3252,11 +3468,38 @@
         arrow
       })}</p>`;
     }
-    const nextSug = suggestNextExercise({ excludeId: ex.id });
+    // Inside a guided routine the next thing is the routine's next step; the
+    // generic suggestion used to hijack it with an unrelated exercise opened
+    // outside the session (no Next button, the wrong timer).
+    const sessionNow = state.structured ? VTSession.get() : null;
+    const routineNextId =
+      sessionNow && VTSession.currentExerciseId() === ex.id
+        ? sessionNow.order[sessionNow.index + 1] || null
+        : sessionNow
+          ? VTSession.currentExerciseId()
+          : null;
+    const routineNextEx = routineNextId ? findExercise(routineNextId) : null;
+    const nextSug = state.structured
+      ? routineNextEx
+        ? { ex: routineNextEx, reason: "structured" }
+        : null
+      : suggestNextExercise({ excludeId: ex.id });
     const nextName = nextSug?.ex
       ? (window.VTI18n ? VTI18n.exTitle(nextSug.ex) : nextSug.ex.title)
       : "";
-    const firstWinHtml = isFirstWin
+    const routineHtml = state.structured
+      ? `<div class="first-win-card" id="post-session-next">
+          <h4>${escapeHtml(tt(routineNextEx ? "loop.routineNextTitle" : "loop.routineLastTitle"))}</h4>
+          <div class="first-win-actions">
+            <button type="button" class="btn btn-primary btn-sm" id="ps-routine-next">${escapeHtml(
+              routineNextEx ? `${tt("home.nextStepCta")}: ${nextName}` : tt("loop.routineFinish")
+            )}</button>
+          </div>
+        </div>`
+      : "";
+    const firstWinHtml = state.structured
+      ? routineHtml
+      : isFirstWin
       ? `<div class="first-win-card" id="first-win-card">
           <h4>${tt("retain.firstWinTitle")}</h4>
           <p>${tt("retain.firstWinBody")}</p>
@@ -3305,7 +3548,7 @@
       } catch {
         /* ignore */
       }
-      state.microSession = true;
+      state.pendingMicro = true;
       openExercise(ex.id, false);
     });
     $("#fw-remind")?.addEventListener("click", () => {
@@ -3326,6 +3569,7 @@
       if (nextSug?.ex) openExercise(nextSug.ex.id, false);
     });
     $("#ps-same")?.addEventListener("click", () => openExercise(ex.id, false));
+    $("#ps-routine-next")?.addEventListener("click", () => advanceStructured("next"));
 
     toast(tt("toast.sessionSaved"));
 
@@ -3336,7 +3580,9 @@
       /* ignore */
     }
 
-    if (state.structured) {
+    // Advance past this step once — a second Save used to skip the next step
+    // without it ever being opened.
+    if (state.structured && !wasSaved && VTSession.currentExerciseId() === ex.id) {
       VTSession.markCurrentComplete();
       updateSessionBanner();
     }
@@ -3366,6 +3612,8 @@
     $("#timer-display").textContent = formatTime(left);
     if (left <= 0) {
       stopTimer(true);
+      // The clearest "done" there is: the step ran its full length.
+      recordPracticeIfDue("timer_done");
       toast(tt("toast.timerDone"));
       if (state.practiceLive) {
         // Soft cue only — don't force stop voice mid-rep
@@ -3519,11 +3767,11 @@
             <div class="history-item" data-id="${r.id}">
               <div>
                 <strong>${r.label}</strong>
-                <div class="meta">${ex ? ex.title : r.exerciseId} · ${new Date(r.createdAt).toLocaleString()} · ${Math.round((r.size || 0) / 1024)} KB</div>
+                <div class="meta">${ex ? exName(ex) : r.exerciseId} · ${new Date(r.createdAt).toLocaleString(locale())} · ${Math.round((r.size || 0) / 1024)} KB</div>
               </div>
               <div class="controls-row">
-                <button type="button" class="btn btn-sm" data-play="${r.id}">Play</button>
-                <button type="button" class="btn btn-sm btn-danger" data-del="${r.id}">Delete</button>
+                <button type="button" class="btn btn-sm" data-play="${r.id}">${tt("history.play")}</button>
+                <button type="button" class="btn btn-sm btn-danger" data-del="${r.id}">${tt("history.delete")}</button>
               </div>
             </div>`;
         }
@@ -3538,7 +3786,7 @@
             const older = sorted[1];
             const ex = findExercise(exId);
             html += `<div class="history-item">
-              <div><strong>${ex ? ex.title : exId}</strong>
+              <div><strong>${ex ? exName(ex) : exId}</strong>
               <div class="meta">${tt("retain.audioCompareMeta")}</div></div>
               <div class="controls-row">
                 <button type="button" class="btn btn-sm" data-ab-old="${older.id}" data-ab-new="${newer.id}">${tt("retain.audioCompareBtn")}</button>
@@ -3559,15 +3807,19 @@
         entries.forEach(([id, p]) => {
           const ex = findExercise(id);
           html += `<div class="history-item">
-            <div><strong>${ex ? ex.title : id}</strong>
-            <div class="meta">${p.completedCount}× · last score ${p.lastScore != null ? p.lastScore + "/10" : "—"} · ${p.lastAt ? new Date(p.lastAt).toLocaleString() : ""}</div></div>
+            <div><strong>${ex ? exName(ex) : id}</strong>
+            <div class="meta">${tt("history.meta", {
+              n: p.completedCount,
+              score: p.lastScore != null ? p.lastScore + "/10" : "—",
+              when: p.lastAt ? new Date(p.lastAt).toLocaleString(locale()) : ""
+            })}</div></div>
           </div>`;
         });
       }
       html += `</div>`;
 
       if (reviews.length) {
-        html += `<h3 style="margin-top:1.5rem;">Saved reviews</h3>`;
+        html += `<h3 style="margin-top:1.5rem;">${tt("history.reviews")}</h3>`;
       }
 
       list.innerHTML = html;
@@ -3749,7 +4001,8 @@
       toast(tt("toast.startWeekFirst"));
       return;
     }
-    const date = new Date().toISOString().slice(0, 10);
+    // Local day: in Lima a UTC date turned over at 19:00.
+    const date = window.VTDays?.dayKey?.() || new Date().toISOString().slice(0, 10);
     plan.checkIns = plan.checkIns || [];
     if (plan.checkIns.some((c) => c.date === date)) {
       toast(tt("toast.alreadyCheckin"));
@@ -3809,12 +4062,21 @@
   }
 
   /* —— Structured session —— */
-  function startStructured(path) {
+  /**
+   * @param {string} [path] basic | advanced | full | daily | basics
+   * @param {{ order?: string[], sec?: Object<string, number>, tier?: string, label?: string }} [routine]
+   *   a prepared sequence (today's basics) instead of a catalog route
+   */
+  function startStructured(path, routine) {
     const p = path || $("#session-path")?.value || "basic";
-    const session = VTSession.start(state.tab, p);
+    const session = VTSession.start(state.tab, p, routine);
     updateSessionBanner();
     const id = VTSession.currentExerciseId();
     if (id) openExercise(id, true);
+    if (routine?.order) {
+      toast(tt("loop.startToast", { tier: routine.label || "", n: String(session.order.length) }));
+      return session;
+    }
     toast(
       tt("toast.structuredStart", {
         track: tt(state.tab === "vocal" ? "track.vocalShort" : "track.singingShort"),
@@ -3850,8 +4112,47 @@
     toast(tt("toast.sessionPaused"));
   }
 
+  /**
+   * Finish the current guided step and open the next one.
+   *
+   * Practice is kept automatically now (recordPracticeIfDue), so there is no
+   * save-or-discard question between steps: rating stays available through
+   * Save before Next, and a 17-step class no longer costs three presses a step.
+   * The last step stops everything — it used to leave the mic, the piano loop
+   * and the timer running on the home page.
+   */
+  function advanceStructured(source) {
+    if (!state.structured || !state.exercise) return;
+    const s = VTSession.get();
+    if (!s) return;
+    recordPracticeIfDue(source === "skip" ? "guided_skip" : "guided_next");
+    stopPractice(true);
+    VTPiano.stopAll();
+    stopTimer(false);
+    stopHold();
+    stopPitchViz();
+    state.recorder.clear();
+    // Advance only past the step that is actually open: Save followed by Next
+    // must move one step, not two.
+    if (VTSession.currentExerciseId() === state.exercise.id) VTSession.markCurrentComplete();
+    updateSessionBanner();
+    const nid = VTSession.currentExerciseId();
+    if (nid) {
+      forceOpenExercise(nid, true);
+      return;
+    }
+    resetSessionPractice();
+    const done = VTSession.get();
+    setView("home");
+    renderExerciseList();
+    if (window.VTLoop?.onRoutineComplete?.(done)) return;
+    toast(tt("toast.structuredDone"));
+  }
+
   function endStructured() {
-    // Always kill live audio/mic — previously left piano/mic running on home
+    // Keep what was practised on this step, then kill live audio/mic —
+    // previously left piano/mic running on home
+    recordPracticeIfDue("guided_end");
     stopPractice(true);
     VTPiano.stopAll();
     stopTimer(false);
@@ -4197,48 +4498,7 @@
     $("#btn-hold-stop")?.addEventListener("click", () => stopPractice(false));
 
     $("#btn-complete").addEventListener("click", completeExercise);
-    $("#btn-next-structured").addEventListener("click", async () => {
-      if (!state.structured) return;
-      const s = VTSession.get();
-      if (!s) return;
-      const next = () => {
-        if (!s.completedIds.includes(state.exercise.id)) {
-          VTSession.markCurrentComplete();
-        }
-        updateSessionBanner();
-        const nid = VTSession.currentExerciseId();
-        if (nid) forceOpenExercise(nid, true);
-        else {
-          toast(tt("toast.structuredDone"));
-          resetSessionPractice();
-          setView("home");
-          renderExerciseList();
-        }
-      };
-      if (shouldPromptOnLeave()) {
-        const choice = await promptLeaveExercise();
-        if (choice === "stay") return;
-        if (choice === "save") {
-          stopPractice(true);
-          VTPiano.stopAll();
-          openMetricsPanel(true);
-          $("#btn-complete")?.focus();
-          toast(tt("leave.scrollSave"));
-          return;
-        }
-        // discard then advance
-        stopPractice(true);
-        VTPiano.stopAll();
-        stopTimer(false);
-        stopHold();
-        stopPitchViz();
-        state.recorder.clear();
-        resetSessionPractice();
-        next();
-        return;
-      }
-      next();
-    });
+    $("#btn-next-structured").addEventListener("click", () => advanceStructured("next"));
 
     $("#btn-open-plan").addEventListener("click", renderPlan);
     $("#btn-plan-start").addEventListener("click", startWeekPlan);
@@ -4259,6 +4519,16 @@
       if (shouldPromptOnLeave()) {
         e.preventDefault();
         e.returnValue = "";
+      }
+    });
+    // A phone that locks, or a tab that closes, keeps what was practised.
+    // localStorage writes are synchronous, so this lands before the page goes.
+    window.addEventListener("pagehide", () => {
+      if (state.view === "exercise") recordPracticeIfDue("pagehide");
+    });
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden" && state.view === "exercise") {
+        recordPracticeIfDue("hidden");
       }
     });
   }
@@ -4520,7 +4790,8 @@
   }
 
   function startMicroSession(exerciseId) {
-    state.microSession = true;
+    // Picked up by forceOpenExercise for this one open only.
+    state.pendingMicro = true;
     const id =
       exerciseId ||
       state.exercise?.id ||
@@ -4545,27 +4816,30 @@
     const bn = $("#chk-browser-notify");
     if (bn) bn.checked = !!cfg.browserNotify;
 
-    // Streak freeze
+    const loopOn = !!window.VTLoop && !!window.VTDays;
+
+    // Rest days (the old "freeze"): the ledger spends them on real misses; this
+    // only reports one it has just spent, once.
     const fl = $("#retain-freeze-label");
     if (fl) {
-      const proFreeze = !!window.VTBilling?.can?.("extra_freezes") || !!window.VTBilling?.isPro?.();
-      const left = VTReminders.freezesLeft(proFreeze);
-      fl.textContent = tt("retain.freezesLeft", { n: String(left) });
-      // Try apply freeze silently when returning after 1 missed day
-      const fr = VTReminders.tryApplyFreeze(proFreeze);
+      fl.textContent = tt("retain.freezesLeft", { n: String(VTReminders.freezesLeft()) });
+      const fr = VTReminders.tryApplyFreeze();
       if (fr.applied) {
-        toast(tt("retain.freezeUsed", { n: String(fr.left) }), { durationMs: 3200 });
+        // The start panel says it in its own words; the toast is the fallback.
+        if (loopOn) window.VTLoop.noteRest(fr);
+        else toast(tt("retain.freezeUsed", { n: String(fr.left) }), { durationMs: 3200 });
         fl.textContent = tt("retain.freezesLeft", { n: String(fr.left) });
       }
     }
 
-    // Welcome back after ≥2 days
+    // Welcome back after ≥2 days. With the daily loop the start panel itself
+    // becomes the comeback screen, so this card would only repeat it lower down.
     const days = VTReminders.daysSinceLastPractice();
     const wb = $("#welcome-back");
     if (wb) {
       const dismissed =
         sessionStorage.getItem("vt_wb_dismiss") === dayKeyLocal();
-      const show = days != null && days >= 2 && !dismissed;
+      const show = !loopOn && days != null && days >= 2 && !dismissed;
       wb.hidden = !show;
       if (show) {
         const body = $("#welcome-back-body");
@@ -4573,23 +4847,44 @@
       }
     }
 
-    // Due reminder banner
+    // Due reminder banner. Evaluating marks the day as notified, so the second
+    // render during page load used to hide the banner the first had just shown:
+    // it was never visible. What was shown today stays until dismissed or until
+    // practice makes it moot.
     const ev = VTReminders.evaluate(isEs);
     const rd = $("#remind-due");
     if (rd) {
+      const today = dayKeyLocal();
       if (ev.due && cfg.enabled) {
-        rd.hidden = false;
-        const tx = $("#remind-due-text");
-        if (tx) tx.textContent = ev.message;
+        state.remindDue = { day: today, message: ev.message };
         VTReminders.markNotified();
-      } else {
-        rd.hidden = true;
+      }
+      const keep =
+        cfg.enabled &&
+        state.remindDue &&
+        state.remindDue.day === today &&
+        !VTReminders.practicedToday();
+      rd.hidden = !keep;
+      if (keep) {
+        const tx = $("#remind-due-text");
+        if (tx) tx.textContent = state.remindDue.message;
+        const go = $("#rd-start");
+        if (go && loopOn) go.textContent = tt("loop.remindCta");
+        try {
+          if (!state.remindDue.tracked) {
+            state.remindDue.tracked = true;
+            window.VTAnalytics?.track?.("remind_due_shown", {});
+          }
+        } catch {
+          /* ignore */
+        }
       }
     }
   }
 
   function dayKeyLocal() {
-    return new Date().toISOString().slice(0, 10);
+    // Named "local" from the start but was the UTC date until the loop fixed it.
+    return window.VTDays?.dayKey?.() || new Date().toISOString().slice(0, 10);
   }
 
   function bindRetention() {
@@ -4669,14 +4964,25 @@
       const wb = $("#welcome-back");
       if (wb) wb.hidden = true;
     });
-    $("#rd-start")?.addEventListener("click", () => startMicroSession("s15-sh-air-ladder"));
+    // The reminder's button starts today's Mínimo when the loop is there; the
+    // old one opened the Canto air ladder for everybody, Vocal users included.
+    $("#rd-start")?.addEventListener("click", () => {
+      state.remindDue = null;
+      if (window.VTLoop?.startTier) window.VTLoop.startTier("min");
+      else startMicroSession("s15-sh-air-ladder");
+    });
     $("#rd-dismiss")?.addEventListener("click", () => {
+      state.remindDue = null;
       const rd = $("#remind-due");
       if (rd) rd.hidden = true;
     });
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible" && state.view === "home") {
+        // A tab left open overnight wakes up on a new day: redraw all of home,
+        // not only the reminders, or "done for today" would still say today.
+        renderValuePulse();
         renderRetentionChrome();
+        renderNextStepCard();
       }
     });
   }
@@ -5599,6 +5905,9 @@
     setTab,
     refreshStartPanel: renderNextStepCard,
     startDaily,
+    startStructured,
+    recordPracticeIfDue,
+    advanceStructured,
     dailySession,
     openPricing,
     closePricing,
@@ -5643,6 +5952,21 @@
     syncGuideLinks();
     const settings = VTStorage.getSettings();
     state.tab = settings.lastTab || "vocal";
+    // The daily loop draws into home and starts routines through these.
+    window.VTLoop?.bind?.({
+      getTab: () => state.tab,
+      findExercise,
+      startRoutine: (r) => startStructured(r.path || "basics", r),
+      startDaily,
+      toast: (msg, opts) => toast(msg, opts),
+      refresh: () => renderNextStepCard(),
+      focusReminders: () => {
+        if (state.view !== "home") setView("home");
+        const panel = $("#retain-panel");
+        panel?.scrollIntoView({ block: "center", behavior: "smooth" });
+        $("#chk-reminders")?.focus({ preventScroll: true });
+      }
+    });
     bind();
     bindBilling();
     bindAuth();

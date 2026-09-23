@@ -14,7 +14,11 @@
     holdLogs: "vt_hold_logs_v1",
     profiles: "vt_profiles_v1",
     goals: "vt_goals_v1",
-    achievements: "vt_achievements_v1"
+    achievements: "vt_achievements_v1",
+    // Daily loop: the local-day practice ledger (js/practice-days.js) and the
+    // loop's own memory — surprises found, milestones marked (js/daily-loop.js).
+    days: "vt_days_v1",
+    loop: "vt_loop_v1"
   };
 
   const MAX_PROFILES_FREE = 1;
@@ -145,6 +149,9 @@
         localStorage.removeItem(`vt_prof_${id}_${LS.weekPlan}`);
         localStorage.removeItem(`vt_prof_${id}_${LS.reviews}`);
         localStorage.removeItem(`vt_prof_${id}_${LS.goals}`);
+        localStorage.removeItem(`vt_prof_${id}_${LS.achievements}`);
+        localStorage.removeItem(`vt_prof_${id}_${LS.days}`);
+        localStorage.removeItem(`vt_prof_${id}_${LS.loop}`);
       } catch {
         /* ignore */
       }
@@ -154,24 +161,44 @@
     getProgress() {
       return read(scopedKey(LS.progress), {});
     },
+    /**
+     * Save one take.
+     *
+     * `replaceId` updates an entry in place instead of adding one: practice that
+     * was recorded automatically (a guided step, a finished timer) and is then
+     * rated with Save is the same take, not a second one. The day it happened
+     * never moves; `updatedAt` lets a sync pick the newer copy of one id.
+     *
+     * `auto: true` marks a take that was recorded without a rating. It has no
+     * score, so it must not overwrite the last real score.
+     */
     saveExerciseResult(exerciseId, result) {
       const all = this.getProgress();
       if (!all[exerciseId]) {
         all[exerciseId] = { completedCount: 0, history: [], lastScore: null, lastAt: null };
       }
+      const row = all[exerciseId];
+      const now = new Date().toISOString();
+      const i = result.replaceId ? row.history.findIndex((h) => h && h.id === result.replaceId) : -1;
+      const prev = i >= 0 ? row.history[i] : null;
       const entry = {
-        id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
-        at: new Date().toISOString(),
+        id: prev ? prev.id : crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+        at: prev ? prev.at : now,
         metrics: result.metrics || {},
         score: result.score ?? null,
         notes: result.notes || "",
         durationSec: result.durationSec || 0
       };
-      all[exerciseId].history.unshift(entry);
-      all[exerciseId].history = all[exerciseId].history.slice(0, 50);
-      all[exerciseId].completedCount += 1;
-      all[exerciseId].lastScore = entry.score;
-      all[exerciseId].lastAt = entry.at;
+      if (prev) entry.updatedAt = now;
+      if (result.auto) entry.auto = true;
+      if (prev) row.history[i] = entry;
+      else {
+        row.history.unshift(entry);
+        row.completedCount += 1;
+      }
+      row.history = row.history.slice(0, 50);
+      if (entry.score != null) row.lastScore = entry.score;
+      if (!row.lastAt || entry.at > row.lastAt) row.lastAt = entry.at;
       write(scopedKey(LS.progress), all);
       return entry;
     },
@@ -230,6 +257,22 @@
       write(scopedKey(LS.goals), g || {});
     },
 
+    /** Local-day practice ledger; shape owned by js/practice-days.js. */
+    getDays() {
+      return read(scopedKey(LS.days), null);
+    },
+    setDays(bag) {
+      write(scopedKey(LS.days), bag);
+    },
+
+    /** Daily-loop memory; shape owned by js/daily-loop.js. */
+    getLoop() {
+      return read(scopedKey(LS.loop), null);
+    },
+    setLoop(bag) {
+      write(scopedKey(LS.loop), bag);
+    },
+
     getAchievementFlags() {
       return read(scopedKey(LS.achievements), {});
     },
@@ -255,7 +298,9 @@
         reviews: this.getReviews(),
         holdLogs: this.getHoldLogs(),
         goals: this.getGoals(),
-        achievements: this.getAchievementFlags()
+        achievements: this.getAchievementFlags(),
+        days: this.getDays(),
+        loop: this.getLoop()
       };
     },
 
@@ -282,6 +327,8 @@
       if (bag.achievements && typeof bag.achievements === "object") {
         write(scopedKey(LS.achievements), bag.achievements);
       }
+      if (bag.days && typeof bag.days === "object") write(scopedKey(LS.days), bag.days);
+      if (bag.loop && typeof bag.loop === "object") write(scopedKey(LS.loop), bag.loop);
       return { ok: true };
     },
 

@@ -337,15 +337,22 @@
           )
         ]);
       for (const constraints of attempts) {
+        const pending = navigator.mediaDevices.getUserMedia(constraints);
         try {
           return await withTimeout(
-            navigator.mediaDevices.getUserMedia(constraints),
+            pending,
             // Shorter bound: piano can still start if mic is denied/hangs
             4000
           );
         } catch (e) {
           lastErr = e;
           console.warn("[VT] getUserMedia attempt failed", e?.name || e?.message || e);
+          // A prompt answered after the timeout would otherwise hand over a
+          // live stream nobody owns, leaving the browser's mic indicator on.
+          pending.then((s) => s.getTracks().forEach((t) => t.stop())).catch(() => {});
+          // A refusal is final: asking twice more with looser constraints only
+          // repeats it (and, on some browsers, the prompt).
+          if (e && (e.name === "NotAllowedError" || e.name === "SecurityError")) break;
         }
       }
       throw lastErr || new Error("getUserMedia failed");

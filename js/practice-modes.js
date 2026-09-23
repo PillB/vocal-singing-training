@@ -1372,15 +1372,21 @@
         <p class="mode-meta">${L("Uniformidad: <strong data-ev>—</strong>", "Evenness: <strong data-ev>—</strong>")}</p>
         <p class="mode-meta muted">${
           straw
-            ? "Air only through straw; cheeks soft. Transfer to /u/ then /A/ after."
-            : "Steady bubbles — jaw free. Transfer same ease to open /A/ after."
+            ? L(
+                "El aire solo por la pajita; mejillas sueltas. Después, lleva la misma facilidad a /u/ y luego a /A/.",
+                "Air only through straw; cheeks soft. Transfer to /u/ then /A/ after."
+              )
+            : L(
+                "Burbujas parejas, mandíbula suelta. Después, lleva la misma facilidad a una /A/ abierta.",
+                "Steady bubbles — jaw free. Transfer same ease to open /A/ after."
+              )
         }</p>
-        <button type="button" class="btn btn-sm" data-xfer>Mark transfer to open vowel ✓</button>
+        <button type="button" class="btn btn-sm" data-xfer>${L("Marcar paso a vocal abierta ✓", "Mark transfer to open vowel ✓")}</button>
         <p class="mode-meta">${L("Transferencia marcada: <strong data-x>no</strong>", "Transfer marked: <strong data-x>no</strong>")}</p>
       `;
       this.$("[data-xfer]")?.addEventListener("click", () => {
         this.state.transfer = true;
-        if (this.$("[data-x]")) this.$("[data-x]").textContent = "yes";
+        if (this.$("[data-x]")) this.$("[data-x]").textContent = L("sí", "yes");
       });
     },
     onFrame(frame) {
@@ -1396,7 +1402,8 @@
         const steady = clamp(1 - Math.sqrt(v) * 8, 0, 1);
         if (this.$("[data-bar]")) this.$("[data-bar]").style.width = `${steady * 100}%`;
         if (this.$("[data-ev]"))
-          this.$("[data-ev]").textContent = steady > 0.7 ? "steady" : steady > 0.4 ? "ok" : "uneven";
+          this.$("[data-ev]").textContent =
+            steady > 0.7 ? L("pareja", "steady") : steady > 0.4 ? L("ok", "ok") : L("irregular", "uneven");
         this.state.steadyScore = steady;
       }
     },
@@ -1411,7 +1418,9 @@
       if (this.state.transfer) patches.transfer = 4;
       return {
         patches,
-        summary: this.state.transfer ? "SOVT + transfer marked" : "SOVT flow (mark transfer next time)"
+        summary: this.state.transfer
+          ? L("SOVT con paso a vocal marcado", "SOVT + transfer marked")
+          : L("SOVT (la próxima vez marca el paso a vocal)", "SOVT flow (mark transfer next time)")
       };
     }
   });

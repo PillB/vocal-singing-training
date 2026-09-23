@@ -134,6 +134,12 @@
       });
       return a.variant;
     }
+    // A switched-off experiment serves everybody the control and splits
+    // nobody, so there is nothing to be exposed to. Recording it anyway spent
+    // each browser's one exposure on the control arm months before the test
+    // was turned on, and those browsers would have entered the real test
+    // already counted — in the wrong arm half the time.
+    if (!a.enabled) return a.variant;
     const bag = readBag() || {};
     bag.seen = bag.seen && typeof bag.seen === "object" ? bag.seen : {};
     if (!bag.seen[key]) {

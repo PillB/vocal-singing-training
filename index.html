@@ -10,7 +10,7 @@
     <meta name="color-scheme" content="dark" />
     <meta name="theme-color" content="#0c1118" />
     <title>Entrenamiento vocal y de canto</title>
-    <link rel="stylesheet" href="css/styles.css?v=20260923a" />
+    <link rel="stylesheet" href="css/styles.css?v=20260923c" />
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎤</text></svg>" />
   </head>
   <body>
@@ -51,6 +51,15 @@
       </div>
 
       <section id="view-home" class="view active">
+        <!-- A due reminder is said first, where it can be seen: it used to sit at
+             the very bottom of home, six screens down on a phone. -->
+        <div class="remind-due card" id="remind-due" hidden role="status">
+          <p id="remind-due-text"></p>
+          <div class="welcome-back-actions">
+            <button type="button" class="btn btn-primary btn-sm" id="rd-start" data-i18n="retain.micro5">▶ 5 min</button>
+            <button type="button" class="btn btn-ghost btn-sm" id="rd-dismiss" data-i18n="retain.wbDismiss">Cerrar</button>
+          </div>
+        </div>
         <!-- Start panel: the single decision point on home. One primary action,
              a first-visit explainer, and the guided session as the quiet alternative. -->
         <section class="hero start-panel" id="start-panel" aria-labelledby="start-title">
@@ -73,6 +82,15 @@
               <button type="button" class="btn btn-practice next-step-cta" id="btn-next-step" data-i18n="start.ctaNew">
                 ▶ Empezar
               </button>
+            </div>
+
+            <!-- Daily loop: how much of today's basics. Written by js/daily-loop.js
+                 (no data-i18n: applyDom would reset what the loop writes). -->
+            <div class="loop-tiers" id="loop-tiers" role="group" aria-labelledby="loop-tiers-label" hidden>
+              <span class="loop-tiers-label muted" id="loop-tiers-label"></span>
+              <button type="button" class="loop-tier" data-tier="min" aria-pressed="true"></button>
+              <button type="button" class="loop-tier" data-tier="ess" aria-pressed="false"></button>
+              <button type="button" class="loop-tier" data-tier="class" aria-pressed="false"></button>
             </div>
 
             <div class="start-alt">
@@ -110,6 +128,30 @@
               <span class="muted" data-i18n="start.step3sub">Tu progreso se queda en este navegador.</span>
             </li>
           </ol>
+
+          <!-- Daily loop: the lifetime count first, the week, then the streak.
+               Replaces the first-visit explainer once there is a day sung. -->
+          <aside class="loop-today" id="loop-today" hidden aria-label="Práctica">
+            <p class="loop-count"><strong id="loop-days">0</strong> <span id="loop-days-label"></span></p>
+            <p class="loop-next-ms muted" id="loop-next-ms"></p>
+            <ol class="loop-week" id="loop-week"></ol>
+            <p class="loop-streak muted" id="loop-streak"></p>
+            <div class="loop-goal">
+              <div class="loop-goal-row">
+                <span class="loop-goal-text" id="loop-goal-text"></span>
+                <label class="loop-goal-pick">
+                  <span class="sr-only" id="loop-goal-label"></span>
+                  <select id="loop-goal-sel" class="select-inline">
+                    <option value="2-3"></option>
+                    <option value="3-5"></option>
+                    <option value="5-7"></option>
+                  </select>
+                </label>
+              </div>
+              <div class="loop-goal-bar" id="loop-goal-bar" aria-hidden="true"></div>
+            </div>
+            <button type="button" class="btn btn-ghost btn-sm loop-cards-btn" id="loop-cards-btn" hidden></button>
+          </aside>
         </section>
 
         <!-- Catalog: primary IA (track switch + filters + list) — high contrast, above dense studio chrome when collapsed -->
@@ -305,13 +347,6 @@
           </div>
         </div>
 
-        <div class="remind-due card" id="remind-due" hidden role="status">
-          <p id="remind-due-text"></p>
-          <div class="welcome-back-actions">
-            <button type="button" class="btn btn-primary btn-sm" id="rd-start" data-i18n="retain.micro5">▶ 5 min</button>
-            <button type="button" class="btn btn-ghost btn-sm" id="rd-dismiss" data-i18n="retain.wbDismiss">Cerrar</button>
-          </div>
-        </div>
       </section>
 
       <section id="view-exercise" class="view">
@@ -462,6 +497,15 @@
               <button type="button" class="btn btn-ghost btn-xs stage-guide-more" id="btn-stage-guide-more" data-i18n="ex.stageGuideMore">
                 Ver todos los pasos y consejos
               </button>
+            </div>
+            <!-- A denied microphone used to be a 2.8 s toast, then a frozen step
+                 with nothing on screen that moved a guided session on (VG-40). -->
+            <div id="mic-blocked" class="mic-blocked" role="alert" hidden>
+              <p id="mic-blocked-text"></p>
+              <div class="mic-blocked-actions">
+                <button type="button" class="btn btn-sm" id="btn-mic-retry"></button>
+                <button type="button" class="btn btn-ghost btn-sm" id="btn-mic-skip" hidden></button>
+              </div>
             </div>
           </div>
 
@@ -668,9 +712,37 @@
         </p>
         <p id="leave-modal-stats" class="leave-stats"></p>
         <div class="modal-actions">
-          <button type="button" class="btn btn-success" id="leave-save" data-i18n="leave.save">Guardar progreso</button>
+          <button type="button" class="btn btn-success" id="leave-save" data-i18n="leave.save">Puntuar ahora</button>
           <button type="button" class="btn btn-danger" id="leave-discard" data-i18n="leave.discard">Descartar</button>
           <button type="button" class="btn btn-ghost" id="leave-cancel" data-i18n="leave.stay">Seguir practicando</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Daily loop: the end of today's basics, and the voice-card collection -->
+    <div id="loop-done" class="modal-overlay loop-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="loop-done-title">
+      <div class="modal-card loop-done-card">
+        <p class="loop-done-kicker" id="loop-done-kicker"></p>
+        <h3 id="loop-done-title"></h3>
+        <p class="loop-done-count" id="loop-done-count"></p>
+        <ol class="loop-week loop-week-lg" id="loop-done-week"></ol>
+        <p class="loop-done-line muted" id="loop-done-line"></p>
+        <div class="loop-done-extra" id="loop-done-extra"></div>
+        <p class="loop-done-tomorrow" id="loop-done-tomorrow"></p>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-primary" id="loop-done-close"></button>
+          <button type="button" class="btn btn-ghost" id="loop-done-remind" hidden></button>
+        </div>
+      </div>
+    </div>
+
+    <div id="loop-cards" class="modal-overlay loop-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="loop-cards-title">
+      <div class="modal-card loop-cards-card">
+        <h3 id="loop-cards-title"></h3>
+        <p class="muted" id="loop-cards-sub"></p>
+        <ul class="loop-cards-grid" id="loop-cards-grid"></ul>
+        <div class="modal-actions">
+          <button type="button" class="btn" id="loop-cards-close"></button>
         </div>
       </div>
     </div>
@@ -860,35 +932,37 @@
     </div>
 
     <script src="js/focus-trap.js?v=20260919a"></script>
-    <script src="js/i18n.js?v=20260923a"></script>
+    <script src="js/i18n.js?v=20260923c"></script>
     <script src="js/exercises-data.js?v=20260920a"></script>
     <script src="js/exercises-locale-es.js?v=20260920a"></script>
     <script src="js/practice-profiles.js?v=20260920a"></script>
-    <script src="js/storage.js?v=20260921a"></script>
+    <script src="js/storage.js?v=20260923c"></script>
+    <script src="js/practice-days.js?v=20260923c"></script>
     <script src="js/billing-config.js?v=20260922a"></script>
     <script src="js/license.js?v=20260921a"></script>
     <script src="js/billing.js?v=20260922a"></script>
     <script src="js/ads-config.js"></script>
     <script src="js/ads.js"></script>
-    <script src="js/value-pulse.js"></script>
-    <script src="js/analytics.js"></script>
-    <script src="js/experiments-config.js?v=20260923a"></script>
-    <script src="js/experiments.js?v=20260923a"></script>
-    <script src="js/reminders.js"></script>
+    <script src="js/value-pulse.js?v=20260923c"></script>
+    <script src="js/analytics.js?v=20260923c"></script>
+    <script src="js/experiments-config.js?v=20260923c"></script>
+    <script src="js/experiments.js?v=20260923c"></script>
+    <script src="js/reminders.js?v=20260923c"></script>
     <script src="js/auth-users.generated.js"></script>
     <script src="js/auth.js"></script>
     <script src="js/account.js?v=20260921a"></script>
-    <script src="js/sync.js?v=20260921a"></script>
+    <script src="js/sync.js?v=20260923c"></script>
     <script src="js/piano.js"></script>
     <script src="js/range-adapter.js"></script>
     <script src="js/pitch-visualizer.js?v=20260717f"></script>
     <script src="js/pitch-game.js"></script>
-    <script src="js/practice-engine.js?v=20260717d"></script>
-    <script src="js/practice-modes.js?v=20260920a"></script>
+    <script src="js/practice-engine.js?v=20260923c"></script>
+    <script src="js/practice-modes.js?v=20260923c"></script>
     <script src="js/recorder.js"></script>
     <script src="js/metrics.js"></script>
-    <script src="js/session.js?v=20260919b"></script>
+    <script src="js/session.js?v=20260923c"></script>
+    <script src="js/daily-loop.js?v=20260923c"></script>
     <script src="js/tour.js?v=20260923a"></script>
-    <script src="js/app.js?v=20260923a"></script>
+    <script src="js/app.js?v=20260923c"></script>
   </body>
 </html>

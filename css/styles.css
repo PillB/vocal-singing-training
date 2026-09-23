@@ -15,6 +15,9 @@
   --success: #4fd492;
   --warn: #f0b84f;
   --danger: #f07a82;
+  /* Celebration only (a day sung, a surprise, a milestone). A clear light gold,
+     kept apart from --warn, which already means "careful" in the level meter. */
+  --reward: #ffd36e;
   --radius: 14px;
   --radius-sm: 10px;
   --shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
@@ -282,15 +285,19 @@ button:focus-visible,
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, #4a8fc4, #6a5ce0);
+  /* Darker ends so white text holds 4.5:1 across the whole gradient: the old
+     #4a8fc4 start gave 3.5:1. */
+  background: linear-gradient(135deg, #3a74a8, #5b4fd0);
   border-color: transparent;
   color: #fff;
 }
 
 .btn-singing {
-  background: linear-gradient(135deg, #b67a45, #c49a5a);
+  /* White on this orange measured 2.6:1; a dark label on a slightly brighter
+     orange keeps the Canto colour and reads at 6.5:1 or better. */
+  background: linear-gradient(135deg, #d08a4a, #e6ad6c);
   border-color: transparent;
-  color: #fff;
+  color: #1a1206;
 }
 
 .btn-ghost {
@@ -469,15 +476,19 @@ button:focus-visible,
 }
 .tab.active[data-tab="vocal"],
 .track-tab.active[data-tab="vocal"] {
-  background: linear-gradient(145deg, rgba(70, 150, 220, 0.95), rgba(50, 110, 180, 0.88));
+  /* The old light end (rgba 70,150,220) gave the label 3.2:1; these hold
+     5.4:1 or better across the gradient. */
+  background: linear-gradient(145deg, #2868a8, #225890);
   color: #f2f9ff;
   border-color: rgba(160, 210, 255, 0.55);
   box-shadow: 0 0 0 1px rgba(90, 170, 240, 0.35), 0 6px 18px rgba(40, 100, 180, 0.35);
 }
 .tab.active[data-tab="singing"],
 .track-tab.active[data-tab="singing"] {
-  background: linear-gradient(145deg, rgba(210, 140, 80, 0.95), rgba(170, 100, 50, 0.9));
-  color: #fff8f0;
+  /* White on this orange read 2.9:1. A dark label on a brighter orange keeps
+     the Canto colour at 6.9:1 or better, matching .btn-singing. */
+  background: linear-gradient(145deg, #e6a468, #d68e50);
+  color: #1a1206;
   border-color: rgba(255, 200, 150, 0.5);
   box-shadow: 0 0 0 1px rgba(230, 160, 100, 0.35), 0 6px 18px rgba(140, 80, 30, 0.35);
 }
@@ -2896,7 +2907,10 @@ body.view-exercise .stage-below.is-fitted {
 .btn-practice {
   background: linear-gradient(135deg, #3dba7a, #2a9d8f 55%, #4a8fc4);
   border: none;
-  color: #fff;
+  /* Near-black on the green reads 7.7:1 at the light end and 5.5:1 at the
+     blue end. White read 2.5:1 on the green — below AA on the one button
+     every screen is built around. */
+  color: #07130e;
   font-size: 1.05rem;
   font-weight: 750;
   padding: 0.75rem 1.35rem;
@@ -4615,8 +4629,10 @@ body.practice-live .stage-guide {
   display: inline;
 }
 
-/* The three-step strip already says what the intro sentence says */
-body.home-zero #start-panel .start-sub {
+/* The three-step strip already says what the intro sentence says. Not once
+   the loop owns the panel: then the line carries the rest-day and welcome-back
+   news, and the strip is gone. */
+body.home-zero:not(.loop-on) #start-panel .start-sub {
   display: none;
 }
 
@@ -4903,4 +4919,427 @@ body.home-zero #start-panel .start-sub {
   .trill-syl {
     font-size: 1.5rem;
   }
+}
+
+/* ————————————————————————————————————————————————————————————————
+   Daily loop (js/daily-loop.js): today's basics, the week, the card that
+   ends the day. Calm by design: one accent for "done", no confetti, motion
+   only on the moment that earned it, and none with reduced motion.
+   ———————————————————————————————————————————————————————————————— */
+
+/* Once there is a day sung, the start panel gets its second column back:
+   the explainer is replaced by the practice record. */
+body.loop-on #start-panel.start-panel {
+  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+}
+body.loop-on .start-steps {
+  display: none;
+}
+
+.loop-tiers {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 0.7rem;
+}
+.loop-tiers-label {
+  font-size: 0.85rem;
+  margin-right: 0.1rem;
+}
+.loop-tier {
+  min-height: var(--min-tap);
+  padding: 0.3rem 0.85rem;
+  border-radius: 999px;
+  border: 1px solid rgba(140, 170, 210, 0.38);
+  background: rgba(12, 18, 28, 0.5);
+  color: var(--text);
+  font-size: 0.88rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+.loop-tier:hover {
+  border-color: var(--accent);
+}
+.loop-tier[aria-pressed="true"] {
+  border-color: rgba(79, 212, 146, 0.75);
+  background: rgba(79, 212, 146, 0.14);
+  color: #c9f6de;
+}
+
+/* Done for today: the card settles, the button goes quiet. */
+#start-panel .next-step.is-done {
+  border-color: rgba(79, 212, 146, 0.5);
+  background: rgba(20, 60, 44, 0.35);
+}
+#start-panel .next-step.is-done .next-step-k {
+  color: #9fecc6;
+}
+
+.loop-today {
+  display: grid;
+  gap: 0.55rem;
+  align-content: start;
+  padding: 0.85rem 0.95rem 0.9rem;
+  border-radius: var(--radius);
+  background: rgba(12, 18, 28, 0.45);
+  border: 1px solid rgba(140, 170, 210, 0.2);
+}
+.loop-today p {
+  margin: 0;
+}
+.loop-count {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  line-height: 1;
+}
+.loop-count strong {
+  font-size: clamp(2.1rem, 4.4vw, 2.7rem);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+}
+.loop-count span {
+  color: var(--text-muted);
+  font-weight: 650;
+}
+.loop-next-ms,
+.loop-streak {
+  font-size: 0.84rem;
+}
+
+/* The week: Monday to Sunday, one dot a day */
+.loop-week {
+  list-style: none;
+  margin: 0.15rem 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.25rem;
+}
+.loop-day {
+  display: grid;
+  justify-items: center;
+  gap: 0.25rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+.loop-day-dot {
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 999px;
+  border: 2px solid rgba(140, 170, 210, 0.38);
+  display: grid;
+  place-items: center;
+  font-size: 0.78rem;
+  line-height: 1;
+}
+.loop-day.is-done .loop-day-dot {
+  background: var(--success);
+  border-color: var(--success);
+}
+.loop-day.is-done .loop-day-dot::after {
+  content: "✓";
+  color: #07170f;
+  font-weight: 900;
+}
+.loop-day.is-rest .loop-day-dot {
+  background: rgba(155, 143, 245, 0.22);
+  border-color: var(--accent-2);
+}
+.loop-day.is-rest .loop-day-dot::after {
+  content: "☾";
+  color: #d4ceff;
+}
+.loop-day.is-missed .loop-day-dot {
+  border-style: dashed;
+  border-color: rgba(140, 170, 210, 0.3);
+}
+.loop-day.is-today .loop-day-dot {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(110, 180, 232, 0.22);
+}
+.loop-day.is-today.is-done .loop-day-dot {
+  border-color: var(--success);
+  box-shadow: 0 0 0 3px rgba(79, 212, 146, 0.25);
+}
+.loop-day.is-today {
+  color: var(--text);
+}
+.loop-day.is-future {
+  opacity: 0.5;
+}
+
+.loop-goal {
+  display: grid;
+  gap: 0.35rem;
+}
+.loop-goal-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.86rem;
+}
+.loop-goal-pick select {
+  min-height: 36px;
+  font-size: 0.82rem;
+}
+.loop-goal-bar {
+  display: flex;
+  gap: 3px;
+}
+.loop-goal-bar span {
+  flex: 1 1 0;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(140, 170, 210, 0.22);
+}
+.loop-goal-bar span.stretch {
+  background: rgba(140, 170, 210, 0.1);
+}
+.loop-goal-bar span.on {
+  background: var(--success);
+}
+.loop-goal-bar span.stretch.on {
+  background: linear-gradient(90deg, var(--success), var(--accent));
+}
+.loop-cards-btn {
+  justify-self: start;
+}
+
+/* The end of today's basics */
+.loop-done-card {
+  width: min(440px, 100%);
+  max-height: calc(100dvh - 2rem);
+  overflow: auto;
+}
+.loop-done-kicker {
+  margin: 0 0 0.25rem;
+  font-size: 0.74rem;
+  font-weight: 750;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.loop-done-count {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin: 0.4rem 0 0.6rem;
+}
+.loop-done-count strong {
+  font-size: 3rem;
+  line-height: 1;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  color: var(--success);
+  font-variant-numeric: tabular-nums;
+}
+.loop-done-count span {
+  color: var(--text-muted);
+  font-weight: 650;
+}
+.loop-week-lg .loop-day-dot {
+  width: 1.85rem;
+  height: 1.85rem;
+}
+.loop-done-line {
+  margin: 0.5rem 0 0.2rem;
+  font-size: 0.86rem;
+}
+.modal-card .loop-note {
+  margin: 0.6rem 0 0;
+  font-size: 0.95rem;
+}
+.loop-ms {
+  font-weight: 700;
+  color: var(--reward);
+}
+.loop-done-tomorrow {
+  margin: 0.8rem 0 1rem;
+  font-size: 0.92rem;
+  color: var(--text-muted);
+}
+
+/* A surprise: set apart by its border, not by noise */
+.loop-reward {
+  margin: 0.75rem 0 0;
+  padding: 0.75rem 0.85rem 0.8rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background:
+    linear-gradient(var(--bg-soft), var(--bg-soft)) padding-box,
+    linear-gradient(135deg, var(--reward), var(--singing)) border-box;
+}
+.loop-reward h4 {
+  margin: 0.1rem 0 0.3rem;
+  font-size: 1rem;
+}
+.loop-reward p {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+.loop-reward .loop-reward-k {
+  font-size: 0.75rem;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--reward);
+}
+
+@keyframes loop-pop {
+  0% {
+    transform: scale(0.7);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@keyframes loop-rise {
+  from {
+    transform: translateY(6px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+.loop-pop {
+  display: inline-block;
+  animation: loop-pop 520ms cubic-bezier(0.2, 0.8, 0.3, 1.2) both;
+}
+.loop-done-card .loop-reward {
+  animation: loop-rise 420ms 280ms ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .loop-pop,
+  .loop-done-card .loop-reward {
+    animation: none;
+  }
+}
+
+/* The collection */
+.loop-cards-card {
+  width: min(720px, 100%);
+  max-height: calc(100dvh - 2rem);
+  display: flex;
+  flex-direction: column;
+}
+.loop-cards-grid {
+  list-style: none;
+  margin: 0.25rem 0 1rem;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 0.5rem;
+  overflow: auto;
+  min-height: 0;
+}
+.loop-card {
+  position: relative;
+  padding: 0.6rem 0.7rem 0.65rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: rgba(12, 18, 28, 0.4);
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+.loop-card h4 {
+  margin: 0 1.6rem 0.25rem 0;
+  font-size: 0.92rem;
+}
+.loop-card p {
+  margin: 0;
+}
+/* Where a fact comes from, under every card: a fact without a source is an opinion. */
+.loop-reward .loop-card-src,
+.loop-card .loop-card-src {
+  margin-top: 0.4rem;
+  font-size: 0.75rem;
+  line-height: 1.35;
+  color: var(--text-muted);
+}
+.loop-card-n {
+  position: absolute;
+  top: 0.45rem;
+  right: 0.55rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: var(--text-muted);
+}
+.loop-card.is-locked {
+  border-style: dashed;
+  opacity: 0.7;
+}
+
+/* A refused microphone, said on the stage where the learner is looking */
+.mic-blocked {
+  position: absolute;
+  top: 0.6rem;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(94%, 460px);
+  z-index: 50;
+  padding: 0.7rem 0.85rem 0.75rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(240, 184, 79, 0.7);
+  background: rgba(24, 30, 40, 0.97);
+  box-shadow: var(--shadow);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+.mic-blocked p {
+  margin: 0 0 0.5rem;
+}
+.mic-blocked-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+@media (max-width: 860px) {
+  /* One column on a phone: today's basics, then the practice record, then the
+     other ways to practise. Without this the record sat below three secondary
+     controls and out of sight on the first screen. */
+  body.loop-on #start-panel.start-panel {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 0;
+  }
+  body.loop-on #start-panel .start-main {
+    display: contents;
+  }
+  body.loop-on #start-panel .loop-today {
+    order: 2;
+    margin-top: 0.15rem;
+  }
+  body.loop-on #start-panel .start-alt {
+    order: 3;
+    margin-top: 0.9rem;
+  }
+  body.loop-on #start-panel #home-tour-invite {
+    order: 4;
+  }
+}
+@media (max-width: 400px) {
+  .loop-day-dot {
+    width: 1.4rem;
+    height: 1.4rem;
+  }
+  .loop-tier {
+    padding-inline: 0.65rem;
+    font-size: 0.84rem;
+  }
+}
+.loop-done-line span {
+  display: block;
 }

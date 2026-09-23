@@ -40,8 +40,10 @@ MP_PLAN_PRO_YEARLY = ""
 # Length of the free trial, in days. One per account, ever.
 TRIAL_DAYS = "30"
 # Comma-separated emails allowed to gift and revoke months. Read on every
-# request, so removing an address here takes effect on the next deploy.
-ADMIN_EMAILS = ""
+# request, so removing an address takes effect on the next deploy.
+# Set it with `wrangler secret put ADMIN_EMAILS`, NOT here: this repository is
+# public and a value in this file publishes the address in git history forever.
+# The worker reads env.ADMIN_EMAILS either way, so a secret behaves identically.
 # Google Sign-In client id (public by design). Empty disables Google sign-in.
 GOOGLE_CLIENT_ID = ""
 # Transactional email for the one-time sign-in codes: resend | brevo | mailersend.
@@ -58,6 +60,7 @@ EMAIL_FROM_NAME = "Vocal Studio"
 #   LICENSE_PRIVATE_KEY_PKCS8_B64  base64 PKCS#8 P-256 private key
 #                                  (scripts/generate-keys.mjs prints it)
 # Accounts only, and only for the provider named in EMAIL_PROVIDER:
+#   ADMIN_EMAILS                   comma-separated admin addresses (see above)
 #   RESEND_API_KEY                 re_...
 #   BREVO_API_KEY                  xkeysib-...
 #   MAILERSEND_API_KEY             mlsn....

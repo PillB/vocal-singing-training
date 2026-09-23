@@ -58,7 +58,9 @@
     /** Set by a "5 min" button; applies to the next exercise opened, only. */
     pendingMicro: false,
     /** The reminder shown today, kept until dismissed (renderRetentionChrome). */
-    remindDue: null
+    remindDue: null,
+    /** The guided step on the step-done card was listening when its clock ran out. */
+    stepDoneMic: false
   };
 
   const $ = (sel, el = document) => el.querySelector(sel);
@@ -627,6 +629,7 @@
     syncHeaderNav(name);
     if (name !== "exercise") {
       document.body.classList.remove("practice-live");
+      hideStepDone();
     }
     syncHeaderHeightVar();
     updateSessionBanner();
@@ -1439,6 +1442,7 @@
     state.microSession = !!state.pendingMicro;
     state.pendingMicro = false;
     stopPractice(true);
+    hideStepDone();
     state.exercise = ex;
     state.structured = !!fromStructured;
     state.reviewChecks = { auditory: false, visual: false, transcription: false };
@@ -2564,6 +2568,7 @@
   async function startPractice() {
     const ex = state.exercise;
     if (!ex || state.practiceLive || state.practiceStarting) return;
+    hideStepDone();
     const profile = getProfile(ex);
     // Generation token: Stop / leave / exercise switch aborts in-flight Start
     const gen = ++state.practiceGen;
@@ -3025,8 +3030,13 @@
     }
   }
 
-  /** Expand or collapse the post-practice metrics card */
-  function openMetricsPanel(open) {
+  /**
+   * Expand or collapse the post-practice metrics card
+   * @param {boolean} open
+   * @param {{ focusForm?: boolean }} [opts] focusForm: the learner asked to
+   *   rate, so bring the form up under the sticky chrome and focus its first field
+   */
+  function openMetricsPanel(open, opts = {}) {
     state.metricsOpen = !!open;
     const card = document.querySelector("#metrics-card");
     card?.classList.toggle("collapsed", !state.metricsOpen);
@@ -3036,6 +3046,16 @@
         ? tt("metrics.hide")
         : tt("metrics.show");
       btn.setAttribute("aria-expanded", String(!!state.metricsOpen));
+    }
+    if (state.metricsOpen && card && opts.focusForm) {
+      const root = getComputedStyle(document.documentElement);
+      const chrome =
+        (parseFloat(root.getPropertyValue("--header-h")) || 0) +
+        (parseFloat(root.getPropertyValue("--ex-chrome-h")) || 0);
+      window.scrollBy({ top: card.getBoundingClientRect().top - chrome - 8, behavior: scrollBehavior() });
+      const first = card.querySelector("#metrics-form input, #metrics-form textarea") || $("#btn-complete");
+      first?.focus({ preventScroll: true });
+      return;
     }
     // U11: reveal metrics without yanking sticky stage off-screen
     if (state.metricsOpen && card) {
@@ -3644,10 +3664,94 @@
       stopTimer(true);
       // The clearest "done" there is: the step ran its full length.
       recordPracticeIfDue("timer_done");
-      toast(tt("toast.timerDone"));
-      if (state.practiceLive) {
-        // Soft cue only — don't force stop voice mid-rep
+      if (state.structured) {
+        // A guided step is over, so stop listening: at 00:00 it used to stay
+        // "En vivo" with the mic open and nothing on screen changed (PR-1).
+        const micWasOn = !!state.practice?.running;
+        stopPractice(true);
+        if (showStepDone(micWasOn)) return;
       }
+      // A single exercise keeps a soft cue: the mic stays on mid-rep.
+      toast(tt("toast.timerDone"));
+    }
+  }
+
+  /* —— Step done (guided sessions) —— */
+  const STEP_MORE_SEC = 30;
+
+  /** Muted under automation like the loop's done card; specs that test it opt in. */
+  function stepDoneQuiet() {
+    try {
+      return sessionStorage.getItem("vt_e2e") === "1" && sessionStorage.getItem("vt_stepdone_e2e") !== "1";
+    } catch {
+      return false;
+    }
+  }
+
+  /** Fill the card for the open step. False when there is no guided step to finish. */
+  function renderStepDone() {
+    const s = state.structured ? VTSession.get() : null;
+    const ex = state.exercise;
+    if (!s || !ex || !s.order?.length) return false;
+    // A Save already moved the session past this step; the next one is then
+    // the current one (as in the score card's routine button).
+    const open = VTSession.currentExerciseId() === ex.id;
+    const n = Math.max(1, Math.min(open ? s.index + 1 : s.index, s.order.length));
+    const nextId = open ? s.order[s.index + 1] || null : VTSession.currentExerciseId();
+    const nextEx = nextId ? findExercise(nextId) : null;
+    $("#step-done-step").textContent = tt("session.progress", { n, total: s.order.length });
+    $("#step-done-sub").textContent = tt(state.stepDoneMic ? "stepDone.micOff" : "stepDone.timeUp");
+    $("#btn-step-done-next").textContent = nextEx
+      ? tt("stepDone.next", { name: window.VTI18n ? VTI18n.exTitle(nextEx) : nextEx.title })
+      : tt("loop.routineFinish");
+    $("#btn-step-done-more").textContent = tt("stepDone.more", { n: STEP_MORE_SEC });
+    return true;
+  }
+
+  /**
+   * Cover the stage with "done" and the way on: one button that does what
+   * #btn-next-structured does, plus more time and the rating form.
+   * @param {boolean} micWasOn the step was listening when its clock ran out
+   * @returns {boolean} true when the card is showing
+   */
+  function showStepDone(micWasOn) {
+    const box = $("#step-done");
+    if (!box || stepDoneQuiet()) return false;
+    state.stepDoneMic = !!micWasOn;
+    if (!renderStepDone()) return false;
+    hideMicBlocked();
+    // On a short landscape screen the sticky title row can cover the top of
+    // the stage; centre the card in the part still in view.
+    const chrome = document.querySelector(".exercise-header-compact") || document.querySelector("header.app-header");
+    const sr = $("#highway-stage").getBoundingClientRect();
+    const covered = Math.min(sr.height / 2, chrome ? chrome.getBoundingClientRect().bottom - sr.top : 0);
+    box.style.paddingTop = covered > 2 ? `calc(1rem + ${Math.round(covered)}px)` : "";
+    box.hidden = false;
+    // Focus the way on, unless the learner is typing (a note in the rating form).
+    const a = document.activeElement;
+    if (!(a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))) $("#btn-step-done-next")?.focus();
+    try {
+      window.VTAnalytics?.track?.("step_done_shown", { exerciseId: state.exercise?.id, mic: !!micWasOn });
+    } catch {
+      /* ignore */
+    }
+    return true;
+  }
+
+  /** @param {boolean} [returnFocus] put focus back on Start (Escape) */
+  function hideStepDone(returnFocus) {
+    const box = $("#step-done");
+    if (!box || box.hidden) return;
+    const hadFocus = box.contains(document.activeElement);
+    box.hidden = true;
+    if (returnFocus && hadFocus) $("#btn-practice-start")?.focus();
+  }
+
+  function stepDoneChoice(choice) {
+    try {
+      window.VTAnalytics?.track?.("step_done_choice", { exerciseId: state.exercise?.id, choice });
+    } catch {
+      /* ignore */
     }
   }
 
@@ -4155,6 +4259,7 @@
   function pauseStructured() {
     VTSession.pause();
     stopPractice(true);
+    hideStepDone();
     pauseTimer();
     VTPiano.stopAll();
     updateSessionBanner();
@@ -4548,6 +4653,28 @@
 
     $("#btn-complete").addEventListener("click", completeExercise);
     $("#btn-next-structured").addEventListener("click", () => advanceStructured("next"));
+    $("#btn-step-done-next")?.addEventListener("click", () => {
+      stepDoneChoice("next");
+      advanceStructured("next");
+    });
+    $("#btn-step-done-more")?.addEventListener("click", () => {
+      stepDoneChoice("more");
+      hideStepDone();
+      state.timer.remaining = STEP_MORE_SEC;
+      $("#timer-display").textContent = formatTime(STEP_MORE_SEC);
+      startPractice();
+    });
+    $("#btn-step-done-rate")?.addEventListener("click", () => {
+      stepDoneChoice("rate");
+      hideStepDone();
+      openMetricsPanel(true, { focusForm: true });
+    });
+    $("#step-done")?.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      stepDoneChoice("close");
+      hideStepDone(true);
+    });
 
     $("#btn-open-plan").addEventListener("click", renderPlan);
     $("#btn-plan-start").addEventListener("click", startWeekPlan);
@@ -6051,6 +6178,7 @@
       VTI18n.onChange = () => {
         renderExerciseList();
         if (state.view === "exercise" && state.exercise) renderExercise();
+        if ($("#step-done") && !$("#step-done").hidden) renderStepDone();
         // Plan and history build their copy at render time, so a language
         // switch has to re-render them or they stay in the old language.
         if (state.view === "plan") renderPlan();

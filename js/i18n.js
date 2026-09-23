@@ -241,6 +241,15 @@
       "session.bannerTitle": "Sesión guiada de {track}",
       "session.statusActive": "En curso",
       "session.statusPaused": "En pausa",
+      // Design: step-end — the card on the stage when a guided step's clock
+      // reaches 00:00. The step count reuses session.progress, the banner's
+      // own word for the unit.
+      "stepDone.title": "¡Listo!",
+      "stepDone.timeUp": "Se acabó el tiempo.",
+      "stepDone.micOff": "Se acabó el tiempo y el micrófono se apagó.",
+      "stepDone.next": "Siguiente: {name} →",
+      "stepDone.more": "{n} s más",
+      "stepDone.rate": "Calificar este ejercicio",
       "start.kickerNew": "Empieza aquí",
       "ex.stageGuideLabel": "Qué vas a hacer",
       "pricing.moreFeatures": "Ver {n} ventajas más",
@@ -1064,6 +1073,13 @@
       "session.bannerTitle": "{track} guided session",
       "session.statusActive": "Active",
       "session.statusPaused": "Paused",
+      // Design: step-end
+      "stepDone.title": "Done!",
+      "stepDone.timeUp": "Time’s up.",
+      "stepDone.micOff": "Time’s up, and the microphone is off.",
+      "stepDone.next": "Next: {name} →",
+      "stepDone.more": "{n} s more",
+      "stepDone.rate": "Rate this exercise",
       "start.kickerNew": "Start here",
       "ex.stageGuideLabel": "What you are going to do",
       "pricing.moreFeatures": "See {n} more benefits",

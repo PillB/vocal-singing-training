@@ -507,6 +507,20 @@
                 <button type="button" class="btn btn-ghost btn-sm" id="btn-mic-skip" hidden></button>
               </div>
             </div>
+            <!-- A guided step used to end with nothing on screen: 00:00, "En vivo",
+                 the mic open and the way on below the fold (PR-1). -->
+            <div id="step-done" class="step-done" role="status" hidden>
+              <div class="step-done-card">
+                <p class="step-done-k"><span id="step-done-step"></span> <span class="step-done-tick" aria-hidden="true">✓</span></p>
+                <p class="step-done-t" data-i18n="stepDone.title">¡Listo!</p>
+                <p class="step-done-sub" id="step-done-sub"></p>
+                <button type="button" class="btn btn-practice step-done-next" id="btn-step-done-next"></button>
+                <div class="step-done-row">
+                  <button type="button" class="btn btn-ghost" id="btn-step-done-more"></button>
+                  <button type="button" class="btn btn-ghost" id="btn-step-done-rate" data-i18n="stepDone.rate">Calificar este ejercicio</button>
+                </div>
+              </div>
+            </div>
           </div>
 
           <!-- Below sticky highway: only secondary chrome (collapsed by default) -->

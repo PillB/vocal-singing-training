@@ -78,6 +78,8 @@ export const EVENT_NAMES = new Set([
   "reminder_enable",
   "rest_used",
   "session_save",
+  "step_done_choice",
+  "step_done_shown",
   "surprise_shown",
   "tour_complete",
   "tour_dismiss",

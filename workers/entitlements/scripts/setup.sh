@@ -35,7 +35,6 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 TOML=wrangler.toml
-WORKER_NAME=$(sed -n 's/^name *= *"\(.*\)"/\1/p' "$TOML" | head -1)
 D1_NAME=$(sed -n 's/^database_name *= *"\(.*\)"/\1/p' "$TOML" | head -1)
 ROTATE_KEY=0
 [ "${1:-}" = "--rotate-key" ] && ROTATE_KEY=1
@@ -105,9 +104,9 @@ extract_json() {
 
 say "KV namespace"
 # The positional argument to `kv namespace create` is the namespace NAME, not a
-# binding — wrangler 4 takes the binding separately, via --binding. Do not guess
-# what title it ends up with: read the id straight out of the create output, and
-# fall back to matching the list by suffix when the namespace already exists.
+# binding — wrangler 4 takes the binding separately, via --binding. Read the id
+# straight out of the create output, and fall back to an exact title match
+# against the list when the namespace already exists.
 kv_lookup() { # $1 = exact title to match
   wr kv namespace list 2>/dev/null | extract_json array \
     | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
@@ -115,32 +114,42 @@ kv_lookup() { # $1 = exact title to match
         const n=a.find(x=>x&&x.title===process.argv[1]);
         if(n&&n.id)process.stdout.write(n.id)})' "$1"
 }
+# `create --preview` prints `preview_id = "..."`, plain create prints
+# `id = "..."` — wrangler builds the key as `${preview ? "preview_" : ""}id`.
+# Anchoring on `^id` therefore matched the live create and silently extracted
+# nothing from the preview one, which is exactly how the first real run failed.
 kv_create() { # $1 = namespace name, $2... = extra flags; prints the new id
   wr kv namespace create "$@" 2>&1 | sed 's/\x1b\[[0-9;]*m//g' \
-    | sed -n 's/^[[:space:]]*id[[:space:]]*=[[:space:]]*"\([0-9a-f]\{32\}\)".*/\1/p' | head -1
+    | sed -n 's/^[[:space:]]*\(preview_\)\?id[[:space:]]*=[[:space:]]*"\([0-9a-f]\{32\}\)".*/\2/p' \
+    | head -1
 }
 
-KV_TITLE="${WORKER_NAME}-ENTITLEMENTS"
+# wrangler titles the namespace `${env-}${name}${_preview}` and prefixes
+# nothing else, so the title is exactly the name passed in. Guessing a
+# "<worker>-<name>" title meant the lookup never matched, so a second run
+# would try to create a namespace that already exists and be refused.
+KV_NAME=ENTITLEMENTS
+KV_TITLE="$KV_NAME"
 KV_ID=$(kv_lookup "$KV_TITLE")
 if [ -n "$KV_ID" ]; then
   echo "reusing $KV_TITLE"
 else
-  KV_ID=$(kv_create ENTITLEMENTS)
+  KV_ID=$(kv_create "$KV_NAME")
   [ -n "$KV_ID" ] || KV_ID=$(kv_lookup "$KV_TITLE")
+  [ -n "$KV_ID" ] || die "Could not create or find the KV namespace $KV_TITLE."
   echo "created $KV_TITLE"
 fi
-[ -n "$KV_ID" ] || die "Could not create or find the KV namespace $KV_TITLE."
 
 KV_PREVIEW_TITLE="${KV_TITLE}_preview"
 KV_PREVIEW_ID=$(kv_lookup "$KV_PREVIEW_TITLE")
 if [ -n "$KV_PREVIEW_ID" ]; then
   echo "reusing $KV_PREVIEW_TITLE"
 else
-  KV_PREVIEW_ID=$(kv_create ENTITLEMENTS --preview)
+  KV_PREVIEW_ID=$(kv_create "$KV_NAME" --preview)
   [ -n "$KV_PREVIEW_ID" ] || KV_PREVIEW_ID=$(kv_lookup "$KV_PREVIEW_TITLE")
+  [ -n "$KV_PREVIEW_ID" ] || die "Could not create or find $KV_PREVIEW_TITLE."
   echo "created $KV_PREVIEW_TITLE"
 fi
-[ -n "$KV_PREVIEW_ID" ] || die "Could not create or find $KV_PREVIEW_TITLE."
 [ "$KV_ID" != "$KV_PREVIEW_ID" ] || die \
   "The live and preview KV namespaces came back with the same id — refusing to
 continue, because that would point preview writes at production data."
@@ -158,9 +167,9 @@ if [ -n "$D1_ID" ]; then
 else
   wr d1 create "$D1_NAME" >/dev/null 2>&1 || true
   D1_ID=$(d1_lookup || true)
+  [ -n "$D1_ID" ] || die "Could not create or find the D1 database $D1_NAME."
   echo "created $D1_NAME"
 fi
-[ -n "$D1_ID" ] || die "Could not create or find the D1 database $D1_NAME."
 
 # --- write the ids in --------------------------------------------------------
 say "Writing the ids into $TOML"
@@ -195,8 +204,23 @@ JWK_OUT=jwk.public.json
 if [ "$ROTATE_KEY" != "1" ] && wr secret list 2>/dev/null | grep -q LICENSE_PRIVATE_KEY_PKCS8_B64; then
   say "Licence signing key: one already exists, keeping it"
   echo "every licence already issued stays valid. Pass --rotate-key to replace it."
-  echo "NOTE: $JWK_OUT is NOT rewritten, because the public half must keep"
-  echo "matching the private half already deployed."
+  # The file is not regenerated: the public half must keep matching the private
+  # half already deployed, and the private half is not on this machine. But a
+  # re-run from a fresh clone has no file at all, and the operator still needs
+  # the public key. The deployed worker publishes it, so fetch it back.
+  if [ ! -f "$JWK_OUT" ] && [ -n "$WORKER_URL" ]; then
+    echo "$JWK_OUT is missing here; recovering the public half from $WORKER_URL/v1/jwks"
+    curl -fsS "$WORKER_URL/v1/jwks" \
+      | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
+          try{const k=JSON.parse(s).keys[0];
+            require("node:fs").writeFileSync(process.argv[1],JSON.stringify(k,null,2)+"\n")}
+          catch(e){process.exit(1)}})' "$JWK_OUT" \
+      && echo "recovered into $JWK_OUT" \
+      || echo "could not recover it; read it from $WORKER_URL/v1/jwks yourself"
+  else
+    echo "NOTE: $JWK_OUT is NOT rewritten, because the public half must keep"
+    echo "matching the private half already deployed."
+  fi
 else
   say "Licence signing key"
   KEY_ID=$(sed -n 's/^LICENSE_KEY_ID *= *"\(.*\)"/\1/p' "$TOML" | head -1)

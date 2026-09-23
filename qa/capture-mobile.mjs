@@ -35,12 +35,19 @@ const VIEWPORTS = [
   { id: "narrow_320x640", width: 320, height: 640 }
 ];
 
+/** On a phone, Pro and Cuenta sit in the header's "Más" menu. */
+async function fromMenu(p, sel) {
+  if (await p.locator("#btn-more").isVisible()) await p.click("#btn-more");
+  await p.click(sel);
+}
+
 const PAGES = [
   { id: "home", open: async () => {} },
+  { id: "menu", open: async (p) => p.click("#btn-more") },
   { id: "plan", open: async (p) => p.click("#btn-plan") },
   { id: "history", open: async (p) => p.click("#btn-history") },
-  { id: "pricing", open: async (p) => p.click("#btn-pricing") },
-  { id: "account", open: async (p) => p.click("#btn-account") }
+  { id: "pricing", open: async (p) => fromMenu(p, "#btn-pricing") },
+  { id: "account", open: async (p) => fromMenu(p, "#btn-account") }
 ];
 
 const MODAL_PAGES = new Set(["pricing", "account"]);
@@ -189,8 +196,9 @@ function audit({ minFont, minTap }) {
 
   // Overlapping interactive controls (a tap hits the wrong thing).
   // Controls in different stacking layers (an open modal over the page behind
-  // it) overlap by design, so only compare within the same layer.
-  const layer = (el) => el.closest(".modal-overlay") || document.body;
+  // it, or the phone header's open "Más" menu) overlap by design, so only
+  // compare within the same layer.
+  const layer = (el) => el.closest(".modal-overlay, .header-utils.is-open") || document.body;
   const taps = boxes.filter(
     (b) => /^(button|select)$/.test(b.el.tagName.toLowerCase()) && b.st.position !== "fixed"
   );

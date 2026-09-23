@@ -896,6 +896,10 @@
       wk.innerHTML = weekHtml(sum);
       wk.setAttribute("aria-label", tt("loop.weekAria"));
     }
+    // Said over the ticks on a phone, where the strip puts them beside the
+    // lifetime count: "3" next to two ticks read as a wrong count.
+    const wkK = $("#loop-week-k");
+    if (wkK) wkK.textContent = tt("loop.weekAria");
     const st = $("#loop-streak");
     if (st) {
       st.textContent = streakLine(sum);
@@ -954,6 +958,56 @@
     else renderHome();
   }
 
+  /** The first-visit chooser and its body class, on or off. */
+  function showFirst(on) {
+    document.body.classList.toggle("loop-first", on);
+    const pick = $("#track-pick");
+    if (pick) pick.hidden = !on;
+  }
+
+  /**
+   * A first visit: no day sung yet. Ask what to train, then offer that
+   * track's Mínimo, so the first practice needs nothing prepared and is the
+   * same few minutes the loop offers every day after.
+   * @returns {boolean} true when the panel was drawn
+   */
+  function renderFirst() {
+    if (guidedOpen()) return false;
+    const trackId = currentTrack();
+    const r = routine(trackId, "min");
+    const title = $("#start-title");
+    const card = $("#next-step-card");
+    const cta = $("#btn-next-step");
+    if (!r || !title || !card || !cta) return false;
+    showFirst(true);
+    document.querySelectorAll("#track-pick [data-track]").forEach((b) => {
+      b.setAttribute("aria-pressed", String(b.dataset.track === trackId));
+    });
+    const min = Math.max(1, Math.round(r.totalSec / 60));
+    const clock = (sec) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
+    // "Trinos" alone is jargon to someone who has never sung an exercise.
+    const name = (id) => (id === "s4-lip-trills" ? tt("first.trills") : short(id));
+    const kicker = $("#start-kicker");
+    if (kicker) kicker.textContent = tt("start.kickerNew");
+    title.textContent = tt("first.title", { min });
+    card.hidden = false;
+    card.dataset.loop = "first";
+    card.classList.remove("is-done");
+    const label = $("#next-step-label");
+    if (label) label.textContent = tt("first.label", { min });
+    const cardTitle = $("#next-step-title");
+    if (cardTitle) cardTitle.textContent = capitalize(r.order.map((id) => `${name(id)} ${clock(r.sec[id] || 0)}`).join(" → "));
+    // Vocal's Mínimo ends on diction, which reads a page aloud: say so now
+    // rather than promise that nothing is needed.
+    const why = $("#next-step-why");
+    if (why) why.textContent = tt(trackId === "vocal" ? "first.whyVocal" : "first.why");
+    cta.textContent = tt("first.cta", { min });
+    cta.classList.add("btn-practice");
+    cta.classList.remove("btn-ghost");
+    cta.onclick = () => startTier("min");
+    return true;
+  }
+
   /**
    * Draw the loop into the start panel.
    * @returns {boolean} true when the loop took over the panel's main copy
@@ -962,6 +1016,10 @@
     const D = days();
     const aside = $("#loop-today");
     const tiers = $("#loop-tiers");
+    const sub = $("#start-sub");
+    // Only the loop's own states quiet the intro line; every other panel keeps it.
+    if (sub) sub.hidden = false;
+    showFirst(false);
     if (!D || !loopEnabled()) {
       if (aside) aside.hidden = true;
       if (tiers) tiers.hidden = true;
@@ -974,7 +1032,7 @@
     if (!on) {
       if (aside) aside.hidden = true;
       if (tiers) tiers.hidden = true;
-      return false;
+      return renderFirst();
     }
     const L = readLoop();
     renderAside(sum, L);
@@ -992,7 +1050,6 @@
 
     const kicker = $("#start-kicker");
     const title = $("#start-title");
-    const sub = $("#start-sub");
     const card = $("#next-step-card");
     const label = $("#next-step-label");
     const cardTitle = $("#next-step-title");
@@ -1040,17 +1097,20 @@
       kicker.textContent = tl(kickerKey, null, trackId);
       title.textContent =
         state === "back" ? tt("loop.titleBack", { min }) : tt(minKey, { what: capitalize(what), min });
-      let subTxt =
+      const subTxt =
         state === "back"
           ? tt("loop.subBack")
           : state === "sang"
             ? tl("loop.subSang", null, trackId)
             : tt(trackId === "vocal" ? "loop.subVocal" : "loop.sub");
       const rest = lastRest && lastRest.on === sum.today ? lastRest : sum.rest.justUsed;
-      if (rest?.days?.length) {
-        subTxt = `${tt(rest.days.length === 1 ? "loop.subRest1" : "loop.subRestN", { n: rest.days.length, streak: sum.streak })} ${subTxt}`;
-      }
-      sub.textContent = subTxt;
+      const restTxt = rest?.days?.length
+        ? tt(rest.days.length === 1 ? "loop.subRest1" : "loop.subRestN", { n: rest.days.length, streak: sum.streak })
+        : "";
+      // Headline and button only: the kicker and title already say what today
+      // is. The line shows for the one thing only it says, a rest day spent.
+      sub.textContent = restTxt || subTxt;
+      sub.hidden = !restTxt;
       if (label) label.textContent = tt("loop.label." + tier, { min });
       if (cardTitle) cardTitle.textContent = capitalize(stepsTxt);
       const whyKey = tier === "min" ? "loop.whyMin" : tier === "ess" ? "loop.whyEss" : "loop.whyClass";
@@ -1223,7 +1283,8 @@
   /**
    * @param {{ getTab: () => string, findExercise: (id: string) => object|null,
    *   startRoutine: (opts: object) => object, startDaily: () => object,
-   *   toast: (msg: string, opts?: object) => void, focusReminders?: () => void }} h
+   *   toast: (msg: string, opts?: object) => void, focusReminders?: () => void,
+   *   setTab?: (track: string) => void }} h
    */
   function bind(h) {
     hooks = h || {};
@@ -1240,6 +1301,13 @@
       refresh();
     });
     $("#loop-cards-btn")?.addEventListener("click", openCards);
+    $("#track-pick")?.addEventListener("click", (e) => {
+      const b = e.target.closest?.("[data-track]");
+      if (!b || b.getAttribute("aria-pressed") === "true") return;
+      track("first_track_pick", { track: b.dataset.track });
+      // The app re-renders home, which redraws this panel for the new track.
+      hooks.setTab?.(b.dataset.track);
+    });
     track("app_open", { day: today(), loop: loopEnabled(), ...reassertedArms() });
     // Both arms see a start panel, which is the thing under test, so both are
     // exposed here. Exposing only the loop arm (as this once did) left the

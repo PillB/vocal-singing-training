@@ -164,11 +164,16 @@ test.describe("Daily loop", () => {
     expect(r.becameDay).toBe(true);
   });
 
-  test("first visit: the loop stays out of the way until a day is sung", async ({ page }) => {
+  test("first visit: the Mínimo is offered, and the record waits for a day sung", async ({ page }) => {
     await boot(page);
     const p = await panel(page);
+    // The loop draws the first visit too (tests/home-design.spec.js has the rest):
+    // what to train, then that track's Mínimo. Sizes and the record come later.
     expect(p.loopOn).toBe(false);
-    expect(p.state).toBeNull();
+    expect(p.state).toBe("first");
+    expect(p.cta).toMatch(/Empezar \(3\smin\)/);
+    expect(p.primaries).toBe(1);
+    await expect(page.locator("#track-pick")).toBeVisible();
     await expect(page.locator("#loop-tiers")).toBeHidden();
     await expect(page.locator("#loop-today")).toBeHidden();
   });
@@ -179,7 +184,8 @@ test.describe("Daily loop", () => {
     expect(p.loopOn).toBe(true);
     expect(p.state).toBe("go");
     expect(p.kicker).toBe("Tus básicos de hoy");
-    expect(p.title).toMatch(/3 minutos/);
+    // A no-break space keeps "3 minutos" on one line.
+    expect(p.title).toMatch(/3\sminutos/);
     expect(p.pressed).toBe("min");
     expect(p.days.trim()).toBe("3");
     // Mon, Tue sung; Wed is today and still open; the rest of the week is ahead.

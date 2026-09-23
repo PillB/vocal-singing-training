@@ -26,8 +26,9 @@
 #
 # Usage:
 #   workers/entitlements/scripts/setup.sh
-#   workers/entitlements/scripts/setup.sh --keep-key   (do not rotate an
-#                                          existing licence signing key)
+#   workers/entitlements/scripts/setup.sh --rotate-key  (replace an existing
+#                          licence signing key — this invalidates every licence
+#                          already issued, so it is never the default)
 
 set -euo pipefail
 
@@ -36,8 +37,8 @@ cd "$(dirname "$0")/.."
 TOML=wrangler.toml
 WORKER_NAME=$(sed -n 's/^name *= *"\(.*\)"/\1/p' "$TOML" | head -1)
 D1_NAME=$(sed -n 's/^database_name *= *"\(.*\)"/\1/p' "$TOML" | head -1)
-KEEP_KEY=0
-[ "${1:-}" = "--keep-key" ] && KEEP_KEY=1
+ROTATE_KEY=0
+[ "${1:-}" = "--rotate-key" ] && ROTATE_KEY=1
 
 say() { printf '\n\033[1m%s\033[0m\n' "$*"; }
 die() { printf '\n%s\n' "$*" >&2; exit 1; }
@@ -61,55 +62,94 @@ else
 set CLOUDFLARE_ACCOUNT_ID (Cloudflare dashboard, right-hand sidebar) and re-run."
 fi
 
-# --- KV ---------------------------------------------------------------------
-# wrangler titles a namespace <worker>-<binding>, and <worker>-<binding>_preview
-# for the preview one. Look them up by title so a second run reuses them.
-kv_id_for() {
-  wr kv namespace list 2>/dev/null \
-    | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
-        const j=s.slice(s.indexOf("["));
-        try{const n=JSON.parse(j).find(x=>x.title===process.argv[1]);
-        if(n)process.stdout.write(n.id)}catch(e){}})' "$1"
+# --- reading ids back out of wrangler ----------------------------------------
+# wrangler writes banners, warnings and ANSI colour to the same stream as its
+# JSON, and at least one of those banners contains a literal "[":
+#   ▲ [WARNING] Proxy environment variables detected.
+# So "slice from the first bracket" picks the wrong offset and the parse fails.
+# extract_json strips ANSI, then tries every plausible start offset in turn and
+# keeps the first one that parses into the shape asked for.
+extract_json() {
+  node -e '
+    let s = "";
+    process.stdin.on("data", (d) => (s += d)).on("end", () => {
+      s = s.replace(/\x1b\[[0-9;]*m/g, "");
+      const want = process.argv[1];          // "array" | "object"
+      const open = want === "array" ? "[" : "{";
+      for (let i = s.indexOf(open); i !== -1; i = s.indexOf(open, i + 1)) {
+        for (let j = s.length; j > i; j--) {
+          const close = s.lastIndexOf(want === "array" ? "]" : "}", j);
+          if (close <= i) break;
+          try {
+            const v = JSON.parse(s.slice(i, close + 1));
+            if (want === "array" ? Array.isArray(v) : v && typeof v === "object") {
+              process.stdout.write(JSON.stringify(v));
+              return;
+            }
+          } catch (e) { /* keep trying */ }
+          j = close;
+        }
+      }
+    });
+  ' "$1"
 }
 
 say "KV namespace"
+# The positional argument to `kv namespace create` is the namespace NAME, not a
+# binding — wrangler 4 takes the binding separately, via --binding. Do not guess
+# what title it ends up with: read the id straight out of the create output, and
+# fall back to matching the list by suffix when the namespace already exists.
+kv_lookup() { # $1 = exact title to match
+  wr kv namespace list 2>/dev/null | extract_json array \
+    | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
+        let a=[];try{a=JSON.parse(s)}catch(e){return}
+        const n=a.find(x=>x&&x.title===process.argv[1]);
+        if(n&&n.id)process.stdout.write(n.id)})' "$1"
+}
+kv_create() { # $1 = namespace name, $2... = extra flags; prints the new id
+  wr kv namespace create "$@" 2>&1 | sed 's/\x1b\[[0-9;]*m//g' \
+    | sed -n 's/^[[:space:]]*id[[:space:]]*=[[:space:]]*"\([0-9a-f]\{32\}\)".*/\1/p' | head -1
+}
+
 KV_TITLE="${WORKER_NAME}-ENTITLEMENTS"
-KV_ID=$(kv_id_for "$KV_TITLE")
-if [ -z "$KV_ID" ]; then
-  wr kv namespace create ENTITLEMENTS >/dev/null
-  KV_ID=$(kv_id_for "$KV_TITLE")
-  echo "created $KV_TITLE"
-else
+KV_ID=$(kv_lookup "$KV_TITLE")
+if [ -n "$KV_ID" ]; then
   echo "reusing $KV_TITLE"
+else
+  KV_ID=$(kv_create ENTITLEMENTS)
+  [ -n "$KV_ID" ] || KV_ID=$(kv_lookup "$KV_TITLE")
+  echo "created $KV_TITLE"
 fi
 [ -n "$KV_ID" ] || die "Could not create or find the KV namespace $KV_TITLE."
 
 KV_PREVIEW_TITLE="${KV_TITLE}_preview"
-KV_PREVIEW_ID=$(kv_id_for "$KV_PREVIEW_TITLE")
-if [ -z "$KV_PREVIEW_ID" ]; then
-  wr kv namespace create ENTITLEMENTS --preview >/dev/null
-  KV_PREVIEW_ID=$(kv_id_for "$KV_PREVIEW_TITLE")
-  echo "created $KV_PREVIEW_TITLE"
-else
+KV_PREVIEW_ID=$(kv_lookup "$KV_PREVIEW_TITLE")
+if [ -n "$KV_PREVIEW_ID" ]; then
   echo "reusing $KV_PREVIEW_TITLE"
+else
+  KV_PREVIEW_ID=$(kv_create ENTITLEMENTS --preview)
+  [ -n "$KV_PREVIEW_ID" ] || KV_PREVIEW_ID=$(kv_lookup "$KV_PREVIEW_TITLE")
+  echo "created $KV_PREVIEW_TITLE"
 fi
 [ -n "$KV_PREVIEW_ID" ] || die "Could not create or find $KV_PREVIEW_TITLE."
+[ "$KV_ID" != "$KV_PREVIEW_ID" ] || die \
+  "The live and preview KV namespaces came back with the same id — refusing to
+continue, because that would point preview writes at production data."
 
 # --- D1 ---------------------------------------------------------------------
 say "D1 database"
-D1_ID=$(wr d1 info "$D1_NAME" --json 2>/dev/null \
-  | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
-      const i=s.indexOf("{");if(i<0)return;
-      try{process.stdout.write(JSON.parse(s.slice(i)).uuid||"")}catch(e){}})' || true)
-if [ -z "$D1_ID" ]; then
-  wr d1 create "$D1_NAME" >/dev/null
-  D1_ID=$(wr d1 info "$D1_NAME" --json 2>/dev/null \
+d1_lookup() {
+  wr d1 info "$D1_NAME" --json 2>/dev/null | extract_json object \
     | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
-        const i=s.indexOf("{");if(i<0)return;
-        try{process.stdout.write(JSON.parse(s.slice(i)).uuid||"")}catch(e){}})')
-  echo "created $D1_NAME"
-else
+        try{const o=JSON.parse(s);if(o.uuid)process.stdout.write(o.uuid)}catch(e){}})'
+}
+D1_ID=$(d1_lookup || true)
+if [ -n "$D1_ID" ]; then
   echo "reusing $D1_NAME"
+else
+  wr d1 create "$D1_NAME" >/dev/null 2>&1 || true
+  D1_ID=$(d1_lookup || true)
+  echo "created $D1_NAME"
 fi
 [ -n "$D1_ID" ] || die "Could not create or find the D1 database $D1_NAME."
 
@@ -126,6 +166,12 @@ fs.writeFileSync(file, t);
 NODE
 grep -E '^(id|preview_id|database_id) *=' "$TOML"
 
+# A placeholder surviving to this point means a lookup silently returned nothing
+# and the deploy would bind the Worker to a namespace that does not exist.
+! grep -q 'TODO_REPLACE' "$TOML" || die \
+  "$TOML still contains a TODO_REPLACE placeholder. Stopping before the deploy
+rather than shipping a Worker bound to a resource that does not exist."
+
 # --- deploy ------------------------------------------------------------------
 say "Deploying"
 DEPLOY_LOG=$(mktemp)
@@ -137,8 +183,11 @@ rm -f "$DEPLOY_LOG"
 # Generated, piped into wrangler, and dropped. The private half is never
 # written to a file and never printed. Only the public JWK comes back out.
 JWK_OUT=jwk.public.json
-if [ "$KEEP_KEY" = "1" ] && wr secret list 2>/dev/null | grep -q LICENSE_PRIVATE_KEY_PKCS8_B64; then
-  say "Licence signing key: keeping the existing one (--keep-key)"
+if [ "$ROTATE_KEY" != "1" ] && wr secret list 2>/dev/null | grep -q LICENSE_PRIVATE_KEY_PKCS8_B64; then
+  say "Licence signing key: one already exists, keeping it"
+  echo "every licence already issued stays valid. Pass --rotate-key to replace it."
+  echo "NOTE: $JWK_OUT is NOT rewritten, because the public half must keep"
+  echo "matching the private half already deployed."
 else
   say "Licence signing key"
   KEY_ID=$(sed -n 's/^LICENSE_KEY_ID *= *"\(.*\)"/\1/p' "$TOML" | head -1)

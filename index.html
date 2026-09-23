@@ -206,19 +206,22 @@
           </div>
 
           <p class="track-blurb" id="home-track-sub" data-i18n="home.vocalSub">
-            Básico: base de oratoria. Avanzado: pausa, rellenos, tono, gestos y más.
+            Clase: dicción, volumen, conexión y revisión. Expresión: pausas, tono, ritmo, gestos e historias.
           </p>
           <h4 class="track-title sr-title" id="home-track-title" data-i18n="home.vocalTitle">Entrenamiento vocal</h4>
 
           <div class="toolbar tier-toolbar">
             <div class="tier-filters" role="group" data-i18n-aria="home.tierAria">
               <button type="button" class="chip tier-chip selected" data-tier="all" data-i18n="tier.all">Todos</button>
-              <button type="button" class="chip tier-chip" data-tier="basic" data-i18n="tier.basic">Básico</button>
-              <button type="button" class="chip tier-chip" data-tier="advanced" data-i18n="tier.advanced">Avanzado</button>
+              <!-- Group names depend on the track: renderExerciseList writes them -->
+              <button type="button" class="chip tier-chip" data-tier="basic">Clase</button>
+              <button type="button" class="chip tier-chip" data-tier="advanced">Expresión</button>
             </div>
             <span class="muted" id="tier-counts" style="font-size: 0.85rem"></span>
           </div>
 
+          <!-- Today's basics in this track, each a shortcut to its exercise (filled by app.js) -->
+          <div class="today-basics" id="today-basics" role="group" aria-labelledby="today-basics-label" hidden></div>
 
           <div id="exercise-list" class="grid" aria-live="polite"></div>
         </section>

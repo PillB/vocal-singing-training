@@ -562,6 +562,23 @@
     return L.tier || "min";
   }
 
+  /**
+   * Today's basics for a track, for the catalog to mark: the routine the start
+   * panel offers right now (a comeback is offered the Mínimo). Null while the
+   * loop is off or before the first day sung, so the catalog never names
+   * basics the home has not introduced.
+   * @returns {{ tier: string, order: string[] } | null}
+   */
+  function todayBasics(track) {
+    const D = days();
+    if (!D || !loopEnabled()) return null;
+    const sum = D.summary();
+    if (!(sum.practiceDays > 0)) return null;
+    const tier = !sum.todayDone && sum.comeback ? "min" : preferredTier();
+    const r = routine(track, tier);
+    return r ? { tier, order: r.order } : null;
+  }
+
   function setTier(tier) {
     if (!TIERS.includes(tier)) return;
     const L = readLoop();
@@ -1211,6 +1228,8 @@
     ROUTINES,
     bind,
     routine,
+    todayBasics,
+    short,
     tomorrowTeaser,
     renderHome,
     startTier,

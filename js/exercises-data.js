@@ -308,7 +308,7 @@ window.VT_EXERCISES = {
       number: 10,
       title: "Power of the Pause",
       durationMin: 8,
-      original: "Research expansion: strategic silence for processing, authority, and fewer fillers.",
+      original: "Strategic silence for processing, authority, and fewer fillers.",
       research:
         "Pauses give listeners time to process, give you time to think, and replace um/uh with intentional silence — increasing clarity, authority, and credibility.",
       steps: [
@@ -1281,7 +1281,7 @@ window.VT_EXERCISES = {
       number: 4,
       title: "Lip Trills (SOVT Warm-up)",
       durationMin: 5,
-      original: "Complementary SOVT: lip bubbles balance airflow and fold vibration with less strain.",
+      original: "Lip bubbles balance airflow and fold vibration with less strain.",
       research:
         "Semi-occluded vocal tract (lip trills) create back pressure that supports efficient phonation — standard modern warm-up.",
       steps: [

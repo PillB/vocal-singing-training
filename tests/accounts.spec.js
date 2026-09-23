@@ -601,6 +601,31 @@ test.describe("Accounts, gifted months and saved progress", () => {
     expect(local).toBeNull();
   });
 
+  test("with no sign-in to offer, the pricing trial still starts a local one", async ({ page }) => {
+    // The worker is deployed but its operator has wired up no sign-in method.
+    // Routing the trial to the account layer here would end at a panel saying
+    // accounts are switched off, with the browser-local trial — which is the
+    // documented no-backend fallback — no longer reachable.
+    const license = await mintLicense({ origin: BASE });
+    const stub = createWorkerStub({ methods: { email: false, google: false, googleClientId: null } });
+    await installWorker(page, stub, license);
+    await boot(page);
+
+    await page.evaluate(() => window.VTApp.openPricing());
+    const trial = page.locator("#btn-start-trial");
+    await expect(trial).toBeVisible();
+    await trial.click();
+
+    await expect(page.locator("#account-modal")).toBeHidden();
+    const after = await page.evaluate(() => ({
+      local: localStorage.getItem("vt_billing_trial_started_v1"),
+      ent: window.VTBilling.getEntitlement()
+    }));
+    expect(after.local).toBeTruthy();
+    expect(after.ent.pro).toBe(true);
+    expect(after.ent.status).toBe("trial");
+  });
+
   test("an account that already used its month is not offered another", async ({ page }) => {
     const license = await mintLicense({ origin: BASE });
     const stub = createWorkerStub({ trialUsed: true });

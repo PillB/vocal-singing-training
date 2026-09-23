@@ -31,19 +31,39 @@
      * Forged or copied localStorage no longer grants Pro, and cancellations stop
      * it at the next refresh.
      *
-     * Operator setup:
+     * Operator setup, all of it done by
+     * `workers/entitlements/scripts/setup.sh`:
      *   1. Deploy workers/entitlements/ and put its base URL in `apiBaseUrl`.
-     *   2. Run `node workers/entitlements/scripts/generate-keys.mjs`, keep the
-     *      private key as a worker secret, paste the public JWK below.
+     *   2. The script generates the signing key, pushes the private half
+     *      straight into a wrangler secret and writes the public half to
+     *      workers/entitlements/jwk.public.json; paste that below.
      *   3. Leave `required: true`.
      * Until apiBaseUrl and publicKeyJwk are set, checkout stays closed on purpose —
      * we do not take money we cannot turn into a verifiable entitlement.
+     *
+     * Both are set now, so a license token can be verified. Checkout is still
+     * closed, because no provider has a checkout link yet, and sign-in is still
+     * off, because the worker reports no sign-in method at /v1/auth/methods.
+     * Each of those switches itself on when its own piece is configured.
      */
     verification: {
       /** Base URL of the entitlements worker, e.g. https://entitlements.example.workers.dev */
-      apiBaseUrl: "",
-      /** Public half of the worker's signing key (ECDSA P-256 / ES256 JWK). */
-      publicKeyJwk: null,
+      apiBaseUrl: "https://vocal-studio-entitlements.vocalstudio-pe.workers.dev",
+      /**
+       * Public half of the worker's signing key (ECDSA P-256 / ES256 JWK).
+       * Public by design: it only verifies signatures, it cannot make them. The
+       * private half is a wrangler secret and exists nowhere else.
+       */
+      publicKeyJwk: {
+        kty: "EC",
+        crv: "P-256",
+        x: "G-6nu_L_-Qpf9-0XD94mO9IAs57laAFWkb7kqYu43Hc",
+        y: "RqsjrqxMmiDeX7fbZ90u0s3-hDLIZcENch5L5KP5yyI",
+        alg: "ES256",
+        use: "sig",
+        kid: "k1",
+        key_ops: ["verify"]
+      },
       /** Token audience; defaults to this site's origin when empty. */
       audience: "",
       /** Ask the worker for a fresh token once a stored one is this old. */

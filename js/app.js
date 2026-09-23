@@ -5005,6 +5005,35 @@
     return status.lastSyncedAt ? tt("auth.syncOk") : tt("auth.syncNever");
   }
 
+  /**
+   * What sign-in this deploy actually offers.
+   *
+   * A configured worker URL is not the same as a usable sign-in: the worker
+   * reports separately, at /v1/auth/methods, which methods its operator has
+   * wired up, and it can be none. `methods` is null until that answer lands,
+   * and the two callers want opposite defaults for that moment — hence both
+   * `offered` and `confirmed` rather than one flag.
+   *
+   * @returns {{configured: boolean, canEmail: boolean, offered: boolean,
+   *            confirmed: boolean}} What may be shown, and what may be relied on.
+   */
+  function accountSignIn() {
+    const account = window.VTAccount?.getState?.() || null;
+    const configured = !!(account && account.configured);
+    const m = (account && account.methods) || null;
+    const any = !!m && (!!m.email || !!m.google);
+    return {
+      configured,
+      canEmail: !m || m.email !== false,
+      // For display: assume yes while unknown, so the form does not flash away
+      // and back on a slow answer.
+      offered: configured && (m ? any : true),
+      // For acting on: require the answer, so nobody is sent to a panel that
+      // may turn out to have nothing in it.
+      confirmed: configured && any
+    };
+  }
+
   function refreshAccountUI() {
     const A = window.VTAuth;
     const account = window.VTAccount?.getState?.() || null;
@@ -5041,14 +5070,12 @@
     // being told afterwards that it cannot be sent. methods is null until the
     // first answer lands, so treat unknown as available rather than flashing
     // the form away and back.
-    const methods = account && account.methods;
-    const canEmail = !methods || methods.email !== false;
-    const anyMethod = !methods || !!methods.email || !!methods.google;
-    const hasRealSignIn = configured && anyMethod;
+    const offer = accountSignIn();
+    const hasRealSignIn = offer.offered;
     if (signIn) signIn.hidden = !hasRealSignIn;
     if (unconfigured) unconfigured.hidden = hasRealSignIn;
     const emailForm = $("#account-email-form");
-    if (emailForm) emailForm.hidden = !canEmail;
+    if (emailForm) emailForm.hidden = !offer.canEmail;
     // Internal QA access hides behind a disclosure only once there is a real
     // sign-in to lead with. While there is none it is the only way in, so
     // collapsing it would leave the panel with nothing to do — and a deployed
@@ -5444,10 +5471,14 @@
     });
     $("#btn-start-trial")?.addEventListener("click", async () => {
       const acct = window.VTAccount?.getState?.() || null;
-      if (acct?.configured) {
+      // Only hand the trial to the account layer once this deploy can actually
+      // sign someone in. A worker with no sign-in method would otherwise send
+      // them to a panel saying accounts are switched off, with the local trial
+      // they could have had now unreachable — the free trial would dead-end.
+      if (accountSignIn().confirmed) {
         // Not signed in: send them to the panel rather than starting a trial
         // this browser would forget and the next one would hand out again.
-        if (!acct.signedIn) {
+        if (!acct?.signedIn) {
           toast(tt("pricing.trialNeedsAccount"), { durationMs: 4200 });
           closePricing();
           openAccount();

@@ -82,7 +82,10 @@ test.describe("Billing & subscriptions", () => {
     });
     expect(r.demoUnlockEnabled).toBe(false);
     expect(r.verificationRequired).toBe(true);
-    expect(r.verificationConfigured).toBe(false);
+    // The worker is deployed and its public key is in the config, so a license
+    // CAN now be verified. That is the stricter state, not a looser one: what
+    // keeps this build from handing anything out is everything below.
+    expect(r.verificationConfigured).toBe(true);
     expect(r.trialRequiresOptIn).toBe(true);
     // No trial clock starts on its own — a fresh browser is plain free.
     expect(r.trialStarted).toBeFalsy();
@@ -537,6 +540,10 @@ test.describe("Billing & subscriptions", () => {
 
   test("checkout is held closed while entitlements cannot be verified", async ({ page }) => {
     await patchBillingConfig(page, {
+      // Explicitly unwired: the shipped config points at the deployed worker,
+      // so without this the case would silently become "links and a worker",
+      // and the redirect it forbids would actually happen.
+      verification: { apiBaseUrl: "", publicKeyJwk: null, required: true },
       providers: {
         stripe: {
           id: "stripe",
@@ -601,13 +608,15 @@ test.describe("Billing & subscriptions", () => {
     });
     expect(r.h).toBeTruthy();
     expect(Array.isArray(r.h.issues)).toBe(true);
-    // Empty links + no worker → not production-ok
+    // The worker is wired up; the checkout links are not, and that alone is
+    // enough to keep this from being production-ok.
+    expect(r.links).toBe(false);
     expect(r.h.ok).toBe(false);
     expect(r.h.productionReady).toBe(false);
     expect(r.h.portalConfigured).toBe(false);
     expect(r.h.demoUnlock).toBe(false);
     expect(r.h.verificationRequired).toBe(true);
-    expect(r.h.verificationConfigured).toBe(false);
+    expect(r.h.verificationConfigured).toBe(true);
     expect(r.bad.ok).toBe(false);
     expect(r.good.ok).toBe(true);
     expect(r.http.ok).toBe(false);

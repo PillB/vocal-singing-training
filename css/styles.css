@@ -1009,18 +1009,6 @@ body.home-zero #pro-insights-panel {
   letter-spacing: 0.04em;
 }
 
-.card-ex-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  margin-bottom: 0.35rem;
-}
-
-.card-ex-top .num {
-  margin-bottom: 0;
-}
-
 .research-note {
   margin: 0.75rem 0 0;
   font-size: 0.88rem;
@@ -4556,6 +4544,168 @@ body:not(.home-zero) #start-panel.start-panel {
    One focus for the week, the exercises that train it, and the days already
    practised. The twelve weeks are a progress strip, not a row of buttons. */
 /* Twelve equal columns: week 12 can never wrap onto a line of its own. */
+/* —— Design: catalog ——
+   Each exercise is a row: number, name, one line on what you do, then minutes
+   and tools. The group badge shows only once filtered (grouped, the head
+   names it) and the sessions badge only once there is a session, top right. */
+/* A grid, so the row's text starts at the top: a block button centres its
+   content, and cards side by side on desktop started at different heights. */
+#exercise-list .card-ex {
+  position: relative;
+  display: grid;
+  align-content: start;
+  padding: 0.7rem 0.8rem 0.75rem 3.25rem;
+}
+#exercise-list .card-ex-body {
+  display: block;
+  min-width: 0;
+}
+#exercise-list .card-ex .num {
+  position: absolute;
+  top: 0.7rem;
+  left: 0.75rem;
+  margin: 0;
+}
+/* Floated ahead of the name, so only the name's first line makes room for it
+   (the badge is no taller than that line) */
+#exercise-list .card-ex-body > .badge.done {
+  float: right;
+  margin: 0 0 0 0.5rem;
+  padding: 0.05rem 0.45rem;
+  font-size: 0.75rem;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+#exercise-list .card-ex h3 {
+  margin: 0.1rem 0 0.15rem;
+  font-size: 1rem;
+  line-height: 1.3;
+}
+/* exerciseSummary() keeps this to two lines at 360px; no clamp, so nothing is
+   ever cut inside a word */
+#exercise-list .card-ex-desc {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+#exercise-list .card-ex .meta {
+  margin: 0.2rem 0 0;
+  font-size: 0.78rem;
+}
+#exercise-list .card-ex-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.6rem;
+  margin-top: 0.25rem;
+}
+#exercise-list .card-ex-tags:empty {
+  display: none;
+}
+#exercise-list .card-ex-tags .badge {
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+@media (max-width: 340px) {
+  /* The narrowest phones: a little more room for the line */
+  #exercise-list .card-ex {
+    padding-left: 2.95rem;
+    padding-right: 0.6rem;
+  }
+  #exercise-list .card-ex .num {
+    left: 0.6rem;
+  }
+  #exercise-list .card-ex-desc {
+    font-size: 0.8rem;
+  }
+}
+@media (min-width: 561px) {
+  /* Three roomy columns rather than four narrow ones, so the line reads */
+  body:not(.view-exercise) #exercise-list {
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  }
+}
+
+/* —— Design: canto-groups ——
+   Groups are named for what they hold, so names run longer than "Básico": on
+   a narrow phone the count drops below the name instead of squeezing it. */
+.grid-group-head {
+  flex-wrap: wrap;
+  row-gap: 0.1rem;
+}
+/* Today's basics, findable from the catalog: a line of shortcuts above the
+   list, and a tag on their rows. Green is the loop's colour for them. */
+.today-basics {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 0.8rem;
+  padding: 0.55rem 0.7rem 0.65rem;
+  border: 1px solid rgba(79, 212, 146, 0.35);
+  border-radius: var(--radius-sm);
+  background: rgba(79, 212, 146, 0.07);
+}
+.today-basics-label {
+  flex: 1 0 100%;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #c9f6de;
+}
+.today-basics-ex,
+.today-basics-more {
+  min-height: var(--min-tap);
+  padding: 0.3rem 0.8rem;
+  border-radius: 999px;
+  border: 1px solid rgba(79, 212, 146, 0.55);
+  background: rgba(12, 18, 28, 0.5);
+  color: var(--text);
+  font-size: 0.85rem;
+  font-weight: 650;
+}
+.today-basics-ex::after {
+  content: "›" / "";
+  margin-left: 0.35rem;
+  color: #8ee0b5;
+}
+.today-basics-ex:hover,
+.today-basics-more:hover {
+  border-color: var(--success);
+}
+.today-basics-more {
+  border-style: dashed;
+  color: var(--text-muted);
+}
+.card-ex-today {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #8ee0b5;
+}
+.card-ex-today::before {
+  content: "";
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* —— Plan: make the twelve weeks visible —— */
+.plan-rail {
+  margin: 0 0 1rem;
+  padding: 0.85rem 1rem;
+}
+.plan-rail-label {
+  margin: 0 0 0.55rem;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
 .plan-week-rail {
   list-style: none;
   margin: 0.5rem 0 0.25rem;

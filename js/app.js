@@ -973,15 +973,98 @@
     return all.filter((ex) => (ex.tier || "basic") === state.tierFilter);
   }
 
+  /**
+   * A group's short name on its track, for the filter chips, the card badge
+   * and the counts line. The groups are named for what they hold (Clase,
+   * Técnica, Expresión), not for a level: "Básico" read as "my daily basics",
+   * and today's basics draw on both groups.
+   */
+  function tierLabel(tier, track = state.tab) {
+    const t = track === "singing" ? "singing" : "vocal";
+    return tt(`tier.${t}.${tier === "advanced" ? "advanced" : "basic"}`);
+  }
+
+  /** Longest row description: two lines at 360px wide (see css "Design: catalog"). */
+  const SUMMARY_MAX = 64;
+  /** Small words: never a meaningful lead-in, and never the last word before "…". */
+  const SMALL_WORDS = new Set(
+    (
+      "de del la las el los lo un una unos unas y e o u a al con sin por para en que se su sus tu tus " +
+      "no ni como mas más the a an and or of on for with to in at by from into your you so that than as more"
+    ).split(" ")
+  );
+
+  /** Words that carry meaning, accent-free, cut to a five-letter stem. */
+  function stems(s) {
+    return String(s)
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .split(/[^a-z0-9]+/)
+      .filter((w) => w.length >= 3 && !SMALL_WORDS.has(w))
+      .map((w) => w.slice(0, 5));
+  }
+
+  /** No bracket or quote left open, so a cut never ends inside "(…" or «…». */
+  function balanced(s) {
+    const unmatched = (a, b) => s.split(a).length !== s.split(b).length;
+    // A straight quote between two letters is an apostrophe (don't), not a quote.
+    const quotes = (s.match(/(^|[^\p{L}])'|'(?=[^\p{L}]|$)/gu) || []).length;
+    return (
+      !unmatched("(", ")") && !unmatched("«", "»") && !unmatched("\u201c", "\u201d") && quotes % 2 === 0
+    );
+  }
+
+  /**
+   * One plain line for a catalog row: what you do. It comes from the
+   * exercise's "in short" line (exField "original", both languages). A lead-in
+   * that only repeats the title ("Trinos de labios (SOVT): …") is dropped, and
+   * a line too long for two phone lines ends at a sentence, a clause or a
+   * word, never inside a word, a bracket or on a small word like "con".
+   */
+  function exerciseSummary(ex) {
+    const I = window.VTI18n;
+    let s = String((I?.exField ? I.exField(ex, "original") : ex.original) || "")
+      .replace(/\s+/g, " ")
+      .trim();
+    const lead = s.match(/^([^:.!?…]{2,48}):\s+(\S.*)$/);
+    if (lead) {
+      const title = new Set(stems(exName(ex)));
+      const words = [...new Set(stems(lead[1]))];
+      const hits = words.filter((w) => title.has(w)).length;
+      if (words.length && hits * 2 > words.length) {
+        s = lead[2].charAt(0).toUpperCase() + lead[2].slice(1);
+      }
+    }
+    if (s.length <= SUMMARY_MAX) return s;
+    const sentence = s.match(/^.{20,}?[.!?](?=\s)/);
+    if (sentence && sentence[0].length <= SUMMARY_MAX) return sentence[0];
+    // Room for the ellipsis: what is kept is at most SUMMARY_MAX - 1 long.
+    const head = s.slice(0, SUMMARY_MAX);
+    // A clause break that keeps most of the line reads best...
+    let cut = -1;
+    for (const m of head.matchAll(/[,;:](?=\s)|\s[—–](?=\s)/g)) {
+      if (m.index >= SUMMARY_MAX * 0.6 && balanced(s.slice(0, m.index))) cut = m.index;
+    }
+    if (cut > 0) return `${s.slice(0, cut)}…`;
+    // ...otherwise the last whole word that leaves no small word dangling.
+    const words = head.slice(0, head.lastIndexOf(" ")).split(" ");
+    const tail = () => words[words.length - 1].toLowerCase().replace(/[^\p{L}]/gu, "");
+    while (words.length > 3 && (SMALL_WORDS.has(tail()) || !balanced(words.join(" ")))) words.pop();
+    return `${words.join(" ").replace(/[\s,;:—–-]+$/, "")}…`;
+  }
+
   function renderExerciseList() {
     const list = $("#exercise-list");
     const exercises = filteredExercises();
+    const grouped = state.tierFilter === "all";
     list.innerHTML = "";
     list.className = `grid track-${state.tab}`;
 
-    $$(".tier-chip").forEach((c) =>
-      c.classList.toggle("selected", c.dataset.tier === state.tierFilter)
-    );
+    $$(".tier-chip").forEach((c) => {
+      c.classList.toggle("selected", c.dataset.tier === state.tierFilter);
+      if (c.dataset.tier !== "all") c.textContent = tierLabel(c.dataset.tier);
+    });
 
     const basicCount = (VT_EXERCISES[state.tab] || []).filter((e) => (e.tier || "basic") === "basic")
       .length;
@@ -990,14 +1073,15 @@
     if (countEl) {
       // With level group headers carrying their own counts, the summary line is
       // noise on the unfiltered view — it only earns its place once filtered.
-      countEl.textContent =
-        state.tierFilter === "all"
-          ? ""
-          : tt("tier.counts", {
-              basic: basicCount,
-              advanced: advCount,
-              showing: exercises.length
-            });
+      countEl.textContent = grouped
+        ? ""
+        : tt("tier.counts", {
+            basic: tierLabel("basic"),
+            nb: basicCount,
+            advanced: tierLabel("advanced"),
+            na: advCount,
+            showing: exercises.length
+          });
     }
 
     // Group by tier when nothing is filtered: 20+ identical cards in one run are
@@ -1007,12 +1091,14 @@
     exercises.forEach((ex) => {
       const prog = progressFor(ex.id);
       const tier = ex.tier || "basic";
-      if (state.tierFilter === "all" && tier !== lastTier) {
+      const track = ex.track || state.tab || "vocal";
+      if (grouped && tier !== lastTier) {
         lastTier = tier;
         const head = document.createElement("h4");
         head.className = `grid-group-head tier-${tier}`;
         const n = (VT_EXERCISES[state.tab] || []).filter((e) => (e.tier || "basic") === tier).length;
-        head.innerHTML = `<span>${tt("badge." + tier)}</span><span class="grid-group-n">${tt("group.count", { n })}</span>`;
+        const name = tt(`group.${state.tab === "singing" ? "singing" : "vocal"}.${tier}`);
+        head.innerHTML = `<span>${name}</span><span class="grid-group-n">${tt("group.count", { n })}</span>`;
         list.appendChild(head);
       }
       const tools =
@@ -1021,28 +1107,33 @@
         (ex.audio.record ? tt("card.record") : tt("card.practice"));
       const sessions = prog?.completedCount || 0;
       const sessLabel =
-        sessions === 0
-          ? tt("card.notPracticed")
-          : sessions === 1
-            ? tt("card.sessions", { n: sessions })
-            : tt("card.sessions_plural", { n: sessions });
+        sessions === 1
+          ? tt("card.sessions", { n: sessions })
+          : tt("card.sessions_plural", { n: sessions });
       const btn = document.createElement("button");
       btn.type = "button";
-      const track = ex.track || state.tab || "vocal";
       btn.className = `card card-ex track-${track}`;
       btn.dataset.track = track;
+      btn.dataset.id = ex.id;
+      // A row: number, name, what you do, then minutes and tools. The sessions
+      // badge (top right) only shows once there is a session to count, and the
+      // group badge only once filtered (grouped, the head names the group).
       btn.innerHTML = `
-        <div class="card-ex-top">
-          <span class="num">${ex.number}</span>
-          <span class="badge tier-${tier}">${tt("badge." + tier)}</span>
-        </div>
-        <h3>${window.VTI18n ? VTI18n.exTitle(ex) : ex.title}</h3>
-        <p class="meta">${tt("card.meta", { min: ex.durationMin, tools })}</p>
-        <span class="badge ${sessions ? "done" : ""}">${sessLabel}</span>
+        <span class="num">${ex.number}</span>
+        <span class="card-ex-body">
+          ${sessions ? `<span class="badge done">${sessLabel}</span>` : ""}
+          <h3>${exName(ex)}</h3>
+          <p class="card-ex-desc">${escapeHtml(exerciseSummary(ex))}</p>
+          <p class="meta">${tt("card.meta", { min: ex.durationMin, tools })}</p>
+          <span class="card-ex-tags">${
+            grouped ? "" : `<span class="badge tier-${tier}">${tierLabel(tier, track)}</span>`
+          }</span>
+        </span>
       `;
       btn.addEventListener("click", () => openExercise(ex.id, false));
       list.appendChild(btn);
     });
+    renderTodayBasics();
 
     syncSessionPathOptions();
     $("#home-track-title").textContent = tt(
@@ -1059,6 +1150,64 @@
     });
     updateHomeZeroClass();
     renderNextStepCard();
+  }
+
+  /* —— Today's basics in the catalog ——
+   * The loop's routine for this track, findable without scrolling: a line above
+   * the list names each exercise as a shortcut, and their rows carry a "Hoy en
+   * tus básicos" tag. Nothing shows until the loop is on (VTLoop.todayBasics),
+   * so a first visit is not told about basics it has not met. */
+  const TODAY_SHOWN = 4; // the Mínimo shows whole; longer routines fold after 3
+  let todayExpanded = false;
+
+  function renderTodayBasics() {
+    const today = window.VTLoop?.todayBasics?.(state.tab) || null;
+    const ids = new Set(today?.order || []);
+    $$("#exercise-list .card-ex").forEach((c) => {
+      const tags = c.querySelector(".card-ex-tags");
+      let tag = tags?.querySelector(".card-ex-today");
+      if (!ids.has(c.dataset.id)) {
+        tag?.remove();
+        return;
+      }
+      if (!tags) return;
+      if (!tag) {
+        tag = document.createElement("span");
+        tag.className = "card-ex-today";
+        tags.appendChild(tag);
+      }
+      tag.textContent = tt("catalog.today");
+    });
+
+    const box = $("#today-basics");
+    if (!box) return;
+    box.hidden = !today;
+    if (!today) {
+      box.innerHTML = "";
+      return;
+    }
+    const fold = today.order.length > TODAY_SHOWN;
+    const shown = fold && !todayExpanded ? today.order.slice(0, TODAY_SHOWN - 1) : today.order;
+    const name = (id) => {
+      const s = String(window.VTLoop.short?.(id) || id);
+      return s.charAt(0).toUpperCase() + s.slice(1);
+    };
+    const label = tt("catalog.todayLabel", { tier: tt("loop.tier." + today.tier) });
+    box.innerHTML =
+      `<span class="today-basics-label" id="today-basics-label">${escapeHtml(label)}</span>` +
+      shown
+        .map(
+          (id) =>
+            `<button type="button" class="today-basics-ex" data-id="${escapeHtml(id)}">${escapeHtml(name(id))}</button>`
+        )
+        .join("") +
+      (fold
+        ? `<button type="button" class="today-basics-more" aria-expanded="${todayExpanded}">${escapeHtml(
+            todayExpanded
+              ? tt("catalog.todayLess")
+              : tt("catalog.todayMore", { n: today.order.length - shown.length })
+          )}</button>`
+        : "");
   }
 
   /**
@@ -1588,7 +1737,7 @@
     const badgeTrack = routineTrack || ex.track;
     $("#ex-track-badge").textContent = routineTrack
       ? tt("badge.basics")
-      : `${tt(ex.track === "vocal" ? "badge.vocal" : "badge.singing")} · ${tt("badge." + tier)}`;
+      : `${tt(ex.track === "vocal" ? "badge.vocal" : "badge.singing")} · ${tierLabel(tier, ex.track)}`;
     $("#ex-track-badge").style.borderColor = badgeTrack === "vocal" ? "var(--vocal)" : "var(--singing)";
     updateExerciseBreadcrumb(ex, routineTrack);
     const I = window.VTI18n;
@@ -4448,6 +4597,18 @@
       });
     });
 
+    $("#today-basics")?.addEventListener("click", (e) => {
+      const b = e.target.closest?.("button");
+      if (!b) return;
+      if (b.dataset.id) {
+        openExercise(b.dataset.id, false);
+        return;
+      }
+      todayExpanded = !todayExpanded;
+      renderTodayBasics();
+      $("#today-basics .today-basics-more")?.focus();
+    });
+
     $("#btn-structured").addEventListener("click", () => startStructured());
     $("#btn-history").addEventListener("click", () => {
       if (state.view === "exercise") leaveExercise({ type: "history" });
@@ -6355,7 +6516,10 @@
       startRoutine: (r) => startStructured(r.path || "basics", r),
       startDaily,
       toast: (msg, opts) => toast(msg, opts),
-      refresh: () => renderNextStepCard(),
+      refresh: () => {
+        renderNextStepCard();
+        renderTodayBasics();
+      },
       focusReminders: () => {
         if (state.view !== "home") setView("home");
         const panel = $("#retain-panel");

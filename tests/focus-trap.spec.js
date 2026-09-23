@@ -103,7 +103,8 @@ test.describe("Modal focus trap", () => {
     await page.locator("#btn-account").focus();
     await page.keyboard.press("Enter");
     await expect(page.locator("#account-modal")).toBeVisible();
-    expect(await activeId(page)).toBe("login-username");
+    // Never the staff-only login: with accounts not live, Close comes first.
+    expect(await activeId(page)).toBe("account-close");
 
     const seen = await tabAround(page, "#account-modal", 12);
     expect(seen.every((s) => s.inside)).toBe(true);

@@ -8,6 +8,11 @@
     return Math.max(a, Math.min(b, n));
   }
 
+  /** Score card copy in the interface language (js/i18n.js "metrics.*"). */
+  function tt(key, vars) {
+    return global.VTI18n?.t?.(key, vars) ?? key;
+  }
+
   const Metrics = {
     /**
      * @param {Array} metricDefs from exercise
@@ -21,7 +26,7 @@
           max: 0,
           pct: 0,
           breakdown: [],
-          summary: "No metrics for this exercise — reflection notes still count."
+          summary: tt("metrics.none")
         };
       }
 
@@ -40,17 +45,17 @@
           mMax = m.max || 5;
           const v = val == null ? 0 : clamp(val, m.min || 1, mMax);
           points = v;
-          detail = val == null ? "Not rated" : `${v} / ${mMax}`;
+          detail = val == null ? tt("metrics.notRated") : `${v} / ${mMax}`;
         } else if (m.type === "number") {
           mMax = 5;
           const target = m.target != null ? Number(m.target) : 1;
           if (val == null || Number.isNaN(val)) {
             points = 0;
-            detail = "Not logged";
+            detail = tt("metrics.notLogged");
           } else if (target <= 0) {
             // e.g. filler count: lower is better
             points = clamp(5 - Math.min(5, val / 2), 0, 5);
-            detail = `${val}${m.unit ? " " + m.unit : ""} (lower is better)`;
+            detail = tt("metrics.lowerBetter", { val: `${val}${m.unit ? " " + m.unit : ""}` });
           } else if (m.id === "breathiness") {
             // already scale-like if mis-typed
             points = clamp(val, 0, 5);
@@ -58,7 +63,8 @@
           } else {
             const ratio = clamp(val / target, 0, 1.2);
             points = clamp(ratio * 5, 0, 5);
-            detail = `${val}${m.unit ? " " + m.unit : ""} · target ${target}${m.unit ? " " + m.unit : ""}`;
+            const unit = m.unit ? " " + m.unit : "";
+            detail = tt("metrics.vsTarget", { val: `${val}${unit}`, target: `${target}${unit}` });
           }
         }
 
@@ -77,10 +83,10 @@
       const score = Math.round((total / (max || 1)) * 100) / 10; // 0–10 style
 
       let summary;
-      if (pct >= 85) summary = "Strong session — keep this consistency.";
-      else if (pct >= 65) summary = "Solid work. One small focus next time will lift this further.";
-      else if (pct >= 40) summary = "Good start. Progress often looks like this before it clicks.";
-      else summary = "You showed up — that matters. Try a shorter, clearer focus next round.";
+      if (pct >= 85) summary = tt("metrics.sum.strong");
+      else if (pct >= 65) summary = tt("metrics.sum.solid");
+      else if (pct >= 40) summary = tt("metrics.sum.start");
+      else summary = tt("metrics.sum.low");
 
       return {
         score: clamp(score, 0, 10),
@@ -88,8 +94,7 @@
         pct,
         breakdown,
         summary,
-        how:
-          "Score is a friendly 0–10 derived from your self-ratings and logged numbers vs. exercise targets. It is a practice compass, not a talent grade."
+        how: tt("metrics.how")
       };
     },
 

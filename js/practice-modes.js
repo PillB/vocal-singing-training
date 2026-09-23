@@ -15,6 +15,15 @@
     return Math.max(a, Math.min(b, n));
   }
 
+  /** Smooth scrolling, unless the visitor asked for reduced motion. */
+  function scrollBehavior() {
+    try {
+      return global.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ? "auto" : "smooth";
+    } catch {
+      return "smooth";
+    }
+  }
+
   /** ES default (Peruvian-clear) / EN when toggle — no heavy jargon */
   function isEs() {
     if (global.VTI18n && global.VTI18n.lang) return global.VTI18n.lang === "es";
@@ -687,7 +696,7 @@
       const rev = document.getElementById("review-block");
       if (rev) {
         rev.hidden = false;
-        rev.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        rev.scrollIntoView({ behavior: scrollBehavior(), block: "nearest" });
       }
       return { patches: {}, summary: "Take ready — schedule review tomorrow" };
     }

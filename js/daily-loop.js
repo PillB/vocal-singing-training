@@ -298,6 +298,26 @@
     return global.VTI18n?.lang === "en" ? "en" : "es";
   }
 
+  /** The track on screen: the home tab, which an open exercise also sets. */
+  function currentTrack() {
+    return hooks.getTab?.() === "vocal" ? "vocal" : "singing";
+  }
+
+  /**
+   * Loop copy for a track. Vocal is speaking practice, so where a string says
+   * "sang" the language's `.vocal` variant ("practicaste", "día de práctica")
+   * wins. Only the current language's table is checked: an English page must
+   * not pick up a Spanish-only variant through the fallback in t().
+   */
+  function tl(key, vars, trackId) {
+    if ((trackId || currentTrack()) === "vocal") {
+      const I = global.VTI18n;
+      const table = I?.strings?.[I.lang];
+      if (table && table[key + ".vocal"] != null) return tt(key + ".vocal", vars);
+    }
+    return tt(key, vars);
+  }
+
   function esc(s) {
     return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
   }
@@ -566,10 +586,10 @@
 
   /* —— Surprises —— */
 
-  function statOptions(sum) {
+  function statOptions(sum, trackId) {
     const D = days();
     const out = [];
-    if (sum.minutes >= 20) out.push({ id: "minutes", text: tt("loop.stat.minutes", { n: sum.minutes }) });
+    if (sum.minutes >= 20) out.push({ id: "minutes", text: tl("loop.stat.minutes", { n: sum.minutes }, trackId) });
     const bag = D?.read?.();
     if (bag) {
       const rows = Object.entries(bag.days).filter(([, r]) => D.counts(r));
@@ -689,12 +709,13 @@
     // Inside a routine the completion card carries the moment; outside one,
     // a short line is enough.
     if (ev.structured) return;
+    const trackId = hooks.findExercise?.(ev.exerciseId)?.track;
     const ms = milestoneToday(sum.practiceDays);
     if (ms) {
       markMilestone(ms);
-      hooks.toast?.(tt("loop.msToast", { n: ms }), { durationMs: 3200 });
+      hooks.toast?.(tl("loop.msToast", { n: ms }, trackId), { durationMs: 3200 });
     } else {
-      hooks.toast?.(tt("loop.dayToast", { n: sum.practiceDays }), { durationMs: 2600 });
+      hooks.toast?.(tl("loop.dayToast", { n: sum.practiceDays }, trackId), { durationMs: 2600 });
     }
     refresh();
   }
@@ -743,7 +764,7 @@
     const need = Math.max(1, Math.ceil((session.order || []).length / 2));
     const tier = session.tier || (session.path === "daily" ? "class" : "min");
     if (!before.todayDone || done < need) {
-      hooks.toast?.(tt("loop.notCounted"), { durationMs: 4200 });
+      hooks.toast?.(tl("loop.notCounted", null, session.track), { durationMs: 4200 });
       track("basics_incomplete", { tier, track: session.track, practiced: done, steps: (session.order || []).length });
       return true;
     }
@@ -775,12 +796,12 @@
 
   /* —— Rendering: the week strip —— */
 
-  function weekHtml(sum) {
+  function weekHtml(sum, trackId) {
     const letters = tt("loop.weekLetters").split(",");
     const names = tt("loop.weekdayFull").split(",");
     return sum.week
       .map((d, i) => {
-        const label = `${(names[i] || "").trim()} ${Number(d.key.slice(8))}: ${tt("loop.dayState." + d.state)}`;
+        const label = `${(names[i] || "").trim()} ${Number(d.key.slice(8))}: ${tl("loop.dayState." + d.state, null, trackId)}`;
         return `<li class="loop-day is-${d.state}${d.isToday ? " is-today" : ""}${d.basics ? " has-basics" : ""}" aria-label="${esc(label)}" title="${esc(label)}"><span class="loop-day-l" aria-hidden="true">${esc((letters[i] || "").trim())}</span><span class="loop-day-dot" aria-hidden="true"></span></li>`;
       })
       .join("");
@@ -820,7 +841,7 @@
     const dEl = $("#loop-days");
     if (dEl) dEl.textContent = String(sum.practiceDays);
     const dl = $("#loop-days-label");
-    if (dl) dl.textContent = sum.practiceDays === 1 ? tt("loop.day1") : tt("loop.days");
+    if (dl) dl.textContent = sum.practiceDays === 1 ? tl("loop.day1") : tl("loop.days");
     const next = days()?.nextMilestone?.(sum.practiceDays);
     const nm = $("#loop-next-ms");
     if (nm) nm.textContent = next ? tt("loop.nextMs", { n: next }) : "";
@@ -832,7 +853,7 @@
     const st = $("#loop-streak");
     if (st) {
       st.textContent = streakLine(sum);
-      st.title = tt("loop.restHelp");
+      st.title = tl("loop.restHelp");
     }
     const gt = $("#loop-goal-text");
     if (gt) gt.textContent = goalText(sum, L.goal);
@@ -956,23 +977,28 @@
       kicker.textContent = tt("loop.kickerDone");
       title.textContent = tt("loop.titleDone");
       const teaser = tomorrowTeaser(trackId);
-      sub.textContent = tt("loop.subDone", {
-        min: Math.max(1, Math.round((D.read().days[sum.today]?.sec || 0) / 60)),
-        tomorrow: teaser ? tt("loop.tomorrowEss", { what: teaser }) : ""
-      }).trim();
+      sub.textContent = tl(
+        "loop.subDone",
+        {
+          min: Math.max(1, Math.round((D.read().days[sum.today]?.sec || 0) / 60)),
+          tomorrow: teaser ? tt("loop.tomorrowEss", { what: teaser }) : ""
+        },
+        trackId
+      ).trim();
       if (label) label.textContent = tt("loop.labelDone");
       if (cardTitle) cardTitle.textContent = tt("loop.tierChip", { name: tierName, min });
       if (why) why.textContent = tt("loop.whyDone");
       cta.textContent = tt("loop.ctaAgain", { tier: tierName });
     } else {
-      kicker.textContent = tt(state === "back" ? "loop.kickerBack" : state === "sang" ? "loop.kickerSang" : "loop.kicker");
+      const kickerKey = state === "back" ? "loop.kickerBack" : state === "sang" ? "loop.kickerSang" : "loop.kicker";
+      kicker.textContent = tl(kickerKey, null, trackId);
       title.textContent =
         state === "back" ? tt("loop.titleBack", { min }) : tt(minKey, { what: capitalize(what), min });
       let subTxt =
         state === "back"
           ? tt("loop.subBack")
           : state === "sang"
-            ? tt("loop.subSang")
+            ? tl("loop.subSang", null, trackId)
             : tt(trackId === "vocal" ? "loop.subVocal" : "loop.sub");
       const rest = lastRest && lastRest.on === sum.today ? lastRest : sum.rest.justUsed;
       if (rest?.days?.length) {
@@ -981,7 +1007,8 @@
       sub.textContent = subTxt;
       if (label) label.textContent = tt("loop.label." + tier, { min });
       if (cardTitle) cardTitle.textContent = capitalize(stepsTxt);
-      if (why) why.textContent = tt(tier === "min" ? "loop.whyMin" : tier === "ess" ? "loop.whyEss" : "loop.whyClass");
+      const whyKey = tier === "min" ? "loop.whyMin" : tier === "ess" ? "loop.whyEss" : "loop.whyClass";
+      if (why) why.textContent = tl(whyKey, null, trackId);
       cta.textContent = tt("loop.cta");
     }
     // Done for today: the button stays, quietly. Nothing on the page asks for more.
@@ -1018,10 +1045,10 @@
     $("#loop-done-title").textContent = tt(o.comeback ? "loop.done.titleBack" : "loop.done.title");
     const count = $("#loop-done-count");
     count.innerHTML = `<strong class="loop-pop">${sum.practiceDays}</strong><span>${esc(
-      sum.practiceDays === 1 ? tt("loop.day1") : tt("loop.days")
+      sum.practiceDays === 1 ? tl("loop.day1", null, o.track) : tl("loop.days", null, o.track)
     )}</span>`;
     const week = $("#loop-done-week");
-    week.innerHTML = weekHtml(sum);
+    week.innerHTML = weekHtml(sum, o.track);
     week.setAttribute("aria-label", tt("loop.weekAria"));
     const L = readLoop();
     const { lo, hi } = goalRange(L.goal);
@@ -1036,7 +1063,9 @@
     }
     if (o.ms) {
       extra.push(
-        `<p class="loop-note loop-ms">${esc(o.ms === 1 ? tt("loop.done.msFirst") : tt("loop.done.ms", { n: o.ms }))}</p>`
+        `<p class="loop-note loop-ms">${esc(
+          o.ms === 1 ? tl("loop.done.msFirst", null, o.track) : tl("loop.done.ms", { n: o.ms }, o.track)
+        )}</p>`
       );
     }
     if (o.surprise?.kind === "card") {
@@ -1050,7 +1079,7 @@
         </div>`);
       }
     } else if (o.surprise?.kind === "stat") {
-      const s = statOptions(sum).find((x) => x.id === o.surprise.id);
+      const s = statOptions(sum, o.track).find((x) => x.id === o.surprise.id);
       if (s) {
         extra.push(`<div class="loop-reward is-stat" role="group">
           <p class="loop-reward-k">${esc(tt("loop.done.stat"))}</p>

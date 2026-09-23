@@ -73,6 +73,19 @@
     return window.VTI18n?.lang === "en" ? "en-US" : "es-PE";
   }
 
+  /**
+   * Behaviour for every scroll this file starts: smooth, except for visitors
+   * who asked for reduced motion (styles.css drops the CSS smooth scroll for
+   * them too, so "auto" jumps).
+   */
+  function scrollBehavior() {
+    try {
+      return window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ? "auto" : "smooth";
+    } catch {
+      return "smooth";
+    }
+  }
+
   /** An exercise's name in the interface language. */
   function exName(ex) {
     return window.VTI18n ? VTI18n.exTitle(ex) : ex.title;
@@ -1121,8 +1134,20 @@
     wrap.hidden = false;
   }
 
-  function updateExerciseBreadcrumb(ex) {
-    const track = ex?.track || state.tab || "vocal";
+  /**
+   * The track of the basics routine (js/daily-loop.js) this exercise is open
+   * as a step of, or null. The Vocal basics borrow Canto's lip trills, whose
+   * own labels ("Canto · avanzado", breadcrumb Canto) told a speaking learner
+   * their warm-up was advanced singing.
+   */
+  function basicsRoutineTrack(ex) {
+    if (!state.structured || !ex) return null;
+    const s = VTSession.get();
+    return s && s.path === "basics" && s.order?.includes(ex.id) ? s.track || null : null;
+  }
+
+  function updateExerciseBreadcrumb(ex, routineTrack) {
+    const track = routineTrack || ex?.track || state.tab || "vocal";
     const trackLabel = tt(track === "vocal" ? "tab.vocalShort" : "tab.singingShort");
     const title = ex
       ? `${ex.number}. ${window.VTI18n ? VTI18n.exTitle(ex) : ex.title}`
@@ -1353,7 +1378,7 @@
         // button below could be inside a collapsed card (VG-28).
         openMetricsPanel(true);
         const metrics = $("#metrics-form") || $("#btn-complete");
-        metrics?.scrollIntoView({ behavior: "smooth", block: "center" });
+        metrics?.scrollIntoView({ behavior: scrollBehavior(), block: "center" });
         $("#btn-complete")?.focus();
         toast(tt("leave.scrollSave"));
         // Stash intended destination after save
@@ -1557,11 +1582,15 @@
       window.VTI18n ? VTI18n.exTitle(ex) : ex.title
     }`;
     const tier = ex.tier || "basic";
-    $("#ex-track-badge").textContent = `${tt(
-      ex.track === "vocal" ? "badge.vocal" : "badge.singing"
-    )} · ${tt("badge." + tier)}`;
-    $("#ex-track-badge").style.borderColor = ex.track === "vocal" ? "var(--vocal)" : "var(--singing)";
-    updateExerciseBreadcrumb(ex);
+    // Inside today's basics every step is a warm-up of the routine's track,
+    // whatever catalog track and tier the exercise has on its own.
+    const routineTrack = basicsRoutineTrack(ex);
+    const badgeTrack = routineTrack || ex.track;
+    $("#ex-track-badge").textContent = routineTrack
+      ? tt("badge.basics")
+      : `${tt(ex.track === "vocal" ? "badge.vocal" : "badge.singing")} · ${tt("badge." + tier)}`;
+    $("#ex-track-badge").style.borderColor = badgeTrack === "vocal" ? "var(--vocal)" : "var(--singing)";
+    updateExerciseBreadcrumb(ex, routineTrack);
     const I = window.VTI18n;
     const original = I?.exField ? I.exField(ex, "original") : ex.original;
     const research = I?.exField ? I.exField(ex, "research") : ex.research;
@@ -3021,11 +3050,11 @@
           if (cr.top > targetTop + 24 || cr.bottom > vh - 12) {
             const delta = cr.top - targetTop;
             if (Math.abs(delta) > 12) {
-              window.scrollBy({ top: delta, behavior: "smooth" });
+              window.scrollBy({ top: delta, behavior: scrollBehavior() });
             }
           }
         } catch {
-          card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          card.scrollIntoView({ behavior: scrollBehavior(), block: "nearest" });
         }
       });
     }
@@ -3531,10 +3560,11 @@
       <p class="muted" style="font-size:0.85rem;">${result.how}</p>
       <ul class="breakdown">
         ${result.breakdown
-          .map(
-            (b) =>
-              `<li><span>${b.label}<br><small class="muted">${b.detail}</small></span><strong>${b.points}/${b.max}</strong></li>`
-          )
+          .map((b) => {
+            // The same localized label the form used; b.label is the English one.
+            const def = (ex.metrics || []).find((m) => m.id === b.id) || b;
+            return `<li><span>${metricLabel(def)}<br><small class="muted">${b.detail}</small></span><strong>${b.points}/${b.max}</strong></li>`;
+          })
           .join("")}
       </ul>
       <div class="encourage">${tt("toast.sessionEncourage")}</div>
@@ -3558,7 +3588,7 @@
         chk.checked = true;
         chk.dispatchEvent(new Event("change", { bubbles: true }));
       }
-      $("#retain-panel")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      $("#retain-panel")?.scrollIntoView({ behavior: scrollBehavior(), block: "center" });
       toast(tt("retain.firstWinRemind"));
     });
     $("#fw-same")?.addEventListener("click", () => openExercise(ex.id, false));
@@ -3744,7 +3774,10 @@
   async function renderHistory() {
     setView("history");
     const list = $("#history-list");
-    list.innerHTML = `<p class="muted">Loading…</p>`;
+    const loading = document.createElement("p");
+    loading.className = "muted";
+    loading.textContent = tt("history.loading");
+    list.replaceChildren(loading);
     try {
       const recs = await VTStorage.listRecordings();
       const progress = VTStorage.getProgress();
@@ -3904,6 +3937,22 @@
     return out === key ? el : out;
   }
 
+  /** A review's stored verdict ("improved" / "continue"), in the interface language. */
+  function planVerdictLabel(verdict) {
+    const key = `plan.verdict.${verdict}`;
+    const out = tt(key);
+    return out === key ? String(verdict || "") : out;
+  }
+
+  /** A check-in's stored local day ("2026-09-23") as a date in the interface language. */
+  function planDayLabel(key) {
+    const [y, m, d] = String(key || "").split("-").map(Number);
+    if (!y || !m || !d) return String(key || "");
+    // Built from parts, not parsed: new Date("2026-09-23") is UTC midnight,
+    // which is the day before in Lima.
+    return new Date(y, m - 1, d).toLocaleDateString(locale(), { day: "numeric", month: "short" });
+  }
+
   function renderPlan() {
     setView("plan");
     const plan = VTStorage.getWeekPlan();
@@ -3944,7 +3993,7 @@
     const checkins = $("#plan-checkins");
     const days = plan.checkIns || [];
     checkins.innerHTML = days.length
-      ? days.map((d) => `<span class="pill">${d.date} ✓</span>`).join("")
+      ? days.map((d) => `<span class="pill">${escapeHtml(planDayLabel(d.date))} ✓</span>`).join("")
       : `<span class="muted">${tt("plan.noCheckins")}</span>`;
 
     const completed = $("#plan-completed-elements");
@@ -3957,7 +4006,7 @@
       .slice(0, 8)
       .map(
         (r) =>
-          `<div class="history-item"><div><strong>${tt("plan.weekN", { n: r.week })}: ${weekElementLabel(r.element)}</strong><div class="meta">${r.verdict} · ${new Date(r.at).toLocaleDateString()} · ${r.notes || ""}</div></div></div>`
+          `<div class="history-item"><div><strong>${tt("plan.weekN", { n: r.week })}: ${weekElementLabel(r.element)}</strong><div class="meta">${planVerdictLabel(r.verdict)} · ${new Date(r.at).toLocaleDateString(locale())} · ${r.notes || ""}</div></div></div>`
       )
       .join("") || `<p class="muted">${tt("plan.noReviews")}</p>`;
   }
@@ -3992,7 +4041,7 @@
     plan.startedAt = plan.startedAt || new Date().toISOString();
     VTStorage.setWeekPlan(plan);
     renderPlan();
-    toast(tt("toast.weekStarted", { n: String(plan.weekNumber), element: plan.element }));
+    toast(tt("toast.weekStarted", { n: String(plan.weekNumber), element: weekElementLabel(plan.element) }));
   }
 
   function checkInDay() {
@@ -4376,7 +4425,7 @@
       const btn = $("#btn-toggle-guide");
       if (!btn) return;
       if (!state.guideOpen) btn.click();
-      document.querySelector(".guide-card")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      document.querySelector(".guide-card")?.scrollIntoView({ behavior: scrollBehavior(), block: "start" });
     });
     $("#btn-toggle-guide")?.addEventListener("click", () => {
       state.guideOpen = !state.guideOpen;
@@ -4398,7 +4447,7 @@
           // next frame so max-height transition can run
           requestAnimationFrame(() => block.classList.add("is-open"));
           // Bring progressions into view only when user asked
-          block.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          block.scrollIntoView({ behavior: scrollBehavior(), block: "nearest" });
         } else {
           block.classList.remove("is-open");
           setTimeout(() => {
@@ -4785,6 +4834,12 @@
           return `<span class="hm-cell l${level}" title="${escapeHtml(c.date)} · ${c.count}" data-date="${escapeHtml(c.date)}"></span>`;
         })
         .join("");
+      // role="img" hides the cells, so the label has to say what the map shows.
+      const practised = data.cells.filter((c) => c.count > 0).length;
+      hm.setAttribute(
+        "aria-label",
+        tt(practised === 1 ? "retain.heatmapAria1" : "retain.heatmapAria", { n: practised, w: data.weeks })
+      );
     }
     updateHomeZeroClass();
   }
@@ -5456,8 +5511,12 @@
     document.body.classList.add("account-open");
     const signedIn = !!window.VTAuth?.isLoggedIn?.() || !!window.VTAccount?.getState?.().signedIn;
     const hasAccountForm = !!$("#account-signin") && !$("#account-signin").hidden;
+    // Never the staff-only "Acceso interno" form: with accounts not yet live it
+    // is open, and focusing its username field popped a phone keyboard for a
+    // field no learner can use. Without a sign-in form, Close is the one thing
+    // a learner can do here.
     window.VTFocusTrap?.activate(modal, {
-      initialFocus: signedIn ? "#account-close" : hasAccountForm ? "#account-email" : "#login-username",
+      initialFocus: hasAccountForm && !signedIn ? "#account-email" : "#account-close",
       returnFocus: opener
     });
   }
@@ -6031,7 +6090,7 @@
       focusReminders: () => {
         if (state.view !== "home") setView("home");
         const panel = $("#retain-panel");
-        panel?.scrollIntoView({ block: "center", behavior: "smooth" });
+        panel?.scrollIntoView({ block: "center", behavior: scrollBehavior() });
         $("#chk-reminders")?.focus({ preventScroll: true });
       }
     });

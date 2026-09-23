@@ -17,6 +17,16 @@
   const LOCK_MS = 800; // hold in-zone to "clear" a challenge note
   const NOTE_POOL = ["A2", "B2", "C3", "D3", "E3", "F3", "G3", "A3"];
 
+  /**
+   * Canvas flash words (perfect, good, close, off, locked, round) in the
+   * interface language: js/i18n.js "game.flash.*".
+   */
+  function flashText(id) {
+    const key = "game.flash." + id;
+    const s = global.VTI18n?.t?.(key);
+    return s && s !== key ? s : id.toUpperCase();
+  }
+
   class PitchGame {
     constructor() {
       this.reset();
@@ -132,14 +142,7 @@
 
       if (quality !== this.lastQuality && quality !== "—") {
         this.flash = {
-          text:
-            quality === "perfect"
-              ? "PERFECT"
-              : quality === "good"
-                ? "GOOD"
-                : quality === "close"
-                  ? "CLOSE"
-                  : "FIND IT",
+          text: flashText(quality),
           color:
             quality === "perfect"
               ? "#7ddeb0"
@@ -165,7 +168,7 @@
       this.lockStart = null;
       this.lockProgress = 0;
       this.flash = {
-        text: "LOCKED ✓",
+        text: flashText("locked"),
         color: "#7ddeb0",
         until: performance.now() + 700
       };
@@ -175,7 +178,7 @@
       if (this.challengeIndex >= this.challengeNotes.length) {
         this.challengeMode = false;
         this.flash = {
-          text: "ROUND CLEAR!",
+          text: flashText("round"),
           color: "#f0c9a0",
           until: performance.now() + 1500
         };

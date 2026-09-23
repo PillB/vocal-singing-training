@@ -228,13 +228,84 @@ test.describe("Tour manners", () => {
     expect(before.n).toBe(1);
   });
 
-  test("clicking the dim dismisses it", async ({ page }) => {
+  // Was: "clicking the dim dismisses it". Deliberately reversed. The dim used
+  // to end the tour, and because the backdrop also covers the spotlight hole and
+  // .tour-highlight cannot take a click, the one thing the tour was pointing at
+  // was the worst thing to touch — it closed the tour, wrote "dismissed", and
+  // took the per-screen coach-marks with it. On a phone the dim is most of the
+  // screen, so a stray tap did all that by accident with no way back.
+  test("clicking the dim does nothing — leaving takes a deliberate act", async ({ page }) => {
     await boot(page);
     await page.evaluate(() => window.VTTour.start(true));
     await page.waitForTimeout(400);
     await page.locator(".tour-backdrop").click({ position: { x: 5, y: 5 } });
-    await page.waitForTimeout(200);
-    await expect(page.locator("#tour-root")).toBeHidden();
+    await page.waitForTimeout(250);
+    await expect(page.locator("#tour-root")).toBeVisible();
+    expect(await page.evaluate(() => localStorage.getItem("vt_tour_v1"))).toBeNull();
+  });
+
+  test("clicking the element being spotlighted moves the tour on", async ({ page }) => {
+    await boot(page);
+    await page.evaluate(() => window.VTTour.start(true));
+    await page.waitForTimeout(400);
+    await page.locator("[data-tour-next]").click(); // step 2 rings #next-step-card
+    await page.waitForTimeout(450);
+    const before = await page.evaluate(
+      () => document.querySelector("[data-tour-progress]").textContent
+    );
+    const spot = await page.evaluate(() => {
+      const r = document.querySelector("[data-tour-spot]").getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    });
+    await page.mouse.click(spot.x, spot.y);
+    await page.waitForTimeout(450);
+    await expect(page.locator("#tour-root")).toBeVisible();
+    expect(
+      await page.evaluate(() => document.querySelector("[data-tour-progress]").textContent)
+    ).not.toBe(before);
+  });
+
+  test("the last step's guide link is not the same one step 1 uses", async ({ page }) => {
+    await boot(page);
+    await page.evaluate(() => window.VTTour.start(true));
+    await page.waitForTimeout(400);
+    const hrefs = [];
+    for (let i = 0; i < 4; i += 1) {
+      hrefs.push(await page.locator("[data-tour-guide]").getAttribute("href"));
+      if (i < 3) {
+        await page.locator("[data-tour-next]").click();
+        await page.waitForTimeout(420);
+      }
+    }
+    expect(new Set(hrefs).size, `each step points somewhere useful: ${hrefs}`).toBe(4);
+  });
+
+  test("ending the tour puts the page back where it found it", async ({ page }) => {
+    await boot(page, { tour: "finished" });
+    // Scrolling down renders the lower sections, which makes the document
+    // taller, and Chromium's scroll anchoring then moves scrollY along with it
+    // — in one run the page went 1462 -> 2368px and scrollY drifted 662 -> 933
+    // with nobody touching it. So scroll to the bottom repeatedly until the
+    // position holds still; measuring before that compares two different pages.
+    let before = 0;
+    for (let i = 0; i < 12; i += 1) {
+      await page.evaluate(() =>
+        window.scrollTo(0, document.documentElement.scrollHeight - window.innerHeight)
+      );
+      await page.waitForTimeout(300);
+      const now = await page.evaluate(() => Math.round(window.scrollY));
+      if (now === before) break;
+      before = now;
+    }
+    expect(before, "the home page is tall enough for this test to mean anything").toBeGreaterThan(
+      200
+    );
+    await page.locator("#btn-tour").click();
+    await page.waitForTimeout(500);
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(400);
+    const after = await page.evaluate(() => Math.round(window.scrollY));
+    expect(Math.abs(after - before), `scroll restored (${before} -> ${after})`).toBeLessThan(40);
   });
 
   test("the page behind is inert while it is open, and released after", async ({ page }) => {
@@ -418,5 +489,56 @@ test.describe("Variant assignment", () => {
     expect(external, "no beacon leaves the page").toEqual([]);
     const events = await page.evaluate(() => window.VTAnalytics.summary().counts);
     expect(events.tour_start, "the events exist, they just stay on the device").toBe(1);
+  });
+});
+
+/**
+ * guide.html's headings are the destination of all 40 of its own contents
+ * links, of every inline cross-reference, of the tour's four "full guide"
+ * links and of any deep link anybody shares. `.app-header` is sticky at about
+ * 74px, so without `scroll-margin-top` every one of them arrives with the
+ * section title hidden behind the header and the reader dropped mid-paragraph.
+ */
+test.describe("The written guide's anchors", () => {
+  test("every anchor lands clear of the sticky header", async ({ page }) => {
+    await page.goto(`${BASE}/guide.html`);
+    await page.waitForLoadState("domcontentloaded");
+    const anchors = await page.$$eval('a[href^="#"]', (as) =>
+      as.map((a) => a.getAttribute("href"))
+    );
+    expect(anchors.length, "the guide still has its contents links").toBeGreaterThan(20);
+    const obscured = [];
+    for (const href of anchors) {
+      await page.evaluate((h) => {
+        // -1 is a sentinel. `html { scroll-behavior: smooth }` makes a hash
+        // change a real journey — up to 7000px here — so the poll below has to
+        // start from a value the new scroll cannot already match, or it reads
+        // the previous anchor's resting position as "settled" straight away.
+        window.__ly = -1;
+        window.location.hash = "";
+        window.location.hash = h;
+      }, href);
+      await page.waitForFunction(
+        () => {
+          const y = Math.round(window.scrollY);
+          const settled = window.__ly === y;
+          window.__ly = y;
+          return settled;
+        },
+        null,
+        { polling: 120, timeout: 6000 }
+      );
+      const seen = await page.evaluate((h) => {
+        const el = document.getElementById(h.slice(1));
+        if (!el) return { missing: true };
+        const b = el.getBoundingClientRect();
+        const hit = document.elementFromPoint(Math.round(b.left + 4), Math.round(b.top + 4));
+        return { top: Math.round(b.top), hit: hit ? hit.className || hit.tagName : null };
+      }, href);
+      if (seen.missing || seen.top < 0 || String(seen.hit).includes("app-header")) {
+        obscured.push(`${href} (top ${seen.top}, hit ${seen.hit})`);
+      }
+    }
+    expect(obscured, `every anchor clears the header: ${obscured.join(", ")}`).toEqual([]);
   });
 });

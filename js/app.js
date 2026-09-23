@@ -785,16 +785,22 @@
       existing?.remove();
       return;
     }
-    if (existing) return;
+    // Rebuilt on every render rather than left alone once it exists. The row is
+    // written in JS, so `if (existing) return` froze it in whatever language the
+    // page first loaded in — and since the site defaults to Spanish, that meant
+    // four Spanish phrases under an English hero for every English speaker, who
+    // can only get an English site by switching.
+    existing?.remove();
     const p = document.createElement("p");
     p.className = "start-invite";
     p.id = "home-tour-invite";
     p.innerHTML = `
-      <span class="muted">${tt("home.tourInvite")}</span>
-      <button type="button" class="btn btn-ghost btn-sm" data-tour-invite-start></button>
-      <a class="btn btn-ghost btn-sm" href="guide.html" data-tour-invite-guide></a>
-      <button type="button" class="btn btn-ghost btn-sm" data-tour-invite-dismiss></button>
+      <span class="muted" data-i18n="home.tourInvite"></span>
+      <button type="button" class="btn btn-ghost btn-sm" data-i18n="home.tourInviteGo" data-tour-invite-start></button>
+      <a class="btn btn-ghost btn-sm" href="guide.html" data-i18n="home.tourInviteGuide" data-tour-invite-guide></a>
+      <button type="button" class="btn btn-ghost btn-sm" data-i18n="home.tourInviteDismiss" data-tour-invite-dismiss></button>
     `;
+    p.querySelector("[data-i18n='home.tourInvite']").textContent = tt("home.tourInvite");
     p.querySelector("[data-tour-invite-start]").textContent = tt("home.tourInviteGo");
     const guideLink = p.querySelector("[data-tour-invite-guide]");
     guideLink.textContent = tt("home.tourInviteGuide");
@@ -802,6 +808,24 @@
     p.querySelector("[data-tour-invite-dismiss]").textContent = tt("home.tourInviteDismiss");
     main.appendChild(p);
     window.VTTour?.bindInvite?.();
+  }
+
+  /**
+   * guide.html holds both languages in one file, so a bare `guide.html` link
+   * always lands an English reader on the Spanish half. Point every static
+   * guide link at the right anchor for the current language.
+   */
+  function syncGuideLinks() {
+    const href = window.VTTour?.guideHref?.() || "guide.html";
+    // The Spanish half starts the document, so `#que-es` points at the top of
+    // a page that already opens there. Keep the plain link in Spanish and add
+    // the anchor only when it does some work — and set it either way, so
+    // switching back to Spanish takes the anchor off again.
+    const clean = href === "guide.html#que-es" ? "guide.html" : href;
+    $$('a[href^="guide.html"]').forEach((a) => {
+      if (a.hasAttribute("data-guide-anchor")) return;
+      a.href = clean;
+    });
   }
 
   function renderStartPanel(sug) {
@@ -2389,7 +2413,14 @@
       // the focus trap to return to.
       const wantsMic = profile.showPitch || profile.showLevel || profile.showHold;
       if (wantsMic && window.VTTour?.needsMicPrimer?.()) {
-        window.VTTour.showMicPrimer(() => startPractice());
+        // The primer used to say the same thing on every exercise — that the
+        // piano keeps playing and only the pitch readout is lost. Roughly half
+        // the exercises that show it have no piano and no pitch readout at all,
+        // including the one the home page's own first-practice button opens.
+        window.VTTour.showMicPrimer(() => startPractice(), {
+          piano: exerciseWantsSound(ex, profile),
+          onDecline: () => toast(tt("tour.mic.declined"))
+        });
         return;
       }
 
@@ -5566,6 +5597,7 @@
     openExercise: forceOpenExercise,
     setView,
     setTab,
+    refreshStartPanel: renderNextStepCard,
     startDaily,
     dailySession,
     openPricing,
@@ -5591,6 +5623,14 @@
         // Refresh tour button label
         const tb = $("#btn-tour");
         if (tb) tb.textContent = tt("nav.tour");
+        // Anything whose copy is written once at render time has to be redone
+        // here or it keeps the language the page loaded in. The start panel
+        // carries the tour invitation; the reminders panel carries the streak
+        // line; the footer's guide link has to point at the right half of
+        // guide.html.
+        renderNextStepCard();
+        renderRetentionChrome();
+        syncGuideLinks();
         // The tour card is built in JS and its copy resolved once per step, so
         // without this an open tour stays in the language it opened in.
         if (window.VTTour?.isActive?.()) window.VTTour.rerender();
@@ -5600,6 +5640,7 @@
         if ($("#pricing-modal") && !$("#pricing-modal").hidden) renderPricingModal();
       };
     }
+    syncGuideLinks();
     const settings = VTStorage.getSettings();
     state.tab = settings.lastTab || "vocal";
     bind();

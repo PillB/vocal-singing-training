@@ -705,17 +705,20 @@
   Modes.weekPlan = baseMode({
     id: "weekPlan",
     render() {
+      // Same copy as the exercise's plan card (week.*): the days are counted
+      // from practice now, so there is no "check in" to ask for.
+      const t = (k) => global.VTI18n?.t?.(k) ?? k;
       this.hud.innerHTML = `
-        <div class="mode-title">${L("Foco de 12 semanas", "12-week focus")}</div>
-        <p class="mode-meta">${L("La práctica está en el panel semanal. Ábrelo para elegir un elemento y registrar el día.", "Practice lives in the weekly dashboard. Open it to pick an element and check in.")}</p>
-        <button type="button" class="btn btn-primary btn-sm" data-open-plan>Open 12-week plan</button>
+        <div class="mode-title">${t("week.cta")}</div>
+        <p class="mode-meta">${t("week.ctaSub")}</p>
+        <button type="button" class="btn btn-primary btn-sm" data-open-plan>${t("week.open")}</button>
       `;
       this.$("[data-open-plan]")?.addEventListener("click", () => {
         document.getElementById("btn-plan")?.click();
       });
     },
     onStart() {
-      // soft redirect path — user can still record a check-in if they stay
+      // soft redirect path: app.js opens the plan on Start
     },
     onStop() {
       return { patches: {}, summary: "Use plan dashboard for week logic" };

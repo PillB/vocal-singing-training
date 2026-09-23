@@ -1664,6 +1664,56 @@ window.VT_WEEK_ELEMENTS = [
   "Energy calibration"
 ];
 
+/**
+ * The exercises that train each week element, per track, in the order the Plan
+ * lists them once the element is picked. Keys are the stored English names
+ * above. Editorial: an element lists the other track's exercises only where
+ * they train the same thing (breathing is breathing whether you speak or sing).
+ */
+window.VT_WEEK_ELEMENT_EXERCISES = {
+  Volume: { vocal: ["v2-volume", "v13-volume-ladder"] },
+  Tonality: { vocal: ["v12-melodic-speech"] },
+  "Facial expression": { vocal: ["v16-facial-expression"] },
+  Diction: { vocal: ["v1-diction", "v4-articulation-pen"] },
+  // v1 cycles reading rates 5 to 8, so it trains rate control as well.
+  "Pace / rate control": { vocal: ["v14-pace-variation", "v1-diction"] },
+  // v7's delayed review is where fillers get counted.
+  "Filler reduction": { vocal: ["v11-kill-fillers", "v7-record-review"] },
+  "Gestures / body language": { vocal: ["v15-gestures"] },
+  "Story structure": { vocal: ["v18-story-peak", "v5-neutral-ears"] },
+  "Resonance / soft palate": {
+    vocal: ["v3-soft-palate"],
+    singing: ["s19-soft-palate-surprise", "s23-mask-ya", "s7-humming"]
+  },
+  "Connection questions": { vocal: ["v6-connect"] },
+  "Breath support": {
+    vocal: ["v2-volume", "s18-costal-breath"],
+    singing: ["s18-costal-breath", "s15-sh-air-ladder", "s8-breath-support"]
+  },
+  "Vocal closure (singing)": { singing: ["s1-vocal-fry", "s12-easy-onset"] },
+  "Strategic pause": { vocal: ["v10-power-pause", "v17-strategic-concision"] },
+  "Pitch accuracy": { singing: ["s9-pitch-match", "s10-five-note", "s16-major-scale-coord"] },
+  "Pitch precision / stability": { singing: ["s11-dynamics", "s2-solfege-chords", "s13-arpeggio-match"] },
+  "Authority cadence": { vocal: ["v19-authority-close"] },
+  "Energy calibration": { vocal: ["v20-energy-match"] }
+};
+
+/**
+ * The elements the Plan offers first on each track, in this order; the rest
+ * wait behind "Ver otros". Seventeen equal chips put a singer through twelve
+ * public-speaking ones before reaching theirs.
+ */
+window.VT_WEEK_ELEMENTS_FIRST = {
+  vocal: ["Volume", "Diction", "Pace / rate control", "Filler reduction", "Strategic pause", "Tonality"],
+  singing: [
+    "Breath support",
+    "Vocal closure (singing)",
+    "Pitch accuracy",
+    "Resonance / soft palate",
+    "Pitch precision / stability"
+  ]
+};
+
 window.VT_STRUCTURED = {
   vocal_basic: [
     "v1-diction",

@@ -20,6 +20,19 @@
     }
   }
 
+  /**
+   * Days practised in the plan's current week. They used to be logged by hand
+   * ("Registro del día"); the Plan now counts them from the practice-day
+   * ledger, and a hand-logged week keeps what it logged.
+   */
+  function planDays(plan) {
+    const logged = (plan?.checkIns || []).length;
+    const D = global.VTDays;
+    const start = plan && plan.status !== "idle" && plan.startedAt ? dayKey(plan.startedAt) : null;
+    if (!start || !D?.countDays) return logged;
+    return Math.max(logged, D.countDays(start, D.addDays(start, 6)));
+  }
+
   function compute() {
     const progress = global.VTStorage?.getProgress?.() || {};
     const holds = global.VTStorage?.getHoldLogs?.() || [];
@@ -171,7 +184,7 @@
       planElement: plan?.element || null,
       planWeek: plan?.weekNumber || null,
       planStatus: plan?.status || "idle",
-      checkIns: (plan?.checkIns || []).length,
+      checkIns: planDays(plan),
       completedElements: (plan?.completedElements || []).length,
       spark,
       holdTrend,
@@ -222,7 +235,6 @@
    */
   function achievements(stats) {
     const s = stats || compute();
-    const plan = global.VTStorage?.getWeekPlan?.() || {};
     const flags = global.VTStorage?.getAchievementFlags?.() || {};
     const list = [
       { id: "first_save", unlocked: s.sessions >= 1 },
@@ -231,7 +243,7 @@
       { id: "hold_5", unlocked: s.bestHoldSec >= 5 },
       { id: "hold_10", unlocked: s.bestHoldSec >= 10 },
       { id: "exercises_5", unlocked: s.exercisesTouched >= 5 },
-      { id: "plan_checkin", unlocked: (plan.checkIns || []).length >= 1 },
+      { id: "plan_checkin", unlocked: s.checkIns >= 1 },
       { id: "goal_week", unlocked: !!s.goalMet },
       { id: "export_once", unlocked: !!flags.exported }
     ];

@@ -640,50 +640,50 @@
           <button type="button" class="btn btn-ghost" id="btn-plan-back" data-i18n="history.back">← Volver</button>
         </div>
 
-        <!-- The panel is named "12 semanas" but only ever showed week 1 -->
-        <div class="plan-rail card" aria-hidden="true">
-          <p class="plan-rail-label" data-i18n="plan.railLabel">Las 12 semanas</p>
-          <div class="plan-week-rail" id="plan-week-rail"></div>
-        </div>
-
         <div class="plan-grid">
-          <div class="card">
-            <h3 data-i18n="plan.current">Semana actual</h3>
-            <p class="plan-week-num" id="plan-week-num">Semana 1</p>
-            <p class="muted" id="plan-status"></p>
-            <p><span data-i18n="plan.focus">Foco</span>: <strong id="plan-element-label">—</strong></p>
-            <h3 style="margin-top: 1rem" data-i18n="plan.pick">Elige el elemento</h3>
-            <div class="element-chips" id="element-chips"></div>
-            <div class="controls-row" style="margin-top: 1rem">
-              <button type="button" class="btn btn-primary" id="btn-plan-start" data-i18n="plan.start">Iniciar / continuar semana</button>
-              <button type="button" class="btn btn-sm" id="btn-plan-checkin" data-i18n="plan.checkin">Registro del día</button>
+          <div class="card plan-focus-card">
+            <h3 class="plan-week-num" id="plan-week-num">Semana 1</h3>
+            <!-- The twelve weeks as a progress strip: where you are, not something to press -->
+            <ol class="plan-week-rail" id="plan-week-rail" aria-hidden="true"></ol>
+            <p class="muted plan-status" id="plan-status" hidden></p>
+            <h4 class="plan-pick" id="plan-pick" data-i18n="plan.pick">Elige el elemento</h4>
+            <div class="element-chips" id="element-chips" role="group" aria-labelledby="plan-pick"></div>
+            <button type="button" class="btn btn-ghost btn-sm plan-focus-more" id="plan-focus-more" aria-controls="element-chips" aria-expanded="false" hidden></button>
+            <!-- The exercises that train the picked element: the way from the plan to practice -->
+            <div class="plan-exercises" id="plan-exercises" hidden>
+              <p class="muted" data-i18n="plan.exLabel">Esta semana, practica:</p>
+              <div class="history-list" id="plan-exercise-list"></div>
             </div>
-            <h3 style="margin-top: 1.25rem" data-i18n="plan.checkins">Registros</h3>
-            <div class="hold-pills" id="plan-checkins"></div>
+            <p class="plan-days" id="plan-days" hidden></p>
+            <div class="controls-row" id="plan-start-row">
+              <button type="button" class="btn btn-primary" id="btn-plan-start" data-i18n="plan.start">Empezar esta semana</button>
+            </div>
           </div>
 
           <div class="card" id="plan-review-card">
             <h3 data-i18n="plan.review">Grabar y revisar al final de la semana</h3>
-            <p class="plan-waiting-note" data-i18n="plan.reviewWaiting">
-              Disponible cuando lleves una semana en marcha. Elige un elemento y empieza.
-            </p>
-            <p class="muted" data-i18n="plan.reviewSub">
-              Tras ~7 días, graba una muestra corta, revísala y decide:
-            </p>
-            <div class="field">
-              <label for="plan-review-notes" data-i18n="plan.notes">Notas de revisión</label>
-              <textarea id="plan-review-notes" data-i18n-placeholder="plan.notesPh" placeholder="¿Qué mejoró?"></textarea>
+            <p class="plan-waiting-note" id="plan-review-when"></p>
+            <div class="plan-review-body" id="plan-review-body">
+              <p class="muted" data-i18n="plan.reviewSub">
+                Tras ~7 días de foco, graba una muestra corta, revísala y decide:
+              </p>
+              <div class="field">
+                <label for="plan-review-notes" data-i18n="plan.notes">Notas de revisión</label>
+                <textarea id="plan-review-notes" data-i18n-placeholder="plan.notesPh" placeholder="¿Qué mejoró?"></textarea>
+              </div>
+              <div class="controls-row" style="margin-top: 0.75rem">
+                <button type="button" class="btn btn-success" id="btn-plan-improved" data-i18n="plan.improved">Mejoró → nuevo elemento</button>
+                <button type="button" class="btn" id="btn-plan-continue" data-i18n="plan.continue">Aún no → mismo elemento</button>
+              </div>
             </div>
-            <div class="controls-row" style="margin-top: 0.75rem">
-              <button type="button" class="btn btn-success" id="btn-plan-improved" data-i18n="plan.improved">Mejoró → nuevo elemento</button>
-              <button type="button" class="btn" id="btn-plan-continue" data-i18n="plan.continue">Aún no → mismo elemento</button>
+            <div id="plan-completed-wrap" hidden>
+              <h3 style="margin-top: 1.25rem" data-i18n="plan.completed">Elementos mejorados</h3>
+              <div id="plan-completed-elements"></div>
             </div>
-            <h3 style="margin-top: 1.25rem" data-i18n="plan.completed">Elementos mejorados</h3>
-            <div id="plan-completed-elements"></div>
           </div>
         </div>
 
-        <div class="card" style="margin-top: 1rem">
+        <div class="card" id="plan-reviews-card" style="margin-top: 1rem" hidden>
           <h3 data-i18n="plan.reviews">Historial de revisiones</h3>
           <div id="plan-reviews"></div>
         </div>

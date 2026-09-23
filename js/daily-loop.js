@@ -1223,6 +1223,8 @@
     readLoop,
     merge,
     setTier,
-    setGoal
+    setGoal,
+    // Track-aware copy ("días cantados" / "días de práctica") for other pages.
+    tl
   };
 })(window);

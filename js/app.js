@@ -5034,13 +5034,27 @@
     const signIn = $("#account-signin");
     const unconfigured = $("#account-unconfigured");
     const configured = !!(account && account.configured);
-    if (signIn) signIn.hidden = !configured;
-    if (unconfigured) unconfigured.hidden = configured;
+    // A deployed worker is not the same as a usable sign-in: it answers
+    // /v1/auth/methods with what its operator has actually wired up, and a
+    // deploy with neither an email provider nor a Google client can take
+    // nobody's sign-in. Showing the form anyway means typing an address and
+    // being told afterwards that it cannot be sent. methods is null until the
+    // first answer lands, so treat unknown as available rather than flashing
+    // the form away and back.
+    const methods = account && account.methods;
+    const canEmail = !methods || methods.email !== false;
+    const anyMethod = !methods || !!methods.email || !!methods.google;
+    const hasRealSignIn = configured && anyMethod;
+    if (signIn) signIn.hidden = !hasRealSignIn;
+    if (unconfigured) unconfigured.hidden = hasRealSignIn;
+    const emailForm = $("#account-email-form");
+    if (emailForm) emailForm.hidden = !canEmail;
     // Internal QA access hides behind a disclosure only once there is a real
-    // sign-in to lead with. Until the worker is wired up it is the only way in,
-    // so collapsing it would leave the panel with nothing to do.
+    // sign-in to lead with. While there is none it is the only way in, so
+    // collapsing it would leave the panel with nothing to do — and a deployed
+    // worker offering no method is that same case, not a wired-up one.
     const internal = document.querySelector(".account-internal");
-    if (internal && !configured) internal.open = true;
+    if (internal && !hasRealSignIn) internal.open = true;
 
     if (!signedIn) {
       out.hidden = false;

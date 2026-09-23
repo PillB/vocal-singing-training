@@ -235,6 +235,39 @@ test.describe("Accounts, gifted months and saved progress", () => {
     await expect(page.locator("#login-username")).toBeVisible();
   });
 
+  test("a worker with no sign-in method wired up offers none", async ({ page }) => {
+    // A deployed worker whose operator has set neither an email provider nor a
+    // Google client. It answers, so the site counts as configured, but there is
+    // nothing to sign in with — the panel must not take an address it cannot
+    // send a code to.
+    const license = await mintLicense({ origin: BASE });
+    const stub = createWorkerStub({ methods: { email: false, google: false, googleClientId: null } });
+    await installWorker(page, stub, license);
+    await boot(page);
+    await page.click("#btn-account");
+    await expect(page.locator("#account-modal")).toBeVisible();
+    await expect(page.locator("#account-signin")).toBeHidden();
+    await expect(page.locator("#account-unconfigured")).toBeVisible();
+    await expect(page.locator("#login-username")).toBeVisible();
+  });
+
+  test("with only Google wired up, the email form stays out of the way", async ({ page }) => {
+    const license = await mintLicense({ origin: BASE });
+    const stub = createWorkerStub({ methods: { email: false, google: true } });
+    await installWorker(page, stub, license);
+    await boot(page);
+    await page.click("#btn-account");
+    await expect(page.locator("#account-modal")).toBeVisible();
+    // The email form goes, because this deploy cannot send a code...
+    await expect(page.locator("#account-email-form")).toBeHidden();
+    // ...but this is a working sign-in, so the panel must not claim accounts
+    // are switched off. Asserted on the notice rather than on #account-signin,
+    // whose only remaining child here is the Google button, which needs
+    // Google's script and so has no box under test.
+    await expect(page.locator("#account-unconfigured")).toBeHidden();
+    await expect(page.locator("#account-signin")).toHaveJSProperty("hidden", false);
+  });
+
   test("signing in by emailed code shows the account and its free plan", async ({ page }) => {
     const license = await mintLicense({ origin: BASE });
     const stub = createWorkerStub();

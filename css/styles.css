@@ -4104,6 +4104,25 @@ body.account-open {
   color: var(--warn);
 }
 
+/* —— Design: abfix —— */
+/* Where a test stands against its plan, and a result cell that wraps its
+   interval onto a second line on a phone instead of scrolling it out of view. */
+.ab-plan {
+  margin: 0.2rem 0 0.4rem;
+}
+.ab-ingest {
+  margin: 0 0 0.6rem;
+}
+.ab-table th,
+.ab-table td:last-child {
+  white-space: normal;
+}
+.ab-ci {
+  display: inline-block;
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+
 .toast {
   position: fixed;
   /* Top placement: never cover bottom Start/Stop rail (mobile hit-target bug) */

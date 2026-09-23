@@ -10,8 +10,8 @@
  * thing to verify whether the access was bought or given.
  *
  * Anonymous usage events and A/B results share the same D1 (see events.js):
- * POST /v1/events from the site, GET /v1/admin/experiments[/results] for an
- * admin.
+ * POST /v1/events and /v1/events/forget from the site,
+ * GET /v1/admin/experiments[/results] for an admin.
  *
  * Bindings (see wrangler.toml and README.md):
  *   KV   ENTITLEMENTS
@@ -23,7 +23,7 @@
  *        ADMIN_EMAILS, TRIAL_DAYS, GOOGLE_CLIENT_ID,
  *        EMAIL_PROVIDER, EMAIL_FROM, EMAIL_FROM_NAME, EVENTS_ENABLED
  *   secrets STRIPE_WEBHOOK_SECRET, MP_WEBHOOK_SECRET, MP_ACCESS_TOKEN,
- *        LICENSE_PRIVATE_KEY_PKCS8_B64,
+ *        LICENSE_PRIVATE_KEY_PKCS8_B64, EVENTS_IP_KEY (optional),
  *        RESEND_API_KEY | BREVO_API_KEY | MAILERSEND_API_KEY
  *
  * Nothing in this file logs a secret, a token or a raw webhook body.
@@ -331,7 +331,8 @@ function handleHealth(env, cors) {
  * Route one request. Exported so tests can drive the router directly.
  * @param {Request} request Incoming request.
  * @param {Object} env Worker env bindings.
- * @param {{fetchImpl?: function}} [options] Injectable fetch, for tests.
+ * @param {{fetchImpl?: function, now?: number, presets?: Object}} [options]
+ *   Injectables for tests: fetch, the clock, and the experiment registry.
  * @returns {Promise<Response>} Response.
  */
 export async function handleRequest(request, env, options) {
@@ -374,6 +375,7 @@ export async function handleRequest(request, env, options) {
     json,
     cors,
     now: options && options.now,
+    presets: options && options.presets,
     requireAdmin
   });
   if (eventsResponse) {
@@ -403,9 +405,9 @@ export async function handleRequest(request, env, options) {
 export default {
   /**
    * Daily housekeeping (the cron in wrangler.toml): expired sign-in codes and
-   * sessions, stale rate-limit buckets, and usage events past retention. The
-   * privacy page promises the 180 days, so this runs on its own rather than
-   * waiting for an admin to press sweep.
+   * sessions, stale rate-limit buckets, and usage events, exposures and ingest
+   * counters past retention. The privacy page promises the 180 days, so this
+   * runs on its own rather than waiting for an admin to press sweep.
    * @param {Object} event Scheduled event.
    * @param {Object} env Worker env bindings.
    * @returns {Promise<void>} Resolves when done.

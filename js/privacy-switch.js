@@ -4,8 +4,13 @@
  *
  * The answer comes from VTAnalytics.remoteState(), the same function that
  * decides whether anything is sent, so the sentence cannot drift from what the
- * page actually does. Opting out only stops sending; events that stay on this
- * device are untouched, because they never left it.
+ * page actually does. Opting out stops sending, asks the worker to delete what
+ * this browser already sent (POST /v1/events/forget), and replaces the random
+ * browser id, so nothing sent later could be tied to what was deleted. Events
+ * that stay on this device are untouched, because they never left it.
+ *
+ * guide.html does not load js/i18n.js (a 100 KB table for two sentences), so
+ * this file keeps its own Spanish and English strings.
  */
 (function (global) {
   "use strict";
@@ -17,7 +22,7 @@
       browser: "Tu navegador pide no ser rastreado, así que no se envía nada.",
       optedOut: "Elegiste no enviar estadísticas desde este navegador.",
       automated: "Este navegador no envía estadísticas.",
-      stop: "No enviar desde este navegador",
+      stop: "No enviar y borrar lo enviado",
       resume: "Volver a permitir"
     },
     en: {
@@ -26,7 +31,7 @@
       browser: "Your browser asks not to be tracked, so nothing is sent.",
       optedOut: "You chose not to send statistics from this browser.",
       automated: "This browser sends no statistics.",
-      stop: "Don't send from this browser",
+      stop: "Stop sending and delete what was sent",
       resume: "Allow again"
     }
   };
@@ -72,7 +77,17 @@
       btn.addEventListener("click", () => {
         const A = global.VTAnalytics;
         if (!A?.setOptOut) return;
-        A.setOptOut(!A.remoteState().optedOut);
+        const out = !A.remoteState().optedOut;
+        if (out) {
+          const E = global.VTExperiments;
+          try {
+            A.forget?.(E?.clientId?.());
+            E?.reset?.();
+          } catch {
+            /* the opt-out below still holds */
+          }
+        }
+        A.setOptOut(out);
         render();
       });
     });

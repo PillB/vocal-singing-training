@@ -14,6 +14,7 @@ import {
   lnGamma,
   meanFromSums,
   normCdf,
+  homogeneity,
   sampleRatioMismatch,
   sampleSizePerArm,
   twoSidedP,
@@ -118,4 +119,19 @@ test("sample size matches the figures quoted in js/experiments-config.js", () =>
   const big = sampleSizePerArm(0.3, 0.45);
   assert.ok(big >= 158 && big <= 162, String(big));
   assert.equal(sampleSizePerArm(0.3, 0.3), null);
+});
+
+test("homogeneity compares arms' rates with a 2 x k chi-square", () => {
+  // 10/30 vs 20/30: every expected cell is 15, chi2 = 4 * 25 / 15.
+  const two = homogeneity([10, 20], [30, 30]);
+  near(two.chi2, 20 / 3, 1e-12);
+  assert.equal(two.df, 1);
+  near(two.p, 0.009823, 1e-5);
+  // The same rate everywhere, or nothing at all, is no evidence of a difference.
+  assert.equal(homogeneity([30, 30, 30], [100, 100, 100]).chi2, 0);
+  assert.equal(homogeneity([0, 0], [50, 50]).p, 1);
+  // An arm with nobody cannot be compared.
+  assert.equal(homogeneity([5, 0], [20, 0]).p, null);
+  // An arm that never sends the event is overwhelming evidence.
+  assert.ok(homogeneity([120, 0], [200, 200]).p < 1e-30);
 });

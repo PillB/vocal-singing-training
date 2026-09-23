@@ -734,8 +734,9 @@
       <h2 id="privacidad">14 · Dónde viven tus datos</h2>
       <p>
         Tu progreso, tus ajustes y tus grabaciones se guardan en
-        <strong>este navegador</strong>. No se suben a ningún servidor nuestro. Eso tiene dos
-        consecuencias que conviene saber:
+        <strong>este navegador</strong>. Si entras con una cuenta, tu progreso (no tus
+        grabaciones) también se guarda en nuestro servidor, para llevarlo a otro dispositivo.
+        Eso tiene dos consecuencias que conviene saber:
       </p>
       <ul>
         <li>Si borras los datos del sitio, o usas modo incógnito, se pierden.</li>
@@ -747,15 +748,22 @@
       </p>
       <p>
         Para saber qué cambios ayudan de verdad, el sitio puede enviar
-        <strong>estadísticas anónimas</strong>: qué partes se usan (por ejemplo «empezó el
-        Mínimo» o «terminó la clase»), qué versión de una prueba viste, tu día local y un
-        número al azar que identifica a este navegador, no a ti. Nunca tu nombre, tu correo, tu
-        voz ni tu dirección IP. Si tu navegador pide no ser rastreado (Global Privacy Control o
-        Do Not Track), no se envía nada.
+        <strong>estadísticas anónimas</strong> a nuestro servidor: qué partes usas (por ejemplo
+        «empezó el Mínimo» o «terminó la clase»), qué versión de una prueba te tocó, tu día
+        local, tu zona horaria y un número al azar que identifica a este navegador, no a ti. El
+        servidor anota la hora en que llegan.
+      </p>
+      <p>
+        No guardamos tu nombre, tu correo, tu voz, tus grabaciones ni tu dirección IP, y nada de
+        esto se une a tu cuenta. La dirección IP solo sirve para frenar abusos: se convierte en
+        un código que cambia cada día y se borra en dos días. Las estadísticas se borran a los
+        180 días. Si tu navegador pide no ser rastreado (Global Privacy Control o Do Not Track), no
+        se envía nada. Con el botón de abajo dejas de enviar y se borra lo que este navegador ya
+        envió.
       </p>
       <p class="privacy-switch" data-privacy-switch data-lang="es" hidden>
         <span data-privacy-state></span>
-        <button type="button" class="btn btn-sm" data-privacy-toggle hidden>No enviar desde este navegador</button>
+        <button type="button" class="btn btn-sm" data-privacy-toggle hidden>No enviar y borrar lo enviado</button>
       </p>
 
       <p class="guide-back"><a href="./">← Volver a la app</a></p>
@@ -1299,8 +1307,9 @@
 
       <h2 id="privacidad-en">14 · Where your data lives</h2>
       <p>
-        Your progress, settings and recordings are stored in <strong>this browser</strong>. They
-        are not uploaded to any server of ours. Two consequences worth knowing:
+        Your progress, settings and recordings are stored in <strong>this browser</strong>. If
+        you sign in to an account, your progress (not your recordings) is also kept on our
+        server, so it can follow you to another device. Two consequences worth knowing:
       </p>
       <ul>
         <li>If you clear the site's data, or use private browsing, they are gone.</li>
@@ -1312,24 +1321,33 @@
       </p>
       <p>
         To learn which changes really help, the site can send <strong>anonymous
-        statistics</strong>: which parts get used (for example "started the Minimum" or
-        "finished the class"), which version of a test you saw, your local day, and a random
-        number that identifies this browser, not you. Never your name, your email, your voice or
-        your IP address. If your browser asks not to be tracked (Global Privacy Control or Do Not
-        Track), nothing is sent.
+        statistics</strong> to our server: which parts you use (for example "started the
+        Minimum" or "finished the class"), which version of a test you got, your local day,
+        your time zone, and a random number that identifies this browser, not you. The server
+        notes the time they arrive.
+      </p>
+      <p>
+        We don't keep your name, your email, your voice, your recordings or your IP address, and
+        none of it is joined to your account. The IP address is only used to stop abuse: it is
+        turned into a code that changes every day and is deleted within two days. The
+        statistics are deleted after 180 days. If your browser asks not to be tracked (Global Privacy
+        Control or Do Not Track), nothing is sent. The button below stops sending and deletes
+        what this browser already sent.
       </p>
       <p class="privacy-switch" data-privacy-switch data-lang="en" hidden>
         <span data-privacy-state></span>
-        <button type="button" class="btn btn-sm" data-privacy-toggle hidden>Don't send from this browser</button>
+        <button type="button" class="btn btn-sm" data-privacy-toggle hidden>Stop sending and delete what was sent</button>
       </p>
 
       <p class="guide-back"><a href="./">← Back to the app</a></p>
       </section>
     </main>
     <!-- Only for the privacy switch above: the same code that decides whether
-         anything is sent, so the sentence it shows cannot drift from it. -->
+         anything is sent, so the sentence it shows cannot drift from it, and
+         the browser id it asks the worker to forget. -->
     <script src="js/experiments-config.js?v=20260923d"></script>
     <script src="js/analytics.js?v=20260923d"></script>
+    <script src="js/experiments.js?v=20260923d"></script>
     <script src="js/privacy-switch.js?v=20260923d"></script>
   </body>
 </html>

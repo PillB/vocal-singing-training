@@ -270,6 +270,34 @@ export function sampleRatioMismatch(counts, weights, alpha) {
 }
 
 /**
+ * Do k arms share one rate? Chi-square test of homogeneity on the 2 x k table
+ * of (with, without). Used on events every arm should send alike, where a
+ * difference means the counting differs, not the people.
+ * @param {number[]} ks Successes per arm.
+ * @param {number[]} ns Trials per arm, same order.
+ * @returns {{chi2: number|null, df: number, p: number|null}} Result.
+ */
+export function homogeneity(ks, ns) {
+  const n = ns.reduce((s, x) => s + x, 0);
+  const k = ks.reduce((s, x) => s + x, 0);
+  const df = ns.length - 1;
+  if (df < 1 || !(n > 0) || ns.some((x) => !(x > 0))) {
+    return { chi2: null, df: Math.max(0, df), p: null };
+  }
+  const pooled = k / n;
+  if (pooled <= 0 || pooled >= 1) {
+    return { chi2: 0, df, p: 1 };
+  }
+  let chi2 = 0;
+  for (let i = 0; i < ns.length; i += 1) {
+    const e1 = ns[i] * pooled;
+    const e0 = ns[i] - e1;
+    chi2 += (ks[i] - e1) ** 2 / e1 + (ns[i] - ks[i] - e0) ** 2 / e0;
+  }
+  return { chi2, df, p: chiSquareP(chi2, df) };
+}
+
+/**
  * People per arm needed to detect a change in a rate, two-sided alpha 0.05,
  * 80% power: n = 7.85 * (p1(1-p1) + p2(1-p2)) / (p1-p2)^2.
  * @param {number} p1 Baseline rate.

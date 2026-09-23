@@ -6,23 +6,30 @@
  * its browser as automated (navigator.webdriver), which the client rightly
  * refuses to send from, so the send tests switch that flag off first.
  */
+const path = require("path");
+const { pathToFileURL } = require("url");
 const { test, expect } = require("@playwright/test");
 
 const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";
 const ENDPOINT = "https://events.test/v1/events";
 const NOW = "2026-09-23T10:00:00-05:00";
+const WORKER_SRC = path.join(__dirname, "..", "workers", "entitlements", "src");
+
+/** The worker's own modules, so these checks cannot drift from what it does. */
+const workerModule = (name) => import(pathToFileURL(path.join(WORKER_SRC, name)).href);
 
 test.use({ timezoneId: "America/Lima", locale: "es-PE" });
 
 /**
  * @param {import('@playwright/test').Page} page
  * @param {{ endpoint?: string, gpc?: boolean, dnt?: boolean, human?: boolean, loopWeights?: number[] }} opts
- * @returns {Promise<{ bodies: object[], headers: object[] }>} captured requests
+ * @returns {Promise<{ bodies: object[], headers: object[], urls: string[] }>} captured requests
  */
 async function boot(page, opts = {}) {
-  const sent = { bodies: [], headers: [] };
+  const sent = { bodies: [], headers: [], urls: [] };
   await page.route("https://events.test/**", async (route) => {
     const req = route.request();
+    sent.urls.push(req.url());
     sent.headers.push(req.headers());
     try {
       sent.bodies.push(JSON.parse(req.postData() || "null"));
@@ -83,6 +90,8 @@ test.describe("anonymous events for A/B tests", () => {
     const names = batch.events.map((e) => e.name);
     expect(names).toEqual(expect.arrayContaining(["app_open", "practice_start"]));
     const ev = batch.events.find((e) => e.name === "practice_start");
+    // Exactly the fields the privacy text lists; the worker adds the arrival time.
+    expect(Object.keys(ev).sort()).toEqual(["cid", "day", "name", "props", "tz"]);
     expect(ev.cid).toMatch(/^[0-9a-f]{16}$/);
     expect(ev.day).toBe("2026-09-23");
     expect(ev.tz).toBe(-300);
@@ -126,13 +135,17 @@ test.describe("anonymous events for A/B tests", () => {
     await expect(es.locator("[data-privacy-toggle]")).toBeVisible();
   });
 
-  test("the guide's switch stops sending from this browser, says so, and can be undone", async ({ page }) => {
+  test("the guide's switch stops sending, deletes what was sent, and can be undone", async ({ page }) => {
     const sent = await boot(page, { endpoint: ENDPOINT, human: true });
+    const oldId = await page.evaluate(() => window.VTExperiments.clientId());
     await page.goto(BASE + "/guide.html#privacidad");
     const es = page.locator('[data-privacy-switch][data-lang="es"]');
     await expect(es.locator("[data-privacy-state]")).toHaveText("Este navegador envía estadísticas anónimas.");
     const btn = es.locator("[data-privacy-toggle]");
-    await expect(btn).toHaveText("No enviar desde este navegador");
+    await expect(btn).toHaveText("No enviar y borrar lo enviado");
+    await expect(page.locator('[data-privacy-switch][data-lang="en"] [data-privacy-toggle]')).toHaveText(
+      "Stop sending and delete what was sent"
+    );
     const box = await btn.boundingBox();
     expect(box.height).toBeGreaterThanOrEqual(44);
     await btn.click();
@@ -143,9 +156,15 @@ test.describe("anonymous events for A/B tests", () => {
     await expect(page.locator('[data-privacy-switch][data-lang="en"] [data-privacy-state]')).toHaveText(
       "You chose not to send statistics from this browser."
     );
+    // One request asked the worker to forget the old id, and the id is gone.
+    await expect.poll(() => sent.bodies.filter((b) => b && b.cid === oldId && !b.events).length).toBe(1);
+    expect(sent.urls.filter((u) => u.endsWith("/v1/events/forget")).length).toBe(1);
+    expect(await page.evaluate(() => localStorage.getItem("vt_ab_v1"))).toBeNull();
 
     await page.goto(BASE + "/");
     await page.waitForFunction(() => !!window.VTAnalytics);
+    // Anything sent later could not be tied to what was deleted.
+    expect(await page.evaluate(() => window.VTExperiments.clientId())).not.toBe(oldId);
     const before = sent.bodies.length;
     await page.evaluate(() => {
       window.VTAnalytics.track("practice_start", { exerciseId: "s4-lip-trills" });
@@ -157,6 +176,45 @@ test.describe("anonymous events for A/B tests", () => {
     await page.goto(BASE + "/guide.html#privacidad");
     await page.locator('[data-privacy-switch][data-lang="es"] [data-privacy-toggle]').click();
     await expect(es.locator("[data-privacy-state]")).toHaveText("Este navegador envía estadísticas anónimas.");
+    // Allowing again deletes nothing.
+    await page.waitForTimeout(150);
+    expect(sent.urls.filter((u) => u.endsWith("/v1/events/forget")).length).toBe(1);
+  });
+
+  test("the privacy text names every field that is sent, in both languages, and the worker's retention", async ({ page }) => {
+    const sent = await boot(page, { endpoint: ENDPOINT, human: true });
+    await page.evaluate(() => {
+      window.VTAnalytics.track("practice_start", { exerciseId: "s4-lip-trills" });
+      window.VTAnalytics.flush();
+    });
+    await expect.poll(() => sent.bodies.length).toBeGreaterThan(0);
+    const fields = Object.keys(sent.bodies[0].events[0]).sort();
+    const { EVENT_RETENTION_SECONDS } = await workerModule("db.js");
+    const days = EVENT_RETENTION_SECONDS / 86400;
+    // Each field sent, and the arrival time the worker adds, in plain words.
+    const words = {
+      es: { name: "qué partes usas", props: "qué partes usas", cid: "número al azar", day: "día local", tz: "zona horaria", received: "hora en que llegan", keep: `${days} días` },
+      en: { name: "which parts you use", props: "which parts you use", cid: "random number", day: "local day", tz: "time zone", received: "time they arrive", keep: `${days} days` }
+    };
+    const section = (id) =>
+      page.evaluate((anchor) => {
+        const out = [];
+        for (let el = document.getElementById(anchor).nextElementSibling; el && el.tagName !== "H2" && !el.classList.contains("guide-back"); el = el.nextElementSibling) {
+          if (!el.hasAttribute("data-privacy-switch")) out.push(el.textContent);
+        }
+        return out.join(" ").replace(/\s+/g, " ");
+      }, id);
+    await page.goto(BASE + "/guide.html");
+    const texts = { es: await section("privacidad"), en: await section("privacidad-en") };
+    await page.goto(BASE + "/privacy.html");
+    const policy = (await page.locator("main").textContent()).replace(/\s+/g, " ");
+    for (const lang of ["es", "en"]) {
+      for (const field of [...fields, "received", "keep"]) {
+        expect(words[lang][field], `no words for ${field}`).toBeTruthy();
+        expect(texts[lang], `${lang} guide: ${field}`).toContain(words[lang][field]);
+        expect(policy, `${lang} privacy page: ${field}`).toContain(words[lang][field]);
+      }
+    }
   });
 
   test("when the loop test is on, both arms are exposed on opening the app", async ({ browser }) => {
@@ -178,4 +236,188 @@ test.describe("anonymous events for A/B tests", () => {
       await ctx.close();
     }
   });
+
+  test("an exposure whose beacon was lost is said again on the next visit's app_open", async ({ page }) => {
+    const sent = await boot(page, { endpoint: ENDPOINT, human: true, loopWeights: [0, 1] });
+    // Visit 1: the exposure happens, but the phone is offline when it is sent.
+    await page.route("https://events.test/**", (route) => route.abort("internetdisconnected"));
+    const first = await page.evaluate(() => {
+      window.VTAnalytics.flush();
+      return window.VTExperiments.report().experiments.loop_home_2026_10.exposed;
+    });
+    expect(first).toBe("classic");
+    await page.unroute("https://events.test/**");
+    await page.route("https://events.test/**", async (route) => {
+      sent.bodies.push(JSON.parse(route.request().postData() || "null"));
+      await route.fulfill({ status: 200, contentType: "application/json", body: '{"ok":true}' });
+    });
+    const before = sent.bodies.length;
+    // Visit 2, online: the device has spent the exposure, so only app_open can carry it.
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => !!window.VTAnalytics && !!window.VTLoop);
+    await page.evaluate(() => window.VTAnalytics.flush());
+    await expect.poll(() => sent.bodies.length).toBeGreaterThan(before);
+    const events = sent.bodies.slice(before).flatMap((b) => (b && b.events) || []);
+    expect(events.filter((e) => e.name === "experiment_expose")).toEqual([]);
+    const open = events.find((e) => e.name === "app_open");
+    expect(open.props.x_loop_home_2026_10).toBe("classic");
+    // Switched-off experiments are not re-asserted.
+    expect(Object.keys(open.props).filter((k) => k.startsWith("x_"))).toEqual(["x_loop_home_2026_10"]);
+  });
+});
+
+/**
+ * Every arm must send the events its experiment is judged on (audit AB-1).
+ *
+ * For each experiment in the worker's registry, each arm is forced on and the
+ * same arm-independent script is run: a Mínimo left without practising, a
+ * Mínimo practised through, a free exercise practised and saved with a
+ * rating, and an exercise whose microphone is refused. Every event a preset
+ * metric reads must then be sent, the same number of times, in every arm. The
+ * loop_home "classic" arm used to send no practice_day at all.
+ */
+test.describe("every arm sends what its experiment is judged on", () => {
+  const HUMAN_UA =
+    "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36";
+
+  /**
+   * Run the script in one arm and count what was recorded on the device.
+   * @returns {Promise<Record<string, number>>} event name -> count
+   */
+  async function runArm(browser, key, arm, arms) {
+    const ctx = await browser.newContext({ timezoneId: "America/Lima", locale: "es-PE", userAgent: HUMAN_UA });
+    const page = await ctx.newPage();
+    await page.clock.install({ time: new Date(NOW) });
+    await page.addInitScript(
+      ({ key, arm, arms }) => {
+        try {
+          // A first visit, so the tour test is exposed; the microphone primer
+          // is taken as already seen, since it is the same in every arm.
+          localStorage.setItem("vt_lang", "es");
+          localStorage.setItem("vt_settings_v1", JSON.stringify({ lastTab: "singing" }));
+          localStorage.setItem("vt_mic_primed_v1", "1");
+        } catch {
+          /* ignore */
+        }
+        const AC = window.AudioContext || window.webkitAudioContext;
+        async function fakeGUM() {
+          if (window.__vtMicDenied) {
+            const err = new Error("Permission denied");
+            err.name = "NotAllowedError";
+            throw err;
+          }
+          let ctx = window.VTSharedAudioCtx;
+          if (!ctx || ctx.state === "closed") {
+            ctx = new AC();
+            window.VTSharedAudioCtx = ctx;
+          }
+          const dest = ctx.createMediaStreamDestination();
+          const osc = ctx.createOscillator();
+          const g = ctx.createGain();
+          g.gain.value = 0.00001;
+          osc.connect(g);
+          g.connect(dest);
+          osc.start();
+          return dest.stream;
+        }
+        if (!navigator.mediaDevices) Object.defineProperty(navigator, "mediaDevices", { value: {}, configurable: true });
+        navigator.mediaDevices.getUserMedia = fakeGUM;
+        if (typeof MediaDevices !== "undefined") MediaDevices.prototype.getUserMedia = fakeGUM;
+        // Switch this experiment on, alone, with all the weight on one arm.
+        let cfg;
+        Object.defineProperty(window, "VT_EXPERIMENTS", {
+          configurable: true,
+          get: () => cfg,
+          set: (v) => {
+            if (v && v[key]) {
+              v[key].enabled = true;
+              v[key].variants = arms.map((id) => ({ id, weight: id === arm ? 1 : 0 }));
+            }
+            cfg = v;
+          }
+        });
+      },
+      { key, arm, arms }
+    );
+    await page.goto(BASE + "/", { waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => !!window.VTApp && !!window.VTLoop && !!window.VTDays);
+    const run = (ms) => page.clock.runFor(ms);
+    // Fifty seconds of singing, jumped over rather than ticked through: the
+    // practice time is read from the clock, and running every frame of the
+    // pitch loop for a minute takes minutes of real time.
+    const practise = async () => {
+      await page.clock.fastForward(50000);
+      await run(500);
+    };
+    const click = (sel) => page.evaluate((s) => document.querySelector(s)?.click(), sel);
+    await run(1500);
+    // A tour that opened itself is closed, the way most first visitors do.
+    await page.evaluate(() => {
+      if (document.body.classList.contains("tour-active")) window.VTTour?.end?.("dismiss");
+    });
+    // 1. A Mínimo left without practising.
+    await page.evaluate(() => window.VTLoop.startTier("min"));
+    await run(400);
+    for (let i = 0; i < 2; i += 1) {
+      await page.evaluate(() => window.VTApp.advanceStructured("next"));
+      await run(300);
+    }
+    // 2. A Mínimo practised through.
+    await page.evaluate(() => window.VTLoop.startTier("min"));
+    await run(400);
+    for (let i = 0; i < 2; i += 1) {
+      await click("#btn-practice-start");
+      await practise();
+      await page.evaluate(() => window.VTApp.advanceStructured("next"));
+      await run(400);
+    }
+    await click("#loop-done-close");
+    // 3. A free exercise, practised and saved with a rating.
+    await page.evaluate(() => window.VTApp.openExercise("s4-lip-trills"));
+    await run(400);
+    await click("#btn-practice-start");
+    await practise();
+    await click("#btn-complete");
+    await run(1500);
+    // 4. An exercise whose microphone is refused.
+    await page.evaluate(() => {
+      window.__vtMicDenied = true;
+      window.VTApp.openExercise("s27-lip-trill-solfege");
+    });
+    await run(400);
+    await click("#btn-practice-start");
+    await run(1500);
+    const out = await page.evaluate((k) => {
+      const bag = JSON.parse(localStorage.getItem("vt_analytics_v1") || "{}");
+      const counts = {};
+      (bag.events || []).forEach((e) => {
+        counts[e.name] = (counts[e.name] || 0) + 1;
+      });
+      return { counts, exposed: window.VTExperiments.report().experiments[k].exposed };
+    }, key);
+    await ctx.close();
+    return out;
+  }
+
+  const keys = ["aa_2026_10", "tour_shape_2026_10", "loop_home_2026_10", "loop_surprise_2026_10", "loop_minimo_len_2026_10"];
+  for (const key of keys) {
+    test(key, async ({ browser }) => {
+      test.setTimeout(120000);
+      const { EXPERIMENT_PRESETS } = await workerModule("events.js");
+      const preset = EXPERIMENT_PRESETS[key];
+      expect(preset, `${key} is in the worker registry`).toBeTruthy();
+      const metricEvents = [...new Set([preset.primary, ...preset.guardrails].map((m) => m.event))];
+      const byArm = {};
+      for (const arm of preset.arms) {
+        byArm[arm] = await runArm(browser, key, arm, preset.arms);
+        // The arm was really served and exposed, or the comparison proves nothing.
+        expect(byArm[arm].exposed, `${key}/${arm} exposed`).toBe(arm);
+      }
+      for (const event of metricEvents) {
+        const counts = preset.arms.map((arm) => byArm[arm].counts[event] || 0);
+        expect(counts[0], `${key}: ${event} is sent at all`).toBeGreaterThan(0);
+        expect(counts, `${key}: ${event} per arm ${preset.arms.join("/")}`).toEqual(counts.map(() => counts[0]));
+      }
+    });
+  }
 });

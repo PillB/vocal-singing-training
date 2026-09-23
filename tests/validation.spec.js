@@ -13,6 +13,24 @@ async function dismissTour(page) {
   });
 }
 
+/**
+ * A day sung yesterday. A first visit shows only the Mínimo and its button;
+ * the other ways in (Continuar, sesión guiada, Ruta) come with a day sung.
+ */
+async function seedPracticeDay(page) {
+  await page.addInitScript(() => {
+    try {
+      if (localStorage.getItem("vt_days_v1")) return;
+      const d = new Date(Date.now() - 864e5);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      const days = { [key]: { sec: 240, n: 2, ex: ["s4-lip-trills"] } };
+      localStorage.setItem("vt_days_v1", JSON.stringify({ v: 1, days, rest: { bank: 1, earnedAt: 0, used: [] }, backfilled: true }));
+    } catch {
+      /* ignore */
+    }
+  });
+}
+
 /** Ensure English for tests that assert English mode copy; default app is Spanish */
 async function forceEn(page) {
   await dismissTour(page);
@@ -150,6 +168,7 @@ test.describe("Exercise-specific practice modes", () => {
   });
 
   test("structured session + continue still work", async ({ page }) => {
+    await seedPracticeDay(page);
     await forceEs(page);
     await page.selectOption("#session-path", "basic");
     await page.click("#btn-structured");

@@ -86,8 +86,21 @@ however it happened.
 
 ## The loop: `vt_loop_v1` and the start panel
 
-Nothing changes on a first visit. From the first day sung, the start panel
-becomes **today's basics**:
+**A first visit** (no day sung yet, no guided session open, and not the
+`classic` arm) asks one question, "¿Qué quieres entrenar?", with two large
+choices: **Cantar** (canciones, afinación) and **Hablar** (presentaciones,
+dicción). Choosing one switches the track; the chosen one is ticked, not only
+coloured. Under it sits that track's **Mínimo** ("Tus básicos · 3 min", its
+steps and times) with one button, "▶ Empezar (3 min)", which starts it. The
+intro line, the other ways in (Continuar, sesión guiada, Ruta) and the
+explainer's "pick an exercise" step are hidden, and the tour offer shrinks to
+two quiet links. So the first practice is the same few minutes the loop offers
+every day after, and it needs nothing prepared: on Canto the card says "Sin
+libro ni partitura"; Vocal's Mínimo ends on diction, which reads a page aloud,
+so its card says to have a short text at hand. The track the site defaults to
+is unchanged, and the catalog keeps its own track switch.
+
+From the first day sung, the start panel becomes **today's basics**:
 
 | Size | Canto | Vocal |
 |---|---|---|
@@ -102,10 +115,18 @@ becomes **today's basics**:
   something else today; the basics round it off), **back** (a comeback: "Qué
   bueno verte", nothing to make up) and **done** ("Listo por hoy", with the
   button turned quiet and nothing asking for more).
+- In go, sang and back the panel says it once: the kicker, the headline and
+  the button. The size and steps are in the chips below and in the exercise
+  itself; the intro line shows only when it reports a rest day spent. A number
+  and its unit never break across lines ("3 minutos").
 - Beside it: **días cantados**, a lifetime count that only goes up and leads;
   the week from Monday; the streak and rest days, second; and a weekly goal
   that is a **range** (3–5 days by default), because a range survives a bad week
   that a fixed number does not.
+- On a phone the record is a compact strip: the count beside this week's
+  ticks (captioned "Esta semana", so three days sung beside two ticks reads
+  right), then the streak and the weekly goal, whose picker stays. The next
+  milestone is left to the wider layout.
 - A routine counts as done when today is a practice day **and** at least half
   of its steps were practised. Stepping through without starting them says
   plainly that it did not count.
@@ -197,6 +218,9 @@ visible: per arm, 30% → 45% needs about 160 people, 30% → 40% about 355, 30%
 
 ## Verifying
 
+- `npx playwright test tests/home-design.spec.js` covers the first visit (the
+  chooser switches the routine, the button starts the Mínimo), the quiet loop
+  panel, the phone record strip and the phone header's "Más" menu.
 - `npx playwright test tests/daily-loop.spec.js` — 19 cases on a fixed clock in
   `America/Lima`: routine rotation, local days, the four panel states, tier
   choice, comeback, rest days, a full Mínimo run to the completion card, the

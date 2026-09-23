@@ -151,6 +151,9 @@
    * the old tour led with pointed below the fold and is now the guide's job.
    */
   function homeSteps() {
+    // A first visit shows what to train and today's basics (js/daily-loop.js),
+    // not an exercise that changes with every save.
+    const first = document.body.classList.contains("loop-first");
     return [
       {
         id: "welcome",
@@ -161,9 +164,9 @@
       },
       {
         id: "nextstep",
-        titleKey: "tour.s2b.title",
-        bodyKey: "tour.s2b.body",
-        target: "#next-step-card",
+        titleKey: first ? "tour.s2first.title" : "tour.s2b.title",
+        bodyKey: first ? "tour.s2first.body" : "tour.s2b.body",
+        target: first ? "#track-pick" : "#next-step-card",
         place: "bottom",
         guideAnchor: "inicio"
       },

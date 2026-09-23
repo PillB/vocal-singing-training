@@ -25,7 +25,7 @@ const CLASS_EXERCISES = [
   { id: "s27-lip-trill-solfege", mode: "trillSolfege" }
 ];
 
-async function boot(page, lang = "es") {
+async function boot(page, lang = "es", query = "") {
   await page.context().grantPermissions(["microphone"]).catch(() => {});
   await page.addInitScript((l) => {
     try {
@@ -62,7 +62,7 @@ async function boot(page, lang = "es") {
     navigator.mediaDevices.getUserMedia = fakeGUM;
     if (typeof MediaDevices !== "undefined") MediaDevices.prototype.getUserMedia = fakeGUM;
   }, lang);
-  await page.goto(BASE + "/?t=" + Date.now(), { waitUntil: "domcontentloaded" });
+  await page.goto(BASE + "/?t=" + Date.now() + query, { waitUntil: "domcontentloaded" });
   await page.waitForFunction(() => !!window.VTApp && !!window.VT_DAILY_SESSION);
 }
 
@@ -114,8 +114,12 @@ test.describe("Prepared daily class session", () => {
     expect(Math.abs(report.totalSec / 60 - report.totalMin)).toBeLessThan(2);
   });
 
+  // A first visit in the loop arm starts with the Mínimo (tests/home-design.spec.js);
+  // the daily class as home's recommendation is the classic arm's panel.
+  const CLASSIC = "&ab_loop_home_2026_10=classic";
+
   test("home: one press on Canto starts the whole sequence", async ({ page }) => {
-    await boot(page);
+    await boot(page, "es", CLASSIC);
     await page.locator('.tab[data-tab="singing"]').click();
     await page.waitForTimeout(150);
 
@@ -748,7 +752,7 @@ test.describe("Prepared daily class session", () => {
   });
 
   test("English keeps the session usable", async ({ page }) => {
-    await boot(page, "en");
+    await boot(page, "en", CLASSIC);
     await page.locator('.tab[data-tab="singing"]').click();
     await page.waitForTimeout(150);
     await expect(page.locator("#next-step-label")).toHaveText(/Daily class session/i);

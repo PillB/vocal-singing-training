@@ -34,8 +34,27 @@ async function installFakeMic(page) {
   });
 }
 
-async function boot(page) {
+/**
+ * A day sung yesterday. A first visit shows only the Mínimo and its button;
+ * the other ways in (Continuar, sesión guiada, Ruta) come with a day sung.
+ */
+async function seedPracticeDay(page) {
+  await page.addInitScript(() => {
+    try {
+      if (localStorage.getItem("vt_days_v1")) return;
+      const d = new Date(Date.now() - 864e5);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      const days = { [key]: { sec: 240, n: 2, ex: ["s4-lip-trills"] } };
+      localStorage.setItem("vt_days_v1", JSON.stringify({ v: 1, days, rest: { bank: 1, earnedAt: 0, used: [] }, backfilled: true }));
+    } catch {
+      /* ignore */
+    }
+  });
+}
+
+async function boot(page, opts = {}) {
   await installFakeMic(page);
+  if (opts.returning) await seedPracticeDay(page);
   await page.goto(BASE + "/?t=" + Date.now(), { waitUntil: "domcontentloaded" });
 }
 
@@ -244,7 +263,7 @@ test.describe("Full journey: core user flows", () => {
   });
 
   test("structured session: start basic path banner", async ({ page }) => {
-    await boot(page);
+    await boot(page, { returning: true });
     await page.click('.tab[data-tab="vocal"]');
     const structured = page.locator("#btn-structured");
     if (!(await structured.isVisible().catch(() => false))) {
@@ -356,7 +375,7 @@ test.describe("Full journey: core user flows", () => {
   });
 
   test("end structured session stops live practice", async ({ page }) => {
-    await boot(page);
+    await boot(page, { returning: true });
     await page.click('.tab[data-tab="vocal"]');
     const structured = page.locator("#btn-structured");
     if (!(await structured.isVisible().catch(() => false))) {

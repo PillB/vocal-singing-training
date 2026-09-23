@@ -59,6 +59,7 @@ export const EVENT_NAMES = new Set([
   "comeback",
   "experiment_expose",
   "experiment_forced_view",
+  "first_track_pick",
   "first_win",
   "first_win_micro",
   "loop_cards_open",

@@ -254,6 +254,8 @@ async function boot(page) {
 
 /** Sign in through the emailed-code form. */
 async function signIn(page) {
+  // On a phone, Cuenta is in the header's "Más" menu.
+  if (await page.locator("#btn-more").isVisible()) await page.click("#btn-more");
   await page.click("#btn-account");
   await expect(page.locator("#account-modal")).toBeVisible();
   await expect(page.locator("#account-signin")).toBeVisible();

@@ -601,6 +601,57 @@
     }, 50);
   }
 
+  /* —— Design: phone-header ——
+     On a phone the header is one row: the sections, then "Más", which opens
+     Pro, Cuenta, idioma and Tour. They are the same buttons with the same
+     handlers; below 640px CSS turns their row into this menu. */
+
+  function headerMenuOpen() {
+    return $("#btn-more")?.getAttribute("aria-expanded") === "true";
+  }
+
+  function setHeaderMenu(open, opts = {}) {
+    const btn = $("#btn-more");
+    const menu = $("#header-utils");
+    if (!btn || !menu) return;
+    btn.setAttribute("aria-expanded", String(open));
+    menu.classList.toggle("is-open", open);
+    if (!open && opts.focus) btn.focus();
+  }
+
+  function bindHeaderMenu() {
+    const btn = $("#btn-more");
+    const menu = $("#header-utils");
+    if (!btn || !menu) return;
+    btn.addEventListener("click", () => setHeaderMenu(!headerMenuOpen()));
+    // Choosing an item closes the menu and its own handler still runs. Focus
+    // moves to "Más" first (capture phase, before that handler), so a dialog
+    // the item opens hands focus back to a button that is still on screen.
+    menu.addEventListener(
+      "click",
+      (e) => {
+        if (!headerMenuOpen() || !e.target.closest("button, a")) return;
+        btn.focus({ preventScroll: true });
+        setHeaderMenu(false);
+      },
+      true
+    );
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape" || !headerMenuOpen()) return;
+      e.preventDefault();
+      setHeaderMenu(false, { focus: true });
+    });
+    document.addEventListener("click", (e) => {
+      if (headerMenuOpen() && !btn.contains(e.target) && !menu.contains(e.target)) setHeaderMenu(false);
+    });
+    // Tabbing out of the menu leaves it closed rather than open behind the page.
+    menu.addEventListener("focusout", (e) => {
+      if (e.relatedTarget && !menu.contains(e.relatedTarget) && e.relatedTarget !== btn) setHeaderMenu(false);
+    });
+    // Wider than a phone the items are a plain row again; nothing is "open".
+    window.matchMedia?.("(max-width: 640px)")?.addEventListener?.("change", () => setHeaderMenu(false));
+  }
+
   /** Paint the header nav so the current section is always identifiable. */
   function syncHeaderNav(name) {
     const current = name === "exercise" ? "home" : name;
@@ -625,6 +676,7 @@
     if (target) target.classList.add("active");
     document.body.classList.toggle("view-exercise", name === "exercise");
     syncHeaderNav(name);
+    setHeaderMenu(false);
     if (name !== "exercise") {
       document.body.classList.remove("practice-live");
     }
@@ -6082,6 +6134,7 @@
     // The daily loop draws into home and starts routines through these.
     window.VTLoop?.bind?.({
       getTab: () => state.tab,
+      setTab,
       findExercise,
       startRoutine: (r) => startStructured(r.path || "basics", r),
       startDaily,
@@ -6095,6 +6148,7 @@
       }
     });
     bind();
+    bindHeaderMenu();
     bindBilling();
     bindAuth();
     setTab(state.tab);

@@ -156,17 +156,34 @@ continue, because that would point preview writes at production data."
 
 # --- D1 ---------------------------------------------------------------------
 say "D1 database"
+# NOT `d1 info`: that resolves the database through wrangler.toml first, and
+# `hasUuid` is a plain truthiness check, so the literal TODO_REPLACE placeholder
+# sitting in the file counts as an id. wrangler then asks the API for a database
+# whose id is "TODO_REPLACE_WITH_D1_DATABASE_ID", gets a 404, and the lookup
+# comes back empty both before AND after the create — which would have stopped
+# this script dead every run, and every re-run after it.
+# `d1 list` reads no config at all, and with --json prints a bare JSON array
+# and suppresses the banner.
 d1_lookup() {
-  wr d1 info "$D1_NAME" --json 2>/dev/null | extract_json object \
+  wr d1 list --json 2>/dev/null | extract_json array \
     | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
-        try{const o=JSON.parse(s);if(o.uuid)process.stdout.write(o.uuid)}catch(e){}})'
+        let a=[];try{a=JSON.parse(s)}catch(e){return}
+        const d=a.find(x=>x&&x.name===process.argv[1]);
+        if(d&&d.uuid)process.stdout.write(d.uuid)})' "$D1_NAME"
 }
-D1_ID=$(d1_lookup || true)
+# `d1 create` prints the same TOML snippet the KV creates do, carrying
+# `database_id = "<uuid>"`. A D1 id is a hyphenated UUID, not 32 bare hex.
+d1_create() {
+  wr d1 create "$D1_NAME" 2>&1 | sed 's/\x1b\[[0-9;]*m//g' \
+    | sed -n 's/^[[:space:]]*database_id[[:space:]]*=[[:space:]]*"\([0-9a-fA-F-]\{36\}\)".*/\1/p' \
+    | head -1
+}
+D1_ID=$(d1_lookup)
 if [ -n "$D1_ID" ]; then
   echo "reusing $D1_NAME"
 else
-  wr d1 create "$D1_NAME" >/dev/null 2>&1 || true
-  D1_ID=$(d1_lookup || true)
+  D1_ID=$(d1_create)
+  [ -n "$D1_ID" ] || D1_ID=$(d1_lookup)
   [ -n "$D1_ID" ] || die "Could not create or find the D1 database $D1_NAME."
   echo "created $D1_NAME"
 fi
@@ -265,7 +282,11 @@ fi
 
 say "Done"
 echo "Worker URL : ${WORKER_URL:-see above}"
-echo "Public JWK : workers/entitlements/$JWK_OUT"
+if [ -f "$JWK_OUT" ]; then
+  echo "Public JWK : workers/entitlements/$JWK_OUT"
+else
+  echo "Public JWK : not on this machine — read it from ${WORKER_URL:-the worker}/v1/jwks"
+fi
 echo
 echo "Next: paste both into js/billing-config.js (apiBaseUrl and publicKeyJwk)."
 echo "The private key is not on this machine and not in this repository."

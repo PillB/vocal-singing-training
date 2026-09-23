@@ -35,6 +35,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 TOML=wrangler.toml
+WORKER_NAME=$(sed -n 's/^name *= *"\(.*\)"/\1/p' "$TOML" | head -1)
 D1_NAME=$(sed -n 's/^database_name *= *"\(.*\)"/\1/p' "$TOML" | head -1)
 ROTATE_KEY=0
 [ "${1:-}" = "--rotate-key" ] && ROTATE_KEY=1
@@ -208,11 +209,36 @@ grep -E '^(id|preview_id|database_id) *=' "$TOML"
 rather than shipping a Worker bound to a resource that does not exist."
 
 # --- deploy ------------------------------------------------------------------
+# The worker's address is <worker>.<account subdomain>.workers.dev. Ask the API
+# for the subdomain rather than scraping it out of the deploy output, because
+# the deploy must NOT be piped: wrangler's isInteractive() is
+# `process.stdin.isTTY && process.stdout.isTTY`, so sending its stdout through
+# `tee` silently turns every prompt into its default answer. That is how the
+# first real deploy failed — asked whether to register a workers.dev subdomain,
+# it answered "no" to itself and then errored out because there was none.
+cf_subdomain() {
+  [ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ] || return 0
+  curl -fsS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+    "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/subdomain" \
+    2>/dev/null \
+    | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
+        try{const r=JSON.parse(s);if(r&&r.result&&r.result.subdomain)
+          process.stdout.write(r.result.subdomain)}catch(e){}})' || true
+}
+
 say "Deploying"
-DEPLOY_LOG=$(mktemp)
-wr deploy 2>&1 | tee "$DEPLOY_LOG"
-WORKER_URL=$(grep -oE 'https://[a-z0-9.-]+\.workers\.dev' "$DEPLOY_LOG" | head -1 || true)
-rm -f "$DEPLOY_LOG"
+if [ -z "$(cf_subdomain)" ]; then
+  echo "This account has no workers.dev subdomain yet, so the worker has no address."
+  echo "wrangler is about to ask whether to register one. Answer y, then give it a"
+  echo "name: lowercase letters, digits and hyphens, and it has to be free across"
+  echo "all of Cloudflare, so something like vocalstudio-pe rather than vocal."
+  echo "The worker then lives at https://$WORKER_NAME.<that name>.workers.dev"
+  echo
+fi
+wr deploy
+WORKER_URL=""
+SUBDOMAIN=$(cf_subdomain)
+[ -n "$SUBDOMAIN" ] && WORKER_URL="https://${WORKER_NAME}.${SUBDOMAIN}.workers.dev"
 
 # --- the signing key ---------------------------------------------------------
 # Generated, piped into wrangler, and dropped. The private half is never
@@ -277,7 +303,8 @@ if [ -n "$WORKER_URL" ]; then
   curl -fsS "$WORKER_URL/v1/health" && echo || echo "(no /v1/health route; try /v1/jwks)"
   curl -fsS "$WORKER_URL/v1/jwks" && echo || true
 else
-  echo "Could not read the worker URL out of the deploy output; check the dashboard."
+  echo "Could not work out the worker URL. It was printed by the deploy just above;"
+  echo "otherwise the dashboard lists it under Workers & Pages."
 fi
 
 say "Done"

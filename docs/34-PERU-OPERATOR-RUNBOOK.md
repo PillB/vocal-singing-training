@@ -195,9 +195,25 @@ is reported as unavailable rather than silently dropping codes.
    - `https://pillb.github.io`
    - `http://127.0.0.1:8765` (so you can test locally)
    - your custom domain, once stage 6 gives you one.
-5. Paste the client id into `GOOGLE_CLIENT_ID` in `wrangler.toml`. It is public
+5. Google also issues a client **secret** on the same screen. **You do not need
+   it.** Do not download the JSON, do not paste it anywhere, and never put it in
+   this repository. A secret is for the server-side code exchange; this flow
+   does not do one. The browser gets an ID token from Google, and the worker
+   verifies Google's signature on it against Google's published keys
+   (`workers/entitlements/src/google.js`). The client id is used only as the
+   audience that token must claim.
+6. Paste the client id into `GOOGLE_CLIENT_ID` in `wrangler.toml`. It is public
    by design — it ships in the page.
-6. `wrangler deploy` again.
+7. Re-run `workers/entitlements/scripts/setup.sh` to deploy. It reuses every
+   resource and keeps the signing key.
+
+**Publishing status decides who can sign in.** A new client starts in
+**Testing**, which means only the accounts listed as test users on the consent
+screen can sign in at all — up to 100 of them. That is enough for the whole
+friends-and-family beta, and it is a reasonable way to run it: add each tester's
+Google address under Audience → Test users. Before charging anyone outside that
+list, switch the app to **Production**. For the basic scopes here (email,
+profile, openid) that switch does not require Google's verification review.
 
 **What this unblocks**: people can now sign in, and their practice follows them
 between devices. You can gift months. Still nobody can pay.

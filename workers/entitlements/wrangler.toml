@@ -44,8 +44,12 @@ TRIAL_DAYS = "30"
 # Set it with `wrangler secret put ADMIN_EMAILS`, NOT here: this repository is
 # public and a value in this file publishes the address in git history forever.
 # The worker reads env.ADMIN_EMAILS either way, so a secret behaves identically.
-# Google Sign-In client id (public by design). Empty disables Google sign-in.
-GOOGLE_CLIENT_ID = ""
+# Google Sign-In client id (public by design: it ships in the page, and the
+# worker only uses it as the audience an ID token must claim). The matching
+# client SECRET is not used anywhere in this worker and must never be added
+# here — that secret is for the server-side code exchange, and this flow does
+# not do one: it verifies Google's signature against Google's published JWKS.
+GOOGLE_CLIENT_ID = "636631700114-g30d6j9nu6khf0k0in0ei0jjct4ki6bc.apps.googleusercontent.com"
 # Transactional email for the one-time sign-in codes: resend | brevo | mailersend.
 # Empty disables email sign-in rather than silently dropping codes.
 EMAIL_PROVIDER = ""

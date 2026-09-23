@@ -46,6 +46,15 @@ die() { printf '\n%s\n' "$*" >&2; exit 1; }
 [ -n "${CLOUDFLARE_API_TOKEN:-}" ] || die \
   "CLOUDFLARE_API_TOKEN is not set. Add it to the environment, not to a file."
 
+# wrangler 4 needs Node 20 or newer, and so does the key generation below. A
+# Mac with an older Homebrew node fails several steps later with a much
+# less obvious message, so say it here instead.
+command -v node >/dev/null 2>&1 || die \
+  "node is not installed. Install Node 20 or newer (https://nodejs.org) and re-run."
+NODE_MAJOR=$(node -p 'process.versions.node.split(".")[0]')
+[ "$NODE_MAJOR" -ge 20 ] 2>/dev/null || die \
+  "node $(node --version) is too old. wrangler 4 needs Node 20 or newer."
+
 wr() { npx --yes wrangler@4 "$@"; }
 
 # `wrangler whoami` needs Account Settings:Read, which a minimum-permission

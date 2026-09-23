@@ -11,12 +11,18 @@
 # It is safe to run twice. Existing resources are reused, not duplicated.
 #
 # Needs, in the environment and never on the command line:
-#   CLOUDFLARE_API_TOKEN   a token with Workers Scripts:Edit, Workers KV
-#                          Storage:Edit, D1:Edit and Account Settings:Read
+#   CLOUDFLARE_API_TOKEN   a token with exactly three account permissions:
+#                            Workers Scripts    Edit
+#                            Workers KV Storage Edit
+#                            D1                 Edit
+#                          Note "Workers Scripts", NOT "Workers AI" — the
+#                          latter is model inference and cannot deploy a Worker.
 #   ADMIN_EMAIL            the address allowed to gift and revoke months.
 #                          Optional. Stored as a secret rather than in
 #                          wrangler.toml, because this repository is public.
-#   CLOUDFLARE_ACCOUNT_ID  only if the token can see more than one account.
+#   CLOUDFLARE_ACCOUNT_ID  the account id from the dashboard sidebar. Supply it
+#                          and the token needs no Account Settings:Read at all,
+#                          which is one fewer permission to hand out.
 #
 # Usage:
 #   workers/entitlements/scripts/setup.sh
@@ -41,8 +47,19 @@ die() { printf '\n%s\n' "$*" >&2; exit 1; }
 
 wr() { npx --yes wrangler@4 "$@"; }
 
-say "Who am I?"
-wr whoami 2>&1 | grep -viE 'telemetry|^$' || die "The token was rejected."
+# `wrangler whoami` needs Account Settings:Read, which a minimum-permission
+# token does not have and does not need. Treat it as informational: when the
+# account id is supplied directly there is nothing to look up, and the real
+# proof the token works is the first resource call below.
+say "Account"
+if [ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
+  echo "using CLOUDFLARE_ACCOUNT_ID from the environment"
+else
+  echo "no CLOUDFLARE_ACCOUNT_ID set; asking the API which account this token belongs to"
+  wr whoami 2>&1 | grep -viE 'telemetry|^$' || die \
+    "Could not list accounts. Either add Account Settings:Read to the token, or
+set CLOUDFLARE_ACCOUNT_ID (Cloudflare dashboard, right-hand sidebar) and re-run."
+fi
 
 # --- KV ---------------------------------------------------------------------
 # wrangler titles a namespace <worker>-<binding>, and <worker>-<binding>_preview

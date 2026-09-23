@@ -3898,6 +3898,54 @@ body.tour-active .app-footer * {
   font-size: 0.75rem !important;
   line-height: 1.4 !important;
 }
+
+/* —— Design: pricing (pre-launch) ——
+   Until checkout can take money the dialog leads with what is true today: a
+   box with the payments note and, while it is offered, the trial as the one
+   primary action. The plan buttons become "not available yet": dashed
+   outline, a muted label that is not bold (6.2:1 on the plan card) and no
+   hover, so they read as off without leaning on the outline alone. */
+.pricing-launch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem 0.9rem;
+  margin: 0 0 0.65rem;
+  padding: 0.7rem 0.8rem;
+  border-radius: 12px;
+  border: 1px solid rgba(110, 180, 232, 0.5);
+  background: rgba(110, 180, 232, 0.08);
+}
+.pricing-launch-note {
+  flex: 1 1 16rem;
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  color: var(--text);
+}
+.pricing-launch #btn-start-trial {
+  flex: 0 0 auto;
+  padding-inline: 1.2rem;
+}
+.plan-card .plan-cta-not-yet:disabled {
+  opacity: 1;
+  background: transparent;
+  border: 1px dashed rgba(140, 170, 210, 0.45);
+  color: #8d9bb0;
+  font-weight: 500;
+}
+.plan-card .plan-cta-not-yet:disabled:hover {
+  border-color: rgba(140, 170, 210, 0.45);
+}
+@media (max-width: 640px) {
+  /* Same slot as the status line in the phone order, right after it. */
+  .pricing-launch {
+    order: 1;
+  }
+  .pricing-launch #btn-start-trial {
+    flex: 1 1 100%;
+  }
+}
 body.pricing-open,
 body.account-open {
   overflow: hidden;

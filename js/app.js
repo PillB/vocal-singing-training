@@ -4813,11 +4813,27 @@
     );
   }
 
+  /**
+   * Pre-launch: checkout cannot take money yet and no QA unlock stands in for
+   * it. The pricing dialog then offers nothing that only answers with a toast:
+   * the plan buttons say "not available yet" and the trial leads instead.
+   */
+  function isCheckoutPrelaunch() {
+    const B = window.VTBilling;
+    try {
+      const h = B?.getBillingHealth?.();
+      return !!h && !h.ok && !B.cfg?.()?.demoUnlockEnabled;
+    } catch {
+      return false;
+    }
+  }
+
   function updateBillingChrome() {
     const B = window.VTBilling;
     if (!B) return;
     const ent = B.getEntitlement();
     const cfg = B.cfg?.() || {};
+    const prelaunch = isCheckoutPrelaunch();
     const pill = $("#billing-pill");
     const btn = $("#btn-pricing");
     if (pill) {
@@ -4863,12 +4879,33 @@
         ? !ent.pro && !(acct.signedIn && acct.account?.trialUsed)
         : !!B.canStartTrial?.() && !ent.pro;
       trialBtn.hidden = !canTrial;
+      // Pre-launch the trial is the one thing this dialog can really do, so it
+      // moves up beside the payments note as the primary; once checkout is live
+      // it goes back to the foot. One element, so its id and listener stay.
+      const slot = prelaunch ? $("#pricing-launch") : $("#pricing-modal .pricing-foot");
+      if (slot && trialBtn.parentElement !== slot) {
+        slot.insertBefore(trialBtn, prelaunch ? null : $("#btn-demo-pro"));
+      }
+      trialBtn.classList.toggle("btn-primary", prelaunch);
+      trialBtn.classList.toggle("btn-sm", !prelaunch);
       if (canTrial) {
         const days = accounts
           ? Number(acct.methods?.trialDays || 30)
           : Number(cfg.freeTrialDays || 0);
-        trialBtn.textContent = tt("pricing.startTrial", { n: String(days) });
+        trialBtn.textContent = tt(prelaunch ? "pricing.startTrialFree" : "pricing.startTrial", {
+          n: String(days)
+        });
       }
+    }
+    // The foot promised secure checkout and cancelling "the same way you
+    // subscribed" while nobody can subscribe. Pre-launch it answers the
+    // question the trial raises instead, and only while the trial is offered.
+    const payNote = $("#pricing-pay-note");
+    if (payNote) {
+      const key = prelaunch ? "pricing.notePrelaunch" : "pricing.note";
+      payNote.setAttribute("data-i18n", key);
+      payNote.textContent = tt(key);
+      payNote.hidden = prelaunch && (!trialBtn || trialBtn.hidden);
     }
     // Customer Portal: show for Pro/trial when a valid portal URL is configured
     const manage = $("#btn-manage-billing");
@@ -4902,6 +4939,13 @@
       } catch {
         healthNote.hidden = true;
       }
+    }
+    const launch = $("#pricing-launch");
+    if (launch) {
+      launch.hidden = !!(
+        (!healthNote || healthNote.hidden) &&
+        (!trialBtn || trialBtn.hidden || trialBtn.parentElement !== launch)
+      );
     }
   }
 
@@ -5366,6 +5410,7 @@
     const market = B.marketFor(region);
     if (!pricingRail) pricingRail = B.preferredRail(region);
     const cfg = B.cfg() || {};
+    const prelaunch = isCheckoutPrelaunch();
     const regionEl = $("#pricing-region-label");
     if (regionEl) {
       regionEl.textContent = `${tt("pricing.region")}: ${market.name} · ${market.currency}`;
@@ -5404,6 +5449,8 @@
     }
     const rails = $("#pricing-rails");
     if (rails) {
+      // Choosing how to pay means nothing while nobody can pay.
+      rails.hidden = prelaunch;
       const stripeLab = es ? (cfg.providers?.stripe?.labelEs || tt("pricing.railStripe")) : (cfg.providers?.stripe?.label || tt("pricing.railStripe"));
       const mpLab = es ? (cfg.providers?.mercadopago?.labelEs || tt("pricing.railMp")) : (cfg.providers?.mercadopago?.label || tt("pricing.railMp"));
       rails.innerHTML = `
@@ -5453,6 +5500,7 @@
                 : "";
           let ctaLabel = tt("pricing.subscribe");
           let disabled = false;
+          let notYet = false;
           if (p.id === "free") {
             ctaLabel = tt("pricing.current");
             disabled = true;
@@ -5462,6 +5510,14 @@
               disabled = ent.plan === p.id || ent.source === "paid";
             }
           }
+          // A Subscribe button that can only answer with a toast is a dead end;
+          // say it on the button instead, and keep it out of the Tab order.
+          if (prelaunch && !disabled) {
+            ctaLabel = tt("pricing.notYet");
+            disabled = true;
+            notYet = true;
+          }
+          const ctaClass = p.id === "free" ? "btn-ghost" : notYet ? "btn-ghost plan-cta-not-yet" : "btn-primary";
           const hero = p.hero || p.id === "pro_yearly" ? " is-hero" : "";
           return `
             <article class="plan-card${p.popular ? " is-popular" : ""}${hero}" data-plan="${p.id}">
@@ -5470,7 +5526,7 @@
               <div class="plan-price">${price.text}<span>${interval}</span></div>
               <ul class="plan-features">${feats}</ul>
               ${moreFeats}
-              <button type="button" class="btn ${p.id === "free" ? "btn-ghost" : "btn-primary"} btn-sm plan-cta" data-plan="${p.id}" ${disabled ? "disabled" : ""}>
+              <button type="button" class="btn ${ctaClass} btn-sm plan-cta" data-plan="${p.id}" ${disabled ? 'disabled aria-disabled="true"' : ""}>
                 ${ctaLabel}
               </button>
             </article>`;

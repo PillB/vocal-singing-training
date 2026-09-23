@@ -24,6 +24,10 @@
     "select",
     "textarea",
     "iframe",
+    // A <details> toggle is tabbable too. Left out, the last control the trap
+    // knew of could sit above one (the pricing trial above "See 6 more
+    // benefits") and Tab wrapped to the top before ever reaching it.
+    "details > summary:first-of-type",
     "audio[controls]",
     "video[controls]",
     "[contenteditable]:not([contenteditable='false'])",

@@ -5756,6 +5756,126 @@ body.loop-on .start-steps {
   gap: 0.4rem;
 }
 
+/* —— Design: step-end —— */
+/* A guided step's clock ran out: the stage says so and holds the way on.
+   Above the HUD rails (Start sits at 56 on short landscape). The stage can be
+   under 300px tall (small phones, landscape), so the card sizes itself to the
+   stage, not the viewport, and centres with auto margins so an overflow
+   scrolls instead of losing its top. */
+.step-done {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  padding: 1rem;
+  overflow-y: auto;
+  container-type: size;
+  background: rgba(6, 10, 16, 0.9);
+  backdrop-filter: blur(2px);
+}
+.step-done-card {
+  margin: auto;
+  width: min(440px, 100%);
+  display: grid;
+  gap: 0.55rem;
+  text-align: center;
+}
+.step-done-card p {
+  margin: 0;
+}
+.step-done-k {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.step-done-tick {
+  color: var(--success);
+}
+.step-done-t {
+  font-size: 1.6rem;
+  font-weight: 800;
+  line-height: 1.2;
+  color: var(--text);
+}
+.step-done-sub {
+  font-size: 0.95rem;
+  color: var(--text-muted);
+}
+.step-done .step-done-next {
+  width: 100%;
+  min-height: 52px;
+  margin-top: 0.3rem;
+  white-space: normal;
+}
+.step-done-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.step-done-row .btn {
+  flex: 1 1 auto;
+  white-space: normal;
+}
+@media (min-width: 900px) and (min-height: 600px) {
+  .step-done-card {
+    width: min(520px, 100%);
+    gap: 0.7rem;
+  }
+  .step-done-k {
+    font-size: 1.15rem;
+  }
+  .step-done-t {
+    font-size: 2rem;
+  }
+  .step-done .step-done-next {
+    min-height: 60px;
+    font-size: 1.15rem;
+  }
+  .step-done-row .btn {
+    min-height: 48px;
+  }
+}
+/* A short stage: tighter type; when wide enough, one row of secondary buttons */
+@container (max-height: 420px) {
+  .step-done-card {
+    width: min(520px, 100%);
+    gap: 0.35rem;
+  }
+  .step-done-t {
+    font-size: 1.3rem;
+  }
+  .step-done-sub {
+    font-size: 0.88rem;
+  }
+  .step-done .step-done-next {
+    min-height: 48px;
+    margin-top: 0.1rem;
+    padding: 0.5rem 1rem;
+    font-size: 1rem;
+  }
+}
+@container (max-height: 420px) and (min-width: 420px) {
+  .step-done-row {
+    flex-wrap: nowrap;
+  }
+  .step-done-row .btn {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+}
+/* Too short for every line: the mic note is the one to drop */
+@container (max-height: 300px) and (max-width: 419px) {
+  .step-done-sub {
+    display: none;
+  }
+}
+@container (max-height: 220px) {
+  .step-done-sub {
+    display: none;
+  }
+}
+
 @media (max-width: 860px) {
   /* One column on a phone: today's basics, then the practice record, then the
      other ways to practise. Without this the record sat below three secondary

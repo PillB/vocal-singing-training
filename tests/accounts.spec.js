@@ -147,6 +147,48 @@ async function installWorker(page, stub, license) {
       if (stub.account.role !== "admin") return json(403, { ok: false, reason: "forbidden" });
       return json(200, { ok: true, account: { email: body.email }, grant: { id: "grant_1", status: "active" } });
     }
+    if (path === "/v1/admin/experiments" && method === "GET") {
+      if (stub.account.role !== "admin") return json(403, { ok: false, reason: "forbidden" });
+      return json(200, {
+        ok: true,
+        experiments: [
+          { experiment: "aa_2026_10", arms: [{ variant: "a", exposed: 412 }, { variant: "b", exposed: 398 }], srm: { p: 0.62, flagged: false } },
+          { experiment: "loop_home_2026_10", arms: [], srm: { p: null, flagged: false } }
+        ]
+      });
+    }
+    if (path === "/v1/admin/experiments/results" && method === "GET") {
+      if (stub.account.role !== "admin") return json(403, { ok: false, reason: "forbidden" });
+      // Shaped exactly like workers/entitlements/src/events.js answers.
+      return json(200, {
+        ok: true,
+        experiment: url.searchParams.get("experiment"),
+        control: "a",
+        exposed: [{ variant: "a", n: 412 }, { variant: "b", n: 398 }],
+        srm: { chi2: 0.24, df: 1, p: 0.62, weights: [1, 1], flagged: false },
+        metrics: [
+          {
+            role: "primary", event: "practice_day", kind: "share", from: 0, to: 7,
+            arms: [
+              { variant: "a", n: 380, k: 152, rate: 0.4, lo: 0.352, hi: 0.45 },
+              { variant: "b", n: 371, k: 150, rate: 0.4043, lo: 0.356, hi: 0.455 }
+            ],
+            comparisons: [{ variant: "b", vs: "a", diff: 0.0043, lo: -0.065, hi: 0.074, z: 0.12, p: 0.904 }],
+            smallSample: false
+          },
+          {
+            role: "guardrail", event: "app_open", kind: "days", from: 0, to: 7,
+            arms: [
+              { variant: "a", n: 380, mean: 2.1, sd: 1.4, lo: 1.96, hi: 2.24 },
+              { variant: "b", n: 371, mean: 2.08, sd: 1.5, lo: 1.93, hi: 2.23 }
+            ],
+            comparisons: [{ variant: "b", vs: "a", diff: -0.02, lo: -0.23, hi: 0.19, z: -0.19, p: 0.85 }],
+            smallSample: false
+          }
+        ],
+        readMe: "ok"
+      });
+    }
     if (path === "/v1/auth/logout") return json(200, { ok: true });
 
     return json(404, { ok: false, reason: "not_found" });
@@ -338,6 +380,24 @@ test.describe("Accounts, gifted months and saved progress", () => {
     await expect(page.locator("#gift-result")).toContainText("amiga@example.test");
     const call = stub.calls.find((c) => c.path === "/v1/admin/grants");
     expect(call.body.days).toBe(60);
+  });
+
+  test("an admin reads A/B results in the account panel", async ({ page }) => {
+    const license = await mintLicense({ origin: BASE });
+    const stub = createWorkerStub({ role: "admin" });
+    await installWorker(page, stub, license);
+    await boot(page);
+    await signIn(page);
+
+    await page.click("#ab-results-load");
+    const box = page.locator("#ab-results");
+    await expect(box).toContainText("aa_2026_10");
+    // Only experiments somebody has seen are asked for.
+    expect(stub.calls.filter((c) => c.path === "/v1/admin/experiments/results").length).toBe(1);
+    await expect(box.locator(".ab-table").first()).toContainText("40.0 %");
+    await expect(box.locator(".ab-diff").first()).toContainText("b frente a a: +0.4 pts");
+    await expect(box.locator(".ab-diff").first()).toContainText("p = 0.904");
+    await expect(box.locator(".ab-warn")).toHaveCount(0);
   });
 
   test("signing out drops the session and any Pro that came with it", async ({ page }) => {

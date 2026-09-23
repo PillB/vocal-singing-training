@@ -9,6 +9,10 @@
  * api.js). Both halves issue the same signed token, so the browser has one
  * thing to verify whether the access was bought or given.
  *
+ * Anonymous usage events and A/B results share the same D1 (see events.js):
+ * POST /v1/events from the site, GET /v1/admin/experiments[/results] for an
+ * admin.
+ *
  * Bindings (see wrangler.toml and README.md):
  *   KV   ENTITLEMENTS
  *   D1   DB                (optional: without it the account routes answer 503
@@ -17,7 +21,7 @@
  *        STRIPE_PRICE_PRO_MONTHLY, STRIPE_PRICE_PRO_YEARLY,
  *        MP_PLAN_PRO_MONTHLY, MP_PLAN_PRO_YEARLY,
  *        ADMIN_EMAILS, TRIAL_DAYS, GOOGLE_CLIENT_ID,
- *        EMAIL_PROVIDER, EMAIL_FROM, EMAIL_FROM_NAME
+ *        EMAIL_PROVIDER, EMAIL_FROM, EMAIL_FROM_NAME, EVENTS_ENABLED
  *   secrets STRIPE_WEBHOOK_SECRET, MP_WEBHOOK_SECRET, MP_ACCESS_TOKEN,
  *        LICENSE_PRIVATE_KEY_PKCS8_B64,
  *        RESEND_API_KEY | BREVO_API_KEY | MAILERSEND_API_KEY
@@ -27,7 +31,9 @@
 
 "use strict";
 
-import { routeAccountApi, authMethods } from "./api.js";
+import { routeAccountApi, authMethods, requireAdmin } from "./api.js";
+import { routeEventsApi } from "./events.js";
+import { ensureSchema, sweepExpired } from "./db.js";
 import { buildJwks, createLicenseToken, isLicenseIdShape, isTokenIssuable } from "./license.js";
 import { mapStripeEvent, verifyStripeSignature } from "./stripe.js";
 import { confirmAndMapNotification, resolveNotificationTarget, verifyMercadoPagoSignature } from "./mercadopago.js";
@@ -312,6 +318,7 @@ function handleHealth(env, cors) {
       mercadopagoConfigured: Boolean(env.MP_WEBHOOK_SECRET && env.MP_ACCESS_TOKEN),
       signingKeyConfigured: Boolean(env.LICENSE_PRIVATE_KEY_PKCS8_B64),
       accountsConfigured: Boolean(env.DB),
+      eventsEnabled: Boolean(env.DB) && String(env.EVENTS_ENABLED || "").trim().toLowerCase() !== "false",
       authMethods: authMethods(env),
       siteOrigin: env.SITE_ORIGIN || ""
     },
@@ -361,6 +368,18 @@ export async function handleRequest(request, env, options) {
     return json(jwks, 200, { ...cors, "cache-control": "public, max-age=600" });
   }
 
+  // Before the account router: it claims every /v1/admin/ path and would
+  // answer the experiment routes with a 404.
+  const eventsResponse = await routeEventsApi(request, env, url, path, {
+    json,
+    cors,
+    now: options && options.now,
+    requireAdmin
+  });
+  if (eventsResponse) {
+    return eventsResponse;
+  }
+
   const accountResponse = await routeAccountApi(request, env, url, path, {
     json,
     cors,
@@ -382,6 +401,23 @@ export async function handleRequest(request, env, options) {
 }
 
 export default {
+  /**
+   * Daily housekeeping (the cron in wrangler.toml): expired sign-in codes and
+   * sessions, stale rate-limit buckets, and usage events past retention. The
+   * privacy page promises the 180 days, so this runs on its own rather than
+   * waiting for an admin to press sweep.
+   * @param {Object} event Scheduled event.
+   * @param {Object} env Worker env bindings.
+   * @returns {Promise<void>} Resolves when done.
+   */
+  async scheduled(event, env) {
+    if (!env.DB) {
+      return;
+    }
+    await ensureSchema(env.DB);
+    await sweepExpired(env.DB);
+  },
+
   /**
    * Worker entry point.
    * @param {Request} request Incoming request.

@@ -4027,6 +4027,69 @@ body.account-open {
   overflow-wrap: anywhere;
 }
 
+/* The guide's statistics switch: one sentence and, when it applies, a button. */
+.privacy-switch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.9rem;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+}
+.privacy-switch[hidden] {
+  display: none;
+}
+
+/* A/B results in the admin panel: plain numbers, one small table per metric. */
+.ab-results {
+  margin-top: 0.6rem;
+  font-size: 0.85rem;
+  color: var(--text);
+}
+.ab-exp + .ab-exp {
+  margin-top: 0.9rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--border);
+}
+.ab-exp h5 {
+  margin: 0 0 0.35rem;
+  font-size: 0.9rem;
+}
+.ab-metric {
+  margin: 0.55rem 0 0.25rem;
+  color: var(--text-muted);
+}
+.ab-table-wrap {
+  overflow-x: auto;
+}
+.ab-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-variant-numeric: tabular-nums;
+}
+.ab-table th,
+.ab-table td {
+  text-align: left;
+  padding: 0.3rem 0.5rem 0.3rem 0;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.ab-table th {
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.ab-diff {
+  margin: 0.3rem 0 0;
+  font-variant-numeric: tabular-nums;
+}
+.ab-warn {
+  margin: 0.2rem 0 0.4rem;
+  font-weight: 650;
+  color: var(--warn);
+}
+
 .toast {
   position: fixed;
   /* Top placement: never cover bottom Start/Stop rail (mobile hit-target bug) */

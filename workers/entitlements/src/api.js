@@ -600,7 +600,7 @@ export async function handleDeleteProgress(request, env, url, deps) {
  * @param {number} at Unix seconds.
  * @returns {Promise<{ok: boolean, reason?: string, status?: number, account?: Object}>} Result.
  */
-async function requireAdmin(env, request, at) {
+export async function requireAdmin(env, request, at) {
   const auth = await requireSession(env, request, at);
   if (!auth.ok) {
     return { ok: false, reason: auth.reason, status: 401 };

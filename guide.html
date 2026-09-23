@@ -745,6 +745,18 @@
         El audio del micrófono se procesa en tu dispositivo y no se envía a ningún sitio. El
         detalle completo está en <a href="privacy.html">Privacidad</a>.
       </p>
+      <p>
+        Para saber qué cambios ayudan de verdad, el sitio puede enviar
+        <strong>estadísticas anónimas</strong>: qué partes se usan (por ejemplo «empezó el
+        Mínimo» o «terminó la clase»), qué versión de una prueba viste, tu día local y un
+        número al azar que identifica a este navegador, no a ti. Nunca tu nombre, tu correo, tu
+        voz ni tu dirección IP. Si tu navegador pide no ser rastreado (Global Privacy Control o
+        Do Not Track), no se envía nada.
+      </p>
+      <p class="privacy-switch" data-privacy-switch data-lang="es" hidden>
+        <span data-privacy-state></span>
+        <button type="button" class="btn btn-sm" data-privacy-toggle hidden>No enviar desde este navegador</button>
+      </p>
 
       <p class="guide-back"><a href="./">← Volver a la app</a></p>
 
@@ -1298,9 +1310,26 @@
         Microphone audio is processed on your device and is not sent anywhere. The full detail is
         in <a href="privacy.html">Privacy</a>.
       </p>
+      <p>
+        To learn which changes really help, the site can send <strong>anonymous
+        statistics</strong>: which parts get used (for example "started the Minimum" or
+        "finished the class"), which version of a test you saw, your local day, and a random
+        number that identifies this browser, not you. Never your name, your email, your voice or
+        your IP address. If your browser asks not to be tracked (Global Privacy Control or Do Not
+        Track), nothing is sent.
+      </p>
+      <p class="privacy-switch" data-privacy-switch data-lang="en" hidden>
+        <span data-privacy-state></span>
+        <button type="button" class="btn btn-sm" data-privacy-toggle hidden>Don't send from this browser</button>
+      </p>
 
       <p class="guide-back"><a href="./">← Back to the app</a></p>
       </section>
     </main>
+    <!-- Only for the privacy switch above: the same code that decides whether
+         anything is sent, so the sentence it shows cannot drift from it. -->
+    <script src="js/experiments-config.js?v=20260923d"></script>
+    <script src="js/analytics.js?v=20260923d"></script>
+    <script src="js/privacy-switch.js?v=20260923d"></script>
   </body>
 </html>

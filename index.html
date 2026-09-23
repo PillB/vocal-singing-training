@@ -864,6 +864,12 @@
 
             <p class="gift-result" id="gift-result" hidden></p>
             <ul class="admin-user-list" id="gift-list"></ul>
+
+            <!-- A/B results from the worker's /v1/admin/experiments routes. -->
+            <h4 data-i18n="ab.title">Experimentos</h4>
+            <p class="muted" data-i18n="ab.lead">Cuántas personas vio cada versión y cómo les fue. Decide solo con la fecha y el tamaño que fijaste antes de empezar.</p>
+            <button type="button" class="btn btn-sm" id="ab-results-load" data-i18n="ab.load">Ver resultados</button>
+            <div class="ab-results" id="ab-results" hidden></div>
           </div>
 
           <div id="admin-panel" class="admin-panel" hidden>

@@ -14,6 +14,9 @@ import { SCHEMA_STATEMENTS, SCHEMA_VERSION } from "./schema.js";
 /** Isolate-local memo so a warm worker does not re-check the schema per request. */
 let schemaReady = new WeakSet();
 
+/** Usage events older than this are deleted by `sweepExpired` (180 days). */
+export const EVENT_RETENTION_SECONDS = 180 * 86400;
+
 /**
  * Current time in unix seconds.
  * @param {number} [nowSeconds] Injected clock, for tests.
@@ -180,7 +183,7 @@ export function callerIp(request) {
 
 /**
  * Delete rows that have aged out: consumed or expired login codes, dead
- * sessions, and stale rate-limit buckets.
+ * sessions, stale rate-limit buckets and usage events past their retention.
  *
  * Called opportunistically (never on the hot path of a login) so the free tier
  * is not slowly filled with garbage.
@@ -194,6 +197,9 @@ export async function sweepExpired(db, now) {
   await db.batch([
     db.prepare("DELETE FROM login_codes WHERE expires_at < ?1 OR consumed_at IS NOT NULL").bind(at - 3600),
     db.prepare("DELETE FROM sessions WHERE expires_at < ?1").bind(at - 86400),
-    db.prepare("DELETE FROM rate_limits WHERE window_start < ?1").bind(at - 86400)
+    db.prepare("DELETE FROM rate_limits WHERE window_start < ?1").bind(at - 86400),
+    // Usage events are only worth keeping as long as an experiment reads
+    // them; exposures are one small row per browser and stay.
+    db.prepare("DELETE FROM events WHERE received_at < ?1").bind(at - EVENT_RETENTION_SECONDS)
   ]);
 }

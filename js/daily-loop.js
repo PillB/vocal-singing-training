@@ -466,6 +466,19 @@
     return arm("loop_home_2026_10") !== "classic";
   }
 
+  /**
+   * Record that this browser has now seen the arm it was given. Called where
+   * the difference first shows, never at assignment: exposing on start alone
+   * would hide a variant that puts people off starting.
+   */
+  function expose(key) {
+    try {
+      global.VTExperiments?.exposeOnce?.(key);
+    } catch {
+      /* ignore */
+    }
+  }
+
   /* —— Routines —— */
 
   function tierMinutes(track, tier) {
@@ -589,6 +602,8 @@
     const had = L.surprises.find((s) => s.day === day);
     if (had) return null;
     const sum = ctx.summary;
+    // A finished routine is the first moment the two arms can differ.
+    expose("loop_surprise_2026_10");
     if (arm("loop_surprise_2026_10") === "none") {
       L.since += 1;
       writeLoop(L);
@@ -853,6 +868,8 @@
       const min = tierMinutes(track, tier);
       b.hidden = !min;
       b.textContent = tt("loop.tierChip", { name: tt("loop.tier." + tier), min });
+      // The chip is where a longer Mínimo first shows: its minutes.
+      if (tier === "min" && min) expose("loop_minimo_len_2026_10");
       b.setAttribute("aria-pressed", String(tier === active));
       b.classList.toggle("is-on", tier === active);
     });
@@ -984,6 +1001,7 @@
     const r = routine(trackId, tier);
     if (!r) return null;
     setTier(tier);
+    if (tier === "min") expose("loop_minimo_len_2026_10");
     track("basics_start", { tier, track: trackId, steps: r.order.length, sec: r.totalSec });
     if (r.daily) return hooks.startDaily?.();
     return hooks.startRoutine?.({ path: "basics", order: r.order, sec: r.sec, tier, label: tt("loop.tier." + tier) });
@@ -1148,13 +1166,14 @@
     });
     $("#loop-cards-btn")?.addEventListener("click", openCards);
     track("app_open", { day: today(), loop: loopEnabled() });
-    if (loopEnabled()) {
-      try {
-        global.VTExperiments?.exposeOnce?.("loop_home_2026_10");
-      } catch {
-        /* ignore */
-      }
-    }
+    // Both arms see a start panel, which is the thing under test, so both are
+    // exposed here. Exposing only the loop arm (as this once did) left the
+    // classic arm with no exposures at all: a guaranteed sample-ratio
+    // mismatch and an unreadable result.
+    expose("loop_home_2026_10");
+    // The A/A check: two identical arms, to prove the pipeline splits and
+    // counts evenly before any real result is trusted.
+    expose("aa_2026_10");
   }
 
   global.VTLoop = {

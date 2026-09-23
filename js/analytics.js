@@ -1,13 +1,29 @@
 /**
  * Lightweight local analytics (no third-party by default).
  * Events support retention measurement: practice_start, session_save, reminder_enable, etc.
- * Optional: window.VT_ANALYTICS_ENDPOINT for future beacon POST.
+ *
+ * Every event is kept in this browser (`vt_analytics_v1`). When
+ * `window.VT_ANALYTICS_ENDPOINT` is set (js/experiments-config.js), events are
+ * also sent, batched, to the entitlements worker's `/v1/events` route so an
+ * A/B test can be read — unless the visitor has said no in any of the ways a
+ * browser can say it: Global Privacy Control, Do Not Track, or the switch in
+ * the guide's privacy section (`vt_analytics_optout_v1`). Automated browsers
+ * never send.
  */
 (function (global) {
   "use strict";
 
   const LS_KEY = "vt_analytics_v1";
+  const OPTOUT_KEY = "vt_analytics_optout_v1";
   const MAX = 500;
+  /** The worker accepts at most this many events per request. */
+  const BATCH = 25;
+  /** Wait this long for more events before sending a batch. */
+  const FLUSH_MS = 4000;
+
+  let queue = [];
+  let timer = null;
+  let bound = false;
 
   function read() {
     try {
@@ -26,47 +42,125 @@
     }
   }
 
+  function endpoint() {
+    const ep = global.VT_ANALYTICS_ENDPOINT;
+    return typeof ep === "string" && /^https:\/\//.test(ep.trim()) ? ep.trim() : "";
+  }
+
+  /**
+   * Why this browser does not send events, or "" when it does.
+   * @returns {"" | "no_endpoint" | "gpc" | "dnt" | "opted_out" | "automated"}
+   */
+  function remoteBlockedReason() {
+    if (!endpoint()) return "no_endpoint";
+    const nav = global.navigator || {};
+    if (nav.globalPrivacyControl === true) return "gpc";
+    if (nav.doNotTrack === "1" || nav.doNotTrack === "yes" || global.doNotTrack === "1") return "dnt";
+    try {
+      if (localStorage.getItem(OPTOUT_KEY) === "1") return "opted_out";
+    } catch {
+      /* storage blocked: fall through */
+    }
+    if (nav.webdriver) return "automated";
+    try {
+      if (sessionStorage.getItem("vt_e2e") === "1") return "automated";
+    } catch {
+      /* ignore */
+    }
+    return "";
+  }
+
+  /**
+   * Send what is queued. `unloading` prefers sendBeacon, which the browser
+   * finishes even as the page goes away.
+   * @param {boolean} [unloading]
+   */
+  function flush(unloading) {
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+    const ep = endpoint();
+    while (queue.length) {
+      const batch = queue.splice(0, BATCH);
+      if (!ep || remoteBlockedReason()) {
+        queue = [];
+        return;
+      }
+      // text/plain is the only body a cross-site beacon may carry without a
+      // preflight; the worker parses it as JSON regardless.
+      const body = JSON.stringify({ v: 1, events: batch });
+      try {
+        if (unloading && typeof global.navigator?.sendBeacon === "function") {
+          if (global.navigator.sendBeacon(ep, body)) continue;
+        }
+        if (typeof fetch === "function") {
+          fetch(ep, {
+            method: "POST",
+            headers: { "content-type": "text/plain" },
+            body,
+            keepalive: true,
+            mode: "no-cors",
+            credentials: "omit"
+          }).catch(() => {});
+        }
+      } catch {
+        /* never let analytics break the page */
+      }
+    }
+  }
+
+  function bindFlushOnHide() {
+    if (bound) return;
+    bound = true;
+    try {
+      global.addEventListener?.("pagehide", () => flush(true));
+      global.document?.addEventListener?.("visibilitychange", () => {
+        if (global.document.visibilityState === "hidden") flush(true);
+      });
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function enqueue(name, props, now) {
+    if (remoteBlockedReason()) return;
+    bindFlushOnHide();
+    // An event nobody can tie to a browser, an arm or a local day cannot
+    // answer an A/B question, so each one carries all three. The id is the
+    // random one js/experiments.js already keeps; nothing personal.
+    queue.push({
+      name,
+      props,
+      t: now.toISOString(),
+      cid: global.VTExperiments?.clientId?.() || null,
+      day: global.VTDays?.dayKey?.(now) || null,
+      tz: -now.getTimezoneOffset()
+    });
+    if (queue.length >= BATCH) flush(false);
+    else if (!timer) timer = setTimeout(() => flush(false), FLUSH_MS);
+  }
+
   /**
    * @param {string} name
    * @param {Record<string, unknown>} [props]
    */
   function track(name, props) {
     if (!name) return;
+    const now = new Date();
     const bag = read();
     bag.events = bag.events || [];
     bag.events.push({
       name: String(name),
       props: props || {},
-      t: new Date().toISOString()
+      t: now.toISOString()
     });
     if (bag.events.length > MAX) bag.events = bag.events.slice(-MAX);
     write(bag);
 
     // Optional remote (never blocks UI)
     try {
-      const ep = global.VT_ANALYTICS_ENDPOINT;
-      if (ep && typeof fetch === "function") {
-        // An event nobody can tie to a browser, an arm or a local day cannot
-        // answer an A/B question, so the beacon carries all three. The id is
-        // the random one js/experiments.js already keeps; nothing personal.
-        const now = new Date();
-        fetch(ep, {
-          method: "POST",
-          // no-cors only allows "simple" content types; a JSON header was
-          // silently dropped, so say what actually arrives.
-          headers: { "content-type": "text/plain" },
-          body: JSON.stringify({
-            name,
-            props,
-            t: now.toISOString(),
-            cid: global.VTExperiments?.clientId?.() || null,
-            day: global.VTDays?.dayKey?.(now) || null,
-            tz: -now.getTimezoneOffset()
-          }),
-          keepalive: true,
-          mode: "no-cors"
-        }).catch(() => {});
-      }
+      enqueue(String(name), props || {}, now);
     } catch {
       /* ignore */
     }
@@ -85,5 +179,32 @@
     write({ events: [] });
   }
 
-  global.VTAnalytics = { track, summary, clear };
+  /**
+   * Stop (or resume) sending from this browser. Local events are unaffected:
+   * they never leave the device either way.
+   * @param {boolean} out
+   */
+  function setOptOut(out) {
+    try {
+      if (out) localStorage.setItem(OPTOUT_KEY, "1");
+      else localStorage.removeItem(OPTOUT_KEY);
+    } catch {
+      /* ignore */
+    }
+    if (out) queue = [];
+  }
+
+  /** For the privacy section: is anything being sent, and if not, why not. */
+  function remoteState() {
+    const reason = remoteBlockedReason();
+    let optedOut = false;
+    try {
+      optedOut = localStorage.getItem(OPTOUT_KEY) === "1";
+    } catch {
+      /* ignore */
+    }
+    return { sending: !reason, reason: reason || null, optedOut };
+  }
+
+  global.VTAnalytics = { track, summary, clear, setOptOut, remoteState, flush };
 })(window);

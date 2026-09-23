@@ -6,17 +6,43 @@
  * false, so the assignment code path runs in production from day one without
  * anybody being put in a treatment arm.
  *
- * Honest limit, recorded here because it decides whether flipping `enabled`
- * is worth it: this site has no analytics backend. Events land in
- * `localStorage` on the visitor's own device (js/analytics.js) and nobody but
- * that visitor can read them. Turning an experiment on splits the audience
- * but does not, on its own, produce a result anyone can look at. See
- * docs/36-TOUR-AND-USER-GUIDE.md for what reading a result would take.
+ * Reading a result needs somewhere for events to land. Until
+ * `VT_ANALYTICS_ENDPOINT` below is set, events stay in `localStorage` on each
+ * visitor's own device (js/analytics.js) and nobody else can read them, so
+ * turning an experiment on splits the audience without producing a result.
+ * Once the entitlements worker is deployed, set the endpoint to
+ * `<worker URL>/v1/events`; results are then in the account panel for an
+ * admin, and at GET /v1/admin/experiments/results?experiment=<key>. Run
+ * `aa_2026_10` first. The whole procedure is in docs/38-AB-TESTING.md.
  */
 (function (global) {
   "use strict";
 
+  /**
+   * Where anonymous events are sent, e.g.
+   * "https://vocal-studio-entitlements.<you>.workers.dev/v1/events".
+   * Empty sends nothing. Visitors with Global Privacy Control, Do Not Track or
+   * the guide's opt-out never send, whatever this says.
+   */
+  if (typeof global.VT_ANALYTICS_ENDPOINT !== "string") {
+    global.VT_ANALYTICS_ENDPOINT = "";
+  }
+
   global.VT_EXPERIMENTS = {
+    /**
+     * A/A check: two identical arms. Switch this on alone, first, for a week
+     * or two after the endpoint is live. The split should be even (no SRM
+     * flag) and the arms should not differ; if either fails, assignment or
+     * logging is broken and no real test result can be trusted yet.
+     */
+    aa_2026_10: {
+      enabled: false,
+      variants: [
+        { id: "a", weight: 1 },
+        { id: "b", weight: 1 }
+      ]
+    },
+
     /**
      * Does a first-time visitor do better when the tour opens itself, or when
      * it waits to be asked for?

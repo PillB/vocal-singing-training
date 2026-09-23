@@ -18,7 +18,7 @@
  * Bump when a statement is added. Stored in `schema_meta` so `ensureSchema`
  * can skip the whole batch on the overwhelming majority of requests.
  */
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 /**
  * Table and index definitions, in dependency order.
@@ -153,5 +153,32 @@ export const SCHEMA_STATEMENTS = [
      bucket TEXT PRIMARY KEY,
      count INTEGER NOT NULL,
      window_start INTEGER NOT NULL
-   )`
+   )`,
+
+  // Version 2: anonymous usage events and A/B exposures (events.js). `cid` is
+  // the random browser id the site keeps for experiments; nothing here joins
+  // to an account, an email or an IP address.
+  `CREATE TABLE IF NOT EXISTS events (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     received_at INTEGER NOT NULL,
+     cid TEXT NOT NULL,
+     name TEXT NOT NULL,
+     day TEXT,
+     tz INTEGER,
+     props TEXT NOT NULL DEFAULT '{}'
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_events_cid_name ON events (cid, name, received_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_events_received ON events (received_at)`,
+
+  // The first exposure a browser reports for an experiment is its arm for
+  // good; INSERT OR IGNORE on this key is what makes that true.
+  `CREATE TABLE IF NOT EXISTS exposures (
+     experiment TEXT NOT NULL,
+     cid TEXT NOT NULL,
+     variant TEXT NOT NULL,
+     first_at INTEGER NOT NULL,
+     day TEXT,
+     PRIMARY KEY (experiment, cid)
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_exposures_arm ON exposures (experiment, variant, first_at)`
 ];

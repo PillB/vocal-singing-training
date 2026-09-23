@@ -49,6 +49,9 @@ GOOGLE_CLIENT_ID = ""
 EMAIL_PROVIDER = ""
 EMAIL_FROM = ""
 EMAIL_FROM_NAME = "Vocal Studio"
+# Anonymous usage events for A/B tests (POST /v1/events, stored in D1). Set to
+# "false" to stop recording at once; the site keeps working either way.
+EVENTS_ENABLED = "true"
 
 # --- Secrets (NEVER put values in this file) ----------------------------
 # Set each one with `wrangler secret put <NAME>`:
@@ -61,6 +64,12 @@ EMAIL_FROM_NAME = "Vocal Studio"
 #   RESEND_API_KEY                 re_...
 #   BREVO_API_KEY                  xkeysib-...
 #   MAILERSEND_API_KEY             mlsn....
+
+# Daily housekeeping at 09:17 UTC (04:17 in Lima): deletes expired sign-in
+# codes and sessions, stale rate-limit rows, and usage events older than 180
+# days. The privacy page promises that deletion, so keep this trigger.
+[triggers]
+crons = ["17 9 * * *"]
 
 [observability]
 enabled = true

@@ -5698,6 +5698,74 @@
         .join("");
     }
 
+    $("#ab-results-load")?.addEventListener("click", renderAbResults);
+
+    /**
+     * A/B results for an admin: exposures per arm, the preset metrics with
+     * 95% intervals, and the two warnings that mean "do not read this yet".
+     * The numbers come from the worker; nothing is computed here.
+     */
+    async function renderAbResults() {
+      const box = $("#ab-results");
+      if (!box) return;
+      const esc = window.VTAuth?.escapeHtml || ((v) => String(v ?? ""));
+      box.hidden = false;
+      box.textContent = tt("ab.loading");
+      const list = await window.VTAccount?.request?.("GET", "/v1/admin/experiments", null);
+      if (!list || !list.ok) {
+        box.textContent = tt("ab.error");
+        return;
+      }
+      const all = list.data?.experiments || [];
+      const live = all.filter((x) => (x.arms || []).length);
+      if (!live.length) {
+        box.textContent = tt("ab.none");
+        return;
+      }
+      const pct = (v) => (v === null || v === undefined ? "–" : `${(v * 100).toFixed(1)} %`);
+      const num = (v) => (v === null || v === undefined ? "–" : v.toFixed(2));
+      const pval = (p) => (p === null || p === undefined ? "–" : p < 0.001 ? "< 0.001" : p.toFixed(3));
+      const parts = [];
+      for (const x of live) {
+        const res = await window.VTAccount.request(
+          "GET",
+          `/v1/admin/experiments/results?experiment=${encodeURIComponent(x.experiment)}`,
+          null
+        );
+        const d = res && res.ok ? res.data : null;
+        let html = `<section class="ab-exp"><h5><code>${esc(x.experiment)}</code></h5>`;
+        if (!d) {
+          parts.push(`${html}<p class="muted">${esc(tt("ab.error"))}</p></section>`);
+          continue;
+        }
+        if (d.srm?.flagged) html += `<p class="ab-warn">${esc(tt("ab.srm", { p: pval(d.srm.p) }))}</p>`;
+        else if (d.readMe === "small_sample") html += `<p class="muted">${esc(tt("ab.small"))}</p>`;
+        for (const m of d.metrics || []) {
+          const share = m.kind === "share";
+          const role = tt(m.role === "primary" ? "ab.primary" : "ab.guardrail");
+          html += `<p class="ab-metric">${esc(tt(share ? "ab.metric.share" : "ab.metric.days", { role, event: m.event, from: m.from, to: m.to }))}</p>`;
+          if (!(m.arms || []).length) {
+            html += `<p class="muted">${esc(tt("ab.immature", { to: m.to }))}</p>`;
+            continue;
+          }
+          const exposed = Object.fromEntries((d.exposed || []).map((a) => [a.variant, a.n]));
+          const rows = m.arms
+            .map((a) => {
+              const val = share ? `${pct(a.rate)} (${pct(a.lo)}–${pct(a.hi)})` : `${num(a.mean)} (${num(a.lo)}–${num(a.hi)})`;
+              return `<tr><td><code>${esc(a.variant)}</code></td><td>${esc(String(exposed[a.variant] ?? a.n))} · ${esc(String(a.n))}</td><td>${esc(val)}</td></tr>`;
+            })
+            .join("");
+          html += `<div class="ab-table-wrap"><table class="ab-table"><thead><tr><th>${esc(tt("ab.arm"))}</th><th>${esc(tt("ab.exposed"))}</th><th>${esc(tt("ab.value"))}</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+          for (const c of m.comparisons || []) {
+            const fmt = (v) => (v === null || v === undefined ? "–" : share ? `${v >= 0 ? "+" : ""}${(v * 100).toFixed(1)} pts` : `${v >= 0 ? "+" : ""}${v.toFixed(2)}`);
+            html += `<p class="ab-diff">${esc(tt("ab.diff", { variant: c.variant, vs: c.vs, diff: fmt(c.diff), lo: fmt(c.lo), hi: fmt(c.hi), p: pval(c.p) }))}</p>`;
+          }
+        }
+        parts.push(`${html}</section>`);
+      }
+      box.innerHTML = parts.join("");
+    }
+
     window.VTAccount?.onChange?.(() => {
       refreshAccountUI();
       updateBillingChrome();

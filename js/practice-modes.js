@@ -2462,6 +2462,7 @@
       if (this.profile.refPitch && global.VT_NOTE_FREQ?.[this.profile.refPitch]) {
         st.refName = this.profile.refPitch;
         st.wantName = this.profile.refPitch;
+        this._target();
       }
       this._mountViz();
     },
@@ -2511,19 +2512,26 @@
       this.viz?.caption?.(L(`Vocal ${this.state.vowels[0]}`, `Vowel ${this.state.vowels[0]}`), 0);
       this.viz?.draw();
     },
-    _ref() {
-      // Published for the app: an ownsTarget mode's current note is what the
-      // piano reference should sound, in place of the generic refPitch.
+    /** The note, at the octave the octave control asks for. */
+    _target() {
       const st = this.state;
-      st.wantName = st.refName;
       const n = shiftedNote(st.refName);
-      if (!n) return;
+      if (!n) return null;
       st.target = global.VTPitchUtils?.noteNameToDual ? global.VTPitchUtils.noteNameToDual(n) : n;
       st.targetMidi = global.VT_NOTE_FREQ?.[n] ? 69 + 12 * Math.log2(global.VT_NOTE_FREQ[n] / 440) : null;
-      if (typeof global.VTSetPracticeTarget === "function" && global.VT_NOTE_FREQ?.[n]) {
+      return n;
+    },
+    _ref() {
+      // Published for the app: an ownsTarget mode's current note is what the
+      // piano reference sounds on Start, in place of the generic refPitch.
+      // The mode does not sound it again at each round: a piano note under
+      // the first vowel would be read as the vowel.
+      const st = this.state;
+      st.wantName = st.refName;
+      const n = this._target();
+      if (n && typeof global.VTSetPracticeTarget === "function" && global.VT_NOTE_FREQ?.[n]) {
         global.VTSetPracticeTarget(global.VT_NOTE_FREQ[n], n);
       }
-      if (global.VTPiano?.playRefPitch) global.VTPiano.playRefPitch(n, 2.2, true).catch(() => {});
     },
     _syncWords() {
       const st = this.state;
@@ -2643,7 +2651,6 @@
       const n = st.sung || 0;
       // Facts across every sung vowel: where the pitch sat furthest from the
       // note, and which vowel came out louder than the round around it
-      const K = global.VTViz?.scenes?.resonanceKit;
       let far = null;
       let loud = null;
       st.pages.forEach((p) => {
@@ -2661,7 +2668,6 @@
       const parts = [L(`${n} ${n === 1 ? "vuelta cantada" : "vueltas cantadas"}`, `${n} ${n === 1 ? "round sung" : "rounds sung"}`)];
       if (far && Math.abs(far.c) > 25) parts.push(L(`tono más lejos en ${far.v} (${fmt(far.c)} ¢)`, `pitch furthest on ${far.v} (${fmt(far.c)} ¢)`));
       if (loud && loud.d > 3) parts.push(L(`más fuerte: ${loud.v} (${fmt(loud.d, 1)} dB)`, `loudest: ${loud.v} (${fmt(loud.d, 1)} dB)`));
-      void K;
       // Only the count is measured; evenness and space stay the learner's rating
       return { patches: n > 0 ? { rounds: n } : {}, summary: parts.join(" · ") };
     }
@@ -3274,7 +3280,7 @@
           </div>
         </div>
         <div class="viz-words">
-          <span data-phase>${phaseLabelFor(st.phases[0]) || L("Toma A", "Take A")}</span>
+          <span data-phase>${st.phases[0] ? phaseLabelFor(st.phases[0]) : L("Toma A", "Take A")}</span>
           <span>${L("Tomas", "Takes")} <strong data-n>0</strong>/2</span>
           <span data-cue>${phaseCueFor(st.phases[0])}</span>
           <span data-facts></span>
@@ -3343,9 +3349,9 @@
       const st = this.state;
       const p = st.phases;
       if (st.review) return L("Tus dos tomas", "Your two takes");
-      if (st.stage === "A") return phaseLabelFor(p[0]) || L("Toma A", "Take A");
-      if (st.stage === "B") return phaseLabelFor(p[1]) || L("Toma B", "Take B");
-      return phaseLabelFor(p[2]) || L("Escucha las dos", "Listen to both");
+      if (st.stage === "A") return p[0] ? phaseLabelFor(p[0]) : L("Toma A", "Take A");
+      if (st.stage === "B") return p[1] ? phaseLabelFor(p[1]) : L("Toma B", "Take B");
+      return p[2] ? phaseLabelFor(p[2]) : L("Escucha las dos", "Listen to both");
     },
     _syncButtons() {
       const st = this.state;

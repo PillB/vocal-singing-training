@@ -388,6 +388,28 @@ test.describe("resonance pictures", () => {
     expect(sum).toMatch(/targets · 100% in zone/);
   });
 
+  test("reduced motion: the zone lane pages instead of scrolling, and draws without errors", async ({ page }) => {
+    test.setTimeout(60_000);
+    const errors = [];
+    page.on("pageerror", (e) => errors.push(String(e.message || e)));
+    // A painter that throws is caught by the surface and logged as "[viz]"
+    page.on("console", (m) => {
+      if (m.text().includes("[viz]")) errors.push("[viz] " + m.text());
+    });
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await boot(page);
+    await openAndStart(page, "s22-mid-voice-hola", "zones");
+    await page.waitForTimeout(3000);
+    const pic = await pictureInView(page);
+    expect(pic.found && pic.lit > 20).toBe(true);
+    expect(await page.evaluate(() => window.VTViz.reducedMotion())).toBe(true);
+    await stopVoice(page);
+    await page.locator("#btn-practice-stop").click();
+    await expect(page.locator("#mode-focus .mode-panel")).toHaveClass(/is-replay/);
+    const viz = errors.filter((e) => /\[viz\]|resonance|practice-modes/i.test(e));
+    expect(viz, viz.join("\n")).toEqual([]);
+  });
+
   for (const vp of [
     { name: "phone", width: 390, height: 844 },
     { name: "landscape", width: 844, height: 390 }

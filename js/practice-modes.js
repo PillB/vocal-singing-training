@@ -1935,69 +1935,401 @@
     }
   });
 
+  /**
+   * s11 messa di voce — "Regulador". Your level in dB against your own soft
+   * start, drawn against a hairpin that waits for you and then scrolls in from
+   * the right; under it your pitch against the note you started on, so a
+   * pitch that rides up with the volume shows as a bend under the peak.
+   *
+   * A swell counts from its shape: at least 6 dB up from your start and 6 dB
+   * back down, with the peak in the middle. Nothing is absolute: the MIC
+   * slider, the distance and the device do not move it (level is read before
+   * the slider's gain and against your own start).
+   */
   Modes.dynamicSwell = baseMode({
     id: "dynamicSwell",
     render() {
-      this.state.swells = 0;
-      this.state.phase = 0;
-      this.state.phaseT = performance.now();
-      this.state.midiSamples = [];
+      const st = this.state;
+      st.target = this.profile.targetSwells || 6;
+      st.D = this.profile.swellSec || 7;
+      this._resetSwell();
       this.hud.innerHTML = `
-        <div class="mode-title">${L("Crescendo dinámico", "Dynamic swell")}</div>
-        <div class="mode-phase" data-phase>Soft</div>
-        <div class="volume-lane"><div class="volume-band" data-band></div><div class="volume-needle" data-n style="left:20%"></div></div>
-        <p class="mode-meta">Swells: <strong data-s>0</strong> · Pitch wobble: <strong data-w>—</strong></p>
+        <div class="viz-row viz-head">
+          <div class="mode-title">${L("Regulador: crece y vuelve", "Swell: grow and return")}</div>
+          <button type="button" class="btn btn-ghost viz-tap" data-len aria-label="${L(
+            "Duración de cada regulador",
+            "Length of each swell"
+          )}">${this._lenLabel()}</button>
+        </div>
+        <div class="viz-words">
+          <span class="mode-phase" data-phase>${L("Empieza suave cuando quieras", "Start soft when you're ready")}</span>
+          <strong class="mode-big" data-s>0</strong>
+          <span data-w>—</span>
+        </div>
+        <p class="mode-meta muted">${L(
+          "Volumen en dB frente a tu propio inicio suave; afinación frente a la nota con que empiezas.",
+          "Level in dB against your own soft start; pitch against the note you start on."
+        )}</p>
       `;
+      this.$("[data-len]")?.addEventListener("click", () => {
+        const opts = [6, 7, 8, 10];
+        st.D = opts[(opts.indexOf(st.D) + 1) % opts.length] || 7;
+        const b = this.$("[data-len]");
+        if (b) b.textContent = this._lenLabel();
+        this.viz?.draw();
+      });
+      this._mountViz();
     },
-    onFrame(frame) {
-      const targets = [0.18, 0.42, 0.18];
-      const elapsed = performance.now() - this.state.phaseT;
-      // advance only if roughly in band for half a second cumulative
-      this.state.bandMs = this.state.bandMs || 0;
-      const rms = frame.rms || 0;
-      if (Math.abs(rms - targets[this.state.phase]) < 0.12) this.state.bandMs += frame.dtMs || 16;
-      else this.state.bandMs = Math.max(0, (this.state.bandMs || 0) - 10);
-
-      if (elapsed > 2000 && this.state.bandMs > 400) {
-        this.state.phase = (this.state.phase + 1) % 3;
-        this.state.phaseT = performance.now();
-        this.state.bandMs = 0;
-        if (this.state.phase === 0) this.state.swells++;
-        if (this.$("[data-phase]"))
-          this.$("[data-phase]").textContent = ["Soft", "Medium", "Soft"][this.state.phase];
-        if (this.$("[data-s]")) this.$("[data-s]").textContent = String(this.state.swells);
+    /** dB and cents in words, with the language's decimal mark (js/scenes/dynamics.js). */
+    _fmt() {
+      return global.VTViz?.scenes?.dynFmt || { db: (n) => `${Math.round(n)} dB`, cents: (n) => `${Math.round(n)}¢` };
+    },
+    _lenLabel() {
+      return L(`Duración ${this.state.D} s`, `Length ${this.state.D} s`);
+    },
+    _resetSwell() {
+      const st = this.state;
+      st.t = 0;
+      st.LO = -6;
+      st.hi = 16;
+      st.H = 10; // the hairpin's height, fitted to your own swells as you go
+      st.swells = 0;
+      st.done = [];
+      st.hairpins = [];
+      st.cur = null;
+      st.lastEnd = null;
+      st.sm = null;
+      st.floorRing = global.VTFeatures ? new global.VTFeatures.Ring(240) : null;
+      st.floorDb = null;
+      st.floorRel = null;
+      st.processed = false;
+      st.clipped = false;
+      st.review = false;
+      st.lastWords = "";
+      st.pitch = global.VTFeatures ? new global.VTFeatures.StablePitch() : null;
+    },
+    _mountViz() {
+      const V = global.VTViz;
+      const F = global.VTFeatures;
+      if (!V || !F || !V.scenes.swell) return;
+      const st = this.state;
+      this.hud.classList.add("has-viz");
+      this.viz = new V.Surface(this.hud, (ctx, w, h) => V.scenes.swell(ctx, w, h, st), {
+        label: L(
+          "Regulador: la banda verde es la forma a seguir, suave, crece hasta el centro y vuelve; tu línea azul es tu volumen en dB frente a tu propio inicio. Debajo, tu afinación frente a la nota con que empezaste.",
+          "Swell: the green band is the shape to follow, soft, growing to the middle and back; your blue line is your level in dB against your own start. Below, your pitch against the note you started on."
+        ),
+        captionHidden: true
+      });
+      const common = { seconds: 14, nowAt: 0.6, minPxPerSec: 18, hz: 30 };
+      st.level = new V.Timeline(this.viz, {
+        ...common,
+        top: L("más fuerte", "louder"),
+        bottom: "",
+        guide: (t) => this._guide(t)
+      });
+      st.cents = new V.Timeline(this.viz, {
+        ...common,
+        top: "+50¢",
+        bottom: "−50¢",
+        tagColors: { 1: V.C.warn },
+        guide: (t) => (this._hairpinAt(t) ? { y: 0.5, lo: 0.35, hi: 0.65 } : null)
+      });
+      this._words();
+      this.viz.draw();
+    },
+    /** The dB scale of the level track, 0..1. */
+    _norm(db) {
+      const st = this.state;
+      return (db - st.LO) / (st.hi - st.LO);
+    },
+    /** Past and current hairpins sit where you sang them; the next one waits for you. */
+    _hairpinAt(t) {
+      const st = this.state;
+      for (let i = st.hairpins.length - 1; i >= 0; i--) {
+        const hp = st.hairpins[i];
+        if (t >= hp.t0 && t <= hp.t0 + hp.D) return hp;
       }
-      if (this.$("[data-n]")) this.$("[data-n]").style.left = `${clamp(rms * 160, 2, 98)}%`;
-      if (this.$("[data-band]")) {
-        const t = targets[this.state.phase];
-        this.$("[data-band]").style.left = `${clamp(t * 160 - 8, 5, 85)}%`;
-        this.$("[data-band]").style.width = "18%";
+      const rest = 2.5;
+      const next = st.cur
+        ? Math.max(st.cur.t0 + st.cur.D, st.t) + rest
+        : Math.max(st.lastEnd != null ? st.lastEnd + rest : 0, st.t + 0.35);
+      if (t >= next && t <= next + st.D) return { t0: next, D: st.D, H: st.H, next: true };
+      return null;
+    },
+    _guide(t) {
+      const hp = this._hairpinAt(t);
+      if (!hp) return null;
+      const u = (t - hp.t0) / hp.D;
+      const c = (hp.H * (1 - Math.cos(2 * Math.PI * u))) / 2;
+      return { y: this._norm(c), lo: this._norm(c - 2.5), hi: this._norm(c + 2.5) };
+    },
+    /** Grow the scale when a swell goes past the top (the drawn line is rescaled with it). */
+    _growScale(rel) {
+      const st = this.state;
+      if (rel < st.hi - 1.5) return;
+      const hi = Math.min(40, Math.ceil((rel + 4) / 2) * 2);
+      if (hi <= st.hi) return;
+      const k = (st.hi - st.LO) / (hi - st.LO);
+      const v = st.level?.value?.v;
+      if (v) for (let i = 0; i < v.length; i++) if (!Number.isNaN(v[i])) v[i] *= k;
+      st.hi = hi;
+    },
+    _startSwell() {
+      const st = this.state;
+      st.cur = { t0: st.t, D: st.D, H: st.H, last: st.t, lv: [], pv: [], base: null, f0: null, peak: -99, peakT: st.t };
+      st.hairpins.push({ t0: st.t, D: st.D, H: st.H });
+      if (st.hairpins.length > 12) st.hairpins.shift();
+      st.pitch?.reset();
+    },
+    _endSwell() {
+      const f = this._fmt();
+      const st = this.state;
+      const c = st.cur;
+      st.cur = null;
+      st.lastEnd = c.last;
+      const dur = c.last - c.t0;
+      if (dur < 1.5 || c.base == null) {
+        // A cough or a false start: no swell, and no hairpin left behind
+        const i = st.hairpins.findIndex((hp) => hp.t0 === c.t0);
+        if (i >= 0) st.hairpins.splice(i, 1);
+        return;
       }
-      if (frame.voiceFreq && global.VTPitchUtils) {
-        this.state.midiSamples.push(global.VTPitchUtils.freqToMidi(frame.voiceFreq));
-        if (this.state.midiSamples.length > 80) this.state.midiSamples.shift();
-        if (this.state.midiSamples.length > 20) {
-          const arr = this.state.midiSamples;
-          const mean = arr.reduce((a, b) => a + b, 0) / arr.length;
-          const v = Math.sqrt(arr.reduce((a, b) => a + (b - mean) ** 2, 0) / arr.length);
-          this.state.wobble = v;
-          if (this.$("[data-w]"))
-            this.$("[data-w]").textContent =
-              v < 0.15 ? "stable" : v < 0.35 ? "ok" : "wandering";
+      const V = global.VTViz;
+      const F = global.VTFeatures;
+      const tail = c.lv.filter((p) => p.t >= c.last - 0.9 && p.t <= c.last - 0.2).map((p) => p.rel);
+      const endRel = tail.length ? F.median(tail) : c.lv[c.lv.length - 1].rel;
+      const rise = c.peak;
+      const fall = c.peak - endRel;
+      const peakFrac = clamp((c.peakT - c.t0) / dur, 0, 1);
+      const near = c.pv.filter((p) => Math.abs(p.t - c.peakT) <= 0.45 && p.c != null).map((p) => p.c);
+      const peakCents = near.length >= 5 ? near.reduce((a, b) => a + b, 0) / near.length : null;
+      // Largest change over 100 ms: a step instead of a slope
+      let jump = 0;
+      for (let i = 0, j = 0; i < c.lv.length; i++) {
+        while (j < c.lv.length && c.lv[j].t - c.lv[i].t < 0.1) j++;
+        if (j < c.lv.length && c.lv[i].t > c.t0 + 0.2 && c.lv[j].t < c.last - 0.2) {
+          jump = Math.max(jump, Math.abs(c.lv[j].rel - c.lv[i].rel));
         }
       }
+      const minRise = st.processed ? 3 : 6;
+      const counted = rise >= minRise && fall >= minRise && peakFrac >= 0.2 && peakFrac <= 0.8;
+      // A 48-point outline of the level for the review card
+      const shape = [];
+      for (let k = 0; k < 48; k++) {
+        const t = c.t0 + (k / 47) * dur;
+        let best = null;
+        let bd = 1e9;
+        for (const p of c.lv) {
+          const d = Math.abs(p.t - t);
+          if (d < bd) {
+            bd = d;
+            best = p;
+          }
+        }
+        shape.push(best && bd < 0.2 ? best.rel : NaN);
+      }
+      const rec = { t0: c.t0, t1: c.last, dur, rise, fall, peakFrac, peakCents, jump, counted, H: c.H, D: c.D, shape };
+      st.done.push(rec);
+      if (counted) {
+        st.swells += 1;
+        const s = this.$("[data-s]");
+        if (s) s.textContent = String(st.swells);
+      }
+      // The next hairpin fits the swells you actually sing
+      st.H = clamp(Math.round(0.6 * st.H + 0.4 * rise), 8, 20);
+      st.level?.mark(`${counted ? "✓ " : ""}${f.db(rise)}`, { at: c.last, color: counted ? V.C.done : V.C.muted });
+      if (peakCents != null && Math.abs(peakCents) >= 20) {
+        st.cents?.mark((peakCents > 0 ? "↑ " : "↓ ") + f.cents(peakCents), { at: c.peakT, color: V.C.warn });
+      }
+      if (peakCents != null) {
+        const w = this.$("[data-w]");
+        if (w) w.textContent = f.cents(peakCents);
+      }
+      const words =
+        L(`Regulador: subió ${f.db(rise)}, pico al ${Math.round(peakFrac * 100)} %`, `Swell: rose ${f.db(rise)}, peak at ${Math.round(peakFrac * 100)}%`) +
+        (peakCents != null ? L(`, afinación en el pico ${f.cents(peakCents)}`, `, pitch at the peak ${f.cents(peakCents)}`) : "");
+      this.viz?.caption(words, 0);
+      st.lastWords = words;
+    },
+    /** Words for now: the headline, the count, and the last swell. */
+    _words() {
+      const f = this._fmt();
+      const st = this.state;
+      let head;
+      if (st.cur) {
+        const u = (st.t - st.cur.t0) / st.cur.D;
+        head =
+          u < 0.12
+            ? L("Suave… empieza a crecer", "Soft… start to grow")
+            : u < 0.42
+              ? L("Crece poco a poco", "Grow little by little")
+              : u < 0.58
+                ? L("Arriba: la afinación quieta", "At the top: keep the pitch still")
+                : u < 1
+                  ? L("Vuelve suave hasta el final", "Ease back down to the end")
+                  : L("Termina suave y respira", "Finish soft, then breathe");
+      } else if (st.done.length && st.t - (st.lastEnd || 0) < 2.5) {
+        const d = st.done[st.done.length - 1];
+        head = d.counted
+          ? L(`✓ Subiste ${f.db(d.rise)} y volviste`, `✓ Up ${f.db(d.rise)} and back`)
+          : d.rise < (st.processed ? 3 : 6)
+            ? L(`Subiste ${f.db(d.rise)}: puedes crecer más`, `Rose ${f.db(d.rise)}: room to grow`)
+            : d.fall < (st.processed ? 3 : 6)
+              ? L("Subiste; la vuelta quedó arriba", "Up, but the return stayed high")
+              : L("El pico llegó muy al borde", "The peak came at the very edge");
+      } else {
+        head = st.done.length ? L("Respira… y otra vez desde suave", "Breathe… and again from soft") : L("Empieza suave cuando quieras", "Start soft when you're ready");
+      }
+      const big = `${st.swells}/${st.target}`;
+      const last = st.done[st.done.length - 1];
+      const sub = last
+        ? L(`Último: ${f.db(last.rise)} · pico al ${Math.round(last.peakFrac * 100)} %`, `Last: ${f.db(last.rise)} · peak at ${Math.round(last.peakFrac * 100)}%`) +
+          (last.peakCents != null ? L(` · afinación ${f.cents(last.peakCents)}`, ` · pitch ${f.cents(last.peakCents)}`) : "")
+        : L("La banda espera a que empieces; dura lo que marca el botón.", "The band waits for you to start; it lasts what the button says.");
+      // A rotated phone has no room for the pitch track: the pitch goes in words
+      const cn = st.centsNow;
+      const headLine = st.tiny && cn != null ? `${head} · ${L("afin.", "pitch")} ${f.cents(cn)}` : head;
+      st.level?.setText(headLine, big, sub);
+      const cnow = st.centsNow;
+      st.cents?.setText(L("Afinación frente a tu inicio", "Pitch against your start"), cnow != null ? f.cents(cnow) : "—", "");
+      const ph = this.$("[data-phase]");
+      if (ph && ph.textContent !== head) ph.textContent = head;
+    },
+    onStart() {
+      const st = this.state;
+      const D = st.D;
+      this._resetSwell();
+      st.D = D;
+      this.hud?.classList.remove("is-replay");
+      st.level?.reset();
+      st.cents?.reset();
+      const s = this.$("[data-s]");
+      if (s) s.textContent = "0";
+      this._words();
+    },
+    onFrame(frame) {
+      const st = this.state;
+      const F = global.VTFeatures;
+      if (!F || !st.level || st.review) return;
+      const dt = F.frameDt(frame);
+      st.t += dt;
+      const snd = !!frame.sounding && !frame.manualSound;
+      // Before the MIC slider's gain, so the slider does not move you
+      const db = Math.max(-100, F.dbfs((frame.rms || 0) / (frame.inputGain || 1)));
+      const a = 1 - Math.exp(-(dt * 1000) / 120);
+      st.sm = st.sm == null ? db : st.sm + a * (db - st.sm);
+      st.processed = !!frame.processedInput;
+      if (!snd && st.floorRing && db > -100) {
+        st.floorRing.push(db);
+        if (st.floorRing.count >= 20) st.floorDb = F.percentile(st.floorRing.last(), 0.2);
+      }
+      if (frame.buf && snd) {
+        let pk = 0;
+        const b = frame.buf;
+        for (let i = 0; i < b.length; i += 2) pk = Math.max(pk, Math.abs(b[i]));
+        if (pk / (frame.inputGain || 1) >= 0.98) st.clipped = true;
+      }
+      // Segment swells on the raw sound edge, bridging only 300 ms
+      if (snd) {
+        if (!st.cur) {
+          this._startSwell();
+          st.sm = db; // do not carry the silence into the new note
+        }
+        st.cur.last = st.t;
+      } else if (st.cur && st.t - st.cur.last >= 0.3) {
+        this._endSwell();
+      }
+      const c = st.cur;
+      let lv = null;
+      let cv = null;
+      let tag = 0;
+      if (c) {
+        const age = st.t - c.t0;
+        // Your soft start: the median level 0.2–0.7 s into the note (the
+        // attack is not the start). Until then, the note so far.
+        if (snd && age <= 0.7) {
+          c._early = c._early || [];
+          c._early.push({ age, db });
+          const settled = c._early.filter((p) => p.age >= 0.2).map((p) => p.db);
+          c.base = F.median(settled.length >= 3 ? settled : c._early.map((p) => p.db));
+        }
+        const base = c.base != null ? c.base : st.sm;
+        const rel = st.sm - base;
+        if (snd) {
+          c.lv.push({ t: st.t, rel });
+          if (c.lv.length > 1200) c.lv.shift();
+          if (age > 0.7 && rel > c.peak) {
+            c.peak = rel;
+            c.peakT = st.t;
+          }
+          this._growScale(rel);
+          lv = this._norm(rel);
+        }
+        st.floorRel = st.floorDb != null ? st.floorDb - base : null;
+        // Pitch against the note you started on, averaged over ~2 vibrato cycles
+        const midi = snd && frame.rawFreq ? st.pitch.feed(frame) : (st.pitch.feed({ rawFreq: null }), null);
+        if (midi != null) {
+          if (age >= 0.2 && age <= 0.9) {
+            c._f = c._f || [];
+            c._f.push(midi);
+            c.f0 = F.median(c._f);
+          }
+          if (c.f0 != null) {
+            c._cw = c._cw || [];
+            c._cw.push({ t: st.t, c: (midi - c.f0) * 100 });
+            while (c._cw.length && st.t - c._cw[0].t > 0.33) c._cw.shift();
+            const mean = c._cw.reduce((s2, p) => s2 + p.c, 0) / c._cw.length;
+            // Soft tails near the floor lose pitch: no line there rather than a wrong one
+            if (rel > -3) {
+              cv = clamp(0.5 + mean / 100, 0, 1);
+              tag = Math.abs(mean) > 20 ? 1 : 0;
+              c.pv.push({ t: st.t, c: mean });
+              if (c.pv.length > 1200) c.pv.shift();
+              st.centsNow = mean;
+            }
+          }
+        } else if (!snd) st.centsNow = null;
+      } else {
+        st.centsNow = null;
+        st.pitch?.reset();
+      }
+      st.level.push(dt, lv, 0);
+      st.cents.push(dt, cv, tag);
+      this._words();
     },
     onStop() {
+      const f = this._fmt();
+      const st = this.state;
+      if (st.cur) this._endSwell();
+      st.review = true;
+      if (this.viz) {
+        this.hud.classList.add("is-replay");
+        this.viz.draw();
+      }
+      const counted = st.done.filter((s) => s.counted);
+      const pk = st.done.map((s) => s.peakCents).filter((c) => c != null);
       const patches = {};
-      if (this.state.swells > 0) {
-        patches.swells = this.state.swells;
-        patches.dynamicControl = clamp(2 + this.state.swells, 1, 5);
+      if (st.swells > 0) patches.swells = st.swells;
+      // Pitch stability is measured (the pitch at each peak against its own
+      // start); dynamic control is left to the learner's own rating
+      if (pk.length) {
+        const med = global.VTViz.median(pk.map((c) => Math.abs(c)));
+        patches.pitchStable = med <= 10 ? 5 : med <= 20 ? 4 : med <= 35 ? 3 : med <= 50 ? 2 : 1;
       }
-      if (this.state.wobble != null) {
-        patches.pitchStable =
-          this.state.wobble < 0.15 ? 5 : this.state.wobble < 0.35 ? 4 : this.state.wobble < 0.55 ? 3 : 2;
-      }
-      return { patches, summary: `${this.state.swells} swells` };
+      const medRise = counted.length ? global.VTViz.median(counted.map((s) => s.rise)) : null;
+      const medPk = pk.length ? global.VTViz.median(pk) : null;
+      return {
+        patches,
+        summary: L(
+          `${st.swells} ${st.swells === 1 ? "regulador" : "reguladores"}` +
+            (medRise != null ? ` · subida mediana ${f.db(medRise)}` : "") +
+            (medPk != null ? ` · afinación en el pico ${f.cents(medPk)}` : ""),
+          `${st.swells} ${st.swells === 1 ? "swell" : "swells"}` +
+            (medRise != null ? ` · median rise ${f.db(medRise)}` : "") +
+            (medPk != null ? ` · pitch at the peak ${f.cents(medPk)}` : "")
+        )
+      };
     }
   });
 
@@ -2068,45 +2400,326 @@
     }
   });
 
+  /**
+   * s12 easy onset — "Forma del ataque". An onset is over in under 100 ms:
+   * nothing to steer while it happens, so each one is drawn after it (its
+   * first 300 ms: the rise, a spike above the level it settles at, air heard
+   * before the tone) and named against the learner's own examples. The
+   * exercise's contrast step (2 abrupt "uh", 2 breathy "ha", 2 easy) is the
+   * calibration: each later onset is called the kind of example it is
+   * nearest to. Abrupt and breathy are information, never red.
+   *
+   * Onsets come from the raw sound edge and the 400 Hz envelope
+   * (VTFeatures.OnsetCapture), normalised to each note's own settled level,
+   * so a loud gradual start is not called hard and a soft sudden one is.
+   */
   Modes.onsetReps = baseMode({
     id: "onsetReps",
     render() {
-      this.state.easy = 0;
-      this.state.hard = 0;
-      this.state.wasQuiet = true;
+      const st = this.state;
+      st.target = this.profile.targetReps || 10;
+      this._resetOnsets(true);
       this.hud.innerHTML = `
-        <div class="mode-title">${L("Repeticiones de ataque suave", "Easy onset reps")}</div>
-        <div class="mode-big" data-e>0 / ${this.profile.targetReps || 10}</div>
-        <p class="mode-meta">${L("Ataques duros marcados: <strong data-h>0</strong>", "Hard attacks flagged: <strong data-h>0</strong>")}</p>
-        <p class="mode-meta muted">${L("Parte del silencio; un inicio brusco cuenta como duro.", "Start from silence; a spiky onset counts as hard.")}</p>
+        <div class="viz-row viz-head">
+          <div class="mode-title">${L("Forma del ataque", "Onset shape")}</div>
+          <button type="button" class="btn btn-ghost viz-tap" data-skip>${this._skipLabel()}</button>
+        </div>
+        <div class="viz-words">
+          <span class="mode-phase" data-phase>${st.head}</span>
+          <strong class="mode-big" data-e>0 / ${st.target}</strong>
+          <span>${L("Bruscos", "Abrupt")}: <strong data-h>0</strong> · ${L("Soplados", "Breathy")}: <strong data-br>0</strong></span>
+        </div>
+        <p class="mode-meta muted">${L(
+          "Parte del silencio. Cada inicio se dibuja al terminar y se compara con tus propios ejemplos.",
+          "Start from silence. Each onset is drawn once it's over and compared with your own examples."
+        )}</p>
       `;
+      this.$("[data-skip]")?.addEventListener("click", () => {
+        if (st.phase === "contrast") this._toReps(false);
+        else this._toContrast();
+        this.viz?.draw();
+      });
+      this._mountViz();
+    },
+    _skipLabel() {
+      return this.state.phase === "contrast" ? L("Saltar ejemplos", "Skip examples") : L("Repetir ejemplos", "Redo examples");
+    },
+    _resetOnsets(full) {
+      const st = this.state;
+      const F = global.VTFeatures;
+      st.t = 0;
+      if (full) {
+        st.phase = "contrast";
+        st.asks = ["abrupt", "abrupt", "breathy", "breathy", "balanced", "balanced"];
+        st.step = 0;
+        st.examples = { abrupt: [], breathy: [], balanced: [] };
+        st.examplesSeq = [];
+        st.refs = null;
+        st.calNote = "";
+        st.onsets = [];
+        st.counts = { balanced: 0, breathy: 0, abrupt: 0, unmeasured: 0 };
+        st.latest = null;
+      }
+      st.review = false;
+      st.quiet = 0; // the take starts unarmed: a sound needs 0.5 s of silence before it
+      st.snd = false;
+      st.ready = "wait";
+      st.soundStart = 0;
+      st.startArmed = false;
+      st.maxDt = 0;
+      st.processed = false;
+      st.capture = F ? new F.OnsetCapture({ minGapMs: 500, onOnset: (r) => this._onOnset(r) }) : null;
+      st.head = this._head();
+    },
+    _mountViz() {
+      const V = global.VTViz;
+      if (!V || !global.VTFeatures || !V.scenes.onset) return;
+      const st = this.state;
+      this.hud.classList.add("has-viz");
+      this.viz = new V.Surface(this.hud, (ctx, w, h) => V.scenes.onset(ctx, w, h, st), {
+        label: L(
+          "Forma del ataque: cada inicio se dibuja al terminar, su subida, un pico sobre el nivel estable y el aire antes del tono, y se nombra como equilibrado, soplado o brusco comparándolo con tus propios ejemplos.",
+          "Onset shape: each onset is drawn once it is over, its rise, a spike above the settled level and any air before the tone, and named balanced, breathy or abrupt against your own examples."
+        )
+      });
+      this.viz.draw();
+    },
+    _toReps(calibrated) {
+      const st = this.state;
+      st.phase = "reps";
+      if (!calibrated) {
+        st.refs = null;
+        st.calNote = "";
+      }
+      st.head = this._head();
+      const b = this.$("[data-skip]");
+      if (b) b.textContent = this._skipLabel();
+      this.viz?.caption(L("Ahora 10 inicios fáciles", "Now 10 easy onsets"), 0);
+    },
+    _toContrast() {
+      const st = this.state;
+      st.phase = "contrast";
+      st.step = 0;
+      st.examples = { abrupt: [], breathy: [], balanced: [] };
+      st.examplesSeq = [];
+      st.refs = null;
+      st.calNote = "";
+      st.head = this._head();
+      const b = this.$("[data-skip]");
+      if (b) b.textContent = this._skipLabel();
+    },
+    /**
+     * How well the last buffer repeats at the detector's period (0 = noise,
+     * 1 = a clean tone). Tried at the period, one sample either side and twice
+     * it, so an octave slip of the detector does not read as air.
+     */
+    _periodicity(frame) {
+      const buf = frame.buf;
+      const sr = frame.sampleRate;
+      if (!buf || !sr || !frame.rawFreq) return 1;
+      const lag0 = Math.round(sr / frame.rawFreq);
+      let best = 0;
+      for (const lag of [lag0 - 1, lag0, lag0 + 1, lag0 * 2]) {
+        if (lag < 8 || lag >= buf.length / 2) continue;
+        let xy = 0;
+        let xx = 0;
+        let yy = 0;
+        for (let i = 0, n = buf.length - lag; i < n; i++) {
+          const a = buf[i];
+          const b = buf[i + lag];
+          xy += a * b;
+          xx += a * a;
+          yy += b * b;
+        }
+        best = Math.max(best, xy / Math.sqrt(xx * yy + 1e-12));
+      }
+      return best;
+    },
+    /** The numbers that tell the kinds apart, on scales where a step means about the same. */
+    _features(r) {
+      return [Math.log2(Math.max(5, r.riseMs)), (Math.max(1, r.overshoot) - 1) * 4, Math.log2(Math.max(10, r.leadMs + 10))];
+    },
+    /** Your examples become the references, if they came out different enough to tell apart. */
+    _calibrate() {
+      const st = this.state;
+      const mean = (arr) => arr[0].map((_, j) => arr.reduce((s, v) => s + v[j], 0) / arr.length);
+      const refs = {};
+      for (const k of ["abrupt", "breathy", "balanced"]) {
+        if (!st.examples[k].length) return this._toReps(false);
+        refs[k] = mean(st.examples[k].map((r) => this._features(r)));
+      }
+      const d = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+      const close = Math.min(d(refs.abrupt, refs.balanced), d(refs.breathy, refs.balanced), d(refs.abrupt, refs.breathy));
+      if (close < 0.7) {
+        st.refs = null;
+        st.calNote = L(
+          "Tus ejemplos salieron parecidos: comparo con formas de referencia",
+          "Your examples came out alike: comparing with reference shapes"
+        );
+      } else {
+        st.refs = refs;
+        st.calNote = "";
+      }
+      this._toReps(true);
+    },
+    /** Nearest of your examples; before (or without) them, published starting points. */
+    _classify(r) {
+      const st = this.state;
+      if (st.refs) {
+        const f = this._features(r);
+        let best = "balanced";
+        let bd = 1e9;
+        for (const k of Object.keys(st.refs)) {
+          const g = st.refs[k];
+          const dd = Math.hypot(f[0] - g[0], f[1] - g[1], f[2] - g[2]);
+          if (dd < bd) {
+            bd = dd;
+            best = k;
+          }
+        }
+        return best;
+      }
+      if (r.leadMs >= 90 || r.riseMs >= 140) return "breathy";
+      if (r.riseMs <= 22 && (r.overshoot >= 1.35 || r.riseMs <= 14)) return "abrupt";
+      return "balanced";
+    },
+    _onOnset(res) {
+      const st = this.state;
+      // The take's first sound (or one that followed noise) had no silence before it
+      if (!st.startArmed || st.review) return;
+      const span = st.bufMs || 43;
+      res.t = st.soundStart;
+      const unmeasured = st.maxDt > span + 3;
+      if (st.phase === "contrast") {
+        const ask = st.asks[st.step];
+        if (unmeasured) {
+          st.latest = Object.assign(res, { kind2: "unmeasured", asked: ask });
+          this.viz?.caption(L("Ese no se pudo medir: otra vez", "That one could not be measured: again"), 0);
+        } else {
+          res.asked = ask;
+          res.kind2 = ask;
+          st.examples[ask].push(res);
+          st.examplesSeq.push(res);
+          st.step += 1;
+          st.latest = res;
+          if (st.step >= st.asks.length) this._calibrate();
+        }
+      } else {
+        res.kind2 = unmeasured ? "unmeasured" : this._classify(res);
+        st.onsets.push(res);
+        st.counts[res.kind2] = (st.counts[res.kind2] || 0) + 1;
+        st.latest = res;
+        const e = this.$("[data-e]");
+        if (e) e.textContent = `${st.counts.balanced} / ${st.target}`;
+        const hEl = this.$("[data-h]");
+        if (hEl) hEl.textContent = String(st.counts.abrupt);
+        const bEl = this.$("[data-br]");
+        if (bEl) bEl.textContent = String(st.counts.breathy);
+      }
+      const words = {
+        balanced: L("Equilibrado", "Balanced"),
+        breathy: L("Soplado", "Breathy"),
+        abrupt: L("Brusco", "Abrupt"),
+        unmeasured: L("Sin medida", "Not measured")
+      }[st.latest.kind2];
+      this.viz?.caption(
+        `${words} · ${L("subida", "rise")} ${Math.round(res.riseMs)} ms · ${L("aire antes", "air first")} ${Math.round(res.leadMs)} ms`,
+        1500
+      );
+      st.head = this._head();
+      this.viz?.draw();
+    },
+    _head() {
+      const st = this.state;
+      const secs = (n) => String(n.toFixed(1)).replace(".", L(",", "."));
+      if (st.phase === "contrast") {
+        const k = st.asks[st.step];
+        const n = `${st.step + 1}/${st.asks.length}`;
+        if (st.ready === "sound") return L(`Ejemplo ${n} · sostén un momento…`, `Example ${n} · hold it a moment…`);
+        const ask = {
+          abrupt: L("un «uh» brusco, a propósito", "an abrupt 'uh', on purpose"),
+          breathy: L("un «ha» soplado, a propósito", "a breathy 'ha', on purpose"),
+          balanced: L("uno cómodo y fácil", "a comfortable, easy one")
+        }[k];
+        return st.ready === "armed" ? L(`Ejemplo ${n}: ${ask}`, `Example ${n}: ${ask}`) : L(`Silencio… luego ${ask}`, `Silence… then ${ask}`);
+      }
+      if (st.ready === "sound") return L(`Sostén 3–5 s · ${secs(st.soundSec || 0)} s`, `Hold 3–5 s · ${secs(st.soundSec || 0)} s`);
+      if (st.ready === "armed") return L("Listo: inhala en silencio y di «a»", "Ready: breathe in silently, then 'ah'");
+      return L("Silencio… (medio segundo)", "Silence… (half a second)");
+    },
+    onStart() {
+      const st = this.state;
+      this._resetOnsets(false);
+      // A fresh take keeps the examples you already gave, not the reps
+      st.onsets = [];
+      st.counts = { balanced: 0, breathy: 0, abrupt: 0, unmeasured: 0 };
+      st.latest = null;
+      this.hud?.classList.remove("is-replay");
+      const e = this.$("[data-e]");
+      if (e) e.textContent = `0 / ${st.target}`;
+      const hEl = this.$("[data-h]");
+      if (hEl) hEl.textContent = "0";
+      st.head = this._head();
+      this.viz?.draw();
     },
     onFrame(frame) {
-      const quiet = (frame.rms || 0) < 0.015;
-      if (quiet) {
-        this.state.wasQuiet = true;
-        return;
-      }
-      if (this.state.wasQuiet && (frame.rms || 0) > 0.02) {
-        this.state.wasQuiet = false;
-        // hard if sudden high rms without gradual
-        if ((frame.rms || 0) > 0.12) {
-          this.state.hard++;
-          if (this.$("[data-h]")) this.$("[data-h]").textContent = String(this.state.hard);
-        } else {
-          this.state.easy++;
-          if (this.$("[data-e]"))
-            this.$("[data-e]").textContent = `${this.state.easy} / ${this.profile.targetReps || 10}`;
+      const st = this.state;
+      if (!st.capture || st.review) return;
+      const dtMs = (frame && frame.dtMs) || 16;
+      st.t += dtMs / 1000;
+      st.processed = !!frame.processedInput;
+      if (frame.buf && frame.sampleRate) st.bufMs = (frame.buf.length / frame.sampleRate) * 1000;
+      const snd = !!frame.sounding && !frame.manualSound;
+      const was = st.ready;
+      if (snd) {
+        if (!st.snd) {
+          st.soundStart = st.t;
+          st.startArmed = st.quiet >= 480;
+          st.maxDt = 0;
         }
+        if (st.t - st.soundStart < 0.4) st.maxDt = Math.max(st.maxDt, dtMs);
+        st.quiet = 0;
+        st.snd = true;
+        st.ready = "sound";
+        st.soundSec = st.t - st.soundStart;
+      } else {
+        st.quiet += dtMs;
+        st.snd = false;
+        st.ready = st.quiet >= 500 ? "armed" : "wait";
       }
+      // Space-as-sound is not a voice: the capture sees silence. In the first
+      // 400 ms of a sound the detector's pitch only counts once the waveform
+      // really repeats: it also names a "pitch" for plain breath noise, which
+      // would hide the air before the tone.
+      if (frame.manualSound) st.capture.feed(Object.assign({}, frame, { sounding: false, rawFreq: null }));
+      else if (snd && frame.rawFreq && st.t - st.soundStart < 0.4 && this._periodicity(frame) < 0.55)
+        st.capture.feed(Object.assign({}, frame, { rawFreq: null }));
+      else st.capture.feed(frame);
+      const head = this._head();
+      if (head !== st.head || was !== st.ready) {
+        st.head = head;
+        const ph = this.$("[data-phase]");
+        if (ph) ph.textContent = head;
+      }
+      this.viz?.draw();
     },
     onStop() {
+      const st = this.state;
+      st.review = true;
+      if (this.viz) {
+        this.hud.classList.add("is-replay");
+        this.viz.draw();
+      }
+      const c = st.counts;
+      const patches = {};
+      // Only the count is measured; balance and comfort stay the learner's ratings
+      if (c.balanced > 0) patches.easyOnsets = c.balanced;
       return {
-        patches: {
-          easyOnsets: this.state.easy,
-          balance: this.state.easy >= 8 && this.state.hard <= 2 ? 5 : 3
-        },
-        summary: `${this.state.easy} easy / ${this.state.hard} hard onsets`
+        patches,
+        summary: L(
+          `${c.balanced} ${c.balanced === 1 ? "equilibrado" : "equilibrados"} · ${c.breathy} ${c.breathy === 1 ? "soplado" : "soplados"} · ${c.abrupt} ${c.abrupt === 1 ? "brusco" : "bruscos"}`,
+          `${c.balanced} balanced · ${c.breathy} breathy · ${c.abrupt} abrupt`
+        )
       };
     }
   });

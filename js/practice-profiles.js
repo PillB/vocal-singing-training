@@ -458,28 +458,39 @@
     },
     "s11-dynamics": {
       mode: "dynamicSwell",
-      showPitch: true,
-      showHold: true,
-      showLevel: true,
-      pitchChallenge: false,
-      autoPiano: true,
-      autoRecord: false,
-      cue: "Swell soft→medium→soft. Watch pitch stay stable while level moves.",
-      cueEs: "Crescendo suave→medio→suave. Que la afinación se mantenga al mover el volumen.",
-      metricHints: { swells: "swellCount", pitchStable: "pitchStableScale" }
-    },
-    "s12-easy-onset": {
-      mode: "onsetReps",
-      showPitch: true,
+      // The skill is the level shape; pitch is its second line, drawn under
+      // it in cents against your own start — so the picture lives in the
+      // stage, not below the fold under a one-lane highway
+      showPitch: false,
       showHold: false,
       showLevel: true,
       pitchChallenge: false,
+      // Space-as-sound would draw a swell nobody sang
+      allowManualSound: false,
+      autoPiano: true,
+      autoRecord: false,
+      targetSwells: 6,
+      swellSec: 7,
+      cue: "Soft → grow → back to soft along the band. The pitch line underneath should stay flat while the level moves.",
+      cueEs: "Suave → crece → vuelve a suave siguiendo la banda. La línea de afinación de abajo debe quedarse plana mientras cambia el volumen.",
+      metricHints: { swells: "swellCount", pitchStable: "pitchAtPeakCents" }
+    },
+    "s12-easy-onset": {
+      mode: "onsetReps",
+      // The skill is the first 100 ms of each note, drawn after it; the
+      // highway only showed detector spikes at every start
+      showPitch: false,
+      showHold: false,
+      showLevel: true,
+      pitchChallenge: false,
+      // Space-as-sound would be an onset nobody made
+      allowManualSound: false,
       autoPiano: true,
       autoRecord: false,
       targetReps: 10,
-      cue: "Easy onsets only. We flag hard attacks (RMS spikes) vs balanced starts.",
-      cueEs: "Solo ataques suaves. Marcamos ataques duros (picos de energía) vs inicios equilibrados.",
-      metricHints: { easyOnsets: "easyOnsetCount" }
+      cue: "First your own examples: 2 abrupt 'uh', 2 breathy 'ha', 2 easy. Then easy onsets from silence; each one is drawn once it's over.",
+      cueEs: "Primero tus ejemplos: 2 «uh» bruscos, 2 «ha» soplados, 2 fáciles. Luego inicios fáciles desde el silencio; cada uno se dibuja al terminar.",
+      metricHints: { easyOnsets: "balancedOnsetCount" }
     },
     "s13-arpeggio-match": {
       mode: "pitchChord",

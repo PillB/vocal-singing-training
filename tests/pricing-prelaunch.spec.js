@@ -27,7 +27,8 @@ async function boot(page, lang = "es") {
     }
   }, lang);
   await page.goto(BASE, { waitUntil: "domcontentloaded" });
-  await expect(page.locator("#btn-pricing")).toBeVisible();
+  // Pro sits in the header, or in its "Más" menu on a phone.
+  await expect(page.locator("#btn-pricing:visible, #btn-more:visible").first()).toBeVisible();
 }
 
 async function openPricing(page) {

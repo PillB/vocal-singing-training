@@ -473,7 +473,9 @@
     isSounding(tailSec = 0.25) {
       if (!this.ctx || this.ctx.state !== "running") return false;
       if (this.loopActive) return true;
-      return this.ctx.currentTime < (this.soundingUntil || 0) + tailSec;
+      // Nothing scheduled yet (or stopAll): silent, even in the context's first tailSec
+      if (!this.soundingUntil) return false;
+      return this.ctx.currentTime < this.soundingUntil + tailSec;
     }
 
     /** True if context running and we recently scheduled voices. */

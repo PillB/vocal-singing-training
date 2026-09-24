@@ -15,9 +15,12 @@
 }
 /* The stage puts the panel in #mode-focus-panel, sized to its content, with
    the "Ahora · paso n" guide under it. A picture has no content height of its
-   own, so its wrapper takes the room the guide leaves. */
+   own, so its wrapper takes the room the guide leaves. The picture keeps most
+   of the box: a long idle step list gets what is left and drops its last
+   steps (js fitStageGuide), instead of squeezing the picture. */
 .mode-focus.mode-focus-live .mode-focus-panel:has(> .mode-panel.has-viz) {
   flex: 1 1 0;
+  min-height: min(19rem, 62%);
   display: flex;
   flex-direction: column;
   overflow: hidden;

@@ -124,10 +124,11 @@ with the judges' fix: the whole session no longer ends from an unlabelled ×.
 
 - **Judges are not users.** They cannot show whether people come back, only
   whether a screen explains itself, is reachable and is legible.
-- **They favour the challenger.** Across the two rounds, 21 of 24 new designs
-  beat today's. The designs were written to fix problems an audit had already
-  found, so many wins are expected. But the rate is high enough that a narrow
-  win should be read as a tie.
+- **They favour the challenger.** Across the two rounds, 21 of 24 questions
+  ended with a new design to ship, and 30 of the 33 challengers were ranked
+  above today's by at least two of three judges. The designs were written to
+  fix problems an audit had already found, so many wins are expected. But the
+  rate is high enough that a narrow win should be read as a tie.
 - **Context changes answers.** The round-1 pricing winner (one plan with a
   monthly/yearly toggle) beat today's dialog 3/3. In round 2 an honest
   pre-launch alternative was also shown, and the round-1 winner then lost 0/3,

@@ -924,27 +924,32 @@
     </div>
 
     <!-- Pricing / subscription overlay (game-style; no page scroll required) -->
-    <div id="pricing-modal" class="modal-overlay pricing-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="pricing-title">
+    <div id="pricing-modal" class="modal-overlay pricing-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="pricing-title" aria-describedby="pricing-health-note">
       <div class="modal-card pricing-card">
         <div class="pricing-head">
           <div>
             <p class="pricing-kicker" id="pricing-region-label">—</p>
             <h3 id="pricing-title" data-i18n="pricing.title">Vocal Studio Pro</h3>
             <p class="muted pricing-sub" data-i18n="pricing.sub">
-              Practica gratis. Pro desbloquea exportar progreso, perfiles y herramientas de coach.
+              Practicar es gratis, siempre. Pro suma extras para seguir y compartir tu avance.
             </p>
           </div>
           <button type="button" class="btn btn-ghost btn-sm" id="pricing-close" aria-label="Cerrar" data-i18n-aria="a11y.close">✕</button>
         </div>
         <div class="pricing-status" id="pricing-status"></div>
+        <!-- What is true today, first: the payments note and, before checkout
+             is live, the trial (app.js moves #btn-start-trial in and out). -->
+        <div class="pricing-launch" id="pricing-launch" hidden>
+          <p class="pricing-launch-note" id="pricing-health-note" hidden></p>
+        </div>
         <div class="pricing-value-stack" id="pricing-value-stack">
           <p class="pricing-dream" data-i18n="pricing.dream">
-            Resultado: voz clara y afinada, con un plan que se sostiene semana a semana.
+            La meta: voz clara y afinada, con un plan que puedes seguir cada semana.
           </p>
           <ul class="pricing-proof" data-i18n-list="pricing.proof">
-            <li data-i18n="pricing.proof1">Autopista + piano + mic ilimitados en Gratis</li>
-            <li data-i18n="pricing.proof2">Pro = exportar prueba, varios perfiles e insights de coach</li>
-            <li data-i18n="pricing.proof3">Ancla: Pro anual ≈ menos que 1 clase particular</li>
+            <li data-i18n="pricing.proof1">Practicar con el micrófono y el piano es gratis y sin límite.</li>
+            <li data-i18n="pricing.proof2">Pro suma: sin anuncios, descargar tu progreso, más perfiles y consejos según tu práctica.</li>
+            <li data-i18n="pricing.proof3">Un año de Pro cuesta menos que 3 clases particulares en Lima.</li>
           </ul>
           <p class="pricing-personal muted" id="pricing-personal" hidden></p>
         </div>
@@ -966,8 +971,7 @@
           <button type="button" class="btn btn-ghost btn-sm" id="btn-demo-pro" data-i18n="pricing.demo" hidden>
             Activar demo Pro
           </button>
-          <p class="muted pricing-note" id="pricing-health-note" hidden></p>
-          <p class="muted pricing-note" data-i18n="pricing.note">
+          <p class="muted pricing-note" id="pricing-pay-note" data-i18n="pricing.note">
             Pagos seguros vía Stripe (global) o Mercado Pago (Perú / LATAM). Cancela cuando quieras en el portal del proveedor.
           </p>
         </div>

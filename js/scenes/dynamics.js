@@ -859,7 +859,8 @@
         label: narrow && !cur ? k.mark : `${L(k.es, k.en)} ${k.mark}`,
         short: k.mark,
         sub: cur ? `${mm}:${ss}` : "",
-        done: i < m.phaseIdx || m.allDone
+        // A check only for a phase sung in this take, not one skipped past
+        done: (i < m.phaseIdx || m.allDone) && m.runs.some((r) => r.phaseIdx === i)
       };
     });
     V.chips(ctx, box, items, { current: m.allDone ? -1 : m.phaseIdx, frac: m.phases[m.phaseIdx] ? 1 - m.remaining / m.phases[m.phaseIdx].sec : 1 });

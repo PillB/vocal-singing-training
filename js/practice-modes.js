@@ -1951,7 +1951,8 @@
     render() {
       const st = this.state;
       st.target = this.profile.targetSwells || 6;
-      st.D = this.profile.swellSec || 7;
+      // A length picked before Start outlives the fresh mount (see _mem)
+      st.D = this._mem().D || this.profile.swellSec || 7;
       this._resetSwell();
       this.hud.innerHTML = `
         <div class="viz-row viz-head">
@@ -1974,18 +1975,29 @@
       this.$("[data-len]")?.addEventListener("click", () => {
         const opts = [6, 7, 8, 10];
         st.D = opts[(opts.indexOf(st.D) + 1) % opts.length] || 7;
+        this._mem().D = st.D;
         const b = this.$("[data-len]");
         if (b) b.textContent = this._lenLabel();
         this.viz?.draw();
       });
       this._mountViz();
     },
+    /**
+     * What outlives one take: the app mounts a fresh copy of the mode on every
+     * Start (VTPracticeModes.get), so choices are kept on the registered mode.
+     */
+    _mem() {
+      const M = Modes.dynamicSwell;
+      if (!M._kept) M._kept = {};
+      return M._kept;
+    },
     /** dB and cents in words, with the language's decimal mark (js/scenes/dynamics.js). */
     _fmt() {
       return global.VTViz?.scenes?.dynFmt || { db: (n) => `${Math.round(n)} dB`, cents: (n) => `${Math.round(n)}¢` };
     },
     _lenLabel() {
-      return L(`Duración ${this.state.D} s`, `Length ${this.state.D} s`);
+      // No break between the number and its unit on a narrow button
+      return L(`Duración ${this.state.D}\u00a0s`, `Length ${this.state.D}\u00a0s`);
     },
     _resetSwell() {
       const st = this.state;
@@ -2365,7 +2377,7 @@
       st.stats = (i) => this._stats(i);
       st.pitchOffset = () => this._pitchOffset();
       this._reset();
-      const p0 = st.phases[0];
+      const p0 = st.phases[st.phaseIdx];
       this.hud.innerHTML = `
         <div class="viz-row viz-head">
           <div class="mode-title">${L("Staccato y legato (cantado)", "Staccato and legato (sung)")}</div>
@@ -2385,19 +2397,45 @@
         )}</p>
       `;
       this.$("[data-next-phase]")?.addEventListener("click", () => {
-        if (!st.allDone) this._nextPhase();
+        if (st.live) {
+          if (!st.allDone) this._nextPhase();
+        } else {
+          // Not live: choose the phase the next take begins with
+          const cur = st.review ? this._mem().resume || 0 : st.phaseIdx;
+          this._mem().resume = (cur + 1) % st.phases.length;
+          if (st.review) {
+            const label = st.phases[this._mem().resume].label;
+            const ph = this.$("[data-phase]");
+            if (ph) ph.textContent = label;
+            this.viz?.caption(L(`La próxima toma empieza en: ${label}`, `The next take starts at: ${label}`), 0);
+          } else {
+            this._reset();
+            this._words();
+          }
+        }
         this.viz?.draw();
       });
       this._mountViz();
     },
+    /**
+     * What outlives one take: the app mounts a fresh copy of the mode on every
+     * Start (VTPracticeModes.get), so choices are kept on the registered mode.
+     */
+    _mem() {
+      const M = Modes.staccatoLegato;
+      if (!M._kept) M._kept = {};
+      return M._kept;
+    },
     _reset() {
       const st = this.state;
       const F = global.VTFeatures;
+      // A new take goes on from the phase the last one stopped in
+      const start = clamp(this._mem().resume || 0, 0, st.phases.length - 1);
       st.t = 0;
-      st.phaseIdx = 0;
-      st.remaining = st.phases[0].sec;
-      st.phaseKind = st.phases[0].kind;
-      st.phases.forEach((p, i) => (p.startT = i === 0 ? 0 : null));
+      st.phaseIdx = start;
+      st.remaining = st.phases[start].sec;
+      st.phaseKind = st.phases[start].kind;
+      st.phases.forEach((p, i) => (p.startT = i === start ? 0 : null));
       st.allDone = false;
       st.lastNow = null;
       st.runs = [];
@@ -2497,7 +2535,7 @@
       if (i10 < 0 || i90 < 0) return;
       run.t0 = Math.min(run.t0, this._tOfIdx(run.startTotal - back + i10));
       run.riseMs = ((i90 - i10) * 1000) / rate;
-      run.hammer = run.maxDt > st.bufMs + 3 ? null : run.riseMs <= 14;
+      run.hammer = run.maxDt > st.bufMs + 6 ? null : run.riseMs <= 14;
     },
     /** Where the sound really ended: the last moment within 15 dB of its peak. */
     _release(run, lastSnd) {
@@ -2739,6 +2777,7 @@
     onStart() {
       const st = this.state;
       this._reset();
+      st.live = true;
       this.hud?.classList.remove("is-replay");
       const sh = this.$("[data-sh]");
       if (sh) sh.textContent = "0";
@@ -2854,6 +2893,8 @@
       const st = this.state;
       if (st.open) this._closeRun(st.open, st.lastSnd);
       st.review = true;
+      st.live = false;
+      this._mem().resume = st.allDone ? 0 : st.phaseIdx;
       if (this.viz) {
         this.hud.classList.add("is-replay");
         this.viz.draw();
@@ -2937,18 +2978,33 @@
     _skipLabel() {
       return this.state.phase === "contrast" ? L("Saltar ejemplos", "Skip examples") : L("Repetir ejemplos", "Redo examples");
     },
+    /**
+     * What outlives one take: the app mounts a fresh copy of the mode on every
+     * Start (VTPracticeModes.get), so choices are kept on the registered mode.
+     */
+    _mem() {
+      const M = Modes.onsetReps;
+      if (!M._kept) M._kept = {};
+      return M._kept;
+    },
+    _remember() {
+      const st = this.state;
+      this._mem().onsets = { phase: st.phase, step: st.step, examples: st.examples, examplesSeq: st.examplesSeq, refs: st.refs, calNote: st.calNote };
+    },
     _resetOnsets(full) {
       const st = this.state;
       const F = global.VTFeatures;
       st.t = 0;
       if (full) {
-        st.phase = "contrast";
+        // Your examples outlive the take (see _mem): given once, not once per take
+        const k = this._mem().onsets;
+        st.phase = k ? k.phase : "contrast";
         st.asks = ["abrupt", "abrupt", "breathy", "breathy", "balanced", "balanced"];
-        st.step = 0;
-        st.examples = { abrupt: [], breathy: [], balanced: [] };
-        st.examplesSeq = [];
-        st.refs = null;
-        st.calNote = "";
+        st.step = k ? k.step : 0;
+        st.examples = k ? k.examples : { abrupt: [], breathy: [], balanced: [] };
+        st.examplesSeq = k ? k.examplesSeq : [];
+        st.refs = k ? k.refs : null;
+        st.calNote = k ? k.calNote : "";
         st.onsets = [];
         st.counts = { balanced: 0, breathy: 0, abrupt: 0, unmeasured: 0 };
         st.latest = null;
@@ -2985,6 +3041,7 @@
         st.calNote = "";
       }
       st.head = this._head();
+      this._remember();
       const b = this.$("[data-skip]");
       if (b) b.textContent = this._skipLabel();
       this.viz?.caption(L("Ahora 10 inicios fáciles", "Now 10 easy onsets"), 0);
@@ -2997,6 +3054,7 @@
       st.examplesSeq = [];
       st.refs = null;
       st.calNote = "";
+      this._mem().onsets = null;
       st.head = this._head();
       const b = this.$("[data-skip]");
       if (b) b.textContent = this._skipLabel();
@@ -3082,7 +3140,8 @@
       if (!st.startArmed || st.review) return;
       const span = st.bufMs || 43;
       res.t = st.soundStart;
-      const unmeasured = st.maxDt > span + 3;
+      // A frame late enough to lose samples of the rise (the engine caps dt at 50 ms)
+      const unmeasured = st.maxDt > span + 6;
       if (st.phase === "contrast") {
         const ask = st.asks[st.step];
         if (unmeasured) {
@@ -3096,6 +3155,7 @@
           st.step += 1;
           st.latest = res;
           if (st.step >= st.asks.length) this._calibrate();
+          else this._remember();
         }
       } else {
         res.kind2 = unmeasured ? "unmeasured" : this._classify(res);
@@ -3170,7 +3230,7 @@
           st.startArmed = st.quiet >= 480;
           st.maxDt = 0;
         }
-        if (st.t - st.soundStart < 0.4) st.maxDt = Math.max(st.maxDt, dtMs);
+        if (st.t - st.soundStart < 0.15) st.maxDt = Math.max(st.maxDt, dtMs);
         st.quiet = 0;
         st.snd = true;
         st.ready = "sound";

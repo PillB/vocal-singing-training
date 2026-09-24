@@ -88,11 +88,36 @@
   }
   const KINDS = { abrupt, breathy, balanced };
 
-  /** Play `seq` of onset kinds, each held `holdMs` then silence until `everyMs`. */
-  function onsetSeq(h, seq, { everyMs = 1900, holdMs = 1000, firstMs = 900, loop = true } = {}) {
+  /** The kind the mode is asking for while it collects your examples, if it is. */
+  function askedKind() {
+    try {
+      const st = window.VTApp?.getState?.()?.modeInstance?.state;
+      return st && st.phase === "contrast" && st.asks ? st.asks[st.step] || null : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Play `seq` of onset kinds, each held `holdMs` then silence until `everyMs`.
+   * `follow`: while the mode asks for examples, sing the one it asks for (a
+   * learner who reads the prompt), so an example the app could not measure
+   * does not shift every later one.
+   */
+  function onsetSeq(h, seq, { everyMs = 1900, holdMs = 1000, firstMs = 900, loop = true, follow = false } = {}) {
     h.vibrato(6);
     let i = 0;
+    let asked = 0;
     const tick = () => {
+      const want = follow ? askedKind() : null;
+      if (want) {
+        asked += 1;
+        KINDS[want](h);
+        h.at(holdMs, () => h.voiceOff(0.08));
+        h.at(everyMs, tick);
+        return;
+      }
+      if (follow && asked && i < 6) i = 6;
       if (i >= seq.length) {
         if (!loop) return;
         i = loop === true ? 0 : loop;
@@ -111,7 +136,7 @@
     onsetSeq(
       h,
       ["abrupt", "abrupt", "breathy", "breathy", "balanced", "balanced", "balanced", "balanced", "breathy", "balanced", "balanced", "abrupt", "balanced", "balanced"],
-      { loop: 6 }
+      { loop: 6, follow: true }
     )
   );
   // Nothing but easy onsets (the reps without the contrast)

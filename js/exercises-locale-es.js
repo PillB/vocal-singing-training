@@ -678,9 +678,9 @@
     "original": "Crescendo/decrescendo en una nota sin perder la afinación.",
     "research": "Tipo messa di voce: control dinámico con estabilidad de tono.",
     "steps": [
-      "Elige un tono cómodo (piano + sostener + autopista).",
+      "Elige un tono cómodo (piano + sostener + visualizador).",
       "Empieza suave → crece a medio → vuelve a suave en ~6–8 s.",
-      "Mantén el centro de afinación (los puntos alineados).",
+      "Mantén el centro de afinación (la línea de afinación bajo el regulador sigue plana).",
       "Haz 6 oleadas; descansa si hay presión.",
       "Opcional: lo mismo en dos tonos cercanos."
     ],
@@ -707,7 +707,7 @@
     "tips": [
       "Piensa “decir la vocal”, no “atacar la nota”.",
       "El fry puede ubicar el cierre; luego suelta al tono.",
-      "La autopista debe asentar rápido, no solo un pico salvaje al inicio."
+      "El dibujo del ataque debe asentarse rápido, sin un pico salvaje al inicio."
     ],
     "mistakes": [
       "Golpes glotales duros",

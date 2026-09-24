@@ -5423,7 +5423,7 @@
       trialBtn.classList.toggle("btn-sm", !prelaunch);
       if (canTrial) {
         const days = accounts
-          ? Number(acct.methods?.trialDays || 30)
+          ? Number(acct.methods?.trialDays || 7) // the worker's TRIAL_DAYS; 7 is the decided length
           : Number(cfg.freeTrialDays || 0);
         trialBtn.textContent = tt(prelaunch ? "pricing.startTrialFree" : "pricing.startTrial", {
           n: String(days)

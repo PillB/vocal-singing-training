@@ -144,6 +144,15 @@
         return this;
       },
       unmount() {
+        // A mode that owns something outside its panel (a playing take, a
+        // timer) lets go of it here, even when the tab is hidden
+        if (typeof this.onUnmount === "function") {
+          try {
+            this.onUnmount();
+          } catch (err) {
+            console.warn("[mode unmount]", err);
+          }
+        }
         this._destroyViz();
         if (this.hud && this.hud.parentNode) this.hud.parentNode.removeChild(this.hud);
         this.hud = null;
@@ -5792,8 +5801,12 @@
           s.d = before.length >= 15 && after.length >= 15 ? K.median(after) - K.median(before) : NaN;
         }
       });
-      // Target hold: ±45 cents at the target's own octave, on sounding frames
-      if (st.wantMidi != null) {
+      // Target hold: ±45 cents at the target's own octave, on sounding frames.
+      // A reference note from the speakers reaches the mic too: while one
+      // sounds, the hold neither grows nor drains.
+      const P = global.VTPiano;
+      const refSounding = !!(P && P.isSounding && !P.loopActive && P.isSounding(0.25));
+      if (st.wantMidi != null && !refSounding) {
         const c = midi != null ? (midi - st.wantMidi) * 100 : null;
         if (c != null && Math.abs(c) <= 45) {
           st.inBand += dt * 1000;
@@ -6258,6 +6271,10 @@
         }
         this._syncButtons?.();
       }
+    },
+    /** Leaving the exercise or starting again stops a take that is playing. */
+    onUnmount() {
+      this._stopPlay();
     },
     /**
      * While a take plays: after Stop no frames arrive, so this redraws the

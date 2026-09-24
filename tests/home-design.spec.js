@@ -306,6 +306,13 @@ test.describe("Phone: one-row header with Más", () => {
     await expect(more).toContainText("▾");
     await expect(more).toHaveAttribute("aria-controls", "header-utils");
     await expect(page.locator("#btn-pricing")).toBeHidden();
+    // The way into accounts is NOT in the menu. A sign-in folded behind "Más"
+    // is a sign-in nobody finds, which is what the site's owner reported, so it
+    // stays on the row at a full 44px and says what pressing it does.
+    const door = page.locator("#btn-account");
+    await expect(door).toBeVisible();
+    await expect(door).toHaveText("Entrar");
+    expect((await door.boundingBox()).height, "the sign-in door is a 44px target").toBeGreaterThanOrEqual(44);
     const hdr = await page.evaluate(() => ({
       h: document.querySelector(".app-header").getBoundingClientRect().height,
       v: parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--header-h"))
@@ -321,7 +328,7 @@ test.describe("Phone: one-row header with Más", () => {
     await page.keyboard.press("Enter");
     await expect(more).toHaveAttribute("aria-expanded", "true");
     await expect(menu).toBeVisible();
-    for (const id of ["#btn-pricing", "#btn-account", "#btn-lang", "#btn-tour"]) {
+    for (const id of ["#btn-pricing", "#btn-lang", "#btn-tour"]) {
       const b = page.locator(id);
       await expect(b).toBeVisible();
       expect((await b.boundingBox()).height, `${id} is a 44px target`).toBeGreaterThanOrEqual(44);
@@ -355,14 +362,12 @@ test.describe("Phone: one-row header with Más", () => {
     await expect(more).toContainText("More");
     await expect(more).toBeFocused();
 
-    // Account: the dialog opens, and closing it returns focus to a button on screen.
-    await more.click();
+    // Account: one tap, no menu, and closing returns focus to the door itself.
     await page.locator("#btn-account").click();
     await expect(page.locator("#account-modal")).toBeVisible();
-    await expect(page.locator("#header-utils")).toBeHidden();
     await page.keyboard.press("Escape");
     await expect(page.locator("#account-modal")).toBeHidden();
-    await expect(more).toBeFocused();
+    await expect(page.locator("#btn-account")).toBeFocused();
 
     // Pro.
     await more.click();

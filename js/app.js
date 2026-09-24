@@ -5168,6 +5168,64 @@
     }
   }
 
+  /**
+   * One reading of what this person holds, for the whole header.
+   *
+   * The chrome used to read `VTBilling` alone, which knows a licence is valid
+   * but not what bought it. So a 30-day account trial arrived wearing the paid
+   * colour, a gifted month was indistinguishable from a subscription, and the
+   * header could say Pro while the account panel on the same screen said
+   * "Plan gratis". The account layer knows the difference, so it answers first
+   * whenever somebody is signed in; `VTBilling` answers for the browser-local
+   * trial and for a licence held without an account. One object, so the two
+   * surfaces cannot disagree.
+   *
+   * @returns {{kind: "free"|"trialLocal"|"trialAccount"|"gift"|"paid"|"canceled",
+   *            days: number|null}} What to show, and days left where that is known.
+   */
+  function headerPlanState() {
+    const ent = window.VTBilling?.getEntitlement?.() || { pro: false, status: "free" };
+    const acct = window.VTAccount?.getState?.() || null;
+    const held = acct && acct.signedIn && acct.entitlement && acct.entitlement.pro
+      ? acct.entitlement
+      : null;
+    // Accepts either an ISO string (VTBilling) or unix seconds (the account
+    // layer), because the two halves of this answer are stored differently.
+    const daysLeft = (when) => {
+      const t = typeof when === "number" && Number.isFinite(when)
+        ? when * 1000
+        : Date.parse(when || "");
+      if (!Number.isFinite(t)) return null;
+      const d = Math.ceil((t - Date.now()) / 86400000);
+      return d >= 0 ? d : null;
+    };
+    if (held) {
+      // `periodEnd` is unix seconds here, which is what accountDate() reads.
+      const until = accountDate(held.periodEnd);
+      if (held.status === "canceled") {
+        return { kind: "canceled", days: daysLeft(held.periodEnd), until };
+      }
+      if (held.source === "trial") {
+        return { kind: "trialAccount", days: daysLeft(held.periodEnd), until };
+      }
+      if (held.source === "gift" || held.source === "comp") {
+        return { kind: "gift", days: daysLeft(held.periodEnd), until };
+      }
+      return { kind: "paid", days: null, until };
+    }
+    // Signed out, or signed in with nothing: the browser's own view. Its dates
+    // are ISO strings rather than unix seconds.
+    const isoUntil = (iso) => {
+      const t = Date.parse(iso || "");
+      return Number.isFinite(t) ? accountDate(t / 1000) : "";
+    };
+    if (ent.status === "trial") {
+      return { kind: "trialLocal", days: daysLeft(ent.expiresAt), until: isoUntil(ent.expiresAt) };
+    }
+    if (ent.pro) return { kind: "paid", days: null, until: isoUntil(ent.expiresAt) };
+    return { kind: "free", days: null, until: "" };
+  }
+
   function updateBillingChrome() {
     const B = window.VTBilling;
     if (!B) return;
@@ -5176,14 +5234,28 @@
     const prelaunch = isCheckoutPrelaunch();
     const pill = $("#billing-pill");
     const btn = $("#btn-pricing");
+    const plan = headerPlanState();
+    const held = plan.kind !== "free";
     if (pill) {
-      pill.classList.remove("is-trial", "is-free");
-      // Only show pill when trial/pro — avoids header button overlap with Free label
-      if (ent.status === "trial") {
+      pill.classList.remove("is-trial", "is-free", "is-gift", "is-ending");
+      // The pill is the status and nothing else. It shows only what is actually
+      // held, and it names which kind, because "Pro" in the paid green over a
+      // free trial is the single thing that misled the site's own owner.
+      if (plan.kind === "trialAccount" || plan.kind === "trialLocal") {
         pill.hidden = false;
-        pill.textContent = isEsLang() ? "Prueba" : "Trial";
+        pill.textContent = plan.days === null
+          ? tt("nav.planTrial")
+          : tt("nav.planTrialDays", { n: String(plan.days) });
         pill.classList.add("is-trial");
-      } else if (ent.pro) {
+      } else if (plan.kind === "gift") {
+        pill.hidden = false;
+        pill.textContent = tt("nav.planGift");
+        pill.classList.add("is-gift");
+      } else if (plan.kind === "canceled") {
+        pill.hidden = false;
+        pill.textContent = tt("nav.planEnding");
+        pill.classList.add("is-ending");
+      } else if (plan.kind === "paid") {
         pill.hidden = false;
         pill.textContent = "Pro";
       } else {
@@ -5192,7 +5264,18 @@
         pill.classList.add("is-free");
       }
     }
-    if (btn) btn.textContent = tt("nav.pro");
+    // Two elements saying "Pro" beside each other is what made the offer read
+    // as a badge already earned. Only one of them ever says it now: while
+    // nothing is held this button is the offer, and once something is held the
+    // pill carries the state and the button becomes the way to the plan — named
+    // for what it opens, which is also the route to cancelling.
+    if (btn) {
+      btn.textContent = held ? tt("nav.subscription") : tt("nav.pro");
+      btn.title = held ? tt("nav.subscriptionTitle") : tt("nav.proOffer");
+      btn.setAttribute("aria-label", btn.title);
+      btn.classList.toggle("btn-pro", !held);
+      btn.classList.toggle("btn-ghost", held);
+    }
     const exp = $("#btn-export-progress");
     if (exp) exp.hidden = !B.can("export_progress");
     const demo = $("#btn-demo-pro");
@@ -5285,10 +5368,26 @@
         healthNote.hidden = true;
       }
     }
+    // Somebody who has already spent their free month while checkout is still
+    // closed is the most interested person in the product, and the dialog used
+    // to show them nothing at all: no plan they could buy, no explanation and
+    // no way on. Say where they stand instead.
+    const spent = $("#pricing-spent");
+    if (spent) {
+      const acct = window.VTAccount?.getState?.() || null;
+      const accountsOffered = accountSignIn().offered;
+      const usedTrial = accountsOffered
+        ? !!(acct && acct.signedIn && acct.account && acct.account.trialUsed)
+        : !!B.trialStartedAt?.();
+      const show = prelaunch && !ent.pro && usedTrial;
+      spent.hidden = !show;
+      spent.textContent = show ? tt("pricing.trialSpent") : "";
+    }
     const launch = $("#pricing-launch");
     if (launch) {
       launch.hidden = !!(
         (!healthNote || healthNote.hidden) &&
+        (!spent || spent.hidden) &&
         (!trialBtn || trialBtn.hidden || trialBtn.parentElement !== launch)
       );
     }
@@ -5763,11 +5862,31 @@
     const status = $("#pricing-status");
     if (status) {
       const ent = B.getEntitlement();
-      if (ent.status === "trial") {
-        const left = B.trialDaysLeft?.() ?? 0;
+      const plan = headerPlanState();
+      // This line used to read "Pro activo · pro_monthly": an internal plan id
+      // shown to a reader, and a 30-day free trial described as a monthly
+      // subscription. It now says which kind of access this is, in words, and it
+      // reads the same source as the header so the two cannot disagree.
+      if (plan.kind === "trialAccount") {
+        status.textContent = plan.days === null
+          ? tt("pricing.statusTrial")
+          : `${tt("pricing.statusTrial")} · ${tt("pricing.trialLeft", { n: String(plan.days) })}`;
+      } else if (plan.kind === "trialLocal") {
+        const left = plan.days === null ? (B.trialDaysLeft?.() ?? 0) : plan.days;
         status.textContent = `${tt("pricing.trial")} · ${tt("pricing.trialLeft", { n: String(left) })}`;
-      } else if (ent.pro) {
-        status.textContent = `${tt("pricing.proActive")} · ${ent.plan}${ent.source === "demo" ? " (demo)" : ""}`;
+      } else if (plan.kind === "gift") {
+        status.textContent = plan.until
+          ? tt("pricing.statusGiftUntil", { date: plan.until })
+          : tt("pricing.statusGift");
+      } else if (plan.kind === "canceled") {
+        status.textContent = plan.until
+          ? tt("pricing.statusCanceled", { date: plan.until })
+          : tt("pricing.statusCanceledNoDate");
+      } else if (plan.kind === "paid") {
+        const demo = ent.source === "demo" ? ` (${tt("pricing.statusDemo")})` : "";
+        status.textContent = (plan.until
+          ? tt("pricing.statusPaidUntil", { date: plan.until })
+          : tt("pricing.proActive")) + demo;
       } else if (ent.status === "pending") {
         status.textContent = tt("pricing.verifying");
       } else if (ent.status === "unverified") {
@@ -5977,6 +6096,19 @@
    * 20th" and "this renews on the 20th" are different facts to a reader.
    */
   function accountPlanLine(entitlement) {
+    // A gift that was revoked, or a grant that ran out, reports pro:false — and
+    // the worker's resolution keeps only the access that is still live, so from
+    // here "your month was taken back" and "you never had one" are the same
+    // answer. These two branches are here for when the worker does say which:
+    // resolveEntitlement() in workers/entitlements/src/grants.js would have to
+    // report the most recent ended grant. Until it does, the line below is the
+    // honest one, and the PR says so rather than guessing from local state.
+    if (entitlement && !entitlement.pro && entitlement.status === "revoked") {
+      return tt("auth.planRevoked");
+    }
+    if (entitlement && !entitlement.pro && entitlement.status === "expired") {
+      return tt("auth.planExpired");
+    }
     if (!entitlement || !entitlement.pro) return tt("auth.planFree");
     const date = accountDate(entitlement.periodEnd);
     if (entitlement.status === "canceled" && date) return tt("auth.planCanceled", { date });
@@ -6026,13 +6158,19 @@
     const canEmail = answered && !!m.email;
     // Unknown counts as usable: the script is only attempted when the panel
     // opens, and until then the worker's word is the best answer there is.
-    const canGoogle = answered && !!m.google && account.googleReady !== false;
+    // A client id is part of the offer, not a detail of it: Google's script
+    // needs the id to draw its button, so google:true without one leaves a
+    // panel with a title, a promise and nothing to press. That is a deploy
+    // with no method, and it says so.
+    const hasGoogle = answered && !!m.google && !!m.googleClientId;
+    const canGoogle = hasGoogle && account.googleReady !== false;
     return {
       configured,
       checking: configured && !m,
       unreachable: configured && !!m && m.ok === false,
-      blocked: answered && !!m.google && account.googleReady === false && !canEmail,
+      blocked: hasGoogle && account.googleReady === false && !canEmail,
       canEmail,
+      canGoogle,
       offered: configured && (canEmail || canGoogle)
     };
   }
@@ -6057,7 +6195,11 @@
       // Google draws its button in its own iframe, which is no use as a target.
       return offer.canEmail ? "#account-email" : "#account-close";
     }
-    return "#login-username";
+    // Nothing public to sign in with: the retry control is the real one, and
+    // focus must not land in the staff form, which is what used to happen.
+    const retry = $("#account-retry-row");
+    if (retry && !retry.hidden) return "#account-retry";
+    return "#account-close";
   }
 
   function refreshAccountUI() {
@@ -6067,19 +6209,31 @@
     const signedIn = !!(account && account.signedIn) || !!session;
     const out = $("#account-logged-out");
     const inn = $("#account-logged-in");
+    // "Entra para guardar tu progreso" stayed on screen after signing in, so the
+    // panel asked for something already done.
+    const sub = $("#account-sub");
+    if (sub) sub.textContent = signedIn ? tt("auth.subSignedIn") : tt("auth.sub");
     const admin = $("#admin-panel");
     const who = $("#account-who");
     const btnAcc = $("#btn-account");
 
     if (btnAcc) {
+      // Signed out, this is the only door into accounts, so it is named for the
+      // act and not for the room: "Cuenta" is a destination nobody who has no
+      // account has a reason to press. Signed in it becomes who you are, which
+      // is what tells you at a glance that you are.
       if (account && account.signedIn && account.account) {
         btnAcc.textContent = (account.account.displayName || account.account.email || "").split("@")[0]
           || tt("nav.account");
+        btnAcc.title = tt("nav.accountTitle");
       } else if (session) {
         btnAcc.textContent = session.username.split(".")[0] || tt("nav.account");
+        btnAcc.title = tt("nav.accountTitle");
       } else {
-        btnAcc.textContent = tt("nav.account");
+        btnAcc.textContent = tt("nav.signIn");
+        btnAcc.title = tt("nav.signInTitle");
       }
+      btnAcc.setAttribute("aria-label", btnAcc.title);
     }
     if (!out || !inn) return;
 
@@ -6107,19 +6261,30 @@
     }
     const emailForm = $("#account-email-form");
     if (emailForm) emailForm.hidden = !offer.canEmail;
-    // Internal QA access hides behind a disclosure only once there is a real
-    // sign-in to lead with. While there is none it is the only way in, so
-    // collapsing it would leave the panel with nothing to do. While the answer
-    // is still coming it stays shut, so focus is never put inside a disclosure
-    // that is about to close again. Both directions, because a worker can be
-    // unreachable on one open and answer on the next, and the staff form must
-    // not sit expanded beside a public sign-in for the rest of the page's life.
+    // The divider only separates two things. On a Google-only deploy — which is
+    // every deploy today — it used to sit under Google's button with nothing
+    // beneath it, reading as "or ... " and then stopping.
+    const orEl = $("#account-or");
+    if (orEl) orEl.hidden = !(offer.canEmail && offer.canGoogle);
+    // Asking again is the honest control for every state that cannot offer a
+    // sign-in yet: the worker was unreachable, or Google's script was blocked
+    // and the visitor has just turned their blocker off. With no worker URL at
+    // all there is nothing to ask, so it stays hidden there.
+    const retryRow = $("#account-retry-row");
+    if (retryRow) {
+      retryRow.hidden = !offer.configured || hasRealSignIn || offer.checking;
+    }
+    // The internal staff login is never opened for anybody. It used to expand
+    // itself whenever no public sign-in could be offered, on the reasoning that
+    // it was then the only way in — but it is not a way in for the person
+    // looking at it. Three of the five signed-out states put an ordinary
+    // visitor in front of a Usuario/Contraseña form, with focus inside it, as
+    // the single thing on the panel they could touch. It stays shut, and those
+    // states get the retry control above instead.
     const internal = document.querySelector(".account-internal");
-    const wantOpen = !hasRealSignIn && !offer.checking;
-    if (internal && internal.open !== wantOpen) {
-      // Never fight somebody who opened it themselves.
-      if (wantOpen || internal.dataset.autoOpen === "1") internal.open = wantOpen;
-      internal.dataset.autoOpen = wantOpen ? "1" : "";
+    if (internal && internal.dataset.autoOpen === "1") {
+      internal.open = false;
+      internal.dataset.autoOpen = "";
     }
 
     if (!signedIn) {
@@ -6196,6 +6361,37 @@
     }
   }
 
+  /**
+   * Draw Google's sign-in button into the panel, if this deploy has one to draw.
+   *
+   * Called on every open, and again after signing out: the button lives in
+   * Google's own iframe and signing out tears it down, so a panel that was only
+   * ever mounted on open was left with no way back in — the person had to close
+   * the modal and reopen it. Drawing happens here and not on page load because
+   * loading Google's script is an off-origin request, and a visitor who only
+   * practises must never make one.
+   */
+  function mountGoogleButton() {
+    const slot = $("#account-google");
+    if (!slot) return;
+    if (!window.VTAccount?.isConfigured?.() || window.VTAccount.getState().signedIn) return;
+    window.VTAccount.renderGoogleButton(slot, {
+      onResult: (res) => {
+        if (res && res.ok) {
+          toast(tt("auth.toast.in"));
+          refreshAccountUI();
+          updateBillingChrome();
+        } else if (res) {
+          accountErrorFor(res.reason);
+        }
+      }
+    }).then(() => {
+      // Whether the divider belongs on screen is a question about which methods
+      // exist, not about whether Google's button drew, so one place decides it.
+      refreshAccountUI();
+    });
+  }
+
   function openAccount() {
     const modal = $("#account-modal");
     if (!modal) return;
@@ -6211,25 +6407,7 @@
     // it offers; nothing is asked on page load, so a visitor who only practises
     // never touches it. The answer redraws the panel through onChange.
     window.VTAccount?.ensureMethods?.();
-    // Google's button can only be drawn once its script is in; do it on open so
-    // a visitor who never opens this panel never loads it at all.
-    const googleSlot = $("#account-google");
-    if (googleSlot && window.VTAccount?.isConfigured?.() && !window.VTAccount.getState().signedIn) {
-      window.VTAccount.renderGoogleButton(googleSlot, {
-        onResult: (res) => {
-          if (res && res.ok) {
-            toast(tt("auth.toast.in"));
-            refreshAccountUI();
-            updateBillingChrome();
-          } else if (res) {
-            accountErrorFor(res.reason);
-          }
-        }
-      }).then((res) => {
-        const or = $("#account-or");
-        if (or) or.hidden = !(res && res.ok);
-      });
-    }
+    mountGoogleButton();
     modal.hidden = false;
     document.body.classList.add("account-open");
     const signedIn = !!window.VTAuth?.isLoggedIn?.() || !!window.VTAccount?.getState?.().signedIn;
@@ -6263,6 +6441,26 @@
       toast(tt("auth.toast.out"));
       refreshAccountUI();
       updateBillingChrome();
+      // Signing out destroys Google's iframe, so without this the panel the
+      // person is still looking at has no way back in.
+      mountGoogleButton();
+    });
+    $("#account-retry")?.addEventListener("click", async (e) => {
+      const btn = e.currentTarget;
+      const label = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = tt("auth.retryChecking");
+      accountError(null);
+      try {
+        await window.VTAccount?.refreshMethods?.();
+        // The worker may now offer Google, and its script may now load, so the
+        // button has to be given another chance to draw.
+        mountGoogleButton();
+      } finally {
+        btn.disabled = false;
+        btn.textContent = label;
+        refreshAccountUI();
+      }
     });
     $("#btn-account-pricing")?.addEventListener("click", () => {
       closeAccount();

@@ -170,19 +170,32 @@ test.describe("Modal focus trap", () => {
     expect(afterOpen).toBeGreaterThanOrEqual(0);
   });
 
-  test("with no accounts wired up the panel leads with the internal form", async ({ page }) => {
-    // No worker URL at all: the disclosure is the only way in, so it is opened
-    // and focus starts in it.
+  test("with no accounts wired up the panel does not lead with the staff form", async ({ page }) => {
+    // No worker URL at all. The disclosure used to open itself on the reasoning
+    // that it was then the only way in, which put an ordinary visitor in front
+    // of a Usuario/Contraseña form with focus inside it. There is nothing to
+    // retry either, because no worker was ever asked, so the panel says its one
+    // sentence and Close is the honest first stop.
     await withSignIn(page, null);
     await boot(page);
     await page.locator("#btn-account").focus();
     await page.keyboard.press("Enter");
     await expect(page.locator("#account-modal")).toBeVisible();
-    expect(await activeId(page)).toBe("login-username");
+    expect(await activeId(page)).toBe("account-close");
+    expect(await page.locator(".account-internal").evaluate((d) => d.open)).toBe(false);
 
+    // The trap still holds, and it must not walk into the collapsed disclosure.
     const seen = await tabAround(page, "#account-modal", 12);
     expect(seen.every((s) => s.inside)).toBe(true);
-    expect(seen.map((s) => s.id)).toEqual(expect.arrayContaining(["login-password"]));
+    expect(seen.map((s) => s.id)).not.toContain("login-username");
+    expect(seen.map((s) => s.id)).not.toContain("login-password");
+
+    // A staff member opens it, and then the form is in the trap like anything
+    // else that is on screen.
+    await page.click(".account-internal > summary");
+    const opened = await tabAround(page, "#account-modal", 12);
+    expect(opened.every((s) => s.inside)).toBe(true);
+    expect(opened.map((s) => s.id)).toEqual(expect.arrayContaining(["login-username"]));
 
     await page.keyboard.press("Escape");
     await expect(page.locator("#account-modal")).toBeHidden();

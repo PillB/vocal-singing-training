@@ -6297,3 +6297,64 @@ body.loop-on .start-steps {
 .loop-done-line span {
   display: block;
 }
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Header: the plan you hold, and the offer you do not
+   ──────────────────────────────────────────────────────────────────────────
+   Appended as an override block rather than edited in place, the way the phone
+   layout pass sits after the flow overhaul, so the two branches working on this
+   file merge without a conflict.
+
+   The site's own owner read the old header as "Pro, not active" and found that
+   confusing, and he was right for a reason the colour name hides: a 25%-alpha
+   gradient over the header bar (rgba(15,20,25,.82) composited on #0c1118 gives
+   #0e1319) is invisible, so the chip never read as a chip. What shouted was
+   gold text at weight 800 — a label, not an affordance. An offer has to read as
+   something you press. */
+.btn-pro {
+  background: rgba(240, 184, 80, 0.12);
+  border-color: rgba(240, 184, 80, 0.7);
+  color: #ffdb95;
+  font-weight: 700;
+}
+.btn-pro:hover,
+.btn-pro:focus-visible {
+  background: rgba(240, 184, 80, 0.22);
+  border-color: #f0b84f;
+}
+
+/* The status pill. Its old 0.72rem rendered at 11.52px everywhere except under
+   640px, where a media query raised it — so the floor the project tests on
+   phones was missed on every desktop. It carries meaning, so it holds the
+   floor at every width. */
+.billing-pill {
+  font-size: 0.75rem;
+}
+
+/* A gifted month and a subscription that has been cancelled are not the same
+   thing as paying, and the header used to draw all three in the paid green. */
+.billing-pill.is-gift {
+  background: rgba(240, 184, 80, 0.16);
+  border-color: rgba(240, 184, 80, 0.45);
+  color: #ffdb95;
+}
+.billing-pill.is-ending {
+  background: rgba(224, 108, 117, 0.14);
+  border-color: rgba(224, 108, 117, 0.45);
+  color: #f3b0b5;
+}
+
+/* The door into accounts sits outside the phone menu now, so it no longer
+   inherits .header-utils .btn-util's muted colour and 0.92 opacity. That is the
+   right direction — it is the one control a signed-out visitor needs to find —
+   but it should be deliberate, and it must not compete with the practice button,
+   which is the actual product. A plain visible control, no fill. */
+.header-door {
+  color: var(--text);
+  font-weight: 600;
+  border-color: var(--border-strong, var(--border));
+}
+.header-door:hover,
+.header-door:focus-visible {
+  border-color: var(--accent, #6eb4e8);
+}

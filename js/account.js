@@ -245,6 +245,32 @@
    * a real answer is cached for the page's life, a failed probe is not.
    * @returns {Promise<object|null>} The answer, or null when unconfigured.
    */
+  /**
+   * Ask the worker again, from scratch.
+   *
+   * `ensureMethods()` keeps a good answer and re-asks a bad one, which is right
+   * for reopening the panel. It is not enough for a person pressing "try
+   * again": the reason they are pressing is usually that they have just turned
+   * off the extension that blocked Google's script, and the `false` verdict on
+   * that script is cached separately from the worker's answer. This clears
+   * both, so a retry can actually succeed.
+   * @returns {Promise<object|null>} The methods, or null with no worker.
+   */
+  function refreshMethods() {
+    methods = null;
+    methodsPending = null;
+    googleReady = null;
+    gisPromise = null;
+    if (!isConfigured()) {
+      emit();
+      return Promise.resolve(null);
+    }
+    return getMethods().then((m) => {
+      emit();
+      return m;
+    });
+  }
+
   function ensureMethods() {
     if (!isConfigured()) return Promise.resolve(null);
     if (methods && methods.ok) return Promise.resolve(methods);
@@ -545,6 +571,7 @@
     onChange,
     startEmailSignIn,
     verifyEmailCode,
+    refreshMethods,
     renderGoogleButton,
     signInWithGoogle,
     signOut,

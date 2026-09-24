@@ -1,0 +1,420 @@
+/**
+ * Every state the account and Pro surfaces can be in, walked one at a time.
+ *
+ * The site's owner asked for exactly this: "consider all permutations of ui
+ * states for the page and how each would be seen by the user by toggling
+ * options on and off and visibilities". An audit of the code and of a real
+ * browser found 32 of 34 reachable states saying something wrong, misleading or
+ * unreachable — two elements both claiming "Pro", a free month wearing the paid
+ * colour, a staff login put in front of visitors as their only option, a panel
+ * with nothing on it at all.
+ *
+ * So the states are the test. Each case fixes the flags that produce one state
+ * and asserts what a person would read, in the header and in the panel, rather
+ * than asserting that a function was called. The worker is stubbed at the
+ * network boundary, and the licence tokens are really signed, so the check that
+ * decides Pro is the real one.
+ */
+const { test, expect } = require("@playwright/test");
+const { mintLicense, patchBillingConfig } = require("./helpers/billing");
+
+const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";
+const API = "https://entitlements.test";
+const DAY = 86400;
+const CLIENT_ID = "test.apps.googleusercontent.com";
+
+/** Google-only, which is what the site actually ships. */
+const GOOGLE_ONLY = { email: false, google: true, googleClientId: CLIENT_ID, trialDays: 30 };
+
+/**
+ * Point the site at a stubbed worker and answer as one given account.
+ *
+ * @param {import('@playwright/test').Page} page Page.
+ * @param {object} opts Stub shape: `methods`, `account`, `entitlement`, plus
+ *   `signedIn` to seed a session, `offline` to refuse every call and `silent` to
+ *   accept the connection and never answer.
+ * @param {{publicKeyJwk: object, sign: function}|null} license Signing material.
+ */
+async function install(page, opts, license) {
+  const o = opts || {};
+  await patchBillingConfig(page, {
+    verification: {
+      apiBaseUrl: o.apiBaseUrl === undefined ? API : o.apiBaseUrl,
+      ...(license ? { publicKeyJwk: license.publicKeyJwk } : {}),
+      required: true,
+      revalidateHours: 24 * 365
+    }
+  });
+  if (o.blockGoogle) await page.route("https://accounts.google.com/**", (r) => r.abort("failed"));
+  if (o.apiBaseUrl === "") return;
+
+  await page.route(`${API}/**`, async (route) => {
+    if (o.offline) return route.abort("failed");
+    if (o.silent) return; // accepted and never answered
+    const url = new URL(route.request().url());
+    const json = (status, data) =>
+      route.fulfill({
+        status,
+        contentType: "application/json",
+        headers: { "access-control-allow-origin": "*" },
+        body: JSON.stringify(data)
+      });
+    if (route.request().method() === "OPTIONS") {
+      return route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } });
+    }
+    if (url.pathname === "/v1/auth/methods") {
+      return json(200, { ok: true, ...(o.methods || GOOGLE_ONLY) });
+    }
+    if (url.pathname === "/v1/me") {
+      if (!o.account) return json(401, { ok: false, reason: "no_session" });
+      const ent = o.entitlement || { pro: false, plan: null, status: "free", source: null, periodEnd: null };
+      let token = null;
+      if (ent.pro && license) {
+        const now = Math.floor(Date.now() / 1000);
+        token = await license.sign({
+          iss: "vocal-studio-entitlements",
+          sub: "grant_state_0001",
+          aud: BASE,
+          plan: ent.plan,
+          status: ent.status,
+          provider: ent.provider || "grant",
+          iat: now,
+          exp: ent.periodEnd,
+          periodEnd: ent.periodEnd,
+          accountId: o.account.id,
+          source: ent.source
+        });
+      }
+      return json(200, {
+        ok: true,
+        account: o.account,
+        entitlement: ent,
+        grants: [],
+        paid: [],
+        licenseId: ent.pro ? "grant_state_0001" : null,
+        token
+      });
+    }
+    return json(404, { ok: false, reason: "not_found" });
+  });
+
+  if (o.signedIn) {
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        "vt_account_session_v1",
+        JSON.stringify({ token: "sess-state-1", expiresAt: 4102444800 })
+      );
+    });
+  }
+}
+
+/** Load home and let the account layer settle. */
+async function boot(page) {
+  await page.addInitScript(() => sessionStorage.setItem("vt_e2e", "1"));
+  await page.goto(`${BASE}/index.html`, { waitUntil: "domcontentloaded" });
+  await page.waitForFunction(() => !!window.VTBilling && !!window.VTAccount);
+}
+
+/** What the header says, reading only what is actually on screen. */
+async function header(page) {
+  return page.evaluate(() => {
+    const shown = (sel) => {
+      const el = document.querySelector(sel);
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      if (!r.width || !r.height) return null;
+      return (el.textContent || "").trim();
+    };
+    const pill = document.querySelector("#billing-pill");
+    return {
+      door: shown("#btn-account"),
+      pro: shown("#btn-pricing"),
+      pill: pill && !pill.hidden ? (pill.textContent || "").trim() : null,
+      pillKind: pill ? pill.className.replace("billing-pill", "").trim() : null
+    };
+  });
+}
+
+/** Open the account panel, from the phone menu if that is where the door is. */
+async function openPanel(page) {
+  if (await page.locator("#btn-more").isVisible()) {
+    if (!(await page.locator("#btn-account").isVisible())) await page.click("#btn-more");
+  }
+  await page.click("#btn-account");
+  await expect(page.locator("#account-modal")).toBeVisible();
+}
+
+test.describe("Signed out: the door says what pressing it does", () => {
+  test("with a worker that offers Google, the header invites a sign-in and offers Pro", async ({ page }) => {
+    const license = await mintLicense({ origin: BASE });
+    await install(page, {}, license);
+    await boot(page);
+    const h = await header(page);
+    // "Cuenta" is a destination; nobody without an account has a reason to press
+    // a destination. This is the owner's first complaint, in one assertion.
+    expect(h.door).toBe("Entrar");
+    // Exactly one element mentions Pro, and it is the offer.
+    expect(h.pro).toBe("Pro");
+    expect(h.pill).toBeNull();
+  });
+
+  test("the offer is styled as an offer, and its text clears contrast on the bar", async ({ page }) => {
+    const license = await mintLicense({ origin: BASE });
+    await install(page, {}, license);
+    await boot(page);
+    const seen = await page.evaluate(() => {
+      const el = document.querySelector("#btn-pricing");
+      const cs = getComputedStyle(el);
+      const lum = (c) => {
+        const [r, g, b] = c.match(/[\d.]+/g).slice(0, 3).map(Number).map((v) => {
+          const s = v / 255;
+          return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+        });
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      };
+      const ratio = (a, b) => {
+        const l1 = Math.max(lum(a), lum(b));
+        const l2 = Math.min(lum(a), lum(b));
+        return (l1 + 0.05) / (l2 + 0.05);
+      };
+      return {
+        gradient: cs.backgroundImage,
+        contrast: ratio(cs.color, "rgb(14, 19, 25)"),
+        label: (el.textContent || "").trim()
+      };
+    });
+    // The old chip was a gold-to-purple gradient at 25% alpha over a near-black
+    // bar: invisible as a fill, so what shouted was gold 800-weight text with no
+    // button around it. It reads as a badge you hold, which is complaint two.
+    expect(seen.gradient).toBe("none");
+    expect(seen.contrast).toBeGreaterThanOrEqual(4.5);
+    expect(seen.label).toBe("Pro");
+  });
+
+  test("a worker that cannot be reached offers a retry, not a staff login", async ({ page }) => {
+    await install(page, { offline: true }, null);
+    await boot(page);
+    await openPanel(page);
+    await expect(page.locator("#account-offline")).toBeVisible();
+    await expect(page.locator("#account-retry")).toBeVisible();
+    // The staff form used to expand itself here and take focus.
+    expect(await page.locator(".account-internal").evaluate((d) => d.open)).toBe(false);
+    await expect(page.locator("#login-username")).toBeHidden();
+  });
+
+  test("a worker that says Google but carries no client id is no method at all", async ({ page }) => {
+    // Google's script needs the id to draw its button. Answering google:true
+    // without one left a modal holding a title, a promise and a close button.
+    await install(page, { methods: { email: false, google: true, googleClientId: null, trialDays: 30 } }, null);
+    await boot(page);
+    await openPanel(page);
+    await expect(page.locator("#account-signin")).toBeHidden();
+    await expect(page.locator("#account-unconfigured")).toBeVisible();
+    await expect(page.locator("#account-retry")).toBeVisible();
+    const controls = await page.locator("#account-modal button:visible").count();
+    expect(controls, "the panel always has something to press").toBeGreaterThanOrEqual(2);
+  });
+
+  test("on a Google-only deploy the divider has nothing to divide, so it is gone", async ({ page }) => {
+    const license = await mintLicense({ origin: BASE });
+    await install(page, {}, license);
+    await boot(page);
+    await openPanel(page);
+    await expect(page.locator("#account-or")).toBeHidden();
+  });
+
+  test("with both methods the divider comes back", async ({ page }) => {
+    const license = await mintLicense({ origin: BASE });
+    await install(page, { methods: { email: true, google: true, googleClientId: CLIENT_ID, trialDays: 30 } }, license);
+    await boot(page);
+    await openPanel(page);
+    await expect(page.locator("#account-email-form")).toBeVisible();
+    await expect(page.locator("#account-or")).toBeVisible();
+  });
+});
+
+test.describe("Signed in: the header names which kind of access this is", () => {
+  const account = (over) => ({
+    id: "acct_state",
+    email: "pablo@example.test",
+    displayName: null,
+    locale: null,
+    role: "member",
+    trialUsed: false,
+    createdAt: 1,
+    ...(over || {})
+  });
+  const ends = (days) => Math.floor(Date.now() / 1000) + days * DAY;
+
+  test("the 30-day free month is a trial, not the paid green", async ({ page }) => {
+    // This is the state the owner was in when he wrote. The header said "PRO" in
+    // the colour a subscription wears, beside a second element also saying Pro.
+    const license = await mintLicense({ origin: BASE });
+    await install(page, {
+      signedIn: true,
+      account: account({ trialUsed: true }),
+      entitlement: { pro: true, plan: "pro_monthly", status: "active", source: "trial", periodEnd: ends(27) }
+    }, license);
+    await boot(page);
+    await expect(page.locator("#billing-pill")).toBeVisible();
+    const h = await header(page);
+    expect(h.pill).toMatch(/^Prueba · \d+ d$/);
+    expect(h.pillKind).toContain("is-trial");
+    // The other element stops saying Pro and becomes the way to the plan.
+    expect(h.pro).toBe("Suscripción");
+    expect(h.door).toBe("pablo");
+  });
+
+  test("and the Pro dialog calls it a free month, not pro_monthly", async ({ page }) => {
+    const license = await mintLicense({ origin: BASE });
+    await install(page, {
+      signedIn: true,
+      account: account({ trialUsed: true }),
+      entitlement: { pro: true, plan: "pro_monthly", status: "active", source: "trial", periodEnd: ends(27) }
+    }, license);
+    await boot(page);
+    await page.click("#btn-pricing");
+    await expect(page.locator("#pricing-modal")).toBeVisible();
+    const status = await page.locator("#pricing-status").textContent();
+    // It used to print an internal plan id at a reader, and call a free trial a
+    // monthly subscription in the same breath.
+    expect(status).not.toContain("pro_monthly");
+    expect(status).toContain("Mes de prueba");
+  });
+
+  test("a gifted month says gifted, and when it ends", async ({ page }) => {
+    const license = await mintLicense({ origin: BASE });
+    await install(page, {
+      signedIn: true,
+      account: account(),
+      entitlement: { pro: true, plan: "pro_monthly", status: "active", source: "gift", periodEnd: ends(12) }
+    }, license);
+    await boot(page);
+    await expect(page.locator("#billing-pill")).toBeVisible();
+    const h = await header(page);
+    expect(h.pill).toBe("Regalo");
+    expect(h.pillKind).toContain("is-gift");
+    await page.click("#btn-pricing");
+    expect(await page.locator("#pricing-status").textContent()).toMatch(/regalo/i);
+  });
+
+  test("a subscription that will not renew says so instead of 'active'", async ({ page }) => {
+    const license = await mintLicense({ origin: BASE });
+    await install(page, {
+      signedIn: true,
+      account: account(),
+      entitlement: { pro: true, plan: "pro_monthly", status: "canceled", source: "paid", periodEnd: ends(9) }
+    }, license);
+    await boot(page);
+    const h = await header(page);
+    expect(h.pill).toBe("Pro · termina");
+    expect(h.pillKind).toContain("is-ending");
+    await page.click("#btn-pricing");
+    expect(await page.locator("#pricing-status").textContent()).toMatch(/no se renueva/i);
+  });
+
+  test("a paid subscriber gets the paid green and one Pro element", async ({ page }) => {
+    const license = await mintLicense({ origin: BASE });
+    await install(page, {
+      signedIn: true,
+      account: account(),
+      entitlement: { pro: true, plan: "pro_yearly", status: "active", source: "paid", periodEnd: ends(300) }
+    }, license);
+    await boot(page);
+    const h = await header(page);
+    expect(h.pill).toBe("Pro");
+    expect(h.pillKind).not.toContain("is-trial");
+    expect(h.pro).toBe("Suscripción");
+    // The whole point: never two elements claiming the same thing.
+    expect([h.pill, h.pro].filter((t) => t === "Pro")).toHaveLength(1);
+  });
+
+  test("someone who has spent their free month is told where they stand", async ({ page }) => {
+    // The dead end: the most interested person in the product, with checkout
+    // closed, used to be shown nothing at all.
+    const license = await mintLicense({ origin: BASE });
+    await install(page, {
+      signedIn: true,
+      account: account({ trialUsed: true }),
+      entitlement: { pro: false, plan: null, status: "free", source: null, periodEnd: null }
+    }, license);
+    await boot(page);
+    await page.click("#btn-pricing");
+    await expect(page.locator("#pricing-modal")).toBeVisible();
+    await expect(page.locator("#pricing-spent")).toBeVisible();
+    await expect(page.locator("#btn-start-trial")).toBeHidden();
+    expect(await page.locator("#pricing-spent").textContent()).toMatch(/gratis/i);
+  });
+
+  test("the panel stops asking a signed-in person to sign in", async ({ page }) => {
+    const license = await mintLicense({ origin: BASE });
+    await install(page, {
+      signedIn: true,
+      account: account(),
+      entitlement: { pro: false, plan: null, status: "free", source: null, periodEnd: null }
+    }, license);
+    await boot(page);
+    await openPanel(page);
+    await expect(page.locator("#account-logged-in")).toBeVisible();
+    expect(await page.locator("#account-sub").textContent()).not.toMatch(/Entra para/i);
+  });
+});
+
+test.describe("The same states in English", () => {
+  test("the door and the offer both translate", async ({ page }) => {
+    const license = await mintLicense({ origin: BASE });
+    await install(page, {}, license);
+    await boot(page);
+    await page.click("#btn-lang");
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
+    const h = await header(page);
+    expect(h.door).toBe("Sign in");
+    expect(h.pro).toBe("Pro");
+  });
+
+  test("a trial pill translates and keeps its days", async ({ page }) => {
+    const license = await mintLicense({ origin: BASE });
+    await install(page, {
+      signedIn: true,
+      account: { id: "a", email: "x@example.test", displayName: null, locale: null, role: "member", trialUsed: true, createdAt: 1 },
+      entitlement: { pro: true, plan: "pro_monthly", status: "active", source: "trial", periodEnd: Math.floor(Date.now() / 1000) + 5 * DAY }
+    }, license);
+    await boot(page);
+    await expect(page.locator("#billing-pill")).toBeVisible();
+    await page.click("#btn-lang");
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
+    expect((await header(page)).pill).toMatch(/^Trial · \d+ d$/);
+  });
+});
+
+test.describe("Phone: the door is on the row, not in the menu", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test("signed out, one tap reaches the panel", async ({ page }) => {
+    const license = await mintLicense({ origin: BASE });
+    await install(page, {}, license);
+    await boot(page);
+    await expect(page.locator("#btn-more")).toBeVisible();
+    const door = page.locator("#btn-account");
+    await expect(door).toBeVisible();
+    expect((await door.boundingBox()).height).toBeGreaterThanOrEqual(44);
+    await door.click();
+    await expect(page.locator("#account-modal")).toBeVisible();
+  });
+
+  test("on a trial the pill is readable without opening anything", async ({ page }) => {
+    const license = await mintLicense({ origin: BASE });
+    await install(page, {
+      signedIn: true,
+      account: { id: "a", email: "x@example.test", displayName: null, locale: null, role: "member", trialUsed: true, createdAt: 1 },
+      entitlement: { pro: true, plan: "pro_monthly", status: "active", source: "trial", periodEnd: Math.floor(Date.now() / 1000) + 20 * DAY }
+    }, license);
+    await boot(page);
+    const pill = page.locator("#billing-pill");
+    await expect(pill).toBeVisible();
+    // It carries meaning, so it holds the 12px floor — its old 0.72rem rendered
+    // at 11.52px everywhere the phone media query did not reach.
+    const size = await pill.evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+    expect(size).toBeGreaterThanOrEqual(12);
+  });
+});

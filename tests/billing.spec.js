@@ -329,6 +329,13 @@ test.describe("Billing & subscriptions", () => {
   });
 
   test("free trial is opt-in", async ({ page }) => {
+    // This is the browser-local trial, so state that premise. Left to the
+    // shipped js/billing-config.js the test reads the real worker's address and
+    // its outcome becomes a function of whether the machine running it has
+    // egress: reach the worker, get "Google sign-in is offered", and the press
+    // routes to the account panel instead — four assertions below flip, for a
+    // reason that has nothing to do with billing.
+    await patchBillingConfig(page, { verification: { apiBaseUrl: "" } });
     await boot(page);
     const before = await page.evaluate(() => VTBilling.getEntitlement());
     expect(before.pro).toBe(false);

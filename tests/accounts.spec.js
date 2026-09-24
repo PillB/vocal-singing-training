@@ -314,6 +314,50 @@ test.describe("Accounts, gifted months and saved progress", () => {
     expect(after.ent.status).toBe("trial");
   });
 
+  test("a slow worker: the trial button names the length the press will give", async ({ page }) => {
+    // The press and the label have to read the same flag. Before, the label came
+    // from the worker's default trial length while the press fell back to the
+    // browser-local trial, so a visitor who clicked before the answer landed was
+    // promised 30 days and given 7.
+    const license = await mintLicense({ origin: BASE });
+    const stub = createWorkerStub({ methods: { email: true, google: false } });
+    await patchBillingConfig(page, {
+      verification: { apiBaseUrl: API, publicKeyJwk: license.publicKeyJwk, required: true }
+    });
+    let release;
+    const held = new Promise((r) => {
+      release = r;
+    });
+    await page.route(`${API}/**`, async (route) => {
+      if (new URL(route.request().url()).pathname === "/v1/auth/methods") {
+        await held;
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          headers: { "access-control-allow-origin": "*" },
+          body: JSON.stringify({ ok: true, ...stub.methods })
+        });
+      }
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        headers: { "access-control-allow-origin": "*" },
+        body: JSON.stringify({ ok: true })
+      });
+    });
+    await boot(page);
+
+    await page.evaluate(() => window.VTApp.openPricing());
+    const trial = page.locator("#btn-start-trial");
+    await expect(trial).toBeVisible();
+    // The answer is still in flight, so the honest offer is the local one.
+    await expect(trial).toContainText("7");
+
+    release();
+    // Once the worker has spoken, the offer becomes the worker's.
+    await expect(trial).toContainText("30");
+  });
+
   test("a worker that never answers gives up rather than pinning the panel", async ({ page }) => {
     // A host that accepts the connection and then goes silent is the worst case
     // for a panel that waits on the reply: with no timeout the visitor is left

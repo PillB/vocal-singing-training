@@ -3561,13 +3561,21 @@
         this._syncButtons?.();
       }
     },
-    /** After Stop no frames arrive: redraw the playhead while a take plays. */
+    /**
+     * While a take plays: after Stop no frames arrive, so this redraws the
+     * playhead; and once the panel is gone (the learner left the exercise)
+     * it stops the take instead of letting it play on.
+     */
     _tick() {
       const st = this.state;
-      if (!st.playing || !st.review || !global.requestAnimationFrame || global.VTViz?.reducedMotion?.()) return;
+      if (!st.playing || !global.requestAnimationFrame) return;
       requestAnimationFrame(() => {
-        if (!this.hud || !st.playing) return;
-        this.viz?.draw();
+        if (!st.playing) return;
+        if (!this.hud) {
+          this._stopPlay();
+          return;
+        }
+        if (st.review && !global.VTViz?.reducedMotion?.()) this.viz?.draw();
         this._tick();
       });
     },

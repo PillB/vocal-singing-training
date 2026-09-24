@@ -363,6 +363,17 @@ test.describe("resonance pictures", () => {
     // After Stop the takes still play
     await expect(page.locator('#mode-focus [data-play="B"]')).toBeVisible();
     expect(Number(await page.locator('#metrics-form [name="takes"]').inputValue())).toBe(2);
+    // Leaving the exercise while a take plays stops it
+    await page.locator('#mode-focus [data-play="B"]').click();
+    const left = await page.evaluate(async () => {
+      const m = window.VTApp.getState().modeInstance;
+      const was = !!m.state.playing;
+      m.unmount();
+      for (let i = 0; i < 4; i++) await new Promise((r) => requestAnimationFrame(r));
+      return { was, now: m.state.playing };
+    });
+    expect(left.was).toBe(true);
+    expect(left.now, "the take stops with the panel").toBeNull();
   });
 
   test("English words on the resonance drills", async ({ page }) => {

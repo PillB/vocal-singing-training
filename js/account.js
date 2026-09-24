@@ -39,6 +39,15 @@
   let methods = null;
   /** In-flight probe, so two callers on the same open share one request. */
   let methodsPending = null;
+  /**
+   * Whether Google's script could actually be loaded in this browser: null
+   * until we have tried, then true or false. The worker naming Google as a
+   * method and a browser being able to run it are different facts — an
+   * extension, a content blocker or a network can refuse the script — and on a
+   * Google-only deploy the difference is the whole sign-in.
+   * @type {boolean|null}
+   */
+  let googleReady = null;
   let refreshing = null;
   let gisPromise = null;
 
@@ -120,7 +129,8 @@
    * @param {string} method HTTP method.
    * @param {string} path Path under the worker base.
    * @param {object|null} body JSON body, or null.
-   * @param {{auth?: boolean}} [options] Whether to send the session token.
+   * @param {{auth?: boolean, timeoutMs?: number}} [options] Whether to send the
+   *   session token, and how long to wait before giving up.
    * @returns {Promise<{ok: boolean, status: number, data: object|null, offline?: boolean}>} Result.
    */
   async function request(method, path, body, options) {
@@ -132,16 +142,33 @@
       headers.authorization = `Bearer ${session.token}`;
     }
     let res;
+    // A host that accepts the connection and then never answers is the worst
+    // case for a caller that gates UI on the reply: without this it waits as
+    // long as the browser will, which is forever to anyone looking at the panel.
+    const timeoutMs = Number(options && options.timeoutMs) > 0 ? Number(options.timeoutMs) : 0;
+    let abort = null;
+    let timer = null;
+    if (timeoutMs) {
+      try {
+        abort = new AbortController();
+        timer = setTimeout(() => abort.abort(), timeoutMs);
+      } catch {
+        abort = null;
+      }
+    }
     try {
       res = await fetch(base + path, {
         method,
         headers,
         body: body === null || body === undefined ? undefined : JSON.stringify(body),
         credentials: "omit",
-        cache: "no-store"
+        cache: "no-store",
+        signal: abort ? abort.signal : undefined
       });
     } catch {
       return { ok: false, status: 0, data: null, offline: true };
+    } finally {
+      if (timer) clearTimeout(timer);
     }
     let data = null;
     try {
@@ -193,7 +220,7 @@
     if (methods) return methods;
     if (methodsPending) return methodsPending;
     methodsPending = (async () => {
-      const res = await request("GET", "/v1/auth/methods", null, { auth: false });
+      const res = await request("GET", "/v1/auth/methods", null, { auth: false, timeoutMs: 6000 });
       methods = res.ok && res.data
         ? {
           email: !!res.data.email,
@@ -280,6 +307,14 @@
       el.onload = () => resolve(!!global.google?.accounts?.id);
       el.onerror = () => resolve(false);
       document.head.appendChild(el);
+    }).then((ok) => {
+      googleReady = !!ok;
+      // A refusal is not a permanent verdict — it may have been the network —
+      // so let the next open try again, the way a failed methods probe does.
+      if (!ok) gisPromise = null;
+      // The panel keys its sign-in options off this, so it has to hear about it.
+      emit();
+      return ok;
     });
     return gisPromise;
   }
@@ -297,9 +332,15 @@
   async function renderGoogleButton(container, options) {
     const available = await getMethods();
     if (!available.google || !available.googleClientId) {
+      // Clear on the way out too: what a deploy offers can change between one
+      // open and the next, and a button drawn earlier must not outlive it.
+      container.innerHTML = "";
       return { ok: false, reason: "google_not_configured" };
     }
-    if (!(await loadGoogleScript())) return { ok: false, reason: "script_blocked" };
+    if (!(await loadGoogleScript())) {
+      container.innerHTML = "";
+      return { ok: false, reason: "script_blocked" };
+    }
     try {
       global.google.accounts.id.initialize({
         client_id: available.googleClientId,
@@ -451,6 +492,8 @@
       // Null until the first /v1/auth/methods answer lands, so read it
       // defensively: the pricing panel may open before anyone signs in.
       methods,
+      // Null until the account panel has tried to load Google's script.
+      googleReady,
       // Pro is whatever the signature check says, never what this JSON claims.
       pro: !!global.VTLicense?.getClaims?.()
     };

@@ -243,6 +243,97 @@ test.describe("Accounts, gifted months and saved progress", () => {
     await expect(page.locator("#login-username")).toBeVisible();
   });
 
+  test("Google-only deploy: a blocked Google script does not leave an empty panel", async ({ page }) => {
+    // This is the configuration the site actually ships: a Google client id and
+    // no email provider. "The worker names a method" and "this browser can run
+    // it" are different facts — an extension, a content blocker or the network
+    // can refuse accounts.google.com — and if the panel trusts the first one it
+    // shows a sign-in block with nothing in it and no way in.
+    const license = await mintLicense({ origin: BASE });
+    const stub = createWorkerStub({
+      methods: { email: false, google: true, googleClientId: "test.apps.googleusercontent.com" }
+    });
+    await installWorker(page, stub, license);
+    await page.route("https://accounts.google.com/**", (route) => route.abort("failed"));
+    await boot(page);
+
+    await page.click("#btn-account");
+    await expect(page.locator("#account-modal")).toBeVisible();
+    await expect(page.locator("#account-signin-blocked")).toBeVisible();
+    await expect(page.locator("#account-signin")).toBeHidden();
+    // It is not the same as "accounts are off", and not the same as "we could
+    // not ask the worker" — both of those would misdirect the reader.
+    await expect(page.locator("#account-unconfigured")).toBeHidden();
+    await expect(page.locator("#account-offline")).toBeHidden();
+    // And the way in that does work is open, with focus somewhere real.
+    await expect(page.locator("#login-username")).toBeVisible();
+    expect(
+      await page.evaluate(() =>
+        document.querySelector("#account-modal").contains(document.activeElement)
+      )
+    ).toBe(true);
+  });
+
+  test("Google-only deploy: a blocked Google script leaves the local trial reachable", async ({
+    page
+  }) => {
+    // The other half of the same defect: the pricing trial routed to the account
+    // layer on the worker's word alone, so it closed the pricing card and opened
+    // a panel with no way in, and the browser-local trial — the documented
+    // fallback — became unreachable.
+    const license = await mintLicense({ origin: BASE });
+    const stub = createWorkerStub({
+      methods: { email: false, google: true, googleClientId: "test.apps.googleusercontent.com" }
+    });
+    await installWorker(page, stub, license);
+    await page.route("https://accounts.google.com/**", (route) => route.abort("failed"));
+    await boot(page);
+
+    // Open the account panel first: that is what tries the script, and what the
+    // trial's decision then has to take into account.
+    await page.click("#btn-account");
+    await expect(page.locator("#account-signin-blocked")).toBeVisible();
+    await page.click("#account-close");
+
+    await page.evaluate(() => window.VTApp.openPricing());
+    const trial = page.locator("#btn-start-trial");
+    await expect(trial).toBeVisible();
+    // Named for what it will actually give, which is the browser-local length.
+    await expect(trial).toContainText("7");
+    await trial.click();
+
+    await expect(page.locator("#account-modal")).toBeHidden();
+    await expect
+      .poll(() => page.evaluate(() => window.VTBilling.getEntitlement().pro))
+      .toBe(true);
+    const after = await page.evaluate(() => ({
+      local: localStorage.getItem("vt_billing_trial_started_v1"),
+      ent: window.VTBilling.getEntitlement()
+    }));
+    expect(after.local).toBeTruthy();
+    expect(after.ent.status).toBe("trial");
+  });
+
+  test("a worker that never answers gives up rather than pinning the panel", async ({ page }) => {
+    // A host that accepts the connection and then goes silent is the worst case
+    // for a panel that waits on the reply: with no timeout the visitor is left
+    // on "Comprobando cómo entrar…" for as long as they keep the panel open,
+    // and reopening re-joins the same dead request instead of retrying.
+    test.setTimeout(30000);
+    await patchBillingConfig(page, { verification: { apiBaseUrl: API } });
+    // Never fulfils, never aborts.
+    await page.route(`${API}/**`, () => {});
+    await boot(page);
+
+    await page.click("#btn-account");
+    await expect(page.locator("#account-modal")).toBeVisible();
+    await expect(page.locator("#account-checking")).toBeVisible();
+    // The request is bounded, so this resolves into a state with a way forward.
+    await expect(page.locator("#account-offline")).toBeVisible({ timeout: 15000 });
+    await expect(page.locator("#account-checking")).toBeHidden();
+    await expect(page.locator("#login-username")).toBeVisible();
+  });
+
   test("the shipped build is pointed at a deployed worker", async () => {
     // Guards the wiring itself. Every other case here stubs the worker, so an
     // emptied apiBaseUrl would take the whole account layer out of the live

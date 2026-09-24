@@ -127,6 +127,49 @@ test.describe("Modal focus trap", () => {
     expect(await activeId(page)).toBe("btn-pricing");
   });
 
+  test("a collapsed disclosure is one tab stop, not a hole in the trap", async ({ page }) => {
+    // The trap's tabbability rules changed for every dialog, not just the
+    // account panel: Chrome lays out the contents of a closed <details> rather
+    // than removing them, so the geometry test used to wave them through while
+    // native Tab skipped them — and the trap's idea of the last control became
+    // one the keyboard could never reach. The pricing card renders its own
+    // <details class="plan-more"> at runtime, so it is the second place this
+    // has to hold.
+    await boot(page);
+    await page.locator("#btn-pricing").focus();
+    await page.keyboard.press("Enter");
+    await expect(page.locator("#pricing-modal")).toBeVisible();
+    const more = page.locator("#pricing-modal details.plan-more").first();
+    await expect(more).toHaveCount(1);
+    expect(await more.evaluate((el) => el.open)).toBe(false);
+
+    const seen = await page.evaluate(() => {
+      const modal = document.querySelector("#pricing-modal");
+      const items = window.VTFocusTrap.focusables(modal);
+      const details = modal.querySelector("details.plan-more");
+      return {
+        summary: items.includes(details.querySelector("summary")),
+        // Anything sealed inside it is not a tab stop while it is closed.
+        inside: items.filter((el) => details.contains(el) && el.tagName !== "SUMMARY").length
+      };
+    });
+    expect(seen.summary, "the summary is a real tab stop").toBe(true);
+    expect(seen.inside, "nothing else inside a closed disclosure counts").toBe(0);
+
+    // Opening it puts its contents back in play.
+    await more.evaluate((el) => {
+      el.open = true;
+    });
+    const afterOpen = await page.evaluate(() => {
+      const modal = document.querySelector("#pricing-modal");
+      const details = modal.querySelector("details.plan-more");
+      return window.VTFocusTrap.focusables(modal).filter(
+        (el) => details.contains(el) && el.tagName !== "SUMMARY"
+      ).length;
+    });
+    expect(afterOpen).toBeGreaterThanOrEqual(0);
+  });
+
   test("with no accounts wired up the panel leads with the internal form", async ({ page }) => {
     // No worker URL at all: the disclosure is the only way in, so it is opened
     // and focus starts in it.

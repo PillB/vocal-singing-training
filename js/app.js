@@ -4958,7 +4958,10 @@
     exhausted: "auth.err.giftExhausted",
     revoked: "auth.err.giftRevoked",
     trial_used: "auth.err.trialUsed",
-    email_not_configured: "auth.err.emailUnavailable"
+    email_not_configured: "auth.err.emailUnavailable",
+    // What every /v1/auth route answers on a deploy with no database, which the
+    // operator runbook explicitly allows. Without this it read as a bug.
+    accounts_not_configured: "auth.err.accountsOff"
   };
 
   function accountError(message) {
@@ -5025,22 +5028,34 @@
    *   !configured   no worker URL at all — the site is practice-only.
    *   checking      a worker URL, but it has not said yet.
    *   unreachable   it was asked and could not be reached.
-   *   offered       it answered with at least one method.
+   *   blocked       it offers only Google, and Google's script will not load
+   *                 in this browser — an extension, a blocker or the network.
+   *   offered       it answered with at least one method this browser can run.
+   *
+   * The last one is the trap: what the worker offers and what a browser can
+   * actually run are different facts, and on a Google-only deploy the
+   * difference is the entire sign-in.
    *
    * @returns {{configured: boolean, checking: boolean, unreachable: boolean,
-   *            canEmail: boolean, offered: boolean}} What the panel may draw.
+   *            blocked: boolean, canEmail: boolean, offered: boolean}} What the
+   *            panel may draw.
    */
   function accountSignIn() {
     const account = window.VTAccount?.getState?.() || null;
     const configured = !!(account && account.configured);
     const m = (account && account.methods) || null;
     const answered = !!m && m.ok !== false;
+    const canEmail = answered && !!m.email;
+    // Unknown counts as usable: the script is only attempted when the panel
+    // opens, and until then the worker's word is the best answer there is.
+    const canGoogle = answered && !!m.google && account.googleReady !== false;
     return {
       configured,
       checking: configured && !m,
       unreachable: configured && !!m && m.ok === false,
-      canEmail: answered && !!m.email,
-      offered: configured && answered && (!!m.email || !!m.google)
+      blocked: answered && !!m.google && account.googleReady === false && !canEmail,
+      canEmail,
+      offered: configured && (canEmail || canGoogle)
     };
   }
 
@@ -5057,6 +5072,8 @@
     // Nothing to lead with yet, and the QA disclosure is closed in this state,
     // so the close button is the only honest target.
     if (offer.checking) return "#account-close";
+    // Every other state that offers nothing opens the disclosure, so the trap
+    // has a real control to land on; the fall-through below picks it up.
     const form = $("#account-signin");
     if (form && !form.hidden) {
       // Google draws its button in its own iframe, which is no use as a target.
@@ -5104,8 +5121,11 @@
     if (checking) checking.hidden = !offer.checking;
     const offline = $("#account-offline");
     if (offline) offline.hidden = !offer.unreachable;
+    const blocked = $("#account-signin-blocked");
+    if (blocked) blocked.hidden = !offer.blocked;
     if (unconfigured) {
-      unconfigured.hidden = hasRealSignIn || offer.checking || offer.unreachable;
+      unconfigured.hidden =
+        hasRealSignIn || offer.checking || offer.unreachable || offer.blocked;
     }
     const emailForm = $("#account-email-form");
     if (emailForm) emailForm.hidden = !offer.canEmail;
@@ -5113,9 +5133,16 @@
     // sign-in to lead with. While there is none it is the only way in, so
     // collapsing it would leave the panel with nothing to do. While the answer
     // is still coming it stays shut, so focus is never put inside a disclosure
-    // that is about to close again.
+    // that is about to close again. Both directions, because a worker can be
+    // unreachable on one open and answer on the next, and the staff form must
+    // not sit expanded beside a public sign-in for the rest of the page's life.
     const internal = document.querySelector(".account-internal");
-    if (internal && !hasRealSignIn && !offer.checking) internal.open = true;
+    const wantOpen = !hasRealSignIn && !offer.checking;
+    if (internal && internal.open !== wantOpen) {
+      // Never fight somebody who opened it themselves.
+      if (wantOpen || internal.dataset.autoOpen === "1") internal.open = wantOpen;
+      internal.dataset.autoOpen = wantOpen ? "1" : "";
+    }
 
     if (!signedIn) {
       out.hidden = false;

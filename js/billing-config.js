@@ -42,9 +42,10 @@
      * we do not take money we cannot turn into a verifiable entitlement.
      *
      * Both are set now, so a license token can be verified. Checkout is still
-     * closed, because no provider has a checkout link yet, and sign-in is still
-     * off, because the worker reports no sign-in method at /v1/auth/methods.
-     * Each of those switches itself on when its own piece is configured.
+     * closed, because no provider has a checkout link yet. Sign-in switches
+     * itself on from what the worker answers at /v1/auth/methods — this deploy
+     * has a Google client id and no email provider, so Google only — and the
+     * panel draws nothing it cannot honour in the browser it is running in.
      */
     verification: {
       /** Base URL of the entitlements worker, e.g. https://entitlements.example.workers.dev */

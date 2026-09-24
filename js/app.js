@@ -5339,7 +5339,13 @@
       // it goes back to the foot. One element, so its id and listener stay.
       const slot = prelaunch ? $("#pricing-launch") : $("#pricing-modal .pricing-foot");
       if (slot && trialBtn.parentElement !== slot) {
-        slot.insertBefore(trialBtn, prelaunch ? null : $("#btn-demo-pro"));
+        // Once checkout is live the plan cards carry the primary action, so this
+        // goes back to being a secondary — but first in its row, not fourth
+        // behind export, manage and recheck. "Visual or language steering toward
+        // subscriptions" was the most common finding in the EU's 2023 sweep of
+        // 399 shops (54 shops, more than fake countdowns), and a trial buried
+        // under three controls that only Pro users ever see is that shape.
+        slot.insertBefore(trialBtn, prelaunch ? null : slot.firstElementChild);
       }
       trialBtn.classList.toggle("btn-primary", prelaunch);
       trialBtn.classList.toggle("btn-sm", !prelaunch);

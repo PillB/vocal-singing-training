@@ -1922,6 +1922,8 @@
       }
       const over = speechIn(vad, s.a, Math.min(s.b, now));
       const past = s.b <= now;
+      // A listening turn cut short by Stop or a scenario change is too short to call quiet
+      const quiet = past && over < 0.5 && s.b - s.a >= 5;
       ctx.strokeStyle = past ? C.grid : C.gridStrong;
       ctx.lineWidth = 1.5;
       ctx.setLineDash(past ? [] : [5, 4]);
@@ -1936,7 +1938,7 @@
         ctx.font = font(laneH < 26 ? 9 : 11, 700);
         let txt = L("escucha", "listen");
         ctx.fillStyle = C.faint;
-        if (past && over < 0.5) {
+        if (quiet) {
           txt = L("✓ en silencio", "✓ quiet");
           ctx.fillStyle = C.target;
         } else if (over >= 0.5) {
@@ -1944,7 +1946,7 @@
           ctx.fillStyle = C.muted;
         }
         ctx.fillText(txt, mid, themY + laneH / 2 + 0.5, b - a - 8);
-      } else if (past && over < 0.5) glyph(ctx, "check", mid, themY + laneH / 2, C.target, 5);
+      } else if (quiet) glyph(ctx, "check", mid, themY + laneH / 2, C.target, 5);
     });
     // Your voice: blocks above; the part inside their turn hatched
     vad.segments.forEach((g) => {

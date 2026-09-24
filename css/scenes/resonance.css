@@ -1,1 +1,43 @@
 /* Exercise pictures — resonance (css for js/scenes/resonance.js). Scoped to .mode-panel.has-viz. */
+
+/* s26: the take and playback buttons sit beside the title and wrap under
+   it on a narrow phone */
+.mode-panel.has-viz .viz-head.ab-head {
+  flex-wrap: wrap;
+}
+.mode-panel.has-viz .ab-btns {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.35rem;
+  margin-left: auto;
+}
+/* "= level" is a toggle: its pressed state shows by more than colour */
+.mode-panel.has-viz .ab-btns [data-match][aria-pressed="true"] {
+  border-color: #34b27a;
+  box-shadow: inset 0 0 0 2px rgba(52, 178, 122, 0.55);
+}
+.mode-panel.has-viz .ab-btns [data-match][aria-pressed="true"]::before {
+  content: "✓ ";
+}
+
+/* Landscape phones: the head is a narrow column beside the picture, so the
+   buttons form a two-by-two grid instead of a tall stack */
+@media (max-height: 500px) {
+  .mode-focus.mode-focus-live .mode-panel.has-viz .viz-head.ab-head {
+    flex-wrap: nowrap;
+  }
+  .mode-focus.mode-focus-live .mode-panel.has-viz .ab-btns {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(44px, auto));
+    align-content: center;
+    gap: 0.3rem;
+    margin-left: 0;
+  }
+  .mode-focus.mode-focus-live .mode-panel.has-viz .ab-btns .btn {
+    min-height: 44px;
+    padding: 0 0.5rem;
+    font-size: 0.8rem;
+    white-space: nowrap;
+  }
+}

@@ -1753,4 +1753,322 @@
   }
 
   V.scenes.zones = zones;
+
+  /* ——————————————————————— Placement A/B (s26) ——————————————————————— */
+
+  /**
+   * Two lanes, A above B, on one time scale: the line is the pitch against
+   * take A's own middle (so a take sung in another key sits visibly off the
+   * dashed line), the shade underneath is the level. Beside them the facts
+   * that decide whether the comparison is fair, then what differs
+   * (brightness and the spectrum's shape, approximate). No verdict.
+   *
+   * model: the placementAB state (stage, takes, A, B, cur, recording,
+   * facts, playing, match, review, clock)
+   */
+  function abTakes(ctx, w, h, m) {
+    panel(ctx, w, h);
+    const pad = 10;
+    const tiny = h < 135;
+    const compact = h < 190;
+    const headH = tiny ? 0 : compact ? 20 : 26;
+    if (!tiny) {
+      const right = L(`${m.takes}/2 tomas`, `${m.takes}/2 takes`);
+      ctx.font = font(compact ? 10 : 11, 700);
+      const rightW = ctx.measureText(right).width;
+      let head;
+      if (m.review) head = L("Tus dos tomas · decide tu oído", "Your two takes · your ear decides");
+      else if (m.stage === "listen") head = L("Escucha las dos: ▶ A y ▶ B", "Listen to both: ▶ A and ▶ B");
+      else if (m.recording) head = L(`Grabando la toma ${m.stage} · ${V.fmtSec(m.cur ? m.cur.dur : 0, 1)}`, `Recording take ${m.stage} · ${V.fmtSec(m.cur ? m.cur.dur : 0, 1)}`);
+      else if (m.stage === "A") head = L("Toma A · canta la frase tal cual", "Take A · sing the phrase as it comes");
+      else head = L("Toma B · la misma frase, colocada", "Take B · the same phrase, placed");
+      ctx.fillStyle = C.text;
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      fitText(ctx, head, pad + 2, pad + headH / 2 - 2, w - pad * 2 - rightW - 14, compact ? 13 : 15, 800, 9);
+      text(ctx, right, w - pad - 2, pad + headH / 2 - 2, { align: "right", color: m.takes >= 2 ? C.done : C.muted, px: compact ? 10 : 11 });
+    }
+    const top = tiny ? pad - 3 : pad + headH + 2;
+    const bodyH = h - top - pad + (tiny ? 3 : 0);
+    const wide = w >= 560;
+    let lanesBox;
+    let factsBox = null;
+    let mini = false;
+    if (wide) {
+      const fw = Math.round(tiny ? clamp(w * 0.34, 200, 300) : clamp(w * 0.38, 220, 400));
+      lanesBox = { x: pad, y: top, w: w - pad * 3 - fw, h: bodyH };
+      factsBox = { x: w - pad - fw, y: top, w: fw, h: bodyH };
+      mini = tiny;
+    } else if (bodyH >= 250) {
+      const lh = Math.round(bodyH * 0.46);
+      lanesBox = { x: pad, y: top, w: w - pad * 2, h: lh };
+      factsBox = { x: pad, y: top + lh + 8, w: w - pad * 2, h: bodyH - lh - 8 };
+    } else {
+      const fh = Math.min(26, Math.round(bodyH * 0.24));
+      lanesBox = { x: pad, y: top, w: w - pad * 2, h: bodyH - fh - 4 };
+      factsBox = { x: pad, y: top + bodyH - fh, w: w - pad * 2, h: fh };
+      mini = true;
+    }
+    const gap = 6;
+    const lh = (lanesBox.h - gap) / 2;
+    const T = Math.max(4, (m.A && m.A.dur) || 0, (m.B && m.B.dur) || 0, (m.cur && m.cur.dur + 1) || 0);
+    const ref = m.A && m.A.medMidi != null ? m.A.medMidi : null;
+    const refDb = m.A && m.A.medDb != null ? m.A.medDb : null;
+    ["A", "B"].forEach((k, i) => {
+      takeLane(ctx, { x: lanesBox.x, y: lanesBox.y + i * (lh + gap), w: lanesBox.w, h: lh }, m, k, { T, ref, refDb, tiny, compact });
+    });
+    if (factsBox) abFacts(ctx, factsBox, m, { mini, compact, tiny });
+  }
+
+  function takeLane(ctx, box, m, k, o) {
+    const { x, y, w, h } = box;
+    ctx.fillStyle = "rgba(170, 195, 230, 0.05)";
+    roundRect(ctx, x, y, w, h, 8);
+    ctx.fill();
+    const live = m.recording && m.cur && m.cur.name === k;
+    const tk = live ? m.cur : m[k];
+    // The take's letter, and what it is for
+    const chip = Math.min(26, h - 8);
+    const done = !!(m[k] && !live);
+    ctx.fillStyle = done ? "rgba(255, 211, 110, 0.18)" : live ? C.youSoft : "rgba(170, 195, 230, 0.08)";
+    roundRect(ctx, x + 6, y + 5, chip, chip, 6);
+    ctx.fill();
+    text(ctx, k, x + 6 + chip / 2, y + 5 + chip / 2 + 0.5, { px: Math.min(15, chip * 0.6), weight: 800, align: "center", color: done ? C.done : C.text });
+    const px = x + chip + 14;
+    const pw = w - chip - 20;
+    const py = y + 4;
+    const ph = h - 8;
+    if (!o.tiny && h >= 54) {
+      text(ctx, k === "A" ? L("tal cual", "as it comes") : L("colocada", "placed"), x + 6, y + chip + 16, { px: 9, color: C.faint, maxW: chip + 30 });
+    }
+    const X = (t) => px + (clamp(t, 0, o.T) / o.T) * pw;
+    const R = 7;
+    const center = o.ref != null ? o.ref : tk && tk.medMidi != null ? tk.medMidi : null;
+    const Y = (mm) => py + ph / 2 - (clamp(mm - center, -R, R) / R) * (ph / 2 - 3);
+    // Take A's middle pitch, dashed, in both lanes
+    if (center != null) {
+      ctx.strokeStyle = C.gridStrong;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(px, py + ph / 2);
+      ctx.lineTo(px + pw, py + ph / 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      if (!o.tiny && k === "B" && o.ref != null) text(ctx, L("altura de A", "A's pitch"), px + pw - 2, py + ph / 2 - 7, { px: 9, color: C.faint, align: "right" });
+    }
+    if (!tk) {
+      const waiting = !m.review && m.stage === k;
+      const s = waiting
+        ? L("Canta la frase: la toma empieza sola y acaba tras 2 s de silencio", "Sing the phrase: the take starts by itself and ends after 2 s of quiet")
+        : k === "B" && !m.review
+          ? L("Después: la misma frase, en la misma tonalidad", "Next: the same phrase, in the same key")
+          : L("Sin toma", "No take");
+      text(ctx, s, px + pw / 2, py + ph / 2, { px: o.tiny ? 10 : 11, color: waiting ? C.muted : C.faint, align: "center", maxW: pw - 10 });
+      return;
+    }
+    if (tk.noAudio) {
+      text(ctx, L("Toma marcada sin audio", "Take marked without audio"), px + pw / 2, py + ph / 2, { px: 11, color: C.faint, align: "center", maxW: pw - 10 });
+      return;
+    }
+    // Level as a shade from the bottom (dB against take A's level)
+    const pts = tk.pts || [];
+    const base = o.refDb != null ? o.refDb : tk.medDb != null ? tk.medDb : null;
+    if (base != null) {
+      ctx.fillStyle = "rgba(191, 230, 255, 0.13)";
+      ctx.beginPath();
+      let open = false;
+      let lastX = px;
+      pts.forEach((p) => {
+        if (p.db == null) {
+          if (open) {
+            ctx.lineTo(lastX, py + ph);
+            ctx.closePath();
+            ctx.fill();
+            ctx.beginPath();
+            open = false;
+          }
+          return;
+        }
+        const lx = X(p.t);
+        const ly = py + ph - clamp((p.db - (base - 24)) / 30, 0, 1) * ph * 0.6;
+        if (!open) {
+          ctx.moveTo(lx, py + ph);
+          open = true;
+        }
+        ctx.lineTo(lx, ly);
+        lastX = lx;
+      });
+      if (open) {
+        ctx.lineTo(lastX, py + ph);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+    // Pitch against A's middle
+    if (center != null) {
+      ctx.strokeStyle = C.you;
+      ctx.lineWidth = 2.2;
+      ctx.lineJoin = "round";
+      ctx.beginPath();
+      let prev = null;
+      pts.forEach((p) => {
+        if (p.m == null) {
+          prev = null;
+          return;
+        }
+        const lx = X(p.t);
+        const ly = Y(p.m);
+        if (prev && p.t - prev.t < 0.2) ctx.lineTo(lx, ly);
+        else ctx.moveTo(lx, ly);
+        prev = p;
+      });
+      ctx.stroke();
+    }
+    if (live) {
+      const ex = X(tk.dur);
+      ctx.strokeStyle = "rgba(238, 243, 250, 0.55)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(ex, py);
+      ctx.lineTo(ex, py + ph);
+      ctx.stroke();
+      glyph(ctx, "dot", px + pw - 60, py + 9, C.text, 9);
+      text(ctx, L("grabando", "recording"), px + pw - 52, py + 9, { px: 10, color: C.text });
+    } else {
+      text(ctx, V.fmtSec(tk.dur, 1), px + pw - 2, py + ph - 8, { px: 10, color: C.muted, align: "right" });
+    }
+    // Playback position
+    const pl = m.playing;
+    if (pl && pl.which === k && !V.reducedMotion()) {
+      const t = clamp((performance.now() - pl.at) / 1000, 0, pl.dur);
+      const hx = X((t / Math.max(0.01, pl.dur)) * tk.dur);
+      ctx.strokeStyle = C.done;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(hx, py);
+      ctx.lineTo(hx, py + ph);
+      ctx.stroke();
+    } else if (pl && pl.which === k) {
+      text(ctx, L("▶ sonando", "▶ playing"), px + 4, py + 9, { px: 10, color: C.done });
+    }
+  }
+
+  function abFacts(ctx, box, m, o) {
+    const { x, y, w, h } = box;
+    ctx.fillStyle = "rgba(170, 195, 230, 0.05)";
+    roundRect(ctx, x, y, w, h, 8);
+    ctx.fill();
+    const f = m.facts;
+    const gx = x + 10;
+    const gw = w - 20;
+    const n1 = (v) => fmtSigned(v, 1);
+    if (o.mini) {
+      let s;
+      if (f) {
+        const bits = [];
+        if (f.key != null) bits.push(f.keyOk ? L("tonalidad ✓", "key ✓") : L(`tonalidad ${n1(f.key / 100)} st`, `key ${n1(f.key / 100)} st`));
+        if (f.vol != null) bits.push(f.volOk ? L("volumen ✓", "level ✓") : L(`volumen ${dB(f.vol)}`, `level ${dB(f.vol)}`));
+        if (f.bright != null) bits.push(L(`brillo ${dB(f.bright)} aprox.`, `brightness ${dB(f.bright)} approx.`));
+        s = bits.join(" · ");
+      } else s = L("1 · Toma A   2 · Toma B   3 · Escucha", "1 · Take A   2 · Take B   3 · Listen");
+      text(ctx, s, x + 8, y + h / 2, { px: 10, color: f && !f.fair ? C.warn : C.muted, maxW: w - 16 });
+      return;
+    }
+    if (!f) {
+      // The protocol, until both takes are in
+      sectionTitle(ctx, L("Cómo se compara", "How to compare"), gx, y + 12, gw);
+      const steps = [
+        { s: L("Toma A: la frase tal cual", "Take A: the phrase as it comes"), done: !!m.A },
+        { s: L("Toma B: misma frase, misma tonalidad, mismo volumen", "Take B: same phrase, same key, same volume"), done: !!m.B },
+        { s: L("Escucha las dos y quédate con una", "Listen to both and keep one"), done: false }
+      ];
+      steps.forEach((st, i) => {
+        const ry = y + 34 + i * 22;
+        if (ry > y + h - 8) return;
+        if (st.done) glyph(ctx, "check", gx + 5, ry, C.done, 4.5);
+        else text(ctx, String(i + 1), gx + 5, ry, { px: 11, weight: 800, align: "center", color: C.muted });
+        text(ctx, st.s, gx + 16, ry, { px: 11, color: st.done ? C.done : C.text, maxW: gw - 16 });
+      });
+      if (m.A && m.B && (m.A.noAudio || m.B.noAudio) && y + 110 < y + h) {
+        text(ctx, L("Una toma no tiene audio: no hay datos que comparar", "One take has no audio: nothing to compare"), gx, y + 106, { px: 10, color: C.faint, maxW: gw });
+      }
+      return;
+    }
+    sectionTitle(ctx, f.fair ? L("Se pueden comparar · aprox.", "A fair comparison · approx.") : L("Antes de comparar · aprox.", "Before comparing · approx."), gx, y + 12, gw);
+    const rows = [];
+    if (f.key != null) {
+      rows.push(
+        f.keyOk
+          ? { ok: true, s: L("Misma tonalidad", "Same key"), sub: L(`B ${cents(f.key)} de A`, `B ${cents(f.key)} from A`) }
+          : { ok: false, s: L(`B ${n1(f.key / 100)} semitonos de A`, `B ${n1(f.key / 100)} semitones from A`), sub: L("repite B en la misma tonalidad", "retake B in the same key") }
+      );
+    }
+    if (f.vol != null) {
+      rows.push(
+        f.volOk
+          ? { ok: true, s: L("Mismo volumen", "Same volume"), sub: L(`B ${dB(f.vol)} (±3 dB)`, `B ${dB(f.vol)} (±3 dB)`) }
+          : { ok: false, s: L(`B ${dB(f.vol)} ${f.vol > 0 ? "más fuerte" : "más suave"}`, `B ${dB(f.vol)} ${f.vol > 0 ? "louder" : "softer"}`), sub: L("iguala el volumen o pulsa «= volumen»", "match the volume or press '= level'") }
+      );
+    }
+    if (f.corr != null) {
+      rows.push(f.melOk ? { ok: true, s: L("Misma melodía", "Same melody") } : { ok: false, s: L("¿La misma frase?", "The same phrase?"), sub: L("las melodías no coinciden", "the melodies do not match") });
+    }
+    rows.push({ ok: null, s: L(`Duración: A ${V.fmtSec(f.durA, 1)} · B ${V.fmtSec(f.durB, 1)}`, `Length: A ${V.fmtSec(f.durA, 1)} · B ${V.fmtSec(f.durB, 1)}`) });
+    if (f.bright != null) {
+      const bw = Math.abs(f.bright) <= 1.5 ? L("brillo parecido", "similar brightness") : f.bright > 0 ? L("B más brillante", "B brighter") : L("B más oscura", "B darker");
+      rows.push({ ok: null, s: `${bw} (${dB(f.bright)})`, sub: f.volOk ? null : L("el volumen también cambia el brillo", "volume changes brightness too") });
+    }
+    let ry = y + 32;
+    const rowGap = o.compact ? 16 : 18;
+    rows.forEach((r) => {
+      if (ry > y + h - 8) return;
+      if (r.ok === true) glyph(ctx, "check", gx + 5, ry, C.done, 4.5);
+      else if (r.ok === false) glyph(ctx, "tri", gx + 5, ry, C.warn, 4.5);
+      else glyph(ctx, "dot", gx + 5, ry, C.muted, 6);
+      text(ctx, r.s, gx + 16, ry, { px: 11, weight: 700, color: r.ok === false ? C.warn : C.text, maxW: gw - 16 });
+      ry += rowGap - 4;
+      if (r.sub && !o.compact && ry <= y + h - 8) {
+        text(ctx, r.sub, gx + 16, ry, { px: 10, color: C.muted, maxW: gw - 16 });
+        ry += rowGap - 4;
+      }
+      ry += 4;
+    });
+    // The spectrum's shape, A against B, when there is room
+    const room = y + h - ry - 6;
+    if (room >= 70 && m.A && m.A.ltas && m.B && m.B.ltas) ltasChart(ctx, { x: gx, y: ry, w: gw, h: room }, m.A.ltas, m.B.ltas);
+  }
+
+  /** Third-octave shape of each take (peak = 0 dB), 2–4 kHz marked. */
+  function ltasChart(ctx, box, a, b) {
+    const { x, y, w, h } = box;
+    const K = V.scenes.resonanceKit;
+    const n = K.THIRDS.length;
+    const top = y + 14;
+    const ch = h - 26;
+    const X = (i) => x + (i / (n - 1)) * w;
+    const Y = (d) => top + (clamp(-d, 0, 40) / 40) * ch;
+    text(ctx, L("Forma del sonido · aprox.", "Shape of the sound · approx."), x, y + 5, { px: 10, color: C.muted, maxW: w * 0.62 });
+    const i2 = K.THIRDS.indexOf(2000);
+    const i4 = K.THIRDS.indexOf(4000);
+    ctx.fillStyle = "rgba(170, 195, 230, 0.08)";
+    ctx.fillRect(X(i2), top, X(i4) - X(i2), ch);
+    text(ctx, "2–4 kHz", (X(i2) + X(i4)) / 2, top + ch + 7, { px: 9, color: C.faint, align: "center" });
+    text(ctx, "125 Hz", x, top + ch + 7, { px: 9, color: C.faint });
+    text(ctx, "5 kHz", x + w, top + ch + 7, { px: 9, color: C.faint, align: "right" });
+    const line = (arr, color, dash) => {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.setLineDash(dash || []);
+      ctx.beginPath();
+      arr.forEach((d, i) => (i ? ctx.lineTo(X(i), Y(d)) : ctx.moveTo(X(i), Y(d))));
+      ctx.stroke();
+      ctx.setLineDash([]);
+    };
+    line(a, C.muted, [5, 4]);
+    line(b, C.you);
+    text(ctx, L("A - - -", "A - - -"), x + w - 70, y + 5, { px: 9, color: C.muted });
+    text(ctx, L("B ——", "B ——"), x + w - 30, y + 5, { px: 9, color: C.you });
+  }
+
+  V.scenes.abTakes = abTakes;
 })(typeof window !== "undefined" ? window : globalThis);

@@ -3246,60 +3246,406 @@
   });
 
   /**
-   * s26 placement A/B — two takes of the same phrase, plain then placed. There is
-   * nothing to detect here that the ear cannot do better, so the mode's job is to
-   * hold the protocol: same key, same melody, both takes marked, then listen.
+   * s26 placement A/B — the same phrase twice, plain then placed, then
+   * listen. The ear is the judge; what the microphone adds is a fair
+   * comparison. Each take starts by itself when you sing and ends after two
+   * seconds of quiet (or on "Take done"); the audio is kept in memory on
+   * this device only, for ▶ A / ▶ B playback, optionally level-matched.
+   * Beside the takes: whether they are comparable — same key (±50 cents),
+   * same volume (±3 dB), the same melody — and, approximately, how the
+   * brightness and the spectrum's shape differ. Nothing says which take is
+   * better; the learner rates that.
    */
   Modes.placementAB = baseMode({
     id: "placementAB",
     render() {
-      const phases = this.profile.phases || [];
-      this.state.phases = phases;
-      this.state.takes = 0;
-      this.state.runner = createPhaseRunner(phases, (i, p) => {
-        if (global.VTToast) global.VTToast(p.label);
-        const cueEl = this.$("[data-cue]");
-        if (cueEl) cueEl.textContent = phaseCueFor(p);
-      });
+      const st = this.state;
+      st.phases = this.profile.phases || [];
+      this._resetRun();
       this.hud.innerHTML = `
-        <div class="mode-title">${L("Comparar colocaciones · A/B", "Placement compare · A/B")}</div>
-        <div class="mode-phase" data-phase>${phases[0]?.label || L("Toma A", "Take A")}</div>
-        <div class="mode-big" data-remain>—</div>
-        <p class="mode-meta" data-cue>${phaseCueFor(phases[0])}</p>
-        <div class="controls-row">
-          <button type="button" class="btn btn-sm" data-take>${L(
-            "Marcar toma ✓",
-            "Mark take ✓"
-          )}</button>
+        <div class="viz-row viz-head ab-head">
+          <div class="mode-title">${L("Comparar colocaciones · A/B", "Placement compare · A/B")}</div>
+          <div class="ab-btns">
+            <button type="button" class="btn btn-sm viz-tap" data-take>${L("Toma lista ✓", "Take done ✓")}</button>
+            <button type="button" class="btn btn-sm viz-tap" data-play="A" hidden>▶ A</button>
+            <button type="button" class="btn btn-sm viz-tap" data-play="B" hidden>▶ B</button>
+            <button type="button" class="btn btn-sm viz-tap" data-match aria-pressed="false" hidden>${L("= volumen", "= level")}</button>
+            <button type="button" class="btn btn-sm viz-tap" data-retake hidden>${L("↺ Toma B", "↺ Take B")}</button>
+          </div>
         </div>
-        <p class="mode-meta">${L("Tomas marcadas", "Takes marked")} <strong data-n>0</strong>/2 · ${L(
-          "misma tonalidad en las dos",
-          "same key in both"
+        <div class="viz-words">
+          <span data-phase>${phaseLabelFor(st.phases[0]) || L("Toma A", "Take A")}</span>
+          <span>${L("Tomas", "Takes")} <strong data-n>0</strong>/2</span>
+          <span data-cue>${phaseCueFor(st.phases[0])}</span>
+          <span data-facts></span>
+          <span data-status></span>
+        </div>
+        <p class="mode-meta muted">${L(
+          "Misma frase, misma tonalidad, mismo volumen. Luego escucha las dos: decide tu oído. Las tomas no salen de este dispositivo.",
+          "Same phrase, same key, same volume. Then listen to both: your ear decides. The takes stay on this device."
         )}</p>
       `;
-      this.$("[data-take]")?.addEventListener("click", () => {
-        this.state.takes = Math.min(2, this.state.takes + 1);
-        if (this.$("[data-n]")) this.$("[data-n]").textContent = String(this.state.takes);
+      this.$("[data-take]")?.addEventListener("click", () => this._markTake());
+      this.hud.querySelectorAll("[data-play]").forEach((b) => b.addEventListener("click", () => this._play(b.dataset.play)));
+      this.$("[data-match]")?.addEventListener("click", () => {
+        st.match = !st.match;
+        this._syncButtons();
+        if (st.playing) this._play(st.playing.which, true);
+        this.viz?.draw();
+      });
+      this.$("[data-retake]")?.addEventListener("click", () => this._retakeB());
+      this._mountViz();
+      this._syncButtons();
+    },
+    _resetRun() {
+      const st = this.state;
+      this._stopPlay?.();
+      const K = global.VTViz?.scenes?.resonanceKit;
+      st.stage = "A";
+      st.takes = 0;
+      st.A = null;
+      st.B = null;
+      st.cur = null;
+      st.recording = false;
+      st.facts = null;
+      st.match = false;
+      st.playing = null;
+      st.review = false;
+      st.clock = 0;
+      st._onMs = 0;
+      st._sil = 0;
+      st._mute = 0;
+      st._frame = 0;
+      st._m3 = [];
+      st.cap = K ? new K.Capture(30) : null;
+    },
+    _mountViz() {
+      const V = global.VTViz;
+      if (!V || !V.scenes.abTakes || !V.scenes.resonanceKit) return;
+      this.hud.classList.add("has-viz");
+      this.viz = new V.Surface(this.hud, (ctx, w, h) => V.scenes.abTakes(ctx, w, h, this.state), {
+        label: L(
+          "Dos tomas, A arriba y B abajo: la línea es tu altura frente a la de la toma A y la sombra tu volumen. Al lado, si las tomas se pueden comparar (misma tonalidad, mismo volumen, misma melodía) y en qué se diferencian, aproximadamente.",
+          "Two takes, A on top and B below: the line is your pitch against take A's and the shade your level. Beside them, whether the takes compare fairly (same key, same volume, same melody) and how they differ, approximately."
+        ),
+        captionHidden: true
+      });
+      this.viz.draw();
+    },
+    onStart() {
+      this._resetRun();
+      this.hud?.classList.remove("is-replay");
+      this._syncButtons();
+      this.viz?.caption?.(L("Toma A: canta la frase", "Take A: sing the phrase"), 0);
+      this.viz?.draw();
+    },
+    _stageLabel() {
+      const st = this.state;
+      const p = st.phases;
+      if (st.review) return L("Tus dos tomas", "Your two takes");
+      if (st.stage === "A") return phaseLabelFor(p[0]) || L("Toma A", "Take A");
+      if (st.stage === "B") return phaseLabelFor(p[1]) || L("Toma B", "Take B");
+      return phaseLabelFor(p[2]) || L("Escucha las dos", "Listen to both");
+    },
+    _syncButtons() {
+      const st = this.state;
+      const q = (s) => this.$(s);
+      const taking = !st.review && (st.stage === "A" || st.stage === "B");
+      const listening = st.review || st.stage === "listen";
+      const has = (k) => !!(st[k] && st[k].samples && st[k].samples.length);
+      if (q("[data-take]")) q("[data-take]").hidden = !taking;
+      ["A", "B"].forEach((k) => {
+        const b = q(`[data-play="${k}"]`);
+        if (!b) return;
+        // During take B, ▶ A recalls the key (nothing is recorded while it plays)
+        const recall = k === "A" && st.stage === "B" && !st.recording && !st.review;
+        b.hidden = !((listening || recall) && has(k));
+        b.textContent = st.playing && st.playing.which === k ? `■ ${k}` : `▶ ${k}`;
+        b.setAttribute("aria-label", st.playing && st.playing.which === k ? L(`Parar la toma ${k}`, `Stop take ${k}`) : L(`Escuchar la toma ${k}`, `Play take ${k}`));
+      });
+      if (q("[data-match]")) {
+        q("[data-match]").hidden = !(listening && has("A") && has("B"));
+        q("[data-match]").setAttribute("aria-pressed", st.match ? "true" : "false");
+      }
+      if (q("[data-retake]")) q("[data-retake]").hidden = !(st.stage === "listen" && !st.review);
+      if (q("[data-n]")) q("[data-n]").textContent = String(st.takes);
+      if (q("[data-phase]")) q("[data-phase]").textContent = this._stageLabel();
+      const cueIdx = st.stage === "A" ? 0 : st.stage === "B" ? 1 : 2;
+      if (q("[data-cue]")) q("[data-cue]").textContent = phaseCueFor(st.phases[cueIdx]);
+      if (q("[data-facts]")) q("[data-facts]").textContent = this._factsText();
+    },
+    /** "Take done": ends the take being sung; with nothing recorded it still marks one. */
+    _markTake() {
+      const st = this.state;
+      if (st.review || (st.stage !== "A" && st.stage !== "B")) return;
+      if (st.recording && st.cur && st.cur.sound >= 0.3) {
+        this._endTake();
+        return;
+      }
+      if (st.recording) this._dropTake();
+      st[st.stage] = { name: st.stage, noAudio: true, pts: [], dur: 0 };
+      this._advance();
+    },
+    _advance() {
+      const st = this.state;
+      st.takes = Math.min(2, st.takes + 1);
+      if (st.stage === "A") st.stage = "B";
+      else if (st.stage === "B") {
+        st.stage = "listen";
+        st.facts = this._facts();
+      }
+      this._syncButtons();
+      this.viz?.caption?.(this._stageLabel(), 0);
+      this.viz?.draw();
+    },
+    _retakeB() {
+      const st = this.state;
+      if (st.review) return;
+      this._stopPlay();
+      st.B = null;
+      st.facts = null;
+      st.stage = "B";
+      st.takes = Math.min(st.takes, 1);
+      st._onMs = 0;
+      this._syncButtons();
+      this.viz?.draw();
+    },
+    _startTake() {
+      const st = this.state;
+      if (!st.cap) return;
+      st.cap.start();
+      st.recording = true;
+      st._sil = 0;
+      st.cur = { name: st.stage, t0: st.clock - 0.15, pts: [], dbs: [], bright: [], ltasSum: null, ltasN: 0, sound: 0.15, dur: 0.15 };
+      this.viz?.caption?.(L(`Grabando la toma ${st.stage}`, `Recording take ${st.stage}`), 0);
+    },
+    _dropTake() {
+      const st = this.state;
+      st.cap?.stop();
+      st.recording = false;
+      st.cur = null;
+      st._onMs = 0;
+    },
+    _endTake() {
+      const st = this.state;
+      const K = global.VTViz?.scenes?.resonanceKit;
+      const tk = st.cur;
+      if (!tk || !K) return;
+      // Keep a third of a second of the quiet that ended the take
+      const recorded = st.cap.length / (st.cap.sr || 48000);
+      const keep = Math.max(0.5, recorded - Math.max(0, st._sil - 0.3));
+      tk.sr = st.cap.sr;
+      tk.samples = st.cap.stop(keep);
+      tk.dur = Math.max(0.1, tk.dur - Math.max(0, st._sil - 0.3));
+      tk.pts = tk.pts.filter((p) => p.t <= tk.dur);
+      st.recording = false;
+      st.cur = null;
+      st._onMs = 0;
+      // The take's own level: its sounding frames without the quiet tails
+      const loud = tk.dbs.length ? K.median(tk.dbs) : null;
+      const body = loud == null ? [] : tk.dbs.filter((d) => d > loud - 15);
+      tk.medDb = body.length ? K.median(body) : null;
+      const ms = tk.pts.filter((p) => p.m != null).map((p) => p.m);
+      tk.medMidi = ms.length >= 5 ? K.median(ms) : null;
+      tk.bright = tk.bright.length >= 6 ? K.median(tk.bright) : null;
+      if (tk.ltasN >= 6) {
+        const db = tk.ltasSum.map((v) => 10 * Math.log10(v / tk.ltasN + 1e-20));
+        const top = Math.max(...db);
+        tk.ltas = db.map((v) => v - top);
+      } else tk.ltas = null;
+      tk.peak = K.peakOf(tk.samples);
+      delete tk.dbs;
+      delete tk.ltasSum;
+      st[tk.name] = tk;
+      this._advance();
+    },
+    /** Is the comparison fair, and what differs — measured, approximate. */
+    _facts() {
+      const st = this.state;
+      const K = global.VTViz?.scenes?.resonanceKit;
+      const A = st.A;
+      const B = st.B;
+      if (!K || !A || !B || A.noAudio || B.noAudio) return null;
+      const f = { durA: A.dur, durB: B.dur };
+      f.key = A.medMidi != null && B.medMidi != null ? (B.medMidi - A.medMidi) * 100 : null;
+      f.vol = A.medDb != null && B.medDb != null ? B.medDb - A.medDb : null;
+      f.bright = A.bright != null && B.bright != null ? B.bright - A.bright : null;
+      // The melody: both pitch lines stretched to the same length, correlated
+      const res = (tk) => {
+        const p = tk.pts.filter((q) => q.m != null);
+        if (p.length < 10) return null;
+        const out = [];
+        const t0 = p[0].t;
+        const t1 = p[p.length - 1].t;
+        for (let i = 0; i < 40; i++) {
+          const t = t0 + ((t1 - t0) * i) / 39;
+          let best = p[0];
+          for (const q of p) if (Math.abs(q.t - t) < Math.abs(best.t - t)) best = q;
+          out.push(best.m);
+        }
+        return out;
+      };
+      const ra = res(A);
+      const rb = res(B);
+      f.corr = ra && rb ? K.correlation(ra, rb) : null;
+      // A flat melody (one held note) correlates by chance: only judge a moving one
+      if (ra && rb && Math.max(...ra) - Math.min(...ra) < 1.5) f.corr = null;
+      f.keyOk = f.key == null || Math.abs(f.key) <= 50;
+      f.volOk = f.vol == null || Math.abs(f.vol) <= 3;
+      f.melOk = f.corr == null || f.corr >= 0.5;
+      f.fair = f.keyOk && f.volOk && f.melOk;
+      return f;
+    },
+    _factsText() {
+      const st = this.state;
+      const f = st.facts;
+      if (!f) return "";
+      const n1 = (x) => {
+        const s = Math.abs(x).toFixed(1);
+        return (x < 0 ? "−" : "+") + (isEs() ? s.replace(".", ",") : s);
+      };
+      const parts = [];
+      if (f.key != null) parts.push(f.keyOk ? L("misma tonalidad", "same key") : L(`B ${n1(f.key / 100)} semitonos`, `B ${n1(f.key / 100)} semitones`));
+      if (f.vol != null) parts.push(f.volOk ? L("mismo volumen", "same volume") : L(`B ${n1(f.vol)} dB`, `B ${n1(f.vol)} dB`));
+      if (f.corr != null && !f.melOk) parts.push(L("¿la misma frase?", "the same phrase?"));
+      if (f.bright != null) parts.push(L(`brillo B ${n1(f.bright)} dB (aprox.)`, `brightness B ${n1(f.bright)} dB (approx.)`));
+      return parts.join(" · ");
+    },
+    _play(which, restart) {
+      const st = this.state;
+      const K = global.VTViz?.scenes?.resonanceKit;
+      const tk = st[which];
+      if (!K || !tk || !tk.samples) return;
+      const same = st.playing && st.playing.which === which;
+      this._stopPlay();
+      if (same && !restart) return;
+      // Level-matched: the louder take is turned down to the softer one
+      let gain = 1;
+      if (st.match && st.A?.medDb != null && st.B?.medDb != null) {
+        const target = Math.min(st.A.medDb, st.B.medDb);
+        gain = Math.pow(10, (target - tk.medDb) / 20);
+      }
+      const stop = K.playSamples(tk.samples, tk.sr || 48000, gain, () => {
+        if (st.playing && st.playing.stop === stop) {
+          st.playing = null;
+          this._syncButtons();
+          this.viz?.draw();
+        }
+      });
+      if (!stop) {
+        if (this.$("[data-status]")) this.$("[data-status]").textContent = L("No se pudo reproducir", "Could not play back");
+        return;
+      }
+      st.playing = { which, at: performance.now(), dur: tk.samples.length / (tk.sr || 48000), stop };
+      this._syncButtons();
+      this._tick();
+    },
+    _stopPlay() {
+      const st = this.state;
+      if (st && st.playing) {
+        const p = st.playing;
+        st.playing = null;
+        try {
+          p.stop();
+        } catch {
+          /* already stopped */
+        }
+        this._syncButtons?.();
+      }
+    },
+    /** After Stop no frames arrive: redraw the playhead while a take plays. */
+    _tick() {
+      const st = this.state;
+      if (!st.playing || !st.review || !global.requestAnimationFrame || global.VTViz?.reducedMotion?.()) return;
+      requestAnimationFrame(() => {
+        if (!this.hud || !st.playing) return;
+        this.viz?.draw();
+        this._tick();
       });
     },
-    onFrame() {
-      const r = this.state.runner;
-      if (!r) return;
-      r.tick(performance.now());
-      const done = r.index >= r.count;
-      if (this.$("[data-phase]"))
-        this.$("[data-phase]").textContent = done
-          ? L("Escucha las dos y quédate con una", "Play both back and keep one")
-          : r.label;
-      if (this.$("[data-remain]"))
-        this.$("[data-remain]").textContent = done ? "✓" : `${Math.ceil(r.remaining)}s`;
+    onFrame(frame) {
+      const st = this.state;
+      const K = global.VTViz?.scenes?.resonanceKit;
+      if (!K || st.review) return;
+      const raw = K.rawOf(frame);
+      const dt = raw.dt;
+      st.clock += dt;
+      st._frame++;
+      // Listening: nothing is recorded, so playback is never taken for a take
+      if (st.stage === "listen") {
+        if (st.playing) this.viz?.draw();
+        return;
+      }
+      st.cap?.feed(frame);
+      let midi = null;
+      if (raw.sounding && raw.freq) {
+        st._m3.push(K.midiOf(raw.freq));
+        if (st._m3.length > 3) st._m3.shift();
+        midi = K.median(st._m3);
+      } else st._m3 = [];
+      if (!st.recording) {
+        // Not while a take is playing back, nor just after: that is not you
+        if (st.playing) st._mute = 0.4;
+        else if (st._mute > 0) st._mute -= dt;
+        st._onMs = raw.sounding && !st.playing && !(st._mute > 0) ? st._onMs + dt * 1000 : 0;
+        if (st._onMs >= 150) {
+          this._startTake();
+          this._syncButtons();
+        }
+      }
+      const tk = st.cur;
+      if (st.recording && tk) {
+        tk.dur = st.clock - tk.t0;
+        if (raw.sounding) {
+          tk.sound += dt;
+          st._sil = 0;
+          tk.dbs.push(raw.db);
+        } else st._sil += dt;
+        const last = tk.pts[tk.pts.length - 1];
+        if (!last || tk.dur - last.t >= 0.04 || (midi == null) !== (last.m == null)) {
+          tk.pts.push({ t: tk.dur, m: midi, db: raw.sounding ? raw.db : null });
+        }
+        // Spectrum of the take, every other sounding frame
+        if (raw.sounding && frame.buf && st._frame % 2 === 0) {
+          const sr = frame.sampleRate || 48000;
+          const spec = K.powerSpectrum(frame.buf);
+          const b = K.brightnessDb(spec, sr);
+          if (b != null) tk.bright.push(b);
+          if (sr >= 16000) {
+            const bands = K.thirdOctave(spec, sr);
+            if (!tk.ltasSum) tk.ltasSum = bands.map(() => 0);
+            bands.forEach((v, i) => (tk.ltasSum[i] += v));
+            tk.ltasN += 1;
+          }
+        }
+        if (st._sil >= 1.8) {
+          if (tk.sound >= 1.2) this._endTake();
+          else this._dropTake();
+        } else if (tk.dur >= 29.5) this._endTake();
+      }
+      this.viz?.draw();
     },
     onStop() {
-      const n = this.state.takes || 0;
-      return {
-        patches: n > 0 ? { takes: n } : {},
-        summary: n >= 2 ? "A/B takes marked — compare the playback" : `${n}/2 takes marked`
-      };
+      const st = this.state;
+      if (st.recording && st.cur) {
+        if (st.cur.sound >= 1.2) this._endTake();
+        else this._dropTake();
+      }
+      st.review = true;
+      if (this.viz) {
+        this.hud.classList.add("is-replay");
+        this.viz.draw();
+      }
+      this._syncButtons();
+      const n = st.takes || 0;
+      const f = st.facts;
+      const parts = [L(`${n}/2 tomas`, `${n}/2 takes`)];
+      const t = this._factsText();
+      if (t) parts.push(t);
+      else if (n >= 2) parts.push(L("escucha las dos", "listen to both"));
+      if (f && !f.fair) parts.push(L("repite B para comparar en igualdad", "retake B for a fair comparison"));
+      // Only the count is measured; which take was better is the learner's call
+      return { patches: n > 0 ? { takes: n } : {}, summary: parts.join(" · ") };
     }
   });
 

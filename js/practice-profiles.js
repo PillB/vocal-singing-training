@@ -814,15 +814,18 @@
       showHold: false,
       showLevel: true,
       pitchChallenge: false,
-      autoPiano: true,
+      // No piano on Start: a looping accompaniment would be recorded into
+      // take A and not B (or both, differently), and the comparison is the
+      // point. The piano stays one tap away to find a starting note.
+      autoPiano: false,
       autoRecord: true,
       phases: [
         {
           label: "Take A · plain",
           labelEs: "Toma A · sin intención",
           sec: 45,
-          cue: "Sing the phrase the way it comes out. Mark the take when you finish it.",
-          cueEs: "Canta la frase como te salga. Marca la toma al terminarla."
+          cue: "Sing the phrase the way it comes out. The take starts when you sing and ends after two seconds of quiet.",
+          cueEs: "Canta la frase como te salga. La toma empieza al cantar y acaba tras dos segundos de silencio."
         },
         {
           label: "Take B · placed",
@@ -835,8 +838,8 @@
           label: "Listen back",
           labelEs: "Escucha las dos",
           sec: 30,
-          cue: "Not which is prettier — which has more ring and width.",
-          cueEs: "No cuál es más bonita — cuál tiene más resonancia y amplitud."
+          cue: "Play A and B. Not which is prettier: which sounds fuller and rings more to you.",
+          cueEs: "Escucha A y B. No cuál es más bonita: cuál te suena más llena y con más brillo."
         }
       ],
       cue: "Two takes of one phrase, plain then placed, then listen back and keep one.",

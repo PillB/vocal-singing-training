@@ -39,6 +39,25 @@
   padding-right: 0;
 }
 
+/*
+ * While the tour points at the exercise panel it adds .tour-highlight, whose
+ * `position: relative` takes #mode-focus out of its absolute place on the
+ * stage. The panel then sizes to its content, and a picture's content is a
+ * canvas that keeps its own aspect, so the panel grew past the screen's
+ * spotlight limit on phones. Keep the stage's own placement for these
+ * panels while highlighted.
+ */
+.mode-focus.mode-focus-live.tour-highlight:has(
+    > .mode-panel.has-viz.mode-rateLadder,
+    > .mode-panel.has-viz.mode-fillerDetect,
+    > .mode-panel.has-viz.mode-keyPointPace,
+    > .mode-panel.has-viz.mode-metronomeSpeech,
+    > .mode-panel.has-viz.mode-speechEnergy,
+    > .mode-panel.has-viz.mode-countPace
+  ) {
+  position: absolute;
+}
+
 /* Narrow phone: a two-word label may take two lines rather than be cut */
 @media (max-width: 480px) {
   .mode-panel.has-viz .st-taps .btn {

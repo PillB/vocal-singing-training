@@ -19,3 +19,6 @@ docs/INTERNAL-TEST-ACCOUNTS.md
 docs/**/*SECRET*
 docs/**/*password*
 docs/**/*PASSWORD*
+
+# Python bytecode (qa/design-test imports a shared module)
+__pycache__/

@@ -1,1 +1,88 @@
 /* Exercise pictures — guided (css for js/scenes/guided.js). Scoped to .mode-panel.has-viz. */
+
+/* The head's controls: a group of 44 px taps beside the title (live: next
+   step / another topic / open the plan; after Stop: ‹ ▶ › and Save) */
+.mode-panel.has-viz.gd .gd-ctl {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.3rem;
+}
+.mode-panel.has-viz.gd .gd-ctl[hidden] {
+  display: none;
+}
+.mode-panel.has-viz.gd .gd-ctl .btn {
+  padding-left: 0.6rem;
+  padding-right: 0.6rem;
+  white-space: nowrap;
+}
+.mode-panel.has-viz.gd .gd-ctl .btn:disabled {
+  opacity: 0.45;
+}
+.mode-panel.has-viz.gd .gd-play .gd-main {
+  font-weight: 800;
+  min-width: 52px;
+}
+/* ‹ › read as arrows, not specks */
+.mode-panel.has-viz.gd .gd-play [data-ch-prev],
+.mode-panel.has-viz.gd .gd-play [data-ch-next] {
+  font-size: 1.35rem;
+  font-weight: 800;
+  line-height: 1;
+}
+/* The picture itself takes taps after Stop (pick a part to play) */
+.mode-panel.has-viz.gd.gd-review .vz-canvas {
+  cursor: pointer;
+}
+
+@media (max-width: 480px) {
+  .mode-panel.has-viz.gd .gd-ctl .btn {
+    padding-left: 0.45rem;
+    padding-right: 0.45rem;
+  }
+}
+
+/* Rotated phone: the controls stack beside the picture; four listen-back
+   controls become a 2 × 2 block so they fit the ~110 px of height */
+@media (max-height: 500px) {
+  .mode-focus.mode-focus-live .mode-panel.has-viz.gd .viz-head {
+    flex: 0 0 auto;
+    gap: 0.25rem;
+  }
+  .mode-focus.mode-focus-live .mode-panel.has-viz.gd .gd-live {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .mode-focus.mode-focus-live .mode-panel.has-viz.gd .gd-play {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(44px, auto));
+    grid-template-areas:
+      "prev next"
+      "play save";
+    gap: 0.25rem;
+  }
+  .mode-focus.mode-focus-live .mode-panel.has-viz.gd .gd-play [data-ch-prev] {
+    grid-area: prev;
+  }
+  .mode-focus.mode-focus-live .mode-panel.has-viz.gd .gd-play [data-ch-next] {
+    grid-area: next;
+  }
+  .mode-focus.mode-focus-live .mode-panel.has-viz.gd .gd-play [data-ch-play] {
+    grid-area: play;
+  }
+  .mode-focus.mode-focus-live .mode-panel.has-viz.gd .gd-play [data-save-take] {
+    grid-area: save;
+  }
+  .mode-focus.mode-focus-live .mode-panel.has-viz.gd .gd-play[hidden] {
+    display: none;
+  }
+  .mode-focus.mode-focus-live .mode-panel.has-viz.gd .gd-ctl .btn {
+    padding-left: 0.4rem;
+    padding-right: 0.4rem;
+    font-size: 0.85rem;
+  }
+  .mode-focus.mode-focus-live .mode-panel.has-viz.gd .gd-ctl.gd-play [data-ch-prev],
+  .mode-focus.mode-focus-live .mode-panel.has-viz.gd .gd-ctl.gd-play [data-ch-next] {
+    font-size: 1.25rem;
+  }
+}

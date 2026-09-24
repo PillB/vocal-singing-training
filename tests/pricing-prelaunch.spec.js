@@ -31,6 +31,8 @@ async function boot(page, lang = "es") {
 }
 
 async function openPricing(page) {
+  // On a phone, Pro is in the header's "Más" menu.
+  if (await page.locator("#btn-more").isVisible()) await page.click("#btn-more");
   await page.click("#btn-pricing");
   await expect(page.locator("#pricing-modal")).toBeVisible();
 }

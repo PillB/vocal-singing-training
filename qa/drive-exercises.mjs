@@ -209,6 +209,15 @@ async function runOne(browser, ex, vpName, variant) {
     await page.screenshot({ path: path.join(dir, "9-stopped.png") });
     rec.shots.push("9-stopped.png");
     rec.probes.stopped = await probe(page);
+    // After Stop the page moves to the rating card; the picture's review is
+    // back up on the stage
+    await page.evaluate(() => {
+      const st = document.getElementById("highway-stage");
+      if (st) window.scrollTo(0, Math.max(0, st.getBoundingClientRect().top + window.scrollY - 8));
+    });
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: path.join(dir, "9b-review.png") });
+    rec.shots.push("9b-review.png");
     rec.toast = await page.evaluate(() => [...document.querySelectorAll(".toast, #toast, [role=status]")].map((n) => n.innerText.trim()).filter(Boolean).join(" | ").slice(0, 400));
   } catch (e) {
     rec.failure = String(e.message || e).slice(0, 500);

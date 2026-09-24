@@ -13,6 +13,20 @@
   overflow: hidden;
   gap: 0.2rem;
 }
+/* The stage puts the panel in #mode-focus-panel, sized to its content, with
+   the "Ahora · paso n" guide under it. A picture has no content height of its
+   own, so its wrapper takes the room the guide leaves. */
+.mode-focus.mode-focus-live .mode-focus-panel:has(> .mode-panel.has-viz) {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.mode-focus.mode-focus-live .mode-focus-panel > .mode-panel.has-viz {
+  flex: 1 1 0;
+  height: auto;
+  min-height: 0;
+}
 
 /* The words above the picture shrink to one tight block */
 .mode-panel.has-viz > .mode-title {
@@ -115,7 +129,7 @@
 
 /* A picture has no pitch labels on its right, so it can use the width the
    pitch highway keeps free for them */
-.mode-focus.mode-focus-live:has(> .mode-panel.has-viz) {
+.mode-focus.mode-focus-live:has(.mode-panel.has-viz) {
   right: 0.5rem;
 }
 
@@ -124,13 +138,17 @@
    panel then sizes to its content, a canvas that keeps its own aspect, and
    grows past the tour's spotlight limit on phones. Keep the stage's own
    placement for picture panels while highlighted. */
-.mode-focus.mode-focus-live.tour-highlight:has(> .mode-panel.has-viz) {
+.mode-focus.mode-focus-live.tour-highlight:has(.mode-panel.has-viz) {
   position: absolute;
 }
 
 /* Landscape phones: every pixel of height goes to the picture. The page
    header already names the exercise, and the picture writes its own words. */
 @media (max-height: 500px) {
+  /* The step line under the picture would take a fifth of its height */
+  .mode-focus.mode-focus-live:has(.mode-panel.has-viz) .stage-guide {
+    display: none;
+  }
   .mode-focus.mode-focus-live .mode-panel.has-viz > .mode-title,
   .mode-focus.mode-focus-live .mode-panel.has-viz .viz-head .mode-title,
   .mode-focus.mode-focus-live .mode-panel.has-viz > .mode-meta {
@@ -154,6 +172,17 @@
     min-height: 70px;
   }
   .vz-cap {
+    display: none;
+  }
+}
+
+/* Pitch exercises put their panel in the stage's coach strip, over the lanes.
+   On a rotated phone the lanes get ~190 px, so while singing the strip keeps
+   to its words and the lanes keep the height; a panel's own picture (the trill
+   solfège stones, the hold shelf) comes back as the review after Stop. */
+@media (max-height: 500px) {
+  .stage-coach .mode-panel:not(.is-replay) .vz,
+  .stage-coach .mode-panel:not(.is-replay) .pz-row {
     display: none;
   }
 }

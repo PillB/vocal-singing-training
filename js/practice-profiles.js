@@ -204,8 +204,10 @@
       pitchChallenge: false,
       autoPiano: false,
       autoRecord: true,
-      cue: "Tap “Key point” when you slow down for impact. Log 3 intentional slow-downs.",
-      cueEs: "Toca “Punto clave” cuando bajes el ritmo por impacto. Registra 3 bajadas intencionales.",
+      keyPoints: 3,
+      minPauseSec: 0.7,
+      cue: "3 takes: one even pace · slow on each key idea (tap “Key point”) · a brake (pause) before it. Aim for 3 anchors.",
+      cueEs: "3 tomas: un solo ritmo · lento en cada idea clave (toca «Punto clave») · un freno (pausa) antes. Busca 3 anclas.",
       metricHints: { keySlowdowns: "keyPoints" }
     },
     "v15-gestures": {

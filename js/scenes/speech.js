@@ -1032,8 +1032,382 @@
     }
   }
 
+  /* —— v14 · Pace for impact —— */
+
+  // Relative pace axis for the river: 40 % … 160 % of your own even pace
+  const RV_LO = 0.4;
+  const RV_HI = 1.6;
+  // A key point counts as slowed at 15 % under your base (the rate itself
+  // is only good to ±15–20 %, so less than that would be noise)
+  const SLOW_REL = 0.85;
+
+  /** A flag on a pole: filled once it has become an anchor, outlined before. */
+  function flagMark(ctx, x, y, s, color, filled) {
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x, y + s * 1.6);
+    ctx.lineTo(x, y - s);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x, y - s);
+    ctx.lineTo(x + s * 1.3, y - s * 0.45);
+    ctx.lineTo(x, y + s * 0.1);
+    ctx.closePath();
+    if (filled) ctx.fill();
+    else {
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+  }
+
+  const anchorsOf = (k) => k.flags.filter((f) => f.state === "anchor").length;
+
+  /** What happened at a key point, in words: "−25 % · pausa 1,1 s". */
+  function flagWords(f, goal) {
+    if (f.state === "wait") return "…";
+    if (f.state !== "anchor") return L("como tu base", "like your base");
+    const parts = [];
+    if (f.rel != null && f.rel <= SLOW_REL) {
+      const n = Math.round((1 - f.rel) * 100);
+      parts.push(L(`−${n} %`, `−${n}%`));
+    }
+    if (f.pause >= goal) parts.push(L(`pausa ${fmtSec(f.pause)}`, `pause ${fmtSec(f.pause)}`));
+    return parts.join(" · ");
+  }
+
+  /**
+   * Pace for impact — "Río de ritmo con anclas".
+   * Your pace over the last half minute as a line, against the band of
+   * your own even pace (take 1). Tap «Punto clave» as a key idea starts: a
+   * flag drops there and the next five seconds decide it. Slower than your
+   * base, or a pause after it, and the flag fills into a gold anchor with
+   * the words of what happened; otherwise it stays an outlined flag, "like
+   * your base" — never red. After Stop, one row per take: its pace profile,
+   * its anchors and how much it varied.
+   * model: {
+   *   takes: [{ name, short, cue, start, end, flags: [{ t, state, rel, pause }], spread }],
+   *   current, elapsed, done, review, talked, waiting,
+   *   base | null (syll/s), provBase, baseFrac 0..1, band [lo, hi],
+   *   live: SlowValue, flash { text, color, until } | null,
+   *   goal, pauseGoal, win, rt: RateTrack, vad
+   * }
+   */
+  function paceRiver(ctx, w, h, m) {
+    panel(ctx, w, h);
+    const pad = 10;
+    const tiny = h < 135;
+    const compact = h < 190;
+    const chipH = tiny ? 0 : compact ? 26 : 36;
+    const T = m.takes;
+    if (!tiny) {
+      chips(
+        ctx,
+        { x: pad, y: pad, w: w - pad * 2, h: chipH },
+        T.map((k, i) => ({
+          label: w >= 520 || (i === m.current && !m.review) ? k.name : k.short,
+          short: k.short,
+          sub: takeSub(m, k, i),
+          done: k.end != null
+        })),
+        { current: m.review || m.done ? -1 : m.current, frac: null }
+      );
+    }
+    const top = tiny ? pad - 2 : pad + chipH + (compact ? 6 : 10);
+    if (m.review) return riverReview(ctx, { x: pad, y: top, w: w - pad * 2, h: h - top - pad }, m, compact);
+    const headY = top + (tiny ? 8 : compact ? 9 : 12);
+    const slotW = riverSlots(ctx, w - pad - 2, headY, m, compact);
+    const head = riverHead(m, tiny);
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = head.color;
+    fitText(ctx, head.text, pad + 2, headY, w - pad * 2 - slotW - 14, compact ? 14 : 17, 800, 10);
+
+    // The river over the strip of speech and pauses, on one time axis
+    const flagRoom = tiny ? 2 : 16;
+    const plotTop = headY + (tiny ? 10 : compact ? 13 : 18) + flagRoom;
+    const stripH = tiny ? 14 : compact ? 18 : 26;
+    const stripBox = { x: pad, y: h - pad - stripH, w: w - pad * 2, h: stripH };
+    const plot = { x: pad, y: plotTop, w: w - pad * 2, h: Math.max(20, stripBox.y - 6 - plotTop) };
+    const secs = w < 420 ? 20 : 30;
+    const map = timeStrip(ctx, stripBox, m.vad, secs, { minLabel: 0.6, goodPause: [m.pauseGoal, 99] });
+    riverPlot(ctx, plot, m, map, { tiny, compact, live: true });
+  }
+
+  function takeSub(m, k, i) {
+    if (k.end != null) return i === 0 && !k.flags.length ? L("tu base", "your base") : L(`anclas ${anchorsOf(k)}`, `anchors ${anchorsOf(k)}`);
+    if (i === m.current && !m.review) return m.done ? "✓" : clockDown(m.elapsed);
+    return "~90 s";
+  }
+
+  /** The headline: one slow cue, in words. */
+  function riverHead(m, tiny) {
+    const pre = tiny ? `${Math.min(m.current, m.takes.length - 1) + 1} · ` : "";
+    const f = m.flash;
+    if (f && performance.now() < f.until) return { text: pre + f.text, color: f.color };
+    if (m.done) return { text: pre + L("Tres tomas listas: Detener muestra el mapa", "Three takes done: Stop shows the map"), color: C.done };
+    if (m.waiting) return { text: pre + L("Punto clave: más lento… y una pausa", "Key point: slower… and a pause"), color: C.text };
+    if (m.current === 0) {
+      if (!m.talked) return { text: pre + L("Di tu mensaje a un solo ritmo", "Say your message at one even pace"), color: C.text };
+      if (m.base == null) return { text: pre + L("Ritmo uniforme · midiendo tu base…", "One even pace · measuring your base…"), color: C.text };
+      return { text: pre + L("Base lista · sigue, o pasa a la toma 2", "Base ready · go on, or move to take 2"), color: C.text };
+    }
+    return { text: pre + (m.takes[m.current]?.cue || ""), color: C.text };
+  }
+
+  /**
+   * Right of the headline: in the even take, a small ring filling while
+   * the base is measured; afterwards, one flag slot per key point, filled
+   * gold as anchors land. Returns the width used.
+   */
+  function riverSlots(ctx, right, cy, m, small) {
+    const k = m.takes[Math.min(m.current, m.takes.length - 1)];
+    ctx.textAlign = "right";
+    ctx.textBaseline = "middle";
+    if (m.current === 0 && !m.done) {
+      const r = small ? 7 : 9;
+      ctx.font = font(small ? 10 : 11, 700);
+      ctx.fillStyle = m.base != null ? C.done : C.muted;
+      const txt = m.base != null ? L("base ✓", "base ✓") : L("base", "base");
+      ctx.fillText(txt, right, cy + 1);
+      const tw = ctx.measureText(txt).width;
+      V.ring(ctx, right - tw - 8 - r, cy, r, m.base != null ? 1 : m.baseFrac || 0, {
+        color: m.base != null ? C.done : C.you,
+        width: 3
+      });
+      return tw + 8 + r * 2;
+    }
+    const n = m.goal || 3;
+    const a = anchorsOf(k);
+    const s = small ? 5 : 7;
+    const step = s * 2.8;
+    ctx.font = font(small ? 12 : 15, 800, true);
+    ctx.fillStyle = a >= n ? C.done : C.text;
+    const txt = `${a}/${n}`;
+    ctx.fillText(txt, right, cy + 1);
+    const tw = ctx.measureText(txt).width;
+    const x0 = right - tw - 10 - step * n + s * 0.4;
+    for (let i = 0; i < n; i++) flagMark(ctx, x0 + i * step, cy - s * 0.3, s, i < a ? C.done : C.faint, i < a);
+    return tw + 10 + step * n;
+  }
+
+  /** The river itself: your pace as a line against your own even band. */
+  function riverPlot(ctx, box, m, map, o) {
+    const { x, y, w, h } = box;
+    const yOf = (rel) => y + h - ((clamp(rel, RV_LO, RV_HI) - RV_LO) / (RV_HI - RV_LO)) * h;
+    ctx.save();
+    ctx.fillStyle = "rgba(170, 195, 230, 0.05)";
+    roundRect(ctx, x, y, w, h, 6);
+    ctx.fill();
+    // Where a key idea lands: under 85 % of your base
+    ctx.fillStyle = "rgba(52, 178, 122, 0.08)";
+    ctx.fillRect(x, yOf(SLOW_REL), w, y + h - yOf(SLOW_REL));
+    // The band of your even pace, and its middle
+    const band = m.band || [0.92, 1.08];
+    ctx.fillStyle = m.base != null ? "rgba(170, 195, 230, 0.16)" : "rgba(170, 195, 230, 0.08)";
+    ctx.fillRect(x, yOf(band[1]), w, yOf(band[0]) - yOf(band[1]));
+    ctx.setLineDash([4, 4]);
+    ctx.strokeStyle = C.gridStrong;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x, yOf(1));
+    ctx.lineTo(x + w, yOf(1));
+    ctx.stroke();
+    ctx.setLineDash([]);
+    if (!o.tiny && h >= 70) {
+      ctx.font = font(10, 700);
+      ctx.textAlign = "left";
+      ctx.fillStyle = C.faint;
+      ctx.textBaseline = "top";
+      ctx.fillText(L("▲ más rápido", "▲ faster"), x + 6, y + 4);
+      ctx.textBaseline = "bottom";
+      ctx.fillText(L("▼ más lento: aquí aterriza lo clave", "▼ slower: where key ideas land"), x + 6, y + h - 3, w - 12);
+      ctx.textAlign = "right";
+      ctx.textBaseline = "top";
+      ctx.fillStyle = C.faint;
+      ctx.fillText(L("sílabas/s, aprox.", "syllables/s, approx."), x + w - 6, y + 4);
+      ctx.textAlign = "left";
+      ctx.textBaseline = "bottom";
+      const bl = m.base != null ? L("tu ritmo uniforme (toma 1)", "your even pace (take 1)") : L("midiendo tu base…", "measuring your base…");
+      const bw = ctx.measureText(bl).width;
+      ctx.fillStyle = "rgba(14, 21, 31, 0.75)";
+      roundRect(ctx, x + 3, yOf(band[1]) - 15, bw + 6, 13, 3);
+      ctx.fill();
+      ctx.fillStyle = C.muted;
+      ctx.fillText(bl, x + 6, yOf(band[1]) - 3);
+    }
+    // Your pace: a line with gaps where you paused
+    const denom = m.base || m.provBase;
+    if (denom) {
+      ctx.beginPath();
+      let pen = false;
+      const tr = m.rt.trace;
+      // A whole syllable more or less in the window is a visible step: a
+      // short running mean over the 4 Hz trace keeps the line calm
+      const smooth = (i) => {
+        let sum = 0;
+        let n = 0;
+        for (let j = Math.max(0, i - 2); j <= Math.min(tr.length - 1, i + 2); j++) {
+          if (tr[j].rate != null) {
+            sum += tr[j].rate;
+            n += 1;
+          }
+        }
+        return n ? sum / n : tr[i].rate;
+      };
+      for (let i = 0; i < tr.length; i++) {
+        const p = tr[i];
+        if (p.t < map.from) continue;
+        if (p.t > map.to) break;
+        if (p.rate == null) {
+          pen = false;
+          continue;
+        }
+        const px = map.xOf(p.t);
+        const py = yOf(smooth(i) / denom);
+        if (pen) ctx.lineTo(px, py);
+        else ctx.moveTo(px, py);
+        pen = true;
+      }
+      ctx.strokeStyle = C.you;
+      ctx.lineWidth = o.tiny ? 2.5 : 3.2;
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
+      ctx.stroke();
+      const live = m.live && m.live.shown;
+      if (o.live && live != null && m.rt.talking) {
+        const nx = Math.min(x + w, map.xOf(map.now));
+        ctx.fillStyle = C.you;
+        ctx.strokeStyle = C.bg;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(nx, yOf(live), o.tiny ? 5 : 7, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
+    }
+    // Key points: a flag at each tap, the five deciding seconds shaded
+    const flagS = o.tiny ? 5 : 6;
+    const all = [];
+    m.takes.forEach((k) => k.flags.forEach((f) => all.push(f)));
+    all.sort((a, b) => a.t - b.t);
+    all.forEach((f, i) => {
+      if (f.t > map.to || f.t < map.from - m.win) return;
+      const fx = map.xOf(f.t);
+      if (f.state === "wait") {
+        const a = Math.max(x, fx);
+        const b = Math.min(x + w, map.xOf(f.t + m.win));
+        ctx.fillStyle = "rgba(238, 243, 250, 0.07)";
+        if (b > a) ctx.fillRect(a, y, b - a, h);
+      }
+      if (fx < x) return;
+      const anchor = f.state === "anchor";
+      ctx.setLineDash([3, 3]);
+      ctx.strokeStyle = anchor ? "rgba(255, 207, 102, 0.55)" : "rgba(238, 243, 250, 0.3)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(fx, y);
+      ctx.lineTo(fx, y + h);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      const fy = o.tiny ? y + flagS + 2 : y - flagS - 3;
+      flagMark(ctx, fx, fy, flagS, anchor ? C.done : f.state === "wait" ? C.text : C.muted, anchor);
+      // Words beside the flag, as far as the next flag allows
+      const nx = all[i + 1] && all[i + 1].t <= map.to ? map.xOf(all[i + 1].t) - 6 : x + w;
+      const tx = fx + flagS * 1.5 + 3;
+      if (!o.tiny && f.state !== "wait" && nx - tx >= 34) {
+        ctx.textAlign = "left";
+        ctx.textBaseline = "middle";
+        ctx.fillStyle = anchor ? C.done : C.muted;
+        fitText(ctx, (anchor ? "✓ " : "") + flagWords(f, m.pauseGoal), tx, fy - flagS * 0.4, nx - tx, 10, 800, 8);
+      }
+    });
+    ctx.restore();
+  }
+
+  /** After Stop: a row per take — how much it varied, its anchors, its profile. */
+  function riverReview(ctx, box, m, compact) {
+    const played = m.takes.filter((k) => k.start != null);
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    if (!played.length || !(m.base || m.provBase)) {
+      ctx.fillStyle = C.muted;
+      ctx.font = font(13, 600);
+      ctx.fillText(L("Sin ritmo medido todavía: habla unos segundos.", "No pace measured yet: speak for a few seconds."), box.x, box.y + 10, box.w);
+      return;
+    }
+    const spreadTxt = (k) => (k.spread != null ? L(`±${Math.round(k.spread * 100)} %`, `±${Math.round(k.spread * 100)}%`) : "—");
+    const a = L("Variación aprox. ", "Variation, approx. ") + played.map(spreadTxt).join(" → ");
+    const b = L("anclas ", "anchors ") + played.map((k) => anchorsOf(k)).join(" → ");
+    const twoLines = box.w < 520 && !compact;
+    const headH = compact ? 18 : twoLines ? 40 : 26;
+    ctx.fillStyle = C.text;
+    if (twoLines) {
+      fitText(ctx, a, box.x + 2, box.y + 10, box.w - 4, 14, 800, 10);
+      ctx.fillStyle = C.done;
+      fitText(ctx, b.charAt(0).toUpperCase() + b.slice(1), box.x + 2, box.y + 29, box.w - 4, 13, 700, 10);
+    } else fitText(ctx, `${a} · ${b}`, box.x + 2, box.y + headH / 2, box.w - 4, compact ? 13 : 15, 800, 10);
+    const footH = compact ? 0 : 16;
+    const rowsTop = box.y + headH + 6;
+    const rowH = Math.min(90, (box.h - headH - 6 - footH) / played.length);
+    const labelW = Math.min(150, box.w * 0.3);
+    played.forEach((k, i) => {
+      const y = rowsTop + i * rowH;
+      ctx.fillStyle = C.text;
+      ctx.font = font(12, 800);
+      ctx.textAlign = "left";
+      ctx.textBaseline = "top";
+      ctx.fillText(k.name, box.x, y + 2, labelW - 6);
+      if (rowH >= 30) {
+        ctx.fillStyle = C.muted;
+        ctx.font = font(11, 600);
+        ctx.fillText(`${spreadTxt(k)} · ${L("anclas", "anchors")} ${anchorsOf(k)}`, box.x, y + 17, labelW - 6);
+      }
+      const end = k.end != null ? k.end : m.vad.t;
+      const span = Math.max(1, end - k.start);
+      const stripH = rowH >= 56 ? 8 : 0;
+      const pb = { x: box.x + labelW, y: y + 10, w: box.w - labelW, h: Math.max(14, rowH - 16 - stripH) };
+      const xOf = (t) => pb.x + ((t - k.start) / span) * pb.w;
+      riverPlot(ctx, pb, m, { from: k.start, to: end, now: end, xOf }, { tiny: true, compact: true, live: false });
+      if (stripH) speechStrip(ctx, { x: pb.x, y: pb.y + pb.h + 2, w: pb.w, h: stripH }, m.vad, { range: [k.start, end], minLabel: 99 });
+      // In a small row the flag words would crowd: the anchors say it
+      if (rowH >= 56) {
+        k.flags.forEach((f, j) => {
+          if (f.state !== "anchor") return;
+          const fx = xOf(f.t);
+          const nx = k.flags[j + 1] ? xOf(k.flags[j + 1].t) - 6 : pb.x + pb.w;
+          if (nx - (fx + 11) < 34) return;
+          ctx.fillStyle = C.done;
+          ctx.textAlign = "left";
+          ctx.textBaseline = "top";
+          fitText(ctx, flagWords(f, m.pauseGoal), fx + 11, pb.y + 2, nx - fx - 11, 10, 800, 8);
+        });
+      }
+    });
+    if (footH) {
+      ctx.textAlign = "left";
+      ctx.textBaseline = "bottom";
+      ctx.fillStyle = C.faint;
+      fitText(
+        ctx,
+        L(
+          `banda = tu ritmo uniforme · ancla = ${Math.round((1 - SLOW_REL) * 100)} % más lento o pausa de ${V.fmtNum(m.pauseGoal, 1)} s tras «Punto clave»`,
+          `band = your even pace · anchor = ${Math.round((1 - SLOW_REL) * 100)}% slower or a ${V.fmtNum(m.pauseGoal, 1)} s pause after “Key point”`
+        ),
+        box.x + 2,
+        box.y + box.h,
+        box.w - 4,
+        10,
+        700,
+        8
+      );
+    }
+  }
+
   V.scenes.rateLadder = rateLadder;
   V.scenes.fillerRounds = fillerRounds;
+  V.scenes.paceRiver = paceRiver;
   V.speechTiming = {
     RateTrack,
     SlowValue,

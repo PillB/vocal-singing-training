@@ -33,6 +33,19 @@
   padding-right: 0;
 }
 
+/* Narrow phone: a two-word label may take two lines rather than be cut */
+@media (max-width: 480px) {
+  .mode-panel.has-viz .st-taps .btn {
+    white-space: normal;
+    line-height: 1.15;
+    text-overflow: clip;
+  }
+  .mode-focus.mode-focus-live .mode-panel.has-viz .st-taps .btn {
+    font-size: 0.82rem;
+    padding: 0.3rem 0.45rem;
+  }
+}
+
 /* Rotated phone: the panel is a row; the taps stand in a column beside the
    picture, next to the picture's own control */
 @media (max-height: 500px) {

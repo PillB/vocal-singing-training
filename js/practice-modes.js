@@ -1307,47 +1307,339 @@
     }
   });
 
+  /**
+   * v14 — pace for impact, in three takes of the same short message: an
+   * even take that measures the learner's own pace, a take that slows on
+   * each key idea, and a take with a brake (a pause) before it. The pace is
+   * syllables per second, approximate, only ever shown against the even
+   * take. The learner taps «Punto clave» as a key idea starts; the next five
+   * seconds decide whether it landed (slower than the base, or a pause) —
+   * which idea is the key one only the learner knows.
+   */
   Modes.keyPointPace = baseMode({
     id: "keyPointPace",
     render() {
-      this.state.keys = 0;
-      this.state.confirmed = 0;
-      this.state.slowUntil = 0;
-      this.state.quietMs = 0;
+      const st = this.state;
+      st.goal = this.profile.keyPoints || 3;
+      st.pauseGoal = this.profile.minPauseSec || 0.7;
+      st.win = 5;
+      const takes = [
+        {
+          word: L("uniforme", "even"),
+          how: L("Toma 1: di tu mensaje a un solo ritmo, sin frenos. Mide tu base.", "Take 1: say your message at one even pace, no brakes. It measures your base."),
+          cue: ""
+        },
+        {
+          word: L("varía", "vary"),
+          how: L(
+            "Toma 2: lento en cada idea clave (toca «Punto clave» al llegar) y un poco más vivo en los puentes.",
+            "Take 2: slow on each key idea (tap “Key point” as it starts), a little brisker on the bridges."
+          ),
+          cue: L("Lento en lo clave · toca «Punto clave»", "Slow on the key idea · tap “Key point”")
+        },
+        {
+          word: L("frenos", "brakes"),
+          how: L(
+            "Toma 3: un freno — una pausa — antes de cada idea clave, y luego lento.",
+            "Take 3: a brake — a pause — before each key idea, then slow."
+          ),
+          cue: L("Un freno antes de lo clave, luego lento", "A brake before the key idea, then slow")
+        }
+      ];
+      st.takes = takes.map((k, i) =>
+        Object.assign(k, { name: `${i + 1} · ${k.word}`, short: String(i + 1), start: null, end: null, flags: [], spread: null })
+      );
       this.hud.innerHTML = `
-        <div class="mode-title">${L("Ritmo con impacto", "Pace for impact")}</div>
-        <div class="mode-big" data-k>0 / 3 confirmed</div>
-        <button type="button" class="btn btn-primary btn-sm" data-key>Mark key point — then slow 1s</button>
-        <p class="mode-meta" data-st>${L("Toca y baja ritmo/energía ~1s para confirmar.", "Tap, then drop pace/energy ~1 second to confirm.")}</p>
+        <div class="viz-row viz-head">
+          <div class="mode-title">${L("Ritmo con impacto", "Pace for impact")}</div>
+          <button type="button" class="btn btn-ghost viz-tap" data-next-take>${L("Siguiente toma →", "Next take →")}</button>
+        </div>
+        <div class="viz-words" aria-live="polite">
+          <span data-status>${takes[0].how}</span>
+          ${L("Ritmo, aprox.", "Pace, approx.")} <strong data-rate>—</strong> ·
+          ${L("Anclas en esta toma", "Anchors this take")} <strong data-k>0</strong> / ${st.goal} ·
+          ${L("Puntos clave marcados", "Key points marked")} <strong data-marked>0</strong>
+          <span data-last></span>
+        </div>
+        <p class="mode-meta muted">${L(
+          "Tu ritmo en sílabas por segundo, aprox., frente a tu propia toma uniforme. Qué idea es la clave lo sabes tú: el micrófono solo mide si bajaste el ritmo o hiciste una pausa después de tocar.",
+          "Your pace in syllables per second, approx., against your own even take. Which idea is the key one only you know: the mic only measures whether you slowed down or paused after the tap."
+        )}</p>
+        <div class="viz-row st-taps">
+          <button type="button" class="btn btn-primary viz-tap st-tap st-tap-key" data-key>${L("Punto clave", "Key point")}</button>
+        </div>
       `;
-      this.$("[data-key]")?.addEventListener("click", () => {
-        this.state.keys++;
-        this.state.slowUntil = performance.now() + 1200;
-        this.state.quietMs = 0;
-        if (this.$("[data-st]"))
-          this.$("[data-st]").textContent = L("Ventana lenta — suaviza ~1 s…", "Slow window — ease off ~1s…");
+      this.$("[data-key]")?.addEventListener("click", () => this._keyPoint());
+      this.$("[data-next-take]")?.addEventListener("click", () => this._nextTake());
+      this._resetTakes();
+      this._mountViz();
+    },
+    _resetTakes() {
+      const st = this.state;
+      const F = global.VTFeatures;
+      const K = global.VTViz?.speechTiming;
+      st.current = 0;
+      st.elapsed = 0;
+      st.done = false;
+      st.review = false;
+      st.running = false;
+      st.talked = false;
+      st.waiting = false;
+      st.base = null;
+      st.provBase = null;
+      st.baseFrac = 0;
+      st.band = null;
+      st.baseAcc = { peaks: 0, speech: 0, samples: [], sampleAcc: 0 };
+      st.open = [];
+      st.flash = null;
+      st.marked = 0;
+      st.last = performance.now();
+      st.lastWords = 0;
+      st.lastLive = 0;
+      st.takes.forEach((k) => {
+        k.start = null;
+        k.end = null;
+        k.flags = [];
+        k.spread = null;
+        k.bin = null;
       });
+      if (F && K) {
+        st.vad = new F.Vad({});
+        st.rt = new K.RateTrack({ windowSec: 3 });
+        st.live = new K.SlowValue(0.6);
+      }
+      ["[data-k]", "[data-marked]"].forEach((s) => {
+        if (this.$(s)) this.$(s).textContent = "0";
+      });
+      if (this.$("[data-rate]")) this.$("[data-rate]").textContent = "—";
+      if (this.$("[data-last]")) this.$("[data-last]").textContent = "";
+      const b = this.$("[data-next-take]");
+      if (b) b.disabled = false;
+    },
+    _mountViz() {
+      const V = global.VTViz;
+      if (!V || !V.scenes.paceRiver || !this.state.rt) return;
+      this.hud.classList.add("has-viz");
+      this.viz = new V.Surface(this.hud, (ctx, w, h) => V.scenes.paceRiver(ctx, w, h, this.state), {
+        label: L(
+          "Río de ritmo: una línea con tu ritmo de habla en el último medio minuto, frente a la banda de tu ritmo uniforme; cada punto clave deja una bandera, que se vuelve ancla dorada si bajaste el ritmo o hiciste una pausa.",
+          "Pace river: a line with your speaking pace over the last half minute, against the band of your even pace; each key point drops a flag, which becomes a gold anchor if you slowed down or paused."
+        ),
+        captionHidden: true
+      });
+      const taps = this.$(".st-taps");
+      if (taps && this.viz.wrap) this.hud.insertBefore(this.viz.wrap, taps);
+      this.viz.draw();
+    },
+    _keyPoint() {
+      const st = this.state;
+      const k = st.takes[st.current];
+      if (!st.running || !k || !st.rt) return;
+      // The tap comes as the key idea starts; a beat of lag is fine here
+      const f = { t: st.rt.t, state: "wait", rel: null, pause: 0, peaks: 0, speech: 0 };
+      k.flags.push(f);
+      st.open.push(f);
+      st.marked += 1;
+      st.waiting = true;
+      if (this.$("[data-marked]")) this.$("[data-marked]").textContent = String(st.marked);
+      this.viz?.draw();
+    },
+    /** Five seconds after a tap: did the pace drop, or did a pause come? */
+    _judge(f, base) {
+      const st = this.state;
+      const rate = f.speech >= 1.2 ? f.peaks / f.speech : null;
+      f.rel = rate != null && base ? rate / base : null;
+      let pause = 0;
+      const from = f.t - 1.5;
+      const to = f.t + st.win + 2.5;
+      (st.vad?.segments || []).forEach((g) => {
+        if (g.kind !== "pause") return;
+        const end = g.end != null ? g.end : st.vad.t;
+        if (end < from || g.start > to) return;
+        pause = Math.max(pause, end - g.start);
+      });
+      f.pause = pause;
+      const slowed = f.rel != null && f.rel <= 0.85;
+      const paused = pause >= st.pauseGoal;
+      f.state = slowed || paused ? "anchor" : "flat";
+      const V = global.VTViz;
+      const k = st.takes.find((x) => x.flags.includes(f));
+      const n = k ? k.flags.filter((x) => x.state === "anchor").length : 0;
+      if (k === st.takes[st.current] && this.$("[data-k]")) this.$("[data-k]").textContent = String(n);
+      let words;
+      if (f.state === "anchor") {
+        const parts = [];
+        if (slowed) parts.push(L(`${Math.round((1 - f.rel) * 100)} % más lento`, `${Math.round((1 - f.rel) * 100)}% slower`));
+        if (paused) parts.push(L(`pausa de ${V.fmtSec(pause)}`, `a ${V.fmtSec(pause)} pause`));
+        words = L("✓ Ancla: ", "✓ Anchor: ") + parts.join(" · ");
+        st.flash = { text: words, color: V.C.done, until: performance.now() + 3000 };
+      } else {
+        words = L("Ese punto sonó a tu ritmo base", "That one was at your usual pace");
+        st.flash = { text: words, color: V.C.text, until: performance.now() + 3000 };
+      }
+      if (this.$("[data-last]")) this.$("[data-last]").textContent = " · " + words;
+    },
+    _closeTake() {
+      const st = this.state;
+      const k = st.takes[st.current];
+      if (!k || k.start == null || k.end != null) return;
+      k.end = st.rt ? st.rt.t : 0;
+      const bin = st.rt?.cur;
+      const base = st.base || st.provBase;
+      if (bin && base && bin.samples.length >= 4) {
+        const K = global.VTViz.speechTiming;
+        k.spread = (K.quantile(bin.samples, 0.75) - K.quantile(bin.samples, 0.25)) / 2 / base;
+      }
+      k.bin = bin || null;
+    },
+    _nextTake() {
+      const st = this.state;
+      if (st.done || !st.rt) return;
+      if (st.current < st.takes.length - 1) {
+        this._closeTake();
+        st.current += 1;
+        const k = st.takes[st.current];
+        k.start = st.rt.t;
+        st.rt.begin(st.current);
+        st.elapsed = 0;
+        st.flash = null;
+        if (this.$("[data-status]")) this.$("[data-status]").textContent = k.how;
+        if (this.$("[data-k]")) this.$("[data-k]").textContent = "0";
+        if (global.VTToast) global.VTToast(k.how);
+      } else {
+        st.done = true;
+      }
+      if (st.done || st.current >= st.takes.length - 1) {
+        const b = this.$("[data-next-take]");
+        if (b) b.disabled = true;
+        if (st.done && this.$("[data-status]"))
+          this.$("[data-status]").textContent = L("Tres tomas listas: Detener muestra el mapa.", "Three takes done: Stop shows the map.");
+      }
+      this.viz?.draw();
+    },
+    onStart() {
+      this._resetTakes();
+      const st = this.state;
+      st.running = true;
+      if (st.takes[0]) st.takes[0].start = 0;
+      st.rt?.begin(0);
+      this.hud?.classList.remove("is-replay");
+      if (this.$("[data-key]")) this.$("[data-key]").disabled = false;
+      this.viz?.draw();
     },
     onFrame(frame) {
-      if (performance.now() < this.state.slowUntil) {
-        // confirm if speech is softer or sparse
-        if ((frame.rms || 0) < 0.04 || !frame.voiced) {
-          this.state.quietMs += frame.dtMs || 16;
-          if (this.state.quietMs >= 600 && this.state.confirming !== this.state.keys) {
-            this.state.confirming = this.state.keys;
-            this.state.confirmed++;
-            if (this.$("[data-k]"))
-              this.$("[data-k]").textContent = `${this.state.confirmed} / 3 confirmed`;
-            if (this.$("[data-st]")) this.$("[data-st]").textContent = L("Bajada confirmada ✓", "Slow-down confirmed ✓");
+      const st = this.state;
+      if (!st.running || !st.rt) return;
+      const K = global.VTViz.speechTiming;
+      const now = performance.now();
+      const dt = Math.min(0.25, Math.max(0, (now - st.last) / 1000));
+      st.last = now;
+      st.elapsed += dt;
+      st.vad.feed(frame);
+      const s0 = st.rt.sr.speechT;
+      const peak = st.rt.feed(frame) ? 1 : 0;
+      const dS = Math.max(0, st.rt.sr.speechT - s0);
+      const t = st.rt.t;
+      if (st.rt.talking) st.talked = true;
+      // The five seconds after each tap
+      st.open.forEach((f) => {
+        if (t <= f.t + st.win) {
+          f.peaks += peak;
+          f.speech += dS;
+        }
+      });
+      // The base: the even take, away from any key point, until it has 8 s
+      // of talking (and on into take 2 if take 1 was cut short)
+      const near = st.takes.some((k) => k.flags.some((f) => t >= f.t - 1 && t <= f.t + st.win + 1));
+      const measuring = st.current === 0 || st.base == null;
+      if (measuring && !near) {
+        const A = st.baseAcc;
+        A.peaks += peak;
+        A.speech += dS;
+        A.sampleAcc += dS;
+        if (A.sampleAcc >= 1) {
+          A.sampleAcc -= 1;
+          const r = st.rt.rate;
+          if (r != null) A.samples.push(r);
+        }
+        st.baseFrac = clamp(A.speech / 8, 0, 1);
+        if (A.speech >= 8 && A.peaks > 0) {
+          const first = st.base == null;
+          st.base = A.peaks / A.speech;
+          if (A.samples.length >= 4) {
+            const q1 = K.quantile(A.samples, 0.25) / st.base;
+            const q3 = K.quantile(A.samples, 0.75) / st.base;
+            st.band = [Math.min(0.95, q1), Math.max(1.05, q3)];
           }
+          if (first) st.flash = { text: L("✓ Base medida", "✓ Base measured"), color: global.VTViz.C.done, until: now + 2000 };
         }
       }
+      if (st.base == null) st.provBase = st.rt.sr.overall;
+      // Judge each tap once its five seconds are up (and a pause that is
+      // still going has had its chance to count)
+      const base = st.base;
+      if (base) {
+        st.open = st.open.filter((f) => {
+          if (t < f.t + st.win) return true;
+          if (st.vad.state === "pause" && t < f.t + st.win + 2.5) return true;
+          this._judge(f, base);
+          return false;
+        });
+      }
+      st.waiting = st.open.some((f) => t < f.t + st.win);
+      // One slow value for the dot: a new target every half second of talking
+      const denom = st.base || st.provBase;
+      if (denom && st.rt.rate != null && st.rt.talking && now - st.lastLive > 500) {
+        st.lastLive = now;
+        st.live.set(st.rt.rate / denom);
+      }
+      st.live.step(dt);
+      if (now - st.lastWords > 300) {
+        st.lastWords = now;
+        const r = st.rt.rate;
+        if (this.$("[data-rate]"))
+          this.$("[data-rate]").textContent =
+            r != null && denom ? `${global.VTViz.fmtNum(r, 1)} ${L("síl/s", "syll/s")} (${K.pct(r / denom)})` : "—";
+      }
+      this.viz?.draw();
     },
     onStop() {
-      const n = this.state.confirmed || 0;
+      const st = this.state;
+      st.running = false;
+      if (st.rt) {
+        this._closeTake();
+        st.rt.end();
+        const base = st.base || st.rt.sr.overall;
+        (st.open || []).forEach((f) => this._judge(f, base));
+        st.open = [];
+        if (!st.base) st.provBase = base;
+      }
+      st.waiting = false;
+      st.flash = null;
+      st.review = true;
+      ["[data-key]", "[data-next-take]"].forEach((s) => {
+        if (this.$(s)) this.$(s).disabled = true;
+      });
+      if (this.viz) {
+        this.hud.classList.add("is-replay");
+        this.viz.draw();
+      }
+      const played = (st.takes || []).filter((k) => k.start != null);
+      const anchors = played.map((k) => k.flags.filter((f) => f.state === "anchor").length);
+      const patches = {};
+      // Intentional slow-downs: the best take's anchors, and only when the
+      // learner marked key points at all
+      if (st.marked > 0 && anchors.length) patches.keySlowdowns = Math.max(...anchors);
+      const spread = played.map((k) => (k.spread != null ? L(`±${Math.round(k.spread * 100)} %`, `±${Math.round(k.spread * 100)}%`) : "—"));
       return {
-        patches: n > 0 ? { keySlowdowns: n, paceCraft: clamp(n + 1, 1, 5) } : { keySlowdowns: this.state.keys || 0 },
-        summary: `${n} confirmed slow-downs (${this.state.keys} marked)`
+        patches,
+        summary:
+          played.length && (st.base || st.provBase)
+            ? L(
+                `Anclas por toma: ${anchors.join(" → ")} · variación de ritmo aprox.: ${spread.join(" → ")}`,
+                `Anchors per take: ${anchors.join(" → ")} · pace variation, approx.: ${spread.join(" → ")}`
+              )
+            : L("Sin ritmo medido todavía: habla unos segundos.", "No pace measured yet: speak for a few seconds.")
       };
     }
   });

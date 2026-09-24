@@ -486,6 +486,12 @@
     return arm("loop_home_2026_10") !== "classic";
   }
 
+  /** The loop owns the start panel: switched on, and a day already sung. */
+  function isOn() {
+    const D = days();
+    return !!D && loopEnabled() && D.summary().practiceDays > 0;
+  }
+
   /**
    * Record that this browser has now seen the arm it was given. Called where
    * the difference first shows, never at assignment: exposing on start alone
@@ -928,6 +934,7 @@
     }
   }
 
+  /** The sizes only select; the button above starts. Name over minutes, one segment each. */
   function renderTiers(active, track) {
     const wrap = $("#loop-tiers");
     if (!wrap) return;
@@ -938,7 +945,9 @@
       const tier = b.dataset.tier;
       const min = tierMinutes(track, tier);
       b.hidden = !min;
-      b.textContent = tt("loop.tierChip", { name: tt("loop.tier." + tier), min });
+      b.innerHTML = `<span class="loop-tier-name">${esc(tt("loop.tier." + tier))}</span> <span class="loop-tier-min">${esc(
+        tt("loop.tierMin", { min })
+      )}</span>`;
       // The chip is where a longer Mínimo first shows: its minutes.
       if (tier === "min" && min) expose("loop_minimo_len_2026_10");
       b.setAttribute("aria-pressed", String(tier === active));
@@ -956,6 +965,21 @@
   function refresh() {
     if (hooks.refresh) hooks.refresh();
     else renderHome();
+  }
+
+  /**
+   * The other ways in (Continuar, sesión guiada). Once the loop owns the panel
+   * they fold behind "Otras formas de practicar", so the first screen is one
+   * button and one size choice; elsewhere they show as they always did.
+   */
+  let moreOpen = false;
+  function renderMoreWays(fold) {
+    const btn = $("#btn-more-ways");
+    const alt = $("#start-alt");
+    if (!btn || !alt) return;
+    btn.hidden = !fold;
+    btn.setAttribute("aria-expanded", String(fold && moreOpen));
+    alt.hidden = fold && !moreOpen;
   }
 
   /** The first-visit chooser and its body class, on or off. */
@@ -1024,11 +1048,13 @@
       if (aside) aside.hidden = true;
       if (tiers) tiers.hidden = true;
       document.body.classList.remove("loop-on");
+      renderMoreWays(false);
       return false;
     }
     const sum = D.summary();
     const on = sum.practiceDays > 0;
     document.body.classList.toggle("loop-on", on);
+    renderMoreWays(on);
     if (!on) {
       if (aside) aside.hidden = true;
       if (tiers) tiers.hidden = true;
@@ -1115,7 +1141,11 @@
       if (cardTitle) cardTitle.textContent = capitalize(stepsTxt);
       const whyKey = tier === "min" ? "loop.whyMin" : tier === "ess" ? "loop.whyEss" : "loop.whyClass";
       if (why) why.textContent = tl(whyKey, null, trackId);
-      cta.textContent = tt("loop.cta");
+      // The button says which size it starts, so another size is never a
+      // blind second tap: "▶ Empezar básicos" over "Esencial · 10 min".
+      cta.innerHTML = `<span class="cta-go">${esc(tt("loop.cta"))}</span> <span class="cta-size">${esc(
+        tt("loop.tierChip", { name: tierName, min })
+      )}</span>`;
     }
     // Done for today: the button stays, quietly. Nothing on the page asks for more.
     cta.classList.toggle("btn-practice", state !== "done");
@@ -1208,6 +1238,10 @@
       remind.hidden = remindersOn;
       remind.textContent = tt("loop.done.remind");
     }
+    // The card says what today earned; a toast from the last step (a hold
+    // logged) would sit on its top line, which on a phone turned sideways is
+    // the milestone.
+    hooks.hideToast?.();
     modal.hidden = false;
     modal.style.display = "";
     global.VTFocusTrap?.activate?.(modal, { initialFocus: close });
@@ -1283,8 +1317,8 @@
   /**
    * @param {{ getTab: () => string, findExercise: (id: string) => object|null,
    *   startRoutine: (opts: object) => object, startDaily: () => object,
-   *   toast: (msg: string, opts?: object) => void, focusReminders?: () => void,
-   *   setTab?: (track: string) => void }} h
+   *   toast: (msg: string, opts?: object) => void, hideToast?: () => void,
+   *   focusReminders?: () => void, setTab?: (track: string) => void }} h
    */
   function bind(h) {
     hooks = h || {};
@@ -1301,6 +1335,10 @@
       refresh();
     });
     $("#loop-cards-btn")?.addEventListener("click", openCards);
+    $("#btn-more-ways")?.addEventListener("click", () => {
+      moreOpen = !moreOpen;
+      renderMoreWays(true);
+    });
     $("#track-pick")?.addEventListener("click", (e) => {
       const b = e.target.closest?.("[data-track]");
       if (!b || b.getAttribute("aria-pressed") === "true") return;
@@ -1329,6 +1367,7 @@
     short,
     tomorrowTeaser,
     renderHome,
+    isOn,
     startTier,
     onPractice,
     onRoutineComplete,

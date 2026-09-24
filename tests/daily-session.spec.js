@@ -736,19 +736,23 @@ test.describe("Prepared daily class session", () => {
   });
 
   test("the daily route is offered on Canto only", async ({ page }) => {
-    await boot(page);
+    // The classic arm: once the daily loop owns the panel the class is its
+    // Clase size and the picker leaves the route out (tests/home-choices.spec.js).
+    await boot(page, "es", CLASSIC);
     const sel = page.locator("#session-path");
     const opt = page.locator('#session-path option[value="daily"]');
 
     await page.locator('.tab[data-tab="singing"]').click();
     await page.waitForTimeout(120);
-    expect(await opt.evaluate((o) => o.disabled)).toBe(false);
+    await expect(opt).toHaveCount(1);
+    await sel.selectOption("daily");
 
     await page.locator('.tab[data-tab="vocal"]').click();
     await page.waitForTimeout(120);
-    expect(await opt.evaluate((o) => o.disabled)).toBe(true);
+    // Left out, not hidden: a hidden option still shows in iOS's picker.
+    await expect(opt).toHaveCount(0);
     // Falling back to a real route rather than silently running Basic as "Diaria"
-    expect(await sel.inputValue()).not.toBe("daily");
+    expect(await sel.inputValue()).toBe("basic");
   });
 
   test("English keeps the session usable", async ({ page }) => {

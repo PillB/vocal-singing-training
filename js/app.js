@@ -1117,7 +1117,10 @@
     list.className = `grid track-${state.tab}`;
 
     $$(".tier-chip").forEach((c) => {
-      c.classList.toggle("selected", c.dataset.tier === state.tierFilter);
+      const on = c.dataset.tier === state.tierFilter;
+      c.classList.toggle("selected", on);
+      // Picked says so in its state and with a tick, not by colour alone.
+      c.setAttribute("aria-pressed", on ? "true" : "false");
       if (c.dataset.tier !== "all") c.textContent = tierLabel(c.dataset.tier);
     });
 
@@ -1266,37 +1269,45 @@
   }
 
   /**
-   * The daily route only exists for the track its sequence was written for, so
-   * the option is hidden elsewhere rather than silently falling back to Basic.
+   * A guided route's name on a track. Routes are named for the catalog groups
+   * they walk (the class homework, then Técnica or Expresión), so the second
+   * group's name depends on the track. Stored values stay basic | advanced |
+   * full | daily.
+   */
+  function pathName(path, track = state.tab) {
+    const own = `home.path.${track}.${path}`;
+    const s = tt(own);
+    return s && s !== own ? s : tt(`home.path.${path}`);
+  }
+
+  /**
+   * The route picker, written for the track on screen. The daily route only
+   * exists for the track its sequence was written for, and once the daily loop
+   * owns the start panel the class is its Clase size: offering it here as well
+   * gave the same class two names. So the option is left out rather than
+   * hidden (a hidden option still shows in iOS's picker).
    */
   function syncSessionPathOptions() {
     const sel = $("#session-path");
-    const opt = sel?.querySelector('option[value="daily"]');
-    if (!sel || !opt) return;
+    if (!sel) return;
     const d = dailySession();
-    const ok = !!d && state.tab === d.def.track;
-    opt.hidden = !ok;
-    opt.disabled = !ok;
-    if (!ok && sel.value === "daily") sel.value = "basic";
-
-    // Say how many exercises each route actually covers. "Completa" is the
-    // whole Vocal track but only 16 of Canto's 27 — the eleven class
-    // exercises live solely in the daily route — and the bare label reads as
-    // a promise it does not keep.
-    const total = (window.VT_EXERCISES?.[state.tab] || []).length;
-    sel.querySelectorAll("option").forEach((o) => {
-      const base = tt(o.dataset.i18n || "") || o.value;
-      const seq = window.VT_STRUCTURED?.[`${state.tab}_${o.value}`];
-      const n = Array.isArray(seq) ? seq.length : 0;
-      if (!n) {
-        o.textContent = base;
-        return;
-      }
-      o.textContent =
-        o.value === "full" && total && n < total
-          ? `${base} (${tt("home.path.ofTotal", { n, total })})`
-          : `${base} (${n})`;
-    });
+    const daily = !!d && state.tab === d.def.track && !window.VTLoop?.isOn?.();
+    const paths = ["basic", "advanced", "full", ...(daily ? ["daily"] : [])];
+    const keep = paths.includes(sel.value) ? sel.value : "basic";
+    // Each name says how many exercises the route covers: "Tareas y técnica"
+    // on Canto is 16 of its 27, the class exercises outside the homework live
+    // in the daily class.
+    sel.replaceChildren(
+      ...paths.map((p) => {
+        const o = document.createElement("option");
+        o.value = p;
+        const seq = window.VT_STRUCTURED?.[`${state.tab}_${p}`];
+        const n = Array.isArray(seq) ? seq.length : 0;
+        o.textContent = n ? tt("home.path.count", { name: pathName(p), n }) : pathName(p);
+        return o;
+      })
+    );
+    sel.value = keep;
   }
 
   /** Progressive disclosure: zero sessions → collapse empty studio chrome */
@@ -4655,10 +4666,7 @@
     toast(
       tt("toast.structuredStart", {
         track: tt(state.tab === "vocal" ? "track.vocalShort" : "track.singingShort"),
-        path: tt(
-          "path." +
-            (p === "advanced" ? "advanced" : p === "full" ? "full" : p === "daily" ? "daily" : "basic")
-        ),
+        path: pathName(["advanced", "full", "daily"].includes(p) ? p : "basic"),
         n: String(session.order.length)
       })
     );
@@ -6697,6 +6705,10 @@
       startRoutine: (r) => startStructured(r.path || "basics", r),
       startDaily,
       toast: (msg, opts) => toast(msg, opts),
+      hideToast: () => {
+        clearTimeout(toast._t);
+        $("#toast")?.classList.remove("show");
+      },
       refresh: () => {
         renderNextStepCard();
         renderTodayBasics();

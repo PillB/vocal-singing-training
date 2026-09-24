@@ -468,24 +468,8 @@ body:not(.view-exercise) .main {
   color: var(--text);
   background: rgba(255, 255, 255, 0.04);
 }
-.tab.active[data-tab="vocal"],
-.track-tab.active[data-tab="vocal"] {
-  /* The old light end (rgba 70,150,220) gave the label 3.2:1; these hold
-     5.4:1 or better across the gradient. */
-  background: linear-gradient(145deg, #2868a8, #225890);
-  color: #f2f9ff;
-  border-color: rgba(160, 210, 255, 0.55);
-  box-shadow: 0 0 0 1px rgba(90, 170, 240, 0.35), 0 6px 18px rgba(40, 100, 180, 0.35);
-}
-.tab.active[data-tab="singing"],
-.track-tab.active[data-tab="singing"] {
-  /* White on this orange read 2.9:1. A dark label on a brighter orange keeps
-     the Canto colour at 6.9:1 or better, matching .btn-singing. */
-  background: linear-gradient(145deg, #e6a468, #d68e50);
-  color: #1a1206;
-  border-color: rgba(255, 200, 150, 0.5);
-  box-shadow: 0 0 0 1px rgba(230, 160, 100, 0.35), 0 6px 18px rgba(140, 80, 30, 0.35);
-}
+/* The chosen track: tint, bar and tick (Design: selected-style), not a
+   solid fill that read as a start button. */
 .tab.active .track-ico,
 .track-tab.active .track-ico {
   opacity: 1;
@@ -975,12 +959,6 @@ body.home-zero #pro-insights-panel {
   background: var(--bg-soft);
   font-size: 0.82rem;
   font-weight: 600;
-}
-
-.chip.selected {
-  border-color: var(--accent);
-  background: rgba(91, 159, 212, 0.2);
-  color: #c5e4f8;
 }
 
 .tier-toolbar {
@@ -4525,11 +4503,6 @@ body:not(.home-zero) #start-panel.start-panel {
 .track-pick-btn:hover {
   border-color: var(--accent);
 }
-.track-pick-btn[aria-pressed="true"] {
-  border-color: var(--accent);
-  background: rgba(110, 180, 232, 0.16);
-  box-shadow: inset 0 0 0 1px var(--accent);
-}
 .track-pick-name {
   display: flex;
   align-items: center;
@@ -4554,9 +4527,9 @@ body:not(.home-zero) #start-panel.start-panel {
 }
 .track-pick-btn[aria-pressed="true"] .track-pick-name::before {
   content: "✓";
-  border-color: var(--accent);
-  background: var(--accent);
-  color: #07121c;
+  border-color: var(--sel);
+  background: var(--sel);
+  color: var(--bg);
 }
 .track-pick-desc {
   font-size: 0.82rem;
@@ -4564,7 +4537,7 @@ body:not(.home-zero) #start-panel.start-panel {
   color: var(--text-muted);
 }
 body.loop-first #start-panel .start-sub,
-body.loop-first #start-panel .start-alt,
+body.loop-first #start-panel .more-ways,
 body.loop-first #start-steps li:first-child {
   display: none;
 }
@@ -5601,35 +5574,73 @@ body.loop-on .start-steps {
   display: none;
 }
 
+/* The sizes: a segmented control that only selects (the button above
+   starts), labelled as a choice. Joined and square-cornered, so it never
+   reads as a row of start buttons; one row even at 320px, name over minutes.
+   The selected look is the shared one (Design: selected-style). */
 .loop-tiers {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.4rem;
   margin: 0 0 0.7rem;
 }
 .loop-tiers-label {
-  font-size: 0.85rem;
-  margin-right: 0.1rem;
+  display: block;
+  margin: 0 0 0.35rem;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.loop-tiers-seg {
+  display: flex;
+  max-width: 30rem;
 }
 .loop-tier {
-  min-height: var(--min-tap);
-  padding: 0.3rem 0.85rem;
-  border-radius: 999px;
-  border: 1px solid rgba(140, 170, 210, 0.38);
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.05rem;
+  min-height: 3.2rem;
+  margin-left: -1px;
+  padding: 0.35rem 0.4rem;
+  border-radius: 0;
+  border: 1px solid rgba(140, 170, 210, 0.45);
   background: rgba(12, 18, 28, 0.5);
   color: var(--text);
-  font-size: 0.88rem;
-  font-weight: 650;
+  line-height: 1.2;
   cursor: pointer;
+}
+.loop-tiers-seg .loop-tier:first-child {
+  margin-left: 0;
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+}
+.loop-tiers-seg .loop-tier:last-child {
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+.loop-tier-name {
+  font-size: 0.92rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.loop-tier-min {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
 }
 .loop-tier:hover {
   border-color: var(--accent);
+  position: relative;
+  z-index: 1;
 }
-.loop-tier[aria-pressed="true"] {
-  border-color: rgba(79, 212, 146, 0.75);
-  background: rgba(79, 212, 146, 0.14);
-  color: #c9f6de;
+@media (max-width: 360px) {
+  /* "✓ Essential" still fits a third of a 320px screen */
+  .loop-tier {
+    padding-inline: 0.15rem;
+  }
+  .loop-tier-name {
+    font-size: 0.8rem;
+  }
 }
 
 /* Done for today: the card settles, the button goes quiet. */
@@ -5670,6 +5681,112 @@ body.loop-on .start-steps {
     min-height: 3.1rem;
     font-size: 1.1rem;
   }
+}
+
+/* —— Design: naming ——
+   A returning learner sees one button and one choice. The button says which
+   size it starts ("▶ Empezar básicos" over "Esencial · 10 min"); the sizes
+   only select; the other ways in (Continuar, sesión guiada) fold behind
+   "Otras formas de practicar" (js/daily-loop.js renderMoreWays). */
+#btn-next-step {
+  flex-direction: column;
+  gap: 0.05rem;
+  line-height: 1.25;
+}
+#btn-next-step .cta-size {
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+.more-ways-btn {
+  gap: 0.5rem;
+  padding-inline: 1rem;
+  font-size: 0.95rem;
+}
+.more-ways-caret {
+  display: inline-block;
+  font-size: 0.9em;
+  transition: transform 0.15s ease;
+}
+.more-ways-btn[aria-expanded="true"] .more-ways-caret {
+  transform: rotate(180deg);
+}
+.more-ways-btn:not([hidden]) + .start-alt {
+  margin-top: 0.6rem;
+}
+@media (max-width: 360px) {
+  /* One line at 320px */
+  .more-ways-btn {
+    padding-inline: 0.8rem;
+    font-size: 0.9rem;
+  }
+}
+.start-path {
+  flex-wrap: wrap;
+  gap: 0.3rem 0.5rem;
+  min-width: 0;
+  font-size: 0.92rem;
+  color: var(--text-muted);
+}
+.start-path select {
+  min-width: 0;
+  max-width: 100%;
+  color: var(--text);
+}
+@media (prefers-reduced-motion: reduce) {
+  .more-ways-caret {
+    transition: none;
+  }
+}
+/* Scrolled text no longer shows through the sticky header (it was 82% opaque). */
+body:not(.view-exercise) .app-header {
+  background: var(--bg);
+}
+
+/* —— Design: selected-style ——
+   One look for every choose-one control: the choice's own colour as a 16%
+   tint, a 3px bar in it along the bottom edge, a border in it and a ✓. Never
+   a solid fill, so a choice never looks like the button that starts
+   something, and never colour alone (the tick, plus aria-pressed or
+   aria-selected). Each control names its colour in --sel: the track's for
+   tracks, the loop's green for sizes, the group's for catalog filters, the
+   accent for the plan's focus. */
+.track-tab[data-tab="singing"],
+.track-pick-btn[data-track="singing"] {
+  --sel: var(--singing);
+}
+.track-tab[data-tab="vocal"],
+.track-pick-btn[data-track="vocal"] {
+  --sel: var(--vocal);
+}
+.loop-tier {
+  --sel: var(--success);
+}
+.tier-chip,
+.element-chips .chip {
+  --sel: var(--accent);
+}
+.tier-chip[data-tier="advanced"] {
+  --sel: var(--accent-2);
+}
+.track-tab.active,
+.track-pick-btn[aria-pressed="true"],
+.loop-tier[aria-pressed="true"],
+.tier-chip[aria-pressed="true"],
+.element-chips .chip[aria-pressed="true"] {
+  position: relative;
+  z-index: 1;
+  border-color: var(--sel);
+  background: rgba(255, 255, 255, 0.06);
+  background: color-mix(in srgb, var(--sel) 16%, transparent);
+  box-shadow: inset 0 -3px 0 var(--sel);
+  color: var(--text);
+  color: color-mix(in srgb, var(--sel) 25%, var(--text));
+}
+.track-tab.active .track-label-short::before,
+.loop-tier[aria-pressed="true"] .loop-tier-name::before,
+.tier-chip[aria-pressed="true"]::before {
+  content: "✓ ";
+  content: "✓ " / "";
 }
 
 .loop-today {
@@ -5813,7 +5930,8 @@ body.loop-on .start-steps {
 .loop-done-card {
   width: min(440px, 100%);
   max-height: calc(100dvh - 2rem);
-  overflow: auto;
+  display: flex;
+  flex-direction: column;
 }
 .loop-done-kicker {
   margin: 0 0 0.25rem;
@@ -5924,6 +6042,62 @@ body.loop-on .start-steps {
   .loop-pop,
   .loop-done-card .loop-reward {
     animation: none;
+  }
+}
+
+/* —— Design: done-landscape ——
+   The buttons stay pinned to the card's bottom edge and whatever does not fit
+   scrolls above them, so "Hasta mañana" is always on the first screen (it was
+   below an inner scroll nothing signalled, at 844x390 and at 360x740). On a
+   short screen (a phone on its side) the card also goes two columns: what
+   today earned, then what is new and tomorrow. */
+.loop-done-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+.loop-done-card .modal-actions {
+  flex: none;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+.loop-done-card .loop-done-tomorrow {
+  margin-bottom: 0.75rem;
+}
+@media (max-height: 500px) {
+  #loop-done.modal-overlay {
+    padding: 0.6rem 1rem;
+  }
+  .loop-done-card {
+    max-height: calc(100dvh - 1.2rem);
+    padding-bottom: 0;
+  }
+  .loop-done-count {
+    margin: 0.2rem 0 0.4rem;
+  }
+  .loop-done-count strong {
+    font-size: 2.4rem;
+  }
+  .loop-done-card .loop-done-tomorrow {
+    margin: 0.6rem 0 0.4rem;
+  }
+  .loop-done-card .modal-actions {
+    flex-wrap: nowrap;
+    padding: 0.55rem 0 0.85rem;
+  }
+}
+@media (max-height: 500px) and (min-width: 540px) {
+  .loop-done-card {
+    width: min(760px, 100%);
+  }
+  .loop-done-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: 1.4rem;
+    align-items: start;
+  }
+  .loop-done-next > .loop-done-extra > :first-child {
+    margin-top: 0;
   }
 }
 
@@ -6141,7 +6315,7 @@ body.loop-on .start-steps {
     order: 2;
     margin-top: 0.15rem;
   }
-  body.loop-on #start-panel .start-alt {
+  body.loop-on #start-panel .more-ways {
     order: 3;
     margin-top: 0.9rem;
   }
@@ -6240,10 +6414,6 @@ body.loop-on .start-steps {
   .loop-day-dot {
     width: 1.4rem;
     height: 1.4rem;
-  }
-  .loop-tier {
-    padding-inline: 0.65rem;
-    font-size: 0.84rem;
   }
 }
 .loop-done-line span {

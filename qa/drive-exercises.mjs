@@ -64,7 +64,7 @@ export const SCENARIO_BY_MODE = {
   concisionGate: "speech",
   storyTimer: "speech",
   authorityLand: "speech",
-  energyMatch: "ladder",
+  energyMatch: "energyTakes",
   pitchHold: "follow",
   pitchChord: "follow",
   pitchSong: "follow",

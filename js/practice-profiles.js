@@ -33,8 +33,8 @@
       pitchChallenge: false,
       autoPiano: false,
       autoRecord: false,
-      cue: "Keep energy even from 1→10. Watch the volume lane — avoid fading at the end.",
-      cueEs: "Mantén la energía pareja del 1 al 10. Mira el carril de volumen — evita apagarte al final.",
+      cue: "Count 1→10 on one breath at one level: the end as strong as the start. Keep the same distance from the mic.",
+      cueEs: "Cuenta del 1 al 10 en una respiración a un mismo nivel: el final tan firme como el inicio. Misma distancia al micrófono.",
       metricHints: { cycles: "breathCycles", consistency: "volumeConsistency" }
     },
     "v3-soft-palate": {
@@ -184,16 +184,22 @@
       pitchChallenge: false,
       autoPiano: false,
       autoRecord: false,
+      // Levels are relative to the learner (dB against their own treads), so
+      // there are no absolute targets here: only the order of the steps.
       ladder: [
-        { label: "1 Whisper", target: 0.12 },
-        { label: "2 Soft", target: 0.22 },
-        { label: "3 Conversational", target: 0.35 },
-        { label: "4 Projected", target: 0.5 },
-        { label: "5 Full room", target: 0.65 }
+        { label: "1 Whisper", labelEs: "1 Susurro" },
+        { label: "2 Soft", labelEs: "2 Suave" },
+        { label: "3 Conversational", labelEs: "3 Conversación" },
+        { label: "4 Projected", labelEs: "4 Proyectada" },
+        { label: "5 Full room", labelEs: "5 Sala llena" }
       ],
+      // Up 1→5, back down 5→3→1 (the exercise's steps), then a 60 s story
+      sequence: [0, 1, 2, 3, 4, 2, 0],
       stepSec: 8,
-      cue: "Climb whisper → full room without strain. Match each level’s target band.",
-      cueEs: "Sube de susurro a sala llena sin forzar. Entra en la franja de cada nivel.",
+      reps: 3,
+      storySec: 60,
+      cue: "Climb 1→5 and back 5→3→1 with the same sentence: each step clearly louder than the last, same distance from the mic. Then a 60 s story with 3+ levels.",
+      cueEs: "Sube del 1 al 5 y baja 5→3→1 con la misma frase: cada escalón claramente más fuerte, misma distancia al micrófono. Luego una historia de 60 s con 3 niveles o más.",
       metricHints: { ladderReps: "ladderCycles" }
     },
     "v14-pace-variation": {
@@ -290,9 +296,10 @@
       pitchChallenge: false,
       autoPiano: false,
       autoRecord: true,
+      // Low → Medium → High → Lead (+10 % over Medium); "Next take" moves on early
       stepSec: 30,
-      cue: "Same message at Low → Medium → High. Volume + pace + face — not just loudness.",
-      cueEs: "El mismo mensaje en Bajo → Medio → Alto. Volumen + ritmo + cara — no solo gritar.",
+      cue: "Same message Low → Medium → High, then lead 10% above Medium. The mic hears volume, pace and melody; face and gesture are in the recording.",
+      cueEs: "El mismo mensaje en Baja → Media → Alta y luego guía un 10 % sobre la media. El micrófono oye volumen, ritmo y melodía; cara y gestos, en la grabación.",
       metricHints: {}
     },
     /* —— Singing basic —— */

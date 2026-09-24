@@ -1,1 +1,23 @@
 /* Exercise pictures — volume (css for js/scenes/volume.js). Scoped to .mode-panel.has-viz. */
+
+/* The steady-volume picture keeps the page's old name for its level picture
+   (.volume-lane), but none of the old 28 px bar's looks: it is a canvas. */
+.mode-panel.has-viz .vz.volume-lane {
+  position: relative;
+  height: auto;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  overflow: visible;
+}
+
+/* The blind-round switch reads as a switch: pressed = filled, with a mark */
+.mode-panel.has-viz [data-blind][aria-pressed="true"] {
+  background: rgba(191, 230, 255, 0.16);
+  border-color: rgba(191, 230, 255, 0.7);
+  color: #eef3fa;
+}
+.mode-panel.has-viz [data-blind][aria-pressed="true"]::before {
+  content: "◐ ";
+}

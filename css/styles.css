@@ -2539,6 +2539,135 @@ body.view-exercise .metrics-card-collapsible.collapsed .metrics-sub-compact {
   justify-content: space-between;
   gap: 0.65rem;
 }
+
+/* —— Design: rating ——
+   After a take the card asks one question with three one-tap answers; the
+   sliders, notes and their own save wait under "Más detalles". The open card
+   is the question itself, so its "Reflexionar y guardar" header steps aside. */
+#metrics-card:not(.collapsed) .metrics-header {
+  display: none;
+}
+.rate {
+  display: grid;
+  gap: 0.65rem;
+}
+.rate p {
+  margin: 0;
+}
+.rate-done {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.section h3.rate-q {
+  margin: 0;
+  font-size: 1.3rem;
+  line-height: 1.25;
+  text-transform: none;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  font-weight: 750;
+}
+/* Focus lands here so the question is announced; it is not a control. */
+.rate-q:focus {
+  outline: none;
+}
+.rate-time {
+  font-size: 1rem;
+  color: var(--text-muted);
+}
+.rate-time strong {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+/* The answers are the card's main action: equal weight, none looks chosen
+   until it is (filled, a check mark and aria-pressed). */
+.rate-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+  max-width: 34rem;
+}
+.rate-row .rate-btn {
+  min-height: 56px;
+  padding: 0.5rem 0.35rem;
+  border: 2px solid var(--accent);
+  background: var(--bg-soft);
+  font-size: 1.05rem;
+  font-weight: 750;
+  line-height: 1.2;
+  /* "Me costó" breaks onto two lines before it overflows at 320px */
+  white-space: normal;
+  text-align: center;
+}
+.rate-row .rate-btn[aria-pressed="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #07131f;
+}
+.rate-row .rate-btn[aria-pressed="true"]::after {
+  content: "✓";
+}
+.rate-note {
+  font-size: 0.95rem;
+  color: var(--text-muted);
+}
+.rate-take.playback-inline:not(:empty) {
+  margin-top: 0.1rem;
+  padding: 0.75rem 0 0.1rem;
+}
+.rate-take .rate-take-k {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.rate-take .audio-player {
+  display: block;
+}
+.rate-take-actions {
+  margin-top: 0.5rem;
+}
+.rate-more {
+  border-top: 1px solid var(--border);
+}
+.rate-more > summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+  list-style: none;
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+.rate-more > summary::-webkit-details-marker {
+  display: none;
+}
+.rate-more > summary::before {
+  content: "▸";
+}
+.rate-more[open] > summary::before {
+  content: "▾";
+}
+.rate-more-body {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.25rem 0 0.5rem;
+}
+.rate-more-body .field input[type="range"] {
+  min-height: 44px;
+}
+.metrics-form .field[hidden] {
+  display: none;
+}
+.rate-skip {
+  justify-self: start;
+}
+.score-feel {
+  margin: 0.15rem 0 0;
+  font-weight: 700;
+}
 .guide-header {
   display: flex;
   align-items: center;

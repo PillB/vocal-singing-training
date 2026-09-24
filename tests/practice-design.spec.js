@@ -3,7 +3,8 @@
  *
  *  - step-end (audit PR-1): when a guided step's clock reaches 00:00 the mic
  *    stops and a card on the stage says the step is done, names the next
- *    exercise and offers 30 more seconds or the rating form.
+ *    exercise and offers 30 more seconds or the one-tap rating
+ *    (tests/finish-rating.spec.js).
  *  - target-lane (audit PR-3): the note to sing is always drawn as the green
  *    primary lane, chord tone or not; the semitone grid recedes; the live dot
  *    stops short of the lane labels; the chord badge clears the HUD row.
@@ -195,7 +196,7 @@ test.describe("Step done: a guided step's clock runs out", () => {
     await expect(page.locator("#step-done-step")).toHaveText("Ejercicio 1 de 2");
   });
 
-  test("Calificar este ejercicio opens the rating form and moves focus into it", async ({ page }) => {
+  test("Calificar este ejercicio opens the one-tap rating and moves focus to its question", async ({ page }) => {
     await boot(page);
     await startMinimo(page);
     await runStepOut(page, 5);
@@ -203,15 +204,16 @@ test.describe("Step done: a guided step's clock runs out", () => {
     await expect(page.locator("#step-done")).toBeHidden();
     await expect(page.locator("#metrics-card")).not.toHaveClass(/collapsed/);
     await expect(page.locator("#btn-toggle-metrics")).toHaveAttribute("aria-expanded", "true");
-    await expect
-      .poll(() => page.evaluate(() => !!document.activeElement?.closest("#metrics-form")))
-      .toBe(true);
-    // The form is brought up, not left at the fold (a smooth scroll, so real time).
+    await expect(page.locator("#rate-q")).toBeFocused();
+    await expect(page.locator(".rate-btn")).toHaveText(["Fácil", "Normal", "Me costó"]);
+    // The card is brought up, not left at the fold (it scrolls on the next
+    // frame, smoothly, so the fake clock moves and then real time passes).
+    await page.clock.runFor(100);
     await expect
       .poll(() => page.evaluate(() => document.querySelector("#metrics-card").getBoundingClientRect().top / innerHeight))
       .toBeLessThan(0.5);
-    // Save still moves the routine on, as before.
-    await page.locator("#btn-complete").click();
+    // One tap saves, and still moves the routine on, as Save did.
+    await page.locator('.rate-btn[data-feel="ok"]').click();
     await expect(page.locator("#ps-routine-next")).toBeVisible();
   });
 
@@ -288,13 +290,15 @@ test.describe("Step done: a guided step's clock runs out", () => {
     expect(await page.evaluate(() => window.VTApp.getState().exercise?.id)).toBe("s27-lip-trill-solfege");
   });
 
-  test("a single exercise keeps its soft cue: no card, the mic stays on", async ({ page }) => {
+  test("a single exercise gets no step card, and its mic stops at 00:00 too", async ({ page }) => {
+    // It used to keep listening, "En vivo", with nothing on screen; its own
+    // ending (the rating card) is in tests/finish-rating.spec.js.
     await boot(page);
     await page.evaluate(() => window.VTApp.openExercise("s4-lip-trills"));
     await page.clock.runFor(300);
     await runStepOut(page, 5);
     await expect(page.locator("#step-done")).toBeHidden();
-    expect(await live(page)).toBe(true);
+    expect(await live(page)).toBe(false);
   });
 });
 

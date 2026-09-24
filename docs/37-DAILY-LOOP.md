@@ -224,3 +224,9 @@ visible: per arm, 30% → 45% needs about 160 people, 30% → 40% about 355, 30%
 - The completion card is suppressed under automation (`vt_e2e`) so it cannot sit
   over other specs' clicks; a spec opts in with `sessionStorage.vt_loop_e2e = "1"`.
   Toasts are muted the same way and come back with `vt_debug = "1"`.
+- The rating card's own ending (a single exercise's clock at 00:00 opens it) is
+  muted the same way, and under automation its "Más detalles" starts open so
+  specs that fill the form and press `#btn-complete` still reach it;
+  `tests/finish-rating.spec.js` opts in with `sessionStorage.vt_rate_e2e = "1"`.
+  Every way out of that card (a one-tap answer, Más detalles then save, Salir
+  sin puntuar) records the day's practice once.

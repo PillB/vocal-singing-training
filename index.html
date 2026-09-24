@@ -556,7 +556,6 @@
               <div id="songs-row" class="two-col" hidden style="margin-top:0.65rem"></div>
             </div>
 
-            <div id="playback-area" class="playback-inline"></div>
             <p class="muted cockpit-hint" id="practice-hint" hidden data-i18n="practice.hint"></p>
           </div>
         </div>
@@ -609,9 +608,31 @@
             <button type="button" class="btn btn-ghost btn-sm" id="btn-toggle-metrics" aria-expanded="false" data-i18n="metrics.show">Mostrar métricas</button>
           </div>
           <div class="metrics-body" id="metrics-body">
-            <form id="metrics-form" class="metrics-form" onsubmit="return false;"></form>
-            <div class="controls-row" style="margin-top: 1rem">
-              <button type="button" class="btn btn-success" id="btn-complete" data-i18n="metrics.save">Guardar sesión y puntaje</button>
+            <!-- Rating: one question and three one-tap answers after a take; the
+                 sliders and notes wait under "Más detalles". It used to open on a
+                 long form below the fold, scored against the wrong length. -->
+            <div class="rate" id="rate">
+              <p class="rate-done" id="rate-done" hidden></p>
+              <h3 class="rate-q" id="rate-q" tabindex="-1" data-i18n="rate.q">¿Cómo te fue?</h3>
+              <p class="rate-time" id="rate-time" hidden></p>
+              <div class="rate-row" role="group" aria-labelledby="rate-q">
+                <button type="button" class="btn rate-btn" data-feel="easy" aria-pressed="false" data-i18n="rate.easy">Fácil</button>
+                <button type="button" class="btn rate-btn" data-feel="ok" aria-pressed="false" data-i18n="rate.ok">Normal</button>
+                <button type="button" class="btn rate-btn" data-feel="hard" aria-pressed="false" data-i18n="rate.hard">Me costó</button>
+              </div>
+              <p class="rate-note" id="rate-note" aria-live="polite"></p>
+              <!-- The take's recording. It sat under the sticky stage, out of reach. -->
+              <div id="playback-area" class="playback-inline rate-take"></div>
+              <details class="rate-more" id="rate-more">
+                <summary data-i18n="rate.more">Más detalles</summary>
+                <div class="rate-more-body">
+                  <form id="metrics-form" class="metrics-form" onsubmit="return false;"></form>
+                  <div class="controls-row">
+                    <button type="button" class="btn btn-success" id="btn-complete" data-i18n="rate.saveDetails">Guardar con estos detalles</button>
+                  </div>
+                </div>
+              </details>
+              <button type="button" class="btn btn-ghost rate-skip" id="btn-rate-skip" data-i18n="rate.skip">Salir sin puntuar</button>
             </div>
             <div id="score-result" class="score-card" style="margin-top: 1rem" hidden></div>
             <aside id="ad-slot-post-session" class="ad-slot" hidden aria-label="Studio tip"></aside>

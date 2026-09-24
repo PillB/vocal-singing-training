@@ -252,7 +252,13 @@
      * `minMs`, so a live value does not become a stream of announcements.
      */
     caption(text, minMs = 2500) {
-      if (!this.cap || text === this._capText) return;
+      if (!this.cap) return;
+      // An immediate caption replaces any throttled one still waiting
+      if (minMs === 0) {
+        clearTimeout(this._capT);
+        delete this.cap.dataset.pending;
+      }
+      if (text === this._capText) return;
       const now = performance.now();
       if (now - this._capAt < minMs && this._capText) {
         this.cap.dataset.pending = text;

@@ -254,11 +254,11 @@
     "original": "Controla el rango de volumen: de íntimo a proyectado, sin esfuerzo.",
     "research": "El volumen con control transmite confianza; el grito tenso no.",
     "steps": [
-      "Elige una frase corta que uses a menudo.",
-      "Dila en 5 niveles: susurro → suave → conversación → sala → proyección (sin gritar).",
-      "Súbela y bájala como una escalera, 3–4 veces.",
-      "Mantén la misma claridad y dicción en todos los niveles.",
-      "Nota en qué nivel te sientes más natural y autoritario."
+      "Elige una frase corta que uses a menudo (8–12 palabras).",
+      "Dila en 5 niveles: 1 casi susurro → 2 suave → 3 conversación → 4 proyectada → 5 sala llena (sin gritar).",
+      "Vuelve 5 → 3 → 1 con la misma frase; repite la escalera 3 veces.",
+      "Luego cuenta una historia de 60 s usando al menos 3 niveles, con intención.",
+      "Mantén la misma claridad y dicción en todos los niveles."
     ],
     "tips": [
       "Proyecta con el cuerpo, no apretando la garganta.",
@@ -397,7 +397,7 @@
     "research": "Emparejar energía genera rapport; luego puedes elevar o calmar con intención.",
     "steps": [
       "Elige tres “salas” imaginarias: 1:1 calmado, equipo animado, presentación formal.",
-      "Di el mismo mensaje de 45 s adaptando volumen, ritmo y gestos a cada sala.",
+      "Di el mismo mensaje de 30 s adaptando volumen, ritmo y gestos a cada sala.",
       "Practica “match then lead”: 10 s al nivel del otro, luego un paso más claro/calmado.",
       "Graba las tres y marca cuál se siente más natural."
     ],

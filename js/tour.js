@@ -383,7 +383,9 @@
         id: "sp-focus",
         titleKey: "uiTour.sp.focus.title",
         bodyKey: "uiTour.sp.focus.body",
-        target: "#mode-focus",
+        // The panel itself: #mode-focus also holds the stage guide and runs
+        // the stage's height, so a card could not sit clear of it
+        target: "#mode-focus-panel",
         place: "bottom",
         requireVisible: true
       },

@@ -749,6 +749,15 @@
       const el = document.getElementById(id);
       if (el) ro.observe(el);
     });
+    // On a phone on its side the banner's Pausar and Terminar sit in the
+    // exercise header's row, which keeps their width free (design: landscape).
+    const ctl = $("#session-banner .controls-row");
+    if (ctl) {
+      new ResizeObserver(() => {
+        const w = Math.ceil(ctl.getBoundingClientRect().width);
+        if (w) document.body.style.setProperty("--session-ctl-w", `${w}px`);
+      }).observe(ctl);
+    }
   }
 
   /**
@@ -1176,6 +1185,7 @@
     const s = VTSession.get();
     if (!s || s.status === "completed") {
       banner.classList.remove("visible");
+      syncStructuredProgress();
       return;
     }
     banner.classList.add("visible");
@@ -1195,12 +1205,34 @@
     pos.textContent = VTSession.progressLabel();
     const rest = document.createElement("span");
     rest.className = "session-banner-rest";
-    rest.textContent = ["", s.status === "paused" ? status : "", name].filter((x, i) => !i || x).join(" · ");
+    // A no-break space: a flex item drops its leading space ("2· Básicos")
+    const restParts = [s.status === "paused" ? status : "", name].filter(Boolean);
+    rest.textContent = restParts.length ? "\u00a0· " + restParts.join(" · ") : "";
     const text = $("#session-banner-text");
     text.replaceChildren(pos, rest);
     text.title = text.textContent;
     $("#btn-session-resume").hidden = s.status !== "paused";
     $("#btn-session-pause").hidden = s.status !== "active";
+    syncStructuredProgress();
+  }
+
+  /**
+   * The exercise header's routine line, "Ejercicio 1 de 3" and "En pausa"
+   * while it is. The banner says it wherever it has a row of its own; on a
+   * phone on its side the banner's buttons join the header's row and this
+   * line stands in for the banner's (design: landscape).
+   */
+  function syncStructuredProgress() {
+    const sp = $("#structured-progress");
+    if (!sp) return;
+    if (!state.structured) {
+      sp.hidden = true;
+      sp.textContent = "";
+      return;
+    }
+    sp.hidden = false;
+    const paused = VTSession.get()?.status === "paused" ? tt("session.statusPaused") : "";
+    sp.textContent = [VTSession.progressLabel(), paused].filter(Boolean).join(" · ");
   }
 
   function filteredExercises() {
@@ -1847,10 +1879,12 @@
     resetSessionPractice();
     renderExercise();
     setView("exercise");
-    // Instant jump to top so game stage is the first viewport (no smooth lag)
-    window.scrollTo(0, 0);
+    // Instant jump to top so game stage is the first viewport (no smooth lag).
+    // "instant", not (0, 0): html has scroll-behavior: smooth, so that glided
+    // for a third of a second from wherever the list was scrolled.
+    window.scrollTo({ top: 0, behavior: "instant" });
     requestAnimationFrame(() => {
-      window.scrollTo(0, 0);
+      window.scrollTo({ top: 0, behavior: "instant" });
       fitStageBelowContent();
     });
     // After layout paints: size cue strip + first-time UI tour for this layout family
@@ -2254,16 +2288,7 @@
 
     // Structured nav
     $("#structured-nav").hidden = !state.structured;
-    const sp = $("#structured-progress");
-    if (sp) {
-      if (state.structured) {
-        sp.hidden = false;
-        sp.textContent = VTSession.progressLabel();
-      } else {
-        sp.hidden = true;
-        sp.textContent = "";
-      }
-    }
+    syncStructuredProgress();
 
     $("#score-result").hidden = true;
 

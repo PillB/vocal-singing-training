@@ -5273,7 +5273,8 @@ body.view-exercise .header-nav {
 }
 .stage-guide-more {
   margin-top: 0.6rem;
-  padding-inline: 0;
+  /* Its words ran into the pill's edge at 0 */
+  padding-inline: 0.75rem;
   color: var(--accent);
 }
 /* While practising it holds only the step the clock is on (js syncStageNow),
@@ -6737,7 +6738,7 @@ body.view-exercise .stage-coach .mode-hud,
   font-weight: 400;
   color: var(--text-muted);
 }
-/* Detail lines and pictures stay in the panel's own rows below the stage */
+/* Detail lines and pictures stay out of the strip: the lanes are the picture */
 .stage-coach .mode-meta,
 .stage-coach .mode-bar,
 .stage-coach .vowel-row,
@@ -6763,6 +6764,13 @@ body.view-exercise .stage-coach .mode-hud,
 }
 .stage-coach .controls-row .btn {
   margin-left: 0;
+}
+/* ...at the strip's right end, so a 44px button does not open a gap in the
+   middle of the line ("Acorde / solfeo · 0 [+1] · Canta…") */
+.stage-coach .mode-panel > .btn,
+.stage-coach .mode-panel > .controls-row {
+  float: right;
+  margin: 0 0 0.1rem 0.5rem;
 }
 .stage-coach .mode-cue {
   display: inline;
@@ -6827,6 +6835,7 @@ body.view-exercise .stage-coach .mode-hud,
   }
   body.view-exercise .header-actions .btn-sm {
     min-height: var(--min-tap);
+    min-width: var(--min-tap);
     font-size: 0.75rem;
   }
   /* The exercise header in two rows at most: where you are and the ?/Atrás
@@ -7022,8 +7031,45 @@ body.view-exercise .stage-coach .mode-hud,
   body.view-exercise .ex-breadcrumb {
     display: none;
   }
+  /* In a routine the banner's Pausar and Terminar join that same row (two
+     rows took 108px of 390). The banner keeps no height of its own and stays
+     stuck at the top; the header keeps the buttons' width free (js
+     --session-ctl-w) and says "Ejercicio 1 de 2" in place of the banner's
+     line, which screen readers still hear. */
   body.view-exercise .session-banner.visible {
-    margin-bottom: 0.25rem;
+    position: sticky;
+    top: 0;
+    z-index: 35;
+    height: 0;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    align-items: flex-start;
+    justify-content: flex-end;
+    pointer-events: none;
+  }
+  body.view-exercise .session-banner.visible #session-banner-text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+  }
+  body.view-exercise .session-banner.visible .controls-row {
+    pointer-events: auto;
+  }
+  body.view-exercise:has(#session-banner.visible) .exercise-header-compact {
+    padding-right: calc(var(--session-ctl-w, 12rem) + 0.4rem);
+  }
+  body.view-exercise:has(#session-banner.visible) #ex-track-badge {
+    display: none;
+  }
+  body.view-exercise:has(#session-banner.visible) #structured-progress:not([hidden]) {
+    display: block;
+    flex: none;
+    max-width: none;
   }
   .hud-tm {
     order: 0;
@@ -7070,6 +7116,21 @@ body.view-exercise .stage-coach .mode-hud,
   .mode-focus.mode-focus-live .btn {
     margin-block: 0.1rem;
   }
+}
+/* —— Design: sticky-bars ——
+   The bars that stay on top of the stage are solid: the site header was 82%
+   opaque, so the stage's top row showed through it once the rating card
+   scrolled the stage up. */
+body.view-exercise .app-header {
+  background: #0e1319;
+  backdrop-filter: none;
+}
+/* The exercise header sticks at the site header's height rounded up, and the
+   stage showed through that last fraction of a pixel as a thin line. */
+body.view-exercise .exercise-header-compact {
+  box-shadow:
+    0 -2px 0 #0e1319,
+    0 1px 0 rgba(0, 0, 0, 0.35);
 }
 /* Sticky offsets come from js syncHeaderHeightVar (set on html and body). The
    stage's own fallbacks under the phone and landscape queries shadowed them,

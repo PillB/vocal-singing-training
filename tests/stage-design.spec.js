@@ -11,8 +11,11 @@
  *  - session-chrome: the guided session's banner is one line with Pausar
  *    (Reanudar) and Terminar in words.
  *  - landscape: a phone on its side hides the site header while an exercise is
- *    open; the banner stays; nothing covers the mode panel's title; the stage
- *    fits the screen at rest (VG-30).
+ *    open; in a routine, Pausar and Terminar share the exercise header's one
+ *    row; nothing covers the mode panel's title; the stage fits the screen at
+ *    rest (VG-30).
+ *  - The bars that stay over the stage are solid, and the stage guide's button
+ *    keeps its words inside the pill.
  *  - The pitch-match challenge scores against the note it asks for, not the
  *    nearest chord lane.
  */
@@ -129,6 +132,34 @@ function floorAudit() {
     });
   });
   return { small, tiny, overflow: document.documentElement.scrollWidth > innerWidth };
+}
+
+/** How many lines a box's text takes (its line boxes' distinct tops). */
+function lineCount(id) {
+  const range = document.createRange();
+  range.selectNodeContents(document.getElementById(id));
+  return new Set([...range.getClientRects()].filter((r) => r.width > 0).map((r) => Math.round(r.top))).size;
+}
+
+/**
+ * Scroll so the stage is stuck under the exercise header and still inside its
+ * card: the card holds the stage and the short rows under it, so past that
+ * the stage leaves with the card, as it should. The piano panel under the
+ * stage gives it room to stay.
+ */
+async function scrollIntoStuck(page) {
+  await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
+  if (await page.locator("#piano-block").isHidden()) await page.locator("#btn-toggle-piano").click();
+  await page.waitForTimeout(150);
+  return page.evaluate(() => {
+    const ex = document.querySelector(".exercise-header-compact").getBoundingClientRect();
+    const st = document.getElementById("highway-stage").getBoundingClientRect();
+    const card = document.getElementById("practice-cockpit").getBoundingClientRect();
+    const room = card.bottom - st.bottom;
+    const y = window.scrollY + Math.max(0, st.top - ex.bottom) + Math.min(60, Math.floor(room / 2));
+    window.scrollTo({ top: y, behavior: "instant" });
+    return { room, y: window.scrollY };
+  });
 }
 
 /** The top rail's lowest edge and a box's top, relative to the viewport. */
@@ -355,11 +386,7 @@ test.describe("Coach strip: the mode and its cue on the stage", () => {
         r = await page.evaluate(railAndTop, "#mode-focus-panel .mode-title");
         expect(r.top, `${id} live`).toBeGreaterThanOrEqual(r.rail);
         // "En vivo" on one line
-        const pill = await page.evaluate(() => {
-          const p = document.getElementById("practice-status");
-          return { h: p.getBoundingClientRect().height, lh: parseFloat(getComputedStyle(p).fontSize) * 2 };
-        });
-        expect(pill.h).toBeLessThan(pill.lh);
+        expect(await page.evaluate(lineCount, "practice-status"), `${id}: En vivo on one line`).toBe(1);
         await page.locator("#btn-practice-stop").click();
         await expect.poll(() => live(page)).toBe(false);
       }
@@ -368,11 +395,12 @@ test.describe("Coach strip: the mode and its cue on the stage", () => {
 });
 
 test.describe("Session chrome: one line, Pausar and Terminar in words", () => {
+  // A phone on its side puts the banner's buttons in the exercise header's
+  // row instead (see Landscape below)
   for (const vp of [
     { width: 390, height: 844 },
     { width: 360, height: 740 },
     { width: 320, height: 640 },
-    { width: 844, height: 390 },
     { width: 1280, height: 800 }
   ]) {
     test(`${vp.width}x${vp.height}: the banner is one line and says where you are`, async ({ page }) => {
@@ -448,7 +476,7 @@ test.describe("Session chrome: one line, Pausar and Terminar in words", () => {
 });
 
 test.describe("Landscape: a phone on its side", () => {
-  test("guided: header out of the way, banner with Pausar and Terminar, stage fits, nothing covers the title", async ({ browser }) => {
+  test("guided: one header row with Pausar and Terminar, stage fits, nothing covers the title", async ({ browser }) => {
     const ctx = await browser.newContext({
       viewport: { width: 844, height: 390 },
       userAgent: MOBILE_UA,
@@ -460,10 +488,24 @@ test.describe("Landscape: a phone on its side", () => {
     await startMinimo(page);
     await expect(page.locator("header.app-header")).toBeHidden();
     await expect(page.locator("#ex-breadcrumb")).toBeHidden();
-    for (const phase of ["idle", "live"]) {
+    // The view slides 6px into place as it opens
+    await expect.poll(() => page.evaluate(() => document.getElementById("view-exercise").getAnimations().length)).toBe(0);
+    // The routine's line moves into the header row; screen readers still
+    // hear the banner's
+    await expect(page.locator("#structured-progress")).toBeVisible();
+    await expect(page.locator("#structured-progress")).toHaveText("Ejercicio 1 de 2");
+    await expect(page.locator("#session-banner-text")).toContainText("Ejercicio 1 de 2");
+    for (const phase of ["idle", "live", "scrolled", "paused"]) {
       if (phase === "live") {
         await start(page);
         await page.clock.runFor(1500);
+      }
+      if (phase === "scrolled") await page.evaluate(() => window.scrollBy({ top: 300, behavior: "instant" }));
+      if (phase === "paused") {
+        await page.locator("#btn-practice-stop").click();
+        await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
+        await page.locator("#btn-session-pause").click();
+        await expect(page.locator("#structured-progress")).toHaveText("Ejercicio 1 de 2 · En pausa");
       }
       const r = await page.evaluate(() => {
         const q = (id) => document.getElementById(id).getBoundingClientRect();
@@ -472,22 +514,40 @@ test.describe("Landscape: a phone on its side", () => {
         return {
           scrollY,
           vh: innerHeight,
+          vw: innerWidth,
           pause: q(document.getElementById("btn-session-pause").hidden ? "btn-session-resume" : "btn-session-pause"),
           end: q("btn-session-end"),
           stage: q("highway-stage"),
           exHeader: document.querySelector(".exercise-header-compact").getBoundingClientRect(),
+          back: q("btn-back-home"),
+          heading: q("ex-title"),
+          progress: q("structured-progress"),
           title,
           pill,
           overlap: !(pill.right <= title.left || pill.left >= title.right || pill.bottom <= title.top || pill.top >= title.bottom),
           stop: q(document.getElementById("btn-practice-stop").hidden ? "btn-practice-start" : "btn-practice-stop")
         };
       });
-      expect(r.pause.bottom, `${phase}: Pausar on screen`).toBeLessThanOrEqual(r.vh);
-      expect(r.pause.top).toBeGreaterThanOrEqual(0);
-      expect(r.end.bottom, `${phase}: Terminar on screen`).toBeLessThanOrEqual(r.vh);
+      // Pausar and Terminar sit in the header's row, clear of Atrás, the title
+      // and the routine's line, and stay there scrolled
+      expect(r.exHeader.height, `${phase}: one header row`).toBeLessThanOrEqual(52);
+      for (const b of [r.pause, r.end]) {
+        expect(b.height, `${phase}: 44px`).toBeGreaterThanOrEqual(44);
+        expect(b.top, `${phase}: in the header row`).toBeGreaterThanOrEqual(r.exHeader.top - 1);
+        expect(b.bottom, `${phase}: in the header row`).toBeLessThanOrEqual(r.exHeader.bottom + 1);
+        expect(b.right).toBeLessThanOrEqual(r.vw);
+      }
+      expect(r.back.right, `${phase}: Atrás clear of Pausar`).toBeLessThanOrEqual(r.pause.left);
+      expect(r.heading.right).toBeLessThanOrEqual(r.back.left);
+      expect(r.progress.right).toBeLessThanOrEqual(r.back.left);
+      if (phase === "scrolled") {
+        expect(r.scrollY).toBeGreaterThan(0);
+        expect(Math.abs(r.exHeader.top), "the row stays at the top").toBeLessThanOrEqual(1);
+        continue;
+      }
       expect(r.overlap, `${phase}: En vivo pill over the panel title`).toBe(false);
       expect(r.title.top).toBeGreaterThanOrEqual(r.pill.bottom);
-      expect(r.pill.height, `${phase}: pill on one line`).toBeLessThan(36);
+      expect(await page.evaluate(lineCount, "practice-status"), `${phase}: pill on one line`).toBe(1);
       expect(r.stage.top).toBeGreaterThanOrEqual(r.exHeader.bottom - 1);
       expect(r.stage.bottom, `${phase}: stage inside the screen (VG-30)`).toBeLessThanOrEqual(r.vh);
       expect(r.stop.bottom).toBeLessThanOrEqual(r.vh);
@@ -516,7 +576,8 @@ test.describe("Landscape: a phone on its side", () => {
       expect(r.stage, `${id}: stage bottom at rest`).toBeLessThanOrEqual(r.vh);
       expect(r.ex).toBeGreaterThanOrEqual(0);
       // Scrolled, it sticks right under the exercise header
-      await page.evaluate(() => window.scrollTo({ top: 200, behavior: "instant" }));
+      const stuck = await scrollIntoStuck(page);
+      expect(stuck.room, `${id}: room to stay stuck`).toBeGreaterThan(20);
       await page.waitForTimeout(100);
       r = await page.evaluate(() => ({
         stageTop: document.getElementById("highway-stage").getBoundingClientRect().top,
@@ -531,6 +592,71 @@ test.describe("Landscape: a phone on its side", () => {
   });
 });
 
+test.describe("Sticky bars over the stage", () => {
+  test("the site header and the exercise header are solid; nothing shows between them", async ({ page }) => {
+    for (const vp of [
+      { width: 1280, height: 800 },
+      { width: 390, height: 844 }
+    ]) {
+      await page.setViewportSize(vp);
+      if (vp.width === 1280) await boot(page);
+      await open(page, "s2-solfege-chords");
+      // Past the card, so the stage's top row runs under both bars
+      await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "instant" }));
+      await page.waitForTimeout(150);
+      const r = await page.evaluate(() => {
+        const alpha = (el) => {
+          const m = getComputedStyle(el).backgroundColor.match(/[\d.]+/g).map(Number);
+          return m.length > 3 ? m[3] : 1;
+        };
+        const app = document.querySelector("header.app-header");
+        const ex = document.querySelector(".exercise-header-compact");
+        const a = app.getBoundingClientRect();
+        const rail = document.getElementById("hud-top-rail").getBoundingClientRect();
+        const under = document.elementFromPoint(innerWidth / 2, a.bottom + 0.5);
+        return {
+          appAlpha: alpha(app),
+          blur: getComputedStyle(app).backdropFilter,
+          exAlpha: alpha(ex),
+          railUnder: rail.top < a.bottom,
+          seam: under ? !!under.closest(".exercise-header-compact, header.app-header") : true
+        };
+      });
+      expect(r.railUnder, `${vp.width}: the stage's top row is under the bars`).toBe(true);
+      expect(r.appAlpha, `${vp.width}: site header solid`).toBe(1);
+      expect(r.blur).toBe("none");
+      expect(r.exAlpha, `${vp.width}: exercise header solid`).toBe(1);
+      expect(r.seam, `${vp.width}: no stage between the two bars`).toBe(true);
+      await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
+    }
+  });
+
+  test("the guide's button keeps its words inside the pill", async ({ page }) => {
+    for (const [vp, lang] of [
+      [{ width: 1280, height: 800 }, "es"],
+      [{ width: 390, height: 844 }, "es"],
+      [{ width: 320, height: 640 }, "en"]
+    ]) {
+      await page.setViewportSize(vp);
+      if (vp.width === 1280) await boot(page);
+      await page.evaluate((l) => window.VTI18n.setLang(l), lang);
+      await open(page, "s4-lip-trills");
+      await expect(page.locator("#btn-stage-guide-more")).toBeVisible();
+      const b = await page.evaluate(() => {
+        const btn = document.getElementById("btn-stage-guide-more");
+        const r = btn.getBoundingClientRect();
+        const range = document.createRange();
+        range.selectNodeContents(btn);
+        const t = range.getBoundingClientRect();
+        return { left: t.left - r.left, right: r.right - t.right, fits: btn.scrollWidth <= btn.clientWidth };
+      });
+      expect(b.fits, `${vp.width} ${lang}`).toBe(true);
+      expect(b.left, `${vp.width} ${lang}: room on the left`).toBeGreaterThanOrEqual(6);
+      expect(b.right, `${vp.width} ${lang}: room on the right`).toBeGreaterThanOrEqual(6);
+    }
+  });
+});
+
 test.describe("Sticky stage on narrow phones", () => {
   test("at 360px and below the stage still sticks under the exercise header", async ({ page }) => {
     for (const vp of [
@@ -540,7 +666,8 @@ test.describe("Sticky stage on narrow phones", () => {
       await page.setViewportSize(vp);
       if (vp.width === 360) await boot(page);
       await open(page, "s4-lip-trills");
-      await page.evaluate(() => window.scrollTo({ top: 400, behavior: "instant" }));
+      const stuck = await scrollIntoStuck(page);
+      expect(stuck.y, `${vp.width}: scrolled`).toBeGreaterThan(0);
       await page.waitForTimeout(100);
       const r = await page.evaluate(() => ({
         stageTop: document.getElementById("highway-stage").getBoundingClientRect().top,

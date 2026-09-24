@@ -361,6 +361,8 @@
       autoRecord: false,
       /** The mode walks its own notes (three roots, C3 → D3 → E3) and sounds each step */
       ownsTarget: true,
+      /** Read by a proposed app.js change: no chord loop or progression window under the steps */
+      noProgression: true,
       roots: [48, 50, 52],
       holdMs: 900,
       tolCents: 40,
@@ -423,6 +425,8 @@
       modeCue: "hum",
       /** The mode walks its own ten notes and sounds each one */
       ownsTarget: true,
+      /** Read by a proposed app.js change: no chord loop or progression window under the notes */
+      noProgression: true,
       cue: "Hum ten soft targets: each counts when held ~1.5 s near the centre. Lip buzz is yours to feel — not scored.",
       cueEs: "Tararea diez objetivos suaves: cada uno cuenta al sostenerlo ~1,5 s cerca del centro. El zumbido lo sientes tú — no se puntúa.",
       metricHints: { targets: "notesHeld" }
@@ -467,6 +471,8 @@
       autoRecord: false,
       /** The mode walks its own notes (three roots, C3 → D3 → E3) and sounds each step */
       ownsTarget: true,
+      /** Read by a proposed app.js change: no chord loop or progression window under the steps */
+      noProgression: true,
       roots: [48, 50, 52],
       holdMs: 700,
       tolCents: 40,

@@ -134,6 +134,7 @@
       profile: null,
       hud: null,
       mount(container, profile) {
+        this._destroyViz();
         this.profile = localizeProfile(profile);
         this.state = { startedAt: performance.now(), patches: {}, extras: {} };
         container.innerHTML = "";
@@ -143,8 +144,24 @@
         return this;
       },
       unmount() {
+        this._destroyViz();
         if (this.hud && this.hud.parentNode) this.hud.parentNode.removeChild(this.hud);
         this.hud = null;
+      },
+      /** A mode's picture (js/exercise-viz.js) and any highway layer it drew. */
+      _destroyViz() {
+        try {
+          this.viz?.destroy?.();
+        } catch {
+          /* ignore */
+        }
+        this.viz = null;
+        const pv = typeof global.VTGetPitchViz === "function" ? global.VTGetPitchViz() : null;
+        if (pv && this._ownsOverlay) {
+          pv.setOverlay?.(null);
+          pv.setNoteQueue?.(null);
+        }
+        this._ownsOverlay = false;
       },
       onStart() {
         if (spec.onStart) spec.onStart.call(this);
@@ -725,55 +742,141 @@
     }
   });
 
+  /**
+   * v10 power pause — "Pausa medida". The silence is the exercise, so the
+   * silence is what the picture shows: a gauge that grows while you are
+   * quiet, a strip of speech and silence, and three takes (baseline, a pause
+   * after every idea, pauses only at the peaks) compared after Stop.
+   *
+   * Pauses come from the raw sound edge (VTFeatures.Vad), not `voiced`: that
+   * flag bridges ~1.2 s of silence, so a correct 1.2 s pause never counted.
+   */
   Modes.pauseDetect = baseMode({
     id: "pauseDetect",
     render() {
+      const lo = this.profile.minPauseSec || 0.8;
+      const hi = this.profile.maxPauseSec || 3;
+      this.state.band = [lo, hi];
       this.state.pauses = 0;
-      this.state.inSilence = false;
-      this.state.silenceStart = 0;
-      this.state.hadSpeech = false;
-      this.state.minP = (this.profile.minPauseSec || 0.8) * 1000;
+      this.state.takes = [
+        { name: L("1 · Base", "1 · Baseline"), short: L("1 · Base", "1 · Base"), start: null, end: null, counted: [] },
+        { name: L("2 · Tras cada idea", "2 · After each idea"), short: L("2 · Ideas", "2 · Ideas"), start: null, end: null, counted: [] },
+        { name: L("3 · Solo en los picos", "3 · Only at the peaks"), short: L("3 · Picos", "3 · Peaks"), start: null, end: null, counted: [] }
+      ];
+      this.state.current = 0;
+      this.state.lastPauses = [];
+      this.state.review = false;
       this.hud.innerHTML = `
-        <div class="mode-title">${L("Detector de pausas de poder", "Power pause detector")}</div>
-        <div class="mode-big" data-p>0</div>
-        <p class="mode-meta">${L("Silencios ≥ " + (this.profile.minPauseSec || 0.8) + "s <em>después de hablar</em> (no silencio vacío)", "Silences ≥ " + (this.profile.minPauseSec || 0.8) + "s <em>after speech</em> (not idle quiet)")}</p>
-        <div class="silence-timeline" data-tl></div>
-        <p class="mode-meta" data-status>${L("Di un punto… y aterriza en silencio.", "Speak a point… then land in silence.")}</p>
+        <div class="viz-row viz-head">
+          <div class="mode-title">${L("Pausa de poder", "Power pause")}</div>
+          <button type="button" class="btn btn-ghost viz-tap" data-next-take>${L("Siguiente toma →", "Next take →")}</button>
+        </div>
+        <div class="viz-words">
+          <span data-status>${L("Di un punto… y aterriza en silencio.", "Speak a point… then land in silence.")}</span>
+          <strong class="mode-big" data-p>0</strong>
+        </div>
+        <p class="mode-meta muted">${L(
+          `Cuenta cada silencio de ${lo.toString().replace(".", ",")} a ${hi} s después de hablar.`,
+          `Counts each silence of ${lo}–${hi} s after speech.`
+        )}</p>
       `;
+      this.$("[data-next-take]")?.addEventListener("click", () => this._nextTake());
+      this._mountViz();
+    },
+    _mountViz() {
+      const V = global.VTViz;
+      const F = global.VTFeatures;
+      if (!V || !F || !V.scenes.pause) return;
+      this.hud.classList.add("has-viz");
+      this.state.vad = new F.Vad({
+        onPauseEnd: (start, len) => this._pauseClosed(len)
+      });
+      this.viz = new V.Surface(this.hud, (ctx, w, h) => V.scenes.pause(ctx, w, h, this.state), {
+        label: L(
+          "Medidor de pausas: crece mientras estás en silencio; la franja verde es la pausa de poder. Debajo, tu habla y tus silencios de los últimos segundos.",
+          "Pause meter: it grows while you are silent; the green band is a power pause. Below, your speech and silences over the last seconds."
+        )
+      });
+      this.viz.draw();
+    },
+    _nextTake() {
+      const st = this.state;
+      const cur = st.takes[st.current];
+      if (cur && cur.start != null && cur.end == null) cur.end = st.vad ? st.vad.t : 0;
+      if (st.current < st.takes.length - 1) {
+        st.current += 1;
+        const nxt = st.takes[st.current];
+        nxt.start = st.vad ? st.vad.t : 0;
+        nxt.end = null;
+        this.viz?.caption?.(nxt.name, 0);
+      }
+      if (st.current >= st.takes.length - 1) {
+        const b = this.$("[data-next-take]");
+        if (b) b.disabled = true;
+      }
+      this.viz?.draw();
+    },
+    _pauseClosed(len) {
+      const st = this.state;
+      st.lastPauses.push(len);
+      if (st.lastPauses.length > 6) st.lastPauses.shift();
+      const [lo, hi] = st.band;
+      if (len >= lo && len <= hi) {
+        st.pauses += 1;
+        st.takes[st.current]?.counted.push(len);
+        if (this.$("[data-p]")) this.$("[data-p]").textContent = String(st.pauses);
+        const words = L(`Pausa de ${len.toFixed(1).replace(".", ",")} s ✓`, `Pause ${len.toFixed(1)} s ✓`);
+        if (this.$("[data-status]")) this.$("[data-status]").textContent = words;
+        this.viz?.caption?.(words, 1500);
+      }
+    },
+    onStart() {
+      const st = this.state;
+      st.review = false;
+      this.hud?.classList.remove("is-replay");
+      st.vad?.reset();
+      st.takes.forEach((t) => {
+        t.start = null;
+        t.end = null;
+        t.counted = [];
+      });
+      st.current = 0;
+      st.takes[0].start = 0;
+      st.pauses = 0;
+      st.lastPauses = [];
+      const b = this.$("[data-next-take]");
+      if (b) b.disabled = false;
+      if (this.$("[data-p]")) this.$("[data-p]").textContent = "0";
+      this.viz?.draw();
     },
     onFrame(frame) {
-      const now = performance.now();
-      const quiet = !frame.voiced && (frame.rms || 0) < 0.02;
-      if (!quiet) {
-        this.state.hadSpeech = true;
-        this.state.inSilence = false;
-        this.state.countedThis = false;
-        if (this.$("[data-status]")) this.$("[data-status]").textContent = L("Hablando…", "Speaking…");
-        return;
+      const st = this.state;
+      if (!st.vad) return;
+      const before = st.vad.state;
+      st.vad.feed(frame);
+      if (before !== st.vad.state && this.$("[data-status]")) {
+        this.$("[data-status]").textContent =
+          st.vad.state === "speech" ? L("Hablando…", "Speaking…") : L("Silencio…", "Silence…");
       }
-      if (!this.state.hadSpeech) return; // don't score pre-speech silence
-      if (!this.state.inSilence) {
-        this.state.inSilence = true;
-        this.state.silenceStart = now;
-      } else if (now - this.state.silenceStart >= this.state.minP && !this.state.countedThis) {
-        this.state.pauses++;
-        this.state.countedThis = true;
-        this.state.hadSpeech = false; // need speech again before next pause
-        if (this.$("[data-p]")) this.$("[data-p]").textContent = String(this.state.pauses);
-        if (this.$("[data-status]")) this.$("[data-status]").textContent = L("Pausa contada ✓", "Pause counted ✓");
-        if (this.$("[data-tl]")) {
-          const bit = document.createElement("span");
-          bit.className = "tl-pause";
-          this.$("[data-tl]").appendChild(bit);
-        }
-      }
+      this.viz?.draw();
     },
     onStop() {
-      const n = this.state.pauses || 0;
-      // Only fill pauseCount — do not invent filler-reduction scores
+      const st = this.state;
+      const cur = st.takes[st.current];
+      if (cur && cur.start != null && cur.end == null) cur.end = st.vad ? st.vad.t : 0;
+      st.review = true;
+      if (this.viz) {
+        this.hud.classList.add("is-replay");
+        this.viz.draw();
+      }
+      const n = st.pauses || 0;
+      // Only the count is measured; felt authority stays the learner's rating
       return {
-        patches: { pauseCount: n, authority: n >= 4 ? 4 : n >= 2 ? 3 : 2 },
-        summary: `${n} intentional pauses (after speech)`
+        patches: n > 0 ? { pauseCount: n } : {},
+        summary: L(
+          `${n} ${n === 1 ? "pausa de poder" : "pausas de poder"} después de hablar`,
+          `${n} power ${n === 1 ? "pause" : "pauses"} after speech`
+        )
       };
     }
   });
@@ -2094,60 +2197,167 @@
       this.state.outSec = p.out || 8;
       this.state.stage = 0; // 0 in · 1 hold · 2 out
       this.state.t = 0;
+      this.state.clock = 0;
       this.state.cycles = 0;
       this.state.last = performance.now();
       this.hud.innerHTML = `
         <div class="mode-title">${L("Respiración costo-abdominal", "Low rib & belly breath")}</div>
-        <div class="mode-phase" data-stage>${L("Inhala por la nariz", "Inhale through the nose")}</div>
-        <div class="mode-big" data-count>${this.state.inSec}</div>
-        <div class="mode-bar thick"><span data-belt style="width:0%"></span></div>
+        <div class="viz-row viz-words">
+          <span class="mode-phase" data-stage>${L("Inhala por la nariz", "Inhale through the nose")}</span>
+          <strong class="mode-big" data-count>${this.state.inSec}</strong>
+        </div>
         <p class="mode-meta">${L("Ciclos", "Cycles")} <strong data-cy>0</strong> · ${this.state
-          .inSec}–${this.state.holdSec}–${this.state.outSec}</p>
-        <p class="mode-meta muted">${L(
-          "Manos en costillas bajas y abdomen. Los hombros no suben.",
-          "Hands on the low ribs and belly. The shoulders do not rise."
+          .inSec}–${this.state.holdSec}–${this.state.outSec} · ${L(
+          "manos en costillas bajas y abdomen; los hombros no suben",
+          "hands on the low ribs and belly; the shoulders stay down"
         )}</p>
       `;
+      // A scrolling breath wave with "now" fixed and the next breath visible
+      // ahead of it: the turn from in to out never arrives as a surprise.
+      // The mic cannot see ribs, so nothing here is scored — it paces.
+      this._mountViz();
+    },
+    _lens() {
+      return [this.state.inSec, this.state.holdSec, this.state.outSec];
+    },
+    _labels() {
+      // The hold is a suspension with the throat open, not a locked breath:
+      // a held glottis primes the hard onset the next exercises undo.
+      return [
+        L("Inhala por la nariz", "Inhale through the nose"),
+        L("Suspende · garganta abierta", "Suspend · throat open"),
+        L("Exhala parejo · costillas anchas", "Even exhale · ribs wide")
+      ];
+    },
+    _mountViz() {
+      const V = global.VTViz;
+      if (!V) return;
+      this.hud.classList.add("has-viz");
+      const lens = this._lens();
+      const cyc = lens[0] + lens[1] + lens[2];
+      const lo = 0.1;
+      const hi = 0.9;
+      const ease = (x) => (1 - Math.cos(Math.PI * clamp(x, 0, 1))) / 2;
+      const phaseAt = (t) => {
+        const u = ((t % cyc) + cyc) % cyc;
+        if (u < lens[0]) return [0, u / (lens[0] || 1)];
+        if (u < lens[0] + lens[1]) return [1, (u - lens[0]) / (lens[1] || 1)];
+        return [2, (u - lens[0] - lens[1]) / (lens[2] || 1)];
+      };
+      // The air: in, suspended, out evenly
+      this.state.wave = (t) => {
+        const [st, f] = phaseAt(t);
+        const y = st === 0 ? lo + (hi - lo) * ease(f) : st === 1 ? hi : hi - (hi - lo) * f;
+        return { y, lo: y - 0.045, hi: y + 0.045 };
+      };
+      // The ribs: they open with the air, then stay wide while the air leaves
+      // and only let go at the end — the apoyo this drill is for. A model of
+      // what to do, drawn as a guide; nothing measures it.
+      const ribs = (t) => {
+        const [st, f] = phaseAt(t);
+        if (st === 0) return lo + 0.05 + (hi - lo - 0.05) * ease(f);
+        if (st === 1) return hi;
+        return f < 0.7 ? hi - 0.06 * (f / 0.7) : hi - 0.06 - (hi - lo - 0.06) * ease((f - 0.7) / 0.3) * 0.85;
+      };
+      this.viz?.destroy?.();
+      this.viz = new V.Timeline(this.hud, {
+        seconds: Math.max(10, Math.min(18, cyc * 1.15)),
+        minPxPerSec: 26,
+        nowAt: 0.4,
+        top: L("lleno · anchas", "full · wide"),
+        bottom: L("vacío", "empty"),
+        label: L(
+          "Guía de respiración: la banda verde es el aire, sube al inhalar y baja parejo al exhalar; la línea discontinua son las costillas, que se quedan anchas casi hasta el final",
+          "Breath guide: the green band is the air, rising on the inhale and falling evenly on the exhale; the dashed line is the ribs, which stay wide almost to the end"
+        ),
+        tagColors: { 0: V.C.target },
+        captionHidden: true,
+        guide: this.state.wave,
+        lines: [{ fn: ribs, color: V.C.done, dash: [7, 5], width: 2, label: L("costillas", "ribs") }]
+      });
+      this._markAhead();
+      this.viz.push(0, this.state.wave(0).y);
+      this.viz.setText(this._labels()[0], String(lens[0]), this._subLine());
+      this.viz.surface.caption(this._labels()[0]);
+    },
+    _subLine() {
+      return `${this.state.inSec}–${this.state.holdSec}–${this.state.outSec} · ${L("una guía: el micrófono no ve las costillas", "a guide: the mic cannot see your ribs")}`;
+    },
+    /** Name each phase where it starts, for the stretch of wave ahead. */
+    _markAhead() {
+      if (!this.viz) return;
+      const lens = this._lens();
+      const cyc = lens[0] + lens[1] + lens[2];
+      const names = [
+        L("Inhala", "Inhale") + " " + lens[0],
+        L("Suspende", "Suspend") + " " + lens[1],
+        L("Exhala", "Exhale") + " " + lens[2]
+      ];
+      const until = this.state.clock + 24;
+      this._markedTo = this._markedTo || 0;
+      while (this._markedTo < until) {
+        const base = this._markedTo;
+        let at = base;
+        for (let i = 0; i < 3; i++) {
+          if (lens[i] > 0) this.viz.mark(names[i], { at, line: false, color: global.VTViz.C.muted });
+          at += lens[i];
+        }
+        this._markedTo = base + cyc;
+      }
     },
     onStart() {
       this.state.last = performance.now();
       this.state.stage = 0;
       this.state.t = 0;
+      this.state.clock = 0;
+      this.state.cycles = 0;
+      this._markedTo = 0;
+      if (this.viz) {
+        this.viz.reset();
+        this._markAhead();
+      }
     },
     onFrame() {
       const now = performance.now();
       const dt = Math.min(0.25, (now - this.state.last) / 1000);
       this.state.last = now;
       this.state.t += dt;
-      const lens = [this.state.inSec, this.state.holdSec, this.state.outSec];
-      while (this.state.t >= lens[this.state.stage] && lens[this.state.stage] > 0) {
+      this.state.clock += dt;
+      const lens = this._lens();
+      const prevStage = this.state.stage;
+      let guard = 0;
+      while (this.state.t >= lens[this.state.stage] && guard++ < 6) {
         this.state.t -= lens[this.state.stage];
         this.state.stage = (this.state.stage + 1) % 3;
         if (this.state.stage === 0) {
           this.state.cycles += 1;
           if (this.$("[data-cy]")) this.$("[data-cy]").textContent = String(this.state.cycles);
         }
-        // Skip a zero-length stage rather than looping forever on it
-        if (lens[this.state.stage] <= 0) continue;
+        // A zero-length stage (no hold) is skipped by the loop condition
       }
       const len = lens[this.state.stage] || 1;
-      const frac = clamp(this.state.t / len, 0, 1);
-      const labels = [
-        L("Inhala por la nariz", "Inhale through the nose"),
-        L("Retén — listo para sonar", "Hold — ready to sound"),
-        L("Espira pareja — costillas anchas", "Even exhale — ribs wide")
-      ];
-      const belt = this.state.stage === 0 ? frac : this.state.stage === 1 ? 1 : 1 - frac;
+      const labels = this._labels();
+      const count = String(Math.max(1, Math.ceil(len - this.state.t)));
       if (this.$("[data-stage]")) this.$("[data-stage]").textContent = labels[this.state.stage];
-      if (this.$("[data-count]"))
-        this.$("[data-count]").textContent = String(Math.max(1, Math.ceil(len - this.state.t)));
-      if (this.$("[data-belt]")) this.$("[data-belt]").style.width = `${belt * 100}%`;
+      if (this.$("[data-count]")) this.$("[data-count]").textContent = count;
+      if (this.viz && this.state.wave) {
+        this.viz.push(dt, this.state.wave(this.state.clock).y, 0);
+        this.viz.setText(labels[this.state.stage], count, this._subLine());
+        if (prevStage !== this.state.stage) {
+          this.viz.surface.caption(labels[this.state.stage], 0);
+          global.VTViz.chime(this.state.stage === 0 ? "done" : "phase");
+          this._markAhead();
+        }
+      }
     },
     onStop() {
       const n = this.state.cycles || 0;
       return {
         patches: n > 0 ? { cycles: n } : {},
-        summary: `${n} breath cycles ${this.state.inSec}–${this.state.holdSec}–${this.state.outSec}`
+        summary: L(
+          `${n} ${n === 1 ? "ciclo" : "ciclos"} de respiración ${this.state.inSec}–${this.state.holdSec}–${this.state.outSec}`,
+          `${n} breath ${n === 1 ? "cycle" : "cycles"} ${this.state.inSec}–${this.state.holdSec}–${this.state.outSec}`
+        )
       };
     }
   });

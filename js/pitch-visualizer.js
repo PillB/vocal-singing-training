@@ -189,9 +189,37 @@
       this.rangeMaxMidi = null;
       this.rangeLocked = false;
       this.activeChordName = "";
+      /**
+       * Exercise-drawn layers (js/practice-modes.js): fn(ctx, geo, layer) with
+       * layer "under" (after the lanes) and "over" (after your trail).
+       */
+      this.overlay = null;
+      /**
+       * Notes still to sing, current first: [{ midi, label, sub }]. When set,
+       * "now" moves in from the right edge and the next notes wait to its
+       * right, so a scale is read ahead like a line of music instead of
+       * discovered one step at a time.
+       */
+      this.noteQueue = null;
+      this.queueProgress = 0;
 
       this._resize();
       window.addEventListener("resize", () => this._resize());
+    }
+
+    setOverlay(fn) {
+      this.overlay = typeof fn === "function" ? fn : null;
+    }
+
+    /** @param {{midi:number,label?:string,sub?:string}[]|null} items current first */
+    setNoteQueue(items) {
+      this.noteQueue = items && items.length ? items.slice(0, 8) : null;
+      this.queueProgress = 0;
+    }
+
+    /** How far the current queued note's hold has got, 0..1. */
+    setQueueProgress(p) {
+      this.queueProgress = Math.max(0, Math.min(1, Number(p) || 0));
     }
 
     attachGame(game) {
@@ -458,6 +486,9 @@
     /** Full reset when switching exercises (no stale multi-lane highway). */
     resetLanes() {
       this.clearChordLanes();
+      this.overlay = null;
+      this.noteQueue = null;
+      this.queueProgress = 0;
       this.history = [];
       this.devWindow = [];
       this.targetFreq = 130.81;
@@ -871,7 +902,11 @@
       // Trails end left of the label column: the live dot and its halo used to
       // sit on the lane labels at the right edge ("G3 S…").
       const plotRight = Math.max(48, laneRight - 20);
-      const xAt = (i) => (i / (this.maxPoints - 1)) * (plotRight - 12) + 12;
+      const queue = this.noteQueue;
+      // With notes queued, "now" sits left of the lane labels by a third so
+      // the next notes have room; otherwise it stays at the right edge.
+      const nowX = queue ? Math.round(12 + (plotRight - 12) * 0.62) : plotRight;
+      const xAt = (i) => (i / (this.maxPoints - 1)) * (nowX - 12) + 12;
       // Label Ys reserved by priority paint (primary > active > ghost)
       const usedLabelYs = [];
       const canPlaceLabel = (y) => {
@@ -1027,6 +1062,32 @@
         cueTop = Math.max(cueTop, badgeTop + 20);
       }
 
+      const geo = {
+        w,
+        h,
+        graphH,
+        laneRight,
+        plotLeft: 12,
+        plotRight,
+        nowX,
+        laneHalf,
+        safeTop: this.safeTop || 0,
+        midiToY: (m) => this._midiToY(m, centerMidi, graphH),
+        xAt,
+        history: this.history,
+        maxPoints: this.maxPoints,
+        rangeMinMidi: this.rangeMinMidi,
+        rangeMaxMidi: this.rangeMaxMidi
+      };
+      if (this.overlay) {
+        try {
+          this.overlay(ctx, geo, "under");
+        } catch (err) {
+          console.warn("[viz overlay]", err);
+        }
+      }
+      if (queue) this._drawQueue(ctx, geo, queue);
+
       const n = this.history.length;
       const lastVoiceMidi = n ? this.history[n - 1].voiceMidi : null;
 
@@ -1170,7 +1231,73 @@
         }
       }
 
+      if (this.overlay) {
+        try {
+          this.overlay(ctx, geo, "over");
+        } catch (err) {
+          console.warn("[viz overlay]", err);
+        }
+      }
+
       this._drawKeyboard(ctx, w, h, centerMidi, lastVoiceMidi);
+    }
+
+    /**
+     * The queued notes as blocks on their lanes: the current one straddles
+     * "now" and fills as you hold it; the next ones wait to its right and
+     * fade with distance. Each carries its syllable, so the eye reads
+     * DO RE MI where the ear hears it.
+     */
+    _drawQueue(ctx, geo, queue) {
+      const { nowX, laneRight, laneHalf } = geo;
+      const room = Math.max(40, laneRight - nowX - 6);
+      const visible = Math.min(queue.length, 5);
+      const bw = Math.max(34, Math.min(88, room / Math.max(1.6, visible - 0.4)));
+      const gap = Math.max(6, bw * 0.14);
+      const bh = Math.max(16, Math.min(34, laneHalf * 1.7));
+      for (let k = visible - 1; k >= 0; k--) {
+        const it = queue[k];
+        if (!it || !Number.isFinite(it.midi)) continue;
+        const y = geo.midiToY(it.midi);
+        const x0 = k === 0 ? nowX - bw * 0.5 : nowX + bw * 0.5 + gap + (k - 1) * (bw + gap);
+        if (x0 > laneRight) continue;
+        const bwk = Math.min(bw, laneRight - x0);
+        const cur = k === 0;
+        const alpha = cur ? 1 : Math.max(0.35, 0.9 - k * 0.14);
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        const r = 7;
+        ctx.beginPath();
+        ctx.moveTo(x0 + r, y - bh / 2);
+        ctx.arcTo(x0 + bwk, y - bh / 2, x0 + bwk, y + bh / 2, r);
+        ctx.arcTo(x0 + bwk, y + bh / 2, x0, y + bh / 2, r);
+        ctx.arcTo(x0, y + bh / 2, x0, y - bh / 2, r);
+        ctx.arcTo(x0, y - bh / 2, x0 + bwk, y - bh / 2, r);
+        ctx.closePath();
+        ctx.fillStyle = cur ? "rgba(79, 212, 146, 0.28)" : "rgba(10, 16, 24, 0.82)";
+        ctx.fill();
+        if (cur && this.queueProgress > 0) {
+          ctx.save();
+          ctx.clip();
+          ctx.fillStyle = "rgba(79, 212, 146, 0.62)";
+          ctx.fillRect(x0, y - bh / 2, bwk * this.queueProgress, bh);
+          ctx.restore();
+        }
+        ctx.lineWidth = cur ? 2.5 : 1.5;
+        ctx.strokeStyle = cur ? "rgba(160, 255, 210, 1)" : "rgba(200, 220, 245, 0.8)";
+        if (!cur) ctx.setLineDash([4, 3]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        const text = it.label || midiToName(Math.round(it.midi));
+        const f = fitCanvasLabel(ctx, text, bwk - 8, `${cur ? 800 : 700} ${cur ? 13 : 12}px system-ui,sans-serif`);
+        ctx.font = f.font;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillStyle = cur ? "#eafff4" : "#dce6f4";
+        ctx.fillText(f.text, x0 + bwk / 2, y + 0.5);
+        ctx.restore();
+      }
+      ctx.textBaseline = "alphabetic";
     }
 
     getSnapshotMetrics() {

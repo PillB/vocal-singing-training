@@ -559,11 +559,12 @@
     },
     "s18-costal-breath": {
       mode: "breathCycle",
-      // The level lane is feedback when a mic is there, never a requirement
+      // A pacer: the mic cannot hear a nose breath or see the ribs, so it is
+      // not opened (no permission prompt, no level pill reacting to the room)
       timeDriven: true,
       showPitch: false,
       showHold: false,
-      showLevel: true,
+      showLevel: false,
       pitchChallenge: false,
       autoPiano: false,
       autoRecord: false,

@@ -3019,9 +3019,11 @@
       if (freq) {
         st._m3.push(K.midiOf(freq));
         if (st._m3.length > 3) st._m3.shift();
-        const cand = K.median(st._m3);
+        const cand = st._m3.length >= 3 ? K.median(st._m3) : null;
         const prev = st._acc;
-        if (prev && st.clock - prev.at < 0.15 && Math.abs(cand - prev.m) > 4) {
+        if (cand == null) {
+          // the first two frames of a sound: too few to outvote a slip
+        } else if (prev && st.clock - prev.at < 0.15 && Math.abs(cand - prev.m) > 4) {
           st._jump = st._jump && Math.abs(st._jump.m - cand) <= 1 ? { m: cand, n: st._jump.n + 1 } : { m: cand, n: 1 };
           if (st._jump.n >= 4) midi = cand;
         } else midi = cand;

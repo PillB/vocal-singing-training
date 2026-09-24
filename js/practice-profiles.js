@@ -51,6 +51,8 @@
     },
     "v4-articulation-pen": {
       mode: "articulationContrast",
+      // A count pacer; the take is recorded so the two counts can be compared
+      timeDriven: true,
       showPitch: false,
       showHold: false,
       showLevel: true,
@@ -58,23 +60,145 @@
       autoPiano: false,
       autoRecord: true,
       phases: [
-        { label: "With pen · count 1–60", sec: 90 },
-        { label: "Pen off · feel the ease", sec: 45 }
+        {
+          label: "With pen · count 1–60",
+          labelEs: "Con bolígrafo · cuenta 1–60",
+          short: "With pen",
+          shortEs: "Con bolígrafo",
+          kind: "count",
+          pen: true,
+          from: 1,
+          to: 60,
+          pace: 1.5,
+          sec: 90,
+          cue: "Pen across the teeth, resting, not bitten. One number per beat: make every consonant land.",
+          cueEs: "Bolígrafo entre los dientes, apoyado, sin morder. Un número por pulso: que cada consonante se oiga."
+        },
+        {
+          label: "Take the pen out",
+          labelEs: "Quita el bolígrafo",
+          short: "Out",
+          shortEs: "Fuera",
+          kind: "penOff",
+          sec: 5,
+          cue: "Put it down. Same pace next.",
+          cueEs: "Déjalo. Ahora, el mismo ritmo."
+        },
+        {
+          label: "Pen off · count 1–20",
+          labelEs: "Sin bolígrafo · cuenta 1–20",
+          short: "Without",
+          shortEs: "Sin bolígrafo",
+          kind: "count",
+          pen: false,
+          from: 1,
+          to: 20,
+          pace: 1.5,
+          sec: 30,
+          cue: "The same numbers without the pen. Notice what changed: you will hear it after Stop.",
+          cueEs: "Los mismos números sin el bolígrafo. Nota qué cambió: lo escucharás al detener."
+        }
       ],
-      cue: "Phase 1: pen in mouth. Phase 2: remove pen and notice clarity.",
-      cueEs: "Fase 1: bolígrafo en la boca. Fase 2: quítalo y nota la claridad.",
+      cue: "Count with the pen, take it out, count the same numbers again. After Stop, listen to both.",
+      cueEs: "Cuenta con el bolígrafo, quítalo y cuenta los mismos números otra vez. Al detener, escucha los dos.",
       metricHints: {}
     },
     "v5-neutral-ears": {
       mode: "recordOnly",
+      // Paced cards; the take is recorded for a later listen with neutral ears
+      timeDriven: true,
       showPitch: false,
       showHold: false,
       showLevel: true,
       pitchChallenge: false,
       autoPiano: false,
       autoRecord: true,
-      cue: "Deliver persona + story. Recording starts with practice — review later with neutral ears.",
-      cueEs: "Entrega persona + historia. La grabación empieza con la práctica — revisa después con oídos neutrales.",
+      phases: [
+        {
+          label: "Motivator",
+          labelEs: "Motivador",
+          persona: "Motivator",
+          personaEs: "Motivador",
+          icon: "star",
+          kind: "persona",
+          sec: 20,
+          intent: "Open with a specific, true compliment.",
+          intentEs: "Abre con un cumplido concreto y verdadero.",
+          cue: "Speak to one imagined person. No judging mid-take.",
+          cueEs: "Háblale a una persona imaginada. Sin juzgarte a mitad."
+        },
+        {
+          label: "Coach",
+          labelEs: "Coach",
+          persona: "Coach",
+          personaEs: "Coach",
+          icon: "flag",
+          kind: "persona",
+          sec: 20,
+          intent: "Give one clear tip. Only one.",
+          intentEs: "Da un consejo claro. Solo uno.",
+          cue: "Same person, new energy: direct and kind.",
+          cueEs: "La misma persona, otra energía: directo y amable."
+        },
+        {
+          label: "Friend",
+          labelEs: "Amigo",
+          persona: "Friend",
+          personaEs: "Amigo",
+          icon: "heart",
+          kind: "persona",
+          sec: 20,
+          intent: "Warm and unhurried: share a small moment.",
+          intentEs: "Cálido y sin prisa: cuenta un momento pequeño.",
+          cue: "Slower, closer, lighter.",
+          cueEs: "Más lento, más cerca, más ligero."
+        },
+        {
+          label: "Educator",
+          labelEs: "Educador",
+          persona: "Educator",
+          personaEs: "Educador",
+          icon: "check",
+          kind: "persona",
+          sec: 20,
+          intent: "Explain one idea so it sticks.",
+          intentEs: "Explica una idea para que se quede.",
+          cue: "One example, then the idea in one line.",
+          cueEs: "Un ejemplo y la idea en una línea."
+        },
+        {
+          label: "Story · setup",
+          labelEs: "Historia · planteamiento",
+          short: "Setup",
+          shortEs: "Planteamiento",
+          kind: "story",
+          sec: 25,
+          cue: "Who, where, and what they wanted.",
+          cueEs: "Quién, dónde y qué quería."
+        },
+        {
+          label: "Story · turn",
+          labelEs: "Historia · giro",
+          short: "Turn",
+          shortEs: "Giro",
+          kind: "story",
+          sec: 25,
+          cue: "What changed, or went another way.",
+          cueEs: "Qué cambió o salió de otra manera."
+        },
+        {
+          label: "Story · point",
+          labelEs: "Historia · punto",
+          short: "Point",
+          shortEs: "Punto",
+          kind: "story",
+          sec: 20,
+          cue: "Land one takeaway, then stop.",
+          cueEs: "Aterriza una sola idea y termina."
+        }
+      ],
+      cue: "Four persona cards, then a 70-second story. Recording starts with practice: listen back later with neutral ears.",
+      cueEs: "Cuatro tarjetas de persona y una historia de 70 s. La grabación empieza con la práctica: escúchala después con oídos neutrales.",
       metricHints: {}
     },
     "v6-connect": {
@@ -102,8 +226,26 @@
       pitchChallenge: false,
       autoPiano: false,
       autoRecord: true,
-      cue: "Record 5–10 min improv. Leave one full day before the 3-step review.",
-      cueEs: "Graba 5–10 min de impro. Espera un día completo antes de la revisión en 3 pasos.",
+      minSec: 300,
+      maxSec: 600,
+      topics: [
+        "The best thing you learned this year",
+        "A place you would go back to",
+        "Your work, explained to a child",
+        "A habit that changed your week",
+        "Something that made you laugh lately",
+        "A meal that tastes like home"
+      ],
+      topicsEs: [
+        "Lo mejor que aprendiste este año",
+        "Un lugar al que volverías",
+        "Tu trabajo, explicado a un niño",
+        "Un hábito que cambió tu semana",
+        "Algo que te hizo reír hace poco",
+        "Una comida que sabe a casa"
+      ],
+      cue: "Record 5–10 min on one topic, without stopping to judge. Leave one full day before the 3-step review.",
+      cueEs: "Graba 5–10 min sobre un tema, sin pararte a juzgar. Espera un día completo antes de la revisión en 3 pasos.",
       metricHints: {}
     },
     "v8-fluency-metaphors": {
@@ -133,8 +275,8 @@
       pitchChallenge: false,
       autoPiano: false,
       autoRecord: false,
-      cue: "Open the 12-week dashboard — one element, daily check-ins, weekly record/review.",
-      cueEs: "Abre el panel de 12 semanas — un elemento, registro diario, grabación/revisión semanal.",
+      cue: "One element for the week, a few minutes a day, a short recording and review at the end.",
+      cueEs: "Un elemento por semana, unos minutos al día, una grabación corta y revisión al final.",
       metricHints: {}
     },
     /* —— Vocal advanced —— */
@@ -210,18 +352,8 @@
     },
     "v15-gestures": {
       mode: "gestureReps",
-      showPitch: false,
-      showHold: false,
-      showLevel: true,
-      pitchChallenge: false,
-      autoPiano: false,
-      autoRecord: true,
-      cue: "3 gesture types: size · count · location. Record, then review muted first.",
-      cueEs: "3 tipos de gesto: tamaño · cuenta · lugar. Graba y revisa primero en silencio.",
-      metricHints: {}
-    },
-    "v16-facial-expression": {
-      mode: "facePhases",
+      // Paced gestures (drawn: no camera here); the sound is recorded
+      timeDriven: true,
       showPitch: false,
       showHold: false,
       showLevel: true,
@@ -229,12 +361,145 @@
       autoPiano: false,
       autoRecord: true,
       phases: [
-        { label: "Curiosity face", sec: 40 },
-        { label: "Surprise face", sec: 40 },
-        { label: "Resolve / warmth", sec: 40 }
+        {
+          label: "Frame yourself",
+          labelEs: "Encuádrate",
+          short: "Camera",
+          shortEs: "Cámara",
+          pose: "frame",
+          sec: 10,
+          cue: "Prop your phone's camera at chest height: waist up, hands in shot. This page keeps time and records the sound.",
+          cueEs: "Apoya la cámara del móvil a la altura del pecho: de cintura arriba, con las manos a la vista. Esta página lleva el tiempo y graba el sonido."
+        },
+        {
+          label: "Hands still",
+          labelEs: "Manos quietas",
+          short: "Still",
+          shortEs: "Quietas",
+          pose: "base",
+          sec: 60,
+          cue: "Talk about your day with your hands together at the navel. Notice how it feels.",
+          cueEs: "Habla de tu día con las manos juntas a la altura del ombligo. Nota cómo se siente."
+        },
+        {
+          label: "Open palms on the key word",
+          labelEs: "Palmas abiertas en la palabra clave",
+          short: "Palms",
+          shortEs: "Palmas",
+          pose: "palms",
+          sec: 30,
+          line: "Here is what *matters*.",
+          lineEs: "Esto es lo *importante*.",
+          cue: "Palms open with the key word, one beat, then back to base.",
+          cueEs: "Palmas abiertas con la palabra clave, un golpe y de vuelta a la base."
+        },
+        {
+          label: "Size · a big idea",
+          labelEs: "Tamaño · una idea grande",
+          short: "Size",
+          shortEs: "Tamaño",
+          pose: "size",
+          sec: 30,
+          line: "It's a *huge* change.",
+          lineEs: "Es un cambio *enorme*.",
+          cue: "The hands open wide as the word arrives, not after it.",
+          cueEs: "Las manos se abren cuando llega la palabra, no después."
+        },
+        {
+          label: "Count · one, two, three",
+          labelEs: "Cuenta · uno, dos, tres",
+          short: "Count",
+          shortEs: "Cuenta",
+          pose: "count",
+          sec: 30,
+          line: "Three steps: *one*, *two*, *three*.",
+          lineEs: "Tres pasos: *uno*, *dos*, *tres*.",
+          cue: "One finger per point, raised with each number.",
+          cueEs: "Un dedo por punto, que sube con cada número."
+        },
+        {
+          label: "Location · here and there",
+          labelEs: "Lugar · aquí y allá",
+          short: "Place",
+          shortEs: "Lugar",
+          pose: "location",
+          sec: 30,
+          line: "We were *here*; now we're *there*.",
+          lineEs: "Estábamos *aquí*; ahora, *allá*.",
+          cue: "Place each idea in space and point back to it.",
+          cueEs: "Coloca cada idea en un lugar y vuelve a señalarla."
+        }
       ],
-      cue: "Curiosity → surprise → resolve on your face. Review muted after.",
-      cueEs: "Curiosidad → sorpresa → resolución en la cara. Revisa en silencio después.",
+      cue: "Hands still, then open palms, size, count and location. Film yourself waist up and watch it muted first.",
+      cueEs: "Manos quietas, luego palmas, tamaño, cuenta y lugar. Fílmate de cintura arriba y mírate primero sin sonido.",
+      metricHints: {}
+    },
+    "v16-facial-expression": {
+      mode: "facePhases",
+      // Paced faces (drawn: no camera here); the sound is recorded
+      timeDriven: true,
+      showPitch: false,
+      showHold: false,
+      showLevel: true,
+      pitchChallenge: false,
+      autoPiano: false,
+      autoRecord: true,
+      phases: [
+        {
+          label: "Resting face",
+          labelEs: "Cara en reposo",
+          short: "Rest",
+          shortEs: "Reposo",
+          face: "neutral",
+          sec: 8,
+          cue: "Look into your camera or a mirror. Soften the jaw and the brows: that is your resting face.",
+          cueEs: "Mírate en la cámara o en un espejo. Suelta la mandíbula y las cejas: esa es tu cara en reposo."
+        },
+        {
+          label: "Warm hello",
+          labelEs: "Hola cálido",
+          short: "Hello",
+          shortEs: "Hola",
+          face: "warm",
+          sec: 10,
+          line: "*Hello*, good to see you.",
+          lineEs: "*Hola*, qué gusto verte.",
+          cue: "Eyes first, then a slight smile, not a fixed grin.",
+          cueEs: "Primero los ojos, luego una sonrisa leve, no una sonrisa fija."
+        },
+        {
+          label: "Curiosity face",
+          labelEs: "Curiosidad",
+          short: "Curiosity",
+          shortEs: "Curiosidad",
+          face: "curious",
+          sec: 20,
+          cue: "Start a 60-second story with a question you want answered. The brows lift a little.",
+          cueEs: "Empieza una historia de 60 s con una pregunta que quieras resolver. Las cejas suben un poco."
+        },
+        {
+          label: "Surprise face",
+          labelEs: "Sorpresa",
+          short: "Surprise",
+          shortEs: "Sorpresa",
+          face: "surprise",
+          sec: 20,
+          cue: "The turn: eyes open and brows up with the word, not two seconds after it.",
+          cueEs: "El giro: ojos abiertos y cejas arriba con la palabra, no dos segundos después."
+        },
+        {
+          label: "Resolve / warmth",
+          labelEs: "Resolución y calidez",
+          short: "Resolve",
+          shortEs: "Resolución",
+          face: "resolve",
+          sec: 20,
+          cue: "Land the point with a settled, warm face.",
+          cueEs: "Aterriza el punto con la cara tranquila y cálida."
+        }
+      ],
+      cue: "Resting face, a warm hello, then a story told with curiosity, surprise and resolve. Watch your video muted after.",
+      cueEs: "Cara en reposo, un hola cálido y una historia con curiosidad, sorpresa y resolución. Después mira tu video sin sonido.",
       metricHints: {}
     },
     "v17-strategic-concision": {
@@ -515,7 +780,7 @@
     /* —— Singing · class course (placement & resonance) —— */
     "s17-jaw-neck-release": {
       mode: "releaseFlow",
-      // Clock-driven and silent: runs with or without a microphone
+      // Clock-driven and quiet: runs with or without a microphone
       timeDriven: true,
       showPitch: false,
       showHold: false,
@@ -527,34 +792,46 @@
         {
           label: "Jaw hangs",
           labelEs: "Mandíbula suelta",
+          short: "Jaw",
+          shortEs: "Mandíbula",
+          art: "jaw",
           sec: 25,
-          cue: "Two fingers on the hinge — let the mouth fall open with no push.",
-          cueEs: "Dos dedos en la bisagra — deja caer la boca sin empujar."
+          cue: "Two fingers on the hinge: let the mouth fall open with no push. Keep breathing.",
+          cueEs: "Dos dedos en la bisagra: deja caer la boca sin empujar. Sigue respirando."
         },
         {
           label: "Slow neck half-circles",
           labelEs: "Medios círculos de cuello",
+          short: "Neck",
+          shortEs: "Cuello",
+          art: "neck",
           sec: 30,
-          cue: "Half circles, one side then the other. Never roll the head back.",
-          cueEs: "Medios círculos, un lado y luego el otro. Nunca eches la cabeza atrás."
+          cue: "Ear to shoulder, chin past the chest, to the other shoulder and back. Never roll the head back.",
+          cueEs: "Oreja al hombro, la barbilla pasa por el pecho, al otro hombro y vuelta. Nunca eches la cabeza atrás."
         },
         {
           label: "Loose chewing hum",
           labelEs: "Masticar y tararear",
+          short: "Chew",
+          shortEs: "Masticar",
+          art: "chew",
           sec: 25,
-          cue: "Chew an imaginary gum, lips closed, soft hum, tongue loose.",
-          cueEs: "Mastica un chicle imaginario, labios cerrados, tarareo suave, lengua floja."
+          cue: "Chew an imaginary gum, lips closed, with a soft hum (the only sound here). Tongue loose.",
+          cueEs: "Mastica un chicle imaginario, labios cerrados, con un tarareo suave (el único sonido). Lengua floja."
         },
         {
           label: "Three silent pre-yawns",
           labelEs: "Tres pre-bostezos en silencio",
+          short: "Pre-yawn",
+          shortEs: "Pre-bostezo",
+          art: "yawns",
           sec: 20,
           cue: "The inside grows, the face stays calm. Stop before the yawn.",
           cueEs: "El interior crece, la cara tranquila. Párate antes del bostezo."
         }
       ],
-      cue: "Silent release before you sing. Phases advance on their own.",
-      cueEs: "Soltar en silencio antes de cantar. Las fases avanzan solas.",
+      cue: "Release before you sing: quiet except a soft hum while chewing. Steps advance on their own.",
+      cueEs: "Soltar antes de cantar: en silencio, salvo un tarareo suave al masticar. Los pasos avanzan solos.",
       metricHints: {}
     },
     "s18-costal-breath": {
@@ -575,56 +852,73 @@
     },
     "s19-soft-palate-surprise": {
       mode: "openSpace",
-      showPitch: true,
-      showHold: true,
+      // The skill is the space, not the note: its own picture replaces the
+      // pitch highway, in the first screen. Silent steps run on the clock.
+      timeDriven: true,
+      showPitch: false,
+      showHold: false,
       showLevel: true,
       pitchChallenge: false,
       autoPiano: true,
-      autoRecord: false,
+      autoRecord: true,
       refPitch: "C3",
       minHoldMs: 1500,
       phases: [
         {
           label: "Surprise face",
           labelEs: "Cara de sorpresa",
+          short: "Surprise",
+          shortEs: "Sorpresa",
+          art: "surprise",
           sec: 20,
-          cue: "Surprising news — the jaw drops on its own. No sound yet.",
-          cueEs: "Una noticia sorprendente — la mandíbula cae sola. Todavía sin sonido."
+          cue: "Surprising news: the jaw drops on its own. No sound yet.",
+          cueEs: "Una noticia sorprendente: la mandíbula cae sola. Todavía sin sonido."
         },
         {
           label: "Stop before the yawn",
           labelEs: "Párate antes del bostezo",
+          short: "Pre-yawn",
+          shortEs: "Pre-bostezo",
+          art: "chapel",
           sec: 20,
-          cue: "The instant before a yawn. Hold that inner space.",
-          cueEs: "El instante antes de bostezar. Sostén ese espacio interno."
+          cue: "The instant before a yawn: the back of the mouth lifts. Hold that inner space, silently.",
+          cueEs: "El instante antes de bostezar: el fondo de la boca se eleva. Sostén ese espacio, en silencio."
         },
         {
           label: "Sing in that space",
           labelEs: "Canta en ese espacio",
-          sec: 45,
+          short: "/A/",
+          shortEs: "/A/",
           sound: true,
-          cue: "Comfortable /A/ from inside the chapel. Hold ≥1.5s to log it.",
-          cueEs: "/A/ cómoda desde dentro de la capilla. Sostén ≥1,5 s para registrarlo."
+          ref: true,
+          sec: 45,
+          cue: "A comfortable /A/ from inside that space. Every hold of 1.5 s or more is counted.",
+          cueEs: "Una /A/ cómoda desde dentro de ese espacio. Cuenta cada sostenido de 1,5 s o más."
         },
         {
           label: "Closed, then open",
           labelEs: "Cerrado, luego abierto",
-          sec: 25,
+          short: "A/B",
+          shortEs: "A/B",
           sound: true,
-          cue: "One phrase with the space closed, one with it open. Hear the difference.",
-          cueEs: "Una frase con el espacio cerrado, otra abierto. Escucha la diferencia."
+          ab: true,
+          sec: 25,
+          cue: "One phrase with the space closed, then the same phrase open, at the same loudness.",
+          cueEs: "Una frase con el espacio cerrado y luego la misma abierta, al mismo volumen."
         },
         {
           label: "Phrase with the space",
           labelEs: "Una frase con el espacio",
-          sec: 35,
+          short: "Phrase",
+          shortEs: "Frase",
           sound: true,
+          sec: 35,
           cue: "A line you know, keeping the pre-yawn space all the way through.",
           cueEs: "Una frase que sepas, manteniendo el espacio de pre-bostezo hasta el final."
         }
       ],
-      cue: "Surprise → pre-yawn → sound from that space. Holds log while a sounding phase runs.",
-      cueEs: "Sorpresa → pre-bostezo → sonido desde ese espacio. Los sostenidos cuentan en las fases con sonido.",
+      cue: "Surprise, then the pre-yawn, in silence; then sing from that space. Sung holds of 1.5 s or more are counted.",
+      cueEs: "Sorpresa y pre-bostezo, en silencio; luego canta desde ese espacio. Cuentan los sostenidos de 1,5 s o más.",
       metricHints: { openHolds: "holds" }
     },
     "s20-five-vowels": {

@@ -506,127 +506,249 @@
     }
   });
 
+  /**
+   * v4 pen articulation — a count pacer. One number per beat, the pen shown in
+   * or out, then the same numbers without the pen. After Stop the take is cut
+   * into "with pen" and "without pen" (the same numbers) so the contrast is
+   * heard, not scored: clarity stays the learner's rating in the metrics.
+   * Pictures: js/scenes/guided.js (VTViz.guided).
+   */
   Modes.articulationContrast = baseMode({
     id: "articulationContrast",
     render() {
+      const G = global.VTViz?.guided;
+      const title = L("Contraste con bolígrafo", "Pen contrast");
       const phases = this.profile.phases || [
-        { label: "With pen · count 1–60", sec: 90 },
-        { label: "Pen off · feel the ease", sec: 45 }
+        { label: "With pen · count 1–60", kind: "count", pen: true, from: 1, to: 60, pace: 1.5, sec: 90 },
+        { label: L("Sin bolígrafo · cuenta 1–20", "Pen off · count 1–20"), kind: "count", pen: false, from: 1, to: 20, pace: 1.5, sec: 30 }
       ];
-      this.state.runner = createPhaseRunner(phases, (i, p) => {
-        if (global.VTToast) global.VTToast(p.label);
-        if (i === 1 && this.$("[data-rate]")) this.$("[data-rate]").hidden = false;
-      });
-      this.state.clarityPen = null;
-      this.state.clarityAfter = null;
-      this.hud.innerHTML = `
-        <div class="mode-title">${L("Contraste de articulación con bolígrafo", "Pen articulation contrast")}</div>
-        <div class="mode-phase" data-phase>${phases[0].label}</div>
-        <div class="mode-big" data-remain>${phases[0].sec}s</div>
-        <div class="mode-bar"><span data-bar style="width:0%"></span></div>
-        <div data-rate hidden>
-          <p class="mode-meta">${L("Califica la claridad después de cada fase:", "Rate clarity after each phase:")}</p>
-          <label class="mode-meta">${L("Con bolígrafo (1–5)", "With pen (1–5)")}
-            <input type="range" min="1" max="5" value="3" data-pen />
-          </label>
-          <label class="mode-meta">${L("Sin bolígrafo (1–5)", "After pen (1–5)")}
-            <input type="range" min="1" max="5" value="3" data-after />
-          </label>
-        </div>
-      `;
-    },
-    onFrame() {
-      const r = this.state.runner;
-      r.tick(performance.now());
-      const phase = this.profile.phases[r.index];
-      if (this.$("[data-phase]"))
-        this.$("[data-phase]").textContent =
-          r.index < r.count ? r.label : L("Contraste listo — valora ambos", "Contrast complete — rate both");
-      if (this.$("[data-remain]"))
-        this.$("[data-remain]").textContent =
-          r.index < r.count ? `${Math.ceil(r.remaining)}s` : "✓";
-      if (phase && this.$("[data-bar]")) {
-        const pct = clamp(((phase.sec - r.remaining) / phase.sec) * 100, 0, 100);
-        this.$("[data-bar]").style.width = `${pct}%`;
+      if (!G) {
+        this.hud.innerHTML = `<div class="mode-title">${title}</div><div class="mode-phase" data-phase>${phases[0].label}</div>`;
+        return;
       }
-      if (r.index >= 1 && this.$("[data-rate]")) this.$("[data-rate]").hidden = false;
+      this.viz = new G.Drill(this, {
+        kind: "pen",
+        title,
+        phases,
+        mic: true,
+        strip: true,
+        recorded: true,
+        skip: true,
+        preCue: 3,
+        label: L(
+          "Cuenta al pulso: el número grande es el que toca ahora, la bola marca el pulso. Arriba, el paso y lo que viene; abajo, todos los pasos.",
+          "Count on the beat: the big number is the one to say now, the ball marks the beat. Above, the step and what comes next; below, every step."
+        ),
+        artFor: () => ({ draw: G.art.numbers, aspect: 3.4, stackAspect: 1.8, plain: true }),
+        doneText: L("Contraste listo", "Contrast done"),
+        chapters: (d) => this._chapters(d),
+        reviewTitle: L("Escucha con y sin bolígrafo", "Hear it with and without the pen"),
+        reviewNote: L(
+          "Mismos números con y sin bolígrafo. La claridad la valoras tú en Métricas.",
+          "The same numbers with and without the pen. You rate clarity in Metrics."
+        )
+      });
+    },
+    /** A: the start of the count with the pen · B: the same numbers without it. */
+    _chapters(d) {
+      const run = d.run;
+      const stopAt = { t: run.clock, rec: run.rec };
+      const cut = (i, sec) => {
+        const s = i >= 0 ? run.span(i, stopAt) : null;
+        if (!s || s.t1 - s.t0 < 1.5) return null;
+        const k = Math.min(sec, s.t1 - s.t0);
+        const p = run.phases[i];
+        const n = Math.max(1, Math.floor(k / (p.pace || 1.5)));
+        const from = p.from || 1;
+        return { t0: s.t0, t1: s.t0 + k, r0: s.r0, r1: s.r0 + k, sub: L(`cuenta ${from}–${from + n - 1}`, `count ${from}–${from + n - 1}`) };
+      };
+      const iA = run.phases.findIndex((p) => p.kind === "count" && p.pen !== false);
+      const iB = run.phases.findIndex((p) => p.kind === "count" && p.pen === false);
+      const a = cut(iA, 15);
+      const b = cut(iB, 15);
+      const out = [];
+      if (a) out.push(Object.assign({ label: L("A · con bolígrafo", "A · with pen") }, a));
+      if (b) out.push(Object.assign({ label: L("B · sin bolígrafo", "B · without pen") }, b));
+      if (a && b) {
+        out.push(
+          Object.assign({}, a, {
+            label: L("A y luego B", "A, then B"),
+            sub: L("seguidos", "back to back"),
+            segs: [
+              [a.r0, a.r1],
+              [b.r0, b.r1]
+            ]
+          })
+        );
+      }
+      return out.concat(d.stepChapters((p) => p.kind === "count"));
+    },
+    onStart() {
+      this.viz?.start?.();
+    },
+    onFrame(frame) {
+      this.viz?.frame?.(frame);
     },
     onStop() {
-      const pen = Number(this.$("[data-pen]")?.value || 0);
-      const after = Number(this.$("[data-after]")?.value || 0);
-      const patches = {};
-      if (pen) patches.clarityPen = pen;
-      if (after) patches.clarityAfter = after;
+      const d = this.viz;
+      d?.stop?.();
+      const n = d ? d.run.completed : 0;
+      const total = d ? d.run.count : 0;
+      // Clarity is a self-rating: it stays empty for the learner to fill in
       return {
-        patches,
-        summary: after ? `Clarity pen ${pen} → after ${after}` : "Contrast phases done"
+        patches: {},
+        summary: L(
+          `Contraste: ${n} de ${total} pasos · escucha A y B antes de valorar`,
+          `Contrast: ${n} of ${total} steps · hear A and B before you rate`
+        )
       };
     }
   });
 
+  /**
+   * v5 neutral ears (persona & story) — a persona deck, then a story arc
+   * (setup → turn → point), recorded. Nothing judges mid-take; after Stop the
+   * take is split by card and by story beat to listen back. Without phases
+   * (an exercise with no profile falls back here) it is a plain take clock.
+   */
   Modes.recordOnly = baseMode({
     id: "recordOnly",
     render() {
-      const prompts = this.profile.prompts || [
-        "Open as Motivator — genuine compliment",
-        "Shift to Coach — one clear tip",
-        "Friend energy — warm story beat",
-        "Educator — land the takeaway"
-      ];
-      this.state.prompts = prompts;
-      this.state.pi = 0;
-      this.state.lastSwap = performance.now();
-      this.hud.innerHTML = `
-        <div class="mode-title">${L("Toma de actuación · persona", "Performance take · persona")}</div>
-        <div class="mode-phase" data-pr>${prompts[0]}</div>
-        <div class="mode-big" data-t>0:00</div>
-        <p class="mode-meta">${L("Las pistas rotan cada ~25s. No te juzgues a mitad — revisa después.", "Prompts rotate every ~25s. Don't judge mid-take — review later.")}</p>
-      `;
-    },
-    onFrame() {
-      const sec = Math.floor((performance.now() - this.state.startedAt) / 1000);
-      if (this.$("[data-t]"))
-        this.$("[data-t]").textContent = `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
-      if (performance.now() - this.state.lastSwap > 25000) {
-        this.state.lastSwap = performance.now();
-        this.state.pi = (this.state.pi + 1) % this.state.prompts.length;
-        if (this.$("[data-pr]")) this.$("[data-pr]").textContent = this.state.prompts[this.state.pi];
+      const G = global.VTViz?.guided;
+      const phases = this.profile.phases;
+      if (!G) {
+        this.hud.innerHTML = `<div class="mode-title">${L("Toma", "Take")}</div><div class="mode-big" data-t>0:00</div>`;
+        return;
       }
+      if (!phases || !phases.length) {
+        this.viz = new G.Take(this, {
+          title: L("Toma", "Take"),
+          minSec: 0,
+          maxSec: 300,
+          idle: L("Pulsa Empezar para grabar tu toma", "Press Start to record your take"),
+          label: L("Tu toma mientras crece: cada barra es un segundo de voz.", "Your take as it grows: each bar is a second of voice.")
+        });
+        return;
+      }
+      this.viz = new G.Drill(this, {
+        kind: "persona",
+        title: L("Persona e historia", "Persona & story"),
+        phases,
+        mic: true,
+        strip: true,
+        recorded: true,
+        skip: true,
+        preCue: 3,
+        label: L(
+          "Tarjeta de persona o arco de la historia del paso actual, con el tiempo que queda y lo que viene. Sin juicio a mitad de toma.",
+          "The persona card or story arc for this step, with the time left and what comes next. No judging mid-take."
+        ),
+        artFor: (p) =>
+          p && p.kind === "story" ? { draw: G.art.story, aspect: 3.2, stackAspect: 2, plain: true } : { draw: G.art.persona, aspect: 2.6, stackAspect: 1.5, plain: true },
+        doneText: L("Toma completa", "Take complete"),
+        chapters: (d) => {
+          const out = d.stepChapters();
+          const idx = [];
+          d.run.phases.forEach((p, i) => {
+            if (p.kind === "story") idx.push(i);
+          });
+          if (idx.length > 1) {
+            const stopAt = { t: d.run.clock, rec: d.run.rec };
+            const a = d.run.span(idx[0], stopAt);
+            const b = d.run.span(idx[idx.length - 1], stopAt);
+            if (a && b && b.t1 - a.t0 > 3) {
+              const s = { t0: a.t0, t1: b.t1, r0: a.r0, r1: b.r1 };
+              out.push(Object.assign({ label: L("La historia entera", "The whole story"), sub: d.chapterSub(s) }, s));
+            }
+          }
+          return out;
+        },
+        reviewTitle: L("Escucha con oídos neutrales", "Listen with neutral ears"),
+        reviewNote: L(
+          "Mejor mañana: ¿qué funcionó? Guarda la toma y la historia para reutilizarla.",
+          "Best tomorrow: what landed? Save the take and keep the story to reuse it."
+        )
+      });
+    },
+    onStart() {
+      this.viz?.start?.();
+    },
+    onFrame(frame) {
+      this.viz?.frame?.(frame);
     },
     onStop() {
-      return { patches: {}, summary: "Take captured — review with neutral ears" };
+      const v = this.viz;
+      v?.stop?.();
+      const G = global.VTViz?.guided;
+      const sec = v ? (v.run ? v.run.clock : v.t) : 0;
+      const len = G ? G.mmss(sec) : `${Math.round(sec)} s`;
+      return {
+        patches: {},
+        summary: L(`Toma de ${len} · escúchala con oídos neutrales`, `${len} take · listen with neutral ears`)
+      };
     }
   });
 
+  /**
+   * v16 facial expression — no camera here, so the face is a drawing: each
+   * step's expression (resting, warm hello, curiosity, surprise, resolve)
+   * with the next one announced a few seconds early so the face can arrive
+   * with the word. Recorded; nothing is scored.
+   */
   Modes.facePhases = baseMode({
     id: "facePhases",
     render() {
+      const G = global.VTViz?.guided;
+      const title = L("Expresión facial", "Facial expression");
       const phases = this.profile.phases || [];
-      this.state.runner = createPhaseRunner(phases, (i, p) => {
-        if (global.VTToast) global.VTToast(p.label);
+      if (!G) {
+        this.hud.innerHTML = `<div class="mode-title">${title}</div><div class="mode-phase" data-phase>${phases[0]?.label || ""}</div><div class="mode-big" data-remain>—</div>`;
+        return;
+      }
+      this.viz = new G.Drill(this, {
+        kind: "face",
+        title,
+        phases,
+        mic: true,
+        strip: true,
+        recorded: true,
+        skip: true,
+        preCue: 3,
+        label: L(
+          "Dibujo de la expresión del paso actual, el tiempo que queda y la siguiente expresión, que se anuncia 3 s antes.",
+          "A drawing of this step's expression, the time left, and the next expression, announced 3 s early."
+        ),
+        artFor: () => ({ draw: G.art.face, aspect: 1 }),
+        scriptFor: (p) => {
+          const line = G.loc(p, "line");
+          return line ? { text: line, hot: true } : null;
+        },
+        doneText: L("Historia completa", "Story complete"),
+        reviewTitle: L("Escucha tu toma", "Listen to your take"),
+        reviewNote: L(
+          "Mira primero tu video sin sonido: ¿la cara cuenta la historia?",
+          "Watch your video muted first: does your face tell the story?"
+        )
       });
-      this.hud.innerHTML = `
-        <div class="mode-title">${L("Expresión facial", "Facial expressiveness")}</div>
-        <div class="mode-phase" data-phase>${phases[0]?.label || L("Gesto", "Face")}</div>
-        <div class="mode-big" data-remain>—</div>
-        <p class="mode-meta">${L("Cambia la cara con la fase. Revisa en silencio al detener.", "Change the face with the phase. Review muted after stop.")}</p>
-      `;
     },
-    onFrame() {
-      const r = this.state.runner;
-      if (!r) return;
-      r.tick(performance.now());
-      if (this.$("[data-phase]"))
-        this.$("[data-phase]").textContent =
-          r.index < r.count ? r.label : L("Listo — revisa sin sonido", "Done — review muted");
-      if (this.$("[data-remain]"))
-        this.$("[data-remain]").textContent =
-          r.index < r.count ? `${Math.ceil(r.remaining)}s` : "✓";
+    onStart() {
+      this.viz?.start?.();
+    },
+    onFrame(frame) {
+      this.viz?.frame?.(frame);
     },
     onStop() {
+      const d = this.viz;
+      d?.stop?.();
+      const n = d ? d.run.completed : 0;
+      const total = d ? d.run.count : 0;
+      // Animation, match and warmth are the learner's own ratings
       return {
         patches: {},
-        summary: "Face phases done — review muted for congruence"
+        summary: L(
+          `Expresión: ${n} de ${total} pasos · revisa el video sin sonido`,
+          `Expression: ${n} of ${total} steps · review your video muted`
+        )
       };
     }
   });
@@ -694,51 +816,196 @@
     }
   });
 
+  /**
+   * v7 record & review — one long improvised take. The picture keeps the take
+   * (a ribbon from 0 to 10:00, one bar per second of voice, the 5:00 minimum
+   * marked) and judges nothing mid-take. After Stop it offers the take by the
+   * minute and says when the review opens: tomorrow, in three passes.
+   */
   Modes.reviewSession = baseMode({
     id: "reviewSession",
     render() {
-      this.hud.innerHTML = `
-        <div class="mode-title">${L("Grabar y revisar", "Record &amp; review take")}</div>
-        <div class="mode-big" data-t>0:00</div>
-        <p class="mode-meta mode-warn">${L("Espera <strong>1 día completo</strong> antes de Audición → Visual → Transcripción.", "Leave <strong>1 full day</strong> before Auditory → Visual → Transcription.")}</p>
-      `;
-    },
-    onFrame() {
-      const sec = Math.floor((performance.now() - this.state.startedAt) / 1000);
-      if (this.$("[data-t]"))
-        this.$("[data-t]").textContent = `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
-    },
-    onStop() {
-      // focus review block
-      const rev = document.getElementById("review-block");
-      if (rev) {
-        rev.hidden = false;
-        rev.scrollIntoView({ behavior: scrollBehavior(), block: "nearest" });
+      const G = global.VTViz?.guided;
+      const title = L("Grabar y revisar", "Record & review");
+      if (!G) {
+        this.hud.innerHTML = `<div class="mode-title">${title}</div><div class="mode-big" data-t>0:00</div>`;
+        return;
       }
-      return { patches: {}, summary: "Take ready — schedule review tomorrow" };
-    }
-  });
-
-  Modes.weekPlan = baseMode({
-    id: "weekPlan",
-    render() {
-      // Same copy as the exercise's plan card (week.*): the days are counted
-      // from practice now, so there is no "check in" to ask for.
-      const t = (k) => global.VTI18n?.t?.(k) ?? k;
-      this.hud.innerHTML = `
-        <div class="mode-title">${t("week.cta")}</div>
-        <p class="mode-meta">${t("week.ctaSub")}</p>
-        <button type="button" class="btn btn-primary btn-sm" data-open-plan>${t("week.open")}</button>
-      `;
-      this.$("[data-open-plan]")?.addEventListener("click", () => {
-        document.getElementById("btn-plan")?.click();
+      const topics = (isEs() ? this.profile.topicsEs : this.profile.topics) || this.profile.topics || [];
+      this.viz = new G.Take(this, {
+        title,
+        topics,
+        minSec: this.profile.minSec || 300,
+        maxSec: this.profile.maxSec || 600,
+        delayReview: true,
+        label: L(
+          "Tu toma mientras crece, de 0 a 10 minutos: cada barra es un segundo de voz, los huecos son silencios. La línea dorada marca el mínimo de 5 minutos.",
+          "Your take as it grows, from 0 to 10 minutes: each bar is a second of voice, gaps are silences. The gold line marks the 5-minute minimum."
+        )
       });
     },
     onStart() {
-      // soft redirect path: app.js opens the plan on Start
+      this.viz?.start?.();
+    },
+    onFrame(frame) {
+      this.viz?.frame?.(frame);
     },
     onStop() {
-      return { patches: {}, summary: "Use plan dashboard for week logic" };
+      const v = this.viz;
+      v?.stop?.();
+      const G = global.VTViz?.guided;
+      const sec = v ? v.t : 0;
+      const len = G ? G.mmss(sec) : `${Math.round(sec)} s`;
+      const min = v ? v.minSec : 300;
+      return {
+        patches: {},
+        summary:
+          sec >= min
+            ? L(`Toma de ${len} · revísala mañana: oído, vista, transcripción`, `${len} take · review it tomorrow: ear, eyes, transcript`)
+            : L(`Toma de ${len} · para la revisión, mejor 5 min o más`, `${len} take · for the review, 5 min or more works best`)
+      };
+    }
+  });
+
+  /**
+   * v9 twelve-week plan — a plan, not a drill. The picture is drawn when the
+   * page opens: this week's seven days (gold = a day you practised your
+   * focus), today ringed, the twelve weeks as a rising staircase with each
+   * week's verdict, and the one next action. Days come from the practice
+   * ledger (VTDays); nothing is lost for a missed day.
+   */
+  Modes.weekPlan = baseMode({
+    id: "weekPlan",
+    render() {
+      // Same copy as the exercise's plan card (week.*)
+      const t = (k) => global.VTI18n?.t?.(k) ?? k;
+      const G = global.VTViz?.guided;
+      if (!G) {
+        this.hud.innerHTML = `
+          <div class="mode-title">${t("week.cta")}</div>
+          <p class="mode-meta">${t("week.ctaSub")}</p>
+          <button type="button" class="btn btn-primary btn-sm" data-open-plan>${t("week.open")}</button>
+        `;
+        this.$("[data-open-plan]")?.addEventListener("click", () => document.getElementById("btn-plan")?.click());
+        return;
+      }
+      const model = this._weekModel();
+      const buttons = [];
+      if (model.focusEx) buttons.push({ attr: "data-open-focus", label: L("Practicar", "Practise") });
+      buttons.push({ attr: "data-open-plan", label: L("Abrir el plan", "Open the plan") });
+      this.viz = new G.Week(this, {
+        title: t("week.cta"),
+        buttons,
+        words: `<span data-week-head>${model.head}</span> <span data-week-action>${model.action}</span>`,
+        model: () => this._weekModel(),
+        label: L(
+          "Tu semana: siete días, en dorado los que practicaste tu foco y hoy rodeado. Debajo, las 12 semanas como una escalera, con la tuya marcada, y la próxima acción.",
+          "Your week: seven days, gold where you practised your focus, today ringed. Below, the 12 weeks as a staircase with yours outlined, and the next action."
+        )
+      });
+      this.$("[data-open-plan]")?.addEventListener("click", () => document.getElementById("btn-plan")?.click());
+      this.$("[data-open-focus]")?.addEventListener("click", () => {
+        const id = this._weekModel().focusEx;
+        if (id && global.VTApp?.openExercise) global.VTApp.openExercise(id);
+      });
+    },
+    /** The plan as it stands: stored plan + practice-day ledger. */
+    _weekModel() {
+      const S = global.VTStorage;
+      const D = global.VTDays;
+      const I = global.VTI18n;
+      const tr = (k, v) => (I && I.t ? I.t(k, v) : k);
+      const plan = (S && S.getWeekPlan && S.getWeekPlan()) || { weekNumber: 1, status: "idle", reviews: [] };
+      const elLabel = (el) => {
+        if (!el) return "";
+        const key = "plan.el." + String(el).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+        const out = tr(key);
+        return out === key ? el : out;
+      };
+      const all = [...(global.VT_EXERCISES?.vocal || []), ...(global.VT_EXERCISES?.singing || [])];
+      const exTitle = (id) => {
+        const ex = all.find((e) => e.id === id);
+        return ex ? (I && I.exTitle ? I.exTitle(ex) : ex.title) : id;
+      };
+      const track = global.VTApp?.getState?.()?.exercise?.track || "vocal";
+      const map = plan.element ? global.VT_WEEK_ELEMENT_EXERCISES?.[plan.element] : null;
+      const ids = map ? (map[track]?.length ? map[track] : map[track === "vocal" ? "singing" : "vocal"] || []) : [];
+      const focusEx = ids.find((id) => id !== "v9-12-week") || null;
+      const weekN = Number(plan.weekNumber) || 1;
+      const active = plan.status !== "idle" && !!plan.startedAt;
+      const loc = isEs() ? "es-PE" : "en-GB";
+
+      let days = [];
+      let focusDays = null;
+      let dayIndex = 0;
+      let todayFocus = false;
+      if (D && D.dayKey) {
+        const today = D.dayKey();
+        let bag = { days: {} };
+        try {
+          bag = D.read();
+        } catch {
+          bag = { days: {} };
+        }
+        const start = active ? D.dayKey(new Date(plan.startedAt)) : D.weekStart(today);
+        dayIndex = D.diffDays(start, today) + 1;
+        let n = 0;
+        for (let i = 0; i < 7; i++) {
+          const key = D.addDays(start, i);
+          const row = bag.days ? bag.days[key] : null;
+          const practised = D.counts(row);
+          const focus = active && practised && ids.some((id) => (row.ex || []).includes(id));
+          if (focus) n += 1;
+          if (focus && key === today) todayFocus = true;
+          const d = D.parseDay(key);
+          let label = "";
+          try {
+            label = d.toLocaleDateString(loc, { weekday: "short" }).replace(".", "");
+          } catch {
+            label = String(i + 1);
+          }
+          days.push({
+            label,
+            num: String(d.getDate()),
+            state: key > today ? "future" : focus ? "focus" : practised ? "other" : "none",
+            today: key === today
+          });
+        }
+        focusDays = active ? n : null;
+      } else {
+        days = Array.from({ length: 7 }, (_, i) => ({ label: String(i + 1), num: "", state: "none", today: false }));
+      }
+
+      const el = elLabel(plan.element);
+      const head = active
+        ? L(`Semana ${weekN} · ${el}`, `Week ${weekN} · ${el}`) + (dayIndex >= 1 && dayIndex <= 7 ? L(` · día ${dayIndex} de 7`, ` · day ${dayIndex} of 7`) : "")
+        : plan.element
+          ? L(`Semana ${weekN} · foco: ${el}`, `Week ${weekN} · focus: ${el}`)
+          : L(`Semana ${weekN} · elige un foco`, `Week ${weekN} · pick a focus`);
+      let action;
+      if (!active && !plan.element) action = L("Abre el plan y elige UN elemento para esta semana", "Open the plan and pick ONE element for this week");
+      else if (!active) action = focusEx ? L(`Empieza la semana con ${exTitle(focusEx)}`, `Start the week with ${exTitle(focusEx)}`) : L("Empieza la semana en el plan", "Start the week in the plan");
+      else if (plan.status === "review" || dayIndex > 7) action = L("La semana terminó: graba una muestra corta y revisa en el plan", "The week is done: record a short sample and review it in the plan");
+      else if (todayFocus) action = L("Hoy ya practicaste tu foco ✓ · mañana, otra ronda corta", "Focus practised today ✓ · another short round tomorrow");
+      else action = focusEx ? L(`Hoy: unos minutos de ${exTitle(focusEx)}`, `Today: a few minutes of ${exTitle(focusEx)}`) : L("Hoy: una ronda corta de tu foco", "Today: one short round of your focus");
+
+      const reviews = plan.reviews || [];
+      const weeks = [];
+      for (let w = 1; w <= 12; w++) {
+        const r = reviews.find((x) => Number(x.week ?? x.weekNumber) === w);
+        weeks.push({
+          state: w < weekN ? "done" : w === weekN ? "current" : "todo",
+          verdict: r ? r.verdict : null,
+          label: r ? elLabel(r.element) : w === weekN ? el : ""
+        });
+      }
+      return { head, focusDays, action, days, weeks, focusEx };
+    },
+    onStart() {
+      // app.js opens the plan on Start; the picture stays as it was drawn
+    },
+    onStop() {
+      return { patches: {}, summary: L("Tu plan está en la pestaña Plan", "Your plan lives in the Plan tab") };
     }
   });
 
@@ -989,44 +1256,66 @@
     }
   });
 
+  /**
+   * v15 gestures — no camera here, so each gesture is a drawing on a 4 s
+   * loop: home base, then the gesture arriving just before its key word
+   * lights up in the line to say. Hands still → open palms → size → count →
+   * location. Recorded; purposefulness and congruence stay self-ratings.
+   */
   Modes.gestureReps = baseMode({
     id: "gestureReps",
     render() {
-      this.state.reps = { size: 0, count: 0, location: 0 };
-      this.state.mutedReview = false;
-      this.hud.innerHTML = `
-        <div class="mode-title">${L("Repeticiones de gestos", "Gesture reps")}</div>
-        <div class="controls-row">
-          <button type="button" class="btn btn-sm" data-g="size">Size +</button>
-          <button type="button" class="btn btn-sm" data-g="count">Count +</button>
-          <button type="button" class="btn btn-sm" data-g="location">Location +</button>
-        </div>
-        <p class="mode-meta">${L("Tamaño <strong data-s>0</strong> · Cuenta <strong data-c>0</strong> · Lugar <strong data-l>0</strong>", "Size <strong data-s>0</strong> · Count <strong data-c>0</strong> · Location <strong data-l>0</strong>")}</p>
-        <label class="mode-meta" style="display:flex;gap:0.4rem;align-items:center;margin-top:0.5rem;">
-          <input type="checkbox" data-muted /> I reviewed the take muted first
-        </label>
-      `;
-      this.hud.querySelectorAll("[data-g]").forEach((b) => {
-        b.addEventListener("click", () => {
-          const k = b.getAttribute("data-g");
-          this.state.reps[k]++;
-          if (this.$("[data-s]")) this.$("[data-s]").textContent = this.state.reps.size;
-          if (this.$("[data-c]")) this.$("[data-c]").textContent = this.state.reps.count;
-          if (this.$("[data-l]")) this.$("[data-l]").textContent = this.state.reps.location;
-        });
-      });
-      this.$("[data-muted]")?.addEventListener("change", (e) => {
-        this.state.mutedReview = e.target.checked;
+      const G = global.VTViz?.guided;
+      const title = L("Gestos con intención", "Purposeful gestures");
+      const phases = this.profile.phases || [];
+      if (!G || !phases.length) {
+        this.hud.innerHTML = `<div class="mode-title">${title}</div><p class="mode-meta">${L("Tamaño · cuenta · lugar", "Size · count · location")}</p>`;
+        return;
+      }
+      this.viz = new G.Drill(this, {
+        kind: "gesture",
+        title,
+        phases,
+        mic: true,
+        strip: true,
+        recorded: true,
+        skip: true,
+        preCue: 3,
+        label: L(
+          "Dibujo del gesto del paso actual: vuelve a la base y el gesto llega justo antes de la palabra clave, que se ilumina en la frase de ejemplo.",
+          "A drawing of this step's gesture: back to home base, and the gesture arrives just before the key word, which lights up in the example line."
+        ),
+        artFor: () => ({ draw: G.art.gesture, aspect: 1.3 }),
+        scriptFor: (p, info) => {
+          const line = G.loc(p, "line");
+          return line ? { text: line, hot: G.gestureCycle(info.t || 0, info.reduced).hot } : null;
+        },
+        doneText: L("Ronda de gestos completa", "Gesture round complete"),
+        reviewTitle: L("Escucha tu toma", "Listen to your take"),
+        reviewNote: L(
+          "Primero mira tu video sin sonido: ¿el gesto llega con la palabra o antes?",
+          "Watch your video muted first: does the gesture land with the word, or before it?"
+        )
       });
     },
+    onStart() {
+      this.viz?.start?.();
+    },
+    onFrame(frame) {
+      this.viz?.frame?.(frame);
+    },
     onStop() {
-      const t = this.state.reps.size + this.state.reps.count + this.state.reps.location;
-      if (!this.state.mutedReview && global.VTToast) {
-        global.VTToast("Tip: check muted review before scoring congruence");
-      }
+      const d = this.viz;
+      d?.stop?.();
+      const n = d ? d.run.completed : 0;
+      const total = d ? d.run.count : 0;
+      // Purposeful, congruent and calm are judged by the learner on video
       return {
-        patches: t > 0 ? { purposeful: clamp(1 + Math.floor(t / 2), 1, 5) } : {},
-        summary: `${t} gesture reps`
+        patches: {},
+        summary: L(
+          `Gestos: ${n} de ${total} pasos · mira el video sin sonido primero`,
+          `Gestures: ${n} of ${total} steps · watch your video muted first`
+        )
       };
     }
   });
@@ -2132,53 +2421,64 @@
   }
 
   /**
-   * s17 jaw & neck release — silent guided phases. Nothing to detect: the value
-   * is being walked through the four releases instead of skipping them because
-   * they make no sound.
+   * s17 jaw & neck release — guided steps with the mic closed. Nothing to
+   * detect: the value is being walked through the four releases (hanging jaw,
+   * neck half-circles, chewing hum, pre-yawns), each drawn, with the time left,
+   * the next step and a soft tone at each change for eyes-closed practice.
    */
   Modes.releaseFlow = baseMode({
     id: "releaseFlow",
     render() {
+      const G = global.VTViz?.guided;
+      const title = L("Soltar mandíbula y cuello", "Jaw & neck release");
       const phases = this.profile.phases || [];
-      this.state.phases = phases;
-      this.state.runner = createPhaseRunner(phases, (i, p) => {
-        if (global.VTToast) global.VTToast(p.label);
-        const cueEl = this.$("[data-cue]");
-        if (cueEl) cueEl.textContent = phaseCueFor(p);
-      });
-      this.hud.innerHTML = `
-        <div class="mode-title">${L("Soltar mandíbula y cuello", "Jaw & neck release")}</div>
-        <div class="mode-phase" data-phase>${phases[0]?.label || L("Suelta", "Release")}</div>
-        <div class="mode-big" data-remain>—</div>
-        <div class="mode-bar"><span data-bar style="width:0%"></span></div>
-        <p class="mode-meta" data-cue>${phaseCueFor(phases[0])}</p>
-        <p class="mode-meta muted">${L(
-          "Sin sonido y sin prisa. Si algo tira o duele, hazlo más pequeño.",
-          "No sound, no hurry. If anything pulls or hurts, make it smaller."
-        )}</p>
-      `;
-    },
-    onFrame() {
-      const r = this.state.runner;
-      if (!r) return;
-      r.tick(performance.now());
-      const done = r.index >= r.count;
-      this.state.done = Math.min(r.index, r.count);
-      if (this.$("[data-phase]")) {
-        this.$("[data-phase]").textContent = done
-          ? L("Listo — cuello y mandíbula sueltos", "Done — jaw and neck free")
-          : r.label;
+      if (!G) {
+        this.hud.innerHTML = `
+          <div class="mode-title">${title}</div>
+          <div class="mode-phase" data-phase>${phases[0]?.label || L("Suelta", "Release")}</div>
+          <div class="mode-big" data-remain>—</div>
+          <p class="mode-meta" data-cue>${phaseCueFor(phases[0])}</p>
+        `;
+        return;
       }
-      if (this.$("[data-remain]"))
-        this.$("[data-remain]").textContent = done ? "✓" : `${Math.ceil(r.remaining)}s`;
-      if (this.$("[data-bar]"))
-        this.$("[data-bar]").style.width = `${(this.state.done / Math.max(1, r.count)) * 100}%`;
+      const aspect = { jaw: 1.75, neck: 1.2, chew: 1.5, yawns: 2.6 };
+      const stack = { yawns: 1.9 };
+      this.viz = new G.Drill(this, {
+        kind: "release",
+        title,
+        phases,
+        skip: true,
+        chime: true,
+        preCue: 3,
+        meta: L("Sin prisa. Si algo tira o duele, hazlo más pequeño.", "No hurry. If anything pulls or hurts, make it smaller."),
+        label: L(
+          "Dibujo del movimiento del paso actual, el tiempo que queda y el siguiente paso. Los pasos avanzan solos; un tono suave marca cada cambio.",
+          "A drawing of this step's movement, the time left and the next step. Steps move on by themselves; a soft tone marks each change."
+        ),
+        artFor: (p) => {
+          const key = p && G.art[p.art] ? p.art : "jaw";
+          return { draw: G.art[key], aspect: aspect[key] || 1.4, stackAspect: stack[key] };
+        },
+        doneText: L("Listo: mandíbula y cuello sueltos", "Done: jaw and neck free"),
+        doneSub: L("Ahora, a cantar", "Now, sing"),
+        doneCue: L("Lleva esta soltura al primer ejercicio con sonido.", "Take this ease into your first sung exercise.")
+      });
+    },
+    onStart() {
+      this.viz?.start?.();
+    },
+    onFrame(frame) {
+      this.viz?.frame?.(frame);
     },
     onStop() {
-      const n = this.state.done || 0;
+      const d = this.viz;
+      d?.stop?.();
+      const n = d ? d.run.completed : 0;
+      const total = d ? d.run.count : this.profile.phases?.length || 0;
+      // Steps walked through is the only thing known; ease is the learner's rating
       return {
         patches: n > 0 ? { phasesDone: n } : {},
-        summary: `${n}/${this.state.phases?.length || 0} release phases`
+        summary: L(`${n} de ${total} pasos de soltura`, `${n} of ${total} release steps`)
       };
     }
   });
@@ -2363,65 +2663,324 @@
   });
 
   /**
-   * s19 soft palate — surprise / pre-yawn phases, then sound in that space.
-   * A sustained voiced hold during a sounding phase is what counts, so the
-   * exercise rewards singing from the open space rather than just opening.
+   * s19 soft palate — the surprise face and the pre-yawn are silent steps,
+   * drawn (a face; the palate rising to the "stop here" line). The sung steps
+   * show what the mic can hear: each hold of 1.5 s or more as a bar against
+   * that line, and a closed-then-open pair of phrases compared after Stop by
+   * level (dB) and pitch (cents) — more space should not mean more volume.
+   * The space itself is never scored: the learner's ear and rating decide.
+   * Holds use the raw sound edge (`sounding`); `voiced` bridges ~1 s gaps.
    */
   Modes.openSpace = baseMode({
     id: "openSpace",
     render() {
+      const G = global.VTViz?.guided;
       const phases = this.profile.phases || [];
-      this.state.phases = phases;
-      this.state.holds = 0;
-      this.state.voiced = 0;
       this.state.minHoldMs = this.profile.minHoldMs || 1500;
-      this.state.runner = createPhaseRunner(phases, (i, p) => {
-        if (global.VTToast) global.VTToast(p.label);
-        const cueEl = this.$("[data-cue]");
-        if (cueEl) cueEl.textContent = phaseCueFor(p);
-        this.state.voiced = 0;
+      this._resetSpace();
+      const title = L("Paladar blando · espacio interno", "Soft palate · inner space");
+      const count = `<strong class="mode-big" data-h>0</strong> <span>${L("sostenidos", "holds")}</span>`;
+      if (!G) {
+        this.hud.innerHTML = `<div class="mode-title">${title}</div><div class="mode-phase" data-phase>${phases[0]?.label || ""}</div>${count}<p class="mode-meta" data-cue>${phaseCueFor(phases[0])}</p>`;
+        return;
+      }
+      this.viz = new G.Drill(this, {
+        kind: "space",
+        title,
+        phases,
+        mic: true,
+        recorded: true,
+        skip: true,
+        preCue: 3,
+        words: " " + count,
+        label: L(
+          "Pasos en silencio: un dibujo de la cara y del paladar que sube hasta la línea. Pasos cantados: cada sostenido como una barra frente a la línea de 1,5 s, y dos frases, cerrada y abierta, para comparar.",
+          "Silent steps: a drawing of the face and of the palate rising to the line. Sung steps: each hold as a bar against the 1.5 s line, and two phrases, closed and open, to compare."
+        ),
+        artFor: (p) => {
+          if (p && p.sound) return p.ab ? { draw: G.art.ab, aspect: 2.6, stackAspect: 2, measured: true } : { draw: G.art.holds, aspect: 2.4, stackAspect: 1.6, measured: true };
+          return p && p.art === "chapel" ? { draw: G.art.chapel, aspect: 1.25 } : { draw: G.art.surprise, aspect: 1 };
+        },
+        status: (info) => this._spaceStatus(info),
+        onStart: () => this._resetSpace(),
+        onFrame: (frame, d) => this._spaceFrame(frame, d),
+        onStep: (i, d) => this._spaceStep(d),
+        chapters: (d) => this._spaceChapters(d),
+        doneText: L("Listo: guarda ese espacio", "Done: keep that space"),
+        reviewTitle: L("Escucha cerrado y abierto", "Hear closed and open"),
+        reviewExtraH: (w) => (this._abDone().length === 2 ? (w < 420 ? 62 : 46) : 0),
+        reviewExtra: (ctx, box) => this._abCard(ctx, box),
+        reviewNote: L(
+          "El espacio no se mide: decide tu oído. La amplitud la valoras tú en Métricas.",
+          "Space isn't measured: your ear decides. You rate the width in Metrics."
+        )
       });
-      this.hud.innerHTML = `
-        <div class="mode-title">${L("Paladar blando · espacio interno", "Soft palate · inner space")}</div>
-        <div class="mode-phase" data-phase>${phases[0]?.label || L("Sorpresa", "Surprise")}</div>
-        <div class="mode-big" data-h>0 ${L("abiertos", "open")}</div>
-        <p class="mode-meta" data-cue>${phaseCueFor(phases[0])}</p>
-        <p class="mode-meta muted">${L(
-          "Sostén ≥1,5 s en las fases con sonido para sumar un espacio abierto.",
-          "Hold ≥1.5s during the sounding phases to log an open space."
-        )}</p>
-      `;
+      this._syncSpace();
+    },
+    _resetSpace() {
+      const st = this.state;
+      st.holds = 0;
+      st.holdList = [];
+      st.ab = [];
+      st.hold = null;
+      st.gap = 0;
+      st.phrase = null;
+      st.pgap = 0;
+      st.noiseAt = -1;
+      st.refUntil = -1;
+      st.lastEl = null;
+      st.abArmed = false;
+      st.abQuiet = 0;
+      this._syncSpace();
+    },
+    /** What the art reads (the Drill is `info.m` in js/scenes/guided.js). */
+    _syncSpace() {
+      const st = this.state;
+      const d = this.viz;
+      if (d) {
+        d.holds = st.holdList;
+        d.ab = st.ab;
+        d.holdLive = st.hold ? st.hold.len : null;
+        d.minHoldMs = st.minHoldMs;
+      }
+      const el = this.$("[data-h]");
+      if (el && el.textContent !== String(st.holds)) el.textContent = String(st.holds);
+    },
+    _spaceFrame(frame, d) {
+      const st = this.state;
+      const run = d.run;
+      // Time between frames: the recording clock when there is one (frames
+      // come further apart on a busy device and dtMs is capped), so a 1 s
+      // breath between two phrases is never read as one long phrase.
+      let dt = Math.min(0.1, Math.max(0, (frame.dtMs || 16) / 1000));
+      if (frame.elapsedMs != null) {
+        if (st.lastEl != null && frame.elapsedMs >= st.lastEl) dt = Math.min(0.5, (frame.elapsedMs - st.lastEl) / 1000);
+        st.lastEl = frame.elapsedMs;
+      }
+      const on = frame.sounding != null ? !!frame.sounding : !!frame.voiced;
+      const phase = run.done ? null : run.cur;
+      const sound = !!(phase && phase.sound);
+      // The reference note the mode plays is not the singer
+      const heard = on && run.clock >= st.refUntil;
+      if (sound && heard) {
+        st.gap = 0;
+        if (!st.hold) st.hold = { len: 0, step: run.index, counted: false };
+        st.hold.len += dt;
+        if (!st.hold.counted && st.hold.len * 1000 >= st.minHoldMs) {
+          st.hold.counted = true;
+          st.holds += 1;
+          d.caption(L(`Sostenido ${st.holds} ✓`, `Hold ${st.holds} ✓`), 1200);
+        }
+      } else if (st.hold) {
+        st.gap += dt;
+        if (st.gap > 0.25 || !sound) this._endHold();
+      }
+      if (sound && phase.ab) this._abFrame(frame, heard, dt, run);
+      else if (st.phrase) this._endPhrase(run);
+      // Silent steps: say so if there is sound (the start-of-practice piano aside)
+      if (!sound && on && run.clock > 5) st.noiseAt = run.clock;
+      this._syncSpace();
+    },
+    _endHold() {
+      const st = this.state;
+      if (st.hold && st.hold.len >= 0.3) st.holdList.push({ len: st.hold.len, step: st.hold.step });
+      if (st.holdList.length > 60) st.holdList.splice(0, st.holdList.length - 60);
+      st.hold = null;
+      st.gap = 0;
+    },
+    /** Closed, then open: the first two phrases of 1 s or more in the step. */
+    _abFrame(frame, on, dt, run) {
+      const st = this.state;
+      // A phrase already under way when the step starts is the last step's
+      // tail: wait for a breath before taking the closed one
+      if (!st.phrase && !st.abArmed) {
+        st.abQuiet = on ? 0 : st.abQuiet + dt;
+        if (st.abQuiet >= 0.3) st.abArmed = true;
+        return;
+      }
+      if (on) {
+        st.pgap = 0;
+        if (!st.phrase && st.ab.length < 2) {
+          st.phrase = { start: run.clock - dt, r0: run.rec - dt, end: null, r1: null, dbs: [], midis: [], db: null, midi: null };
+          st.ab.push(st.phrase);
+        }
+        if (st.phrase) {
+          const rms = frame.rms || 0;
+          if (rms > 0) st.phrase.dbs.push(20 * Math.log10(rms));
+          const f = frame.rawFreq || frame.voiceFreq || 0;
+          if (f > 60 && f < 1000) st.phrase.midis.push(69 + 12 * Math.log2(f / 440));
+        }
+      } else if (st.phrase) {
+        st.pgap += dt;
+        if (st.pgap > 0.35) this._endPhrase(run);
+      }
+    },
+    _endPhrase(run) {
+      const st = this.state;
+      const p = st.phrase;
+      if (!p) return;
+      const back = Math.min(st.pgap, 0.35);
+      st.phrase = null;
+      st.pgap = 0;
+      const end = run.clock - back;
+      const r1 = run.rec - back;
+      if (r1 - p.r0 < 1) {
+        st.ab.splice(st.ab.indexOf(p), 1);
+        return;
+      }
+      const med = (a) => {
+        if (!a.length) return null;
+        const s = a.slice().sort((x, y) => x - y);
+        return s[Math.floor(s.length / 2)];
+      };
+      p.end = end;
+      p.r1 = r1;
+      p.len = r1 - p.r0;
+      p.db = med(p.dbs);
+      p.midi = med(p.midis);
+      p.dbs = [];
+      p.midis = [];
+    },
+    _abDone() {
+      return (this.state.ab || []).filter((s) => s.end != null);
+    },
+    _spaceStep(d) {
+      const st = this.state;
+      if (st.hold) this._endHold();
+      st.abArmed = false;
+      st.abQuiet = 0;
+      const p = d.run.done ? null : d.run.cur;
+      // The first sung step starts from a reference note (once, short)
+      if (p && p.ref && global.VTPiano?.playRefPitch && document.getElementById("chk-auto-piano")?.checked !== false) {
+        try {
+          const played = global.VTPiano.playRefPitch(shiftedNote(this.profile.refPitch || "C3"), 1.2, false);
+          if (played && played.catch) played.catch(() => {});
+          st.refUntil = d.run.clock + 1.8;
+        } catch {
+          /* no reference is fine */
+        }
+      }
+      this._syncSpace();
+    },
+    _spaceStatus(info) {
+      const st = this.state;
+      const d = this.viz;
+      const C = global.VTViz.C;
+      if (!d || !d.live || info.done || !info.phase) return null;
+      if (!info.phase.sound) {
+        return st.noiseAt >= 0 && d.run.clock - st.noiseAt < 1.2
+          ? { text: L("Se oye sonido · este paso va sin voz", "Sound heard · this step is silent"), color: C.warn }
+          : { text: L("En silencio ✓", "Silent ✓"), color: C.muted };
+      }
+      if (d.run.clock < st.refUntil) return { text: L("Escucha la nota de referencia…", "Listen to the reference note…"), color: C.muted };
+      return { text: L(`Sostenidos ≥ 1,5 s en total: ${st.holds}`, `Holds ≥ 1.5 s in all: ${st.holds}`), color: C.muted };
+    },
+    _spaceChapters(d) {
+      const V = global.VTViz;
+      const [a, b] = this._abDone();
+      const seg = (s) => ({ t0: s.start, t1: s.end, r0: s.r0, r1: s.r1, sub: V.fmtSec(s.len != null ? s.len : s.end - s.start) });
+      const out = [];
+      if (a) out.push(Object.assign({ label: L("1 · Cerrado", "1 · Closed") }, seg(a)));
+      if (b) out.push(Object.assign({ label: L("2 · Abierto", "2 · Open") }, seg(b)));
+      if (a && b) {
+        out.push(
+          Object.assign(seg(a), {
+            label: L("Cerrado → abierto", "Closed → open"),
+            sub: L("una tras otra", "one after the other"),
+            segs: [
+              [a.r0, a.r1],
+              [b.r0, b.r1]
+            ]
+          })
+        );
+      }
+      return out.concat(d.stepChapters((p) => p.sound && !p.ab));
+    },
+    /** After Stop: open vs closed, in dB and cents (estimates, relative to you). */
+    _abCard(ctx, box) {
+      const V = global.VTViz;
+      const { C } = V;
+      const [a, b] = this._abDone();
+      if (!a || !b) return;
+      const dDb = a.db != null && b.db != null ? b.db - a.db : null;
+      const dC = a.midi != null && b.midi != null ? (b.midi - a.midi) * 100 : null;
+      const sgn = (x, digits) => {
+        const r = Number(Math.abs(x).toFixed(digits));
+        return (r === 0 ? "±" : x >= 0 ? "+" : "−") + V.fmtNum(r, digits);
+      };
+      const facts = [
+        dDb != null ? L(`nivel ${sgn(dDb, 1)} dB`, `level ${sgn(dDb, 1)} dB`) : L("nivel —", "level —"),
+        dC != null ? L(`tono ${sgn(dC, 0)} cents`, `pitch ${sgn(dC, 0)} cents`) : L("tono —", "pitch —")
+      ].join(" · ");
+      // What the numbers mean (the long line, and a short one for phones)
+      let verdict;
+      let short;
+      let color;
+      if (dDb != null && dDb >= 3) {
+        verdict = L("Más espacio ≠ más volumen: la abierta sonó más fuerte", "More space ≠ more volume: the open one was louder");
+        short = L("Más fuerte: más espacio ≠ más volumen", "Louder: more space ≠ more volume");
+        color = C.warn;
+      } else if (dDb != null && dDb <= -3) {
+        verdict = L("La abierta sonó más suave: busca el mismo volumen", "The open one was softer: aim for the same loudness");
+        short = L("Más suave: busca el mismo volumen", "Softer: aim for the same loudness");
+        color = C.muted;
+      } else {
+        verdict = L("Mismo volumen ✓ · escucha la diferencia de color", "Same loudness ✓ · listen for the change in colour");
+        short = L("Mismo volumen ✓ · escucha el color", "Same loudness ✓ · listen for colour");
+        color = C.target;
+      }
+      const moved = dC != null && Math.abs(dC) > 50 ? L(" · la nota se movió", " · the note moved") : "";
+      const { x, y, w, h } = box;
+      const fit = V.guided?.fitLine || V.fitText;
+      ctx.fillStyle = "rgba(170, 195, 230, 0.06)";
+      V.roundRect(ctx, x, y, w, h, 8);
+      ctx.fill();
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      const title = L("Abierta frente a cerrada (aprox.)", "Open vs closed (approx.)");
+      if (h >= 60) {
+        // Narrow: the title, then the numbers, then what they mean
+        ctx.fillStyle = C.muted;
+        fit(ctx, title, x + 10, y + 13, w - 20, 11, 700, 9);
+        ctx.fillStyle = C.text;
+        fit(ctx, facts + moved, x + 10, y + 31, w - 20, 13, 800, 10);
+        ctx.fillStyle = color;
+        fit(ctx, short, x + 10, y + 49, w - 20, 12, 800, 9);
+        return;
+      }
+      ctx.fillStyle = C.text;
+      fit(ctx, title + ": " + facts, x + 10, y + h * 0.3, w - 20, 13, 800, 10);
+      ctx.fillStyle = color;
+      fit(ctx, verdict + moved, x + 10, y + h * 0.72, w - 20, 12, 800, 9);
+    },
+    onStart() {
+      this.viz?.start?.();
     },
     onFrame(frame) {
-      const r = this.state.runner;
-      if (!r) return;
-      r.tick(performance.now());
-      const done = r.index >= r.count;
-      const phase = this.state.phases[r.index];
-      if (this.$("[data-phase]")) {
-        this.$("[data-phase]").textContent = done
-          ? L("Listo — guarda ese espacio", "Done — keep that space")
-          : r.label;
-      }
-      // Only sounding phases log holds; the silent ones are the setup
-      if (!done && phase && phase.sound && frame.voiced) {
-        this.state.voiced += frame.dtMs || 16;
-        if (this.state.voiced >= this.state.minHoldMs) {
-          this.state.holds += 1;
-          this.state.voiced = 0;
-          if (this.$("[data-h]"))
-            this.$("[data-h]").textContent = `${this.state.holds} ${L("abiertos", "open")}`;
-        }
-      } else if (!frame.voiced) {
-        this.state.voiced = 0;
-      }
+      if (this.viz) this.viz.frame(frame);
     },
     onStop() {
-      const n = this.state.holds || 0;
-      return {
-        patches: n > 0 ? { openHolds: n } : {},
-        summary: `${n} open-space holds`
-      };
+      const d = this.viz;
+      const st = this.state;
+      if (d) {
+        if (st.hold) this._endHold();
+        if (st.phrase) this._endPhrase(d.run);
+        this._syncSpace();
+        d.stop();
+      }
+      const n = st.holds || 0;
+      let summary = L(`${n} ${n === 1 ? "sostenido cantado" : "sostenidos cantados"} ≥1,5 s`, `${n} sung ${n === 1 ? "hold" : "holds"} ≥1.5 s`);
+      const [a, b] = this._abDone();
+      if (a && b && a.db != null && b.db != null) {
+        const x = b.db - a.db;
+        const V = global.VTViz;
+        const r = Number(Math.abs(x).toFixed(1));
+        const num = V ? V.fmtNum(r, 1) : r.toFixed(1);
+        const sign = r === 0 ? "±" : x >= 0 ? "+" : "−";
+        summary += L(` · abierta ${sign}${num} dB aprox. frente a cerrada`, ` · open ${sign}${num} dB approx. vs closed`);
+      }
+      // Only the sung holds are measured; space and a free jaw stay self-rated
+      return { patches: n > 0 ? { openHolds: n } : {}, summary };
     }
   });
 

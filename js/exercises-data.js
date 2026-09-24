@@ -215,34 +215,37 @@ window.VT_EXERCISES = {
         {
           id: "auditory",
           title: "1 · Auditory review",
+          titleEs: "1 · Revisión con el oído",
           prompts: [
-            "Is volume steady and appropriate?",
-            "Is tonality warm / monotone / tense?",
-            "Pace: too fast, too slow, or varied well?",
-            "Diction: are word endings clear?",
-            "Breath: noisy, gasping, or easy?",
-            "Filler sounds: um, uh, clicks?"
+            { en: "Is volume steady and appropriate?", es: "¿El volumen es estable y adecuado?" },
+            { en: "Is tonality warm / monotone / tense?", es: "¿El tono suena cálido, monótono o tenso?" },
+            { en: "Pace: too fast, too slow, or varied well?", es: "Ritmo: ¿muy rápido, muy lento o bien variado?" },
+            { en: "Diction: are word endings clear?", es: "Dicción: ¿se oyen los finales de palabra?" },
+            { en: "Breath: noisy, gasping, or easy?", es: "Respiración: ¿ruidosa, entrecortada o tranquila?" },
+            { en: "Filler sounds: um, uh, clicks?", es: "Muletillas: ¿eh, este, chasquidos?" }
           ]
         },
         {
           id: "visual",
           title: "2 · Visual review",
+          titleEs: "2 · Revisión con la vista",
           prompts: [
-            "Posture: open or collapsed?",
-            "Facial expression matches the story?",
-            "Hand gestures purposeful or restless?",
-            "Eye contact with the camera lens?",
-            "Any distracting habits?"
+            { en: "Posture: open or collapsed?", es: "Postura: ¿abierta o hundida?" },
+            { en: "Facial expression matches the story?", es: "¿La expresión de la cara acompaña la historia?" },
+            { en: "Hand gestures purposeful or restless?", es: "¿Gestos con intención o manos inquietas?" },
+            { en: "Eye contact with the camera lens?", es: "¿Miras a la lente de la cámara?" },
+            { en: "Any distracting habits?", es: "¿Algún hábito que distraiga?" }
           ]
         },
         {
           id: "transcription",
           title: "3 · Transcription review",
+          titleEs: "3 · Revisión con la transcripción",
           prompts: [
-            "Transcribe a 1–2 minute excerpt.",
-            "Highlight fillers: um, like, you know…",
-            "Mark unclear or run-on sentences.",
-            "Choose ONE pattern to improve next week."
+            { en: "Transcribe a 1–2 minute excerpt.", es: "Transcribe un fragmento de 1–2 minutos." },
+            { en: "Highlight fillers: um, like, you know…", es: "Marca las muletillas: eh, o sea, este…" },
+            { en: "Mark unclear or run-on sentences.", es: "Señala frases confusas o que no terminan." },
+            { en: "Choose ONE pattern to improve next week.", es: "Elige UN patrón para mejorar la próxima semana." }
           ]
         }
       ]
@@ -959,7 +962,7 @@ window.VT_EXERCISES = {
         "Letting the tongue block the exit"
       ],
       metrics: [
-        { id: "openHolds", label: "Open-space holds marked", labelEs: "Sostenidos con espacio abierto", type: "number", target: 6, unit: "" },
+        { id: "openHolds", label: "Sung holds ≥1.5 s", labelEs: "Sostenidos cantados ≥1,5 s", type: "number", target: 6, unit: "" },
         { id: "openness", label: "Space / width felt", labelEs: "Espacio / amplitud que sentiste", type: "scale", min: 1, max: 5 },
         { id: "jawFree", label: "Jaw free (no tension)", labelEs: "Mandíbula libre (sin tensión)", type: "scale", min: 1, max: 5 }
       ],

@@ -320,139 +320,614 @@
     }
   });
 
+  /**
+   * v2 — steady volume while counting 1 to 10 on one breath. The picture is
+   * the count ribbon (js/scenes/volume.js): each breath's loudness in dB
+   * against your own level, the end read against the start, a card per
+   * breath that stays. Breaths come from the raw sound edge (0.6 s of
+   * silence ends one; `voiced` bridges a second and made every breath look
+   * faded), levels from before the MIC slider's gain.
+   */
   Modes.volumeSteady = baseMode({
     id: "volumeSteady",
     render() {
-      this.state.breathCycles = 0;
-      this.state.inBreath = false;
-      this.state.peakRms = 0;
-      this.state.samples = [];
+      this._fresh();
       this.hud.innerHTML = `
-        <div class="mode-title">${L("Carril de volumen · energía estable", "Volume lane · steady energy")}</div>
-        <div class="volume-lane">
-          <div class="volume-band"></div>
-          <div class="volume-needle" data-needle style="left:50%"></div>
+        <div class="viz-row viz-head">
+          <div class="mode-title">${L("Volumen parejo · del 1 al 10", "Even volume · 1 to 10")}</div>
+          <button type="button" class="btn btn-ghost viz-tap" data-blind aria-pressed="false">${L("A ciegas", "Blind round")}</button>
         </div>
-        <p class="mode-meta">${L("Nivel en vivo · apunta a la franja central · ciclos de aire: <strong data-cyc>0</strong>", "Live level · aim for the center band · breath cycles: <strong data-cyc>0</strong>")}</p>
-        <p class="mode-meta" data-fade>—</p>
+        <div class="viz-words">
+          <span data-status>${L("Inhala y cuenta del 1 al 10.", "Breathe in and count 1 to 10.")}</span>
+          <strong class="mode-big" data-cyc>0</strong>
+          <span data-fade></span>
+        </div>
+        <p class="mode-meta muted">${L(
+          "Tu nivel en dB frente a ti mismo · misma distancia al micrófono en cada respiración",
+          "Your level in dB against your own · the same distance from the mic every breath"
+        )}</p>
       `;
+      this.$("[data-blind]")?.addEventListener("click", () => this._toggleBlind());
+      this._mountViz();
+    },
+    _fresh() {
+      const st = this.state;
+      st.breaths = [];
+      st.cur = null;
+      st.nextRef = null;
+      st.T = 8;
+      st.t = 0;
+      st.level = null;
+      st.review = false;
+      st.processed = false;
+      st.clipping = false;
+      st.blind = !!st.blind;
+    },
+    _mountViz() {
+      const V = global.VTViz;
+      const F = global.VTFeatures;
+      const K = global.VTVolumeKit;
+      if (!V || !F || !K || !V.scenes.volumeCount) return;
+      this.hud.classList.add("has-viz");
+      this.state.kit = new K.LevelKit();
+      this.state.vad = new F.Vad({});
+      // .volume-lane: the name the page has always given this exercise's level picture
+      this.viz = new V.Surface(this.hud, (ctx, w, h) => V.scenes.volumeCount(ctx, w, h, this.state), {
+        className: "volume-lane vz-volume",
+        label: L(
+          "Cinta del conteo: tu volumen en dB durante cada respiración, frente a tu propio nivel (franja verde de ±3 dB). Al terminar la respiración se compara el final con el inicio y queda una tarjeta por respiración.",
+          "Count ribbon: your loudness in dB through each breath, against your own level (green band, ±3 dB). When the breath ends its end is compared with its start, and each breath leaves a card."
+        )
+      });
+      this.viz.draw();
+    },
+    _toggleBlind() {
+      const st = this.state;
+      st.blind = !st.blind;
+      if (st.cur) st.cur.blind = st.blind;
+      const b = this.$("[data-blind]");
+      if (b) {
+        b.setAttribute("aria-pressed", String(st.blind));
+        b.classList.toggle("is-on", st.blind);
+      }
+      this.viz?.caption?.(
+        st.blind
+          ? L("Ronda a ciegas: la cinta aparece al terminar cada respiración.", "Blind round: the ribbon appears when each breath ends.")
+          : L("Cinta visible mientras cuentas.", "Ribbon visible while you count."),
+        0
+      );
+      this.viz?.draw();
+    },
+    _openBreath(start) {
+      const st = this.state;
+      st.cur = {
+        start,
+        ref: st.nextRef,
+        provRef: null,
+        peaks: [],
+        trace: [],
+        soundSec: 0,
+        lastSample: -1,
+        blind: st.blind
+      };
+      if (this.$("[data-status]")) this.$("[data-status]").textContent = L("Contando…", "Counting…");
+    },
+    _breathStats(b) {
+      const K = global.VTVolumeKit;
+      const len = b.len;
+      const pick = (a, z) => {
+        const p = b.peaks.filter((x) => x.t >= a && x.t <= z).map((x) => x.db);
+        if (p.length) return K.median(p);
+        const tr = b.trace.filter((x) => x[0] >= a && x[0] <= z && !Number.isNaN(x[1])).map((x) => x[1]);
+        return tr.length >= 3 ? K.median(tr) : null;
+      };
+      const startMed = pick(0, len * 0.3);
+      const endMed = pick(len * 0.7, len + 0.05);
+      const all = b.peaks.length
+        ? K.median(b.peaks.map((x) => x.db))
+        : K.median(b.trace.filter((x) => !Number.isNaN(x[1])).map((x) => x[1]));
+      const early = b.peaks.filter((x) => x.t <= 1).map((x) => x.db);
+      return {
+        startMed,
+        endMed,
+        diff: startMed != null && endMed != null ? endMed - startMed : null,
+        median: all,
+        push: early.length > 0 && all != null && Math.max(...early) - all > 4
+      };
+    },
+    _closeBreath(endT) {
+      const st = this.state;
+      const K = global.VTVolumeKit;
+      const b = st.cur;
+      st.cur = null;
+      if (!b) return;
+      b.len = Math.max(0, endT - b.start);
+      b.trace = b.trace.filter((p) => p[0] <= b.len + 0.05);
+      b.peaks = b.peaks.filter((p) => p.t <= b.len + 0.05);
+      // A cough or a single word is not a count
+      if (b.len < 1.2 || b.soundSec < 0.8) return;
+      if (b.ref == null) {
+        b.ref = b.peaks.length >= 2 ? K.median(b.peaks.map((p) => p.db)) : K.median(b.trace.filter((p) => !Number.isNaN(p[1])).map((p) => p[1]));
+      }
+      if (b.ref == null) return;
+      b.stats = this._breathStats(b);
+      st.breaths.push(b);
+      // The next breath's band: your level so far, from every breath's own median
+      st.nextRef = K.median(st.breaths.map((x) => x.stats.median).filter((v) => Number.isFinite(v)));
+      st.T = Math.max(8, Math.ceil(Math.max(...st.breaths.map((x) => x.len)) + 1));
+      const n = st.breaths.length;
+      const d = b.stats.diff;
+      let words;
+      if (d == null) words = L(`Respiración ${n}: corta para comparar.`, `Breath ${n}: too short to compare.`);
+      else if (d <= -3)
+        words = L(
+          `Respiración ${n}: el final quedó ${K.fmtNum(-d, 0)} dB por debajo del inicio. Prueba a empezar un poco más suave.`,
+          `Breath ${n}: the end was ${K.fmtNum(-d, 0)} dB below the start. Try starting a little softer.`
+        );
+      else if (d >= 3)
+        words = L(`Respiración ${n}: el final subió ${K.fmtNum(d, 0)} dB sobre el inicio.`, `Breath ${n}: the end rose ${K.fmtNum(d, 0)} dB above the start.`);
+      else words = L(`Respiración ${n}: pareja (${K.fmtDb(d)}).`, `Breath ${n}: even (${K.fmtDb(d)}).`);
+      if (this.$("[data-cyc]")) this.$("[data-cyc]").textContent = String(n);
+      if (this.$("[data-fade]")) this.$("[data-fade]").textContent = words;
+      if (this.$("[data-status]")) this.$("[data-status]").textContent = L("Respira… y cuenta otra vez.", "Breathe… and count again.");
+      this.viz?.caption?.(words, 1500);
+    },
+    onStart() {
+      const st = this.state;
+      this._fresh();
+      st.kit?.reset();
+      st.vad?.reset();
+      this.hud?.classList.remove("is-replay");
+      if (this.$("[data-cyc]")) this.$("[data-cyc]").textContent = "0";
+      if (this.$("[data-fade]")) this.$("[data-fade]").textContent = "";
+      this.viz?.draw();
     },
     onFrame(frame) {
-      const rms = frame.rms || 0;
-      // smooth
-      this.state.smooth = (this.state.smooth || 0.2) * 0.85 + rms * 0.15;
-      const x = clamp(this.state.smooth * 180, 2, 98);
-      if (this.$("[data-needle]")) this.$("[data-needle]").style.left = `${x}%`;
-      // breath cycle: voice then silence
-      if (frame.voiced || rms > 0.025) {
-        if (!this.state.inBreath) {
-          this.state.inBreath = true;
-          this.state.breathStartPeak = this.state.smooth;
-          this.state.breathSamples = [];
+      const st = this.state;
+      if (!st.kit || st.review) return;
+      const K = global.VTVolumeKit;
+      const peak = st.kit.feed(frame);
+      st.vad.feed(frame);
+      st.t = st.kit.t;
+      st.processed = st.kit.processed;
+      st.clipping = st.kit.clipping;
+      K.noteProcessed(st, this.viz);
+      st.level = st.kit.disp;
+      const vad = st.vad;
+      if (!st.cur && vad.state === "speech") this._openBreath(vad.speechStart);
+      const b = st.cur;
+      if (b) {
+        const tb = st.t - b.start;
+        if (st.kit.sounding) b.soundSec += st.kit.dt;
+        if (peak && peak.t >= b.start - 0.05) b.peaks.push({ t: Math.max(0, peak.t - b.start), db: peak.db });
+        if (st.t - b.lastSample >= 0.04) {
+          b.trace.push([tb, st.kit.sounding ? st.kit.fast : NaN]);
+          b.lastSample = st.t;
         }
-        this.state.breathSamples.push(this.state.smooth);
-        this.state.peakRms = Math.max(this.state.peakRms, this.state.smooth);
-      } else if (this.state.inBreath && rms < 0.015) {
-        this.state.inBreath = false;
-        this.state.breathCycles++;
-        const arr = this.state.breathSamples || [];
-        if (arr.length > 8) {
-          const first = arr.slice(0, Math.floor(arr.length / 3));
-          const last = arr.slice(-Math.floor(arr.length / 3));
-          const fAvg = first.reduce((a, b) => a + b, 0) / first.length;
-          const lAvg = last.reduce((a, b) => a + b, 0) / last.length;
-          this.state.lastFade = lAvg < fAvg * 0.7;
+        if (b.ref == null) {
+          // First breath: your level is what you do in its first second
+          const vals = b.peaks.length >= 2 ? b.peaks.map((p) => p.db) : b.trace.filter((p) => !Number.isNaN(p[1])).map((p) => p[1]);
+          b.provRef = vals.length ? K.median(vals) : null;
+          if (b.soundSec >= 1.2 && b.provRef != null) b.ref = b.provRef;
         }
-        if (this.$("[data-cyc]")) this.$("[data-cyc]").textContent = String(this.state.breathCycles);
-        if (this.$("[data-fade]"))
-          this.$("[data-fade]").textContent = this.state.lastFade
-            ? "Last breath: faded at the end — start slightly softer next time."
-            : "Last breath: solid evenness.";
+        if (tb > st.T - 0.6) st.T = Math.ceil(tb + 2);
+        if (vad.state === "pause" && vad.pauseLen >= 0.6) this._closeBreath(vad.pauseStart);
       }
+      this.viz?.draw();
     },
     onStop() {
-      const cyc = this.state.breathCycles || 0;
-      const consistency = this.state.lastFade === false ? 4 : this.state.lastFade ? 2 : 3;
-      return {
-        patches: { cycles: Math.max(cyc, 1), consistency },
-        summary: `${cyc} breath cycles logged`
-      };
+      const st = this.state;
+      const K = global.VTVolumeKit;
+      if (st.cur && st.t - st.cur.start >= 1.2) this._closeBreath(st.t);
+      st.cur = null;
+      st.review = true;
+      if (this.$("[data-status]")) this.$("[data-status]").textContent = L("Repaso de la sesión", "Session review");
+      if (this.viz) {
+        this.hud.classList.add("is-replay");
+        this.viz.draw();
+      }
+      const breaths = st.breaths || [];
+      // A full 1–10 count on one breath takes about 3 s or more
+      const counts = breaths.filter((b) => b.len >= 3).length;
+      const diffs = breaths.map((b) => b.stats && b.stats.diff).filter((v) => Number.isFinite(v));
+      const med = K && diffs.length ? K.median(diffs) : null;
+      const even = diffs.filter((d) => Math.abs(d) < 3).length;
+      const n = breaths.length;
+      const fmt = (d) => (K ? K.fmtDb(d) : `${Math.round(d)} dB`);
+      const summary = n
+        ? L(
+            `${n} ${n === 1 ? "respiración" : "respiraciones"} · ${even} parejas · final mediano ${fmt(med)} frente al inicio`,
+            `${n} ${n === 1 ? "breath" : "breaths"} · ${even} even · median end ${fmt(med)} against the start`
+          )
+        : L("Sin respiraciones completas todavía", "No full breaths yet");
+      K?.finalCaption?.(this.viz, summary);
+      return { patches: counts > 0 ? { cycles: counts } : {}, summary };
     }
   });
 
+  /**
+   * v13 — the volume ladder: the same sentence at five levels, up and back
+   * down (1 2 3 4 5 · 3 1), then a short story that uses your levels. Each
+   * tread sets at the level you held (dB against yourself, before the MIC
+   * gain) and says how far it moved from the one before; ≥3 dB in the asked
+   * direction is a distinct step. Nothing is reset: finished ladders stay as
+   * ghosts, and a partial one keeps its treads.
+   */
   Modes.volumeLadder = baseMode({
     id: "volumeLadder",
     render() {
+      const st = this.state;
       const ladder = this.profile.ladder || [];
-      this.state.step = 0;
-      this.state.stepStarted = performance.now();
-      this.state.cycles = 0;
-      this.state.inBandMs = 0;
-      this.state.stepMs = 0;
-      this.state.creditedSteps = 0;
+      st.levels = ladder.map((l) => ({ label: phaseLabelFor(l) }));
+      const seq = Array.isArray(this.profile.sequence) ? this.profile.sequence : [0, 1, 2, 3, 4, 2, 0];
+      st.seq = seq.filter((i) => i >= 0 && i < st.levels.length);
+      st.stepSec = this.profile.stepSec || 8;
+      st.storySec = this.profile.storySec || 60;
+      st.repsTarget = this.profile.reps || 3;
+      this._fresh();
+      const first = st.levels[st.seq[0]]?.label || "—";
       this.hud.innerHTML = `
-        <div class="mode-title">${L("Escalera de volumen / energía", "Volume / energy ladder")}</div>
-        <div class="mode-phase" data-phase>${ladder[0]?.label || "—"}</div>
-        <div class="volume-lane">
-          <div class="volume-band" data-band></div>
-          <div class="volume-needle" data-needle style="left:10%"></div>
+        <div class="viz-row viz-head">
+          <div class="mode-title">${L("Escalera de volumen", "Volume ladder")}</div>
+          <button type="button" class="btn btn-ghost viz-tap" data-phase-btn>${L("Historia →", "Story →")}</button>
         </div>
-        <div class="mode-big" data-remain>${this.profile.stepSec || 8}s</div>
-        <p class="mode-meta">${L("Paso <strong data-step>1</strong>/" + ladder.length + " · Pasos contados: <strong data-cr>0</strong> · Subidas: <strong data-cyc>0</strong>", "Step <strong data-step>1</strong>/" + ladder.length + " · Credited steps: <strong data-cr>0</strong> · Climbs: <strong data-cyc>0</strong>")}</p>
-        <p class="mode-meta muted">${L("El paso solo cuenta si te mantienes en la franja ≥50% del tiempo.", "Step only credits if you stay in the band ≥50% of the step.")}</p>
+        <div class="viz-words">
+          <span class="mode-phase" data-phase>${first}</span>
+          <strong class="mode-big" data-remain>${st.stepSec}s</strong>
+          <span>${L("Paso", "Step")} <strong data-step>1</strong>/${st.seq.length} · ${L("Escaleras", "Ladders")} <strong data-cyc>0</strong> · ${L(
+            "Pasos distintos",
+            "Distinct steps"
+          )} <strong data-cr>0</strong></span>
+        </div>
+        <p class="mode-meta muted">${L(
+          "Un escalón distinto cambia al menos 3 dB · medido en dB frente a ti mismo",
+          "A distinct step changes by at least 3 dB · measured in dB against yourself"
+        )}</p>
       `;
+      this.$("[data-phase-btn]")?.addEventListener("click", () => this._togglePhase());
+      this._mountViz();
+    },
+    _fresh() {
+      const st = this.state;
+      st.reps = [{ treads: [] }];
+      st.repNo = 1;
+      st.pos = 0;
+      st.tStep = 0;
+      st.cur = this._freshTread();
+      st.range = null;
+      st.phase = "ladder";
+      st.story = null;
+      st.stories = [];
+      st.history = [];
+      st.review = false;
+      st.level = null;
+      st.processed = false;
+      st.clipping = false;
+      st.distinctTotal = 0;
+    },
+    _freshTread() {
+      return { dbs: [], recent: [], voiced: 0, lastSample: -1, median: null, live: null };
+    },
+    _mountViz() {
+      const V = global.VTViz;
+      const K = global.VTVolumeKit;
+      if (!V || !K || !V.scenes.volumeLadder) return;
+      this.hud.classList.add("has-viz");
+      this.state.kit = new K.LevelKit();
+      this.viz = new V.Surface(this.hud, (ctx, w, h) => V.scenes.volumeLadder(ctx, w, h, this.state), {
+        className: "vz-volume",
+        label: L(
+          "Escalera de volumen: un escalón por nivel, del susurro a la sala llena y de vuelta. Cada escalón queda a la altura que sostuviste, en dB frente a ti, con cuánto subió o bajó respecto al anterior.",
+          "Volume ladder: one step per level, from whisper to full room and back. Each step sets at the level you held, in dB against yourself, with how far it rose or fell from the one before."
+        )
+      });
+      this.viz.draw();
+    },
+    /** Level of a tread: the upper quartile of its voiced frames, near the syllable peaks. */
+    _treadLevel(c) {
+      const K = global.VTVolumeKit;
+      return c.dbs.length >= 20 ? K.percentile(c.dbs, 0.75) : null;
+    },
+    _growRange(db) {
+      const st = this.state;
+      if (!st.range) st.range = { lo: db - 8, hi: db + 24 };
+      if (db > st.range.hi - 2) st.range.hi = db + 5;
+      if (db < st.range.lo + 2) st.range.lo = db - 5;
+    },
+    _setTread(advance = true) {
+      const st = this.state;
+      const K = global.VTVolumeKit;
+      const rep = st.reps[st.reps.length - 1];
+      const lv = st.seq[st.pos];
+      const db = this._treadLevel(st.cur);
+      const prev = [...rep.treads].reverse().find((t) => t.db != null);
+      let verdict = db == null ? "silent" : "first";
+      let delta = null;
+      if (db != null && prev) {
+        delta = db - prev.db;
+        const dir = Math.sign(lv - prev.level) || 1;
+        if (dir * delta >= 3) verdict = "distinct";
+        else if (Math.abs(delta) < 3) verdict = "same";
+        else verdict = "wrong";
+      }
+      rep.treads.push({ level: lv, db, delta, verdict });
+      if (db != null) this._growRange(db);
+      if (verdict === "distinct") st.distinctTotal += 1;
+      const name = st.levels[lv]?.label || String(lv + 1);
+      let words;
+      if (verdict === "silent") words = L(`${name}: sin voz en este escalón.`, `${name}: no voice on this step.`);
+      else if (verdict === "first") words = L(`${name}: base fijada.`, `${name}: base set.`);
+      else if (verdict === "distinct") words = L(`${name}: ${K.fmtDb(delta)}, distinto.`, `${name}: ${K.fmtDb(delta)}, distinct.`);
+      else if (verdict === "same") words = L(`${name}: ${K.fmtDb(delta)}, casi igual al anterior.`, `${name}: ${K.fmtDb(delta)}, about the same as the last.`);
+      else words = L(`${name}: ${K.fmtDb(delta)}, hacia el otro lado.`, `${name}: ${K.fmtDb(delta)}, the other way.`);
+      this.viz?.caption?.(words, 1500);
+      if (!advance) return;
+      st.pos += 1;
+      st.tStep = 0;
+      st.cur = this._freshTread();
+      if (st.pos >= st.seq.length) this._finishRep(true);
+      this._syncWords();
+    },
+    _repSummary(rep) {
+      const set = rep.treads.filter((t) => t.db != null);
+      const steps = rep.treads.filter((t) => t.db != null && t.verdict !== "first");
+      const dbs = set.map((t) => t.db);
+      return {
+        distinct: steps.filter((t) => t.verdict === "distinct").length,
+        steps: steps.length,
+        span: dbs.length >= 2 ? Math.max(...dbs) - Math.min(...dbs) : 0
+      };
+    },
+    _finishRep(complete) {
+      const st = this.state;
+      const rep = st.reps[st.reps.length - 1];
+      if (!rep.treads.length && !complete) return;
+      const s = this._repSummary(rep);
+      const voiced = complete && rep.treads.length === st.seq.length && rep.treads.every((t) => t.db != null);
+      st.history.push({ kind: "ladder", k: st.repNo, complete, voiced, distinct: s.distinct, steps: s.steps, span: s.span });
+      if (complete) {
+        this.viz?.caption?.(
+          L(
+            `Escalera ${st.repNo}: ${s.distinct} de ${s.steps} pasos distintos, rango ${Math.round(s.span)} dB.`,
+            `Ladder ${st.repNo}: ${s.distinct} of ${s.steps} steps distinct, range ${Math.round(s.span)} dB.`
+          ),
+          0
+        );
+      }
+      const finished = st.history.filter((h) => h.kind === "ladder" && h.complete).length;
+      const storyDone = st.history.some((h) => h.kind === "story");
+      if (complete && !storyDone && finished >= st.repsTarget) this._startStory();
+      else if (complete) this._newRep();
+    },
+    _newRep() {
+      const st = this.state;
+      // A ladder left before its first tread is taken up again, not skipped
+      const last = st.reps[st.reps.length - 1];
+      if (!last || last.treads.length) {
+        st.reps.push({ treads: [] });
+        if (st.reps.length > 6) st.reps.shift();
+        st.repNo += 1;
+      }
+      st.pos = 0;
+      st.tStep = 0;
+      st.cur = this._freshTread();
+      st.phase = "ladder";
+      const b = this.$("[data-phase-btn]");
+      if (b) b.textContent = L("Historia →", "Story →");
+    },
+    /** Five zones from your own ladder: its whisper and its full room, split evenly. */
+    _zones() {
+      const st = this.state;
+      const K = global.VTVolumeKit;
+      const n = st.levels.length;
+      const by = st.levels.map(() => []);
+      st.reps.forEach((r) => r.treads.forEach((t) => t.db != null && by[t.level] && by[t.level].push(t.db)));
+      const lo = by[0].length ? K.median(by[0]) : null;
+      const hi = by[n - 1].length ? K.median(by[n - 1]) : null;
+      if (lo == null || hi == null || hi - lo < 8) return null;
+      const step = (hi - lo) / (n - 1);
+      return st.levels.map((_, i) => ({ c: lo + i * step, lo: lo + (i - 0.5) * step, hi: lo + (i + 0.5) * step }));
+    },
+    _startStory() {
+      const st = this.state;
+      const zones = this._zones();
+      st.phase = "story";
+      st.story = {
+        t: 0,
+        trace: [],
+        lastSample: -1,
+        zones,
+        approx: !zones,
+        used: st.levels.map(() => false),
+        usedCount: 0,
+        voiced: [],
+        voicedSec: 0,
+        phrase: null,
+        phrases: [],
+        quiet: 0
+      };
+      const b = this.$("[data-phase-btn]");
+      if (b) b.textContent = L("Escalera →", "Ladder →");
+      this.viz?.caption?.(
+        L("Historia de 60 s: usa al menos 3 de tus niveles, con intención.", "A 60 s story: use at least 3 of your levels, on purpose."),
+        0
+      );
+      this._syncWords();
+    },
+    _closePhrase() {
+      const st = this.state;
+      const s = st.story;
+      const K = global.VTVolumeKit;
+      const p = s.phrase;
+      s.phrase = null;
+      if (!p || !s.zones || p.dbs.length < 10) return;
+      const lvl = K.percentile(p.dbs, 0.75);
+      let best = 0;
+      s.zones.forEach((z, i) => {
+        if (Math.abs(z.c - lvl) < Math.abs(s.zones[best].c - lvl)) best = i;
+      });
+      // Each phrase sets as one step at the level it held
+      s.phrases.push({ t0: p.t0, t1: Math.max(p.t0, s.t - s.quiet), db: lvl, zone: best });
+      if (s.phrases.length > 60) s.phrases.shift();
+      if (!s.used[best]) {
+        s.used[best] = true;
+        s.usedCount = s.used.filter(Boolean).length;
+        this.viz?.caption?.(
+          L(`Nivel ${best + 1} usado · ${s.usedCount} de 5.`, `Level ${best + 1} used · ${s.usedCount} of 5.`),
+          1500
+        );
+      }
+    },
+    _finishStory() {
+      const st = this.state;
+      const s = st.story;
+      if (!s) return;
+      if (s.phrase) this._closePhrase();
+      st.history.push({ kind: "story", used: s.usedCount });
+      st.stories.push(s);
+      this.viz?.caption?.(L(`Historia: ${s.usedCount} de 5 niveles usados.`, `Story: ${s.usedCount} of 5 levels used.`), 0);
+      st.story = null;
+      this._newRep();
+      this._syncWords();
+    },
+    _togglePhase() {
+      const st = this.state;
+      if (st.review) return;
+      if (st.phase === "story") this._finishStory();
+      else {
+        this._finishRep(false);
+        this._startStory();
+      }
+      this.viz?.draw();
+    },
+    _syncWords() {
+      const st = this.state;
+      const set = (sel, txt) => {
+        const el = this.$(sel);
+        if (el && el.textContent !== txt) el.textContent = txt;
+      };
+      if (st.phase === "story") {
+        set("[data-phase]", L("Historia", "Story"));
+        set("[data-remain]", `${Math.max(0, Math.ceil(st.storySec - (st.story ? st.story.t : 0)))}s`);
+      } else {
+        set("[data-phase]", st.levels[st.seq[st.pos]]?.label || "—");
+        set("[data-remain]", `${Math.max(0, Math.ceil(st.stepSec - st.tStep))}s`);
+        set("[data-step]", String(Math.min(st.pos + 1, st.seq.length)));
+      }
+      set("[data-cyc]", String(st.history.filter((h) => h.kind === "ladder" && h.voiced).length));
+      set("[data-cr]", String(st.distinctTotal));
+    },
+    onStart() {
+      const st = this.state;
+      this._fresh();
+      st.kit?.reset();
+      this.hud?.classList.remove("is-replay");
+      const b = this.$("[data-phase-btn]");
+      if (b) {
+        b.textContent = L("Historia →", "Story →");
+        b.disabled = false;
+      }
+      this._syncWords();
+      this.viz?.draw();
     },
     onFrame(frame) {
-      const ladder = this.profile.ladder || [];
-      const stepSec = (this.profile.stepSec || 8) * 1000;
-      const elapsed = performance.now() - this.state.stepStarted;
-      const left = Math.max(0, (stepSec - elapsed) / 1000);
-      if (this.$("[data-remain]")) this.$("[data-remain]").textContent = `${Math.ceil(left)}s`;
-      const target = ladder[this.state.step]?.target || 0.35;
-      this.state.smooth = (this.state.smooth || 0) * 0.8 + (frame.rms || 0) * 0.2;
-      const x = clamp(this.state.smooth * 160, 2, 98);
-      if (this.$("[data-needle]")) this.$("[data-needle]").style.left = `${x}%`;
-      if (this.$("[data-band]")) {
-        const bandLeft = clamp(target * 160 - 8, 5, 85);
-        this.$("[data-band]").style.left = `${bandLeft}%`;
-        this.$("[data-band]").style.width = "16%";
-      }
-      const dt = frame.dtMs || 16;
-      this.state.stepMs += dt;
-      if (Math.abs(this.state.smooth - target) < 0.1) this.state.inBandMs += dt;
-
-      if (elapsed >= stepSec) {
-        const ratio = this.state.stepMs ? this.state.inBandMs / this.state.stepMs : 0;
-        if (ratio >= 0.5) {
-          this.state.creditedSteps++;
-          if (this.$("[data-cr]")) this.$("[data-cr]").textContent = String(this.state.creditedSteps);
+      const st = this.state;
+      if (!st.kit || st.review) return;
+      const K = global.VTVolumeKit;
+      st.kit.feed(frame);
+      const kit = st.kit;
+      const dt = kit.dt;
+      // Steps run on the wall clock: frame steps are capped, so a busy
+      // machine would otherwise stretch an 8 s step
+      const now = performance.now();
+      const wdt = Math.min(0.25, Math.max(0, (now - (st.lastNow || now)) / 1000));
+      st.lastNow = now;
+      st.processed = kit.processed;
+      st.clipping = kit.clipping;
+      K.noteProcessed(st, this.viz);
+      st.level = kit.disp;
+      if (st.phase === "story") {
+        const s = st.story;
+        s.t += wdt;
+        if (kit.t - s.lastSample >= 0.05) {
+          s.trace.push([s.t, kit.disp == null ? NaN : kit.disp]);
+          s.lastSample = kit.t;
+          while (s.trace.length && s.trace[0][0] < s.t - 20) s.trace.shift();
+          if (kit.sounding && kit.disp != null) {
+            s.voiced.push(kit.disp);
+            if (s.voiced.length > 600) s.voiced.shift();
+            if (!s.phrase) s.phrase = { dbs: [], t0: s.t };
+            s.phrase.dbs.push(kit.disp);
+          }
         }
-        this.state.inBandMs = 0;
-        this.state.stepMs = 0;
-        this.state.step++;
-        if (this.state.step >= ladder.length) {
-          if (this.state.creditedSteps >= ladder.length) this.state.cycles++;
-          this.state.step = 0;
-          this.state.creditedSteps = 0;
-          if (this.$("[data-cyc]")) this.$("[data-cyc]").textContent = String(this.state.cycles);
-          if (this.$("[data-cr]")) this.$("[data-cr]").textContent = "0";
+        if (kit.sounding) {
+          s.voicedSec += dt;
+          s.quiet = 0;
+        } else if (s.phrase) {
+          s.quiet += dt;
+          if (s.quiet >= 0.35) this._closePhrase();
         }
-        this.state.stepStarted = performance.now();
-        if (this.$("[data-phase]"))
-          this.$("[data-phase]").textContent = ladder[this.state.step]?.label || "—";
-        if (this.$("[data-step]")) this.$("[data-step]").textContent = String(this.state.step + 1);
+        // No ladder yet: five zones 5 dB apart around your story's own level
+        if (!s.zones && s.voicedSec >= 2 && s.voiced.length >= 20) {
+          const med = K.median(s.voiced);
+          s.zones = st.levels.map((_, i) => ({ c: med + (i - 2) * 5, lo: med + (i - 2.5) * 5, hi: med + (i - 1.5) * 5 }));
+          s.approx = true;
+        }
+        if (s.t >= st.storySec) this._finishStory();
+      } else {
+        st.tStep += wdt;
+        const c = st.cur;
+        if (kit.sounding && kit.disp != null) {
+          c.voiced += dt;
+          c.recent.push([kit.t, kit.disp]);
+          // The first 0.6 s of a step is the change of level, not the level
+          if (st.tStep >= 0.6 && kit.t - c.lastSample >= 0.05) {
+            c.dbs.push(kit.disp);
+            c.lastSample = kit.t;
+          }
+        }
+        while (c.recent.length && c.recent[0][0] < kit.t - 0.5) c.recent.shift();
+        c.live = c.recent.length >= 5 ? K.median(c.recent.map((r) => r[1])) : null;
+        c.median = this._treadLevel(c);
+        if (c.live != null) this._growRange(c.live);
+        if (st.tStep >= st.stepSec) this._setTread(true);
       }
+      this._syncWords();
+      this.viz?.draw();
     },
     onStop() {
-      const patches = {};
-      if (this.state.cycles > 0) {
-        patches.ladderReps = this.state.cycles;
-        patches.control = clamp(2 + this.state.cycles, 1, 5);
+      const st = this.state;
+      if (st.phase === "story" && st.story && st.story.phrase) this._closePhrase();
+      else if (st.phase === "ladder" && st.cur && this._treadLevel(st.cur) != null && st.pos < st.seq.length) this._setTread(false);
+      this._syncWords();
+      st.review = true;
+      const b = this.$("[data-phase-btn]");
+      if (b) b.disabled = true;
+      if (this.viz) {
+        this.hud.classList.add("is-replay");
+        this.viz.draw();
       }
-      return {
-        patches,
-        summary: `${this.state.cycles} band-credited climb(s)`
-      };
+      const hist = st.history || [];
+      const full = hist.filter((h) => h.kind === "ladder" && h.voiced).length;
+      const reps = (st.reps || []).map((r) => this._repSummary(r)).filter((s) => s.steps);
+      const d = reps.reduce((a, s) => a + s.distinct, 0);
+      const s = reps.reduce((a, x) => a + x.steps, 0);
+      const span = Math.round(Math.max(0, ...reps.map((x) => x.span)));
+      const story = st.phase === "story" && st.story ? st.story.usedCount : hist.filter((h) => h.kind === "story").map((h) => h.used).pop();
+      const lead = full
+        ? L(`${full} ${full === 1 ? "escalera completa" : "escaleras completas"}`, `${full} full ${full === 1 ? "ladder" : "ladders"}`)
+        : L("Escalera a medias", "Partial ladder");
+      let summary = s
+        ? L(`${lead} · ${d} de ${s} pasos distintos · rango ${span} dB`, `${lead} · ${d} of ${s} steps distinct · range ${span} dB`)
+        : L("Sin escalones medidos todavía", "No measured steps yet");
+      if (story != null) summary += L(` · historia: ${story} de 5 niveles`, ` · story: ${story} of 5 levels`);
+      const ph = this.$("[data-phase]");
+      if (ph) ph.textContent = L("Repaso", "Review");
+      const rm = this.$("[data-remain]");
+      if (rm) rm.textContent = "—";
+      global.VTVolumeKit?.finalCaption?.(this.viz, summary);
+      // Only the count of full ladders is measured; control and ease stay yours to rate
+      return { patches: full > 0 ? { ladderReps: full } : {}, summary };
     }
   });
 
@@ -1178,61 +1653,291 @@
     }
   });
 
-  /** v20 — energy triad (not pure volume ladder) */
+  /**
+   * v20 — energy triad: the same message low, medium and high, then a lead
+   * take a little above your medium. The mic hears three channels of
+   * energy — volume (dB against your medium take), pace (syllables per
+   * second, approx.) and melody (pitch range in semitones) — and the picture
+   * sets one dot per take on each, so what changed and what stayed flat is
+   * visible. Face and gesture are not heard: they are in the recording.
+   * Flexibility, calibration and authenticity stay the learner's to rate.
+   */
   Modes.energyMatch = baseMode({
     id: "energyMatch",
     render() {
-      this.state.levels = ["Low", "Medium", "High"];
-      this.state.i = 0;
-      this.state.completed = 0;
-      this.state.stepStarted = performance.now();
-      this.state.stepSec = (this.profile.stepSec || 30) * 1000;
+      const st = this.state;
+      st.takeDefs = [
+        {
+          key: "low",
+          label: L("Baja", "Low"),
+          short: L("Baja", "Low"),
+          persona: L("1:1 calmado", "tired colleague"),
+          instruction: L("Energía baja · para un 1:1 calmado", "Low energy · for a tired colleague")
+        },
+        {
+          key: "med",
+          label: L("Media", "Medium"),
+          short: L("Media", "Med"),
+          persona: L("presentación formal", "formal panel"),
+          instruction: L("Energía media · para una presentación formal", "Medium energy · for a formal panel")
+        },
+        {
+          key: "high",
+          label: L("Alta", "High"),
+          short: L("Alta", "High"),
+          persona: L("equipo animado", "excited friend"),
+          instruction: L("Energía alta · equipo animado, sin gritar", "High energy · an excited friend, no shouting")
+        },
+        {
+          key: "lead",
+          label: L("Guía +10 %", "Lead +10%"),
+          short: L("Guía", "Lead"),
+          persona: L("tu media, algo más viva", "your medium, a bit brighter"),
+          instruction: L("Guía: tu media, un 10 % más viva", "Lead: your medium, 10% brighter")
+        }
+      ];
+      st.stepSec = this.profile.stepSec || 30;
+      this._fresh();
       this.hud.innerHTML = `
-        <div class="mode-title">${L("Ajuste de energía · trío", "Energy match · triad")}</div>
-        <div class="mode-phase" data-phase>Low energy</div>
-        <div class="mode-big" data-remain>30s</div>
-        <div class="volume-lane"><div class="volume-band" data-band></div><div class="volume-needle" data-n style="left:20%"></div></div>
-        <p class="mode-meta">${L("El volumen es un canal — también ritmo y cara. Ciclos: <strong data-c>0</strong>", "Volume is one channel — also match pace &amp; face. Cycles: <strong data-c>0</strong>")}</p>
-        <p class="mode-meta muted" data-tip>${L("Bajo: ojos calmados, más lento. Alto: cara viva, más rápido (sin gritar).", "Low: calm eyes, slower pace. High: brighter face, quicker (not shout).")}</p>
+        <div class="viz-row viz-head">
+          <div class="mode-title">${L("Energía · tres tomas y una guía", "Energy · three takes and a lead")}</div>
+          <button type="button" class="btn btn-ghost viz-tap" data-next-take>${L("Siguiente toma →", "Next take →")}</button>
+        </div>
+        <div class="viz-words">
+          <span class="mode-phase" data-phase>${st.takeDefs[0].instruction}</span>
+          <strong class="mode-big" data-remain>${st.stepSec}s</strong>
+          <span>${L("Ciclos", "Cycles")} <strong data-c>0</strong></span>
+          <span data-tip></span>
+        </div>
+        <p class="mode-meta muted">${L(
+          "El mismo mensaje en cada toma · volumen, ritmo y melodía frente a ti mismo · cara y gestos, en la grabación",
+          "The same message every take · volume, pace and melody against yourself · face and gesture in the recording"
+        )}</p>
       `;
+      this.$("[data-next-take]")?.addEventListener("click", () => {
+        if (!this.state.review) this._closeTake(true);
+      });
+      this._mountViz();
+    },
+    _newCycle() {
+      return this.state.takeDefs.map(() => ({ closed: false, done: false, db: null, rate: null, range: null, drop: null, voiced: 0 }));
+    },
+    _freshTake() {
+      const F = global.VTFeatures;
+      const st = this.state;
+      st.cur = { peaks: [], dbs: [], midis: [], voiced: 0, lastSample: -1, lastMidi: -1 };
+      st.syl = F ? new F.SyllableRate({ windowSec: 5 }) : null;
+    },
+    _fresh() {
+      const F = global.VTFeatures;
+      const st = this.state;
+      st.cycles = [this._newCycle()];
+      st.i = 0;
+      st.tTake = 0;
+      st.completed = 0;
+      st.review = false;
+      st.processed = false;
+      st.clipping = false;
+      st.recentPeaks = [];
+      st.recentMidi = [];
+      st.sessionPeaks = [];
+      st.live = { db: null, rate: null, range: null };
+      st.liveAt = 0;
+      st.pitch = F ? new F.StablePitch() : null;
+      this._freshTake();
+      this._derive();
+    },
+    _mountViz() {
+      const V = global.VTViz;
+      const F = global.VTFeatures;
+      const K = global.VTVolumeKit;
+      if (!V || !F || !K || !V.scenes.energyTriad) return;
+      this.hud.classList.add("has-viz");
+      this.state.kit = new K.LevelKit();
+      this.viz = new V.Surface(this.hud, (ctx, w, h) => V.scenes.energyTriad(ctx, w, h, this.state), {
+        className: "vz-volume",
+        label: L(
+          "Tres canales de energía por toma: volumen en dB frente a tu toma media, ritmo en sílabas por segundo (aprox.) y rango de melodía en semitonos. Cada toma deja un punto por canal; las líneas muestran qué cambió entre baja, media y alta.",
+          "Three channels of energy per take: volume in dB against your medium take, pace in syllables per second (approx.) and melody range in semitones. Each take leaves a dot per channel; the lines show what changed between low, medium and high."
+        )
+      });
+      this.viz.draw();
+    },
+    /** What the picture reads: this cycle, the last one as ghosts, the reference, the lead's suggestion. */
+    _derive() {
+      const st = this.state;
+      const K = global.VTVolumeKit;
+      const cyc = st.cycles[st.cycles.length - 1];
+      let prev = st.cycles.length > 1 ? st.cycles[st.cycles.length - 2] : null;
+      let main = cyc;
+      // After Stop, review whichever of the last two cycles holds more takes
+      const doneIn = (c) => c.filter((t) => t.done).length;
+      if (st.review && prev && doneIn(prev) > doneIn(cyc)) {
+        main = prev;
+        prev = st.cycles.length > 2 ? st.cycles[st.cycles.length - 3] : null;
+      }
+      st.cycle = main;
+      st.ghost = prev;
+      const medOf = (c) => (c && c[1] && c[1].done ? c[1] : null);
+      const med = medOf(main) || medOf(prev);
+      let ref = med ? med.db : null;
+      let refName = L("tu toma media", "your medium take");
+      if (ref == null && main[0] && main[0].done) {
+        ref = main[0].db;
+        refName = L("tu toma baja", "your low take");
+      }
+      if (ref == null && K && st.sessionPeaks.length >= 5) {
+        ref = K.median(st.sessionPeaks);
+        refName = L("tu nivel de hoy", "your level today");
+      }
+      st.refDb = ref;
+      st.refName = refName;
+      // "10 % more" is a framing, not a constant: about +1 dB, +10 % pace and range
+      st.targets = med
+        ? { db: med.db + 1, rate: med.rate != null ? med.rate * 1.1 : null, range: med.range != null ? med.range * 1.1 : null }
+        : null;
+    },
+    _closeTake(advance) {
+      const st = this.state;
+      const K = global.VTVolumeKit;
+      const cyc = st.cycles[st.cycles.length - 1];
+      const rec = cyc[st.i];
+      const c = st.cur;
+      if (rec && !rec.closed) {
+        rec.closed = true;
+        rec.voiced = c.voiced;
+        if (c.voiced >= 3 && K) {
+          rec.done = true;
+          rec.db = c.peaks.length >= 4 ? K.median(c.peaks.map((p) => p.db)) : K.percentile(c.dbs, 0.75);
+          rec.rate = st.syl ? st.syl.overall : null;
+          rec.range = c.midis.length >= 45 ? K.percentile(c.midis, 0.9) - K.percentile(c.midis, 0.1) : null;
+          const half = st.tTake / 2;
+          const a = c.peaks.filter((p) => p.t < half).map((p) => p.db);
+          const b = c.peaks.filter((p) => p.t >= half).map((p) => p.db);
+          rec.drop = a.length >= 3 && b.length >= 3 ? K.median(b) - K.median(a) : null;
+        }
+        this._derive();
+        const d = st.takeDefs[st.i];
+        const words = rec.done
+          ? [
+              d.label,
+              st.refDb != null ? K.fmtDb(rec.db - st.refDb) : "",
+              rec.rate != null ? L(`${K.fmtNum(rec.rate, 1)} síl/s`, `${K.fmtNum(rec.rate, 1)} syll/s`) : "",
+              rec.range != null ? L(`${Math.round(rec.range)} semitonos`, `${Math.round(rec.range)} semitones`) : ""
+            ]
+              .filter(Boolean)
+              .join(" · ")
+          : L(`${d.label}: sin voz suficiente para medir.`, `${d.label}: not enough voice to measure.`);
+        this.viz?.caption?.(words, 0);
+        if (this.$("[data-tip]")) this.$("[data-tip]").textContent = words;
+      }
+      if (!advance) return;
+      st.i += 1;
+      st.tTake = 0;
+      this._freshTake();
+      if (st.i >= st.takeDefs.length) {
+        if (cyc.every((t) => t.done)) st.completed += 1;
+        st.cycles.push(this._newCycle());
+        if (st.cycles.length > 8) st.cycles.shift();
+        st.i = 0;
+        if (this.$("[data-c]")) this.$("[data-c]").textContent = String(st.completed);
+      }
+      this._derive();
+      const d = st.takeDefs[st.i];
+      if (this.$("[data-phase]")) this.$("[data-phase]").textContent = d.instruction;
+      this.viz?.draw();
+    },
+    onStart() {
+      this._fresh();
+      this.state.kit?.reset();
+      this.hud?.classList.remove("is-replay");
+      const b = this.$("[data-next-take]");
+      if (b) b.disabled = false;
+      if (this.$("[data-c]")) this.$("[data-c]").textContent = "0";
+      if (this.$("[data-phase]")) this.$("[data-phase]").textContent = this.state.takeDefs[0].instruction;
+      this.viz?.draw();
     },
     onFrame(frame) {
-      const targets = [0.2, 0.38, 0.58];
-      const elapsed = performance.now() - this.state.stepStarted;
-      const left = Math.max(0, (this.state.stepSec - elapsed) / 1000);
-      if (this.$("[data-remain]")) this.$("[data-remain]").textContent = `${Math.ceil(left)}s`;
-      this.state.smooth = (this.state.smooth || 0) * 0.8 + (frame.rms || 0) * 0.2;
-      if (this.$("[data-n]")) this.$("[data-n]").style.left = `${clamp(this.state.smooth * 160, 2, 98)}%`;
-      if (this.$("[data-band]")) {
-        const t = targets[this.state.i];
-        this.$("[data-band]").style.left = `${clamp(t * 160 - 8, 5, 85)}%`;
-        this.$("[data-band]").style.width = "16%";
-      }
-      if (elapsed >= this.state.stepSec) {
-        this.state.i++;
-        if (this.state.i >= 3) {
-          this.state.i = 0;
-          this.state.completed++;
-          if (this.$("[data-c]")) this.$("[data-c]").textContent = String(this.state.completed);
+      const st = this.state;
+      if (!st.kit || st.review) return;
+      const K = global.VTVolumeKit;
+      const kit = st.kit;
+      const peak = kit.feed(frame);
+      const dt = kit.dt;
+      const now = performance.now();
+      st.tTake += Math.min(0.25, Math.max(0, (now - (st.lastNow || now)) / 1000));
+      st.lastNow = now;
+      st.processed = kit.processed;
+      st.clipping = kit.clipping;
+      K.noteProcessed(st, this.viz);
+      const manual = !!frame.manualSound;
+      if (st.syl && !manual) st.syl.feed(frame);
+      const midi = st.pitch && !manual ? st.pitch.feed(frame) : null;
+      const c = st.cur;
+      if (kit.sounding) {
+        c.voiced += dt;
+        if (kit.disp != null && kit.t - c.lastSample >= 0.05) {
+          c.dbs.push(kit.disp);
+          c.lastSample = kit.t;
         }
-        this.state.stepStarted = performance.now();
-        const tips = [
-          "Low: calm eyes, slower pace.",
-          "Medium: conversational body + voice.",
-          "High: brighter face, quicker (not shout)."
-        ];
-        if (this.$("[data-phase]"))
-          this.$("[data-phase]").textContent = L(`${this.state.levels[this.state.i]} de energía`, `${this.state.levels[this.state.i]} energy`);
-        if (this.$("[data-tip]")) this.$("[data-tip]").textContent = tips[this.state.i];
+        if (midi != null && kit.t - c.lastMidi >= 1 / 30) {
+          c.midis.push(midi);
+          c.lastMidi = kit.t;
+          st.recentMidi.push([kit.t, midi]);
+        }
       }
+      if (peak) {
+        c.peaks.push({ t: st.tTake, db: peak.db });
+        st.recentPeaks.push([kit.t, peak.db]);
+        st.sessionPeaks.push(peak.db);
+        if (st.sessionPeaks.length > 600) st.sessionPeaks.shift();
+      }
+      while (st.recentPeaks.length && st.recentPeaks[0][0] < kit.t - 3) st.recentPeaks.shift();
+      while (st.recentMidi.length && st.recentMidi[0][0] < kit.t - 6) st.recentMidi.shift();
+      // The live dots move slowly (twice a second): a reading, not a needle
+      if (kit.t - st.liveAt >= 0.5) {
+        st.liveAt = kit.t;
+        const pk = st.recentPeaks.map((p) => p[1]);
+        const mi = st.recentMidi.map((p) => p[1]);
+        st.live = {
+          db: pk.length >= 3 ? K.median(pk) : null,
+          rate: st.syl ? st.syl.rate : null,
+          range: mi.length >= 30 ? K.percentile(mi, 0.9) - K.percentile(mi, 0.1) : null
+        };
+        if (st.refDb == null) this._derive();
+        const left = Math.max(0, Math.ceil(st.stepSec - st.tTake));
+        const r = this.$("[data-remain]");
+        if (r && r.textContent !== `${left}s`) r.textContent = `${left}s`;
+      }
+      if (st.tTake >= st.stepSec) this._closeTake(true);
+      this.viz?.draw();
     },
     onStop() {
-      // flexibility only if they completed cycles — still modest autofill
-      const c = this.state.completed;
-      return {
-        patches: c > 0 ? { flexibility: clamp(2 + c, 1, 5) } : {},
-        summary: `${c} full L/M/H energy cycle(s) — rate authenticity yourself`
-      };
+      const st = this.state;
+      const K = global.VTVolumeKit;
+      if (st.cur && st.cur.voiced >= 3) this._closeTake(false);
+      st.review = true;
+      this._derive();
+      const b = this.$("[data-next-take]");
+      if (b) b.disabled = true;
+      if (this.$("[data-phase]")) this.$("[data-phase]").textContent = L("Repaso", "Review");
+      if (this.$("[data-remain]")) this.$("[data-remain]").textContent = "—";
+      if (this.viz) {
+        this.hud.classList.add("is-replay");
+        this.viz.draw();
+      }
+      const cyc = st.cycle || [];
+      const done = cyc.map((t, i) => ({ t, d: st.takeDefs[i] })).filter((x) => x.t.done);
+      if (!done.length || !K) {
+        return { patches: {}, summary: L("Ninguna toma con voz todavía", "No take with voice yet") };
+      }
+      const vol = done.map((x) => `${x.d.short} ${st.refDb != null ? K.fmtDb(x.t.db - st.refDb) : "—"}`).join(" · ");
+      const rates = done.map((x) => (x.t.rate != null ? K.fmtNum(x.t.rate, 1) : "—")).join(" → ");
+      const ranges = done.map((x) => (x.t.range != null ? String(Math.round(x.t.range)) : "—")).join(" → ");
+      const summary = L(`${vol}; ritmo ${rates} síl/s; melodía ${ranges} semitonos`, `${vol}; pace ${rates} syll/s; melody ${ranges} semitones`);
+      K.finalCaption(this.viz, summary);
+      // Only measured facts: the ratings (flexibility, calibration, authenticity) stay yours
+      return { patches: {}, summary };
     }
   });
 

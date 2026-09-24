@@ -1,0 +1,877 @@
+{
+ "first-visit": {
+  "title": "What a first-time visitor sees",
+  "verdict": "ship C",
+  "judges": 3,
+  "A": {
+   "meanRank": 3.0,
+   "meanScore": 3.0,
+   "blocking": [
+    [
+     "beginner",
+     "The screen promises a quick first practice, but Empezar opens a drill whose first step asks you to pick a page from a book or article to read aloud. Nothing on the screen warns you that you need material, so a first-time visitor on a phone gets stuck right after tapping."
+    ],
+    [
+     "designer",
+     "The main 'Empezar' card presents 'Mejor dicción' as a short, no-pressure exercise, but its first instruction is to find a page from a book or article to read aloud. A phone visitor arriving from a link may have nothing to hand and cannot start as the card implies."
+    ],
+    [
+     "access",
+     "The main 'Empezar' button leads to a drill that first asks the user to find a book or article to read aloud. That contradicts the promise of a quick first practice and would stall someone with nothing to hand."
+    ]
+   ]
+  },
+  "challengers": {
+   "B": {
+    "name": "day-0 Mínimo on Canto, link to Vocal",
+    "wins": 3,
+    "guard": [],
+    "meanRank": 2.0,
+    "meanScore": 6.0
+   },
+   "C": {
+    "name": "track chooser in the panel plus Mínimo",
+    "wins": 3,
+    "guard": [],
+    "meanRank": 1.0,
+    "meanScore": 8.0
+   }
+  },
+  "close": [],
+  "notes": [
+   {
+    "persona": "beginner",
+    "ranking": [
+     "C",
+     "B",
+     "A"
+    ],
+    "confidence": "high",
+    "summary": "[C] wins because it asks me in plain words whether I want to sing or speak, which are my two real goals, and then gives one obvious 3-minute button that needs no preparation, with little else competing for my tap. It would be better if the unexplained jargon 'Trinos' were replaced or explained in simple words, like 'vibrar los labios', and if the top bar were less cluttered (Pro, Cuenta, English, Tour). [A] falls last because its first practice needs reading material that nobody warned me about, and it repeats the same action under three labels."
+   },
+   {
+    "persona": "designer",
+    "ranking": [
+     "C",
+     "B",
+     "A"
+    ],
+    "confidence": "high",
+    "summary": "[C] wins because it lets the visitor pick what suits them (Cantar / Hablar, with plain examples), then offers one clear, prep-free 3-minute start. Secondary options are reduced to quiet links. Its biggest gains would come from a headline that says what the practice is, a 'no book or sheet music needed' line like [B]'s, and plainer wording than 'Trinos'. [B] is a close second but assumes singing and crowds the first screen. [A]'s main button leads to a drill that needs a book, and its labels are misleading."
+   },
+   {
+    "persona": "access",
+    "ranking": [
+     "C",
+     "B",
+     "A"
+    ],
+    "confidence": "high",
+    "summary": "[C] wins because a first-time, less confident user sees only one question with two large, plainly described choices and then one large button with its duration. By the behaviour notes, that button starts a 3-minute routine that needs nothing prepared, and nothing else on the first screen competes with it. [B] is close on reassurance but adds clutter and hides the speaking path behind a small, jargon-labelled link. [A] sends users to a drill that needs a book and gives three differently named buttons for the same action. [C] would improve most by adding a visible checkmark or 'Elegido' label to the selected option, and by replacing 'Trinos' with plain language such as 'vibrar los labios'."
+   }
+  ]
+ },
+ "loop-copy": {
+  "title": "Today's basics for someone who practised the last three days",
+  "verdict": "ship C",
+  "judges": 3,
+  "A": {
+   "meanRank": 3.0,
+   "meanScore": 5.33,
+   "blocking": []
+  },
+  "challengers": {
+   "B": {
+    "name": "the steps are the headline",
+    "wins": 3,
+    "guard": [],
+    "meanRank": 1.67,
+    "meanScore": 7.33
+   },
+   "C": {
+    "name": "headline plus button only",
+    "wins": 3,
+    "guard": [],
+    "meanRank": 1.33,
+    "meanScore": 7.67
+   }
+  },
+  "close": [],
+  "notes": [
+   {
+    "persona": "beginner",
+    "ranking": [
+     "C",
+     "B",
+     "A"
+    ],
+    "confidence": "medium",
+    "summary": "[C] wins because I can see what today is and tap the big green 'Empezar básicos' right under the title, with nothing to read in between. That suits someone impatient on a phone. It would be even better if the 'Continuar práctica' and 'Iniciar sesión guiada' buttons were less prominent or moved further down, and if the Mínimo/Esencial/Clase chips clearly said whether you can tap them, so the green button is the only obvious action."
+   },
+   {
+    "persona": "designer",
+    "ranking": [
+     "C",
+     "B",
+     "A"
+    ],
+    "confidence": "medium",
+    "summary": "[C] wins because its hierarchy does exactly the job: a short label, a plain headline saying what today's practice is and how long it takes, then the start button immediately below it, highest on the phone screen. [B] is close and more specific about the 1:30 + 1:30 sequence, but its extra nested box and repeated duration add clutter. [C] would improve most by adding the sequence as a light subline (e.g. 'Trinos 1:30 → solfeo 1:30') without a nested box, and by keeping the laptop button as large as it is on the phone."
+   },
+   {
+    "persona": "access",
+    "ranking": [
+     "B",
+     "C",
+     "A"
+    ],
+    "confidence": "medium",
+    "summary": "[B] wins because its large title states the two steps and their lengths, and one short, reassuring line leads to a big, high start button. An older or unsure learner knows what will happen and can start without help. [C] is close and even simpler, but it hides the two-part structure and shows competing play-style buttons on the phone. [B] would improve most by moving '3 minutos' out of the small capitals and into the large title or the button label (for example '▶ Empezar · 3 min'). Writing the durations as '1 min 30' rather than '1:30' would avoid a clock-time misreading."
+   }
+  ]
+ },
+ "phone-header": {
+  "title": "The header on a phone",
+  "verdict": "ship B",
+  "judges": 3,
+  "A": {
+   "meanRank": 3.0,
+   "meanScore": 4.67,
+   "blocking": []
+  },
+  "challengers": {
+   "B": {
+    "name": "one-row header with Más",
+    "wins": 3,
+    "guard": [],
+    "meanRank": 1.0,
+    "meanScore": 8.0
+   },
+   "C": {
+    "name": "header scrolls away, Más menu",
+    "wins": 3,
+    "guard": [],
+    "meanRank": 2.0,
+    "meanScore": 6.33
+   }
+  },
+  "close": [],
+  "notes": [
+   {
+    "persona": "beginner",
+    "ranking": [
+     "B",
+     "C",
+     "A"
+    ],
+    "confidence": "medium",
+    "summary": "[B] does the job best on the phone I actually use: the one compact row stays at the top, so I can always move between Practicar, Plan and Historial, leaves the most room for the exercise, and puts Pro, Cuenta, English and Tour behind one clear 'Más' tap. It would be even better with a '▾' arrow or a different look on 'Más' so it doesn't look like another tab, and with a thinner pinned bar when the phone is sideways."
+   },
+   {
+    "persona": "designer",
+    "ranking": [
+     "B",
+     "C",
+     "A"
+    ],
+    "confidence": "medium",
+    "summary": "[B] wins because it has the smallest pinned header on a portrait phone, the three main destinations are always reachable, and the secondary items are behind 'Más'. That best balances navigation against space for practice. [C]'s scroll-away header gives space back only by hiding the nav, and [A]'s always-visible third row eats the screen. [B] would improve most with a chevron on 'Más' so the menu is discoverable. In landscape, where all three show the same full row, it should also shrink or auto-hide the pinned header."
+   },
+   {
+    "persona": "access",
+    "ranking": [
+     "B",
+     "C",
+     "A"
+    ],
+    "confidence": "medium",
+    "summary": "[B] does the job best: its compact, single pinned row keeps the three sections one tap away at all times while giving the most screen to practice, with large, well-spaced targets and little to take in. [C] is more predictable ('Más ▾', visible app name), but its header scrolls away, which strands older users further down the page. [A] hides nothing but spends too much permanent space on two rows of pills that all look alike. [B] would improve most by adding an arrow to 'Más' and a visible app name or label beside the music-note icon."
+   }
+  ]
+ },
+ "done-card": {
+  "title": "Home after today's basics are done",
+  "verdict": "holds",
+  "judges": 3,
+  "A": {
+   "meanRank": 1.0,
+   "meanScore": 7.0,
+   "blocking": []
+  },
+  "challengers": {
+   "B": {
+    "name": "one-line done strip, no level chips",
+    "wins": 0,
+    "guard": [],
+    "meanRank": 2.0,
+    "meanScore": 5.67
+   }
+  },
+  "close": [],
+  "notes": [
+   {
+    "persona": "beginner",
+    "ranking": [
+     "A",
+     "B"
+    ],
+    "confidence": "medium",
+    "summary": "[A] wins because its done box is roomy and says in one plain sentence that I can do more or just come back tomorrow, with a big, obvious 'Otra vuelta' button and level choices that show minutes. That feels calm, not pushy. [B] is simpler, but its done box is cramped on the phone and 'Continuar práctica' makes me doubt I'm done. [A] would improve most by fixing the '1 min' vs '3 min' mismatch, removing the duplicate 'Hoy: Mínimo' chip, and keeping the extra buttons (Continuar práctica, Iniciar sesión guiada, Ruta) out of the finished-today view."
+   },
+   {
+    "persona": "designer",
+    "ranking": [
+     "A",
+     "B"
+    ],
+    "confidence": "medium",
+    "summary": "[A] wins: on the phone its done card is clean and legible, and it says in words that stopping is fine ('Si no, hasta mañana'). It also offers real, optional ways to do more (repeat today's routine or pick a longer level), all styled as secondary buttons. [B] is calmer, but on the phone its done card wraps badly, and the only extra it offers is repeating the same routine. [A] would improve most by dropping the 'Hoy: Mínimo' chip, which repeats the done card, and by merging its stacked desktop action rows so less of the first screen goes to optional actions."
+   },
+   {
+    "persona": "access",
+    "ranking": [
+     "A",
+     "B"
+    ],
+    "confidence": "medium",
+    "summary": "[A] wins because its done card is big and clean on the phone, and its plain-language line 'Si quieres más, elige otro nivel. Si no, hasta mañana.' gives an older or less confident user explicit permission to stop and a clear path to more, backed by a large full-width tap target. Its main weakness is clutter: it would improve most by dropping the redundant highlighted 'Hoy: Mínimo' chip and moving the streak/week-goal proof higher so 'counted' shows on the first phone screen, as it does in [B]."
+   }
+  ]
+ },
+ "record-strip": {
+  "title": "The practice record on a phone",
+  "verdict": "ship B",
+  "judges": 3,
+  "A": {
+   "meanRank": 2.0,
+   "meanScore": 5.0,
+   "blocking": []
+  },
+  "challengers": {
+   "B": {
+    "name": "compact record strip",
+    "wins": 3,
+    "guard": [],
+    "meanRank": 1.0,
+    "meanScore": 8.0
+   }
+  },
+  "close": [],
+  "notes": [
+   {
+    "persona": "beginner",
+    "ranking": [
+     "B",
+     "A"
+    ],
+    "confidence": "high",
+    "summary": "[B] wins because it fits my day count, the week dots and the weekly progress bar into one compact strip that I can see on the first screen of a normal phone, without pushing everything else down. [A] spends space on a big heading and the vague 'Próximo hito: 7', so the weekly progress falls off the screen. [B] would get better with simpler wording for the weekly line, for example 'Esta semana: 2 días (meta 3 a 5)', and a plainer phrase than 'día de descanso guardado'."
+   },
+   {
+    "persona": "designer",
+    "ranking": [
+     "B",
+     "A"
+    ],
+    "confidence": "high",
+    "summary": "[B] wins because it puts the day count, the week's dots, the streak and this week's goal progress into one compact card. It fits on the first screen of a standard phone and keeps the rest of the page close. [A] spreads the same content vertically, so the weekly progress falls below the fold. [B] would improve most with a less cramped 'días cantados' label and some visible way to change the weekly goal on phones, such as a small edit link."
+   },
+   {
+    "persona": "access",
+    "ranking": [
+     "B",
+     "A"
+    ],
+    "confidence": "high",
+    "summary": "[B] wins because it shows both the total days sung and this week's progress (with a text equivalent, not colour alone) on the first screen of a normal phone, without pushing the rest of the page down. [A] is easier on the eyes but hides the weekly progress below the fold. [B] would improve most by making the 'días cantados' label and the day letters/circles a little larger and less cramped, and by clarifying why the total (3) differs from this week's check marks (2)."
+   }
+  ]
+ },
+ "step-end": {
+  "title": "The moment a guided step's time runs out",
+  "verdict": "ship B",
+  "judges": 3,
+  "A": {
+   "meanRank": 2.0,
+   "meanScore": 2.33,
+   "blocking": [
+    [
+     "beginner",
+     "When the time ends there's no message and no next-step button on screen. The 'En vivo' badge stays green and the mic stays on, so it looks like the exercise is still running. The action to continue is below the fold, and I couldn't find it without scrolling and guessing."
+    ],
+    [
+     "designer",
+     "There is no sign that the step has ended apart from '00:00', and 'En vivo' still shows as live with the mic on. The next-step action is off the first screen, so the learner may keep singing or not know how to move on."
+    ],
+    [
+     "access",
+     "At 0:00 nothing on the first screen says the exercise has ended. The green 'En vivo' badge stays next to '00:00' and the mic stays on, which suggests it is still running. The button to go to the next step is off-screen below the fold, and nothing hints that it is there."
+    ]
+   ]
+  },
+  "challengers": {
+   "B": {
+    "name": "step-done card on the stage",
+    "wins": 3,
+    "guard": [],
+    "meanRank": 1.0,
+    "meanScore": 8.67
+   }
+  },
+  "close": [],
+  "notes": [
+   {
+    "persona": "beginner",
+    "ranking": [
+     "B",
+     "A"
+    ],
+    "confidence": "high",
+    "summary": "[B] wins by a wide margin: when the time is up it says so clearly ('¡Listo!', 'Paso 1 de 2 ✓') and puts one large button with the next exercise's name in the middle of the screen, so I'd know what to tap right away on my phone. [A] looks almost the same at 0:00 as during the exercise, the mic stays live and the way forward is out of sight. [B] would be better with a plainer label than 'Puntuar', for example 'Calificar cómo me fue'."
+   },
+   {
+    "persona": "designer",
+    "ranking": [
+     "B",
+     "A"
+    ],
+    "confidence": "high",
+    "summary": "[B] wins clearly. At 0:00 it replaces the practice area with a plain 'done' message and one large button that names the next exercise. The learner knows the step is over and can move on with one tap, while '30 s más' and 'Puntuar' are still offered as secondary options. It would improve most by using the same term in the banner and the overlay ('paso' vs 'ejercicio'). It could also show a small countdown or hint that the mic has stopped, so the end of the step is fully clear."
+   },
+   {
+    "persona": "access",
+    "ranking": [
+     "B",
+     "A"
+    ],
+    "confidence": "high",
+    "summary": "[B] wins clearly. It says in words that the step is done ('¡Listo!', 'PASO 1 DE 2 ✓'), dims everything else, and gives one large, high-contrast, centred button that names the next exercise. An older user can move on without help. [A] shows only '00:00' beside a still-green 'En vivo' badge, leaves the mic on, and hides the next-step button below the fold. It also has overlapping controls on the phone. [B] would improve most with a larger, higher-contrast 'Paso 1 de 2 completado' line and a clearer label than 'Puntuar' (for example 'Puntuar este ejercicio')."
+   }
+  ]
+ },
+ "landscape": {
+  "title": "Practising with the phone turned sideways",
+  "verdict": "ship B",
+  "judges": 3,
+  "A": {
+   "meanRank": 2.0,
+   "meanScore": 2.67,
+   "blocking": [
+    [
+     "beginner",
+     "Guided session, landscape: the site header and breadcrumb cover the 'En vivo' timer. Only the top of the green pill shows, so the singer can't see the time."
+    ],
+    [
+     "beginner",
+     "Exercise, landscape: the chord and note dropdown row (I - vi - IV - V, 1 nota) covers the 'Uniformidad: irregular' line. The 'Marcar paso a vocal abierta' button is cut in half behind the MIC bar and looks unreachable."
+    ],
+    [
+     "designer",
+     "Guided session, landscape: the sticky site header and exercise header cover the top of the practice card. The live 'En vivo' timer is hidden (only 'En' shows at the top edge), and so are the card heading and meter bar."
+    ],
+    [
+     "designer",
+     "The chord and note selector bar (I-vi-IV-V (C), 1 nota) overlaps the practice card: it covers the progress/meter bar and cuts through the 'Uniformidad: irregular' text. In the exercise view the 'Marcar paso a vocal abierta' button is half hidden under the MIC bar."
+    ],
+    [
+     "access",
+     "Guided session in landscape: the sticky site header and title bar cover the 'En vivo' timer, so it is not visible at all (only the top of the chip peeks out). The card title and progress bar are hidden too."
+    ],
+    [
+     "access",
+     "Exercise in landscape: the floating row of dropdowns ('I - vi - IV - V (C)', '1 nota') covers the 'Uniformidad: irregular' text, and the MIC slider row cuts off the 'Marcar paso a vocal abierta' button, so the button is only half visible."
+    ]
+   ]
+  },
+  "challengers": {
+   "B": {
+    "name": "landscape practice mode",
+    "wins": 3,
+    "guard": [],
+    "meanRank": 1.0,
+    "meanScore": 7.0
+   }
+  },
+  "close": [],
+  "notes": [
+   {
+    "persona": "beginner",
+    "ranking": [
+     "B",
+     "A"
+    ],
+    "confidence": "high",
+    "summary": "[B] wins because it hides the site header in landscape. That leaves the timer, the exercise card and the Detener controls all visible at once in both the guided session and the single exercise. [A] covers the timer in one case and a button and some text in the other. The biggest improvement for [B] would be a small pause/end control for the guided session, plus moving the timer pill so it doesn't overlap the card title."
+   },
+   {
+    "persona": "designer",
+    "ranking": [
+     "B",
+     "A"
+    ],
+    "confidence": "high",
+    "summary": "[B] does the job the brief sets. It removes the site header in landscape, so the timer, the full practice card and the singing controls all fit on the first screen without layers covering each other. [A] buries the live timer under a sticky header in the guided session, and its selector bar covers the practice feedback. [B] would improve most by moving the timer badge off the card heading and by putting a small Pausar/Terminar for the session, plus the MIC control, into the empty band above the controls row."
+   },
+   {
+    "persona": "access",
+    "ranking": [
+     "B",
+     "A"
+    ],
+    "confidence": "high",
+    "summary": "[B] does what the brief asks. In both landscape screenshots the practice card, timer and singing controls fit on one screen, and the only overlap is the timer over the card heading, which is minor. [A] keeps the site header and breadcrumbs, and they hide the timer in the guided session and cover part of the exercise content. [B] would improve most by moving the timer so it no longer covers the card heading and by giving the guided session a small visible Pausar/Terminar control, so an older user is not left with only '← Atrás' to get out."
+   }
+  ]
+ },
+ "target-lane": {
+  "title": "Seeing which note to sing",
+  "verdict": "ship B",
+  "judges": 3,
+  "A": {
+   "meanRank": 2.0,
+   "meanScore": 3.33,
+   "blocking": [
+    [
+     "beginner",
+     "The instructions say 'Quédate en el carril verde', but no lane is green. The target note (A2) looks the same as the other plain dashed rows, and several other lanes are highlighted gold, so the wrong lines look like targets."
+    ],
+    [
+     "designer",
+     "The instruction text below the staff says 'Quédate en el carril verde', but no lane is green. The target (A2) looks almost the same as the other lanes, and the amber chord-tone lanes stand out more, so the learner may aim at the wrong note."
+    ],
+    [
+     "access",
+     "The instructions say 'Quédate en el carril verde', but no green lane is drawn. The target lane (A2) looks the same as every other dashed lane, and the only green on screen is the G key on the keyboard, which is not the target. This steers the user toward the wrong note."
+    ]
+   ]
+  },
+  "challengers": {
+   "B": {
+    "name": "target always the primary lane; grid recedes",
+    "wins": 3,
+    "guard": [],
+    "meanRank": 1.0,
+    "meanScore": 7.0
+   }
+  },
+  "close": [],
+  "notes": [
+   {
+    "persona": "beginner",
+    "ranking": [
+     "B",
+     "A"
+    ],
+    "confidence": "high",
+    "summary": "[B] wins because the note I must sing is a clear green lane with a dot on its name, matching the 'Nota ...' text and the 'stay in the green lane' instruction. [A] gives the target only as text and has no green lane, which leaves a beginner guessing. [B] would improve most with Spanish feedback words in place of GOOD/CLOSE, a clear sign when my voice line is inside the green lane, and a phone toast that does not cover the title."
+   },
+   {
+    "persona": "designer",
+    "ranking": [
+     "B",
+     "A"
+    ],
+    "confidence": "high",
+    "summary": "[B] wins. The screen's job is knowing which note to sing, and [B] marks the target lane in green with a dot on its label, matching both the header and the on-page instruction. [A] names the target only in small text and leaves its lane indistinguishable from the rest, so the learner has to remember the note and search for it. To improve [B], make the target note name larger and more central (it is small and crowded under the selects), keep toasts off the title area on phone, and use Spanish for the feedback word to match the rest of the app."
+   },
+   {
+    "persona": "access",
+    "ranking": [
+     "B",
+     "A"
+    ],
+    "confidence": "high",
+    "summary": "[B] wins because it marks the target note in the lanes themselves: a bright green lane plus a dot on its label. That matches the 'carril verde' instruction and does not rely on colour alone. [A] hides the target in a small caption and gives the target lane no visual weight, so older users would likely sing the wrong note. [B] would improve most by making the target label much larger and bolder, keeping green for the target only (not the G keyboard key), showing feedback in Spanish, and moving the toast so it no longer covers the title."
+   }
+  ]
+ },
+ "big-start": {
+  "title": "An exercise before pressing Start",
+  "verdict": "ship B",
+  "judges": 3,
+  "A": {
+   "meanRank": 2.0,
+   "meanScore": 5.0,
+   "blocking": []
+  },
+  "challengers": {
+   "B": {
+    "name": "one big Start",
+    "wins": 3,
+    "guard": [],
+    "meanRank": 1.0,
+    "meanScore": 8.0
+   }
+  },
+  "close": [],
+  "notes": [
+   {
+    "persona": "beginner",
+    "ranking": [
+     "B",
+     "A"
+    ],
+    "confidence": "high",
+    "summary": "[B] wins because the only thing I need to do, start, is a big, full-width green 'Empezar' button with nothing competing next to it, so I tap it in the first seconds. [A] makes Empezar small and surrounds it with a MIC slider and '− 0 +' controls that have no labels, which makes me hesitate. What would most improve [B] is fixing the empty gap on small phones, where the 'Qué vas a hacer' steps vanish, and removing or labelling the empty bar above the button."
+   },
+   {
+    "persona": "designer",
+    "ranking": [
+     "B",
+     "A"
+    ],
+    "confidence": "high",
+    "summary": "[B] does the job best. Its full-width, tall Empezar button is the one obvious primary action on the first screen at both phone sizes, and it is easy to tap with one thumb. [A]'s small left-aligned Empezar is smaller than a secondary button and crowded by a slider and unlabelled controls. [B] would improve most by filling or collapsing the blank gap left on the small phone, labelling or removing the empty bar above Empezar, and fixing the clipped heading and instruction text."
+   },
+   {
+    "persona": "access",
+    "ranking": [
+     "B",
+     "A"
+    ],
+    "confidence": "high",
+    "summary": "[B] does the job better. Its Empezar button is large, full-width, high-contrast and nearly alone, so an older or unsure user sees at once how to start and can do it in one tap. [A] crowds a small Empezar button among a mic slider and unlabeled octave, checkbox and piano controls. [B] would improve most by fixing the missing or blank instructions area on small phones, removing or labeling the empty bar above the button, and giving the clipped step list a visible scroll cue."
+   }
+  ]
+ },
+ "catalog": {
+  "title": "The list of exercises",
+  "verdict": "ship B",
+  "judges": 3,
+  "A": {
+   "meanRank": 3.0,
+   "meanScore": 4.33,
+   "blocking": []
+  },
+  "challengers": {
+   "B": {
+    "name": "rows plus a what-you-do line",
+    "wins": 3,
+    "guard": [],
+    "meanRank": 1.0,
+    "meanScore": 8.0
+   },
+   "C": {
+    "name": "compact rows",
+    "wins": 3,
+    "guard": [],
+    "meanRank": 2.0,
+    "meanScore": 6.0
+   }
+  },
+  "close": [],
+  "notes": [
+   {
+    "persona": "beginner",
+    "ranking": [
+     "B",
+     "C",
+     "A"
+    ],
+    "confidence": "high",
+    "summary": "[B] wins because it is the only one where a beginner like me can understand what an exercise is before tapping it. The short plain-Spanish line under each technical name does the explaining, and the whole row is clearly tappable. The biggest improvement would be to write descriptions that fit without being cut off and that do not repeat the title. Fixing the confusing number order (1, 2, 3, 15...) would also help."
+   },
+   {
+    "persona": "designer",
+    "ranking": [
+     "B",
+     "C",
+     "A"
+    ],
+    "confidence": "high",
+    "summary": "[B] wins because it is the only one that explains what each exercise is. Its short plain-language descriptions turn jargon titles like 'Fry vocal' or 'SOVT' into something a learner can choose between, and each row stays one large tap target with clear title-first hierarchy. The biggest improvement would be tighter descriptions that say something new in one line and never repeat the title or cut off mid-word, which would also shorten rows. [A] should drop its redundant level badges and uniform 'not practised' pills in favour of that kind of description."
+   },
+   {
+    "persona": "access",
+    "ranking": [
+     "B",
+     "C",
+     "A"
+    ],
+    "confidence": "medium",
+    "summary": "[B] wins because it is the only design that answers 'what is this exercise?'. Its short plain-language description under each jargon-heavy title lets an older or unsure learner choose with confidence, while keeping large full-row tap targets and a predictable layout. The biggest improvement would be to stop cutting descriptions mid-word, either by showing the full sentence or writing descriptions that fit in two lines, and to raise the description text size and contrast, especially on desktop."
+   }
+  ]
+ },
+ "canto-groups": {
+  "title": "How singing exercises are grouped",
+  "verdict": "ship B",
+  "judges": 3,
+  "A": {
+   "meanRank": 2.0,
+   "meanScore": 4.33,
+   "blocking": [
+    [
+     "beginner",
+     "No card is marked as part of the daily basics. The 'Básico' group name is easy to mistake for 'my daily basics', so a beginner would think all 16 Básico exercises are her daily routine."
+    ],
+    [
+     "designer",
+     "Nothing marks daily basics anywhere, and the group is called 'Básico' (16 exercises). A singer is likely to read that as their daily basics, which is wrong and misleads them on the exact question the screen exists to answer."
+    ],
+    [
+     "access",
+     "No card shows which exercises are part of the daily basics. The 'Básico' section (16 exercises) reads as 'your basics', so a user would likely conclude that all 16 are their daily exercises."
+    ]
+   ]
+  },
+  "challengers": {
+   "B": {
+    "name": "groups named for what they are; today's basics marked",
+    "wins": 3,
+    "guard": [],
+    "meanRank": 1.0,
+    "meanScore": 6.0
+   }
+  },
+  "close": [],
+  "notes": [
+   {
+    "persona": "beginner",
+    "ranking": [
+     "B",
+     "A"
+    ],
+    "confidence": "medium",
+    "summary": "[B] wins narrowly because it is the only one that answers 'which of these are my daily basics', with a plain 'Hoy en tus básicos' tag. [A] has clearer groups (Básico/Avanzado) but never marks the daily basics, and its 'Básico' label invites the wrong conclusion. [B] would improve most by making its intro sentence match its group names and by bringing the daily-basics cards to the top on mobile, for example with a 'Mis básicos de hoy' filter or section."
+   },
+   {
+    "persona": "designer",
+    "ranking": [
+     "B",
+     "A"
+    ],
+    "confidence": "medium",
+    "summary": "[B] wins because it is the only one that answers 'which of these are in my daily basics?' (the 'Hoy en tus básicos' badges), and its group names say what each set is for. [A] groups by level only, and its 'Básico' label can pass for daily basics. [B] would improve most by replacing the stale Básico/Avanzado intro line with copy that matches its groups, and by pulling today's basics into a short strip or filter at the top instead of scattering badges deep in the list."
+   },
+   {
+    "persona": "access",
+    "ranking": [
+     "B",
+     "A"
+    ],
+    "confidence": "medium",
+    "summary": "[B] wins because it is the only design that tells the singer which exercises are in their daily basics, with a text badge that does not depend on colour. [A] explains the grouping more clearly, but it never marks daily basics, and its 'Básico' label invites exactly the wrong conclusion. The biggest improvements to [B] would be to rewrite the helper sentence so it matches the 'Clase del mes' / 'Calentamientos y técnica' groups, and to put the daily basics near the top (a 'Mis básicos de hoy' filter chip or a pinned strip) instead of leaving the badges deep in the list. Shortening or dropping the repeated group pill on every card would also cut visual noise for older users."
+   }
+  ]
+ },
+ "plan": {
+  "title": "The Plan page",
+  "verdict": "ship B",
+  "judges": 3,
+  "A": {
+   "meanRank": 2.0,
+   "meanScore": 4.33,
+   "blocking": [
+    [
+     "beginner",
+     "After you pick a focus and press 'Iniciar / continuar semana', the page offers no way to reach an exercise. A beginner doesn't know where to practise next, so the page stops short of its job."
+    ],
+    [
+     "designer",
+     "The page has no route from the chosen focus to any exercise, so after pressing start the learner is stranded on the Plan page with nothing to practise."
+    ]
+   ]
+  },
+  "challengers": {
+   "B": {
+    "name": "one focus, its exercises, days counted",
+    "wins": 3,
+    "guard": [],
+    "meanRank": 1.0,
+    "meanScore": 7.33
+   }
+  },
+  "close": [],
+  "notes": [
+   {
+    "persona": "beginner",
+    "ranking": [
+     "B",
+     "A"
+    ],
+    "confidence": "high",
+    "summary": "[B] wins because I understand it in seconds: a few focus choices, one clear 'Empezar esta semana' button, nothing else in the way, and the exercises open directly so I actually get to practise. [A] buries the start button under 17 chips full of jargon plus review forms I can't use yet, and it never takes me to an exercise. [B] would improve most by showing a mix of singing and speaking options before 'Ver otros 12', using plainer names (for example 'Voz más clara' instead of 'Resonancia y velo del paladar'), and keeping the start button on the first phone screen."
+   },
+   {
+    "persona": "designer",
+    "ranking": [
+     "B",
+     "A"
+    ],
+    "confidence": "high",
+    "summary": "[B] wins because it gives this job one clear path: show a few focus areas with the rest one tap away, then one obvious start button. Everything fits on the first desktop screen and is one short scroll away on a phone. According to the notes, its exercises open directly and days practised are counted automatically. [A] buries its vaguely labelled start button under 17 chips and an early, disabled review form, and it offers no way to reach an exercise. [B] would improve most by making the week markers bigger, proper tap targets without the orphaned '12', and by picking its first five chips to suit the learner's goal (singing or speaking)."
+   },
+   {
+    "persona": "access",
+    "ranking": [
+     "B",
+     "A"
+    ],
+    "confidence": "high",
+    "summary": "[B] wins for older adults. It asks for one decision from a short list and puts the start button right below it. It fits on one desktop screen, and per the behaviour notes it links straight to exercises, so the learner actually gets to practising. [A] buries the start button under 17 options and a stack of empty sections, and never links to exercises. [B] would improve most by making 'Ver otros 12' a clear button, giving week numbers visible tap-sized targets, and repeating 'Semana 1' in the card for orientation."
+   }
+  ]
+ },
+ "history": {
+  "title": "The history page",
+  "verdict": "ship B",
+  "judges": 3,
+  "A": {
+   "meanRank": 2.0,
+   "meanScore": 4.0,
+   "blocking": [
+    [
+     "beginner",
+     "The exercise rows look like cards but have no arrow or button, and nothing says they open the exercise. I can't pick up where I left off from this page."
+    ],
+    [
+     "access",
+     "The completed-exercise rows look like tappable cards, but nothing shows they open the exercise and the notes give them no action. A user trying to resume by tapping one gets no result or is left unsure, and has no other visible way to continue from this screen."
+    ]
+   ]
+  },
+  "challengers": {
+   "B": {
+    "name": "days sung first, then what you did last",
+    "wins": 3,
+    "guard": [],
+    "meanRank": 1.0,
+    "meanScore": 8.0
+   }
+  },
+  "close": [],
+  "notes": [
+   {
+    "persona": "beginner",
+    "ranking": [
+     "B",
+     "A"
+    ],
+    "confidence": "high",
+    "summary": "[B] wins because it does all three jobs at a glance: a practice count with a green calendar, recent exercises with friendly dates, and a play arrow on each row so I can carry on. [A] opens with an empty recordings box, uses long timestamps, and gives no clear way to resume. [B] would get better with labels on '3×' and '7/10' (for example 'nota 7/10'), a readable name in place of 's2-humming', and a smaller calendar on the phone so the recent list shows up sooner."
+   },
+   {
+    "persona": "designer",
+    "ranking": [
+     "B",
+     "A"
+    ],
+    "confidence": "high",
+    "summary": "[B] wins because it does all three parts of the job: a clear practice total with a calendar, a recency-ordered list with human relative dates, and rows that open the exercise so the learner can resume. [A] leads with an empty state, has no summary, and gives no way to continue. What would most improve [B] is shrinking the calendar on the phone, or moving the top 'Lo último que practicaste' row (or an explicit 'Continuar' button) above it, and labelling the month and the period that '3 días' covers."
+   },
+   {
+    "persona": "access",
+    "ranking": [
+     "B",
+     "A"
+    ],
+    "confidence": "high",
+    "summary": "[B] wins because it covers the whole job. It shows a clear total ('3 días cantados'), lists the latest practice with friendly relative dates, and lets you resume with one tap on a big row. [A] leads with an empty recordings block, has no summary and no visible way to resume. [B] would improve most by marking practised days with more than colour (e.g. a tick), labelling the '3× · 7/10' meta (e.g. '3 veces · nota 7/10'), and making the resume action explicit with a word like 'Seguir' next to the arrow."
+   }
+  ]
+ },
+ "pricing": {
+  "title": "The Pro pricing sheet",
+  "verdict": "ship B",
+  "judges": 3,
+  "A": {
+   "meanRank": 2.0,
+   "meanScore": 4.67,
+   "blocking": []
+  },
+  "challengers": {
+   "B": {
+    "name": "one plan, interval toggle, plain benefits",
+    "wins": 3,
+    "guard": [],
+    "meanRank": 1.0,
+    "meanScore": 7.0
+   }
+  },
+  "close": [],
+  "notes": [
+   {
+    "persona": "beginner",
+    "ranking": [
+     "B",
+     "A"
+    ],
+    "confidence": "medium",
+    "summary": "[B] wins because in a few seconds I understand what Pro adds (in plain Spanish), what it costs and that payments are not open yet, so I should keep practising for free. There is one clear button and no jargon. It would improve most by showing the monthly price without a tap and giving me something I can do now, like a free trial or a clear 'Seguir practicando gratis' button. [A] has the working trial, but it is buried at the bottom under jargon and too many choices."
+   },
+   {
+    "persona": "designer",
+    "ranking": [
+     "B",
+     "A"
+    ],
+    "confidence": "medium",
+    "summary": "[B] does this screen's job better. Its first screen tells someone curious what Pro adds, in plain language, shows the price big, and has one primary action with an upfront note that payments aren't live yet. [A] buries Pro under the free card, uses jargon and has two competing dead-end buttons. [B] would improve most by showing the monthly price alongside the annual one (or on the toggle label) and by giving people a real 'right now' action, such as a trial or 'Seguir practicando', in place of a button that only explains payments aren't public."
+   },
+   {
+    "persona": "access",
+    "ranking": [
+     "B",
+     "A"
+    ],
+    "confidence": "medium",
+    "summary": "For older or less confident users, [B] wins. It asks for one decision at a time and uses plain-language benefits. The 'payments not live yet, keep practising free' message sits right beside the only button, so nobody is left wondering what happened or what to do next. It would improve most by making the Mensual/Anual and payment selections clearly visible (checkmark, strong outline, or 'Seleccionado' text) and by showing the monthly price next to the switch. [A]'s working trial is its best asset, but that trial is buried under a crowded, jargon-heavy layout."
+   }
+  ]
+ },
+ "tour-invite": {
+  "title": "The invitation to take the tour on a first visit",
+  "verdict": "close",
+  "judges": 3,
+  "A": {
+   "meanRank": 1.67,
+   "meanScore": 6.0,
+   "blocking": []
+  },
+  "challengers": {
+   "B": {
+    "name": "invitation as one line of links",
+    "wins": 2,
+    "guard": [
+     "fresh__phone: smallest text 12 -> 0px",
+     "fresh__small: smallest text 12 -> 0px"
+    ],
+    "meanRank": 1.33,
+    "meanScore": 7.0
+   }
+  },
+  "close": [
+   "B"
+  ],
+  "notes": [
+   {
+    "persona": "beginner",
+    "ranking": [
+     "B",
+     "A"
+    ],
+    "confidence": "medium",
+    "summary": "[B] wins because the tour and guide are quiet text links under the main card. I can find them, but they never look like a way to start practising, so 'Empezar' stays the obvious tap. [B] would improve most by replacing the bare ✕ with a short 'No, gracias' text link. [A] has clearer wording, but it adds three more same-looking buttons that crowd the start."
+   },
+   {
+    "persona": "designer",
+    "ranking": [
+     "B",
+     "A"
+    ],
+    "confidence": "high",
+    "summary": "[B] fits the brief best. It keeps the tour and guide easy to find but visibly secondary as inline text links, so Empezar stays the only strong call to action, and it leaves more of the first screen for content. It would be better with a larger, labeled close target (for example 'Ahora no' or a 44px ✕ hit area) and a little more space above the prompt."
+   },
+   {
+    "persona": "access",
+    "ranking": [
+     "A",
+     "B"
+    ],
+    "confidence": "medium",
+    "summary": "[A] wins narrowly for older users. Its large, clearly labelled pills (including an explicit 'No, gracias') are easier to hit and more predictable than [B]'s text links and tiny unlabelled '✕'. 'Empezar' stays dominant in both. [A] would improve most by making the three invitation pills visibly quieter than the practice buttons: smaller or borderless, grouped in their own subtle panel, and with 'No, gracias' shown as a lighter text action. The tap targets should stay large."
+   }
+  ]
+ }
+}

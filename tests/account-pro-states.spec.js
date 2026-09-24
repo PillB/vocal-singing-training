@@ -620,3 +620,99 @@ test.describe("Reload and offline: a trial must not become a subscription", () =
     expect(JSON.stringify(rec)).not.toContain("example.test");
   });
 });
+
+test.describe("Colour is never the only thing that says which state this is", () => {
+  const NOW = () => Math.floor(Date.now() / 1000);
+  const member = {
+    id: "a",
+    email: "x@example.test",
+    displayName: null,
+    locale: null,
+    role: "member",
+    trialUsed: false,
+    createdAt: 1
+  };
+  const CASES = [
+    { source: "trial", status: "active", label: /^Prueba · \d+ d$/ },
+    { source: "gift", status: "active", label: /^Regalo$/ },
+    { source: "paid", status: "active", label: /^Pro$/ },
+    { source: "paid", status: "canceled", label: /^Pro · termina$/ }
+  ];
+
+  for (const c of CASES) {
+    test(`${c.source}/${c.status} names itself in words, and its border clears 3:1`, async ({ page }) => {
+      const license = await mintLicense({ origin: BASE });
+      await install(page, {
+        signedIn: true,
+        account: member,
+        entitlement: { pro: true, plan: "pro_monthly", status: c.status, source: c.source, periodEnd: NOW() + 15 * DAY }
+      }, license);
+      await boot(page);
+      const pill = page.locator("#billing-pill");
+      await expect(pill).toBeVisible();
+      // WCAG 2.2 SC 1.4.1: the four states used to differ by hue alone, all of
+      // them saying "Pro". Each now carries its own word.
+      await expect(pill).toHaveText(c.label);
+      const seen = await pill.evaluate((el) => {
+        const cs = getComputedStyle(el);
+        const lum = (c) => {
+          const p = c.match(/[\d.]+/g).map(Number);
+          const a = p.length > 3 ? p[3] : 1;
+          // Composited over the header bar, which is what sits behind it.
+          const bar = [14, 19, 25];
+          const [r, g, b] = p.slice(0, 3).map((v, i) => v * a + bar[i] * (1 - a)).map((v) => {
+            const s = v / 255;
+            return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+          });
+          return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        };
+        const bar = lum("rgb(14, 19, 25)");
+        const b = lum(cs.borderTopColor);
+        return { ratio: (Math.max(bar, b) + 0.05) / (Math.min(bar, b) + 0.05) };
+      });
+      expect(seen.ratio).toBeGreaterThanOrEqual(3);
+    });
+  }
+
+  test("the four labels are four different words", async ({ page }) => {
+    const license = await mintLicense({ origin: BASE });
+    const seen = [];
+    for (const c of CASES) {
+      const ctx = await page.context().browser().newContext();
+      const p2 = await ctx.newPage();
+      await install(p2, {
+        signedIn: true,
+        account: member,
+        entitlement: { pro: true, plan: "pro_monthly", status: c.status, source: c.source, periodEnd: NOW() + 15 * DAY }
+      }, license);
+      await boot(p2);
+      await expect(p2.locator("#billing-pill")).toBeVisible();
+      seen.push((await p2.locator("#billing-pill").textContent()).trim().replace(/\d+/, "N"));
+      await ctx.close();
+    }
+    expect(new Set(seen).size).toBe(CASES.length);
+  });
+
+  test("the offer's accessible name is a verb, not the badge again", async ({ page }) => {
+    const license = await mintLicense({ origin: BASE });
+    await install(page, {}, license);
+    await boot(page);
+    // The visible label stays short because the header is narrow, but a screen
+    // reader used to hear "Pro" twice, four lines apart, for a status and an
+    // action. This is the one that tells them apart.
+    expect(await page.locator("#btn-pricing").getAttribute("aria-label")).toBe(
+      "Ver Pro y el mes de prueba gratis"
+    );
+  });
+
+  test("with the scripts dead, the static page still promises nothing it cannot do", async ({ page }) => {
+    // No JS at all: what is hard-coded in index.html is the whole message. It
+    // used to name "el portal del proveedor" as where you cancel, a route that
+    // does not exist while nobody can be charged in the first place.
+    await page.route("**/js/**", (r) => r.abort("failed"));
+    await page.goto(`${BASE}/index.html`, { waitUntil: "domcontentloaded" });
+    const note = (await page.locator("#pricing-pay-note").textContent()).trim();
+    expect(note).not.toMatch(/portal del proveedor/);
+    expect(note).toMatch(/no pide tarjeta/);
+  });
+});

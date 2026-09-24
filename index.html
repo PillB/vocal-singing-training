@@ -1007,8 +1007,11 @@
           <button type="button" class="btn btn-ghost btn-sm" id="btn-demo-pro" data-i18n="pricing.demo" hidden>
             Activar demo Pro
           </button>
-          <p class="muted pricing-note" id="pricing-pay-note" data-i18n="pricing.note">
-            Pagos seguros vía Stripe (global) o Mercado Pago (Perú / LATAM). Cancela cuando quieras en el portal del proveedor.
+          <!-- The fallback a reader gets if the scripts never run, so it has to be
+               true on its own: today nobody can be charged, and "el portal del
+               proveedor" named a cancellation route that does not exist. -->
+          <p class="muted pricing-note" id="pricing-pay-note" data-i18n="pricing.notePrelaunch">
+            La prueba gratis no pide tarjeta. Cuando termina, sigues en el plan Gratis y no se cobra nada.
           </p>
         </div>
       </div>

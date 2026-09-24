@@ -6379,3 +6379,22 @@ body.loop-on .start-steps {
   color: #f3b0b5;
   border-color: rgba(224, 108, 117, 0.45);
 }
+
+/* The pill's border is its only shape cue, and every state drew it under the
+   3:1 that WCAG 1.4.11 asks of a graphical object: 2.91 paid, 2.62 trial, 2.09
+   ending, computed against the header bar (rgba(15,20,25,.82) over --bg). The
+   word carries the state now, so this is not what makes the pill readable — its
+   text clears 8.7:1 — but a box you can barely see is a box worth not drawing
+   badly. Alphas raised to the first value that clears 3:1. */
+.billing-pill {
+  border-color: rgba(79, 212, 146, 0.55);
+}
+.billing-pill.is-trial {
+  border-color: rgba(110, 180, 232, 0.58);
+}
+.billing-pill.is-gift {
+  border-color: rgba(240, 184, 80, 0.55);
+}
+.billing-pill.is-ending {
+  border-color: rgba(224, 108, 117, 0.68);
+}

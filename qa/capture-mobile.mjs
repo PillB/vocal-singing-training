@@ -1,5 +1,7 @@
 /**
- * Phone-viewport layout audit: plan / history / pricing / account / home.
+ * Phone-viewport layout audit: home / plan / history / pricing / account, and
+ * the practice screen (a lip trill, pitch match, and a guided session's first
+ * step, at rest).
  *
  * Seeds realistic progress + week-plan data so the pages are rendered with
  * content (empty states hide most layout breaks), then reports for each
@@ -47,7 +49,18 @@ const PAGES = [
   { id: "plan", open: async (p) => p.click("#btn-plan") },
   { id: "history", open: async (p) => p.click("#btn-history") },
   { id: "pricing", open: async (p) => fromMenu(p, "#btn-pricing") },
-  { id: "account", open: async (p) => fromMenu(p, "#btn-account") }
+  { id: "account", open: async (p) => fromMenu(p, "#btn-account") },
+  // The practice screen: the stage's controls meet the same floors (design:
+  // start-floor). The guided one goes last: it starts today's routine.
+  { id: "exercise", open: async (p) => p.evaluate(() => window.VTApp.openExercise("s4-lip-trills")) },
+  { id: "exercise-pitch", open: async (p) => p.evaluate(() => window.VTApp.openExercise("s9-pitch-match")) },
+  {
+    id: "exercise-guided",
+    open: async (p) => {
+      await p.evaluate(() => window.VTApp.setView("home"));
+      await p.click("#btn-next-step");
+    }
+  }
 ];
 
 const MODAL_PAGES = new Set(["pricing", "account"]);

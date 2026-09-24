@@ -202,8 +202,10 @@
       const dpr = window.devicePixelRatio || 1;
       const rect = this.canvas.getBoundingClientRect();
       const w = Math.max(320, rect.width || 640);
-      // Taller highway for multi-lane + low-vision note channels
-      const h = Math.max(300, rect.height || 340);
+      // Taller highway for multi-lane + low-vision note channels. The lanes
+      // start under the coach strip now; on a short stage a 300px floor only
+      // shrank the whole drawing into the middle of the box (object-fit).
+      const h = Math.max(120, rect.height || 340);
       this.canvas.width = Math.floor(w * dpr);
       this.canvas.height = Math.floor(h * dpr);
       this.ctx2d.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -576,10 +578,13 @@
     }
 
     _ingest(f, dtMs = 16) {
-      // Multi-lane truth: score vs nearest active chord tone when lanes exist
+      // Multi-lane truth: score vs nearest active chord tone when lanes exist.
+      // A challenge asks for one note, so it scores against that note only:
+      // any nearer lane said "BIEN" on G3 while A2 was asked.
       let scoreFreq = this.targetFreq;
       let scoreName = null;
-      if (f && this.chordLanes && this.chordLanes.length) {
+      const challenge = !!(this.game && this.game.challengeMode);
+      if (f && !challenge && this.chordLanes && this.chordLanes.length) {
         const near = this.nearestActiveLane(f);
         if (near && near.freq) {
           scoreFreq = near.freq;
@@ -739,7 +744,7 @@
         }
       }
       const w = Math.max(320, this.w || this.canvas?.clientWidth || 640);
-      const h = Math.max(220, this.h || this.canvas?.clientHeight || 300);
+      const h = Math.max(120, this.h || this.canvas?.clientHeight || 300);
       this.w = w;
       this.h = h;
       ctx.clearRect(0, 0, w, h);
@@ -752,6 +757,9 @@
       ctx.fillRect(0, 0, w, h);
       const graphH = h - 58;
       const mid = graphH * 0.45;
+      // Half the lane's height: 40px, less on a canvas made short by the coach
+      // strip on a small phone, where the second hint line is dropped.
+      const band = Math.min(40, Math.max(14, graphH * 0.2));
       // Faint horizontal guides (like staff / pitch channels)
       ctx.strokeStyle = "rgba(140, 175, 220, 0.22)";
       ctx.lineWidth = 1;
@@ -765,9 +773,9 @@
       }
       // Target lane — higher contrast so idle is never “black void”
       ctx.fillStyle = "rgba(79, 212, 146, 0.22)";
-      ctx.fillRect(0, mid - 40, w, 80);
+      ctx.fillRect(0, mid - band, w, band * 2);
       ctx.fillStyle = "rgba(79, 212, 146, 0.38)";
-      ctx.fillRect(0, mid - 22, w, 44);
+      ctx.fillRect(0, mid - band * 0.55, w, band * 1.1);
       ctx.strokeStyle = "rgba(255, 230, 170, 0.95)";
       ctx.lineWidth = 3;
       ctx.setLineDash([10, 8]);
@@ -780,10 +788,10 @@
       ctx.strokeStyle = "rgba(79, 212, 146, 0.55)";
       ctx.lineWidth = 1.5;
       ctx.beginPath();
-      ctx.moveTo(0, mid - 22);
-      ctx.lineTo(w, mid - 22);
-      ctx.moveTo(0, mid + 22);
-      ctx.lineTo(w, mid + 22);
+      ctx.moveTo(0, mid - band * 0.55);
+      ctx.lineTo(w, mid - band * 0.55);
+      ctx.moveTo(0, mid + band * 0.55);
+      ctx.lineTo(w, mid + band * 0.55);
       ctx.stroke();
       const es =
         (global.VTI18n && global.VTI18n.lang === "es") ||
@@ -800,15 +808,17 @@
       ctx.fillStyle = "#8ee0b5";
       const f0 = fitCanvasLabel(ctx, idle0, maxIdle, "700 15px system-ui,sans-serif");
       ctx.font = f0.font;
-      ctx.fillText(f0.text, w / 2, mid - 52);
+      ctx.fillText(f0.text, w / 2, mid - band - 12);
       ctx.fillStyle = "#f2f6fc";
       const f1 = fitCanvasLabel(ctx, idle1, maxIdle, "700 16px system-ui,sans-serif");
       ctx.font = f1.font;
-      ctx.fillText(f1.text, w / 2, mid + 52);
-      const f2 = fitCanvasLabel(ctx, idle2, maxIdle, "600 13px system-ui,sans-serif");
-      ctx.font = f2.font;
-      ctx.fillStyle = "#b8c8dc";
-      ctx.fillText(f2.text, w / 2, mid + 74);
+      ctx.fillText(f1.text, w / 2, mid + band + 12);
+      if (mid + band + 34 <= graphH) {
+        const f2 = fitCanvasLabel(ctx, idle2, maxIdle, "600 13px system-ui,sans-serif");
+        ctx.font = f2.font;
+        ctx.fillStyle = "#b8c8dc";
+        ctx.fillText(f2.text, w / 2, mid + band + 34);
+      }
       this._drawKeyboard(ctx, w, h, null, null);
     }
 

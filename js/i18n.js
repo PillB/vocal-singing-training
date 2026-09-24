@@ -343,6 +343,8 @@
       "ex.stageGuideLabel": "Qué vas a hacer",
       "pricing.moreFeatures": "Ver {n} ventajas más",
       "ex.stageGuideMore": "Ver todos los pasos y consejos",
+      // Design: coach-strip — the stage guide while practising: the step the clock is on
+      "ex.stageNow": "Ahora · paso {n} de {total}",
       "start.kickerBack": "Continúa donde lo dejaste",
       "start.kickerGuided": "Sesión guiada en curso",
       "start.titleNew": "Tu primera práctica, en 5 minutos",
@@ -475,6 +477,8 @@
       "oct.groupTitle": "Ajusta la octava a tu rango vocal",
       "oct.downAria": "Bajar una octava",
       "oct.upAria": "Subir una octava",
+      // Design: start-floor — the word under the octave number (−1, 0, +1)
+      "oct.label": "octava",
       "mic.sensAria": "Sensibilidad del micrófono",
       "range.autoTitle": "Detecta si no alcanzas y mueve los acordes",
       "pitch.canvasAria": "Autopista de afinación: carriles de notas y tu voz en tiempo real",
@@ -558,6 +562,10 @@
       "session.pause": "Pausar",
       "session.resume": "Reanudar",
       "session.end": "Terminar",
+      // Design: session-chrome — the banner's buttons name the session they act on
+      "session.pauseAria": "Pausar la sesión guiada",
+      "session.resumeAria": "Reanudar la sesión guiada",
+      "session.endAria": "Terminar la sesión guiada",
       "home.vocalTitle": "Entrenamiento vocal",
       "home.vocalSub":
         "Clase: dicción, volumen, conexión y revisión. Expresión: pausas, tono, ritmo, gestos e historias.",
@@ -1319,6 +1327,8 @@
       "ex.stageGuideLabel": "What you are going to do",
       "pricing.moreFeatures": "See {n} more benefits",
       "ex.stageGuideMore": "See all the steps and tips",
+      // Design: coach-strip
+      "ex.stageNow": "Now · step {n} of {total}",
       "start.kickerBack": "Pick up where you left off",
       "start.kickerGuided": "Guided session in progress",
       "start.titleNew": "Your first practice, in 5 minutes",
@@ -1451,6 +1461,8 @@
       "oct.groupTitle": "Move the chords to suit your range",
       "oct.downAria": "Down one octave",
       "oct.upAria": "Up one octave",
+      // Design: start-floor
+      "oct.label": "octave",
       "mic.sensAria": "Microphone sensitivity",
       "range.autoTitle": "Detects notes out of your reach and moves the chords",
       "pitch.canvasAria": "Pitch highway: note lanes and your voice in real time",
@@ -1534,6 +1546,10 @@
       "session.pause": "Pause",
       "session.resume": "Resume",
       "session.end": "End",
+      // Design: session-chrome
+      "session.pauseAria": "Pause the guided session",
+      "session.resumeAria": "Resume the guided session",
+      "session.endAria": "End the guided session",
       "home.vocalTitle": "Vocal Training",
       "home.vocalSub":
         "Class: diction, volume, connecting and reviewing. Expression: pauses, tone, pace, gestures and stories.",

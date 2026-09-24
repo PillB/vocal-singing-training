@@ -366,8 +366,8 @@
       allowManualSound: true,
       manualSoundKind: "air",
       rungs: [5, 10, 20, 25, 30],
-      cue: "Nose inhale → even SH. Climb 5→10→20→25→30s. Air only. Raise Mic or hold Space if the timer doesn’t move.",
-      cueEs: "Inhala por la nariz → SH pareja. Peldaños 5→10→20→25→30 s. Solo aire. Si el contador no se mueve, sube Mic o mantén Espacio.",
+      cue: "Nose inhale → even SH, no voice. Climb 5→10→20→25→30 s, resting between tries. Raise Mic or hold Space if the timer doesn’t move.",
+      cueEs: "Inhala por la nariz → SH pareja, sin voz. Sube 5→10→20→25→30 s, descansando entre intentos. Si el contador no se mueve, sube Mic o mantén Espacio.",
       metricHints: { rungs: "cleared", maxSH: "best" }
     },
     "s16-major-scale-coord": {
@@ -400,8 +400,8 @@
       pitchChallenge: false,
       autoPiano: true,
       autoRecord: false,
-      cue: "Steady air for lip bubbles. Evenness bar — mark transfer to /A/ after.",
-      cueEs: "Aire estable para burbujas de labios. Barra de uniformidad — marca el paso a /A/ después.",
+      cue: "Brrr without voice, then a trill on the piano's note. The zig-zag is your bubble; a flat line means the lips stopped. Last, /A/ on the same note.",
+      cueEs: "Brrr sin voz y luego trino en la nota del piano. El zigzag es tu burbuja; una línea plana, que los labios se pararon. Al final, /A/ en la misma nota.",
       metricHints: {}
     },
     "s5-sirens": {
@@ -429,8 +429,8 @@
       pitchChallenge: false,
       autoPiano: true,
       autoRecord: false,
-      cue: "Straw only — steady air, soft cheeks. Mark transfer to open vowel after.",
-      cueEs: "Solo pajita — aire estable, mejillas suaves. Marca el paso a vocal abierta después.",
+      cue: "A soft tone through the straw on the piano's note, cheeks soft. The bar is your tone; dots mean air only. Then, without the straw: /u/, then /A/.",
+      cueEs: "Un tono suave por la pajita en la nota del piano, mejillas sueltas. La barra es tu tono; los puntos, solo aire. Después, sin pajita: /u/ y luego /A/.",
       metricHints: {}
     },
     "s7-humming": {
@@ -453,8 +453,10 @@
     },
     "s8-breath-support": {
       mode: "breathS",
-      showPitch: true,
-      showHold: true,
+      // The two lanes (S, then /A/) are the picture; the highway would push
+      // them out of the first screen
+      showPitch: false,
+      showHold: false,
       showLevel: true,
       pitchChallenge: false,
       autoPiano: true,
@@ -462,9 +464,9 @@
       /** Space / air assist for unvoiced S phase (a11y) — allowed even with pitch canvas */
       manualSoundKind: "air",
       allowManualSound: true,
-      cue: "Phase 1: even S (or SH). Phase 2: same support on /A/. Pair with SH ladder warm-up.",
-      cueEs: "Fase 1: S (o SH) pareja. Fase 2: mismo soporte en /A/. Combina con escalera SH.",
-      metricHints: { maxS: "bestS", transferA: "bestA" }
+      cue: "Step 1: a long, even S with no voice. Step 2: the same easy length on a sung /A/. We time both; how it feels is yours to rate.",
+      cueEs: "Paso 1: una S larga y pareja, sin voz. Paso 2: la misma duración tranquila en una /A/ cantada. Medimos ambas; cómo se siente lo valoras tú.",
+      metricHints: { maxS: "bestS" }
     },
     "s9-pitch-match": {
       mode: "pitchMatch",

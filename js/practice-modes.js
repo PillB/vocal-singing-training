@@ -3934,7 +3934,10 @@
       if (snd) {
         if (!st.snd) {
           st.soundStart = st.t;
-          st.startArmed = st.quiet >= 480;
+          // A reference note through the speakers is not an onset
+          const P = global.VTPiano;
+          const piano = !!(P && P.isSounding && !P.loopActive && P.isSounding(0.25));
+          st.startArmed = st.quiet >= 480 && !piano;
           st.maxDt = 0;
         }
         if (st.t - st.soundStart < 0.15) st.maxDt = Math.max(st.maxDt, dtMs);

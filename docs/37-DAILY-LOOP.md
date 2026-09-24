@@ -92,7 +92,7 @@ choices: **Cantar** (canciones, afinación) and **Hablar** (presentaciones,
 dicción). Choosing one switches the track; the chosen one is ticked, not only
 coloured. Under it sits that track's **Mínimo** ("Tus básicos · 3 min", its
 steps and times) with one button, "▶ Empezar (3 min)", which starts it. The
-intro line, the other ways in (Continuar, sesión guiada, Ruta) and the
+intro line, the other ways in (Continuar, sesión guiada) and the
 explainer's "pick an exercise" step are hidden, and the tour offer shrinks to
 two quiet links. So the first practice is the same few minutes the loop offers
 every day after, and it needs nothing prepared: on Canto the card says "Sin
@@ -119,6 +119,16 @@ From the first day sung, the start panel becomes **today's basics**:
   the button. The size and steps are in the chips below and in the exercise
   itself; the intro line shows only when it reports a rest day spent. A number
   and its unit never break across lines ("3 minutos").
+- One naming scheme. The button says which size it starts ("▶ Empezar
+  básicos" over "Esencial · 10 min"); under it, **Elige el tamaño de hoy:** is
+  a segmented choice that only selects. Continuar and the guided sessions sit
+  behind **Otras formas de practicar**. The guided sessions are named for the
+  catalog groups they walk (Tareas de la clase, Técnica or Expresión, or both),
+  and the daily class is not offered there: it is the Clase size. The classic
+  arm keeps the row open and the daily route in its picker.
+- Every choose-one control (sizes, tracks, the first-visit chooser, catalog
+  filters, the plan's focus) shows its pick the same way: a tint of its own
+  colour, a bar along the bottom and a ✓, never a solid fill.
 - Beside it: **días cantados**, a lifetime count that only goes up and leads;
   the week from Monday; the streak and rest days, second; and a weekly goal
   that is a **range** (3–5 days by default), because a range survives a bad week
@@ -131,7 +141,10 @@ From the first day sung, the start panel becomes **today's basics**:
   of its steps were practised. Stepping through without starting them says
   plainly that it did not count.
 - Finishing shows one card: the day count, the week, any milestone, the
-  comeback line, sometimes a surprise, and what tomorrow brings. Milestones fall
+  comeback line, sometimes a surprise, and what tomorrow brings. Its buttons
+  stay pinned to its bottom edge and the rest scrolls above them; on a short
+  screen (a phone on its side) it goes two columns. A toast left over from the
+  last step is cleared when it opens. Milestones fall
   at 1, 3, 7, 14, 21, 30, 50, 75, 100 days and on; only the exact count is news,
   so a browser arriving with 40 days of history is not told it just reached 30.
 
@@ -248,3 +261,9 @@ visible: per arm, 30% → 45% needs about 160 people, 30% → 40% about 355, 30%
 - The completion card is suppressed under automation (`vt_e2e`) so it cannot sit
   over other specs' clicks; a spec opts in with `sessionStorage.vt_loop_e2e = "1"`.
   Toasts are muted the same way and come back with `vt_debug = "1"`.
+- The rating card's own ending (a single exercise's clock at 00:00 opens it) is
+  muted the same way, and under automation its "Más detalles" starts open so
+  specs that fill the form and press `#btn-complete` still reach it;
+  `tests/finish-rating.spec.js` opts in with `sessionStorage.vt_rate_e2e = "1"`.
+  Every way out of that card (a one-tap answer, Más detalles then save, Salir
+  sin puntuar) records the day's practice once.

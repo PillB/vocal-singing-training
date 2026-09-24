@@ -213,7 +213,10 @@ test.describe("Today's basics: headline and button", () => {
     });
     expect(box.border).toBe("0px");
     expect(box.bg).toBe("rgba(0, 0, 0, 0)");
-    // With a day sung the other ways in are back.
+    // With a day sung the other ways in are back, one tap away behind "Otras
+    // formas de practicar" (tests/home-choices.spec.js has the rest).
+    await expect(page.locator("#btn-continue")).toBeHidden();
+    await page.locator("#btn-more-ways").click();
     await expect(page.locator("#btn-continue")).toBeVisible();
     await expect(page.locator("#btn-structured")).toBeVisible();
 

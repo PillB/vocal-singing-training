@@ -6367,3 +6367,15 @@ body.loop-on .start-steps {
   line-height: 1.45;
   color: var(--text-muted);
 }
+
+/* The home card's plan tag carries the same four answers as the header pill, so
+   it needs the same two colours the header gained: a gifted month is not a
+   purchase, and a subscription that is ending is not one that renews. */
+.value-pulse-tag.is-gift {
+  color: #ffdb95;
+  border-color: rgba(240, 184, 80, 0.45);
+}
+.value-pulse-tag.is-ending {
+  color: #f3b0b5;
+  border-color: rgba(224, 108, 117, 0.45);
+}

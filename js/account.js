@@ -21,6 +21,18 @@
   "use strict";
 
   const LS_KEY = "vt_account_session_v1";
+  /**
+   * Which KIND of access the last `/v1/me` reported. Display only, and kept
+   * apart from the session for that reason: a signed licence token says
+   * `pro_monthly` whether it came from the free trial, a gifted month or a
+   * payment (the trial grant sets that plan id — see grants.js), so between a
+   * reload and the worker answering there is nothing in the browser that can
+   * tell them apart. Writing the last answer down is what stops the header
+   * calling a free trial a subscription in that window, and for as long as it
+   * lasts when the browser is offline. It grants nothing: access is still only
+   * what the signature check says.
+   */
+  const LS_PLAN_KEY = "vt_account_plan_v1";
   /** Google Identity Services, loaded on demand so a signed-out visitor pays nothing for it. */
   const GIS_SRC = "https://accounts.google.com/gsi/client";
 
@@ -28,6 +40,12 @@
   let session = null;
   /** @type {object|null} Last `/v1/me` answer. */
   let snapshot = null;
+  /**
+   * Remembered kind of access, shaped like an `entitlement`. `undefined`
+   * until first read so nothing touches storage at parse time.
+   * @type {object|null|undefined}
+   */
+  let lastPlan;
   /**
    * What this deploy offers, once the worker has said. Null until asked, and
    * `ok: false` when the worker could not be reached — the panel shows those
@@ -100,6 +118,49 @@
       else localStorage.setItem(LS_KEY, JSON.stringify(rec));
     } catch {
       /* private mode */
+    }
+  }
+
+  /**
+   * The remembered kind of access, or null. A record whose period has already
+   * ended is dropped: a stale "gifted month" label outliving the gift is the
+   * mistake this whole record exists to prevent, in the other direction.
+   * @returns {object|null} An entitlement-shaped record, display only.
+   */
+  function readLastPlan() {
+    try {
+      const raw = localStorage.getItem(LS_PLAN_KEY);
+      if (!raw) return null;
+      const rec = JSON.parse(raw);
+      if (!rec || rec.pro !== true) return null;
+      if (Number.isFinite(rec.periodEnd) && rec.periodEnd * 1000 < Date.now()) {
+        localStorage.removeItem(LS_PLAN_KEY);
+        return null;
+      }
+      return rec;
+    } catch {
+      return null;
+    }
+  }
+
+  function writeLastPlan(ent) {
+    lastPlan = null;
+    try {
+      if (!ent || ent.pro !== true) {
+        localStorage.removeItem(LS_PLAN_KEY);
+        return;
+      }
+      // Only the four fields the wording needs. No email, no ids, no token.
+      lastPlan = {
+        pro: true,
+        plan: ent.plan || null,
+        status: ent.status || null,
+        source: ent.source || null,
+        periodEnd: Number.isFinite(ent.periodEnd) ? ent.periodEnd : null
+      };
+      localStorage.setItem(LS_PLAN_KEY, JSON.stringify(lastPlan));
+    } catch {
+      /* private mode: the label just falls back to the licence's own reading */
     }
   }
 
@@ -187,6 +248,7 @@
    */
   async function adopt(data) {
     snapshot = data;
+    writeLastPlan(data && data.entitlement);
     if (data && data.token && global.VTLicense?.adopt) {
       await global.VTLicense.adopt(data.token, data.licenseId);
     } else if (global.VTLicense?.clear) {
@@ -203,6 +265,7 @@
     session = null;
     snapshot = null;
     writeSession(null);
+    writeLastPlan(null);
     try {
       global.VTLicense?.clear?.();
     } catch {
@@ -514,6 +577,10 @@
       signedIn: !!session?.token,
       account: snapshot?.account || null,
       entitlement: snapshot?.entitlement || null,
+      // The kind of access the worker last reported, for the window where
+      // `signedIn` is already true and `entitlement` is not in yet. Wording
+      // only; read `pro` below for whether anything is actually unlocked.
+      lastPlan: lastPlan === undefined ? (lastPlan = readLastPlan()) : lastPlan,
       grants: snapshot?.grants || [],
       // Null until the first /v1/auth/methods answer lands, so read it
       // defensively: the pricing panel may open before anyone signs in.

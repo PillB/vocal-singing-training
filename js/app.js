@@ -5186,9 +5186,20 @@
   function headerPlanState() {
     const ent = window.VTBilling?.getEntitlement?.() || { pro: false, status: "free" };
     const acct = window.VTAccount?.getState?.() || null;
-    const held = acct && acct.signedIn && acct.entitlement && acct.entitlement.pro
-      ? acct.entitlement
+    const signedIn = !!(acct && acct.signedIn);
+    const live = signedIn && acct.entitlement && acct.entitlement.pro ? acct.entitlement : null;
+    // Reload a signed-in browser and `signedIn` is true from the first frame,
+    // while `entitlement` only arrives when the worker answers — never, if the
+    // browser is offline. The licence token survives that gap but cannot say
+    // which kind of access it is: the trial grant issues plan "pro_monthly"
+    // exactly like a payment. So without the remembered kind below, a free
+    // trial reads as a paid subscription on every load, which is the one thing
+    // this whole reading exists to stop. It is used only while the licence
+    // still verifies, so a revoked gift does not keep its label.
+    const remembered = !live && signedIn && ent.pro && acct.lastPlan && acct.lastPlan.pro
+      ? acct.lastPlan
       : null;
+    const held = live || remembered;
     // Accepts either an ISO string (VTBilling) or unix seconds (the account
     // layer), because the two halves of this answer are stored differently.
     const daysLeft = (when) => {
@@ -5224,6 +5235,22 @@
     }
     if (ent.pro) return { kind: "paid", days: null, until: isoUntil(ent.expiresAt) };
     return { kind: "free", days: null, until: "" };
+  }
+
+  /**
+   * Whether this person has already spent their one free month. Read from the
+   * account when accounts are on, because that is where the worker records it
+   * and it has to hold across browsers; from this browser's own trial mark
+   * otherwise. Shared by the Pro dialog's two lines so they cannot disagree.
+   * @returns {boolean} True when the free month is gone.
+   */
+  function trialSpent() {
+    const B = window.VTBilling;
+    const acct = window.VTAccount?.getState?.() || null;
+    if (accountSignIn().offered) {
+      return !!(acct && acct.signedIn && acct.account && acct.account.trialUsed);
+    }
+    return !!B?.trialStartedAt?.();
   }
 
   function updateBillingChrome() {
@@ -5374,12 +5401,7 @@
     // no way on. Say where they stand instead.
     const spent = $("#pricing-spent");
     if (spent) {
-      const acct = window.VTAccount?.getState?.() || null;
-      const accountsOffered = accountSignIn().offered;
-      const usedTrial = accountsOffered
-        ? !!(acct && acct.signedIn && acct.account && acct.account.trialUsed)
-        : !!B.trialStartedAt?.();
-      const show = prelaunch && !ent.pro && usedTrial;
+      const show = prelaunch && !ent.pro && trialSpent();
       spent.hidden = !show;
       spent.textContent = show ? tt("pricing.trialSpent") : "";
     }
@@ -5419,15 +5441,27 @@
 
     const B = window.VTBilling;
     const ent = B?.getEntitlement?.() || { pro: false, status: "free" };
-    const isProUser = !!(ent.pro || ent.status === "trial");
+    // The tag on the home card and the pill in the header are the same claim in
+    // two places, so they read the same source. Before this they did not: this
+    // one tested `ent.status === "trial"`, which is only ever the browser's own
+    // opt-in trial, so a worker-granted trial month fell through to "Pro" — the
+    // header's old mistake, still on the page a visitor sees first.
+    const plan = headerPlanState();
+    const isProUser = !!(ent.pro || ent.status === "trial" || plan.kind !== "free");
     const tag = $("#value-pulse-tag");
     if (tag) {
       tag.hidden = false;
-      if (ent.status === "trial") {
-        const n = B.trialDaysLeft?.() ?? 0;
+      if (plan.kind === "trialAccount" || plan.kind === "trialLocal") {
+        const n = plan.days === null ? (B?.trialDaysLeft?.() ?? 0) : plan.days;
         tag.textContent = tt("value.tagTrial", { n: String(n) });
         tag.className = "value-pulse-tag is-trial";
-      } else if (ent.pro) {
+      } else if (plan.kind === "gift") {
+        tag.textContent = tt("value.tagGift");
+        tag.className = "value-pulse-tag is-gift";
+      } else if (plan.kind === "canceled") {
+        tag.textContent = tt("value.tagEnding");
+        tag.className = "value-pulse-tag is-ending";
+      } else if (plan.kind === "paid") {
         tag.textContent = tt("value.tagPro");
         tag.className = "value-pulse-tag is-pro";
       } else {
@@ -5891,6 +5925,10 @@
         status.textContent = tt("pricing.verifying");
       } else if (ent.status === "unverified") {
         status.textContent = tt("pricing.unverified");
+      } else if (ent.status === "expired" || (!prelaunch && trialSpent())) {
+        // A month that has run out is not the same state as never having had
+        // one, and "Plan gratis" told those two people the same thing.
+        status.textContent = tt("pricing.statusEnded");
       } else {
         status.textContent = tt("pricing.free");
       }
@@ -6809,6 +6847,10 @@
     window.VTAccount?.onChange?.(() => {
       refreshAccountUI();
       updateBillingChrome();
+      // Signing in is the moment the plan becomes known, and the home card
+      // carries the same claim as the header. Without this it kept whatever it
+      // said before the visitor signed in, which was "Gratis".
+      renderValuePulse();
     });
     window.VTSync?.onChange?.(() => refreshAccountUI());
   }
@@ -6947,6 +6989,7 @@
     if (window.VTBilling) {
       VTBilling.onChange(() => {
         updateBillingChrome();
+        renderValuePulse();
         if ($("#pricing-modal") && !$("#pricing-modal").hidden) renderPricingModal();
       });
       const ret = VTBilling.handleReturnFromCheckout();

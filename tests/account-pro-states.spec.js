@@ -464,3 +464,159 @@ test.describe("Phone: the door is on the row, not in the menu", () => {
     expect(size).toBeGreaterThanOrEqual(12);
   });
 });
+
+test.describe("The same claim wherever it appears", () => {
+  const NOW = () => Math.floor(Date.now() / 1000);
+  const member = {
+    id: "a",
+    email: "x@example.test",
+    displayName: null,
+    locale: null,
+    role: "member",
+    trialUsed: true,
+    createdAt: 1
+  };
+
+  /** What the home card's plan tag says, and which colour it wears. */
+  async function homeTag(page) {
+    return page.evaluate(() => {
+      const el = document.querySelector("#value-pulse-tag");
+      if (!el || el.hidden) return null;
+      return { text: (el.textContent || "").trim(), kind: el.className.replace("value-pulse-tag", "").trim() };
+    });
+  }
+
+  test("a free month reads as a free month on the home card too", async ({ page }) => {
+    const license = await mintLicense({ origin: BASE });
+    await install(page, {
+      signedIn: true,
+      account: member,
+      entitlement: { pro: true, plan: "pro_monthly", status: "active", source: "trial", periodEnd: NOW() + 12 * DAY }
+    }, license);
+    await boot(page);
+    await expect(page.locator("#billing-pill")).toBeVisible();
+    // The card a visitor sees first used to say PRO here, in the paid green,
+    // because it tested VTBilling's own trial flag and a worker-granted trial
+    // does not set it. Two elements, one truth.
+    await expect.poll(() => homeTag(page).then((t) => t && t.kind)).toBe("is-trial");
+    const tag = await homeTag(page);
+    expect(tag.text).toMatch(/^Prueba · \d+d$/);
+    expect(tag.text).not.toMatch(/Pro/);
+  });
+
+  test("a gifted month reads as a gift on the home card", async ({ page }) => {
+    const license = await mintLicense({ origin: BASE });
+    await install(page, {
+      signedIn: true,
+      account: { ...member, trialUsed: false },
+      entitlement: { pro: true, plan: "pro_monthly", status: "active", source: "gift", periodEnd: NOW() + 20 * DAY }
+    }, license);
+    await boot(page);
+    await expect.poll(() => homeTag(page).then((t) => t && t.kind)).toBe("is-gift");
+    expect((await homeTag(page)).text).toBe("Regalo");
+  });
+
+  test("a paid subscription still reads as Pro on the home card", async ({ page }) => {
+    const license = await mintLicense({ origin: BASE });
+    await install(page, {
+      signedIn: true,
+      account: { ...member, trialUsed: false },
+      entitlement: { pro: true, plan: "pro_monthly", status: "active", source: "paid", periodEnd: NOW() + 28 * DAY }
+    }, license);
+    await boot(page);
+    await expect.poll(() => homeTag(page).then((t) => t && t.kind)).toBe("is-pro");
+    expect((await homeTag(page)).text).toBe("Pro");
+  });
+
+  test("a free visitor's home card says free, not nothing", async ({ page }) => {
+    const license = await mintLicense({ origin: BASE });
+    await install(page, {}, license);
+    await boot(page);
+    expect((await homeTag(page)).kind).toBe("is-free");
+  });
+});
+
+test.describe("Reload and offline: a trial must not become a subscription", () => {
+  const NOW = () => Math.floor(Date.now() / 1000);
+  const member = {
+    id: "a",
+    email: "x@example.test",
+    displayName: null,
+    locale: null,
+    role: "member",
+    trialUsed: true,
+    createdAt: 1
+  };
+
+  test("a signed-in trial reloaded with the worker unreachable still says Prueba", async ({ page }) => {
+    const license = await mintLicense({ origin: BASE });
+    await install(page, {
+      signedIn: true,
+      account: member,
+      entitlement: { pro: true, plan: "pro_monthly", status: "active", source: "trial", periodEnd: NOW() + 9 * DAY }
+    }, license);
+    await boot(page);
+    await expect(page.locator("#billing-pill")).toHaveText(/^Prueba · \d+ d$/);
+
+    // Now the worker is gone: a phone on the underground, or simply the frames
+    // between a reload and the first answer. The licence token survives and
+    // still verifies, but it carries plan "pro_monthly" — the trial grant issues
+    // the same plan id a payment does — so the licence alone cannot tell them
+    // apart, and the header used to call this a subscription.
+    await page.unroute(`${API}/**`);
+    await page.route(`${API}/**`, (r) => r.abort("failed"));
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => !!window.VTBilling && !!window.VTAccount);
+    await expect(page.locator("#billing-pill")).toHaveText(/^Prueba · \d+ d$/);
+    expect(await page.locator("#btn-pricing").textContent()).toBe("Suscripción");
+    // And Pro itself is still the signature check, not the remembered wording.
+    expect(await page.evaluate(() => window.VTBilling.isPro())).toBe(true);
+  });
+
+  test("the remembered wording is dropped once its period has passed", async ({ page }) => {
+    const license = await mintLicense({ origin: BASE });
+    await install(page, { signedIn: true }, license);
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        "vt_account_plan_v1",
+        JSON.stringify({ pro: true, plan: "pro_monthly", status: "active", source: "gift", periodEnd: 1000 })
+      );
+    });
+    await boot(page);
+    // A gift that ended in 1970 must not leave a "Regalo" pill behind, and the
+    // record itself should be gone rather than re-read on every load.
+    await expect(page.locator("#billing-pill")).toBeHidden();
+    expect(await page.evaluate(() => localStorage.getItem("vt_account_plan_v1"))).toBeNull();
+  });
+
+  test("signing out forgets the remembered wording", async ({ page }) => {
+    const license = await mintLicense({ origin: BASE });
+    await install(page, {
+      signedIn: true,
+      account: member,
+      entitlement: { pro: true, plan: "pro_monthly", status: "active", source: "trial", periodEnd: NOW() + 9 * DAY }
+    }, license);
+    await boot(page);
+    await expect(page.locator("#billing-pill")).toBeVisible();
+    expect(await page.evaluate(() => localStorage.getItem("vt_account_plan_v1"))).not.toBeNull();
+    await page.evaluate(() => window.VTAccount.signOut());
+    await expect(page.locator("#billing-pill")).toBeHidden();
+    expect(await page.evaluate(() => localStorage.getItem("vt_account_plan_v1"))).toBeNull();
+    expect(await page.locator("#btn-account").textContent()).toBe("Entrar");
+  });
+
+  test("the remembered wording holds no personal detail", async ({ page }) => {
+    const license = await mintLicense({ origin: BASE });
+    await install(page, {
+      signedIn: true,
+      account: member,
+      entitlement: { pro: true, plan: "pro_monthly", status: "active", source: "gift", periodEnd: NOW() + 9 * DAY }
+    }, license);
+    await boot(page);
+    await expect(page.locator("#billing-pill")).toBeVisible();
+    const rec = await page.evaluate(() => JSON.parse(localStorage.getItem("vt_account_plan_v1")));
+    // It exists to pick a word, so it may hold nothing that identifies anybody.
+    expect(Object.keys(rec).sort()).toEqual(["periodEnd", "plan", "pro", "source", "status"]);
+    expect(JSON.stringify(rec)).not.toContain("example.test");
+  });
+});

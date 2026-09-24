@@ -13,13 +13,29 @@
     return global.VTI18n?.t?.(key, vars) ?? key;
   }
 
+  /** 90 → "1:30" */
+  function clock(sec) {
+    sec = Math.max(0, Math.round(sec));
+    return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
+  }
+
   const Metrics = {
+    /** Practice time in minutes (duration, minutes with the straw): scored from the clock. */
+    isTimeMetric(m) {
+      return !!m && m.type === "number" && m.unit === "min";
+    },
+
     /**
      * @param {Array} metricDefs from exercise
      * @param {Object} values user-entered values
+     * @param {{ timeSec?: number, targetSec?: number }} [opts]
+     *   timeSec: how long the take ran, used for a time metric left blank;
+     *   targetSec: the length it was asked for (a guided step's own timer),
+     *   which replaces the catalog's minutes. A 1:30 step used to be scored
+     *   against 5 minutes and came out 2/5.
      * @returns {{ score: number, max: number, pct: number, breakdown: Array, summary: string }}
      */
-    compute(metricDefs, values) {
+    compute(metricDefs, values, opts = {}) {
       if (!metricDefs || !metricDefs.length) {
         return {
           score: 0,
@@ -40,8 +56,19 @@
         let points = 0;
         let mMax = 5;
         let detail = "";
+        let skipped = false;
 
-        if (m.type === "scale") {
+        if (Metrics.isTimeMetric(m)) {
+          const typed = val == null || Number.isNaN(val) ? null : val * 60;
+          const sec = typed > 0 ? typed : opts.timeSec > 0 ? opts.timeSec : typed;
+          const goal = opts.targetSec > 0 ? opts.targetSec : (m.target != null ? Number(m.target) : 1) * 60;
+          if (sec == null) {
+            skipped = true;
+          } else {
+            points = clamp((sec / goal) * 5, 0, 5);
+            detail = tt("metrics.timeOf", { done: clock(sec), total: clock(goal) }) + (sec >= goal - 1 ? " ✓" : "");
+          }
+        } else if (m.type === "scale") {
           mMax = m.max || 5;
           const v = val == null ? 0 : clamp(val, m.min || 1, mMax);
           points = v;
@@ -50,8 +77,9 @@
           mMax = 5;
           const target = m.target != null ? Number(m.target) : 1;
           if (val == null || Number.isNaN(val)) {
-            points = 0;
-            detail = tt("metrics.notLogged");
+            // A count left blank was not counted, so it is not scored as a
+            // zero: one tap on "Fácil" used to come out 5/10.
+            skipped = true;
           } else if (target <= 0) {
             // e.g. filler count: lower is better
             points = clamp(5 - Math.min(5, val / 2), 0, 5);
@@ -68,6 +96,11 @@
           }
         }
 
+        if (skipped) {
+          points = 0;
+          mMax = 0;
+          detail = tt("metrics.notCounted");
+        }
         total += points;
         max += mMax;
         breakdown.push({
@@ -75,7 +108,8 @@
           label: m.label,
           points: Math.round(points * 10) / 10,
           max: mMax,
-          detail
+          detail,
+          skipped
         });
       }
 
@@ -90,13 +124,16 @@
 
       return {
         score: clamp(score, 0, 10),
-        max: 10,
+        // Nothing scored (every count left blank) reads "—", not 0 / 10.
+        max: max > 0 ? 10 : 0,
         pct,
         breakdown,
         summary,
         how: tt("metrics.how")
       };
     },
+
+    clock,
 
     formatScore(result) {
       if (!result || result.max === 0) return "—";

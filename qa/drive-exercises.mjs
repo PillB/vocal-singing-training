@@ -28,7 +28,14 @@ const OUT = process.env.OUT || path.join(HERE, "screenshots", "drive");
 const SECS = Number(process.env.SECS || 9);
 const CONC = Number(process.env.CONC || 4);
 const LANG = process.env.LANG_UI || process.env.LANG_APP || (process.env.LANG === "en" ? "en" : "es");
-const VOICE_SRC = fs.readFileSync(path.join(HERE, "synthetic-voice.js"), "utf8");
+// The synthetic voice plus any extra scenarios in qa/voices/*.js
+const VOICES_DIR = path.join(HERE, "voices");
+const VOICE_SRC = [
+  fs.readFileSync(path.join(HERE, "synthetic-voice.js"), "utf8"),
+  ...(fs.existsSync(VOICES_DIR)
+    ? fs.readdirSync(VOICES_DIR).filter((f) => f.endsWith(".js")).sort().map((f) => fs.readFileSync(path.join(VOICES_DIR, f), "utf8"))
+    : [])
+].join("\n;\n");
 
 const VIEWPORTS = {
   desktop: { width: 1280, height: 720 },
@@ -82,6 +89,8 @@ export const SCENARIO_BY_MODE = {
 const SLOPPY_OK = new Set(["follow", "trill"]);
 
 function scenarioFor(ex) {
+  // SCENARIO=name runs every exercise with that voice (e.g. a new failure case)
+  if (process.env.SCENARIO) return process.env.SCENARIO;
   if (ex.id === "s6-straw") return "straw";
   return SCENARIO_BY_MODE[ex.mode] || "speech";
 }

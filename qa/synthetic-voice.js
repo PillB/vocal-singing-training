@@ -170,15 +170,18 @@
   }
 
   // Speech-like syllable train: ~4.5 syllables/s, intonation moves per syllable.
-  function speech({ baseHz = 135, spreadSemis = 4, syllPerSec = 4.5, phraseMs = 3000, pauseMs = 1200, gain = 0.28, fillers = false } = {}) {
+  function speech({ baseHz = 135, spreadSemis = 4, syllPerSec = 4.5, phraseMs = 3000, pauseMs = 1200, gain: gainOpt = 0.28, fillers = false } = {}) {
+    // gain, syllPerSec and pauseMs may be functions, read at each use
+    const val = (v) => (typeof v === "function" ? v() : v);
+    let gain = val(gainOpt);
     let inPhrase = false;
     let phraseLeft = 0;
-    const syllMs = 1000 / syllPerSec;
     let n = 0;
     const tick = () => {
+      gain = val(gainOpt);
       if (!inPhrase) {
         inPhrase = true;
-        phraseLeft = phraseMs;
+        phraseLeft = val(phraseMs);
       }
       if (phraseLeft <= 0) {
         inPhrase = false;
@@ -192,12 +195,13 @@
           at(850, () => voiceOff(0.05));
         }
         n++;
-        V.timers.push(setTimeout(tick, pauseMs));
+        V.timers.push(setTimeout(tick, val(pauseMs)));
         return;
       }
       const semis = (Math.sin(phraseLeft / 400 + n) * 0.5 + (Math.random() - 0.5)) * spreadSemis;
       setPitch(baseHz * Math.pow(2, semis / 12), 0.04);
       voiceOn(gain * (0.75 + Math.random() * 0.25), 0.03);
+      const syllMs = 1000 / val(syllPerSec);
       V.timers.push(setTimeout(() => ramp(V.nodes.voice.gain, gain * 0.15, 0.04), syllMs * 0.62));
       phraseLeft -= syllMs;
       V.timers.push(setTimeout(tick, syllMs));
@@ -260,8 +264,10 @@
       speech({ syllPerSec: 2, phraseMs: 5000, pauseMs: 1400, spreadSemis: 1.5 });
     },
     ladder() {
+      // Louder every 5 s: speech() reads the gain through a getter, so the
+      // climb actually happens (a plain number was copied once and never rose)
       let g = 0.06;
-      speech({ syllPerSec: 2, phraseMs: 4000, pauseMs: 1000, spreadSemis: 1.5, gain: g });
+      speech({ syllPerSec: 2, phraseMs: 4000, pauseMs: 1000, spreadSemis: 1.5, gain: () => g });
       every(5000, () => {
         g = Math.min(0.5, g * 1.7);
       });
@@ -328,6 +334,17 @@
     (SCENARIOS[name] || SCENARIOS.silent)();
   };
   V.stop = stop;
+  /**
+   * More scenarios live in qa/voices/*.js (loaded after this file by the
+   * drive harness and the specs): each calls
+   *   __VTVoice.define("name", (h) => { … h.voiceOn(); h.setPitch(220, 1); … })
+   * with the same helpers the scenarios above use.
+   */
+  V.h = { ramp, setPitch, voiceOn, voiceOff, airOn, airOff, vibrato, trillOn, at, every, targetHz, startFollow, phrases, speech, now, nodes: () => V.nodes, timers: V.timers };
+  V.define = (name, fn) => {
+    SCENARIOS[name] = () => fn(V.h);
+    V.scenarios = Object.keys(SCENARIOS);
+  };
   V.scenarios = Object.keys(SCENARIOS);
   window.__VTVoice = V;
 })();

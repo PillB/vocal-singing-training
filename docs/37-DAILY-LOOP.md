@@ -261,6 +261,9 @@ visible: per arm, 30% → 45% needs about 160 people, 30% → 40% about 355, 30%
 - The completion card is suppressed under automation (`vt_e2e`) so it cannot sit
   over other specs' clicks; a spec opts in with `sessionStorage.vt_loop_e2e = "1"`.
   Toasts are muted the same way and come back with `vt_debug = "1"`.
+- The step-done card (a guided step's clock at 00:00) is muted the same way;
+  `tests/practice-design.spec.js` opts in with `sessionStorage.vt_stepdone_e2e = "1"`.
+  The microphone still stops at 00:00 either way.
 - The rating card's own ending (a single exercise's clock at 00:00 opens it) is
   muted the same way, and under automation its "Más detalles" starts open so
   specs that fill the form and press `#btn-complete` still reach it;

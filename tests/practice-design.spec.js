@@ -449,7 +449,9 @@ test.describe("Target lane: the note to sing is always the primary lane", () => 
       return { badgeY, badgeTopPx: cr.top + (badgeY ?? 0), railBottom, safeTop: pv.safeTop, canvasTop: cr.top };
     });
     expect(r.badgeY, "chord badge painted").not.toBeNull();
-    expect(r.safeTop).toBeGreaterThan(0);
+    // Design coach-strip: the lanes now start under the rail (and the coach
+    // strip in it), so safeTop is 0 there; either way the badge clears the rail.
+    expect(r.safeTop > 0 || r.canvasTop >= r.railBottom, "canvas under the rail, or badge pushed down").toBe(true);
     expect(r.badgeTopPx).toBeGreaterThanOrEqual(r.railBottom);
   });
 });

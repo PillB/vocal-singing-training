@@ -5,7 +5,7 @@
  * states for the page and how each would be seen by the user by toggling
  * options on and off and visibilities". An audit of the code and of a real
  * browser found 32 of 34 reachable states saying something wrong, misleading or
- * unreachable — two elements both claiming "Pro", a free month wearing the paid
+ * unreachable — two elements both claiming "Pro", a free trial wearing the paid
  * colour, a staff login put in front of visitors as their only option, a panel
  * with nothing on it at all.
  *
@@ -24,7 +24,7 @@ const DAY = 86400;
 const CLIENT_ID = "test.apps.googleusercontent.com";
 
 /** Google-only, which is what the site actually ships. */
-const GOOGLE_ONLY = { email: false, google: true, googleClientId: CLIENT_ID, trialDays: 30 };
+const GOOGLE_ONLY = { email: false, google: true, googleClientId: CLIENT_ID, trialDays: 7 };
 
 /**
  * Point the site at a stubbed worker and answer as one given account.
@@ -231,7 +231,7 @@ test.describe("Signed out: the door says what pressing it does", () => {
     const text = await offer.textContent();
     // The zero price has to be literal: the word, the number of days, no card.
     expect(text).toMatch(/gratis/i);
-    expect(text).toMatch(/30 días/);
+    expect(text).toMatch(/7 días/);
     expect(text).toMatch(/sin tarjeta/i);
     expect(text).toMatch(/si ya tienes cuenta/i);
     // And it comes before the method button, not after it. Asserted on document
@@ -248,8 +248,8 @@ test.describe("Signed out: the door says what pressing it does", () => {
     expect(size).toBeGreaterThanOrEqual(12);
   });
 
-  test("no sign-in means no promise of a free month", async ({ page }) => {
-    // Naming a free month beside a notice saying sign-in is off is the worst of
+  test("no sign-in means no promise of a free trial", async ({ page }) => {
+    // Naming a free trial beside a notice saying sign-in is off is the worst of
     // both, so the offer line belongs only to states that can act.
     await install(page, { offline: true }, null);
     await boot(page);
@@ -289,7 +289,7 @@ test.describe("Signed in: the header names which kind of access this is", () => 
   });
   const ends = (days) => Math.floor(Date.now() / 1000) + days * DAY;
 
-  test("the 30-day free month is a trial, not the paid green", async ({ page }) => {
+  test("a granted trial reads as a trial, not the paid green", async ({ page }) => {
     // This is the state the owner was in when he wrote. The header said "PRO" in
     // the colour a subscription wears, beside a second element also saying Pro.
     const license = await mintLicense({ origin: BASE });
@@ -308,7 +308,7 @@ test.describe("Signed in: the header names which kind of access this is", () => 
     expect(h.door).toBe("pablo");
   });
 
-  test("and the Pro dialog calls it a free month, not pro_monthly", async ({ page }) => {
+  test("and the Pro dialog calls it a free trial, not pro_monthly", async ({ page }) => {
     const license = await mintLicense({ origin: BASE });
     await install(page, {
       signedIn: true,
@@ -372,7 +372,7 @@ test.describe("Signed in: the header names which kind of access this is", () => 
     expect([h.pill, h.pro].filter((t) => t === "Pro")).toHaveLength(1);
   });
 
-  test("someone who has spent their free month is told where they stand", async ({ page }) => {
+  test("someone who has spent their free trial is told where they stand", async ({ page }) => {
     // The dead end: the most interested person in the product, with checkout
     // closed, used to be shown nothing at all.
     const license = await mintLicense({ origin: BASE });
@@ -486,7 +486,7 @@ test.describe("The same claim wherever it appears", () => {
     });
   }
 
-  test("a free month reads as a free month on the home card too", async ({ page }) => {
+  test("a granted trial reads as a trial on the home card too", async ({ page }) => {
     const license = await mintLicense({ origin: BASE });
     await install(page, {
       signedIn: true,
@@ -701,7 +701,7 @@ test.describe("Colour is never the only thing that says which state this is", ()
     // reader used to hear "Pro" twice, four lines apart, for a status and an
     // action. This is the one that tells them apart.
     expect(await page.locator("#btn-pricing").getAttribute("aria-label")).toBe(
-      "Ver Pro y el mes de prueba gratis"
+      "Ver Pro y la prueba gratis"
     );
   });
 

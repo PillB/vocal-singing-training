@@ -5426,7 +5426,7 @@
   }
 
   /**
-   * Whether this person has already spent their one free month. Read from the
+   * Whether this person has already spent their one free trial. Read from the
    * account when accounts are on, because that is where the worker records it
    * and it has to hold across browsers; from this browser's own trial mark
    * otherwise. Shared by the Pro dialog's two lines so they cannot disagree.
@@ -5539,7 +5539,7 @@
       trialBtn.classList.toggle("btn-sm", !prelaunch);
       if (canTrial) {
         const days = accounts
-          ? Number(acct.methods?.trialDays || 7) // the worker's TRIAL_DAYS; 7 is the decided length
+          ? Number(acct.methods?.trialDays || 7) // the worker's TRIAL_DAYS, whose default is also 7
           : Number(cfg.freeTrialDays || 0);
         trialBtn.textContent = tt(prelaunch ? "pricing.startTrialFree" : "pricing.startTrial", {
           n: String(days)
@@ -6511,7 +6511,7 @@
       retryRow.hidden = !offer.configured || hasRealSignIn || offer.checking;
     }
     // What the account is for, above the button that makes one. Only where a
-    // sign-in can really be performed: promising a free month beside a notice
+    // sign-in can really be performed: promising a free trial beside a notice
     // saying sign-in is off would be the worst of both.
     const offerLine = $("#account-offer");
     if (offerLine) {
@@ -6582,6 +6582,22 @@
         !account.account.trialUsed &&
         !(account.entitlement && account.entitlement.pro)
       );
+      // Name the length the press will actually give, read from the worker, the
+      // same way the Pro dialog's button does. The neutral label is the fallback
+      // for a worker that has not said yet; no label may name a month, because
+      // the trial is seven days.
+      const trialDays = Number(account && account.methods && account.methods.trialDays);
+      if (trialDays > 0) {
+        // The generic [data-i18n] applier calls t(key) with no params, so a key
+        // holding {n} would render the placeholder literally on a language
+        // switch. Drop the attribute and own the label here; VTI18n.onChange
+        // calls refreshAccountUI(), which is what re-translates it.
+        trialBtn.removeAttribute("data-i18n");
+        trialBtn.textContent = tt("auth.startTrialDays", { n: String(trialDays) });
+      } else {
+        trialBtn.setAttribute("data-i18n", "auth.startTrial");
+        trialBtn.textContent = tt("auth.startTrial");
+      }
     }
     const redeemForm = $("#account-redeem-form");
     if (redeemForm) redeemForm.hidden = !(account && account.signedIn);

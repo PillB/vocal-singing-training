@@ -392,7 +392,8 @@ test.describe("Accounts, gifted months and saved progress", () => {
     // The press and the label have to read the same flag. Before, the label came
     // from the worker's default trial length while the press fell back to the
     // browser-local trial, so a visitor who clicked before the answer landed was
-    // promised 30 days and given 7.
+    // promised a different length from the one they got. The two lengths agree at
+    // 7 days now, but the flag they read must still be the same one.
     const license = await mintLicense({ origin: BASE });
     const stub = createWorkerStub({ methods: { email: true, google: false } });
     await patchBillingConfig(page, {

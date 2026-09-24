@@ -27,7 +27,7 @@ hard-codes them.
 | Price in Peru | **S/ 19.90 per month, S/ 119.90 per year** | Decided, not a range — the evidence is in [35-PRICING.md](35-PRICING.md). Under Spotify's S/ 20.90, and well under what Yousician (S/ 30.90) and Duolingo (S/ 32.90) charge Peruvians. Note the fee cliffs in stage 5: at S/ 19.90 a Culqi charge costs 17.6% in commission alone, against 10.0% on Mercado Pago. |
 | Price abroad | **USD 7.99 per month, USD 49 per year** | Decided in [35-PRICING.md](35-PRICING.md). The fixed fee per charge dominates below $7, so $7.99 is the floor worth using. The old $79 annual was double the category median of $38–45. |
 | Annual option | Yes, at 6 months' price (50% off) | **The biggest lever you have.** One charge a year pays the fixed fee once instead of twelve times, halving the take to about 5%, and an annual subscriber beats a monthly one on net revenue until month 6.4. |
-| Trial | One month, one per account | Already built. `TRIAL_DAYS` in `wrangler.toml`. Mercado Pago's seller UI only offers 7 and 14 day presets, so a 30-day trial may need the API. |
+| Trial | **Seven days**, one per account | Already built. `TRIAL_DAYS` in `wrangler.toml`, changed from 30 on 2026-09-24 — the reasoning is in [35-PRICING.md](35-PRICING.md). Convenient: Mercado Pago's seller UI presets are 7 and 14 days, so this needs no API call. |
 
 These are already in `js/billing-config.js`. They become the Mercado Pago plan
 and the merchant-of-record products.

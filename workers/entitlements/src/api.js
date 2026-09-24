@@ -197,7 +197,7 @@ export async function buildMePayload(env, account, now) {
  * Which sign-in methods this deployment can actually offer.
  *
  * `trialDays` rides along because the pricing panel has to name the length of
- * the free month before anybody signs in, and this is the only public route
+ * the free trial before anybody signs in, and this is the only public route
  * that answers before a session exists.
  *
  * @param {Object} env Worker env bindings.

@@ -73,7 +73,7 @@ routes above are untouched):
 | POST | `/v1/auth/logout` | Drops the bearer session. |
 | GET | `/v1/me` | The account, its entitlement, and a fresh license token when entitled. |
 | POST | `/v1/me/link` | `{provider, sessionId}` — attaches a checkout the visitor paid for anonymously. |
-| POST | `/v1/me/trial` | Starts the one free month. `409 {reason:"trial_used"}` the second time. |
+| POST | `/v1/me/trial` | Starts the one free trial. `409 {reason:"trial_used"}` the second time. |
 | POST | `/v1/me/redeem` | `{code}` — redeems a gift code. |
 | GET/PUT/DELETE | `/v1/me/progress` | Saved progress for one profile. `PUT` takes `{profileId, doc, baseRev}` and answers `409` with the server's copy when the revision moved. |
 | POST/GET | `/v1/admin/gift-codes` | Mint or list gift codes. |
@@ -165,7 +165,7 @@ Public, committed in `wrangler.toml`:
 | `LICENSE_TTL_SECONDS` | Token lifetime (clamped to 60…2592000). |
 | `STRIPE_PRICE_PRO_MONTHLY` / `STRIPE_PRICE_PRO_YEARLY` | Optional price → plan mapping. |
 | `MP_PLAN_PRO_MONTHLY` / `MP_PLAN_PRO_YEARLY` | Optional `preapproval_plan_id` → plan mapping. |
-| `TRIAL_DAYS` | Length of the free trial. One per account, ever. Default 30. |
+| `TRIAL_DAYS` | Length of the free trial, in days. One per account, ever. Default 7. |
 | `ADMIN_EMAILS` | Comma-separated emails allowed to gift and revoke months, and to read A/B results. |
 | `GOOGLE_CLIENT_ID` | Google Sign-In client id. Public by design. Empty disables Google sign-in. |
 | `EMAIL_PROVIDER` | `resend`, `brevo` or `mailersend`. Empty disables email sign-in rather than dropping codes silently. |

@@ -29,7 +29,7 @@ import { mintId, nowSec } from "./db.js";
 export const GRANT_KINDS = ["trial", "gift", "comp"];
 
 /** How long the free trial runs, in days, unless env overrides it. */
-export const DEFAULT_TRIAL_DAYS = 30;
+export const DEFAULT_TRIAL_DAYS = 7;
 
 /** Upper bound on any single grant, so a typo cannot comp somebody for a decade. */
 export const MAX_GRANT_DAYS = 3650;

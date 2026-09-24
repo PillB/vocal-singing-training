@@ -2522,14 +2522,16 @@
     const headY = pad + (tiny ? 9 : 13);
     const right = d.focusDays != null ? L(`${d.focusDays} de 7 días con tu foco`, `${d.focusDays} of 7 days on your focus`) : "";
     ctx.font = font(tiny ? 11 : 13, 800);
-    const rw = right ? ctx.measureText(right).width : 0;
+    // A narrow, tall panel: the week's name gets the whole line, the count goes under it
+    const stack = !!right && !tiny && !compact && w < 480;
+    const rw = right && !stack ? ctx.measureText(right).width : 0;
     ctx.fillStyle = C.text;
-    fitLine(ctx, d.head, pad + 2, headY, w - pad * 2 - rw - 14, tiny ? 14 : compact ? 16 : 19, 800, 11);
+    fitLine(ctx, d.head, pad + 2, headY, w - pad * 2 - rw - (rw ? 14 : 4), tiny ? 14 : compact ? 16 : 19, 800, 11);
     if (right) {
-      ctx.font = font(tiny ? 11 : 13, 800);
       ctx.fillStyle = C.done;
-      ctx.textAlign = "right";
-      ctx.fillText(right, w - pad - 2, headY);
+      ctx.textAlign = stack ? "left" : "right";
+      fitLine(ctx, right, stack ? pad + 2 : w - pad - 2, stack ? headY + 22 : headY, stack ? w - pad * 2 - 4 : rw + 2, tiny ? 11 : 13, 800, 10);
+      ctx.textAlign = "left";
     }
     // The action line at the bottom
     const actH = tiny ? 0 : compact ? 18 : 24;
@@ -2538,7 +2540,7 @@
       ctx.fillStyle = C.text;
       fitLine(ctx, "→ " + d.action, pad + 2, h - pad - actH / 2 + 2, w - pad * 2, compact ? 13 : 15, 800, 10);
     }
-    const top = headY + (tiny ? 12 : 20);
+    const top = headY + (tiny ? 12 : 20) + (stack ? 22 : 0);
     const bottom = h - pad - actH - (actH ? 6 : 0);
     const avail = bottom - top;
     // Days of this week, then the twelve weeks

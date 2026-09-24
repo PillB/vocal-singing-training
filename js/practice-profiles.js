@@ -21,8 +21,8 @@
         { label: "Rate 7 · brisk", sec: 75 },
         { label: "Rate 8 · challenge", sec: 75 }
       ],
-      cue: "Over-articulate the same page. Rate phases advance automatically.",
-      cueEs: "Sobre-articula la misma página. Las fases de ritmo avanzan solas.",
+      cue: "Over-articulate the same page. The first rung measures your own pace; each next rung is a step faster. Rungs advance on their own.",
+      cueEs: "Sobre-articula la misma página. El primer peldaño mide tu propio ritmo; cada peldaño sube un poco. Avanzan solos.",
       metricHints: { duration: "fromTimerMin" }
     },
     "v2-volume": {
@@ -90,9 +90,9 @@
         { label: "Scenario 2 · acquaintance", sec: 120 },
         { label: "Scenario 3 · new contact", sec: 120 }
       ],
-      cue: "Aim for more listening than speaking. Silence ratio is a friend.",
-      cueEs: "Busca más escucha que habla. El silencio es tu aliado.",
-      metricHints: { presence: "listenBias" }
+      cue: "Curiosity loops: ask in your turn, stay quiet in theirs and imagine the answer. Leave with one real fact.",
+      cueEs: "Bucles de curiosidad: pregunta en tu turno, calla en el suyo e imagina la respuesta. Llévate un dato real.",
+      metricHints: {}
     },
     "v7-record-review": {
       mode: "reviewSession",
@@ -160,8 +160,8 @@
       autoPiano: false,
       autoRecord: true,
       minPauseSec: 0.7,
-      cue: "Tap when you catch a filler. Prefer “Paused instead.” Auto pauses are secondary.",
-      cueEs: "Toca al atrapar un relleno. Prefiere “Pausé en su lugar”. Las pausas auto son secundarias.",
+      cue: "3 rounds on one topic: in round 1 tap “Caught a filler”; in rounds 2–3 close your mouth, pause, and tap “Paused instead”.",
+      cueEs: "3 rondas sobre un tema: en la 1 toca «Noté un relleno»; en la 2 y la 3 cierra la boca, pausa y toca «Pausé en su lugar».",
       metricHints: {}
     },
     "v12-melodic-speech": {

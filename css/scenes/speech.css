@@ -1,1 +1,95 @@
 /* Exercise pictures — speech (css for js/scenes/speech.js). Scoped to .mode-panel.has-viz. */
+
+/*
+ * Taps that belong to a timing picture (a filler caught, a pause instead, a
+ * key point, a metaphor spoken, a number miscounted): large and equal, in a
+ * row under the picture, so a thumb finds them without looking.
+ */
+.mode-panel.has-viz .st-taps {
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  gap: 0.5rem;
+}
+.mode-panel.has-viz .st-taps .btn {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: var(--min-tap, 44px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mode-focus.mode-focus-live .mode-panel.has-viz .st-taps .btn {
+  font-size: 0.86rem;
+  padding: 0.35rem 0.6rem;
+}
+/* Catching a filler is awareness, not a fault: an outline, never red */
+.mode-panel.has-viz .st-tap-fill {
+  border-color: rgba(238, 243, 250, 0.38);
+}
+/* A self-report that stays on once tapped (a real fact learned): gold, with its tick */
+.mode-panel.has-viz .st-taps .btn.is-on {
+  border-color: rgba(255, 211, 110, 0.75);
+  color: #ffd36e;
+  background: rgba(255, 211, 110, 0.1);
+}
+/* A small correction (−1 / +1) stays a small square beside the big taps */
+.mode-panel.has-viz .st-taps .st-tap-small {
+  flex: 0 0 var(--min-tap, 44px);
+  padding-left: 0;
+  padding-right: 0;
+}
+
+/*
+ * While the tour points at the exercise panel it adds .tour-highlight, whose
+ * `position: relative` takes #mode-focus out of its absolute place on the
+ * stage. The panel then sizes to its content, and a picture's content is a
+ * canvas that keeps its own aspect, so the panel grew past the screen's
+ * spotlight limit on phones. Keep the stage's own placement for these
+ * panels while highlighted.
+ */
+.mode-focus.mode-focus-live.tour-highlight:has(
+    > .mode-panel.has-viz.mode-rateLadder,
+    > .mode-panel.has-viz.mode-fillerDetect,
+    > .mode-panel.has-viz.mode-keyPointPace,
+    > .mode-panel.has-viz.mode-metronomeSpeech,
+    > .mode-panel.has-viz.mode-speechEnergy,
+    > .mode-panel.has-viz.mode-countPace
+  ) {
+  position: absolute;
+}
+
+/* Narrow phone: a two-word label may take two lines rather than be cut */
+@media (max-width: 480px) {
+  .mode-panel.has-viz .st-taps .btn {
+    white-space: normal;
+    line-height: 1.15;
+    text-overflow: clip;
+  }
+  .mode-focus.mode-focus-live .mode-panel.has-viz .st-taps .btn {
+    font-size: 0.82rem;
+    padding: 0.3rem 0.45rem;
+  }
+}
+
+/* Rotated phone: the panel is a row; the taps stand in a column beside the
+   picture, next to the picture's own control */
+@media (max-height: 500px) {
+  .mode-focus.mode-focus-live .mode-panel.has-viz .st-taps {
+    order: 3;
+    flex-direction: column;
+    justify-content: center;
+    align-items: stretch;
+    gap: 0.35rem;
+    width: 10.5rem;
+  }
+  .mode-focus.mode-focus-live .mode-panel.has-viz .st-taps .btn {
+    flex: 0 0 auto;
+    white-space: normal;
+    line-height: 1.15;
+    text-overflow: clip;
+  }
+  .mode-focus.mode-focus-live .mode-panel.has-viz .st-taps.st-taps-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+}

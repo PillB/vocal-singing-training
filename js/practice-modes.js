@@ -202,129 +202,529 @@
 
   // ——— VOCAL ———
 
+  /**
+   * v1 diction — rate ladder. Rungs 5 (comfortable) → 8 (challenge) are a pace
+   * relative to the learner's own first rung: syllables per talking second
+   * from the loudness envelope (VTFeatures.SyllableRate), approximate, so only
+   * ever shown against that baseline. While reading (eyes on the page) one
+   * slow dot on a staircase; after Stop, the pace each rung was read at and
+   * how often the learner breathed. Clarity is not measurable: it stays the
+   * learner's own rating, and so does "rate control".
+   */
   Modes.rateLadder = baseMode({
     id: "rateLadder",
     render() {
       const phases = this.profile.phases || [];
-      // BPM rises each phase: 72 → 96 → 120 → 144
-      this.state.bpms = phases.map((_, i) => 72 + i * 24);
-      // Localize phase labels (profiles store English keys / EN copy)
-      const phaseLabel = (p) => phaseLabelFor(p);
-      this.state.phaseLabel = phaseLabel;
-      this.state.runner = createPhaseRunner(phases, (i, p) => {
-        if (global.VTToast)
-          global.VTToast(`${phaseLabel(p, i)} · ~${this.state.bpms[i]} BPM`);
+      const st = this.state;
+      // A prepared routine can give this step less time than the four rungs
+      // add up to (105 s in the daily minimum): fit the ladder to the step so
+      // every rung still happens.
+      const total = phases.reduce((a, p) => a + (p.sec || 0), 0);
+      let avail = 0;
+      try {
+        avail = Number(global.VTApp?.getState?.()?.timer?.total) || 0;
+      } catch {
+        avail = 0;
+      }
+      const scale = avail > 0 && total > avail ? avail / total : 1;
+      const words = [
+        [L("cómodo", "comfortable"), L("cómodo", "easy")],
+        [L("un poco más rápido", "a bit faster"), L("+ rápido", "faster")],
+        [L("ágil", "brisk"), L("ágil", "brisk")],
+        [L("reto", "challenge"), L("reto", "push")]
+      ];
+      st.rungs = phases.map((p, i) => {
+        const num = String((String(p.label || "").match(/\d+/) || [5 + i])[0]);
+        // Treads relative to the first rung, wide because the count is approximate
+        const lo = [0.9, 1.05, 1.15, 1.25][i] || 1.25 + (i - 3) * 0.1;
+        const hi = [1.1, 1.3, 1.45, 1.65][i] || 1.65 + (i - 3) * 0.1;
+        const w = words[i] || [phaseLabelFor(p), phaseLabelFor(p)];
+        return {
+          num,
+          name: `${num} · ${w[0]}`,
+          word: w[1],
+          label: phaseLabelFor(p),
+          sec: Math.max(12, Math.round((p.sec || 60) * scale)),
+          lo,
+          hi,
+          mid: (lo + hi) / 2,
+          start: null,
+          end: null,
+          rel: null,
+          samples: [],
+          run: null
+        };
       });
-      this.state.beatMs = 0;
-      this.state.flash = false;
-      const p0 = phases[0];
-      const idlePhase = phaseLabel(p0, 0);
-      const idleRemain = p0?.sec != null ? `${p0.sec}s` : "—";
+      st.phaseLabel = (p) => phaseLabelFor(p);
+      const r0 = st.rungs[0];
       this.hud.innerHTML = `
-        <div class="mode-title">${L("Dicción · escalera de ritmo", "Diction · rate ladder")}</div>
-        <div class="mode-phase" data-phase>${idlePhase}</div>
-        <div class="metro-dot" data-metro aria-hidden="true"></div>
-        <div class="mode-big" data-remain>${idleRemain}</div>
-        <div class="mode-bar"><span data-bar style="width:0%"></span></div>
-        <p class="mode-meta">${L("Ritmo <strong data-bpm>~72 BPM</strong> · sobre-articula · hablando: <strong data-act>0%</strong>", "Pace cue <strong data-bpm>~72 BPM</strong> · over-articulate · speech on: <strong data-act>0%</strong>")}</p>
-        <p class="mode-meta muted">${L("Mantén las consonantes claras al subir el ritmo en cada fase.", "Keep consonants crisp as the pulse speeds up each phase.")}</p>
+        <div class="viz-row viz-head">
+          <div class="mode-title">${L("Dicción · escalera de ritmo", "Diction · rate ladder")}</div>
+          <button type="button" class="btn btn-ghost viz-tap" data-next-rung>${L("Siguiente peldaño →", "Next rung →")}</button>
+        </div>
+        <div class="viz-words">
+          <span class="mode-phase" data-phase>${r0 ? r0.label : "—"}</span>
+          <strong class="mode-big" data-remain>${r0 ? r0.sec + "s" : "—"}</strong>
+          <span data-rate>—</span>
+        </div>
+        <p class="mode-meta muted">${L(
+          "Sobre-articula la misma página. El punto es tu ritmo (sílabas por segundo, aprox.) frente a tu propio primer peldaño; la claridad la juzgas tú.",
+          "Over-articulate the same page. The dot is your pace (syllables per second, approx.) against your own first rung; clarity is yours to judge."
+        )}</p>
       `;
+      this.$("[data-next-rung]")?.addEventListener("click", () => this._nextRung(false));
+      this._resetLadder();
+      this._mountViz();
     },
-    onFrame(frame) {
-      const r = this.state.runner;
-      if (!r) return;
-      r.tick(performance.now());
-      const phase = this.profile.phases[r.index];
-      const total = phase?.sec || 1;
-      const pct = phase ? clamp(((total - r.remaining) / total) * 100, 0, 100) : 100;
-      const bpm = this.state.bpms[Math.min(r.index, this.state.bpms.length - 1)] || 72;
-      const beatPeriod = 60000 / bpm;
-      this.state.beatMs = (this.state.beatMs || 0) + (frame.dtMs || 16);
-      if (this.state.beatMs >= beatPeriod) {
-        this.state.beatMs = 0;
-        const dot = this.$("[data-metro]");
-        if (dot) {
-          dot.classList.remove("pulse");
-          // reflow
-          void dot.offsetWidth;
-          dot.classList.add("pulse");
+    _resetLadder() {
+      const st = this.state;
+      const F = global.VTFeatures;
+      const K = global.VTViz?.speechTiming;
+      st.current = 0;
+      st.remaining = st.rungs[0]?.sec || 0;
+      st.frac = 0;
+      st.done = !st.rungs.length;
+      st.review = false;
+      st.base = null;
+      st.calib = 0;
+      st.live = null;
+      st.state = "idle";
+      st.sinceUpd = 0;
+      st.last = performance.now();
+      st.rungs.forEach((r) => {
+        r.start = null;
+        r.end = null;
+        r.rel = null;
+        r.samples = [];
+        r.run = null;
+      });
+      if (F && K) {
+        st.vad = new F.Vad();
+        st.rt = new K.RateTrack({ windowSec: 4 });
+        st.slow = new K.SlowValue(0.8);
+        if (st.rungs.length) {
+          st.rt.begin(0);
+          st.rungs[0].start = 0;
         }
       }
-      if (this.$("[data-bpm]")) this.$("[data-bpm]").textContent = `~${bpm} BPM`;
-      if (this.$("[data-phase]")) {
-        const lab =
-          r.index < r.count
-            ? this.state.phaseLabel?.(phase, r.index) || r.label
-            : L("Escalera lista — mezcla libre", "Ladder complete — free mix");
-        this.$("[data-phase]").textContent = lab;
+      const b = this.$("[data-next-rung]");
+      if (b) b.disabled = st.done;
+    },
+    _mountViz() {
+      const V = global.VTViz;
+      if (!V || !V.scenes.rateLadder || !this.state.rt) return;
+      this.hud.classList.add("has-viz");
+      this.viz = new V.Surface(this.hud, (ctx, w, h) => V.scenes.rateLadder(ctx, w, h, this.state), {
+        label: L(
+          "Escalera de ritmo: cuatro peldaños de izquierda a derecha, cada uno un poco más rápido que tu primer peldaño. El punto es tu ritmo al leer; la franja verde, el peldaño actual.",
+          "Rate ladder: four rungs from left to right, each a little faster than your first rung. The dot is your reading pace; the green band is the current rung."
+        ),
+        captionHidden: true
+      });
+      this.viz.draw();
+    },
+    /** Pace relative to the first rung, for a finished stretch of reading. */
+    _relOf(bin) {
+      const K = global.VTViz?.speechTiming;
+      const st = this.state;
+      if (!K || !st.base) return null;
+      const r = K.RateTrack.binRate(bin, 2);
+      return r != null ? r / st.base : null;
+    },
+    _closeRung() {
+      const st = this.state;
+      const r = st.rungs[st.current];
+      if (!r || r.end != null || !st.rt) return;
+      const bin = st.rt.bins[st.rt.bins.length - 1];
+      r.end = st.rt.t;
+      r.rel = this._relOf(bin);
+      r.samples = bin ? bin.samples.slice() : [];
+      r.run = global.VTViz.speechTiming.meanRun(st.vad, r.start, r.end);
+    },
+    _nextRung(auto) {
+      const st = this.state;
+      if (st.done || !st.rt) return;
+      this._closeRung();
+      const b = this.$("[data-next-rung]");
+      if (st.current < st.rungs.length - 1) {
+        st.current += 1;
+        const nx = st.rungs[st.current];
+        nx.start = st.rt.t;
+        st.remaining = nx.sec;
+        st.frac = 0;
+        st.rt.begin(st.current);
+        st.sinceUpd = 0;
+        if (global.VTToast) global.VTToast(`${L("Peldaño", "Rung")} ${nx.name}`);
+        this.viz?.caption?.(`${L("Peldaño", "Rung")} ${nx.name}`, 0);
+      } else {
+        st.done = true;
+        st.remaining = 0;
+        st.frac = 1;
+        st.rt.begin("free");
+        if (b) b.disabled = true;
+        if (global.VTToast) global.VTToast(L("Escalera lista — mezcla libre", "Ladder complete — free mix"));
+        this.viz?.caption?.(L("Escalera lista — mezcla libre", "Ladder complete — free mix"), 0);
       }
-      if (this.$("[data-remain]"))
-        this.$("[data-remain]").textContent =
-          r.index < r.count ? `${Math.ceil(r.remaining)}s` : "✓";
-      if (this.$("[data-bar]")) this.$("[data-bar]").style.width = `${pct}%`;
-      this.state.samples = (this.state.samples || 0) + 1;
-      if (frame.voiced || frame.rms > 0.02) this.state.active = (this.state.active || 0) + 1;
-      const act = Math.round(((this.state.active || 0) / this.state.samples) * 100);
-      if (this.$("[data-act]")) this.$("[data-act]").textContent = `${act}%`;
+      if (!auto) this.viz?.draw();
+    },
+    _ladderState() {
+      const st = this.state;
+      if (!st.vad || st.vad.state === "idle") return "idle";
+      if (!st.base) return "calib";
+      if (!st.rt.talking && st.vad.pauseLen > 0.6) return "pause";
+      const v = st.live;
+      if (v == null) return st.state === "calib" ? "calib" : "pause";
+      // The first rung is the baseline itself: no direction to give there
+      if (st.current === 0 && !st.done) return "base";
+      const r = st.rungs[Math.min(st.current, st.rungs.length - 1)];
+      // A little hysteresis so the words do not flicker at the band's edge
+      const m = st.state === "in" ? 0.02 : 0;
+      if (v < r.lo - m) return "low";
+      if (v > r.hi + m) return "high";
+      return "in";
+    },
+    onStart() {
+      this._resetLadder();
+      this.hud?.classList.remove("is-replay");
+      this.state.wallStart = performance.now();
+      this.viz?.draw();
+    },
+    onFrame(frame) {
+      const st = this.state;
+      if (!st.rt || st.review) return;
+      const K = global.VTViz.speechTiming;
+      const now = performance.now();
+      const dt = Math.min(0.25, Math.max(0, (now - st.last) / 1000));
+      st.last = now;
+      const before = st.vad.state;
+      st.vad.feed(frame);
+      st.rt.feed(frame);
+      const phraseEnded = before === "speech" && st.vad.state === "pause";
+      if (!st.done) {
+        st.remaining -= dt;
+        const r = st.rungs[st.current];
+        st.frac = clamp(1 - st.remaining / (r.sec || 1), 0, 1);
+        if (st.remaining <= 0) this._nextRung(true);
+      }
+      // The baseline: the first rung's own pace, refined all through it.
+      // If the first rung went by unread, the next few seconds of reading
+      // set it instead.
+      const CALIB = 6;
+      const bin = st.rt.cur;
+      if (bin && (st.current === 0 || !st.base) && !(st.done && st.base)) {
+        st.calib = clamp(bin.speech / CALIB, 0, 1);
+        if (bin.speech >= CALIB) st.base = bin.peaks / bin.speech;
+      }
+      // The dot moves at the end of a phrase, or every 2.5 s of talking
+      if (st.rt.talking) st.sinceUpd += dt;
+      const rate = st.rt.rate;
+      if (st.base && rate != null && (phraseEnded || st.sinceUpd >= 2.5 || st.slow.target == null)) {
+        st.slow.set(rate / st.base);
+        st.sinceUpd = 0;
+      }
+      st.live = st.slow.step(dt);
+      const prevState = st.state;
+      st.state = this._ladderState();
+      // Words, for screen readers and tests (a few times a second at most)
+      st._wordsAcc = (st._wordsAcc || 0) + dt;
+      if (st._wordsAcc >= 0.25) {
+        st._wordsAcc = 0;
+        const r = st.rungs[Math.min(st.current, st.rungs.length - 1)];
+        if (this.$("[data-phase]"))
+          this.$("[data-phase]").textContent = st.done ? L("Escalera lista — mezcla libre", "Ladder complete — free mix") : r?.label || "—";
+        if (this.$("[data-remain]")) this.$("[data-remain]").textContent = st.done ? "✓" : `${Math.ceil(st.remaining)}s`;
+        if (this.$("[data-rate]")) this.$("[data-rate]").textContent = st.live != null ? K.pct(st.live) : "—";
+      }
+      if (phraseEnded && prevState !== st.state && (st.state === "in" || st.state === "low" || st.state === "high")) {
+        const say = {
+          in: L("En el peldaño", "On the rung"),
+          low: L("Un poco más rápido", "A little faster"),
+          high: L("Más rápido que el peldaño", "Faster than the rung")
+        }[st.state];
+        this.viz?.caption?.(say, 4000);
+      }
+      this.viz?.draw();
     },
     onStop() {
-      const r = this.state.runner;
-      const done = r ? Math.min(r.count, r.index + (r.remaining <= 0 ? 0 : 1)) : 0;
-      const mins = Math.max(1, Math.round((performance.now() - this.state.startedAt) / 60000));
+      const st = this.state;
+      const K = global.VTViz?.speechTiming;
+      if (st.rt && !st.review) {
+        if (!st.done) this._closeRung();
+        st.rt.end();
+      }
+      st.review = true;
+      if (this.viz) {
+        this.hud.classList.add("is-replay");
+        this.viz.draw();
+      }
+      const b = this.$("[data-next-rung]");
+      if (b) b.disabled = true;
+      const sec = (performance.now() - (st.wallStart || st.startedAt)) / 1000;
+      const mins = Math.max(1, Math.round(sec / 60));
+      const seq = (st.rungs || []).filter((r) => r.rel != null).map((r) => Math.round(r.rel * 100));
+      // Only what was measured: the minutes. Clarity and rate control are the
+      // learner's own ratings.
+      const patches = sec >= 20 ? { duration: mins } : {};
       return {
-        patches: {
-          duration: mins,
-          rateControl: clamp(1 + done, 1, 5)
-        },
-        summary: L(
-          `${done}/${r?.count || 0} fases de ritmo · ${mins} min`,
-          `${done}/${r?.count || 0} rate phases · ${mins} min`
-        )
+        patches,
+        summary: seq.length
+          ? L(`Escalera aprox.: ${seq.join(" → ")} % · ${mins} min`, `Ladder approx.: ${seq.join(" → ")}% · ${mins} min`)
+          : K
+            ? L("Sin ritmo medido todavía — lee unos segundos en voz alta", "No pace measured yet — read aloud for a few seconds")
+            : L(`${mins} min de escalera de ritmo`, `${mins} min of rate ladder`)
       };
     }
   });
 
   /** v8 — distinct from rate ladder: log metaphors per topic */
+  /**
+   * Dry topics for the metaphor minute (v8): ordinary, concrete, a little
+   * boring on purpose, so the image has to come from the speaker. Each
+   * day starts at a different place in the deck.
+   */
+  const METAPHOR_TOPICS = [
+    ["La factura del agua", "The water bill"],
+    ["Una reunión de presupuesto", "A budget meeting"],
+    ["Actualizar el teléfono", "Updating your phone"],
+    ["El reglamento del edificio", "The building's rules"],
+    ["Esperar el autobús", "Waiting for the bus"],
+    ["Una hoja de cálculo", "A spreadsheet"],
+    ["El seguro del auto", "Car insurance"],
+    ["Ordenar el correo", "Sorting your email"],
+    ["La fila del banco", "The queue at the bank"],
+    ["Las contraseñas", "Passwords"],
+    ["Un contrato de alquiler", "A rental contract"],
+    ["La lavadora", "The washing machine"],
+    ["El acta de una reunión", "Meeting minutes"],
+    ["El tráfico de la mañana", "Morning traffic"],
+    ["Declarar impuestos", "Filing taxes"],
+    ["El manual de una impresora", "A printer manual"],
+    ["Cambiar una bombilla", "Changing a light bulb"],
+    ["La lista del súper", "The grocery list"]
+  ];
+
+  /**
+   * v8 — metaphor fluency: five dry topics, a minute each, one fresh
+   * metaphor out loud per topic. The card shows the topic; the ribbon under
+   * it shows only what a microphone can tell (when you speak, how long you
+   * think, when the first word came); the star is the learner's own tap.
+   * The metaphor's quality is never scored.
+   */
   Modes.metronomeSpeech = baseMode({
     id: "metronomeSpeech",
     render() {
+      const st = this.state;
       const phases = this.profile.phases || [];
-      this.state.runner = createPhaseRunner(phases, (i, p) => {
-        if (global.VTToast) global.VTToast(p.label);
-      });
-      this.state.logged = 0;
+      const n = phases.length || 5;
+      const deck = METAPHOR_TOPICS;
+      const day = Math.floor(Date.now() / 86400000);
+      st.deckNext = (day * n) % deck.length;
+      const draw = () => {
+        const pair = deck[st.deckNext % deck.length];
+        st.deckNext += 1;
+        return L(pair[0], pair[1]);
+      };
+      st.topics = Array.from({ length: n }, (_, i) => ({
+        name: L(`Tema ${i + 1}`, `Topic ${i + 1}`),
+        short: String(i + 1),
+        sec: phases[i]?.sec || 60,
+        text: draw(),
+        start: null,
+        end: null,
+        stars: [],
+        firstWord: null
+      }));
+      st.draw = draw;
+      const first = st.topics[0];
       this.hud.innerHTML = `
-        <div class="mode-title">${L("Fluidez con metáforas", "Metaphor fluency")}</div>
-        <div class="mode-phase" data-phase>${phases[0]?.label || L("Tema", "Topic")}</div>
-        <div class="mode-big" data-remain>—</div>
-        <button type="button" class="btn btn-primary btn-sm" data-log>${L("Dije una metáfora ✓", "I spoke a metaphor ✓")}</button>
-        <p class="mode-meta">${L("Metáforas: <strong data-n>0</strong> / " + phases.length, "Metaphors logged: <strong data-n>0</strong> / " + phases.length)}</p>
-        <p class="mode-meta muted">${L("Una imagen concreta por tema — dilo en voz alta y toca.", "One concrete image per topic — say it out loud, then tap.")}</p>
+        <div class="viz-row viz-head">
+          <div class="mode-title">${L("Fluidez con metáforas", "Metaphor fluency")}</div>
+          <button type="button" class="btn btn-ghost viz-tap" data-next-topic>${L("Siguiente tema →", "Next topic →")}</button>
+        </div>
+        <div class="viz-words" aria-live="polite">
+          <span class="mode-phase" data-phase>${first.name} · ${first.text}</span>
+          <strong class="mode-big" data-remain>${this._clock(first.sec)}</strong>
+          ${L("Metáforas", "Metaphors")} <strong data-n>0</strong> / ${n}
+        </div>
+        <p class="mode-meta muted">${L(
+          "Una imagen concreta por tema, en voz alta: «esto es como… porque…». Pensar en silencio está bien. El micrófono no juzga la metáfora: solo muestra cuándo hablas y cuánto piensas.",
+          "One concrete image per topic, out loud: “this is like… because…”. Thinking in silence is fine. The mic does not judge the metaphor: it only shows when you speak and how long you think."
+        )}</p>
+        <div class="viz-row st-taps">
+          <button type="button" class="btn btn-primary viz-tap st-tap" data-log>${L("Dije una metáfora ✓", "I spoke a metaphor ✓")}</button>
+          <button type="button" class="btn btn-ghost viz-tap st-tap st-tap-swap" data-swap>${L("Otro tema ↻", "Other topic ↻")}</button>
+        </div>
       `;
-      this.$("[data-log]")?.addEventListener("click", () => {
-        this.state.logged++;
-        if (this.$("[data-n]")) this.$("[data-n]").textContent = String(this.state.logged);
-      });
+      this.$("[data-log]")?.addEventListener("click", () => this._star());
+      this.$("[data-swap]")?.addEventListener("click", () => this._swap());
+      this.$("[data-next-topic]")?.addEventListener("click", () => this._nextTopic(false));
+      this._resetTopics();
+      this._mountViz();
     },
-    onFrame() {
-      const r = this.state.runner;
-      if (!r) return;
-      r.tick(performance.now());
+    _clock(sec) {
+      const s = Math.max(0, Math.ceil(sec || 0));
+      return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+    },
+    _resetTopics() {
+      const st = this.state;
+      const F = global.VTFeatures;
+      st.current = 0;
+      st.remaining = st.topics[0]?.sec || 60;
+      st.frac = 0;
+      st.done = false;
+      st.review = false;
+      st.running = false;
+      st.logged = 0;
+      st.last = performance.now();
+      st.lastWords = 0;
+      st.topics.forEach((k) => {
+        k.start = null;
+        k.end = null;
+        k.stars = [];
+        k.firstWord = null;
+      });
+      if (F) st.vad = new F.Vad({});
+      if (this.$("[data-n]")) this.$("[data-n]").textContent = "0";
+      const b = this.$("[data-next-topic]");
+      if (b) b.disabled = false;
+    },
+    _mountViz() {
+      const V = global.VTViz;
+      if (!V || !V.scenes.topicRibbon || !this.state.vad) return;
+      this.hud.classList.add("has-viz");
+      this.viz = new V.Surface(this.hud, (ctx, w, h) => V.scenes.topicRibbon(ctx, w, h, this.state), {
+        label: L(
+          "Tarjeta del tema y cinta de un minuto: bloques cuando hablas, huecos con su duración cuando piensas, y una estrella donde dijiste una metáfora.",
+          "Topic card and a one-minute ribbon: blocks while you speak, gaps with their length while you think, and a star where you spoke a metaphor."
+        ),
+        captionHidden: true
+      });
+      const taps = this.$(".st-taps");
+      if (taps && this.viz.wrap) this.hud.insertBefore(this.viz.wrap, taps);
+      this.viz.draw();
+    },
+    _words() {
+      const st = this.state;
+      const k = st.topics[Math.min(st.current, st.topics.length - 1)];
       if (this.$("[data-phase]"))
-        this.$("[data-phase]").textContent =
-          r.index < r.count ? r.label : L("Todos los temas listos", "All topics done");
-      if (this.$("[data-remain]"))
-        this.$("[data-remain]").textContent =
-          r.index < r.count ? `${Math.ceil(r.remaining)}s` : "✓";
+        this.$("[data-phase]").textContent = st.done ? L("Todos los temas listos", "All topics done") : `${k.name} · ${k.text}`;
+      if (this.$("[data-remain]")) this.$("[data-remain]").textContent = st.done ? "✓" : this._clock(st.remaining);
+    },
+    _star() {
+      const st = this.state;
+      const k = st.topics[Math.min(st.current, st.topics.length - 1)];
+      if (!st.running || !k || !st.vad) return;
+      k.stars.push(st.vad.t);
+      st.logged += 1;
+      if (this.$("[data-n]")) this.$("[data-n]").textContent = String(st.logged);
+      this.viz?.draw();
+    },
+    /** A topic that gives nothing: another from the deck, and its minute starts again. */
+    _swap() {
+      const st = this.state;
+      if (st.done) return;
+      const k = st.topics[st.current];
+      if (!k) return;
+      k.text = st.draw();
+      if (st.running && st.vad) {
+        k.start = st.vad.t;
+        k.firstWord = null;
+        k.stars = [];
+        st.logged = st.topics.reduce((s, x) => s + x.stars.length, 0);
+        if (this.$("[data-n]")) this.$("[data-n]").textContent = String(st.logged);
+        st.remaining = k.sec;
+        st.frac = 0;
+      }
+      this._words();
+      this.viz?.draw();
+    },
+    _nextTopic(auto) {
+      const st = this.state;
+      if (st.done || !st.vad) return;
+      const k = st.topics[st.current];
+      if (k && k.start != null && k.end == null) k.end = st.vad.t;
+      if (st.current < st.topics.length - 1) {
+        st.current += 1;
+        const nx = st.topics[st.current];
+        nx.start = st.running ? st.vad.t : null;
+        st.remaining = nx.sec;
+        st.frac = 0;
+        if (global.VTToast) global.VTToast(`${nx.name} · ${nx.text}`);
+      } else {
+        st.done = true;
+        st.remaining = 0;
+        st.frac = 1;
+      }
+      if (st.done || st.current >= st.topics.length - 1) {
+        const b = this.$("[data-next-topic]");
+        if (b) b.disabled = true;
+      }
+      if (st.done && this.$("[data-swap]")) this.$("[data-swap]").disabled = true;
+      this._words();
+      if (!auto) this.viz?.draw();
+    },
+    onStart() {
+      this._resetTopics();
+      const st = this.state;
+      st.running = true;
+      if (st.topics[0]) st.topics[0].start = 0;
+      this.hud?.classList.remove("is-replay");
+      ["[data-log]", "[data-swap]"].forEach((s) => {
+        if (this.$(s)) this.$(s).disabled = false;
+      });
+      this._words();
+      this.viz?.draw();
+    },
+    onFrame(frame) {
+      const st = this.state;
+      if (!st.running || !st.vad) return;
+      const now = performance.now();
+      const dt = Math.min(0.25, Math.max(0, (now - st.last) / 1000));
+      st.last = now;
+      st.vad.feed(frame);
+      const k = st.topics[st.current];
+      if (k && k.start != null && k.firstWord == null && st.vad.state === "speech" && st.vad.speechStart != null) {
+        k.firstWord = Math.max(0, st.vad.speechStart - k.start);
+      }
+      if (!st.done) {
+        st.remaining -= dt;
+        st.frac = clamp(1 - st.remaining / (k?.sec || 60), 0, 1);
+        if (st.remaining <= 0) this._nextTopic(true);
+      }
+      if (now - st.lastWords > 250) {
+        st.lastWords = now;
+        this._words();
+      }
+      this.viz?.draw();
     },
     onStop() {
-      const n = this.state.logged || 0;
+      const st = this.state;
+      st.running = false;
+      if (st.vad) {
+        const k = st.topics[st.current];
+        if (k && k.start != null && k.end == null) k.end = st.vad.t;
+      }
+      st.review = true;
+      ["[data-log]", "[data-swap]", "[data-next-topic]"].forEach((s) => {
+        if (this.$(s)) this.$(s).disabled = true;
+      });
+      if (this.viz) {
+        this.hud.classList.add("is-replay");
+        this.viz.draw();
+      }
+      const n = st.logged || 0;
+      const played = (st.topics || []).filter((k) => k.start != null);
+      const fw = played.filter((k) => k.firstWord != null).map((k) => global.VTViz?.fmtSec?.(k.firstWord) || `${k.firstWord.toFixed(1)} s`);
+      const fwTxt = fw.length ? L(` · 1.ª palabra: ${fw.join(" → ")}`, ` · first word: ${fw.join(" → ")}`) : "";
       return {
-        patches: {
-          metaphorCount: n,
-          vividness: n >= 5 ? 5 : n >= 3 ? 4 : n >= 1 ? 3 : 2
-        },
-        summary: `${n} metaphors logged`
+        // Spoken metaphors are the learner's own taps; vividness stays theirs to rate
+        patches: n > 0 ? { metaphorCount: n } : {},
+        summary: played.length
+          ? L(
+              `Metáforas por tema: ${played.map((k) => k.stars.length).join(" → ")}${fwTxt}`,
+              `Metaphors per topic: ${played.map((k) => k.stars.length).join(" → ")}${fwTxt}`
+            )
+          : L("Sin temas todavía", "No topics yet")
       };
     }
   });
@@ -940,52 +1340,172 @@
     }
   });
 
+  /**
+   * v3 — lift the soft palate: tongue gently out, count aloud to 60. Each
+   * number is a burst of voice after a short silence, so the count comes
+   * from the microphone (approximately: "treinta y uno" may split, a click
+   * may add one), with −1 / +1 to correct it. The next bead's ring fills
+   * over an unhurried beat as a pace to count against. Nothing here can
+   * tell palate height or nasality: openness and comfort stay self-rated.
+   */
   Modes.countPace = baseMode({
     id: "countPace",
     render() {
-      this.state.count = 0;
-      this.state.lastNudge = 0;
+      const st = this.state;
+      st.goal = this.profile.countTo || 60;
+      st.pace = this.profile.paceSec || 1.1;
       this.hud.innerHTML = `
-        <div class="mode-title">${L("Paladar blando · cuenta hasta 60", "Soft palate · count to 60")}</div>
-        <div class="mode-big" data-c>0</div>
-        <div class="controls-row">
-          <button type="button" class="btn btn-primary btn-sm" data-plus>+1 count</button>
-          <button type="button" class="btn btn-sm" data-plus5>+5</button>
+        <div class="viz-row viz-head">
+          <div class="mode-title">${L("Paladar blando · cuenta hasta 60", "Soft palate · count to 60")}</div>
         </div>
-        <p class="mode-meta">${L("Tiempo <strong data-t>0:00</strong> · Meta 60 · espacio alto, lengua suave afuera", "Time <strong data-t>0:00</strong> · Target 60 · tall space, tongue gently out")}</p>
-        <p class="mode-meta" data-nudge>${L("Toca al contar — o +5 cada pocos números.", "Tap as you count — or +5 every few numbers.")}</p>
+        <div class="viz-words" aria-live="polite">
+          ${L("Cuenta, aprox. por voz:", "Count, approx. by voice:")} <strong class="mode-big" data-c>0</strong> / ${st.goal} ·
+          ${L("Tiempo", "Time")} <strong data-t>0:00</strong>
+          <span data-nudge></span>
+        </div>
+        <p class="mode-meta muted">${L(
+          "Cada número que dices en voz alta llena una cuenta; si una palabra larga cuenta doble, corrige con −1. El dibujo es una guía, no una medida: el micrófono no ve el paladar.",
+          "Each number you say aloud fills a bead; if a long word counts twice, correct with −1. The drawing is a guide, not a measure: the mic cannot see your palate."
+        )}</p>
+        <div class="viz-row st-taps">
+          <button type="button" class="btn btn-ghost viz-tap st-tap st-tap-small" data-minus aria-label="${L("Quitar un número", "Remove one number")}">−1</button>
+          <button type="button" class="btn btn-ghost viz-tap st-tap st-tap-small" data-plus aria-label="${L("Añadir un número", "Add one number")}">+1</button>
+        </div>
       `;
-      this.$("[data-plus]")?.addEventListener("click", () => {
-        this.state.count++;
-        if (this.$("[data-c]")) this.$("[data-c]").textContent = String(this.state.count);
-      });
-      this.$("[data-plus5]")?.addEventListener("click", () => {
-        this.state.count += 5;
-        if (this.$("[data-c]")) this.$("[data-c]").textContent = String(this.state.count);
-      });
+      this.$("[data-plus]")?.addEventListener("click", () => this._adjust(1));
+      this.$("[data-minus]")?.addEventListener("click", () => this._adjust(-1));
+      this._resetCount();
+      this._mountViz();
     },
-    onFrame() {
-      const sec = Math.floor((performance.now() - this.state.startedAt) / 1000);
-      if (this.$("[data-t]"))
-        this.$("[data-t]").textContent = `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
-      if (sec > 0 && sec % 15 === 0 && sec !== this.state.lastNudge) {
-        this.state.lastNudge = sec;
-        if (this.$("[data-nudge]"))
-          this.$("[data-nudge]").textContent =
-            this.state.count < 30
-              ? "Rose-smell lift — keep counting."
-              : "Past 30 — stay free in the jaw.";
+    _resetCount() {
+      const st = this.state;
+      const F = global.VTFeatures;
+      st.beads = [];
+      st.running = false;
+      st.review = false;
+      st.elapsed = 0;
+      st.lastT = null;
+      st.startT = 0;
+      st.counted = false;
+      st.note = null;
+      st.reminder = "";
+      st.last = performance.now();
+      st.lastWords = 0;
+      st.clock = 0;
+      const K = global.VTViz?.speechTiming;
+      if (F && K) st.bursts = new K.Bursts({ onBurst: (t) => this._number(t) });
+      if (this.$("[data-c]")) this.$("[data-c]").textContent = "0";
+    },
+    _mountViz() {
+      const V = global.VTViz;
+      if (!V || !V.scenes.beads || !this.state.bursts) return;
+      this.hud.classList.add("has-viz");
+      this.viz = new V.Surface(this.hud, (ctx, w, h) => V.scenes.beads(ctx, w, h, this.state), {
+        label: L(
+          "Sesenta cuentas en seis filas de diez: cada número que dices llena una; el anillo de la siguiente se llena a un ritmo sin prisa. Al lado, un dibujo de la lengua afuera y el espacio alto.",
+          "Sixty beads in six rows of ten: each number you say fills one; the next bead's ring fills at an unhurried pace. Beside it, a drawing of the tongue out and the tall space."
+        ),
+        captionHidden: true
+      });
+      const taps = this.$(".st-taps");
+      if (taps && this.viz.wrap) this.hud.insertBefore(this.viz.wrap, taps);
+      this.viz.draw();
+    },
+    _adjust(d) {
+      const st = this.state;
+      if (st.review) return;
+      if (d > 0) st.beads.push({ t: st.clock || 0, early: false, manual: true });
+      else st.beads.pop();
+      if (this.$("[data-c]")) this.$("[data-c]").textContent = String(st.beads.length);
+      this.viz?.draw();
+    },
+    onStart() {
+      this._resetCount();
+      const st = this.state;
+      st.running = true;
+      st.startT = 0;
+      this.hud?.classList.remove("is-replay");
+      ["[data-plus]", "[data-minus]"].forEach((s) => {
+        if (this.$(s)) this.$(s).disabled = false;
+      });
+      this.viz?.draw();
+    },
+    /** A number heard: the next bead, marked "»" if it came well before the beat. */
+    _number(t) {
+      const st = this.state;
+      if (!st.running) return;
+      const prev = st.beads[st.beads.length - 1];
+      const early = !!prev && !prev.manual && t - prev.t < st.pace * 0.6;
+      st.beads.push({ t, early, manual: false });
+      st.lastT = t;
+      if (this.$("[data-c]")) this.$("[data-c]").textContent = String(st.beads.length);
+      if (st.beads.length === st.goal)
+        st.note = { text: L(`¡${st.goal}! Descansa la lengua`, `${st.goal}! Rest your tongue`), color: global.VTViz.C.done, until: performance.now() + 4000 };
+    },
+    onFrame(frame) {
+      const st = this.state;
+      if (!st.running || !st.bursts) return;
+      const now = performance.now();
+      const dt = Math.min(0.25, Math.max(0, (now - st.last) / 1000));
+      st.last = now;
+      st.elapsed += dt;
+      st.bursts.feed(frame);
+      st.clock = st.bursts.t;
+      // Two gentle reminders, as words in the card
+      const sec = st.elapsed;
+      const rem =
+        sec >= 60
+          ? L("Descansa si la lengua se cansa", "Rest if your tongue tires")
+          : sec >= 30
+            ? L("Mandíbula suelta", "Jaw loose")
+            : "";
+      if (rem !== st.reminder) {
+        st.reminder = rem;
+        if (rem) st.note = { text: rem, until: now + 3000 };
+        if (this.$("[data-nudge]")) this.$("[data-nudge]").textContent = rem ? ` · ${rem}` : "";
       }
+      if (now - st.lastWords > 500) {
+        st.lastWords = now;
+        const s = Math.floor(sec);
+        if (this.$("[data-t]")) this.$("[data-t]").textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+      }
+      this.viz?.draw();
     },
     onStop() {
-      const c = this.state.count || 0;
+      const st = this.state;
+      st.running = false;
+      st.review = true;
+      ["[data-plus]", "[data-minus]"].forEach((s) => {
+        if (this.$(s)) this.$(s).disabled = true;
+      });
+      if (this.viz) {
+        this.hud.classList.add("is-replay");
+        this.viz.draw();
+      }
+      const c = st.beads ? st.beads.length : 0;
+      const K = global.VTViz?.speechTiming;
+      let tempoTxt = "";
+      const iv = [];
+      (st.beads || []).forEach((b, i, a) => {
+        if (i && !b.manual && !a[i - 1].manual) {
+          const d = b.t - a[i - 1].t;
+          if (d > 0.15 && d < 3) iv.push(d);
+        }
+      });
+      if (iv.length >= 3 && K) {
+        const mu = K.mean(iv);
+        const sd = Math.sqrt(K.mean(iv.map((d) => (d - mu) * (d - mu))));
+        const f = global.VTViz.fmtNum;
+        tempoTxt = L(` · ~${f(mu, 1)} s por número (±${f(sd, 1)} s)`, ` · ~${f(mu, 1)} s per number (±${f(sd, 1)} s)`);
+      }
+      const secs = Math.round(st.elapsed || 0);
       return {
-        patches: {
-          countReached: c,
-          openness: c >= 60 ? 4 : c >= 30 ? 3 : 2,
-          comfort: 3
-        },
-        summary: `Counted to ${c}`
+        // The count is measured (and corrected by the learner); openness and
+        // comfort are theirs to rate
+        patches: c > 0 ? { countReached: c } : {},
+        summary: c
+          ? L(`Llegaste a ${c}${tempoTxt} · ${secs} s`, `You reached ${c}${tempoTxt} · ${secs} s`)
+          : L("Sin números contados todavía", "No numbers counted yet")
       };
     }
   });
@@ -1115,65 +1635,267 @@
     }
   });
 
+  /**
+   * v6 — how to connect: curiosity loops played solo. Each minute is a
+   * loop of scripted turns (10 s your open question, 20 s their imagined
+   * answer, 10 s your reflection and deeper question, 20 s listening), in
+   * three scenarios. The mic can only tell when a voice sounds, so the
+   * picture shows when you spoke, whether their turns stayed quiet, and
+   * your longest turn; presence and question quality stay self-rated.
+   */
   Modes.speechEnergy = baseMode({
     id: "speechEnergy",
     render() {
-      const phases = this.profile.phases;
-      if (phases) {
-        this.state.runner = createPhaseRunner(phases, (i, p) => {
-          if (global.VTToast) global.VTToast(p.label);
-        });
-      }
-      this.state.voice = 0;
-      this.state.silent = 0;
-      this.state.slot = "you"; // you speak | they speak (scripted silence window)
-      this.state.slotT = performance.now();
+      const st = this.state;
+      const phases = this.profile.phases || [{ label: L("Conversación", "Conversation"), sec: 120 }];
+      st.loop = [
+        {
+          kind: "you",
+          sec: 10,
+          name: L("Pregunta abierta", "Open question"),
+          short: L("Pregunta", "Ask"),
+          cue: L("Tu turno: una pregunta abierta", "Your turn: one open question")
+        },
+        {
+          kind: "them",
+          sec: 20,
+          name: L("Escucha", "Listen"),
+          short: L("Escucha", "Listen"),
+          cue: L("Su turno: escucha e imagina la respuesta", "Their turn: listen, imagine the answer")
+        },
+        {
+          kind: "you",
+          sec: 10,
+          name: L("Refleja + pregunta más honda", "Reflect + deeper question"),
+          short: L("Refleja", "Reflect"),
+          cue: L("Tu turno: refleja un detalle, pregunta más hondo", "Your turn: reflect a detail, ask deeper")
+        },
+        {
+          kind: "them",
+          sec: 20,
+          name: L("Escucha", "Listen"),
+          short: L("Escucha", "Listen"),
+          cue: L("Su turno: escucha, busca un dato real", "Their turn: listen for one real fact")
+        }
+      ];
+      st.scenarios = phases.map((p, i) => ({
+        name: p.label,
+        short: String(i + 1),
+        sec: p.sec || 120,
+        start: null,
+        end: null,
+        talk: 0,
+        elapsed: 0,
+        overlap: 0,
+        longest: 0,
+        fact: false
+      }));
       this.hud.innerHTML = `
-        <div class="mode-title">${L("Conexión · bucles de curiosidad", "Connection · curiosity loops")}</div>
-        <div class="mode-phase" data-phase>${phases?.[0]?.label || L("Práctica de conversación", "Conversation practice")}</div>
-        <div class="mode-big" data-slot>YOU ask / speak</div>
-        <div class="listen-bars">
-          <div class="listen-speak" data-speak style="width:50%"></div>
+        <div class="viz-row viz-head">
+          <div class="mode-title">${L("Conexión · bucles de curiosidad", "Connection · curiosity loops")}</div>
+          <button type="button" class="btn btn-ghost viz-tap" data-next-scenario>${L("Siguiente situación →", "Next scenario →")}</button>
         </div>
-        <p class="mode-meta">${L("Tú hablas <strong data-sp>50%</strong> · silencio/escucha <strong data-si>50%</strong>", "You speaking <strong data-sp>50%</strong> · silence/listen slots <strong data-si>50%</strong>")}</p>
-        <p class="mode-meta muted" data-tip>${L("Imagina su respuesta — cállate en SU turno. Califica presencia al final.", "Imagine their answer — stay quiet in THEIR slot. Rate presence yourself after.")}</p>
+        <div class="viz-words" aria-live="polite">
+          <span class="mode-phase" data-phase>${st.scenarios[0]?.name || ""}</span> ·
+          <strong data-slot>${st.loop[0].cue}</strong>
+          <span data-remain>0:10</span> ·
+          ${L("Hablaste", "You spoke")} <strong data-sp>—</strong> ·
+          ${L("Turno más largo", "Longest turn")} <strong data-long>0 s</strong> ·
+          ${L("En su turno", "In their turn")} <strong data-over>0 s</strong>
+        </div>
+        <p class="mode-meta muted">${L(
+          "Juego de rol a solas: pregunta en tu turno y calla en el suyo, imaginando la respuesta. El micrófono solo sabe cuándo suena una voz: cualquier voz en la sala cuenta como «tú». La presencia y las preguntas las calificas tú.",
+          "Solo role-play: ask in your turn and stay quiet in theirs, imagining the answer. The mic only knows when a voice sounds: any voice in the room counts as “you”. Presence and questions are yours to rate."
+        )}</p>
+        <div class="viz-row st-taps">
+          <button type="button" class="btn btn-ghost viz-tap st-tap st-tap-fact" data-fact>${L("Aprendí un dato real ✓", "I learned a real fact ✓")}</button>
+        </div>
       `;
+      this.$("[data-next-scenario]")?.addEventListener("click", () => this._nextScenario());
+      this.$("[data-fact]")?.addEventListener("click", () => this._fact());
+      this._resetTurns();
+      this._mountViz();
+    },
+    _resetTurns() {
+      const st = this.state;
+      const F = global.VTFeatures;
+      st.current = 0;
+      st.done = false;
+      st.review = false;
+      st.running = false;
+      st.slot = null;
+      st.run = 0;
+      st.runStart = null;
+      st.lastSpeech = null;
+      st.overlapNow = 0;
+      st.lastWords = 0;
+      st.scenarios.forEach((s) => {
+        s.start = null;
+        s.end = null;
+        s.talk = 0;
+        s.elapsed = 0;
+        s.overlap = 0;
+        s.longest = 0;
+        s.fact = false;
+      });
+      if (F) st.vad = new F.Vad({ hangMs: 250 });
+      const b = this.$("[data-next-scenario]");
+      if (b) b.disabled = false;
+      const f = this.$("[data-fact]");
+      if (f) f.classList.remove("is-on");
+    },
+    _mountViz() {
+      const V = global.VTViz;
+      if (!V || !V.scenes.turns || !this.state.vad) return;
+      this.hud.classList.add("has-viz");
+      this.viz = new V.Surface(this.hud, (ctx, w, h) => V.scenes.turns(ctx, w, h, this.state), {
+        label: L(
+          "Línea de turnos: arriba, tu voz; abajo, los turnos imaginados de la otra persona, que llegan desde la derecha. Tu voz dentro de su turno aparece rayada; un turno suyo en silencio se cierra con una marca.",
+          "Turn-taking line: above, your voice; below, the other person's imagined turns, arriving from the right. Your voice inside their turn shows hatched; a quiet turn of theirs closes with a check."
+        ),
+        captionHidden: true
+      });
+      const taps = this.$(".st-taps");
+      if (taps && this.viz.wrap) this.hud.insertBefore(this.viz.wrap, taps);
+      this.viz.draw();
+    },
+    _fact() {
+      const st = this.state;
+      const sc = st.scenarios[Math.min(st.current, st.scenarios.length - 1)];
+      if (!sc || !st.running) return;
+      sc.fact = !sc.fact;
+      this.$("[data-fact]")?.classList.toggle("is-on", sc.fact);
+      this.viz?.caption?.(sc.fact ? L("Dato real anotado", "Real fact noted") : L("Dato quitado", "Fact removed"), 900);
+      this.viz?.draw();
+    },
+    _closeRun(at) {
+      const st = this.state;
+      if (st.runStart == null) return;
+      const len = Math.max(0, at - st.runStart);
+      const sc = st.scenarios[st.current];
+      if (sc) sc.longest = Math.max(sc.longest, len);
+      st.runStart = null;
+      st.run = 0;
+    },
+    _nextScenario(auto) {
+      const st = this.state;
+      if (st.done || !st.vad) return;
+      const sc = st.scenarios[st.current];
+      const t = st.vad.t;
+      if (sc && sc.start != null && sc.end == null) sc.end = t;
+      this._closeRun(st.lastSpeech != null ? st.lastSpeech : t);
+      if (st.current < st.scenarios.length - 1) {
+        st.current += 1;
+        const nx = st.scenarios[st.current];
+        nx.start = st.running ? t : null;
+        const f = this.$("[data-fact]");
+        if (f) f.classList.remove("is-on");
+        if (this.$("[data-phase]")) this.$("[data-phase]").textContent = nx.name;
+        if (global.VTToast) global.VTToast(nx.name);
+      } else {
+        st.done = true;
+        st.slot = null;
+        if (this.$("[data-phase]")) this.$("[data-phase]").textContent = L("Situaciones listas", "Scenarios done");
+      }
+      if (st.done || st.current >= st.scenarios.length - 1) {
+        const b = this.$("[data-next-scenario]");
+        if (b) b.disabled = true;
+      }
+      if (!auto) this.viz?.draw();
+    },
+    onStart() {
+      this._resetTurns();
+      const st = this.state;
+      st.running = true;
+      if (st.scenarios[0]) st.scenarios[0].start = 0;
+      if (this.$("[data-phase]")) this.$("[data-phase]").textContent = st.scenarios[0]?.name || "";
+      this.hud?.classList.remove("is-replay");
+      if (this.$("[data-fact]")) this.$("[data-fact]").disabled = false;
+      this.viz?.draw();
     },
     onFrame(frame) {
-      // Alternate 20s you / 25s they (scripted listen)
-      if (performance.now() - this.state.slotT > (this.state.slot === "you" ? 20000 : 25000)) {
-        this.state.slot = this.state.slot === "you" ? "them" : "you";
-        this.state.slotT = performance.now();
-        if (this.$("[data-slot]"))
-          this.$("[data-slot]").textContent =
-            this.state.slot === "you" ? "YOU ask / speak" : "THEIR turn — listen (stay quiet)";
-        if (this.$("[data-tip]"))
-          this.$("[data-tip]").textContent =
-            this.state.slot === "them"
-              ? "Scripted listen window — don't monologue."
-              : "Open question → reflect one detail → deeper question.";
+      const st = this.state;
+      if (!st.running || !st.vad) return;
+      const V = global.VTViz;
+      const K = V.speechTiming;
+      st.vad.feed(frame);
+      const dt = K.frameDt(frame);
+      const t = st.vad.t;
+      const sc = st.scenarios[st.current];
+      if (!st.done && sc && sc.start != null) {
+        sc.elapsed += dt;
+        // Which scripted turn is it now?
+        const u = t - sc.start;
+        const cyc = st.loop.reduce((s, p) => s + p.sec, 0);
+        let off = u % cyc;
+        let step = 0;
+        while (step < st.loop.length - 1 && off >= st.loop[step].sec) {
+          off -= st.loop[step].sec;
+          step += 1;
+        }
+        const a = t - off;
+        const prevKind = st.slot?.kind;
+        st.slot = { kind: st.loop[step].kind, step, a, b: Math.min(a + st.loop[step].sec, sc.start + sc.sec) };
+        if (prevKind && prevKind !== st.slot.kind) st.overlapNow = 0;
+        const speaking = st.vad.state === "speech";
+        if (speaking) {
+          sc.talk += dt;
+          if (st.slot.kind === "them") {
+            sc.overlap += dt;
+            st.overlapNow += dt;
+          }
+        }
+        if (u >= sc.sec) this._nextScenario(true);
       }
-      if (frame.voiced || frame.rms > 0.025) this.state.voice++;
-      else this.state.silent++;
-      const t = this.state.voice + this.state.silent || 1;
-      const sp = Math.round((this.state.voice / t) * 100);
-      const si = 100 - sp;
-      if (this.$("[data-speak]")) this.$("[data-speak]").style.width = `${sp}%`;
-      if (this.$("[data-sp]")) this.$("[data-sp]").textContent = `${sp}%`;
-      if (this.$("[data-si]")) this.$("[data-si]").textContent = `${si}%`;
-      if (this.state.runner) {
-        this.state.runner.tick(performance.now());
-        if (this.$("[data-phase]") && this.state.runner.index < this.state.runner.count)
-          this.$("[data-phase]").textContent = this.state.runner.label;
+      // Turns: speech with no pause of 1.5 s or more
+      if (st.vad.state === "speech") {
+        if (st.runStart == null) st.runStart = st.vad.speechStart != null ? st.vad.speechStart : t;
+        st.lastSpeech = t;
+        st.run = t - st.runStart;
+      } else if (st.runStart != null && st.lastSpeech != null && t - st.lastSpeech >= 1.5) this._closeRun(st.lastSpeech);
+      const now = performance.now();
+      if (now - st.lastWords > 250) {
+        st.lastWords = now;
+        const cur = st.scenarios[Math.min(st.current, st.scenarios.length - 1)];
+        if (this.$("[data-slot]")) this.$("[data-slot]").textContent = st.done ? "✓" : st.loop[st.slot?.step || 0].cue;
+        if (this.$("[data-remain]")) this.$("[data-remain]").textContent = st.done || !st.slot ? "✓" : K.clockUp(st.slot.b - t);
+        if (this.$("[data-sp]")) this.$("[data-sp]").textContent = cur && cur.elapsed > 3 ? K.pct(cur.talk / cur.elapsed) : "—";
+        if (this.$("[data-long]")) this.$("[data-long]").textContent = `${V.fmtNum(Math.max(cur?.longest || 0, st.run || 0), 0)} s`;
+        if (this.$("[data-over]")) this.$("[data-over]").textContent = `${V.fmtNum(cur?.overlap || 0, 0)} s`;
       }
+      this.viz?.draw();
     },
     onStop() {
-      const t = this.state.voice + this.state.silent || 1;
-      const listenBias = this.state.silent / t;
-      // Honest: show data only — do not auto-score presence from silence
+      const st = this.state;
+      st.running = false;
+      if (st.vad) {
+        const sc = st.scenarios[st.current];
+        if (sc && sc.start != null && sc.end == null) sc.end = st.vad.t;
+        this._closeRun(st.lastSpeech != null ? st.lastSpeech : st.vad.t);
+      }
+      st.review = true;
+      ["[data-fact]", "[data-next-scenario]"].forEach((s) => {
+        if (this.$(s)) this.$(s).disabled = true;
+      });
+      if (this.viz) {
+        this.hud.classList.add("is-replay");
+        this.viz.draw();
+      }
+      const K = global.VTViz?.speechTiming;
+      const played = (st.scenarios || []).filter((s) => s.start != null && s.elapsed > 1);
+      const share = played.map((s) => (K ? K.pct(s.talk / Math.max(1, s.elapsed)) : `${Math.round((s.talk / Math.max(1, s.elapsed)) * 100)}%`));
+      const longest = Math.max(0, ...played.map((s) => s.longest));
+      const over = played.reduce((a, s) => a + s.overlap, 0);
+      const facts = played.filter((s) => s.fact).length;
       return {
+        // Presence and question quality are the learner's to rate
         patches: {},
-        summary: `Speak ${Math.round((1 - listenBias) * 100)}% · silence ${Math.round(listenBias * 100)}% — rate presence yourself`
+        summary: played.length
+          ? L(
+              `Hablaste ${share.join(" → ")} (ref. 30 %) · turno más largo ${Math.round(longest)} s · ${Math.round(over)} s en su turno · datos reales: ${facts}`,
+              `You spoke ${share.join(" → ")} (ref. 30%) · longest turn ${Math.round(longest)} s · ${Math.round(over)} s in their turn · real facts: ${facts}`
+            )
+          : L("Sin situaciones todavía", "No scenarios yet")
       };
     }
   });
@@ -1365,110 +2087,573 @@
     }
   });
 
-  /** v11 — distinct from power pause: user flags fillers + replaces with pause */
+  /**
+   * v11 — kill the fillers, in three rounds on the same topic. Round 1 is
+   * awareness (the learner taps when they catch a filler), rounds 2–3 the
+   * competing response (close the mouth and pause instead). A microphone
+   * cannot tell which word was said: the taps are the learner's, the pauses
+   * are measured from the raw sound edge (VTFeatures.Vad), and long flat
+   * voiced sounds ("eee", "mmm") are marked only as possible hesitations,
+   * approximate, never counted as fillers and never red.
+   */
   Modes.fillerDetect = baseMode({
     id: "fillerDetect",
     render() {
-      this.state.fillers = 0;
-      this.state.replacements = 0;
-      this.state.pauses = 0;
-      this.state.hadSpeech = false;
-      this.state.inSilence = false;
-      this.state.minP = (this.profile.minPauseSec || 0.7) * 1000;
+      const st = this.state;
+      const n = this.profile.rounds || 3;
+      const sec = this.profile.roundSec || 120;
+      st.goal = this.profile.minPauseSec || 0.7;
+      st.rounds = Array.from({ length: n }, (_, i) => ({
+        name: L(`Ronda ${i + 1}`, `Round ${i + 1}`),
+        short: L(`R${i + 1}`, `R${i + 1}`),
+        sec,
+        start: null,
+        end: null,
+        noted: [],
+        replaced: [],
+        hes: [],
+        pauses: [],
+        talk: 0
+      }));
+      const goalTxt = String(st.goal);
       this.hud.innerHTML = `
-        <div class="mode-title">${L("Elimina rellenos", "Kill the fillers")}</div>
-        <div class="controls-row">
-          <button type="button" class="btn btn-danger btn-sm" data-fill>Caught an um/like +</button>
-          <button type="button" class="btn btn-success btn-sm" data-rep>Paused instead +</button>
+        <div class="viz-row viz-head">
+          <div class="mode-title">${L("Elimina rellenos", "Kill the fillers")}</div>
+          <button type="button" class="btn btn-ghost viz-tap" data-next-round>${L("Siguiente ronda →", "Next round →")}</button>
         </div>
-        <p class="mode-meta">${L("Rellenos <strong data-f>0</strong> · Reemplazos <strong data-r>0</strong> · Pausas auto <strong data-p>0</strong>", "Fillers noted <strong data-f>0</strong> · Replacements <strong data-r>0</strong> · Auto pauses <strong data-p>0</strong>")}</p>
-        <p class="mode-meta muted">${L("Toca al notar un relleno. Prefiere “Pausé en su lugar” si te atrapas a tiempo.", "Tap when you notice a filler. Prefer “Paused instead” when you catch yourself.")}</p>
+        <div class="viz-words" aria-live="polite">
+          <span data-status>${L("Ronda 1: habla de tu tema y toca al notar un relleno.", "Round 1: talk on your topic and tap when you catch a filler.")}</span>
+          ${L("Rellenos notados", "Fillers caught")} <strong data-f>0</strong> ·
+          ${L("Pausas en su lugar", "Paused instead")} <strong data-r>0</strong> ·
+          ${L(`Pausas de ${goalTxt.replace(".", ",")} s o más`, `Pauses of ${goalTxt} s or more`)} <strong data-p>0</strong> ·
+          ${L("Posibles sonidos de duda (aprox.)", "Possible hesitation sounds (approx.)")} <strong data-hes>0</strong>
+        </div>
+        <p class="mode-meta muted">${L(
+          "El micrófono no distingue palabras: los «o sea», «este» o «entonces» los notas tú. Solo marca, aprox., sonidos largos y planos («eee», «mmm») y tus silencios.",
+          "The mic cannot tell words apart: the “like”, “you know” and “so” are yours to notice. It only marks, approx., long flat sounds (“uhh”, “mmm”) and your silences."
+        )}</p>
+        <div class="viz-row st-taps">
+          <button type="button" class="btn btn-ghost viz-tap st-tap st-tap-fill" data-fill>▽ ${L("Noté un relleno", "Caught a filler")}</button>
+          <button type="button" class="btn btn-success viz-tap st-tap st-tap-rep" data-rep>■ ${L("Pausé en su lugar", "Paused instead")}</button>
+        </div>
       `;
-      this.$("[data-fill]")?.addEventListener("click", () => {
-        this.state.fillers++;
-        if (this.$("[data-f]")) this.$("[data-f]").textContent = String(this.state.fillers);
+      this.$("[data-fill]")?.addEventListener("click", () => this._tap("noted"));
+      this.$("[data-rep]")?.addEventListener("click", () => this._tap("replaced"));
+      this.$("[data-next-round]")?.addEventListener("click", () => this._nextRound(false));
+      this._resetRounds();
+      this._mountViz();
+    },
+    _resetRounds() {
+      const st = this.state;
+      const F = global.VTFeatures;
+      const K = global.VTViz?.speechTiming;
+      st.current = 0;
+      st.remaining = st.rounds[0]?.sec || 0;
+      st.frac = 0;
+      st.done = false;
+      st.review = false;
+      st.running = false;
+      st.fillers = 0;
+      st.replacements = 0;
+      st.pauses = 0;
+      st.hesCount = 0;
+      st.last = performance.now();
+      st.rounds.forEach((r) => {
+        r.start = null;
+        r.end = null;
+        r.noted = [];
+        r.replaced = [];
+        r.hes = [];
+        r.pauses = [];
+        r.talk = 0;
       });
-      this.$("[data-rep]")?.addEventListener("click", () => {
-        this.state.replacements++;
-        if (this.$("[data-r]")) this.$("[data-r]").textContent = String(this.state.replacements);
+      if (F && K) {
+        st.vad = new F.Vad({ onPauseEnd: (start, len) => this._pauseClosed(len) });
+        st.hes = new K.Hesitations({ onFound: (hit) => this._hesFound(hit) });
+      }
+      ["[data-f]", "[data-r]", "[data-p]", "[data-hes]"].forEach((s) => {
+        if (this.$(s)) this.$(s).textContent = "0";
       });
+      const b = this.$("[data-next-round]");
+      if (b) b.disabled = false;
+    },
+    _mountViz() {
+      const V = global.VTViz;
+      if (!V || !V.scenes.fillerRounds || !this.state.vad) return;
+      this.hud.classList.add("has-viz");
+      this.viz = new V.Surface(this.hud, (ctx, w, h) => V.scenes.fillerRounds(ctx, w, h, this.state), {
+        label: L(
+          "Rondas sin relleno: el anillo se llena mientras haces una pausa; debajo, tu habla y tus silencios, con tus marcas: triángulo, relleno notado; cuadrado, pausa en su lugar; círculo, posible sonido de duda.",
+          "Filler-free rounds: the ring fills while you pause; below, your speech and silences with your marks: triangle, filler caught; square, paused instead; circle, possible hesitation sound."
+        ),
+        captionHidden: true
+      });
+      // The picture sits above the two tap buttons
+      const taps = this.$(".st-taps");
+      if (taps && this.viz.wrap) this.hud.insertBefore(this.viz.wrap, taps);
+      this.viz.draw();
+    },
+    _tap(kind) {
+      const st = this.state;
+      const r = st.rounds[st.current];
+      if (!st.running || !r || !st.vad) return;
+      const t = st.vad.t;
+      if (kind === "noted") {
+        // A tap comes a beat after the filler: place the mark where it was
+        r.noted.push(Math.max(r.start, t - 0.6));
+        st.fillers += 1;
+        if (this.$("[data-f]")) this.$("[data-f]").textContent = String(st.fillers);
+      } else {
+        r.replaced.push(t);
+        st.replacements += 1;
+        if (this.$("[data-r]")) this.$("[data-r]").textContent = String(st.replacements);
+      }
+      this.viz?.caption?.(kind === "noted" ? L("Relleno notado", "Filler caught") : L("Pausa en su lugar", "Paused instead"), 800);
+      this.viz?.draw();
+    },
+    _pauseClosed(len) {
+      const st = this.state;
+      if (!st.running || len < st.goal) return;
+      st.pauses += 1;
+      st.rounds[st.current]?.pauses.push(len);
+      if (this.$("[data-p]")) this.$("[data-p]").textContent = String(st.pauses);
+    },
+    _hesFound(hit) {
+      const st = this.state;
+      if (!st.running) return;
+      st.rounds[st.current]?.hes.push(hit);
+      st.hesCount += 1;
+      if (this.$("[data-hes]")) this.$("[data-hes]").textContent = String(st.hesCount);
+    },
+    _nextRound(auto) {
+      const st = this.state;
+      if (st.done || !st.vad) return;
+      const r = st.rounds[st.current];
+      if (st.current < st.rounds.length - 1) {
+        if (r && r.start != null && r.end == null) r.end = st.vad.t;
+        st.current += 1;
+        const nx = st.rounds[st.current];
+        nx.start = st.vad.t;
+        st.remaining = nx.sec;
+        st.frac = 0;
+        const words = L(
+          `${nx.name}: mismo tema. Si viene un relleno, cierra la boca y pausa.`,
+          `${nx.name}: same topic. If a filler comes, close your mouth and pause.`
+        );
+        if (this.$("[data-status]")) this.$("[data-status]").textContent = words;
+        if (global.VTToast) global.VTToast(words);
+      } else {
+        // The last round keeps listening; Stop shows the map
+        st.done = true;
+        st.remaining = 0;
+        st.frac = 1;
+      }
+      if (st.done || st.current >= st.rounds.length - 1) {
+        const b = this.$("[data-next-round]");
+        if (b) b.disabled = true;
+      }
+      if (!auto) this.viz?.draw();
+    },
+    onStart() {
+      this._resetRounds();
+      const st = this.state;
+      st.running = true;
+      if (st.rounds[0]) st.rounds[0].start = 0;
+      this.hud?.classList.remove("is-replay");
+      ["[data-fill]", "[data-rep]"].forEach((s) => {
+        if (this.$(s)) this.$(s).disabled = false;
+      });
+      this.viz?.draw();
     },
     onFrame(frame) {
+      const st = this.state;
+      if (!st.vad || !st.running) return;
       const now = performance.now();
-      const quiet = !frame.voiced && (frame.rms || 0) < 0.02;
-      if (!quiet) {
-        this.state.hadSpeech = true;
-        this.state.inSilence = false;
-        this.state.countedThis = false;
-        return;
+      const dt = Math.min(0.25, Math.max(0, (now - st.last) / 1000));
+      st.last = now;
+      st.vad.feed(frame);
+      st.hes.feed(frame);
+      const r = st.rounds[st.current];
+      if (r && st.vad.state === "speech") r.talk += global.VTViz.speechTiming.frameDt(frame);
+      if (!st.done) {
+        st.remaining -= dt;
+        st.frac = clamp(1 - st.remaining / (r?.sec || 1), 0, 1);
+        if (st.remaining <= 0) this._nextRound(true);
       }
-      if (!this.state.hadSpeech) return;
-      if (!this.state.inSilence) {
-        this.state.inSilence = true;
-        this.state.silenceStart = now;
-      } else if (now - this.state.silenceStart >= this.state.minP && !this.state.countedThis) {
-        this.state.pauses++;
-        this.state.countedThis = true;
-        this.state.hadSpeech = false;
-        if (this.$("[data-p]")) this.$("[data-p]").textContent = String(this.state.pauses);
-      }
+      this.viz?.draw();
     },
     onStop() {
-      const f = this.state.fillers;
-      const r = this.state.replacements;
-      // Honest: filler count is user-logged; replacement scale from user taps only
+      const st = this.state;
+      if (st.vad) {
+        const r = st.rounds[st.current];
+        if (r && r.start != null && r.end == null) r.end = st.vad.t;
+      }
+      st.running = false;
+      st.review = true;
+      ["[data-fill]", "[data-rep]", "[data-next-round]"].forEach((s) => {
+        if (this.$(s)) this.$(s).disabled = true;
+      });
+      if (this.viz) {
+        this.hud.classList.add("is-replay");
+        this.viz.draw();
+      }
+      const played = (st.rounds || []).filter((r) => r.start != null);
+      const seq = played.map((r) => r.noted.length);
+      const seqR = played.map((r) => r.replaced.length);
+      // The best round is the one with the fewest fillers caught, among the
+      // rounds long enough to mean something; only when the learner used the
+      // taps at all (no taps is not "no fillers").
+      const patches = {};
+      const tapped = (st.fillers || 0) + (st.replacements || 0) > 0;
+      const real = played.filter((r) => r.talk >= 20);
+      if (tapped && real.length) patches.fillerCount = Math.min(...real.map((r) => r.noted.length));
+      const hes = st.hesCount || 0;
+      const hesTxt = hes ? L(` · ≈${hes} posibles sonidos de duda (aprox.)`, ` · ≈${hes} possible hesitation sounds (approx.)`) : "";
       return {
-        patches: {
-          fillerCount: f,
-          awareness: f + r >= 3 ? 4 : 3,
-          replacement: r >= 3 ? 5 : r >= 1 ? 4 : 2
-        },
-        summary: `${f} fillers noted · ${r} pause-replacements · ${this.state.pauses} auto pauses`
+        patches,
+        summary: played.length
+          ? L(
+              `Rellenos notados por ronda: ${seq.join(" → ")} · pausas en su lugar: ${seqR.join(" → ")}${hesTxt}`,
+              `Fillers caught per round: ${seq.join(" → ")} · paused instead: ${seqR.join(" → ")}${hesTxt}`
+            )
+          : L("Sin rondas todavía", "No rounds yet")
       };
     }
   });
 
+  /**
+   * v14 — pace for impact, in three takes of the same short message: an
+   * even take that measures the learner's own pace, a take that slows on
+   * each key idea, and a take with a brake (a pause) before it. The pace is
+   * syllables per second, approximate, only ever shown against the even
+   * take. The learner taps «Punto clave» as a key idea starts; the next five
+   * seconds decide whether it landed (slower than the base, or a pause) —
+   * which idea is the key one only the learner knows.
+   */
   Modes.keyPointPace = baseMode({
     id: "keyPointPace",
     render() {
-      this.state.keys = 0;
-      this.state.confirmed = 0;
-      this.state.slowUntil = 0;
-      this.state.quietMs = 0;
+      const st = this.state;
+      st.goal = this.profile.keyPoints || 3;
+      st.pauseGoal = this.profile.minPauseSec || 0.7;
+      st.win = 5;
+      const takes = [
+        {
+          word: L("uniforme", "even"),
+          how: L("Toma 1: di tu mensaje a un solo ritmo, sin frenos. Mide tu base.", "Take 1: say your message at one even pace, no brakes. It measures your base."),
+          cue: ""
+        },
+        {
+          word: L("varía", "vary"),
+          how: L(
+            "Toma 2: lento en cada idea clave (toca «Punto clave» al llegar) y un poco más vivo en los puentes.",
+            "Take 2: slow on each key idea (tap “Key point” as it starts), a little brisker on the bridges."
+          ),
+          cue: L("Lento en lo clave · toca «Punto clave»", "Slow on the key idea · tap “Key point”")
+        },
+        {
+          word: L("frenos", "brakes"),
+          how: L(
+            "Toma 3: un freno — una pausa — antes de cada idea clave, y luego lento.",
+            "Take 3: a brake — a pause — before each key idea, then slow."
+          ),
+          cue: L("Un freno antes de lo clave, luego lento", "A brake before the key idea, then slow")
+        }
+      ];
+      st.takes = takes.map((k, i) =>
+        Object.assign(k, { name: `${i + 1} · ${k.word}`, short: String(i + 1), start: null, end: null, flags: [], spread: null })
+      );
       this.hud.innerHTML = `
-        <div class="mode-title">${L("Ritmo con impacto", "Pace for impact")}</div>
-        <div class="mode-big" data-k>0 / 3 confirmed</div>
-        <button type="button" class="btn btn-primary btn-sm" data-key>Mark key point — then slow 1s</button>
-        <p class="mode-meta" data-st>${L("Toca y baja ritmo/energía ~1s para confirmar.", "Tap, then drop pace/energy ~1 second to confirm.")}</p>
+        <div class="viz-row viz-head">
+          <div class="mode-title">${L("Ritmo con impacto", "Pace for impact")}</div>
+          <button type="button" class="btn btn-ghost viz-tap" data-next-take>${L("Siguiente toma →", "Next take →")}</button>
+        </div>
+        <div class="viz-words" aria-live="polite">
+          <span data-status>${takes[0].how}</span>
+          ${L("Ritmo, aprox.", "Pace, approx.")} <strong data-rate>—</strong> ·
+          ${L("Anclas en esta toma", "Anchors this take")} <strong data-k>0</strong> / ${st.goal} ·
+          ${L("Puntos clave marcados", "Key points marked")} <strong data-marked>0</strong>
+          <span data-last></span>
+        </div>
+        <p class="mode-meta muted">${L(
+          "Tu ritmo en sílabas por segundo, aprox., frente a tu propia toma uniforme. Qué idea es la clave lo sabes tú: el micrófono solo mide si bajaste el ritmo o hiciste una pausa después de tocar.",
+          "Your pace in syllables per second, approx., against your own even take. Which idea is the key one only you know: the mic only measures whether you slowed down or paused after the tap."
+        )}</p>
+        <div class="viz-row st-taps">
+          <button type="button" class="btn btn-primary viz-tap st-tap st-tap-key" data-key>${L("Punto clave", "Key point")}</button>
+        </div>
       `;
-      this.$("[data-key]")?.addEventListener("click", () => {
-        this.state.keys++;
-        this.state.slowUntil = performance.now() + 1200;
-        this.state.quietMs = 0;
-        if (this.$("[data-st]"))
-          this.$("[data-st]").textContent = L("Ventana lenta — suaviza ~1 s…", "Slow window — ease off ~1s…");
+      this.$("[data-key]")?.addEventListener("click", () => this._keyPoint());
+      this.$("[data-next-take]")?.addEventListener("click", () => this._nextTake());
+      this._resetTakes();
+      this._mountViz();
+    },
+    _resetTakes() {
+      const st = this.state;
+      const F = global.VTFeatures;
+      const K = global.VTViz?.speechTiming;
+      st.current = 0;
+      st.elapsed = 0;
+      st.done = false;
+      st.review = false;
+      st.running = false;
+      st.talked = false;
+      st.waiting = false;
+      st.base = null;
+      st.provBase = null;
+      st.baseFrac = 0;
+      st.band = null;
+      st.baseAcc = { peaks: 0, speech: 0, samples: [], sampleAcc: 0 };
+      st.open = [];
+      st.flash = null;
+      st.marked = 0;
+      st.last = performance.now();
+      st.lastWords = 0;
+      st.lastLive = 0;
+      st.takes.forEach((k) => {
+        k.start = null;
+        k.end = null;
+        k.flags = [];
+        k.spread = null;
+        k.bin = null;
       });
+      if (F && K) {
+        st.vad = new F.Vad({});
+        st.rt = new K.RateTrack({ windowSec: 3 });
+        st.live = new K.SlowValue(0.6);
+      }
+      ["[data-k]", "[data-marked]"].forEach((s) => {
+        if (this.$(s)) this.$(s).textContent = "0";
+      });
+      if (this.$("[data-rate]")) this.$("[data-rate]").textContent = "—";
+      if (this.$("[data-last]")) this.$("[data-last]").textContent = "";
+      const b = this.$("[data-next-take]");
+      if (b) b.disabled = false;
+    },
+    _mountViz() {
+      const V = global.VTViz;
+      if (!V || !V.scenes.paceRiver || !this.state.rt) return;
+      this.hud.classList.add("has-viz");
+      this.viz = new V.Surface(this.hud, (ctx, w, h) => V.scenes.paceRiver(ctx, w, h, this.state), {
+        label: L(
+          "Río de ritmo: una línea con tu ritmo de habla en el último medio minuto, frente a la banda de tu ritmo uniforme; cada punto clave deja una bandera, que se vuelve ancla dorada si bajaste el ritmo o hiciste una pausa.",
+          "Pace river: a line with your speaking pace over the last half minute, against the band of your even pace; each key point drops a flag, which becomes a gold anchor if you slowed down or paused."
+        ),
+        captionHidden: true
+      });
+      const taps = this.$(".st-taps");
+      if (taps && this.viz.wrap) this.hud.insertBefore(this.viz.wrap, taps);
+      this.viz.draw();
+    },
+    _keyPoint() {
+      const st = this.state;
+      const k = st.takes[st.current];
+      if (!st.running || !k || !st.rt) return;
+      // The tap comes as the key idea starts; a beat of lag is fine here
+      const f = { t: st.rt.t, state: "wait", rel: null, pause: 0, peaks: 0, speech: 0 };
+      k.flags.push(f);
+      st.open.push(f);
+      st.marked += 1;
+      st.waiting = true;
+      if (this.$("[data-marked]")) this.$("[data-marked]").textContent = String(st.marked);
+      this.viz?.draw();
+    },
+    /** Five seconds after a tap: did the pace drop, or did a pause come? */
+    _judge(f, base) {
+      const st = this.state;
+      const rate = f.speech >= 1.2 ? f.peaks / f.speech : null;
+      f.rel = rate != null && base ? rate / base : null;
+      let pause = 0;
+      const from = f.t - 1.5;
+      const to = f.t + st.win + 2.5;
+      (st.vad?.segments || []).forEach((g) => {
+        if (g.kind !== "pause") return;
+        const end = g.end != null ? g.end : st.vad.t;
+        if (end < from || g.start > to) return;
+        pause = Math.max(pause, end - g.start);
+      });
+      f.pause = pause;
+      const slowed = f.rel != null && f.rel <= 0.85;
+      const paused = pause >= st.pauseGoal;
+      f.state = slowed || paused ? "anchor" : "flat";
+      const V = global.VTViz;
+      const k = st.takes.find((x) => x.flags.includes(f));
+      const n = k ? k.flags.filter((x) => x.state === "anchor").length : 0;
+      if (k === st.takes[st.current] && this.$("[data-k]")) this.$("[data-k]").textContent = String(n);
+      let words;
+      if (f.state === "anchor") {
+        const parts = [];
+        if (slowed) parts.push(L(`${Math.round((1 - f.rel) * 100)} % más lento`, `${Math.round((1 - f.rel) * 100)}% slower`));
+        if (paused) parts.push(L(`pausa de ${V.fmtSec(pause)}`, `a ${V.fmtSec(pause)} pause`));
+        words = L("✓ Ancla: ", "✓ Anchor: ") + parts.join(" · ");
+        st.flash = { text: words, color: V.C.done, until: performance.now() + 3000 };
+      } else {
+        words = L("Ese punto sonó a tu ritmo base", "That one was at your usual pace");
+        st.flash = { text: words, color: V.C.text, until: performance.now() + 3000 };
+      }
+      if (this.$("[data-last]")) this.$("[data-last]").textContent = " · " + words;
+    },
+    _closeTake() {
+      const st = this.state;
+      const k = st.takes[st.current];
+      if (!k || k.start == null || k.end != null) return;
+      k.end = st.rt ? st.rt.t : 0;
+      const bin = st.rt?.cur;
+      const base = st.base || st.provBase;
+      if (bin && base && bin.samples.length >= 4) {
+        const K = global.VTViz.speechTiming;
+        k.spread = (K.quantile(bin.samples, 0.75) - K.quantile(bin.samples, 0.25)) / 2 / base;
+      }
+      k.bin = bin || null;
+    },
+    _nextTake() {
+      const st = this.state;
+      if (st.done || !st.rt) return;
+      if (st.current < st.takes.length - 1) {
+        this._closeTake();
+        st.current += 1;
+        const k = st.takes[st.current];
+        k.start = st.rt.t;
+        st.rt.begin(st.current);
+        st.elapsed = 0;
+        st.flash = null;
+        if (this.$("[data-status]")) this.$("[data-status]").textContent = k.how;
+        if (this.$("[data-k]")) this.$("[data-k]").textContent = "0";
+        if (global.VTToast) global.VTToast(k.how);
+      } else {
+        st.done = true;
+      }
+      if (st.done || st.current >= st.takes.length - 1) {
+        const b = this.$("[data-next-take]");
+        if (b) b.disabled = true;
+        if (st.done && this.$("[data-status]"))
+          this.$("[data-status]").textContent = L("Tres tomas listas: Detener muestra el mapa.", "Three takes done: Stop shows the map.");
+      }
+      this.viz?.draw();
+    },
+    onStart() {
+      this._resetTakes();
+      const st = this.state;
+      st.running = true;
+      if (st.takes[0]) st.takes[0].start = 0;
+      st.rt?.begin(0);
+      this.hud?.classList.remove("is-replay");
+      if (this.$("[data-key]")) this.$("[data-key]").disabled = false;
+      this.viz?.draw();
     },
     onFrame(frame) {
-      if (performance.now() < this.state.slowUntil) {
-        // confirm if speech is softer or sparse
-        if ((frame.rms || 0) < 0.04 || !frame.voiced) {
-          this.state.quietMs += frame.dtMs || 16;
-          if (this.state.quietMs >= 600 && this.state.confirming !== this.state.keys) {
-            this.state.confirming = this.state.keys;
-            this.state.confirmed++;
-            if (this.$("[data-k]"))
-              this.$("[data-k]").textContent = `${this.state.confirmed} / 3 confirmed`;
-            if (this.$("[data-st]")) this.$("[data-st]").textContent = L("Bajada confirmada ✓", "Slow-down confirmed ✓");
+      const st = this.state;
+      if (!st.running || !st.rt) return;
+      const K = global.VTViz.speechTiming;
+      const now = performance.now();
+      const dt = Math.min(0.25, Math.max(0, (now - st.last) / 1000));
+      st.last = now;
+      st.elapsed += dt;
+      st.vad.feed(frame);
+      const s0 = st.rt.sr.speechT;
+      const peak = st.rt.feed(frame) ? 1 : 0;
+      const dS = Math.max(0, st.rt.sr.speechT - s0);
+      const t = st.rt.t;
+      if (st.rt.talking) st.talked = true;
+      // The five seconds after each tap
+      st.open.forEach((f) => {
+        if (t <= f.t + st.win) {
+          f.peaks += peak;
+          f.speech += dS;
+        }
+      });
+      // The base: the even take, away from any key point, until it has 8 s
+      // of talking (and on into take 2 if take 1 was cut short)
+      const near = st.takes.some((k) => k.flags.some((f) => t >= f.t - 1 && t <= f.t + st.win + 1));
+      const measuring = st.current === 0 || st.base == null;
+      if (measuring && !near) {
+        const A = st.baseAcc;
+        A.peaks += peak;
+        A.speech += dS;
+        A.sampleAcc += dS;
+        if (A.sampleAcc >= 1) {
+          A.sampleAcc -= 1;
+          const r = st.rt.rate;
+          if (r != null) A.samples.push(r);
+        }
+        st.baseFrac = clamp(A.speech / 8, 0, 1);
+        if (A.speech >= 8 && A.peaks > 0) {
+          const first = st.base == null;
+          st.base = A.peaks / A.speech;
+          if (A.samples.length >= 4) {
+            const q1 = K.quantile(A.samples, 0.25) / st.base;
+            const q3 = K.quantile(A.samples, 0.75) / st.base;
+            st.band = [Math.min(0.95, q1), Math.max(1.05, q3)];
           }
+          if (first) st.flash = { text: L("✓ Base medida", "✓ Base measured"), color: global.VTViz.C.done, until: now + 2000 };
         }
       }
+      if (st.base == null) st.provBase = st.rt.sr.overall;
+      // Judge each tap once its five seconds are up (and a pause that is
+      // still going has had its chance to count)
+      const base = st.base;
+      if (base) {
+        st.open = st.open.filter((f) => {
+          if (t < f.t + st.win) return true;
+          if (st.vad.state === "pause" && t < f.t + st.win + 2.5) return true;
+          this._judge(f, base);
+          return false;
+        });
+      }
+      st.waiting = st.open.some((f) => t < f.t + st.win);
+      // One slow value for the dot: a new target every half second of talking
+      const denom = st.base || st.provBase;
+      if (denom && st.rt.rate != null && st.rt.talking && now - st.lastLive > 500) {
+        st.lastLive = now;
+        st.live.set(st.rt.rate / denom);
+      }
+      st.live.step(dt);
+      if (now - st.lastWords > 300) {
+        st.lastWords = now;
+        const r = st.rt.rate;
+        if (this.$("[data-rate]"))
+          this.$("[data-rate]").textContent =
+            r != null && denom ? `${global.VTViz.fmtNum(r, 1)} ${L("síl/s", "syll/s")} (${K.pct(r / denom)})` : "—";
+      }
+      this.viz?.draw();
     },
     onStop() {
-      const n = this.state.confirmed || 0;
+      const st = this.state;
+      st.running = false;
+      if (st.rt) {
+        this._closeTake();
+        st.rt.end();
+        const base = st.base || st.rt.sr.overall;
+        (st.open || []).forEach((f) => this._judge(f, base));
+        st.open = [];
+        if (!st.base) st.provBase = base;
+      }
+      st.waiting = false;
+      st.flash = null;
+      st.review = true;
+      ["[data-key]", "[data-next-take]"].forEach((s) => {
+        if (this.$(s)) this.$(s).disabled = true;
+      });
+      if (this.viz) {
+        this.hud.classList.add("is-replay");
+        this.viz.draw();
+      }
+      const played = (st.takes || []).filter((k) => k.start != null);
+      const anchors = played.map((k) => k.flags.filter((f) => f.state === "anchor").length);
+      const patches = {};
+      // Intentional slow-downs: the best take's anchors, and only when the
+      // learner marked key points at all
+      if (st.marked > 0 && anchors.length) patches.keySlowdowns = Math.max(...anchors);
+      const spread = played.map((k) => (k.spread != null ? L(`±${Math.round(k.spread * 100)} %`, `±${Math.round(k.spread * 100)}%`) : "—"));
       return {
-        patches: n > 0 ? { keySlowdowns: n, paceCraft: clamp(n + 1, 1, 5) } : { keySlowdowns: this.state.keys || 0 },
-        summary: `${n} confirmed slow-downs (${this.state.keys} marked)`
+        patches,
+        summary:
+          played.length && (st.base || st.provBase)
+            ? L(
+                `Anclas por toma: ${anchors.join(" → ")} · variación de ritmo aprox.: ${spread.join(" → ")}`,
+                `Anchors per take: ${anchors.join(" → ")} · pace variation, approx.: ${spread.join(" → ")}`
+              )
+            : L("Sin ritmo medido todavía: habla unos segundos.", "No pace measured yet: speak for a few seconds.")
       };
     }
   });

@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Anyone can load this page; only an account on the worker's ADMIN_EMAILS
+         list gets an answer from the routes it calls. Keep it out of search. -->
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Admin · Estudio Vocal</title>
+    <link rel="stylesheet" href="css/styles.css?v=20260923a" />
+    <link rel="stylesheet" href="css/admin.css?v=20260924b" />
+  </head>
+  <body class="admin-page">
+    <header class="app-header">
+      <div class="header-inner">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">♪</div>
+          <div>
+            <p class="brand-name">Estudio Vocal</p>
+            <p data-t="brandSub">Panel de admin</p>
+          </div>
+        </div>
+        <div class="header-actions">
+          <button type="button" class="btn btn-ghost btn-sm" id="admin-lang" lang="en">English</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="admin-signout" hidden data-t="signOut">Salir</button>
+          <a class="btn btn-ghost btn-sm" href="./" data-t="backToApp">← Estudio</a>
+        </div>
+      </div>
+    </header>
+
+    <main class="admin-wrap" id="admin-main">
+      <h1 data-t="title">Panel de admin</h1>
+      <p class="admin-lede" data-t="lede">
+        Da y quita Pro, crea códigos de regalo y revisa el servidor.
+      </p>
+
+      <!-- Who is signed in, and whether this account may use the tools. Exactly
+           one state is shown at a time. -->
+      <section class="admin-card admin-gate" id="admin-gate" aria-live="polite">
+        <p id="gate-checking" data-t="gateChecking">Comprobando tu cuenta…</p>
+
+        <div id="gate-unconfigured" hidden>
+          <p data-t="gateUnconfigured">Este sitio no tiene servidor de cuentas configurado.</p>
+        </div>
+
+        <div id="gate-unreachable" hidden>
+          <p data-t="gateUnreachable">No se pudo contactar al servidor de cuentas.</p>
+          <button type="button" class="btn btn-sm" id="gate-retry" data-t="retry">Reintentar</button>
+        </div>
+
+        <div id="gate-signed-out" hidden>
+          <p data-t="gateSignedOut">Entra con la cuenta de Google de administrador.</p>
+          <div class="admin-google" id="gate-google"></div>
+          <p class="muted admin-small" id="gate-google-fallback" hidden>
+            <span data-t="gateGoogleBlocked">El botón de Google no cargó (a veces lo bloquea una extensión).</span>
+            <a href="./" data-t="gateUseApp">Entra desde el estudio, en Cuenta, y vuelve a esta página.</a>
+          </p>
+          <p class="admin-error" id="gate-error" role="alert"></p>
+        </div>
+
+        <div id="gate-not-admin" hidden>
+          <p><strong id="gate-not-admin-who"></strong></p>
+          <p data-t="gateNotAdmin">Esta cuenta no es administradora. Si debería serlo, su correo tiene que estar en la lista ADMIN_EMAILS del servidor (ver la guía de admin).</p>
+        </div>
+
+        <div id="gate-admin" hidden>
+          <p class="admin-who"><span data-t="signedInAs">Administras como</span> <strong id="gate-admin-who"></strong></p>
+        </div>
+      </section>
+
+      <div id="admin-tools" hidden>
+        <nav class="admin-jump" aria-label="Secciones" data-t-aria="navLabel">
+          <a href="#lookup" data-t="navLookup">Buscar</a>
+          <a href="#give" data-t="navGive">Dar Pro</a>
+          <a href="#codes" data-t="navCodes">Códigos</a>
+          <a href="#maintenance" data-t="navMaintenance">Mantenimiento</a>
+        </nav>
+
+        <!-- 1. Look somebody up: what they hold, and take it back. -->
+        <section class="admin-card" id="lookup" aria-labelledby="lookup-title">
+          <h2 id="lookup-title" data-t="lookupTitle">Buscar una cuenta</h2>
+          <p class="muted" data-t="lookupHelp">Escribe el correo con el que la persona entra al sitio.</p>
+          <form id="lookup-form" class="admin-form admin-inline" novalidate>
+            <label class="field">
+              <span data-t="email">Correo</span>
+              <input type="email" id="lookup-email" name="email" maxlength="254" autocomplete="off" spellcheck="false" required />
+            </label>
+            <button type="submit" class="btn btn-primary" id="lookup-submit" data-t="lookupSubmit">Buscar</button>
+          </form>
+          <div id="lookup-result" class="admin-result" aria-live="polite"></div>
+        </section>
+
+        <!-- 2. Give Pro to a named person, no code needed. -->
+        <section class="admin-card" id="give" aria-labelledby="give-title">
+          <h2 id="give-title" data-t="giveTitle">Dar Pro a una persona</h2>
+          <p class="muted" data-t="giveHelp">Los días cuentan desde hoy. Si la cuenta aún no existe, se crea, y la persona tendrá Pro en cuanto entre con ese correo.</p>
+          <form id="give-form" class="admin-form" novalidate>
+            <label class="field">
+              <span data-t="email">Correo</span>
+              <input type="email" id="give-email" name="email" maxlength="254" autocomplete="off" spellcheck="false" required />
+            </label>
+            <div class="admin-row">
+              <label class="field admin-days">
+                <span data-t="days">Días</span>
+                <input type="number" id="give-days" name="days" min="1" max="3650" step="1" value="30" required />
+              </label>
+              <div class="admin-chips" role="group" aria-label="Días" data-t-aria="days">
+                <button type="button" class="btn btn-sm" data-days="7">7</button>
+                <button type="button" class="btn btn-sm" data-days="30">30</button>
+                <button type="button" class="btn btn-sm" data-days="90">90</button>
+                <button type="button" class="btn btn-sm" data-days="365">365</button>
+              </div>
+            </div>
+            <label class="field">
+              <span data-t="noteLabel">Nota (solo la ven los admins)</span>
+              <input type="text" id="give-note" name="note" maxlength="200" autocomplete="off" />
+            </label>
+            <button type="submit" class="btn btn-primary" id="give-submit" data-t="giveSubmit">Dar Pro</button>
+          </form>
+          <p class="admin-message" id="give-result" aria-live="polite"></p>
+        </section>
+
+        <!-- 3. Gift codes, for handing out by message. -->
+        <section class="admin-card" id="codes" aria-labelledby="codes-title">
+          <h2 id="codes-title" data-t="codesTitle">Códigos de regalo</h2>
+          <p class="muted" data-t="codesHelp">Quien recibe el código lo escribe en Cuenta → «¿Tienes un código de regalo?». Sus días cuentan desde que lo canjea.</p>
+          <form id="code-form" class="admin-form" novalidate>
+            <div class="admin-row">
+              <label class="field admin-days">
+                <span data-t="days">Días</span>
+                <input type="number" id="code-days" name="days" min="1" max="3650" step="1" value="30" required />
+              </label>
+              <label class="field admin-days">
+                <span data-t="uses">Usos</span>
+                <input type="number" id="code-uses" name="uses" min="1" max="1000" step="1" value="1" required />
+              </label>
+            </div>
+            <label class="field">
+              <span data-t="noteLabel">Nota (solo la ven los admins)</span>
+              <input type="text" id="code-note" name="note" maxlength="200" autocomplete="off" />
+            </label>
+            <button type="submit" class="btn btn-primary" id="code-submit" data-t="codeSubmit">Crear código</button>
+          </form>
+          <div class="admin-newcode" id="code-new" aria-live="polite" hidden>
+            <p class="admin-code" id="code-new-value"></p>
+            <div class="controls-row">
+              <button type="button" class="btn btn-sm" id="code-copy" data-t="copyCode">Copiar código</button>
+              <button type="button" class="btn btn-sm" id="code-copy-message" data-t="copyMessage">Copiar mensaje para enviar</button>
+            </div>
+            <p class="muted admin-small" id="code-copy-status" aria-live="polite"></p>
+          </div>
+          <p class="admin-message" id="code-result" aria-live="polite" tabindex="-1"></p>
+          <div class="admin-list-head">
+            <h3 data-t="codesListTitle">Códigos creados</h3>
+            <button type="button" class="btn btn-ghost btn-sm" id="codes-refresh" data-t="codesRefresh">Actualizar lista</button>
+          </div>
+          <div id="code-list" class="admin-table-wrap"></div>
+        </section>
+
+        <!-- 4. Health and housekeeping. -->
+        <section class="admin-card" id="maintenance" aria-labelledby="maintenance-title">
+          <h2 id="maintenance-title" data-t="maintenanceTitle">Mantenimiento</h2>
+          <h3 data-t="healthTitle">Estado del servidor</h3>
+          <ul class="admin-health" id="health-list" aria-live="polite"></ul>
+          <button type="button" class="btn btn-sm" id="health-refresh" data-t="healthRefresh">Comprobar de nuevo</button>
+          <h3 data-t="sweepTitle">Limpiar datos vencidos</h3>
+          <p class="muted" data-t="sweepHelp">Borra sesiones vencidas, códigos de entrada usados y contadores viejos. No toca cuentas, regalos ni progreso.</p>
+          <button type="button" class="btn btn-sm" id="sweep-run" data-t="sweepRun">Limpiar ahora</button>
+          <p class="admin-message" id="sweep-result" aria-live="polite"></p>
+        </section>
+      </div>
+
+      <!-- Outside the tools, so someone who cannot get in yet can still read how. -->
+      <p class="admin-small admin-guide-link">
+        <a href="https://github.com/PillB/vocal-singing-training/blob/main/docs/ADMIN-GUIDE.md" target="_blank" rel="noopener" data-t="guideLink">Guía de admin (paso a paso)</a>
+      </p>
+    </main>
+
+    <script src="js/billing-config.js?v=20260924a"></script>
+    <script src="js/account.js?v=20260924b"></script>
+    <script src="js/admin.js?v=20260924b"></script>
+  </body>
+</html>

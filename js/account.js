@@ -129,8 +129,9 @@
    * @param {string} method HTTP method.
    * @param {string} path Path under the worker base.
    * @param {object|null} body JSON body, or null.
-   * @param {{auth?: boolean, timeoutMs?: number}} [options] Whether to send the
-   *   session token, and how long to wait before giving up.
+   * @param {{auth?: boolean, timeoutMs?: number, token?: string}} [options] Whether
+   *   to send the session token, how long to wait before giving up, and a token
+   *   to send in place of the current one (sign-out, after forgetting it).
    * @returns {Promise<{ok: boolean, status: number, data: object|null, offline?: boolean}>} Result.
    */
   async function request(method, path, body, options) {
@@ -138,8 +139,9 @@
     if (!base) return { ok: false, status: 0, data: null };
     const headers = {};
     if (body !== null && body !== undefined) headers["content-type"] = "application/json";
-    if ((options && options.auth) !== false && session?.token) {
-      headers.authorization = `Bearer ${session.token}`;
+    const token = (options && options.token) || session?.token;
+    if ((options && options.auth) !== false && token) {
+      headers.authorization = `Bearer ${token}`;
     }
     let res;
     // A host that accepts the connection and then never answers is the worst
@@ -388,12 +390,14 @@
    */
   async function signOut(options) {
     const everywhere = !!(options && options.everywhere);
-    if (session?.token) {
-      // Best effort: the local session is dropped either way, so a failed call
-      // never leaves somebody stuck signed in.
-      await request("POST", "/v1/auth/logout", { everywhere });
-    }
+    const token = session?.token;
+    // Forget first, synchronously: the page is signed out the moment this is
+    // called, whether or not the worker ever answers the call below.
     forget();
+    if (token) {
+      // Best effort, and bounded, so a caller that awaits this is not stuck.
+      await request("POST", "/v1/auth/logout", { everywhere }, { token, timeoutMs: 6000 });
+    }
     return { ok: true };
   }
 

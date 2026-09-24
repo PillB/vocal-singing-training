@@ -468,46 +468,254 @@
   });
 
   /** v8 — distinct from rate ladder: log metaphors per topic */
+  /**
+   * Dry topics for the metaphor minute (v8): ordinary, concrete, a little
+   * boring on purpose, so the image has to come from the speaker. Each
+   * day starts at a different place in the deck.
+   */
+  const METAPHOR_TOPICS = [
+    ["La factura del agua", "The water bill"],
+    ["Una reunión de presupuesto", "A budget meeting"],
+    ["Actualizar el teléfono", "Updating your phone"],
+    ["El reglamento del edificio", "The building's rules"],
+    ["Esperar el autobús", "Waiting for the bus"],
+    ["Una hoja de cálculo", "A spreadsheet"],
+    ["El seguro del auto", "Car insurance"],
+    ["Ordenar el correo", "Sorting your email"],
+    ["La fila del banco", "The queue at the bank"],
+    ["Las contraseñas", "Passwords"],
+    ["Un contrato de alquiler", "A rental contract"],
+    ["La lavadora", "The washing machine"],
+    ["El acta de una reunión", "Meeting minutes"],
+    ["El tráfico de la mañana", "Morning traffic"],
+    ["Declarar impuestos", "Filing taxes"],
+    ["El manual de una impresora", "A printer manual"],
+    ["Cambiar una bombilla", "Changing a light bulb"],
+    ["La lista del súper", "The grocery list"]
+  ];
+
+  /**
+   * v8 — metaphor fluency: five dry topics, a minute each, one fresh
+   * metaphor out loud per topic. The card shows the topic; the ribbon under
+   * it shows only what a microphone can tell (when you speak, how long you
+   * think, when the first word came); the star is the learner's own tap.
+   * The metaphor's quality is never scored.
+   */
   Modes.metronomeSpeech = baseMode({
     id: "metronomeSpeech",
     render() {
+      const st = this.state;
       const phases = this.profile.phases || [];
-      this.state.runner = createPhaseRunner(phases, (i, p) => {
-        if (global.VTToast) global.VTToast(p.label);
-      });
-      this.state.logged = 0;
+      const n = phases.length || 5;
+      const deck = METAPHOR_TOPICS;
+      const day = Math.floor(Date.now() / 86400000);
+      st.deckNext = (day * n) % deck.length;
+      const draw = () => {
+        const pair = deck[st.deckNext % deck.length];
+        st.deckNext += 1;
+        return L(pair[0], pair[1]);
+      };
+      st.topics = Array.from({ length: n }, (_, i) => ({
+        name: L(`Tema ${i + 1}`, `Topic ${i + 1}`),
+        short: String(i + 1),
+        sec: phases[i]?.sec || 60,
+        text: draw(),
+        start: null,
+        end: null,
+        stars: [],
+        firstWord: null
+      }));
+      st.draw = draw;
+      const first = st.topics[0];
       this.hud.innerHTML = `
-        <div class="mode-title">${L("Fluidez con metáforas", "Metaphor fluency")}</div>
-        <div class="mode-phase" data-phase>${phases[0]?.label || L("Tema", "Topic")}</div>
-        <div class="mode-big" data-remain>—</div>
-        <button type="button" class="btn btn-primary btn-sm" data-log>${L("Dije una metáfora ✓", "I spoke a metaphor ✓")}</button>
-        <p class="mode-meta">${L("Metáforas: <strong data-n>0</strong> / " + phases.length, "Metaphors logged: <strong data-n>0</strong> / " + phases.length)}</p>
-        <p class="mode-meta muted">${L("Una imagen concreta por tema — dilo en voz alta y toca.", "One concrete image per topic — say it out loud, then tap.")}</p>
+        <div class="viz-row viz-head">
+          <div class="mode-title">${L("Fluidez con metáforas", "Metaphor fluency")}</div>
+          <button type="button" class="btn btn-ghost viz-tap" data-next-topic>${L("Siguiente tema →", "Next topic →")}</button>
+        </div>
+        <div class="viz-words" aria-live="polite">
+          <span class="mode-phase" data-phase>${first.name} · ${first.text}</span>
+          <strong class="mode-big" data-remain>${this._clock(first.sec)}</strong>
+          ${L("Metáforas", "Metaphors")} <strong data-n>0</strong> / ${n}
+        </div>
+        <p class="mode-meta muted">${L(
+          "Una imagen concreta por tema, en voz alta: «esto es como… porque…». Pensar en silencio está bien. El micrófono no juzga la metáfora: solo muestra cuándo hablas y cuánto piensas.",
+          "One concrete image per topic, out loud: “this is like… because…”. Thinking in silence is fine. The mic does not judge the metaphor: it only shows when you speak and how long you think."
+        )}</p>
+        <div class="viz-row st-taps">
+          <button type="button" class="btn btn-primary viz-tap st-tap" data-log>${L("Dije una metáfora ✓", "I spoke a metaphor ✓")}</button>
+          <button type="button" class="btn btn-ghost viz-tap st-tap st-tap-swap" data-swap>${L("Otro tema ↻", "Other topic ↻")}</button>
+        </div>
       `;
-      this.$("[data-log]")?.addEventListener("click", () => {
-        this.state.logged++;
-        if (this.$("[data-n]")) this.$("[data-n]").textContent = String(this.state.logged);
-      });
+      this.$("[data-log]")?.addEventListener("click", () => this._star());
+      this.$("[data-swap]")?.addEventListener("click", () => this._swap());
+      this.$("[data-next-topic]")?.addEventListener("click", () => this._nextTopic(false));
+      this._resetTopics();
+      this._mountViz();
     },
-    onFrame() {
-      const r = this.state.runner;
-      if (!r) return;
-      r.tick(performance.now());
+    _clock(sec) {
+      const s = Math.max(0, Math.ceil(sec || 0));
+      return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+    },
+    _resetTopics() {
+      const st = this.state;
+      const F = global.VTFeatures;
+      st.current = 0;
+      st.remaining = st.topics[0]?.sec || 60;
+      st.frac = 0;
+      st.done = false;
+      st.review = false;
+      st.running = false;
+      st.logged = 0;
+      st.last = performance.now();
+      st.lastWords = 0;
+      st.topics.forEach((k) => {
+        k.start = null;
+        k.end = null;
+        k.stars = [];
+        k.firstWord = null;
+      });
+      if (F) st.vad = new F.Vad({});
+      if (this.$("[data-n]")) this.$("[data-n]").textContent = "0";
+      const b = this.$("[data-next-topic]");
+      if (b) b.disabled = false;
+    },
+    _mountViz() {
+      const V = global.VTViz;
+      if (!V || !V.scenes.topicRibbon || !this.state.vad) return;
+      this.hud.classList.add("has-viz");
+      this.viz = new V.Surface(this.hud, (ctx, w, h) => V.scenes.topicRibbon(ctx, w, h, this.state), {
+        label: L(
+          "Tarjeta del tema y cinta de un minuto: bloques cuando hablas, huecos con su duración cuando piensas, y una estrella donde dijiste una metáfora.",
+          "Topic card and a one-minute ribbon: blocks while you speak, gaps with their length while you think, and a star where you spoke a metaphor."
+        ),
+        captionHidden: true
+      });
+      const taps = this.$(".st-taps");
+      if (taps && this.viz.wrap) this.hud.insertBefore(this.viz.wrap, taps);
+      this.viz.draw();
+    },
+    _words() {
+      const st = this.state;
+      const k = st.topics[Math.min(st.current, st.topics.length - 1)];
       if (this.$("[data-phase]"))
-        this.$("[data-phase]").textContent =
-          r.index < r.count ? r.label : L("Todos los temas listos", "All topics done");
-      if (this.$("[data-remain]"))
-        this.$("[data-remain]").textContent =
-          r.index < r.count ? `${Math.ceil(r.remaining)}s` : "✓";
+        this.$("[data-phase]").textContent = st.done ? L("Todos los temas listos", "All topics done") : `${k.name} · ${k.text}`;
+      if (this.$("[data-remain]")) this.$("[data-remain]").textContent = st.done ? "✓" : this._clock(st.remaining);
+    },
+    _star() {
+      const st = this.state;
+      const k = st.topics[Math.min(st.current, st.topics.length - 1)];
+      if (!st.running || !k || !st.vad) return;
+      k.stars.push(st.vad.t);
+      st.logged += 1;
+      if (this.$("[data-n]")) this.$("[data-n]").textContent = String(st.logged);
+      this.viz?.draw();
+    },
+    /** A topic that gives nothing: another from the deck, and its minute starts again. */
+    _swap() {
+      const st = this.state;
+      if (st.done) return;
+      const k = st.topics[st.current];
+      if (!k) return;
+      k.text = st.draw();
+      if (st.running && st.vad) {
+        k.start = st.vad.t;
+        k.firstWord = null;
+        k.stars = [];
+        st.logged = st.topics.reduce((s, x) => s + x.stars.length, 0);
+        if (this.$("[data-n]")) this.$("[data-n]").textContent = String(st.logged);
+        st.remaining = k.sec;
+        st.frac = 0;
+      }
+      this._words();
+      this.viz?.draw();
+    },
+    _nextTopic(auto) {
+      const st = this.state;
+      if (st.done || !st.vad) return;
+      const k = st.topics[st.current];
+      if (k && k.start != null && k.end == null) k.end = st.vad.t;
+      if (st.current < st.topics.length - 1) {
+        st.current += 1;
+        const nx = st.topics[st.current];
+        nx.start = st.running ? st.vad.t : null;
+        st.remaining = nx.sec;
+        st.frac = 0;
+        if (global.VTToast) global.VTToast(`${nx.name} · ${nx.text}`);
+      } else {
+        st.done = true;
+        st.remaining = 0;
+        st.frac = 1;
+      }
+      if (st.done || st.current >= st.topics.length - 1) {
+        const b = this.$("[data-next-topic]");
+        if (b) b.disabled = true;
+      }
+      if (st.done && this.$("[data-swap]")) this.$("[data-swap]").disabled = true;
+      this._words();
+      if (!auto) this.viz?.draw();
+    },
+    onStart() {
+      this._resetTopics();
+      const st = this.state;
+      st.running = true;
+      if (st.topics[0]) st.topics[0].start = 0;
+      this.hud?.classList.remove("is-replay");
+      ["[data-log]", "[data-swap]"].forEach((s) => {
+        if (this.$(s)) this.$(s).disabled = false;
+      });
+      this._words();
+      this.viz?.draw();
+    },
+    onFrame(frame) {
+      const st = this.state;
+      if (!st.running || !st.vad) return;
+      const now = performance.now();
+      const dt = Math.min(0.25, Math.max(0, (now - st.last) / 1000));
+      st.last = now;
+      st.vad.feed(frame);
+      const k = st.topics[st.current];
+      if (k && k.start != null && k.firstWord == null && st.vad.state === "speech" && st.vad.speechStart != null) {
+        k.firstWord = Math.max(0, st.vad.speechStart - k.start);
+      }
+      if (!st.done) {
+        st.remaining -= dt;
+        st.frac = clamp(1 - st.remaining / (k?.sec || 60), 0, 1);
+        if (st.remaining <= 0) this._nextTopic(true);
+      }
+      if (now - st.lastWords > 250) {
+        st.lastWords = now;
+        this._words();
+      }
+      this.viz?.draw();
     },
     onStop() {
-      const n = this.state.logged || 0;
+      const st = this.state;
+      st.running = false;
+      if (st.vad) {
+        const k = st.topics[st.current];
+        if (k && k.start != null && k.end == null) k.end = st.vad.t;
+      }
+      st.review = true;
+      ["[data-log]", "[data-swap]", "[data-next-topic]"].forEach((s) => {
+        if (this.$(s)) this.$(s).disabled = true;
+      });
+      if (this.viz) {
+        this.hud.classList.add("is-replay");
+        this.viz.draw();
+      }
+      const n = st.logged || 0;
+      const played = (st.topics || []).filter((k) => k.start != null);
+      const fw = played.filter((k) => k.firstWord != null).map((k) => global.VTViz?.fmtSec?.(k.firstWord) || `${k.firstWord.toFixed(1)} s`);
+      const fwTxt = fw.length ? L(` · 1.ª palabra: ${fw.join(" → ")}`, ` · first word: ${fw.join(" → ")}`) : "";
       return {
-        patches: {
-          metaphorCount: n,
-          vividness: n >= 5 ? 5 : n >= 3 ? 4 : n >= 1 ? 3 : 2
-        },
-        summary: `${n} metaphors logged`
+        // Spoken metaphors are the learner's own taps; vividness stays theirs to rate
+        patches: n > 0 ? { metaphorCount: n } : {},
+        summary: played.length
+          ? L(
+              `Metáforas por tema: ${played.map((k) => k.stars.length).join(" → ")}${fwTxt}`,
+              `Metaphors per topic: ${played.map((k) => k.stars.length).join(" → ")}${fwTxt}`
+            )
+          : L("Sin temas todavía", "No topics yet")
       };
     }
   });
@@ -823,65 +1031,267 @@
     }
   });
 
+  /**
+   * v6 — how to connect: curiosity loops played solo. Each minute is a
+   * loop of scripted turns (10 s your open question, 20 s their imagined
+   * answer, 10 s your reflection and deeper question, 20 s listening), in
+   * three scenarios. The mic can only tell when a voice sounds, so the
+   * picture shows when you spoke, whether their turns stayed quiet, and
+   * your longest turn; presence and question quality stay self-rated.
+   */
   Modes.speechEnergy = baseMode({
     id: "speechEnergy",
     render() {
-      const phases = this.profile.phases;
-      if (phases) {
-        this.state.runner = createPhaseRunner(phases, (i, p) => {
-          if (global.VTToast) global.VTToast(p.label);
-        });
-      }
-      this.state.voice = 0;
-      this.state.silent = 0;
-      this.state.slot = "you"; // you speak | they speak (scripted silence window)
-      this.state.slotT = performance.now();
+      const st = this.state;
+      const phases = this.profile.phases || [{ label: L("Conversación", "Conversation"), sec: 120 }];
+      st.loop = [
+        {
+          kind: "you",
+          sec: 10,
+          name: L("Pregunta abierta", "Open question"),
+          short: L("Pregunta", "Ask"),
+          cue: L("Tu turno: una pregunta abierta", "Your turn: one open question")
+        },
+        {
+          kind: "them",
+          sec: 20,
+          name: L("Escucha", "Listen"),
+          short: L("Escucha", "Listen"),
+          cue: L("Su turno: escucha e imagina la respuesta", "Their turn: listen, imagine the answer")
+        },
+        {
+          kind: "you",
+          sec: 10,
+          name: L("Refleja + pregunta más honda", "Reflect + deeper question"),
+          short: L("Refleja", "Reflect"),
+          cue: L("Tu turno: refleja un detalle, pregunta más hondo", "Your turn: reflect a detail, ask deeper")
+        },
+        {
+          kind: "them",
+          sec: 20,
+          name: L("Escucha", "Listen"),
+          short: L("Escucha", "Listen"),
+          cue: L("Su turno: escucha, busca un dato real", "Their turn: listen for one real fact")
+        }
+      ];
+      st.scenarios = phases.map((p, i) => ({
+        name: p.label,
+        short: String(i + 1),
+        sec: p.sec || 120,
+        start: null,
+        end: null,
+        talk: 0,
+        elapsed: 0,
+        overlap: 0,
+        longest: 0,
+        fact: false
+      }));
       this.hud.innerHTML = `
-        <div class="mode-title">${L("Conexión · bucles de curiosidad", "Connection · curiosity loops")}</div>
-        <div class="mode-phase" data-phase>${phases?.[0]?.label || L("Práctica de conversación", "Conversation practice")}</div>
-        <div class="mode-big" data-slot>YOU ask / speak</div>
-        <div class="listen-bars">
-          <div class="listen-speak" data-speak style="width:50%"></div>
+        <div class="viz-row viz-head">
+          <div class="mode-title">${L("Conexión · bucles de curiosidad", "Connection · curiosity loops")}</div>
+          <button type="button" class="btn btn-ghost viz-tap" data-next-scenario>${L("Siguiente situación →", "Next scenario →")}</button>
         </div>
-        <p class="mode-meta">${L("Tú hablas <strong data-sp>50%</strong> · silencio/escucha <strong data-si>50%</strong>", "You speaking <strong data-sp>50%</strong> · silence/listen slots <strong data-si>50%</strong>")}</p>
-        <p class="mode-meta muted" data-tip>${L("Imagina su respuesta — cállate en SU turno. Califica presencia al final.", "Imagine their answer — stay quiet in THEIR slot. Rate presence yourself after.")}</p>
+        <div class="viz-words" aria-live="polite">
+          <span class="mode-phase" data-phase>${st.scenarios[0]?.name || ""}</span> ·
+          <strong data-slot>${st.loop[0].cue}</strong>
+          <span data-remain>0:10</span> ·
+          ${L("Hablaste", "You spoke")} <strong data-sp>—</strong> ·
+          ${L("Turno más largo", "Longest turn")} <strong data-long>0 s</strong> ·
+          ${L("En su turno", "In their turn")} <strong data-over>0 s</strong>
+        </div>
+        <p class="mode-meta muted">${L(
+          "Juego de rol a solas: pregunta en tu turno y calla en el suyo, imaginando la respuesta. El micrófono solo sabe cuándo suena una voz: cualquier voz en la sala cuenta como «tú». La presencia y las preguntas las calificas tú.",
+          "Solo role-play: ask in your turn and stay quiet in theirs, imagining the answer. The mic only knows when a voice sounds: any voice in the room counts as “you”. Presence and questions are yours to rate."
+        )}</p>
+        <div class="viz-row st-taps">
+          <button type="button" class="btn btn-ghost viz-tap st-tap st-tap-fact" data-fact>${L("Aprendí un dato real ✓", "I learned a real fact ✓")}</button>
+        </div>
       `;
+      this.$("[data-next-scenario]")?.addEventListener("click", () => this._nextScenario());
+      this.$("[data-fact]")?.addEventListener("click", () => this._fact());
+      this._resetTurns();
+      this._mountViz();
+    },
+    _resetTurns() {
+      const st = this.state;
+      const F = global.VTFeatures;
+      st.current = 0;
+      st.done = false;
+      st.review = false;
+      st.running = false;
+      st.slot = null;
+      st.run = 0;
+      st.runStart = null;
+      st.lastSpeech = null;
+      st.overlapNow = 0;
+      st.lastWords = 0;
+      st.scenarios.forEach((s) => {
+        s.start = null;
+        s.end = null;
+        s.talk = 0;
+        s.elapsed = 0;
+        s.overlap = 0;
+        s.longest = 0;
+        s.fact = false;
+      });
+      if (F) st.vad = new F.Vad({ hangMs: 250 });
+      const b = this.$("[data-next-scenario]");
+      if (b) b.disabled = false;
+      const f = this.$("[data-fact]");
+      if (f) f.classList.remove("is-on");
+    },
+    _mountViz() {
+      const V = global.VTViz;
+      if (!V || !V.scenes.turns || !this.state.vad) return;
+      this.hud.classList.add("has-viz");
+      this.viz = new V.Surface(this.hud, (ctx, w, h) => V.scenes.turns(ctx, w, h, this.state), {
+        label: L(
+          "Línea de turnos: arriba, tu voz; abajo, los turnos imaginados de la otra persona, que llegan desde la derecha. Tu voz dentro de su turno aparece rayada; un turno suyo en silencio se cierra con una marca.",
+          "Turn-taking line: above, your voice; below, the other person's imagined turns, arriving from the right. Your voice inside their turn shows hatched; a quiet turn of theirs closes with a check."
+        ),
+        captionHidden: true
+      });
+      const taps = this.$(".st-taps");
+      if (taps && this.viz.wrap) this.hud.insertBefore(this.viz.wrap, taps);
+      this.viz.draw();
+    },
+    _fact() {
+      const st = this.state;
+      const sc = st.scenarios[Math.min(st.current, st.scenarios.length - 1)];
+      if (!sc || !st.running) return;
+      sc.fact = !sc.fact;
+      this.$("[data-fact]")?.classList.toggle("is-on", sc.fact);
+      this.viz?.caption?.(sc.fact ? L("Dato real anotado", "Real fact noted") : L("Dato quitado", "Fact removed"), 900);
+      this.viz?.draw();
+    },
+    _closeRun(at) {
+      const st = this.state;
+      if (st.runStart == null) return;
+      const len = Math.max(0, at - st.runStart);
+      const sc = st.scenarios[st.current];
+      if (sc) sc.longest = Math.max(sc.longest, len);
+      st.runStart = null;
+      st.run = 0;
+    },
+    _nextScenario(auto) {
+      const st = this.state;
+      if (st.done || !st.vad) return;
+      const sc = st.scenarios[st.current];
+      const t = st.vad.t;
+      if (sc && sc.start != null && sc.end == null) sc.end = t;
+      this._closeRun(st.lastSpeech != null ? st.lastSpeech : t);
+      if (st.current < st.scenarios.length - 1) {
+        st.current += 1;
+        const nx = st.scenarios[st.current];
+        nx.start = st.running ? t : null;
+        const f = this.$("[data-fact]");
+        if (f) f.classList.remove("is-on");
+        if (this.$("[data-phase]")) this.$("[data-phase]").textContent = nx.name;
+        if (global.VTToast) global.VTToast(nx.name);
+      } else {
+        st.done = true;
+        st.slot = null;
+        if (this.$("[data-phase]")) this.$("[data-phase]").textContent = L("Situaciones listas", "Scenarios done");
+      }
+      if (st.done || st.current >= st.scenarios.length - 1) {
+        const b = this.$("[data-next-scenario]");
+        if (b) b.disabled = true;
+      }
+      if (!auto) this.viz?.draw();
+    },
+    onStart() {
+      this._resetTurns();
+      const st = this.state;
+      st.running = true;
+      if (st.scenarios[0]) st.scenarios[0].start = 0;
+      if (this.$("[data-phase]")) this.$("[data-phase]").textContent = st.scenarios[0]?.name || "";
+      this.hud?.classList.remove("is-replay");
+      if (this.$("[data-fact]")) this.$("[data-fact]").disabled = false;
+      this.viz?.draw();
     },
     onFrame(frame) {
-      // Alternate 20s you / 25s they (scripted listen)
-      if (performance.now() - this.state.slotT > (this.state.slot === "you" ? 20000 : 25000)) {
-        this.state.slot = this.state.slot === "you" ? "them" : "you";
-        this.state.slotT = performance.now();
-        if (this.$("[data-slot]"))
-          this.$("[data-slot]").textContent =
-            this.state.slot === "you" ? "YOU ask / speak" : "THEIR turn — listen (stay quiet)";
-        if (this.$("[data-tip]"))
-          this.$("[data-tip]").textContent =
-            this.state.slot === "them"
-              ? "Scripted listen window — don't monologue."
-              : "Open question → reflect one detail → deeper question.";
+      const st = this.state;
+      if (!st.running || !st.vad) return;
+      const V = global.VTViz;
+      const K = V.speechTiming;
+      st.vad.feed(frame);
+      const dt = K.frameDt(frame);
+      const t = st.vad.t;
+      const sc = st.scenarios[st.current];
+      if (!st.done && sc && sc.start != null) {
+        sc.elapsed += dt;
+        // Which scripted turn is it now?
+        const u = t - sc.start;
+        const cyc = st.loop.reduce((s, p) => s + p.sec, 0);
+        let off = u % cyc;
+        let step = 0;
+        while (step < st.loop.length - 1 && off >= st.loop[step].sec) {
+          off -= st.loop[step].sec;
+          step += 1;
+        }
+        const a = t - off;
+        const prevKind = st.slot?.kind;
+        st.slot = { kind: st.loop[step].kind, step, a, b: Math.min(a + st.loop[step].sec, sc.start + sc.sec) };
+        if (prevKind && prevKind !== st.slot.kind) st.overlapNow = 0;
+        const speaking = st.vad.state === "speech";
+        if (speaking) {
+          sc.talk += dt;
+          if (st.slot.kind === "them") {
+            sc.overlap += dt;
+            st.overlapNow += dt;
+          }
+        }
+        if (u >= sc.sec) this._nextScenario(true);
       }
-      if (frame.voiced || frame.rms > 0.025) this.state.voice++;
-      else this.state.silent++;
-      const t = this.state.voice + this.state.silent || 1;
-      const sp = Math.round((this.state.voice / t) * 100);
-      const si = 100 - sp;
-      if (this.$("[data-speak]")) this.$("[data-speak]").style.width = `${sp}%`;
-      if (this.$("[data-sp]")) this.$("[data-sp]").textContent = `${sp}%`;
-      if (this.$("[data-si]")) this.$("[data-si]").textContent = `${si}%`;
-      if (this.state.runner) {
-        this.state.runner.tick(performance.now());
-        if (this.$("[data-phase]") && this.state.runner.index < this.state.runner.count)
-          this.$("[data-phase]").textContent = this.state.runner.label;
+      // Turns: speech with no pause of 1.5 s or more
+      if (st.vad.state === "speech") {
+        if (st.runStart == null) st.runStart = st.vad.speechStart != null ? st.vad.speechStart : t;
+        st.lastSpeech = t;
+        st.run = t - st.runStart;
+      } else if (st.runStart != null && st.lastSpeech != null && t - st.lastSpeech >= 1.5) this._closeRun(st.lastSpeech);
+      const now = performance.now();
+      if (now - st.lastWords > 250) {
+        st.lastWords = now;
+        const cur = st.scenarios[Math.min(st.current, st.scenarios.length - 1)];
+        if (this.$("[data-slot]")) this.$("[data-slot]").textContent = st.done ? "✓" : st.loop[st.slot?.step || 0].cue;
+        if (this.$("[data-remain]")) this.$("[data-remain]").textContent = st.done || !st.slot ? "✓" : K.clockUp(st.slot.b - t);
+        if (this.$("[data-sp]")) this.$("[data-sp]").textContent = cur && cur.elapsed > 3 ? K.pct(cur.talk / cur.elapsed) : "—";
+        if (this.$("[data-long]")) this.$("[data-long]").textContent = `${V.fmtNum(Math.max(cur?.longest || 0, st.run || 0), 0)} s`;
+        if (this.$("[data-over]")) this.$("[data-over]").textContent = `${V.fmtNum(cur?.overlap || 0, 0)} s`;
       }
+      this.viz?.draw();
     },
     onStop() {
-      const t = this.state.voice + this.state.silent || 1;
-      const listenBias = this.state.silent / t;
-      // Honest: show data only — do not auto-score presence from silence
+      const st = this.state;
+      st.running = false;
+      if (st.vad) {
+        const sc = st.scenarios[st.current];
+        if (sc && sc.start != null && sc.end == null) sc.end = st.vad.t;
+        this._closeRun(st.lastSpeech != null ? st.lastSpeech : st.vad.t);
+      }
+      st.review = true;
+      ["[data-fact]", "[data-next-scenario]"].forEach((s) => {
+        if (this.$(s)) this.$(s).disabled = true;
+      });
+      if (this.viz) {
+        this.hud.classList.add("is-replay");
+        this.viz.draw();
+      }
+      const K = global.VTViz?.speechTiming;
+      const played = (st.scenarios || []).filter((s) => s.start != null && s.elapsed > 1);
+      const share = played.map((s) => (K ? K.pct(s.talk / Math.max(1, s.elapsed)) : `${Math.round((s.talk / Math.max(1, s.elapsed)) * 100)}%`));
+      const longest = Math.max(0, ...played.map((s) => s.longest));
+      const over = played.reduce((a, s) => a + s.overlap, 0);
+      const facts = played.filter((s) => s.fact).length;
       return {
+        // Presence and question quality are the learner's to rate
         patches: {},
-        summary: `Speak ${Math.round((1 - listenBias) * 100)}% · silence ${Math.round(listenBias * 100)}% — rate presence yourself`
+        summary: played.length
+          ? L(
+              `Hablaste ${share.join(" → ")} (ref. 30 %) · turno más largo ${Math.round(longest)} s · ${Math.round(over)} s en su turno · datos reales: ${facts}`,
+              `You spoke ${share.join(" → ")} (ref. 30%) · longest turn ${Math.round(longest)} s · ${Math.round(over)} s in their turn · real facts: ${facts}`
+            )
+          : L("Sin situaciones todavía", "No scenarios yet")
       };
     }
   });

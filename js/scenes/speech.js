@@ -1405,9 +1405,700 @@
     }
   }
 
+  /* —— v8 · Metaphor topics —— */
+
+  // A thinking gap long enough to be worth naming (never a fault)
+  const GAP_SEC = 1.5;
+
+  /** Word-wrap `text` into at most `maxLines` lines at the largest size from `px` down that fits. */
+  function wrapFit(ctx, text, maxW, px, min, weight, maxLines) {
+    const words = String(text || "").split(/\s+/);
+    for (let size = px; size >= min; size -= 1) {
+      ctx.font = font(size, weight);
+      const lines = [];
+      let cur = "";
+      words.forEach((wd) => {
+        const t = cur ? cur + " " + wd : wd;
+        if (!cur || ctx.measureText(t).width <= maxW) cur = t;
+        else {
+          lines.push(cur);
+          cur = wd;
+        }
+      });
+      if (cur) lines.push(cur);
+      if (lines.length <= maxLines || size === min) return { size, lines: lines.slice(0, maxLines) };
+    }
+    return { size: min, lines: [text] };
+  }
+
+  /** The pauses of one topic, clipped to it: [{ a, b, len, lead }] (lead = before the first word). */
+  function topicGaps(vad, k, now) {
+    const out = [];
+    if (!vad || k.start == null) return out;
+    const to = k.end != null ? k.end : now;
+    let spoke = false;
+    vad.segments.forEach((g) => {
+      const end = g.end != null ? g.end : vad.t;
+      if (end <= k.start || g.start >= to) return;
+      if (g.kind === "speech") {
+        spoke = true;
+        return;
+      }
+      const a = Math.max(g.start, k.start);
+      const b = Math.min(end, to);
+      out.push({ a, b, len: b - a, lead: !spoke, open: g.end == null });
+    });
+    return out;
+  }
+
+  /**
+   * Metaphor fluency — "Baraja de temas y cinta de fluidez".
+   * A topic card (a dry topic, and the frame "… es como ___ porque ___"),
+   * the five topics as a track, and under the card one minute of ribbon for
+   * this topic: your speech as blocks, thinking gaps of 1,5 s or more named
+   * by their length in a neutral tone, the time to your first word, and a
+   * star where you said a metaphor. The metaphor itself is never judged.
+   * model: {
+   *   topics: [{ name, short, text, sec, start, end, stars: [t], firstWord }],
+   *   current, remaining, frac, done, review, vad
+   * }
+   */
+  function topicRibbon(ctx, w, h, m) {
+    panel(ctx, w, h);
+    const pad = 10;
+    const tiny = h < 135;
+    const compact = h < 190;
+    const chipH = tiny ? 0 : compact ? 26 : 36;
+    const T = m.topics;
+    if (!tiny) {
+      const wide = w >= 560;
+      chips(
+        ctx,
+        { x: pad, y: pad, w: w - pad * 2, h: chipH },
+        T.map((k, i) => ({
+          label: wide ? k.name : k.short,
+          short: k.short,
+          sub: topicSub(m, k, i),
+          done: k.end != null && k.stars.length > 0
+        })),
+        { current: m.review || m.done ? -1 : m.current, frac: m.review || m.done ? null : m.frac }
+      );
+    }
+    const top = tiny ? pad - 2 : pad + chipH + (compact ? 6 : 10);
+    if (m.review) return topicReview(ctx, { x: pad, y: top, w: w - pad * 2, h: h - top - pad }, m, compact);
+    const i = Math.min(m.current, T.length - 1);
+    const k = T[i];
+    const vad = m.vad;
+    // Bottom block: stars, the one-minute ribbon, a line of readouts
+    const ribH = tiny ? 16 : compact ? 20 : clamp(h * 0.12, 26, 64);
+    const readH = tiny ? 0 : 16;
+    const starRoom = tiny ? 11 : 17;
+    const ribY = h - pad - readH - ribH;
+    const card = { x: pad, y: top, w: w - pad * 2, h: Math.max(20, ribY - starRoom - (tiny ? 2 : 8) - top) };
+    topicCard(ctx, card, m, k, i, { tiny, compact });
+    const box = { x: pad, y: ribY, w: w - pad * 2, h: ribH };
+    const from = k.start != null ? k.start : vad.t;
+    const read = ribbon(ctx, box, m, k, from, from + k.sec, { tiny, live: true, starY: ribY - (tiny ? 6 : 9) });
+    if (readH) {
+      ctx.font = font(10, 700);
+      ctx.textBaseline = "top";
+      ctx.textAlign = "left";
+      ctx.fillStyle = C.muted;
+      const parts = [];
+      if (k.firstWord != null) parts.push(L(`1.ª palabra ${fmtSec(k.firstWord)}`, `first word ${fmtSec(k.firstWord)}`));
+      parts.push(L(`pausas de ${V.fmtNum(GAP_SEC, 1)} s o más: ${read.long}`, `pauses of ${V.fmtNum(GAP_SEC, 1)} s or more: ${read.long}`));
+      const legend = box.w >= 520;
+      fitText(ctx, parts.join(" · "), box.x + 2, ribY + ribH + 4, legend ? box.w * 0.68 : box.w - 4, 10, 700, 8);
+      if (legend) {
+        ctx.textAlign = "right";
+        ctx.fillStyle = C.faint;
+        ctx.fillText(L("1 min · hablas ▬ piensas ␣", "1 min · speaking ▬ thinking ␣"), box.x + box.w - 2, ribY + ribH + 4, box.w * 0.3);
+      }
+    }
+  }
+
+  function topicSub(m, k, i) {
+    if (k.end != null) return k.stars.length ? `★ ${k.stars.length}` : "—";
+    if (i === m.current && !m.review && !m.done) return clockUp(m.remaining);
+    return `${Math.round(k.sec)} s`;
+  }
+
+  /** The card: which topic, the topic itself, the frame, and one slow cue. */
+  function topicCard(ctx, box, m, k, i, o) {
+    const { x, y, w, h } = box;
+    const n = m.topics.length;
+    ctx.fillStyle = "rgba(170, 195, 230, 0.07)";
+    roundRect(ctx, x, y, w, h, 10);
+    ctx.fill();
+    ctx.strokeStyle = C.grid;
+    ctx.lineWidth = 1;
+    roundRect(ctx, x, y, w, h, 10);
+    ctx.stroke();
+    const ix = x + 12;
+    const iw = w - 24;
+    // The clock, top right
+    ctx.textAlign = "right";
+    ctx.textBaseline = "top";
+    ctx.fillStyle = C.text;
+    const clockPx = o.tiny ? 15 : o.compact ? 17 : 22;
+    ctx.font = font(clockPx, 800, true);
+    const clock = m.done ? "✓" : clockUp(m.remaining);
+    ctx.fillText(clock, x + w - 10, y + (o.tiny ? 4 : 8));
+    const cw = ctx.measureText(clock).width + 14;
+    if (o.tiny) {
+      ctx.textAlign = "left";
+      ctx.textBaseline = "top";
+      ctx.fillStyle = C.text;
+      fitText(ctx, `${i + 1}/${n} · ${k.text}`, ix, y + 5, iw - cw, 15, 800, 10);
+      if (h >= 40) {
+        ctx.fillStyle = C.muted;
+        fitText(ctx, topicCue(m, k), ix, y + 24, iw, 11, 700, 9);
+      }
+      return;
+    }
+    ctx.textAlign = "left";
+    ctx.fillStyle = C.muted;
+    let lead = L(`Tema ${i + 1} de ${n}`, `Topic ${i + 1} of ${n}`);
+    const nx = m.topics[i + 1];
+    if (nx && !m.done && m.remaining <= 8) lead += L(` · siguiente: ${nx.text}`, ` · next: ${nx.text}`);
+    fitText(ctx, lead, ix, y + 9, iw - cw, 11, 700, 9);
+    // The topic, as big as the card allows (up to two lines), and the
+    // frame for the image under it; on a tall card the frame takes two lines
+    const cueH = o.compact ? 0 : 18;
+    const tall = !o.compact && h >= 230;
+    const frameH = o.compact ? 0 : tall ? 50 : 20;
+    const avail = h - 28 - cueH - frameH - 6;
+    const px = clamp(Math.floor(avail / 2.4), 13, tall ? 40 : 30);
+    const fit = wrapFit(ctx, k.text, iw - (avail < 40 ? cw : 0), px, 12, 800, avail >= px * 2.2 ? 2 : 1);
+    const blockH = fit.lines.length * fit.size * 1.18 + frameH;
+    let ty = y + 26 + Math.max(0, (h - 28 - cueH - 6 - blockH) / 2);
+    ctx.fillStyle = C.text;
+    ctx.font = font(fit.size, 800);
+    ctx.textBaseline = "top";
+    fit.lines.forEach((ln) => {
+      ctx.fillText(ln, ix, ty, iw);
+      ty += fit.size * 1.18;
+    });
+    if (frameH) {
+      ctx.fillStyle = C.faint;
+      if (tall) {
+        fitText(ctx, L("… es como ______", "… is like ______"), ix, ty + 4, iw, 18, 700, 11);
+        fitText(ctx, L("… porque ______", "… because ______"), ix, ty + 28, iw, 18, 700, 11);
+      } else fitText(ctx, L("… es como ______ porque ______", "… is like ______ because ______"), ix, ty + 2, iw, 13, 700, 10);
+    }
+    if (cueH) {
+      const cue = topicCue(m, k);
+      ctx.fillStyle = k.stars.length && !m.done ? C.done : C.muted;
+      fitText(ctx, cue, ix, y + h - cueH - 2, iw, 12, 700, 9);
+    }
+  }
+
+  /** One slow cue for the card. */
+  function topicCue(m, k) {
+    const vad = m.vad;
+    if (m.done) return L("Cinco temas listos: Detener muestra tus cintas", "Five topics done: Stop shows your ribbons");
+    if (k.firstWord == null) return L("Busca una imagen concreta… y empieza a hablar", "Find a concrete image… then start speaking");
+    if (vad.state === "pause" && vad.pauseLen >= GAP_SEC) return L("Pensar está bien · sigue cuando la tengas", "Thinking is fine · go on when you have it");
+    if (k.stars.length) return L(`★ ${k.stars.length} en este tema · sigue hablando`, `★ ${k.stars.length} on this topic · keep talking`);
+    return L("Al decir la metáfora, toca «Dije una metáfora»", "When you say the metaphor, tap “I spoke a metaphor”");
+  }
+
+  /**
+   * One topic's ribbon over [from, to]: speech blocks, named thinking
+   * gaps, the lead-in before the first word, stars. Returns { long }.
+   */
+  function ribbon(ctx, box, m, k, from, to, o) {
+    const vad = m.vad;
+    const span = Math.max(0.5, to - from);
+    const now = Math.min(vad.t, to, k.end != null ? k.end : Infinity);
+    const xOf = (t) => box.x + ((t - from) / span) * box.w;
+    // Only this topic's sound, on the scale of its whole minute
+    ctx.fillStyle = "rgba(170, 195, 230, 0.06)";
+    roundRect(ctx, box.x, box.y, box.w, box.h, 6);
+    ctx.fill();
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(box.x - 1, box.y - 2, Math.max(0, xOf(now) - box.x + 1), box.h + 4);
+    ctx.clip();
+    speechStrip(ctx, box, vad, { range: [from, to], minLabel: 99 });
+    ctx.restore();
+    // Thinking gaps, clipped to this topic, named by length, neutral
+    let long = 0;
+    topicGaps(vad, k, now).forEach((g) => {
+      if (g.len < GAP_SEC) return;
+      if (!g.lead) long += 1;
+      const a = xOf(g.a);
+      const b = xOf(g.b);
+      if (b - a < 24 || o.tiny) return;
+      ctx.font = font(box.h < 26 ? 10 : 11, 800);
+      ctx.fillStyle = C.muted;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      const txt = g.lead ? (b - a > 90 ? L(`1.ª palabra ${fmtSec(g.len)}`, `first word ${fmtSec(g.len)}`) : `⏱ ${fmtSec(g.len)}`) : fmtSec(g.len);
+      ctx.fillText(txt, (a + b) / 2, box.y + box.h / 2 + 0.5, b - a - 4);
+    });
+    if (o.live && vad.t <= to) {
+      const nx = xOf(vad.t);
+      ctx.strokeStyle = "rgba(238, 243, 250, 0.55)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(nx, box.y - 3);
+      ctx.lineTo(nx, box.y + box.h + 3);
+      ctx.stroke();
+    }
+    k.stars.forEach((t) => {
+      if (t < from || t > to + 0.5) return;
+      mark(ctx, "star", Math.min(box.x + box.w - 4, xOf(t)), o.starY, o.tiny ? 5 : 7);
+    });
+    return { long };
+  }
+
+  /** After Stop: a mini ribbon per topic, stacked, and where to keep the best line. */
+  function topicReview(ctx, box, m, compact) {
+    const played = m.topics.filter((k) => k.start != null);
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    if (!played.length) {
+      ctx.fillStyle = C.muted;
+      ctx.font = font(13, 600);
+      ctx.fillText(L("Sin temas todavía.", "No topics yet."), box.x, box.y + 10);
+      return;
+    }
+    const total = played.reduce((s, k) => s + k.stars.length, 0);
+    const seq = played.map((k) => k.stars.length).join(" → ");
+    ctx.fillStyle = C.text;
+    fitText(ctx, L(`Metáforas ★ ${seq} · total ${total}`, `Metaphors ★ ${seq} · total ${total}`), box.x + 2, box.y + 10, box.w - 4, compact ? 13 : 15, 800, 10);
+    const footH = compact ? 0 : 18;
+    const rowsTop = box.y + 24;
+    const rowH = Math.min(64, (box.h - 24 - footH) / played.length);
+    const labelW = Math.min(230, box.w * 0.4);
+    played.forEach((k, i) => {
+      const y = rowsTop + i * rowH;
+      const end = k.end != null ? k.end : m.vad.t;
+      ctx.fillStyle = C.text;
+      ctx.textAlign = "left";
+      ctx.textBaseline = "top";
+      fitText(ctx, `${k.short} · ${k.text}`, box.x, y + 2, labelW - 8, 12, 800, 9);
+      const gaps = topicGaps(m.vad, k, end).filter((g) => !g.lead && g.len >= GAP_SEC).length;
+      if (rowH >= 30) {
+        ctx.fillStyle = C.muted;
+        const fw = k.firstWord != null ? L(`1.ª palabra ${fmtSec(k.firstWord)}`, `first word ${fmtSec(k.firstWord)}`) : L("sin habla", "no speech");
+        fitText(ctx, `${fw} · ${L("pausas largas", "long pauses")} ${gaps}`, box.x, y + 17, labelW - 8, 11, 600, 8);
+      }
+      const rb = { x: box.x + labelW, y: y + 11, w: box.w - labelW, h: Math.max(10, Math.min(24, rowH - 18)) };
+      // The whole topic minute on the same scale, so the rows compare
+      ribbon(ctx, rb, m, k, k.start, k.start + Math.max(k.sec, end - k.start), { tiny: rb.h < 18, live: false, starY: rb.y - 5 });
+    });
+    if (footH) {
+      ctx.textAlign = "left";
+      ctx.textBaseline = "bottom";
+      ctx.fillStyle = C.done;
+      fitText(ctx, L("★ Escribe tu mejor metáfora de hoy en «Notas de la sesión», abajo.", "★ Write today's best metaphor in “Session notes”, below."), box.x + 2, box.y + box.h, box.w - 4, 12, 700, 9);
+    }
+  }
+
+  /* —— v6 · Curiosity loops —— */
+
+  /**
+   * The scripted turns of one scenario, from its start to its planned (or
+   * actual) end: [{ kind: "you"|"them", step, a, b }].
+   */
+  function slotsOf(sc, loop, startAt) {
+    const out = [];
+    const start = startAt != null ? startAt : sc.start;
+    if (start == null) return out;
+    const end = sc.end != null ? sc.end : start + sc.sec;
+    let t = start;
+    let i = 0;
+    while (t < end - 0.05 && out.length < 400) {
+      const p = loop[i % loop.length];
+      out.push({ kind: p.kind, step: i % loop.length, a: t, b: Math.min(end, t + p.sec) });
+      t += p.sec;
+      i += 1;
+    }
+    return out;
+  }
+
+  /** Seconds of your speech inside [a, b]. */
+  function speechIn(vad, a, b) {
+    let s = 0;
+    for (let i = vad.segments.length - 1; i >= 0; i--) {
+      const g = vad.segments[i];
+      const end = g.end != null ? g.end : vad.t;
+      if (end <= a) break;
+      if (g.kind !== "speech" || g.start >= b) continue;
+      s += Math.max(0, Math.min(end, b) - Math.max(g.start, a));
+    }
+    return s;
+  }
+
+  /** Diagonal hatching over a box: your voice in their turn, marked by shape, not by alarm. */
+  function hatch(ctx, x, y, w, h, color) {
+    if (w <= 0) return;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x, y, w, h);
+    ctx.clip();
+    ctx.fillStyle = "rgba(191, 230, 255, 0.16)";
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    for (let d = -h; d < w + h; d += 6) {
+      ctx.moveTo(x + d, y + h);
+      ctx.lineTo(x + d + h, y);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  /**
+   * Curiosity loops — "Línea de turnos".
+   * Two lanes on one clock: above, your voice; below, the imagined other
+   * person's turns, arriving from the right so a flip is never a surprise.
+   * Your voice inside their turn is hatched and tallied in seconds, never
+   * red; a listening turn you left quiet closes with a check. The loop's
+   * four steps run as a track above; the talk share and the longest turn
+   * of this scenario sit beside the lanes, with 30 % as a reference only.
+   * model: {
+   *   scenarios: [{ name, short, sec, start, end, talk, elapsed, overlap, longest, fact }],
+   *   loop: [{ kind, name, short, sec, cue }], current, done, review,
+   *   slot { kind, step, a, b } | null, run (current turn, s), vad
+   * }
+   */
+  function turns(ctx, w, h, m) {
+    panel(ctx, w, h);
+    const pad = 10;
+    const tiny = h < 135;
+    const compact = h < 190;
+    const chipH = tiny ? 0 : compact ? 26 : 36;
+    const vad = m.vad;
+    const now = vad.t;
+    if (m.review) {
+      const top = pad;
+      return turnsReview(ctx, { x: pad, y: top, w: w - pad * 2, h: h - top - pad }, m, compact);
+    }
+    const slot = m.slot;
+    if (!tiny) {
+      const wide = w >= 620;
+      chips(
+        ctx,
+        { x: pad, y: pad, w: w - pad * 2, h: chipH },
+        m.loop.map((p, i) => ({
+          label: wide ? p.name : p.short,
+          short: p.short,
+          sub: slot && slot.step === i && !m.done ? clockUp(slot.b - now) : `${p.sec} s`,
+          done: !!slot && !m.done && i < slot.step
+        })),
+        { current: slot && !m.done ? slot.step : -1, frac: slot && !m.done ? clamp((now - slot.a) / Math.max(0.1, slot.b - slot.a), 0, 1) : null }
+      );
+    }
+    const top = tiny ? pad - 2 : pad + chipH + (compact ? 6 : 10);
+    const headY = top + (tiny ? 8 : compact ? 9 : 12);
+    // Right: when the turn flips, counted down in words and a big number
+    let rightW = 0;
+    if (slot && !m.done) {
+      const left = Math.max(0, slot.b - now);
+      ctx.textAlign = "right";
+      ctx.textBaseline = "middle";
+      ctx.font = font(compact ? 16 : 22, 800, true);
+      ctx.fillStyle = C.text;
+      const big = clockUp(left);
+      ctx.fillText(big, w - pad - 2, headY + 1);
+      const bw = ctx.measureText(big).width;
+      ctx.font = font(10, 700);
+      ctx.fillStyle = left <= 5 ? C.text : C.muted;
+      const words = slot.kind === "you" ? L("su turno en", "their turn in") : L("tu turno en", "your turn in");
+      ctx.fillText(words, w - pad - bw - 8, headY + 1);
+      rightW = bw + 12 + ctx.measureText(words).width;
+    }
+    const head = turnsHead(m, tiny);
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = head.color;
+    // A narrow picture gives the cue its own line under the countdown
+    const own = !tiny && !compact && w < 480;
+    const cueY = own ? headY + 24 : headY;
+    fitText(ctx, head.text, pad + 2, cueY, own ? w - pad * 2 - 4 : w - pad * 2 - rightW - 12, compact ? 14 : 17, 800, 10);
+    if (own && m.scenarios[m.current]) {
+      ctx.fillStyle = C.muted;
+      fitText(ctx, m.scenarios[m.current].name, pad + 2, headY, w - pad * 2 - rightW - 12, 12, 700, 9);
+    }
+
+    // Readouts beside the lanes when there is width, else under them
+    const side = w >= 640 && !tiny;
+    const readW = side ? 170 : 0;
+    const readH = side || tiny ? 0 : compact ? 16 : 34;
+    const lanesTop = cueY + (tiny ? 10 : compact ? 13 : 20);
+    const lanes = { x: pad, y: lanesTop, w: w - pad * 2 - (side ? readW + 10 : 0), h: h - lanesTop - pad - readH };
+    lanesPlot(ctx, lanes, m, { tiny, compact, live: true });
+    const sc = m.scenarios[Math.min(m.current, m.scenarios.length - 1)];
+    if (side) turnsReadouts(ctx, { x: w - pad - readW, y: lanesTop, w: readW, h: lanes.h }, m, sc, false);
+    else if (readH) turnsReadouts(ctx, { x: pad, y: h - pad - readH, w: w - pad * 2, h: readH }, m, sc, true);
+  }
+
+  function turnsHead(m, tiny) {
+    const sc = m.scenarios[Math.min(m.current, m.scenarios.length - 1)];
+    const pre = tiny && sc ? `${sc.short} · ` : "";
+    if (m.done) return { text: pre + L("Tres situaciones listas: Detener muestra el mapa", "Three scenarios done: Stop shows the map"), color: C.done };
+    const slot = m.slot;
+    if (!slot) return { text: pre + L("Empieza con una pregunta abierta", "Start with an open question"), color: C.text };
+    const p = m.loop[slot.step];
+    if (slot.kind === "them" && m.overlapNow >= 1) return { text: pre + L("Su turno: deja espacio a su respuesta", "Their turn: leave room for the answer"), color: C.text };
+    return { text: pre + p.cue, color: slot.kind === "you" ? C.you : C.text };
+  }
+
+  /** The two lanes: your voice above, their imagined turns below, one clock. */
+  function lanesPlot(ctx, box, m, o) {
+    const vad = m.vad;
+    const now = o.range ? o.range[1] : vad.t;
+    const labelW = o.tiny || box.w < 420 ? 0 : 66;
+    const lx = box.x + labelW;
+    const lw = box.w - labelW;
+    const secs = o.range ? Math.max(1, o.range[1] - o.range[0]) : lw < 380 ? 24 : 40;
+    let from;
+    if (o.range) from = o.range[0];
+    else if (V.reducedMotion()) from = Math.floor(now / secs) * secs;
+    else from = now - secs * 0.72; // what is coming shows on the right
+    const to = from + secs;
+    const xOf = (t) => lx + ((t - from) / secs) * lw;
+    const gap = o.tiny ? 4 : 6;
+    const laneH = (box.h - gap) / 2;
+    const youY = box.y;
+    const themY = box.y + laneH + gap;
+    ctx.fillStyle = "rgba(170, 195, 230, 0.05)";
+    roundRect(ctx, lx, youY, lw, laneH, 6);
+    ctx.fill();
+    roundRect(ctx, lx, themY, lw, laneH, 6);
+    ctx.fill();
+    if (labelW) {
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      ctx.font = font(12, 800);
+      ctx.fillStyle = C.you;
+      ctx.fillText(L("Tú", "You"), box.x, youY + laneH / 2);
+      ctx.fillStyle = C.muted;
+      ctx.font = font(11, 800);
+      ctx.fillText(L("Su turno", "Their turn"), box.x, themY + laneH / 2 - 6, labelW - 4);
+      ctx.font = font(9, 700);
+      ctx.fillStyle = C.faint;
+      ctx.fillText(L("(imaginado)", "(imagined)"), box.x, themY + laneH / 2 + 7, labelW - 4);
+    }
+    if (!labelW && !o.tiny && laneH >= 34) {
+      ctx.textAlign = "left";
+      ctx.textBaseline = "top";
+      ctx.font = font(10, 800);
+      ctx.fillStyle = C.you;
+      ctx.fillText(L("tú", "you"), lx + 6, youY + 4);
+      ctx.fillStyle = C.faint;
+      ctx.fillText(L("su turno (imaginado)", "their turn (imagined)"), lx + 6, themY + 4, lw - 12);
+    }
+    // The scripted turns: yours as a faint slot above, theirs outlined below
+    const scs = m.scenarios;
+    const all = [];
+    scs.forEach((sc, i) => {
+      if (sc.start != null) all.push(...slotsOf(sc, m.loop));
+      else if (!o.range && !m.done && i === m.current + 1) {
+        const cur = scs[m.current];
+        if (cur && cur.start != null) all.push(...slotsOf(sc, m.loop, cur.start + cur.sec));
+      }
+    });
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(lx, box.y - 2, lw, box.h + 4);
+    ctx.clip();
+    all.forEach((s) => {
+      if (s.b <= from || s.a >= to) return;
+      const a = Math.max(lx, xOf(s.a));
+      const b = Math.min(lx + lw, xOf(s.b));
+      if (s.kind === "you") {
+        ctx.fillStyle = "rgba(191, 230, 255, 0.1)";
+        roundRect(ctx, a + 1, youY + 1, b - a - 2, laneH - 2, 5);
+        ctx.fill();
+        ctx.strokeStyle = "rgba(191, 230, 255, 0.28)";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        return;
+      }
+      const over = speechIn(vad, s.a, Math.min(s.b, now));
+      const past = s.b <= now;
+      ctx.strokeStyle = past ? C.grid : C.gridStrong;
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash(past ? [] : [5, 4]);
+      roundRect(ctx, a + 2, themY + 2, b - a - 4, laneH - 4, 5);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      // What the window is, and how it went
+      const mid = (a + b) / 2;
+      if (b - a > 40 && !o.tiny) {
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.font = font(laneH < 26 ? 9 : 11, 700);
+        let txt = L("escucha", "listen");
+        ctx.fillStyle = C.faint;
+        if (past && over < 0.5) {
+          txt = L("✓ en silencio", "✓ quiet");
+          ctx.fillStyle = C.target;
+        } else if (over >= 0.5) {
+          txt = L(`${V.fmtNum(over, 0)} s en su turno`, `${V.fmtNum(over, 0)} s in their turn`);
+          ctx.fillStyle = C.muted;
+        }
+        ctx.fillText(txt, mid, themY + laneH / 2 + 0.5, b - a - 8);
+      } else if (past && over < 0.5) glyph(ctx, "check", mid, themY + laneH / 2, C.target, 5);
+    });
+    // Your voice: blocks above; the part inside their turn hatched
+    vad.segments.forEach((g) => {
+      if (g.kind !== "speech") return;
+      const end = g.end != null ? g.end : vad.t;
+      if (end <= from || g.start >= Math.min(to, now)) return;
+      const a = Math.max(lx, xOf(g.start));
+      const b = Math.min(lx + lw, xOf(Math.min(end, now)));
+      if (b - a < 0.5) return;
+      ctx.fillStyle = C.you;
+      ctx.globalAlpha = 0.85;
+      roundRect(ctx, a, youY + laneH * 0.22, Math.max(2, b - a), laneH * 0.56, 3);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      all.forEach((s) => {
+        if (s.kind !== "them" || s.b <= g.start || s.a >= end) return;
+        const ha = Math.max(a, xOf(Math.max(s.a, g.start)));
+        const hb = Math.min(b, xOf(Math.min(s.b, end, now)));
+        if (hb - ha < 1) return;
+        ctx.fillStyle = C.panel;
+        ctx.fillRect(ha, youY + laneH * 0.18, hb - ha, laneH * 0.64);
+        hatch(ctx, ha, youY + laneH * 0.22, hb - ha, laneH * 0.56, C.you);
+      });
+    });
+    ctx.restore();
+    if (!o.range) {
+      const nx = xOf(now);
+      ctx.strokeStyle = "rgba(238, 243, 250, 0.55)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(nx, box.y - 3);
+      ctx.lineTo(nx, box.y + box.h + 3);
+      ctx.stroke();
+    }
+  }
+
+  /** Beside or under the lanes: this scenario's talk share and longest turn. */
+  function turnsReadouts(ctx, box, m, sc, row) {
+    if (!sc) return;
+    const share = sc.elapsed > 3 ? sc.talk / sc.elapsed : null;
+    const longest = Math.max(sc.longest || 0, m.run || 0);
+    const shareTxt = share != null ? pct(share) : "—";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    if (row) {
+      ctx.font = font(11, 700);
+      ctx.fillStyle = C.muted;
+      const parts = [
+        L(`Hablaste ${shareTxt} (ref. 30 %)`, `You spoke ${shareTxt} (ref. 30%)`),
+        L(`turno más largo ${V.fmtNum(longest, 0)} s`, `longest turn ${V.fmtNum(longest, 0)} s`)
+      ];
+      if (box.h >= 30) {
+        const left = clockUp(Math.max(0, sc.start + sc.sec - m.vad.t));
+        fitText(ctx, L(`Quedan ${left} en esta situación`, `${left} left in this scenario`), box.x + 2, box.y + 2, box.w - 4, 11, 700, 9);
+        ctx.fillStyle = C.muted;
+        fitText(ctx, parts.join(" · "), box.x + 2, box.y + 18, box.w - 4, 11, 700, 9);
+      } else fitText(ctx, parts.join(" · "), box.x + 2, box.y + 2, box.w - 4, 11, 700, 9);
+      return;
+    }
+    const { x, y, w } = box;
+    ctx.font = font(11, 700);
+    ctx.fillStyle = C.muted;
+    fitText(ctx, sc.name, x, y, w, 11, 700, 9);
+    ctx.fillStyle = C.faint;
+    ctx.font = font(10, 700);
+    ctx.fillText(L(`quedan ${clockUp(Math.max(0, sc.start + sc.sec - m.vad.t))}`, `${clockUp(Math.max(0, sc.start + sc.sec - m.vad.t))} left`), x, y + 15, w);
+    // Talk share, with 30 % as a reference tick
+    const by = y + 36;
+    ctx.fillStyle = C.text;
+    ctx.font = font(12, 800);
+    ctx.fillText(L(`Hablaste ${shareTxt}`, `You spoke ${shareTxt}`), x, by, w);
+    const barY = by + 18;
+    ctx.fillStyle = "rgba(170, 195, 230, 0.12)";
+    roundRect(ctx, x, barY, w, 8, 4);
+    ctx.fill();
+    if (share != null) {
+      ctx.fillStyle = C.you;
+      roundRect(ctx, x, barY, Math.max(4, w * clamp(share, 0, 1)), 8, 4);
+      ctx.fill();
+    }
+    ctx.strokeStyle = C.text;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(x + w * 0.3, barY - 3);
+    ctx.lineTo(x + w * 0.3, barY + 11);
+    ctx.stroke();
+    ctx.font = font(9, 700);
+    ctx.fillStyle = C.faint;
+    ctx.fillText(L("30 %: referencia", "30%: reference"), x + w * 0.3 - 4, barY + 13, w * 0.7);
+    if (box.h >= 110) {
+      ctx.font = font(12, 800);
+      ctx.fillStyle = C.text;
+      ctx.fillText(L(`Turno más largo ${V.fmtNum(longest, 0)} s`, `Longest turn ${V.fmtNum(longest, 0)} s`), x, barY + 30, w);
+    }
+  }
+
+  /** After Stop: a row per scenario, its two lanes over its whole length. */
+  function turnsReview(ctx, box, m, compact) {
+    const played = m.scenarios.filter((s) => s.start != null && s.elapsed > 1);
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    if (!played.length) {
+      ctx.fillStyle = C.muted;
+      ctx.font = font(13, 600);
+      ctx.fillText(L("Sin situaciones todavía.", "No scenarios yet."), box.x, box.y + 10);
+      return;
+    }
+    const shares = played.map((s) => pct(s.talk / Math.max(1, s.elapsed))).join(" → ");
+    ctx.fillStyle = C.text;
+    fitText(ctx, L(`Hablaste ${shares} · ref. 30 %`, `You spoke ${shares} · ref. 30%`), box.x + 2, box.y + 10, box.w - 4, compact ? 13 : 15, 800, 10);
+    const rowsTop = box.y + 24;
+    const footH = compact ? 0 : 16;
+    const rowH = Math.min(96, (box.h - 24 - footH) / played.length);
+    const labelW = Math.min(170, box.w * 0.32);
+    played.forEach((s, i) => {
+      const y = rowsTop + i * rowH;
+      ctx.textAlign = "left";
+      ctx.textBaseline = "top";
+      ctx.fillStyle = C.text;
+      fitText(ctx, s.name, box.x, y + 2, labelW - 8, 12, 800, 9);
+      if (rowH >= 30) {
+        ctx.fillStyle = C.muted;
+        const over = s.overlap >= 0.5 ? L(` · ${V.fmtNum(s.overlap, 0)} s en su turno`, ` · ${V.fmtNum(s.overlap, 0)} s in their turn`) : "";
+        fitText(ctx, L(`turno más largo ${V.fmtNum(s.longest, 0)} s`, `longest turn ${V.fmtNum(s.longest, 0)} s`) + over, box.x, y + 17, labelW - 8, 11, 600, 8);
+      }
+      if (rowH >= 46) {
+        ctx.fillStyle = s.fact ? C.done : C.faint;
+        fitText(ctx, s.fact ? L("✓ aprendiste un dato", "✓ you learned a fact") : L("sin dato marcado", "no fact marked"), box.x, y + 31, labelW - 8, 11, 700, 8);
+      }
+      const end = s.end != null ? s.end : m.vad.t;
+      lanesPlot(ctx, { x: box.x + labelW, y: y + 3, w: box.w - labelW, h: Math.max(18, rowH - 10) }, m, { tiny: rowH < 50, range: [s.start, end] });
+    });
+    if (footH) {
+      ctx.textAlign = "left";
+      ctx.textBaseline = "bottom";
+      ctx.fillStyle = C.faint;
+      fitText(
+        ctx,
+        L("Cualquier voz en la sala cuenta como «tú». La presencia y las preguntas las calificas tú.", "Any voice in the room counts as “you”. Presence and questions are yours to rate."),
+        box.x + 2,
+        box.y + box.h,
+        box.w - 4,
+        10,
+        700,
+        8
+      );
+    }
+  }
+
   V.scenes.rateLadder = rateLadder;
   V.scenes.fillerRounds = fillerRounds;
   V.scenes.paceRiver = paceRiver;
+  V.scenes.topicRibbon = topicRibbon;
+  V.scenes.turns = turns;
   V.speechTiming = {
     RateTrack,
     SlowValue,

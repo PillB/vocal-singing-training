@@ -26,6 +26,12 @@
 .mode-panel.has-viz .st-tap-fill {
   border-color: rgba(238, 243, 250, 0.38);
 }
+/* A self-report that stays on once tapped (a real fact learned): gold, with its tick */
+.mode-panel.has-viz .st-taps .btn.is-on {
+  border-color: rgba(255, 211, 110, 0.75);
+  color: #ffd36e;
+  background: rgba(255, 211, 110, 0.1);
+}
 /* A small correction (−1 / +1) stays a small square beside the big taps */
 .mode-panel.has-viz .st-taps .st-tap-small {
   flex: 0 0 var(--min-tap, 44px);
@@ -59,6 +65,9 @@
   }
   .mode-focus.mode-focus-live .mode-panel.has-viz .st-taps .btn {
     flex: 0 0 auto;
+    white-space: normal;
+    line-height: 1.15;
+    text-overflow: clip;
   }
   .mode-focus.mode-focus-live .mode-panel.has-viz .st-taps.st-taps-grid {
     display: grid;

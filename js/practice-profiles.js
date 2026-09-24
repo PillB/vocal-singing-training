@@ -323,9 +323,9 @@
       autoPiano: true,
       autoRecord: false,
       refPitch: "A2",
-      cue: "Fry → clear /A/. Hold ≥2s logs automatically. No note-challenge game.",
-      cueEs: "Fry → /A/ clara. Sostenidos ≥2s se registran solos. No es un juego de notas.",
-      metricHints: { maxHold: "bestHold" }
+      cue: "Fry → clear /A/. The highway shows when the tone turns steady; 2 s clear holds count. No note-challenge game.",
+      cueEs: "Fry → /A/ clara. La autopista muestra cuándo el tono se vuelve estable; cuentan los sostenidos claros de 2 s. No es un juego de notas.",
+      metricHints: { maxHold: "bestClearHold" }
     },
     "s2-solfege-chords": {
       mode: "pitchChord",
@@ -335,9 +335,9 @@
       pitchChallenge: false,
       autoPiano: true,
       autoRecord: false,
-      cue: "Sing /A/ on chord tones. Piano loops with sustain. Track reps toward 25.",
-      cueEs: "Canta /A/ en los tonos del acorde. El piano hace bucle con sostenido. Meta ~25 reps.",
-      metricHints: { reps: "repCount" }
+      cue: "Sing /A/ on the note the piano plays. A note counts when held 1 s inside the band; the next ones wait to the right. Goal ~25.",
+      cueEs: "Canta /A/ en la nota que toca el piano. Cuenta al sostenerla 1 s dentro de la banda; las siguientes esperan a la derecha. Meta ~25.",
+      metricHints: { reps: "landedNotes" }
     },
     "s3-song-stanzas": {
       mode: "pitchSong",
@@ -346,10 +346,11 @@
       showLevel: true,
       pitchChallenge: false,
       autoPiano: true,
+      autoArpeggio: true,
       autoRecord: true,
-      cue: "Finish each phrase without mid-breath. Dose air; piano under you; mark phrase-complete.",
-      cueEs: "Termina cada frase sin respirar a mitad. Dosifica el aire; marca frase completa.",
-      metricHints: { phraseBreath: "phraseOk" }
+      cue: "Finish each phrase without a mid-breath. Each phrase is measured against the goal you pick; tap +1 per stanza.",
+      cueEs: "Termina cada frase sin respirar a mitad. Cada frase se mide contra la meta que eliges; marca +1 por estrofa.",
+      metricHints: { repsFeel: "stanzaTaps", repsBetter: "stanzaTaps" }
     },
     "s15-sh-air-ladder": {
       mode: "shAirLadder",
@@ -376,9 +377,16 @@
       pitchChallenge: false,
       autoPiano: true,
       autoRecord: false,
-      cue: "Major scale on /A/: listen, then sing each step. Coordinate air + closure + pitch.",
-      cueEs: "Escala mayor en /A/: escucha, luego canta cada paso. Coordina aire + cierre + afinación.",
-      metricHints: { roots: "rootCount" }
+      /** The mode walks its own notes (three roots, C3 → D3 → E3) and sounds each step */
+      ownsTarget: true,
+      /** Read by a proposed app.js change: no chord loop or progression window under the steps */
+      noProgression: true,
+      roots: [48, 50, 52],
+      holdMs: 900,
+      tolCents: 40,
+      cue: "Major scale on /A/: listen, then sing each step. The next steps wait to the right; the root moves up after each pass.",
+      cueEs: "Escala mayor en /A/: escucha, luego canta cada paso. Los siguientes esperan a la derecha; la raíz sube tras cada pasada.",
+      metricHints: { roots: "rootCount", intonation: "medianCents" }
     },
     /* —— Singing advanced —— */
     "s4-lip-trills": {
@@ -400,13 +408,15 @@
       showHold: false,
       showLevel: true,
       pitchChallenge: false,
-      // Piano on so Empezar plays mid-range ref (G2) under the glide
-      autoPiano: true,
-      refPitch: "G2",
+      // Free range: no reference drone and no target lane; the mode draws the span you covered
+      autoPiano: false,
+      ownsTarget: true,
+      /** Read by a proposed app.js change: no auto octave shift under a siren */
+      freeRange: true,
       autoRecord: false,
-      cue: "Smooth glides. We track pitch range rope and siren count — not single-note locks.",
-      cueEs: "Deslizamientos suaves. Seguimos el rango y el conteo de sirenas — no bloqueos de nota única.",
-      metricHints: { sirens: "sirenCount", smoothness: "rangeSmooth" }
+      cue: "Glide low to high and back. The line shows your range and where the voice jumps — there is no note to hit.",
+      cueEs: "Desliza de grave a agudo y vuelve. La línea muestra tu rango y dónde salta la voz — no hay nota que acertar.",
+      metricHints: { sirens: "sirenCount" }
     },
     "s6-straw": {
       mode: "sovtFlow",
@@ -431,9 +441,13 @@
       autoRecord: false,
       refPitch: "D3",
       modeCue: "hum",
-      cue: "Hum through soft pitch targets. Lip buzz, no challenge scoring.",
-      cueEs: "Tararea hacia objetivos suaves. Zumbido en labios, sin puntuación de reto.",
-      metricHints: {}
+      /** The mode walks its own ten notes and sounds each one */
+      ownsTarget: true,
+      /** Read by a proposed app.js change: no chord loop or progression window under the notes */
+      noProgression: true,
+      cue: "Hum ten soft targets: each counts when held ~1.5 s near the centre. Lip buzz is yours to feel — not scored.",
+      cueEs: "Tararea diez objetivos suaves: cada uno cuenta al sostenerlo ~1,5 s cerca del centro. El zumbido lo sientes tú — no se puntúa.",
+      metricHints: { targets: "notesHeld" }
     },
     "s8-breath-support": {
       mode: "breathS",
@@ -456,11 +470,14 @@
       showHold: false,
       showLevel: true,
       pitchChallenge: true,
+      /** Read by a proposed app.js change: no score/combo words; the mode patches accuracy on Stop */
+      noGameScore: true,
+      ownsMetrics: true,
       autoPiano: true,
       autoRecord: false,
-      cue: "Listen first, then match. Lock 8 notes in the green lane — full pitch game.",
-      cueEs: "Escucha primero, luego afina. Bloquea 8 notas en el carril verde.",
-      metricHints: { matches: "locks", accuracy: "gameAccuracy", precision: "gameCombo" }
+      cue: "Listen to the whole note first, then match it. Lock 8 notes in the green band; an octave up counts.",
+      cueEs: "Escucha la nota entera primero, luego afínala. Fija 8 notas en la banda verde; una octava arriba también vale.",
+      metricHints: { matches: "locks", accuracy: "medianCents", precision: "medianSpread" }
     },
     "s10-five-note": {
       mode: "scaleSteps",
@@ -470,8 +487,15 @@
       pitchChallenge: false,
       autoPiano: true,
       autoRecord: false,
-      cue: "1–2–3–4–5–4–3–2–1 step targets. Short lock per step, not free challenge.",
-      cueEs: "Objetivos 1–2–3–4–5–4–3–2–1. Bloqueo corto por paso, no reto libre.",
+      /** The mode walks its own notes (three roots, C3 → D3 → E3) and sounds each step */
+      ownsTarget: true,
+      /** Read by a proposed app.js change: no chord loop or progression window under the steps */
+      noProgression: true,
+      roots: [48, 50, 52],
+      holdMs: 700,
+      tolCents: 40,
+      cue: "1–2–3–4–5–4–3–2–1 on three roots. Each step locks when held in the band; the next steps wait to the right.",
+      cueEs: "1–2–3–4–5–4–3–2–1 en tres raíces. Cada paso se fija al sostenerlo en la banda; los siguientes esperan a la derecha.",
       metricHints: { roots: "rootCount" }
     },
     "s11-dynamics": {
@@ -519,9 +543,9 @@
       autoPiano: true,
       autoArpeggio: true,
       autoRecord: false,
-      cue: "Arpeggio + sustain. Match chord tones as they roll.",
-      cueEs: "Arpegio + sostenido. Acompaña los tonos del acorde al salir.",
-      metricHints: { progressions: "repCount" }
+      cue: "Arpeggio + sustain. Sing each chord 1 → 3 → 5 → 8 in order; a full pass counts when every chord is complete.",
+      cueEs: "Arpegio + sostenido. Canta cada acorde 1 → 3 → 5 → 8 en orden; una vuelta cuenta cuando todos los acordes están completos.",
+      metricHints: { progressions: "fullPasses", intervalAccuracy: "medianIntervalCents" }
     },
     "s14-staccato-legato": {
       mode: "staccatoLegato",

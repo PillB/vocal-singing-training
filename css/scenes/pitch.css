@@ -1,1 +1,44 @@
-/* Exercise pictures — pitch (css for js/scenes/pitch.js). Scoped to .mode-panel.has-viz. */
+/* Exercise pictures — pitch (css for js/scenes/pitch.js). Scoped to .mode-panel.pz.
+   For the pitch family the note highway is the picture; the mode panel under the
+   stage is a compact summary, so this only keeps it short and its buttons tappable.
+   It does not style the stage, #mode-hud or #mode-cue. */
+
+.mode-panel.pz .mode-meta.muted {
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.mode-panel.pz .pz-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0.4rem 0 0.1rem;
+}
+
+.mode-panel.pz .pz-row[hidden],
+.mode-panel.pz [hidden] {
+  display: none;
+}
+
+.mode-panel.pz .pz-lab {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin-right: 0.15rem;
+}
+
+/* 44 px targets (WCAG 2.5.5) for every button the pitch panels add */
+.mode-panel.pz .btn {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* The phrase-goal chips: the chosen one filled, and marked with a check, not colour alone */
+.mode-panel.pz .pz-chip[aria-pressed="true"] {
+  background: rgba(52, 178, 122, 0.22);
+  border-color: rgba(52, 178, 122, 0.7);
+  color: var(--text);
+}
+.mode-panel.pz .pz-chip[aria-pressed="true"]::before {
+  content: "✓ ";
+}

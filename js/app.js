@@ -4318,7 +4318,12 @@
     const trialBtn = $("#btn-start-trial");
     if (trialBtn) {
       const acct = window.VTAccount?.getState?.() || null;
-      const accounts = !!acct?.configured;
+      // A worker URL is not enough: the button has to name the length of the
+      // trial the press will actually start, and the press only goes to the
+      // account layer once the worker has said it can sign somebody in. Anything
+      // short of that — still asking, unreachable, no method wired up — is the
+      // browser-local trial, so the button says the browser-local length.
+      const accounts = accountSignIn().offered;
       const canTrial = accounts
         ? !ent.pro && !(acct.signedIn && acct.account?.trialUsed)
         : !!B.canStartTrial?.() && !ent.pro;
@@ -4918,6 +4923,10 @@
   function openPricing() {
     const modal = $("#pricing-modal");
     if (!modal) return;
+    // The trial's length is the worker's to name, not this file's. Asking here
+    // means the card is right by the time anyone reads it, and — as with the
+    // account panel — only because somebody opened the panel.
+    window.VTAccount?.ensureMethods?.();
     // Remember the trigger before renderPricingModal() rebuilds the card.
     const opener = document.activeElement;
     renderPricingModal();
@@ -5010,28 +5019,50 @@
    *
    * A configured worker URL is not the same as a usable sign-in: the worker
    * reports separately, at /v1/auth/methods, which methods its operator has
-   * wired up, and it can be none. `methods` is null until that answer lands,
-   * and the two callers want opposite defaults for that moment — hence both
-   * `offered` and `confirmed` rather than one flag.
+   * wired up, and it can be none. Four states, not two, because guessing at
+   * the middle one is what showed a form that could never send a code:
    *
-   * @returns {{configured: boolean, canEmail: boolean, offered: boolean,
-   *            confirmed: boolean}} What may be shown, and what may be relied on.
+   *   !configured   no worker URL at all — the site is practice-only.
+   *   checking      a worker URL, but it has not said yet.
+   *   unreachable   it was asked and could not be reached.
+   *   offered       it answered with at least one method.
+   *
+   * @returns {{configured: boolean, checking: boolean, unreachable: boolean,
+   *            canEmail: boolean, offered: boolean}} What the panel may draw.
    */
   function accountSignIn() {
     const account = window.VTAccount?.getState?.() || null;
     const configured = !!(account && account.configured);
     const m = (account && account.methods) || null;
-    const any = !!m && (!!m.email || !!m.google);
+    const answered = !!m && m.ok !== false;
     return {
       configured,
-      canEmail: !m || m.email !== false,
-      // For display: assume yes while unknown, so the form does not flash away
-      // and back on a slow answer.
-      offered: configured && (m ? any : true),
-      // For acting on: require the answer, so nobody is sent to a panel that
-      // may turn out to have nothing in it.
-      confirmed: configured && any
+      checking: configured && !m,
+      unreachable: configured && !!m && m.ok === false,
+      canEmail: answered && !!m.email,
+      offered: configured && answered && (!!m.email || !!m.google)
     };
+  }
+
+  /**
+   * Where focus lands when the account panel opens. It has to name a control
+   * that is actually on screen in each of the states above, or the focus trap
+   * activates with focus on the body.
+   * @param {boolean} signedIn Whether somebody is signed in.
+   * @returns {string} A selector.
+   */
+  function accountInitialFocus(signedIn) {
+    if (signedIn) return "#account-close";
+    const offer = accountSignIn();
+    // Nothing to lead with yet, and the QA disclosure is closed in this state,
+    // so the close button is the only honest target.
+    if (offer.checking) return "#account-close";
+    const form = $("#account-signin");
+    if (form && !form.hidden) {
+      // Google draws its button in its own iframe, which is no use as a target.
+      return offer.canEmail ? "#account-email" : "#account-close";
+    }
+    return "#login-username";
   }
 
   function refreshAccountUI() {
@@ -5062,26 +5093,29 @@
     // cannot work.
     const signIn = $("#account-signin");
     const unconfigured = $("#account-unconfigured");
-    const configured = !!(account && account.configured);
-    // A deployed worker is not the same as a usable sign-in: it answers
-    // /v1/auth/methods with what its operator has actually wired up, and a
-    // deploy with neither an email provider nor a Google client can take
-    // nobody's sign-in. Showing the form anyway means typing an address and
-    // being told afterwards that it cannot be sent. methods is null until the
-    // first answer lands, so treat unknown as available rather than flashing
-    // the form away and back.
+    // Exactly one of the four states is drawn, and which one is the whole point
+    // of accountSignIn(): a deploy with neither an email provider nor a Google
+    // client can take nobody's sign-in, and showing the form anyway means
+    // typing an address and being told afterwards that it cannot be sent.
     const offer = accountSignIn();
     const hasRealSignIn = offer.offered;
     if (signIn) signIn.hidden = !hasRealSignIn;
-    if (unconfigured) unconfigured.hidden = hasRealSignIn;
+    const checking = $("#account-checking");
+    if (checking) checking.hidden = !offer.checking;
+    const offline = $("#account-offline");
+    if (offline) offline.hidden = !offer.unreachable;
+    if (unconfigured) {
+      unconfigured.hidden = hasRealSignIn || offer.checking || offer.unreachable;
+    }
     const emailForm = $("#account-email-form");
     if (emailForm) emailForm.hidden = !offer.canEmail;
     // Internal QA access hides behind a disclosure only once there is a real
     // sign-in to lead with. While there is none it is the only way in, so
-    // collapsing it would leave the panel with nothing to do — and a deployed
-    // worker offering no method is that same case, not a wired-up one.
+    // collapsing it would leave the panel with nothing to do. While the answer
+    // is still coming it stays shut, so focus is never put inside a disclosure
+    // that is about to close again.
     const internal = document.querySelector(".account-internal");
-    if (internal && !hasRealSignIn) internal.open = true;
+    if (internal && !hasRealSignIn && !offer.checking) internal.open = true;
 
     if (!signedIn) {
       out.hidden = false;
@@ -5168,6 +5202,10 @@
       err.textContent = "";
     }
     accountError(null);
+    // Opening this panel is the deliberate act that lets us ask the worker what
+    // it offers; nothing is asked on page load, so a visitor who only practises
+    // never touches it. The answer redraws the panel through onChange.
+    window.VTAccount?.ensureMethods?.();
     // Google's button can only be drawn once its script is in; do it on open so
     // a visitor who never opens this panel never loads it at all.
     const googleSlot = $("#account-google");
@@ -5190,9 +5228,8 @@
     modal.hidden = false;
     document.body.classList.add("account-open");
     const signedIn = !!window.VTAuth?.isLoggedIn?.() || !!window.VTAccount?.getState?.().signedIn;
-    const hasAccountForm = !!$("#account-signin") && !$("#account-signin").hidden;
     window.VTFocusTrap?.activate(modal, {
-      initialFocus: signedIn ? "#account-close" : hasAccountForm ? "#account-email" : "#login-username",
+      initialFocus: accountInitialFocus(signedIn),
       returnFocus: opener
     });
   }
@@ -5470,12 +5507,22 @@
       });
     });
     $("#btn-start-trial")?.addEventListener("click", async () => {
+      // Which trial this is belongs to the worker, so ask before choosing:
+      // guessing "local" hands out a browser trial that a later server trial
+      // then duplicates, and guessing "server" sends someone to a panel that
+      // may have no way in. openPricing() has usually already asked, so this
+      // returns at once — but a click must never hang on the network, so a
+      // worker that has not answered by now counts as no worker.
+      await Promise.race([
+        window.VTAccount?.ensureMethods?.() || Promise.resolve(null),
+        new Promise((resolve) => setTimeout(resolve, 1200))
+      ]);
       const acct = window.VTAccount?.getState?.() || null;
       // Only hand the trial to the account layer once this deploy can actually
       // sign someone in. A worker with no sign-in method would otherwise send
       // them to a panel saying accounts are switched off, with the local trial
       // they could have had now unreachable — the free trial would dead-end.
-      if (accountSignIn().confirmed) {
+      if (accountSignIn().offered) {
         // Not signed in: send them to the panel rather than starting a trial
         // this browser would forget and the next one would hand out again.
         if (!acct?.signedIn) {

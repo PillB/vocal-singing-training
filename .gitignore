@@ -22,3 +22,4 @@ docs/INTERNAL-TEST-ACCOUNTS.md
 docs/**/*SECRET*
 docs/**/*password*
 docs/**/*PASSWORD*
+pw.local.tmp.js

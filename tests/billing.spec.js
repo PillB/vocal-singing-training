@@ -338,6 +338,11 @@ test.describe("Billing & subscriptions", () => {
     await expect(page.locator("#btn-start-trial")).toBeVisible();
     await page.click("#btn-start-trial");
 
+    // The click asks the worker which trial this is before starting one, so the
+    // entitlement lands a moment after the press rather than during it.
+    await expect
+      .poll(() => page.evaluate(() => VTBilling.getEntitlement().pro))
+      .toBe(true);
     const after = await page.evaluate(() => ({
       ent: VTBilling.getEntitlement(),
       daysLeft: VTBilling.trialDaysLeft(),

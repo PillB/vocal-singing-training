@@ -224,15 +224,39 @@ async function signIn(page) {
 }
 
 test.describe("Accounts, gifted months and saved progress", () => {
-  test("the shipped build offers no sign-in and says so", async ({ page }) => {
+  test("a build with no worker offers no sign-in and says so", async ({ page }) => {
+    // The documented no-backend mode: anybody who clones this site and does not
+    // deploy the worker gets a practice-only build. The shipped build does point
+    // at a worker now (see the case below), so this states the premise itself
+    // rather than inheriting whatever js/billing-config.js currently holds.
+    await patchBillingConfig(page, { verification: { apiBaseUrl: "" } });
     await boot(page);
     await page.click("#btn-account");
     await expect(page.locator("#account-modal")).toBeVisible();
     // No worker configured: the panel must not offer a sign-in that cannot work.
     await expect(page.locator("#account-signin")).toBeHidden();
     await expect(page.locator("#account-unconfigured")).toBeVisible();
+    // Nor claim it merely could not check, because it never asked.
+    await expect(page.locator("#account-checking")).toBeHidden();
+    await expect(page.locator("#account-offline")).toBeHidden();
     // And the internal QA form stays reachable, because it is the only way in.
     await expect(page.locator("#login-username")).toBeVisible();
+  });
+
+  test("the shipped build is pointed at a deployed worker", async () => {
+    // Guards the wiring itself. Every other case here stubs the worker, so an
+    // emptied apiBaseUrl would take the whole account layer out of the live
+    // site without failing anything.
+    const fs = require("fs");
+    const src = fs.readFileSync(require("path").join(__dirname, "..", "js", "billing-config.js"), "utf8");
+    const base = /apiBaseUrl:\s*"([^"]*)"/.exec(src);
+    expect(base, "js/billing-config.js still declares apiBaseUrl").toBeTruthy();
+    expect(base[1]).toMatch(/^https:\/\/[^\s"]+$/);
+    // A public key has to be there too, or a license token cannot be checked
+    // and every entitlement the worker signs is worthless.
+    expect(src).toMatch(/"kty":\s*"EC"|kty:\s*"EC"/);
+    // And the client secret must never be here: this repo is public.
+    expect(src).not.toMatch(/client_?[Ss]ecret/);
   });
 
   test("a worker with no sign-in method wired up offers none", async ({ page }) => {

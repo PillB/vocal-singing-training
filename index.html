@@ -718,6 +718,17 @@
             </form>
           </div>
 
+          <!-- Asking the worker which sign-in methods it offers. Neither the
+               form nor the "not switched on" notice is drawn yet: guessing
+               shows a form that vanishes, or one that can never send. -->
+          <p class="muted" id="account-checking" hidden data-i18n="auth.checking">
+            Comprobando cómo entrar…
+          </p>
+
+          <p class="muted" id="account-offline" hidden data-i18n="auth.signInOffline">
+            No pudimos comprobar el acceso ahora mismo. Cierra y vuelve a abrir este panel para intentarlo otra vez. Tu práctica se guarda en este navegador.
+          </p>
+
           <p class="muted" id="account-unconfigured" hidden data-i18n="auth.unconfigured">
             Las cuentas todavía no están activas en este sitio. Tu práctica se guarda en este navegador.
           </p>

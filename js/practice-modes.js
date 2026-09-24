@@ -1506,149 +1506,806 @@
     }
   });
 
+  /**
+   * v17 — receive, breathe, answer. The thinking silence is the skill, so it
+   * is paced (a doorway that fills while you are silent and opens at the gate)
+   * and measured from the raw sound edge, not the grace-bridged `voiced`. The
+   * answer's length and its pauses are measured; whether it was concise is
+   * the learner's own rating, so nothing fills it in.
+   */
   Modes.concisionGate = baseMode({
     id: "concisionGate",
     render() {
-      this.state.q = 1;
-      this.state.maxQ = this.profile.questions || 5;
-      this.state.phase = "receive";
-      this.state.silenceNeed = (this.profile.preSilenceSec || 2.5) * 1000;
-      this.state.silenceAcc = 0;
-      this.state.gates = 0;
+      const st = this.state;
+      st.maxQ = this.profile.questions || 5;
+      st.gate = this.profile.preSilenceSec || 2.5;
+      st.closeSec = this.profile.closeSilenceSec || 2;
+      st.guide = this.profile.answerGuideSec || [20, 30];
+      const d = new Date();
+      st.offset = Math.floor((d - new Date(d.getFullYear(), 0, 0)) / 864e5);
+      st.live = false;
+      this._resetQs();
+      const gate = global.VTViz ? global.VTViz.fmtNum(st.gate, 1) : String(st.gate);
       this.hud.innerHTML = `
-        <div class="mode-title">${L("Puerta de concisión", "Concision gate")}</div>
-        <div class="mode-phase" data-phase>${L("P1 · Recibe la pregunta", "Q1 · Receive the question")}</div>
-        <div class="mode-big" data-g>${L("Respira", "Breathe")}</div>
-        <p class="mode-meta">${L("Puertas pasadas: <strong data-ok>0</strong>/" + this.state.maxQ, "Gates passed: <strong data-ok>0</strong>/" + this.state.maxQ)}</p>
-        <button type="button" class="btn btn-sm" data-next>${L("Siguiente pregunta", "Next question")}</button>
+        <div class="viz-row viz-head">
+          <div class="mode-title">${L("Puerta de concisión", "Concision gate")}</div>
+          <button type="button" class="btn btn-ghost viz-tap" data-next>${L("Siguiente pregunta →", "Next question →")}</button>
+        </div>
+        <div class="viz-words">
+          <span class="mode-phase" data-phase></span>
+          <strong class="mode-big" data-g></strong>
+          <span>${L("Puertas abiertas", "Gates opened")}: <strong data-ok>0</strong>/${st.maxQ}</span>
+        </div>
+        <p class="mode-meta muted">${L(
+          `Lee la pregunta, calla ${gate} s mientras piensas y responde con la idea primero. Medimos el silencio y cuánto dura la respuesta; la concisión la valoras tú.`,
+          `Read the question, stay silent ${gate} s while you think, then answer point first. We measure the silence and how long the answer runs; you rate the concision.`
+        )}</p>
       `;
-      this.$("[data-next]")?.addEventListener("click", () => {
-        if (this.state.q < this.state.maxQ) {
-          this.state.q++;
-          this.state.phase = "receive";
-          this.state.silenceAcc = 0;
-          if (this.$("[data-phase]"))
-            this.$("[data-phase]").textContent = L(`P${this.state.q} · Recibe la pregunta`, `Q${this.state.q} · Receive the question`);
-          if (this.$("[data-g]")) this.$("[data-g]").textContent = L("Respira", "Breathe");
-        }
-      });
+      this.$("[data-next]")?.addEventListener("click", () => this._skip());
+      this._mountViz();
+      this._words();
     },
-    onFrame(frame) {
-      const quiet = !frame.voiced && (frame.rms || 0) < 0.02;
-      const dt = frame.dtMs || 16;
-      if (this.state.phase === "receive" || this.state.phase === "silence") {
-        if (quiet) {
-          this.state.phase = "silence";
-          this.state.silenceAcc += dt;
-          const left = Math.max(0, (this.state.silenceNeed - this.state.silenceAcc) / 1000);
-          if (this.$("[data-g]"))
-            this.$("[data-g]").textContent =
-              left > 0 ? `Silence ${left.toFixed(1)}s` : "Answer now";
-          if (this.state.silenceAcc >= this.state.silenceNeed && this.state.phase === "silence") {
-            this.state.phase = "answer";
-            this.state.gates++;
-            if (this.$("[data-ok]")) this.$("[data-ok]").textContent = String(this.state.gates);
-            if (this.$("[data-g]")) this.$("[data-g]").textContent = L("Responde en ≤3 oraciones", "Answer ≤3 sentences");
+    /** A small bilingual bank; the learner may always use their own question. */
+    _bank() {
+      return [
+        ["¿Qué cambiarías de tu último proyecto?", "What would you change about your last project?"],
+        ["¿Por qué deberíamos elegir tu propuesta?", "Why should we pick your proposal?"],
+        ["¿Qué aprendiste este mes?", "What did you learn this month?"],
+        ["¿Cuál es el mayor riesgo de este plan?", "What is the biggest risk in this plan?"],
+        ["¿Qué necesitas de tu equipo esta semana?", "What do you need from your team this week?"],
+        ["¿Qué harías con el doble de presupuesto?", "What would you do with twice the budget?"],
+        ["¿Qué error no volverías a cometer?", "Which mistake would you not make again?"],
+        ["¿Cómo le explicarías tu trabajo a un niño?", "How would you explain your work to a child?"]
+      ];
+    },
+    _newQ(i, t) {
+      const bank = this._bank();
+      const pair = bank[(this.state.offset + i) % bank.length];
+      return {
+        text: L(pair[0], pair[1]),
+        shownAt: t,
+        silent: 0,
+        gateOk: false,
+        aStart: null,
+        aEnd: null,
+        pauses: 0,
+        blips: [],
+        skipped: false
+      };
+    },
+    _resetQs() {
+      const st = this.state;
+      st.qs = [this._newQ(0, 0)];
+      st.q = 0;
+      st.phase = "think";
+      st.flash = null;
+      st.review = false;
+      st._lastT = 0;
+    },
+    _mountViz() {
+      const V = global.VTViz;
+      const S = V && V.scenes;
+      if (!S || !S.ShapeTracker || !S.concisionGate) return;
+      this.hud.classList.add("has-viz");
+      this.state.tracker = new S.ShapeTracker({
+        onPhrase: (p) => this._burst(p),
+        onPauseEnd: (s, len) => this._pauseEnd(s, len)
+      });
+      this.viz = new V.Surface(this.hud, (ctx, w, h) => S.concisionGate(ctx, w, h, this.state), {
+        label: L(
+          "Puerta de concisión: la puerta se llena mientras piensas en silencio y se abre a los segundos pedidos; después, tu respuesta como habla y pausas frente a una guía de tiempo.",
+          "Concision gate: the doorway fills while you think in silence and opens at the asked seconds; then your answer as speech and pauses against a time guide."
+        ),
+        captionHidden: true
+      });
+      this.viz.draw();
+    },
+    /** A burst of sound during the thinking time: noted, never a reset. */
+    _burst(p) {
+      const st = this.state;
+      const q = st.qs[st.q];
+      if (!q || st.phase !== "think" || q.aStart != null) return;
+      const len = p.end - p.start;
+      if (len >= 1.0) return;
+      // A held, flat voiced sound ("eeh", "mmm") may be a filler; asked, not asserted
+      const vb = p.bins.filter((b) => b.m != null).map((b) => b.m);
+      let filler = false;
+      if (vb.length >= 6) {
+        const mean = vb.reduce((a, b) => a + b, 0) / vb.length;
+        const sd = Math.sqrt(vb.reduce((a, b) => a + (b - mean) * (b - mean), 0) / vb.length);
+        filler = sd < 1;
+      }
+      q.blips.push({ t: p.start, len, filler });
+    },
+    _pauseEnd(start, len) {
+      const st = this.state;
+      const q = st.qs[st.q];
+      if (st.phase === "answer" && q && q.aStart != null && start >= q.aStart && len >= 0.5) q.pauses += 1;
+    },
+    _tick() {
+      const st = this.state;
+      const trk = st.tracker;
+      const vad = trk.vad;
+      const t = trk.t;
+      const dt = Math.max(0, t - (st._lastT || 0));
+      st._lastT = t;
+      const q = st.qs[st.q];
+      if (!q) return;
+      if (st.phase === "think") {
+        if (vad.state !== "speech") {
+          q.silent += dt;
+          if (!q.gateOk && q.silent >= st.gate) {
+            q.gateOk = true;
+            this.viz?.caption?.(L("Puerta abierta: responde", "Gate open: answer"), 0);
           }
-        } else if (this.state.phase === "silence") {
-          this.state.silenceAcc = Math.max(0, this.state.silenceAcc - dt * 2);
+        } else if (q.gateOk || vad.runLen >= 1.0) {
+          // Speech after the gate, or sustained speech before it, is the answer
+          this._answer(vad.speechStart != null ? vad.speechStart : t);
         }
+      } else if (st.phase === "answer") {
+        if (vad.state === "pause" && vad.pauseLen >= st.closeSec) this._close(vad.pauseStart);
       }
     },
+    _answer(t0) {
+      const st = this.state;
+      const q = st.qs[st.q];
+      q.aStart = t0;
+      st.phase = "answer";
+      st.flash = null;
+      this.viz?.caption?.(L("Respondiendo", "Answering"), 0);
+    },
+    _close(tEnd) {
+      const st = this.state;
+      const q = st.qs[st.q];
+      const V = global.VTViz;
+      q.aEnd = Math.max(q.aStart, tEnd);
+      const len = q.aEnd - q.aStart;
+      const words = L(
+        `P${st.q + 1}: ${V.fmtNum(q.silent, 1)} s de silencio · respuesta de ${V.fmtNum(len, 0)} s`,
+        `Q${st.q + 1}: ${V.fmtNum(q.silent, 1)} s of silence · ${V.fmtNum(len, 0)} s answer`
+      );
+      this.viz?.caption?.(words, 0);
+      st.flash = { text: "✓ " + words, until: st.tracker.t + 2.5 };
+      this._nextQ(st.tracker.t);
+    },
+    _nextQ(t) {
+      const st = this.state;
+      st.qs.push(this._newQ(st.qs.length, t));
+      st.q = st.qs.length - 1;
+      st.phase = "think";
+    },
+    /** "Next question": closes an answer in progress, or moves on without one. */
+    _skip() {
+      const st = this.state;
+      if (st.review) return;
+      if (!st.live || !st.tracker) {
+        // Before Start: offer another question from the bank
+        st.offset += 1;
+        st.qs = [this._newQ(0, 0)];
+        this._words();
+        this.viz?.draw();
+        return;
+      }
+      const t = st.tracker.t;
+      if (st.phase === "answer") this._close(t);
+      else {
+        const q = st.qs[st.q];
+        if (q && q.aStart == null) q.skipped = true;
+        st.flash = null;
+        this._nextQ(t);
+      }
+      this._words();
+      this.viz?.draw();
+    },
+    _words() {
+      const st = this.state;
+      const q = st.qs[st.q];
+      if (!q) return;
+      const V = global.VTViz;
+      const n = st.q + 1;
+      let phase;
+      let big;
+      if (st.phase === "answer") {
+        phase = L(`P${n} · Respondiendo`, `Q${n} · Answering`);
+        const len = (q.aEnd != null ? q.aEnd : st.tracker ? st.tracker.t : 0) - q.aStart;
+        big = `${Math.floor(len)} s`;
+      } else {
+        phase = q.gateOk
+          ? L(`P${n} · Puerta abierta: responde`, `Q${n} · Gate open: answer`)
+          : L(`P${n} · Recibe la pregunta y respira`, `Q${n} · Receive the question and breathe`);
+        big = V ? `${V.fmtNum(q.silent, 1)} s` : `${q.silent.toFixed(1)} s`;
+      }
+      const set = (sel, text) => {
+        const el = this.$(sel);
+        if (el && el.textContent !== text) el.textContent = text;
+      };
+      set("[data-phase]", phase);
+      set("[data-g]", big);
+      set("[data-ok]", String(st.qs.filter((x) => x.gateOk).length));
+    },
+    onStart() {
+      const st = this.state;
+      st.live = true;
+      st.review = false;
+      this.hud?.classList.remove("is-replay");
+      st.tracker?.reset();
+      this._resetQs();
+      this._words();
+      this.viz?.draw();
+    },
+    onFrame(frame) {
+      const st = this.state;
+      if (!st.tracker) return;
+      st.tracker.feed(frame);
+      this._tick();
+      this._words();
+      this.viz?.draw();
+    },
     onStop() {
+      const st = this.state;
+      const V = global.VTViz;
+      st.live = false;
+      const trk = st.tracker;
+      if (trk) {
+        trk.finish();
+        const q = st.qs[st.q];
+        if (st.phase === "answer" && q && q.aEnd == null) {
+          q.aEnd = trk.vad.state === "pause" && trk.vad.pauseStart != null ? Math.max(q.aStart, trk.vad.pauseStart) : trk.t;
+          // Stop right as an answer began: not an answer to measure
+          if (q.aEnd - q.aStart < 1) {
+            q.aStart = null;
+            q.aEnd = null;
+            q.pauses = 0;
+          }
+        }
+      }
+      st.review = true;
+      if (this.viz) {
+        this.hud.classList.add("is-replay");
+        this.viz.draw();
+      }
+      const answered = st.qs.filter((q) => q.aStart != null);
+      const gates = st.qs.filter((q) => q.gateOk).length;
+      const n = answered.length;
+      const sil = answered.map((q) => q.silent).sort((a, b) => a - b);
+      const med = sil.length ? sil[Math.floor((sil.length - 1) / 2)] : null;
+      const fmt = (v) => (V ? V.fmtNum(v, 1) : v.toFixed(1));
       return {
-        patches: {
-          questions: this.state.q,
-          pauseBefore: clamp(this.state.gates, 1, 5),
-          concision: clamp(2 + this.state.gates, 1, 5)
-        },
-        summary: `${this.state.gates} pre-answer silence gates`
+        // Only the count is measured; concision and the pause habit are the learner's ratings
+        patches: n > 0 ? { questions: n } : {},
+        summary:
+          n > 0
+            ? L(
+                `${n} ${n === 1 ? "respuesta" : "respuestas"} · ${gates} con ${fmt(st.gate)} s de silencio antes · silencio mediano ${fmt(med)} s`,
+                `${n} ${n === 1 ? "answer" : "answers"} · ${gates} after ${fmt(st.gate)} s of silence · median silence ${fmt(med)} s`
+              )
+            : L("Sin respuestas medidas todavía", "No answers measured yet")
       };
     }
   });
 
+  /**
+   * v18 — a story in parts: context, tension, the peak, the point. The parts
+   * are a pacer you can move on from early; under them runs your loudness,
+   * and a flag where you mark the peak. After Stop the peak is set against
+   * the context in loudness, pace and the pause before it — delivery facts,
+   * approximate; how vivid or clear the story was stays the learner's rating.
+   */
   Modes.storyTimer = baseMode({
     id: "storyTimer",
     render() {
-      const phases = this.profile.phases || [];
-      this.state.runner = createPhaseRunner(phases);
-      this.state.peakMarked = false;
+      const st = this.state;
+      const keys = ["context", "tension", "peak", "point"];
+      const phases = (this.profile.phases || []).length
+        ? this.profile.phases
+        : [
+            { label: L("Contexto", "Context"), sec: 20 },
+            { label: L("Tensión", "Tension"), sec: 25 },
+            { label: L("Pico", "Peak"), sec: 30 },
+            { label: L("Aprendizaje", "Point"), sec: 15 }
+          ];
+      st.phases = phases.map((p, i) => ({
+        key: p.key || keys[i] || "part" + i,
+        label: p.label,
+        sec: p.sec || 20,
+        hint: L(p.hintEs || p.hint || p.label, p.hint || p.label)
+      }));
+      st.live = false;
+      this._resetStory();
       this.hud.innerHTML = `
-        <div class="mode-title">${L("Arco de historia", "Story arc")}</div>
-        <div class="mode-phase" data-phase>${phases[0]?.label}</div>
-        <div class="mode-big" data-remain>—</div>
-        <button type="button" class="btn btn-singing btn-sm" data-peak>Mark PEAK now</button>
-        <p class="mode-meta" data-peak-st>${L("Pico aún no marcado", "Peak not marked yet")}</p>
+        <div class="viz-row viz-head">
+          <div class="mode-title">${L("Arco de historia", "Story arc")}</div>
+          <span class="viz-btns">
+            <button type="button" class="btn btn-ghost viz-tap" data-peak aria-label="${L("Marcar el pico ahora", "Mark the peak now")}"><span aria-hidden="true">⚑</span> <span class="ss-long">${L("Marcar pico", "Mark peak")}</span><span class="ss-short">${L("Pico", "Peak")}</span></button>
+            <button type="button" class="btn btn-ghost viz-tap" data-next-phase aria-label="${L("Pasar a la siguiente parte", "Go to the next part")}"><span class="ss-long">${L("Siguiente parte →", "Next part →")}</span><span class="ss-short">${L("Parte →", "Part →")}</span></button>
+          </span>
+        </div>
+        <div class="viz-words">
+          <span class="mode-phase" data-phase>${st.phases[0].label}</span>
+          <strong class="mode-big" data-remain>${st.phases[0].sec}s</strong>
+          <span data-peak-st>${L("Pico aún no marcado", "Peak not marked yet")}</span>
+        </div>
+        <p class="mode-meta muted">${L(
+          "Las partes son una guía: pasa a la siguiente cuando termines. Marca el pico cuando llegues; al detener verás el pico frente al contexto.",
+          "The parts are a guide: move on when you are done. Mark the peak when you reach it; on Stop you see the peak against the context."
+        )}</p>
       `;
-      this.$("[data-peak]")?.addEventListener("click", () => {
-        this.state.peakMarked = true;
-        if (this.$("[data-peak-st]"))
-          this.$("[data-peak-st]").textContent = L(`Pico marcado en “${this.state.runner.label}”`, `Peak marked in “${this.state.runner.label}”`);
+      this.$("[data-peak]")?.addEventListener("click", () => this._mark());
+      this.$("[data-next-phase]")?.addEventListener("click", () => {
+        if (this.state.live && this.state.tracker) this._advance(this.state.tracker.t);
       });
+      this._mountViz();
     },
-    onFrame() {
-      const r = this.state.runner;
-      r.tick(performance.now());
-      if (this.$("[data-phase]"))
-        this.$("[data-phase]").textContent =
-          r.index < r.count ? r.label : L("Historia completa", "Story complete");
-      if (this.$("[data-remain]"))
-        this.$("[data-remain]").textContent =
-          r.index < r.count ? `${Math.ceil(r.remaining)}s` : "✓";
+    _resetStory() {
+      const st = this.state;
+      st.index = 0;
+      st.starts = [0];
+      st.over = false;
+      st.overAt = null;
+      st.ebins = [];
+      st.medDb = null;
+      st.marks = [];
+      st.review = false;
+      st.compare = null;
+      st._eb = { k: 0, dbs: [], sp: 0, n: 0 };
+      st._shown = "";
+    },
+    _mountViz() {
+      const V = global.VTViz;
+      const S = V && V.scenes;
+      if (!S || !S.ShapeTracker || !S.storyArc) return;
+      this.hud.classList.add("has-viz");
+      this.state.tracker = new S.ShapeTracker({ syllables: true });
+      this.viz = new V.Surface(this.hud, (ctx, w, h) => S.storyArc(ctx, w, h, this.state), {
+        label: L(
+          "Arco de historia: las partes de la historia como una barra según su tiempo, y debajo tu volumen con huecos en las pausas y una bandera donde marcas el pico.",
+          "Story arc: the parts of the story as a bar sized by their time, and under it your loudness with gaps at pauses and a flag where you mark the peak."
+        ),
+        captionHidden: true
+      });
+      this.viz.draw();
+    },
+    /** Loudness in half-second bins: the 90th percentile of the sounding frames. */
+    _energy(frame) {
+      const st = this.state;
+      const trk = st.tracker;
+      const F = global.VTFeatures;
+      const e = st._eb;
+      const k = Math.floor(trk.t / 0.5);
+      if (k !== e.k) {
+        this._closeEnergy();
+        st._eb = { k, dbs: [], sp: 0, n: 0 };
+      }
+      const cur = st._eb;
+      cur.n += 1;
+      if (trk.vad.state === "speech") cur.sp += 1;
+      if (frame.sounding && F) cur.dbs.push(F.dbfs((frame.rms || 0) / (frame.inputGain || 1)));
+    },
+    _closeEnergy() {
+      const st = this.state;
+      const F = global.VTFeatures;
+      const e = st._eb;
+      if (!e || !e.n || !F) return;
+      st.ebins.push({ t: (e.k + 0.5) * 0.5, db: e.dbs.length ? F.percentile(e.dbs, 0.9) : null, sp: e.sp / e.n > 0.4 });
+      if (st.ebins.length > 1440) st.ebins.splice(0, st.ebins.length - 1440);
+      const dbs = st.ebins.filter((b) => b.sp && b.db != null).map((b) => b.db);
+      st.medDb = dbs.length >= 4 ? F.median(dbs) : null;
+      e.n = 0;
+    },
+    _advance(t) {
+      const st = this.state;
+      if (st.over) return;
+      if (st.index + 1 < st.phases.length) {
+        st.index += 1;
+        st.starts[st.index] = t;
+        this.viz?.caption?.(st.phases[st.index].label, 0);
+      } else {
+        st.over = true;
+        st.overAt = t;
+        this.viz?.caption?.(L("Tiempo guía cumplido: cierra cuando quieras", "Guide time reached: close when you like"), 0);
+        const b = this.$("[data-next-phase]");
+        if (b) b.disabled = true;
+      }
+      this._words();
+      this.viz?.draw();
+    },
+    _mark() {
+      const st = this.state;
+      if (!st.live || !st.tracker) return;
+      const t = st.tracker.t;
+      st.marks.push(t);
+      if (st.marks.length > 20) st.marks.shift();
+      const label = st.phases[st.index].label;
+      const V = global.VTViz;
+      const at = V && V.scenes.speechShapeUtil ? V.scenes.speechShapeUtil.clock(t) : Math.round(t) + " s";
+      const words = L(`Pico marcado en “${label}” (${at})`, `Peak marked in “${label}” (${at})`);
+      const el = this.$("[data-peak-st]");
+      if (el) el.textContent = words;
+      this.viz?.caption?.(words, 0);
+      this.viz?.draw();
+    },
+    _words() {
+      const st = this.state;
+      const t = st.tracker ? st.tracker.t : 0;
+      const ph = st.phases[st.index];
+      const label = st.over ? L("Historia completa", "Story complete") : ph.label;
+      const remain = st.over ? "✓" : `${Math.max(0, Math.ceil(ph.sec - (t - st.starts[st.index])))}s`;
+      const key = label + "|" + remain;
+      if (key === st._shown) return;
+      st._shown = key;
+      const p = this.$("[data-phase]");
+      if (p) p.textContent = label;
+      const r = this.$("[data-remain]");
+      if (r) r.textContent = remain;
+    },
+    onStart() {
+      const st = this.state;
+      st.live = true;
+      this.hud?.classList.remove("is-replay");
+      st.tracker?.reset();
+      this._resetStory();
+      const b = this.$("[data-next-phase]");
+      if (b) b.disabled = false;
+      const el = this.$("[data-peak-st]");
+      if (el) el.textContent = L("Pico aún no marcado", "Peak not marked yet");
+      this._words();
+      this.viz?.draw();
+    },
+    onFrame(frame) {
+      const st = this.state;
+      if (!st.tracker) return;
+      st.tracker.feed(frame || {});
+      this._energy(frame || {});
+      const t = st.tracker.t;
+      if (!st.over && t - st.starts[st.index] >= st.phases[st.index].sec) this._advance(t);
+      this._words();
+      this.viz?.draw();
+    },
+    /** The peak against the context: loudness, pace, the pause before; and the ending. */
+    _compare() {
+      const st = this.state;
+      const trk = st.tracker;
+      const t = trk.t;
+      const F = global.VTFeatures;
+      const endOf = (i) => (i + 1 < st.phases.length && st.starts[i + 1] != null ? st.starts[i + 1] : st.over ? st.overAt : t);
+      const peakIdx = st.phases.findIndex((p) => p.key === "peak");
+      let peak = null;
+      let fromMark = false;
+      if (st.marks.length) {
+        const mk = st.marks[st.marks.length - 1];
+        peak = [Math.max(0, mk - 5), Math.min(t, mk + 5)];
+        fromMark = true;
+      } else if (peakIdx >= 0 && st.starts[peakIdx] != null) {
+        peak = [st.starts[peakIdx], endOf(peakIdx)];
+      }
+      let setup = [0, st.starts[1] != null ? st.starts[1] : t];
+      if (trk.talkIn(setup[0], setup[1]) < 3 && st.starts[2] != null) setup = [0, st.starts[2]];
+      const c = { peak, setup, fromMark, dDb: null, dRate: null, pauseBefore: null, end: null, endSilence: null };
+      if (peak && peak[1] - peak[0] >= 2) {
+        const overlap = Math.max(0, Math.min(peak[1], setup[1]) - Math.max(peak[0], setup[0]));
+        if (overlap < 0.5 * (peak[1] - peak[0])) {
+          const inWin = (a, b) => st.ebins.filter((x) => x.sp && x.db != null && x.t >= a && x.t <= b).map((x) => x.db);
+          const dp = inWin(peak[0], peak[1]);
+          const ds = inWin(setup[0], setup[1]);
+          if (dp.length >= 4 && ds.length >= 4 && F) c.dDb = F.median(dp) - F.median(ds);
+          const tp = trk.talkIn(peak[0], peak[1]);
+          const ts = trk.talkIn(setup[0], setup[1]);
+          const sp = trk.syllIn(peak[0], peak[1]);
+          const ss = trk.syllIn(setup[0], setup[1]);
+          if (tp >= 2.5 && ts >= 2.5 && sp >= 6 && ss >= 6) c.dRate = sp / tp / (ss / ts) - 1;
+        }
+        let best = 0;
+        trk.vad.segments.forEach((g) => {
+          if (g.kind !== "pause" || g.end == null) return;
+          const len = g.end - g.start;
+          if (g.end >= peak[0] - 3 && g.end <= peak[0] + 1.5 && len > best) best = len;
+        });
+        if (best >= 0.4) c.pauseBefore = best;
+      }
+      const last = trk.phrases[trk.phrases.length - 1];
+      if (last && last.fin && last.fin.kind !== "short") {
+        c.end = last.fin;
+        const after = t - last.end;
+        c.endSilence = after >= 0.2 ? after : null;
+      }
+      return c;
     },
     onStop() {
-      return {
-        patches: {
-          peakClarity: this.state.peakMarked ? 4 : 2,
-          structure: this.state.runner.index >= 2 ? 4 : 3
-        },
-        summary: this.state.peakMarked ? "Peak marked" : "Consider marking the peak next time"
-      };
+      const st = this.state;
+      const V = global.VTViz;
+      st.live = false;
+      const trk = st.tracker;
+      let summary = L("Historia detenida", "Story stopped");
+      if (trk) {
+        trk.finish();
+        this._closeEnergy();
+        st.compare = this._compare();
+        const c = st.compare;
+        const fmt = (v, d) => (V ? V.fmtNum(v, d) : v.toFixed(d));
+        const sign = (v) => (v >= 0 ? "+" : "−");
+        const parts = [];
+        if (c.dDb != null) parts.push(L(`pico ${sign(c.dDb)}${fmt(Math.abs(c.dDb), 1)} dB`, `peak ${sign(c.dDb)}${fmt(Math.abs(c.dDb), 1)} dB`));
+        if (c.dRate != null) parts.push(L(`ritmo ${sign(c.dRate)}${fmt(Math.abs(c.dRate) * 100, 0)} %`, `pace ${sign(c.dRate)}${fmt(Math.abs(c.dRate) * 100, 0)} %`));
+        if (c.pauseBefore != null) parts.push(L(`pausa antes ${fmt(c.pauseBefore, 1)} s`, `pause before ${fmt(c.pauseBefore, 1)} s`));
+        const clock = V && V.scenes.speechShapeUtil ? V.scenes.speechShapeUtil.clock(trk.t) : Math.round(trk.t) + " s";
+        summary =
+          L(`Historia de ${clock}`, `Story of ${clock}`) +
+          (parts.length
+            ? " · " + parts.join(" · ") + L(" (aprox., frente al contexto)", " (approx., against the context)")
+            : !c.peak
+              ? L(" · sin pico que comparar: marca ⚑ o llega a «Pico»", " · no peak to compare: mark ⚑ or reach “Peak”")
+              : L(" · poca voz para comparar el pico", " · too little voice to compare the peak"));
+      }
+      st.review = true;
+      if (this.viz) {
+        this.hud.classList.add("is-replay");
+        this.viz.draw();
+      }
+      // Peak clarity, structure and impact are the learner's ratings: nothing is filled in
+      return { patches: {}, summary };
     }
   });
 
+  /**
+   * v19 — land the sentence. When you stop speaking, the end of the sentence
+   * is read against the sentence's own middle (↘ cae / → plano / ↗ sube),
+   * then a ring fills over the second of silence. No button between speaking
+   * and silence: the sound edge (not the grace-bridged `voiced`) ends a claim.
+   * "Landed" (measured, approximate) = a fall plus the full pause and no tag.
+   * Felt authority and "no tag" stay the learner's ratings.
+   */
   Modes.authorityLand = baseMode({
     id: "authorityLand",
     render() {
-      this.state.lands = 0;
-      this.state.need = (this.profile.landSilenceSec || 1) * 1000;
-      this.state.waitingLand = false;
-      this.state.silenceAcc = 0;
+      const st = this.state;
+      st.claims = this.profile.claims || 5;
+      st.need = this.profile.landSilenceSec || 1;
+      this._resetClaims();
       this.hud.innerHTML = `
-        <div class="mode-title">${L("Cierres con autoridad", "Authority landings")}</div>
-        <div class="mode-big" data-l>0 / ${this.profile.claims || 5}</div>
-        <button type="button" class="btn btn-primary btn-sm" data-claim>I stated a claim — now land</button>
-        <p class="mode-meta" data-st>${L("Di la afirmación y guarda silencio ~1s (sin “¿sabes?”)", "State claim, then hold silence ~1s (no “you know?”)")}</p>
+        <div class="viz-row viz-head">
+          <div class="mode-title">${L("Cierre con autoridad", "Authority close")}</div>
+          <button type="button" class="btn btn-ghost viz-tap" data-again aria-pressed="false" disabled>${L("↺ Otra vez", "↺ Again")}</button>
+        </div>
+        <div class="viz-words">
+          <strong class="mode-big" data-l>0 / ${st.claims}</strong>
+          <span data-st>${L("Di la afirmación y guarda silencio ~1 s (sin “¿sabes?”)", "State the claim, then hold ~1 s of silence (no “you know?”)")}</span>
+        </div>
+        <p class="mode-meta muted">${L(
+          "Al callar verás cómo terminó tu frase frente a su propio medio (↘ cae, → plano, ↗ sube) y un anillo para el segundo de silencio. «Otra vez» repite la misma afirmación y deja la anterior a la vista.",
+          "When you stop you see how the sentence ended against its own middle (↘ falls, → level, ↗ rises) and a ring for the second of silence. “Again” repeats the same claim and keeps the last one in view."
+        )}</p>
       `;
-      this.$("[data-claim]")?.addEventListener("click", () => {
-        this.state.waitingLand = true;
-        this.state.silenceAcc = 0;
-        if (this.$("[data-st]")) this.$("[data-st]").textContent = L("Mantén el silencio para aterrizar…", "Hold silence to land…");
+      this.$("[data-again]")?.addEventListener("click", () => this._toggleAgain());
+      this._mountViz();
+    },
+    _resetClaims() {
+      const st = this.state;
+      st.slots = [];
+      st.cur = null;
+      st.shown = null;
+      st.maybe = null;
+      st.last = null;
+      st.phase = "idle";
+      st.again = false;
+      st.review = false;
+    },
+    _mountViz() {
+      const V = global.VTViz;
+      const S = V && V.scenes;
+      if (!S || !S.ShapeTracker || !S.landingStrip) return;
+      this.hud.classList.add("has-viz");
+      this.state.tracker = new S.ShapeTracker({
+        onSpeech: (t) => this._onSpeech(t),
+        onPhrase: (p) => this._onPhrase(p)
       });
+      this.viz = new V.Surface(this.hud, (ctx, w, h) => S.landingStrip(ctx, w, h, this.state), {
+        label: L(
+          "Pista de aterrizaje: una casilla por afirmación; la línea de tono de tu frase y, al callar, una flecha de cómo terminó y un anillo que se llena con un segundo de silencio.",
+          "Landing strip: a slot per claim; your sentence's pitch line and, when you stop, an arrow for how it ended and a ring that fills with a second of silence."
+        ),
+        captionHidden: true
+      });
+      this.viz.draw();
+    },
+    _toggleAgain() {
+      const st = this.state;
+      if (!st.slots.length || st.review) return;
+      st.again = !st.again;
+      const b = this.$("[data-again]");
+      if (b) b.setAttribute("aria-pressed", String(st.again));
+      this.viz?.draw();
+    },
+    _newClaim(start) {
+      return { start, end: null, fin: null, pause: 0, tag: false, landed: false, committed: false, bins: null };
+    },
+    _onSpeech(t) {
+      const st = this.state;
+      if (st.phase === "idle" || st.phase === "landed") {
+        if (st.phase === "landed" && st.last) st.last.pause = Math.max(st.last.pause, t - (st.last.pauseFrom != null ? st.last.pauseFrom : st.last.end));
+        st.cur = this._newClaim(t);
+        st.shown = st.cur;
+        st.phase = "speaking";
+        this._status(L("Hablando…", "Speaking…"));
+      } else if (st.phase === "landing") {
+        // Speech before the pause was complete: a tag, the same claim going
+        // on, or the next claim — the next half second decides
+        st.maybe = { start: t, gap: t - (st.cur.pauseFrom != null ? st.cur.pauseFrom : st.cur.end) };
+        st.phase = "maybeTag";
+      }
+    },
+    _onPhrase(p) {
+      const st = this.state;
+      if (st.phase === "speaking" && st.cur) {
+        st.cur.end = p.end;
+        st.cur.fin = p.fin;
+        st.phase = "landing";
+        this._status(this._endWords(p.fin));
+        return;
+      }
+      if (st.phase === "maybeTag" && st.cur && st.maybe) {
+        const mb = st.maybe;
+        const len = p.end - mb.start;
+        st.maybe = null;
+        if (len <= 0.8 && this._rising(p)) {
+          st.cur.tag = true;
+          st.cur.tagEnd = p.end;
+          st.cur.pauseFrom = p.end;
+          st.phase = "landing";
+          this._status(L("¿Etiqueta al final?", "A tag at the end?"));
+          return;
+        }
+        if (mb.gap < 0.45) {
+          // A short breath inside one sentence: it goes on
+          st.cur.end = p.end;
+          st.cur.fin = p.fin;
+          st.cur.pauseFrom = null;
+          st.phase = "landing";
+          return;
+        }
+        st.cur.pause = mb.gap;
+        this._commit(st.cur);
+        st.cur = this._newClaim(mb.start);
+        st.cur.end = p.end;
+        st.cur.fin = p.fin;
+        st.shown = st.cur;
+        st.phase = "landing";
+      }
+    },
+    /** A short burst that climbs 2 st or more within itself (¿no?, ¿sabes?). [H] */
+    _rising(p) {
+      if (p.fin && p.fin.kind === "rise") return true;
+      const vb = p.bins.filter((b) => b.m != null);
+      if (vb.length < 3 || !p.fin || p.fin.fin == null) return false;
+      const first = vb.slice(0, Math.max(1, Math.min(3, vb.length - 1))).map((b) => b.m);
+      first.sort((a, b) => a - b);
+      return p.fin.fin - first[first.length >> 1] >= 2;
+    },
+    _tick() {
+      const st = this.state;
+      const t = st.tracker.t;
+      if (st.phase === "landing" && st.cur) {
+        const from = st.cur.pauseFrom != null ? st.cur.pauseFrom : st.cur.end;
+        st.cur.pause = Math.max(0, t - from);
+        if (st.cur.pause >= st.need) {
+          this._commit(st.cur);
+          st.phase = "landed";
+        }
+      } else if (st.phase === "landed" && st.last) {
+        const c = st.last;
+        c.pause = Math.max(c.pause, t - (c.pauseFrom != null ? c.pauseFrom : c.end));
+      } else if (st.phase === "maybeTag" && st.maybe && t - st.maybe.start > 0.9) {
+        // Too long for a tag
+        const mb = st.maybe;
+        st.maybe = null;
+        if (mb.gap < 0.45) {
+          st.cur.end = null;
+          st.cur.fin = null;
+          st.cur.pauseFrom = null;
+        } else {
+          st.cur.pause = mb.gap;
+          this._commit(st.cur);
+          st.cur = this._newClaim(mb.start);
+          st.shown = st.cur;
+        }
+        st.phase = "speaking";
+      }
+    },
+    _commit(att) {
+      const st = this.state;
+      if (att.committed) return;
+      att.committed = true;
+      const until = (att.tagEnd || att.end || st.tracker.t) + 0.02;
+      att.bins = st.tracker.binsIn(att.start - 0.02, until);
+      att.landed = !!(att.fin && att.fin.kind === "fall" && att.pause >= st.need - 1e-6 && !att.tag);
+      if (st.again && st.slots.length) {
+        st.slots[st.slots.length - 1].attempts.push(att);
+        st.again = false;
+        this.$("[data-again]")?.setAttribute("aria-pressed", "false");
+      } else st.slots.push({ attempts: [att] });
+      st.last = att;
+      const b = this.$("[data-again]");
+      if (b) b.disabled = false;
+      const landed = st.slots.filter((s) => s.attempts.some((a) => a.landed)).length;
+      const l = this.$("[data-l]");
+      if (l) l.textContent = `${landed} / ${st.claims}`;
+      const V = global.VTViz;
+      const pause = V ? V.fmtNum(Math.min(att.pause, 9.9), 1) : att.pause.toFixed(1);
+      const words = `${this._endWords(att.fin)} · ${L("pausa", "pause")} ${pause} s${att.landed ? " ✓" : ""}${
+        att.tag ? " · " + L("¿etiqueta?", "tag?") : ""
+      }`;
+      this._status(words);
+      this.viz?.caption?.(words, 0);
+    },
+    _endWords(fin) {
+      const V = global.VTViz;
+      const U = V && V.scenes.speechShapeUtil;
+      if (!U || !fin) return L("Terminó", "Ended");
+      const info = U.endInfo(fin);
+      return info.Word + (info.num ? " " + info.num : "");
+    },
+    _status(text) {
+      const el = this.$("[data-st]");
+      if (el) el.textContent = text;
+    },
+    onStart() {
+      const st = this.state;
+      this.hud?.classList.remove("is-replay");
+      st.tracker?.reset();
+      this._resetClaims();
+      const b = this.$("[data-again]");
+      if (b) {
+        b.disabled = true;
+        b.setAttribute("aria-pressed", "false");
+      }
+      const l = this.$("[data-l]");
+      if (l) l.textContent = `0 / ${st.claims}`;
+      this.viz?.draw();
     },
     onFrame(frame) {
-      if (!this.state.waitingLand) return;
-      const quiet = !frame.voiced && (frame.rms || 0) < 0.02;
-      const dt = frame.dtMs || 16;
-      if (quiet) {
-        this.state.silenceAcc += dt;
-        if (this.state.silenceAcc >= this.state.need) {
-          this.state.lands++;
-          this.state.waitingLand = false;
-          if (this.$("[data-l]"))
-            this.$("[data-l]").textContent = `${this.state.lands} / ${this.profile.claims || 5}`;
-          if (this.$("[data-st]")) this.$("[data-st]").textContent = L("Aterrizado ✓", "Landed ✓");
-        }
-      } else this.state.silenceAcc = 0;
+      const st = this.state;
+      if (!st.tracker) return;
+      st.tracker.feed(frame);
+      this._tick();
+      this.viz?.draw();
     },
     onStop() {
+      const st = this.state;
+      const trk = st.tracker;
+      if (trk) {
+        if (st.phase === "maybeTag" && st.maybe && st.cur) {
+          // Stop came while speech had resumed: the claim before it keeps the gap it had
+          st.cur.pause = st.maybe.gap;
+          st.maybe = null;
+          this._commit(st.cur);
+          st.cur = null;
+          st.phase = "idle";
+        } else if (st.phase === "speaking") {
+          // Cut off mid-sentence by Stop: no ending to read, so no slot
+          st.cur = null;
+          st.phase = "idle";
+        }
+        trk.finish();
+        if (st.cur && !st.cur.committed && st.cur.fin) this._commit(st.cur);
+      }
+      st.review = true;
+      st.again = false;
+      if (this.viz) {
+        this.hud.classList.add("is-replay");
+        this.viz.draw();
+      }
+      const n = st.slots.length;
+      const landed = st.slots.filter((s) => s.attempts.some((a) => a.landed)).length;
       return {
-        patches: {
-          landed: this.state.lands,
-          authority: clamp(1 + this.state.lands, 1, 5)
-          // noTag left for honest self-rate
-        },
-        summary: `${this.state.lands} clean landings`
+        // Measured (approximate): a fall plus the full pause. Authority and
+        // "no tag" stay with the learner.
+        patches: landed > 0 ? { landed } : {},
+        summary:
+          n > 0
+            ? L(
+                `${landed} de ${n} ${n === 1 ? "afirmación cayó" : "afirmaciones cayeron"} y sostuvieron el silencio (aprox.)`,
+                `${landed} of ${n} ${n === 1 ? "claim" : "claims"} fell and held the silence (approx.)`
+              )
+            : L("Sin afirmaciones medidas todavía", "No claims measured yet")
       };
     }
   });
@@ -1941,39 +2598,204 @@
     }
   });
 
+  /**
+   * v12 — the melody of speech, in semitones against your own usual pitch
+   * (not notes on a highway: speech is not a scale). Four takes follow the
+   * steps: a flat baseline, an exaggerated one, one with coloured words, a
+   * natural final one. Each phrase ends with an arrow for how it landed, and
+   * the range of each take (10th–90th percentile, never min–max, which one
+   * glitch would set) stands beside the baseline's. Variety, naturalness and
+   * engagement stay the learner's own ratings.
+   */
   Modes.pitchContour = baseMode({
     id: "pitchContour",
     render() {
-      this.state.minM = 999;
-      this.state.maxM = 0;
+      const st = this.state;
+      st.takes = [
+        {
+          name: L("1 · Base plana", "1 · Flat baseline"),
+          short: L("1 Base", "1 Base"),
+          hint: L("Toma base: léelo plano, sin melodía", "Baseline: read it flat, no melody")
+        },
+        {
+          name: L("2 · Exagerada", "2 · Exaggerated"),
+          short: L("2 Exag.", "2 Exag."),
+          hint: L("Exagera: sube las palabras clave, cae al final", "Exaggerate: lift the key words, fall at the end")
+        },
+        {
+          name: L("3 · Color", "3 · Colour"),
+          short: L("3 Color", "3 Colour"),
+          hint: L("Colorea 3 palabras: calidez, sorpresa, resolución", "Colour 3 words: warmth, surprise, resolve")
+        },
+        {
+          name: L("4 · Final natural", "4 · Natural final"),
+          short: L("4 Final", "4 Final"),
+          hint: L("Natural pero musical: la melodía sigue al sentido", "Natural but musical: the melody follows the meaning")
+        }
+      ];
+      this._resetTakes();
       this.hud.innerHTML = `
-        <div class="mode-title">${L("Rango melódico (habla)", "Melodic range (speech)")}</div>
-        <div class="mode-big" data-r>— st</div>
-        <p class="mode-meta">${L("Rango mín–máx al hablar. Variedad sin ejercicios de nota.", "Min–max pitch span while you speak. Variety without note drills.")}</p>
-        <p class="mode-meta" data-d>${L("Empieza a hablar con color…", "Start speaking with color…")}</p>
+        <div class="viz-row viz-head">
+          <div class="mode-title">${L("Melodía al hablar", "Speech melody")}</div>
+          <button type="button" class="btn btn-ghost viz-tap" data-next-take>${L("Siguiente toma →", "Next take →")}</button>
+        </div>
+        <div class="viz-words">
+          <span data-d>${L("Empieza con la toma base: plano, sin melodía.", "Start with the baseline take: flat, no melody.")}</span>
+          <strong class="mode-big" data-r>— st</strong>
+        </div>
+        <p class="mode-meta muted">${L(
+          "Tu tono en semitonos frente a tu tono habitual, frase a frase, y cómo termina cada frase: ↘ cae, → plano, ↗ sube.",
+          "Your pitch in semitones against your usual pitch, phrase by phrase, and how each phrase ends: ↘ falls, → level, ↗ rises."
+        )}</p>
       `;
+      this.$("[data-next-take]")?.addEventListener("click", () => this._nextTake());
+      this._mountViz();
+    },
+    _resetTakes() {
+      const st = this.state;
+      st.takes.forEach((t) => {
+        t.start = null;
+        t.end = null;
+        t.vals = [];
+        t.p10 = null;
+        t.p90 = null;
+        t.range = null;
+        t.R = 6;
+        t._n = 0;
+        t._pageFrom = 0;
+      });
+      st.current = 0;
+      st.review = false;
+    },
+    _mountViz() {
+      const V = global.VTViz;
+      const S = V && V.scenes;
+      if (!S || !S.ShapeTracker || !S.melodyRibbon) return;
+      this.hud.classList.add("has-viz");
+      this.state.tracker = new S.ShapeTracker({
+        onBin: (b) => this._bin(b),
+        onPhrase: (p) => this._phrase(p)
+      });
+      this.viz = new V.Surface(this.hud, (ctx, w, h) => S.melodyRibbon(ctx, w, h, this.state), {
+        label: L(
+          "Melodía al hablar: tu tono en semitonos frente a tu tono habitual (la línea 0), frase a frase, con una flecha de cómo termina cada frase; a la derecha, el rango de esta toma junto al de la toma base.",
+          "Speech melody: your pitch in semitones against your usual pitch (the 0 line), phrase by phrase, with an arrow for how each phrase ends; on the right, this take's range beside the baseline take's."
+        ),
+        captionHidden: true
+      });
+      this.viz.draw();
+    },
+    /** Each voiced 50 ms bin joins the current take's pitch sample. */
+    _bin(b) {
+      const st = this.state;
+      const take = st.takes[st.current];
+      if (b.m == null || !take || take.start == null) return;
+      take.vals.push(b.m);
+      if (take.vals.length > 6000) take.vals.splice(0, 1000);
+      take._n += 1;
+      if (take._n % 10 === 0 && take.vals.length >= 40) this._stats(take);
+    },
+    _stats(take) {
+      const F = global.VTFeatures;
+      const V = global.VTViz;
+      if (!F || take.vals.length < 40) return;
+      take.p10 = F.percentile(take.vals, 0.1);
+      take.p90 = F.percentile(take.vals, 0.9);
+      take.range = take.p90 - take.p10;
+      const ref = this.state.tracker ? this.state.tracker.ref : null;
+      if (ref != null) {
+        const lo = F.percentile(take.vals, 0.03) - ref;
+        const hi = F.percentile(take.vals, 0.97) - ref;
+        take.R = clamp(Math.ceil(Math.max(Math.abs(lo), Math.abs(hi)) + 1), take.R || 6, 14);
+      }
+      const r = this.$("[data-r]");
+      if (r) r.textContent = `${V ? V.fmtNum(take.range, 1) : take.range.toFixed(1)} st`;
+    },
+    _phrase(p) {
+      const st = this.state;
+      p.takeIdx = st.current;
+      const U = global.VTViz && global.VTViz.scenes.speechShapeUtil;
+      if (!U || !p.fin || p.fin.kind === "short") return;
+      const info = U.endInfo(p.fin);
+      const words = L("Final de frase: ", "Phrase ending: ") + info.word + (info.num ? " " + info.num : "");
+      const d = this.$("[data-d]");
+      if (d) d.textContent = words;
+      this.viz?.caption?.(words);
+    },
+    _nextTake() {
+      const st = this.state;
+      const trk = st.tracker;
+      if (!trk || st.review) return;
+      const t = trk.t;
+      const cur = st.takes[st.current];
+      if (cur.start == null) cur.start = t;
+      cur.end = t;
+      this._stats(cur);
+      // The flat baseline sets "your usual pitch" for the takes after it
+      if (st.current === 0 && cur.vals.length >= 40 && global.VTFeatures) trk.lockRef(global.VTFeatures.median(cur.vals));
+      if (st.current < st.takes.length - 1) {
+        st.current += 1;
+        const nxt = st.takes[st.current];
+        nxt.start = t;
+        nxt.end = null;
+        this.viz?.caption?.(nxt.name, 0);
+        const d = this.$("[data-d]");
+        if (d) d.textContent = nxt.hint;
+      }
+      if (st.current >= st.takes.length - 1) {
+        const b = this.$("[data-next-take]");
+        if (b) b.disabled = true;
+      }
+      const r = this.$("[data-r]");
+      if (r) r.textContent = "— st";
+      this.viz?.draw();
+    },
+    onStart() {
+      const st = this.state;
+      this.hud?.classList.remove("is-replay");
+      st.tracker?.reset();
+      this._resetTakes();
+      st.takes[0].start = 0;
+      const b = this.$("[data-next-take]");
+      if (b) b.disabled = false;
+      const r = this.$("[data-r]");
+      if (r) r.textContent = "— st";
+      this.viz?.draw();
     },
     onFrame(frame) {
-      if (frame.voiceFreq && global.VTPitchUtils) {
-        const m = global.VTPitchUtils.freqToMidi(frame.voiceFreq);
-        this.state.minM = Math.min(this.state.minM, m);
-        this.state.maxM = Math.max(this.state.maxM, m);
-        const span = this.state.maxM - this.state.minM;
-        if (this.$("[data-r]")) this.$("[data-r]").textContent = `${span.toFixed(1)} st`;
-        if (this.$("[data-d]"))
-          this.$("[data-d]").textContent =
-            span < 2 ? "Still flat — paint more highs/lows on meaning." : "Nice contour range.";
-      }
+      const st = this.state;
+      if (!st.tracker) return;
+      st.tracker.feed(frame);
+      this.viz?.draw();
     },
     onStop() {
-      const span = Math.max(0, this.state.maxM - this.state.minM);
-      return {
-        patches: { variety: span >= 5 ? 5 : span >= 3 ? 4 : span >= 1.5 ? 3 : 2 },
-        summary: `Pitch span ~${span.toFixed(1)} semitones`
-      };
+      const st = this.state;
+      const V = global.VTViz;
+      const trk = st.tracker;
+      if (trk) {
+        trk.finish();
+        const cur = st.takes[st.current];
+        if (cur.start != null && cur.end == null) cur.end = trk.t;
+        this._stats(cur);
+      }
+      st.review = true;
+      if (this.viz) {
+        this.hud.classList.add("is-replay");
+        this.viz.draw();
+      }
+      const fmt = (v) => (V ? V.fmtNum(v, 1) : v.toFixed(1));
+      const done = st.takes.filter((t) => t.range != null);
+      const falls = trk ? trk.phrases.filter((p) => p.fin && p.fin.kind === "fall").length : 0;
+      const ends = trk ? trk.phrases.filter((p) => p.fin && ["fall", "rise", "level"].includes(p.fin.kind)).length : 0;
+      const summary = done.length
+        ? L("Rango aprox.: ", "Range approx.: ") +
+          done.map((t) => `${t.short} ${fmt(t.range)} st`).join(" → ") +
+          (ends ? L(` · ${falls} de ${ends} finales caen`, ` · ${falls} of ${ends} endings fall`) : "")
+        : L("Poca voz con tono para medir la melodía", "Too little voiced speech to measure the melody");
+      // Variety, naturalness and engagement are the learner's ratings: nothing is filled in
+      return { patches: {}, summary };
     }
   });
-
   // ——— SINGING ———
 
   Modes.pitchHold = baseMode({

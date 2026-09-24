@@ -137,15 +137,15 @@
 
   /**
    * The SH ladder: an 11 s even hiss (clears 5 s and 10 s), a rest, a hiss
-   * with a 0.6 s gap in it, a rest, then a hiss that pulses four times a
-   * second.
+   * with a 0.25 s gap in it (inside the hold-off, so one hold with a gap),
+   * a rest, then a hiss that pulses four times a second.
    */
   V.define("airLadder", (h) => {
     h.airOn(0.35, 0.15);
     h.at(11000, () => h.airOff(0.2));
     h.at(14000, () => h.airOn(0.35, 0.15));
-    h.at(17000, () => h.airOff(0.05));
-    h.at(17600, () => h.airOn(0.35, 0.05));
+    h.at(17000, () => h.airOff(0.03));
+    h.at(17250, () => h.airOn(0.35, 0.03));
     h.at(21000, () => h.airOff(0.2));
     h.at(23000, () => {
       h.airOn(0.35, 0.1);

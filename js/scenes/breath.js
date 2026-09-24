@@ -113,6 +113,36 @@
     return { rms, sounding, raw };
   }
 
+  /**
+   * Air (S, SH), a sung tone, or Space, for one frame.
+   * - air: the engine's raw air decision (airRaw, no grace window; hand-made
+   *   frames without it fall back to airDetected), unless the frame is
+   *   plainly a sung tone. airRaw alone is not enough: it also fires on a
+   *   loud sung vowel.
+   * - voiced: a pitch the detector keeps finding (PitchGate) while sounding,
+   *   with little hiss for its level. An S or SH carries high-frequency
+   *   energy near its whole level (first-difference hf/rms ≈ 0.9); a sung
+   *   /A/ has about a tenth of it.
+   * - assisted: Space held for air (the manual assist), counted but drawn apart.
+   */
+  function airBits(frame, gate) {
+    const b = frameBits(frame);
+    const dt = F.frameDt(frame);
+    const kept = gate ? gate.feed(b.raw, dt) : b.raw;
+    const hf = frame && frame.hfRms;
+    const hissy = hf != null && b.rms > 0 ? hf / b.rms >= 0.3 : null;
+    const assisted = !!(frame && frame.manualSound && frame.manualKind === "air");
+    const airFlag = frame && frame.airRaw !== undefined ? !!frame.airRaw : !!(frame && frame.airDetected);
+    const voiced = !!kept && b.sounding && hissy !== true;
+    return {
+      air: airFlag && !(kept && hissy === false),
+      voiced,
+      assisted,
+      db: b.rms > 0 ? 20 * Math.log10(b.rms) : null,
+      dt
+    };
+  }
+
   /* —— Lip trill / straw: the continuity track —— */
 
   /** How long after the lips stop the flutter measure lets go of it (s). */
@@ -471,8 +501,10 @@
       // Its honest length ends at the last frame the sound was there
       h.len = Math.max(0, h.lastPresent - h.start);
       h.stats = holdStats(h);
-      this.last = h;
+      // A blip (a consonant, the breath at the end of a note) does not
+      // replace the last real try
       if (h.len >= 0.5) {
+        this.last = h;
         this.holds.push(h);
         if (this.holds.length > 60) this.holds.shift();
       }
@@ -485,6 +517,13 @@
     /** End the hold now (Stop). */
     flush() {
       if (this.hold) this._close();
+    }
+    /** Drop the hold in progress without keeping it (it was something else). */
+    cancel() {
+      this.hold = null;
+      this.cur = 0;
+      this._onset = 0;
+      this._off = 0;
     }
   }
 
@@ -1061,7 +1100,11 @@
     const hist = geo.history || [];
     const n = hist.length;
     const h = opts.h || clamp(geo.graphH * 0.05, 12, 18);
-    const y = geo.graphH - h - 3;
+    // A semitone above the bottom of the locked range (the mode leaves room
+    // there under its lowest note), else along the bottom of the plot
+    const m = opts.midi != null ? opts.midi : geo.rangeMinMidi != null ? geo.rangeMinMidi + 1 : null;
+    const yc = m != null ? geo.midiToY(m) : geo.graphH - h / 2 - 3;
+    const y = clamp(yc - h / 2, (geo.safeTop || 0) + 4, geo.graphH - h - 3);
     const x0 = geo.plotLeft;
     ctx.save();
     ctx.fillStyle = "rgba(6, 10, 16, 0.55)";
@@ -1126,91 +1169,644 @@
         glyph(ctx, "notch", geo.xAt(k), y - 4, C.warn, 5);
       });
     }
+    // Its name sits just past "now", where the strip ends
     ctx.font = font(10, 800);
     ctx.textAlign = "left";
-    ctx.textBaseline = "bottom";
+    ctx.textBaseline = "middle";
     ctx.fillStyle = C.muted;
-    ctx.fillText(opts.label || L("burbujeo", "bubbling"), x0, y - 3);
+    const lx = geo.nowX + 8;
+    if (lx < geo.laneRight - 30) ctx.fillText(opts.label || L("burbujeo", "bubbling"), lx, y + h / 2, geo.laneRight - lx - 4);
     ctx.restore();
   }
 
   /**
    * The lip-trill scale under the highway: one row per pattern, one stone
-   * per note (1 2 3 4 5 4 3 2 1). A stone the bubble carried all the way is
-   * a zig-zag; one where it stopped is flat with a notch; a stone not sung
-   * yet is an outline. After Stop, the rows are the review.
-   * model: { patterns: [{ root, stones: [{ state: "trill"|"stall"|"todo"|"now", frac }] }],
-   *          degrees, syllables, current, review, summary }
+   * per note (DO RE MI FA SOL FA MI RE DO). A stone the bubble carried is a
+   * zig-zag; one where the lips stopped is flat with a notch; one sung with
+   * no bubble is flat; one not sung yet is an outline. The stone being sung
+   * fills green as its note is held. After Stop, the rows are the review.
+   * model: { patterns: [{ rootName, stones: [{ state: "trill"|"stall"|"tone"|"todo"|"now", frac, trilling }] }],
+   *          degrees, review, summary }
    */
   function trillMap(ctx, w, h, m) {
     panel(ctx, w, h);
     const pad = 8;
-    const labelW = Math.min(64, w * 0.16);
-    const rows = m.patterns.slice(-Math.max(1, Math.floor((h - pad * 2 - 18) / 26)));
-    const rowH = Math.min(30, (h - pad * 2 - 18) / Math.max(1, rows.length));
-    const stoneW = (w - pad * 2 - labelW) / m.degrees.length;
-    ctx.font = font(10, 700);
-    ctx.fillStyle = C.muted;
+    const headH = 20;
+    const labelW = Math.min(58, Math.max(40, w * 0.12));
+    const avail = h - pad * 2 - headH;
+    const maxRows = Math.max(1, Math.floor(avail / 24));
+    const rows = m.patterns.slice(-maxRows);
+    const rowH = Math.min(32, avail / Math.max(1, rows.length));
+    const n = m.degrees.length;
+    const stoneW = (w - pad * 2 - labelW) / n;
+    ctx.fillStyle = m.review ? C.text : C.muted;
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
-    fitText(ctx, m.summary || "", pad, pad + 6, w - pad * 2, 11, 700, 9);
+    fitText(ctx, m.summary || "", pad, pad + 8, w - pad * 2, 12, 800, 9);
     rows.forEach((row, ri) => {
-      const ry = pad + 18 + ri * rowH;
-      const isCur = !m.review && ri === rows.length - 1 && m.patterns[m.patterns.length - 1] === row;
+      const ry = pad + headH + ri * rowH;
+      const isCur = !m.review && ri === rows.length - 1;
       ctx.fillStyle = isCur ? C.text : C.muted;
       ctx.font = font(11, 800);
       ctx.textAlign = "left";
-      ctx.fillText(row.rootName, pad, ry + rowH / 2);
+      ctx.textBaseline = "middle";
+      ctx.fillText(row.rootName, pad, ry + rowH / 2, labelW - 4);
       row.stones.forEach((s, i) => {
-        const sx = pad + labelW + i * stoneW + 2;
-        const sw = stoneW - 4;
-        const sh = rowH - 6;
-        const cy = ry + rowH / 2;
+        const sx = pad + labelW + i * stoneW + 1.5;
+        const sw = stoneW - 3;
+        const sh = rowH - 5;
+        const top = ry + 2.5;
+        const cy = top + sh / 2 + (sh >= 20 ? 3 : 0);
+        const now = s.state === "now";
         ctx.save();
-        ctx.lineWidth = s.state === "now" ? 2 : 1;
-        ctx.strokeStyle = s.state === "now" ? C.text : C.grid;
-        ctx.fillStyle = s.state === "trill" ? "rgba(191, 230, 255, 0.12)" : "rgba(170, 195, 230, 0.05)";
-        roundRect(ctx, sx, ry + 3, sw, sh, 5);
+        ctx.fillStyle = s.state === "trill" ? "rgba(191, 230, 255, 0.10)" : "rgba(170, 195, 230, 0.05)";
+        roundRect(ctx, sx, top, sw, sh, 5);
         ctx.fill();
+        if (now && s.frac > 0) {
+          ctx.save();
+          roundRect(ctx, sx, top, sw, sh, 5);
+          ctx.clip();
+          ctx.fillStyle = C.targetSoft;
+          ctx.fillRect(sx, top, sw * clamp(s.frac, 0, 1), sh);
+          ctx.restore();
+        }
+        ctx.lineWidth = now ? 2 : 1;
+        ctx.strokeStyle = now ? C.text : s.state === "todo" ? C.grid : "rgba(170, 195, 230, 0.22)";
+        if (s.state === "todo") ctx.setLineDash([3, 3]);
+        roundRect(ctx, sx + 0.5, top + 0.5, sw - 1, sh - 1, 5);
         ctx.stroke();
-        if (s.state === "trill" || (s.state === "now" && s.frac > 0)) {
+        ctx.setLineDash([]);
+        const zig = s.state === "trill" || (now && s.trilling);
+        if (zig) {
           ctx.strokeStyle = C.you;
           ctx.lineWidth = 1.8;
+          ctx.lineJoin = "round";
           ctx.beginPath();
-          const end = sx + 3 + (sw - 6) * (s.state === "now" ? clamp(s.frac, 0, 1) : 1);
+          const end = sx + sw - 4;
           let up = true;
-          ctx.moveTo(sx + 3, cy);
-          for (let px = sx + 5; px <= end; px += 3.5) {
-            ctx.lineTo(px, cy + (up ? -sh * 0.22 : sh * 0.22));
+          ctx.moveTo(sx + 4, cy);
+          for (let px = sx + 6.5; px <= end; px += 3.5) {
+            ctx.lineTo(px, cy + (up ? -1 : 1) * Math.min(4, sh * 0.2));
             up = !up;
           }
           ctx.stroke();
-        } else if (s.state === "stall") {
+        } else if (s.state === "stall" || s.state === "tone") {
           ctx.fillStyle = C.muted;
-          roundRect(ctx, sx + 3, cy - 1.5, sw - 6, 3, 1.5);
+          roundRect(ctx, sx + 4, cy - 1.5, sw - 8, 3, 1.5);
           ctx.fill();
-          glyph(ctx, "notch", sx + sw / 2, ry + 7, C.warn, 4);
+          if (s.state === "stall") glyph(ctx, "notch", sx + sw - 9, cy - 6, C.warn, 4);
         }
         ctx.restore();
-        if (sw > 20 && rowH >= 22) {
-          ctx.font = font(9, 700);
+        if (sw > 22 && sh >= 20) {
+          ctx.font = font(8, 700);
           ctx.fillStyle = C.faint;
           ctx.textAlign = "center";
           ctx.textBaseline = "top";
-          ctx.fillText(String(m.degrees[i]), sx + sw / 2, ry + 4);
+          ctx.fillText(String(m.degrees[i]), sx + sw / 2, top + 2, sw - 2);
         }
       });
     });
-    if (!rows.length || !rows[0].stones.length) {
+  }
+
+  /* —— Holds on a seconds axis: the SH ladder, and S then /A/ —— */
+
+  /** A round end for a seconds axis: 6, 8, 10, 12, 15, 20, 25, 30, 40… */
+  function niceSec(s) {
+    const steps = [6, 8, 10, 12, 15, 20, 25, 30, 35, 40, 50, 60, 75, 90, 120];
+    for (const v of steps) if (s <= v) return v;
+    return Math.ceil(s / 30) * 30;
+  }
+
+  /**
+   * One hold as a bar along a seconds axis. Inside it, the level against
+   * the hold's own median: a line, with the ±3 dB corridor shaded (the
+   * microphone's level, not air flow, so it is labelled approximate). Gaps
+   * are breaks; Space-assisted stretches are hatched.
+   * o: { x0, pps (px per second), y, h, color, soft, ghost, maxX }
+   */
+  function holdBar(ctx, hold, o) {
+    if (!hold) return;
+    const { x0, pps, y, h } = o;
+    const len = Math.max(0, hold.len);
+    const xEnd = Math.min(o.maxX || Infinity, x0 + len * pps);
+    const r = Math.min(6, h / 2);
+    if (xEnd - x0 < 1) return;
+    if (o.ghost) {
+      ctx.save();
+      ctx.strokeStyle = o.color;
+      ctx.globalAlpha = 0.5;
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([5, 4]);
+      roundRect(ctx, x0 + 0.5, y + 0.5, xEnd - x0 - 1, h - 1, r);
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
+    ctx.save();
+    ctx.fillStyle = o.soft;
+    roundRect(ctx, x0, y, xEnd - x0, h, r);
+    ctx.fill();
+    roundRect(ctx, x0, y, xEnd - x0, h, r);
+    ctx.clip();
+    const mid = y + h / 2;
+    const k = (h / 2 - 2) / 6; // px per dB: ±6 dB fills the bar
+    ctx.fillStyle = "rgba(238, 243, 250, 0.07)";
+    ctx.fillRect(x0, mid - 3 * k, xEnd - x0, 6 * k);
+    // Space-assisted stretches
+    const S = hold.samples || [];
+    let a0 = null;
+    const flushAssist = (t1) => {
+      if (a0 == null) return;
+      ctx.fillStyle = hatch(ctx, "rgba(238, 243, 250, 0.4)");
+      ctx.fillRect(x0 + a0 * pps, y, Math.max(2, (t1 - a0) * pps), h);
+      a0 = null;
+    };
+    for (const s of S) {
+      if (s.assisted && a0 == null) a0 = s.t - 1 / 30;
+      else if (!s.assisted) flushAssist(s.t);
+    }
+    flushAssist(len);
+    // The level line
+    ctx.strokeStyle = o.color;
+    ctx.lineWidth = h >= 26 ? 2 : 1.5;
+    ctx.lineJoin = "round";
+    ctx.beginPath();
+    let pen = false;
+    const ref = hold.ref;
+    for (const s of S) {
+      if (!Number.isFinite(s.db) || ref == null) {
+        pen = false;
+        continue;
+      }
+      const px = x0 + s.t * pps;
+      const py = mid - clamp((s.db - ref) * k, -h / 2 + 1.5, h / 2 - 1.5);
+      if (pen) ctx.lineTo(px, py);
+      else ctx.moveTo(px, py);
+      pen = true;
+    }
+    if (ref == null) {
+      // Not enough of it yet to have its own level: a plain centre line
+      ctx.moveTo(x0 + 2, mid);
+      ctx.lineTo(xEnd - 2, mid);
+    }
+    ctx.stroke();
+    ctx.restore();
+    // Gaps: the bar is cut where the sound was not there
+    (hold.gaps || []).forEach((g) => {
+      const ga = x0 + g.t * pps;
+      const gb = Math.min(xEnd, ga + g.len * pps);
+      if (gb - ga < 1) return;
+      ctx.fillStyle = C.bg;
+      ctx.fillRect(ga, y - 1, Math.max(2, gb - ga), h + 2);
+      ctx.strokeStyle = C.muted;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(ga, y + h / 2);
+      ctx.lineTo(gb, y + h / 2);
+      ctx.stroke();
+      if (o.words !== false && h >= 20) {
+        ctx.font = font(9, 800);
+        ctx.fillStyle = C.muted;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "bottom";
+        ctx.fillText(L("hueco", "gap"), (ga + gb) / 2, y - 2);
+      }
+    });
+  }
+
+  /** Seconds along the bottom of an axis, with the rungs (or marks) as ticks. */
+  function secAxis(ctx, x0, pps, y, maxSec, w, ticks) {
+    ctx.strokeStyle = C.grid;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x0, y);
+    ctx.lineTo(x0 + maxSec * pps, y);
+    ctx.stroke();
+    ctx.font = font(9, 700);
+    ctx.fillStyle = C.faint;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    let lastX = -1e9;
+    (ticks || []).forEach((t) => {
+      const x = x0 + t * pps;
+      if (t > maxSec + 0.01 || x - lastX < 26) return;
+      ctx.beginPath();
+      ctx.moveTo(x, y - 3);
+      ctx.lineTo(x, y + 3);
+      ctx.stroke();
+      ctx.fillText(fmtNum(t, 0) + " s", clamp(x, x0 + 8, x0 + w - 12), y + 4);
+      lastX = x;
+    });
+  }
+
+  /**
+   * The SH ladder.
+   * model: { track (HoldTrack), rungs, cleared, i (target rung), rest (s left),
+   *          assisted (Space now), review, justCleared (rung seconds or null) }
+   */
+  function ladder(ctx, w, h, m) {
+    panel(ctx, w, h);
+    const tr = m.track;
+    const pad = 10;
+    const tiny = h < 135;
+    const compact = h < 190;
+    const narrow = w < 420;
+    const rungs = m.rungs;
+    const target = rungs[Math.min(m.i, rungs.length - 1)];
+    const hold = tr.hold;
+    const last = tr.last;
+
+    // Headline and the big number
+    let head;
+    let big;
+    let cap;
+    let color = C.text;
+    let icon = null;
+    if (m.review) {
+      head = L(
+        `Escalera: ${m.cleared} de ${rungs.length} peldaños · mejor ${fmtSec(tr.best, 1)}`,
+        `Ladder: ${m.cleared} of ${rungs.length} rungs · best ${fmtSec(tr.best, 1)}`
+      );
+      big = fmtSec(tr.best, 1);
+      cap = L("SH más larga", "longest SH");
+    } else if (hold) {
+      head = m.assisted ? L("Contando con Espacio", "Counting with Space") : L("SH sonando", "SH sounding");
+      icon = "air";
+      big = fmtSec(hold.len, 1);
+      cap = L(`meta ${fmtNum(target, 0)} s`, `goal ${fmtNum(target, 0)} s`);
+      if (hold.len >= target && m.cleared > 0) {
+        head = L(`Peldaño ${fmtNum(target, 0)} s ✓ · sigue si es cómodo`, `${fmtNum(target, 0)} s rung ✓ · go on if it's easy`);
+        color = C.done;
+      }
+    } else if (m.justCleared != null) {
+      head = L(`Peldaño ${fmtNum(m.justCleared, 0)} s ✓`, `${fmtNum(m.justCleared, 0)} s rung ✓`);
+      color = C.done;
+      big = m.rest > 0 ? String(Math.ceil(m.rest)) : fmtSec(last ? last.len : 0, 1);
+      cap = m.rest > 0 ? L("descansa e inhala", "rest and inhale") : L("última", "last");
+    } else if (m.rest > 0) {
+      head = L("Descansa · inhala por la nariz", "Rest · breathe in through the nose");
+      big = String(Math.ceil(m.rest));
+      cap = L("descanso", "rest");
+    } else {
+      head = last
+        ? L(`Cuando quieras: SH pareja, meta ${fmtNum(target, 0)} s`, `When ready: even SH, goal ${fmtNum(target, 0)} s`)
+        : L("Inhala por la nariz… y una SH pareja", "Breathe in through the nose… then an even SH");
+      big = fmtSec(last ? last.len : 0, 1);
+      cap = last ? L("última", "last") : L(`meta ${fmtNum(target, 0)} s`, `goal ${fmtNum(target, 0)} s`);
+    }
+    const headY = tiny ? 12 : 17;
+    const bigW = narrow ? 80 : 120;
+    if (icon) tagIcon(ctx, T.AIR, pad + 9, headY, 7, C.air);
+    ctx.fillStyle = color;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    fitText(ctx, head, pad + (icon ? 22 : 0), headY, w - pad * 2 - (icon ? 22 : 0) - bigW, tiny ? 13 : narrow ? 14 : 16, 800, 10);
+    ctx.textAlign = "right";
+    ctx.fillStyle = C.text;
+    ctx.font = font(tiny ? 17 : 22, 800, true);
+    ctx.fillText(big, w - pad, headY + 1);
+    if (!tiny) {
+      ctx.font = font(10, 700);
+      ctx.fillStyle = C.muted;
+      ctx.textBaseline = "top";
+      ctx.fillText(cap, w - pad, headY + 13);
+    }
+    let top = headY + (tiny ? 12 : 30);
+
+    // The rungs, as a checklist the microphone fills in
+    if (!compact) {
+      const chipH = 34;
+      const items = rungs.map((r, k) => ({
+        label: `${fmtNum(r, 0)} s`,
+        short: fmtNum(r, 0),
+        sub: k < m.cleared ? "" : k === m.i && !m.review ? L("meta", "goal") : "",
+        done: k < m.cleared
+      }));
+      chips(ctx, { x: pad, y: top, w: w - pad * 2, h: chipH }, items, { current: m.review ? -1 : Math.min(m.i, rungs.length - 1) });
+      top += chipH + 10;
+    }
+
+    const legendH = tiny ? 0 : 16;
+    const areaX = pad + (narrow ? 2 : 6);
+    const areaW = w - pad * 2 - (narrow ? 4 : 12);
+    const areaTop = top;
+    const areaBot = h - pad - legendH - (tiny ? 0 : 14);
+
+    if (m.review) {
+      ladderReview(ctx, { x: areaX, y: areaTop, w: areaW, h: areaBot - areaTop }, m);
+    } else {
+      // One attempt at a time, against the goal
+      const cur = hold ? hold.len : 0;
+      const maxSec = niceSec(Math.max(target * 1.1, cur * 1.08, last ? last.len * 1.05 : 0, 6));
+      const pps = areaW / maxSec;
+      const barH = clamp((areaBot - areaTop) * 0.36, 16, 96);
+      const barY = areaTop + (areaBot - areaTop - barH) / 2 + (tiny ? 0 : 4);
+      // Rung lines behind the bar; the goal as a green flag
+      rungs.forEach((r, k) => {
+        if (r > maxSec) return;
+        const x = areaX + r * pps;
+        const isGoal = k === Math.min(m.i, rungs.length - 1);
+        ctx.strokeStyle = isGoal ? C.target : k < m.cleared ? "rgba(255, 211, 110, 0.45)" : C.grid;
+        ctx.lineWidth = isGoal ? 2 : 1;
+        ctx.setLineDash(isGoal ? [] : [3, 4]);
+        ctx.beginPath();
+        ctx.moveTo(x, areaTop + (tiny ? 0 : 8));
+        ctx.lineTo(x, areaBot);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        if (isGoal) {
+          glyph(ctx, "flag", x, areaTop + (tiny ? 5 : 12), C.target, tiny ? 4 : 5);
+          if (!tiny) {
+            ctx.font = font(10, 800);
+            ctx.fillStyle = C.target;
+            ctx.textAlign = x > areaX + areaW - 60 ? "right" : "left";
+            ctx.textBaseline = "middle";
+            ctx.fillText(L("meta", "goal"), x + (ctx.textAlign === "right" ? -6 : 9), areaTop + 10);
+          }
+        } else if (k < m.cleared) {
+          glyph(ctx, "check", x, areaTop + (tiny ? 5 : 12), C.done, 4);
+        }
+      });
+      // Your best, as a gold tick
+      if (tr.best > 0.5 && tr.best <= maxSec) {
+        const bx = areaX + tr.best * pps;
+        glyph(ctx, "star", bx, barY + barH + 7, C.done, 4);
+      }
+      // The attempt before, as a ghost; the one now (or the last) solid
+      if (hold && last) holdBar(ctx, last, { x0: areaX, pps, y: barY, h: barH, color: C.air, ghost: true });
+      holdBar(ctx, hold || last, { x0: areaX, pps, y: barY, h: barH, color: C.air, soft: hold ? C.airSoft : "rgba(159, 134, 255, 0.14)" });
+      if (hold) {
+        const nx = areaX + Math.min(maxSec, hold.len) * pps;
+        ctx.fillStyle = C.air;
+        ctx.beginPath();
+        ctx.arc(nx, barY + barH / 2, 5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      if (!tiny) secAxis(ctx, areaX, pps, areaBot + 2, maxSec, areaW, [0].concat(rungs));
+    }
+
+    // What the shapes mean, and the numbers
+    if (!tiny) {
+      const ly = h - pad - 5;
+      let x = pad + 2;
+      ctx.font = font(10, 700);
+      ctx.textBaseline = "middle";
+      ctx.textAlign = "left";
+      // corridor swatch
+      ctx.fillStyle = C.airSoft;
+      roundRect(ctx, x, ly - 5, 18, 10, 3);
+      ctx.fill();
+      ctx.strokeStyle = C.air;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(x + 2, ly + 1);
+      ctx.lineTo(x + 6, ly - 2);
+      ctx.lineTo(x + 11, ly + 2);
+      ctx.lineTo(x + 16, ly - 1);
+      ctx.stroke();
+      ctx.fillStyle = C.muted;
+      const t1 = narrow ? L("nivel ±3 dB aprox.", "level ±3 dB approx.") : L("nivel frente a tu media, ±3 dB (aprox.)", "level vs your own median, ±3 dB (approx.)");
+      ctx.fillText(t1, x + 23, ly + 0.5);
+      x += 23 + ctx.measureText(t1).width + 12;
+      if (!narrow) {
+        ctx.fillStyle = hatch(ctx, "rgba(238, 243, 250, 0.45)");
+        ctx.fillRect(x, ly - 5, 14, 10);
+        ctx.fillStyle = C.muted;
+        ctx.fillText(L("Espacio", "Space"), x + 19, ly + 0.5);
+        x += 19 + ctx.measureText(L("Espacio", "Space")).width + 12;
+      }
+      const tail = L(`mejor ${fmtSec(tr.best, 1)} · ${m.cleared}/${rungs.length} peldaños`, `best ${fmtSec(tr.best, 1)} · ${m.cleared}/${rungs.length} rungs`);
+      if (narrow && !compact) {
+        // A narrow, tall panel: the numbers get their own line above
+        ctx.font = font(12, 700);
+        ctx.fillStyle = C.text;
+        ctx.textAlign = "left";
+        ctx.fillText(tail, pad + 2, ly - 34, w - pad * 2);
+      } else {
+        ctx.textAlign = "right";
+        if (x < w - pad - ctx.measureText(tail).width - 6) ctx.fillText(tail, w - pad, ly + 0.5);
+      }
+    }
+  }
+
+  /** After Stop: every attempt, one row each, on one axis with the rungs. */
+  function ladderReview(ctx, box, m) {
+    const tr = m.track;
+    const holds = tr.holds.slice();
+    if (tr.last && !holds.includes(tr.last) && tr.last.len >= 0.5) holds.push(tr.last);
+    const { x, y, w, h } = box;
+    if (!holds.length) {
       ctx.fillStyle = C.faint;
       ctx.font = font(12, 600);
       ctx.textAlign = "center";
-      ctx.fillText(L("Las pasadas aparecen aquí", "Your patterns appear here"), w / 2, h / 2);
+      ctx.textBaseline = "middle";
+      ctx.fillText(L("Sin SH todavía", "No SH yet"), x + w / 2, y + h / 2);
+      return;
+    }
+    const rowH = clamp((h - 16) / Math.max(1, holds.length), 12, 40);
+    const show = holds.slice(-Math.max(1, Math.floor((h - 16) / rowH)));
+    const textW = w < 420 ? 0 : w < 700 ? 150 : 200;
+    const numW = 18;
+    const maxSec = niceSec(Math.max(...show.map((hd) => hd.len), m.rungs[Math.min(m.cleared, m.rungs.length - 1)], 6));
+    const x0 = x + numW;
+    const pps = (w - numW - textW) / maxSec;
+    m.rungs.forEach((r, k) => {
+      if (r > maxSec) return;
+      const rx = x0 + r * pps;
+      ctx.strokeStyle = k < m.cleared ? "rgba(255, 211, 110, 0.5)" : C.grid;
+      ctx.setLineDash([3, 4]);
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(rx, y);
+      ctx.lineTo(rx, y + show.length * rowH);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    });
+    const first = holds.length - show.length;
+    show.forEach((hd, k) => {
+      const ry = y + k * rowH;
+      const bh = Math.max(8, rowH - 8);
+      ctx.font = font(10, 800);
+      ctx.fillStyle = C.faint;
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      ctx.fillText(String(first + k + 1), x, ry + rowH / 2);
+      holdBar(ctx, hd, { x0, pps, y: ry + (rowH - bh) / 2, h: bh, color: C.air, soft: C.airSoft, words: false });
+      if (hd === tr.bestHold) glyph(ctx, "star", x0 + hd.len * pps + 8, ry + rowH / 2, C.done, 4);
+      if (textW) {
+        const st = hd.stats || holdStats(hd);
+        let txt = fmtSec(hd.len, 1);
+        if (st.inBand != null) txt += L(` · ${Math.round(st.inBand * 100)} % en ±3 dB`, ` · ${Math.round(st.inBand * 100)} % within ±3 dB`);
+        if (st.gaps) txt += L(` · ${st.gaps} ${st.gaps === 1 ? "hueco" : "huecos"}`, ` · ${st.gaps} ${st.gaps === 1 ? "gap" : "gaps"}`);
+        ctx.font = font(10, 700);
+        ctx.fillStyle = C.muted;
+        ctx.textAlign = "right";
+        ctx.fillText(txt, x + w, ry + rowH / 2, textW - 6);
+      }
+    });
+    secAxis(ctx, x0, pps, y + show.length * rowH + 2, maxSec, w - numW - textW, [0].concat(m.rungs));
+  }
+
+  /**
+   * S, then /A/: two lanes on one seconds axis. The S lane holds unvoiced
+   * air (violet); the /A/ lane holds a sung tone (light blue) with your best
+   * S as a dashed mark to reach for. The step being asked for is outlined.
+   * model: { s: HoldTrack, a: HoldTrack, step: "S"|"A", review, inhale (s left),
+   *          assisted }
+   */
+  function breathLanes(ctx, w, h, m) {
+    panel(ctx, w, h);
+    const pad = 10;
+    const tiny = h < 135;
+    const compact = h < 190;
+    const narrow = w < 420;
+    const S = m.s;
+    const A = m.a;
+    const active = S.hold ? "S" : A.hold ? "A" : null;
+    let head;
+    let big;
+    let cap;
+    const color = C.text;
+    if (m.review) {
+      head = L(`S más larga ${fmtSec(S.best, 1)} · /A/ más larga ${fmtSec(A.best, 1)}`, `Longest S ${fmtSec(S.best, 1)} · longest /A/ ${fmtSec(A.best, 1)}`);
+      big = fmtSec(m.step === "A" ? A.best : S.best, 1);
+      cap = m.step === "A" ? L("/A/ más larga", "longest /A/") : L("S más larga", "longest S");
+    } else if (active === "S") {
+      head = m.assisted ? L("S · contando con Espacio", "S · counting with Space") : L("S sonando, sin voz", "S sounding, no voice");
+      big = fmtSec(S.hold.len, 1);
+      cap = L("S seguida", "unbroken S");
+    } else if (active === "A") {
+      head =
+        S.best > 0.5
+          ? L(`/A/ sonando · tu mejor S: ${fmtSec(S.best, 1)}`, `/A/ sounding · your best S: ${fmtSec(S.best, 1)}`)
+          : L("/A/ sonando", "/A/ sounding");
+      big = fmtSec(A.hold.len, 1);
+      cap = L("/A/ seguida", "unbroken /A/");
+    } else if (m.inhale > 0) {
+      const n = clamp(4 - Math.ceil(m.inhale), 1, 3);
+      head = L(`Inhala suave · ${[1, 2, 3].slice(0, n).join(" · ")}`, `Breathe in softly · ${[1, 2, 3].slice(0, n).join(" · ")}`);
+      big = fmtSec((m.step === "A" ? A.last : S.last)?.len || 0, 1);
+      cap = L("última", "last");
+    } else {
+      head =
+        m.step === "A"
+          ? S.best > 0.5
+            ? L(`Paso 2 · /A/ tan larga y tranquila como tu S (${fmtSec(S.best, 1)})`, `Step 2 · an /A/ as long and easy as your S (${fmtSec(S.best, 1)})`)
+            : L("Paso 2 · una /A/ cómoda y larga", "Step 2 · a long, easy /A/")
+          : L("Paso 1 · inhala y una S larga y pareja", "Step 1 · breathe in, then a long, even S");
+      big = fmtSec((m.step === "A" ? A.last : S.last)?.len || 0, 1);
+      cap = L("última", "last");
+    }
+    const headY = tiny ? 12 : 17;
+    const bigW = narrow ? 80 : 120;
+    ctx.fillStyle = color;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    fitText(ctx, head, pad, headY, w - pad * 2 - bigW, tiny ? 13 : narrow ? 14 : 16, 800, 10);
+    ctx.textAlign = "right";
+    ctx.fillStyle = C.text;
+    ctx.font = font(tiny ? 17 : 22, 800, true);
+    ctx.fillText(big, w - pad, headY + 1);
+    if (!tiny) {
+      ctx.font = font(10, 700);
+      ctx.fillStyle = C.muted;
+      ctx.textBaseline = "top";
+      ctx.fillText(cap, w - pad, headY + 13);
+    }
+
+    const top = headY + (tiny ? 12 : compact ? 26 : 34);
+    const legendH = tiny ? 0 : 16;
+    const axisH = tiny ? 0 : 14;
+    const bottom = h - pad - legendH - axisH;
+    const labelW = narrow ? 44 : 104;
+    const x0 = pad + labelW;
+    const areaW = w - pad * 2 - labelW - 16;
+    const cur = active === "S" ? S.hold.len : active === "A" ? A.hold.len : 0;
+    const maxSec = niceSec(Math.max(S.best * 1.1, A.best * 1.1, cur * 1.08, 8));
+    const pps = areaW / maxSec;
+    const laneH = (bottom - top) / 2;
+    const lanes = [
+      { key: "S", tr: S, name: narrow ? "S" : L("S sin voz", "S, no voice"), color: C.air, soft: C.airSoft, icon: T.AIR },
+      { key: "A", tr: A, name: narrow ? "/A/" : L("/A/ cantada", "/A/ sung"), color: C.you, soft: C.youSoft, icon: T.TONE }
+    ];
+    lanes.forEach((ln, k) => {
+      const ly = top + k * laneH;
+      const asked = m.step === ln.key;
+      const bh = clamp(laneH * 0.52, 12, 44);
+      const by = ly + (laneH - bh) / 2;
+      // The lane being asked for is outlined
+      ctx.save();
+      ctx.fillStyle = asked ? "rgba(170, 195, 230, 0.07)" : "rgba(170, 195, 230, 0.025)";
+      roundRect(ctx, pad, ly + 2, w - pad * 2, laneH - 4, 8);
+      ctx.fill();
+      if (asked && !m.review) {
+        ctx.strokeStyle = C.gridStrong;
+        ctx.lineWidth = 1.5;
+        roundRect(ctx, pad + 0.5, ly + 2.5, w - pad * 2 - 1, laneH - 5, 8);
+        ctx.stroke();
+      }
+      ctx.restore();
+      tagIcon(ctx, ln.icon, pad + 12, ly + laneH / 2, 6, ln.color);
+      ctx.font = font(narrow ? 11 : 12, 800);
+      ctx.fillStyle = asked ? C.text : C.muted;
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      ctx.fillText(ln.name, pad + 24, ly + laneH / 2, labelW - 26);
+      // In the /A/ lane, your best S as the length to reach for
+      if (ln.key === "A" && S.best > 0.5) {
+        const sx = x0 + Math.min(maxSec, S.best) * pps;
+        ctx.save();
+        ctx.strokeStyle = C.air;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([4, 3]);
+        ctx.beginPath();
+        ctx.moveTo(sx, by - 5);
+        ctx.lineTo(sx, by + bh + 5);
+        ctx.stroke();
+        ctx.restore();
+        if (!tiny && laneH >= 40) {
+          ctx.font = font(9, 800);
+          ctx.fillStyle = C.air;
+          ctx.textAlign = sx > x0 + areaW - 70 ? "right" : "left";
+          ctx.textBaseline = "top";
+          ctx.fillText(L("tu mejor S", "your best S"), sx + (ctx.textAlign === "right" ? -4 : 4), by + bh + 1);
+        }
+      }
+      const tr = ln.tr;
+      if (tr.hold && tr.last) holdBar(ctx, tr.last, { x0, pps, y: by, h: bh, color: ln.color, ghost: true });
+      holdBar(ctx, tr.hold || (m.review ? tr.bestHold : tr.last), { x0, pps, y: by, h: bh, color: ln.color, soft: tr.hold ? ln.soft : "rgba(170, 195, 230, 0.10)", words: laneH >= 40 });
+      if (tr.best > 0.5) {
+        glyph(ctx, "star", x0 + Math.min(maxSec, tr.best) * pps, by - 5, C.done, 4);
+      }
+      if (tr.hold) {
+        ctx.fillStyle = ln.color;
+        ctx.beginPath();
+        ctx.arc(x0 + Math.min(maxSec, tr.hold.len) * pps, by + bh / 2, 5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    });
+    if (!tiny) secAxis(ctx, x0, pps, bottom + 2, maxSec, areaW, [0, 5, 10, 15, 20, 25, 30, 40, 50, 60]);
+    if (!tiny) {
+      const ly = h - pad - 5;
+      ctx.font = font(10, 700);
+      ctx.textBaseline = "middle";
+      ctx.textAlign = "left";
+      ctx.fillStyle = C.muted;
+      let x = pad + 2;
+      glyph(ctx, "star", x + 5, ly, C.done, 4);
+      const t0 = L("mejor", "best");
+      ctx.fillStyle = C.muted;
+      ctx.fillText(t0, x + 13, ly + 0.5);
+      x += 13 + ctx.measureText(t0).width + 12;
+      const t1 = narrow ? L("nivel ±3 dB aprox.", "level ±3 dB approx.") : L("línea: nivel frente a tu media, ±3 dB (aprox.)", "line: level vs your own median, ±3 dB (approx.)");
+      ctx.fillText(t1, x, ly + 0.5, w - pad - x);
     }
   }
 
   V.scenes.sovt = sovt;
   V.scenes.trillStrip = trillStrip;
   V.scenes.trillMap = trillMap;
-  V.scenes.breathKit = { T, TrillTrack, HoldTrack, PitchGate, frameBits, holdStats, noteName, hzToMidi, foldTo, fmtClock, tagIcon, legend, timeWindow, sovtWords };
+  V.scenes.ladder = ladder;
+  V.scenes.breathLanes = breathLanes;
+  V.scenes.breathKit = { T, TrillTrack, HoldTrack, PitchGate, frameBits, airBits, holdStats, holdBar, niceSec, noteName, hzToMidi, foldTo, fmtClock, tagIcon, legend, timeWindow, sovtWords };
 })(typeof window !== "undefined" ? window : globalThis);

@@ -1875,86 +1875,179 @@
     }
   });
 
+  /**
+   * s8 — S, then /A/ (js/scenes/breath.js, breathLanes). The microphone can
+   * time an unvoiced S (hiss with no kept pitch) and a sung /A/ (a pitch the
+   * detector keeps finding, little hiss), and show how even each one's level
+   * stays against its own median. It cannot hear support, ribs or air flow,
+   * so nothing here scores them: the lengths are measured, and how the /A/
+   * felt stays the learner's rating.
+   */
   Modes.breathS = baseMode({
     id: "breathS",
     render() {
-      this.state.phase = "S"; // S | A
+      this.state.phase = "S"; // S | A: the step being asked for
       this.state.bestS = 0;
       this.state.bestA = 0;
       this.state.cur = 0;
       this.state._airHoldFrames = 0;
       this.state._airOnset = 0;
+      this.state.inhale = 0;
+      this.state.review = false;
+      this.state.assisted = false;
       this.hud.innerHTML = `
-        <div class="mode-title">${L("Soporte de aire · S y luego /A/", "Breath support · S then /A/")}</div>
-        <div class="mode-phase" data-phase>${L("Paso 1 · S pareja (sin voz)", "Step 1 · even S (no voice)")}</div>
-        <div class="mode-big" data-h>0.0s</div>
-        <p class="mode-meta">${L("Mejor S <strong data-s>0</strong>s · Mejor /A/ <strong data-a>0</strong>s", "Best S <strong data-s>0</strong>s · Best /A/ <strong data-a>0</strong>s")}</p>
-        <button type="button" class="btn btn-sm" data-sw>${L("Pasar a fase /A/", "Switch to /A/ phase")}</button>
+        <div class="viz-row viz-head">
+          <div class="mode-title">${L("Soporte de aire · S y luego /A/", "Breath support · S then /A/")}</div>
+          <button type="button" class="btn btn-ghost viz-tap" data-sw aria-pressed="false">${this._swLabel()}</button>
+        </div>
+        <div class="viz-words">
+          <span class="mode-phase" data-phase>${this._phaseLabel()}</span>
+          <span class="mode-big" data-h>0.0s</span>
+          <span>${L("Mejor S <strong data-s>0</strong>s · Mejor /A/ <strong data-a>0</strong>s", "Best S <strong data-s>0</strong>s · Best /A/ <strong data-a>0</strong>s")}</span>
+          <span data-say></span>
+        </div>
+        <p class="mode-meta muted">${L(
+          "Una S sin voz, larga y pareja; respira; luego la misma duración tranquila en una /A/ cantada. Medimos cuánto dura cada una y lo pareja que suena.",
+          "A long, even S with no voice; breathe; then the same easy length on a sung /A/. We time each and show how even it sounds."
+        )}</p>
       `;
-      this.$("[data-sw]")?.addEventListener("click", () => {
-        this.state.phase = this.state.phase === "S" ? "A" : "S";
-        if (this.$("[data-phase]"))
-          this.$("[data-phase]").textContent =
-            this.state.phase === "S"
-              ? L("Paso 1 · S pareja (sin voz)", "Step 1 · even S (no voice)")
-              : L("Paso 2 · /A/ con el mismo apoyo", "Step 2 · /A/ with same support");
+      this.$("[data-sw]")?.addEventListener("click", () => this._switch());
+      this._mountViz();
+    },
+    _phaseLabel() {
+      return this.state.phase === "S"
+        ? L("Paso 1 · S pareja (sin voz)", "Step 1 · even S (no voice)")
+        : L("Paso 2 · /A/ tan larga y tranquila como tu S", "Step 2 · /A/ as long and easy as your S");
+    },
+    _swLabel() {
+      return this.state.phase === "S" ? L("Paso 2: /A/ →", "Step 2: /A/ →") : L("← Paso 1: S", "← Step 1: S");
+    },
+    _switch() {
+      const st = this.state;
+      st.phase = st.phase === "S" ? "A" : "S";
+      if (this.$("[data-phase]")) this.$("[data-phase]").textContent = this._phaseLabel();
+      const b = this.$("[data-sw]");
+      if (b) {
+        b.textContent = this._swLabel();
+        b.setAttribute("aria-pressed", String(st.phase === "A"));
+      }
+      this.viz?.draw();
+    },
+    _kit() {
+      return global.VTViz?.scenes?.breathKit || null;
+    },
+    _mountViz() {
+      const V = global.VTViz;
+      const K = this._kit();
+      if (!V || !K || !V.scenes.breathLanes) return;
+      this.hud.classList.add("has-viz");
+      this.state.sTrack = new K.HoldTrack({ holdOffSec: 0.35 });
+      this.state.aTrack = new K.HoldTrack({ holdOffSec: 0.35 });
+      // After a real try: breathe in, and the next step is the other sound
+      // (the button still picks the step by hand)
+      this.state.sTrack.onClose = (h) => {
+        if (h.len >= 1) this.state.inhale = 3;
+        if (h.len >= 2 && this.state.phase === "S" && !this.state.review) this._switch();
+      };
+      this.state.aTrack.onClose = (h) => {
+        if (h.len >= 1) this.state.inhale = 3;
+        if (h.len >= 2 && this.state.phase === "A" && !this.state.review) this._switch();
+      };
+      this.state.gate = new K.PitchGate();
+      this.viz = new V.Surface(this.hud, (ctx, w, h) => V.scenes.breathLanes(ctx, w, h, this._model()), {
+        label: L(
+          "Dos carriles de segundos: arriba la S sin voz (violeta), abajo la /A/ cantada (azul claro). Cada barra crece mientras suena; la línea dentro es el nivel frente a tu propia media, ±3 dB (aprox.); los cortes son huecos. La estrella marca tu mejor; la raya violeta en la /A/ es tu mejor S.",
+          "Two lanes of seconds: the unvoiced S on top (violet), the sung /A/ below (light blue). Each bar grows while it sounds; the line inside is the level against your own median, ±3 dB (approx.); breaks are gaps. The star marks your best; the violet dash in the /A/ lane is your best S."
+        ),
+        captionHidden: true
       });
+      this.viz.draw();
+    },
+    _model() {
+      const st = this.state;
+      return { s: st.sTrack, a: st.aTrack, step: st.phase, review: st.review, inhale: st.inhale, assisted: st.assisted };
+    },
+    onStart() {
+      const st = this.state;
+      st.review = false;
+      this.hud?.classList.remove("is-replay");
+      st.sTrack?.reset();
+      st.aTrack?.reset();
+      st.gate?.reset();
+      st.bestS = 0;
+      st.bestA = 0;
+      st.cur = 0;
+      st.inhale = 0;
+      this.viz?.draw();
     },
     onFrame(frame) {
-      // S phase: ONLY airDetected or Space — never bare RMS (room noise free-run).
-      // Space latches immediately; mic needs a short onset to reject blips.
-      const thr = frame.airRmsThreshold != null ? frame.airRmsThreshold * 1.1 : 0.02;
-      const manualAir = !!(frame.manualSound && frame.manualKind === "air");
-      let airNow =
-        this.state.phase === "S"
-          ? !!frame.airDetected || manualAir
-          : frame.voiced ||
-            !!(frame.manualSound && frame.manualKind === "voice") ||
-            !!frame.airDetected ||
-            (frame.rms || 0) > thr * 1.4;
-      if (this.state.phase === "S") {
-        if (manualAir) {
-          this.state._airOnset = 5;
-          this.state._airHoldFrames = 16;
-        } else if (airNow) {
-          this.state._airOnset = (this.state._airOnset || 0) + 1;
-          if ((this.state._airOnset || 0) >= 4) this.state._airHoldFrames = 16;
-        } else {
-          this.state._airOnset = 0;
-          if (this.state._airHoldFrames > 0) this.state._airHoldFrames -= 1;
-        }
-      } else {
-        this.state._airOnset = 0;
-        this.state._airHoldFrames = 0;
+      const st = this.state;
+      const K = this._kit();
+      if (!K || !st.sTrack || st.review) return;
+      const a = K.airBits(frame, st.gate);
+      st.assisted = a.assisted;
+      // S: air with no kept pitch, or Space. /A/: a kept pitch with little hiss.
+      const hadA = !!st.aTrack.hold;
+      st.sTrack.feed(a.dt, a.air && !a.voiced, a.assisted, a.db);
+      const v = st.aTrack.feed(a.dt, a.voiced && !a.assisted, false, a.db);
+      // A sung onset is air for a moment before its pitch is caught: when the
+      // /A/ starts, a short "S" just before it was that onset, not an S
+      if (!hadA && st.aTrack.hold && st.sTrack.hold && !a.assisted) {
+        const h = st.sTrack.hold;
+        if (h.lastPresent - h.start < 0.6) st.sTrack.cancel();
       }
-      const air =
-        this.state.phase === "S"
-          ? manualAir ||
-            (this.state._airOnset || 0) >= 4 ||
-            this.state._airHoldFrames > 0
-          : airNow;
-      if (air) {
-        this.state.cur += (frame.dtMs || 16) / 1000;
-        if (this.state.phase === "S") this.state.bestS = Math.max(this.state.bestS, this.state.cur);
-        else this.state.bestA = Math.max(this.state.bestA, this.state.cur);
-      } else this.state.cur = 0;
-      if (this.$("[data-h]")) this.$("[data-h]").textContent = `${this.state.cur.toFixed(1)}s`;
-      if (this.$("[data-s]")) this.$("[data-s]").textContent = this.state.bestS.toFixed(1);
-      if (this.$("[data-a]")) this.$("[data-a]").textContent = this.state.bestA.toFixed(1);
+      st.cur = st.sTrack.hold ? st.sTrack.cur : st.aTrack.hold ? v : 0;
+      st._airOnset = st.sTrack._onset;
+      st._airHoldFrames = st.sTrack._off > 0 ? Math.ceil(st.sTrack._off / 0.016) : 0;
+      if (!st.sTrack.hold && !st.aTrack.hold && st.inhale > 0) st.inhale = Math.max(0, st.inhale - a.dt);
+      else if (st.sTrack.hold || st.aTrack.hold) st.inhale = 0;
+      st.bestS = st.sTrack.best;
+      st.bestA = st.aTrack.best;
+      const set = (sel, txt) => {
+        const el = this.$(sel);
+        if (el && el.textContent !== txt) el.textContent = txt;
+      };
+      set("[data-h]", `${st.cur.toFixed(1)}s`);
+      set("[data-s]", st.bestS.toFixed(1));
+      set("[data-a]", st.bestA.toFixed(1));
+      this.$("[data-h]")?.classList.toggle("is-air", !!st.sTrack.hold);
+      this.viz?.draw();
     },
     onStop() {
-      return {
-        patches: {
-          maxS: Math.round(this.state.bestS),
-          maxHold: Math.round(this.state.bestA),
-          transferA: this.state.bestA > 3 ? 4 : 3
-        },
-        summary: `S ${this.state.bestS.toFixed(1)}s · A ${this.state.bestA.toFixed(1)}s`
-      };
+      const st = this.state;
+      const V = global.VTViz;
+      if (!st.sTrack || !V) {
+        return { patches: {}, summary: "" };
+      }
+      st.review = true;
+      st.sTrack.flush();
+      st.aTrack.flush();
+      st.bestS = st.sTrack.best;
+      st.bestA = st.aTrack.best;
+      this.hud?.classList.add("is-replay");
+      this.viz?.draw();
+      // Only the S is a measured length the form asks for; evenness and the
+      // transfer to /A/ stay the learner's own ratings.
+      const patches = {};
+      if (st.bestS >= 1) patches.maxS = Math.round(st.bestS);
+      const summary =
+        st.bestS < 0.5 && st.bestA < 0.5
+          ? L("Sin S ni /A/ todavía — una S larga y sin voz para empezar", "No S or /A/ yet — start with a long S, no voice")
+          : L(`S ${V.fmtSec(st.bestS, 1)} · /A/ ${V.fmtSec(st.bestA, 1)}`, `S ${V.fmtSec(st.bestS, 1)} · /A/ ${V.fmtSec(st.bestA, 1)}`);
+      const say = this.$("[data-say]");
+      if (say) say.textContent = summary;
+      return { patches, summary };
     }
   });
 
-  /** Class-1 SH air ladder: 5→10→20→25→30s even unvoiced fricative */
+  /**
+   * s15 — the SH ladder (js/scenes/breath.js, ladder): one hold at a time
+   * against the goal rung, the one before as a ghost, a rest between tries.
+   * A hold is timed from the engine's raw air decision (no grace window)
+   * with a 0.35 s hold-off, so its length is the SH itself; a sung tone does
+   * not count as air. Every rung a hold passes is cleared (the count never
+   * goes back), and the hold keeps counting: nothing resets under you.
+   */
   Modes.shAirLadder = baseMode({
     id: "shAirLadder",
     render() {
@@ -1963,79 +2056,152 @@
       this.state.cleared = 0;
       this.state.best = 0;
       this.state.cur = 0;
-      this.state.holdOk = 0;
-      /** Frame-based hold-off after a real latch — not wall-clock */
+      /** Mirrors of the hold gate, kept for older probes */
       this.state._airHoldFrames = 0;
-      /** Consecutive positive frames before count starts (reject ambient blips) */
       this.state._airOnset = 0;
+      this.state.rest = 0;
+      this.state.t = 0;
+      this.state.justCleared = null;
+      this.state.justAt = -99;
+      this.state.review = false;
+      this.state.assisted = false;
       const target = this.state.rungs[0];
       this.hud.innerHTML = `
-        <div class="mode-title">${L("Escalera de aire SH", "SH air-dosing ladder")}</div>
-        <div class="mode-phase" data-ph>${L("Meta", "Target")}: <strong data-t>${target}</strong>s · SH pareja</div>
-        <div class="mode-big" data-h>0.0s</div>
-        <p class="mode-meta">${L("Peldaños", "Rungs")} <strong data-c>0</strong>/${this.state.rungs.length} · ${L("Mejor", "Best")} <strong data-b>0</strong>s</p>
-        <p class="mode-meta muted" data-airhint>${L("Inhala por la nariz · exhala SH constante · sin pulsos. Si no cuenta, sube Mic o mantén Espacio.", "Nose inhale · steady SH · no pulses. If it won’t count, raise Mic or hold Space.")}</p>
+        <div class="viz-row viz-head">
+          <div class="mode-title">${L("Escalera de aire SH", "SH air-dosing ladder")}</div>
+        </div>
+        <div class="viz-words">
+          <span class="mode-phase" data-ph>${L("Meta", "Target")}: <strong data-t>${target}</strong>s · ${L("SH pareja", "even SH")}</span>
+          <span class="mode-big" data-h>0.0s</span>
+          <span>${L("Peldaños", "Rungs")} <strong data-c>0</strong>/${this.state.rungs.length} · ${L("Mejor", "Best")} <strong data-b>0</strong>s</span>
+          <span data-say></span>
+        </div>
+        <p class="mode-meta muted" data-airhint>${L(
+          "Inhala por la nariz · exhala SH constante · sin pulsos. Si no cuenta, sube Mic o mantén Espacio.",
+          "Nose inhale · steady SH · no pulses. If it won’t count, raise Mic or hold Space."
+        )}</p>
       `;
+      this._mountViz();
+    },
+    _kit() {
+      return global.VTViz?.scenes?.breathKit || null;
+    },
+    _mountViz() {
+      const V = global.VTViz;
+      const K = this._kit();
+      if (!V || !K || !V.scenes.ladder) return;
+      this.hud.classList.add("has-viz");
+      this.state.track = new K.HoldTrack({ holdOffSec: 0.35 });
+      this.state.track.onClose = (h) => {
+        // A rest after every real try: guidance only, it never blocks counting
+        if (h.len >= 1) this.state.rest = 8;
+      };
+      this.state.gate = new K.PitchGate();
+      this.viz = new V.Surface(this.hud, (ctx, w, h) => V.scenes.ladder(ctx, w, h, this._model()), {
+        label: L(
+          "Escalera SH: los peldaños arriba (dorados los superados); debajo, tu SH de ahora como una barra violeta que crece hacia la bandera verde de la meta. La línea dentro es el nivel frente a tu propia media, ±3 dB (aprox.); los cortes son huecos; lo rayado se contó con Espacio. La raya discontinua es el intento anterior.",
+          "SH ladder: the rungs on top (gold once cleared); below, your SH now as a violet bar growing towards the green goal flag. The line inside is the level against your own median, ±3 dB (approx.); breaks are gaps; hatched parts were counted with Space. The dashed outline is the try before."
+        ),
+        captionHidden: true
+      });
+      this.viz.draw();
+    },
+    _model() {
+      const st = this.state;
+      return {
+        track: st.track,
+        rungs: st.rungs,
+        cleared: st.cleared,
+        i: st.i,
+        rest: st.rest,
+        assisted: st.assisted,
+        review: st.review,
+        justCleared: st.justCleared != null && st.t - st.justAt < 5 && !st.track.hold ? st.justCleared : null
+      };
+    },
+    onStart() {
+      const st = this.state;
+      st.review = false;
+      this.hud?.classList.remove("is-replay");
+      st.track?.reset();
+      st.gate?.reset();
+      st.i = 0;
+      st.cleared = 0;
+      st.best = 0;
+      st.cur = 0;
+      st.rest = 0;
+      st.t = 0;
+      st.justCleared = null;
+      this._paintWords();
+      this.viz?.draw();
     },
     onFrame(frame) {
-      // ONLY airDetected or Space — never bare RMS (room noise free-run).
-      // Space → count immediately; mic needs ~4 frames onset then short hold-off.
-      const manualAir = !!(frame.manualSound && frame.manualKind === "air");
-      const airNow = !!frame.airDetected || manualAir;
-      if (manualAir) {
-        this.state._airOnset = 5;
-        this.state._airHoldFrames = 16;
-      } else if (airNow) {
-        this.state._airOnset = (this.state._airOnset || 0) + 1;
-        if ((this.state._airOnset || 0) >= 4) this.state._airHoldFrames = 16;
-      } else {
-        this.state._airOnset = 0;
-        if (this.state._airHoldFrames > 0) this.state._airHoldFrames -= 1;
-      }
-      const air =
-        manualAir || (this.state._airOnset || 0) >= 4 || this.state._airHoldFrames > 0;
-      const target = this.state.rungs[this.state.i] || this.state.rungs[this.state.rungs.length - 1];
-      if (air) {
-        this.state.cur += (frame.dtMs || 16) / 1000;
-        this.state.best = Math.max(this.state.best, this.state.cur);
-        if (this.state.cur >= target && this.state.i < this.state.rungs.length) {
-          // credit rung once when held continuously
-          if (this.state.holdOk !== this.state.i + 1) {
-            this.state.holdOk = this.state.i + 1;
-            this.state.cleared = Math.max(this.state.cleared, this.state.i + 1);
-            this.state.i = Math.min(this.state.i + 1, this.state.rungs.length - 1);
-            const next = this.state.rungs[this.state.i];
-            if (this.$("[data-t]")) this.$("[data-t]").textContent = String(next);
-            if (this.$("[data-c]")) this.$("[data-c]").textContent = String(this.state.cleared);
-            // reset hold for next rung after short release expectation
-            this.state.cur = 0;
-          }
+      const st = this.state;
+      const K = this._kit();
+      if (!K || !st.track || st.review) return;
+      const a = K.airBits(frame, st.gate);
+      st.t += a.dt;
+      st.assisted = a.assisted;
+      const tr = st.track;
+      st.cur = tr.feed(a.dt, a.air, a.assisted, a.db);
+      st._airOnset = tr._onset;
+      st._airHoldFrames = tr._off > 0 ? Math.ceil(tr._off / 0.016) : 0;
+      const h = tr.hold;
+      if (h) {
+        st.rest = 0;
+        // Every rung this hold has passed, timed to the last moment the SH was there
+        const held = h.lastPresent - h.start;
+        while (st.cleared < st.rungs.length && held >= st.rungs[st.cleared]) {
+          st.cleared += 1;
+          st.justCleared = st.rungs[st.cleared - 1];
+          st.justAt = st.t;
         }
-      } else {
-        this.state.cur = 0;
+      } else if (st.rest > 0) {
+        st.rest = Math.max(0, st.rest - a.dt);
       }
-      if (this.$("[data-h]")) this.$("[data-h]").textContent = `${this.state.cur.toFixed(1)}s`;
-      if (this.$("[data-b]")) this.$("[data-b]").textContent = this.state.best.toFixed(1);
-      // Visual: hearing air (auto) vs Space assist
-      const panel = this.hud?.querySelector?.(".mode-panel") || this.hud;
-      if (panel) {
-        panel.classList.toggle("is-air", !!air && !frame.manualSound);
-        panel.classList.toggle("is-manual-air", !!(frame.manualSound && frame.manualKind === "air"));
-      }
-      const big = this.$("[data-h]");
-      if (big) {
-        big.classList.toggle("is-air", !!air);
-      }
+      st.i = Math.min(st.cleared, st.rungs.length - 1);
+      st.best = tr.best;
+      this._paintWords();
+      this.$("[data-h]")?.classList.toggle("is-air", !!h);
+      this.viz?.draw();
+    },
+    _paintWords() {
+      const st = this.state;
+      const set = (sel, txt) => {
+        const el = this.$(sel);
+        if (el && el.textContent !== txt) el.textContent = txt;
+      };
+      set("[data-h]", `${st.cur.toFixed(1)}s`);
+      set("[data-b]", st.best.toFixed(1));
+      set("[data-c]", String(st.cleared));
+      set("[data-t]", String(st.rungs[st.i]));
     },
     onStop() {
-      return {
-        patches: {
-          rungs: this.state.cleared,
-          maxSH: Math.round(this.state.best),
-          evenness: this.state.cleared >= 4 ? 5 : this.state.cleared >= 2 ? 4 : 3
-        },
-        summary: `SH ladder ${this.state.cleared}/${this.state.rungs.length} · best ${this.state.best.toFixed(1)}s`
-      };
+      const st = this.state;
+      const V = global.VTViz;
+      if (!st.track || !V) return { patches: {}, summary: "" };
+      st.track.flush();
+      st.best = st.track.best;
+      st.cur = 0;
+      st.review = true;
+      this.hud?.classList.add("is-replay");
+      this._paintWords();
+      this.viz?.draw();
+      // The rungs and the longest SH are measured; how even the air felt
+      // stays the learner's own rating.
+      const patches = {};
+      if (st.best >= 1) {
+        patches.rungs = st.cleared;
+        patches.maxSH = Math.round(st.best);
+      }
+      const n = st.rungs.length;
+      const summary =
+        st.best < 0.5
+          ? L("Sin SH todavía — inhala por la nariz y una SH pareja", "No SH yet — breathe in through the nose, then an even SH")
+          : L(`Escalera SH ${st.cleared}/${n} · mejor ${V.fmtSec(st.best, 1)}`, `SH ladder ${st.cleared}/${n} · best ${V.fmtSec(st.best, 1)}`);
+      const say = this.$("[data-say]");
+      if (say) say.textContent = summary;
+      return { patches, summary };
     }
   });
 
@@ -3036,29 +3202,50 @@
       this.state.hist = [];
       this.state.lastFreq = null;
       this.state.refBlank = 0;
-      this.state.levels = [];
-      this.state.steadyScore = 0;
+      this.state.review = false;
+      this.state.rows = [];
+      this.state.rec = [];
+      this.state.stallMarks = [];
       this.hud.innerHTML = `
-        <div class="mode-title">${L("Solfeo en trino de labios", "Lip-trill solfège")}</div>
-        <div class="trill-row">
-          <span class="trill-syl" data-syl>${this.state.syllables[0]}</span>
-          <span class="trill-note" data-note>—</span>
+        <div class="viz-row viz-head">
+          <div class="mode-title">${L("Solfeo en trino de labios", "Lip-trill solfège")}</div>
         </div>
-        <div class="mode-bar thick"><span data-bar style="width:0%"></span></div>
-        <p class="mode-meta">${L("Uniformidad del trino:", "Trill evenness:")} <strong data-ev>—</strong></p>
-        <p class="mode-meta">${L("Paso", "Step")} <strong data-step>1</strong>/${
-          this.state.pattern.length
-        } · ${L("Pasadas", "Patterns")} <strong data-p>0</strong> · ${L(
-          "Raíz",
-          "Root"
-        )} <strong data-root>—</strong></p>
+        <div class="viz-words">
+          <span data-syl>${this.state.syllables[0]}</span>
+          <span data-note>—</span>
+          <span data-ev>—</span>
+          <span>${L("Paso", "Step")} <strong data-step>1</strong>/${this.state.pattern.length} · ${L(
+            "Pasadas",
+            "Patterns"
+          )} <strong data-p>0</strong> · ${L("Raíz", "Root")} <strong data-root>—</strong></span>
+        </div>
         <p class="mode-meta muted">${L(
-          "No dejes que el burbujeo se pare entre notas. La raíz sube sola al completar la pasada.",
-          "Do not let the bubble stop between notes. The root moves up on its own once the pattern lands."
+          "En la autopista: las notas que vienen y, abajo, tu burbujeo (zigzag; plano si los labios se paran). Aquí, cada pasada nota a nota.",
+          "On the highway: the notes coming next and, along the bottom, your bubble (zig-zag; flat if the lips stop). Here, each pattern note by note."
         )}</p>
       `;
+      this._mountViz();
       this._lockLadder();
       this._pushTarget();
+    },
+    _kit() {
+      return global.VTViz?.scenes?.breathKit || null;
+    },
+    _mountViz() {
+      const V = global.VTViz;
+      const K = this._kit();
+      if (!V || !K || !V.scenes.trillMap) return;
+      this.hud.classList.add("has-viz");
+      this.state.track = new K.TrillTrack({ onTags: [K.T.TRILL, K.T.AIRTRILL] });
+      this.viz = new V.Surface(this.hud, (ctx, w, h) => V.scenes.trillMap(ctx, w, h, this._mapModel()), {
+        label: L(
+          "Pasadas del solfeo en trino: una fila por pasada y una piedra por nota. Zigzag: el burbujeo siguió toda la nota; línea plana con muesca: los labios se pararon; línea plana sin muesca: sonó sin burbuja; contorno: por cantar.",
+          "Lip-trill solfège patterns: one row per pattern, one stone per note. Zig-zag: the bubble carried the whole note; flat line with a notch: the lips stopped; flat line alone: sung with no bubble; outline: still to sing."
+        ),
+        captionHidden: true
+      });
+      this._newRow();
+      this.viz.draw();
     },
     /** Real sounding MIDI: the highway plots detected pitch, not written pitch. */
     _shift() {
@@ -3073,8 +3260,9 @@
       const viz = global.VTGetPitchViz();
       if (!viz?.lockMidiRange) return;
       const sh = this._shift();
+      // Two semitones more below the lowest note: the bubble strip runs there
       viz.lockMidiRange(
-        this.state.baseMidi + Math.min(...this.state.pattern) + sh,
+        this.state.baseMidi + Math.min(...this.state.pattern) + sh - 2,
         this.state.topMidi + Math.max(...this.state.pattern) + sh,
         { pad: 1.5, minSpan: 10 }
       );
@@ -3138,10 +3326,132 @@
         this.$("[data-root]").textContent = shiftedNote(
           global.VTPitchUtils.midiToName(this.state.rootMidi)
         );
+      this._pushQueue();
+    },
+    /** The rest of the pattern, read ahead on the highway: DO RE MI … */
+    _pushQueue() {
+      if (!this._ownsOverlay) return;
+      const pv = typeof global.VTGetPitchViz === "function" ? global.VTGetPitchViz() : null;
+      if (!pv?.setNoteQueue) return;
+      const st = this.state;
+      const sh = this._shift();
+      const items = [];
+      for (let k = st.i; k < st.pattern.length; k++) {
+        const m = st.rootMidi + st.pattern[k] + sh;
+        items.push({ midi: m, label: st.syllables[k] || "", sub: global.VTPitchUtils?.midiToName(m) || "" });
+      }
+      pv.setNoteQueue(items);
+      pv.setQueueProgress?.(0);
+    },
+    /** A new row of stones for the pattern at the current root. */
+    _newRow() {
+      const st = this.state;
+      const K = this._kit();
+      if (!K) return;
+      st.rows.push({
+        root: st.rootMidi,
+        rootName: K.noteName(st.rootMidi + this._shift()),
+        stones: st.pattern.map(() => ({ state: "todo", trillSec: 0, soundSec: 0, stalls: 0, frac: 0 }))
+      });
+      if (st.rows.length > 40) st.rows.shift();
+    },
+    /** What the finished note was: bubble all through, stopped, or no bubble. */
+    _settleStone(s) {
+      if (!s) return;
+      if (s.stalls > 0) s.state = "stall";
+      else if (s.trillSec >= 0.25 && s.trillSec >= 0.5 * s.soundSec) s.state = "trill";
+      else s.state = s.soundSec > 0.05 ? "tone" : "todo";
+    },
+    _curStone() {
+      const row = this.state.rows[this.state.rows.length - 1];
+      return row ? row.stones[this.state.i] : null;
+    },
+    _mapModel() {
+      const st = this.state;
+      const K = this._kit();
+      const V = global.VTViz;
+      const rows = st.rows.map((r, ri) => ({
+        rootName: r.rootName,
+        stones: r.stones.map((s, i) =>
+          !st.review && ri === st.rows.length - 1 && i === st.i
+            ? { state: "now", frac: s.frac, trilling: s.trillSec > 0 }
+            : s
+        )
+      }));
+      const tr = st.track;
+      let summary;
+      if (st.review) {
+        const c = this._stoneCounts();
+        const top = K ? K.noteName(st.rootMidi + this._shift()) : "";
+        summary =
+          L(
+            `${st.patterns} ${st.patterns === 1 ? "pasada" : "pasadas"} · raíz ${top} · ${c.trill} de ${c.sung} notas con burbujeo`,
+            `${st.patterns} ${st.patterns === 1 ? "pattern" : "patterns"} · root ${top} · ${c.trill} of ${c.sung} notes bubbling`
+          ) + (tr && tr.best > 0 ? L(` · mejor racha ${V.fmtSec(tr.best, 1)}`, ` · best run ${V.fmtSec(tr.best, 1)}`) : "");
+      } else {
+        summary = this._evText();
+      }
+      return { patterns: rows, degrees: st.syllables, review: st.review, summary };
+    },
+    _stoneCounts() {
+      let trill = 0;
+      let sung = 0;
+      let stall = 0;
+      this.state.rows.forEach((r) =>
+        r.stones.forEach((s) => {
+          if (s.state === "trill") trill++;
+          if (s.state === "stall") stall++;
+          if (s.state === "trill" || s.state === "stall" || s.state === "tone") sung++;
+        })
+      );
+      return { trill, sung, stall };
+    },
+    /** The bubble now, in words (also the screen reader's line). */
+    _evText() {
+      const K = this._kit();
+      const tr = this.state.track;
+      const V = global.VTViz;
+      if (!K || !tr) return "—";
+      const T = K.T;
+      const syl = this.state.syllables[this.state.i] || "";
+      const lead = `${L("Pasada", "Pattern")} ${this.state.patterns + 1} · ${syl}`;
+      if (tr.tag === T.TRILL || tr.tag === T.AIRTRILL)
+        return `${lead} · ${L("burbujeo seguido", "unbroken bubble")} ${V.fmtSec(tr.runLen, 1)}`;
+      const last = tr.runs.length ? tr.runs[tr.runs.length - 1] : null;
+      if (tr.tag === T.TONE || tr.tag === T.AIR)
+        return `${lead} · ${
+          last && last.kind === "stall" && tr.t - last.end < 4
+            ? L("se paró el burbujeo: labios sueltos, más aire", "the bubble stopped: loose lips, more air")
+            : L("sin burbuja", "no bubble")
+        }`;
+      if (tr.tag === T.PEND) return `${lead} · ${L("escuchando…", "listening…")}`;
+      return `${lead} · ${tr.heard ? L("respira y sigue", "breathe and go on") : L("empieza a trinar", "start the trill")}`;
+    },
+    /** The bubble strip along the bottom of the highway. */
+    _overlay(ctx, geo, layer) {
+      if (layer !== "under") return;
+      if (!this.hud || !this.hud.isConnected) return;
+      const V = global.VTViz;
+      if (!V?.scenes?.trillStrip) return;
+      V.scenes.trillStrip(ctx, geo, this.state.rec, { stalls: this.state.stallMarks });
     },
     onStart() {
+      const st = this.state;
+      st.review = false;
+      this.hud?.classList.remove("is-replay");
+      st.track?.reset();
+      st.rec = [];
+      st.stallMarks = [];
+      st.rows = [];
+      this._newRow();
+      const pv = typeof global.VTGetPitchViz === "function" ? global.VTGetPitchViz() : null;
+      if (pv?.setOverlay && st.track) {
+        this._ownsOverlay = true;
+        pv.setOverlay((ctx, geo, layer) => this._overlay(ctx, geo, layer));
+      }
       this._lockLadder();
       this._pushTarget();
+      this.viz?.draw();
     },
     /** Median of the accepted pitch history — one stray frame cannot move it. */
     _median() {
@@ -3152,6 +3462,7 @@
     },
     /** Advance one step; at the end of a pattern the root walks up, then back down. */
     _advance() {
+      this._settleStone(this._curStone());
       this.state.acc = 0;
       this.state.i += 1;
       if (this.state.i >= this.state.pattern.length) {
@@ -3169,40 +3480,75 @@
           this.state.rootMidi = next;
         }
         this._drawLanes();
+        this._newRow();
       }
       this._pushTarget();
     },
     /**
-     * Trill evenness as a coefficient of variation rather than a bare standard
-     * deviation: the same trill would otherwise score differently at different
-     * input gains. The window is short enough to stay inside one scale step, so
-     * the legitimate level change between notes is not counted as unevenness.
+     * The bubble, measured apart from the pitch gate: the flutter track tags
+     * each moment (trill, brrr, tone, air, silence) for the strip on the
+     * highway and for the stone of the note being sung.
      */
-    _evenness(rms) {
-      if (!(rms > 0)) return;
-      const win = this.profile.evenWindow || 40;
-      this.state.levels.push(rms);
-      if (this.state.levels.length > win) this.state.levels.shift();
-      const a = this.state.levels;
-      if (a.length < 12) return;
-      const mean = a.reduce((x, y) => x + y, 0) / a.length;
-      if (!(mean > 0)) return;
-      const sd = Math.sqrt(a.reduce((x, y) => x + (y - mean) ** 2, 0) / a.length);
-      const steady = clamp(1 - (sd / mean) * (this.profile.evenK || 6), 0, 1);
-      this.state.steadyScore = steady;
-      if (this.$("[data-bar]")) this.$("[data-bar]").style.width = `${Math.round(steady * 100)}%`;
-      if (this.$("[data-ev]"))
-        this.$("[data-ev]").textContent =
-          steady > 0.7
-            ? L("estable", "steady")
-            : steady > 0.4
-              ? L("aceptable", "ok")
-              : L("irregular", "uneven");
+    _feedTrack(frame) {
+      const st = this.state;
+      const tr = st.track;
+      const K = this._kit();
+      if (!tr || !K) return;
+      const T = K.T;
+      const before = tr.tag;
+      const nStall = tr.stalls.length;
+      tr.feed(frame);
+      const dt = global.VTFeatures.frameDt(frame);
+      const now = performance.now();
+      // The start of a sound, once told apart, takes the tag it turned out to be
+      if (before === T.PEND && tr.tag !== T.PEND && st.rec.length && tr.pendFrom != null) {
+        const last = st.rec[st.rec.length - 1];
+        if (last.tag === T.PEND) last.tag = tr.tagAt(tr.pendFrom);
+      }
+      const lastRec = st.rec[st.rec.length - 1];
+      if (!lastRec || lastRec.tag !== tr.tag) st.rec.push({ t: now, tag: tr.tag });
+      if (tr.stalls.length > nStall) {
+        const s = tr.stalls[tr.stalls.length - 1];
+        const at = now - (tr.t - s.t) * 1000;
+        st.stallMarks.push({ t: at });
+        // The strip turns flat from when the lips stopped, not when it was heard
+        const r = st.rec[st.rec.length - 1];
+        const prev = st.rec[st.rec.length - 2];
+        if (r && r.tag === s.tag) r.t = Math.max(prev ? prev.t + 1 : 0, Math.min(r.t, at));
+        const stone = this._curStone();
+        if (stone) stone.stalls++;
+      }
+      if (st.rec.length > 600) st.rec.splice(0, st.rec.length - 400);
+      if (st.stallMarks.length > 100) st.stallMarks.shift();
+      const stone = this._curStone();
+      if (stone) {
+        if (tr.tag === T.TRILL || tr.tag === T.AIRTRILL) stone.trillSec += dt;
+        if (tr.tag !== T.SIL && tr.tag !== T.PEND) stone.soundSec += dt;
+      }
     },
     onFrame(frame) {
+      const st = this.state;
+      if (st.review) return;
+      this._feedTrack(frame);
+      this._frameGate(frame);
+      const hold = this.profile.holdMs || 600;
+      const stone = this._curStone();
+      if (stone) stone.frac = clamp(st.acc / hold, 0, 1);
+      if (this._ownsOverlay) {
+        const pv = typeof global.VTGetPitchViz === "function" ? global.VTGetPitchViz() : null;
+        pv?.setQueueProgress?.(st.acc / hold);
+      }
+      const ev = this.$("[data-ev]");
+      if (ev && st.track) {
+        const txt = this._evText();
+        if (ev.textContent !== txt) ev.textContent = txt;
+      }
+      this.viz?.draw();
+    },
+    /** The pitch gate that walks the scale (see the note above the mode). */
+    _frameGate(frame) {
       const dt = frame.dtMs || 16;
       const rms = frame.rms || 0;
-      this._evenness(rms);
       if (!this.state.wantFreq || !global.VTPitchUtils) return;
       // The clock-only fallback frame carries voiceFreq 0, not null.
       const f = frame.voiceFreq || 0;
@@ -3237,23 +3583,44 @@
       }
     },
     onStop() {
-      const p = this.state.patterns || 0;
-      const s = this.state.steadyScore || 0;
+      const st = this.state;
+      const p = st.patterns || 0;
+      // The note being sung when Stop came counts as far as it got
+      const stone = this._curStone();
+      if (stone && stone.soundSec > 0.05) this._settleStone(stone);
+      // A last row that never started is not part of the take
+      const lastRow = st.rows[st.rows.length - 1];
+      if (st.rows.length > 1 && lastRow && lastRow.stones.every((s) => s.state === "todo")) st.rows.pop();
+      st.review = true;
+      this.hud?.classList.add("is-replay");
+      const pv = typeof global.VTGetPitchViz === "function" ? global.VTGetPitchViz() : null;
+      if (pv && this._ownsOverlay) {
+        pv.setOverlay?.(null);
+        pv.setNoteQueue?.(null);
+        this._ownsOverlay = false;
+      }
+      const ev = this.$("[data-ev]");
+      if (ev && st.track) ev.textContent = this._mapModel().summary;
+      this.viz?.draw();
+      // Only the count of patterns is measured into the form; how steady and
+      // how easy the trill felt stay the learner's own ratings.
       const patches = {};
       if (p > 0) patches.patterns = p;
-      if (this.state.levels.length >= 12 && s > 0.2) {
-        patches.trillSteady = s > 0.75 ? 5 : s > 0.55 ? 4 : 3;
-      }
       const top = global.VTPitchUtils
-        ? global.VTPitchUtils.midiToName(this.state.rootMidi)
+        ? global.VTPitchUtils.midiToName(st.rootMidi)
         : "—";
+      let tail = "";
+      if (st.track && p > 0) {
+        const c = this._stoneCounts();
+        if (c.trill) tail = L(` · ${c.trill} de ${c.sung} notas con burbujeo`, ` · ${c.trill} of ${c.sung} notes bubbling`);
+      }
       return {
         patches,
         summary: p
           ? L(
               `${p} ${p === 1 ? "pasada" : "pasadas"} · raíz alcanzada ${top}`,
               `${p} ${p === 1 ? "pattern" : "patterns"} · root reached ${top}`
-            )
+            ) + tail
           : L(
               "Ninguna pasada completa todavía — mantén el burbujeo por las nueve notas",
               "No pattern completed yet — keep the bubble going through all nine notes"

@@ -289,7 +289,9 @@ test.describe("Phone: the practice record as a strip", () => {
 
     const sel = page.locator("#loop-goal-sel");
     await expect(sel).toBeVisible();
-    expect((await sel.boundingBox()).height).toBeGreaterThanOrEqual(44);
+    // min-height is 44px; the box comes back as 43.99997 at some scroll
+    // offsets (float rounding), so allow a hundredth of a pixel.
+    expect((await sel.boundingBox()).height).toBeGreaterThanOrEqual(43.99);
     await sel.selectOption("5-7");
     await page.clock.runFor(200);
     await expect(page.locator("#loop-goal-text")).toContainText("5–7");

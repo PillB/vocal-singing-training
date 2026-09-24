@@ -9,6 +9,9 @@ test-results/
 # Wrangler local secrets for workers/entitlements
 .dev.vars
 .dev.vars.*
+# Intermediate output of workers/entitlements/scripts/setup.sh. Not secret —
+# the public JWK belongs in js/billing-config.js, not loose in the tree.
+workers/entitlements/jwk.public.json
 
 # QA captures (regenerate locally)
 qa/screenshots/
@@ -19,3 +22,4 @@ docs/INTERNAL-TEST-ACCOUNTS.md
 docs/**/*SECRET*
 docs/**/*password*
 docs/**/*PASSWORD*
+pw.local.tmp.js

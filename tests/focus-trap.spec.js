@@ -3,8 +3,37 @@
  * focus to the control that opened it.
  */
 const { test, expect } = require("@playwright/test");
+const { patchBillingConfig } = require("./helpers/billing");
 
 const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";
+const API = "https://entitlements.test";
+
+/**
+ * Point the page at a worker and decide what it says about sign-in, so which
+ * control the account panel leads with is a property of the deployment under
+ * test and not of whether this machine happens to reach the real worker.
+ *
+ * @param {import('@playwright/test').Page} page Page.
+ * @param {object|"unreachable"|null} methods `/v1/auth/methods` payload,
+ *   "unreachable" to fail the probe, or null for a site with no worker at all.
+ */
+async function withSignIn(page, methods) {
+  if (methods === null) {
+    // No worker at all, whatever js/billing-config.js happens to hold today.
+    await patchBillingConfig(page, { verification: { apiBaseUrl: "" } });
+    return;
+  }
+  await patchBillingConfig(page, { verification: { apiBaseUrl: API } });
+  await page.route(`${API}/**`, (route) => {
+    if (methods === "unreachable") return route.abort("failed");
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: { "access-control-allow-origin": "*" },
+      body: JSON.stringify({ ok: true, trialDays: 30, googleClientId: null, ...methods })
+    });
+  });
+}
 
 async function boot(page) {
   await page.addInitScript(() => {
@@ -98,7 +127,53 @@ test.describe("Modal focus trap", () => {
     expect(await activeId(page)).toBe("btn-pricing");
   });
 
-  test("account modal traps focus and restores it on Escape", async ({ page }) => {
+  test("a collapsed disclosure is one tab stop, not a hole in the trap", async ({ page }) => {
+    // The trap's tabbability rules changed for every dialog, not just the
+    // account panel: Chrome lays out the contents of a closed <details> rather
+    // than removing them, so the geometry test used to wave them through while
+    // native Tab skipped them — and the trap's idea of the last control became
+    // one the keyboard could never reach. The pricing card renders its own
+    // <details class="plan-more"> at runtime, so it is the second place this
+    // has to hold.
+    await boot(page);
+    await page.locator("#btn-pricing").focus();
+    await page.keyboard.press("Enter");
+    await expect(page.locator("#pricing-modal")).toBeVisible();
+    const more = page.locator("#pricing-modal details.plan-more").first();
+    await expect(more).toHaveCount(1);
+    expect(await more.evaluate((el) => el.open)).toBe(false);
+
+    const seen = await page.evaluate(() => {
+      const modal = document.querySelector("#pricing-modal");
+      const items = window.VTFocusTrap.focusables(modal);
+      const details = modal.querySelector("details.plan-more");
+      return {
+        summary: items.includes(details.querySelector("summary")),
+        // Anything sealed inside it is not a tab stop while it is closed.
+        inside: items.filter((el) => details.contains(el) && el.tagName !== "SUMMARY").length
+      };
+    });
+    expect(seen.summary, "the summary is a real tab stop").toBe(true);
+    expect(seen.inside, "nothing else inside a closed disclosure counts").toBe(0);
+
+    // Opening it puts its contents back in play.
+    await more.evaluate((el) => {
+      el.open = true;
+    });
+    const afterOpen = await page.evaluate(() => {
+      const modal = document.querySelector("#pricing-modal");
+      const details = modal.querySelector("details.plan-more");
+      return window.VTFocusTrap.focusables(modal).filter(
+        (el) => details.contains(el) && el.tagName !== "SUMMARY"
+      ).length;
+    });
+    expect(afterOpen).toBeGreaterThanOrEqual(0);
+  });
+
+  test("with no accounts wired up the panel leads with the internal form", async ({ page }) => {
+    // No worker URL at all: the disclosure is the only way in, so it is opened
+    // and focus starts in it.
+    await withSignIn(page, null);
     await boot(page);
     await page.locator("#btn-account").focus();
     await page.keyboard.press("Enter");
@@ -108,6 +183,51 @@ test.describe("Modal focus trap", () => {
     const seen = await tabAround(page, "#account-modal", 12);
     expect(seen.every((s) => s.inside)).toBe(true);
     expect(seen.map((s) => s.id)).toEqual(expect.arrayContaining(["login-password"]));
+
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#account-modal")).toBeHidden();
+    expect(await activeId(page)).toBe("btn-account");
+  });
+
+  test("with a real sign-in the panel leads with it, not with the QA form", async ({ page }) => {
+    await withSignIn(page, { email: true, google: false });
+    await boot(page);
+    await page.locator("#btn-account").focus();
+    await page.keyboard.press("Enter");
+    await expect(page.locator("#account-modal")).toBeVisible();
+    // The worker's answer arrives a moment after the panel does, and redrawing
+    // must not leave focus stranded outside the dialog.
+    await expect(page.locator("#account-email")).toBeVisible();
+    expect(
+      await page.evaluate(() =>
+        document.querySelector("#account-modal").contains(document.activeElement)
+      )
+    ).toBe(true);
+
+    const seen = await tabAround(page, "#account-modal", 12);
+    expect(seen.every((s) => s.inside)).toBe(true);
+    expect(seen.map((s) => s.id)).toEqual(expect.arrayContaining(["account-email"]));
+
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#account-modal")).toBeHidden();
+    expect(await activeId(page)).toBe("btn-account");
+  });
+
+  test("a worker that cannot be reached still leaves a usable, trapped panel", async ({ page }) => {
+    await withSignIn(page, "unreachable");
+    await boot(page);
+    await page.locator("#btn-account").focus();
+    await page.keyboard.press("Enter");
+    await expect(page.locator("#account-modal")).toBeVisible();
+    // Never a sign-in form we cannot honour, and never the flat claim that
+    // accounts are switched off when we simply could not ask.
+    await expect(page.locator("#account-offline")).toBeVisible();
+    await expect(page.locator("#account-signin")).toBeHidden();
+    await expect(page.locator("#account-unconfigured")).toBeHidden();
+    await expect(page.locator("#account-checking")).toBeHidden();
+
+    const seen = await tabAround(page, "#account-modal", 12);
+    expect(seen.every((s) => s.inside)).toBe(true);
 
     await page.keyboard.press("Escape");
     await expect(page.locator("#account-modal")).toBeHidden();

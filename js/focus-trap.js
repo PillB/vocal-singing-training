@@ -26,6 +26,10 @@
     "iframe",
     "audio[controls]",
     "video[controls]",
+    // A closed <details> hides its contents but its summary is still a tab
+    // stop. Left out of this list, the trap loses track of the last control in
+    // any dialog that ends with a collapsed disclosure, and Tab walks out.
+    "summary",
     "[contenteditable]:not([contenteditable='false'])",
     "[tabindex]"
   ].join(",");
@@ -46,7 +50,30 @@
     const ti = el.getAttribute("tabindex");
     if (ti !== null && Number(ti) < 0) return false;
     if (el.closest("[hidden]")) return false;
+    if (inCollapsedDisclosure(el)) return false;
     return !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
+  }
+
+  /**
+   * True for a control sealed inside a closed <details>.
+   *
+   * Chrome lays that content out rather than removing it — it is hidden with
+   * content-visibility, not display:none — so it still reports a box and the
+   * geometry test above waves it through. Native Tab skips it all the same, so
+   * without this the trap's idea of the last control is one the keyboard can
+   * never reach: the wrap never fires and Tab walks out of the dialog.
+   *
+   * @param {Element} el Candidate.
+   * @returns {boolean} Whether it is collapsed out of reach.
+   */
+  function inCollapsedDisclosure(el) {
+    for (let d = el.closest("details"); d; d = d.parentElement && d.parentElement.closest("details")) {
+      if (d.open) continue;
+      // The disclosure's own summary stays a tab stop; everything else goes.
+      const summary = d.querySelector(":scope > summary");
+      if (!summary || !summary.contains(el)) return true;
+    }
+    return false;
   }
 
   /** Tabbable controls inside a container, in DOM order. */
@@ -171,7 +198,7 @@
     const existing = stack.find((t) => t.container === container);
     if (existing) {
       const again = resolve(o.initialFocus, container);
-      if (again) focus(again);
+      if (isFocusable(again)) focus(again);
       return existing;
     }
     let returnTo = "returnFocus" in o ? resolve(o.returnFocus, container) : document.activeElement;
@@ -180,7 +207,11 @@
     const trap = { container, returnTo };
     stack.push(trap);
     bind();
-    const initial = resolve(o.initialFocus, container) || focusables(container)[0];
+    // A requested target that is hidden or disabled is no target at all: focus()
+    // would quietly fail and leave the dialog open with focus on the body.
+    let initial = resolve(o.initialFocus, container);
+    if (initial && !isFocusable(initial)) initial = null;
+    if (!initial) initial = focusables(container)[0];
     if (initial) focus(initial);
     else focusContainer(container);
     return trap;

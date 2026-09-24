@@ -296,6 +296,19 @@ What stays, and why it is not people-pleasing:
 - **The retention figures** (180 days for events, about two days for the address
   bucket). Part of the same required notice, and true.
 
+**How solid the citations above are.** The Ley 29733 article numbers were read
+from secondary copies of the statute and of reglamento DS 016-2024-JUS, not from
+an official source: `*.gob.pe` is refused at this container's proxy, and the OAS
+copy of the law (`oas.org/es/sla/ddi/docs/…`) could not be fetched either. The
+numbers most load-bearing here — art. 15 (flujo transfronterizo), art. 18 (the
+notice items) and arts. 20/22/24 (cancelación, oposición, and the duty to provide
+the channel) — were each seen in the statute text by a research pass, but nobody
+has checked them against an official publication. The visitor-facing pages name
+only "la Ley 29733" and make no article claim, which is deliberate. Verify the
+numbering before quoting it anywhere public, and treat the EU and US citations
+(EDPB Guidelines 2/2023, WP29 Opinion 04/2012, CNIL délibération 2020-091) the
+same way.
+
 Still open, and the owner's call: the ePrivacy Directive art. 5(3) reading is
 that analytics storage in a browser needs *prior* consent in the EU, which an
 opt-out does not give (EDPB Guidelines 2/2023 on the technical scope; WP29

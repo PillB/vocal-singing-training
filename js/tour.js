@@ -174,7 +174,9 @@
         id: "session",
         titleKey: "tour.s5.title",
         bodyKey: "tour.s5.body",
-        target: ".start-alt",
+        // The row, or the "Otras formas de practicar" toggle it folds behind
+        // once the daily loop owns the panel.
+        target: "#more-ways",
         place: "bottom",
         guideAnchor: "rutas"
       },

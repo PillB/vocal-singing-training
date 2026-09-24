@@ -95,7 +95,9 @@
       if (s.path === "daily" || s.path === "basics") {
         return t("session.progress", { n: Math.min(s.index + 1, s.order.length), total: s.order.length });
       }
-      const pathKey = `home.path.${s.path}`;
+      // Route names follow the track (the picker's names, js/app.js pathName).
+      const ownKey = `home.path.${s.track}.${s.path}`;
+      const pathKey = t(ownKey) !== ownKey ? ownKey : `home.path.${s.path}`;
       const pathName = s.path ? t(pathKey) : "";
       const path = pathName && pathName !== pathKey ? ` · ${pathName}` : s.path ? ` · ${s.path}` : "";
       return (

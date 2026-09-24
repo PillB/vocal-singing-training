@@ -103,29 +103,37 @@
               </button>
             </div>
 
-            <!-- Daily loop: how much of today's basics. Written by js/daily-loop.js
+            <!-- Daily loop: how much of today's basics, a segmented choice that
+                 only selects (the button above starts). Written by js/daily-loop.js
                  (no data-i18n: applyDom would reset what the loop writes). -->
             <div class="loop-tiers" id="loop-tiers" role="group" aria-labelledby="loop-tiers-label" hidden>
-              <span class="loop-tiers-label muted" id="loop-tiers-label"></span>
-              <button type="button" class="loop-tier" data-tier="min" aria-pressed="true"></button>
-              <button type="button" class="loop-tier" data-tier="ess" aria-pressed="false"></button>
-              <button type="button" class="loop-tier" data-tier="class" aria-pressed="false"></button>
+              <span class="loop-tiers-label" id="loop-tiers-label"></span>
+              <div class="loop-tiers-seg">
+                <button type="button" class="loop-tier" data-tier="min" aria-pressed="true"></button>
+                <button type="button" class="loop-tier" data-tier="ess" aria-pressed="false"></button>
+                <button type="button" class="loop-tier" data-tier="class" aria-pressed="false"></button>
+              </div>
             </div>
 
-            <div class="start-alt">
-              <button type="button" class="btn btn-ghost btn-sm" id="btn-continue" data-i18n="home.continue">▶ Continuar práctica</button>
-              <button type="button" class="btn btn-ghost btn-sm" id="btn-structured" data-i18n="home.structured">
-                Iniciar sesión guiada
+            <!-- The other ways in. Once the loop owns the panel they fold behind
+                 one toggle (js/daily-loop.js); otherwise the toggle stays hidden
+                 and the row shows as it always did. -->
+            <div class="more-ways" id="more-ways">
+              <button type="button" class="btn btn-ghost more-ways-btn" id="btn-more-ways" aria-expanded="false" aria-controls="start-alt" hidden>
+                <span data-i18n="home.moreWays">Otras formas de practicar</span>
+                <span class="more-ways-caret" aria-hidden="true">▾</span>
               </button>
-              <label class="start-path muted">
-                <span data-i18n="home.path">Ruta</span>
-                <select id="session-path" class="select-inline">
-                  <option value="basic" data-i18n="home.path.basic">Básica</option>
-                  <option value="advanced" data-i18n="home.path.advanced">Avanzada</option>
-                  <option value="full" data-i18n="home.path.full">Completa</option>
-                  <option value="daily" data-i18n="home.path.daily">Diaria (clase)</option>
-                </select>
-              </label>
+              <div class="start-alt" id="start-alt">
+                <button type="button" class="btn btn-ghost btn-sm" id="btn-continue" data-i18n="home.continue">▶ Continuar práctica</button>
+                <button type="button" class="btn btn-ghost btn-sm" id="btn-structured" data-i18n="home.structured">
+                  Iniciar sesión guiada
+                </button>
+                <label class="start-path">
+                  <span data-i18n="home.path">Sesión guiada:</span>
+                  <!-- Options by syncSessionPathOptions (js/app.js): their names follow the track -->
+                  <select id="session-path" class="select-inline"></select>
+                </label>
+              </div>
             </div>
           </div>
 
@@ -232,10 +240,10 @@
 
           <div class="toolbar tier-toolbar">
             <div class="tier-filters" role="group" data-i18n-aria="home.tierAria">
-              <button type="button" class="chip tier-chip selected" data-tier="all" data-i18n="tier.all">Todos</button>
+              <button type="button" class="chip tier-chip selected" data-tier="all" aria-pressed="true" data-i18n="tier.all">Todos</button>
               <!-- Group names depend on the track: renderExerciseList writes them -->
-              <button type="button" class="chip tier-chip" data-tier="basic">Clase</button>
-              <button type="button" class="chip tier-chip" data-tier="advanced">Expresión</button>
+              <button type="button" class="chip tier-chip" data-tier="basic" aria-pressed="false">Clase</button>
+              <button type="button" class="chip tier-chip" data-tier="advanced" aria-pressed="false">Expresión</button>
             </div>
             <span class="muted" id="tier-counts" style="font-size: 0.85rem"></span>
           </div>
@@ -758,14 +766,23 @@
 
     <!-- Daily loop: the end of today's basics, and the voice-card collection -->
     <div id="loop-done" class="modal-overlay loop-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="loop-done-title">
+      <!-- Two groups, so a short screen can set them side by side (what today
+           earned, then what is new and tomorrow) and scroll them above the
+           buttons, which stay pinned to the card's bottom edge. -->
       <div class="modal-card loop-done-card">
-        <p class="loop-done-kicker" id="loop-done-kicker"></p>
-        <h3 id="loop-done-title"></h3>
-        <p class="loop-done-count" id="loop-done-count"></p>
-        <ol class="loop-week loop-week-lg" id="loop-done-week"></ol>
-        <p class="loop-done-line muted" id="loop-done-line"></p>
-        <div class="loop-done-extra" id="loop-done-extra"></div>
-        <p class="loop-done-tomorrow" id="loop-done-tomorrow"></p>
+        <div class="loop-done-body">
+          <div class="loop-done-earned">
+            <p class="loop-done-kicker" id="loop-done-kicker"></p>
+            <h3 id="loop-done-title"></h3>
+            <p class="loop-done-count" id="loop-done-count"></p>
+            <ol class="loop-week loop-week-lg" id="loop-done-week"></ol>
+            <p class="loop-done-line muted" id="loop-done-line"></p>
+          </div>
+          <div class="loop-done-next">
+            <div class="loop-done-extra" id="loop-done-extra"></div>
+            <p class="loop-done-tomorrow" id="loop-done-tomorrow"></p>
+          </div>
+        </div>
         <div class="modal-actions">
           <button type="button" class="btn btn-primary" id="loop-done-close"></button>
           <button type="button" class="btn btn-ghost" id="loop-done-remind" hidden></button>

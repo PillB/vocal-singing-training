@@ -15,7 +15,8 @@ async function dismissTour(page) {
 
 /**
  * A day sung yesterday. A first visit shows only the Mínimo and its button;
- * the other ways in (Continuar, sesión guiada, Ruta) come with a day sung.
+ * the other ways in (Continuar, sesión guiada) come with a day sung, behind
+ * "Otras formas de practicar".
  */
 async function seedPracticeDay(page) {
   await page.addInitScript(() => {
@@ -170,6 +171,8 @@ test.describe("Exercise-specific practice modes", () => {
   test("structured session + continue still work", async ({ page }) => {
     await seedPracticeDay(page);
     await forceEs(page);
+    // With a day sung they sit behind "Otras formas de practicar".
+    await page.click("#btn-more-ways");
     await page.selectOption("#session-path", "basic");
     await page.click("#btn-structured");
     await expect(page.locator("#session-banner")).toHaveClass(/visible/);

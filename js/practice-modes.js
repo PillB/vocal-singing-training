@@ -2126,10 +2126,12 @@
       }
       const minRise = st.processed ? 3 : 6;
       const counted = rise >= minRise && fall >= minRise && peakFrac >= 0.2 && peakFrac <= 0.8;
-      // A 48-point outline of the level for the review card
+      // A 48-point outline of the level for the review card, without the
+      // first and last 120 ms (the edge from and back into silence)
       const shape = [];
+      const edge = Math.min(0.12, dur / 10);
       for (let k = 0; k < 48; k++) {
-        const t = c.t0 + (k / 47) * dur;
+        const t = c.t0 + edge + (k / 47) * (dur - 2 * edge);
         let best = null;
         let bd = 1e9;
         for (const p of c.lv) {

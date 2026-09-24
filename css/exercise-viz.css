@@ -45,6 +45,15 @@
   .mode-focus.mode-focus-live .mode-panel.has-viz > .mode-meta.muted {
     display: none;
   }
+  /* Beside a button a phone leaves the title ~120 px: two lines rather than
+     "DICCIÓN · ES…" */
+  .mode-panel.has-viz .viz-head .mode-title {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    line-height: 1.2;
+  }
 }
 
 .vz {

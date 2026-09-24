@@ -166,15 +166,17 @@
     },
     "v12-melodic-speech": {
       mode: "pitchContour",
-      showPitch: true,
+      // Speech melody is drawn relative to your own usual pitch in the stage,
+      // not as notes on the singing highway (and so in the first screen)
+      showPitch: false,
       showHold: false,
       showLevel: true,
       pitchChallenge: false,
       autoPiano: false,
       autoRecord: true,
-      cue: "Use pitch range for musical speech — variety, not note-matching drills.",
-      cueEs: "Usa el rango de tono para un habla musical — variedad, no ejercicios de nota exacta.",
-      metricHints: { variety: "pitchRangeScale" }
+      cue: "Flat baseline first, then melody: lift key words, land each ending. Variety, not note-matching.",
+      cueEs: "Primero una toma plana, luego melodía: eleva palabras clave y cierra cada final. Variedad, no notas exactas.",
+      metricHints: {}
     },
     "v13-volume-ladder": {
       mode: "volumeLadder",
@@ -247,9 +249,13 @@
       autoRecord: true,
       questions: 5,
       preSilenceSec: 2.5,
+      // A silence this long after speaking closes the answer
+      closeSilenceSec: 2,
+      // A soft time guide for "≤3 sentences", never a limit
+      answerGuideSec: [20, 30],
       cue: "Receive → breathe (~2.5s silence) → answer in ≤3 sentences.",
       cueEs: "Recibe → respira (~2,5s de silencio) → responde en ≤3 oraciones.",
-      metricHints: { questions: "questionCount", pauseBefore: "gateSuccess" }
+      metricHints: { questions: "questionCount" }
     },
     "v18-story-peak": {
       mode: "storyTimer",
@@ -259,13 +265,18 @@
       pitchChallenge: false,
       autoPiano: false,
       autoRecord: true,
+      // Context → tension → peak → point in ~90 s, as the steps lay it out.
+      // A guide: "Next part" moves on early; running over is shown, not scolded.
       phases: [
-        { label: "Setup", sec: 40 },
-        { label: "Peak emotion", sec: 50 },
-        { label: "Point / takeaway", sec: 30 }
+        { key: "context", label: "Context", labelEs: "Contexto", sec: 20, hint: "Context: who, where — keep it short", hintEs: "Contexto: quién y dónde, corto" },
+        { key: "tension", label: "Tension", labelEs: "Tensión", sec: 25, hint: "Tension: what was at stake", hintEs: "Tensión: qué estaba en juego" },
+        { key: "peak", label: "Peak", labelEs: "Pico", sec: 30, hint: "The peak: a little slower, a little stronger, a pause", hintEs: "El pico: un poco más lento, más intenso, una pausa" },
+        { key: "point", label: "Point", labelEs: "Aprendizaje", sec: 15, hint: "The point in one still sentence", hintEs: "El aprendizaje en una frase quieta" }
       ],
-      cue: "Setup short · peak vivid · land the point. Mark peak when you hit it.",
-      cueEs: "Inicio corto · pico vivo · cierra el punto. Marca el pico cuando llegues.",
+      // The parts are a pacer: they still run if the microphone is refused
+      timeDriven: true,
+      cue: "Context short · peak vivid · land the point. Mark the peak when you reach it.",
+      cueEs: "Contexto corto · pico vivo · cierra con el aprendizaje. Marca el pico cuando llegues.",
       metricHints: {}
     },
     "v19-authority-close": {

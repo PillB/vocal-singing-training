@@ -557,8 +557,8 @@ window.VT_EXERCISES = {
       research:
         "Memorable stories emphasize the peak emotional turn, not every detail. Setup is short; the turn is vivid; the point is clear.",
       steps: [
-        "Choose a true 2-minute personal story.",
-        "Write: setup (2–3 sentences) → peak moment (sensory detail) → point (1 sentence).",
+        "Choose a true personal story you can tell in about 90 seconds.",
+        "Plan it: context → tension → peak moment (sensory detail) → point (1 sentence).",
         "Deliver emphasizing the peak with pace, volume, and pause.",
         "Remove one unnecessary setup detail; re-deliver tighter."
       ],

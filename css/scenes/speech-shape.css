@@ -1,1 +1,39 @@
 /* Exercise pictures — speech-shape (css for js/scenes/speech-shape.js). Scoped to .mode-panel.has-viz. */
+
+/* Two controls beside the title (story: mark the peak, next part) */
+.mode-panel.has-viz .viz-btns {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.4rem;
+  align-items: center;
+}
+.mode-panel.has-viz .viz-head .viz-btns .btn {
+  white-space: nowrap;
+}
+
+/* Short button words on a narrow phone, full words elsewhere */
+.mode-panel.has-viz .ss-short {
+  display: none;
+}
+@media (max-width: 480px) {
+  .mode-panel.has-viz .ss-long {
+    display: none;
+  }
+  .mode-panel.has-viz .ss-short {
+    display: inline;
+  }
+}
+
+/* A pressed "Again" stays visibly pressed (shape and word, not colour only) */
+.mode-panel.has-viz .viz-head [data-again][aria-pressed="true"] {
+  border-style: dashed;
+  border-width: 2px;
+}
+
+/* Rotated phone: the controls stack beside the picture */
+@media (max-height: 500px) {
+  .mode-panel.has-viz .viz-btns {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

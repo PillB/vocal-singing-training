@@ -6213,6 +6213,10 @@
     // panel asked for something already done.
     const sub = $("#account-sub");
     if (sub) sub.textContent = signedIn ? tt("auth.subSignedIn") : tt("auth.sub");
+    // The heading said "Cuenta" — the same defect the header button had, one
+    // layer down: a room, not a reason. Signed out it names what you get.
+    const title = $("#account-title");
+    if (title) title.textContent = signedIn ? tt("auth.title") : tt("auth.titleOut");
     const admin = $("#admin-panel");
     const who = $("#account-who");
     const btnAcc = $("#btn-account");
@@ -6273,6 +6277,19 @@
     const retryRow = $("#account-retry-row");
     if (retryRow) {
       retryRow.hidden = !offer.configured || hasRealSignIn || offer.checking;
+    }
+    // What the account is for, above the button that makes one. Only where a
+    // sign-in can really be performed: promising a free month beside a notice
+    // saying sign-in is off would be the worst of both.
+    const offerLine = $("#account-offer");
+    if (offerLine) {
+      offerLine.hidden = !hasRealSignIn || signedIn;
+      if (!offerLine.hidden) {
+        const days = Number(account && account.methods && account.methods.trialDays);
+        offerLine.textContent = days > 0
+          ? tt("auth.offer", { n: String(days) })
+          : tt("auth.offerNoTrial");
+      }
     }
     // The internal staff login is never opened for anybody. It used to expand
     // itself whenever no public sign-in could be offered, on the reasoning that

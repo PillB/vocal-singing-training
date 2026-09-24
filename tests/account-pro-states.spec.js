@@ -215,6 +215,49 @@ test.describe("Signed out: the door says what pressing it does", () => {
     expect(controls, "the panel always has something to press").toBeGreaterThanOrEqual(2);
   });
 
+  test("the panel leads with what an account is for, not with a method", async ({ page }) => {
+    // Mozilla's Persona A/B test (226,104 widget impressions) measured a door
+    // named only for returning users at 17 accounts against 212 for one that
+    // also named account creation. The one button here does both, so the copy
+    // carries it: what this makes, what it costs, and that it works either way.
+    const license = await mintLicense({ origin: BASE });
+    await install(page, {}, license);
+    await boot(page);
+    await openPanel(page);
+    // The heading names the outcome rather than the room.
+    await expect(page.locator("#account-title")).toHaveText("Guarda tu progreso");
+    const offer = page.locator("#account-offer");
+    await expect(offer).toBeVisible();
+    const text = await offer.textContent();
+    // The zero price has to be literal: the word, the number of days, no card.
+    expect(text).toMatch(/gratis/i);
+    expect(text).toMatch(/30 días/);
+    expect(text).toMatch(/sin tarjeta/i);
+    expect(text).toMatch(/si ya tienes cuenta/i);
+    // And it comes before the method button, not after it. Asserted on document
+    // order rather than geometry: Google's container is an empty div here,
+    // because its script is not reachable from a test run, so it has no box.
+    const offerIsFirst = await page.evaluate(() => {
+      const a = document.querySelector("#account-offer");
+      const b = document.querySelector("#account-google");
+      return !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    });
+    expect(offerIsFirst).toBe(true);
+    // It must clear the 12px floor, because it carries the price.
+    const size = await offer.evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+    expect(size).toBeGreaterThanOrEqual(12);
+  });
+
+  test("no sign-in means no promise of a free month", async ({ page }) => {
+    // Naming a free month beside a notice saying sign-in is off is the worst of
+    // both, so the offer line belongs only to states that can act.
+    await install(page, { offline: true }, null);
+    await boot(page);
+    await openPanel(page);
+    await expect(page.locator("#account-offline")).toBeVisible();
+    await expect(page.locator("#account-offer")).toBeHidden();
+  });
+
   test("on a Google-only deploy the divider has nothing to divide, so it is gone", async ({ page }) => {
     const license = await mintLicense({ origin: BASE });
     await install(page, {}, license);
@@ -357,6 +400,9 @@ test.describe("Signed in: the header names which kind of access this is", () => 
     await openPanel(page);
     await expect(page.locator("#account-logged-in")).toBeVisible();
     expect(await page.locator("#account-sub").textContent()).not.toMatch(/Entra para/i);
+    // The heading and the offer belong to the signed-out panel only.
+    await expect(page.locator("#account-title")).toHaveText("Cuenta");
+    await expect(page.locator("#account-offer")).toBeHidden();
   });
 });
 

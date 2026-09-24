@@ -26,6 +26,9 @@
       "nav.planTrialDays": "Prueba · {n} d",
       "nav.planGift": "Regalo",
       "nav.planEnding": "Pro · termina",
+      "auth.titleOut": "Guarda tu progreso",
+      "auth.offer": "Crear tu cuenta es gratis e incluye {n} días de Pro sin tarjeta. El mismo botón sirve si ya tienes cuenta.",
+      "auth.offerNoTrial": "Crear tu cuenta es gratis y toma un momento. El mismo botón sirve si ya tienes cuenta.",
       "auth.title": "Cuenta",
       "a11y.close": "Cerrar",
 
@@ -933,6 +936,9 @@
       "nav.planTrialDays": "Trial · {n} d",
       "nav.planGift": "Gift",
       "nav.planEnding": "Pro · ending",
+      "auth.titleOut": "Save your progress",
+      "auth.offer": "Creating an account is free and includes {n} days of Pro with no card. The same button works if you already have one.",
+      "auth.offerNoTrial": "Creating an account is free and takes a moment. The same button works if you already have one.",
       "auth.title": "Account",
       "a11y.close": "Close",
 

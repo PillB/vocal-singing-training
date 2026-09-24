@@ -6358,3 +6358,12 @@ body.loop-on .start-steps {
 .header-door:focus-visible {
   border-color: var(--accent, #6eb4e8);
 }
+
+/* What an account is for, above the button that makes one. Small, quiet, and it
+   has to clear the 12px floor because it carries the price. */
+.account-offer {
+  margin: 0 0 0.6rem;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+}

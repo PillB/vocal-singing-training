@@ -150,6 +150,69 @@
     return freq;
   }
 
+  /**
+   * How the highway draws, for the exercise that owns the overlay. Every
+   * default is the highway as it always was; an exercise passes only what it
+   * changes, as the second argument of setOverlay(fn, display) (or later with
+   * setDisplay). Clearing the overlay restores all of them.
+   */
+  const DISPLAY_DEFAULTS = {
+    /** Tick the attached pitch game (score, combo, challenge locks). */
+    game: true,
+    /** The game's flash words, challenge box and lock ring on the canvas. */
+    gameFlash: true,
+    /** A listen window: the game sees silence, so nothing scores or locks. */
+    gameHold: false,
+    /** Cents to the nearest octave of the target (an octave match counts). */
+    foldOctave: false,
+    /** Amber target trail and its dots. */
+    targetTrail: true,
+    /** The blue moving-average precision band. */
+    band: true,
+    /** "zones": the voice trail coloured by cents; "none": the overlay draws the voice. */
+    trail: "zones",
+    /** The green lane on the target, the amber chord-tone lanes, the dim ghost lanes. */
+    primaryLane: true,
+    chordLanes: true,
+    ghostLanes: true,
+    /** The chord / note badge at the top centre. */
+    chordBadge: true,
+    /** [{ midi, label }]: the ghost lanes to draw instead of the progression's. */
+    lanes: null,
+    /** Half-width of the green lane, exactly, in cents (the band that counts). */
+    laneCents: null,
+    /** { min, max, pad, minSpan } in MIDI: the Y window, whatever was locked. */
+    range: null,
+    /**
+     * > 0: x is time, not frame count — the last `pastSec` seconds end at
+     * "now", at `nowAt` of the plot width, and overlays place things ahead of
+     * it with geo.xAtTime(t). Under reduced motion the picture pages instead
+     * of scrolling.
+     */
+    pastSec: 0,
+    nowAt: null,
+    /** "nearest": the stats readout names the nearest note (nothing to miss). */
+    stats: "target",
+    /** Light the target key on the keyboard strip. */
+    keyboardTarget: true,
+    /** After Stop keep the last picture (the overlay's review), not the idle card. */
+    keepOnStop: false,
+    /**
+     * Px under the stage's top rail the overlay's own header uses (a number,
+     * or fn(graphH, safeTop) → px): the display.range starts below it, so the
+     * top note is not drawn under the header. null = the usual 8 % margin.
+     */
+    headPx: null
+  };
+
+  function prefersReducedMotion() {
+    try {
+      return !!global.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+    } catch {
+      return false;
+    }
+  }
+
   class PitchVisualizer {
     constructor(canvas) {
       this.canvas = canvas;
@@ -202,13 +265,36 @@
        */
       this.noteQueue = null;
       this.queueProgress = 0;
+      /** See DISPLAY_DEFAULTS. */
+      this.display = Object.assign({}, DISPLAY_DEFAULTS);
+      /** fn(ctx, geo): what an exercise shows before Start instead of the generic card. */
+      this.idlePainter = null;
+      this._frozenAt = null;
+      this._pageStart = null;
 
       this._resize();
       window.addEventListener("resize", () => this._resize());
     }
 
-    setOverlay(fn) {
+    /**
+     * @param {Function|null} fn overlay painter fn(ctx, geo, "under"|"over")
+     * @param {object} [display] how the highway draws while this overlay is on
+     *   (see DISPLAY_DEFAULTS); omitted = the highway as always
+     */
+    setOverlay(fn, display) {
       this.overlay = typeof fn === "function" ? fn : null;
+      this.display = Object.assign({}, DISPLAY_DEFAULTS, this.overlay && display ? display : null);
+      this._pageStart = null;
+    }
+
+    /** Change some display options of the current overlay (see DISPLAY_DEFAULTS). */
+    setDisplay(patch) {
+      if (patch && typeof patch === "object") Object.assign(this.display, patch);
+    }
+
+    /** fn(ctx, geo) painted on the empty highway before Start; null for the default card. */
+    setIdle(fn) {
+      this.idlePainter = typeof fn === "function" ? fn : null;
     }
 
     /** @param {{midi:number,label?:string,sub?:string}[]|null} items current first */
@@ -230,8 +316,12 @@
       const dpr = window.devicePixelRatio || 1;
       const rect = this.canvas.getBoundingClientRect();
       const w = Math.max(320, rect.width || 640);
-      // Taller highway for multi-lane + low-vision note channels
-      const h = Math.max(300, rect.height || 340);
+      // Taller highway for multi-lane + low-vision note channels. A laid-out
+      // canvas keeps its own height: on a rotated phone the stage gives it
+      // ~200 px, and a 300 px drawing buffer was letterboxed into that box
+      // (object-fit: contain), shrinking the whole picture and leaving empty
+      // bands at both sides.
+      const h = rect.height >= 120 ? rect.height : Math.max(300, rect.height || 340);
       this.canvas.width = Math.floor(w * dpr);
       this.canvas.height = Math.floor(h * dpr);
       this.ctx2d.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -487,6 +577,10 @@
     resetLanes() {
       this.clearChordLanes();
       this.overlay = null;
+      this.display = Object.assign({}, DISPLAY_DEFAULTS);
+      this.idlePainter = null;
+      this._frozenAt = null;
+      this._pageStart = null;
       this.noteQueue = null;
       this.queueProgress = 0;
       this.history = [];
@@ -535,6 +629,8 @@
       this.history = [];
       this.devWindow = [];
       this.lastIngestAt = performance.now();
+      this._frozenAt = null;
+      this._pageStart = null;
       this._drawIdle();
     }
 
@@ -603,14 +699,26 @@
         this.stream = null;
       }
       this.voiceFreq = null;
+      // The clock stops with the take: a review drawn later stays where it was
+      this._frozenAt = performance.now();
       this._drawIdle();
     }
 
     _ingest(f, dtMs = 16) {
+      const d = this.display || DISPLAY_DEFAULTS;
       // Multi-lane truth: score vs nearest active chord tone when lanes exist
       let scoreFreq = this.targetFreq;
       let scoreName = null;
-      if (f && this.chordLanes && this.chordLanes.length) {
+      if (f && d.stats === "nearest") {
+        // Free singing (a siren, a song): there is no target to miss, so the
+        // readout names the note you are on and how far from its centre
+        const vm = Math.round(freqToMidi(f));
+        scoreFreq = midiToFreq(vm);
+        scoreName = midiToName(vm);
+      } else if (f && d.chordLanes !== false && this.chordLanes && this.chordLanes.length) {
+        // (Lanes an overlay hid are not what it scores against: s9's challenge
+        // note used to be scored against the progression chord left over from
+        // opening the exercise.)
         const near = this.nearestActiveLane(f);
         if (near && near.freq) {
           scoreFreq = near.freq;
@@ -623,6 +731,10 @@
       if (f) {
         voiceMidi = freqToMidi(f);
         cents = (voiceMidi - targetMidi) * 100;
+        // An octave match is the same note (and the detector itself slips octaves)
+        if (d.foldOctave && Math.abs(cents) > 600) {
+          cents = ((((cents + 600) % 1200) + 1200) % 1200) - 600;
+        }
         this.devWindow.push(cents);
         if (this.devWindow.length > 48) this.devWindow.shift();
         const n = this.devWindow.length;
@@ -636,17 +748,29 @@
       }
 
       let gameSnap = null;
-      if (this.game) {
-        gameSnap = this.game.tick(cents, f != null, dtMs);
+      const gameOn = !!this.game && d.game !== false;
+      if (gameOn) {
+        // A listen window feeds the game silence: nothing scores or locks
+        gameSnap = d.gameHold ? this.game.tick(null, false, dtMs) : this.game.tick(cents, f != null, dtMs);
       }
 
+      const now = performance.now();
       this.history.push({
         targetMidi,
         voiceMidi,
         cents,
-        t: performance.now()
+        t: now
       });
-      if (this.history.length > this.maxPoints) this.history.shift();
+      if (d.pastSec > 0) {
+        // Time-based: keep what the window shows (plus a margin), not a frame count
+        const cut = now - (d.pastSec + 1.5) * 1000;
+        let drop = 0;
+        while (drop < this.history.length - 2 && this.history[drop].t < cut) drop++;
+        if (this.history.length - drop > 2400) drop = this.history.length - 2400;
+        if (drop) this.history.splice(0, drop);
+      } else if (this.history.length > this.maxPoints) {
+        this.history.splice(0, this.history.length - this.maxPoints);
+      }
 
       if (this.onStats) {
         this.onStats({
@@ -657,7 +781,8 @@
           accuracyCents: this.accuracyCents,
           precisionCents: this.precisionCents,
           maAbs: this.maAbs,
-          game: gameSnap || (this.game && this.game.snapshot())
+          // No game: the readout stays on the note, not a score
+          game: gameOn ? gameSnap || this.game.snapshot() : null
         });
       }
     }
@@ -676,18 +801,39 @@
      * Map MIDI → Y. When progression range is set, use full span so all chord
      * tones fit on the highway (not just ±6 around one note).
      */
-    _midiToY(midi, centerMidi, graphH) {
-      const gh = graphH != null ? graphH : this.h - 44;
-      const pad = 0.08 * gh;
+    /** The Y window in MIDI: an overlay's display.range wins over any lock. */
+    _range() {
+      const r = this.display && this.display.range;
+      if (r && Number.isFinite(r.min) && Number.isFinite(r.max)) {
+        const n = this._normalizeRange(r.min, r.max, r.pad != null ? r.pad : 1, r.minSpan != null ? r.minSpan : 8);
+        return { min: n.minMidi, max: n.maxMidi };
+      }
       if (
         this.rangeMinMidi != null &&
         this.rangeMaxMidi != null &&
         this.rangeMaxMidi > this.rangeMinMidi
       ) {
-        const span = this.rangeMaxMidi - this.rangeMinMidi;
-        const t = (midi - this.rangeMinMidi) / span;
+        return { min: this.rangeMinMidi, max: this.rangeMaxMidi };
+      }
+      return null;
+    }
+
+    _midiToY(midi, centerMidi, graphH) {
+      const gh = graphH != null ? graphH : this.h - 44;
+      const pad = 0.08 * gh;
+      const range = this._range();
+      if (range) {
+        const span = range.max - range.min;
+        const t = (midi - range.min) / span;
         const clamped = Math.max(0, Math.min(1, t));
-        return gh - pad - clamped * (gh - pad * 2);
+        const d = this.display || DISPLAY_DEFAULTS;
+        let top = pad;
+        if (d.headPx != null) {
+          const st = this.safeTop || 0;
+          const px = typeof d.headPx === "function" ? Number(d.headPx(gh, st)) || 0 : Number(d.headPx) || 0;
+          top = Math.max(pad, Math.min(gh * 0.45, st + px));
+        }
+        return gh - pad - clamped * (gh - pad - top);
       }
       const half = 6;
       const delta = midi - centerMidi;
@@ -770,10 +916,27 @@
         }
       }
       const w = Math.max(320, this.w || this.canvas?.clientWidth || 640);
-      const h = Math.max(220, this.h || this.canvas?.clientHeight || 300);
+      const h = Math.max(120, this.h || this.canvas?.clientHeight || 300);
       this.w = w;
       this.h = h;
+      // A stopped take whose exercise keeps its review: redraw that, frozen
+      if (this.display.keepOnStop && this.overlay && this._frozenAt) {
+        try {
+          this._draw();
+          return;
+        } catch (err) {
+          console.warn("[viz review]", err);
+        }
+      }
       ctx.clearRect(0, 0, w, h);
+      if (this.idlePainter) {
+        try {
+          this._drawIdleFor(ctx, w, h);
+          return;
+        } catch (err) {
+          console.warn("[viz idle]", err);
+        }
+      }
       // Richer empty state (research: tuners/pitch apps show lanes before audio)
       const bg = ctx.createLinearGradient(0, 0, 0, h);
       bg.addColorStop(0, "#0e1622");
@@ -843,10 +1006,57 @@
       this._drawKeyboard(ctx, w, h, null, null);
     }
 
+    /**
+     * The empty highway an exercise dressed for itself (setIdle): background,
+     * a faint grid, then its painter — what the exercise will ask for, shown
+     * before Start instead of the generic "sing in the green lane" card.
+     */
+    _drawIdleFor(ctx, w, h) {
+      const g = ctx.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, "#0c121a");
+      g.addColorStop(0.45, "#121c2a");
+      g.addColorStop(1, "#0c121a");
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, w, h);
+      const graphH = h - 58;
+      const centerMidi = freqToMidi(this.targetFreq || 130.81);
+      const range = this._range();
+      const lo = range ? Math.floor(range.min) : Math.floor(centerMidi - 6);
+      const hi = range ? Math.ceil(range.max) : Math.ceil(centerMidi + 6);
+      ctx.strokeStyle = "rgba(170, 195, 230, 0.12)";
+      ctx.lineWidth = 1.5;
+      for (let m = lo; m <= hi; m++) {
+        const y = this._midiToY(m, centerMidi, graphH);
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(w, y);
+        ctx.stroke();
+      }
+      const gutter = Math.max(72, Math.min(w * 0.14, 140));
+      const laneRight = Math.max(8, w - gutter);
+      const plotRight = Math.max(48, laneRight - 20);
+      this.idlePainter(ctx, {
+        w,
+        h,
+        graphH,
+        laneRight,
+        plotLeft: 12,
+        plotRight,
+        nowX: plotRight,
+        safeTop: this.safeTop || 0,
+        midiToY: (m) => this._midiToY(m, centerMidi, graphH),
+        rangeMinMidi: range ? range.min : lo,
+        rangeMaxMidi: range ? range.max : hi,
+        idle: true
+      });
+      this._drawKeyboard(ctx, w, h, null, null);
+    }
+
     _draw() {
       const ctx = this.ctx2d;
       const w = this.w;
       const h = this.h;
+      const d = this.display || DISPLAY_DEFAULTS;
       const centerMidi = freqToMidi(this.targetFreq);
       const game = this.game ? this.game.snapshot() : null;
       const zones = (game && game.zones) || { perfect: 15, good: 35, close: 60 };
@@ -864,10 +1074,9 @@
 
       // Range-aware semitone grid. It recedes (.12, was .38): at 2.5:1 every grid
       // line outshone the lane to sing (PR-3).
-      const lo =
-        this.rangeMinMidi != null ? Math.floor(this.rangeMinMidi) : Math.floor(centerMidi - 6);
-      const hi =
-        this.rangeMaxMidi != null ? Math.ceil(this.rangeMaxMidi) : Math.ceil(centerMidi + 6);
+      const range = this._range();
+      const lo = range ? Math.floor(range.min) : Math.floor(centerMidi - 6);
+      const hi = range ? Math.ceil(range.max) : Math.ceil(centerMidi + 6);
       ctx.strokeStyle = "rgba(170, 195, 230, 0.12)";
       ctx.lineWidth = 1.5;
       for (let m = lo; m <= hi; m++) {
@@ -887,9 +1096,25 @@
       const spanSt = Math.max(6, hi - lo);
       // Thicker lanes when canvas is tall (low-vision friendly)
       const laneHalf = Math.max(8, (zones.good / 100) * (graphH / spanSt) * 1.55);
-      const primaryMidi = Math.round(freqToMidi(this.targetFreq) * 2) / 2;
-      const lanes = (this.chordLanes || []).slice();
-      if (!lanes.some((L) => Math.round(L.midi * 2) / 2 === primaryMidi)) {
+      // An exercise can ask for the band that actually counts, exactly
+      const midMidi = range ? (range.min + range.max) / 2 : centerMidi;
+      const tolHalf =
+        d.laneCents > 0
+          ? Math.max(
+              4,
+              Math.abs(
+                this._midiToY(midMidi + d.laneCents / 100, centerMidi, graphH) -
+                  this._midiToY(midMidi, centerMidi, graphH)
+              )
+            )
+          : null;
+      const primaryMidi =
+        d.primaryLane === false ? NaN : Math.round(freqToMidi(this.targetFreq) * 2) / 2;
+      const lanes = d.chordLanes === false ? [] : (this.chordLanes || []).slice();
+      if (
+        d.primaryLane !== false &&
+        !lanes.some((L) => Math.round(L.midi * 2) / 2 === primaryMidi)
+      ) {
         lanes.push({ midi: primaryMidi, label: noteNameToDual(primaryMidi) });
       }
       const activeMidis = new Set(lanes.map((L) => Math.round(L.midi * 2) / 2));
@@ -905,8 +1130,36 @@
       const queue = this.noteQueue;
       // With notes queued, "now" sits left of the lane labels by a third so
       // the next notes have room; otherwise it stays at the right edge.
-      const nowX = queue ? Math.round(12 + (plotRight - 12) * 0.62) : plotRight;
-      const xAt = (i) => (i / (this.maxPoints - 1)) * (nowX - 12) + 12;
+      const timeBased = d.pastSec > 0;
+      let nowX =
+        timeBased && d.nowAt != null
+          ? Math.round(12 + (plotRight - 12) * Math.max(0.2, Math.min(1, d.nowAt)))
+          : queue
+            ? Math.round(12 + (plotRight - 12) * 0.62)
+            : plotRight;
+      // Time-based x: the clock, frozen when the take stops
+      const tNow = this.running || !this._frozenAt ? performance.now() : this._frozenAt;
+      const pxPerSec = timeBased ? (nowX - 12) / d.pastSec : 0;
+      let xAtTime = null;
+      if (timeBased) {
+        if (prefersReducedMotion()) {
+          // No scrolling: "now" walks across a still page, then a new page
+          // starts. What was sung stays where it was drawn.
+          const pageMs = d.pastSec * 1000;
+          if (this._pageStart == null || tNow < this._pageStart || tNow - this._pageStart > pageMs) {
+            this._pageStart = tNow;
+          }
+          const p0 = this._pageStart;
+          nowX = Math.round(12 + ((tNow - p0) / 1000) * pxPerSec);
+          xAtTime = (t) => 12 + ((t - p0) / 1000) * pxPerSec;
+        } else {
+          const nx = nowX;
+          xAtTime = (t) => nx - ((tNow - t) / 1000) * pxPerSec;
+        }
+      }
+      const xAt = timeBased
+        ? (i) => xAtTime(this.history[i] ? this.history[i].t : tNow)
+        : (i) => (i / (this.maxPoints - 1)) * (nowX - 12) + 12;
       // Label Ys reserved by priority paint (primary > active > ghost)
       const usedLabelYs = [];
       const canPlaceLabel = (y) => {
@@ -954,14 +1207,26 @@
           return y;
         }
         const isPrimary = mode === "primary";
+        // The band that counts, when the exercise gave it in cents
+        const half = isPrimary && tolHalf ? tolHalf : laneHalf;
         ctx.fillStyle = isPrimary
           ? "rgba(79, 212, 146, 0.32)"
           : "rgba(240, 184, 80, 0.26)";
-        ctx.fillRect(0, y - laneHalf, laneRight, laneHalf * 2);
+        ctx.fillRect(0, y - half, laneRight, half * 2);
+        if (isPrimary && tolHalf) {
+          ctx.strokeStyle = "rgba(160, 255, 210, 0.6)";
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(0, y - half + 0.5);
+          ctx.lineTo(laneRight, y - half + 0.5);
+          ctx.moveTo(0, y + half - 0.5);
+          ctx.lineTo(laneRight, y + half - 0.5);
+          ctx.stroke();
+        }
         ctx.strokeStyle = isPrimary
           ? "rgba(160, 255, 210, 1)"
           : "rgba(255, 220, 150, 0.95)";
-        ctx.lineWidth = isPrimary ? 3.5 : 2.5;
+        ctx.lineWidth = isPrimary ? (tolHalf ? 2 : 3.5) : 2.5;
         ctx.shadowColor = isPrimary
           ? "rgba(79, 212, 146, 0.65)"
           : "rgba(240, 184, 80, 0.5)";
@@ -976,7 +1241,12 @@
       };
 
       const ghostLanes = [];
-      (this.progressionLanes || []).forEach((lane) => {
+      const ghostSource = Array.isArray(d.lanes)
+        ? d.lanes
+        : d.ghostLanes === false
+          ? []
+          : this.progressionLanes || [];
+      ghostSource.forEach((lane) => {
         const k = Math.round(lane.midi * 2) / 2;
         if (activeMidis.has(k)) return;
         const y = drawLaneBand(lane, "ghost");
@@ -1026,8 +1296,10 @@
       const hiY = Math.max(12, Math.min(graphH - 4, this._midiToY(hi, centerMidi, graphH) + 4));
       const loY = Math.max(12, Math.min(graphH - 4, this._midiToY(lo, centerMidi, graphH) + 4));
       ctx.textAlign = "left";
-      const hiLab = midiToDualLabel(hi, false);
-      const loLab = midiToDualLabel(lo, false);
+      // With the octave: "D# Re♯" at both edges of a 12-semitone window read
+      // as the same note (the audit's top and bottom labels)
+      const hiLab = midiToDualLabel(hi, true);
+      const loLab = midiToDualLabel(lo, true);
       const leftMax = Math.min(96, w * 0.2);
       const paintLeft = (lab, y) => {
         const f = fitCanvasLabel(ctx, lab, leftMax, "600 10px ui-monospace,monospace");
@@ -1044,7 +1316,7 @@
       // it below the HUD row that covers the canvas top on phones
       const badgeTop = Math.max(graphH * 0.02, (this.safeTop || 0) + 4);
       let cueTop = Math.max(graphH * 0.08, (this.safeTop || 0) + 4);
-      if (this.activeChordName) {
+      if (this.activeChordName && d.chordBadge !== false) {
         ctx.textAlign = "center";
         const cnMax = Math.min(w * 0.36, 200);
         const f = fitCanvasLabel(
@@ -1076,8 +1348,17 @@
         xAt,
         history: this.history,
         maxPoints: this.maxPoints,
-        rangeMinMidi: this.rangeMinMidi,
-        rangeMaxMidi: this.rangeMaxMidi
+        rangeMinMidi: range ? range.min : this.rangeMinMidi,
+        rangeMaxMidi: range ? range.max : this.rangeMaxMidi,
+        // Additive (display.pastSec > 0): time runs left to right to "now"
+        timeBased,
+        tNow,
+        pxPerSec,
+        xAtTime: xAtTime || ((t) => nowX - ((tNow - t) / 1000) * ((nowX - 12) / 4)),
+        /** Half-height in px of display.laneCents (null when not set) */
+        tolHalf,
+        running: !!this.running,
+        display: d
       };
       if (this.overlay) {
         try {
@@ -1091,7 +1372,7 @@
       const n = this.history.length;
       const lastVoiceMidi = n ? this.history[n - 1].voiceMidi : null;
 
-      if (n) {
+      if (n && d.band !== false) {
         // Precision MA band
         const bandPtsTop = [];
         const bandPtsBot = [];
@@ -1116,7 +1397,9 @@
         ctx.closePath();
         ctx.fillStyle = "rgba(91,159,212,0.16)";
         ctx.fill();
+      }
 
+      if (n && d.targetTrail !== false) {
         // Target trail
         ctx.lineWidth = 3;
         ctx.strokeStyle = "rgba(240,201,160,0.4)";
@@ -1141,7 +1424,9 @@
           ctx.arc(x, y, i === n - 1 ? 6 : 2, 0, Math.PI * 2);
           ctx.fill();
         }
+      }
 
+      if (n && d.trail !== "none") {
         // Voice trail colored by zone
         ctx.lineWidth = 2.5;
         ctx.beginPath();
@@ -1183,7 +1468,7 @@
           const vx = xAt(n - 1);
           const vy = this._midiToY(last.voiceMidi, centerMidi, graphH);
           // lock-on ring (hold-to-clear)
-          if (game && game.lockProgress > 0) {
+          if (game && d.gameFlash !== false && game.lockProgress > 0) {
             ctx.beginPath();
             ctx.strokeStyle = "rgba(125,222,176,0.9)";
             ctx.lineWidth = 3;
@@ -1202,7 +1487,7 @@
       }
 
       // Challenge cue only (score lives in DOM .hud-tr — avoid double HUD under corners)
-      if (game) {
+      if (game && d.game !== false && d.gameFlash !== false) {
         if (game.challengeMode) {
           const es =
             (global.VTI18n && global.VTI18n.lang === "es") ||
@@ -1239,7 +1524,13 @@
         }
       }
 
-      this._drawKeyboard(ctx, w, h, centerMidi, lastVoiceMidi);
+      this._drawKeyboard(
+        ctx,
+        w,
+        h,
+        d.keyboardTarget === false || d.primaryLane === false ? null : centerMidi,
+        lastVoiceMidi
+      );
     }
 
     /**
@@ -1289,7 +1580,10 @@
         ctx.stroke();
         ctx.setLineDash([]);
         const text = it.label || midiToName(Math.round(it.midi));
-        const f = fitCanvasLabel(ctx, text, bwk - 8, `${cur ? 800 : 700} ${cur ? 13 : 12}px system-ui,sans-serif`);
+        const qFont = `${cur ? 800 : 700} ${cur ? 13 : 12}px system-ui,sans-serif`;
+        let f = fitCanvasLabel(ctx, text, bwk - 8, qFont);
+        // Optional short form ({midi, label, short}) when the full one would be cut
+        if (it.short && f.text !== text) f = fitCanvasLabel(ctx, it.short, bwk - 8, qFont);
         ctx.font = f.font;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";

@@ -1271,137 +1271,1174 @@
 
   // ——— SINGING ———
 
+  /*
+   * The pitch family (s1 s2 s3 s5 s7 s9 s10 s13 s16). The note highway is the
+   * picture: each mode paints on it through its overlay hook, with the
+   * painters in js/scenes/pitch.js, and keeps its panel under the stage a
+   * compact summary, because that panel is often below the fold while the
+   * highway is in the first screen. Measured from the mic: pitch (from the raw
+   * detector frame, so a breath is a gap), level against your own median, and
+   * time. Nothing here rates ease, support or placement.
+   */
+
+  function pzKit() {
+    return (global.VTViz && global.VTViz.scenes && global.VTViz.scenes.pitchKit) || null;
+  }
+  function pzHighway() {
+    try {
+      return typeof global.VTGetPitchViz === "function" ? global.VTGetPitchViz() : null;
+    } catch {
+      return null;
+    }
+  }
+  /** n with the singular or plural word */
+  function pzPl(n, one, many) {
+    return `${n} ${n === 1 ? one : many}`;
+  }
+  function pzSec(s) {
+    return global.VTViz?.fmtSec ? global.VTViz.fmtSec(s) : `${Number(s || 0).toFixed(1)} s`;
+  }
+  function pzMedian(a) {
+    if (!a || !a.length) return null;
+    const s = a.slice().sort((x, y) => x - y);
+    const k = Math.floor(s.length / 2);
+    return s.length % 2 ? s[k] : (s[k - 1] + s[k]) / 2;
+  }
+  function pzHz(midi) {
+    return 440 * Math.pow(2, (midi - 69) / 12);
+  }
+  /** "C#3" for the piano and VT_NOTE_FREQ. */
+  function pzKey(midi) {
+    return global.VTPitchUtils ? global.VTPitchUtils.midiToName(midi) : null;
+  }
+  function pzLevel() {
+    const RL = global.VTFeatures && global.VTFeatures.RelativeLevel;
+    return RL ? new RL() : null;
+  }
+
+  /** Paint this mode's picture on the highway while it is live, and its review after Stop. */
+  function pzOverlay(mode, painter, display) {
+    const pv = pzHighway();
+    const paint = global.VTViz?.scenes?.[painter];
+    if (!pv || typeof pv.setOverlay !== "function" || typeof paint !== "function") return null;
+    pv.setOverlay((ctx, geo, layer) => {
+      if (mode.state && mode.state.viz) paint(ctx, geo, layer, mode.state.viz);
+    }, display);
+    mode._ownsOverlay = true;
+    return pv;
+  }
+
+  /**
+   * Before Start: what the exercise will ask, drawn on the empty highway. The
+   * app resets the highway's lanes right after mounting the mode, so this
+   * waits for that to finish.
+   */
+  function pzIdle(mode, paint, display) {
+    Promise.resolve().then(() => {
+      const pv = pzHighway();
+      if (!pv || pv.running || !mode.hud || typeof pv.setIdle !== "function") return;
+      if (display && pv.setDisplay) pv.setDisplay(display);
+      pv.setIdle(paint);
+      try {
+        pv.redrawIdle?.();
+      } catch {
+        /* ignore */
+      }
+    });
+  }
+
+  /** A reference note on the piano, unless the learner turned Auto piano off. */
+  function pzPlay(midi, sec) {
+    const P = global.VTPiano;
+    const name = pzKey(midi);
+    if (!name || !P || typeof P.playRefPitch !== "function") return;
+    const auto = document.getElementById("chk-auto-piano");
+    if (auto && auto.checked === false) return;
+    try {
+      const p = P.playRefPitch(name, sec || 1.8, true);
+      if (p && p.catch) p.catch(() => {});
+    } catch {
+      /* the piano is optional */
+    }
+  }
+
+  /**
+   * Point the practice engine and the highway at the note this mode waits for.
+   * The app's chord loop and its octave re-lock also set a target, so modes
+   * call this every frame and it only writes when something moved it.
+   */
+  function pzTarget(midi, frame, name) {
+    if (!Number.isFinite(midi) || typeof global.VTSetPracticeTarget !== "function") return;
+    const f = pzHz(midi);
+    const pv = pzHighway();
+    const off = (x) => !x || Math.abs(1200 * Math.log2(x / f)) > 3;
+    if (!frame || off(frame.targetFreq) || off(pv && pv.targetFreq)) global.VTSetPracticeTarget(f, name);
+  }
+
+  /**
+   * Free singing (a siren, fry → /A/) has no note to reach. The engine target
+   * follows your voice instead, so the auto-octave adapter, which moves the
+   * material when you plateau far from the target, has nothing to chase.
+   */
+  function pzFollowVoice(st, frame, now) {
+    if (!frame.voiceFreq || now - (st.followAt || 0) < 250) return;
+    st.followAt = now;
+    pzTarget(69 + 12 * Math.log2(frame.voiceFreq / 440), frame);
+  }
+
+  /**
+   * The app starts an exercise's chord loop on Start when the exercise lists
+   * progressions. A mode that plays its own notes (a scale, hum targets) stops
+   * that loop in the first seconds of a take and after an octave change, then
+   * sounds its own reference. A loop the learner starts later stays theirs.
+   */
+  function pzOwnSound(st, replay) {
+    if (performance.now() > (st.ownSoundUntil || 0)) return;
+    const P = global.VTPiano;
+    if (P && P.loopActive) {
+      try {
+        P.stopAll();
+      } catch {
+        /* ignore */
+      }
+      replay();
+    }
+  }
+
+  /** Scale 1–5 from a measured spread in cents (small is better). */
+  function pzScale(c, cuts) {
+    if (!Number.isFinite(c)) return null;
+    return c <= cuts[0] ? 5 : c <= cuts[1] ? 4 : c <= cuts[2] ? 3 : 2;
+  }
+
+  /* —— Stepping stones: a scale on three roots (s10, s16), hum targets (s7) —— */
+
+  const DEGREE = { 0: "1", 2: "2", 4: "3", 5: "4", 7: "5", 9: "6", 11: "7", 12: "8" };
+
+  const pzStones = {
+    /** The notes of the current pass, shifted to the learner's octave. */
+    seq(st) {
+      const kit = st.kit;
+      const sh = 12 * st.shift;
+      if (st.cfg.kind === "hum") {
+        return st.cfg.notes.map((m) => ({ midi: m + sh, label: kit.noteName(m + sh), short: kit.noteName(m + sh) }));
+      }
+      const root = st.cfg.roots[st.rootIdx % st.cfg.roots.length] + sh;
+      return st.cfg.pattern.map((s) => {
+        const d = DEGREE[s] || String(s);
+        return { midi: root + s, label: `${d} ${kit.noteName(root + s)}`, short: d };
+      });
+    },
+    /** Every note the take can ask for: the Y window stays still across roots. */
+    span(st) {
+      const sh = 12 * st.shift;
+      const all =
+        st.cfg.kind === "hum"
+          ? st.cfg.notes.map((m) => m + sh)
+          : st.cfg.roots.flatMap((r) => st.cfg.pattern.map((s) => r + s + sh));
+      return { min: Math.min(...all), max: Math.max(...all) };
+    },
+    display(st) {
+      const sp = pzStones.span(st);
+      const seen = new Set();
+      const lanes = [];
+      pzStones.seq(st).forEach((n) => {
+        if (seen.has(n.midi)) return;
+        seen.add(n.midi);
+        lanes.push({ midi: n.midi });
+      });
+      return {
+        range: { min: sp.min, max: sp.max, pad: 1.5, minSpan: 10 },
+        lanes
+      };
+    },
+    idle(mode, cfg) {
+      const kit = pzKit();
+      if (!kit) return;
+      const st = { cfg, kit, shift: kit.octaveShift(), rootIdx: 0 };
+      const seq = pzStones.seq(st);
+      const sp = pzStones.span(st);
+      const title =
+        cfg.kind === "hum"
+          ? L("Tararea 10 notas suaves", "Hum 10 soft notes")
+          : L(`Escala en ${kit.noteName(seq[0].midi)}, luego sube de raíz`, `Scale on ${kit.noteName(seq[0].midi)}, then the root moves up`);
+      const line =
+        cfg.kind === "hum"
+          ? L(`Cada nota cuenta al sostenerla ${pzSec(cfg.holdMs / 1000)} cerca del centro`, `Each note counts once held ${pzSec(cfg.holdMs / 1000)} near the centre`)
+          : L("Escucha el paso, cántalo y sostenlo: el siguiente espera a la derecha", "Hear the step, sing it and hold it: the next one waits to the right");
+      pzIdle(mode, kit.idleCard(title, [line], kit.idleStones(seq.map((n) => ({ midi: n.midi, label: n.label, short: n.short })))), {
+        range: { min: sp.min - 1, max: sp.max + 7, pad: 0, minSpan: 12 },
+        lanes: pzStones.display(st).lanes,
+        primaryLane: false,
+        chordLanes: false,
+        chordBadge: false
+      });
+    },
+    start(mode, cfg) {
+      const kit = pzKit();
+      const st = mode.state;
+      if (!kit) return;
+      const now = performance.now();
+      Object.assign(st, {
+        cfg,
+        kit,
+        shift: kit.octaveShift(),
+        rootIdx: 0,
+        i: 0,
+        passes: 0,
+        locked: 0,
+        results: [],
+        level: pzLevel(),
+        gate: new kit.NoteGate({ tol: cfg.tol, holdMs: cfg.holdMs, blankMs: 300, fold: true }),
+        trace: new kit.Trace(8),
+        ownSoundUntil: now + 4000,
+        doneUntil: 0,
+        softUntil: 0,
+        lastPanel: 0
+      });
+      st.viz = {
+        trace: st.trace,
+        steps: [],
+        i: 0,
+        frac: 0,
+        dir: null,
+        head: "",
+        right: "",
+        headColor: null,
+        marks: [],
+        review: false,
+        reviewTitle: "",
+        reviewRows: [],
+        levels: []
+      };
+      pzOverlay(
+        mode,
+        "pitchStones",
+        Object.assign(
+          {
+            game: false,
+            gameFlash: false,
+            trail: "none",
+            band: false,
+            targetTrail: false,
+            chordLanes: false,
+            chordBadge: false,
+            laneCents: cfg.tol,
+            pastSec: 6,
+            nowAt: 0.6,
+            keepOnStop: true,
+            headPx: kit.headPx("chips")
+          },
+          pzStones.display(st)
+        )
+      );
+      pzStones.step(mode, false);
+    },
+    /** Aim at step i: the gate, the engine target, the queue ahead, the chips. */
+    step(mode, play) {
+      const st = mode.state;
+      const seq = pzStones.seq(st);
+      const cur = seq[st.i];
+      st.gate.setTarget(cur.midi, { blankMs: play ? 300 : 0 });
+      st.wantMidi = cur.midi;
+      // The app sounds this note on Start for a mode that owns its target
+      st.wantName = pzKey(cur.midi - 12 * st.shift);
+      st.wantFreq = pzHz(cur.midi);
+      pzTarget(cur.midi, null, st.kit.noteDual(cur.midi));
+      const pv = pzHighway();
+      if (pv && pv.setNoteQueue) pv.setNoteQueue(seq.slice(st.i).map((n) => ({ midi: n.midi, label: n.label, short: n.short })));
+      if (play) pzPlay(cur.midi, st.cfg.refSec);
+      st.viz.steps = seq.map((n, k) => ({ label: n.label, short: n.short, done: k < st.i }));
+      st.viz.i = st.i;
+    },
+    frame(mode, frame) {
+      const st = mode.state;
+      if (!st.viz || !st.kit) return;
+      const kit = st.kit;
+      const now = performance.now();
+      const pv = pzHighway();
+      // The learner's octave moved (auto range or the ± buttons): same step, new pitch
+      const sh = kit.octaveShift();
+      if (sh !== st.shift) {
+        st.shift = sh;
+        if (pv && pv.setDisplay) pv.setDisplay(pzStones.display(st));
+        pzStones.step(mode, false);
+        st.ownSoundUntil = now + 4000;
+      }
+      pzOwnSound(st, () => pzPlay(st.wantMidi, st.cfg.refSec));
+      const rel = st.level ? st.level.feed(frame) : null;
+      const f = frame.rawFreq;
+      st.trace.push(now, f && frame.sounding !== false ? kit.hzToMidi(f) : null, rel, 0);
+      const seq = pzStones.seq(st);
+      const cur = seq[st.i];
+      pzTarget(cur.midi, frame, kit.noteDual(cur.midi));
+      const locked = st.gate.feed(frame, rel);
+      if (pv && pv.setQueueProgress) pv.setQueueProgress(st.gate.frac);
+      st.viz.frac = st.gate.frac;
+      st.viz.dir = st.gate.direction();
+      if (st.cfg.kind === "hum" && rel != null && rel > 6 && st.gate.cents != null) st.softUntil = now + 1800;
+      if (locked) {
+        const res = st.gate.result();
+        st.results.push(Object.assign({ short: cur.short, label: cur.label, root: st.rootIdx }, res));
+        st.viz.marks.push({ t: now, m: cur.midi, res });
+        if (st.viz.marks.length > 40) st.viz.marks.shift();
+        st.locked++;
+        st.i++;
+        if (st.i >= seq.length) {
+          st.passes++;
+          st.doneName = st.cfg.kind === "hum" ? "" : kit.noteName(seq[0].midi);
+          st.doneUntil = now + 2600;
+          st.i = 0;
+          st.rootIdx++;
+          if (st.cfg.kind !== "hum" && pv && pv.setDisplay) pv.setDisplay(pzStones.display(st));
+        }
+        pzStones.step(mode, true);
+        st.lastPanel = 0;
+      }
+      pzStones.words(mode, now);
+      if (now - st.lastPanel > 150) {
+        st.lastPanel = now;
+        pzStones.panel(mode);
+      }
+    },
+    words(mode, now) {
+      const st = mode.state;
+      const kit = st.kit;
+      const v = st.viz;
+      const seq = pzStones.seq(st);
+      const cur = seq[st.i];
+      v.headColor = null;
+      if (st.cfg.kind === "hum") {
+        v.head = L(`Tararea ${kit.noteName(cur.midi)} · ${st.i + 1}/${seq.length}`, `Hum ${kit.noteName(cur.midi)} · ${st.i + 1}/${seq.length}`);
+        v.right = L(`sostenidas ${st.locked}`, `held ${st.locked}`);
+        if (now < st.doneUntil) {
+          v.head = L(`✓ Ronda ${st.passes} completa`, `✓ Round ${st.passes} complete`);
+          v.headColor = global.VTViz?.C?.done;
+        }
+        if (now < st.softUntil) v.right = L("más suave: sin empujar", "softer: no pushing");
+      } else {
+        const root = kit.noteName(seq[0].midi);
+        v.head = L(`Paso ${st.i + 1}/${seq.length} · canta ${kit.noteName(cur.midi)}`, `Step ${st.i + 1}/${seq.length} · sing ${kit.noteName(cur.midi)}`);
+        v.right = L(`raíz ${root} · ${st.passes} hechas`, `root ${root} · ${st.passes} done`);
+        if (now < st.doneUntil) {
+          v.head = L(`✓ Raíz ${st.doneName} completa · ahora ${root}`, `✓ Root ${st.doneName} complete · now ${root}`);
+          v.headColor = global.VTViz?.C?.done;
+        }
+      }
+    },
+    panel(mode) {
+      const st = mode.state;
+      const seq = pzStones.seq(st);
+      const set = (sel, t) => {
+        const e = mode.$(sel);
+        if (e && e.textContent !== t) e.textContent = t;
+      };
+      if (st.cfg.kind === "hum") {
+        set("[data-n]", L(`Objetivo: ${st.kit.noteName(seq[st.i].midi)}`, `Target: ${st.kit.noteName(seq[st.i].midi)}`));
+        set("[data-l]", `${st.locked} / ${seq.length}`);
+      } else {
+        set("[data-step]", `${L("Paso", "Step")} ${st.i + 1} / ${seq.length}`);
+        set("[data-r]", String(st.passes));
+        set("[data-k]", String(st.locked));
+      }
+    },
+    stop(mode) {
+      const st = mode.state;
+      if (!st.viz || !st.kit) return { patches: {}, summary: "" };
+      const kit = st.kit;
+      const pv = pzHighway();
+      if (pv && pv.setNoteQueue) pv.setNoteQueue(null);
+      const res = st.results.filter((r) => r.cents != null);
+      const abs = res.map((r) => Math.abs(r.cents));
+      const medAbs = abs.length ? Math.round(pzMedian(abs)) : null;
+      const medSigned = res.length ? pzMedian(res.map((r) => r.cents)) : null;
+      const rows = [];
+      const hum = st.cfg.kind === "hum";
+      rows.push(
+        hum
+          ? L(`Notas sostenidas: ${st.locked} · rondas completas: ${st.passes}`, `Notes held: ${st.locked} · full rounds: ${st.passes}`)
+          : L(`Raíces completas: ${st.passes} · notas fijadas: ${st.locked}`, `Roots complete: ${st.passes} · notes locked: ${st.locked}`)
+      );
+      if (res.length >= 3) {
+        const lean =
+          Math.abs(medSigned) >= 8
+            ? L(` · tiendes a quedar ${medSigned > 0 ? "alto" : "bajo"} (${kit.fmtCents(medSigned)})`, ` · you lean ${medSigned > 0 ? "sharp" : "flat"} (${kit.fmtCents(medSigned)})`)
+            : "";
+        rows.push(L(`A ${medAbs}¢ del centro, en mediana (aprox.)${lean}`, `${medAbs}¢ from the centre, median (approx.)${lean}`));
+        if (!hum) {
+          const by = {};
+          res.forEach((r) => (by[r.short] = by[r.short] || []).push(r.cents));
+          const far = Object.keys(by)
+            .map((d) => ({ d, c: pzMedian(by[d]) }))
+            .filter((x) => Math.abs(x.c) >= 15)
+            .sort((a, b) => Math.abs(b.c) - Math.abs(a.c))
+            .slice(0, 2);
+          rows.push(
+            far.length
+              ? L(`Más lejos: ${far.map((x) => `grado ${x.d} (${kit.fmtCents(x.c)})`).join(", ")}`, `Furthest: ${far.map((x) => `degree ${x.d} (${kit.fmtCents(x.c)})`).join(", ")}`)
+              : L("Todos los grados quedaron cerca del centro", "Every degree stayed close to the centre")
+          );
+        }
+        const settle = pzMedian(st.results.map((r) => r.settleMs).filter(Number.isFinite));
+        if (settle != null) rows.push(L(`Llegas a cada nota en ~${pzSec(settle / 1000)}`, `You reach each note in ~${pzSec(settle / 1000)}`));
+      } else if (!st.locked) {
+        rows.push(
+          L(
+            `Una nota cuenta al sostenerla ${pzSec(st.cfg.holdMs / 1000)} dentro de ±${st.cfg.tol}¢ (una octava arriba también vale)`,
+            `A note counts once held ${pzSec(st.cfg.holdMs / 1000)} within ±${st.cfg.tol}¢ (an octave up counts too)`
+          )
+        );
+      }
+      const last = st.results.slice(-Math.min(15, pzStones.seq(st).length));
+      st.viz.levels = last.filter((r) => Number.isFinite(r.level)).length >= 3 ? last.map((r) => ({ label: r.short, db: r.level })) : [];
+      st.viz.head = hum
+        ? L(pzPl(st.locked, "nota sostenida", "notas sostenidas"), pzPl(st.locked, "note held", "notes held"))
+        : L(`${pzPl(st.passes, "raíz completa", "raíces completas")} · ${pzPl(st.locked, "nota", "notas")}`, `${pzPl(st.passes, "root", "roots")} complete · ${pzPl(st.locked, "note", "notes")}`);
+      st.viz.headColor = null;
+      st.viz.right = "";
+      st.viz.dir = null;
+      st.viz.reviewTitle = hum ? L("Tus tarareos", "Your hums") : L("Tu escala", "Your scale");
+      st.viz.reviewRows = rows;
+      st.viz.steps = st.viz.steps.map((s) => Object.assign({}, s));
+      st.viz.review = true;
+      const patches = {};
+      if (hum) {
+        if (st.locked > 0) patches.targets = st.locked;
+      } else {
+        if (st.passes > 0) patches.roots = st.passes;
+        if (st.cfg.intonation && abs.length >= 5) patches.intonation = pzScale(medAbs, [10, 18, 28]);
+      }
+      const off = medAbs != null ? L(` · a ${medAbs}¢ del centro (aprox.)`, ` · ${medAbs}¢ from centre (approx.)`) : "";
+      const summary = hum
+        ? L(`${pzPl(st.locked, "nota tarareada", "notas tarareadas")} · ${pzPl(st.passes, "ronda", "rondas")}${off}`, `${pzPl(st.locked, "note", "notes")} hummed · ${pzPl(st.passes, "round", "rounds")}${off}`)
+        : L(`${pzPl(st.passes, "raíz completa", "raíces completas")} · ${pzPl(st.locked, "nota fijada", "notas fijadas")}${off}`, `${pzPl(st.passes, "root", "roots")} complete · ${pzPl(st.locked, "note", "notes")} locked${off}`);
+      return { patches, summary };
+    }
+  };
+
+  /** s1 — fry that clears into /A/: creak on its own floor lane, clear tone at its pitch. */
   Modes.pitchHold = baseMode({
     id: "pitchHold",
     render() {
       const fry = this.profile.fryPhase !== false && this.profile.modeCue !== "hum";
-      this.state.phase = fry ? "fry" : "hold";
+      this.state.phase = fry ? "fry" : "clear";
       this.state.best = 0;
+      this.hud.classList.add("pz");
       this.hud.innerHTML = `
         <div class="mode-title">${fry ? L("Fry → /A/ clara sostenida", "Fry → clear /A/ hold") : L("Sostén y mantén", "Sustain & hold")}</div>
         <div class="mode-phase" data-phase>${fry ? L("Paso 1 · fry suave (buscador)", "Step 1 · gentle fry (finder)") : L("Sostén", "Sustain")}</div>
-        <div class="mode-big" data-h>0.0s</div>
-        <p class="mode-meta">${L("Mejor sostenido: <strong data-best>0s</strong> · registros: <strong data-n>0</strong>", "Best clear hold: <strong data-best>0s</strong> · logs: <strong data-n>0</strong>")}</p>
+        <div class="mode-big" data-h>${pzSec(0)}</div>
+        <p class="mode-meta">${L("Mejor /A/ clara:", "Best clear /A/:")} <strong data-best>${pzSec(0)}</strong> · ${L("sostenidos de 2 s:", "2 s holds:")} <strong data-n>0</strong></p>
         ${
           fry
-            ? `<button type="button" class="btn btn-sm btn-singing" data-clear>${L("Pasar a /A/ clara", "Move to clear /A/")}</button>`
+            ? `<div class="pz-row"><button type="button" class="btn btn-sm btn-singing" data-clear>${L("Pasar a /A/ clara", "Move to clear /A/")}</button></div>`
             : ""
         }
-        <p class="mode-meta muted">${L("Los sostenidos de 2+ s se registran al soltar. No es un juego de notas.", "Holds of 2+ s are logged when you release. Not a note-challenge game.")}</p>
+        <p class="mode-meta muted">${L("Clara = tono estable, medido. El fry no tiene tono estable: se ve como puntos abajo. No es un juego de notas.", "Clear = a steady tone, measured. Fry has no steady pitch: it shows as dots at the bottom. Not a note-challenge game.")}</p>
       `;
-      this.$("[data-clear]")?.addEventListener("click", () => {
-        this.state.phase = "hold";
-        if (this.$("[data-phase]"))
-          this.$("[data-phase]").textContent = L("Paso 2 · /A/ clara sostenida", "Step 2 · clear /A/ hold");
+      this.$("[data-clear]")?.addEventListener("click", () => this._setPhase("clear"));
+      const kit = pzKit();
+      if (kit) {
+        pzIdle(
+          this,
+          kit.idleCard(L("Fry suave → /A/ clara", "Gentle fry → clear /A/"), [
+            L("Empieza en fry y deja que se aclare en /A/", "Start in fry and let it clear into /A/"),
+            L("Verás cuándo el tono se vuelve estable y cuánto dura", "You will see when the tone turns steady and how long it lasts")
+          ]),
+          { primaryLane: false, chordBadge: false }
+        );
+      }
+    },
+    _setPhase(p) {
+      this.state.phase = p;
+      if (this.state.viz) this.state.viz.phase = p;
+      const el = this.$("[data-phase]");
+      if (el) el.textContent = p === "fry" ? L("Paso 1 · fry suave (buscador)", "Step 1 · gentle fry (finder)") : L("Paso 2 · /A/ clara sostenida", "Step 2 · clear /A/ hold");
+    },
+    _range(center) {
+      const st = this.state;
+      st.range = { min: center - 9, max: center + 9 };
+      st.viz.fryM = st.range.min + 1.5;
+      const pv = pzHighway();
+      if (pv && pv.setDisplay) pv.setDisplay({ range: { min: st.range.min, max: st.range.max, pad: 0, minSpan: 14 } });
+    },
+    onStart() {
+      const kit = pzKit();
+      if (!kit) return;
+      const st = this.state;
+      const ref = kit.nameToMidi(this.profile.refPitch || "A2") || 45;
+      Object.assign(st, {
+        kit,
+        trace: new kit.Trace(10),
+        level: pzLevel(),
+        hist: [],
+        cur: null,
+        run: 0,
+        nonClear: 0,
+        clearMs: [],
+        logs: 0,
+        loudUntil: 0,
+        lastPanel: 0,
+        lastComfort: 0
       });
+      st.viz = {
+        trace: st.trace,
+        phase: st.phase,
+        cur: null,
+        holds: [],
+        best: 0,
+        bestHold: null,
+        comfort: null,
+        fryM: 0,
+        clearMarks: [],
+        loud: false,
+        review: false
+      };
+      pzOverlay(this, "pitchHold", {
+        game: false,
+        gameFlash: false,
+        trail: "none",
+        primaryLane: false,
+        chordLanes: false,
+        ghostLanes: false,
+        band: false,
+        targetTrail: false,
+        chordBadge: false,
+        keyboardTarget: false,
+        stats: "nearest",
+        pastSec: 10,
+        nowAt: 0.8,
+        keepOnStop: true,
+        headPx: kit.headPx("hold")
+      });
+      this._range(ref + 12 * kit.octaveShift() + 1);
     },
     onFrame(frame) {
-      if (this.$("[data-h]")) this.$("[data-h]").textContent = `${(frame.holdSec || 0).toFixed(1)}s`;
-      if (this.$("[data-n]")) this.$("[data-n]").textContent = String((frame.holds || []).length);
-      // Only track best during clear hold phase (or always if hum)
-      if (this.state.phase === "hold" || this.profile.modeCue === "hum") {
-        const best = (frame.holds || []).reduce((m, h) => Math.max(m, h.seconds), 0);
-        this.state.best = Math.max(this.state.best || 0, best, frame.holdSec >= 2 ? frame.holdSec : 0);
-        if (this.$("[data-best]"))
-          this.$("[data-best]").textContent = `${(this.state.best || 0).toFixed(1)}s`;
+      const st = this.state;
+      if (!st.viz || !st.kit) return;
+      const kit = st.kit;
+      const now = performance.now();
+      const dt = clamp(frame.dtMs || 16, 0, 100);
+      const rel = st.level ? st.level.feed(frame) : null;
+      const f = frame.rawFreq;
+      const snd = !!frame.sounding;
+      let kind = null;
+      let m = null;
+      if (snd) {
+        if (!f || f < 72) kind = "creak";
+        else {
+          m = kit.hzToMidi(f);
+          st.hist.push(m);
+          if (st.hist.length > 5) st.hist.shift();
+          kind = st.hist.length >= 3 && Math.abs(m - pzMedian(st.hist)) > 0.7 ? "creak" : "clear";
+        }
+      } else st.hist.length = 0;
+      st.trace.push(now, kind === "clear" ? m : null, rel, kind === "creak" ? 2 : 0);
+      pzFollowVoice(st, frame, now);
+
+      if (snd) {
+        if (!st.cur) st.cur = { t0: now, total: 0, creakSec: 0, clearSec: 0, bestClear: 0, hadCreak: false, marked: false, last: now };
+        const c = st.cur;
+        c.total += dt;
+        c.last = now;
+        if (kind === "creak") {
+          c.creakSec += dt / 1000;
+          c.hadCreak = true;
+          st.nonClear += dt;
+          if (st.nonClear > 120) st.run = 0;
+        } else {
+          st.nonClear = 0;
+          st.run += dt;
+          st.clearMs.push(m);
+          if (st.clearMs.length > 900) st.clearMs.shift();
+          if (!c.marked && c.hadCreak && st.run >= 300) {
+            c.marked = true;
+            st.viz.clearMarks.push({ t: now - 300, m });
+          }
+          if (rel != null && rel > 8) st.loudUntil = now + 2000;
+        }
+        c.clearSec = st.run / 1000;
+        c.bestClear = Math.max(c.bestClear, c.clearSec);
+        if (st.phase === "fry" && st.run >= 1000) this._setPhase("clear");
+      } else if (st.cur && now - st.cur.last > 250) this._endHold();
+      st.viz.cur = st.cur ? { clearSec: st.cur.clearSec, creakSec: st.cur.creakSec } : null;
+      st.viz.loud = now < st.loudUntil;
+      // Your comfortable pitch: the middle of your clear tone so far (shown, never scored)
+      if (st.clearMs.length >= 90 && now - st.lastComfort > 500) {
+        st.lastComfort = now;
+        const cm = pzMedian(st.clearMs);
+        st.viz.comfort = cm;
+        if (cm < st.range.min + 4 || cm > st.range.max - 3) this._range(cm + 1);
+      }
+      if (now - st.lastPanel > 120) {
+        st.lastPanel = now;
+        const shown = st.cur ? st.cur.clearSec : st.lastClear || 0;
+        const h = this.$("[data-h]");
+        if (h) h.textContent = pzSec(shown);
+        const b = this.$("[data-best]");
+        if (b) b.textContent = pzSec(st.viz.best);
+        const n = this.$("[data-n]");
+        if (n) n.textContent = String(st.logs);
+      }
+    },
+    _endHold() {
+      const st = this.state;
+      const c = st.cur;
+      st.cur = null;
+      st.run = 0;
+      st.nonClear = 0;
+      if (!c) return;
+      const hold = { total: c.total / 1000, creak: c.creakSec, clear: c.bestClear, best: false };
+      st.lastClear = c.bestClear;
+      if (hold.total < 0.5) return;
+      st.viz.holds.push(hold);
+      if (hold.clear >= 2) st.logs++;
+      if (hold.clear > st.viz.best) {
+        st.viz.best = hold.clear;
+        st.viz.bestHold = hold;
       }
     },
     onStop() {
-      const best = Math.round((this.state.best || 0) * 10) / 10;
+      const st = this.state;
+      if (!st.viz) return { patches: {}, summary: "" };
+      if (st.cur) this._endHold();
+      st.viz.cur = null;
+      const holds = st.viz.holds;
+      const rows = [];
+      if (holds.length) {
+        rows.push(
+          L(
+            `Mejor /A/ clara: ${pzSec(st.viz.best)} · ${st.logs} de ${holds.length} ${holds.length === 1 ? "sostenido" : "sostenidos"} ${st.logs === 1 ? "llegó" : "llegaron"} a 2 s claros`,
+            `Best clear /A/: ${pzSec(st.viz.best)} · ${st.logs} of ${holds.length} holds reached 2 s clear`
+          )
+        );
+        const fry = holds.filter((h) => h.creak > 0.2 && h.clear > 0.3).map((h) => h.creak);
+        if (fry.length) rows.push(L(`El fry duró ~${pzSec(pzMedian(fry))} antes de aclararse`, `The fry lasted ~${pzSec(pzMedian(fry))} before it cleared`));
+        if (st.viz.comfort != null) rows.push(L(`Tu /A/ clara quedó cerca de ${st.kit.noteName(st.viz.comfort)} (aprox.)`, `Your clear /A/ sat near ${st.kit.noteName(st.viz.comfort)} (approx.)`));
+      }
+      st.viz.reviewRows = rows;
+      st.viz.review = true;
+      const best = Math.round((st.viz.best || 0) * 10) / 10;
       const patches = {};
       if (best > 0) patches.maxHold = best;
-      // do not invent targets/holdCount
-      return { patches, summary: `Best hold ${best}s` };
+      return {
+        patches,
+        summary: L(
+          `Mejor /A/ clara: ${pzSec(best)} · ${st.logs} ${st.logs === 1 ? "sostenido" : "sostenidos"} de 2 s o más`,
+          `Best clear /A/: ${pzSec(best)} · ${st.logs} ${st.logs === 1 ? "hold" : "holds"} of 2 s or more`
+        )
+      };
     }
   });
+
+  /* —— Chord tones with the path ahead (s2 landing, s13 arpeggio stones) —— */
+
+  const pzChord = {
+    /** The progression the piano plays, as the events it will fire (from the app's own settings). */
+    sched(st) {
+      const app = (global.VTApp && global.VTApp.getState && global.VTApp.getState()) || {};
+      const id = app.selectedProg || "prog1";
+      const base = (global.VT_PROGRESSIONS || {})[id];
+      if (!base) return null;
+      const shift = st.kit.octaveShift();
+      const prog = typeof global.VTTransposeProgression === "function" ? global.VTTransposeProgression(base, shift) : base;
+      const one = !!document.getElementById("chk-one-note")?.checked;
+      const arp = !!document.getElementById("chk-arpeggio")?.checked;
+      const sus = document.getElementById("chk-sustain")?.checked !== false;
+      const sec = Number(document.getElementById("sustain-sec")?.value || 4);
+      const stepMs = (one || sus ? clamp(sec, 1.5, 5.5) : 2.2) * 1000;
+      const perChord = st.stones || !one;
+      const flat = [];
+      prog.chords.forEach((ch, ci) => {
+        if (perChord) flat.push({ ci, dur: one ? ch.notes.length * Math.max(550, stepMs) : stepMs });
+        else ch.notes.forEach((n) => flat.push({ ci, note: n, dur: Math.max(550, stepMs) }));
+      });
+      return { key: [id, shift, one, arp, stepMs, !!st.stones].join("|"), id, shift, prog, one, arp, flat };
+    },
+    /** Bass notes an octave up: sing the chord where your voice is. */
+    fold(st, midi) {
+      const low = 45 + 12 * st.kit.octaveShift();
+      let m = midi;
+      while (m < low) m += 12;
+      return m;
+    },
+    targets(st, s, e) {
+      const kit = st.kit;
+      const ch = s.prog.chords[e.ci];
+      if (st.stones) {
+        const mm = /^([A-G])([#b]?)(m(?!aj))?/.exec(ch.name || "") || [];
+        const pc = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 }[mm[1]] ?? 0;
+        const acc = mm[2] === "#" ? 1 : mm[2] === "b" ? -1 : 0;
+        const sh = 12 * kit.octaveShift();
+        let root = 36 + ((pc + acc + 12) % 12) + sh;
+        while (root < 43 + sh) root += 12;
+        const third = mm[3] ? 3 : 4;
+        return [
+          { deg: "1", midi: root },
+          { deg: "3", midi: root + third },
+          { deg: "5", midi: root + 7 },
+          { deg: "8", midi: root + 12 }
+        ].map((x) => ({ deg: x.deg, midi: x.midi, label: `${x.deg} ${kit.noteName(x.midi)}` }));
+      }
+      const names = e.note ? [e.note] : ch.notes;
+      const seen = new Set();
+      const out = [];
+      names.forEach((n) => {
+        const f = (global.VT_NOTE_FREQ || {})[n];
+        if (!f) return;
+        const m = Math.round(pzChord.fold(st, kit.hzToMidi(f)));
+        if (seen.has(m)) return;
+        seen.add(m);
+        out.push({ midi: m, label: kit.noteName(m) });
+      });
+      return out.sort((a, b) => a.midi - b.midi);
+    },
+    /** Lanes and the Y window over every note the progression asks for. */
+    layout(mode) {
+      const st = mode.state;
+      const s = st.sched;
+      if (!s) return;
+      const all = new Set();
+      s.flat.forEach((e) => pzChord.targets(st, s, e).forEach((t) => all.add(t.midi)));
+      const ms = [...all].sort((a, b) => a - b);
+      const pv = pzHighway();
+      if (pv && pv.setDisplay && ms.length) {
+        pv.setDisplay({
+          lanes: ms.map((m) => ({ midi: m })),
+          range: { min: ms[0], max: ms[ms.length - 1], pad: 1.5, minSpan: 10 }
+        });
+      }
+    },
+    start(mode) {
+      const kit = pzKit();
+      const st = mode.state;
+      if (!kit) return;
+      const stones = !!mode.profile.autoArpeggio;
+      Object.assign(st, {
+        kit,
+        stones,
+        trace: new kit.Trace(10),
+        level: pzLevel(),
+        sched: null,
+        schedAt: 0,
+        k: -1,
+        cur: null,
+        past: [],
+        seen: 0,
+        landed: 0,
+        missed: {},
+        leaps: 0,
+        leapsLanded: 0,
+        chordsDone: 0,
+        run: 0,
+        passes: 0,
+        intervals: [],
+        gate: new kit.NoteGate(stones ? { tol: 35, holdMs: 400, blankMs: 0, fold: true } : { tol: 50, holdMs: 1000, blankMs: 0, fold: true }),
+        alt: stones ? new kit.NoteGate({ tol: 35, holdMs: 400, blankMs: 0, fold: true }) : null,
+        lastLanes: null,
+        lastPanel: 0
+      });
+      st.viz = {
+        trace: st.trace,
+        events: [],
+        chords: [],
+        links: [],
+        leap: null,
+        dir: null,
+        ring: 0,
+        head: "",
+        right: "",
+        headColor: null,
+        review: false,
+        reviewTitle: "",
+        reviewRows: []
+      };
+      const pv = pzOverlay(mode, "pitchChord", {
+        game: false,
+        gameFlash: false,
+        trail: "none",
+        band: false,
+        targetTrail: false,
+        primaryLane: false,
+        chordLanes: false,
+        chordBadge: false,
+        keyboardTarget: false,
+        foldOctave: true,
+        stats: "nearest",
+        laneCents: stones ? 35 : 50,
+        pastSec: 6,
+        nowAt: 0.42,
+        keepOnStop: true,
+        lanes: [],
+        headPx: kit.headPx("strip")
+      });
+      st.lastLanes = pv ? pv.chordLanes : null;
+      st.sched = pzChord.sched(st);
+      pzChord.layout(mode);
+    },
+    /** The piano moved on: which event of the schedule just started. */
+    observe(mode, now) {
+      const st = mode.state;
+      const pv = pzHighway();
+      if (!pv || pv.chordLanes === st.lastLanes) return;
+      st.lastLanes = pv.chordLanes;
+      const s = st.sched;
+      const lanes = pv.chordLanes || [];
+      if (!s || !lanes.length) return;
+      const label = pv.activeChordName || "";
+      const isOne = lanes.length === 1 && label.indexOf("·") >= 0;
+      const name = label.split("·")[0].trim();
+      if (!st.stones && isOne !== s.one) return; // the app's lock-time preview, not a note
+      const n = s.flat.length;
+      if (st.cur) {
+        const ce = s.flat[st.k];
+        const cname = s.prog.chords[ce.ci].name;
+        // Same event re-announced (lock, or one note of a chord in the stones mode)
+        if (cname === name && (!ce.note || (lanes[0] && lanes[0].name === ce.note)) && now - st.cur.t0 < ce.dur - 250) return;
+      }
+      for (let j = 1; j <= n; j++) {
+        const k = (st.k + j + n) % n;
+        const e = s.flat[k];
+        if (s.prog.chords[e.ci].name !== name) continue;
+        if (e.note && !(lanes[0] && lanes[0].name === e.note)) continue;
+        pzChord.begin(mode, k, now);
+        return;
+      }
+    },
+    begin(mode, k, now) {
+      const st = mode.state;
+      const s = st.sched;
+      if (st.cur) pzChord.finish(mode, st.cur);
+      const e = s.flat[k];
+      const tg = pzChord.targets(st, s, e);
+      const prev = st.cur;
+      st.k = k;
+      st.cur = {
+        k,
+        t0: now,
+        t1: now + e.dur,
+        ci: e.ci,
+        name: s.prog.chords[e.ci].name,
+        targets: tg.map((t) => Object.assign({ lit: false, amber: false, now: true, frac: 0 }, t)),
+        landed: false,
+        si: 0,
+        leap: prev && prev.targets[0] && tg[0] ? tg[0].midi - prev.targets[0].midi : 0
+      };
+      st.seen++;
+      if (Math.abs(st.cur.leap) >= 5) st.leaps++;
+      if (st.stones) {
+        st.gate.setTarget(tg[0].midi);
+        st.alt.setTarget(tg.slice(1).map((t) => t.midi));
+      } else st.gate.setTarget(tg.map((t) => t.midi));
+    },
+    finish(mode, ev) {
+      const st = mode.state;
+      ev.cur = false;
+      ev.t1 = Math.min(ev.t1, performance.now());
+      if (st.stones) {
+        const full = ev.si >= 3;
+        if (full) st.chordsDone++;
+        st.run = full ? st.run + 1 : 0;
+        if (st.sched && st.run >= st.sched.prog.chords.length) {
+          st.passes++;
+          st.run = 0;
+        }
+      } else if (!ev.landed) {
+        ev.targets.forEach((t) => (st.missed[t.label] = (st.missed[t.label] || 0) + 1));
+      }
+      ev.targets.forEach((t) => (t.now = false));
+      st.past.push(ev);
+      if (st.past.length > 8) st.past.shift();
+    },
+    frame(mode, frame) {
+      const st = mode.state;
+      if (!st.viz || !st.kit) return;
+      const kit = st.kit;
+      const now = performance.now();
+      if (now - st.schedAt > 500) {
+        st.schedAt = now;
+        const s = pzChord.sched(st);
+        if (s && (!st.sched || s.key !== st.sched.key)) {
+          st.sched = s;
+          st.k = -1;
+          if (st.cur) pzChord.finish(mode, st.cur);
+          st.cur = null;
+          pzChord.layout(mode);
+        }
+      }
+      pzChord.observe(mode, now);
+      const rel = st.level ? st.level.feed(frame) : null;
+      const f = frame.rawFreq;
+      st.trace.push(now, f && frame.sounding !== false ? kit.hzToMidi(f) : null, rel, 0);
+      const ev = st.cur;
+      st.viz.ring = 0;
+      st.viz.dir = null;
+      if (ev) {
+        if (st.stones) pzChord.stoneFrame(mode, frame, ev, now, rel);
+        else {
+          const locked = ev.landed ? false : st.gate.feed(frame, rel);
+          const hit = st.gate.hit;
+          ev.targets.forEach((t) => (t.frac = !ev.landed && t.midi === hit ? st.gate.frac : 0));
+          if (locked) {
+            ev.landed = true;
+            st.landed++;
+            if (Math.abs(ev.leap) >= 5) st.leapsLanded++;
+            ev.targets.forEach((t) => (t.lit = t.midi === hit));
+          }
+          st.viz.ring = ev.landed ? 0 : st.gate.frac;
+          st.viz.dir = ev.landed ? null : st.gate.direction();
+          const aim = ev.targets.find((t) => t.midi === hit) || ev.targets[0];
+          if (aim) pzTarget(aim.midi, frame);
+        }
+      }
+      pzChord.picture(mode, now);
+      if (now - st.lastPanel > 150) {
+        st.lastPanel = now;
+        const r = mode.$("[data-r]");
+        const val = String(st.stones ? st.passes : st.landed);
+        if (r && r.textContent !== val) r.textContent = val;
+        const s2 = mode.$("[data-st]");
+        const line = st.stones
+          ? L(`Acordes 1-3-5 completos: ${st.chordsDone}`, `Chords with 1-3-5 complete: ${st.chordsDone}`)
+          : L(`Acertadas ${st.landed} de ${st.seen}`, `Landed ${st.landed} of ${st.seen}`);
+        if (s2 && s2.textContent !== line) s2.textContent = line;
+      }
+    },
+    stoneFrame(mode, frame, ev, now, rel) {
+      const st = mode.state;
+      const kit = st.kit;
+      const tg = ev.targets;
+      if (ev.si < tg.length) {
+        const cur = tg[ev.si];
+        const locked = st.gate.feed(frame, rel);
+        tg.forEach((t, i) => {
+          t.now = i === ev.si;
+          t.frac = i === ev.si ? st.gate.frac : 0;
+        });
+        // Another chord tone, held: shown in amber on its stone (the order is 1-3-5-8)
+        if (st.alt.feed(frame, rel)) {
+          const other = tg.find((t) => t.midi === st.alt.hit && !t.lit);
+          if (other) other.amber = true;
+          st.alt.setTarget(tg.filter((t, i) => i > ev.si && !t.amber).map((t) => t.midi));
+        }
+        if (locked) {
+          cur.lit = true;
+          cur.amber = false;
+          cur.t = now;
+          cur.sung = st.gate.midi;
+          const prev = tg[ev.si - 1];
+          if (prev && prev.lit && Number.isFinite(prev.sung) && Number.isFinite(cur.sung)) {
+            const written = cur.midi - prev.midi;
+            const err = kit.foldCents((cur.sung - prev.sung - written) * 100);
+            const name = { 3: L("3m", "m3"), 4: L("3M", "M3"), 5: L("4J", "P4"), 7: L("5J", "P5"), 12: L("8J", "P8") }[written] || `${written}st`;
+            st.intervals.push({ name, err });
+            st.viz.links.push({ ta: prev.t, tb: now, ma: prev.midi, mb: cur.midi, name, err });
+            if (st.viz.links.length > 16) st.viz.links.shift();
+          }
+          ev.si++;
+          if (ev.si >= 3) ev.landed = true;
+          if (ev.si < tg.length) {
+            st.gate.setTarget(tg[ev.si].midi);
+            st.alt.setTarget(tg.filter((t, i) => i > ev.si && !t.amber).map((t) => t.midi));
+          }
+        }
+        st.viz.ring = st.gate.frac;
+        st.viz.dir = st.gate.direction();
+      }
+      const aim = tg[Math.min(ev.si, tg.length - 1)];
+      if (aim) pzTarget(aim.midi, frame);
+    },
+    /** Past, current and the next events by the clock; chord names along the top. */
+    picture(mode, now) {
+      const st = mode.state;
+      const kit = st.kit;
+      const v = st.viz;
+      const s = st.sched;
+      const C = global.VTViz?.C || {};
+      const events = st.past.slice(-4);
+      const future = [];
+      if (st.cur && s) {
+        events.push(st.cur);
+        let t = st.cur.t0 + s.flat[st.k].dur;
+        for (let j = 1; j <= 5; j++) {
+          const k = (st.k + j) % s.flat.length;
+          const e = s.flat[k];
+          const tg = pzChord.targets(st, s, e);
+          future.push({
+            t0: t,
+            t1: t + e.dur,
+            ci: e.ci,
+            name: s.prog.chords[e.ci].name,
+            cur: false,
+            targets: tg.map((x) => Object.assign({ dashed: true, now: false }, x))
+          });
+          t += e.dur;
+        }
+      }
+      const all = events.concat(future);
+      v.events = all.map((e) => (st.stones ? Object.assign({}, e, { stones: e.targets }) : e));
+      // Chord names: consecutive events of one chord merge
+      const chords = [];
+      all.forEach((e) => {
+        const last = chords[chords.length - 1];
+        if (last && last.ci === e.ci && Math.abs(last.t1 - e.t0) < 400) {
+          last.t1 = e.t1;
+          last.cur = last.cur || !!e.cur;
+        } else chords.push({ ci: e.ci, t0: e.t0, t1: e.t1, name: e.name, cur: !!e.cur });
+      });
+      v.chords = chords;
+      v.leap = null;
+      if (st.cur && future[0] && future[0].targets[0] && st.cur.targets[0]) {
+        const d = future[0].targets[0].midi - st.cur.targets[0].midi;
+        if (Math.abs(d) >= 5) v.leap = { t: future[0].t0, m: future[0].targets[0].midi, dir: Math.sign(d), n: Math.abs(d) };
+      }
+      v.headColor = null;
+      if (!st.cur) {
+        v.head = L("Espera al piano: cada acorde marca tus notas", "Wait for the piano: each chord marks your notes");
+        v.right = "";
+        return;
+      }
+      const ev = st.cur;
+      if (st.stones) {
+        const t = ev.targets[Math.min(ev.si, 3)];
+        if (ev.si >= 3) {
+          v.head = L(`✓ ${ev.name}: 1-3-5${ev.si >= 4 ? "-8" : ""}`, `✓ ${ev.name}: 1-3-5${ev.si >= 4 ? "-8" : ""}`);
+          v.headColor = C.done;
+        } else v.head = L(`${ev.name}: canta el ${t.deg} (${kit.noteName(t.midi)})`, `${ev.name}: sing the ${t.deg} (${kit.noteName(t.midi)})`);
+        v.right = L(`vueltas completas ${st.passes}`, `full passes ${st.passes}`);
+      } else {
+        if (ev.landed) {
+          const lit = ev.targets.find((x) => x.lit) || ev.targets[0];
+          v.head = `✓ ${lit ? lit.label : ev.name}`;
+          v.headColor = C.done;
+        } else if (ev.targets.length === 1) v.head = L(`Canta ${ev.targets[0].label} (${ev.name})`, `Sing ${ev.targets[0].label} (${ev.name})`);
+        else v.head = L(`${ev.name}: canta cualquier nota del acorde`, `${ev.name}: sing any chord tone`);
+        v.right = L(`acertadas ${st.landed}`, `landed ${st.landed}`);
+      }
+    },
+    stop(mode) {
+      const st = mode.state;
+      if (!st.viz || !st.kit) return { patches: {}, summary: "" };
+      const kit = st.kit;
+      if (st.cur) pzChord.finish(mode, st.cur);
+      st.cur = null;
+      pzChord.picture(mode, performance.now());
+      const rows = [];
+      const patches = {};
+      let summary;
+      if (st.stones) {
+        rows.push(L(`Acordes con 1-3-5 completo: ${st.chordsDone} de ${st.seen}`, `Chords with 1-3-5 complete: ${st.chordsDone} of ${st.seen}`));
+        rows.push(L(`Vueltas completas (todos los acordes seguidos): ${st.passes}`, `Full passes (every chord in a row): ${st.passes}`));
+        const errs = st.intervals.map((x) => Math.abs(x.err));
+        const med = errs.length ? Math.round(pzMedian(errs)) : null;
+        if (errs.length >= 3) {
+          rows.push(L(`Intervalos: a ${med}¢ de lo escrito, en mediana (aprox.)`, `Intervals: ${med}¢ from the written ones, median (approx.)`));
+          const by = {};
+          st.intervals.forEach((x) => (by[x.name] = by[x.name] || []).push(x.err));
+          const worst = Object.keys(by)
+            .map((k) => ({ k, c: pzMedian(by[k]) }))
+            .sort((a, b) => Math.abs(b.c) - Math.abs(a.c))[0];
+          if (worst && Math.abs(worst.c) >= 15) {
+            rows.push(L(`El que más se aleja: ${worst.k} (${kit.fmtCents(worst.c)})`, `Furthest off: ${worst.k} (${kit.fmtCents(worst.c)})`));
+          }
+        }
+        if (st.passes > 0) patches.progressions = st.passes;
+        if (errs.length >= 4) patches.intervalAccuracy = pzScale(med, [10, 20, 35]);
+        summary = L(
+          `${st.passes} vueltas completas · ${st.chordsDone} acordes 1-3-5${med != null ? ` · intervalos a ${med}¢ (aprox.)` : ""}`,
+          `${st.passes} full passes · ${st.chordsDone} chords 1-3-5${med != null ? ` · intervals ${med}¢ off (approx.)` : ""}`
+        );
+      } else {
+        rows.push(L(`Acertaste ${st.landed} de ${st.seen} notas (±50¢ durante 1 s)`, `You landed ${st.landed} of ${st.seen} notes (±50¢ for 1 s)`));
+        const hard = Object.keys(st.missed)
+          .sort((a, b) => st.missed[b] - st.missed[a])
+          .slice(0, 3);
+        if (hard.length) rows.push(L(`Te costaron más: ${hard.join(", ")}`, `Hardest: ${hard.join(", ")}`));
+        if (st.leaps) rows.push(L(`Saltos grandes (5 semitonos o más): ${st.leapsLanded} de ${st.leaps}`, `Big leaps (5 semitones or more): ${st.leapsLanded} of ${st.leaps}`));
+        if (st.landed > 0) patches.reps = st.landed;
+        summary = L(`${st.landed} de ${st.seen} notas acertadas`, `${st.landed} of ${st.seen} notes landed`);
+      }
+      st.viz.head = st.stones ? L(pzPl(st.passes, "vuelta completa", "vueltas completas"), pzPl(st.passes, "full pass", "full passes")) : L(`Acertaste ${st.landed} de ${st.seen}`, `Landed ${st.landed} of ${st.seen}`);
+      st.viz.right = "";
+      st.viz.reviewTitle = st.stones ? L("Tus arpegios", "Your arpeggios") : L("Tus notas del acorde", "Your chord tones");
+      st.viz.reviewRows = rows;
+      st.viz.review = true;
+      return { patches, summary };
+    }
+  };
 
   Modes.pitchChord = baseMode({
     id: "pitchChord",
     render() {
-      this.state.reps = 0;
-      this.state.inBandMs = 0;
-      const title = this.profile.autoArpeggio
-        ? L("Arpegio · tonos del acorde", "Arpeggio chord tones")
-        : L("Acorde / solfeo", "Chord / solfège");
+      const arp = !!this.profile.autoArpeggio;
+      this.hud.classList.add("pz");
       this.hud.innerHTML = `
-        <div class="mode-title">${title}</div>
+        <div class="mode-title">${arp ? L("Arpegio · tonos del acorde 1-3-5-8", "Arpeggio chord tones 1-3-5-8") : L("Acorde / solfeo · canta sus notas", "Chord / solfège · sing its tones")}</div>
         <div class="mode-big" data-r>0</div>
-        <p class="mode-meta">${L("Rep auto si te quedas ~1,2s en cualquier tono activo del acorde · o +1", "Auto-rep when ~1.2s near any active chord tone · or tap +1")}</p>
-        <button type="button" class="btn btn-sm btn-singing" data-rep>+1</button>
-        <p class="mode-meta" data-st>${L("Canta en los carriles cuando el piano cambie de acorde.", "Sing into the lanes when the piano changes chords.")}</p>
+        <p class="mode-meta" data-st>${arp ? L("Acordes 1-3-5 completos: 0", "Chords with 1-3-5 complete: 0") : L("Acertadas 0 de 0", "Landed 0 of 0")}</p>
+        <p class="mode-meta muted">${
+          arp
+            ? L("Cada acorde: 1 → 3 → 5 → 8, en orden, ~0,4 s cada uno dentro de ±35¢. El número cuenta vueltas completas.", "Each chord: 1 → 3 → 5 → 8, in order, ~0.4 s each within ±35¢. The number counts full passes.")
+            : L("Una nota del acorde cuenta al sostenerla 1 s dentro de ±50¢ (el bajo se canta una octava arriba).", "A chord tone counts once held 1 s within ±50¢ (bass notes are sung an octave up).")
+        }</p>
       `;
-      this.$("[data-rep]")?.addEventListener("click", () => {
-        this.state.reps++;
-        if (this.$("[data-r]")) this.$("[data-r]").textContent = String(this.state.reps);
-      });
+      const kit = pzKit();
+      if (kit) {
+        pzIdle(
+          this,
+          kit.idleCard(
+            arp ? L("Arpegio: 1 → 3 → 5 → 8", "Arpeggio: 1 → 3 → 5 → 8") : L("Canta las notas del acorde", "Sing the chord tones"),
+            [
+              arp ? L("Las piedras de cada acorde esperan a la derecha", "Each chord's stones wait to the right") : L("La nota que toca el piano es tu objetivo", "The note the piano plays is your target"),
+              L("Los saltos grandes se anuncian antes de llegar", "Big leaps are announced before they come")
+            ]
+          ),
+          { chordBadge: false }
+        );
+      }
+    },
+    onStart() {
+      pzChord.start(this);
     },
     onFrame(frame) {
-      // Multi-lane: any active chord tone within ~50¢ counts (not only primary)
-      if (!frame.voiceFreq || !frame.voiced) {
-        this.state.inBandMs = 0;
-        return;
-      }
-      let cents = Infinity;
-      const viz = global.VTPitchVizInstance || null;
-      // Prefer visualizer nearest active lane when available via app singleton
-      const appViz = document.getElementById("pitch-canvas") && global.VTGetPitchViz
-        ? global.VTGetPitchViz()
-        : null;
-      const nearest =
-        appViz?.nearestActiveLane?.(frame.voiceFreq) ||
-        viz?.nearestActiveLane?.(frame.voiceFreq);
-      if (nearest) {
-        cents = Math.abs(nearest.cents);
-      } else if (frame.targetFreq && global.VTPitchUtils) {
-        const vm = global.VTPitchUtils.freqToMidi(frame.voiceFreq);
-        const tm = global.VTPitchUtils.freqToMidi(frame.targetFreq);
-        cents = Math.abs((vm - tm) * 100);
-      }
-      if (cents <= 50) {
-        this.state.inBandMs += frame.dtMs || 16;
-        const fill = Math.min(1, this.state.inBandMs / 1200);
-        if (this.$("[data-st]")) {
-          this.$("[data-st]").textContent = L(
-            `En carril · ${(fill * 100).toFixed(0)}%`,
-            `In-lane · ${(fill * 100).toFixed(0)}%`
-          );
-        }
-        if (this.state.inBandMs >= 1200) {
-          this.state.reps++;
-          this.state.inBandMs = 0;
-          if (this.$("[data-r]")) this.$("[data-r]").textContent = String(this.state.reps);
-          if (this.$("[data-st]")) {
-            this.$("[data-st]").textContent = L("Rep contada ✓", "Rep credited ✓");
-          }
-        }
-      } else this.state.inBandMs = 0;
+      pzChord.frame(this, frame);
     },
     onStop() {
-      return {
-        patches: { reps: this.state.reps, progressions: this.state.reps },
-        summary: `${this.state.reps} reps`
-      };
+      return pzChord.stop(this);
     }
   });
+
+  /* —— Song phrases (s3): each phrase as a bracket with its length —— */
 
   Modes.pitchSong = baseMode({
     id: "pitchSong",
     render() {
       this.state.feel = 0;
       this.state.better = 0;
-      this.state.phraseOk = 0;
-      this.state.inBand = 0;
-      this.state.samples = 0;
+      this.state.goal = 6;
+      this.state.ok = 0;
+      this.hud.classList.add("pz");
+      const chip = (s) =>
+        `<button type="button" class="btn btn-sm pz-chip" data-goal="${s}" aria-pressed="${s === 6}">${s} s</button>`;
       this.hud.innerHTML = `
         <div class="mode-title">${L("Frases de canción · sin respirar a mitad", "Song phrases · no mid-breath")}</div>
-        <div class="controls-row">
+        <div class="pz-row" role="group" aria-label="${L("Meta de frase", "Phrase goal")}">
+          <span class="pz-lab">${L("Meta de frase", "Phrase goal")}</span>${chip(4)}${chip(6)}${chip(8)}
+        </div>
+        <div class="pz-row">
           <button type="button" class="btn btn-sm" data-feel>${L("Canción A +1", "Song A +1")}</button>
           <button type="button" class="btn btn-sm" data-better>${L("Canción B +1", "Song B +1")}</button>
-          <button type="button" class="btn btn-sm btn-primary" data-phrase>${L("Frase completa ✓", "Phrase complete ✓")}</button>
         </div>
-        <p class="mode-meta">${L("A <strong data-f>0</strong>/5 · B <strong data-b>0</strong>/5 · Frases OK <strong data-p>0</strong> · Carril <strong data-lane>0%</strong>", "A <strong data-f>0</strong>/5 · B <strong data-b>0</strong>/5 · Phrases OK <strong data-p>0</strong> · Lane <strong data-lane>0%</strong>")}</p>
-        <p class="mode-meta muted">${L("Respira entre frases · dosifica el aire · no fuerces el volumen.", "Breathe between phrases · dose air · don’t force volume.")}</p>
+        <p class="mode-meta">A <strong data-f>0</strong>/5 · B <strong data-b>0</strong>/5 · ${L("frases a la meta", "phrases at goal")} <strong data-p>0</strong></p>
+        <p class="mode-meta muted">${L("Marca +1 al terminar una estrofa. La línea mide cada frase: su largo, las pausas y si el volumen cae al final.", "Tap +1 when you finish a stanza. The line measures each phrase: its length, the pauses, and whether the level falls at the end.")}</p>
       `;
+      this.hud.querySelectorAll("[data-goal]").forEach((b) =>
+        b.addEventListener("click", () => {
+          this.state.goal = Number(b.getAttribute("data-goal")) || 6;
+          this.hud.querySelectorAll("[data-goal]").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+          if (this.state.viz) this.state.viz.target = this.state.goal;
+        })
+      );
       this.$("[data-feel]")?.addEventListener("click", () => {
         this.state.feel++;
         if (this.$("[data-f]")) this.$("[data-f]").textContent = this.state.feel;
@@ -1410,68 +2447,430 @@
         this.state.better++;
         if (this.$("[data-b]")) this.$("[data-b]").textContent = this.state.better;
       });
-      this.$("[data-phrase]")?.addEventListener("click", () => {
-        this.state.phraseOk++;
-        if (this.$("[data-p]")) this.$("[data-p]").textContent = this.state.phraseOk;
+      const kit = pzKit();
+      if (kit) {
+        pzIdle(
+          this,
+          kit.idleCard(L("Una frase, un aire", "One phrase, one breath"), [
+            L("Cada frase se mide: su largo y la meta que eliges", "Each phrase is measured: its length against the goal you pick"),
+            L("Respirar entre frases es parte de cantar: no resta", "Breathing between phrases is part of singing: it costs nothing")
+          ]),
+          { chordBadge: false }
+        );
+      }
+    },
+    onStart() {
+      const kit = pzKit();
+      if (!kit) return;
+      const st = this.state;
+      Object.assign(st, {
+        kit,
+        trace: new kit.Trace(10),
+        level: pzLevel(),
+        phrases: [],
+        cur: null,
+        sndMs: 0,
+        silMs: 0,
+        lo: null,
+        hi: null,
+        med: [],
+        lastRange: 0,
+        lastLanes: null,
+        lastPanel: 0
+      });
+      st.viz = {
+        trace: st.trace,
+        phrases: st.phrases,
+        cur: null,
+        target: st.goal,
+        head: "",
+        right: "",
+        headColor: null,
+        review: false,
+        reviewTitle: "",
+        reviewRows: []
+      };
+      pzOverlay(this, "pitchSong", {
+        game: false,
+        gameFlash: false,
+        trail: "none",
+        band: false,
+        targetTrail: false,
+        primaryLane: false,
+        chordLanes: false,
+        chordBadge: false,
+        keyboardTarget: false,
+        stats: "nearest",
+        lanes: [],
+        pastSec: 8,
+        nowAt: 0.55,
+        keepOnStop: true,
+        headPx: kit.headPx("phrases")
       });
     },
     onFrame(frame) {
-      if (!frame.voiceFreq) return;
-      this.state.samples++;
-      let cents = Infinity;
-      const near = global.VTGetPitchViz?.()?.nearestActiveLane?.(frame.voiceFreq);
-      if (near) cents = Math.abs(near.cents);
-      else if (frame.targetFreq && global.VTPitchUtils) {
-        cents = Math.abs(
-          (global.VTPitchUtils.freqToMidi(frame.voiceFreq) -
-            global.VTPitchUtils.freqToMidi(frame.targetFreq)) *
-            100
-        );
+      const st = this.state;
+      if (!st.viz || !st.kit) return;
+      const kit = st.kit;
+      const now = performance.now();
+      const dt = clamp(frame.dtMs || 16, 0, 100);
+      const rel = st.level ? st.level.feed(frame) : null;
+      const f = frame.rawFreq;
+      const m = f && frame.sounding !== false ? kit.hzToMidi(f) : null;
+      st.trace.push(now, m, rel, 0);
+      if (m != null) {
+        st.med.push(m);
+        if (st.med.length > 5) st.med.shift();
+        const mm = pzMedian(st.med);
+        st.lo = st.lo == null ? mm : Math.min(st.lo, mm);
+        st.hi = st.hi == null ? mm : Math.max(st.hi, mm);
+      } else st.med.length = 0;
+      if (frame.sounding) {
+        st.sndMs += dt;
+        st.silMs = 0;
+        if (!st.cur && st.sndMs >= 60) st.cur = { t0: now - st.sndMs, last: now, dbs: [] };
+        if (st.cur) {
+          st.cur.last = now;
+          if (rel != null) st.cur.dbs.push(rel);
+        }
+      } else {
+        st.sndMs = 0;
+        if (st.cur) {
+          st.silMs += dt;
+          if (st.silMs >= 350) this._endPhrase();
+        }
       }
-      if (cents <= 50) this.state.inBand++;
-      if (this.$("[data-lane]") && this.state.samples > 5) {
-        this.$("[data-lane]").textContent = `${Math.round(
-          (this.state.inBand / this.state.samples) * 100
-        )}%`;
+      st.viz.cur = st.cur ? { t0: st.cur.t0 } : null;
+      // The harmony under you: the chord the piano plays, folded into singing
+      // range (bass notes an octave up) as quiet lanes; the Y window covers the
+      // progression's folded tones and wherever your voice went
+      if (now - st.lastRange > 250) {
+        st.lastRange = now;
+        const pv = pzHighway();
+        if (pv && pv.chordLanes !== st.lastLanes) {
+          st.lastLanes = pv.chordLanes;
+          const seen = new Set();
+          const lanes = [];
+          (pv.chordLanes || []).forEach((ln) => {
+            const m = Math.round(pzChord.fold(st, ln.midi));
+            if (seen.has(m)) return;
+            seen.add(m);
+            lanes.push({ midi: m });
+          });
+          if (pv.setDisplay) pv.setDisplay({ lanes });
+        }
+        const sch = pzChord.sched(st);
+        const tones = [];
+        if (sch) sch.prog.chords.forEach((c) => c.notes.forEach((n) => {
+          const f = (global.VT_NOTE_FREQ || {})[n];
+          if (f) tones.push(pzChord.fold(st, kit.hzToMidi(f)));
+        }));
+        const lo = Math.min(tones.length ? Math.min(...tones) : 45, st.lo != null ? st.lo - 2 : 99);
+        const hi = Math.max(tones.length ? Math.max(...tones) : 57, st.hi != null ? st.hi + 2 : 0);
+        const r = { min: Math.floor(lo), max: Math.ceil(hi) };
+        if (!st.range || r.min !== st.range.min || r.max !== st.range.max) {
+          st.range = r;
+          if (pv && pv.setDisplay) pv.setDisplay({ range: { min: r.min, max: r.max, pad: 1, minSpan: 12 } });
+        }
+      }
+      const pv = pzHighway();
+      const chord = pv && pv.activeChordName ? pv.activeChordName.split("·")[0].trim() : "";
+      const n = st.phrases.length;
+      if (st.cur) st.viz.head = L(`Frase ${n + 1} · ${pzSec((now - st.cur.t0) / 1000)}`, `Phrase ${n + 1} · ${pzSec((now - st.cur.t0) / 1000)}`);
+      else st.viz.head = n ? L("Respira y empieza la frase siguiente", "Breathe, then start the next phrase") : L("Canta la primera frase", "Sing the first phrase");
+      st.viz.right = (chord ? chord + " · " : "") + L(`meta ${st.goal} s · ${pzPl(st.ok, "completa", "completas")}`, `goal ${st.goal} s · ${st.ok} full`);
+      if (now - st.lastPanel > 200) {
+        st.lastPanel = now;
+        const p = this.$("[data-p]");
+        if (p && p.textContent !== String(st.ok)) p.textContent = String(st.ok);
       }
     },
-    onStop() {
-      const patches = {
-        repsFeel: this.state.feel,
-        repsBetter: this.state.better,
-        phraseBreath: this.state.phraseOk >= 5 ? 5 : this.state.phraseOk >= 3 ? 4 : this.state.phraseOk >= 1 ? 3 : 2
-      };
-      if (this.state.samples > 20) {
-        const pct = Math.round((this.state.inBand / this.state.samples) * 100);
-        patches.accuracy = pct >= 70 ? 5 : pct >= 50 ? 4 : pct >= 30 ? 3 : 2;
+    _endPhrase() {
+      const st = this.state;
+      const c = st.cur;
+      st.cur = null;
+      st.silMs = 0;
+      if (!c) return;
+      const len = (c.last - c.t0) / 1000;
+      if (len < 0.8) return;
+      let shape = "even";
+      if (c.dbs.length >= 12) {
+        const k = Math.floor(c.dbs.length / 3);
+        const d = pzMedian(c.dbs.slice(-k)) - pzMedian(c.dbs.slice(0, k));
+        shape = d <= -4 ? "fades" : d >= 4 ? "grows" : "even";
       }
+      const ok = len >= st.goal - 0.05;
+      if (ok) st.ok++;
+      st.phrases.push({ t0: c.t0, t1: c.last, len, ok, shape });
+      if (st.phrases.length > 60) st.phrases.shift();
+    },
+    onStop() {
+      const st = this.state;
+      const patches = {};
+      if (st.feel > 0) patches.repsFeel = st.feel;
+      if (st.better > 0) patches.repsBetter = st.better;
+      if (!st.viz || !st.kit) return { patches, summary: "" };
+      if (st.cur) this._endPhrase();
+      st.viz.cur = null;
+      const ps = st.phrases;
+      const rows = [];
+      if (ps.length) {
+        rows.push(L(`${pzPl(ps.length, "frase", "frases")} · ${st.ok} ${st.ok === 1 ? "llegó" : "llegaron"} a ${st.goal} s sin respirar`, `${pzPl(ps.length, "phrase", "phrases")} · ${st.ok} reached ${st.goal} s without a breath`));
+        rows.push(L(`La más larga: ${pzSec(Math.max(...ps.map((p) => p.len)))}`, `Longest: ${pzSec(Math.max(...ps.map((p) => p.len)))}`));
+        const fades = ps.filter((p) => p.shape === "fades").length;
+        rows.push(
+          fades >= 2
+            ? L(`${fades === 1 ? "1 frase cae" : fades + " frases caen"} al final (◣): guarda aire para el final`, `${fades === 1 ? "1 phrase fades" : fades + " phrases fade"} at the end (◣): save air for the end`)
+            : L("El volumen se mantuvo hasta el final de las frases", "The level held to the end of your phrases")
+        );
+        const gaps = [];
+        for (let i = 1; i < ps.length; i++) gaps.push((ps[i].t0 - ps[i - 1].t1) / 1000);
+        if (gaps.length) rows.push(L(`Pausas para respirar: ${pzSec(pzMedian(gaps))} de mediana`, `Breathing pauses: ${pzSec(pzMedian(gaps))} median`));
+      } else rows.push(L("Sin frases medidas todavía: canta una frase y respira al final", "No phrases measured yet: sing a phrase and breathe at its end"));
+      st.viz.reviewTitle = L("Tus frases", "Your phrases");
+      st.viz.reviewRows = rows;
+      st.viz.head = L(pzPl(ps.length, "frase", "frases"), pzPl(ps.length, "phrase", "phrases"));
+      st.viz.review = true;
       return {
         patches,
-        summary: `A ${this.state.feel} · B ${this.state.better} · phrases ${this.state.phraseOk}`
+        summary: L(
+          `${st.ok} de ${ps.length} frases a la meta (${st.goal} s) · A ${st.feel} · B ${st.better}`,
+          `${st.ok} of ${ps.length} phrases at goal (${st.goal} s) · A ${st.feel} · B ${st.better}`
+        )
       };
     }
   });
 
+  /* —— Listen, then sing (s9): the app's note challenge, with a listening gate —— */
+
+  const PZ_LISTEN_MS = 1800;
+
   Modes.pitchMatch = baseMode({
     id: "pitchMatch",
     render() {
+      this.hud.classList.add("pz");
       this.hud.innerHTML = `
-        <div class="mode-title">${L("Juego de afinación", "Pitch match game")}</div>
-        <p class="mode-meta">${L("Autopista + puntos + bloquea 8 notas. Quédate en el carril verde.", "Full highway + score + lock 8 notes. Stay in the green lane.")}</p>
-        <p class="mode-meta" data-s>${L("El puntaje se actualiza en el HUD de arriba.", "Score updates in the pitch HUD above.")}</p>
+        <div class="mode-title">${L("Afinar nota · escucha y canta", "Pitch match · listen, then sing")}</div>
+        <div class="mode-big" data-s>0 / 8</div>
+        <p class="mode-meta muted">${L("Escucha la nota entera; luego cántala en /A/ y sostenla ~0,8 s dentro de ±35¢. Una octava arriba o abajo también vale.", "Hear the whole note; then sing it on /A/ and hold it ~0.8 s within ±35¢. An octave up or down counts too.")}</p>
+        <div class="pz-row"><button type="button" class="btn btn-sm btn-singing" data-again hidden>${L("Otra ronda", "Another round")}</button></div>
       `;
+      this.$("[data-again]")?.addEventListener("click", () => this._newRound());
+      const kit = pzKit();
+      if (kit) {
+        pzIdle(
+          this,
+          kit.idleCard(L("Escucha, luego canta", "Listen, then sing"), [
+            L("El piano toca una nota: escúchala entera", "The piano plays a note: hear all of it"),
+            L("Luego cántala y sostenla hasta que se fije · 8 notas", "Then sing it and hold it until it locks · 8 notes")
+          ]),
+          { chordBadge: false }
+        );
+      }
     },
-    onStop(ctx) {
-      const g = (ctx && ctx.pitchGame) || global.VTAppPitchGameSnap || null;
-      if (!g) return { patches: {}, summary: "Pitch match session" };
-      const patches = { matches: g.challengeCleared || 0 };
-      if (g.totalSamples > 30) {
-        patches.accuracy = g.accuracyPct >= 80 ? 5 : g.accuracyPct >= 60 ? 4 : g.accuracyPct >= 40 ? 3 : 2;
-        patches.precision = g.maxCombo >= 40 ? 5 : g.maxCombo >= 20 ? 4 : g.maxCombo >= 10 ? 3 : 2;
+    onStart() {
+      const kit = pzKit();
+      if (!kit) return;
+      const st = this.state;
+      Object.assign(st, {
+        kit,
+        trace: new kit.Trace(6),
+        level: pzLevel(),
+        gate: new kit.NoteGate({ tol: 35, holdMs: 1e9, blankMs: 0, fold: true }),
+        notes: null,
+        idx: 0,
+        shift: kit.octaveShift(),
+        results: [],
+        locks: 0,
+        listenFrom: null,
+        singFrom: null,
+        lastPanel: 0
+      });
+      st.viz = {
+        trace: st.trace,
+        slots: [],
+        idx: 0,
+        phase: "listen",
+        listenFrac: 0,
+        lock: 0,
+        dir: null,
+        noteLabel: "—",
+        targetMidi: NaN,
+        review: false,
+        summary: []
+      };
+      pzOverlay(this, "pitchMatch", {
+        game: true,
+        gameFlash: false,
+        gameHold: true,
+        foldOctave: true,
+        laneCents: 35,
+        trail: "none",
+        band: false,
+        targetTrail: false,
+        chordLanes: false,
+        chordBadge: false,
+        pastSec: 5,
+        nowAt: 0.62,
+        keepOnStop: true,
+        headPx: kit.headPx("chips")
+      });
+    },
+    _midi(i) {
+      const st = this.state;
+      const f = (global.VT_NOTE_FREQ || {})[st.notes[i]];
+      return f ? st.kit.hzToMidi(f) + 12 * st.shift : NaN;
+    },
+    _aim(now) {
+      const st = this.state;
+      const pv = pzHighway();
+      const m = this._midi(st.idx);
+      st.gate.setTarget(m);
+      st.viz.targetMidi = m;
+      st.viz.noteLabel = st.kit.noteName(m);
+      st.viz.idx = st.idx;
+      st.viz.phase = "listen";
+      st.listenFrom = now;
+      if (pv && pv.setDisplay) pv.setDisplay({ gameHold: true });
+      if (pv && pv.setNoteQueue) {
+        pv.setNoteQueue(st.notes.slice(st.idx).map((n, j) => {
+          const mm = this._midi(st.idx + j);
+          return { midi: mm, label: st.kit.noteName(mm) };
+        }));
+      }
+    },
+    _newRound() {
+      const pv = pzHighway();
+      const game = pv && pv.game;
+      if (!game || !this.state.viz || this.state.viz.review) return;
+      const first = game.startChallenge(8);
+      if (typeof global.VTLockHighwayNotes === "function") global.VTLockHighwayNotes(game.challengeNotes);
+      const nm = typeof global.VTShiftNoteName === "function" ? global.VTShiftNoteName(first, this.state.kit.octaveShift()) : first;
+      const f = (global.VT_NOTE_FREQ || {})[nm];
+      if (f) {
+        global.VTSetPracticeTarget?.(f);
+        pzPlay(this.state.kit.hzToMidi(f), 4);
+      }
+      const b = this.$("[data-again]");
+      if (b) b.hidden = true;
+    },
+    onFrame(frame) {
+      const st = this.state;
+      if (!st.viz || !st.kit) return;
+      const kit = st.kit;
+      const now = performance.now();
+      const pv = pzHighway();
+      const game = pv && pv.game;
+      const rel = st.level ? st.level.feed(frame) : null;
+      const f = frame.rawFreq;
+      st.trace.push(now, f && frame.sounding !== false ? kit.hzToMidi(f) : null, rel, 0);
+      if (!game || !game.challengeNotes || !game.challengeNotes.length) {
+        // Challenge turned off: free matching against the reference lane
+        if (pv && pv.display && pv.display.gameHold) pv.setDisplay({ gameHold: false });
+        st.viz.phase = "sing";
+        st.viz.noteLabel = pv && pv.targetFreq ? kit.noteName(kit.hzToMidi(pv.targetFreq)) : "—";
+        st.viz.lock = game ? game.lockProgress || 0 : 0;
+        return;
+      }
+      // A new round (the app's, or "Another round")
+      if (game.challengeNotes !== st.notes) {
+        st.notes = game.challengeNotes;
+        st.idx = game.challengeIndex;
+        st.viz.slots = st.notes.map((n, i) => ({ label: kit.noteName(this._midi(i)), res: null, state: i < st.idx ? "done" : i === st.idx ? "cur" : "next" }));
+        this._aim(now);
+      }
+      const sh = kit.octaveShift();
+      if (sh !== st.shift) {
+        st.shift = sh;
+        st.viz.slots.forEach((s, i) => (s.label = kit.noteName(this._midi(i))));
+        if (st.idx < st.notes.length) this._aim(now);
+      }
+      // Locked by the game (800 ms inside ±35¢): the note's result
+      while (game.challengeIndex > st.idx && st.idx < st.notes.length) {
+        const res = st.gate.result();
+        res.settleMs = st.singFrom != null && st.gate.firstIn != null ? st.gate.firstIn : null;
+        const slot = st.viz.slots[st.idx];
+        if (slot) {
+          slot.state = "done";
+          slot.res = res;
+        }
+        if (res.cents != null) st.results.push(res);
+        st.locks++;
+        st.idx++;
+        if (st.viz.slots[st.idx]) st.viz.slots[st.idx].state = "cur";
+        if (st.idx < st.notes.length) this._aim(now);
+      }
+      if (st.idx >= st.notes.length) {
+        if (st.viz.phase !== "done") {
+          st.viz.phase = "done";
+          if (pv && pv.setNoteQueue) pv.setNoteQueue(null);
+          const b = this.$("[data-again]");
+          if (b) b.hidden = false;
+        }
+      } else if (st.viz.phase === "listen") {
+        st.viz.listenFrac = (now - st.listenFrom) / PZ_LISTEN_MS;
+        if (now - st.listenFrom >= PZ_LISTEN_MS) {
+          st.viz.phase = "sing";
+          st.singFrom = now;
+          if (pv && pv.setDisplay) pv.setDisplay({ gameHold: false });
+        }
+      } else {
+        st.gate.feed(frame, rel);
+        st.viz.dir = st.gate.direction();
+        const m = this._midi(st.idx);
+        pzTarget(m, frame);
+      }
+      st.viz.lock = game.lockProgress || 0;
+      if (pv && pv.setQueueProgress) pv.setQueueProgress(st.viz.phase === "sing" ? st.viz.lock : 0);
+      // Throttled, but a new lock shows at once (the canvas already counts it)
+      if (now - st.lastPanel > 150 || st.panelIdx !== st.idx) {
+        st.lastPanel = now;
+        st.panelIdx = st.idx;
+        const s = this.$("[data-s]");
+        const t = `${Math.min(st.idx, st.notes.length)} / ${st.notes.length}`;
+        if (s && s.textContent !== t) s.textContent = t;
+      }
+    },
+    onStop() {
+      const st = this.state;
+      if (!st.viz || !st.kit) return { patches: {}, summary: "" };
+      const kit = st.kit;
+      const pv = pzHighway();
+      if (pv && pv.setNoteQueue) pv.setNoteQueue(null);
+      const res = st.results;
+      const abs = res.map((r) => Math.abs(r.cents));
+      const medAbs = abs.length ? Math.round(pzMedian(abs)) : null;
+      const sds = res.map((r) => r.sd).filter(Number.isFinite);
+      const sd = sds.length ? Math.round(pzMedian(sds)) : null;
+      const rows = [];
+      if (res.length) {
+        const signed = pzMedian(res.map((r) => r.cents));
+        rows.push(L(`Afinación: a ${medAbs}¢ del centro, en mediana (aprox.)`, `Accuracy: ${medAbs}¢ from the centre, median (approx.)`));
+        rows.push(
+          Math.abs(signed) >= 8
+            ? L(`Tiendes a quedar ${signed > 0 ? "alto" : "bajo"} (${kit.fmtCents(signed)})`, `You lean ${signed > 0 ? "sharp" : "flat"} (${kit.fmtCents(signed)})`)
+            : L("Sin tendencia alta ni baja", "No sharp or flat lean")
+        );
+        if (sd != null) rows.push(L(`Estabilidad: ±${sd}¢ mientras sostienes`, `Stability: ±${sd}¢ while you hold`));
+        const settle = pzMedian(res.map((r) => r.settleMs).filter(Number.isFinite));
+        if (settle != null) rows.push(L(`Llegas a la nota en ~${pzSec(settle / 1000)} tras escuchar`, `You reach the note in ~${pzSec(settle / 1000)} after listening`));
+      } else {
+        rows.push(L("Ninguna nota fijada todavía: escucha la nota entera y luego cántala suave", "No note locked yet: hear the whole note, then sing it softly"));
+      }
+      st.viz.summary = rows;
+      st.viz.review = true;
+      const patches = {};
+      if (st.locks > 0) patches.matches = st.locks;
+      if (res.length >= 3) {
+        patches.accuracy = pzScale(medAbs, [8, 15, 25]);
+        if (sd != null) patches.precision = pzScale(sd, [8, 14, 22]);
       }
       return {
         patches,
-        summary: `Score ${g.score} · ${g.accuracyPct}% in-lane · ${g.challengeCleared} locks`
+        summary: L(
+          `${st.locks} notas fijadas${medAbs != null ? ` · a ${medAbs}¢ del centro` : ""}${sd != null ? ` · ±${sd}¢` : ""} (aprox.)`,
+          `${st.locks} notes locked${medAbs != null ? ` · ${medAbs}¢ from centre` : ""}${sd != null ? ` · ±${sd}¢` : ""} (approx.)`
+        )
       };
     }
   });
@@ -1540,120 +2939,363 @@
     }
   });
 
-  /** s7 humming — soft multi-target, not fry hold clone */
+  /** s7 humming — ten soft targets as stepping stones (not a fry-hold clone) */
+  const PZ_HUM = {
+    kind: "hum",
+    notes: [48, 50, 52, 53, 55, 57, 55, 52, 48, 50], // C3 D3 E3 F3 G3 A3 G3 E3 C3 D3
+    tol: 45,
+    holdMs: 1500,
+    refSec: 2.2
+  };
+
   Modes.humTargets = baseMode({
     id: "humTargets",
     render() {
-      this.state.notes = ["C3", "D3", "E3", "F3", "G3", "A3", "G3", "E3", "C3", "D3"];
-      this.state.i = 0;
-      this.state.locked = 0;
-      this.state.inBand = 0;
+      const kit = pzKit();
+      const first = kit ? kit.noteName(PZ_HUM.notes[0] + 12 * kit.octaveShift()) : "C3";
+      this.state.notes = PZ_HUM.notes.slice();
+      this.hud.classList.add("pz");
       this.hud.innerHTML = `
         <div class="mode-title">${L("Tarareo · objetivos suaves", "Humming · soft targets")}</div>
-        <div class="mode-phase" data-n>${L("Objetivo: ", "Target: ")}${this.state.notes[0]}</div>
-        <div class="mode-big" data-l>0 / 10</div>
-        <p class="mode-meta">${L("Mantén el tarareo cerca del objetivo ~0,9s para avanzar. Siente el zumbido en los labios.", "Hold hum near target ~0.9s to advance. Feel lip buzz.")}</p>
+        <div class="mode-phase" data-n>${L("Objetivo: ", "Target: ")}${first}</div>
+        <div class="mode-big" data-l>0 / ${PZ_HUM.notes.length}</div>
+        <p class="mode-meta muted">${L("Sostén cada nota ~1,5 s dentro de ±45¢ para pasar a la siguiente. Tararea suave: el zumbido en los labios lo sientes tú, el micrófono no lo mide.", "Hold each note ~1.5 s within ±45¢ to move on. Hum softly: you feel the lip buzz, the mic does not measure it.")}</p>
       `;
-      // Lock highway to full note set so steps don't re-scale the Y-axis
-      if (typeof global.VTLockHighwayNotes === "function") {
-        global.VTLockHighwayNotes(this.state.notes);
-      }
-      // set first target
-      if (global.VT_NOTE_FREQ && global.VT_NOTE_FREQ[this.state.notes[0]]) {
-        // app practice engine target set via onFrame consumer — set on window for app
-        this.state.wantFreq = global.VT_NOTE_FREQ[this.state.notes[0]];
-      }
+      pzStones.idle(this, PZ_HUM);
     },
     onStart() {
-      if (typeof global.VTLockHighwayNotes === "function") {
-        global.VTLockHighwayNotes(this.state.notes);
-      }
-      this._pushTarget();
-    },
-    _pushTarget() {
-      const n = this.state.notes[this.state.i];
-      this.state.wantFreq = global.VT_NOTE_FREQ?.[n];
-      if (typeof global.VTSetPracticeTarget === "function" && this.state.wantFreq) {
-        global.VTSetPracticeTarget(this.state.wantFreq, n);
-      }
-      // Audible reference each step (soft sustain) — default sound for this mode
-      if (this.state.wantFreq && global.VTPiano?.playRefPitch) {
-        global.VTPiano.playRefPitch(n, 2.2, true).catch(() => {});
-      }
-      if (this.$("[data-n]")) {
-        this.$("[data-n]").textContent = L(`Objetivo: ${n}`, `Target: ${n}`);
-      }
+      pzStones.start(this, PZ_HUM);
     },
     onFrame(frame) {
-      if (this.state.wantFreq && frame.voiceFreq && global.VTPitchUtils) {
-        const cents = Math.abs(
-          (global.VTPitchUtils.freqToMidi(frame.voiceFreq) -
-            global.VTPitchUtils.freqToMidi(this.state.wantFreq)) *
-            100
-        );
-        if (cents <= 45 && frame.voiced) {
-          this.state.inBand += frame.dtMs || 16;
-          if (this.state.inBand >= 900) {
-            this.state.locked++;
-            this.state.inBand = 0;
-            this.state.i = Math.min(this.state.i + 1, this.state.notes.length - 1);
-            if (this.state.locked < 10) this._pushTarget();
-            if (this.$("[data-l]")) this.$("[data-l]").textContent = `${this.state.locked} / 10`;
-          }
-        } else this.state.inBand = 0;
-      }
+      pzStones.frame(this, frame);
     },
     onStop() {
-      const n = this.state.locked;
-      return {
-        patches: n > 0 ? { targets: n, buzz: n >= 6 ? 4 : 3 } : {},
-        summary: `${n} hum targets held`
-      };
+      return pzStones.stop(this);
     }
   });
+
+  /* —— Sirens (s5): the span you actually covered, and where the voice jumped —— */
 
   Modes.sirenRange = baseMode({
     id: "sirenRange",
     render() {
-      this.state.minM = 999;
-      this.state.maxM = 0;
-      this.state.sirens = 0;
-      this.state.voicedLong = 0;
+      this.hud.classList.add("pz");
       this.hud.innerHTML = `
-        <div class="mode-title">${L("Sirena · cuerda de rango", "Siren range rope")}</div>
+        <div class="mode-title">${L("Sirena · tu rango", "Siren · your range")}</div>
         <div class="mode-big" data-r>— st</div>
-        <p class="mode-meta">Sirens counted: <strong data-s>0</strong> (long glides ≥1.5s)</p>
-        <p class="mode-meta">Not a single-note lock game — ride the rope smooth.</p>
+        <p class="mode-meta"><span data-ext>—</span></p>
+        <p class="mode-meta">${L("Sirenas", "Sirens")}: <strong data-s>0</strong>/8 · ${L("saltos", "jumps")}: <strong data-k>0</strong></p>
+        <p class="mode-meta muted">${L("Una sirena cuenta al subir 5 semitonos o más y volver a bajar. No hay nota que acertar: la línea muestra hasta dónde llegas.", "A siren counts when you rise 5 semitones or more and come back down. There is no note to hit: the line shows how far you go.")}</p>
       `;
+      const kit = pzKit();
+      if (kit) {
+        const arc = (ctx, geo) => {
+          // An example siren: low, up, back down (dashed, not a target)
+          const x0 = geo.plotLeft + 30;
+          const x1 = geo.laneRight - 30;
+          ctx.save();
+          ctx.setLineDash([6, 6]);
+          ctx.strokeStyle = "rgba(191, 230, 255, 0.45)";
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          for (let i = 0; i <= 60; i++) {
+            const u = i / 60;
+            const m = 47 + 16 * Math.sin(Math.PI * u);
+            const x = x0 + (x1 - x0) * u;
+            const y = geo.midiToY(m);
+            if (i) ctx.lineTo(x, y);
+            else ctx.moveTo(x, y);
+          }
+          ctx.stroke();
+          ctx.restore();
+        };
+        pzIdle(
+          this,
+          kit.idleCard(L("Desliza de grave a agudo y vuelve", "Glide low to high and back"), [
+            L("Verás hasta dónde llegas y dónde salta la voz", "You will see how far you reach and where the voice jumps"),
+            L("Por encima de ~Sol4 el micrófono solo estima (aprox.)", "Above ~G4 the mic only estimates (approx.)")
+          ], arc),
+          { range: { min: 43, max: 69, pad: 0, minSpan: 14 }, lanes: this._lanes(43, 69), primaryLane: false, chordBadge: false }
+        );
+      }
+    },
+    /** Reference lanes on every C and G: a map of the range, not targets. */
+    _lanes(lo, hi) {
+      const out = [];
+      for (let m = Math.ceil(lo); m <= hi; m++) if (m % 12 === 0 || m % 12 === 7) out.push({ midi: m });
+      return out;
+    },
+    onStart() {
+      const kit = pzKit();
+      if (!kit) return;
+      const st = this.state;
+      Object.assign(st, {
+        kit,
+        trace: new kit.Trace(12),
+        level: pzLevel(),
+        med: [],
+        prevM: null,
+        prevAt: 0,
+        lastPitchAt: 0,
+        runFrom: null,
+        prevQ: 0,
+        gapStart: null,
+        lastBreakAt: 0,
+        lastCeilAt: 0,
+        s: null,
+        dir: 0,
+        ext: null,
+        turn: null,
+        legApprox: false,
+        pend: null,
+        runBreaks: [],
+        runLo: null,
+        runHi: null,
+        runApprox: false,
+        range: { min: 43, max: 69 },
+        lastPanel: 0
+      });
+      st.viz = {
+        trace: st.trace,
+        breaks: [],
+        ceil: [],
+        sirens: [],
+        run: null,
+        goal: 8,
+        lastSirenAt: 0,
+        review: false,
+        extent: null
+      };
+      pzOverlay(this, "pitchSiren", {
+        game: false,
+        gameFlash: false,
+        trail: "none",
+        primaryLane: false,
+        chordLanes: false,
+        targetTrail: false,
+        band: false,
+        chordBadge: false,
+        keyboardTarget: false,
+        stats: "nearest",
+        pastSec: 9,
+        nowAt: 0.72,
+        keepOnStop: true,
+        lanes: this._lanes(43, 69),
+        range: { min: 43, max: 69, pad: 0, minSpan: 14 },
+        headPx: kit.headPx("header")
+      });
     },
     onFrame(frame) {
-      if (frame.voiceFreq && global.VTPitchUtils) {
-        const m = global.VTPitchUtils.freqToMidi(frame.voiceFreq);
-        this.state.minM = Math.min(this.state.minM, m);
-        this.state.maxM = Math.max(this.state.maxM, m);
-        const span = this.state.maxM - this.state.minM;
-        if (this.$("[data-r]")) this.$("[data-r]").textContent = `${span.toFixed(1)} st`;
-      }
-      if (frame.voiced) {
-        this.state.voicedLong += 16;
-        if (this.state.voicedLong >= 1500 && !this.state.counted) {
-          this.state.sirens++;
-          this.state.counted = true;
-          if (this.$("[data-s]")) this.$("[data-s]").textContent = String(this.state.sirens);
+      const st = this.state;
+      if (!st.viz || !st.kit) return;
+      const kit = st.kit;
+      const now = performance.now();
+      const dt = clamp(frame.dtMs || 16, 0, 100);
+      const rel = st.level ? st.level.feed(frame) : null;
+      const f = frame.rawFreq;
+      const snd = !!frame.sounding || !!f;
+      let m = null;
+      let q = 0;
+      if (f) {
+        let raw = kit.hzToMidi(f);
+        // Above ~400 Hz the detector reads an octave low: a sudden octave drop
+        // in the middle of a glide is folded back up and marked "aprox."
+        const p = st.prevM;
+        const gap = now - st.prevAt;
+        if (p != null && gap < 400 && p >= 60) {
+          // The glide can move ~10 semitones a second between two frames
+          const tol = 3 + (10 * gap) / 1000;
+          if (p - raw > 12 - tol && Math.abs(raw + 12 - p) < tol) {
+            raw += 12;
+            q = 1;
+          }
         }
+        const unfoldFlip = q !== st.prevQ;
+        st.prevQ = q;
+        st.med.push(raw);
+        if (st.med.length > 3) st.med.shift();
+        m = st.med.length === 3 ? pzMedian(st.med) : raw;
+        if (m > 67) q = 1;
+        if (st.gapStart != null || st.runFrom == null) st.runFrom = now;
+        if (p != null && Math.max(m, p) <= 67 && now - st.lastBreakAt > 400) {
+          // A jump: the line leapt in one step, in the middle of a glide (median
+          // of three frames, so one stray frame is not a jump; not at an onset)
+          if (now - st.prevAt < 80 && now - st.runFrom > 150 && !unfoldFlip && Math.abs(m - p) > 2.5) this._break(now, (m + p) / 2, "jump");
+          // A cut: the voice dropped out for a moment mid-glide and came back near the same note
+          else if (st.gapStart != null && now - st.gapStart >= 60 && now - st.gapStart <= 300 && Math.abs(m - p) < 4) this._break(st.gapStart, p, "cut");
+        }
+        st.gapStart = null;
+        st.prevM = m;
+        st.prevAt = now;
+        st.lastPitchAt = now;
+        const ext = st.viz.extent;
+        if (!ext) st.viz.extent = { lo: m, hi: m, approx: q === 1 };
+        else {
+          if (m < ext.lo) ext.lo = m;
+          if (m > ext.hi) {
+            ext.hi = m;
+            if (q === 1) ext.approx = true;
+          }
+        }
+        st.runLo = st.runLo == null ? m : Math.min(st.runLo, m);
+        st.runHi = st.runHi == null ? m : Math.max(st.runHi, m);
+        if (q === 1) st.runApprox = st.legApprox = true;
+        this._legs(m, dt, now);
       } else {
-        this.state.voicedLong = 0;
-        this.state.counted = false;
+        st.med.length = 0;
+        if (st.prevM != null && st.gapStart == null) st.gapStart = now;
+        // Sound, but no pitch, right after a high note: above what the mic can measure
+        if (snd && st.prevM != null && st.prevM >= 64 && now - st.lastPitchAt > 150 && now - st.lastPitchAt < 1500 && now - st.lastCeilAt > 1000) {
+          st.lastCeilAt = now;
+          st.viz.ceil.push(now);
+          if (st.viz.ceil.length > 30) st.viz.ceil.shift();
+          if (st.viz.extent) st.viz.extent.approx = true;
+          st.runApprox = st.legApprox = true;
+        }
+        // A breath ends the glide: the leg in progress counts, then a new siren starts
+        if (st.turn != null && now - st.lastPitchAt > 400) this._endGlide(now);
+      }
+      st.trace.push(now, m, rel, q);
+      pzFollowVoice(st, frame, now);
+      st.viz.run = st.runLo != null ? { lo: st.runLo, hi: st.runHi, approx: st.runApprox } : null;
+      if (now - st.lastPanel > 150) {
+        st.lastPanel = now;
+        this._panel();
+        this._fit();
       }
     },
+    _break(t, m, kind) {
+      const st = this.state;
+      st.lastBreakAt = performance.now();
+      st.viz.breaks.push({ t, m, kind });
+      if (st.viz.breaks.length > 40) st.viz.breaks.shift();
+      st.runBreaks.push(m);
+    },
+    /** Turning points on the smoothed line, with 2 semitones of hysteresis. */
+    _legs(m, dt, now) {
+      const st = this.state;
+      st.s = st.s == null ? m : st.s + (1 - Math.exp(-dt / 150)) * (m - st.s);
+      const s = st.s;
+      if (st.turn == null) {
+        st.turn = s;
+        st.ext = s;
+        st.dir = 0;
+        return;
+      }
+      if (st.dir === 0) {
+        if (s - st.turn > 2) st.dir = 1;
+        else if (st.turn - s > 2) st.dir = -1;
+        st.ext = s;
+        return;
+      }
+      if (st.dir === 1) {
+        if (s > st.ext) st.ext = s;
+        else if (st.ext - s > 2) {
+          this._leg(st.turn, st.ext, now);
+          st.turn = st.ext;
+          st.dir = -1;
+          st.ext = s;
+        }
+      } else if (s < st.ext) st.ext = s;
+      else if (s - st.ext > 2) {
+        this._leg(st.turn, st.ext, now);
+        st.turn = st.ext;
+        st.dir = 1;
+        st.ext = s;
+      }
+    },
+    /** Two opposite legs of 5 semitones or more, one after the other, make a siren. */
+    _leg(from, to, now) {
+      const st = this.state;
+      const span = Math.abs(to - from);
+      const approx = st.legApprox;
+      st.legApprox = false;
+      if (span < 5) {
+        st.pend = null;
+        return;
+      }
+      const leg = { lo: Math.min(from, to), hi: Math.max(from, to), up: to > from, approx };
+      if (st.pend && st.pend.up !== leg.up) {
+        st.viz.sirens.push({
+          lo: Math.min(st.pend.lo, leg.lo),
+          hi: Math.max(st.pend.hi, leg.hi),
+          approx: st.pend.approx || leg.approx,
+          breaks: st.runBreaks.slice()
+        });
+        st.viz.lastSirenAt = now;
+        st.pend = null;
+        st.runBreaks = [];
+        st.runLo = st.runHi = null;
+        st.runApprox = false;
+      } else st.pend = leg;
+    },
+    _endGlide(now) {
+      const st = this.state;
+      if (st.dir !== 0 && st.turn != null && st.ext != null) this._leg(st.turn, st.ext, now);
+      st.dir = 0;
+      st.s = null;
+      st.turn = null;
+      st.ext = null;
+      st.pend = null;
+      st.runLo = st.runHi = null;
+      st.runApprox = false;
+      st.runBreaks = [];
+    },
+    /** The Y window grows to whatever you reach (never shrinks during a take). */
+    _fit() {
+      const st = this.state;
+      const ext = st.viz.extent;
+      if (!ext) return;
+      // Grow in steps with headroom, so the picture rescales rarely (each
+      // rescale moves everything drawn so far)
+      let lo = st.range.min;
+      let hi = st.range.max;
+      if (ext.lo - 2 < lo) lo = Math.max(34, Math.floor(ext.lo - 5));
+      if (ext.hi + 2 > hi) hi = Math.min(79, Math.ceil(ext.hi + 5));
+      if (lo === st.range.min && hi === st.range.max) return;
+      st.range = { min: lo, max: hi };
+      const pv = pzHighway();
+      if (pv && pv.setDisplay) pv.setDisplay({ range: { min: lo, max: hi, pad: 0, minSpan: 14 }, lanes: this._lanes(lo, hi) });
+    },
+    _panel() {
+      const st = this.state;
+      const kit = st.kit;
+      const ext = st.viz.extent;
+      const set = (sel, t) => {
+        const e = this.$(sel);
+        if (e && e.textContent !== t) e.textContent = t;
+      };
+      if (ext) {
+        set("[data-r]", `${Math.round(ext.hi - ext.lo)} st`);
+        set("[data-ext]", `${kit.noteName(ext.lo)} → ${kit.noteName(ext.hi)}${ext.approx ? " " + L("(arriba aprox.)", "(top approx.)") : ""}`);
+      }
+      set("[data-s]", String(st.viz.sirens.length));
+      set("[data-k]", String(st.viz.breaks.length));
+    },
     onStop() {
-      const span = Math.max(0, this.state.maxM - this.state.minM);
+      const st = this.state;
+      if (!st.viz || !st.kit) return { patches: {}, summary: "" };
+      const kit = st.kit;
+      this._endGlide(performance.now());
+      st.viz.run = null;
+      st.viz.review = true;
+      this._panel();
+      const n = st.viz.sirens.length;
+      const ext = st.viz.extent;
+      const k = st.viz.breaks.length;
+      const range = ext
+        ? L(
+            ` · de ${kit.noteName(ext.lo)} a ${kit.noteName(ext.hi)} (${kit.semis(ext.hi - ext.lo)}${ext.approx ? ", arriba aprox." : ""})`,
+            ` · ${kit.noteName(ext.lo)} to ${kit.noteName(ext.hi)} (${kit.semis(ext.hi - ext.lo)}${ext.approx ? ", top approx." : ""})`
+          )
+        : "";
+      // Only the count is measured well enough to log; smoothness and ease stay yours to rate
       return {
-        patches: {
-          sirens: this.state.sirens,
-          smoothness: span >= 4 ? 4 : 3
-        },
-        summary: `${this.state.sirens} sirens · ${span.toFixed(1)} st range`
+        patches: n > 0 ? { sirens: n } : {},
+        summary: L(
+          `${n} ${n === 1 ? "sirena" : "sirenas"}${range} · ${k} ${k === 1 ? "salto" : "saltos"}`,
+          `${n} ${n === 1 ? "siren" : "sirens"}${range} · ${k} ${k === 1 ? "jump" : "jumps"}`
+        )
       };
     }
   });
@@ -1822,116 +3464,53 @@
     }
   });
 
+  /**
+   * s10 five-note and s16 major scale: stepping stones on three roots. Each
+   * step lands when held inside ±40¢ (the green band, exactly that wide); the
+   * next steps wait to the right of "now"; the root moves up after a full pass.
+   */
   Modes.scaleSteps = baseMode({
     id: "scaleSteps",
+    _cfg() {
+      const p = this.profile || {};
+      return {
+        kind: "scale",
+        pattern:
+          p.pattern ||
+          (p.majorScale ? [0, 2, 4, 5, 7, 9, 11, 12, 11, 9, 7, 5, 4, 2, 0] : [0, 2, 4, 5, 7, 5, 4, 2, 0]),
+        roots: Array.isArray(p.roots) && p.roots.length ? p.roots : [p.rootMidi || 48, (p.rootMidi || 48) + 2, (p.rootMidi || 48) + 4],
+        tol: p.tolCents || 40,
+        holdMs: p.holdMs || 700,
+        refSec: 1.6,
+        intonation: !!p.majorScale
+      };
+    },
     render() {
-      // Major scale (profile.majorScale) or classic 5-note
-      this.state.pattern = this.profile.pattern ||
-        (this.profile.majorScale
-          ? [0, 2, 4, 5, 7, 9, 11, 12, 11, 9, 7, 5, 4, 2, 0]
-          : [0, 2, 4, 5, 7, 5, 4, 2, 0]);
-      this.state.rootMidi = this.profile.rootMidi || 48; // C3
-      this.state.i = 0;
-      this.state.roots = 0;
-      this.state.inBand = 0;
-      const nSteps = this.state.pattern.length;
+      const cfg = this._cfg();
+      const nSteps = cfg.pattern.length;
       const title = this.profile.majorScale
         ? L("Escala mayor · coordinación", "Major scale · coordination")
         : L("Escala de 5 notas · con afinación", "Five-note scale · pitch-gated");
+      this.hud.classList.add("pz");
       this.hud.innerHTML = `
         <div class="mode-title">${title}</div>
-        <div class="mode-big" data-step>Step 1 / ${nSteps}</div>
-        <p class="mode-meta">${L("Mantén el paso (~40¢) 0,7s · Raíces:", "Hold near step (~40¢) 0.7s · Roots:")} <strong data-r>0</strong></p>
-        <p class="mode-meta muted" data-st>${L("Escucha, luego canta — sin saltar.", "Listen, then sing — no free skip.")}</p>
+        <div class="mode-big" data-step>${L("Paso", "Step")} 1 / ${nSteps}</div>
+        <p class="mode-meta">${L("Raíces", "Roots")}: <strong data-r>0</strong> · ${L("notas fijadas", "notes locked")}: <strong data-k>0</strong></p>
+        <p class="mode-meta muted" data-st>${L(
+          `Escucha, luego canta: cada paso cuenta al sostenerlo ${pzSec(cfg.holdMs / 1000)} dentro de ±${cfg.tol}¢. Tras cada pasada la raíz sube un tono.`,
+          `Listen, then sing: each step counts once held ${pzSec(cfg.holdMs / 1000)} within ±${cfg.tol}¢. After each pass the root moves up a tone.`
+        )}</p>
       `;
-      this._lockScaleRange();
-      this._setStepTarget();
-    },
-    _lockScaleRange() {
-      // Max span of the full 5-note pattern — fixed for the whole option
-      if (global.VTPitchUtils && global.VTGetPitchViz) {
-        const viz = global.VTGetPitchViz();
-        if (viz?.lockMidiRange) {
-          const midis = this.state.pattern.map((s) => this.state.rootMidi + s);
-          viz.lockMidiRange(Math.min(...midis), Math.max(...midis), {
-            pad: 1.5,
-            minSpan: 10
-          });
-          // Ghost lanes for each unique step
-          const seen = new Set();
-          viz.progressionLanes = [];
-          midis.forEach((m) => {
-            const k = Math.round(m * 2) / 2;
-            if (seen.has(k)) return;
-            seen.add(k);
-            viz.progressionLanes.push({
-              name: global.VTPitchUtils.midiToName(m),
-              freq: global.VTPitchUtils.midiToFreq(m),
-              midi: m,
-              active: false
-            });
-          });
-          viz.progressionLanes.sort((a, b) => a.midi - b.midi);
-        }
-      }
-    },
-    _setStepTarget() {
-      const semi = this.state.pattern[this.state.i];
-      const midi = this.state.rootMidi + semi;
-      if (global.VTPitchUtils) {
-        const f = global.VTPitchUtils.midiToFreq(midi);
-        const name = global.VTPitchUtils.midiToName(midi);
-        this.state.wantFreq = f;
-        this.state.wantName = name;
-        // Retarget only — range already locked to full scale span
-        if (typeof global.VTSetPracticeTarget === "function") {
-          global.VTSetPracticeTarget(f, name);
-        }
-        // Play the step note so the student hears the target
-        if (global.VTPiano?.playRefPitch && name) {
-          global.VTPiano.playRefPitch(name, 1.8, true).catch(() => {});
-        } else if (global.VTPiano?.playNote && f && global.VTPiano.ctx) {
-          try {
-            global.VTPiano.playNote(f, global.VTPiano.ctx.currentTime + 0.02, 1.8, 0.45, true);
-          } catch {
-            /* ignore */
-          }
-        }
-      }
+      pzStones.idle(this, cfg);
     },
     onStart() {
-      this._lockScaleRange();
-      this._setStepTarget();
+      pzStones.start(this, this._cfg());
     },
     onFrame(frame) {
-      if (!this.state.wantFreq || !frame.voiceFreq || !global.VTPitchUtils) return;
-      const cents = Math.abs(
-        (global.VTPitchUtils.freqToMidi(frame.voiceFreq) -
-          global.VTPitchUtils.freqToMidi(this.state.wantFreq)) *
-          100
-      );
-      if (cents <= 40 && frame.voiced) {
-        this.state.inBand += frame.dtMs || 16;
-        if (this.state.inBand >= 700) {
-          this.state.inBand = 0;
-          this.state.i++;
-          if (this.state.i >= this.state.pattern.length) {
-            this.state.i = 0;
-            this.state.roots++;
-            if (this.$("[data-r]")) this.$("[data-r]").textContent = String(this.state.roots);
-          }
-          this._setStepTarget();
-          if (this.$("[data-step]"))
-            this.$("[data-step]").textContent = `Step ${this.state.i + 1} / ${this.state.pattern.length}`;
-          if (this.$("[data-st]")) this.$("[data-st]").textContent = "Step locked ✓";
-        }
-      } else this.state.inBand = 0;
+      pzStones.frame(this, frame);
     },
     onStop() {
-      return {
-        patches: this.state.roots > 0 ? { roots: this.state.roots } : {},
-        summary: `${this.state.roots} roots completed (pitch-gated)`
-      };
+      return pzStones.stop(this);
     }
   });
 

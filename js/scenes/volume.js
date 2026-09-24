@@ -1295,9 +1295,16 @@
       roundRect(ctx, cx(leadI) - bw / 2 + 0.5, ty - 4.5, bw - 1, 9, 4);
       ctx.stroke();
       if (!o.tiny && m.i === leadI && !m.review) {
-        // Above the band, or below it when your live reading sits there
-        const ly = live != null && Math.abs(yOf(live) - (ty - 12)) < 14 ? ty + 14 : ty - 12;
-        small(ctx, "+10 %", cx(leadI), ly, C.target, { align: "center", px: 9, weight: 800 });
+        // Above the band if free, else below or higher up: never over your
+        // live ring or its number (the chip above already says "+10 %")
+        const busy = [];
+        if (live != null) {
+          const ry = yOf(live);
+          busy.push(ry, ry + 17 <= area.y + area.h - 2 ? ry + 17 : ry - 17);
+        }
+        const free = (yy) => yy >= area.y + 4 && yy <= area.y + area.h - 4 && busy.every((b) => Math.abs(b - yy) >= 13);
+        const ly = [ty - 12, ty + 14, ty - 26].find(free);
+        if (ly != null) small(ctx, "+10 %", cx(leadI), ly, C.target, { align: "center", px: 9, weight: 800 });
       }
     }
     // Last cycle, faint
@@ -1365,7 +1372,9 @@
       if (flat && !o.tiny) {
         const mx = (cx(i - 1) + cx(i)) / 2;
         const my = (yOf(a) + yOf(b)) / 2;
-        tag(ctx, o.compact ? "≈" : L("≈ casi igual", "≈ about the same"), mx, my - 9, C.muted, { align: "center", px: 9, weight: 700, maxW: cx(i) - cx(i - 1) - 24 });
+        // Opposite the left dot's number (which sits below when the line climbs)
+        const side = yOf(b) < yOf(a) ? -9 : 9;
+        tag(ctx, o.compact ? "≈" : L("≈ casi igual", "≈ about the same"), mx, my + side, C.muted, { align: "center", px: 9, weight: 700, maxW: cx(i) - cx(i - 1) - 24 });
       }
     }
   }

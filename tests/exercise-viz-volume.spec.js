@@ -70,12 +70,16 @@ async function pictureInView(page) {
 }
 
 const modeState = (page, fn) => page.evaluate(fn);
+const breathDiffs = (page) => modeState(page, () => window.VTApp.getState().modeInstance.state.breaths.map((b) => b.stats.diff));
 
 test.describe("volume pictures", () => {
   test("steady count: breaths counted against your own level, a fading end is flagged", async ({ page }) => {
     const warnings = await boot(page);
     await openAndStart(page, "v2-volume", "countFade");
-    await page.waitForTimeout(13500);
+    // Two counts of 5 s with a 1.4 s breath between; a busy machine stretches them
+    await expect
+      .poll(async () => (await breathDiffs(page)).some((d) => d != null && d <= -3), { timeout: 30000, intervals: [500] })
+      .toBe(true);
     const pic = await pictureInView(page);
     expect(pic.found).toBe(true);
     expect(pic.top).toBeGreaterThanOrEqual(0);
@@ -84,8 +88,6 @@ test.describe("volume pictures", () => {
     expect(pic.lit, "the ribbon is drawn").toBeGreaterThan(20);
     const n = Number(await page.locator("#mode-focus [data-cyc]").textContent());
     expect(n, "each 5 s count on one breath is a breath").toBeGreaterThanOrEqual(1);
-    const diffs = await modeState(page, () => window.VTApp.getState().modeInstance.state.breaths.map((b) => b.stats.diff));
-    expect(diffs.some((d) => d != null && d <= -3), `the end sinks below the start: ${diffs}`).toBe(true);
     await expect(page.locator("#mode-focus [data-fade]")).toContainText(/por debajo del inicio/);
     const before = await page.locator('#metrics-form [name="consistency"]').inputValue().catch(() => null);
     await stop(page);
@@ -101,11 +103,12 @@ test.describe("volume pictures", () => {
     const page = await ctx.newPage();
     const warnings = await boot(page);
     await openAndStart(page, "v2-volume", "count");
-    await page.waitForTimeout(8000);
+    // An even voice stays within ±3 dB from start to end
+    await expect
+      .poll(async () => (await breathDiffs(page)).some((d) => d != null && Math.abs(d) < 3), { timeout: 30000, intervals: [500] })
+      .toBe(true);
     const pic = await pictureInView(page);
     expect(pic.found && pic.top >= 0 && pic.bottom <= pic.vh, JSON.stringify(pic)).toBe(true);
-    const diffs = await modeState(page, () => window.VTApp.getState().modeInstance.state.breaths.map((b) => b.stats.diff));
-    expect(diffs.some((d) => d != null && Math.abs(d) < 3), `an even voice stays within ±3 dB: ${diffs}`).toBe(true);
     const blind = page.locator("#mode-focus [data-blind]");
     const box = await blind.boundingBox();
     expect(box.height, "tap target").toBeGreaterThanOrEqual(44);
@@ -161,15 +164,17 @@ test.describe("volume pictures", () => {
     const btn = page.locator("#mode-focus [data-phase-btn]");
     await btn.click();
     await expect(btn).toHaveText(/Escalera/);
-    await page.waitForTimeout(9000);
-    const story = await modeState(page, () => {
-      const s = window.VTApp.getState().modeInstance.state;
-      return { phase: s.phase, used: s.story && s.story.usedCount, approx: s.story && s.story.approx, phrases: s.story && s.story.phrases.length };
-    });
+    const readStory = () =>
+      modeState(page, () => {
+        const s = window.VTApp.getState().modeInstance.state;
+        return { phase: s.phase, used: s.story && s.story.usedCount, approx: s.story && s.story.approx, phrases: s.story && s.story.phrases.length };
+      });
+    // Phrases of about 2 s at changing levels; a busy machine stretches them, so wait on the count
+    await expect.poll(async () => (await readStory()).used, { timeout: 25000, intervals: [500] }).toBeGreaterThanOrEqual(2);
+    const story = await readStory();
     expect(story.phase).toBe("story");
     // No ladder yet: the zones are placed around the story's own level, and say "aprox."
     expect(story.approx).toBe(true);
-    expect(story.used, JSON.stringify(story)).toBeGreaterThanOrEqual(2);
     expect(story.phrases).toBeGreaterThanOrEqual(2);
     const pic = await pictureInView(page);
     expect(pic.found && pic.lit > 20).toBe(true);

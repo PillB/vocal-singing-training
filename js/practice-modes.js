@@ -5124,206 +5124,466 @@
   });
 
   /**
-   * s20 five vowels — I E A O U on one pitch. Each vowel gets its own steadiness
-   * reading, so the closed vowels that usually collapse show up as the weak ones
-   * instead of being hidden inside one average.
+   * s20 five vowels — I E A O U on one pitch, 4 s each. The vowels walk on
+   * the clock like a pacer; what is measured is what the microphone can hear
+   * of the listed mistakes: the pitch moving when the vowel changes, a vowel
+   * sung louder than the others, and — approximately, only at low and middle
+   * pitches — each vowel's shape (its first two resonances), read against the
+   * learner's own vowels. The "space" and the palate are felt, not measured,
+   * so they stay self-rated.
    */
   Modes.vowelLadder = baseMode({
     id: "vowelLadder",
     render() {
-      this.state.vowels = this.profile.vowels || ["I", "E", "A", "O", "U"];
-      this.state.secPer = this.profile.secPerVowel || 4;
-      this.state.i = 0;
-      this.state.t = 0;
-      this.state.rounds = 0;
-      this.state.last = performance.now();
-      this.state.samples = [];
-      this.state.scores = this.state.vowels.map(() => []);
-      const chips = this.state.vowels
-        .map(
-          (v, i) =>
-            `<span class="vowel-chip${i === 0 ? " is-on" : ""}" data-v="${i}">${v}</span>`
-        )
+      const st = this.state;
+      st.vowels = this.profile.vowels || ["I", "E", "A", "O", "U"];
+      st.secPer = this.profile.secPerVowel || 4;
+      this._resetRun();
+      const chips = st.vowels
+        .map((v, i) => `<span class="vowel-chip${i === 0 ? " is-on" : ""}" data-v="${i}">${v}</span>`)
         .join("");
       this.hud.innerHTML = `
-        <div class="mode-title">${L("Cinco vocales · I E A O U", "Five vowels · I E A O U")}</div>
-        <div class="vowel-row" data-chips>${chips}</div>
-        <div class="mode-big" data-cur>${this.state.vowels[0]}</div>
-        <div class="mode-bar thick"><span data-bar style="width:0%"></span></div>
-        <p class="mode-meta">${L("Vueltas", "Rounds")} <strong data-r>0</strong> · ${L(
-          "Uniformidad",
-          "Evenness"
-        )} <strong data-ev>—</strong></p>
+        <div class="viz-row viz-head">
+          <div class="mode-title">${L("Cinco vocales · I E A O U", "Five vowels · I E A O U")}</div>
+        </div>
+        <div class="viz-words">
+          <span class="vowel-row" data-chips>${chips}</span>
+          <strong class="mode-big" data-cur>${st.vowels[0]}</strong>
+          <span>${L("Vueltas cantadas", "Rounds sung")} <strong data-r>0</strong></span>
+          <span data-status></span>
+        </div>
         <p class="mode-meta muted">${L(
-          "Mismo espacio en todas. La vocal cambia de forma, no de tamaño.",
-          "Same space on all of them. The vowel changes shape, not size."
+          "Una sola nota; la vocal cambia de forma, no de tamaño. Debajo de cada vocal: tu tono y tu volumen.",
+          "One note; the vowel changes shape, not size. Under each vowel: your pitch and your level."
         )}</p>
       `;
       if (this.profile.refPitch && global.VT_NOTE_FREQ?.[this.profile.refPitch]) {
-        this.state.refName = this.profile.refPitch;
-        this.state.wantName = this.profile.refPitch;
+        st.refName = this.profile.refPitch;
+        st.wantName = this.profile.refPitch;
+        this._target();
       }
+      this._mountViz();
+    },
+    _newPage() {
+      return {
+        cells: this.state.vowels.map(() => ({ cents: null, db: null, f1: null, f2: null, sec: 0, _c: [], _d: [], _f1: [], _f2: [] })),
+        trace: []
+      };
+    },
+    _resetRun() {
+      const st = this.state;
+      st.i = 0;
+      st.t = 0;
+      st.clock = 0;
+      st.sung = 0;
+      st.rounds = 0;
+      st.pages = [this._newPage()];
+      st.prevPage = null;
+      st.live = null;
+      st.trail = [];
+      st.gate = "";
+      st.octave = 0;
+      st.review = false;
+      st._octMs = 0;
+      st._frame = 0;
+      st._lastTraceAt = -1;
+      st._lvl = [];
+    },
+    _mountViz() {
+      const V = global.VTViz;
+      if (!V || !V.scenes.vowels || !V.scenes.resonanceKit) return;
+      this.hud.classList.add("has-viz");
+      this.viz = new V.Surface(this.hud, (ctx, w, h) => V.scenes.vowels(ctx, w, h, this.state), {
+        label: L(
+          "Cinco vocales en una nota: una columna por vocal con tu tono respecto a la nota (la franja verde es la nota) y, al terminar cada vocal, cuánto se alejó el tono y su volumen frente a las demás. Al lado, la forma aproximada de cada vocal.",
+          "Five vowels on one note: a column per vowel with your pitch against the note (the green band is the note) and, when each vowel ends, how far the pitch sat and its level against the others. Beside it, the approximate shape of each vowel."
+        ),
+        captionHidden: true
+      });
+      this.viz.draw();
     },
     onStart() {
-      this.state.last = performance.now();
+      this._resetRun();
+      this.hud?.classList.remove("is-replay");
+      this._syncWords();
       this._ref();
+      this.viz?.caption?.(L(`Vocal ${this.state.vowels[0]}`, `Vowel ${this.state.vowels[0]}`), 0);
+      this.viz?.draw();
+    },
+    /** The note, at the octave the octave control asks for. */
+    _target() {
+      const st = this.state;
+      const n = shiftedNote(st.refName);
+      if (!n) return null;
+      st.target = global.VTPitchUtils?.noteNameToDual ? global.VTPitchUtils.noteNameToDual(n) : n;
+      st.targetMidi = global.VT_NOTE_FREQ?.[n] ? 69 + 12 * Math.log2(global.VT_NOTE_FREQ[n] / 440) : null;
+      return n;
     },
     _ref() {
       // Published for the app: an ownsTarget mode's current note is what the
-      // piano reference should sound, in place of the generic refPitch.
-      this.state.wantName = this.state.refName;
-      const n = shiftedNote(this.state.refName);
-      if (!n) return;
-      if (typeof global.VTSetPracticeTarget === "function" && global.VT_NOTE_FREQ?.[n]) {
+      // piano reference sounds on Start, in place of the generic refPitch.
+      // The mode does not sound it again at each round: a piano note under
+      // the first vowel would be read as the vowel.
+      const st = this.state;
+      st.wantName = st.refName;
+      const n = this._target();
+      if (n && typeof global.VTSetPracticeTarget === "function" && global.VT_NOTE_FREQ?.[n]) {
         global.VTSetPracticeTarget(global.VT_NOTE_FREQ[n], n);
       }
-      if (global.VTPiano?.playRefPitch) global.VTPiano.playRefPitch(n, 2.2, true).catch(() => {});
+    },
+    _syncWords() {
+      const st = this.state;
+      if (this.$("[data-cur]")) this.$("[data-cur]").textContent = st.vowels[st.i];
+      if (this.$("[data-r]")) this.$("[data-r]").textContent = String(st.sung);
+      this.hud?.querySelectorAll?.(".vowel-chip").forEach((c, idx) => c.classList.toggle("is-on", idx === st.i));
+    },
+    /** Close the vowel that just ended: medians of its steady part. */
+    _closeCell(cell) {
+      const K = global.VTViz?.scenes?.resonanceKit;
+      const med = K ? K.median : (a) => (a.length ? a.slice().sort((x, y) => x - y)[a.length >> 1] : null);
+      // A vowel counts once there is a second of steady singing in it
+      if (cell._c.length >= 12 && cell.sec >= 1) {
+        cell.cents = med(cell._c);
+        cell.db = med(cell._d);
+      }
+      if (cell._f1.length >= 6) {
+        cell.f1 = med(cell._f1);
+        cell.f2 = med(cell._f2);
+      }
     },
     onFrame(frame) {
-      const now = performance.now();
-      const dt = Math.min(0.25, (now - this.state.last) / 1000);
-      this.state.last = now;
-      this.state.t += dt;
-      // Steadiness of the current vowel from loudness variance
-      const rms = frame.rms || 0;
-      if (rms > 0.01) {
-        this.state.samples.push(rms);
-        if (this.state.samples.length > 90) this.state.samples.shift();
+      const st = this.state;
+      const V = global.VTViz;
+      const K = V?.scenes?.resonanceKit;
+      if (!K || st.review) return;
+      const raw = K.rawOf(frame);
+      const dt = raw.dt;
+      st.t += dt;
+      st.clock += dt;
+      st._frame++;
+      const page = st.pages[st.pages.length - 1];
+      const cell = page.cells[st.i];
+      const roundX = st.i * st.secPer + st.t;
+      let c = null;
+      if (raw.sounding && raw.freq && st.targetMidi != null) {
+        // Pitch against the note, folded to the nearest octave: an octave
+        // match is the same note, sung where the voice lives
+        const d = (K.midiOf(raw.freq) - st.targetMidi) * 100;
+        const oct = Math.round(d / 1200);
+        c = d - oct * 1200;
+        st._octMs = oct === st.octave ? 0 : st._octMs + dt * 1000;
+        if (st._octMs > 600) {
+          st.octave = oct;
+          st._octMs = 0;
+        }
+        // The first half second after a change is the change itself
+        if (st.t >= 0.5) {
+          cell._c.push(c);
+          cell._d.push(raw.db);
+          cell.sec += dt;
+        }
+        st._lvl.push(raw.db);
+        if (st._lvl.length > 400) st._lvl.shift();
       }
-      let steady = 0;
-      const arr = this.state.samples;
-      if (arr.length > 10) {
-        const mean = arr.reduce((a, b) => a + b, 0) / arr.length;
-        const v = arr.reduce((a, b) => a + (b - mean) ** 2, 0) / arr.length;
-        steady = clamp(1 - Math.sqrt(v) * 8, 0, 1);
-        if (this.$("[data-bar]")) this.$("[data-bar]").style.width = `${steady * 100}%`;
-        if (this.$("[data-ev]"))
-          this.$("[data-ev]").textContent =
-            steady > 0.7 ? L("pareja", "steady") : steady > 0.4 ? L("ok", "ok") : L("irregular", "uneven");
+      if (roundX - st._lastTraceAt >= 1 / 30 || c == null) {
+        st._lastTraceAt = roundX;
+        page.trace.push({ x: roundX, c, at: st.clock });
       }
-      if (this.state.t >= this.state.secPer) {
-        this.state.t = 0;
-        if (steady > 0) this.state.scores[this.state.i].push(steady);
-        this.state.samples = [];
-        this.state.i += 1;
-        if (this.state.i >= this.state.vowels.length) {
-          this.state.i = 0;
-          this.state.rounds += 1;
-          if (this.$("[data-r]")) this.$("[data-r]").textContent = String(this.state.rounds);
+      // The vowel's shape, only where it can be read: a steady voiced frame,
+      // not the quiet tail of a note, and a pitch low enough for the
+      // harmonics to trace the resonances (above ~300 Hz they cannot)
+      if (raw.sounding && raw.freq && frame.buf && st._frame % 2 === 0) {
+        if (raw.freq > 300) st.gate = "high";
+        else {
+          const ref = K.median(st._lvl) ?? raw.db;
+          st.gate = "";
+          if (raw.db > ref - 12) {
+            const f = K.formants(frame.buf, frame.sampleRate || 48000);
+            if (f && f.f1 >= 1.8 * raw.freq) {
+              st.trail.push({ f1: f.f1, f2: f.f2 });
+              if (st.trail.length > 8) st.trail.shift();
+              const f1 = K.median(st.trail.slice(-5).map((p) => p.f1));
+              const f2 = K.median(st.trail.slice(-5).map((p) => p.f2));
+              st.live = { f1, f2, at: st.clock };
+              if (st.t >= 0.5) {
+                cell._f1.push(f.f1);
+                cell._f2.push(f.f2);
+              }
+            }
+          }
+        }
+      } else if (!raw.sounding) st.gate = "";
+      // Next vowel on the clock
+      if (st.t >= st.secPer) {
+        st.t -= st.secPer;
+        this._closeCell(cell);
+        st.i += 1;
+        st.trail = [];
+        if (st.i >= st.vowels.length) {
+          // A round counts when at least four of its vowels were sung
+          const sungCells = page.cells.filter((x) => x.cents != null).length;
+          if (sungCells >= Math.min(4, st.vowels.length)) {
+            st.sung += 1;
+            st.rounds = st.sung;
+          }
+          st.prevPage = page.cells.some((x) => x.cents != null) ? page : st.prevPage;
+          st.pages.push(this._newPage());
+          if (st.pages.length > 12) st.pages.splice(1, 1); // keep the first round for the map
+          st.i = 0;
           this._ref();
         }
-        const cur = this.state.vowels[this.state.i];
-        if (this.$("[data-cur]")) this.$("[data-cur]").textContent = cur;
-        this.hud?.querySelectorAll?.(".vowel-chip").forEach((c, idx) => {
-          c.classList.toggle("is-on", idx === this.state.i);
-        });
+        this._syncWords();
+        this.viz?.caption?.(L(`Vocal ${st.vowels[st.i]}`, `Vowel ${st.vowels[st.i]}`), 0);
       }
+      this.viz?.draw();
     },
     onStop() {
-      const rounds = this.state.rounds || 0;
-      const means = this.state.scores.map((a) =>
-        a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0
-      );
-      const seen = means.filter((m) => m > 0);
-      const patches = {};
-      if (rounds > 0) patches.rounds = rounds;
-      if (seen.length >= 3) {
-        const worst = Math.min(...seen);
-        patches.evenVowels = worst > 0.7 ? 5 : worst > 0.55 ? 4 : worst > 0.35 ? 3 : 2;
+      const st = this.state;
+      const page = st.pages[st.pages.length - 1];
+      if (!st.review && page) this._closeCell(page.cells[st.i]);
+      st.review = true;
+      if (this.viz) {
+        this.hud.classList.add("is-replay");
+        this.viz.draw();
       }
-      const weakIdx = means.findIndex((m) => m > 0 && m === Math.min(...seen));
-      const weak = weakIdx >= 0 ? this.state.vowels[weakIdx] : null;
-      return {
-        patches,
-        summary: weak ? `${rounds} rounds · weakest vowel ${weak}` : `${rounds} vowel rounds`
+      const n = st.sung || 0;
+      // Facts across every sung vowel: where the pitch sat furthest from the
+      // note, and which vowel came out louder than the round around it
+      let far = null;
+      let loud = null;
+      st.pages.forEach((p) => {
+        const dbs = p.cells.map((c) => c.db).filter((d) => d != null);
+        const mean = dbs.length >= 2 ? dbs.reduce((a, b) => a + b, 0) / dbs.length : null;
+        p.cells.forEach((c, i) => {
+          if (c.cents != null && (!far || Math.abs(c.cents) > Math.abs(far.c))) far = { v: st.vowels[i], c: c.cents };
+          if (mean != null && c.db != null && (!loud || c.db - mean > loud.d)) loud = { v: st.vowels[i], d: c.db - mean };
+        });
+      });
+      const fmt = (x, d = 0) => {
+        const s = Math.abs(x).toFixed(d);
+        return (x < 0 ? "−" : "+") + (isEs() ? s.replace(".", ",") : s);
       };
+      const parts = [L(`${n} ${n === 1 ? "vuelta cantada" : "vueltas cantadas"}`, `${n} ${n === 1 ? "round sung" : "rounds sung"}`)];
+      if (far && Math.abs(far.c) > 25) parts.push(L(`tono más lejos en ${far.v} (${fmt(far.c)} ¢)`, `pitch furthest on ${far.v} (${fmt(far.c)} ¢)`));
+      if (loud && loud.d > 3) parts.push(L(`más fuerte: ${loud.v} (${fmt(loud.d, 1)} dB)`, `loudest: ${loud.v} (${fmt(loud.d, 1)} dB)`));
+      // Only the count is measured; evenness and space stay the learner's rating
+      return { patches: n > 0 ? { rounds: n } : {}, summary: parts.join(" · ") };
     }
   });
 
   /**
-   * s21–s25 resonance zones — low / middle / high. One mode, configured with the
-   * zones each exercise works: a single zone for the focused drills, all three
-   * for the tour. Targets are held by pitch like the hum mode, zones advance on
-   * time, and the zone strip shows where the voice actually is versus where the
-   * exercise asked for it.
+   * s21–s25 resonance zones — low / middle / high. One mode, configured with
+   * the zones each exercise works: a single zone for the focused drills, all
+   * three for the tour. A microphone cannot hear "chest", "mask" or
+   * "placement"; it hears which pitch range you are in (that is what a zone
+   * is here), how loud you are against yourself, how clear the tone is and
+   * how much energy sits high in the spectrum. So the picture is a lane of
+   * the zone with your voice and the targets ahead, and beside it the one
+   * measurable thing each drill is about (profile.focus):
+   *   body   (s21) level against your own average, tone clarity, the lowest
+   *                 note you held clear today
+   *   speech (s22) your speaking pitch as a band, spoken vs sung turns
+   *   bright (s23) brightness against loudness, in the drill's four phases
+   *   soft   (s24) level against the volume you started with, per-note cards
+   *   seams  (s25) the tour's timeline and what happened at each seam
+   * Targets are held by pitch (±45 cents for 0.9 s on sounding frames), and
+   * the only scores patched are what that measures: targets held, and — where
+   * the exercise names it (profile.stabilityMetric) — pitch steadiness over
+   * the holds. Body, buzz, balance, comfort, pushing and transitions stay the
+   * learner's own rating.
    */
   Modes.resonanceZone = baseMode({
     id: "resonanceZone",
     render() {
       const zones = this.profile.zones || [];
-      this.state.zones = zones;
-      this.state.z = 0;
-      this.state.t = 0;
-      this.state.last = performance.now();
-      this.state.ni = 0;
-      this.state.held = 0;
-      this.state.inBand = 0;
-      this.state.inZoneMs = 0;
-      this.state.voicedMs = 0;
-      this.state.zoneHits = zones.map(() => 0);
-      const allNotes = zones.reduce((a, z) => a.concat(z.notes || []), []);
-      this.state.allNotes = allNotes;
+      const st = this.state;
+      st.zones = zones;
+      st.focus = this.profile.focus || (zones.length > 1 ? "seams" : "");
+      this._resetRun();
+      const zl = (z) => (z ? (isEs() ? z.labelEs || z.label : z.label) || "" : "");
       const strip = zones
-        .map(
-          (z, i) =>
-            `<span class="zone-chip${i === 0 ? " is-on" : ""}" data-z="${i}">${
-              isEs() ? z.labelEs || z.label : z.label
-            }</span>`
-        )
+        .map((z, i) => `<span class="zone-chip${i === 0 ? " is-on" : ""}" data-z="${i}">${zl(z)}</span>`)
         .join("");
+      const titles = {
+        body: L("Graves con cuerpo · volumen y claridad", "Low notes with body · level and clarity"),
+        speech: L("Zona media · de hablar a cantar", "Middle zone · from speech to song"),
+        bright: L("«YA» · brillo frente a volumen", "'YA' · brightness against loudness"),
+        soft: L("Agudos suaves · volumen de inicio", "Soft high notes · starting volume"),
+        seams: L("Recorrido de zonas · las costuras", "Zone tour · the seams")
+      };
+      const metas = {
+        body: L(
+          "Tu voz en la zona grave, con tu volumen y lo claro del tono. El cuerpo lo sientes tú.",
+          "Your voice in the low zone, with your level and how clear the tone is. The body is yours to feel."
+        ),
+        speech: L(
+          "Di «hola» y luego cántalo: la franja rayada es tu voz hablada.",
+          "Say 'hola', then sing it: the hatched band is your speaking voice."
+        ),
+        bright: L(
+          "La máscara la sientes tú; aquí ves el brillo (energía aguda) frente al volumen.",
+          "The mask is yours to feel; here you see brightness (high energy) against loudness."
+        ),
+        soft: L(
+          "Empieza suave: tu primer segundo y medio marca tu volumen de inicio.",
+          "Start soft: your first second and a half sets your starting volume."
+        ),
+        seams: L(
+          "Graves → medios → agudos. Mira qué pasa en cada costura.",
+          "Low → middle → high. See what happens at each seam."
+        )
+      };
+      this.hud.dataset.focus = st.focus || "zone";
+      const next =
+        st.focus === "bright"
+          ? `<button type="button" class="btn btn-sm viz-tap" data-next>${L("Siguiente fase ›", "Next phase ›")}</button>`
+          : "";
       this.hud.innerHTML = `
-        <div class="mode-title">${L("Zonas de resonancia", "Resonance zones")}</div>
-        <div class="zone-row" data-zones>${strip}</div>
-        <div class="mode-phase" data-zn>${
-          isEs() ? zones[0]?.labelEs || zones[0]?.label || "" : zones[0]?.label || ""
-        }</div>
-        <div class="mode-big" data-t>${allNotes[0] || "—"}</div>
-        <p class="mode-meta">${L("Objetivos", "Targets")} <strong data-h>0</strong> · ${L(
-          "En zona",
-          "In zone"
-        )} <strong data-iz>0%</strong></p>
-        <p class="mode-meta" data-cue>${phaseCueFor(zones[0])}</p>
+        <div class="viz-row viz-head">
+          <div class="mode-title">${titles[st.focus] || L("Zonas de resonancia", "Resonance zones")}</div>
+          ${next}
+        </div>
+        <div class="viz-words">
+          <span class="zone-row" data-zones>${strip}</span>
+          <span data-zn>${zl(zones[0])}</span>
+          <strong class="mode-big" data-t>${st.allNotes[0] || "—"}</strong>
+          <span>${L("Objetivos", "Targets")} <strong data-h>0</strong></span>
+          <span>${L("En la zona", "In zone")} <strong data-iz>0 %</strong></span>
+          <span data-cue>${phaseCueFor(zones[0])}</span>
+          <span data-status></span>
+        </div>
+        <p class="mode-meta muted">${metas[st.focus] || L("Sostén cada nota objetivo; la zona es el rango de alturas.", "Hold each target note; the zone is the pitch range.")}</p>
       `;
-      if (typeof global.VTLockHighwayNotes === "function" && allNotes.length) {
-        global.VTLockHighwayNotes(allNotes);
-      }
+      this.$("[data-next]")?.addEventListener("click", () => this._nextPhase());
+      this._mountViz();
+    },
+    _resetRun() {
+      const st = this.state;
+      const zones = st.zones || [];
+      st.z = 0;
+      st.t = 0;
+      st.ni = 0;
+      st.held = 0;
+      st.inBand = 0;
+      st.holdMs = 900;
+      st.inZoneMs = 0;
+      st.voicedMs = 0;
+      st.zoneHits = zones.map(() => 0);
+      st.allNotes = zones.reduce((a, z) => a.concat(z.notes || []), []);
+      st.zoneMidis = zones.map((z) => (z.notes || []).map((x) => this._midiOfNote(x)).filter((x) => x != null));
+      st.wantLabel = st.allNotes[0] ? shiftedNote(st.allNotes[0]) : "";
+      st.wantMidi = st.allNotes[0] ? this._midiOfNote(st.allNotes[0]) : null;
+      st.queue = [];
+      st.passes = 0;
+      st.clock = 0;
+      st.trace = [];
+      st._lastTraceAt = -1;
+      st.targets = [];
+      st.cards = [];
+      st._hold = [];
+      st.lvl = { vals: [], med: null, now: null, rel: null };
+      st.clar = { now: null, lowMs: 0 };
+      st.floor = null;
+      st.octHint = 0;
+      st._octMs = 0;
+      st.review = false;
+      st._frame = 0;
+      st.fresh = null;
+      st._m3 = [];
+      st._acc = null;
+      st._jump = null;
+      // speech
+      st.sp = { seg: null, turns: [], band: null, pairs: [] };
+      // bright
+      st.br = { p: 0, phaseHeld: 0, soundSec: 0, vals: [[], [], [], []], base: null, pts: [], med: [null, null, null, null], louder: false };
+      // soft
+      st.soft = { ref: null, refVals: [], rel: null, overMs: 0 };
+      // seams
+      st.seams = [];
+    },
+    _mountViz() {
+      const V = global.VTViz;
+      if (!V || !V.scenes.zones || !V.scenes.resonanceKit) return;
+      this.hud.classList.add("has-viz");
+      this.viz = new V.Surface(this.hud, (ctx, w, h) => V.scenes.zones(ctx, w, h, this.state), {
+        label: L(
+          "Carril de la zona: la franja es el rango de alturas de la zona, tu voz es la línea azul clara y las notas objetivo esperan a la derecha; cada una se llena al sostenerla. Al lado, lo que se mide en este ejercicio.",
+          "Zone lane: the band is the zone's pitch range, your voice is the light blue line and the target notes wait on the right; each fills as you hold it. Beside it, what this drill measures."
+        ),
+        captionHidden: true
+      });
+      this.viz.draw();
     },
     onStart() {
-      this.state.last = performance.now();
-      if (typeof global.VTLockHighwayNotes === "function" && this.state.allNotes?.length) {
-        global.VTLockHighwayNotes(this.state.allNotes);
-      }
+      const V = global.VTViz;
+      this._resetRun();
+      this.hud?.classList.remove("is-replay");
+      this._setChips();
       this._pushTarget();
+      this.viz?.caption?.(this._say(), 0);
+      if (V) this.viz?.draw();
     },
     _zoneNotes() {
       return this.state.zones[this.state.z]?.notes || [];
     },
-    _pushTarget() {
+    _midiOfNote(n) {
+      const f = global.VT_NOTE_FREQ?.[shiftedNote(n)];
+      return f ? 69 + 12 * Math.log2(f / 440) : null;
+    },
+    /** The notes after the current one, for the queue ahead of "now". */
+    _upcoming(k = 3) {
       const notes = this._zoneNotes();
-      const n = notes[this.state.ni % Math.max(1, notes.length)];
+      const out = [];
+      for (let j = 1; j <= k && notes.length; j++) {
+        const n = notes[(this.state.ni + j) % notes.length];
+        out.push({ name: n, label: shiftedNote(n), midi: this._midiOfNote(n) });
+      }
+      return out;
+    },
+    _pushTarget() {
+      const st = this.state;
+      const notes = this._zoneNotes();
+      const n = notes[st.ni % Math.max(1, notes.length)];
       if (!n) return;
       const sounded = shiftedNote(n);
-      this.state.wantName = n;
-      this.state.wantFreq = global.VT_NOTE_FREQ?.[sounded];
-      if (typeof global.VTSetPracticeTarget === "function" && this.state.wantFreq) {
-        global.VTSetPracticeTarget(this.state.wantFreq, sounded);
+      st.wantName = n;
+      st.wantLabel = sounded;
+      st.wantFreq = global.VT_NOTE_FREQ?.[sounded];
+      st.wantMidi = st.wantFreq ? 69 + 12 * Math.log2(st.wantFreq / 440) : null;
+      st.queue = this._upcoming(3);
+      st.zoneMidis = st.zones.map((z) => (z.notes || []).map((x) => this._midiOfNote(x)).filter((x) => x != null));
+      st.inBand = 0;
+      st._hold = [];
+      const last = st.targets[st.targets.length - 1];
+      if (last && last.t1 == null) last.t1 = st.clock;
+      if (st.wantMidi != null) st.targets.push({ t0: st.clock, t1: null, midi: st.wantMidi, name: sounded, held: false });
+      if (st.targets.length > 400) st.targets.splice(0, st.targets.length - 400);
+      if (typeof global.VTSetPracticeTarget === "function" && st.wantFreq) {
+        global.VTSetPracticeTarget(st.wantFreq, sounded);
       }
-      if (global.VTPiano?.playRefPitch)
-        global.VTPiano.playRefPitch(sounded, 2.2, true).catch(() => {});
+      if (global.VTPiano?.playRefPitch) global.VTPiano.playRefPitch(sounded, 2.2, true).catch(() => {});
       if (this.$("[data-t]")) this.$("[data-t]").textContent = sounded;
     },
-    _setZone(i) {
-      this.state.z = i;
-      this.state.ni = 0;
-      this.state.inBand = 0;
-      const z = this.state.zones[i];
-      if (this.$("[data-zn]"))
-        this.$("[data-zn]").textContent = isEs() ? z.labelEs || z.label : z.label;
+    _setChips() {
+      const st = this.state;
+      const z = st.zones[st.z];
+      const zl = z ? (isEs() ? z.labelEs || z.label : z.label) || "" : "";
+      if (this.$("[data-zn]")) this.$("[data-zn]").textContent = zl;
       if (this.$("[data-cue]")) this.$("[data-cue]").textContent = phaseCueFor(z);
-      this.hud?.querySelectorAll?.(".zone-chip").forEach((c, idx) => {
-        c.classList.toggle("is-on", idx === i);
-      });
-      if (global.VTToast) global.VTToast(isEs() ? z.labelEs || z.label : z.label);
+      this.hud?.querySelectorAll?.(".zone-chip").forEach((c, idx) => c.classList.toggle("is-on", idx === st.z));
+    },
+    _setZone(i) {
+      const st = this.state;
+      const from = st.z;
+      st.z = i;
+      st.ni = 0;
+      st.inBand = 0;
+      this._setChips();
+      if (from !== i && st.zones.length > 1) {
+        // A seam: level just before against level just after, filled in 3 s later
+        st.seams.push({ t: st.clock, from, to: i, d: null, pass: st.passes });
+        if (st.seams.length > 60) st.seams.shift();
+      }
       this._pushTarget();
     },
     /**
@@ -5351,128 +5611,755 @@
       }
       return -1;
     },
+    /** s23: the drill's four phases — normal, exaggerated, kept, balanced. */
+    _nextPhase() {
+      const br = this.state.br;
+      if (!br || br.p >= 3) return;
+      br.p += 1;
+      br.phaseHeld = 0;
+      this.viz?.caption?.(this._say(), 0);
+      this.viz?.draw();
+    },
+    _say() {
+      const st = this.state;
+      const t = st.wantLabel || "";
+      if (st.focus === "bright") {
+        const ph = [L("«YA» normal", "Normal 'YA'"), L("Exagera el «YA»", "Exaggerate the 'YA'"), L("Mantenlo en las notas", "Keep it on the notes"), L("Equilibra el color", "Balance the colour")];
+        return `${ph[st.br.p]} · ${t}`;
+      }
+      return L(`Nota ${t}`, `Note ${t}`);
+    },
+    /** Pitch steadiness over one hold: SD in cents of the ~200 ms smoothed pitch. */
+    _holdSd(samples) {
+      const s = samples.filter((x) => x.at >= 0.2);
+      if (s.length < 8) return null;
+      const sm = [];
+      let acc = 0;
+      let accT = 0;
+      let j = 0;
+      for (let i = 0; i < s.length; i++) {
+        acc += s[i].c * s[i].dt;
+        accT += s[i].dt;
+        while (accT - s[j].dt >= 0.2 && j < i) {
+          acc -= s[j].c * s[j].dt;
+          accT -= s[j].dt;
+          j++;
+        }
+        if (accT >= 0.15) sm.push(acc / accT);
+      }
+      if (sm.length < 4) return null;
+      const mean = sm.reduce((a, b) => a + b, 0) / sm.length;
+      return Math.sqrt(sm.reduce((a, b) => a + (b - mean) * (b - mean), 0) / sm.length);
+    },
+    _credit() {
+      const st = this.state;
+      const K = global.VTViz?.scenes?.resonanceKit;
+      const med = K ? K.median : (a) => (a.length ? a.slice().sort((x, y) => x - y)[a.length >> 1] : null);
+      const h = st._hold;
+      const sd = this._holdSd(h);
+      const dbs = h.map((x) => x.db);
+      const clars = h.map((x) => x.clar).filter((x) => x != null);
+      const rels = h.map((x) => x.rel).filter((x) => x != null);
+      const card = {
+        name: st.wantLabel,
+        midi: st.wantMidi,
+        z: st.z,
+        sd,
+        db: med(dbs),
+        clar: clars.length >= 4 ? med(clars) : null,
+        maxRel: rels.length ? Math.max(...rels) : null,
+        t: st.clock
+      };
+      card.soft = card.maxRel == null ? null : card.maxRel <= 3;
+      st.cards.push(card);
+      if (st.cards.length > 200) st.cards.shift();
+      const cur = st.targets[st.targets.length - 1];
+      if (cur) cur.held = true;
+      // s21: the lowest note held with a clear tone today
+      if (st.focus === "body" && card.clar != null && card.clar >= 0.85 && (!st.floor || card.midi < st.floor.midi)) {
+        st.floor = { midi: card.midi, name: card.name };
+      }
+      st.held += 1;
+      st.zoneHits[st.z] += 1;
+      st.ni += 1;
+      if (st.focus === "bright") {
+        st.br.phaseHeld += 1;
+        if (st.br.p < 3 && st.br.phaseHeld >= 3) this._nextPhase();
+      }
+      this._pushTarget();
+      if (this.$("[data-h]")) this.$("[data-h]").textContent = String(st.held);
+      this.viz?.caption?.(this._say(), 1500);
+    },
     onFrame(frame) {
-      const now = performance.now();
-      const dt = Math.min(0.25, (now - this.state.last) / 1000);
-      this.state.last = now;
-      const zone = this.state.zones[this.state.z];
+      const st = this.state;
+      const K = global.VTViz?.scenes?.resonanceKit;
+      if (!K || st.review) return;
+      const raw = K.rawOf(frame);
+      const dt = raw.dt;
+      st.clock += dt;
+      st._frame++;
       // Zone advances on time (single-zone exercises simply never advance)
-      if (zone && zone.sec && this.state.zones.length > 1) {
-        this.state.t += dt;
-        if (this.state.t >= zone.sec) {
-          this.state.t = 0;
-          this._setZone((this.state.z + 1) % this.state.zones.length);
+      const zone = st.zones[st.z];
+      if (zone && zone.sec && st.zones.length > 1) {
+        st.t += dt;
+        if (st.t >= zone.sec) {
+          st.t = 0;
+          const nz = (st.z + 1) % st.zones.length;
+          if (nz === 0) st.passes += 1;
+          this._setZone(nz);
         }
       }
-      // Target lock inside the zone
-      if (this.state.wantFreq && frame.voiceFreq && global.VTPitchUtils) {
-        const cents = Math.abs(
-          (global.VTPitchUtils.freqToMidi(frame.voiceFreq) -
-            global.VTPitchUtils.freqToMidi(this.state.wantFreq)) *
-            100
-        );
-        if (cents <= 45 && frame.voiced) {
-          this.state.inBand += frame.dtMs || 16;
-          if (this.state.inBand >= 900) {
-            this.state.inBand = 0;
-            this.state.held += 1;
-            this.state.zoneHits[this.state.z] += 1;
-            this.state.ni += 1;
-            this._pushTarget();
-            if (this.$("[data-h]")) this.$("[data-h]").textContent = String(this.state.held);
-          }
-        } else this.state.inBand = 0;
+      const freq = raw.sounding ? raw.freq : null;
+      // Median of the last three sounding frames, and a jump of more than
+      // four semitones only once it has lasted four frames: a tracker slip
+      // at an onset is not your voice, so it is neither drawn nor counted
+      let midi = null;
+      if (freq) {
+        st._m3.push(K.midiOf(freq));
+        if (st._m3.length > 3) st._m3.shift();
+        const cand = st._m3.length >= 3 ? K.median(st._m3) : null;
+        const prev = st._acc;
+        if (cand == null) {
+          // the first two frames of a sound: too few to outvote a slip
+        } else if (prev && st.clock - prev.at < 0.15 && Math.abs(cand - prev.m) > 4) {
+          st._jump = st._jump && Math.abs(st._jump.m - cand) <= 1 ? { m: cand, n: st._jump.n + 1 } : { m: cand, n: 1 };
+          if (st._jump.n >= 4) midi = cand;
+        } else midi = cand;
+        if (midi != null) {
+          st._acc = { m: midi, at: st.clock };
+          st._jump = null;
+        }
+      } else st._m3 = [];
+      // Level against your own average (dB), smoothed ~0.3 s
+      const a = 1 - Math.exp(-dt / 0.3);
+      if (raw.sounding) {
+        st.lvl.vals.push(raw.db);
+        if (st.lvl.vals.length > 900) st.lvl.vals.shift();
+        if (st._frame % 15 === 0 || st.lvl.med == null) st.lvl.med = K.median(st.lvl.vals);
+        st.lvl.now = st.lvl.now == null ? raw.db : st.lvl.now + (raw.db - st.lvl.now) * a;
+        st.lvl.rel = st.lvl.vals.length >= 20 ? st.lvl.now - st.lvl.med : null;
       }
-      // How much of your sung time landed in the zone the exercise asked for
-      if (frame.voiced && frame.voiceFreq) {
-        this.state.voicedMs += frame.dtMs || 16;
-        if (this._zoneOf(frame.voiceFreq) === this.state.z)
-          this.state.inZoneMs += frame.dtMs || 16;
-        if (this.$("[data-iz]")) {
-          const pct = this.state.voicedMs
-            ? Math.round((this.state.inZoneMs / this.state.voicedMs) * 100)
-            : 0;
-          this.$("[data-iz]").textContent = `${pct}%`;
+      // Spectrum-derived readings, every other frame, only while sounding
+      let clar = null;
+      let bright = null;
+      if (freq && frame.buf && st._frame % 2 === 0) {
+        const sr = frame.sampleRate || 48000;
+        if (st.focus === "body") clar = K.clarityAt(frame.buf, sr, freq);
+        if ((st.focus === "bright" || st.focus === "speech") && (st.lvl.med == null || raw.db > st.lvl.med - 12)) {
+          bright = K.brightnessDb(K.powerSpectrum(frame.buf), sr);
+        }
+      }
+      if (clar != null) {
+        st.clar.now = st.clar.now == null ? clar : st.clar.now + (clar - st.clar.now) * (1 - Math.exp(-(dt * 2) / 0.4));
+        st.clar.lowMs = st.clar.now < 0.8 ? st.clar.lowMs + dt * 2000 : Math.max(0, st.clar.lowMs - dt * 2000);
+      }
+      if (!raw.sounding) st.clar.lowMs = Math.max(0, st.clar.lowMs - dt * 1000);
+      // s24: the starting volume is the first 1.5 s of sound
+      const soft = st.soft;
+      if (st.focus === "soft" && raw.sounding) {
+        if (soft.ref == null) {
+          soft.refVals.push(raw.db);
+          if (soft.refVals.length * dt >= 1.5 || soft.refVals.length >= 90) soft.ref = K.median(soft.refVals);
+        } else {
+          soft.rel = st.lvl.now - soft.ref;
+          soft.overMs = soft.rel > 3 ? soft.overMs + dt * 1000 : Math.max(0, soft.overMs - dt * 2000);
+        }
+      }
+      // Lane trace, ~30 per second
+      if (st.clock - st._lastTraceAt >= 1 / 30 || (midi == null) !== (st.trace[st.trace.length - 1]?.m == null)) {
+        st._lastTraceAt = st.clock;
+        st.trace.push({ t: st.clock, m: midi, db: raw.sounding ? raw.db : null });
+        if (st.trace.length > 36000) st.trace.splice(0, 6000);
+      }
+      if (midi != null) st.fresh = { m: midi, at: st.clock };
+      // In-zone share of sung time
+      if (freq) {
+        st.voicedMs += dt * 1000;
+        if (this._zoneOf(freq) === st.z) st.inZoneMs += dt * 1000;
+        if (this.$("[data-iz]") && st._frame % 10 === 0) {
+          this.$("[data-iz]").textContent = `${Math.round((st.inZoneMs / st.voicedMs) * 100)} %`;
+        }
+      }
+      // s22: spoken and sung turns
+      if (st.focus === "speech") this._speechFrame(raw, midi, bright, dt);
+      // s23: brightness against loudness, relative to the normal "YA"
+      if (st.focus === "bright") this._brightFrame(raw, bright, dt);
+      // s25: fill in each seam's level change once 3 s have passed
+      st.seams.forEach((s) => {
+        if (s.d == null && st.clock - s.t >= 3) {
+          const before = st.trace.filter((p) => p.db != null && p.t >= s.t - 3 && p.t < s.t).map((p) => p.db);
+          const after = st.trace.filter((p) => p.db != null && p.t >= s.t && p.t < s.t + 3).map((p) => p.db);
+          s.d = before.length >= 15 && after.length >= 15 ? K.median(after) - K.median(before) : NaN;
+        }
+      });
+      // Target hold: ±45 cents at the target's own octave, on sounding frames
+      if (st.wantMidi != null) {
+        const c = midi != null ? (midi - st.wantMidi) * 100 : null;
+        if (c != null && Math.abs(c) <= 45) {
+          st.inBand += dt * 1000;
+          st._octMs = 0;
+          st.octHint = 0;
+          st._hold.push({ c, dt, at: st.inBand / 1000, db: raw.db, clar, rel: st.focus === "soft" && soft.ref != null ? soft.rel : null });
+          if (st.inBand >= st.holdMs) this._credit();
+        } else {
+          // A brief wobble costs a little, it does not wipe the hold
+          st.inBand = Math.max(0, st.inBand - dt * 2000);
+          if (st.inBand === 0) st._hold = [];
+          // Singing the same note an octave away: say so once it is steady
+          if (c != null && Math.abs(Math.abs(c) - 1200) <= 60) {
+            st._octMs += dt * 1000;
+            if (st._octMs > 1500) st.octHint = c > 0 ? 1 : -1;
+          } else if (c != null) st._octMs = Math.max(0, st._octMs - dt * 1000);
+        }
+      }
+      this.viz?.draw();
+    },
+    _speechFrame(raw, midi, bright, dt) {
+      const sp = this.state.sp;
+      const K = global.VTViz.scenes.resonanceKit;
+      const now = this.state.clock;
+      if (midi != null) {
+        if (!sp.seg) sp.seg = { t0: now, t1: now, m: [], db: [], br: [], gap: 0 };
+        sp.seg.t1 = now;
+        sp.seg.gap = 0;
+        sp.seg.m.push(midi);
+        sp.seg.db.push(raw.db);
+        if (bright != null) sp.seg.br.push(bright);
+      } else if (sp.seg) {
+        sp.seg.gap += dt;
+        // A turn ends after a quarter second of quiet
+        if (sp.seg.gap >= 0.25) {
+          const s = sp.seg;
+          sp.seg = null;
+          const dur = s.t1 - s.t0;
+          if (dur >= 0.3 && s.m.length >= 8) {
+            const med = K.median(s.m);
+            const mean = s.m.reduce((a, b) => a + b, 0) / s.m.length;
+            const sd = Math.sqrt(s.m.reduce((a, b) => a + (b - mean) * (b - mean), 0) / s.m.length);
+            // Held on one pitch and long enough: sung; otherwise spoken
+            const kind = sd < 0.6 && dur >= 0.6 ? "sung" : "spoken";
+            const turn = { t0: s.t0, t1: s.t1, kind, med, db: K.median(s.db), br: s.br.length >= 4 ? K.median(s.br) : null };
+            sp.turns.push(turn);
+            if (sp.turns.length > 120) sp.turns.shift();
+            const spoken = sp.turns.filter((x) => x.kind === "spoken").slice(-12);
+            if (spoken.length) {
+              const all = spoken.map((x) => x.med);
+              sp.band = { lo: K.quantile(all, 0.25) - 0.5, hi: K.quantile(all, 0.75) + 0.5, med: K.median(all) };
+            }
+            if (kind === "sung") {
+              const lastSpoken = spoken[spoken.length - 1];
+              if (lastSpoken) {
+                sp.pairs.push({
+                  dDb: turn.db - lastSpoken.db,
+                  dBr: turn.br != null && lastSpoken.br != null ? turn.br - lastSpoken.br : null,
+                  dSt: turn.med - lastSpoken.med,
+                  t: turn.t1
+                });
+                if (sp.pairs.length > 40) sp.pairs.shift();
+              }
+            }
+          }
         }
       }
     },
+    _brightFrame(raw, bright, dt) {
+      const st = this.state;
+      const br = st.br;
+      const K = global.VTViz.scenes.resonanceKit;
+      if (raw.sounding) br.soundSec += dt;
+      // The normal "YA" moves on by itself after 3 s of sound
+      if (br.p === 0 && br.soundSec >= 3 && br.vals[0].length >= 20) this._nextPhase();
+      if (bright == null) return;
+      br.vals[br.p].push({ db: raw.db, br: bright });
+      if (br.vals[br.p].length > 600) br.vals[br.p].shift();
+      if (br.p === 0 || !br.base) {
+        const v = br.vals[0];
+        if (v.length >= 10) br.base = { db: K.median(v.map((x) => x.db)), br: K.median(v.map((x) => x.br)) };
+      }
+      if (!br.base) return;
+      br.pts.push({ t: st.clock, x: raw.db - br.base.db, y: bright - br.base.br });
+      while (br.pts.length && st.clock - br.pts[0].t > 3) br.pts.shift();
+      if (st._frame % 10 === 0) {
+        br.med = br.vals.map((v) =>
+          v.length >= 10 ? { x: K.median(v.map((q) => q.db)) - br.base.db, y: K.median(v.map((q) => q.br)) - br.base.br } : null
+        );
+        // Louder without brighter, over the last 1.5 s
+        const recent = br.pts.filter((p) => st.clock - p.t <= 1.5);
+        if (br.p > 0 && recent.length >= 10) {
+          const x = K.median(recent.map((p) => p.x));
+          const y = K.median(recent.map((p) => p.y));
+          br.louder = x >= 4 && y < 1;
+        } else br.louder = false;
+      }
+    },
     onStop() {
-      const held = this.state.held || 0;
-      const pct = this.state.voicedMs
-        ? Math.round((this.state.inZoneMs / this.state.voicedMs) * 100)
-        : 0;
+      const st = this.state;
+      const K = global.VTViz?.scenes?.resonanceKit;
+      const last = st.targets[st.targets.length - 1];
+      if (last && last.t1 == null) last.t1 = st.clock;
+      st.review = true;
+      if (this.viz) {
+        this.hud.classList.add("is-replay");
+        this.viz.draw();
+      }
+      const held = st.held || 0;
+      const pct = st.voicedMs ? Math.round((st.inZoneMs / st.voicedMs) * 100) : 0;
       const patches = {};
       if (held > 0) patches.zoneTargets = held;
-      if (this.state.voicedMs > 3000) {
-        const scale = pct >= 80 ? 5 : pct >= 60 ? 4 : pct >= 40 ? 3 : 2;
-        // Each zone exercise names its own quality metric ("body", "buzz",
-        // "stability"…): a patch under any other key is silently dropped.
-        const key =
-          this.profile.qualityMetric || (this.state.zones.length > 1 ? "transitions" : "steadiness");
-        patches[key] = scale;
+      // Pitch steadiness over the holds, where the exercise scores it. s24's
+      // is steadiness at soft volume, so only the holds sung soft count.
+      const key =
+        this.profile.stabilityMetric !== undefined
+          ? this.profile.stabilityMetric
+          : st.zones.length > 1
+            ? null
+            : "steadiness";
+      const used = st.cards.filter((c) => c.sd != null && (st.focus !== "soft" || c.soft !== false));
+      let sdMed = null;
+      if (key && used.length >= 2) {
+        sdMed = K ? K.median(used.map((c) => c.sd)) : used[0].sd;
+        patches[key] = sdMed <= 8 ? 5 : sdMed <= 15 ? 4 : sdMed <= 25 ? 3 : sdMed <= 40 ? 2 : 1;
       }
-      const spread = this.state.zoneHits
-        .map((n, i) => `${isEs() ? this.state.zones[i].labelEs : this.state.zones[i].label}:${n}`)
-        .join(" · ");
-      return { patches, summary: `${held} targets · ${pct}% in zone · ${spread}` };
+      const parts = [
+        L(`${held} ${held === 1 ? "objetivo" : "objetivos"}`, `${held} ${held === 1 ? "target" : "targets"}`),
+        L(`${pct} % en la zona`, `${pct}% in zone`)
+      ];
+      if (sdMed != null) parts.push(L(`tono ±${Math.round(sdMed)} ¢`, `pitch ±${Math.round(sdMed)} ¢`));
+      if (st.focus === "body" && st.floor) parts.push(L(`nota clara más grave: ${st.floor.name}`, `lowest clear note: ${st.floor.name}`));
+      if (st.focus === "soft") {
+        const known = st.cards.filter((c) => c.soft != null);
+        if (known.length) {
+          const n = known.filter((c) => c.soft).length;
+          parts.push(L(`${n} de ${known.length} notas suaves`, `${n} of ${known.length} notes soft`));
+        }
+      }
+      if (st.focus === "speech" && st.sp.pairs.length) {
+        const d = K.median(st.sp.pairs.map((p) => p.dDb));
+        const s = (Math.abs(d) < 0.05 ? "" : d > 0 ? "+" : "−") + Math.abs(d).toFixed(1);
+        parts.push(L(`cantado frente a hablado: ${s.replace(".", ",")} dB`, `sung vs spoken: ${s} dB`));
+      }
+      if (st.focus === "seams") {
+        const big = st.seams.filter((s) => Number.isFinite(s.d) && Math.abs(s.d) > 3);
+        const zl = (i) => (isEs() ? st.zones[i]?.labelEs || st.zones[i]?.label : st.zones[i]?.label) || "";
+        if (big.length) {
+          const b = big.reduce((x, y) => (Math.abs(y.d) > Math.abs(x.d) ? y : x));
+          const s = (b.d > 0 ? "+" : "−") + Math.abs(b.d).toFixed(1);
+          parts.push(L(`costura más marcada: ${zl(b.to)} (${s.replace(".", ",")} dB)`, `biggest seam: ${zl(b.to)} (${s} dB)`));
+        } else if (st.seams.some((s) => Number.isFinite(s.d))) parts.push(L("costuras parejas", "even seams"));
+      }
+      return { patches, summary: parts.join(" · ") };
     }
   });
 
   /**
-   * s26 placement A/B — two takes of the same phrase, plain then placed. There is
-   * nothing to detect here that the ear cannot do better, so the mode's job is to
-   * hold the protocol: same key, same melody, both takes marked, then listen.
+   * s26 placement A/B — the same phrase twice, plain then placed, then
+   * listen. The ear is the judge; what the microphone adds is a fair
+   * comparison. Each take starts by itself when you sing and ends after two
+   * seconds of quiet (or on "Take done"); the audio is kept in memory on
+   * this device only, for ▶ A / ▶ B playback, optionally level-matched.
+   * Beside the takes: whether they are comparable — same key (±50 cents),
+   * same volume (±3 dB), the same melody — and, approximately, how the
+   * brightness and the spectrum's shape differ. Nothing says which take is
+   * better; the learner rates that.
    */
   Modes.placementAB = baseMode({
     id: "placementAB",
     render() {
-      const phases = this.profile.phases || [];
-      this.state.phases = phases;
-      this.state.takes = 0;
-      this.state.runner = createPhaseRunner(phases, (i, p) => {
-        if (global.VTToast) global.VTToast(p.label);
-        const cueEl = this.$("[data-cue]");
-        if (cueEl) cueEl.textContent = phaseCueFor(p);
-      });
+      const st = this.state;
+      st.phases = this.profile.phases || [];
+      this._resetRun();
       this.hud.innerHTML = `
-        <div class="mode-title">${L("Comparar colocaciones · A/B", "Placement compare · A/B")}</div>
-        <div class="mode-phase" data-phase>${phases[0]?.label || L("Toma A", "Take A")}</div>
-        <div class="mode-big" data-remain>—</div>
-        <p class="mode-meta" data-cue>${phaseCueFor(phases[0])}</p>
-        <div class="controls-row">
-          <button type="button" class="btn btn-sm" data-take>${L(
-            "Marcar toma ✓",
-            "Mark take ✓"
-          )}</button>
+        <div class="viz-row viz-head ab-head">
+          <div class="mode-title">${L("Comparar colocaciones · A/B", "Placement compare · A/B")}</div>
+          <div class="ab-btns">
+            <button type="button" class="btn btn-sm viz-tap" data-take>${L("Toma lista ✓", "Take done ✓")}</button>
+            <button type="button" class="btn btn-sm viz-tap" data-play="A" hidden>▶ A</button>
+            <button type="button" class="btn btn-sm viz-tap" data-play="B" hidden>▶ B</button>
+            <button type="button" class="btn btn-sm viz-tap" data-match aria-pressed="false" hidden>${L("= volumen", "= level")}</button>
+            <button type="button" class="btn btn-sm viz-tap" data-retake hidden>${L("↺ Toma B", "↺ Take B")}</button>
+          </div>
         </div>
-        <p class="mode-meta">${L("Tomas marcadas", "Takes marked")} <strong data-n>0</strong>/2 · ${L(
-          "misma tonalidad en las dos",
-          "same key in both"
+        <div class="viz-words">
+          <span data-phase>${st.phases[0] ? phaseLabelFor(st.phases[0]) : L("Toma A", "Take A")}</span>
+          <span>${L("Tomas", "Takes")} <strong data-n>0</strong>/2</span>
+          <span data-cue>${phaseCueFor(st.phases[0])}</span>
+          <span data-facts></span>
+          <span data-status></span>
+        </div>
+        <p class="mode-meta muted">${L(
+          "Misma frase, misma tonalidad, mismo volumen. Luego escucha las dos: decide tu oído. Las tomas no salen de este dispositivo.",
+          "Same phrase, same key, same volume. Then listen to both: your ear decides. The takes stay on this device."
         )}</p>
       `;
-      this.$("[data-take]")?.addEventListener("click", () => {
-        this.state.takes = Math.min(2, this.state.takes + 1);
-        if (this.$("[data-n]")) this.$("[data-n]").textContent = String(this.state.takes);
+      this.$("[data-take]")?.addEventListener("click", () => this._markTake());
+      this.hud.querySelectorAll("[data-play]").forEach((b) => b.addEventListener("click", () => this._play(b.dataset.play)));
+      this.$("[data-match]")?.addEventListener("click", () => {
+        st.match = !st.match;
+        this._syncButtons();
+        if (st.playing) this._play(st.playing.which, true);
+        this.viz?.draw();
+      });
+      this.$("[data-retake]")?.addEventListener("click", () => this._retakeB());
+      this._mountViz();
+      this._syncButtons();
+    },
+    _resetRun() {
+      const st = this.state;
+      this._stopPlay?.();
+      const K = global.VTViz?.scenes?.resonanceKit;
+      st.stage = "A";
+      st.takes = 0;
+      st.A = null;
+      st.B = null;
+      st.cur = null;
+      st.recording = false;
+      st.facts = null;
+      st.match = false;
+      st.playing = null;
+      st.review = false;
+      st.clock = 0;
+      st._onMs = 0;
+      st._sil = 0;
+      st._mute = 0;
+      st._frame = 0;
+      st._m3 = [];
+      st.cap = K ? new K.Capture(30) : null;
+    },
+    _mountViz() {
+      const V = global.VTViz;
+      if (!V || !V.scenes.abTakes || !V.scenes.resonanceKit) return;
+      this.hud.classList.add("has-viz");
+      this.viz = new V.Surface(this.hud, (ctx, w, h) => V.scenes.abTakes(ctx, w, h, this.state), {
+        label: L(
+          "Dos tomas, A arriba y B abajo: la línea es tu altura frente a la de la toma A y la sombra tu volumen. Al lado, si las tomas se pueden comparar (misma tonalidad, mismo volumen, misma melodía) y en qué se diferencian, aproximadamente.",
+          "Two takes, A on top and B below: the line is your pitch against take A's and the shade your level. Beside them, whether the takes compare fairly (same key, same volume, same melody) and how they differ, approximately."
+        ),
+        captionHidden: true
+      });
+      this.viz.draw();
+    },
+    onStart() {
+      this._resetRun();
+      this.hud?.classList.remove("is-replay");
+      this._syncButtons();
+      this.viz?.caption?.(L("Toma A: canta la frase", "Take A: sing the phrase"), 0);
+      this.viz?.draw();
+    },
+    _stageLabel() {
+      const st = this.state;
+      const p = st.phases;
+      if (st.review) return L("Tus dos tomas", "Your two takes");
+      if (st.stage === "A") return p[0] ? phaseLabelFor(p[0]) : L("Toma A", "Take A");
+      if (st.stage === "B") return p[1] ? phaseLabelFor(p[1]) : L("Toma B", "Take B");
+      return p[2] ? phaseLabelFor(p[2]) : L("Escucha las dos", "Listen to both");
+    },
+    _syncButtons() {
+      const st = this.state;
+      const q = (s) => this.$(s);
+      const taking = !st.review && (st.stage === "A" || st.stage === "B");
+      const listening = st.review || st.stage === "listen";
+      const has = (k) => !!(st[k] && st[k].samples && st[k].samples.length);
+      if (q("[data-take]")) q("[data-take]").hidden = !taking;
+      ["A", "B"].forEach((k) => {
+        const b = q(`[data-play="${k}"]`);
+        if (!b) return;
+        // During take B, ▶ A recalls the key (nothing is recorded while it plays)
+        const recall = k === "A" && st.stage === "B" && !st.recording && !st.review;
+        b.hidden = !((listening || recall) && has(k));
+        b.textContent = st.playing && st.playing.which === k ? `■ ${k}` : `▶ ${k}`;
+        b.setAttribute("aria-label", st.playing && st.playing.which === k ? L(`Parar la toma ${k}`, `Stop take ${k}`) : L(`Escuchar la toma ${k}`, `Play take ${k}`));
+      });
+      if (q("[data-match]")) {
+        q("[data-match]").hidden = !(listening && has("A") && has("B"));
+        q("[data-match]").setAttribute("aria-pressed", st.match ? "true" : "false");
+      }
+      if (q("[data-retake]")) q("[data-retake]").hidden = !(st.stage === "listen" && !st.review);
+      if (q("[data-n]")) q("[data-n]").textContent = String(st.takes);
+      if (q("[data-phase]")) q("[data-phase]").textContent = this._stageLabel();
+      const cueIdx = st.stage === "A" ? 0 : st.stage === "B" ? 1 : 2;
+      if (q("[data-cue]")) q("[data-cue]").textContent = phaseCueFor(st.phases[cueIdx]);
+      if (q("[data-facts]")) q("[data-facts]").textContent = this._factsText();
+    },
+    /** "Take done": ends the take being sung; with nothing recorded it still marks one. */
+    _markTake() {
+      const st = this.state;
+      if (st.review || (st.stage !== "A" && st.stage !== "B")) return;
+      if (st.recording && st.cur && st.cur.sound >= 0.3) {
+        this._endTake();
+        return;
+      }
+      if (st.recording) this._dropTake();
+      st[st.stage] = { name: st.stage, noAudio: true, pts: [], dur: 0 };
+      this._advance();
+    },
+    _advance() {
+      const st = this.state;
+      st.takes = Math.min(2, st.takes + 1);
+      if (st.stage === "A") st.stage = "B";
+      else if (st.stage === "B") {
+        st.stage = "listen";
+        st.facts = this._facts();
+      }
+      this._syncButtons();
+      this.viz?.caption?.(this._stageLabel(), 0);
+      this.viz?.draw();
+    },
+    _retakeB() {
+      const st = this.state;
+      if (st.review) return;
+      this._stopPlay();
+      st.B = null;
+      st.facts = null;
+      st.stage = "B";
+      st.takes = Math.min(st.takes, 1);
+      st._onMs = 0;
+      this._syncButtons();
+      this.viz?.draw();
+    },
+    _startTake() {
+      const st = this.state;
+      if (!st.cap) return;
+      st.cap.start();
+      st.recording = true;
+      st._sil = 0;
+      st.cur = { name: st.stage, t0: st.clock - 0.15, pts: [], dbs: [], bright: [], ltasSum: null, ltasN: 0, sound: 0.15, dur: 0.15 };
+      this.viz?.caption?.(L(`Grabando la toma ${st.stage}`, `Recording take ${st.stage}`), 0);
+    },
+    _dropTake() {
+      const st = this.state;
+      st.cap?.stop();
+      st.recording = false;
+      st.cur = null;
+      st._onMs = 0;
+    },
+    _endTake() {
+      const st = this.state;
+      const K = global.VTViz?.scenes?.resonanceKit;
+      const tk = st.cur;
+      if (!tk || !K) return;
+      // Keep a third of a second of the quiet that ended the take
+      const recorded = st.cap.length / (st.cap.sr || 48000);
+      const keep = Math.max(0.5, recorded - Math.max(0, st._sil - 0.3));
+      tk.sr = st.cap.sr;
+      tk.samples = st.cap.stop(keep);
+      tk.dur = Math.max(0.1, tk.dur - Math.max(0, st._sil - 0.3));
+      tk.pts = tk.pts.filter((p) => p.t <= tk.dur);
+      st.recording = false;
+      st.cur = null;
+      st._onMs = 0;
+      // The take's own level: its sounding frames without the quiet tails
+      const loud = tk.dbs.length ? K.median(tk.dbs) : null;
+      const body = loud == null ? [] : tk.dbs.filter((d) => d > loud - 15);
+      tk.medDb = body.length ? K.median(body) : null;
+      const ms = tk.pts.filter((p) => p.m != null).map((p) => p.m);
+      tk.medMidi = ms.length >= 5 ? K.median(ms) : null;
+      tk.bright = tk.bright.length >= 6 ? K.median(tk.bright) : null;
+      if (tk.ltasN >= 6) {
+        const db = tk.ltasSum.map((v) => 10 * Math.log10(v / tk.ltasN + 1e-20));
+        const top = Math.max(...db);
+        tk.ltas = db.map((v) => v - top);
+      } else tk.ltas = null;
+      tk.peak = K.peakOf(tk.samples);
+      delete tk.dbs;
+      delete tk.ltasSum;
+      st[tk.name] = tk;
+      this._advance();
+    },
+    /** Is the comparison fair, and what differs — measured, approximate. */
+    _facts() {
+      const st = this.state;
+      const K = global.VTViz?.scenes?.resonanceKit;
+      const A = st.A;
+      const B = st.B;
+      if (!K || !A || !B || A.noAudio || B.noAudio) return null;
+      const f = { durA: A.dur, durB: B.dur };
+      f.key = A.medMidi != null && B.medMidi != null ? (B.medMidi - A.medMidi) * 100 : null;
+      f.vol = A.medDb != null && B.medDb != null ? B.medDb - A.medDb : null;
+      f.bright = A.bright != null && B.bright != null ? B.bright - A.bright : null;
+      // The melody: both pitch lines stretched to the same length, correlated
+      const res = (tk) => {
+        const p = tk.pts.filter((q) => q.m != null);
+        if (p.length < 10) return null;
+        const out = [];
+        const t0 = p[0].t;
+        const t1 = p[p.length - 1].t;
+        for (let i = 0; i < 40; i++) {
+          const t = t0 + ((t1 - t0) * i) / 39;
+          let best = p[0];
+          for (const q of p) if (Math.abs(q.t - t) < Math.abs(best.t - t)) best = q;
+          out.push(best.m);
+        }
+        return out;
+      };
+      const ra = res(A);
+      const rb = res(B);
+      f.corr = ra && rb ? K.correlation(ra, rb) : null;
+      // A flat melody (one held note) correlates by chance: only judge a moving one
+      if (ra && rb && Math.max(...ra) - Math.min(...ra) < 1.5) f.corr = null;
+      f.keyOk = f.key == null || Math.abs(f.key) <= 50;
+      f.volOk = f.vol == null || Math.abs(f.vol) <= 3;
+      f.melOk = f.corr == null || f.corr >= 0.5;
+      f.fair = f.keyOk && f.volOk && f.melOk;
+      return f;
+    },
+    _factsText() {
+      const st = this.state;
+      const f = st.facts;
+      if (!f) return "";
+      const n1 = (x) => {
+        const s = Math.abs(x).toFixed(1);
+        return (x < 0 ? "−" : "+") + (isEs() ? s.replace(".", ",") : s);
+      };
+      const parts = [];
+      if (f.key != null) parts.push(f.keyOk ? L("misma tonalidad", "same key") : L(`B ${n1(f.key / 100)} semitonos`, `B ${n1(f.key / 100)} semitones`));
+      if (f.vol != null) parts.push(f.volOk ? L("mismo volumen", "same volume") : L(`B ${n1(f.vol)} dB`, `B ${n1(f.vol)} dB`));
+      if (f.corr != null && !f.melOk) parts.push(L("¿la misma frase?", "the same phrase?"));
+      if (f.bright != null) parts.push(L(`brillo B ${n1(f.bright)} dB (aprox.)`, `brightness B ${n1(f.bright)} dB (approx.)`));
+      return parts.join(" · ");
+    },
+    _play(which, restart) {
+      const st = this.state;
+      const K = global.VTViz?.scenes?.resonanceKit;
+      const tk = st[which];
+      if (!K || !tk || !tk.samples) return;
+      const same = st.playing && st.playing.which === which;
+      this._stopPlay();
+      if (same && !restart) return;
+      // Level-matched: the louder take is turned down to the softer one
+      let gain = 1;
+      if (st.match && st.A?.medDb != null && st.B?.medDb != null) {
+        const target = Math.min(st.A.medDb, st.B.medDb);
+        gain = Math.pow(10, (target - tk.medDb) / 20);
+      }
+      const stop = K.playSamples(tk.samples, tk.sr || 48000, gain, () => {
+        if (st.playing && st.playing.stop === stop) {
+          st.playing = null;
+          this._syncButtons();
+          this.viz?.draw();
+        }
+      });
+      if (!stop) {
+        if (this.$("[data-status]")) this.$("[data-status]").textContent = L("No se pudo reproducir", "Could not play back");
+        return;
+      }
+      st.playing = { which, at: performance.now(), dur: tk.samples.length / (tk.sr || 48000), stop };
+      this._syncButtons();
+      this._tick();
+    },
+    _stopPlay() {
+      const st = this.state;
+      if (st && st.playing) {
+        const p = st.playing;
+        st.playing = null;
+        try {
+          p.stop();
+        } catch {
+          /* already stopped */
+        }
+        this._syncButtons?.();
+      }
+    },
+    /**
+     * While a take plays: after Stop no frames arrive, so this redraws the
+     * playhead; and once the panel is gone (the learner left the exercise)
+     * it stops the take instead of letting it play on.
+     */
+    _tick() {
+      const st = this.state;
+      if (!st.playing || !global.requestAnimationFrame) return;
+      requestAnimationFrame(() => {
+        if (!st.playing) return;
+        if (!this.hud) {
+          this._stopPlay();
+          return;
+        }
+        if (st.review && !global.VTViz?.reducedMotion?.()) this.viz?.draw();
+        this._tick();
       });
     },
-    onFrame() {
-      const r = this.state.runner;
-      if (!r) return;
-      r.tick(performance.now());
-      const done = r.index >= r.count;
-      if (this.$("[data-phase]"))
-        this.$("[data-phase]").textContent = done
-          ? L("Escucha las dos y quédate con una", "Play both back and keep one")
-          : r.label;
-      if (this.$("[data-remain]"))
-        this.$("[data-remain]").textContent = done ? "✓" : `${Math.ceil(r.remaining)}s`;
+    onFrame(frame) {
+      const st = this.state;
+      const K = global.VTViz?.scenes?.resonanceKit;
+      if (!K || st.review) return;
+      const raw = K.rawOf(frame);
+      const dt = raw.dt;
+      st.clock += dt;
+      st._frame++;
+      // Listening: nothing is recorded, so playback is never taken for a take
+      if (st.stage === "listen") {
+        if (st.playing) this.viz?.draw();
+        return;
+      }
+      st.cap?.feed(frame);
+      let midi = null;
+      if (raw.sounding && raw.freq) {
+        st._m3.push(K.midiOf(raw.freq));
+        if (st._m3.length > 3) st._m3.shift();
+        midi = K.median(st._m3);
+      } else st._m3 = [];
+      if (!st.recording) {
+        // Not while a take is playing back, nor just after: that is not you
+        if (st.playing) st._mute = 0.4;
+        else if (st._mute > 0) st._mute -= dt;
+        st._onMs = raw.sounding && !st.playing && !(st._mute > 0) ? st._onMs + dt * 1000 : 0;
+        if (st._onMs >= 150) {
+          this._startTake();
+          this._syncButtons();
+        }
+      }
+      const tk = st.cur;
+      if (st.recording && tk) {
+        tk.dur = st.clock - tk.t0;
+        if (raw.sounding) {
+          tk.sound += dt;
+          st._sil = 0;
+          tk.dbs.push(raw.db);
+        } else st._sil += dt;
+        const last = tk.pts[tk.pts.length - 1];
+        if (!last || tk.dur - last.t >= 0.04 || (midi == null) !== (last.m == null)) {
+          tk.pts.push({ t: tk.dur, m: midi, db: raw.sounding ? raw.db : null });
+        }
+        // Spectrum of the take, every other sounding frame
+        if (raw.sounding && frame.buf && st._frame % 2 === 0) {
+          const sr = frame.sampleRate || 48000;
+          const spec = K.powerSpectrum(frame.buf);
+          const b = K.brightnessDb(spec, sr);
+          if (b != null) tk.bright.push(b);
+          if (sr >= 16000) {
+            const bands = K.thirdOctave(spec, sr);
+            if (!tk.ltasSum) tk.ltasSum = bands.map(() => 0);
+            bands.forEach((v, i) => (tk.ltasSum[i] += v));
+            tk.ltasN += 1;
+          }
+        }
+        if (st._sil >= 1.8) {
+          if (tk.sound >= 1.2) this._endTake();
+          else this._dropTake();
+        } else if (tk.dur >= 29.5) this._endTake();
+      }
+      this.viz?.draw();
     },
     onStop() {
-      const n = this.state.takes || 0;
-      return {
-        patches: n > 0 ? { takes: n } : {},
-        summary: n >= 2 ? "A/B takes marked — compare the playback" : `${n}/2 takes marked`
-      };
+      const st = this.state;
+      if (st.recording && st.cur) {
+        if (st.cur.sound >= 1.2) this._endTake();
+        else this._dropTake();
+      }
+      st.review = true;
+      if (this.viz) {
+        this.hud.classList.add("is-replay");
+        this.viz.draw();
+      }
+      this._syncButtons();
+      const n = st.takes || 0;
+      const f = st.facts;
+      const parts = [L(`${n}/2 tomas`, `${n}/2 takes`)];
+      const t = this._factsText();
+      if (t) parts.push(t);
+      else if (n >= 2) parts.push(L("escucha las dos", "listen to both"));
+      if (f && !f.fair) parts.push(L("repite B para comparar en igualdad", "retake B for a fair comparison"));
+      // Only the count is measured; which take was better is the learner's call
+      return { patches: n > 0 ? { takes: n } : {}, summary: parts.join(" · ") };
     }
   });
 

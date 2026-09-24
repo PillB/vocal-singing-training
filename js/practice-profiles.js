@@ -666,7 +666,8 @@
     "s20-five-vowels": {
       mode: "vowelLadder",
       ownsTarget: true,
-      showPitch: true,
+      // The mode draws its own one-note lane (a column per vowel) in the panel
+      showPitch: false,
       showHold: false,
       showLevel: true,
       pitchChallenge: false,
@@ -683,8 +684,11 @@
       mode: "resonanceZone",
       // The mode walks its own note list; keep the generic refPitch off the target
       ownsTarget: true,
-      qualityMetric: "body",
-      showPitch: true,
+      // The mode draws its own zone lane in the panel (no pitch highway)
+      showPitch: false,
+      focus: "body",
+      // Only what the microphone measures is scored: the picture measures level and tone clarity; body and comfort stay self-rated
+      stabilityMetric: false,
       showHold: false,
       showLevel: true,
       pitchChallenge: false,
@@ -694,23 +698,26 @@
       zones: [
         {
           key: "low",
-          label: "Low · chest",
-          labelEs: "Graves · pecho",
+          label: "Low · chest voice",
+          labelEs: "Graves · voz de pecho",
           notes: ["C3", "B2", "A2", "G2", "A2", "B2"],
-          cue: "Aim the sound lower, soft palate open. Do not press the voice down.",
-          cueEs: "Dirige el sonido más abajo, paladar blando abierto. No empujes la voz hacia abajo."
+          cue: "Low and easy, space in the mouth. Do not press the voice down.",
+          cueEs: "Grave y fácil, espacio en la boca. No empujes la voz hacia abajo."
         }
       ],
-      cue: "Low targets with body. Aim lower — never press.",
-      cueEs: "Objetivos graves con cuerpo. Dirige más abajo — nunca aprietes.",
+      cue: "Low targets with body, never pressed. Stop where the tone stops being clear.",
+      cueEs: "Objetivos graves con cuerpo, sin apretar. Para donde el tono deja de ser claro.",
       metricHints: { zoneTargets: "targets" }
     },
     "s22-mid-voice-hola": {
       mode: "resonanceZone",
       // The mode walks its own note list; keep the generic refPitch off the target
       ownsTarget: true,
-      qualityMetric: "steadiness",
-      showPitch: true,
+      // The mode draws its own zone lane in the panel (no pitch highway)
+      showPitch: false,
+      focus: "speech",
+      // Only what the microphone measures is scored: pitch steadiness over the holds is measured; speech-likeness stays self-rated
+      stabilityMetric: "steadiness",
       showHold: false,
       showLevel: true,
       pitchChallenge: false,
@@ -735,8 +742,11 @@
       mode: "resonanceZone",
       // The mode walks its own note list; keep the generic refPitch off the target
       ownsTarget: true,
-      qualityMetric: "buzz",
-      showPitch: true,
+      // The mode draws its own zone lane in the panel (no pitch highway)
+      showPitch: false,
+      focus: "bright",
+      // Only what the microphone measures is scored: the picture shows brightness against loudness; buzz and balance stay self-rated
+      stabilityMetric: false,
       showHold: false,
       showLevel: true,
       pitchChallenge: false,
@@ -749,20 +759,23 @@
           label: "Mask · bright",
           labelEs: "Máscara · brillante",
           notes: ["E3", "G3", "A3", "G3", "B3", "A3"],
-          cue: "'YA, YA' deliberately nasal. Find the buzz in the nose and forehead.",
-          cueEs: "«YA, YA» a propósito nasal. Encuentra el zumbido en nariz y frente."
+          cue: "'YA, YA' deliberately nasal and bright. Notice where you feel the buzz.",
+          cueEs: "«YA, YA» a propósito nasal y brillante. Nota dónde sientes el zumbido."
         }
       ],
-      cue: "Exaggerate the nasal 'YA' to find the mask, then balance the colour back.",
-      cueEs: "Exagera el «YA» nasal para encontrar la máscara, luego equilibra el color.",
+      cue: "Normal 'YA', then exaggerate it, keep it on the notes, then balance the colour back.",
+      cueEs: "«YA» normal, luego exagéralo, mantenlo en las notas y equilibra el color.",
       metricHints: { zoneTargets: "targets" }
     },
     "s24-nana-high": {
       mode: "resonanceZone",
       // The mode walks its own note list; keep the generic refPitch off the target
       ownsTarget: true,
-      qualityMetric: "stability",
-      showPitch: true,
+      // The mode draws its own zone lane in the panel (no pitch highway)
+      showPitch: false,
+      focus: "soft",
+      // Only what the microphone measures is scored: pitch steadiness over the holds sung soft is measured; pushing stays self-rated
+      stabilityMetric: "stability",
       showHold: false,
       showLevel: true,
       pitchChallenge: false,
@@ -787,8 +800,11 @@
       mode: "resonanceZone",
       // The mode walks its own note list; keep the generic refPitch off the target
       ownsTarget: true,
-      qualityMetric: "transitions",
-      showPitch: true,
+      // The mode draws its own zone lane in the panel (no pitch highway)
+      showPitch: false,
+      focus: "seams",
+      // Only what the microphone measures is scored: the picture shows each seam; transitions and comfort stay self-rated
+      stabilityMetric: false,
       showHold: false,
       showLevel: true,
       pitchChallenge: false,
@@ -834,15 +850,18 @@
       showHold: false,
       showLevel: true,
       pitchChallenge: false,
-      autoPiano: true,
+      // No piano on Start: a looping accompaniment would be recorded into
+      // take A and not B (or both, differently), and the comparison is the
+      // point. The piano stays one tap away to find a starting note.
+      autoPiano: false,
       autoRecord: true,
       phases: [
         {
           label: "Take A · plain",
           labelEs: "Toma A · sin intención",
           sec: 45,
-          cue: "Sing the phrase the way it comes out. Mark the take when you finish it.",
-          cueEs: "Canta la frase como te salga. Marca la toma al terminarla."
+          cue: "Sing the phrase the way it comes out. The take starts when you sing and ends after two seconds of quiet.",
+          cueEs: "Canta la frase como te salga. La toma empieza al cantar y acaba tras dos segundos de silencio."
         },
         {
           label: "Take B · placed",
@@ -855,8 +874,8 @@
           label: "Listen back",
           labelEs: "Escucha las dos",
           sec: 30,
-          cue: "Not which is prettier — which has more ring and width.",
-          cueEs: "No cuál es más bonita — cuál tiene más resonancia y amplitud."
+          cue: "Play A and B. Not which is prettier: which sounds fuller and rings more to you.",
+          cueEs: "Escucha A y B. No cuál es más bonita: cuál te suena más llena y con más brillo."
         }
       ],
       cue: "Two takes of one phrase, plain then placed, then listen back and keep one.",

@@ -1075,7 +1075,7 @@ window.VT_EXERCISES = {
       metrics: [
         { id: "zoneTargets", label: "Middle targets held", labelEs: "Objetivos medios sostenidos", type: "number", target: 6, unit: "" },
         { id: "speechLike", label: "Speech-like ease", labelEs: "Facilidad parecida al habla", type: "scale", min: 1, max: 5 },
-        { id: "steadiness", label: "Steadiness", labelEs: "Estabilidad", type: "scale", min: 1, max: 5 }
+        { id: "steadiness", label: "Pitch steadiness", labelEs: "Estabilidad del tono", type: "scale", min: 1, max: 5 }
       ],
       audio: { timer: true, record: true, piano: true, pitchViz: true, refPitch: "D3" },
       timerDefaultSec: 180
@@ -1150,7 +1150,7 @@ window.VT_EXERCISES = {
       ],
       metrics: [
         { id: "zoneTargets", label: "High targets held", labelEs: "Objetivos agudos sostenidos", type: "number", target: 6, unit: "" },
-        { id: "stability", label: "Stability at low pressure", labelEs: "Estabilidad con poca presión", type: "scale", min: 1, max: 5 },
+        { id: "stability", label: "Pitch steadiness at soft volume", labelEs: "Estabilidad del tono a volumen suave", type: "scale", min: 1, max: 5 },
         { id: "noPush", label: "Reached without pushing", labelEs: "Llegaste sin empujar", type: "scale", min: 1, max: 5 }
       ],
       audio: { timer: true, record: true, piano: true, pitchViz: true, refPitch: "G3" },

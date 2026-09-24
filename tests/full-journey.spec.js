@@ -36,7 +36,8 @@ async function installFakeMic(page) {
 
 /**
  * A day sung yesterday. A first visit shows only the Mínimo and its button;
- * the other ways in (Continuar, sesión guiada, Ruta) come with a day sung.
+ * the other ways in (Continuar, sesión guiada) come with a day sung, behind
+ * "Otras formas de practicar".
  */
 async function seedPracticeDay(page) {
   await page.addInitScript(() => {
@@ -265,6 +266,8 @@ test.describe("Full journey: core user flows", () => {
   test("structured session: start basic path banner", async ({ page }) => {
     await boot(page, { returning: true });
     await page.click('.tab[data-tab="vocal"]');
+    // With a day sung the guided session sits behind "Otras formas de practicar".
+    await page.click("#btn-more-ways");
     const structured = page.locator("#btn-structured");
     if (!(await structured.isVisible().catch(() => false))) {
       test.skip();
@@ -377,6 +380,8 @@ test.describe("Full journey: core user flows", () => {
   test("end structured session stops live practice", async ({ page }) => {
     await boot(page, { returning: true });
     await page.click('.tab[data-tab="vocal"]');
+    // With a day sung the guided session sits behind "Otras formas de practicar".
+    await page.click("#btn-more-ways");
     const structured = page.locator("#btn-structured");
     if (!(await structured.isVisible().catch(() => false))) {
       test.skip();

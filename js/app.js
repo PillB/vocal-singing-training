@@ -60,7 +60,15 @@
     /** The reminder shown today, kept until dismissed (renderRetentionChrome). */
     remindDue: null,
     /** The guided step on the step-done card was listening when its clock ran out. */
-    stepDoneMic: false
+    stepDoneMic: false,
+    /**
+     * The rating card for this open: the one-tap answer, the saved result, why
+     * it opened (the clock ran out), and the first save's comparison and
+     * first-win flag, which a changed answer keeps.
+     */
+    rate: { feel: null, result: null, end: null, prevScore: null, firstWin: false },
+    /** The open exercise's steps when the stage shows them (no pitch canvas). */
+    stageSteps: []
   };
 
   const $ = (sel, el = document) => el.querySelector(sel);
@@ -398,6 +406,8 @@
       if (!input || v == null) return;
       if (input.type === "range") {
         input.value = String(v);
+        // Measured by the mode: a one-tap rating leaves it alone.
+        input.dataset.measured = "1";
         input.dispatchEvent(new Event("input"));
       } else {
         const cur = Number(input.value);
@@ -424,19 +434,31 @@
 
   /** Keep sticky highway under real header + exercise chrome (Back row). */
   function syncHeaderHeightVar() {
+    // Set on body as well as the root: body.view-exercise carries fallback
+    // values that otherwise shadowed these, so on a phone the stage stuck
+    // under a header row that was taller than the fallback said.
+    const setVar = (name, value) => {
+      document.documentElement.style.setProperty(name, value);
+      document.body?.style.setProperty(name, value);
+    };
     try {
       const h = document.querySelector("header.app-header");
       if (h) {
-        const hh = Math.max(40, Math.ceil(h.getBoundingClientRect().height));
-        document.documentElement.style.setProperty("--header-h", `${hh}px`);
+        // A rotated phone hides the header while an exercise is open (design:
+        // landscape); the sticky rows below it then start at the very top.
+        const hh =
+          getComputedStyle(h).display === "none"
+            ? 0
+            : Math.max(40, Math.ceil(h.getBoundingClientRect().height));
+        setVar("--header-h", `${hh}px`);
       }
       // Sticky ← Atrás row height — stage must stick below it so hits never land on stage/header
       const ex = document.querySelector(".exercise-header-compact");
       if (ex && !ex.hidden && getComputedStyle(ex).display !== "none") {
         const eh = Math.max(36, Math.ceil(ex.getBoundingClientRect().height));
-        document.documentElement.style.setProperty("--ex-chrome-h", `${eh}px`);
+        setVar("--ex-chrome-h", `${eh}px`);
       } else {
-        document.documentElement.style.setProperty("--ex-chrome-h", "0px");
+        setVar("--ex-chrome-h", "0px");
       }
     } catch {
       /* ignore */
@@ -492,19 +514,39 @@
         const anchor = title || cock || stage;
         const ar = anchor.getBoundingClientRect();
         if (ar.top < 0 || ar.top > (window.innerHeight || 600) * 0.35) {
-          anchor.scrollIntoView({ block: "start", behavior: "auto" });
+          // "instant": html has scroll-behavior: smooth, so "auto" glided and
+          // the stage below was measured mid-scroll.
+          anchor.scrollIntoView({ block: "start", behavior: "instant" });
         }
       } catch {
         /* ignore */
       }
+      syncStageInsets();
       const r = stage.getBoundingClientRect();
       const { vh, offsetTop, safeBottom } = getViewportMetrics();
       // Gap: short/landscape + safe-area (home indicator)
       const gap = (vh < 500 ? 12 : 8) + Math.max(0, safeBottom);
       // Visual bottom of the usable screen (visualViewport may be offset)
       const visualBottom = offsetTop + vh;
+      // Size for the lowest the stage sits at rest. It is sticky, so a page
+      // scrolled by a few pixels lifts it to its sticky offset; measured then,
+      // the stage came out that much too tall once the page was back at the
+      // top (VG-30: 400px against a 390px landscape phone). When the stage
+      // starts high enough that the top of the page is where it rests, size it
+      // for that position.
+      let top = Math.max(0, r.top);
+      const cock = document.getElementById("practice-cockpit");
+      if (cock && stage.parentElement === cock) {
+        const cs = getComputedStyle(cock);
+        const restTop =
+          cock.getBoundingClientRect().top +
+          window.scrollY +
+          (parseFloat(cs.borderTopWidth) || 0) +
+          (parseFloat(cs.paddingTop) || 0);
+        if (restTop <= vh * 0.35) top = Math.max(top, restTop);
+      }
       // Remaining space under stage top within the *visual* viewport
-      const avail = Math.floor(visualBottom - Math.max(0, r.top) - gap);
+      const avail = Math.floor(visualBottom - top - gap);
       let maxH = Math.max(120, avail);
       // Prefer tall for low vision but never past visual bottom
       const prefer = Math.min(
@@ -527,37 +569,10 @@
         stage.style.maxHeight = `${fix}px`;
         stage.style.height = `${fix}px`;
       }
-      // Measure bottom rail so mode-focus never covers Start/Mic (hit-target safety)
-      try {
-        const rail = document.getElementById("hud-bottom-rail");
-        if (rail) {
-          const rh = Math.ceil(rail.getBoundingClientRect().height || 0);
-          // +12px gap so mode-focus bottom stays above rail top
-          const clear = Math.max(72, rh + 12 + Math.min(12, safeBottom));
-          stage.style.setProperty("--rail-h", `${clear}px`);
-        }
-      } catch {
-        /* ignore */
-      }
-      // Fit the in-stage guidance into whatever is left between the mode panel
-      // and the bottom rail, so it never rides over either.
-      try {
-        const guide = document.getElementById("stage-guide");
-        // dataset.on, not .hidden: a rotate back into portrait must be able to
-        // bring the guide back after a short viewport hid it.
-        if (guide && guide.dataset.on === "1") {
-          const sr = stage.getBoundingClientRect();
-          const panel = stage.querySelector(".mode-panel");
-          const panelBottom = panel ? panel.getBoundingClientRect().bottom : sr.top;
-          const railPx = parseFloat(getComputedStyle(stage).getPropertyValue("--rail-h")) || 88;
-          const room = Math.floor(sr.bottom - railPx - 8 - Math.max(panelBottom, sr.top) - 8);
-          // Below ~92px only a heading would fit, which is worse than nothing
-          guide.hidden = room < 92;
-          guide.style.maxHeight = room > 0 ? `${room}px` : "";
-        }
-      } catch {
-        /* ignore */
-      }
+      // Rails re-measured at the fitted height, so mode-focus and the lanes
+      // never run under Start/Mic (hit-target safety) or the top controls.
+      syncStageInsets();
+      fitStageGuide();
       // Ensure Start is fully inside visual viewport (critical for short + land)
       try {
         const start = document.getElementById("btn-practice-start");
@@ -591,6 +606,170 @@
     } catch {
       /* ignore */
     }
+  }
+
+  /**
+   * Place what sits between the stage's two rails from their measured edges.
+   * The top rail (status, chords, score and, on a pitch exercise, the coach
+   * strip) and the bottom rail (Start, mic, piano) change height as they wrap;
+   * at a fixed 10% the top rail's second row covered the mode panel's title on
+   * a phone, and the lanes ran under both rails.
+   * Sets --rail-t (top rail's bottom edge) and --rail-h (bottom rail plus a gap)
+   * on the stage. Returns true when either moved.
+   */
+  function syncStageInsets() {
+    try {
+      const stage = document.getElementById("highway-stage");
+      if (!stage || !document.body.classList.contains("view-exercise")) return false;
+      const sr = stage.getBoundingClientRect();
+      if (sr.height < 1) return false;
+      let railBottom = 0;
+      [...(document.getElementById("hud-top-rail")?.children || [])].forEach((el) => {
+        const b = el.getBoundingClientRect();
+        if (b.height) railBottom = Math.max(railBottom, b.bottom - sr.top);
+      });
+      const rail = document.getElementById("hud-bottom-rail");
+      const rh = Math.ceil(rail?.getBoundingClientRect().height || 0);
+      // +12px gap so mode-focus bottom stays above rail top
+      const clear = Math.max(72, rh + 12 + Math.min(12, getViewportMetrics().safeBottom));
+      const t = `${Math.ceil(railBottom) + 4}px`;
+      const b = `${clear}px`;
+      const moved =
+        stage.style.getPropertyValue("--rail-t") !== t || stage.style.getPropertyValue("--rail-h") !== b;
+      stage.style.setProperty("--rail-t", t);
+      stage.style.setProperty("--rail-h", b);
+      return moved;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Show as many of the guide's steps as fit under the mode panel, whole: a
+   * clipped box cut a step through the middle of a line, and below ~90px the
+   * box used to vanish and leave an empty band. When no step fits, the button
+   * to all the steps still does. While practising it holds one step, so it
+   * only needs room for that.
+   */
+  function fitStageGuide() {
+    const guide = $("#stage-guide");
+    // dataset.on, not .hidden: a rotate back into portrait must be able to
+    // bring the guide back after a short viewport hid it.
+    if (!guide || guide.dataset.on !== "1") return;
+    const focus = $("#mode-focus");
+    const panel = $("#mode-focus-panel");
+    if (!focus || focus.hidden) return;
+    const live = guide.classList.contains("is-now");
+    const head = $("#stage-guide-k");
+    const list = $("#stage-guide-steps");
+    const items = $$("#stage-guide-steps li", guide);
+    items.forEach((li) => (li.hidden = false));
+    if (head) head.hidden = live;
+    if (list) list.hidden = live;
+    guide.classList.remove("is-bare");
+    guide.hidden = false;
+    const cs = getComputedStyle(focus);
+    const room = Math.floor(
+      focus.clientHeight -
+        (parseFloat(cs.paddingTop) || 0) -
+        (parseFloat(cs.paddingBottom) || 0) -
+        (panel && panel.offsetHeight ? panel.offsetHeight + (parseFloat(cs.rowGap) || 0) : 0)
+    );
+    const fits = () => guide.scrollHeight <= room + 1;
+    if (!live) {
+      // Idle: drop steps from the end; "Ver todos los pasos" still opens the rest.
+      for (let i = items.length - 1; i > 0 && !fits(); i--) items[i].hidden = true;
+      if (!fits() && head && list) {
+        head.hidden = true;
+        list.hidden = true;
+        guide.classList.add("is-bare");
+      }
+    }
+    guide.hidden = !fits();
+  }
+
+  /**
+   * The stage guide while practising: the step the clock has reached, "Ahora ·
+   * paso 2 de 5", moving on as the time runs. The steps used to disappear at
+   * Start and leave the middle of the stage empty. Idle, it lists the first
+   * steps again. Cheap enough for every timer tick: it redraws on a change.
+   * @param {boolean} [force] redraw even if the step is the same (new exercise, language)
+   */
+  function syncStageNow(force) {
+    const wrap = $("#stage-guide");
+    if (!wrap || wrap.dataset.on !== "1") return;
+    const steps = state.stageSteps || [];
+    const t = state.timer;
+    const live = !!state.practiceLive && t.total > 0 && steps.length > 0;
+    const idx = live
+      ? Math.min(steps.length - 1, Math.floor(Math.max(0, t.total - t.remaining) / (t.total / steps.length)))
+      : -1;
+    const key = live ? String(idx) : "idle";
+    if (!force && wrap.dataset.now === key) return;
+    wrap.dataset.now = key;
+    wrap.classList.toggle("is-now", live);
+    // The step lives in its own polite live region, number and text together;
+    // the idle list around it stays silent while it is refitted.
+    const now = $("#stage-guide-now");
+    if (now) {
+      now.hidden = !live;
+      $("#stage-now-k").textContent = live ? tt("ex.stageNow", { n: idx + 1, total: steps.length }) : "";
+      $("#stage-now-t").textContent = live ? steps[idx] : "";
+    }
+    $("#stage-guide-k").textContent = tt("ex.stageGuideLabel");
+    $("#btn-stage-guide-more").hidden = live;
+    // Heading and list: fitStageGuide shows them idle, as room allows
+    fitStageGuide();
+  }
+
+  /** Re-place the lanes and the guide whenever a rail changes height (wrap, live HUD, cue). */
+  function watchStageRails() {
+    if (typeof ResizeObserver !== "function") return;
+    let raf = 0;
+    const ro = new ResizeObserver(() => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const moved = syncStageInsets();
+        fitStageGuide();
+        if (!moved) return;
+        try {
+          if (state.pitchViz && !$("#pitch-block")?.hidden) {
+            if (!state.practiceLive && typeof state.pitchViz.redrawIdle === "function") {
+              state.pitchViz.redrawIdle();
+            } else {
+              state.pitchViz._resize?.();
+            }
+          }
+        } catch {
+          /* ignore */
+        }
+      });
+    });
+    ["hud-top-rail", "hud-bottom-rail", "mode-focus-panel"].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) ro.observe(el);
+    });
+    // On a phone on its side the banner's Pausar and Terminar sit in the
+    // exercise header's row, which keeps their width free (design: landscape).
+    const ctl = $("#session-banner .controls-row");
+    if (ctl) {
+      new ResizeObserver(() => {
+        const w = Math.ceil(ctl.getBoundingClientRect().width);
+        if (w) document.body.style.setProperty("--session-ctl-w", `${w}px`);
+      }).observe(ctl);
+    }
+  }
+
+  /**
+   * Where an exercise's mode panel mounts; both places are on the stage. A
+   * pitch exercise's mode rides with its cue in the strip under the top
+   * controls (#stage-coach, design: coach-strip); any other exercise's sits in
+   * the middle of the stage, above the guide. A mode empties what it mounts
+   * into, hence the inner panel.
+   */
+  function modeMountTarget(profile) {
+    if (profile.showPitch) return $("#mode-hud");
+    return $("#mode-focus-panel") || $("#mode-focus");
   }
 
   /** Debounced fit for resize / visualViewport / orientation / fullscreen */
@@ -1006,6 +1185,7 @@
     const s = VTSession.get();
     if (!s || s.status === "completed") {
       banner.classList.remove("visible");
+      syncStructuredProgress();
       return;
     }
     banner.classList.add("visible");
@@ -1017,9 +1197,42 @@
         : s.path === "basics"
           ? tt("loop.banner", { tier: tt("loop.tier." + (s.tier || "min")) })
           : tt("session.bannerTitle", { track: trackLabel });
-    $("#session-banner-text").textContent = `${name} · ${status} · ${VTSession.progressLabel()}`;
+    // One line (design: session-chrome): where you are first and never cut,
+    // then "En pausa" only when it is and the routine's name, which a narrow
+    // phone cuts with "…". The title keeps the whole line for a pointer.
+    const pos = document.createElement("span");
+    pos.className = "session-banner-pos";
+    pos.textContent = VTSession.progressLabel();
+    const rest = document.createElement("span");
+    rest.className = "session-banner-rest";
+    // A no-break space: a flex item drops its leading space ("2· Básicos")
+    const restParts = [s.status === "paused" ? status : "", name].filter(Boolean);
+    rest.textContent = restParts.length ? "\u00a0· " + restParts.join(" · ") : "";
+    const text = $("#session-banner-text");
+    text.replaceChildren(pos, rest);
+    text.title = text.textContent;
     $("#btn-session-resume").hidden = s.status !== "paused";
     $("#btn-session-pause").hidden = s.status !== "active";
+    syncStructuredProgress();
+  }
+
+  /**
+   * The exercise header's routine line, "Ejercicio 1 de 3" and "En pausa"
+   * while it is. The banner says it wherever it has a row of its own; on a
+   * phone on its side the banner's buttons join the header's row and this
+   * line stands in for the banner's (design: landscape).
+   */
+  function syncStructuredProgress() {
+    const sp = $("#structured-progress");
+    if (!sp) return;
+    if (!state.structured) {
+      sp.hidden = true;
+      sp.textContent = "";
+      return;
+    }
+    sp.hidden = false;
+    const paused = VTSession.get()?.status === "paused" ? tt("session.statusPaused") : "";
+    sp.textContent = [VTSession.progressLabel(), paused].filter(Boolean).join(" · ");
   }
 
   function filteredExercises() {
@@ -1117,7 +1330,10 @@
     list.className = `grid track-${state.tab}`;
 
     $$(".tier-chip").forEach((c) => {
-      c.classList.toggle("selected", c.dataset.tier === state.tierFilter);
+      const on = c.dataset.tier === state.tierFilter;
+      c.classList.toggle("selected", on);
+      // Picked says so in its state and with a tick, not by colour alone.
+      c.setAttribute("aria-pressed", on ? "true" : "false");
       if (c.dataset.tier !== "all") c.textContent = tierLabel(c.dataset.tier);
     });
 
@@ -1266,37 +1482,45 @@
   }
 
   /**
-   * The daily route only exists for the track its sequence was written for, so
-   * the option is hidden elsewhere rather than silently falling back to Basic.
+   * A guided route's name on a track. Routes are named for the catalog groups
+   * they walk (the class homework, then Técnica or Expresión), so the second
+   * group's name depends on the track. Stored values stay basic | advanced |
+   * full | daily.
+   */
+  function pathName(path, track = state.tab) {
+    const own = `home.path.${track}.${path}`;
+    const s = tt(own);
+    return s && s !== own ? s : tt(`home.path.${path}`);
+  }
+
+  /**
+   * The route picker, written for the track on screen. The daily route only
+   * exists for the track its sequence was written for, and once the daily loop
+   * owns the start panel the class is its Clase size: offering it here as well
+   * gave the same class two names. So the option is left out rather than
+   * hidden (a hidden option still shows in iOS's picker).
    */
   function syncSessionPathOptions() {
     const sel = $("#session-path");
-    const opt = sel?.querySelector('option[value="daily"]');
-    if (!sel || !opt) return;
+    if (!sel) return;
     const d = dailySession();
-    const ok = !!d && state.tab === d.def.track;
-    opt.hidden = !ok;
-    opt.disabled = !ok;
-    if (!ok && sel.value === "daily") sel.value = "basic";
-
-    // Say how many exercises each route actually covers. "Completa" is the
-    // whole Vocal track but only 16 of Canto's 27 — the eleven class
-    // exercises live solely in the daily route — and the bare label reads as
-    // a promise it does not keep.
-    const total = (window.VT_EXERCISES?.[state.tab] || []).length;
-    sel.querySelectorAll("option").forEach((o) => {
-      const base = tt(o.dataset.i18n || "") || o.value;
-      const seq = window.VT_STRUCTURED?.[`${state.tab}_${o.value}`];
-      const n = Array.isArray(seq) ? seq.length : 0;
-      if (!n) {
-        o.textContent = base;
-        return;
-      }
-      o.textContent =
-        o.value === "full" && total && n < total
-          ? `${base} (${tt("home.path.ofTotal", { n, total })})`
-          : `${base} (${n})`;
-    });
+    const daily = !!d && state.tab === d.def.track && !window.VTLoop?.isOn?.();
+    const paths = ["basic", "advanced", "full", ...(daily ? ["daily"] : [])];
+    const keep = paths.includes(sel.value) ? sel.value : "basic";
+    // Each name says how many exercises the route covers: "Tareas y técnica"
+    // on Canto is 16 of its 27, the class exercises outside the homework live
+    // in the daily class.
+    sel.replaceChildren(
+      ...paths.map((p) => {
+        const o = document.createElement("option");
+        o.value = p;
+        const seq = window.VT_STRUCTURED?.[`${state.tab}_${p}`];
+        const n = Array.isArray(seq) ? seq.length : 0;
+        o.textContent = n ? tt("home.path.count", { name: pathName(p), n }) : pathName(p);
+        return o;
+      })
+    );
+    sel.value = keep;
   }
 
   /** Progressive disclosure: zero sessions → collapse empty studio chrome */
@@ -1321,21 +1545,22 @@
     const wrap = $("#stage-guide");
     const list = $("#stage-guide-steps");
     if (!wrap || !list) return;
-    const items = (steps || []).slice(0, 3);
-    if (!enabled || !items.length) {
+    // Every step, for "Ahora · paso n de N" while practising; the idle list
+    // shows the first three.
+    state.stageSteps = enabled ? (steps || []).filter(Boolean) : [];
+    const items = state.stageSteps.slice(0, 3);
+    if (!items.length) {
       wrap.hidden = true;
       delete wrap.dataset.on;
       list.innerHTML = "";
       return;
     }
     list.innerHTML = items.map((step) => `<li>${escapeHtml(step)}</li>`).join("");
-    wrap.style.maxHeight = "";
-    const label = $(".stage-guide-k", wrap);
-    if (label) label.textContent = tt("ex.stageGuideLabel");
     const more = $("#btn-stage-guide-more");
     if (more) more.textContent = tt("ex.stageGuideMore");
     wrap.dataset.on = "1";
     wrap.hidden = false;
+    syncStageNow(true);
   }
 
   /**
@@ -1579,11 +1804,9 @@
         stopPractice(true);
         VTPiano.stopAll();
         // The silent stop skips the metrics reveal a normal stop does, so the
-        // button below could be inside a collapsed card (VG-28).
-        openMetricsPanel(true);
-        const metrics = $("#metrics-form") || $("#btn-complete");
-        metrics?.scrollIntoView({ behavior: scrollBehavior(), block: "center" });
-        $("#btn-complete")?.focus();
+        // button below could be inside a collapsed card (VG-28). One tap on
+        // the rating card saves and then goes where the learner was headed.
+        openMetricsPanel(true, { focus: true });
         toast(tt("leave.scrollSave"));
         // Stash intended destination after save
         state.pendingLeave = destination;
@@ -1656,10 +1879,12 @@
     resetSessionPractice();
     renderExercise();
     setView("exercise");
-    // Instant jump to top so game stage is the first viewport (no smooth lag)
-    window.scrollTo(0, 0);
+    // Instant jump to top so game stage is the first viewport (no smooth lag).
+    // "instant", not (0, 0): html has scroll-behavior: smooth, so that glided
+    // for a third of a second from wherever the list was scrolled.
+    window.scrollTo({ top: 0, behavior: "instant" });
     requestAnimationFrame(() => {
-      window.scrollTo(0, 0);
+      window.scrollTo({ top: 0, behavior: "instant" });
       fitStageBelowContent();
     });
     // After layout paints: size cue strip + first-time UI tour for this layout family
@@ -1685,14 +1910,12 @@
   function fitStageBelowContent() {
     const below = document.querySelector(".stage-below");
     if (!below || !document.body.classList.contains("view-exercise")) return;
-    const cue = $("#mode-cue");
-    const hud = $("#mode-hud");
+    // The mode and its cue moved onto the stage (#stage-coach, design:
+    // coach-strip); only the stats are left to fit here.
     const stats = $("#pitch-stats");
-    const hold = $("#hold-block");
-    const shell = $("#mode-shell");
 
     // Clear previous locks so we can remeasure
-    [below, cue, hud, stats, shell].forEach((el) => {
+    [below, stats].forEach((el) => {
       if (!el) return;
       el.style.maxHeight = "";
       el.style.height = "";
@@ -1700,27 +1923,6 @@
       el.style.overflow = "";
     });
 
-    if (cue && !cue.hidden) {
-      cue.style.maxHeight = "none";
-      cue.style.overflow = "visible";
-      cue.style.whiteSpace = "normal";
-      cue.style.height = "auto";
-      // Force reflow then lock min-height to full wrapped text
-      void cue.offsetHeight;
-      const need = Math.ceil(cue.scrollHeight);
-      if (need > 0) cue.style.minHeight = `${need}px`;
-    }
-    if (hud && !hud.hidden) {
-      hud.style.maxHeight = "none";
-      hud.style.overflow = "visible";
-      hud.querySelectorAll(".mode-panel, .mode-big, .mode-meta").forEach((p) => {
-        p.style.maxHeight = "none";
-        p.style.overflow = "visible";
-      });
-      void hud.offsetHeight;
-      const needH = Math.ceil(hud.scrollHeight);
-      if (needH > 0) hud.style.minHeight = `${needH}px`;
-    }
     if (stats && stats.childElementCount) {
       stats.style.maxHeight = "none";
       stats.style.overflow = "visible";
@@ -1860,9 +2062,10 @@
     const modeHud = $("#mode-hud");
     const modeFocus = $("#mode-focus");
     if (modeHud) modeHud.innerHTML = "";
-    if (modeFocus) modeFocus.innerHTML = "";
-    // Non-pitch: mount live mode into sticky stage (less scroll). Pitch: mode below highway.
-    const mountTarget = !profile.showPitch && modeFocus ? modeFocus : modeHud;
+    if ($("#mode-focus-panel")) $("#mode-focus-panel").innerHTML = "";
+    const mountTarget = modeMountTarget(profile);
+    // The pitch exercise's strip shows only with its canvas
+    if ($("#stage-coach")) $("#stage-coach").hidden = !profile.showPitch;
     if (modeFocus) {
       if (!profile.showPitch) {
         modeFocus.hidden = false;
@@ -1884,13 +2087,10 @@
         (document.documentElement.lang || "").startsWith("es");
       $("#mode-cue").textContent =
         (es && profile.cueEs) || profile.cue || tt("practice.hint");
-      // Cue already lives in sticky stage for speech; hide duplicate below
+      // Cue already lives in the mode panel for speech; the strip is pitch-only
       $("#mode-cue").hidden = !profile.showPitch;
     }
-    // Hide empty mode-hud shell when mode lives in sticky focus
-    if (modeHud) {
-      modeHud.hidden = !profile.showPitch && mountTarget === modeFocus;
-    }
+    if (modeHud) modeHud.hidden = !profile.showPitch;
 
     // Pitch visualizer only when profile asks
     const pitchBlock = $("#pitch-block");
@@ -2002,6 +2202,12 @@
       syncSustainSecLabel();
       syncPlayModeSelect();
     }
+    // Lip trills, straws and the rate ladder keep the default chord and play
+    // mode; their two menus only crowded a phone's stage and covered the
+    // exercise's name (design: start-floor).
+    if ((profile.mode === "sovtFlow" || profile.mode === "rateLadder") && $("#hud-prog-bar")) {
+      $("#hud-prog-bar").hidden = true;
+    }
     if (pianoMini) {
       pianoMini.style.display = showPiano || exerciseWantsSound(ex, profile) ? "" : "none";
       // U8 progressive disclosure: secondary piano opts collapsed until 🎹+
@@ -2016,6 +2222,8 @@
       tbtn.setAttribute("aria-expanded", "false");
       tbtn.textContent = tt("piano.more");
       tbtn.title = tt("piano.showPanel");
+      // "🎹+" alone is read out as an emoji; the button says what it opens
+      tbtn.setAttribute("aria-label", tbtn.title);
     }
 
     // Practice hint stays hidden in stage (hint is in tour / guide)
@@ -2074,21 +2282,13 @@
       $("#week-plan-cta").hidden = true;
     }
 
-    // Metrics form
+    // Metrics form, under the rating card's one-tap answers
     renderMetricsForm(ex);
+    resetRating();
 
     // Structured nav
     $("#structured-nav").hidden = !state.structured;
-    const sp = $("#structured-progress");
-    if (sp) {
-      if (state.structured) {
-        sp.hidden = false;
-        sp.textContent = VTSession.progressLabel();
-      } else {
-        sp.hidden = true;
-        sp.textContent = "";
-      }
-    }
+    syncStructuredProgress();
 
     $("#score-result").hidden = true;
 
@@ -2609,6 +2809,7 @@
       pill.textContent = live ? tt("practice.live") : tt("practice.ready");
       pill.classList.toggle("live", live);
     }
+    syncStageNow();
     // Practice clock for leave-prompt (≥10% of exercise)
     if (live) {
       state.sessionPractice.everStarted = true;
@@ -2843,10 +3044,7 @@
           /* ignore */
         }
       }
-      const modeHud = $("#mode-hud");
-      const modeFocus = $("#mode-focus");
-      const mountTarget =
-        !profile.showPitch && modeFocus ? modeFocus : modeHud;
+      const mountTarget = modeMountTarget(profile);
       if (mountTarget && window.VTPracticeModes) {
         state.modeInstance = VTPracticeModes.get(profile.mode);
         state.modeInstance.mount(mountTarget, profile);
@@ -3226,16 +3424,21 @@
     $("#level-fill").style.width = "0%";
     if (!silent) {
       toast(modeResult?.summary ? `⏹ ${modeResult.summary}` : tt("toast.stopped"));
-      // Musk-mode UX: after a real stop, open reflect/save so metrics aren't hidden
-      openMetricsPanel(true);
+      // Musk-mode UX: after a real stop, open reflect/save so metrics aren't hidden.
+      // Detener hides itself; its focus goes to the question, not the page top.
+      const a = document.activeElement;
+      const lost = !a || a === document.body || a.id === "btn-practice-stop";
+      openMetricsPanel(true, { focus: lost && !rateQuiet() });
     }
   }
 
   /**
-   * Expand or collapse the post-practice metrics card
+   * Expand or collapse the rating card (#metrics-card)
    * @param {boolean} open
-   * @param {{ focusForm?: boolean }} [opts] focusForm: the learner asked to
-   *   rate, so bring the form up under the sticky chrome and focus its first field
+   * @param {{ reveal?: boolean, focus?: boolean, end?: "mic"|"time" }} [opts]
+   *   reveal (unless false): bring the card into view (revealRating); focus: move focus
+   *   to its question (the learner asked to rate, or the exercise just ended);
+   *   end: the clock ran out, and whether the mic was on
    */
   function openMetricsPanel(open, opts = {}) {
     state.metricsOpen = !!open;
@@ -3248,50 +3451,216 @@
         : tt("metrics.show");
       btn.setAttribute("aria-expanded", String(!!state.metricsOpen));
     }
-    if (state.metricsOpen && card && opts.focusForm) {
-      const root = getComputedStyle(document.documentElement);
-      const chrome =
-        (parseFloat(root.getPropertyValue("--header-h")) || 0) +
-        (parseFloat(root.getPropertyValue("--ex-chrome-h")) || 0);
-      window.scrollBy({ top: card.getBoundingClientRect().top - chrome - 8, behavior: scrollBehavior() });
-      const first = card.querySelector("#metrics-form input, #metrics-form textarea") || $("#btn-complete");
-      first?.focus({ preventScroll: true });
-      return;
-    }
-    // U11: reveal metrics without yanking sticky stage off-screen
-    if (state.metricsOpen && card) {
-      requestAnimationFrame(() => {
-        try {
-          const vh = window.innerHeight || 600;
-          const cr = card.getBoundingClientRect();
-          const stage = document.getElementById("highway-stage");
-          const stageBottom = stage ? stage.getBoundingClientRect().bottom : 0;
-          // Ideal: metrics top sits just under stage (or mid-lower viewport)
-          const targetTop = Math.max(stageBottom + 8, vh * 0.42);
-          if (cr.top > targetTop + 24 || cr.bottom > vh - 12) {
-            const delta = cr.top - targetTop;
-            if (Math.abs(delta) > 12) {
-              window.scrollBy({ top: delta, behavior: scrollBehavior() });
-            }
-          }
-        } catch {
-          card.scrollIntoView({ behavior: scrollBehavior(), block: "nearest" });
-        }
-      });
+    syncRoutineNav();
+    if (!state.metricsOpen || !card) return;
+    state.rate.end = opts.end || null;
+    paintRating();
+    if (opts.focus) $("#rate-q")?.focus({ preventScroll: true });
+    if (opts.reveal !== false) revealRating();
+  }
+
+  /* —— Rating: one tap after a take —— */
+  /** Self-ratings a one-tap answer sets, on the 1–5 sliders. */
+  const FEEL = { easy: 5, ok: 3, hard: 2 };
+
+  /**
+   * Muted under automation like the step-done card: the single-exercise ending
+   * stays a toast, "Más detalles" starts open so specs that fill the form and
+   * press #btn-complete still reach them, and a routine keeps its "Siguiente
+   * ejercicio" in view. Specs that test it opt in (vt_rate_e2e).
+   */
+  function rateQuiet() {
+    try {
+      return sessionStorage.getItem("vt_e2e") === "1" && sessionStorage.getItem("vt_rate_e2e") !== "1";
+    } catch {
+      return false;
     }
   }
 
+  /**
+   * How long this take ran, and the length it was asked for: a guided step's
+   * own timer (1:30 of a 1:30 step), a single exercise's timer, or none. The
+   * timer and the practice clock agree while it runs; the clock also holds
+   * time sung after 00:00 ("30 s más", Empezar again).
+   * @returns {{ done: number, total: number }} seconds
+   */
+  function takeTimes() {
+    const total = state.timer.total > 0 ? state.timer.total : 0;
+    const ran = total ? Math.max(0, Math.min(total, total - state.timer.remaining)) : 0;
+    return { done: Math.round(Math.max(ran, getPracticedSec())), total };
+  }
+
+  /** A new exercise starts with nothing chosen. */
+  function resetRating() {
+    state.rate = { feel: null, result: null, end: null, prevScore: null, firstWin: false };
+    const more = $("#rate-more");
+    if (more) more.open = rateQuiet();
+    paintRating();
+  }
+
+  /** Write the card's state: the time, the answer chosen, the note, the way out. */
+  function paintRating() {
+    const r = state.rate;
+    const { done, total } = takeTimes();
+    const time = $("#rate-time");
+    if (time) {
+      time.hidden = done < 1;
+      const strong = document.createElement("strong");
+      strong.textContent = total
+        ? tt("metrics.timeOf", { done: VTMetrics.clock(done), total: VTMetrics.clock(total) }) +
+          (done >= total - 1 ? " ✓" : "")
+        : VTMetrics.clock(done);
+      time.replaceChildren(document.createTextNode(`${tt("rate.time")} `), strong);
+    }
+    // A timed take fills the minutes itself; the field is there for practice
+    // the clock never saw.
+    $$("#metrics-form .field-time").forEach((f) => {
+      f.hidden = done >= 1;
+    });
+    $$(".rate-btn").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.feel === r.feel)));
+    const note = $("#rate-note");
+    if (note) {
+      note.textContent = r.result
+        ? tt("rate.saved", { score: VTMetrics.formatScore(r.result) })
+        : tt("rate.hint");
+    }
+    const kicker = $("#rate-done");
+    if (kicker) {
+      kicker.hidden = !r.end;
+      kicker.textContent = r.end
+        ? `${tt("stepDone.title")} ${tt(r.end === "mic" ? "stepDone.micOff" : "stepDone.timeUp")}`
+        : "";
+    }
+    const skip = $("#btn-rate-skip");
+    if (skip) {
+      skip.hidden = !!state.sessionPractice.saved;
+      skip.textContent = tt(state.structured ? "rate.skipNext" : "rate.skip");
+    }
+  }
+
+  /**
+   * Inside a routine the rating card carries the way on (Seguir sin puntuar,
+   * then the score card's next step); the big "Siguiente ejercicio" under it
+   * outshone the answers and read as a second way out. Other specs still
+   * find it under automation.
+   */
+  function syncRoutineNav() {
+    const nav = $("#structured-nav");
+    if (nav) nav.hidden = !state.structured || (!!state.metricsOpen && !rateQuiet());
+  }
+
+  /**
+   * Bring the rating card into view, its top no lower than 45% of the screen
+   * and never under the sticky header: the whole card when it fits, else down
+   * to the take and its save, else the question and its answers (a phone on
+   * its side). An open "Más detalles" form is never measured; it may run past
+   * the fold.
+   */
+  function revealRating() {
+    requestAnimationFrame(() => {
+      const card = $("#metrics-card");
+      if (!card || card.classList.contains("collapsed")) return;
+      const root = getComputedStyle(document.documentElement);
+      const top =
+        (parseFloat(root.getPropertyValue("--header-h")) || 0) +
+        (parseFloat(root.getPropertyValue("--ex-chrome-h")) || 0) +
+        8;
+      const vh = window.innerHeight || 600;
+      const r = card.getBoundingClientRect();
+      const take = $("#playback-area");
+      const ends = [
+        $("#rate-more")?.open ? null : $("#rate"),
+        take?.childElementCount ? take : null,
+        $("#rate-note")
+      ].filter(Boolean);
+      let want = top;
+      for (const el of ends) {
+        want = Math.min(vh * 0.45, vh - (el.getBoundingClientRect().bottom - r.top) - 24);
+        if (want >= top) break;
+      }
+      const delta = r.top - Math.max(top, want);
+      if (Math.abs(delta) > 12) window.scrollBy({ top: delta, behavior: scrollBehavior() });
+    });
+  }
+
+  /** After a save, scroll just far enough that the score itself is in view. */
+  function revealScore() {
+    requestAnimationFrame(() => {
+      const big = $("#score-result .score-big");
+      if (!big) return;
+      const vh = window.innerHeight || 600;
+      const b = big.getBoundingClientRect();
+      const over = b.bottom + 56 - vh;
+      if (over > 0) window.scrollBy({ top: over, behavior: scrollBehavior() });
+    });
+  }
+
+  /**
+   * One tap: set the self-rated sliders (not the ones a mode measured) and
+   * save through the same path as the form. Tapping another answer later
+   * re-rates the same take.
+   * @param {"easy"|"ok"|"hard"} feel
+   */
+  function rateFeel(feel) {
+    const v = FEEL[feel];
+    if (!v || !state.exercise) return;
+    $$('#metrics-form input[type="range"]').forEach((input) => {
+      if (input.dataset.measured === "1") return;
+      input.value = String(v);
+      input.dispatchEvent(new Event("input"));
+    });
+    completeExercise({ feel });
+  }
+
+  /**
+   * "Salir sin puntuar": the practice is kept (VG-27), only the rating is
+   * skipped. In a routine it goes on to the next step.
+   */
+  function leaveUnrated() {
+    if (state.structured) {
+      advanceStructured("next");
+      return;
+    }
+    const pending = state.pendingLeave;
+    const dest = pending?.type && pending.type !== "next" ? pending : { type: "home" };
+    state.pendingLeave = null;
+    recordPracticeIfDue("leave");
+    resetSessionPractice();
+    leaveExercise(dest);
+  }
+
+  /**
+   * A single exercise's clock reached 00:00: the practice is recorded and the
+   * mic is off (tickTimer); say so and ask how it went. It used to keep
+   * listening, "En vivo", with nothing on screen.
+   * @param {boolean} micWasOn
+   * @returns {boolean} true when the card is showing
+   */
+  function showExerciseEnd(micWasOn) {
+    if (rateQuiet()) return false;
+    openMetricsPanel(true, { focus: true, end: micWasOn ? "mic" : "time" });
+    return true;
+  }
+
+  /**
+   * The take's recording, in the rating card: the stage-below strip it used to
+   * sit in is covered by the sticky stage, so its player and Save could not be
+   * reached. A recording means a take just ended, so the card opens (quietly:
+   * the stop that made it decides whether to scroll).
+   */
   function showPlayback(result) {
     const area = $("#playback-area");
     if (!area || !result) return;
     area.innerHTML = `
-      <audio class="audio-player" controls src="${result.url}"></audio>
-      <div class="controls-row" style="margin-top:0.5rem;">
-        <button type="button" class="btn btn-sm btn-success" id="btn-save-rec">Save to history</button>
-        <button type="button" class="btn btn-sm btn-ghost" id="btn-discard-rec">Discard</button>
+      <p class="rate-take-k" id="rate-take-k">${escapeHtml(tt("rate.take"))}</p>
+      <audio class="audio-player" controls aria-labelledby="rate-take-k" src="${result.url}"></audio>
+      <div class="controls-row rate-take-actions">
+        <button type="button" class="btn btn-sm btn-success" id="btn-save-rec">${escapeHtml(tt("rate.takeSave"))}</button>
+        <button type="button" class="btn btn-sm btn-ghost" id="btn-discard-rec">${escapeHtml(tt("rate.takeDiscard"))}</button>
       </div>
     `;
-    $("#btn-save-rec")?.addEventListener("click", async () => {
+    const save = $("#btn-save-rec");
+    save?.addEventListener("click", async () => {
       try {
         await VTStorage.saveRecording({
           exerciseId: state.exercise.id,
@@ -3299,6 +3668,8 @@
           label: `${state.exercise.title} · ${new Date().toLocaleString()}`,
           meta: { durationMs: result.durationMs }
         });
+        save.textContent = tt("rate.takeSaved");
+        save.disabled = true;
         toast(tt("toast.recordingSaved"));
       } catch (e) {
         console.error(e);
@@ -3306,8 +3677,10 @@
       }
     });
     $("#btn-discard-rec")?.addEventListener("click", () => {
+      state.recorder.clear();
       area.innerHTML = "";
     });
+    if (!state.metricsOpen) openMetricsPanel(true, { reveal: false });
   }
 
   function updatePitchStatsLabel(stats) {
@@ -3556,6 +3929,8 @@
           <label for="m-${m.id}">${lab}${m.unit ? ` (${m.unit})` : ""}${tgt}</label>
           <input type="number" id="m-${m.id}" name="${m.id}" min="0" step="1" placeholder="0" />
         `;
+        // Filled from the clock when the take was timed (paintRating).
+        if (VTMetrics.isTimeMetric(m)) field.classList.add("field-time");
       }
       form.appendChild(field);
     });
@@ -3591,7 +3966,12 @@
     return { values, notes };
   }
 
-  function completeExercise() {
+  /**
+   * Save this take with its rating and show the score.
+   * @param {{ feel?: "easy"|"ok"|"hard" }} [opts] feel: the one-tap answer
+   *   (rateFeel), shown on the score card; absent for "Guardar con estos detalles"
+   */
+  function completeExercise(opts = {}) {
     const ex = state.exercise;
     if (!ex) return;
     if (state.practiceLive) stopPractice(true);
@@ -3625,16 +4005,17 @@
     }
     // Prefer actual practice clock over timer-only elapsed
     const practicedSec = Math.round(getPracticedSec());
-    if (values.duration == null || values.duration === "" || Number(values.duration) === 0) {
-      const durInput = $('#metrics-form [name="duration"]');
-      if (durInput && practicedSec > 0) {
-        // store minutes for duration metric when present
-        const mins = Math.max(1, Math.round(practicedSec / 60));
-        if (durInput.type === "number") durInput.value = mins;
-        values.duration = durInput.value;
+    // Minutes left blank are scored from the take's own time, against the
+    // step's own length when it had a timer: a 1:30 guided step used to be
+    // measured against the catalog's 5 minutes.
+    const take = takeTimes();
+    const result = VTMetrics.compute(ex.metrics, values, { timeSec: take.done, targetSec: take.total });
+    // Stored as whole minutes, as before, so History and the Plan read it unchanged.
+    (ex.metrics || []).filter((m) => VTMetrics.isTimeMetric(m)).forEach((m) => {
+      if (!(Number(values[m.id]) > 0) && take.done > 0) {
+        values[m.id] = String(Math.max(1, Math.round(take.done / 60)));
       }
-    }
-    const result = VTMetrics.compute(ex.metrics, values);
+    });
     const elapsed =
       practicedSec > 0
         ? practicedSec
@@ -3642,14 +4023,13 @@
           ? state.timer.total - state.timer.remaining
           : 0;
 
-    // Progress compare (before/after emotion — r/singing "same song later")
-    const prevRow = VTStorage.getProgress()?.[ex.id];
-    const prevScore = prevRow?.lastScore;
-
     // A take this open already recorded automatically is the same take: rate
     // it in place rather than adding a second one.
     const sp = state.sessionPractice;
     const wasSaved = !!sp.saved;
+    // Progress compare (before/after emotion — r/singing "same song later").
+    // A changed answer compares with the score before this take, not with itself.
+    const prevScore = wasSaved ? state.rate.prevScore : VTStorage.getProgress()?.[ex.id]?.lastScore;
     const insertedNow = !sp.entryId;
     const savedEntry = VTStorage.saveExerciseResult(ex.id, {
       replaceId: sp.entryId,
@@ -3674,28 +4054,33 @@
     const sessionsAfter = totalSessionsSaved();
     // First *rated* take: automatically kept steps are practice, but the
     // first-win card is about the first time somebody reviewed their own work.
-    const isFirstWin = !wasSaved && ratedSessionsSaved() === 1;
+    // A changed answer keeps the card its first save showed.
+    const isFirstWin = wasSaved ? state.rate.firstWin : ratedSessionsSaved() === 1;
     window.VTLoop?.onPractice?.({
       exerciseId: ex.id,
       source: "save",
       day: dayRec,
       structured: !!state.structured
     });
+    // One take is one save: a changed answer re-rates it without counting it again.
     try {
-      window.VTAnalytics?.track?.("session_save", {
-        exerciseId: ex.id,
-        score: result.score,
-        durationSec: elapsed,
-        firstWin: isFirstWin
-      });
-      if (isFirstWin) window.VTAnalytics?.track?.("first_win", { exerciseId: ex.id });
+      if (!wasSaved) {
+        window.VTAnalytics?.track?.("session_save", {
+          exerciseId: ex.id,
+          score: result.score,
+          durationSec: elapsed,
+          firstWin: isFirstWin,
+          feel: opts.feel || "details"
+        });
+        if (isFirstWin) window.VTAnalytics?.track?.("first_win", { exerciseId: ex.id });
+      }
     } catch {
       /* ignore */
     }
     renderValuePulse();
     // Success → soft moment (first_win prioritized via sessions===1). Never in
     // the middle of a guided routine: the reward there is the next step.
-    if (!state.structured) {
+    if (!state.structured && !wasSaved) {
       setTimeout(() => showValueMoment(isFirstWin ? "first_save" : undefined), 600);
     }
 
@@ -3774,8 +4159,12 @@
             </div>
           </div>`
         : "";
+    const feelHtml = FEEL[opts.feel]
+      ? `<p class="score-feel">${escapeHtml(tt("rate.feel", { feel: tt(`rate.${opts.feel}`) }))}</p>`
+      : "";
     box.innerHTML = `
       <div class="score-big">${VTMetrics.formatScore(result)}</div>
+      ${feelHtml}
       ${compareHtml}
       <p>${result.summary}</p>
       <p class="muted" style="font-size:0.85rem;">${result.how}</p>
@@ -3784,7 +4173,9 @@
           .map((b) => {
             // The same localized label the form used; b.label is the English one.
             const def = (ex.metrics || []).find((m) => m.id === b.id) || b;
-            return `<li><span>${metricLabel(def)}<br><small class="muted">${b.detail}</small></span><strong>${b.points}/${b.max}</strong></li>`;
+            // A count left blank is not scored: "—", not 0/5.
+            const pts = b.skipped ? "—" : `${b.points}/${b.max}`;
+            return `<li><span>${metricLabel(def)}<br><small class="muted">${b.detail}</small></span><strong>${pts}</strong></li>`;
           })
           .join("")}
       </ul>
@@ -3823,12 +4214,17 @@
     $("#ps-routine-next")?.addEventListener("click", () => advanceStructured("next"));
 
     toast(tt("toast.sessionSaved"));
+    Object.assign(state.rate, { feel: opts.feel || null, result, prevScore, firstWin: isFirstWin });
+    paintRating();
+    revealScore();
 
     // Post-session native tip (free only; never mid-practice) — research: end-of-task ads only
-    try {
-      setTimeout(() => window.VTAds?.onPostSession?.(), 700);
-    } catch {
-      /* ignore */
+    if (!wasSaved) {
+      try {
+        setTimeout(() => window.VTAds?.onPostSession?.(), 700);
+      } catch {
+        /* ignore */
+      }
     }
 
     // Advance past this step once — a second Save used to skip the next step
@@ -3861,18 +4257,17 @@
     const left = Math.max(0, (state.timer.endAt - performance.now()) / 1000);
     state.timer.remaining = left;
     $("#timer-display").textContent = formatTime(left);
+    syncStageNow();
     if (left <= 0) {
       stopTimer(true);
       // The clearest "done" there is: the step ran its full length.
       recordPracticeIfDue("timer_done");
-      if (state.structured) {
-        // A guided step is over, so stop listening: at 00:00 it used to stay
-        // "En vivo" with the mic open and nothing on screen changed (PR-1).
-        const micWasOn = !!state.practice?.running;
-        stopPractice(true);
-        if (showStepDone(micWasOn)) return;
-      }
-      // A single exercise keeps a soft cue: the mic stays on mid-rep.
+      // The time is up, so stop listening: at 00:00 it used to stay "En vivo"
+      // with the mic open and nothing on screen changed (PR-1).
+      const micWasOn = !!state.practice?.running;
+      stopPractice(true);
+      // A guided step says so on the stage; a single exercise asks how it went.
+      if (state.structured ? showStepDone(micWasOn) : showExerciseEnd(micWasOn)) return;
       toast(tt("toast.timerDone"));
     }
   }
@@ -4046,33 +4441,8 @@
     $("#btn-rec-stop").disabled = true;
     $("#level-fill").style.width = "0%";
     if (!result) return;
-
-    const area = $("#playback-area");
-    area.innerHTML = `
-      <audio class="audio-player" controls src="${result.url}"></audio>
-      <div class="controls-row" style="margin-top:0.5rem;">
-        <button type="button" class="btn btn-sm btn-success" id="btn-save-rec">Save to history</button>
-        <button type="button" class="btn btn-sm btn-ghost" id="btn-discard-rec">Discard</button>
-      </div>
-    `;
-    $("#btn-save-rec").addEventListener("click", async () => {
-      try {
-        await VTStorage.saveRecording({
-          exerciseId: state.exercise.id,
-          blob: result.blob,
-          label: `${state.exercise.title} · ${new Date().toLocaleString()}`,
-          meta: { durationMs: result.durationMs }
-        });
-        toast(tt("toast.recordingSaved"));
-      } catch (e) {
-        console.error(e);
-        toast(tt("toast.recordingFail"));
-      }
-    });
-    $("#btn-discard-rec").addEventListener("click", () => {
-      state.recorder.clear();
-      area.innerHTML = "";
-    });
+    showPlayback(result);
+    openMetricsPanel(true);
   }
 
   /* —— History —— */
@@ -4655,10 +5025,7 @@
     toast(
       tt("toast.structuredStart", {
         track: tt(state.tab === "vocal" ? "track.vocalShort" : "track.singingShort"),
-        path: tt(
-          "path." +
-            (p === "advanced" ? "advanced" : p === "full" ? "full" : p === "daily" ? "daily" : "basic")
-        ),
+        path: pathName(["advanced", "full", "daily"].includes(p) ? p : "basic"),
         n: String(session.order.length)
       })
     );
@@ -5003,6 +5370,7 @@
       if (btn) {
         btn.textContent = state.pianoOpen ? tt("piano.less") : tt("piano.more");
         btn.title = state.pianoOpen ? tt("piano.hidePanel") : tt("piano.showPanel");
+        btn.setAttribute("aria-label", btn.title);
         btn.setAttribute("aria-expanded", String(!!state.pianoOpen));
       }
     });
@@ -5085,7 +5453,9 @@
     $("#btn-hold-start")?.addEventListener("click", startPractice);
     $("#btn-hold-stop")?.addEventListener("click", () => stopPractice(false));
 
-    $("#btn-complete").addEventListener("click", completeExercise);
+    $("#btn-complete").addEventListener("click", () => completeExercise());
+    $$(".rate-btn").forEach((b) => b.addEventListener("click", () => rateFeel(b.dataset.feel)));
+    $("#btn-rate-skip")?.addEventListener("click", leaveUnrated);
     $("#btn-next-structured").addEventListener("click", () => advanceStructured("next"));
     $("#btn-step-done-next")?.addEventListener("click", () => {
       stepDoneChoice("next");
@@ -5101,7 +5471,7 @@
     $("#btn-step-done-rate")?.addEventListener("click", () => {
       stepDoneChoice("rate");
       hideStepDone();
-      openMetricsPanel(true, { focusForm: true });
+      openMetricsPanel(true, { focus: true });
     });
     $("#step-done")?.addEventListener("keydown", (e) => {
       if (e.key !== "Escape") return;
@@ -5235,7 +5605,7 @@
       trialBtn.classList.toggle("btn-sm", !prelaunch);
       if (canTrial) {
         const days = accounts
-          ? Number(acct.methods?.trialDays || 30)
+          ? Number(acct.methods?.trialDays || 7) // the worker's TRIAL_DAYS; 7 is the decided length
           : Number(cfg.freeTrialDays || 0);
         trialBtn.textContent = tt(prelaunch ? "pricing.startTrialFree" : "pricing.startTrial", {
           n: String(days)
@@ -6868,6 +7238,10 @@
       startRoutine: (r) => startStructured(r.path || "basics", r),
       startDaily,
       toast: (msg, opts) => toast(msg, opts),
+      hideToast: () => {
+        clearTimeout(toast._t);
+        $("#toast")?.classList.remove("show");
+      },
       refresh: () => {
         renderNextStepCard();
         renderTodayBasics();
@@ -6906,6 +7280,7 @@
     setPlayMode("oneNote", { silent: true });
     syncHeaderHeightVar();
     fitHighwayToViewport();
+    watchStageRails();
     window.addEventListener("resize", () => {
       syncHeaderHeightVar();
       scheduleFitHighway();

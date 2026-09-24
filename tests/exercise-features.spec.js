@@ -151,7 +151,13 @@ test.describe("Exercise feature matrix", () => {
         ) {
           // pitchMatch may still show prog bar via renderPianoControls
         }
-        if (hasProgData && (profile.autoPiano || st.exercise?.audio?.piano) && !progShown) {
+        // Design start-floor: lip trills, straws and the rate ladder keep the
+        // default chord and play mode; their menus are left off on purpose.
+        const noChordMenus = ["sovtFlow", "rateLadder"].includes(profile.mode);
+        if (noChordMenus && progShown) {
+          local.push("sovtFlow/rateLadder shows the chord and play-mode menus");
+        }
+        if (hasProgData && (profile.autoPiano || st.exercise?.audio?.piano) && !progShown && !noChordMenus) {
           local.push("has progressions + piano but prog bar hidden");
         }
         if (!profile.showPitch && profile.mode !== "weekPlan" && !modeHasContent) {

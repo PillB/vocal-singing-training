@@ -244,7 +244,7 @@ test.describe("Pro dialog once checkout is live", () => {
     await expect(page.locator("#pricing-launch")).toBeHidden();
     const trial = page.locator("#pricing-modal .pricing-foot #btn-start-trial");
     await expect(trial).toBeVisible();
-    // With the entitlements worker set, the trial is the account's (30 days).
+    // With the entitlements worker set, the trial is the account's (the worker names its length).
     await expect(trial).toHaveText(/^Empezar prueba Pro de \d+ días$/);
     await expect(trial).not.toHaveClass(/btn-primary/);
     await expect(page.locator("#pricing-pay-note")).toHaveText(/Pago seguro/);

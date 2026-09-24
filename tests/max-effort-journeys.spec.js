@@ -30,8 +30,10 @@ test.describe("Max-effort journeys (Musk)", () => {
     await stopPractice(page);
     // After stop, metrics card should auto-expand (learner next step)
     await expect(page.locator("#metrics-card")).not.toHaveClass(/collapsed/, { timeout: 3000 });
+    // The minutes field hides once the take has run a second (the clock fills
+    // it), so look for a field the learner still fills in.
     await expect(
-      page.locator("#metrics-form .field, #metrics-form input, #metrics-form label").first()
+      page.locator("#metrics-form .field:not([hidden])").first()
     ).toBeVisible({ timeout: 3000 });
   });
 

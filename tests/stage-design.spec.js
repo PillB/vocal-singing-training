@@ -548,7 +548,7 @@ test.describe("Landscape: a phone on its side", () => {
       expect(r.overlap, `${phase}: En vivo pill over the panel title`).toBe(false);
       expect(r.title.top).toBeGreaterThanOrEqual(r.pill.bottom);
       expect(await page.evaluate(lineCount, "practice-status"), `${phase}: pill on one line`).toBe(1);
-      expect(r.stage.top).toBeGreaterThanOrEqual(r.exHeader.bottom - 1);
+      expect(r.stage.top, `${phase}: stage under the header (scrollY ${r.scrollY})`).toBeGreaterThanOrEqual(r.exHeader.bottom - 1);
       expect(r.stage.bottom, `${phase}: stage inside the screen (VG-30)`).toBeLessThanOrEqual(r.vh);
       expect(r.stop.bottom).toBeLessThanOrEqual(r.vh);
     }

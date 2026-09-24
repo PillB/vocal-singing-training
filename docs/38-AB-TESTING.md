@@ -202,6 +202,16 @@ At the traffic a friends-and-family beta brings, only large effects can be
 seen. Report "no detectable difference", never "no difference". Colours and
 hues are not worth a test at this size.
 
+These sizes suit behaviour that many people show (a third or more). A
+conversion near 2%, such as starting the trial or paying, is another matter:
+a 20% relative lift (2.0% → 2.4%) needs about 21,100 people per arm at the
+same alpha and power, and 150 per arm there would detect almost nothing. At
+this traffic, read each step of a funnel on its own, as one proportion with a
+Wilson interval (`wilson()` in `workers/entitlements/src/stats.js`): 0 of 20
+people passing a step bounds its rate below about 16%, which finds a broken
+step without an A/B test. It cannot show a 20% improvement; nothing at this
+traffic can.
+
 ### Running the first test
 
 1. Deploy the entitlements worker (see `docs/34-PERU-OPERATOR-RUNBOOK.md`).

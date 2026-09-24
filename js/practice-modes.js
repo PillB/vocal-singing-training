@@ -542,7 +542,8 @@
         artFor: () => ({ draw: G.art.numbers, aspect: 3.4, stackAspect: 1.8, plain: true }),
         doneText: L("Contraste listo", "Contrast done"),
         chapters: (d) => this._chapters(d),
-        reviewTitle: L("Escucha con y sin bolígrafo", "Hear it with and without the pen"),
+        reviewTitle: (d) =>
+          d.chapters.some((c) => c.segs) ? L("Escucha con y sin bolígrafo", "Hear it with and without the pen") : L("Escucha tu toma", "Listen to your take"),
         reviewNote: L(
           "Mismos números con y sin bolígrafo. La claridad la valoras tú en Métricas.",
           "The same numbers with and without the pen. You rate clarity in Metrics."
@@ -2707,7 +2708,7 @@
         onStep: (i, d) => this._spaceStep(d),
         chapters: (d) => this._spaceChapters(d),
         doneText: L("Listo: guarda ese espacio", "Done: keep that space"),
-        reviewTitle: L("Escucha cerrado y abierto", "Hear closed and open"),
+        reviewTitle: () => (this._abDone().length === 2 ? L("Escucha cerrado y abierto", "Hear closed and open") : L("Escucha tu toma", "Listen to your take")),
         reviewExtraH: (w) => (this._abDone().length === 2 ? (w < 420 ? 62 : 46) : 0),
         reviewExtra: (ctx, box) => this._abCard(ctx, box),
         reviewNote: L(

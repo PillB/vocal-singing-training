@@ -1968,7 +1968,7 @@
    *   where the mic is closed), preCue (seconds), artFor(phase, info) →
    *   { draw, aspect, measured }, cueFor, scriptFor, status(info),
    *   onFrame(frame, drill), onStep(index, drill), chapters(drill),
-   *   doneText, doneSub, doneCue, reviewTitle, reviewNote,
+   *   doneText, doneSub, doneCue, reviewTitle (text, or fn(drill)), reviewNote,
    *   reviewExtra(ctx, box, drill), reviewExtraH(w, h, drill).
    */
   class Drill extends Panel {
@@ -2009,7 +2009,8 @@
       return this.cfg.doneCue || "";
     }
     reviewTitle() {
-      return this.cfg.reviewTitle || L("Escucha tu toma", "Listen to your take");
+      const t = typeof this.cfg.reviewTitle === "function" ? this.cfg.reviewTitle(this) : this.cfg.reviewTitle;
+      return t || L("Escucha tu toma", "Listen to your take");
     }
     reviewNote() {
       return this.cfg.reviewNote || "";

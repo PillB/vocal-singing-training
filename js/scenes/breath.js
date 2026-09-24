@@ -1111,7 +1111,9 @@
     // there under its lowest note), else along the bottom of the plot
     const m = opts.midi != null ? opts.midi : geo.rangeMinMidi != null ? geo.rangeMinMidi + 1 : null;
     const yc = m != null ? geo.midiToY(m) : geo.graphH - h / 2 - 3;
-    const y = clamp(yc - h / 2, (geo.safeTop || 0) + 4, geo.graphH - h - 3);
+    // safeBottom (when the highway reports it) is the part the bottom rail covers
+    const floor = Math.min(geo.graphH, geo.h - (geo.safeBottom || 0));
+    const y = clamp(yc - h / 2, (geo.safeTop || 0) + 4, floor - h - 3);
     const x0 = geo.plotLeft;
     ctx.save();
     ctx.fillStyle = "rgba(6, 10, 16, 0.55)";

@@ -1810,10 +1810,30 @@
     }
   }
 
+  /**
+   * Paint a picture now. The modes call this from their frame callback, which
+   * already runs inside the engine's animation frame: painting there shows
+   * this frame's sound in this frame, asks for no second frame, and reads no
+   * layout (the Surface keeps its size from its own resize observer).
+   */
+  function paintNow(s) {
+    if (!s || !s.ctx || !s.canvas || !s.canvas.isConnected) return;
+    if (!s.w || !s.h) {
+      s.draw();
+      return;
+    }
+    s.ctx.clearRect(0, 0, s.w, s.h);
+    try {
+      s.drawFn(s.ctx, s.w, s.h);
+    } catch (err) {
+      console.warn("[viz]", err);
+    }
+  }
+
   V.scenes.sovt = sovt;
   V.scenes.trillStrip = trillStrip;
   V.scenes.trillMap = trillMap;
   V.scenes.ladder = ladder;
   V.scenes.breathLanes = breathLanes;
-  V.scenes.breathKit = { T, TrillTrack, HoldTrack, PitchGate, frameBits, airBits, holdStats, holdBar, niceSec, noteName, hzToMidi, foldTo, fmtClock, tagIcon, legend, timeWindow, sovtWords };
+  V.scenes.breathKit = { T, TrillTrack, HoldTrack, PitchGate, frameBits, airBits, holdStats, holdBar, niceSec, noteName, hzToMidi, foldTo, fmtClock, tagIcon, legend, timeWindow, sovtWords, paintNow };
 })(typeof window !== "undefined" ? window : globalThis);

@@ -1531,12 +1531,17 @@
     _kit() {
       return global.VTViz?.scenes?.breathKit || null;
     },
-    /** The live picture redraws about 30 times a second: smooth to read, half the paint work. */
+    /**
+     * The live picture redraws about 30 times a second, painted inside the
+     * engine's own frame: smooth to read, half the paint work, no extra frame.
+     */
     _paceDraw(dt, now) {
       this._drawAcc = (this._drawAcc || 0) + dt;
       if (now || this._drawAcc >= 0.03) {
         this._drawAcc = 0;
-        this.viz?.draw();
+        const kit = global.VTViz?.scenes?.breathKit;
+        if (kit?.paintNow) kit.paintNow(this.viz);
+        else this.viz?.draw();
       }
     },
     /** Seconds of the asked-for sound (trill, or tone in the straw) in the flow step. */
@@ -2029,12 +2034,17 @@
       this.$("[data-h]")?.classList.toggle("is-air", !!st.sTrack.hold);
       this._paceDraw(a.dt);
     },
-    /** The live picture redraws about 30 times a second: smooth to read, half the paint work. */
+    /**
+     * The live picture redraws about 30 times a second, painted inside the
+     * engine's own frame: smooth to read, half the paint work, no extra frame.
+     */
     _paceDraw(dt) {
       this._drawAcc = (this._drawAcc || 0) + dt;
       if (this._drawAcc >= 0.03) {
         this._drawAcc = 0;
-        this.viz?.draw();
+        const kit = global.VTViz?.scenes?.breathKit;
+        if (kit?.paintNow) kit.paintNow(this.viz);
+        else this.viz?.draw();
       }
     },
     onStop() {
@@ -2189,12 +2199,17 @@
       this.$("[data-h]")?.classList.toggle("is-air", !!h);
       this._paceDraw(a.dt);
     },
-    /** The live picture redraws about 30 times a second: smooth to read, half the paint work. */
+    /**
+     * The live picture redraws about 30 times a second, painted inside the
+     * engine's own frame: smooth to read, half the paint work, no extra frame.
+     */
     _paceDraw(dt) {
       this._drawAcc = (this._drawAcc || 0) + dt;
       if (this._drawAcc >= 0.03) {
         this._drawAcc = 0;
-        this.viz?.draw();
+        const kit = global.VTViz?.scenes?.breathKit;
+        if (kit?.paintNow) kit.paintNow(this.viz);
+        else this.viz?.draw();
       }
     },
     _paintWords() {
@@ -3575,11 +3590,14 @@
         const txt = this._evText();
         if (ev.textContent !== txt) ev.textContent = txt;
       }
-      // The map of stones changes slowly: about ten redraws a second
+      // The map of stones changes slowly: about ten redraws a second, painted
+      // inside the engine's frame
       this._drawAcc = (this._drawAcc || 0) + (frame.dtMs || 16) / 1000;
       if (this._drawAcc >= 0.1) {
         this._drawAcc = 0;
-        this.viz?.draw();
+        const kit = global.VTViz?.scenes?.breathKit;
+        if (kit?.paintNow) kit.paintNow(this.viz);
+        else this.viz?.draw();
       }
     },
     /** The pitch gate that walks the scale (see the note above the mode). */

@@ -115,8 +115,8 @@ test.describe("anonymous events for A/B tests", () => {
     expect(Object.keys(batch).sort()).toEqual(["events", "v"]);
   });
 
-  test("a browser that says no is never sent from: GPC, Do Not Track, automation", async ({ browser }) => {
-    for (const opts of [{ gpc: true, human: true }, { dnt: true, human: true }, { human: false }]) {
+  test("a browser that says no is never sent from: GPC, automation", async ({ browser }) => {
+    for (const opts of [{ gpc: true, human: true }, { human: false }]) {
       // A fresh context per case: init scripts would otherwise pile up.
       const ctx = await browser.newContext({ timezoneId: "America/Lima", locale: "es-PE" });
       const page = await ctx.newPage();
@@ -127,13 +127,36 @@ test.describe("anonymous events for A/B tests", () => {
         return window.VTAnalytics.remoteState();
       });
       expect(state.sending).toBe(false);
-      expect(state.reason).toBe(opts.gpc ? "gpc" : opts.dnt ? "dnt" : "automated");
+      expect(state.reason).toBe(opts.gpc ? "gpc" : "automated");
       await page.waitForTimeout(150);
       expect(sent.bodies).toEqual([]);
       // Nothing changes locally: the event is still recorded on the device.
       const counts = await page.evaluate(() => window.VTAnalytics.summary().counts);
       expect(counts.practice_start).toBeGreaterThan(0);
       await ctx.close();
+    }
+  });
+
+  test("Do Not Track alone no longer stops anything, which the pages no longer claim", async ({ page }) => {
+    // Retired 2026-09-24: the W3C discontinued the specification in 2019 and
+    // Safari removed the header that year, because sending it narrowed a
+    // fingerprint rather than protecting anybody. GPC and the guide's switch are
+    // the two ways to say no, and both are tested above. This case also guards
+    // the pages: a promise to honour DNT must not come back while the code does
+    // not, which is how a privacy page starts lying.
+    const sent = await boot(page, { endpoint: ENDPOINT, dnt: true, human: true });
+    const state = await page.evaluate(() => {
+      window.VTAnalytics.track("practice_start", { exerciseId: "s4-lip-trills" });
+      window.VTAnalytics.flush(true);
+      return window.VTAnalytics.remoteState();
+    });
+    expect(state.sending).toBe(true);
+    expect(state.reason).toBe(null);
+    await expect.poll(() => sent.bodies.length).toBeGreaterThan(0);
+    for (const file of ["privacy.html", "guide.html"]) {
+      const res = await page.request.get(`${BASE}/${file}`);
+      const body = (await res.text()).toLowerCase();
+      expect(body, `${file} still promises Do Not Track`).not.toContain("do not track");
     }
   });
 
@@ -193,6 +216,31 @@ test.describe("anonymous events for A/B tests", () => {
     // Allowing again deletes nothing.
     await page.waitForTimeout(150);
     expect(sent.urls.filter((u) => u.endsWith("/v1/events/forget")).length).toBe(1);
+  });
+
+  test("the guide page knows where events go, so its switch can really delete them", async ({ page }) => {
+    // The switch and the state line come from the same code the app uses, but
+    // guide.html loads its own scripts. The endpoint is derived from the worker
+    // URL in js/billing-config.js, so leaving that file out of this page would
+    // make it say "nothing is being sent" while the app sends, and would leave
+    // POST /v1/events/forget with nowhere to go — the one channel the privacy
+    // page promises for deleting what was already sent. No init script here: it
+    // has to be true of the page as deployed.
+    await page.addInitScript(() => {
+      // Only so the state line is the one a person would read; the endpoint
+      // assertion below does not depend on it.
+      Object.defineProperty(Navigator.prototype, "webdriver", { get: () => false, configurable: true });
+    });
+    await page.goto(`${BASE}/guide.html#privacidad`);
+    const seen = await page.evaluate(() => ({
+      endpoint: window.VT_ANALYTICS_ENDPOINT,
+      worker: window.VT_BILLING_CONFIG?.verification?.apiBaseUrl || ""
+    }));
+    expect(seen.worker).toMatch(/^https:\/\//);
+    expect(seen.endpoint).toBe(`${seen.worker.replace(/\/+$/, "")}/v1/events`);
+    // And the line the visitor reads is the sending one, not "nothing is sent".
+    const state = page.locator('[data-privacy-switch][data-lang="es"] [data-privacy-state]');
+    await expect(state).toHaveText("Este navegador envía estadísticas anónimas.");
   });
 
   test("the privacy text names every field that is sent, in both languages, and the worker's retention", async ({ page }) => {
@@ -460,7 +508,17 @@ test.describe("The account and trial funnel", () => {
     const sent = await boot(page, { endpoint: ENDPOINT, human: true });
     await page.evaluate(() => window.VTAnalytics.flush());
     await expect.poll(() => sent.bodies.length).toBeGreaterThan(0);
-    expect([...hosts]).toEqual(["events.test"]);
+    // Two of ours, and only ours: the stubbed events endpoint, and the worker
+    // itself, which js/account.js now asks once the page is quiet so the account
+    // panel knows the ways in before anybody opens it. The allowed host is read
+    // from the deployment's own config, so a new URL cannot slip through here.
+    const ours = await page.evaluate(
+      () => window.VT_BILLING_CONFIG?.verification?.apiBaseUrl || ""
+    );
+    const allowed = new Set(["events.test", new URL(ours).host]);
+    await page.waitForTimeout(2600); // the idle probe's own timeout
+    for (const host of hosts) expect(allowed.has(host), `${host} is not ours`).toBe(true);
+    expect([...hosts], "and the statistics really were sent").toContain("events.test");
   });
 
   test("opening the account panel reports which state the visitor is looking at", async ({ page }) => {

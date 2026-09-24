@@ -477,21 +477,54 @@ test.describe("Variant assignment", () => {
     expect(a.forced).toBe(true);
   });
 
-  test("nothing is sent anywhere — the privacy page stays true", async ({ page }) => {
+  test("nothing reaches a third party — the privacy page stays true", async ({ page }) => {
+    // Until 2026-09-24 this asserted that NO external request was made at all,
+    // and it passed for the wrong reason: Playwright marks its browser automated
+    // and js/analytics.js never sends from one, so the promise was never really
+    // under test. The owner chose measurement over that promise, so the site now
+    // sends anonymous statistics from the first visit and privacy.html says so.
+    // What is left to defend, and what the page still claims, is that nobody
+    // else is contacted: no third-party script, no analytics vendor, no ad host,
+    // before or during practice. This browser behaves like a person's, so the
+    // client's own refusals cannot make the assertion vacuous.
     const external = [];
     await page.route("**/*", (route) => {
       const url = route.request().url();
       if (!url.startsWith(BASE)) external.push(url);
       return route.continue();
     });
-    await boot(page);
+    await page.addInitScript(() => {
+      try {
+        localStorage.clear();
+        localStorage.setItem("vt_lang", "es");
+      } catch {
+        /* ignore */
+      }
+      Object.defineProperty(Navigator.prototype, "webdriver", { get: () => false, configurable: true });
+    });
+    await page.goto(BASE, { waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => !!window.VTTour && !!window.VTAnalytics);
     await page.evaluate(() => window.VTTour.start(true));
     await page.waitForTimeout(500);
     await page.locator("[data-tour-next]").click();
     await page.waitForTimeout(400);
-    expect(external, "no beacon leaves the page").toEqual([]);
+    await page.evaluate(() => window.VTAnalytics.flush());
+    await page.waitForTimeout(200);
+
+    // The one host allowed is the deployment's own worker, read from the config
+    // rather than written out here, so a new URL cannot quietly become a third
+    // party that this test waves through.
+    const ours = await page.evaluate(
+      () => window.VT_BILLING_CONFIG?.verification?.apiBaseUrl || ""
+    );
+    expect(ours, "this deploy has a worker to send to").toMatch(/^https:\/\//);
+    const ourHost = new URL(ours).host;
+    const hosts = [...new Set(external.map((u) => new URL(u).host))];
+    for (const host of hosts) expect(host, `${host} is not ours`).toBe(ourHost);
+    // And not vacuous: something really did go to our own worker.
+    expect(hosts, "the statistics really are sent").toEqual([ourHost]);
     const events = await page.evaluate(() => window.VTAnalytics.summary().counts);
-    expect(events.tour_start, "the events exist, they just stay on the device").toBe(1);
+    expect(events.tour_start, "the events are kept on the device as well").toBe(1);
   });
 });
 

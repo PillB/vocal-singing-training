@@ -14,9 +14,10 @@
  * - The IP is used only to rate-limit, and only as an HMAC under a secret key
  *   with the UTC day in it (the bucket key), which the sweep deletes within two
  *   days. Without the key nobody can go from a bucket back to an address.
- * - A browser that sends Global Privacy Control or Do Not Track is not
- *   recorded at all — the site does not send in that case, and if something
- *   sends anyway the worker drops it.
+ * - A browser that sends Global Privacy Control is not recorded at all — the
+ *   site does not send in that case, and if something sends anyway the worker
+ *   drops it. Do Not Track is no longer read, on either side (2026-09-24): no
+ *   law requires it and the specification was discontinued in 2019.
  * - Automated browsers (headless Chrome, Playwright, crawlers) are dropped, so
  *   test runs against the live site cannot pollute a result.
  * - Events, exposures and the daily ingest counters are deleted at 180 days
@@ -398,7 +399,7 @@ export function ingestRefusal(request, env) {
   if (String(env.EVENTS_ENABLED || "").trim().toLowerCase() === "false") {
     return "events_disabled";
   }
-  if (request.headers.get("sec-gpc") === "1" || request.headers.get("dnt") === "1") {
+  if (request.headers.get("sec-gpc") === "1") {
     return "opted_out";
   }
   const ua = request.headers.get("user-agent") || "";
@@ -541,7 +542,7 @@ async function newExposures(db, events) {
  * POST /v1/events — record a batch of anonymous events.
  *
  * Answers 200 with counts on success. Refusals that are the visitor's choice
- * (GPC, DNT) or not ours to count (bots, switched off) answer 202 and store
+ * (GPC) or not ours to count (bots, switched off) answer 202 and store
  * nothing, so nothing on the client ever retries them. Every outcome adds to
  * the day's ingest counters (except the kill switch, which records nothing),
  * because the client posts no-cors and can never see a refusal itself.

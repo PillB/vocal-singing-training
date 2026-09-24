@@ -148,9 +148,12 @@ with the judges' fix: the whole session no longer ends from an unlabelled ×.
   records one exposure per experiment, only once the thing under test has
   actually been shown. `?ab_<key>=<variant>` shows an arm without joining the
   experiment.
-- `js/analytics.js` sends events to `VT_ANALYTICS_ENDPOINT`. Nothing is sent
-  while that is empty (today), from automated browsers, or when the browser
-  sends Global Privacy Control or Do Not Track.
+- `js/analytics.js` sends events to `VT_ANALYTICS_ENDPOINT`, which
+  `js/experiments-config.js` derives from the worker URL in
+  `js/billing-config.js`. Nothing is sent when there is no worker, from
+  automated browsers, or when the browser sends Global Privacy Control. Do Not
+  Track is not read (dropped 2026-09-24: no law requires it, the specification
+  was discontinued in 2019).
 - The worker (`workers/entitlements/src/events.js`) stores the events and
   exposures, and answers results for an admin. The results show in the account
   panel and at `GET /v1/admin/experiments/results?experiment=<key>`.
@@ -242,12 +245,62 @@ hues are not worth a test at this size.
 - `privacy.html` and guide section 14 list exactly the fields sent, and
   `tests/ab-events.spec.js` fails if the text and the code drift apart.
 
+### What the owner decided on 2026-09-24, and what it cost
+
+Analytics are on. The endpoint is no longer a string somebody has to remember to
+fill in: `js/experiments-config.js` derives it from the worker URL in
+`js/billing-config.js`, so a deployment with a worker measures and one without
+sends nothing.
+
+Three self-imposed rules were dropped with it, because each one made the funnel
+unreadable and none was required by any law:
+
+- **"While you are only practising, your browser talks to no server of ours."**
+  It was the reason there was no funnel at all. privacy.html now says what the
+  site does instead: statistics go from the first visit, and here is the switch.
+  `tests/tour-behaviour.spec.js` used to assert zero external requests — and
+  passed only because Playwright browsers never send. It now asserts what is
+  still true and is worth defending: no third party is contacted, ever.
+- **Honouring Do Not Track.** No law anywhere requires it, the W3C discontinued
+  the specification in 2019, and Safari removed the header that year because
+  sending it narrowed a fingerprint rather than protecting anybody. Dropped on
+  the client and in the worker in the same commit: the client sending while the
+  worker discarded would be the worst of both.
+- **No `/v1/auth/methods` probe on page load.** It existed to keep the promise
+  above. Its cost was that nothing knew which ways in the deployment offers
+  until somebody opened a panel, so every first open drew "still asking" and
+  reported that state. `js/account.js` now asks once the page is quiet.
+
+What stays, and why it is not people-pleasing:
+
+- **Global Privacy Control**, the guide's switch and `POST /v1/events/forget`.
+  Ley 29733 arts. 20, 22 and 24 require a channel to stop and delete; GDPR arts.
+  17 and 21 require the same, and art. 13(2)(b) requires saying so. GPC is also
+  what Brave and DuckDuckGo actually send, and it has legal force in several US
+  states for businesses the thresholds cover.
+- **The recipient and cross-border disclosure** that privacy.html was missing
+  entirely: Cloudflare (the Worker, D1, KV), GitHub Pages (the host, which sees
+  an IP), Google (sign-in), Stripe and Mercado Pago (payment). Ley 29733 art. 15
+  requires saying the data leaves Peru and art. 18 requires naming who receives
+  it; GDPR art. 13(1)(e)-(f) says the same.
+- **The retention figures** (180 days for events, about two days for the address
+  bucket). Part of the same required notice, and true.
+
+Still open, and the owner's call: the ePrivacy Directive art. 5(3) reading is
+that analytics storage in a browser needs *prior* consent in the EU, which an
+opt-out does not give (EDPB Guidelines 2/2023 on the technical scope; WP29
+Opinion 04/2012 on why first-party analytics is not "strictly necessary"). Peru
+is stricter still in form — Ley 29733 has no legitimate-interests basis — though
+enforcement there is complaint-driven. Nothing in this repo gates the events
+behind a consent step; a first-visit consent line for EU visitors is the fix if
+he wants one, and it costs sample.
+
 ### Left for later
 
 - `tour_shape_2026_10` is still judged on first wins. A practice-based primary
   would suit it better.
-- A browser that already sends GPC or DNT never sees the switch, so it cannot
-  delete what it sent before. That data goes at the 180-day sweep.
+- A browser that already sends GPC never sees the switch, so it cannot delete
+  what it sent before. That data goes at the 180-day sweep.
 - There are no always-valid p-values: the fixed plan is the only protection
   against peeking.
 - There is no route to replay an A/A from stored data.

@@ -50,7 +50,7 @@
       if (st.optedOut) {
         line = t.optedOut;
         label = t.resume;
-      } else if (st.reason === "gpc" || st.reason === "dnt") {
+      } else if (st.reason === "gpc") {
         line = t.browser;
         canToggle = false;
       } else if (st.reason === "automated") {

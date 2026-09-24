@@ -4,11 +4,18 @@
  *
  * Every event is kept in this browser (`vt_analytics_v1`). When
  * `window.VT_ANALYTICS_ENDPOINT` is set (js/experiments-config.js), events are
- * also sent, batched, to the entitlements worker's `/v1/events` route so an
- * A/B test can be read — unless the visitor has said no in any of the ways a
- * browser can say it: Global Privacy Control, Do Not Track, or the switch in
- * the guide's privacy section (`vt_analytics_optout_v1`). Automated browsers
- * never send.
+ * also sent, batched, to the entitlements worker's `/v1/events` route so the
+ * funnel can be read — unless the visitor has said no: Global Privacy Control,
+ * or the switch in the guide's privacy section (`vt_analytics_optout_v1`).
+ * Automated browsers never send.
+ *
+ * Do Not Track was honoured until 2026-09-24 and is not any more. No law
+ * anywhere requires it, the W3C discontinued the specification in 2019, and
+ * Safari removed the header that year because sending it narrowed a browser's
+ * fingerprint rather than protecting anybody. GPC stays: it is a deliberate
+ * opt-out with legal force in several US states, it is what Brave and
+ * DuckDuckGo actually send, and the switch below is the same choice made by
+ * hand.
  *
  * What is sent is exactly what the guide and privacy.html list: the event
  * name, its flat props, the random browser id, the local day and the time
@@ -54,13 +61,12 @@
 
   /**
    * Why this browser does not send events, or "" when it does.
-   * @returns {"" | "no_endpoint" | "gpc" | "dnt" | "opted_out" | "automated"}
+   * @returns {"" | "no_endpoint" | "gpc" | "opted_out" | "automated"}
    */
   function remoteBlockedReason() {
     if (!endpoint()) return "no_endpoint";
     const nav = global.navigator || {};
     if (nav.globalPrivacyControl === true) return "gpc";
-    if (nav.doNotTrack === "1" || nav.doNotTrack === "yes" || global.doNotTrack === "1") return "dnt";
     try {
       if (localStorage.getItem(OPTOUT_KEY) === "1") return "opted_out";
     } catch {

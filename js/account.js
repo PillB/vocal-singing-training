@@ -600,6 +600,23 @@
   }
 
   /**
+   * Run something once the page has stopped being busy, so a boot-time request
+   * never competes with the first paint.
+   * @param {Function} fn What to run.
+   */
+  function afterIdle(fn) {
+    try {
+      if (typeof global.requestIdleCallback === "function") {
+        global.requestIdleCallback(() => fn(), { timeout: 2500 });
+        return;
+      }
+    } catch {
+      /* fall through to the timer */
+    }
+    setTimeout(fn, 1500);
+  }
+
+  /**
    * Adopt what is in storage and, when signed in, re-check with the worker.
    * @returns {Promise<object>} State after the check.
    */
@@ -609,11 +626,17 @@
       emit();
       return getState();
     }
-    // Deliberately no /v1/auth/methods here. A visitor who only ever practises
-    // must not have their browser talk to our worker at all, which is what
-    // privacy.html promises and what tests/tour-behaviour.spec.js checks. The
-    // probe happens on ensureMethods(), which the account and Pro panels call
-    // when someone opens them.
+    // This used to be deliberately empty: a visitor who only practised must not
+    // have their browser talk to our worker at all, which is what privacy.html
+    // promised until 2026-09-24. That promise is gone — the site sends anonymous
+    // statistics from the first visit — and the cost of keeping the rule was
+    // real: nothing knew which ways in this deployment offers until somebody
+    // opened a panel, so the first open of every page load drew "still asking"
+    // and reported that state to the funnel. Asking once the page is quiet fixes
+    // both, and costs one cached request per load.
+    afterIdle(() => {
+      ensureMethods().catch(() => null);
+    });
     if (!session?.token) {
       emit();
       return getState();

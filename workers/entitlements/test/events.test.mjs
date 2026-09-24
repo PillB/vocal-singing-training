@@ -230,17 +230,37 @@ test("props are capped at twelve keys and a bad day or tz becomes null", () => {
   assert.equal(clean.event.tz, null);
 });
 
-test("Global Privacy Control and Do Not Track are honoured: nothing is stored", async () => {
+test("Global Privacy Control is honoured: nothing is stored", async () => {
   const env = freshEnv();
-  for (const headers of [{ "sec-gpc": "1" }, { dnt: "1" }]) {
-    const res = await call(beacon({ events: [ev("app_open", "a1b2c3d4e5f60718")] }, { headers }), env, { now: NOW });
-    assert.equal(res.status, 202);
-    assert.equal(res.body.reason, "opted_out");
-  }
+  const res = await call(
+    beacon({ events: [ev("app_open", "a1b2c3d4e5f60718")] }, { headers: { "sec-gpc": "1" } }),
+    env,
+    { now: NOW }
+  );
+  assert.equal(res.status, 202);
+  assert.equal(res.body.reason, "opted_out");
   // Nothing stored but the day's count of refusals, which holds no id.
   await ensureSchema(env.DB);
   assert.equal((await rows(env, "SELECT COUNT(*) AS n FROM events"))[0].n, 0);
-  assert.deepEqual(await rows(env, "SELECT reason, n FROM ingest_daily"), [{ reason: "opted_out", n: 2 }]);
+  assert.deepEqual(await rows(env, "SELECT reason, n FROM ingest_daily"), [{ reason: "opted_out", n: 1 }]);
+});
+
+test("Do Not Track is not read any more, on this side either", async () => {
+  // Dropped 2026-09-24. No law requires honouring DNT, the W3C discontinued the
+  // specification in 2019 and Safari removed the header the same year because it
+  // narrowed a fingerprint rather than protecting anybody. The client stopped
+  // reading it too (js/analytics.js), which is what keeps the two halves from
+  // disagreeing: the client sending while the worker discards would be the worst
+  // of both. GPC above still stops everything, and so does the guide's switch.
+  const env = freshEnv();
+  const res = await call(
+    beacon({ events: [ev("app_open", "a1b2c3d4e5f60718")] }, { headers: { dnt: "1" } }),
+    env,
+    { now: NOW }
+  );
+  assert.equal(res.status, 200, JSON.stringify(res.body));
+  assert.equal(res.body.accepted, 1);
+  assert.equal((await rows(env, "SELECT COUNT(*) AS n FROM events"))[0].n, 1);
 });
 
 test("automated browsers are not counted", async () => {

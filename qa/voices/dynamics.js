@@ -162,8 +162,9 @@
           h.voiceOff(0.1);
           return h.at(700, done);
         }
-        h.setPitch(hz * Math.pow(2, PATTERN[k] / 12), 0.05);
-        if (sloppy && k > 0) {
+        // Sloppy: the third note is reached by a slow slide (0,4 s)
+        h.setPitch(hz * Math.pow(2, PATTERN[k] / 12), sloppy && k === 2 ? 0.4 : 0.05);
+        if (sloppy && (k === 1 || k === 3)) {
           // A break in the line: the tone stops for ~150 ms between notes
           h.voiceOff(0.02);
           h.at(150, () => h.voiceOn(0.3, 0.02));

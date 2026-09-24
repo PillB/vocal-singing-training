@@ -507,21 +507,28 @@
     },
     "s14-staccato-legato": {
       mode: "staccatoLegato",
-      showPitch: true,
-      showHold: true,
+      // The skill is note length and the gaps between notes; the highway
+      // bridged every staccato rest into one line and chased the chord loop
+      showPitch: false,
+      showHold: false,
       showLevel: true,
       pitchChallenge: false,
-      autoPiano: true,
+      // Space-as-sound would draw notes nobody sang
+      allowManualSound: false,
+      // A chord loop through the speakers fills the rests the picture measures;
+      // the piano stays one tap away
+      autoPiano: false,
       autoRecord: false,
       phases: [
-        { label: "Staccato rounds", sec: 90 },
-        { label: "Legato line", sec: 90 },
-        { label: "Staccato again", sec: 60 },
-        { label: "Legato again", sec: 60 }
+        { label: "Staccato rounds", labelEs: "Staccato", sec: 90, kind: "staccato" },
+        { label: "Legato line", labelEs: "Legato", sec: 90, kind: "legato" },
+        { label: "Staccato again", labelEs: "Staccato otra vez", sec: 60, kind: "staccato" },
+        { label: "Legato again", labelEs: "Legato otra vez", sec: 60, kind: "legato" },
+        { label: "Song phrase · legato", labelEs: "Frase de canción · legato", sec: 30, kind: "legato", round: false }
       ],
-      cue: "Short bounce vs connected line — note lengths auto-classify after holds.",
-      cueEs: "Rebote corto vs línea conectada — las duraciones se clasifican solas.",
-      metricHints: {}
+      cue: "Same 3-note pattern: short notes with silence between, then one joined line. Each note is drawn as long as it sounded. With the piano on speakers, use headphones.",
+      cueEs: "El mismo patrón de 3 notas: notas cortas con silencio entre ellas, luego una sola línea unida. Cada nota se dibuja tan larga como sonó. Con el piano por altavoz, usa auriculares.",
+      metricHints: { rounds: "phasesSungInTheirWay" }
     },
     /* —— Singing · class course (placement & resonance) —— */
     "s17-jaw-neck-release": {

@@ -779,6 +779,508 @@
     });
   }
 
+
+  /* ================================================================
+   * s14 · Staccato / legato — "Rollo de articulación"
+   * model (Modes.staccatoLegato state):
+   *   phases: [{ label, sec, kind }]   kind "staccato" | "legato"
+   *   phaseIdx, remaining, phaseKind, allDone
+   *   runs: [run]   every stretch of sound, from the raw edge:
+   *     { t0, t1 (null while open), phaseIdx, kind, notes (pitch steps),
+   *       hammer (fast attack, or null when not measured), breakBefore,
+   *       dip (deepest level dip inside, dB) }
+   *   t             the take's clock (s)
+   *   medMidi       your pitch centre (median of your notes)
+   *   notesOf(run)  the run's notes [{ t0, t1, midi|null }]
+   *   stats(i)      the numbers of phase i
+   *   review        true after Stop
+   * ================================================================ */
+
+  const ART = {
+    staccato: { es: "Staccato", en: "Staccato", mark: "· · ·" },
+    legato: { es: "Legato", en: "Legato", mark: "———" }
+  };
+
+  /** The model of an articulation, drawn as outlines: what to aim for, not a pacer. */
+  function artModel(ctx, x, yMid, span, pxPerSec, kind, maxX) {
+    const step = Math.min(10, span * 0.3);
+    ctx.strokeStyle = C.target;
+    ctx.fillStyle = C.targetSoft;
+    ctx.lineWidth = 1.5;
+    if (kind === "legato") {
+      let cx = x;
+      const levels = [1, 0, -1];
+      ctx.beginPath();
+      levels.forEach((lv, i) => {
+        const y = yMid - lv * step;
+        const x2 = Math.min(maxX, cx + 0.5 * pxPerSec);
+        if (i) ctx.lineTo(cx, y);
+        else ctx.moveTo(cx, y);
+        ctx.lineTo(x2, y);
+        cx = x2;
+      });
+      ctx.lineWidth = 7;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.strokeStyle = C.targetSoft;
+      ctx.stroke();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = C.target;
+      ctx.setLineDash([4, 3]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.lineCap = "butt";
+      return cx;
+    }
+    let cx = x;
+    [1, 0, -1].forEach((lv) => {
+      const w = Math.max(6, 0.18 * pxPerSec);
+      if (cx + w > maxX) return;
+      const y = yMid - lv * step;
+      roundRect(ctx, cx, y - 4, w, 8, 4);
+      ctx.fill();
+      ctx.setLineDash([3, 2]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      cx += w + Math.max(6, 0.27 * pxPerSec);
+    });
+    return cx;
+  }
+
+  function artChips(ctx, box, m) {
+    // Narrow: the phases to come are their marks alone (· · · or ———)
+    const narrow = box.w / Math.max(1, m.phases.length) < 110;
+    const items = m.phases.map((p, i) => {
+      const k = ART[p.kind] || ART.staccato;
+      const cur = i === m.phaseIdx && !m.allDone;
+      const mm = Math.floor(Math.max(0, m.remaining) / 60);
+      const ss = String(Math.floor(Math.max(0, m.remaining) % 60)).padStart(2, "0");
+      return {
+        label: narrow && !cur ? k.mark : `${L(k.es, k.en)} ${k.mark}`,
+        short: k.mark,
+        sub: cur ? `${mm}:${ss}` : "",
+        done: i < m.phaseIdx || m.allDone
+      };
+    });
+    V.chips(ctx, box, items, { current: m.allDone ? -1 : m.phaseIdx, frac: m.phases[m.phaseIdx] ? 1 - m.remaining / m.phases[m.phaseIdx].sec : 1 });
+  }
+
+  /** One run of sound: its notes as pills (joined when they are one line). */
+  function drawRun(ctx, run, notes, xOf, yOf, opts) {
+    const ph = opts.pillH;
+    const t1 = run.t1 != null ? run.t1 : opts.now;
+    const x0 = xOf(run.t0);
+    const x1 = xOf(t1);
+    if (x1 < opts.left || x0 > opts.right) return;
+    let prevY = null;
+    let prevX = null;
+    notes.forEach((nt, i) => {
+      if (nt.glide) {
+        // The way from one note to the next: a slanted line; a slow one is a slide
+        const next = notes[i + 1];
+        const a = xOf(nt.t0);
+        const b = xOf(nt.t1 != null ? nt.t1 : t1);
+        const y0 = prevY != null ? prevY : yOf(null);
+        const y1 = next && next.midi != null ? yOf(next.midi) : y0;
+        ctx.strokeStyle = C.you;
+        ctx.lineWidth = Math.max(2, ph * 0.4);
+        ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.moveTo(a, y0);
+        ctx.lineTo(b, y1);
+        ctx.stroke();
+        ctx.lineCap = "butt";
+        if (nt.slide && opts.lengths && a >= opts.left && b <= opts.right) {
+          text(ctx, L("deslizado", "slide"), (a + b) / 2, Math.min(y0, y1) - ph / 2 - 6, { align: "center", font: font(9, 800), color: C.warn });
+        }
+        prevY = y1;
+        prevX = b;
+        return;
+      }
+      const a = clamp(xOf(nt.t0), opts.left, opts.right);
+      const b = clamp(xOf(nt.t1 != null ? nt.t1 : t1), opts.left, opts.right);
+      const y = nt.midi != null ? yOf(nt.midi) : prevY != null ? prevY : yOf(null);
+      // Joined notes of one line: a vertical step from the last one
+      if (prevY != null && prevX != null && Math.abs(prevX - a) < 3) {
+        ctx.fillStyle = C.you;
+        ctx.fillRect(a - 1.5, Math.min(prevY, y) - ph / 2 + 2, 3, Math.abs(prevY - y) + ph - 4);
+      }
+      if (nt.midi != null) {
+        ctx.fillStyle = C.you;
+        roundRect(ctx, a, y - ph / 2, Math.max(3, b - a), ph, ph / 2);
+        ctx.fill();
+      } else {
+        // No reliable pitch (too short): an outline, not a guessed note
+        ctx.strokeStyle = C.you;
+        ctx.lineWidth = 1.5;
+        roundRect(ctx, a + 0.75, y - ph / 2 + 0.75, Math.max(3, b - a - 1.5), ph - 1.5, ph / 2);
+        ctx.stroke();
+      }
+      prevY = y;
+      prevX = b;
+    });
+    if (run.hammer && x0 >= opts.left) {
+      const ny = notes[0] && notes[0].midi != null ? yOf(notes[0].midi) : yOf(null);
+      kindGlyph(ctx, "abrupt", x0 + 3, ny - ph / 2 - 7, 5);
+    }
+    if (opts.lengths && run.t1 != null && run.t1 - run.t0 < 0.8 && x1 - x0 >= 0 && x0 >= opts.left) {
+      const ny = notes[0] && notes[0].midi != null ? yOf(notes[0].midi) : yOf(null);
+      const y = ny + ph / 2 + 9;
+      if (opts.labelEnd == null || x0 > opts.labelEnd + 4) {
+        const s = fmtNum(run.t1 - run.t0, 2).replace(/^0/, "");
+        text(ctx, s, x0, y, { font: font(9, 700), color: C.muted });
+        ctx.font = font(9, 700);
+        opts.labelEnd = x0 + ctx.measureText(s).width;
+      }
+    }
+  }
+
+  /** The roll: your notes over time; ahead of now, the articulation to aim for. */
+  function artRoll(ctx, box, m) {
+    const { x, y, w, h } = box;
+    const reduced = V.reducedMotion();
+    const seconds = clamp(w / 110, 4.5, 9);
+    const nowAt = 0.7;
+    const secPerPx = seconds / w;
+    let nowX;
+    let tLeft;
+    if (reduced) {
+      const page = seconds * nowAt;
+      const inPage = m.t % page;
+      tLeft = m.t - inPage;
+      nowX = x + inPage / secPerPx;
+    } else {
+      nowX = x + w * nowAt;
+      tLeft = m.t - (nowX - x) * secPerPx;
+    }
+    const xOf = (t) => x + (t - tLeft) / secPerPx;
+    const ph = h < 90 ? 8 : 12;
+    // Pitch: semitones against your own centre
+    let range = 6;
+    const vis = m.runs.filter((r) => (r.t1 == null ? m.t : r.t1) >= tLeft);
+    const visNotes = vis.map((r) => ({ r, notes: m.notesOf(r) }));
+    if (m.medMidi != null) {
+      visNotes.forEach(({ notes }) =>
+        notes.forEach((n) => {
+          if (n.midi != null) range = Math.max(range, Math.min(12, Math.abs(n.midi - m.medMidi) + 1));
+        })
+      );
+    }
+    const top = y + 14;
+    const bot = y + h - 16;
+    const yOf = (midi) => {
+      if (midi == null || m.medMidi == null) return (top + bot) / 2;
+      return (top + bot) / 2 - clamp((midi - m.medMidi) / range, -1, 1) * ((bot - top) / 2);
+    };
+    ctx.fillStyle = "rgba(170, 195, 230, 0.04)";
+    roundRect(ctx, x, y, w, h, 8);
+    ctx.fill();
+    ctx.fillStyle = "rgba(143, 211, 255, 0.045)";
+    ctx.fillRect(nowX, y, x + w - nowX, h);
+    // Lanes every two semitones; your centre a little stronger
+    for (let s = -range; s <= range; s += 2) {
+      const ly = Math.round((top + bot) / 2 - (s / range) * ((bot - top) / 2)) + 0.5;
+      ctx.strokeStyle = s === 0 ? C.gridStrong : C.grid;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x + 4, ly);
+      ctx.lineTo(x + w - 4, ly);
+      ctx.stroke();
+    }
+    if (h >= 90) {
+      text(ctx, L("agudo", "higher"), x + 6, y + 8, { font: font(9, 700), color: C.faint });
+      text(ctx, L("grave", "lower"), x + 6, y + h - 8, { font: font(9, 700), color: C.faint });
+    }
+    // Ahead of now: the articulation to aim for, and where the phase changes
+    const pxPerSec = 1 / secPerPx;
+    const future = (x + w - nowX) * secPerPx;
+    const cur = m.phases[m.phaseIdx];
+    if (cur && !m.allDone) {
+      const ahead = nowX + 14;
+      const change = m.remaining < future - 0.3 ? nowX + m.remaining * pxPerSec : null;
+      const lim = change != null ? change - 8 : x + w - 8;
+      if (lim - ahead > 30) {
+        text(ctx, L("así", "like this"), ahead, top - 4, { font: font(9, 800), color: C.target });
+        artModel(ctx, ahead, (top + bot) / 2, (bot - top) / 2, pxPerSec, cur.kind, lim);
+      }
+      const nxt = m.phases[m.phaseIdx + 1];
+      if (change != null && nxt) {
+        ctx.strokeStyle = C.done;
+        ctx.setLineDash([3, 4]);
+        ctx.beginPath();
+        ctx.moveTo(change, y + 3);
+        ctx.lineTo(change, y + h - 3);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        const k = ART[nxt.kind] || ART.staccato;
+        text(ctx, `${L(k.es, k.en)} ▸`, change + 5, top - 4, { font: font(10, 800), color: C.done, max: x + w - change - 8 });
+        if (x + w - change > 44) artModel(ctx, change + 8, (top + bot) / 2, (bot - top) / 2, pxPerSec, nxt.kind, x + w - 6);
+      }
+    }
+    // Phase changes behind now
+    m.phases.forEach((p, i) => {
+      if (i === 0 || p.startT == null) return;
+      const px = xOf(p.startT);
+      if (px < x || px > nowX) return;
+      ctx.strokeStyle = C.gridStrong;
+      ctx.setLineDash([3, 4]);
+      ctx.beginPath();
+      ctx.moveTo(px, y + 3);
+      ctx.lineTo(px, y + h - 3);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    });
+    // Your notes
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x, y, nowX - x + 1, h);
+    ctx.clip();
+    const opts = { pillH: ph, now: m.t, left: x, right: nowX, lengths: h >= 90, labelEnd: null };
+    let prev = null;
+    visNotes.forEach(({ r, notes }) => {
+      drawRun(ctx, r, notes, xOf, yOf, opts);
+      // A break inside a legato line: a notch in the gap, with its word
+      if (r.breakBefore && prev && prev.t1 != null) {
+        const gx = (xOf(prev.t1) + xOf(r.t0)) / 2;
+        const pn = m.notesOf(prev);
+        const gy = yOf(pn.length ? pn[pn.length - 1].midi : null);
+        if (gx > x && gx < nowX) {
+          glyph(ctx, "notch", gx, gy - ph / 2 - 8, C.warn, 5);
+          text(ctx, L("corte", "break"), gx, gy + ph / 2 + 9, { align: "center", font: font(9, 800), color: C.warn });
+        }
+      }
+      prev = r;
+    });
+    ctx.restore();
+    // Now
+    ctx.strokeStyle = "rgba(238, 243, 250, 0.55)";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(nowX, y + 2);
+    ctx.lineTo(nowX, y + h - 2);
+    ctx.stroke();
+  }
+
+  function artStatsLine(m, i, short) {
+    const s = m.stats(i);
+    const p = m.phases[i];
+    if (!p) return "";
+    if (p.kind === "legato") {
+      if (!s.lines) return L("Aún sin líneas: une las notas sin parar el sonido", "No lines yet: join the notes without stopping the sound");
+      return L(
+        `${s.lines} ${s.lines === 1 ? "línea" : "líneas"} · ${s.breaks} ${s.breaks === 1 ? "corte" : "cortes"}` +
+          (s.slides ? ` · ${s.slides} ${s.slides === 1 ? "deslizado" : "deslizados"}` : "") +
+          (s.dip != null && s.dip >= 2 && !short ? ` · caída máx ${fmtNum(s.dip, 0)} dB` : "") +
+          (s.longest ? ` · la más larga ${fmtSec(s.longest)}` : ""),
+        `${s.lines} ${s.lines === 1 ? "line" : "lines"} · ${s.breaks} ${s.breaks === 1 ? "break" : "breaks"}` +
+          (s.slides ? ` · ${s.slides} ${s.slides === 1 ? "slide" : "slides"}` : "") +
+          (s.dip != null && s.dip >= 2 && !short ? ` · deepest dip ${fmtNum(s.dip, 0)} dB` : "") +
+          (s.longest ? ` · longest ${fmtSec(s.longest)}` : "")
+      );
+    }
+    if (!s.notes) return L("Aún sin notas: cortas, con silencio entre ellas", "No notes yet: short, with silence between");
+    return L(
+      `${s.notes} ${s.notes === 1 ? "nota" : "notas"} · largo mediano ${fmtSec(s.medLen, 2)}` + (s.medGap != null ? ` · silencio mediano ${fmtSec(s.medGap, 2)}` : "") + (s.hammers ? ` · ${s.hammers} de golpe ▲` : ""),
+      `${s.notes} ${s.notes === 1 ? "note" : "notes"} · median length ${fmtSec(s.medLen, 2)}` + (s.medGap != null ? ` · median gap ${fmtSec(s.medGap, 2)}` : "") + (s.hammers ? ` · ${s.hammers} hammered ▲` : "")
+    );
+  }
+
+  function articulation(ctx, w, h, m) {
+    panel(ctx, w, h);
+    if (m.review) return artReview(ctx, w, h, m);
+    const pad = 10;
+    const tiny = h < 135;
+    const compact = h < 190;
+    let y = pad;
+    if (!tiny) {
+      const chipH = compact ? 26 : 34;
+      artChips(ctx, { x: pad, y, w: w - pad * 2, h: chipH }, m);
+      y += chipH + (compact ? 6 : 10);
+    }
+    // Headline: what to do in this phase, and its one number
+    const cur = m.phases[m.phaseIdx];
+    const kind = cur ? cur.kind : "staccato";
+    const s = m.stats(m.phaseIdx);
+    let head = m.allDone
+      ? L("Fases completas: sigue si quieres", "Phases done: carry on if you like")
+      : kind === "legato"
+        ? L("Legato: une las notas en una sola línea", "Legato: join the notes into one line")
+        : L("Staccato: notas cortas, con silencio entre ellas", "Staccato: short notes, silence between");
+    if (tiny && cur) {
+      const mm = Math.floor(Math.max(0, m.remaining) / 60);
+      const ss = String(Math.floor(Math.max(0, m.remaining) % 60)).padStart(2, "0");
+      head = `${mm}:${ss} · ${head}`;
+    }
+    const big = kind === "legato" ? (s.current != null ? fmtSec(s.current) : s.longest ? fmtSec(s.longest) : "—") : s.medLen != null ? fmtSec(s.medLen, 2) : "—";
+    const bigWord = kind === "legato" ? L("línea", "line") : L("largo mediano", "median length");
+    const hy = y + (tiny ? 6 : 10);
+    ctx.font = font(tiny ? 15 : 20, 800, true);
+    const bw = ctx.measureText(big).width;
+    text(ctx, big, w - pad, hy, { align: "right", font: font(tiny ? 15 : 20, 800, true), color: C.text });
+    let wordW = 0;
+    if (w >= 420) {
+      ctx.font = font(10, 700);
+      wordW = ctx.measureText(bigWord).width + 8;
+      text(ctx, bigWord, w - pad - bw - 8, hy + 1, { align: "right", font: font(10, 700), color: C.muted });
+    }
+    ctx.fillStyle = C.text;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    fitText(ctx, head, pad, hy, w - pad * 2 - bw - wordW - 12, tiny ? 13 : compact ? 14 : 16, 800, 10);
+    y = hy + (tiny ? 10 : 16);
+    const statsH = tiny ? 0 : 16;
+    artRoll(ctx, { x: pad, y, w: w - pad * 2, h: h - y - pad - statsH }, m);
+    if (m.processed && !tiny) {
+      // Auto gain lifts the tails and the room between notes
+      text(ctx, L("mic procesado: largos y silencios aprox.", "processed mic: lengths and gaps approx."), w - pad - 6, y + 8, {
+        align: "right",
+        font: font(9, 800),
+        color: C.warn
+      });
+    }
+    if (statsH) {
+      text(ctx, artStatsLine(m, m.phaseIdx, w < 420), pad, h - pad - 6, { font: font(11, 700), color: C.muted, max: w - pad * 2 });
+    }
+  }
+
+  /**
+   * Every note's length on one scale (log, 0,05–4 s): staccato dots should
+   * sit in "short", legato lines in "long". The contrast is the gap between
+   * the two clusters.
+   */
+  function lengthScale(ctx, box, m) {
+    const { x, y, w, h } = box;
+    const lo = 0.05;
+    const hi = 4;
+    const ax = x + (w < 420 ? 8 : 92);
+    const aw = x + w - 10 - ax;
+    const xOf = (v) => ax + (Math.log(clamp(v, lo, hi) / lo) / Math.log(hi / lo)) * aw;
+    ctx.fillStyle = "rgba(170, 195, 230, 0.05)";
+    roundRect(ctx, x, y, w, h, 6);
+    ctx.fill();
+    const laneTop = y + 16;
+    const axisY = y + h - 14;
+    const laneH = (axisY - 4 - laneTop) / 2;
+    // Zones with words: short, long
+    const zone = (a, b, word) => {
+      ctx.fillStyle = "rgba(52, 178, 122, 0.10)";
+      ctx.fillRect(xOf(a), laneTop - 2, xOf(b) - xOf(a), axisY - laneTop);
+      text(ctx, word, (xOf(a) + xOf(b)) / 2, y + 8, { align: "center", font: font(9, 800), color: C.target });
+    };
+    zone(0.08, 0.45, L("corto", "short"));
+    zone(1.2, hi, L("largo", "long"));
+    // Axis
+    ctx.strokeStyle = C.gridStrong;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(ax, axisY + 0.5);
+    ctx.lineTo(ax + aw, axisY + 0.5);
+    ctx.stroke();
+    [0.1, 0.2, 0.5, 1, 2].forEach((v) => {
+      const tx = Math.round(xOf(v)) + 0.5;
+      ctx.beginPath();
+      ctx.moveTo(tx, axisY - 2);
+      ctx.lineTo(tx, axisY + 3);
+      ctx.stroke();
+      text(ctx, v < 1 ? fmtNum(v, 1) : fmtNum(v, 0), tx, axisY + 8, { align: "center", font: font(9, 700), color: C.faint });
+    });
+    text(ctx, "s", ax + aw + 4, axisY + 8, { font: font(9, 700), color: C.faint });
+    const lanes = [
+      { kind: "staccato", y: laneTop + laneH * 0.5 },
+      { kind: "legato", y: laneTop + laneH * 1.5 }
+    ];
+    lanes.forEach((ln) => {
+      const k = ART[ln.kind];
+      if (w >= 420) text(ctx, `${L(k.es, k.en)} ${k.mark}`, x + 8, ln.y, { font: font(10, 800), color: C.muted, max: ax - x - 12 });
+      const runs = m.runs.filter((r) => r.kind === ln.kind && r.t1 != null);
+      runs.forEach((r, i) => {
+        const px = xOf(r.t1 - r.t0);
+        // A little spread so equal lengths do not hide each other
+        const jy = ln.y + (((i * 7) % 5) - 2) * Math.min(2.5, laneH / 10);
+        ctx.fillStyle = C.you;
+        if (ln.kind === "staccato") {
+          ctx.beginPath();
+          ctx.arc(px, jy, 3, 0, Math.PI * 2);
+          ctx.fill();
+        } else {
+          ctx.fillRect(px - 6, jy - 1.5, 12, 3);
+        }
+      });
+      if (w < 420 && runs.length) {
+        text(ctx, k.mark, x + 4, ln.y, { font: font(9, 800), color: C.faint });
+      }
+    });
+  }
+
+  /** After Stop: one row per phase you sang, its notes and its numbers; then every length on one scale. */
+  function artReview(ctx, w, h, m) {
+    const pad = 10;
+    const tiny = h < 135;
+    const rows = m.phases.map((p, i) => ({ p, i, runs: m.runs.filter((r) => r.phaseIdx === i) })).filter((r) => r.runs.length);
+    ctx.fillStyle = C.text;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    const off = m.pitchOffset();
+    const head = rows.length
+      ? L("Staccato frente a legato", "Staccato against legato") +
+        (off != null ? L(` · afinación del staccato ${centsText(off)} aprox.`, ` · staccato pitch ${centsText(off)} approx.`) : "")
+      : L("Sin notas todavía", "No notes yet");
+    fitText(ctx, head, pad, pad + 9, w - pad * 2, tiny ? 13 : 15, 800, 10);
+    if (!rows.length) return;
+    const top = pad + (tiny ? 20 : 26);
+    const avail = h - top - pad;
+    const scaleH = !tiny && avail >= 170 ? clamp(avail * 0.34, 70, 110) : 0;
+    const rowsAvail = avail - (scaleH ? scaleH + 10 : 0);
+    const narrow = w < 420;
+    const rowH = Math.min(tiny ? 60 : narrow ? 120 : 110, rowsAvail / rows.length);
+    const labelW = narrow ? 0 : Math.min(190, w * 0.24);
+    rows.forEach((row, k) => {
+      const ry = top + k * rowH;
+      const kd = ART[row.p.kind] || ART.staccato;
+      text(ctx, `${row.p.label} ${kd.mark}`, pad, ry + 9, { font: font(12, 800), color: C.text, max: labelW ? labelW - 8 : w - pad * 2 });
+      if (labelW) {
+        ctx.font = font(11, 700);
+        ctx.fillStyle = C.muted;
+        V.wrapText(ctx, artStatsLine(m, row.i, true), pad, ry + 26, labelW - 10, 13, Math.max(1, Math.floor((rowH - 28) / 13)));
+      } else {
+        text(ctx, artStatsLine(m, row.i, true), pad, ry + rowH - 12, { font: font(10, 700), color: C.muted, max: w - pad * 2 });
+      }
+      // Up to the last 10 s of the phase, as a strip
+      const end = row.runs[row.runs.length - 1].t1 || m.t;
+      const from = Math.max(row.runs[0].t0, end - 10);
+      const bx = pad + labelW;
+      const bw = w - pad - bx;
+      const by = labelW ? ry + 4 : ry + 18;
+      const bh = labelW ? rowH - 12 : rowH - 38;
+      if (bh < 14) return;
+      ctx.fillStyle = "rgba(170, 195, 230, 0.05)";
+      roundRect(ctx, bx, by, bw, bh, 6);
+      ctx.fill();
+      const span = Math.max(1, end - from);
+      const xOf = (t) => bx + 6 + ((t - from) / span) * (bw - 12);
+      const all = row.runs.flatMap((r) => m.notesOf(r)).map((n) => n.midi).filter((v) => v != null);
+      const med = all.length ? V.median(all) : null;
+      const rng = all.length ? Math.max(3, ...all.map((v) => Math.abs(v - med) + 0.5)) : 3;
+      const yOf = (midi) => (midi == null || med == null ? by + bh / 2 : by + bh / 2 - clamp((midi - med) / rng, -1, 1) * (bh / 2 - 8));
+      const opts = { pillH: clamp(bh / 6, 6, 11), now: end, left: bx + 2, right: bx + bw - 2, lengths: false };
+      let prev = null;
+      row.runs.forEach((r) => {
+        if ((r.t1 || end) < from) return;
+        drawRun(ctx, r, m.notesOf(r), xOf, yOf, opts);
+        if (r.breakBefore && prev && prev.t1 != null && prev.t1 >= from) {
+          const gx = (xOf(prev.t1) + xOf(r.t0)) / 2;
+          glyph(ctx, "notch", gx, by + 8, C.warn, 4);
+        }
+        prev = r;
+      });
+    });
+    if (scaleH) {
+      const sy = top + rows.length * rowH + 10;
+      lengthScale(ctx, { x: pad, y: sy, w: w - pad * 2, h: Math.min(scaleH, h - pad - sy) }, m);
+    }
+  }
+
+  V.scenes.articulation = articulation;
   V.scenes.onset = onset;
   V.scenes.swell = swell;
   /** Words the modes share with the pictures (decimal comma in Spanish). */

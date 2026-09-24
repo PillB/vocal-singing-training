@@ -2333,69 +2333,562 @@
     }
   });
 
-  /** s14 sung staccato vs legato — note length contrast via onset/offset (not ≥2s holds) */
+  /**
+   * s14 sung staccato vs legato — "Rollo de articulación". The difference is
+   * in the gaps, not the notes. Every stretch of sound is cut from the raw
+   * sound edge (frame.sounding, 40 ms hangover) and trimmed with the fast
+   * envelope to where it falls 15 dB under its own peak, so neither room echo
+   * nor the engine's silence bridge (voiced/voiceFreq hold ~1.1 s) joins two
+   * staccato notes. Notes inside a stretch are pitch steps; a legato line that
+   * stops for a moment is a break, drawn as a notch with a word, never red.
+   */
   Modes.staccatoLegato = baseMode({
     id: "staccatoLegato",
     render() {
-      const phases = this.profile.phases || [
-        { label: L("Staccato", "Staccato"), sec: 90 },
-        { label: L("Legato", "Legato"), sec: 90 }
-      ];
-      this.state.runner = createPhaseRunner(phases, (i, p) => {
-        if (global.VTToast) global.VTToast(p.label);
-      });
-      this.state.shortHolds = 0;
-      this.state.longHolds = 0;
-      this.state.noteOn = false;
-      this.state.noteStart = 0;
+      const st = this.state;
+      const raw =
+        this.profile.phases && this.profile.phases.length
+          ? this.profile.phases
+          : [
+              { label: L("Staccato", "Staccato"), sec: 90, kind: "staccato" },
+              { label: L("Legato", "Legato"), sec: 90, kind: "legato" }
+            ];
+      st.phases = raw.map((p) => ({
+        label: p.label,
+        sec: p.sec || 60,
+        kind: p.kind || (/legato/i.test(p.label || "") ? "legato" : "staccato"),
+        round: p.round !== false,
+        startT: null
+      }));
+      // What the picture asks of the state
+      st.notesOf = (r) => this._notesOf(r);
+      st.stats = (i) => this._stats(i);
+      st.pitchOffset = () => this._pitchOffset();
+      this._reset();
+      const p0 = st.phases[0];
       this.hud.innerHTML = `
-        <div class="mode-title">${L("Staccato vs legato (cantado)", "Staccato vs legato (sung)")}</div>
-        <div class="mode-phase" data-phase>${phases[0].label}</div>
-        <div class="mode-big" data-remain>—</div>
-        <p class="mode-meta">${L("Notas cortas (&lt;0,45s):", "Short notes (&lt;0.45s):")} <strong data-sh>0</strong> · ${L("Largas (≥1,2s):", "Long (≥1.2s):")} <strong data-lg>0</strong></p>
-        <p class="mode-meta muted">${L("Staccato = aire con rebote. Legato = línea conectada con aire estable.", "Staccato = bounce air. Legato = connect with steady air.")}</p>
+        <div class="viz-row viz-head">
+          <div class="mode-title">${L("Staccato y legato (cantado)", "Staccato and legato (sung)")}</div>
+          <button type="button" class="btn btn-ghost viz-tap" data-next-phase>${L("Siguiente fase", "Next phase")}</button>
+        </div>
+        <div class="viz-words">
+          <span class="mode-phase" data-phase>${p0.label}</span>
+          <strong class="mode-big" data-remain>${Math.ceil(p0.sec)}s</strong>
+          <span>${L("Notas cortas (&lt;0,45 s):", "Short notes (&lt;0.45 s):")} <strong data-sh>0</strong> · ${L(
+            "Largas (≥1,2 s):",
+            "Long (≥1.2 s):"
+          )} <strong data-lg>0</strong></span>
+        </div>
+        <p class="mode-meta muted">${L(
+          "Staccato: rebote de aire, no golpe de garganta. Legato: aire constante que une las notas.",
+          "Staccato: a bounce of air, not a throat hit. Legato: steady air that joins the notes."
+        )}</p>
       `;
+      this.$("[data-next-phase]")?.addEventListener("click", () => {
+        if (!st.allDone) this._nextPhase();
+        this.viz?.draw();
+      });
+      this._mountViz();
+    },
+    _reset() {
+      const st = this.state;
+      const F = global.VTFeatures;
+      st.t = 0;
+      st.phaseIdx = 0;
+      st.remaining = st.phases[0].sec;
+      st.phaseKind = st.phases[0].kind;
+      st.phases.forEach((p, i) => (p.startT = i === 0 ? 0 : null));
+      st.allDone = false;
+      st.lastNow = null;
+      st.runs = [];
+      st.open = null;
+      st.lastSnd = -1;
+      st.waitLoud = null;
+      st.short = 0;
+      st.long = 0;
+      st.medMidi = null;
+      st.processed = false;
+      st.review = false;
+      st.bufMs = 43;
+      st.env = F ? new F.Envelope({ keepSec: 3 }) : null;
+    },
+    _mountViz() {
+      const V = global.VTViz;
+      if (!V || !global.VTFeatures || !V.scenes.articulation) return;
+      const st = this.state;
+      this.hud.classList.add("has-viz");
+      this.viz = new V.Surface(this.hud, (ctx, w, h) => V.scenes.articulation(ctx, w, h, st), {
+        label: L(
+          "Rollo de articulación: cada nota que cantas es una píldora tan larga como sonó, a la altura de su tono; los huecos son silencios reales. Delante del ahora, la forma de la fase: staccato, notas cortas separadas; legato, una línea unida.",
+          "Articulation roll: each note you sing is a pill as long as it sounded, at the height of its pitch; the gaps are real silences. Ahead of now, the shape of the phase: staccato, short separate notes; legato, one joined line."
+        )
+      });
+      this.viz.draw();
+    },
+    _nextPhase() {
+      const st = this.state;
+      if (st.open) this._closeRun(st.open, st.lastSnd);
+      st.phaseIdx += 1;
+      if (st.phaseIdx >= st.phases.length) {
+        st.phaseIdx = st.phases.length - 1;
+        st.allDone = true;
+        st.remaining = 0;
+      } else {
+        const p = st.phases[st.phaseIdx];
+        p.startT = st.t;
+        st.remaining = p.sec;
+        st.phaseKind = p.kind;
+        if (global.VTToast) global.VTToast(p.label);
+        this.viz?.caption(
+          p.kind === "legato"
+            ? L("Ahora legato: une las notas sin parar el sonido", "Now legato: join the notes without stopping the sound")
+            : L("Ahora staccato: notas cortas, silencio entre ellas", "Now staccato: short notes, silence between"),
+          2500
+        );
+      }
+      this._words();
+    },
+    _words() {
+      const st = this.state;
+      const ph = this.$("[data-phase]");
+      if (ph) ph.textContent = st.allDone ? L("Contraste listo", "Contrast complete") : st.phases[st.phaseIdx].label;
+      const rem = this.$("[data-remain]");
+      if (rem) rem.textContent = st.allDone ? "✓" : `${Math.ceil(Math.max(0, st.remaining))}s`;
+      const b = this.$("[data-next-phase]");
+      if (b) b.disabled = !!st.allDone;
+    },
+    /** Envelope index → the take's clock. */
+    _tOfIdx(idx) {
+      const E = this.state.env;
+      return this.state.t - (E.total - 1 - idx) / E.rate;
+    },
+    /**
+     * The attack of a run from the fast envelope: where it really started and
+     * how fast it rose. A rise under ~14 ms is a hammer (a glottal "slap"),
+     * unless frames were dropped and the attack was not seen.
+     */
+    _attack(run) {
+      const st = this.state;
+      const E = st.env;
+      run.attackDone = true;
+      if (!E || !E.total) return;
+      const rate = E.rate;
+      const back = Math.round(0.04 * rate);
+      const since = E.total - run.startTotal + back;
+      const seg = E.window(since / rate);
+      if (seg.length < since || seg.length < back + 8) return;
+      const n = Math.min(seg.length, back + Math.round(0.12 * rate));
+      const head = seg.slice(0, back);
+      const noise = global.VTFeatures.percentile(head, 0.2) || 0;
+      let peak = 0;
+      for (let i = 0; i < n; i++) peak = Math.max(peak, seg[i]);
+      if (peak <= noise * 1.5) return;
+      const lo = noise + (peak - noise) * 0.1;
+      const hi = noise + (peak - noise) * 0.9;
+      let i10 = -1;
+      let i90 = -1;
+      for (let i = 0; i < n; i++) {
+        if (i10 < 0 && seg[i] >= lo) i10 = i;
+        if (i10 >= 0 && seg[i] >= hi) {
+          i90 = i;
+          break;
+        }
+      }
+      if (i10 < 0 || i90 < 0) return;
+      run.t0 = Math.min(run.t0, this._tOfIdx(run.startTotal - back + i10));
+      run.riseMs = ((i90 - i10) * 1000) / rate;
+      run.hammer = run.maxDt > st.bufMs + 3 ? null : run.riseMs <= 14;
+    },
+    /** Where the sound really ended: the last moment within 15 dB of its peak. */
+    _release(run, lastSnd) {
+      const st = this.state;
+      const E = st.env;
+      if (!E || !E.total || !run.peakRms) return lastSnd;
+      const look = Math.max(0.05, st.t - lastSnd + 0.25);
+      const seg = E.window(look);
+      const thr = run.peakRms * 0.178;
+      let idx = -1;
+      for (let i = seg.length - 1; i >= 0; i--) {
+        if (seg[i] >= thr) {
+          idx = i;
+          break;
+        }
+      }
+      if (idx < 0) return lastSnd;
+      const t = this._tOfIdx(E.total - seg.length + idx);
+      return clamp(t, lastSnd - 0.08, lastSnd + 0.02);
+    },
+    _closeRun(run, lastSnd, cutAt) {
+      const st = this.state;
+      st.open = null;
+      if (!run.attackDone) this._attack(run);
+      run.t1 = Math.max(run.t0 + 0.02, cutAt != null ? cutAt : this._release(run, lastSnd));
+      const len = run.t1 - run.t0;
+      if (len < 0.06) {
+        // A click, not a note
+        const i = st.runs.indexOf(run);
+        if (i >= 0) st.runs.splice(i, 1);
+        return;
+      }
+      if (len >= 0.08 && len < 0.45) st.short += 1;
+      if (len >= 1.2) st.long += 1;
+      run.notes = null;
+      run.notes = this._segment(run);
+      // A legato line that thins out: the deepest dip under its own middle level
+      if (len >= 0.8) {
+        const inner = run.samples.filter((s) => s.t > run.t0 + 0.15 && s.t < run.t1 - 0.15).map((s) => s.db);
+        if (inner.length >= 8) {
+          const mid = global.VTFeatures.median(inner);
+          let dip = 0;
+          for (let i = 2; i < inner.length - 2; i++) {
+            const sm = global.VTFeatures.median(inner.slice(i - 2, i + 3));
+            dip = Math.max(dip, mid - sm);
+          }
+          run.dip = dip;
+        }
+      }
+      const mids = [];
+      for (let k = st.runs.length - 1; k >= 0 && mids.length < 40; k--) {
+        (st.runs[k].notes || []).forEach((nt) => {
+          if (nt.midi != null) mids.push(nt.midi);
+        });
+      }
+      if (mids.length) st.medMidi = global.VTFeatures.median(mids);
+      const sh = this.$("[data-sh]");
+      if (sh) sh.textContent = String(st.short);
+      const lg = this.$("[data-lg]");
+      if (lg) lg.textContent = String(st.long);
+    },
+    /**
+     * A run's notes: a new note when the pitch moves more than 0.8 semitone and
+     * stays moved for four frames. A note's pitch is the median of its middle
+     * 60 %, only for notes of 120 ms or more (none is better than a wrong one).
+     * Short pieces between two notes are the way from one to the other: a
+     * slide when that takes longer than a quarter second.
+     */
+    _segment(run) {
+      const S = run.samples;
+      const t1 = run.t1 != null ? run.t1 : this.state.t;
+      const med = global.VTFeatures.median;
+      const sm = S.map((s, i) => {
+        if (s.midi == null) return null;
+        const w = [];
+        for (let j = Math.max(0, i - 2); j <= Math.min(S.length - 1, i + 2); j++) if (S[j].midi != null) w.push(S[j].midi);
+        return w.length >= 2 ? med(w) : s.midi;
+      });
+      const pieces = [];
+      let cur = { t0: run.t0, idx: [], ref: null };
+      let pend = [];
+      // A note's pitch is where it settled first: a slide must not drag it along
+      const refOf = (idx) => {
+        const v = idx.slice(0, 20).map((i) => sm[i]).filter((x) => x != null);
+        return v.length ? med(v) : null;
+      };
+      for (let i = 0; i < S.length; i++) {
+        const m = sm[i];
+        if (m == null) {
+          (pend.length ? pend : cur.idx).push(i);
+          continue;
+        }
+        if (cur.ref == null) {
+          cur.idx.push(i);
+          cur.ref = m;
+          continue;
+        }
+        if (Math.abs(m - cur.ref) > 0.8) {
+          pend.push(i);
+          const pv = pend.map((k) => sm[k]).filter((x) => x != null);
+          if (pv.length >= 4 && Math.abs(med(pv) - cur.ref) > 0.8) {
+            cur.t1 = S[pend[0]].t;
+            pieces.push(cur);
+            cur = { t0: S[pend[0]].t, idx: pend, ref: med(pv) };
+            pend = [];
+          }
+        } else {
+          if (pend.length) cur.idx.push(...pend);
+          pend = [];
+          cur.idx.push(i);
+          cur.ref = refOf(cur.idx);
+        }
+      }
+      if (pend.length) cur.idx.push(...pend);
+      cur.t1 = t1;
+      pieces.push(cur);
+      const notes = pieces.map((p) => {
+        const dur = p.t1 - p.t0;
+        const v = p.idx.map((i) => S[i]).filter((s) => s.midi != null);
+        let midi = null;
+        if (dur >= 0.12 && v.length >= 4) {
+          const a = Math.floor(v.length * 0.2);
+          const mid = v.slice(a, Math.max(a + 1, v.length - a)).map((s) => s.midi);
+          midi = med(mid);
+        }
+        return { t0: p.t0, t1: p.t1, midi, dur };
+      });
+      // Short pitched pieces between two notes are a way, not notes
+      let out = [];
+      for (let i = 0; i < notes.length; i++) {
+        const nt = notes[i];
+        const between = i > 0 && i < notes.length - 1 && nt.dur < 0.15;
+        if (between) {
+          const last = out[out.length - 1];
+          if (last && last.glide) last.t1 = nt.t1;
+          else out.push({ t0: nt.t0, t1: nt.t1, midi: null, glide: true });
+          continue;
+        }
+        out.push({ t0: nt.t0, t1: nt.t1, midi: nt.midi });
+      }
+      // How long each step takes: from the last moment on the old pitch to the
+      // first on the new one (within a third of a semitone). Over a quarter
+      // second it is a slide, drawn as the slanted way it took.
+      const pitched = out.filter((nt) => nt.midi != null);
+      const steps = [];
+      for (let k = 1; k < pitched.length; k++) {
+        const A = pitched[k - 1];
+        const B = pitched[k];
+        if (Math.abs(B.midi - A.midi) < 1) continue;
+        const from = (A.t0 + A.t1) / 2;
+        const to = (B.t0 + B.t1) / 2;
+        let leave = null;
+        let arrive = null;
+        for (let i = 0; i < S.length; i++) {
+          const s = S[i];
+          if (s.t < from || s.t > to || sm[i] == null) continue;
+          if (Math.abs(sm[i] - B.midi) <= 0.35) {
+            arrive = s.t;
+            break;
+          }
+          if (Math.abs(sm[i] - A.midi) <= 0.35) leave = s.t;
+        }
+        if (leave != null && arrive != null && arrive - leave > 0.25) steps.push({ A, B, leave, arrive });
+      }
+      steps.forEach(({ A, B, leave, arrive }) => {
+        out = out.filter((nt) => !(nt.glide && nt.t0 >= A.t0 && nt.t1 <= B.t1));
+        A.t1 = leave;
+        B.t0 = arrive;
+        out.splice(out.indexOf(B), 0, { t0: leave, t1: arrive, midi: null, glide: true, slide: true });
+      });
+      // An open run's last note is still growing: the picture draws it to now
+      if (run.t1 == null && out.length) out[out.length - 1].t1 = null;
+      return out;
+    },
+    _notesOf(run) {
+      if (run.notes) return run.notes;
+      // The open run: re-cut every few frames, not every paint
+      if (!run._cut || run.samples.length - run._cutN >= 4) {
+        run._cut = this._segment(run);
+        run._cutN = run.samples.length;
+      }
+      return run._cut;
+    },
+    _stats(i) {
+      const st = this.state;
+      const p = st.phases[i];
+      const runs = st.runs.filter((r) => r.phaseIdx === i);
+      const closed = runs.filter((r) => r.t1 != null);
+      const len = (r) => (r.t1 != null ? r.t1 : st.t) - r.t0;
+      const med = global.VTFeatures.median;
+      if (!p) return {};
+      if (p.kind === "legato") {
+        const lines = closed.filter((r) => len(r) >= 0.8);
+        const open = st.open && st.open.phaseIdx === i ? st.open : null;
+        const dips = lines.map((r) => r.dip).filter((d) => d != null);
+        let slides = 0;
+        closed.forEach((r) => (r.notes || []).forEach((nt) => (slides += nt.slide ? 1 : 0)));
+        return {
+          lines: lines.length + (open && len(open) >= 0.8 ? 1 : 0),
+          breaks: runs.filter((r) => r.breakBefore).length,
+          dip: dips.length ? Math.max(...dips) : null,
+          longest: runs.length ? Math.max(...runs.map(len)) : 0,
+          current: open ? len(open) : null,
+          slides
+        };
+      }
+      const lens = closed.map(len);
+      const gaps = [];
+      for (let k = 1; k < closed.length; k++) {
+        const g = closed[k].t0 - closed[k - 1].t1;
+        if (g > 0 && g < 1) gaps.push(g);
+      }
+      return {
+        notes: closed.length,
+        medLen: lens.length ? med(lens) : null,
+        medGap: gaps.length ? med(gaps) : null,
+        hammers: closed.filter((r) => r.hammer).length
+      };
+    },
+    /**
+     * Staccato pitch against legato pitch, each as its median offset from the
+     * nearest piano key, when both have five notes with a pitch (aprox.).
+     */
+    _pitchOffset() {
+      const st = this.state;
+      const devs = { staccato: [], legato: [] };
+      st.runs.forEach((r) =>
+        (r.notes || []).forEach((nt) => {
+          if (nt.midi != null && devs[r.kind]) devs[r.kind].push((nt.midi - Math.round(nt.midi)) * 100);
+        })
+      );
+      if (devs.staccato.length < 5 || devs.legato.length < 5) return null;
+      const med = global.VTFeatures.median;
+      let d = med(devs.staccato) - med(devs.legato);
+      if (d > 50) d -= 100;
+      if (d < -50) d += 100;
+      return d;
+    },
+    onStart() {
+      const st = this.state;
+      this._reset();
+      this.hud?.classList.remove("is-replay");
+      const sh = this.$("[data-sh]");
+      if (sh) sh.textContent = "0";
+      const lg = this.$("[data-lg]");
+      if (lg) lg.textContent = "0";
+      this._words();
+      st.lastNow = null;
+      this.viz?.draw();
     },
     onFrame(frame) {
-      const r = this.state.runner;
-      r.tick(performance.now());
-      if (this.$("[data-phase]"))
-        this.$("[data-phase]").textContent =
-          r.index < r.count ? r.label : L("Contraste listo", "Contrast complete");
-      if (this.$("[data-remain]"))
-        this.$("[data-remain]").textContent =
-          r.index < r.count ? `${Math.ceil(r.remaining)}s` : "✓";
-      // Note events from RMS (works for short staccato; hold logger only keeps ≥2s)
-      const voiced = !!frame.voiced || (frame.rms || 0) >= 0.018;
+      const st = this.state;
+      if (st.review || !frame) return;
       const now = performance.now();
-      if (voiced && !this.state.noteOn) {
-        this.state.noteOn = true;
-        this.state.noteStart = now;
-      } else if (!voiced && this.state.noteOn) {
-        this.state.noteOn = false;
-        const sec = (now - this.state.noteStart) / 1000;
-        if (sec >= 0.08 && sec < 0.45) this.state.shortHolds++;
-        if (sec >= 1.2) this.state.longHolds++;
-        if (this.$("[data-sh]")) this.$("[data-sh]").textContent = String(this.state.shortHolds);
-        if (this.$("[data-lg]")) this.$("[data-lg]").textContent = String(this.state.longHolds);
+      const wall = st.lastNow == null ? 0 : Math.min(0.25, (now - st.lastNow) / 1000);
+      st.lastNow = now;
+      const dtMs = frame.dtMs || 16;
+      st.t += dtMs / 1000;
+      st.processed = !!frame.processedInput;
+      if (frame.buf && frame.sampleRate) st.bufMs = (frame.buf.length / frame.sampleRate) * 1000;
+      const pushed = st.env ? st.env.feed(frame) : 0;
+      // The phases are a wall clock, like the countdown that names them
+      if (!st.allDone) {
+        st.remaining -= wall;
+        if (st.remaining <= 0) this._nextPhase();
       }
+      const snd = !!frame.sounding && !frame.manualSound;
+      // A frame's level spans 43 ms, so a short gap barely shows in it: the
+      // fast envelope cuts the run where it stays 15 dB under its peak for
+      // 50 ms (about 65 ms of real gap once its 12,5 ms smoothing is counted),
+      // and the next run waits until the sound is clearly back.
+      let loudAt = null;
+      if (st.env && pushed) {
+        const E = st.env;
+        const seg = E.window(pushed / E.rate);
+        const base = E.total - seg.length;
+        for (let i = 0; i < seg.length; i++) {
+          const v = seg[i];
+          const run = st.open;
+          if (run) {
+            if (v > run.peakEnv) run.peakEnv = v;
+            if (v < run.peakEnv * 0.178) {
+              if (run.qStart == null) run.qStart = base + i;
+              const quietMs = (base + i - run.qStart + 1) * E.blockMs;
+              if (quietMs >= 50 && (run.qStart - run.startTotal) * E.blockMs > 60) {
+                const peak = run.peakEnv;
+                this._closeRun(run, st.lastSnd, this._tOfIdx(run.qStart));
+                st.waitLoud = peak * 0.25;
+              }
+            } else run.qStart = null;
+          } else if (st.waitLoud != null && v >= st.waitLoud && loudAt == null) {
+            loudAt = base + i;
+          }
+        }
+      }
+      if (!snd) st.waitLoud = null;
+      if (snd && (st.waitLoud == null || loudAt != null)) {
+        let run = st.open;
+        if (!run) {
+          st.waitLoud = null;
+          const prev = st.runs[st.runs.length - 1];
+          const kind = st.phases[st.phaseIdx].kind;
+          const t0 = loudAt != null ? this._tOfIdx(loudAt) : st.t - dtMs / 2000;
+          run = {
+            t0,
+            t1: null,
+            phaseIdx: st.phaseIdx,
+            kind,
+            samples: [],
+            startTotal: loudAt != null ? loudAt : st.env ? st.env.total : 0,
+            attackDone: false,
+            hammer: null,
+            maxDt: 0,
+            peakRms: 0,
+            peakEnv: 0,
+            qStart: null,
+            dip: null,
+            notes: null,
+            // A legato line that stopped for a moment, not a breath between phrases
+            breakBefore:
+              kind === "legato" &&
+              !!prev &&
+              prev.phaseIdx === st.phaseIdx &&
+              prev.t1 != null &&
+              prev.t1 - prev.t0 >= 0.25 &&
+              t0 - prev.t1 < 0.35
+          };
+          st.runs.push(run);
+          st.open = run;
+          if (st.runs.length > 600) st.runs.splice(0, st.runs.length - 600);
+        }
+        const age = st.t - run.t0;
+        if (age < 0.2) run.maxDt = Math.max(run.maxDt, dtMs);
+        const rms = frame.rms || 0;
+        run.peakRms = Math.max(run.peakRms, rms);
+        const f = frame.rawFreq;
+        const midi = f && f >= 60 && f <= 1100 ? 69 + 12 * Math.log2(f / 440) : null;
+        const db = rms > 0 ? Math.max(-100, 20 * Math.log10(rms / (frame.inputGain || 1))) : -100;
+        run.samples.push({ t: st.t, midi, db });
+        if (st.medMidi == null && midi != null) st.medMidi = midi;
+        if (!run.attackDone && age >= 0.13) this._attack(run);
+        st.lastSnd = st.t;
+      } else if (st.open && st.t - st.lastSnd > 0.04) {
+        this._closeRun(st.open, st.lastSnd);
+      }
+      const rem = this.$("[data-remain]");
+      if (rem) {
+        const s = st.allDone ? "✓" : `${Math.ceil(Math.max(0, st.remaining))}s`;
+        if (rem.textContent !== s) rem.textContent = s;
+      }
+      this.viz?.draw();
     },
     onStop() {
-      // flush open note
-      if (this.state.noteOn) {
-        const sec = (performance.now() - this.state.noteStart) / 1000;
-        if (sec >= 0.08 && sec < 0.45) this.state.shortHolds++;
-        if (sec >= 1.2) this.state.longHolds++;
-        this.state.noteOn = false;
+      const st = this.state;
+      if (st.open) this._closeRun(st.open, st.lastSnd);
+      st.review = true;
+      if (this.viz) {
+        this.hud.classList.add("is-replay");
+        this.viz.draw();
       }
-      const patches = { rounds: this.state.runner?.index || 0 };
-      if (this.state.shortHolds + this.state.longHolds > 0) {
-        patches.staccatoEase = this.state.shortHolds >= 4 ? 4 : 3;
-        patches.legatoLine = this.state.longHolds >= 3 ? 4 : 3;
+      // A phase counts as a round once it was sung in its own way
+      let rounds = 0;
+      st.phases.forEach((p, i) => {
+        if (!p.round || i > st.phaseIdx) return;
+        const runs = st.runs.filter((r) => r.phaseIdx === i);
+        const ok =
+          p.kind === "legato"
+            ? runs.some((r) => r.t1 - r.t0 >= 1.2)
+            : runs.filter((r) => r.t1 - r.t0 < 0.45).length >= 3;
+        if (ok) rounds += 1;
+      });
+      const patches = {};
+      // Ease and line quality stay the learner's own ratings
+      if (rounds > 0) patches.rounds = rounds;
+      const sIdx = st.phases.findIndex((p, i) => p.kind === "staccato" && st.runs.some((r) => r.phaseIdx === i));
+      const lIdx = st.phases.findIndex((p, i) => p.kind === "legato" && st.runs.some((r) => r.phaseIdx === i));
+      const parts = [];
+      const allStacc = st.runs.filter((r) => r.kind === "staccato" && r.t1 != null);
+      if (sIdx >= 0 && allStacc.length) {
+        const ml = global.VTFeatures.median(allStacc.map((r) => r.t1 - r.t0));
+        parts.push(L(`staccato ${ml.toFixed(2).replace(".", ",")} s de mediana`, `staccato ${ml.toFixed(2)} s median`));
+      }
+      if (lIdx >= 0) {
+        const br = st.runs.filter((r) => r.breakBefore).length;
+        parts.push(L(`legato ${br} ${br === 1 ? "corte" : "cortes"}`, `legato ${br} ${br === 1 ? "break" : "breaks"}`));
       }
       return {
         patches,
-        summary: `short ${this.state.shortHolds} · long ${this.state.longHolds}`
+        summary:
+          L(`${rounds} ${rounds === 1 ? "ronda" : "rondas"}`, `${rounds} ${rounds === 1 ? "round" : "rounds"}`) +
+          (parts.length ? " · " + parts.join(" · ") : "")
       };
     }
   });

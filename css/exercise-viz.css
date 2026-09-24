@@ -110,6 +110,15 @@
   right: 0.5rem;
 }
 
+/* While the tour points at the exercise panel it adds .tour-highlight, whose
+   `position: relative` takes #mode-focus out of its place on the stage. The
+   panel then sizes to its content, a canvas that keeps its own aspect, and
+   grows past the tour's spotlight limit on phones. Keep the stage's own
+   placement for picture panels while highlighted. */
+.mode-focus.mode-focus-live.tour-highlight:has(> .mode-panel.has-viz) {
+  position: absolute;
+}
+
 /* Landscape phones: every pixel of height goes to the picture. The page
    header already names the exercise, and the picture writes its own words. */
 @media (max-height: 500px) {

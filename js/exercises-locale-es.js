@@ -336,10 +336,10 @@
     "original": "Di lo esencial en menos palabras sin perder el punto.",
     "research": "La concisión estratégica respeta el tiempo del oyente y sube la autoridad percibida.",
     "steps": [
-      "Escribe (o improvisa) tu idea en ~120 palabras.",
-      "Córtala a la mitad manteniendo el punto.",
-      "Córtala otra vez a 2–3 oraciones máximas.",
-      "Habla la versión corta en voz alta con pausas y tono claros."
+      "Haz una lista de 5 preguntas de práctica (trabajo o vida).",
+      "En cada una: cuenta 3 tiempos en silencio antes de responder.",
+      "Responde en 3 oraciones o menos.",
+      "Graba un bloque de preguntas y respuestas; quita cualquier frase que no aporte."
     ],
     "tips": [
       "Empieza por el punto, no por la prehistoria.",

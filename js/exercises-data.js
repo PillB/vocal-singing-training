@@ -392,7 +392,7 @@ window.VT_EXERCISES = {
         { id: "naturalness", label: "Still natural?", type: "scale", min: 1, max: 5 },
         { id: "engagement", label: "Engagement feel", type: "scale", min: 1, max: 5 }
       ],
-      audio: { timer: true, record: true, piano: true, pitchViz: true, refPitch: "C3" },
+      audio: { timer: true, record: true },
       timerDefaultSec: 480,
       progressions: ["prog1"]
     },

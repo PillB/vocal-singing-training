@@ -44,12 +44,14 @@
     </header>
 
     <main class="main">
+      <!-- One line: where you are in the routine, then Pausar and Terminar in words
+           (a bare × read as "close this banner"). Design: session-chrome. -->
       <div id="session-banner" class="session-banner" role="status">
         <span id="session-banner-text" data-i18n="session.banner">Sesión guiada</span>
         <div class="controls-row">
-          <button type="button" class="btn btn-sm" id="btn-session-pause" data-i18n="session.pause">Pausar</button>
-          <button type="button" class="btn btn-sm btn-primary" id="btn-session-resume" hidden data-i18n="session.resume">Reanudar</button>
-          <button type="button" class="btn btn-sm btn-ghost" id="btn-session-end" data-i18n="session.end">Terminar</button>
+          <button type="button" class="btn btn-sm" id="btn-session-pause" data-i18n="session.pause" data-i18n-aria="session.pauseAria">Pausar</button>
+          <button type="button" class="btn btn-sm btn-primary" id="btn-session-resume" hidden data-i18n="session.resume" data-i18n-aria="session.resumeAria">Reanudar</button>
+          <button type="button" class="btn btn-sm btn-ghost" id="btn-session-end" data-i18n="session.end" data-i18n-aria="session.endAria">Terminar</button>
         </div>
       </div>
 
@@ -438,6 +440,13 @@
                   <span data-i18n="pitch.challengeShort">Reto</span>
                 </label>
               </div>
+              <!-- Pitch exercises: the mode and its cue ride on the stage, under the
+                   controls and above the lanes. They used to sit below the stage,
+                   off the first screen of a phone. Design: coach-strip. -->
+              <div class="stage-coach" id="stage-coach" hidden>
+                <div id="mode-hud" class="mode-hud mode-hud-compact" aria-live="polite"></div>
+                <p class="mode-cue" id="mode-cue"></p>
+              </div>
             </div>
             <!-- Full-width bottom rail: Start | Mic (flex) | Piano opts — uses X space, no overflow clip -->
             <div class="hud-bottom-rail" id="hud-bottom-rail">
@@ -450,9 +459,11 @@
                 </label>
               </div>
               <div class="hud-corner hud-bc" id="mic-sens-hud" title="">
-                <div class="level-meter practice-meter" id="level-meter-wrap" aria-hidden="true"><span id="level-fill"></span></div>
                 <label class="mic-sens-label" for="mic-sensitivity">
                   <span class="mic-sens-title" data-i18n="mic.sens">Mic</span>
+                  <!-- The mic's level, right after its name: on its own at the left
+                       edge it read as an empty, unlabelled pill. -->
+                  <span class="level-meter practice-meter" id="level-meter-wrap" aria-hidden="true"><span id="level-fill"></span></span>
                   <input
                     type="range"
                     id="mic-sensitivity"
@@ -473,7 +484,10 @@
               <div class="hud-corner hud-br" id="piano-mini-opts">
                 <div class="hud-oct" id="oct-controls" role="group" data-i18n-aria="oct.groupAria" data-i18n-title="oct.groupTitle">
                   <button type="button" class="btn btn-ghost btn-xs oct-btn" id="btn-oct-down" data-i18n-aria="oct.downAria" title="−1 oct">−</button>
-                  <span class="oct-label" id="oct-label" title="Octava">0</span>
+                  <span class="oct-val"
+                    ><span class="oct-label" id="oct-label" title="Octava">0</span
+                    ><span class="oct-k" data-i18n="oct.label" aria-hidden="true">octava</span></span
+                  >
                   <button type="button" class="btn btn-ghost btn-xs oct-btn" id="btn-oct-up" data-i18n-aria="oct.upAria" title="+1 oct">+</button>
                   <label class="muted piano-opt oct-auto" data-i18n-title="range.autoTitle">
                     <input type="checkbox" id="chk-range-auto" checked />
@@ -519,15 +533,22 @@
             </div>
 
             <!-- Non-pitch: compact focus panel inside sticky stage (safe zone under TL, above BL) -->
-            <div id="mode-focus" class="mode-focus" hidden aria-hidden="true"></div>
-            <!-- Exercises without a pitch canvas left the middle of the stage empty
-                 while the "how to practise" steps sat collapsed below the fold. -->
-            <div id="stage-guide" class="stage-guide" hidden>
-              <p class="stage-guide-k" data-i18n="ex.stageGuideLabel">Qué vas a hacer</p>
-              <ol class="stage-guide-steps" id="stage-guide-steps"></ol>
-              <button type="button" class="btn btn-ghost btn-xs stage-guide-more" id="btn-stage-guide-more" data-i18n="ex.stageGuideMore">
-                Ver todos los pasos y consejos
-              </button>
+            <div id="mode-focus" class="mode-focus" hidden aria-hidden="true">
+              <!-- The mode mounts here (it empties its container), the guide follows it. -->
+              <div id="mode-focus-panel" class="mode-focus-panel"></div>
+              <!-- Exercises without a pitch canvas left the middle of the stage empty
+                   while the "how to practise" steps sat collapsed below the fold.
+                   While practising it holds the step the clock has reached. -->
+              <div id="stage-guide" class="stage-guide" hidden>
+                <p class="stage-guide-k" id="stage-guide-k" data-i18n="ex.stageGuideLabel">Qué vas a hacer</p>
+                <ol class="stage-guide-steps" id="stage-guide-steps"></ol>
+                <p class="stage-guide-now" id="stage-guide-now" aria-live="polite" hidden
+                  ><span class="stage-guide-k" id="stage-now-k"></span> <span class="stage-now-t" id="stage-now-t"></span
+                ></p>
+                <button type="button" class="btn btn-ghost btn-xs stage-guide-more" id="btn-stage-guide-more" data-i18n="ex.stageGuideMore">
+                  Ver todos los pasos y consejos
+                </button>
+              </div>
             </div>
             <!-- A denied microphone used to be a 2.8 s toast, then a frozen step
                  with nothing on screen that moved a guided session on (VG-40). -->
@@ -556,10 +577,6 @@
 
           <!-- Below sticky highway: only secondary chrome (collapsed by default) -->
           <div class="stage-below">
-            <div id="mode-shell" class="mode-shell">
-              <div id="mode-hud" class="mode-hud mode-hud-compact" aria-live="polite"></div>
-              <p class="mode-cue" id="mode-cue"></p>
-            </div>
             <div class="pitch-stats" id="pitch-stats"></div>
 
             <div id="hold-block" class="hold-inline" hidden>

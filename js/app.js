@@ -66,7 +66,9 @@
      * it opened (the clock ran out), and the first save's comparison and
      * first-win flag, which a changed answer keeps.
      */
-    rate: { feel: null, result: null, end: null, prevScore: null, firstWin: false }
+    rate: { feel: null, result: null, end: null, prevScore: null, firstWin: false },
+    /** The open exercise's steps when the stage shows them (no pitch canvas). */
+    stageSteps: []
   };
 
   const $ = (sel, el = document) => el.querySelector(sel);
@@ -432,19 +434,31 @@
 
   /** Keep sticky highway under real header + exercise chrome (Back row). */
   function syncHeaderHeightVar() {
+    // Set on body as well as the root: body.view-exercise carries fallback
+    // values that otherwise shadowed these, so on a phone the stage stuck
+    // under a header row that was taller than the fallback said.
+    const setVar = (name, value) => {
+      document.documentElement.style.setProperty(name, value);
+      document.body?.style.setProperty(name, value);
+    };
     try {
       const h = document.querySelector("header.app-header");
       if (h) {
-        const hh = Math.max(40, Math.ceil(h.getBoundingClientRect().height));
-        document.documentElement.style.setProperty("--header-h", `${hh}px`);
+        // A rotated phone hides the header while an exercise is open (design:
+        // landscape); the sticky rows below it then start at the very top.
+        const hh =
+          getComputedStyle(h).display === "none"
+            ? 0
+            : Math.max(40, Math.ceil(h.getBoundingClientRect().height));
+        setVar("--header-h", `${hh}px`);
       }
       // Sticky ← Atrás row height — stage must stick below it so hits never land on stage/header
       const ex = document.querySelector(".exercise-header-compact");
       if (ex && !ex.hidden && getComputedStyle(ex).display !== "none") {
         const eh = Math.max(36, Math.ceil(ex.getBoundingClientRect().height));
-        document.documentElement.style.setProperty("--ex-chrome-h", `${eh}px`);
+        setVar("--ex-chrome-h", `${eh}px`);
       } else {
-        document.documentElement.style.setProperty("--ex-chrome-h", "0px");
+        setVar("--ex-chrome-h", "0px");
       }
     } catch {
       /* ignore */
@@ -500,19 +514,39 @@
         const anchor = title || cock || stage;
         const ar = anchor.getBoundingClientRect();
         if (ar.top < 0 || ar.top > (window.innerHeight || 600) * 0.35) {
-          anchor.scrollIntoView({ block: "start", behavior: "auto" });
+          // "instant": html has scroll-behavior: smooth, so "auto" glided and
+          // the stage below was measured mid-scroll.
+          anchor.scrollIntoView({ block: "start", behavior: "instant" });
         }
       } catch {
         /* ignore */
       }
+      syncStageInsets();
       const r = stage.getBoundingClientRect();
       const { vh, offsetTop, safeBottom } = getViewportMetrics();
       // Gap: short/landscape + safe-area (home indicator)
       const gap = (vh < 500 ? 12 : 8) + Math.max(0, safeBottom);
       // Visual bottom of the usable screen (visualViewport may be offset)
       const visualBottom = offsetTop + vh;
+      // Size for the lowest the stage sits at rest. It is sticky, so a page
+      // scrolled by a few pixels lifts it to its sticky offset; measured then,
+      // the stage came out that much too tall once the page was back at the
+      // top (VG-30: 400px against a 390px landscape phone). When the stage
+      // starts high enough that the top of the page is where it rests, size it
+      // for that position.
+      let top = Math.max(0, r.top);
+      const cock = document.getElementById("practice-cockpit");
+      if (cock && stage.parentElement === cock) {
+        const cs = getComputedStyle(cock);
+        const restTop =
+          cock.getBoundingClientRect().top +
+          window.scrollY +
+          (parseFloat(cs.borderTopWidth) || 0) +
+          (parseFloat(cs.paddingTop) || 0);
+        if (restTop <= vh * 0.35) top = Math.max(top, restTop);
+      }
       // Remaining space under stage top within the *visual* viewport
-      const avail = Math.floor(visualBottom - Math.max(0, r.top) - gap);
+      const avail = Math.floor(visualBottom - top - gap);
       let maxH = Math.max(120, avail);
       // Prefer tall for low vision but never past visual bottom
       const prefer = Math.min(
@@ -535,37 +569,10 @@
         stage.style.maxHeight = `${fix}px`;
         stage.style.height = `${fix}px`;
       }
-      // Measure bottom rail so mode-focus never covers Start/Mic (hit-target safety)
-      try {
-        const rail = document.getElementById("hud-bottom-rail");
-        if (rail) {
-          const rh = Math.ceil(rail.getBoundingClientRect().height || 0);
-          // +12px gap so mode-focus bottom stays above rail top
-          const clear = Math.max(72, rh + 12 + Math.min(12, safeBottom));
-          stage.style.setProperty("--rail-h", `${clear}px`);
-        }
-      } catch {
-        /* ignore */
-      }
-      // Fit the in-stage guidance into whatever is left between the mode panel
-      // and the bottom rail, so it never rides over either.
-      try {
-        const guide = document.getElementById("stage-guide");
-        // dataset.on, not .hidden: a rotate back into portrait must be able to
-        // bring the guide back after a short viewport hid it.
-        if (guide && guide.dataset.on === "1") {
-          const sr = stage.getBoundingClientRect();
-          const panel = stage.querySelector(".mode-panel");
-          const panelBottom = panel ? panel.getBoundingClientRect().bottom : sr.top;
-          const railPx = parseFloat(getComputedStyle(stage).getPropertyValue("--rail-h")) || 88;
-          const room = Math.floor(sr.bottom - railPx - 8 - Math.max(panelBottom, sr.top) - 8);
-          // Below ~92px only a heading would fit, which is worse than nothing
-          guide.hidden = room < 92;
-          guide.style.maxHeight = room > 0 ? `${room}px` : "";
-        }
-      } catch {
-        /* ignore */
-      }
+      // Rails re-measured at the fitted height, so mode-focus and the lanes
+      // never run under Start/Mic (hit-target safety) or the top controls.
+      syncStageInsets();
+      fitStageGuide();
       // Ensure Start is fully inside visual viewport (critical for short + land)
       try {
         const start = document.getElementById("btn-practice-start");
@@ -599,6 +606,161 @@
     } catch {
       /* ignore */
     }
+  }
+
+  /**
+   * Place what sits between the stage's two rails from their measured edges.
+   * The top rail (status, chords, score and, on a pitch exercise, the coach
+   * strip) and the bottom rail (Start, mic, piano) change height as they wrap;
+   * at a fixed 10% the top rail's second row covered the mode panel's title on
+   * a phone, and the lanes ran under both rails.
+   * Sets --rail-t (top rail's bottom edge) and --rail-h (bottom rail plus a gap)
+   * on the stage. Returns true when either moved.
+   */
+  function syncStageInsets() {
+    try {
+      const stage = document.getElementById("highway-stage");
+      if (!stage || !document.body.classList.contains("view-exercise")) return false;
+      const sr = stage.getBoundingClientRect();
+      if (sr.height < 1) return false;
+      let railBottom = 0;
+      [...(document.getElementById("hud-top-rail")?.children || [])].forEach((el) => {
+        const b = el.getBoundingClientRect();
+        if (b.height) railBottom = Math.max(railBottom, b.bottom - sr.top);
+      });
+      const rail = document.getElementById("hud-bottom-rail");
+      const rh = Math.ceil(rail?.getBoundingClientRect().height || 0);
+      // +12px gap so mode-focus bottom stays above rail top
+      const clear = Math.max(72, rh + 12 + Math.min(12, getViewportMetrics().safeBottom));
+      const t = `${Math.ceil(railBottom) + 4}px`;
+      const b = `${clear}px`;
+      const moved =
+        stage.style.getPropertyValue("--rail-t") !== t || stage.style.getPropertyValue("--rail-h") !== b;
+      stage.style.setProperty("--rail-t", t);
+      stage.style.setProperty("--rail-h", b);
+      return moved;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Show as many of the guide's steps as fit under the mode panel, whole: a
+   * clipped box cut a step through the middle of a line, and below ~90px the
+   * box used to vanish and leave an empty band. When no step fits, the button
+   * to all the steps still does. While practising it holds one step, so it
+   * only needs room for that.
+   */
+  function fitStageGuide() {
+    const guide = $("#stage-guide");
+    // dataset.on, not .hidden: a rotate back into portrait must be able to
+    // bring the guide back after a short viewport hid it.
+    if (!guide || guide.dataset.on !== "1") return;
+    const focus = $("#mode-focus");
+    const panel = $("#mode-focus-panel");
+    if (!focus || focus.hidden) return;
+    const live = guide.classList.contains("is-now");
+    const head = $("#stage-guide-k");
+    const list = $("#stage-guide-steps");
+    const items = $$("#stage-guide-steps li", guide);
+    items.forEach((li) => (li.hidden = false));
+    if (head) head.hidden = live;
+    if (list) list.hidden = live;
+    guide.classList.remove("is-bare");
+    guide.hidden = false;
+    const cs = getComputedStyle(focus);
+    const room = Math.floor(
+      focus.clientHeight -
+        (parseFloat(cs.paddingTop) || 0) -
+        (parseFloat(cs.paddingBottom) || 0) -
+        (panel && panel.offsetHeight ? panel.offsetHeight + (parseFloat(cs.rowGap) || 0) : 0)
+    );
+    const fits = () => guide.scrollHeight <= room + 1;
+    if (!live) {
+      // Idle: drop steps from the end; "Ver todos los pasos" still opens the rest.
+      for (let i = items.length - 1; i > 0 && !fits(); i--) items[i].hidden = true;
+      if (!fits() && head && list) {
+        head.hidden = true;
+        list.hidden = true;
+        guide.classList.add("is-bare");
+      }
+    }
+    guide.hidden = !fits();
+  }
+
+  /**
+   * The stage guide while practising: the step the clock has reached, "Ahora ·
+   * paso 2 de 5", moving on as the time runs. The steps used to disappear at
+   * Start and leave the middle of the stage empty. Idle, it lists the first
+   * steps again. Cheap enough for every timer tick: it redraws on a change.
+   * @param {boolean} [force] redraw even if the step is the same (new exercise, language)
+   */
+  function syncStageNow(force) {
+    const wrap = $("#stage-guide");
+    if (!wrap || wrap.dataset.on !== "1") return;
+    const steps = state.stageSteps || [];
+    const t = state.timer;
+    const live = !!state.practiceLive && t.total > 0 && steps.length > 0;
+    const idx = live
+      ? Math.min(steps.length - 1, Math.floor(Math.max(0, t.total - t.remaining) / (t.total / steps.length)))
+      : -1;
+    const key = live ? String(idx) : "idle";
+    if (!force && wrap.dataset.now === key) return;
+    wrap.dataset.now = key;
+    wrap.classList.toggle("is-now", live);
+    // The step lives in its own polite live region, number and text together;
+    // the idle list around it stays silent while it is refitted.
+    const now = $("#stage-guide-now");
+    if (now) {
+      now.hidden = !live;
+      $("#stage-now-k").textContent = live ? tt("ex.stageNow", { n: idx + 1, total: steps.length }) : "";
+      $("#stage-now-t").textContent = live ? steps[idx] : "";
+    }
+    $("#stage-guide-k").textContent = tt("ex.stageGuideLabel");
+    $("#btn-stage-guide-more").hidden = live;
+    // Heading and list: fitStageGuide shows them idle, as room allows
+    fitStageGuide();
+  }
+
+  /** Re-place the lanes and the guide whenever a rail changes height (wrap, live HUD, cue). */
+  function watchStageRails() {
+    if (typeof ResizeObserver !== "function") return;
+    let raf = 0;
+    const ro = new ResizeObserver(() => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const moved = syncStageInsets();
+        fitStageGuide();
+        if (!moved) return;
+        try {
+          if (state.pitchViz && !$("#pitch-block")?.hidden) {
+            if (!state.practiceLive && typeof state.pitchViz.redrawIdle === "function") {
+              state.pitchViz.redrawIdle();
+            } else {
+              state.pitchViz._resize?.();
+            }
+          }
+        } catch {
+          /* ignore */
+        }
+      });
+    });
+    ["hud-top-rail", "hud-bottom-rail", "mode-focus-panel"].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) ro.observe(el);
+    });
+  }
+
+  /**
+   * Where an exercise's mode panel mounts; both places are on the stage. A
+   * pitch exercise's mode rides with its cue in the strip under the top
+   * controls (#stage-coach, design: coach-strip); any other exercise's sits in
+   * the middle of the stage, above the guide. A mode empties what it mounts
+   * into, hence the inner panel.
+   */
+  function modeMountTarget(profile) {
+    if (profile.showPitch) return $("#mode-hud");
+    return $("#mode-focus-panel") || $("#mode-focus");
   }
 
   /** Debounced fit for resize / visualViewport / orientation / fullscreen */
@@ -1025,7 +1187,18 @@
         : s.path === "basics"
           ? tt("loop.banner", { tier: tt("loop.tier." + (s.tier || "min")) })
           : tt("session.bannerTitle", { track: trackLabel });
-    $("#session-banner-text").textContent = `${name} · ${status} · ${VTSession.progressLabel()}`;
+    // One line (design: session-chrome): where you are first and never cut,
+    // then "En pausa" only when it is and the routine's name, which a narrow
+    // phone cuts with "…". The title keeps the whole line for a pointer.
+    const pos = document.createElement("span");
+    pos.className = "session-banner-pos";
+    pos.textContent = VTSession.progressLabel();
+    const rest = document.createElement("span");
+    rest.className = "session-banner-rest";
+    rest.textContent = ["", s.status === "paused" ? status : "", name].filter((x, i) => !i || x).join(" · ");
+    const text = $("#session-banner-text");
+    text.replaceChildren(pos, rest);
+    text.title = text.textContent;
     $("#btn-session-resume").hidden = s.status !== "paused";
     $("#btn-session-pause").hidden = s.status !== "active";
   }
@@ -1340,21 +1513,22 @@
     const wrap = $("#stage-guide");
     const list = $("#stage-guide-steps");
     if (!wrap || !list) return;
-    const items = (steps || []).slice(0, 3);
-    if (!enabled || !items.length) {
+    // Every step, for "Ahora · paso n de N" while practising; the idle list
+    // shows the first three.
+    state.stageSteps = enabled ? (steps || []).filter(Boolean) : [];
+    const items = state.stageSteps.slice(0, 3);
+    if (!items.length) {
       wrap.hidden = true;
       delete wrap.dataset.on;
       list.innerHTML = "";
       return;
     }
     list.innerHTML = items.map((step) => `<li>${escapeHtml(step)}</li>`).join("");
-    wrap.style.maxHeight = "";
-    const label = $(".stage-guide-k", wrap);
-    if (label) label.textContent = tt("ex.stageGuideLabel");
     const more = $("#btn-stage-guide-more");
     if (more) more.textContent = tt("ex.stageGuideMore");
     wrap.dataset.on = "1";
     wrap.hidden = false;
+    syncStageNow(true);
   }
 
   /**
@@ -1702,14 +1876,12 @@
   function fitStageBelowContent() {
     const below = document.querySelector(".stage-below");
     if (!below || !document.body.classList.contains("view-exercise")) return;
-    const cue = $("#mode-cue");
-    const hud = $("#mode-hud");
+    // The mode and its cue moved onto the stage (#stage-coach, design:
+    // coach-strip); only the stats are left to fit here.
     const stats = $("#pitch-stats");
-    const hold = $("#hold-block");
-    const shell = $("#mode-shell");
 
     // Clear previous locks so we can remeasure
-    [below, cue, hud, stats, shell].forEach((el) => {
+    [below, stats].forEach((el) => {
       if (!el) return;
       el.style.maxHeight = "";
       el.style.height = "";
@@ -1717,27 +1889,6 @@
       el.style.overflow = "";
     });
 
-    if (cue && !cue.hidden) {
-      cue.style.maxHeight = "none";
-      cue.style.overflow = "visible";
-      cue.style.whiteSpace = "normal";
-      cue.style.height = "auto";
-      // Force reflow then lock min-height to full wrapped text
-      void cue.offsetHeight;
-      const need = Math.ceil(cue.scrollHeight);
-      if (need > 0) cue.style.minHeight = `${need}px`;
-    }
-    if (hud && !hud.hidden) {
-      hud.style.maxHeight = "none";
-      hud.style.overflow = "visible";
-      hud.querySelectorAll(".mode-panel, .mode-big, .mode-meta").forEach((p) => {
-        p.style.maxHeight = "none";
-        p.style.overflow = "visible";
-      });
-      void hud.offsetHeight;
-      const needH = Math.ceil(hud.scrollHeight);
-      if (needH > 0) hud.style.minHeight = `${needH}px`;
-    }
     if (stats && stats.childElementCount) {
       stats.style.maxHeight = "none";
       stats.style.overflow = "visible";
@@ -1877,9 +2028,10 @@
     const modeHud = $("#mode-hud");
     const modeFocus = $("#mode-focus");
     if (modeHud) modeHud.innerHTML = "";
-    if (modeFocus) modeFocus.innerHTML = "";
-    // Non-pitch: mount live mode into sticky stage (less scroll). Pitch: mode below highway.
-    const mountTarget = !profile.showPitch && modeFocus ? modeFocus : modeHud;
+    if ($("#mode-focus-panel")) $("#mode-focus-panel").innerHTML = "";
+    const mountTarget = modeMountTarget(profile);
+    // The pitch exercise's strip shows only with its canvas
+    if ($("#stage-coach")) $("#stage-coach").hidden = !profile.showPitch;
     if (modeFocus) {
       if (!profile.showPitch) {
         modeFocus.hidden = false;
@@ -1901,13 +2053,10 @@
         (document.documentElement.lang || "").startsWith("es");
       $("#mode-cue").textContent =
         (es && profile.cueEs) || profile.cue || tt("practice.hint");
-      // Cue already lives in sticky stage for speech; hide duplicate below
+      // Cue already lives in the mode panel for speech; the strip is pitch-only
       $("#mode-cue").hidden = !profile.showPitch;
     }
-    // Hide empty mode-hud shell when mode lives in sticky focus
-    if (modeHud) {
-      modeHud.hidden = !profile.showPitch && mountTarget === modeFocus;
-    }
+    if (modeHud) modeHud.hidden = !profile.showPitch;
 
     // Pitch visualizer only when profile asks
     const pitchBlock = $("#pitch-block");
@@ -2019,6 +2168,12 @@
       syncSustainSecLabel();
       syncPlayModeSelect();
     }
+    // Lip trills, straws and the rate ladder keep the default chord and play
+    // mode; their two menus only crowded a phone's stage and covered the
+    // exercise's name (design: start-floor).
+    if ((profile.mode === "sovtFlow" || profile.mode === "rateLadder") && $("#hud-prog-bar")) {
+      $("#hud-prog-bar").hidden = true;
+    }
     if (pianoMini) {
       pianoMini.style.display = showPiano || exerciseWantsSound(ex, profile) ? "" : "none";
       // U8 progressive disclosure: secondary piano opts collapsed until 🎹+
@@ -2033,6 +2188,8 @@
       tbtn.setAttribute("aria-expanded", "false");
       tbtn.textContent = tt("piano.more");
       tbtn.title = tt("piano.showPanel");
+      // "🎹+" alone is read out as an emoji; the button says what it opens
+      tbtn.setAttribute("aria-label", tbtn.title);
     }
 
     // Practice hint stays hidden in stage (hint is in tour / guide)
@@ -2627,6 +2784,7 @@
       pill.textContent = live ? tt("practice.live") : tt("practice.ready");
       pill.classList.toggle("live", live);
     }
+    syncStageNow();
     // Practice clock for leave-prompt (≥10% of exercise)
     if (live) {
       state.sessionPractice.everStarted = true;
@@ -2861,10 +3019,7 @@
           /* ignore */
         }
       }
-      const modeHud = $("#mode-hud");
-      const modeFocus = $("#mode-focus");
-      const mountTarget =
-        !profile.showPitch && modeFocus ? modeFocus : modeHud;
+      const mountTarget = modeMountTarget(profile);
       if (mountTarget && window.VTPracticeModes) {
         state.modeInstance = VTPracticeModes.get(profile.mode);
         state.modeInstance.mount(mountTarget, profile);
@@ -4077,6 +4232,7 @@
     const left = Math.max(0, (state.timer.endAt - performance.now()) / 1000);
     state.timer.remaining = left;
     $("#timer-display").textContent = formatTime(left);
+    syncStageNow();
     if (left <= 0) {
       stopTimer(true);
       // The clearest "done" there is: the step ran its full length.
@@ -5189,6 +5345,7 @@
       if (btn) {
         btn.textContent = state.pianoOpen ? tt("piano.less") : tt("piano.more");
         btn.title = state.pianoOpen ? tt("piano.hidePanel") : tt("piano.showPanel");
+        btn.setAttribute("aria-label", btn.title);
         btn.setAttribute("aria-expanded", String(!!state.pianoOpen));
       }
     });
@@ -7098,6 +7255,7 @@
     setPlayMode("oneNote", { silent: true });
     syncHeaderHeightVar();
     fitHighwayToViewport();
+    watchStageRails();
     window.addEventListener("resize", () => {
       syncHeaderHeightVar();
       scheduleFitHighway();

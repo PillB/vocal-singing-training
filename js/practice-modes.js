@@ -856,52 +856,172 @@
     }
   });
 
+  /**
+   * v3 — lift the soft palate: tongue gently out, count aloud to 60. Each
+   * number is a burst of voice after a short silence, so the count comes
+   * from the microphone (approximately: "treinta y uno" may split, a click
+   * may add one), with −1 / +1 to correct it. The next bead's ring fills
+   * over an unhurried beat as a pace to count against. Nothing here can
+   * tell palate height or nasality: openness and comfort stay self-rated.
+   */
   Modes.countPace = baseMode({
     id: "countPace",
     render() {
-      this.state.count = 0;
-      this.state.lastNudge = 0;
+      const st = this.state;
+      st.goal = this.profile.countTo || 60;
+      st.pace = this.profile.paceSec || 1.1;
       this.hud.innerHTML = `
-        <div class="mode-title">${L("Paladar blando · cuenta hasta 60", "Soft palate · count to 60")}</div>
-        <div class="mode-big" data-c>0</div>
-        <div class="controls-row">
-          <button type="button" class="btn btn-primary btn-sm" data-plus>+1 count</button>
-          <button type="button" class="btn btn-sm" data-plus5>+5</button>
+        <div class="viz-row viz-head">
+          <div class="mode-title">${L("Paladar blando · cuenta hasta 60", "Soft palate · count to 60")}</div>
         </div>
-        <p class="mode-meta">${L("Tiempo <strong data-t>0:00</strong> · Meta 60 · espacio alto, lengua suave afuera", "Time <strong data-t>0:00</strong> · Target 60 · tall space, tongue gently out")}</p>
-        <p class="mode-meta" data-nudge>${L("Toca al contar — o +5 cada pocos números.", "Tap as you count — or +5 every few numbers.")}</p>
+        <div class="viz-words" aria-live="polite">
+          ${L("Cuenta, aprox. por voz:", "Count, approx. by voice:")} <strong class="mode-big" data-c>0</strong> / ${st.goal} ·
+          ${L("Tiempo", "Time")} <strong data-t>0:00</strong>
+          <span data-nudge></span>
+        </div>
+        <p class="mode-meta muted">${L(
+          "Cada número que dices en voz alta llena una cuenta; si una palabra larga cuenta doble, corrige con −1. El dibujo es una guía, no una medida: el micrófono no ve el paladar.",
+          "Each number you say aloud fills a bead; if a long word counts twice, correct with −1. The drawing is a guide, not a measure: the mic cannot see your palate."
+        )}</p>
+        <div class="viz-row st-taps">
+          <button type="button" class="btn btn-ghost viz-tap st-tap st-tap-small" data-minus aria-label="${L("Quitar un número", "Remove one number")}">−1</button>
+          <button type="button" class="btn btn-ghost viz-tap st-tap st-tap-small" data-plus aria-label="${L("Añadir un número", "Add one number")}">+1</button>
+        </div>
       `;
-      this.$("[data-plus]")?.addEventListener("click", () => {
-        this.state.count++;
-        if (this.$("[data-c]")) this.$("[data-c]").textContent = String(this.state.count);
-      });
-      this.$("[data-plus5]")?.addEventListener("click", () => {
-        this.state.count += 5;
-        if (this.$("[data-c]")) this.$("[data-c]").textContent = String(this.state.count);
-      });
+      this.$("[data-plus]")?.addEventListener("click", () => this._adjust(1));
+      this.$("[data-minus]")?.addEventListener("click", () => this._adjust(-1));
+      this._resetCount();
+      this._mountViz();
     },
-    onFrame() {
-      const sec = Math.floor((performance.now() - this.state.startedAt) / 1000);
-      if (this.$("[data-t]"))
-        this.$("[data-t]").textContent = `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
-      if (sec > 0 && sec % 15 === 0 && sec !== this.state.lastNudge) {
-        this.state.lastNudge = sec;
-        if (this.$("[data-nudge]"))
-          this.$("[data-nudge]").textContent =
-            this.state.count < 30
-              ? "Rose-smell lift — keep counting."
-              : "Past 30 — stay free in the jaw.";
+    _resetCount() {
+      const st = this.state;
+      const F = global.VTFeatures;
+      st.beads = [];
+      st.running = false;
+      st.review = false;
+      st.elapsed = 0;
+      st.lastT = null;
+      st.startT = 0;
+      st.counted = false;
+      st.note = null;
+      st.reminder = "";
+      st.last = performance.now();
+      st.lastWords = 0;
+      st.clock = 0;
+      const K = global.VTViz?.speechTiming;
+      if (F && K) st.bursts = new K.Bursts({ onBurst: (t) => this._number(t) });
+      if (this.$("[data-c]")) this.$("[data-c]").textContent = "0";
+    },
+    _mountViz() {
+      const V = global.VTViz;
+      if (!V || !V.scenes.beads || !this.state.bursts) return;
+      this.hud.classList.add("has-viz");
+      this.viz = new V.Surface(this.hud, (ctx, w, h) => V.scenes.beads(ctx, w, h, this.state), {
+        label: L(
+          "Sesenta cuentas en seis filas de diez: cada número que dices llena una; el anillo de la siguiente se llena a un ritmo sin prisa. Al lado, un dibujo de la lengua afuera y el espacio alto.",
+          "Sixty beads in six rows of ten: each number you say fills one; the next bead's ring fills at an unhurried pace. Beside it, a drawing of the tongue out and the tall space."
+        ),
+        captionHidden: true
+      });
+      const taps = this.$(".st-taps");
+      if (taps && this.viz.wrap) this.hud.insertBefore(this.viz.wrap, taps);
+      this.viz.draw();
+    },
+    _adjust(d) {
+      const st = this.state;
+      if (st.review) return;
+      if (d > 0) st.beads.push({ t: st.clock || 0, early: false, manual: true });
+      else st.beads.pop();
+      if (this.$("[data-c]")) this.$("[data-c]").textContent = String(st.beads.length);
+      this.viz?.draw();
+    },
+    onStart() {
+      this._resetCount();
+      const st = this.state;
+      st.running = true;
+      st.startT = 0;
+      this.hud?.classList.remove("is-replay");
+      ["[data-plus]", "[data-minus]"].forEach((s) => {
+        if (this.$(s)) this.$(s).disabled = false;
+      });
+      this.viz?.draw();
+    },
+    /** A number heard: the next bead, marked "»" if it came well before the beat. */
+    _number(t) {
+      const st = this.state;
+      if (!st.running) return;
+      const prev = st.beads[st.beads.length - 1];
+      const early = !!prev && !prev.manual && t - prev.t < st.pace * 0.6;
+      st.beads.push({ t, early, manual: false });
+      st.lastT = t;
+      if (this.$("[data-c]")) this.$("[data-c]").textContent = String(st.beads.length);
+      if (st.beads.length === st.goal)
+        st.note = { text: L(`¡${st.goal}! Descansa la lengua`, `${st.goal}! Rest your tongue`), color: global.VTViz.C.done, until: performance.now() + 4000 };
+    },
+    onFrame(frame) {
+      const st = this.state;
+      if (!st.running || !st.bursts) return;
+      const now = performance.now();
+      const dt = Math.min(0.25, Math.max(0, (now - st.last) / 1000));
+      st.last = now;
+      st.elapsed += dt;
+      st.bursts.feed(frame);
+      st.clock = st.bursts.t;
+      // Two gentle reminders, as words in the card
+      const sec = st.elapsed;
+      const rem =
+        sec >= 60
+          ? L("Descansa si la lengua se cansa", "Rest if your tongue tires")
+          : sec >= 30
+            ? L("Mandíbula suelta", "Jaw loose")
+            : "";
+      if (rem !== st.reminder) {
+        st.reminder = rem;
+        if (rem) st.note = { text: rem, until: now + 3000 };
+        if (this.$("[data-nudge]")) this.$("[data-nudge]").textContent = rem ? ` · ${rem}` : "";
       }
+      if (now - st.lastWords > 500) {
+        st.lastWords = now;
+        const s = Math.floor(sec);
+        if (this.$("[data-t]")) this.$("[data-t]").textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+      }
+      this.viz?.draw();
     },
     onStop() {
-      const c = this.state.count || 0;
+      const st = this.state;
+      st.running = false;
+      st.review = true;
+      ["[data-plus]", "[data-minus]"].forEach((s) => {
+        if (this.$(s)) this.$(s).disabled = true;
+      });
+      if (this.viz) {
+        this.hud.classList.add("is-replay");
+        this.viz.draw();
+      }
+      const c = st.beads ? st.beads.length : 0;
+      const K = global.VTViz?.speechTiming;
+      let tempoTxt = "";
+      const iv = [];
+      (st.beads || []).forEach((b, i, a) => {
+        if (i && !b.manual && !a[i - 1].manual) {
+          const d = b.t - a[i - 1].t;
+          if (d > 0.15 && d < 3) iv.push(d);
+        }
+      });
+      if (iv.length >= 3 && K) {
+        const mu = K.mean(iv);
+        const sd = Math.sqrt(K.mean(iv.map((d) => (d - mu) * (d - mu))));
+        const f = global.VTViz.fmtNum;
+        tempoTxt = L(` · ~${f(mu, 1)} s por número (±${f(sd, 1)} s)`, ` · ~${f(mu, 1)} s per number (±${f(sd, 1)} s)`);
+      }
+      const secs = Math.round(st.elapsed || 0);
       return {
-        patches: {
-          countReached: c,
-          openness: c >= 60 ? 4 : c >= 30 ? 3 : 2,
-          comfort: 3
-        },
-        summary: `Counted to ${c}`
+        // The count is measured (and corrected by the learner); openness and
+        // comfort are theirs to rate
+        patches: c > 0 ? { countReached: c } : {},
+        summary: c
+          ? L(`Llegaste a ${c}${tempoTxt} · ${secs} s`, `You reached ${c}${tempoTxt} · ${secs} s`)
+          : L("Sin números contados todavía", "No numbers counted yet")
       };
     }
   });

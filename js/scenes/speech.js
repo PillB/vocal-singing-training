@@ -2094,15 +2094,388 @@
     }
   }
 
+  /* —— v3 · Count to 60 —— */
+
+  /**
+   * Bursts of voice, one per spoken number: a burst starts when the level
+   * rises well above the room, and ends when it falls 10 dB under the
+   * burst's own peak (or the sound stops) for 120 ms — longer than the
+   * stop consonants inside a word, shorter than the gap between two
+   * numbers said briskly. A burst counts once it has lasted 0.1 s, so a
+   * click or a breath does not.
+   */
+  class Bursts {
+    constructor(opts = {}) {
+      this.dipDb = opts.dipDb || 10;
+      this.gapSec = opts.gapSec || 0.12;
+      this.minSec = opts.minSec || 0.1;
+      this.smoothMs = opts.smoothMs || 25;
+      this.onBurst = opts.onBurst || null;
+      this.t = 0;
+      this.s = null;
+      this.state = "quiet";
+      this.start = null;
+      this.peak = -140;
+      this.lowFor = 0;
+      this.loudFor = 0;
+      this.counted = false;
+      this.floorDb = -70;
+      this._floor = [];
+      this._floorAcc = 0;
+    }
+    feed(frame) {
+      const dt = frameDt(frame);
+      this.t += dt;
+      const db = dbOf(frame.rms || 0);
+      const a = 1 - Math.exp(-(dt * 1000) / this.smoothMs);
+      this.s = this.s == null ? db : this.s + a * (db - this.s);
+      // The room's level: a low percentile of the last few seconds
+      this._floorAcc += dt;
+      if (this._floorAcc >= 0.1) {
+        this._floorAcc = 0;
+        this._floor.push(this.s);
+        if (this._floor.length > 60) this._floor.shift();
+        if (this._floor.length >= 5) this.floorDb = Math.max(-90, quantile(this._floor, 0.1));
+      }
+      const loud = !!frame.sounding && this.s > this.floorDb + 8;
+      if (this.state === "burst") {
+        this.peak = Math.max(this.peak, this.s);
+        const low = !frame.sounding || this.s < this.peak - this.dipDb;
+        this.lowFor = low ? this.lowFor + dt : 0;
+        if (this.lowFor >= this.gapSec) {
+          this.state = "quiet";
+          this.loudFor = 0;
+        } else if (!this.counted && this.t - this.start >= this.minSec) {
+          this.counted = true;
+          if (this.onBurst) this.onBurst(this.start);
+        }
+      } else {
+        this.loudFor = loud ? this.loudFor + dt : 0;
+        if (this.loudFor >= 0.03) {
+          this.state = "burst";
+          this.start = this.t - this.loudFor;
+          this.peak = this.s;
+          this.lowFor = 0;
+          this.counted = false;
+        }
+      }
+    }
+  }
+
+  /** The steady intervals between numbers: mean and spread, leaving out rests of 3 s or more. */
+  function countTempo(beads) {
+    const iv = [];
+    for (let i = 1; i < beads.length; i++) {
+      const a = beads[i - 1];
+      const b = beads[i];
+      if (a.manual || b.manual) continue;
+      const d = b.t - a.t;
+      if (d > 0.15 && d < 3) iv.push(d);
+    }
+    if (iv.length < 3) return { n: iv.length, mean: null, sd: null, iv };
+    const mu = mean(iv);
+    const sd = Math.sqrt(mean(iv.map((d) => (d - mu) * (d - mu))));
+    return { n: iv.length, mean: mu, sd, iv };
+  }
+
+  /**
+   * Count to 60 — "Collar de 60 cuentas".
+   * Six rows of ten beads, one row per ten numbers. Each number you say
+   * aloud (a burst of voice after a short silence) fills the next bead —
+   * filled means heard, hollow means not yet — and the next bead's ring
+   * fills over about a second, an unhurried pace to count against. It
+   * never runs ahead of you: a number said before its ring is nearly full
+   * gets a small "»" and the words "un poco rápido", as information only.
+   * A card beside it shows, as an illustration, what the mouth is doing.
+   * model: {
+   *   beads: [{ t, early, manual }], goal, pace (s), lastT, running, review,
+   *   elapsed, vad, note { text, until } | null
+   * }
+   */
+  function beads(ctx, w, h, m) {
+    panel(ctx, w, h);
+    const pad = 10;
+    const tiny = h < 135;
+    const compact = h < 190;
+    const n = m.beads.length;
+    const goal = m.goal || 60;
+    const tempo = countTempo(m.beads);
+    // Headline: one slow cue
+    const headY = pad + (tiny ? 6 : 10);
+    const head = beadsHead(m, tempo);
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = head.color;
+    fitText(ctx, head.text, pad + 2, headY, w - pad * 2 - 70, compact ? 14 : 17, 800, 10);
+    ctx.textAlign = "right";
+    ctx.fillStyle = C.muted;
+    ctx.font = font(compact ? 13 : 15, 800, true);
+    ctx.fillText(clockDown(m.elapsed), w - pad - 2, headY + 1);
+    const bodyTop = headY + (tiny ? 10 : compact ? 14 : 20);
+    const bodyH = h - bodyTop - pad;
+    // Where things go: count, beads, card
+    const stacked = !tiny && w < 520;
+    let countBox;
+    let gridBox;
+    let cardBox = null;
+    if (tiny) {
+      countBox = { x: pad, y: bodyTop, w: 78, h: bodyH };
+      gridBox = { x: pad + 84, y: bodyTop, w: w - pad * 2 - 84, h: bodyH };
+    } else if (stacked) {
+      const countH = 50;
+      const cardH = bodyH >= 280 ? clamp(bodyH * 0.3, 90, 150) : 0;
+      countBox = { x: pad, y: bodyTop, w: w - pad * 2, h: countH };
+      gridBox = { x: pad, y: bodyTop + countH + 6, w: w - pad * 2, h: bodyH - countH - 6 - (cardH ? cardH + 8 : 0) };
+      if (cardH) cardBox = { x: pad, y: h - pad - cardH, w: w - pad * 2, h: cardH };
+    } else {
+      const countW = clamp(w * 0.2, 120, 180);
+      const cardW = w >= 760 ? clamp(w * 0.27, 200, 280) : 0;
+      countBox = { x: pad, y: bodyTop, w: countW, h: bodyH };
+      gridBox = { x: pad + countW + 10, y: bodyTop, w: w - pad * 2 - countW - 10 - (cardW ? cardW + 12 : 0), h: bodyH };
+      if (cardW) cardBox = { x: w - pad - cardW, y: bodyTop, w: cardW, h: bodyH };
+    }
+    beadCount(ctx, countBox, m, n, goal, tempo, { tiny, row: stacked });
+    beadGrid(ctx, gridBox, m, goal, { tiny, compact });
+    if (cardBox) {
+      if (m.review) tempoCard(ctx, cardBox, m, tempo);
+      else mouthCard(ctx, cardBox, m, { wide: !stacked });
+    }
+  }
+
+  function beadsHead(m, tempo) {
+    const n = m.beads.length;
+    const goal = m.goal || 60;
+    if (m.review) {
+      if (!n) return { text: L("Sin números contados todavía", "No numbers counted yet"), color: C.muted };
+      return { text: L(`Llegaste a ${n}`, `You reached ${n}`) + (n >= goal ? " ✓" : ""), color: n >= goal ? C.done : C.text };
+    }
+    const note = m.note;
+    if (note && performance.now() < note.until) return { text: note.text, color: note.color || C.text };
+    if (n >= goal) return { text: L(`¡${goal}! Descansa la lengua`, `${goal}! Rest your tongue`), color: C.done };
+    if (!n) return { text: L("Lengua afuera, suave · cuenta en voz alta: uno…", "Tongue gently out · count aloud: one…"), color: C.text };
+    if (m.beads[n - 1]?.early) return { text: L("» Un poco rápido: deja que el círculo se llene", "» A bit fast: let the ring fill"), color: C.text };
+    return { text: L("Sin prisa: un número cuando el círculo se llena", "No rush: one number as the ring fills"), color: C.text };
+  }
+
+  /** The count, large, and what it means. */
+  function beadCount(ctx, box, m, n, goal, tempo, o) {
+    const { x, y, w, h } = box;
+    const done = n >= goal;
+    ctx.textBaseline = "alphabetic";
+    ctx.textAlign = "left";
+    const big = o.tiny ? 26 : o.row ? 34 : clamp(h * 0.3, 30, 52);
+    ctx.font = font(big, 800, true);
+    ctx.fillStyle = done ? C.done : C.text;
+    const num = String(n);
+    const baseY = o.row || o.tiny ? y + big * 0.9 : y + h * 0.42;
+    ctx.fillText(num, x + 2, baseY);
+    const nw = ctx.measureText(num).width;
+    ctx.font = font(o.tiny ? 12 : 15, 800, true);
+    ctx.fillStyle = C.muted;
+    ctx.fillText(` / ${goal}`, x + 4 + nw, baseY);
+    ctx.font = font(10, 700);
+    ctx.fillStyle = C.faint;
+    ctx.textBaseline = "top";
+    const byVoice = L("≈ por voz", "≈ by voice");
+    const tempoTxt =
+      tempo.mean != null
+        ? L(`~${V.fmtNum(tempo.mean, 1)} s por número (±${V.fmtNum(tempo.sd, 1)})`, `~${V.fmtNum(tempo.mean, 1)} s per number (±${V.fmtNum(tempo.sd, 1)})`)
+        : L("ritmo: después de 4 números", "pace: after 4 numbers");
+    if (o.row) {
+      // Upright phone: words to the right of the number
+      const tx = x + 4 + nw + 60;
+      ctx.fillText(byVoice, tx, y + 6, w - (tx - x));
+      ctx.fillStyle = C.muted;
+      ctx.font = font(11, 700);
+      ctx.fillText(tempoTxt, tx, y + 22, w - (tx - x));
+      return;
+    }
+    if (o.tiny) {
+      ctx.fillText(byVoice, x + 2, baseY + 4, w - 4);
+      return;
+    }
+    ctx.fillText(byVoice, x + 2, baseY + 6, w - 4);
+    ctx.fillStyle = C.muted;
+    ctx.font = font(11, 700);
+    const lines = wrapFit(ctx, tempoTxt, w - 4, 11, 9, 700, 2);
+    ctx.font = font(lines.size, 700);
+    lines.lines.forEach((ln, i) => ctx.fillText(ln, x + 2, baseY + 24 + i * (lines.size + 3), w - 4));
+  }
+
+  /** Six rows of ten; the next bead's ring is the pace. */
+  function beadGrid(ctx, box, m, goal, o) {
+    const { x, y, w, h } = box;
+    const rows = o.tiny ? (w / h > 7 ? 2 : 3) : 6;
+    const cols = Math.ceil(goal / rows);
+    const labelW = !o.tiny && rows === 6 && w >= 260 ? 22 : 0;
+    const cw = (w - labelW) / cols;
+    const rh = h / rows;
+    const r = clamp(Math.min(cw, rh) * 0.34, 2.5, 11);
+    const n = m.beads.length;
+    const pos = (i) => ({ x: x + labelW + cw * ((i % cols) + 0.5), y: y + rh * (Math.floor(i / cols) + 0.5) });
+    if (labelW) {
+      ctx.font = font(9, 700);
+      ctx.fillStyle = C.faint;
+      ctx.textAlign = "right";
+      ctx.textBaseline = "middle";
+      for (let row = 0; row < rows; row++) ctx.fillText(String((row + 1) * cols), x + labelW - 5, y + rh * (row + 0.5));
+    }
+    const now = m.clock || 0;
+    for (let i = 0; i < goal; i++) {
+      const p = pos(i);
+      const b = m.beads[i];
+      if (b) {
+        ctx.fillStyle = b.manual ? C.muted : n >= goal ? C.done : C.you;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+        ctx.fill();
+        if (b.early && r >= 4) {
+          ctx.fillStyle = C.muted;
+          ctx.font = font(Math.max(8, r * 1.1), 800);
+          ctx.textAlign = "left";
+          ctx.textBaseline = "middle";
+          ctx.fillText("»", p.x + r + 1, p.y - r * 0.6);
+        }
+      } else {
+        ctx.strokeStyle = C.grid;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      // The pacer: the next bead's ring fills over one unhurried beat
+      if (i === n && m.running) {
+        let f = clamp((now - (m.lastT != null ? m.lastT : m.startT || 0)) / (m.pace || 1.1), 0, 1);
+        if (V.reducedMotion()) f = Math.floor(f * 4) / 4;
+        V.ring(ctx, p.x, p.y, r + 2.5, f, { color: f >= 1 ? C.target : C.you, width: 2.5, track: "rgba(170, 195, 230, 0.2)" });
+      }
+    }
+  }
+
+  /** An illustration, not a measure: the tongue out, the tall space, the rose. */
+  function mouthCard(ctx, box, m, o) {
+    const { x, y, w, h } = box;
+    ctx.fillStyle = "rgba(170, 195, 230, 0.06)";
+    roundRect(ctx, x, y, w, h, 10);
+    ctx.fill();
+    // The drawing: an open mouth taller than wide, the tongue resting out
+    // over the lower lip, an arrow up for the lifted palate
+    const dh = o.wide ? Math.min(h * 0.46, (w - 20) * 0.9) : h - 16;
+    const dw = dh * 0.8;
+    const dx = o.wide ? x + w / 2 : x + 12 + dw / 2;
+    const dy = o.wide ? y + 10 + dh / 2 : y + 8 + dh * 0.42;
+    ctx.strokeStyle = C.muted;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.ellipse(dx, dy, dw * 0.32, dh * 0.42, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    // tongue
+    ctx.fillStyle = "rgba(238, 243, 250, 0.2)";
+    ctx.strokeStyle = C.muted;
+    ctx.beginPath();
+    ctx.ellipse(dx, dy + dh * 0.42, dw * 0.2, dh * 0.16, 0, 0, Math.PI);
+    ctx.fill();
+    ctx.stroke();
+    // lifted palate: an arrow up inside the mouth
+    ctx.strokeStyle = C.you;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(dx, dy + dh * 0.12);
+    ctx.lineTo(dx, dy - dh * 0.26);
+    ctx.moveTo(dx - 5, dy - dh * 0.18);
+    ctx.lineTo(dx, dy - dh * 0.26);
+    ctx.lineTo(dx + 5, dy - dh * 0.18);
+    ctx.stroke();
+    const lines = [
+      L("lengua afuera, suave", "tongue gently out"),
+      L("espacio alto: bostezo suave", "tall space: a soft yawn"),
+      L("huele una rosa", "smell a rose")
+    ];
+    const reminder = m.reminder || "";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    if (o.wide) {
+      let ty = y + 18 + dh * 1.1;
+      lines.forEach((ln) => {
+        ctx.fillStyle = C.muted;
+        fitText(ctx, ln, x + 10, ty, w - 20, 11, 700, 9);
+        ty += 15;
+      });
+      if (reminder && ty + 14 <= y + h) {
+        ctx.fillStyle = C.text;
+        fitText(ctx, reminder, x + 10, ty + 2, w - 20, 12, 800, 9);
+      }
+    } else {
+      const tx = x + 24 + dw;
+      let ty = y + 12;
+      lines.forEach((ln) => {
+        ctx.fillStyle = C.muted;
+        fitText(ctx, ln, tx, ty, x + w - tx - 8, 12, 700, 9);
+        ty += 18;
+      });
+      if (reminder) {
+        ctx.fillStyle = C.text;
+        fitText(ctx, reminder, tx, ty + 4, x + w - tx - 8, 13, 800, 9);
+      }
+    }
+    ctx.font = font(9, 700);
+    ctx.fillStyle = C.faint;
+    ctx.textAlign = "right";
+    ctx.textBaseline = "bottom";
+    ctx.fillText(L("ilustrativo", "illustration"), x + w - 8, y + h - 5);
+  }
+
+  /** After Stop, in the card's place: each interval between numbers, against the pacer's beat. */
+  function tempoCard(ctx, box, m, tempo) {
+    const { x, y, w, h } = box;
+    ctx.fillStyle = "rgba(170, 195, 230, 0.06)";
+    roundRect(ctx, x, y, w, h, 10);
+    ctx.fill();
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    ctx.fillStyle = C.muted;
+    fitText(ctx, L("Segundos entre números", "Seconds between numbers"), x + 10, y + 8, w - 20, 11, 700, 9);
+    const iv = tempo.iv;
+    const px = { x: x + 10, y: y + 28, w: w - 20, h: h - 44 };
+    if (iv.length < 2 || px.h < 20) return;
+    const hi = Math.max(2, ...iv);
+    const yOf = (d) => px.y + px.h - (d / hi) * px.h;
+    // The pacer's beat as a line
+    ctx.setLineDash([4, 4]);
+    ctx.strokeStyle = C.target;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(px.x, yOf(m.pace || 1.1));
+    ctx.lineTo(px.x + px.w, yOf(m.pace || 1.1));
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.font = font(9, 700);
+    ctx.fillStyle = C.faint;
+    ctx.fillText(L(`pauta ${V.fmtNum(m.pace || 1.1, 1)} s`, `pacer ${V.fmtNum(m.pace || 1.1, 1)} s`), px.x + 2, yOf(m.pace || 1.1) + 2);
+    iv.forEach((d, i) => {
+      const cx = px.x + ((i + 0.5) / iv.length) * px.w;
+      ctx.fillStyle = C.you;
+      ctx.beginPath();
+      ctx.arc(cx, yOf(d), 3, 0, Math.PI * 2);
+      ctx.fill();
+    });
+    ctx.fillStyle = C.faint;
+    ctx.textAlign = "right";
+    ctx.textBaseline = "bottom";
+    ctx.fillText(L("número →", "number →"), x + w - 10, y + h - 4);
+  }
+
   V.scenes.rateLadder = rateLadder;
   V.scenes.fillerRounds = fillerRounds;
   V.scenes.paceRiver = paceRiver;
   V.scenes.topicRibbon = topicRibbon;
   V.scenes.turns = turns;
+  V.scenes.beads = beads;
   V.speechTiming = {
     RateTrack,
     SlowValue,
     Hesitations,
+    Bursts,
     meanRun,
     timeStrip,
     mark,

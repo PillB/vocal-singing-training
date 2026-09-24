@@ -465,28 +465,39 @@
     },
     "s11-dynamics": {
       mode: "dynamicSwell",
-      showPitch: true,
-      showHold: true,
-      showLevel: true,
-      pitchChallenge: false,
-      autoPiano: true,
-      autoRecord: false,
-      cue: "Swell soft→medium→soft. Watch pitch stay stable while level moves.",
-      cueEs: "Crescendo suave→medio→suave. Que la afinación se mantenga al mover el volumen.",
-      metricHints: { swells: "swellCount", pitchStable: "pitchStableScale" }
-    },
-    "s12-easy-onset": {
-      mode: "onsetReps",
-      showPitch: true,
+      // The skill is the level shape; pitch is its second line, drawn under
+      // it in cents against your own start — so the picture lives in the
+      // stage, not below the fold under a one-lane highway
+      showPitch: false,
       showHold: false,
       showLevel: true,
       pitchChallenge: false,
+      // Space-as-sound would draw a swell nobody sang
+      allowManualSound: false,
+      autoPiano: true,
+      autoRecord: false,
+      targetSwells: 6,
+      swellSec: 7,
+      cue: "Soft → grow → back to soft along the band. The pitch line underneath should stay flat while the level moves.",
+      cueEs: "Suave → crece → vuelve a suave siguiendo la banda. La línea de afinación de abajo debe quedarse plana mientras cambia el volumen.",
+      metricHints: { swells: "swellCount", pitchStable: "pitchAtPeakCents" }
+    },
+    "s12-easy-onset": {
+      mode: "onsetReps",
+      // The skill is the first 100 ms of each note, drawn after it; the
+      // highway only showed detector spikes at every start
+      showPitch: false,
+      showHold: false,
+      showLevel: true,
+      pitchChallenge: false,
+      // Space-as-sound would be an onset nobody made
+      allowManualSound: false,
       autoPiano: true,
       autoRecord: false,
       targetReps: 10,
-      cue: "Easy onsets only. We flag hard attacks (RMS spikes) vs balanced starts.",
-      cueEs: "Solo ataques suaves. Marcamos ataques duros (picos de energía) vs inicios equilibrados.",
-      metricHints: { easyOnsets: "easyOnsetCount" }
+      cue: "First your own examples: 2 abrupt 'uh', 2 breathy 'ha', 2 easy. Then easy onsets from silence; each one is drawn once it's over.",
+      cueEs: "Primero tus ejemplos: 2 «uh» bruscos, 2 «ha» soplados, 2 fáciles. Luego inicios fáciles desde el silencio; cada uno se dibuja al terminar.",
+      metricHints: { easyOnsets: "balancedOnsetCount" }
     },
     "s13-arpeggio-match": {
       mode: "pitchChord",
@@ -503,21 +514,28 @@
     },
     "s14-staccato-legato": {
       mode: "staccatoLegato",
-      showPitch: true,
-      showHold: true,
+      // The skill is note length and the gaps between notes; the highway
+      // bridged every staccato rest into one line and chased the chord loop
+      showPitch: false,
+      showHold: false,
       showLevel: true,
       pitchChallenge: false,
-      autoPiano: true,
+      // Space-as-sound would draw notes nobody sang
+      allowManualSound: false,
+      // A chord loop through the speakers fills the rests the picture measures;
+      // the piano stays one tap away
+      autoPiano: false,
       autoRecord: false,
       phases: [
-        { label: "Staccato rounds", sec: 90 },
-        { label: "Legato line", sec: 90 },
-        { label: "Staccato again", sec: 60 },
-        { label: "Legato again", sec: 60 }
+        { label: "Staccato rounds", labelEs: "Staccato", sec: 90, kind: "staccato" },
+        { label: "Legato line", labelEs: "Legato", sec: 90, kind: "legato" },
+        { label: "Staccato again", labelEs: "Staccato otra vez", sec: 60, kind: "staccato" },
+        { label: "Legato again", labelEs: "Legato otra vez", sec: 60, kind: "legato" },
+        { label: "Song phrase · legato", labelEs: "Frase de canción · legato", sec: 30, kind: "legato", round: false }
       ],
-      cue: "Short bounce vs connected line — note lengths auto-classify after holds.",
-      cueEs: "Rebote corto vs línea conectada — las duraciones se clasifican solas.",
-      metricHints: {}
+      cue: "Same 3-note pattern: short notes with silence between, then one joined line. Each note is drawn as long as it sounded. With the piano on speakers, use headphones.",
+      cueEs: "El mismo patrón de 3 notas: notas cortas con silencio entre ellas, luego una sola línea unida. Cada nota se dibuja tan larga como sonó. Con el piano por altavoz, usa auriculares.",
+      metricHints: { rounds: "phasesSungInTheirWay" }
     },
     /* —— Singing · class course (placement & resonance) —— */
     "s17-jaw-neck-release": {

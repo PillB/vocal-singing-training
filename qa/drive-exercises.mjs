@@ -82,9 +82,9 @@ export const SCENARIO_BY_MODE = {
   humTargets: "follow",
   breathS: "air",
   pitchMatch: "follow",
-  dynamicSwell: "swell",
-  onsetReps: "onset",
-  staccatoLegato: "staccato"
+  dynamicSwell: "swellCoach",
+  onsetReps: "onsetContrast",
+  staccatoLegato: "articulation"
 };
 const SLOPPY_OK = new Set(["follow", "trill"]);
 

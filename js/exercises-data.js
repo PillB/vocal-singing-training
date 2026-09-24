@@ -1519,7 +1519,7 @@ window.VT_EXERCISES = {
       steps: [
         "Pick one comfortable pitch (piano + sustain + visualizer).",
         "Start soft → swell to medium → back to soft over ~6–8 seconds.",
-        "Keep pitch center (watch the dots stay aligned).",
+        "Keep pitch center (the pitch line under the swell stays flat).",
         "Do 6 swells; rest if pressed.",
         "Optional: same on two nearby pitches."
       ],

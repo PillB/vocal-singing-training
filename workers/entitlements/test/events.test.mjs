@@ -1110,6 +1110,48 @@ test("the funnel readout gives one conditional proportion per step, never a comp
   assert.match(res.body.readMe, /not an A\/B comparison/);
 });
 
+test("the funnel breaks out what the trial press actually did, since its rate cannot", async () => {
+  // Every branch of both trial buttons ends in a trial_result, so the step rate
+  // is ~1 whatever happens and the leak lives in the outcome. Six browsers press:
+  // three start a trial, two are sent off to sign in first, one is told the trial
+  // is spent.
+  const env = freshEnv();
+  const events = [];
+  for (let i = 0; i < 6; i++) {
+    events.push(ev("app_open", cid(i, "o")));
+    events.push(ev("trial_click", cid(i, "o"), { where: "pricing" }));
+  }
+  for (let i = 0; i < 3; i++) {
+    events.push(ev("trial_result", cid(i, "o"), { outcome: "started", where: "pricing", kind: "account" }));
+  }
+  for (let i = 3; i < 5; i++) {
+    events.push(
+      ev("trial_result", cid(i, "o"), { outcome: "needs_account", where: "pricing", kind: "account" })
+    );
+  }
+  events.push(ev("trial_result", cid(5, "o"), { outcome: "trial_used", where: "panel", kind: "account" }));
+  await sendAll(env, events, NOW);
+
+  const admin = await signIn(env, "admin@example.test", NOW);
+  const res = await call(adminGet("/v1/admin/funnel", admin), env, { now: NOW });
+  assert.equal(res.status, 200, JSON.stringify(res.body));
+  const byStep = Object.fromEntries(res.body.steps.map((s) => [s.step, s]));
+  // The step itself says everything went fine, which is the trap.
+  assert.equal(byStep.trial_result.rate, 1);
+  // The breakout says half of them did not get a trial. Sorted by size, so the
+  // biggest bucket is readable first, and a differing `where` or `kind` does not
+  // split an outcome into two rows.
+  const outcomes = Object.fromEntries(res.body.trialOutcomes.map((o) => [o.outcome, o.browsers]));
+  assert.deepEqual(outcomes, { started: 3, needs_account: 2, trial_used: 1 });
+  assert.deepEqual(
+    res.body.trialOutcomes.map((o) => o.outcome),
+    ["started", "needs_account", "trial_used"]
+  );
+  // And the readout warns about the two things a reader would otherwise assume.
+  assert.match(res.body.readMe, /needs_account/);
+  assert.match(res.body.readMe, /add up to more/);
+});
+
 test("the funnel counts a blocked Google script, which no experiment would report", async () => {
   const env = freshEnv();
   const events = [];

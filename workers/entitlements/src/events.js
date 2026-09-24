@@ -1124,6 +1124,43 @@ export const PANEL_STATES = [
 ];
 
 /**
+ * Count distinct browsers per value of one prop of one event.
+ *
+ * `props` is stored as the JSON text it arrived as, so grouping happens on that
+ * text and identical values written in a different key order land in different
+ * rows; summing per parsed value here is what makes the count right. A browser
+ * that sent two different values is counted in each, so these buckets can add
+ * up to more than the browsers that sent the event at all.
+ * @param {Object} env Worker env bindings.
+ * @param {string} name Event name.
+ * @param {string} prop Prop to group by.
+ * @param {number} since Unix seconds.
+ * @returns {Promise<Map<string, number>>} Value to distinct-browser count.
+ */
+async function countByProp(env, name, prop, since) {
+  const res = await env.DB.prepare(
+    `SELECT props, COUNT(DISTINCT cid) AS n
+       FROM events WHERE name = ?1 AND received_at >= ?2
+       GROUP BY props`
+  )
+    .bind(name, since)
+    .all();
+  const out = new Map();
+  for (const row of res.results || []) {
+    let value = null;
+    try {
+      const parsed = JSON.parse(row.props || "{}");
+      value = typeof parsed[prop] === "string" ? parsed[prop] : null;
+    } catch {
+      value = null;
+    }
+    if (!value) continue;
+    out.set(value, (out.get(value) || 0) + (Number(row.n) || 0));
+  }
+  return out;
+}
+
+/**
  * GET /v1/admin/funnel?days=N
  * @param {Object} env Worker env bindings.
  * @param {URL} url Request URL.
@@ -1182,26 +1219,20 @@ export async function handleFunnel(env, url, deps) {
   // The panel's own states, counted per browser. This is the signal no A/B test
   // at any sample size would report: a browser where Google's script will not
   // load is a count here, not a hypothesis.
-  const stateRows = await env.DB.prepare(
-    `SELECT props, COUNT(DISTINCT cid) AS n
-       FROM events WHERE name = 'account_panel_open' AND received_at >= ?1
-       GROUP BY props`
-  )
-    .bind(since)
-    .all();
   const states = {};
   for (const key of PANEL_STATES) states[key] = 0;
-  for (const row of stateRows.results || []) {
-    let state = null;
-    try {
-      state = JSON.parse(row.props || "{}").state || null;
-    } catch {
-      state = null;
-    }
-    if (state && Object.prototype.hasOwnProperty.call(states, state)) {
-      states[state] += Number(row.n) || 0;
-    }
+  for (const [value, n] of await countByProp(env, "account_panel_open", "state", since)) {
+    if (Object.prototype.hasOwnProperty.call(states, value)) states[value] += n;
   }
+
+  // Every branch of both trial buttons ends in a trial_result, so the step's own
+  // rate is ~100% by construction and the whole signal lives in this prop. The
+  // one that matters is "needs_account": the press worked and sent the person to
+  // sign in, which is a leak the step rate cannot show. Open-ended, so it comes
+  // back sorted rather than as a fixed set.
+  const outcomes = [...(await countByProp(env, "trial_result", "outcome", since))]
+    .map(([outcome, browsers]) => ({ outcome, browsers }))
+    .sort((a, b) => b.browsers - a.browsers || a.outcome.localeCompare(b.outcome));
 
   return json(
     {
@@ -1210,9 +1241,14 @@ export async function handleFunnel(env, url, deps) {
       browsers: rows.length,
       steps,
       panelStates: states,
+      trialOutcomes: outcomes,
       readMe:
         "Each rate is one proportion with a 95% Wilson interval, conditional on the step before it. " +
         "This finds a step nobody gets through; it cannot detect an improvement of a few points. " +
+        "trial_result has a rate near 1 by construction, because every branch of both buttons ends " +
+        "in one; read trialOutcomes instead, where needs_account is a press that worked and still " +
+        "started no trial. panelStates and trialOutcomes count browsers per value, so a browser that " +
+        "sent two values is in both buckets and they can add up to more than the step's own count. " +
         "It is not an A/B comparison and must not be read as one."
     },
     200,

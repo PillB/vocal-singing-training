@@ -2831,8 +2831,12 @@
         });
         // The last step of the funnel, and the only one that says the trial was
         // worth giving: somebody who holds one and then actually practises. Once
-        // per browser per trial, marked in storage rather than in memory, because
-        // the interesting case is the session after the one that started it.
+        // per browser, marked in storage rather than in memory so pressing the
+        // trial button and practising straight away counts once, and so does
+        // coming back the next day. The mark is never cleared, so a second trial
+        // does not re-fire it and clearing site data does; both are acceptable
+        // for a step whose question is "did the trial lead to any practice at
+        // all", and neither can inflate the count for one browser.
         const held = headerPlanState().kind;
         if (held === "trialAccount" || held === "trialLocal") {
           try {
@@ -5375,7 +5379,7 @@
    * One reading of what this person holds, for the whole header.
    *
    * The chrome used to read `VTBilling` alone, which knows a licence is valid
-   * but not what bought it. So a 30-day account trial arrived wearing the paid
+   * but not what bought it. So an account trial arrived wearing the paid
    * colour, a gifted month was indistinguishable from a subscription, and the
    * header could say Pro while the account panel on the same screen said
    * "Plan gratis". The account layer knows the difference, so it answers first
@@ -5553,8 +5557,9 @@
       trialBtn.classList.toggle("btn-primary", prelaunch);
       trialBtn.classList.toggle("btn-sm", !prelaunch);
       // Once per load, not once per render: this sits in a path that re-runs on
-      // every entitlement change and every language switch.
-      if (canTrial) trackFunnel("trial_cta_view", { where: "pricing" }, "cta:pricing");
+      // every entitlement change and every language switch. The dialog's own
+      // visibility is the gate — see noteTrialCtaView.
+      noteTrialCtaView("pricing");
       if (canTrial) {
         const days = accounts
           ? Number(acct.methods?.trialDays || 7) // the worker's TRIAL_DAYS, whose default is also 7
@@ -6110,7 +6115,7 @@
       const ent = B.getEntitlement();
       const plan = headerPlanState();
       // This line used to read "Pro activo · pro_monthly": an internal plan id
-      // shown to a reader, and a 30-day free trial described as a monthly
+      // shown to a reader, and a free trial described as a monthly
       // subscription. It now says which kind of access this is, in words, and it
       // reads the same source as the header so the two cannot disagree.
       if (plan.kind === "trialAccount") {
@@ -6278,6 +6283,9 @@
     const opener = document.activeElement;
     renderPricingModal();
     modal.hidden = false;
+    // renderPricingModal() ran while the dialog was still hidden, so the CTA
+    // view is counted here, once it is on screen.
+    noteTrialCtaView("pricing");
     document.body.classList.add("pricing-open");
     window.VTFocusTrap?.activate(modal, { initialFocus: "#pricing-close", returnFocus: opener });
   }
@@ -6350,6 +6358,34 @@
     if (offer.blocked) return "blocked";
     if (offer.offered) return "offered";
     return "no_method";
+  }
+
+  /** Which dialog each trial CTA lives in, and the button that is the CTA. */
+  const TRIAL_CTA = {
+    pricing: { modal: "#pricing-modal", btn: "#btn-start-trial" },
+    panel: { modal: "#account-modal", btn: "#btn-account-trial" }
+  };
+
+  /**
+   * Count a trial offer as seen only when it is genuinely on screen.
+   *
+   * Both CTAs are drawn by functions that run at boot — `updateBillingChrome()`
+   * from `bindBilling()`, `refreshAccountUI()` from `bindAuth()` — while their
+   * dialogs still carry `hidden` from the markup. A bare event in either one
+   * therefore counts a view for every browser that merely loaded the page, and
+   * because `trial_cta_view` sits downstream of signing in
+   * (workers/entitlements/src/events.js FUNNEL_STEPS), that would pin the step
+   * near 100% and make it report nothing. Reading both the dialog's and the
+   * button's own `hidden` means the event and the pixel cannot disagree.
+   * @param {"pricing"|"panel"} where Which surface.
+   */
+  function noteTrialCtaView(where) {
+    const sel = TRIAL_CTA[where];
+    if (!sel) return;
+    const modal = $(sel.modal);
+    const btn = $(sel.btn);
+    if (!modal || modal.hidden || !btn || btn.hidden) return;
+    trackFunnel("trial_cta_view", { where }, `cta:${where}`);
   }
 
   const ACCOUNT_ERROR_KEYS = {
@@ -6665,7 +6701,7 @@
       // for a worker that has not said yet; no label may name a month, because
       // the trial is seven days.
       const trialDays = Number(account && account.methods && account.methods.trialDays);
-      if (!trialBtn.hidden) trackFunnel("trial_cta_view", { where: "panel" }, "cta:panel");
+      noteTrialCtaView("panel");
       if (trialDays > 0) {
         // The generic [data-i18n] applier calls t(key) with no params, so a key
         // holding {n} would render the placeholder literally on a language
@@ -6760,12 +6796,26 @@
     // Opening this panel is the deliberate act that lets us ask the worker what
     // it offers; nothing is asked on page load, so a visitor who only practises
     // never touches it. The answer redraws the panel through onChange.
-    window.VTAccount?.ensureMethods?.();
+    const asking = window.VTAccount?.ensureMethods?.();
     mountGoogleButton();
-    // The state is read before the worker's answer can land, which is the honest
-    // reading: it is what the visitor is looking at as the panel opens.
-    trackFunnel("account_panel_open", { state: accountPanelState() });
+    // What the visitor ends up looking at is the state worth counting, and on
+    // the first open of a page load that is not knowable yet: nothing probes
+    // /v1/auth/methods before this, so accountPanelState() would read "checking"
+    // for nearly every first open and "offered" would barely appear. Waiting on
+    // the same answer the panel waits on is what makes the histogram mean
+    // something. `panel:open` keeps it one reading per load, so the states
+    // cannot outnumber the browsers that opened the panel.
+    const noteOpen = () =>
+      trackFunnel("account_panel_open", { state: accountPanelState() }, "panel:open");
+    Promise.resolve(asking).catch(() => null).then(noteOpen);
+    // A floor, in case that answer never comes: `panel:open` means whichever of
+    // the two lands first is the only one counted, so a worker that hangs leaves
+    // a "checking" record rather than no record at all.
+    setTimeout(noteOpen, 1500);
     modal.hidden = false;
+    // Same reason as the Pro dialog: refreshAccountUI() has already run with the
+    // panel hidden.
+    noteTrialCtaView("panel");
     document.body.classList.add("account-open");
     const signedIn = !!window.VTAuth?.isLoggedIn?.() || !!window.VTAccount?.getState?.().signedIn;
     window.VTFocusTrap?.activate(modal, {
@@ -6952,12 +7002,16 @@
       trackFunnel("trial_click", { where: "panel" });
       const res = await window.VTAccount?.startTrial?.();
       if (res && res.ok) {
-        trackFunnel("trial_result", { outcome: "started", where: "panel" });
+        trackFunnel("trial_result", { outcome: "started", where: "panel", kind: "account" });
         toast(tt("pricing.toast.trialStarted", { n: res.days ?? "" }));
         refreshAccountUI();
         updateBillingChrome();
       } else {
-        trackFunnel("trial_result", { outcome: funnelReason(res && res.reason), where: "panel" });
+        trackFunnel("trial_result", {
+        outcome: funnelReason(res && res.reason),
+        where: "panel",
+        kind: "account"
+      });
         accountErrorFor(res && res.reason);
       }
     });
@@ -7093,6 +7147,17 @@
           return `<li>${esc(tt(`funnel.state${cap}`))}: <strong>${count(n)}</strong></li>`;
         })
         .join("");
+      // Every branch of both trial buttons ends in a trial_result, so the step's
+      // rate says nothing and this list is where the leak shows: "we asked them
+      // to sign in first" is a press that worked and still did not start a trial.
+      const outcomes = (data.trialOutcomes || [])
+        .filter((o) => Number(o.browsers) > 0)
+        .map((o) => {
+          const key = `funnel.outcome.${o.outcome}`;
+          const name = tt(key) === key ? o.outcome : tt(key);
+          return `<li>${esc(name)}: <strong>${count(o.browsers)}</strong></li>`;
+        })
+        .join("");
       box.innerHTML = `
         <p class="muted">${esc(tt("funnel.window", { n: String(data.window?.days ?? ""), browsers: count(data.browsers) }))}</p>
         <div class="ab-table-wrap">
@@ -7108,6 +7173,7 @@
           </table>
         </div>
         ${states ? `<p class="muted">${esc(tt("funnel.states"))}</p><ul class="admin-user-list">${states}</ul>` : ""}
+        ${outcomes ? `<p class="muted">${esc(tt("funnel.outcomes"))}</p><ul class="admin-user-list">${outcomes}</ul>` : ""}
         <p class="muted">${esc(tt("funnel.note"))}</p>
       `;
     }
@@ -7290,7 +7356,7 @@
           // Not a failure: the press worked and sent them to sign in. It is the
           // step where the funnel most plausibly leaks, so it gets its own id
           // rather than being folded into an error.
-          trackFunnel("trial_result", { outcome: "needs_account", where: "pricing" });
+          trackFunnel("trial_result", { outcome: "needs_account", where: "pricing", kind: "account" });
           toast(tt("pricing.trialNeedsAccount"), { durationMs: 4200 });
           closePricing();
           openAccount();
@@ -7298,10 +7364,14 @@
         }
         const res = await window.VTAccount.startTrial();
         if (res && res.ok) {
-          trackFunnel("trial_result", { outcome: "started", where: "pricing" });
+          trackFunnel("trial_result", { outcome: "started", where: "pricing", kind: "account" });
           toast(tt("pricing.toast.trialStarted", { n: String(res.days ?? "") }));
         } else {
-          trackFunnel("trial_result", { outcome: funnelReason(res && res.reason), where: "pricing" });
+          trackFunnel("trial_result", {
+          outcome: funnelReason(res && res.reason),
+          where: "pricing",
+          kind: "account"
+        });
           toast(tt("pricing.toast.trialUsed"), { durationMs: 4200 });
         }
         updateBillingChrome();

@@ -277,7 +277,9 @@
   /**
    * Which sign-in methods the deployment offers. Cached for the page's life.
    * @returns {Promise<{email: boolean, google: boolean, googleClientId: string|null,
-   *                    trialDays: number}>} Methods.
+   *                    trialDays: number}>} Methods. `trialDays` falls back to the
+   *          worker's own default (7) when the answer omits it; see
+   *          workers/entitlements/src/grants.js DEFAULT_TRIAL_DAYS.
    */
   async function getMethods() {
     if (methods) return methods;
@@ -289,13 +291,13 @@
           email: !!res.data.email,
           google: !!res.data.google,
           googleClientId: res.data.googleClientId || null,
-          trialDays: Number(res.data.trialDays) > 0 ? Number(res.data.trialDays) : 30,
+          trialDays: Number(res.data.trialDays) > 0 ? Number(res.data.trialDays) : 7,
           ok: true
         }
         // Unreachable is not an answer. It is cached only so the panel has
         // something terminal to draw, and ensureMethods() throws it away so
         // the next open asks again.
-        : { email: false, google: false, googleClientId: null, trialDays: 30, ok: false };
+        : { email: false, google: false, googleClientId: null, trialDays: 7, ok: false };
       methodsPending = null;
       return methods;
     })();

@@ -487,6 +487,60 @@ test.describe("The account and trial funnel", () => {
     ]).toContain(open[0].props.state);
   });
 
+  test("the trial offer counts as seen only once it is on screen", async ({ page }) => {
+    // Both CTAs are drawn at boot, inside dialogs that are still `hidden`.
+    // Counting a view there would count nearly every browser, and because this
+    // step sits downstream of signing in the rate would pin near 100% forever.
+    const sent = await boot(page, { endpoint: ENDPOINT, human: true });
+    const views = () =>
+      sent.bodies
+        .filter(Boolean)
+        .flatMap((b) => b.events || [])
+        .filter((e) => e.name === "trial_cta_view");
+    await page.evaluate(() => window.VTAnalytics.flush());
+    await expect.poll(() => sent.bodies.length).toBeGreaterThan(0);
+    expect(views(), "nothing was on screen yet").toEqual([]);
+
+    await page.click("#btn-pricing");
+    await expect(page.locator("#pricing-modal")).toBeVisible();
+    await expect(page.locator("#btn-start-trial")).toBeVisible();
+    await page.evaluate(() => window.VTAnalytics.flush());
+    await expect.poll(() => views().length).toBe(1);
+    expect(views()[0].props.where).toBe("pricing");
+
+    // And once per page load, not once per render: closing and reopening the
+    // dialog re-runs updateBillingChrome().
+    await page.click("#pricing-close");
+    await page.click("#btn-pricing");
+    await expect(page.locator("#pricing-modal")).toBeVisible();
+    await page.evaluate(() => window.VTAnalytics.flush());
+    await page.waitForTimeout(200);
+    expect(views(), "one view per load").toHaveLength(1);
+  });
+
+  test("a press that only asks somebody to sign in is its own outcome", async ({ page }) => {
+    // The likeliest leak in the funnel, and invisible in the step rates: every
+    // branch of the button sends a trial_result, so the rate is ~1 and the whole
+    // signal is in this prop.
+    const sent = await boot(page, { endpoint: ENDPOINT, human: true });
+    await page.click("#btn-pricing");
+    await page.click("#btn-start-trial");
+    await page.evaluate(() => window.VTAnalytics.flush());
+    const of = (name) =>
+      sent.bodies
+        .filter(Boolean)
+        .flatMap((b) => b.events || [])
+        .filter((e) => e.name === name);
+    await expect.poll(() => of("trial_result").length).toBeGreaterThan(0);
+    expect(of("trial_click")).toHaveLength(1);
+    expect(of("trial_click")[0].props.where).toBe("pricing");
+    const result = of("trial_result")[0];
+    expect(typeof result.props.outcome).toBe("string");
+    // Whichever branch this deploy takes, it says which layer answered, so a
+    // missing prop never has to be read as a meaning.
+    expect(["account", "local"]).toContain(result.props.kind);
+  });
+
   test("every funnel event the page can emit is a name the worker accepts", async ({ page }) => {
     // The two halves drift silently otherwise: the browser sends a name, the
     // worker drops it, and the funnel has a hole nobody sees.

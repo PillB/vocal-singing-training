@@ -827,6 +827,21 @@
             </form>
           </div>
 
+          <!-- Asking the worker which sign-in methods it offers. Neither the
+               form nor the "not switched on" notice is drawn yet: guessing
+               shows a form that vanishes, or one that can never send. -->
+          <p class="muted" id="account-checking" hidden data-i18n="auth.checking">
+            Comprobando cómo entrar…
+          </p>
+
+          <p class="muted" id="account-signin-blocked" hidden data-i18n="auth.signInBlocked">
+            Este sitio entra con Google, y el navegador no pudo cargarlo. Suele ser una extensión que bloquea scripts, o la red. Tu práctica se guarda en este navegador igual.
+          </p>
+
+          <p class="muted" id="account-offline" hidden data-i18n="auth.signInOffline">
+            No pudimos comprobar el acceso ahora mismo. Cierra y vuelve a abrir este panel para intentarlo otra vez. Tu práctica se guarda en este navegador.
+          </p>
+
           <p class="muted" id="account-unconfigured" hidden data-i18n="auth.unconfigured">
             Las cuentas todavía no están activas en este sitio. Tu práctica se guarda en este navegador.
           </p>
@@ -978,14 +993,14 @@
       </div>
     </div>
 
-    <script src="js/focus-trap.js?v=20260919a"></script>
-    <script src="js/i18n.js?v=20260923e"></script>
+    <script src="js/focus-trap.js?v=20260924b"></script>
+    <script src="js/i18n.js?v=20260924b"></script>
     <script src="js/exercises-data.js?v=20260920a"></script>
     <script src="js/exercises-locale-es.js?v=20260920a"></script>
     <script src="js/practice-profiles.js?v=20260920a"></script>
     <script src="js/storage.js?v=20260923c"></script>
     <script src="js/practice-days.js?v=20260923c"></script>
-    <script src="js/billing-config.js?v=20260922a"></script>
+    <script src="js/billing-config.js?v=20260924a"></script>
     <script src="js/license.js?v=20260921a"></script>
     <script src="js/billing.js?v=20260922a"></script>
     <script src="js/ads-config.js"></script>
@@ -997,7 +1012,7 @@
     <script src="js/reminders.js?v=20260923c"></script>
     <script src="js/auth-users.generated.js"></script>
     <script src="js/auth.js"></script>
-    <script src="js/account.js?v=20260921a"></script>
+    <script src="js/account.js?v=20260924a"></script>
     <script src="js/sync.js?v=20260923c"></script>
     <script src="js/piano.js"></script>
     <script src="js/range-adapter.js"></script>
@@ -1010,6 +1025,6 @@
     <script src="js/session.js?v=20260923c"></script>
     <script src="js/daily-loop.js?v=20260923e"></script>
     <script src="js/tour.js?v=20260923a"></script>
-    <script src="js/app.js?v=20260923e"></script>
+    <script src="js/app.js?v=20260924b"></script>
   </body>
 </html>

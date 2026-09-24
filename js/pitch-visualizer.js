@@ -342,6 +342,20 @@
       } catch {
         /* detached canvas */
       }
+      // Likewise the bottom rail (MIC, controls) covers the canvas's foot on
+      // a rotated phone; overlays that draw near the bottom read this.
+      this.safeBottom = 0;
+      try {
+        const low = this.canvas.closest(".highway-stage")?.querySelector(".hud-bottom-rail");
+        let top = rect.bottom;
+        [...(low?.children || [])].forEach((el) => {
+          const r = el.getBoundingClientRect();
+          if (r.height && r.top < rect.bottom) top = Math.min(top, r.top);
+        });
+        this.safeBottom = Math.max(0, Math.min(h * 0.4, rect.bottom - top));
+      } catch {
+        /* detached canvas */
+      }
     }
 
     /**
@@ -1044,6 +1058,7 @@
         plotRight,
         nowX: plotRight,
         safeTop: this.safeTop || 0,
+        safeBottom: this.safeBottom || 0,
         midiToY: (m) => this._midiToY(m, centerMidi, graphH),
         rangeMinMidi: range ? range.min : lo,
         rangeMaxMidi: range ? range.max : hi,
@@ -1344,6 +1359,7 @@
         nowX,
         laneHalf,
         safeTop: this.safeTop || 0,
+        safeBottom: this.safeBottom || 0,
         midiToY: (m) => this._midiToY(m, centerMidi, graphH),
         xAt,
         history: this.history,

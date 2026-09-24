@@ -657,17 +657,6 @@
       ctx.fillStyle = "rgba(143, 211, 255, 0.045)";
       ctx.fillRect(nowX, y, x + w - nowX, h - floorH - 1);
     }
-    if (!small) {
-      ctx.font = font(9, 700);
-      ctx.fillStyle = C.faint;
-      ctx.textAlign = "left";
-      ctx.textBaseline = "top";
-      ctx.fillText(L("agudo", "higher"), x + 4, plotTop);
-      ctx.textBaseline = "bottom";
-      ctx.fillText(L("grave", "lower"), x + 4, plotBot);
-      ctx.textBaseline = "middle";
-      ctx.fillText(L("sin tono", "no pitch"), x + 4, floorY);
-    }
 
     // The piano's notes: past dim, the current one bright, the next ones ahead
     (o.targets || []).forEach((g) => {
@@ -829,6 +818,24 @@
         runStart = k;
         prevTag = tag;
       }
+    }
+
+    // The axis words, over whatever runs past them
+    if (!small) {
+      ctx.font = font(9, 700);
+      ctx.textAlign = "left";
+      const tag = (text, ty, base) => {
+        ctx.textBaseline = base;
+        const tw = ctx.measureText(text).width;
+        const by = base === "top" ? ty : base === "bottom" ? ty - 10 : ty - 5;
+        ctx.fillStyle = "rgba(11, 17, 25, 0.72)";
+        ctx.fillRect(x + 2, by - 1, tw + 4, 12);
+        ctx.fillStyle = C.faint;
+        ctx.fillText(text, x + 4, ty);
+      };
+      tag(L("agudo", "higher"), plotTop, "top");
+      tag(L("grave", "lower"), plotBot, "bottom");
+      tag(L("sin tono", "no pitch"), floorY, "middle");
     }
 
     // Where the trill stopped while you kept sounding: a notch, and words

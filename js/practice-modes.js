@@ -1531,6 +1531,14 @@
     _kit() {
       return global.VTViz?.scenes?.breathKit || null;
     },
+    /** The live picture redraws about 30 times a second: smooth to read, half the paint work. */
+    _paceDraw(dt, now) {
+      this._drawAcc = (this._drawAcc || 0) + dt;
+      if (now || this._drawAcc >= 0.03) {
+        this._drawAcc = 0;
+        this.viz?.draw();
+      }
+    },
     /** Seconds of the asked-for sound (trill, or tone in the straw) in the flow step. */
     _flowSec() {
       const st = this.state;
@@ -1702,7 +1710,7 @@
         if (run.textContent !== txt) run.textContent = txt;
       }
       if (before !== tr.tag) this._say(false);
-      this.viz?.draw();
+      this._paceDraw(dt, before !== tr.tag);
     },
     onStop() {
       const st = this.state;
@@ -1978,6 +1986,13 @@
       st.bestA = 0;
       st.cur = 0;
       st.inhale = 0;
+      // The reference note Start plays reaches the mic through speakers (the
+      // app asks for no echo cancellation) and would read as a sung /A/: the
+      // /A/ lane stays shut while it rings. The S lane is unaffected (a piano
+      // note has a kept pitch and no hiss).
+      const auto = document.getElementById("chk-auto-piano");
+      const ring = Number(document.getElementById("sustain-sec")?.value) || 4;
+      st.refBlank = auto && auto.checked === false ? 0 : Math.min(8, ring) + 0.4;
       this.viz?.draw();
     },
     onFrame(frame) {
@@ -1988,8 +2003,9 @@
       st.assisted = a.assisted;
       // S: air with no kept pitch, or Space. /A/: a kept pitch with little hiss.
       const hadA = !!st.aTrack.hold;
+      if (st.refBlank > 0) st.refBlank -= a.dt;
       st.sTrack.feed(a.dt, a.air && !a.voiced, a.assisted, a.db);
-      const v = st.aTrack.feed(a.dt, a.voiced && !a.assisted, false, a.db);
+      const v = st.aTrack.feed(a.dt, a.voiced && !a.assisted && !(st.refBlank > 0), false, a.db);
       // A sung onset is air for a moment before its pitch is caught: when the
       // /A/ starts, a short "S" just before it was that onset, not an S
       if (!hadA && st.aTrack.hold && st.sTrack.hold && !a.assisted) {
@@ -2011,7 +2027,15 @@
       set("[data-s]", st.bestS.toFixed(1));
       set("[data-a]", st.bestA.toFixed(1));
       this.$("[data-h]")?.classList.toggle("is-air", !!st.sTrack.hold);
-      this.viz?.draw();
+      this._paceDraw(a.dt);
+    },
+    /** The live picture redraws about 30 times a second: smooth to read, half the paint work. */
+    _paceDraw(dt) {
+      this._drawAcc = (this._drawAcc || 0) + dt;
+      if (this._drawAcc >= 0.03) {
+        this._drawAcc = 0;
+        this.viz?.draw();
+      }
     },
     onStop() {
       const st = this.state;
@@ -2163,7 +2187,15 @@
       st.best = tr.best;
       this._paintWords();
       this.$("[data-h]")?.classList.toggle("is-air", !!h);
-      this.viz?.draw();
+      this._paceDraw(a.dt);
+    },
+    /** The live picture redraws about 30 times a second: smooth to read, half the paint work. */
+    _paceDraw(dt) {
+      this._drawAcc = (this._drawAcc || 0) + dt;
+      if (this._drawAcc >= 0.03) {
+        this._drawAcc = 0;
+        this.viz?.draw();
+      }
     },
     _paintWords() {
       const st = this.state;
@@ -3543,7 +3575,12 @@
         const txt = this._evText();
         if (ev.textContent !== txt) ev.textContent = txt;
       }
-      this.viz?.draw();
+      // The map of stones changes slowly: about ten redraws a second
+      this._drawAcc = (this._drawAcc || 0) + (frame.dtMs || 16) / 1000;
+      if (this._drawAcc >= 0.1) {
+        this._drawAcc = 0;
+        this.viz?.draw();
+      }
     },
     /** The pitch gate that walks the scale (see the note above the mode). */
     _frameGate(frame) {

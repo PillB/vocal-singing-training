@@ -1476,66 +1476,283 @@
     }
   });
 
+  /**
+   * s4 lip trills / s6 straw — a continuity ribbon (js/scenes/breath.js).
+   * The microphone can tell whether the lips are still flapping (a 20–30 Hz
+   * flutter in the envelope), whether there is a tone or only air, and the
+   * pitch. It cannot tell ease or support, so those stay the learner's own
+   * ratings: only the measured minutes are filled in on Stop.
+   */
   Modes.sovtFlow = baseMode({
     id: "sovtFlow",
     render() {
-      this.state.samples = [];
       const straw = this.profile.variant === "straw";
+      this.state.straw = straw;
+      this.state.step = "flow";
+      this.state.transfer = false;
+      this.state.review = false;
+      this.state.targets = [];
+      this.state.ahead = [];
+      this.state.flowPrev = 0;
+      this.state.onMark = 0;
+      this.state.match = { sec: 0, diff: null, ok: false };
+      this.state.refMidi = null;
       this.hud.innerHTML = `
-        <div class="mode-title">${straw ? L("Fonación con pajita · SOVT", "Straw phonation · SOVT") : L("Trinos de labios · SOVT", "Lip trills · SOVT")}</div>
-        <div class="mode-bar thick"><span data-bar style="width:0%"></span></div>
-        <p class="mode-meta">${L("Uniformidad: <strong data-ev>—</strong>", "Evenness: <strong data-ev>—</strong>")}</p>
+        <div class="viz-row viz-head">
+          <div class="mode-title">${straw ? L("Fonación con pajita · SOVT", "Straw phonation · SOVT") : L("Trinos de labios · SOVT", "Lip trills · SOVT")}</div>
+          <button type="button" class="btn btn-ghost viz-tap" data-xfer aria-pressed="false">${this._xferLabel()}</button>
+        </div>
+        <div class="viz-words">
+          <span data-status>${straw ? L("Canta suave por la pajita", "Sing softly into the straw") : L("Empieza con un brrr sin voz", "Start with a brrr, no voice")}</span>
+          <strong data-run>0.0</strong>
+          <span data-ev>—</span>
+          <span>${L("Paso a vocal marcado:", "Transfer marked:")} <span data-x>no</span></span>
+        </div>
         <p class="mode-meta muted">${
           straw
             ? L(
-                "El aire solo por la pajita; mejillas sueltas. Después, lleva la misma facilidad a /u/ y luego a /A/.",
-                "Air only through straw; cheeks soft. Transfer to /u/ then /A/ after."
+                "El aire solo por la pajita; mejillas sueltas. Después, sin pajita: la misma nota en /u/ y luego en /A/.",
+                "Air only through the straw; cheeks soft. Then, without it: the same note on /u/, then /A/."
               )
             : L(
-                "Burbujas parejas, mandíbula suelta. Después, lleva la misma facilidad a una /A/ abierta.",
-                "Steady bubbles — jaw free. Transfer same ease to open /A/ after."
+                "Burbujas parejas, mandíbula suelta. Si los labios se paran, más aire y menos presión. Al final, la misma nota en /A/.",
+                "Even bubbles, loose jaw. If the lips stop, more air and less pressing. Last, the same note on /A/."
               )
         }</p>
-        <button type="button" class="btn btn-sm" data-xfer>${L("Marcar paso a vocal abierta ✓", "Mark transfer to open vowel ✓")}</button>
-        <p class="mode-meta">${L("Transferencia marcada: <strong data-x>no</strong>", "Transfer marked: <strong data-x>no</strong>")}</p>
       `;
-      this.$("[data-xfer]")?.addEventListener("click", () => {
-        this.state.transfer = true;
-        if (this.$("[data-x]")) this.$("[data-x]").textContent = L("sí", "yes");
+      this.$("[data-xfer]")?.addEventListener("click", () => this._toggleStep());
+      this._mountViz();
+    },
+    _xferLabel() {
+      const straw = this.state.straw;
+      if (this.state.step === "vowel") return straw ? L("← Otra vez con pajita", "← Back to the straw") : L("← Otra vez en trino", "← Back to the trill");
+      return straw ? L("Sin pajita: /u/ → /A/", "No straw: /u/ → /A/") : L("Paso a /A/ →", "On to /A/ →");
+    },
+    _kit() {
+      return global.VTViz?.scenes?.breathKit || null;
+    },
+    /** Seconds of the asked-for sound (trill, or tone in the straw) in the flow step. */
+    _flowSec() {
+      const st = this.state;
+      const on = st.step === "flow" && st.track ? st.track.onSec - st.onMark : 0;
+      return st.flowPrev + Math.max(0, on);
+    },
+    _flowTags() {
+      const T = this._kit().T;
+      return this.state.straw ? [T.TONE, T.TRILL] : [T.TRILL, T.AIRTRILL];
+    },
+    _mountViz() {
+      const V = global.VTViz;
+      const K = this._kit();
+      if (!V || !K || !V.scenes.sovt) return;
+      this.hud.classList.add("has-viz");
+      this.state.track = new K.TrillTrack({ onTags: this._flowTags() });
+      this.viz = new V.Surface(this.hud, (ctx, w, h) => V.scenes.sovt(ctx, w, h, this._model()), {
+        label: this.state.straw
+          ? L(
+              "Cinta de la pajita: una barra lisa mientras suena un tono, puntos en el suelo cuando solo pasa aire, nada en silencio. Arriba y abajo es la altura; la línea verde es la nota del piano.",
+              "Straw ribbon: a smooth bar while a tone sounds, dots along the floor when only air goes through, nothing in silence. Up and down is pitch; the green line is the piano's note."
+            )
+          : L(
+              "Cinta del trino: zigzag mientras los labios burbujean, una línea plana gris si el burbujeo se para y el sonido sigue, nada en silencio. Arriba y abajo es la altura; las líneas verdes son las notas del piano, las siguientes a la derecha.",
+              "Trill ribbon: a zig-zag while the lips bubble, a flat grey line if the bubbling stops while the sound goes on, nothing in silence. Up and down is pitch; the green lines are the piano's notes, the next ones to the right."
+            ),
+        captionHidden: true
       });
+      this.viz.draw();
+    },
+    _model() {
+      const st = this.state;
+      const targets = st.targets.map((g) => (g.t1 == null && st.ahead.length ? Object.assign({}, g, { t1: st.curEnd }) : g));
+      return {
+        track: st.track,
+        straw: st.straw,
+        step: st.step,
+        review: st.review,
+        targets: st.review ? targets : targets.concat(st.ahead),
+        refMidi: st.refMidi,
+        match: st.match
+      };
+    },
+    _toggleStep() {
+      const st = this.state;
+      const K = this._kit();
+      if (st.step === "flow") {
+        st.flowPrev = this._flowSec();
+        st.step = "vowel";
+        st.transfer = true;
+        st.refMidi = st.track ? st.track.lastRunMidi() : null;
+        if (st.track && K) st.track.setOnTags([K.T.TONE]);
+      } else {
+        st.step = "flow";
+        if (st.track && K) st.track.setOnTags(this._flowTags());
+        st.onMark = st.track ? st.track.onSec : 0;
+      }
+      st.match = { sec: st.match.sec, diff: null, ok: false };
+      const b = this.$("[data-xfer]");
+      if (b) {
+        b.textContent = this._xferLabel();
+        b.setAttribute("aria-pressed", String(st.step === "vowel"));
+      }
+      if (this.$("[data-x]")) this.$("[data-x]").textContent = st.transfer ? L("sí", "yes") : "no";
+      this._say(true);
+      this.viz?.draw();
+    },
+    /** The piano's note in "1 nota" mode, with the next two from the progression. */
+    _pianoNote(note, ei, prog) {
+      const st = this.state;
+      const K = this._kit();
+      const P = global.VTPiano;
+      if (!this.hud || !this.hud.isConnected || !st.track || !K) {
+        if (P && P.onNoteChange === this._onNote) P.onNoteChange = null;
+        return;
+      }
+      const tr = st.track;
+      const midi = K.hzToMidi(global.VT_NOTE_FREQ?.[note]);
+      if (midi == null) return;
+      st.gotNoteHook = true;
+      const list = st.targets;
+      const last = list[list.length - 1];
+      if (last && last.t1 == null) {
+        last.t1 = tr.t;
+        st.noteSec = clamp(tr.t - last.t0, 1, 8);
+      }
+      list.push({ t0: tr.t, t1: null, midi, name: K.noteName(midi) });
+      if (list.length > 200) list.shift();
+      const events = [];
+      (prog?.chords || []).forEach((ch) => (ch.notes || []).forEach((n) => events.push(n)));
+      const sec = st.noteSec || Number(document.getElementById("sustain-sec")?.value) || 4;
+      st.curEnd = tr.t + sec;
+      st.ahead = [];
+      for (let k = 1; k <= 2 && events.length > 1; k++) {
+        const fm = K.hzToMidi(global.VT_NOTE_FREQ?.[events[(ei + k) % events.length]]);
+        if (fm != null) st.ahead.push({ t0: tr.t + k * sec, t1: tr.t + (k + 1) * sec, midi: fm, name: K.noteName(fm) });
+      }
+    },
+    /** Without the note hook (chord mode, a single reference): follow the target. */
+    _targetFallback(frame) {
+      const st = this.state;
+      const K = this._kit();
+      const f = frame.targetFreq || 0;
+      if (st.gotNoteHook || !(f >= 80) || Math.abs(f - (st.lastTgt || 0)) < 0.5) return;
+      st.lastTgt = f;
+      const midi = K.hzToMidi(f);
+      const list = st.targets;
+      const last = list[list.length - 1];
+      if (last && last.t1 == null) last.t1 = st.track.t;
+      list.push({ t0: st.track.t, t1: null, midi, name: K.noteName(midi) });
+      if (list.length > 200) list.shift();
+    },
+    _say(now) {
+      const K = this._kit();
+      const st = this.state;
+      if (!K || !st.track) return;
+      const w = K.sovtWords(this._model());
+      if (this.$("[data-status]")) this.$("[data-status]").textContent = w.head;
+      if (this.$("[data-ev]")) this.$("[data-ev]").textContent = w.head;
+      this.viz?.caption?.(w.head, now ? 0 : 2500);
+    },
+    onStart() {
+      const st = this.state;
+      st.review = false;
+      this.hud?.classList.remove("is-replay");
+      st.track?.reset();
+      if (st.track) st.track.setOnTags(st.step === "vowel" ? [this._kit().T.TONE] : this._flowTags());
+      st.targets = [];
+      st.ahead = [];
+      st.flowPrev = 0;
+      st.onMark = 0;
+      st.gotNoteHook = false;
+      st.lastTgt = 0;
+      st.match = { sec: 0, diff: null, ok: false };
+      const P = global.VTPiano;
+      if (P && st.track) {
+        this._onNote = (note, chord, ei, prog) => this._pianoNote(note, ei, prog);
+        P.onNoteChange = this._onNote;
+      }
+      this.viz?.draw();
     },
     onFrame(frame) {
-      const rms = frame.rms || 0;
-      if (rms > 0.01) {
-        this.state.samples.push(rms);
-        if (this.state.samples.length > 120) this.state.samples.shift();
+      const st = this.state;
+      const tr = st.track;
+      const K = this._kit();
+      if (!tr || !K || st.review) return;
+      const T = K.T;
+      const before = tr.tag;
+      tr.feed(frame);
+      this._targetFallback(frame);
+      const dt = global.VTFeatures.frameDt(frame);
+      if (st.step === "vowel" && st.refMidi != null && tr.tag === T.TONE && tr.smoothMidi != null) {
+        let d = tr.smoothMidi - st.refMidi;
+        d -= 12 * Math.round(d / 12);
+        // The detector reads a lip trill 30–60 cents sharp and an open vowel
+        // true, so the /A/ may sit a little under the trill's reading
+        const lo = st.straw ? -0.6 : -1.1;
+        const hi = st.straw ? 0.6 : 0.7;
+        st.match.diff = d;
+        st.match.ok = d >= lo && d <= hi;
+        if (st.match.ok) st.match.sec += dt;
+      } else if (tr.tag !== T.TONE) {
+        st.match.diff = null;
+        st.match.ok = false;
       }
-      const arr = this.state.samples;
-      if (arr.length > 10) {
-        const mean = arr.reduce((a, b) => a + b, 0) / arr.length;
-        const v = arr.reduce((a, b) => a + (b - mean) ** 2, 0) / arr.length;
-        const steady = clamp(1 - Math.sqrt(v) * 8, 0, 1);
-        if (this.$("[data-bar]")) this.$("[data-bar]").style.width = `${steady * 100}%`;
-        if (this.$("[data-ev]"))
-          this.$("[data-ev]").textContent =
-            steady > 0.7 ? L("pareja", "steady") : steady > 0.4 ? L("ok", "ok") : L("irregular", "uneven");
-        this.state.steadyScore = steady;
+      const run = this.$("[data-run]");
+      if (run) {
+        const txt = tr.runLen.toFixed(1);
+        if (run.textContent !== txt) run.textContent = txt;
       }
+      if (before !== tr.tag) this._say(false);
+      this.viz?.draw();
     },
     onStop() {
-      const s = this.state.steadyScore || 0;
+      const st = this.state;
+      const P = global.VTPiano;
+      if (P && this._onNote && P.onNoteChange === this._onNote) P.onNoteChange = null;
+      const tr = st.track;
+      const V = global.VTViz;
+      if (!tr || !V) return { patches: {}, summary: "" };
+      const last = st.targets[st.targets.length - 1];
+      if (last && last.t1 == null) last.t1 = tr.t;
+      st.review = true;
+      this.hud?.classList.add("is-replay");
+      this._say(true);
+      this.viz?.draw();
+      const K = this._kit();
       const patches = {};
-      if (s > 0.2) {
-        const scale = s > 0.75 ? 5 : s > 0.55 ? 4 : 3;
-        patches.ease = scale;
-        patches.steadiness = scale;
+      // Measured minutes of the asked-for sound (the flutter, or the tone
+      // through the straw). Ease, steadiness and the transfer stay the
+      // learner's own ratings.
+      const flowSec = this._flowSec();
+      if (flowSec >= 30) patches[st.straw ? "minutes" : "duration"] = Math.max(1, Math.round(flowSec / 60));
+      if (!tr.heard) {
+        return {
+          patches,
+          summary: st.straw
+            ? L("Sin sonido todavía — canta suave por la pajita", "No sound yet — sing softly into the straw")
+            : L("Sin sonido todavía — empieza con un brrr sin voz", "No sound yet — start with a brrr, no voice")
+        };
       }
-      if (this.state.transfer) patches.transfer = 4;
+      const best = V.fmtSec(tr.best, 1);
+      const clock = K.fmtClock(flowSec);
+      const same = st.match.sec >= 1.5 ? L(" · /A/ en la misma nota ✓", " · /A/ on the same note ✓") : "";
+      if (st.straw) {
+        const air = tr.sec[K.T.AIR];
+        return {
+          patches,
+          summary:
+            L(`Tono por la pajita ${clock} · mejor ${best}`, `Tone through the straw ${clock} · best ${best}`) +
+            (air >= 1 ? L(` · solo aire ${V.fmtSec(air, 0)}`, ` · air only ${V.fmtSec(air, 0)}`) : "") +
+            same
+        };
+      }
+      const n = tr.stalls.length;
       return {
         patches,
-        summary: this.state.transfer
-          ? L("SOVT con paso a vocal marcado", "SOVT + transfer marked")
-          : L("SOVT (la próxima vez marca el paso a vocal)", "SOVT flow (mark transfer next time)")
+        summary:
+          L(
+            `Burbujeo ${clock} · mejor racha ${best} · ${n} ${n === 1 ? "parada" : "paradas"}`,
+            `Bubbling ${clock} · best run ${best} · ${n} ${n === 1 ? "stop" : "stops"}`
+          ) + same
       };
     }
   });

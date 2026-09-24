@@ -1060,3 +1060,93 @@ test("a result stays too early, with counts and no comparison, until the plan is
   assert.deepEqual(again.metrics, ready.metrics);
   assert.deepEqual(again.horizon.cohortEnd, ready.horizon.cohortEnd);
 });
+
+test("the funnel readout gives one conditional proportion per step, never a comparison", async () => {
+  const env = freshEnv();
+  // Ten browsers open the site. Five open the account panel. Two of those start
+  // a sign-in and both succeed. One sees the trial offer and presses it.
+  const events = [];
+  for (let i = 0; i < 10; i++) events.push(ev("app_open", cid(i, "f")));
+  for (let i = 0; i < 5; i++) events.push(ev("account_panel_open", cid(i, "f"), { state: "offered" }));
+  for (let i = 0; i < 2; i++) {
+    events.push(ev("signin_start", cid(i, "f"), { method: "google" }));
+    events.push(ev("signin_success", cid(i, "f"), { method: "google" }));
+  }
+  events.push(ev("trial_cta_view", cid(0, "f"), { where: "panel" }));
+  events.push(ev("trial_click", cid(0, "f"), { where: "panel" }));
+  events.push(ev("trial_result", cid(0, "f"), { outcome: "started", where: "panel" }));
+  await sendAll(env, events, NOW);
+
+  const admin = await signIn(env, "admin@example.test", NOW);
+  const res = await call(adminGet("/v1/admin/funnel", admin), env, { now: NOW });
+  assert.equal(res.status, 200, JSON.stringify(res.body));
+  const byStep = Object.fromEntries(res.body.steps.map((s) => [s.step, s]));
+
+  assert.equal(res.body.browsers, 10);
+  // The first step is the denominator and carries no rate: there is nothing
+  // before it to be conditional on.
+  assert.equal(byStep.app_open.browsers, 10);
+  assert.equal(byStep.app_open.rate, null);
+  // Conditional on the step before it, which is the whole point: 5 of the 10 who
+  // opened the site, then 2 of those 5, not 2 of 10.
+  assert.equal(byStep.account_panel_open.browsers, 5);
+  assert.equal(byStep.account_panel_open.of, 10);
+  assert.equal(byStep.account_panel_open.rate, 0.5);
+  assert.equal(byStep.signin_start.browsers, 2);
+  assert.equal(byStep.signin_start.of, 5);
+  assert.equal(byStep.signin_success.of, 2);
+  assert.equal(byStep.signin_success.rate, 1);
+  // A rate of 1 still carries a bound below 1: two of two is not proof.
+  assert.ok(byStep.signin_success.lo < 1 && byStep.signin_success.lo > 0.2);
+  assert.equal(byStep.signin_success.hi, 1);
+  // A step nobody reached reports zero of its denominator, not a null.
+  assert.equal(byStep.trial_first_practice.browsers, 0);
+  assert.equal(byStep.trial_first_practice.rate, 0);
+  assert.ok(byStep.trial_first_practice.hi > 0);
+  // The panel's own states are counted per browser, with the zeros visible.
+  assert.equal(res.body.panelStates.offered, 5);
+  assert.equal(res.body.panelStates.blocked, 0);
+  // And the readout says what it is, so nobody reads it as an A/B result.
+  assert.match(res.body.readMe, /not an A\/B comparison/);
+});
+
+test("the funnel counts a blocked Google script, which no experiment would report", async () => {
+  const env = freshEnv();
+  const events = [];
+  for (let i = 0; i < 6; i++) {
+    events.push(ev("app_open", cid(i, "g")));
+    events.push(ev("account_panel_open", cid(i, "g"), { state: i < 4 ? "blocked" : "offered" }));
+  }
+  await sendAll(env, events, NOW);
+  const admin = await signIn(env, "admin@example.test", NOW);
+  const res = await call(adminGet("/v1/admin/funnel?days=7", admin), env, { now: NOW });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.window.days, 7);
+  assert.equal(res.body.panelStates.blocked, 4);
+  assert.equal(res.body.panelStates.offered, 2);
+});
+
+test("the funnel window excludes older events, and it is admin-only", async () => {
+  const env = freshEnv();
+  await sendAll(env, [ev("app_open", cid(1, "h"))], NOW - 30 * DAY);
+  await sendAll(env, [ev("app_open", cid(2, "h")), ev("account_panel_open", cid(2, "h"), { state: "offered" })], NOW);
+
+  const anon = await call(adminGet("/v1/admin/funnel"), env, { now: NOW });
+  assert.equal(anon.status, 401);
+  const member = await signIn(env, "someone@example.test", NOW);
+  const forbidden = await call(adminGet("/v1/admin/funnel", member), env, { now: NOW });
+  assert.equal(forbidden.status, 403);
+
+  const admin = await signIn(env, "admin@example.test", NOW);
+  const res = await call(adminGet("/v1/admin/funnel?days=7", admin), env, { now: NOW });
+  assert.equal(res.status, 200);
+  // The 30-day-old browser is outside a 7-day window.
+  assert.equal(res.body.browsers, 1);
+  const wide = await call(adminGet("/v1/admin/funnel?days=90", admin), env, { now: NOW });
+  assert.equal(wide.body.browsers, 2);
+  // A nonsense or oversized window falls back to the default rather than erroring.
+  const junk = await call(adminGet("/v1/admin/funnel?days=nonsense", admin), env, { now: NOW });
+  assert.equal(junk.body.window.days, 28);
+  const huge = await call(adminGet("/v1/admin/funnel?days=100000", admin), env, { now: NOW });
+  assert.equal(huge.body.window.days, 180);
+});

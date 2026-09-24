@@ -25,13 +25,26 @@
   "use strict";
 
   /**
-   * Where anonymous events are sent, e.g.
-   * "https://vocal-studio-entitlements.<you>.workers.dev/v1/events".
-   * Empty sends nothing. Visitors with Global Privacy Control, Do Not Track or
-   * the guide's opt-out never send, whatever this says.
+   * Where anonymous events are sent. Derived from the worker URL the billing
+   * config already holds (js/billing-config.js loads first), so the worker's
+   * address lives in exactly one place and cannot drift between the two files.
+   * Set `window.VT_ANALYTICS_ENDPOINT` before this script to override, which is
+   * what the tests do.
+   *
+   * Switched on 2026-09-24. Before that it was "" and nothing was ever sent, so
+   * the sign-in and trial funnel could not be read at any traffic. What goes out
+   * is the event name, flat id props, the random browser id, the local day and
+   * the time zone; privacy.html and guide.html list exactly that, and
+   * tests/ab-events.spec.js holds the page to the list. Automated browsers, and
+   * anyone who has switched sending off in the guide, still send nothing.
    */
   if (typeof global.VT_ANALYTICS_ENDPOINT !== "string") {
-    global.VT_ANALYTICS_ENDPOINT = "";
+    const base = String(
+      (global.VT_BILLING_CONFIG && global.VT_BILLING_CONFIG.verification
+        ? global.VT_BILLING_CONFIG.verification.apiBaseUrl
+        : "") || ""
+    ).trim().replace(/\/+$/, "");
+    global.VT_ANALYTICS_ENDPOINT = /^https:\/\//.test(base) ? `${base}/v1/events` : "";
   }
 
   global.VT_EXPERIMENTS = {

@@ -76,6 +76,7 @@ routes above are untouched):
 | POST | `/v1/me/trial` | Starts the one free trial. `409 {reason:"trial_used"}` the second time. |
 | POST | `/v1/me/redeem` | `{code}` — redeems a gift code. |
 | GET/PUT/DELETE | `/v1/me/progress` | Saved progress for one profile. `PUT` takes `{profileId, doc, baseRev}` and answers `409` with the server's copy when the revision moved. |
+| GET | `/v1/admin/funnel?days=N` | The account and trial funnel, one proportion per step with a Wilson interval, conditional on the step before it. Not an A/B comparison — it finds a step nobody gets through, and cannot detect a few points of improvement. |
 | POST/GET | `/v1/admin/gift-codes` | Mint or list gift codes. |
 | POST | `/v1/admin/gift-codes/revoke` | Stop a code being redeemed again. |
 | POST/GET | `/v1/admin/grants` | Gift months straight to an email, or list an account's grants. |

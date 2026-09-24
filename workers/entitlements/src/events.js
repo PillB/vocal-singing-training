@@ -73,6 +73,7 @@ export const FORGET_RATE_LIMIT = [30, 3600];
  * Keep in step with the `track(...)` calls in js/.
  */
 export const EVENT_NAMES = new Set([
+  "account_panel_open",
   "ad_click",
   "ad_dismiss",
   "ad_impression",
@@ -106,6 +107,9 @@ export const EVENT_NAMES = new Set([
   "reminder_enable",
   "rest_used",
   "session_save",
+  "signin_fail",
+  "signin_start",
+  "signin_success",
   "step_done_choice",
   "step_done_shown",
   "surprise_shown",
@@ -116,7 +120,16 @@ export const EVENT_NAMES = new Set([
   "tour_invite_dismiss",
   "tour_skip",
   "tour_start",
-  "tour_step"
+  "tour_step",
+  // The account, sign-in and trial funnel, added 2026-09-24. None of these is an
+  // arm event for any preset below: they fire from the same code in js/app.js in
+  // every arm, which is what a metric has to be. account_panel_open carries
+  // accountSignIn()'s own state, which is the one signal no A/B test would give —
+  // a browser where Google's script will not load is a count, not a hypothesis.
+  "trial_click",
+  "trial_cta_view",
+  "trial_first_practice",
+  "trial_result"
 ]);
 
 /**
@@ -1074,6 +1087,140 @@ export async function ingestSummary(db, at) {
 }
 
 /**
+ * The account and trial funnel, as one proportion per step.
+ *
+ * Deliberately NOT an A/B comparison. At this site's traffic a between-arm
+ * comparison on a 2% funnel needs about 21,000 browsers per arm to detect a 20%
+ * relative lift; a single proportion with a Wilson bound finds a BROKEN step
+ * with about thirty visitors. Nought of twenty people passing a step bounds its
+ * true rate below 16%; twenty of twenty bounds it above 84%. What this readout
+ * cannot do is detect an improvement of a few points, and it says so in
+ * `readMe` rather than letting a reader assume otherwise.
+ *
+ * Each step's denominator is the browsers that reached the PREVIOUS step, so the
+ * rate is conditional and the chain multiplies out. One row per browser comes
+ * back from D1, which at this traffic is hundreds of rows, not millions.
+ */
+export const FUNNEL_STEPS = [
+  { key: "app_open", label: "opened the site" },
+  { key: "account_panel_open", label: "opened the account panel" },
+  { key: "signin_start", label: "started signing in" },
+  { key: "signin_success", label: "signed in" },
+  { key: "trial_cta_view", label: "saw the trial offer" },
+  { key: "trial_click", label: "pressed it" },
+  { key: "trial_result", label: "got an answer" },
+  { key: "trial_first_practice", label: "practised on the trial" }
+];
+
+/** The states account_panel_open reports, so a zero is visible as a zero. */
+export const PANEL_STATES = [
+  "signed_in",
+  "not_configured",
+  "checking",
+  "unreachable",
+  "blocked",
+  "offered",
+  "no_method"
+];
+
+/**
+ * GET /v1/admin/funnel?days=N
+ * @param {Object} env Worker env bindings.
+ * @param {URL} url Request URL.
+ * @param {Object} deps Injectables.
+ * @returns {Promise<Response>} Response.
+ */
+export async function handleFunnel(env, url, deps) {
+  const { json, cors } = deps;
+  const raw = Number.parseInt(url.searchParams.get("days") || "", 10);
+  const days = Number.isFinite(raw) && raw > 0 ? Math.min(raw, 180) : 28;
+  const since = nowSec(deps.now) - days * 86400;
+
+  // One row per browser, with a flag per step. MAX(name = ?) is SQLite's idiom
+  // for "any row matched", and it keeps this to a single pass over the window.
+  const flags = FUNNEL_STEPS.map((step, i) => `MAX(name = '${step.key}') AS s${i}`).join(",\n         ");
+  const result = await env.DB.prepare(
+    `SELECT cid,
+         ${flags}
+       FROM events WHERE received_at >= ?1 GROUP BY cid`
+  )
+    .bind(since)
+    .all();
+  const rows = result.results || [];
+
+  const steps = [];
+  for (let i = 0; i < FUNNEL_STEPS.length; i++) {
+    const reached = rows.filter((r) => Number(r[`s${i}`]) === 1).length;
+    if (i === 0) {
+      steps.push({
+        step: FUNNEL_STEPS[i].key,
+        label: FUNNEL_STEPS[i].label,
+        browsers: reached,
+        of: null,
+        rate: null,
+        lo: null,
+        hi: null
+      });
+      continue;
+    }
+    // Conditional on the previous step, which is what makes the chain honest: a
+    // step cannot look good merely because few people reached the one before it.
+    const prior = rows.filter((r) => Number(r[`s${i - 1}`]) === 1);
+    const both = prior.filter((r) => Number(r[`s${i}`]) === 1).length;
+    const w = wilson(both, prior.length);
+    steps.push({
+      step: FUNNEL_STEPS[i].key,
+      label: FUNNEL_STEPS[i].label,
+      browsers: both,
+      of: prior.length,
+      rate: w.rate,
+      lo: w.lo,
+      hi: w.hi
+    });
+  }
+
+  // The panel's own states, counted per browser. This is the signal no A/B test
+  // at any sample size would report: a browser where Google's script will not
+  // load is a count here, not a hypothesis.
+  const stateRows = await env.DB.prepare(
+    `SELECT props, COUNT(DISTINCT cid) AS n
+       FROM events WHERE name = 'account_panel_open' AND received_at >= ?1
+       GROUP BY props`
+  )
+    .bind(since)
+    .all();
+  const states = {};
+  for (const key of PANEL_STATES) states[key] = 0;
+  for (const row of stateRows.results || []) {
+    let state = null;
+    try {
+      state = JSON.parse(row.props || "{}").state || null;
+    } catch {
+      state = null;
+    }
+    if (state && Object.prototype.hasOwnProperty.call(states, state)) {
+      states[state] += Number(row.n) || 0;
+    }
+  }
+
+  return json(
+    {
+      ok: true,
+      window: { days, since },
+      browsers: rows.length,
+      steps,
+      panelStates: states,
+      readMe:
+        "Each rate is one proportion with a 95% Wilson interval, conditional on the step before it. " +
+        "This finds a step nobody gets through; it cannot detect an improvement of a few points. " +
+        "It is not an A/B comparison and must not be read as one."
+    },
+    200,
+    cors
+  );
+}
+
+/**
  * GET /v1/admin/experiments — every registered experiment with its exposures
  * per arm and the sample-ratio check, plus the last week of ingest counters.
  * @param {Object} env Worker env bindings.
@@ -1253,7 +1400,11 @@ export async function routeEventsApi(request, env, url, path, deps) {
     }
     return path === "/v1/events" ? handleIngest(request, env, deps) : handleForget(request, env, deps);
   }
-  if (path !== "/v1/admin/experiments" && path !== "/v1/admin/experiments/results") {
+  if (
+    path !== "/v1/admin/experiments" &&
+    path !== "/v1/admin/experiments/results" &&
+    path !== "/v1/admin/funnel"
+  ) {
     return null;
   }
   if (request.method !== "GET") {
@@ -1267,6 +1418,7 @@ export async function routeEventsApi(request, env, url, path, deps) {
   if (!admin.ok) {
     return json({ ok: false, reason: admin.reason }, admin.status, cors);
   }
+  if (path === "/v1/admin/funnel") return handleFunnel(env, url, deps);
   return path === "/v1/admin/experiments"
     ? handleListExperiments(env, deps)
     : handleExperimentResults(env, url, deps);

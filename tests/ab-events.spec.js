@@ -22,7 +22,7 @@ test.use({ timezoneId: "America/Lima", locale: "es-PE" });
 
 /**
  * @param {import('@playwright/test').Page} page
- * @param {{ endpoint?: string, gpc?: boolean, dnt?: boolean, human?: boolean, loopWeights?: number[] }} opts
+ * @param {{ endpoint?: string, gpc?: boolean, dnt?: boolean, human?: boolean, noWorker?: boolean, loopWeights?: number[] }} opts
  * @returns {Promise<{ bodies: object[], headers: object[], urls: string[] }>} captured requests
  */
 async function boot(page, opts = {}) {
@@ -47,6 +47,20 @@ async function boot(page, opts = {}) {
       /* ignore */
     }
     if (o.endpoint) window.VT_ANALYTICS_ENDPOINT = o.endpoint;
+    // The endpoint is derived from the worker URL in js/billing-config.js since
+    // 2026-09-24, so "no endpoint" now means "no worker", which is a real
+    // deployment the runbook allows. Blank it before that file is read.
+    if (o.noWorker) {
+      let held;
+      Object.defineProperty(window, "VT_BILLING_CONFIG", {
+        configurable: true,
+        get: () => held,
+        set: (v) => {
+          if (v && v.verification) v.verification.apiBaseUrl = "";
+          held = v;
+        }
+      });
+    }
     if (o.human) Object.defineProperty(Navigator.prototype, "webdriver", { get: () => false, configurable: true });
     if (o.gpc) Object.defineProperty(Navigator.prototype, "globalPrivacyControl", { get: () => true, configurable: true });
     if (o.dnt) Object.defineProperty(Navigator.prototype, "doNotTrack", { get: () => "1", configurable: true });
@@ -123,8 +137,8 @@ test.describe("anonymous events for A/B tests", () => {
     }
   });
 
-  test("without an endpoint nothing leaves the page, and the guide says so", async ({ page }) => {
-    await boot(page, { human: true });
+  test("a deploy with no worker sends nothing, and the guide says so", async ({ page }) => {
+    await boot(page, { human: true, noWorker: true });
     const state = await page.evaluate(() => window.VTAnalytics.remoteState());
     expect(state).toEqual({ sending: false, reason: "no_endpoint", optedOut: false });
     await page.goto(BASE + "/guide.html#privacidad");
@@ -420,4 +434,107 @@ test.describe("every arm sends what its experiment is judged on", () => {
       }
     });
   }
+});
+
+test.describe("The account and trial funnel", () => {
+  /** Watch every host the page actually contacts, not only the stubbed one. */
+  async function watchHosts(page) {
+    const hosts = new Set();
+    page.on("request", (r) => {
+      try {
+        const u = new URL(r.url());
+        if (u.origin !== new URL(BASE).origin) hosts.add(u.host);
+      } catch {
+        /* ignore */
+      }
+    });
+    return hosts;
+  }
+
+  test("the only host a first visit contacts is our own worker", async ({ page }) => {
+    // The promise that a first visit contacts NO server of ours was retired on
+    // 2026-09-24: it made the funnel unmeasurable, and the owner chose the
+    // measurement. What replaces it is the part that was always the point — no
+    // third party is contacted, by us or on our behalf, before anybody signs in.
+    const hosts = await watchHosts(page);
+    const sent = await boot(page, { endpoint: ENDPOINT, human: true });
+    await page.evaluate(() => window.VTAnalytics.flush());
+    await expect.poll(() => sent.bodies.length).toBeGreaterThan(0);
+    expect([...hosts]).toEqual(["events.test"]);
+  });
+
+  test("opening the account panel reports which state the visitor is looking at", async ({ page }) => {
+    const sent = await boot(page, { endpoint: ENDPOINT, human: true });
+    await page.click("#btn-account");
+    await expect(page.locator("#account-modal")).toBeVisible();
+    await page.evaluate(() => window.VTAnalytics.flush());
+    const names = () => sent.bodies.filter(Boolean).flatMap((b) => b.events || []);
+    await expect.poll(() => names().some((e) => e.name === "account_panel_open")).toBe(true);
+    const open = names().filter((e) => e.name === "account_panel_open");
+    // Exactly one per open, and it carries accountSignIn()'s own answer. Which
+    // answer depends on whether this run's worker is reachable, so assert the
+    // vocabulary rather than one value: it is the vocabulary that makes "an
+    // extension blocked Google's script" a count instead of a hypothesis.
+    expect(open).toHaveLength(1);
+    expect([
+      "signed_in",
+      "not_configured",
+      "checking",
+      "unreachable",
+      "blocked",
+      "offered",
+      "no_method"
+    ]).toContain(open[0].props.state);
+  });
+
+  test("every funnel event the page can emit is a name the worker accepts", async ({ page }) => {
+    // The two halves drift silently otherwise: the browser sends a name, the
+    // worker drops it, and the funnel has a hole nobody sees.
+    const { EVENT_NAMES } = await workerModule("events.js");
+    const FUNNEL = [
+      "account_panel_open",
+      "signin_start",
+      "signin_success",
+      "signin_fail",
+      "trial_cta_view",
+      "trial_click",
+      "trial_result",
+      "trial_first_practice"
+    ];
+    for (const name of FUNNEL) expect(EVENT_NAMES.has(name), `${name} missing from EVENT_NAMES`).toBe(true);
+    // And the denominator the funnel is read against.
+    expect(EVENT_NAMES.has("app_open")).toBe(true);
+
+    // The props must survive the worker's own key and value rules, or they are
+    // dropped and the readout loses the only interesting dimension.
+    const { EXPERIMENT_PRESETS } = await workerModule("events.js");
+    const armEvents = new Set(
+      Object.values(EXPERIMENT_PRESETS).flatMap((p) => Object.values(p.armEvents || {}).flat())
+    );
+    // A metric has to be an event every arm sends through the same code, so none
+    // of these may be an arm event: they fire from js/app.js in every arm.
+    for (const name of FUNNEL) expect(armEvents.has(name), `${name} is an arm event`).toBe(false);
+  });
+
+  test("the funnel events carry only flat ids, which is what the worker keeps", async ({ page }) => {
+    const { EVENT_NAMES } = await workerModule("events.js");
+    const sent = await boot(page, { endpoint: ENDPOINT, human: true });
+    await page.click("#btn-account");
+    await expect(page.locator("#account-modal")).toBeVisible();
+    await page.evaluate(() => window.VTAnalytics.flush());
+    await expect.poll(() => sent.bodies.filter(Boolean).flatMap((b) => b.events || []).length).toBeGreaterThan(0);
+    const events = sent.bodies.filter(Boolean).flatMap((b) => b.events || []);
+    const KEY = /^[A-Za-z][A-Za-z0-9_]{0,31}$/;
+    const VALUE = /^[A-Za-z0-9_.:-]{0,64}$/;
+    for (const e of events) {
+      expect(EVENT_NAMES.has(e.name), `${e.name} not accepted`).toBe(true);
+      for (const [k, v] of Object.entries(e.props || {})) {
+        expect(KEY.test(k), `prop key ${k}`).toBe(true);
+        if (typeof v === "string") expect(VALUE.test(v), `prop ${k}=${v}`).toBe(true);
+      }
+      // Nothing that identifies a person. The browser id is a separate field and
+      // is random; an email or a name must never ride in props.
+      expect(JSON.stringify(e.props || {})).not.toMatch(/@/);
+    }
+  });
 });

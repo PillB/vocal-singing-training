@@ -2829,6 +2829,21 @@
           mode: profile.mode,
           micro: !!state.microSession
         });
+        // The last step of the funnel, and the only one that says the trial was
+        // worth giving: somebody who holds one and then actually practises. Once
+        // per browser per trial, marked in storage rather than in memory, because
+        // the interesting case is the session after the one that started it.
+        const held = headerPlanState().kind;
+        if (held === "trialAccount" || held === "trialLocal") {
+          try {
+            if (localStorage.getItem("vt_trial_first_practice_v1") !== "1") {
+              localStorage.setItem("vt_trial_first_practice_v1", "1");
+              window.VTAnalytics?.track?.("trial_first_practice", { kind: held === "trialAccount" ? "account" : "local" });
+            }
+          } catch {
+            /* private mode: the event is simply not sent */
+          }
+        }
       } catch {
         /* ignore */
       }
@@ -5537,6 +5552,9 @@
       }
       trialBtn.classList.toggle("btn-primary", prelaunch);
       trialBtn.classList.toggle("btn-sm", !prelaunch);
+      // Once per load, not once per render: this sits in a path that re-runs on
+      // every entitlement change and every language switch.
+      if (canTrial) trackFunnel("trial_cta_view", { where: "pricing" }, "cta:pricing");
       if (canTrial) {
         const days = accounts
           ? Number(acct.methods?.trialDays || 7) // the worker's TRIAL_DAYS, whose default is also 7
@@ -6274,6 +6292,66 @@
   }
 
   /** Map a worker `reason` code onto a translated line. */
+  /**
+   * The account, sign-in and trial funnel, as events.
+   *
+   * Until this existed the funnel was unmeasurable at any traffic: all 44 names
+   * in the worker's EVENT_NAMES were practice, tour, daily loop and ads, and
+   * js/app.js made no track() call for accounts at all. So "how many people who
+   * opened the account panel got a trial" had no answer, and no A/B test at any
+   * sample size would have given one — at a 2% baseline a 20% relative lift
+   * needs about 21,000 browsers per arm, which this site will not see. Each step
+   * is read as one proportion with a Wilson bound instead, which finds a broken
+   * step with about thirty visitors.
+   *
+   * None of these is an arm event for any experiment in EXPERIMENT_PRESETS: they
+   * fire from this code in every arm, which is the condition a metric has to
+   * meet. Props stay flat ids so the worker's PROP_STRING_RE accepts them.
+   */
+  const FUNNEL_SEEN = new Set();
+
+  /**
+   * @param {string} name Event name; must be in the worker's EVENT_NAMES.
+   * @param {Record<string, string>} [props] Flat id props.
+   * @param {string} [onceKey] When given, the event fires at most once per page
+   *   load for this key — for anything that sits in a render path.
+   */
+  function trackFunnel(name, props, onceKey) {
+    if (onceKey) {
+      if (FUNNEL_SEEN.has(onceKey)) return;
+      FUNNEL_SEEN.add(onceKey);
+    }
+    try {
+      window.VTAnalytics?.track?.(name, props || {});
+    } catch {
+      /* analytics never breaks the page */
+    }
+  }
+
+  /** A reason from the worker or the account layer, as a prop the worker accepts. */
+  function funnelReason(reason) {
+    return String(reason || "error").replace(/[^A-Za-z0-9_.:-]/g, "_").slice(0, 64);
+  }
+
+  /**
+   * Which of the account panel's states a visitor is actually looking at. These
+   * are accountSignIn()'s own answers, which is the point: it turns "an
+   * extension blocked Google's script" from a hypothesis into a count, and that
+   * is something no A/B test would ever report.
+   * @returns {string} One flat id.
+   */
+  function accountPanelState() {
+    const acct = window.VTAccount?.getState?.() || null;
+    if (acct && acct.signedIn) return "signed_in";
+    const offer = accountSignIn();
+    if (!offer.configured) return "not_configured";
+    if (offer.checking) return "checking";
+    if (offer.unreachable) return "unreachable";
+    if (offer.blocked) return "blocked";
+    if (offer.offered) return "offered";
+    return "no_method";
+  }
+
   const ACCOUNT_ERROR_KEYS = {
     bad_email: "auth.err.email",
     bad_code: "auth.err.code",
@@ -6587,6 +6665,7 @@
       // for a worker that has not said yet; no label may name a month, because
       // the trial is seven days.
       const trialDays = Number(account && account.methods && account.methods.trialDays);
+      if (!trialBtn.hidden) trackFunnel("trial_cta_view", { where: "panel" }, "cta:panel");
       if (trialDays > 0) {
         // The generic [data-i18n] applier calls t(key) with no params, so a key
         // holding {n} would render the placeholder literally on a language
@@ -6642,11 +6721,21 @@
     if (!window.VTAccount?.isConfigured?.() || window.VTAccount.getState().signedIn) return;
     window.VTAccount.renderGoogleButton(slot, {
       onResult: (res) => {
+        // Google's rendered button gives no press callback, so the earliest
+        // moment we can see is the credential coming back. For Google, therefore,
+        // signin_start means "returned from Google", not "pressed it", and the
+        // start-to-outcome ratio is always 1. The press-but-never-return case is
+        // invisible here; what covers the common cause of it is
+        // account_panel_open with state "blocked", which counts the browsers
+        // where Google's script would not load at all.
+        trackFunnel("signin_start", { method: "google" });
         if (res && res.ok) {
+          trackFunnel("signin_success", { method: "google" });
           toast(tt("auth.toast.in"));
           refreshAccountUI();
           updateBillingChrome();
         } else if (res) {
+          trackFunnel("signin_fail", { method: "google", reason: funnelReason(res.reason) });
           accountErrorFor(res.reason);
         }
       }
@@ -6673,6 +6762,9 @@
     // never touches it. The answer redraws the panel through onChange.
     window.VTAccount?.ensureMethods?.();
     mountGoogleButton();
+    // The state is read before the worker's answer can land, which is the honest
+    // reading: it is what the visitor is looking at as the panel opens.
+    trackFunnel("account_panel_open", { state: accountPanelState() });
     modal.hidden = false;
     document.body.classList.add("account-open");
     const signedIn = !!window.VTAuth?.isLoggedIn?.() || !!window.VTAccount?.getState?.().signedIn;
@@ -6826,9 +6918,13 @@
       e.preventDefault();
       const email = ($("#account-email")?.value || "").trim();
       accountError(null);
+      trackFunnel("signin_start", { method: "email" });
       const res = await window.VTAccount?.startEmailSignIn?.(email);
       if (res && res.ok) showCodeStep(email);
-      else accountErrorFor(res && res.reason);
+      else {
+        trackFunnel("signin_fail", { method: "email", reason: funnelReason(res && res.reason) });
+        accountErrorFor(res && res.reason);
+      }
     });
 
     $("#account-code-form")?.addEventListener("submit", async (e) => {
@@ -6838,12 +6934,14 @@
       accountError(null);
       const res = await window.VTAccount?.verifyEmailCode?.(email, code);
       if (res && res.ok) {
+        trackFunnel("signin_success", { method: "email" });
         if ($("#account-code")) $("#account-code").value = "";
         showEmailStep();
         toast(tt("auth.toast.in"));
         refreshAccountUI();
         updateBillingChrome();
       } else {
+        trackFunnel("signin_fail", { method: "email", reason: funnelReason(res && res.reason) });
         accountErrorFor(res && res.reason);
       }
     });
@@ -6851,12 +6949,15 @@
     $("#account-code-back")?.addEventListener("click", showEmailStep);
 
     $("#btn-account-trial")?.addEventListener("click", async () => {
+      trackFunnel("trial_click", { where: "panel" });
       const res = await window.VTAccount?.startTrial?.();
       if (res && res.ok) {
+        trackFunnel("trial_result", { outcome: "started", where: "panel" });
         toast(tt("pricing.toast.trialStarted", { n: res.days ?? "" }));
         refreshAccountUI();
         updateBillingChrome();
       } else {
+        trackFunnel("trial_result", { outcome: funnelReason(res && res.reason), where: "panel" });
         accountErrorFor(res && res.reason);
       }
     });
@@ -6939,6 +7040,77 @@
     }
 
     $("#ab-results-load")?.addEventListener("click", renderAbResults);
+    $("#funnel-load")?.addEventListener("click", renderFunnel);
+
+    /**
+     * The account and trial funnel for an admin: one proportion per step with
+     * its 95% Wilson interval, conditional on the step before it, plus what
+     * people actually saw when the account panel opened.
+     *
+     * Deliberately not a comparison between arms. At a 2% baseline a 20%
+     * relative lift needs about 21,000 browsers per arm, which this site will
+     * not see; a single proportion finds a step nobody gets through with about
+     * thirty visitors. The margin is shown on every row so a small count reads
+     * as a small count, and the note under the table says what the method
+     * cannot do. Every number comes from the worker.
+     */
+    async function renderFunnel() {
+      const box = $("#funnel-results");
+      if (!box) return;
+      const esc = window.VTAuth?.escapeHtml || ((v) => String(v ?? ""));
+      box.hidden = false;
+      box.textContent = tt("funnel.loading");
+      const res = await window.VTAccount?.request?.("GET", "/v1/admin/funnel", null);
+      if (!res || !res.ok || !res.data) {
+        box.textContent = tt("funnel.error");
+        return;
+      }
+      const data = res.data;
+      const locale = window.VTI18n?.lang === "en" ? "en-GB" : "es-PE";
+      const count = (v) => Number(v || 0).toLocaleString(locale);
+      const pct = (v) => (v === null || v === undefined ? "–" : `${(v * 100).toFixed(1)} %`);
+      if (!data.browsers) {
+        box.innerHTML = `<p class="muted">${esc(tt("funnel.empty"))}</p>`;
+        return;
+      }
+      const label = (step) => {
+        const key = `funnel.step.${step.step}`;
+        const translated = tt(key);
+        // The worker sends an English label; use it only where no translation
+        // exists, rather than showing a raw key.
+        return translated === key ? step.label || step.step : translated;
+      };
+      const rows = (data.steps || [])
+        .map((st) => {
+          const range = st.rate === null ? "–" : `${pct(st.lo)} – ${pct(st.hi)}`;
+          return `<tr><td>${esc(label(st))}</td><td>${count(st.browsers)}</td><td>${st.of === null ? "–" : count(st.of)}</td><td>${esc(pct(st.rate))}</td><td class="muted">${esc(range)}</td></tr>`;
+        })
+        .join("");
+      const states = Object.entries(data.panelStates || {})
+        .filter(([, n]) => Number(n) > 0)
+        .map(([key, n]) => {
+          const cap = key.charAt(0).toUpperCase() + key.slice(1);
+          return `<li>${esc(tt(`funnel.state${cap}`))}: <strong>${count(n)}</strong></li>`;
+        })
+        .join("");
+      box.innerHTML = `
+        <p class="muted">${esc(tt("funnel.window", { n: String(data.window?.days ?? ""), browsers: count(data.browsers) }))}</p>
+        <div class="ab-table-wrap">
+          <table class="ab-table">
+            <thead><tr>
+              <th>${esc(tt("funnel.stepHead"))}</th>
+              <th>${esc(tt("funnel.nHead"))}</th>
+              <th>${esc(tt("funnel.ofHead"))}</th>
+              <th>${esc(tt("funnel.rateHead"))}</th>
+              <th>${esc(tt("funnel.rangeHead"))}</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+        ${states ? `<p class="muted">${esc(tt("funnel.states"))}</p><ul class="admin-user-list">${states}</ul>` : ""}
+        <p class="muted">${esc(tt("funnel.note"))}</p>
+      `;
+    }
 
     /**
      * A/B results for an admin: how events are arriving, exposures per arm,
@@ -7095,6 +7267,7 @@
       });
     });
     $("#btn-start-trial")?.addEventListener("click", async () => {
+      trackFunnel("trial_click", { where: "pricing" });
       // Which trial this is belongs to the worker, so ask before choosing:
       // guessing "local" hands out a browser trial that a later server trial
       // then duplicates, and guessing "server" sends someone to a panel that
@@ -7114,6 +7287,10 @@
         // Not signed in: send them to the panel rather than starting a trial
         // this browser would forget and the next one would hand out again.
         if (!acct?.signedIn) {
+          // Not a failure: the press worked and sent them to sign in. It is the
+          // step where the funnel most plausibly leaks, so it gets its own id
+          // rather than being folded into an error.
+          trackFunnel("trial_result", { outcome: "needs_account", where: "pricing" });
           toast(tt("pricing.trialNeedsAccount"), { durationMs: 4200 });
           closePricing();
           openAccount();
@@ -7121,8 +7298,10 @@
         }
         const res = await window.VTAccount.startTrial();
         if (res && res.ok) {
+          trackFunnel("trial_result", { outcome: "started", where: "pricing" });
           toast(tt("pricing.toast.trialStarted", { n: String(res.days ?? "") }));
         } else {
+          trackFunnel("trial_result", { outcome: funnelReason(res && res.reason), where: "pricing" });
           toast(tt("pricing.toast.trialUsed"), { durationMs: 4200 });
         }
         updateBillingChrome();
@@ -7132,8 +7311,10 @@
       if (!window.VTBilling?.startTrial) return;
       const res = VTBilling.startTrial();
       if (!res.ok) {
+        trackFunnel("trial_result", { outcome: funnelReason(res.reason), where: "pricing", kind: "local" });
         toast(tt("pricing.toast.trialUsed"), { durationMs: 4200 });
       } else {
+        trackFunnel("trial_result", { outcome: "started", where: "pricing", kind: "local" });
         toast(tt("pricing.toast.trialStarted", { n: String(VTBilling.trialDaysLeft?.() ?? 0) }));
       }
       updateBillingChrome();

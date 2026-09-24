@@ -11,7 +11,7 @@
  *
  * Anonymous usage events and A/B results share the same D1 (see events.js):
  * POST /v1/events and /v1/events/forget from the site,
- * GET /v1/admin/experiments[/results] for an admin.
+ * GET /v1/admin/experiments[/results] and GET /v1/admin/funnel for an admin.
  *
  * Bindings (see wrangler.toml and README.md):
  *   KV   ENTITLEMENTS

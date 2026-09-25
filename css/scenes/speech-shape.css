@@ -11,16 +11,15 @@
   white-space: nowrap;
 }
 
-/* Short button words on a narrow phone, full words elsewhere */
+/* Full button words everywhere: on a phone "Pico" and "Parte →" read like the
+   picture's part names, so the buttons take their own line instead */
 .mode-panel.has-viz .ss-short {
   display: none;
 }
 @media (max-width: 480px) {
-  .mode-panel.has-viz .ss-long {
-    display: none;
-  }
-  .mode-panel.has-viz .ss-short {
-    display: inline;
+  .mode-panel.has-viz .viz-btns {
+    flex-wrap: wrap;
+    max-width: 100%;
   }
 }
 

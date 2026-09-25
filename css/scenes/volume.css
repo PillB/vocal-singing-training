@@ -21,3 +21,17 @@
 .mode-panel.has-viz [data-blind][aria-pressed="true"]::before {
   content: "◐ ";
 }
+
+/* After Stop the picture draws the session's summary itself; the same words
+   under it would say it twice. They stay in the page for screen readers. */
+.mode-panel.has-viz.is-replay .vz-volume .vz-cap {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}

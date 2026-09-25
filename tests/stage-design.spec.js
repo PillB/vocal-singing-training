@@ -284,8 +284,8 @@ test.describe("Coach strip: the mode and its cue on the stage", () => {
       });
       expect(r.inRail).toBe(true);
       expect(r.hudIn).toBe(true);
-      expect(r.title).toBe("Juego de afinación");
-      expect(r.cue).toBe("Escucha primero, luego afina. Bloquea 8 notas en el carril verde.");
+      expect(r.title).toBe("Afinar nota · escucha y canta");
+      expect(r.cue).toBe("Escucha la nota entera primero, luego afínala. Fija 8 notas en la banda verde; una octava arriba también vale.");
       expect(r.cueWhole, "every line of the cue inside the strip").toBe(true);
       expect(r.clipped).toBe(false);
       expect(r.inStage).toBe(true);
@@ -721,9 +721,13 @@ test.describe("Pitch match challenge scores the note it asks for", () => {
         pv.chordLanes = [...(pv.chordLanes || []), lane];
       }
       pv.setTargetFreq(wantF);
+      // Past the listen window: the game scores what is sung
+      pv.setDisplay({ gameHold: false });
       for (let i = 0; i < 30; i++) pv.pushFrame(lane.freq, wantF);
       const snap = game.snapshot();
-      // …and on the asked note it is in tune
+      // …and on the asked note, after a breath, it is in tune (these frames
+      // arrive with ~0 ms between them, so the breath empties the window)
+      pv.pushFrame(null, wantF);
       for (let i = 0; i < 30; i++) pv.pushFrame(wantF, wantF);
       const onNote = game.snapshot();
       return {

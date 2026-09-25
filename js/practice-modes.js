@@ -9273,7 +9273,18 @@
    * the exercise names it (profile.stabilityMetric) — pitch steadiness over
    * the holds. Body, buzz, balance, comfort, pushing and transitions stay the
    * learner's own rating.
+   *
+   * Each new target sounds a short reference note, and a learner sings along
+   * with it. The speakers reach the microphone too, so while the note sounds
+   * the mic may be hearing the piano: time in tune then is kept aside (refRun)
+   * and counts only once the same run carries on by itself, in tune, for
+   * ZONE_HOLD_CLEAN_MS after the piano and its tail are gone. If the sound
+   * stops when the piano does, it was the piano, and the kept time goes.
+   * Everything a card measures (level, clarity, steadiness) comes from the
+   * frames heard without the piano.
    */
+  const ZONE_REF_SEC = 1.5;
+  const ZONE_HOLD_CLEAN_MS = 250;
   Modes.resonanceZone = baseMode({
     id: "resonanceZone",
     render() {
@@ -9347,7 +9358,9 @@
       st.ni = 0;
       st.held = 0;
       st.inBand = 0;
+      st.refRun = 0;
       st.holdMs = 900;
+      st.holdClean = ZONE_HOLD_CLEAN_MS;
       st.inZoneMs = 0;
       st.voicedMs = 0;
       st.zoneHits = zones.map(() => 0);
@@ -9435,6 +9448,7 @@
       st.queue = this._upcoming(3);
       st.zoneMidis = st.zones.map((z) => (z.notes || []).map((x) => this._midiOfNote(x)).filter((x) => x != null));
       st.inBand = 0;
+      st.refRun = 0;
       st._hold = [];
       const last = st.targets[st.targets.length - 1];
       if (last && last.t1 == null) last.t1 = st.clock;
@@ -9443,7 +9457,8 @@
       if (typeof global.VTSetPracticeTarget === "function" && st.wantFreq) {
         global.VTSetPracticeTarget(st.wantFreq, sounded);
       }
-      if (global.VTPiano?.playRefPitch) global.VTPiano.playRefPitch(sounded, 2.2, true).catch(() => {});
+      // A short cue, not a drone: while it sounds the hold is only provisional
+      if (global.VTPiano?.playRefPitch) global.VTPiano.playRefPitch(sounded, ZONE_REF_SEC, true).catch(() => {});
       if (this.$("[data-t]")) this.$("[data-t]").textContent = sounded;
     },
     _setChips() {
@@ -9460,6 +9475,7 @@
       st.z = i;
       st.ni = 0;
       st.inBand = 0;
+      st.refRun = 0;
       this._setChips();
       if (from !== i && st.zones.length > 1) {
         // A seam: level just before against level just after, filled in 3 s later
@@ -9515,6 +9531,9 @@
     _holdSd(samples) {
       const s = samples.filter((x) => x.at >= 0.2);
       if (s.length < 8) return null;
+      // A hold finished just after the reference has too little of its own to
+      // say how steady it was: no number rather than a flattering one
+      if (s[s.length - 1].at - s[0].at < 0.45) return null;
       const sm = [];
       let acc = 0;
       let accT = 0;
@@ -9676,20 +9695,29 @@
       });
       // Target hold: ±45 cents at the target's own octave, on sounding frames.
       // A reference note from the speakers reaches the mic too: while one
-      // sounds, the hold neither grows nor drains.
+      // sounds, time in tune is only provisional (refRun, see above).
       const P = global.VTPiano;
       const refSounding = !!(P && P.isSounding && !P.loopActive && P.isSounding(0.25));
-      if (st.wantMidi != null && !refSounding) {
+      if (st.wantMidi != null) {
         const c = midi != null ? (midi - st.wantMidi) * 100 : null;
-        if (c != null && Math.abs(c) <= 45) {
+        const inTune = c != null && Math.abs(c) <= 45;
+        // Silence breaks a run at once; a pitch off the note only wears it down
+        const drain = (v, rate) => Math.max(0, v - dt * rate);
+        if (refSounding) {
+          if (inTune) st.refRun += dt * 1000;
+          else st.refRun = drain(st.refRun, c == null ? 6000 : 2000);
+        } else if (inTune) {
           st.inBand += dt * 1000;
           st._octMs = 0;
           st.octHint = 0;
-          st._hold.push({ c, dt, at: st.inBand / 1000, db: raw.db, clar, rel: st.focus === "soft" && soft.ref != null ? soft.rel : null });
-          if (st.inBand >= st.holdMs) this._credit();
+          st._hold.push({ c, dt, at: (st.inBand + st.refRun) / 1000, db: raw.db, clar, rel: st.focus === "soft" && soft.ref != null ? soft.rel : null });
+          // Sung along with the reference and carried on alone: the kept time counts
+          const need = st.refRun > 0 ? Math.max(st.holdClean, st.holdMs - st.refRun) : st.holdMs;
+          if (st.inBand >= need) this._credit();
         } else {
           // A brief wobble costs a little, it does not wipe the hold
           st.inBand = Math.max(0, st.inBand - dt * 2000);
+          st.refRun = drain(st.refRun, c == null ? 6000 : 2000);
           if (st.inBand === 0) st._hold = [];
           // Singing the same note an octave away: say so once it is steady
           if (c != null && Math.abs(Math.abs(c) - 1200) <= 60) {
@@ -9702,51 +9730,84 @@
     },
     _speechFrame(raw, midi, bright, dt) {
       const sp = this.state.sp;
-      const K = global.VTViz.scenes.resonanceKit;
       const now = this.state.clock;
       if (midi != null) {
-        if (!sp.seg) sp.seg = { t0: now, t1: now, m: [], db: [], br: [], gap: 0 };
+        if (!sp.seg) sp.seg = { t0: now, t1: now, pts: [], gap: 0 };
         sp.seg.t1 = now;
         sp.seg.gap = 0;
-        sp.seg.m.push(midi);
-        sp.seg.db.push(raw.db);
-        if (bright != null) sp.seg.br.push(bright);
+        sp.seg.pts.push({ t: now, m: midi, db: raw.db, br: bright });
       } else if (sp.seg) {
         sp.seg.gap += dt;
         // A turn ends after a quarter second of quiet
-        if (sp.seg.gap >= 0.25) {
-          const s = sp.seg;
-          sp.seg = null;
-          const dur = s.t1 - s.t0;
-          if (dur >= 0.3 && s.m.length >= 8) {
-            const med = K.median(s.m);
-            const mean = s.m.reduce((a, b) => a + b, 0) / s.m.length;
-            const sd = Math.sqrt(s.m.reduce((a, b) => a + (b - mean) * (b - mean), 0) / s.m.length);
-            // Held on one pitch and long enough: sung; otherwise spoken
-            const kind = sd < 0.6 && dur >= 0.6 ? "sung" : "spoken";
-            const turn = { t0: s.t0, t1: s.t1, kind, med, db: K.median(s.db), br: s.br.length >= 4 ? K.median(s.br) : null };
-            sp.turns.push(turn);
-            if (sp.turns.length > 120) sp.turns.shift();
-            const spoken = sp.turns.filter((x) => x.kind === "spoken").slice(-12);
-            if (spoken.length) {
-              const all = spoken.map((x) => x.med);
-              sp.band = { lo: K.quantile(all, 0.25) - 0.5, hi: K.quantile(all, 0.75) + 0.5, med: K.median(all) };
-            }
-            if (kind === "sung") {
-              const lastSpoken = spoken[spoken.length - 1];
-              if (lastSpoken) {
-                sp.pairs.push({
-                  dDb: turn.db - lastSpoken.db,
-                  dBr: turn.br != null && lastSpoken.br != null ? turn.br - lastSpoken.br : null,
-                  dSt: turn.med - lastSpoken.med,
-                  t: turn.t1
-                });
-                if (sp.pairs.length > 40) sp.pairs.shift();
-              }
-            }
-          }
-        }
+        if (sp.seg.gap >= 0.25) this._endTurn();
       }
+    },
+    /**
+     * Close the turn in progress. Speech moves its pitch every syllable;
+     * singing holds one. So a turn is sung when it holds a pitch (within half
+     * a semitone) for 0.6 s or more, and a sung turn is measured on that held
+     * stretch alone: a note that slides on to the next target when it is
+     * credited, or a "hola" run straight into the note, is still the note
+     * that was held. Talking just before the held stretch, without a pause,
+     * is kept as a spoken turn of its own.
+     */
+    _endTurn() {
+      const sp = this.state.sp;
+      const s = sp.seg;
+      sp.seg = null;
+      if (!s || s.t1 - s.t0 < 0.3 || s.pts.length < 8) return;
+      const pts = s.pts;
+      let best = null;
+      let a = 0;
+      let sum = 0;
+      for (let j = 0; j < pts.length; j++) {
+        const n = j - a;
+        const mean = n ? sum / n : pts[j].m;
+        const broken = n && (Math.abs(pts[j].m - mean) > 0.5 || pts[j].t - pts[j - 1].t > 0.12);
+        if (broken) {
+          a = j;
+          sum = 0;
+        }
+        sum += pts[j].m;
+        const len = pts[j].t - pts[a].t;
+        if (!best || len > best.len) best = { a, b: j, len };
+      }
+      const sung = best && best.len >= 0.6 ? pts.slice(best.a, best.b + 1) : null;
+      if (sung) {
+        const before = pts.slice(0, best.a);
+        if (before.length >= 8 && before[before.length - 1].t - before[0].t >= 0.3) this._pushTurn("spoken", before);
+        this._pushTurn("sung", sung);
+      } else this._pushTurn("spoken", pts);
+    },
+    _pushTurn(kind, pts) {
+      const sp = this.state.sp;
+      const K = global.VTViz.scenes.resonanceKit;
+      const brs = pts.map((p) => p.br).filter((b) => b != null);
+      const turn = {
+        t0: pts[0].t,
+        t1: pts[pts.length - 1].t,
+        kind,
+        med: K.median(pts.map((p) => p.m)),
+        db: K.median(pts.map((p) => p.db)),
+        br: brs.length >= 4 ? K.median(brs) : null
+      };
+      sp.turns.push(turn);
+      if (sp.turns.length > 120) sp.turns.shift();
+      const spoken = sp.turns.filter((x) => x.kind === "spoken").slice(-12);
+      if (kind === "spoken") {
+        const all = spoken.map((x) => x.med);
+        sp.band = { lo: K.quantile(all, 0.25) - 0.5, hi: K.quantile(all, 0.75) + 0.5, med: K.median(all) };
+        return;
+      }
+      const lastSpoken = spoken[spoken.length - 1];
+      if (!lastSpoken) return;
+      sp.pairs.push({
+        dDb: turn.db - lastSpoken.db,
+        dBr: turn.br != null && lastSpoken.br != null ? turn.br - lastSpoken.br : null,
+        dSt: turn.med - lastSpoken.med,
+        t: turn.t1
+      });
+      if (sp.pairs.length > 40) sp.pairs.shift();
     },
     _brightFrame(raw, bright, dt) {
       const st = this.state;
@@ -9783,6 +9844,8 @@
       const K = global.VTViz?.scenes?.resonanceKit;
       const last = st.targets[st.targets.length - 1];
       if (last && last.t1 == null) last.t1 = st.clock;
+      // A turn still sounding at Stop is a turn too (s22)
+      if (st.focus === "speech" && st.sp.seg && K) this._endTurn();
       st.review = true;
       if (this.viz) {
         this.hud.classList.add("is-replay");

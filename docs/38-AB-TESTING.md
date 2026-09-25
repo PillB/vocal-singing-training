@@ -342,10 +342,43 @@ request, no latency, not one byte different on the wire.
   Lima is byte-for-byte what it was before this existed — which is what
   `tests/ab-events.spec.js` still asserts, untouched.
 
-**Fail closed, in both directions.** A worker that cannot be reached, or answers
-without a country, leaves the stricter verdict in place: asking afterwards is not
-asking first. And a worker that says PE for a browser whose clock says Madrid
-lifts the hold, so an expat with a European time zone is never asked.
+**Fail closed, in both directions.** A worker that cannot be reached, or that
+answers `placed: false` because the edge could not place the address (Tor's "T1",
+Cloudflare's "XX"), leaves the stricter verdict in place: "no country" is not the
+same answer as "not in Europe", and asking afterwards is not asking first. A
+worker that says PE for a browser whose clock says Madrid does lift the hold, so
+an expat with a European time zone is never asked. A **404** is the one exception,
+and it is a fact about the deployment rather than a signal: until the worker is
+redeployed with the route, the page falls back to what its own clock says, so a
+Madrid clock is asked and somebody whose only European signal was a language or a
+blank time zone is not.
+
+**A time zone that says nothing must not be read as "not Europe".** Firefox with
+`resistFingerprinting` and Tor Browser report UTC deliberately, a machine with no
+zone set reports `Etc/Unknown` or nothing at all, and an unparseable `TZ` makes
+`resolvedOptions().timeZone` literally `undefined`. All of those, and any
+`Europe/…` zone the file has never heard of (a rename, a new id), resolve to
+"unknown", which means ask the worker — the visitors most likely to care are
+exactly the ones a fail-open guess would never ask. Both spellings of every
+rename are listed on whichever side they belong to (Kyiv and Kiev out, Faroe and
+Faeroe out, Nuuk and Godthab out), and so are the link names ICU does not
+canonicalize (`Eire`, `Poland`, `Portugal`, `Iceland`, `Atlantic/Jan_Mayen`).
+
+**An automated browser is settled as out of scope before any of that runs.**
+Nothing is sent from one and nobody is sitting at it, so there is nothing to ask
+about; it also keeps the site's own suite on the ordinary path, which is the path
+worth testing, and stops 500 specs each calling a route they have no reason to
+call. `tests/region-gate.spec.js` asserts it rather than leaving it to luck.
+
+**The answer is stored as `{"v":1,"a":"y"|"n","t":<epoch>}` and holds for six
+months.** Nothing else goes in that key — no id, no country — and it is never
+sent anywhere, which is what keeps it inside the exemption for storage that only
+records the choice about storage (CNIL's published exempt list; PECR Schedule A1
+para 4). Six months is CNIL's published good practice and the only figure any
+regulator has put in writing. A refusal is kept exactly as long as a consent,
+because remembering the no is what stops the bar coming back — re-prompting a
+refuser on the next visit is the deceptive pattern the EDPB Cookie Banner
+Taskforce targets, not diligence.
 
 **The A/B split goes inert, not uniform.** The obvious implementation — make
 `clientId()` return `""` — would have hashed every visitor in those countries into
@@ -360,14 +393,49 @@ what draws their streak and their heatmap, it never leaves the device, and
 gating it would break the product for those visitors rather than protect them.
 What is gated is the sending and the A/B id, which serve us.
 
-**The UK is in, Switzerland is out.** The list is the set of places whose law
-requires asking first, not a political one: the EEA under ePrivacy art. 5(3),
-the UK under PECR reg. 6 (the same rule, kept after leaving), and the Crown
-dependencies and Gibraltar, which follow it. Switzerland's revFADP does not
-require prior consent for first-party analytics, so a visitor in Zurich is not
-asked. The two lists live in two languages — IANA zones in the page, ISO codes
-in the worker — and `tests/region-gate.spec.js` holds them to each other so they
-cannot drift.
+**The list is the set of places whose law requires asking first, not a political
+one.** In: the EEA under ePrivacy art. 5(3), the EU's outermost regions, and the
+Crown dependencies and Gibraltar, which keep rules of the same shape and went in
+to fail closed rather than on a confirmed reading. Out: Switzerland, whose revFADP
+does not require prior consent for first-party analytics, so a visitor in Zurich
+is not asked; Greenland and the Faroes, outside the EEA; Andorra, Monaco, San
+Marino and the Vatican, bound by neither.
+
+The outermost regions need entries of their own — GF, GP, MQ, RE, YT, MF, AX —
+because Cloudflare reports them under their own codes rather than their member
+state's, and `cf.isEUCountry` cannot be relied on to cover them. The first draft
+of this gate assumed they arrived as FR and would have released Réunion and
+Guadeloupe although EU law applies there in full; the page takes the worker's
+`askFirst` before its own country check, so nothing on the client would have
+caught it.
+
+**The United Kingdom is out, and this is the one call in here worth revisiting.**
+The DUAA amendment to PECR Schedule A1, in force 5 February 2026, added a
+statistical-purposes exemption from consent, conditional on telling the visitor
+clearly and giving them a simple means of objecting free of charge — which
+`privacy.html` and the guide's switch are, and the ICO is explicit that browser
+settings alone would not be. The risk in relying on it is the "sole purpose"
+test: this pipeline measures a sign-in and trial funnel, which a regulator could
+read as conversion optimisation rather than improving the service. It was left out
+because the owner's standing instruction is to keep nothing the law does not
+require, and because the UK is one of the site's priority markets, where a banner
+costs real sample. Putting `"GB"` back into `ASK_FIRST_COUNTRIES` (worker) and
+`ASK_FIRST_REGIONS` plus `Europe/London` (page) is the whole change. The
+consolidated in-force Schedule A1 at legislation.gov.uk could not be read from
+this container, so the enacted DUAA text and the ICO's exceptions page are the
+sources.
+
+The two lists live in two languages — IANA zones and ISO codes in the page, ISO
+codes in the worker — and `tests/region-gate.spec.js` asserts the country sets are
+equal in both directions, so they cannot drift.
+
+**The one hole left open, and which way it fails.** A visitor physically in an EEA
+country whose device is set to a non-European time zone *and* a non-European
+language is never asked, because the page never asks the worker about them. Their
+events are still not kept: they reach the worker, which reads the country from the
+edge, sees an ask-first country and no consent marker, and stores nothing. So the
+failure is measurement lost, not data kept — the right direction, and the reason
+the worker's check is not merely a belt.
 
 **What it costs.** Sample, in exactly those countries: every browser there that
 refuses, or closes the tab before answering, is absent from the funnel and from

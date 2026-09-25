@@ -341,16 +341,19 @@ function handleHealth(env, cors) {
  * replaces, and js/region-gate.js only asks when a browser's own time zone or
  * language already looks European, so nobody else pays a request for it.
  *
- * `country` is null when the edge cannot place the address (a unit test, Tor,
- * `wrangler dev` without --remote). `askFirst` is then false, because the page
- * has already decided from the visitor's own time zone and a worker answering
- * "yes" to everything unplaceable would hold back events from everywhere.
+ * `placed` is false when the edge cannot say where the request came from (a unit
+ * test, Tor's "T1", Cloudflare's "XX", `wrangler dev` without --remote), and the
+ * page treats that as no answer at all rather than as "not in Europe": it keeps
+ * whatever its own clock said, which is the safe direction. `askFirst` is false
+ * in that case because the ingest route must not turn away events from every
+ * unplaceable address in the world.
  * @param {Request} request Incoming request.
  * @param {Object} cors CORS headers.
  * @returns {Response} Response.
  */
 function handleGeo(request, cors) {
-  return json({ ok: true, country: callerCountry(request) || null, askFirst: asksFirst(request) }, 200, cors);
+  const country = callerCountry(request);
+  return json({ ok: true, country: country || null, placed: !!country, askFirst: asksFirst(request) }, 200, cors);
 }
 
 /**

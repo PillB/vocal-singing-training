@@ -39,35 +39,57 @@
 (function (global) {
   "use strict";
 
-  /** The visitor's answer, the only thing this file ever stores. */
+  /**
+   * The visitor's answer, the only thing this file ever stores:
+   * `{"v":1,"a":"y"|"n","t":<epoch seconds>}`. Nothing else goes in it — no id,
+   * no country — and it is never sent anywhere, which is what keeps it inside
+   * the exemption for storage that only records the choice about storage
+   * (CNIL's published exempt list; PECR Schedule A1 para 4).
+   */
   const CHOICE_KEY = "vt_eu_consent_v1";
+
+  /**
+   * How long an answer holds, either way. Six months is CNIL's published good
+   * practice and the only figure any regulator has put in writing; a refusal is
+   * kept exactly as long as a consent, because remembering the no is what stops
+   * the bar coming back on the next visit.
+   */
+  const CHOICE_TTL_SECONDS = 183 * 86400;
 
   /** How long to wait for the worker before assuming the stricter answer. */
   const ASK_TIMEOUT_MS = 2500;
 
   /**
-   * IANA zones of the countries that require consent first: the EEA (EU 27 plus
-   * Iceland, Liechtenstein and Norway), the EU's outermost regions, the United
-   * Kingdom, and the Crown dependencies and Gibraltar, which keep PECR-shaped
-   * rules of their own. A zone missing here only means the worker is not asked
-   * on that guess alone; a visitor there is still caught by their language or,
-   * failing that, is not asked — which is why the list aims to be complete.
+   * IANA zones of the places that require consent first: the EEA (EU 27 plus
+   * Iceland, Liechtenstein and Norway), the EU's outermost regions, and the
+   * Crown dependencies and Gibraltar, which keep PECR-shaped rules of their
+   * own. Link names ICU does not canonicalize are listed too (Eire, Poland,
+   * Portugal, Iceland, Atlantic/Jan_Mayen), because a browser may report any of
+   * them.
+   *
+   * The United Kingdom is deliberately absent. Its DUAA amendment to PECR
+   * Schedule A1, in force 5 February 2026, exempts first-party statistics from
+   * consent where the visitor is told clearly and has a simple free way to
+   * object — which privacy.html and the guide's switch are. docs/38-AB-TESTING.md
+   * records the one risk in that reading and says it is a one-line change.
    */
   const ASK_FIRST_ZONES = new Set([
     "Africa/Ceuta",
     "America/Cayenne",
     "America/Guadeloupe",
+    "America/Marigot",
     "America/Martinique",
     "Arctic/Longyearbyen",
     "Asia/Famagusta",
     "Asia/Nicosia",
     "Atlantic/Azores",
     "Atlantic/Canary",
+    "Atlantic/Jan_Mayen",
     "Atlantic/Madeira",
     "Atlantic/Reykjavik",
+    "Eire",
     "Europe/Amsterdam",
     "Europe/Athens",
-    "Europe/Belfast",
     "Europe/Berlin",
     "Europe/Bratislava",
     "Europe/Brussels",
@@ -83,7 +105,6 @@
     "Europe/Jersey",
     "Europe/Lisbon",
     "Europe/Ljubljana",
-    "Europe/London",
     "Europe/Luxembourg",
     "Europe/Madrid",
     "Europe/Malta",
@@ -102,15 +123,103 @@
     "Europe/Vilnius",
     "Europe/Warsaw",
     "Europe/Zagreb",
+    "Iceland",
     "Indian/Mayotte",
-    "Indian/Reunion"
+    "Indian/Reunion",
+    "Poland",
+    "Portugal"
   ]);
 
-  /** The same places as region subtags, for `navigator.languages` and the worker. */
+  /**
+   * European zones that are provably NOT in that list, so a browser reporting
+   * one is settled without asking anybody. Both spellings of every rename are
+   * here, because ICU canonicalizes some of them in one direction and browsers
+   * with newer CLDR data report the other.
+   */
+  const CLEAR_EUROPEAN_ZONES = new Set([
+    "America/Godthab",
+    "America/Nuuk",
+    "Asia/Istanbul",
+    "Atlantic/Faeroe",
+    "Atlantic/Faroe",
+    "Europe/Andorra",
+    "Europe/Astrakhan",
+    "Europe/Belfast",
+    "Europe/Belgrade",
+    "Europe/Chisinau",
+    "Europe/Istanbul",
+    "Europe/Kaliningrad",
+    "Europe/Kiev",
+    "Europe/Kirov",
+    "Europe/Kyiv",
+    "Europe/London",
+    "Europe/Minsk",
+    "Europe/Monaco",
+    "Europe/Moscow",
+    "Europe/Podgorica",
+    "Europe/Samara",
+    "Europe/San_Marino",
+    "Europe/Sarajevo",
+    "Europe/Saratov",
+    "Europe/Simferopol",
+    "Europe/Skopje",
+    "Europe/Tirane",
+    "Europe/Tiraspol",
+    "Europe/Ulyanovsk",
+    "Europe/Uzhgorod",
+    "Europe/Vatican",
+    "Europe/Volgograd",
+    "Europe/Zaporozhye",
+    "Europe/Zurich",
+    "GB",
+    "GB-Eire",
+    "Turkey"
+  ]);
+
+  /**
+   * Zones that say nothing about where the browser is. A hardened browser
+   * (Firefox with resistFingerprinting, Tor) reports UTC on purpose, and so
+   * does a machine with no time zone set, so these must mean "ask the worker"
+   * rather than "not in Europe" — otherwise the visitors most likely to care
+   * are the ones never asked.
+   */
+  const NO_ZONE_SIGNAL = new Set([
+    "+00:00",
+    "Etc/GMT",
+    "Etc/GMT+0",
+    "Etc/GMT-0",
+    "Etc/GMT0",
+    "Etc/UCT",
+    "Etc/Universal",
+    "Etc/UTC",
+    "Etc/Unknown",
+    "Etc/Zulu",
+    "GMT",
+    "GMT+0",
+    "GMT-0",
+    "GMT0",
+    "Greenwich",
+    "UCT",
+    "UTC",
+    "Universal",
+    "Z",
+    "Zulu"
+  ]);
+
+  /** Old European abbreviations that name an offset, not a country. */
+  const AMBIGUOUS_ZONES = new Set(["CET", "EET", "MET", "WET"]);
+
+  /**
+   * The same places as region subtags, for `navigator.languages`. Identical to
+   * the worker's own ASK_FIRST_COUNTRIES, which is the list that decides;
+   * tests/region-gate.spec.js asserts the two are equal in both directions.
+   * Cloudflare reports the outermost regions under their own codes (GP, MQ, GF,
+   * RE, YT, MF), not their member state's, so they need entries of their own.
+   */
   const ASK_FIRST_REGIONS = new Set([
-    "AT", "AX", "BE", "BG", "CY", "CZ", "DE", "DK", "EE", "ES", "FI", "FR", "GB",
-    "GF", "GG", "GI", "GP", "GR", "HR", "HU", "IE", "IM", "IS", "IT", "JE", "LI",
-    "LT", "LU", "LV", "MQ", "MT", "NL", "NO", "PL", "PT", "RE", "RO", "SE", "SI",
+    "AT", "AX", "BE", "BG", "CY", "CZ", "DE", "DK", "EE", "ES", "FI", "FR", "GF",
+    "GG", "GI", "GP", "GR", "HR", "HU", "IE", "IM", "IS", "IT", "JE", "LI", "LT",
+    "LU", "LV", "MF", "MQ", "MT", "NL", "NO", "PL", "PT", "RE", "RO", "SE", "SI",
     "SJ", "SK", "YT"
   ]);
 
@@ -169,20 +278,59 @@
   }
 
   /**
+   * An automated browser: headless Chrome, Playwright, a crawler. js/analytics.js
+   * sends nothing from one and nobody is sitting at it, so there is nothing to
+   * ask and nothing to protect. Settling it as out of scope keeps the site's own
+   * suite on the ordinary path — which is the path worth testing — and stops
+   * every spec making a request to a route it has no reason to call.
+   * @returns {boolean} True when this is not a person's browser.
+   */
+  function automated() {
+    if (global.navigator?.webdriver) return true;
+    try {
+      return sessionStorage.getItem("vt_e2e") === "1";
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * What this browser's clock says about where it is.
+   * @returns {"ask" | "unknown" | "clear"} Verdict from the time zone alone.
+   */
+  function zoneVerdict() {
+    const tz = timeZone();
+    if (!tz || NO_ZONE_SIGNAL.has(tz) || AMBIGUOUS_ZONES.has(tz)) return "unknown";
+    if (ASK_FIRST_ZONES.has(tz)) return "ask";
+    if (CLEAR_EUROPEAN_ZONES.has(tz)) return "clear";
+    // A European zone this file has never heard of: a rename, or a new id. The
+    // worker knows; guessing "not Europe" here is the one wrong answer.
+    if (tz.indexOf("Europe/") === 0) return "unknown";
+    return "clear";
+  }
+
+  /**
    * Is it worth asking the worker where this browser is? Deliberately generous:
    * a false yes costs one small request and a second of held statistics, a
    * false no costs asking somebody after the fact, which is not asking.
-   * @returns {boolean} True when the browser looks European.
+   * @returns {boolean} True when the browser might be somewhere that asks first.
    */
   function looksEuropean() {
-    if (ASK_FIRST_ZONES.has(timeZone())) return true;
+    if (zoneVerdict() !== "clear") return true;
     return languageRegions().some((r) => ASK_FIRST_REGIONS.has(r));
   }
 
   function storedChoice() {
     try {
       const raw = localStorage.getItem(CHOICE_KEY);
-      return raw === "granted" || raw === "denied" ? raw : null;
+      if (!raw) return null;
+      const bag = JSON.parse(raw);
+      const answer = bag && bag.a;
+      if (answer !== "y" && answer !== "n") return null;
+      const at = Number(bag.t);
+      if (!Number.isFinite(at) || at <= 0) return null;
+      if (Math.floor(Date.now() / 1000) - at > CHOICE_TTL_SECONDS) return null;
+      return answer === "y" ? "granted" : "denied";
     } catch {
       return null;
     }
@@ -297,17 +445,28 @@
         cache: "no-store",
         signal: ctl ? ctl.signal : undefined
       });
+      // A worker that has not been redeployed yet has no such route. That is a
+      // fact about the deployment, not a privacy signal, so fall back to what
+      // the clock says rather than putting a bar in front of everybody whose
+      // only European signal was a language or a blank time zone.
+      if (res.status === 404) {
+        settle(zoneVerdict() === "ask" ? "eu" : "non_eu", null, "route_missing");
+        return;
+      }
       const data = res.ok ? await res.json() : null;
       const cc = typeof data?.country === "string" ? data.country.toUpperCase() : "";
-      if (typeof data?.askFirst === "boolean") {
+      const placed = data ? data.placed === true || /^[A-Z]{2}$/.test(cc) : false;
+      // Tor and an address the edge cannot map answer "no country", which is not
+      // the same as "not in Europe": keep the stricter verdict for those.
+      if (!placed) {
+        settle("eu", null, "worker_silent");
+        return;
+      }
+      if (typeof data.askFirst === "boolean") {
         settle(data.askFirst ? "eu" : "non_eu", cc || null, "worker");
         return;
       }
-      if (/^[A-Z]{2}$/.test(cc)) {
-        settle(ASK_FIRST_REGIONS.has(cc) ? "eu" : "non_eu", cc, "worker");
-        return;
-      }
-      settle("eu", null, "worker_silent");
+      settle(ASK_FIRST_REGIONS.has(cc) ? "eu" : "non_eu", cc, "worker");
     } catch {
       settle("eu", null, "unreachable");
     } finally {
@@ -323,7 +482,10 @@
    */
   function setConsent(granted) {
     try {
-      localStorage.setItem(CHOICE_KEY, granted ? "granted" : "denied");
+      localStorage.setItem(
+        CHOICE_KEY,
+        JSON.stringify({ v: 1, a: granted ? "y" : "n", t: Math.floor(Date.now() / 1000) })
+      );
     } catch {
       /* private mode: the answer holds for this page only */
     }
@@ -460,6 +622,7 @@
       country,
       source,
       timeZone: timeZone(),
+      zoneVerdict: zoneVerdict(),
       languageRegions: languageRegions(),
       consent: consent(),
       reason: blockedReason(),
@@ -478,13 +641,17 @@
     onChange,
     report,
     looksEuropean,
+    zoneVerdict,
     // Exposed so a test can hold this list to the worker's own
     // (events.js ASK_FIRST_COUNTRIES), which is the one that decides.
     regions: () => [...ASK_FIRST_REGIONS].sort()
   };
 
   // The synchronous half, and the whole of it for most of the world.
-  if (!looksEuropean()) {
+  if (automated()) {
+    verdict = "non_eu";
+    source = "automated";
+  } else if (!looksEuropean()) {
     verdict = "non_eu";
     source = "guess";
   } else if (consent()) {

@@ -294,21 +294,35 @@ test("a country that asks first is turned away unless the batch says the visitor
   assert.equal(yes.body.accepted, 1);
   assert.equal((await rows(env, "SELECT COUNT(*) AS n FROM events"))[0].n, 1);
 
-  // The United Kingdom is not in the EU and asks first all the same (PECR
-  // reg. 6), which cf.isEUCountry alone would miss.
-  const gb = await call(
-    beacon({ events: [ev("app_open", "b1b2c3d4e5f60718")] }, { headers: { "cf-ipcountry": "GB" } }),
+  // An outermost region reports its own code, not its member state's, and
+  // cf.isEUCountry cannot be relied on to cover it — so without its own entry
+  // Réunion would be let through although EU law applies there in full.
+  const re = await call(
+    beacon({ events: [ev("app_open", "b1b2c3d4e5f60718")] }, { headers: { "cf-ipcountry": "RE" } }),
     freshEnv(),
     { now: NOW }
   );
-  assert.equal(gb.body.reason, "eu_no_consent");
+  assert.equal(re.body.reason, "eu_no_consent");
+
+  // And the EU itself, by the edge's own flag rather than the list.
+  const flagged = new Request(`${BASE}/v1/events`, {
+    method: "POST",
+    headers: { "content-type": "text/plain", "user-agent": CHROME_UA, Origin: TEST_ORIGIN },
+    body: JSON.stringify({ events: [ev("app_open", "c1b2c3d4e5f60718")] })
+  });
+  Object.defineProperty(flagged, "cf", { value: { country: "DE", isEUCountry: "1" }, configurable: true });
+  assert.equal((await call(flagged, freshEnv(), { now: NOW })).body.reason, "eu_no_consent");
 });
 
 test("a visitor anywhere else is recorded exactly as before", async () => {
   // The whole point of the region gate: outside the ask-first list nothing
   // changes, and a batch with no consent field is the normal case.
+  // GB is in this list on purpose: since 5 February 2026 PECR Schedule A1 para 5
+  // exempts first-party statistics from consent where the visitor is told and
+  // has a simple free way to object, which privacy.html and the guide's switch
+  // are. docs/38-AB-TESTING.md carries the reasoning and the risk in it.
   const env = freshEnv();
-  for (const cc of ["PE", "US", "MX", "CO", "CL", "AR", "BR", "CH", "XX", "T1"]) {
+  for (const cc of ["PE", "US", "MX", "CO", "CL", "AR", "BR", "CH", "GB", "XX", "T1"]) {
     const res = await call(
       beacon({ events: [ev("app_open", "a1b2c3d4e5f60718")] }, { headers: { "cf-ipcountry": cc } }),
       env,
@@ -317,7 +331,7 @@ test("a visitor anywhere else is recorded exactly as before", async () => {
     assert.equal(res.status, 200, `${cc}: ${JSON.stringify(res.body)}`);
     assert.equal(res.body.accepted, 1, cc);
   }
-  assert.equal((await rows(env, "SELECT COUNT(*) AS n FROM events"))[0].n, 10);
+  assert.equal((await rows(env, "SELECT COUNT(*) AS n FROM events"))[0].n, 11);
 });
 
 test("GET /v1/geo says where the edge places a request, and nothing else", async () => {
@@ -337,17 +351,19 @@ test("GET /v1/geo says where the edge places a request, and nothing else", async
 
   const es = await geo("ES");
   assert.equal(es.status, 200);
-  assert.deepEqual(es.body, { ok: true, country: "ES", askFirst: true });
-  assert.deepEqual(Object.keys(es.body).sort(), ["askFirst", "country", "ok"]);
+  assert.deepEqual(es.body, { ok: true, country: "ES", placed: true, askFirst: true });
+  assert.deepEqual(Object.keys(es.body).sort(), ["askFirst", "country", "ok", "placed"]);
 
-  assert.deepEqual((await geo("GB")).body, { ok: true, country: "GB", askFirst: true });
-  assert.deepEqual((await geo("PE")).body, { ok: true, country: "PE", askFirst: false });
-  assert.deepEqual((await geo("CH")).body, { ok: true, country: "CH", askFirst: false });
+  assert.deepEqual((await geo("RE")).body, { ok: true, country: "RE", placed: true, askFirst: true });
+  assert.deepEqual((await geo("GB")).body, { ok: true, country: "GB", placed: true, askFirst: false });
+  assert.deepEqual((await geo("PE")).body, { ok: true, country: "PE", placed: true, askFirst: false });
+  assert.deepEqual((await geo("CH")).body, { ok: true, country: "CH", placed: true, askFirst: false });
   // Unplaceable: Tor, an address the edge cannot map, or a request with no
-  // header at all. The page has already decided from its own time zone.
-  assert.deepEqual((await geo("T1")).body, { ok: true, country: null, askFirst: false });
-  assert.deepEqual((await geo("XX")).body, { ok: true, country: null, askFirst: false });
-  assert.deepEqual((await geo(null)).body, { ok: true, country: null, askFirst: false });
+  // header at all. `placed: false` is how the page tells "no country" apart from
+  // "not in Europe" — it keeps whatever its own clock said.
+  assert.deepEqual((await geo("T1")).body, { ok: true, country: null, placed: false, askFirst: false });
+  assert.deepEqual((await geo("XX")).body, { ok: true, country: null, placed: false, askFirst: false });
+  assert.deepEqual((await geo(null)).body, { ok: true, country: null, placed: false, askFirst: false });
 
   // Reading it stores nothing at all, not even a counter.
   await ensureSchema(env.DB);

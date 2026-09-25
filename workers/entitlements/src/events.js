@@ -407,18 +407,32 @@ export function sanitizeEvent(raw, registry) {
 /**
  * Countries whose law requires the visitor be asked before anything
  * non-essential is kept: the EEA (ePrivacy art. 5(3), as read by EDPB
- * Guidelines 2/2023), the United Kingdom (PECR reg. 6), and the Crown
- * dependencies and Gibraltar, which keep the same rule. The EU's outermost
- * regions carry their member state's code, so they need no entry of their own.
+ * Guidelines 2/2023), and the Crown dependencies and Gibraltar, which keep
+ * rules of the same shape.
  *
- * js/region-gate.js holds the same list as time zones, to decide whether it is
- * worth asking. This one is the authority: it comes from the edge's own view of
- * the address, which the page cannot talk its way out of.
+ * The EU's outermost regions have entries of their own (GF, GP, MQ, RE, YT, MF,
+ * AX) because Cloudflare reports them under their own codes rather than their
+ * member state's, and `cf.isEUCountry` cannot be relied on to cover them — so
+ * without these, Réunion and Guadeloupe would be let through although EU law
+ * applies there in full.
+ *
+ * The United Kingdom is deliberately absent. Its DUAA amendment to PECR
+ * Schedule A1, in force 5 February 2026, exempts first-party statistics from
+ * consent where the visitor is told clearly and has a simple free way to
+ * object — which privacy.html and the guide's switch are. docs/38-AB-TESTING.md
+ * records the one real risk in that reading, and putting "GB" back here and in
+ * js/region-gate.js is the whole change if the owner would rather not take it.
+ *
+ * js/region-gate.js holds the identical list, plus the matching time zones, to
+ * decide whether it is worth asking at all. This one is the authority: it comes
+ * from the edge's own view of the address, which the page cannot talk its way
+ * out of.
  */
 export const ASK_FIRST_COUNTRIES = new Set([
-  "AT", "AX", "BE", "BG", "CY", "CZ", "DE", "DK", "EE", "ES", "FI", "FR", "GB",
-  "GG", "GI", "GR", "HR", "HU", "IE", "IM", "IS", "IT", "JE", "LI", "LT", "LU",
-  "LV", "MT", "NL", "NO", "PL", "PT", "RO", "SE", "SI", "SJ", "SK"
+  "AT", "AX", "BE", "BG", "CY", "CZ", "DE", "DK", "EE", "ES", "FI", "FR", "GF",
+  "GG", "GI", "GP", "GR", "HR", "HU", "IE", "IM", "IS", "IT", "JE", "LI", "LT",
+  "LU", "LV", "MF", "MQ", "MT", "NL", "NO", "PL", "PT", "RE", "RO", "SE", "SI",
+  "SJ", "SK", "YT"
 ]);
 
 /**

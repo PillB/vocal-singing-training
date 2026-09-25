@@ -23,12 +23,16 @@ const ENDPOINT = "https://events.test/v1/events";
 /**
  * Open the site in its own context, with the worker stubbed.
  * @param {import('@playwright/test').Browser} browser Browser.
- * @param {{timezoneId: string, locale: string, geo?: object|"fail", gpc?: boolean,
- *          storage?: Record<string, string>}} opts Case.
+ * @param {{timezoneId?: string, locale: string, geo?: object|"fail", geoStatus?: number,
+ *          gpc?: boolean, human?: boolean, storage?: Record<string, string>}} opts Case.
  * @returns {Promise<{ctx: object, page: object, sent: {batches: object[], geo: number}}>} Case.
  */
 async function open(browser, opts) {
-  const ctx = await browser.newContext({ timezoneId: opts.timezoneId, locale: opts.locale });
+  const ctx = await browser.newContext(
+    // No timezoneId leaves the container's own zone, which is Etc/UTC — the case
+    // a hardened browser and this suite both present.
+    opts.timezoneId ? { timezoneId: opts.timezoneId, locale: opts.locale } : { locale: opts.locale }
+  );
   const page = await ctx.newPage();
   const sent = { batches: [], geo: 0 };
   await page.route("https://events.test/**", async (route) => {
@@ -40,9 +44,9 @@ async function open(browser, opts) {
         return;
       }
       await route.fulfill({
-        status: 200,
+        status: opts.geoStatus || 200,
         contentType: "application/json",
-        body: JSON.stringify(opts.geo || { ok: true, country: "ES", askFirst: true })
+        body: JSON.stringify(opts.geo || { ok: true, country: "ES", placed: true, askFirst: true })
       });
       return;
     }
@@ -62,11 +66,13 @@ async function open(browser, opts) {
       /* ignore */
     }
     window.VT_ANALYTICS_ENDPOINT = o.endpoint;
-    Object.defineProperty(Navigator.prototype, "webdriver", { get: () => false, configurable: true });
+    if (o.human) {
+      Object.defineProperty(Navigator.prototype, "webdriver", { get: () => false, configurable: true });
+    }
     if (o.gpc) {
       Object.defineProperty(Navigator.prototype, "globalPrivacyControl", { get: () => true, configurable: true });
     }
-  }, { endpoint: ENDPOINT, gpc: !!opts.gpc, storage: opts.storage || {} });
+  }, { endpoint: ENDPOINT, gpc: !!opts.gpc, human: opts.human !== false, storage: opts.storage || {} });
   await page.goto(BASE + "/", { waitUntil: "domcontentloaded" });
   await page.waitForFunction(() => !!window.VTAnalytics && !!window.VTRegion);
   return { ctx, page, sent };
@@ -243,7 +249,101 @@ test.describe("EU rules only in the EU", () => {
     // (Guadeloupe, Réunion, the Azores) whose requests reach the worker under
     // the member state's own code, so the worker needs no entry for it.
     const extra = client.filter((cc) => !ASK_FIRST_COUNTRIES.has(cc));
-    expect(extra).toEqual(["GF", "GP", "MQ", "RE", "YT"]);
+    expect(extra).toEqual([]);
+    // And the list itself is the one the research settled on: the EEA with the
+    // outermost regions under their own codes, the Crown dependencies and
+    // Gibraltar, and no GB.
+    expect(client).toContain("RE");
+    expect(client).toContain("MF");
+    expect(client).not.toContain("GB");
+    await ctx.close();
+  });
+
+  test("a browser that hides its clock is checked, not assumed", async ({ browser }) => {
+    // Firefox with resistFingerprinting and Tor Browser report UTC on purpose,
+    // and a machine with no zone set reports nothing at all. Reading either as
+    // "not in Europe" would leave the visitors most likely to care never asked.
+    const { ctx, page, sent } = await open(browser, {
+      locale: "en-US",
+      geo: { ok: true, country: "PE", placed: true, askFirst: false }
+    });
+    expect(await page.evaluate(() => window.VTRegion.zoneVerdict())).toBe("unknown");
+    expect(await page.evaluate(() => window.VTRegion.looksEuropean())).toBe(true);
+    await page.waitForFunction(() => window.VTRegion.verdict() !== "pending");
+    expect(sent.geo).toBe(1);
+    expect(await page.evaluate(() => window.VTRegion.verdict())).toBe("non_eu");
+    await trackAndFlush(page);
+    await expect.poll(() => sent.batches.length).toBeGreaterThan(0);
+    await expect(page.locator(bar)).toHaveCount(0);
+    await ctx.close();
+  });
+
+  test("an automated browser is never asked, so the suite grows no bar", async ({ browser }) => {
+    // This container runs on Etc/UTC, so every spec that does not set a zone
+    // lands on the "unknown" branch above. Nothing may come of that: an
+    // automated browser sends nothing, so there is nothing to consent to.
+    const { ctx, page, sent } = await open(browser, { locale: "es-PE", human: false });
+    await page.waitForTimeout(400);
+    expect(await page.evaluate(() => window.VTRegion.verdict())).toBe("non_eu");
+    expect(await page.evaluate(() => window.VTRegion.report().source)).toBe("automated");
+    expect(sent.geo).toBe(0);
+    expect(await page.evaluate(() => window.VTAnalytics.remoteState().reason)).toBe("automated");
+    await trackAndFlush(page);
+    await page.waitForTimeout(200);
+    expect(sent.batches).toEqual([]);
+    await expect(page.locator(bar)).toHaveCount(0);
+    await ctx.close();
+  });
+
+  test("a worker that cannot place the request is no answer, not a no", async ({ browser }) => {
+    // Tor answers "T1" and an unmappable address answers "XX"; the worker reports
+    // both as placed:false. Treating that as "not in Europe" would release
+    // exactly the visitors who are hardest to place.
+    const { ctx, page, sent } = await open(browser, {
+      timezoneId: "Europe/Madrid",
+      locale: "es-ES",
+      geo: { ok: true, country: null, placed: false, askFirst: false }
+    });
+    await page.waitForFunction(() => window.VTRegion.verdict() !== "pending");
+    expect(await page.evaluate(() => window.VTRegion.verdict())).toBe("eu");
+    await trackAndFlush(page);
+    await page.waitForTimeout(250);
+    expect(sent.batches).toEqual([]);
+    await expect(page.locator(bar)).toBeVisible();
+    await ctx.close();
+  });
+
+  test("a worker without the route yet falls back to the clock, not to a bar for everybody", async ({ browser }) => {
+    // /v1/geo only exists once the worker is redeployed. A 404 is a fact about
+    // the deployment, not a privacy signal: keep the bar for a European clock and
+    // keep it away from somebody whose only European signal was a language.
+    const madrid = await open(browser, { timezoneId: "Europe/Madrid", locale: "es-ES", geoStatus: 404 });
+    await madrid.page.waitForFunction(() => window.VTRegion.verdict() !== "pending");
+    expect(await madrid.page.evaluate(() => window.VTRegion.report().source)).toBe("route_missing");
+    expect(await madrid.page.evaluate(() => window.VTRegion.verdict())).toBe("eu");
+    await expect(madrid.page.locator(bar)).toBeVisible();
+    await madrid.ctx.close();
+
+    const lima = await open(browser, { timezoneId: "America/Lima", locale: "de-DE", geoStatus: 404 });
+    await lima.page.waitForFunction(() => window.VTRegion.verdict() !== "pending");
+    expect(await lima.page.evaluate(() => window.VTRegion.verdict())).toBe("non_eu");
+    await trackAndFlush(lima.page);
+    await expect.poll(() => lima.sent.batches.length).toBeGreaterThan(0);
+    await expect(lima.page.locator(bar)).toHaveCount(0);
+    await lima.ctx.close();
+  });
+
+  test("the United Kingdom is not asked, and pays nothing for the EU's rules", async ({ browser }) => {
+    // PECR Schedule A1 para 5, in force 5 February 2026, exempts first-party
+    // statistics where the visitor is told and has a simple free way to object.
+    // docs/38-AB-TESTING.md carries the reasoning and the risk in it.
+    const { ctx, page, sent } = await open(browser, { timezoneId: "Europe/London", locale: "en-GB" });
+    expect(await page.evaluate(() => window.VTRegion.zoneVerdict())).toBe("clear");
+    expect(await page.evaluate(() => window.VTRegion.verdict())).toBe("non_eu");
+    await trackAndFlush(page);
+    await expect.poll(() => sent.batches.length).toBeGreaterThan(0);
+    expect(sent.geo).toBe(0);
+    await expect(page.locator(bar)).toHaveCount(0);
     await ctx.close();
   });
 

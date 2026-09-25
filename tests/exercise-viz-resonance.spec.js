@@ -376,6 +376,136 @@ test.describe("resonance pictures", () => {
     expect(left.now, "the take stops with the panel").toBeNull();
   });
 
+  test("a note sung along with the piano's reference counts once you carry on alone", async ({ page }) => {
+    await boot(page);
+    const r = await page.evaluate(() => {
+      const P = window.VTPiano;
+      const was = P.isSounding;
+      let ref = true;
+      P.isSounding = () => ref;
+      try {
+        const run = (gap) => {
+          const m = window.VTPracticeModes.get("resonanceZone");
+          const host = document.createElement("div");
+          document.body.appendChild(host);
+          m.mount(host, { zones: [{ key: "low", label: "Low", labelEs: "Graves", notes: ["C3", "B2", "A2"] }], focus: "" });
+          m.onStart();
+          const f = m.state.wantFreq;
+          ref = true;
+          // ~1 s in tune while the reference sounds: provisional only
+          for (let i = 0; i < 60; i++) m.onFrame({ dtMs: 16, rms: 0.05, sounding: true, rawFreq: f, inputGain: 1 });
+          const during = { held: m.state.held, refRun: m.state.refRun };
+          ref = false;
+          // a gap of silence after the piano stops wipes the provisional run
+          for (let i = 0; i < gap; i++) m.onFrame({ dtMs: 16, rms: 0.001, sounding: false, rawFreq: null, inputGain: 1 });
+          for (let i = 0; i < 20; i++) m.onFrame({ dtMs: 16, rms: 0.05, sounding: true, rawFreq: f, inputGain: 1 });
+          const after = m.state.held;
+          m.unmount();
+          host.remove();
+          return { during, after };
+        };
+        return { carried: run(0), stopped: run(12) };
+      } finally {
+        P.isSounding = was;
+      }
+    });
+    expect(r.carried.during.held, "nothing counts while the piano still sounds").toBe(0);
+    expect(r.carried.during.refRun).toBeGreaterThan(800);
+    expect(r.carried.after, "a quarter second alone confirms it").toBe(1);
+    expect(r.stopped.after, "stopping with the piano does not count").toBe(0);
+  });
+
+  test("middle zone: a sung note that slides on, or is still open at Stop, is a sung turn", async ({ page }) => {
+    await boot(page);
+    const r = await page.evaluate(() => {
+      const m = window.VTPracticeModes.get("resonanceZone");
+      const host = document.createElement("div");
+      document.body.appendChild(host);
+      const ex = VT_EXERCISES.singing.find((e) => e.id === "s22-mid-voice-hola");
+      m.mount(host, ex.practice);
+      m.onStart();
+      const base = window.VT_NOTE_FREQ.C3;
+      const quiet = (n) => {
+        for (let i = 0; i < n; i++) m.onFrame({ dtMs: 16, rms: 0.001, sounding: false, rawFreq: null });
+      };
+      const speak = () => {
+        for (let i = 0; i < 50; i++) {
+          const st = [0, 3, -1, 2][Math.floor(i / 12) % 4];
+          m.onFrame({ dtMs: 16, rms: 0.04, sounding: true, rawFreq: base * Math.pow(2, st / 12) });
+        }
+        quiet(25);
+      };
+      speak();
+      // Held, then straight on to a note two semitones up without a breath
+      const f = m.state.wantFreq;
+      for (let i = 0; i < 70; i++) m.onFrame({ dtMs: 16, rms: 0.05, sounding: true, rawFreq: f });
+      for (let i = 0; i < 15; i++) m.onFrame({ dtMs: 16, rms: 0.05, sounding: true, rawFreq: f * Math.pow(2, 2 / 12) });
+      quiet(25);
+      speak();
+      // Still singing when Stop is pressed
+      const g = m.state.wantFreq;
+      for (let i = 0; i < 70; i++) m.onFrame({ dtMs: 16, rms: 0.05, sounding: true, rawFreq: g });
+      m.onStop({});
+      const sp = m.state.sp;
+      const res = { kinds: sp.turns.map((t) => t.kind), pairs: sp.pairs.length };
+      m.unmount();
+      host.remove();
+      return res;
+    });
+    expect(r.kinds.filter((k) => k === "sung").length, r.kinds.join(",")).toBe(2);
+    expect(r.kinds.filter((k) => k === "spoken").length).toBeGreaterThanOrEqual(2);
+    expect(r.pairs, "each sung turn is compared with the spoken one before it").toBe(2);
+  });
+
+  test("phone: after Stop the zone pictures list every held note, recap brightness, and squeeze no text", async ({ page }) => {
+    test.setTimeout(150_000);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.addInitScript(() => {
+      window.__squeezed = [];
+      window.__texts = new Set();
+      const P = CanvasRenderingContext2D.prototype;
+      const orig = P.fillText;
+      P.fillText = function (t, x, y, maxW) {
+        const inPanel = this.canvas && this.canvas.closest && this.canvas.closest(".mode-panel");
+        if (inPanel) {
+          window.__texts.add(String(t));
+          // Condensed by maxWidth, or cut short with "…"
+          if ((maxW != null && this.measureText(t).width > maxW + 0.5) || /…$/.test(t)) window.__squeezed.push(String(t));
+        }
+        return orig.call(this, t, x, y, maxW);
+      };
+    });
+    await boot(page);
+    const out = {};
+    const squeezed = [];
+    for (const id of ["s21-chest-resonance", "s23-mask-ya", "s24-nana-high", "s25-zone-tour"]) {
+      // A fresh page each, as a learner would open it
+      await page.goto(BASE + "/?e2e", { waitUntil: "domcontentloaded" });
+      await page.waitForFunction(() => !!window.VTApp?.openExercise && !!window.VTViz?.scenes?.resonanceKit);
+      await open(page, id);
+      await page.evaluate(() => document.getElementById("btn-practice-start")?.click());
+      await page.waitForTimeout(250);
+      await playVoice(page, "zones");
+      await page.waitForTimeout(9000);
+      await stopVoice(page);
+      await page.evaluate(() => {
+        window.__texts.clear();
+        document.getElementById("btn-practice-stop")?.click();
+      });
+      await page.waitForTimeout(900);
+      out[id] = await page.evaluate(() => ({ held: window.VTApp.getState().modeInstance.state.held, texts: [...window.__texts] }));
+      squeezed.push(...(await page.evaluate(() => window.__squeezed)).map((t) => `${id}: ${t}`));
+    }
+    // The first two notes, even with the piano's reference sounding at Start
+    expect(out["s21-chest-resonance"].held).toBeGreaterThanOrEqual(2);
+    expect(out["s24-nana-high"].held).toBeGreaterThanOrEqual(2);
+    // Brightness per phase, and one plain line on it
+    const s23 = out["s23-mask-ya"].texts.join("\n");
+    expect(s23).toMatch(/Brillo.*aprox\./);
+    expect(s23).toMatch(/Exagera|brillante|Brillo parecido|Solo el «YA» normal/);
+    expect(squeezed, squeezed.join(" | ")).toEqual([]);
+  });
+
   test("English words on the resonance drills", async ({ page }) => {
     await boot(page, "en");
     await open(page, "s26-placement-compare");

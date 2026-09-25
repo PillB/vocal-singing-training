@@ -528,7 +528,7 @@
 
   /* ——————————————————————— Shared drawing bits ——————————————————————— */
 
-  const { font, roundRect, panel, fitText, glyph, hatch } = V;
+  const { font, roundRect, panel, glyph, hatch } = V;
 
   function fmtSigned(n, digits = 0) {
     const v = Number(n) || 0;
@@ -542,13 +542,215 @@
   function dB(d) {
     return fmtSigned(d, Math.abs(d) < 10 ? 1 : 0) + " dB";
   }
+  function widthOf(ctx, s, px, weight = 700) {
+    ctx.font = font(px, weight);
+    return ctx.measureText(s).width;
+  }
+  /**
+   * The first wording that fits `maxW`, largest size first: every wording at
+   * `px`, then a size down, … to `minPx`. Text is never condensed; when
+   * nothing fits, the last (shortest) wording is cut with "…" as a last resort.
+   */
+  function fitWords(ctx, words, maxW, px, minPx = px, weight = 700) {
+    const vs = (Array.isArray(words) ? words : [words]).filter((s) => s != null && s !== "");
+    if (!vs.length) return { s: "", px, w: 0 };
+    for (let p = px; p >= minPx; p--) {
+      for (const s of vs) {
+        const w = widthOf(ctx, s, p, weight);
+        if (w <= maxW) return { s, px: p, w };
+      }
+    }
+    let s = vs[vs.length - 1];
+    ctx.font = font(minPx, weight);
+    while (s.length > 1 && ctx.measureText(s + "…").width > maxW) s = s.slice(0, -1).trimEnd();
+    s += "…";
+    return { s, px: minPx, w: ctx.measureText(s).width };
+  }
+  /**
+   * One line of text. With `maxW` it fits by wording (`alt`, shorter ones)
+   * and size (down to `minPx`, 10 by default), never by condensing.
+   * Returns the width drawn.
+   */
   function text(ctx, s, x, y, o = {}) {
-    ctx.font = o.font || font(o.px || 11, o.weight || 700);
+    const weight = o.weight || 700;
+    let px = o.px || 11;
+    let str = s;
+    if (o.maxW != null) {
+      const f = fitWords(ctx, [s].concat(o.alt || []), o.maxW, px, Math.min(px, o.minPx || 10), weight);
+      str = f.s;
+      px = f.px;
+    }
+    ctx.font = font(px, weight);
     ctx.fillStyle = o.color || C.text;
     ctx.textAlign = o.align || "left";
     ctx.textBaseline = o.baseline || "middle";
-    if (o.maxW) ctx.fillText(s, x, y, o.maxW);
-    else ctx.fillText(s, x, y);
+    ctx.fillText(str, x, y);
+    return ctx.measureText(str).width;
+  }
+  /** Words broken into lines no wider than `maxW`, in the current font. */
+  function wrapLines(ctx, s, maxW) {
+    const lines = [];
+    let cur = "";
+    String(s)
+      .split(/\s+/)
+      .filter(Boolean)
+      .forEach((word) => {
+        const t = cur ? cur + " " + word : word;
+        if (!cur || ctx.measureText(t).width <= maxW) cur = t;
+        else {
+          lines.push(cur);
+          cur = word;
+        }
+      });
+    if (cur) lines.push(cur);
+    return lines;
+  }
+  /**
+   * Words in up to `maxLines` lines (the first line centred on `y`): the
+   * first wording that wraps into them at `px`, then smaller, to `minPx`.
+   * Returns { lines, px, bottom } — `bottom` is the last line's centre.
+   */
+  function textBlock(ctx, words, x, y, maxW, o = {}) {
+    const vs = (Array.isArray(words) ? words : [words]).filter(Boolean);
+    const weight = o.weight || 700;
+    const px0 = o.px || 11;
+    const minPx = Math.min(px0, o.minPx || 10);
+    const maxLines = Math.max(1, o.maxLines || 2);
+    let pick = null;
+    for (let p = px0; p >= minPx && !pick; p--) {
+      ctx.font = font(p, weight);
+      for (const s of vs) {
+        const lines = wrapLines(ctx, s, maxW);
+        if (lines.length <= maxLines && lines.every((l) => ctx.measureText(l).width <= maxW)) {
+          pick = { lines, px: p };
+          break;
+        }
+      }
+    }
+    if (!pick) {
+      const f = fitWords(ctx, vs[vs.length - 1], maxW, minPx, minPx, weight);
+      pick = { lines: [f.s], px: f.px };
+    }
+    const lh = o.lineH || Math.round(pick.px * 1.4);
+    // o.middle: the block is centred on y rather than starting there
+    const y0 = o.middle ? y - ((pick.lines.length - 1) * lh) / 2 : y;
+    ctx.font = font(pick.px, weight);
+    ctx.fillStyle = o.color || C.text;
+    ctx.textAlign = o.align || "left";
+    ctx.textBaseline = "middle";
+    pick.lines.forEach((l, i) => ctx.fillText(l, x, y0 + i * lh));
+    return { lines: pick.lines.length, px: pick.px, bottom: y0 + (pick.lines.length - 1) * lh };
+  }
+  /**
+   * A picture's header row: the count on the right keeps its words, the
+   * title on the left gets the rest (a shorter wording before a smaller one).
+   */
+  function headRow(ctx, w, pad, headH, compact, left, right, rightColor) {
+    const cy = pad + headH / 2 - 2;
+    const rpx = compact ? 10 : 11;
+    const r = fitWords(ctx, right, w * 0.45, rpx, 10, 700);
+    ctx.font = font(r.px, 700);
+    ctx.fillStyle = rightColor;
+    ctx.textAlign = "right";
+    ctx.textBaseline = "middle";
+    ctx.fillText(r.s, w - pad - 2, cy);
+    const h = fitWords(ctx, left, w - pad * 2 - r.w - 14, compact ? 13 : 15, compact ? 11 : 12, 800);
+    ctx.font = font(h.px, 800);
+    ctx.fillStyle = C.text;
+    ctx.textAlign = "left";
+    ctx.fillText(h.s, pad + 2, cy);
+  }
+
+  function overlapArea(a, b) {
+    const ix = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
+    const iy = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+    return ix > 0 && iy > 0 ? ix * iy : 0;
+  }
+  /** The rectangle a V.label backing takes (18 px tall, 4 px either side). */
+  function labelRect(ctx, s, x, y, px, align, weight = 700) {
+    const tw = widthOf(ctx, s, px, weight);
+    const bx = align === "right" ? x - tw - 4 : align === "center" ? x - tw / 2 - 4 : x - 4;
+    return { x: bx, y: y - 9, w: tw + 8, h: 18 };
+  }
+  /**
+   * Put a label where it covers the least: never past `bounds`, off every
+   * rectangle in `obst` (other labels, boxes, the now line) and on as little
+   * of the trace (`pts`, screen points) as possible. `words` are wordings,
+   * longest first; `spots` are [x, y, align] in order of preference. Draws it
+   * with a dark backing, adds it to `obst` and returns its rectangle, or null
+   * when no spot fits.
+   */
+  function placeLabel(ctx, words, spots, o) {
+    const px = o.px || 10;
+    const weight = o.weight || 700;
+    let best = null;
+    words.forEach((s, wi) => {
+      spots.forEach(([sx, sy, align], si) => {
+        const r = labelRect(ctx, s, sx, sy, px, align, weight);
+        const b = o.bounds;
+        if (r.x < b.x || r.x + r.w > b.x + b.w || r.y < b.y || r.y + r.h > b.y + b.h) return;
+        let cost = wi * 6 + si * 0.5;
+        // Stay put while nothing new is in the way: a label that hops each
+        // frame is harder to read than one that covers a little
+        const was = o.memo && o.memo[o.key];
+        if (was && was.wi === wi && was.si === si) cost -= 30;
+        let hit = false;
+        (o.obst || []).forEach((q) => {
+          const a = overlapArea(r, q);
+          if (a > 0) {
+            cost += 400 + a;
+            hit = true;
+          }
+        });
+        let onTrace = 0;
+        (o.pts || []).forEach((p) => {
+          if (p[0] >= r.x - 2 && p[0] <= r.x + r.w + 2 && p[1] >= r.y - 1 && p[1] <= r.y + r.h + 1) onTrace++;
+        });
+        cost += onTrace * 4;
+        if (!best || cost < best.cost) best = { cost, s, sx, sy, align, r, wi, si, hit: hit || onTrace >= 3 };
+      });
+    });
+    // An optional word (a zone's name) is left out rather than laid on
+    // another word, a check, a box or your voice
+    if (!best || (o.optional && best.hit)) return null;
+    if (o.memo) o.memo[o.key] = { wi: best.wi, si: best.si };
+    V.label(ctx, best.s, best.sx, best.sy, { align: best.align, font: font(px, weight), color: o.color || C.text });
+    if (o.obst) o.obst.push(best.r);
+    return best.r;
+  }
+
+  /**
+   * V.gauge with every word under the bar. The pointer comes down onto the
+   * bar from above, so a band's word above the bar sat under it whenever the
+   * reading was in that band. Under the bar: the end words at the ends, each
+   * band's word under its band, a ghost's word under its tick; a word that
+   * would touch one already there is left out (the end words go first).
+   * Returns the y below the words.
+   */
+  function gaugeWords(ctx, box, opts) {
+    const strip = (arr) => (arr || []).map((b) => Object.assign({}, b, { label: null }));
+    V.gauge(ctx, box, Object.assign({}, opts, { bands: strip(opts.bands), ghosts: strip(opts.ghosts), left: null, right: null }));
+    const { x, y, w, h } = box;
+    const xOf = (v) => x + ((clamp(v, opts.lo, opts.hi) - opts.lo) / (opts.hi - opts.lo)) * w;
+    const barY = y + h * 0.3;
+    const barH = Math.max(10, h * 0.34);
+    const wy = barY + barH + 9;
+    const px = 10;
+    const placed = [];
+    const put = (s, at, align, color) => {
+      if (!s) return;
+      const tw = widthOf(ctx, s, px, 700);
+      const x0 = clamp(align === "left" ? at : align === "right" ? at - tw : at - tw / 2, x, x + w - tw);
+      const r = { x: x0 - 4, w: tw + 8 };
+      if (placed.some((q) => r.x < q.x + q.w && q.x < r.x + r.w)) return;
+      placed.push(r);
+      text(ctx, s, x0, wy, { px, color });
+    };
+    put(opts.left, x, "left", opts.leftColor || C.faint);
+    put(opts.right, x + w, "right", opts.rightColor || C.faint);
+    (opts.bands || []).forEach((b) => put(b.label, (xOf(b.from) + xOf(b.to)) / 2, "center", b.stroke || C.target));
+    (opts.ghosts || []).forEach((g) => put(g.label, xOf(g.v), "center", C.faint));
+    return wy + 8;
   }
   /** A small "direction" glyph for a signed value past a threshold. */
   function dirGlyph(ctx, v, thr, x, y, color, s = 5) {
@@ -612,25 +814,20 @@
     const headH = tiny ? 0 : compact ? 20 : 26;
     if (!tiny) {
       const page = m.pages.length;
-      const narrow = w < 480;
-      const right = L(`${m.sung} ${m.sung === 1 ? "vuelta cantada" : "vueltas cantadas"}`, `${m.sung} ${m.sung === 1 ? "round sung" : "rounds sung"}`);
-      ctx.font = font(compact ? 10 : 11, 700);
-      const rightW = Math.min(w * 0.34, ctx.measureText(right).width);
+      const n = m.sung;
+      const right = [
+        L(`${n} ${n === 1 ? "vuelta cantada" : "vueltas cantadas"}`, `${n} ${n === 1 ? "round sung" : "rounds sung"}`),
+        L(`${n} ${n === 1 ? "vuelta" : "vueltas"}`, `${n} ${n === 1 ? "round" : "rounds"}`)
+      ];
+      const note = m.target || "";
       const head = m.review
-        ? L(`Tus vueltas · nota ${m.target || ""}`, `Your rounds · note ${m.target || ""}`)
-        : narrow
-          ? L(`Vuelta ${page} · nota ${m.target || ""}`, `Round ${page} · note ${m.target || ""}`)
-          : L(`Vuelta ${page} · una sola nota: ${m.target || ""}`, `Round ${page} · one note: ${m.target || ""}`);
-      ctx.fillStyle = C.text;
-      ctx.textAlign = "left";
-      ctx.textBaseline = "middle";
-      fitText(ctx, head, pad + 2, pad + headH / 2 - 2, w - pad * 2 - rightW - 14, compact ? 13 : 15, 800, 9);
-      text(ctx, right, w - pad - 2, pad + headH / 2 - 2, {
-        align: "right",
-        color: m.sung ? C.done : C.muted,
-        px: compact ? 10 : 11,
-        maxW: w * 0.34
-      });
+        ? [L(`Tus vueltas · nota ${note}`, `Your rounds · note ${note}`), L(`Tus vueltas · ${note}`, `Your rounds · ${note}`)]
+        : [
+            L(`Vuelta ${page} · una sola nota: ${note}`, `Round ${page} · one note: ${note}`),
+            L(`Vuelta ${page} · nota ${note}`, `Round ${page} · note ${note}`),
+            L(`Vuelta ${page} · ${note}`, `Round ${page} · ${note}`)
+          ];
+      headRow(ctx, w, pad, headH, compact, head, right, n ? C.done : C.muted);
     }
     const top = tiny ? pad - 4 : pad + headH + 2;
     const bodyH = h - top - pad + (tiny ? 4 : 0);
@@ -663,7 +860,10 @@
     const cw = box.w / n;
     const hh = o.tiny ? 22 : o.compact ? 26 : 34;
     const isCurPage = page === m.pages[m.pages.length - 1];
-    const stampH = o.tiny ? 0 : o.compact ? 16 : 34;
+    // A compact stamp is one line, "+8 ¢ · +0,3 dB", when a column holds it;
+    // in narrow columns the two numbers stack instead of being condensed
+    const oneLine = widthOf(ctx, "−88 ¢ · −8,8 dB", 10) <= cw - 4;
+    const stampH = o.tiny ? 0 : o.compact ? (oneLine ? 16 : 28) : 34;
     // Review adds a row per earlier round under the page
     const rows = m.review && !o.tiny ? m.pages.filter((p) => p !== page && p.cells.some((c) => c.cents != null)).slice(-3) : [];
     const rowH = o.compact ? 15 : 17;
@@ -693,16 +893,16 @@
       roundRect(ctx, x + 2.5, box.y + 0.5, cw - 5, hh - 1, 7);
       ctx.stroke();
       const letter = m.vowels[i];
-      let label = letter;
+      const words = [letter];
       if (o.tiny && done) {
         const c = page.cells[i];
-        if (c.cents != null) label = `${letter}  ${cents(c.cents)}${levels[i] != null ? "  " + dB(levels[i]) : ""}`;
+        if (c.cents != null) {
+          words.unshift(`${letter}  ${cents(c.cents)}`);
+          if (levels[i] != null) words.unshift(`${letter}  ${cents(c.cents)}  ${dB(levels[i])}`);
+        }
       }
-      ctx.fillStyle = cur ? C.text : done ? C.done : C.muted;
-      ctx.font = font(o.tiny ? (label.length > 2 ? 11 : 14) : o.compact ? 15 : 19, 800);
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(label, x + cw / 2, box.y + hh / 2 + 0.5, cw - 8);
+      const px = o.tiny ? (words.length > 1 ? 11 : 14) : o.compact ? 15 : 19;
+      text(ctx, words[0], x + cw / 2, box.y + hh / 2 + 0.5, { px, weight: 800, align: "center", color: cur ? C.text : done ? C.done : C.muted, maxW: cw - 8, minPx: Math.min(px, 11), alt: words.slice(1) });
     }
     // Pitch area
     ctx.fillStyle = "rgba(170, 195, 230, 0.05)";
@@ -733,8 +933,9 @@
       ctx.stroke();
     }
     if (!o.tiny && areaH >= 60) {
-      text(ctx, L("↑ más alto", "↑ higher"), box.x + 4, areaTop + 8, { px: 9, color: C.faint });
-      text(ctx, L("↓ más bajo", "↓ lower"), box.x + 4, areaTop + areaH - 8, { px: 9, color: C.faint });
+      // Inside the first vowel's column, clear of the line after it
+      text(ctx, L("↑ más alto", "↑ higher"), box.x + 4, areaTop + 8, { px: 9, color: C.faint, maxW: cw - 8, minPx: 9, alt: [L("↑ alto", "↑ high"), "↑"] });
+      text(ctx, L("↓ más bajo", "↓ lower"), box.x + 4, areaTop + areaH - 8, { px: 9, color: C.faint, maxW: cw - 8, minPx: 9, alt: [L("↓ bajo", "↓ low"), "↓"] });
     }
     // Last round's centre per vowel, as a hollow marker to sing against
     const prev = m.prevPage && isCurPage ? m.prevPage : null;
@@ -813,22 +1014,29 @@
         const lv = levels[i];
         const pitchOff = Math.abs(c.cents) > 25;
         const loud = lv != null && Math.abs(lv) > 3;
-        if (o.compact) {
+        if (o.compact && oneLine) {
           text(ctx, `${cents(c.cents)}${lv != null ? " · " + dB(lv) : ""}`, cx, sy + stampH / 2, {
             align: "center",
             px: 10,
             color: pitchOff || loud ? C.warn : C.muted,
-            maxW: cw - 4
+            maxW: cw - 4,
+            alt: [cents(c.cents)]
           });
+        } else if (o.compact) {
+          text(ctx, cents(c.cents), cx, sy + 7, { align: "center", px: 10, color: pitchOff ? C.warn : C.muted, maxW: cw - 4 });
+          if (lv != null) text(ctx, dB(lv), cx, sy + 21, { align: "center", px: 10, color: loud ? C.warn : C.muted, maxW: cw - 4 });
         } else {
+          // The direction glyph sits beside the number when the column has
+          // room for both; otherwise the sign says the direction
           const y1 = sy + 8;
           const y2 = sy + 25;
-          const hasG1 = dirGlyph(ctx, c.cents, 25, cx - cw / 2 + 10, y1, C.warn, 4.5);
-          text(ctx, cents(c.cents), cx + (hasG1 ? 5 : 0), y1, { align: "center", px: 11, color: pitchOff ? C.warn : C.text, maxW: cw - 18 });
-          if (lv != null) {
-            const hasG2 = dirGlyph(ctx, lv, 3, cx - cw / 2 + 10, y2, C.warn, 4.5);
-            text(ctx, dB(lv), cx + (hasG2 ? 5 : 0), y2, { align: "center", px: 10, color: loud ? C.warn : C.muted, maxW: cw - 18 });
-          }
+          const stamp = (s, v, thr, yy, px, color) => {
+            const tw = widthOf(ctx, s, px);
+            const room = tw + 14 <= cw - 4 && dirGlyph(ctx, v, thr, cx - tw / 2 - 4, yy, C.warn, 4.5);
+            text(ctx, s, cx + (room ? 5 : 0), yy, { align: "center", px, color, maxW: cw - 4 });
+          };
+          stamp(cents(c.cents), c.cents, 25, y1, 11, pitchOff ? C.warn : C.text);
+          if (lv != null) stamp(dB(lv), lv, 3, y2, 10, loud ? C.warn : C.muted);
         }
       }
     }
@@ -842,7 +1050,7 @@
         p.cells.forEach((c, i) => {
           const cx = box.x + (i + 0.5) * cw;
           const s = c.cents == null ? "—" : `${cents(c.cents)}${lv[i] != null ? " · " + dB(lv[i]) : ""}`;
-          text(ctx, s, cx, y - rowH / 2 + 2, { align: "center", px: 10, color: C.muted, maxW: cw - 4 });
+          text(ctx, s, cx, y - rowH / 2 + 2, { align: "center", px: 10, color: C.muted, maxW: cw - 4, alt: c.cents == null ? [] : [cents(c.cents)] });
         });
       });
     }
@@ -890,8 +1098,10 @@
     ctx.lineWidth = 1;
     ctx.strokeRect(pl + 0.5, pt + 0.5, pr - pl - 1, pb - pt - 1);
     // Axis words: what up/down and left/right mean, no Hz
-    text(ctx, L("cerrada", "closed"), pl + 4, pt + 8, { px: 9, color: C.faint });
-    text(ctx, L("abierta", "open"), pl + 4, pb - 8, { px: 9, color: C.faint });
+    // Where no vowel lands: "closed" top centre (I sits top left, U top
+    // right), "open" bottom left (A is open but central)
+    text(ctx, L("↑ cerrada", "↑ closed"), (pl + pr) / 2, pt + 8, { px: 9, color: C.faint, align: "center" });
+    text(ctx, L("↓ abierta", "↓ open"), pl + 4, pb - 8, { px: 9, color: C.faint });
     text(ctx, L("adelante", "front"), pl, pb + 10, { px: 9, color: C.faint });
     text(ctx, L("atrás", "back"), pr, pb + 10, { px: 9, color: C.faint, align: "right" });
     // First round (ring) → latest (dot), per vowel
@@ -967,22 +1177,26 @@
     const v = Math.round(n);
     return fmtSigned(v, 0) + " " + (Math.abs(v) === 1 ? L("semitono", "semitone") : L("semitonos", "semitones"));
   }
-  function sectionTitle(ctx, s, x, y, maxW) {
-    text(ctx, s, x, y, { px: 11, color: C.muted, maxW });
+  function sectionTitle(ctx, s, x, y, maxW, alt) {
+    return text(ctx, s, x, y, { px: 11, color: C.muted, maxW, alt });
   }
+  /** Where each lane's movable words sat last frame, so they do not hop about. */
+  const laneMemo = new WeakMap();
 
   /**
    * The zone lane plus one side panel per drill. The lane is pitch against
    * time: the zone is a band of pitches, your voice the light line, the
    * target notes wait to the right of "now" (the next three too) and each
-   * fills with gold as you hold it. Past targets stay as green segments with
-   * a check where they were held. With reduced motion the past fills a page
-   * left to right instead of scrolling. After Stop the lane shows the whole
-   * run.
+   * fills with gold as you hold it — lighter while the reference note still
+   * sounds (that part only counts once you carry on past it). Past targets
+   * stay as green segments with a check where they were held. With reduced
+   * motion the past fills a page left to right instead of scrolling. After
+   * Stop the lane shows the whole run and the side panel the drill's recap.
    *
    * model: the resonanceZone state (zones, z, zoneMidis, wantMidi, wantLabel,
-   * queue, inBand, holdMs, trace, targets, cards, fresh, clock, focus,
-   * lvl, clar, floor, sp, br, soft, seams, passes, octHint, review, held)
+   * queue, inBand, refRun, holdMs, holdClean, trace, targets, cards, fresh,
+   * clock, focus, lvl, clar, floor, sp, br, soft, seams, passes, octHint,
+   * review, held)
    */
   function zones(ctx, w, h, m) {
     panel(ctx, w, h);
@@ -991,20 +1205,19 @@
     const compact = h < 190;
     const headH = tiny ? 0 : compact ? 20 : 26;
     if (!tiny) {
-      const right = L(`${m.held} ${m.held === 1 ? "nota sostenida" : "notas sostenidas"}`, `${m.held} ${m.held === 1 ? "note held" : "notes held"}`);
-      ctx.font = font(compact ? 10 : 11, 700);
-      const rightW = Math.min(w * 0.36, ctx.measureText(right).width);
+      const n = m.held || 0;
       const z = m.zones[m.z];
-      const head = m.review
-        ? L("Tu recorrido", "Your run")
+      const note = `${L("Nota", "Note")} ${noteLabel(m.wantLabel)}`;
+      const left = m.review
+        ? [L("Tu recorrido", "Your run")]
         : m.zones.length > 1
-          ? `${zoneName(z)} · ${L("nota", "note")} ${noteLabel(m.wantLabel)}`
-          : `${L("Nota", "Note")} ${noteLabel(m.wantLabel)} · ${zoneName(z)}`;
-      ctx.fillStyle = C.text;
-      ctx.textAlign = "left";
-      ctx.textBaseline = "middle";
-      fitText(ctx, head, pad + 2, pad + headH / 2 - 2, w - pad * 2 - rightW - 14, compact ? 13 : 15, 800, 9);
-      text(ctx, right, w - pad - 2, pad + headH / 2 - 2, { align: "right", color: m.held ? C.done : C.muted, px: compact ? 10 : 11, maxW: w * 0.36 });
+          ? [`${zoneName(z)} · ${L("nota", "note")} ${noteLabel(m.wantLabel)}`, note]
+          : [`${note} · ${zoneName(z)}`, note];
+      const right = [
+        L(`${n} ${n === 1 ? "nota sostenida" : "notas sostenidas"}`, `${n} ${n === 1 ? "note held" : "notes held"}`),
+        L(`${n} ${n === 1 ? "sostenida" : "sostenidas"}`, `${n} held`)
+      ];
+      headRow(ctx, w, pad, headH, compact, left, right, n ? C.done : C.muted);
     }
     const top = tiny ? pad - 3 : pad + headH + 2;
     const bodyH = h - top - pad + (tiny ? 3 : 0);
@@ -1021,9 +1234,16 @@
       sideBox = { x: w - pad - sideW, y: top, w: sideW, h: bodyH };
       mini = tiny;
     } else if (bodyH >= 250) {
-      const laneH = Math.round(bodyH * (m.focus === "bright" ? 0.44 : 0.5));
+      const laneH = Math.round(bodyH * (m.focus === "bright" && !m.review ? 0.44 : 0.5));
       laneBox = { x: pad, y: top, w: w - pad * 2, h: laneH };
       sideBox = { x: pad, y: top + laneH + 8, w: w - pad * 2, h: bodyH - laneH - 8 };
+    } else if (m.review) {
+      // After Stop on a short phone picture the recap takes the larger share;
+      // the lane still shows the run's shape
+      const laneH = Math.max(40, Math.round(bodyH * 0.42));
+      laneBox = { x: pad, y: top, w: w - pad * 2, h: laneH };
+      sideBox = { x: pad, y: top + laneH + 6, w: w - pad * 2, h: bodyH - laneH - 6 };
+      mini = sideBox.h < 64;
     } else {
       const sideH = Math.min(52, Math.round(bodyH * 0.34));
       laneBox = { x: pad, y: top, w: w - pad * 2, h: bodyH - sideH - 6 };
@@ -1031,7 +1251,7 @@
       mini = true;
     }
     zoneLane(ctx, laneBox, m, { tiny, compact, narrow: !wide });
-    if (sideBox) {
+    if (sideBox && sideBox.h >= 24) {
       const o = { mini, review: m.review, compact };
       const f = { body: sideBody, speech: sideSpeech, bright: sideBright, soft: sideSoft, seams: sideSeams }[m.focus];
       if (f) f(ctx, sideBox, m, o);
@@ -1043,6 +1263,8 @@
     ctx.fillStyle = "rgba(170, 195, 230, 0.05)";
     roundRect(ctx, x, y, w, h, 8);
     ctx.fill();
+    let memo = laneMemo.get(m);
+    if (!memo) laneMemo.set(m, (memo = {}));
     const mids = (m.zoneMidis || []).flat();
     if (m.wantMidi != null) mids.push(m.wantMidi);
     let lo = mids.length ? Math.min(...mids) - 2.5 : 45;
@@ -1055,7 +1277,17 @@
     const Y = (mm) => y + h - 3 - ((clamp(mm, lo, hi) - lo) / (hi - lo)) * (h - 6);
     const review = m.review;
     const win = o.tiny ? 5 : 7;
-    const rightRoom = review ? 34 : 0;
+    // What the movable words must keep off: other words, boxes, lines…
+    const obst = [];
+    // …and the trace, as points on screen
+    const pts = [];
+    // Note names at the right edge, where the queue ahead leaves them room.
+    // After Stop the run stops short of them.
+    const rows = [...new Set(mids.map((mm) => Math.round(mm)))].sort((a, b) => a - b);
+    const labelEvery = h / Math.max(1, hi - lo) < 9 ? 2 : 1;
+    const names = (!o.tiny || h >= 90) && (review || w >= 480) ? rows.filter((r, k) => !(k % labelEvery)) : [];
+    const namesW = names.reduce((a, r) => Math.max(a, widthOf(ctx, dualLabel(r), 9)), 0);
+    const rightRoom = review ? (names.length ? Math.ceil(namesW) + 12 : 8) : 0;
     const nowX = review ? x + w - rightRoom : x + w * (o.narrow ? 0.5 : 0.56);
     let t0;
     let t1;
@@ -1074,6 +1306,7 @@
     }
     const X = (t) => x + 4 + ((t - t0) / (t1 - t0)) * (nowX - x - 4);
     // Zone bands: the pitch range each zone covers
+    const bands = [];
     (m.zoneMidis || []).forEach((zm, i) => {
       if (!zm.length) return;
       const zt = Y(Math.max(...zm) + 0.5);
@@ -1091,66 +1324,71 @@
       ctx.lineTo(x + w, zb - 0.5);
       ctx.stroke();
       ctx.setLineDash([]);
-      if (m.zones.length > 1 && !o.tiny) {
-        text(ctx, zoneName(m.zones[i]), x + 6, zt + 8, { px: 9, color: cur ? C.text : C.faint });
-      }
+      bands.push({ i, zt, zb, cur });
     });
     // Your speaking pitch (s22), hatched: measured from your spoken turns
+    let bt = null;
+    let bb = null;
     if (band) {
-      const bt = Y(band.hi);
-      const bb = Y(band.lo);
+      bt = Y(band.hi);
+      bb = Y(band.lo);
       ctx.fillStyle = hatch(ctx, "rgba(191, 230, 255, 0.35)");
       ctx.fillRect(x, bt, w, Math.max(3, bb - bt));
-      if (!o.tiny) V.label(ctx, L("tu voz hablada", "your speaking voice"), x + 6, (bt + bb) / 2, { font: font(10, 700), color: C.you });
     }
-    // Note lines with names at the right edge
-    const seen = new Set();
-    mids.forEach((mm) => {
-      const r = Math.round(mm);
-      if (seen.has(r)) return;
-      seen.add(r);
+    // Note lines, and the names at the right edge
+    rows.forEach((r) => {
       ctx.strokeStyle = C.grid;
+      ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(x, Y(r) + 0.5);
       ctx.lineTo(x + w, Y(r) + 0.5);
       ctx.stroke();
     });
-    const labelEvery = h / Math.max(1, hi - lo) < 9 ? 2 : 1;
-    // Names at the right edge, where the queue ahead leaves room for them
-    if ((!o.tiny || h >= 90) && (review || w >= 480)) {
-      [...seen].sort((a, b) => a - b).forEach((r, k) => {
-        if (k % labelEvery) return;
-        text(ctx, dualLabel(r), x + w - 4, Y(r), { px: 9, color: C.faint, align: "right" });
-      });
-    }
+    // Keep a name only where it clears the one below it
+    let lastY = Infinity;
+    names.filter((r) => {
+      if (lastY - Y(r) < 11) return false;
+      lastY = Y(r);
+      return true;
+    }).forEach((r) => {
+      const s = dualLabel(r);
+      const tw = text(ctx, s, x + w - 4, Y(r), { px: 9, color: C.faint, align: "right" });
+      obst.push({ x: x + w - 6 - tw, y: Y(r) - 6, w: tw + 4, h: 12 });
+    });
     // Floor (s21): the lowest note held with a clear tone today
+    let fy = null;
     if (m.floor) {
-      const fy = Y(m.floor.midi);
+      fy = Y(m.floor.midi) + 6;
+      const end = review ? nowX : x + w - (names.length ? namesW + 10 : 36);
       ctx.strokeStyle = C.done;
       ctx.lineWidth = 1.5;
       ctx.setLineDash([6, 4]);
       ctx.beginPath();
-      ctx.moveTo(x, fy + 6);
-      ctx.lineTo(x + w - 36, fy + 6);
+      ctx.moveTo(x, fy);
+      ctx.lineTo(end, fy);
       ctx.stroke();
       ctx.setLineDash([]);
-      if (!o.tiny) V.label(ctx, L("tu nota clara más grave hoy", "your lowest clear note today"), x + 8, fy + 15, { font: font(9, 700), color: C.done });
     }
     // Seams (s25) inside the window
     (m.seams || []).forEach((s) => {
       if (s.t < t0 || s.t > t1) return;
       const sx = X(s.t);
       ctx.strokeStyle = C.gridStrong;
+      ctx.lineWidth = 1;
       ctx.setLineDash([2, 3]);
       ctx.beginPath();
       ctx.moveTo(sx, y + 2);
       ctx.lineTo(sx, y + h - 2);
       ctx.stroke();
       ctx.setLineDash([]);
-      if (!o.tiny) text(ctx, L("costura", "seam"), sx + 3, y + 9, { px: 9, color: C.muted });
+      obst.push({ x: sx - 2, y, w: 4, h });
+      if (!o.tiny) {
+        const tw = text(ctx, L("costura", "seam"), sx + 3, y + 9, { px: 10, color: C.muted });
+        obst.push({ x: sx + 1, y: y + 2, w: tw + 4, h: 14 });
+      }
     });
     // Past targets: a green segment each, a check where it was held
-    const segH = Math.max(6, (h - 6) / (hi - lo) * 0.9);
+    const segH = Math.max(6, ((h - 6) / (hi - lo)) * 0.9);
     ctx.save();
     ctx.beginPath();
     ctx.rect(x, y, nowX - x, h);
@@ -1162,7 +1400,12 @@
       const ty = Y(tg.midi);
       ctx.fillStyle = C.targetSoft;
       ctx.fillRect(X(a), ty - segH / 2, Math.max(2, X(b) - X(a)), segH);
-      if (tg.held && tg.t1 != null && tg.t1 <= t1) glyph(ctx, "check", X(tg.t1) - 7, ty - segH / 2 - 6, C.done, 4);
+      if (tg.held && tg.t1 != null && tg.t1 <= t1) {
+        const cx = X(tg.t1) - 7;
+        const cy = ty - segH / 2 - 6;
+        glyph(ctx, "check", cx, cy, C.done, 4);
+        obst.push({ x: cx - 6, y: cy - 6, w: 12, h: 12 });
+      }
     });
     ctx.restore();
     // Your voice
@@ -1171,6 +1414,7 @@
     ctx.lineJoin = "round";
     ctx.beginPath();
     let prev = null;
+    let last = null;
     let started = false;
     for (let i = 0; i < m.trace.length; i++) {
       const p = m.trace[i];
@@ -1182,91 +1426,151 @@
       }
       const px = X(p.t);
       const py = Y(p.m);
-      if (prev && p.t - prev.t < 0.2) ctx.lineTo(px, py);
-      else ctx.moveTo(px, py);
+      if (prev && p.t - prev.t < 0.2) {
+        ctx.lineTo(px, py);
+        // A steep step is a line too: keep points along it
+        const steps = Math.floor(Math.max(Math.abs(py - last[1]), Math.abs(px - last[0])) / 3);
+        for (let k = 1; k < steps; k++) pts.push([last[0] + ((px - last[0]) * k) / steps, last[1] + ((py - last[1]) * k) / steps]);
+      } else ctx.moveTo(px, py);
+      pts.push([px, py]);
+      last = [px, py];
       started = true;
       prev = p;
     }
     if (started) ctx.stroke();
-    if (review) return;
-    // Now line (or the page's playhead with reduced motion)
-    const hx = head != null ? X(head) : nowX;
-    ctx.strokeStyle = "rgba(238, 243, 250, 0.55)";
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(hx, y + 2);
-    ctx.lineTo(hx, y + h - 2);
-    ctx.stroke();
-    // The current target, filling as you hold it, then the next ones
-    const qRight = x + w - 34;
-    const bw = clamp((qRight - nowX) / 4.6, 22, 90);
-    const gap = 6;
-    if (m.wantMidi != null) {
-      const ty = Y(m.wantMidi);
-      const bh = Math.max(12, segH + 4);
-      ctx.fillStyle = C.targetSoft;
-      roundRect(ctx, nowX, ty - bh / 2, bw, bh, 4);
-      ctx.fill();
-      const frac = clamp((m.inBand || 0) / (m.holdMs || 900), 0, 1);
-      if (frac > 0) {
-        ctx.fillStyle = "rgba(255, 211, 110, 0.75)";
-        roundRect(ctx, nowX, ty - bh / 2, Math.max(4, bw * frac), bh, 4);
-        ctx.fill();
-      }
-      ctx.strokeStyle = C.target;
-      ctx.lineWidth = 2;
-      roundRect(ctx, nowX + 0.5, ty - bh / 2 + 0.5, bw - 1, bh - 1, 4);
-      ctx.stroke();
-      const above = ty - bh / 2 - 9 > y + 6;
-      V.label(ctx, noteLabel(m.wantLabel), nowX + bw / 2, above ? ty - bh / 2 - 9 : ty + bh / 2 + 9, {
-        align: "center",
-        font: font(o.tiny ? 10 : 11, 800),
-        color: C.text
-      });
-      // s24: above your starting volume, the target says so
-      if (m.focus === "soft" && m.soft && m.soft.overMs > 600) {
-        const wy = above ? ty + bh / 2 + 10 : ty - bh / 2 - 22;
-        glyph(ctx, "tri", nowX + 6, wy, C.warn, 4.5);
-        V.label(ctx, L("más suave", "softer"), nowX + 14, wy, { font: font(10, 800), color: C.warn });
-      }
-    }
-    (m.queue || []).forEach((q, k) => {
-      if (q.midi == null) return;
-      const qx = nowX + (bw + gap) * (k + 1);
-      if (qx + bw * 0.8 > qRight + 30) return;
-      const qy = Y(q.midi);
-      const qh = Math.max(10, segH);
-      ctx.strokeStyle = C.target;
-      ctx.globalAlpha = 0.75 - k * 0.18;
+    if (!review) {
+      // Now line (or the page's playhead with reduced motion)
+      const hx = head != null ? X(head) : nowX;
+      ctx.strokeStyle = "rgba(238, 243, 250, 0.55)";
       ctx.lineWidth = 1.5;
-      ctx.setLineDash([4, 3]);
-      roundRect(ctx, qx + 0.5, qy - qh / 2 + 0.5, bw * 0.8 - 1, qh - 1, 4);
+      ctx.beginPath();
+      ctx.moveTo(hx, y + 2);
+      ctx.lineTo(hx, y + h - 2);
       ctx.stroke();
-      ctx.setLineDash([]);
-      if (!o.tiny || k === 0) text(ctx, noteLabel(q.label), qx + bw * 0.4, qy - qh / 2 - 7, { px: 9, color: C.muted, align: "center", maxW: bw + gap });
-      ctx.globalAlpha = 1;
-    });
-    // Where you are now
-    if (m.fresh && m.clock - m.fresh.at < 0.2) {
-      const out = m.fresh.m > hi ? 1 : m.fresh.m < lo ? -1 : 0;
-      const py = Y(m.fresh.m);
-      if (out) glyph(ctx, out > 0 ? "up" : "tri", hx, out > 0 ? y + 8 : y + h - 8, C.you, 6);
-      else {
-        ctx.fillStyle = C.you;
-        ctx.beginPath();
-        ctx.arc(hx, py, 5.5, 0, Math.PI * 2);
+      obst.push({ x: hx - 3, y, w: 6, h });
+      // The current target, filling as you hold it, then the next ones
+      const qRight = x + w - 34;
+      const qLimit = names.length ? x + w - namesW - 12 : x + w - 4;
+      const bw = clamp((qRight - nowX) / 4.6, 22, 90);
+      const gap = 6;
+      if (m.wantMidi != null) {
+        const ty = Y(m.wantMidi);
+        const bh = Math.max(12, segH + 4);
+        ctx.fillStyle = C.targetSoft;
+        roundRect(ctx, nowX, ty - bh / 2, bw, bh, 4);
         ctx.fill();
+        // Sung along with the reference: lighter, it counts once you carry on
+        const hold = m.holdMs || 900;
+        const pend = clamp((m.refRun || 0) / hold, 0, 1);
+        const own = m.refRun > 0 ? clamp((m.inBand || 0) / Math.max(m.holdClean || 250, hold - m.refRun), 0, 1) * (1 - pend) : clamp((m.inBand || 0) / hold, 0, 1);
+        if (pend > 0) {
+          ctx.fillStyle = "rgba(255, 211, 110, 0.32)";
+          roundRect(ctx, nowX, ty - bh / 2, Math.max(4, bw * pend), bh, 4);
+          ctx.fill();
+        }
+        if (own > 0) {
+          ctx.fillStyle = "rgba(255, 211, 110, 0.75)";
+          roundRect(ctx, nowX, ty - bh / 2, Math.max(4, bw * (pend > 0 ? pend + own : own)), bh, 4);
+          ctx.fill();
+        }
+        ctx.strokeStyle = C.target;
+        ctx.lineWidth = 2;
+        roundRect(ctx, nowX + 0.5, ty - bh / 2 + 0.5, bw - 1, bh - 1, 4);
+        ctx.stroke();
+        obst.push({ x: nowX - 1, y: ty - bh / 2 - 1, w: bw + 2, h: bh + 2 });
+        // Above the box, unless that is off the lane or on the floor line
+        const upY = ty - bh / 2 - 9;
+        const downY = ty + bh / 2 + 9;
+        const onFloor = (ly) => fy != null && Math.abs(fy - ly) < 10;
+        const above = upY > y + 6 && !(onFloor(upY) && downY < y + h - 6 && !onFloor(downY));
+        const ly = above ? ty - bh / 2 - 9 : ty + bh / 2 + 9;
+        const tpx = o.tiny ? 10 : 11;
+        V.label(ctx, noteLabel(m.wantLabel), nowX + bw / 2, ly, { align: "center", font: font(tpx, 800), color: C.text });
+        obst.push(labelRect(ctx, noteLabel(m.wantLabel), nowX + bw / 2, ly, tpx, "center", 800));
+        // s24: above your starting volume, the target says so
+        if (m.focus === "soft" && m.soft && m.soft.overMs > 600) {
+          const wy = above ? ty + bh / 2 + 10 : ty - bh / 2 - 22;
+          glyph(ctx, "tri", nowX + 6, wy, C.warn, 4.5);
+          V.label(ctx, L("más suave", "softer"), nowX + 14, wy, { font: font(10, 800), color: C.warn });
+          obst.push({ x: nowX, y: wy - 9, w: labelRect(ctx, L("más suave", "softer"), nowX + 14, wy, 10, "left", 800).w + 14, h: 18 });
+        }
+      }
+      (m.queue || []).forEach((q, k) => {
+        if (q.midi == null) return;
+        const qx = nowX + (bw + gap) * (k + 1);
+        if (qx + bw * 0.8 > qLimit) return;
+        const qy = Y(q.midi);
+        const qh = Math.max(10, segH);
+        ctx.strokeStyle = C.target;
+        ctx.globalAlpha = 0.75 - k * 0.18;
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([4, 3]);
+        roundRect(ctx, qx + 0.5, qy - qh / 2 + 0.5, bw * 0.8 - 1, qh - 1, 4);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        obst.push({ x: qx, y: qy - qh / 2, w: bw * 0.8, h: qh });
+        if (!o.tiny || k === 0) {
+          const s = noteLabel(q.label);
+          const tw = text(ctx, s, qx + bw * 0.4, qy - qh / 2 - 7, { px: 9, color: C.muted, align: "center" });
+          obst.push({ x: qx + bw * 0.4 - tw / 2 - 2, y: qy - qh / 2 - 13, w: tw + 4, h: 12 });
+        }
+        ctx.globalAlpha = 1;
+      });
+      // Where you are now
+      if (m.fresh && m.clock - m.fresh.at < 0.2) {
+        const out = m.fresh.m > hi ? 1 : m.fresh.m < lo ? -1 : 0;
+        const py = Y(m.fresh.m);
+        if (out) glyph(ctx, out > 0 ? "up" : "tri", hx, out > 0 ? y + 8 : y + h - 8, C.you, 6);
+        else {
+          ctx.fillStyle = C.you;
+          ctx.beginPath();
+          ctx.arc(hx, py, 5.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        const dy = out > 0 ? y + 8 : out < 0 ? y + h - 8 : py;
+        obst.push({ x: hx - 8, y: dy - 8, w: 16, h: 16 });
+      }
+      if (m.octHint) {
+        const s =
+          m.octHint > 0
+            ? L("Una octava por encima de la nota · si ahí está tu voz, pulsa + en octava", "An octave above the note · if your voice lives there, press octave +")
+            : L("Una octava por debajo de la nota · si ahí está tu voz, pulsa − en octava", "An octave below the note · if your voice lives there, press octave −");
+        const short = m.octHint > 0 ? L("Una octava arriba · octava +", "An octave up · octave +") : L("Una octava abajo · octava −", "An octave down · octave −");
+        const f = fitWords(ctx, [s, short], w - 20, 10, 10, 700);
+        V.label(ctx, f.s, x + w / 2, y + 12, { align: "center", font: font(f.px, 700), color: C.text });
+        obst.push(labelRect(ctx, f.s, x + w / 2, y + 12, f.px, "center"));
       }
     }
-    if (m.octHint) {
-      const s =
-        m.octHint > 0
-          ? L("Una octava por encima de la nota · si ahí está tu voz, pulsa + en octava", "An octave above the note · if your voice lives there, press octave +")
-          : L("Una octava por debajo de la nota · si ahí está tu voz, pulsa − en octava", "An octave below the note · if your voice lives there, press octave −");
-      const short = m.octHint > 0 ? L("Una octava arriba · octava +", "An octave up · octave +") : L("Una octava abajo · octava −", "An octave down · octave −");
-      ctx.font = font(10, 700);
-      const use = ctx.measureText(s).width < w - 20 ? s : short;
-      V.label(ctx, use, x + w / 2, y + 12, { align: "center", font: font(10, 700), color: C.text });
+    if (o.tiny) return;
+    // The words that can move, last: where they cover no other word or box,
+    // and as little of your voice as there is room for
+    const xs = [[x + 6, "left"]];
+    if (review) xs.push([x + (nowX - x) * 0.3, "center"], [x + (nowX - x) / 2, "center"], [x + (nowX - x) * 0.7, "center"], [nowX - 6, "right"]);
+    else xs.push([nowX - 10, "right"], [nowX + 10, "left"]);
+    xs.push([x + w - 6 - (names.length ? namesW + 8 : 0), "right"]);
+    const spotsAt = (ys) => ys.flatMap((yy) => xs.map(([xx, al]) => [xx, yy, al]));
+    const bounds = { x: x + 1, y: y + 1, w: w - 2, h: h - 2 };
+    const put = (key, words, ys, color, optional) =>
+      placeLabel(ctx, words, spotsAt(ys), { px: 10, color, obst, pts, bounds, memo, key, optional });
+    if (m.zones.length > 1) {
+      bands.forEach((b) => {
+        // Rows inside the part of the band no other zone shares
+        let et = b.zt;
+        let eb = b.zb;
+        bands.forEach((q) => {
+          if (q === b) return;
+          if (q.zb > et && q.zb < eb && q.zt <= et) et = q.zb;
+          if (q.zt < eb && q.zt > et && q.zb >= eb) eb = q.zt;
+        });
+        const ys = eb - et >= 20 ? [et + 9.5, eb - 9.5] : [(et + eb) / 2];
+        put("zone" + b.i, [zoneName(m.zones[b.i])], ys, b.cur ? C.text : C.muted, true);
+      });
+    }
+    if (band) {
+      put("band", [L("tu voz hablada", "your speaking voice"), L("voz hablada", "speaking voice")], [(bt + bb) / 2, bt - 10, bb + 10], C.you);
+    }
+    if (fy != null) {
+      put("floor", [L("tu nota clara más grave hoy", "your lowest clear note today"), L("nota clara más grave", "lowest clear note")], [fy + 10, fy - 10], C.done);
     }
   }
 
@@ -1275,26 +1579,31 @@
     roundRect(ctx, box.x, box.y, box.w, box.h, 8);
     ctx.fill();
   }
+  const clarWords = (c) =>
+    c == null ? ["—"] : c >= 0.85 ? [L("claro", "clear")] : c >= 0.8 ? [L("casi claro", "nearly clear")] : [L("áspero o con aire", "rough or airy"), L("áspero", "rough")];
 
   /** s21: level against your own average, tone clarity, the clear floor. */
   function sideBody(ctx, box, m, o) {
     sideFrame(ctx, box);
+    if (o.review) return bodyReview(ctx, box, m, o);
     const { x, y, w, h } = box;
     const rel = m.lvl && m.lvl.rel;
     const clar = m.clar && m.clar.now;
-    const clarWord = (c) => (c == null ? "—" : c >= 0.85 ? L("claro", "clear") : c >= 0.8 ? L("casi claro", "nearly clear") : L("áspero o con aire", "rough or airy"));
+    const rough = clar != null && clar < 0.8;
     if (o.mini) {
-      const lv = rel == null || o.review ? "—" : dB(rel);
-      text(ctx, `${L("Volumen", "Level")} ${lv}`, x + 8, y + h * 0.3, { px: 11, color: C.text, maxW: w - 16 });
-      text(ctx, `${L("Tono", "Tone")}: ${clarWord(o.review ? null : clar)}`, x + 8, y + h * 0.72, { px: 11, color: clar != null && clar < 0.8 && !o.review ? C.warn : C.muted, maxW: w - 16 });
+      text(ctx, `${L("Volumen", "Level")} ${rel == null ? "—" : dB(rel)}`, x + 8, y + h * 0.3, { px: 11, color: C.text, maxW: w - 16 });
+      const cw = clarWords(clar);
+      const ty = y + h * 0.72;
+      if (rough) glyph(ctx, "tri", x + 12, ty, C.warn, 4);
+      text(ctx, `${L("Tono", "Tone")}: ${cw[0]}`, x + (rough ? 20 : 8), ty, { px: 11, color: rough ? C.warn : C.muted, maxW: w - 28, alt: cw.slice(1).map((s) => `${L("Tono", "Tone")}: ${s}`) });
       return;
     }
-    if (o.review) return bodyReview(ctx, box, m);
     const gx = x + 10;
     const gw = w - 20;
-    sectionTitle(ctx, L("Volumen · frente a tu media", "Level · against your average"), gx, y + 12, gw * 0.72);
+    const vw = rel != null ? widthOf(ctx, dB(rel), 12, 800) + 10 : 0;
+    sectionTitle(ctx, L("Volumen · frente a tu media", "Level · against your average"), gx, y + 12, gw - vw, [L("Volumen", "Level")]);
     if (rel != null) text(ctx, dB(rel), gx + gw, y + 12, { px: 12, weight: 800, align: "right", color: Math.abs(rel) > 3 ? C.warn : C.you });
-    V.gauge(ctx, { x: gx, y: y + 24, w: gw, h: 38 }, {
+    let cy = gaugeWords(ctx, { x: gx, y: y + 22, w: gw, h: 36 }, {
       lo: -9,
       hi: 9,
       value: rel,
@@ -1302,9 +1611,9 @@
       left: L("más suave", "softer"),
       right: L("más fuerte", "louder")
     });
-    const cy = y + 84;
+    cy += 10;
     sectionTitle(ctx, L("Claridad del tono · aprox.", "Tone clarity · approx."), gx, cy, gw);
-    V.gauge(ctx, { x: gx, y: cy + 10, w: gw, h: 38 }, {
+    cy = gaugeWords(ctx, { x: gx, y: cy + 10, w: gw, h: 36 }, {
       lo: 0.5,
       hi: 1,
       value: clar,
@@ -1313,23 +1622,33 @@
         { from: 0.85, to: 1, label: L("claro", "clear") }
       ]
     });
-    let ty = cy + 64;
-    if (m.clar && m.clar.lowMs > 1000 && ty < y + h - 10) {
+    let ty = cy + 8;
+    if (m.clar && m.clar.lowMs > 1000 && ty < y + h - 8) {
       glyph(ctx, "tri", gx + 5, ty, C.warn, 4.5);
-      text(ctx, L("Áspero o con aire: no bajes más de lo cómodo", "Rough or airy: go no lower than is easy"), gx + 14, ty, { px: 11, color: C.warn, maxW: gw - 14 });
+      text(ctx, L("Áspero o con aire: no bajes más de lo cómodo", "Rough or airy: go no lower than is easy"), gx + 14, ty, {
+        px: 11,
+        color: C.warn,
+        maxW: gw - 14,
+        alt: [L("Áspero: no bajes más de lo cómodo", "Rough: go no lower than is easy")]
+      });
       ty += 18;
     }
     if (m.floor && ty < y + h - 8) {
       glyph(ctx, "check", gx + 5, ty, C.done, 4.5);
-      text(ctx, L(`Nota clara más grave hoy: ${noteLabel(m.floor.name)}`, `Lowest clear note today: ${noteLabel(m.floor.name)}`), gx + 14, ty, { px: 11, color: C.done, maxW: gw - 14 });
+      text(ctx, L(`Nota clara más grave hoy: ${noteLabel(m.floor.name)}`, `Lowest clear note today: ${noteLabel(m.floor.name)}`), gx + 14, ty, {
+        px: 11,
+        color: C.done,
+        maxW: gw - 14,
+        alt: [L(`Clara más grave: ${noteLabel(m.floor.name)}`, `Lowest clear: ${noteLabel(m.floor.name)}`)]
+      });
     }
   }
 
-  function bodyReview(ctx, box, m) {
+  /** s21 after Stop: each note held, how clear it was and its level. */
+  function bodyReview(ctx, box, m, o) {
     const { x, y, w, h } = box;
     const gx = x + 10;
     const gw = w - 20;
-    sectionTitle(ctx, L("Cada nota sostenida · aprox.", "Each note you held · approx."), gx, y + 12, gw);
     const byNote = new Map();
     (m.cards || []).forEach((c) => {
       const k = Math.round(c.midi);
@@ -1341,27 +1660,39 @@
     const K = V.scenes.resonanceKit;
     const allDb = (m.cards || []).map((c) => c.db).filter((d) => d != null);
     const mean = allDb.length ? allDb.reduce((a, b) => a + b, 0) / allDb.length : null;
-    const rows = [...byNote.entries()].sort((a, b) => b[0] - a[0]);
-    if (!rows.length) {
-      text(ctx, L("Sin notas sostenidas en esta toma", "No notes held in this take"), gx, y + 36, { px: 11, color: C.faint, maxW: gw });
+    const rows = [...byNote.entries()].sort((a, b) => b[0] - a[0]).map(([, e]) => e);
+    const none = L("Sin notas sostenidas en esta toma", "No notes held in this take");
+    if (o.mini) {
+      if (!rows.length) return void text(ctx, none, gx, y + h / 2, { px: 11, color: C.faint, maxW: gw });
+      const list = rows.map((e) => `${noteLabel(e.name)} ${clarWords(K.median(e.clar)).slice(-1)[0]}`).join(" · ");
+      textBlock(ctx, [L(`Sostenidas: ${list}`, `Held: ${list}`), list], gx, y + 13, gw, { px: 11, maxLines: h >= 44 ? 2 : 1, color: C.text });
       return;
     }
-    const rowH = clamp((h - 30) / rows.length, 15, 22);
-    rows.forEach(([, e], i) => {
+    sectionTitle(ctx, L("Cada nota sostenida · aprox.", "Each note you held · approx."), gx, y + 12, gw, [L("Notas sostenidas · aprox.", "Notes held · approx.")]);
+    if (!rows.length) {
+      text(ctx, none, gx, y + 36, { px: 11, color: C.faint, maxW: gw });
+      return;
+    }
+    const rowH = clamp((h - 30) / rows.length, 17, 22);
+    const fit = Math.max(1, Math.floor((h - 30) / rowH));
+    rows.forEach((e, i) => {
+      if (i >= fit) return;
       const ry = y + 30 + i * rowH;
-      if (ry > y + h - 6) return;
+      if (i === fit - 1 && rows.length > fit) {
+        text(ctx, L(`y ${rows.length - fit + 1} más`, `and ${rows.length - fit + 1} more`), gx, ry, { px: 11, color: C.muted });
+        return;
+      }
       const c = K.median(e.clar);
       const d = mean != null && e.db.length ? K.median(e.db) - mean : null;
       const rough = c != null && c < 0.8;
-      text(ctx, noteLabel(e.name), gx, ry, { px: 11, color: C.text, maxW: gw * 0.34 });
-      if (rough) glyph(ctx, "tri", gx + gw * 0.36 + 4, ry, C.warn, 4);
-      text(ctx, c == null ? "—" : c >= 0.85 ? L("claro", "clear") : c >= 0.8 ? L("casi claro", "nearly clear") : L("áspero o con aire", "rough or airy"), gx + gw * 0.36 + (rough ? 12 : 0), ry, {
-        px: 11,
-        color: rough ? C.warn : C.muted,
-        maxW: gw * 0.4
-      });
+      const floor = m.floor && Math.round(m.floor.midi) === Math.round(e.midi || -1);
+      text(ctx, noteLabel(e.name), gx, ry, { px: 11, color: C.text, maxW: gw * 0.3 });
+      const wx = gx + gw * 0.36;
+      if (floor) glyph(ctx, "check", wx - 8, ry, C.done, 4);
+      if (rough) glyph(ctx, "tri", wx + 4, ry, C.warn, 4);
+      const dw = d != null ? widthOf(ctx, dB(d), 10) + 8 : 0;
+      text(ctx, clarWords(c)[0], wx + (rough ? 12 : 0), ry, { px: 11, color: rough ? C.warn : C.muted, maxW: gx + gw - dw - wx - (rough ? 12 : 0), alt: clarWords(c).slice(1) });
       if (d != null) text(ctx, dB(d), gx + gw, ry, { px: 10, color: C.muted, align: "right" });
-      if (m.floor && Math.round(m.floor.midi) === Math.round(e.midi || -1)) glyph(ctx, "check", gx + gw * 0.3, ry, C.done, 4);
     });
   }
 
@@ -1372,103 +1703,210 @@
     const sp = m.sp || { pairs: [], turns: [] };
     const K = V.scenes.resonanceKit;
     const pairs = sp.pairs || [];
-    const last = o.review && pairs.length
-      ? { dDb: K.median(pairs.map((p) => p.dDb)), dBr: pairs.some((p) => p.dBr != null) ? K.median(pairs.filter((p) => p.dBr != null).map((p) => p.dBr)) : null, dSt: K.median(pairs.map((p) => p.dSt)) }
-      : pairs[pairs.length - 1];
-    const lvWord = (d) => (Math.abs(d) <= 3 ? L("parejo", "even") : d > 0 ? L("más fuerte al cantar", "louder when sung") : L("más suave al cantar", "softer when sung"));
-    const brWord = (d) => (d == null ? "—" : Math.abs(d) <= 1.5 ? L("parecido", "similar") : d > 0 ? L("más brillante al cantar", "brighter when sung") : L("más oscuro al cantar", "darker when sung"));
+    const last =
+      o.review && pairs.length
+        ? {
+            dDb: K.median(pairs.map((p) => p.dDb)),
+            dBr: pairs.some((p) => p.dBr != null) ? K.median(pairs.filter((p) => p.dBr != null).map((p) => p.dBr)) : null,
+            dSt: K.median(pairs.map((p) => p.dSt))
+          }
+        : pairs[pairs.length - 1];
+    const lvWords = (d) =>
+      Math.abs(d) <= 3 ? [L("parejo", "even")] : d > 0 ? [L("más fuerte al cantar", "louder when sung"), L("más fuerte", "louder")] : [L("más suave al cantar", "softer when sung"), L("más suave", "softer")];
+    const brWords = (d) =>
+      d == null
+        ? ["—"]
+        : Math.abs(d) <= 1.5
+          ? [L("parecido", "similar")]
+          : d > 0
+            ? [L("más brillante al cantar", "brighter when sung"), L("más brillante", "brighter")]
+            : [L("más oscuro al cantar", "darker when sung"), L("más oscuro", "darker")];
+    const spoken = (sp.turns || []).filter((t) => t.kind === "spoken").length;
+    const sung = (sp.turns || []).filter((t) => t.kind === "sung").length;
     if (o.mini) {
-      const s = last
-        ? `${L("Cantado vs hablado", "Sung vs spoken")}: ${dB(last.dDb)} · ${brWord(last.dBr)}`
-        : L("Di «hola» y luego cántalo", "Say 'hola', then sing it");
-      text(ctx, s, x + 8, y + h / 2, { px: 11, color: last ? C.text : C.muted, maxW: w - 16 });
+      if (last) {
+        const bw = brWords(last.dBr);
+        text(ctx, `${L("Cantado vs hablado", "Sung vs spoken")}: ${dB(last.dDb)} · ${bw[0]}`, x + 8, y + h / 2, {
+          px: 11,
+          color: C.text,
+          maxW: w - 16,
+          alt: [`${L("Cantado vs hablado", "Sung vs spoken")}: ${dB(last.dDb)} · ${bw.slice(-1)[0]}`, `${L("Cantado", "Sung")}: ${dB(last.dDb)} · ${bw.slice(-1)[0]}`]
+        });
+      } else if (o.review) {
+        text(ctx, L(`${spoken} hablados · ${sung} cantados: sin par que comparar`, `${spoken} spoken · ${sung} sung: no pair to compare`), x + 8, y + h / 2, {
+          px: 11,
+          color: C.muted,
+          maxW: w - 16,
+          alt: [L("Sin par hablado y cantado", "No spoken and sung pair")]
+        });
+      } else text(ctx, L("Di «hola» y luego cántalo", "Say 'hola', then sing it"), x + 8, y + h / 2, { px: 11, color: C.muted, maxW: w - 16 });
       return;
     }
     const gx = x + 10;
     const gw = w - 20;
-    const spoken = (sp.turns || []).filter((t) => t.kind === "spoken").length;
-    const sung = (sp.turns || []).filter((t) => t.kind === "sung").length;
     const counts = L(`${spoken} hablados · ${sung} cantados`, `${spoken} spoken · ${sung} sung`);
     const title = o.review ? L("Cantado frente a hablado · mediana", "Sung against spoken · median") : L("Hablado → cantado", "Spoken → sung");
-    ctx.font = font(10, 700);
-    const cw = ctx.measureText(counts).width;
-    ctx.font = font(11, 700);
-    const both = ctx.measureText(title).width + cw + 16 <= gw;
-    sectionTitle(ctx, title, gx, y + 12, both ? gw - cw - 12 : gw);
+    const cw = widthOf(ctx, counts, 10);
+    const both = widthOf(ctx, title, 11) + cw + 16 <= gw;
+    sectionTitle(ctx, title, gx, y + 12, both ? gw - cw - 12 : gw, [L("Cantado vs hablado", "Sung vs spoken")]);
+    let top = y + 30;
     if (both) text(ctx, counts, gx + gw, y + 12, { px: 10, color: C.faint, align: "right" });
+    else {
+      text(ctx, counts, gx, y + 27, { px: 10, color: C.faint });
+      top = y + 44;
+    }
     if (!last) {
-      text(ctx, L("Di «hola, hola» y luego canta la nota:", "Say 'hola, hola', then sing the note:"), gx, y + 40, { px: 11, color: C.muted, maxW: gw });
-      text(ctx, L("aquí verás la diferencia.", "the difference shows here."), gx, y + 58, { px: 11, color: C.muted, maxW: gw });
-      if (sp.band) text(ctx, L(`Tu voz hablada: ${dualLabel(sp.band.med)} (aprox.)`, `Your speaking voice: ${dualLabel(sp.band.med)} (approx.)`), gx, y + 84, { px: 11, color: C.you, maxW: gw });
+      const r = textBlock(
+        ctx,
+        o.review
+          ? [L("Hace falta un «hola» hablado y luego una nota cantada para comparar.", "It takes a spoken 'hola' and then a sung note to compare.")]
+          : [L("Di «hola, hola» y luego canta la nota: aquí verás la diferencia.", "Say 'hola, hola', then sing the note: the difference shows here.")],
+        gx,
+        top + 6,
+        gw,
+        { px: 11, maxLines: 3, color: C.muted }
+      );
+      if (sp.band && r.bottom + 24 < y + h) {
+        text(ctx, L(`Tu voz hablada: ${dualLabel(sp.band.med)} (aprox.)`, `Your speaking voice: ${dualLabel(sp.band.med)} (approx.)`), gx, r.bottom + 22, {
+          px: 11,
+          color: C.you,
+          maxW: gw,
+          alt: [L(`Voz hablada: ${dualLabel(sp.band.med)} aprox.`, `Speaking voice: ${dualLabel(sp.band.med)} approx.`)]
+        });
+      }
       return;
     }
     const level = Math.abs(last.dSt) < 0.5;
     const rows = [
       {
         k: L("Altura", "Pitch"),
-        v: level ? "0" : stLabel(last.dSt),
-        wd: level ? L("a la altura de tu voz hablada", "at your speaking pitch") : last.dSt > 0 ? L("sobre tu voz hablada", "above your speaking voice") : L("bajo tu voz hablada", "below your speaking voice"),
+        v: level ? L("igual", "same") : stLabel(last.dSt),
+        wd: level
+          ? [L("a la altura de tu voz hablada", "at your speaking pitch"), L("como al hablar", "as when speaking")]
+          : last.dSt > 0
+            ? [L("sobre tu voz hablada", "above your speaking voice"), L("más agudo", "higher")]
+            : [L("bajo tu voz hablada", "below your speaking voice"), L("más grave", "lower")],
         warn: false,
         bar: null
       },
-      { k: L("Volumen", "Level"), v: dB(last.dDb), wd: lvWord(last.dDb), warn: Math.abs(last.dDb) > 3, bar: { v: last.dDb, lo: -9, hi: 9, ok: 3 } },
-      { k: L("Brillo · aprox.", "Brightness · approx."), v: last.dBr == null ? "—" : dB(last.dBr), wd: brWord(last.dBr), warn: false, bar: last.dBr == null ? null : { v: last.dBr, lo: -8, hi: 8, ok: 1.5 } }
+      { k: L("Volumen", "Level"), v: dB(last.dDb), wd: lvWords(last.dDb), warn: Math.abs(last.dDb) > 3, bar: { v: last.dDb, lo: -9, hi: 9, ok: 3 } },
+      {
+        k: L("Brillo · aprox.", "Brightness · approx."),
+        v: last.dBr == null ? "—" : dB(last.dBr),
+        wd: brWords(last.dBr),
+        warn: false,
+        bar: last.dBr == null ? null : { v: last.dBr, lo: -8, hi: 8, ok: 1.5 }
+      }
     ];
     // Two lines a row: the name and the number, then the words and a small bar
-    const rowH = clamp((h - 26) / 3, 26, 46);
+    const rowH = clamp((y + h - top + 4) / 3, 26, 46);
     rows.forEach((r, i) => {
-      const ry = y + 30 + i * rowH;
+      const ry = top + i * rowH;
       if (ry > y + h - 8) return;
-      text(ctx, r.k, gx, ry, { px: 10, color: C.faint, maxW: gw * 0.55 });
-      text(ctx, r.v, gx + gw, ry, { px: 12, weight: 800, color: r.warn ? C.warn : C.text, align: "right", maxW: gw * 0.44 });
-      if (rowH < 34) return;
-      const wy = ry + 15;
-      const bw = r.bar ? Math.min(gw * 0.42, 150) : 0;
-      text(ctx, r.wd, gx, wy, { px: 10, color: r.warn ? C.warn : C.muted, maxW: gw - bw - 10 });
-      if (r.bar) {
-        const bx = gx + gw - bw;
-        const by = wy - 2.5;
-        const xOf = (v) => bx + ((clamp(v, r.bar.lo, r.bar.hi) - r.bar.lo) / (r.bar.hi - r.bar.lo)) * bw;
-        ctx.fillStyle = "rgba(170, 195, 230, 0.1)";
-        ctx.fillRect(bx, by, bw, 5);
-        ctx.fillStyle = C.targetSoft;
-        ctx.fillRect(xOf(-r.bar.ok), by, xOf(r.bar.ok) - xOf(-r.bar.ok), 5);
-        ctx.fillStyle = C.faint;
-        ctx.fillRect(xOf(0) - 0.5, by - 2, 1, 9);
-        ctx.fillStyle = C.you;
-        ctx.beginPath();
-        ctx.arc(xOf(r.bar.v), by + 2.5, 4.5, 0, Math.PI * 2);
-        ctx.fill();
+      const vw = text(ctx, r.v, gx + gw, ry, { px: 12, weight: 800, color: r.warn ? C.warn : C.text, align: "right", maxW: gw * 0.44 });
+      if (rowH < 34) {
+        // One line a row: the name and, when it fits, what the number means
+        const wd = r.wd[r.wd.length - 1];
+        const alt = wd && wd !== "—" ? [r.k] : [];
+        text(ctx, alt.length ? `${r.k} · ${wd}` : r.k, gx, ry, { px: 10, color: r.warn ? C.warn : C.faint, maxW: gw - vw - 10, alt });
+        return;
       }
+      text(ctx, r.k, gx, ry, { px: 10, color: C.faint, maxW: gw - vw - 10 });
+      const wy = ry + 15;
+      const bw = r.bar ? Math.min(gw * 0.36, 150) : 0;
+      text(ctx, r.wd[0], gx, wy, { px: 10, color: r.warn ? C.warn : C.muted, maxW: gw - bw - 10, alt: r.wd.slice(1) });
+      if (r.bar) miniBar(ctx, gx + gw - bw, wy - 2.5, bw, r.bar);
     });
+  }
+
+  /** A small scale around zero: the "about the same" band and your value. */
+  function miniBar(ctx, bx, by, bw, bar) {
+    const xOf = (v) => bx + ((clamp(v, bar.lo, bar.hi) - bar.lo) / (bar.hi - bar.lo)) * bw;
+    ctx.fillStyle = "rgba(170, 195, 230, 0.1)";
+    ctx.fillRect(bx, by, bw, 5);
+    ctx.fillStyle = C.targetSoft;
+    ctx.fillRect(xOf(-bar.ok), by, xOf(bar.ok) - xOf(-bar.ok), 5);
+    ctx.fillStyle = C.faint;
+    ctx.fillRect(xOf(0) - 0.5, by - 2, 1, 9);
+    ctx.fillStyle = C.you;
+    ctx.beginPath();
+    ctx.arc(xOf(bar.v), by + 2.5, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  const brightNames = () => [L("Normal", "Normal"), L("Exagera", "Exaggerate"), L("Mantén", "Keep"), L("Equilibra", "Balance")];
+  const BRIGHT_LETTERS = ["N", "E", "M", "B"];
+
+  /**
+   * One plain line on what the drill's phases did to brightness, against the
+   * normal "YA" — and whether loudness came along, since louder alone also
+   * reads brighter. Wordings longest first.
+   */
+  function brightVerdict(br) {
+    const b = br.med || [];
+    const names = brightNames();
+    if (!br.base) return [L("Sin «YA» normal medido: no hay con qué comparar", "No normal 'YA' measured: nothing to compare with"), L("Sin «YA» normal medido", "No normal 'YA' measured")];
+    const later = [1, 2, 3].filter((i) => b[i]);
+    if (!later.length) return [L("Solo el «YA» normal: sigue con «Exagera» para comparar", "Only the normal 'YA': go on to 'Exaggerate' to compare"), L("Solo el «YA» normal", "Only the normal 'YA'")];
+    const k = later.reduce((a, i) => (b[i].y > b[a].y ? i : a), later[0]);
+    const p = b[k];
+    const nm = names[k];
+    if (p.y > 1.5 && p.x <= 3) return [L(`${nm}: más brillante sin subir el volumen`, `${nm}: brighter without getting louder`), L(`${nm}: más brillante`, `${nm}: brighter`)];
+    if (p.y > 1.5)
+      return [
+        L(`${nm}: más brillante, y también más fuerte (el volumen sube el brillo)`, `${nm}: brighter, and louder too (volume raises brightness)`),
+        L(`${nm}: más brillante y más fuerte`, `${nm}: brighter and louder`)
+      ];
+    if (later.some((i) => b[i].x > 3)) return [L("Más fuerte, no más brillante", "Louder, not brighter")];
+    return [L("El brillo apenas cambió entre fases", "Brightness barely changed between phases"), L("Brillo parecido en cada fase", "Similar brightness in each phase")];
   }
 
   /** s23: brightness against loudness, both against your normal "YA". */
   function sideBright(ctx, box, m, o) {
     sideFrame(ctx, box);
+    if (o.review) return brightReview(ctx, box, m, o);
     const { x, y, w, h } = box;
     const br = m.br || { p: 0, pts: [], med: [] };
-    const names = [L("Normal", "Normal"), L("Exagera", "Exaggerate"), L("Mantén", "Keep"), L("Equilibra", "Balance")];
-    const letters = ["N", "E", "M", "B"];
+    const names = brightNames();
     let plotBox;
     if (o.mini) {
       const s = Math.min(h - 8, w * 0.55);
       plotBox = { x: x + w - s - 6, y: y + 4, w: s, h: h - 8 };
-      text(ctx, names[br.p], x + 8, y + 14, { px: 11, weight: 800, color: C.text, maxW: w - s - 20 });
+      const tw = w - s - 20;
+      text(ctx, names[br.p], x + 8, y + 14, { px: 11, weight: 800, color: C.text, maxW: tw });
       if (br.louder) {
         glyph(ctx, "tri", x + 12, y + 34, C.warn, 4);
-        text(ctx, L("más fuerte, no más brillante", "louder, not brighter"), x + 20, y + 34, { px: 10, color: C.warn, maxW: w - s - 30 });
-      } else text(ctx, L("brillo · aprox.", "brightness · approx."), x + 8, y + 34, { px: 10, color: C.faint, maxW: w - s - 20 });
+        text(ctx, L("más fuerte, no más brillante", "louder, not brighter"), x + 20, y + 34, {
+          px: 10,
+          color: C.warn,
+          maxW: tw - 12,
+          alt: [L("solo más fuerte", "just louder")]
+        });
+      } else text(ctx, L("brillo · aprox.", "brightness · approx."), x + 8, y + 34, { px: 10, color: C.faint, maxW: tw });
     } else {
-      V.chips(ctx, { x: x + 8, y: y + 6, w: w - 16, h: o.compact ? 22 : 26 }, names.map((n, i) => ({ label: n, short: letters[i], done: o.review ? br.med[i] != null : i < br.p })), {
-        current: o.review ? -1 : br.p
+      V.chips(ctx, { x: x + 8, y: y + 6, w: w - 16, h: o.compact ? 22 : 26 }, names.map((n, i) => ({ label: n, short: BRIGHT_LETTERS[i], done: i < br.p })), {
+        current: br.p
       });
       const top = y + (o.compact ? 34 : 40);
       const foot = h >= 200 ? 30 : 16;
       const side = Math.min(w - 40, h - (top - y) - foot);
-      plotBox = { x: x + (w - side) / 2 + 8, y: top, w: side, h: side };
-      text(ctx, L("Brillo = energía aguda (2–4 kHz) · aprox.", "Brightness = high energy (2–4 kHz) · approx."), x + w / 2, y + h - (foot > 16 ? 22 : 8), { px: 9, color: C.faint, align: "center", maxW: w - 12 });
-      if (foot > 16) text(ctx, L("La máscara la sientes tú; aquí ves el brillo", "The mask is yours to feel; this shows brightness"), x + w / 2, y + h - 9, { px: 9, color: C.faint, align: "center", maxW: w - 12 });
+      plotBox = { x: x + (w - side) / 2, y: top, w: side, h: side };
+      // The foot: what brightness is here, and — while it happens — "louder,
+      // not brighter" on a line of its own, never over the plot's words
+      const lines = [];
+      const what = [L("Brillo = energía aguda (2–4 kHz) · aprox.", "Brightness = high energy (2–4 kHz) · approx."), L("Brillo = energía aguda · aprox.", "Brightness = high energy · approx.")];
+      if (foot > 16) lines.push(what);
+      if (br.louder) lines.push("louder");
+      else lines.push(foot > 16 ? [L("La máscara la sientes tú; aquí ves el brillo", "The mask is yours to feel; this shows brightness"), L("La máscara la sientes tú", "The mask is yours to feel")] : what);
+      lines.forEach((ln, i) => {
+        const ly = y + h - (lines.length - i === 2 ? 22 : 9);
+        if (ln === "louder") {
+          const f = fitWords(ctx, [L("Más fuerte, no más brillante", "Louder, not brighter")], w - 30, 11, 10, 800);
+          const lx = x + w / 2 - (f.w + 12) / 2;
+          glyph(ctx, "tri", lx + 4, ly, C.warn, 4);
+          text(ctx, f.s, lx + 12, ly, { px: f.px, weight: 800, color: C.warn });
+        } else text(ctx, ln[0], x + w / 2, ly, { px: 10, color: C.faint, align: "center", maxW: w - 12, alt: ln.slice(1) });
+      });
     }
     const { x: px, y: py, w: pw, h: ph } = plotBox;
     if (pw < 40 || ph < 40) return;
@@ -1488,26 +1926,51 @@
     ctx.lineTo(px + pw, Y(0));
     ctx.stroke();
     if (!o.mini) {
-      text(ctx, L("↑ más brillante", "↑ brighter"), px + 4, py + 8, { px: 9, color: C.faint });
-      text(ctx, L("↓ más oscuro", "↓ darker"), px + 4, py + ph - 8, { px: 9, color: C.faint });
-      // Loudness words sit outside the plot when there is room beside it
-      const room = Math.min(px - x, x + w - px - pw) - 8;
-      if (room >= 58) {
-        text(ctx, L("más fuerte →", "louder →"), px + pw + 4, Y(0), { px: 9, color: C.faint, maxW: room });
-        text(ctx, L("← más suave", "← softer"), px - 4, Y(0), { px: 9, color: C.faint, align: "right", maxW: room });
+      // Left of the plot when there is room, else beside the brightness
+      // axis inside it; never across a line
+      const up = [L("↑ más brillante", "↑ brighter"), L("↑ brillo", "↑ bright")];
+      const down = [L("↓ más oscuro", "↓ darker"), L("↓ oscuro", "↓ dark")];
+      const outRoom = px - x - 8;
+      const k = [0, 1].find((i) => Math.max(widthOf(ctx, up[i], 10), widthOf(ctx, down[i], 10)) <= outRoom);
+      if (k != null) {
+        text(ctx, up[k], px - 4, py + 8, { px: 10, color: C.faint, align: "right" });
+        text(ctx, down[k], px - 4, py + ph - 8, { px: 10, color: C.faint, align: "right" });
       } else {
-        text(ctx, L("más fuerte →", "louder →"), px + pw - 4, Y(0) - 7, { px: 9, color: C.faint, align: "right" });
-        if (ph >= 140) text(ctx, L("← más suave", "← softer"), px + 4, Y(0) + 8, { px: 9, color: C.faint });
+        const half = pw / 2 - 8;
+        text(ctx, up[0], X(0) + 4, py + 8, { px: 10, color: C.faint, maxW: half, alt: [up[1], "↑"] });
+        text(ctx, down[0], X(0) + 4, py + ph - 8, { px: 10, color: C.faint, maxW: half, alt: [down[1], "↓"] });
+      }
+      // Loudness words beside the plot, shorter ones when the room is short;
+      // inside it only as a last resort, under the axis at its ends
+      const room = Math.min(px - x, x + w - px - pw) - 6;
+      const pairs = [
+        [L("más fuerte →", "louder →"), L("← más suave", "← softer")],
+        [L("fuerte →", "loud →"), L("← suave", "← soft")]
+      ];
+      const pick = pairs.find(([r, l]) => Math.max(widthOf(ctx, r, 10), widthOf(ctx, l, 10)) <= room);
+      if (pick) {
+        text(ctx, pick[0], px + pw + 4, Y(0), { px: 10, color: C.faint });
+        text(ctx, pick[1], px - 4, Y(0), { px: 10, color: C.faint, align: "right" });
+      } else if (pw >= 110) {
+        text(ctx, pairs[1][0], px + pw - 4, Y(0) + 9, { px: 10, color: C.faint, align: "right" });
+        text(ctx, pairs[1][1], px + 4, Y(0) + 9, { px: 10, color: C.faint });
       }
     }
     if (!br.base) {
-      if (!o.mini) V.label(ctx, L("Canta «YA» normal: será tu punto de partida", "Sing a normal 'YA': your starting point"), px + pw / 2, py + ph * 0.32, { align: "center", font: font(10, 700), color: C.muted });
+      if (!o.mini) {
+        textBlock(ctx, [L("Canta «YA» normal: será tu punto de partida", "Sing a normal 'YA': your starting point"), L("Canta «YA» normal", "Sing a normal 'YA'")], px + pw / 2, py + ph * 0.3, pw - 16, {
+          px: 10,
+          maxLines: 3,
+          align: "center",
+          color: C.muted
+        });
+      }
       return;
     }
     // Each phase's median: a letter, gold once the phase is behind you
     (br.med || []).forEach((p, i) => {
       if (!p) return;
-      const done = o.review || i < br.p;
+      const done = i < br.p;
       const cx = X(p.x);
       const cy = Y(p.y);
       ctx.beginPath();
@@ -1520,37 +1983,106 @@
         ctx.lineWidth = 1.5;
         ctx.stroke();
       }
-      text(ctx, letters[i], cx, cy + 0.5, { px: 9, weight: 800, align: "center", color: done ? "#1b1406" : C.text });
+      text(ctx, BRIGHT_LETTERS[i], cx, cy + 0.5, { px: 9, weight: 800, align: "center", color: done ? "#1b1406" : C.text });
     });
-    if (!o.review) {
-      const pts = br.pts || [];
-      pts.forEach((p) => {
-        const age = m.clock - p.t;
-        ctx.globalAlpha = clamp(1 - age / 3, 0.08, 0.7);
-        ctx.fillStyle = C.you;
-        ctx.beginPath();
-        ctx.arc(X(p.x), Y(p.y), 2.5, 0, Math.PI * 2);
-        ctx.fill();
-      });
-      ctx.globalAlpha = 1;
-      const lastP = pts[pts.length - 1];
-      if (lastP && m.clock - lastP.t < 0.3) {
-        ctx.fillStyle = C.you;
-        ctx.beginPath();
-        ctx.arc(X(lastP.x), Y(lastP.y), 5.5, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      if (br.louder && !o.mini) {
-        ctx.strokeStyle = C.warn;
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(X(0.5), Y(0) + 12);
-        ctx.lineTo(X(6), Y(0) + 12);
-        ctx.stroke();
-        glyph(ctx, "tri", X(6) + 4, Y(0) + 12, C.warn, 4);
-        V.label(ctx, L("más fuerte, no más brillante", "louder, not brighter"), px + pw / 2, py + ph - 18, { align: "center", font: font(10, 800), color: C.warn });
-      }
+    const pts = br.pts || [];
+    pts.forEach((p) => {
+      const age = m.clock - p.t;
+      ctx.globalAlpha = clamp(1 - age / 3, 0.08, 0.7);
+      ctx.fillStyle = C.you;
+      ctx.beginPath();
+      ctx.arc(X(p.x), Y(p.y), 2.5, 0, Math.PI * 2);
+      ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+    const lastP = pts[pts.length - 1];
+    if (lastP && m.clock - lastP.t < 0.3) {
+      ctx.fillStyle = C.you;
+      ctx.beginPath();
+      ctx.arc(X(lastP.x), Y(lastP.y), 5.5, 0, Math.PI * 2);
+      ctx.fill();
     }
+    if (br.louder && !o.mini) {
+      // The move that happened: right (louder), not up (brighter)
+      ctx.strokeStyle = C.warn;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(X(0.5), Y(0) + 12);
+      ctx.lineTo(X(6), Y(0) + 12);
+      ctx.stroke();
+      glyph(ctx, "tri", X(6) + 4, Y(0) + 12, C.warn, 4);
+    }
+  }
+
+  /**
+   * s23 after Stop: how bright each phase was against the normal "YA" and how
+   * loud, approximately, and one plain line on what changed.
+   */
+  function brightReview(ctx, box, m, o) {
+    const { x, y, w, h } = box;
+    const br = m.br || { med: [] };
+    const names = brightNames();
+    const gx = x + 10;
+    const gw = w - 20;
+    const verdict = brightVerdict(br);
+    const rows = br.base ? [1, 2, 3].filter((i) => br.med && br.med[i]) : [];
+    if (o.mini || h < 70) {
+      if (!rows.length) {
+        textBlock(ctx, verdict, gx - 2, y + (h >= 44 ? 13 : h / 2), gw + 4, { px: 11, maxLines: h >= 44 ? 2 : 1, color: C.muted });
+        return;
+      }
+      // Each phase by name when the line has room, by its letter otherwise
+      const named = rows.map((i) => `${names[i]} ${dB(br.med[i].y)}`).join(" · ");
+      const bits = rows.map((i) => `${BRIGHT_LETTERS[i]} ${dB(br.med[i].y)}`).join(" · ");
+      text(ctx, L(`Brillo frente a tu normal · aprox.: ${named}`, `Brightness vs your normal · approx.: ${named}`), gx - 2, y + h * 0.3, {
+        px: 11,
+        color: C.text,
+        maxW: gw + 4,
+        alt: [
+          L(`Brillo · aprox.: ${named}`, `Brightness · approx.: ${named}`),
+          L(`Brillo frente a tu normal · aprox.: ${bits}`, `Brightness vs your normal · approx.: ${bits}`),
+          L(`Brillo · aprox.: ${bits}`, `Brightness · approx.: ${bits}`),
+          bits
+        ]
+      });
+      text(ctx, verdict[0], gx - 2, y + h * 0.72, { px: 11, color: C.muted, maxW: gw + 4, alt: verdict.slice(1) });
+      return;
+    }
+    sectionTitle(ctx, L("Brillo frente a tu «YA» normal · aprox.", "Brightness against your normal 'YA' · approx."), gx, y + 12, gw, [
+      L("Brillo frente a tu normal · aprox.", "Brightness vs your normal · approx."),
+      L("Brillo · aprox.", "Brightness · approx.")
+    ]);
+    if (!rows.length) {
+      textBlock(ctx, verdict, gx, y + 36, gw, { px: 11, maxLines: 3, color: C.muted });
+      return;
+    }
+    // Columns: the phase, a small scale, its brightness, its loudness
+    const volHead = L("volumen", "level");
+    const brHead = L("brillo", "brightness");
+    const vals = rows.map((i) => [dB(br.med[i].y), dB(br.med[i].x)]);
+    const volW = Math.max(widthOf(ctx, volHead, 10), ...vals.map((v) => widthOf(ctx, v[1], 11)));
+    const brW = Math.max(widthOf(ctx, brHead, 10), ...vals.map((v) => widthOf(ctx, v[0], 11, 800)));
+    const nameW = Math.max(...rows.map((i) => widthOf(ctx, names[i], 11)));
+    const colV = gx + gw;
+    const colB = colV - volW - 14;
+    const barX = gx + nameW + 10;
+    const barW = Math.min(130, colB - brW - 12 - barX);
+    const headY = y + 30;
+    text(ctx, brHead, colB, headY, { px: 10, color: C.faint, align: "right" });
+    text(ctx, volHead, colV, headY, { px: 10, color: C.faint, align: "right" });
+    const rowH = 18;
+    let ry = headY;
+    rows.forEach((i, k) => {
+      ry = headY + rowH * (k + 1);
+      const p = br.med[i];
+      text(ctx, names[i], gx, ry, { px: 11, color: C.text });
+      if (barW >= 40) miniBar(ctx, barX, ry - 2.5, barW, { v: p.y, lo: -8, hi: 8, ok: 1.5 });
+      text(ctx, vals[k][0], colB, ry, { px: 11, weight: 800, color: C.text, align: "right" });
+      const louderOnly = p.x > 3 && p.y <= 1.5;
+      text(ctx, vals[k][1], colV, ry, { px: 11, color: louderOnly ? C.warn : C.muted, align: "right" });
+    });
+    const room = y + h - (ry + 20);
+    if (room >= 8) textBlock(ctx, verdict, gx, ry + 22, gw, { px: 11, maxLines: room >= 22 ? 2 : 1, color: C.text });
   }
 
   /** s24: your level against the volume you started with, and each note held. */
@@ -1560,65 +2092,107 @@
     const soft = m.soft || {};
     const gx = x + 10;
     const gw = w - 20;
+    const cards = (m.cards || []).slice(o.review ? -12 : -6);
+    const known = (m.cards || []).filter((c) => c.soft != null);
+    const nSoft = known.filter((c) => c.soft).length;
     const gaugeOpts = {
       lo: -6,
       hi: 12,
-      value: o.review ? null : soft.rel,
-      bands: [
-        { from: -6, to: 3, label: L("suave", "soft") },
-        { from: 3, to: 12, color: hatch(ctx, "rgba(255, 159, 90, 0.5)"), stroke: C.warn, label: L("más fuerte", "louder") }
-      ],
+      value: soft.rel,
+      bands: [{ from: -6, to: 3 }, { from: 3, to: 12, color: hatch(ctx, "rgba(255, 159, 90, 0.5)"), stroke: C.warn }],
+      // The words sit under the bar, clear of the pointer
+      left: L("suave", "soft"),
+      leftColor: C.target,
+      right: L("más fuerte", "louder"),
+      rightColor: C.warn,
       ghosts: [{ v: 0, label: L("inicio", "start") }]
     };
     if (o.mini) {
-      if (soft.ref == null) text(ctx, L("Empieza suave: tomo tu volumen de inicio", "Start soft: taking your starting volume"), x + 8, y + h / 2, { px: 11, color: C.muted, maxW: w - 16 });
-      else V.gauge(ctx, { x: gx, y: y + 6, w: gw, h: h - 12 }, Object.assign({}, gaugeOpts, { ghosts: [] }));
+      if (o.review) {
+        const s = known.length
+          ? L(`${nSoft} de ${known.length} notas suaves, frente a tu volumen de inicio`, `${nSoft} of ${known.length} notes soft, against your starting volume`)
+          : L("Sin notas sostenidas en esta toma", "No notes held in this take");
+        const words = known.length ? [s, L(`${nSoft} de ${known.length} notas suaves`, `${nSoft} of ${known.length} notes soft`)] : [s];
+        textBlock(ctx, words, gx - 2, y + (h >= 44 ? 13 : h / 2), gw + 4, {
+          px: 11,
+          maxLines: h >= 44 ? 2 : 1,
+          color: C.text
+        });
+      } else if (soft.ref == null) {
+        textBlock(ctx, [L("Empieza suave: tomo tu volumen de inicio", "Start soft: taking your starting volume"), L("Empieza suave", "Start soft")], x + 8, y + h / 2, w - 16, {
+          px: 11,
+          maxLines: 1,
+          color: C.muted
+        });
+      } else gaugeWords(ctx, { x: gx, y: y + 4, w: gw, h: Math.max(26, h - 22) }, gaugeOpts);
       return;
     }
-    sectionTitle(ctx, L("Volumen · frente a tu inicio", "Level · against your start"), gx, y + 12, gw * 0.72);
-    if (soft.rel != null && !o.review) text(ctx, dB(soft.rel), gx + gw, y + 12, { px: 12, weight: 800, align: "right", color: soft.rel > 3 ? C.warn : C.you });
+    const vw = soft.rel != null && !o.review ? widthOf(ctx, dB(soft.rel), 12, 800) + 10 : 0;
+    sectionTitle(ctx, L("Volumen · frente a tu inicio", "Level · against your start"), gx, y + 12, gw - vw, [L("Volumen", "Level")]);
+    if (vw) text(ctx, dB(soft.rel), gx + gw, y + 12, { px: 12, weight: 800, align: "right", color: soft.rel > 3 ? C.warn : C.you });
     let cy = y + 26;
-    if (soft.ref == null && !o.review) {
-      text(ctx, L("Empieza suave: tu primer segundo y medio", "Start soft: your first second and a half"), gx, cy + 14, { px: 11, color: C.muted, maxW: gw });
-      text(ctx, L("marca tu volumen de inicio.", "sets your starting volume."), gx, cy + 30, { px: 11, color: C.muted, maxW: gw });
-      cy += 48;
-    } else if (!o.review) {
-      V.gauge(ctx, { x: gx, y: cy, w: gw, h: 44 }, gaugeOpts);
-      cy += 56;
+    if (o.review) {
+      if (known.length) {
+        text(ctx, L(`${nSoft} de ${known.length} notas suaves`, `${nSoft} of ${known.length} notes soft`), gx, cy + 2, { px: 11, color: C.text, maxW: gw });
+        cy += 14;
+      }
+    } else if (soft.ref == null) {
+      const r = textBlock(
+        ctx,
+        [
+          L("Empieza suave: tu primer segundo y medio marca tu volumen de inicio.", "Start soft: your first second and a half sets your starting volume."),
+          L("Empieza suave: así marcas tu volumen de inicio.", "Start soft: that sets your starting volume.")
+        ],
+        gx,
+        cy + 12,
+        gw,
+        { px: 11, maxLines: 3, color: C.muted }
+      );
+      cy = r.bottom + 14;
+    } else {
+      cy = gaugeWords(ctx, { x: gx, y: cy, w: gw, h: 40 }, gaugeOpts) + 6;
       if (soft.overMs > 600) {
         glyph(ctx, "tri", gx + 5, cy, C.warn, 4.5);
-        text(ctx, L("Más suave: vuelve a tu volumen de inicio", "Softer: back to your starting volume"), gx + 14, cy, { px: 11, color: C.warn, maxW: gw - 14 });
+        text(ctx, L("Más suave: vuelve a tu volumen de inicio", "Softer: back to your starting volume"), gx + 14, cy, {
+          px: 11,
+          color: C.warn,
+          maxW: gw - 14,
+          alt: [L("Más suave: vuelve a tu inicio", "Softer: back to your start")]
+        });
       }
-      cy += 16;
+      cy += 12;
     }
     // A card per note held: soft or not, and how steady
-    const cards = (m.cards || []).slice(o.review ? -12 : -6);
     if (!cards.length) return;
     const cw = clamp(gw / Math.min(6, cards.length), 50, 78);
     const perRow = Math.max(1, Math.floor(gw / cw));
     const ch = 46;
-    const rows = Math.max(1, Math.floor((y + h - cy - 4) / (ch + 4)));
-    const shown = cards.slice(-perRow * rows);
+    const nRows = Math.floor((y + h - cy - 4) / (ch + 4));
+    if (nRows < 1) return;
+    const shown = cards.slice(-perRow * nRows);
     shown.forEach((c, i) => {
       const cx = gx + (i % perRow) * cw;
       const ry = cy + Math.floor(i / perRow) * (ch + 4);
       ctx.fillStyle = c.soft === false ? C.warnSoft : "rgba(255, 211, 110, 0.12)";
       roundRect(ctx, cx + 1, ry, cw - 4, ch, 6);
       ctx.fill();
-      text(ctx, dualLabel(c.midi), cx + (cw - 3) / 2, ry + 10, { px: 10, weight: 800, align: "center", color: C.text, maxW: cw - 8 });
+      const mid = cx + (cw - 3) / 2;
+      text(ctx, dualLabel(c.midi), mid, ry + 10, { px: 10, weight: 800, align: "center", color: C.text, maxW: cw - 8, alt: [midiLabel(c.midi)] });
       if (c.soft === false) {
-        text(ctx, dB(c.maxRel), cx + (cw - 3) / 2, ry + 24, { px: 10, align: "center", color: C.warn, maxW: cw - 8 });
+        text(ctx, dB(c.maxRel), mid, ry + 24, { px: 10, align: "center", color: C.warn, maxW: cw - 8 });
       } else if (c.soft) {
-        glyph(ctx, "check", cx + 10, ry + 24, C.done, 3.5);
-        text(ctx, L("suave", "soft"), cx + (cw - 3) / 2 + 5, ry + 24, { px: 10, align: "center", color: C.done, maxW: cw - 18 });
+        const tw = widthOf(ctx, L("suave", "soft"), 10);
+        glyph(ctx, "check", mid - tw / 2 - 5, ry + 24, C.done, 3.5);
+        text(ctx, L("suave", "soft"), mid + 4, ry + 24, { px: 10, align: "center", color: C.done });
       }
-      if (c.sd != null) text(ctx, `±${Math.round(c.sd)} ¢`, cx + (cw - 3) / 2, ry + 37, { px: 9, align: "center", color: C.muted, maxW: cw - 8 });
+      if (c.sd != null) text(ctx, `±${Math.round(c.sd)} ¢`, mid, ry + 37, { px: 10, align: "center", color: C.muted, maxW: cw - 8 });
     });
   }
 
   /** s25: where you are in the tour, and what each seam did to your level. */
   function sideSeams(ctx, box, m, o) {
     sideFrame(ctx, box);
+    if (o.review) return seamsReview(ctx, box, m, o);
     const { x, y, w, h } = box;
     const gx = x + 10;
     const gw = w - 20;
@@ -1628,14 +2202,14 @@
     const tlY = y + (o.mini ? 10 : 26);
     const tlH = o.mini ? 16 : 20;
     if (!o.mini) {
-      sectionTitle(ctx, o.review ? L("Tu recorrido · volumen", "Your tour · level") : L(`Pasada ${m.passes + 1}`, `Pass ${m.passes + 1}`), gx, y + 12, gw * 0.5);
       const zone = zs[m.z];
       const left = zone && zone.sec ? zone.sec - m.t : null;
-      if (!o.review && left != null && left <= 10) {
-        text(ctx, L(`costura en ${Math.ceil(left)} s`, `seam in ${Math.ceil(left)} s`), gx + gw, y + 12, { px: 11, weight: 800, color: C.text, align: "right" });
+      let rw = 0;
+      if (left != null && left <= 10) {
+        rw = text(ctx, L(`costura en ${Math.ceil(left)} s`, `seam in ${Math.ceil(left)} s`), gx + gw, y + 12, { px: 11, weight: 800, color: C.text, align: "right" }) + 10;
       }
+      sectionTitle(ctx, L(`Pasada ${m.passes + 1}`, `Pass ${m.passes + 1}`), gx, y + 12, gw - rw);
     }
-    if (o.review) return seamsReview(ctx, box, m);
     let acc = 0;
     zs.forEach((z, i) => {
       const zx = gx + (acc / total) * gw;
@@ -1652,7 +2226,7 @@
         roundRect(ctx, zx + 1.5, tlY + 0.5, zw - 3, tlH - 1, 5);
         ctx.stroke();
       }
-      text(ctx, zoneName(z), zx + zw / 2, tlY + tlH / 2 + 0.5, { px: o.mini ? 9 : 10, weight: cur ? 800 : 700, align: "center", color: done ? C.done : cur ? C.text : C.muted, maxW: zw - 6 });
+      text(ctx, zoneName(z), zx + zw / 2, tlY + tlH / 2 + 0.5, { px: 10, weight: cur ? 800 : 700, align: "center", color: done ? C.done : cur ? C.text : C.muted, maxW: zw - 6 });
     });
     const before = zs.slice(0, m.z).reduce((a, z) => a + (z.sec || 0), 0);
     const mx = gx + ((before + m.t) / total) * gw;
@@ -1662,57 +2236,112 @@
     // Seam cards: level 3 s after against 3 s before
     const cards = (m.seams || []).slice(-3);
     let cy = tlY + tlH + 16;
-    sectionTitle(ctx, L("Costuras · volumen al entrar", "Seams · level on entering"), gx, cy, gw);
+    sectionTitle(ctx, L("Costuras · volumen al entrar", "Seams · level on entering"), gx, cy, gw, [L("Costuras", "Seams")]);
     cy += 16;
     if (!cards.length) {
-      text(ctx, L("La primera costura llega al cambiar de zona", "The first seam comes when the zone changes"), gx, cy + 4, { px: 11, color: C.faint, maxW: gw });
+      textBlock(ctx, [L("La primera costura llega al cambiar de zona", "The first seam comes when the zone changes")], gx, cy + 4, gw, {
+        px: 11,
+        maxLines: y + h - cy > 30 ? 2 : 1,
+        color: C.faint
+      });
       return;
     }
     cards.forEach((s) => {
       if (cy > y + h - 8) return;
       const lbl = `${zoneName(zs[s.from])} → ${zoneName(zs[s.to])}`;
-      text(ctx, lbl, gx, cy, { px: 11, color: C.text, maxW: gw * 0.5 });
+      const lw = text(ctx, lbl, gx, cy, { px: 11, color: C.text, maxW: gw * 0.5 });
       let wd;
       let col = C.muted;
-      if (s.d == null) wd = L("midiendo…", "measuring…");
-      else if (!Number.isFinite(s.d)) wd = L("sin datos (silencio)", "no data (silence)");
-      else if (Math.abs(s.d) <= 3) wd = `${dB(s.d)} · ${L("parejo", "even")}`;
+      if (s.d == null) wd = [L("midiendo…", "measuring…")];
+      else if (!Number.isFinite(s.d)) wd = [L("sin datos (silencio)", "no data (silence)"), L("sin datos", "no data")];
+      else if (Math.abs(s.d) <= 3) wd = [`${dB(s.d)} · ${L("parejo", "even")}`];
       else {
-        wd = `${dB(s.d)} · ${s.d > 0 ? L("más fuerte al entrar", "louder on entering") : L("más suave al entrar", "softer on entering")}`;
+        const up = s.d > 0;
+        wd = [`${dB(s.d)} · ${up ? L("más fuerte al entrar", "louder on entering") : L("más suave al entrar", "softer on entering")}`, `${dB(s.d)} · ${up ? L("más fuerte", "louder") : L("más suave", "softer")}`];
         col = C.warn;
-        glyph(ctx, s.d > 0 ? "up" : "tri", gx + gw * 0.52, cy, C.warn, 4);
+        glyph(ctx, up ? "up" : "tri", gx + lw + 8, cy, C.warn, 4);
       }
-      text(ctx, wd, gx + gw, cy, { px: 10, color: col, align: "right", maxW: gw * 0.44 });
+      text(ctx, wd[0], gx + gw, cy, { px: 10, color: col, align: "right", maxW: gw - lw - 22, alt: wd.slice(1) });
       cy += 18;
     });
   }
 
   /** After Stop: the whole tour's level against your average, seams marked. */
-  function seamsReview(ctx, box, m) {
+  function seamsReview(ctx, box, m, o) {
     const { x, y, w, h } = box;
     const gx = x + 10;
     const gw = w - 20;
     const K = V.scenes.resonanceKit;
+    const zs = m.zones || [];
+    const seams = m.seams || [];
+    const n = seams.length;
+    const sec = zs[0] && zs[0].sec;
+    const passes = m.passes || 0;
+    const summary = n
+      ? [
+          L(`${n} ${n === 1 ? "costura" : "costuras"}`, `${n} ${n === 1 ? "seam" : "seams"}`) +
+            (passes ? L(` · ${passes} ${passes === 1 ? "pasada completa" : "pasadas completas"}`, ` · ${passes} full ${passes === 1 ? "pass" : "passes"}`) : "")
+        ]
+      : [
+          sec ? L(`Sin costuras aún: la zona cambia cada ${sec} s`, `No seams yet: the zone changes every ${sec} s`) : L("Sin costuras aún", "No seams yet"),
+          L("Sin costuras aún", "No seams yet")
+        ];
+    const measured = seams.filter((s) => Number.isFinite(s.d));
+    const big = measured.filter((s) => Math.abs(s.d) > 3).sort((a, b) => Math.abs(b.d) - Math.abs(a.d))[0];
+    const verdict = big
+      ? [L(`Costura más marcada: ${zoneName(zs[big.to])} ${dB(big.d)}`, `Biggest seam: ${zoneName(zs[big.to])} ${dB(big.d)}`)]
+      : measured.length
+        ? [L("Costuras parejas: dentro de ±3 dB", "Even seams: within ±3 dB"), L("Costuras parejas", "Even seams")]
+        : null;
+    if (o.mini) {
+      text(ctx, summary[0], gx - 2, y + h * 0.3, { px: 11, color: C.text, maxW: gw + 4, alt: summary.slice(1) });
+      const how = [L("Cada costura compara tu volumen 3 s antes y después", "Each seam compares your level 3 s before and after"), L("Volumen 3 s antes y después", "Level 3 s before and after")];
+      text(ctx, (verdict || how)[0], gx - 2, y + h * 0.72, {
+        px: 11,
+        color: big ? C.warn : C.muted,
+        maxW: gw + 4,
+        alt: (verdict || how).slice(1)
+      });
+      return;
+    }
+    // Title, and the band's legend beside it when there is room
+    const legend = L("tu media ±3 dB", "your average ±3 dB");
+    const lw = widthOf(ctx, legend, 10) + 16;
+    const title = L("Tu recorrido · volumen", "Your tour · level");
+    const legendBeside = widthOf(ctx, title, 11) + lw + 12 <= gw;
+    sectionTitle(ctx, title, gx, y + 12, legendBeside ? gw - lw - 12 : gw, [L("Volumen", "Level")]);
+    if (legendBeside) {
+      const lx = gx + gw - lw;
+      ctx.fillStyle = C.targetSoft;
+      ctx.fillRect(lx, y + 8, 10, 8);
+      text(ctx, legend, lx + 14, y + 12, { px: 10, color: C.muted });
+    }
+    const footY = y + h - 10;
+    const lines = verdict && h >= 110 ? [verdict, summary] : [verdict || summary];
+    lines.forEach((ln, i) => {
+      const ly = footY - (lines.length - 1 - i) * 15;
+      text(ctx, ln[0], gx, ly, { px: 10, color: ln === verdict && big ? C.warn : C.muted, maxW: gw, alt: ln.slice(1) });
+    });
+    const ry = y + 24;
+    const rh = footY - 9 - (lines.length - 1) * 15 - ry;
+    if (rh < 24) return;
     const pts = (m.trace || []).filter((p) => p.db != null);
-    const rx = gx;
-    const ry = y + 26;
-    const rh = Math.max(40, h - 60);
     ctx.fillStyle = "rgba(170, 195, 230, 0.05)";
-    ctx.fillRect(rx, ry, gw, rh);
+    ctx.fillRect(gx, ry, gw, rh);
     if (pts.length < 10) {
-      text(ctx, L("Sin sonido suficiente para el recorrido", "Not enough sound for the tour"), gx, ry + rh / 2, { px: 11, color: C.faint, maxW: gw });
+      text(ctx, L("Sin sonido suficiente para el recorrido", "Not enough sound for the tour"), gx + 6, ry + rh / 2, { px: 11, color: C.faint, maxW: gw - 12 });
       return;
     }
     const med = K.median(pts.map((p) => p.db));
     const t0 = m.trace[0].t;
     const t1 = Math.max(t0 + 1, m.clock);
-    const X = (t) => rx + ((t - t0) / (t1 - t0)) * gw;
+    const X = (t) => gx + ((t - t0) / (t1 - t0)) * gw;
     const Y = (d) => ry + rh / 2 - (clamp(d, -12, 12) / 12) * (rh / 2 - 4);
     ctx.fillStyle = C.targetSoft;
-    ctx.fillRect(rx, Y(3), gw, Y(-3) - Y(3));
-    text(ctx, L("tu media ±3 dB", "your average ±3 dB"), rx + 4, Y(3) - 7, { px: 9, color: C.faint });
+    ctx.fillRect(gx, Y(3), gw, Y(-3) - Y(3));
     // Each phrase (a run of sound) as one bar at its median level, so the
     // ribbon reads as phrases and a note's quiet tail does not look like a dip
+    const obst = [];
     const runs = [];
     let run = null;
     pts.forEach((p) => {
@@ -1731,25 +2360,35 @@
       const bx = X(r.t0);
       const bw = Math.max(2, X(r.t1) - bx - 1);
       ctx.fillRect(bx, Y(v) - 1.5, bw, 3);
+      obst.push({ x: bx, y: Y(v) - 3, w: bw, h: 6 });
       if (off) glyph(ctx, v > 0 ? "up" : "tri", bx + bw / 2, v > 0 ? Y(v) - 8 : Y(v) + 8, C.warn, 3.5);
     });
-    (m.seams || []).forEach((s) => {
+    seams.forEach((s) => {
       const sx = X(s.t);
       ctx.strokeStyle = Number.isFinite(s.d) && Math.abs(s.d) > 3 ? C.warn : C.gridStrong;
+      ctx.lineWidth = 1;
       ctx.setLineDash([3, 3]);
       ctx.beginPath();
       ctx.moveTo(sx, ry);
       ctx.lineTo(sx, ry + rh);
       ctx.stroke();
       ctx.setLineDash([]);
-      if (Number.isFinite(s.d)) text(ctx, dB(s.d), sx + 3, ry + 8, { px: 9, color: Math.abs(s.d) > 3 ? C.warn : C.muted });
+      obst.push({ x: sx - 2, y: ry, w: 4, h: rh });
+      if (Number.isFinite(s.d)) {
+        const tw = text(ctx, dB(s.d), sx + 3, ry + 8, { px: 10, color: Math.abs(s.d) > 3 ? C.warn : C.muted });
+        obst.push({ x: sx + 1, y: ry + 1, w: tw + 4, h: 14 });
+      }
     });
-    const n = (m.seams || []).length;
-    text(ctx, L(`${n} ${n === 1 ? "costura" : "costuras"} · ${m.passes} ${m.passes === 1 ? "pasada completa" : "pasadas completas"}`, `${n} ${n === 1 ? "seam" : "seams"} · ${m.passes} full ${m.passes === 1 ? "pass" : "passes"}`), gx, y + h - 12, {
-      px: 10,
-      color: C.muted,
-      maxW: gw
-    });
+    // No room for the legend beside the title: on the ribbon, off the bars
+    if (!legendBeside) {
+      const ys = [Y(3) - 10, Y(-3) + 10];
+      placeLabel(ctx, [legend], ys.flatMap((yy) => [[gx + 6, yy, "left"], [gx + gw - 6, yy, "right"]]), {
+        px: 10,
+        color: C.muted,
+        obst,
+        bounds: { x: gx, y: ry, w: gw, h: rh }
+      });
+    }
   }
 
   V.scenes.zones = zones;
@@ -1773,20 +2412,15 @@
     const compact = h < 190;
     const headH = tiny ? 0 : compact ? 20 : 26;
     if (!tiny) {
-      const right = L(`${m.takes}/2 tomas`, `${m.takes}/2 takes`);
-      ctx.font = font(compact ? 10 : 11, 700);
-      const rightW = ctx.measureText(right).width;
+      const right = [L(`${m.takes}/2 tomas`, `${m.takes}/2 takes`), `${m.takes}/2`];
+      const secs = V.fmtSec(m.cur ? m.cur.dur : 0, 1);
       let head;
-      if (m.review) head = L("Tus dos tomas · decide tu oído", "Your two takes · your ear decides");
-      else if (m.stage === "listen") head = L("Escucha las dos: ▶ A y ▶ B", "Listen to both: ▶ A and ▶ B");
-      else if (m.recording) head = L(`Grabando la toma ${m.stage} · ${V.fmtSec(m.cur ? m.cur.dur : 0, 1)}`, `Recording take ${m.stage} · ${V.fmtSec(m.cur ? m.cur.dur : 0, 1)}`);
-      else if (m.stage === "A") head = L("Toma A · canta la frase tal cual", "Take A · sing the phrase as it comes");
-      else head = L("Toma B · la misma frase, colocada", "Take B · the same phrase, placed");
-      ctx.fillStyle = C.text;
-      ctx.textAlign = "left";
-      ctx.textBaseline = "middle";
-      fitText(ctx, head, pad + 2, pad + headH / 2 - 2, w - pad * 2 - rightW - 14, compact ? 13 : 15, 800, 9);
-      text(ctx, right, w - pad - 2, pad + headH / 2 - 2, { align: "right", color: m.takes >= 2 ? C.done : C.muted, px: compact ? 10 : 11 });
+      if (m.review) head = [L("Tus dos tomas · decide tu oído", "Your two takes · your ear decides"), L("Tus dos tomas", "Your two takes")];
+      else if (m.stage === "listen") head = [L("Escucha las dos: ▶ A y ▶ B", "Listen to both: ▶ A and ▶ B"), L("Escucha ▶ A y ▶ B", "Listen: ▶ A and ▶ B")];
+      else if (m.recording) head = [L(`Grabando la toma ${m.stage} · ${secs}`, `Recording take ${m.stage} · ${secs}`), L(`Toma ${m.stage} · ${secs}`, `Take ${m.stage} · ${secs}`)];
+      else if (m.stage === "A") head = [L("Toma A · canta la frase tal cual", "Take A · sing the phrase as it comes"), L("Toma A · tal cual", "Take A · as it comes")];
+      else head = [L("Toma B · la misma frase, colocada", "Take B · the same phrase, placed"), L("Toma B · colocada", "Take B · placed")];
+      headRow(ctx, w, pad, headH, compact, head, right, m.takes >= 2 ? C.done : C.muted);
     }
     const top = tiny ? pad - 3 : pad + headH + 2;
     const bodyH = h - top - pad + (tiny ? 3 : 0);
@@ -1834,13 +2468,14 @@
     roundRect(ctx, x + 6, y + 5, chip, chip, 6);
     ctx.fill();
     text(ctx, k, x + 6 + chip / 2, y + 5 + chip / 2 + 0.5, { px: Math.min(15, chip * 0.6), weight: 800, align: "center", color: done ? C.done : C.text });
-    const px = x + chip + 14;
-    const pw = w - chip - 20;
+    // What the take is for, under the letter; the take's line starts after it
+    const what = !o.tiny && h >= 54 ? (k === "A" ? L("tal cual", "as it comes") : L("colocada", "placed")) : null;
+    const lead = Math.max(chip + 14, what ? Math.min(w * 0.3, widthOf(ctx, what, 9) + 16) : 0);
+    const px = x + lead;
+    const pw = w - lead - 6;
     const py = y + 4;
     const ph = h - 8;
-    if (!o.tiny && h >= 54) {
-      text(ctx, k === "A" ? L("tal cual", "as it comes") : L("colocada", "placed"), x + 6, y + chip + 16, { px: 9, color: C.faint, maxW: chip + 30 });
-    }
+    if (what) text(ctx, what, x + 6, y + chip + 16, { px: 9, color: C.faint, maxW: lead - 10, minPx: 9 });
     const X = (t) => px + (clamp(t, 0, o.T) / o.T) * pw;
     const R = 7;
     const center = o.ref != null ? o.ref : tk && tk.medMidi != null ? tk.medMidi : null;
@@ -1858,12 +2493,24 @@
     }
     if (!tk) {
       const waiting = !m.review && m.stage === k;
-      const s = waiting
-        ? L("Canta la frase: la toma empieza sola y acaba tras 2 s de silencio", "Sing the phrase: the take starts by itself and ends after 2 s of quiet")
+      const words = waiting
+        ? [
+            L("Canta la frase: la toma empieza sola y acaba tras 2 s de silencio", "Sing the phrase: the take starts by itself and ends after 2 s of quiet"),
+            L("Canta: empieza sola y acaba tras 2 s de silencio", "Sing: it starts by itself, ends after 2 s of quiet"),
+            L("Canta la frase: empieza sola", "Sing the phrase: it starts by itself")
+          ]
         : k === "B" && !m.review
-          ? L("Después: la misma frase, en la misma tonalidad", "Next: the same phrase, in the same key")
-          : L("Sin toma", "No take");
-      text(ctx, s, px + pw / 2, py + ph / 2, { px: o.tiny ? 10 : 11, color: waiting ? C.muted : C.faint, align: "center", maxW: pw - 10 });
+          ? [L("Después: la misma frase, en la misma tonalidad", "Next: the same phrase, in the same key"), L("Después: misma frase y tonalidad", "Next: same phrase, same key"), L("Después: la misma frase", "Next: the same phrase")]
+          : [L("Sin toma", "No take")];
+      const lines = ph >= 34 && !o.tiny ? 2 : 1;
+      const pxT = o.tiny ? 10 : 11;
+      textBlock(ctx, words, px + pw / 2, py + ph / 2, pw - 10, {
+        px: pxT,
+        maxLines: lines,
+        align: "center",
+        middle: true,
+        color: waiting ? C.muted : C.faint
+      });
       return;
     }
     if (tk.noAudio) {
@@ -1932,8 +2579,9 @@
       ctx.moveTo(ex, py);
       ctx.lineTo(ex, py + ph);
       ctx.stroke();
-      glyph(ctx, "dot", px + pw - 60, py + 9, C.text, 9);
-      text(ctx, L("grabando", "recording"), px + pw - 52, py + 9, { px: 10, color: C.text });
+      // Top left, clear of the take's growing end line
+      glyph(ctx, "dot", px + 6, py + 9, C.text, 9);
+      text(ctx, L("grabando", "recording"), px + 14, py + 9, { px: 10, color: C.text });
     } else {
       text(ctx, V.fmtSec(tk.dur, 1), px + pw - 2, py + ph - 8, { px: 10, color: C.muted, align: "right" });
     }
@@ -1963,38 +2611,57 @@
     const gw = w - 20;
     const n1 = (v) => fmtSigned(v, 1);
     if (o.mini) {
-      let s;
+      let words;
       if (f) {
-        const bits = [];
-        if (f.key != null) bits.push(f.keyOk ? L("tonalidad ✓", "key ✓") : L(`tonalidad ${n1(f.key / 100)} st`, `key ${n1(f.key / 100)} st`));
-        if (f.vol != null) bits.push(f.volOk ? L("volumen ✓", "level ✓") : L(`volumen ${dB(f.vol)}`, `level ${dB(f.vol)}`));
-        if (f.bright != null) bits.push(L(`brillo ${dB(f.bright)} aprox.`, `brightness ${dB(f.bright)} approx.`));
-        s = bits.join(" · ");
-      } else s = L("1 · Toma A   2 · Toma B   3 · Escucha", "1 · Take A   2 · Take B   3 · Listen");
-      text(ctx, s, x + 8, y + h / 2, { px: 10, color: f && !f.fair ? C.warn : C.muted, maxW: w - 16 });
+        // What stops a fair comparison first, so the shortest line keeps it
+        const bad = [];
+        const good = [];
+        if (f.key != null) (f.keyOk ? good : bad).push(f.keyOk ? L("tonalidad ✓", "key ✓") : L(`tonalidad ${n1(f.key / 100)} st`, `key ${n1(f.key / 100)} st`));
+        if (f.vol != null) (f.volOk ? good : bad).push(f.volOk ? L("volumen ✓", "level ✓") : L(`volumen ${dB(f.vol)}`, `level ${dB(f.vol)}`));
+        if (f.corr != null) (f.melOk ? good : bad).push(f.melOk ? L("melodía ✓", "melody ✓") : L("¿la misma frase?", "the same phrase?"));
+        const bits = bad.concat(good);
+        const full = bits.slice();
+        if (f.bright != null) full.push(L(`brillo ${dB(f.bright)} aprox.`, `brightness ${dB(f.bright)} approx.`));
+        words = [full.join(" · "), bits.join(" · ")];
+        if (bad.length) words.push(bad.join(" · "));
+      } else words = [L("1 · Toma A   2 · Toma B   3 · Escucha", "1 · Take A   2 · Take B   3 · Listen"), L("A · B · Escucha", "A · B · Listen")];
+      text(ctx, words[0], x + 8, y + h / 2, { px: 10, color: f && !f.fair ? C.warn : C.muted, maxW: w - 16, alt: words.slice(1) });
       return;
     }
     if (!f) {
       // The protocol, until both takes are in
       sectionTitle(ctx, L("Cómo se compara", "How to compare"), gx, y + 12, gw);
       const steps = [
-        { s: L("Toma A: la frase tal cual", "Take A: the phrase as it comes"), done: !!m.A },
-        { s: L("Toma B: misma frase, misma tonalidad, mismo volumen", "Take B: same phrase, same key, same volume"), done: !!m.B },
-        { s: L("Escucha las dos y quédate con una", "Listen to both and keep one"), done: false }
+        { s: [L("Toma A: la frase tal cual", "Take A: the phrase as it comes")], done: !!m.A },
+        {
+          s: [L("Toma B: misma frase, misma tonalidad, mismo volumen", "Take B: same phrase, same key, same volume"), L("Toma B: misma frase, tono y volumen", "Take B: same phrase, key and volume")],
+          done: !!m.B
+        },
+        { s: [L("Escucha las dos y quédate con una", "Listen to both and keep one"), L("Escucha y quédate con una", "Listen and keep one")], done: false }
       ];
+      // A step that does not fit one line wraps to two when the box has room
+      const spare = h - 34 - steps.length * 20;
+      let ry = y + 34;
       steps.forEach((st, i) => {
-        const ry = y + 34 + i * 22;
         if (ry > y + h - 8) return;
         if (st.done) glyph(ctx, "check", gx + 5, ry, C.done, 4.5);
         else text(ctx, String(i + 1), gx + 5, ry, { px: 11, weight: 800, align: "center", color: C.muted });
-        text(ctx, st.s, gx + 16, ry, { px: 11, color: st.done ? C.done : C.text, maxW: gw - 16 });
+        const r = textBlock(ctx, st.s, gx + 16, ry, gw - 16, { px: 11, maxLines: spare >= 14 ? 2 : 1, lineH: 14, color: st.done ? C.done : C.text });
+        ry = r.bottom + 20;
       });
-      if (m.A && m.B && (m.A.noAudio || m.B.noAudio) && y + 110 < y + h) {
-        text(ctx, L("Una toma no tiene audio: no hay datos que comparar", "One take has no audio: nothing to compare"), gx, y + 106, { px: 10, color: C.faint, maxW: gw });
+      if (m.A && m.B && (m.A.noAudio || m.B.noAudio) && ry < y + h - 6) {
+        text(ctx, L("Una toma no tiene audio: no hay datos que comparar", "One take has no audio: nothing to compare"), gx, ry, {
+          px: 10,
+          color: C.faint,
+          maxW: gw,
+          alt: [L("Una toma no tiene audio", "One take has no audio")]
+        });
       }
       return;
     }
-    sectionTitle(ctx, f.fair ? L("Se pueden comparar · aprox.", "A fair comparison · approx.") : L("Antes de comparar · aprox.", "Before comparing · approx."), gx, y + 12, gw);
+    sectionTitle(ctx, f.fair ? L("Se pueden comparar · aprox.", "A fair comparison · approx.") : L("Antes de comparar · aprox.", "Before comparing · approx."), gx, y + 12, gw, [
+      f.fair ? L("Comparables · aprox.", "Fair · approx.") : L("Antes de comparar", "Before comparing")
+    ]);
     const rows = [];
     if (f.key != null) {
       rows.push(
@@ -2028,7 +2695,7 @@
       text(ctx, r.s, gx + 16, ry, { px: 11, weight: 700, color: r.ok === false ? C.warn : C.text, maxW: gw - 16 });
       ry += rowGap - 4;
       if (r.sub && !o.compact && ry <= y + h - 8) {
-        text(ctx, r.sub, gx + 16, ry, { px: 10, color: C.muted, maxW: gw - 16 });
+        ry = textBlock(ctx, [r.sub], gx + 16, ry, gw - 16, { px: 10, maxLines: 2, lineH: 13, color: C.muted }).bottom;
         ry += rowGap - 4;
       }
       ry += 4;

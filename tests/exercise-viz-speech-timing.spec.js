@@ -259,6 +259,80 @@ test.describe("speech timing pictures", () => {
     await expect(page.locator("#mode-focus .mode-title")).toContainText("Metaphor");
   });
 
+  test("words are never condensed, and the reviews say what their numbers mean", async ({ page }) => {
+    test.setTimeout(120000);
+    await boot(page);
+    // Each picture drawn from its live model into a phone-size canvas, a
+    // rotated-phone one and a short desktop one; every fillText is recorded
+    const cases = [
+      // v1 needs ~6 s of reading to measure its base
+      ["v1-diction", "rateLadder", "rateSteps", 8500],
+      ["v10-power-pause", "pause", "speech", 3500],
+      ["v11-kill-fillers", "fillerRounds", "fillerTalk"],
+      ["v14-pace-variation", "paceRiver", "keyPoints", 4000],
+      ["v8-fluency-metaphors", "topicRibbon", "topicTalk"],
+      ["v6-connect", "turns", "turnTaking"],
+      ["v3-soft-palate", "beads", "countNumbers"]
+    ];
+    const draw = (scene, sizes) =>
+      page.evaluate(
+        ([scene, sizes]) => {
+          const st = window.VTApp.getState().modeInstance.state;
+          const out = [];
+          sizes.forEach(([w, h]) => {
+            const c = document.createElement("canvas");
+            c.width = w;
+            c.height = h;
+            const ctx = c.getContext("2d");
+            const fill = ctx.fillText.bind(ctx);
+            ctx.fillText = (t, x, y, mw) => {
+              const s = String(t);
+              const px = Number((/(\d+(?:\.\d+)?)px/.exec(ctx.font) || [])[1] || 0);
+              out.push({ size: `${w}x${h}`, t: s, px, mw: mw == null ? null : mw, tw: ctx.measureText(s).width });
+              return mw == null ? fill(t, x, y) : fill(t, x, y, mw);
+            };
+            window.VTViz.scenes[scene](ctx, w, h, st);
+          });
+          return out;
+        },
+        [scene, sizes]
+      );
+    const sizes = [
+      [294, 340],
+      [294, 180],
+      [480, 192],
+      [1004, 120]
+    ];
+    const texts = {};
+    for (const [id, scene, voice, ms] of cases) {
+      // A fresh page per drill: the synthetic voice plays once per page
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await page.waitForFunction(() => !!window.VTApp?.openExercise);
+      await openEx(page, id);
+      await start(page, voice);
+      await page.waitForTimeout(ms || 3200);
+      const live = await draw(scene, sizes);
+      await stopVoice(page);
+      await page.locator("#btn-practice-stop").click();
+      await expect(page.locator("#mode-focus .mode-panel")).toHaveClass(/is-replay/);
+      const review = await draw(scene, sizes);
+      for (const c of [...live, ...review]) {
+        if (!c.t.trim() || c.t === "»") continue;
+        expect(c.mw == null || c.tw <= c.mw + 0.5, `${id} ${c.size}: "${c.t}" condensed (${c.tw.toFixed(0)} > ${c.mw})`).toBe(true);
+        expect(c.px, `${id} ${c.size}: "${c.t}" at ${c.px}px`).toBeGreaterThanOrEqual(10);
+      }
+      texts[id] = review.map((c) => c.t).join(" | ");
+    }
+    // v1: 100 % is named as the base, not left bare
+    expect(texts["v1-diction"]).toMatch(/tu base = 100 %/);
+    expect(texts["v1-diction"]).not.toMatch(/Tu escalera/);
+    // v10: plain words for the typical pause, no "mediana"
+    expect(texts["v10-power-pause"]).not.toMatch(/mediana/);
+    expect(texts["v10-power-pause"]).toMatch(/pausas? de poder/);
+    // v14: what an anchor is, in words
+    expect(texts["v14-pace-variation"]).toMatch(/Ancla = /);
+  });
+
   test("the pictures fit a phone held both ways", async ({ page }) => {
     await boot(page);
     for (const vp of [

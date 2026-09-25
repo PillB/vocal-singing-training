@@ -168,9 +168,9 @@
         },
         {
           label: "Story · setup",
-          labelEs: "Historia · planteamiento",
+          labelEs: "Historia · inicio",
           short: "Setup",
-          shortEs: "Planteamiento",
+          shortEs: "Inicio",
           kind: "story",
           sec: 25,
           cue: "Who, where, and what they wanted.",
@@ -852,14 +852,27 @@
       pitchChallenge: false,
       autoPiano: false,
       autoRecord: false,
+      // The exercise's five steps, in its words and order: stand tall first,
+      // then the four releases (103 s, inside the daily session's 105 s)
       phases: [
+        {
+          label: "Stand tall, shoulders down",
+          labelEs: "De pie, hombros bajos",
+          short: "Stand",
+          shortEs: "De pie",
+          art: "stand",
+          setup: true,
+          sec: 6,
+          cue: "Stand tall, shoulders down, nothing tight at the waist or the collar.",
+          cueEs: "De pie, hombros bajos, nada apretado en la cintura ni en el cuello."
+        },
         {
           label: "Jaw hangs",
           labelEs: "Mandíbula suelta",
           short: "Jaw",
           shortEs: "Mandíbula",
           art: "jaw",
-          sec: 25,
+          sec: 22,
           cue: "Two fingers on the hinge: let the mouth fall open with no push. Keep breathing.",
           cueEs: "Dos dedos en la bisagra: deja caer la boca sin empujar. Sigue respirando."
         },
@@ -886,8 +899,8 @@
         {
           label: "Three silent pre-yawns",
           labelEs: "Tres pre-bostezos en silencio",
-          short: "Pre-yawn",
-          shortEs: "Pre-bostezo",
+          short: "Pre-yawns",
+          shortEs: "Pre-bostezos",
           art: "yawns",
           sec: 20,
           cue: "The inside grows, the face stays calm. Stop before the yawn.",

@@ -62,6 +62,26 @@
     ctx.fillText(str, x, y);
     return size;
   }
+  /**
+   * A secondary label that is drawn whole or not at all: the largest size
+   * from `px` down to `min` that fits `maxW` (never squeezed by fillText's
+   * maxWidth, never cut). Returns whether it was drawn.
+   */
+  function sayIf(ctx, text, x, y, maxW, px, weight = 700, min = 10) {
+    const size = fitPx(ctx, text, maxW, px, weight, min);
+    if (!size) return false;
+    ctx.font = font(size, weight);
+    ctx.fillText(text, x, y);
+    return true;
+  }
+  /** The largest size from `px` down to `min` at which `text` fits `maxW`, or 0. */
+  function fitPx(ctx, text, maxW, px, weight = 700, min = 11) {
+    for (let size = px; size >= min; size--) {
+      ctx.font = font(size, weight);
+      if (ctx.measureText(text).width <= maxW) return size;
+    }
+    return 0;
+  }
   function setText(el, text) {
     if (el && el.textContent !== text) el.textContent = text;
   }
@@ -343,42 +363,93 @@
       }
       px += sw + gap;
     });
-    if (opts.labels) stepLabels(ctx, box, run, segs);
+    return opts.labels ? stepLabels(ctx, box, run, segs) : null;
   }
 
   /**
-   * Step names under the bar, each centred on its segment and free to run past
-   * a short segment's ends. Where names would collide, the current step's name
-   * wins, then the steps nearest it; a name that can't fit is left out rather
-   * than replaced by a bare number (a row of "1 2 3 Giro 5" read as noise).
+   * Step names under the bar, in the steps' order, each as close to the
+   * middle of its segment as the names around it allow: a short segment's
+   * name is nudged along rather than dropped (on a phone, "Hola" or
+   * "Pre-bostezo" used to vanish beside a long neighbour). Names are 11 px,
+   * 10 px (and a narrower gap) when that is what lets every name fit, and may
+   * run a few px past the bar's ends into the padding; only when even that
+   * is too wide does a name drop out — the ones furthest from the current
+   * step first — never replaced by a bare number ("1 2 3 Giro 5" read as
+   * noise). Returns the names drawn with their x-extent (the spec reads it).
    */
   function stepLabels(ctx, box, run, segs) {
-    const { x, y, w, h } = box;
+    const { y, h } = box;
+    const x = box.x - 6;
+    const w = box.w + 12;
     const cur = run.done ? -1 : run.index;
-    const order = segs
-      .map((sg) => sg.i)
-      .sort((a, b) => (a === cur ? -1 : b === cur ? 1 : Math.abs(a - Math.max(0, cur)) - Math.abs(b - Math.max(0, cur)) || a - b));
-    const placed = [];
+    const all = segs
+      .map((sg) => ({ i: sg.i, sg, text: loc(run.phases[sg.i], "short") || run.phases[sg.i].label || "" }))
+      .filter((q) => q.text);
+    // Who gives way first: the steps furthest from the current one
+    const priority = (i) => (i === cur ? -1 : Math.abs(i - Math.max(0, cur)) * 2 + (i < cur ? 1 : 0));
+    let placed = null;
+    let px = 11;
+    const tries = [
+      [11, 9],
+      [11, 6],
+      [10, 9],
+      [10, 6]
+    ];
+    for (const [size, gap] of tries) {
+      const last = size === 10 && gap === 6;
+      let list = all.slice();
+      while (list.length) {
+        const out = layoutLabels(ctx, list, x, w, size, cur, gap);
+        if (out) {
+          placed = out;
+          break;
+        }
+        if (!last) break;
+        const drop = list.reduce((a, q) => (priority(q.i) > priority(a.i) ? q : a), list[0]);
+        list = list.filter((q) => q !== drop);
+      }
+      if (placed) {
+        px = size;
+        break;
+      }
+    }
+    placed = placed || [];
     ctx.textAlign = "left";
     ctx.textBaseline = "top";
-    for (const i of order) {
-      const p = run.phases[i];
-      const sg = segs[i];
-      const text = loc(p, "short") || p.label || "";
-      if (!text) continue;
-      ctx.font = font(10, i === cur ? 800 : 700);
-      const tw = ctx.measureText(text).width;
-      if (tw > w) continue;
-      const lx = clamp(sg.x + sg.w / 2 - tw / 2, x, x + w - tw);
-      if (placed.some((q) => lx < q.r + 6 && lx + tw > q.l - 6)) continue;
-      placed.push({ i, l: lx, r: lx + tw, text });
-    }
     for (const q of placed) {
       const done = run.done || q.i < run.index;
-      ctx.font = font(10, q.i === cur ? 800 : 700);
+      ctx.font = font(px, q.i === cur ? 800 : 700);
       ctx.fillStyle = q.i === cur ? C.text : done ? C.done : C.muted;
       ctx.fillText(q.text, q.l, y + h + 3);
     }
+    return { px, labels: placed.map((q) => ({ i: q.i, text: q.text, l: q.l, r: q.r })) };
+  }
+
+  /**
+   * One row of names, kept in order and in bounds: each wants the middle of
+   * its segment and is pushed right, then left, just enough to keep a gap
+   * from its neighbours. Null when the names can't fit side by side.
+   */
+  function layoutLabels(ctx, list, x, w, px, cur, gap) {
+    const items = list.map((q) => {
+      ctx.font = font(px, q.i === cur ? 800 : 700);
+      const tw = ctx.measureText(q.text).width;
+      return { i: q.i, text: q.text, tw, l: q.sg.x + q.sg.w / 2 - tw / 2 };
+    });
+    const need = items.reduce((a, q) => a + q.tw, 0) + gap * Math.max(0, items.length - 1);
+    if (need > w) return null;
+    for (let k = 0; k < items.length; k++) {
+      const q = items[k];
+      q.l = Math.max(q.l, k ? items[k - 1].l + items[k - 1].tw + gap : x);
+    }
+    for (let k = items.length - 1; k >= 0; k--) {
+      const q = items[k];
+      q.l = Math.min(q.l, k < items.length - 1 ? items[k + 1].l - gap - q.tw : x + w - q.tw);
+    }
+    items.forEach((q) => {
+      q.r = q.l + q.tw;
+    });
+    return items;
   }
 
   /**
@@ -415,7 +486,7 @@
       });
       return tw;
     };
-    while (size > 11 && width() > maxW) size -= 1;
+    while (size > 10 && width() > maxW) size -= 1;
     let cx = x;
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
@@ -425,7 +496,7 @@
       ctx.font = font(size, key ? 900 : 700);
       const tw = ctx.measureText(s).width;
       ctx.fillStyle = key ? (hot ? C.done : C.text) : C.muted;
-      ctx.fillText(s, cx, y, Math.max(10, maxW - (cx - x)));
+      ctx.fillText(s, cx, y);
       if (key && hot) {
         ctx.fillStyle = C.done;
         ctx.fillRect(cx, y + size * 0.62, tw, 2);
@@ -580,6 +651,83 @@
 
   /* —— Art: jaw and neck release (s17) —— */
 
+  /**
+   * Stand tall (the exercise's first step): a figure from the waist up that
+   * grows a little taller while the shoulders settle down, arms loose at the
+   * sides and a loose belt. Arrows say which way each part goes. Everything,
+   * the arrows too, stays inside its box.
+   */
+  function artStand(ctx, box, info) {
+    const { x, y, w, h } = box;
+    const k = info.reduced ? 1 : ease(info.t / 1.6);
+    // In units of s: arrow tip 0, crown 0.15, shoulders 0.5, waist 1.06
+    const s = Math.min(h / 1.1, w / 0.95);
+    const cx = x + w / 2;
+    const y0 = y + (h - s * 1.08) / 2;
+    const u = (v) => y0 + v * s;
+    const headR = s * 0.115;
+    const headY = u(0.265) + (1 - k) * s * 0.03;
+    const shY = u(0.5) - (1 - k) * s * 0.07;
+    const waistY = u(1.06);
+    const lw = Math.max(1.8, s * 0.026);
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    ctx.strokeStyle = C.you;
+    ctx.fillStyle = "rgba(191, 230, 255, 0.07)";
+    ctx.lineWidth = lw;
+    // Torso: neck, shoulders, tapering to the waist
+    ctx.beginPath();
+    ctx.moveTo(cx - s * 0.045, headY + headR - 1);
+    ctx.lineTo(cx - s * 0.045, shY - s * 0.04);
+    ctx.quadraticCurveTo(cx - s * 0.26, shY - s * 0.03, cx - s * 0.28, shY + s * 0.06);
+    ctx.lineTo(cx - s * 0.2, waistY);
+    ctx.lineTo(cx + s * 0.2, waistY);
+    ctx.lineTo(cx + s * 0.28, shY + s * 0.06);
+    ctx.quadraticCurveTo(cx + s * 0.26, shY - s * 0.03, cx + s * 0.045, shY - s * 0.04);
+    ctx.lineTo(cx + s * 0.045, headY + headR - 1);
+    ctx.fill();
+    ctx.stroke();
+    // Arms hanging loose at the sides
+    [-1, 1].forEach((sd) => {
+      ctx.beginPath();
+      ctx.moveTo(cx + sd * s * 0.3, shY + s * 0.08);
+      ctx.quadraticCurveTo(cx + sd * s * 0.35, u(0.75), cx + sd * s * 0.32, u(0.98));
+      ctx.stroke();
+    });
+    ctx.beginPath();
+    ctx.arc(cx, headY, headR, 0, TAU);
+    ctx.fill();
+    ctx.stroke();
+    // A loose belt: nothing tight at the waist
+    ctx.setLineDash([4, 4]);
+    ctx.strokeStyle = C.faint;
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(cx - s * 0.21, waistY - s * 0.09);
+    ctx.lineTo(cx + s * 0.21, waistY - s * 0.09);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // Taller: up from the crown; shoulders: down
+    const gs = Math.max(3, s * 0.035);
+    ctx.strokeStyle = C.done;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(cx, u(0.12));
+    ctx.lineTo(cx, u(0.01) + gs);
+    ctx.stroke();
+    glyph(ctx, "up", cx, u(0.01) + gs * 0.7, C.done, gs);
+    [-1, 1].forEach((sd) => {
+      const sx = cx + sd * s * 0.38;
+      ctx.strokeStyle = C.done;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(sx, u(0.3));
+      ctx.lineTo(sx, u(0.4));
+      ctx.stroke();
+      glyph(ctx, "tri", sx, u(0.4), C.done, Math.max(2.5, s * 0.025));
+    });
+  }
+
   function breathDot(ctx, box, t, reduced) {
     const { x, y, w, h } = box;
     const cx = x + w / 2;
@@ -603,16 +751,14 @@
     ctx.strokeStyle = C.grid;
     ctx.stroke();
     ctx.setLineDash([]);
-    ctx.font = font(h < 100 ? 10 : 11, 800);
     ctx.fillStyle = C.air;
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
     const word = reduced ? L("respira", "breathe") : inhale ? L("inhala", "in") : L("exhala", "out");
-    ctx.fillText(word, cx, cy + rMax + 4, w);
+    sayIf(ctx, word, cx, cy + rMax + 4, w, h < 100 ? 11 : 12, 800, 10);
     if (h >= 110) {
       ctx.fillStyle = C.muted;
-      ctx.font = font(10, 700);
-      ctx.fillText(L("no aguantes el aire", "don't hold your breath"), cx, cy + rMax + 18, w + 20);
+      sayIf(ctx, L("no aguantes el aire", "don't hold your breath"), cx, cy + rMax + 19, w + 20, 11, 700, 10);
     }
   }
 
@@ -675,11 +821,10 @@
     ctx.setLineDash([]);
     glyph(ctx, "cross", cx, cyU - B, C.muted, Math.max(4, r * 0.35));
     if (h >= 100 && w >= 120) {
-      ctx.font = font(10, 800);
       ctx.fillStyle = C.muted;
       ctx.textAlign = "left";
       ctx.textBaseline = "middle";
-      ctx.fillText(L("nunca atrás", "never back"), cx + r * 0.5, cyU - B - 1, w / 2);
+      sayIf(ctx, L("nunca atrás", "never back"), cx + r * 0.5, cyU - B - 1, x + w - (cx + r * 0.5), 11, 800, 10);
     }
     // The front half (the path)
     ctx.setLineDash([6, 5]);
@@ -766,11 +911,10 @@
     }
     ctx.globalAlpha = 1;
     if (w - faceW > 30) {
-      ctx.font = font(h < 100 ? 12 : 14, 800);
       ctx.fillStyle = C.air;
       ctx.textAlign = "left";
       ctx.textBaseline = "middle";
-      ctx.fillText("mmm", mx + s * 0.32, my, w - faceW);
+      sayIf(ctx, "mmm", mx + s * 0.32, my, x + w - (mx + s * 0.32), h < 100 ? 12 : 14, 800, 11);
     }
   }
 
@@ -860,11 +1004,23 @@
 
   /* —— Art: soft palate (s19) —— */
 
+  /**
+   * The news arrives and the jaw drops: a short beat of the resting face at
+   * the start of the step, then the surprise, held. Every few seconds the
+   * face eases a little and the news lands again, but the jaw never closes
+   * (a looping face was caught with a closed mouth, the wrong face here).
+   */
   function artSurprise(ctx, box, info) {
-    const loop = 6;
-    const u = ((info.t % loop) + loop) % loop;
+    const t = Math.max(0, info.t || 0);
     let k = 1;
-    if (!info.reduced) k = u < 0.8 ? 0 : u < 1.4 ? ease((u - 0.8) / 0.6) : u < 5 ? 1 : 1 - ease((u - 5) / 1);
+    if (!info.reduced) {
+      if (t < 0.9) k = t < 0.4 ? 0 : ease((t - 0.4) / 0.5);
+      else {
+        const u = (t - 0.9) % 7;
+        // A dip to 0.6 and back over the last second of each 7 s
+        k = u < 6 ? 1 : 1 - 0.4 * Math.sin(Math.PI * (u - 6));
+      }
+    }
     const s = Math.min(box.h * 0.92, box.w * 0.9);
     drawFace(ctx, box.x + box.w / 2, box.y + box.h * 0.46, s, mixExpr(EXPR.neutral, EXPR.surprise, k));
   }
@@ -947,11 +1103,10 @@
       ctx.stroke();
       ctx.setLineDash([]);
       if (h >= 100) {
-        ctx.font = font(10, 800);
         ctx.fillStyle = C.done;
         ctx.textAlign = "left";
         ctx.textBaseline = "top";
-        ctx.fillText(L("cámara: cintura arriba", "camera: waist up"), fx0 + 4, fy0 + 3, fx1 - fx0 - 8);
+        sayIf(ctx, L("cámara: cintura arriba", "camera: waist up"), fx0 + 9, fy0 + 6, fx1 - fx0 - 18, 11, 800, 10);
       }
     }
     // Home base band at the navel
@@ -965,12 +1120,12 @@
     ctx.lineTo(bx1, by);
     ctx.stroke();
     ctx.setLineDash([]);
-    if (w >= 150 && h >= 90) {
-      ctx.font = font(9, 700);
-      ctx.fillStyle = C.faint;
+    // Its name to the left of it — not over the camera frame's line
+    if (w >= 150 && h >= 90 && kind !== "frame") {
+      ctx.fillStyle = C.muted;
       ctx.textAlign = "right";
-      ctx.textBaseline = "bottom";
-      ctx.fillText(L("base", "home"), bx0 - 2, by + 4);
+      ctx.textBaseline = "middle";
+      sayIf(ctx, L("base", "home"), bx0 - 4, by, bx0 - 4 - x, 11, 700, 10);
     }
     // Body
     ctx.strokeStyle = C.you;
@@ -1137,11 +1292,11 @@
       const rowH = Math.min(40, h * 0.26);
       const ps = rowH * 0.9;
       penGlyph(ctx, x + ps * 0.7, y + rowH / 2, ps, penState);
-      ctx.font = font(12, 800);
       ctx.fillStyle = penState === "in" ? C.done : C.muted;
       ctx.textAlign = "left";
       ctx.textBaseline = "middle";
-      ctx.fillText(penWord, x + ps * 1.6 + (penState === "out" ? ps * 0.6 : 0), y + rowH / 2, w - ps * 2);
+      const wx = x + ps * 1.6 + (penState === "out" ? ps * 0.6 : 0);
+      sayIf(ctx, penWord, wx, y + rowH / 2, x + w - wx, 12, 800, 11);
       y += rowH + 6;
       h -= rowH + 6;
     }
@@ -1151,24 +1306,22 @@
       const ps = Math.min(penW * 0.75, h * 0.55);
       penGlyph(ctx, x + penW / 2 - (penState === "out" ? ps * 0.25 : 0), y + h * 0.42, ps, penState);
       if (h >= 70) {
-        ctx.font = font(10, 800);
         ctx.fillStyle = penState === "in" ? C.done : C.muted;
         ctx.textAlign = "center";
         ctx.textBaseline = "top";
-        ctx.fillText(penWord, x + penW / 2, y + h * 0.42 + ps * 0.4, penW);
+        sayIf(ctx, penWord, x + penW / 2, y + h * 0.42 + ps * 0.4, penW + 8, 11, 800, 10);
       }
     }
     const rx = x + penW + (showPen ? 8 : 0);
     const rw = w - (rx - x);
     if (p.kind === "penOff") {
-      ctx.font = font(Math.min(22, h * 0.26), 800);
       ctx.fillStyle = C.text;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(L("Quita el bolígrafo", "Take the pen out"), rx + rw / 2, y + h * 0.4, rw);
-      ctx.font = font(12, 700);
+      sayIf(ctx, L("Quita el bolígrafo", "Take the pen out"), rx + rw / 2, y + h * 0.4, rw, Math.round(Math.min(22, h * 0.26)), 800, 12) ||
+        sayIf(ctx, L("Quítalo", "Pen out"), rx + rw / 2, y + h * 0.4, rw, 14, 800, 11);
       ctx.fillStyle = C.muted;
-      ctx.fillText(L("mismo ritmo, ahora sin él", "same pace, now without it"), rx + rw / 2, y + h * 0.4 + Math.min(26, h * 0.3), rw);
+      sayIf(ctx, L("mismo ritmo, ahora sin él", "same pace, now without it"), rx + rw / 2, y + h * 0.4 + Math.min(26, h * 0.3), rw, 12, 700, 11);
       return;
     }
     const pace = p.pace || 1.5;
@@ -1212,11 +1365,10 @@
       ctx.fillStyle = C.target;
       ctx.fillRect(cx - slot * 0.35, cy + h * 0.32, slot * 0.7 * f, 3);
     } else if (h >= 60) {
-      ctx.font = font(12, 800);
       ctx.fillStyle = C.done;
       ctx.textAlign = "left";
       ctx.textBaseline = "middle";
-      ctx.fillText("✓ " + L("hasta el " + to, "up to " + to), cx + slot * 0.55, cy, rw * 0.5);
+      sayIf(ctx, "✓ " + L("hasta el " + to, "up to " + to), cx + slot * 0.55, cy, rx + rw - (cx + slot * 0.55), 12, 800, 11);
     }
   }
 
@@ -1320,11 +1472,12 @@
     roundRect(ctx, xOf(land0), top, xOf(total) - xOf(land0), base - top, 6);
     ctx.fill();
     if (h >= 80) {
-      ctx.font = font(10, 800);
       ctx.fillStyle = C.target;
       ctx.textAlign = "right";
       ctx.textBaseline = "top";
-      ctx.fillText(L("aterriza el punto", "land the point"), xOf(total) - 4, top + 3, xOf(total) - xOf(land0) - 6);
+      const bw = xOf(total) - xOf(land0) - 8;
+      sayIf(ctx, L("aterriza el punto", "land the point"), xOf(total) - 4, top + 4, bw, 11, 800, 10) ||
+        sayIf(ctx, L("aterriza", "land it"), xOf(total) - 4, top + 4, bw, 11, 800, 10);
     }
     // Zone dividers and names
     let acc = 0;
@@ -1341,11 +1494,15 @@
         ctx.lineTo(xOf(a), base);
         ctx.stroke();
       }
-      ctx.font = font(h < 90 ? 10 : 12, cur ? 900 : 700);
       ctx.fillStyle = cur ? C.text : done ? C.done : C.muted;
       ctx.textAlign = "center";
       ctx.textBaseline = "bottom";
-      ctx.fillText((done ? "✓ " : "") + (loc(z.p, "short") || z.p.label), (xOf(a) + xOf(acc)) / 2, y + h, xOf(acc) - xOf(a) - 4);
+      // The zone's name, whole: without its check mark before it is ever squeezed
+      const name = loc(z.p, "short") || z.p.label;
+      const zw = xOf(acc) - xOf(a) - 4;
+      const zx = (xOf(a) + xOf(acc)) / 2;
+      const zpx = h < 90 ? 11 : 12;
+      if (!(done && sayIf(ctx, "✓ " + name, zx, y + h, zw, zpx, cur ? 900 : 700, 10))) sayIf(ctx, name, zx, y + h, zw, zpx, cur ? 900 : 700, 10);
     });
     // The arc
     ctx.strokeStyle = C.faint;
@@ -1413,18 +1570,18 @@
     ctx.lineTo(x + w, yOf(min));
     ctx.stroke();
     ctx.setLineDash([]);
-    ctx.font = font(10, 800);
+    ctx.font = font(11, 800);
     ctx.fillStyle = C.target;
     ctx.textAlign = "right";
     ctx.textBaseline = "bottom";
     ctx.fillText(fmtSec(min), x + w, yOf(min) - 2);
     if (labelH) {
       const n = list.filter((q) => q.len >= min).length;
-      ctx.font = font(11, 800);
       ctx.fillStyle = C.muted;
       ctx.textAlign = "left";
       ctx.textBaseline = "top";
-      ctx.fillText(L(`Sostenidos ≥ ${fmtNum(min, 1)} s en este paso: ${n}`, `Holds ≥ ${fmtNum(min, 1)} s this step: ${n}`), x, y, w);
+      sayIf(ctx, L(`Sostenidos ≥ ${fmtNum(min, 1)} s en este paso: ${n}`, `Holds ≥ ${fmtNum(min, 1)} s this step: ${n}`), x, y, w, 11, 800, 10) ||
+        sayIf(ctx, L(`En este paso: ${n}`, `This step: ${n}`), x, y, w, 11, 800, 10);
     }
     const slots = 11;
     const sw = w / slots;
@@ -1453,11 +1610,10 @@
       if (topY - 2 > y + labelH + 8) ctx.fillText((good && !b.live ? "✓ " : "") + fmtNum(b.len, 1), cx, topY - 2);
     });
     if (!bars.length) {
-      ctx.font = font(12, 700);
-      ctx.fillStyle = C.faint;
+      ctx.fillStyle = C.muted;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(L("canta /A/ y sostén", "sing /A/ and hold"), x + w / 2, (top + base) / 2, w);
+      sayIf(ctx, L("canta /A/ y sostén", "sing /A/ and hold"), x + w / 2, (top + base) / 2, w, 12, 700, 11);
     }
   }
 
@@ -1486,7 +1642,6 @@
       ctx.textAlign = "left";
       ctx.textBaseline = "top";
       fitLine(ctx, (got ? "✓ " : "") + (i ? L("2 · Abierto", "2 · Open") : L("1 · Cerrado", "1 · Closed")), cx + 10, y + 8, cw - 20, h < 90 ? 13 : 15, 900, 10);
-      ctx.font = font(h < 90 ? 11 : 12, 700);
       ctx.fillStyle = C.muted;
       let line = "";
       if (got) line = fmtSec(s.len != null ? s.len : s.end - s.start);
@@ -1494,11 +1649,12 @@
       else if (waiting) line = L("canta la frase…", "sing the phrase…");
       else line = L("después", "then");
       ctx.textBaseline = "top";
-      ctx.fillText(line, cx + 10, y + (h < 90 ? 28 : 32), cw - 20);
+      sayIf(ctx, line, cx + 10, y + (h < 90 ? 28 : 32), cw - 20, h < 90 ? 11 : 12, 700, 10) ||
+        (waiting && sayIf(ctx, L("canta…", "sing…"), cx + 10, y + (h < 90 ? 28 : 32), cw - 20, 11, 700, 10));
       if (h >= 90) {
-        ctx.font = font(10, 600);
-        ctx.fillStyle = C.faint;
-        ctx.fillText(i ? L("pre-bostezo, mismo volumen", "pre-yawn, same loudness") : L("espacio cerrado", "space closed"), cx + 10, y + cardH - 18, cw - 20);
+        ctx.fillStyle = C.muted;
+        const how = i ? L("pre-bostezo, mismo volumen", "pre-yawn, same loudness") : L("espacio cerrado", "space closed");
+        sayIf(ctx, how, cx + 10, y + cardH - 19, cw - 20, 11, 600, 10) || (i && sayIf(ctx, L("mismo volumen", "same loudness"), cx + 10, y + cardH - 19, cw - 20, 11, 600, 10));
       }
     });
   }
@@ -1551,9 +1707,14 @@
     const nx = run.next;
     const soon = !!nx && run.remaining <= (m.preCue || 4) && m.live;
     let nextText;
+    // The same with the next step's short name, for a narrow head
+    let nextShort = "";
     if (run.done) nextText = m.doneSub();
-    else if (nx) nextText = (soon ? L(`En ${Math.ceil(run.remaining)} s → `, `In ${Math.ceil(run.remaining)} s → `) : L("Luego: ", "Next: ")) + nx.label;
-    else nextText = L("Último paso", "Last step");
+    else if (nx) {
+      const lead = soon ? L(`En ${Math.ceil(run.remaining)} s → `, `In ${Math.ceil(run.remaining)} s → `) : L("Luego: ", "Next: ");
+      nextText = lead + nx.label;
+      nextShort = lead + (loc(nx, "short") || nx.label);
+    } else nextText = L("Último paso", "Last step");
     const stepWord = run.done || run.count < 2 ? "" : L(`Paso ${idx + 1} de ${run.count}`, `Step ${idx + 1} of ${run.count}`);
     const strip = m.strip();
     const status = m.status(info);
@@ -1575,7 +1736,7 @@
       let yy = pad + 44;
       if (status && status.text) {
         ctx.fillStyle = status.color || C.muted;
-        fitLine(ctx, status.text, x0, yy + 7, tw, 11, 700, 9);
+        fitLine(ctx, status.text, x0, yy + 7, tw, 11, 700, 10);
         yy += 16;
       }
       if (strip && h - pad - 14 - yy >= 16) speechStrip(ctx, { x: x0, y: yy + 2, w: tw, h: 13 }, strip.vad, { seconds: 10, minLabel: 1e9 });
@@ -1596,25 +1757,33 @@
     fitLine(ctx, title, pad + 2, pad + (compact ? 11 : 14), headW, compact ? 16 : w < 360 ? 17 : 20, 800, 12);
     const line2Y = pad + (compact ? 30 : 38);
     ctx.fillStyle = soon ? C.done : C.muted;
-    fitLine(ctx, stepWord ? `${stepWord} · ${nextText}` : nextText, pad + 2, line2Y, headW, compact ? 11 : 13, soon ? 800 : 700, 10);
+    // "Paso 1 de 5 · Luego: Medios círculos de cuello", or with the next
+    // step's short name ("Luego: Cuello") rather than ending in "…"
+    const line2 = [nextText, nextShort]
+      .filter(Boolean)
+      .map((t) => (stepWord ? `${stepWord} · ${t}` : t));
+    const l2px = compact ? 11 : 13;
+    const l2 = line2.find((t) => fitPx(ctx, t, headW, l2px, soon ? 800 : 700, compact ? 11 : 12)) || line2[line2.length - 1];
+    fitLine(ctx, l2, pad + 2, line2Y, headW, l2px, soon ? 800 : 700, 10);
 
     // Foot: every step, as a bar
     const barH = compact ? 8 : 11;
     const labels = !compact && w >= 260;
     const barY = h - pad - barH - (labels ? 15 : 0);
-    stepBar(ctx, { x: pad, y: barY, w: w - pad * 2, h: barH }, run, { labels });
+    // What the names under the bar came to (read by the spec)
+    m._stepLabels = stepBar(ctx, { x: pad, y: barY, w: w - pad * 2, h: barH }, run, { labels });
     let bottom = barY - (compact ? 6 : 10);
     if (strip) {
       const sh = compact ? 13 : 18;
       if (!compact) {
-        ctx.font = font(9, 700);
-        ctx.fillStyle = C.faint;
+        ctx.font = font(11, 700);
+        ctx.fillStyle = C.muted;
         ctx.textAlign = "left";
         ctx.textBaseline = "bottom";
         ctx.fillText(strip.label || L("tu voz", "your voice"), pad + 2, bottom - sh - 2);
       }
       speechStrip(ctx, { x: pad, y: bottom - sh, w: w - pad * 2, h: sh }, strip.vad, { seconds: w < 420 ? 10 : 20, minLabel: 1e9 });
-      bottom -= sh + (compact ? 6 : 16);
+      bottom -= sh + (compact ? 6 : 19);
     }
     const region = { x: pad, y: line2Y + (compact ? 10 : 16), w: w - pad * 2, h: 0 };
     region.h = bottom - region.y;
@@ -1682,10 +1851,10 @@
       y += 18;
     }
     if (ill) {
-      ctx.fillStyle = C.faint;
+      ctx.fillStyle = C.muted;
       ctx.textAlign = "left";
       ctx.textBaseline = "top";
-      fitLine(ctx, ill, box.x, y + 4, box.w, 10, 700, 9);
+      sayIf(ctx, ill, box.x, y + 4, box.w, 11, 700, 10) || sayIf(ctx, L("Dibujo guía", "Guide drawing"), box.x, y + 4, box.w, 11, 700, 10);
     }
   }
 
@@ -1757,8 +1926,27 @@
       const fit = Math.max(1, Math.floor(avail / minRow));
       const n = Math.min(chs.length, fit);
       const first = clamp(sel - Math.floor(n / 2), 0, chs.length - n);
-      const rowH = Math.min(tiny ? avail : narrow ? 64 : 50, avail / n);
       const labelW = narrow ? 0 : Math.min(tiny ? 130 : 190, w * (tiny ? 0.3 : 0.34));
+      // With room to spare (a short take: a row or two), each row also says
+      // what its step asked for — what to listen for — and its strip grows
+      const hintW = narrow ? w - pad * 2 - 12 : w - pad - 6 - (pad + labelW);
+      const HINT_LH = 16;
+      let hintLines = 0;
+      let rowH = Math.min(tiny ? avail : narrow ? 64 : 50, avail / n);
+      const shown = chs.slice(first, first + n);
+      // Lines each row's words take; a row whose words would need more than
+      // three (two when wide) shows none rather than a cut sentence
+      ctx.font = font(12, 600);
+      const hintN = shown.map((c) => (!tiny && c.hint ? lineCount(ctx, c.hint, hintW) : 0));
+      const cap = narrow ? 3 : 2;
+      const most = Math.max(0, ...hintN.filter((c) => c <= cap));
+      const need = (narrow ? 64 : 50) + most * HINT_LH + 4;
+      if (most && avail / n >= need) {
+        hintLines = most;
+        // As tall as the words and a 40 px strip need, no taller
+        rowH = Math.min(avail / n, (narrow ? 75 : 62) + most * HINT_LH);
+      }
+      m._reviewRows = { n, rowH, hintLines, y0: y, bottom };
       for (let k = 0; k < n; k++) {
         const i = first + k;
         const ch = chs[i];
@@ -1781,33 +1969,71 @@
         let sw;
         let sy;
         let sh;
+        const hint = hintLines && ch.hint && hintN[k] <= hintLines ? ch.hint : "";
         if (narrow) {
-          // Name and length on one line, the speech strip under them
-          ctx.font = font(10, 600);
-          const subW = Math.min(w * 0.45, ctx.measureText(sub).width);
+          // Name and length on one line (the length under the name when
+          // both won't fit whole), what the step asked under them, then the
+          // speech strip
+          const nameMax = w - pad * 2 - 12;
+          let subPx = sub ? fitPx(ctx, sub, w * 0.45, 11, 600, 10) : 0;
+          ctx.font = font(subPx || 11, 600);
+          let subW = subPx ? ctx.measureText(sub).width : 0;
+          const beside = !!subPx && !!fitPx(ctx, ch.label, nameMax - subW - 10, 13, 800, 12);
+          const below = !!sub && !beside && rowH >= 58;
+          if (!beside) {
+            // Under the name when the row has room; else the name keeps the line
+            subPx = below ? fitPx(ctx, sub, nameMax, 11, 600, 10) : 0;
+            subW = 0;
+          }
           ctx.fillStyle = isSel ? C.text : C.muted;
-          fitLine(ctx, ch.label, pad + 6, ry + 13, w - pad * 2 - subW - 22, 13, 800, 10);
-          ctx.font = font(10, 600);
-          ctx.fillStyle = C.faint;
-          ctx.textAlign = "right";
-          ctx.fillText(sub, w - pad - 6, ry + 13, subW);
+          fitLine(ctx, ch.label, pad + 6, ry + 13, nameMax - (subW ? subW + 10 : 0), 13, 800, 11);
+          if (subPx) {
+            ctx.font = font(subPx, 600);
+            ctx.fillStyle = C.muted;
+            ctx.textAlign = below ? "left" : "right";
+            ctx.fillText(sub, below ? pad + 6 : w - pad - 6, below ? ry + 29 : ry + 13);
+          }
           sx = pad + 6;
           sw = w - pad * 2 - 12;
-          sy = ry + 23;
-          sh = Math.max(10, Math.min(24, rowH - 30));
+          sy = ry + (below ? 38 : 23);
+          if (hintLines) {
+            if (hint) {
+              ctx.font = font(12, 600);
+              ctx.fillStyle = C.muted;
+              ctx.textAlign = "left";
+              wrap(ctx, hint, sx, sy, sw, HINT_LH, hintLines);
+            }
+            sy += hintLines * HINT_LH + 4;
+          }
+          sh = Math.max(10, Math.min(hintLines ? 40 : 24, ry + rowH - 7 - sy));
         } else {
           ctx.fillStyle = isSel ? C.text : C.muted;
           const twoLines = rowH >= 34;
-          fitLine(ctx, (tiny ? idxText : "") + ch.label, pad + 6, ry + (twoLines ? rowH * 0.36 : rowH / 2), labelW - 12, 12, 800, 9);
-          if (twoLines) {
-            ctx.font = font(10, 600);
-            ctx.fillStyle = C.faint;
-            ctx.fillText(sub, pad + 6, ry + rowH * 0.7, labelW - 12);
+          const nameY = hintLines ? ry + 17 : ry + (twoLines ? rowH * 0.36 : rowH / 2);
+          fitLine(ctx, (tiny ? idxText : "") + ch.label, pad + 6, nameY, labelW - 12, 12, 800, tiny ? 10 : 11);
+          const subPx = twoLines && sub ? fitPx(ctx, sub, labelW - 12, 11, 600, 10) : 0;
+          if (subPx) {
+            ctx.font = font(subPx, 600);
+            ctx.fillStyle = C.muted;
+            ctx.textAlign = "left";
+            ctx.textBaseline = "middle";
+            ctx.fillText(sub, pad + 6, hintLines ? ry + 35 : ry + rowH * 0.7);
           }
           sx = pad + labelW;
           sw = w - pad - 6 - sx;
-          sh = Math.min(26, rowH - 10);
-          sy = ry + (rowH - sh) / 2;
+          if (hintLines) {
+            if (hint) {
+              ctx.font = font(12, 600);
+              ctx.fillStyle = C.muted;
+              ctx.textAlign = "left";
+              wrap(ctx, hint, sx, ry + 9, sw, HINT_LH, hintLines);
+            }
+            sy = ry + 9 + hintLines * HINT_LH + 4;
+            sh = Math.max(10, Math.min(40, ry + rowH - 8 - sy));
+          } else {
+            sh = Math.min(26, rowH - 10);
+            sy = ry + (rowH - sh) / 2;
+          }
         }
         if (m.vad && ch.t1 > ch.t0) {
           speechStrip(ctx, { x: sx, y: sy, w: sw, h: sh }, m.vad, { range: [ch.t0, ch.t1], minLabel: 2 });
@@ -1831,9 +2057,21 @@
         }
         m._hits.push({ y0: ry, y1: ry + rowH, i });
       }
+      // A take stopped early has few rows: say so plainly, under them
+      const part = m.partialNote ? m.partialNote() : "";
+      const below = y + n * rowH + 10;
+      if (part && !tiny && n === chs.length) {
+        ctx.font = font(12, 600);
+        const lines = lineCount(ctx, part, w - pad * 2 - 8);
+        if (lines <= 3 && bottom - below >= lines * 16 + 6) {
+          ctx.fillStyle = C.muted;
+          ctx.textAlign = "left";
+          wrap(ctx, part, pad + 4, below, w - pad * 2 - 8, 16, lines);
+        }
+      }
       if (n < chs.length && !tiny) {
-        ctx.font = font(10, 700);
-        ctx.fillStyle = C.faint;
+        ctx.font = font(11, 700);
+        ctx.fillStyle = C.muted;
         ctx.textAlign = "right";
         ctx.textBaseline = "bottom";
         const more = chs.length - n;
@@ -2011,7 +2249,9 @@
    *   { draw, aspect, measured }, cueFor, scriptFor, status(info),
    *   onFrame(frame, drill), onStep(index, drill), chapters(drill),
    *   doneText, doneSub, doneCue, reviewTitle (text, or fn(drill)), reviewNote,
-   *   reviewExtra(ctx, box, drill), reviewExtraH(w, h, drill).
+   *   reviewExtra(ctx, box, drill), reviewExtraH(w, h, drill),
+   *   chapterHint(phase, drill) (a chapter's "what to listen for"; default:
+   *   the step's intent or cue), partialNote (say how far a short take got).
    */
   class Drill extends Panel {
     constructor(mode, cfg) {
@@ -2119,9 +2359,28 @@
         if (filter && !filter(p, i)) return;
         const s = this.run.span(i, stopAt);
         if (!s || s.t1 - s.t0 < 1.5) return;
-        out.push({ label: p.label, sub: this.chapterSub(s), t0: s.t0, t1: s.t1, r0: s.r0, r1: s.r1 });
+        out.push({ label: p.label, sub: this.chapterSub(s), hint: this.chapterHint(p), t0: s.t0, t1: s.t1, r0: s.r0, r1: s.r1 });
       });
       return out;
+    }
+    /** What a step asked for, shown with its chapter after Stop: what to listen for. */
+    chapterHint(p) {
+      if (this.cfg.chapterHint) return this.cfg.chapterHint(p, this) || "";
+      return loc(p, "intent") || loc(p, "cue");
+    }
+    /**
+     * After a take stopped before its last step: how far it got, as a fact
+     * (only for drills whose every step becomes a chapter).
+     */
+    partialNote() {
+      if (!this.cfg.partialNote) return "";
+      const r = this.run;
+      if (r.done || !r.count) return "";
+      const got = Math.min(r.count, r.index + 1);
+      return L(
+        `Esta toma llegó al paso ${got} de ${r.count}. Cada paso que grabes aparece aquí como un tramo.`,
+        `This take reached step ${got} of ${r.count}. Each step you record shows up here as a part.`
+      );
     }
     chapterSub(s) {
       const len = s.t1 - s.t0;
@@ -2241,8 +2500,8 @@
       }
     }
     if (rows === 1 && opts.minuteLabels) {
-      ctx.font = font(9, 700);
-      ctx.fillStyle = C.faint;
+      ctx.font = font(10, 700);
+      ctx.fillStyle = C.muted;
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
       const every = rw / (R.maxSec / 60) < 26 ? 2 : 1;
@@ -2304,7 +2563,7 @@
       const q = R.at(p.start + p.len / 2);
       glyph(ctx, "notch", q.x, q.y + 5, C.muted, 3);
       if (opts.pauseLabels && p.len * pxPerSec > 30) {
-        ctx.font = font(9, 700);
+        ctx.font = font(10, 700);
         ctx.fillStyle = C.muted;
         ctx.textAlign = "center";
         ctx.textBaseline = "bottom";
@@ -2364,7 +2623,10 @@
     const pad = tiny ? 8 : 10;
     const review = m.review;
     const P = m.player;
-    // Head: REC and one clock
+    const playing = !!(review && P && P.playing);
+    // Head: REC, what is going on, and one clock that says what it counts
+    // (beside the page's own session timer, a bare "0:06" read as a second,
+    // unexplained clock)
     ctx.textBaseline = "middle";
     ctx.textAlign = "left";
     let hx = pad + 2;
@@ -2376,31 +2638,77 @@
       ctx.fill();
       hx += 18;
     }
-    ctx.fillStyle = C.text;
+    const left = m.minSec ? mmss(Math.max(0, m.minSec - m.t)) : "";
+    const past = !!m.minSec && m.t >= m.minSec;
+    // How far to the minimum, long and short (a phone gets its own line)
+    const minLong = !m.minSec ? "" : past ? L("ya pasaste el mínimo ✓", "past the minimum ✓") : L(`el mínimo llega en ${left}`, `minimum in ${left}`);
+    const minShort = !m.minSec ? "" : past ? L("mínimo ✓", "minimum ✓") : L(`mínimo en ${left}`, `minimum in ${left}`);
     const headWord = review
       ? L(`Toma de ${mmss(m.t)}`, `${mmss(m.t)} take`)
       : m.live
-        ? !m.minSec
-          ? L("Grabando", "Recording")
-          : m.t < m.minSec
-            ? L(`Grabando · el mínimo llega en ${mmss(m.minSec - m.t)}`, `Recording · minimum in ${mmss(m.minSec - m.t)}`)
-            : L("Grabando · ya pasaste el mínimo ✓", "Recording · past the minimum ✓")
+        ? L("Grabando", "Recording")
         : m.cfg.idle || L("Graba 5 a 10 minutos sobre un tema", "Record 5 to 10 minutes on one topic");
-    const clockText = review ? (P && P.playing ? mmss(P.pos) : mmss(m.t)) : mmss(m.t);
-    ctx.font = font(tiny ? 20 : compact ? 22 : 28, 800, true);
-    const cw = ctx.measureText(clockText).width;
-    ctx.fillStyle = review && P && P.playing ? C.done : C.text;
-    ctx.textAlign = "right";
-    ctx.fillText(clockText, w - pad - 2, hy + 1);
+    // After Stop the head already says how long the take is: the clock
+    // only comes back to follow what is playing
+    const clockText = review ? (playing ? mmss(Math.max(0, P.pos - m.recOffset)) : "") : mmss(m.t);
+    const clockWord = review ? L("escuchando", "playing") : L("grabado", "recorded");
+    const headPx = tiny ? 13 : compact ? 15 : 17;
+    let cw = 0;
+    if (clockText) {
+      ctx.font = font(tiny ? 20 : compact ? 22 : 28, 800, true);
+      const nw = ctx.measureText(clockText).width;
+      ctx.fillStyle = playing ? C.done : C.text;
+      ctx.textAlign = "right";
+      ctx.fillText(clockText, w - pad - 2, hy + 1);
+      ctx.font = font(11, 700);
+      const lw = ctx.measureText(clockWord).width;
+      ctx.fillStyle = playing ? C.done : C.muted;
+      ctx.fillText(clockWord, w - pad - 2 - nw - 6, hy + 2);
+      cw = nw + 6 + lw;
+    }
     ctx.textAlign = "left";
+    const headW = w - hx - pad - cw - 12;
+    // One line when "Grabando · el mínimo llega en 4:53" fits; else the
+    // minimum gets a line of its own rather than ending in "e…"
+    let minLine = "";
+    let head = headWord;
+    if (!review && m.live && minLong) {
+      ctx.font = font(headPx, 800);
+      const one = [`${headWord} · ${minLong}`, `${headWord} · ${minShort}`].find((t) => ctx.measureText(t).width <= headW);
+      if (one) head = one;
+      else if (tiny) head = `${headWord} · ${minShort}`;
+      else minLine = minLong;
+    }
     ctx.fillStyle = C.text;
-    fitLine(ctx, headWord, hx, hy, w - hx - pad - cw - 12, tiny ? 13 : compact ? 15 : 17, 800, 10);
+    fitLine(ctx, head, hx, hy, headW, headPx, 800, 10);
+    m._head = { head, minLine, clockWord: clockText ? clockWord : "" };
     let top = hy + (tiny ? 12 : 18);
-    // Topic, or the review line
+    if (minLine) {
+      ctx.fillStyle = past ? C.done : C.muted;
+      fitLine(ctx, minLine, pad + 2, top + 8, w - pad * 2, compact ? 12 : 14, 800, 11);
+      top += compact ? 18 : 22;
+    }
+    // Topic, or the review line (two lines on a phone, not cut short)
     const sub = review ? m.reviewLine() : m.topic ? L("Tema: ", "Topic: ") + m.topic : "";
     if (sub && !tiny) {
       ctx.fillStyle = review ? C.done : C.muted;
-      fitLine(ctx, sub, pad + 2, top + 8, w - pad * 2, compact ? 12 : 14, 700, 10);
+      const px = compact ? 12 : 14;
+      ctx.font = font(px, 700);
+      // The review line is the instruction after Stop: wrapped, never cut
+      let wrapPx = 0;
+      if (review && ctx.measureText(sub).width > w - pad * 2) {
+        for (let size = px; size >= 12 && !wrapPx; size--) {
+          ctx.font = font(size, 700);
+          if (lineCount(ctx, sub, w - pad * 2) <= 2) wrapPx = size;
+        }
+      }
+      if (wrapPx) {
+        const lh = wrapPx + 4;
+        ctx.font = font(wrapPx, 700);
+        wrap(ctx, sub, pad + 2, top + 8 - lh / 2, w - pad * 2, lh, 2);
+        ctx.textBaseline = "middle";
+        top += lh;
+      } else fitLine(ctx, sub, pad + 2, top + 8, w - pad * 2, px, 700, 10);
       top += compact ? 18 : 24;
     } else if (sub && tiny && review) {
       ctx.fillStyle = C.done;
@@ -2431,18 +2739,22 @@
       playPos: review && P && P.playing ? P.pos - m.recOffset : null
     });
     if (!tiny) {
-      ctx.font = font(10, 700);
-      ctx.fillStyle = C.faint;
+      ctx.fillStyle = C.muted;
       ctx.textAlign = "left";
       ctx.textBaseline = "bottom";
-      const foot = review
-        ? w < 520
-          ? L("‹ › elige el minuto · ▶ escucha", "‹ › pick the minute · ▶ play")
-          : L("‹ › elige el minuto · ▶ escucha · Guardar la deja en tu historial", "‹ › pick the minute · ▶ play · Save keeps it in your history")
-        : w < 520
-          ? L("barra = tu voz · hueco = silencio · ⌄ pausa ≥ 2 s", "bar = your voice · gap = silence · ⌄ pause ≥ 2 s")
-          : L("barra = tu voz (dB sobre la sala) · hueco = silencio · ⌄ pausa de 2 s o más · sin juicio a mitad de toma", "bar = your voice (dB over the room) · gap = silence · ⌄ pause of 2 s or more · no judging mid-take");
-      fitLine(ctx, foot, pad + 2, h - pad + 2, w - pad * 2, 10, 700, 8);
+      // The key to the ribbon, 11 px and in the muted colour (it was 10 px
+      // and faint), the longest version that fits
+      const feet = review
+        ? [
+            L("‹ › elige el minuto · ▶ escucha · Guardar la deja en tu historial", "‹ › pick the minute · ▶ play · Save keeps it in your history"),
+            L("‹ › elige el minuto · ▶ escucha", "‹ › pick the minute · ▶ play")
+          ]
+        : [
+            L("barra = tu voz (dB sobre la sala) · hueco = silencio · ⌄ pausa de 2 s o más · sin juicio a mitad de toma", "bar = your voice (dB over the room) · gap = silence · ⌄ pause of 2 s or more · no judging mid-take"),
+            L("barra = tu voz · hueco = silencio · ⌄ pausa ≥ 2 s", "bar = your voice · gap = silence · ⌄ pause ≥ 2 s"),
+            L("barra = voz · hueco = silencio · ⌄ pausa", "bar = voice · gap = silence · ⌄ pause")
+          ];
+      feet.some((t) => sayIf(ctx, t, pad + 2, h - pad + 2, w - pad * 2, 11, 700, 10));
     }
   }
 
@@ -2576,12 +2888,25 @@
       fitLine(ctx, right, stack ? pad + 2 : w - pad - 2, stack ? headY + 22 : headY, stack ? w - pad * 2 - 4 : rw + 2, tiny ? 11 : 13, 800, 10);
       ctx.textAlign = "left";
     }
-    // The action line at the bottom
-    const actH = tiny ? 0 : compact ? 18 : 24;
+    // The action line at the bottom: the one instruction on this picture, so
+    // on a phone it takes two lines rather than ending in "esta s…"
+    const actW = w - pad * 2 - 4;
+    const actText = "→ " + d.action;
+    ctx.font = font(compact ? 13 : 15, 800);
+    const actTwo = !tiny && !compact && ctx.measureText(actText).width > actW;
+    const actH = tiny ? 0 : compact ? 18 : actTwo ? 44 : 24;
+    // What the action line came to (read by the spec)
+    m._act = { lines: actTwo ? lineCount(ctx, actText, actW) : actH ? 1 : 0 };
     if (actH) {
       ctx.textAlign = "left";
       ctx.fillStyle = C.text;
-      fitLine(ctx, "→ " + d.action, pad + 2, h - pad - actH / 2 + 2, w - pad * 2, compact ? 13 : 15, 800, 10);
+      if (actTwo) {
+        ctx.font = font(15, 800);
+        wrap(ctx, actText, pad + 2, h - pad - actH + 4, actW, 20, 2);
+      } else {
+        ctx.textBaseline = "middle";
+        fitLine(ctx, actText, pad + 2, h - pad - actH / 2 + 2, actW, compact ? 13 : 15, 800, 11);
+      }
     }
     const top = headY + (tiny ? 12 : 20) + (stack ? 22 : 0);
     const bottom = h - pad - actH - (actH ? 6 : 0);
@@ -2631,16 +2956,15 @@
         ctx.arc(cx, cy, r + 4, 0, TAU);
         ctx.stroke();
       }
-      ctx.font = font(labelH > 12 ? 11 : 9, day.today ? 900 : 700);
       ctx.fillStyle = day.today ? C.text : C.muted;
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
-      ctx.fillText(day.label, cx, y, slot - 2);
-      ctx.textBaseline = "top";
-      ctx.fillStyle = day.today ? C.text : C.faint;
+      const dpx = labelH > 12 ? 11 : 10;
+      sayIf(ctx, day.label, cx, y, slot - 2, dpx, day.today ? 900 : 700, 10);
+      ctx.fillStyle = day.today ? C.text : C.muted;
       const under = day.today ? L("hoy", "today") : day.num;
       const uy = cy + r + (day.today ? 6 : 3);
-      if (under && y + h - uy >= 9) ctx.fillText(under, cx, uy, slot - 2);
+      if (under && y + h - uy >= 10) sayIf(ctx, under, cx, uy, slot - 2, dpx, day.today ? 900 : 700, 10);
     });
   }
 
@@ -2668,37 +2992,98 @@
       ctx.stroke();
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
-      ctx.font = font(th < 22 ? 9 : 11, 800);
       ctx.fillStyle = done ? C.done : cur ? C.text : C.muted;
-      ctx.fillText(String(i + 1), tx + tw / 2, ty + (th < 22 ? 2 : 4), tw - 2);
-      if (done && th >= 30) {
-        glyph(ctx, wk.verdict === "improved" ? "up" : "notch", tx + tw / 2, ty + th * 0.55, C.done, Math.min(5, tw * 0.2));
+      sayIf(ctx, String(i + 1), tx + tw / 2, ty + (th < 22 ? 2 : 4), tw - 2, th < 22 ? 10 : 11, 800, 9);
+      // The week's review, when there was one: ↑ improved, ↻ another week
+      // on the same focus. A week closed without a review gets no mark.
+      if (done && th >= 30 && wk.verdict) {
+        weekMark(ctx, wk.verdict, tx + tw / 2, ty + 24, C.done, Math.min(5, tw * 0.2));
       }
+      // The week's element, on up to two lines, 11 px (10 when a word needs
+      // it); left out rather than squeezed when a word is wider than the week
       if (th >= 52 && tw >= 30 && wk.label) {
-        ctx.font = font(9, 700);
-        ctx.fillStyle = done ? C.done : C.muted;
-        ctx.textBaseline = "bottom";
-        const words = wk.label.split(/\s+/);
-        const lines = [];
-        let line = "";
-        words.forEach((wd) => {
-          const test = line ? line + " " + wd : wd;
-          if (ctx.measureText(test).width > tw - 4 && line) {
-            lines.push(line);
-            line = wd;
-          } else line = test;
-        });
-        if (line) lines.push(line);
-        lines.slice(0, 2).forEach((l, k) => ctx.fillText(l, tx + tw / 2, ty + th - 3 - (Math.min(2, lines.length) - 1 - k) * 10, tw - 3));
+        const split = (px) => {
+          ctx.font = font(px, 700);
+          const lines = [];
+          let line = "";
+          wk.label.split(/\s+/).forEach((wd) => {
+            const test = line ? line + " " + wd : wd;
+            if (ctx.measureText(test).width > tw - 4 && line) {
+              lines.push(line);
+              line = wd;
+            } else line = test;
+          });
+          if (line) lines.push(line);
+          return lines.length <= 2 && lines.every((l) => ctx.measureText(l).width <= tw - 3) ? lines : null;
+        };
+        const px = split(11) ? 11 : split(10) ? 10 : 0;
+        const lines = px ? split(px) : null;
+        // Under the number and the mark, never on them
+        if (lines && th >= 34 + lines.length * (px + 1)) {
+          ctx.fillStyle = done ? C.done : C.muted;
+          ctx.textBaseline = "bottom";
+          lines.forEach((l, k) => ctx.fillText(l, tx + tw / 2, ty + th - 3 - (lines.length - 1 - k) * (px + 1)));
+        }
       }
     }
-    if (!flat && h >= 60) {
-      ctx.font = font(9, 700);
-      ctx.fillStyle = C.faint;
-      ctx.textAlign = "left";
-      ctx.textBaseline = "top";
-      ctx.fillText(L("↑ avanzó · ⌄ otra semana", "↑ improved · ⌄ another week"), x, y, w * 0.6);
+    // What the marks mean, in the Plan tab's own words, only when a mark is
+    // drawn; it sits over the low steps of the staircase, where there is room
+    const kinds = ["improved", "continue"].filter((v) => d.weeks.some((wk) => wk.state === "done" && (v === "improved" ? wk.verdict === "improved" : wk.verdict && wk.verdict !== "improved")));
+    if (!flat && kinds.length) {
+      const lh = 15;
+      let free = w;
+      for (let i = 0; i < n; i++) {
+        if (y + h - (minH + step * i) < y + lh + 3) {
+          free = i * (tw + gap) - 8;
+          break;
+        }
+      }
+      const words = (long) => kinds.map((v) => (v === "improved" ? L("mejoró", "improved") : long ? L("aún no, otra semana", "not yet, another week") : L("otra semana", "another week")));
+      ctx.font = font(11, 700);
+      const width = (ws) => ws.reduce((a, t) => a + 16 + ctx.measureText(t).width, 0) + 14 * (ws.length - 1);
+      const ws = [words(true), words(false)].find((list) => width(list) <= free);
+      d.legend = ws || null;
+      if (ws) {
+        let lx = x;
+        ctx.textAlign = "left";
+        ctx.textBaseline = "middle";
+        ws.forEach((t, k) => {
+          weekMark(ctx, kinds[k], lx + 5, y + lh / 2, C.done, 5);
+          ctx.font = font(11, 700);
+          ctx.fillStyle = C.muted;
+          ctx.fillText(t, lx + 16, y + lh / 2 + 0.5);
+          lx += 16 + ctx.measureText(t).width + 14;
+        });
+      }
     }
+  }
+
+  /** A reviewed week's mark: ↑ improved, ↻ another week on the same focus. */
+  function weekMark(ctx, verdict, x, y, color, s) {
+    if (verdict === "improved") {
+      glyph(ctx, "up", x, y, color, s);
+      return;
+    }
+    const a1 = Math.PI * 1.2;
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(x, y, s * 0.85, -Math.PI * 0.4, a1);
+    ctx.stroke();
+    const px = x + s * 0.85 * Math.cos(a1);
+    const py = y + s * 0.85 * Math.sin(a1);
+    const dx = -Math.sin(a1);
+    const dy = Math.cos(a1);
+    const nx = Math.cos(a1);
+    const ny = Math.sin(a1);
+    const k = s * 0.55;
+    ctx.beginPath();
+    ctx.moveTo(px + dx * k, py + dy * k);
+    ctx.lineTo(px + nx * k * 0.8, py + ny * k * 0.8);
+    ctx.lineTo(px - nx * k * 0.8, py - ny * k * 0.8);
+    ctx.closePath();
+    ctx.fill();
   }
 
   /** v9 controller: the plan as it stands, drawn when the page opens. */
@@ -2730,6 +3115,7 @@
     Week,
     EXPR,
     art: {
+      stand: artStand,
       jaw: artJaw,
       neck: artNeck,
       chew: artChew,

@@ -1570,7 +1570,12 @@
         const p = run.phases[i];
         const n = Math.max(1, Math.floor(k / (p.pace || 1.5)));
         const from = p.from || 1;
-        return { t0: s.t0, t1: s.t0 + k, r0: s.r0, r1: s.r0 + k, sub: L(`cuenta ${from}–${from + n - 1}`, `count ${from}–${from + n - 1}`) };
+        const last = from + n - 1;
+        // Written out ("números del 1 al 6"): beside the step "cuenta 1–60",
+        // a short take's "cuenta 1–6" read as a number cut off
+        const sub =
+          n === 1 ? L(`solo el número ${from}`, `only number ${from}`) : L(`números del ${from} al ${last}`, `numbers ${from} to ${last}`);
+        return { t0: s.t0, t1: s.t0 + k, r0: s.r0, r1: s.r0 + k, sub };
       };
       const iA = run.phases.findIndex((p) => p.kind === "count" && p.pen !== false);
       const iB = run.phases.findIndex((p) => p.kind === "count" && p.pen === false);
@@ -1649,6 +1654,8 @@
         recorded: true,
         skip: true,
         preCue: 3,
+        // After Stop each card's row says what it asked for (what to listen for)
+        partialNote: true,
         label: L(
           "Tarjeta de persona o arco de la historia del paso actual, con el tiempo que queda y lo que viene. Sin juicio a mitad de toma.",
           "The persona card or story arc for this step, with the time left and what comes next. No judging mid-take."
@@ -1726,6 +1733,7 @@
         recorded: true,
         skip: true,
         preCue: 3,
+        partialNote: true,
         label: L(
           "Dibujo de la expresión del paso actual, el tiempo que queda y la siguiente expresión, que se anuncia 3 s antes.",
           "A drawing of this step's expression, the time left, and the next expression, announced 3 s early."
@@ -2958,6 +2966,7 @@
         recorded: true,
         skip: true,
         preCue: 3,
+        partialNote: true,
         label: L(
           "Dibujo del gesto del paso actual: vuelve a la base y el gesto llega justo antes de la palabra clave, que se ilumina en la frase de ejemplo.",
           "A drawing of this step's gesture: back to home base, and the gesture arrives just before the key word, which lights up in the example line."
@@ -8331,9 +8340,11 @@
 
   /**
    * s17 jaw & neck release — guided steps with the mic closed. Nothing to
-   * detect: the value is being walked through the four releases (hanging jaw,
-   * neck half-circles, chewing hum, pre-yawns), each drawn, with the time left,
-   * the next step and a soft tone at each change for eyes-closed practice.
+   * detect: the value is being walked through the exercise's five steps
+   * (stand tall, then the four releases: hanging jaw, neck half-circles,
+   * chewing hum, pre-yawns), each drawn, with the time left, the next step
+   * and a soft tone at each change for eyes-closed practice. The posture step
+   * sets up the releases and is not counted as one (phasesDone targets 4).
    */
   Modes.releaseFlow = baseMode({
     id: "releaseFlow",
@@ -8350,8 +8361,8 @@
         `;
         return;
       }
-      const aspect = { jaw: 1.75, neck: 1.2, chew: 1.5, yawns: 2.6 };
-      const stack = { yawns: 1.9 };
+      const aspect = { stand: 1, jaw: 1.75, neck: 1.2, chew: 1.5, yawns: 2.6 };
+      const stack = { stand: 1.4, yawns: 1.9 };
       this.viz = new G.Drill(this, {
         kind: "release",
         title,
@@ -8382,8 +8393,11 @@
     onStop() {
       const d = this.viz;
       d?.stop?.();
-      const n = d ? d.run.completed : 0;
-      const total = d ? d.run.count : this.profile.phases?.length || 0;
+      const phases = d ? d.run.phases : this.profile.phases || [];
+      const done = d ? d.run.completed : 0;
+      // The releases only: the posture step before them is a set-up
+      const n = phases.filter((p, i) => i < done && !p.setup).length;
+      const total = phases.filter((p) => !p.setup).length;
       // Steps walked through is the only thing known; ease is the learner's rating
       return {
         patches: n > 0 ? { phasesDone: n } : {},

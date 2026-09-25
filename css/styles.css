@@ -7246,3 +7246,49 @@ body.view-exercise .highway-stage {
     overflow-x: clip;
   }
 }
+
+/* ──────────────────────────────────────────────────────────────────────────
+   The phone header row, now that the door is on it
+   ──────────────────────────────────────────────────────────────────────────
+   Taking `#btn-account` out of the "Más" menu added a fifth control to a row
+   that already just fitted: brand, the nav pill's three links, the door, Más.
+   At 320 and 360 the natural widths add up past the viewport, and `.header-nav`
+   was the only shrinkable box in the row — so it shrank to 147px while its own
+   buttons kept their 197px, overflowed it, and `#btn-account` was laid out on
+   top of "Historial" and swallowed its clicks. tests/plan-history-design caught
+   it at both widths; at 390 the overlap missed the click point by nine pixels,
+   which is the kind of luck that hides a defect.
+
+   Two changes, no control hidden and no label shortened: the row's horizontal
+   padding pays for the door, and the pill scrolls instead of overflowing, so
+   whatever does not fit is reachable by a swipe rather than sitting underneath
+   another button. The 44px tap floor and the 12px text floor are untouched. */
+@media (max-width: 420px) {
+  /* The same selector the phone-header pass uses (specificity matters here: a
+     bare `.header-actions .btn-sm` loses to
+     `body:not(.view-exercise) .app-header:has(#btn-more) .header-actions .btn-sm`
+     however late it appears). */
+  body:not(.view-exercise) .app-header:has(#btn-more) .header-actions {
+    gap: 0.3rem;
+  }
+  body:not(.view-exercise) .app-header:has(#btn-more) .header-actions .btn-sm {
+    padding-inline: 0.25rem;
+  }
+  body:not(.view-exercise) .app-header:has(#btn-more) .header-nav {
+    flex: 1 1 auto;
+    min-width: 0;
+    gap: 0.1rem;
+    padding: 0.12rem;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  body:not(.view-exercise) .app-header:has(#btn-more) .header-nav::-webkit-scrollbar {
+    display: none;
+  }
+  body:not(.view-exercise) .app-header:has(#btn-more) .header-nav .nav-link {
+    padding-inline: 0.3rem;
+    flex: 0 0 auto;
+  }
+}

@@ -785,6 +785,14 @@
         · <a href="guide.html" id="footer-guide-link" data-i18n="footer.guide">Guía de uso</a>
         · <a href="privacy.html" data-i18n="footer.privacy">Privacidad</a>
       </p>
+      <!-- Whether this browser sends anonymous statistics, and the way to stop.
+           Here as well as in the guide because saying no has to be as easy as
+           saying yes: js/privacy-switch.js fills it in, in the page's language,
+           and hides it until it has an answer to show. -->
+      <p class="privacy-switch" data-privacy-switch hidden>
+        <span data-privacy-state></span>
+        <button type="button" class="btn btn-sm" data-privacy-toggle hidden></button>
+      </p>
     </footer>
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
@@ -1103,6 +1111,7 @@
     <script src="js/analytics.js?v=20260925a"></script>
     <script src="js/experiments-config.js?v=20260924e"></script>
     <script src="js/experiments.js?v=20260925a"></script>
+    <script src="js/privacy-switch.js?v=20260925a"></script>
     <script src="js/reminders.js?v=20260924c"></script>
     <script src="js/auth-users.generated.js"></script>
     <script src="js/auth.js"></script>

@@ -10,7 +10,16 @@
  * that stay on this device are untouched, because they never left it.
  *
  * guide.html does not load js/i18n.js (a 100 KB table for two sentences), so
- * this file keeps its own Spanish and English strings.
+ * this file keeps its own Spanish and English strings. A block with `data-lang`
+ * is fixed to that language, which is what guide.html's two static halves need;
+ * a block without one follows the page, which is what the app's footer needs,
+ * and a language switch there re-renders it.
+ *
+ * It is in the app's footer as well as the guide because consent has to be as
+ * easy to withdraw as it was to give (GDPR art. 7(3); EDPB Guidelines 05/2020
+ * para 114): the consent bar appears on the app, so the way back has to be there
+ * too. The same control is what the UK's PECR Schedule A1 exemption and
+ * Switzerland's art. 45c FMG both hang on — one control, three jurisdictions.
  *
  * In the countries that require being asked first (js/region-gate.js) this is
  * also where somebody who said no to the bar can change their mind, and where
@@ -48,12 +57,20 @@
     }
   };
 
+  /** The language a block should speak: its own, or the page's. */
+  function langFor(box) {
+    if (box.dataset.lang) return box.dataset.lang === "en" ? "en" : "es";
+    const l = String(global.VTI18n?.lang || document.documentElement.lang || "es").toLowerCase();
+    return l.startsWith("en") ? "en" : "es";
+  }
+
   function render() {
     const A = global.VTAnalytics;
     if (!A?.remoteState) return;
     const st = A.remoteState();
     document.querySelectorAll("[data-privacy-switch]").forEach((box) => {
-      const t = T[box.dataset.lang === "en" ? "en" : "es"];
+      const t = T[langFor(box)];
+      box.setAttribute("lang", langFor(box));
       const text = box.querySelector("[data-privacy-state]");
       const btn = box.querySelector("[data-privacy-toggle]");
       let line;
@@ -121,6 +138,17 @@
     // The region gate settles a moment after load, and the answer to its bar
     // changes what this section should say.
     global.VTRegion?.onChange?.(render);
+    // The app switches language under the footer's feet; js/i18n.js writes
+    // <html lang>. app.js owns VTI18n.onChange, so watch the attribute instead of
+    // taking it over.
+    try {
+      new MutationObserver(() => render()).observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ["lang"]
+      });
+    } catch {
+      /* no MutationObserver: the footer keeps the language it loaded in */
+    }
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);

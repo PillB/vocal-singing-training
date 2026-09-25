@@ -112,8 +112,9 @@
    * What the region gate says, or "" when it has nothing to say.
    *
    * Read separately from remoteBlockedReason() because this one governs the
-   * write to the device, which Global Privacy Control, the guide's switch and
-   * automation do not: those three stop events leaving, not being kept here.
+   * write to the device, which Global Privacy Control, the opt-out switch in the
+   * app's footer and in the guide, and automation do not: those three stop events
+   * leaving, not being kept here.
    * @returns {"" | "eu_pending" | "eu_unanswered" | "eu_refused" | "no_region_gate"} Reason.
    */
   function regionReason() {

@@ -312,6 +312,17 @@ test("a country that asks first is turned away unless the batch says the visitor
   });
   Object.defineProperty(flagged, "cf", { value: { country: "DE", isEUCountry: "1" }, configurable: true });
   assert.equal((await call(flagged, freshEnv(), { now: NOW })).body.reason, "eu_no_consent");
+
+  // French Polynesia is in no EU instrument at all (TFEU art. 198 leaves the
+  // overseas collectivities out), and cf.isEUCountry will never flag it — but
+  // art. 82 of loi 78-17 has applied there in full since 1 June 2019, so the
+  // list has to carry it or a Tahitian visitor is recorded without being asked.
+  const pf = await call(
+    beacon({ events: [ev("app_open", "d1b2c3d4e5f60718")] }, { headers: { "cf-ipcountry": "PF" } }),
+    freshEnv(),
+    { now: NOW }
+  );
+  assert.equal(pf.body.reason, "eu_no_consent");
 });
 
 test("a visitor anywhere else is recorded exactly as before", async () => {
@@ -319,10 +330,15 @@ test("a visitor anywhere else is recorded exactly as before", async () => {
   // changes, and a batch with no consent field is the normal case.
   // GB is in this list on purpose: since 5 February 2026 PECR Schedule A1 para 5
   // exempts first-party statistics from consent where the visitor is told and
-  // has a simple free way to object, which privacy.html and the guide's switch
-  // are. docs/38-AB-TESTING.md carries the reasoning and the risk in it.
+  // has a simple free way to object, which the app's footer switch and the
+  // guide's are. docs/38-AB-TESTING.md carries the reasoning and the risk in it.
+  // JE, GG and IM are here because the ePrivacy Directive never applied to the
+  // Crown dependencies and PECR was never extended to them; each legislates its
+  // own data protection, and none of them requires prior consent for this.
+  // CH is here because art. 45c FMG wants information and a way to refuse, not
+  // an opt-in — which the same footer switch gives.
   const env = freshEnv();
-  for (const cc of ["PE", "US", "MX", "CO", "CL", "AR", "BR", "CH", "GB", "XX", "T1"]) {
+  for (const cc of ["PE", "US", "MX", "CO", "CL", "AR", "BR", "CH", "GB", "JE", "GG", "IM", "XX", "T1"]) {
     const res = await call(
       beacon({ events: [ev("app_open", "a1b2c3d4e5f60718")] }, { headers: { "cf-ipcountry": cc } }),
       env,
@@ -331,7 +347,7 @@ test("a visitor anywhere else is recorded exactly as before", async () => {
     assert.equal(res.status, 200, `${cc}: ${JSON.stringify(res.body)}`);
     assert.equal(res.body.accepted, 1, cc);
   }
-  assert.equal((await rows(env, "SELECT COUNT(*) AS n FROM events"))[0].n, 11);
+  assert.equal((await rows(env, "SELECT COUNT(*) AS n FROM events"))[0].n, 14);
 });
 
 test("GET /v1/geo says where the edge places a request, and nothing else", async () => {
@@ -355,7 +371,10 @@ test("GET /v1/geo says where the edge places a request, and nothing else", async
   assert.deepEqual(Object.keys(es.body).sort(), ["askFirst", "country", "ok", "placed"]);
 
   assert.deepEqual((await geo("RE")).body, { ok: true, country: "RE", placed: true, askFirst: true });
+  assert.deepEqual((await geo("PF")).body, { ok: true, country: "PF", placed: true, askFirst: true });
+  assert.deepEqual((await geo("GI")).body, { ok: true, country: "GI", placed: true, askFirst: true });
   assert.deepEqual((await geo("GB")).body, { ok: true, country: "GB", placed: true, askFirst: false });
+  assert.deepEqual((await geo("JE")).body, { ok: true, country: "JE", placed: true, askFirst: false });
   assert.deepEqual((await geo("PE")).body, { ok: true, country: "PE", placed: true, askFirst: false });
   assert.deepEqual((await geo("CH")).body, { ok: true, country: "CH", placed: true, askFirst: false });
   // Unplaceable: Tor, an address the edge cannot map, or a request with no

@@ -7292,3 +7292,16 @@ body.view-exercise .highway-stage {
     flex: 0 0 auto;
   }
 }
+
+/* The same statistics switch in the app's footer (index.html), not only in the
+   guide: consent is given with one tap on the region bar, so the way back has to
+   be on the same page (GDPR art. 7(3)). It sits under the footer's own small
+   print, so it reads as one quiet line rather than the guide's card. */
+.app-footer .privacy-switch {
+  justify-content: center;
+  margin: 0.6rem auto 0;
+  max-width: 34rem;
+  font-size: 0.85rem;
+  background: transparent;
+  border-color: rgba(148, 163, 184, 0.25);
+}

@@ -65,18 +65,24 @@
   const ASK_TIMEOUT_MS = 2500;
 
   /**
-   * IANA zones of the places that require consent first: the EEA (EU 27 plus
-   * Iceland, Liechtenstein and Norway), the EU's outermost regions, and the
-   * Crown dependencies and Gibraltar, which keep PECR-shaped rules of their
-   * own. Link names ICU does not canonicalize are listed too (Eire, Poland,
-   * Portugal, Iceland, Atlantic/Jan_Mayen), because a browser may report any of
-   * them.
+   * IANA zones of the places that require consent first. What binds is never the
+   * Directive itself but each state's transposition, so the list is built from
+   * those rather than from "is this in the EU": the EEA (EU 27 plus Iceland,
+   * Liechtenstein and Norway), the EU's outermost regions, Gibraltar on its own
+   * 2006 regulations transposing the Directive, and the French
+   * overseas collectivities, where art. 82 of loi 78-17 applies in full as
+   * domestic French law since 1 June 2019 although no EU instrument reaches them.
+   * Link names ICU does not canonicalize are listed too (Eire, Poland, Portugal,
+   * Iceland, Atlantic/Jan_Mayen), because a browser may report any of them.
    *
-   * The United Kingdom is deliberately absent. Its DUAA amendment to PECR
-   * Schedule A1, in force 5 February 2026, exempts first-party statistics from
-   * consent where the visitor is told clearly and has a simple free way to
-   * object — which privacy.html and the guide's switch are. docs/38-AB-TESTING.md
-   * records the one risk in that reading and says it is a one-line change.
+   * Deliberately absent: the United Kingdom, whose DUAA amendment to PECR
+   * Schedule A1 (in force 5 February 2026) exempts first-party statistics where
+   * the visitor is told clearly and has a simple free way to object; the Crown
+   * dependencies — Jersey's own regulator says "neither the EPD nor PECR apply in
+   * Jersey", PECR was never extended to the Isle of Man, and Guernsey has no
+   * ePrivacy ordinance; Switzerland, which wants information and a refusal rather
+   * than consent; and Greenland, the Faroes and the Dutch Caribbean, which
+   * legislate their own. docs/38-AB-TESTING.md carries the sources and the risks.
    */
   const ASK_FIRST_ZONES = new Set([
     "Africa/Ceuta",
@@ -84,6 +90,8 @@
     "America/Guadeloupe",
     "America/Marigot",
     "America/Martinique",
+    "America/Miquelon",
+    "America/St_Barthelemy",
     "Arctic/Longyearbyen",
     "Asia/Famagusta",
     "Asia/Nicosia",
@@ -104,10 +112,7 @@
     "Europe/Copenhagen",
     "Europe/Dublin",
     "Europe/Gibraltar",
-    "Europe/Guernsey",
     "Europe/Helsinki",
-    "Europe/Isle_of_Man",
-    "Europe/Jersey",
     "Europe/Lisbon",
     "Europe/Ljubljana",
     "Europe/Luxembourg",
@@ -129,8 +134,14 @@
     "Europe/Warsaw",
     "Europe/Zagreb",
     "Iceland",
+    "Indian/Kerguelen",
     "Indian/Mayotte",
     "Indian/Reunion",
+    "Pacific/Gambier",
+    "Pacific/Marquesas",
+    "Pacific/Noumea",
+    "Pacific/Tahiti",
+    "Pacific/Wallis",
     "Poland",
     "Portugal"
   ]);
@@ -152,7 +163,10 @@
     "Europe/Belfast",
     "Europe/Belgrade",
     "Europe/Chisinau",
+    "Europe/Guernsey",
+    "Europe/Isle_of_Man",
     "Europe/Istanbul",
+    "Europe/Jersey",
     "Europe/Kaliningrad",
     "Europe/Kiev",
     "Europe/Kirov",
@@ -218,14 +232,17 @@
    * The same places as region subtags, for `navigator.languages`. Identical to
    * the worker's own ASK_FIRST_COUNTRIES, which is the list that decides;
    * tests/region-gate.spec.js asserts the two are equal in both directions.
-   * Cloudflare reports the outermost regions under their own codes (GP, MQ, GF,
-   * RE, YT, MF), not their member state's, so they need entries of their own.
+   *
+   * Cloudflare reports the outermost regions and the overseas collectivities
+   * under their own codes (GP, MQ, GF, RE, YT, MF, PF, NC, WF, BL, PM, TF), not
+   * their member state's, so each needs an entry. The Canaries, Madeira and the
+   * Azores do not: the edge reports those as ES and PT.
    */
   const ASK_FIRST_REGIONS = new Set([
-    "AT", "AX", "BE", "BG", "CY", "CZ", "DE", "DK", "EE", "ES", "FI", "FR", "GF",
-    "GG", "GI", "GP", "GR", "HR", "HU", "IE", "IM", "IS", "IT", "JE", "LI", "LT",
-    "LU", "LV", "MF", "MQ", "MT", "NL", "NO", "PL", "PT", "RE", "RO", "SE", "SI",
-    "SJ", "SK", "YT"
+    "AT", "AX", "BE", "BG", "BL", "CY", "CZ", "DE", "DK", "EE", "ES", "FI", "FR",
+    "GF", "GI", "GP", "GR", "HR", "HU", "IE", "IS", "IT", "LI", "LT", "LU", "LV",
+    "MF", "MQ", "MT", "NC", "NL", "NO", "PF", "PL", "PM", "PT", "RE", "RO", "SE",
+    "SI", "SJ", "SK", "TF", "WF", "YT"
   ]);
 
   const T = {
@@ -233,7 +250,8 @@
       title: "Estadísticas anónimas",
       body:
         "Donde estás, la ley pide permiso antes de que guardemos estadísticas de uso. " +
-        "Practicar funciona igual si dices que no.",
+        "Practicar funciona igual si dices que no, y puedes cambiar de opinión cuando " +
+        "quieras desde el pie de la página.",
       accept: "Aceptar",
       reject: "Rechazar",
       more: "Qué guardamos"
@@ -242,7 +260,8 @@
       title: "Anonymous statistics",
       body:
         "Where you are, the law asks for permission before we keep usage statistics. " +
-        "Practising works the same if you say no.",
+        "Practising works the same if you say no, and you can change your mind whenever " +
+        "you like, from the foot of the page.",
       accept: "Accept",
       reject: "Reject",
       more: "What we keep"

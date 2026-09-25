@@ -1,3 +1,18 @@
+/**
+ * Are the header's five controls actually pressable, at every width a phone can be?
+ *
+ * For each viewport it prints each control's box, whether the element at the
+ * centre of that box really belongs to it (`elementFromPoint`, so a control
+ * sitting on top of another is caught rather than merely looking wrong), how
+ * much of the nav is scrolled out of sight, and whether the page itself
+ * overflows sideways.
+ *
+ * Written on 2026-09-24 to prove that "Entrar" had stopped landing on top of
+ * "Historial" at 320 and 360, and kept because a geometry assertion in a spec
+ * says a box moved while this says a finger lands on the right thing. Needs the
+ * site served locally: `python3 -m http.server 8765`, then
+ * `node qa/check-header-hit-targets.mjs`.
+ */
 import { chromium } from '@playwright/test';
 const BASE = process.env.BASE_URL || 'http://127.0.0.1:8765';
 const b = await chromium.launch();

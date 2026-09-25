@@ -380,6 +380,33 @@ because remembering the no is what stops the bar coming back — re-prompting a
 refuser on the next visit is the deceptive pattern the EDPB Cookie Banner
 Taskforce targets, not diligence.
 
+**Saying no has to be as easy as saying yes, and the first version broke that.**
+GDPR art. 7(3) third sentence, and EDPB Guidelines 05/2020 para 114: withdrawal
+must be as easy as giving. Consent was given with one tap on a bar drawn over the
+app, while the only way back was a switch in `guide.html` — a different page,
+reachable from a footer link, which is not "as easy". So `js/privacy-switch.js`
+now loads on the app too, and `index.html`'s footer carries the same
+`[data-privacy-switch]` block. One control, and it is doing three jobs at once:
+the art. 7(3) way back for the EEA, the "simple means of objecting free of charge"
+the UK's Schedule A1 exemption is conditional on, and the "possibility of refusal"
+Swiss art. 45c FMG wants. Those last two are why the UK and Switzerland can be out
+of the gate without being no-ops.
+
+The footer block deliberately carries no `data-lang`, unlike the guide's two
+(which are fixed to the language of the half they sit in): it reads `VTI18n.lang`,
+and a `MutationObserver` on `<html lang>` re-renders it when the visitor switches
+language mid-session, because `app.js` owns `VTI18n.onChange` and this file must
+not take it over.
+
+**The choice lives in two keys, and that is not a bug.** `vt_eu_consent_v1` is the
+answer to the bar: six months, ask-first countries only. `vt_analytics_optout_v1`
+is the ordinary opt-out: everywhere, no expiry. A visitor in Madrid who accepts and
+later presses the footer switch has both — granted in the first, opted out in the
+second — and `remoteState()` reads the opt-out first, so the later answer wins.
+Collapsing them into one key would mean an EEA refusal expiring after six months
+the way a consent does, which is the re-prompting the Cookie Banner Taskforce
+objects to.
+
 **The A/B split goes inert, not uniform.** The obvious implementation — make
 `clientId()` return `""` — would have hashed every visitor in those countries into
 the same arm and produced a result that looked real and was worthless.
@@ -404,6 +431,28 @@ together when the answer is yes; a refusal throws them away, and Global Privacy
 Control in an ask-first country *is* a refusal, so nothing is kept for those
 browsers either.
 
+**There are national analytics exemptions, and this pipeline does not qualify
+for them.** The Netherlands (Telecommunicatiewet art. 11.7a(3)), the Italian
+Garante and CNIL each let strictly-scoped first-party audience measurement run
+without consent. Every one of them is conditional in the same way: aggregate, used
+only to count and improve the site, no cross-site use, and no persistent
+identifier that could follow a visitor. This pipeline mints `vt_ab_v1`, a random id
+that persists precisely so a browser stays in the same experiment arm across
+visits, and it measures a sign-in and trial funnel. A persistent id used to split
+people into arms is not minimised aggregate measurement, so none of those
+exemptions is available and the gate does not try to claim them. The authority for
+treating first-party analytics as non-exempt in the first place is WP29 Opinion
+04/2012 (WP 194), which considered exactly this case and declined to exempt it;
+Planet49 (C-673/17) then settled that art. 5(3) bites whether or not the data is
+personal.
+
+**The Digital Omnibus is not something to design against.** The Commission's
+proposal of 19 November 2025 would move some terminal-equipment rules out of
+ePrivacy and into the GDPR, with a wider measurement exemption. It is a proposal:
+unadopted, subject to Parliament and Council, and on its own timetable it would not
+apply before 2028. Nothing here anticipates it. If it lands, the change is to
+delete code, which is the easy direction.
+
 **An absent gate must never read as permission.** Both pages declare
 `window.VT_REGION_REQUIRED = true` before loading `js/region-gate.js`, and
 `js/analytics.js` and `js/experiments.js` refuse everything when the flag is set
@@ -411,28 +460,65 @@ and the gate is missing — a 404 on that one file, a content blocker, a parse
 error. Measurement falling to zero worldwide is a failure somebody notices; EU
 visitors quietly measured without consent is not.
 
-**The list is the set of places whose law requires asking first, not a political
-one.** In: the EEA under ePrivacy art. 5(3), the EU's outermost regions, and the
-Crown dependencies and Gibraltar, which keep rules of the same shape and went in
-to fail closed rather than on a confirmed reading. Out: Switzerland, whose revFADP
-does not require prior consent for first-party analytics, so a visitor in Zurich
-is not asked; Greenland and the Faroes, outside the EEA; Andorra, Monaco, San
-Marino and the Vatican, bound by neither.
+**The list is the set of places whose law requires asking first, and it is not
+"the EU".** It is 45 codes. Membership follows the instrument that actually binds
+a visitor's terminal equipment, which is why three of the four groups in it are
+not EU member states:
 
-The outermost regions need entries of their own — GF, GP, MQ, RE, YT, MF, AX —
-because Cloudflare reports them under their own codes rather than their member
-state's, and `cf.isEUCountry` cannot be relied on to cover them. The first draft
-of this gate assumed they arrived as FR and would have released Réunion and
-Guadeloupe although EU law applies there in full; the page takes the worker's
-`askFirst` before its own country check, so nothing on the client would have
+- **The EEA**, under ePrivacy art. 5(3) as transposed: the 27 plus IS, LI and NO.
+  Åland (`AX`) gets its own Cloudflare code and so needs its own entry, although
+  the law reaching it is Finland's. Svalbard and Jan Mayen (`SJ`) is in for a
+  weaker reason, recorded below: it is outside the EEA Agreement, but geo-IP maps
+  it to Norway and being asked there costs nobody anything.
+- **The EU's outermost regions that Cloudflare reports under their own code** —
+  `GF` French Guiana, `GP` Guadeloupe, `MQ` Martinique, `RE` Réunion, `YT`
+  Mayotte, `MF` Saint-Martin. EU law applies there in full (TFEU art. 349). The
+  Canaries, the Azores and Madeira are outermost regions too but arrive as `ES`
+  and `PT`, so they need nothing.
+- **Gibraltar**, on its own 2006 regulations transposing the ePrivacy Directive,
+  which the UK's 2026 reform did not touch. It is in on its own law, not on a
+  fail-closed guess. The exact title and current text are unread here, which the
+  sources list records.
+- **The French overseas collectivities** — `PF` French Polynesia, `NC` New
+  Caledonia, `WF` Wallis and Futuna, `BL` Saint-Barthélemy, `PM` Saint-Pierre and
+  Miquelon, `TF` the French Southern Territories. No EU instrument reaches them
+  (TFEU art. 198 makes them OCTs, not EU territory), and `cf.isEUCountry` will
+  never flag them — but art. 82 of loi 78-17, the French transposition of art.
+  5(3), has applied there in full since 1 June 2019, so a Tahitian visitor is owed
+  the same question as a Parisian one. The first draft had them out; that was a
+  mistake found by re-reading CNIL's own territorial-scope page.
+
+Out, each on its own reason rather than on distance from Brussels:
+
+- **The United Kingdom**, on PECR Schedule A1 — see below, and it is the one call
+  here worth revisiting.
+- **Jersey, Guernsey and the Isle of Man.** The first draft had all three in, on
+  the stated rationale that the Crown dependencies "keep rules of the same shape".
+  They do not. The ePrivacy Directive never applied to them, PECR was never
+  extended to them, Jersey's own regulator says in terms that neither instrument
+  applies there, and neither Guernsey nor the Isle of Man has an ePrivacy-shaped
+  ordinance. All three now sit with the UK: told, and given a simple free way to
+  object.
+- **Switzerland.** Art. 45c FMG wants the visitor informed and given a
+  possibility of refusal — not prior consent — and the revFADP adds no consent
+  rule for first-party analytics. So Zurich is not asked, but it is not a no-op
+  either: the refusal possibility is the footer switch below.
+- **Greenland, the Faroes and the Dutch Caribbean** (`GL`, `FO`, `AW`, `CW`, `SX`,
+  `BQ`), each legislating its own and none inside the EEA; and **Andorra, Monaco,
+  San Marino and the Vatican**, bound by neither.
+
+Both halves of the outermost-region entry are load-bearing. The first draft
+assumed those regions arrived as `FR` and would have released Réunion and
+Guadeloupe although EU law applies there in full; and because the page takes the
+worker's `askFirst` over its own country check, nothing on the client would have
 caught it.
 
 **The United Kingdom is out, and this is the one call in here worth revisiting.**
 The DUAA amendment to PECR Schedule A1, in force 5 February 2026, added a
 statistical-purposes exemption from consent, conditional on telling the visitor
 clearly and giving them a simple means of objecting free of charge — which
-`privacy.html` and the guide's switch are, and the ICO is explicit that browser
-settings alone would not be. The risk in relying on it is the "sole purpose"
+`privacy.html` and the switch in the app's own footer are, and the ICO is
+explicit that browser settings alone would not be. The risk in relying on it is the "sole purpose"
 test: this pipeline measures a sign-in and trial funnel, which a regulator could
 read as conversion optimisation rather than improving the service. It was left out
 because the owner's standing instruction is to keep nothing the law does not
@@ -451,7 +537,7 @@ equal in both directions, so they cannot drift.
 nothing is transmitted to reach the verdict, so art. 5(3) is not engaged on the
 EDPB's own reading of "gaining access" — though the UK's new reg. 6(2)(b)
 expressly covers "collecting or monitoring information automatically emitted by
-the terminal equipment", which is one more reason the UK call below deserves a
+the terminal equipment", which is one more reason the UK call above deserves a
 second look. The values never leave the device, and anything unreadable resolves
 to "ask the worker".
 
@@ -481,20 +567,39 @@ still an inference:
   robots-blocked here. The UK call rests on the enacted DUAA Sch. 12 text and the
   ICO's exceptions page instead, so the exact operative wording as amended is
   unread. This is the load-bearing one: it decides whether GB belongs in the list.
-- **Article 82 of the French loi 78-17** on `legifrance.gouv.fr` — a fetch of it
-  was still waiting on a permission prompt when this shipped. CNIL states the loi
-  Informatique et Libertés applies in full in the French overseas collectivities
-  since 1 June 2019, but art. 82's own territorial provision is unread, so PF, NC,
-  WF, BL, PM and TF are currently **out** of the list on moderate confidence.
-  Moving them in is a one-line change.
-- **Whether Jersey, Guernsey and the Isle of Man have a standalone
-  terminal-equipment consent rule** as opposed to GDPR-aligned data protection law
-  alone. Unconfirmed; all three are **in** the list to fail closed.
+- **Article 82 of the French loi 78-17** on `legifrance.gouv.fr` — unread here; a
+  fetch of it was still parked on a permission prompt when this shipped. PF, NC,
+  WF, BL, PM and TF are nevertheless **in** the list, on CNIL's own statement that
+  the loi Informatique et Libertés applies in full in the overseas collectivities
+  since 1 June 2019. What is unread is art. 82's own territorial wording, so the
+  reading is CNIL's rather than the statute's.
+- **Jersey, Guernsey and the Isle of Man are now out**, which reverses the first
+  draft. The finding: the ePrivacy Directive never applied to the Crown
+  dependencies, PECR was never extended to them, Jersey's regulator says so in
+  terms, and neither Guernsey nor the Isle of Man has an ePrivacy-shaped
+  ordinance. What is still unread is each island's own consolidated statute book,
+  so this rests on the regulators' published guidance rather than on the
+  instruments.
 - **Svalbard (SJ)** is excluded from the EEA Agreement, so strictly it is out. It
   is **in** because geo-IP maps it to Norway. A pragmatic call, not a finding.
 - **Whether `cf.isEUCountry` covers the outermost regions.** Cloudflare's own
   documentation on this was not readable from here, which is why GF, GP, MQ, RE,
-  YT, MF and AX have explicit entries rather than relying on that flag.
+  YT and MF have explicit entries rather than relying on that flag. The same doubt
+  is why AX and SJ are listed although Finnish and Norwegian law is what reaches
+  them.
+- **Gibraltar's 2006 ePrivacy regulations** on `gibraltarlaws.gov.gi` — unread,
+  title included: secondary sources give it as both the Data Protection (Privacy
+  and Electronic Communications) Regulations and the Communications (Personal Data
+  and Privacy) Regulations, so the code says "its own 2006 regulations" rather
+  than picking one. GI is in on those sources saying they transposed the ePrivacy
+  Directive and were untouched by the UK's 2026 reform.
+- **The Dutch Telecommunicatiewet art. 11.7a(3), the Italian Garante's 2021
+  cookie guidelines and CNIL's audience-measurement exemption** in the original.
+  None was relied on — the section above explains why this pipeline fails all
+  three — so they are unread on purpose rather than by accident.
+- **The Digital Omnibus proposal of 19 November 2025** (COM(2025) 836 and the
+  data package alongside it) in the original. It is a proposal and nothing here
+  depends on it; it is named only so the next person does not mistake it for law.
 - **Peru's art. 14.9 exception** ("safeguarding legitimate interests"): the
   Spanish original is unread and the English translation is ambiguous about whose
   interests. It was not relied on, and the Peru reasoning stands without it.

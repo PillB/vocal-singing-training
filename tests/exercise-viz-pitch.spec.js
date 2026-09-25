@@ -67,6 +67,7 @@ async function viz(page) {
       holds: (v.holds || []).length,
       phase: v.phase || null,
       marks: (v.marks || []).length,
+      steps: (v.steps || []).length,
       slots: (v.slots || []).filter((s) => s.state === "done").length,
       phrases: (v.phrases || []).length,
       phrasesOk: (v.phrases || []).filter((p) => p.ok).length,
@@ -80,6 +81,26 @@ async function viz(page) {
       frozen: !!pv._frozenAt,
       gameHold: !!pv.display.gameHold
     };
+  });
+}
+
+/**
+ * After Stop: where the review card goes (kit.reviewPlan) and where the lanes
+ * start (the display's headPx), so a test can check the card covers no lane.
+ */
+async function reviewLayout(page) {
+  return page.evaluate(() => {
+    const kit = window.VTViz.scenes.pitchKit;
+    const m = window.VTApp.getState().modeInstance;
+    const v = m.state.viz;
+    const pv = window.VTGetPitchViz();
+    const gh = pv.h - 58;
+    const st = pv.safeTop || 0;
+    const rows = v.reviewRows || v.summary || [];
+    const plan = kit.reviewPlan(kit.measureCtx(), kit.plotBox(pv.w, gh, st), rows, {});
+    const hp = pv.display.headPx;
+    const head = typeof hp === "function" ? hp(gh, st) : hp || 0;
+    return plan ? { mode: plan.mode, bottom: plan.y + plan.h, lanesTop: st + head, gh } : { mode: null };
   });
 }
 
@@ -140,7 +161,11 @@ test.describe("pitch pictures", () => {
     await boot(page);
     await openAndStart(page, "s7-humming", "follow");
     await page.waitForTimeout(1200);
-    expect((await viz(page)).queue, "the next notes wait to the right").toBeGreaterThanOrEqual(5);
+    // Only the blocks that fit whole wait to the right
+    expect((await viz(page)).queue, "the next notes wait to the right").toBeGreaterThanOrEqual(3);
+    // Five targets, as the title says (two rounds make the goal of ten)
+    expect((await viz(page)).steps).toBe(5);
+    await expect(page.locator("#mode-hud .mode-title")).toContainText("5 objetivos");
     await page.waitForTimeout(8500);
     const pic = await highwayInView(page);
     expect(pic.found && pic.bottom <= pic.vh && pic.lit > 20).toBe(true);
@@ -150,6 +175,8 @@ test.describe("pitch pictures", () => {
     expect(await page.evaluate(() => !!window.VTPiano?.loopActive)).toBe(false);
     await stop(page);
     expect((await viz(page)).review).toBe(true);
+    // A wide stage: the review card sits beside the take
+    expect((await reviewLayout(page)).mode).toBe("side");
     expect(Number(await metric(page, "targets"))).toBeGreaterThanOrEqual(3);
   });
 
@@ -184,7 +211,11 @@ test.describe("pitch pictures", () => {
     await openAndStart(page, "s10-five-note", "follow");
     await page.waitForTimeout(1000);
     const q = await viz(page);
-    expect(q.queue).toBeGreaterThanOrEqual(5);
+    expect(q.queue).toBeGreaterThanOrEqual(3);
+    // One step counter, on the picture; the panel names the root
+    expect(q.head).toMatch(/Paso \d+\/9/);
+    await expect(page.locator("#mode-hud [data-root]")).toContainText("Raíz");
+    await expect(page.locator("#mode-hud [data-step]")).toHaveCount(0);
     await page.waitForTimeout(9500);
     const pic = await highwayInView(page);
     expect(pic.found && pic.bottom <= pic.vh && pic.lit > 20).toBe(true);
@@ -219,7 +250,7 @@ test.describe("pitch pictures", () => {
     expect(pic.found && pic.bottom <= pic.vh && pic.lit > 20).toBe(true);
     const v = await viz(page);
     expect(v.landed).toBeGreaterThanOrEqual(1);
-    expect(Number(await page.locator("#mode-hud [data-r]").textContent())).toBe(v.landed);
+    expect(parseInt(await page.locator("#mode-hud [data-r]").textContent(), 10)).toBe(v.landed);
     await stop(page);
     expect((await viz(page)).review).toBe(true);
     expect(Number(await metric(page, "reps"))).toBeGreaterThanOrEqual(1);
@@ -248,10 +279,30 @@ test.describe("pitch pictures", () => {
     expect(v.phrases).toBeGreaterThanOrEqual(2);
     expect(v.phrasesOk, "the 6,5 s phrase reaches the 6 s goal").toBeGreaterThanOrEqual(1);
     expect(v.phrasesOk, "the 4,2 s one does not").toBeLessThan(v.phrases);
+    // A pause, not a breath: the mic hears unbroken sound
+    await expect(page.locator("#mode-hud .mode-title")).toContainText("sin pausa");
     await page.locator("#mode-hud [data-feel]").click();
     await stop(page);
     expect((await viz(page)).review).toBe(true);
     expect(Number(await metric(page, "repsFeel"))).toBe(1);
+  });
+
+  test("phone: after Stop the review card sits above the lanes, not on them", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await boot(page);
+    for (const [id, voice] of [
+      ["s1-vocal-fry", "fryClear"],
+      ["s9-pitch-match", "matchListen"]
+    ]) {
+      await openAndStart(page, id, voice);
+      await page.waitForTimeout(6000);
+      await stop(page);
+      const r = await reviewLayout(page);
+      expect(r.mode, id).toBe("top");
+      expect(r.lanesTop, `${id}: the lanes start under the card`).toBeGreaterThanOrEqual(r.bottom);
+      // Inside what the highway allows the header rows (45 % of the plot)
+      expect(r.bottom, id).toBeLessThanOrEqual(r.gh * 0.45);
+    }
   });
 
   test("reduced motion: the siren picture pages instead of scrolling", async ({ page }) => {
@@ -296,7 +347,7 @@ test.describe("pitch pictures", () => {
       ["s5-sirens", /Siren · your range/, null],
       ["s1-vocal-fry", /Fry → clear \/A\/ hold/, null],
       ["s10-five-note", /pitch-gated/, /Step \d+\/9 · sing/],
-      ["s7-humming", /Humming · soft targets/, /Hum [A-G]/],
+      ["s7-humming", /Humming · 5 soft targets/, /Hum [A-G]/],
       ["s9-pitch-match", /Pitch match · listen, then sing/, null],
       ["s2-solfege-chords", /Chord \/ solfège/, /Sing|Wait for the piano|chord tone|✓/],
       ["s3-song-stanzas", /Song phrases/, /Phrase|Sing the first phrase|Breathe/]

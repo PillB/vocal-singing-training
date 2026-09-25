@@ -141,6 +141,11 @@
         this.hud = el(`<div class="mode-panel mode-${spec.id}"></div>`);
         container.appendChild(this.hud);
         if (spec.render) spec.render.call(this);
+        // #mode-hud is not a live region (its numbers change many times a
+        // second): a panel without its own announcer has its step read out
+        if (this.hud && !this.hud.querySelector("[aria-live]")) {
+          this.hud.querySelectorAll("[data-phase], .mode-phase").forEach((p) => p.setAttribute("aria-live", "polite"));
+        }
         return this;
       },
       unmount() {

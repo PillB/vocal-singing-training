@@ -792,6 +792,8 @@
         this.onStats({
           targetFreq: scoreFreq || this.targetFreq,
           targetName: scoreName || midiToName(targetMidi),
+          // targetName is the nearest note, not a target (display.stats "nearest")
+          nearest: d.stats === "nearest",
           voiceFreq: f,
           voiceName: f ? midiToName(freqToMidi(f)) : "—",
           accuracyCents: this.accuracyCents,

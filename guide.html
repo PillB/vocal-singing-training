@@ -787,7 +787,7 @@
       <p>
         Desde el Espacio Económico Europeo, donde la ley pide permiso primero, no
         se envía nada hasta que contestes la barra que aparece al entrar; rechazar es un botón, y
-        mientras no contestes, lo que hagas se queda en este navegador. Desde cualquier otro país
+        mientras no contestes no se guarda ni se envía ninguna estadística. Desde cualquier otro país
         no cambia nada: las estadísticas empiezan en la primera visita y el botón de abajo las
         apaga.
       </p>
@@ -1391,7 +1391,7 @@
       <p>
         From the European Economic Area, where the law asks first, nothing is
         sent until you answer the bar that appears when you arrive; refusing is one button, and until
-        you answer, what you do stays in this browser. From anywhere else nothing changes: the
+        you answer, no statistic is kept or sent. From anywhere else nothing changes: the
         statistics start on the first visit and the button below switches them off.
       </p>
       <p class="privacy-switch" data-privacy-switch data-lang="en" hidden>
@@ -1410,6 +1410,11 @@
          delete button would have nowhere to send the deletion. -->
     <script src="js/billing-config.js?v=20260924a"></script>
     <script src="js/experiments-config.js?v=20260924e"></script>
+    <!-- The page declares that the region gate belongs on it, so that if
+         js/region-gate.js ever 404s or fails to parse, js/analytics.js and
+         js/experiments.js keep nothing and send nothing rather than reading an
+         absent gate as permission. -->
+    <script>window.VT_REGION_REQUIRED = true;</script>
     <script src="js/region-gate.js?v=20260925a"></script>
     <script src="js/analytics.js?v=20260925a"></script>
     <script src="js/experiments.js?v=20260925a"></script>

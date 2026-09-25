@@ -119,11 +119,17 @@ test.describe("EU rules only in the EU", () => {
     expect(sent.batches).toEqual([]);
     expect(await page.evaluate(() => window.VTAnalytics.remoteState().reason)).toBe("eu_unanswered");
 
-    // Practising is untouched: the local log, which is what the streaks and the
-    // guide's own figures read, still has everything.
+    // Nothing is written to the device either, because that is the thing being
+    // asked about. The events wait in memory, which is why summary() still shows
+    // them while localStorage holds nothing.
+    expect(await page.evaluate(() => localStorage.getItem("vt_analytics_v1"))).toBeNull();
     const counts = await page.evaluate(() => window.VTAnalytics.summary().counts);
     expect(counts.practice_start).toBeGreaterThan(0);
     expect(counts.app_open).toBeGreaterThan(0);
+
+    // And practising itself is untouched: the streaks, the heatmap and the
+    // history read their own keys, not this log.
+    expect(await page.evaluate(() => !!window.VTDays?.summary)).toBe(true);
 
     // No A/B id minted, and the split is inert rather than all in one arm.
     expect(await page.evaluate(() => localStorage.getItem("vt_ab_v1"))).toBeNull();
@@ -158,6 +164,11 @@ test.describe("EU rules only in the EU", () => {
 
     await page.locator(`${bar} [data-region-accept]`).click();
     await expect.poll(() => sent.batches.length).toBeGreaterThan(0);
+    // The device is written at the same moment, with each event keeping the time
+    // it actually happened rather than the time the answer came.
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem("vt_analytics_v1") || "null"));
+    expect(stored.events.map((e) => e.name)).toEqual(expect.arrayContaining(["app_open", "practice_start"]));
+    expect(new Set(stored.events.map((e) => e.t)).size).toBeGreaterThan(1);
     const batch = sent.batches[0];
     // The events raised before the answer are the ones a funnel starts with, so
     // they are kept and sent, not thrown away and re-raised.
@@ -167,6 +178,58 @@ test.describe("EU rules only in the EU", () => {
     expect(batch.events.every((e) => /^[0-9a-f]{16}$/.test(e.cid))).toBe(true);
     expect(await page.evaluate(() => localStorage.getItem("vt_ab_v1"))).toContain("cid");
     await expect(page.locator(bar)).toHaveCount(0);
+    await ctx.close();
+  });
+
+  test("a hidden clock is not released by a worker that has no route yet", async ({ browser }) => {
+    // The nastiest case: somebody in Berlin on Tor Browser, whose clock says UTC,
+    // against a worker that has not been redeployed. Releasing them on the 404
+    // would mint the id, send the batch, and be kept — a worker old enough to
+    // 404 this route has no refusal on ingest either.
+    const { ctx, page, sent } = await open(browser, { locale: "en-US", geoStatus: 404 });
+    await page.waitForFunction(() => window.VTRegion.verdict() !== "pending");
+    expect(await page.evaluate(() => window.VTRegion.zoneVerdict())).toBe("unknown");
+    expect(await page.evaluate(() => window.VTRegion.verdict())).toBe("eu");
+    await trackAndFlush(page);
+    await page.waitForTimeout(250);
+    expect(sent.batches).toEqual([]);
+    expect(await page.evaluate(() => localStorage.getItem("vt_ab_v1"))).toBeNull();
+    expect(await page.evaluate(() => localStorage.getItem("vt_analytics_v1"))).toBeNull();
+    await expect(page.locator(bar)).toBeVisible();
+    await ctx.close();
+  });
+
+  test("a gate that fails to load keeps nothing and sends nothing", async ({ browser }) => {
+    // js/region-gate.js 404ing, blocked by an extension, or failing to parse must
+    // not read as permission. Both pages declare VT_REGION_REQUIRED, so its
+    // absence stops everything instead.
+    const ctx = await browser.newContext({ timezoneId: "Europe/Madrid", locale: "es-ES" });
+    const page = await ctx.newPage();
+    const batches = [];
+    await page.route("https://events.test/**", async (route) => {
+      try {
+        batches.push(JSON.parse(route.request().postData() || "null"));
+      } catch {
+        batches.push(null);
+      }
+      await route.fulfill({ status: 200, contentType: "application/json", body: '{"ok":true}' });
+    });
+    await page.route("**/js/region-gate.js*", (route) => route.fulfill({ status: 404, body: "" }));
+    await page.addInitScript((ep) => {
+      window.VT_ANALYTICS_ENDPOINT = ep;
+      Object.defineProperty(Navigator.prototype, "webdriver", { get: () => false, configurable: true });
+    }, ENDPOINT);
+    await page.goto(BASE + "/", { waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => !!window.VTAnalytics);
+    expect(await page.evaluate(() => !!window.VTRegion)).toBe(false);
+    expect(await page.evaluate(() => window.VT_REGION_REQUIRED)).toBe(true);
+    expect(await page.evaluate(() => window.VTAnalytics.remoteState().reason)).toBe("no_region_gate");
+    await trackAndFlush(page);
+    await page.waitForTimeout(300);
+    expect(batches).toEqual([]);
+    expect(await page.evaluate(() => localStorage.getItem("vt_analytics_v1"))).toBeNull();
+    expect(await page.evaluate(() => localStorage.getItem("vt_ab_v1"))).toBeNull();
+    expect(await page.evaluate(() => window.VTExperiments.report().inert)).toBe(true);
     await ctx.close();
   });
 
@@ -361,6 +424,9 @@ test.describe("EU rules only in the EU", () => {
     await page.waitForTimeout(300);
     expect(sent.batches).toEqual([]);
     expect(await page.evaluate(() => window.VTAnalytics.remoteState().reason)).toBe("gpc");
+    // In an ask-first country the signal is the answer, so nothing is kept either.
+    expect(await page.evaluate(() => window.VTRegion.blockedReason())).toBe("eu_refused");
+    expect(await page.evaluate(() => localStorage.getItem("vt_analytics_v1"))).toBeNull();
     await expect(page.locator(bar)).toHaveCount(0);
     await ctx.close();
   });

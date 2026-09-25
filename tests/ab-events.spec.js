@@ -243,7 +243,7 @@ test.describe("anonymous events for A/B tests", () => {
     await expect(state).toHaveText("Este navegador envía estadísticas anónimas.");
   });
 
-  test("the privacy text names every field that is sent, in both languages, and the worker's retention", async ({ page }) => {
+  test("the privacy text names every field of an event that is sent, in both languages, and the worker's retention", async ({ page }) => {
     const sent = await boot(page, { endpoint: ENDPOINT, human: true });
     await page.evaluate(() => {
       window.VTAnalytics.track("practice_start", { exerciseId: "s4-lip-trills" });
@@ -251,6 +251,11 @@ test.describe("anonymous events for A/B tests", () => {
     });
     await expect.poll(() => sent.bodies.length).toBeGreaterThan(0);
     const fields = Object.keys(sent.bodies[0].events[0]).sort();
+    // The batch itself carries only the format version and the events. A third
+    // field, `consent`, exists but rides along only where the visitor was asked
+    // first (js/region-gate.js), and it says nothing about them — which is why
+    // the field list the pages have to name is the event's, not the batch's.
+    expect(Object.keys(sent.bodies[0]).sort()).toEqual(["events", "v"]);
     const { EVENT_RETENTION_SECONDS } = await workerModule("db.js");
     const days = EVENT_RETENTION_SECONDS / 86400;
     // Each field sent, and the arrival time the worker adds, in plain words.

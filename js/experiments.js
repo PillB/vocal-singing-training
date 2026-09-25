@@ -24,6 +24,18 @@
 
   const LS_KEY = "vt_ab_v1";
 
+  /**
+   * Must this file do nothing at all — no id, no split, no exposure? True in a
+   * country that asks first until the visitor says yes, and true as well when the
+   * page says the region gate belongs on it and the gate is not there, because an
+   * absent gate must never read as permission.
+   * @returns {boolean} True when everything here must stay inert.
+   */
+  function inert() {
+    if (global.VT_REGION_REQUIRED && typeof global.VTRegion?.inert !== "function") return true;
+    return !!global.VTRegion?.inert?.();
+  }
+
   function readBag() {
     try {
       const raw = localStorage.getItem(LS_KEY);
@@ -55,7 +67,7 @@
     // country wants permission for first. The only caller that needs an id is
     // the statistics sender, and it holds its events until the answer comes;
     // assignment() below never gets this far while inert.
-    if (global.VTRegion?.inert?.()) return "";
+    if (inert()) return "";
     let cid = "";
     try {
       const buf = new Uint8Array(8);
@@ -111,7 +123,7 @@
     }
     // Asked-first country, not answered yet: the control, and no split. Placed
     // before anything that could read or write the client id.
-    if (global.VTRegion?.inert?.()) {
+    if (inert()) {
       return { variant: control, forced: false, enabled: false, inert: true };
     }
     // Disabled experiments still run this far, so the code path is exercised.
@@ -200,7 +212,7 @@
     const bag = readBag() || {};
     const out = {
       clientId: bag.cid || null,
-      inert: !!global.VTRegion?.inert?.(),
+      inert: inert(),
       region: global.VTRegion?.report?.() || null,
       experiments: {}
     };

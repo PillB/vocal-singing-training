@@ -76,7 +76,7 @@
       } else if (st.reason === "automated") {
         line = t.automated;
         canToggle = false;
-      } else if (st.reason === "no_endpoint") {
+      } else if (st.reason === "no_endpoint" || st.reason === "no_region_gate") {
         // Offer the switch anyway, so the choice holds if sending starts later.
         line = t.off;
       } else {

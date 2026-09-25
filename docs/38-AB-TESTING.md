@@ -386,12 +386,30 @@ the same arm and produced a result that looked real and was worthless.
 `assignment()` returns `variants[0]` before anything reads or writes the id, and
 `exposeOnce()` records nothing.
 
-**What is deliberately *not* gated:** practice history, streaks, recordings and
-the local event log `js/analytics.js` keeps. That is storage strictly necessary
-for the service the visitor explicitly requested (art. 5(3), second limb): it is
-what draws their streak and their heatmap, it never leaves the device, and
-gating it would break the product for those visitors rather than protect them.
-What is gated is the sending and the A/B id, which serve us.
+**What is *not* gated:** practice history, the week plan, settings, streaks and
+recordings. That is storage strictly necessary for the service the visitor
+explicitly requested (art. 5(3), second limb), it lives under its own keys in
+`js/storage.js` and `js/practice-days.js`, and gating it would break the product
+for those visitors rather than protect them.
+
+**The local event log is gated, and the first version of this got that wrong.**
+It shipped writing `vt_analytics_v1` before the gate was consulted, on the
+argument that the log draws the streak and the heatmap. It does not: the only
+caller of `VTAnalytics.summary()` anywhere is `VTExperiments.report()`, a
+console-only helper, and the streaks and the heatmap read `VTDays` and
+`VTStorage` under their own keys. So the log serves us, not the visitor, art.
+5(3) is about storage rather than transmission, and holding it costs the visitor
+nothing. Events now wait in memory with their timestamps and are written and sent
+together when the answer is yes; a refusal throws them away, and Global Privacy
+Control in an ask-first country *is* a refusal, so nothing is kept for those
+browsers either.
+
+**An absent gate must never read as permission.** Both pages declare
+`window.VT_REGION_REQUIRED = true` before loading `js/region-gate.js`, and
+`js/analytics.js` and `js/experiments.js` refuse everything when the flag is set
+and the gate is missing — a 404 on that one file, a content blocker, a parse
+error. Measurement falling to zero worldwide is a failure somebody notices; EU
+visitors quietly measured without consent is not.
 
 **The list is the set of places whose law requires asking first, not a political
 one.** In: the EEA under ePrivacy art. 5(3), the EU's outermost regions, and the
@@ -429,6 +447,14 @@ The two lists live in two languages — IANA zones and ISO codes in the page, IS
 codes in the worker — and `tests/region-gate.spec.js` asserts the country sets are
 equal in both directions, so they cannot drift.
 
+**Reading the clock and the language is not itself gated.** Nothing is stored and
+nothing is transmitted to reach the verdict, so art. 5(3) is not engaged on the
+EDPB's own reading of "gaining access" — though the UK's new reg. 6(2)(b)
+expressly covers "collecting or monitoring information automatically emitted by
+the terminal equipment", which is one more reason the UK call below deserves a
+second look. The values never leave the device, and anything unreadable resolves
+to "ask the worker".
+
 **The one hole left open, and which way it fails.** A visitor physically in an EEA
 country whose device is set to a non-European time zone *and* a non-European
 language is never asked, because the page never asks the worker about them. Their
@@ -444,6 +470,41 @@ small share, but it means an arm's totals are not comparable across regions and
 the SRM check should be read on the whole, not per country. It also means the
 funnel understates first visits from the EEA and the UK by however many people
 never answer, and no correction for that is possible or attempted.
+
+### Sources behind the region gate that nobody has read in the original
+
+The reasoning above was assembled by a research pass in this container, and these
+are the things it could not read, with the URLs, so the next person knows what is
+still an inference:
+
+- **The consolidated, in-force PECR Schedule A1** at `legislation.gov.uk` —
+  robots-blocked here. The UK call rests on the enacted DUAA Sch. 12 text and the
+  ICO's exceptions page instead, so the exact operative wording as amended is
+  unread. This is the load-bearing one: it decides whether GB belongs in the list.
+- **Article 82 of the French loi 78-17** on `legifrance.gouv.fr` — a fetch of it
+  was still waiting on a permission prompt when this shipped. CNIL states the loi
+  Informatique et Libertés applies in full in the French overseas collectivities
+  since 1 June 2019, but art. 82's own territorial provision is unread, so PF, NC,
+  WF, BL, PM and TF are currently **out** of the list on moderate confidence.
+  Moving them in is a one-line change.
+- **Whether Jersey, Guernsey and the Isle of Man have a standalone
+  terminal-equipment consent rule** as opposed to GDPR-aligned data protection law
+  alone. Unconfirmed; all three are **in** the list to fail closed.
+- **Svalbard (SJ)** is excluded from the EEA Agreement, so strictly it is out. It
+  is **in** because geo-IP maps it to Norway. A pragmatic call, not a finding.
+- **Whether `cf.isEUCountry` covers the outermost regions.** Cloudflare's own
+  documentation on this was not readable from here, which is why GF, GP, MQ, RE,
+  YT, MF and AX have explicit entries rather than relying on that flag.
+- **Peru's art. 14.9 exception** ("safeguarding legitimate interests"): the
+  Spanish original is unread and the English translation is ambiguous about whose
+  interests. It was not relied on, and the Peru reasoning stands without it.
+- **`*.gob.pe` and the OAS copy of Ley 29733** are refused at this container's
+  proxy, as recorded further up: every Ley 29733 article number here comes from a
+  secondary copy.
+
+None of this is legal advice, and two of the load-bearing instruments — the UK
+reform of 5 February 2026 and Peru's DS 016-2024-JUS — are recent enough that a
+lawyer in each jurisdiction should confirm before anybody is charged.
 
 ### Left for later
 

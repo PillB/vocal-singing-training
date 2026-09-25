@@ -1094,6 +1094,11 @@
     <script src="js/ads-config.js"></script>
     <script src="js/ads.js"></script>
     <script src="js/value-pulse.js?v=20260924c"></script>
+    <!-- The page declares that the region gate belongs on it, so that if
+         js/region-gate.js ever 404s or fails to parse, js/analytics.js and
+         js/experiments.js keep nothing and send nothing rather than reading an
+         absent gate as permission. -->
+    <script>window.VT_REGION_REQUIRED = true;</script>
     <script src="js/region-gate.js?v=20260925a"></script>
     <script src="js/analytics.js?v=20260925a"></script>
     <script src="js/experiments-config.js?v=20260924e"></script>

@@ -25,12 +25,17 @@
  * EU. The list is the set of places that require being asked first, not a
  * political one — docs/38-AB-TESTING.md says so in more detail.
  *
- * What is NOT gated: everything the visitor came for. Practice history,
- * streaks, recordings and the local event log js/analytics.js keeps stay
- * exactly as they are, in this browser, because they are what the visitor
- * asked the site to do (art. 5(3), second limb: storage strictly necessary for
- * the service explicitly requested). What is gated is sending anything to our
- * worker and the A/B id, which serve us, not them.
+ * What is NOT gated: everything the visitor came for. Practice history, the
+ * week plan, settings, streaks and recordings stay exactly as they are, in this
+ * browser, because they are what the visitor asked the site to do (art. 5(3),
+ * second limb: storage strictly necessary for the service explicitly requested).
+ * They live under their own keys, in js/storage.js and js/practice-days.js.
+ *
+ * What IS gated: sending anything to our worker, the A/B id, and — since a
+ * reading pass found that nothing in the product ever reads it — the event log
+ * js/analytics.js keeps. The streaks and the heatmap come from VTStorage and
+ * VTDays, so that log serves us, not the visitor, and holding it costs them
+ * nothing.
  *
  * This file carries its own Spanish and English strings and its own styles, the
  * way js/privacy-switch.js does: guide.html loads neither js/i18n.js nor the
@@ -244,6 +249,14 @@
     }
   };
 
+  /**
+   * The answer when localStorage refused to keep it (private mode, blocked site
+   * data). Without this a visitor who presses Accept is left unanswered with the
+   * bar gone and their statistics held for ever — fail-closed, but their press
+   * would do nothing at all.
+   */
+  let sessionAnswer = null;
+
   /** "non_eu" | "eu" | "pending" — "pending" only ever for a European-looking browser. */
   let verdict = "pending";
   /** Two-letter country the worker reported, or null while nobody has asked. */
@@ -338,7 +351,7 @@
 
   /** @returns {"granted" | "denied" | null} What the visitor answered. */
   function consent() {
-    return storedChoice();
+    return storedChoice() || sessionAnswer;
   }
 
   /**
@@ -360,8 +373,15 @@
     // then opens the site on a trip does not get counted because their time
     // zone changed.
     if (choice === "denied") return "eu_refused";
-    if (verdict === "non_eu") return "";
+    // A yes beats a browser-level signal, because somebody who pressed Accept in
+    // the guide's privacy section meant it. Sending is still stopped by Global
+    // Privacy Control in js/analytics.js; this only lets the site keep the log.
     if (choice === "granted") return "";
+    if (verdict === "non_eu") return "";
+    // Global Privacy Control is a refusal, and where the law asks first it is
+    // the answer — so nothing is kept, nothing is sent, and maybeShowBar() does
+    // not ask somebody to repeat themselves.
+    if (global.navigator?.globalPrivacyControl === true) return "eu_refused";
     if (verdict === "pending") return "eu_pending";
     return "eu_unanswered";
   }
@@ -449,8 +469,12 @@
       // fact about the deployment, not a privacy signal, so fall back to what
       // the clock says rather than putting a bar in front of everybody whose
       // only European signal was a language or a blank time zone.
+      // Only a positively non-European clock may be released this way. A hidden
+      // clock ("unknown") keeps the stricter verdict, exactly as an unplaceable
+      // address does below — a worker old enough to 404 this route also predates
+      // the refusal on ingest, so releasing here would have events kept.
       if (res.status === 404) {
-        settle(zoneVerdict() === "ask" ? "eu" : "non_eu", null, "route_missing");
+        settle(zoneVerdict() === "clear" ? "non_eu" : "eu", null, "route_missing");
         return;
       }
       const data = res.ok ? await res.json() : null;
@@ -481,6 +505,7 @@
    * @param {boolean} granted Whether the visitor accepted.
    */
   function setConsent(granted) {
+    sessionAnswer = granted ? "granted" : "denied";
     try {
       localStorage.setItem(
         CHOICE_KEY,
@@ -495,6 +520,7 @@
 
   /** Forget the answer, so the bar comes back. For the console and the tests. */
   function resetConsent() {
+    sessionAnswer = null;
     try {
       localStorage.removeItem(CHOICE_KEY);
     } catch {

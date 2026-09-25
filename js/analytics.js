@@ -10,10 +10,11 @@
  * Automated browsers never send.
  *
  * In the countries whose law requires being asked first (js/region-gate.js: the
- * EEA and the UK) nothing is sent until the visitor says yes. Events raised in
- * the meantime wait in memory, not on the device, and are either sent when the
- * answer is yes or thrown away when it is no. Everywhere else that gate is a
- * single synchronous `false` and nothing about this file changes.
+ * EEA) nothing is kept or sent until the visitor says yes. Events raised in the
+ * meantime wait in memory — not in `localStorage`, because writing to the device
+ * is the very thing being asked about — and are written and sent together when
+ * the answer is yes, or thrown away when it is no. Everywhere else that gate is
+ * a single synchronous `false` and nothing about this file changes.
  *
  * Do Not Track was honoured until 2026-09-24 and is not any more. No law
  * anywhere requires it, the W3C discontinued the specification in 2019, and
@@ -100,7 +101,29 @@
       /* ignore */
     }
     // Last, because a browser that sends nothing for any of the reasons above
-    // needs no consent bar and no question asked.
+    // needs no consent bar and no question asked. The order matters: an
+    // automated browser is answered by "automated" here rather than by the
+    // region, which settles one as out of scope so the suite runs the ordinary
+    // path. Moving the region read above these would change that.
+    return regionReason();
+  }
+
+  /**
+   * What the region gate says, or "" when it has nothing to say.
+   *
+   * Read separately from remoteBlockedReason() because this one governs the
+   * write to the device, which Global Privacy Control, the guide's switch and
+   * automation do not: those three stop events leaving, not being kept here.
+   * @returns {"" | "eu_pending" | "eu_unanswered" | "eu_refused" | "no_region_gate"} Reason.
+   */
+  function regionReason() {
+    if (global.VT_REGION_REQUIRED && typeof global.VTRegion?.blockedReason !== "function") {
+      // The page says the gate belongs here and it is not: js/region-gate.js
+      // 404ed, was blocked, or failed to parse. Keep nothing and send nothing.
+      // An absent gate must never read as permission, and a funnel that falls
+      // to zero is a failure somebody notices.
+      return "no_region_gate";
+    }
     return global.VTRegion?.blockedReason?.() || "";
   }
 
@@ -185,6 +208,10 @@
     held.push({
       name,
       props,
+      // The clock time the local log would have kept, so the answer "yes" can
+      // write the session down as it actually happened rather than as one
+      // instant. It is not sent: the worker records when a batch arrives.
+      t: now.toISOString(),
       day: global.VTDays?.dayKey?.(now) || null,
       tz: -now.getTimezoneOffset()
     });
@@ -205,10 +232,17 @@
         return;
       }
       if (!held.length) return;
-      const cid = global.VTExperiments?.clientId?.() || null;
       const waiting = held;
       held = [];
-      waiting.forEach((e) => queue.push({ ...e, cid }));
+      // The device first, because that is what was being asked about.
+      const bag = read();
+      bag.events = bag.events || [];
+      waiting.forEach((e) => bag.events.push({ name: e.name, props: e.props, t: e.t }));
+      if (bag.events.length > MAX) bag.events = bag.events.slice(-MAX);
+      write(bag);
+      // Then the worker, with the id minted only now.
+      const cid = global.VTExperiments?.clientId?.() || null;
+      waiting.forEach((e) => queue.push({ name: e.name, props: e.props, cid, day: e.day, tz: e.tz }));
       bindFlushOnHide();
       flush(false);
     });
@@ -244,6 +278,18 @@
   function track(name, props) {
     if (!name) return;
     const now = new Date();
+    const region = regionReason();
+    // Where the law wants the visitor asked first, keeping the event on the
+    // device is the thing being asked about, so it waits in memory with
+    // everything else. Nothing in the product reads this log — the streaks, the
+    // heatmap and the history all come from VTStorage and VTDays under their own
+    // keys — so holding it costs the visitor nothing.
+    if (HELD_REASONS.includes(region)) {
+      hold(String(name), props || {}, now);
+      return;
+    }
+    // A refusal, or a gate that should be on this page and is not.
+    if (region) return;
     const bag = read();
     bag.events = bag.events || [];
     bag.events.push({
@@ -264,11 +310,16 @@
 
   function summary() {
     const bag = read();
+    // Held events are part of this session even though nothing has been written
+    // down yet, so the console report shows them rather than an empty log.
+    const events = (bag.events || []).concat(
+      held.map((e) => ({ name: e.name, props: e.props, t: e.t, held: true }))
+    );
     const counts = {};
-    (bag.events || []).forEach((e) => {
+    events.forEach((e) => {
       counts[e.name] = (counts[e.name] || 0) + 1;
     });
-    return { total: (bag.events || []).length, counts, recent: (bag.events || []).slice(-20) };
+    return { total: events.length, counts, recent: events.slice(-20) };
   }
 
   function clear() {

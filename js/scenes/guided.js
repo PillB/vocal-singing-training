@@ -320,8 +320,10 @@
     const avail = w - gap * (n - 1);
     let px = x;
     const r = Math.min(5, h / 2);
+    const segs = [];
     phases.forEach((p, i) => {
       const sw = Math.max(5, (avail * (p.sec || 0)) / total);
+      segs.push({ i, x: px, w: sw });
       const done = run.done || i < run.index;
       const cur = !run.done && i === run.index;
       ctx.fillStyle = done ? C.done : "rgba(170, 195, 230, 0.12)";
@@ -339,18 +341,66 @@
         roundRect(ctx, px + 0.5, y + 0.5, sw - 1, h - 1, r);
         ctx.stroke();
       }
-      if (opts.labels) {
-        const text = loc(p, "short") || p.label || "";
-        ctx.font = font(10, cur ? 800 : 700);
-        ctx.textAlign = "center";
-        ctx.textBaseline = "top";
-        ctx.fillStyle = cur ? C.text : done ? C.done : C.muted;
-        const tw = ctx.measureText(text).width;
-        const words = tw <= sw - 4 ? text : sw >= 16 ? String(i + 1) : "";
-        if (words) ctx.fillText(words, px + sw / 2, y + h + 3, sw - 2);
-      }
       px += sw + gap;
     });
+    if (opts.labels) stepLabels(ctx, box, run, segs);
+  }
+
+  /**
+   * Step names under the bar, each centred on its segment and free to run past
+   * a short segment's ends. Where names would collide, the current step's name
+   * wins, then the steps nearest it; a name that can't fit is left out rather
+   * than replaced by a bare number (a row of "1 2 3 Giro 5" read as noise).
+   */
+  function stepLabels(ctx, box, run, segs) {
+    const { x, y, w, h } = box;
+    const cur = run.done ? -1 : run.index;
+    const order = segs
+      .map((sg) => sg.i)
+      .sort((a, b) => (a === cur ? -1 : b === cur ? 1 : Math.abs(a - Math.max(0, cur)) - Math.abs(b - Math.max(0, cur)) || a - b));
+    const placed = [];
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    for (const i of order) {
+      const p = run.phases[i];
+      const sg = segs[i];
+      const text = loc(p, "short") || p.label || "";
+      if (!text) continue;
+      ctx.font = font(10, i === cur ? 800 : 700);
+      const tw = ctx.measureText(text).width;
+      if (tw > w) continue;
+      const lx = clamp(sg.x + sg.w / 2 - tw / 2, x, x + w - tw);
+      if (placed.some((q) => lx < q.r + 6 && lx + tw > q.l - 6)) continue;
+      placed.push({ i, l: lx, r: lx + tw, text });
+    }
+    for (const q of placed) {
+      const done = run.done || q.i < run.index;
+      ctx.font = font(10, q.i === cur ? 800 : 700);
+      ctx.fillStyle = q.i === cur ? C.text : done ? C.done : C.muted;
+      ctx.fillText(q.text, q.l, y + h + 3);
+    }
+  }
+
+  /**
+   * The countdown's seconds with their unit ("84 s"): a bare "84" in a ring
+   * read as a score. Returns the drawn width.
+   */
+  function secCount(ctx, cd, x, y, px, align, done) {
+    const unit = done ? "" : " s";
+    ctx.textBaseline = "middle";
+    ctx.font = font(px, 800, true);
+    const nw = ctx.measureText(cd).width;
+    ctx.font = font(Math.round(px * 0.62), 700);
+    const uw = unit ? ctx.measureText(unit).width : 0;
+    const left = align === "right" ? x - nw - uw : align === "center" ? x - (nw + uw) / 2 : x;
+    ctx.textAlign = "left";
+    ctx.font = font(px, 800, true);
+    ctx.fillText(cd, left, y);
+    if (unit) {
+      ctx.font = font(Math.round(px * 0.62), 700);
+      ctx.fillText(unit, left + nw, y + px * 0.12);
+    }
+    return nw + uw;
   }
 
   /** Words with *starred* key words; the key words light up while `hot`. */
@@ -1181,12 +1231,20 @@
     ctx.fill();
   }
 
+  /**
+   * The persona card: its sign and name, with the time left on it. What to
+   * say with it ("Abre con un cumplido concreto y verdadero") is written in
+   * the step's words beside or under the card, where it wraps whole (inside a
+   * small card it was cut to "Abre con …"). The next card peeks beside it
+   * only when both have room for their names.
+   */
   function artPersona(ctx, box, info) {
     const { x, y, w, h } = box;
     const p = info.phase || {};
     const run = info.m.run;
     const nx = run.next && run.next.kind === "persona" ? run.next : null;
-    const cw = nx ? Math.min(w * 0.7, Math.max(w * 0.55, h * 2.4)) : Math.min(w, h * 2.6);
+    const peek = nx && w >= 380 ? Math.min(130, Math.max(100, w * 0.24)) : 0;
+    const cw = w - (peek ? peek + 10 : 0);
     ctx.fillStyle = "rgba(170, 195, 230, 0.07)";
     roundRect(ctx, x, y, cw, h, 10);
     ctx.fill();
@@ -1194,34 +1252,25 @@
     ctx.lineWidth = 1.5;
     roundRect(ctx, x + 0.5, y + 0.5, cw - 1, h - 1, 10);
     ctx.stroke();
-    const ip = Math.min(14, h * 0.12);
-    const iconS = Math.min(12, h * 0.12);
-    if (p.icon === "heart") heart(ctx, x + ip + iconS, y + ip + iconS, iconS * 0.9, C.done);
-    else glyph(ctx, p.icon || "star", x + ip + iconS, y + ip + iconS, C.done, iconS);
+    const ip = Math.min(12, Math.max(8, h * 0.1));
+    const iconS = clamp(h * 0.14, 7, 12);
+    const nameY = y + (h - 6) / 2;
+    if (p.icon === "heart") heart(ctx, x + ip + iconS, nameY, iconS * 0.9, C.done);
+    else glyph(ctx, p.icon || "star", x + ip + iconS, nameY, C.done, iconS);
     ctx.fillStyle = C.text;
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
-    fitLine(ctx, loc(p, "persona") || p.label || "", x + ip + iconS * 2 + 8, y + ip + iconS, cw - ip * 2 - iconS * 2 - 8, Math.min(22, h * 0.2), 900, 12);
-    const intent = loc(p, "intent");
-    if (intent && h >= 64) {
-      const big = h >= 130 && cw >= 240;
-      const lh = h < 110 ? 15 : big ? 23 : 18;
-      ctx.font = font(h < 110 ? 12 : big ? 18 : 14, 700);
-      ctx.fillStyle = C.text;
-      ctx.globalAlpha = 0.85;
-      wrap(ctx, intent, x + ip, y + ip + iconS * 2 + 10, cw - ip * 2, lh, Math.max(1, Math.floor((h - ip * 2 - iconS * 2 - 18) / lh)));
-      ctx.globalAlpha = 1;
-    }
+    fitLine(ctx, loc(p, "persona") || p.label || "", x + ip + iconS * 2 + 8, nameY, cw - ip * 2 - iconS * 2 - 8, clamp(h * 0.3, 14, 24), 900, 12);
     // Time left on this card
     ctx.fillStyle = C.grid;
-    ctx.fillRect(x + ip, y + h - 7, cw - ip * 2, 3);
+    ctx.fillRect(x + ip, y + h - 6, cw - ip * 2, 3);
     ctx.fillStyle = C.target;
-    ctx.fillRect(x + ip, y + h - 7, (cw - ip * 2) * (1 - info.frac), 3);
+    ctx.fillRect(x + ip, y + h - 6, (cw - ip * 2) * (1 - info.frac), 3);
     // The next card, peeking
-    if (nx && w - cw > 44) {
+    if (peek) {
       const px = x + cw + 10;
-      const pw = w - cw - 10;
-      ctx.globalAlpha = 0.55;
+      const pw = peek;
+      ctx.globalAlpha = 0.6;
       ctx.fillStyle = "rgba(170, 195, 230, 0.05)";
       roundRect(ctx, px, y + h * 0.12, pw, h * 0.76, 9);
       ctx.fill();
@@ -1230,14 +1279,14 @@
       roundRect(ctx, px + 0.5, y + h * 0.12 + 0.5, pw - 1, h * 0.76 - 1, 9);
       ctx.stroke();
       ctx.globalAlpha = 1;
-      ctx.font = font(10, 700);
-      ctx.fillStyle = C.faint;
+      ctx.font = font(11, 700);
+      ctx.fillStyle = C.muted;
       ctx.textAlign = "left";
       ctx.textBaseline = "top";
-      ctx.fillText(L("luego", "next"), px + 8, y + h * 0.12 + 7, pw - 12);
-      ctx.fillStyle = C.muted;
+      ctx.fillText(L("luego", "next"), px + 8, y + h * 0.12 + 6);
+      ctx.fillStyle = C.text;
       ctx.textBaseline = "middle";
-      fitLine(ctx, loc(nx, "persona") || nx.label, px + 8, y + h * 0.5, pw - 14, 14, 800, 10);
+      fitLine(ctx, loc(nx, "persona") || nx.label, px + 8, y + h * 0.55, pw - 14, 15, 800, 12);
     }
   }
 
@@ -1516,12 +1565,8 @@
       if (art) drawArt(ctx, art, { x: pad, y: pad, w: artW, h: artH }, info);
       const x0 = pad + (art ? artW + 12 : 0);
       const tw = w - x0 - pad;
-      ctx.font = font(22, 800, true);
       ctx.fillStyle = run.done ? C.done : C.text;
-      ctx.textAlign = "right";
-      ctx.textBaseline = "middle";
-      ctx.fillText(cd, w - pad, pad + 12);
-      const cdW = ctx.measureText(cd).width + 10;
+      const cdW = secCount(ctx, cd, w - pad, pad + 12, 22, "right", run.done) + 10;
       ctx.fillStyle = C.text;
       ctx.textAlign = "left";
       fitLine(ctx, title, x0, pad + 12, tw - cdW, 16, 800, 11);
@@ -1543,11 +1588,8 @@
     const rcx = w - pad - ringR - 2;
     const rcy = pad + ringR + 1;
     V.ring(ctx, rcx, rcy, ringR, run.done ? 1 : 1 - run.frac, { color: run.done ? C.done : C.target, width: compact ? 4 : 5 });
-    ctx.font = font(ringR > 18 ? 15 : 12, 800, true);
     ctx.fillStyle = C.text;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(cd, rcx, rcy + 1);
+    secCount(ctx, cd, rcx, rcy + 1, (ringR > 18 ? 15 : 12) - (cd.length > 2 ? 2 : 0), "center", run.done);
     const headW = rcx - ringR - pad * 2;
     ctx.textAlign = "left";
     ctx.fillStyle = C.text;

@@ -1654,7 +1654,9 @@
           "The persona card or story arc for this step, with the time left and what comes next. No judging mid-take."
         ),
         artFor: (p) =>
-          p && p.kind === "story" ? { draw: G.art.story, aspect: 3.2, stackAspect: 2, plain: true } : { draw: G.art.persona, aspect: 2.6, stackAspect: 1.5, plain: true },
+          p && p.kind === "story" ? { draw: G.art.story, aspect: 3.2, stackAspect: 2, plain: true } : { draw: G.art.persona, aspect: 3.4, stackAspect: 4, plain: true },
+        // A persona card's words: what to say with it, then how
+        cueFor: (p) => [p && p.kind === "persona" ? G.loc(p, "intent") : "", G.loc(p, "cue")].filter(Boolean).join(" "),
         doneText: L("Toma completa", "Take complete"),
         chapters: (d) => {
           const out = d.stepChapters();

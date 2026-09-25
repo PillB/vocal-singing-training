@@ -278,6 +278,7 @@
       "ex.stageGuideMore": "Ver todos los pasos y consejos",
       // Design: coach-strip — the stage guide while practising: the step the clock is on
       "ex.stageNow": "Ahora · paso {n} de {total}",
+      "ex.holdsEmpty": "Tus notas sostenidas (2 s o más) aparecen aquí",
       "start.kickerBack": "Continúa donde lo dejaste",
       "start.kickerGuided": "Sesión guiada en curso",
       "start.titleNew": "Tu primera práctica, en 5 minutos",
@@ -1195,6 +1196,7 @@
       "ex.stageGuideMore": "See all the steps and tips",
       // Design: coach-strip
       "ex.stageNow": "Now · step {n} of {total}",
+      "ex.holdsEmpty": "Your holds (2 s or longer) appear here",
       "start.kickerBack": "Pick up where you left off",
       "start.kickerGuided": "Guided session in progress",
       "start.titleNew": "Your first practice, in 5 minutes",

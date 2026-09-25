@@ -310,6 +310,16 @@ test.describe("Coach strip: the mode and its cue on the stage", () => {
     await expect(page.locator("#stage-guide-k")).toHaveText("Qué vas a hacer");
     await expect(page.locator("#stage-guide-now")).toBeHidden();
     await start(page);
+    // Beside a live picture the picture's own stage is the step line: the
+    // clock's guess is not shown next to it
+    await expect(page.locator("#mode-focus .mode-panel.has-viz")).toBeVisible();
+    await expect(page.locator("#stage-guide")).toBeHidden();
+    // A panel without a picture (words only) still gets the clock's step
+    await page.evaluate(() => {
+      const panel = document.querySelector("#mode-focus .mode-panel.has-viz");
+      panel.querySelectorAll(".vz").forEach((v) => v.remove());
+      panel.classList.remove("has-viz");
+    });
     const now = page.locator("#stage-guide-now");
     await expect(now).toBeVisible();
     await expect(page.locator("#stage-now-k")).toHaveText(/^Ahora · paso 1 de (\d+)$/);

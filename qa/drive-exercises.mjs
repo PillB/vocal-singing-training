@@ -209,11 +209,14 @@ async function runOne(browser, ex, vpName, variant) {
     await page.screenshot({ path: path.join(dir, "9-stopped.png") });
     rec.shots.push("9-stopped.png");
     rec.probes.stopped = await probe(page);
-    // After Stop the page moves to the rating card; the picture's review is
-    // back up on the stage
+    // After Stop the page may move on to the rating card; bring the stage back
+    // up to just under the sticky header and exercise bar (as the app does)
     await page.evaluate(() => {
       const st = document.getElementById("highway-stage");
-      if (st) window.scrollTo(0, Math.max(0, st.getBoundingClientRect().top + window.scrollY - 8));
+      const root = getComputedStyle(document.documentElement);
+      const chrome =
+        (parseFloat(root.getPropertyValue("--header-h")) || 0) + (parseFloat(root.getPropertyValue("--ex-chrome-h")) || 0);
+      if (st) window.scrollTo({ top: Math.max(0, st.getBoundingClientRect().top + window.scrollY - chrome - 8), behavior: "instant" });
     });
     await page.waitForTimeout(400);
     await page.screenshot({ path: path.join(dir, "9b-review.png") });

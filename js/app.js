@@ -2044,6 +2044,9 @@
     state.timer.remaining = timerSec;
     $("#timer-display").textContent = timerSec ? formatTime(timerSec) : "—";
     $("#timer-display").style.opacity = timerSec ? "1" : "0.45";
+    // No clock for this exercise (its picture keeps its own time): no lone
+    // dash beside "En vivo"
+    $("#timer-display").hidden = !timerSec;
 
     $("#playback-area").innerHTML = "";
     $("#level-fill").style.width = "0%";
@@ -4450,7 +4453,7 @@
       : stored;
     el.innerHTML = logs.length
       ? logs.map((l) => `<span class="pill">${l.seconds}s</span>`).join("")
-      : `<span class="muted">Holds appear here automatically (≥2s)</span>`;
+      : `<span class="muted">${escapeHtml(tt("ex.holdsEmpty"))}</span>`;
   }
 
   /* —— Recording —— */

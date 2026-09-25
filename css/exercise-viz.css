@@ -63,8 +63,14 @@
     display: none;
   }
   /* Beside a button a phone leaves the title ~120 px: two lines rather than
-     "DICCIÓN · ES…" */
+     "DICCIÓN · ES…". Under ~11rem the buttons move to their own line, so a
+     long title is never cut. */
+  .mode-panel.has-viz .viz-head {
+    flex-wrap: wrap;
+    row-gap: 0.2rem;
+  }
   .mode-panel.has-viz .viz-head .mode-title {
+    flex: 1 1 11rem;
     white-space: normal;
     display: -webkit-box;
     -webkit-line-clamp: 2;
@@ -145,10 +151,18 @@
   position: absolute;
 }
 
+/* While practising, a picture shows the step it is on (its own phases, takes
+   or rungs). The stage guide's "Ahora · paso n de N" only divides the clock
+   into equal parts, so beside a picture it counted different steps and fell
+   behind: one step line, the picture's. Idle, the guide lists the steps. */
+.mode-focus.mode-focus-live:has(.mode-panel.has-viz) .stage-guide.is-now {
+  display: none;
+}
+
 /* Landscape phones: every pixel of height goes to the picture. The page
    header already names the exercise, and the picture writes its own words. */
 @media (max-height: 500px) {
-  /* The step line under the picture would take a fifth of its height */
+  /* The step list under the picture would take a fifth of its height */
   .mode-focus.mode-focus-live:has(.mode-panel.has-viz) .stage-guide {
     display: none;
   }

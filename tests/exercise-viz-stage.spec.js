@@ -68,8 +68,11 @@ async function takeAndStop(page) {
       return { top: r.top, bottom: r.bottom };
     };
     const buttons = [...document.querySelectorAll("#metrics-card .rate-btn")].map((b) => b.getBoundingClientRect());
+    const root = getComputedStyle(document.documentElement);
     return {
       vh: innerHeight,
+      // the sticky page header and exercise bar
+      chrome: (parseFloat(root.getPropertyValue("--header-h")) || 0) + (parseFloat(root.getPropertyValue("--ex-chrome-h")) || 0),
       review: box("#mode-focus .mode-panel.has-viz.is-replay"),
       q: box("#rate-q"),
       buttonsBottom: Math.max(...buttons.map((r) => r.bottom)),
@@ -82,7 +85,7 @@ test.describe("after Stop: the picture's review, then the rating", () => {
   test("phone: the review stays whole; the card is at most one screen below", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     const r = await takeAndStop(page);
-    expect(r.review.top, "the review is not scrolled away").toBeGreaterThanOrEqual(0);
+    expect(r.review.top, "the review is not under the sticky header").toBeGreaterThanOrEqual(r.chrome - 1);
     expect(r.review.bottom, "the review ends on screen").toBeLessThanOrEqual(r.vh + 1);
     expect(r.q.top - r.vh, "¿Cómo te fue? within one screen below").toBeLessThanOrEqual(r.vh);
     expect(r.focus).toBe("rate-q");
@@ -94,7 +97,7 @@ test.describe("after Stop: the picture's review, then the rating", () => {
   test("desktop: the review stays whole; the question starts in view", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     const r = await takeAndStop(page);
-    expect(r.review.top).toBeGreaterThanOrEqual(0);
+    expect(r.review.top, "the review is not under the sticky header").toBeGreaterThanOrEqual(r.chrome - 1);
     expect(r.review.bottom).toBeLessThanOrEqual(r.vh + 1);
     expect(r.q.top, "¿Cómo te fue? starts on screen").toBeLessThanOrEqual(r.vh);
     expect(r.buttonsBottom - r.vh, "the answers a short scroll away").toBeLessThanOrEqual(r.vh * 0.25);

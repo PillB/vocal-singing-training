@@ -119,7 +119,44 @@ test.describe("guided pictures", () => {
     await page.locator("#mode-focus [data-next-step]").click();
     const after = await vizState(page, () => window.VTApp.getState().modeInstance.viz.run.index);
     expect(after).toBe(before + 1);
-    await expect(page.locator("#mode-focus [data-phase]")).toHaveText(/Cuello|cuello/);
+    // Stand tall first, as the exercise says; then the jaw
+    await expect(page.locator("#mode-focus [data-phase]")).toHaveText(/Mandíbula/);
+  });
+
+  test("s17 walks the exercise's own five steps; the posture step is not counted as a release", async ({ page }) => {
+    await boot(page);
+    const out = await page.evaluate(() => {
+      const ex = window.VT_EXERCISES.singing.find((e) => e.id === "s17-jaw-neck-release");
+      const m = window.VTPracticeModes.get("releaseFlow");
+      const host = document.createElement("div");
+      document.body.appendChild(host);
+      m.mount(host, Object.assign({}, ex.practice));
+      let el = 0;
+      const feed = (sec) => {
+        for (let i = 0; i < Math.round(sec / 0.05); i++) {
+          el += 50;
+          m.onFrame({ dtMs: 50, elapsedMs: el, rms: 0, voiced: false, sounding: false });
+        }
+      };
+      const run = m.viz.run;
+      const phases = run.phases.map((p) => ({ short: p.shortEs || p.short, setup: !!p.setup }));
+      m.onStart?.();
+      feed(run.phases[0].sec + 0.5);
+      const afterPosture = m.onStop({}).patches;
+      m.onStart?.();
+      el = 0;
+      feed(run.phases[0].sec + run.phases[1].sec + 0.5);
+      const afterJaw = m.onStop({}).patches;
+      host.remove();
+      return { steps: ex.steps.length, phases, afterPosture, afterJaw, total: ex.practice.phases.reduce((a, p) => a + p.sec, 0) };
+    });
+    expect(out.phases.length, "one step per step of the exercise's text").toBe(out.steps);
+    expect(out.phases[0].setup).toBe(true);
+    expect(out.phases[0].short).toBe("De pie");
+    expect(out.phases[out.phases.length - 1].short).toBe("Pre-bostezos");
+    expect(out.total, "fits the daily session's 105 s").toBeLessThanOrEqual(105);
+    expect(out.afterPosture, "standing tall is not a release").toEqual({});
+    expect(out.afterJaw).toEqual({ phasesDone: 1 });
   });
 
   test("s19 counts sung holds and compares closed with open after Stop", async ({ page }) => {
@@ -251,8 +288,11 @@ test.describe("guided pictures", () => {
     await expectPicture(page, 150);
     await page.waitForTimeout(12000);
     await stopAndExpectReview(page);
-    const labels = await vizState(page, () => window.VTApp.getState().modeInstance.viz.chapters.map((c) => c.label));
-    expect(labels.slice(0, 3)).toEqual(["A · con bolígrafo", "B · sin bolígrafo", "A y luego B"]);
+    const chs = await vizState(page, () => window.VTApp.getState().modeInstance.viz.chapters.map((c) => ({ label: c.label, sub: c.sub })));
+    expect(chs.slice(0, 3).map((c) => c.label)).toEqual(["A · con bolígrafo", "B · sin bolígrafo", "A y luego B"]);
+    // Written out, so a short count never reads as "cuenta 1–6" cut from 1–60
+    expect(chs[0].sub).toMatch(/^números del 1 al \d+$/);
+    expect(chs[1].sub).toMatch(/^números del 1 al \d+$/);
   });
 
   test("v7 keeps the page still, grows the ribbon and cuts the take by minute", async ({ page }) => {
@@ -305,6 +345,9 @@ test.describe("guided pictures", () => {
     await expectPicture(page, 120);
     await expect(page.locator("#mode-focus [data-week-head]")).toContainText("Semana 3");
     const m = await vizState(page, () => window.VTApp.getState().modeInstance._weekModel());
+    // The marks' key, in the Plan tab's words, drawn because weeks 1–2 have reviews
+    const legend = await vizState(page, () => window.VTApp.getState().modeInstance.viz._model.legend);
+    expect(legend).toEqual(["mejoró", "aún no, otra semana"]);
     expect(m.days.length).toBe(7);
     expect(m.days.filter((d) => d.today).length, "today is in the week").toBe(1);
     expect(m.days.filter((d) => d.state === "focus").length, "two days with the focus").toBe(2);
@@ -374,8 +417,65 @@ test.describe("guided pictures on a phone", () => {
         })
       );
       for (const s of tap) expect(s, "44 px taps").toBeGreaterThanOrEqual(43.5);
+      if (id === "v7-record-review") {
+        // The minimum gets its own line rather than "el mínimo llega e…",
+        // and the clock says what it counts
+        const head = await vizState(page, () => window.VTApp.getState().modeInstance.viz._head);
+        expect(head.head).toBe("Grabando");
+        expect(head.minLine).toMatch(/^el mínimo llega en \d:\d\d$/);
+        expect(head.clockWord).toBe("grabado");
+      }
     });
   }
+
+  test("every step keeps its name under the bar at phone width, apart and in order", async ({ page }) => {
+    await boot(page);
+    const out = await page.evaluate(() => {
+      const res = {};
+      for (const [id, mode] of [
+        ["v15-gestures", "gestureReps"],
+        ["v16-facial-expression", "facePhases"],
+        ["s17-jaw-neck-release", "releaseFlow"],
+        ["s19-soft-palate-surprise", "openSpace"],
+        ["v4-articulation-pen", "articulationContrast"],
+        ["v5-neutral-ears", "recordOnly"]
+      ]) {
+        const ex = [...window.VT_EXERCISES.vocal, ...window.VT_EXERCISES.singing].find((e) => e.id === id);
+        const m = window.VTPracticeModes.get(mode);
+        // The phone's picture: a 390 px screen gives the canvas ~294 px
+        const host = document.createElement("div");
+        host.style.cssText = "position:fixed;left:0;top:0;width:294px";
+        document.body.appendChild(host);
+        m.mount(host, Object.assign({}, ex.practice));
+        Object.assign(m.viz.surface.canvas.style, { width: "294px", height: "430px", flex: "none" });
+        m.viz.surface.drawNow();
+        const got = m.viz._stepLabels;
+        res[id] = { count: m.viz.run.count, px: got && got.px, labels: got ? got.labels : [], size: [m.viz.surface.w, m.viz.surface.h] };
+        host.remove();
+      }
+      return res;
+    });
+    for (const [id, r] of Object.entries(out)) {
+      // v5's seven cards and beats can't all be named in 294 px: the ones
+      // furthest from the current step give way, never to a bare number
+      if (id === "v5-neutral-ears") expect(r.labels.length, id).toBeGreaterThanOrEqual(r.count - 2);
+      else expect(r.labels.length, id + ": a name for every step (" + r.size + ")").toBe(r.count);
+      expect(r.px, id + ": 10 px or more").toBeGreaterThanOrEqual(10);
+      const sorted = r.labels.slice().sort((a, b) => a.l - b.l);
+      expect(sorted.map((q) => q.i), id + ": in the steps' order").toEqual(r.labels.map((q) => q.i).sort((a, b) => a - b));
+      for (let k = 1; k < sorted.length; k++) expect(sorted[k].l - sorted[k - 1].r, id + ": names apart").toBeGreaterThanOrEqual(5);
+      for (const q of r.labels) expect(q.text, id + ": a name, not a number").not.toMatch(/^\d+$/);
+    }
+  });
+
+  test("v9 on a phone: the action is whole, on two lines", async ({ page }) => {
+    await boot(page);
+    await open(page, "v9-12-week");
+    await page.waitForTimeout(300);
+    const act = await vizState(page, () => window.VTApp.getState().modeInstance.viz._act);
+    expect(act.lines).toBeGreaterThanOrEqual(1);
+    expect(act.lines).toBeLessThanOrEqual(2);
+  });
 
   test("v5: skipping to the end still leaves a take to hear", async ({ page }) => {
     await boot(page);
@@ -391,5 +491,11 @@ test.describe("guided pictures on a phone", () => {
     await page.locator("#mode-focus [data-ch-play]").click();
     await expect.poll(() => vizState(page, () => !!window.VTApp.getState().modeInstance.viz.player.playing), { timeout: 4000 }).toBe(true);
     await expectPicture(page, 200);
+    // Each card's row says what it asked for: what to listen for
+    const hint = await vizState(page, () => {
+      const v = window.VTApp.getState().modeInstance.viz;
+      return v.chapterHint(v.run.phases[0]);
+    });
+    expect(hint).toBe("Abre con un cumplido concreto y verdadero.");
   });
 });

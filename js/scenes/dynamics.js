@@ -20,7 +20,7 @@
   "use strict";
   const V = global.VTViz;
   if (!V) return;
-  const { C, L, font, clamp, panel, roundRect, fitText, fmtNum, fmtSec, glyph, hatch } = V;
+  const { C, L, font, clamp, panel, roundRect, fmtNum, fmtSec, glyph, hatch } = V;
 
   /* —— shared bits —— */
 
@@ -35,17 +35,121 @@
   function centsText(n) {
     return signed(Math.round(n), 0) + "¢";
   }
+  /**
+   * Words at a point. With opts.max they are never condensed to fit (judges
+   * read squeezed canvas text as broken): a smaller size down to opts.min
+   * (default 10 px), then the first of opts.alt that fits, else left out.
+   * Returns the width drawn (0 when nothing was).
+   */
   function text(ctx, s, x, y, opts = {}) {
     ctx.font = opts.font || font(11, 700);
     ctx.fillStyle = opts.color || C.muted;
     ctx.textAlign = opts.align || "left";
     ctx.textBaseline = opts.baseline || "middle";
-    ctx.fillText(s, x, y, opts.max || 9999);
+    if (opts.max != null) {
+      const cands = [s].concat(opts.alt || []);
+      const base = ctx.font;
+      const size = parseFloat((base.match(/(\d+(?:\.\d+)?)px/) || [])[1] || "11");
+      const min = Math.min(size, opts.min || 10);
+      for (const c of cands) {
+        for (let px = size; px >= min; px--) {
+          ctx.font = base.replace(/(\d+(?:\.\d+)?)px/, `${px}px`);
+          const tw = ctx.measureText(c).width;
+          if (tw <= opts.max) {
+            ctx.fillText(c, x, y);
+            return tw;
+          }
+        }
+      }
+      ctx.font = base;
+      return 0;
+    }
+    ctx.fillText(s, x, y);
+    return ctx.measureText(s).width;
   }
-  /** A tiny hatched swatch + words: "measured with care" notes. */
+
+  /** Words, with a unit kept on the line of its number ("12 dB", "0,21 s"). */
+  function wordsOf(s) {
+    const out = [];
+    for (const wd of String(s).split(/ +/).filter(Boolean)) {
+      if (out.length && /^(s|ms|dB|%|¢)[.,;:)]?$/.test(wd) && /\d$/.test(out[out.length - 1])) out[out.length - 1] += " " + wd;
+      else out.push(wd);
+    }
+    return out;
+  }
+
+  /** Words broken at spaces into lines no wider than maxW (at the current font). */
+  function wrapWords(ctx, s, maxW) {
+    const out = [];
+    let line = "";
+    for (const wd of wordsOf(s)) {
+      const test = line ? line + " " + wd : wd;
+      if (line && ctx.measureText(test).width > maxW) {
+        out.push(line);
+        line = wd;
+      } else line = test;
+    }
+    if (line) out.push(line);
+    return out;
+  }
+
+  /**
+   * Plan a headline that fits maxW without being condensed: one line from
+   * `px` down to `one`, else up to `lines` lines from `px` down to `min`.
+   * Returns { lines, size, lineH, h } for fitDraw.
+   */
+  function fitPlan(ctx, s, maxW, o = {}) {
+    const px = o.px || 14;
+    const min = Math.min(px, o.min || 11);
+    const weight = o.weight || 800;
+    const maxLines = o.lines || 2;
+    const one = Math.max(min, o.one != null ? o.one : px - 2);
+    let pick = null;
+    for (let z = px; z >= one && !pick; z--) {
+      ctx.font = font(z, weight);
+      if (ctx.measureText(s).width <= maxW) pick = { size: z, lines: [String(s)] };
+    }
+    for (let z = px; z >= min && !pick && maxLines > 1; z--) {
+      ctx.font = font(z, weight);
+      const ls = wrapWords(ctx, s, maxW);
+      if (ls.length <= maxLines && ls.every((l) => ctx.measureText(l).width <= maxW)) pick = { size: z, lines: ls };
+    }
+    if (!pick) {
+      // Too long even small: whole words, the rest left out
+      ctx.font = font(min, weight);
+      const ls = wrapWords(ctx, s, maxW);
+      const keep = ls.slice(0, maxLines);
+      if (ls.length > maxLines) {
+        let last = keep[keep.length - 1];
+        while (last.includes(" ") && ctx.measureText(last + " …").width > maxW) last = last.slice(0, last.lastIndexOf(" "));
+        keep[keep.length - 1] = last + " …";
+      }
+      pick = { size: min, lines: keep };
+    }
+    const lineH = Math.round(pick.size * 1.2);
+    return { lines: pick.lines, size: pick.size, weight, lineH, h: (pick.lines.length - 1) * lineH + pick.size };
+  }
+  /** Draw a fitPlan with its first line centred on y (textBaseline middle). */
+  function fitDraw(ctx, plan, x, y) {
+    ctx.font = font(plan.size, plan.weight);
+    ctx.textBaseline = "middle";
+    plan.lines.forEach((l, i) => ctx.fillText(l, x, y + i * plan.lineH));
+  }
+
+  /**
+   * A tiny hatched swatch + words: "measured with care" notes. `s` may be a
+   * list, longest first: the first that fits is written (never condensed).
+   */
   function hatchNote(ctx, s, x, y, maxW, color = C.air) {
     ctx.font = font(10, 700);
-    const tw = Math.min(ctx.measureText(s).width, maxW - 16);
+    const cands = [].concat(s);
+    let t = cands.find((c) => ctx.measureText(c).width <= maxW - 16);
+    if (t == null) {
+      t = cands[cands.length - 1];
+      while (t.includes(" ") && ctx.measureText(t + " …").width > maxW - 16) t = t.slice(0, t.lastIndexOf(" "));
+      t += " …";
+    }
+    const tw = ctx.measureText(t).width;
     ctx.fillStyle = "rgba(6, 10, 16, 0.82)";
     roundRect(ctx, x - 3, y - 8, tw + 22, 16, 4);
     ctx.fill();
@@ -54,7 +158,7 @@
     ctx.fillStyle = color;
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
-    ctx.fillText(s, x + 14, y + 0.5, maxW - 16);
+    ctx.fillText(t, x + 14, y + 0.5);
   }
 
   /** A row of small keys (swatch + word) that wraps to what fits. */
@@ -135,13 +239,18 @@
     }
     const notes = [];
     if (m.processed) {
+      const short = L("Mic con auto-volumen: forma aprox.", "Mic auto-levels: shape approx.");
       notes.push(
         tiny
-          ? L("Mic con auto-volumen: forma aprox.", "Mic auto-levels: shape approx.")
-          : L(
-              "Tu micrófono iguala el volumen (control automático): la subida se ve más plana de lo que suena",
-              "Your mic evens out the volume (auto gain): the swell looks flatter than it sounds"
-            )
+          ? short
+          : [
+              L(
+                "Tu micrófono iguala el volumen (control automático): la subida se ve más plana de lo que suena",
+                "Your mic evens out the volume (auto gain): the swell looks flatter than it sounds"
+              ),
+              L("Tu micrófono iguala el volumen: la subida se ve más plana", "Your mic evens out the volume: the swell looks flatter"),
+              short
+            ]
       );
     }
     if (m.clipped) notes.push(L("Muy cerca del micrófono: satura", "Too close to the mic: it clips"));
@@ -181,9 +290,11 @@
             (medPk != null ? ` · pitch at the peak ${centsText(medPk)}` : "")
         )
       : L("Sin reguladores todavía: empieza suave, crece y vuelve", "No swells yet: start soft, grow, come back");
-    fitText(ctx, head, pad, pad + 8, w - pad * 2, tiny ? 12 : 14, 800, 10);
+    // Whole words: a second line when one does not hold them
+    const plan = fitPlan(ctx, head, w - pad * 2, { px: tiny ? 12 : 14, one: tiny ? 11 : 12, min: 11, lines: tiny ? 1 : 2 });
+    fitDraw(ctx, plan, pad, pad + 8);
     if (!done.length) return;
-    const top = pad + (tiny ? 18 : 24);
+    const top = pad + (tiny ? 18 : 24) + (plan.lines.length - 1) * plan.lineH;
     const legendH = tiny ? 0 : 18;
     const list = done.slice(-(w < 420 ? 4 : 6));
     const n = list.length;
@@ -276,22 +387,38 @@
     // Where the peak landed
     const px = plot.x + ((s.peakFrac * s.dur) / span) * plot.w;
     glyph(ctx, "tri", px, yOf(s.rise) - 9, C.text, 4);
-    const words = [
-      dbText(s.rise),
-      L(`pico ${Math.round(s.peakFrac * 100)} %`, `peak ${Math.round(s.peakFrac * 100)}%`),
-      s.peakCents != null ? L(`afin. ${centsText(s.peakCents)}`, `pitch ${centsText(s.peakCents)}`) : ""
-    ].filter(Boolean);
+    // The peak's place said as a share of the swell's own length (51 %: the
+    // middle is the aim), or as the second it came at when room is short
+    const pct = Math.round(s.peakFrac * 100);
+    const at = fmtSec(s.peakFrac * s.dur, 1);
+    const rise = dbText(s.rise);
+    const peak = [
+      L(`pico al ${pct} % de la duración`, `peak at ${pct}% of its length`),
+      L(`pico a los ${at}`, `peak at ${at}`),
+      L(`pico ${at}`, `peak ${at}`)
+    ];
+    const pitch = s.peakCents != null ? L(`afin. ${centsText(s.peakCents)}`, `pitch ${centsText(s.peakCents)}`) : "";
+    const drift = s.peakCents != null && Math.abs(s.peakCents) >= 20;
+    const driftWord = drift ? (s.peakCents > 0 ? L(" · subió con el volumen", " · rose with the volume") : L(" · bajó", " · dropped")) : "";
+    const maxW = w - 12;
     if (small) {
-      text(ctx, words.join(" · "), x + 7, y + h - 8, { font: font(10, 700), color: C.text, max: w - 12 });
+      // One line: as much as fits, rise first, never condensed
+      const withPitch = pitch ? peak.map((p) => `${rise} · ${p} · ${pitch}`) : [];
+      text(ctx, withPitch[0] || `${rise} · ${peak[0]}`, x + 7, y + h - 8, {
+        font: font(10, 700),
+        color: C.text,
+        max: maxW,
+        alt: withPitch.slice(1).concat(peak.map((p) => `${rise} · ${p}`), [rise])
+      });
     } else {
-      text(ctx, words[0] + " · " + words[1], x + 7, y + h - 22, { font: font(11, 800), color: C.text, max: w - 12 });
-      const drift = s.peakCents != null && Math.abs(s.peakCents) >= 20;
-      if (words[2]) {
-        text(ctx, words[2] + (drift ? (s.peakCents > 0 ? L(" · subió con el volumen", " · rose with the volume") : L(" · bajó", " · dropped")) : ""), x + 7, y + h - 8, {
-          font: font(10, 700),
-          color: drift ? C.warn : C.muted,
-          max: w - 12
-        });
+      text(ctx, `${rise} · ${peak[0]}`, x + 7, y + h - 22, {
+        font: font(11, 800),
+        color: C.text,
+        max: maxW,
+        alt: peak.slice(1).map((p) => `${rise} · ${p}`).concat([rise])
+      });
+      if (pitch) {
+        text(ctx, pitch + driftWord, x + 7, y + h - 8, { font: font(10, 700), color: drift ? C.warn : C.muted, max: maxW, alt: [pitch] });
       }
     }
   }
@@ -395,7 +522,12 @@
 
   /** The first ~300 ms of one onset: its envelope, the air before the tone, the spike. */
   function onsetPlot(ctx, box, res, opts = {}) {
-    const { x, y, w, h } = box;
+    const { x, w } = box;
+    // With its words, the plot keeps a band on top for the spike's ▲×n and
+    // the dashed line's key, so neither sits on the numbers above or the trace
+    const head = opts.labels ? 14 : 0;
+    const y = box.y + head;
+    const h = Math.max(10, box.h - head);
     const shape = res.shape || [];
     const n = shape.length || 136;
     const kind = opts.kind || res.kind2 || res.kind;
@@ -411,7 +543,10 @@
       ctx.globalAlpha = opts.faint ? 0.35 : 0.55;
       ctx.fillRect(a, y, b - a, h);
       ctx.globalAlpha = 1;
-      if (opts.labels && b - a > 34) text(ctx, L("aire", "air"), (a + b) / 2, y + 8, { align: "center", font: font(10, 800), color: C.air });
+      // Its word at the top of the hatching, where the trace is not
+      let hi = 0;
+      for (let i = on; i < n && xOf(i) <= b; i++) hi = Math.max(hi, shape[i] || 0);
+      if (opts.labels && b - a > 34 && yOf(hi) > y + 17) text(ctx, L("aire", "air"), (a + b) / 2, y + 8, { align: "center", font: font(10, 800), color: C.air });
     }
     if (opts.labels) {
       // The level the note settles at, and the time axis
@@ -423,7 +558,18 @@
       ctx.lineTo(x + w, Math.round(yOf(0.625)) + 0.5);
       ctx.stroke();
       ctx.setLineDash([]);
-      text(ctx, L("nivel estable", "settled level"), x + w - 2, yOf(0.625) - 8, { align: "right", font: font(9, 700), color: C.faint });
+      // Its name as a key in the band above, not on the line the trace crosses
+      ctx.font = font(10, 700);
+      const kw = ctx.measureText(L("nivel estable", "settled level")).width;
+      const kx = x + w - kw - 2;
+      ctx.strokeStyle = C.gridStrong;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      ctx.moveTo(kx - 20, box.y + 6.5);
+      ctx.lineTo(kx - 5, box.y + 6.5);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      text(ctx, L("nivel estable", "settled level"), kx, box.y + 6.5, { font: font(10, 700), color: C.faint });
       for (let ms = 0; ms <= 300; ms += 100) {
         const px = xOf(on + (ms / 1000) * 400);
         if (px > x + w - 2) break;
@@ -479,13 +625,18 @@
     }
   }
 
+  /** The onset's numbers, longest wording first (the card writes the first that fits). */
   function onsetNumbers(res) {
-    if (!res || res.model) return "";
-    if (res.kind2 === "unmeasured") return L("la pantalla se saltó cuadros: sin medida", "the screen skipped frames: no measure");
-    return L(
-      `subida ${Math.round(res.riseMs)} ms · pico ×${fmtNum(res.overshoot, 1)} · aire antes ${Math.round(res.leadMs)} ms`,
-      `rise ${Math.round(res.riseMs)} ms · peak ×${fmtNum(res.overshoot, 1)} · air first ${Math.round(res.leadMs)} ms`
-    );
+    if (!res || res.model) return [""];
+    if (res.kind2 === "unmeasured") return [L("la pantalla se saltó cuadros: sin medida", "the screen skipped frames: no measure"), L("sin medida", "no measure")];
+    const r = Math.round(res.riseMs);
+    const o = fmtNum(res.overshoot, 1);
+    const a = Math.round(res.leadMs);
+    return [
+      L(`subida ${r} ms · pico ×${o} · aire antes ${a} ms`, `rise ${r} ms · peak ×${o} · air first ${a} ms`),
+      L(`subida ${r} ms · pico ×${o} · aire ${a} ms`, `rise ${r} ms · peak ×${o} · air ${a} ms`),
+      L(`subida ${r} ms · aire ${a} ms`, `rise ${r} ms · air ${a} ms`)
+    ];
   }
 
   /** The big card: the latest onset, named, with its numbers. */
@@ -498,32 +649,38 @@
     const pad = 8;
     const small = h < 110;
     if (!res) {
-      text(ctx, L("Aquí se dibuja cada inicio", "Each onset is drawn here"), x + w / 2, y + h / 2 - 8, {
-        align: "center",
-        font: font(small ? 11 : 13, 700),
-        color: C.muted,
-        max: w - 16
-      });
-      text(ctx, L("cuando termina, no mientras suena", "once it's over, not while it sounds"), x + w / 2, y + h / 2 + 10, {
-        align: "center",
-        font: font(10, 600),
-        color: C.faint,
-        max: w - 16
-      });
+      // Two short lines, each whole (wrapped, never condensed)
+      ctx.textAlign = "center";
+      ctx.fillStyle = C.muted;
+      const a = fitPlan(ctx, L("Aquí se dibuja cada inicio", "Each onset is drawn here"), w - 16, { px: small ? 12 : 13, one: 11, min: 11, lines: 2, weight: 700 });
+      ctx.fillStyle = C.muted;
+      const b = fitPlan(ctx, L("cuando termina, no mientras suena", "once it's over, not while it sounds"), w - 16, { px: 11, one: 10, min: 10, lines: 2, weight: 600 });
+      const hh = a.h + 6 + b.h;
+      const y0 = y + h / 2 - hh / 2;
+      ctx.fillStyle = C.muted;
+      fitDraw(ctx, a, x + w / 2, y0 + a.size / 2);
+      ctx.fillStyle = C.faint;
+      fitDraw(ctx, b, x + w / 2, y0 + a.h + 6 + b.size / 2);
+      ctx.textAlign = "left";
       return;
     }
     const kind = res.kind2 || res.kind;
     const titleY = y + (small ? 10 : 14);
     kindGlyph(ctx, kind, x + pad + 6, titleY, small ? 5 : 7);
-    ctx.textAlign = "left";
-    ctx.textBaseline = "middle";
-    ctx.fillStyle = (KIND[kind] || KIND.unmeasured).color;
     const title = res.asked ? `${kindWord(kind)} · ${L("ejemplo", "example")}` : kindWord(kind);
-    fitText(ctx, title, x + pad + 18, titleY, small ? w * 0.42 : w * 0.6, small ? 13 : 17, 800, 11);
+    text(ctx, title, x + pad + 18, titleY, {
+      font: font(small ? 13 : 17, 800),
+      color: (KIND[kind] || KIND.unmeasured).color,
+      max: w - pad * 2 - 18,
+      min: 11,
+      alt: [kindWord(kind)]
+    });
+    // The numbers take their own line under the name, on a small card too
+    // (beside it they ran into "Brusco · ejemplo")
     const numbers = onsetNumbers(res);
-    if (!small) text(ctx, numbers, x + pad, titleY + 18, { font: font(11, 700), color: C.text, max: w - pad * 2 });
-    else text(ctx, numbers, x + w - pad, titleY, { align: "right", font: font(9, 700), color: C.muted, max: w * 0.52 });
-    const top = small ? titleY + 10 : titleY + 30;
+    const numY = small ? titleY + 15 : titleY + 18;
+    text(ctx, numbers[0], x + pad, numY, { font: font(small ? 10 : 11, 700), color: small ? C.muted : C.text, max: w - pad * 2, alt: numbers.slice(1) });
+    const top = small ? numY + 8 : titleY + 30;
     const bottom = y + h - (small ? 6 : 18);
     if (kind === "unmeasured") return;
     onsetPlot(ctx, { x: x + pad, y: top, w: w - pad * 2, h: Math.max(20, bottom - top) }, res, { labels: !small, kind });
@@ -551,10 +708,12 @@
         roundRect(ctx, x + 0.75, y + 0.75, cw - 1.5, ch - 1.5, 7);
         ctx.stroke();
       }
-      kindGlyph(ctx, k, x + 11, y + 11, 5);
-      text(ctx, kindWord(k), x + 20, y + 11, { font: font(11, 800), color: KIND[k].color, max: cw * 0.5 });
+      kindGlyph(ctx, k, x + 10, y + 11, 5);
+      // The kind's name whole (a size smaller, or its short form, when the
+      // cell is narrow); the small tag only where it still has room
+      const wordEnd = x + 18 + text(ctx, kindWord(k), x + 18, y + 11, { font: font(11, 800), color: KIND[k].color, max: cw - 22, alt: [kindShort(k)] });
       const tag = ex ? L("tu ejemplo", "your example") : m.phase === "contrast" ? L("pendiente", "to do") : L("referencia", "reference");
-      if (cw >= 110) text(ctx, tag, x + cw - 6, y + 11, { align: "right", font: font(9, 700), color: C.faint, max: cw * 0.4 });
+      if (cw >= 110) text(ctx, tag, x + cw - 6, y + 11, { align: "right", font: font(10, 700), color: C.faint, max: x + cw - 6 - wordEnd - 10, min: 9 });
       if (ch >= 40) {
         const py = y + 21;
         const ph = ch - 26;
@@ -612,14 +771,23 @@
       if (k) {
         const gy = withPlot || ch >= 34 ? cy + ch - 8 : cy + ch / 2;
         kindGlyph(ctx, k, cx + 8, gy, 4);
-        if (cw >= 40) text(ctx, kindShort(k), cx + 15, gy, { font: font(9, 800), color: done ? (KIND[k] || KIND.unmeasured).color : C.faint, max: cw - 18 });
+        // Its word where it fits whole; else the shape alone says the kind
+        // (each shape is named in the examples above)
+        text(ctx, kindShort(k), cx + 15, gy, { font: font(10, 800), color: done ? (KIND[k] || KIND.unmeasured).color : C.faint, max: cw - 18, min: 9 });
       } else if (cw >= 18) {
         text(ctx, String(it.num), cx + cw / 2, cy + ch / 2, { align: "center", font: font(9, 700), color: C.faint });
       }
     });
   }
 
-  function onsetHead(ctx, x, y, w, m, size) {
+  /**
+   * The ready light, the headline and the count. While the examples are
+   * asked for, the count names the example being asked for, numbered as the
+   * headline numbers it ("Ejemplo 2/6"), and is left out when the headline
+   * already says it: "Ejemplo 2/6" beside "Ejemplos 1/6" read as two answers.
+   * Returns the height the headline took beyond one line.
+   */
+  function onsetHead(ctx, x, y, w, m, size, maxLines = 2) {
     // The ready light: armed (a filled dot), sounding (a ringed dot), or waiting (a ring)
     const r = size >= 15 ? 6 : 5;
     const cx = x + r + 1;
@@ -645,17 +813,21 @@
       ctx.arc(cx, y, r - 0.5, 0, Math.PI * 2);
       ctx.stroke();
     }
-    const count =
-      m.phase === "contrast"
-        ? L(`Ejemplos ${m.step}/${m.asks.length}`, `Examples ${m.step}/${m.asks.length}`)
-        : L(`Equilibrados ${m.counts.balanced}/${m.target}`, `Balanced ${m.counts.balanced}/${m.target}`);
+    let count;
+    if (m.phase === "contrast") {
+      const n = m.asks.length;
+      const k = Math.min(n, m.step + 1);
+      count = L(`Ejemplo ${k}/${n}`, `Example ${k}/${n}`);
+      if ((m.head || "").includes(count)) count = "";
+    } else count = L(`Equilibrados ${m.counts.balanced}/${m.target}`, `Balanced ${m.counts.balanced}/${m.target}`);
     ctx.font = font(size - 1, 800, true);
-    const cwid = ctx.measureText(count).width;
-    text(ctx, count, x + w, y, { align: "right", font: font(size - 1, 800, true), color: C.text });
+    const cwid = count ? ctx.measureText(count).width + 12 : 0;
+    if (count) text(ctx, count, x + w, y, { align: "right", font: font(size - 1, 800, true), color: C.text });
     ctx.fillStyle = C.text;
     ctx.textAlign = "left";
-    ctx.textBaseline = "middle";
-    fitText(ctx, m.head || "", x + r * 2 + 8, y, Math.max(60, w - cwid - r * 2 - 22), size, 800, 10);
+    const plan = fitPlan(ctx, m.head || "", Math.max(60, w - cwid - r * 2 - 10), { px: size, one: Math.max(11, size - 2), min: 11, lines: maxLines });
+    fitDraw(ctx, plan, x + r * 2 + 8, y);
+    return (plan.lines.length - 1) * plan.lineH;
   }
 
   function onset(ctx, w, h, m) {
@@ -666,10 +838,14 @@
     const compact = h < 190;
     const narrow = w < 520;
     const headY = pad + (tiny ? 4 : 9);
-    onsetHead(ctx, pad, headY, w - pad * 2, m, tiny ? 13 : narrow ? 14 : 16);
-    let top = headY + (tiny ? 10 : 16);
+    const extra = onsetHead(ctx, pad, headY, w - pad * 2, m, tiny ? 13 : narrow ? 14 : 16, tiny ? 1 : 2);
+    let top = headY + (tiny ? 10 : 16) + extra;
     const notes = [];
-    if (m.processed) notes.push(L("Tu micrófono filtra ruido: el aire antes del tono puede no verse", "Your mic filters noise: air before the tone may not show"));
+    if (m.processed)
+      notes.push([
+        L("Tu micrófono filtra ruido: el aire antes del tono puede no verse", "Your mic filters noise: air before the tone may not show"),
+        L("Mic con filtro de ruido: el aire puede no verse", "Mic filters noise: air may not show")
+      ]);
     if (m.calNote) notes.push(m.calNote);
     if (!compact && notes.length) {
       notes.forEach((s, i) => hatchNote(ctx, s, pad + 4, top + 7 + i * 18, w - pad * 2 - 8, C.air));
@@ -723,9 +899,9 @@
         : L("Sin inicios todavía: parte del silencio y di «a»", "No onsets yet: start from silence and say 'ah'");
     ctx.fillStyle = C.text;
     ctx.textAlign = "left";
-    ctx.textBaseline = "middle";
-    fitText(ctx, head, pad, pad + 9, w - pad * 2, tiny ? 13 : 15, 800, 10);
-    let y = pad + (tiny ? 20 : 26);
+    const plan = fitPlan(ctx, head, w - pad * 2, { px: tiny ? 13 : 15, one: tiny ? 11 : 13, min: 11, lines: tiny ? 1 : 2 });
+    fitDraw(ctx, plan, pad, pad + 9);
+    let y = pad + (tiny ? 20 : 26) + (plan.lines.length - 1) * plan.lineH;
     if (!tiny) {
       const meds = ["balanced", "breathy", "abrupt"]
         .map((k) => {
@@ -736,8 +912,10 @@
         .filter(Boolean)
         .join(" · ");
       if (meds) {
-        text(ctx, L("subida mediana — ", "median rise — ") + meds, pad, y, { font: font(11, 700), color: C.muted, max: w - pad * 2 });
-        y += 18;
+        ctx.fillStyle = C.muted;
+        const mp = fitPlan(ctx, L("subida mediana — ", "median rise — ") + meds, w - pad * 2, { px: 11, one: 11, min: 11, lines: 2, weight: 700 });
+        fitDraw(ctx, mp, pad, y);
+        y += 18 + (mp.lines.length - 1) * mp.lineH;
       }
     }
     const all = m.onsets.map((r) => ({ kind: r.kind2, res: r }));
@@ -775,7 +953,7 @@
       }
       const gy = ch >= 34 ? cy + ch - 8 : cy + ch / 2;
       kindGlyph(ctx, it.kind, cx + 8, gy, 4);
-      text(ctx, kindShort(it.kind), cx + 15, gy, { font: font(9, 800), color: (KIND[it.kind] || KIND.unmeasured).color, max: cw - 18 });
+      text(ctx, kindShort(it.kind), cx + 15, gy, { font: font(10, 800), color: (KIND[it.kind] || KIND.unmeasured).color, max: cw - 18, min: 9 });
     });
   }
 
@@ -847,23 +1025,58 @@
     return cx;
   }
 
+  /**
+   * The phases as chips, each named in words (a phone showed only · · · and
+   * ———). Every phase with its mark when that fits; else the words alone;
+   * else, on a narrow panel, the phase before, this one and the next, with
+   * "n/5" beside the clock so the rest is not lost.
+   */
   function artChips(ctx, box, m) {
-    // Narrow: the phases to come are their marks alone (· · · or ———)
-    const narrow = box.w / Math.max(1, m.phases.length) < 110;
-    const items = m.phases.map((p, i) => {
-      const k = ART[p.kind] || ART.staccato;
-      const cur = i === m.phaseIdx && !m.allDone;
-      const mm = Math.floor(Math.max(0, m.remaining) / 60);
-      const ss = String(Math.floor(Math.max(0, m.remaining) % 60)).padStart(2, "0");
+    const n = m.phases.length;
+    const cur = m.allDone ? -1 : m.phaseIdx;
+    const mm = Math.floor(Math.max(0, m.remaining) / 60);
+    const ss = String(Math.floor(Math.max(0, m.remaining) % 60)).padStart(2, "0");
+    const item = (i, mark, windowed) => {
+      const k = ART[m.phases[i].kind] || ART.staccato;
+      const word = L(k.es, k.en);
       return {
-        label: narrow && !cur ? k.mark : `${L(k.es, k.en)} ${k.mark}`,
-        short: k.mark,
-        sub: cur ? `${mm}:${ss}` : "",
+        label: mark ? `${word} ${k.mark}` : word,
+        short: word,
+        sub: i === cur ? (windowed ? `${mm}:${ss} · ${i + 1}/${n}` : `${mm}:${ss}`) : "",
         // A check only for a phase sung in this take, not one skipped past
         done: (i < m.phaseIdx || m.allDone) && m.runs.some((r) => r.phaseIdx === i)
       };
-    });
-    V.chips(ctx, box, items, { current: m.allDone ? -1 : m.phaseIdx, frac: m.phases[m.phaseIdx] ? 1 - m.remaining / m.phases[m.phaseIdx].sec : 1 });
+    };
+    // Whether these labels fit the room chips() gives each (never condensed)
+    const fits = (idxs, mark) => {
+      const c = idxs.length;
+      const pos = idxs.indexOf(cur);
+      const weight = c > 5 ? 2.2 : 1.4;
+      const unit = (box.w - 4 * (c - 1)) / (c - 1 + (pos >= 0 ? weight : 1));
+      const small = box.h < 30 || unit < 44;
+      return idxs.every((i, j) => {
+        const isCur = j === pos;
+        const it = item(i, mark === true || (mark === "cur" && isCur), false);
+        ctx.font = font(isCur ? (small ? 11 : 12) : small ? 10 : 11, isCur ? 800 : 700);
+        const t = (it.done ? "✓ " : "") + (isCur || !small ? it.label : it.short);
+        return ctx.measureText(t).width <= (isCur ? unit * weight : unit) - 6;
+      });
+    };
+    const all = m.phases.map((_, i) => i);
+    let idxs = all;
+    let mark = true;
+    if (!fits(all, true)) {
+      mark = false;
+      if (!fits(all, false) && n > 3) {
+        const c = clamp(cur < 0 ? n - 2 : cur, 1, n - 2);
+        idxs = [c - 1, c, c + 1];
+        mark = fits(idxs, "cur") ? "cur" : false;
+      }
+    }
+    const windowed = idxs.length < n;
+    const items = idxs.map((i) => item(i, mark === true || (mark === "cur" && i === cur), windowed));
+    const p = m.phases[m.phaseIdx];
+    V.chips(ctx, box, items, { current: idxs.indexOf(cur), frac: p ? 1 - m.remaining / p.sec : 1 });
   }
 
   /** One run of sound: its notes as pills (joined when they are one line). */
@@ -927,11 +1140,20 @@
     if (opts.lengths && run.t1 != null && run.t1 - run.t0 < 0.8 && x1 - x0 >= 0 && x0 >= opts.left) {
       const ny = notes[0] && notes[0].midi != null ? yOf(notes[0].midi) : yOf(null);
       const y = ny + ph / 2 + 9;
-      if (opts.labelEnd == null || x0 > opts.labelEnd + 4) {
-        const s = fmtNum(run.t1 - run.t0, 2).replace(/^0/, "");
-        text(ctx, s, x0, y, { font: font(9, 700), color: C.muted });
-        ctx.font = font(9, 700);
-        opts.labelEnd = x0 + ctx.measureText(s).width;
+      // Each note's length with its leading zero: "0,21 s", or "0,21" in a
+      // roll whose notes come too close for the unit (one way for all of
+      // them). A label that would touch another label at about the same
+      // height, or the next note, is left out.
+      const len = run.t1 - run.t0;
+      const room = Math.min(opts.right + 2, (opts.nextX != null ? opts.nextX : Infinity) - 3) - x0;
+      ctx.font = font(10, 700);
+      const s = opts.unit === false ? fmtNum(len, 2) : fmtSec(len, 2);
+      const tw = ctx.measureText(s).width;
+      const ends = opts.labelEnds || (opts.labelEnds = []);
+      const clash = ends.some((e) => Math.abs(e.y - y) < 12 && x0 < e.x1 + 4 && x0 + tw > e.x0 - 4);
+      if (!clash && tw <= room) {
+        text(ctx, s, x0, y, { font: font(10, 700), color: C.muted });
+        ends.push({ x0, x1: x0 + tw, y });
       }
     }
   }
@@ -1036,9 +1258,15 @@
     ctx.beginPath();
     ctx.rect(x, y, nowX - x + 1, h);
     ctx.clip();
-    const opts = { pillH: ph, now: m.t, left: x, right: nowX, lengths: h >= 90, labelEnd: null };
+    const opts = { pillH: ph, now: m.t, left: x, right: nowX, lengths: h >= 90, labelEnds: [] };
+    // "0,21 s" when an easy staccato beat (a note and its rest, ~0.45 s)
+    // has room for it at this scale, else "0,21": fixed by the layout, so
+    // the labels do not change form as notes scroll by
+    ctx.font = font(10, 700);
+    opts.unit = 0.45 / secPerPx >= ctx.measureText(fmtSec(0.25, 2)).width + 5;
     let prev = null;
-    visNotes.forEach(({ r, notes }) => {
+    visNotes.forEach(({ r, notes }, i) => {
+      opts.nextX = i + 1 < visNotes.length ? xOf(visNotes[i + 1].r.t0) : null;
       drawRun(ctx, r, notes, xOf, yOf, opts);
       // A break inside a legato line: a notch in the gap, with its word
       if (r.breakBefore && prev && prev.t1 != null) {
@@ -1126,10 +1354,16 @@
     }
     ctx.fillStyle = C.text;
     ctx.textAlign = "left";
-    ctx.textBaseline = "middle";
-    fitText(ctx, head, pad, hy, w - pad * 2 - bw - wordW - 12, tiny ? 13 : compact ? 14 : 16, 800, 10);
-    y = hy + (tiny ? 10 : 16);
-    const statsH = tiny ? 0 : 16;
+    // The instruction whole, on two lines when one does not hold it
+    const px = tiny ? 13 : compact ? 14 : 16;
+    const plan = fitPlan(ctx, head, w - pad * 2 - bw - wordW - 12, { px, one: Math.max(11, px - 2), min: 11, lines: tiny ? 1 : 2 });
+    const hy2 = plan.lines.length > 1 ? hy - plan.lineH / 2 + 2 : hy;
+    fitDraw(ctx, plan, pad, hy2);
+    y = hy2 + (plan.lines.length - 1) * plan.lineH + (tiny ? 10 : 16);
+    // The numbers under the roll: two lines on a narrow panel rather than squeezed
+    ctx.fillStyle = C.muted;
+    const stats = tiny ? null : fitPlan(ctx, artStatsLine(m, m.phaseIdx, w < 420), w - pad * 2, { px: 11, one: 11, min: 11, lines: 2, weight: 700 });
+    const statsH = stats ? 16 + (stats.lines.length - 1) * stats.lineH : 0;
     artRoll(ctx, { x: pad, y, w: w - pad * 2, h: h - y - pad - statsH }, m);
     if (m.processed && !tiny) {
       // Auto gain lifts the tails and the room between notes
@@ -1139,8 +1373,10 @@
         color: C.warn
       });
     }
-    if (statsH) {
-      text(ctx, artStatsLine(m, m.phaseIdx, w < 420), pad, h - pad - 6, { font: font(11, 700), color: C.muted, max: w - pad * 2 });
+    if (stats) {
+      ctx.fillStyle = C.muted;
+      ctx.textAlign = "left";
+      fitDraw(ctx, stats, pad, h - pad - 6 - (stats.lines.length - 1) * stats.lineH);
     }
   }
 
@@ -1226,9 +1462,10 @@
       ? L("Staccato frente a legato", "Staccato against legato") +
         (off != null ? L(` · afinación del staccato ${centsText(off)} aprox.`, ` · staccato pitch ${centsText(off)} approx.`) : "")
       : L("Sin notas todavía", "No notes yet");
-    fitText(ctx, head, pad, pad + 9, w - pad * 2, tiny ? 13 : 15, 800, 10);
+    const plan = fitPlan(ctx, head, w - pad * 2, { px: tiny ? 13 : 15, one: tiny ? 11 : 13, min: 11, lines: tiny ? 1 : 2 });
+    fitDraw(ctx, plan, pad, pad + 9);
     if (!rows.length) return;
-    const top = pad + (tiny ? 20 : 26);
+    const top = pad + (tiny ? 20 : 26) + (plan.lines.length - 1) * plan.lineH;
     const avail = h - top - pad;
     const scaleH = !tiny && avail >= 170 ? clamp(avail * 0.34, 70, 110) : 0;
     const rowsAvail = avail - (scaleH ? scaleH + 10 : 0);
@@ -1238,13 +1475,19 @@
     rows.forEach((row, k) => {
       const ry = top + k * rowH;
       const kd = ART[row.p.kind] || ART.staccato;
-      text(ctx, `${row.p.label} ${kd.mark}`, pad, ry + 9, { font: font(12, 800), color: C.text, max: labelW ? labelW - 8 : w - pad * 2 });
+      text(ctx, `${row.p.label} ${kd.mark}`, pad, ry + 9, { font: font(12, 800), color: C.text, max: labelW ? labelW - 8 : w - pad * 2, min: 11, alt: [row.p.label] });
+      let statsExtra = 0;
       if (labelW) {
         ctx.font = font(11, 700);
         ctx.fillStyle = C.muted;
         V.wrapText(ctx, artStatsLine(m, row.i, true), pad, ry + 26, labelW - 10, 13, Math.max(1, Math.floor((rowH - 28) / 13)));
       } else {
-        text(ctx, artStatsLine(m, row.i, true), pad, ry + rowH - 12, { font: font(10, 700), color: C.muted, max: w - pad * 2 });
+        // Under the strip, on two lines rather than squeezed
+        ctx.fillStyle = C.muted;
+        ctx.textAlign = "left";
+        const sp = fitPlan(ctx, artStatsLine(m, row.i, true), w - pad * 2, { px: 11, one: 10, min: 10, lines: 2, weight: 700 });
+        statsExtra = (sp.lines.length - 1) * sp.lineH;
+        fitDraw(ctx, sp, pad, ry + rowH - 12 - statsExtra);
       }
       // Up to the last 10 s of the phase, as a strip
       const end = row.runs[row.runs.length - 1].t1 || m.t;
@@ -1252,7 +1495,7 @@
       const bx = pad + labelW;
       const bw = w - pad - bx;
       const by = labelW ? ry + 4 : ry + 18;
-      const bh = labelW ? rowH - 12 : rowH - 38;
+      const bh = labelW ? rowH - 12 : rowH - 38 - statsExtra;
       if (bh < 14) return;
       ctx.fillStyle = "rgba(170, 195, 230, 0.05)";
       roundRect(ctx, bx, by, bw, bh, 6);

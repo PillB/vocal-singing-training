@@ -20,6 +20,18 @@ async function boot(page, lang = "es") {
     } catch {
       /* ignore */
     }
+    // Words the pictures draw, so a spec can read a canvas
+    window.__drawn = [];
+    const fill = CanvasRenderingContext2D.prototype.fillText;
+    CanvasRenderingContext2D.prototype.fillText = function (s, ...rest) {
+      try {
+        if (window.__drawn.length > 6000) window.__drawn.splice(0, 3000);
+        window.__drawn.push(String(s));
+      } catch {
+        /* ignore */
+      }
+      return fill.call(this, s, ...rest);
+    };
   }, lang);
   await useVoice(page);
   await page.goto(BASE + "/?e2e", { waitUntil: "domcontentloaded" });
@@ -55,6 +67,9 @@ async function inView(page, sel = "#mode-focus .vz-canvas, #mode-hud .vz-canvas"
   }, sel);
 }
 
+const drawn = (page) => page.evaluate(() => window.__drawn.slice(-3000).join(" | "));
+const clearDrawn = (page) => page.evaluate(() => (window.__drawn.length = 0));
+
 /** The live mode instance's state, reduced to what a test reads. */
 function modeState(page, fn) {
   return page.evaluate(`(() => {
@@ -85,7 +100,14 @@ test.describe("breath and SOVT pictures", () => {
     expect(r.trill, "the voiced trill is heard as flutter with a pitch").toBeGreaterThan(1.5);
     expect(r.stalls, "the lips stopping mid-sound is counted").toBeGreaterThanOrEqual(1);
     expect(r.runs).toContain("stall");
+    // The axis words sit in their own gutter, away from the trace
+    expect(await drawn(page)).toContain("sin tono");
+    await clearDrawn(page);
     await stop(page);
+    const words = await drawn(page);
+    // Totals and the longest unbroken run are named, not two bare numbers
+    expect(words).toMatch(/seguido/);
+    expect(words, "a share of the sound never passes 100 %").not.toMatch(/\b(1\d[1-9]|1[1-9]\d|[2-9]\d\d) %/);
     const after = await modeState(page, `(st) => ({ review: st.review, replay: document.querySelector("#mode-focus .mode-panel").classList.contains("is-replay") })`);
     expect(after.review).toBe(true);
     expect(after.replay, "Stop leaves the take on the picture").toBe(true);
@@ -107,6 +129,10 @@ test.describe("breath and SOVT pictures", () => {
     // The detector's window straddles the silence at every onset; that must
     // not read as a trill in a straw with no flutter at all
     expect(r.bubbles, "no bubbles invented at the onsets").toBeLessThan(0.3);
+    // The step's seconds are its total; the longest run is said in words
+    const w6 = await drawn(page);
+    expect(w6).toMatch(/en total/);
+    expect(w6).toMatch(/tono seguido más largo \d+,\d s/);
     const pic = await inView(page);
     expect(pic.bottom).toBeLessThanOrEqual(pic.vh);
     await stop(page);
@@ -149,6 +175,7 @@ test.describe("breath and SOVT pictures", () => {
     expect(live.trillRec).toBeGreaterThanOrEqual(1);
     expect(live.stallMarks, "the lips stopping shows on the strip").toBeGreaterThanOrEqual(1);
     expect(live.step + live.patterns * 9, "the scale walks").toBeGreaterThan(0);
+    await clearDrawn(page);
     const hw = await inView(page, "#pitch-canvas");
     expect(hw.found && hw.bottom <= hw.vh, "the highway is the first-screen picture").toBe(true);
     await stop(page);
@@ -164,6 +191,7 @@ test.describe("breath and SOVT pictures", () => {
     expect(after.stones).toContain("trill");
     expect(after.stones).toContain("stall");
     expect(after.ev).toMatch(/notas con burbujeo/);
+    expect(await drawn(page), "the review says where the lips stopped").toMatch(/se paró en|sin burbuja en|el burbujeo siguió/);
     expect((await inView(page, "#mode-hud .vz-canvas")).lit).toBeGreaterThan(20);
   });
 

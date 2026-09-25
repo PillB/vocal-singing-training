@@ -89,7 +89,11 @@ test.describe("dynamics pictures", () => {
     expect(await drawn(page)).toContain("dB");
     // No pitch highway: the picture is the stage
     await expect(page.locator("#pitch-block")).toBeHidden();
+    await clearDrawn(page);
     await stop(page);
+    await page.waitForTimeout(200);
+    // Where the peak came, said in words, not a bare "pico 51 %"
+    expect(await drawn(page)).toMatch(/pico al \d+ % de la duración/);
     await expect(page.locator('#metrics-form [name="swells"]')).toHaveValue(/^[1-9]/);
   });
 
@@ -198,6 +202,10 @@ test.describe("dynamics pictures", () => {
     expect(s0.medLen).toBeLessThan(0.3);
     expect(s0.medGap).toBeGreaterThan(0.15);
     expect(s0.hammers).toBe(0);
+    // Note lengths keep their leading zero: "0,21 s", never ",21"
+    const w14 = await drawn(page);
+    expect(w14).toMatch(/(^| )0,\d\d s( |$)/);
+    expect(w14).not.toMatch(/(^|[^\d]),\d/);
     await page.locator("#mode-focus [data-next-phase]").click();
     await expect(page.locator("#mode-focus [data-phase]")).toHaveText(/Legato/);
     await page.waitForFunction(() => (window.VTApp.getState().modeInstance?.state?.stats(1)?.lines || 0) >= 2, null, { timeout: 20000 });
@@ -269,7 +277,10 @@ test.describe("dynamics pictures", () => {
       ["s14-staccato-legato", "articulation"]
     ]) {
       await openAndStart(page, id, voice);
+      await clearDrawn(page);
       await page.waitForTimeout(2500);
+      // On a phone the phase tabs still carry their words
+      if (id === "s14-staccato-legato") expect(await drawn(page)).toMatch(/(^| )Legato( |$)/);
       const pic = await pictureInView(page);
       expect(pic.found, id).toBe(true);
       expect(pic.bottom, id).toBeLessThanOrEqual(pic.vh);

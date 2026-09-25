@@ -4478,7 +4478,7 @@
       const sp = pzStones.span(st);
       const title =
         cfg.kind === "hum"
-          ? L("Tararea 10 notas suaves", "Hum 10 soft notes")
+          ? L(`Tararea ${cfg.notes.length} notas suaves`, `Hum ${cfg.notes.length} soft notes`)
           : L(`Escala en ${kit.noteName(seq[0].midi)}, luego sube de raíz`, `Scale on ${kit.noteName(seq[0].midi)}, then the root moves up`);
       const line =
         cfg.kind === "hum"
@@ -4521,13 +4521,13 @@
         frac: 0,
         dir: null,
         head: "",
+        headAlt: [],
         right: "",
+        rightAlt: [],
         headColor: null,
         marks: [],
         review: false,
-        reviewTitle: "",
-        reviewRows: [],
-        levels: []
+        reviewRows: []
       };
       pzOverlay(
         mode,
@@ -4545,7 +4545,8 @@
             pastSec: 6,
             nowAt: 0.6,
             keepOnStop: true,
-            headPx: kit.headPx("chips")
+            // After Stop on a phone the review sits above the lanes
+            headPx: kit.reviewHeadPx(st.viz, kit.headPx("chips"))
           },
           pzStones.display(st)
         )
@@ -4562,9 +4563,15 @@
       // The app sounds this note on Start for a mode that owns its target
       st.wantName = pzKey(cur.midi - 12 * st.shift);
       st.wantFreq = pzHz(cur.midi);
-      pzTarget(cur.midi, null, st.kit.noteDual(cur.midi));
+      // The short name: the stage's top corner cut "Sol3 · G3" on a phone
+      pzTarget(cur.midi, null, st.kit.noteName(cur.midi));
       const pv = pzHighway();
-      if (pv && pv.setNoteQueue) pv.setNoteQueue(seq.slice(st.i).map((n) => ({ midi: n.midi, label: n.label, short: n.short })));
+      // The current block carries no words: your dot sits on it, and the
+      // header and the lane label already name it. Only blocks that fit whole.
+      if (pv && pv.setNoteQueue) {
+        const ahead = seq.slice(st.i, st.i + st.kit.queueFits(seq.length - st.i));
+        pv.setNoteQueue(ahead.map((n, k) => (k ? { midi: n.midi, label: n.label, short: n.short } : { midi: n.midi, label: " ", short: " " })));
+      }
       if (play) pzPlay(cur.midi, st.cfg.refSec);
       st.viz.steps = seq.map((n, k) => ({ label: n.label, short: n.short, done: k < st.i }));
       st.viz.i = st.i;
@@ -4589,7 +4596,7 @@
       st.trace.push(now, f && frame.sounding !== false ? kit.hzToMidi(f) : null, rel, 0);
       const seq = pzStones.seq(st);
       const cur = seq[st.i];
-      pzTarget(cur.midi, frame, kit.noteDual(cur.midi));
+      pzTarget(cur.midi, frame, kit.noteName(cur.midi));
       const locked = st.gate.feed(frame, rel);
       if (pv && pv.setQueueProgress) pv.setQueueProgress(st.gate.frac);
       st.viz.frac = st.gate.frac;
@@ -4598,7 +4605,8 @@
       if (locked) {
         const res = st.gate.result();
         st.results.push(Object.assign({ short: cur.short, label: cur.label, root: st.rootIdx }, res));
-        st.viz.marks.push({ t: now, m: cur.midi, res });
+        const mark = { t: now, m: cur.midi, res, below: false };
+        st.viz.marks.push(mark);
         if (st.viz.marks.length > 40) st.viz.marks.shift();
         st.locked++;
         st.i++;
@@ -4610,6 +4618,9 @@
           st.rootIdx++;
           if (st.cfg.kind !== "hum" && pv && pv.setDisplay) pv.setDisplay(pzStones.display(st));
         }
+        // The line leaves for the next note from here: the mark goes on the other side
+        const next = pzStones.seq(st)[st.i];
+        mark.below = !!next && next.midi > cur.midi;
         pzStones.step(mode, true);
         st.lastPanel = 0;
       }
@@ -4625,21 +4636,35 @@
       const v = st.viz;
       const seq = pzStones.seq(st);
       const cur = seq[st.i];
+      const note = kit.noteName(cur.midi);
+      const n = seq.length;
       v.headColor = null;
+      // One count, on the picture only (the strip above it names the note or
+      // the root): it moved one frame apart from the picture's and read as a
+      // second, different count
       if (st.cfg.kind === "hum") {
-        v.head = L(`Tararea ${kit.noteName(cur.midi)} · ${st.i + 1}/${seq.length}`, `Hum ${kit.noteName(cur.midi)} · ${st.i + 1}/${seq.length}`);
-        v.right = L(`sostenidas ${st.locked}`, `held ${st.locked}`);
+        v.head = L(`Tararea ${note}`, `Hum ${note}`);
+        v.headAlt = [];
+        v.right = L(`${st.i} de ${n} sostenidas`, `${st.i} of ${n} held`);
+        v.rightAlt = [`${st.i}/${n}`];
         if (now < st.doneUntil) {
           v.head = L(`✓ Ronda ${st.passes} completa`, `✓ Round ${st.passes} complete`);
+          v.headAlt = [L(`✓ Ronda ${st.passes}`, `✓ Round ${st.passes}`)];
           v.headColor = global.VTViz?.C?.done;
         }
-        if (now < st.softUntil) v.right = L("más suave: sin empujar", "softer: no pushing");
+        if (now < st.softUntil) {
+          v.right = L("más suave: sin empujar", "softer: no pushing");
+          v.rightAlt = [L("más suave", "softer")];
+        }
       } else {
         const root = kit.noteName(seq[0].midi);
-        v.head = L(`Paso ${st.i + 1}/${seq.length} · canta ${kit.noteName(cur.midi)}`, `Step ${st.i + 1}/${seq.length} · sing ${kit.noteName(cur.midi)}`);
+        v.head = L(`Paso ${st.i + 1}/${n} · canta ${note}`, `Step ${st.i + 1}/${n} · sing ${note}`);
+        v.headAlt = [`${st.i + 1}/${n} · ${L("canta", "sing")} ${note}`, L(`Canta ${note}`, `Sing ${note}`)];
         v.right = L(`raíz ${root} · ${st.passes} hechas`, `root ${root} · ${st.passes} done`);
+        v.rightAlt = [L(`raíz ${root}`, `root ${root}`)];
         if (now < st.doneUntil) {
           v.head = L(`✓ Raíz ${st.doneName} completa · ahora ${root}`, `✓ Root ${st.doneName} complete · now ${root}`);
+          v.headAlt = [L(`✓ Raíz ${st.doneName} · ahora ${root}`, `✓ Root ${st.doneName} · now ${root}`), L(`✓ Raíz ${st.doneName}`, `✓ Root ${st.doneName}`)];
           v.headColor = global.VTViz?.C?.done;
         }
       }
@@ -4653,9 +4678,8 @@
       };
       if (st.cfg.kind === "hum") {
         set("[data-n]", L(`Objetivo: ${st.kit.noteName(seq[st.i].midi)}`, `Target: ${st.kit.noteName(seq[st.i].midi)}`));
-        set("[data-l]", `${st.locked} / ${seq.length}`);
       } else {
-        set("[data-step]", `${L("Paso", "Step")} ${st.i + 1} / ${seq.length}`);
+        set("[data-root]", `${L("Raíz", "Root")} ${st.kit.noteName(seq[0].midi)}`);
         set("[data-r]", String(st.passes));
         set("[data-k]", String(st.locked));
       }
@@ -4707,15 +4731,27 @@
           )
         );
       }
-      const last = st.results.slice(-Math.min(15, pzStones.seq(st).length));
-      st.viz.levels = last.filter((r) => Number.isFinite(r.level)).length >= 3 ? last.map((r) => ({ label: r.short, db: r.level })) : [];
+      // Level per note against your own median, in words (a bare mini-chart
+      // of it read as unexplained): the honest proxy for "air to the end"
+      const lv = st.results.slice(-pzStones.seq(st).length).filter((r) => Number.isFinite(r.level));
+      if (lv.length >= 3) {
+        const loud = lv.reduce((a, b) => (b.level > a.level ? b : a));
+        const soft = lv.reduce((a, b) => (b.level < a.level ? b : a));
+        const d = Math.round(loud.level - soft.level);
+        rows.push(
+          d >= 6
+            ? L(`Volumen: más fuerte en ${loud.label}, más suave en ${soft.label} (${d} dB de diferencia, aprox.)`, `Level: loudest on ${loud.label}, softest on ${soft.label} (${d} dB apart, approx.)`)
+            : L("Volumen parejo entre las notas (aprox.)", "Even level across the notes (approx.)")
+        );
+      }
       st.viz.head = hum
         ? L(pzPl(st.locked, "nota sostenida", "notas sostenidas"), pzPl(st.locked, "note held", "notes held"))
         : L(`${pzPl(st.passes, "raíz completa", "raíces completas")} · ${pzPl(st.locked, "nota", "notas")}`, `${pzPl(st.passes, "root", "roots")} complete · ${pzPl(st.locked, "note", "notes")}`);
+      st.viz.headAlt = [];
       st.viz.headColor = null;
       st.viz.right = "";
+      st.viz.rightAlt = [];
       st.viz.dir = null;
-      st.viz.reviewTitle = hum ? L("Tus tarareos", "Your hums") : L("Tu escala", "Your scale");
       st.viz.reviewRows = rows;
       st.viz.steps = st.viz.steps.map((s) => Object.assign({}, s));
       st.viz.review = true;
@@ -4827,7 +4863,7 @@
         pastSec: 10,
         nowAt: 0.8,
         keepOnStop: true,
-        headPx: kit.headPx("hold")
+        headPx: kit.reviewHeadPx(st.viz, kit.headPx("hold"))
       });
       this._range(ref + 12 * kit.octaveShift() + 1);
     },
@@ -4933,6 +4969,8 @@
         const fry = holds.filter((h) => h.creak > 0.2 && h.clear > 0.3).map((h) => h.creak);
         if (fry.length) rows.push(L(`El fry duró ~${pzSec(pzMedian(fry))} antes de aclararse`, `The fry lasted ~${pzSec(pzMedian(fry))} before it cleared`));
         if (st.viz.comfort != null) rows.push(L(`Tu /A/ clara quedó cerca de ${st.kit.noteName(st.viz.comfort)} (aprox.)`, `Your clear /A/ sat near ${st.kit.noteName(st.viz.comfort)} (approx.)`));
+      } else {
+        rows.push(L("Sin sostenidos todavía: empieza con un fry suave y deja que se aclare en /A/", "No holds yet: start with a gentle fry and let it clear into /A/"));
       }
       st.viz.reviewRows = rows;
       st.viz.review = true;
@@ -5082,13 +5120,16 @@
         chordBadge: false,
         keyboardTarget: false,
         foldOctave: true,
-        stats: "nearest",
+        // One note asked at a time (the stones, one piano note): the readout
+        // names that target, as the picture does ("canta el 5 (Mi3)"); a chord
+        // of several tones names the note you are on (see frame)
+        stats: stones ? "target" : "nearest",
         laneCents: stones ? 35 : 50,
         pastSec: 6,
         nowAt: 0.42,
         keepOnStop: true,
         lanes: [],
-        headPx: kit.headPx("strip")
+        headPx: kit.reviewHeadPx(st.viz, kit.headPx("strip"))
       });
       st.lastLanes = pv ? pv.chordLanes : null;
       st.sched = pzChord.sched(st);
@@ -5207,13 +5248,18 @@
           st.viz.dir = ev.landed ? null : st.gate.direction();
           const aim = ev.targets.find((t) => t.midi === hit) || ev.targets[0];
           if (aim) pzTarget(aim.midi, frame);
+          const want = ev.targets.length === 1 ? "target" : "nearest";
+          const pv = pzHighway();
+          if (pv && pv.display && pv.display.stats !== want && pv.setDisplay) pv.setDisplay({ stats: want });
         }
       }
       pzChord.picture(mode, now);
       if (now - st.lastPanel > 150) {
         st.lastPanel = now;
         const r = mode.$("[data-r]");
-        const val = String(st.stones ? st.passes : st.landed);
+        const val = st.stones
+          ? L(`${st.passes} ${st.passes === 1 ? "vuelta" : "vueltas"}`, `${st.passes} ${st.passes === 1 ? "pass" : "passes"}`)
+          : L(`${st.landed} ${st.landed === 1 ? "acertada" : "acertadas"}`, `${st.landed} landed`);
         if (r && r.textContent !== val) r.textContent = val;
         const s2 = mode.$("[data-st]");
         const line = st.stones
@@ -5311,8 +5357,11 @@
         if (Math.abs(d) >= 5) v.leap = { t: future[0].t0, m: future[0].targets[0].midi, dir: Math.sign(d), n: Math.abs(d) };
       }
       v.headColor = null;
+      v.headAlt = [];
+      v.rightAlt = [];
       if (!st.cur) {
         v.head = L("Espera al piano: cada acorde marca tus notas", "Wait for the piano: each chord marks your notes");
+        v.headAlt = [L("Espera al piano", "Wait for the piano")];
         v.right = "";
         return;
       }
@@ -5322,16 +5371,34 @@
         if (ev.si >= 3) {
           v.head = L(`✓ ${ev.name}: 1-3-5${ev.si >= 4 ? "-8" : ""}`, `✓ ${ev.name}: 1-3-5${ev.si >= 4 ? "-8" : ""}`);
           v.headColor = C.done;
-        } else v.head = L(`${ev.name}: canta el ${t.deg} (${kit.noteName(t.midi)})`, `${ev.name}: sing the ${t.deg} (${kit.noteName(t.midi)})`);
+        } else {
+          v.head = L(`${ev.name}: canta el ${t.deg} (${kit.noteName(t.midi)})`, `${ev.name}: sing the ${t.deg} (${kit.noteName(t.midi)})`);
+          v.headAlt = [L(`Canta el ${t.deg} (${kit.noteName(t.midi)})`, `Sing the ${t.deg} (${kit.noteName(t.midi)})`)];
+        }
+        // The last interval you sang, against the written one (its tag on the
+        // picture is left out where it would sit on a stone)
+        const last = st.intervals[st.intervals.length - 1];
+        const iv = last ? `${last.name} ${kit.fmtCents(last.err)}` : "";
         v.right = L(`vueltas completas ${st.passes}`, `full passes ${st.passes}`);
+        v.rightAlt = [L(`vueltas ${st.passes}`, `passes ${st.passes}`)];
+        if (iv) {
+          v.right = `${iv} · ${v.right}`;
+          v.rightAlt = [`${iv} · ${L("vueltas", "passes")} ${st.passes}`, iv].concat(v.rightAlt);
+        }
       } else {
         if (ev.landed) {
           const lit = ev.targets.find((x) => x.lit) || ev.targets[0];
           v.head = `✓ ${lit ? lit.label : ev.name}`;
           v.headColor = C.done;
-        } else if (ev.targets.length === 1) v.head = L(`Canta ${ev.targets[0].label} (${ev.name})`, `Sing ${ev.targets[0].label} (${ev.name})`);
-        else v.head = L(`${ev.name}: canta cualquier nota del acorde`, `${ev.name}: sing any chord tone`);
+        } else if (ev.targets.length === 1) {
+          v.head = L(`Canta ${ev.targets[0].label} (${ev.name})`, `Sing ${ev.targets[0].label} (${ev.name})`);
+          v.headAlt = [L(`Canta ${ev.targets[0].label}`, `Sing ${ev.targets[0].label}`)];
+        } else {
+          v.head = L(`${ev.name}: canta cualquier nota del acorde`, `${ev.name}: sing any chord tone`);
+          v.headAlt = [L(`${ev.name}: una nota del acorde`, `${ev.name}: any chord tone`)];
+        }
         v.right = L(`acertadas ${st.landed}`, `landed ${st.landed}`);
+        v.rightAlt = [`✓ ${st.landed}`];
       }
     },
     stop(mode) {
@@ -5377,8 +5444,9 @@
         summary = L(`${st.landed} de ${st.seen} notas acertadas`, `${st.landed} of ${st.seen} notes landed`);
       }
       st.viz.head = st.stones ? L(pzPl(st.passes, "vuelta completa", "vueltas completas"), pzPl(st.passes, "full pass", "full passes")) : L(`Acertaste ${st.landed} de ${st.seen}`, `Landed ${st.landed} of ${st.seen}`);
+      st.viz.headAlt = [];
       st.viz.right = "";
-      st.viz.reviewTitle = st.stones ? L("Tus arpegios", "Your arpeggios") : L("Tus notas del acorde", "Your chord tones");
+      st.viz.rightAlt = [];
       st.viz.reviewRows = rows;
       st.viz.review = true;
       return { patches, summary };
@@ -5392,7 +5460,7 @@
       this.hud.classList.add("pz");
       this.hud.innerHTML = `
         <div class="mode-title">${arp ? L("Arpegio · tonos del acorde 1-3-5-8", "Arpeggio chord tones 1-3-5-8") : L("Acorde / solfeo · canta sus notas", "Chord / solfège · sing its tones")}</div>
-        <div class="mode-big" data-r>0</div>
+        <div class="mode-big" data-r>${arp ? L("0 vueltas", "0 passes") : L("0 acertadas", "0 landed")}</div>
         <p class="mode-meta" data-st>${arp ? L("Acordes 1-3-5 completos: 0", "Chords with 1-3-5 complete: 0") : L("Acertadas 0 de 0", "Landed 0 of 0")}</p>
         <p class="mode-meta muted">${
           arp
@@ -5439,7 +5507,7 @@
       const chip = (s) =>
         `<button type="button" class="btn btn-sm pz-chip" data-goal="${s}" aria-pressed="${s === 6}">${s} s</button>`;
       this.hud.innerHTML = `
-        <div class="mode-title">${L("Frases de canción · sin respirar a mitad", "Song phrases · no mid-breath")}</div>
+        <div class="mode-title">${L("Frases de canción · sin pausa a mitad", "Song phrases · no mid-phrase pause")}</div>
         <div class="pz-row" role="group" aria-label="${L("Meta de frase", "Phrase goal")}">
           <span class="pz-lab">${L("Meta de frase", "Phrase goal")}</span>${chip(4)}${chip(6)}${chip(8)}
         </div>
@@ -5523,7 +5591,8 @@
         pastSec: 8,
         nowAt: 0.55,
         keepOnStop: true,
-        headPx: kit.headPx("phrases")
+        // After Stop on a phone the review sits above the phrase brackets
+        headPx: kit.reviewHeadPx(st.viz, kit.headPx("phrases"), 24)
       });
     },
     onFrame(frame) {
@@ -5594,9 +5663,17 @@
       const pv = pzHighway();
       const chord = pv && pv.activeChordName ? pv.activeChordName.split("·")[0].trim() : "";
       const n = st.phrases.length;
+      st.viz.headAlt = [];
       if (st.cur) st.viz.head = L(`Frase ${n + 1} · ${pzSec((now - st.cur.t0) / 1000)}`, `Phrase ${n + 1} · ${pzSec((now - st.cur.t0) / 1000)}`);
-      else st.viz.head = n ? L("Respira y empieza la frase siguiente", "Breathe, then start the next phrase") : L("Canta la primera frase", "Sing the first phrase");
-      st.viz.right = (chord ? chord + " · " : "") + L(`meta ${st.goal} s · ${pzPl(st.ok, "completa", "completas")}`, `goal ${st.goal} s · ${st.ok} full`);
+      else if (n) {
+        st.viz.head = L("Respira y empieza la frase siguiente", "Breathe, then start the next phrase");
+        st.viz.headAlt = [L("Respira y sigue", "Breathe, then go on")];
+      } else st.viz.head = L("Canta la primera frase", "Sing the first phrase");
+      // Whole words on a phone: the chord goes first (the stage's corner names it too), then the count
+      const goal = L(`meta ${st.goal} s`, `goal ${st.goal} s`);
+      const full = L(pzPl(st.ok, "completa", "completas"), `${st.ok} full`);
+      st.viz.right = (chord ? chord + " · " : "") + `${goal} · ${full}`;
+      st.viz.rightAlt = [`${goal} · ${full}`, `${goal} · ${st.ok} ✓`, goal];
       if (now - st.lastPanel > 200) {
         st.lastPanel = now;
         const p = this.$("[data-p]");
@@ -5633,7 +5710,8 @@
       const ps = st.phrases;
       const rows = [];
       if (ps.length) {
-        rows.push(L(`${pzPl(ps.length, "frase", "frases")} · ${st.ok} ${st.ok === 1 ? "llegó" : "llegaron"} a ${st.goal} s sin respirar`, `${pzPl(ps.length, "phrase", "phrases")} · ${st.ok} reached ${st.goal} s without a breath`));
+        // "Without a pause", not "without a breath": the mic hears unbroken sound, not the breath
+        rows.push(L(`${pzPl(ps.length, "frase", "frases")} · ${st.ok} ${st.ok === 1 ? "llegó" : "llegaron"} a ${st.goal} s sin pausa`, `${pzPl(ps.length, "phrase", "phrases")} · ${st.ok} reached ${st.goal} s without a pause`));
         rows.push(L(`La más larga: ${pzSec(Math.max(...ps.map((p) => p.len)))}`, `Longest: ${pzSec(Math.max(...ps.map((p) => p.len)))}`));
         const fades = ps.filter((p) => p.shape === "fades").length;
         rows.push(
@@ -5645,9 +5723,18 @@
         for (let i = 1; i < ps.length; i++) gaps.push((ps[i].t0 - ps[i - 1].t1) / 1000);
         if (gaps.length) rows.push(L(`Pausas para respirar: ${pzSec(pzMedian(gaps))} de mediana`, `Breathing pauses: ${pzSec(pzMedian(gaps))} median`));
       } else rows.push(L("Sin frases medidas todavía: canta una frase y respira al final", "No phrases measured yet: sing a phrase and breathe at its end"));
-      st.viz.reviewTitle = L("Tus frases", "Your phrases");
       st.viz.reviewRows = rows;
-      st.viz.head = L(pzPl(ps.length, "frase", "frases"), pzPl(ps.length, "phrase", "phrases"));
+      // The header carries the result too, for a stage too short for the card
+      st.viz.head = ps.length
+        ? L(`Tus frases: ${ps.length} · ${st.ok} a la meta (${st.goal} s)`, `Your phrases: ${ps.length} · ${st.ok} at goal (${st.goal} s)`)
+        : L("Tus frases: 0", "Your phrases: 0");
+      st.viz.headAlt = ps.length
+        ? [L(`${pzPl(ps.length, "frase", "frases")} · ${st.ok} a la meta`, `${pzPl(ps.length, "phrase", "phrases")} · ${st.ok} at goal`), L(`Tus frases: ${ps.length}`, `Your phrases: ${ps.length}`)]
+        : [];
+      st.viz.headColor = null;
+      const longest = ps.length ? pzSec(Math.max(...ps.map((p) => p.len))) : "";
+      st.viz.right = longest ? L(`la más larga ${longest}`, `longest ${longest}`) : "";
+      st.viz.rightAlt = longest ? [L(`máx. ${longest}`, `max ${longest}`)] : [];
       st.viz.review = true;
       return {
         patches,
@@ -5731,7 +5818,7 @@
         pastSec: 5,
         nowAt: 0.62,
         keepOnStop: true,
-        headPx: kit.headPx("chips")
+        headPx: kit.reviewHeadPx(st.viz, kit.headPx("chips"))
       });
     },
     _midi(i) {
@@ -5751,9 +5838,12 @@
       st.listenFrom = now;
       if (pv && pv.setDisplay) pv.setDisplay({ gameHold: true });
       if (pv && pv.setNoteQueue) {
-        pv.setNoteQueue(st.notes.slice(st.idx).map((n, j) => {
+        // The note to sing carries no words on its block: your dot sits there
+        // and cut them ("So…"); the header and the lane label name it
+        const left = st.notes.length - st.idx;
+        pv.setNoteQueue(st.notes.slice(st.idx, st.idx + st.kit.queueFits(left)).map((n, j) => {
           const mm = this._midi(st.idx + j);
-          return { midi: mm, label: st.kit.noteName(mm) };
+          return { midi: mm, label: j ? st.kit.noteName(mm) : " " };
         }));
       }
     },
@@ -6187,10 +6277,14 @@
     }
   });
 
-  /** s7 humming — ten soft targets as stepping stones (not a fry-hold clone) */
+  /**
+   * s7 humming — five soft targets as stepping stones (not a fry-hold clone).
+   * The exercise asks for 5 piano targets ("Hum 5 piano targets"); its logged
+   * goal of 10 pitches is two rounds.
+   */
   const PZ_HUM = {
     kind: "hum",
-    notes: [48, 50, 52, 53, 55, 57, 55, 52, 48, 50], // C3 D3 E3 F3 G3 A3 G3 E3 C3 D3
+    notes: [48, 50, 52, 53, 55], // C3 D3 E3 F3 G3
     tol: 45,
     holdMs: 1500,
     refSec: 2.2
@@ -6203,11 +6297,12 @@
       const first = kit ? kit.noteName(PZ_HUM.notes[0] + 12 * kit.octaveShift()) : "C3";
       this.state.notes = PZ_HUM.notes.slice();
       this.hud.classList.add("pz");
+      // The count lives on the picture only (its header and chips): a second
+      // one here drifted a frame apart and read as a different number
       this.hud.innerHTML = `
-        <div class="mode-title">${L("Tarareo · objetivos suaves", "Humming · soft targets")}</div>
+        <div class="mode-title">${L(`Tarareo · ${PZ_HUM.notes.length} objetivos suaves`, `Humming · ${PZ_HUM.notes.length} soft targets`)}</div>
         <div class="mode-phase" data-n>${L("Objetivo: ", "Target: ")}${first}</div>
-        <div class="mode-big" data-l>0 / ${PZ_HUM.notes.length}</div>
-        <p class="mode-meta muted">${L("Sostén cada nota ~1,5 s dentro de ±45¢ para pasar a la siguiente. Tararea suave: el zumbido en los labios lo sientes tú, el micrófono no lo mide.", "Hold each note ~1.5 s within ±45¢ to move on. Hum softly: you feel the lip buzz, the mic does not measure it.")}</p>
+        <p class="mode-meta muted">${L("Sostén cada nota ~1,5 s dentro de ±45¢ para pasar a la siguiente (tararéala 3–5 s si te sale cómodo). Tararea suave: el zumbido en los labios lo sientes tú, el micrófono no lo mide.", "Hold each note ~1.5 s within ±45¢ to move on (hum it 3–5 s if that feels easy). Hum softly: you feel the lip buzz, the mic does not measure it.")}</p>
       `;
       pzStones.idle(this, PZ_HUM);
     },
@@ -6330,7 +6425,7 @@
         keepOnStop: true,
         lanes: this._lanes(43, 69),
         range: { min: 43, max: 69, pad: 0, minSpan: 14 },
-        headPx: kit.headPx("header")
+        headPx: kit.reviewHeadPx(st.viz, kit.headPx("header"))
       });
     },
     onFrame(frame) {
@@ -6526,6 +6621,7 @@
       const kit = st.kit;
       this._endGlide(performance.now());
       st.viz.run = null;
+      st.viz.reviewRows = kit.sirenRows ? kit.sirenRows(st.viz) : [];
       st.viz.review = true;
       this._panel();
       const n = st.viz.sirens.length;
@@ -6935,14 +7031,16 @@
     },
     render() {
       const cfg = this._cfg();
-      const nSteps = cfg.pattern.length;
+      const kit = pzKit();
+      const root = kit ? kit.noteName(cfg.roots[0] + 12 * kit.octaveShift()) : "C3";
       const title = this.profile.majorScale
         ? L("Escala mayor · coordinación", "Major scale · coordination")
         : L("Escala de 5 notas · con afinación", "Five-note scale · pitch-gated");
       this.hud.classList.add("pz");
+      // The step count lives on the picture only (header and chips); here, the root
       this.hud.innerHTML = `
         <div class="mode-title">${title}</div>
-        <div class="mode-big" data-step>${L("Paso", "Step")} 1 / ${nSteps}</div>
+        <div class="mode-big" data-root>${L("Raíz", "Root")} ${root}</div>
         <p class="mode-meta">${L("Raíces", "Roots")}: <strong data-r>0</strong> · ${L("notas fijadas", "notes locked")}: <strong data-k>0</strong></p>
         <p class="mode-meta muted" data-st>${L(
           `Escucha, luego canta: cada paso cuenta al sostenerlo ${pzSec(cfg.holdMs / 1000)} dentro de ±${cfg.tol}¢. Tras cada pasada la raíz sube un tono.`,

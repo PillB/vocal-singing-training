@@ -255,7 +255,7 @@
       const h = gh - (safeTop || 0);
       const size = h < 150 ? "tiny" : h < 250 ? "compact" : "full";
       if (size === "tiny") return 30;
-      if (rows === "chips") return size === "compact" ? 58 : 66;
+      if (rows === "chips") return size === "compact" ? 62 : 66;
       if (rows === "strip") return 56;
       if (rows === "phrases") return size === "compact" ? 56 : 72;
       // Title, the 2 s bar and (full size) the shelf of recent holds
@@ -272,6 +272,52 @@
     ctx.font = font(px, weight);
     return ctx.measureText(text).width;
   }
+
+  /* —— Words that fit: never condensed with fillText's maxWidth —— */
+
+  let measure = null;
+  /** A 2D context for measuring words outside a draw (the review's layout). */
+  function measureCtx() {
+    if (!measure) {
+      try {
+        measure = document.createElement("canvas").getContext("2d");
+      } catch {
+        measure = null;
+      }
+    }
+    return measure;
+  }
+  /** Words wrapped into lines no wider than maxW, at the font already set. */
+  function wrapLines(ctx, text, maxW) {
+    const words = String(text || "").split(/\s+/).filter(Boolean);
+    const lines = [];
+    let line = "";
+    words.forEach((w) => {
+      const test = line ? line + " " + w : w;
+      if (line && ctx.measureText(test).width > maxW) {
+        lines.push(line);
+        line = w;
+      } else line = test;
+    });
+    if (line) lines.push(line);
+    return lines;
+  }
+  /** The first of `options` that fits maxW whole at this size, or null (then nothing is drawn). */
+  function fitOption(ctx, options, maxW, px, weight) {
+    ctx.font = font(px, weight);
+    for (const t of [].concat(options)) {
+      if (t != null && t !== "" && ctx.measureText(t).width <= maxW) return t;
+    }
+    return null;
+  }
+  /** Text at (x, y) only when one of `options` fits whole; returns its width or 0. */
+  function textIfFits(ctx, options, x, y, maxW, px, weight) {
+    const t = fitOption(ctx, options, maxW, px, weight);
+    if (t == null) return 0;
+    ctx.fillText(t, x, y);
+    return ctx.measureText(t).width;
+  }
+
   /** Text on a dark pill, so it reads over lanes and traces. Returns its width. */
   function pill(ctx, text, x, y, opts = {}) {
     const px = opts.px || 12;
@@ -300,39 +346,58 @@
     return tw + 10;
   }
 
+  const HEAD_H = 23;
+  /** The y under the header row. */
+  function headBottom(geo) {
+    return (geo.safeTop || 0) + 4 + HEAD_H;
+  }
+
   /**
    * The top line of the picture, just under the stage's top rail: what is
    * happening, in words, on the left; the count or the extent on the right.
-   * Returns the y under it.
+   * `left` and `right` may each be a list, longest first: the first pair that
+   * fits whole is drawn (the left one wins, the right one may be left out),
+   * so a phone gets shorter words instead of cut ones. Returns the y under it.
    */
   function header(ctx, geo, left, right, opts = {}) {
     const size = sizeOf(geo);
     const y = (geo.safeTop || 0) + 4;
-    const px = size === "tiny" ? 12 : 13;
-    const h = px + 10;
+    const px = 13;
+    const pxR = 12;
+    const h = HEAD_H;
     const x = geo.plotLeft;
     const span = geo.laneRight - x - 4;
+    const lefts = [].concat(left || []).filter(Boolean);
+    const rights = [].concat(right || []).filter(Boolean);
+    const wOf = (t, p, wt) => (t ? textW(ctx, t, p, wt) + 10 : 0);
+    let pick = null;
+    for (const l of lefts.length ? lefts : [""]) {
+      const wl = wOf(l, px, 800);
+      if (wl > span) continue;
+      let r = "";
+      for (const rr of rights) {
+        if (wl + 8 + wOf(rr, pxR, 700) <= span) {
+          r = rr;
+          break;
+        }
+      }
+      pick = { l, r };
+      break;
+    }
+    // Nothing fits whole (should not happen with a short form last): the pill cuts it
+    if (!pick) pick = { l: lefts[lefts.length - 1] || "", r: "" };
     let used = 0;
-    if (left) {
-      used = pill(ctx, left, x, y, {
-        px,
-        h,
-        color: opts.leftColor || C.text,
-        maxW: right ? span * 0.64 : span,
-        stroke: opts.leftStroke
-      });
+    if (pick.l) {
+      used = pill(ctx, pick.l, x, y, { px, h, color: opts.leftColor || C.text, maxW: span, stroke: opts.leftStroke });
     }
     // The pips only where there is room for them and the words on the right
-    if (opts.pips && span > 460) used += drawPips(ctx, x + used + 6, y + h / 2, opts.pips, size) + 6;
-    if (right) {
-      pill(ctx, right, geo.laneRight - 4, y, {
-        px: px - 1,
-        h,
-        weight: 700,
-        align: "right",
-        color: opts.rightColor || C.muted,
-        maxW: Math.max(60, span - used - 10)
-      });
+    if (opts.pips && size !== "tiny" && span > 460) {
+      const pw = Math.min(12, opts.pips.of || 0) * 11 + 8;
+      const wr = pick.r ? wOf(pick.r, pxR, 700) + 8 : 0;
+      if (used + 12 + pw + wr <= span) used += drawPips(ctx, x + used + 6, y + h / 2, opts.pips, size) + 6;
+    }
+    if (pick.r) {
+      pill(ctx, pick.r, geo.laneRight - 4, y, { px: pxR, h, weight: 700, align: "right", color: opts.rightColor || C.muted });
     }
     return y + h;
   }
@@ -374,6 +439,30 @@
    * Gaps stay gaps. Estimated stretches (q=1) are dashed. opts: { alpha,
    * widthOf(p), color, skip(p) }
    */
+  /** Whether your line (as drawTrace draws it) runs through the rectangle r. */
+  function traceHits(geo, pts, r, gapMs = 160) {
+    if (!pts || !geo.xAtTime) return false;
+    const inside = (x, y) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+    let prev = null;
+    for (let i = 0; i < pts.length; i++) {
+      const p = pts[i];
+      if (p.m == null) {
+        prev = null;
+        continue;
+      }
+      const x = geo.xAtTime(p.t);
+      const y = geo.midiToY(p.m);
+      if (inside(x, y)) return true;
+      if (prev && p.t - prev.t < gapMs && Math.max(x, prev.x) >= r.x && Math.min(x, prev.x) <= r.x + r.w) {
+        for (let k = 1; k < 8; k++) {
+          if (inside(prev.x + ((x - prev.x) * k) / 8, prev.y + ((y - prev.y) * k) / 8)) return true;
+        }
+      }
+      prev = { t: p.t, x, y };
+    }
+    return false;
+  }
+
   function drawTrace(ctx, geo, pts, opts = {}) {
     if (!pts || pts.length < 2 || !geo.xAtTime) return;
     const gapMs = opts.gapMs || 160;
@@ -486,71 +575,274 @@
   function drawDirection(ctx, geo, at, dir) {
     if (!at || !dir) return;
     const text = dir === "up" ? L("sube ↑", "go up ↑") : L("baja ↓", "go down ↓");
-    const y = clamp(at.y + (dir === "up" ? 16 : -34), (geo.safeTop || 0) + 30, geo.graphH - 22);
+    const y = clamp(at.y + (dir === "up" ? 16 : -34), headBottom(geo) + 3, geo.graphH - 22);
     pill(ctx, text, at.x - 8, y, { px: 12, align: "right", color: C.text });
   }
 
-  /** A landed note: a check and its offset, above the lane, in the "done" colour. */
+  /**
+   * A landed note: a check and its offset by the lane, in the "done" colour —
+   * above it, or below it when your line leaves upward from there (opts.below),
+   * so the line to the next note does not run through the words.
+   */
   function drawResultMark(ctx, geo, x, y, res, opts = {}) {
     if (x < geo.plotLeft || x > geo.laneRight) return;
-    glyph(ctx, "check", x, y - 12, C.done, 5);
+    const below = !!opts.below;
+    glyph(ctx, "check", x, below ? y + 11 : y - 12, C.done, 5);
     if (res && res.cents != null && opts.cents !== false) {
-      ctx.font = font(10, 800);
+      ctx.font = font(11, 800);
       ctx.fillStyle = C.done;
       ctx.textAlign = "center";
-      ctx.textBaseline = "bottom";
-      ctx.fillText(res.octave ? "8va" : fmtCents(res.cents), x, y - 20);
+      ctx.textBaseline = below ? "top" : "bottom";
+      ctx.fillText(res.octave ? "8va" : fmtCents(res.cents), x, below ? y + 18 : y - 20);
     }
   }
 
   /**
-   * A row of steps under the header (the scale's shape, the 8 notes of a
-   * round): done ones keep a check and stay filled, the current one fills
-   * with its hold. Built on VTViz.chips.
+   * How many queued notes the highway draws whole (the layout of
+   * js/pitch-visualizer.js _drawQueue): a block cut at the lane labels read
+   * "Do…". n: the notes left.
+   */
+  function queueFits(n) {
+    const pv = highway();
+    if (!pv || !pv.w || n <= 1) return Math.max(0, n);
+    const d = pv.display || {};
+    const box = plotBox(pv.w, 0, 0);
+    const plotRight = Math.max(48, box.laneRight - 20);
+    const at = d.pastSec > 0 && d.nowAt != null ? Math.max(0.2, Math.min(1, d.nowAt)) : 0.62;
+    const nowX = Math.round(12 + (plotRight - 12) * at);
+    const span = Math.max(40, box.laneRight - nowX - 6);
+    for (let v = Math.min(n, 5); v >= 2; v--) {
+      const bw = Math.max(34, Math.min(88, span / Math.max(1.6, v - 0.4)));
+      const gap = Math.max(6, bw * 0.14);
+      const x0 = nowX + bw * 0.5 + gap + (v - 2) * (bw + gap);
+      if (x0 + bw <= box.laneRight) return v;
+    }
+    return 1;
+  }
+
+  /**
+   * A row of steps under the header (the scale's shape, the notes of a
+   * round): done ones keep a check and stay filled, the current one is
+   * outlined and fills with its hold, the next ones wait. Every chip keeps
+   * its words whole at full size: when they do not all fit (a phone), the
+   * row shows a window around the current step, with "…" where steps are
+   * left out. items: [{ label, short, done }]
    */
   function stepRow(ctx, geo, y, items, current, frac) {
     const size = sizeOf(geo);
     if (size === "tiny" || !items.length) return y;
-    const h = size === "compact" ? 24 : 30;
-    const x = geo.plotLeft;
-    const w = Math.max(120, geo.laneRight - x - 4);
+    const plan = chipPlan(ctx, geo, items, current);
+    const h = size === "compact" ? 26 : 30;
+    const x0 = geo.plotLeft;
     ctx.fillStyle = "rgba(6, 10, 16, 0.55)";
-    roundRect(ctx, x - 2, y - 2, w + 4, h + 4, 8);
+    roundRect(ctx, x0 - 2, y - 2, plan.W + 4, h + 4, 8);
     ctx.fill();
-    V.chips(ctx, { x, y, w, h }, items, { current, frac });
+    let x = x0;
+    const mark = (mx) => {
+      ctx.font = font(13, 800);
+      ctx.fillStyle = C.muted;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("…", mx + CHIP_MARK / 2, y + h / 2);
+    };
+    if (plan.before) {
+      mark(x);
+      x += CHIP_MARK + CHIP_GAP;
+    }
+    plan.shown.forEach((c) => {
+      const it = items[c.i];
+      const isCur = c.i === plan.cur;
+      const w = c.w;
+      ctx.fillStyle = it.done ? "rgba(255, 211, 110, 0.16)" : "rgba(170, 195, 230, 0.07)";
+      roundRect(ctx, x, y, w, h, 7);
+      ctx.fill();
+      if (isCur && frac != null) {
+        ctx.fillStyle = C.targetSoft;
+        roundRect(ctx, x, y, Math.max(6, w * clamp(frac, 0, 1)), h, 7);
+        ctx.fill();
+      }
+      ctx.lineWidth = isCur ? 2 : 1;
+      ctx.strokeStyle = isCur ? C.text : it.done ? "rgba(255, 211, 110, 0.55)" : C.grid;
+      roundRect(ctx, x + 0.5, y + 0.5, w - 1, h - 1, 7);
+      ctx.stroke();
+      ctx.font = font(isCur ? 13 : 12, isCur ? 800 : 700);
+      ctx.fillStyle = it.done ? C.done : isCur ? C.text : C.muted;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(c.text, x + w / 2, y + h / 2 + 0.5);
+      x += w + CHIP_GAP;
+    });
+    if (plan.after) mark(x);
     return y + h + 4;
   }
 
-  /** A card of words over the frozen take (the review after Stop). */
-  function reviewCard(ctx, geo, y, title, rows, opts = {}) {
-    const size = sizeOf(geo);
-    const x = geo.plotLeft + 4;
-    const w = Math.min(geo.laneRight - x - 8, opts.w || 470);
-    const lineH = size === "tiny" ? 15 : 18;
-    const maxRows = Math.max(1, Math.floor((geo.graphH - y - 18) / lineH) - 1);
-    const shown = rows.slice(0, maxRows);
-    const h = 12 + lineH + shown.length * lineH;
-    ctx.fillStyle = "rgba(8, 13, 20, 0.9)";
-    roundRect(ctx, x, y, w, h, 10);
+  const CHIP_GAP = 4;
+  const CHIP_MARK = 14;
+  /** Which chips the row shows and how wide, words at full size (see stepRow). */
+  function chipPlan(ctx, geo, items, current) {
+    const n = items.length;
+    const W = Math.max(120, geo.laneRight - geo.plotLeft - 4);
+    const cur = current != null && current >= 0 && current < n ? current : -1;
+    const textOf = (i, short) => {
+      const it = items[i];
+      const words = i === cur || !short ? it.label : it.short || it.label;
+      return (it.done ? "✓ " : "") + (words || "");
+    };
+    const widthOf = (i, short) => {
+      const isCur = i === cur;
+      return Math.max(isCur ? 44 : 28, textW(ctx, textOf(i, short), isCur ? 13 : 12, isCur ? 800 : 700) + 14);
+    };
+    const sum = (a, b, short) => {
+      let s = 0;
+      for (let i = a; i <= b; i++) s += widthOf(i, short) + (i > a ? CHIP_GAP : 0);
+      return s + (a > 0 ? CHIP_MARK + CHIP_GAP : 0) + (b < n - 1 ? CHIP_MARK + CHIP_GAP : 0);
+    };
+    let lo = 0;
+    let hi = n - 1;
+    let short = false;
+    if (sum(0, n - 1, false) > W) {
+      short = true;
+      if (sum(0, n - 1, true) > W) {
+        // A window: up to two steps before the current one, then the ones ahead
+        const c = Math.max(0, cur);
+        lo = hi = c;
+        for (let guard = 0; guard < n * 2; guard++) {
+          if (lo > 0 && c - lo < 2 && sum(lo - 1, hi, true) <= W) lo--;
+          else if (hi < n - 1 && sum(lo, hi + 1, true) <= W) hi++;
+          else if (lo > 0 && sum(lo - 1, hi, true) <= W) lo--;
+          else break;
+        }
+      }
+    }
+    const shown = [];
+    for (let i = lo; i <= hi; i++) shown.push({ i, text: textOf(i, short), w: widthOf(i, short) });
+    // The room left over is shared, the current chip taking a larger part
+    const used = sum(lo, hi, short);
+    const extra = Math.max(0, W - used);
+    const shares = shown.reduce((s, c) => s + (c.i === cur ? 1.6 : 1), 0) || 1;
+    shown.forEach((c) => (c.w += (extra * (c.i === cur ? 1.6 : 1)) / shares));
+    return { shown, before: lo > 0, after: hi < n - 1, cur, W };
+  }
+
+  /* —— The review after Stop: words beside or above the take, never over it —— */
+
+  const ROW_PX = 12;
+  const ROW_LH = 15;
+
+  /** The review rows a model carries (the siren's are built from its take). */
+  function rowsOf(m) {
+    return (m && (m.reviewRows && m.reviewRows.length ? m.reviewRows : m.summary)) || [];
+  }
+  /** The highway's plot box for a canvas `w` wide (as js/pitch-visualizer.js lays it out). */
+  function plotBox(w, gh, safeTop) {
+    const gutter = Math.max(72, Math.min(w * 0.14, 140));
+    return { w, plotLeft: 12, laneRight: Math.max(8, w - gutter), graphH: gh, safeTop: safeTop || 0 };
+  }
+
+  /**
+   * Where the words of the review go after Stop, so they never cover the
+   * picture. A wide canvas: a card beside the take (the take is drawn
+   * narrower, on the left, see reviewGeo). A narrow one (a phone): a card
+   * under the header, and the lanes move down below it (reviewHeadPx), so the
+   * take keeps the rest. Rows that do not fit are left out whole, the first
+   * ones being the ones that matter most.
+   * g: { w, plotLeft, laneRight, graphH, safeTop }; opts: { top (y the card
+   * starts at beside the take), extra (px the family's own row needs under
+   * the card when it is above the take) }
+   */
+  function reviewPlan(ctx, g, rows, opts = {}) {
+    const list = [].concat(rows || []).map((r) => (typeof r === "string" ? { text: r } : r)).filter((r) => r && r.text);
+    if (!list.length || !ctx) return null;
+    const plotW = g.laneRight - g.plotLeft;
+    ctx.font = font(ROW_PX, 650);
+    const lay = (w, maxH) => {
+      const lines = [];
+      const fit = Math.floor((maxH - 14) / ROW_LH);
+      for (const r of list) {
+        const ls = wrapLines(ctx, r.text, w - 20);
+        if (lines.length + ls.length > fit) break;
+        ls.forEach((t) => lines.push({ text: t, color: r.color }));
+      }
+      return lines;
+    };
+    if (plotW >= 520) {
+      const w = clamp(Math.round(plotW * 0.42), 250, 400);
+      const x = g.laneRight - 6 - w;
+      const y = (opts.top != null ? opts.top : headBottom(g) + 4) + 2;
+      const lines = lay(w, g.graphH - 6 - y);
+      if (!lines.length) return null;
+      return { mode: "side", x, y, w, h: lines.length * ROW_LH + 14, lines, right: x - 16 };
+    }
+    // Above the take: across the whole canvas (the lane labels move down too)
+    const x = g.plotLeft - 4;
+    const w = g.w - 6 - x;
+    const y = headBottom(g) + 4;
+    const extra = opts.extra || 0;
+    // The highway lets the header rows take at most 45 % of the plot
+    const lines = lay(w, g.graphH * 0.45 - 10 - extra - y);
+    if (!lines.length) return null;
+    const h = lines.length * ROW_LH + 14;
+    return { mode: "top", x, y, w, h, lines, reserve: y + h + 10 + extra };
+  }
+
+  /** The take drawn narrower, left of a card beside it (a "side" plan); otherwise as it is. */
+  function reviewGeo(geo, plan) {
+    if (!plan || plan.mode !== "side") return geo;
+    const x0 = geo.plotLeft;
+    const k = (plan.right - x0) / Math.max(1, geo.laneRight - x0);
+    const map = (x) => x0 + (x - x0) * k;
+    return Object.assign({}, geo, {
+      nowX: map(geo.nowX),
+      plotRight: map(geo.plotRight != null ? geo.plotRight : geo.laneRight),
+      laneRight: plan.right,
+      xAtTime: (t) => map(geo.xAtTime(t)),
+      xAt: typeof geo.xAt === "function" ? (i) => map(geo.xAt(i)) : geo.xAt
+    });
+  }
+
+  /** The card itself: rows of words on a dark card with a gold edge. */
+  function drawReview(ctx, plan) {
+    if (!plan) return;
+    ctx.fillStyle = "rgba(8, 13, 20, 0.94)";
+    roundRect(ctx, plan.x, plan.y, plan.w, plan.h, 10);
     ctx.fill();
     ctx.strokeStyle = "rgba(255, 211, 110, 0.45)";
     ctx.lineWidth = 1;
-    roundRect(ctx, x + 0.5, y + 0.5, w - 1, h - 1, 10);
+    roundRect(ctx, plan.x + 0.5, plan.y + 0.5, plan.w - 1, plan.h - 1, 10);
     ctx.stroke();
+    ctx.font = font(ROW_PX, 650);
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
-    ctx.fillStyle = C.done;
-    V.fitText(ctx, title, x + 10, y + 6 + lineH / 2, w - 20, size === "tiny" ? 12 : 14, 800, 10);
-    shown.forEach((r, i) => {
-      const ry = y + 6 + lineH * (i + 1) + lineH / 2;
-      const text = typeof r === "string" ? r : r.text;
-      ctx.fillStyle = (r && r.color) || C.text;
-      V.fitText(ctx, text, x + 10, ry, w - 20, size === "tiny" ? 11 : 12, 650, 9);
+    plan.lines.forEach((l, i) => {
+      ctx.fillStyle = l.color || C.text;
+      ctx.fillText(l.text, plan.x + 10, plan.y + 7 + ROW_LH * i + ROW_LH / 2 + 0.5);
     });
-    return y + h;
   }
 
-  /** Before Start: what the exercise will ask, on the empty highway. */
+  /**
+   * display.headPx for a pitch mode: its own rows while live (`base`) and,
+   * after Stop on a narrow canvas, room for the review card above the lanes.
+   * extra: px the family's own row needs under the card (the phrase brackets).
+   */
+  function reviewHeadPx(model, base, extra = 0) {
+    let memo = null;
+    return (gh, safeTop) => {
+      if (model && model.review) {
+        const pv = highway();
+        const w = (pv && pv.w) || 640;
+        const rows = rowsOf(model);
+        const key = [w, gh, safeTop, rows.length, V.isEs()].join("|");
+        if (!memo || memo.key !== key) {
+          const plan = reviewPlan(measureCtx(), plotBox(w, gh, safeTop), rows, { extra });
+          memo = { key, px: plan && plan.mode === "top" ? plan.reserve - (safeTop || 0) : null };
+        }
+        if (memo.px != null) return memo.px;
+      }
+      return base(gh, safeTop);
+    };
+  }
+
+  /** Before Start: what the exercise will ask, on the empty highway (words wrap, never squeezed). */
   function idleCard(title, lines, extra) {
     return (ctx, geo) => {
       if (extra) {
@@ -561,20 +853,36 @@
         }
       }
       const cx = (geo.plotLeft + geo.laneRight) / 2;
-      const top = Math.max((geo.safeTop || 0) + 8, geo.graphH * 0.2);
       const w = Math.min(geo.laneRight - geo.plotLeft - 20, 460);
-      const lineH = 18;
-      const h = 16 + 22 + lines.length * lineH;
+      const inner = w - 24;
+      let tpx = 16;
+      ctx.font = font(tpx, 800);
+      while (tpx > 13 && ctx.measureText(title).width > inner) {
+        tpx--;
+        ctx.font = font(tpx, 800);
+      }
+      const tLines = wrapLines(ctx, title, inner);
+      ctx.font = font(13, 650);
+      const body = [];
+      lines.forEach((t, i) => wrapLines(ctx, t, inner).forEach((s) => body.push({ s, first: i === 0 })));
+      const tLH = tpx + 5;
+      const bLH = 17;
+      const h = 12 + tLines.length * tLH + 4 + body.length * bLH + 8;
+      let top = Math.max((geo.safeTop || 0) + 8, geo.graphH * 0.2);
+      if (top + h > geo.graphH - 4) top = Math.max((geo.safeTop || 0) + 4, geo.graphH - 4 - h);
       ctx.fillStyle = "rgba(8, 13, 20, 0.86)";
       roundRect(ctx, cx - w / 2, top, w, h, 12);
       ctx.fill();
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillStyle = C.text;
-      V.fitText(ctx, title, cx, top + 8 + 11, w - 24, 16, 800, 11);
-      lines.forEach((t, i) => {
-        ctx.fillStyle = i === 0 ? C.target : C.muted;
-        V.fitText(ctx, t, cx, top + 8 + 22 + lineH * i + lineH / 2, w - 24, 13, 650, 10);
+      ctx.font = font(tpx, 800);
+      tLines.forEach((s, i) => ctx.fillText(s, cx, top + 12 + tLH * i + tLH / 2));
+      ctx.font = font(13, 650);
+      const by = top + 12 + tLines.length * tLH + 4;
+      body.forEach((b, i) => {
+        ctx.fillStyle = b.first ? C.target : C.muted;
+        ctx.fillText(b.s, cx, by + bLH * i + bLH / 2);
       });
       ctx.textAlign = "left";
     };
@@ -588,7 +896,8 @@
       const x0 = geo.plotLeft + 20;
       const x1 = geo.laneRight - 16;
       const step = (x1 - x0) / n;
-      const bw = Math.max(18, Math.min(60, step - 6));
+      // Stones never overlap: narrower ones on a phone, their words only when whole
+      const bw = Math.max(10, Math.min(60, step - 3));
       stones.forEach((s, i) => {
         const x = x0 + i * step + (step - bw) / 2;
         const y = geo.midiToY(s.midi);
@@ -604,130 +913,154 @@
         ctx.fillStyle = C.muted;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.font = font(11, 800);
-        const text = s.short && ctx.measureText(s.label).width > bw - 6 ? s.short : s.label;
-        ctx.fillText(text, x + bw / 2, y + 0.5, bw - 4);
+        textIfFits(ctx, [s.label, s.short], x + bw / 2, y + 0.5, bw - 2, 11, 800);
       });
     };
   }
 
   /* —— Sirens (s5) —— */
 
+  /** The siren review in words (built from the take; the mode stores them on Stop). */
+  function sirenRows(m) {
+    const rows = [];
+    const ext = m.extent;
+    const done = m.sirens.length;
+    if (ext) {
+      rows.push(
+        L(
+          `De ${noteName(ext.lo)} a ${noteName(ext.hi)}: ${semis(ext.hi - ext.lo)}${ext.approx ? " (arriba, aprox.)" : ""}`,
+          `From ${noteName(ext.lo)} to ${noteName(ext.hi)}: ${semis(ext.hi - ext.lo)}${ext.approx ? " (top approx.)" : ""}`
+        )
+      );
+    }
+    const uniq = [...new Set(m.breaks.map((b) => noteName(b.m)))];
+    rows.push(
+      m.breaks.length
+        ? {
+            text: L(
+              `${m.breaks.length} ${m.breaks.length === 1 ? "salto" : "saltos"} cerca de ${uniq.slice(0, 4).join(", ")}: ahí está tu cambio de registro`,
+              `${m.breaks.length} ${m.breaks.length === 1 ? "jump" : "jumps"} near ${uniq.slice(0, 4).join(", ")}: that is where your register shifts`
+            ),
+            color: C.warn
+          }
+        : L("Sin saltos: la línea fue continua", "No jumps: the line was continuous")
+    );
+    if (m.ceil.length) {
+      rows.push(
+        L("Por encima de ~Sol4 el micrófono pierde el tono: ahí la línea es aprox.", "Above ~G4 the mic loses the pitch: the line is approx. there")
+      );
+    }
+    if (!done) {
+      rows.push(
+        L("Una sirena cuenta al subir 5 semitonos o más y volver a bajar", "A siren counts when you rise 5 semitones or more and come back down")
+      );
+    }
+    return rows;
+  }
+
   /**
    * model: { trace, breaks: [{t, m, kind}], ceil: [t…], sirens: [{lo, hi, approx,
    *   breaks: [m…]}], run: { lo, hi } | null, goal, lastSirenAt, review,
-   *   extent: { lo, hi, approx } | null }
+   *   extent: { lo, hi, approx } | null, reviewRows }
    */
   function pitchSiren(ctx, geo, layer, m) {
     if (layer !== "over") return;
     const size = sizeOf(geo);
-    drawTrace(ctx, geo, m.trace.pts, { widthOf: (p) => levelWidth(p.db) });
+    const plan = m.review ? reviewPlan(ctx, geo, rowsOf(m), { top: headBottom(geo) + 4 }) : null;
+    const g = reviewGeo(geo, plan);
+    // Where the picture's own top rows start: under the header, or under the card above it
+    const top = plan && plan.mode === "top" ? plan.y + plan.h + 6 : headBottom(geo) + 4;
+    drawTrace(ctx, g, m.trace.pts, { widthOf: (p) => levelWidth(p.db) });
     ctx.save();
-    clipPlot(ctx, geo);
+    clipPlot(ctx, g);
     // A break: a notch where the line jumped or cut, and the note it was at
+    // Its words go above the notch, else beside it, wherever your line does
+    // not run through them and no other words are; otherwise only the notch
+    const placed = [];
     m.breaks.forEach((b) => {
-      const x = geo.xAtTime(b.t);
-      if (x < geo.plotLeft - 4 || x > geo.nowX + 2) return;
-      const y = geo.midiToY(b.m);
+      const x = g.xAtTime(b.t);
+      if (x < g.plotLeft - 4 || x > g.nowX + 2) return;
+      const y = g.midiToY(b.m);
       glyph(ctx, "notch", x, y - 12, C.warn, 6);
-      if (size !== "tiny") {
-        ctx.font = font(10, 800);
-        ctx.fillStyle = C.warn;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "bottom";
-        ctx.fillText(
-          (b.kind === "cut" ? L("corte ", "cut ") : L("salto ", "jump ")) + noteName(b.m),
-          x,
-          y - 20
+      if (size === "tiny") return;
+      const words = [(b.kind === "cut" ? L("corte ", "cut ") : L("salto ", "jump ")) + noteName(b.m), noteName(b.m)];
+      for (const t of words) {
+        const tw = textW(ctx, t, 11, 800);
+        const spots = [
+          { x: x - tw / 2, y: y - 34 },
+          { x: x - 9 - tw, y: y - 19 },
+          { x: x + 9, y: y - 19 },
+          { x: x - tw / 2, y: y + 6 }
+        ].map((q) => ({ x: q.x, y: q.y, w: tw, h: 14 }));
+        const spot = spots.find(
+          (r) =>
+            r.x >= g.plotLeft + 2 &&
+            r.x + r.w <= g.nowX - 4 &&
+            r.y >= top &&
+            r.y + r.h <= g.graphH - 2 &&
+            !placed.some((o) => boxesMeet(r, o)) &&
+            !traceHits(g, m.trace.pts, { x: r.x - 2, y: r.y - 1, w: r.w + 4, h: r.h + 2 })
         );
+        if (!spot) continue;
+        placed.push(spot);
+        ctx.font = font(11, 800);
+        ctx.fillStyle = C.warn;
+        ctx.textAlign = "left";
+        ctx.textBaseline = "top";
+        ctx.fillText(t, spot.x, spot.y + 1);
+        break;
       }
     });
     // Sound with no pitch above the detector's reach: an arrow up, not a break
     let lastCx = -99;
     m.ceil.forEach((t) => {
-      const x = geo.xAtTime(t);
-      if (x < geo.plotLeft || x > geo.nowX + 2 || x - lastCx < 60) return;
+      const x = g.xAtTime(t);
+      if (x < g.plotLeft || x > g.nowX + 2 || x - lastCx < 60) return;
       lastCx = x;
-      const y = (geo.safeTop || 0) + (size === "tiny" ? 30 : 60);
+      const y = top + (size === "tiny" ? 2 : 28);
       glyph(ctx, "up", x, y, C.muted, 6);
       if (size !== "tiny") {
-        ctx.font = font(10, 700);
         ctx.fillStyle = C.muted;
         ctx.textAlign = "center";
         ctx.textBaseline = "top";
-        ctx.fillText(L("más agudo de lo que mide el micro", "above what the mic can measure"), x, y + 6);
+        // Whole, and inside the take, or not at all
+        const words = [L("más agudo de lo que mide el micro", "above what the mic can measure"), L("fuera del micro", "above the mic")];
+        const room2 = 2 * Math.min(x - g.plotLeft, g.nowX - x) - 4;
+        textIfFits(ctx, words, x, y + 6, room2, 11, 700);
       }
     });
     ctx.restore();
-    const dot = drawNowDot(ctx, geo, m.trace.pts);
+    const dot = drawNowDot(ctx, g, m.trace.pts);
     if (dot && m.trace.last && m.trace.last.q === 1 && size !== "tiny") {
-      pill(ctx, L("aprox.", "approx."), dot.x - 10, dot.y - 30, { px: 10, align: "right", color: C.muted });
+      pill(ctx, L("aprox.", "approx."), dot.x - 10, dot.y - 30, { px: 11, align: "right", color: C.muted });
     }
-    sirenColumn(ctx, geo, m, size);
+    sirenColumn(ctx, g, m, size, top);
 
     const done = m.sirens.length;
     const goal = m.goal || 8;
     const ext = m.extent;
-    const wide = geo.laneRight - geo.plotLeft > 520;
+    const approx = ext && ext.approx;
     let right = ext
-      ? wide
-        ? `${noteName(ext.lo)} → ${noteName(ext.hi)} · ${semis(ext.hi - ext.lo)}${ext.approx ? " " + L("aprox.", "approx.") : ""}`
-        : `${noteName(ext.lo)}–${noteName(ext.hi)} · ${Math.round(ext.hi - ext.lo)} st${ext.approx ? " ~" : ""}`
-      : L("desliza de grave a agudo y vuelve", "glide low to high and back");
+      ? [
+          `${noteName(ext.lo)} → ${noteName(ext.hi)} · ${semis(ext.hi - ext.lo)}${approx ? " " + L("aprox.", "approx.") : ""}`,
+          `${noteName(ext.lo)}–${noteName(ext.hi)} · ${Math.round(ext.hi - ext.lo)} st${approx ? " ~" : ""}`,
+          `${Math.round(ext.hi - ext.lo)} st${approx ? " ~" : ""}`
+        ]
+      : [L("desliza de grave a agudo y vuelve", "glide low to high and back"), L("grave → agudo → grave", "low → high → low")];
     let rightColor = C.muted;
     if (!m.review && m.lastSirenAt && geo.tNow - m.lastSirenAt < 2600) {
-      right = L(`✓ sirena ${done} · respira`, `✓ siren ${done} · breathe`);
+      right = [L(`✓ sirena ${done} · respira`, `✓ siren ${done} · breathe`), L(`✓ sirena ${done}`, `✓ siren ${done}`)];
       rightColor = C.done;
     }
     const left = m.review
       ? L(`${done} ${done === 1 ? "sirena" : "sirenas"}`, `${done} ${done === 1 ? "siren" : "sirens"}`)
       : L(`Sirenas ${done}/${goal}`, `Sirens ${done}/${goal}`);
-    const y = header(ctx, geo, left, right, { rightColor, pips: { done, of: goal } });
-    if (m.review) {
-      const rows = [];
-      if (ext) {
-        rows.push(
-          L(
-            `De ${noteName(ext.lo)} a ${noteName(ext.hi)}: ${semis(ext.hi - ext.lo)}${ext.approx ? " (arriba, aprox.)" : ""}`,
-            `From ${noteName(ext.lo)} to ${noteName(ext.hi)}: ${semis(ext.hi - ext.lo)}${ext.approx ? " (top approx.)" : ""}`
-          )
-        );
-      }
-      const bn = m.breaks.map((b) => noteName(b.m));
-      const uniq = [...new Set(bn)];
-      rows.push(
-        m.breaks.length
-          ? {
-              text: L(
-                `${m.breaks.length} ${m.breaks.length === 1 ? "salto" : "saltos"} cerca de ${uniq.slice(0, 4).join(", ")}: ahí está tu cambio de registro`,
-                `${m.breaks.length} ${m.breaks.length === 1 ? "jump" : "jumps"} near ${uniq.slice(0, 4).join(", ")}: that is where your register shifts`
-              ),
-              color: C.warn
-            }
-          : L("Sin saltos: la línea fue continua", "No jumps: the line was continuous")
-      );
-      if (m.ceil.length) {
-        rows.push(
-          L(
-            "Por encima de ~Sol4 el micrófono pierde el tono: ahí la línea es aprox.",
-            "Above ~G4 the mic loses the pitch: the line is approx. there"
-          )
-        );
-      }
-      if (!done) {
-        rows.push(
-          L(
-            "Una sirena cuenta al subir 5 semitonos o más y volver a bajar",
-            "A siren counts when you rise 5 semitones or more and come back down"
-          )
-        );
-      }
-      reviewCard(ctx, geo, y + 6, L("Tus sirenas", "Your sirens"), rows, { w: Math.max(200, geo.nowX - geo.plotLeft - 10) });
-    }
+    header(ctx, geo, left, right, { rightColor, pips: { done, of: goal } });
+    drawReview(ctx, plan);
   }
 
   /** Right of "now": one bar per siren from its lowest to its highest note. */
-  function sirenColumn(ctx, geo, m, size) {
+  function sirenColumn(ctx, geo, m, size, top0) {
     const x0 = geo.nowX + 14;
     const x1 = geo.laneRight - 6;
     if (x1 - x0 < 30) return;
@@ -736,17 +1069,17 @@
     const n = Math.max(4, bars.length + (live ? 1 : 0));
     const step = (x1 - x0) / n;
     const bw = clamp(step * 0.45, 4, 12);
-    const top = (geo.safeTop || 0) + (size === "tiny" ? 26 : 32);
+    const top = top0 != null ? top0 : headBottom(geo) + 4;
     ctx.save();
     ctx.beginPath();
     ctx.rect(x0 - 6, top, x1 - x0 + 12, geo.graphH - top);
     ctx.clip();
     if (size !== "tiny") {
-      ctx.font = font(10, 700);
       ctx.fillStyle = C.faint;
       ctx.textAlign = "left";
       ctx.textBaseline = "top";
-      ctx.fillText(L("tu rango por sirena", "your range per siren"), x0 - 4, top + 2, x1 - x0 + 8);
+      // Whole words or none: the column is narrow on a phone
+      textIfFits(ctx, [L("tu rango por sirena", "your range per siren"), L("rango", "range")], x0 - 4, top + 2, x1 - x0 + 8, 11, 700);
     }
     const drawBar = (s, i, dashed) => {
       const cx = x0 + step * (i + 0.5);
@@ -787,7 +1120,7 @@
     const last = bars[bars.length - 1];
     if (last && size !== "tiny") {
       const cx = x0 + step * (bars.length - 0.5);
-      ctx.font = font(10, 800);
+      ctx.font = font(11, 800);
       ctx.fillStyle = C.text;
       ctx.textAlign = "center";
       ctx.textBaseline = "bottom";
@@ -800,119 +1133,163 @@
 
   /* —— Fry → clear /A/ (s1) —— */
 
+  /** The width of the highway's own range label at the bottom left ("C#2 Do♯"), to keep clear of it. */
+  function lowLabelW(ctx, geo) {
+    const U = global.VTPitchUtils;
+    if (!U || !U.midiToDualLabel || !Number.isFinite(geo.rangeMinMidi)) return 64;
+    ctx.font = "600 10px ui-monospace,monospace";
+    return ctx.measureText(U.midiToDualLabel(Math.floor(geo.rangeMinMidi), true)).width + 8;
+  }
+
+  /** Where the highway paints its top and bottom note names at the left edge ("A#3 La♯"). */
+  function edgeLabelRects(ctx, geo) {
+    const U = global.VTPitchUtils;
+    if (!U || !U.midiToDualLabel) return [];
+    ctx.font = "600 10px ui-monospace,monospace";
+    const rect = (midi) => {
+      const y = Math.max(12, Math.min(geo.graphH - 4, geo.midiToY(midi) + 4));
+      return { x: 0, y: y - 11, w: ctx.measureText(U.midiToDualLabel(midi, true)).width + 12, h: 16 };
+    };
+    const out = [];
+    if (Number.isFinite(geo.rangeMaxMidi)) out.push(rect(Math.ceil(geo.rangeMaxMidi)));
+    if (Number.isFinite(geo.rangeMinMidi)) out.push(rect(Math.floor(geo.rangeMinMidi)));
+    return out;
+  }
+
   /**
    * model: { trace (q=2 creak-like), phase "fry"|"clear", cur: { start, clearFrom,
    *   clearSec, creakSec } | null, holds: [{ total, creak, clear, best }], best,
-   *   comfort (MIDI | null), fryM (MIDI of the fry floor), loud (bool), review }
+   *   comfort (MIDI | null), fryM (MIDI of the fry floor), loud (bool), review, reviewRows }
    */
   function pitchHold(ctx, geo, layer, m) {
     const size = sizeOf(geo);
+    const plan = m.review ? reviewPlan(ctx, geo, rowsOf(m), { top: headBottom(geo) + 4 }) : null;
+    const g = reviewGeo(geo, plan);
     if (layer === "under") {
       if (m.comfort != null) {
-        const yA = geo.midiToY(m.comfort + 1);
-        const yB = geo.midiToY(m.comfort - 1);
+        const yA = g.midiToY(m.comfort + 1);
+        const yB = g.midiToY(m.comfort - 1);
         ctx.fillStyle = "rgba(52, 178, 122, 0.1)";
-        ctx.fillRect(geo.plotLeft, yA, geo.laneRight - geo.plotLeft, yB - yA);
+        ctx.fillRect(g.plotLeft, yA, g.laneRight - g.plotLeft, yB - yA);
         ctx.setLineDash([5, 5]);
         ctx.strokeStyle = "rgba(52, 178, 122, 0.55)";
         ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.moveTo(geo.plotLeft, yA);
-        ctx.lineTo(geo.laneRight, yA);
-        ctx.moveTo(geo.plotLeft, yB);
-        ctx.lineTo(geo.laneRight, yB);
+        ctx.moveTo(g.plotLeft, yA);
+        ctx.lineTo(g.laneRight, yA);
+        ctx.moveTo(g.plotLeft, yB);
+        ctx.lineTo(g.laneRight, yB);
         ctx.stroke();
         ctx.setLineDash([]);
         if (size !== "tiny") {
-          ctx.font = font(10, 700);
+          // Above the band; the "clara" marks sit below it, on their own lines
           ctx.fillStyle = C.target;
           ctx.textAlign = "left";
           ctx.textBaseline = "bottom";
-          ctx.fillText(L("tu tono cómodo (no se puntúa)", "your comfortable pitch (not scored)"), geo.plotLeft + 4, yA - 2);
+          textIfFits(
+            ctx,
+            [L("tu tono cómodo (no se puntúa)", "your comfortable pitch (not scored)"), L("tu tono cómodo", "your comfortable pitch")],
+            g.plotLeft + 4,
+            yA - 2,
+            g.laneRight - g.plotLeft - 8,
+            11,
+            700
+          );
         }
       }
       // The fry floor: creak has no steady pitch, so it lives on its own lane
-      const yF = geo.midiToY(m.fryM);
+      const yF = g.midiToY(m.fryM);
       ctx.setLineDash([2, 5]);
       ctx.strokeStyle = "rgba(169, 184, 204, 0.5)";
       ctx.lineWidth = 1.5;
       ctx.beginPath();
-      ctx.moveTo(geo.plotLeft, yF);
-      ctx.lineTo(geo.laneRight, yF);
+      ctx.moveTo(g.plotLeft, yF);
+      ctx.lineTo(g.laneRight, yF);
       ctx.stroke();
       ctx.setLineDash([]);
-      ctx.font = font(10, 700);
+      // Under the floor, right of the highway's own low label (they shared a spot)
+      const lowY = g.midiToY(Math.floor(g.rangeMinMidi != null ? g.rangeMinMidi : m.fryM - 2)) + 4;
+      const fx = Math.abs(yF + 10 - (lowY - 3)) < 16 ? g.plotLeft + lowLabelW(ctx, g) + 4 : g.plotLeft + 4;
       ctx.fillStyle = C.muted;
       ctx.textAlign = "left";
       ctx.textBaseline = "top";
-      ctx.fillText(L("fry (sin tono estable)", "fry (no steady pitch)"), geo.plotLeft + 4, yF + 4);
+      textIfFits(ctx, [L("fry (sin tono estable)", "fry (no steady pitch)"), "fry"], fx, yF + 4, g.laneRight - fx - 4, 11, 700);
       return;
     }
     // Clear tone: the line at its pitch, as thick as it is loud
-    drawTrace(ctx, geo, m.trace.pts, { widthOf: (p) => levelWidth(p.db), skip: (p) => p.q === 2 });
+    drawTrace(ctx, g, m.trace.pts, { widthOf: (p) => levelWidth(p.db), skip: (p) => p.q === 2 });
     // Creak-like sound: dots along the fry floor
     ctx.save();
-    clipPlot(ctx, geo);
-    const yF = geo.midiToY(m.fryM);
+    clipPlot(ctx, g);
+    const yF = g.midiToY(m.fryM);
     ctx.fillStyle = C.you;
     let lastX = -99;
     m.trace.pts.forEach((p) => {
       if (p.q !== 2) return;
-      const x = geo.xAtTime(p.t);
+      const x = g.xAtTime(p.t);
       if (x - lastX < 5) return;
       lastX = x;
       ctx.beginPath();
       ctx.arc(x, yF - 5, 2.2, 0, Math.PI * 2);
       ctx.fill();
     });
-    // Where each hold turned clear
+    // Where each hold turned clear: a line up from the floor, "clara" beside it
+    let lastLab = -99;
     (m.clearMarks || []).forEach((cm) => {
-      const x = geo.xAtTime(cm.t);
-      if (x < geo.plotLeft || x > geo.laneRight) return;
+      const x = g.xAtTime(cm.t);
+      if (x < g.plotLeft || x > g.laneRight) return;
+      const yT = g.midiToY(cm.m) + 8;
       ctx.strokeStyle = C.done;
       ctx.lineWidth = 1.5;
       ctx.beginPath();
       ctx.moveTo(x, yF - 12);
-      ctx.lineTo(x, geo.midiToY(cm.m) + 8);
+      ctx.lineTo(x, yT);
       ctx.stroke();
-      if (size !== "tiny") {
-        ctx.font = font(10, 800);
+      if (size !== "tiny" && yF - 12 - yT >= 16 && x - lastLab > 50) {
         ctx.fillStyle = C.done;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "bottom";
-        ctx.fillText(L("clara", "clear"), x, geo.midiToY(cm.m) + 6 - 14);
+        ctx.textAlign = "left";
+        ctx.textBaseline = "middle";
+        if (textIfFits(ctx, [L("clara", "clear")], x + 4, (yF - 12 + yT) / 2, g.laneRight - x - 6, 11, 800)) lastLab = x;
       }
     });
     ctx.restore();
-    drawNowDot(ctx, geo, m.trace.pts);
+    drawNowDot(ctx, g, m.trace.pts);
 
-    const phase =
-      m.phase === "fry"
-        ? L("Paso 1 · fry suave", "Step 1 · gentle fry")
-        : L("Paso 2 · /A/ clara", "Step 2 · clear /A/");
+    const fryPhase = m.phase === "fry";
+    const phase = fryPhase ? L("Paso 1 · fry suave", "Step 1 · gentle fry") : L("Paso 2 · /A/ clara", "Step 2 · clear /A/");
+    const phaseShort = fryPhase ? L("Fry suave", "Gentle fry") : L("/A/ clara", "Clear /A/");
     const cur = m.cur;
-    let left = phase;
+    let left = [phase, phaseShort];
     let leftColor = C.text;
-    if (m.review) left = L("Tus sostenidos", "Your holds");
+    if (m.review) left = [L("Tus sostenidos", "Your holds")];
     else if (cur && cur.clearSec > 0) {
-      left = `${phase} · ${L("clara", "clear")} ${V.fmtSec(cur.clearSec)}`;
+      const s = V.fmtSec(cur.clearSec);
+      left = fryPhase
+        ? [`${phase} · ${L("clara", "clear")} ${s}`, `${L("Clara", "Clear")} ${s}`]
+        : [`${phase} ${s}`, `${phaseShort} ${s}`];
       leftColor = cur.clearSec >= 2 ? C.done : C.text;
-    } else if (cur) left = `${phase} · ${L("sonando", "sounding")} ${V.fmtSec(cur.creakSec)}`;
-    // In review the card below carries the best hold
-    const right = m.review && m.reviewRows && m.reviewRows.length ? "" : m.best > 0 ? L(`mejor clara ${V.fmtSec(m.best)}`, `best clear ${V.fmtSec(m.best)}`) : L("2 s claros se registran", "2 s clear gets logged");
+    } else if (cur) {
+      const s = V.fmtSec(cur.creakSec);
+      left = [`${phase} · ${L("sonando", "sounding")} ${s}`, `${phaseShort} ${s}`];
+    }
+    // In review the card carries the best hold
+    const right = m.review
+      ? []
+      : m.best > 0
+        ? [L(`mejor clara ${V.fmtSec(m.best)}`, `best clear ${V.fmtSec(m.best)}`), L(`mejor ${V.fmtSec(m.best)}`, `best ${V.fmtSec(m.best)}`)]
+        : [L("2 s claros se registran", "2 s clear gets logged"), L("meta 2 s", "goal 2 s")];
     let y = header(ctx, geo, left, right, { leftColor });
-    if (size !== "tiny") y = holdBar(ctx, geo, y + 4, m, size);
-    if (size === "full" || m.review) y = shelf(ctx, geo, y + 2, m, size);
-    if (!m.review && m.loud && size !== "tiny") {
-      pill(ctx, L("más fuerte no es más claro", "louder is not clearer"), geo.plotLeft, y + 4, { px: 11, color: C.muted, weight: 700 });
+    if (!m.review) {
+      if (size !== "tiny") y = holdBar(ctx, g, y + 4, m, size);
+      if (size === "full") y = shelf(ctx, g, y + 2, m, size);
+      if (m.loud && size !== "tiny") {
+        pill(ctx, L("más fuerte no es más claro", "louder is not clearer"), geo.plotLeft, y + 4, { px: 11, color: C.muted, weight: 700 });
+      }
+    } else if (plan && plan.mode === "side" && size !== "tiny") {
+      // Beside the card: the shelf of holds, left of it
+      shelf(ctx, g, y + 6, m, size);
     }
-    if (m.review && !m.holds.length) {
-      reviewCard(ctx, geo, y + 4, L("Sin sostenidos todavía", "No holds yet"), [
-        L("Empieza con un fry suave y deja que se aclare en /A/", "Start with a gentle fry and let it clear into /A/")
-      ]);
-    } else if (m.review && m.reviewRows && m.reviewRows.length) {
-      reviewCard(ctx, geo, y + 4, L("Tus sostenidos", "Your holds"), m.reviewRows, { w: Math.max(220, geo.nowX - geo.plotLeft - 10) });
-    }
+    drawReview(ctx, plan);
   }
 
   /** The current clear hold against the 2 s mark and your best (a hollow ghost). */
@@ -948,7 +1325,7 @@
     ctx.moveTo(tx, y - 3);
     ctx.lineTo(tx, y + h + 3);
     ctx.stroke();
-    ctx.font = font(10, 700);
+    ctx.font = font(11, 700);
     ctx.textBaseline = "top";
     ctx.textAlign = "center";
     ctx.fillStyle = C.muted;
@@ -967,7 +1344,7 @@
     const x0 = geo.plotLeft;
     const avail = Math.min(geo.nowX - x0 - 10, 460);
     const cw = Math.min(74, (avail - (holds.length - 1) * 5) / holds.length);
-    if (cw < 34) return y;
+    if (cw < 40) return y;
     const h = 30;
     holds.forEach((hd, i) => {
       const x = x0 + i * (cw + 5);
@@ -981,11 +1358,11 @@
       ctx.fillRect(x + 5, y + h - 9, barW * cf, 5);
       ctx.fillStyle = C.you;
       ctx.fillRect(x + 5 + barW * cf, y + h - 9, barW * (1 - cf), 5);
-      ctx.font = font(11, 800);
       ctx.fillStyle = hd.clear >= 2 ? C.done : C.text;
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
-      ctx.fillText((hd.clear >= 2 ? "✓ " : "") + V.fmtSec(hd.clear), x + cw / 2, y + 3, cw - 4);
+      const s = V.fmtSec(hd.clear);
+      textIfFits(ctx, hd.clear >= 2 ? ["✓ " + s, s] : [s], x + cw / 2, y + 3, cw - 4, 11, 800);
       if (hd === m.bestHold) {
         ctx.strokeStyle = C.done;
         ctx.lineWidth = 1.5;
@@ -994,11 +1371,10 @@
       }
     });
     if (size === "full") {
-      ctx.font = font(10, 700);
       ctx.fillStyle = C.faint;
       ctx.textAlign = "left";
       ctx.textBaseline = "top";
-      ctx.fillText(L("clara ▬  fry ▨", "clear ▬  fry ▨"), x0, y + h + 3);
+      textIfFits(ctx, [L("clara ▬  fry ▨", "clear ▬  fry ▨")], x0, y + h + 3, avail, 11, 700);
     }
     return y + h + 16;
   }
@@ -1007,72 +1383,27 @@
 
   /**
    * model: { trace, steps: [{ label, short, done, res }], i, frac, dir, head,
-   *   right, marks: [{ t, m, res }], review, reviewRows, reviewTitle, levels? }
+   *   headAlt, right, rightAlt, marks: [{ t, m, res }], review, reviewRows }
    */
   function pitchStones(ctx, geo, layer, m) {
     if (layer !== "over") return;
     const size = sizeOf(geo);
-    drawTrace(ctx, geo, m.trace.pts, { alpha: m.dim ? 0.45 : 1 });
+    const chipsY = headBottom(geo) + 4;
+    const chipH = size === "tiny" ? 0 : size === "compact" ? 26 : 30;
+    const plan = m.review ? reviewPlan(ctx, geo, rowsOf(m), { top: chipH ? chipsY + chipH + 4 : chipsY }) : null;
+    const g = reviewGeo(geo, plan);
+    drawTrace(ctx, g, m.trace.pts, { alpha: m.dim ? 0.45 : 1 });
     ctx.save();
-    clipPlot(ctx, geo);
-    (m.marks || []).forEach((k) => drawResultMark(ctx, geo, geo.xAtTime(k.t), geo.midiToY(k.m), k.res, { cents: size !== "tiny" }));
+    clipPlot(ctx, g);
+    (m.marks || []).forEach((k) => drawResultMark(ctx, g, g.xAtTime(k.t), g.midiToY(k.m), k.res, { cents: size !== "tiny", below: k.below }));
     ctx.restore();
-    const at = drawNowDot(ctx, geo, m.trace.pts);
-    if (!m.review) drawDirection(ctx, geo, at, m.dir);
-    let y = header(ctx, geo, m.head, m.right, { leftColor: m.headColor });
-    if (!m.review) {
-      stepRow(ctx, geo, y + 4, m.steps, m.i, m.frac);
-      return;
-    }
-    y = stepRow(ctx, geo, y + 4, m.steps, -1, null);
-    if (m.reviewRows && m.reviewRows.length) {
-      const bottom = reviewCard(ctx, geo, y + 2, m.reviewTitle || "", m.reviewRows);
-      if (m.levels && m.levels.length > 2 && size === "full") levelBars(ctx, geo, bottom + 6, m.levels);
-    }
-  }
-
-  /**
-   * Level per step, relative to your own median (dB): the honest proxy for
-   * "all the air at the start" — shown after the take, never live.
-   * levels: [{ label, db }]
-   */
-  function levelBars(ctx, geo, y, levels) {
-    const x = geo.plotLeft + 4;
-    const w = Math.min(geo.laneRight - x - 8, 470);
-    const h = 64;
-    if (y + h + 18 > geo.graphH) return;
-    ctx.fillStyle = "rgba(8, 13, 20, 0.9)";
-    roundRect(ctx, x, y, w, h + 16, 10);
-    ctx.fill();
-    ctx.font = font(10, 800);
-    ctx.fillStyle = C.muted;
-    ctx.textAlign = "left";
-    ctx.textBaseline = "top";
-    ctx.fillText(L("nivel por nota (vs. tu mediana)", "level per note (vs your median)"), x + 8, y + 4);
-    const n = levels.length;
-    const slot = (w - 16) / n;
-    const mid = y + 16 + (h - 20) / 2;
-    const scale = (h - 24) / 2 / 8; // ±8 dB fills the half height
-    ctx.strokeStyle = C.grid;
-    ctx.beginPath();
-    ctx.moveTo(x + 8, mid);
-    ctx.lineTo(x + w - 8, mid);
-    ctx.stroke();
-    ctx.fillStyle = C.targetSoft;
-    ctx.fillRect(x + 8, mid - 3 * scale, w - 16, 6 * scale);
-    levels.forEach((l, i) => {
-      const cx = x + 8 + slot * (i + 0.5);
-      if (Number.isFinite(l.db)) {
-        const v = clamp(l.db, -8, 8) * scale;
-        ctx.fillStyle = Math.abs(l.db) > 3 ? C.warn : C.you;
-        ctx.fillRect(cx - Math.min(6, slot * 0.3), v > 0 ? mid - v : mid, Math.min(12, slot * 0.6), Math.max(1.5, Math.abs(v)));
-      }
-      ctx.font = font(9, 700);
-      ctx.fillStyle = C.faint;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "bottom";
-      ctx.fillText(l.label, cx, y + h + 14);
-    });
+    const at = drawNowDot(ctx, g, m.trace.pts);
+    if (!m.review) drawDirection(ctx, g, at, m.dir);
+    header(ctx, geo, [m.head].concat(m.headAlt || []), [m.right].concat(m.rightAlt || []), { leftColor: m.headColor });
+    if (!m.review) stepRow(ctx, geo, chipsY, m.steps, m.i, m.frac);
+    // After Stop the steps stay only where the card is beside the take
+    else if (!plan || plan.mode === "side") stepRow(ctx, geo, chipsY, m.steps, -1, null);
+    drawReview(ctx, plan);
   }
 
   /* —— Listen → sing → lock (s9) —— */
@@ -1085,40 +1416,35 @@
     if (layer !== "over") return;
     const size = sizeOf(geo);
     const listening = m.phase === "listen";
-    drawTrace(ctx, geo, m.trace.pts, { alpha: listening ? 0.4 : 1 });
-    const at = drawNowDot(ctx, geo, m.trace.pts, { ring: listening ? 0 : m.lock });
-    if (!m.review && m.phase === "sing") drawDirection(ctx, geo, at, m.dir);
+    const chipsY = headBottom(geo) + 4;
+    const chipH = size === "tiny" ? 0 : size === "compact" ? 26 : 30;
+    const plan = m.review ? reviewPlan(ctx, geo, rowsOf(m), { top: chipH ? chipsY + chipH + 4 : chipsY }) : null;
+    const g = reviewGeo(geo, plan);
+    drawTrace(ctx, g, m.trace.pts, { alpha: listening ? 0.4 : 1 });
+    const at = drawNowDot(ctx, g, m.trace.pts, { ring: listening ? 0 : m.lock });
+    if (!m.review && m.phase === "sing") drawDirection(ctx, g, at, m.dir);
     const total = m.slots.length;
     const done = m.slots.filter((s) => s.state === "done").length;
-    const narrow = geo.laneRight - geo.plotLeft < 460;
+    const n = m.noteLabel;
     let left;
     let leftColor = C.text;
-    if (m.review) left = L(`Fijaste ${done} de ${total}`, `You locked ${done} of ${total}`);
+    if (m.review) left = [L(`Fijaste ${done} de ${total}`, `You locked ${done} of ${total}`)];
     else if (m.phase === "done") {
-      left = L("✓ Ronda completa", "✓ Round complete");
+      left = [L("✓ Ronda completa", "✓ Round complete")];
       leftColor = C.done;
-    } else if (listening) left = narrow ? L(`Escucha ${m.noteLabel}…`, `Listen: ${m.noteLabel}…`) : L(`Escucha ${m.noteLabel}… luego canta`, `Listen to ${m.noteLabel}… then sing`);
-    else left = narrow ? L(`Canta ${m.noteLabel}`, `Sing ${m.noteLabel}`) : L(`Canta ${m.noteLabel} y sostenlo`, `Sing ${m.noteLabel} and hold it`);
-    const right = L(`fijadas ${done}/${total}`, `locked ${done}/${total}`);
-    const y = header(ctx, geo, left, right, { leftColor });
-    if (listening && !m.review) earCue(ctx, geo, m);
+    } else if (listening) left = [L(`Escucha ${n}… luego canta`, `Listen to ${n}… then sing`), L(`Escucha ${n}…`, `Listen: ${n}…`)];
+    else left = [L(`Canta ${n} y sostenlo`, `Sing ${n} and hold it`), L(`Canta ${n}`, `Sing ${n}`)];
+    const right = m.review ? [] : [L(`fijadas ${done}/${total}`, `locked ${done}/${total}`), `${done}/${total}`];
+    header(ctx, geo, left, right, { leftColor });
+    if (listening && !m.review) earCue(ctx, g, m);
     const items = m.slots.map((s) => ({
       label: s.state === "done" && s.res ? `${s.label} ${s.res.octave ? "8va" : fmtCents(s.res.cents)}` : s.label,
       short: s.label,
-      sub:
-        s.state === "done" && s.res && s.res.sd != null
-          ? `±${Math.round(s.res.sd)}¢`
-          : s.state === "cur" && !m.review
-            ? listening
-              ? L("escucha", "listen")
-              : L("canta", "sing")
-            : "",
       done: s.state === "done"
     }));
-    const y2 = stepRow(ctx, geo, y + 4, items, m.review ? -1 : m.idx, listening ? null : m.lock);
-    if (m.review && m.summary && m.summary.length) {
-      reviewCard(ctx, geo, y2 + 2, L("Afinación y estabilidad", "Accuracy and stability"), m.summary);
-    }
+    if (!m.review) stepRow(ctx, geo, chipsY, items, m.idx, listening ? null : m.lock);
+    else if (!plan || plan.mode === "side") stepRow(ctx, geo, chipsY, items, -1, null);
+    drawReview(ctx, plan);
   }
 
   /** While the reference rings: sound waves by the target lane and a countdown ring. */
@@ -1141,53 +1467,87 @@
 
   /* —— Chord tones with the path ahead (s2, s13) —— */
 
+  /** The chord strip's row under the header (none on a rotated phone). */
+  function stripTop(geo) {
+    return headBottom(geo) + 4;
+  }
+
   /**
-   * model: { trace, events: [{ t0, t1, chord, targets: [{ midi, label, dashed,
+   * model: { trace, events: [{ t0, t1, chord, targets: [{ midi, label, deg, dashed,
    *   lit, amber }], landed, frac, cur, stones }], chords: [{ t0, t1, name, cur }],
-   *   leap: { t, dir, n } | null, dir, head, right, review, reviewTitle, reviewRows }
+   *   leap: { t, dir, n } | null, dir, head, headAlt, right, rightAlt, review, reviewRows }
    */
   function pitchChord(ctx, geo, layer, m) {
     const size = sizeOf(geo);
+    const top = size === "tiny" ? headBottom(geo) + 4 : stripTop(geo) + 24;
+    const plan = m.review ? reviewPlan(ctx, geo, rowsOf(m), { top }) : null;
+    const g = reviewGeo(geo, plan);
     if (layer === "under") {
-      chordBars(ctx, geo, m, size);
+      chordBars(ctx, g, m, size);
       return;
     }
-    drawTrace(ctx, geo, m.trace.pts);
-    const at = drawNowDot(ctx, geo, m.trace.pts, { ring: m.review ? 0 : m.ring || 0 });
-    if (!m.review) drawDirection(ctx, geo, at, m.dir);
+    drawTrace(ctx, g, m.trace.pts);
+    const at = drawNowDot(ctx, g, m.trace.pts, { ring: m.review ? 0 : m.ring || 0 });
+    if (!m.review) drawDirection(ctx, g, at, m.dir);
     // A big leap coming: its size and direction, before it sounds
     if (!m.review && m.leap && size !== "tiny") {
-      const x = geo.xAtTime(m.leap.t);
-      if (x > geo.nowX && x < geo.laneRight) {
-        const y = geo.midiToY(m.leap.m) + (m.leap.dir > 0 ? 22 : -38);
-        pill(ctx, `${m.leap.dir > 0 ? "↑" : "↓"}${m.leap.n}`, x + 4, clamp(y, (geo.safeTop || 0) + 30, geo.graphH - 24), {
-          px: 12,
-          color: C.text,
-          stroke: C.gridStrong
-        });
+      const x = g.xAtTime(m.leap.t);
+      if (x > g.nowX && x < g.laneRight - 40) {
+        // Beside the bar it leads to, on the side the leap comes from, and
+        // only where it covers no other bar or its name
+        const text = `${m.leap.dir > 0 ? "↑" : "↓"}${m.leap.n}`;
+        const w = textW(ctx, text, 12, 800) + 10;
+        const h = 21;
+        const ym = g.midiToY(m.leap.m);
+        const lo = stripTop(geo) + 26;
+        const hi = g.graphH - 24;
+        const ys = m.leap.dir > 0 ? [ym + 14, ym - 14 - h] : [ym - 14 - h, ym + 14];
+        const spot = ys
+          .map((y) => ({ x: x + 4, y, w, h }))
+          .find((r) => r.y >= lo && r.y <= hi && r.x + r.w <= g.laneRight - 2 && !chordBoxes.some((b) => boxesMeet(r, b)));
+        if (spot) pill(ctx, text, spot.x, spot.y, { px: 12, h, color: C.text, stroke: C.gridStrong });
       }
     }
-    let y = header(ctx, geo, m.head, m.right, { leftColor: m.headColor });
-    if (size !== "tiny") y = chordStrip(ctx, geo, y + 4, m);
-    if (m.review && m.reviewRows && m.reviewRows.length) reviewCard(ctx, geo, y + 4, m.reviewTitle || "", m.reviewRows);
+    header(ctx, geo, [m.head].concat(m.headAlt || []), [m.right].concat(m.rightAlt || []), { leftColor: m.headColor });
+    if (size !== "tiny" && (!plan || plan.mode === "side")) chordStrip(ctx, g, stripTop(geo), m);
+    drawReview(ctx, plan);
   }
 
-  /** Target bars by the clock: now filled, ahead dashed, behind faint with a check. */
+  /** The bars chordBars drew this frame, so the leap pill can keep off them. */
+  let chordBoxes = [];
+  const boxesMeet = (r, b) => r.x < b.x + b.w && r.x + r.w > b.x && r.y < b.y + b.h && r.y + r.h > b.y;
+
+  /**
+   * Target bars by the clock: now filled, ahead dashed, behind faint with a
+   * check. A bar's name sits where your line is not: whole bars ahead are
+   * named in their middle, the one you sing in its part still ahead of "now",
+   * the ones behind are not named (their lane label on the right is).
+   */
   function chordBars(ctx, geo, m, size) {
     ctx.save();
     clipPlot(ctx, geo);
-    const bh = Math.max(12, Math.min(24, (geo.tolHalf || 6) * 2 + 6));
+    const bhMax = Math.max(12, Math.min(24, (geo.tolHalf || 6) * 2 + 6));
+    const boxes = [];
+    const names = [];
+    chordBoxes = boxes;
     (m.events || []).forEach((ev) => {
       const xa = geo.xAtTime(ev.t0);
       const xb = geo.xAtTime(ev.t1);
       if (xb < geo.plotLeft || xa > geo.laneRight) return;
       const past = ev.t1 <= geo.tNow;
       const cur = ev.cur;
-      (ev.stones || ev.targets).forEach((tg) => {
+      const list = ev.stones || ev.targets;
+      // Bars no taller than the gap between their lanes, so none covers another
+      const ys = list.map((tg) => geo.midiToY(tg.midi)).sort((a, b) => a - b);
+      let gap = Infinity;
+      for (let i = 1; i < ys.length; i++) if (ys[i] - ys[i - 1] > 0.5) gap = Math.min(gap, ys[i] - ys[i - 1]);
+      const bh = Math.max(8, Math.min(bhMax, gap - 2));
+      list.forEach((tg, si) => {
         const sa = tg.t0 != null ? geo.xAtTime(tg.t0) : xa + 2;
         const sb = tg.t1 != null ? geo.xAtTime(tg.t1) : xb - 2;
         const y = geo.midiToY(tg.midi);
         const w = Math.max(6, sb - sa);
+        boxes.push({ x: sa, y: y - bh / 2, w, h: bh });
         ctx.globalAlpha = past && !cur ? 0.45 : cur ? 1 : 0.85;
         if (tg.lit) ctx.fillStyle = "rgba(255, 211, 110, 0.3)";
         else if (cur && tg.now) ctx.fillStyle = "rgba(52, 178, 122, 0.34)";
@@ -1214,13 +1574,28 @@
         roundRect(ctx, sa + 0.5, y - bh / 2 + 0.5, w - 1, bh - 1, 6);
         ctx.stroke();
         ctx.setLineDash([]);
-        if (w > 18 && bh >= 14) {
-          ctx.font = font(bh >= 20 ? 12 : 10, 800);
-          ctx.fillStyle = tg.lit ? C.done : cur && tg.now ? "#eafff4" : C.muted;
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-          ctx.fillText((tg.lit ? "✓ " : "") + tg.label, sa + w / 2, y + 0.5, w - 4);
-        } else if (tg.lit) glyph(ctx, "check", sa + w / 2, y, C.done, 4);
+        // The bar's name, only where no line runs through it
+        const ahead = sa >= geo.nowX + 2;
+        const lx0 = ahead ? sa : Math.max(sa, geo.nowX + 16);
+        const room = sb - lx0 - 6;
+        const px = bh >= 20 ? 12 : 11;
+        if (bh >= 13 && room > 14 && !past) {
+          const words = (tg.lit ? ["✓ " + tg.label, "✓ " + (tg.deg || "")] : [tg.label, tg.deg]).filter(Boolean);
+          const t = fitOption(ctx, words, room, px, 800);
+          const cx = lx0 + 3 + room / 2;
+          const r = t ? { x: cx - ctx.measureText(t).width / 2, y: y - px / 2 - 1, w: ctx.measureText(t).width, h: px + 2 } : null;
+          if (r && !names.some((o) => boxesMeet(r, o))) {
+            names.push(r);
+            ctx.fillStyle = tg.lit ? C.done : cur && tg.now ? "#eafff4" : C.muted;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText(t, cx, y + 0.5);
+          }
+        }
+        // A landed stone behind "now": its check at the end your line had left
+        if (tg.lit && ev.stones && (past || sb < geo.nowX)) {
+          glyph(ctx, "check", si === 0 ? Math.max(sa + 8, sb - 9) : sa + 9, y, C.done, 4);
+        }
         ctx.globalAlpha = 1;
       });
       if (ev.landed && !ev.stones) {
@@ -1228,7 +1603,11 @@
         if (tg) glyph(ctx, "check", Math.max(geo.plotLeft + 6, xb - 8), geo.midiToY(tg.midi) - bh / 2 - 7, C.done, 5);
       }
     });
-    // Intervals between landed stones (s13): the sung interval against the written one
+    // Intervals between landed stones (s13): the sung interval against the
+    // written one, named only where the words touch no bar and stay whole
+    const meets = boxesMeet;
+    const hit = (r) => boxes.some((b) => meets(r, b));
+    const tags = [];
     (m.links || []).forEach((k) => {
       const xa = geo.xAtTime(k.ta);
       const xb = geo.xAtTime(k.tb);
@@ -1241,11 +1620,16 @@
       ctx.moveTo(xa, ya);
       ctx.lineTo(xb, yb);
       ctx.stroke();
-      ctx.font = font(10, 800);
+      const text = `${k.name} ${fmtCents(k.err)}`;
+      const tw = textW(ctx, text, 11, 800);
+      const cx = (xa + xb) / 2;
+      const r = { x: cx - tw / 2 - 2, y: Math.min(ya, yb) - 17, w: tw + 4, h: 14 };
+      if (r.x < geo.plotLeft + 2 || r.x + r.w > geo.laneRight - 2 || hit(r) || tags.some((t) => meets(r, t))) return;
+      tags.push(r);
       ctx.fillStyle = C.done;
       ctx.textAlign = "center";
       ctx.textBaseline = "bottom";
-      ctx.fillText(`${k.name} ${fmtCents(k.err)}`, (xa + xb) / 2, Math.min(ya, yb) - 4);
+      ctx.fillText(text, cx, Math.min(ya, yb) - 4);
     });
     ctx.restore();
   }
@@ -1270,11 +1654,14 @@
       ctx.lineWidth = 1;
       roundRect(ctx, xa + 1.5, y + 0.5, xb - xa - 3, h - 1, 5);
       ctx.stroke();
-      ctx.font = font(11, 800);
       ctx.fillStyle = c.cur ? C.text : C.muted;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(c.name, (xa + xb) / 2, y + h / 2 + 0.5, xb - xa - 6);
+      // The name keeps off the "now" line: in the part ahead of it, else behind
+      const tw = textW(ctx, c.name, 11, 800);
+      const parts = geo.nowX > xa + 3 && geo.nowX < xb - 3 ? [[geo.nowX + 3, xb], [xa, geo.nowX - 3]] : [[xa, xb]];
+      const part = parts.find(([a, b]) => b - a - 6 >= tw);
+      if (part) textIfFits(ctx, [c.name], (part[0] + part[1]) / 2, y + h / 2 + 0.5, part[1] - part[0] - 6, 11, 800);
     });
     // "now" through the strip
     ctx.strokeStyle = "rgba(238, 243, 250, 0.6)";
@@ -1289,63 +1676,88 @@
 
   /* —— Song phrases (s3) —— */
 
+  /** Px the phrase brackets and their lengths need under the review card when it sits above them. */
+  const PHRASE_ROW = 24;
+
   /**
    * model: { trace, phrases: [{ t0, t1, len, ok, shape }], cur: { t0 } | null,
-   *   target (s), head, right, chord, review, reviewRows }
+   *   target (s), head, headAlt, right, rightAlt, review, reviewRows }
    */
   function pitchSong(ctx, geo, layer, m) {
     if (layer !== "over") return;
     const size = sizeOf(geo);
-    drawTrace(ctx, geo, m.trace.pts, { widthOf: (p) => levelWidth(p.db) });
-    drawNowDot(ctx, geo, m.trace.pts);
-    let y = header(ctx, geo, m.head, m.right, { leftColor: m.headColor });
-    const by = y + (size === "tiny" ? 8 : 14);
+    const plan = m.review ? reviewPlan(ctx, geo, rowsOf(m), { top: headBottom(geo) + 4, extra: PHRASE_ROW }) : null;
+    const g = reviewGeo(geo, plan);
+    drawTrace(ctx, g, m.trace.pts, { widthOf: (p) => levelWidth(p.db) });
+    drawNowDot(ctx, g, m.trace.pts);
+    header(ctx, geo, [m.head].concat(m.headAlt || []), [m.right].concat(m.rightAlt || []), { leftColor: m.headColor });
+    const by = plan && plan.mode === "top" ? plan.y + plan.h + 8 : headBottom(geo) + (size === "tiny" ? 8 : 14);
     ctx.save();
-    clipPlot(ctx, geo);
+    clipPlot(ctx, g);
     // Each phrase as a bracket with its length; pauses between them, neutral
     let prevEnd = null;
-    m.phrases.forEach((p) => {
-      const xa = geo.xAtTime(p.t0);
-      const xb = geo.xAtTime(p.t1);
-      if (prevEnd != null) pauseMark(ctx, geo, prevEnd, p.t0, by, size);
-      prevEnd = p.t1;
-      if (xb < geo.plotLeft || xa > geo.laneRight) return;
-      bracket(ctx, xa, xb, by, p.ok ? C.done : C.muted);
-      const label = (p.ok ? "✓ " : "") + V.fmtSec(p.len);
-      ctx.font = font(11, 800);
-      ctx.fillStyle = p.ok ? C.done : C.text;
-      ctx.textAlign = "center";
+    let lastRight = -99;
+    // The highway's own note names at the left edge are obstacles too
+    const edges = edgeLabelRects(ctx, geo);
+    const labelAt = (text, cx, y, px, weight, color, maxW) => {
+      const t = fitOption(ctx, text, maxW, px, weight);
+      if (t == null) return false;
+      const tw = ctx.measureText(t).width;
+      let x = cx - tw / 2;
+      edges.forEach((r) => {
+        if (boxesMeet({ x, y, w: tw, h: px + 3 }, r)) x = r.x + r.w + 4;
+      });
+      if (x + tw > cx + maxW / 2 || x < lastRight + 6) return false;
+      ctx.fillStyle = color;
+      ctx.textAlign = "left";
       ctx.textBaseline = "top";
-      ctx.fillText(label, (xa + xb) / 2, by + 4, Math.max(30, xb - xa));
-      if (size === "full" && p.shape && xb - xa > 50) {
-        ctx.font = font(10, 700);
-        ctx.fillStyle = C.muted;
-        ctx.fillText(shapeWord(p.shape), (xa + xb) / 2, by + 18, xb - xa);
+      ctx.fillText(t, x, y);
+      lastRight = x + tw;
+      return true;
+    };
+    m.phrases.forEach((p) => {
+      const xa = g.xAtTime(p.t0);
+      const xb = g.xAtTime(p.t1);
+      if (prevEnd != null) pauseMark(ctx, g, prevEnd, p.t0, by, size, false, labelAt);
+      prevEnd = p.t1;
+      if (xb < g.plotLeft || xa > g.laneRight) return;
+      bracket(ctx, xa, xb, by, p.ok ? C.done : C.muted);
+      const len = V.fmtSec(p.len);
+      labelAt(p.ok ? ["✓ " + len, len] : [len], (xa + xb) / 2, by + 4, 11, 800, p.ok ? C.done : C.text, Math.max(40, xb - xa + 24));
+      if (size === "full" && !(plan && plan.mode === "top") && p.shape && xb - xa > 50) {
+        const t = fitOption(ctx, [shapeWord(p.shape)], xb - xa, 11, 700);
+        if (t) {
+          ctx.fillStyle = C.muted;
+          ctx.fillText(t, (xa + xb) / 2, by + 18);
+        }
       }
     });
     if (m.cur) {
-      if (prevEnd != null) pauseMark(ctx, geo, prevEnd, m.cur.t0, by, size);
-      const xa = geo.xAtTime(m.cur.t0);
-      bracket(ctx, xa, geo.nowX, by, C.you);
+      if (prevEnd != null) pauseMark(ctx, g, prevEnd, m.cur.t0, by, size, false, labelAt);
+      const xa = g.xAtTime(m.cur.t0);
+      bracket(ctx, xa, g.nowX, by, C.you);
       // The finish mark: your phrase length, ahead of you
       if (m.target > 0) {
         const tf = m.cur.t0 + m.target * 1000;
-        const xf = geo.xAtTime(tf);
-        const reached = geo.tNow >= tf;
+        const xf = g.xAtTime(tf);
+        const reached = g.tNow >= tf;
         ctx.setLineDash(reached ? [] : [5, 4]);
         ctx.strokeStyle = reached ? C.done : C.text;
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.moveTo(xf, by - 6);
-        ctx.lineTo(xf, geo.graphH - 6);
+        ctx.lineTo(xf, g.graphH - 6);
         ctx.stroke();
         ctx.setLineDash([]);
         const t = reached ? L("✓ frase completa", "✓ full phrase") : L(`meta ${fmtNum(m.target, 0)} s`, `goal ${fmtNum(m.target, 0)} s`);
-        pill(ctx, t, xf + 4, by + 2, { px: 11, color: reached ? C.done : C.text });
+        // Right of the mark when it fits before the lane labels, else left of it
+        const tw = textW(ctx, t, 11, 800) + 10;
+        const px0 = xf + 4 + tw <= g.laneRight - 2 ? xf + 4 : xf - 4;
+        pill(ctx, t, px0, by + 2, { px: 11, color: reached ? C.done : C.text, align: px0 < xf ? "right" : "left" });
       }
-    } else if (prevEnd != null && geo.running) pauseMark(ctx, geo, prevEnd, geo.tNow, by, size, true);
+    } else if (prevEnd != null && g.running) pauseMark(ctx, g, prevEnd, g.tNow, by, size, true, labelAt);
     ctx.restore();
-    if (m.review && m.reviewRows && m.reviewRows.length) reviewCard(ctx, geo, by + 34, m.reviewTitle || "", m.reviewRows);
+    drawReview(ctx, plan);
   }
 
   function bracket(ctx, xa, xb, y, color) {
@@ -1360,16 +1772,13 @@
   }
 
   /** A pause: its length in the gap, neutral grey — a breath is not a fault. */
-  function pauseMark(ctx, geo, t0, t1, y, size, open) {
+  function pauseMark(ctx, geo, t0, t1, y, size, open, labelAt) {
     const xa = geo.xAtTime(t0);
     const xb = geo.xAtTime(t1);
     const len = (t1 - t0) / 1000;
     if (xb - xa < 30 || len < 0.3 || size === "tiny") return;
-    ctx.font = font(10, 700);
-    ctx.fillStyle = C.faint;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "top";
-    ctx.fillText((open ? "" : L("pausa ", "pause ")) + V.fmtSec(len), (xa + xb) / 2, y + 4, xb - xa - 4);
+    const s = V.fmtSec(len);
+    labelAt(open ? [s] : [L("pausa ", "pause ") + s, s], (xa + xb) / 2, y + 4, 11, 700, C.faint, xb - xa - 4);
   }
 
   function shapeWord(shape) {
@@ -1395,7 +1804,14 @@
     idleStones,
     shapeWord,
     sizeOf,
-    headPx
+    headPx,
+    reviewHeadPx,
+    reviewPlan,
+    plotBox,
+    chipPlan,
+    sirenRows,
+    measureCtx,
+    queueFits
   };
   V.scenes.pitchSiren = pitchSiren;
   V.scenes.pitchHold = pitchHold;

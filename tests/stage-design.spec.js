@@ -169,7 +169,10 @@ function railAndTop(sel) {
     const b = el.getBoundingClientRect();
     if (b.height) rail = Math.max(rail, b.bottom);
   });
-  const el = document.querySelector(sel);
+  let el = document.querySelector(sel);
+  // On a rotated phone a picture's panel drops its title (the page header
+  // names the exercise): the picture itself is then the panel's top
+  if (el && !el.getBoundingClientRect().height) el = el.closest(".mode-panel")?.querySelector(".vz") || el;
   return { rail, top: el ? el.getBoundingClientRect().top : null };
 }
 
@@ -519,7 +522,10 @@ test.describe("Landscape: a phone on its side", () => {
       }
       const r = await page.evaluate(() => {
         const q = (id) => document.getElementById(id).getBoundingClientRect();
-        const title = document.querySelector("#mode-focus-panel .mode-title").getBoundingClientRect();
+        // The panel's title, or its picture where a rotated phone drops the title
+        let head = document.querySelector("#mode-focus-panel .mode-title");
+        if (!head.getBoundingClientRect().height) head = head.closest(".mode-panel").querySelector(".vz") || head;
+        const title = head.getBoundingClientRect();
         const pill = q("practice-status");
         return {
           scrollY,

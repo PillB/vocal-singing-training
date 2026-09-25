@@ -1806,7 +1806,7 @@
         // The silent stop skips the metrics reveal a normal stop does, so the
         // button below could be inside a collapsed card (VG-28). One tap on
         // the rating card saves and then goes where the learner was headed.
-        openMetricsPanel(true, { focus: true });
+        openMetricsPanel(true, { focus: true, cardFirst: true });
         toast(tt("leave.scrollSave"));
         // Stash intended destination after save
         state.pendingLeave = destination;
@@ -2871,12 +2871,19 @@
     return !el || el.checked !== false;
   }
 
+  /**
+   * Whether Empezar itself starts the piano: an exercise that wants sound,
+   * except s19, which opens on silent steps (its mode plays its own reference
+   * at the first sung step).
+   */
+  function soundsOnStart(ex, profile) {
+    return exerciseWantsSound(ex, profile) && profile?.mode !== "openSpace";
+  }
+
   async function startExerciseSound(ex, profile) {
     if (!ex || !window.VTPiano) return false;
     if (!autoPianoChecked()) return false;
-    if (!exerciseWantsSound(ex, profile)) return false;
-    // s19 opens on silent steps; the mode plays its own reference at the first sung step
-    if (profile?.mode === "openSpace") return false;
+    if (!soundsOnStart(ex, profile)) return false;
 
     // Unlock Web Audio (recreates if context was closed by a prior mic stop)
     await VTPiano.ensure();
@@ -3451,10 +3458,11 @@
   /**
    * Expand or collapse the rating card (#metrics-card)
    * @param {boolean} open
-   * @param {{ reveal?: boolean, focus?: boolean, end?: "mic"|"time" }} [opts]
+   * @param {{ reveal?: boolean, focus?: boolean, end?: "mic"|"time", cardFirst?: boolean }} [opts]
    *   reveal (unless false): bring the card into view (revealRating); focus: move focus
    *   to its question (the learner asked to rate, or the exercise just ended);
-   *   end: the clock ran out, and whether the mic was on
+   *   end: the clock ran out, and whether the mic was on; cardFirst: the learner
+   *   asked for the rating itself, so it comes up even over a picture's review
    */
   function openMetricsPanel(open, opts = {}) {
     state.metricsOpen = !!open;
@@ -3472,7 +3480,7 @@
     state.rate.end = opts.end || null;
     paintRating();
     if (opts.focus) $("#rate-q")?.focus({ preventScroll: true });
-    if (opts.reveal !== false) revealRating();
+    if (opts.reveal !== false) revealRating(!!opts.cardFirst);
   }
 
   /* —— Rating: one tap after a take —— */
@@ -3572,7 +3580,7 @@
    * its side). An open "Más detalles" form is never measured; it may run past
    * the fold.
    */
-  function revealRating() {
+  function revealRating(cardFirst) {
     requestAnimationFrame(() => {
       const card = $("#metrics-card");
       if (!card || card.classList.contains("collapsed")) return;
@@ -3597,10 +3605,11 @@
       let delta = r.top - Math.max(top, want);
       // A pictured exercise's review is what "¿Cómo te fue?" is answered from:
       // keep it whole on screen, and let the card show below it as room allows
+      // (unless the learner asked for the rating itself: "Calificar")
       const review = document.querySelector(
         "#mode-focus .mode-panel.has-viz.is-replay, #mode-hud .mode-panel.has-viz.is-replay"
       );
-      if (review) delta = Math.min(delta, review.getBoundingClientRect().top - top - 8);
+      if (review && !cardFirst) delta = Math.min(delta, review.getBoundingClientRect().top - top - 8);
       if (Math.abs(delta) > 12) window.scrollBy({ top: delta, behavior: scrollBehavior() });
     });
   }
@@ -5508,7 +5517,7 @@
     $("#btn-step-done-rate")?.addEventListener("click", () => {
       stepDoneChoice("rate");
       hideStepDone();
-      openMetricsPanel(true, { focus: true });
+      openMetricsPanel(true, { focus: true, cardFirst: true });
     });
     $("#step-done")?.addEventListener("keydown", (e) => {
       if (e.key !== "Escape") return;
@@ -7206,7 +7215,7 @@
     /** True if current (or given) exercise should start piano/ref on Empezar when Auto is on. */
     wantsSound: (ex) => {
       const e = ex || state.exercise;
-      return exerciseWantsSound(e, e ? getProfile(e) : null);
+      return soundsOnStart(e, e ? getProfile(e) : null);
     },
     shouldPromptOnLeave,
     getPracticedSec,

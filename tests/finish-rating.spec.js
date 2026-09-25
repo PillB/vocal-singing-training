@@ -132,11 +132,12 @@ const records = (page, id) =>
  * below it. There the check is the review first, then the card after the
  * learner's own scroll.
  */
-async function cardInView(page) {
+async function cardInView(page, { cardFirst = false } = {}) {
   // The reveal runs on the next frame (a faked clock here) and scrolls smoothly.
   await page.clock.runFor(100);
   const review = page.locator("#mode-focus .mode-panel.has-viz.is-replay, #mode-hud .mode-panel.has-viz.is-replay");
-  if (await review.count()) {
+  // After Stop a picture's review comes first; "Calificar" asks for the card itself
+  if (!cardFirst && (await review.count())) {
     const vh = await page.evaluate(() => innerHeight);
     await expect
       .poll(async () => {
@@ -203,7 +204,7 @@ test.describe("Rating: one tap after a take", () => {
     // The sliders wait under "Más detalles".
     await expect(page.locator("#rate-more")).not.toHaveAttribute("open", "");
     await expect(page.locator("#btn-complete")).toBeHidden();
-    const geo = await cardInView(page);
+    const geo = await cardInView(page, { cardFirst: true });
     expect(geo.qBelowChrome).toBe(true);
     geo.btns.forEach((b) => {
       expect(b.onTop).toBe(true);

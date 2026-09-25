@@ -5631,7 +5631,7 @@
    * account when accounts are on, because that is where the worker records it
    * and it has to hold across browsers; from this browser's own trial mark
    * otherwise. Shared by the Pro dialog's two lines so they cannot disagree.
-   * @returns {boolean} True when the free month is gone.
+   * @returns {boolean} True when the free trial is gone.
    */
   function trialSpent() {
     const B = window.VTBilling;
@@ -5794,7 +5794,7 @@
         healthNote.hidden = true;
       }
     }
-    // Somebody who has already spent their free month while checkout is still
+    // Somebody who has already spent their free trial while checkout is still
     // closed is the most interested person in the product, and the dialog used
     // to show them nothing at all: no plan they could buy, no explanation and
     // no way on. Say where they stand instead.

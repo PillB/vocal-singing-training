@@ -309,14 +309,73 @@ numbering before quoting it anywhere public, and treat the EU and US citations
 (EDPB Guidelines 2/2023, WP29 Opinion 04/2012, CNIL délibération 2020-091) the
 same way.
 
-Still open, and the owner's call: the ePrivacy Directive art. 5(3) reading is
-that analytics storage in a browser needs *prior* consent in the EU, which an
-opt-out does not give (EDPB Guidelines 2/2023 on the technical scope; WP29
-Opinion 04/2012 on why first-party analytics is not "strictly necessary"). Peru
-is stricter still in form — Ley 29733 has no legitimate-interests basis — though
-enforcement there is complaint-driven. Nothing in this repo gates the events
-behind a consent step; a first-visit consent line for EU visitors is the fix if
-he wants one, and it costs sample.
+### The region gate: asked first where the law asks first (2026-09-25)
+
+The question left open above — ePrivacy art. 5(3) wants *prior* consent for
+analytics storage in the EU, and an opt-out is not consent — was answered by the
+owner: "We are not for the eu or only enable required eu stuff in the eu."
+
+Declaring the site out of scope was not available. `js/billing-config.js` lists
+ES, GB, DE, FR and IT among its priority markets and the site is served in
+English from a public URL, so "not directed at the EU" is not a claim it could
+defend. What shipped is the second half of the sentence, read strictly: the rule
+applies where it applies, and **nowhere else pays for it** — no banner, no extra
+request, no latency, not one byte different on the wire.
+
+**Three files.**
+
+- `js/region-gate.js` (`window.VTRegion`) decides. A browser whose time zone is
+  none of the EEA / UK zones and whose languages carry none of their regions is
+  `non_eu` **synchronously**, at load, before the first event exists: no fetch,
+  no bar, nothing held. Anything that does look European is `pending`, which
+  holds events in memory (never on the device) while `GET /v1/geo` is asked.
+- `workers/entitlements/src/events.js` holds the authority: `ASK_FIRST_COUNTRIES`
+  plus `cf.isEUCountry`, read from Cloudflare's own view of the address, which
+  no page can talk its way out of. `GET /v1/geo` (index.js) answers
+  `{country, askFirst}` and stores nothing at all — no counter, no row.
+  `handleIngest` turns away a batch from an ask-first country that does not carry
+  `consent: "granted"`, with a new `eu_no_consent` ingest reason, 202 and nothing
+  stored, so the client never retries it.
+- `js/analytics.js` holds up to 50 events while the answer is outstanding and
+  replays them, with the id stamped on at that moment, if the answer is yes. The
+  `consent` field is added to the body **only** when it is needed, so a batch from
+  Lima is byte-for-byte what it was before this existed — which is what
+  `tests/ab-events.spec.js` still asserts, untouched.
+
+**Fail closed, in both directions.** A worker that cannot be reached, or answers
+without a country, leaves the stricter verdict in place: asking afterwards is not
+asking first. And a worker that says PE for a browser whose clock says Madrid
+lifts the hold, so an expat with a European time zone is never asked.
+
+**The A/B split goes inert, not uniform.** The obvious implementation — make
+`clientId()` return `""` — would have hashed every visitor in those countries into
+the same arm and produced a result that looked real and was worthless.
+`assignment()` returns `variants[0]` before anything reads or writes the id, and
+`exposeOnce()` records nothing.
+
+**What is deliberately *not* gated:** practice history, streaks, recordings and
+the local event log `js/analytics.js` keeps. That is storage strictly necessary
+for the service the visitor explicitly requested (art. 5(3), second limb): it is
+what draws their streak and their heatmap, it never leaves the device, and
+gating it would break the product for those visitors rather than protect them.
+What is gated is the sending and the A/B id, which serve us.
+
+**The UK is in, Switzerland is out.** The list is the set of places whose law
+requires asking first, not a political one: the EEA under ePrivacy art. 5(3),
+the UK under PECR reg. 6 (the same rule, kept after leaving), and the Crown
+dependencies and Gibraltar, which follow it. Switzerland's revFADP does not
+require prior consent for first-party analytics, so a visitor in Zurich is not
+asked. The two lists live in two languages — IANA zones in the page, ISO codes
+in the worker — and `tests/region-gate.spec.js` holds them to each other so they
+cannot drift.
+
+**What it costs.** Sample, in exactly those countries: every browser there that
+refuses, or closes the tab before answering, is absent from the funnel and from
+every experiment. For a site whose traffic is Peruvian that is a small share of a
+small share, but it means an arm's totals are not comparable across regions and
+the SRM check should be read on the whole, not per country. It also means the
+funnel understates first visits from the EEA and the UK by however many people
+never answer, and no correction for that is possible or attempted.
 
 ### Left for later
 

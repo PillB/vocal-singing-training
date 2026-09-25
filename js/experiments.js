@@ -11,6 +11,13 @@
  * `?ab_<key>=<variant>` forces a variant for the rest of the page. That is how
  * you look at both versions yourself — it is the "show me the other one"
  * switch, not a user-facing feature.
+ *
+ * Where the law wants to be asked first (js/region-gate.js) this whole file
+ * goes inert until the visitor says yes: everybody is served `variants[0]`,
+ * nothing is stored and no exposure is recorded. Inert has to mean the control,
+ * not an empty client id — an empty id hashes identically, so every visitor in
+ * those countries would land in the same arm and the result would look real
+ * while being worthless.
  */
 (function (global) {
   "use strict";
@@ -44,6 +51,11 @@
   function clientId() {
     const bag = readBag() || {};
     if (typeof bag.cid === "string" && bag.cid.length >= 8) return bag.cid;
+    // Minting one writes to the device, which is exactly what an ask-first
+    // country wants permission for first. The only caller that needs an id is
+    // the statistics sender, and it holds its events until the answer comes;
+    // assignment() below never gets this far while inert.
+    if (global.VTRegion?.inert?.()) return "";
     let cid = "";
     try {
       const buf = new Uint8Array(8);
@@ -93,7 +105,14 @@
     const control = variants[0].id;
     const forced = forcedVariant(key);
     if (forced && variants.some((v) => v.id === forced)) {
+      // A forced link is somebody looking at the other arm on purpose and
+      // stores nothing, so it works wherever they are.
       return { variant: forced, forced: true, enabled: !!(def && def.enabled) };
+    }
+    // Asked-first country, not answered yet: the control, and no split. Placed
+    // before anything that could read or write the client id.
+    if (global.VTRegion?.inert?.()) {
+      return { variant: control, forced: false, enabled: false, inert: true };
     }
     // Disabled experiments still run this far, so the code path is exercised.
     if (!def.enabled) return { variant: control, forced: false, enabled: false };
@@ -179,7 +198,12 @@
    */
   function report() {
     const bag = readBag() || {};
-    const out = { clientId: bag.cid || null, experiments: {} };
+    const out = {
+      clientId: bag.cid || null,
+      inert: !!global.VTRegion?.inert?.(),
+      region: global.VTRegion?.report?.() || null,
+      experiments: {}
+    };
     Object.keys(defs()).forEach((key) => {
       const a = assignment(key);
       out.experiments[key] = {

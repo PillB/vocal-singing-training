@@ -14,6 +14,12 @@
  * - The IP is used only to rate-limit, and only as an HMAC under a secret key
  *   with the UTC day in it (the bucket key), which the sweep deletes within two
  *   days. Without the key nobody can go from a bucket back to an address.
+ * - A request from a country whose law wants the visitor asked first (the EEA
+ *   and the UK) is turned away unless the batch says the visitor said yes. The
+ *   site holds those events until somebody answers (js/region-gate.js); this is
+ *   the backstop, and it reads the country from the edge, which no browser can
+ *   talk its way out of. Nowhere else is affected: a request the edge places
+ *   outside that list is handled exactly as before.
  * - A browser that sends Global Privacy Control is not recorded at all — the
  *   site does not send in that case, and if something sends anyway the worker
  *   drops it. Do Not Track is no longer read, on either side (2026-09-24): no
@@ -259,7 +265,16 @@ export const MIX_CHECK_EVENTS = ["app_open", "practice_start", "practice_recorde
 export const INGEST_REASONS = {
   event: ["accepted", "unknown_event", "bad_cid", "not_an_object"],
   exposure: ["exposure_new", "exposure_recovered", "exposure_unregistered", "exposure_capped"],
-  request: ["origin_not_allowed", "rate_limited", "opted_out", "automated", "body_too_large", "bad_request", "forget"]
+  request: [
+    "origin_not_allowed",
+    "rate_limited",
+    "opted_out",
+    "automated",
+    "body_too_large",
+    "bad_request",
+    "eu_no_consent",
+    "forget"
+  ]
 };
 
 const CID_RE = /^[0-9a-z]{8,32}$/;
@@ -387,6 +402,62 @@ export function sanitizeEvent(raw, registry) {
     });
   }
   return { ok: true, event };
+}
+
+/**
+ * Countries whose law requires the visitor be asked before anything
+ * non-essential is kept: the EEA (ePrivacy art. 5(3), as read by EDPB
+ * Guidelines 2/2023), the United Kingdom (PECR reg. 6), and the Crown
+ * dependencies and Gibraltar, which keep the same rule. The EU's outermost
+ * regions carry their member state's code, so they need no entry of their own.
+ *
+ * js/region-gate.js holds the same list as time zones, to decide whether it is
+ * worth asking. This one is the authority: it comes from the edge's own view of
+ * the address, which the page cannot talk its way out of.
+ */
+export const ASK_FIRST_COUNTRIES = new Set([
+  "AT", "AX", "BE", "BG", "CY", "CZ", "DE", "DK", "EE", "ES", "FI", "FR", "GB",
+  "GG", "GI", "GR", "HR", "HU", "IE", "IM", "IS", "IT", "JE", "LI", "LT", "LU",
+  "LV", "MT", "NL", "NO", "PL", "PT", "RO", "SE", "SI", "SJ", "SK"
+]);
+
+/**
+ * The two-letter country the edge put on this request, or "" when there is
+ * none: a unit test, `wrangler dev` without --remote, Tor ("T1") or an address
+ * Cloudflare cannot place ("XX").
+ * @param {Request} request Incoming request.
+ * @returns {string} ISO 3166-1 alpha-2, or "".
+ */
+export function callerCountry(request) {
+  const cf = request && request.cf;
+  const fromCf = cf && typeof cf.country === "string" ? cf.country : "";
+  let header = "";
+  try {
+    header = request.headers.get("cf-ipcountry") || "";
+  } catch {
+    header = "";
+  }
+  const cc = String(fromCf || header).trim().toUpperCase();
+  return /^[A-Z]{2}$/.test(cc) && cc !== "XX" && cc !== "T1" ? cc : "";
+}
+
+/**
+ * Whether this request comes from somewhere the visitor must be asked first.
+ * `cf.isEUCountry` covers the EU; the list above adds the rest of the EEA and
+ * the UK. An address the edge cannot place is not treated as one of them: the
+ * page has already made that call from the visitor's own time zone, and a
+ * worker guessing "yes" for every unplaceable address would turn away real
+ * events from everywhere else.
+ * @param {Request} request Incoming request.
+ * @returns {boolean} True when consent is required first.
+ */
+export function asksFirst(request) {
+  const cf = request && request.cf;
+  if (cf && (cf.isEUCountry === "1" || cf.isEUCountry === true)) {
+    return true;
+  }
+  const cc = callerCountry(request);
+  return !!cc && ASK_FIRST_COUNTRIES.has(cc);
 }
 
 /**
@@ -542,8 +613,9 @@ async function newExposures(db, events) {
  * POST /v1/events — record a batch of anonymous events.
  *
  * Answers 200 with counts on success. Refusals that are the visitor's choice
- * (GPC) or not ours to count (bots, switched off) answer 202 and store
- * nothing, so nothing on the client ever retries them. Every outcome adds to
+ * (GPC), not ours to count (bots, switched off) or not ours to keep without
+ * being asked (an ask-first country with no `consent: "granted"` in the batch)
+ * answer 202 and store nothing, so nothing on the client ever retries them. Every outcome adds to
  * the day's ingest counters (except the kill switch, which records nothing),
  * because the client posts no-cors and can never see a refusal itself.
  *
@@ -576,6 +648,12 @@ export async function handleIngest(request, env, deps) {
     return json({ ok: false, reason: parsed.reason }, parsed.reason === "body_too_large" ? 413 : 400, cors);
   }
   const body = parsed.body;
+  // Before anything is read out of the batch: where the law wants the visitor
+  // asked first, a batch that does not say they were asked is not ours to keep.
+  if (asksFirst(request) && !(body && typeof body === "object" && body.consent === "granted")) {
+    await countIngest(env.DB, at, { eu_no_consent: 1 });
+    return json({ ok: true, accepted: 0, reason: "eu_no_consent" }, 202, cors);
+  }
   const list = Array.isArray(body && body.events) ? body.events : body && typeof body === "object" ? [body] : [];
   if (!list.length || list.length > MAX_EVENTS_PER_REQUEST) {
     await countIngest(env.DB, at, { bad_request: 1 });

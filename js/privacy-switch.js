@@ -11,6 +11,10 @@
  *
  * guide.html does not load js/i18n.js (a 100 KB table for two sentences), so
  * this file keeps its own Spanish and English strings.
+ *
+ * In the countries that require being asked first (js/region-gate.js) this is
+ * also where somebody who said no to the bar can change their mind, and where
+ * the section says so instead of claiming statistics are being sent.
  */
 (function (global) {
   "use strict";
@@ -22,8 +26,12 @@
       browser: "Tu navegador pide no ser rastreado, así que no se envía nada.",
       optedOut: "Elegiste no enviar estadísticas desde este navegador.",
       automated: "Este navegador no envía estadísticas.",
+      pending: "Estamos viendo desde dónde entras antes de enviar nada.",
+      unanswered: "Aquí la ley pide permiso primero y todavía no has contestado, así que no se envía nada.",
+      askedFirst: "Aquí la ley pide permiso primero y dijiste que no, así que no se envía nada.",
       stop: "No enviar y borrar lo enviado",
-      resume: "Volver a permitir"
+      resume: "Volver a permitir",
+      allow: "Permitir estadísticas"
     },
     en: {
       sending: "This browser sends anonymous statistics.",
@@ -31,8 +39,12 @@
       browser: "Your browser asks not to be tracked, so nothing is sent.",
       optedOut: "You chose not to send statistics from this browser.",
       automated: "This browser sends no statistics.",
+      pending: "We are checking where you are before sending anything.",
+      unanswered: "Where you are the law asks first and you have not answered yet, so nothing is sent.",
+      askedFirst: "Where you are the law asks first, and you said no, so nothing is sent.",
       stop: "Stop sending and delete what was sent",
-      resume: "Allow again"
+      resume: "Allow again",
+      allow: "Allow statistics"
     }
   };
 
@@ -47,9 +59,17 @@
       let line;
       let label = t.stop;
       let canToggle = true;
+      let action = "optout";
       if (st.optedOut) {
         line = t.optedOut;
         label = t.resume;
+      } else if (st.reason === "eu_pending") {
+        line = t.pending;
+        canToggle = false;
+      } else if (st.reason === "eu_unanswered" || st.reason === "eu_refused") {
+        line = st.reason === "eu_refused" ? t.askedFirst : t.unanswered;
+        label = t.allow;
+        action = "grant";
       } else if (st.reason === "gpc") {
         line = t.browser;
         canToggle = false;
@@ -66,6 +86,7 @@
       if (btn) {
         btn.hidden = !canToggle;
         btn.textContent = label;
+        btn.dataset.privacyAction = action;
         btn.setAttribute("aria-pressed", String(!!st.optedOut));
       }
       box.hidden = false;
@@ -76,6 +97,11 @@
     document.querySelectorAll("[data-privacy-toggle]").forEach((btn) => {
       btn.addEventListener("click", () => {
         const A = global.VTAnalytics;
+        if (btn.dataset.privacyAction === "grant") {
+          global.VTRegion?.setConsent?.(true);
+          render();
+          return;
+        }
         if (!A?.setOptOut) return;
         const out = !A.remoteState().optedOut;
         if (out) {
@@ -92,6 +118,9 @@
       });
     });
     render();
+    // The region gate settles a moment after load, and the answer to its bar
+    // changes what this section should say.
+    global.VTRegion?.onChange?.(render);
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);

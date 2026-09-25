@@ -9,6 +9,12 @@
  * or the switch in the guide's privacy section (`vt_analytics_optout_v1`).
  * Automated browsers never send.
  *
+ * In the countries whose law requires being asked first (js/region-gate.js: the
+ * EEA and the UK) nothing is sent until the visitor says yes. Events raised in
+ * the meantime wait in memory, not on the device, and are either sent when the
+ * answer is yes or thrown away when it is no. Everywhere else that gate is a
+ * single synchronous `false` and nothing about this file changes.
+ *
  * Do Not Track was honoured until 2026-09-24 and is not any more. No law
  * anywhere requires it, the W3C discontinued the specification in 2019, and
  * Safari removed the header that year because sending it narrowed a browser's
@@ -33,9 +39,21 @@
   /** Wait this long for more events before sending a batch. */
   const FLUSH_MS = 4000;
 
+  /**
+   * Events raised while a visitor in an ask-first country has not answered yet.
+   * Memory only, and capped: holding them on the device would be the very
+   * storage the answer is about, and the first events are the ones a funnel
+   * needs, so an overflow drops the newest rather than the oldest.
+   */
+  let held = [];
+  const MAX_HELD = 50;
+  /** Region reasons that mean "not yet", as opposed to "no". */
+  const HELD_REASONS = ["eu_pending", "eu_unanswered"];
+
   let queue = [];
   let timer = null;
   let bound = false;
+  let regionBound = false;
 
   function read() {
     try {
@@ -60,8 +78,11 @@
   }
 
   /**
-   * Why this browser does not send events, or "" when it does.
-   * @returns {"" | "no_endpoint" | "gpc" | "opted_out" | "automated"}
+   * Why this browser does not send events, or "" when it does. The two reasons
+   * in HELD_REASONS mean an answer is still outstanding, so events are kept
+   * rather than dropped; every other reason means they are dropped.
+   * @returns {"" | "no_endpoint" | "gpc" | "opted_out" | "automated" | "eu_pending"
+   *           | "eu_unanswered" | "eu_refused"}
    */
   function remoteBlockedReason() {
     if (!endpoint()) return "no_endpoint";
@@ -78,7 +99,18 @@
     } catch {
       /* ignore */
     }
-    return "";
+    // Last, because a browser that sends nothing for any of the reasons above
+    // needs no consent bar and no question asked.
+    return global.VTRegion?.blockedReason?.() || "";
+  }
+
+  /**
+   * The one field the worker needs to accept a batch from an ask-first country.
+   * Null everywhere else, which is what the worker sees today.
+   * @returns {"granted" | null} Marker.
+   */
+  function consentMarker() {
+    return global.VTRegion?.consent?.() === "granted" ? "granted" : null;
   }
 
   /**
@@ -92,15 +124,23 @@
       timer = null;
     }
     const ep = endpoint();
+    const reason = remoteBlockedReason();
+    if (!ep || reason) {
+      // Checked once, before the loop. Inside it, a queue emptied on the way
+      // out of a tab threw away events that were only waiting for an answer.
+      if (!HELD_REASONS.includes(reason)) queue = [];
+      return;
+    }
     while (queue.length) {
       const batch = queue.splice(0, BATCH);
-      if (!ep || remoteBlockedReason()) {
-        queue = [];
-        return;
-      }
       // text/plain is the only body a cross-site beacon may carry without a
-      // preflight; the worker parses it as JSON regardless.
-      const body = JSON.stringify({ v: 1, events: batch });
+      // preflight; the worker parses it as JSON regardless. The consent marker
+      // is added only where it is needed, so a batch from anywhere else is the
+      // same bytes it has always been.
+      const payload = { v: 1, events: batch };
+      const marker = consentMarker();
+      if (marker) payload.consent = marker;
+      const body = JSON.stringify(payload);
       try {
         if (unloading && typeof global.navigator?.sendBeacon === "function") {
           if (global.navigator.sendBeacon(ep, body)) continue;
@@ -134,8 +174,53 @@
     }
   }
 
+  /**
+   * Keep an event until the visitor answers. No id is minted here: minting one
+   * writes to the device, which is the thing being asked about, so the id is
+   * stamped on at replay.
+   */
+  function hold(name, props, now) {
+    watchRegion();
+    if (held.length >= MAX_HELD) return;
+    held.push({
+      name,
+      props,
+      day: global.VTDays?.dayKey?.(now) || null,
+      tz: -now.getTimezoneOffset()
+    });
+  }
+
+  /**
+   * Send or drop what was held, once the region gate settles or the visitor
+   * answers. Bound once; the gate calls it on every change.
+   */
+  function watchRegion() {
+    if (regionBound || typeof global.VTRegion?.onChange !== "function") return;
+    regionBound = true;
+    global.VTRegion.onChange(() => {
+      const reason = remoteBlockedReason();
+      if (HELD_REASONS.includes(reason)) return;
+      if (reason) {
+        held = [];
+        return;
+      }
+      if (!held.length) return;
+      const cid = global.VTExperiments?.clientId?.() || null;
+      const waiting = held;
+      held = [];
+      waiting.forEach((e) => queue.push({ ...e, cid }));
+      bindFlushOnHide();
+      flush(false);
+    });
+  }
+
   function enqueue(name, props, now) {
-    if (remoteBlockedReason()) return;
+    const reason = remoteBlockedReason();
+    if (HELD_REASONS.includes(reason)) {
+      hold(name, props, now);
+      return;
+    }
+    if (reason) return;
     bindFlushOnHide();
     // An event nobody can tie to a browser, an arm or a local day cannot
     // answer an A/B question, so each one carries all three. The id is the
@@ -202,7 +287,10 @@
     } catch {
       /* ignore */
     }
-    if (out) queue = [];
+    if (out) {
+      queue = [];
+      held = [];
+    }
   }
 
   /**
@@ -244,4 +332,7 @@
   }
 
   global.VTAnalytics = { track, summary, clear, setOptOut, remoteState, flush, forget };
+
+  // So an answer given before any event is raised still releases the hold.
+  watchRegion();
 })(window);

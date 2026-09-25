@@ -263,6 +263,105 @@ test("Do Not Track is not read any more, on this side either", async () => {
   assert.equal((await rows(env, "SELECT COUNT(*) AS n FROM events"))[0].n, 1);
 });
 
+test("a country that asks first is turned away unless the batch says the visitor said yes", async () => {
+  // The site holds those events until somebody answers (js/region-gate.js). This
+  // is the backstop for anything that posts anyway, and it reads the country from
+  // the edge rather than from the page.
+  const env = freshEnv();
+  const res = await call(
+    beacon({ events: [ev("app_open", "a1b2c3d4e5f60718")] }, { headers: { "cf-ipcountry": "ES" } }),
+    env,
+    { now: NOW }
+  );
+  assert.equal(res.status, 202);
+  assert.equal(res.body.reason, "eu_no_consent");
+  assert.equal(res.body.accepted, 0);
+  await ensureSchema(env.DB);
+  assert.equal((await rows(env, "SELECT COUNT(*) AS n FROM events"))[0].n, 0);
+  assert.deepEqual(await rows(env, "SELECT reason, n FROM ingest_daily"), [{ reason: "eu_no_consent", n: 1 }]);
+  assert.ok(INGEST_REASONS.request.includes("eu_no_consent"));
+
+  // The same batch, with the answer in it.
+  const yes = await call(
+    beacon(
+      { consent: "granted", events: [ev("app_open", "a1b2c3d4e5f60718")] },
+      { headers: { "cf-ipcountry": "ES" } }
+    ),
+    env,
+    { now: NOW }
+  );
+  assert.equal(yes.status, 200, JSON.stringify(yes.body));
+  assert.equal(yes.body.accepted, 1);
+  assert.equal((await rows(env, "SELECT COUNT(*) AS n FROM events"))[0].n, 1);
+
+  // The United Kingdom is not in the EU and asks first all the same (PECR
+  // reg. 6), which cf.isEUCountry alone would miss.
+  const gb = await call(
+    beacon({ events: [ev("app_open", "b1b2c3d4e5f60718")] }, { headers: { "cf-ipcountry": "GB" } }),
+    freshEnv(),
+    { now: NOW }
+  );
+  assert.equal(gb.body.reason, "eu_no_consent");
+});
+
+test("a visitor anywhere else is recorded exactly as before", async () => {
+  // The whole point of the region gate: outside the ask-first list nothing
+  // changes, and a batch with no consent field is the normal case.
+  const env = freshEnv();
+  for (const cc of ["PE", "US", "MX", "CO", "CL", "AR", "BR", "CH", "XX", "T1"]) {
+    const res = await call(
+      beacon({ events: [ev("app_open", "a1b2c3d4e5f60718")] }, { headers: { "cf-ipcountry": cc } }),
+      env,
+      { now: NOW }
+    );
+    assert.equal(res.status, 200, `${cc}: ${JSON.stringify(res.body)}`);
+    assert.equal(res.body.accepted, 1, cc);
+  }
+  assert.equal((await rows(env, "SELECT COUNT(*) AS n FROM events"))[0].n, 10);
+});
+
+test("GET /v1/geo says where the edge places a request, and nothing else", async () => {
+  const env = freshEnv();
+  /**
+   * @param {string|null} cc Country header, or null for none.
+   * @returns {Promise<{status: number, body: Object}>} Result.
+   */
+  const geo = (cc) =>
+    call(
+      new Request(`${BASE}/v1/geo`, {
+        headers: { "user-agent": CHROME_UA, Origin: TEST_ORIGIN, ...(cc ? { "cf-ipcountry": cc } : {}) }
+      }),
+      env,
+      { now: NOW }
+    );
+
+  const es = await geo("ES");
+  assert.equal(es.status, 200);
+  assert.deepEqual(es.body, { ok: true, country: "ES", askFirst: true });
+  assert.deepEqual(Object.keys(es.body).sort(), ["askFirst", "country", "ok"]);
+
+  assert.deepEqual((await geo("GB")).body, { ok: true, country: "GB", askFirst: true });
+  assert.deepEqual((await geo("PE")).body, { ok: true, country: "PE", askFirst: false });
+  assert.deepEqual((await geo("CH")).body, { ok: true, country: "CH", askFirst: false });
+  // Unplaceable: Tor, an address the edge cannot map, or a request with no
+  // header at all. The page has already decided from its own time zone.
+  assert.deepEqual((await geo("T1")).body, { ok: true, country: null, askFirst: false });
+  assert.deepEqual((await geo("XX")).body, { ok: true, country: null, askFirst: false });
+  assert.deepEqual((await geo(null)).body, { ok: true, country: null, askFirst: false });
+
+  // Reading it stores nothing at all, not even a counter.
+  await ensureSchema(env.DB);
+  assert.equal((await rows(env, "SELECT COUNT(*) AS n FROM ingest_daily"))[0].n, 0);
+  assert.equal((await rows(env, "SELECT COUNT(*) AS n FROM events"))[0].n, 0);
+
+  const posted = await call(
+    new Request(`${BASE}/v1/geo`, { method: "POST", headers: { Origin: TEST_ORIGIN } }),
+    env,
+    { now: NOW }
+  );
+  assert.equal(posted.status, 405);
+});
+
 test("automated browsers are not counted", async () => {
   const env = freshEnv();
   for (const ua of [

@@ -316,10 +316,10 @@
     "original": "La cara debe coincidir con el mensaje: emoción legible sin sobreactuar.",
     "research": "La incongruencia cara–mensaje reduce confianza; la expresión auténtica la sube.",
     "steps": [
-      "Elige 3 frases: buena noticia, dato serio, invitación cálida.",
-      "Di cada una con cara “apagada”, luego con expresión alineada.",
-      "Practica micro-sonrisa de ojos en la invitación (no solo boca).",
-      "Graba y revisa solo el rostro 30 s en silencio (mute)."
+      "Revisa tu cara en reposo en un espejo o la cámara (foto neutra).",
+      "Practica 10 segundos una cara de “hola” cálida (ojos + sonrisa leve).",
+      "Cuenta una historia de 60 s con 3 cambios de cara intencionales: curiosidad, sorpresa, resolución.",
+      "Revisa primero el video sin sonido: ¿la cara cuenta la historia?"
     ],
     "tips": [
       "La tensión de mandíbula endurece la expresión: suéltala.",

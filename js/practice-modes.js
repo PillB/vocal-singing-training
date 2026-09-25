@@ -7327,14 +7327,14 @@
               ? L("Subiste; la vuelta quedó arriba", "Up, but the return stayed high")
               : L("El pico llegó muy al borde", "The peak came at the very edge");
       } else {
-        head = st.done.length ? L("Respira… y otra vez desde suave", "Breathe… and again from soft") : L("Empieza suave cuando quieras", "Start soft when you're ready");
+        head = st.done.length ? L("Respira… y otra vez desde suave", "Breathe… and again from soft") : L("Empieza suave", "Start soft");
       }
       const big = `${st.swells}/${st.target}`;
       const last = st.done[st.done.length - 1];
       const sub = last
         ? L(`Último: ${f.db(last.rise)} · pico al ${Math.round(last.peakFrac * 100)} %`, `Last: ${f.db(last.rise)} · peak at ${Math.round(last.peakFrac * 100)}%`) +
           (last.peakCents != null ? L(` · afinación ${f.cents(last.peakCents)}`, ` · pitch ${f.cents(last.peakCents)}`) : "")
-        : L("La banda espera a que empieces; dura lo que marca el botón.", "The band waits for you to start; it lasts what the button says.");
+        : L("La banda espera a que empieces", "The band waits for you to start");
       // A rotated phone has no room for the pitch track: the pitch goes in words
       const cn = st.centsNow;
       const headLine = st.tiny && cn != null ? `${head} · ${L("afin.", "pitch")} ${f.cents(cn)}` : head;
@@ -8594,7 +8594,7 @@
         tagColors: { 0: V.C.target },
         captionHidden: true,
         guide: this.state.wave,
-        lines: [{ fn: ribs, color: V.C.done, dash: [7, 5], width: 2, label: L("costillas", "ribs") }]
+        lines: [{ fn: ribs, color: V.C.done, dash: [7, 5], width: 2, label: L("costillas · guía, no medida", "ribs · a guide, not measured") }]
       });
       this._markAhead();
       this.viz.push(0, this.state.wave(0).y);

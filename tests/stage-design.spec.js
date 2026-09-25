@@ -506,6 +506,16 @@ test.describe("Landscape: a phone on its side", () => {
         await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
         await page.locator("#btn-session-pause").click();
         await expect(page.locator("#structured-progress")).toHaveText("Ejercicio 1 de 2 · En pausa");
+        // Reanudar is wider than Pausar: the header makes room for it once its
+        // ResizeObserver has run, on the next rendering step, not at the click.
+        await expect
+          .poll(() =>
+            page.evaluate(() => {
+              const back = document.getElementById("btn-back-home").getBoundingClientRect();
+              return back.right <= document.getElementById("btn-session-resume").getBoundingClientRect().left;
+            })
+          )
+          .toBe(true);
       }
       const r = await page.evaluate(() => {
         const q = (id) => document.getElementById(id).getBoundingClientRect();

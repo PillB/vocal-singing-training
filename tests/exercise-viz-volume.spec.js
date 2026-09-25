@@ -239,6 +239,44 @@ test.describe("volume pictures", () => {
     expect(warnings).toEqual([]);
   });
 
+  test("on a phone every word is drawn whole, and the summary is not said twice after Stop", async ({ browser }) => {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
+    // A fillText given a maxWidth narrower than its text condenses it
+    await ctx.addInitScript(() => {
+      const P = CanvasRenderingContext2D.prototype;
+      const orig = P.fillText;
+      window.__squeezed = [];
+      P.fillText = function (text, x, y, maxW) {
+        if (maxW != null && Number.isFinite(maxW) && String(text).trim() && this.measureText(String(text)).width > maxW + 0.75)
+          window.__squeezed.push(String(text));
+        return orig.call(this, text, x, y, maxW);
+      };
+    });
+    for (const [id, voice] of [
+      ["v2-volume", "count"],
+      ["v13-volume-ladder", "ladderSteps"],
+      ["v20-energy-match", "energyTakes"]
+    ]) {
+      const page = await ctx.newPage();
+      const warnings = await boot(page);
+      if (id === "v13-volume-ladder") await setProfile(page, id, { stepSec: 2 });
+      await openAndStart(page, id, voice);
+      await page.waitForTimeout(3500);
+      await stop(page);
+      await page.waitForTimeout(300);
+      expect(await page.evaluate(() => window.__squeezed), `${id} squeezed words`).toEqual([]);
+      // The words stay in the page for screen readers, drawn once (in the picture)
+      const cap = page.locator("#mode-focus .vz-cap");
+      await expect(cap).not.toBeEmpty();
+      expect(await cap.evaluate((el) => getComputedStyle(el).position), `${id} caption`).toBe("absolute");
+      // Too short for three charts after Stop: the takes as a table of words
+      if (id === "v20-energy-match") expect(await modeState(page, () => window.VTApp.getState().modeInstance.state._layout)).toBe("table");
+      expect(warnings, id).toEqual([]);
+      await page.close();
+    }
+    await ctx.close();
+  });
+
   test("English labels on the volume pictures", async ({ page }) => {
     const warnings = await boot(page, "en");
     await openAndStart(page, "v2-volume");

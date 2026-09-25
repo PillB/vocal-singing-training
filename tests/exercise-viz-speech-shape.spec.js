@@ -257,6 +257,18 @@ test.describe("speech-shape pictures", () => {
   ]) {
     test(`all four pictures fit the first screen on a ${vp.name}`, async ({ browser }) => {
       const ctx = await browser.newContext({ viewport: { width: vp.width, height: vp.height }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
+      // Every word is drawn whole: a fillText given a maxWidth narrower than
+      // its text condenses it, which reads as squeezed on a phone
+      await ctx.addInitScript(() => {
+        const P = CanvasRenderingContext2D.prototype;
+        const orig = P.fillText;
+        window.__squeezed = [];
+        P.fillText = function (text, x, y, maxW) {
+          if (maxW != null && Number.isFinite(maxW) && String(text).trim() && this.measureText(String(text)).width > maxW + 0.75)
+            window.__squeezed.push(String(text));
+          return orig.call(this, text, x, y, maxW);
+        };
+      });
       for (const id of ["v12-melodic-speech", "v19-authority-close", "v17-strategic-concision", "v18-story-peak"]) {
         // A fresh page each (Stop scrolls down to the ratings), and a moment
         // to settle before Start: a Start pressed while the page is still
@@ -285,6 +297,15 @@ test.describe("speech-shape pictures", () => {
             .filter((r) => r.height < 44 || r.width < 44).length
         );
         expect(small, `${id} taps`).toBe(0);
+        if (vp.name === "phone") {
+          // The claim's line on top and its result under it, not two slivers side by side
+          if (id === "v19-authority-close") expect(await modeState(page, () => window.VTApp.getState().modeInstance.state._layout.stack)).toBe(true);
+          // The story's buttons keep their full words ("Pico" alone read like a part's name)
+          if (id === "v18-story-peak") await expect(page.locator("#mode-focus [data-peak] .ss-long")).toBeVisible();
+        }
+        await page.locator("#btn-practice-stop").click();
+        await page.waitForTimeout(400);
+        expect(await page.evaluate(() => window.__squeezed), `${id} squeezed words`).toEqual([]);
         expect(errors, id).toEqual([]);
         await page.close();
       }

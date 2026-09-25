@@ -21,7 +21,7 @@
   const V = global.VTViz;
   const F = global.VTFeatures;
   if (!V || !F) return;
-  const { C, L, font, clamp, fitText, fmtNum, roundRect, panel, chips, glyph } = V;
+  const { C, L, font, clamp, fmtNum, roundRect, panel, chips, glyph } = V;
 
   /** Pitch bins: 20 a second. */
   const BIN = 0.05;
@@ -378,11 +378,262 @@
     ctx.restore();
   }
 
-  function note(ctx, text, x, y, maxW, color, px = 12) {
-    ctx.fillStyle = color || C.muted;
-    ctx.textAlign = "center";
+  /* —— Words that fit whole ——
+   * ctx.fillText(text, x, y, maxWidth) squeezes letters together when the
+   * words are wider than maxWidth: unreadable on a phone. These pick words
+   * that fit (a shorter version, a second line, a smaller size down to a
+   * readable minimum) and never pass a maxWidth. */
+
+  function widthAt(ctx, text, px, weight = 800) {
+    ctx.font = font(px, weight);
+    return ctx.measureText(String(text)).width;
+  }
+
+  /** The words of `text` on lines no wider than `maxW` (at the current font). */
+  function lineBreak(ctx, text, maxW) {
+    const words = String(text).split(/\s+/).filter(Boolean);
+    const lines = [];
+    let line = "";
+    words.forEach((wd) => {
+      const test = line ? line + " " + wd : wd;
+      if (line && ctx.measureText(test).width > maxW) {
+        lines.push(line);
+        line = wd;
+      } else line = test;
+    });
+    if (line) lines.push(line);
+    return lines;
+  }
+
+  /** `text` cut after a whole word, with "…", to fit `maxW` (current font); "" when no word fits. */
+  function cutAtWord(ctx, text, maxW) {
+    const words = String(text).split(/\s+/).filter(Boolean);
+    if (ctx.measureText(words.join(" ")).width <= maxW) return words.join(" ");
+    while (words.length > 1) {
+      words.pop();
+      const t = words.join(" ").replace(/[\s,;:·(]+$/, "") + "…";
+      if (ctx.measureText(t).width <= maxW) return t;
+    }
+    return "";
+  }
+
+  /**
+   * Draw the first of `texts` (longest first) that fits `maxW` whole at `px`,
+   * or smaller down to `min`. When none does, the last is cut after a word.
+   * Returns { text, px } (text "" when nothing was drawn).
+   */
+  function fitOne(ctx, texts, x, y, maxW, px, weight = 800, min = 11) {
+    const list = [].concat(texts).filter((t) => t != null && t !== "");
+    for (const t of list)
+      for (let s = px; s >= min; s--)
+        if (widthAt(ctx, t, s, weight) <= maxW) {
+          ctx.fillText(t, x, y);
+          return { text: t, px: s };
+        }
+    if (!list.length) return { text: "", px: min };
+    ctx.font = font(min, weight);
+    const cut = cutAtWord(ctx, list[list.length - 1], maxW);
+    if (cut) ctx.fillText(cut, x, y);
+    return { text: cut, px: min };
+  }
+
+  /**
+   * `text` wrapped whole onto at most `maxLines` lines of `maxW`, at `px` or
+   * smaller down to `min`. Does not draw. `fits` is false when even `min`
+   * needed more lines: the last line is then cut after a word.
+   */
+  function wrapPlan(ctx, text, maxW, px, weight, min, maxLines) {
+    for (let s = px; s >= min; s--) {
+      ctx.font = font(s, weight);
+      const lines = lineBreak(ctx, text, maxW);
+      if (lines.length <= maxLines && lines.every((l) => ctx.measureText(l).width <= maxW))
+        return { lines, px: s, lh: Math.round(s * 1.28), weight, fits: true };
+    }
+    ctx.font = font(min, weight);
+    const all = lineBreak(ctx, text, maxW);
+    const lines = all.slice(0, maxLines);
+    if (all.length > maxLines) lines[maxLines - 1] = cutAtWord(ctx, all.slice(maxLines - 1).join(" "), maxW);
+    return { lines: lines.filter((l) => ctx.measureText(l).width <= maxW), px: min, lh: Math.round(min * 1.28), weight, fits: false };
+  }
+
+  /** Draw a wrapPlan with the block's top at `yTop` (align as set by the caller). */
+  function drawLines(ctx, plan, x, yTop) {
+    ctx.font = font(plan.px, plan.weight);
     ctx.textBaseline = "middle";
-    fitText(ctx, text, x, y, maxW, px, 600, 9);
+    plan.lines.forEach((l, i) => ctx.fillText(l, x, yTop + plan.lh * (i + 0.5)));
+    return plan.lines.length * plan.lh;
+  }
+
+  /** A legend: `parts` joined by " · " on up to `maxLines` lines; a part that does not fit is left out. */
+  function legendPlan(ctx, parts, maxW, px, maxLines) {
+    ctx.font = font(px, 700);
+    const lines = [];
+    let line = "";
+    parts.filter(Boolean).forEach((p) => {
+      const test = line ? line + " · " + p : p;
+      if (ctx.measureText(test).width <= maxW) line = test;
+      else if (line && lines.length + 1 < maxLines && ctx.measureText(p).width <= maxW) {
+        lines.push(line);
+        line = p;
+      }
+    });
+    if (line) lines.push(line);
+    return { lines, px, lh: Math.round(px * 1.3), weight: 700, fits: true };
+  }
+
+  /** Text on a small dark backing, so a line running under it does not cross the letters. */
+  function backed(ctx, text, x, y, color, px = 11, weight = 800) {
+    ctx.font = font(px, weight);
+    const tw = ctx.measureText(text).width;
+    const al = ctx.textAlign;
+    const x0 = al === "right" || al === "end" ? x - tw : al === "center" ? x - tw / 2 : x;
+    const bl = ctx.textBaseline;
+    const hh = px + 4;
+    const yc = bl === "top" ? y + px / 2 : bl === "bottom" || bl === "alphabetic" ? y - px / 2 : y;
+    ctx.save();
+    ctx.fillStyle = "rgba(11, 17, 25, 0.86)";
+    roundRect(ctx, x0 - 3, yc - hh / 2, tw + 6, hh, 4);
+    ctx.fill();
+    ctx.restore();
+    ctx.fillStyle = color;
+    ctx.fillText(text, x, y);
+    return tw;
+  }
+
+  /** The words before a ":" or " · " (a headline's short form), or null. */
+  function lead(text) {
+    const s = String(text || "");
+    const i = s.search(/:| · /);
+    return i > 3 ? s.slice(0, i) : null;
+  }
+
+  /**
+   * A label and its shorter forms: "Aprendizaje" → "Aprendizaj.", … "Apr.".
+   * For a row of tabs whose width follows time, not words.
+   */
+  function abbrevs(label, mark = "") {
+    const s = String(label || "");
+    const out = [mark + s];
+    for (let n = s.length - 2; n >= 3; n--) if (!/\s$/.test(s.slice(0, n))) out.push(mark + s.slice(0, n) + ".");
+    return out;
+  }
+
+  /**
+   * V.chips with words that fit. chips() squeezes a label wider than its chip,
+   * so for each chip this picks the longest of its label, its short form and
+   * its number that fits whole at the size chips() draws it, and keeps its
+   * second line only when that (or its short form) fits. Mirrors chips()'s
+   * widths. item: { label, short, num, sub, subShort, done }.
+   */
+  function fitChips(ctx, box, items, opts = {}) {
+    const n = items.length;
+    if (!n) return;
+    const gap = 4;
+    const cur = opts.current != null ? opts.current : -1;
+    const weightCur = n > 5 ? 2.2 : 1.4;
+    const unit = (box.w - gap * (n - 1)) / (n - 1 + (cur >= 0 && cur < n ? weightCur : 1));
+    const small = box.h < 30 || unit < 44;
+    const out = items.map((it, i) => {
+      const isCur = i === cur;
+      const w = isCur ? unit * weightCur : unit;
+      // Clear of the chip's edges, not only inside them
+      const room = w - 9;
+      const mark = it.done || (opts.doneBefore && i < cur) ? "✓ " : "";
+      ctx.font = font(isCur ? (small ? 11 : 12) : small ? 10 : 11, isCur ? 800 : 700);
+      const first = isCur || !small ? it.label : it.short || it.label;
+      const options = [first, it.short, it.num].filter(Boolean);
+      const pick = options.find((t) => ctx.measureText(mark + t).width <= room) || options[options.length - 1] || "";
+      const o = Object.assign({}, it, { label: pick, short: pick });
+      if (it.sub) {
+        ctx.font = font(10, 600);
+        o.sub = [it.sub, it.subShort].filter(Boolean).find((t) => ctx.measureText(t).width <= room) || "";
+      }
+      return o;
+    });
+    chips(ctx, box, out, opts);
+  }
+
+  /**
+   * A picture's headline row: `big` (a number) at the right, the words at the
+   * left, whole — on one line, else (lines: 2) wrapped onto a second, else the
+   * first shorter form in `texts` that fits. A small `caption` before the big
+   * number shows only when the words keep their room. `dots(right)` may draw
+   * something between them and return its width. Returns the extra height a
+   * second line took (0 on one line).
+   */
+  function headRow(ctx, o) {
+    const x = o.x;
+    const y = o.y;
+    let end = o.right;
+    if (o.big) {
+      ctx.font = font(o.bigPx, 800, true);
+      ctx.textAlign = "right";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = o.bigColor || C.text;
+      ctx.fillText(o.big, end, y + 1);
+      end -= ctx.measureText(o.big).width + 12;
+    }
+    if (o.dots) end -= o.dots(end) + 8;
+    const texts = [].concat(o.texts).filter(Boolean);
+    const px = o.px;
+    const min = o.min || 13;
+    const fitsIn = (room) => texts.length && widthAt(ctx, texts[0], min, 800) <= room;
+    if (o.caption) {
+      const cw = widthAt(ctx, o.caption, 11, 700);
+      if (fitsIn(end - cw - 8 - x - 2)) {
+        ctx.font = font(11, 700);
+        ctx.textAlign = "right";
+        ctx.textBaseline = "middle";
+        ctx.fillStyle = C.muted;
+        ctx.fillText(o.caption, end, y + 1);
+        end -= cw + 8;
+      }
+    }
+    const maxW = end - x - 2;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = o.color || C.text;
+    if (!texts.length) return 0;
+    for (let s = px; s >= min; s--)
+      if (widthAt(ctx, texts[0], s, 800) <= maxW) {
+        ctx.fillText(texts[0], x, y);
+        return 0;
+      }
+    const twoLines = (t) => {
+      const plan = wrapPlan(ctx, t, maxW, Math.min(px, 14), 800, min, 2);
+      if (!plan.fits) return -1;
+      drawLines(ctx, plan, x, y - plan.lh / 2);
+      return plan.lh * (plan.lines.length - 1);
+    };
+    // The full words on two lines, else a shorter form on one, else on two
+    if (o.lines === 2) {
+      const r = twoLines(texts[0]);
+      if (r >= 0) return r;
+    }
+    const rest = texts.length > 1 ? texts.slice(1) : texts;
+    for (const t of rest)
+      for (let s = px; s >= min; s--)
+        if (widthAt(ctx, t, s, 800) <= maxW) {
+          ctx.fillText(t, x, y);
+          return 0;
+        }
+    if (o.lines === 2)
+      for (const t of rest) {
+        const r = twoLines(t);
+        if (r >= 0) return r;
+      }
+    fitOne(ctx, rest, x, y, maxW, px, 800, min);
+    return 0;
+  }
+
+  /** A centred note, wrapped whole onto up to `maxLines` lines. */
+  function note(ctx, text, x, y, maxW, color, px = 12, maxLines = 2, wholeOnly = false) {
+    ctx.fillStyle = color || C.muted;
+    const plan = wrapPlan(ctx, text, maxW, px, 600, Math.min(px, 11), maxLines);
+    // A placeholder that cannot show whole is left out rather than cut
+    if (wholeOnly && !plan.fits) return;
+    ctx.textAlign = "center";
+    drawLines(ctx, plan, x, y - (plan.lines.length * plan.lh) / 2);
   }
 
   /* —— v12 · Melody while speaking —— */
@@ -414,13 +665,14 @@
     const take = takes[m.current];
     let top = pad;
     if (!tiny) {
-      const chipH = compact ? 26 : 36;
-      chips(
+      const chipH = compact ? (h >= 150 ? 30 : 26) : 36;
+      fitChips(
         ctx,
         { x: pad, y: top, w: w - pad * 2, h: chipH },
         takes.map((t, i) => ({
           label: t.name,
           short: t.short,
+          num: String(i + 1),
           sub:
             t.range != null
               ? fmtNum(t.range, 1) + " st"
@@ -439,34 +691,47 @@
     }
     const ref = trk.ref;
     const headY = top + (tiny ? 6 : compact ? 9 : 12);
-    let head = ref == null
-      ? L("Habla normal unos segundos: tu tono habitual será la línea 0", "Speak normally for a few seconds: your usual pitch becomes the 0 line")
-      : take.hint;
-    if (tiny) head = take.short + " · " + head;
+    let texts =
+      ref == null
+        ? [
+            L("Habla normal unos segundos: tu tono habitual será la línea 0", "Speak normally for a few seconds: your usual pitch becomes the 0 line"),
+            L("Habla normal unos segundos", "Speak normally for a few seconds")
+          ]
+        : [take.hint, lead(take.hint)];
+    // No chips on a rotated phone: the take's name leads the line
+    if (tiny) texts = [...texts.map((t) => t && take.short + " · " + t), texts[1]];
     // This take's range, large, on the right
     const range = takeRange(take);
-    const big = range != null ? fmtNum(range, 1) + " st" : "— st";
-    ctx.font = font(tiny ? 15 : compact ? 18 : 22, 800, true);
-    const bigW = ctx.measureText(big).width;
-    ctx.textAlign = "right";
-    ctx.textBaseline = "middle";
-    ctx.fillStyle = C.text;
-    ctx.fillText(big, w - pad - 2, headY + 1);
-    let labW = 0;
-    if (w >= 420) {
-      ctx.font = font(10, 700);
-      ctx.fillStyle = C.muted;
-      const lab = L("rango aprox.", "range approx.");
-      labW = ctx.measureText(lab).width + 8;
-      ctx.fillText(lab, w - pad - 2 - bigW - 8, headY + 1);
-    }
-    ctx.textAlign = "left";
-    ctx.fillStyle = C.text;
-    fitText(ctx, head, pad + 2, headY, w - pad * 2 - bigW - labW - 16, tiny || compact ? 13 : 16, 800, 10);
+    const extra = headRow(ctx, {
+      x: pad + 2,
+      right: w - pad - 2,
+      y: headY,
+      big: range != null ? fmtNum(range, 1) + " st" : "— st",
+      bigPx: tiny ? 15 : compact ? 18 : 22,
+      caption: w >= 420 ? L("rango aprox.", "range approx.") : null,
+      texts,
+      px: tiny || compact ? 14 : 16,
+      min: tiny ? 12 : 13,
+      lines: tiny || (compact && w >= 420) ? 1 : 2
+    });
 
-    // The plot
-    const legendH = compact ? 0 : 16;
-    const plotTop = headY + (tiny ? 12 : compact ? 16 : 20);
+    // The plot, and under it what its marks mean (on two lines on a phone)
+    const legend = compact
+      ? null
+      : legendPlan(
+          ctx,
+          [
+            L("0 = tu tono habitual", "0 = your usual pitch"),
+            L("↘ cae  → plano  ↗ sube", "↘ falls  → level  ↗ rises"),
+            L("st = semitonos", "st = semitones"),
+            L("más grueso = más fuerte", "thicker = louder")
+          ],
+          w - pad * 2,
+          11,
+          h >= 260 ? 2 : 1
+        );
+    const legendH = legend ? legend.lines.length * legend.lh + 4 : 0;
+    const plotTop = headY + extra + (tiny ? 12 : compact ? 16 : 20);
     const plotBot = h - pad - legendH;
     const axisW = 22;
     const colW = w >= 380 ? 58 : 42;
@@ -482,14 +747,6 @@
     roundRect(ctx, px, py - 2, pw, ph + 4, 6);
     ctx.fill();
     stGrid(ctx, px, pw, yOf, R, { labels: true, every: ph >= 150 });
-    if (!tiny && !legendH && w >= 360) {
-      // No legend line at this height: name the 0 line in the plot's corner
-      ctx.font = font(10, 700);
-      ctx.fillStyle = C.faint;
-      ctx.textAlign = "left";
-      ctx.textBaseline = "bottom";
-      ctx.fillText(L("0 = tu tono habitual", "0 = your usual pitch"), px + 6, py + ph);
-    }
 
     if (ref == null) {
       note(ctx, L("Escuchando tu tono habitual…", "Listening for your usual pitch…"), px + pw / 2, mid + (tiny ? 0 : 16), pw - 20, C.muted, 13);
@@ -497,24 +754,18 @@
       drawPhrases(ctx, trk, m, take, ref, { px, py, pw, ph, yOf, tiny });
       rangeColumn(ctx, m, take, ref, { x: px + pw + 8, w: colW - 8, y: py, h: ph, yOf, R });
     }
-
-    if (legendH) {
-      ctx.fillStyle = C.faint;
+    if (!tiny && !legendH && w >= 360) {
+      // No legend line at this height: name the 0 line in the plot's corner,
+      // on a backing so a pitch line under it does not cross the words
       ctx.textAlign = "left";
       ctx.textBaseline = "bottom";
-      fitText(
-        ctx,
-        L(
-          "0 = tu tono habitual · st = semitonos · más grueso = más fuerte · ↘ cae  → plano  ↗ sube",
-          "0 = your usual pitch · st = semitones · thicker = louder · ↘ falls  → level  ↗ rises"
-        ),
-        pad + 2,
-        h - pad + 2,
-        w - pad * 2,
-        10,
-        700,
-        8
-      );
+      backed(ctx, L("0 = tu tono habitual", "0 = your usual pitch"), px + 6, py + ph - 1, C.muted, 11, 700);
+    }
+
+    if (legend) {
+      ctx.fillStyle = C.faint;
+      ctx.textAlign = "left";
+      drawLines(ctx, legend, pad + 2, h - pad - legendH + 4);
     }
   }
 
@@ -581,12 +832,15 @@
       const ax = xOf(p.end) + (big ? 18 : 13);
       const ay = p.fin.fin != null ? clamp(yOf(p.fin.fin - ref), py + 12, py + ph - 26) : py + ph / 2;
       endArrow(ctx, info.kind, ax, ay, big ? 10 : 7, info.color, big ? 3.2 : 2.4);
-      ctx.font = font(big ? 12 : 10, 800);
-      ctx.fillStyle = info.color;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "top";
       const words = big ? (info.num ? info.num.replace(" st", "") + " " : "") + info.word : info.num.replace(" st", "");
-      if (words) ctx.fillText(words, clamp(ax, px + 30, px + pw - 34), ay + (big ? 13 : 10), big ? 84 : 40);
+      if (words) {
+        // On a backing: the next phrase's line may run under it
+        const fpx = big ? 12 : 11;
+        const tw = widthAt(ctx, words, fpx, 800);
+        ctx.textAlign = "center";
+        ctx.textBaseline = "top";
+        backed(ctx, words, clamp(ax, px + tw / 2 + 4, px + pw - tw / 2 - 4), ay + (big ? 13 : 10), info.color, fpx, 800);
+      }
     });
     ctx.restore();
   }
@@ -623,21 +877,28 @@
         ctx.stroke();
       }
       ctx.restore();
-      ctx.font = font(9, 700);
-      ctx.fillStyle = ghost ? C.faint : C.you;
+      // Side by side the two words would meet: the baseline's goes over its
+      // bar, this take's under it
+      ctx.font = font(11, 700);
+      ctx.fillStyle = ghost ? C.muted : C.you;
       ctx.textAlign = "center";
-      ctx.textBaseline = "top";
-      ctx.fillText(ghost ? L("base", "base") : L("ahora", "now"), bx + bw / 2, Math.min(y2 + 3, g.y + g.h - 10), bw + 6);
+      if (ghost) {
+        ctx.textBaseline = "bottom";
+        ctx.fillText(L("base", "base"), bx + bw / 2, Math.max(y1 - 3, g.y + 10));
+      } else {
+        ctx.textBaseline = "top";
+        ctx.fillText(L("ahora", "now"), bx + bw / 2, Math.min(y2 + 3, g.y + g.h - 10));
+      }
     };
     if (two) bar(base, x + 2, true);
     if (take.p10 != null) bar(take, two ? x + w / 2 + 1 : cx - bw / 2, false);
     else {
-      ctx.font = font(9, 700);
+      ctx.font = font(11, 700);
       ctx.fillStyle = C.faint;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(L("rango", "range"), cx, yOf(0) - 10, w);
-      ctx.fillText("…", cx, yOf(0) + 4, w);
+      ctx.fillText(L("rango", "range"), cx, yOf(0) - 10);
+      ctx.fillText("…", cx, yOf(0) + 4);
     }
   }
 
@@ -660,20 +921,23 @@
       const y = box.y + n * rowH;
       const t = r.t;
       ctx.textAlign = "left";
-      ctx.textBaseline = "top";
+      ctx.textBaseline = "middle";
       ctx.fillStyle = C.text;
-      fitText(ctx, t.name, box.x, y + 2, labelW - 8, 12, 800, 9);
+      fitOne(ctx, [t.name, t.short, String(r.i + 1)], box.x, y + 9, labelW - 8, 12, 800, 11);
+      let ly = y + 18;
       if (rowH >= 34) {
-        ctx.font = font(10, 700);
         ctx.fillStyle = C.muted;
-        ctx.fillText(
-          t.range != null ? L(`rango ${fmtNum(t.range, 1)} st aprox.`, `range ${fmtNum(t.range, 1)} st approx.`) : L("rango: poca voz", "range: little voice"),
-          box.x,
-          y + 18,
-          labelW - 8
-        );
+        const words =
+          t.range != null ? L(`rango ${fmtNum(t.range, 1)} st aprox.`, `range ${fmtNum(t.range, 1)} st approx.`) : L("rango: poca voz", "range: little voice");
+        // Two lines when the row has the height, rather than squeezed
+        const plan = wrapPlan(ctx, words, labelW - 8, 11, 700, 11, rowH >= 62 ? 2 : 1);
+        if (plan.fits) ly += drawLines(ctx, plan, box.x, ly);
+        else {
+          fitOne(ctx, t.range != null ? [`${fmtNum(t.range, 1)} st aprox.`, `${fmtNum(t.range, 1)} st`] : [L("poca voz", "little voice")], box.x, ly + 7, labelW - 8, 11, 700, 11);
+          ly += 14;
+        }
       }
-      if (rowH >= 50) endCounts(ctx, box.x, y + 36, r.ps);
+      if (rowH >= 50 && ly + 12 <= y + rowH) endCounts(ctx, box.x, ly + 2, r.ps);
       // The take's phrases, squeezed to fit its row
       const px = box.x + labelW;
       const pw = box.w - labelW;
@@ -769,41 +1033,51 @@
     const headY = top + (tiny ? 6 : compact ? 9 : 12);
     const n = m.slots.length;
     const idx = Math.min(n + (m.again && n ? 0 : 1), 99);
-    let head;
+    let texts;
     const ph = m.phase;
-    if (ph === "idle") head = L(`Afirmación ${idx}: dila y deja que caiga`, `Claim ${idx}: say it and let it land`);
-    else if (ph === "speaking" || ph === "maybeTag") head = L("Hablando… termina la frase y calla", "Speaking… finish the sentence, then stop");
-    else if (ph === "landing") head = L("Silencio… sostén 1 s", "Silence… hold 1 s");
-    else if (ph === "landed") head = L("✓ Pausa completa · la siguiente cuando quieras", "✓ Pause held · the next one when you like");
-    else head = L("Siguiente afirmación cuando quieras", "Next claim when you like");
-    if (m.again && ph !== "speaking") head = L(`Otra vez la ${Math.max(1, n)}: `, `Claim ${Math.max(1, n)} again: `) + head;
-    const big = `${landedCount(m)}/${m.claims}`;
-    ctx.font = font(tiny ? 15 : compact ? 18 : 22, 800, true);
-    const bigW = ctx.measureText(big).width;
-    ctx.textAlign = "right";
-    ctx.textBaseline = "middle";
-    ctx.fillStyle = C.text;
-    ctx.fillText(big, w - pad - 2, headY + 1);
-    let labW = 0;
-    if (w >= 460) {
-      ctx.font = font(10, 700);
-      ctx.fillStyle = C.muted;
-      const lab = L("cierres que caen + 1 s (aprox.)", "falls + 1 s pause (approx.)");
-      labW = ctx.measureText(lab).width + 8;
-      ctx.fillText(lab, w - pad - 2 - bigW - 8, headY + 1);
-    } else if (tiny) {
-      labW = miniDots(ctx, w - pad - 2 - bigW - 8, headY + 1, m) + 8;
+    if (ph === "idle") texts = [L(`Afirmación ${idx}: dila y deja que caiga`, `Claim ${idx}: say it and let it land`), L(`Afirmación ${idx}`, `Claim ${idx}`)];
+    else if (ph === "speaking" || ph === "maybeTag")
+      texts = [L("Hablando… termina la frase y calla", "Speaking… finish the sentence, then stop"), L("Termina la frase y calla", "Finish, then stop")];
+    else if (ph === "landing") texts = [L("Silencio… sostén 1 s", "Silence… hold 1 s")];
+    else if (ph === "landed")
+      texts = [L("✓ Pausa completa · la siguiente cuando quieras", "✓ Pause held · the next one when you like"), L("✓ Pausa completa", "✓ Pause held")];
+    else texts = [L("Siguiente afirmación cuando quieras", "Next claim when you like"), L("Siguiente afirmación", "Next claim")];
+    if (m.again && ph !== "speaking") {
+      const pre = L(`Otra vez la ${Math.max(1, n)}: `, `Claim ${Math.max(1, n)} again: `);
+      texts = [...texts.map((t) => pre + t), texts[texts.length - 1]];
     }
-    ctx.textAlign = "left";
-    ctx.fillStyle = ph === "landed" ? C.target : C.text;
-    fitText(ctx, head, pad + 2, headY, w - pad * 2 - bigW - labW - 14, tiny || compact ? 13 : 16, 800, 10);
+    const extra = headRow(ctx, {
+      x: pad + 2,
+      right: w - pad - 2,
+      y: headY,
+      big: `${landedCount(m)}/${m.claims}`,
+      bigPx: tiny ? 15 : compact ? 18 : 22,
+      caption: w >= 460 ? L("cierres que caen + 1 s (aprox.)", "falls + 1 s pause (approx.)") : null,
+      dots: tiny ? (right) => miniDots(ctx, right, headY + 1, m) : null,
+      texts,
+      color: ph === "landed" ? C.target : C.text,
+      px: tiny || compact ? 14 : 16,
+      min: tiny ? 12 : 13,
+      lines: tiny || (compact && w >= 420) ? 1 : 2
+    });
 
-    // The card: the claim's line on the left, its ending and pause on the right
-    const cardTop = headY + (tiny ? 12 : compact ? 16 : 20);
+    // The card: the claim's line on the left, its ending and pause on the
+    // right — on an upright phone, under it, where its words have the width
+    const cardTop = headY + extra + (tiny ? 12 : compact ? 16 : 20);
     const cardH = Math.max(40, h - pad - cardTop);
-    const resW = clamp(w * 0.36, 118, 230);
-    const cbox = { x: pad, y: cardTop, w: w - pad * 2 - resW - 8, h: cardH };
-    const rbox = { x: w - pad - resW, y: cardTop, w: resW, h: cardH };
+    let cbox;
+    let rbox;
+    const stack = w < 420 && !tiny && cardH >= 120;
+    if (stack) {
+      const resH = clamp(cardH * 0.3, 74, 96);
+      cbox = { x: pad, y: cardTop, w: w - pad * 2, h: cardH - resH - 8 };
+      rbox = { x: pad, y: cardTop + cardH - resH, w: w - pad * 2, h: resH, side: true };
+    } else {
+      const resW = clamp(w * 0.36, 118, 230);
+      cbox = { x: pad, y: cardTop, w: w - pad * 2 - resW - 8, h: cardH };
+      rbox = { x: w - pad - resW, y: cardTop, w: resW, h: cardH };
+    }
+    m._layout = { stack, cbox, rbox };
     claimCard(ctx, cbox, m, m.shown, ghostFor(m));
     landingResult(ctx, rbox, m, m.shown);
   }
@@ -861,15 +1135,16 @@
       const ax = x + (roomy ? 14 : sw / 2 - (landed ? 6 : 0));
       endArrow(ctx, info.kind, ax, cy, box.h < 34 ? 5 : 6, info.color, 2);
       if (roomy) {
-        ctx.font = font(box.h < 34 ? 10 : 11, 800, true);
+        ctx.font = font(11, 800, true);
         ctx.fillStyle = att.pause >= m.need ? C.text : C.muted;
         ctx.textAlign = "left";
-        ctx.fillText(fmtNum(Math.min(att.pause, 9.9), 1) + " s", x + 26, cy + 0.5, sw - 30);
+        const ps = fmtNum(Math.min(att.pause, 9.9), 1) + " s";
+        if (ctx.measureText(ps).width <= sw - (landed || att.tag ? 44 : 30)) ctx.fillText(ps, x + 26, cy + 0.5);
       }
       if (landed) {
         glyph(ctx, "check", x + sw - 10, cy, C.done, 4);
       } else if (att.tag) {
-        ctx.font = font(10, 800);
+        ctx.font = font(11, 800);
         ctx.fillStyle = C.warn;
         ctx.textAlign = "right";
         ctx.fillText("¿?", x + sw - 4, box.y + 9);
@@ -930,7 +1205,8 @@
         b.y + b.h / 2,
         b.w - 16,
         C.faint,
-        12
+        12,
+        b.h >= 70 ? 3 : 2
       );
       return;
     }
@@ -946,17 +1222,12 @@
     let maxAbs = 0;
     runs.forEach((r) => r.forEach((p) => (maxAbs = Math.max(maxAbs, Math.abs(p.v)))));
     const R = clamp(Math.ceil(maxAbs + 1), 5, 12);
-    const inner = { x: b.x + 26, y: b.y + 8, w: b.w - 26 - 24, h: b.h - 16 };
+    // A row under the plot names the 0 line, so the words never sit on a line
+    const zeroRow = b.h >= 96 ? 16 : 0;
+    const inner = { x: b.x + 26, y: b.y + 8, w: b.w - 26 - 24, h: b.h - 16 - zeroRow };
     const mid = inner.y + inner.h / 2;
     const yOf = (v) => mid - clamp(v / R, -1.1, 1.1) * (inner.h / 2 - 2);
     stGrid(ctx, inner.x, inner.w + 16, yOf, R, { labels: inner.h >= 60, step: R > 8 ? 6 : 3 });
-    if (inner.h >= 60) {
-      ctx.font = font(10, 700);
-      ctx.fillStyle = C.faint;
-      ctx.textAlign = "left";
-      ctx.textBaseline = "bottom";
-      ctx.fillText(L("0 = el medio de tu frase", "0 = the middle of your sentence"), inner.x + 4, inner.y + inner.h);
-    }
     const dur = Math.max(2.2, endT - att.start);
     const xOf = (t) => inner.x + ((t - att.start) / dur) * inner.w;
     if (ghost && ghost !== att) {
@@ -968,16 +1239,25 @@
         const gx = (t) => inner.x + ((t - ghost.start) / gdur) * inner.w;
         drawRuns(ctx, runsOf(gBins, gref), gx, yOf, { color: C.muted, dash: [5, 4], width: 1.8, fixed: true, alpha: 0.8 });
         if (inner.h >= 60) {
-          ctx.font = font(9, 700);
-          ctx.fillStyle = C.faint;
           ctx.textAlign = "right";
           ctx.textBaseline = "top";
-          ctx.fillText(L("- - intento anterior", "- - previous try"), inner.x + inner.w, inner.y);
+          const t = [L("- - intento anterior", "- - previous try"), L("- - anterior", "- - previous")].find((s) => widthAt(ctx, s, 10, 700) <= inner.w - 8);
+          if (t) backed(ctx, t, inner.x + inner.w, inner.y, C.muted, 10, 700);
         }
       }
     }
     const medDb = median(bins.filter((x) => x.db != null).map((x) => x.db));
     drawRuns(ctx, runs, xOf, yOf, { medDb, alpha: att.fin ? 0.85 : 1 });
+    if (zeroRow) {
+      // What the 0 line is, whole, in its own row under the plot
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = C.muted;
+      const t = [L("0 = el medio de tu frase", "0 = the middle of your sentence"), L("0 = medio de la frase", "0 = sentence middle")].find(
+        (s) => widthAt(ctx, s, 11, 700) <= b.w - 36
+      );
+      if (t) ctx.fillText(t, inner.x, inner.y + inner.h + 4 + zeroRow / 2);
+    }
     if (att.fin && att.fin.tLast != null) {
       const info = endInfo(att.fin, C.warn);
       if (info.kind === "fall" || info.kind === "rise" || info.kind === "level") {
@@ -993,48 +1273,59 @@
     ctx.fillStyle = PANEL_SOFT;
     roundRect(ctx, b.x, b.y, b.w, b.h, 8);
     ctx.fill();
-    const side = b.h < 96;
-    const ringR = side ? clamp(b.h * 0.32, 14, 26) : clamp(Math.min(b.w * 0.2, (b.h - 56) * 0.34), 14, 34);
+    // Words beside the ring (a short box, or the strip under the card on a
+    // phone), or over it (a tall, narrow box)
+    const side = b.side || b.h < 96;
+    const ringR = side ? clamp(b.h * 0.3, 14, 26) : clamp(Math.min(b.w * 0.2, (b.h - 56) * 0.34), 14, 34);
     const waiting = !att || !att.fin || m.phase === "speaking" || (m.phase === "maybeTag" && !att.fin);
-    // Ending, in shape and words
     const tx = b.x + 10;
-    const ty = side ? b.y + b.h / 2 - 9 : b.y + 20;
+    const wordsW = side ? b.w - ringR * 2 - 36 : b.w - 20;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
     if (waiting) {
-      ctx.font = font(12, 700);
-      ctx.fillStyle = C.faint;
-      ctx.textAlign = "left";
-      ctx.textBaseline = "middle";
-      fitText(ctx, L("Al final: ¿cae, plano o sube?", "At the end: falls, level or rises?"), tx, ty, (side ? b.w - ringR * 2 - 24 : b.w - 20), 12, 700, 9);
+      // The question the picture answers when you stop: whole and readable
+      ctx.fillStyle = C.muted;
+      const plan = wrapPlan(ctx, L("Al final: ¿cae, plano o sube?", "At the end: falls, level or rises?"), wordsW, 13, 700, 12, side ? 2 : 3);
+      const hh = plan.lines.length * plan.lh;
+      drawLines(ctx, plan, tx, side ? b.y + b.h / 2 - 4 - hh / 2 : b.y + 12);
     } else {
       const info = endInfo(att.fin, C.warn);
+      // What follows the ending's name, a line each, as far as there is room
+      const more = [];
+      if (info.kind === "rise") more.push({ t: [L("suena a pregunta", "sounds like a question")], c: C.muted, wt: 700 });
+      if (att.tag)
+        more.push({
+          t: [L("¿etiqueta al final? (¿no?, ¿sabes?)", "tag at the end? (right?, you know?)"), L("¿etiqueta al final?", "tag at the end?")],
+          c: C.warn,
+          wt: 800
+        });
+      else if (att.fin.fade != null && att.fin.fade < -10)
+        more.push({
+          t: [L(`el final se apaga (${fmtNum(att.fin.fade, 0)} dB)`, `the ending fades (${fmtNum(att.fin.fade, 0)} dB)`), L("el final se apaga", "the ending fades")],
+          c: C.muted,
+          wt: 700
+        });
+      const lineH = 16;
+      const shown = more.slice(0, side ? Math.max(0, Math.floor((b.h - 34) / lineH)) : 3);
+      const blockH = 20 + shown.length * lineH;
+      const ty = side ? b.y + b.h / 2 - 4 - blockH / 2 + 10 : b.y + 20;
       endArrow(ctx, info.kind, tx + 10, ty, 8, info.color, 2.8);
       ctx.textAlign = "left";
       ctx.textBaseline = "middle";
       ctx.fillStyle = info.color;
       const wx = tx + 26;
-      const maxW = (side ? b.w - ringR * 2 - 24 : b.w - 20) - 26;
-      fitText(ctx, info.Word + (info.num ? " " + info.num : ""), wx, ty, maxW, 15, 800, 10);
-      let ly = ty + 18;
-      if (info.kind === "rise") {
-        ctx.font = font(10, 700);
-        ctx.fillStyle = C.muted;
-        ctx.fillText(L("suena a pregunta", "sounds like a question"), wx, ly, maxW);
-        ly += 14;
-      }
-      if (att.tag) {
-        ctx.font = font(10, 800);
-        ctx.fillStyle = C.warn;
-        ctx.fillText(L("¿etiqueta al final? (¿no?, ¿sabes?)", "tag at the end? (right?, you know?)"), wx, ly, maxW);
-        ly += 14;
-      } else if (att.fin.fade != null && att.fin.fade < -10 && (!side || ly < b.y + b.h - 6)) {
-        ctx.font = font(10, 700);
-        ctx.fillStyle = C.muted;
-        ctx.fillText(L(`el final se apaga (${fmtNum(att.fin.fade, 0)} dB)`, `the ending fades (${fmtNum(att.fin.fade, 0)} dB)`), wx, ly, maxW);
-      }
+      const maxW = wordsW - 26;
+      fitOne(ctx, [info.Word + (info.num ? " " + info.num : ""), info.Word], wx, ty, maxW, 15, 800, 12);
+      let ly = ty + 19;
+      shown.forEach((ln) => {
+        ctx.fillStyle = ln.c;
+        fitOne(ctx, ln.t, wx, ly, maxW, 11, ln.wt, 11);
+        ly += lineH;
+      });
     }
     // The landing pause: fills over `need` seconds of silence
-    const rcx = side ? b.x + b.w - ringR - 12 : b.x + b.w / 2;
-    const rcy = side ? b.y + b.h / 2 - 4 : b.y + b.h - ringR - 22;
+    const rcx = side ? b.x + b.w - ringR - 14 : b.x + b.w / 2;
+    const rcy = side ? b.y + b.h / 2 - 6 : b.y + b.h - ringR - 22;
     const pause = att && !waiting ? att.pause || 0 : 0;
     const full = pause >= m.need;
     V.ring(ctx, rcx, rcy, ringR, waiting ? 0 : pause / m.need, {
@@ -1046,9 +1337,9 @@
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(waiting ? "—" : fmtNum(Math.min(pause, 9.9), 1) + " s", rcx, rcy + 0.5);
-    ctx.font = font(10, 700);
+    ctx.font = font(11, 700);
     ctx.fillStyle = full ? C.done : C.muted;
-    ctx.fillText((full ? "✓ " : "") + L("pausa", "pause"), rcx, rcy + ringR + 10);
+    ctx.fillText((full ? "✓ " : "") + L("pausa", "pause"), rcx, Math.min(rcy + ringR + 10, b.y + b.h - 7));
   }
 
   /** After Stop: every claim with its ending, its pause and its line. */
@@ -1060,21 +1351,23 @@
       return;
     }
     ctx.textAlign = "left";
-    ctx.textBaseline = "top";
     ctx.fillStyle = C.text;
     const sum = L(
       `${landedCount(m)} de ${m.slots.length} cayeron y sostuvieron ${fmtNum(m.need, 0)} s de silencio (aprox.)`,
       `${landedCount(m)} of ${m.slots.length} fell and held ${fmtNum(m.need, 0)} s of silence (approx.)`
     );
-    fitText(ctx, sum, box.x, box.y, box.w, 13, 800, 10);
-    const top = box.y + 20;
+    // Whole, on a second line when a phone needs one
+    const sumPlan = wrapPlan(ctx, sum, box.w, 13, 800, 12, box.h >= 120 ? 2 : 1);
+    const sumH = drawLines(ctx, sumPlan, box.x, box.y - 2);
+    const top = box.y + sumH + 2;
+    const avail = box.h - sumH - 2;
     const cols = rows.length > 4 && box.w >= 560 ? 2 : 1;
     const perCol = Math.ceil(rows.length / cols);
     const colW = (box.w - (cols - 1) * 12) / cols;
     // Narrow: the words on one line and the sentence's line under them
     const stack = colW < 480;
-    const rowH = clamp((box.h - 22) / Math.max(perCol, stack ? 3 : 1), 16, stack ? 96 : 56);
-    const shown = Math.floor((box.h - 22) / rowH) * cols;
+    const rowH = clamp(avail / Math.max(perCol, stack ? 3 : 1), 16, stack ? 96 : 56);
+    const shown = Math.max(1, Math.floor(avail / rowH)) * cols;
     rows.slice(-shown).forEach((r, k) => {
       const col = Math.floor(k / perCol);
       const row = k % perCol;
@@ -1088,12 +1381,12 @@
       ctx.textBaseline = "middle";
       ctx.fillText(`${r.i + 1}${r.of > 1 ? String.fromCharCode(97 + r.j) : ""}`, x, cy);
       endArrow(ctx, info.kind, x + 30, cy, 5.5, info.color, 2);
-      const words = `${info.word}${info.num ? " " + info.num : ""} · ${L("pausa", "pause")} ${fmtNum(Math.min(r.a.pause, 9.9), 1)} s${
-        r.a.landed ? " ✓" : ""
-      }${r.a.tag ? " · " + L("¿etiqueta?", "tag?") : ""}`;
+      const pauseW = `${L("pausa", "pause")} ${fmtNum(Math.min(r.a.pause, 9.9), 1)} s${r.a.landed ? " ✓" : ""}`;
+      const tagW = r.a.tag ? " · " + L("¿etiqueta?", "tag?") : "";
+      const endW = `${info.word}${info.num ? " " + info.num : ""}`;
       const textW = stack ? colW - 46 : Math.min(colW * 0.55, 260);
       ctx.fillStyle = r.a.landed ? C.text : C.muted;
-      fitText(ctx, words, x + 42, cy, textW, 11, 700, 9);
+      fitOne(ctx, [`${endW} · ${pauseW}${tagW}`, `${endW} · ${pauseW}`, `${info.word} · ${pauseW}`], x + 42, cy, textW, 12, 700, 11);
       // Its line, small
       const lx = stack ? x + 42 : x + 46 + textW;
       const lw = stack ? colW - 42 : colW - (lx - x);
@@ -1147,20 +1440,23 @@
     let top = pad;
     const n = Math.max(m.maxQ, m.qs.length);
     if (!tiny) {
-      const chipH = compact ? 26 : 36;
+      const chipH = compact ? (h >= 150 ? 30 : 26) : 36;
       const items = [];
       for (let i = 0; i < n; i++) {
         const q = m.qs[i];
         const answered = q && q.aStart != null;
+        const len = answered ? clock((q.aEnd != null ? q.aEnd : trk.t) - q.aStart) : "";
         items.push({
           label: L(`P${i + 1}`, `Q${i + 1}`),
           short: L(`P${i + 1}`, `Q${i + 1}`),
-          sub: answered ? `${fmtNum(q.silent, 1)} s · ${clock((q.aEnd != null ? q.aEnd : trk.t) - q.aStart)}` : q && q.skipped ? L("saltada", "skipped") : "",
+          // The silence before · the answer; where both do not fit, the answer's length
+          sub: answered ? `${fmtNum(q.silent, 1)} s · ${len}` : q && q.skipped ? L("saltada", "skipped") : "",
+          subShort: answered ? len : "",
           done: answered && (q.aEnd != null || m.review)
         });
       }
       const cq = m.qs[m.q];
-      chips(ctx, { x: pad, y: top, w: w - pad * 2, h: chipH }, items, {
+      fitChips(ctx, { x: pad, y: top, w: w - pad * 2, h: chipH }, items, {
         current: m.review ? -1 : m.q,
         frac: !m.review && m.phase === "think" && cq ? clamp(cq.silent / m.gate, 0, 1) : null
       });
@@ -1174,42 +1470,47 @@
     if (!q) return;
     const t = trk.t;
     // Headline + one number
-    let head;
+    let texts;
     let big;
     let headColor = C.text;
     if (m.flash && t < m.flash.until) {
-      head = m.flash.text;
+      texts = [m.flash.text, lead(m.flash.text)];
       headColor = C.done;
       big = m.phase === "answer" ? clock(t - q.aStart) : fmtNum(q.silent, 1) + " s";
     } else if (m.phase === "think" && !q.gateOk) {
-      head = L("Lee la pregunta en silencio · respira", "Read the question silently · breathe");
+      texts = [L("Lee la pregunta en silencio · respira", "Read the question silently · breathe"), L("Lee en silencio · respira", "Read silently · breathe")];
       big = fmtNum(q.silent, 1) + " s";
     } else if (m.phase === "think") {
-      head = L("✓ Puerta abierta · responde con la idea primero", "✓ Gate open · answer, point first");
+      texts = [L("✓ Puerta abierta · responde con la idea primero", "✓ Gate open · answer, point first"), L("✓ Puerta abierta · responde", "✓ Gate open · answer")];
       headColor = C.target;
       big = "✓ " + fmtNum(q.silent, 1) + " s";
     } else {
-      head = L("Responde: la idea primero, luego cierra", "Answer: point first, then stop");
+      texts = [L("Responde: la idea primero, luego cierra", "Answer: point first, then stop"), L("La idea primero, luego cierra", "Point first, then stop")];
       big = clock(t - q.aStart);
     }
+    // No chips on a rotated phone: the question's number leads the line
+    if (tiny) texts = [...texts.map((s) => s && L(`P${m.q + 1} · `, `Q${m.q + 1} · `) + s), texts[texts.length - 1]];
     const headY = top + (tiny ? 6 : compact ? 9 : 12);
-    ctx.font = font(tiny ? 15 : compact ? 18 : 22, 800, true);
-    const bigW = ctx.measureText(big).width;
-    ctx.textAlign = "right";
-    ctx.textBaseline = "middle";
-    ctx.fillStyle = C.text;
-    ctx.fillText(big, w - pad - 2, headY + 1);
-    ctx.textAlign = "left";
-    ctx.fillStyle = headColor;
-    fitText(ctx, (tiny ? L(`P${m.q + 1} · `, `Q${m.q + 1} · `) : "") + head, pad + 2, headY, w - pad * 2 - bigW - 14, tiny || compact ? 13 : 16, 800, 10);
-    let y = headY + (tiny ? 12 : compact ? 16 : 20);
-    // The question
+    const extra = headRow(ctx, {
+      x: pad + 2,
+      right: w - pad - 2,
+      y: headY,
+      big,
+      bigPx: tiny ? 15 : compact ? 18 : 22,
+      texts,
+      color: headColor,
+      px: tiny || compact ? 14 : 16,
+      min: tiny ? 12 : 13,
+      lines: tiny || (compact && w >= 420) ? 1 : 2
+    });
+    let y = headY + extra + (tiny ? 12 : compact ? 16 : 20);
+    // The question, whole on up to two lines (a fixed room, so nothing jumps)
     if (!tiny) {
       const qH = compact ? 18 : 40;
       ctx.fillStyle = C.muted;
-      ctx.font = font(compact ? 12 : 14, 600);
       ctx.textAlign = "left";
-      V.wrapText(ctx, `«${q.text}»`, pad + 2, y + (compact ? 7 : 9), w - pad * 2 - 4, compact ? 15 : 18, compact ? 1 : 2);
+      const plan = wrapPlan(ctx, `«${q.text}»`, w - pad * 2 - 4, compact ? 12 : 14, 600, 12, compact ? 1 : 2);
+      drawLines(ctx, plan, pad + 2, y - 2);
       y += qH;
     }
     // The beats: doorway → answer
@@ -1229,50 +1530,54 @@
       const tw = w - pad - tx - 2;
       ctx.textAlign = "left";
       ctx.textBaseline = "middle";
-      ctx.font = font(11, 700);
       ctx.fillStyle = C.muted;
-      ctx.fillText(L("Silencio para pensar", "Thinking silence"), tx, door.y + 10, tw);
+      fitOne(ctx, [L("Silencio para pensar", "Thinking silence"), L("Silencio", "Silence")], tx, door.y + 10, tw, 12, 700, 11);
       ctx.font = font(24, 800, true);
       ctx.fillStyle = open ? C.target : C.text;
-      ctx.fillText(open ? `✓ ${fmtNum(q.silent, 1)} s` : `${fmtNum(q.silent, 1)} s`, tx, door.y + door.h / 2, tw);
-      ctx.font = font(10, 700);
-      ctx.fillStyle = open ? C.target : C.faint;
-      ctx.fillText(
-        open ? L("puerta abierta", "gate open") : L(`la puerta se abre a los ${fmtNum(m.gate, 1)} s`, `the gate opens at ${fmtNum(m.gate, 1)} s`),
+      ctx.fillText(open ? `✓ ${fmtNum(q.silent, 1)} s` : `${fmtNum(q.silent, 1)} s`, tx, door.y + door.h / 2);
+      ctx.fillStyle = open ? C.target : C.muted;
+      fitOne(
+        ctx,
+        open
+          ? [L("puerta abierta", "gate open")]
+          : [
+              L(`la puerta se abre a los ${fmtNum(m.gate, 1)} s`, `the gate opens at ${fmtNum(m.gate, 1)} s`),
+              L(`se abre a los ${fmtNum(m.gate, 1)} s`, `opens at ${fmtNum(m.gate, 1)} s`)
+            ],
         tx,
-        door.y + door.h / 2 + 22,
-        tw
+        door.y + door.h / 2 + 24,
+        tw,
+        11,
+        700,
+        11
       );
       if (blips) {
         ctx.fillStyle = C.muted;
-        ctx.fillText(blipWords, tx, door.y + door.h - 6, tw);
+        fitOne(ctx, [blipWords], tx, door.y + door.h - 6, tw, 11, 700, 11);
       }
-      const sy = door.y + door.h + 12;
-      const sbox = { x: pad + 2, y: sy, w: w - pad * 2 - 4, h: Math.min(bottom - sy, 120) };
+      const sy = door.y + door.h + 14;
+      const sbox = { x: pad + 2, y: sy, w: w - pad * 2 - 4, h: Math.min(bottom - sy, 130) };
       answerStrip(ctx, sbox, m, q, trk, true, 64);
       return;
     }
-    const trackH = clamp(bottom - y, 34, 120);
-    const labelH = 14;
+    const trackH = clamp(bottom - y, 34, 130);
+    const labelH = 16;
     const doorW = clamp(w * 0.15, 46, 86);
     const doorH = Math.min(trackH - labelH, 96);
     const door = { x: pad + 2, y: y + (trackH - labelH - doorH) / 2, w: doorW, h: doorH };
     drawDoor(ctx, door, clamp(q.silent / m.gate, 0, 1), open, m.phase === "think" && !q.gateOk);
-    ctx.font = font(10, 800, true);
+    ctx.font = font(11, 800, true);
     ctx.fillStyle = open ? C.target : C.muted;
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    ctx.fillText(
-      open ? `✓ ${fmtNum(q.silent, 1)} s` : `${fmtNum(q.silent, 1)} / ${fmtNum(m.gate, 1)} s`,
-      door.x + door.w / 2,
-      door.y + door.h + 3,
-      door.w + 24
-    );
+    // Centred under the door, but never past the picture's left edge
+    const doorWords = open ? `✓ ${fmtNum(q.silent, 1)} s` : `${fmtNum(q.silent, 1)} / ${fmtNum(m.gate, 1)} s`;
+    ctx.fillText(doorWords, Math.max(door.x + door.w / 2, pad + ctx.measureText(doorWords).width / 2), door.y + door.h + 3);
     if (blips && trackH >= 60) {
-      ctx.font = font(9, 700);
+      ctx.font = font(11, 700);
       ctx.fillStyle = C.muted;
       ctx.textBaseline = "bottom";
-      ctx.fillText(blipWords, door.x + door.w / 2, door.y - 2, door.w + 24);
+      ctx.fillText(blipWords, Math.max(door.x + door.w / 2, pad + ctx.measureText(blipWords).width / 2), door.y - 2);
     }
     // Arrow between the beats
     const ax = door.x + door.w + 6;
@@ -1344,90 +1649,153 @@
     ctx.restore();
   }
 
-  /** The answer: speech and silence against a soft time guide; pauses ticked. */
+  /** A pause of ≥0.5 s: a mark over the answer's bar, pointing at its gap. */
+  function pauseMark(ctx, x, yBottom, s = 5) {
+    ctx.fillStyle = C.muted;
+    ctx.beginPath();
+    ctx.moveTo(x - s, yBottom - s * 1.25);
+    ctx.lineTo(x + s, yBottom - s * 1.25);
+    ctx.lineTo(x, yBottom);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  /**
+   * Speech as blocks between `a` and `e` on a bar at (by, bh), and a mark over
+   * the bar (never on it) for each pause of ≥0.5 s. Returns the marks' x.
+   */
+  function speechBlocks(ctx, vad, a, e, now, xOf, by, bh, marks) {
+    const xs = [];
+    let lastX = -99;
+    vad.segments.forEach((sg) => {
+      const s0 = Math.max(a, sg.start);
+      const s1 = Math.min(e, sg.end != null ? sg.end : now);
+      if (s1 <= s0) return;
+      if (sg.kind === "speech") {
+        ctx.fillStyle = C.you;
+        ctx.globalAlpha = 0.85;
+        roundRect(ctx, xOf(s0 - a), by + bh * 0.2, Math.max(2, xOf(s1 - a) - xOf(s0 - a)), bh * 0.6, 3);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      } else if (marks && sg.end != null && sg.end - sg.start >= 0.5 && sg.end <= e) {
+        const px = xOf((s0 + s1) / 2 - a);
+        // Two pauses closer than a mark's width share one
+        if (px - lastX < 11) return;
+        lastX = px;
+        pauseMark(ctx, px, by - 2, 5);
+        xs.push(px);
+      }
+    });
+    return xs;
+  }
+
+  /**
+   * Seconds under a strip every 10 s, and the guide's name between its two
+   * seconds where they leave room for it (whole, or just "guía").
+   */
+  function secondsRow(ctx, xOf, T, y, right, guide, last = T) {
+    ctx.font = font(10, 700);
+    ctx.fillStyle = C.faint;
+    ctx.textBaseline = "top";
+    const spans = [];
+    for (let s = 0; s <= last + 0.01; s += 10) {
+      const lab = `${s} s`;
+      const lw = ctx.measureText(lab).width;
+      let x = xOf(s);
+      let al = s === 0 ? "left" : "center";
+      if (s > 0 && x + lw / 2 > right) {
+        al = "right";
+        x = right;
+      }
+      ctx.textAlign = al;
+      ctx.fillText(lab, x, y);
+      const x0 = al === "left" ? x : al === "right" ? x - lw : x - lw / 2;
+      spans.push([x0, x0 + lw]);
+    }
+    const gc = (xOf(guide[0]) + xOf(guide[1])) / 2;
+    ctx.font = font(11, 800);
+    const gl = [L(`guía ${guide[0]}–${guide[1]} s`, `guide ${guide[0]}–${guide[1]} s`), L("guía", "guide")].find((s) => {
+      const lw = ctx.measureText(s).width;
+      return spans.every(([p, q]) => gc + lw / 2 + 4 < p || gc - lw / 2 - 4 > q);
+    });
+    if (gl) {
+      ctx.fillStyle = C.target;
+      ctx.textAlign = "center";
+      ctx.fillText(gl, gc, y);
+    }
+  }
+
+  /** The guide: a soft green band between two dashed edges (a guide, not a limit). */
+  function guideBand(ctx, x0, x1, y, hh, alpha = 0.12) {
+    ctx.fillStyle = `rgba(52, 178, 122, ${alpha})`;
+    ctx.fillRect(x0, y, x1 - x0, hh);
+    ctx.strokeStyle = "rgba(52, 178, 122, 0.55)";
+    ctx.setLineDash([3, 3]);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x0 + 0.5, y);
+    ctx.lineTo(x0 + 0.5, y + hh);
+    ctx.moveTo(x1 - 0.5, y);
+    ctx.lineTo(x1 - 0.5, y + hh);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  /**
+   * The answer: speech and silence against a soft time guide. Top to bottom:
+   * a row for the pause marks, the bar, the seconds (with the guide's name),
+   * and where there is room the count of pauses.
+   */
   function answerStrip(ctx, b, m, q, trk, words, maxBh = 44) {
     const vad = trk.vad;
     const t = trk.t;
     const len = q.aStart != null ? (q.aEnd != null ? q.aEnd : t) - q.aStart : 0;
     const T = Math.max(m.guide[1] + 10, len + 6);
     const xOf = (s) => b.x + (s / T) * b.w;
-    const bh = Math.min(b.h - (maxBh > 44 ? 40 : 0), maxBh);
-    const by = b.y + (b.h - bh) / 2;
+    const markH = b.h >= 40 ? 11 : 0;
+    const ticksH = words && b.h - markH >= 40 ? 15 : 0;
+    const avail = b.h - markH - ticksH;
+    const countH = words && avail - 16 >= Math.min(maxBh, 28) ? 16 : 0;
+    const bh = Math.max(12, Math.min(avail - countH, maxBh));
+    const by = b.y + markH + Math.max(0, (avail - countH - bh) / 2);
     ctx.fillStyle = PANEL_SOFT;
     roundRect(ctx, b.x, by, b.w, bh, 6);
     ctx.fill();
-    // The guide: a soft bracket, not a limit
     const g0 = xOf(m.guide[0]);
     const g1 = xOf(m.guide[1]);
-    ctx.fillStyle = "rgba(52, 178, 122, 0.12)";
-    ctx.fillRect(g0, by, g1 - g0, bh);
-    ctx.strokeStyle = "rgba(52, 178, 122, 0.55)";
-    ctx.setLineDash([3, 3]);
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(g0 + 0.5, by);
-    ctx.lineTo(g0 + 0.5, by + bh);
-    ctx.moveTo(g1 - 0.5, by);
-    ctx.lineTo(g1 - 0.5, by + bh);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    if (words && b.y + (b.h - bh) / 2 >= b.y + 12) {
-      ctx.font = font(9, 700);
-      ctx.fillStyle = C.target;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "bottom";
-      ctx.fillText(L(`guía ${m.guide[0]}–${m.guide[1]} s`, `guide ${m.guide[0]}–${m.guide[1]} s`), (g0 + g1) / 2, by - 2, Math.max(60, g1 - g0 + 30));
-    }
+    guideBand(ctx, g0, g1, by, bh);
     if (q.aStart == null) {
-      note(ctx, L("tu respuesta aparece aquí", "your answer appears here"), b.x + Math.min(b.w, g0 - b.x) / 2, by + bh / 2, Math.max(60, g0 - b.x - 8), C.faint, 11);
+      const nw = Math.max(60, g0 - b.x - 12);
+      note(ctx, L("tu respuesta aparece aquí", "your answer appears here"), b.x + 6 + nw / 2, by + bh / 2, nw, C.muted, 11, bh >= 30 ? 2 : 1, true);
     } else {
       const a = q.aStart;
       const e = q.aEnd != null ? q.aEnd : t;
-      vad.segments.forEach((sg) => {
-        const s0 = Math.max(a, sg.start);
-        const s1 = Math.min(e, sg.end != null ? sg.end : t);
-        if (s1 <= s0) return;
-        if (sg.kind === "speech") {
-          ctx.fillStyle = C.you;
-          ctx.globalAlpha = 0.85;
-          roundRect(ctx, xOf(s0 - a), by + bh * 0.22, Math.max(2, xOf(s1 - a) - xOf(s0 - a)), bh * 0.56, 3);
-          ctx.fill();
-          ctx.globalAlpha = 1;
-        } else if (sg.end != null && sg.end - sg.start >= 0.5 && sg.end <= e) {
-          glyph(ctx, "notch", xOf((s0 + s1) / 2 - a), by + 6, C.muted, 4);
-        }
-      });
+      speechBlocks(ctx, vad, a, e, t, xOf, by, bh, !!markH);
       if (q.aEnd == null) {
         const nx = xOf(t - a);
         ctx.strokeStyle = "rgba(238, 243, 250, 0.55)";
         ctx.lineWidth = 1.5;
         ctx.beginPath();
-        ctx.moveTo(nx, by - 3);
-        ctx.lineTo(nx, by + bh + 3);
+        ctx.moveTo(nx, by - 1);
+        ctx.lineTo(nx, by + bh + 1);
         ctx.stroke();
       }
     }
-    // Seconds under the strip
-    if (words && b.h - bh >= 20) {
-      ctx.font = font(9, 700);
-      ctx.fillStyle = C.faint;
+    if (ticksH) secondsRow(ctx, xOf, T, by + bh + 3, b.x + b.w, m.guide);
+    if (countH && q.aStart != null) {
+      ctx.font = font(11, 700);
+      ctx.fillStyle = C.muted;
+      ctx.textAlign = "right";
       ctx.textBaseline = "top";
-      for (let s = 0; s <= T; s += 10) {
-        ctx.textAlign = s === 0 ? "left" : "center";
-        ctx.fillText(`${s} s`, xOf(s), by + bh + 3);
-      }
-      if (q.aStart != null) {
-        ctx.textAlign = "right";
-        ctx.fillStyle = C.muted;
-        ctx.fillText(L(`pausas ≥0,5 s: ${q.pauses}`, `pauses ≥0.5 s: ${q.pauses}`), b.x + b.w, by + bh + 14);
-      }
+      ctx.fillText(L(`pausas ≥0,5 s: ${q.pauses}`, `pauses ≥0.5 s: ${q.pauses}`), b.x + b.w, by + bh + ticksH + 3);
     }
   }
 
   /**
-   * After Stop: one row per question — the silence before it (a chip, ✓ when
-   * it reached the gate) and the answer on a shared seconds axis with the
-   * soft guide band — under a line of plain facts.
+   * After Stop: one row per question — the question itself when the row has
+   * the height, the silence before it (a chip, ✓ when it reached the gate)
+   * and the answer on a shared seconds axis with the soft guide band — under
+   * a line of plain facts, and over a key to the marks.
    */
   function gateReview(ctx, box, m) {
     const trk = m.tracker;
@@ -1441,25 +1809,26 @@
     const sil = rows.map((r) => r.q.silent);
     const lens = answered.map((r) => lenOf(r.q));
     const narrow = box.w < 480;
-    // One line of facts (no score: whether it was concise is the learner's call)
+    // One line of facts (two on a phone; no score: whether it was concise is the learner's call)
     const facts = [
       L(`${answered.length} ${answered.length === 1 ? "respuesta" : "respuestas"}`, `${answered.length} ${answered.length === 1 ? "answer" : "answers"}`),
       L(`silencio antes ${fmtNum(median(sil), 1)} s`, `silence before ${fmtNum(median(sil), 1)} s`)
     ];
     if (lens.length) facts.push(L(`respuesta ${clock(median(lens))}`, `answer ${clock(median(lens))}`));
     ctx.textAlign = "left";
-    ctx.textBaseline = "middle";
     ctx.fillStyle = C.text;
-    fitText(ctx, facts.join(" · ") + (rows.length > 1 ? L(" (medianas)", " (medians)") : ""), box.x + 2, box.y + 8, box.w - 4, 13, 800, 9);
-    const axisH = 14;
-    const top = box.y + 22;
-    const avail = box.h - 22 - axisH;
-    const rowH = clamp(avail / Math.max(rows.length, 3), 20, 58);
+    const fplan = wrapPlan(ctx, facts.join(" · ") + (rows.length > 1 ? L(" (medianas)", " (medians)") : ""), box.w - 4, 13, 800, 12, box.h >= 130 ? 2 : 1);
+    const factsH = drawLines(ctx, fplan, box.x + 2, box.y - 1) + 5;
+    const axisH = 16;
+    let avail = box.h - factsH - axisH;
+    // The key to the marks, when the rows keep their height
+    const keyH = avail - 18 >= rows.length * 30 ? 18 : 0;
+    avail -= keyH;
+    const rowH = clamp(avail / rows.length, 26, 92);
     const shown = rows.slice(-Math.max(1, Math.floor(avail / rowH)));
+    const top = box.y + factsH;
     const labelW = narrow ? 30 : 44;
-    // The silence before each answer as a chip: "✓ 3,3 s" when it reached the gate
-    const chipH = Math.min(rowH - 8, 28);
-    const doorW = narrow ? 50 : 60;
+    const doorW = narrow ? 56 : 64;
     const sx = box.x + labelW + doorW + 12;
     const sw = box.x + box.w - sx;
     const T = Math.max(m.guide[1] + 10, ...m.qs.map((q) => lenOf(q) || 0)) + 2;
@@ -1471,12 +1840,26 @@
     shown.forEach((r, k) => {
       const q = r.q;
       const y = top + k * rowH;
-      const cy = y + rowH / 2;
+      // A tall row names its question over its line
+      const qLine = rowH >= 58 && q.text;
+      if (qLine) {
+        ctx.textAlign = "left";
+        ctx.textBaseline = "middle";
+        ctx.fillStyle = C.muted;
+        fitOne(ctx, [`«${q.text}»`], box.x + labelW, y + 8, box.w - labelW, 12, 600, 11);
+      }
+      const lineTop = qLine ? y + 17 : y;
+      const region = y + rowH - 3 - lineTop;
+      const markH = region >= 30 ? 11 : 0;
+      const bh = Math.min(region - markH - 2, 28);
+      const by = lineTop + markH + Math.max(0, (region - markH - bh) / 2);
+      const cy = by + bh / 2;
       ctx.textAlign = "left";
       ctx.textBaseline = "middle";
       ctx.fillStyle = C.muted;
-      ctx.font = font(11, 800);
-      ctx.fillText(L(`P${r.i + 1}`, `Q${r.i + 1}`), box.x + 2, cy, labelW - 4);
+      ctx.font = font(12, 800);
+      ctx.fillText(L(`P${r.i + 1}`, `Q${r.i + 1}`), box.x + 2, cy);
+      const chipH = Math.min(bh + 4, 28);
       const chip = { x: box.x + labelW, y: cy - chipH / 2, w: doorW, h: chipH };
       ctx.fillStyle = q.gateOk ? C.targetSoft : PANEL_SOFT;
       roundRect(ctx, chip.x, chip.y, chip.w, chip.h, 5);
@@ -1484,45 +1867,35 @@
       ctx.strokeStyle = q.gateOk ? C.target : C.gridStrong;
       ctx.lineWidth = 1.5;
       ctx.stroke();
-      ctx.font = font(11, 800, true);
       ctx.fillStyle = q.gateOk ? C.target : C.muted;
       ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(`${q.gateOk ? "✓ " : ""}${fmtNum(q.silent, 1)} s`, chip.x + chip.w / 2, cy + 0.5, chip.w - 6);
+      // Its words clear of the chip's edges
+      const sw0 = `${q.gateOk ? "✓ " : ""}${fmtNum(q.silent, 1)} s`;
+      const sw1 = `${fmtNum(q.silent, 1)} s`;
+      const cpx = [12, 11].find((p) => {
+        ctx.font = font(p, 800, true);
+        return ctx.measureText(sw0).width <= chip.w - 12;
+      });
+      ctx.font = font(cpx || 11, 800, true);
+      ctx.fillText(cpx ? sw0 : sw1, chip.x + chip.w / 2, cy + 0.5);
       // The answer
-      const bh = Math.min(rowH - 8, 26);
-      const by = cy - bh / 2;
       ctx.fillStyle = PANEL_SOFT;
       roundRect(ctx, sx, by, sw, bh, 4);
       ctx.fill();
       const len = lenOf(q);
       if (len == null) {
-        ctx.fillStyle = C.faint;
+        ctx.fillStyle = C.muted;
         ctx.textAlign = "left";
-        ctx.textBaseline = "middle";
-        fitText(ctx, q.skipped ? L("saltada", "skipped") : L("sin respuesta", "no answer"), sx + 8, cy, sw - 16, 11, 700, 9);
+        fitOne(ctx, [q.skipped ? L("saltada", "skipped") : L("sin respuesta", "no answer")], sx + 8, cy, sw - 16, 11, 700, 11);
         return;
       }
       const a = q.aStart;
       const e = q.aEnd != null ? q.aEnd : trk.t;
-      trk.vad.segments.forEach((sg) => {
-        const s0 = Math.max(a, sg.start);
-        const s1 = Math.min(e, sg.end != null ? sg.end : trk.t);
-        if (s1 <= s0) return;
-        if (sg.kind === "speech") {
-          ctx.fillStyle = C.you;
-          ctx.globalAlpha = 0.85;
-          roundRect(ctx, xOf(s0 - a), by + bh * 0.18, Math.max(2, xOf(s1 - a) - xOf(s0 - a)), bh * 0.64, 2);
-          ctx.fill();
-          ctx.globalAlpha = 1;
-        } else if (sg.end != null && sg.end - sg.start >= 0.5 && sg.end <= e && bh >= 18) {
-          glyph(ctx, "notch", xOf((s0 + s1) / 2 - a), by + 4, C.muted, 3.5);
-        }
-      });
+      speechBlocks(ctx, trk.vad, a, e, trk.t, xOf, by, bh, !!markH);
       // Its length (and pauses when there is room), right after it
       const ex = xOf(len);
       const lenText = clock(len);
-      ctx.font = font(11, 800, true);
+      ctx.font = font(12, 800, true);
       const lw = ctx.measureText(lenText).width;
       const rightRoom = sx + sw - ex - 8;
       const after = rightRoom > lw + 6;
@@ -1530,28 +1903,58 @@
       ctx.fillStyle = C.text;
       ctx.textBaseline = "middle";
       ctx.textAlign = after ? "left" : "right";
-      ctx.fillText(lenText, tx, cy);
-      if (after && rowH >= 30 && rightRoom > lw + 70) {
-        ctx.font = font(10, 700);
-        ctx.fillStyle = C.muted;
-        ctx.textAlign = "left";
+      if (!after) backed(ctx, lenText, tx, cy, C.text, 12, 800);
+      else ctx.fillText(lenText, tx, cy);
+      if (after) {
         const one = q.pauses === 1;
-        ctx.fillText(L(` · ${q.pauses} ${one ? "pausa" : "pausas"}`, ` · ${q.pauses} ${one ? "pause" : "pauses"}`), tx + lw, cy, rightRoom - lw - 4);
+        const pw = L(` · ${q.pauses} ${one ? "pausa" : "pausas"}`, ` · ${q.pauses} ${one ? "pause" : "pauses"}`);
+        ctx.font = font(11, 700);
+        if (ctx.measureText(pw).width <= rightRoom - lw - 4) {
+          ctx.fillStyle = C.muted;
+          ctx.textAlign = "left";
+          ctx.fillText(pw, tx + lw, cy);
+        }
       }
     });
     // Seconds and the guide's name under the rows
-    ctx.font = font(9, 700);
-    ctx.textBaseline = "top";
-    const ay = bandBottom + 2;
-    for (let sec = 0; sec <= T - 2; sec += 10) {
-      ctx.fillStyle = C.faint;
-      ctx.textAlign = sec === 0 ? "left" : "center";
-      ctx.fillText(`${sec} s`, xOf(sec), ay);
-    }
-    if (xOf(m.guide[1]) - xOf(m.guide[0]) >= 80) {
-      ctx.fillStyle = C.target;
-      ctx.textAlign = "center";
-      ctx.fillText(L("guía", "guide"), (xOf(m.guide[0]) + xOf(m.guide[1])) / 2, ay);
+    secondsRow(ctx, xOf, T, bandBottom + 3, box.x + box.w, m.guide, T - 2);
+    if (keyH) gateKey(ctx, box.x + 2, bandBottom + axisH + keyH / 2 + 1, box.w - 4, m.guide);
+  }
+
+  /** The key to the review's marks: voice, a pause, the guide — as far as the width allows. */
+  function gateKey(ctx, x, y, maxW, guide) {
+    const items = [
+      {
+        icon: (ix) => {
+          ctx.fillStyle = C.you;
+          roundRect(ctx, ix, y - 4, 14, 8, 2);
+          ctx.fill();
+          return 14;
+        },
+        text: L("voz", "voice")
+      },
+      { icon: (ix) => (pauseMark(ctx, ix + 5, y + 4, 5), 10), text: L("pausa ≥0,5 s", "pause ≥0.5 s") },
+      {
+        icon: (ix) => {
+          ctx.fillStyle = "rgba(52, 178, 122, 0.3)";
+          ctx.fillRect(ix, y - 5, 14, 10);
+          return 14;
+        },
+        text: L(`guía ${guide[0]}–${guide[1]} s`, `guide ${guide[0]}–${guide[1]} s`)
+      }
+    ];
+    ctx.font = font(11, 700);
+    let cx = x;
+    for (const it of items) {
+      const tw = ctx.measureText(it.text).width;
+      if (cx + 20 + tw > x + maxW) break;
+      const iw = it.icon(cx);
+      ctx.font = font(11, 700);
+      ctx.fillStyle = C.muted;
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      ctx.fillText(it.text, cx + iw + 5, y);
+      cx += iw + 5 + tw + 16;
     }
   }
 
@@ -1578,29 +1981,32 @@
     const ph = m.phases[m.index];
     // Headline + countdown
     const headY = pad + (tiny ? 6 : compact ? 9 : 12);
-    let head;
+    let texts;
     let big;
     let bigColor = C.text;
     if (m.review) {
-      head = L("Tu historia: volumen y pausas, parte por parte", "Your story: loudness and pauses, part by part");
+      texts = [L("Tu historia: volumen y pausas, parte por parte", "Your story: loudness and pauses, part by part"), L("Tu historia, parte por parte", "Your story, part by part")];
       big = clock(t);
     } else if (m.over) {
-      head = L("Cierra con una frase quieta, cuando quieras", "Close with one still sentence, when you like");
+      texts = [L("Cierra con una frase quieta, cuando quieras", "Close with one still sentence, when you like"), L("Cierra con una frase quieta", "Close with one still sentence")];
       big = "+" + clock(t - m.overAt);
       bigColor = C.muted;
     } else {
-      head = ph.hint || ph.label;
+      texts = [ph.hint || ph.label, lead(ph.hint), ph.label];
       big = clock(Math.ceil(ph.sec - (t - m.starts[m.index])));
     }
-    ctx.font = font(tiny ? 15 : compact ? 18 : 22, 800, true);
-    const bigW = ctx.measureText(big).width;
-    ctx.textAlign = "right";
-    ctx.textBaseline = "middle";
-    ctx.fillStyle = bigColor;
-    ctx.fillText(big, w - pad - 2, headY + 1);
-    ctx.textAlign = "left";
-    ctx.fillStyle = C.text;
-    fitText(ctx, head, pad + 2, headY, w - pad * 2 - bigW - 14, tiny || compact ? 13 : 16, 800, 10);
+    const extra = headRow(ctx, {
+      x: pad + 2,
+      right: w - pad - 2,
+      y: headY,
+      big,
+      bigPx: tiny ? 15 : compact ? 18 : 22,
+      bigColor,
+      texts,
+      px: tiny || compact ? 14 : 16,
+      min: tiny ? 12 : 13,
+      lines: tiny || compact || m.review ? 1 : 2
+    });
 
     // One time axis for the bar and the ribbon: the parts as run so far, the
     // rest as planned
@@ -1609,8 +2015,8 @@
     const x0 = pad + 2;
     const W = w - pad * 2 - 4;
     const xOf = (s) => x0 + (clamp(s, 0, T) / T) * W;
-    const barY = headY + (tiny ? 12 : compact ? 15 : 20);
-    const barH = tiny ? 18 : compact ? 22 : 30;
+    const barY = headY + extra + (tiny ? 12 : compact ? 15 : 20);
+    const barH = tiny ? 18 : compact ? 22 : m.review && W < 520 ? 26 : 30;
     segs.forEach((s) => {
       const a = xOf(s.a) + 1.5;
       const bw = Math.max(4, xOf(s.b) - xOf(s.a) - 3);
@@ -1618,11 +2024,10 @@
         ctx.fillStyle = V.hatch(ctx, "rgba(170, 195, 230, 0.35)");
         roundRect(ctx, a, barY, bw, barH, 5);
         ctx.fill();
-        ctx.font = font(10, 700);
         ctx.fillStyle = C.muted;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        if (bw > 30) ctx.fillText(L("extra", "extra"), a + bw / 2, barY + barH / 2, bw - 4);
+        if (widthAt(ctx, L("extra", "extra"), 11, 700) <= bw - 8) ctx.fillText(L("extra", "extra"), a + bw / 2, barY + barH / 2);
         return;
       }
       const done = s.state === "done" || (m.review && s.state === "cur");
@@ -1642,18 +2047,35 @@
       ctx.fillStyle = done ? C.done : s.state === "cur" ? C.text : C.muted;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      fitText(ctx, (done ? "✓ " : "") + s.label, a + bw / 2, barY + barH / 2 + 0.5, bw - 6, tiny ? 10 : 12, s.state === "cur" ? 800 : 700, 8);
+      // A part's width follows its time, not its name: the name whole, else
+      // shortened with a point ("Aprend."), else the part's number
+      const mark = done ? "✓ " : "";
+      fitOne(ctx, [...abbrevs(s.label, mark), ...(mark ? abbrevs(s.label) : []), String(s.i + 1)], a + bw / 2, barY + barH / 2 + 0.5, bw - 8, tiny ? 11 : 12, s.state === "cur" ? 800 : 700, 11);
     });
 
-    // The ribbon
-    // After Stop the facts get room; on a tall, narrow panel one fact per row
-    let cmpH = 0;
-    if (m.review && m.compare) {
-      const nf = compareFacts(m.compare).length;
-      cmpH = tiny ? 16 : compact ? 34 : W < 520 && h > 360 ? 18 + nf * 42 : 64;
-    }
-    const legendH = compact || m.review ? 0 : 16;
+    // The ribbon, and after Stop the facts under it: they get the height they
+    // need to be read whole, the ribbon keeps at least 24 px
     const rTop = barY + barH + (tiny ? 5 : 8);
+    let cmp = null;
+    if (m.review && m.compare) cmp = comparePlan(ctx, m.compare, W, Math.max(22, h - pad - rTop - 24 - 6));
+    const cmpH = cmp ? cmp.h : 0;
+    const legend =
+      compact || m.review
+        ? null
+        : legendPlan(
+            ctx,
+            [
+              W < 340
+                ? L("cinta = tu volumen (dB, aprox.)", "ribbon = your loudness (dB, approx.)")
+                : L("cinta = tu volumen (dB, frente a tu mediana)", "ribbon = your loudness (dB, against your median)"),
+              L("huecos = pausas", "gaps = pauses"),
+              L("⚑ = tu pico", "⚑ = your peak")
+            ],
+            W,
+            11,
+            W < 520 ? 2 : 1
+          );
+    const legendH = legend ? legend.lines.length * legend.lh + 4 : 0;
     const rH = Math.max(18, h - pad - legendH - cmpH - (cmpH ? 6 : 0) - rTop);
     const rMid = rTop + rH / 2;
     ctx.fillStyle = PANEL_SOFT;
@@ -1736,9 +2158,10 @@
     ctx.globalAlpha = 1;
     ctx.restore();
     if (med == null && !m.review) {
-      note(ctx, L("Tu volumen aparece aquí mientras hablas", "Your loudness appears here as you speak"), x0 + W / 2, rMid, W - 20, C.faint, 12);
+      note(ctx, L("Tu volumen aparece aquí mientras hablas", "Your loudness appears here as you speak"), x0 + W / 2, rMid, W - 20, C.muted, 12);
     }
     // Peak flags (every mark stays; the last one is the one compared)
+    let peakAt = null;
     m.marks.forEach((mk, i) => {
       const fx = xOf(mk);
       const last = i === m.marks.length - 1;
@@ -1750,41 +2173,41 @@
       ctx.lineTo(fx, rTop + rH - 2);
       ctx.stroke();
       glyph(ctx, "flag", fx, rTop + 8, C.done, 5);
-      if (last && rH >= 40) {
-        ctx.font = font(10, 800);
-        ctx.fillStyle = C.done;
-        ctx.textAlign = fx > x0 + W - 50 ? "right" : "left";
-        ctx.textBaseline = "top";
-        ctx.fillText(L("pico", "peak"), fx + (fx > x0 + W - 50 ? -10 : 9), rTop + 3);
-      }
+      if (last && rH >= 40) peakAt = fx;
       ctx.globalAlpha = 1;
     });
-    // Now
+    // Now: a line through the ribbon only; the part's own fill shows where
+    // you are in the bar, so the line never runs through a part's name
     if (!m.review) {
       const nx = xOf(t);
       ctx.strokeStyle = "rgba(238, 243, 250, 0.6)";
       ctx.lineWidth = 1.5;
       ctx.beginPath();
-      ctx.moveTo(nx, barY - 3);
+      ctx.moveTo(nx, rTop - 2);
       ctx.lineTo(nx, rTop + rH + 2);
       ctx.stroke();
     }
-    if (legendH) {
+    // The flag's word last, on its own backing: over the ribbon and clear of
+    // the now line (it goes to the side the line is not on)
+    if (peakAt != null) {
+      const word = L("pico", "peak");
+      ctx.font = font(11, 800);
+      const ww = ctx.measureText(word).width;
+      const nx = m.review ? null : xOf(t);
+      const fitsRight = peakAt + 9 + ww + 3 <= x0 + W;
+      const hitsNow = nx != null && nx > peakAt && nx < peakAt + 9 + ww + 6;
+      const right = fitsRight && !hitsNow;
+      ctx.textAlign = right ? "left" : "right";
+      ctx.textBaseline = "top";
+      backed(ctx, word, peakAt + (right ? 9 : -10), rTop + 3, C.done, 11, 800);
+    }
+    m._layout = { barY, barH, rTop, rH, cmpH };
+    if (legend) {
       ctx.fillStyle = C.faint;
       ctx.textAlign = "left";
-      ctx.textBaseline = "bottom";
-      fitText(
-        ctx,
-        L("cinta = tu volumen (dB, frente a tu mediana) · huecos = pausas · ⚑ = tu pico", "ribbon = your loudness (dB, against your median) · gaps = pauses · ⚑ = your peak"),
-        x0,
-        h - pad + 2,
-        W,
-        10,
-        700,
-        8
-      );
+      drawLines(ctx, legend, x0, h - pad - legendH + 4);
     }
-    if (cmpH) compareCard(ctx, { x: x0, y: h - pad - cmpH, w: W, h: cmpH }, m.compare, tiny);
+    if (cmp) compareCard(ctx, { x: x0, y: h - pad - cmpH, w: W, h: cmpH }, cmp);
   }
 
   /** Parts of the story on the time axis: as run so far, the rest as planned. */
@@ -1810,7 +2233,7 @@
         state = "next";
       }
       if (m.review && i > m.index) return;
-      out.push({ a, b, state, label: p.label, key: p.key });
+      out.push({ a, b, state, label: p.label, key: p.key, i });
       at = b;
     });
     if (m.over) out.push({ a: m.overAt, b: Math.max(m.overAt + 0.5, t), over: true, state: "over" });
@@ -1836,9 +2259,8 @@
           val: (c.dRate >= 0 ? "+" : "−") + fmtNum(Math.abs(c.dRate) * 100, 0) + " %"
         });
       facts.push({ k: null, label: L("Pausa antes del pico", "Pause before the peak"), val: c.pauseBefore != null ? fmtNum(c.pauseBefore, 1) + " s" : "—" });
-    } else {
-      facts.push({ k: null, label: L("Marca ⚑ o llega a «Pico» para compararlo", "Mark ⚑ or reach “Peak” to compare it"), val: L("Sin pico", "No peak") });
     }
+    // Without a peak, what to do about it is the card's title
     if (c.end) {
       const info = endInfo(c.end, C.you);
       facts.push({
@@ -1851,53 +2273,100 @@
     return facts;
   }
 
-  /** After Stop: the peak against the context, as facts with arrows. */
-  function compareCard(ctx, b, c, tiny) {
+  /** The card's title: what the facts compare, or how to get a peak to compare. */
+  function compareTitle(c) {
+    if (!c.peak) return L("Sin pico: marca ⚑ o llega a «Pico» para compararlo con el contexto", "No peak: mark ⚑ or reach “Peak” to compare it with the context");
+    return c.fromMark
+      ? L("Tu pico marcado frente al contexto (aprox.)", "Your marked peak against the context (approx.)")
+      : L("La parte «Pico» frente al contexto (aprox.)", "The “Peak” part against the context (approx.)");
+  }
+
+  /**
+   * How the facts after Stop are laid out: the first layout, roomiest first,
+   * whose words all fit whole in the width and whose height fits `maxH` —
+   * all in a row (value over words), two columns, then a line each. Without
+   * room for the title it goes; with room for nothing, one line of values.
+   */
+  function comparePlan(ctx, c, W, maxH) {
     const facts = compareFacts(c);
+    const inner = W - 12;
+    const n = facts.length;
+    const iconW = (f) => (f.k ? 20 : 2);
+    const valW = (f, px) => {
+      ctx.font = font(px, 800, true);
+      return ctx.measureText(f.val).width;
+    };
+    const labW = (f) => widthAt(ctx, f.label, 11, 700);
+    const stackOk = (cols) => facts.every((f) => iconW(f) + Math.max(valW(f, 15), labW(f)) <= inner / cols - 8);
+    const inlineOk = (cols) => facts.every((f) => iconW(f) + valW(f, 13) + 6 + labW(f) <= inner / cols - 8);
+    const layouts = [];
+    if (n && stackOk(n)) layouts.push({ kind: "stack", cols: n, h: 38 });
+    if (n > 2 && stackOk(2)) layouts.push({ kind: "stack", cols: 2, h: Math.ceil(n / 2) * 38 });
+    if (n && inlineOk(1)) layouts.push({ kind: "inline", cols: 1, h: n * 20 });
+    if (n > 1 && inlineOk(2)) layouts.push({ kind: "inline", cols: 2, h: Math.ceil(n / 2) * 20 });
+    const tplan = wrapPlan(ctx, compareTitle(c), inner, 11, 700, 11, 2);
+    const titleH = tplan.fits ? tplan.lines.length * tplan.lh + 2 : 0;
+    for (const th of titleH ? [titleH, 0] : [0]) {
+      if (!n && th) return { facts, title: tplan, lay: { kind: "none", h: 0 }, h: 8 + th };
+      const lay = layouts.find((l) => 8 + th + l.h <= maxH);
+      if (lay) return { facts, title: th ? tplan : null, lay, h: 8 + th + lay.h };
+    }
+    return { facts, title: null, lay: { kind: "line" }, h: Math.min(Math.max(22, maxH), 24) };
+  }
+
+  /** After Stop: the peak against the context, as facts with arrows, laid out by comparePlan. */
+  function compareCard(ctx, b, plan) {
+    const { facts, title, lay } = plan;
     ctx.fillStyle = PANEL_SOFT;
     roundRect(ctx, b.x, b.y, b.w, b.h, 6);
     ctx.fill();
-    if (tiny || b.h < 30) {
-      ctx.textAlign = "left";
-      ctx.textBaseline = "middle";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    if (lay.kind === "line") {
       ctx.fillStyle = C.text;
-      fitText(ctx, facts.map((f) => `${f.label}: ${f.val}`).join(" · ") + L(" (aprox.)", " (approx.)"), b.x + 6, b.y + b.h / 2, b.w - 12, 11, 700, 8);
+      fitOne(
+        ctx,
+        [facts.map((f) => `${f.label}: ${f.val}`).join(" · ") + L(" (aprox.)", " (approx.)"), facts.map((f) => f.val).join(" · ")],
+        b.x + 6,
+        b.y + b.h / 2,
+        b.w - 12,
+        11,
+        700,
+        11
+      );
       return;
     }
-    ctx.font = font(10, 700);
-    ctx.fillStyle = C.faint;
-    ctx.textAlign = "left";
-    ctx.textBaseline = "top";
-    const title = !c.peak
-      ? L("El pico frente al contexto", "The peak against the context")
-      : c.fromMark
-        ? L("Tu pico marcado frente al contexto (aprox.)", "Your marked peak against the context (approx.)")
-        : L("La parte «Pico» frente al contexto (aprox.)", "The “Peak” part against the context (approx.)");
-    ctx.fillText(title, b.x + 6, b.y + 4, b.w - 12);
-    const cols = b.w >= 520 ? facts.length : b.h - 18 >= facts.length * 38 ? 1 : 2;
-    const rows = Math.ceil(facts.length / cols);
+    let y = b.y + 4;
+    if (title) {
+      ctx.fillStyle = C.muted;
+      y += drawLines(ctx, title, b.x + 6, y) + 2;
+    }
+    const cols = lay.cols || 1;
     const cw = (b.w - 12) / cols;
-    const ch = (b.h - 18) / rows;
+    const ch = lay.kind === "stack" ? 38 : 20;
     facts.forEach((f, i) => {
       const cx = b.x + 6 + (i % cols) * cw;
-      const cy = b.y + 18 + Math.floor(i / cols) * ch;
+      const cy = y + Math.floor(i / cols) * ch;
       const midY = cy + ch / 2;
       if (f.k) endArrow(ctx, f.k, cx + 8, midY, 5, f.color || C.you, 2);
+      const vx = cx + (f.k ? 20 : 2);
       ctx.textAlign = "left";
       ctx.textBaseline = "middle";
-      ctx.font = font(ch >= 40 ? 15 : 12, 800, true);
-      ctx.fillStyle = C.text;
-      const vx = cx + (f.k ? 20 : 2);
-      ctx.fillText(f.val, vx, ch >= 40 ? midY - 7 : midY, cw - 24);
-      if (ch >= 40) {
-        ctx.font = font(10, 700);
+      if (lay.kind === "stack") {
+        ctx.font = font(15, 800, true);
+        ctx.fillStyle = C.text;
+        ctx.fillText(f.val, vx, midY - 7);
+        ctx.font = font(11, 700);
         ctx.fillStyle = C.muted;
-        ctx.fillText(f.label, vx, midY + 10, cw - 24);
+        ctx.fillText(f.label, vx, midY + 10);
       } else {
+        ctx.font = font(13, 800, true);
+        ctx.fillStyle = C.text;
+        ctx.fillText(f.val, vx, midY);
         const vw = ctx.measureText(f.val).width;
-        ctx.font = font(10, 700);
+        ctx.font = font(11, 700);
         ctx.fillStyle = C.muted;
-        ctx.fillText(f.label, vx + vw + 6, midY, Math.max(10, cw - 30 - vw));
+        ctx.fillText(f.label, vx + vw + 6, midY);
       }
     });
   }
@@ -1909,6 +2378,7 @@
     landingStrip,
     concisionGate,
     storyArc,
-    speechShapeUtil: { fmtSt, clock, endInfo, runsOf, median, pct }
+    speechShapeUtil: { fmtSt, clock, endInfo, runsOf, median, pct },
+    textFit: { widthAt, cutAtWord, fitOne, wrapPlan, drawLines, legendPlan, backed, lead, abbrevs, fitChips, headRow, note }
   });
 })(typeof window !== "undefined" ? window : globalThis);

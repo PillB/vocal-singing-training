@@ -25,7 +25,7 @@
   const V = global.VTViz;
   const F = global.VTFeatures;
   if (!V || !F) return;
-  const { C, L, font, clamp, chips, fmtSec, fmtNum, fitText, panel, glyph, roundRect, hatch, ring } = V;
+  const { C, L, font, clamp, chips, fmtSec, fmtNum, panel, glyph, roundRect, hatch, ring } = V;
 
   /* —— Tags: what the microphone hears, one per sample —— */
 
@@ -58,6 +58,105 @@
   function fmtClock(sec) {
     const s = Math.max(0, Math.round(sec));
     return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  }
+
+  /* —— Words that fit without being squeezed —— */
+
+  /** Words, with a unit kept on the line of its number ("12 dB", "0,21 s"). */
+  function wordsOf(text) {
+    const out = [];
+    for (const wd of String(text).split(/ +/).filter(Boolean)) {
+      if (out.length && /^(s|ms|dB|%|¢)[.,;:)]?$/.test(wd) && /\d$/.test(out[out.length - 1])) out[out.length - 1] += " " + wd;
+      else out.push(wd);
+    }
+    return out;
+  }
+
+  /** Words broken at spaces into lines no wider than maxW (at the current font). */
+  function wrapWords(ctx, text, maxW) {
+    const out = [];
+    let line = "";
+    for (const wd of wordsOf(text)) {
+      const test = line ? line + " " + wd : wd;
+      if (line && ctx.measureText(test).width > maxW) {
+        out.push(line);
+        line = wd;
+      } else line = test;
+    }
+    if (line) out.push(line);
+    return out;
+  }
+
+  /**
+   * A line of words that fits maxW at its own shape: one line from `px` down
+   * to `one` (a size or two smaller), else wrapped on up to `lines` lines from
+   * `px` down to `min`. Never condensed with fillText's maxWidth. Drawn with
+   * textBaseline "middle", the block centred on y (or its first line at y with
+   * o.top). Returns { n, size, lineH, bottom }.
+   */
+  function fitLines(ctx, text, x, y, maxW, o = {}) {
+    const px = o.px || 14;
+    const min = Math.min(px, o.min || 11);
+    const weight = o.weight || 800;
+    const maxLines = o.lines || 2;
+    const one = Math.max(min, o.one != null ? o.one : px - 2);
+    let pick = null;
+    for (let s = px; s >= one && !pick; s--) {
+      ctx.font = font(s, weight);
+      if (ctx.measureText(text).width <= maxW) pick = { size: s, lines: [String(text)] };
+    }
+    for (let s = px; s >= min && !pick && maxLines > 1; s--) {
+      ctx.font = font(s, weight);
+      const ls = wrapWords(ctx, text, maxW);
+      if (ls.length <= maxLines && ls.every((l) => ctx.measureText(l).width <= maxW)) pick = { size: s, lines: ls };
+    }
+    if (!pick) {
+      // Too long even small: keep whole words, leave the rest out
+      ctx.font = font(min, weight);
+      const ls = wrapWords(ctx, text, maxW);
+      const keep = ls.slice(0, maxLines);
+      if (ls.length > maxLines) {
+        let last = keep[keep.length - 1];
+        while (last.includes(" ") && ctx.measureText(last + " …").width > maxW) last = last.slice(0, last.lastIndexOf(" "));
+        keep[keep.length - 1] = last + " …";
+      }
+      pick = { size: min, lines: keep };
+    }
+    const lineH = Math.round(pick.size * 1.2);
+    const n = pick.lines.length;
+    const y0 = o.top ? y : y - ((n - 1) * lineH) / 2;
+    ctx.textBaseline = "middle";
+    pick.lines.forEach((l, i) => ctx.fillText(l, x, y0 + i * lineH));
+    return { n, size: pick.size, lineH, bottom: y0 + (n - 1) * lineH + pick.size / 2 };
+  }
+
+  /** The first of `options` that fits maxW at the current font (else the last). */
+  function firstFit(ctx, options, maxW) {
+    for (const s of options) if (s && ctx.measureText(s).width <= maxW) return s;
+    return options[options.length - 1];
+  }
+
+  /**
+   * A picture's headline beside its big number: one line when it fits, two
+   * (a little higher, so the second clears the chips below) when it does not.
+   */
+  /** Room the big number and its caption take at the right of a headline. */
+  function bigRoom(ctx, big, cap, tiny, min) {
+    ctx.font = font(tiny ? 17 : 22, 800, true);
+    let wd = ctx.measureText(big).width;
+    if (cap && !tiny) {
+      ctx.font = font(10, 700);
+      wd = Math.max(wd, ctx.measureText(cap).width);
+    }
+    return Math.max(min, wd + 12);
+  }
+
+  function headLine(ctx, text, x, headY, maxW, tiny, narrow) {
+    const px = tiny ? 13 : narrow ? 14 : 16;
+    if (tiny) return fitLines(ctx, text, x, headY, maxW, { px, one: 11, min: 11, lines: 1 });
+    ctx.font = font(px - 2, 800);
+    const two = ctx.measureText(text).width > maxW;
+    return fitLines(ctx, text, x, two ? headY + 1 : headY, maxW, { px, min: 11, lines: 2 });
   }
 
   /* —— Pitch you keep, not pitch the detector invents —— */
@@ -628,10 +727,24 @@
    * o: { seconds, nowAt, review, goal: "flutter"|"tone", span, targets,
    *      refMidi, refLabel, small }
    */
+  /** The axis words of the ribbon: pitch up and down, and the no-pitch floor. */
+  function ribbonWords() {
+    return [L("agudo", "higher"), L("grave", "lower"), L("sin tono", "no pitch")];
+  }
+
   function sovtRibbon(ctx, box, tr, o) {
-    const { x, y, w, h } = box;
     const small = !!o.small;
-    const floorH = clamp(h * 0.17, 11, 22);
+    // The axis words get a gutter of their own at the left: the sound runs
+    // right of it, so a trace never passes under a word
+    let gutter = 0;
+    if (!small) {
+      ctx.font = font(10, 700);
+      gutter = Math.ceil(Math.max(...ribbonWords().map((s) => ctx.measureText(s).width))) + 10;
+    }
+    const x = box.x + gutter;
+    const w = box.w - gutter;
+    const { y, h } = box;
+    const floorH = clamp(h * 0.17, 12, 22);
     const plotTop = y + 4;
     const plotBot = y + h - floorH - 3;
     const floorY = y + h - floorH / 2 - 1;
@@ -646,13 +759,21 @@
     const yOfMidi = (m) =>
       clamp(plotTop + (plotBot - plotTop) * (0.5 - (m - center) / span), plotTop + 4, plotBot - 4);
 
-    // Plot and floor lane
+    // Plot and floor lane (the floor runs under its word in the gutter)
     ctx.fillStyle = "rgba(170, 195, 230, 0.05)";
-    roundRect(ctx, x, y, w, h, 8);
+    roundRect(ctx, box.x, y, box.w, h, 8);
     ctx.fill();
     ctx.fillStyle = "rgba(159, 134, 255, 0.07)";
-    roundRect(ctx, x, y + h - floorH - 1, w, floorH + 1, 6);
+    roundRect(ctx, box.x, y + h - floorH - 1, box.w, floorH + 1, 6);
     ctx.fill();
+    if (gutter) {
+      ctx.strokeStyle = C.grid;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x - 0.5, y + 3);
+      ctx.lineTo(x - 0.5, y + h - 3);
+      ctx.stroke();
+    }
     if (!o.review && nowX < x + w) {
       ctx.fillStyle = "rgba(143, 211, 255, 0.045)";
       ctx.fillRect(nowX, y, x + w - nowX, h - floorH - 1);
@@ -678,13 +799,14 @@
       ctx.restore();
       if (!o.review && g.name && (ahead || (t1 > tr.t && g.t0 <= tr.t))) {
         const lx = ahead ? xa + 3 : Math.max(xa, nowX) + 6;
-        if (lx < x + w - 22) {
-          ctx.font = font(small ? 10 : 11, 800);
+        ctx.font = font(small ? 10 : 11, 800);
+        // The note's name once its line has room for it, never condensed
+        if (ctx.measureText(g.name).width <= Math.min(xb, x + w) - lx - 2) {
           ctx.fillStyle = C.target;
           ctx.globalAlpha = ahead ? 0.8 : 1;
           ctx.textAlign = "left";
           ctx.textBaseline = "bottom";
-          ctx.fillText(g.name, lx, yy - 3, Math.max(24, xb - lx - 2));
+          ctx.fillText(g.name, lx, yy - 3);
           ctx.globalAlpha = 1;
         }
       }
@@ -820,22 +942,19 @@
       }
     }
 
-    // The axis words, over whatever runs past them
-    if (!small) {
-      ctx.font = font(9, 700);
+    // The axis words, in their own gutter: nothing is drawn under them. On a
+    // short ribbon "grave" moves up so it keeps clear of the floor's word.
+    if (gutter) {
+      const [hiW, loW, floorW] = ribbonWords();
+      ctx.font = font(10, 700);
       ctx.textAlign = "left";
-      const tag = (text, ty, base) => {
-        ctx.textBaseline = base;
-        const tw = ctx.measureText(text).width;
-        const by = base === "top" ? ty : base === "bottom" ? ty - 10 : ty - 5;
-        ctx.fillStyle = "rgba(11, 17, 25, 0.72)";
-        ctx.fillRect(x + 2, by - 1, tw + 4, 12);
-        ctx.fillStyle = C.faint;
-        ctx.fillText(text, x + 4, ty);
-      };
-      tag(L("agudo", "higher"), plotTop, "top");
-      tag(L("grave", "lower"), plotBot, "bottom");
-      tag(L("sin tono", "no pitch"), floorY, "middle");
+      ctx.fillStyle = C.faint;
+      ctx.textBaseline = "top";
+      ctx.fillText(hiW, box.x + 4, plotTop);
+      ctx.textBaseline = "middle";
+      ctx.fillText(floorW, box.x + 4, floorY);
+      const loY = Math.min(plotBot - 6, floorY - floorH / 2 - 8);
+      if (loY - 6 > plotTop + 14) ctx.fillText(loW, box.x + 4, loY);
     }
 
     // Where the trill stopped while you kept sounding: a notch, and words
@@ -903,15 +1022,17 @@
     const compact = h < 190;
     const narrow = w < 420;
     const words = sovtWords(m);
+    // After Stop the headline already says "of 0:09 sounding": on a narrow
+    // panel the percentage's caption gives the headline its room
+    if (m.review && narrow) words.bigCap = "";
 
     // Headline: the state in words, with its shape; the run on the right
     const headY = tiny ? 12 : 17;
-    const bigW = narrow ? 76 : 110;
+    const bigW = bigRoom(ctx, words.big, words.bigCap, tiny, narrow ? 76 : 110);
     tagIcon(ctx, words.icon, pad + 9, headY, 7, words.iconColor);
     ctx.fillStyle = words.color || C.text;
     ctx.textAlign = "left";
-    ctx.textBaseline = "middle";
-    fitText(ctx, words.head, pad + 22, headY, w - pad * 2 - 22 - bigW, tiny ? 13 : narrow ? 14 : 16, 800, 10);
+    headLine(ctx, words.head, pad + 22, headY, w - pad * 2 - 22 - bigW, tiny, narrow);
     ctx.textAlign = "right";
     ctx.fillStyle = C.text;
     ctx.font = font(tiny ? 17 : 22, 800, true);
@@ -928,9 +1049,23 @@
     if (!compact) {
       const chipH = narrow ? 34 : 36;
       const cur = m.review ? -1 : sovtCurrent(m);
-      // A narrow panel names the other steps by their short names
-      const steps = sovtSteps(m).map((s, i) => (narrow && i !== cur ? Object.assign({}, s, { label: s.short }) : s));
-      chips(ctx, { x: pad, y: top, w: w - pad * 2, h: chipH }, steps, { current: cur });
+      const box = { x: pad, y: top, w: w - pad * 2, h: chipH };
+      // Each chip's room, as chips() lays them out (the current one is wider)
+      const n = 3;
+      const unit = (box.w - 4 * (n - 1)) / (n - 1 + (cur >= 0 ? 1.4 : 1));
+      const room = (i) => (i === cur ? unit * 1.4 : unit) - 6;
+      const steps = sovtSteps(m).map((s, i) => {
+        const o = Object.assign({}, s);
+        // A step's whole name when it fits, else its short name
+        ctx.font = font(i === cur ? 12 : 11, i === cur ? 800 : 700);
+        if (ctx.measureText((s.done ? "✓ " : "") + s.label).width > room(i)) o.label = s.short;
+        // Seconds of a step are its total: said so when there is room, so
+        // they are not read against the longest unbroken run below
+        ctx.font = font(10, 600);
+        if (s.subs) o.sub = firstFit(ctx, s.subs, room(i));
+        return o;
+      });
+      chips(ctx, box, steps, { current: cur });
       top += chipH + 8;
     }
     // On a narrow, tall panel the numbers get their own line above the legend
@@ -963,16 +1098,20 @@
             { tag: T.TONE, text: narrow ? L("sin burbuja", "no bubble") : L("tono sin burbuja", "tone, no bubble"), color: C.muted }
           ];
       const used = legend(ctx, items, pad + 2, ly, w - pad * 2 - (narrow ? 0 : 170));
-      const tail = sovtTail(m);
+      const tails = sovtTail(m);
       ctx.font = font(twoLines ? 12 : 10, 700);
       ctx.fillStyle = twoLines ? C.text : C.muted;
       ctx.textBaseline = "middle";
       if (twoLines) {
         ctx.textAlign = "left";
-        ctx.fillText(tail, pad + 2, ly - 17, w - pad * 2);
-      } else if (!narrow || used < w * 0.45) {
-        ctx.textAlign = "right";
-        ctx.fillText(tail, w - pad, ly + 0.5, Math.max(80, w - pad * 2 - used - 8));
+        ctx.fillText(firstFit(ctx, tails, w - pad * 2), pad + 2, ly - 17);
+      } else {
+        const room = w - pad * 2 - used - 8;
+        const tail = firstFit(ctx, tails, room);
+        if (ctx.measureText(tail).width <= room) {
+          ctx.textAlign = "right";
+          ctx.fillText(tail, w - pad, ly + 0.5);
+        }
       }
     }
   }
@@ -987,12 +1126,14 @@
   function sovtSteps(m) {
     const tr = m.track;
     const sec = (s) => (s > 0.05 ? fmtSec(s, s >= 10 ? 0 : 1) : "—");
+    // A step's seconds are all of it in the take, not one unbroken run
+    const total = (s) => (s > 0.05 ? [L(`${sec(s)} en total`, `${sec(s)} in all`), L(`total ${sec(s)}`, `${sec(s)} total`), sec(s)] : null);
     const match = m.match || { sec: 0 };
     if (m.straw) {
       const tone = tr.sec[T.TONE] + tr.sec[T.TRILL];
       const range = tr.bestRange;
       return [
-        { label: L("1 · Tono en la pajita", "1 · Tone in the straw"), short: L("1 · Tono", "1 · Tone"), sub: sec(tone), done: tone >= 5 },
+        { label: L("1 · Tono en la pajita", "1 · Tone in the straw"), short: L("1 · Tono", "1 · Tone"), sub: sec(tone), subs: total(tone), done: tone >= 5 },
         {
           label: L("2 · Desliza", "2 · Glide"),
           short: L("2 · Desliza", "2 · Glide"),
@@ -1010,8 +1151,8 @@
     const brrr = tr.sec[T.AIRTRILL];
     const trill = tr.sec[T.TRILL];
     return [
-      { label: L("1 · Brrr sin voz", "1 · Brrr, no voice"), short: "1 · Brrr", sub: sec(brrr), done: brrr >= 3 },
-      { label: L("2 · Trino con voz", "2 · Trill with voice"), short: L("2 · Trino", "2 · Trill"), sub: sec(trill), done: trill >= 5 },
+      { label: L("1 · Brrr sin voz", "1 · Brrr, no voice"), short: "1 · Brrr", sub: sec(brrr), subs: total(brrr), done: brrr >= 3 },
+      { label: L("2 · Trino con voz", "2 · Trill with voice"), short: L("2 · Trino", "2 · Trill"), sub: sec(trill), subs: total(trill), done: trill >= 5 },
       {
         label: L("3 · /A/ en la misma nota", "3 · /A/ on the same note"),
         short: "3 · /A/",
@@ -1033,9 +1174,11 @@
       bigCap: m.straw || m.step === "vowel" ? L("tono seguido", "steady tone") : L("burbujeo seguido", "unbroken trill")
     };
     if (m.review) {
-      const on = tr.onSec;
       const snd = tr.soundSec;
-      const pct = snd > 0.5 ? Math.round((on / snd) * 100) : 0;
+      // The start of each sound is counted once it is told apart, a frame or
+      // two apart from the sounding clock: never more than the sounding time
+      const on = Math.min(tr.onSec, snd);
+      const pct = snd > 0.5 ? Math.min(100, Math.round((on / snd) * 100)) : 0;
       out.icon = m.straw ? T.TONE : T.TRILL;
       out.head = m.straw
         ? L(`Tono por la pajita: ${fmtClock(on)} de ${fmtClock(snd)} con sonido`, `Tone through the straw: ${fmtClock(on)} of ${fmtClock(snd)} sounding`)
@@ -1084,18 +1227,45 @@
     return out;
   }
 
+  /**
+   * The line of numbers under the ribbon, longest first (the caller takes
+   * the first that fits). Its seconds are the longest unbroken run, named as
+   * such: the step chips above count all of it in the take.
+   */
   function sovtTail(m) {
     const tr = m.track;
-    const best = L("mejor ", "best ") + fmtSec(tr.best, 1);
-    const n = tr.stalls.length;
+    const b = fmtSec(tr.best, 1);
+    const long = m.straw ? L(`tono seguido más largo ${b}`, `longest unbroken tone ${b}`) : L(`burbujeo seguido más largo ${b}`, `longest unbroken trill ${b}`);
+    const short = L(`máximo seguido ${b}`, `longest unbroken ${b}`);
+    let extra;
     if (m.straw) {
       const air = tr.sec[T.AIR];
-      return air >= 1 ? `${best} · ${L("solo aire", "air only")} ${fmtSec(air, 0)}` : best;
+      extra = air >= 1 ? `${L("solo aire", "air only")} ${fmtSec(air, 0)}` : "";
+    } else {
+      const n = tr.stalls.length;
+      extra = `${n} ${n === 1 ? L("parada", "stop") : L("paradas", "stops")}`;
     }
-    return `${best} · ${n} ${n === 1 ? L("parada", "stop") : L("paradas", "stops")}`;
+    return extra ? [`${long} · ${extra}`, `${short} · ${extra}`, short] : [long, short];
   }
 
   /* —— Lip-trill scale: the strip on the pitch highway —— */
+
+  /**
+   * The right edge of the highway's own low-note label at the left of its
+   * plot (js/pitch-visualizer.js draws it, 10 px monospace on a dark box,
+   * 10 px above to 4 px below the note's line), when the band yA..yB meets
+   * it; else -Infinity.
+   */
+  function lowLabelRight(ctx, geo, yA, yB) {
+    const PU = global.VTPitchUtils;
+    if (geo.rangeMinMidi == null || !PU || typeof PU.midiToDualLabel !== "function") return -Infinity;
+    const lo = Math.floor(geo.rangeMinMidi);
+    const ly = clamp(geo.midiToY(lo) + 4, 12, geo.graphH - 4);
+    if (yB < ly - 11 || yA > ly + 5) return -Infinity;
+    ctx.font = "600 10px ui-monospace, monospace";
+    const tw = Math.min(Math.min(96, geo.w * 0.2), ctx.measureText(PU.midiToDualLabel(lo, true)).width);
+    return 2 + tw + 8;
+  }
 
   /**
    * Drawn by the highway's overlay hook along the bottom of its plot, under
@@ -1114,12 +1284,19 @@
     // safeBottom (when the highway reports it) is the part the bottom rail covers
     const floor = Math.min(geo.graphH, geo.h - (geo.safeBottom || 0));
     const y = clamp(yc - h / 2, (geo.safeTop || 0) + 4, floor - h - 3);
-    const x0 = geo.plotLeft;
+    // The highway names its lowest note at the left edge ("G#2 Sol♯"): where
+    // the strip runs at that height, it starts right of the name
+    const x0 = Math.max(geo.plotLeft, lowLabelRight(ctx, geo, y - 3, y + h + 3) + 8);
     ctx.save();
-    ctx.fillStyle = "rgba(6, 10, 16, 0.55)";
-    roundRect(ctx, x0 - 4, y - 3, geo.nowX - x0 + 8, h + 6, 5);
-    ctx.fill();
-    if (n >= 2 && rec.length) {
+    if (geo.nowX - x0 > 8) {
+      ctx.fillStyle = "rgba(6, 10, 16, 0.55)";
+      roundRect(ctx, x0 - 4, y - 3, geo.nowX - x0 + 8, h + 6, 5);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.rect(x0 - 4, 0, geo.w, geo.h);
+      ctx.clip();
+    }
+    if (n >= 2 && rec.length && geo.nowX - x0 > 8) {
       // For each history point, the tag at its time
       let j = 0;
       const tagAt = (t) => {
@@ -1184,7 +1361,8 @@
     ctx.textBaseline = "middle";
     ctx.fillStyle = C.muted;
     const lx = geo.nowX + 8;
-    if (lx < geo.laneRight - 30) ctx.fillText(opts.label || L("burbujeo", "bubbling"), lx, y + h / 2, geo.laneRight - lx - 4);
+    const name = opts.label || L("burbujeo", "bubbling");
+    if (ctx.measureText(name).width <= geo.laneRight - lx - 4) ctx.fillText(name, lx, y + h / 2);
     ctx.restore();
   }
 
@@ -1197,35 +1375,124 @@
    * model: { patterns: [{ rootName, stones: [{ state: "trill"|"stall"|"tone"|"todo"|"now", frac, trilling }] }],
    *          degrees, review, summary }
    */
+  /** After Stop: where the bubble stopped (or was missing), by note, in words. */
+  function trillStops(m) {
+    const multi = m.patterns.length > 1;
+    const at = (kind) => {
+      const out = [];
+      m.patterns.forEach((row) =>
+        row.stones.forEach((s, i) => {
+          if (s.state === kind) out.push(String(m.degrees[i]) + (multi ? ` (${row.rootName})` : ""));
+        })
+      );
+      return out;
+    };
+    const list = (a) => (a.length > 4 ? a.slice(0, 4).join(", ") + " …" : a.join(", "));
+    const stalls = at("stall");
+    const flat = at("tone");
+    const parts = [];
+    if (stalls.length) parts.push(L(`se paró en ${list(stalls)}`, `stopped on ${list(stalls)}`));
+    if (flat.length) parts.push(L(`sin burbuja en ${list(flat)}`, `no bubble on ${list(flat)}`));
+    const sung = m.patterns.some((row) => row.stones.some((s) => s.state === "trill"));
+    if (!parts.length && sung) parts.push(L("el burbujeo siguió en todas las notas cantadas", "the bubble carried every note sung"));
+    return parts.join(" · ");
+  }
+
+  /** The stones' key: [shape, word], drawn as far as it fits (a key never squeezes). */
+  function trillMapKey(ctx, x, y, maxW) {
+    const items = [
+      ["trill", L("burbujeo", "bubbling")],
+      ["stall", L("se paró", "stopped")],
+      ["tone", L("sin burbuja", "no bubble")],
+      ["todo", L("por cantar", "to sing")]
+    ];
+    ctx.font = font(10, 700);
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    let cx = x;
+    for (const [kind, word] of items) {
+      const tw = ctx.measureText(word).width;
+      if (cx + 20 + tw > x + maxW) break;
+      ctx.save();
+      if (kind === "trill") {
+        ctx.strokeStyle = C.you;
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        for (let i = 0; i <= 4; i++) ctx[i ? "lineTo" : "moveTo"](cx + i * 3.5, y + (i % 2 ? -3 : 3));
+        ctx.stroke();
+      } else if (kind === "todo") {
+        ctx.strokeStyle = C.grid;
+        ctx.setLineDash([2, 2]);
+        roundRect(ctx, cx + 0.5, y - 5.5, 14, 11, 3);
+        ctx.stroke();
+      } else {
+        ctx.fillStyle = C.muted;
+        roundRect(ctx, cx, y - 1.5, 14, 3, 1.5);
+        ctx.fill();
+        if (kind === "stall") glyph(ctx, "notch", cx + 10, y - 5, C.warn, 3.5);
+      }
+      ctx.restore();
+      ctx.fillStyle = C.muted;
+      ctx.fillText(word, cx + 19, y + 0.5);
+      cx += 19 + tw + 12;
+    }
+  }
+
   function trillMap(ctx, w, h, m) {
     panel(ctx, w, h);
     const pad = 8;
-    const headH = 20;
     const labelW = Math.min(58, Math.max(40, w * 0.12));
-    const avail = h - pad * 2 - headH;
-    const maxRows = Math.max(1, Math.floor(avail / 24));
-    const rows = m.patterns.slice(-maxRows);
-    const rowH = Math.min(32, avail / Math.max(1, rows.length));
-    const n = m.degrees.length;
-    const stoneW = (w - pad * 2 - labelW) / n;
+    // The summary, whole: on a second line when it does not fit one
     ctx.fillStyle = m.review ? C.text : C.muted;
     ctx.textAlign = "left";
-    ctx.textBaseline = "middle";
-    fitText(ctx, m.summary || "", pad, pad + 8, w - pad * 2, 12, 800, 9);
+    const head = fitLines(ctx, m.summary || "", pad, pad + 8, w - pad * 2, { px: 12, one: 11, min: 11, lines: 2, top: true });
+    let top = head.bottom + 5;
+    // After Stop: where the bubble stopped, in words
+    if (m.review) {
+      const stops = trillStops(m);
+      if (stops) {
+        ctx.fillStyle = C.muted;
+        const r = fitLines(ctx, stops, pad, top + 6, w - pad * 2, { px: 11, one: 11, min: 11, lines: 2, weight: 700, top: true });
+        top = r.bottom + 5;
+      }
+    }
+    const keyH = h - top - pad >= 24 * 2 + 22 ? 22 : 0;
+    const avail = h - top - pad - keyH;
+    const maxRows = Math.max(1, Math.floor(avail / 24));
+    const rows = m.patterns.slice(-maxRows);
+    // Rows as tall as the card allows (the stones fill it, not an empty band);
+    // what is left is shared above and below the stones and their key
+    const rowH = clamp(avail / Math.max(1, rows.length), 20, 46);
+    top += Math.max(0, (avail - rowH * rows.length) / 2);
+    const n = m.degrees.length;
+    const stoneW = (w - pad * 2 - labelW) / n;
+    if (keyH) trillMapKey(ctx, pad + 2, top + rowH * rows.length + keyH / 2 + 3, w - pad * 2 - 4);
     rows.forEach((row, ri) => {
-      const ry = pad + headH + ri * rowH;
+      const ry = top + ri * rowH;
       const isCur = !m.review && ri === rows.length - 1;
       ctx.fillStyle = isCur ? C.text : C.muted;
       ctx.font = font(11, 800);
+      if (ctx.measureText(row.rootName).width > labelW - 4) ctx.font = font(10, 800);
       ctx.textAlign = "left";
       ctx.textBaseline = "middle";
-      ctx.fillText(row.rootName, pad, ry + rowH / 2, labelW - 4);
+      ctx.fillText(row.rootName, pad, ry + rowH / 2);
       row.stones.forEach((s, i) => {
         const sx = pad + labelW + i * stoneW + 1.5;
         const sw = stoneW - 3;
         const sh = rowH - 5;
         const top = ry + 2.5;
-        const cy = top + sh / 2 + (sh >= 20 ? 3 : 0);
+        // The note's name at the top of its stone, at a size that reads
+        // (else left out); the shape sits in the room below it
+        const deg = String(m.degrees[i]);
+        let degPx = 0;
+        for (const px of sh >= 26 ? [10, 9] : sh >= 20 ? [9] : []) {
+          ctx.font = font(px, 700);
+          if (ctx.measureText(deg).width <= sw - 4) {
+            degPx = px;
+            break;
+          }
+        }
+        const cy = degPx ? top + (sh + degPx + 4) / 2 : top + sh / 2;
         const now = s.state === "now";
         ctx.save();
         ctx.fillStyle = s.state === "trill" ? "rgba(191, 230, 255, 0.10)" : "rgba(170, 195, 230, 0.05)";
@@ -1266,12 +1533,12 @@
           if (s.state === "stall") glyph(ctx, "notch", sx + sw - 9, cy - 6, C.warn, 4);
         }
         ctx.restore();
-        if (sw > 22 && sh >= 20) {
-          ctx.font = font(8, 700);
+        if (degPx) {
+          ctx.font = font(degPx, 700);
           ctx.fillStyle = C.faint;
           ctx.textAlign = "center";
           ctx.textBaseline = "top";
-          ctx.fillText(String(m.degrees[i]), sx + sw / 2, top + 2, sw - 2);
+          ctx.fillText(deg, sx + sw / 2, top + 2);
         }
       });
     });
@@ -1464,12 +1731,12 @@
       cap = last ? L("última", "last") : L(`meta ${fmtNum(target, 0)} s`, `goal ${fmtNum(target, 0)} s`);
     }
     const headY = tiny ? 12 : 17;
-    const bigW = narrow ? 80 : 120;
+    const bigW = bigRoom(ctx, big, cap, tiny, narrow ? 80 : 120);
     if (icon) tagIcon(ctx, T.AIR, pad + 9, headY, 7, C.air);
     ctx.fillStyle = color;
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
-    fitText(ctx, head, pad + (icon ? 22 : 0), headY, w - pad * 2 - (icon ? 22 : 0) - bigW, tiny ? 13 : narrow ? 14 : 16, 800, 10);
+    headLine(ctx, head, pad + (icon ? 22 : 0), headY, w - pad * 2 - (icon ? 22 : 0) - bigW, tiny, narrow);
     ctx.textAlign = "right";
     ctx.fillStyle = C.text;
     ctx.font = font(tiny ? 17 : 22, 800, true);
@@ -1585,15 +1852,17 @@
         x += 19 + ctx.measureText(L("Espacio", "Space")).width + 12;
       }
       const tail = L(`mejor ${fmtSec(tr.best, 1)} · ${m.cleared}/${rungs.length} peldaños`, `best ${fmtSec(tr.best, 1)} · ${m.cleared}/${rungs.length} rungs`);
+      const tails = [tail, L(`mejor ${fmtSec(tr.best, 1)}`, `best ${fmtSec(tr.best, 1)}`)];
       if (narrow && !compact) {
         // A narrow, tall panel: the numbers get their own line above
         ctx.font = font(12, 700);
         ctx.fillStyle = C.text;
         ctx.textAlign = "left";
-        ctx.fillText(tail, pad + 2, ly - 34, w - pad * 2);
+        ctx.fillText(firstFit(ctx, tails, w - pad * 2), pad + 2, ly - 34);
       } else {
         ctx.textAlign = "right";
-        if (x < w - pad - ctx.measureText(tail).width - 6) ctx.fillText(tail, w - pad, ly + 0.5);
+        const t = firstFit(ctx, tails, w - pad - x - 6);
+        if (ctx.measureText(t).width <= w - pad - x - 6) ctx.fillText(t, w - pad, ly + 0.5);
       }
     }
   }
@@ -1644,13 +1913,13 @@
       if (hd === tr.bestHold) glyph(ctx, "star", x0 + hd.len * pps + 8, ry + rowH / 2, C.done, 4);
       if (textW) {
         const st = hd.stats || holdStats(hd);
-        let txt = fmtSec(hd.len, 1);
-        if (st.inBand != null) txt += L(` · ${Math.round(st.inBand * 100)} % en ±3 dB`, ` · ${Math.round(st.inBand * 100)} % within ±3 dB`);
-        if (st.gaps) txt += L(` · ${st.gaps} ${st.gaps === 1 ? "hueco" : "huecos"}`, ` · ${st.gaps} ${st.gaps === 1 ? "gap" : "gaps"}`);
+        const len = fmtSec(hd.len, 1);
+        const band = st.inBand != null ? L(` · ${Math.round(st.inBand * 100)} % en ±3 dB`, ` · ${Math.round(st.inBand * 100)} % within ±3 dB`) : "";
+        const gaps = st.gaps ? L(` · ${st.gaps} ${st.gaps === 1 ? "hueco" : "huecos"}`, ` · ${st.gaps} ${st.gaps === 1 ? "gap" : "gaps"}`) : "";
         ctx.font = font(10, 700);
         ctx.fillStyle = C.muted;
         ctx.textAlign = "right";
-        ctx.fillText(txt, x + w, ry + rowH / 2, textW - 6);
+        ctx.fillText(firstFit(ctx, [len + band + gaps, len + band, len], textW - 6), x + w, ry + rowH / 2);
       }
     });
     secAxis(ctx, x0, pps, y + show.length * rowH + 2, maxSec, w - numW - textW, [0].concat(m.rungs));
@@ -1707,11 +1976,11 @@
       cap = L("última", "last");
     }
     const headY = tiny ? 12 : 17;
-    const bigW = narrow ? 80 : 120;
+    const bigW = bigRoom(ctx, big, cap, tiny, narrow ? 80 : 120);
     ctx.fillStyle = color;
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
-    fitText(ctx, head, pad, headY, w - pad * 2 - bigW, tiny ? 13 : narrow ? 14 : 16, 800, 10);
+    headLine(ctx, head, pad, headY, w - pad * 2 - bigW, tiny, narrow);
     ctx.textAlign = "right";
     ctx.fillStyle = C.text;
     ctx.font = font(tiny ? 17 : 22, 800, true);
@@ -1757,10 +2026,11 @@
       ctx.restore();
       tagIcon(ctx, ln.icon, pad + 12, ly + laneH / 2, 6, ln.color);
       ctx.font = font(narrow ? 11 : 12, 800);
+      if (ctx.measureText(ln.name).width > labelW - 24) ctx.font = font(10, 800);
       ctx.fillStyle = asked ? C.text : C.muted;
       ctx.textAlign = "left";
       ctx.textBaseline = "middle";
-      ctx.fillText(ln.name, pad + 24, ly + laneH / 2, labelW - 26);
+      ctx.fillText(ln.name, pad + 22, ly + laneH / 2);
       // In the /A/ lane, your best S as the length to reach for
       if (ln.key === "A" && S.best > 0.5) {
         const sx = x0 + Math.min(maxSec, S.best) * pps;
@@ -1807,8 +2077,12 @@
       ctx.fillStyle = C.muted;
       ctx.fillText(t0, x + 13, ly + 0.5);
       x += 13 + ctx.measureText(t0).width + 12;
-      const t1 = narrow ? L("nivel ±3 dB aprox.", "level ±3 dB approx.") : L("línea: nivel frente a tu media, ±3 dB (aprox.)", "line: level vs your own median, ±3 dB (approx.)");
-      ctx.fillText(t1, x, ly + 0.5, w - pad - x);
+      const t1 = firstFit(
+        ctx,
+        [L("línea: nivel frente a tu media, ±3 dB (aprox.)", "line: level vs your own median, ±3 dB (approx.)"), L("nivel ±3 dB aprox.", "level ±3 dB approx.")],
+        w - pad - x
+      );
+      if (ctx.measureText(t1).width <= w - pad - x) ctx.fillText(t1, x, ly + 0.5);
     }
   }
 

@@ -7,12 +7,17 @@
   const Session = {
     /**
      * @param {string} track vocal | singing
-     * @param {string} path basic | advanced | full
+     * @param {string} path basic | advanced | full | daily | basics
+     * @param {{ order?: string[], sec?: Object<string, number>, tier?: string }} [routine]
+     *   A prepared sequence instead of a catalog route: today's basics are
+     *   built per day (js/daily-loop.js), so they are handed in rather than
+     *   looked up. `sec` gives each step its own timer.
      */
-    start(track, path = "basic") {
+    start(track, path = "basic", routine = null) {
       const key = `${track}_${path}`;
       const legacy = track;
       const order =
+        (routine && Array.isArray(routine.order) && routine.order.slice()) ||
         (global.VT_STRUCTURED && (global.VT_STRUCTURED[key] || global.VT_STRUCTURED[legacy])) ||
         [];
       const session = {
@@ -26,6 +31,8 @@
         pausedAt: null,
         completedIds: []
       };
+      if (routine?.sec) session.sec = { ...routine.sec };
+      if (routine?.tier) session.tier = routine.tier;
       global.VTStorage.setSession(session);
       return session;
     },
@@ -83,7 +90,14 @@
       const s = this.get();
       if (!s) return "";
       const t = (k, vars) => global.VTI18n?.t?.(k, vars) ?? k;
-      const pathKey = `home.path.${s.path}`;
+      // The banner already names these two ("Sesión diaria de clase", "Básicos
+      // de hoy · Mínimo"); a path suffix only repeated it.
+      if (s.path === "daily" || s.path === "basics") {
+        return t("session.progress", { n: Math.min(s.index + 1, s.order.length), total: s.order.length });
+      }
+      // Route names follow the track (the picker's names, js/app.js pathName).
+      const ownKey = `home.path.${s.track}.${s.path}`;
+      const pathKey = t(ownKey) !== ownKey ? ownKey : `home.path.${s.path}`;
       const pathName = s.path ? t(pathKey) : "";
       const path = pathName && pathName !== pathKey ? ` · ${pathName}` : s.path ? ` · ${s.path}` : "";
       return (

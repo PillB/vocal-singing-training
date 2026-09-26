@@ -9,6 +9,15 @@
  * api.js). Both halves issue the same signed token, so the browser has one
  * thing to verify whether the access was bought or given.
  *
+ * Anonymous usage events and A/B results share the same D1 (see events.js):
+ * POST /v1/events and /v1/events/forget from the site,
+ * GET /v1/admin/experiments[/results] and GET /v1/admin/funnel for an admin.
+ *
+ * GET /v1/geo answers where the edge thinks a request came from, so the page can
+ * tell whether it is in a country that requires asking before anything is kept.
+ * It reads nothing and stores nothing, and only browsers that already look
+ * European ask for it.
+ *
  * Bindings (see wrangler.toml and README.md):
  *   KV   ENTITLEMENTS
  *   D1   DB                (optional: without it the account routes answer 503
@@ -17,9 +26,9 @@
  *        STRIPE_PRICE_PRO_MONTHLY, STRIPE_PRICE_PRO_YEARLY,
  *        MP_PLAN_PRO_MONTHLY, MP_PLAN_PRO_YEARLY,
  *        ADMIN_EMAILS, TRIAL_DAYS, GOOGLE_CLIENT_ID,
- *        EMAIL_PROVIDER, EMAIL_FROM, EMAIL_FROM_NAME
+ *        EMAIL_PROVIDER, EMAIL_FROM, EMAIL_FROM_NAME, EVENTS_ENABLED
  *   secrets STRIPE_WEBHOOK_SECRET, MP_WEBHOOK_SECRET, MP_ACCESS_TOKEN,
- *        LICENSE_PRIVATE_KEY_PKCS8_B64,
+ *        LICENSE_PRIVATE_KEY_PKCS8_B64, EVENTS_IP_KEY (optional),
  *        RESEND_API_KEY | BREVO_API_KEY | MAILERSEND_API_KEY
  *
  * Nothing in this file logs a secret, a token or a raw webhook body.
@@ -27,7 +36,9 @@
 
 "use strict";
 
-import { routeAccountApi, authMethods } from "./api.js";
+import { routeAccountApi, authMethods, requireAdmin } from "./api.js";
+import { asksFirst, callerCountry, routeEventsApi } from "./events.js";
+import { ensureSchema, sweepExpired } from "./db.js";
 import { buildJwks, createLicenseToken, isLicenseIdShape, isTokenIssuable } from "./license.js";
 import { mapStripeEvent, verifyStripeSignature } from "./stripe.js";
 import { confirmAndMapNotification, resolveNotificationTarget, verifyMercadoPagoSignature } from "./mercadopago.js";
@@ -312,6 +323,7 @@ function handleHealth(env, cors) {
       mercadopagoConfigured: Boolean(env.MP_WEBHOOK_SECRET && env.MP_ACCESS_TOKEN),
       signingKeyConfigured: Boolean(env.LICENSE_PRIVATE_KEY_PKCS8_B64),
       accountsConfigured: Boolean(env.DB),
+      eventsEnabled: Boolean(env.DB) && String(env.EVENTS_ENABLED || "").trim().toLowerCase() !== "false",
       authMethods: authMethods(env),
       siteOrigin: env.SITE_ORIGIN || ""
     },
@@ -321,10 +333,35 @@ function handleHealth(env, cors) {
 }
 
 /**
+ * Handle GET /v1/geo.
+ *
+ * The country the edge already knows, and whether that country's law wants the
+ * visitor asked before statistics are kept (events.js ASK_FIRST_COUNTRIES). No
+ * database, no rate limit and nothing stored: it is cheaper than the 404 it
+ * replaces, and js/region-gate.js only asks when a browser's own time zone or
+ * language already looks European, so nobody else pays a request for it.
+ *
+ * `placed` is false when the edge cannot say where the request came from (a unit
+ * test, Tor's "T1", Cloudflare's "XX", `wrangler dev` without --remote), and the
+ * page treats that as no answer at all rather than as "not in Europe": it keeps
+ * whatever its own clock said, which is the safe direction. `askFirst` is false
+ * in that case because the ingest route must not turn away events from every
+ * unplaceable address in the world.
+ * @param {Request} request Incoming request.
+ * @param {Object} cors CORS headers.
+ * @returns {Response} Response.
+ */
+function handleGeo(request, cors) {
+  const country = callerCountry(request);
+  return json({ ok: true, country: country || null, placed: !!country, askFirst: asksFirst(request) }, 200, cors);
+}
+
+/**
  * Route one request. Exported so tests can drive the router directly.
  * @param {Request} request Incoming request.
  * @param {Object} env Worker env bindings.
- * @param {{fetchImpl?: function}} [options] Injectable fetch, for tests.
+ * @param {{fetchImpl?: function, now?: number, presets?: Object}} [options]
+ *   Injectables for tests: fetch, the clock, and the experiment registry.
  * @returns {Promise<Response>} Response.
  */
 export async function handleRequest(request, env, options) {
@@ -361,6 +398,26 @@ export async function handleRequest(request, env, options) {
     return json(jwks, 200, { ...cors, "cache-control": "public, max-age=600" });
   }
 
+  if (path === "/v1/geo") {
+    if (request.method !== "GET") {
+      return json({ ok: false, reason: "method_not_allowed" }, 405, { ...cors, allow: "GET" });
+    }
+    return handleGeo(request, cors);
+  }
+
+  // Before the account router: it claims every /v1/admin/ path and would
+  // answer the experiment routes with a 404.
+  const eventsResponse = await routeEventsApi(request, env, url, path, {
+    json,
+    cors,
+    now: options && options.now,
+    presets: options && options.presets,
+    requireAdmin
+  });
+  if (eventsResponse) {
+    return eventsResponse;
+  }
+
   const accountResponse = await routeAccountApi(request, env, url, path, {
     json,
     cors,
@@ -382,6 +439,23 @@ export async function handleRequest(request, env, options) {
 }
 
 export default {
+  /**
+   * Daily housekeeping (the cron in wrangler.toml): expired sign-in codes and
+   * sessions, stale rate-limit buckets, and usage events, exposures and ingest
+   * counters past retention. The privacy page promises the 180 days, so this
+   * runs on its own rather than waiting for an admin to press sweep.
+   * @param {Object} event Scheduled event.
+   * @param {Object} env Worker env bindings.
+   * @returns {Promise<void>} Resolves when done.
+   */
+  async scheduled(event, env) {
+    if (!env.DB) {
+      return;
+    }
+    await ensureSchema(env.DB);
+    await sweepExpired(env.DB);
+  },
+
   /**
    * Worker entry point.
    * @param {Request} request Incoming request.

@@ -63,6 +63,7 @@ Vanilla HTML / CSS / JS — no build step. Web Audio API (piano), MediaRecorder 
 - [Subscriptions (Peru + worldwide)](docs/10-SUBSCRIPTIONS.md)
 - [Auth & hardening](docs/11-AUTH-AND-HARDENING.md) 
 - [The tour, the user guide and the A/B machinery](docs/36-TOUR-AND-USER-GUIDE.md)
+- [The daily loop: basics every day, rest days and surprises](docs/37-DAILY-LOOP.md)
 
 ## Privacy
 

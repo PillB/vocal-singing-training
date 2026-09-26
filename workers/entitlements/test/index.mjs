@@ -19,3 +19,5 @@ import "./progress.test.mjs";
 import "./google.test.mjs";
 import "./email.test.mjs";
 import "./api.test.mjs";
+import "./stats.test.mjs";
+import "./events.test.mjs";

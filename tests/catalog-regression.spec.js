@@ -156,7 +156,9 @@ test.describe("Catalog & structure regression", () => {
     await expect(page.locator("#view-home")).toBeVisible();
     await expect(page.locator(".tabs")).toBeVisible();
     await expect(page.locator(".tier-filters")).toBeVisible();
-    await expect(page.locator("#btn-continue")).toBeVisible();
+    // Continuar sits with the other ways in, which a first visit hides behind
+    // the Mínimo (tests/home-design.spec.js checks it shows with a day sung).
+    await expect(page.locator("#btn-continue")).toBeAttached();
     await expect(page.locator("#exercise-list .card-ex").first()).toBeVisible();
   });
 

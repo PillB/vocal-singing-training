@@ -15,6 +15,15 @@
     return Math.max(a, Math.min(b, n));
   }
 
+  /** Smooth scrolling, unless the visitor asked for reduced motion. */
+  function scrollBehavior() {
+    try {
+      return global.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ? "auto" : "smooth";
+    } catch {
+      return "smooth";
+    }
+  }
+
   /** ES default (Peruvian-clear) / EN when toggle — no heavy jargon */
   function isEs() {
     if (global.VTI18n && global.VTI18n.lang) return global.VTI18n.lang === "es";
@@ -687,7 +696,7 @@
       const rev = document.getElementById("review-block");
       if (rev) {
         rev.hidden = false;
-        rev.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        rev.scrollIntoView({ behavior: scrollBehavior(), block: "nearest" });
       }
       return { patches: {}, summary: "Take ready — schedule review tomorrow" };
     }
@@ -696,17 +705,20 @@
   Modes.weekPlan = baseMode({
     id: "weekPlan",
     render() {
+      // Same copy as the exercise's plan card (week.*): the days are counted
+      // from practice now, so there is no "check in" to ask for.
+      const t = (k) => global.VTI18n?.t?.(k) ?? k;
       this.hud.innerHTML = `
-        <div class="mode-title">${L("Foco de 12 semanas", "12-week focus")}</div>
-        <p class="mode-meta">${L("La práctica está en el panel semanal. Ábrelo para elegir un elemento y registrar el día.", "Practice lives in the weekly dashboard. Open it to pick an element and check in.")}</p>
-        <button type="button" class="btn btn-primary btn-sm" data-open-plan>Open 12-week plan</button>
+        <div class="mode-title">${t("week.cta")}</div>
+        <p class="mode-meta">${t("week.ctaSub")}</p>
+        <button type="button" class="btn btn-primary btn-sm" data-open-plan>${t("week.open")}</button>
       `;
       this.$("[data-open-plan]")?.addEventListener("click", () => {
         document.getElementById("btn-plan")?.click();
       });
     },
     onStart() {
-      // soft redirect path — user can still record a check-in if they stay
+      // soft redirect path: app.js opens the plan on Start
     },
     onStop() {
       return { patches: {}, summary: "Use plan dashboard for week logic" };
@@ -1372,15 +1384,21 @@
         <p class="mode-meta">${L("Uniformidad: <strong data-ev>—</strong>", "Evenness: <strong data-ev>—</strong>")}</p>
         <p class="mode-meta muted">${
           straw
-            ? "Air only through straw; cheeks soft. Transfer to /u/ then /A/ after."
-            : "Steady bubbles — jaw free. Transfer same ease to open /A/ after."
+            ? L(
+                "El aire solo por la pajita; mejillas sueltas. Después, lleva la misma facilidad a /u/ y luego a /A/.",
+                "Air only through straw; cheeks soft. Transfer to /u/ then /A/ after."
+              )
+            : L(
+                "Burbujas parejas, mandíbula suelta. Después, lleva la misma facilidad a una /A/ abierta.",
+                "Steady bubbles — jaw free. Transfer same ease to open /A/ after."
+              )
         }</p>
-        <button type="button" class="btn btn-sm" data-xfer>Mark transfer to open vowel ✓</button>
+        <button type="button" class="btn btn-sm" data-xfer>${L("Marcar paso a vocal abierta ✓", "Mark transfer to open vowel ✓")}</button>
         <p class="mode-meta">${L("Transferencia marcada: <strong data-x>no</strong>", "Transfer marked: <strong data-x>no</strong>")}</p>
       `;
       this.$("[data-xfer]")?.addEventListener("click", () => {
         this.state.transfer = true;
-        if (this.$("[data-x]")) this.$("[data-x]").textContent = "yes";
+        if (this.$("[data-x]")) this.$("[data-x]").textContent = L("sí", "yes");
       });
     },
     onFrame(frame) {
@@ -1396,7 +1414,8 @@
         const steady = clamp(1 - Math.sqrt(v) * 8, 0, 1);
         if (this.$("[data-bar]")) this.$("[data-bar]").style.width = `${steady * 100}%`;
         if (this.$("[data-ev]"))
-          this.$("[data-ev]").textContent = steady > 0.7 ? "steady" : steady > 0.4 ? "ok" : "uneven";
+          this.$("[data-ev]").textContent =
+            steady > 0.7 ? L("pareja", "steady") : steady > 0.4 ? L("ok", "ok") : L("irregular", "uneven");
         this.state.steadyScore = steady;
       }
     },
@@ -1411,7 +1430,9 @@
       if (this.state.transfer) patches.transfer = 4;
       return {
         patches,
-        summary: this.state.transfer ? "SOVT + transfer marked" : "SOVT flow (mark transfer next time)"
+        summary: this.state.transfer
+          ? L("SOVT con paso a vocal marcado", "SOVT + transfer marked")
+          : L("SOVT (la próxima vez marca el paso a vocal)", "SOVT flow (mark transfer next time)")
       };
     }
   });

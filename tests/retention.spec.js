@@ -1,5 +1,5 @@
 /**
- * Retention: reminders, ICS, freeze, micro-session, welcome-back.
+ * Retention: reminders, ICS, rest days, micro-session, welcome-back.
  */
 const { test, expect } = require("@playwright/test");
 
@@ -40,28 +40,39 @@ test.describe("Retention features", () => {
     expect(cfg.times[0]).toBe("19:30");
   });
 
-  test("freeze only once per day and respects allowance", async ({ page }) => {
+  test("rest day covers one missed day, once, and never a gap it cannot cover", async ({ page }) => {
     await boot(page);
     const r = await page.evaluate(() => {
-      // Fake last practice yesterday
-      const yesterday = new Date(Date.now() - 86400000).toISOString();
-      const prog = {
-        "v1-diction": {
-          completedCount: 1,
-          lastScore: 3,
-          lastAt: yesterday,
-          history: [{ at: yesterday, score: 3, durationSec: 60, metrics: {} }]
-        }
-      };
-      localStorage.setItem("vt_progress_v1", JSON.stringify(prog));
-      localStorage.removeItem("vt_streak_freeze_v1");
+      const D = window.VTDays;
+      const today = D.dayKey();
+      const seed = (lastPractice, bank) =>
+        VTStorage.setDays({
+          v: 1,
+          days: { [lastPractice]: { sec: 120, n: 1, ex: ["v1-diction"] } },
+          rest: { bank, earnedAt: 0, used: [] },
+          backfilled: true
+        });
+      // Sang two days ago, missed yesterday, one rest day in the bank.
+      seed(D.addDays(today, -2), 1);
       const a1 = VTReminders.tryApplyFreeze(false);
       const a2 = VTReminders.tryApplyFreeze(false);
-      return { a1, a2, left: VTReminders.freezesLeft(false) };
+      const left = VTReminders.freezesLeft(false);
+      const s1 = D.summary();
+      // Sang four days ago: three missed days, one rest day. Nothing is spent.
+      seed(D.addDays(today, -4), 1);
+      const b1 = VTReminders.tryApplyFreeze(false);
+      const s2 = D.summary();
+      return { a1, a2, left, s1, b1, s2 };
     });
     expect(r.a1.applied).toBe(true);
+    expect(r.a1.days.length).toBe(1);
     expect(r.a2.applied).toBe(false);
     expect(r.left).toBe(0);
+    // The rest day bridges the run without lengthening it.
+    expect(r.s1.streak).toBe(1);
+    expect(r.b1.applied).toBe(false);
+    expect(r.s2.rest.bank).toBe(1);
+    expect(r.s2.streak).toBe(0);
   });
 
   test("micro-session opens exercise with 5 min timer", async ({ page }) => {
@@ -74,7 +85,7 @@ test.describe("Retention features", () => {
     expect(t).toMatch(/05:0|5:0/);
   });
 
-  test("welcome-back shows when last practice old", async ({ page }) => {
+  test("coming back after days away opens on the short welcome-back routine", async ({ page }) => {
     await boot(page);
     await page.evaluate(() => {
       const old = new Date(Date.now() - 5 * 86400000).toISOString();
@@ -88,10 +99,16 @@ test.describe("Retention features", () => {
           }
         })
       );
+      localStorage.removeItem("vt_days_v1");
       sessionStorage.removeItem("vt_wb_dismiss");
     });
     await page.reload({ waitUntil: "networkidle" });
-    await expect(page.locator("#welcome-back")).toBeVisible();
+    // The loop's start panel carries the welcome back now; the old banner
+    // would say it twice.
+    const card = page.locator("#next-step-card");
+    await expect(card).toHaveAttribute("data-loop", "back");
+    await expect(page.locator("#start-kicker")).toContainText(/Qué bueno verte|Good to see you/);
+    await expect(page.locator("#welcome-back")).toBeHidden();
   });
 
   test("practice heatmap and analytics exist", async ({ page }) => {

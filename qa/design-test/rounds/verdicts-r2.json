@@ -1,0 +1,581 @@
+{
+ "naming": {
+  "title": "Start choices for a returning learner",
+  "verdict": "ship B",
+  "judges": 3,
+  "A": {
+   "meanRank": 3.0,
+   "meanScore": 4.33,
+   "blocking": []
+  },
+  "challengers": {
+   "B": {
+    "name": "one naming scheme, other routes behind a disclosure",
+    "wins": 3,
+    "guard": [],
+    "meanRank": 1.33,
+    "meanScore": 7.33
+   },
+   "C": {
+    "name": "level chips that start",
+    "wins": 3,
+    "guard": [],
+    "meanRank": 1.67,
+    "meanScore": 6.67
+   }
+  },
+  "close": [],
+  "notes": [
+   {
+    "persona": "beginner",
+    "ranking": [
+     "C",
+     "B",
+     "A"
+    ],
+    "confidence": "medium",
+    "summary": "[C] wins for someone like Rosa. Every ▶ button starts something, so today's practice or a longer one is a single obvious tap, and the guided routes are hidden, with no second 'Clase' to compete. Its biggest improvement would be to say briefly that a picked size stays as the default next time and to explain what 'Mínimo' means next to 'Hoy:'. [B] is a close second because it is clear but needs two taps. [A] shows both naming schemes at once and would make her hesitate."
+   },
+   {
+    "persona": "designer",
+    "ranking": [
+     "B",
+     "C",
+     "A"
+    ],
+    "confidence": "medium",
+    "summary": "[B] does the job best. Today's basics start in one tap, the size chips work as a clear selector with a live preview, and the guided route sits behind progressive disclosure under an honest label, with the class reachable only as a size. [A] brings back a second name for the class ('Diaria (clase)') and shows everything at once, and [C] splits attention across three play buttons and hides a change to the next-day default. [B] would improve most with a one-tap way to start a different size, such as a start button that shows the selected size and duration, and an opaque sticky header."
+   },
+   {
+    "persona": "access",
+    "ranking": [
+     "B",
+     "C",
+     "A"
+    ],
+    "confidence": "medium",
+    "summary": "[B] wins because it keeps the first screen to one clear start button and an explicitly labelled size choice that never starts anything by surprise. It also uses a single naming scheme: sizes for amount, and 'Sesión guiada' routes without a duplicate class entry. The biggest improvements would be putting the size chips above '▶ Empezar básicos' (or repeating the chosen size in the button's label), marking the selected chip with a checkmark or text rather than tint alone, and making the 'Otras formas de practicar' toggle and small helper labels larger and higher in contrast."
+   }
+  ]
+ },
+ "done-landscape": {
+  "title": "Finishing card in phone landscape",
+  "verdict": "ship B",
+  "judges": 3,
+  "A": {
+   "meanRank": 2.0,
+   "meanScore": 3.67,
+   "blocking": [
+    [
+     "beginner",
+     "In landscape (844x390) neither 'Hasta mañana' nor 'Elegir recordatorio' shows on the first screen. The card cuts off mid-sentence in the 'La voz avisa' text, and nothing hints that the card scrolls inside itself. A first-time user holding the phone sideways would not find how to close it."
+    ],
+    [
+     "designer",
+     "Phone landscape (844x390): the card is cut off mid-paragraph in the 'La voz avisa' body, and both 'Hasta mañana' and 'Elegir recordatorio' are off-screen. The only way to reach them is to scroll inside the card, and nothing on screen signals that. A learner holding the phone sideways sees no way to close the card."
+    ],
+    [
+     "access",
+     "In phone landscape (844x390), neither 'Hasta mañana' nor 'Elegir recordatorio' is visible on the first screen. The user has to scroll inside the card to reach them, and the only hint is the health card's text cut off at the bottom edge ('Carraspear seguido, ronquera o dolor son señales...')."
+    ]
+   ]
+  },
+  "challengers": {
+   "B": {
+    "name": "two-column done card in short viewports, actions pinned",
+    "wins": 3,
+    "guard": [],
+    "meanRank": 1.0,
+    "meanScore": 8.0
+   }
+  },
+  "close": [],
+  "notes": [
+   {
+    "persona": "beginner",
+    "ranking": [
+     "B",
+     "A"
+    ],
+    "confidence": "high",
+    "summary": "[B] wins because with the phone sideways it shows what I earned and both closing buttons without scrolling. [A] hides the buttons below a cut-off card with no sign that it scrolls, and that is exactly where I would give up. [B] would be better if the 'Sostenido registrado' bubble did not cover the 'Llegaste a 7 días cantados' line in landscape."
+   },
+   {
+    "persona": "designer",
+    "ranking": [
+     "B",
+     "A"
+    ],
+    "confidence": "high",
+    "summary": "[B] wins because in landscape the two-column layout puts both what the learner earned and the pinned 'Hasta mañana' / 'Elegir recordatorio' row on the first screen, with a clear primary action. In [A] both buttons sit below the fold in an inner scroll that nothing on screen signals. The fix that would most improve [B] is moving the 'Sostenido registrado' toast, or making it dismiss sooner, so it stops covering the 'Llegaste a 7 días cantados' milestone line."
+   },
+   {
+    "persona": "access",
+    "ranking": [
+     "B",
+     "A"
+    ],
+    "confidence": "high",
+    "summary": "[B] wins because, with the phone sideways, both closing actions are large, clearly different and visible without scrolling, so an older user can finish the job without help. [A] hides both buttons inside a scrolling card, which many older users will not discover. The biggest improvement to [B] would be to move or auto-hide the 'Sostenido registrado' toast so it stops covering the 'Llegaste a 7 días cantados.' line."
+   }
+  ]
+ },
+ "pricing-prelaunch": {
+  "title": "Pro dialog before checkout is live",
+  "verdict": "ship B",
+  "judges": 3,
+  "A": {
+   "meanRank": 2.0,
+   "meanScore": 5.0,
+   "blocking": [
+    [
+     "beginner",
+     "The 'Suscribirse' buttons look fully active, but they only show a toast. The note that payments are not open yet and the 'Empezar prueba Pro de 7 días' button are both at the very end of the dialog, far below the fold on a phone. A learner tries to pay, fails, and probably never finds the trial."
+    ]
+   ]
+  },
+  "challengers": {
+   "B": {
+    "name": "honest pre-launch state",
+    "wins": 3,
+    "guard": [],
+    "meanRank": 1.0,
+    "meanScore": 8.0
+   },
+   "C": {
+    "name": "one plan, interval toggle, plain benefits",
+    "wins": 0,
+    "guard": [
+     "blocking problem reported by 2+ judges: The primary gradient button 'Suscribirme al año' / 'al mes' says you can subscribe, but tapping it only shows a 'payments not public' toast. The notice that explains this is small grey text under the button, and the dialog offers no alternative action such as a trial.; The main gradient button 'Suscribirme al año' / 'al mes' invites the user to subscribe, but it only shows a toast that disappears, and there is no trial or other way forward. An older user who taps it can easily miss the toast or think the app is broken. The only warning is small print below the button."
+    ],
+    "meanRank": 3.0,
+    "meanScore": 3.67
+   }
+  },
+  "close": [],
+  "notes": [
+   {
+    "persona": "beginner",
+    "ranking": [
+     "B",
+     "A",
+     "C"
+    ],
+    "confidence": "high",
+    "summary": "[B] wins because a phone user sees two things near the top, before any scrolling: that paying isn't possible yet and a big 'Probar Pro 7 días gratis' button. Its plan buttons say 'Aún no disponible' instead of pretending to work. It would improve most by hiding the payment-method picker while checkout is closed and by replacing jargon like JSON, sparkline and insights with plain Spanish, the way [C] words its benefits."
+   },
+   {
+    "persona": "designer",
+    "ranking": [
+     "B",
+     "A",
+     "C"
+    ],
+    "confidence": "high",
+    "summary": "[B] wins because it turns the pre-launch state into one clear, honest next step: the 'payments not public' notice and a primary 'Probar Pro 7 días gratis' button appear together at the top of the first screen. The plan cards below show what Pro offers, and their 'Aún no disponible' buttons do not promise a purchase. Removing or collapsing the payment-method toggle while checkout is closed would improve it most, as would putting a Pro card ahead of the Gratis card on phone so the value of Pro shows above the fold."
+   },
+   {
+    "persona": "access",
+    "ranking": [
+     "B",
+     "A",
+     "C"
+    ],
+    "confidence": "high",
+    "summary": "[B] wins because it opens with the truth and the one working action: a plain sentence that payments aren't open, next to a large 'Probar Pro 7 días gratis' button, visible without scrolling on phone and desktop. Its subscribe buttons are honestly labelled 'Aún no disponible', so an older or less confident user isn't sent to a dead end. It would improve most by cutting cognitive load: remove the payment-method toggles and the jargon-heavy 'Resultado' block ('Ancla:', JSON, sparkline) while checkout is closed, make the disabled buttons look clearly inactive, and enlarge the very small desktop text."
+   }
+  ]
+ },
+ "selected-style": {
+  "title": "How a selected choice looks",
+  "verdict": "ship B",
+  "judges": 3,
+  "A": {
+   "meanRank": 2.0,
+   "meanScore": 5.33,
+   "blocking": []
+  },
+  "challengers": {
+   "B": {
+    "name": "one selected style: tint, bar and check",
+    "wins": 3,
+    "guard": [],
+    "meanRank": 1.0,
+    "meanScore": 7.0
+   }
+  },
+  "close": [],
+  "notes": [
+   {
+    "persona": "beginner",
+    "ranking": [
+     "B",
+     "A"
+    ],
+    "confidence": "medium",
+    "summary": "[B] wins because the check mark and the square joined boxes make it clear at once which size is chosen, and they look different from the round buttons that start things. In [A] the chosen size is a green-tinted pill shaped like the start buttons, which could make me think it starts the practice. [B] would get better if the size group stayed on one line on the phone (or stacked neatly) and the chosen track had a stronger fill or its own check mark."
+   },
+   {
+    "persona": "designer",
+    "ranking": [
+     "B",
+     "A"
+    ],
+    "confidence": "medium",
+    "summary": "[B] does the job better. Its size options use a checkmark as well as colour, and a squared segmented shape that clearly differs from the rounded start buttons, so choosing is visually separate from starting. It would improve most by keeping the segmented bar in one piece on phone (stack all three evenly or let it fill the full width) and by making the selected track stronger, for example with a checkmark or tinted fill in place of the outline."
+   },
+   {
+    "persona": "access",
+    "ranking": [
+     "B",
+     "A"
+    ],
+    "confidence": "medium",
+    "summary": "[B] wins because the selected size carries a checkmark and sits in a rectangular segmented bar. That separates choices from the round start buttons and doesn't rely on colour alone, which is what older and colour-blind users need. It would improve most by keeping the size bar on one row on the phone, or stacking it as a clean vertical list with the 'Hoy:' label above it, and by making the selected track stand out more, for example with a checkmark or a thicker, filled look."
+   }
+  ]
+ },
+ "exercise-end": {
+  "title": "When a single exercise's time runs out",
+  "verdict": "ship B",
+  "judges": 3,
+  "A": {
+   "meanRank": 2.0,
+   "meanScore": 2.0,
+   "blocking": [
+    [
+     "beginner",
+     "When the time runs out, the screen still shows the green 'En vivo' badge and the mic stays on, so the 00:00 timer is the only hint. It's misleading: it looks like it's still recording or frozen, not finished."
+    ],
+    [
+     "beginner",
+     "No way to save is visible on the first screen. The rating form is below the fold, and you have to press 'Detener' first, which nothing explains."
+    ],
+    [
+     "designer",
+     "At 00:00 the green 'En vivo' badge is still showing and the mic stays on. The screen says the session is still live when time is up, and the rating form is not on the first screen at all. Users may not realise they are finished, or how to save."
+    ],
+    [
+     "access",
+     "At 00:00 the green 'En vivo' badge is still shown and the mic stays on. Nothing says the time is over, so the screen tells users the session is still live."
+    ],
+    [
+     "access",
+     "The rating/save form cannot be seen on the first screen on either phone or desktop, and nothing points to it. Users must know to press Detener and scroll down to save."
+    ]
+   ]
+  },
+  "challengers": {
+   "B": {
+    "name": "finish sheet with one-tap rating",
+    "wins": 3,
+    "guard": [],
+    "meanRank": 1.0,
+    "meanScore": 8.0
+   }
+  },
+  "close": [],
+  "notes": [
+   {
+    "persona": "beginner",
+    "ranking": [
+     "B",
+     "A"
+    ],
+    "confidence": "high",
+    "summary": "[B] does the job straight away: it says clearly that the practice is over, stops the mic, and saves with one tap on a plain-language rating. [A] gives no sign that time is up, keeps saying 'En vivo', and hides saving behind 'Detener' plus a form I'd have to scroll to. The biggest fix for [B] would be to stop the header overlapping the content behind the sheet and remove the outline that makes 'Difícil' look preselected."
+   },
+   {
+    "persona": "designer",
+    "ranking": [
+     "B",
+     "A"
+    ],
+    "confidence": "high",
+    "summary": "[B] wins clearly. It tells the user the practice is over, stops the mic, and puts saving one tap away with three large rating buttons in thumb reach; notes are an optional secondary link. [A] still shows 'En vivo' at 00:00 and hides saving behind Detener plus a form further down the page. The biggest improvements for [B] would be removing the preselected-looking outline on 'Difícil', fixing the sticky-header overlap, and limiting the sheet's width on desktop."
+   },
+   {
+    "persona": "access",
+    "ranking": [
+     "B",
+     "A"
+    ],
+    "confidence": "high",
+    "summary": "[B] clearly wins. It tells the user in plain, large words that practice is over, stops the mic, and saves the session with one tap on a big word-labelled button, which is the job exactly and suits older users. [A] gives no signal at all, leaves 'En vivo' on at 00:00, and hides saving behind Detener and an unseen form. The biggest improvement to [B] would be removing the pre-selected-looking outline on Difícil. Enlarging the desktop subtitle and fixing the clipped header behind the sheet would also help."
+   }
+  ]
+ },
+ "rating": {
+  "title": "Rating a finished step",
+  "verdict": "ship B",
+  "judges": 3,
+  "A": {
+   "meanRank": 3.0,
+   "meanScore": 2.33,
+   "blocking": [
+    [
+     "beginner",
+     "The rating form is not visible anywhere on the first screen after tapping Detener, on phone or desktop. Only the stage with 'Listo 00:00' and 'Empezar' shows, so there is nothing telling me to scroll down to rate and save."
+    ],
+    [
+     "beginner",
+     "The score compares my minutes to a 5-minute exercise target ('2 min · meta 5 min', Minutos 2/5, total 5.5/10) instead of the 1:30 step I actually sang, so a completed step looks like a weak result."
+    ],
+    [
+     "designer",
+     "Right after Detener, the rating form is below the fold on both phone (390×844) and desktop (1280×800). The first screen shows only the stage, with 'Empezar' as the strongest action, so the learner does not see anything asking them to rate or save."
+    ],
+    [
+     "designer",
+     "The score measures minutes against a 5-minute target instead of the step's 1:30 length. A fully completed step shows 'Minutos practicados 2/5 · 2 min · meta 5 min' and 5.5/10, both of which misstate what the learner did."
+    ],
+    [
+     "access",
+     "Right after Detener, the rating form is completely off-screen on both phone and desktop. The visible stage shows 'Listo 00:00' and 'Empezar', suggesting the session was reset and nothing needs saving. There is no cue to scroll down."
+    ],
+    [
+     "access",
+     "The score misrepresents the step. A 1:30 step that was fully completed shows 'Minutos practicados 2/5 · 2 min · meta 5 min' and 5.5/10, which tells the learner they practised too little."
+    ]
+   ]
+  },
+  "challengers": {
+   "B": {
+    "name": "one-tap feel rating in place of the form",
+    "wins": 3,
+    "guard": [],
+    "meanRank": 1.0,
+    "meanScore": 8.67
+   },
+   "C": {
+    "name": "keep the form, prefilled and reachable",
+    "wins": 3,
+    "guard": [],
+    "meanRank": 2.0,
+    "meanScore": 6.0
+   }
+  },
+  "close": [],
+  "notes": [
+   {
+    "persona": "beginner",
+    "ranking": [
+     "B",
+     "C",
+     "A"
+    ],
+    "confidence": "high",
+    "summary": "[B] wins clearly. Right after Detener it asks one plain question with three big answers, one tap saves the take, and the score is based on the 1:30 step I actually sang. It would improve most by toning down or moving the prominent 'Siguiente ejercicio' button so nobody skips the rating by accident, and by making sure the 'Fácil' choice shows up clearly in the result."
+   },
+   {
+    "persona": "designer",
+    "ranking": [
+     "B",
+     "C",
+     "A"
+    ],
+    "confidence": "high",
+    "summary": "[B] wins because, as soon as Detener is pressed, the whole rating task is on the first screen: three large one-tap choices that save the take, a clear note saying so, and details hidden until asked for. Its score also matches the step's real length. The biggest improvement would be to make 'Siguiente ejercicio' look secondary, or put it inside the card, so it does not outrank the rating choices or blur with 'Salir sin puntuar'. [A] is last because its form is not visible after Detener and its score measures against the wrong target."
+   },
+   {
+    "persona": "access",
+    "ranking": [
+     "B",
+     "C",
+     "A"
+    ],
+    "confidence": "high",
+    "summary": "[B] does the job best: a short, fully visible card with one question, three big labelled buttons, and a clear note that one tap saves. The score also uses the step's real length. [C] is correct but slower and more fiddly for older hands (sliders, a decimal minutes field, only half visible). [A] hides the form after Detener and scores against the wrong target. The best improvement to [B] would be to make the rating buttons the main visual action and tone down or move 'Siguiente ejercicio' so it doesn't compete with them, plus add a brief 'Deshacer' after the one-tap save."
+   }
+  ]
+ },
+ "session-chrome": {
+  "title": "Guided-session chrome on phones",
+  "verdict": "close",
+  "judges": 3,
+  "A": {
+   "meanRank": 2.0,
+   "meanScore": 6.0,
+   "blocking": []
+  },
+  "challengers": {
+   "B": {
+    "name": "step strip inside the stage",
+    "wins": 1,
+    "guard": [
+     "guided-live-clear__small: controls under 44px 9 -> 12",
+     "guided-live-clear__small: contrast failures 0 -> 2"
+    ],
+    "meanRank": 2.67,
+    "meanScore": 5.0
+   },
+   "C": {
+    "name": "a one-line banner",
+    "wins": 2,
+    "guard": [
+     "guided-live-clear__small: controls under 44px 9 -> 12",
+     "guided-live-clear__small: contrast failures 0 -> 2"
+    ],
+    "meanRank": 1.33,
+    "meanScore": 6.67
+   }
+  },
+  "close": [
+   "B",
+   "C"
+  ],
+  "notes": [
+   {
+    "persona": "beginner",
+    "ranking": [
+     "C",
+     "A",
+     "B"
+    ],
+    "confidence": "medium",
+    "summary": "[C] wins for me because its one small line shows where I am (1/2), leaves the exercise most of the screen, stays visible while I sing, and uses an X everyone recognises to finish. [A] is the clearest, with real 'Pausar' and 'Terminar' buttons, but it eats too much screen and scrolls away on a small phone. [C] would improve most by putting a visible 'Pausar' word or pause icon next to the X instead of hiding it in '⋯', and by replacing 'Mínimo' with something plainer like 'Ejercicio 1 de 2'."
+   },
+   {
+    "persona": "designer",
+    "ranking": [
+     "C",
+     "B",
+     "A"
+    ],
+    "confidence": "medium",
+    "summary": "[C] balances the three parts of the job best. It shows the position explicitly in a slim banner that keeps the stage high on the screen. It offers a visible one-tap end, and the chrome stays on screen while singing on small phones. [A] labels its controls best but spends too much of the first screen on chrome and loses it entirely while singing on a small phone. [C] would improve most by making Pausar a visible labelled control in the banner in place of the ⋯, and by labelling or confirming the × (e.g. 'Terminar'). Borrowing [B]'s segmented time strip would also help."
+   },
+   {
+    "persona": "access",
+    "ranking": [
+     "A",
+     "C",
+     "B"
+    ],
+    "confidence": "medium",
+    "summary": "[A] wins for older and less confident users because it is the only design that puts position ('Ejercicio 1 de 2') and the pause and end actions on screen as plain labelled buttons. That removes the icon-guessing and hidden-menu problems that trip up this group. Its main weakness is size: the banner pushes the instructions off the first screen and scrolls out of view while singing on a small phone. A slimmer version that keeps the labelled Pausar and Terminar buttons (for example one line of text plus two compact labelled buttons, pinned to the top) would fix most of this."
+   }
+  ]
+ },
+ "start-floor": {
+  "title": "Exercise controls on small phones",
+  "verdict": "ship B",
+  "judges": 3,
+  "A": {
+   "meanRank": 2.67,
+   "meanScore": 4.0,
+   "blocking": []
+  },
+  "challengers": {
+   "B": {
+    "name": "same layout, raised to the floor",
+    "wins": 3,
+    "guard": [],
+    "meanRank": 1.0,
+    "meanScore": 7.0
+   },
+   "C": {
+    "name": "one big Start; settings hidden",
+    "wins": 2,
+    "guard": [],
+    "meanRank": 2.33,
+    "meanScore": 5.0
+   }
+  },
+  "close": [],
+  "notes": [
+   {
+    "persona": "beginner",
+    "ranking": [
+     "B",
+     "C",
+     "A"
+    ],
+    "confidence": "medium",
+    "summary": "[B] wins because it keeps every setting and makes those controls large enough to tap. Hiding the chord and mode dropdowns on this exercise also means nothing covers the title. [C]'s big full-width Empezar is the clearest thing on any of the screens, but it drops the settings on phones and keeps the overlap. [B] would improve most with a full-width Empezar like [C]'s and short words ('Octava', 'Rango', 'Micrófono') next to the unlabeled −/+, checkbox and slider."
+   },
+   {
+    "persona": "designer",
+    "ranking": [
+     "B",
+     "A",
+     "C"
+    ],
+    "confidence": "medium",
+    "summary": "[B] wins because it is the only design that keeps every setting that matters for the exercise on the stage and makes each one a large target that is easy to tap and read. It also leaves out the irrelevant chord and mode selects, so nothing covers the exercise heading. It would improve most with a wider, more dominant ▶ Empezar like the one in [C], visible labels for the octave value and the range checkbox, and a fix for the empty gap and cut-off instruction text on small phones."
+   },
+   {
+    "persona": "access",
+    "ranking": [
+     "B",
+     "C",
+     "A"
+    ],
+    "confidence": "medium",
+    "summary": "[B] wins because it is the only design where a learner can both start and adjust every setting with targets of at least 44 px, and hiding the chord and mode selects for lip trills removes the overlap that clips the title in the other two designs. [C] gives the friendliest start button, but it hides mic sensitivity and octave on phones, and [A] keeps all the controls but makes them too small. [B] would improve most by adding short text labels to its controls ('Octava', 'Rango', and a word for the grey pill) and by making Empezar full-width and clearly the main button, as [C] does."
+   }
+  ]
+ },
+ "coach-strip": {
+  "title": "Coaching cue while singing",
+  "verdict": "ship B",
+  "judges": 3,
+  "A": {
+   "meanRank": 2.0,
+   "meanScore": 3.33,
+   "blocking": [
+    [
+     "beginner",
+     "Phone, tuning exercise: no instruction is visible anywhere on the first screen while singing. The cue sits below the practice stage, off screen, so you have to scroll mid-exercise to find out what to do."
+    ],
+    [
+     "designer",
+     "Phone, pitch exercise: no coaching cue anywhere on the first screen. The instruction is below the stage, so a learner who is singing cannot see what to do without scrolling."
+    ],
+    [
+     "access",
+     "While singing, the coaching cue is out of view. On the phone pitch screen it is below the fold. On desktop the 'JUEGO DE AFINACIÓN' text is cut by the bottom edge of the viewport ('El puntaje se actualiza en el HUD de arriba' is sliced in half). In the non-canvas exercise the steps disappear entirely once practice starts, leaving an empty stage."
+    ]
+   ]
+  },
+  "challengers": {
+   "B": {
+    "name": "coach strip on the stage",
+    "wins": 3,
+    "guard": [],
+    "meanRank": 1.0,
+    "meanScore": 7.67
+   }
+  },
+  "close": [],
+  "notes": [
+   {
+    "persona": "beginner",
+    "ranking": [
+     "B",
+     "A"
+    ],
+    "confidence": "high",
+    "summary": "[B] wins because it keeps the instruction on screen while I sing on my phone. The lip-trill exercise shows a large, plain 'Ahora · paso 1 de 5' step, and the tuning game has a cue strip above the note lanes. [A] puts the cue below the stage or hides it, so a beginner on a phone is left without guidance. [B] would improve most by showing the whole tuning cue on the phone instead of cutting it with '…', and by replacing jargon like 'SOVT' and 'Uniformidad' with everyday words."
+   },
+   {
+    "persona": "designer",
+    "ranking": [
+     "B",
+     "A"
+    ],
+    "confidence": "high",
+    "summary": "[B] wins because it keeps what to do right now on the stage during singing in both kinds of exercise. There is a large, readable 'Ahora · paso n de N' card that moves on with the timer, and a cue strip above the pitch lanes. [A] hides the steps once practice starts and moves the pitch cue below the stage, where it is off-screen on phone and cut off on desktop. The biggest improvement for [B] would be phone cue text that keeps the actionable target (for example, 'Bloquea 8 notas en el carril verde') instead of cutting it off after the preamble. Shrinking the secondary mode card on phone so the current step leads would also help."
+   },
+   {
+    "persona": "access",
+    "ranking": [
+     "B",
+     "A"
+    ],
+    "confidence": "high",
+    "summary": "[B] wins because it keeps the current instruction on the stage, in large readable text, while the learner sings. A step that updates with the timer is exactly what an older or less confident user needs, since they cannot scroll while holding a note. [A] hides the steps or pushes the cue below the fold, so the job fails. [B] would improve most by letting the phone pitch cue wrap in full instead of cutting it off at 'Bloquea 8 nota…', and by naming the target lane in words as well as by its colour."
+   }
+  ]
+ }
+}

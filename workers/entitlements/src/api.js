@@ -215,7 +215,7 @@ export async function buildMePayload(env, account, now) {
  * Which sign-in methods this deployment can actually offer.
  *
  * `trialDays` rides along because the pricing panel has to name the length of
- * the free month before anybody signs in, and this is the only public route
+ * the free trial before anybody signs in, and this is the only public route
  * that answers before a session exists.
  *
  * @param {Object} env Worker env bindings.
@@ -618,7 +618,7 @@ export async function handleDeleteProgress(request, env, url, deps) {
  * @param {number} at Unix seconds.
  * @returns {Promise<{ok: boolean, reason?: string, status?: number, account?: Object}>} Result.
  */
-async function requireAdmin(env, request, at) {
+export async function requireAdmin(env, request, at) {
   const auth = await requireSession(env, request, at);
   if (!auth.ok) {
     return { ok: false, reason: auth.reason, status: 401 };

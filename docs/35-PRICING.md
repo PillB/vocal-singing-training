@@ -257,24 +257,42 @@ and two of them change what is buildable.
 
 ---
 
-## The trial stays as it is
+## The trial is seven days (decided 2026-09-24, was 30)
 
-The code has two trials and that looked like an inconsistency. It is not.
+The code still has two trials, and that is not an inconsistency — but they now
+agree on length.
 
-- **7 days, browser-local** (`freeTrialDays`) is the fallback for a deploy with
-  no worker. It is farmable by clearing storage, so it stays short.
-- **30 days, per account** (`TRIAL_DAYS`) is the real one, and it is one per
-  person ever.
+- **7 days, browser-local** (`freeTrialDays` in `js/billing-config.js`) is the
+  fallback for a deploy with no worker. It is farmable by clearing storage, so it
+  was always short.
+- **7 days, per account** (`TRIAL_DAYS` in `wrangler.toml`, `DEFAULT_TRIAL_DAYS`
+  in `grants.js`) is the real one, one per person ever.
 
-The evidence says length barely matters for conversion: there is a cliff below
-about 5 days and then a plateau. Adapty's medians are 30% for 1–4 day trials,
-then 45%, 44% and 45.7% for longer ones. RevenueCat's larger dataset puts the
-7-day-to-30-day difference at 37.4% versus 42.5%.
+**What changed the decision.** This section used to argue for 30 days from
+Adapty's and RevenueCat's medians (30% for 1–4 day trials, then a plateau
+around 45%; 37.4% at 7 days against 42.5% at 30). Those are **observational**
+— cross-app comparisons confounded by category and price. The only randomised
+experiment on trial length assigned **337,724 users** across six markets to 7,
+14 or 30 days: against the 30-day control's 14.67% subscription rate, the 7-day
+arm produced **5.59% more subscriptions** (t = 2.58, p < 0.05) in the test data,
+and the 14-day arm was not significant. A randomised result beats a
+cross-sectional median, so the observational argument for 30 days is retired.
 
-So 30 days is justified on habit formation — the 12-week plan needs a month
-before it has anything to show — and on cancellation timing: 64% of 7-day trial
-cancellations happen on day 0–1, against 31% for 30-day trials. It is not
-justified by a conversion claim, and should not be sold as one.
+**The counter-argument, which is real and lost anyway.** A daily singing habit
+plausibly needs longer than a week, and the mechanism behind shorter trials
+winning is dormancy — people forget — which is worse in a practice product than
+in most. Cancellation timing points the same way: 64% of 7-day trial
+cancellations happen on day 0–1 against 31% for 30-day trials. The owner made
+the call for 7 days on 2026-09-24. If it disappoints, the lever is re-entry
+(reminders, the comeback path), not length, and the change is one value.
+
+**Side effect worth having:** Mercado Pago's seller UI presets are 7 and 14
+days, so a 7-day trial needs no API call to configure.
+
+Nothing in the copy may name a month. The strings that can interpolate
+(`pricing.startTrial`, `pricing.startTrialFree`, `auth.offer`,
+`auth.startTrialDays`) read the length from the worker; the fixed ones say
+"prueba gratis" / "free trial" with no duration.
 
 **What to expect.** The right benchmark for a product with a permanently free
 core is freemium, not trials: the median is **2.1% of downloads paying by day

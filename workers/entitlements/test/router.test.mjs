@@ -83,7 +83,9 @@ test("health reports booleans and the site origin, never key material", async ()
     // binding and no auth configuration, which is exactly the shape a
     // payments-only deployment has.
     accountsConfigured: false,
-    authMethods: { email: false, google: false, googleClientId: null, trialDays: 30 },
+    // Events need the same D1 binding, so a payments-only deployment has none.
+    eventsEnabled: false,
+    authMethods: { email: false, google: false, googleClientId: null, trialDays: 7 },
     siteOrigin: TEST_ORIGIN
   });
   const text = JSON.stringify(body);

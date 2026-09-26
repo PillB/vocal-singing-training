@@ -1,5 +1,5 @@
 /**
- * Default 1-nota mode, stage-below fits cue text, interactive UI tours.
+ * Default 1-nota mode, the coach strip fits its cue text, interactive UI tours.
  */
 import { test, expect } from "@playwright/test";
 
@@ -42,7 +42,10 @@ test.describe("Default 1-nota + stage-below layout", () => {
     await expect(page.locator("#chk-arpeggio")).not.toBeChecked();
   });
 
-  test("mode-cue under highway is fully visible without clip/scroll", async ({ page }) => {
+  // Design coach-strip: the cue left the box under the stage for a strip on
+  // the stage (#stage-coach, under the top controls). It must still show in
+  // full, never clipped, with the lanes starting below it.
+  test("mode-cue in the stage's coach strip is fully visible without clip/scroll", async ({ page }) => {
     await boot(page);
     await openSolfege(page);
     // Ensure cue has multi-line potential content
@@ -55,36 +58,38 @@ test.describe("Default 1-nota + stage-below layout", () => {
           "apunta al carril verde de la autopista y mantén el tono estable durante el sostenido. " +
           "Si no alcanzas, usa el control de octava − / + o Rango auto.";
       }
-      window.VTApp?.fitStageBelowContent?.();
+      window.VTApp?.fitHighwayToViewport?.();
     });
-    await page.waitForTimeout(80);
+    await page.waitForTimeout(150);
     const metrics = await page.evaluate(() => {
       const cue = document.getElementById("mode-cue");
-      const below = document.querySelector(".stage-below");
-      if (!cue || !below) return { ok: false };
-      const cs = getComputedStyle(cue);
+      const strip = document.getElementById("stage-coach");
+      const stage = document.getElementById("highway-stage");
+      const lanes = document.getElementById("pitch-block");
+      if (!cue || !strip || !stage || !lanes) return { ok: false };
+      const sr = strip.getBoundingClientRect();
+      const rects = [...cue.getClientRects()];
       return {
         ok: true,
-        scrollH: cue.scrollHeight,
-        clientH: cue.clientHeight,
-        overflowY: cs.overflowY,
-        maxHeight: cs.maxHeight,
-        belowMin: below.style.minHeight || getComputedStyle(below).minHeight,
-        belowScroll: below.scrollHeight,
-        belowClient: below.clientHeight,
-        clipped: cue.scrollHeight > cue.clientHeight + 2
+        inStrip: strip.contains(cue) && !strip.hidden,
+        lines: rects.length,
+        textInside: rects.every((r) => r.top >= sr.top - 1 && r.bottom <= sr.bottom + 1),
+        clipped: strip.scrollHeight > strip.clientHeight + 2,
+        stripInStage: sr.bottom <= stage.getBoundingClientRect().bottom,
+        lanesBelow: lanes.getBoundingClientRect().top >= sr.bottom - 1
       };
     });
     expect(metrics.ok).toBe(true);
-    expect(metrics.overflowY === "visible" || metrics.overflowY === "auto").toBeTruthy();
+    expect(metrics.inStrip).toBe(true);
+    expect(metrics.lines).toBeGreaterThan(0);
     // Must not clip text
     expect(metrics.clipped).toBe(false);
-    expect(metrics.scrollH).toBeGreaterThan(20);
-    // Container tall enough for its content
-    expect(metrics.belowClient + 4).toBeGreaterThanOrEqual(Math.min(metrics.belowScroll, metrics.scrollH));
+    expect(metrics.textInside).toBe(true);
+    expect(metrics.stripInStage).toBe(true);
+    expect(metrics.lanesBelow).toBe(true);
   });
 
-  test("stage-below min-height tracks window resize wrap", async ({ page }) => {
+  test("coach strip grows with the cue on a narrow window and never clips", async ({ page }) => {
     await boot(page);
     await openSolfege(page);
     await page.evaluate(() => {
@@ -92,17 +97,17 @@ test.describe("Default 1-nota + stage-below layout", () => {
       cue.hidden = false;
       cue.textContent =
         "Long cue text that should wrap on narrow viewports so height grows with line count and never needs an inner scrollbar for the prompt itself.";
-      window.VTApp?.fitStageBelowContent?.();
+      window.VTApp?.fitHighwayToViewport?.();
     });
-    const wide = await page.evaluate(() => document.getElementById("mode-cue").scrollHeight);
+    const wide = await page.evaluate(() => document.getElementById("stage-coach").scrollHeight);
     await page.setViewportSize({ width: 360, height: 720 });
-    await page.waitForTimeout(120);
-    await page.evaluate(() => window.VTApp?.fitStageBelowContent?.());
-    const narrow = await page.evaluate(() => document.getElementById("mode-cue").scrollHeight);
+    await page.waitForTimeout(250);
+    const narrow = await page.evaluate(() => document.getElementById("stage-coach").scrollHeight);
     expect(narrow).toBeGreaterThanOrEqual(wide - 2);
     const noClip = await page.evaluate(() => {
-      const c = document.getElementById("mode-cue");
-      return c.scrollHeight <= c.clientHeight + 3;
+      const c = document.getElementById("stage-coach");
+      const lanes = document.getElementById("pitch-block").getBoundingClientRect();
+      return c.scrollHeight <= c.clientHeight + 3 && lanes.top >= c.getBoundingClientRect().bottom - 1;
     });
     expect(noClip).toBe(true);
   });

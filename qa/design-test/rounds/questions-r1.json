@@ -1,0 +1,248 @@
+{
+ "first-visit": {
+  "title": "What a first-time visitor sees",
+  "job": "A person who has never used the site, arriving on a phone from a link, understands what this is and starts a first practice that suits them with no preparation.",
+  "states": "fresh",
+  "vps": "phone,desktop",
+  "arms": {
+   "A": {
+    "caption": "The green button opens a 5-minute speaking drill ('Mejor dicción') whose first instruction is to pick a short page from a book or article and read it aloud. 'Continuar práctica' and 'Iniciar sesión guiada' open that same drill."
+   },
+   "B": {
+    "name": "day-0 Mínimo on Canto, link to Vocal",
+    "caption": "The green button starts a 3-minute singing routine with nothing to prepare: lip trills for 1:30, then lip-trill solfège for 1:30. The underlined link switches the suggestion to the speaking track (lip trills, then diction)."
+   },
+   "C": {
+    "name": "track chooser in the panel plus Mínimo",
+    "caption": "Cantar / Hablar switches the suggestion between singing and speaking (Hablar is preselected). The green button starts a 3-minute routine for the chosen track with nothing to prepare."
+   }
+  }
+ },
+ "loop-copy": {
+  "title": "Today's basics for someone who practised the last three days",
+  "job": "A returning learner sees at a glance what today's practice is and starts it.",
+  "states": "home-returning",
+  "vps": "phone,laptop",
+  "arms": {
+   "A": {
+    "caption": "The green button starts today's 3-minute routine: lip trills 1:30, then lip-trill solfège 1:30."
+   },
+   "B": {
+    "name": "the steps are the headline",
+    "caption": "The green button starts today's 3-minute routine: lip trills 1:30, then lip-trill solfège 1:30."
+   },
+   "C": {
+    "name": "headline plus button only",
+    "caption": "The green button starts today's 3-minute routine: lip trills 1:30, then lip-trill solfège 1:30."
+   }
+  }
+ },
+ "phone-header": {
+  "title": "The header on a phone",
+  "job": "The header lets people move between Practicar, Plan and Historial and reach Pro, their account, the language switch and the tour, while leaving as much of the screen as possible for practice.",
+  "states": "home-returning,home-menu",
+  "vps": "phone,land",
+  "arms": {
+   "A": {
+    "caption": "The header stays pinned at the top while the page scrolls, with every button always visible."
+   },
+   "B": {
+    "name": "one-row header with Más",
+    "caption": "The header stays pinned at the top. 'Más' opens a small menu with Pro, Cuenta, English and Tour (the second phone screenshot shows it open)."
+   },
+   "C": {
+    "name": "header scrolls away, Más menu",
+    "caption": "The header scrolls away with the page instead of staying pinned. 'Más ▾' opens a menu with Pro, Cuenta, English and Tour (the second phone screenshot shows it open)."
+   }
+  }
+ },
+ "done-card": {
+  "title": "Home after today's basics are done",
+  "job": "Someone who has just finished today's practice sees that it is done and counted, and can do more if they want without feeling pushed.",
+  "states": "done-closed",
+  "vps": "phone,desktop",
+  "arms": {
+   "A": {
+    "caption": "'Otra vuelta' repeats the same 3-minute routine. The level buttons below (Mínimo, Esencial 10 min, Clase 32 min) pick a longer routine."
+   },
+   "B": {
+    "name": "one-line done strip, no level chips",
+    "caption": "'Otra vuelta' repeats the same 3-minute routine. The level buttons are not shown once today's basics are done."
+   }
+  }
+ },
+ "record-strip": {
+  "title": "The practice record on a phone",
+  "job": "A returning learner sees how many days they have practised and this week's progress, without it pushing the rest of the page far down.",
+  "states": "home-returning",
+  "vps": "phone,small",
+  "arms": {
+   "A": {
+    "caption": ""
+   },
+   "B": {
+    "name": "compact record strip",
+    "caption": "The weekly-goal picker is not shown on phones in this design."
+   }
+  }
+ },
+ "step-end": {
+  "title": "The moment a guided step's time runs out",
+  "job": "In the middle of today's routine, when the first exercise's time is up, the learner knows it is over and moves on to the next one easily.",
+  "states": "step-end",
+  "vps": "phone,desktop",
+  "arms": {
+   "A": {
+    "caption": "At 0:00 the microphone stays on and the screen stays as shown; the button that moves to the next step is further down the page."
+   },
+   "B": {
+    "name": "step-done card on the stage",
+    "caption": "At 0:00 this card covers the practice area. The big button goes to the next step, '30 s más' adds 30 seconds, 'Puntuar' opens the rating form."
+   }
+  }
+ },
+ "landscape": {
+  "title": "Practising with the phone turned sideways",
+  "job": "While singing with the phone in landscape, the learner sees the practice area, the timer and the controls they need without anything covering them.",
+  "states": "guided-live,practicing",
+  "vps": "land",
+  "arms": {
+   "A": {
+    "caption": ""
+   },
+   "B": {
+    "name": "landscape practice mode",
+    "caption": "While an exercise is open in landscape, the site header and the guided-session banner are hidden, so the session's Pausar and Terminar buttons are not on screen; '← Atrás' still leaves the exercise."
+   }
+  }
+ },
+ "target-lane": {
+  "title": "Seeing which note to sing",
+  "job": "While singing a pitch exercise, the learner can tell which note to sing and whether their voice is on it.",
+  "states": "practicing-s9",
+  "vps": "phone,desktop",
+  "arms": {
+   "A": {
+    "caption": ""
+   },
+   "B": {
+    "name": "target always the primary lane; grid recedes",
+    "caption": ""
+   }
+  }
+ },
+ "big-start": {
+  "title": "An exercise before pressing Start",
+  "job": "Someone who has just opened an exercise on a phone finds how to start and can start with one tap.",
+  "states": "exercise",
+  "vps": "phone,small",
+  "arms": {
+   "A": {
+    "caption": ""
+   },
+   "B": {
+    "name": "one big Start",
+    "caption": "On phones the microphone-sensitivity label and the piano's octave buttons are not shown in this design."
+   }
+  }
+ },
+ "catalog": {
+  "title": "The list of exercises",
+  "job": "A learner browsing the exercises understands what each one is and picks one to do.",
+  "states": "catalog",
+  "vps": "phone,desktop",
+  "full": true,
+  "arms": {
+   "A": {
+    "caption": "Tapping any card opens that exercise."
+   },
+   "B": {
+    "name": "rows plus a what-you-do line",
+    "caption": "Tapping any row opens that exercise."
+   },
+   "C": {
+    "name": "compact rows",
+    "caption": "Tapping any row opens that exercise."
+   }
+  }
+ },
+ "canto-groups": {
+  "title": "How singing exercises are grouped",
+  "job": "A singer browsing the singing exercises understands how they are grouped and which ones are part of their daily basics.",
+  "states": "catalog",
+  "vps": "phone,desktop",
+  "full": true,
+  "arms": {
+   "A": {
+    "caption": "Tapping any card opens that exercise."
+   },
+   "B": {
+    "name": "groups named for what they are; today's basics marked",
+    "caption": "Tapping any card opens that exercise."
+   }
+  }
+ },
+ "plan": {
+  "title": "The Plan page",
+  "job": "A learner decides what to focus on this week and gets to practising it.",
+  "states": "plan",
+  "vps": "phone,desktop",
+  "full": true,
+  "arms": {
+   "A": {
+    "caption": "Picking a focus and pressing the start button starts a week of the 12-week plan. The Plan page itself has no links to exercises."
+   },
+   "B": {
+    "name": "one focus, its exercises, days counted",
+    "caption": "Each listed exercise opens directly. The count of days practised fills in by itself from days already practised."
+   }
+  }
+ },
+ "history": {
+  "title": "The history page",
+  "job": "A learner sees how much they have practised and what they did last, and can pick up where they left off.",
+  "states": "history-rich",
+  "vps": "phone,desktop",
+  "full": true,
+  "arms": {
+   "A": {
+    "caption": ""
+   },
+   "B": {
+    "name": "days sung first, then what you did last",
+    "caption": "Each row under 'Lo último que practicaste' opens that exercise."
+   }
+  }
+ },
+ "pricing": {
+  "title": "The Pro pricing sheet",
+  "job": "Someone curious about Pro understands what it adds, what it costs and what they can do right now.",
+  "states": "pricing,pricing-end",
+  "vps": "phone,desktop",
+  "full": false,
+  "arms": {
+   "A": {
+    "caption": "Payments are not live yet: the subscribe buttons show a notice that payments are not public. The 7-day free trial button works."
+   },
+   "B": {
+    "name": "one plan, interval toggle, plain benefits",
+    "caption": "Payments are not live yet: the subscribe button shows a notice that payments are not public. Mensual / Anual switches which plan is shown. The 7-day free trial is not offered in this design."
+   }
+  }
+ },
+ "tour-invite": {
+  "title": "The invitation to take the tour on a first visit",
+  "job": "A first-time visitor can take a short tour or read the guide if they want, without it competing with starting a practice.",
+  "states": "fresh",
+  "vps": "phone,small",
+  "arms": {
+   "A": {
+    "caption": "'No, gracias' hides the invitation."
+   },
+   "B": {
+    "name": "invitation as one line of links",
+    "caption": "The ✕ hides the invitation."
+   }
+  }
+ }
+}

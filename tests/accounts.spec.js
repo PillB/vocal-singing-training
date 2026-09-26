@@ -39,6 +39,8 @@ function createWorkerStub(options) {
     licenseId: null,
     progress: opts.progress || null,
     rev: opts.rev || 0,
+    // Overrides for the A/B results answer, merged over the default below.
+    abResults: opts.abResults || null,
     sentCode: "424242",
     calls: []
   };
@@ -147,6 +149,60 @@ async function installWorker(page, stub, license) {
       if (stub.account.role !== "admin") return json(403, { ok: false, reason: "forbidden" });
       return json(200, { ok: true, account: { email: body.email }, grant: { id: "grant_1", status: "active" } });
     }
+    if (path === "/v1/admin/experiments" && method === "GET") {
+      if (stub.account.role !== "admin") return json(403, { ok: false, reason: "forbidden" });
+      return json(200, {
+        ok: true,
+        experiments: [
+          { experiment: "aa_2026_10", arms: [{ variant: "a", exposed: 412 }, { variant: "b", exposed: 398 }], srm: { p: 0.62, flagged: false } },
+          { experiment: "loop_home_2026_10", arms: [], srm: { p: null, flagged: false } }
+        ],
+        ingest: {
+          since: "2026-09-17",
+          days: [{ day: "2026-09-23", counts: { accepted: 1240, unknown_event: 2 } }],
+          totals: { accepted: 1240, unknown_event: 2 },
+          lastAcceptedAt: 1790000000
+        }
+      });
+    }
+    if (path === "/v1/admin/experiments/results" && method === "GET") {
+      if (stub.account.role !== "admin") return json(403, { ok: false, reason: "forbidden" });
+      // Shaped exactly like workers/entitlements/src/events.js answers.
+      return json(200, {
+        ok: true,
+        experiment: url.searchParams.get("experiment"),
+        control: "a",
+        exposed: [{ variant: "a", n: 412 }, { variant: "b", n: 398 }],
+        srm: { chi2: 0.24, df: 1, p: 0.62, weights: [1, 1], flagged: false },
+        horizon: { nPerArm: 150, minDays: 14, mde: null, maxTo: 7, startedAt: 1788000000, cohortEnd: 1788500000, readyAt: 1789200000, estimated: false, reached: true, counted: 150 },
+        eventMix: {
+          events: [{ event: "app_open", from: -1, to: 1, arms: [{ variant: "a", n: 412, k: 412, share: 1 }, { variant: "b", n: 398, k: 398, share: 1 }], p: 1, flagged: false, reason: null }],
+          flagged: false
+        },
+        metrics: [
+          {
+            role: "primary", event: "practice_day", kind: "share", from: 0, to: 7,
+            arms: [
+              { variant: "a", n: 380, k: 152, rate: 0.4, lo: 0.352, hi: 0.45 },
+              { variant: "b", n: 371, k: 150, rate: 0.4043, lo: 0.356, hi: 0.455 }
+            ],
+            comparisons: [{ variant: "b", vs: "a", diff: 0.0043, lo: -0.065, hi: 0.074, z: 0.12, p: 0.904 }],
+            smallSample: false
+          },
+          {
+            role: "guardrail", event: "app_open", kind: "days", from: 0, to: 7,
+            arms: [
+              { variant: "a", n: 380, mean: 2.1, sd: 1.4, lo: 1.96, hi: 2.24 },
+              { variant: "b", n: 371, mean: 2.08, sd: 1.5, lo: 1.93, hi: 2.23 }
+            ],
+            comparisons: [{ variant: "b", vs: "a", diff: -0.02, lo: -0.23, hi: 0.19, z: -0.19, p: 0.85 }],
+            smallSample: false
+          }
+        ],
+        readMe: "ok",
+        ...(stub.abResults || {})
+      });
+    }
     if (path === "/v1/auth/logout") return json(200, { ok: true });
 
     return json(404, { ok: false, reason: "not_found" });
@@ -212,6 +268,8 @@ async function boot(page) {
 
 /** Sign in through the emailed-code form. */
 async function signIn(page) {
+  // On a phone, Cuenta is in the header's "Más" menu.
+  if (await page.locator("#btn-more").isVisible()) await page.click("#btn-more");
   await page.click("#btn-account");
   await expect(page.locator("#account-modal")).toBeVisible();
   await expect(page.locator("#account-signin")).toBeVisible();
@@ -239,8 +297,18 @@ test.describe("Accounts, gifted months and saved progress", () => {
     // Nor claim it merely could not check, because it never asked.
     await expect(page.locator("#account-checking")).toBeHidden();
     await expect(page.locator("#account-offline")).toBeHidden();
-    // And the internal QA form stays reachable, because it is the only way in.
-    await expect(page.locator("#login-username")).toBeVisible();
+    // There is no worker to ask, so there is nothing to retry either.
+    await expect(page.locator("#account-retry-row")).toBeHidden();
+    // And the internal staff login is NOT presented. It used to expand itself
+    // here, so an ordinary visitor was shown a Usuario/Contraseña form as the
+    // only thing on the panel they could touch, with focus inside it.
+    await expect(page.locator("#login-username")).toBeHidden();
+    expect(await page.locator(".account-internal").evaluate((d) => d.open)).toBe(false);
+    expect(
+      await page.evaluate(() =>
+        document.querySelector("#account-modal").contains(document.activeElement)
+      )
+    ).toBe(true);
   });
 
   test("Google-only deploy: a blocked Google script does not leave an empty panel", async ({ page }) => {
@@ -265,8 +333,14 @@ test.describe("Accounts, gifted months and saved progress", () => {
     // not ask the worker" — both of those would misdirect the reader.
     await expect(page.locator("#account-unconfigured")).toBeHidden();
     await expect(page.locator("#account-offline")).toBeHidden();
-    // And the way in that does work is open, with focus somewhere real.
-    await expect(page.locator("#login-username")).toBeVisible();
+    // The control this state deserves is "try again": the usual cause is an
+    // extension the visitor can switch off, and a retry clears both the cached
+    // worker answer and the cached "Google will not load" verdict.
+    await expect(page.locator("#account-retry")).toBeVisible();
+    // The staff form is not what a blocked visitor is shown.
+    await expect(page.locator("#login-username")).toBeHidden();
+    expect(await page.locator(".account-internal").evaluate((d) => d.open)).toBe(false);
+    // Focus is somewhere real inside the panel.
     expect(
       await page.evaluate(() =>
         document.querySelector("#account-modal").contains(document.activeElement)
@@ -318,7 +392,8 @@ test.describe("Accounts, gifted months and saved progress", () => {
     // The press and the label have to read the same flag. Before, the label came
     // from the worker's default trial length while the press fell back to the
     // browser-local trial, so a visitor who clicked before the answer landed was
-    // promised 30 days and given 7.
+    // promised a different length from the one they got. The two lengths agree at
+    // 7 days now, but the flag they read must still be the same one.
     const license = await mintLicense({ origin: BASE });
     const stub = createWorkerStub({ methods: { email: true, google: false } });
     await patchBillingConfig(page, {
@@ -375,7 +450,10 @@ test.describe("Accounts, gifted months and saved progress", () => {
     // The request is bounded, so this resolves into a state with a way forward.
     await expect(page.locator("#account-offline")).toBeVisible({ timeout: 15000 });
     await expect(page.locator("#account-checking")).toBeHidden();
-    await expect(page.locator("#login-username")).toBeVisible();
+    // "Close and reopen this panel" was the whole recovery, in prose, while the
+    // only tappable thing was the staff form. There is a real button now.
+    await expect(page.locator("#account-retry")).toBeVisible();
+    await expect(page.locator("#login-username")).toBeHidden();
   });
 
   test("the shipped build is pointed at a deployed worker", async () => {
@@ -407,7 +485,10 @@ test.describe("Accounts, gifted months and saved progress", () => {
     await expect(page.locator("#account-modal")).toBeVisible();
     await expect(page.locator("#account-signin")).toBeHidden();
     await expect(page.locator("#account-unconfigured")).toBeVisible();
-    await expect(page.locator("#login-username")).toBeVisible();
+    // A worker answered, so asking it again is meaningful; the staff form is
+    // still not the visitor's way in.
+    await expect(page.locator("#account-retry")).toBeVisible();
+    await expect(page.locator("#login-username")).toBeHidden();
   });
 
   test("with only Google wired up, the email form stays out of the way", async ({ page }) => {
@@ -530,6 +611,82 @@ test.describe("Accounts, gifted months and saved progress", () => {
     await expect(page.locator("#gift-result")).toContainText("amiga@example.test");
     const call = stub.calls.find((c) => c.path === "/v1/admin/grants");
     expect(call.body.days).toBe(60);
+  });
+
+  test("an admin reads A/B results in the account panel", async ({ page }) => {
+    const license = await mintLicense({ origin: BASE });
+    const stub = createWorkerStub({ role: "admin" });
+    await installWorker(page, stub, license);
+    await boot(page);
+    await signIn(page);
+
+    await page.click("#ab-results-load");
+    const box = page.locator("#ab-results");
+    await expect(box).toContainText("aa_2026_10");
+    // Only experiments somebody has seen are asked for.
+    expect(stub.calls.filter((c) => c.path === "/v1/admin/experiments/results").length).toBe(1);
+    await expect(box.locator(".ab-table").first()).toContainText("40.0 %");
+    await expect(box.locator(".ab-diff").first()).toContainText("b frente a a: +0.4 pts");
+    await expect(box.locator(".ab-diff").first()).toContainText("p = 0.904");
+    await expect(box.locator(".ab-warn")).toHaveCount(0);
+    // The plan is met, the split check shows even when it passes, and the
+    // arrivals line says the pipeline is alive.
+    await expect(box).toContainText("Plan cumplido el");
+    await expect(box).toContainText("Reparto parejo entre versiones (p = 0.620)");
+    await expect(box.locator(".ab-ingest")).toContainText(/1[,.\u00a0]?240 eventos guardados, 2 descartados, 0 envíos rechazados/);
+  });
+
+  test("before its plan is met a test shows counts and the date, never a comparison", async ({ page }) => {
+    const license = await mintLicense({ origin: BASE });
+    const readyAt = Math.floor(Date.UTC(2026, 10, 20, 15) / 1000);
+    const stub = createWorkerStub({
+      role: "admin",
+      abResults: {
+        horizon: { nPerArm: 150, minDays: 14, mde: null, maxTo: 7, startedAt: 1788000000, cohortEnd: null, readyAt, estimated: true, reached: false, counted: 120 },
+        readMe: "instrumentation",
+        eventMix: {
+          events: [
+            { event: "practice_day", from: 0, to: 1, arms: [{ variant: "a", n: 380, k: 152, share: 0.4 }, { variant: "b", n: 371, k: 0, share: 0 }], p: 1e-40, flagged: true, reason: "missing" }
+          ],
+          flagged: true
+        },
+        metrics: [
+          {
+            role: "primary", event: "practice_day", kind: "share", from: 0, to: 7,
+            arms: [
+              { variant: "a", n: 120, k: 48, rate: 0.4, lo: 0.316, hi: 0.49 },
+              { variant: "b", n: 121, k: 50, rate: 0.4132, lo: 0.328, hi: 0.503 }
+            ],
+            comparisons: [],
+            withheld: true,
+            smallSample: false
+          }
+        ]
+      }
+    });
+    await installWorker(page, stub, license);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await boot(page);
+    await signIn(page);
+
+    await page.click("#ab-results-load");
+    const box = page.locator("#ab-results");
+    await expect(box).toContainText("Aún no se puede leer: van 120 de 150 por versión");
+    await expect(box).toContainText(/Se podrá leer hacia el 20 nov\.? 2026/);
+    // No difference and no p-value for any metric: only the arms' own numbers.
+    await expect(box.locator(".ab-diff")).toHaveCount(0);
+    await expect(box).not.toContainText("frente a");
+    // The split check and the instrumentation check are shown regardless.
+    await expect(box).toContainText("Reparto parejo entre versiones");
+    await expect(box.locator(".ab-warn")).toContainText("Una versión no registra «practice_day»");
+    // On a phone the interval wraps under the value rather than scrolling away.
+    const edges = await page.evaluate(() => {
+      const wrap = document.querySelector("#ab-results .ab-table-wrap");
+      const ci = document.querySelector("#ab-results .ab-table .ab-ci");
+      return { wrap: wrap.getBoundingClientRect().right, ci: ci.getBoundingClientRect().right, scroll: wrap.scrollWidth - wrap.clientWidth };
+    });
+    expect(edges.ci).toBeLessThanOrEqual(edges.wrap + 0.5);
+    expect(edges.scroll).toBeLessThanOrEqual(0);
   });
 
   test("signing out drops the session and any Pro that came with it", async ({ page }) => {

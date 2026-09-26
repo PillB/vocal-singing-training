@@ -230,17 +230,171 @@ test("props are capped at twelve keys and a bad day or tz becomes null", () => {
   assert.equal(clean.event.tz, null);
 });
 
-test("Global Privacy Control and Do Not Track are honoured: nothing is stored", async () => {
+test("Global Privacy Control is honoured: nothing is stored", async () => {
   const env = freshEnv();
-  for (const headers of [{ "sec-gpc": "1" }, { dnt: "1" }]) {
-    const res = await call(beacon({ events: [ev("app_open", "a1b2c3d4e5f60718")] }, { headers }), env, { now: NOW });
-    assert.equal(res.status, 202);
-    assert.equal(res.body.reason, "opted_out");
-  }
+  const res = await call(
+    beacon({ events: [ev("app_open", "a1b2c3d4e5f60718")] }, { headers: { "sec-gpc": "1" } }),
+    env,
+    { now: NOW }
+  );
+  assert.equal(res.status, 202);
+  assert.equal(res.body.reason, "opted_out");
   // Nothing stored but the day's count of refusals, which holds no id.
   await ensureSchema(env.DB);
   assert.equal((await rows(env, "SELECT COUNT(*) AS n FROM events"))[0].n, 0);
-  assert.deepEqual(await rows(env, "SELECT reason, n FROM ingest_daily"), [{ reason: "opted_out", n: 2 }]);
+  assert.deepEqual(await rows(env, "SELECT reason, n FROM ingest_daily"), [{ reason: "opted_out", n: 1 }]);
+});
+
+test("Do Not Track is not read any more, on this side either", async () => {
+  // Dropped 2026-09-24. No law requires honouring DNT, the W3C discontinued the
+  // specification in 2019 and Safari removed the header the same year because it
+  // narrowed a fingerprint rather than protecting anybody. The client stopped
+  // reading it too (js/analytics.js), which is what keeps the two halves from
+  // disagreeing: the client sending while the worker discards would be the worst
+  // of both. GPC above still stops everything, and so does the guide's switch.
+  const env = freshEnv();
+  const res = await call(
+    beacon({ events: [ev("app_open", "a1b2c3d4e5f60718")] }, { headers: { dnt: "1" } }),
+    env,
+    { now: NOW }
+  );
+  assert.equal(res.status, 200, JSON.stringify(res.body));
+  assert.equal(res.body.accepted, 1);
+  assert.equal((await rows(env, "SELECT COUNT(*) AS n FROM events"))[0].n, 1);
+});
+
+test("a country that asks first is turned away unless the batch says the visitor said yes", async () => {
+  // The site holds those events until somebody answers (js/region-gate.js). This
+  // is the backstop for anything that posts anyway, and it reads the country from
+  // the edge rather than from the page.
+  const env = freshEnv();
+  const res = await call(
+    beacon({ events: [ev("app_open", "a1b2c3d4e5f60718")] }, { headers: { "cf-ipcountry": "ES" } }),
+    env,
+    { now: NOW }
+  );
+  assert.equal(res.status, 202);
+  assert.equal(res.body.reason, "eu_no_consent");
+  assert.equal(res.body.accepted, 0);
+  await ensureSchema(env.DB);
+  assert.equal((await rows(env, "SELECT COUNT(*) AS n FROM events"))[0].n, 0);
+  assert.deepEqual(await rows(env, "SELECT reason, n FROM ingest_daily"), [{ reason: "eu_no_consent", n: 1 }]);
+  assert.ok(INGEST_REASONS.request.includes("eu_no_consent"));
+
+  // The same batch, with the answer in it.
+  const yes = await call(
+    beacon(
+      { consent: "granted", events: [ev("app_open", "a1b2c3d4e5f60718")] },
+      { headers: { "cf-ipcountry": "ES" } }
+    ),
+    env,
+    { now: NOW }
+  );
+  assert.equal(yes.status, 200, JSON.stringify(yes.body));
+  assert.equal(yes.body.accepted, 1);
+  assert.equal((await rows(env, "SELECT COUNT(*) AS n FROM events"))[0].n, 1);
+
+  // An outermost region reports its own code, not its member state's, and
+  // cf.isEUCountry cannot be relied on to cover it — so without its own entry
+  // Réunion would be let through although EU law applies there in full.
+  const re = await call(
+    beacon({ events: [ev("app_open", "b1b2c3d4e5f60718")] }, { headers: { "cf-ipcountry": "RE" } }),
+    freshEnv(),
+    { now: NOW }
+  );
+  assert.equal(re.body.reason, "eu_no_consent");
+
+  // And the EU itself, by the edge's own flag rather than the list.
+  const flagged = new Request(`${BASE}/v1/events`, {
+    method: "POST",
+    headers: { "content-type": "text/plain", "user-agent": CHROME_UA, Origin: TEST_ORIGIN },
+    body: JSON.stringify({ events: [ev("app_open", "c1b2c3d4e5f60718")] })
+  });
+  Object.defineProperty(flagged, "cf", { value: { country: "DE", isEUCountry: "1" }, configurable: true });
+  assert.equal((await call(flagged, freshEnv(), { now: NOW })).body.reason, "eu_no_consent");
+
+  // French Polynesia is in no EU instrument at all (TFEU art. 198 leaves the
+  // overseas collectivities out), and cf.isEUCountry will never flag it — but
+  // art. 82 of loi 78-17 has applied there in full since 1 June 2019, so the
+  // list has to carry it or a Tahitian visitor is recorded without being asked.
+  const pf = await call(
+    beacon({ events: [ev("app_open", "d1b2c3d4e5f60718")] }, { headers: { "cf-ipcountry": "PF" } }),
+    freshEnv(),
+    { now: NOW }
+  );
+  assert.equal(pf.body.reason, "eu_no_consent");
+});
+
+test("a visitor anywhere else is recorded exactly as before", async () => {
+  // The whole point of the region gate: outside the ask-first list nothing
+  // changes, and a batch with no consent field is the normal case.
+  // GB is in this list on purpose: since 5 February 2026 PECR Schedule A1 para 5
+  // exempts first-party statistics from consent where the visitor is told and
+  // has a simple free way to object, which the app's footer switch and the
+  // guide's are. docs/38-AB-TESTING.md carries the reasoning and the risk in it.
+  // JE, GG and IM are here because the ePrivacy Directive never applied to the
+  // Crown dependencies and PECR was never extended to them; each legislates its
+  // own data protection, and none of them requires prior consent for this.
+  // CH is here because art. 45c FMG wants information and a way to refuse, not
+  // an opt-in — which the same footer switch gives.
+  const env = freshEnv();
+  for (const cc of ["PE", "US", "MX", "CO", "CL", "AR", "BR", "CH", "GB", "JE", "GG", "IM", "XX", "T1"]) {
+    const res = await call(
+      beacon({ events: [ev("app_open", "a1b2c3d4e5f60718")] }, { headers: { "cf-ipcountry": cc } }),
+      env,
+      { now: NOW }
+    );
+    assert.equal(res.status, 200, `${cc}: ${JSON.stringify(res.body)}`);
+    assert.equal(res.body.accepted, 1, cc);
+  }
+  assert.equal((await rows(env, "SELECT COUNT(*) AS n FROM events"))[0].n, 14);
+});
+
+test("GET /v1/geo says where the edge places a request, and nothing else", async () => {
+  const env = freshEnv();
+  /**
+   * @param {string|null} cc Country header, or null for none.
+   * @returns {Promise<{status: number, body: Object}>} Result.
+   */
+  const geo = (cc) =>
+    call(
+      new Request(`${BASE}/v1/geo`, {
+        headers: { "user-agent": CHROME_UA, Origin: TEST_ORIGIN, ...(cc ? { "cf-ipcountry": cc } : {}) }
+      }),
+      env,
+      { now: NOW }
+    );
+
+  const es = await geo("ES");
+  assert.equal(es.status, 200);
+  assert.deepEqual(es.body, { ok: true, country: "ES", placed: true, askFirst: true });
+  assert.deepEqual(Object.keys(es.body).sort(), ["askFirst", "country", "ok", "placed"]);
+
+  assert.deepEqual((await geo("RE")).body, { ok: true, country: "RE", placed: true, askFirst: true });
+  assert.deepEqual((await geo("PF")).body, { ok: true, country: "PF", placed: true, askFirst: true });
+  assert.deepEqual((await geo("GI")).body, { ok: true, country: "GI", placed: true, askFirst: true });
+  assert.deepEqual((await geo("GB")).body, { ok: true, country: "GB", placed: true, askFirst: false });
+  assert.deepEqual((await geo("JE")).body, { ok: true, country: "JE", placed: true, askFirst: false });
+  assert.deepEqual((await geo("PE")).body, { ok: true, country: "PE", placed: true, askFirst: false });
+  assert.deepEqual((await geo("CH")).body, { ok: true, country: "CH", placed: true, askFirst: false });
+  // Unplaceable: Tor, an address the edge cannot map, or a request with no
+  // header at all. `placed: false` is how the page tells "no country" apart from
+  // "not in Europe" — it keeps whatever its own clock said.
+  assert.deepEqual((await geo("T1")).body, { ok: true, country: null, placed: false, askFirst: false });
+  assert.deepEqual((await geo("XX")).body, { ok: true, country: null, placed: false, askFirst: false });
+  assert.deepEqual((await geo(null)).body, { ok: true, country: null, placed: false, askFirst: false });
+
+  // Reading it stores nothing at all, not even a counter.
+  await ensureSchema(env.DB);
+  assert.equal((await rows(env, "SELECT COUNT(*) AS n FROM ingest_daily"))[0].n, 0);
+  assert.equal((await rows(env, "SELECT COUNT(*) AS n FROM events"))[0].n, 0);
+
+  const posted = await call(
+    new Request(`${BASE}/v1/geo`, { method: "POST", headers: { Origin: TEST_ORIGIN } }),
+    env,
+    { now: NOW }
+  );
+  assert.equal(posted.status, 405);
 });
 
 test("automated browsers are not counted", async () => {
@@ -1059,4 +1213,136 @@ test("a result stays too early, with counts and no comparison, until the plan is
   const again = await read(t0 + 40 * DAY);
   assert.deepEqual(again.metrics, ready.metrics);
   assert.deepEqual(again.horizon.cohortEnd, ready.horizon.cohortEnd);
+});
+
+test("the funnel readout gives one conditional proportion per step, never a comparison", async () => {
+  const env = freshEnv();
+  // Ten browsers open the site. Five open the account panel. Two of those start
+  // a sign-in and both succeed. One sees the trial offer and presses it.
+  const events = [];
+  for (let i = 0; i < 10; i++) events.push(ev("app_open", cid(i, "f")));
+  for (let i = 0; i < 5; i++) events.push(ev("account_panel_open", cid(i, "f"), { state: "offered" }));
+  for (let i = 0; i < 2; i++) {
+    events.push(ev("signin_start", cid(i, "f"), { method: "google" }));
+    events.push(ev("signin_success", cid(i, "f"), { method: "google" }));
+  }
+  events.push(ev("trial_cta_view", cid(0, "f"), { where: "panel" }));
+  events.push(ev("trial_click", cid(0, "f"), { where: "panel" }));
+  events.push(ev("trial_result", cid(0, "f"), { outcome: "started", where: "panel" }));
+  await sendAll(env, events, NOW);
+
+  const admin = await signIn(env, "admin@example.test", NOW);
+  const res = await call(adminGet("/v1/admin/funnel", admin), env, { now: NOW });
+  assert.equal(res.status, 200, JSON.stringify(res.body));
+  const byStep = Object.fromEntries(res.body.steps.map((s) => [s.step, s]));
+
+  assert.equal(res.body.browsers, 10);
+  // The first step is the denominator and carries no rate: there is nothing
+  // before it to be conditional on.
+  assert.equal(byStep.app_open.browsers, 10);
+  assert.equal(byStep.app_open.rate, null);
+  // Conditional on the step before it, which is the whole point: 5 of the 10 who
+  // opened the site, then 2 of those 5, not 2 of 10.
+  assert.equal(byStep.account_panel_open.browsers, 5);
+  assert.equal(byStep.account_panel_open.of, 10);
+  assert.equal(byStep.account_panel_open.rate, 0.5);
+  assert.equal(byStep.signin_start.browsers, 2);
+  assert.equal(byStep.signin_start.of, 5);
+  assert.equal(byStep.signin_success.of, 2);
+  assert.equal(byStep.signin_success.rate, 1);
+  // A rate of 1 still carries a bound below 1: two of two is not proof.
+  assert.ok(byStep.signin_success.lo < 1 && byStep.signin_success.lo > 0.2);
+  assert.equal(byStep.signin_success.hi, 1);
+  // A step nobody reached reports zero of its denominator, not a null.
+  assert.equal(byStep.trial_first_practice.browsers, 0);
+  assert.equal(byStep.trial_first_practice.rate, 0);
+  assert.ok(byStep.trial_first_practice.hi > 0);
+  // The panel's own states are counted per browser, with the zeros visible.
+  assert.equal(res.body.panelStates.offered, 5);
+  assert.equal(res.body.panelStates.blocked, 0);
+  // And the readout says what it is, so nobody reads it as an A/B result.
+  assert.match(res.body.readMe, /not an A\/B comparison/);
+});
+
+test("the funnel breaks out what the trial press actually did, since its rate cannot", async () => {
+  // Every branch of both trial buttons ends in a trial_result, so the step rate
+  // is ~1 whatever happens and the leak lives in the outcome. Six browsers press:
+  // three start a trial, two are sent off to sign in first, one is told the trial
+  // is spent.
+  const env = freshEnv();
+  const events = [];
+  for (let i = 0; i < 6; i++) {
+    events.push(ev("app_open", cid(i, "o")));
+    events.push(ev("trial_click", cid(i, "o"), { where: "pricing" }));
+  }
+  for (let i = 0; i < 3; i++) {
+    events.push(ev("trial_result", cid(i, "o"), { outcome: "started", where: "pricing", kind: "account" }));
+  }
+  for (let i = 3; i < 5; i++) {
+    events.push(
+      ev("trial_result", cid(i, "o"), { outcome: "needs_account", where: "pricing", kind: "account" })
+    );
+  }
+  events.push(ev("trial_result", cid(5, "o"), { outcome: "trial_used", where: "panel", kind: "account" }));
+  await sendAll(env, events, NOW);
+
+  const admin = await signIn(env, "admin@example.test", NOW);
+  const res = await call(adminGet("/v1/admin/funnel", admin), env, { now: NOW });
+  assert.equal(res.status, 200, JSON.stringify(res.body));
+  const byStep = Object.fromEntries(res.body.steps.map((s) => [s.step, s]));
+  // The step itself says everything went fine, which is the trap.
+  assert.equal(byStep.trial_result.rate, 1);
+  // The breakout says half of them did not get a trial. Sorted by size, so the
+  // biggest bucket is readable first, and a differing `where` or `kind` does not
+  // split an outcome into two rows.
+  const outcomes = Object.fromEntries(res.body.trialOutcomes.map((o) => [o.outcome, o.browsers]));
+  assert.deepEqual(outcomes, { started: 3, needs_account: 2, trial_used: 1 });
+  assert.deepEqual(
+    res.body.trialOutcomes.map((o) => o.outcome),
+    ["started", "needs_account", "trial_used"]
+  );
+  // And the readout warns about the two things a reader would otherwise assume.
+  assert.match(res.body.readMe, /needs_account/);
+  assert.match(res.body.readMe, /add up to more/);
+});
+
+test("the funnel counts a blocked Google script, which no experiment would report", async () => {
+  const env = freshEnv();
+  const events = [];
+  for (let i = 0; i < 6; i++) {
+    events.push(ev("app_open", cid(i, "g")));
+    events.push(ev("account_panel_open", cid(i, "g"), { state: i < 4 ? "blocked" : "offered" }));
+  }
+  await sendAll(env, events, NOW);
+  const admin = await signIn(env, "admin@example.test", NOW);
+  const res = await call(adminGet("/v1/admin/funnel?days=7", admin), env, { now: NOW });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.window.days, 7);
+  assert.equal(res.body.panelStates.blocked, 4);
+  assert.equal(res.body.panelStates.offered, 2);
+});
+
+test("the funnel window excludes older events, and it is admin-only", async () => {
+  const env = freshEnv();
+  await sendAll(env, [ev("app_open", cid(1, "h"))], NOW - 30 * DAY);
+  await sendAll(env, [ev("app_open", cid(2, "h")), ev("account_panel_open", cid(2, "h"), { state: "offered" })], NOW);
+
+  const anon = await call(adminGet("/v1/admin/funnel"), env, { now: NOW });
+  assert.equal(anon.status, 401);
+  const member = await signIn(env, "someone@example.test", NOW);
+  const forbidden = await call(adminGet("/v1/admin/funnel", member), env, { now: NOW });
+  assert.equal(forbidden.status, 403);
+
+  const admin = await signIn(env, "admin@example.test", NOW);
+  const res = await call(adminGet("/v1/admin/funnel?days=7", admin), env, { now: NOW });
+  assert.equal(res.status, 200);
+  // The 30-day-old browser is outside a 7-day window.
+  assert.equal(res.body.browsers, 1);
+  const wide = await call(adminGet("/v1/admin/funnel?days=90", admin), env, { now: NOW });
+  assert.equal(wide.body.browsers, 2);
+  // A nonsense or oversized window falls back to the default rather than erroring.
+  const junk = await call(adminGet("/v1/admin/funnel?days=nonsense", admin), env, { now: NOW });
+  assert.equal(junk.body.window.days, 28);
+  const huge = await call(adminGet("/v1/admin/funnel?days=100000", admin), env, { now: NOW });
+  assert.equal(huge.body.window.days, 180);
 });

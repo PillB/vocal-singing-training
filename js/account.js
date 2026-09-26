@@ -21,6 +21,18 @@
   "use strict";
 
   const LS_KEY = "vt_account_session_v1";
+  /**
+   * Which KIND of access the last `/v1/me` reported. Display only, and kept
+   * apart from the session for that reason: a signed licence token says
+   * `pro_monthly` whether it came from the free trial, a gifted month or a
+   * payment (the trial grant sets that plan id — see grants.js), so between a
+   * reload and the worker answering there is nothing in the browser that can
+   * tell them apart. Writing the last answer down is what stops the header
+   * calling a free trial a subscription in that window, and for as long as it
+   * lasts when the browser is offline. It grants nothing: access is still only
+   * what the signature check says.
+   */
+  const LS_PLAN_KEY = "vt_account_plan_v1";
   /** Google Identity Services, loaded on demand so a signed-out visitor pays nothing for it. */
   const GIS_SRC = "https://accounts.google.com/gsi/client";
 
@@ -28,6 +40,12 @@
   let session = null;
   /** @type {object|null} Last `/v1/me` answer. */
   let snapshot = null;
+  /**
+   * Remembered kind of access, shaped like an `entitlement`. `undefined`
+   * until first read so nothing touches storage at parse time.
+   * @type {object|null|undefined}
+   */
+  let lastPlan;
   /**
    * What this deploy offers, once the worker has said. Null until asked, and
    * `ok: false` when the worker could not be reached — the panel shows those
@@ -100,6 +118,49 @@
       else localStorage.setItem(LS_KEY, JSON.stringify(rec));
     } catch {
       /* private mode */
+    }
+  }
+
+  /**
+   * The remembered kind of access, or null. A record whose period has already
+   * ended is dropped: a stale "gifted month" label outliving the gift is the
+   * mistake this whole record exists to prevent, in the other direction.
+   * @returns {object|null} An entitlement-shaped record, display only.
+   */
+  function readLastPlan() {
+    try {
+      const raw = localStorage.getItem(LS_PLAN_KEY);
+      if (!raw) return null;
+      const rec = JSON.parse(raw);
+      if (!rec || rec.pro !== true) return null;
+      if (Number.isFinite(rec.periodEnd) && rec.periodEnd * 1000 < Date.now()) {
+        localStorage.removeItem(LS_PLAN_KEY);
+        return null;
+      }
+      return rec;
+    } catch {
+      return null;
+    }
+  }
+
+  function writeLastPlan(ent) {
+    lastPlan = null;
+    try {
+      if (!ent || ent.pro !== true) {
+        localStorage.removeItem(LS_PLAN_KEY);
+        return;
+      }
+      // Only the four fields the wording needs. No email, no ids, no token.
+      lastPlan = {
+        pro: true,
+        plan: ent.plan || null,
+        status: ent.status || null,
+        source: ent.source || null,
+        periodEnd: Number.isFinite(ent.periodEnd) ? ent.periodEnd : null
+      };
+      localStorage.setItem(LS_PLAN_KEY, JSON.stringify(lastPlan));
+    } catch {
+      /* private mode: the label just falls back to the licence's own reading */
     }
   }
 
@@ -187,6 +248,7 @@
    */
   async function adopt(data) {
     snapshot = data;
+    writeLastPlan(data && data.entitlement);
     if (data && data.token && global.VTLicense?.adopt) {
       await global.VTLicense.adopt(data.token, data.licenseId);
     } else if (global.VTLicense?.clear) {
@@ -203,6 +265,7 @@
     session = null;
     snapshot = null;
     writeSession(null);
+    writeLastPlan(null);
     try {
       global.VTLicense?.clear?.();
     } catch {
@@ -214,7 +277,9 @@
   /**
    * Which sign-in methods the deployment offers. Cached for the page's life.
    * @returns {Promise<{email: boolean, google: boolean, googleClientId: string|null,
-   *                    trialDays: number}>} Methods.
+   *                    trialDays: number}>} Methods. `trialDays` falls back to the
+   *          worker's own default (7) when the answer omits it; see
+   *          workers/entitlements/src/grants.js DEFAULT_TRIAL_DAYS.
    */
   async function getMethods() {
     if (methods) return methods;
@@ -226,13 +291,13 @@
           email: !!res.data.email,
           google: !!res.data.google,
           googleClientId: res.data.googleClientId || null,
-          trialDays: Number(res.data.trialDays) > 0 ? Number(res.data.trialDays) : 30,
+          trialDays: Number(res.data.trialDays) > 0 ? Number(res.data.trialDays) : 7,
           ok: true
         }
         // Unreachable is not an answer. It is cached only so the panel has
         // something terminal to draw, and ensureMethods() throws it away so
         // the next open asks again.
-        : { email: false, google: false, googleClientId: null, trialDays: 30, ok: false };
+        : { email: false, google: false, googleClientId: null, trialDays: 7, ok: false };
       methodsPending = null;
       return methods;
     })();
@@ -245,6 +310,32 @@
    * a real answer is cached for the page's life, a failed probe is not.
    * @returns {Promise<object|null>} The answer, or null when unconfigured.
    */
+  /**
+   * Ask the worker again, from scratch.
+   *
+   * `ensureMethods()` keeps a good answer and re-asks a bad one, which is right
+   * for reopening the panel. It is not enough for a person pressing "try
+   * again": the reason they are pressing is usually that they have just turned
+   * off the extension that blocked Google's script, and the `false` verdict on
+   * that script is cached separately from the worker's answer. This clears
+   * both, so a retry can actually succeed.
+   * @returns {Promise<object|null>} The methods, or null with no worker.
+   */
+  function refreshMethods() {
+    methods = null;
+    methodsPending = null;
+    googleReady = null;
+    gisPromise = null;
+    if (!isConfigured()) {
+      emit();
+      return Promise.resolve(null);
+    }
+    return getMethods().then((m) => {
+      emit();
+      return m;
+    });
+  }
+
   function ensureMethods() {
     if (!isConfigured()) return Promise.resolve(null);
     if (methods && methods.ok) return Promise.resolve(methods);
@@ -488,6 +579,10 @@
       signedIn: !!session?.token,
       account: snapshot?.account || null,
       entitlement: snapshot?.entitlement || null,
+      // The kind of access the worker last reported, for the window where
+      // `signedIn` is already true and `entitlement` is not in yet. Wording
+      // only; read `pro` below for whether anything is actually unlocked.
+      lastPlan: lastPlan === undefined ? (lastPlan = readLastPlan()) : lastPlan,
       grants: snapshot?.grants || [],
       // Null until the first /v1/auth/methods answer lands, so read it
       // defensively: the pricing panel may open before anyone signs in.
@@ -505,6 +600,23 @@
   }
 
   /**
+   * Run something once the page has stopped being busy, so a boot-time request
+   * never competes with the first paint.
+   * @param {Function} fn What to run.
+   */
+  function afterIdle(fn) {
+    try {
+      if (typeof global.requestIdleCallback === "function") {
+        global.requestIdleCallback(() => fn(), { timeout: 2500 });
+        return;
+      }
+    } catch {
+      /* fall through to the timer */
+    }
+    setTimeout(fn, 1500);
+  }
+
+  /**
    * Adopt what is in storage and, when signed in, re-check with the worker.
    * @returns {Promise<object>} State after the check.
    */
@@ -514,11 +626,17 @@
       emit();
       return getState();
     }
-    // Deliberately no /v1/auth/methods here. A visitor who only ever practises
-    // must not have their browser talk to our worker at all, which is what
-    // privacy.html promises and what tests/tour-behaviour.spec.js checks. The
-    // probe happens on ensureMethods(), which the account and Pro panels call
-    // when someone opens them.
+    // This used to be deliberately empty: a visitor who only practised must not
+    // have their browser talk to our worker at all, which is what privacy.html
+    // promised until 2026-09-24. That promise is gone — the site sends anonymous
+    // statistics from the first visit — and the cost of keeping the rule was
+    // real: nothing knew which ways in this deployment offers until somebody
+    // opened a panel, so the first open of every page load drew "still asking"
+    // and reported that state to the funnel. Asking once the page is quiet fixes
+    // both, and costs one cached request per load.
+    afterIdle(() => {
+      ensureMethods().catch(() => null);
+    });
     if (!session?.token) {
       emit();
       return getState();
@@ -545,6 +663,7 @@
     onChange,
     startEmailSignIn,
     verifyEmailCode,
+    refreshMethods,
     renderGoogleButton,
     signInWithGoogle,
     signOut,

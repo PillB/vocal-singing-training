@@ -11,7 +11,12 @@
  *
  * Anonymous usage events and A/B results share the same D1 (see events.js):
  * POST /v1/events and /v1/events/forget from the site,
- * GET /v1/admin/experiments[/results] for an admin.
+ * GET /v1/admin/experiments[/results] and GET /v1/admin/funnel for an admin.
+ *
+ * GET /v1/geo answers where the edge thinks a request came from, so the page can
+ * tell whether it is in a country that requires asking before anything is kept.
+ * It reads nothing and stores nothing, and only browsers that already look
+ * European ask for it.
  *
  * Bindings (see wrangler.toml and README.md):
  *   KV   ENTITLEMENTS
@@ -32,7 +37,7 @@
 "use strict";
 
 import { routeAccountApi, authMethods, requireAdmin } from "./api.js";
-import { routeEventsApi } from "./events.js";
+import { asksFirst, callerCountry, routeEventsApi } from "./events.js";
 import { ensureSchema, sweepExpired } from "./db.js";
 import { buildJwks, createLicenseToken, isLicenseIdShape, isTokenIssuable } from "./license.js";
 import { mapStripeEvent, verifyStripeSignature } from "./stripe.js";
@@ -328,6 +333,30 @@ function handleHealth(env, cors) {
 }
 
 /**
+ * Handle GET /v1/geo.
+ *
+ * The country the edge already knows, and whether that country's law wants the
+ * visitor asked before statistics are kept (events.js ASK_FIRST_COUNTRIES). No
+ * database, no rate limit and nothing stored: it is cheaper than the 404 it
+ * replaces, and js/region-gate.js only asks when a browser's own time zone or
+ * language already looks European, so nobody else pays a request for it.
+ *
+ * `placed` is false when the edge cannot say where the request came from (a unit
+ * test, Tor's "T1", Cloudflare's "XX", `wrangler dev` without --remote), and the
+ * page treats that as no answer at all rather than as "not in Europe": it keeps
+ * whatever its own clock said, which is the safe direction. `askFirst` is false
+ * in that case because the ingest route must not turn away events from every
+ * unplaceable address in the world.
+ * @param {Request} request Incoming request.
+ * @param {Object} cors CORS headers.
+ * @returns {Response} Response.
+ */
+function handleGeo(request, cors) {
+  const country = callerCountry(request);
+  return json({ ok: true, country: country || null, placed: !!country, askFirst: asksFirst(request) }, 200, cors);
+}
+
+/**
  * Route one request. Exported so tests can drive the router directly.
  * @param {Request} request Incoming request.
  * @param {Object} env Worker env bindings.
@@ -367,6 +396,13 @@ export async function handleRequest(request, env, options) {
     const jwks = await buildJwks(env);
     // The public key is public: let browsers and CDNs cache it.
     return json(jwks, 200, { ...cors, "cache-control": "public, max-age=600" });
+  }
+
+  if (path === "/v1/geo") {
+    if (request.method !== "GET") {
+      return json({ ok: false, reason: "method_not_allowed" }, 405, { ...cors, allow: "GET" });
+    }
+    return handleGeo(request, cors);
   }
 
   // Before the account router: it claims every /v1/admin/ path and would

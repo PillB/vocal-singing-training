@@ -14,9 +14,16 @@
  * - The IP is used only to rate-limit, and only as an HMAC under a secret key
  *   with the UTC day in it (the bucket key), which the sweep deletes within two
  *   days. Without the key nobody can go from a bucket back to an address.
- * - A browser that sends Global Privacy Control or Do Not Track is not
- *   recorded at all — the site does not send in that case, and if something
- *   sends anyway the worker drops it.
+ * - A request from a country whose law wants the visitor asked first (the EEA
+ *   and the UK) is turned away unless the batch says the visitor said yes. The
+ *   site holds those events until somebody answers (js/region-gate.js); this is
+ *   the backstop, and it reads the country from the edge, which no browser can
+ *   talk its way out of. Nowhere else is affected: a request the edge places
+ *   outside that list is handled exactly as before.
+ * - A browser that sends Global Privacy Control is not recorded at all — the
+ *   site does not send in that case, and if something sends anyway the worker
+ *   drops it. Do Not Track is no longer read, on either side (2026-09-24): no
+ *   law requires it and the specification was discontinued in 2019.
  * - Automated browsers (headless Chrome, Playwright, crawlers) are dropped, so
  *   test runs against the live site cannot pollute a result.
  * - Events, exposures and the daily ingest counters are deleted at 180 days
@@ -73,6 +80,7 @@ export const FORGET_RATE_LIMIT = [30, 3600];
  * Keep in step with the `track(...)` calls in js/.
  */
 export const EVENT_NAMES = new Set([
+  "account_panel_open",
   "ad_click",
   "ad_dismiss",
   "ad_impression",
@@ -106,6 +114,9 @@ export const EVENT_NAMES = new Set([
   "reminder_enable",
   "rest_used",
   "session_save",
+  "signin_fail",
+  "signin_start",
+  "signin_success",
   "step_done_choice",
   "step_done_shown",
   "surprise_shown",
@@ -116,7 +127,16 @@ export const EVENT_NAMES = new Set([
   "tour_invite_dismiss",
   "tour_skip",
   "tour_start",
-  "tour_step"
+  "tour_step",
+  // The account, sign-in and trial funnel, added 2026-09-24. None of these is an
+  // arm event for any preset below: they fire from the same code in js/app.js in
+  // every arm, which is what a metric has to be. account_panel_open carries
+  // accountSignIn()'s own state, which is the one signal no A/B test would give —
+  // a browser where Google's script will not load is a count, not a hypothesis.
+  "trial_click",
+  "trial_cta_view",
+  "trial_first_practice",
+  "trial_result"
 ]);
 
 /**
@@ -245,7 +265,16 @@ export const MIX_CHECK_EVENTS = ["app_open", "practice_start", "practice_recorde
 export const INGEST_REASONS = {
   event: ["accepted", "unknown_event", "bad_cid", "not_an_object"],
   exposure: ["exposure_new", "exposure_recovered", "exposure_unregistered", "exposure_capped"],
-  request: ["origin_not_allowed", "rate_limited", "opted_out", "automated", "body_too_large", "bad_request", "forget"]
+  request: [
+    "origin_not_allowed",
+    "rate_limited",
+    "opted_out",
+    "automated",
+    "body_too_large",
+    "bad_request",
+    "eu_no_consent",
+    "forget"
+  ]
 };
 
 const CID_RE = /^[0-9a-z]{8,32}$/;
@@ -376,6 +405,90 @@ export function sanitizeEvent(raw, registry) {
 }
 
 /**
+ * Countries whose law requires the visitor be asked before anything
+ * non-essential is kept. What binds is never ePrivacy art. 5(3) itself — it has
+ * no direct effect — but each state's transposition, and a transposition's reach
+ * is not the EU's, so the list is built from those:
+ *
+ * - The EEA: EU 27 plus Iceland, Liechtenstein and Norway (the Directive was
+ *   taken into the EEA Agreement in 2003), read as EDPB Guidelines 2/2023 read
+ *   it — storage means localStorage too, and Planet49 (C-673/17) says it applies
+ *   whether or not the stored information is personal.
+ * - The outermost regions and the French overseas collectivities, each under its
+ *   own code (AX, SJ, GF, GP, MQ, RE, YT, MF, PF, NC, WF, BL, PM, TF), because
+ *   Cloudflare reports them that way rather than as FR and `cf.isEUCountry`
+ *   cannot be relied on to cover them. The first version of this list assumed
+ *   they arrived as FR and would have let Réunion and Guadeloupe through. No EU
+ *   instrument reaches the collectivities, but art. 82 of loi 78-17 applies there
+ *   in full as domestic French law since 1 June 2019, which is why they are here
+ *   and Greenland, the Faroes and the Dutch Caribbean — which legislate their
+ *   own — are not.
+ * - Gibraltar, on its own 2006 regulations transposing the ePrivacy Directive,
+ *   which kept only the two original exemptions and which the UK's 2026 reform
+ *   did not touch. Their exact title is unread here; docs/38-AB-TESTING.md says
+ *   so rather than guessing between the two titles the secondary sources give.
+ *
+ * Deliberately absent: the United Kingdom, whose DUAA amendment to PECR Schedule
+ * A1 (in force 5 February 2026) exempts first-party statistics where the visitor
+ * is told clearly and has a simple free way to object — the switch in the app's
+ * footer and in the guide. The Crown dependencies: Jersey's own regulator says
+ * "neither the EPD nor PECR apply in Jersey", PECR was never extended to the
+ * Isle of Man, and Guernsey has no ePrivacy ordinance. Switzerland, which wants
+ * information and a refusal rather than consent. docs/38-AB-TESTING.md carries
+ * the sources and what putting any of them back would take.
+ *
+ * js/region-gate.js holds the identical list, plus the matching time zones, to
+ * decide whether it is worth asking at all. This one is the authority: it comes
+ * from the edge's own view of the address, which the page cannot talk its way
+ * out of.
+ */
+export const ASK_FIRST_COUNTRIES = new Set([
+  "AT", "AX", "BE", "BG", "BL", "CY", "CZ", "DE", "DK", "EE", "ES", "FI", "FR",
+  "GF", "GI", "GP", "GR", "HR", "HU", "IE", "IS", "IT", "LI", "LT", "LU", "LV",
+  "MF", "MQ", "MT", "NC", "NL", "NO", "PF", "PL", "PM", "PT", "RE", "RO", "SE",
+  "SI", "SJ", "SK", "TF", "WF", "YT"
+]);
+
+/**
+ * The two-letter country the edge put on this request, or "" when there is
+ * none: a unit test, `wrangler dev` without --remote, Tor ("T1") or an address
+ * Cloudflare cannot place ("XX").
+ * @param {Request} request Incoming request.
+ * @returns {string} ISO 3166-1 alpha-2, or "".
+ */
+export function callerCountry(request) {
+  const cf = request && request.cf;
+  const fromCf = cf && typeof cf.country === "string" ? cf.country : "";
+  let header = "";
+  try {
+    header = request.headers.get("cf-ipcountry") || "";
+  } catch {
+    header = "";
+  }
+  const cc = String(fromCf || header).trim().toUpperCase();
+  return /^[A-Z]{2}$/.test(cc) && cc !== "XX" && cc !== "T1" ? cc : "";
+}
+
+/**
+ * Whether this request comes from somewhere the visitor must be asked first.
+ * `cf.isEUCountry` covers the EU; the list above adds the rest of the EEA and
+ * the UK. An address the edge cannot place is not treated as one of them: the
+ * page has already made that call from the visitor's own time zone, and a
+ * worker guessing "yes" for every unplaceable address would turn away real
+ * events from everywhere else.
+ * @param {Request} request Incoming request.
+ * @returns {boolean} True when consent is required first.
+ */
+export function asksFirst(request) {
+  const cf = request && request.cf;
+  if (cf && (cf.isEUCountry === "1" || cf.isEUCountry === true)) {
+    return true;
+  }
+  const cc = callerCountry(request);
+  return !!cc && ASK_FIRST_COUNTRIES.has(cc);
+}
+
+/**
  * Why this request must not be recorded, or "" when it may be.
  * @param {Request} request Incoming request.
  * @param {Object} env Worker env bindings.
@@ -385,7 +498,7 @@ export function ingestRefusal(request, env) {
   if (String(env.EVENTS_ENABLED || "").trim().toLowerCase() === "false") {
     return "events_disabled";
   }
-  if (request.headers.get("sec-gpc") === "1" || request.headers.get("dnt") === "1") {
+  if (request.headers.get("sec-gpc") === "1") {
     return "opted_out";
   }
   const ua = request.headers.get("user-agent") || "";
@@ -528,8 +641,9 @@ async function newExposures(db, events) {
  * POST /v1/events — record a batch of anonymous events.
  *
  * Answers 200 with counts on success. Refusals that are the visitor's choice
- * (GPC, DNT) or not ours to count (bots, switched off) answer 202 and store
- * nothing, so nothing on the client ever retries them. Every outcome adds to
+ * (GPC), not ours to count (bots, switched off) or not ours to keep without
+ * being asked (an ask-first country with no `consent: "granted"` in the batch)
+ * answer 202 and store nothing, so nothing on the client ever retries them. Every outcome adds to
  * the day's ingest counters (except the kill switch, which records nothing),
  * because the client posts no-cors and can never see a refusal itself.
  *
@@ -562,6 +676,12 @@ export async function handleIngest(request, env, deps) {
     return json({ ok: false, reason: parsed.reason }, parsed.reason === "body_too_large" ? 413 : 400, cors);
   }
   const body = parsed.body;
+  // Before anything is read out of the batch: where the law wants the visitor
+  // asked first, a batch that does not say they were asked is not ours to keep.
+  if (asksFirst(request) && !(body && typeof body === "object" && body.consent === "granted")) {
+    await countIngest(env.DB, at, { eu_no_consent: 1 });
+    return json({ ok: true, accepted: 0, reason: "eu_no_consent" }, 202, cors);
+  }
   const list = Array.isArray(body && body.events) ? body.events : body && typeof body === "object" ? [body] : [];
   if (!list.length || list.length > MAX_EVENTS_PER_REQUEST) {
     await countIngest(env.DB, at, { bad_request: 1 });
@@ -1074,6 +1194,176 @@ export async function ingestSummary(db, at) {
 }
 
 /**
+ * The account and trial funnel, as one proportion per step.
+ *
+ * Deliberately NOT an A/B comparison. At this site's traffic a between-arm
+ * comparison on a 2% funnel needs about 21,000 browsers per arm to detect a 20%
+ * relative lift; a single proportion with a Wilson bound finds a BROKEN step
+ * with about thirty visitors. Nought of twenty people passing a step bounds its
+ * true rate below 16%; twenty of twenty bounds it above 84%. What this readout
+ * cannot do is detect an improvement of a few points, and it says so in
+ * `readMe` rather than letting a reader assume otherwise.
+ *
+ * Each step's denominator is the browsers that reached the PREVIOUS step, so the
+ * rate is conditional and the chain multiplies out. One row per browser comes
+ * back from D1, which at this traffic is hundreds of rows, not millions.
+ */
+export const FUNNEL_STEPS = [
+  { key: "app_open", label: "opened the site" },
+  { key: "account_panel_open", label: "opened the account panel" },
+  { key: "signin_start", label: "started signing in" },
+  { key: "signin_success", label: "signed in" },
+  { key: "trial_cta_view", label: "saw the trial offer" },
+  { key: "trial_click", label: "pressed it" },
+  { key: "trial_result", label: "got an answer" },
+  { key: "trial_first_practice", label: "practised on the trial" }
+];
+
+/** The states account_panel_open reports, so a zero is visible as a zero. */
+export const PANEL_STATES = [
+  "signed_in",
+  "not_configured",
+  "checking",
+  "unreachable",
+  "blocked",
+  "offered",
+  "no_method"
+];
+
+/**
+ * Count distinct browsers per value of one prop of one event.
+ *
+ * `props` is stored as the JSON text it arrived as, so grouping happens on that
+ * text and identical values written in a different key order land in different
+ * rows; summing per parsed value here is what makes the count right. A browser
+ * that sent two different values is counted in each, so these buckets can add
+ * up to more than the browsers that sent the event at all.
+ * @param {Object} env Worker env bindings.
+ * @param {string} name Event name.
+ * @param {string} prop Prop to group by.
+ * @param {number} since Unix seconds.
+ * @returns {Promise<Map<string, number>>} Value to distinct-browser count.
+ */
+async function countByProp(env, name, prop, since) {
+  const res = await env.DB.prepare(
+    `SELECT props, COUNT(DISTINCT cid) AS n
+       FROM events WHERE name = ?1 AND received_at >= ?2
+       GROUP BY props`
+  )
+    .bind(name, since)
+    .all();
+  const out = new Map();
+  for (const row of res.results || []) {
+    let value = null;
+    try {
+      const parsed = JSON.parse(row.props || "{}");
+      value = typeof parsed[prop] === "string" ? parsed[prop] : null;
+    } catch {
+      value = null;
+    }
+    if (!value) continue;
+    out.set(value, (out.get(value) || 0) + (Number(row.n) || 0));
+  }
+  return out;
+}
+
+/**
+ * GET /v1/admin/funnel?days=N
+ * @param {Object} env Worker env bindings.
+ * @param {URL} url Request URL.
+ * @param {Object} deps Injectables.
+ * @returns {Promise<Response>} Response.
+ */
+export async function handleFunnel(env, url, deps) {
+  const { json, cors } = deps;
+  const raw = Number.parseInt(url.searchParams.get("days") || "", 10);
+  const days = Number.isFinite(raw) && raw > 0 ? Math.min(raw, 180) : 28;
+  const since = nowSec(deps.now) - days * 86400;
+
+  // One row per browser, with a flag per step. MAX(name = ?) is SQLite's idiom
+  // for "any row matched", and it keeps this to a single pass over the window.
+  const flags = FUNNEL_STEPS.map((step, i) => `MAX(name = '${step.key}') AS s${i}`).join(",\n         ");
+  const result = await env.DB.prepare(
+    `SELECT cid,
+         ${flags}
+       FROM events WHERE received_at >= ?1 GROUP BY cid`
+  )
+    .bind(since)
+    .all();
+  const rows = result.results || [];
+
+  const steps = [];
+  for (let i = 0; i < FUNNEL_STEPS.length; i++) {
+    const reached = rows.filter((r) => Number(r[`s${i}`]) === 1).length;
+    if (i === 0) {
+      steps.push({
+        step: FUNNEL_STEPS[i].key,
+        label: FUNNEL_STEPS[i].label,
+        browsers: reached,
+        of: null,
+        rate: null,
+        lo: null,
+        hi: null
+      });
+      continue;
+    }
+    // Conditional on the previous step, which is what makes the chain honest: a
+    // step cannot look good merely because few people reached the one before it.
+    const prior = rows.filter((r) => Number(r[`s${i - 1}`]) === 1);
+    const both = prior.filter((r) => Number(r[`s${i}`]) === 1).length;
+    const w = wilson(both, prior.length);
+    steps.push({
+      step: FUNNEL_STEPS[i].key,
+      label: FUNNEL_STEPS[i].label,
+      browsers: both,
+      of: prior.length,
+      rate: w.rate,
+      lo: w.lo,
+      hi: w.hi
+    });
+  }
+
+  // The panel's own states, counted per browser. This is the signal no A/B test
+  // at any sample size would report: a browser where Google's script will not
+  // load is a count here, not a hypothesis.
+  const states = {};
+  for (const key of PANEL_STATES) states[key] = 0;
+  for (const [value, n] of await countByProp(env, "account_panel_open", "state", since)) {
+    if (Object.prototype.hasOwnProperty.call(states, value)) states[value] += n;
+  }
+
+  // Every branch of both trial buttons ends in a trial_result, so the step's own
+  // rate is ~100% by construction and the whole signal lives in this prop. The
+  // one that matters is "needs_account": the press worked and sent the person to
+  // sign in, which is a leak the step rate cannot show. Open-ended, so it comes
+  // back sorted rather than as a fixed set.
+  const outcomes = [...(await countByProp(env, "trial_result", "outcome", since))]
+    .map(([outcome, browsers]) => ({ outcome, browsers }))
+    .sort((a, b) => b.browsers - a.browsers || a.outcome.localeCompare(b.outcome));
+
+  return json(
+    {
+      ok: true,
+      window: { days, since },
+      browsers: rows.length,
+      steps,
+      panelStates: states,
+      trialOutcomes: outcomes,
+      readMe:
+        "Each rate is one proportion with a 95% Wilson interval, conditional on the step before it. " +
+        "This finds a step nobody gets through; it cannot detect an improvement of a few points. " +
+        "trial_result has a rate near 1 by construction, because every branch of both buttons ends " +
+        "in one; read trialOutcomes instead, where needs_account is a press that worked and still " +
+        "started no trial. panelStates and trialOutcomes count browsers per value, so a browser that " +
+        "sent two values is in both buckets and they can add up to more than the step's own count. " +
+        "It is not an A/B comparison and must not be read as one."
+    },
+    200,
+    cors
+  );
+}
+
+/**
  * GET /v1/admin/experiments — every registered experiment with its exposures
  * per arm and the sample-ratio check, plus the last week of ingest counters.
  * @param {Object} env Worker env bindings.
@@ -1253,7 +1543,11 @@ export async function routeEventsApi(request, env, url, path, deps) {
     }
     return path === "/v1/events" ? handleIngest(request, env, deps) : handleForget(request, env, deps);
   }
-  if (path !== "/v1/admin/experiments" && path !== "/v1/admin/experiments/results") {
+  if (
+    path !== "/v1/admin/experiments" &&
+    path !== "/v1/admin/experiments/results" &&
+    path !== "/v1/admin/funnel"
+  ) {
     return null;
   }
   if (request.method !== "GET") {
@@ -1267,6 +1561,7 @@ export async function routeEventsApi(request, env, url, path, deps) {
   if (!admin.ok) {
     return json({ ok: false, reason: admin.reason }, admin.status, cors);
   }
+  if (path === "/v1/admin/funnel") return handleFunnel(env, url, deps);
   return path === "/v1/admin/experiments"
     ? handleListExperiments(env, deps)
     : handleExperimentResults(env, url, deps);

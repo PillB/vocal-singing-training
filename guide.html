@@ -748,7 +748,8 @@
       <h2 id="privacidad">14 · Dónde viven tus datos</h2>
       <p>
         Tu progreso, tus ajustes y tus grabaciones se guardan en
-        <strong>este navegador</strong>. Sin cuenta no hay copia en ninguna otra parte. Si entras
+        <strong>este navegador</strong>. Sin cuenta no guardamos ninguna copia en nuestro
+        servidor. Si entras
         con una cuenta, tu progreso y tus ajustes también se guardan en nuestro servidor, para que
         los tengas en otro dispositivo; tus grabaciones <strong>nunca</strong> salen de aquí. Eso
         tiene dos consecuencias que conviene saber:
@@ -762,7 +763,7 @@
         detalle completo está en <a href="privacy.html">Privacidad</a>.
       </p>
       <p>
-        Para saber qué cambios ayudan de verdad, el sitio puede enviar
+        Para saber qué cambios ayudan de verdad, el sitio envía
         <strong>estadísticas anónimas</strong> a nuestro servidor: qué partes usas (por ejemplo
         «empezó el Mínimo» o «terminó la clase»), qué versión de una prueba te tocó, tu día
         local, tu zona horaria y un número al azar que identifica a este navegador, no a ti. El
@@ -772,9 +773,23 @@
         No guardamos tu nombre, tu correo, tu voz, tus grabaciones ni tu dirección IP, y nada de
         esto se une a tu cuenta. La dirección IP solo sirve para frenar abusos: se convierte en
         un código que cambia cada día y se borra en dos días. Las estadísticas se borran a los
-        180 días. Si tu navegador pide no ser rastreado (Global Privacy Control o Do Not Track), no
-        se envía nada. Con el botón de abajo dejas de enviar y se borra lo que este navegador ya
-        envió.
+        180 días. Si tu navegador pide no ser rastreado (Global Privacy Control), no se envía
+        nada. Con el botón de abajo dejas de enviar y se borra lo que este navegador ya envió,
+        cuando quieras y sin dar explicaciones.
+      </p>
+      <p>
+        Nuestro servidor es un Worker de <strong>Cloudflare</strong> y la página se sirve desde
+        <strong>GitHub Pages</strong>, los dos fuera del Perú. «Anónimas» quiere decir sin tu nombre
+        ni tu correo; el número al azar sigue siendo un identificador de este navegador, y la ley lo
+        trata como dato personal. Quién recibe qué, y tus derechos sobre todo esto, están en
+        <a href="privacy.html">Privacidad</a>.
+      </p>
+      <p>
+        Desde el Espacio Económico Europeo, donde la ley pide permiso primero, no
+        se envía nada hasta que contestes la barra que aparece al entrar; rechazar es un botón, y
+        mientras no contestes no se guarda ni se envía ninguna estadística. Desde cualquier otro país
+        no cambia nada: las estadísticas empiezan en la primera visita y el botón de abajo las
+        apaga.
       </p>
       <p class="privacy-switch" data-privacy-switch data-lang="es" hidden>
         <span data-privacy-state></span>
@@ -1339,7 +1354,7 @@
       <h2 id="privacidad-en">14 · Where your data lives</h2>
       <p>
         Your progress, settings and recordings are stored in <strong>this browser</strong>. With
-        no account there is no copy anywhere else. Sign in and your progress and settings are also
+        no account we keep no copy on our server. Sign in and your progress and settings are also
         saved on our server, so another device can pick them up; your recordings
         <strong>never</strong> leave this browser. Two consequences worth knowing:
       </p>
@@ -1352,7 +1367,7 @@
         in <a href="privacy.html">Privacy</a>.
       </p>
       <p>
-        To learn which changes really help, the site can send <strong>anonymous
+        To learn which changes really help, the site sends <strong>anonymous
         statistics</strong> to our server: which parts you use (for example "started the
         Minimum" or "finished the class"), which version of a test you got, your local day,
         your time zone, and a random number that identifies this browser, not you. The server
@@ -1362,9 +1377,22 @@
         We don't keep your name, your email, your voice, your recordings or your IP address, and
         none of it is joined to your account. The IP address is only used to stop abuse: it is
         turned into a code that changes every day and is deleted within two days. The
-        statistics are deleted after 180 days. If your browser asks not to be tracked (Global Privacy
-        Control or Do Not Track), nothing is sent. The button below stops sending and deletes
-        what this browser already sent.
+        statistics are deleted after 180 days. If your browser asks not to be tracked (Global
+        Privacy Control), nothing is sent. The button below stops sending and deletes what this
+        browser already sent, whenever you like and without giving a reason.
+      </p>
+      <p>
+        Our server is a <strong>Cloudflare</strong> Worker and the page is served from
+        <strong>GitHub Pages</strong>, both outside Peru. "Anonymous" means without your name or
+        email address; the random number is still an identifier for this browser, and the law treats
+        it as personal data. Who receives what, and your rights over all of it, are in
+        <a href="privacy.html">Privacy</a>.
+      </p>
+      <p>
+        From the European Economic Area, where the law asks first, nothing is
+        sent until you answer the bar that appears when you arrive; refusing is one button, and until
+        you answer, no statistic is kept or sent. From anywhere else nothing changes: the
+        statistics start on the first visit and the button below switches them off.
       </p>
       <p class="privacy-switch" data-privacy-switch data-lang="en" hidden>
         <span data-privacy-state></span>
@@ -1376,10 +1404,20 @@
     </main>
     <!-- Only for the privacy switch above: the same code that decides whether
          anything is sent, so the sentence it shows cannot drift from it, and
-         the browser id it asks the worker to forget. -->
-    <script src="js/experiments-config.js?v=20260924c"></script>
-    <script src="js/analytics.js?v=20260924c"></script>
-    <script src="js/experiments.js?v=20260924c"></script>
-    <script src="js/privacy-switch.js?v=20260924c"></script>
+         the browser id it asks the worker to forget. billing-config.js is here
+         because the endpoint is derived from the worker URL it holds: without it
+         this page would say nothing is being sent while the app sends, and the
+         delete button would have nowhere to send the deletion. -->
+    <script src="js/billing-config.js?v=20260924a"></script>
+    <script src="js/experiments-config.js?v=20260924e"></script>
+    <!-- The page declares that the region gate belongs on it, so that if
+         js/region-gate.js ever 404s or fails to parse, js/analytics.js and
+         js/experiments.js keep nothing and send nothing rather than reading an
+         absent gate as permission. -->
+    <script>window.VT_REGION_REQUIRED = true;</script>
+    <script src="js/region-gate.js?v=20260925a"></script>
+    <script src="js/analytics.js?v=20260925a"></script>
+    <script src="js/experiments.js?v=20260925a"></script>
+    <script src="js/privacy-switch.js?v=20260925a"></script>
   </body>
 </html>

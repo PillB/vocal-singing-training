@@ -10,7 +10,7 @@
     <meta name="color-scheme" content="dark" />
     <meta name="theme-color" content="#0c1118" />
     <title>Entrenamiento vocal y de canto</title>
-    <link rel="stylesheet" href="css/styles.css?v=20260924c" />
+    <link rel="stylesheet" href="css/styles.css?v=20260924g" />
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎤</text></svg>" />
   </head>
   <body>
@@ -30,12 +30,15 @@
             <button type="button" class="btn btn-ghost btn-sm nav-link" id="btn-plan" data-view="plan" data-i18n-aria="nav.plan" aria-label="Plan de 12 semanas"><span class="nav-full" data-i18n="nav.plan">Plan de 12 semanas</span><span class="nav-short" data-i18n="nav.planShort">Plan</span></button>
             <button type="button" class="btn btn-ghost btn-sm nav-link" id="btn-history" data-view="history" data-i18n="nav.history">Historial</button>
           </nav>
-          <!-- Phones only: Pro, Cuenta, idioma and Tour fold into this menu (js/app.js). -->
+          <!-- The door into accounts and the plan you hold stay outside the phone
+               menu. A sign-in folded behind "Más" is a sign-in nobody finds, and
+               the status pill is the answer to "what do I have?" — neither is
+               worth a tap. Pro, idioma and Tour do fold in. -->
+          <span class="billing-pill" id="billing-pill" hidden>Pro</span>
+          <button type="button" class="btn btn-ghost btn-sm btn-util header-door" id="btn-account" data-i18n="nav.signIn" data-i18n-title="nav.signInTitle">Entrar</button>
           <button type="button" class="btn btn-ghost btn-sm header-more" id="btn-more" aria-expanded="false" aria-controls="header-utils"><span data-i18n="nav.more">Más</span> <span class="header-more-caret" aria-hidden="true">▾</span></button>
           <div class="header-utils" id="header-utils">
             <button type="button" class="btn btn-pro btn-sm" id="btn-pricing" data-i18n="nav.pro" title="Pro">Pro</button>
-            <span class="billing-pill" id="billing-pill" hidden>Pro</span>
-            <button type="button" class="btn btn-ghost btn-sm btn-util" id="btn-account" data-i18n="nav.account" data-i18n-title="nav.accountTitle">Cuenta</button>
             <button type="button" class="btn btn-ghost btn-sm btn-util" id="btn-lang" data-i18n="nav.lang" data-i18n-aria="nav.langAria">English</button>
             <button type="button" class="btn btn-ghost btn-sm btn-util" id="btn-tour" data-i18n="nav.tour" data-i18n-title="nav.tourTitle">Tour</button>
           </div>
@@ -782,6 +785,14 @@
         · <a href="guide.html" id="footer-guide-link" data-i18n="footer.guide">Guía de uso</a>
         · <a href="privacy.html" data-i18n="footer.privacy">Privacidad</a>
       </p>
+      <!-- Whether this browser sends anonymous statistics, and the way to stop.
+           Here as well as in the guide because saying no has to be as easy as
+           saying yes: js/privacy-switch.js fills it in, in the page's language,
+           and hides it until it has an answer to show. -->
+      <p class="privacy-switch" data-privacy-switch hidden>
+        <span data-privacy-state></span>
+        <button type="button" class="btn btn-sm" data-privacy-toggle hidden></button>
+      </p>
     </footer>
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
@@ -845,7 +856,7 @@
         <div class="pricing-head">
           <div>
             <h3 id="account-title" data-i18n="auth.title">Cuenta</h3>
-            <p class="muted pricing-sub" data-i18n="auth.sub">
+            <p class="muted pricing-sub" id="account-sub" data-i18n="auth.sub">
               Entra para guardar tu progreso y llevarlo a cualquier dispositivo. Practicar gratis nunca pide cuenta.
             </p>
           </div>
@@ -859,6 +870,15 @@
         <div id="account-logged-out">
           <!-- Shown only once an operator has pointed the site at the worker. -->
           <div id="account-signin" hidden>
+            <!-- Outcome before method. Mozilla's Persona A/B test (226,104 widget
+                 impressions) found a door named only for returning users produced
+                 17 accounts against 212 for one that also named account creation
+                 — and a single combined button reached 58% of the split pair. We
+                 cannot split the paths here, because on a Google-only deploy the
+                 one button both creates and returns, so the copy carries what the
+                 split carried: that this makes an account, what it costs, and
+                 that the same button works either way. -->
+            <p class="account-offer" id="account-offer" hidden></p>
             <div id="account-google" class="account-google"></div>
             <p class="account-or" id="account-or" hidden><span data-i18n="auth.or">o</span></p>
 
@@ -901,6 +921,14 @@
             Las cuentas todavía no están activas en este sitio. Tu práctica se guarda en este navegador.
           </p>
 
+          <!-- Every signed-out state that cannot offer a sign-in used to end in
+               prose, leaving the internal staff form as the only thing on the
+               panel a visitor could press — and the place focus landed. This is
+               the control those states get instead: it asks the worker again. -->
+          <div class="account-retry-row" id="account-retry-row" hidden>
+            <button type="button" class="btn btn-sm" id="account-retry" data-i18n="auth.retry">Intentar de nuevo</button>
+          </div>
+
           <details class="account-internal">
             <summary data-i18n="auth.internalTitle">Acceso interno</summary>
             <form id="login-form" class="login-form" autocomplete="on">
@@ -924,7 +952,7 @@
           <p class="muted account-sync" id="account-sync"></p>
 
           <div class="account-actions controls-row">
-            <button type="button" class="btn btn-primary btn-sm" id="btn-account-trial" hidden data-i18n="auth.startTrial">Empezar mes de prueba</button>
+            <button type="button" class="btn btn-primary btn-sm" id="btn-account-trial" hidden data-i18n="auth.startTrial">Empezar prueba gratis</button>
             <button type="button" class="btn btn-sm" id="btn-account-pricing" data-i18n="nav.pro">Pro</button>
             <button type="button" class="btn btn-sm" id="btn-account-sync" data-i18n="auth.syncNow">Guardar ahora</button>
             <button type="button" class="btn btn-ghost btn-sm" id="btn-logout" data-i18n="auth.signOut">Salir</button>
@@ -972,6 +1000,15 @@
             <p class="gift-result" id="gift-result" hidden></p>
             <ul class="admin-user-list" id="gift-list"></ul>
 
+            <!-- The account and trial funnel, from /v1/admin/funnel. One
+                 proportion per step, never a comparison between arms: at this
+                 traffic a comparison needs about 21,000 browsers per arm, while
+                 a single proportion finds a broken step with about thirty. -->
+            <h4 data-i18n="funnel.title">Embudo de cuentas</h4>
+            <p class="muted" data-i18n="funnel.lead">Cuánta gente pasa de un paso al siguiente, con su margen. Encuentra un paso por el que nadie pasa; no sirve para medir una mejora de unos puntos.</p>
+            <button type="button" class="btn btn-sm" id="funnel-load" data-i18n="funnel.load">Ver el embudo</button>
+            <div class="ab-results" id="funnel-results" hidden></div>
+
             <!-- A/B results from the worker's /v1/admin/experiments routes. -->
             <h4 data-i18n="ab.title">Experimentos</h4>
             <p class="muted" data-i18n="ab.lead">Cuántas personas vio cada versión y cómo les fue. Decide solo con la fecha y el tamaño que fijaste antes de empezar.</p>
@@ -1011,6 +1048,7 @@
              is live, the trial (app.js moves #btn-start-trial in and out). -->
         <div class="pricing-launch" id="pricing-launch" hidden>
           <p class="pricing-launch-note" id="pricing-health-note" hidden></p>
+          <p class="pricing-launch-note" id="pricing-spent" hidden></p>
         </div>
         <div class="pricing-value-stack" id="pricing-value-stack">
           <p class="pricing-dream" data-i18n="pricing.dream">
@@ -1041,15 +1079,18 @@
           <button type="button" class="btn btn-ghost btn-sm" id="btn-demo-pro" data-i18n="pricing.demo" hidden>
             Activar demo Pro
           </button>
-          <p class="muted pricing-note" id="pricing-pay-note" data-i18n="pricing.note">
-            Pagos seguros vía Stripe (global) o Mercado Pago (Perú / LATAM). Cancela cuando quieras en el portal del proveedor.
+          <!-- The fallback a reader gets if the scripts never run, so it has to be
+               true on its own: today nobody can be charged, and "el portal del
+               proveedor" named a cancellation route that does not exist. -->
+          <p class="muted pricing-note" id="pricing-pay-note" data-i18n="pricing.notePrelaunch">
+            La prueba gratis no pide tarjeta. Cuando termina, sigues en el plan Gratis y no se cobra nada.
           </p>
         </div>
       </div>
     </div>
 
     <script src="js/focus-trap.js?v=20260924c"></script>
-    <script src="js/i18n.js?v=20260924c"></script>
+    <script src="js/i18n.js?v=20260924g"></script>
     <script src="js/exercises-data.js?v=20260924c"></script>
     <script src="js/exercises-locale-es.js?v=20260920a"></script>
     <script src="js/practice-profiles.js?v=20260920a"></script>
@@ -1061,13 +1102,20 @@
     <script src="js/ads-config.js"></script>
     <script src="js/ads.js"></script>
     <script src="js/value-pulse.js?v=20260924c"></script>
-    <script src="js/analytics.js?v=20260924c"></script>
-    <script src="js/experiments-config.js?v=20260924c"></script>
-    <script src="js/experiments.js?v=20260924c"></script>
+    <!-- The page declares that the region gate belongs on it, so that if
+         js/region-gate.js ever 404s or fails to parse, js/analytics.js and
+         js/experiments.js keep nothing and send nothing rather than reading an
+         absent gate as permission. -->
+    <script>window.VT_REGION_REQUIRED = true;</script>
+    <script src="js/region-gate.js?v=20260925a"></script>
+    <script src="js/analytics.js?v=20260925a"></script>
+    <script src="js/experiments-config.js?v=20260924e"></script>
+    <script src="js/experiments.js?v=20260925a"></script>
+    <script src="js/privacy-switch.js?v=20260925a"></script>
     <script src="js/reminders.js?v=20260924c"></script>
     <script src="js/auth-users.generated.js"></script>
     <script src="js/auth.js"></script>
-    <script src="js/account.js?v=20260924a"></script>
+    <script src="js/account.js?v=20260924f"></script>
     <script src="js/sync.js?v=20260924c"></script>
     <script src="js/piano.js"></script>
     <script src="js/range-adapter.js"></script>
@@ -1080,6 +1128,6 @@
     <script src="js/session.js?v=20260924c"></script>
     <script src="js/daily-loop.js?v=20260924c"></script>
     <script src="js/tour.js?v=20260924c"></script>
-    <script src="js/app.js?v=20260924c"></script>
+    <script src="js/app.js?v=20260924g"></script>
   </body>
 </html>

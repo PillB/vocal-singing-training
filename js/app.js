@@ -1806,7 +1806,7 @@
         // The silent stop skips the metrics reveal a normal stop does, so the
         // button below could be inside a collapsed card (VG-28). One tap on
         // the rating card saves and then goes where the learner was headed.
-        openMetricsPanel(true, { focus: true });
+        openMetricsPanel(true, { focus: true, cardFirst: true });
         toast(tt("leave.scrollSave"));
         // Stash intended destination after save
         state.pendingLeave = destination;
@@ -2044,6 +2044,9 @@
     state.timer.remaining = timerSec;
     $("#timer-display").textContent = timerSec ? formatTime(timerSec) : "—";
     $("#timer-display").style.opacity = timerSec ? "1" : "0.45";
+    // No clock for this exercise (its picture keeps its own time): no lone
+    // dash beside "En vivo"
+    $("#timer-display").hidden = !timerSec;
 
     $("#playback-area").innerHTML = "";
     $("#level-fill").style.width = "0%";
@@ -2116,6 +2119,7 @@
       }
       // Prefer full progression span when exercise has chords; else fixed window on ref
       const wantsProg =
+        !profile.noProgression &&
         !!(ex.progressions?.length ||
           ex.songs?.length ||
           ex.audio?.progressions ||
@@ -2145,8 +2149,9 @@
     if (gameHud) {
       gameHud.style.display = showPitchHud ? "" : "none";
       gameHud.style.opacity = "1";
-      gameHud.classList.toggle("hud-challenge", !!profile.pitchChallenge);
-      gameHud.classList.toggle("hud-cents-only", showPitchHud && !profile.pitchChallenge);
+      const scored = !!profile.pitchChallenge && !profile.noGameScore;
+      gameHud.classList.toggle("hud-challenge", scored);
+      gameHud.classList.toggle("hud-cents-only", showPitchHud && !scored);
     }
     const tr = $(".hud-tr");
     if (tr) tr.style.display = showPitchHud ? "" : "none";
@@ -2204,8 +2209,11 @@
     }
     // Lip trills, straws and the rate ladder keep the default chord and play
     // mode; their two menus only crowded a phone's stage and covered the
-    // exercise's name (design: start-floor).
-    if ((profile.mode === "sovtFlow" || profile.mode === "rateLadder") && $("#hud-prog-bar")) {
+    // exercise's name (design: start-floor). Staccato/legato and the placement
+    // A/B draw their own picture there, and the menus sat on top of it.
+    const noChordMenus = ["sovtFlow", "rateLadder", "staccatoLegato", "placementAB"];
+    // A mode that walks its own notes (profile.noProgression) has no chord loop to pick
+    if ((noChordMenus.includes(profile.mode) || profile.noProgression) && $("#hud-prog-bar")) {
       $("#hud-prog-bar").hidden = true;
     }
     if (pianoMini) {
@@ -2406,7 +2414,10 @@
     if ($("#chord-desc")) {
       $("#chord-desc").textContent = p.description || p.name || "";
     }
-    if (state.exercise?.audio?.pitchViz || state.exercise?.practice?.showPitch) {
+    if (
+      (state.exercise?.audio?.pitchViz || state.exercise?.practice?.showPitch) &&
+      !(state.exercise && getProfile(state.exercise)?.noProgression)
+    ) {
       lockHighwayForProgression(id);
     }
     if (!silent) applyPianoOptionsHot("prog:" + (p.name || id));
@@ -2426,7 +2437,7 @@
       syncPlayModeSelect();
 
       // Highway range + ghost lanes follow the selected progression immediately
-      if (profile?.showPitch || ex.audio?.pitchViz) {
+      if ((profile?.showPitch || ex.audio?.pitchViz) && !profile?.noProgression) {
         if (state.selectedProg) lockHighwayForProgression(state.selectedProg);
       }
 
@@ -2734,7 +2745,7 @@
     }
     // fill accuracy metric from game
     const accInput = $('#metrics-form [name="accuracy"]');
-    if (accInput && accInput.type === "range" && state.pitchGame) {
+    if (accInput && accInput.type === "range" && state.pitchGame && !getProfile(state.exercise)?.ownsMetrics) {
       const pct = state.pitchGame.accuracyPct();
       accInput.value = pct >= 80 ? 5 : pct >= 60 ? 4 : pct >= 40 ? 3 : 2;
       accInput.dispatchEvent(new Event("input"));
@@ -2860,10 +2871,19 @@
     return !el || el.checked !== false;
   }
 
+  /**
+   * Whether Empezar itself starts the piano: an exercise that wants sound,
+   * except s19, which opens on silent steps (its mode plays its own reference
+   * at the first sung step).
+   */
+  function soundsOnStart(ex, profile) {
+    return exerciseWantsSound(ex, profile) && profile?.mode !== "openSpace";
+  }
+
   async function startExerciseSound(ex, profile) {
     if (!ex || !window.VTPiano) return false;
     if (!autoPianoChecked()) return false;
-    if (!exerciseWantsSound(ex, profile)) return false;
+    if (!soundsOnStart(ex, profile)) return false;
 
     // Unlock Web Audio (recreates if context was closed by a prior mic stop)
     await VTPiano.ensure();
@@ -2882,7 +2902,9 @@
     }
     const sec = sustainOn ? Number($("#sustain-sec")?.value || 4) : 2.5;
     const inChallenge = !!(profile.pitchChallenge && state.pitchGame?.challengeMode);
+    // profile.noProgression: the mode walks its own notes; no chord loop under it
     const hasProg =
+      !profile.noProgression &&
       !!(ex.progressions?.length || ex.songs?.length || ex.audio?.progressions);
 
     // Ensure a progression is selected before looping
@@ -3084,7 +3106,7 @@
           state.pitchViz.pushFrame(frame.voiceFreq, frame.targetFreq);
         }
         // Adaptive range: detect plateau short of target while trying (not silence)
-        if (profile.showPitch && state.rangeAuto) {
+        if (profile.showPitch && state.rangeAuto && !profile.freeRange) {
           const adapter = ensureRangeAdapter();
           if (adapter) {
             try {
@@ -3139,11 +3161,12 @@
           // Lock once to full challenge set so notes don't jump the Y-axis
           lockHighwayForNotes(state.pitchGame.challengeNotes);
         } else if (
-          ex.progressions?.length ||
-          ex.songs?.length ||
-          ex.audio?.progressions ||
-          profile.mode === "pitchChord" ||
-          profile.mode === "pitchSong"
+          !profile.noProgression &&
+          (ex.progressions?.length ||
+            ex.songs?.length ||
+            ex.audio?.progressions ||
+            profile.mode === "pitchChord" ||
+            profile.mode === "pitchSong")
         ) {
           lockHighwayForProgression(state.selectedProg);
         } else if (ref && !profile.ownsTarget) {
@@ -3435,10 +3458,11 @@
   /**
    * Expand or collapse the rating card (#metrics-card)
    * @param {boolean} open
-   * @param {{ reveal?: boolean, focus?: boolean, end?: "mic"|"time" }} [opts]
+   * @param {{ reveal?: boolean, focus?: boolean, end?: "mic"|"time", cardFirst?: boolean }} [opts]
    *   reveal (unless false): bring the card into view (revealRating); focus: move focus
    *   to its question (the learner asked to rate, or the exercise just ended);
-   *   end: the clock ran out, and whether the mic was on
+   *   end: the clock ran out, and whether the mic was on; cardFirst: the learner
+   *   asked for the rating itself, so it comes up even over a picture's review
    */
   function openMetricsPanel(open, opts = {}) {
     state.metricsOpen = !!open;
@@ -3456,7 +3480,7 @@
     state.rate.end = opts.end || null;
     paintRating();
     if (opts.focus) $("#rate-q")?.focus({ preventScroll: true });
-    if (opts.reveal !== false) revealRating();
+    if (opts.reveal !== false) revealRating(!!opts.cardFirst);
   }
 
   /* —— Rating: one tap after a take —— */
@@ -3556,7 +3580,7 @@
    * its side). An open "Más detalles" form is never measured; it may run past
    * the fold.
    */
-  function revealRating() {
+  function revealRating(cardFirst) {
     requestAnimationFrame(() => {
       const card = $("#metrics-card");
       if (!card || card.classList.contains("collapsed")) return;
@@ -3578,7 +3602,14 @@
         want = Math.min(vh * 0.45, vh - (el.getBoundingClientRect().bottom - r.top) - 24);
         if (want >= top) break;
       }
-      const delta = r.top - Math.max(top, want);
+      let delta = r.top - Math.max(top, want);
+      // A pictured exercise's review is what "¿Cómo te fue?" is answered from:
+      // keep it whole on screen, and let the card show below it as room allows
+      // (unless the learner asked for the rating itself: "Calificar")
+      const review = document.querySelector(
+        "#mode-focus .mode-panel.has-viz.is-replay, #mode-hud .mode-panel.has-viz.is-replay"
+      );
+      if (review && !cardFirst) delta = Math.min(delta, review.getBoundingClientRect().top - top - 8);
       if (Math.abs(delta) > 12) window.scrollBy({ top: delta, behavior: scrollBehavior() });
     });
   }
@@ -3735,10 +3766,25 @@
           ? "settling"
           : "variable";
     const g = stats.game;
+    // Free singing (a siren): no target, so the readout names the nearest note
+    // and says where you sit in it, without "sharp"/"flat"
+    const near = !!stats.nearest;
+    const centreWord = es
+      ? Math.abs(acc) <= 25
+        ? "centrado"
+        : acc > 0
+          ? "arriba del centro"
+          : "abajo del centro"
+      : Math.abs(acc) <= 25
+        ? "centred"
+        : acc > 0
+          ? "above centre"
+          : "below centre";
+    const targetLabel = near ? (es ? "Nota" : "Note") : es ? "Objetivo" : "Target";
     el.innerHTML = `
-      <span><strong>${es ? "Objetivo" : "Target"}</strong> ${stats.targetName || "—"}</span>
+      <span><strong>${targetLabel}</strong> ${stats.targetName || "—"}</span>
       <span><strong>${es ? "Tú" : "You"}</strong> ${stats.voiceName || "—"}</span>
-      <span><strong>Cents</strong> ${acc > 0 ? "+" : ""}${acc}¢ · ${accWordLong}</span>
+      <span><strong>Cents</strong> ${acc > 0 ? "+" : ""}${acc}¢ · ${near ? centreWord : accWordLong}</span>
       <span><strong>${es ? "Precisión" : "Precision"}</strong> ±${prec}¢ · ${precWord}</span>
       ${g ? `<span><strong>${es ? "Juego" : "Game"}</strong> ${g.score} pts · ${g.accuracyPct}%</span>` : ""}
     `;
@@ -3759,7 +3805,7 @@
                 ? "close"
                 : "off");
       }
-      if (accEl) accEl.textContent = accWord;
+      if (accEl) accEl.textContent = near ? (Math.abs(acc) <= 25 ? centreWord : acc > 0 ? "↑" : "↓") : accWord;
       const score = $("#hud-score");
       const combo = $("#hud-combo");
       // Prefer short letter form in the tight TR strip
@@ -4416,7 +4462,7 @@
       : stored;
     el.innerHTML = logs.length
       ? logs.map((l) => `<span class="pill">${l.seconds}s</span>`).join("")
-      : `<span class="muted">Holds appear here automatically (≥2s)</span>`;
+      : `<span class="muted">${escapeHtml(tt("ex.holdsEmpty"))}</span>`;
   }
 
   /* —— Recording —— */
@@ -5471,7 +5517,7 @@
     $("#btn-step-done-rate")?.addEventListener("click", () => {
       stepDoneChoice("rate");
       hideStepDone();
-      openMetricsPanel(true, { focus: true });
+      openMetricsPanel(true, { focus: true, cardFirst: true });
     });
     $("#step-done")?.addEventListener("keydown", (e) => {
       if (e.key !== "Escape") return;
@@ -7169,7 +7215,7 @@
     /** True if current (or given) exercise should start piano/ref on Empezar when Auto is on. */
     wantsSound: (ex) => {
       const e = ex || state.exercise;
-      return exerciseWantsSound(e, e ? getProfile(e) : null);
+      return soundsOnStart(e, e ? getProfile(e) : null);
     },
     shouldPromptOnLeave,
     getPracticedSec,

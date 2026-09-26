@@ -383,7 +383,7 @@ test.describe("Prepared daily class session", () => {
     expect(zone.afterFirstHold, "and the mode moves to the next target").toBe("D3");
     expect(zone.patches.zoneTargets).toBeGreaterThanOrEqual(3);
     expect(zone.patches.steadiness, "single-zone drills score steadiness").toBeGreaterThanOrEqual(4);
-    expect(zone.summary, "the summary reports the in-zone share").toMatch(/100% in zone/);
+    expect(zone.summary, "the summary reports the in-zone share").toMatch(/100\s?% (en la zona|in zone)/);
     expect(zone.chips, "the zone strip renders a chip per zone").toBe(1);
 
     // Off-pitch singing must not credit anything

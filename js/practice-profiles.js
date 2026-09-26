@@ -21,8 +21,8 @@
         { label: "Rate 7 · brisk", sec: 75 },
         { label: "Rate 8 · challenge", sec: 75 }
       ],
-      cue: "Over-articulate the same page. Rate phases advance automatically.",
-      cueEs: "Sobre-articula la misma página. Las fases de ritmo avanzan solas.",
+      cue: "Over-articulate the same page. The first rung measures your own pace; each next rung is a step faster. Rungs advance on their own.",
+      cueEs: "Sobre-articula la misma página. El primer peldaño mide tu propio ritmo; cada peldaño sube un poco. Avanzan solos.",
       metricHints: { duration: "fromTimerMin" }
     },
     "v2-volume": {
@@ -33,8 +33,8 @@
       pitchChallenge: false,
       autoPiano: false,
       autoRecord: false,
-      cue: "Keep energy even from 1→10. Watch the volume lane — avoid fading at the end.",
-      cueEs: "Mantén la energía pareja del 1 al 10. Mira el carril de volumen — evita apagarte al final.",
+      cue: "Count 1→10 on one breath at one level: the end as strong as the start. Keep the same distance from the mic.",
+      cueEs: "Cuenta del 1 al 10 en una respiración a un mismo nivel: el final tan firme como el inicio. Misma distancia al micrófono.",
       metricHints: { cycles: "breathCycles", consistency: "volumeConsistency" }
     },
     "v3-soft-palate": {
@@ -51,6 +51,8 @@
     },
     "v4-articulation-pen": {
       mode: "articulationContrast",
+      // A count pacer; the take is recorded so the two counts can be compared
+      timeDriven: true,
       showPitch: false,
       showHold: false,
       showLevel: true,
@@ -58,23 +60,145 @@
       autoPiano: false,
       autoRecord: true,
       phases: [
-        { label: "With pen · count 1–60", sec: 90 },
-        { label: "Pen off · feel the ease", sec: 45 }
+        {
+          label: "With pen · count 1–60",
+          labelEs: "Con bolígrafo · cuenta 1–60",
+          short: "With pen",
+          shortEs: "Con bolígrafo",
+          kind: "count",
+          pen: true,
+          from: 1,
+          to: 60,
+          pace: 1.5,
+          sec: 90,
+          cue: "Pen across the teeth, resting, not bitten. One number per beat: make every consonant land.",
+          cueEs: "Bolígrafo entre los dientes, apoyado, sin morder. Un número por pulso: que cada consonante se oiga."
+        },
+        {
+          label: "Take the pen out",
+          labelEs: "Quita el bolígrafo",
+          short: "Out",
+          shortEs: "Fuera",
+          kind: "penOff",
+          sec: 5,
+          cue: "Put it down. Same pace next.",
+          cueEs: "Déjalo. Ahora, el mismo ritmo."
+        },
+        {
+          label: "Pen off · count 1–20",
+          labelEs: "Sin bolígrafo · cuenta 1–20",
+          short: "Without",
+          shortEs: "Sin bolígrafo",
+          kind: "count",
+          pen: false,
+          from: 1,
+          to: 20,
+          pace: 1.5,
+          sec: 30,
+          cue: "The same numbers without the pen. Notice what changed: you will hear it after Stop.",
+          cueEs: "Los mismos números sin el bolígrafo. Nota qué cambió: lo escucharás al detener."
+        }
       ],
-      cue: "Phase 1: pen in mouth. Phase 2: remove pen and notice clarity.",
-      cueEs: "Fase 1: bolígrafo en la boca. Fase 2: quítalo y nota la claridad.",
+      cue: "Count with the pen, take it out, count the same numbers again. After Stop, listen to both.",
+      cueEs: "Cuenta con el bolígrafo, quítalo y cuenta los mismos números otra vez. Al detener, escucha los dos.",
       metricHints: {}
     },
     "v5-neutral-ears": {
       mode: "recordOnly",
+      // Paced cards; the take is recorded for a later listen with neutral ears
+      timeDriven: true,
       showPitch: false,
       showHold: false,
       showLevel: true,
       pitchChallenge: false,
       autoPiano: false,
       autoRecord: true,
-      cue: "Deliver persona + story. Recording starts with practice — review later with neutral ears.",
-      cueEs: "Entrega persona + historia. La grabación empieza con la práctica — revisa después con oídos neutrales.",
+      phases: [
+        {
+          label: "Motivator",
+          labelEs: "Motivador",
+          persona: "Motivator",
+          personaEs: "Motivador",
+          icon: "star",
+          kind: "persona",
+          sec: 20,
+          intent: "Open with a specific, true compliment.",
+          intentEs: "Abre con un cumplido concreto y verdadero.",
+          cue: "Speak to one imagined person. No judging mid-take.",
+          cueEs: "Háblale a una persona imaginada. Sin juzgarte a mitad."
+        },
+        {
+          label: "Coach",
+          labelEs: "Coach",
+          persona: "Coach",
+          personaEs: "Coach",
+          icon: "flag",
+          kind: "persona",
+          sec: 20,
+          intent: "Give one clear tip. Only one.",
+          intentEs: "Da un consejo claro. Solo uno.",
+          cue: "Same person, new energy: direct and kind.",
+          cueEs: "La misma persona, otra energía: directo y amable."
+        },
+        {
+          label: "Friend",
+          labelEs: "Amigo",
+          persona: "Friend",
+          personaEs: "Amigo",
+          icon: "heart",
+          kind: "persona",
+          sec: 20,
+          intent: "Warm and unhurried: share a small moment.",
+          intentEs: "Cálido y sin prisa: cuenta un momento pequeño.",
+          cue: "Slower, closer, lighter.",
+          cueEs: "Más lento, más cerca, más ligero."
+        },
+        {
+          label: "Educator",
+          labelEs: "Educador",
+          persona: "Educator",
+          personaEs: "Educador",
+          icon: "check",
+          kind: "persona",
+          sec: 20,
+          intent: "Explain one idea so it sticks.",
+          intentEs: "Explica una idea para que se quede.",
+          cue: "One example, then the idea in one line.",
+          cueEs: "Un ejemplo y la idea en una línea."
+        },
+        {
+          label: "Story · setup",
+          labelEs: "Historia · inicio",
+          short: "Setup",
+          shortEs: "Inicio",
+          kind: "story",
+          sec: 25,
+          cue: "Who, where, and what they wanted.",
+          cueEs: "Quién, dónde y qué quería."
+        },
+        {
+          label: "Story · turn",
+          labelEs: "Historia · giro",
+          short: "Turn",
+          shortEs: "Giro",
+          kind: "story",
+          sec: 25,
+          cue: "What changed, or went another way.",
+          cueEs: "Qué cambió o salió de otra manera."
+        },
+        {
+          label: "Story · point",
+          labelEs: "Historia · punto",
+          short: "Point",
+          shortEs: "Punto",
+          kind: "story",
+          sec: 20,
+          cue: "Land one takeaway, then stop.",
+          cueEs: "Aterriza una sola idea y termina."
+        }
+      ],
+      cue: "Four persona cards, then a 70-second story. Recording starts with practice: listen back later with neutral ears.",
+      cueEs: "Cuatro tarjetas de persona y una historia de 70 s. La grabación empieza con la práctica: escúchala después con oídos neutrales.",
       metricHints: {}
     },
     "v6-connect": {
@@ -90,9 +214,9 @@
         { label: "Scenario 2 · acquaintance", sec: 120 },
         { label: "Scenario 3 · new contact", sec: 120 }
       ],
-      cue: "Aim for more listening than speaking. Silence ratio is a friend.",
-      cueEs: "Busca más escucha que habla. El silencio es tu aliado.",
-      metricHints: { presence: "listenBias" }
+      cue: "Curiosity loops: ask in your turn, stay quiet in theirs and imagine the answer. Leave with one real fact.",
+      cueEs: "Bucles de curiosidad: pregunta en tu turno, calla en el suyo e imagina la respuesta. Llévate un dato real.",
+      metricHints: {}
     },
     "v7-record-review": {
       mode: "reviewSession",
@@ -102,8 +226,26 @@
       pitchChallenge: false,
       autoPiano: false,
       autoRecord: true,
-      cue: "Record 5–10 min improv. Leave one full day before the 3-step review.",
-      cueEs: "Graba 5–10 min de impro. Espera un día completo antes de la revisión en 3 pasos.",
+      minSec: 300,
+      maxSec: 600,
+      topics: [
+        "The best thing you learned this year",
+        "A place you would go back to",
+        "Your work, explained to a child",
+        "A habit that changed your week",
+        "Something that made you laugh lately",
+        "A meal that tastes like home"
+      ],
+      topicsEs: [
+        "Lo mejor que aprendiste este año",
+        "Un lugar al que volverías",
+        "Tu trabajo, explicado a un niño",
+        "Un hábito que cambió tu semana",
+        "Algo que te hizo reír hace poco",
+        "Una comida que sabe a casa"
+      ],
+      cue: "Record 5–10 min on one topic, without stopping to judge. Leave one full day before the 3-step review.",
+      cueEs: "Graba 5–10 min sobre un tema, sin pararte a juzgar. Espera un día completo antes de la revisión en 3 pasos.",
       metricHints: {}
     },
     "v8-fluency-metaphors": {
@@ -133,8 +275,8 @@
       pitchChallenge: false,
       autoPiano: false,
       autoRecord: false,
-      cue: "Open the 12-week dashboard — one element, daily check-ins, weekly record/review.",
-      cueEs: "Abre el panel de 12 semanas — un elemento, registro diario, grabación/revisión semanal.",
+      cue: "One element for the week, a few minutes a day, a short recording and review at the end.",
+      cueEs: "Un elemento por semana, unos minutos al día, una grabación corta y revisión al final.",
       metricHints: {}
     },
     /* —— Vocal advanced —— */
@@ -160,21 +302,23 @@
       autoPiano: false,
       autoRecord: true,
       minPauseSec: 0.7,
-      cue: "Tap when you catch a filler. Prefer “Paused instead.” Auto pauses are secondary.",
-      cueEs: "Toca al atrapar un relleno. Prefiere “Pausé en su lugar”. Las pausas auto son secundarias.",
+      cue: "3 rounds on one topic: in round 1 tap “Caught a filler”; in rounds 2–3 close your mouth, pause, and tap “Paused instead”.",
+      cueEs: "3 rondas sobre un tema: en la 1 toca «Noté un relleno»; en la 2 y la 3 cierra la boca, pausa y toca «Pausé en su lugar».",
       metricHints: {}
     },
     "v12-melodic-speech": {
       mode: "pitchContour",
-      showPitch: true,
+      // Speech melody is drawn relative to your own usual pitch in the stage,
+      // not as notes on the singing highway (and so in the first screen)
+      showPitch: false,
       showHold: false,
       showLevel: true,
       pitchChallenge: false,
       autoPiano: false,
       autoRecord: true,
-      cue: "Use pitch range for musical speech — variety, not note-matching drills.",
-      cueEs: "Usa el rango de tono para un habla musical — variedad, no ejercicios de nota exacta.",
-      metricHints: { variety: "pitchRangeScale" }
+      cue: "Flat baseline first, then melody: lift key words, land each ending. Variety, not note-matching.",
+      cueEs: "Primero una toma plana, luego melodía: eleva palabras clave y cierra cada final. Variedad, no notas exactas.",
+      metricHints: {}
     },
     "v13-volume-ladder": {
       mode: "volumeLadder",
@@ -184,16 +328,22 @@
       pitchChallenge: false,
       autoPiano: false,
       autoRecord: false,
+      // Levels are relative to the learner (dB against their own treads), so
+      // there are no absolute targets here: only the order of the steps.
       ladder: [
-        { label: "1 Whisper", target: 0.12 },
-        { label: "2 Soft", target: 0.22 },
-        { label: "3 Conversational", target: 0.35 },
-        { label: "4 Projected", target: 0.5 },
-        { label: "5 Full room", target: 0.65 }
+        { label: "1 Whisper", labelEs: "1 Susurro" },
+        { label: "2 Soft", labelEs: "2 Suave" },
+        { label: "3 Conversational", labelEs: "3 Conversación" },
+        { label: "4 Projected", labelEs: "4 Proyectada" },
+        { label: "5 Full room", labelEs: "5 Sala llena" }
       ],
+      // Up 1→5, back down 5→3→1 (the exercise's steps), then a 60 s story
+      sequence: [0, 1, 2, 3, 4, 2, 0],
       stepSec: 8,
-      cue: "Climb whisper → full room without strain. Match each level’s target band.",
-      cueEs: "Sube de susurro a sala llena sin forzar. Entra en la franja de cada nivel.",
+      reps: 3,
+      storySec: 60,
+      cue: "Climb 1→5 and back 5→3→1 with the same sentence: each step clearly louder than the last, same distance from the mic. Then a 60 s story with 3+ levels.",
+      cueEs: "Sube del 1 al 5 y baja 5→3→1 con la misma frase: cada escalón claramente más fuerte, misma distancia al micrófono. Luego una historia de 60 s con 3 niveles o más.",
       metricHints: { ladderReps: "ladderCycles" }
     },
     "v14-pace-variation": {
@@ -204,24 +354,16 @@
       pitchChallenge: false,
       autoPiano: false,
       autoRecord: true,
-      cue: "Tap “Key point” when you slow down for impact. Log 3 intentional slow-downs.",
-      cueEs: "Toca “Punto clave” cuando bajes el ritmo por impacto. Registra 3 bajadas intencionales.",
+      keyPoints: 3,
+      minPauseSec: 0.7,
+      cue: "3 takes: one even pace · slow on each key idea (tap “Key point”) · a brake (pause) before it. Aim for 3 anchors.",
+      cueEs: "3 tomas: un solo ritmo · lento en cada idea clave (toca «Punto clave») · un freno (pausa) antes. Busca 3 anclas.",
       metricHints: { keySlowdowns: "keyPoints" }
     },
     "v15-gestures": {
       mode: "gestureReps",
-      showPitch: false,
-      showHold: false,
-      showLevel: true,
-      pitchChallenge: false,
-      autoPiano: false,
-      autoRecord: true,
-      cue: "3 gesture types: size · count · location. Record, then review muted first.",
-      cueEs: "3 tipos de gesto: tamaño · cuenta · lugar. Graba y revisa primero en silencio.",
-      metricHints: {}
-    },
-    "v16-facial-expression": {
-      mode: "facePhases",
+      // Paced gestures (drawn: no camera here); the sound is recorded
+      timeDriven: true,
       showPitch: false,
       showHold: false,
       showLevel: true,
@@ -229,12 +371,145 @@
       autoPiano: false,
       autoRecord: true,
       phases: [
-        { label: "Curiosity face", sec: 40 },
-        { label: "Surprise face", sec: 40 },
-        { label: "Resolve / warmth", sec: 40 }
+        {
+          label: "Frame yourself",
+          labelEs: "Encuádrate",
+          short: "Camera",
+          shortEs: "Cámara",
+          pose: "frame",
+          sec: 10,
+          cue: "Prop your phone's camera at chest height: waist up, hands in shot. This page keeps time and records the sound.",
+          cueEs: "Apoya la cámara del móvil a la altura del pecho: de cintura arriba, con las manos a la vista. Esta página lleva el tiempo y graba el sonido."
+        },
+        {
+          label: "Hands still",
+          labelEs: "Manos quietas",
+          short: "Still",
+          shortEs: "Quietas",
+          pose: "base",
+          sec: 60,
+          cue: "Talk about your day with your hands together at the navel. Notice how it feels.",
+          cueEs: "Habla de tu día con las manos juntas a la altura del ombligo. Nota cómo se siente."
+        },
+        {
+          label: "Open palms on the key word",
+          labelEs: "Palmas abiertas en la palabra clave",
+          short: "Palms",
+          shortEs: "Palmas",
+          pose: "palms",
+          sec: 30,
+          line: "Here is what *matters*.",
+          lineEs: "Esto es lo *importante*.",
+          cue: "Palms open with the key word, one beat, then back to base.",
+          cueEs: "Palmas abiertas con la palabra clave, un golpe y de vuelta a la base."
+        },
+        {
+          label: "Size · a big idea",
+          labelEs: "Tamaño · una idea grande",
+          short: "Size",
+          shortEs: "Tamaño",
+          pose: "size",
+          sec: 30,
+          line: "It's a *huge* change.",
+          lineEs: "Es un cambio *enorme*.",
+          cue: "The hands open wide as the word arrives, not after it.",
+          cueEs: "Las manos se abren cuando llega la palabra, no después."
+        },
+        {
+          label: "Count · one, two, three",
+          labelEs: "Cuenta · uno, dos, tres",
+          short: "Count",
+          shortEs: "Cuenta",
+          pose: "count",
+          sec: 30,
+          line: "Three steps: *one*, *two*, *three*.",
+          lineEs: "Tres pasos: *uno*, *dos*, *tres*.",
+          cue: "One finger per point, raised with each number.",
+          cueEs: "Un dedo por punto, que sube con cada número."
+        },
+        {
+          label: "Location · here and there",
+          labelEs: "Lugar · aquí y allá",
+          short: "Place",
+          shortEs: "Lugar",
+          pose: "location",
+          sec: 30,
+          line: "We were *here*; now we're *there*.",
+          lineEs: "Estábamos *aquí*; ahora, *allá*.",
+          cue: "Place each idea in space and point back to it.",
+          cueEs: "Coloca cada idea en un lugar y vuelve a señalarla."
+        }
       ],
-      cue: "Curiosity → surprise → resolve on your face. Review muted after.",
-      cueEs: "Curiosidad → sorpresa → resolución en la cara. Revisa en silencio después.",
+      cue: "Hands still, then open palms, size, count and location. Film yourself waist up and watch it muted first.",
+      cueEs: "Manos quietas, luego palmas, tamaño, cuenta y lugar. Fílmate de cintura arriba y mírate primero sin sonido.",
+      metricHints: {}
+    },
+    "v16-facial-expression": {
+      mode: "facePhases",
+      // Paced faces (drawn: no camera here); the sound is recorded
+      timeDriven: true,
+      showPitch: false,
+      showHold: false,
+      showLevel: true,
+      pitchChallenge: false,
+      autoPiano: false,
+      autoRecord: true,
+      phases: [
+        {
+          label: "Resting face",
+          labelEs: "Cara en reposo",
+          short: "Rest",
+          shortEs: "Reposo",
+          face: "neutral",
+          sec: 8,
+          cue: "Look into your camera or a mirror. Soften the jaw and the brows: that is your resting face.",
+          cueEs: "Mírate en la cámara o en un espejo. Suelta la mandíbula y las cejas: esa es tu cara en reposo."
+        },
+        {
+          label: "Warm hello",
+          labelEs: "Hola cálido",
+          short: "Hello",
+          shortEs: "Hola",
+          face: "warm",
+          sec: 10,
+          line: "*Hello*, good to see you.",
+          lineEs: "*Hola*, qué gusto verte.",
+          cue: "Eyes first, then a slight smile, not a fixed grin.",
+          cueEs: "Primero los ojos, luego una sonrisa leve, no una sonrisa fija."
+        },
+        {
+          label: "Curiosity face",
+          labelEs: "Curiosidad",
+          short: "Curiosity",
+          shortEs: "Curiosidad",
+          face: "curious",
+          sec: 20,
+          cue: "Start a 60-second story with a question you want answered. The brows lift a little.",
+          cueEs: "Empieza una historia de 60 s con una pregunta que quieras resolver. Las cejas suben un poco."
+        },
+        {
+          label: "Surprise face",
+          labelEs: "Sorpresa",
+          short: "Surprise",
+          shortEs: "Sorpresa",
+          face: "surprise",
+          sec: 20,
+          cue: "The turn: eyes open and brows up with the word, not two seconds after it.",
+          cueEs: "El giro: ojos abiertos y cejas arriba con la palabra, no dos segundos después."
+        },
+        {
+          label: "Resolve / warmth",
+          labelEs: "Resolución y calidez",
+          short: "Resolve",
+          shortEs: "Resolución",
+          face: "resolve",
+          sec: 20,
+          cue: "Land the point with a settled, warm face.",
+          cueEs: "Aterriza el punto con la cara tranquila y cálida."
+        }
+      ],
+      cue: "Resting face, a warm hello, then a story told with curiosity, surprise and resolve. Watch your video muted after.",
+      cueEs: "Cara en reposo, un hola cálido y una historia con curiosidad, sorpresa y resolución. Después mira tu video sin sonido.",
       metricHints: {}
     },
     "v17-strategic-concision": {
@@ -247,9 +522,13 @@
       autoRecord: true,
       questions: 5,
       preSilenceSec: 2.5,
+      // A silence this long after speaking closes the answer
+      closeSilenceSec: 2,
+      // A soft time guide for "≤3 sentences", never a limit
+      answerGuideSec: [20, 30],
       cue: "Receive → breathe (~2.5s silence) → answer in ≤3 sentences.",
       cueEs: "Recibe → respira (~2,5s de silencio) → responde en ≤3 oraciones.",
-      metricHints: { questions: "questionCount", pauseBefore: "gateSuccess" }
+      metricHints: { questions: "questionCount" }
     },
     "v18-story-peak": {
       mode: "storyTimer",
@@ -259,13 +538,18 @@
       pitchChallenge: false,
       autoPiano: false,
       autoRecord: true,
+      // Context → tension → peak → point in ~90 s, as the steps lay it out.
+      // A guide: "Next part" moves on early; running over is shown, not scolded.
       phases: [
-        { label: "Setup", sec: 40 },
-        { label: "Peak emotion", sec: 50 },
-        { label: "Point / takeaway", sec: 30 }
+        { key: "context", label: "Context", labelEs: "Contexto", sec: 20, hint: "Context: who, where — keep it short", hintEs: "Contexto: quién y dónde, corto" },
+        { key: "tension", label: "Tension", labelEs: "Tensión", sec: 25, hint: "Tension: what was at stake", hintEs: "Tensión: qué estaba en juego" },
+        { key: "peak", label: "Peak", labelEs: "Pico", sec: 30, hint: "The peak: a little slower, a little stronger, a pause", hintEs: "El pico: un poco más lento, más intenso, una pausa" },
+        { key: "point", label: "Point", labelEs: "Aprendizaje", sec: 15, hint: "The point in one still sentence", hintEs: "El aprendizaje en una frase quieta" }
       ],
-      cue: "Setup short · peak vivid · land the point. Mark peak when you hit it.",
-      cueEs: "Inicio corto · pico vivo · cierra el punto. Marca el pico cuando llegues.",
+      // The parts are a pacer: they still run if the microphone is refused
+      timeDriven: true,
+      cue: "Context short · peak vivid · land the point. Mark the peak when you reach it.",
+      cueEs: "Contexto corto · pico vivo · cierra con el aprendizaje. Marca el pico cuando llegues.",
       metricHints: {}
     },
     "v19-authority-close": {
@@ -290,9 +574,10 @@
       pitchChallenge: false,
       autoPiano: false,
       autoRecord: true,
+      // Low → Medium → High → Lead (+10 % over Medium); "Next take" moves on early
       stepSec: 30,
-      cue: "Same message at Low → Medium → High. Volume + pace + face — not just loudness.",
-      cueEs: "El mismo mensaje en Bajo → Medio → Alto. Volumen + ritmo + cara — no solo gritar.",
+      cue: "Same message Low → Medium → High, then lead 10% above Medium. The mic hears volume, pace and melody; face and gesture are in the recording.",
+      cueEs: "El mismo mensaje en Baja → Media → Alta y luego guía un 10 % sobre la media. El micrófono oye volumen, ritmo y melodía; cara y gestos, en la grabación.",
       metricHints: {}
     },
     /* —— Singing basic —— */
@@ -305,9 +590,9 @@
       autoPiano: true,
       autoRecord: false,
       refPitch: "A2",
-      cue: "Fry → clear /A/. Hold ≥2s logs automatically. No note-challenge game.",
-      cueEs: "Fry → /A/ clara. Sostenidos ≥2s se registran solos. No es un juego de notas.",
-      metricHints: { maxHold: "bestHold" }
+      cue: "Fry → clear /A/. The highway shows when the tone turns steady; 2 s clear holds count. No note-challenge game.",
+      cueEs: "Fry → /A/ clara. La autopista muestra cuándo el tono se vuelve estable; cuentan los sostenidos claros de 2 s. No es un juego de notas.",
+      metricHints: { maxHold: "bestClearHold" }
     },
     "s2-solfege-chords": {
       mode: "pitchChord",
@@ -317,9 +602,9 @@
       pitchChallenge: false,
       autoPiano: true,
       autoRecord: false,
-      cue: "Sing /A/ on chord tones. Piano loops with sustain. Track reps toward 25.",
-      cueEs: "Canta /A/ en los tonos del acorde. El piano hace bucle con sostenido. Meta ~25 reps.",
-      metricHints: { reps: "repCount" }
+      cue: "Sing /A/ on the note the piano plays. A note counts when held 1 s inside the band; the next ones wait to the right. Goal ~25.",
+      cueEs: "Canta /A/ en la nota que toca el piano. Cuenta al sostenerla 1 s dentro de la banda; las siguientes esperan a la derecha. Meta ~25.",
+      metricHints: { reps: "landedNotes" }
     },
     "s3-song-stanzas": {
       mode: "pitchSong",
@@ -328,10 +613,11 @@
       showLevel: true,
       pitchChallenge: false,
       autoPiano: true,
+      autoArpeggio: true,
       autoRecord: true,
-      cue: "Finish each phrase without mid-breath. Dose air; piano under you; mark phrase-complete.",
-      cueEs: "Termina cada frase sin respirar a mitad. Dosifica el aire; marca frase completa.",
-      metricHints: { phraseBreath: "phraseOk" }
+      cue: "Finish each phrase without a mid-breath. Each phrase is measured against the goal you pick; tap +1 per stanza.",
+      cueEs: "Termina cada frase sin respirar a mitad. Cada frase se mide contra la meta que eliges; marca +1 por estrofa.",
+      metricHints: { repsFeel: "stanzaTaps", repsBetter: "stanzaTaps" }
     },
     "s15-sh-air-ladder": {
       mode: "shAirLadder",
@@ -345,8 +631,8 @@
       allowManualSound: true,
       manualSoundKind: "air",
       rungs: [5, 10, 20, 25, 30],
-      cue: "Nose inhale → even SH. Climb 5→10→20→25→30s. Air only. Raise Mic or hold Space if the timer doesn’t move.",
-      cueEs: "Inhala por la nariz → SH pareja. Peldaños 5→10→20→25→30 s. Solo aire. Si el contador no se mueve, sube Mic o mantén Espacio.",
+      cue: "Nose inhale → even SH, no voice. Climb 5→10→20→25→30 s, resting between tries. Raise Mic or hold Space if the timer doesn’t move.",
+      cueEs: "Inhala por la nariz → SH pareja, sin voz. Sube 5→10→20→25→30 s, descansando entre intentos. Si el contador no se mueve, sube Mic o mantén Espacio.",
       metricHints: { rungs: "cleared", maxSH: "best" }
     },
     "s16-major-scale-coord": {
@@ -358,9 +644,16 @@
       pitchChallenge: false,
       autoPiano: true,
       autoRecord: false,
-      cue: "Major scale on /A/: listen, then sing each step. Coordinate air + closure + pitch.",
-      cueEs: "Escala mayor en /A/: escucha, luego canta cada paso. Coordina aire + cierre + afinación.",
-      metricHints: { roots: "rootCount" }
+      /** The mode walks its own notes (three roots, C3 → D3 → E3) and sounds each step */
+      ownsTarget: true,
+      /** Read by js/app.js: no chord loop or progression window under the steps */
+      noProgression: true,
+      roots: [48, 50, 52],
+      holdMs: 900,
+      tolCents: 40,
+      cue: "Major scale on /A/: listen, then sing each step. The next steps wait to the right; the root moves up after each pass.",
+      cueEs: "Escala mayor en /A/: escucha, luego canta cada paso. Los siguientes esperan a la derecha; la raíz sube tras cada pasada.",
+      metricHints: { roots: "rootCount", intonation: "medianCents" }
     },
     /* —— Singing advanced —— */
     "s4-lip-trills": {
@@ -372,8 +665,8 @@
       pitchChallenge: false,
       autoPiano: true,
       autoRecord: false,
-      cue: "Steady air for lip bubbles. Evenness bar — mark transfer to /A/ after.",
-      cueEs: "Aire estable para burbujas de labios. Barra de uniformidad — marca el paso a /A/ después.",
+      cue: "Brrr without voice, then a trill on the piano's note. The zig-zag is your bubble; a flat line means the lips stopped. Last, /A/ on the same note.",
+      cueEs: "Brrr sin voz y luego trino en la nota del piano. El zigzag es tu burbuja; una línea plana, que los labios se pararon. Al final, /A/ en la misma nota.",
       metricHints: {}
     },
     "s5-sirens": {
@@ -382,13 +675,15 @@
       showHold: false,
       showLevel: true,
       pitchChallenge: false,
-      // Piano on so Empezar plays mid-range ref (G2) under the glide
-      autoPiano: true,
-      refPitch: "G2",
+      // Free range: no reference drone and no target lane; the mode draws the span you covered
+      autoPiano: false,
+      ownsTarget: true,
+      /** Read by a proposed app.js change: no auto octave shift under a siren */
+      freeRange: true,
       autoRecord: false,
-      cue: "Smooth glides. We track pitch range rope and siren count — not single-note locks.",
-      cueEs: "Deslizamientos suaves. Seguimos el rango y el conteo de sirenas — no bloqueos de nota única.",
-      metricHints: { sirens: "sirenCount", smoothness: "rangeSmooth" }
+      cue: "Glide low to high and back. The line shows your range and where the voice jumps — there is no note to hit.",
+      cueEs: "Desliza de grave a agudo y vuelve. La línea muestra tu rango y dónde salta la voz — no hay nota que acertar.",
+      metricHints: { sirens: "sirenCount" }
     },
     "s6-straw": {
       mode: "sovtFlow",
@@ -399,8 +694,8 @@
       pitchChallenge: false,
       autoPiano: true,
       autoRecord: false,
-      cue: "Straw only — steady air, soft cheeks. Mark transfer to open vowel after.",
-      cueEs: "Solo pajita — aire estable, mejillas suaves. Marca el paso a vocal abierta después.",
+      cue: "A soft tone through the straw on the piano's note, cheeks soft. The bar is your tone; dots mean air only. Then, without the straw: /u/, then /A/.",
+      cueEs: "Un tono suave por la pajita en la nota del piano, mejillas sueltas. La barra es tu tono; los puntos, solo aire. Después, sin pajita: /u/ y luego /A/.",
       metricHints: {}
     },
     "s7-humming": {
@@ -413,14 +708,20 @@
       autoRecord: false,
       refPitch: "D3",
       modeCue: "hum",
-      cue: "Hum through soft pitch targets. Lip buzz, no challenge scoring.",
-      cueEs: "Tararea hacia objetivos suaves. Zumbido en labios, sin puntuación de reto.",
-      metricHints: {}
+      /** The mode walks its own ten notes and sounds each one */
+      ownsTarget: true,
+      /** Read by js/app.js: no chord loop or progression window under the notes */
+      noProgression: true,
+      cue: "Hum ten soft targets: each counts when held ~1.5 s near the centre. Lip buzz is yours to feel — not scored.",
+      cueEs: "Tararea diez objetivos suaves: cada uno cuenta al sostenerlo ~1,5 s cerca del centro. El zumbido lo sientes tú — no se puntúa.",
+      metricHints: { targets: "notesHeld" }
     },
     "s8-breath-support": {
       mode: "breathS",
-      showPitch: true,
-      showHold: true,
+      // The two lanes (S, then /A/) are the picture; the highway would push
+      // them out of the first screen
+      showPitch: false,
+      showHold: false,
       showLevel: true,
       pitchChallenge: false,
       autoPiano: true,
@@ -428,9 +729,9 @@
       /** Space / air assist for unvoiced S phase (a11y) — allowed even with pitch canvas */
       manualSoundKind: "air",
       allowManualSound: true,
-      cue: "Phase 1: even S (or SH). Phase 2: same support on /A/. Pair with SH ladder warm-up.",
-      cueEs: "Fase 1: S (o SH) pareja. Fase 2: mismo soporte en /A/. Combina con escalera SH.",
-      metricHints: { maxS: "bestS", transferA: "bestA" }
+      cue: "Step 1: a long, even S with no voice. Step 2: the same easy length on a sung /A/. We time both; how it feels is yours to rate.",
+      cueEs: "Paso 1: una S larga y pareja, sin voz. Paso 2: la misma duración tranquila en una /A/ cantada. Medimos ambas; cómo se siente lo valoras tú.",
+      metricHints: { maxS: "bestS" }
     },
     "s9-pitch-match": {
       mode: "pitchMatch",
@@ -438,11 +739,14 @@
       showHold: false,
       showLevel: true,
       pitchChallenge: true,
+      /** Read by a proposed app.js change: no score/combo words; the mode patches accuracy on Stop */
+      noGameScore: true,
+      ownsMetrics: true,
       autoPiano: true,
       autoRecord: false,
-      cue: "Listen first, then match. Lock 8 notes in the green lane — full pitch game.",
-      cueEs: "Escucha primero, luego afina. Bloquea 8 notas en el carril verde.",
-      metricHints: { matches: "locks", accuracy: "gameAccuracy", precision: "gameCombo" }
+      cue: "Listen to the whole note first, then match it. Lock 8 notes in the green band; an octave up counts.",
+      cueEs: "Escucha la nota entera primero, luego afínala. Fija 8 notas en la banda verde; una octava arriba también vale.",
+      metricHints: { matches: "locks", accuracy: "medianCents", precision: "medianSpread" }
     },
     "s10-five-note": {
       mode: "scaleSteps",
@@ -452,34 +756,52 @@
       pitchChallenge: false,
       autoPiano: true,
       autoRecord: false,
-      cue: "1–2–3–4–5–4–3–2–1 step targets. Short lock per step, not free challenge.",
-      cueEs: "Objetivos 1–2–3–4–5–4–3–2–1. Bloqueo corto por paso, no reto libre.",
+      /** The mode walks its own notes (three roots, C3 → D3 → E3) and sounds each step */
+      ownsTarget: true,
+      /** Read by js/app.js: no chord loop or progression window under the steps */
+      noProgression: true,
+      roots: [48, 50, 52],
+      holdMs: 700,
+      tolCents: 40,
+      cue: "1–2–3–4–5–4–3–2–1 on three roots. Each step locks when held in the band; the next steps wait to the right.",
+      cueEs: "1–2–3–4–5–4–3–2–1 en tres raíces. Cada paso se fija al sostenerlo en la banda; los siguientes esperan a la derecha.",
       metricHints: { roots: "rootCount" }
     },
     "s11-dynamics": {
       mode: "dynamicSwell",
-      showPitch: true,
-      showHold: true,
-      showLevel: true,
-      pitchChallenge: false,
-      autoPiano: true,
-      autoRecord: false,
-      cue: "Swell soft→medium→soft. Watch pitch stay stable while level moves.",
-      cueEs: "Crescendo suave→medio→suave. Que la afinación se mantenga al mover el volumen.",
-      metricHints: { swells: "swellCount", pitchStable: "pitchStableScale" }
-    },
-    "s12-easy-onset": {
-      mode: "onsetReps",
-      showPitch: true,
+      // The skill is the level shape; pitch is its second line, drawn under
+      // it in cents against your own start — so the picture lives in the
+      // stage, not below the fold under a one-lane highway
+      showPitch: false,
       showHold: false,
       showLevel: true,
       pitchChallenge: false,
+      // Space-as-sound would draw a swell nobody sang
+      allowManualSound: false,
+      autoPiano: true,
+      autoRecord: false,
+      targetSwells: 6,
+      swellSec: 7,
+      cue: "Soft → grow → back to soft along the band. The pitch line underneath should stay flat while the level moves.",
+      cueEs: "Suave → crece → vuelve a suave siguiendo la banda. La línea de afinación de abajo debe quedarse plana mientras cambia el volumen.",
+      metricHints: { swells: "swellCount", pitchStable: "pitchAtPeakCents" }
+    },
+    "s12-easy-onset": {
+      mode: "onsetReps",
+      // The skill is the first 100 ms of each note, drawn after it; the
+      // highway only showed detector spikes at every start
+      showPitch: false,
+      showHold: false,
+      showLevel: true,
+      pitchChallenge: false,
+      // Space-as-sound would be an onset nobody made
+      allowManualSound: false,
       autoPiano: true,
       autoRecord: false,
       targetReps: 10,
-      cue: "Easy onsets only. We flag hard attacks (RMS spikes) vs balanced starts.",
-      cueEs: "Solo ataques suaves. Marcamos ataques duros (picos de energía) vs inicios equilibrados.",
-      metricHints: { easyOnsets: "easyOnsetCount" }
+      cue: "First your own examples: 2 abrupt 'uh', 2 breathy 'ha', 2 easy. Then easy onsets from silence; each one is drawn once it's over.",
+      cueEs: "Primero tus ejemplos: 2 «uh» bruscos, 2 «ha» soplados, 2 fáciles. Luego inicios fáciles desde el silencio; cada uno se dibuja al terminar.",
+      metricHints: { easyOnsets: "balancedOnsetCount" }
     },
     "s13-arpeggio-match": {
       mode: "pitchChord",
@@ -490,32 +812,39 @@
       autoPiano: true,
       autoArpeggio: true,
       autoRecord: false,
-      cue: "Arpeggio + sustain. Match chord tones as they roll.",
-      cueEs: "Arpegio + sostenido. Acompaña los tonos del acorde al salir.",
-      metricHints: { progressions: "repCount" }
+      cue: "Arpeggio + sustain. Sing each chord 1 → 3 → 5 → 8 in order; a full pass counts when every chord is complete.",
+      cueEs: "Arpegio + sostenido. Canta cada acorde 1 → 3 → 5 → 8 en orden; una vuelta cuenta cuando todos los acordes están completos.",
+      metricHints: { progressions: "fullPasses", intervalAccuracy: "medianIntervalCents" }
     },
     "s14-staccato-legato": {
       mode: "staccatoLegato",
-      showPitch: true,
-      showHold: true,
+      // The skill is note length and the gaps between notes; the highway
+      // bridged every staccato rest into one line and chased the chord loop
+      showPitch: false,
+      showHold: false,
       showLevel: true,
       pitchChallenge: false,
-      autoPiano: true,
+      // Space-as-sound would draw notes nobody sang
+      allowManualSound: false,
+      // A chord loop through the speakers fills the rests the picture measures;
+      // the piano stays one tap away
+      autoPiano: false,
       autoRecord: false,
       phases: [
-        { label: "Staccato rounds", sec: 90 },
-        { label: "Legato line", sec: 90 },
-        { label: "Staccato again", sec: 60 },
-        { label: "Legato again", sec: 60 }
+        { label: "Staccato rounds", labelEs: "Staccato", sec: 90, kind: "staccato" },
+        { label: "Legato line", labelEs: "Legato", sec: 90, kind: "legato" },
+        { label: "Staccato again", labelEs: "Staccato otra vez", sec: 60, kind: "staccato" },
+        { label: "Legato again", labelEs: "Legato otra vez", sec: 60, kind: "legato" },
+        { label: "Song phrase · legato", labelEs: "Frase de canción · legato", sec: 30, kind: "legato", round: false }
       ],
-      cue: "Short bounce vs connected line — note lengths auto-classify after holds.",
-      cueEs: "Rebote corto vs línea conectada — las duraciones se clasifican solas.",
-      metricHints: {}
+      cue: "Same 3-note pattern: short notes with silence between, then one joined line. Each note is drawn as long as it sounded. With the piano on speakers, use headphones.",
+      cueEs: "El mismo patrón de 3 notas: notas cortas con silencio entre ellas, luego una sola línea unida. Cada nota se dibuja tan larga como sonó. Con el piano por altavoz, usa auriculares.",
+      metricHints: { rounds: "phasesSungInTheirWay" }
     },
     /* —— Singing · class course (placement & resonance) —— */
     "s17-jaw-neck-release": {
       mode: "releaseFlow",
-      // Clock-driven and silent: runs with or without a microphone
+      // Clock-driven and quiet: runs with or without a microphone
       timeDriven: true,
       showPitch: false,
       showHold: false,
@@ -523,47 +852,73 @@
       pitchChallenge: false,
       autoPiano: false,
       autoRecord: false,
+      // The exercise's five steps, in its words and order: stand tall first,
+      // then the four releases (103 s, inside the daily session's 105 s)
       phases: [
+        {
+          label: "Stand tall, shoulders down",
+          labelEs: "De pie, hombros bajos",
+          short: "Stand",
+          shortEs: "De pie",
+          art: "stand",
+          setup: true,
+          sec: 6,
+          cue: "Stand tall, shoulders down, nothing tight at the waist or the collar.",
+          cueEs: "De pie, hombros bajos, nada apretado en la cintura ni en el cuello."
+        },
         {
           label: "Jaw hangs",
           labelEs: "Mandíbula suelta",
-          sec: 25,
-          cue: "Two fingers on the hinge — let the mouth fall open with no push.",
-          cueEs: "Dos dedos en la bisagra — deja caer la boca sin empujar."
+          short: "Jaw",
+          shortEs: "Mandíbula",
+          art: "jaw",
+          sec: 22,
+          cue: "Two fingers on the hinge: let the mouth fall open with no push. Keep breathing.",
+          cueEs: "Dos dedos en la bisagra: deja caer la boca sin empujar. Sigue respirando."
         },
         {
           label: "Slow neck half-circles",
           labelEs: "Medios círculos de cuello",
+          short: "Neck",
+          shortEs: "Cuello",
+          art: "neck",
           sec: 30,
-          cue: "Half circles, one side then the other. Never roll the head back.",
-          cueEs: "Medios círculos, un lado y luego el otro. Nunca eches la cabeza atrás."
+          cue: "Ear to shoulder, chin past the chest, to the other shoulder and back. Never roll the head back.",
+          cueEs: "Oreja al hombro, la barbilla pasa por el pecho, al otro hombro y vuelta. Nunca eches la cabeza atrás."
         },
         {
           label: "Loose chewing hum",
           labelEs: "Masticar y tararear",
+          short: "Chew",
+          shortEs: "Masticar",
+          art: "chew",
           sec: 25,
-          cue: "Chew an imaginary gum, lips closed, soft hum, tongue loose.",
-          cueEs: "Mastica un chicle imaginario, labios cerrados, tarareo suave, lengua floja."
+          cue: "Chew an imaginary gum, lips closed, with a soft hum (the only sound here). Tongue loose.",
+          cueEs: "Mastica un chicle imaginario, labios cerrados, con un tarareo suave (el único sonido). Lengua floja."
         },
         {
           label: "Three silent pre-yawns",
           labelEs: "Tres pre-bostezos en silencio",
+          short: "Pre-yawns",
+          shortEs: "Pre-bostezos",
+          art: "yawns",
           sec: 20,
           cue: "The inside grows, the face stays calm. Stop before the yawn.",
           cueEs: "El interior crece, la cara tranquila. Párate antes del bostezo."
         }
       ],
-      cue: "Silent release before you sing. Phases advance on their own.",
-      cueEs: "Soltar en silencio antes de cantar. Las fases avanzan solas.",
+      cue: "Release before you sing: quiet except a soft hum while chewing. Steps advance on their own.",
+      cueEs: "Soltar antes de cantar: en silencio, salvo un tarareo suave al masticar. Los pasos avanzan solos.",
       metricHints: {}
     },
     "s18-costal-breath": {
       mode: "breathCycle",
-      // The level lane is feedback when a mic is there, never a requirement
+      // A pacer: the mic cannot hear a nose breath or see the ribs, so it is
+      // not opened (no permission prompt, no level pill reacting to the room)
       timeDriven: true,
       showPitch: false,
       showHold: false,
-      showLevel: true,
+      showLevel: false,
       pitchChallenge: false,
       autoPiano: false,
       autoRecord: false,
@@ -574,62 +929,80 @@
     },
     "s19-soft-palate-surprise": {
       mode: "openSpace",
-      showPitch: true,
-      showHold: true,
+      // The skill is the space, not the note: its own picture replaces the
+      // pitch highway, in the first screen. Silent steps run on the clock.
+      timeDriven: true,
+      showPitch: false,
+      showHold: false,
       showLevel: true,
       pitchChallenge: false,
       autoPiano: true,
-      autoRecord: false,
+      autoRecord: true,
       refPitch: "C3",
       minHoldMs: 1500,
       phases: [
         {
           label: "Surprise face",
           labelEs: "Cara de sorpresa",
+          short: "Surprise",
+          shortEs: "Sorpresa",
+          art: "surprise",
           sec: 20,
-          cue: "Surprising news — the jaw drops on its own. No sound yet.",
-          cueEs: "Una noticia sorprendente — la mandíbula cae sola. Todavía sin sonido."
+          cue: "Surprising news: the jaw drops on its own. No sound yet.",
+          cueEs: "Una noticia sorprendente: la mandíbula cae sola. Todavía sin sonido."
         },
         {
           label: "Stop before the yawn",
           labelEs: "Párate antes del bostezo",
+          short: "Pre-yawn",
+          shortEs: "Pre-bostezo",
+          art: "chapel",
           sec: 20,
-          cue: "The instant before a yawn. Hold that inner space.",
-          cueEs: "El instante antes de bostezar. Sostén ese espacio interno."
+          cue: "The instant before a yawn: the back of the mouth lifts. Hold that inner space, silently.",
+          cueEs: "El instante antes de bostezar: el fondo de la boca se eleva. Sostén ese espacio, en silencio."
         },
         {
           label: "Sing in that space",
           labelEs: "Canta en ese espacio",
-          sec: 45,
+          short: "/A/",
+          shortEs: "/A/",
           sound: true,
-          cue: "Comfortable /A/ from inside the chapel. Hold ≥1.5s to log it.",
-          cueEs: "/A/ cómoda desde dentro de la capilla. Sostén ≥1,5 s para registrarlo."
+          ref: true,
+          sec: 45,
+          cue: "A comfortable /A/ from inside that space. Every hold of 1.5 s or more is counted.",
+          cueEs: "Una /A/ cómoda desde dentro de ese espacio. Cuenta cada sostenido de 1,5 s o más."
         },
         {
           label: "Closed, then open",
           labelEs: "Cerrado, luego abierto",
-          sec: 25,
+          short: "A/B",
+          shortEs: "A/B",
           sound: true,
-          cue: "One phrase with the space closed, one with it open. Hear the difference.",
-          cueEs: "Una frase con el espacio cerrado, otra abierto. Escucha la diferencia."
+          ab: true,
+          sec: 25,
+          cue: "One phrase with the space closed, then the same phrase open, at the same loudness.",
+          cueEs: "Una frase con el espacio cerrado y luego la misma abierta, al mismo volumen."
         },
         {
           label: "Phrase with the space",
           labelEs: "Una frase con el espacio",
-          sec: 35,
+          short: "Phrase",
+          shortEs: "Frase",
           sound: true,
+          sec: 35,
           cue: "A line you know, keeping the pre-yawn space all the way through.",
           cueEs: "Una frase que sepas, manteniendo el espacio de pre-bostezo hasta el final."
         }
       ],
-      cue: "Surprise → pre-yawn → sound from that space. Holds log while a sounding phase runs.",
-      cueEs: "Sorpresa → pre-bostezo → sonido desde ese espacio. Los sostenidos cuentan en las fases con sonido.",
+      cue: "Surprise, then the pre-yawn, in silence; then sing from that space. Sung holds of 1.5 s or more are counted.",
+      cueEs: "Sorpresa y pre-bostezo, en silencio; luego canta desde ese espacio. Cuentan los sostenidos de 1,5 s o más.",
       metricHints: { openHolds: "holds" }
     },
     "s20-five-vowels": {
       mode: "vowelLadder",
       ownsTarget: true,
-      showPitch: true,
+      // The mode draws its own one-note lane (a column per vowel) in the panel
+      showPitch: false,
       showHold: false,
       showLevel: true,
       pitchChallenge: false,
@@ -646,8 +1019,11 @@
       mode: "resonanceZone",
       // The mode walks its own note list; keep the generic refPitch off the target
       ownsTarget: true,
-      qualityMetric: "body",
-      showPitch: true,
+      // The mode draws its own zone lane in the panel (no pitch highway)
+      showPitch: false,
+      focus: "body",
+      // Only what the microphone measures is scored: the picture measures level and tone clarity; body and comfort stay self-rated
+      stabilityMetric: false,
       showHold: false,
       showLevel: true,
       pitchChallenge: false,
@@ -657,23 +1033,26 @@
       zones: [
         {
           key: "low",
-          label: "Low · chest",
-          labelEs: "Graves · pecho",
+          label: "Low · chest voice",
+          labelEs: "Graves · voz de pecho",
           notes: ["C3", "B2", "A2", "G2", "A2", "B2"],
-          cue: "Aim the sound lower, soft palate open. Do not press the voice down.",
-          cueEs: "Dirige el sonido más abajo, paladar blando abierto. No empujes la voz hacia abajo."
+          cue: "Low and easy, space in the mouth. Do not press the voice down.",
+          cueEs: "Grave y fácil, espacio en la boca. No empujes la voz hacia abajo."
         }
       ],
-      cue: "Low targets with body. Aim lower — never press.",
-      cueEs: "Objetivos graves con cuerpo. Dirige más abajo — nunca aprietes.",
+      cue: "Low targets with body, never pressed. Stop where the tone stops being clear.",
+      cueEs: "Objetivos graves con cuerpo, sin apretar. Para donde el tono deja de ser claro.",
       metricHints: { zoneTargets: "targets" }
     },
     "s22-mid-voice-hola": {
       mode: "resonanceZone",
       // The mode walks its own note list; keep the generic refPitch off the target
       ownsTarget: true,
-      qualityMetric: "steadiness",
-      showPitch: true,
+      // The mode draws its own zone lane in the panel (no pitch highway)
+      showPitch: false,
+      focus: "speech",
+      // Only what the microphone measures is scored: pitch steadiness over the holds is measured; speech-likeness stays self-rated
+      stabilityMetric: "steadiness",
       showHold: false,
       showLevel: true,
       pitchChallenge: false,
@@ -698,8 +1077,11 @@
       mode: "resonanceZone",
       // The mode walks its own note list; keep the generic refPitch off the target
       ownsTarget: true,
-      qualityMetric: "buzz",
-      showPitch: true,
+      // The mode draws its own zone lane in the panel (no pitch highway)
+      showPitch: false,
+      focus: "bright",
+      // Only what the microphone measures is scored: the picture shows brightness against loudness; buzz and balance stay self-rated
+      stabilityMetric: false,
       showHold: false,
       showLevel: true,
       pitchChallenge: false,
@@ -712,20 +1094,23 @@
           label: "Mask · bright",
           labelEs: "Máscara · brillante",
           notes: ["E3", "G3", "A3", "G3", "B3", "A3"],
-          cue: "'YA, YA' deliberately nasal. Find the buzz in the nose and forehead.",
-          cueEs: "«YA, YA» a propósito nasal. Encuentra el zumbido en nariz y frente."
+          cue: "'YA, YA' deliberately nasal and bright. Notice where you feel the buzz.",
+          cueEs: "«YA, YA» a propósito nasal y brillante. Nota dónde sientes el zumbido."
         }
       ],
-      cue: "Exaggerate the nasal 'YA' to find the mask, then balance the colour back.",
-      cueEs: "Exagera el «YA» nasal para encontrar la máscara, luego equilibra el color.",
+      cue: "Normal 'YA', then exaggerate it, keep it on the notes, then balance the colour back.",
+      cueEs: "«YA» normal, luego exagéralo, mantenlo en las notas y equilibra el color.",
       metricHints: { zoneTargets: "targets" }
     },
     "s24-nana-high": {
       mode: "resonanceZone",
       // The mode walks its own note list; keep the generic refPitch off the target
       ownsTarget: true,
-      qualityMetric: "stability",
-      showPitch: true,
+      // The mode draws its own zone lane in the panel (no pitch highway)
+      showPitch: false,
+      focus: "soft",
+      // Only what the microphone measures is scored: pitch steadiness over the holds sung soft is measured; pushing stays self-rated
+      stabilityMetric: "stability",
       showHold: false,
       showLevel: true,
       pitchChallenge: false,
@@ -750,8 +1135,11 @@
       mode: "resonanceZone",
       // The mode walks its own note list; keep the generic refPitch off the target
       ownsTarget: true,
-      qualityMetric: "transitions",
-      showPitch: true,
+      // The mode draws its own zone lane in the panel (no pitch highway)
+      showPitch: false,
+      focus: "seams",
+      // Only what the microphone measures is scored: the picture shows each seam; transitions and comfort stay self-rated
+      stabilityMetric: false,
       showHold: false,
       showLevel: true,
       pitchChallenge: false,
@@ -797,15 +1185,18 @@
       showHold: false,
       showLevel: true,
       pitchChallenge: false,
-      autoPiano: true,
+      // No piano on Start: a looping accompaniment would be recorded into
+      // take A and not B (or both, differently), and the comparison is the
+      // point. The piano stays one tap away to find a starting note.
+      autoPiano: false,
       autoRecord: true,
       phases: [
         {
           label: "Take A · plain",
           labelEs: "Toma A · sin intención",
           sec: 45,
-          cue: "Sing the phrase the way it comes out. Mark the take when you finish it.",
-          cueEs: "Canta la frase como te salga. Marca la toma al terminarla."
+          cue: "Sing the phrase the way it comes out. The take starts when you sing and ends after two seconds of quiet.",
+          cueEs: "Canta la frase como te salga. La toma empieza al cantar y acaba tras dos segundos de silencio."
         },
         {
           label: "Take B · placed",
@@ -818,8 +1209,8 @@
           label: "Listen back",
           labelEs: "Escucha las dos",
           sec: 30,
-          cue: "Not which is prettier — which has more ring and width.",
-          cueEs: "No cuál es más bonita — cuál tiene más resonancia y amplitud."
+          cue: "Play A and B. Not which is prettier: which sounds fuller and rings more to you.",
+          cueEs: "Escucha A y B. No cuál es más bonita: cuál te suena más llena y con más brillo."
         }
       ],
       cue: "Two takes of one phrase, plain then placed, then listen back and keep one.",

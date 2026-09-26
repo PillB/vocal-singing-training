@@ -423,6 +423,8 @@ test.describe("Target lane: the note to sing is always the primary lane", () => 
     const r = await page.evaluate(() => {
       const pv = window.VTApp.getState().pitchViz;
       pv.activeChordName = pv.activeChordName || "C";
+      // s9 draws its own header and turns the badge off; this checks the badge geometry
+      pv.setDisplay?.({ chordBadge: true });
       pv._resize();
       pv._draw();
       const c = pv.canvas;

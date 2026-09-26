@@ -254,11 +254,11 @@
     "original": "Controla el rango de volumen: de íntimo a proyectado, sin esfuerzo.",
     "research": "El volumen con control transmite confianza; el grito tenso no.",
     "steps": [
-      "Elige una frase corta que uses a menudo.",
-      "Dila en 5 niveles: susurro → suave → conversación → sala → proyección (sin gritar).",
-      "Súbela y bájala como una escalera, 3–4 veces.",
-      "Mantén la misma claridad y dicción en todos los niveles.",
-      "Nota en qué nivel te sientes más natural y autoritario."
+      "Elige una frase corta que uses a menudo (8–12 palabras).",
+      "Dila en 5 niveles: 1 casi susurro → 2 suave → 3 conversación → 4 proyectada → 5 sala llena (sin gritar).",
+      "Vuelve 5 → 3 → 1 con la misma frase; repite la escalera 3 veces.",
+      "Luego cuenta una historia de 60 s usando al menos 3 niveles, con intención.",
+      "Mantén la misma claridad y dicción en todos los niveles."
     ],
     "tips": [
       "Proyecta con el cuerpo, no apretando la garganta.",
@@ -316,10 +316,10 @@
     "original": "La cara debe coincidir con el mensaje: emoción legible sin sobreactuar.",
     "research": "La incongruencia cara–mensaje reduce confianza; la expresión auténtica la sube.",
     "steps": [
-      "Elige 3 frases: buena noticia, dato serio, invitación cálida.",
-      "Di cada una con cara “apagada”, luego con expresión alineada.",
-      "Practica micro-sonrisa de ojos en la invitación (no solo boca).",
-      "Graba y revisa solo el rostro 30 s en silencio (mute)."
+      "Revisa tu cara en reposo en un espejo o la cámara (foto neutra).",
+      "Practica 10 segundos una cara de “hola” cálida (ojos + sonrisa leve).",
+      "Cuenta una historia de 60 s con 3 cambios de cara intencionales: curiosidad, sorpresa, resolución.",
+      "Revisa primero el video sin sonido: ¿la cara cuenta la historia?"
     ],
     "tips": [
       "La tensión de mandíbula endurece la expresión: suéltala.",
@@ -336,10 +336,10 @@
     "original": "Di lo esencial en menos palabras sin perder el punto.",
     "research": "La concisión estratégica respeta el tiempo del oyente y sube la autoridad percibida.",
     "steps": [
-      "Escribe (o improvisa) tu idea en ~120 palabras.",
-      "Córtala a la mitad manteniendo el punto.",
-      "Córtala otra vez a 2–3 oraciones máximas.",
-      "Habla la versión corta en voz alta con pausas y tono claros."
+      "Haz una lista de 5 preguntas de práctica (trabajo o vida).",
+      "En cada una: cuenta 3 tiempos en silencio antes de responder.",
+      "Responde en 3 oraciones o menos.",
+      "Graba un bloque de preguntas y respuestas; quita cualquier frase que no aporte."
     ],
     "tips": [
       "Empieza por el punto, no por la prehistoria.",
@@ -397,7 +397,7 @@
     "research": "Emparejar energía genera rapport; luego puedes elevar o calmar con intención.",
     "steps": [
       "Elige tres “salas” imaginarias: 1:1 calmado, equipo animado, presentación formal.",
-      "Di el mismo mensaje de 45 s adaptando volumen, ritmo y gestos a cada sala.",
+      "Di el mismo mensaje de 30 s adaptando volumen, ritmo y gestos a cada sala.",
       "Practica “match then lead”: 10 s al nivel del otro, luego un paso más claro/calmado.",
       "Graba las tres y marca cuál se siente más natural."
     ],
@@ -678,9 +678,9 @@
     "original": "Crescendo/decrescendo en una nota sin perder la afinación.",
     "research": "Tipo messa di voce: control dinámico con estabilidad de tono.",
     "steps": [
-      "Elige un tono cómodo (piano + sostener + autopista).",
+      "Elige un tono cómodo (piano + sostener + visualizador).",
       "Empieza suave → crece a medio → vuelve a suave en ~6–8 s.",
-      "Mantén el centro de afinación (los puntos alineados).",
+      "Mantén el centro de afinación (la línea de afinación bajo el regulador sigue plana).",
       "Haz 6 oleadas; descansa si hay presión.",
       "Opcional: lo mismo en dos tonos cercanos."
     ],
@@ -707,7 +707,7 @@
     "tips": [
       "Piensa “decir la vocal”, no “atacar la nota”.",
       "El fry puede ubicar el cierre; luego suelta al tono.",
-      "La autopista debe asentar rápido, no solo un pico salvaje al inicio."
+      "El dibujo del ataque debe asentarse rápido, sin un pico salvaje al inicio."
     ],
     "mistakes": [
       "Golpes glotales duros",

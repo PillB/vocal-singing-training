@@ -215,34 +215,37 @@ window.VT_EXERCISES = {
         {
           id: "auditory",
           title: "1 · Auditory review",
+          titleEs: "1 · Revisión con el oído",
           prompts: [
-            "Is volume steady and appropriate?",
-            "Is tonality warm / monotone / tense?",
-            "Pace: too fast, too slow, or varied well?",
-            "Diction: are word endings clear?",
-            "Breath: noisy, gasping, or easy?",
-            "Filler sounds: um, uh, clicks?"
+            { en: "Is volume steady and appropriate?", es: "¿El volumen es estable y adecuado?" },
+            { en: "Is tonality warm / monotone / tense?", es: "¿El tono suena cálido, monótono o tenso?" },
+            { en: "Pace: too fast, too slow, or varied well?", es: "Ritmo: ¿muy rápido, muy lento o bien variado?" },
+            { en: "Diction: are word endings clear?", es: "Dicción: ¿se oyen los finales de palabra?" },
+            { en: "Breath: noisy, gasping, or easy?", es: "Respiración: ¿ruidosa, entrecortada o tranquila?" },
+            { en: "Filler sounds: um, uh, clicks?", es: "Muletillas: ¿eh, este, chasquidos?" }
           ]
         },
         {
           id: "visual",
           title: "2 · Visual review",
+          titleEs: "2 · Revisión con la vista",
           prompts: [
-            "Posture: open or collapsed?",
-            "Facial expression matches the story?",
-            "Hand gestures purposeful or restless?",
-            "Eye contact with the camera lens?",
-            "Any distracting habits?"
+            { en: "Posture: open or collapsed?", es: "Postura: ¿abierta o hundida?" },
+            { en: "Facial expression matches the story?", es: "¿La expresión de la cara acompaña la historia?" },
+            { en: "Hand gestures purposeful or restless?", es: "¿Gestos con intención o manos inquietas?" },
+            { en: "Eye contact with the camera lens?", es: "¿Miras a la lente de la cámara?" },
+            { en: "Any distracting habits?", es: "¿Algún hábito que distraiga?" }
           ]
         },
         {
           id: "transcription",
           title: "3 · Transcription review",
+          titleEs: "3 · Revisión con la transcripción",
           prompts: [
-            "Transcribe a 1–2 minute excerpt.",
-            "Highlight fillers: um, like, you know…",
-            "Mark unclear or run-on sentences.",
-            "Choose ONE pattern to improve next week."
+            { en: "Transcribe a 1–2 minute excerpt.", es: "Transcribe un fragmento de 1–2 minutos." },
+            { en: "Highlight fillers: um, like, you know…", es: "Marca las muletillas: eh, o sea, este…" },
+            { en: "Mark unclear or run-on sentences.", es: "Señala frases confusas o que no terminan." },
+            { en: "Choose ONE pattern to improve next week.", es: "Elige UN patrón para mejorar la próxima semana." }
           ]
         }
       ]
@@ -392,7 +395,7 @@ window.VT_EXERCISES = {
         { id: "naturalness", label: "Still natural?", type: "scale", min: 1, max: 5 },
         { id: "engagement", label: "Engagement feel", type: "scale", min: 1, max: 5 }
       ],
-      audio: { timer: true, record: true, piano: true, pitchViz: true, refPitch: "C3" },
+      audio: { timer: true, record: true },
       timerDefaultSec: 480,
       progressions: ["prog1"]
     },
@@ -557,8 +560,8 @@ window.VT_EXERCISES = {
       research:
         "Memorable stories emphasize the peak emotional turn, not every detail. Setup is short; the turn is vivid; the point is clear.",
       steps: [
-        "Choose a true 2-minute personal story.",
-        "Write: setup (2–3 sentences) → peak moment (sensory detail) → point (1 sentence).",
+        "Choose a true personal story you can tell in about 90 seconds.",
+        "Plan it: context → tension → peak moment (sensory detail) → point (1 sentence).",
         "Deliver emphasizing the peak with pace, volume, and pause.",
         "Remove one unnecessary setup detail; re-deliver tighter."
       ],
@@ -959,7 +962,7 @@ window.VT_EXERCISES = {
         "Letting the tongue block the exit"
       ],
       metrics: [
-        { id: "openHolds", label: "Open-space holds marked", labelEs: "Sostenidos con espacio abierto", type: "number", target: 6, unit: "" },
+        { id: "openHolds", label: "Sung holds ≥1.5 s", labelEs: "Sostenidos cantados ≥1,5 s", type: "number", target: 6, unit: "" },
         { id: "openness", label: "Space / width felt", labelEs: "Espacio / amplitud que sentiste", type: "scale", min: 1, max: 5 },
         { id: "jawFree", label: "Jaw free (no tension)", labelEs: "Mandíbula libre (sin tensión)", type: "scale", min: 1, max: 5 }
       ],
@@ -1075,7 +1078,7 @@ window.VT_EXERCISES = {
       metrics: [
         { id: "zoneTargets", label: "Middle targets held", labelEs: "Objetivos medios sostenidos", type: "number", target: 6, unit: "" },
         { id: "speechLike", label: "Speech-like ease", labelEs: "Facilidad parecida al habla", type: "scale", min: 1, max: 5 },
-        { id: "steadiness", label: "Steadiness", labelEs: "Estabilidad", type: "scale", min: 1, max: 5 }
+        { id: "steadiness", label: "Pitch steadiness", labelEs: "Estabilidad del tono", type: "scale", min: 1, max: 5 }
       ],
       audio: { timer: true, record: true, piano: true, pitchViz: true, refPitch: "D3" },
       timerDefaultSec: 180
@@ -1150,7 +1153,7 @@ window.VT_EXERCISES = {
       ],
       metrics: [
         { id: "zoneTargets", label: "High targets held", labelEs: "Objetivos agudos sostenidos", type: "number", target: 6, unit: "" },
-        { id: "stability", label: "Stability at low pressure", labelEs: "Estabilidad con poca presión", type: "scale", min: 1, max: 5 },
+        { id: "stability", label: "Pitch steadiness at soft volume", labelEs: "Estabilidad del tono a volumen suave", type: "scale", min: 1, max: 5 },
         { id: "noPush", label: "Reached without pushing", labelEs: "Llegaste sin empujar", type: "scale", min: 1, max: 5 }
       ],
       audio: { timer: true, record: true, piano: true, pitchViz: true, refPitch: "G3" },
@@ -1519,7 +1522,7 @@ window.VT_EXERCISES = {
       steps: [
         "Pick one comfortable pitch (piano + sustain + visualizer).",
         "Start soft → swell to medium → back to soft over ~6–8 seconds.",
-        "Keep pitch center (watch the dots stay aligned).",
+        "Keep pitch center (the pitch line under the swell stays flat).",
         "Do 6 swells; rest if pressed.",
         "Optional: same on two nearby pitches."
       ],

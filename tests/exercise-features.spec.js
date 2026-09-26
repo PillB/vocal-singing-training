@@ -152,10 +152,14 @@ test.describe("Exercise feature matrix", () => {
           // pitchMatch may still show prog bar via renderPianoControls
         }
         // Design start-floor: lip trills, straws and the rate ladder keep the
-        // default chord and play mode; their menus are left off on purpose.
-        const noChordMenus = ["sovtFlow", "rateLadder"].includes(profile.mode);
+        // default chord and play mode; their menus are left off on purpose. So
+        // do the modes whose picture sits where the menus were (staccato and
+        // legato, the A/B placement takes) and the modes that walk their own
+        // notes (practice.noProgression: the hum targets, the scale steps).
+        const noChordMenus =
+          ["sovtFlow", "rateLadder", "staccatoLegato", "placementAB"].includes(profile.mode) || !!p.noProgression;
         if (noChordMenus && progShown) {
-          local.push("sovtFlow/rateLadder shows the chord and play-mode menus");
+          local.push(`${profile.mode} shows the chord and play-mode menus`);
         }
         if (hasProgData && (profile.autoPiano || st.exercise?.audio?.piano) && !progShown && !noChordMenus) {
           local.push("has progressions + piano but prog bar hidden");

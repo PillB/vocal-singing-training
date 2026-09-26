@@ -70,17 +70,31 @@
     return next;
   }
 
+  /** Local calendar day. It was the UTC date, which in Lima turns over at 19:00. */
   function dayKey(d = new Date()) {
-    return d.toISOString().slice(0, 10);
+    if (global.VTDays?.dayKey) return global.VTDays.dayKey(d);
+    const p = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
   }
 
   function practicedToday() {
+    if (global.VTDays?.summary) return !!global.VTDays.summary().todayDone;
     const pulse = global.VTValuePulse?.compute?.();
     if (!pulse?.lastAt) return false;
     return dayKey(new Date(pulse.lastAt)) === dayKey();
   }
 
+  /**
+   * Calendar days since the last practice: 0 today, 1 yesterday. It used to
+   * count elapsed 24-hour blocks, so a singer who practised at 20:00 and came
+   * back at 19:00 the next evening was "0 days away".
+   */
   function daysSinceLastPractice() {
+    if (global.VTDays?.summary) {
+      const s = global.VTDays.summary();
+      if (s.todayDone) return 0;
+      return s.daysAway;
+    }
     const pulse = global.VTValuePulse?.compute?.();
     if (!pulse?.lastAt) return null;
     const t0 = Date.parse(pulse.lastAt);
@@ -166,47 +180,40 @@
     return { due, message, daysAway, cfg };
   }
 
-  // ——— Streak freeze (gentle, anti-guilt) ———
+  // ——— Rest days (the old "streak freeze") ———
+  //
+  // The freeze used to live here, and it did not work: it spent itself when the
+  // last practice was 24–48 hours old — the evening after any practice — and the
+  // streak never read it, so "racha protegida" was shown over a streak of 0.
+  // Rest days now live in the practice-day ledger (js/practice-days.js): earned
+  // by practising, spent only on a day that was really missed. These wrappers
+  // keep the old names working for callers and specs.
 
-  function weekKey() {
-    const now = new Date();
-    const day = (now.getUTCDay() + 6) % 7;
-    const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - day));
-    return start.toISOString().slice(0, 10);
+  function freezeAllowance(isPro) {
+    return isPro ? 3 : 2;
+  }
+
+  function freezesLeft() {
+    const s = global.VTDays?.summary?.();
+    return s ? s.rest.bank : 0;
   }
 
   function getFreezeState() {
-    const st = read(FREEZE_KEY, null) || { weekKey: weekKey(), used: 0 };
-    if (st.weekKey !== weekKey()) return { weekKey: weekKey(), used: 0 };
-    return st;
-  }
-
-  function freezeAllowance(isPro) {
-    return isPro ? 3 : 1;
-  }
-
-  function freezesLeft(isPro) {
-    const st = getFreezeState();
-    return Math.max(0, freezeAllowance(isPro) - (st.used || 0));
+    const s = global.VTDays?.summary?.();
+    return s ? { bank: s.rest.bank, cap: s.rest.cap, justUsed: s.rest.justUsed } : { bank: 0 };
   }
 
   /**
-   * If user missed exactly 1 day and has freezes, consume one and treat streak as continuous.
-   * @returns {{ applied: boolean, left: number, messageKey?: string }}
+   * Report a rest day the ledger has just spent, once.
+   * @returns {{ applied: boolean, left: number, days?: string[], messageKey?: string }}
    */
-  function tryApplyFreeze(isPro) {
-    const days = daysSinceLastPractice();
-    const left = freezesLeft(isPro);
-    if (days !== 1 || left <= 0) return { applied: false, left };
-    const st = getFreezeState();
-    // Only one freeze per calendar day of application
-    if (st.lastAppliedDay === dayKey()) return { applied: false, left };
-    st.used = (st.used || 0) + 1;
-    st.weekKey = weekKey();
-    st.lastAppliedAt = new Date().toISOString();
-    st.lastAppliedDay = dayKey();
-    write(FREEZE_KEY, st);
-    return { applied: true, left: freezesLeft(isPro), messageKey: "retain.freezeUsed" };
+  function tryApplyFreeze() {
+    const s = global.VTDays?.summary?.();
+    if (!s) return { applied: false, left: 0 };
+    const used = s.rest.justUsed;
+    if (!used) return { applied: false, left: s.rest.bank };
+    global.VTDays.ackRest();
+    return { applied: true, left: s.rest.bank, days: used.days, messageKey: "retain.freezeUsed" };
   }
 
   // ——— ICS calendar ———
@@ -245,7 +252,20 @@
     const desc = isEs
       ? "Recordatorio amable: abre el estudio y haz una micro-sesión. Sin presión."
       : "Kind reminder: open the studio for a micro-session. No pressure.";
-    const uid = "vt-practice-" + Date.now() + "@vocal-studio";
+    // One UID per cadence, so importing the file again updates the event
+    // instead of adding a second one.
+    const uid = "vt-practice-" + freq.toLowerCase() + "@vocal-studio";
+    const now = new Date();
+    const stamp =
+      now.getUTCFullYear() +
+      pad(now.getUTCMonth() + 1) +
+      pad(now.getUTCDate()) +
+      "T" +
+      pad(now.getUTCHours()) +
+      pad(now.getUTCMinutes()) +
+      pad(now.getUTCSeconds()) +
+      "Z";
+    const url = opts.url || (global.location ? global.location.origin + global.location.pathname : "");
     const lines = [
       "BEGIN:VCALENDAR",
       "VERSION:2.0",
@@ -254,12 +274,19 @@
       "METHOD:PUBLISH",
       "BEGIN:VEVENT",
       "UID:" + uid,
-      "DTSTAMP:" + toIcsDateLocal(new Date()) + "Z",
+      "DTSTAMP:" + stamp,
       "DTSTART:" + toIcsDateLocal(start),
       "DTEND:" + toIcsDateLocal(end),
       "RRULE:FREQ=" + freq,
       "SUMMARY:" + summary,
-      "DESCRIPTION:" + desc,
+      "DESCRIPTION:" + desc + (url ? " " + url : ""),
+      ...(url ? ["URL:" + url] : []),
+      // Many calendars stay silent without an alarm of their own.
+      "BEGIN:VALARM",
+      "ACTION:DISPLAY",
+      "DESCRIPTION:" + summary,
+      "TRIGGER:PT0M",
+      "END:VALARM",
       "END:VEVENT",
       "END:VCALENDAR"
     ];

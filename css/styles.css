@@ -15,13 +15,15 @@
   --success: #4fd492;
   --warn: #f0b84f;
   --danger: #f07a82;
+  /* Celebration only (a day sung, a surprise, a milestone). A clear light gold,
+     kept apart from --warn, which already means "careful" in the level meter. */
+  --reward: #ffd36e;
   --radius: 14px;
   --radius-sm: 10px;
   --shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
   --font: "Segoe UI", system-ui, -apple-system, sans-serif;
   --mono: "SF Mono", "Fira Code", ui-monospace, monospace;
   --max: 1100px;
-  --focus-ring: 0 0 0 3px rgba(110, 180, 232, 0.55);
   --min-tap: 44px;
   /* Multi-format / notched phones — JS fitHighway reads --safe-bottom */
   --safe-top: env(safe-area-inset-top, 0px);
@@ -255,11 +257,6 @@ body:not(.view-exercise) .main {
   border-color: var(--accent);
 }
 
-.btn:focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring);
-}
-
 .btn:active {
   transform: translateY(0);
 }
@@ -270,27 +267,31 @@ body:not(.view-exercise) .main {
   transform: none;
 }
 
-a:focus-visible,
-input:focus-visible,
-select:focus-visible,
-textarea:focus-visible,
-button:focus-visible,
-.tab:focus-visible,
-.tier-chip:focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring);
+/* Keyboard focus is an outline, never a box-shadow. The old shadow ring lost
+   to the decorative shadows on the selected track tab and the current nav
+   link (it vanished on both), faded into button glows, and forced-colours
+   mode drops box-shadow altogether. The offset puts the ring on the dark
+   surround, where it reads at about 17:1. :focus-visible keeps clicked
+   buttons ring-free. */
+:focus-visible {
+  outline: 3px solid #f5f8fd;
+  outline-offset: 3px;
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, #4a8fc4, #6a5ce0);
+  /* Darker ends so white text holds 4.5:1 across the whole gradient: the old
+     #4a8fc4 start gave 3.5:1. */
+  background: linear-gradient(135deg, #3a74a8, #5b4fd0);
   border-color: transparent;
   color: #fff;
 }
 
 .btn-singing {
-  background: linear-gradient(135deg, #b67a45, #c49a5a);
+  /* White on this orange measured 2.6:1; a dark label on a slightly brighter
+     orange keeps the Canto colour and reads at 6.5:1 or better. */
+  background: linear-gradient(135deg, #d08a4a, #e6ad6c);
   border-color: transparent;
-  color: #fff;
+  color: #1a1206;
 }
 
 .btn-ghost {
@@ -467,20 +468,8 @@ button:focus-visible,
   color: var(--text);
   background: rgba(255, 255, 255, 0.04);
 }
-.tab.active[data-tab="vocal"],
-.track-tab.active[data-tab="vocal"] {
-  background: linear-gradient(145deg, rgba(70, 150, 220, 0.95), rgba(50, 110, 180, 0.88));
-  color: #f2f9ff;
-  border-color: rgba(160, 210, 255, 0.55);
-  box-shadow: 0 0 0 1px rgba(90, 170, 240, 0.35), 0 6px 18px rgba(40, 100, 180, 0.35);
-}
-.tab.active[data-tab="singing"],
-.track-tab.active[data-tab="singing"] {
-  background: linear-gradient(145deg, rgba(210, 140, 80, 0.95), rgba(170, 100, 50, 0.9));
-  color: #fff8f0;
-  border-color: rgba(255, 200, 150, 0.5);
-  box-shadow: 0 0 0 1px rgba(230, 160, 100, 0.35), 0 6px 18px rgba(140, 80, 30, 0.35);
-}
+/* The chosen track: tint, bar and tick (Design: selected-style), not a
+   solid fill that read as a start button. */
 .tab.active .track-ico,
 .track-tab.active .track-ico {
   opacity: 1;
@@ -972,12 +961,6 @@ body.home-zero #pro-insights-panel {
   font-weight: 600;
 }
 
-.chip.selected {
-  border-color: var(--accent);
-  background: rgba(91, 159, 212, 0.2);
-  color: #c5e4f8;
-}
-
 .tier-toolbar {
   margin-bottom: 0.75rem;
 }
@@ -1002,18 +985,6 @@ body.home-zero #pro-insights-panel {
   border-color: rgba(124, 108, 240, 0.4);
   text-transform: uppercase;
   letter-spacing: 0.04em;
-}
-
-.card-ex-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  margin-bottom: 0.35rem;
-}
-
-.card-ex-top .num {
-  margin-bottom: 0;
 }
 
 .research-note {
@@ -2332,17 +2303,32 @@ html[lang^="es"] .hud-bc.is-manual .mic-sens-title::after {
 /* Non-pitch focus area inside sticky stage — center safe zone only */
 .mode-focus {
   position: absolute;
-  /* Stay clear of top HUD + full bottom control rail (never cover Start) */
-  top: calc(var(--hud-safe-t, 10%) + 0.15rem);
-  right: max(0.5rem, var(--hud-safe-r, 14%));
+  /* Starts under the top rail's measured bottom (--rail-t, js syncStageInsets):
+     at a fixed 10% the rail's second row on a phone covered the panel's
+     title. No canvas here, so no note labels to keep the right edge for.
+     The mode panel, then the stage guide, top to bottom. */
+  top: var(--rail-t, calc(var(--hud-safe-t, 10%) + 0.15rem));
+  right: 0.5rem;
   bottom: max(var(--rail-h, 6rem), calc(var(--hud-safe-b, 10%) + 0.75rem));
   left: 0.5rem;
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: stretch;
   justify-content: center;
   pointer-events: none;
   z-index: 2;
   overflow: hidden;
+}
+/* The panel keeps its height; the guide takes what is left (js fitStageGuide). */
+.mode-focus-panel {
+  flex: 0 0 auto;
+  min-height: 0;
+  max-height: 100%;
+  overflow: auto;
+}
+.mode-focus-panel:empty {
+  display: none;
 }
 
 /* Live practice mode mounted inside sticky stage (speech exercises) */
@@ -2350,19 +2336,19 @@ html[lang^="es"] .hud-bc.is-manual .mic-sens-title::after {
   /* Panel only receives clicks — empty inset must not steal rail hits */
   pointer-events: none;
   /* U2: top-align coach panel — avoid empty “theater” filling the stage */
-  align-items: flex-start;
+  align-items: stretch;
   justify-content: flex-start;
-  padding-top: 0.15rem;
-  /* Clear full measured bottom rail (+ gap); never cover Start/Mic */
-  bottom: max(var(--rail-h, 6rem), 5.5rem);
+  /* Clear full measured bottom rail (+ gap); never cover Start/Mic. The
+     rail is always measured now (js syncStageInsets), so no 5.5rem floor. */
+  bottom: var(--rail-h, 6rem);
 }
 .mode-focus.mode-focus-live .mode-panel {
   pointer-events: auto;
   width: 100%;
-  /* Content-sized panel; scroll only if phase list grows long.
-     14rem clipped the last line of the coaching cue on phones. */
-  max-height: min(100%, 18rem);
-  overflow: auto;
+  /* Content-sized panel; its wrapper (.mode-focus-panel) scrolls if a phase
+     list outgrows the stage. 14rem clipped the cue's last line on phones. */
+  max-height: none;
+  overflow: visible;
   margin: 0;
   background: rgba(12, 18, 26, 0.92);
   border: 1px solid var(--border);
@@ -2546,20 +2532,146 @@ body.view-exercise .metrics-card-collapsible.collapsed .metrics-sub-compact {
   justify-content: space-between;
   gap: 0.65rem;
 }
+
+/* —— Design: rating ——
+   After a take the card asks one question with three one-tap answers; the
+   sliders, notes and their own save wait under "Más detalles". The open card
+   is the question itself, so its "Reflexionar y guardar" header steps aside. */
+#metrics-card:not(.collapsed) .metrics-header {
+  display: none;
+}
+.rate {
+  display: grid;
+  gap: 0.65rem;
+}
+.rate p {
+  margin: 0;
+}
+.rate-done {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.section h3.rate-q {
+  margin: 0;
+  font-size: 1.3rem;
+  line-height: 1.25;
+  text-transform: none;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  font-weight: 750;
+}
+/* Focus lands here so the question is announced; it is not a control. */
+.rate-q:focus {
+  outline: none;
+}
+.rate-time {
+  font-size: 1rem;
+  color: var(--text-muted);
+}
+.rate-time strong {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+/* The answers are the card's main action: equal weight, none looks chosen
+   until it is, and then it wears the shared selected look (Design:
+   selected-style: tint, bar, border, a check mark and aria-pressed). */
+.rate-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+  max-width: 34rem;
+}
+.rate-row .rate-btn {
+  --sel: var(--accent);
+  min-height: 56px;
+  padding: 0.5rem 0.35rem;
+  border: 2px solid var(--accent);
+  background: var(--bg-soft);
+  font-size: 1.05rem;
+  font-weight: 750;
+  line-height: 1.2;
+  /* "Me costó" breaks onto two lines before it overflows at 320px */
+  white-space: normal;
+  text-align: center;
+}
+.rate-row .rate-btn[aria-pressed="true"] {
+  border-color: var(--sel);
+  background: rgba(255, 255, 255, 0.06);
+  background: color-mix(in srgb, var(--sel) 16%, transparent);
+  box-shadow: inset 0 -3px 0 var(--sel);
+  color: var(--text);
+  color: color-mix(in srgb, var(--sel) 25%, var(--text));
+}
+.rate-row .rate-btn[aria-pressed="true"]::before {
+  content: "✓ ";
+  content: "✓ " / "";
+}
+.rate-note {
+  font-size: 0.95rem;
+  color: var(--text-muted);
+}
+.rate-take.playback-inline:not(:empty) {
+  margin-top: 0.1rem;
+  padding: 0.75rem 0 0.1rem;
+}
+.rate-take .rate-take-k {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.rate-take .audio-player {
+  display: block;
+}
+.rate-take-actions {
+  margin-top: 0.5rem;
+}
+.rate-more {
+  border-top: 1px solid var(--border);
+}
+.rate-more > summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+  list-style: none;
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+.rate-more > summary::-webkit-details-marker {
+  display: none;
+}
+.rate-more > summary::before {
+  content: "▸";
+}
+.rate-more[open] > summary::before {
+  content: "▾";
+}
+.rate-more-body {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.25rem 0 0.5rem;
+}
+.rate-more-body .field input[type="range"] {
+  min-height: 44px;
+}
+.metrics-form .field[hidden] {
+  display: none;
+}
+.rate-skip {
+  justify-self: start;
+}
+.score-feel {
+  margin: 0.15rem 0 0;
+  font-weight: 700;
+}
 .guide-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.65rem;
-}
-
-.mode-shell {
-  min-width: 0;
-}
-
-.mode-shell:empty,
-.mode-shell:has(#mode-hud:empty):has(#mode-cue:empty) {
-  display: none;
 }
 
 #mode-cue:empty {
@@ -2628,10 +2740,6 @@ body.view-exercise .metrics-card-collapsible.collapsed .metrics-sub-compact {
   word-break: break-word;
   line-height: 1.4;
   color: var(--text-muted);
-}
-.mode-shell {
-  overflow: visible;
-  max-height: none;
 }
 /* Pitch modes: show full mode panel + cue without internal scrollbars */
 body.view-exercise .mode-hud-compact {
@@ -2874,13 +2982,23 @@ body.view-exercise .stage-below.is-fitted {
   }
 }
 
-/* Prefer larger text when user requests it */
+/* Reduced motion: no smooth scrolling (the JS scrolls check the same setting,
+   see scrollBehavior() in js/app.js), and every animation plays once. A short
+   duration alone left the infinite loops restarting every frame, so the live
+   dot flickered for exactly the people who asked for less motion. */
 @media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
   *,
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+  .status-pill.live::before {
+    animation: none !important;
   }
 }
 
@@ -2896,7 +3014,10 @@ body.view-exercise .stage-below.is-fitted {
 .btn-practice {
   background: linear-gradient(135deg, #3dba7a, #2a9d8f 55%, #4a8fc4);
   border: none;
-  color: #fff;
+  /* Near-black on the green reads 7.7:1 at the light end and 5.5:1 at the
+     blue end. White read 2.5:1 on the green — below AA on the one button
+     every screen is built around. */
+  color: #07130e;
   font-size: 1.05rem;
   font-weight: 750;
   padding: 0.75rem 1.35rem;
@@ -3134,27 +3255,39 @@ body.view-exercise .stage-below.is-fitted {
   margin-bottom: 0.35rem;
   font-size: 0.8rem;
 }
+/* 26 weeks of 10px cells and 2px gaps is 310px: it fits the 312px the map
+   gets on a 360px phone. Wider screens have room for bigger cells. */
 .practice-heatmap {
+  --hm-cell: 10px;
   display: grid;
   grid-auto-flow: column;
-  grid-template-rows: repeat(7, 9px);
-  grid-auto-columns: 9px;
+  grid-template-rows: repeat(7, var(--hm-cell));
+  grid-auto-columns: var(--hm-cell);
   gap: 2px;
   max-width: 100%;
   overflow-x: auto;
   padding: 0.2rem 0;
 }
+@media (min-width: 640px) {
+  .practice-heatmap {
+    --hm-cell: 14px;
+    gap: 3px;
+  }
+}
+/* A readable ramp: one session (the usual beginner day) already stands out
+   from an empty day, and each level is clearly brighter than the one below.
+   The old ramp put a practised day at 1.3:1 against an empty one. */
 .hm-cell {
-  width: 9px;
-  height: 9px;
+  width: var(--hm-cell);
+  height: var(--hm-cell);
   border-radius: 2px;
-  background: rgba(40, 55, 70, 0.85);
+  background: #1f2b39;
   border: 1px solid rgba(255, 255, 255, 0.04);
 }
-.hm-cell.l1 { background: rgba(56, 120, 90, 0.55); }
-.hm-cell.l2 { background: rgba(60, 150, 100, 0.7); }
-.hm-cell.l3 { background: rgba(70, 190, 120, 0.85); }
-.hm-cell.l4 { background: #6eec9a; }
+.hm-cell.l1 { background: #2f8a5c; }
+.hm-cell.l2 { background: #43b87c; }
+.hm-cell.l3 { background: #7fe3ad; }
+.hm-cell.l4 { background: #d2ffe6; }
 .ab-player {
   display: flex;
   flex-direction: column;
@@ -3868,6 +4001,54 @@ body.tour-active .app-footer * {
   font-size: 0.75rem !important;
   line-height: 1.4 !important;
 }
+
+/* —— Design: pricing (pre-launch) ——
+   Until checkout can take money the dialog leads with what is true today: a
+   box with the payments note and, while it is offered, the trial as the one
+   primary action. The plan buttons become "not available yet": dashed
+   outline, a muted label that is not bold (6.2:1 on the plan card) and no
+   hover, so they read as off without leaning on the outline alone. */
+.pricing-launch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem 0.9rem;
+  margin: 0 0 0.65rem;
+  padding: 0.7rem 0.8rem;
+  border-radius: 12px;
+  border: 1px solid rgba(110, 180, 232, 0.5);
+  background: rgba(110, 180, 232, 0.08);
+}
+.pricing-launch-note {
+  flex: 1 1 16rem;
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  color: var(--text);
+}
+.pricing-launch #btn-start-trial {
+  flex: 0 0 auto;
+  padding-inline: 1.2rem;
+}
+.plan-card .plan-cta-not-yet:disabled {
+  opacity: 1;
+  background: transparent;
+  border: 1px dashed rgba(140, 170, 210, 0.45);
+  color: #8d9bb0;
+  font-weight: 500;
+}
+.plan-card .plan-cta-not-yet:disabled:hover {
+  border-color: rgba(140, 170, 210, 0.45);
+}
+@media (max-width: 640px) {
+  /* Same slot as the status line in the phone order, right after it. */
+  .pricing-launch {
+    order: 1;
+  }
+  .pricing-launch #btn-start-trial {
+    flex: 1 1 100%;
+  }
+}
 body.pricing-open,
 body.account-open {
   overflow: hidden;
@@ -3980,8 +4161,6 @@ body.account-open {
   align-items: center;
 }
 .account-internal > summary:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
   border-radius: 8px;
 }
 .account-internal .login-form {
@@ -4013,6 +4192,88 @@ body.account-open {
   overflow-wrap: anywhere;
 }
 
+/* The guide's statistics switch: one sentence and, when it applies, a button. */
+.privacy-switch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.9rem;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+}
+.privacy-switch[hidden] {
+  display: none;
+}
+
+/* A/B results in the admin panel: plain numbers, one small table per metric. */
+.ab-results {
+  margin-top: 0.6rem;
+  font-size: 0.85rem;
+  color: var(--text);
+}
+.ab-exp + .ab-exp {
+  margin-top: 0.9rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--border);
+}
+.ab-exp h5 {
+  margin: 0 0 0.35rem;
+  font-size: 0.9rem;
+}
+.ab-metric {
+  margin: 0.55rem 0 0.25rem;
+  color: var(--text-muted);
+}
+.ab-table-wrap {
+  overflow-x: auto;
+}
+.ab-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-variant-numeric: tabular-nums;
+}
+.ab-table th,
+.ab-table td {
+  text-align: left;
+  padding: 0.3rem 0.5rem 0.3rem 0;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.ab-table th {
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.ab-diff {
+  margin: 0.3rem 0 0;
+  font-variant-numeric: tabular-nums;
+}
+.ab-warn {
+  margin: 0.2rem 0 0.4rem;
+  font-weight: 650;
+  color: var(--warn);
+}
+
+/* —— Design: abfix —— */
+/* Where a test stands against its plan, and a result cell that wraps its
+   interval onto a second line on a phone instead of scrolling it out of view. */
+.ab-plan {
+  margin: 0.2rem 0 0.4rem;
+}
+.ab-ingest {
+  margin: 0 0 0.6rem;
+}
+.ab-table th,
+.ab-table td:last-child {
+  white-space: normal;
+}
+.ab-ci {
+  display: inline-block;
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+
 .toast {
   position: fixed;
   /* Top placement: never cover bottom Start/Stop rail (mobile hit-target bug) */
@@ -4026,9 +4287,15 @@ body.account-open {
   padding: 0.75rem 1.15rem;
   border-radius: 999px;
   box-shadow: var(--shadow);
-  z-index: 100;
+  /* Above every overlay: the dialogs (.modal-overlay 100, pricing 120,
+     account 125) and the tour (10000–10002). At 100 the pricing toasts drew
+     under the pricing overlay, so Suscribirse and the trial looked dead. */
+  z-index: 10010;
   opacity: 0;
   transition: transform 0.25s ease, opacity 0.25s ease;
+  /* Size to the message, not to the half of the screen right of left:50%:
+     without this a long toast on a phone wrapped into a narrow oval. */
+  width: max-content;
   max-width: min(90vw, 420px);
   text-align: center;
   font-weight: 600;
@@ -4390,6 +4657,113 @@ body:not(.home-zero) #start-panel.start-panel {
   grid-template-columns: minmax(0, 1fr);
 }
 
+/* —— Design: first-visit ——
+   Before any day is sung the panel asks what to train, then offers that
+   track's Mínimo (js/daily-loop.js renderFirst, body.loop-first): one
+   question, one button. The intro line, the other ways in and the
+   explainer's "pick an exercise" step go; the tour offer is quiet links. */
+.track-pick-q {
+  margin: 0.85rem 0 0.45rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+.track-pick-opts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+.track-pick-btn {
+  display: grid;
+  align-content: center;
+  gap: 0.2rem;
+  min-width: 0;
+  min-height: 60px;
+  padding: 0.55rem 0.75rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(140, 170, 210, 0.38);
+  background: rgba(12, 18, 28, 0.5);
+  color: var(--text);
+  text-align: left;
+}
+.track-pick-btn:hover {
+  border-color: var(--accent);
+}
+.track-pick-name {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 1rem;
+  font-weight: 750;
+}
+/* A ring, ticked when chosen: the choice never rests on colour alone. */
+.track-pick-name::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 1.15rem;
+  height: 1.15rem;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  border-radius: 999px;
+  border: 2px solid rgba(140, 170, 210, 0.6);
+  font-size: 0.75rem;
+  font-weight: 900;
+  line-height: 1;
+}
+.track-pick-btn[aria-pressed="true"] .track-pick-name::before {
+  content: "✓";
+  border-color: var(--sel);
+  background: var(--sel);
+  color: var(--bg);
+}
+.track-pick-desc {
+  font-size: 0.82rem;
+  line-height: 1.3;
+  color: var(--text-muted);
+}
+body.loop-first #start-panel .start-sub,
+body.loop-first #start-panel .more-ways,
+body.loop-first #start-steps li:first-child {
+  display: none;
+}
+/* The explainer is down to two short steps, so the question and the Mínimo
+   take the room: headline and card line fit one line each, and the catalog
+   still starts in the first screen. */
+@media (min-width: 861px) {
+  body.loop-first #start-panel.start-panel {
+    grid-template-columns: minmax(0, 2.3fr) minmax(0, 1fr);
+  }
+  body.loop-first #start-panel .start-title {
+    font-size: clamp(1.3rem, 2.3vw, 1.6rem);
+  }
+}
+/* Numbered by counter, so a hidden step renumbers the rest */
+.start-steps {
+  counter-reset: start-step;
+}
+.start-steps li {
+  counter-increment: start-step;
+}
+.start-step-n::before {
+  content: counter(start-step);
+}
+body.loop-first #home-tour-invite > .muted,
+body.loop-first #home-tour-invite [data-tour-invite-dismiss] {
+  display: none;
+}
+body.loop-first #home-tour-invite {
+  gap: 0 0.25rem;
+  margin-top: 0.5rem;
+}
+body.loop-first #home-tour-invite .btn {
+  padding-inline: 0.5rem;
+  border-color: transparent;
+  background: none;
+  box-shadow: none;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
 /* —— Catalog: level groups so 20 cards read as two scannable sets —— */
 .track-blurb {
   margin: 0.75rem 0 0;
@@ -4436,6 +4810,159 @@ body:not(.home-zero) #start-panel.start-panel {
   color: var(--text-muted);
 }
 
+/* —— Design: planhist (Plan) ——
+   One focus for the week, the exercises that train it, and the days already
+   practised. The twelve weeks are a progress strip, not a row of buttons. */
+/* Twelve equal columns: week 12 can never wrap onto a line of its own. */
+/* —— Design: catalog ——
+   Each exercise is a row: number, name, one line on what you do, then minutes
+   and tools. The group badge shows only once filtered (grouped, the head
+   names it) and the sessions badge only once there is a session, top right. */
+/* A grid, so the row's text starts at the top: a block button centres its
+   content, and cards side by side on desktop started at different heights. */
+#exercise-list .card-ex {
+  position: relative;
+  display: grid;
+  align-content: start;
+  padding: 0.7rem 0.8rem 0.75rem 3.25rem;
+}
+#exercise-list .card-ex-body {
+  display: block;
+  min-width: 0;
+}
+#exercise-list .card-ex .num {
+  position: absolute;
+  top: 0.7rem;
+  left: 0.75rem;
+  margin: 0;
+}
+/* Floated ahead of the name, so only the name's first line makes room for it
+   (the badge is no taller than that line) */
+#exercise-list .card-ex-body > .badge.done {
+  float: right;
+  margin: 0 0 0 0.5rem;
+  padding: 0.05rem 0.45rem;
+  font-size: 0.75rem;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+#exercise-list .card-ex h3 {
+  margin: 0.1rem 0 0.15rem;
+  font-size: 1rem;
+  line-height: 1.3;
+}
+/* exerciseSummary() keeps this to two lines at 360px; no clamp, so nothing is
+   ever cut inside a word */
+#exercise-list .card-ex-desc {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+#exercise-list .card-ex .meta {
+  margin: 0.2rem 0 0;
+  font-size: 0.78rem;
+}
+#exercise-list .card-ex-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.6rem;
+  margin-top: 0.25rem;
+}
+#exercise-list .card-ex-tags:empty {
+  display: none;
+}
+#exercise-list .card-ex-tags .badge {
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+@media (max-width: 340px) {
+  /* The narrowest phones: a little more room for the line */
+  #exercise-list .card-ex {
+    padding-left: 2.95rem;
+    padding-right: 0.6rem;
+  }
+  #exercise-list .card-ex .num {
+    left: 0.6rem;
+  }
+  #exercise-list .card-ex-desc {
+    font-size: 0.8rem;
+  }
+}
+@media (min-width: 561px) {
+  /* Three roomy columns rather than four narrow ones, so the line reads */
+  body:not(.view-exercise) #exercise-list {
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  }
+}
+
+/* —— Design: canto-groups ——
+   Groups are named for what they hold, so names run longer than "Básico": on
+   a narrow phone the count drops below the name instead of squeezing it. */
+.grid-group-head {
+  flex-wrap: wrap;
+  row-gap: 0.1rem;
+}
+/* Today's basics, findable from the catalog: a line of shortcuts above the
+   list, and a tag on their rows. Green is the loop's colour for them. */
+.today-basics {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 0.8rem;
+  padding: 0.55rem 0.7rem 0.65rem;
+  border: 1px solid rgba(79, 212, 146, 0.35);
+  border-radius: var(--radius-sm);
+  background: rgba(79, 212, 146, 0.07);
+}
+.today-basics-label {
+  flex: 1 0 100%;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #c9f6de;
+}
+.today-basics-ex,
+.today-basics-more {
+  min-height: var(--min-tap);
+  padding: 0.3rem 0.8rem;
+  border-radius: 999px;
+  border: 1px solid rgba(79, 212, 146, 0.55);
+  background: rgba(12, 18, 28, 0.5);
+  color: var(--text);
+  font-size: 0.85rem;
+  font-weight: 650;
+}
+.today-basics-ex::after {
+  content: "›" / "";
+  margin-left: 0.35rem;
+  color: #8ee0b5;
+}
+.today-basics-ex:hover,
+.today-basics-more:hover {
+  border-color: var(--success);
+}
+.today-basics-more {
+  border-style: dashed;
+  color: var(--text-muted);
+}
+.card-ex-today {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #8ee0b5;
+}
+.card-ex-today::before {
+  content: "";
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: currentColor;
+}
+
 /* —— Plan: make the twelve weeks visible —— */
 .plan-rail {
   margin: 0 0 1rem;
@@ -4450,49 +4977,243 @@ body:not(.home-zero) #start-panel.start-panel {
   color: var(--text-muted);
 }
 .plan-week-rail {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
+  list-style: none;
+  margin: 0.5rem 0 0.25rem;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 0.25rem;
 }
 .plan-week-dot {
-  width: 2rem;
-  height: 2rem;
   display: grid;
-  place-items: center;
-  border-radius: 999px;
-  font-size: 0.82rem;
+  justify-items: center;
+  align-content: start;
+  gap: 0.3rem;
+  font-size: 0.75rem;
   font-weight: 700;
-  border: 1px solid var(--border);
+  line-height: 1.2;
   color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
 }
-.plan-week-dot.done {
-  color: #0b1017;
+/* The bar under each week: hollow still to come, filled done, taller now. */
+.plan-week-dot::after {
+  content: "";
+  width: 100%;
+  height: 0.375rem;
+  border-radius: 999px;
+  border: 1px solid rgba(140, 170, 210, 0.55);
+}
+.plan-week-dot.done::after {
   background: var(--success);
-  border-color: transparent;
+  border-color: var(--success);
 }
 .plan-week-dot.current {
   color: var(--text);
+  font-weight: 800;
+}
+.plan-week-dot.current::after {
+  height: 0.625rem;
+  background: var(--accent);
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px rgba(110, 180, 232, 0.3);
+}
+/* Cards keep their own height: a short review note no longer stretches to
+   the length of the focus card beside it. */
+.plan-grid {
+  align-items: start;
 }
 .plan-week-num {
   font-size: 1.4rem;
   font-weight: 800;
-  margin: 0.25rem 0;
+  margin: 0;
 }
-/* The week review asks you to judge a week you have not run yet */
+.plan-status {
+  margin: 0.75rem 0 0;
+}
+.plan-pick {
+  margin: 1rem 0 0.55rem;
+  font-size: 1rem;
+}
+/* The picked focus says so in text, not only in colour. */
+#element-chips .chip[aria-pressed="true"]::before {
+  content: "✓ ";
+}
+/* Not another focus: a quieter, outlined button with a chevron. */
+.plan-focus-more {
+  margin-top: 0.6rem;
+  color: var(--accent);
+}
+.plan-focus-more::after {
+  content: "▾";
+  content: "▾" / "";
+}
+.plan-focus-more[aria-expanded="true"]::after {
+  content: "▴";
+  content: "▴" / "";
+}
+.plan-exercises {
+  margin-top: 1.1rem;
+}
+.plan-exercises > p {
+  margin: 0 0 0.5rem;
+}
+.plan-days {
+  margin: 1rem 0 0;
+  font-weight: 700;
+}
+#plan-start-row {
+  margin-top: 1.1rem;
+}
 .plan-waiting-note {
-  display: none;
-  margin: 0 0 0.75rem;
+  margin: 0;
+  color: var(--text-muted);
+}
+
+/* A row that opens an exercise (Plan and History): the whole row is the button. */
+.open-row {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  min-height: 56px;
+  padding: 0.65rem 0.9rem;
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--text);
+  text-align: left;
+}
+.open-row:hover {
+  border-color: var(--accent);
+}
+.open-row-text {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.open-row .meta {
+  color: var(--text-muted);
   font-size: 0.85rem;
-  color: var(--warn);
 }
-#plan-review-card.is-waiting .plan-waiting-note {
-  display: block;
+.open-row .meta > span {
+  white-space: nowrap;
 }
-#plan-review-card.is-waiting .field,
-#plan-review-card.is-waiting .controls-row {
-  opacity: 0.55;
+.open-row-go {
+  flex: none;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+/* —— Design: planhist (History) ——
+   The days practised first, then what you did last. Day cells are plain
+   text, not buttons; practised and rest days carry a mark as well as a colour. */
+.hist-top {
+  display: grid;
+  gap: 1.25rem;
+  align-items: start;
+}
+@media (min-width: 900px) {
+  .hist-top {
+    grid-template-columns: minmax(0, 21rem) minmax(0, 1fr);
+    gap: 2rem;
+  }
+  .hist-top > :only-child {
+    grid-column: 1 / -1;
+  }
+}
+.hist-count {
+  margin: 0 0 0.35rem;
+  font-size: 1rem;
+  font-weight: 650;
+  line-height: 1.35;
+}
+.hist-count strong {
+  font-size: 1.75rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.hist-period {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+.hist-total {
+  margin: 0 0 0.5rem;
+  font-size: 0.88rem;
+}
+.hist-cal {
+  width: 100%;
+  max-width: 21rem;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 3px;
+  margin: 0 -3px;
+  font-variant-numeric: tabular-nums;
+}
+.hist-cal caption {
+  caption-side: top;
+  text-align: left;
+  padding: 0.25rem 3px 0.3rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+.hist-cal caption::first-letter {
+  text-transform: uppercase;
+}
+.hist-cal th {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  padding: 0 0 0.15rem;
+}
+.hist-cal td {
+  height: 1.75rem;
+  padding: 0;
+  text-align: center;
+  vertical-align: middle;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  line-height: 1;
+  color: var(--text-muted);
+}
+.hist-cal td.is-done {
+  background: var(--success);
+  color: #07170f;
+  font-weight: 800;
+}
+.hist-cal td.is-rest {
+  background: rgba(155, 143, 245, 0.22);
+  box-shadow: inset 0 0 0 1px var(--accent-2);
+  color: var(--text);
+}
+.hist-cal td.is-today {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  color: var(--text);
+  font-weight: 800;
+}
+.hist-cal td.is-done.is-today {
+  outline-color: var(--text);
+}
+.hist-mark {
+  margin-left: 1px;
+  font-size: 0.75rem;
+  font-weight: 900;
+}
+.hist-legend {
+  margin: 0.4rem 0 0;
+  font-size: 0.8rem;
+}
+.hist-recent h3 {
+  margin: 0 0 0.6rem;
+}
+.hist-rec-empty {
+  margin: 1.25rem 0 0;
+  font-size: 0.88rem;
 }
 
 /* —— Empty states point back at practice instead of dead-ending —— */
@@ -4520,14 +5241,12 @@ body.view-exercise .header-nav {
 
 /* —— Exercise stage: guidance instead of dead space —— */
 .stage-guide {
-  position: absolute;
-  /* Anchored just above the bottom control rail, so it fills the gap under the
-     mode panel and never covers Start or the mic slider. */
-  left: 0.5rem;
-  right: max(0.5rem, var(--hud-safe-r, 14%));
-  bottom: calc(max(var(--rail-h, 6rem), 5.5rem) + 0.4rem);
-  max-height: 44%; /* JS narrows this to the real gap under the mode panel */
-  overflow: auto;
+  /* In #mode-focus, under the mode panel and above the bottom rail, so it
+     never covers Start or the mic slider. js fitStageGuide shows as many
+     whole steps as fit (a clipped box cut a step mid-line). */
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow: hidden;
   z-index: 1;
   padding: 0.85rem 1rem;
   border-radius: var(--radius-sm);
@@ -4538,7 +5257,7 @@ body.view-exercise .header-nav {
 }
 .stage-guide-k {
   margin: 0 0 0.45rem;
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -4554,17 +5273,38 @@ body.view-exercise .header-nav {
 }
 .stage-guide-more {
   margin-top: 0.6rem;
-  padding-inline: 0;
+  /* Its words ran into the pill's edge at 0 */
+  padding-inline: 0.75rem;
   color: var(--accent);
 }
-/* Once practice is live the stage belongs to the exercise, not the reading */
-body.practice-live .stage-guide {
-  display: none;
+/* While practising it holds only the step the clock is on (js syncStageNow),
+   "Ahora · paso 2 de 5"; the steps used to vanish at Start. */
+.stage-guide-now {
+  margin: 0;
+  display: grid;
+  gap: 0.2rem;
 }
-@media (max-height: 560px) {
-  .stage-guide {
-    display: none;
-  }
+.stage-guide-now .stage-guide-k {
+  margin: 0;
+}
+.stage-now-t {
+  font-size: 0.95rem;
+  line-height: 1.4;
+  color: var(--text);
+}
+/* Only the button to all the steps fits: no box around it */
+.stage-guide.is-bare {
+  padding: 0 0.2rem;
+  border-color: transparent;
+  background: none;
+}
+.stage-guide.is-bare .stage-guide-more {
+  margin-top: 0;
+}
+.stage-guide.is-now {
+  padding: 0.55rem 0.8rem;
+  border-color: rgba(140, 170, 210, 0.3);
+  background: rgba(12, 18, 28, 0.9);
 }
 
 /* Mode cue was clipped mid-sentence on phone */
@@ -4615,8 +5355,10 @@ body.practice-live .stage-guide {
   display: inline;
 }
 
-/* The three-step strip already says what the intro sentence says */
-body.home-zero #start-panel .start-sub {
+/* The three-step strip already says what the intro sentence says. Not once
+   the loop owns the panel: then the line carries the rest-day and welcome-back
+   news, and the strip is gone. */
+body.home-zero:not(.loop-on) #start-panel .start-sub {
   display: none;
 }
 
@@ -4821,6 +5563,122 @@ body.home-zero #start-panel .start-sub {
   }
 }
 
+/* —— Design: phone-header ——
+   One row on a phone, away from the exercise: the mark (named for screen
+   readers by the title it stands in for), the three sections and "Más ▾",
+   which opens Pro, Cuenta, idioma and Tour as a menu. Same buttons, same
+   handlers (js/app.js bindHeaderMenu). Wider screens and the exercise view
+   keep the full header, and so do the guide and privacy pages (no Más). */
+.header-more {
+  display: none;
+}
+@media (max-width: 640px) {
+  body:not(.view-exercise) .app-header:has(#btn-more) .header-inner {
+    position: relative;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.375rem 0.6rem;
+  }
+  body:not(.view-exercise) .app-header:has(#btn-more) .brand {
+    flex: 0 0 auto;
+    gap: 0;
+  }
+  body:not(.view-exercise) .app-header:has(#btn-more) .brand-mark {
+    display: grid;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    font-size: 1rem;
+  }
+  body:not(.view-exercise) .app-header:has(#btn-more) .brand h1 {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  body:not(.view-exercise) .app-header:has(#btn-more) .header-actions {
+    flex: 1 1 auto;
+    min-width: 0;
+    flex-wrap: nowrap;
+    justify-content: flex-end;
+    gap: 0.3rem;
+  }
+  body:not(.view-exercise) .app-header:has(#btn-more) .header-nav {
+    flex-wrap: nowrap;
+    min-width: 0;
+  }
+  body:not(.view-exercise) .app-header:has(#btn-more) .header-more {
+    display: inline-flex;
+    flex: 0 0 auto;
+    gap: 0.3rem;
+    min-width: var(--min-tap);
+    font-weight: 650;
+  }
+  body:not(.view-exercise) .app-header:has(#btn-more) .header-more[aria-expanded="true"] {
+    background: rgba(110, 180, 232, 0.2);
+    box-shadow: inset 0 0 0 1px rgba(110, 180, 232, 0.5);
+  }
+  body:not(.view-exercise) .app-header:has(#btn-more) .header-more[aria-expanded="true"] .header-more-caret {
+    transform: rotate(180deg);
+  }
+  .header-more-caret {
+    display: inline-block;
+  }
+  body:not(.view-exercise) .app-header:has(#btn-more) .header-utils {
+    display: none;
+  }
+  body:not(.view-exercise) .app-header:has(#btn-more) .header-utils.is-open {
+    display: flex;
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0.6rem;
+    z-index: 50;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.35rem;
+    min-width: 11rem;
+    padding: 0.45rem;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: var(--bg-elevated);
+    box-shadow: var(--shadow);
+  }
+  body:not(.view-exercise) .app-header:has(#btn-more) .header-utils.is-open .btn {
+    justify-content: flex-start;
+    width: 100%;
+    padding-inline: 0.9rem;
+    font-size: 0.9rem;
+  }
+}
+@media (max-width: 360px) {
+  /* hidden made body a scroll container, which unpinned the header at this
+     width; clip trims the same overflow and leaves the header sticky. The
+     exercise view keeps hidden: its stage is sized for an unpinned header. */
+  html:not(:has(body.view-exercise)),
+  body:not(.view-exercise) {
+    overflow-x: clip;
+  }
+}
+@media (max-width: 359px) {
+  /* 320px: the row still fits, with tighter pills (text stays at 12px). */
+  body:not(.view-exercise) .app-header:has(#btn-more) .header-inner {
+    gap: 0.3rem;
+    padding-inline: 0.45rem;
+  }
+  body:not(.view-exercise) .app-header:has(#btn-more) .header-actions,
+  body:not(.view-exercise) .app-header:has(#btn-more) .header-nav {
+    gap: 0.15rem;
+  }
+  body:not(.view-exercise) .app-header:has(#btn-more) .header-actions .btn-sm {
+    padding-inline: 0.45rem;
+    font-size: 0.75rem;
+  }
+}
+
 /* ── Class course modes: vowel ladder + resonance zones ──
    Chip strips that name where you are in a sequence. Both mount inside
    .mode-panel, so they inherit its spacing and only add the strip itself. */
@@ -4902,5 +5760,1388 @@ body.home-zero #start-panel .start-sub {
 
   .trill-syl {
     font-size: 1.5rem;
+  }
+}
+
+/* ————————————————————————————————————————————————————————————————
+   Daily loop (js/daily-loop.js): today's basics, the week, the card that
+   ends the day. Calm by design: one accent for "done", no confetti, motion
+   only on the moment that earned it, and none with reduced motion.
+   ———————————————————————————————————————————————————————————————— */
+
+/* Once there is a day sung, the start panel gets its second column back:
+   the explainer is replaced by the practice record. */
+body.loop-on #start-panel.start-panel {
+  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+}
+body.loop-on .start-steps {
+  display: none;
+}
+
+/* The sizes: a segmented control that only selects (the button above
+   starts), labelled as a choice. Joined and square-cornered, so it never
+   reads as a row of start buttons; one row even at 320px, name over minutes.
+   The selected look is the shared one (Design: selected-style). */
+.loop-tiers {
+  margin: 0 0 0.7rem;
+}
+.loop-tiers-label {
+  display: block;
+  margin: 0 0 0.35rem;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.loop-tiers-seg {
+  display: flex;
+  max-width: 30rem;
+}
+.loop-tier {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.05rem;
+  min-height: 3.2rem;
+  margin-left: -1px;
+  padding: 0.35rem 0.4rem;
+  border-radius: 0;
+  border: 1px solid rgba(140, 170, 210, 0.45);
+  background: rgba(12, 18, 28, 0.5);
+  color: var(--text);
+  line-height: 1.2;
+  cursor: pointer;
+}
+.loop-tiers-seg .loop-tier:first-child {
+  margin-left: 0;
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+}
+.loop-tiers-seg .loop-tier:last-child {
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+.loop-tier-name {
+  font-size: 0.92rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.loop-tier-min {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.loop-tier:hover {
+  border-color: var(--accent);
+  position: relative;
+  z-index: 1;
+}
+@media (max-width: 360px) {
+  /* "✓ Essential" still fits a third of a 320px screen */
+  .loop-tier {
+    padding-inline: 0.15rem;
+  }
+  .loop-tier-name {
+    font-size: 0.8rem;
+  }
+}
+
+/* Done for today: the card settles, the button goes quiet. */
+#start-panel .next-step.is-done {
+  border-color: rgba(79, 212, 146, 0.5);
+  background: rgba(20, 60, 44, 0.35);
+  /* The quiet button keeps its natural width, so in a row it squeezed the
+     text to 51px at 390 (one word per line). Stack it instead. */
+  flex-direction: column;
+  align-items: stretch;
+}
+@media (max-width: 640px) {
+  #start-panel .next-step.is-done .next-step-cta {
+    width: 100%;
+  }
+}
+#start-panel .next-step.is-done .next-step-k {
+  color: #9fecc6;
+}
+
+/* —— Design: loop-copy ——
+   Today's basics say it once: kicker, headline, button. The card's size,
+   steps and reason go, and so does its box; js/daily-loop.js hides the
+   intro line too unless it reports a rest day spent. */
+#start-panel .next-step:is([data-loop="go"], [data-loop="sang"], [data-loop="back"]) {
+  margin: 0.7rem 0 0.6rem;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+#start-panel .next-step:is([data-loop="go"], [data-loop="sang"], [data-loop="back"]) .next-step-body {
+  display: none;
+}
+@media (min-width: 641px) {
+  /* Alone on its row, the button keeps the weight it has on a phone. */
+  #start-panel .next-step:is([data-loop="go"], [data-loop="sang"], [data-loop="back"]) .next-step-cta {
+    min-width: 16rem;
+    min-height: 3.1rem;
+    font-size: 1.1rem;
+  }
+}
+
+/* —— Design: naming ——
+   A returning learner sees one button and one choice. The button says which
+   size it starts ("▶ Empezar básicos" over "Esencial · 10 min"); the sizes
+   only select; the other ways in (Continuar, sesión guiada) fold behind
+   "Otras formas de practicar" (js/daily-loop.js renderMoreWays). */
+#btn-next-step {
+  flex-direction: column;
+  gap: 0.05rem;
+  line-height: 1.25;
+}
+#btn-next-step .cta-size {
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+.more-ways-btn {
+  gap: 0.5rem;
+  padding-inline: 1rem;
+  font-size: 0.95rem;
+}
+.more-ways-caret {
+  display: inline-block;
+  font-size: 0.9em;
+  transition: transform 0.15s ease;
+}
+.more-ways-btn[aria-expanded="true"] .more-ways-caret {
+  transform: rotate(180deg);
+}
+.more-ways-btn:not([hidden]) + .start-alt {
+  margin-top: 0.6rem;
+}
+@media (max-width: 360px) {
+  /* One line at 320px */
+  .more-ways-btn {
+    padding-inline: 0.8rem;
+    font-size: 0.9rem;
+  }
+}
+.start-path {
+  flex-wrap: wrap;
+  gap: 0.3rem 0.5rem;
+  min-width: 0;
+  font-size: 0.92rem;
+  color: var(--text-muted);
+}
+.start-path select {
+  min-width: 0;
+  max-width: 100%;
+  color: var(--text);
+}
+@media (prefers-reduced-motion: reduce) {
+  .more-ways-caret {
+    transition: none;
+  }
+}
+/* Scrolled text no longer shows through the sticky header (it was 82% opaque). */
+body:not(.view-exercise) .app-header {
+  background: var(--bg);
+}
+
+/* —— Design: selected-style ——
+   One look for every choose-one control: the choice's own colour as a 16%
+   tint, a 3px bar in it along the bottom edge, a border in it and a ✓. Never
+   a solid fill, so a choice never looks like the button that starts
+   something, and never colour alone (the tick, plus aria-pressed or
+   aria-selected). Each control names its colour in --sel: the track's for
+   tracks, the loop's green for sizes, the group's for catalog filters, the
+   accent for the plan's focus. */
+.track-tab[data-tab="singing"],
+.track-pick-btn[data-track="singing"] {
+  --sel: var(--singing);
+}
+.track-tab[data-tab="vocal"],
+.track-pick-btn[data-track="vocal"] {
+  --sel: var(--vocal);
+}
+.loop-tier {
+  --sel: var(--success);
+}
+.tier-chip,
+.element-chips .chip {
+  --sel: var(--accent);
+}
+.tier-chip[data-tier="advanced"] {
+  --sel: var(--accent-2);
+}
+.track-tab.active,
+.track-pick-btn[aria-pressed="true"],
+.loop-tier[aria-pressed="true"],
+.tier-chip[aria-pressed="true"],
+.element-chips .chip[aria-pressed="true"] {
+  position: relative;
+  z-index: 1;
+  border-color: var(--sel);
+  background: rgba(255, 255, 255, 0.06);
+  background: color-mix(in srgb, var(--sel) 16%, transparent);
+  box-shadow: inset 0 -3px 0 var(--sel);
+  color: var(--text);
+  color: color-mix(in srgb, var(--sel) 25%, var(--text));
+}
+.track-tab.active .track-label-short::before,
+.loop-tier[aria-pressed="true"] .loop-tier-name::before,
+.tier-chip[aria-pressed="true"]::before {
+  content: "✓ ";
+  content: "✓ " / "";
+}
+
+.loop-today {
+  display: grid;
+  gap: 0.55rem;
+  align-content: start;
+  padding: 0.85rem 0.95rem 0.9rem;
+  border-radius: var(--radius);
+  background: rgba(12, 18, 28, 0.45);
+  border: 1px solid rgba(140, 170, 210, 0.2);
+}
+.loop-today p {
+  margin: 0;
+}
+.loop-count {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  line-height: 1;
+}
+.loop-count strong {
+  font-size: clamp(2.1rem, 4.4vw, 2.7rem);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+}
+.loop-count span {
+  color: var(--text-muted);
+  font-weight: 650;
+}
+.loop-next-ms,
+.loop-streak {
+  font-size: 0.84rem;
+}
+
+/* The week: Monday to Sunday, one dot a day */
+.loop-week {
+  list-style: none;
+  margin: 0.15rem 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.25rem;
+}
+.loop-day {
+  display: grid;
+  justify-items: center;
+  gap: 0.25rem;
+  /* 12px: the text floor qa/capture-mobile.mjs holds everything else to. */
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+.loop-day-dot {
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 999px;
+  border: 2px solid rgba(140, 170, 210, 0.38);
+  display: grid;
+  place-items: center;
+  font-size: 0.78rem;
+  line-height: 1;
+}
+.loop-day.is-done .loop-day-dot {
+  background: var(--success);
+  border-color: var(--success);
+}
+.loop-day.is-done .loop-day-dot::after {
+  content: "✓";
+  color: #07170f;
+  font-weight: 900;
+}
+.loop-day.is-rest .loop-day-dot {
+  background: rgba(155, 143, 245, 0.22);
+  border-color: var(--accent-2);
+}
+.loop-day.is-rest .loop-day-dot::after {
+  content: "☾";
+  color: #d4ceff;
+}
+.loop-day.is-missed .loop-day-dot {
+  border-style: dashed;
+  border-color: rgba(140, 170, 210, 0.3);
+}
+.loop-day.is-today .loop-day-dot {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(110, 180, 232, 0.22);
+}
+.loop-day.is-today.is-done .loop-day-dot {
+  border-color: var(--success);
+  box-shadow: 0 0 0 3px rgba(79, 212, 146, 0.25);
+}
+.loop-day.is-today {
+  color: var(--text);
+}
+/* Days still to come recede through the dot, not the letter: fading the
+   whole cell took the letter to 3.8:1. */
+.loop-day.is-future .loop-day-dot {
+  opacity: 0.55;
+}
+
+.loop-goal {
+  display: grid;
+  gap: 0.35rem;
+}
+.loop-goal-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.86rem;
+}
+.loop-goal-pick select {
+  min-height: 36px;
+  font-size: 0.82rem;
+}
+.loop-goal-bar {
+  display: flex;
+  gap: 3px;
+}
+.loop-goal-bar span {
+  flex: 1 1 0;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(140, 170, 210, 0.22);
+}
+.loop-goal-bar span.stretch {
+  background: rgba(140, 170, 210, 0.1);
+}
+.loop-goal-bar span.on {
+  background: var(--success);
+}
+.loop-goal-bar span.stretch.on {
+  background: linear-gradient(90deg, var(--success), var(--accent));
+}
+.loop-cards-btn {
+  justify-self: start;
+}
+
+/* The end of today's basics */
+.loop-done-card {
+  width: min(440px, 100%);
+  max-height: calc(100dvh - 2rem);
+  display: flex;
+  flex-direction: column;
+}
+.loop-done-kicker {
+  margin: 0 0 0.25rem;
+  font-size: 0.74rem;
+  font-weight: 750;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.loop-done-count {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin: 0.4rem 0 0.6rem;
+}
+.loop-done-count strong {
+  font-size: 3rem;
+  line-height: 1;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  color: var(--success);
+  font-variant-numeric: tabular-nums;
+}
+.loop-done-count span {
+  color: var(--text-muted);
+  font-weight: 650;
+}
+.loop-week-lg .loop-day-dot {
+  width: 1.85rem;
+  height: 1.85rem;
+}
+.loop-done-line {
+  margin: 0.5rem 0 0.2rem;
+  font-size: 0.86rem;
+}
+.modal-card .loop-note {
+  margin: 0.6rem 0 0;
+  font-size: 0.95rem;
+}
+.loop-ms {
+  font-weight: 700;
+  color: var(--reward);
+}
+.loop-done-tomorrow {
+  margin: 0.8rem 0 1rem;
+  font-size: 0.92rem;
+  color: var(--text-muted);
+}
+
+/* A surprise: set apart by its border, not by noise */
+.loop-reward {
+  margin: 0.75rem 0 0;
+  padding: 0.75rem 0.85rem 0.8rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background:
+    linear-gradient(var(--bg-soft), var(--bg-soft)) padding-box,
+    linear-gradient(135deg, var(--reward), var(--singing)) border-box;
+}
+.loop-reward h4 {
+  margin: 0.1rem 0 0.3rem;
+  font-size: 1rem;
+}
+.loop-reward p {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+.loop-reward .loop-reward-k {
+  font-size: 0.75rem;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--reward);
+}
+
+@keyframes loop-pop {
+  0% {
+    transform: scale(0.7);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@keyframes loop-rise {
+  from {
+    transform: translateY(6px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+.loop-pop {
+  display: inline-block;
+  animation: loop-pop 520ms cubic-bezier(0.2, 0.8, 0.3, 1.2) both;
+}
+.loop-done-card .loop-reward {
+  animation: loop-rise 420ms 280ms ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .loop-pop,
+  .loop-done-card .loop-reward {
+    animation: none;
+  }
+}
+
+/* —— Design: done-landscape ——
+   The buttons stay pinned to the card's bottom edge and whatever does not fit
+   scrolls above them, so "Hasta mañana" is always on the first screen (it was
+   below an inner scroll nothing signalled, at 844x390 and at 360x740). On a
+   short screen (a phone on its side) the card also goes two columns: what
+   today earned, then what is new and tomorrow. */
+.loop-done-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+.loop-done-card .modal-actions {
+  flex: none;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+.loop-done-card .loop-done-tomorrow {
+  margin-bottom: 0.75rem;
+}
+@media (max-height: 500px) {
+  #loop-done.modal-overlay {
+    padding: 0.6rem 1rem;
+  }
+  .loop-done-card {
+    max-height: calc(100dvh - 1.2rem);
+    padding-bottom: 0;
+  }
+  .loop-done-count {
+    margin: 0.2rem 0 0.4rem;
+  }
+  .loop-done-count strong {
+    font-size: 2.4rem;
+  }
+  .loop-done-card .loop-done-tomorrow {
+    margin: 0.6rem 0 0.4rem;
+  }
+  .loop-done-card .modal-actions {
+    flex-wrap: nowrap;
+    padding: 0.55rem 0 0.85rem;
+  }
+}
+@media (max-height: 500px) and (min-width: 540px) {
+  .loop-done-card {
+    width: min(760px, 100%);
+  }
+  .loop-done-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: 1.4rem;
+    align-items: start;
+  }
+  .loop-done-next > .loop-done-extra > :first-child {
+    margin-top: 0;
+  }
+}
+
+/* The collection */
+.loop-cards-card {
+  width: min(720px, 100%);
+  max-height: calc(100dvh - 2rem);
+  display: flex;
+  flex-direction: column;
+}
+.loop-cards-grid {
+  list-style: none;
+  margin: 0.25rem 0 1rem;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 0.5rem;
+  overflow: auto;
+  min-height: 0;
+}
+.loop-card {
+  position: relative;
+  padding: 0.6rem 0.7rem 0.65rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: rgba(12, 18, 28, 0.4);
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+.loop-card h4 {
+  margin: 0 1.6rem 0.25rem 0;
+  font-size: 0.92rem;
+}
+.loop-card p {
+  margin: 0;
+}
+/* Where a fact comes from, under every card: a fact without a source is an opinion. */
+.loop-reward .loop-card-src,
+.loop-card .loop-card-src {
+  margin-top: 0.4rem;
+  font-size: 0.75rem;
+  line-height: 1.35;
+  color: var(--text-muted);
+}
+.loop-card-n {
+  position: absolute;
+  top: 0.45rem;
+  right: 0.55rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: var(--text-muted);
+}
+.loop-card.is-locked {
+  border-style: dashed;
+  opacity: 0.7;
+}
+
+/* A refused microphone, said on the stage where the learner is looking */
+.mic-blocked {
+  position: absolute;
+  top: 0.6rem;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(94%, 460px);
+  z-index: 50;
+  padding: 0.7rem 0.85rem 0.75rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(240, 184, 79, 0.7);
+  background: rgba(24, 30, 40, 0.97);
+  box-shadow: var(--shadow);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+.mic-blocked p {
+  margin: 0 0 0.5rem;
+}
+.mic-blocked-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+/* —— Design: step-end —— */
+/* A guided step's clock ran out: the stage says so and holds the way on.
+   Above the HUD rails (Start sits at 56 on short landscape). The stage can be
+   under 300px tall (small phones, landscape), so the card sizes itself to the
+   stage, not the viewport, and centres with auto margins so an overflow
+   scrolls instead of losing its top. */
+.step-done {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  padding: 1rem;
+  overflow-y: auto;
+  container-type: size;
+  background: rgba(6, 10, 16, 0.9);
+  backdrop-filter: blur(2px);
+}
+.step-done-card {
+  margin: auto;
+  width: min(440px, 100%);
+  display: grid;
+  gap: 0.55rem;
+  text-align: center;
+}
+.step-done-card p {
+  margin: 0;
+}
+.step-done-k {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.step-done-tick {
+  color: var(--success);
+}
+.step-done-t {
+  font-size: 1.6rem;
+  font-weight: 800;
+  line-height: 1.2;
+  color: var(--text);
+}
+.step-done-sub {
+  font-size: 0.95rem;
+  color: var(--text-muted);
+}
+.step-done .step-done-next {
+  width: 100%;
+  min-height: 52px;
+  margin-top: 0.3rem;
+  white-space: normal;
+}
+.step-done-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.step-done-row .btn {
+  flex: 1 1 auto;
+  white-space: normal;
+}
+@media (min-width: 900px) and (min-height: 600px) {
+  .step-done-card {
+    width: min(520px, 100%);
+    gap: 0.7rem;
+  }
+  .step-done-k {
+    font-size: 1.15rem;
+  }
+  .step-done-t {
+    font-size: 2rem;
+  }
+  .step-done .step-done-next {
+    min-height: 60px;
+    font-size: 1.15rem;
+  }
+  .step-done-row .btn {
+    min-height: 48px;
+  }
+}
+/* A short stage: tighter type; when wide enough, one row of secondary buttons */
+@container (max-height: 420px) {
+  .step-done-card {
+    width: min(520px, 100%);
+    gap: 0.35rem;
+  }
+  .step-done-t {
+    font-size: 1.3rem;
+  }
+  .step-done-sub {
+    font-size: 0.88rem;
+  }
+  .step-done .step-done-next {
+    min-height: 48px;
+    margin-top: 0.1rem;
+    padding: 0.5rem 1rem;
+    font-size: 1rem;
+  }
+}
+@container (max-height: 420px) and (min-width: 420px) {
+  .step-done-row {
+    flex-wrap: nowrap;
+  }
+  .step-done-row .btn {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+}
+/* Too short for every line: the mic note is the one to drop */
+@container (max-height: 300px) and (max-width: 419px) {
+  .step-done-sub {
+    display: none;
+  }
+}
+@container (max-height: 220px) {
+  .step-done-sub {
+    display: none;
+  }
+}
+
+@media (max-width: 860px) {
+  /* One column on a phone: today's basics, then the practice record, then the
+     other ways to practise. Without this the record sat below three secondary
+     controls and out of sight on the first screen. */
+  body.loop-on #start-panel.start-panel {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 0;
+  }
+  body.loop-on #start-panel .start-main {
+    display: contents;
+  }
+  body.loop-on #start-panel .loop-today {
+    order: 2;
+    margin-top: 0.15rem;
+  }
+  body.loop-on #start-panel .more-ways {
+    order: 3;
+    margin-top: 0.9rem;
+  }
+  body.loop-on #start-panel #home-tour-invite {
+    order: 4;
+  }
+}
+
+/* —— Design: record-strip ——
+   On a phone the practice record is one strip: the lifetime count beside
+   this week's ticks (captioned, so 3 days beside 2 ticks reads right), then
+   the streak and the weekly goal. The goal picker stays, compact, so the
+   goal can still be changed here. */
+.loop-week-k {
+  display: none;
+}
+@media (max-width: 860px) {
+  body.loop-on #start-panel .loop-today {
+    grid-template-columns: auto minmax(0, 1fr);
+    column-gap: 0.75rem;
+    row-gap: 0.45rem;
+    padding: 0.7rem 0.75rem 0.8rem;
+  }
+  body.loop-on #start-panel .loop-count {
+    grid-row: 1 / span 2;
+    grid-column: 1;
+    align-self: center;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.2rem;
+  }
+  body.loop-on #start-panel .loop-count strong {
+    font-size: 2.2rem;
+  }
+  body.loop-on #start-panel .loop-count span {
+    font-size: 0.82rem;
+    white-space: nowrap;
+  }
+  body.loop-on #start-panel .loop-next-ms {
+    display: none;
+  }
+  body.loop-on #start-panel .loop-week-k {
+    display: block;
+    grid-row: 1;
+    grid-column: 2;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  body.loop-on #start-panel .loop-week {
+    grid-row: 2;
+    grid-column: 2;
+    margin: 0;
+    gap: 3px;
+  }
+  /* A day's ring shrinks with its column rather than crowd the next one. */
+  body.loop-on #start-panel .loop-day-dot {
+    width: min(1.6rem, 100%);
+    height: auto;
+    aspect-ratio: 1;
+  }
+  body.loop-on #start-panel .loop-streak,
+  body.loop-on #start-panel .loop-goal,
+  body.loop-on #start-panel .loop-cards-btn {
+    grid-column: 1 / -1;
+  }
+  body.loop-on #start-panel .loop-goal-row {
+    flex-wrap: wrap;
+    gap: 0.3rem 0.4rem;
+  }
+  body.loop-on #start-panel .loop-goal-row {
+    font-size: 0.84rem;
+  }
+  body.loop-on #start-panel .loop-goal-pick select {
+    padding-inline: 0.4rem;
+  }
+}
+@media (max-width: 359px) {
+  /* Too narrow for the count and seven days side by side: stack them. */
+  body.loop-on #start-panel .loop-today {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  body.loop-on #start-panel .loop-count {
+    grid-row: auto;
+    flex-direction: row;
+    align-items: baseline;
+  }
+  body.loop-on #start-panel .loop-week-k,
+  body.loop-on #start-panel .loop-week {
+    grid-row: auto;
+    grid-column: 1;
+  }
+}
+@media (max-width: 400px) {
+  .loop-day-dot {
+    width: 1.4rem;
+    height: 1.4rem;
+  }
+}
+.loop-done-line span {
+  display: block;
+}
+
+/* —— Design: session-chrome ——
+   The guided-session banner is one line, "Ejercicio 1 de 3 · Básicos de hoy",
+   then Pausar (Reanudar while paused) and Terminar in words. The two-row box
+   took a quarter of a phone's first screen and scrolled away while singing;
+   the prototype's bare × read as "close this banner", not "end the session". */
+.session-banner.visible {
+  flex-wrap: nowrap;
+  gap: 0.4rem;
+  min-height: var(--min-tap);
+  padding: 0.2rem 0.3rem 0.2rem 0.85rem;
+  margin-bottom: 0.5rem;
+}
+#session-banner-text {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  font-size: 0.9rem;
+  font-weight: 650;
+  color: var(--text);
+}
+.session-banner-pos {
+  flex: none;
+}
+.session-banner-rest {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.session-banner .controls-row {
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  gap: 0.3rem;
+}
+.session-banner .controls-row .btn {
+  min-height: var(--min-tap);
+  padding: 0.3rem 0.8rem;
+  font-size: 0.85rem;
+}
+/* The banner already says "Ejercicio n de N" */
+body:has(#session-banner.visible) #structured-progress {
+  display: none;
+}
+@media (max-width: 400px) {
+  .session-banner.visible {
+    gap: 0.25rem;
+    padding-left: 0.6rem;
+  }
+  .session-banner .controls-row .btn {
+    padding-inline: 0.6rem;
+  }
+}
+@media (max-width: 340px) {
+  #session-banner-text,
+  .session-banner .controls-row .btn {
+    font-size: 0.8rem;
+  }
+  .session-banner .controls-row .btn {
+    padding-inline: 0.5rem;
+  }
+}
+
+/* —— Design: coach-strip ——
+   A pitch exercise's mode and cue ride on the stage in a strip under the top
+   controls (#stage-coach, the rail's last row); the lanes start below it.
+   One flowing line, "Juego de afinación · Escucha primero, luego afina…",
+   never cut: the old box below the stage was off a phone's first screen. */
+.hud-top-rail:has(> .stage-coach:not([hidden])) {
+  flex-wrap: wrap;
+  max-height: none;
+}
+.stage-coach {
+  order: 10;
+  flex: 1 1 100%;
+  min-width: 0;
+  padding: 0.3rem 0.6rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: rgba(6, 10, 16, 0.9);
+  color: var(--text);
+  font-size: 0.85rem;
+  line-height: 1.35;
+  pointer-events: none;
+}
+body.view-exercise .stage-coach .mode-hud,
+.stage-coach .mode-panel {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+.stage-coach .mode-hud:empty {
+  display: none;
+}
+.stage-coach .mode-title,
+.stage-coach .mode-phase,
+.stage-coach .mode-big {
+  display: inline;
+  margin: 0;
+  font: inherit;
+  font-weight: 750;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text);
+}
+.stage-coach .mode-phase::before,
+.stage-coach .mode-big::before {
+  content: " · ";
+  font-weight: 400;
+  color: var(--text-muted);
+}
+/* Detail lines and pictures stay out of the strip: the lanes are the picture */
+.stage-coach .mode-meta,
+.stage-coach .mode-bar,
+.stage-coach .vowel-row,
+.stage-coach .zone-row,
+.stage-coach .trill-row,
+.stage-coach .volume-band {
+  display: none;
+}
+/* A mode's own buttons (+1, marks) stay where the mode is */
+.stage-coach .controls-row {
+  display: inline-flex;
+  gap: 0.3rem;
+  vertical-align: middle;
+}
+.stage-coach .btn {
+  display: inline-flex;
+  vertical-align: middle;
+  margin: 0.1rem 0 0.1rem 0.4rem;
+  min-height: 36px;
+  padding: 0.2rem 0.7rem;
+  font-size: 0.8rem;
+  pointer-events: auto;
+}
+.stage-coach .controls-row .btn {
+  margin-left: 0;
+}
+/* ...at the strip's right end, so a 44px button does not open a gap in the
+   middle of the line ("Acorde / solfeo · 0 [+1] · Canta…") */
+.stage-coach .mode-panel > .btn,
+.stage-coach .mode-panel > .controls-row {
+  float: right;
+  margin: 0 0 0.1rem 0.5rem;
+}
+.stage-coach .mode-cue {
+  display: inline;
+  margin: 0;
+  font-size: inherit;
+  font-weight: 500;
+  line-height: inherit;
+  color: var(--text);
+}
+.stage-coach .mode-hud:not(:empty) + .mode-cue::before {
+  content: " · ";
+  color: var(--text-muted);
+}
+/* The lanes start under the rail's measured bottom (--rail-t). Their graph
+   ends above the bottom rail; only the canvas's keyboard strip (58px) may
+   sit behind it, as it always did. */
+.pitch-stage {
+  top: var(--rail-t, var(--hud-safe-t, 10%));
+  bottom: max(var(--hud-safe-b, 10%), calc(var(--rail-h, 6rem) - 58px));
+}
+/* The canvas fills that box; a fixed 220px floor ran it under the controls */
+#pitch-block:not([hidden]) #pitch-canvas {
+  min-height: 0;
+}
+/* "En vivo" never wraps inside its pill; nothing sits under it any more */
+.status-pill {
+  white-space: nowrap;
+}
+.highway-stage:has(.mode-focus-live) .hud-tl {
+  max-width: none;
+}
+
+/* —— Design: start-floor ——
+   Every control on the practice stage at least 44px tall on a phone and
+   every word at least 12px, with the same controls. The octave number says
+   "octava", the range box says "Rango", the level meter sits right after
+   MIC and reads as a meter, and Empezar gets a row of its own. */
+.oct-val {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.05;
+}
+.hud-oct .oct-k {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+/* Segments, so the empty bar reads as a level meter, not a blank pill */
+.hud-bc .practice-meter {
+  background: repeating-linear-gradient(90deg, rgba(150, 180, 215, 0.4) 0 5px, transparent 5px 7px);
+  border-color: rgba(150, 180, 215, 0.45);
+}
+@media (max-width: 640px), (max-height: 500px) {
+  body.view-exercise .ex-bc-link {
+    /* 44px hit box, same line: the padding reaches over the rows around it */
+    padding-block: 15px;
+    margin-block: -15px;
+  }
+  body.view-exercise .btn-back-compact {
+    min-height: var(--min-tap);
+  }
+  body.view-exercise .header-actions .btn-sm {
+    min-height: var(--min-tap);
+    min-width: var(--min-tap);
+    font-size: 0.75rem;
+  }
+  /* The exercise header in two rows at most: where you are and the ?/Atrás
+     buttons, then the exercise's name in full (it was a third row of
+     buttons under "4. Trinos de…"). */
+  body.view-exercise .exercise-header-compact {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "bc act" "title title";
+    align-items: center;
+    gap: 0.1rem 0.4rem;
+  }
+  body.view-exercise .exercise-header-compact .ex-header-main {
+    display: contents;
+  }
+  body.view-exercise .ex-breadcrumb {
+    grid-area: bc;
+    flex-wrap: nowrap;
+    min-width: 0;
+  }
+  body.view-exercise .exercise-header-compact .ex-title-row {
+    grid-area: title;
+  }
+  body.view-exercise .exercise-header-compact .ex-header-actions {
+    grid-area: act;
+  }
+  body.view-exercise .exercise-header-compact h2 {
+    max-width: none;
+  }
+  .hud-tr .hud-challenge {
+    min-height: var(--min-tap);
+  }
+  body.view-exercise .exercise-header-compact .badge,
+  body.view-exercise .exercise-header-compact .sub {
+    font-size: 0.75rem;
+  }
+  .status-pill,
+  .hold-live {
+    font-size: 0.75rem;
+  }
+  .hud-prog-select {
+    min-height: var(--min-tap);
+    font-size: 0.75rem;
+  }
+  .hud-tr .hud-label,
+  .hud-tr .hud-score,
+  .hud-tr .hud-combo,
+  .hud-tr .hud-acc,
+  .hud-tr .hud-challenge,
+  .hud-cents-only .hud-score strong::before,
+  .hud-cents-only .hud-combo strong::before {
+    font-size: 0.75rem;
+  }
+  .hud-tr .hud-quality,
+  .hud-cents-only .hud-quality {
+    font-size: 0.75rem !important;
+  }
+  .hud-bl .btn-sm,
+  .hud-bl .btn-practice {
+    min-height: var(--min-tap);
+  }
+  .hud-bl .hud-check {
+    min-height: var(--min-tap);
+    font-size: 0.75rem;
+  }
+  .hud-bc {
+    min-height: var(--min-tap);
+    max-height: none;
+    padding-block: 0;
+  }
+  .hud-bc #mic-sensitivity {
+    height: var(--min-tap);
+  }
+  .hud-bc .mic-sens-title {
+    font-size: 0.75rem;
+  }
+  .hud-oct .oct-btn {
+    min-width: var(--min-tap);
+    min-height: var(--min-tap);
+  }
+  /* The label is the hit area; the box itself stays 20px */
+  .hud-oct .oct-auto {
+    min-height: var(--min-tap);
+    padding: 0 0.4rem;
+    font-size: 0.75rem;
+  }
+  .hud-br .oct-auto span {
+    display: inline;
+  }
+  .hud-oct .oct-auto input {
+    width: 20px;
+    height: 20px;
+    margin: 0;
+  }
+  .hud-br .hud-piano-more {
+    min-width: var(--min-tap);
+    min-height: var(--min-tap);
+    font-size: 0.8rem;
+  }
+  .stage-guide-more {
+    min-height: var(--min-tap);
+  }
+  .stage-coach .btn {
+    min-height: var(--min-tap);
+  }
+  .mode-focus.mode-focus-live .mode-meta,
+  .mode-focus .mode-note {
+    font-size: 0.8rem;
+  }
+}
+/* Upright phone: the rail takes the full width (the lanes end above it, so
+   no note label sits behind it). A tall phone stacks MIC, the piano settings
+   and Empezar across the whole row (it was a small pill at the left); a
+   shorter one keeps two rows, the settings then Empezar beside MIC, so a
+   pitch exercise keeps room for its lanes. */
+@media (max-width: 640px) and (min-height: 501px) {
+  .hud-bottom-rail {
+    right: 0.35rem;
+  }
+  .hud-bl #btn-practice-start,
+  .hud-bl #btn-practice-stop {
+    flex: 1 1 auto;
+    min-height: 48px;
+    font-size: 1rem;
+  }
+  .hud-br {
+    order: 0;
+    flex: 1 1 100%;
+    justify-content: space-between;
+  }
+}
+@media (max-width: 640px) and (min-height: 700px) {
+  .hud-bl {
+    order: 1;
+    flex: 1 1 100%;
+  }
+}
+@media (max-width: 640px) and (min-height: 501px) and (max-height: 699.98px) {
+  .hud-br {
+    order: -2;
+  }
+  .hud-bl {
+    order: 0;
+    flex: 0 1 auto;
+  }
+  .hud-bc {
+    order: 1;
+    flex: 1 1 8rem;
+    width: auto;
+  }
+  .hud-bc {
+    padding-inline: 0.4rem;
+  }
+  .hud-bc .mic-sens-label {
+    gap: 0.3rem;
+  }
+  .hud-bc .practice-meter {
+    width: 2rem;
+    min-width: 2rem;
+  }
+  .hud-bc #mic-sensitivity {
+    min-width: 2.75rem;
+  }
+}
+/* 12px labels on the score strip wrap onto a second line on the narrowest
+   phones instead of cutting "COMBO ×…" */
+@media (max-width: 340px) {
+  .hud-tr {
+    flex-wrap: wrap;
+    row-gap: 0;
+  }
+  .hud-tr .hud-score,
+  .hud-tr .hud-combo,
+  .hud-tr .hud-acc {
+    overflow: visible;
+  }
+}
+
+/* —— Design: landscape ——
+   A phone on its side: the site header steps aside while an exercise is open
+   and the exercise header is one row, so the stage gets the height. The
+   session banner stays (one line), so Pausar and Terminar are on screen.
+   The rails go back to one row each, MIC keeps its label. */
+@media (max-height: 500px) {
+  body.view-exercise .app-header {
+    display: none;
+  }
+  body.view-exercise .exercise-header-compact {
+    top: 0;
+    grid-template-areas: "title act";
+    padding-block: 0;
+  }
+  body.view-exercise .ex-breadcrumb {
+    display: none;
+  }
+  /* In a routine the banner's Pausar and Terminar join that same row (two
+     rows took 108px of 390). The banner keeps no height of its own and stays
+     stuck at the top; the header keeps the buttons' width free (js
+     --session-ctl-w) and says "Ejercicio 1 de 2" in place of the banner's
+     line, which screen readers still hear. */
+  body.view-exercise .session-banner.visible {
+    position: sticky;
+    top: 0;
+    z-index: 35;
+    height: 0;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    align-items: flex-start;
+    justify-content: flex-end;
+    pointer-events: none;
+  }
+  body.view-exercise .session-banner.visible #session-banner-text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+  }
+  body.view-exercise .session-banner.visible .controls-row {
+    pointer-events: auto;
+  }
+  body.view-exercise:has(#session-banner.visible) .exercise-header-compact {
+    padding-right: calc(var(--session-ctl-w, 12rem) + 0.4rem);
+  }
+  body.view-exercise:has(#session-banner.visible) #ex-track-badge {
+    display: none;
+  }
+  body.view-exercise:has(#session-banner.visible) #structured-progress:not([hidden]) {
+    display: block;
+    flex: none;
+    max-width: none;
+  }
+  .hud-tm {
+    order: 0;
+    flex: 1 1 auto;
+  }
+  .hud-bottom-rail {
+    flex-wrap: nowrap;
+  }
+  .hud-bc {
+    order: 0;
+    flex: 1 1 8rem;
+    width: auto;
+  }
+  .hud-br {
+    flex: 0 0 auto;
+  }
+  #piano-mini-opts {
+    max-width: none;
+    overflow: visible;
+  }
+  .highway-stage:has(.mode-focus-live) .hud-bottom-rail {
+    right: 0.35rem;
+  }
+  /* As in the winning prototype: the chord and play-mode menus give their
+     row to the lanes here; the piano panel (🎹+) still switches chords. */
+  body.view-exercise #hud-prog-bar {
+    display: none;
+  }
+  /* A tighter mode panel, so a lip trill's card fits whole between the rails */
+  .mode-focus.mode-focus-live .mode-panel {
+    padding: 0.3rem 0.6rem 0.35rem;
+    line-height: 1.3;
+  }
+  .mode-focus.mode-focus-live .mode-title {
+    margin-bottom: 0;
+  }
+  .mode-focus.mode-focus-live .mode-bar {
+    height: 10px;
+    margin: 0.25rem 0;
+  }
+  .mode-focus.mode-focus-live .mode-meta {
+    margin: 0.05rem 0;
+  }
+  .mode-focus.mode-focus-live .btn {
+    margin-block: 0.1rem;
+  }
+}
+/* —— Design: sticky-bars ——
+   The bars that stay on top of the stage are solid: the site header was 82%
+   opaque, so the stage's top row showed through it once the rating card
+   scrolled the stage up. */
+body.view-exercise .app-header {
+  background: #0e1319;
+  backdrop-filter: none;
+}
+/* The exercise header sticks at the site header's height rounded up, and the
+   stage showed through that last fraction of a pixel as a thin line. */
+body.view-exercise .exercise-header-compact {
+  box-shadow:
+    0 -2px 0 #0e1319,
+    0 1px 0 rgba(0, 0, 0, 0.35);
+}
+/* Sticky offsets come from js syncHeaderHeightVar (set on html and body). The
+   stage's own fallbacks under the phone and landscape queries shadowed them,
+   so it stuck under a header that was taller, or hidden (VG-30). */
+body.view-exercise .highway-stage {
+  --header-h: inherit;
+}
+/* overflow-x: hidden made body a scroll box at 360px and below, and nothing
+   on the exercise screen stayed stuck; clip trims the same overflow. */
+@media (max-width: 360px) {
+  body.view-exercise {
+    overflow-x: clip;
   }
 }

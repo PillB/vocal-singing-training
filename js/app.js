@@ -45,11 +45,30 @@
       everStarted: false,
       liveSince: null,
       accumulatedMs: 0,
-      saved: false
+      saved: false,
+      // The history entry this open already wrote, so a later record or Save
+      // updates one take instead of adding a second (see recordPracticeIfDue).
+      entryId: null,
+      // Seconds of this open already credited to today's practice-day row.
+      creditedSec: 0
     },
     leavePromptOpen: false,
     /** 5-minute micro-session mode (retention research) */
-    microSession: false
+    microSession: false,
+    /** Set by a "5 min" button; applies to the next exercise opened, only. */
+    pendingMicro: false,
+    /** The reminder shown today, kept until dismissed (renderRetentionChrome). */
+    remindDue: null,
+    /** The guided step on the step-done card was listening when its clock ran out. */
+    stepDoneMic: false,
+    /**
+     * The rating card for this open: the one-tap answer, the saved result, why
+     * it opened (the clock ran out), and the first save's comparison and
+     * first-win flag, which a changed answer keeps.
+     */
+    rate: { feel: null, result: null, end: null, prevScore: null, firstWin: false },
+    /** The open exercise's steps when the stage shows them (no pitch canvas). */
+    stageSteps: []
   };
 
   const $ = (sel, el = document) => el.querySelector(sel);
@@ -57,6 +76,29 @@
 
   function tt(key, vars) {
     return typeof globalThis.t === "function" ? globalThis.t(key, vars) : key;
+  }
+
+  /** Date locale for the interface language, so dates read like the rest of the page. */
+  function locale() {
+    return window.VTI18n?.lang === "en" ? "en-US" : "es-PE";
+  }
+
+  /**
+   * Behaviour for every scroll this file starts: smooth, except for visitors
+   * who asked for reduced motion (styles.css drops the CSS smooth scroll for
+   * them too, so "auto" jumps).
+   */
+  function scrollBehavior() {
+    try {
+      return window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ? "auto" : "smooth";
+    } catch {
+      return "smooth";
+    }
+  }
+
+  /** An exercise's name in the interface language. */
+  function exName(ex) {
+    return window.VTI18n ? VTI18n.exTitle(ex) : ex.title;
   }
 
   function escapeHtml(s) {
@@ -364,6 +406,8 @@
       if (!input || v == null) return;
       if (input.type === "range") {
         input.value = String(v);
+        // Measured by the mode: a one-tap rating leaves it alone.
+        input.dataset.measured = "1";
         input.dispatchEvent(new Event("input"));
       } else {
         const cur = Number(input.value);
@@ -390,19 +434,31 @@
 
   /** Keep sticky highway under real header + exercise chrome (Back row). */
   function syncHeaderHeightVar() {
+    // Set on body as well as the root: body.view-exercise carries fallback
+    // values that otherwise shadowed these, so on a phone the stage stuck
+    // under a header row that was taller than the fallback said.
+    const setVar = (name, value) => {
+      document.documentElement.style.setProperty(name, value);
+      document.body?.style.setProperty(name, value);
+    };
     try {
       const h = document.querySelector("header.app-header");
       if (h) {
-        const hh = Math.max(40, Math.ceil(h.getBoundingClientRect().height));
-        document.documentElement.style.setProperty("--header-h", `${hh}px`);
+        // A rotated phone hides the header while an exercise is open (design:
+        // landscape); the sticky rows below it then start at the very top.
+        const hh =
+          getComputedStyle(h).display === "none"
+            ? 0
+            : Math.max(40, Math.ceil(h.getBoundingClientRect().height));
+        setVar("--header-h", `${hh}px`);
       }
       // Sticky ← Atrás row height — stage must stick below it so hits never land on stage/header
       const ex = document.querySelector(".exercise-header-compact");
       if (ex && !ex.hidden && getComputedStyle(ex).display !== "none") {
         const eh = Math.max(36, Math.ceil(ex.getBoundingClientRect().height));
-        document.documentElement.style.setProperty("--ex-chrome-h", `${eh}px`);
+        setVar("--ex-chrome-h", `${eh}px`);
       } else {
-        document.documentElement.style.setProperty("--ex-chrome-h", "0px");
+        setVar("--ex-chrome-h", "0px");
       }
     } catch {
       /* ignore */
@@ -458,19 +514,39 @@
         const anchor = title || cock || stage;
         const ar = anchor.getBoundingClientRect();
         if (ar.top < 0 || ar.top > (window.innerHeight || 600) * 0.35) {
-          anchor.scrollIntoView({ block: "start", behavior: "auto" });
+          // "instant": html has scroll-behavior: smooth, so "auto" glided and
+          // the stage below was measured mid-scroll.
+          anchor.scrollIntoView({ block: "start", behavior: "instant" });
         }
       } catch {
         /* ignore */
       }
+      syncStageInsets();
       const r = stage.getBoundingClientRect();
       const { vh, offsetTop, safeBottom } = getViewportMetrics();
       // Gap: short/landscape + safe-area (home indicator)
       const gap = (vh < 500 ? 12 : 8) + Math.max(0, safeBottom);
       // Visual bottom of the usable screen (visualViewport may be offset)
       const visualBottom = offsetTop + vh;
+      // Size for the lowest the stage sits at rest. It is sticky, so a page
+      // scrolled by a few pixels lifts it to its sticky offset; measured then,
+      // the stage came out that much too tall once the page was back at the
+      // top (VG-30: 400px against a 390px landscape phone). When the stage
+      // starts high enough that the top of the page is where it rests, size it
+      // for that position.
+      let top = Math.max(0, r.top);
+      const cock = document.getElementById("practice-cockpit");
+      if (cock && stage.parentElement === cock) {
+        const cs = getComputedStyle(cock);
+        const restTop =
+          cock.getBoundingClientRect().top +
+          window.scrollY +
+          (parseFloat(cs.borderTopWidth) || 0) +
+          (parseFloat(cs.paddingTop) || 0);
+        if (restTop <= vh * 0.35) top = Math.max(top, restTop);
+      }
       // Remaining space under stage top within the *visual* viewport
-      const avail = Math.floor(visualBottom - Math.max(0, r.top) - gap);
+      const avail = Math.floor(visualBottom - top - gap);
       let maxH = Math.max(120, avail);
       // Prefer tall for low vision but never past visual bottom
       const prefer = Math.min(
@@ -493,37 +569,10 @@
         stage.style.maxHeight = `${fix}px`;
         stage.style.height = `${fix}px`;
       }
-      // Measure bottom rail so mode-focus never covers Start/Mic (hit-target safety)
-      try {
-        const rail = document.getElementById("hud-bottom-rail");
-        if (rail) {
-          const rh = Math.ceil(rail.getBoundingClientRect().height || 0);
-          // +12px gap so mode-focus bottom stays above rail top
-          const clear = Math.max(72, rh + 12 + Math.min(12, safeBottom));
-          stage.style.setProperty("--rail-h", `${clear}px`);
-        }
-      } catch {
-        /* ignore */
-      }
-      // Fit the in-stage guidance into whatever is left between the mode panel
-      // and the bottom rail, so it never rides over either.
-      try {
-        const guide = document.getElementById("stage-guide");
-        // dataset.on, not .hidden: a rotate back into portrait must be able to
-        // bring the guide back after a short viewport hid it.
-        if (guide && guide.dataset.on === "1") {
-          const sr = stage.getBoundingClientRect();
-          const panel = stage.querySelector(".mode-panel");
-          const panelBottom = panel ? panel.getBoundingClientRect().bottom : sr.top;
-          const railPx = parseFloat(getComputedStyle(stage).getPropertyValue("--rail-h")) || 88;
-          const room = Math.floor(sr.bottom - railPx - 8 - Math.max(panelBottom, sr.top) - 8);
-          // Below ~92px only a heading would fit, which is worse than nothing
-          guide.hidden = room < 92;
-          guide.style.maxHeight = room > 0 ? `${room}px` : "";
-        }
-      } catch {
-        /* ignore */
-      }
+      // Rails re-measured at the fitted height, so mode-focus and the lanes
+      // never run under Start/Mic (hit-target safety) or the top controls.
+      syncStageInsets();
+      fitStageGuide();
       // Ensure Start is fully inside visual viewport (critical for short + land)
       try {
         const start = document.getElementById("btn-practice-start");
@@ -559,6 +608,170 @@
     }
   }
 
+  /**
+   * Place what sits between the stage's two rails from their measured edges.
+   * The top rail (status, chords, score and, on a pitch exercise, the coach
+   * strip) and the bottom rail (Start, mic, piano) change height as they wrap;
+   * at a fixed 10% the top rail's second row covered the mode panel's title on
+   * a phone, and the lanes ran under both rails.
+   * Sets --rail-t (top rail's bottom edge) and --rail-h (bottom rail plus a gap)
+   * on the stage. Returns true when either moved.
+   */
+  function syncStageInsets() {
+    try {
+      const stage = document.getElementById("highway-stage");
+      if (!stage || !document.body.classList.contains("view-exercise")) return false;
+      const sr = stage.getBoundingClientRect();
+      if (sr.height < 1) return false;
+      let railBottom = 0;
+      [...(document.getElementById("hud-top-rail")?.children || [])].forEach((el) => {
+        const b = el.getBoundingClientRect();
+        if (b.height) railBottom = Math.max(railBottom, b.bottom - sr.top);
+      });
+      const rail = document.getElementById("hud-bottom-rail");
+      const rh = Math.ceil(rail?.getBoundingClientRect().height || 0);
+      // +12px gap so mode-focus bottom stays above rail top
+      const clear = Math.max(72, rh + 12 + Math.min(12, getViewportMetrics().safeBottom));
+      const t = `${Math.ceil(railBottom) + 4}px`;
+      const b = `${clear}px`;
+      const moved =
+        stage.style.getPropertyValue("--rail-t") !== t || stage.style.getPropertyValue("--rail-h") !== b;
+      stage.style.setProperty("--rail-t", t);
+      stage.style.setProperty("--rail-h", b);
+      return moved;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Show as many of the guide's steps as fit under the mode panel, whole: a
+   * clipped box cut a step through the middle of a line, and below ~90px the
+   * box used to vanish and leave an empty band. When no step fits, the button
+   * to all the steps still does. While practising it holds one step, so it
+   * only needs room for that.
+   */
+  function fitStageGuide() {
+    const guide = $("#stage-guide");
+    // dataset.on, not .hidden: a rotate back into portrait must be able to
+    // bring the guide back after a short viewport hid it.
+    if (!guide || guide.dataset.on !== "1") return;
+    const focus = $("#mode-focus");
+    const panel = $("#mode-focus-panel");
+    if (!focus || focus.hidden) return;
+    const live = guide.classList.contains("is-now");
+    const head = $("#stage-guide-k");
+    const list = $("#stage-guide-steps");
+    const items = $$("#stage-guide-steps li", guide);
+    items.forEach((li) => (li.hidden = false));
+    if (head) head.hidden = live;
+    if (list) list.hidden = live;
+    guide.classList.remove("is-bare");
+    guide.hidden = false;
+    const cs = getComputedStyle(focus);
+    const room = Math.floor(
+      focus.clientHeight -
+        (parseFloat(cs.paddingTop) || 0) -
+        (parseFloat(cs.paddingBottom) || 0) -
+        (panel && panel.offsetHeight ? panel.offsetHeight + (parseFloat(cs.rowGap) || 0) : 0)
+    );
+    const fits = () => guide.scrollHeight <= room + 1;
+    if (!live) {
+      // Idle: drop steps from the end; "Ver todos los pasos" still opens the rest.
+      for (let i = items.length - 1; i > 0 && !fits(); i--) items[i].hidden = true;
+      if (!fits() && head && list) {
+        head.hidden = true;
+        list.hidden = true;
+        guide.classList.add("is-bare");
+      }
+    }
+    guide.hidden = !fits();
+  }
+
+  /**
+   * The stage guide while practising: the step the clock has reached, "Ahora ·
+   * paso 2 de 5", moving on as the time runs. The steps used to disappear at
+   * Start and leave the middle of the stage empty. Idle, it lists the first
+   * steps again. Cheap enough for every timer tick: it redraws on a change.
+   * @param {boolean} [force] redraw even if the step is the same (new exercise, language)
+   */
+  function syncStageNow(force) {
+    const wrap = $("#stage-guide");
+    if (!wrap || wrap.dataset.on !== "1") return;
+    const steps = state.stageSteps || [];
+    const t = state.timer;
+    const live = !!state.practiceLive && t.total > 0 && steps.length > 0;
+    const idx = live
+      ? Math.min(steps.length - 1, Math.floor(Math.max(0, t.total - t.remaining) / (t.total / steps.length)))
+      : -1;
+    const key = live ? String(idx) : "idle";
+    if (!force && wrap.dataset.now === key) return;
+    wrap.dataset.now = key;
+    wrap.classList.toggle("is-now", live);
+    // The step lives in its own polite live region, number and text together;
+    // the idle list around it stays silent while it is refitted.
+    const now = $("#stage-guide-now");
+    if (now) {
+      now.hidden = !live;
+      $("#stage-now-k").textContent = live ? tt("ex.stageNow", { n: idx + 1, total: steps.length }) : "";
+      $("#stage-now-t").textContent = live ? steps[idx] : "";
+    }
+    $("#stage-guide-k").textContent = tt("ex.stageGuideLabel");
+    $("#btn-stage-guide-more").hidden = live;
+    // Heading and list: fitStageGuide shows them idle, as room allows
+    fitStageGuide();
+  }
+
+  /** Re-place the lanes and the guide whenever a rail changes height (wrap, live HUD, cue). */
+  function watchStageRails() {
+    if (typeof ResizeObserver !== "function") return;
+    let raf = 0;
+    const ro = new ResizeObserver(() => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const moved = syncStageInsets();
+        fitStageGuide();
+        if (!moved) return;
+        try {
+          if (state.pitchViz && !$("#pitch-block")?.hidden) {
+            if (!state.practiceLive && typeof state.pitchViz.redrawIdle === "function") {
+              state.pitchViz.redrawIdle();
+            } else {
+              state.pitchViz._resize?.();
+            }
+          }
+        } catch {
+          /* ignore */
+        }
+      });
+    });
+    ["hud-top-rail", "hud-bottom-rail", "mode-focus-panel"].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) ro.observe(el);
+    });
+    // On a phone on its side the banner's Pausar and Terminar sit in the
+    // exercise header's row, which keeps their width free (design: landscape).
+    const ctl = $("#session-banner .controls-row");
+    if (ctl) {
+      new ResizeObserver(() => {
+        const w = Math.ceil(ctl.getBoundingClientRect().width);
+        if (w) document.body.style.setProperty("--session-ctl-w", `${w}px`);
+      }).observe(ctl);
+    }
+  }
+
+  /**
+   * Where an exercise's mode panel mounts; both places are on the stage. A
+   * pitch exercise's mode rides with its cue in the strip under the top
+   * controls (#stage-coach, design: coach-strip); any other exercise's sits in
+   * the middle of the stage, above the guide. A mode empties what it mounts
+   * into, hence the inner panel.
+   */
+  function modeMountTarget(profile) {
+    if (profile.showPitch) return $("#mode-hud");
+    return $("#mode-focus-panel") || $("#mode-focus");
+  }
+
   /** Debounced fit for resize / visualViewport / orientation / fullscreen */
   let _fitHighwayTimer = null;
   function scheduleFitHighway() {
@@ -567,6 +780,57 @@
       _fitHighwayTimer = null;
       fitHighwayToViewport();
     }, 50);
+  }
+
+  /* —— Design: phone-header ——
+     On a phone the header is one row: the sections, then "Más", which opens
+     Pro, Cuenta, idioma and Tour. They are the same buttons with the same
+     handlers; below 640px CSS turns their row into this menu. */
+
+  function headerMenuOpen() {
+    return $("#btn-more")?.getAttribute("aria-expanded") === "true";
+  }
+
+  function setHeaderMenu(open, opts = {}) {
+    const btn = $("#btn-more");
+    const menu = $("#header-utils");
+    if (!btn || !menu) return;
+    btn.setAttribute("aria-expanded", String(open));
+    menu.classList.toggle("is-open", open);
+    if (!open && opts.focus) btn.focus();
+  }
+
+  function bindHeaderMenu() {
+    const btn = $("#btn-more");
+    const menu = $("#header-utils");
+    if (!btn || !menu) return;
+    btn.addEventListener("click", () => setHeaderMenu(!headerMenuOpen()));
+    // Choosing an item closes the menu and its own handler still runs. Focus
+    // moves to "Más" first (capture phase, before that handler), so a dialog
+    // the item opens hands focus back to a button that is still on screen.
+    menu.addEventListener(
+      "click",
+      (e) => {
+        if (!headerMenuOpen() || !e.target.closest("button, a")) return;
+        btn.focus({ preventScroll: true });
+        setHeaderMenu(false);
+      },
+      true
+    );
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape" || !headerMenuOpen()) return;
+      e.preventDefault();
+      setHeaderMenu(false, { focus: true });
+    });
+    document.addEventListener("click", (e) => {
+      if (headerMenuOpen() && !btn.contains(e.target) && !menu.contains(e.target)) setHeaderMenu(false);
+    });
+    // Tabbing out of the menu leaves it closed rather than open behind the page.
+    menu.addEventListener("focusout", (e) => {
+      if (e.relatedTarget && !menu.contains(e.relatedTarget) && e.relatedTarget !== btn) setHeaderMenu(false);
+    });
+    // Wider than a phone the items are a plain row again; nothing is "open".
+    window.matchMedia?.("(max-width: 640px)")?.addEventListener?.("change", () => setHeaderMenu(false));
   }
 
   /** Paint the header nav so the current section is always identifiable. */
@@ -593,8 +857,10 @@
     if (target) target.classList.add("active");
     document.body.classList.toggle("view-exercise", name === "exercise");
     syncHeaderNav(name);
+    setHeaderMenu(false);
     if (name !== "exercise") {
       document.body.classList.remove("practice-live");
+      hideStepDone();
     }
     syncHeaderHeightVar();
     updateSessionBanner();
@@ -651,6 +917,19 @@
   function totalSessionsSaved() {
     const prog = VTStorage.getProgress() || {};
     return Object.values(prog).reduce((n, row) => n + (Number(row?.completedCount) || 0), 0);
+  }
+
+  /** Rated takes (not the ones kept automatically), counted up to 2. */
+  function ratedSessionsSaved() {
+    const prog = VTStorage.getProgress() || {};
+    let n = 0;
+    for (const row of Object.values(prog)) {
+      for (const h of row?.history || []) {
+        if (h && !h.auto) n += 1;
+        if (n > 1) return n;
+      }
+    }
+    return n;
   }
 
   /**
@@ -730,11 +1009,23 @@
     if (!card || !titleEl || !btn) return;
     // Hide on empty catalog
     const sug = suggestNextExercise();
+    // Once there is a day sung, today's basics are the recommendation: the
+    // loop writes the panel (js/daily-loop.js). An open guided session keeps
+    // its own copy below.
+    if (window.VTLoop?.renderHome?.()) {
+      renderTourInvite();
+      return;
+    }
     if (!sug?.ex) {
       card.hidden = true;
       return;
     }
     card.hidden = false;
+    // The loop may have left the CTA quiet ("done for today"); this panel has one primary.
+    btn.classList.add("btn-practice");
+    btn.classList.remove("btn-ghost");
+    card.classList.remove("is-done");
+    delete card.dataset.loop;
     const daily = sug.reason === "daily";
     const d = daily ? dailySession() : null;
     if (daily && d) {
@@ -858,7 +1149,7 @@
     const key = guided ? "Guided" : returning ? "Back" : "New";
     kicker.textContent = tt("start.kicker" + key);
     title.textContent = returning
-      ? tt("start.titleBack", { n: saved })
+      ? tt(saved === 1 ? "start.titleBack1" : "start.titleBack", { n: saved })
       : tt("start.titleNew");
     sub.textContent = tt("start.sub" + key);
     if (label) label.textContent = tt(guided ? "home.nextStepLabelGuided" : "home.nextStepLabel");
@@ -894,16 +1185,54 @@
     const s = VTSession.get();
     if (!s || s.status === "completed") {
       banner.classList.remove("visible");
+      syncStructuredProgress();
       return;
     }
     banner.classList.add("visible");
     const trackLabel = tt(s.track === "vocal" ? "tab.vocalShort" : "tab.singingShort");
     const status = tt(s.status === "paused" ? "session.statusPaused" : "session.statusActive");
     const name =
-      s.path === "daily" ? tt("daily.banner") : tt("session.bannerTitle", { track: trackLabel });
-    $("#session-banner-text").textContent = `${name} · ${status} · ${VTSession.progressLabel()}`;
+      s.path === "daily"
+        ? tt("daily.banner")
+        : s.path === "basics"
+          ? tt("loop.banner", { tier: tt("loop.tier." + (s.tier || "min")) })
+          : tt("session.bannerTitle", { track: trackLabel });
+    // One line (design: session-chrome): where you are first and never cut,
+    // then "En pausa" only when it is and the routine's name, which a narrow
+    // phone cuts with "…". The title keeps the whole line for a pointer.
+    const pos = document.createElement("span");
+    pos.className = "session-banner-pos";
+    pos.textContent = VTSession.progressLabel();
+    const rest = document.createElement("span");
+    rest.className = "session-banner-rest";
+    // A no-break space: a flex item drops its leading space ("2· Básicos")
+    const restParts = [s.status === "paused" ? status : "", name].filter(Boolean);
+    rest.textContent = restParts.length ? "\u00a0· " + restParts.join(" · ") : "";
+    const text = $("#session-banner-text");
+    text.replaceChildren(pos, rest);
+    text.title = text.textContent;
     $("#btn-session-resume").hidden = s.status !== "paused";
     $("#btn-session-pause").hidden = s.status !== "active";
+    syncStructuredProgress();
+  }
+
+  /**
+   * The exercise header's routine line, "Ejercicio 1 de 3" and "En pausa"
+   * while it is. The banner says it wherever it has a row of its own; on a
+   * phone on its side the banner's buttons join the header's row and this
+   * line stands in for the banner's (design: landscape).
+   */
+  function syncStructuredProgress() {
+    const sp = $("#structured-progress");
+    if (!sp) return;
+    if (!state.structured) {
+      sp.hidden = true;
+      sp.textContent = "";
+      return;
+    }
+    sp.hidden = false;
+    const paused = VTSession.get()?.status === "paused" ? tt("session.statusPaused") : "";
+    sp.textContent = [VTSession.progressLabel(), paused].filter(Boolean).join(" · ");
   }
 
   function filteredExercises() {
@@ -912,15 +1241,101 @@
     return all.filter((ex) => (ex.tier || "basic") === state.tierFilter);
   }
 
+  /**
+   * A group's short name on its track, for the filter chips, the card badge
+   * and the counts line. The groups are named for what they hold (Clase,
+   * Técnica, Expresión), not for a level: "Básico" read as "my daily basics",
+   * and today's basics draw on both groups.
+   */
+  function tierLabel(tier, track = state.tab) {
+    const t = track === "singing" ? "singing" : "vocal";
+    return tt(`tier.${t}.${tier === "advanced" ? "advanced" : "basic"}`);
+  }
+
+  /** Longest row description: two lines at 360px wide (see css "Design: catalog"). */
+  const SUMMARY_MAX = 64;
+  /** Small words: never a meaningful lead-in, and never the last word before "…". */
+  const SMALL_WORDS = new Set(
+    (
+      "de del la las el los lo un una unos unas y e o u a al con sin por para en que se su sus tu tus " +
+      "no ni como mas más the a an and or of on for with to in at by from into your you so that than as more"
+    ).split(" ")
+  );
+
+  /** Words that carry meaning, accent-free, cut to a five-letter stem. */
+  function stems(s) {
+    return String(s)
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .split(/[^a-z0-9]+/)
+      .filter((w) => w.length >= 3 && !SMALL_WORDS.has(w))
+      .map((w) => w.slice(0, 5));
+  }
+
+  /** No bracket or quote left open, so a cut never ends inside "(…" or «…». */
+  function balanced(s) {
+    const unmatched = (a, b) => s.split(a).length !== s.split(b).length;
+    // A straight quote between two letters is an apostrophe (don't), not a quote.
+    const quotes = (s.match(/(^|[^\p{L}])'|'(?=[^\p{L}]|$)/gu) || []).length;
+    return (
+      !unmatched("(", ")") && !unmatched("«", "»") && !unmatched("\u201c", "\u201d") && quotes % 2 === 0
+    );
+  }
+
+  /**
+   * One plain line for a catalog row: what you do. It comes from the
+   * exercise's "in short" line (exField "original", both languages). A lead-in
+   * that only repeats the title ("Trinos de labios (SOVT): …") is dropped, and
+   * a line too long for two phone lines ends at a sentence, a clause or a
+   * word, never inside a word, a bracket or on a small word like "con".
+   */
+  function exerciseSummary(ex) {
+    const I = window.VTI18n;
+    let s = String((I?.exField ? I.exField(ex, "original") : ex.original) || "")
+      .replace(/\s+/g, " ")
+      .trim();
+    const lead = s.match(/^([^:.!?…]{2,48}):\s+(\S.*)$/);
+    if (lead) {
+      const title = new Set(stems(exName(ex)));
+      const words = [...new Set(stems(lead[1]))];
+      const hits = words.filter((w) => title.has(w)).length;
+      if (words.length && hits * 2 > words.length) {
+        s = lead[2].charAt(0).toUpperCase() + lead[2].slice(1);
+      }
+    }
+    if (s.length <= SUMMARY_MAX) return s;
+    const sentence = s.match(/^.{20,}?[.!?](?=\s)/);
+    if (sentence && sentence[0].length <= SUMMARY_MAX) return sentence[0];
+    // Room for the ellipsis: what is kept is at most SUMMARY_MAX - 1 long.
+    const head = s.slice(0, SUMMARY_MAX);
+    // A clause break that keeps most of the line reads best...
+    let cut = -1;
+    for (const m of head.matchAll(/[,;:](?=\s)|\s[—–](?=\s)/g)) {
+      if (m.index >= SUMMARY_MAX * 0.6 && balanced(s.slice(0, m.index))) cut = m.index;
+    }
+    if (cut > 0) return `${s.slice(0, cut)}…`;
+    // ...otherwise the last whole word that leaves no small word dangling.
+    const words = head.slice(0, head.lastIndexOf(" ")).split(" ");
+    const tail = () => words[words.length - 1].toLowerCase().replace(/[^\p{L}]/gu, "");
+    while (words.length > 3 && (SMALL_WORDS.has(tail()) || !balanced(words.join(" ")))) words.pop();
+    return `${words.join(" ").replace(/[\s,;:—–-]+$/, "")}…`;
+  }
+
   function renderExerciseList() {
     const list = $("#exercise-list");
     const exercises = filteredExercises();
+    const grouped = state.tierFilter === "all";
     list.innerHTML = "";
     list.className = `grid track-${state.tab}`;
 
-    $$(".tier-chip").forEach((c) =>
-      c.classList.toggle("selected", c.dataset.tier === state.tierFilter)
-    );
+    $$(".tier-chip").forEach((c) => {
+      const on = c.dataset.tier === state.tierFilter;
+      c.classList.toggle("selected", on);
+      // Picked says so in its state and with a tick, not by colour alone.
+      c.setAttribute("aria-pressed", on ? "true" : "false");
+      if (c.dataset.tier !== "all") c.textContent = tierLabel(c.dataset.tier);
+    });
 
     const basicCount = (VT_EXERCISES[state.tab] || []).filter((e) => (e.tier || "basic") === "basic")
       .length;
@@ -929,14 +1344,15 @@
     if (countEl) {
       // With level group headers carrying their own counts, the summary line is
       // noise on the unfiltered view — it only earns its place once filtered.
-      countEl.textContent =
-        state.tierFilter === "all"
-          ? ""
-          : tt("tier.counts", {
-              basic: basicCount,
-              advanced: advCount,
-              showing: exercises.length
-            });
+      countEl.textContent = grouped
+        ? ""
+        : tt("tier.counts", {
+            basic: tierLabel("basic"),
+            nb: basicCount,
+            advanced: tierLabel("advanced"),
+            na: advCount,
+            showing: exercises.length
+          });
     }
 
     // Group by tier when nothing is filtered: 20+ identical cards in one run are
@@ -946,12 +1362,14 @@
     exercises.forEach((ex) => {
       const prog = progressFor(ex.id);
       const tier = ex.tier || "basic";
-      if (state.tierFilter === "all" && tier !== lastTier) {
+      const track = ex.track || state.tab || "vocal";
+      if (grouped && tier !== lastTier) {
         lastTier = tier;
         const head = document.createElement("h4");
         head.className = `grid-group-head tier-${tier}`;
         const n = (VT_EXERCISES[state.tab] || []).filter((e) => (e.tier || "basic") === tier).length;
-        head.innerHTML = `<span>${tt("badge." + tier)}</span><span class="grid-group-n">${tt("group.count", { n })}</span>`;
+        const name = tt(`group.${state.tab === "singing" ? "singing" : "vocal"}.${tier}`);
+        head.innerHTML = `<span>${name}</span><span class="grid-group-n">${tt("group.count", { n })}</span>`;
         list.appendChild(head);
       }
       const tools =
@@ -960,28 +1378,33 @@
         (ex.audio.record ? tt("card.record") : tt("card.practice"));
       const sessions = prog?.completedCount || 0;
       const sessLabel =
-        sessions === 0
-          ? tt("card.notPracticed")
-          : sessions === 1
-            ? tt("card.sessions", { n: sessions })
-            : tt("card.sessions_plural", { n: sessions });
+        sessions === 1
+          ? tt("card.sessions", { n: sessions })
+          : tt("card.sessions_plural", { n: sessions });
       const btn = document.createElement("button");
       btn.type = "button";
-      const track = ex.track || state.tab || "vocal";
       btn.className = `card card-ex track-${track}`;
       btn.dataset.track = track;
+      btn.dataset.id = ex.id;
+      // A row: number, name, what you do, then minutes and tools. The sessions
+      // badge (top right) only shows once there is a session to count, and the
+      // group badge only once filtered (grouped, the head names the group).
       btn.innerHTML = `
-        <div class="card-ex-top">
-          <span class="num">${ex.number}</span>
-          <span class="badge tier-${tier}">${tt("badge." + tier)}</span>
-        </div>
-        <h3>${window.VTI18n ? VTI18n.exTitle(ex) : ex.title}</h3>
-        <p class="meta">${tt("card.meta", { min: ex.durationMin, tools })}</p>
-        <span class="badge ${sessions ? "done" : ""}">${sessLabel}</span>
+        <span class="num">${ex.number}</span>
+        <span class="card-ex-body">
+          ${sessions ? `<span class="badge done">${sessLabel}</span>` : ""}
+          <h3>${exName(ex)}</h3>
+          <p class="card-ex-desc">${escapeHtml(exerciseSummary(ex))}</p>
+          <p class="meta">${tt("card.meta", { min: ex.durationMin, tools })}</p>
+          <span class="card-ex-tags">${
+            grouped ? "" : `<span class="badge tier-${tier}">${tierLabel(tier, track)}</span>`
+          }</span>
+        </span>
       `;
       btn.addEventListener("click", () => openExercise(ex.id, false));
       list.appendChild(btn);
     });
+    renderTodayBasics();
 
     syncSessionPathOptions();
     $("#home-track-title").textContent = tt(
@@ -1000,38 +1423,104 @@
     renderNextStepCard();
   }
 
+  /* —— Today's basics in the catalog ——
+   * The loop's routine for this track, findable without scrolling: a line above
+   * the list names each exercise as a shortcut, and their rows carry a "Hoy en
+   * tus básicos" tag. Nothing shows until the loop is on (VTLoop.todayBasics),
+   * so a first visit is not told about basics it has not met. */
+  const TODAY_SHOWN = 4; // the Mínimo shows whole; longer routines fold after 3
+  let todayExpanded = false;
+
+  function renderTodayBasics() {
+    const today = window.VTLoop?.todayBasics?.(state.tab) || null;
+    const ids = new Set(today?.order || []);
+    $$("#exercise-list .card-ex").forEach((c) => {
+      const tags = c.querySelector(".card-ex-tags");
+      let tag = tags?.querySelector(".card-ex-today");
+      if (!ids.has(c.dataset.id)) {
+        tag?.remove();
+        return;
+      }
+      if (!tags) return;
+      if (!tag) {
+        tag = document.createElement("span");
+        tag.className = "card-ex-today";
+        tags.appendChild(tag);
+      }
+      tag.textContent = tt("catalog.today");
+    });
+
+    const box = $("#today-basics");
+    if (!box) return;
+    box.hidden = !today;
+    if (!today) {
+      box.innerHTML = "";
+      return;
+    }
+    const fold = today.order.length > TODAY_SHOWN;
+    const shown = fold && !todayExpanded ? today.order.slice(0, TODAY_SHOWN - 1) : today.order;
+    const name = (id) => {
+      const s = String(window.VTLoop.short?.(id) || id);
+      return s.charAt(0).toUpperCase() + s.slice(1);
+    };
+    const label = tt("catalog.todayLabel", { tier: tt("loop.tier." + today.tier) });
+    box.innerHTML =
+      `<span class="today-basics-label" id="today-basics-label">${escapeHtml(label)}</span>` +
+      shown
+        .map(
+          (id) =>
+            `<button type="button" class="today-basics-ex" data-id="${escapeHtml(id)}">${escapeHtml(name(id))}</button>`
+        )
+        .join("") +
+      (fold
+        ? `<button type="button" class="today-basics-more" aria-expanded="${todayExpanded}">${escapeHtml(
+            todayExpanded
+              ? tt("catalog.todayLess")
+              : tt("catalog.todayMore", { n: today.order.length - shown.length })
+          )}</button>`
+        : "");
+  }
+
   /**
-   * The daily route only exists for the track its sequence was written for, so
-   * the option is hidden elsewhere rather than silently falling back to Basic.
+   * A guided route's name on a track. Routes are named for the catalog groups
+   * they walk (the class homework, then Técnica or Expresión), so the second
+   * group's name depends on the track. Stored values stay basic | advanced |
+   * full | daily.
+   */
+  function pathName(path, track = state.tab) {
+    const own = `home.path.${track}.${path}`;
+    const s = tt(own);
+    return s && s !== own ? s : tt(`home.path.${path}`);
+  }
+
+  /**
+   * The route picker, written for the track on screen. The daily route only
+   * exists for the track its sequence was written for, and once the daily loop
+   * owns the start panel the class is its Clase size: offering it here as well
+   * gave the same class two names. So the option is left out rather than
+   * hidden (a hidden option still shows in iOS's picker).
    */
   function syncSessionPathOptions() {
     const sel = $("#session-path");
-    const opt = sel?.querySelector('option[value="daily"]');
-    if (!sel || !opt) return;
+    if (!sel) return;
     const d = dailySession();
-    const ok = !!d && state.tab === d.def.track;
-    opt.hidden = !ok;
-    opt.disabled = !ok;
-    if (!ok && sel.value === "daily") sel.value = "basic";
-
-    // Say how many exercises each route actually covers. "Completa" is the
-    // whole Vocal track but only 16 of Canto's 27 — the eleven class
-    // exercises live solely in the daily route — and the bare label reads as
-    // a promise it does not keep.
-    const total = (window.VT_EXERCISES?.[state.tab] || []).length;
-    sel.querySelectorAll("option").forEach((o) => {
-      const base = tt(o.dataset.i18n || "") || o.value;
-      const seq = window.VT_STRUCTURED?.[`${state.tab}_${o.value}`];
-      const n = Array.isArray(seq) ? seq.length : 0;
-      if (!n) {
-        o.textContent = base;
-        return;
-      }
-      o.textContent =
-        o.value === "full" && total && n < total
-          ? `${base} (${tt("home.path.ofTotal", { n, total })})`
-          : `${base} (${n})`;
-    });
+    const daily = !!d && state.tab === d.def.track && !window.VTLoop?.isOn?.();
+    const paths = ["basic", "advanced", "full", ...(daily ? ["daily"] : [])];
+    const keep = paths.includes(sel.value) ? sel.value : "basic";
+    // Each name says how many exercises the route covers: "Tareas y técnica"
+    // on Canto is 16 of its 27, the class exercises outside the homework live
+    // in the daily class.
+    sel.replaceChildren(
+      ...paths.map((p) => {
+        const o = document.createElement("option");
+        o.value = p;
+        const seq = window.VT_STRUCTURED?.[`${state.tab}_${p}`];
+        const n = Array.isArray(seq) ? seq.length : 0;
+        o.textContent = n ? tt("home.path.count", { name: pathName(p), n }) : pathName(p);
+        return o;
+      })
+    );
+    sel.value = keep;
   }
 
   /** Progressive disclosure: zero sessions → collapse empty studio chrome */
@@ -1056,25 +1545,38 @@
     const wrap = $("#stage-guide");
     const list = $("#stage-guide-steps");
     if (!wrap || !list) return;
-    const items = (steps || []).slice(0, 3);
-    if (!enabled || !items.length) {
+    // Every step, for "Ahora · paso n de N" while practising; the idle list
+    // shows the first three.
+    state.stageSteps = enabled ? (steps || []).filter(Boolean) : [];
+    const items = state.stageSteps.slice(0, 3);
+    if (!items.length) {
       wrap.hidden = true;
       delete wrap.dataset.on;
       list.innerHTML = "";
       return;
     }
     list.innerHTML = items.map((step) => `<li>${escapeHtml(step)}</li>`).join("");
-    wrap.style.maxHeight = "";
-    const label = $(".stage-guide-k", wrap);
-    if (label) label.textContent = tt("ex.stageGuideLabel");
     const more = $("#btn-stage-guide-more");
     if (more) more.textContent = tt("ex.stageGuideMore");
     wrap.dataset.on = "1";
     wrap.hidden = false;
+    syncStageNow(true);
   }
 
-  function updateExerciseBreadcrumb(ex) {
-    const track = ex?.track || state.tab || "vocal";
+  /**
+   * The track of the basics routine (js/daily-loop.js) this exercise is open
+   * as a step of, or null. The Vocal basics borrow Canto's lip trills, whose
+   * own labels ("Canto · avanzado", breadcrumb Canto) told a speaking learner
+   * their warm-up was advanced singing.
+   */
+  function basicsRoutineTrack(ex) {
+    if (!state.structured || !ex) return null;
+    const s = VTSession.get();
+    return s && s.path === "basics" && s.order?.includes(ex.id) ? s.track || null : null;
+  }
+
+  function updateExerciseBreadcrumb(ex, routineTrack) {
+    const track = routineTrack || ex?.track || state.tab || "vocal";
     const trackLabel = tt(track === "vocal" ? "tab.vocalShort" : "tab.singingShort");
     const title = ex
       ? `${ex.number}. ${window.VTI18n ? VTI18n.exTitle(ex) : ex.title}`
@@ -1093,7 +1595,9 @@
       everStarted: false,
       liveSince: null,
       accumulatedMs: 0,
-      saved: false
+      saved: false,
+      entryId: null,
+      creditedSec: 0
     };
   }
 
@@ -1128,15 +1632,95 @@
     return `${m}:${String(s).padStart(2, "0")}`;
   }
 
-  /** True if user practiced ≥10% of planned exercise length and hasn't saved */
+  /**
+   * The length this open was actually asked for: the running timer (a daily or
+   * basics step, a 5-minute micro-session) before the exercise's own default.
+   * Measuring a 1:45 guided step against a 20-minute default made the leave
+   * prompt say "14s of 20:00".
+   */
+  function stepTargetSec(ex = state.exercise) {
+    if (state.timer?.total > 0) return state.timer.total;
+    return getExerciseTargetSec(ex);
+  }
+
+  /**
+   * Live seconds after which an unrated run counts as practice: a third of the
+   * step, never less than 15 s and never more than 45 s. Pressing Start and
+   * then Next is not practice; a real minute of lip trills is.
+   */
+  function practiceCreditSec(ex = state.exercise) {
+    const target = stepTargetSec(ex);
+    return Math.min(45, Math.max(15, Math.round(target * 0.3)));
+  }
+
+  /** True once this open holds practice worth keeping and nothing is saved yet. */
   function shouldPromptOnLeave() {
     if (state.leavePromptOpen) return false;
     if (!state.exercise || state.view !== "exercise") return false;
     if (state.sessionPractice.saved) return false;
     if (!state.sessionPractice.everStarted) return false;
-    const target = getExerciseTargetSec(state.exercise);
-    if (target <= 0) return false;
-    return getPracticedSec() >= target * 0.1;
+    return getPracticedSec() >= practiceCreditSec();
+  }
+
+  /**
+   * Record this open as practice, if it was practice (VG-27).
+   *
+   * Every way out of an exercise used to lose the work unless the learner
+   * pressed Save: Next in a guided session, "Descartar", "Terminar", opening
+   * another exercise, closing the tab. A whole daily class could finish with
+   * `vt_progress_v1` still null and no streak day. This is the one choke point
+   * all of those now pass through.
+   *
+   * Idempotent per open: the first call inserts an unrated take and credits
+   * today's practice-day row; later calls update that same take and credit only
+   * the new seconds. A rated Save afterwards replaces it (completeExercise).
+   *
+   * @param {string} source what ended or interrupted the run, for analytics
+   * @returns {object|null} the history entry, or null when nothing was due
+   */
+  function recordPracticeIfDue(source) {
+    const ex = state.exercise;
+    const sp = state.sessionPractice;
+    if (!ex || !sp || sp.saved || !sp.everStarted) return null;
+    const sec = Math.round(getPracticedSec());
+    if (sec < practiceCreditSec(ex)) return null;
+    if (sp.entryId && sec <= (sp.creditedSec || 0)) return null;
+    let entry = null;
+    try {
+      entry = VTStorage.saveExerciseResult(ex.id, {
+        replaceId: sp.entryId,
+        metrics: {},
+        score: null,
+        notes: "",
+        durationSec: sec,
+        auto: true
+      });
+    } catch (e) {
+      console.warn("[VT] practice record", e);
+      return null;
+    }
+    const inserted = !sp.entryId;
+    const delta = Math.max(0, sec - (sp.creditedSec || 0));
+    sp.entryId = entry.id;
+    sp.creditedSec = sec;
+    const day = window.VTDays?.record?.({ exerciseId: ex.id, sec: delta, bump: inserted, source });
+    if (inserted) {
+      window.VTSync?.schedule?.();
+      try {
+        window.VTAnalytics?.track?.("practice_recorded", {
+          exerciseId: ex.id,
+          source,
+          durationSec: sec,
+          structured: !!state.structured,
+          micro: !!state.microSession,
+          firstOfDay: !!day?.becameDay
+        });
+      } catch {
+        /* ignore */
+      }
+    }
+    window.VTLoop?.onPractice?.({ exerciseId: ex.id, source, day, structured: !!state.structured });
+    return entry;
   }
 
   /**
@@ -1153,7 +1737,7 @@
       }
       state.leavePromptOpen = true;
       const practiced = getPracticedSec();
-      const target = getExerciseTargetSec(state.exercise);
+      const target = stepTargetSec();
       const pct = Math.min(100, Math.round((practiced / target) * 100));
       const stats = $("#leave-modal-stats");
       if (stats) {
@@ -1163,14 +1747,9 @@
           pct: String(pct)
         });
       }
-      // Refresh i18n titles if available
-      if (window.VTI18n?.applyDom) {
-        try {
-          VTI18n.applyDom();
-        } catch {
-          /* optional */
-        }
-      }
+      // The modal's own strings are set below. It used to run VTI18n.applyDom()
+      // here, which reset every data-i18n element on the page to its default —
+      // the session banner read "Sesión guiada" from then on.
       const title = $("#leave-modal-title");
       const body = $("#leave-modal-body");
       const btnSave = $("#leave-save");
@@ -1218,20 +1797,24 @@
     // destination: { type: "home"|"exercise"|"history"|"plan"|"next", id? }
     if (shouldPromptOnLeave()) {
       const choice = await promptLeaveExercise();
+      if (choice === "stay" || choice === "save") state.pendingMicro = false;
       if (choice === "stay") return false;
       if (choice === "save") {
         // Stop audio, keep user on exercise to complete metrics
         stopPractice(true);
         VTPiano.stopAll();
-        const metrics = $("#metrics-form") || $("#btn-complete");
-        metrics?.scrollIntoView({ behavior: "smooth", block: "center" });
-        $("#btn-complete")?.focus();
+        // The silent stop skips the metrics reveal a normal stop does, so the
+        // button below could be inside a collapsed card (VG-28). One tap on
+        // the rating card saves and then goes where the learner was headed.
+        openMetricsPanel(true, { focus: true });
         toast(tt("leave.scrollSave"));
         // Stash intended destination after save
         state.pendingLeave = destination;
         return false;
       }
-      // discard
+      // "Leave without rating": the practice still happened, so it still
+      // counts. Only the rating and the take are dropped.
+      recordPracticeIfDue("leave");
       stopPractice(true);
       VTPiano.stopAll();
       stopTimer(false);
@@ -1241,6 +1824,7 @@
       resetSessionPractice();
       toast(tt("leave.discarded"));
     } else {
+      recordPracticeIfDue("leave");
       stopPractice(true);
       VTPiano.stopAll();
       stopTimer(false);
@@ -1274,7 +1858,15 @@
   function forceOpenExercise(id, fromStructured) {
     const ex = findExercise(id);
     if (!ex) return;
+    // Whatever was running is kept before it is torn down.
+    recordPracticeIfDue("switch");
+    // A 5-minute micro-session applies to the open that asked for it, not to
+    // every exercise after it: the flag used to stick until the next Save and
+    // gave each later daily step a 5:00 timer.
+    state.microSession = !!state.pendingMicro;
+    state.pendingMicro = false;
     stopPractice(true);
+    hideStepDone();
     state.exercise = ex;
     state.structured = !!fromStructured;
     state.reviewChecks = { auditory: false, visual: false, transcription: false };
@@ -1287,10 +1879,12 @@
     resetSessionPractice();
     renderExercise();
     setView("exercise");
-    // Instant jump to top so game stage is the first viewport (no smooth lag)
-    window.scrollTo(0, 0);
+    // Instant jump to top so game stage is the first viewport (no smooth lag).
+    // "instant", not (0, 0): html has scroll-behavior: smooth, so that glided
+    // for a third of a second from wherever the list was scrolled.
+    window.scrollTo({ top: 0, behavior: "instant" });
     requestAnimationFrame(() => {
-      window.scrollTo(0, 0);
+      window.scrollTo({ top: 0, behavior: "instant" });
       fitStageBelowContent();
     });
     // After layout paints: size cue strip + first-time UI tour for this layout family
@@ -1316,14 +1910,12 @@
   function fitStageBelowContent() {
     const below = document.querySelector(".stage-below");
     if (!below || !document.body.classList.contains("view-exercise")) return;
-    const cue = $("#mode-cue");
-    const hud = $("#mode-hud");
+    // The mode and its cue moved onto the stage (#stage-coach, design:
+    // coach-strip); only the stats are left to fit here.
     const stats = $("#pitch-stats");
-    const hold = $("#hold-block");
-    const shell = $("#mode-shell");
 
     // Clear previous locks so we can remeasure
-    [below, cue, hud, stats, shell].forEach((el) => {
+    [below, stats].forEach((el) => {
       if (!el) return;
       el.style.maxHeight = "";
       el.style.height = "";
@@ -1331,27 +1923,6 @@
       el.style.overflow = "";
     });
 
-    if (cue && !cue.hidden) {
-      cue.style.maxHeight = "none";
-      cue.style.overflow = "visible";
-      cue.style.whiteSpace = "normal";
-      cue.style.height = "auto";
-      // Force reflow then lock min-height to full wrapped text
-      void cue.offsetHeight;
-      const need = Math.ceil(cue.scrollHeight);
-      if (need > 0) cue.style.minHeight = `${need}px`;
-    }
-    if (hud && !hud.hidden) {
-      hud.style.maxHeight = "none";
-      hud.style.overflow = "visible";
-      hud.querySelectorAll(".mode-panel, .mode-big, .mode-meta").forEach((p) => {
-        p.style.maxHeight = "none";
-        p.style.overflow = "visible";
-      });
-      void hud.offsetHeight;
-      const needH = Math.ceil(hud.scrollHeight);
-      if (needH > 0) hud.style.minHeight = `${needH}px`;
-    }
     if (stats && stats.childElementCount) {
       stats.style.maxHeight = "none";
       stats.style.overflow = "visible";
@@ -1412,16 +1983,21 @@
   function renderExercise() {
     const ex = state.exercise;
     if (!ex) return;
+    hideMicBlocked();
 
     $("#ex-title").textContent = `${ex.number}. ${
       window.VTI18n ? VTI18n.exTitle(ex) : ex.title
     }`;
     const tier = ex.tier || "basic";
-    $("#ex-track-badge").textContent = `${tt(
-      ex.track === "vocal" ? "badge.vocal" : "badge.singing"
-    )} · ${tt("badge." + tier)}`;
-    $("#ex-track-badge").style.borderColor = ex.track === "vocal" ? "var(--vocal)" : "var(--singing)";
-    updateExerciseBreadcrumb(ex);
+    // Inside today's basics every step is a warm-up of the routine's track,
+    // whatever catalog track and tier the exercise has on its own.
+    const routineTrack = basicsRoutineTrack(ex);
+    const badgeTrack = routineTrack || ex.track;
+    $("#ex-track-badge").textContent = routineTrack
+      ? tt("badge.basics")
+      : `${tt(ex.track === "vocal" ? "badge.vocal" : "badge.singing")} · ${tierLabel(tier, ex.track)}`;
+    $("#ex-track-badge").style.borderColor = badgeTrack === "vocal" ? "var(--vocal)" : "var(--singing)";
+    updateExerciseBreadcrumb(ex, routineTrack);
     const I = window.VTI18n;
     const original = I?.exField ? I.exField(ex, "original") : ex.original;
     const research = I?.exField ? I.exField(ex, "research") : ex.research;
@@ -1453,12 +2029,16 @@
     // Timer (integrated into cockpit — always show display when timer exists)
     // Micro-session: 5 min soft cap for comeback practice
     let timerSec = state.microSession ? 5 * 60 : ex.timerDefaultSec || 0;
-    // The prepared daily session runs short per-step timers so the whole class
-    // sequence fits one sitting instead of summing every exercise's own default.
+    // Prepared routines (the daily class, today's basics) run short per-step
+    // timers so the whole sequence fits one sitting instead of summing every
+    // exercise's own default. A routine carries its own map; the daily class
+    // still falls back to the catalog's.
     if (!state.microSession && state.structured) {
       const ds = VTSession.get();
-      const step = window.VT_DAILY_SESSION?.sec?.[ex.id];
-      if (ds && ds.path === "daily" && step) timerSec = step;
+      const step =
+        Number(ds?.sec?.[ex.id]) ||
+        (ds?.path === "daily" ? Number(window.VT_DAILY_SESSION?.sec?.[ex.id]) : 0);
+      if (ds && step > 0) timerSec = step;
     }
     state.timer.total = timerSec;
     state.timer.remaining = timerSec;
@@ -1482,9 +2062,10 @@
     const modeHud = $("#mode-hud");
     const modeFocus = $("#mode-focus");
     if (modeHud) modeHud.innerHTML = "";
-    if (modeFocus) modeFocus.innerHTML = "";
-    // Non-pitch: mount live mode into sticky stage (less scroll). Pitch: mode below highway.
-    const mountTarget = !profile.showPitch && modeFocus ? modeFocus : modeHud;
+    if ($("#mode-focus-panel")) $("#mode-focus-panel").innerHTML = "";
+    const mountTarget = modeMountTarget(profile);
+    // The pitch exercise's strip shows only with its canvas
+    if ($("#stage-coach")) $("#stage-coach").hidden = !profile.showPitch;
     if (modeFocus) {
       if (!profile.showPitch) {
         modeFocus.hidden = false;
@@ -1506,13 +2087,10 @@
         (document.documentElement.lang || "").startsWith("es");
       $("#mode-cue").textContent =
         (es && profile.cueEs) || profile.cue || tt("practice.hint");
-      // Cue already lives in sticky stage for speech; hide duplicate below
+      // Cue already lives in the mode panel for speech; the strip is pitch-only
       $("#mode-cue").hidden = !profile.showPitch;
     }
-    // Hide empty mode-hud shell when mode lives in sticky focus
-    if (modeHud) {
-      modeHud.hidden = !profile.showPitch && mountTarget === modeFocus;
-    }
+    if (modeHud) modeHud.hidden = !profile.showPitch;
 
     // Pitch visualizer only when profile asks
     const pitchBlock = $("#pitch-block");
@@ -1624,6 +2202,12 @@
       syncSustainSecLabel();
       syncPlayModeSelect();
     }
+    // Lip trills, straws and the rate ladder keep the default chord and play
+    // mode; their two menus only crowded a phone's stage and covered the
+    // exercise's name (design: start-floor).
+    if ((profile.mode === "sovtFlow" || profile.mode === "rateLadder") && $("#hud-prog-bar")) {
+      $("#hud-prog-bar").hidden = true;
+    }
     if (pianoMini) {
       pianoMini.style.display = showPiano || exerciseWantsSound(ex, profile) ? "" : "none";
       // U8 progressive disclosure: secondary piano opts collapsed until 🎹+
@@ -1638,6 +2222,8 @@
       tbtn.setAttribute("aria-expanded", "false");
       tbtn.textContent = tt("piano.more");
       tbtn.title = tt("piano.showPanel");
+      // "🎹+" alone is read out as an emoji; the button says what it opens
+      tbtn.setAttribute("aria-label", tbtn.title);
     }
 
     // Practice hint stays hidden in stage (hint is in tour / guide)
@@ -1696,21 +2282,13 @@
       $("#week-plan-cta").hidden = true;
     }
 
-    // Metrics form
+    // Metrics form, under the rating card's one-tap answers
     renderMetricsForm(ex);
+    resetRating();
 
     // Structured nav
     $("#structured-nav").hidden = !state.structured;
-    const sp = $("#structured-progress");
-    if (sp) {
-      if (state.structured) {
-        sp.hidden = false;
-        sp.textContent = VTSession.progressLabel();
-      } else {
-        sp.hidden = true;
-        sp.textContent = "";
-      }
-    }
+    syncStructuredProgress();
 
     $("#score-result").hidden = true;
 
@@ -2231,6 +2809,7 @@
       pill.textContent = live ? tt("practice.live") : tt("practice.ready");
       pill.classList.toggle("live", live);
     }
+    syncStageNow();
     // Practice clock for leave-prompt (≥10% of exercise)
     if (live) {
       state.sessionPractice.everStarted = true;
@@ -2391,6 +2970,7 @@
   async function startPractice() {
     const ex = state.exercise;
     if (!ex || state.practiceLive || state.practiceStarting) return;
+    hideStepDone();
     const profile = getProfile(ex);
     // Generation token: Stop / leave / exercise switch aborts in-flight Start
     const gen = ++state.practiceGen;
@@ -2464,10 +3044,7 @@
           /* ignore */
         }
       }
-      const modeHud = $("#mode-hud");
-      const modeFocus = $("#mode-focus");
-      const mountTarget =
-        !profile.showPitch && modeFocus ? modeFocus : modeHud;
+      const mountTarget = modeMountTarget(profile);
       if (mountTarget && window.VTPracticeModes) {
         state.modeInstance = VTPracticeModes.get(profile.mode);
         state.modeInstance.mount(mountTarget, profile);
@@ -2674,7 +3251,7 @@
       if (!micOk && !soundOk && !profile.timeDriven) {
         state.practiceStarting = false;
         setPracticeUI(false);
-        toast(tt("toast.mic"));
+        showMicBlocked(false);
         return;
       }
 
@@ -2686,7 +3263,12 @@
       const engineLive = (needsMic || wantRecord) && micOk;
       if (!engineLive && (profile.timeDriven || (!needsMic && !wantRecord))) startModeTicker();
 
-      if (ex.audio.timer && state.timer.total > 0 && (micOk || state._modeTicker)) startTimer();
+      // The step clock runs whenever the step is live. It used to wait for the
+      // mic, so with the mic refused and the piano playing the timer sat still
+      // and a guided step could never end (VG-40).
+      if (ex.audio.timer && state.timer.total > 0) startTimer();
+      if ((needsMic || wantRecord) && !micOk) showMicBlocked(true);
+      else hideMicBlocked();
 
       // Keep piano awake while practicing (tab blur / OS audio policies)
       if (wantPiano && soundOk) {
@@ -2752,6 +3334,46 @@
     state._modeTicker = requestAnimationFrame(tick);
   }
 
+  /**
+   * A refused microphone, said where the learner is looking and kept there:
+   * how to allow it, a retry, and — inside a guided routine — a way on.
+   * @param {boolean} canRun true when the piano or the clock still runs
+   */
+  function showMicBlocked(canRun) {
+    const box = $("#mic-blocked");
+    if (!box) {
+      toast(tt("toast.mic"));
+      return;
+    }
+    $("#mic-blocked-text").textContent = tt(canRun ? "mic.blocked.partial" : "mic.blocked.none");
+    const retry = $("#btn-mic-retry");
+    const skip = $("#btn-mic-skip");
+    if (retry) {
+      retry.textContent = tt("mic.blocked.retry");
+      retry.onclick = () => {
+        hideMicBlocked();
+        stopPractice(true);
+        startPractice();
+      };
+    }
+    if (skip) {
+      skip.textContent = tt("mic.blocked.skip");
+      skip.hidden = !state.structured;
+      skip.onclick = () => advanceStructured("skip");
+    }
+    box.hidden = false;
+    try {
+      window.VTAnalytics?.track?.("mic_blocked", { exerciseId: state.exercise?.id, canRun: !!canRun });
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function hideMicBlocked() {
+    const box = $("#mic-blocked");
+    if (box) box.hidden = true;
+  }
+
   function stopModeTicker() {
     if (state._modeTicker) cancelAnimationFrame(state._modeTicker);
     state._modeTicker = null;
@@ -2802,13 +3424,23 @@
     $("#level-fill").style.width = "0%";
     if (!silent) {
       toast(modeResult?.summary ? `⏹ ${modeResult.summary}` : tt("toast.stopped"));
-      // Musk-mode UX: after a real stop, open reflect/save so metrics aren't hidden
-      openMetricsPanel(true);
+      // Musk-mode UX: after a real stop, open reflect/save so metrics aren't hidden.
+      // Detener hides itself; its focus goes to the question, not the page top.
+      const a = document.activeElement;
+      const lost = !a || a === document.body || a.id === "btn-practice-stop";
+      openMetricsPanel(true, { focus: lost && !rateQuiet() });
     }
   }
 
-  /** Expand or collapse the post-practice metrics card */
-  function openMetricsPanel(open) {
+  /**
+   * Expand or collapse the rating card (#metrics-card)
+   * @param {boolean} open
+   * @param {{ reveal?: boolean, focus?: boolean, end?: "mic"|"time" }} [opts]
+   *   reveal (unless false): bring the card into view (revealRating); focus: move focus
+   *   to its question (the learner asked to rate, or the exercise just ended);
+   *   end: the clock ran out, and whether the mic was on
+   */
+  function openMetricsPanel(open, opts = {}) {
     state.metricsOpen = !!open;
     const card = document.querySelector("#metrics-card");
     card?.classList.toggle("collapsed", !state.metricsOpen);
@@ -2819,40 +3451,216 @@
         : tt("metrics.show");
       btn.setAttribute("aria-expanded", String(!!state.metricsOpen));
     }
-    // U11: reveal metrics without yanking sticky stage off-screen
-    if (state.metricsOpen && card) {
-      requestAnimationFrame(() => {
-        try {
-          const vh = window.innerHeight || 600;
-          const cr = card.getBoundingClientRect();
-          const stage = document.getElementById("highway-stage");
-          const stageBottom = stage ? stage.getBoundingClientRect().bottom : 0;
-          // Ideal: metrics top sits just under stage (or mid-lower viewport)
-          const targetTop = Math.max(stageBottom + 8, vh * 0.42);
-          if (cr.top > targetTop + 24 || cr.bottom > vh - 12) {
-            const delta = cr.top - targetTop;
-            if (Math.abs(delta) > 12) {
-              window.scrollBy({ top: delta, behavior: "smooth" });
-            }
-          }
-        } catch {
-          card.scrollIntoView({ behavior: "smooth", block: "nearest" });
-        }
-      });
+    syncRoutineNav();
+    if (!state.metricsOpen || !card) return;
+    state.rate.end = opts.end || null;
+    paintRating();
+    if (opts.focus) $("#rate-q")?.focus({ preventScroll: true });
+    if (opts.reveal !== false) revealRating();
+  }
+
+  /* —— Rating: one tap after a take —— */
+  /** Self-ratings a one-tap answer sets, on the 1–5 sliders. */
+  const FEEL = { easy: 5, ok: 3, hard: 2 };
+
+  /**
+   * Muted under automation like the step-done card: the single-exercise ending
+   * stays a toast, "Más detalles" starts open so specs that fill the form and
+   * press #btn-complete still reach them, and a routine keeps its "Siguiente
+   * ejercicio" in view. Specs that test it opt in (vt_rate_e2e).
+   */
+  function rateQuiet() {
+    try {
+      return sessionStorage.getItem("vt_e2e") === "1" && sessionStorage.getItem("vt_rate_e2e") !== "1";
+    } catch {
+      return false;
     }
   }
 
+  /**
+   * How long this take ran, and the length it was asked for: a guided step's
+   * own timer (1:30 of a 1:30 step), a single exercise's timer, or none. The
+   * timer and the practice clock agree while it runs; the clock also holds
+   * time sung after 00:00 ("30 s más", Empezar again).
+   * @returns {{ done: number, total: number }} seconds
+   */
+  function takeTimes() {
+    const total = state.timer.total > 0 ? state.timer.total : 0;
+    const ran = total ? Math.max(0, Math.min(total, total - state.timer.remaining)) : 0;
+    return { done: Math.round(Math.max(ran, getPracticedSec())), total };
+  }
+
+  /** A new exercise starts with nothing chosen. */
+  function resetRating() {
+    state.rate = { feel: null, result: null, end: null, prevScore: null, firstWin: false };
+    const more = $("#rate-more");
+    if (more) more.open = rateQuiet();
+    paintRating();
+  }
+
+  /** Write the card's state: the time, the answer chosen, the note, the way out. */
+  function paintRating() {
+    const r = state.rate;
+    const { done, total } = takeTimes();
+    const time = $("#rate-time");
+    if (time) {
+      time.hidden = done < 1;
+      const strong = document.createElement("strong");
+      strong.textContent = total
+        ? tt("metrics.timeOf", { done: VTMetrics.clock(done), total: VTMetrics.clock(total) }) +
+          (done >= total - 1 ? " ✓" : "")
+        : VTMetrics.clock(done);
+      time.replaceChildren(document.createTextNode(`${tt("rate.time")} `), strong);
+    }
+    // A timed take fills the minutes itself; the field is there for practice
+    // the clock never saw.
+    $$("#metrics-form .field-time").forEach((f) => {
+      f.hidden = done >= 1;
+    });
+    $$(".rate-btn").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.feel === r.feel)));
+    const note = $("#rate-note");
+    if (note) {
+      note.textContent = r.result
+        ? tt("rate.saved", { score: VTMetrics.formatScore(r.result) })
+        : tt("rate.hint");
+    }
+    const kicker = $("#rate-done");
+    if (kicker) {
+      kicker.hidden = !r.end;
+      kicker.textContent = r.end
+        ? `${tt("stepDone.title")} ${tt(r.end === "mic" ? "stepDone.micOff" : "stepDone.timeUp")}`
+        : "";
+    }
+    const skip = $("#btn-rate-skip");
+    if (skip) {
+      skip.hidden = !!state.sessionPractice.saved;
+      skip.textContent = tt(state.structured ? "rate.skipNext" : "rate.skip");
+    }
+  }
+
+  /**
+   * Inside a routine the rating card carries the way on (Seguir sin puntuar,
+   * then the score card's next step); the big "Siguiente ejercicio" under it
+   * outshone the answers and read as a second way out. Other specs still
+   * find it under automation.
+   */
+  function syncRoutineNav() {
+    const nav = $("#structured-nav");
+    if (nav) nav.hidden = !state.structured || (!!state.metricsOpen && !rateQuiet());
+  }
+
+  /**
+   * Bring the rating card into view, its top no lower than 45% of the screen
+   * and never under the sticky header: the whole card when it fits, else down
+   * to the take and its save, else the question and its answers (a phone on
+   * its side). An open "Más detalles" form is never measured; it may run past
+   * the fold.
+   */
+  function revealRating() {
+    requestAnimationFrame(() => {
+      const card = $("#metrics-card");
+      if (!card || card.classList.contains("collapsed")) return;
+      const root = getComputedStyle(document.documentElement);
+      const top =
+        (parseFloat(root.getPropertyValue("--header-h")) || 0) +
+        (parseFloat(root.getPropertyValue("--ex-chrome-h")) || 0) +
+        8;
+      const vh = window.innerHeight || 600;
+      const r = card.getBoundingClientRect();
+      const take = $("#playback-area");
+      const ends = [
+        $("#rate-more")?.open ? null : $("#rate"),
+        take?.childElementCount ? take : null,
+        $("#rate-note")
+      ].filter(Boolean);
+      let want = top;
+      for (const el of ends) {
+        want = Math.min(vh * 0.45, vh - (el.getBoundingClientRect().bottom - r.top) - 24);
+        if (want >= top) break;
+      }
+      const delta = r.top - Math.max(top, want);
+      if (Math.abs(delta) > 12) window.scrollBy({ top: delta, behavior: scrollBehavior() });
+    });
+  }
+
+  /** After a save, scroll just far enough that the score itself is in view. */
+  function revealScore() {
+    requestAnimationFrame(() => {
+      const big = $("#score-result .score-big");
+      if (!big) return;
+      const vh = window.innerHeight || 600;
+      const b = big.getBoundingClientRect();
+      const over = b.bottom + 56 - vh;
+      if (over > 0) window.scrollBy({ top: over, behavior: scrollBehavior() });
+    });
+  }
+
+  /**
+   * One tap: set the self-rated sliders (not the ones a mode measured) and
+   * save through the same path as the form. Tapping another answer later
+   * re-rates the same take.
+   * @param {"easy"|"ok"|"hard"} feel
+   */
+  function rateFeel(feel) {
+    const v = FEEL[feel];
+    if (!v || !state.exercise) return;
+    $$('#metrics-form input[type="range"]').forEach((input) => {
+      if (input.dataset.measured === "1") return;
+      input.value = String(v);
+      input.dispatchEvent(new Event("input"));
+    });
+    completeExercise({ feel });
+  }
+
+  /**
+   * "Salir sin puntuar": the practice is kept (VG-27), only the rating is
+   * skipped. In a routine it goes on to the next step.
+   */
+  function leaveUnrated() {
+    if (state.structured) {
+      advanceStructured("next");
+      return;
+    }
+    const pending = state.pendingLeave;
+    const dest = pending?.type && pending.type !== "next" ? pending : { type: "home" };
+    state.pendingLeave = null;
+    recordPracticeIfDue("leave");
+    resetSessionPractice();
+    leaveExercise(dest);
+  }
+
+  /**
+   * A single exercise's clock reached 00:00: the practice is recorded and the
+   * mic is off (tickTimer); say so and ask how it went. It used to keep
+   * listening, "En vivo", with nothing on screen.
+   * @param {boolean} micWasOn
+   * @returns {boolean} true when the card is showing
+   */
+  function showExerciseEnd(micWasOn) {
+    if (rateQuiet()) return false;
+    openMetricsPanel(true, { focus: true, end: micWasOn ? "mic" : "time" });
+    return true;
+  }
+
+  /**
+   * The take's recording, in the rating card: the stage-below strip it used to
+   * sit in is covered by the sticky stage, so its player and Save could not be
+   * reached. A recording means a take just ended, so the card opens (quietly:
+   * the stop that made it decides whether to scroll).
+   */
   function showPlayback(result) {
     const area = $("#playback-area");
     if (!area || !result) return;
     area.innerHTML = `
-      <audio class="audio-player" controls src="${result.url}"></audio>
-      <div class="controls-row" style="margin-top:0.5rem;">
-        <button type="button" class="btn btn-sm btn-success" id="btn-save-rec">Save to history</button>
-        <button type="button" class="btn btn-sm btn-ghost" id="btn-discard-rec">Discard</button>
+      <p class="rate-take-k" id="rate-take-k">${escapeHtml(tt("rate.take"))}</p>
+      <audio class="audio-player" controls aria-labelledby="rate-take-k" src="${result.url}"></audio>
+      <div class="controls-row rate-take-actions">
+        <button type="button" class="btn btn-sm btn-success" id="btn-save-rec">${escapeHtml(tt("rate.takeSave"))}</button>
+        <button type="button" class="btn btn-sm btn-ghost" id="btn-discard-rec">${escapeHtml(tt("rate.takeDiscard"))}</button>
       </div>
     `;
-    $("#btn-save-rec")?.addEventListener("click", async () => {
+    const save = $("#btn-save-rec");
+    save?.addEventListener("click", async () => {
       try {
         await VTStorage.saveRecording({
           exerciseId: state.exercise.id,
@@ -2860,6 +3668,8 @@
           label: `${state.exercise.title} · ${new Date().toLocaleString()}`,
           meta: { durationMs: result.durationMs }
         });
+        save.textContent = tt("rate.takeSaved");
+        save.disabled = true;
         toast(tt("toast.recordingSaved"));
       } catch (e) {
         console.error(e);
@@ -2867,8 +3677,10 @@
       }
     });
     $("#btn-discard-rec")?.addEventListener("click", () => {
+      state.recorder.clear();
       area.innerHTML = "";
     });
+    if (!state.metricsOpen) openMetricsPanel(true, { reveal: false });
   }
 
   function updatePitchStatsLabel(stats) {
@@ -3117,6 +3929,8 @@
           <label for="m-${m.id}">${lab}${m.unit ? ` (${m.unit})` : ""}${tgt}</label>
           <input type="number" id="m-${m.id}" name="${m.id}" min="0" step="1" placeholder="0" />
         `;
+        // Filled from the clock when the take was timed (paintRating).
+        if (VTMetrics.isTimeMetric(m)) field.classList.add("field-time");
       }
       form.appendChild(field);
     });
@@ -3152,7 +3966,12 @@
     return { values, notes };
   }
 
-  function completeExercise() {
+  /**
+   * Save this take with its rating and show the score.
+   * @param {{ feel?: "easy"|"ok"|"hard" }} [opts] feel: the one-tap answer
+   *   (rateFeel), shown on the score card; absent for "Guardar con estos detalles"
+   */
+  function completeExercise(opts = {}) {
     const ex = state.exercise;
     if (!ex) return;
     if (state.practiceLive) stopPractice(true);
@@ -3186,16 +4005,17 @@
     }
     // Prefer actual practice clock over timer-only elapsed
     const practicedSec = Math.round(getPracticedSec());
-    if (values.duration == null || values.duration === "" || Number(values.duration) === 0) {
-      const durInput = $('#metrics-form [name="duration"]');
-      if (durInput && practicedSec > 0) {
-        // store minutes for duration metric when present
-        const mins = Math.max(1, Math.round(practicedSec / 60));
-        if (durInput.type === "number") durInput.value = mins;
-        values.duration = durInput.value;
+    // Minutes left blank are scored from the take's own time, against the
+    // step's own length when it had a timer: a 1:30 guided step used to be
+    // measured against the catalog's 5 minutes.
+    const take = takeTimes();
+    const result = VTMetrics.compute(ex.metrics, values, { timeSec: take.done, targetSec: take.total });
+    // Stored as whole minutes, as before, so History and the Plan read it unchanged.
+    (ex.metrics || []).filter((m) => VTMetrics.isTimeMetric(m)).forEach((m) => {
+      if (!(Number(values[m.id]) > 0) && take.done > 0) {
+        values[m.id] = String(Math.max(1, Math.round(take.done / 60)));
       }
-    }
-    const result = VTMetrics.compute(ex.metrics, values);
+    });
     const elapsed =
       practicedSec > 0
         ? practicedSec
@@ -3203,35 +4023,66 @@
           ? state.timer.total - state.timer.remaining
           : 0;
 
-    // Progress compare (before/after emotion — r/singing "same song later")
-    const prevRow = VTStorage.getProgress()?.[ex.id];
-    const prevScore = prevRow?.lastScore;
-
-    VTStorage.saveExerciseResult(ex.id, {
+    // A take this open already recorded automatically is the same take: rate
+    // it in place rather than adding a second one.
+    const sp = state.sessionPractice;
+    const wasSaved = !!sp.saved;
+    // Progress compare (before/after emotion — r/singing "same song later").
+    // A changed answer compares with the score before this take, not with itself.
+    const prevScore = wasSaved ? state.rate.prevScore : VTStorage.getProgress()?.[ex.id]?.lastScore;
+    const insertedNow = !sp.entryId;
+    const savedEntry = VTStorage.saveExerciseResult(ex.id, {
+      replaceId: sp.entryId,
       metrics: values,
       score: result.score,
       notes,
       durationSec: elapsed
     });
+    const elapsedSec = Math.max(0, Math.round(Number(elapsed) || 0));
+    const dayRec = window.VTDays?.record?.({
+      exerciseId: ex.id,
+      sec: Math.max(0, elapsedSec - (sp.creditedSec || 0)),
+      saved: true,
+      bump: insertedNow,
+      source: "save"
+    });
+    sp.entryId = savedEntry.id;
+    sp.creditedSec = Math.max(sp.creditedSec || 0, elapsedSec);
     // Ask for a sync rather than doing one: the scheduler collapses a whole
     // practice session's saves into a single write.
     window.VTSync?.schedule?.();
     const sessionsAfter = totalSessionsSaved();
-    const isFirstWin = sessionsAfter === 1;
+    // First *rated* take: automatically kept steps are practice, but the
+    // first-win card is about the first time somebody reviewed their own work.
+    // A changed answer keeps the card its first save showed.
+    const isFirstWin = wasSaved ? state.rate.firstWin : ratedSessionsSaved() === 1;
+    window.VTLoop?.onPractice?.({
+      exerciseId: ex.id,
+      source: "save",
+      day: dayRec,
+      structured: !!state.structured
+    });
+    // One take is one save: a changed answer re-rates it without counting it again.
     try {
-      window.VTAnalytics?.track?.("session_save", {
-        exerciseId: ex.id,
-        score: result.score,
-        durationSec: elapsed,
-        firstWin: isFirstWin
-      });
-      if (isFirstWin) window.VTAnalytics?.track?.("first_win", { exerciseId: ex.id });
+      if (!wasSaved) {
+        window.VTAnalytics?.track?.("session_save", {
+          exerciseId: ex.id,
+          score: result.score,
+          durationSec: elapsed,
+          firstWin: isFirstWin,
+          feel: opts.feel || "details"
+        });
+        if (isFirstWin) window.VTAnalytics?.track?.("first_win", { exerciseId: ex.id });
+      }
     } catch {
       /* ignore */
     }
     renderValuePulse();
-    // Success → soft moment (first_win prioritized via sessions===1)
-    setTimeout(() => showValueMoment(isFirstWin ? "first_save" : undefined), 600);
+    // Success → soft moment (first_win prioritized via sessions===1). Never in
+    // the middle of a guided routine: the reward there is the next step.
+    if (!state.structured && !wasSaved) {
+      setTimeout(() => showValueMoment(isFirstWin ? "first_save" : undefined), 600);
+    }
 
     state.sessionPractice.saved = true;
     state.microSession = false;
@@ -3252,11 +4103,38 @@
         arrow
       })}</p>`;
     }
-    const nextSug = suggestNextExercise({ excludeId: ex.id });
+    // Inside a guided routine the next thing is the routine's next step; the
+    // generic suggestion used to hijack it with an unrelated exercise opened
+    // outside the session (no Next button, the wrong timer).
+    const sessionNow = state.structured ? VTSession.get() : null;
+    const routineNextId =
+      sessionNow && VTSession.currentExerciseId() === ex.id
+        ? sessionNow.order[sessionNow.index + 1] || null
+        : sessionNow
+          ? VTSession.currentExerciseId()
+          : null;
+    const routineNextEx = routineNextId ? findExercise(routineNextId) : null;
+    const nextSug = state.structured
+      ? routineNextEx
+        ? { ex: routineNextEx, reason: "structured" }
+        : null
+      : suggestNextExercise({ excludeId: ex.id });
     const nextName = nextSug?.ex
       ? (window.VTI18n ? VTI18n.exTitle(nextSug.ex) : nextSug.ex.title)
       : "";
-    const firstWinHtml = isFirstWin
+    const routineHtml = state.structured
+      ? `<div class="first-win-card" id="post-session-next">
+          <h4>${escapeHtml(tt(routineNextEx ? "loop.routineNextTitle" : "loop.routineLastTitle"))}</h4>
+          <div class="first-win-actions">
+            <button type="button" class="btn btn-primary btn-sm" id="ps-routine-next">${escapeHtml(
+              routineNextEx ? `${tt("home.nextStepCta")}: ${nextName}` : tt("loop.routineFinish")
+            )}</button>
+          </div>
+        </div>`
+      : "";
+    const firstWinHtml = state.structured
+      ? routineHtml
+      : isFirstWin
       ? `<div class="first-win-card" id="first-win-card">
           <h4>${tt("retain.firstWinTitle")}</h4>
           <p>${tt("retain.firstWinBody")}</p>
@@ -3281,17 +4159,24 @@
             </div>
           </div>`
         : "";
+    const feelHtml = FEEL[opts.feel]
+      ? `<p class="score-feel">${escapeHtml(tt("rate.feel", { feel: tt(`rate.${opts.feel}`) }))}</p>`
+      : "";
     box.innerHTML = `
       <div class="score-big">${VTMetrics.formatScore(result)}</div>
+      ${feelHtml}
       ${compareHtml}
       <p>${result.summary}</p>
       <p class="muted" style="font-size:0.85rem;">${result.how}</p>
       <ul class="breakdown">
         ${result.breakdown
-          .map(
-            (b) =>
-              `<li><span>${b.label}<br><small class="muted">${b.detail}</small></span><strong>${b.points}/${b.max}</strong></li>`
-          )
+          .map((b) => {
+            // The same localized label the form used; b.label is the English one.
+            const def = (ex.metrics || []).find((m) => m.id === b.id) || b;
+            // A count left blank is not scored: "—", not 0/5.
+            const pts = b.skipped ? "—" : `${b.points}/${b.max}`;
+            return `<li><span>${metricLabel(def)}<br><small class="muted">${b.detail}</small></span><strong>${pts}</strong></li>`;
+          })
           .join("")}
       </ul>
       <div class="encourage">${tt("toast.sessionEncourage")}</div>
@@ -3305,7 +4190,7 @@
       } catch {
         /* ignore */
       }
-      state.microSession = true;
+      state.pendingMicro = true;
       openExercise(ex.id, false);
     });
     $("#fw-remind")?.addEventListener("click", () => {
@@ -3315,7 +4200,7 @@
         chk.checked = true;
         chk.dispatchEvent(new Event("change", { bubbles: true }));
       }
-      $("#retain-panel")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      $("#retain-panel")?.scrollIntoView({ behavior: scrollBehavior(), block: "center" });
       toast(tt("retain.firstWinRemind"));
     });
     $("#fw-same")?.addEventListener("click", () => openExercise(ex.id, false));
@@ -3326,17 +4211,25 @@
       if (nextSug?.ex) openExercise(nextSug.ex.id, false);
     });
     $("#ps-same")?.addEventListener("click", () => openExercise(ex.id, false));
+    $("#ps-routine-next")?.addEventListener("click", () => advanceStructured("next"));
 
     toast(tt("toast.sessionSaved"));
+    Object.assign(state.rate, { feel: opts.feel || null, result, prevScore, firstWin: isFirstWin });
+    paintRating();
+    revealScore();
 
     // Post-session native tip (free only; never mid-practice) — research: end-of-task ads only
-    try {
-      setTimeout(() => window.VTAds?.onPostSession?.(), 700);
-    } catch {
-      /* ignore */
+    if (!wasSaved) {
+      try {
+        setTimeout(() => window.VTAds?.onPostSession?.(), 700);
+      } catch {
+        /* ignore */
+      }
     }
 
-    if (state.structured) {
+    // Advance past this step once — a second Save used to skip the next step
+    // without it ever being opened.
+    if (state.structured && !wasSaved && VTSession.currentExerciseId() === ex.id) {
       VTSession.markCurrentComplete();
       updateSessionBanner();
     }
@@ -3364,12 +4257,97 @@
     const left = Math.max(0, (state.timer.endAt - performance.now()) / 1000);
     state.timer.remaining = left;
     $("#timer-display").textContent = formatTime(left);
+    syncStageNow();
     if (left <= 0) {
       stopTimer(true);
+      // The clearest "done" there is: the step ran its full length.
+      recordPracticeIfDue("timer_done");
+      // The time is up, so stop listening: at 00:00 it used to stay "En vivo"
+      // with the mic open and nothing on screen changed (PR-1).
+      const micWasOn = !!state.practice?.running;
+      stopPractice(true);
+      // A guided step says so on the stage; a single exercise asks how it went.
+      if (state.structured ? showStepDone(micWasOn) : showExerciseEnd(micWasOn)) return;
       toast(tt("toast.timerDone"));
-      if (state.practiceLive) {
-        // Soft cue only — don't force stop voice mid-rep
-      }
+    }
+  }
+
+  /* —— Step done (guided sessions) —— */
+  const STEP_MORE_SEC = 30;
+
+  /** Muted under automation like the loop's done card; specs that test it opt in. */
+  function stepDoneQuiet() {
+    try {
+      return sessionStorage.getItem("vt_e2e") === "1" && sessionStorage.getItem("vt_stepdone_e2e") !== "1";
+    } catch {
+      return false;
+    }
+  }
+
+  /** Fill the card for the open step. False when there is no guided step to finish. */
+  function renderStepDone() {
+    const s = state.structured ? VTSession.get() : null;
+    const ex = state.exercise;
+    if (!s || !ex || !s.order?.length) return false;
+    // A Save already moved the session past this step; the next one is then
+    // the current one (as in the score card's routine button).
+    const open = VTSession.currentExerciseId() === ex.id;
+    const n = Math.max(1, Math.min(open ? s.index + 1 : s.index, s.order.length));
+    const nextId = open ? s.order[s.index + 1] || null : VTSession.currentExerciseId();
+    const nextEx = nextId ? findExercise(nextId) : null;
+    $("#step-done-step").textContent = tt("session.progress", { n, total: s.order.length });
+    $("#step-done-sub").textContent = tt(state.stepDoneMic ? "stepDone.micOff" : "stepDone.timeUp");
+    $("#btn-step-done-next").textContent = nextEx
+      ? tt("stepDone.next", { name: window.VTI18n ? VTI18n.exTitle(nextEx) : nextEx.title })
+      : tt("loop.routineFinish");
+    $("#btn-step-done-more").textContent = tt("stepDone.more", { n: STEP_MORE_SEC });
+    return true;
+  }
+
+  /**
+   * Cover the stage with "done" and the way on: one button that does what
+   * #btn-next-structured does, plus more time and the rating form.
+   * @param {boolean} micWasOn the step was listening when its clock ran out
+   * @returns {boolean} true when the card is showing
+   */
+  function showStepDone(micWasOn) {
+    const box = $("#step-done");
+    if (!box || stepDoneQuiet()) return false;
+    state.stepDoneMic = !!micWasOn;
+    if (!renderStepDone()) return false;
+    hideMicBlocked();
+    // On a short landscape screen the sticky title row can cover the top of
+    // the stage; centre the card in the part still in view.
+    const chrome = document.querySelector(".exercise-header-compact") || document.querySelector("header.app-header");
+    const sr = $("#highway-stage").getBoundingClientRect();
+    const covered = Math.min(sr.height / 2, chrome ? chrome.getBoundingClientRect().bottom - sr.top : 0);
+    box.style.paddingTop = covered > 2 ? `calc(1rem + ${Math.round(covered)}px)` : "";
+    box.hidden = false;
+    // Focus the way on, unless the learner is typing (a note in the rating form).
+    const a = document.activeElement;
+    if (!(a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))) $("#btn-step-done-next")?.focus();
+    try {
+      window.VTAnalytics?.track?.("step_done_shown", { exerciseId: state.exercise?.id, mic: !!micWasOn });
+    } catch {
+      /* ignore */
+    }
+    return true;
+  }
+
+  /** @param {boolean} [returnFocus] put focus back on Start (Escape) */
+  function hideStepDone(returnFocus) {
+    const box = $("#step-done");
+    if (!box || box.hidden) return;
+    const hadFocus = box.contains(document.activeElement);
+    box.hidden = true;
+    if (returnFocus && hadFocus) $("#btn-practice-start")?.focus();
+  }
+
+  function stepDoneChoice(choice) {
+    try {
+      window.VTAnalytics?.track?.("step_done_choice", { exerciseId: state.exercise?.id, choice });
+    } catch {
+      /* ignore */
     }
   }
 
@@ -3463,49 +4441,181 @@
     $("#btn-rec-stop").disabled = true;
     $("#level-fill").style.width = "0%";
     if (!result) return;
-
-    const area = $("#playback-area");
-    area.innerHTML = `
-      <audio class="audio-player" controls src="${result.url}"></audio>
-      <div class="controls-row" style="margin-top:0.5rem;">
-        <button type="button" class="btn btn-sm btn-success" id="btn-save-rec">Save to history</button>
-        <button type="button" class="btn btn-sm btn-ghost" id="btn-discard-rec">Discard</button>
-      </div>
-    `;
-    $("#btn-save-rec").addEventListener("click", async () => {
-      try {
-        await VTStorage.saveRecording({
-          exerciseId: state.exercise.id,
-          blob: result.blob,
-          label: `${state.exercise.title} · ${new Date().toLocaleString()}`,
-          meta: { durationMs: result.durationMs }
-        });
-        toast(tt("toast.recordingSaved"));
-      } catch (e) {
-        console.error(e);
-        toast(tt("toast.recordingFail"));
-      }
-    });
-    $("#btn-discard-rec").addEventListener("click", () => {
-      state.recorder.clear();
-      area.innerHTML = "";
-    });
+    showPlayback(result);
+    openMetricsPanel(true);
   }
 
   /* —— History —— */
+
+  /** The track History and the Plan speak to: the one picked on home. */
+  function pageTrack() {
+    return state.tab === "vocal" ? "vocal" : "singing";
+  }
+
+  /** Loop copy for a track ("días cantados" / "días de práctica"), see js/daily-loop.js. */
+  function trackText(key, vars, track) {
+    return window.VTLoop?.tl ? VTLoop.tl(key, vars, track) : tt(key, vars);
+  }
+
+  /** How long ago, in words: "hoy", "ayer", "hace 3 días", then a date. */
+  function relativeDay(iso) {
+    const D = window.VTDays;
+    const d = new Date(iso);
+    if (!D || !Number.isFinite(d.getTime())) return "";
+    const n = Math.max(0, D.diffDays(D.dayKey(d), D.dayKey()));
+    if (n < 7 && typeof Intl.RelativeTimeFormat === "function") {
+      return new Intl.RelativeTimeFormat(locale(), { numeric: "auto" }).format(-n, "day");
+    }
+    const opts = { day: "numeric", month: "short" };
+    if (d.getFullYear() !== new Date().getFullYear()) opts.year = "numeric";
+    return d.toLocaleDateString(locale(), opts);
+  }
+
+  /** The months a span of days covers, as a caption: "agosto–setiembre de 2026". */
+  function monthRangeLabel(a, b) {
+    try {
+      const f = new Intl.DateTimeFormat(locale(), { month: "long", year: "numeric" });
+      return typeof f.formatRange === "function" ? f.formatRange(a, b) : `${f.format(a)} – ${f.format(b)}`;
+    } catch {
+      return "";
+    }
+  }
+
+  /**
+   * A row that opens an exercise: the Plan's exercises and History's recent
+   * list. The whole row is the button; "Abrir →" says what it does (a ▶ read
+   * as "play a recording").
+   */
+  function openRowHtml(ex, meta, cls = "") {
+    // Each part of the meta stays on one line ("último puntaje 7/10" never splits).
+    const parts = meta
+      .filter(Boolean)
+      .map((m) => `<span>${escapeHtml(m)}</span>`)
+      .join(" · ");
+    return `<button type="button" class="open-row${cls ? " " + cls : ""}" data-open-ex="${escapeHtml(ex.id)}">
+        <span class="open-row-text"><strong>${escapeHtml(exName(ex))}</strong><span class="meta">${parts}</span></span>
+        <span class="open-row-go" aria-hidden="true">${escapeHtml(tt("history.open"))} →</span>
+      </button>`;
+  }
+
+  /**
+   * The days practised: how many in the last five weeks, and those weeks as a
+   * Monday-first calendar with today outlined. Empty until there is a day.
+   */
+  function historyDaysHtml(track) {
+    const D = window.VTDays;
+    if (!D?.span) return "";
+    const sum = D.summary();
+    if (!sum.practiceDays) return "";
+    const monday = D.weekStart(sum.today);
+    const from = D.addDays(monday, -28);
+    const days = D.span(from, D.addDays(monday, 6));
+    const n = days.filter((d) => d.state === "done").length;
+    const names = tt("loop.weekdayFull").split(",");
+    const head = tt("loop.weekLetters")
+      .split(",")
+      .map(
+        (l, i) =>
+          `<th scope="col"><span aria-hidden="true">${escapeHtml(l.trim())}</span><span class="sr-only">${escapeHtml((names[i] || "").trim())}</span></th>`
+      )
+      .join("");
+    let rows = "";
+    for (let w = 0; w < 5; w += 1) {
+      rows += "<tr>";
+      for (let i = 0; i < 7; i += 1) {
+        const d = days[w * 7 + i];
+        if (!d || d.state === "future") {
+          rows += `<td class="is-future"></td>`;
+          continue;
+        }
+        // Practised and rest days carry a mark as well as a colour.
+        const mark = d.state === "done" ? "✓" : d.state === "rest" ? "☾" : "";
+        const label = d.state === "missed" ? "" : trackText("loop.dayState." + d.state, null, track);
+        rows += `<td class="is-${d.state}${d.isToday ? " is-today" : ""}">${Number(d.key.slice(8))}${
+          mark ? `<span class="hist-mark" aria-hidden="true">${mark}</span>` : ""
+        }${label ? `<span class="sr-only">: ${escapeHtml(label)}</span>` : ""}</td>`;
+      }
+      rows += "</tr>";
+    }
+    const first = sum.firstDay ? D.parseDay(sum.firstDay) : null;
+    const firstLabel = first
+      ? first.toLocaleDateString(locale(), {
+          day: "numeric",
+          month: "long",
+          ...(first.getFullYear() !== new Date().getFullYear() ? { year: "numeric" } : {})
+        })
+      : "";
+    const total =
+      sum.practiceDays > n && firstLabel
+        ? `<p class="muted hist-total">${escapeHtml(tt("history.daysTotal", { n: sum.practiceDays, date: firstLabel }))}</p>`
+        : "";
+    const legend = days.some((d) => d.state === "rest")
+      ? `<p class="muted hist-legend">✓ ${escapeHtml(trackText("loop.day1", null, track))} · ☾ ${escapeHtml(tt("loop.dayState.rest"))}</p>`
+      : "";
+    return `<section class="hist-days" aria-labelledby="hist-days-count">
+        <h3 class="hist-count" id="hist-days-count"><strong>${n}</strong> ${escapeHtml(
+          n === 1 ? trackText("loop.day1", null, track) : trackText("loop.days", null, track)
+        )} <span class="hist-period">${escapeHtml(tt("history.daysPeriod"))}</span></h3>
+        ${total}
+        <table class="hist-cal">
+          <caption>${escapeHtml(monthRangeLabel(D.parseDay(from), D.parseDay(sum.today)))}</caption>
+          <thead><tr>${head}</tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+        ${legend}
+      </section>`;
+  }
+
+  /** ["hoy", "3 veces", "último puntaje 7/10"] */
+  function historyRowMeta(p) {
+    const n = Number(p.completedCount) || 0;
+    const parts = [p.lastAt ? relativeDay(p.lastAt) : ""];
+    if (n) parts.push(n === 1 ? tt("history.times1") : tt("history.timesN", { n }));
+    if (p.lastScore != null && Number.isFinite(Number(p.lastScore))) {
+      const score = Number(p.lastScore).toLocaleString(locale(), { maximumFractionDigits: 1 });
+      parts.push(tt("history.lastScore", { score: `${score}/10` }));
+    }
+    return parts;
+  }
+
   async function renderHistory() {
     setView("history");
     const list = $("#history-list");
-    list.innerHTML = `<p class="muted">Loading…</p>`;
+    const loading = document.createElement("p");
+    loading.className = "muted";
+    loading.textContent = tt("history.loading");
+    list.replaceChildren(loading);
     try {
       const recs = await VTStorage.listRecordings();
       const progress = VTStorage.getProgress();
       const reviews = VTStorage.getReviews();
+      const track = pageTrack();
 
-      let html = `<h3>${tt("history.recordings")}</h3>`;
-      if (!recs.length) {
-        html += `<p class="empty-state">${tt("history.noRecordings")}</p>`;
+      // Most recent first. An exercise that has left the catalogue cannot be
+      // opened again, and its id is not a name, so it is left out.
+      const recent = Object.entries(progress)
+        .map(([id, p]) => ({ ex: findExercise(id), p }))
+        .filter((r) => r.ex && r.p)
+        .sort((a, b) => String(b.p.lastAt || "").localeCompare(String(a.p.lastAt || "")));
+      const daysHtml = historyDaysHtml(track);
+
+      let html = "";
+      if (!daysHtml && !recent.length) {
+        html += `<p class="muted">${tt("history.noSessions")}</p>
+          <p><button type="button" class="btn btn-practice btn-sm" id="history-empty-cta">${tt("history.emptyCta")}</button></p>`;
       } else {
+        html += `<div class="hist-top">${daysHtml}`;
+        if (recent.length) {
+          html += `<section class="hist-recent" aria-labelledby="hist-recent-h">
+            <h3 id="hist-recent-h">${tt("history.recent")}</h3>
+            <div class="history-list">${recent.map((r) => openRowHtml(r.ex, historyRowMeta(r.p), "history-item")).join("")}</div>
+          </section>`;
+        }
+        html += `</div>`;
+      }
+
+      if (recs.length) {
+        html += `<h3 style="margin-top:1.5rem;">${tt("history.recordings")}</h3>`;
         // Group by exercise for A/B compare (progress proof users love)
         const byEx = {};
         recs.forEach((r) => {
@@ -3519,11 +4629,11 @@
             <div class="history-item" data-id="${r.id}">
               <div>
                 <strong>${r.label}</strong>
-                <div class="meta">${ex ? ex.title : r.exerciseId} · ${new Date(r.createdAt).toLocaleString()} · ${Math.round((r.size || 0) / 1024)} KB</div>
+                <div class="meta">${ex ? exName(ex) : r.exerciseId} · ${new Date(r.createdAt).toLocaleString(locale())} · ${Math.round((r.size || 0) / 1024)} KB</div>
               </div>
               <div class="controls-row">
-                <button type="button" class="btn btn-sm" data-play="${r.id}">Play</button>
-                <button type="button" class="btn btn-sm btn-danger" data-del="${r.id}">Delete</button>
+                <button type="button" class="btn btn-sm" data-play="${r.id}">${tt("history.play")}</button>
+                <button type="button" class="btn btn-sm btn-danger" data-del="${r.id}">${tt("history.delete")}</button>
               </div>
             </div>`;
         }
@@ -3538,7 +4648,7 @@
             const older = sorted[1];
             const ex = findExercise(exId);
             html += `<div class="history-item">
-              <div><strong>${ex ? ex.title : exId}</strong>
+              <div><strong>${ex ? exName(ex) : exId}</strong>
               <div class="meta">${tt("retain.audioCompareMeta")}</div></div>
               <div class="controls-row">
                 <button type="button" class="btn btn-sm" data-ab-old="${older.id}" data-ab-new="${newer.id}">${tt("retain.audioCompareBtn")}</button>
@@ -3550,27 +4660,21 @@
         html += `<div id="history-player"></div>`;
       }
 
-      html += `<h3 style="margin-top:1.5rem;">${tt("history.completions")}</h3><div class="history-list">`;
-      const entries = Object.entries(progress);
-      if (!entries.length)
-        html += `<p class="muted">${tt("history.noSessions")}</p>
-          <p><button type="button" class="btn btn-practice btn-sm" id="history-empty-cta">${tt("history.emptyCta")}</button></p>`;
-      else {
-        entries.forEach(([id, p]) => {
-          const ex = findExercise(id);
-          html += `<div class="history-item">
-            <div><strong>${ex ? ex.title : id}</strong>
-            <div class="meta">${p.completedCount}× · last score ${p.lastScore != null ? p.lastScore + "/10" : "—"} · ${p.lastAt ? new Date(p.lastAt).toLocaleString() : ""}</div></div>
-          </div>`;
-        });
-      }
-      html += `</div>`;
-
       if (reviews.length) {
-        html += `<h3 style="margin-top:1.5rem;">Saved reviews</h3>`;
+        html += `<h3 style="margin-top:1.5rem;">${tt("history.reviews")}</h3>
+          <div class="history-list">${reviews.slice(0, 12).map(planReviewRow).join("")}</div>`;
+      }
+
+      // No recordings: one quiet line at the end, not an empty block on top.
+      if (!recs.length && (daysHtml || recent.length)) {
+        html += `<p class="muted hist-rec-empty">${tt("history.noRecordings")}</p>`;
       }
 
       list.innerHTML = html;
+
+      $$("[data-open-ex]", list).forEach((btn) => {
+        btn.addEventListener("click", () => openExercise(btn.dataset.openEx));
+      });
 
       $$("[data-play]", list).forEach((btn) => {
         btn.addEventListener("click", async () => {
@@ -3652,67 +4756,165 @@
     return out === key ? el : out;
   }
 
+  /** A review's stored verdict ("improved" / "continue"), in the interface language. */
+  function planVerdictLabel(verdict) {
+    const key = `plan.verdict.${verdict}`;
+    const out = tt(key);
+    return out === key ? String(verdict || "") : out;
+  }
+
+  /** One saved week review, on the Plan and in History. */
+  function planReviewRow(r) {
+    const when = r.at ? new Date(r.at).toLocaleDateString(locale()) : "";
+    const meta = [planVerdictLabel(r.verdict), when, r.notes].filter(Boolean).join(" · ");
+    return `<div class="history-item"><div><strong>${escapeHtml(tt("plan.weekN", { n: r.week ?? r.weekNumber ?? "" }))}: ${escapeHtml(
+      weekElementLabel(r.element)
+    )}</strong><div class="meta">${escapeHtml(meta)}</div></div></div>`;
+  }
+
+  /** "Ver otros" stays open across the re-render a pick causes. */
+  let planShowAllElements = false;
+
+  /** The exercises that train an element: this track's, or the other's when it has none. */
+  function planExercisesFor(el, track) {
+    const m = window.VT_WEEK_ELEMENT_EXERCISES?.[el];
+    if (!m) return [];
+    const ids = m[track]?.length ? m[track] : m[track === "vocal" ? "singing" : "vocal"] || [];
+    return ids.map(findExercise).filter(Boolean);
+  }
+
+  /** Local day the plan's week started, or null before it has. */
+  function planStartDay(plan) {
+    if (plan.status === "idle" || !plan.startedAt) return null;
+    return window.VTDays?.dayKey?.(new Date(plan.startedAt)) || null;
+  }
+
+  /** Days practised in the plan's week, counted from the practice-day ledger. */
+  function planWeekDays(plan) {
+    const D = window.VTDays;
+    const start = planStartDay(plan);
+    if (!start || !D?.countDays) return 0;
+    return D.countDays(start, D.addDays(start, 6));
+  }
+
   function renderPlan() {
     setView("plan");
     const plan = VTStorage.getWeekPlan();
+    const track = pageTrack();
+    const idle = plan.status === "idle";
     renderPlanWeekRail(plan);
     $("#plan-week-num").textContent = tt("plan.weekN", { n: plan.weekNumber });
-    $("#plan-status").textContent =
-      plan.status === "idle"
-        ? tt("plan.statusIdle")
-        : plan.status === "active"
-          ? tt("plan.statusActive", { element: weekElementLabel(plan.element) })
-          : tt("plan.statusReview", { element: weekElementLabel(plan.element) });
-    $("#plan-element-label").textContent = weekElementLabel(plan.element);
-    // The week review only makes sense once a week is under way.
-    const waiting = plan.status === "idle";
-    const reviewCard = $("#plan-review-card");
-    if (reviewCard) reviewCard.classList.toggle("is-waiting", waiting);
-    ["#plan-review-notes", "#btn-plan-improved", "#btn-plan-continue"].forEach((sel) => {
-      const el = $(sel);
-      if (el) el.disabled = waiting;
+    // Before the week starts, "Elige el elemento" and the start button say it all.
+    const status = $("#plan-status");
+    status.hidden = idle;
+    status.textContent = idle
+      ? ""
+      : plan.status === "active"
+        ? tt("plan.statusActive", { element: weekElementLabel(plan.element) })
+        : tt("plan.statusReview", { element: weekElementLabel(plan.element) });
+
+    renderPlanChips(plan, track);
+
+    const exs = plan.element ? planExercisesFor(plan.element, track) : [];
+    const exList = $("#plan-exercise-list");
+    $("#plan-exercises").hidden = !exs.length;
+    exList.innerHTML = exs
+      .map((ex) => {
+        // An exercise from the other track says which one it is.
+        const other = ex.track !== track ? tt(ex.track === "vocal" ? "badge.vocal" : "badge.singing") : "";
+        return openRowHtml(ex, [other, tt("plan.exMeta", { min: ex.durationMin })]);
+      })
+      .join("");
+    $$("[data-open-ex]", exList).forEach((btn) => {
+      btn.addEventListener("click", () => openPlanExercise(btn.dataset.openEx));
     });
 
-    const chips = $("#element-chips");
-    chips.innerHTML = "";
-    VT_WEEK_ELEMENTS.forEach((el) => {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "chip" + (plan.element === el ? " selected" : "");
-      b.textContent = weekElementLabel(el);
-      b.addEventListener("click", () => {
-        const p = VTStorage.getWeekPlan();
-        p.element = el;
-        VTStorage.setWeekPlan(p);
-        renderPlan();
-      });
-      chips.appendChild(b);
-    });
+    // Days are counted from practice, not logged by hand.
+    const days = $("#plan-days");
+    days.hidden = idle;
+    days.textContent = idle ? "" : tt("plan.days", { n: planWeekDays(plan) });
+    // Once the week is under way its exercises are the next step, not this button.
+    $("#plan-start-row").hidden = !idle;
 
-    const checkins = $("#plan-checkins");
-    const days = plan.checkIns || [];
-    checkins.innerHTML = days.length
-      ? days.map((d) => `<span class="pill">${d.date} ✓</span>`).join("")
-      : `<span class="muted">${tt("plan.noCheckins")}</span>`;
-
-    const completed = $("#plan-completed-elements");
-    completed.innerHTML = (plan.completedElements || []).length
-      ? plan.completedElements.map((e) => `<span class="pill">${weekElementLabel(e)}</span>`).join(" ")
-      : `<span class="muted">${tt("plan.noImproved")}</span>`;
-
-    const reviews = $("#plan-reviews");
-    reviews.innerHTML = (plan.reviews || [])
-      .slice(0, 8)
-      .map(
-        (r) =>
-          `<div class="history-item"><div><strong>${tt("plan.weekN", { n: r.week })}: ${weekElementLabel(r.element)}</strong><div class="meta">${r.verdict} · ${new Date(r.at).toLocaleDateString()} · ${r.notes || ""}</div></div></div>`
-      )
-      .join("") || `<p class="muted">${tt("plan.noReviews")}</p>`;
+    renderPlanReview(plan);
   }
 
   /**
-   * Twelve-week rail. The panel is called "12 semanas" but only ever showed the
-   * current week, so the shape of the plan was invisible.
+   * Focus chips: the current track's first, the rest behind "Ver otros N".
+   * The picked chip says so with a check mark and aria-pressed, not colour.
+   */
+  function renderPlanChips(plan, track) {
+    const first = (window.VT_WEEK_ELEMENTS_FIRST?.[track] || []).filter((el) => VT_WEEK_ELEMENTS.includes(el));
+    const rest = VT_WEEK_ELEMENTS.filter((el) => !first.includes(el));
+    const box = $("#element-chips");
+    box.innerHTML = "";
+    [...first, ...rest].forEach((el) => {
+      const on = plan.element === el;
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "chip" + (on ? " selected" : "");
+      b.setAttribute("aria-pressed", on ? "true" : "false");
+      b.textContent = weekElementLabel(el);
+      b.hidden = !planShowAllElements && !on && !first.includes(el);
+      b.addEventListener("click", () => pickPlanElement(el));
+      box.appendChild(b);
+    });
+    const more = $("#plan-focus-more");
+    const extra = rest.filter((el) => el !== plan.element).length;
+    more.hidden = !extra;
+    more.setAttribute("aria-expanded", planShowAllElements ? "true" : "false");
+    more.textContent = planShowAllElements ? tt("plan.less") : tt("plan.more", { n: extra });
+  }
+
+  function pickPlanElement(el) {
+    const p = VTStorage.getWeekPlan();
+    p.element = el;
+    VTStorage.setWeekPlan(p);
+    renderPlan();
+    // The chips were rebuilt: keep keyboard focus on the one just picked.
+    $("#element-chips .chip.selected")?.focus();
+  }
+
+  function togglePlanElements() {
+    planShowAllElements = !planShowAllElements;
+    renderPlanChips(VTStorage.getWeekPlan(), pageTrack());
+  }
+
+  /**
+   * The review opens seven days after the week starts; until then the card
+   * says when, instead of showing a form that cannot be used yet.
+   */
+  function renderPlanReview(plan) {
+    const D = window.VTDays;
+    const start = planStartDay(plan);
+    const opensOn = start && D?.addDays ? D.addDays(start, 7) : null;
+    const open =
+      plan.status === "review" || (plan.status === "active" && (!opensOn || (D?.dayKey?.() || "") >= opensOn));
+    const when = $("#plan-review-when");
+    when.hidden = open;
+    when.textContent = open
+      ? ""
+      : opensOn
+        ? tt("plan.reviewOpensOn", {
+            date: D.parseDay(opensOn).toLocaleDateString(locale(), { weekday: "long", day: "numeric", month: "long" })
+          })
+        : tt("plan.reviewWaiting");
+    $("#plan-review-body").hidden = !open;
+
+    const improved = plan.completedElements || [];
+    $("#plan-completed-wrap").hidden = !improved.length;
+    $("#plan-completed-elements").innerHTML = improved
+      .map((e) => `<span class="pill">${escapeHtml(weekElementLabel(e))}</span>`)
+      .join(" ");
+
+    const reviews = (plan.reviews || []).slice(0, 8);
+    $("#plan-reviews-card").hidden = !reviews.length;
+    $("#plan-reviews").innerHTML = reviews.map(planReviewRow).join("");
+  }
+
+  /**
+   * Twelve-week rail: a progress strip (done, this week, still to come), drawn
+   * so it does not read as twelve buttons and never wraps a lone week.
    */
   function renderPlanWeekRail(plan) {
     const rail = $("#plan-week-rail");
@@ -3721,13 +4923,20 @@
     const done = (plan.reviews || []).length;
     rail.innerHTML = "";
     for (let w = 1; w <= 12; w += 1) {
-      const dot = document.createElement("span");
+      const li = document.createElement("li");
       const stateCls = w < current || w <= done ? "done" : w === current ? "current" : "todo";
-      dot.className = `plan-week-dot ${stateCls}`;
-      dot.textContent = String(w);
-      dot.title = tt("plan.weekN", { n: w });
-      rail.appendChild(dot);
+      li.className = `plan-week-dot ${stateCls}`;
+      li.textContent = String(w);
+      rail.appendChild(li);
     }
+  }
+
+  /** Start the plan's week (status and start date); the element is already picked. */
+  function beginPlanWeek(plan) {
+    plan.status = "active";
+    plan.startedAt = plan.startedAt || new Date().toISOString();
+    VTStorage.setWeekPlan(plan);
+    toast(tt("toast.weekStarted", { n: String(plan.weekNumber), element: weekElementLabel(plan.element) }));
   }
 
   function startWeekPlan() {
@@ -3736,29 +4945,17 @@
       toast(tt("toast.pickElement"));
       return;
     }
-    plan.status = "active";
-    plan.startedAt = plan.startedAt || new Date().toISOString();
-    VTStorage.setWeekPlan(plan);
+    beginPlanWeek(plan);
     renderPlan();
-    toast(tt("toast.weekStarted", { n: String(plan.weekNumber), element: plan.element }));
+    // The start button is gone now; the week's first exercise is the next step.
+    $("#plan-exercise-list [data-open-ex]")?.focus();
   }
 
-  function checkInDay() {
+  /** Opening one of the week's exercises starts the week if it has not started. */
+  function openPlanExercise(id) {
     const plan = VTStorage.getWeekPlan();
-    if (plan.status === "idle") {
-      toast(tt("toast.startWeekFirst"));
-      return;
-    }
-    const date = new Date().toISOString().slice(0, 10);
-    plan.checkIns = plan.checkIns || [];
-    if (plan.checkIns.some((c) => c.date === date)) {
-      toast(tt("toast.alreadyCheckin"));
-      return;
-    }
-    plan.checkIns.push({ date });
-    VTStorage.setWeekPlan(plan);
-    renderPlan();
-    toast(tt("toast.checkinSaved"));
+    if (plan.status === "idle" && plan.element) beginPlanWeek(plan);
+    openExercise(id);
   }
 
   function submitWeekReview(improved) {
@@ -3779,7 +4976,8 @@
       verdict: improved ? "improved" : "continue",
       notes,
       at: new Date().toISOString(),
-      checkInCount: (plan.checkIns || []).length
+      // Days practised that week: hand-logged check-ins before, the ledger now.
+      checkInCount: Math.max((plan.checkIns || []).length, planWeekDays(plan))
     };
     plan.reviews = plan.reviews || [];
     plan.reviews.unshift(review);
@@ -3809,19 +5007,25 @@
   }
 
   /* —— Structured session —— */
-  function startStructured(path) {
+  /**
+   * @param {string} [path] basic | advanced | full | daily | basics
+   * @param {{ order?: string[], sec?: Object<string, number>, tier?: string, label?: string }} [routine]
+   *   a prepared sequence (today's basics) instead of a catalog route
+   */
+  function startStructured(path, routine) {
     const p = path || $("#session-path")?.value || "basic";
-    const session = VTSession.start(state.tab, p);
+    const session = VTSession.start(state.tab, p, routine);
     updateSessionBanner();
     const id = VTSession.currentExerciseId();
     if (id) openExercise(id, true);
+    if (routine?.order) {
+      toast(tt("loop.startToast", { tier: routine.label || "", n: String(session.order.length) }));
+      return session;
+    }
     toast(
       tt("toast.structuredStart", {
         track: tt(state.tab === "vocal" ? "track.vocalShort" : "track.singingShort"),
-        path: tt(
-          "path." +
-            (p === "advanced" ? "advanced" : p === "full" ? "full" : p === "daily" ? "daily" : "basic")
-        ),
+        path: pathName(["advanced", "full", "daily"].includes(p) ? p : "basic"),
         n: String(session.order.length)
       })
     );
@@ -3844,14 +5048,54 @@
   function pauseStructured() {
     VTSession.pause();
     stopPractice(true);
+    hideStepDone();
     pauseTimer();
     VTPiano.stopAll();
     updateSessionBanner();
     toast(tt("toast.sessionPaused"));
   }
 
+  /**
+   * Finish the current guided step and open the next one.
+   *
+   * Practice is kept automatically now (recordPracticeIfDue), so there is no
+   * save-or-discard question between steps: rating stays available through
+   * Save before Next, and a 17-step class no longer costs three presses a step.
+   * The last step stops everything — it used to leave the mic, the piano loop
+   * and the timer running on the home page.
+   */
+  function advanceStructured(source) {
+    if (!state.structured || !state.exercise) return;
+    const s = VTSession.get();
+    if (!s) return;
+    recordPracticeIfDue(source === "skip" ? "guided_skip" : "guided_next");
+    stopPractice(true);
+    VTPiano.stopAll();
+    stopTimer(false);
+    stopHold();
+    stopPitchViz();
+    state.recorder.clear();
+    // Advance only past the step that is actually open: Save followed by Next
+    // must move one step, not two.
+    if (VTSession.currentExerciseId() === state.exercise.id) VTSession.markCurrentComplete();
+    updateSessionBanner();
+    const nid = VTSession.currentExerciseId();
+    if (nid) {
+      forceOpenExercise(nid, true);
+      return;
+    }
+    resetSessionPractice();
+    const done = VTSession.get();
+    setView("home");
+    renderExerciseList();
+    if (window.VTLoop?.onRoutineComplete?.(done)) return;
+    toast(tt("toast.structuredDone"));
+  }
+
   function endStructured() {
-    // Always kill live audio/mic — previously left piano/mic running on home
+    // Keep what was practised on this step, then kill live audio/mic —
+    // previously left piano/mic running on home
+    recordPracticeIfDue("guided_end");
     stopPractice(true);
     VTPiano.stopAll();
     stopTimer(false);
@@ -3875,6 +5119,18 @@
         state.tierFilter = c.dataset.tier;
         renderExerciseList();
       });
+    });
+
+    $("#today-basics")?.addEventListener("click", (e) => {
+      const b = e.target.closest?.("button");
+      if (!b) return;
+      if (b.dataset.id) {
+        openExercise(b.dataset.id, false);
+        return;
+      }
+      todayExpanded = !todayExpanded;
+      renderTodayBasics();
+      $("#today-basics .today-basics-more")?.focus();
     });
 
     $("#btn-structured").addEventListener("click", () => startStructured());
@@ -4075,7 +5331,7 @@
       const btn = $("#btn-toggle-guide");
       if (!btn) return;
       if (!state.guideOpen) btn.click();
-      document.querySelector(".guide-card")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      document.querySelector(".guide-card")?.scrollIntoView({ behavior: scrollBehavior(), block: "start" });
     });
     $("#btn-toggle-guide")?.addEventListener("click", () => {
       state.guideOpen = !state.guideOpen;
@@ -4097,7 +5353,7 @@
           // next frame so max-height transition can run
           requestAnimationFrame(() => block.classList.add("is-open"));
           // Bring progressions into view only when user asked
-          block.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          block.scrollIntoView({ behavior: scrollBehavior(), block: "nearest" });
         } else {
           block.classList.remove("is-open");
           setTimeout(() => {
@@ -4114,6 +5370,7 @@
       if (btn) {
         btn.textContent = state.pianoOpen ? tt("piano.less") : tt("piano.more");
         btn.title = state.pianoOpen ? tt("piano.hidePanel") : tt("piano.showPanel");
+        btn.setAttribute("aria-label", btn.title);
         btn.setAttribute("aria-expanded", String(!!state.pianoOpen));
       }
     });
@@ -4196,53 +5453,36 @@
     $("#btn-hold-start")?.addEventListener("click", startPractice);
     $("#btn-hold-stop")?.addEventListener("click", () => stopPractice(false));
 
-    $("#btn-complete").addEventListener("click", completeExercise);
-    $("#btn-next-structured").addEventListener("click", async () => {
-      if (!state.structured) return;
-      const s = VTSession.get();
-      if (!s) return;
-      const next = () => {
-        if (!s.completedIds.includes(state.exercise.id)) {
-          VTSession.markCurrentComplete();
-        }
-        updateSessionBanner();
-        const nid = VTSession.currentExerciseId();
-        if (nid) forceOpenExercise(nid, true);
-        else {
-          toast(tt("toast.structuredDone"));
-          resetSessionPractice();
-          setView("home");
-          renderExerciseList();
-        }
-      };
-      if (shouldPromptOnLeave()) {
-        const choice = await promptLeaveExercise();
-        if (choice === "stay") return;
-        if (choice === "save") {
-          stopPractice(true);
-          VTPiano.stopAll();
-          openMetricsPanel(true);
-          $("#btn-complete")?.focus();
-          toast(tt("leave.scrollSave"));
-          return;
-        }
-        // discard then advance
-        stopPractice(true);
-        VTPiano.stopAll();
-        stopTimer(false);
-        stopHold();
-        stopPitchViz();
-        state.recorder.clear();
-        resetSessionPractice();
-        next();
-        return;
-      }
-      next();
+    $("#btn-complete").addEventListener("click", () => completeExercise());
+    $$(".rate-btn").forEach((b) => b.addEventListener("click", () => rateFeel(b.dataset.feel)));
+    $("#btn-rate-skip")?.addEventListener("click", leaveUnrated);
+    $("#btn-next-structured").addEventListener("click", () => advanceStructured("next"));
+    $("#btn-step-done-next")?.addEventListener("click", () => {
+      stepDoneChoice("next");
+      advanceStructured("next");
+    });
+    $("#btn-step-done-more")?.addEventListener("click", () => {
+      stepDoneChoice("more");
+      hideStepDone();
+      state.timer.remaining = STEP_MORE_SEC;
+      $("#timer-display").textContent = formatTime(STEP_MORE_SEC);
+      startPractice();
+    });
+    $("#btn-step-done-rate")?.addEventListener("click", () => {
+      stepDoneChoice("rate");
+      hideStepDone();
+      openMetricsPanel(true, { focus: true });
+    });
+    $("#step-done")?.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      stepDoneChoice("close");
+      hideStepDone(true);
     });
 
     $("#btn-open-plan").addEventListener("click", renderPlan);
     $("#btn-plan-start").addEventListener("click", startWeekPlan);
-    $("#btn-plan-checkin").addEventListener("click", checkInDay);
+    $("#plan-focus-more").addEventListener("click", togglePlanElements);
     $("#btn-plan-improved").addEventListener("click", () => submitWeekReview(true));
     $("#btn-plan-continue").addEventListener("click", () => submitWeekReview(false));
     $("#btn-plan-back").addEventListener("click", () => {
@@ -4261,6 +5501,16 @@
         e.returnValue = "";
       }
     });
+    // A phone that locks, or a tab that closes, keeps what was practised.
+    // localStorage writes are synchronous, so this lands before the page goes.
+    window.addEventListener("pagehide", () => {
+      if (state.view === "exercise") recordPracticeIfDue("pagehide");
+    });
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden" && state.view === "exercise") {
+        recordPracticeIfDue("hidden");
+      }
+    });
   }
 
   // ── Billing / pricing overlay (Stripe + Mercado Pago) ──
@@ -4273,11 +5523,27 @@
     );
   }
 
+  /**
+   * Pre-launch: checkout cannot take money yet and no QA unlock stands in for
+   * it. The pricing dialog then offers nothing that only answers with a toast:
+   * the plan buttons say "not available yet" and the trial leads instead.
+   */
+  function isCheckoutPrelaunch() {
+    const B = window.VTBilling;
+    try {
+      const h = B?.getBillingHealth?.();
+      return !!h && !h.ok && !B.cfg?.()?.demoUnlockEnabled;
+    } catch {
+      return false;
+    }
+  }
+
   function updateBillingChrome() {
     const B = window.VTBilling;
     if (!B) return;
     const ent = B.getEntitlement();
     const cfg = B.cfg?.() || {};
+    const prelaunch = isCheckoutPrelaunch();
     const pill = $("#billing-pill");
     const btn = $("#btn-pricing");
     if (pill) {
@@ -4328,12 +5594,33 @@
         ? !ent.pro && !(acct.signedIn && acct.account?.trialUsed)
         : !!B.canStartTrial?.() && !ent.pro;
       trialBtn.hidden = !canTrial;
+      // Pre-launch the trial is the one thing this dialog can really do, so it
+      // moves up beside the payments note as the primary; once checkout is live
+      // it goes back to the foot. One element, so its id and listener stay.
+      const slot = prelaunch ? $("#pricing-launch") : $("#pricing-modal .pricing-foot");
+      if (slot && trialBtn.parentElement !== slot) {
+        slot.insertBefore(trialBtn, prelaunch ? null : $("#btn-demo-pro"));
+      }
+      trialBtn.classList.toggle("btn-primary", prelaunch);
+      trialBtn.classList.toggle("btn-sm", !prelaunch);
       if (canTrial) {
         const days = accounts
-          ? Number(acct.methods?.trialDays || 30)
+          ? Number(acct.methods?.trialDays || 7) // the worker's TRIAL_DAYS; 7 is the decided length
           : Number(cfg.freeTrialDays || 0);
-        trialBtn.textContent = tt("pricing.startTrial", { n: String(days) });
+        trialBtn.textContent = tt(prelaunch ? "pricing.startTrialFree" : "pricing.startTrial", {
+          n: String(days)
+        });
       }
+    }
+    // The foot promised secure checkout and cancelling "the same way you
+    // subscribed" while nobody can subscribe. Pre-launch it answers the
+    // question the trial raises instead, and only while the trial is offered.
+    const payNote = $("#pricing-pay-note");
+    if (payNote) {
+      const key = prelaunch ? "pricing.notePrelaunch" : "pricing.note";
+      payNote.setAttribute("data-i18n", key);
+      payNote.textContent = tt(key);
+      payNote.hidden = prelaunch && (!trialBtn || trialBtn.hidden);
     }
     // Customer Portal: show for Pro/trial when a valid portal URL is configured
     const manage = $("#btn-manage-billing");
@@ -4367,6 +5654,13 @@
       } catch {
         healthNote.hidden = true;
       }
+    }
+    const launch = $("#pricing-launch");
+    if (launch) {
+      launch.hidden = !!(
+        (!healthNote || healthNote.hidden) &&
+        (!trialBtn || trialBtn.hidden || trialBtn.parentElement !== launch)
+      );
     }
   }
 
@@ -4520,12 +5814,19 @@
           return `<span class="hm-cell l${level}" title="${escapeHtml(c.date)} · ${c.count}" data-date="${escapeHtml(c.date)}"></span>`;
         })
         .join("");
+      // role="img" hides the cells, so the label has to say what the map shows.
+      const practised = data.cells.filter((c) => c.count > 0).length;
+      hm.setAttribute(
+        "aria-label",
+        tt(practised === 1 ? "retain.heatmapAria1" : "retain.heatmapAria", { n: practised, w: data.weeks })
+      );
     }
     updateHomeZeroClass();
   }
 
   function startMicroSession(exerciseId) {
-    state.microSession = true;
+    // Picked up by forceOpenExercise for this one open only.
+    state.pendingMicro = true;
     const id =
       exerciseId ||
       state.exercise?.id ||
@@ -4550,27 +5851,30 @@
     const bn = $("#chk-browser-notify");
     if (bn) bn.checked = !!cfg.browserNotify;
 
-    // Streak freeze
+    const loopOn = !!window.VTLoop && !!window.VTDays;
+
+    // Rest days (the old "freeze"): the ledger spends them on real misses; this
+    // only reports one it has just spent, once.
     const fl = $("#retain-freeze-label");
     if (fl) {
-      const proFreeze = !!window.VTBilling?.can?.("extra_freezes") || !!window.VTBilling?.isPro?.();
-      const left = VTReminders.freezesLeft(proFreeze);
-      fl.textContent = tt("retain.freezesLeft", { n: String(left) });
-      // Try apply freeze silently when returning after 1 missed day
-      const fr = VTReminders.tryApplyFreeze(proFreeze);
+      fl.textContent = tt("retain.freezesLeft", { n: String(VTReminders.freezesLeft()) });
+      const fr = VTReminders.tryApplyFreeze();
       if (fr.applied) {
-        toast(tt("retain.freezeUsed", { n: String(fr.left) }), { durationMs: 3200 });
+        // The start panel says it in its own words; the toast is the fallback.
+        if (loopOn) window.VTLoop.noteRest(fr);
+        else toast(tt("retain.freezeUsed", { n: String(fr.left) }), { durationMs: 3200 });
         fl.textContent = tt("retain.freezesLeft", { n: String(fr.left) });
       }
     }
 
-    // Welcome back after ≥2 days
+    // Welcome back after ≥2 days. With the daily loop the start panel itself
+    // becomes the comeback screen, so this card would only repeat it lower down.
     const days = VTReminders.daysSinceLastPractice();
     const wb = $("#welcome-back");
     if (wb) {
       const dismissed =
         sessionStorage.getItem("vt_wb_dismiss") === dayKeyLocal();
-      const show = days != null && days >= 2 && !dismissed;
+      const show = !loopOn && days != null && days >= 2 && !dismissed;
       wb.hidden = !show;
       if (show) {
         const body = $("#welcome-back-body");
@@ -4578,23 +5882,44 @@
       }
     }
 
-    // Due reminder banner
+    // Due reminder banner. Evaluating marks the day as notified, so the second
+    // render during page load used to hide the banner the first had just shown:
+    // it was never visible. What was shown today stays until dismissed or until
+    // practice makes it moot.
     const ev = VTReminders.evaluate(isEs);
     const rd = $("#remind-due");
     if (rd) {
+      const today = dayKeyLocal();
       if (ev.due && cfg.enabled) {
-        rd.hidden = false;
-        const tx = $("#remind-due-text");
-        if (tx) tx.textContent = ev.message;
+        state.remindDue = { day: today, message: ev.message };
         VTReminders.markNotified();
-      } else {
-        rd.hidden = true;
+      }
+      const keep =
+        cfg.enabled &&
+        state.remindDue &&
+        state.remindDue.day === today &&
+        !VTReminders.practicedToday();
+      rd.hidden = !keep;
+      if (keep) {
+        const tx = $("#remind-due-text");
+        if (tx) tx.textContent = state.remindDue.message;
+        const go = $("#rd-start");
+        if (go && loopOn) go.textContent = tt("loop.remindCta");
+        try {
+          if (!state.remindDue.tracked) {
+            state.remindDue.tracked = true;
+            window.VTAnalytics?.track?.("remind_due_shown", {});
+          }
+        } catch {
+          /* ignore */
+        }
       }
     }
   }
 
   function dayKeyLocal() {
-    return new Date().toISOString().slice(0, 10);
+    // Named "local" from the start but was the UTC date until the loop fixed it.
+    return window.VTDays?.dayKey?.() || new Date().toISOString().slice(0, 10);
   }
 
   function bindRetention() {
@@ -4674,14 +5999,25 @@
       const wb = $("#welcome-back");
       if (wb) wb.hidden = true;
     });
-    $("#rd-start")?.addEventListener("click", () => startMicroSession("s15-sh-air-ladder"));
+    // The reminder's button starts today's Mínimo when the loop is there; the
+    // old one opened the Canto air ladder for everybody, Vocal users included.
+    $("#rd-start")?.addEventListener("click", () => {
+      state.remindDue = null;
+      if (window.VTLoop?.startTier) window.VTLoop.startTier("min");
+      else startMicroSession("s15-sh-air-ladder");
+    });
     $("#rd-dismiss")?.addEventListener("click", () => {
+      state.remindDue = null;
       const rd = $("#remind-due");
       if (rd) rd.hidden = true;
     });
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible" && state.view === "home") {
+        // A tab left open overnight wakes up on a new day: redraw all of home,
+        // not only the reminders, or "done for today" would still say today.
+        renderValuePulse();
         renderRetentionChrome();
+        renderNextStepCard();
       }
     });
   }
@@ -4789,6 +6125,7 @@
     const market = B.marketFor(region);
     if (!pricingRail) pricingRail = B.preferredRail(region);
     const cfg = B.cfg() || {};
+    const prelaunch = isCheckoutPrelaunch();
     const regionEl = $("#pricing-region-label");
     if (regionEl) {
       regionEl.textContent = `${tt("pricing.region")}: ${market.name} · ${market.currency}`;
@@ -4827,6 +6164,8 @@
     }
     const rails = $("#pricing-rails");
     if (rails) {
+      // Choosing how to pay means nothing while nobody can pay.
+      rails.hidden = prelaunch;
       const stripeLab = es ? (cfg.providers?.stripe?.labelEs || tt("pricing.railStripe")) : (cfg.providers?.stripe?.label || tt("pricing.railStripe"));
       const mpLab = es ? (cfg.providers?.mercadopago?.labelEs || tt("pricing.railMp")) : (cfg.providers?.mercadopago?.label || tt("pricing.railMp"));
       rails.innerHTML = `
@@ -4876,6 +6215,7 @@
                 : "";
           let ctaLabel = tt("pricing.subscribe");
           let disabled = false;
+          let notYet = false;
           if (p.id === "free") {
             ctaLabel = tt("pricing.current");
             disabled = true;
@@ -4885,6 +6225,14 @@
               disabled = ent.plan === p.id || ent.source === "paid";
             }
           }
+          // A Subscribe button that can only answer with a toast is a dead end;
+          // say it on the button instead, and keep it out of the Tab order.
+          if (prelaunch && !disabled) {
+            ctaLabel = tt("pricing.notYet");
+            disabled = true;
+            notYet = true;
+          }
+          const ctaClass = p.id === "free" ? "btn-ghost" : notYet ? "btn-ghost plan-cta-not-yet" : "btn-primary";
           const hero = p.hero || p.id === "pro_yearly" ? " is-hero" : "";
           return `
             <article class="plan-card${p.popular ? " is-popular" : ""}${hero}" data-plan="${p.id}">
@@ -4893,7 +6241,7 @@
               <div class="plan-price">${price.text}<span>${interval}</span></div>
               <ul class="plan-features">${feats}</ul>
               ${moreFeats}
-              <button type="button" class="btn ${p.id === "free" ? "btn-ghost" : "btn-primary"} btn-sm plan-cta" data-plan="${p.id}" ${disabled ? "disabled" : ""}>
+              <button type="button" class="btn ${ctaClass} btn-sm plan-cta" data-plan="${p.id}" ${disabled ? 'disabled aria-disabled="true"' : ""}>
                 ${ctaLabel}
               </button>
             </article>`;
@@ -5497,6 +6845,122 @@
         .join("");
     }
 
+    $("#ab-results-load")?.addEventListener("click", renderAbResults);
+
+    /**
+     * A/B results for an admin: how events are arriving, exposures per arm,
+     * where each test stands against its plan, the preset metrics with 95%
+     * intervals, and the warnings that mean "do not read this yet". The
+     * numbers and verdicts come from the worker; nothing is computed here.
+     * Differences and p-values appear only once the worker says the plan is
+     * met (horizon.reached): until then the arms' own counts, and the date.
+     */
+    async function renderAbResults() {
+      const box = $("#ab-results");
+      if (!box) return;
+      const esc = window.VTAuth?.escapeHtml || ((v) => String(v ?? ""));
+      box.hidden = false;
+      box.textContent = tt("ab.loading");
+      const list = await window.VTAccount?.request?.("GET", "/v1/admin/experiments", null);
+      if (!list || !list.ok) {
+        box.textContent = tt("ab.error");
+        return;
+      }
+      const locale = window.VTI18n?.lang === "en" ? "en-GB" : "es-PE";
+      const count = (v) => Number(v || 0).toLocaleString(locale);
+      const date = (sec) => new Date(sec * 1000).toLocaleDateString(locale, { day: "numeric", month: "short", year: "numeric" });
+      const pct = (v) => (v === null || v === undefined ? "–" : `${(v * 100).toFixed(1)} %`);
+      const num = (v) => (v === null || v === undefined ? "–" : v.toFixed(2));
+      const pval = (p) => (p === null || p === undefined ? "p = –" : p < 0.001 ? "p < 0.001" : `p = ${p.toFixed(3)}`);
+      const parts = [ingestHtml(list.data?.ingest, { esc, count, date })];
+      const all = list.data?.experiments || [];
+      const live = all.filter((x) => (x.arms || []).length);
+      if (!live.length) {
+        parts.push(`<p class="muted">${esc(tt("ab.none"))}</p>`);
+        box.innerHTML = parts.join("");
+        return;
+      }
+      for (const x of live) {
+        const res = await window.VTAccount.request(
+          "GET",
+          `/v1/admin/experiments/results?experiment=${encodeURIComponent(x.experiment)}`,
+          null
+        );
+        const d = res && res.ok ? res.data : null;
+        let html = `<section class="ab-exp"><h5><code>${esc(x.experiment)}</code></h5>`;
+        if (!d) {
+          parts.push(`${html}<p class="muted">${esc(tt("ab.error"))}</p></section>`);
+          continue;
+        }
+        // An older worker sends no horizon; treat it as open, as it was.
+        const h = d.horizon || { reached: true };
+        if (h.nPerArm) html += `<p class="muted">${esc(tt("ab.plan", { n: count(h.nPerArm), days: h.minDays }))}</p>`;
+        if (h.reached) {
+          if (h.readyAt) html += `<p class="ab-plan">${esc(tt("ab.ready", { date: date(h.readyAt) }))}</p>`;
+        } else {
+          const when = !h.readyAt
+            ? tt("ab.readyUnknown")
+            : tt(h.estimated ? "ab.readyAround" : "ab.readyOn", { date: date(h.readyAt) });
+          html += `<p class="ab-plan">${esc(tt("ab.tooEarly", { have: count(h.counted), n: count(h.nPerArm) }))} ${esc(when)}</p>`;
+        }
+        // The split check is shown every time, flagged or not.
+        if (d.srm?.flagged) html += `<p class="ab-warn">${esc(tt("ab.srm", { p: pval(d.srm.p) }))}</p>`;
+        else if (d.srm && d.srm.p !== null && d.srm.p !== undefined) html += `<p class="muted">${esc(tt("ab.srmOk", { p: pval(d.srm.p) }))}</p>`;
+        for (const e of d.eventMix?.events || []) {
+          if (!e.flagged) continue;
+          html += `<p class="ab-warn">${esc(tt(e.reason === "missing" ? "ab.mixMissing" : "ab.mixDiffers", { event: e.event, p: pval(e.p) }))}</p>`;
+        }
+        if (h.reached && d.readMe === "small_sample") html += `<p class="muted">${esc(tt("ab.small"))}</p>`;
+        for (const m of d.metrics || []) {
+          const share = m.kind === "share";
+          const role = tt(m.role === "primary" ? "ab.primary" : "ab.guardrail");
+          html += `<p class="ab-metric">${esc(tt(share ? "ab.metric.share" : "ab.metric.days", { role, event: m.event, from: m.from, to: m.to }))}</p>`;
+          if (!(m.arms || []).length) {
+            html += `<p class="muted">${esc(tt("ab.immature", { to: m.to }))}</p>`;
+            continue;
+          }
+          const exposed = Object.fromEntries((d.exposed || []).map((a) => [a.variant, a.n]));
+          const rows = m.arms
+            .map((a) => {
+              const val = share ? pct(a.rate) : num(a.mean);
+              const ci = share ? `${pct(a.lo)}–${pct(a.hi)}` : `${num(a.lo)}–${num(a.hi)}`;
+              return `<tr><td><code>${esc(a.variant)}</code></td><td>${esc(count(exposed[a.variant] ?? a.n))} · ${esc(count(a.n))}</td><td>${esc(val)} <span class="ab-ci">(${esc(ci)})</span></td></tr>`;
+            })
+            .join("");
+          html += `<div class="ab-table-wrap"><table class="ab-table"><thead><tr><th>${esc(tt("ab.arm"))}</th><th>${esc(tt("ab.exposed"))}</th><th>${esc(tt("ab.value"))}</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+          for (const c of m.comparisons || []) {
+            const fmt = (v) => (v === null || v === undefined ? "–" : share ? `${v >= 0 ? "+" : ""}${(v * 100).toFixed(1)} pts` : `${v >= 0 ? "+" : ""}${v.toFixed(2)}`);
+            html += `<p class="ab-diff">${esc(tt("ab.diff", { variant: c.variant, vs: c.vs, diff: fmt(c.diff), lo: fmt(c.lo), hi: fmt(c.hi), p: pval(c.p) }))}</p>`;
+          }
+        }
+        parts.push(`${html}</section>`);
+      }
+      box.innerHTML = parts.join("");
+    }
+
+    /**
+     * One line on how events are arriving: the client posts no-cors and never
+     * sees a refusal, so a wrong origin or a stuck limit shows up here or
+     * nowhere.
+     */
+    function ingestHtml(ingest, { esc, count, date }) {
+      if (!ingest) return "";
+      const t = ingest.totals || {};
+      const sum = (keys) => keys.reduce((n, k) => n + (Number(t[k]) || 0), 0);
+      const dropped = sum(["unknown_event", "bad_cid", "not_an_object"]);
+      const refusedKeys = ["origin_not_allowed", "rate_limited", "opted_out", "automated", "body_too_large", "bad_request"];
+      const refused = sum(refusedKeys);
+      if (!t.accepted && !dropped && !refused) return `<p class="muted ab-ingest">${esc(tt("ab.ingestNone"))}</p>`;
+      let line = tt("ab.ingest", { accepted: count(t.accepted), dropped: count(dropped), refused: count(refused) });
+      const reasons = refusedKeys.filter((k) => t[k]).map((k) => `${k} ${count(t[k])}`);
+      if (reasons.length) line += ` ${tt("ab.ingestReasons", { list: reasons.join(", ") })}`;
+      if (ingest.lastAcceptedAt) line += ` ${tt("ab.ingestLast", { when: date(ingest.lastAcceptedAt) })}`;
+      // A wrong origin or a stuck limit is a broken pipeline; opted-out and
+      // automated refusals are the system working.
+      const broken = sum(["origin_not_allowed", "rate_limited"]) > 0;
+      return `<p class="${broken ? "ab-warn" : "muted"} ab-ingest">${esc(line)}</p>`;
+    }
+
     window.VTAccount?.onChange?.(() => {
       refreshAccountUI();
       updateBillingChrome();
@@ -5718,6 +7182,9 @@
     setTab,
     refreshStartPanel: renderNextStepCard,
     startDaily,
+    startStructured,
+    recordPracticeIfDue,
+    advanceStructured,
     dailySession,
     openPricing,
     closePricing,
@@ -5734,6 +7201,7 @@
       VTI18n.onChange = () => {
         renderExerciseList();
         if (state.view === "exercise" && state.exercise) renderExercise();
+        if ($("#step-done") && !$("#step-done").hidden) renderStepDone();
         // Plan and history build their copy at render time, so a language
         // switch has to re-render them or they stay in the old language.
         if (state.view === "plan") renderPlan();
@@ -5762,7 +7230,31 @@
     syncGuideLinks();
     const settings = VTStorage.getSettings();
     state.tab = settings.lastTab || "vocal";
+    // The daily loop draws into home and starts routines through these.
+    window.VTLoop?.bind?.({
+      getTab: () => state.tab,
+      setTab,
+      findExercise,
+      startRoutine: (r) => startStructured(r.path || "basics", r),
+      startDaily,
+      toast: (msg, opts) => toast(msg, opts),
+      hideToast: () => {
+        clearTimeout(toast._t);
+        $("#toast")?.classList.remove("show");
+      },
+      refresh: () => {
+        renderNextStepCard();
+        renderTodayBasics();
+      },
+      focusReminders: () => {
+        if (state.view !== "home") setView("home");
+        const panel = $("#retain-panel");
+        panel?.scrollIntoView({ block: "center", behavior: scrollBehavior() });
+        $("#chk-reminders")?.focus({ preventScroll: true });
+      }
+    });
     bind();
+    bindHeaderMenu();
     bindBilling();
     bindAuth();
     setTab(state.tab);
@@ -5788,6 +7280,7 @@
     setPlayMode("oneNote", { silent: true });
     syncHeaderHeightVar();
     fitHighwayToViewport();
+    watchStageRails();
     window.addEventListener("resize", () => {
       syncHeaderHeightVar();
       scheduleFitHighway();

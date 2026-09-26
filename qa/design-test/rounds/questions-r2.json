@@ -1,0 +1,157 @@
+{
+ "naming": {
+  "title": "Start choices for a returning learner",
+  "job": "Let a returning learner start today's practice in one tap, and pick a different amount or a guided route without two competing naming schemes.",
+  "states": "home-returning,home-returning-more",
+  "vps": "phone,laptop",
+  "arms": {
+   "A": {
+    "caption": "'▶ Empezar básicos' starts today's basics at the highlighted size. Tapping Mínimo, Esencial or Clase only changes the size: the card redraws and nothing starts. 'Continuar práctica' opens the next unpractised exercise, or resumes an open guided session. 'Iniciar sesión guiada' starts a guided session on the route picked under 'Ruta' (Básica, Avanzada, Completa or Diaria (clase))."
+   },
+   "B": {
+    "name": "one naming scheme, other routes behind a disclosure",
+    "caption": "'▶ Empezar básicos' starts today's basics at the highlighted size. Tapping a size chip only changes the size: the card redraws and nothing starts. 'Otras formas de practicar' opens and closes a panel holding 'Continuar práctica' and 'Iniciar sesión guiada', which do the same as before. The route picker there offers Básica, Avanzada or Completa. The daily class is reached through the Clase size, which starts the same class session."
+   },
+   "C": {
+    "name": "level chips that start",
+    "caption": "'▶ Empezar básicos' starts today's basics at the size named after 'Hoy:'. Tapping '▶ Esencial' or '▶ Clase' starts that size straight away and keeps it as the size shown next time. 'Otras formas de practicar' opens and closes a panel with 'Continuar práctica', 'Iniciar sesión guiada' and the route picker (Básica, Avanzada, Completa)."
+   }
+  }
+ },
+ "done-landscape": {
+  "title": "Finishing card in phone landscape",
+  "job": "Let the learner see what today's practice earned and close the card with 'Hasta mañana' (or choose a reminder) while holding the phone sideways.",
+  "states": "done",
+  "vps": "land,phone",
+  "arms": {
+   "A": {
+    "caption": "'Hasta mañana' closes the card and returns to home. 'Elegir recordatorio' closes it and scrolls to the reminder settings. When the screen is short, the card scrolls inside itself to reach both buttons."
+   },
+   "B": {
+    "name": "two-column done card in short viewports, actions pinned",
+    "caption": "'Hasta mañana' closes the card and returns to home. 'Elegir recordatorio' closes it and scrolls to the reminder settings. On screens under 500px tall the card uses two columns and the button row stays pinned to the card's bottom edge."
+   }
+  }
+ },
+ "pricing-prelaunch": {
+  "title": "Pro dialog before checkout is live",
+  "job": "Let a free learner see what Pro offers and what they can actually do about it today, while paid checkout is not open yet.",
+  "states": "pricing,pricing-end-card",
+  "vps": "phone,desktop",
+  "arms": {
+   "A": {
+    "caption": "Either 'Suscribirse' shows a toast saying payments are not public yet, and nothing else happens. 'Empezar prueba Pro de 7 días', at the end of the dialog, starts a 7-day Pro trial in this browser. The two payment-method buttons switch which checkout would be used."
+   },
+   "B": {
+    "name": "honest pre-launch state",
+    "caption": "The two 'Aún no disponible' buttons are disabled and do nothing when tapped. 'Probar Pro 7 días gratis' starts a 7-day Pro trial in this browser. The payment-method buttons switch which checkout would be used."
+   },
+   "C": {
+    "name": "one plan, interval toggle, plain benefits",
+    "caption": "'Mensual' / 'Anual' switches which Pro plan card is shown. 'Suscribirme al año' (or 'al mes') shows a toast saying payments are not public yet, and nothing else happens. This dialog offers no way to start a trial."
+   }
+  }
+ },
+ "selected-style": {
+  "title": "How a selected choice looks",
+  "job": "A learner can tell at a glance which track and which size of today's practice are selected, and can tell these choices apart from buttons that start something.",
+  "states": "home-returning",
+  "vps": "phone,desktop",
+  "arms": {
+   "A": {
+    "caption": "Tapping Canto or Vocal switches the track. Tapping Mínimo, Esencial or Clase changes the size of today's practice; nothing starts until the green button is pressed."
+   },
+   "B": {
+    "name": "one selected style: tint, bar and check",
+    "caption": "Tapping Canto or Vocal switches the track. Tapping Mínimo, Esencial or Clase changes the size of today's practice; nothing starts until the green button is pressed."
+   }
+  }
+ },
+ "exercise-end": {
+  "title": "When a single exercise's time runs out",
+  "job": "Someone practising one exercise on their own (not a guided routine) knows the time is up and saves how it went with little effort.",
+  "states": "exercise-timeup",
+  "vps": "phone,desktop",
+  "arms": {
+   "A": {
+    "caption": "At 00:00 the microphone stays on and the screen stays as shown. Saving the session means pressing Detener and filling in the rating form further down the page."
+   },
+   "B": {
+    "name": "finish sheet with one-tap rating",
+    "caption": "At 00:00 the microphone stops and this sheet appears. Tapping Difícil, Bien or Muy bien saves the session with that rating. 'Añadir notas y detalles' closes the sheet and scrolls to the full rating form."
+   }
+  }
+ },
+ "rating": {
+  "title": "Rating a finished step",
+  "job": "Let the learner record how the step went, and keep the take, in a few seconds, with a score that reflects the step they actually sang.",
+  "states": "rating,rating-saved",
+  "vps": "phone,desktop",
+  "arms": {
+   "A": {
+    "caption": "Pressing Detener opens a rating form (minutes, three 1–5 sliders, notes) under the practice stage, and the page scrolls so the form starts just below the stage. 'Guardar sesión y puntaje' saves the take and shows a 0–10 score that compares the minutes with the exercise's 5-minute target."
+   },
+   "B": {
+    "name": "one-tap feel rating in place of the form",
+    "caption": "Pressing Detener scrolls a short rating card fully into view. Tapping Fácil, Normal or Me costó saves the take straight away; the minutes come from the step timer and are scored against the step's own length. The score then appears. 'Más detalles' opens the sliders and notes, which have their own save button. 'Salir sin puntuar' goes to the next routine step and keeps the take unrated."
+   },
+   "C": {
+    "name": "keep the form, prefilled and reachable",
+    "caption": "Pressing Detener scrolls the rating form until its top is about 45% down the screen. The minutes are already filled in from the time practised. The Save button stays pinned to the bottom of the screen while the form is in view. Saving scores the minutes against the step's own length."
+   }
+  }
+ },
+ "session-chrome": {
+  "title": "Guided-session chrome on phones",
+  "job": "Let the learner see where they are in the guided routine and pause or end it, while giving the screen to the practice stage.",
+  "states": "guided-idle,guided-live-clear",
+  "vps": "phone,small",
+  "arms": {
+   "A": {
+    "caption": "The banner's Pausar and Terminar buttons pause or end the guided session. When paused, the banner shows Reanudar."
+   },
+   "B": {
+    "name": "step strip inside the stage",
+    "caption": "The ⋯ button next to '← Atrás' opens a menu with Pausar sesión (Reanudar sesión when paused) and Terminar sesión. The current segment of the strip fills as the step's timer runs, and the total time left counts down."
+   },
+   "C": {
+    "name": "a one-line banner",
+    "caption": "The × at the end of the banner ends the guided session. The ⋯ next to it opens a menu with Pausar sesión (Reanudar sesión when paused)."
+   }
+  }
+ },
+ "start-floor": {
+  "title": "Exercise controls on small phones",
+  "job": "Let the learner start the exercise and adjust its settings with controls that are easy to tap and read.",
+  "states": "exercise",
+  "vps": "phone,small",
+  "arms": {
+   "A": {
+    "caption": "▶ Empezar starts the exercise. The chord and mode selects, octave −/+, range checkbox, mic slider and 🎹+ (piano and chord panel) can all be adjusted from the stage."
+   },
+   "B": {
+    "name": "same layout, raised to the floor",
+    "caption": "Same controls and behaviour, each at least 44 px tall with text of 12 px or more. The chord and mode selects are not shown for lip-trill and straw exercises."
+   },
+   "C": {
+    "name": "one big Start; settings hidden",
+    "caption": "▶ Empezar and ■ Detener span the stage width. On phones the mic-sensitivity slider and the octave −/+ and range controls are not shown on the stage. 🎹+ still opens the piano and chord panel."
+   }
+  }
+ },
+ "coach-strip": {
+  "title": "Coaching cue while singing",
+  "job": "Keep the instruction for what to do right now in view while the learner sings.",
+  "states": "practicing,practicing-s9",
+  "vps": "phone,desktop",
+  "arms": {
+   "A": {
+    "caption": "While singing, the coaching cue and the mode summary sit below the practice stage. In exercises without a pitch canvas, the 'Qué vas a hacer' steps are hidden once practice starts."
+   },
+   "B": {
+    "name": "coach strip on the stage",
+    "caption": "In a pitch exercise, the mode name and the coaching cue stay on the stage in a strip under the top controls, cut to two lines, and the pitch lanes start below the strip. In exercises without a canvas, the current step ('Ahora · paso n de N') stays on the stage and moves on as the timer runs."
+   }
+  }
+ }
+}

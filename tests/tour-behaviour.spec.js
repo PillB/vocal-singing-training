@@ -269,15 +269,18 @@ test.describe("Tour manners", () => {
     await boot(page);
     await page.evaluate(() => window.VTTour.start(true));
     await page.waitForTimeout(400);
+    // A first visit has three steps (its start panel has no other ways in to
+    // point at); a returning one has four. Walk whichever runs, to its end.
     const hrefs = [];
-    for (let i = 0; i < 4; i += 1) {
+    for (let i = 0; i < 6; i += 1) {
       hrefs.push(await page.locator("[data-tour-guide]").getAttribute("href"));
-      if (i < 3) {
-        await page.locator("[data-tour-next]").click();
-        await page.waitForTimeout(420);
-      }
+      const p = progressNumbers(await page.locator("[data-tour-progress]").textContent());
+      if (!p || p.n === p.total) break;
+      await page.locator("[data-tour-next]").click();
+      await page.waitForTimeout(420);
     }
-    expect(new Set(hrefs).size, `each step points somewhere useful: ${hrefs}`).toBe(4);
+    expect(hrefs.length, `the tour has its steps: ${hrefs}`).toBeGreaterThanOrEqual(3);
+    expect(new Set(hrefs).size, `each step points somewhere useful: ${hrefs}`).toBe(hrefs.length);
   });
 
   test("ending the tour puts the page back where it found it", async ({ page }) => {

@@ -5,7 +5,8 @@
  * Assignment is a hash of (experiment key, client id), so a visitor sees the
  * same variant on every reload without anything being stored per experiment
  * and without a server round trip. The client id is a random string in
- * `vt_ab_v1`; it is not tied to an account and never leaves the device.
+ * `vt_ab_v1`; it is not tied to an account. It leaves the device only with the
+ * anonymous statistics js/analytics.js sends, and only when sending is on.
  *
  * `?ab_<key>=<variant>` forces a variant for the rest of the page. That is how
  * you look at both versions yourself — it is the "show me the other one"
@@ -134,6 +135,12 @@
       });
       return a.variant;
     }
+    // A switched-off experiment serves everybody the control and splits
+    // nobody, so there is nothing to be exposed to. Recording it anyway spent
+    // each browser's one exposure on the control arm months before the test
+    // was turned on, and those browsers would have entered the real test
+    // already counted — in the wrong arm half the time.
+    if (!a.enabled) return a.variant;
     const bag = readBag() || {};
     bag.seen = bag.seen && typeof bag.seen === "object" ? bag.seen : {};
     if (!bag.seen[key]) {
@@ -147,6 +154,23 @@
       });
     }
     return a.variant;
+  }
+
+  /**
+   * The arm this browser was exposed to, for each switched-on experiment it has
+   * been exposed to. js/daily-loop.js repeats these on every app_open, so an
+   * exposure whose first beacon never reached the worker is recorded late
+   * rather than lost; the worker keeps whichever arrives first.
+   * @returns {Record<string, string>} experiment key -> arm id
+   */
+  function exposedArms() {
+    const bag = readBag() || {};
+    const seen = bag.seen && typeof bag.seen === "object" ? bag.seen : {};
+    const out = {};
+    Object.keys(defs()).forEach((key) => {
+      if (defs()[key]?.enabled && typeof seen[key] === "string") out[key] = seen[key];
+    });
+    return out;
   }
 
   /**
@@ -177,5 +201,5 @@
     }
   }
 
-  global.VTExperiments = { assignment, variant, exposeOnce, report, reset, clientId };
+  global.VTExperiments = { assignment, variant, exposeOnce, exposedArms, report, reset, clientId };
 })(window);

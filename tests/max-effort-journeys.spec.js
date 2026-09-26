@@ -30,8 +30,10 @@ test.describe("Max-effort journeys (Musk)", () => {
     await stopPractice(page);
     // After stop, metrics card should auto-expand (learner next step)
     await expect(page.locator("#metrics-card")).not.toHaveClass(/collapsed/, { timeout: 3000 });
+    // The minutes field hides once the take has run a second (the clock fills
+    // it), so look for a field the learner still fills in.
     await expect(
-      page.locator("#metrics-form .field, #metrics-form input, #metrics-form label").first()
+      page.locator("#metrics-form .field:not([hidden])").first()
     ).toBeVisible({ timeout: 3000 });
   });
 
@@ -182,8 +184,10 @@ test.describe("Max-effort journeys (Musk)", () => {
     expect(dead).toEqual([]);
     // Both languages are on the page, and every Spanish section has its
     // English twin — a half-translated manual is the one people complain about.
+    // The English half sets its subsections one level lower (h4 where the
+    // Spanish has h3), so a twin may be any heading level.
     const halves = await page.evaluate(() => {
-      const ids = [...document.querySelectorAll("h2[id], h3[id]")].map((h) => h.id);
+      const ids = [...document.querySelectorAll("h2[id], h3[id], h4[id]")].map((h) => h.id);
       const es = ids.filter((id) => !id.endsWith("-en") && id !== "en");
       return { es, missing: es.filter((id) => !ids.includes(`${id}-en`)) };
     });

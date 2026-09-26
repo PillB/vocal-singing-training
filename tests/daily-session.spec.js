@@ -25,7 +25,7 @@ const CLASS_EXERCISES = [
   { id: "s27-lip-trill-solfege", mode: "trillSolfege" }
 ];
 
-async function boot(page, lang = "es") {
+async function boot(page, lang = "es", query = "") {
   await page.context().grantPermissions(["microphone"]).catch(() => {});
   await page.addInitScript((l) => {
     try {
@@ -62,7 +62,7 @@ async function boot(page, lang = "es") {
     navigator.mediaDevices.getUserMedia = fakeGUM;
     if (typeof MediaDevices !== "undefined") MediaDevices.prototype.getUserMedia = fakeGUM;
   }, lang);
-  await page.goto(BASE + "/?t=" + Date.now(), { waitUntil: "domcontentloaded" });
+  await page.goto(BASE + "/?t=" + Date.now() + query, { waitUntil: "domcontentloaded" });
   await page.waitForFunction(() => !!window.VTApp && !!window.VT_DAILY_SESSION);
 }
 
@@ -114,8 +114,12 @@ test.describe("Prepared daily class session", () => {
     expect(Math.abs(report.totalSec / 60 - report.totalMin)).toBeLessThan(2);
   });
 
+  // A first visit in the loop arm starts with the Mínimo (tests/home-design.spec.js);
+  // the daily class as home's recommendation is the classic arm's panel.
+  const CLASSIC = "&ab_loop_home_2026_10=classic";
+
   test("home: one press on Canto starts the whole sequence", async ({ page }) => {
-    await boot(page);
+    await boot(page, "es", CLASSIC);
     await page.locator('.tab[data-tab="singing"]').click();
     await page.waitForTimeout(150);
 
@@ -732,23 +736,27 @@ test.describe("Prepared daily class session", () => {
   });
 
   test("the daily route is offered on Canto only", async ({ page }) => {
-    await boot(page);
+    // The classic arm: once the daily loop owns the panel the class is its
+    // Clase size and the picker leaves the route out (tests/home-choices.spec.js).
+    await boot(page, "es", CLASSIC);
     const sel = page.locator("#session-path");
     const opt = page.locator('#session-path option[value="daily"]');
 
     await page.locator('.tab[data-tab="singing"]').click();
     await page.waitForTimeout(120);
-    expect(await opt.evaluate((o) => o.disabled)).toBe(false);
+    await expect(opt).toHaveCount(1);
+    await sel.selectOption("daily");
 
     await page.locator('.tab[data-tab="vocal"]').click();
     await page.waitForTimeout(120);
-    expect(await opt.evaluate((o) => o.disabled)).toBe(true);
+    // Left out, not hidden: a hidden option still shows in iOS's picker.
+    await expect(opt).toHaveCount(0);
     // Falling back to a real route rather than silently running Basic as "Diaria"
-    expect(await sel.inputValue()).not.toBe("daily");
+    expect(await sel.inputValue()).toBe("basic");
   });
 
   test("English keeps the session usable", async ({ page }) => {
-    await boot(page, "en");
+    await boot(page, "en", CLASSIC);
     await page.locator('.tab[data-tab="singing"]').click();
     await page.waitForTimeout(150);
     await expect(page.locator("#next-step-label")).toHaveText(/Daily class session/i);

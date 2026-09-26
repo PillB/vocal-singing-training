@@ -28,6 +28,11 @@
     "test:click-ui-live:mic-help": "HEADED=1 MIC_HELP=1 SLOWMO=55 playwright test tests/click-ui-live-log.spec.js --headed --project=chromium --workers=1 --reporter=line",
     "catalog:rebuild": "node qa/rebuild-catalog-snapshot.mjs",
     "accounts:generate": "node qa/generate-test-accounts.mjs",
+    "design-test:render": "node qa/design-test/run-all.mjs",
+    "design-test:blind": "node qa/design-test/blind.mjs",
+    "design-test:briefs": "python3 qa/design-test/briefs.py",
+    "design-test:decide": "python3 qa/design-test/decide.py",
+    "design-test:notes": "python3 qa/design-test/notes.py",
     "serve": "python3 -m http.server 8765",
     "start": "python3 -m http.server 8765"
   },

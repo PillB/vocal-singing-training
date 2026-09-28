@@ -67,8 +67,10 @@ lo enviado** (Stop sending and delete what was sent). A test walks exactly the
 steps the statistics count (opening the account panel, signing in, the trial),
 and nobody can filter it out afterwards, because statistics are not tied to
 accounts. The choice holds in that browser until you press **Volver a permitir**
-(Allow again). Browsers set to send "Do not track" signals (Global Privacy
-Control) send nothing anyway and don't show the button.
+(Allow again), but not in a private window (each new one starts without it,
+so press the button again inside it) and not after clearing the site's data.
+Browsers that send Global Privacy Control send nothing anyway and don't show
+the button; the older "Do Not Track" setting does not count.
 
 ## 1. Give a tester Pro
 
@@ -109,8 +111,10 @@ any address someone made a Google account with).
 1. In **Dar Pro a una persona** (Give Pro to a person), type their address in
    **Correo** (Email).
 2. Set **Días** (Days), or press 7, 30, 90 or 365.
-3. Optionally write a **Nota** (Note) for yourself, such as "Beta round 2". Only
-   admins see it.
+3. Optionally write a **Nota** (Note) for yourself, such as "Beta round 2". The
+   person doesn't see it, but can ask for it with the rest of their data
+   ([8.14](#814-send-someone-the-data-we-hold)), so write only what you would
+   show them.
 4. Press **Dar Pro** (Give Pro).
 
 ![The Give Pro form, filled in for a tester](admin-guide/03-give-form.png)
@@ -205,15 +209,12 @@ progress, does not sign them out, and does not stop you giving Pro again later.
 It does not use up their free trial either. If they never had one, their panel
 now offers **Empezar 7 días gratis** (Start 7 days free), as in the picture
 above, and they can take it once. Usually that is fine. To stop it, mark their
-trial as used in the Mac terminal ([8.0](#80-get-the-terminal-ready)). **Changes
-data**, one field on their account; the offer is gone on their next load:
+trial as used in the Mac terminal. Set their address as in
+[8.0, step 4](#80-get-the-terminal-ready), then run this. **Changes data**, one
+field on their account; the offer is gone on their next load:
 
 ```bash
-EMAIL='person@example.com'
-```
-
-```bash
-npx --yes wrangler@4 d1 execute vocal-studio-accounts --remote --command "UPDATE accounts SET trial_used_at = unixepoch() WHERE email_normalized = lower(trim('$EMAIL')) AND trial_used_at IS NULL"
+npx --yes wrangler@4 d1 execute vocal-studio-accounts --remote --command "UPDATE accounts SET trial_used_at = unixepoch() WHERE email_normalized = lower(trim('$SQLEMAIL')) AND trial_used_at IS NULL"
 ```
 
 The look-up then says **Ya usó su prueba gratis**.
@@ -285,7 +286,9 @@ when they redeem it.
 
 1. In **Códigos de regalo** (Gift codes), set **Días** (Days) and **Usos**
    (Uses: how many different people can redeem it).
-2. Optionally add a **Nota** (Note), such as "Coro del barrio".
+2. Optionally add a **Nota** (Note), such as "Coro del barrio". It is copied
+   onto the gift of everyone who redeems the code, so each of them can ask to
+   see it (8.14).
 3. Press **Crear código** (Create code).
 4. Press **Copiar mensaje para enviar** (Copy message to send) and paste it into
    WhatsApp or email. It carries the site's address, the steps and the code.
@@ -362,10 +365,11 @@ account, so both devices must be signed in with the **same** address:
 2. On the new device: sign in with the same address, press **Guardar ahora**
    there too, then reload the page.
 
-What moves: practice history and scores, practice days and streak, the
-12-week plan, and goals. What stays on each device: recordings, reminders,
-language, microphone settings, and any practice profile other than the one
-open when they pressed **Guardar ahora**.
+Only the first practice profile moves, so it must be the one open on both
+devices when they press **Guardar ahora**. What moves: practice history and
+scores, practice days and streak, the 12-week plan, and goals. What stays on
+each device: recordings, reminders, language, microphone settings, and any
+other practice profile (Pro can have up to three).
 
 **"A bar at the bottom asks me about statistics."** Only visitors in places
 whose law says to ask first (the European Economic Area and a few territories)
@@ -492,6 +496,25 @@ name.
 paste one command at a time; don't paste lines that start with `#`; and never
 put `!` inside double quotes, because zsh treats it as a history command.
 
+**4. Setting someone's address**, for the commands that act on one person.
+The address comes from a message, so never type it into a command yourself;
+let the terminal read it:
+
+```bash
+read -r EMAIL
+```
+
+Paste or type the address exactly as they sign in, and press Enter. Then:
+
+```bash
+SQLEMAIL=${EMAIL//\'/\'\'}; echo "[$EMAIL]"
+```
+
+It prints the address between brackets; check it is the one you meant. The
+commands below use `$SQLEMAIL`, which is the same address made safe to put in
+the database's commands (an apostrophe, as in o'neil@…, would otherwise break
+them). Both last until you close the window.
+
 Every command below was run in an interactive zsh against a local copy of the
 database (`--local` in place of `--remote`) with made-up people, and its
 output checked. Commands that change data say so in bold.
@@ -578,23 +601,29 @@ When someone asks for their data to be deleted (Peru's personal data law, Ley
 29733, gives them that right), this removes their account, sessions, sign-in
 records, gifts and trial, code redemptions, saved progress and counters.
 
+**Only act for the owner of the address.** Requests may arrive from anywhere
+(a GitHub issue, another address). Write to the address itself and go ahead
+only once they confirm from it.
+
 **This cannot be undone from the page or the terminal.** Take a backup first
 ([8.8](#88-back-up-the-accounts-database)); within the time-travel window a
 point-in-time restore can also bring it back, but that rolls back
 **everyone's** changes since then.
 
-1. Set the address (between single quotes, exactly as they sign in):
+1. Set the address as in [8.0, step 4](#80-get-the-terminal-ready).
+2. Look them up, to be sure it is the right account (read-only):
 
    ```bash
-   EMAIL='person@example.com'
+   npx --yes wrangler@4 d1 execute vocal-studio-accounts --remote --command "SELECT id, email, datetime(created_at, 'unixepoch') AS created_utc FROM accounts WHERE email_normalized = lower(trim('$SQLEMAIL'))"
    ```
 
-2. Look them up first, on the admin page or with 8.4, to be sure it is the
-   right account.
+   Write today's date and the **id** (it starts with `acct_`) in your private
+   deletion log, never the address. No row means no account has that
+   address: stop.
 3. **Delete** (one command, all on one line):
 
    ```bash
-   npx --yes wrangler@4 d1 execute vocal-studio-accounts --remote --command "DELETE FROM progress WHERE account_id = (SELECT id FROM accounts WHERE email_normalized = lower(trim('$EMAIL'))); DELETE FROM sessions WHERE account_id = (SELECT id FROM accounts WHERE email_normalized = lower(trim('$EMAIL'))); DELETE FROM identities WHERE account_id = (SELECT id FROM accounts WHERE email_normalized = lower(trim('$EMAIL'))); DELETE FROM gift_redemptions WHERE account_id = (SELECT id FROM accounts WHERE email_normalized = lower(trim('$EMAIL'))); DELETE FROM grants WHERE account_id = (SELECT id FROM accounts WHERE email_normalized = lower(trim('$EMAIL'))); DELETE FROM license_links WHERE account_id = (SELECT id FROM accounts WHERE email_normalized = lower(trim('$EMAIL'))); DELETE FROM rate_limits WHERE bucket = 'login:email:' || lower(trim('$EMAIL')) OR bucket IN (SELECT 'redeem:acct:' || id FROM accounts WHERE email_normalized = lower(trim('$EMAIL')) UNION SELECT 'progress:acct:' || id FROM accounts WHERE email_normalized = lower(trim('$EMAIL'))); DELETE FROM login_codes WHERE email_normalized = lower(trim('$EMAIL')); DELETE FROM accounts WHERE email_normalized = lower(trim('$EMAIL'))"
+   npx --yes wrangler@4 d1 execute vocal-studio-accounts --remote --command "DELETE FROM progress WHERE account_id = (SELECT id FROM accounts WHERE email_normalized = lower(trim('$SQLEMAIL'))); DELETE FROM sessions WHERE account_id = (SELECT id FROM accounts WHERE email_normalized = lower(trim('$SQLEMAIL'))); DELETE FROM identities WHERE account_id = (SELECT id FROM accounts WHERE email_normalized = lower(trim('$SQLEMAIL'))); DELETE FROM gift_redemptions WHERE account_id = (SELECT id FROM accounts WHERE email_normalized = lower(trim('$SQLEMAIL'))); DELETE FROM grants WHERE account_id = (SELECT id FROM accounts WHERE email_normalized = lower(trim('$SQLEMAIL'))); DELETE FROM license_links WHERE account_id = (SELECT id FROM accounts WHERE email_normalized = lower(trim('$SQLEMAIL'))); DELETE FROM rate_limits WHERE bucket = 'login:email:' || lower(trim('$SQLEMAIL')) OR bucket IN (SELECT 'redeem:acct:' || id FROM accounts WHERE email_normalized = lower(trim('$SQLEMAIL')) UNION SELECT 'progress:acct:' || id FROM accounts WHERE email_normalized = lower(trim('$SQLEMAIL'))); DELETE FROM login_codes WHERE email_normalized = lower(trim('$SQLEMAIL')); DELETE FROM accounts WHERE email_normalized = lower(trim('$SQLEMAIL'))"
    ```
 
    It ends with **9 commands executed successfully**. A typo in the address
@@ -620,11 +649,16 @@ Worth knowing:
   deleted after 180 days anyway. If they can still open the browser but the
   button doesn't work for them, they can send you its browser id instead: in
   that browser, on the practice site, the id is
-  `VTExperiments.report().clientId` in the developer console. Check it looks
-  like one before using it:
+  `VTExperiments.report().clientId` in the developer console. Let the terminal
+  read it (paste it, press Enter):
 
   ```bash
-  CID='THE-ID-THEY-SENT'
+  read -r CID
+  ```
+
+  Then check it looks like one before using it:
+
+  ```bash
   print -r -- "$CID" | grep -Eqx '[0-9a-z]{8,32}' && echo "looks right" || echo "not a browser id: stop"
   ```
 
@@ -636,24 +670,21 @@ Worth knowing:
 
   It ends with **3 commands executed successfully**. This is what the button
   does on the server.
-- **Sign-in counters keyed by network address** (to stop password-guessing)
-  cannot be matched to a person; the daily clean-up removes them within two
+- **Sign-in limit counters** are keyed by the network address a sign-in came
+  from (to stop sign-in and code guessing), not by the account, so the command
+  above leaves them; once the daily clean-up runs (8.7) they go within two
   days.
-- Keep a private deletion log (date and account id, never the address), so a
-  backup restored later ([8.8](#88-back-up-the-accounts-database)) can have the
-  same deletions applied again.
+- The deletion log (step 2) is what lets you delete them again if a backup is
+  ever restored ([8.8](#88-back-up-the-accounts-database)).
 
 ### 8.6 Sign someone out everywhere
 
 For a lost phone, or "someone else is using my account". **Changes data**, but
-only ends sessions: their account, Pro and progress stay.
+only ends sessions: their account, Pro and progress stay. Set the address as
+in [8.0, step 4](#80-get-the-terminal-ready), then:
 
 ```bash
-EMAIL='person@example.com'
-```
-
-```bash
-npx --yes wrangler@4 d1 execute vocal-studio-accounts --remote --command "UPDATE sessions SET revoked_at = unixepoch() WHERE revoked_at IS NULL AND account_id = (SELECT id FROM accounts WHERE email_normalized = lower(trim('$EMAIL')))"
+npx --yes wrangler@4 d1 execute vocal-studio-accounts --remote --command "UPDATE sessions SET revoked_at = unixepoch() WHERE revoked_at IS NULL AND account_id = (SELECT id FROM accounts WHERE email_normalized = lower(trim('$SQLEMAIL')))"
 ```
 
 Every browser where they were signed in drops the session the next time it
@@ -726,19 +757,22 @@ licence stops verifying until the site ships the new public key.
 
 ### 8.8 Back up the accounts database
 
-The file holds everyone's email, their saved progress, the anonymous
-statistics with their browser ids, and sign-in counters keyed by network
-address, so keep it off GitHub and out of this folder. Read-only on the
-server.
+The backup holds the account tables only: accounts, sign-ins, sessions, gifts
+and codes, paid-licence links and saved progress. It leaves out the anonymous
+statistics and the per-network counters on purpose, because the privacy page
+promises those are gone after 180 days and two days, and a backup would keep
+them longer. It still holds everyone's email, so keep it off GitHub and out
+of this folder. Read-only on the server; the second command is one line:
 
 ```bash
 mkdir -p ~/vocal-backups
-npx --yes wrangler@4 d1 export vocal-studio-accounts --remote --output ~/vocal-backups/accounts-$(date +%Y%m%d).sql
 ```
 
-Don't keep backups forever: the privacy page says statistics go after 180
-days, and a backup that keeps them longer breaks that. Delete old ones now and
-then (this removes backups older than 30 days):
+```bash
+npx --yes wrangler@4 d1 export vocal-studio-accounts --remote --table schema_meta --table accounts --table identities --table sessions --table grants --table gift_codes --table gift_redemptions --table license_links --table progress --output ~/vocal-backups/accounts-$(date +%Y%m%d).sql
+```
+
+Delete old backups now and then; this removes those older than 30 days:
 
 ```bash
 find ~/vocal-backups -name 'accounts-*.sql' -mtime +30 -delete
@@ -747,14 +781,39 @@ find ~/vocal-backups -name 'accounts-*.sql' -mtime +30 -delete
 A backup restores only into an **empty** database (its tables are created
 without "if not exists"), with
 `npx --yes wrangler@4 d1 execute DATABASE-NAME --remote --file BACKUP.sql`.
-That was tried locally with statistics in the database, and every table's row
-count matched. A restore also brings back anyone deleted since the backup was
-taken: apply the deletions in your private deletion log again (8.5).
+The worker creates the statistics tables again, empty, on its next request.
+That was tried locally: every restored table's row count matched, and the
+statistics tables came back empty and working.
+
+A restore also brings back anyone deleted since the backup was taken. Delete
+them again from your deletion log (8.5): for each id dated after the backup,
+let the terminal read it (paste it, press Enter)
+
+```bash
+read -r ID
+```
+
+check it,
+
+```bash
+print -r -- "$ID" | grep -Eqx 'acct_[A-Za-z0-9_-]{22}' && echo "looks right" || echo "not an account id: stop"
+```
+
+and only if it says **looks right**, **delete** (one line; it ends with **8
+commands executed successfully**):
+
+```bash
+npx --yes wrangler@4 d1 execute vocal-studio-accounts --remote --command "DELETE FROM progress WHERE account_id = '$ID'; DELETE FROM sessions WHERE account_id = '$ID'; DELETE FROM identities WHERE account_id = '$ID'; DELETE FROM gift_redemptions WHERE account_id = '$ID'; DELETE FROM grants WHERE account_id = '$ID'; DELETE FROM license_links WHERE account_id = '$ID'; DELETE FROM rate_limits WHERE bucket IN ('redeem:acct:$ID', 'progress:acct:$ID'); DELETE FROM accounts WHERE id = '$ID'"
+```
 
 For "undo the last few hours", point-in-time restore is simpler. It works on
-the live database only, and rolls back **everything** since the chosen moment.
-It reaches back up to 30 days, possibly fewer on the free plan (not checked
-here; `time-travel info` shows whether a moment is still reachable):
+the live database only, and rolls back **everything** since the chosen moment,
+statistics included: anything deleted since then comes back, including what
+people deleted with **No enviar y borrar lo enviado**, and nothing records
+which browsers those were. Use it only for a real emergency, then apply your
+deletion log again as above. It reaches back up to 30 days, possibly fewer on
+the free plan (not checked here; `time-travel info` shows whether a moment is
+still reachable):
 
 ```bash
 npx --yes wrangler@4 d1 time-travel info vocal-studio-accounts --timestamp 2026-09-24T12:00:00Z
@@ -769,14 +828,17 @@ local copy.)
 Live, while someone reproduces a problem (Ctrl+C stops it):
 
 ```bash
-npx --yes wrangler@4 tail vocal-studio-entitlements --format pretty --status error
+npx --yes wrangler@4 tail vocal-studio-entitlements --format pretty
 ```
 
-Add `--search "some text"` to filter. Every visitor's browser now calls the
-worker (statistics, the region check), so without a filter the stream is
-mostly those; `--search "/v1/admin"` keeps only admin actions. Past logs are
-in the Cloudflare dashboard, on the worker's page (logging is switched on in
-`wrangler.toml`). The worker's own log lines never include request bodies,
+It shows every request, and every visitor's browser now calls the worker
+(statistics, the region check), so start it just before the problem is
+reproduced. When the problem is on your own computer, add `--ip self` to see
+only your requests. When something breaks inside the worker it writes
+**unhandled error** and the reason, and answers 500; Cloudflare does not
+count that as an error, so don't add `--status error`, which would hide it.
+Past logs are in the Cloudflare dashboard, on the worker's page (logging is
+switched on in `wrangler.toml`). The worker's own log lines never include request bodies,
 tokens or secrets, but Cloudflare's request records include each address
 called, and a look-up's address carries the email, so treat logs as private.
 What else Cloudflare records about each request was not checked here; look
@@ -794,10 +856,15 @@ check the admin list (section 7) afterwards. It does **not** roll back the
 database or the licence store.
 
 **Don't roll back past the statistics redeploy** (8.7) unless something is
-badly broken: the older code has no daily clean-up, so statistics would stop
-being deleted at 180 days, and the site's statistics requests would all fail.
-If you must, press **Limpiar ahora** by hand every few days until the next
-deploy, and check that health shows the trial length you expect.
+badly broken. The older code has no daily clean-up, and its **Limpiar ahora**
+does not delete statistics, so the 180-day promise would break; the site's
+statistics requests would all fail; and new trials would go back to 30 days.
+If you must, run this every few days until you deploy forward again (one line;
+**changes data**, deleting only statistics older than 180 days):
+
+```bash
+npx --yes wrangler@4 d1 execute vocal-studio-accounts --remote --command "DELETE FROM events WHERE received_at < unixepoch() - 15552000; DELETE FROM exposures WHERE first_at < unixepoch() - 15552000; DELETE FROM ingest_daily WHERE day < date('now', '-180 days')"
+```
 
 ### 8.11 Limits worth knowing
 
@@ -818,8 +885,10 @@ deploy, and check that health shows the trial length you expect.
   counters for statistics, and health shows **Estadísticas anónimas:
   apagado**. Browsers keep sending until the site stops too, which is a
   change to `js/experiments-config.js`; the requests are cheap because they
-  are refused before anything is written. Don't commit the change unless you
-  mean it to stay; set it back to `"true"` and deploy to resume.
+  are refused before anything is written. Set it back to `"true"` and deploy
+  to resume. **Never commit from the Mac checkout**: its `wrangler.toml` holds
+  the real ids. To make a switch-off permanent, change it in a pull request
+  from a clean copy of the repository.
 - The codes list on the admin page shows the latest 100 codes.
 - Look-ups show up to 200 history rows per person.
 
@@ -836,8 +905,9 @@ verification for this. Not tried here yet.
 **Estadísticas** (Statistics) on the admin page shows how many people get from
 one step to the next when signing in and trying Pro. Choose a period (7, 28,
 90 or 180 days; 28 is chosen to start) and press **Leer estadísticas** (Read
-statistics). Nothing is read until you press it, and reading from this page
-adds nothing to the numbers. (The same funnel is in the practice site's account
+statistics). Nothing is read until you press it; after that, pressing another
+period reads it straight away. Reading from this page adds nothing to the
+numbers. If the kill switch is on (8.11), the section says so at the top. (The same funnel is in the practice site's account
 panel under **Embudo de cuentas**, but opening that panel counts you as a
 visitor.)
 
@@ -892,15 +962,19 @@ exactly what keeping them apart is meant to prevent.
 ### 8.14 Send someone the data we hold
 
 The privacy page promises people access to what we keep about them. This
-collects it into one file on the Mac, **read-only**. Set the address first
-(8.5, step 1). Then make a folder for the file, and run the export (one line):
+collects it into one file on the Mac, **read-only**. As with deleting, **only
+act for the owner of the address**: send the file only by email to that same
+address, never to another one or to the place the request came from.
+
+Set the address as in [8.0, step 4](#80-get-the-terminal-ready). Then make a
+folder for the file, and run the export (one line):
 
 ```bash
 mkdir -p ~/vocal-exports
 ```
 
 ```bash
-npx --yes wrangler@4 d1 execute vocal-studio-accounts --remote --json --command "SELECT email, display_name, locale, role, datetime(created_at, 'unixepoch') AS created_utc, datetime(trial_used_at, 'unixepoch') AS trial_used_utc FROM accounts WHERE email_normalized = lower(trim('$EMAIL')); SELECT provider, subject, datetime(created_at, 'unixepoch') AS since_utc FROM identities WHERE account_id = (SELECT id FROM accounts WHERE email_normalized = lower(trim('$EMAIL'))); SELECT datetime(created_at, 'unixepoch') AS signed_in_utc, datetime(last_seen_at, 'unixepoch') AS last_seen_utc, datetime(revoked_at, 'unixepoch') AS signed_out_utc FROM sessions WHERE account_id = (SELECT id FROM accounts WHERE email_normalized = lower(trim('$EMAIL'))); SELECT kind, plan, datetime(starts_at, 'unixepoch') AS starts_utc, datetime(ends_at, 'unixepoch') AS ends_utc, source, note, datetime(revoked_at, 'unixepoch') AS removed_utc FROM grants WHERE account_id = (SELECT id FROM accounts WHERE email_normalized = lower(trim('$EMAIL'))); SELECT code_normalized AS code, datetime(created_at, 'unixepoch') AS redeemed_utc FROM gift_redemptions WHERE account_id = (SELECT id FROM accounts WHERE email_normalized = lower(trim('$EMAIL'))); SELECT license_id, provider, datetime(created_at, 'unixepoch') AS linked_utc FROM license_links WHERE account_id = (SELECT id FROM accounts WHERE email_normalized = lower(trim('$EMAIL'))); SELECT profile_id, datetime(updated_at, 'unixepoch') AS saved_utc, doc FROM progress WHERE account_id = (SELECT id FROM accounts WHERE email_normalized = lower(trim('$EMAIL')))" > ~/vocal-exports/export-$(date +%Y%m%d-%H%M).json
+npx --yes wrangler@4 d1 execute vocal-studio-accounts --remote --json --command "SELECT email, display_name, locale, role, datetime(created_at, 'unixepoch') AS created_utc, datetime(trial_used_at, 'unixepoch') AS trial_used_utc FROM accounts WHERE email_normalized = lower(trim('$SQLEMAIL')); SELECT provider, subject, datetime(created_at, 'unixepoch') AS since_utc FROM identities WHERE account_id = (SELECT id FROM accounts WHERE email_normalized = lower(trim('$SQLEMAIL'))); SELECT datetime(created_at, 'unixepoch') AS signed_in_utc, datetime(last_seen_at, 'unixepoch') AS last_seen_utc, datetime(revoked_at, 'unixepoch') AS signed_out_utc FROM sessions WHERE account_id = (SELECT id FROM accounts WHERE email_normalized = lower(trim('$SQLEMAIL'))); SELECT kind, plan, datetime(starts_at, 'unixepoch') AS starts_utc, datetime(ends_at, 'unixepoch') AS ends_utc, source, note, datetime(revoked_at, 'unixepoch') AS removed_utc FROM grants WHERE account_id = (SELECT id FROM accounts WHERE email_normalized = lower(trim('$SQLEMAIL'))); SELECT code_normalized AS code, datetime(created_at, 'unixepoch') AS redeemed_utc FROM gift_redemptions WHERE account_id = (SELECT id FROM accounts WHERE email_normalized = lower(trim('$SQLEMAIL'))); SELECT license_id, provider, datetime(created_at, 'unixepoch') AS linked_utc FROM license_links WHERE account_id = (SELECT id FROM accounts WHERE email_normalized = lower(trim('$SQLEMAIL'))); SELECT profile_id, datetime(updated_at, 'unixepoch') AS saved_utc, doc FROM progress WHERE account_id = (SELECT id FROM accounts WHERE email_normalized = lower(trim('$SQLEMAIL')))" > ~/vocal-exports/export-$(date +%Y%m%d-%H%M).json
 ```
 
 The file (in the `vocal-exports` folder of your home folder) holds seven
@@ -913,9 +987,15 @@ privately, then delete it from the Mac.
 
 It leaves out on purpose: which admin gave or removed a gift (that is the
 admin's data), and session keys. Statistics are not in it because they are not
-tied to the account (8.13); if they send you a browser id (8.5), `SELECT name,
-datetime(received_at, 'unixepoch') AS utc, props FROM events WHERE cid =
-'$CID'` lists that browser's.
+tied to the account (8.13). If they want those too, they send you the browser
+id as in 8.5; read and check it the way 8.5 does, then (one line, read-only):
+
+```bash
+npx --yes wrangler@4 d1 execute vocal-studio-accounts --remote --json --command "SELECT name, day, tz, datetime(received_at, 'unixepoch') AS utc, props FROM events WHERE cid = '$CID'; SELECT experiment, variant, day, datetime(first_at, 'unixepoch') AS first_utc FROM exposures WHERE cid = '$CID'" > ~/vocal-exports/stats-$(date +%Y%m%d-%H%M).json
+```
+
+That file holds two lists: the events that browser sent, and which version of
+any test it was shown.
 
 ## 9. Practise in the sandbox
 
@@ -984,8 +1064,8 @@ Three layers, from most to least automatic:
 | 5. Gift codes | gift codes: create, redeem, used up, cancel · cancelling a code does not take days… | |
 | 7. Admin list | an admin taken off ADMIN_EMAILS is refused at once… · an admin added… after first signing in… | `secret put`, local |
 | 8.1–8.2 Health, clean-up | maintenance: server status and clean-up · maintenance: an old worker's missing statistics field… | `curl` shape checked against the code |
-| 8.3–8.6 Lists, delete, sign out everywhere | a session that ends mid-use returns to sign-in… | each query, local, including deleting one browser's statistics |
-| 8.7–8.10 Deploy, backup, logs, rollback | the sandbox's trial length is the one wrangler.toml deploys · admin.html loads the same versions… | build checked with `deploy --dry-run`; export and restore with statistics, local; others by `--help` only |
+| 8.3–8.6 Lists, delete, sign out everywhere | a session that ends mid-use returns to sign-in… | each query, local, with the address read by `read -r` (an apostrophe included), and deleting one browser's statistics |
+| 8.7–8.10 Deploy, backup, logs, rollback | the sandbox's trial length is the one wrangler.toml deploys · admin.html loads the same versions… | build checked with `deploy --dry-run`; account-only export, restore and deleting again from the log, local; the rollback clean-up, local; others by `--help` only |
 | 8.13 Statistics | statistics: the funnel and arrivals… · statistics: an empty window, a member, and a worker without the route | |
 | 8.14 Data export | | the export, local, checked as JSON |
 | Phone, English | on a phone… · works in English too | |
@@ -997,10 +1077,11 @@ in this order:
    activo** and **Prueba gratis: 7 días**.
 2. Switch statistics off in your test browsers (section 0).
 3. Sign in to the admin page with a real admin address.
-4. In a private window, sign in on the practice site with **Entrar** using a
-   second Google account that is **not** a Google test user (does Google's
-   exemption hold?). Its panel offers **Empezar 7 días gratis**: don't press
-   it, so the account stays useful for the next test.
+4. In a private window, first press **No enviar y borrar lo enviado** at the
+   foot of the practice site (a private window forgets step 2), then sign in
+   with **Entrar** using a second Google account that is **not** a Google test
+   user (does Google's exemption hold?). Its panel offers **Empezar 7 días
+   gratis**: don't press it, so the account stays useful for the next test.
 5. Give that account 1 day. On its next reload: the REGALO tag, and **Pro de
    regalo · termina el …** in its panel.
 6. Remove it and reload: no tag, **Pro** again, and **Plan gratis**.

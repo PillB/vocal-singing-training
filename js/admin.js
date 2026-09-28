@@ -47,7 +47,7 @@
         "Los días cuentan desde hoy. Si la cuenta aún no existe, se crea, y la persona tendrá Pro en cuanto entre con ese correo.",
       days: "Días",
       uses: "Usos",
-      noteLabel: "Nota (solo la ven los admins)",
+      noteLabel: "Nota (la persona puede pedir verla)",
       giveSubmit: "Dar Pro",
       codesTitle: "Códigos de regalo",
       codesHelp:
@@ -228,7 +228,7 @@
         "Days count from today. If the account does not exist yet it is created, and the person has Pro as soon as they sign in with that address.",
       days: "Days",
       uses: "Uses",
-      noteLabel: "Note (only admins see it)",
+      noteLabel: "Note (the person may ask to see it)",
       giveSubmit: "Give Pro",
       codesTitle: "Gift codes",
       codesHelp:
@@ -477,7 +477,9 @@
    */
   function statsLabel(group, key) {
     const table = (STATS_LABELS[lang] || STATS_LABELS.es)[group] || {};
-    return table[key] || String(key);
+    // Outcomes are whatever a browser posted, so a key such as "constructor"
+    // must not find something on Object.prototype.
+    return Object.prototype.hasOwnProperty.call(table, key) ? table[key] : String(key);
   }
 
   const LANG_KEY = "vt_lang";
@@ -714,6 +716,9 @@
     newestCode = null;
     statsSeq += 1;
     statsData = null;
+    statsAsked = false;
+    const statsButton = $("#stats-load");
+    if (statsButton) statsButton.disabled = false;
     $("#lookup-result")?.replaceChildren();
     $("#stats-result")?.replaceChildren();
     ["#give-result", "#code-result", "#code-copy-status", "#sweep-result"].forEach((sel) => setMessage($(sel), "", ""));
@@ -1250,10 +1255,12 @@
   // ------------------------------------------------------------ statistics
 
   // Read on demand, never on load: each read is two queries over the events
-  // table, and most visits here are to give or remove Pro.
+  // table, and most visits here are to give or remove Pro. Once the admin has
+  // asked, choosing another period reads that period straight away.
   let statsDays = 28;
   let statsData = null;
   let statsSeq = 0;
+  let statsAsked = false;
 
   /**
    * Read the funnel and the ingest counters for the chosen window.
@@ -1267,14 +1274,22 @@
     const button = $("#stats-load");
     if (!box) return;
     const seq = ++statsSeq;
+    statsAsked = true;
+    // Nothing from an earlier read may be redrawn (on a language switch, say)
+    // while this one is on its way.
+    statsData = null;
     if (button) button.disabled = true;
     box.replaceChildren(el("p", { className: "muted", text: t("statsLoading") }));
-    const [funnel, experiments] = await Promise.all([
+    const [funnel, experiments, health] = await Promise.all([
       api("GET", `/v1/admin/funnel?days=${statsDays}`, null, { timeoutMs: 15000 }),
-      api("GET", "/v1/admin/experiments", null, { timeoutMs: 15000 })
+      api("GET", "/v1/admin/experiments", null, { timeoutMs: 15000 }),
+      // Only health says whether the kill switch is on: while it is, nothing
+      // arrives and nothing is counted, which would otherwise read as a quiet
+      // week.
+      api("GET", "/v1/health", null, { auth: false, timeoutMs: 8000 })
     ]);
-    if (button) button.disabled = false;
     if (seq !== statsSeq) return;
+    if (button) button.disabled = false;
     if (!funnel.ok || !funnel.data) {
       statsData = null;
       // A worker from before the statistics has no such route, and says so
@@ -1286,7 +1301,8 @@
     statsData = {
       funnel: funnel.data,
       ingest: experiments.ok && experiments.data ? experiments.data.ingest || null : null,
-      ingestFailed: !experiments.ok
+      ingestFailed: !experiments.ok,
+      switchedOff: !!(health.ok && health.data && health.data.eventsEnabled === false)
     };
     renderStats();
   }
@@ -1301,7 +1317,11 @@
       v === null || v === undefined
         ? "–"
         : `${(Number(v) * 100).toLocaleString(locale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 })} %`;
-    const parts = [el("h3", { text: t("funnelTitle") })];
+    const parts = [];
+    if (statsData.switchedOff) {
+      parts.push(el("p", { className: "admin-message", "data-tone": "info", text: t("ingestOff") }));
+    }
+    parts.push(el("h3", { text: t("funnelTitle") }));
     const days = (data.window && data.window.days) || statsDays;
     if (!data.browsers) {
       parts.push(el("p", { className: "muted", text: t("funnelEmpty") }));
@@ -1486,7 +1506,7 @@
       chip.addEventListener("click", () => {
         statsDays = Number(chip.getAttribute("data-window")) || 28;
         markStatsWindow();
-        loadStats();
+        if (statsAsked) loadStats();
       });
     });
     markStatsWindow();

@@ -102,7 +102,17 @@ async function shot(page, name, selector) {
   if (selector && typeof selector === "object") {
     await page.screenshot({ path, clip: selector, animations: "disabled" });
   } else if (selector) {
-    await page.locator(selector).first().screenshot({ path, animations: "disabled" });
+    const target = page.locator(selector).first();
+    // A card nearly as tall as the window, scrolled to sit under the sticky
+    // header, runs past the bottom and comes out with an unpainted strip at its
+    // foot. Make the window tall enough for it while it is captured.
+    const box = await target.boundingBox();
+    const size = page.viewportSize();
+    const need = box ? Math.ceil(box.height) + 160 : 0;
+    const grow = !!size && need > size.height;
+    if (grow) await page.setViewportSize({ width: size.width, height: need });
+    await target.screenshot({ path, animations: "disabled" });
+    if (grow) await page.setViewportSize(size);
   } else {
     await page.screenshot({ path, animations: "disabled" });
   }

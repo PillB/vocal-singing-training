@@ -940,16 +940,22 @@ How to read it:
 
 **Llegada de estadísticas** (Statistics arriving) is the last week's counters:
 
-- **guardados** (stored): events kept. Zero for days while people are using
-  the site means something is broken.
+- **guardados** (stored): events kept as they arrived. Zero for days while
+  people are using the site means something is broken. A later deletion does
+  not lower it, so it can sit a little above what the funnel still holds (in
+  the picture, 84 arrived and one browser then deleted its one event).
 - **otro sitio** (another site) above zero usually means `SITE_ORIGIN` in
   `wrangler.toml` doesn't match the site's address. It shows in red.
 - **demasiados seguidos** (too many at once), also red: a browser or a shared
   network hit its hourly limit.
-- **borrados a petición** (deleted on request): someone pressed the delete
-  switch. **sin permiso (Europa)** (no consent, Europe): a batch from the EEA
+- **borrados a petición** (deleted on request): how many times someone
+  pressed the delete switch, not how many events it removed. **sin permiso (Europa)** (no consent, Europe): a batch from the EEA
   without consent, refused as it should be. **navegador que pide no ser
   rastreado** and **navegadores automáticos**: refused on purpose.
+- **descartados por mal formados** (dropped as malformed): mostly events the
+  worker does not know yet, which happens when the site was updated and the
+  worker was not. A steady stream after a merge means the worker needs its
+  redeploy (8.7); a stray few are harmless.
 
 If the section says the server doesn't have this yet, the worker needs its
 redeploy (8.7).

@@ -11,6 +11,7 @@
  * Each procedure in docs/ADMIN-GUIDE.md has a test here with the same name.
  */
 const { test, expect } = require("@playwright/test");
+const fs = require("fs");
 const path = require("path");
 const { pathToFileURL } = require("url");
 const { patchBillingConfig } = require("./helpers/billing");
@@ -292,6 +293,7 @@ test.describe("Admin page", () => {
     await expect(studio.locator(".app-header")).not.toContainText(/regalo/i);
     await openAccountPanel(studio);
     await expect(studio.locator("#account-plan")).toHaveText("Plan gratis");
+    await expect(studio.locator("#btn-account-trial")).toBeVisible();
     await expect(studio.locator("#btn-account-trial")).toHaveText("Empezar 7 días gratis");
     expect(await studio.evaluate(() => localStorage.getItem("vt_account_plan_v1"))).toBeNull();
     await adminCtx.close();
@@ -305,10 +307,16 @@ test.describe("Admin page", () => {
     const look = await worker.call("GET", "/v1/admin/account?email=bruno.tester@example.com", { token: adminToken });
     const grantId = look.body.grants[0].id;
     await worker.call("POST", "/v1/admin/grants/revoke", { token: adminToken, body: { grantId } });
-    // docs/ADMIN-GUIDE.md section 2, with the address in lower case and padded
-    // the way people paste it.
-    const email = " Bruno.Tester@example.com ";
-    await worker.sql("UPDATE accounts SET trial_used_at = unixepoch() WHERE email_normalized = lower(trim(?1))", email);
+    // The command from docs/ADMIN-GUIDE.md itself, so the guide cannot drift
+    // from what is tested, with the address in mixed case and padded the way
+    // people paste it.
+    const guide = fs.readFileSync(path.join(__dirname, "..", "docs", "ADMIN-GUIDE.md"), "utf8");
+    const command = guide.match(/--command "(UPDATE accounts SET trial_used_at[^"]*)"/);
+    expect(command, "the guide's trial-blocking command").toBeTruthy();
+    const statement = command[1].split("'$SQLEMAIL'").join("?1");
+    expect(statement).toContain("?1");
+    expect(statement).not.toContain("$");
+    await worker.sql(statement, " Bruno.Tester@example.com ");
     const ctx = await browser.newContext();
     const studio = await openStudio(ctx, worker, bruno);
     await studio.evaluate(() => window.VTAccount.refresh());
@@ -663,6 +671,19 @@ test.describe("Admin page", () => {
     await expect(health).toContainText("Estadísticas anónimas: no informado (servidor antiguo: redespliégalo, guía 8.7)");
     await expect(health).toContainText("Prueba gratis: 30 días");
     await expect(health.locator("li", { hasText: "Estadísticas anónimas" })).toHaveAttribute("data-tone", "error");
+    await adminCtx.close();
+  });
+
+  test("statistics switched off on the server: the page says so, in status and in Statistics", async ({ browser }) => {
+    const { worker, admin } = await startWorker();
+    worker.env.EVENTS_ENABLED = "false";
+    const adminCtx = await browser.newContext();
+    const page = await openAdmin(adminCtx, worker, admin);
+    const health = page.locator("#health-list");
+    await expect(health).toContainText("Estadísticas anónimas: apagado");
+    await expect(health.locator("li", { hasText: "Estadísticas anónimas" })).toHaveAttribute("data-tone", "off");
+    await page.click("#stats-load");
+    await expect(page.locator("#stats-result")).toContainText("El servidor tiene las estadísticas apagadas (EVENTS_ENABLED).");
     await adminCtx.close();
   });
 

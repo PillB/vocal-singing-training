@@ -1204,9 +1204,17 @@ export async function ingestSummary(db, at) {
  * cannot do is detect an improvement of a few points, and it says so in
  * `readMe` rather than letting a reader assume otherwise.
  *
- * Each step's denominator is the browsers that reached the PREVIOUS step, so the
- * rate is conditional and the chain multiplies out. One row per browser comes
- * back from D1, which at this traffic is hundreds of rows, not millions.
+ * Each step's denominator is the browsers that reached the PREVIOUS step, and
+ * only that one — not the browsers that passed every step before it. So each
+ * rate is a pairwise transition and **the chain does not multiply out**: the
+ * product of the rates is not the end-to-end rate, and nobody should read it as
+ * one. That is deliberate rather than a shortcut. The trial has two entry
+ * points, the pricing page and the account panel, so a press can reach
+ * trial_cta_view and trial_click without ever touching signin_start. A strict
+ * cumulative denominator would report those presses as nought, hiding the whole
+ * anonymous and local-trial path, which is exactly the path worth watching
+ * before checkout exists. One row per browser comes back from D1, which at this
+ * traffic is hundreds of rows, not millions.
  */
 export const FUNNEL_STEPS = [
   { key: "app_open", label: "opened the site" },
@@ -1233,36 +1241,50 @@ export const PANEL_STATES = [
 /**
  * Count distinct browsers per value of one prop of one event.
  *
- * `props` is stored as the JSON text it arrived as, so grouping happens on that
- * text and identical values written in a different key order land in different
- * rows; summing per parsed value here is what makes the count right. A browser
- * that sent two different values is counted in each, so these buckets can add
- * up to more than the browsers that sent the event at all.
+ * The value has to be extracted in SQL, because the grouping is what the count
+ * is counting. The first version grouped on the raw `props` text and summed the
+ * per-row counts afterwards, which counted one browser once per distinct props
+ * JSON: somebody who pressed the trial from the pricing page and again from the
+ * account panel sends `{"outcome":"needs_account","from":"pricing"}` and
+ * `{"outcome":"needs_account","from":"panel"}` — two rows, one browser, and the
+ * bucket read 2. The name of this function was the specification and the code
+ * did not meet it.
+ *
+ * `props` is stored as the text it arrived as, so it can be malformed, and
+ * `json_extract` raises on malformed JSON rather than returning null — one bad
+ * row would fail the whole query. Hence the nested CASE: SQLite guarantees a
+ * CASE evaluates its branches in order, which a chain of ANDs does not, so
+ * `json_valid` is known to have run before `json_extract` is reached. The inner
+ * `json_type = 'text'` keeps this to string values, as the JSON.parse version
+ * did. Values written with the keys in a different order now land in one bucket,
+ * which the old grouping split.
+ *
+ * A browser that sent two *different* values is still counted in each, so these
+ * buckets can add up to more than the browsers that sent the event at all.
  * @param {Object} env Worker env bindings.
  * @param {string} name Event name.
- * @param {string} prop Prop to group by.
+ * @param {string} prop Prop to group by. From this file's own constants, never
+ *   from a request.
  * @param {number} since Unix seconds.
  * @returns {Promise<Map<string, number>>} Value to distinct-browser count.
  */
 async function countByProp(env, name, prop, since) {
+  const path = `$."${String(prop).replace(/["\\]/g, "")}"`;
   const res = await env.DB.prepare(
-    `SELECT props, COUNT(DISTINCT cid) AS n
+    `SELECT CASE WHEN json_valid(props)
+                 THEN CASE WHEN json_type(props, ?3) = 'text' THEN json_extract(props, ?3) END
+            END AS v,
+            COUNT(DISTINCT cid) AS n
        FROM events WHERE name = ?1 AND received_at >= ?2
-       GROUP BY props`
+       GROUP BY v`
   )
-    .bind(name, since)
+    .bind(name, since, path)
     .all();
   const out = new Map();
   for (const row of res.results || []) {
-    let value = null;
-    try {
-      const parsed = JSON.parse(row.props || "{}");
-      value = typeof parsed[prop] === "string" ? parsed[prop] : null;
-    } catch {
-      value = null;
-    }
+    const value = typeof row.v === "string" && row.v ? row.v : null;
     if (!value) continue;
-    out.set(value, (out.get(value) || 0) + (Number(row.n) || 0));
+    out.set(value, Number(row.n) || 0);
   }
   return out;
 }
@@ -1350,7 +1372,10 @@ export async function handleFunnel(env, url, deps) {
       panelStates: states,
       trialOutcomes: outcomes,
       readMe:
-        "Each rate is one proportion with a 95% Wilson interval, conditional on the step before it. " +
+        "Each rate is one proportion with a 95% Wilson interval, conditional on the step before it " +
+        "and on that step alone, not on all the steps before it. They are pairwise transitions, so do " +
+        "not multiply them together: the trial can be pressed from the pricing page without signing " +
+        "in, so later steps include browsers that never reached the earlier ones. " +
         "This finds a step nobody gets through; it cannot detect an improvement of a few points. " +
         "trial_result has a rate near 1 by construction, because every branch of both buttons ends " +
         "in one; read trialOutcomes instead, where needs_account is a press that worked and still " +

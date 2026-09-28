@@ -1306,6 +1306,72 @@ test("the funnel breaks out what the trial press actually did, since its rate ca
   assert.match(res.body.readMe, /add up to more/);
 });
 
+test("a browser that sent the same outcome twice is one browser, not two", async () => {
+  // The bug this pins: countByProp grouped on the whole props JSON and summed the
+  // per-row counts, so one browser that pressed the trial from the pricing page
+  // and again from the account panel — same outcome, different `where` — was
+  // counted once in each row and read as two browsers. The buckets are supposed
+  // to be browsers, which is what the function is named for.
+  const env = freshEnv();
+  const one = cid(1, "d");
+  const two = cid(2, "d");
+  await sendAll(
+    env,
+    [
+      ev("app_open", one),
+      ev("app_open", two),
+      // One browser, one outcome, two places it came from.
+      ev("trial_result", one, { outcome: "needs_account", where: "pricing", kind: "account" }),
+      ev("trial_result", one, { outcome: "needs_account", where: "panel", kind: "account" }),
+      // And one that pressed twice from the same place, to pin the plain case too.
+      ev("trial_result", two, { outcome: "started", where: "panel", kind: "local" }),
+      ev("trial_result", two, { outcome: "started", where: "panel", kind: "local" }),
+      // Two browsers reporting the same panel state from different props.
+      ev("account_panel_open", one, { state: "offered", where: "header" }),
+      ev("account_panel_open", one, { state: "offered", where: "pricing" })
+    ],
+    NOW
+  );
+
+  const admin = await signIn(env, "admin@example.test", NOW);
+  const res = await call(adminGet("/v1/admin/funnel", admin), env, { now: NOW });
+  assert.equal(res.status, 200, JSON.stringify(res.body));
+  const outcomes = Object.fromEntries(res.body.trialOutcomes.map((o) => [o.outcome, o.browsers]));
+  // Two browsers pressed, so the two buckets hold one browser each. Before the
+  // fix needs_account read 2 for the single browser that sent it twice.
+  assert.deepEqual(outcomes, { needs_account: 1, started: 1 });
+  assert.equal(res.body.panelStates.offered, 1);
+  // A bucket can still exceed the step's own count when a browser sent two
+  // *different* values, which is the documented behaviour and not this bug.
+  assert.match(res.body.readMe, /add up to more/);
+  // And the readout now says the rates are pairwise, so nobody multiplies them.
+  assert.match(res.body.readMe, /do not multiply them/);
+});
+
+test("a malformed props row cannot fail the whole breakout", async () => {
+  // props holds the text it arrived as. sanitizeProps means the router cannot
+  // write anything malformed today, but an older worker or a hand-edited row can,
+  // and SQLite's json_extract raises on malformed JSON rather than returning
+  // null — one such row would take the whole admin readout down with it.
+  const env = freshEnv();
+  await sendAll(
+    env,
+    [ev("app_open", cid(1, "m")), ev("trial_result", cid(1, "m"), { outcome: "started" })],
+    NOW
+  );
+  await env.DB.prepare("INSERT INTO events (cid, name, props, received_at, day, tz) VALUES (?1, ?2, ?3, ?4, ?5, ?6)")
+    .bind(cid(2, "m"), "trial_result", "{not json", NOW, "2027-01-15", -300)
+    .run();
+
+  const admin = await signIn(env, "admin@example.test", NOW);
+  const res = await call(adminGet("/v1/admin/funnel", admin), env, { now: NOW });
+  assert.equal(res.status, 200, JSON.stringify(res.body));
+  assert.deepEqual(
+    Object.fromEntries(res.body.trialOutcomes.map((o) => [o.outcome, o.browsers])),
+    { started: 1 }
+  );
+});
+
 test("the funnel counts a blocked Google script, which no experiment would report", async () => {
   const env = freshEnv();
   const events = [];

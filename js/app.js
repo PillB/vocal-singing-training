@@ -5642,55 +5642,73 @@
     return !!B?.trialStartedAt?.();
   }
 
+  /**
+   * What the header's one Pro element says for a plan state, and how it looks.
+   * Shared by the header button and anything that must say the same thing.
+   * @param {{kind: string, days: number|null}} plan From headerPlanState().
+   * @returns {{text: string, title: string, cls: string}}
+   */
+  function planLabel(plan) {
+    const days = (n) => tt(n === 1 ? "nav.day" : "nav.days", { n: String(n) });
+    switch (plan.kind) {
+      case "trialAccount":
+      case "trialLocal":
+        return {
+          text: plan.days === null ? tt("nav.planTrial") : tt("nav.planTrialDays", { d: days(plan.days) }),
+          title: tt("nav.subscriptionTitle"),
+          cls: "plan-trial"
+        };
+      case "gift":
+        return {
+          text: plan.days === null ? tt("nav.planGift") : tt("nav.planGiftDays", { d: days(plan.days) }),
+          title: tt("nav.subscriptionTitle"),
+          cls: "plan-gift"
+        };
+      case "canceled":
+        return { text: tt("nav.planEnding"), title: tt("nav.subscriptionTitle"), cls: "plan-ending" };
+      case "paid":
+        return { text: tt("nav.planPaid"), title: tt("nav.subscriptionTitle"), cls: "plan-paid" };
+      default:
+        // The offer. "Probar" while a free trial is still on the table, "Ver"
+        // once it has been spent, so the word never promises what is gone.
+        return {
+          text: trialSpent() ? tt("nav.proSee") : tt("nav.proTry"),
+          title: tt("nav.proOffer"),
+          cls: "btn-pro"
+        };
+    }
+  }
+
   function updateBillingChrome() {
     const B = window.VTBilling;
     if (!B) return;
     const ent = B.getEntitlement();
     const cfg = B.cfg?.() || {};
     const prelaunch = isCheckoutPrelaunch();
-    const pill = $("#billing-pill");
     const btn = $("#btn-pricing");
     const plan = headerPlanState();
-    const held = plan.kind !== "free";
-    if (pill) {
-      pill.classList.remove("is-trial", "is-free", "is-gift", "is-ending");
-      // The pill is the status and nothing else. It shows only what is actually
-      // held, and it names which kind, because "Pro" in the paid green over a
-      // free trial is the single thing that misled the site's own owner.
-      if (plan.kind === "trialAccount" || plan.kind === "trialLocal") {
-        pill.hidden = false;
-        pill.textContent = plan.days === null
-          ? tt("nav.planTrial")
-          : tt("nav.planTrialDays", { n: String(plan.days) });
-        pill.classList.add("is-trial");
-      } else if (plan.kind === "gift") {
-        pill.hidden = false;
-        pill.textContent = tt("nav.planGift");
-        pill.classList.add("is-gift");
-      } else if (plan.kind === "canceled") {
-        pill.hidden = false;
-        pill.textContent = tt("nav.planEnding");
-        pill.classList.add("is-ending");
-      } else if (plan.kind === "paid") {
-        pill.hidden = false;
-        pill.textContent = "Pro";
-      } else {
-        pill.hidden = true;
-        pill.textContent = "";
-        pill.classList.add("is-free");
-      }
-    }
-    // Two elements saying "Pro" beside each other is what made the offer read
-    // as a badge already earned. Only one of them ever says it now: while
-    // nothing is held this button is the offer, and once something is held the
-    // pill carries the state and the button becomes the way to the plan — named
-    // for what it opens, which is also the route to cancelling.
     if (btn) {
-      btn.textContent = held ? tt("nav.subscription") : tt("nav.pro");
-      btn.title = held ? tt("nav.subscriptionTitle") : tt("nav.proOffer");
-      btn.setAttribute("aria-label", btn.title);
-      btn.classList.toggle("btn-pro", !held);
-      btn.classList.toggle("btn-ghost", held);
+      // One element about Pro, never two. It used to be a status pill beside a
+      // button (on main, a "Pro" button beside a "PRO" badge; after that, a
+      // "Prueba · 5 d" pill beside "Suscripción"): two things about one plan,
+      // side by side, one pressable and one not, and on a phone the pair pushed
+      // "Historial" off the row. Now the button is the plan. With nothing held
+      // it is the offer, in words that say it is one; with something held its
+      // label is what you hold, and pressing it opens that plan, which is also
+      // where cancelling lives. Four kinds of access, four different words, so
+      // colour is never the only thing that tells them apart.
+      const label = planLabel(plan);
+      btn.textContent = label.text;
+      btn.title = label.title;
+      // The accessible name is the visible label; the title says what opens.
+      btn.removeAttribute("aria-label");
+      btn.classList.remove("btn-pro", "btn-ghost", "plan-trial", "plan-gift", "plan-paid", "plan-ending");
+      btn.classList.add(label.cls);
+      btn.dataset.plan = plan.kind;
+    }
+    const acctPricing = $("#btn-account-pricing");
+    if (acctPricing) {
+      acctPricing.textContent = plan.kind === "free" ? tt("nav.proSee") : tt("nav.planOpen");
     }
     const exp = $("#btn-export-progress");
     if (exp) exp.hidden = !B.can("export_progress");
@@ -5774,12 +5792,17 @@
     } catch {
       /* ignore */
     }
-    // Soft note for free users when checkout not live (no developer/issue jargon)
+    // Soft note for free users when checkout not live (no developer/issue jargon).
+    // Only for free users: "Sigue practicando gratis; Pro se activará cuando
+    // estén listos" was also told to people already holding Pro.
     const healthNote = $("#pricing-health-note");
     if (healthNote && B.getBillingHealth) {
       try {
         const h = B.getBillingHealth();
-        if (h && !h.ok && h.links && h.verificationRequired && !h.verificationConfigured) {
+        if (headerPlanState().kind !== "free") {
+          healthNote.hidden = true;
+          healthNote.textContent = "";
+        } else if (h && !h.ok && h.links && h.verificationRequired && !h.verificationConfigured) {
           // Links are live but entitlements cannot be verified — checkout is held.
           healthNote.hidden = false;
           healthNote.textContent = tt("pricing.verifyUnavailable");
@@ -5883,6 +5906,12 @@
         insights.textContent = "";
       }
     }
+
+    // "Pro: exportar y coach" and its price anchor are an offer. They stayed on
+    // this card for people already holding Pro: a second "Pro" button asking
+    // them to buy what the tag beside the title says they have.
+    const cta = $("#value-pulse-cta");
+    if (cta) cta.hidden = plan.kind !== "free";
 
     renderProStudio(pulse, isProUser);
   }
@@ -6369,6 +6398,11 @@
     if (grid) {
       const plans = cfg.plans || [];
       const ent = B.getEntitlement();
+      // Which card is "Plan actual" follows the same reading as the header. The
+      // licence alone cannot tell a trial or a gift from a payment (both carry
+      // plan "pro_monthly"), so trial and gift holders were told the paid
+      // monthly card was their current plan, while the free card said so too.
+      const held = headerPlanState().kind;
       // Computed from the two prices on the cards, so the badge can never
       // disagree with the numbers printed next to it.
       const savingPct = B.annualSavingPct(plans, region);
@@ -6403,8 +6437,10 @@
           let disabled = false;
           let notYet = false;
           if (p.id === "free") {
-            ctaLabel = tt("pricing.current");
+            ctaLabel = held === "free" ? tt("pricing.current") : tt("pricing.freeAlways");
             disabled = true;
+          } else if (held === "trialAccount" || held === "gift") {
+            // Pro is held, but not by buying this card: leave it as an offer.
           } else if (ent.pro && (ent.plan === p.id || (ent.plan === "trial" && p.id !== "free"))) {
             if (ent.plan === p.id || ent.source === "demo") {
               ctaLabel = tt("pricing.current");
@@ -6754,18 +6790,38 @@
       // act and not for the room: "Cuenta" is a destination nobody who has no
       // account has a reason to press. Signed in it becomes who you are, which
       // is what tells you at a glance that you are.
-      if (account && account.signedIn && account.account) {
-        btnAcc.textContent = (account.account.displayName || account.account.email || "").split("@")[0]
-          || tt("nav.account");
+      //
+      // Signed in, a bare name read as a label rather than a button, and it
+      // could be any length ("pablo.illescas.buendia") on a phone row that has
+      // none to spare. So it is drawn as an account button everywhere: your
+      // initial in a circle, the name beside it where there is room (CSS hides
+      // the name on phones). The accessible name starts with the name.
+      const who = account && account.signedIn && account.account
+        ? (account.account.displayName || account.account.email || "").split("@")[0]
+        : session
+          ? session.username.split(".")[0]
+          : "";
+      btnAcc.classList.toggle("is-signed-in", !!(who || (account && account.signedIn)));
+      if (who || (account && account.signedIn) || session) {
+        const name = who || tt("nav.account");
+        const initial = (name.trim()[0] || "?").toLocaleUpperCase();
+        btnAcc.replaceChildren();
+        const dot = document.createElement("span");
+        dot.className = "door-avatar";
+        dot.setAttribute("aria-hidden", "true");
+        dot.textContent = initial;
+        const label = document.createElement("span");
+        label.className = "door-name";
+        label.textContent = name;
+        btnAcc.append(dot, label);
         btnAcc.title = tt("nav.accountTitle");
-      } else if (session) {
-        btnAcc.textContent = session.username.split(".")[0] || tt("nav.account");
-        btnAcc.title = tt("nav.accountTitle");
+        btnAcc.setAttribute("aria-label", tt("nav.accountNamed", { name }));
       } else {
         btnAcc.textContent = tt("nav.signIn");
         btnAcc.title = tt("nav.signInTitle");
+        // The visible word leads the accessible name (WCAG 2.5.3).
+        btnAcc.setAttribute("aria-label", btnAcc.title);
       }
-      btnAcc.setAttribute("aria-label", btnAcc.title);
     }
     if (!out || !inn) return;
 

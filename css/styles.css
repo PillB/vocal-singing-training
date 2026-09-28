@@ -7305,3 +7305,100 @@ body.view-exercise .highway-stage {
   background: transparent;
   border-color: rgba(148, 163, 184, 0.25);
 }
+
+/* ──────────────────────────────────────────────────────────────────────────
+   One element about Pro, and a door that looks like one
+   ──────────────────────────────────────────────────────────────────────────
+   #btn-pricing is the only thing in the header about Pro. With nothing held it
+   is the gold offer ("Probar Pro"); with something held its words are the plan
+   ("Prueba · 5 días", "Regalo · 20 días", "Pro · activo", "Pro · termina") in
+   the colours the old status pill used, and pressing it opens that plan. The
+   words carry the state; the colour only agrees with them. */
+#btn-pricing.plan-trial,
+#btn-pricing.plan-gift,
+#btn-pricing.plan-paid,
+#btn-pricing.plan-ending {
+  font-weight: 700;
+  opacity: 1;
+}
+#btn-pricing.plan-trial {
+  background: rgba(110, 180, 232, 0.16);
+  border-color: rgba(110, 180, 232, 0.58);
+  color: #b7dbf5;
+}
+#btn-pricing.plan-gift {
+  background: rgba(240, 184, 80, 0.16);
+  border-color: rgba(240, 184, 80, 0.55);
+  color: #ffdb95;
+}
+#btn-pricing.plan-paid {
+  background: rgba(79, 212, 146, 0.16);
+  border-color: rgba(79, 212, 146, 0.55);
+  color: #9aecc4;
+}
+#btn-pricing.plan-ending {
+  background: rgba(224, 108, 117, 0.14);
+  border-color: rgba(224, 108, 117, 0.68);
+  color: #f3b0b5;
+}
+
+/* Signed in, the door is your initial in a circle and, where there is room,
+   your name: an account button, not a stray word. */
+.header-door.is-signed-in {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding-inline-start: 0.35rem;
+}
+.door-avatar {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #6eb4e8, #9b8ff5);
+  color: #0c1118;
+  font-size: 0.8rem;
+  font-weight: 800;
+  line-height: 1;
+}
+.door-name {
+  max-width: 6.5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 640px) {
+  /* On a phone the row has no room for a name of any length, so the initial
+     stands for it; the accessible name still starts with the name. */
+  body:not(.view-exercise) .app-header:has(#btn-more) .header-door.is-signed-in {
+    justify-content: center;
+    min-width: var(--min-tap);
+    padding-inline: 0;
+  }
+  /* "Plan" is the shortest word on the row; with the row's tight padding it
+     drew 41px wide, under the 44px floor. */
+  body:not(.view-exercise) .app-header:has(#btn-more) .header-nav .nav-link {
+    min-width: var(--min-tap);
+  }
+  body:not(.view-exercise) .app-header:has(#btn-more) .header-door.is-signed-in .door-name {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+@media (max-width: 374px) {
+  /* Below 375px the row cannot hold the mark, the three sections whole, the
+     door and "Más": something had to give, and until now it was "Historial",
+     scrolled out of sight inside the nav pill ("Histo" at 320, gone entirely
+     beside a plan pill). The mark is decoration here — it is not a link, and
+     the title it stands for is already read to screen readers — so it goes,
+     and every section stays whole. */
+  body:not(.view-exercise) .app-header:has(#btn-more) .brand {
+    display: none;
+  }
+}

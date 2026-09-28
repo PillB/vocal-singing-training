@@ -125,12 +125,18 @@ async function header(page) {
       if (!r.width || !r.height) return null;
       return (el.textContent || "").trim();
     };
-    const pill = document.querySelector("#billing-pill");
+    // Signed in, the door is an initial plus a name; the name is what it says.
+    const doorName = document.querySelector("#btn-account .door-name");
+    const plan = document.querySelector("#btn-pricing");
     return {
-      door: shown("#btn-account"),
+      door: doorName ? (doorName.textContent || "").trim() : shown("#btn-account"),
       pro: shown("#btn-pricing"),
-      pill: pill && !pill.hidden ? (pill.textContent || "").trim() : null,
-      pillKind: pill ? pill.className.replace("billing-pill", "").trim() : null
+      // The one element about Pro: what it says, read even when it sits inside
+      // the closed phone menu, and which state it was drawn for.
+      plan: plan ? (plan.textContent || "").trim() : null,
+      planKind: plan ? plan.dataset.plan || null : null,
+      // The status pill that used to sit beside the button is gone for good.
+      pill: document.querySelector("#billing-pill")
     };
   });
 }
@@ -153,8 +159,8 @@ test.describe("Signed out: the door says what pressing it does", () => {
     // "Cuenta" is a destination; nobody without an account has a reason to press
     // a destination. This is the owner's first complaint, in one assertion.
     expect(h.door).toBe("Entrar");
-    // Exactly one element mentions Pro, and it is the offer.
-    expect(h.pro).toBe("Pro");
+    // Exactly one element mentions Pro, and it is the offer, worded as one.
+    expect(h.pro).toBe("Probar Pro");
     expect(h.pill).toBeNull();
   });
 
@@ -188,7 +194,7 @@ test.describe("Signed out: the door says what pressing it does", () => {
     // button around it. It reads as a badge you hold, which is complaint two.
     expect(seen.gradient).toBe("none");
     expect(seen.contrast).toBeGreaterThanOrEqual(4.5);
-    expect(seen.label).toBe("Pro");
+    expect(seen.label).toBe("Probar Pro");
   });
 
   test("a worker that cannot be reached offers a retry, not a staff login", async ({ page }) => {
@@ -299,12 +305,12 @@ test.describe("Signed in: the header names which kind of access this is", () => 
       entitlement: { pro: true, plan: "pro_monthly", status: "active", source: "trial", periodEnd: ends(27) }
     }, license);
     await boot(page);
-    await expect(page.locator("#billing-pill")).toBeVisible();
+    await expect(page.locator("#btn-pricing")).toHaveText(/^Prueba · \d+ días$/);
     const h = await header(page);
-    expect(h.pill).toMatch(/^Prueba · \d+ d$/);
-    expect(h.pillKind).toContain("is-trial");
-    // The other element stops saying Pro and becomes the way to the plan.
-    expect(h.pro).toBe("Suscripción");
+    expect(h.planKind).toBe("trialAccount");
+    await expect(page.locator("#btn-pricing")).toHaveClass(/plan-trial/);
+    // One element: no pill beside it, and it no longer says Pro at all.
+    expect(h.pill).toBeNull();
     expect(h.door).toBe("pablo");
   });
 
@@ -322,7 +328,13 @@ test.describe("Signed in: the header names which kind of access this is", () => 
     // It used to print an internal plan id at a reader, and call a free trial a
     // monthly subscription in the same breath.
     expect(status).not.toContain("pro_monthly");
-    expect(status).toContain("Mes de prueba");
+    expect(status).toContain("Prueba gratis");
+    // A seven-day trial is not a month, and the paid monthly card is not the
+    // plan a trial holder is on.
+    expect(status).not.toContain("Mes de prueba");
+    await expect(page.locator('.plan-cta[data-plan="pro_monthly"]')).not.toHaveText(/Plan actual/);
+    await expect(page.locator('.plan-cta[data-plan="free"]')).not.toHaveText(/Plan actual/);
+    await expect(page.locator("#pricing-health-note")).toBeHidden();
   });
 
   test("a gifted month says gifted, and when it ends", async ({ page }) => {
@@ -333,10 +345,8 @@ test.describe("Signed in: the header names which kind of access this is", () => 
       entitlement: { pro: true, plan: "pro_monthly", status: "active", source: "gift", periodEnd: ends(12) }
     }, license);
     await boot(page);
-    await expect(page.locator("#billing-pill")).toBeVisible();
-    const h = await header(page);
-    expect(h.pill).toBe("Regalo");
-    expect(h.pillKind).toContain("is-gift");
+    await expect(page.locator("#btn-pricing")).toHaveText(/^Regalo · \d+ días$/);
+    await expect(page.locator("#btn-pricing")).toHaveClass(/plan-gift/);
     await page.click("#btn-pricing");
     expect(await page.locator("#pricing-status").textContent()).toMatch(/regalo/i);
   });
@@ -349,9 +359,8 @@ test.describe("Signed in: the header names which kind of access this is", () => 
       entitlement: { pro: true, plan: "pro_monthly", status: "canceled", source: "paid", periodEnd: ends(9) }
     }, license);
     await boot(page);
-    const h = await header(page);
-    expect(h.pill).toBe("Pro · termina");
-    expect(h.pillKind).toContain("is-ending");
+    await expect(page.locator("#btn-pricing")).toHaveText("Pro · termina");
+    await expect(page.locator("#btn-pricing")).toHaveClass(/plan-ending/);
     await page.click("#btn-pricing");
     expect(await page.locator("#pricing-status").textContent()).toMatch(/no se renueva/i);
   });
@@ -364,12 +373,20 @@ test.describe("Signed in: the header names which kind of access this is", () => 
       entitlement: { pro: true, plan: "pro_yearly", status: "active", source: "paid", periodEnd: ends(300) }
     }, license);
     await boot(page);
+    await expect(page.locator("#btn-pricing")).toHaveText("Pro · activo");
     const h = await header(page);
-    expect(h.pill).toBe("Pro");
-    expect(h.pillKind).not.toContain("is-trial");
-    expect(h.pro).toBe("Suscripción");
-    // The whole point: never two elements claiming the same thing.
-    expect([h.pill, h.pro].filter((t) => t === "Pro")).toHaveLength(1);
+    expect(h.planKind).toBe("paid");
+    // The whole point: never two elements claiming the same thing. Count every
+    // visible control in the header whose words mention Pro.
+    const proish = await page.evaluate(() =>
+      [...document.querySelectorAll(".app-header button, .app-header a, .app-header span")]
+        .filter((el) => {
+          const r = el.getBoundingClientRect();
+          return r.width && r.height && !el.querySelector("button, span") && /\bpro\b/i.test(el.textContent || "");
+        })
+        .map((el) => el.textContent.trim())
+    );
+    expect(proish).toEqual(["Pro · activo"]);
   });
 
   test("someone who has spent their free trial is told where they stand", async ({ page }) => {
@@ -415,10 +432,10 @@ test.describe("The same states in English", () => {
     await expect(page.locator("html")).toHaveAttribute("lang", "en");
     const h = await header(page);
     expect(h.door).toBe("Sign in");
-    expect(h.pro).toBe("Pro");
+    expect(h.pro).toBe("Try Pro");
   });
 
-  test("a trial pill translates and keeps its days", async ({ page }) => {
+  test("a trial label translates and keeps its days", async ({ page }) => {
     const license = await mintLicense({ origin: BASE });
     await install(page, {
       signedIn: true,
@@ -426,10 +443,10 @@ test.describe("The same states in English", () => {
       entitlement: { pro: true, plan: "pro_monthly", status: "active", source: "trial", periodEnd: Math.floor(Date.now() / 1000) + 5 * DAY }
     }, license);
     await boot(page);
-    await expect(page.locator("#billing-pill")).toBeVisible();
+    await expect(page.locator("#btn-pricing")).toHaveText(/^Prueba · \d+ días$/);
     await page.click("#btn-lang");
     await expect(page.locator("html")).toHaveAttribute("lang", "en");
-    expect((await header(page)).pill).toMatch(/^Trial · \d+ d$/);
+    expect((await header(page)).plan).toMatch(/^Trial · \d+ days$/);
   });
 });
 
@@ -448,7 +465,10 @@ test.describe("Phone: the door is on the row, not in the menu", () => {
     await expect(page.locator("#account-modal")).toBeVisible();
   });
 
-  test("on a trial the pill is readable without opening anything", async ({ page }) => {
+  test("on a trial the plan is the first thing in Más, in words", async ({ page }) => {
+    // The trial used to sit on the row as a pill, which pushed "Historial" out
+    // of sight inside the nav. It lives in the menu now, one tap away, as the
+    // same single element the desktop header shows.
     const license = await mintLicense({ origin: BASE });
     await install(page, {
       signedIn: true,
@@ -456,12 +476,37 @@ test.describe("Phone: the door is on the row, not in the menu", () => {
       entitlement: { pro: true, plan: "pro_monthly", status: "active", source: "trial", periodEnd: Math.floor(Date.now() / 1000) + 20 * DAY }
     }, license);
     await boot(page);
-    const pill = page.locator("#billing-pill");
-    await expect(pill).toBeVisible();
-    // It carries meaning, so it holds the 12px floor — its old 0.72rem rendered
-    // at 11.52px everywhere the phone media query did not reach.
-    const size = await pill.evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+    await page.click("#btn-more");
+    const plan = page.locator("#btn-pricing");
+    await expect(plan).toBeVisible();
+    await expect(plan).toHaveText(/^Prueba · \d+ días$/);
+    const first = await page.evaluate(() => {
+      const shown = [...document.querySelectorAll("#header-utils button")].filter((b) => b.getBoundingClientRect().height);
+      return shown[0] && shown[0].id;
+    });
+    expect(first).toBe("btn-pricing");
+    const size = await plan.evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
     expect(size).toBeGreaterThanOrEqual(12);
+  });
+
+  test("signed in, the door is an account button, not a stray name", async ({ page }) => {
+    const license = await mintLicense({ origin: BASE });
+    await install(page, {
+      signedIn: true,
+      account: { id: "a", email: "pablo.illescas.buendia@example.test", displayName: null, locale: null, role: "member", trialUsed: true, createdAt: 1 },
+      entitlement: { pro: false, plan: null, status: "free", source: null, periodEnd: null }
+    }, license);
+    await boot(page);
+    const door = page.locator("#btn-account");
+    await expect(door.locator(".door-avatar")).toHaveText("P");
+    // The name is too long for any phone row, so the initial stands in for it;
+    // a screen reader still hears the name first.
+    const nameWidth = await door.locator(".door-name").evaluate((el) => el.getBoundingClientRect().width);
+    expect(nameWidth).toBeLessThanOrEqual(1);
+    expect(await door.getAttribute("aria-label")).toMatch(/^pablo\.illescas\.buendia/);
+    const box = await door.boundingBox();
+    expect(box.width).toBeGreaterThanOrEqual(44);
+    expect(box.height).toBeGreaterThanOrEqual(44);
   });
 });
 
@@ -494,7 +539,7 @@ test.describe("The same claim wherever it appears", () => {
       entitlement: { pro: true, plan: "pro_monthly", status: "active", source: "trial", periodEnd: NOW() + 12 * DAY }
     }, license);
     await boot(page);
-    await expect(page.locator("#billing-pill")).toBeVisible();
+    await expect(page.locator("#btn-pricing")).toHaveText(/^Prueba · /);
     // The card a visitor sees first used to say PRO here, in the paid green,
     // because it tested VTBilling's own trial flag and a worker-granted trial
     // does not set it. Two elements, one truth.
@@ -556,7 +601,7 @@ test.describe("Reload and offline: a trial must not become a subscription", () =
       entitlement: { pro: true, plan: "pro_monthly", status: "active", source: "trial", periodEnd: NOW() + 9 * DAY }
     }, license);
     await boot(page);
-    await expect(page.locator("#billing-pill")).toHaveText(/^Prueba · \d+ d$/);
+    await expect(page.locator("#btn-pricing")).toHaveText(/^Prueba · \d+ días$/);
 
     // Now the worker is gone: a phone on the underground, or simply the frames
     // between a reload and the first answer. The licence token survives and
@@ -567,8 +612,7 @@ test.describe("Reload and offline: a trial must not become a subscription", () =
     await page.route(`${API}/**`, (r) => r.abort("failed"));
     await page.reload({ waitUntil: "domcontentloaded" });
     await page.waitForFunction(() => !!window.VTBilling && !!window.VTAccount);
-    await expect(page.locator("#billing-pill")).toHaveText(/^Prueba · \d+ d$/);
-    expect(await page.locator("#btn-pricing").textContent()).toBe("Suscripción");
+    await expect(page.locator("#btn-pricing")).toHaveText(/^Prueba · \d+ días$/);
     // And Pro itself is still the signature check, not the remembered wording.
     expect(await page.evaluate(() => window.VTBilling.isPro())).toBe(true);
   });
@@ -583,9 +627,9 @@ test.describe("Reload and offline: a trial must not become a subscription", () =
       );
     });
     await boot(page);
-    // A gift that ended in 1970 must not leave a "Regalo" pill behind, and the
+    // A gift that ended in 1970 must not leave a "Regalo" label behind, and the
     // record itself should be gone rather than re-read on every load.
-    await expect(page.locator("#billing-pill")).toBeHidden();
+    await expect(page.locator("#btn-pricing")).toHaveAttribute("data-plan", "free");
     expect(await page.evaluate(() => localStorage.getItem("vt_account_plan_v1"))).toBeNull();
   });
 
@@ -597,10 +641,10 @@ test.describe("Reload and offline: a trial must not become a subscription", () =
       entitlement: { pro: true, plan: "pro_monthly", status: "active", source: "trial", periodEnd: NOW() + 9 * DAY }
     }, license);
     await boot(page);
-    await expect(page.locator("#billing-pill")).toBeVisible();
+    await expect(page.locator("#btn-pricing")).toHaveAttribute("data-plan", "trialAccount");
     expect(await page.evaluate(() => localStorage.getItem("vt_account_plan_v1"))).not.toBeNull();
     await page.evaluate(() => window.VTAccount.signOut());
-    await expect(page.locator("#billing-pill")).toBeHidden();
+    await expect(page.locator("#btn-pricing")).toHaveAttribute("data-plan", "free");
     expect(await page.evaluate(() => localStorage.getItem("vt_account_plan_v1"))).toBeNull();
     expect(await page.locator("#btn-account").textContent()).toBe("Entrar");
   });
@@ -613,7 +657,7 @@ test.describe("Reload and offline: a trial must not become a subscription", () =
       entitlement: { pro: true, plan: "pro_monthly", status: "active", source: "gift", periodEnd: NOW() + 9 * DAY }
     }, license);
     await boot(page);
-    await expect(page.locator("#billing-pill")).toBeVisible();
+    await expect(page.locator("#btn-pricing")).toHaveAttribute("data-plan", "gift");
     const rec = await page.evaluate(() => JSON.parse(localStorage.getItem("vt_account_plan_v1")));
     // It exists to pick a word, so it may hold nothing that identifies anybody.
     expect(Object.keys(rec).sort()).toEqual(["periodEnd", "plan", "pro", "source", "status"]);
@@ -633,9 +677,9 @@ test.describe("Colour is never the only thing that says which state this is", ()
     createdAt: 1
   };
   const CASES = [
-    { source: "trial", status: "active", label: /^Prueba · \d+ d$/ },
-    { source: "gift", status: "active", label: /^Regalo$/ },
-    { source: "paid", status: "active", label: /^Pro$/ },
+    { source: "trial", status: "active", label: /^Prueba · \d+ días$/ },
+    { source: "gift", status: "active", label: /^Regalo · \d+ días$/ },
+    { source: "paid", status: "active", label: /^Pro · activo$/ },
     { source: "paid", status: "canceled", label: /^Pro · termina$/ }
   ];
 
@@ -648,7 +692,7 @@ test.describe("Colour is never the only thing that says which state this is", ()
         entitlement: { pro: true, plan: "pro_monthly", status: c.status, source: c.source, periodEnd: NOW() + 15 * DAY }
       }, license);
       await boot(page);
-      const pill = page.locator("#billing-pill");
+      const pill = page.locator("#btn-pricing");
       await expect(pill).toBeVisible();
       // WCAG 2.2 SC 1.4.1: the four states used to differ by hue alone, all of
       // them saying "Pro". Each now carries its own word.
@@ -686,23 +730,24 @@ test.describe("Colour is never the only thing that says which state this is", ()
         entitlement: { pro: true, plan: "pro_monthly", status: c.status, source: c.source, periodEnd: NOW() + 15 * DAY }
       }, license);
       await boot(p2);
-      await expect(p2.locator("#billing-pill")).toBeVisible();
-      seen.push((await p2.locator("#billing-pill").textContent()).trim().replace(/\d+/, "N"));
+      await expect(p2.locator("#btn-pricing")).not.toHaveAttribute("data-plan", "free");
+      seen.push((await p2.locator("#btn-pricing").textContent()).trim().replace(/\d+/, "N"));
       await ctx.close();
     }
     expect(new Set(seen).size).toBe(CASES.length);
   });
 
-  test("the offer's accessible name is a verb, not the badge again", async ({ page }) => {
+  test("the offer's name is a verb, and what you see is what is read", async ({ page }) => {
     const license = await mintLicense({ origin: BASE });
     await install(page, {}, license);
     await boot(page);
-    // The visible label stays short because the header is narrow, but a screen
-    // reader used to hear "Pro" twice, four lines apart, for a status and an
-    // action. This is the one that tells them apart.
-    expect(await page.locator("#btn-pricing").getAttribute("aria-label")).toBe(
-      "Ver Pro y la prueba gratis"
-    );
+    // A screen reader used to hear "Pro" twice, four lines apart, for a status
+    // and an action. There is one element now and its words are a verb, so the
+    // visible label is the accessible name (WCAG 2.5.3) and the title says more.
+    const btn = page.locator("#btn-pricing");
+    expect(await btn.getAttribute("aria-label")).toBeNull();
+    await expect(btn).toHaveText("Probar Pro");
+    expect(await btn.getAttribute("title")).toBe("Ver Pro y la prueba gratis");
   });
 
   test("with the scripts dead, the static page still promises nothing it cannot do", async ({ page }) => {
@@ -714,5 +759,124 @@ test.describe("Colour is never the only thing that says which state this is", ()
     const note = (await page.locator("#pricing-pay-note").textContent()).trim();
     expect(note).not.toMatch(/portal del proveedor/);
     expect(note).toMatch(/no pide tarjeta/);
+  });
+});
+
+test.describe("The menu, read by someone who has never seen it", () => {
+  // The owner's question after the account rework merged: did it fix the
+  // ambiguous menu — duplicate Pro buttons, no immediate way to sign in? It
+  // fixed those and broke the row: with the door on it, "Historial" scrolled
+  // out of sight inside the nav on every phone narrower than 390, and entirely
+  // at 390 too once a plan pill joined it. These walk the states that matter
+  // at the widths phones actually are.
+  const NOW = () => Math.floor(Date.now() / 1000);
+  const member = (over) => ({
+    id: "a",
+    email: "pablo.illescas.buendia@example.test",
+    displayName: null,
+    locale: null,
+    role: "member",
+    trialUsed: true,
+    createdAt: 1,
+    ...(over || {})
+  });
+  const STATES = {
+    "signed out": {},
+    trial: { signedIn: true, account: member(), entitlement: { pro: true, plan: "pro_monthly", status: "active", source: "trial", periodEnd: NOW() + 5 * DAY } },
+    gift: { signedIn: true, account: member({ trialUsed: false }), entitlement: { pro: true, plan: "pro_monthly", status: "active", source: "gift", periodEnd: NOW() + 20 * DAY } },
+    ending: { signedIn: true, account: member(), entitlement: { pro: true, plan: "pro_monthly", status: "canceled", source: "paid", periodEnd: NOW() + 10 * DAY } }
+  };
+
+  for (const width of [320, 360, 390]) {
+    for (const [name, opts] of Object.entries(STATES)) {
+      test(`${width}px, ${name}: every section is whole and pressable, and the door is on the row`, async ({ browser }) => {
+        const ctx = await browser.newContext({ viewport: { width, height: 740 } });
+        const page = await ctx.newPage();
+        const license = await mintLicense({ origin: BASE });
+        await install(page, opts, license);
+        await boot(page);
+        if (opts.signedIn) await expect(page.locator("#btn-pricing")).not.toHaveAttribute("data-plan", "free");
+        const seen = await page.evaluate(() => {
+          const nav = document.querySelector("#header-nav");
+          const hits = ["btn-nav-home", "btn-plan", "btn-history", "btn-account", "btn-more"].map((id) => {
+            const el = document.getElementById(id);
+            const r = el.getBoundingClientRect();
+            const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+            return {
+              id,
+              whole: r.left >= 0 && r.right <= innerWidth && r.left >= nav.getBoundingClientRect().left - 1,
+              hit: !!top && el.contains(top),
+              w: r.width,
+              h: r.height
+            };
+          });
+          return {
+            hidden: nav.scrollWidth - nav.clientWidth,
+            overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+            hits
+          };
+        });
+        // Nothing in the nav is behind a sideways scroll...
+        expect(seen.hidden).toBeLessThanOrEqual(1);
+        expect(seen.overflow).toBe(0);
+        for (const h of seen.hits) {
+          // ...and a finger on each control lands on that control.
+          expect(h, h.id).toMatchObject({ whole: true, hit: true });
+          expect(h.h, h.id).toBeGreaterThanOrEqual(44);
+          expect(h.w, h.id).toBeGreaterThanOrEqual(44);
+        }
+        await ctx.close();
+      });
+    }
+  }
+
+  for (const [name, opts] of Object.entries(STATES)) {
+    test(`${name}: one element about Pro in the header and its menu, and the home card offers nothing already held`, async ({ page }) => {
+      await page.setViewportSize({ width: 390, height: 844 });
+      const license = await mintLicense({ origin: BASE });
+      await install(page, opts, license);
+      await boot(page);
+      if (opts.signedIn) await expect(page.locator("#btn-pricing")).not.toHaveAttribute("data-plan", "free");
+      await page.click("#btn-more");
+      const words = await page.evaluate(() =>
+        [...document.querySelectorAll(".app-header button, .app-header span, .app-header a")]
+          .filter((el) => {
+            const r = el.getBoundingClientRect();
+            return r.width && r.height && !el.querySelector("button, span");
+          })
+          .map((el) => (el.textContent || "").trim())
+          .filter((t) => /\b(pro|prueba|regalo|suscripci[oó]n)\b/i.test(t))
+      );
+      expect(words).toHaveLength(1);
+      // "Pro: exportar y coach" is an offer; someone holding Pro is not sold it.
+      if (opts.signedIn) await expect(page.locator("#btn-value-pro")).toBeHidden();
+      else await expect(page.locator("#btn-value-pro")).toBeAttached();
+    });
+  }
+
+  test("a desktop header holds a long name and a plan on one row", async ({ page }) => {
+    // With the old pill and "Suscripción" side by side, a signed-in trial
+    // wrapped the 1280px header onto a second row.
+    await page.setViewportSize({ width: 1280, height: 800 });
+    const license = await mintLicense({ origin: BASE });
+    await install(page, { ...STATES.trial, account: member({ displayName: "Maria Fernanda de la Torre" }) }, license);
+    await boot(page);
+    await expect(page.locator("#btn-pricing")).toHaveText(/^Prueba · /);
+    const tops = await page.evaluate(() =>
+      ["btn-nav-home", "btn-account", "btn-pricing", "btn-lang", "btn-tour"].map((id) =>
+        Math.round(document.getElementById(id).getBoundingClientRect().top)
+      )
+    );
+    expect(Math.max(...tops) - Math.min(...tops)).toBeLessThanOrEqual(4);
+    await expect(page.locator("#btn-account .door-name")).toBeVisible();
+  });
+
+  test("the account panel names its plan button for what it opens", async ({ page }) => {
+    const license = await mintLicense({ origin: BASE });
+    await install(page, STATES.trial, license);
+    await boot(page);
+    await expect(page.locator("#btn-pricing")).toHaveAttribute("data-plan", "trialAccount");
+    await openPanel(page);
+    await expect(page.locator("#btn-account-pricing")).toHaveText("Ver tu plan");
   });
 });

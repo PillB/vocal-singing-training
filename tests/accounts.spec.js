@@ -159,8 +159,11 @@ async function installWorker(page, stub, license) {
         ],
         ingest: {
           since: "2026-09-17",
-          days: [{ day: "2026-09-23", counts: { accepted: 1240, unknown_event: 2 } }],
-          totals: { accepted: 1240, unknown_event: 2 },
+          // eu_no_consent is here because the readout used to leave it out of its
+          // refusal list, so batches turned away for want of an EEA answer were
+          // in neither column and the numbers did not add up to what was posted.
+          days: [{ day: "2026-09-23", counts: { accepted: 1240, unknown_event: 2, eu_no_consent: 9 } }],
+          totals: { accepted: 1240, unknown_event: 2, eu_no_consent: 9 },
           lastAcceptedAt: 1790000000
         }
       });
@@ -633,7 +636,12 @@ test.describe("Accounts, gifted months and saved progress", () => {
     // arrivals line says the pipeline is alive.
     await expect(box).toContainText("Plan cumplido el");
     await expect(box).toContainText("Reparto parejo entre versiones (p = 0.620)");
-    await expect(box.locator(".ab-ingest")).toContainText(/1[,.\u00a0]?240 eventos guardados, 2 descartados, 0 envíos rechazados/);
+    await expect(box.locator(".ab-ingest")).toContainText(/1[,.\u00a0]?240 eventos guardados, 2 descartados, 9 envíos rechazados/);
+    // Named, so an admin can see which refusal it was...
+    await expect(box.locator(".ab-ingest")).toContainText("Rechazos: eu_no_consent 9");
+    // ...and not painted as a broken pipeline, because a visitor who has not
+    // answered the bar yet is the system working exactly as intended.
+    await expect(box.locator(".ab-ingest.ab-warn")).toHaveCount(0);
   });
 
   test("before its plan is met a test shows counts and the date, never a comparison", async ({ page }) => {

@@ -3023,9 +3023,25 @@
         const held = headerPlanState().kind;
         if (held === "trialAccount" || held === "trialLocal") {
           try {
-            if (localStorage.getItem("vt_trial_first_practice_v1") !== "1") {
-              localStorage.setItem("vt_trial_first_practice_v1", "1");
-              window.VTAnalytics?.track?.("trial_first_practice", { kind: held === "trialAccount" ? "account" : "local" });
+            // The mark goes down only once the event is actually kept, which is
+            // what track() now reports. Writing it first was wrong twice over:
+            // in a country that asks before anything is stored it put the mark
+            // on the device before the visitor had answered — the very thing
+            // being asked about — and on a refusal the event was dropped while
+            // the mark stayed, silencing this step for that browser for good,
+            // because the mark is never cleared.
+            // "held" gets no mark either: the answer may never come. If it does
+            // come the held event is sent, and this fires once more on a later
+            // visit, which costs one beacon and cannot double-count — the funnel
+            // groups by browser (GROUP BY cid in handleFunnel), not by event.
+            if (!state.trialFirstPracticeTried && localStorage.getItem("vt_trial_first_practice_v1") !== "1") {
+              // Once per page load whatever the answer is, so two exercises
+              // started before the bar is answered do not hold two copies.
+              state.trialFirstPracticeTried = true;
+              const kept = window.VTAnalytics?.track?.("trial_first_practice", {
+                kind: held === "trialAccount" ? "account" : "local"
+              });
+              if (kept === "recorded") localStorage.setItem("vt_trial_first_practice_v1", "1");
             }
           } catch {
             /* private mode: the event is simply not sent */
@@ -7461,15 +7477,31 @@
       const t = ingest.totals || {};
       const sum = (keys) => keys.reduce((n, k) => n + (Number(t[k]) || 0), 0);
       const dropped = sum(["unknown_event", "bad_cid", "not_an_object"]);
-      const refusedKeys = ["origin_not_allowed", "rate_limited", "opted_out", "automated", "body_too_large", "bad_request"];
+      // Every request-level reason the worker counts (INGEST_REASONS.request in
+      // workers/entitlements/src/events.js) except "forget", which is a deletion
+      // asked for rather than a batch turned away. eu_no_consent was missing
+      // here, so batches refused for want of an EEA answer vanished from the
+      // readout: accepted did not move, refused did not move, and the numbers
+      // simply did not add up to what was posted.
+      const refusedKeys = [
+        "origin_not_allowed",
+        "rate_limited",
+        "opted_out",
+        "automated",
+        "body_too_large",
+        "bad_request",
+        "eu_no_consent"
+      ];
       const refused = sum(refusedKeys);
       if (!t.accepted && !dropped && !refused) return `<p class="muted ab-ingest">${esc(tt("ab.ingestNone"))}</p>`;
       let line = tt("ab.ingest", { accepted: count(t.accepted), dropped: count(dropped), refused: count(refused) });
       const reasons = refusedKeys.filter((k) => t[k]).map((k) => `${k} ${count(t[k])}`);
       if (reasons.length) line += ` ${tt("ab.ingestReasons", { list: reasons.join(", ") })}`;
       if (ingest.lastAcceptedAt) line += ` ${tt("ab.ingestLast", { when: date(ingest.lastAcceptedAt) })}`;
-      // A wrong origin or a stuck limit is a broken pipeline; opted-out and
-      // automated refusals are the system working.
+      // A wrong origin or a stuck limit is a broken pipeline; opted-out,
+      // automated and eu_no_consent refusals are the system working, so they are
+      // named above but must not colour the line — a site with EEA visitors who
+      // have not answered would otherwise read as broken for ever.
       const broken = sum(["origin_not_allowed", "rate_limited"]) > 0;
       return `<p class="${broken ? "ab-warn" : "muted"} ab-ingest">${esc(line)}</p>`;
     }

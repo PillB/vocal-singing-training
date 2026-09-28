@@ -913,22 +913,40 @@ test.describe("The menu, read by someone who has never seen it", () => {
     });
   }
 
-  test("a desktop header holds a long name and a plan on one row", async ({ page }) => {
-    // With the old pill and "Suscripción" side by side, a signed-in trial
-    // wrapped the 1280px header onto a second row.
-    await page.setViewportSize({ width: 1280, height: 800 });
-    const license = await mintLicense({ origin: BASE });
-    await install(page, { ...STATES.trial, account: member({ displayName: "Maria Fernanda de la Torre" }) }, license);
-    await boot(page);
-    await expect(page.locator("#btn-pricing")).toHaveText(/^Prueba · /);
-    const tops = await page.evaluate(() =>
-      ["btn-nav-home", "btn-account", "btn-pricing", "btn-lang", "btn-tour"].map((id) =>
-        Math.round(document.getElementById(id).getBoundingClientRect().top)
-      )
-    );
-    expect(Math.max(...tops) - Math.min(...tops)).toBeLessThanOrEqual(4);
-    await expect(page.locator("#btn-account .door-name")).toBeVisible();
-  });
+  for (const width of [1024, 1280]) {
+    for (const state of ["trial", "ending"]) {
+      test(`${width}px, ${state}: a desktop header holds a long name and a plan on one row, beside the title`, async ({ page }) => {
+        // With the old pill and "Suscripción" side by side, a signed-in trial
+        // wrapped the 1280px header onto a second row. Later, a long name and
+        // "Pro · termina en 10 días" still dropped the whole row of controls
+        // under the title on a 1024px laptop (74px to 130px): every control
+        // shared one top, so only the title's position gives it away.
+        await page.setViewportSize({ width, height: 800 });
+        const license = await mintLicense({ origin: BASE });
+        await install(page, { ...STATES[state], account: member({ displayName: "Maximiliano Alejandro de la Torre" }) }, license);
+        await boot(page);
+        await expect(page.locator("#btn-pricing")).not.toHaveAttribute("data-plan", "free");
+        const g = await page.evaluate(() => {
+          const rect = (el) => el.getBoundingClientRect();
+          const ids = ["btn-nav-home", "btn-account", "btn-pricing", "btn-lang", "btn-tour"];
+          const boxes = ids.map((id) => rect(document.getElementById(id)));
+          return {
+            tops: boxes.map((b) => Math.round(b.top)),
+            rowTop: Math.min(...boxes.map((b) => b.top)),
+            rowBottom: Math.max(...boxes.map((b) => b.bottom)),
+            brand: rect(document.querySelector(".brand")),
+            header: rect(document.querySelector("header.app-header")).height
+          };
+        });
+        expect(Math.max(...g.tops) - Math.min(...g.tops)).toBeLessThanOrEqual(4);
+        // The title sits beside the controls, not above them.
+        expect(g.brand.bottom).toBeGreaterThan(g.rowTop);
+        expect(g.brand.top).toBeLessThan(g.rowBottom);
+        expect(g.header).toBeLessThanOrEqual(90);
+        await expect(page.locator("#btn-account .door-name")).toBeVisible();
+      });
+    }
+  }
 
   test("the account panel names its plan button for what it opens", async ({ page }) => {
     const license = await mintLicense({ origin: BASE });

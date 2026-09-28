@@ -127,7 +127,8 @@ body.view-exercise .main {
 body.view-exercise .header-actions .btn-sm {
   min-height: 32px;
   padding: 0.24rem 0.5rem;
-  font-size: 0.74rem;
+  /* 12px, the project's text floor (0.74rem drew 11.84px). */
+  font-size: 0.75rem;
 }
 /* Exercise: hide low-priority chrome so stage owns the fold */
 body.view-exercise #btn-history,
@@ -7461,5 +7462,28 @@ body.view-exercise .door-avatar {
     overflow: hidden;
     clip-path: inset(50%);
     white-space: nowrap;
+  }
+}
+@media (min-width: 1000px), (max-height: 500px) and (min-width: 800px) {
+  /* Signed in with a long name and a plan label ("Pro · termina en 10 días"),
+     the controls outgrew the space beside the title and the whole row
+     dropped under it: a 74px header became 130px. Here the controls keep
+     their row and the title takes what is left: the tagline goes first, then
+     the name wraps onto a second line beside the mark. */
+  body:not(.view-exercise) .header-inner {
+    flex-wrap: nowrap;
+  }
+  body:not(.view-exercise) .brand {
+    flex: 1 1 0;
+    min-width: 0;
+    container-type: inline-size;
+  }
+  body:not(.view-exercise) .header-actions {
+    flex: 0 0 auto;
+  }
+}
+@container (max-width: 20rem) {
+  .brand p {
+    display: none;
   }
 }

@@ -60,6 +60,7 @@ async function wire(page, worker, session, options) {
         if (!fresh) return;
         localStorage.removeItem("vt_license_v1");
         localStorage.removeItem("vt_billing_v1");
+        localStorage.removeItem("vt_account_plan_v1");
         if (rec) localStorage.setItem("vt_account_session_v1", JSON.stringify(rec));
         else localStorage.removeItem("vt_account_session_v1");
       } catch {
@@ -115,6 +116,17 @@ async function studioIsPro(page) {
     await window.VTAccount.refresh();
     return window.VTBilling.isPro();
   });
+}
+
+/**
+ * Open the tester's account panel, where the plan line is. Written against
+ * what the guide tells an admin to look for, so it holds whichever header
+ * wording is live: the header names a gift ("Regalo", "Pro de regalo"), and
+ * the panel says "Pro de regalo · termina el …" or "Plan gratis".
+ */
+async function openAccountPanel(page) {
+  if (!(await page.locator("#account-plan").isVisible())) await page.click("#btn-account");
+  await expect(page.locator("#account-plan")).toBeVisible();
 }
 
 async function lookUp(page, email) {
@@ -215,6 +227,11 @@ test.describe("Admin page", () => {
     const anaCtx = await browser.newContext();
     const studio = await openStudio(anaCtx, worker, ana);
     await expect.poll(() => studioIsPro(studio)).toBe(true);
+    // What she sees, as the guide describes it: the header names the gift and
+    // her account panel says when it ends.
+    await expect(studio.locator(".app-header")).toContainText(/regalo/i);
+    await openAccountPanel(studio);
+    await expect(studio.locator("#account-plan")).toHaveText(/^Pro de regalo · termina el /);
 
     // Looking her up again now shows she has signed in.
     await lookUp(page, "ana.tester@example.com");
@@ -234,6 +251,7 @@ test.describe("Admin page", () => {
     const brunoCtx = await browser.newContext();
     const studio = await openStudio(brunoCtx, worker, bruno);
     await expect.poll(() => studioIsPro(studio)).toBe(true);
+    await expect(studio.locator(".app-header")).toContainText(/regalo/i);
 
     const adminCtx = await browser.newContext();
     const page = await openAdmin(adminCtx, worker, admin);
@@ -268,8 +286,38 @@ test.describe("Admin page", () => {
     await studio.reload({ waitUntil: "domcontentloaded" });
     await studio.waitForFunction(() => !!window.VTBilling);
     await expect.poll(() => studioIsPro(studio)).toBe(false);
+    // What he sees: no gift in the header, "Plan gratis" in his panel. Removing
+    // a gift does not use up the free trial, so he is now offered it; the guide
+    // says so and how to stop it.
+    await expect(studio.locator(".app-header")).not.toContainText(/regalo/i);
+    await openAccountPanel(studio);
+    await expect(studio.locator("#account-plan")).toHaveText("Plan gratis");
+    await expect(studio.locator("#btn-account-trial")).toHaveText("Empezar 7 días gratis");
+    expect(await studio.evaluate(() => localStorage.getItem("vt_account_plan_v1"))).toBeNull();
     await adminCtx.close();
     await brunoCtx.close();
+  });
+
+  test("blocking the free trial after removing a gift, with the guide's SQL", async ({ browser }) => {
+    const { worker, adminToken } = await startWorker();
+    const bruno = await worker.signIn("bruno.tester@example.com");
+    await worker.call("POST", "/v1/admin/grants", { token: adminToken, body: { email: "bruno.tester@example.com", days: 30 } });
+    const look = await worker.call("GET", "/v1/admin/account?email=bruno.tester@example.com", { token: adminToken });
+    const grantId = look.body.grants[0].id;
+    await worker.call("POST", "/v1/admin/grants/revoke", { token: adminToken, body: { grantId } });
+    // docs/ADMIN-GUIDE.md section 2, with the address in lower case and padded
+    // the way people paste it.
+    const email = " Bruno.Tester@example.com ";
+    await worker.sql("UPDATE accounts SET trial_used_at = unixepoch() WHERE email_normalized = lower(trim(?1))", email);
+    const ctx = await browser.newContext();
+    const studio = await openStudio(ctx, worker, bruno);
+    await studio.evaluate(() => window.VTAccount.refresh());
+    await openAccountPanel(studio);
+    await expect(studio.locator("#account-plan")).toHaveText("Plan gratis");
+    await expect(studio.locator("#btn-account-trial")).toBeHidden();
+    const trial = await worker.call("POST", "/v1/me/trial", { token: bruno.token });
+    expect(trial.status).toBe(409);
+    await ctx.close();
   });
 
   test("remove a free trial: it stays used, so no second trial is offered", async ({ browser }) => {
@@ -281,7 +329,7 @@ test.describe("Admin page", () => {
     const adminCtx = await browser.newContext();
     const page = await openAdmin(adminCtx, worker, admin);
     await lookUp(page, "carla@example.com");
-    await expect(page.locator("#lookup-result")).toContainText("Ya usó su mes de prueba");
+    await expect(page.locator("#lookup-result")).toContainText("Ya usó su prueba gratis");
     const row = page.locator("[data-testid=grants-table] tbody tr").first();
     await expect(row).toContainText("Prueba gratis");
     page.once("dialog", (dialog) => dialog.accept());
@@ -568,9 +616,13 @@ test.describe("Admin page", () => {
 
   test("maintenance: server status and clean-up", async ({ browser }) => {
     const { worker, admin } = await startWorker();
-    // An expired session for clean-up to remove.
+    // An expired session, and one browser's statistics from 200 days ago next
+    // to one from today, for clean-up to sort.
     const old = await worker.signIn("old@example.com", { at: worker.now() - 200 * DAY });
     expect(old.token).toBeTruthy();
+    const insertEvent = "INSERT INTO events (received_at, cid, name, day, tz, props) VALUES (?1, ?2, 'app_open', NULL, NULL, '{}')";
+    await worker.sql(insertEvent, worker.now() - 200 * DAY, "oldbrowser1");
+    await worker.sql(insertEvent, worker.now() - DAY, "newbrowser1");
     const adminCtx = await browser.newContext();
     const page = await openAdmin(adminCtx, worker, admin);
     const health = page.locator("#health-list");
@@ -578,14 +630,132 @@ test.describe("Admin page", () => {
     await expect(health).toContainText("Firma de licencias Pro: activo");
     await expect(health).toContainText("Entrar con Google: activo");
     await expect(health).toContainText("Entrar con código por correo: apagado");
+    await expect(health).toContainText("Estadísticas anónimas: activo");
+    await expect(health).toContainText("Prueba gratis: 7 días");
     await expect(health).toContainText(`Sitio permitido: ${BASE}`);
+    await expect(page.locator("#maintenance")).toContainText("04:17");
 
     const before = await worker.env.DB.prepare("SELECT COUNT(*) AS n FROM sessions").first();
     await page.click("#sweep-run");
     await expect(page.locator("#sweep-result")).toHaveText("Limpieza hecha.");
     const after = await worker.env.DB.prepare("SELECT COUNT(*) AS n FROM sessions").first();
     expect(Number(after.n)).toBe(Number(before.n) - 1);
+    const left = await worker.env.DB.prepare("SELECT cid FROM events ORDER BY cid").all();
+    expect(left.results.map((r) => r.cid)).toEqual(["newbrowser1"]);
     await adminCtx.close();
+  });
+
+  test("maintenance: an old worker's missing statistics field reads as 'redeploy', not as off", async ({ browser }) => {
+    const { worker, admin } = await startWorker();
+    const adminCtx = await browser.newContext();
+    const page = await adminCtx.newPage();
+    await wire(page, worker, admin);
+    // The shape the worker had before statistics: no eventsEnabled, 30-day trial.
+    await page.route(`${API}/v1/health`, async (route) => {
+      const res = await worker.fetch(new Request(`${API}/v1/health`, { headers: { origin: BASE } }));
+      const body = await res.json();
+      delete body.eventsEnabled;
+      body.authMethods.trialDays = 30;
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+    });
+    await page.goto(`${BASE}/admin.html`, { waitUntil: "domcontentloaded" });
+    const health = page.locator("#health-list");
+    await expect(health).toContainText("Estadísticas anónimas: no informado (servidor antiguo: redespliégalo, guía 8.7)");
+    await expect(health).toContainText("Prueba gratis: 30 días");
+    await expect(health.locator("li", { hasText: "Estadísticas anónimas" })).toHaveAttribute("data-tone", "error");
+    await adminCtx.close();
+  });
+
+  test("statistics: the funnel and arrivals, read without adding to them", async ({ browser }) => {
+    const { seedStats } = await localWorkerModule();
+    const { worker, admin } = await startWorker();
+    await seedStats(worker);
+    const before = await worker.env.DB.prepare("SELECT COUNT(*) AS n FROM events").first();
+    const log = [];
+    const adminCtx = await browser.newContext();
+    const page = await openAdmin(adminCtx, worker, admin, { log });
+    // Nothing is read until asked, and the page carries no statistics code.
+    await expect(page.locator("#stats-result")).toBeEmpty();
+    expect(await page.evaluate(() => typeof window.VTAnalytics)).toBe("undefined");
+    await expect(page.locator('#stats [data-window="28"]')).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator('#stats [data-window="28"]')).toHaveText("28 días");
+
+    await page.click("#stats-load");
+    const result = page.locator("#stats-result");
+    await expect(result).toContainText("Últimos 28 días · 40 navegadores");
+    const rows = result.locator(".admin-funnel tbody tr");
+    await expect(rows).toHaveCount(8);
+    await expect(rows.nth(0)).toContainText("abrió el sitio");
+    await expect(rows.nth(1)).toContainText("abrió el panel de cuenta");
+    await expect(rows.nth(1)).toContainText("35.0 %");
+    await expect(result).toContainText("Google bloqueado en ese navegador: 2");
+    await expect(result).toContainText("le pedimos entrar primero: 1");
+    await expect(result).toContainText("Último evento guardado:");
+    await expect(result).toContainText("borrados a petición: 1");
+    await expect(result).toContainText("navegador que pide no ser rastreado: 1");
+    expect(log.filter((r) => r.path === "/v1/admin/funnel")).toHaveLength(1);
+
+    // Another window re-reads; the language switch redraws what was read.
+    await page.click('#stats [data-window="7"]');
+    await expect(page.locator('#stats [data-window="7"]')).toHaveAttribute("aria-pressed", "true");
+    await expect(result).toContainText("Últimos 7 días");
+    await page.click("#admin-lang");
+    await expect(result).toContainText("Last 7 days · 40 browsers");
+    await expect(result).toContainText("opened the account panel");
+    await expect(result).toContainText("deleted on request: 1");
+
+    // Looking changed nothing: no event route was called and no row was added.
+    expect(log.some((r) => r.path.startsWith("/v1/events") || r.path === "/v1/geo")).toBe(false);
+    const after = await worker.env.DB.prepare("SELECT COUNT(*) AS n FROM events").first();
+    expect(Number(after.n)).toBe(Number(before.n));
+    await adminCtx.close();
+  });
+
+  test("statistics: an empty window, a member, and a worker without the route", async ({ browser }) => {
+    const { worker, admin } = await startWorker();
+    const adminCtx = await browser.newContext();
+    const page = await openAdmin(adminCtx, worker, admin);
+    await page.click("#stats-load");
+    await expect(page.locator("#stats-result")).toContainText("Todavía no hay datos en este periodo");
+    await expect(page.locator("#stats-result")).toContainText("Todavía no se ha guardado ningún evento");
+
+    // The route itself refuses anyone not on ADMIN_EMAILS.
+    const ana = await worker.signIn("ana.tester@example.com");
+    const denied = await worker.call("GET", "/v1/admin/funnel", { token: ana.token });
+    expect(denied.status).toBe(403);
+
+    // A worker from before the statistics answers 404: say what to do.
+    await page.route(`${API}/v1/admin/funnel**`, (route) =>
+      route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ ok: false, reason: "not_found" }) })
+    );
+    await page.click("#stats-load");
+    await expect(page.locator("#stats-result")).toHaveText(/Redespliega el worker \(guía, sección 8\.7\)/);
+    await adminCtx.close();
+  });
+
+  test("the sandbox's trial length is the one wrangler.toml deploys", async () => {
+    const fs = require("fs");
+    const toml = fs.readFileSync(path.join(__dirname, "..", "workers", "entitlements", "wrangler.toml"), "utf8");
+    const deployed = /^TRIAL_DAYS\s*=\s*"(\d+)"/m.exec(toml);
+    expect(deployed).not.toBeNull();
+    const { worker } = await startWorker();
+    const methods = await worker.call("GET", "/v1/auth/methods");
+    expect(String(methods.body.trialDays)).toBe(deployed[1]);
+  });
+
+  test("admin.html loads the same versions of shared files as the studio", async () => {
+    const fs = require("fs");
+    const read = (name) => fs.readFileSync(path.join(__dirname, "..", name), "utf8");
+    const stamps = (html) => {
+      const out = {};
+      for (const m of html.matchAll(/(?:src|href)="((?:js|css)\/[\w.-]+)\?v=([\w]+)"/g)) out[m[1]] = m[2];
+      return out;
+    };
+    const studio = stamps(read("index.html"));
+    const admin = stamps(read("admin.html"));
+    const shared = Object.keys(admin).filter((file) => studio[file]);
+    expect(shared).toEqual(expect.arrayContaining(["css/styles.css", "js/billing-config.js", "js/account.js"]));
+    for (const file of shared) expect(`${file}?v=${admin[file]}`).toBe(`${file}?v=${studio[file]}`);
   });
 
   test("works in English too", async ({ browser }) => {
@@ -595,7 +765,9 @@ test.describe("Admin page", () => {
     const page = await openAdmin(adminCtx, worker, admin, { lang: "en" });
     await expect(page.locator("h1")).toHaveText("Admin panel");
     await expect(page.locator(".admin-jump")).toHaveAttribute("aria-label", "Sections");
-    await expect(page.locator(".admin-chips")).toHaveAttribute("aria-label", "Days");
+    await expect(page.locator("#give .admin-chips")).toHaveAttribute("aria-label", "Days");
+    await expect(page.locator("#stats .admin-chips")).toHaveAttribute("aria-label", "Period");
+    await expect(page.locator('#stats [data-window="28"]')).toHaveText("28 days");
     await lookUp(page, "ana.tester@example.com");
     await expect(page.getByRole("button", { name: "Remove access" })).toBeVisible();
     await expect(page.locator("[data-testid=lookup-status]")).toContainText("Has Pro until");
@@ -609,9 +781,13 @@ test.describe("Admin page", () => {
     const { worker, adminToken, admin } = await startWorker();
     await worker.call("POST", "/v1/admin/grants", { token: adminToken, body: { email: "ana.tester@example.com", days: 30, note: "Beta" } });
     await worker.call("POST", "/v1/admin/gift-codes", { token: adminToken, body: { days: 30, maxRedemptions: 5, note: "Coro" } });
+    const { seedStats } = await localWorkerModule();
+    await seedStats(worker);
     const ctx = await browser.newContext({ viewport: { width: 375, height: 740 }, isMobile: true, hasTouch: true });
     const page = await openAdmin(ctx, worker, admin);
     await lookUp(page, "ana.tester@example.com");
+    await page.click("#stats-load");
+    await expect(page.locator("#stats-result .admin-funnel")).toBeVisible();
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     expect(overflow).toBeLessThanOrEqual(0);
     const small = await page.evaluate(() =>

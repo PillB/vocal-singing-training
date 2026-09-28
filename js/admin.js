@@ -27,7 +27,7 @@
       retry: "Reintentar",
       gateSignedOut: "Entra con la cuenta de Google de administrador.",
       gateGoogleBlocked: "El botón de Google no cargó (a veces lo bloquea una extensión).",
-      gateUseApp: "Entra desde el estudio, en Cuenta, y vuelve a esta página.",
+      gateUseApp: "Entra en el estudio con el botón «Entrar» de arriba y vuelve a esta página.",
       gateNotAdmin:
         "Esta cuenta no es administradora. Si debería serlo, su correo tiene que estar en la lista ADMIN_EMAILS del servidor (ver la guía de admin).",
       gateNotAdminWho: "Entraste como {email}.",
@@ -35,6 +35,7 @@
       navLookup: "Buscar",
       navGive: "Dar Pro",
       navCodes: "Códigos",
+      navStats: "Estadísticas",
       navMaintenance: "Mantenimiento",
       navLabel: "Secciones",
       lookupTitle: "Buscar una cuenta",
@@ -50,7 +51,7 @@
       giveSubmit: "Dar Pro",
       codesTitle: "Códigos de regalo",
       codesHelp:
-        "Quien recibe el código lo escribe en Cuenta → «¿Tienes un código de regalo?». Sus días cuentan desde que lo canjea.",
+        "Quien recibe el código entra en el estudio con «Entrar» y lo escribe en «¿Tienes un código de regalo?». Sus días cuentan desde que lo canjea.",
       codeSubmit: "Crear código",
       copyCode: "Copiar código",
       copyMessage: "Copiar mensaje para enviar",
@@ -62,7 +63,7 @@
       healthRefresh: "Comprobar de nuevo",
       sweepTitle: "Limpiar datos vencidos",
       sweepHelp:
-        "Borra sesiones vencidas, códigos de entrada usados y contadores viejos. No toca cuentas, regalos ni progreso.",
+        "Borra sesiones vencidas, códigos de entrada usados, contadores viejos y estadísticas de más de 180 días. El servidor lo hace solo cada día a las 04:17 (hora de Lima); este botón lo hace ahora. No toca cuentas, regalos ni progreso.",
       sweepRun: "Limpiar ahora",
       guideLink: "Guía de admin (paso a paso)",
 
@@ -89,10 +90,10 @@
       via: "por {source}",
       created: "Cuenta creada el {date}",
       adminBadge: "Admin",
-      trialUsed: "Ya usó su mes de prueba (no puede empezar otro)",
-      trialFree: "No ha usado su mes de prueba",
+      trialUsed: "Ya usó su prueba gratis (no puede empezar otra)",
+      trialFree: "No ha usado su prueba gratis",
       neverSignedIn:
-        "Nunca ha entrado con este correo. Si dice que ya entró, lo hizo con otra dirección: pídele que te diga el correo que ve en Cuenta.",
+        "Nunca ha entrado con este correo. Si dice que ya entró, lo hizo con otra dirección: pídele que abra su cuenta (arriba a la derecha) y te lea el correo que aparece tras «Sesión iniciada como».",
       signedInWith: "Entra con {methods} · última vez: {date}",
       signedInWithNoDate: "Entra con {methods}",
       activeSessions: "Sesiones abiertas: {n}",
@@ -141,7 +142,7 @@
         "Se guardó el regalo, pero {email} ya tenía acceso hasta el {date}, así que su fecha final no cambia.",
       codeCreated: "Código creado: {days} días, {uses} uso(s).",
       codeMessage:
-        "Te regalo {days} días de Estudio Vocal Pro. Entra en {url} , toca Cuenta, entra con Google y escribe este código en «¿Tienes un código de regalo?»: {code}",
+        "Te regalo {days} días de Estudio Vocal Pro. Entra en {url} , toca «Entrar» (arriba a la derecha), entra con Google, escribe este código en «¿Tienes un código de regalo?» y pulsa «Canjear»: {code}",
       copied: "Copiado.",
       copyFailed: "No se pudo copiar. Selecciónalo y cópialo a mano.",
       noCodes: "Todavía no hay códigos.",
@@ -158,11 +159,40 @@
       healthGoogle: "Entrar con Google",
       healthEmail: "Entrar con código por correo",
       healthPayments: "Pagos (Mercado Pago o Stripe)",
+      healthEvents: "Estadísticas anónimas",
+      healthTrial: "Prueba gratis: {n} días",
+      healthOld: "no informado (servidor antiguo: redespliégalo, guía 8.7)",
       healthOrigin: "Sitio permitido: {origin}",
       healthOn: "activo",
       healthOff: "apagado",
       healthUnreachable: "No se pudo leer el estado del servidor.",
       sweepDone: "Limpieza hecha.",
+      statsTitle: "Estadísticas",
+      statsLead:
+        "Cuánta gente pasa de un paso al siguiente al entrar y probar Pro. Cuenta navegadores, nunca personas, y no es una prueba A/B. Este panel no envía estadísticas, así que mirarlo no las cambia.",
+      statsWindow: "Periodo",
+      statsDays: "{n} días",
+      statsLoad: "Leer estadísticas",
+      statsLoading: "Leyendo…",
+      statsMissing: "El servidor aún no tiene esta función. Redespliega el worker (guía, sección 8.7).",
+      funnelTitle: "Embudo de cuentas",
+      funnelEmpty: "Todavía no hay datos en este periodo. Aparecen cuando alguien visita el sitio.",
+      funnelWindow: "Últimos {n} días · {browsers} navegadores",
+      funnelStepHead: "Paso",
+      funnelNHead: "Navegadores",
+      funnelOfHead: "De",
+      funnelRateHead: "Pasan",
+      funnelRangeHead: "Margen (95 %)",
+      funnelStates: "Al abrir el panel de cuenta, qué vio la gente",
+      funnelOutcomes: "Al pulsar la prueba, qué pasó",
+      funnelNote:
+        "Cada porcentaje es una sola proporción con su margen, condicionada al paso anterior. Sirve para encontrar un paso por el que nadie pasa, no para medir una mejora de unos puntos. «Recibió respuesta» pasa casi siempre por construcción: mira qué pasó al pulsar la prueba, sobre todo «le pedimos entrar primero».",
+      ingestTitle: "Llegada de estadísticas (últimos 7 días)",
+      ingestLast: "Último evento guardado: {date}",
+      ingestNone: "Todavía no se ha guardado ningún evento.",
+      ingestOff: "El servidor tiene las estadísticas apagadas (EVENTS_ENABLED).",
+      ingestHint:
+        "«Otro sitio» mayor que cero suele ser SITE_ORIGIN mal puesto. «Borrados a petición» es alguien que pulsó «No enviar y borrar lo enviado».",
       notSet: "—"
     },
     en: {
@@ -178,7 +208,7 @@
       retry: "Try again",
       gateSignedOut: "Sign in with the admin Google account.",
       gateGoogleBlocked: "Google's button did not load (an extension sometimes blocks it).",
-      gateUseApp: "Sign in from the studio, under Account, then come back to this page.",
+      gateUseApp: "Sign in on the studio with the “Sign in” button at the top, then come back to this page.",
       gateNotAdmin:
         "This account is not an admin. If it should be, its address has to be on the server's ADMIN_EMAILS list (see the admin guide).",
       gateNotAdminWho: "Signed in as {email}.",
@@ -186,6 +216,7 @@
       navLookup: "Look up",
       navGive: "Give Pro",
       navCodes: "Codes",
+      navStats: "Statistics",
       navMaintenance: "Maintenance",
       navLabel: "Sections",
       lookupTitle: "Look up an account",
@@ -201,7 +232,7 @@
       giveSubmit: "Give Pro",
       codesTitle: "Gift codes",
       codesHelp:
-        "Whoever gets the code types it under Account → “Have a gift code?”. Their days count from when they redeem it.",
+        "Whoever gets the code signs in on the studio with “Sign in” and types it under “Have a gift code?”. Their days count from when they redeem it.",
       codeSubmit: "Create code",
       copyCode: "Copy code",
       copyMessage: "Copy message to send",
@@ -213,7 +244,7 @@
       healthRefresh: "Check again",
       sweepTitle: "Clean up expired data",
       sweepHelp:
-        "Deletes expired sessions, used sign-in codes and old counters. Accounts, gifts and progress are untouched.",
+        "Deletes expired sessions, used sign-in codes, old counters and statistics older than 180 days. The server does this by itself every day at 04:17 Lima time; this button does it now. Accounts, gifts and progress are untouched.",
       sweepRun: "Clean up now",
       guideLink: "Admin guide (step by step)",
 
@@ -240,10 +271,10 @@
       via: "from {source}",
       created: "Account created {date}",
       adminBadge: "Admin",
-      trialUsed: "Has used the free trial month (cannot start another)",
-      trialFree: "Has not used the free trial month",
+      trialUsed: "Has used the free trial (cannot start another)",
+      trialFree: "Has not used the free trial",
       neverSignedIn:
-        "Has never signed in with this address. If they say they did, they used a different one: ask for the address shown under Account.",
+        "Has never signed in with this address. If they say they did, they used a different one: ask them to open their account (top right) and read you the address after “Signed in as”.",
       signedInWith: "Signs in with {methods} · last seen: {date}",
       signedInWithNoDate: "Signs in with {methods}",
       activeSessions: "Open sessions: {n}",
@@ -292,7 +323,7 @@
         "The gift was saved, but {email} already had access until {date}, so their end date does not change.",
       codeCreated: "Code created: {days} days, {uses} use(s).",
       codeMessage:
-        "Here are {days} days of Vocal Studio Pro. Go to {url} , tap Account, sign in with Google and type this code under “Have a gift code?”: {code}",
+        "Here are {days} days of Vocal Studio Pro. Go to {url} , tap “Sign in” (top right), sign in with Google, type this code under “Have a gift code?” and press “Redeem”: {code}",
       copied: "Copied.",
       copyFailed: "Could not copy. Select it and copy it by hand.",
       noCodes: "No codes yet.",
@@ -309,14 +340,145 @@
       healthGoogle: "Sign in with Google",
       healthEmail: "Sign in with an emailed code",
       healthPayments: "Payments (Mercado Pago or Stripe)",
+      healthEvents: "Anonymous statistics",
+      healthTrial: "Free trial: {n} days",
+      healthOld: "not reported (old server: redeploy it, guide 8.7)",
       healthOrigin: "Allowed site: {origin}",
       healthOn: "on",
       healthOff: "off",
       healthUnreachable: "Could not read the server status.",
       sweepDone: "Clean-up done.",
+      statsTitle: "Statistics",
+      statsLead:
+        "How many people get from one step to the next when signing in and trying Pro. It counts browsers, never people, and it is not an A/B test. This panel sends no statistics, so looking does not change them.",
+      statsWindow: "Period",
+      statsDays: "{n} days",
+      statsLoad: "Read statistics",
+      statsLoading: "Reading…",
+      statsMissing: "The server does not have this yet. Redeploy the worker (guide, section 8.7).",
+      funnelTitle: "Account funnel",
+      funnelEmpty: "No data in this period yet. It appears once somebody visits the site.",
+      funnelWindow: "Last {n} days · {browsers} browsers",
+      funnelStepHead: "Step",
+      funnelNHead: "Browsers",
+      funnelOfHead: "Of",
+      funnelRateHead: "Pass",
+      funnelRangeHead: "Margin (95%)",
+      funnelStates: "What people saw when the account panel opened",
+      funnelOutcomes: "What happened when people pressed the trial",
+      funnelNote:
+        "Each percentage is one proportion with its margin, conditional on the step before it. It finds a step nobody gets through; it cannot measure an improvement of a few points. “Got an answer” passes almost always by construction: read what happened when people pressed the trial, above all “we asked them to sign in first”.",
+      ingestTitle: "Statistics arriving (last 7 days)",
+      ingestLast: "Last event stored: {date}",
+      ingestNone: "No event has been stored yet.",
+      ingestOff: "The server has statistics switched off (EVENTS_ENABLED).",
+      ingestHint:
+        "“Another site” above zero usually means SITE_ORIGIN is wrong. “Deleted on request” is someone who pressed “Stop sending and delete what was sent”.",
       notSet: "—"
     }
   };
+
+  /**
+   * Names for what the worker's funnel and ingest counters report. This page
+   * loads no js/i18n.js, so the funnel's step, state and outcome names are
+   * copied from there (the `funnel.*` keys); keep the two in step. A key the
+   * table lacks shows as the worker sent it, never as nothing.
+   */
+  const STATS_LABELS = {
+    es: {
+      steps: {
+        app_open: "abrió el sitio",
+        account_panel_open: "abrió el panel de cuenta",
+        signin_start: "empezó a entrar",
+        signin_success: "entró",
+        trial_cta_view: "vio la oferta de prueba",
+        trial_click: "la pulsó",
+        trial_result: "recibió respuesta",
+        trial_first_practice: "practicó con la prueba"
+      },
+      states: {
+        signed_in: "ya había entrado",
+        not_configured: "cuentas apagadas",
+        checking: "aún preguntando",
+        unreachable: "servidor sin respuesta",
+        blocked: "Google bloqueado en ese navegador",
+        offered: "podía entrar",
+        no_method: "sin forma de entrar"
+      },
+      outcomes: {
+        started: "la prueba empezó",
+        needs_account: "le pedimos entrar primero",
+        trial_used: "ya la había usado",
+        used: "ya la había usado en este navegador",
+        already_active: "ya estaba activa",
+        disabled: "prueba apagada",
+        offline: "sin conexión",
+        error: "error del servidor"
+      },
+      ingest: {
+        accepted: "guardados",
+        dropped: "descartados por mal formados",
+        forget: "borrados a petición",
+        eu_no_consent: "sin permiso (Europa)",
+        opted_out: "navegador que pide no ser rastreado",
+        automated: "navegadores automáticos",
+        origin_not_allowed: "otro sitio",
+        rate_limited: "demasiados seguidos"
+      }
+    },
+    en: {
+      steps: {
+        app_open: "opened the site",
+        account_panel_open: "opened the account panel",
+        signin_start: "started signing in",
+        signin_success: "signed in",
+        trial_cta_view: "saw the trial offer",
+        trial_click: "pressed it",
+        trial_result: "got an answer",
+        trial_first_practice: "practised on the trial"
+      },
+      states: {
+        signed_in: "already signed in",
+        not_configured: "accounts switched off",
+        checking: "still asking",
+        unreachable: "server did not answer",
+        blocked: "Google blocked in that browser",
+        offered: "could sign in",
+        no_method: "no way in"
+      },
+      outcomes: {
+        started: "the trial started",
+        needs_account: "we asked them to sign in first",
+        trial_used: "already used it",
+        used: "already used it in this browser",
+        already_active: "already running",
+        disabled: "trial switched off",
+        offline: "offline",
+        error: "server error"
+      },
+      ingest: {
+        accepted: "stored",
+        dropped: "dropped as malformed",
+        forget: "deleted on request",
+        eu_no_consent: "no consent (Europe)",
+        opted_out: "browser asks not to be tracked",
+        automated: "automated browsers",
+        origin_not_allowed: "another site",
+        rate_limited: "too many at once"
+      }
+    }
+  };
+
+  /**
+   * Name one funnel or ingest value in the page's language.
+   * @param {string} group steps, states, outcomes or ingest.
+   * @param {string} key The worker's key.
+   * @returns {string} Label.
+   */
+  function statsLabel(group, key) {
+    const table = (STATS_LABELS[lang] || STATS_LABELS.es)[group] || {};
+    return table[key] || String(key);
+  }
 
   const LANG_KEY = "vt_lang";
   let lang = "es";
@@ -550,7 +712,10 @@
     lookupSeq += 1;
     lastLookup = null;
     newestCode = null;
+    statsSeq += 1;
+    statsData = null;
     $("#lookup-result")?.replaceChildren();
+    $("#stats-result")?.replaceChildren();
     ["#give-result", "#code-result", "#code-copy-status", "#sweep-result"].forEach((sel) => setMessage($(sel), "", ""));
     const box = $("#code-new");
     if (box) box.hidden = true;
@@ -1050,18 +1215,27 @@
       [t("healthSigning"), !!h.signingKeyConfigured],
       [t("healthGoogle"), !!methods.google],
       [t("healthEmail"), !!methods.email],
-      [t("healthPayments"), !!(h.mercadopagoConfigured || h.stripeConfigured)]
+      [t("healthPayments"), !!(h.mercadopagoConfigured || h.stripeConfigured)],
+      // A worker built before the statistics existed sends no such field, which
+      // is a different answer from "switched off" and needs a redeploy, not a
+      // setting.
+      [t("healthEvents"), h.eventsEnabled === undefined ? null : !!h.eventsEnabled]
     ];
-    list.replaceChildren(
+    const trialDays = Number(methods.trialDays);
+    const items = [
       ...rows.map(([label, on]) =>
-        el("li", { "data-tone": on ? "on" : "off" }, [
+        el("li", { "data-tone": on === null ? "error" : on ? "on" : "off" }, [
           el("span", { className: "admin-dot", "aria-hidden": "true" }),
           `${label}: `,
-          el("strong", { text: on ? t("healthOn") : t("healthOff") })
+          el("strong", { text: on === null ? t("healthOld") : on ? t("healthOn") : t("healthOff") })
         ])
       ),
+      // The trial length is also the quickest way to tell which build is live:
+      // builds from before the seven-day trial answer 30.
+      trialDays > 0 ? el("li", { className: "muted", text: t("healthTrial", { n: trialDays }) }) : null,
       el("li", { className: "muted", text: t("healthOrigin", { origin: h.siteOrigin || t("notSet") }) })
-    );
+    ];
+    list.replaceChildren(...items.filter(Boolean));
   }
 
   async function sweep() {
@@ -1071,6 +1245,186 @@
     const res = await api("POST", "/v1/admin/sweep", {}, { timeoutMs: 15000 });
     if (button) button.disabled = false;
     setMessage(result, res.ok ? t("sweepDone") : failureText(res), res.ok ? "ok" : "error");
+  }
+
+  // ------------------------------------------------------------ statistics
+
+  // Read on demand, never on load: each read is two queries over the events
+  // table, and most visits here are to give or remove Pro.
+  let statsDays = 28;
+  let statsData = null;
+  let statsSeq = 0;
+
+  /**
+   * Read the funnel and the ingest counters for the chosen window.
+   *
+   * This page loads neither js/analytics.js nor js/region-gate.js, so reading
+   * the funnel from here adds nothing to it; reading it from the studio's
+   * account panel counts the admin as a visitor who opened the panel.
+   */
+  async function loadStats() {
+    const box = $("#stats-result");
+    const button = $("#stats-load");
+    if (!box) return;
+    const seq = ++statsSeq;
+    if (button) button.disabled = true;
+    box.replaceChildren(el("p", { className: "muted", text: t("statsLoading") }));
+    const [funnel, experiments] = await Promise.all([
+      api("GET", `/v1/admin/funnel?days=${statsDays}`, null, { timeoutMs: 15000 }),
+      api("GET", "/v1/admin/experiments", null, { timeoutMs: 15000 })
+    ]);
+    if (button) button.disabled = false;
+    if (seq !== statsSeq) return;
+    if (!funnel.ok || !funnel.data) {
+      statsData = null;
+      // A worker from before the statistics has no such route, and says so
+      // with a 404 rather than an error of its own.
+      const text = funnel.status === 404 ? t("statsMissing") : failureText(funnel);
+      box.replaceChildren(el("p", { className: "admin-message", "data-tone": "error", text }));
+      return;
+    }
+    statsData = {
+      funnel: funnel.data,
+      ingest: experiments.ok && experiments.data ? experiments.data.ingest || null : null,
+      ingestFailed: !experiments.ok
+    };
+    renderStats();
+  }
+
+  /** Draw what loadStats() last read, in the page's current language. */
+  function renderStats() {
+    const box = $("#stats-result");
+    if (!box || !statsData) return;
+    const data = statsData.funnel;
+    const count = (v) => Number(v || 0).toLocaleString(locale());
+    const pct = (v) =>
+      v === null || v === undefined
+        ? "–"
+        : `${(Number(v) * 100).toLocaleString(locale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 })} %`;
+    const parts = [el("h3", { text: t("funnelTitle") })];
+    const days = (data.window && data.window.days) || statsDays;
+    if (!data.browsers) {
+      parts.push(el("p", { className: "muted", text: t("funnelEmpty") }));
+    } else {
+      parts.push(el("p", { className: "muted", text: t("funnelWindow", { n: days, browsers: count(data.browsers) }) }));
+      const head = el("tr", {}, [
+        el("th", { scope: "col", text: t("funnelStepHead") }),
+        el("th", { scope: "col", text: t("funnelNHead") }),
+        el("th", { scope: "col", text: t("funnelOfHead") }),
+        el("th", { scope: "col", text: t("funnelRateHead") }),
+        el("th", { scope: "col", text: t("funnelRangeHead") })
+      ]);
+      const body = (data.steps || []).map((step) =>
+        el("tr", {}, [
+          el("th", { scope: "row", text: statsLabel("steps", step.step) }),
+          el("td", { "data-label": t("funnelNHead"), text: count(step.browsers) }),
+          el("td", { "data-label": t("funnelOfHead"), text: step.of === null || step.of === undefined ? "–" : count(step.of) }),
+          el("td", { "data-label": t("funnelRateHead"), text: pct(step.rate) }),
+          el("td", {
+            "data-label": t("funnelRangeHead"),
+            text: step.rate === null || step.rate === undefined ? "–" : `${pct(step.lo)} – ${pct(step.hi)}`
+          })
+        ])
+      );
+      parts.push(
+        el("div", { className: "admin-table-wrap" }, [
+          el("table", { className: "admin-table admin-funnel" }, [el("thead", {}, [head]), el("tbody", {}, body)])
+        ])
+      );
+      const states = Object.entries(data.panelStates || {}).filter(([, n]) => Number(n) > 0);
+      if (states.length) {
+        parts.push(el("h4", { text: t("funnelStates") }));
+        parts.push(
+          el(
+            "ul",
+            { className: "admin-counts" },
+            states.map(([key, n]) => el("li", {}, [`${statsLabel("states", key)}: `, el("strong", { text: count(n) })]))
+          )
+        );
+      }
+      const outcomes = (data.trialOutcomes || []).filter((o) => Number(o.browsers) > 0);
+      if (outcomes.length) {
+        parts.push(el("h4", { text: t("funnelOutcomes") }));
+        parts.push(
+          el(
+            "ul",
+            { className: "admin-counts" },
+            outcomes.map((o) =>
+              el("li", {}, [`${statsLabel("outcomes", o.outcome)}: `, el("strong", { text: count(o.browsers) })])
+            )
+          )
+        );
+      }
+      parts.push(el("p", { className: "muted admin-small", text: t("funnelNote") }));
+    }
+    parts.push(...ingestNodes(statsData.ingest, statsData.ingestFailed, count));
+    box.replaceChildren(...parts);
+  }
+
+  /**
+   * How statistics are arriving: the last event stored and the last week's
+   * counters. These are the only server-side proof that the delete switch and
+   * the Europe consent gate work, because the site posts without reading the
+   * answer.
+   * @param {Object|null} ingest `ingest` from /v1/admin/experiments.
+   * @param {boolean} failed Whether that read failed.
+   * @param {Function} count Number formatter.
+   * @returns {Array<HTMLElement>} Nodes.
+   */
+  function ingestNodes(ingest, failed, count) {
+    const nodes = [el("h3", { text: t("ingestTitle") })];
+    if (failed || !ingest) {
+      nodes.push(el("p", { className: "muted", text: t("healthUnreachable") }));
+      return nodes;
+    }
+    const totals = ingest.totals || {};
+    const n = (key) => Number(totals[key]) || 0;
+    const dropped = ["unknown_event", "bad_cid", "not_an_object", "body_too_large", "bad_request"].reduce(
+      (sum, key) => sum + n(key),
+      0
+    );
+    nodes.push(
+      el("p", {
+        className: "muted",
+        text: ingest.lastAcceptedAt ? t("ingestLast", { date: fmtDateTime(ingest.lastAcceptedAt) }) : t("ingestNone")
+      })
+    );
+    const rows = [
+      ["accepted", n("accepted")],
+      ["forget", n("forget")],
+      ["eu_no_consent", n("eu_no_consent")],
+      ["opted_out", n("opted_out")],
+      ["automated", n("automated")],
+      ["origin_not_allowed", n("origin_not_allowed")],
+      ["rate_limited", n("rate_limited")],
+      ["dropped", dropped]
+    ];
+    // Stored events are always listed, so a zero reads as a zero; the rest only
+    // when something happened.
+    const shown = rows.filter(([key, value]) => key === "accepted" || value > 0);
+    nodes.push(
+      el(
+        "ul",
+        { className: "admin-counts" },
+        shown.map(([key, value]) =>
+          el("li", { "data-tone": (key === "origin_not_allowed" || key === "rate_limited") && value > 0 ? "error" : "" }, [
+            `${statsLabel("ingest", key)}: `,
+            el("strong", { text: count(value) })
+          ])
+        )
+      )
+    );
+    nodes.push(el("p", { className: "muted admin-small", text: t("ingestHint") }));
+    return nodes;
+  }
+
+  /** Name each window chip in the page's language and mark the chosen one. */
+  function markStatsWindow() {
+    document.querySelectorAll("#stats [data-window]").forEach((chip) => {
+      const days = Number(chip.getAttribute("data-window"));
+      chip.textContent = t("statsDays", { n: days });
+      chip.setAttribute("aria-pressed", String(days === statsDays));
+    });
   }
 
   // ---------------------------------------------------------------- wire
@@ -1084,9 +1438,11 @@
         /* private mode */
       }
       applyStaticText();
+      markStatsWindow();
       // Redraw what was built from data in the old language.
       if (gate === "admin") {
         if (lastLookup) renderAccount(lastLookup);
+        renderStats();
         reloadCodes();
         loadHealth();
       } else {
@@ -1126,6 +1482,15 @@
     });
     $("#health-refresh")?.addEventListener("click", loadHealth);
     $("#sweep-run")?.addEventListener("click", sweep);
+    document.querySelectorAll("#stats [data-window]").forEach((chip) => {
+      chip.addEventListener("click", () => {
+        statsDays = Number(chip.getAttribute("data-window")) || 28;
+        markStatsWindow();
+        loadStats();
+      });
+    });
+    markStatsWindow();
+    $("#stats-load")?.addEventListener("click", loadStats);
   }
 
   applyStaticText();

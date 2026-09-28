@@ -7,8 +7,8 @@
          list gets an answer from the routes it calls. Keep it out of search. -->
     <meta name="robots" content="noindex, nofollow" />
     <title>Admin · Estudio Vocal</title>
-    <link rel="stylesheet" href="css/styles.css?v=20260923a" />
-    <link rel="stylesheet" href="css/admin.css?v=20260924b" />
+    <link rel="stylesheet" href="css/styles.css?v=20260924g" />
+    <link rel="stylesheet" href="css/admin.css?v=20260926a" />
   </head>
   <body class="admin-page">
     <header class="app-header">
@@ -53,7 +53,7 @@
           <div class="admin-google" id="gate-google"></div>
           <p class="muted admin-small" id="gate-google-fallback" hidden>
             <span data-t="gateGoogleBlocked">El botón de Google no cargó (a veces lo bloquea una extensión).</span>
-            <a href="./" data-t="gateUseApp">Entra desde el estudio, en Cuenta, y vuelve a esta página.</a>
+            <a href="./" data-t="gateUseApp">Entra en el estudio con el botón «Entrar» de arriba y vuelve a esta página.</a>
           </p>
           <p class="admin-error" id="gate-error" role="alert"></p>
         </div>
@@ -73,6 +73,7 @@
           <a href="#lookup" data-t="navLookup">Buscar</a>
           <a href="#give" data-t="navGive">Dar Pro</a>
           <a href="#codes" data-t="navCodes">Códigos</a>
+          <a href="#stats" data-t="navStats">Estadísticas</a>
           <a href="#maintenance" data-t="navMaintenance">Mantenimiento</a>
         </nav>
 
@@ -123,7 +124,7 @@
         <!-- 3. Gift codes, for handing out by message. -->
         <section class="admin-card" id="codes" aria-labelledby="codes-title">
           <h2 id="codes-title" data-t="codesTitle">Códigos de regalo</h2>
-          <p class="muted" data-t="codesHelp">Quien recibe el código lo escribe en Cuenta → «¿Tienes un código de regalo?». Sus días cuentan desde que lo canjea.</p>
+          <p class="muted" data-t="codesHelp">Quien recibe el código entra en el estudio con «Entrar» y lo escribe en «¿Tienes un código de regalo?». Sus días cuentan desde que lo canjea.</p>
           <form id="code-form" class="admin-form" novalidate>
             <div class="admin-row">
               <label class="field admin-days">
@@ -157,14 +158,31 @@
           <div id="code-list" class="admin-table-wrap"></div>
         </section>
 
-        <!-- 4. Health and housekeeping. -->
+        <!-- 4. The account funnel and how statistics are arriving. Read only
+             when asked, and from a page that sends none itself. -->
+        <section class="admin-card" id="stats" aria-labelledby="stats-title">
+          <h2 id="stats-title" data-t="statsTitle">Estadísticas</h2>
+          <p class="muted" data-t="statsLead">Cuánta gente pasa de un paso al siguiente al entrar y probar Pro. Cuenta navegadores, nunca personas, y no es una prueba A/B. Este panel no envía estadísticas, así que mirarlo no las cambia.</p>
+          <div class="admin-row admin-stats-controls">
+            <div class="admin-chips" role="group" aria-label="Periodo" data-t-aria="statsWindow">
+              <button type="button" class="btn btn-sm" data-window="7" aria-pressed="false">7</button>
+              <button type="button" class="btn btn-sm" data-window="28" aria-pressed="true">28</button>
+              <button type="button" class="btn btn-sm" data-window="90" aria-pressed="false">90</button>
+              <button type="button" class="btn btn-sm" data-window="180" aria-pressed="false">180</button>
+            </div>
+            <button type="button" class="btn btn-primary" id="stats-load" data-t="statsLoad">Leer estadísticas</button>
+          </div>
+          <div id="stats-result" class="admin-result" aria-live="polite"></div>
+        </section>
+
+        <!-- 5. Health and housekeeping. -->
         <section class="admin-card" id="maintenance" aria-labelledby="maintenance-title">
           <h2 id="maintenance-title" data-t="maintenanceTitle">Mantenimiento</h2>
           <h3 data-t="healthTitle">Estado del servidor</h3>
           <ul class="admin-health" id="health-list" aria-live="polite"></ul>
           <button type="button" class="btn btn-sm" id="health-refresh" data-t="healthRefresh">Comprobar de nuevo</button>
           <h3 data-t="sweepTitle">Limpiar datos vencidos</h3>
-          <p class="muted" data-t="sweepHelp">Borra sesiones vencidas, códigos de entrada usados y contadores viejos. No toca cuentas, regalos ni progreso.</p>
+          <p class="muted" data-t="sweepHelp">Borra sesiones vencidas, códigos de entrada usados, contadores viejos y estadísticas de más de 180 días. El servidor lo hace solo cada día a las 04:17 (hora de Lima); este botón lo hace ahora. No toca cuentas, regalos ni progreso.</p>
           <button type="button" class="btn btn-sm" id="sweep-run" data-t="sweepRun">Limpiar ahora</button>
           <p class="admin-message" id="sweep-result" aria-live="polite"></p>
         </section>
@@ -176,8 +194,11 @@
       </p>
     </main>
 
+    <!-- js/analytics.js and js/region-gate.js are left out on purpose: nothing
+         an admin does here should enter the funnel this page reads. Keep the
+         ?v= stamps equal to index.html's for the files both load. -->
     <script src="js/billing-config.js?v=20260924a"></script>
-    <script src="js/account.js?v=20260924b"></script>
-    <script src="js/admin.js?v=20260924b"></script>
+    <script src="js/account.js?v=20260926a"></script>
+    <script src="js/admin.js?v=20260926a"></script>
   </body>
 </html>

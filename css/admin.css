@@ -134,6 +134,11 @@
 .admin-chips .btn {
   min-width: 3.2rem;
 }
+.admin-chips .btn[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: rgba(110, 180, 232, 0.16);
+  color: var(--text);
+}
 
 .admin-message {
   margin: 0.6rem 0;
@@ -319,6 +324,33 @@
   color: #ffd0d4;
 }
 
+/* Statistics: the funnel's step names wrap instead of widening the table. */
+.admin-funnel tbody th {
+  white-space: normal;
+  font-weight: 500;
+  color: var(--text);
+}
+.admin-card h4 {
+  font-size: 0.95rem;
+  margin: 1rem 0 0.35rem;
+  color: var(--text);
+}
+.admin-counts {
+  list-style: none;
+  padding: 0;
+  margin: 0.3rem 0 0.6rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.25rem;
+  color: var(--text-muted);
+}
+.admin-counts strong {
+  color: var(--text);
+}
+.admin-counts li[data-tone="error"] {
+  color: #ffd0d4;
+}
+
 /* Phone: tables become labelled rows, so nothing needs sideways scrolling. */
 @media (max-width: 640px) {
   .admin-wrap {
@@ -341,9 +373,14 @@
   .admin-table,
   .admin-table tbody,
   .admin-table tr,
-  .admin-table td {
+  .admin-table td,
+  .admin-table tbody th {
     display: block;
     width: 100%;
+  }
+  .admin-table tbody th {
+    border: 0;
+    padding: 0.15rem 0;
   }
   .admin-table tr {
     padding: 0.5rem 0;
@@ -365,6 +402,17 @@
   }
   .admin-page .header-actions .btn-sm {
     padding: 0.3rem 0.6rem;
+  }
+}
+
+/* styles.css shrinks header buttons to 32px on short landscape screens, which
+   suits the practice stage; this page has no stage, so keep the 44px floor. */
+.admin-page .header-actions .btn-sm {
+  min-height: var(--min-tap);
+}
+@media (max-height: 500px) {
+  .admin-page .header-actions .btn-sm {
+    font-size: 0.78rem;
   }
 }
 

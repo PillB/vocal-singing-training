@@ -25,7 +25,7 @@ import { readFile } from "node:fs/promises";
 import { extname, join, normalize, resolve, dirname, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { createLocalWorker, seedBeta, PEOPLE } from "./local-worker.mjs";
+import { createLocalWorker, seedBeta, seedStats, PEOPLE } from "./local-worker.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const arg = (name, fallback) => {
@@ -150,13 +150,15 @@ function signInPage(session, next) {
   return `<!doctype html><meta charset="utf-8"><title>Entrando…</title><script>
 localStorage.setItem("vt_account_session_v1", ${js(rec)});
 localStorage.removeItem("vt_license_v1");
+localStorage.removeItem("vt_account_plan_v1");
 location.replace(${js(next)});
 </script>`;
 }
 
 /**
  * Start the sandbox: the real worker on one port, the site on another.
- * @param {{sitePort?: number, workerPort?: number, quiet?: boolean}} [options] Ports.
+ * @param {{sitePort?: number, workerPort?: number, quiet?: boolean, stats?: boolean}} [options]
+ *   Ports; `stats: false` leaves the Statistics section empty.
  * @returns {Promise<{site: string, workerUrl: string, worker: Object, seeded: Object,
  *                    people: Object, close: () => Promise<void>}>} Handle.
  */
@@ -169,11 +171,13 @@ export async function startSandbox(options) {
 
   const worker = await createLocalWorker({ origin: site });
   const seeded = await seedBeta(worker);
+  // Made-up browsers for the Statistics section; opt out with { stats: false }.
+  if (opts.stats !== false) await seedStats(worker);
   const people = {
     admin: { ...PEOPLE.admin, note: "administradora (está en ADMIN_EMAILS)" },
     ana: { ...PEOPLE.ana, note: "tester nueva, sin Pro" },
     bruno: { ...PEOPLE.bruno, note: "tester con un mes regalado" },
-    carla: { ...PEOPLE.carla, note: "usó su mes de prueba, ya venció" },
+    carla: { ...PEOPLE.carla, note: "usó su prueba gratis, ya venció" },
     diego: { ...PEOPLE.diego, note: "invitado con Pro, aún no ha entrado" }
   };
 
@@ -225,7 +229,7 @@ export async function startSandbox(options) {
     if (path === "/__sandbox/sign-out") {
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
       return res.end(
-        `<!doctype html><script>localStorage.removeItem("vt_account_session_v1");localStorage.removeItem("vt_license_v1");location.replace("/")</script>`
+        `<!doctype html><script>localStorage.removeItem("vt_account_session_v1");localStorage.removeItem("vt_license_v1");localStorage.removeItem("vt_account_plan_v1");location.replace("/")</script>`
       );
     }
     if (path === "/js/billing-config.js") {

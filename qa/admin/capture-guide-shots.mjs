@@ -51,6 +51,10 @@ async function as(who, options) {
     try {
       localStorage.setItem("vt_tour_v1", "1");
       localStorage.setItem("vt_lang", "es");
+      // Mutes toasts and upgrade nudges that would otherwise land on top of
+      // the header in some shots and not others, and keeps this browser out of
+      // the statistics the Statistics shot reads.
+      sessionStorage.setItem("vt_e2e", "1");
     } catch {
       /* ignore */
     }
@@ -74,6 +78,9 @@ async function openStudio(page) {
   await page.goto(`${sandbox.site}/`);
   await page.waitForFunction(() => !!window.VTAccount && !!window.VTBilling);
   await page.evaluate(() => window.VTAccount.refresh());
+  // The trial button names the worker's trial length, which arrives with the
+  // sign-in methods; wait for it so no shot shows the fallback label.
+  await page.waitForFunction(() => !!window.VTAccount.getState().methods?.ok);
   await page.waitForTimeout(400);
 }
 
@@ -115,7 +122,17 @@ try {
     await openStudio(page);
     await openAccountPanel(page);
     await page.locator("#account-admin-page").scrollIntoViewIfNeeded();
-    await shot(page, "01-account-panel-admin-link", "#account-modal .modal-card");
+    // From the top of the panel down to the line under the link, so the shot
+    // ends on the link rather than halfway through the gifting form below it.
+    const card = await page.locator("#account-modal .modal-card").boundingBox();
+    const help = await page.locator("#account-admin-page").locator("xpath=../following-sibling::p[1]").boundingBox();
+    const top = Math.max(card.y, 0);
+    await shot(page, "01-account-panel-admin-link", {
+      x: card.x,
+      y: top,
+      width: card.width,
+      height: Math.min(help.y + help.height + 16, card.y + card.height) - top
+    });
     await context.close();
   }
 
@@ -142,11 +159,11 @@ try {
     await shot(page, "05-lookup-after-give", "#lookup");
   }
 
-  // 4. Ana signs in and sees Pro.
+  // 4. Ana signs in and sees her gift.
   {
     const { context, page } = await as("ana");
     await openStudio(page);
-    await shot(page, "06-tester-header-pro", ".app-header");
+    await shot(page, "06-tester-header-gift", ".app-header");
     await openAccountPanel(page);
     await shot(page, "07-tester-account-pro", "#account-modal .modal-card");
     await context.close();
@@ -227,8 +244,17 @@ try {
   {
     const { page } = admin;
     await page.click("#sweep-run");
-    await page.waitForFunction(() => !document.querySelector("#sweep-result")?.hidden);
+    await page.waitForFunction(() => /Limpieza hecha/.test(document.querySelector("#sweep-result")?.textContent || ""));
     await shot(page, "17-maintenance", "#maintenance");
+  }
+
+  // 8b. Statistics, from the made-up browsers the sandbox seeds.
+  {
+    const { page } = admin;
+    await page.locator("#stats").scrollIntoViewIfNeeded();
+    await page.click("#stats-load");
+    await page.waitForSelector("#stats-result .admin-funnel");
+    await shot(page, "21-statistics", "#stats");
   }
   await admin.context.close();
 

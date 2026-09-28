@@ -50,9 +50,10 @@ async function makeKeys() {
 /**
  * Start a local worker.
  *
- * Configured like production (Google sign-in only, a 30-day trial, 72-hour
- * licences), except for the site origin and the admin list, which are the
- * sandbox's own.
+ * Configured like production (Google sign-in only, a 7-day trial, 72-hour
+ * licences, anonymous statistics on), except for the site origin and the
+ * admin list, which are the sandbox's own. tests/admin.spec.js checks the
+ * trial length against wrangler.toml, so the two cannot drift apart.
  *
  * @param {{origin: string, admins?: string, now?: () => number}} options
  *   `origin` is where the site is served from (the worker's only CORS origin
@@ -67,7 +68,8 @@ export async function createLocalWorker(options) {
     LICENSE_KEY_ID: "k1",
     LICENSE_TTL_SECONDS: "259200",
     LICENSE_PRIVATE_KEY_PKCS8_B64: keys.privateKeyB64,
-    TRIAL_DAYS: "30",
+    TRIAL_DAYS: "7",
+    EVENTS_ENABLED: "true",
     ADMIN_EMAILS: opts.admins || "admin@example.com",
     GOOGLE_CLIENT_ID,
     EMAIL_PROVIDER: "",
@@ -182,8 +184,8 @@ const DAY = 86400;
 
 /**
  * Fill the database with a small, believable beta: an admin, a tester with a
- * gifted month, one whose trial ran out, one invited who has not signed in,
- * and a gift code half used.
+ * gifted month, one whose seven-day trial ended ten days ago, one invited who
+ * has not signed in, and a gift code half used.
  * @param {Object} worker Handle from createLocalWorker.
  * @returns {Promise<{adminToken: string, tokens: Object, codes: Object}>} Sessions and codes.
  */
@@ -200,12 +202,12 @@ export async function seedBeta(worker) {
     body: { email: PEOPLE.bruno.email, days: 30, note: "Beta ronda 1" }
   });
 
-  // Carla: used her trial, which has ended.
+  // Carla: used her free trial, which ended ten days ago.
   const carla = await worker.signIn(PEOPLE.carla.email, { displayName: PEOPLE.carla.displayName, at: now - 40 * DAY });
   tokens.carla = carla.token;
   await worker.call("POST", "/v1/me/trial", { token: carla.token });
-  await worker.sql("UPDATE grants SET starts_at = ?1, ends_at = ?2 WHERE account_id = ?3 AND kind = 'trial'", now - 40 * DAY, now - 10 * DAY, carla.accountId);
-  await worker.sql("UPDATE accounts SET trial_used_at = ?1 WHERE id = ?2", now - 40 * DAY, carla.accountId);
+  await worker.sql("UPDATE grants SET starts_at = ?1, ends_at = ?2 WHERE account_id = ?3 AND kind = 'trial'", now - 17 * DAY, now - 10 * DAY, carla.accountId);
+  await worker.sql("UPDATE accounts SET trial_used_at = ?1 WHERE id = ?2", now - 17 * DAY, carla.accountId);
 
   // Diego: invited by email, has not signed in yet.
   await worker.call("POST", "/v1/admin/grants", {
@@ -225,4 +227,70 @@ export async function seedBeta(worker) {
   }
 
   return { adminToken: admin.token, tokens, codes: { group: code } };
+}
+
+/**
+ * Made-up browsers walking the account funnel, sent through the worker's own
+ * event route the way the site sends them, so the admin page's Statistics
+ * section has something to show. Forty browsers open the site and fewer get
+ * through each step; one then presses the delete switch, and one arrives with
+ * Global Privacy Control on, so both show in the arrival counters.
+ *
+ * Every id is made up and random-looking only in shape; nothing here is a
+ * real browser.
+ * @param {Object} worker Handle from createLocalWorker.
+ * @returns {Promise<{accepted: number}>} Events the worker kept.
+ */
+export async function seedStats(worker) {
+  const origin = worker.env.SITE_ORIGIN;
+  const post = async (path, body, extra) => {
+    const response = await worker.fetch(
+      new Request(`http://worker.local${path}`, {
+        method: "POST",
+        headers: {
+          origin,
+          "content-type": "text/plain;charset=UTF-8",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Safari/537.36",
+          ...(extra || {})
+        },
+        body: JSON.stringify(body)
+      })
+    );
+    return response.json().catch(() => null);
+  };
+  const day = new Date(worker.now() * 1000).toISOString().slice(0, 10);
+  // How many browsers reach each step, in funnel order.
+  const reach = [
+    ["app_open", 40],
+    ["account_panel_open", 14],
+    ["signin_start", 8],
+    ["signin_success", 6],
+    ["trial_cta_view", 5],
+    ["trial_click", 4],
+    ["trial_result", 4],
+    ["trial_first_practice", 2]
+  ];
+  const panelStates = ["offered", "offered", "offered", "offered", "offered", "offered", "offered", "offered", "offered", "signed_in", "signed_in", "signed_in", "blocked", "blocked"];
+  const outcomes = ["started", "started", "needs_account", "trial_used"];
+  let accepted = 0;
+  for (let i = 0; i < 40; i++) {
+    const cid = `sbx${String(i).padStart(5, "0")}`;
+    const events = [];
+    reach.forEach(([name, n]) => {
+      if (i >= n) return;
+      const props = {};
+      if (name === "account_panel_open") props.state = panelStates[i];
+      if (name === "trial_result") props.outcome = outcomes[i];
+      events.push({ name, cid, day, tz: 300, props });
+    });
+    const res = await post("/v1/events", { events });
+    accepted += (res && res.accepted) || 0;
+  }
+  // One browser that later asked for its statistics to be deleted.
+  const gone = "sbxforget1";
+  await post("/v1/events", { events: [{ name: "app_open", cid: gone, day, tz: 300, props: {} }] });
+  await post("/v1/events/forget", { cid: gone });
+  // One browser that sends Global Privacy Control: refused, counted, not kept.
+  await post("/v1/events", { events: [{ name: "app_open", cid: "sbxgpc001", day, tz: 300, props: {} }] }, { "sec-gpc": "1" });
+  return { accepted };
 }

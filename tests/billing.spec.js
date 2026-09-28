@@ -155,7 +155,7 @@ test.describe("Billing & subscriptions", () => {
     expect(r.source).toBe("license");
     expect(r.verified).toBe(true);
     expect(r.canExport).toBe(true);
-    await expect(page.locator("#billing-pill")).toContainText(/Pro/i);
+    await expect(page.locator("#btn-pricing")).toHaveText("Pro · activo");
 
     await page.reload({ waitUntil: "domcontentloaded" });
     await waitForLicenseState(page, "ok");
@@ -324,7 +324,7 @@ test.describe("Billing & subscriptions", () => {
     expect(ent.pro).toBe(true);
     expect(ent.source).toBe("demo");
     expect(ent.canExport).toBe(true);
-    await expect(page.locator("#billing-pill")).toContainText(/Pro/i);
+    await expect(page.locator("#btn-pricing")).toHaveText("Pro · activo");
     await expect(page.locator("#btn-export-progress")).toBeVisible();
   });
 

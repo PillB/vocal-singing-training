@@ -6688,7 +6688,10 @@
     if (!status || !status.available) return "";
     if (status.syncing) return tt("auth.syncing");
     if (status.lastError) return tt("auth.syncError");
-    return status.lastSyncedAt ? tt("auth.syncOk") : tt("auth.syncNever");
+    // "Aún no guardado" is only true of a device that has never synced. After a
+    // reload `lastSyncedAt` starts empty, but a revision on file means this
+    // device's progress has been in the account before.
+    return status.lastSyncedAt || status.rev > 0 ? tt("auth.syncOk") : tt("auth.syncNever");
   }
 
   /**
@@ -6776,7 +6779,28 @@
     // "Entra para guardar tu progreso" stayed on screen after signing in, so the
     // panel asked for something already done.
     const sub = $("#account-sub");
-    if (sub) sub.textContent = signedIn ? tt("auth.subSignedIn") : tt("auth.sub");
+    // Signed out with a sign-in on offer, the heading already says "Guarda tu
+    // progreso" and the offer line says what the account costs, so the lede
+    // only adds what neither says: practising never needs one.
+    if (sub) {
+      sub.textContent = signedIn
+        ? tt("auth.subSignedIn")
+        : accountSignIn().offered
+          ? tt("auth.subOffered")
+          : tt("auth.sub");
+    }
+    // Two places told a signed-in person their progress stays in this browser,
+    // which stopped being true the moment they signed in.
+    const step3 = $("#start-step3-sub");
+    if (step3) {
+      step3.textContent = signedIn
+        ? tt("start.step3subSignedIn")
+        : accountSignIn().offered
+          ? tt("start.step3subOffer")
+          : tt("start.step3sub");
+    }
+    const histSub = $("#history-sub");
+    if (histSub) histSub.textContent = signedIn ? tt("history.subSignedIn") : tt("history.sub");
     // The heading said "Cuenta" — the same defect the header button had, one
     // layer down: a room, not a reason. Signed out it names what you get.
     const title = $("#account-title");
@@ -6796,8 +6820,11 @@
       // none to spare. So it is drawn as an account button everywhere: your
       // initial in a circle, the name beside it where there is room (CSS hides
       // the name on phones). The accessible name starts with the name.
-      const who = account && account.signedIn && account.account
-        ? (account.account.displayName || account.account.email || "").split("@")[0]
+      // A Google name is a full name ("Maria Fernanda de la Torre"); the
+      // header only needs the given name. Without one, the address's local part.
+      const acc = account && account.signedIn && account.account ? account.account : null;
+      const who = acc
+        ? ((acc.displayName || "").trim().split(/\s+/)[0] || (acc.email || "").split("@")[0])
         : session
           ? session.username.split(".")[0]
           : "";
@@ -6886,6 +6913,21 @@
     if (internal && internal.dataset.autoOpen === "1") {
       internal.open = false;
       internal.dataset.autoOpen = "";
+    }
+    // Closed was not enough. On the live site, which has a real sign-in, a
+    // visitor still saw "Acceso interno" under the Google button: a second way
+    // in, whose form's button says "Entrar" like the header's door. It is a
+    // staff tool, so on a deploy with accounts it only appears for staff who
+    // ask for it (index.html?staff or #staff). A deploy with no worker at all
+    // keeps it, because there it is the only way QA gets in.
+    if (internal) {
+      let staffAsked = false;
+      try {
+        staffAsked = new URLSearchParams(location.search).has("staff") || location.hash === "#staff";
+      } catch {
+        /* ignore */
+      }
+      internal.hidden = offer.configured && !staffAsked;
     }
 
     if (!signedIn) {
@@ -7105,6 +7147,11 @@
         btn.disabled = false;
         btn.textContent = label;
         refreshAccountUI();
+        // Disabling the pressed button dropped focus to the page; put it back on
+        // whatever the panel now leads with.
+        const next = $(accountInitialFocus(false));
+        if (next && next.offsetParent !== null) next.focus({ preventScroll: true });
+        else if (btn.offsetParent !== null) btn.focus({ preventScroll: true });
       }
     });
     $("#btn-account-pricing")?.addEventListener("click", () => {

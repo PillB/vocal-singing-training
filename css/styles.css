@@ -7402,3 +7402,32 @@ body.view-exercise .highway-stage {
     display: none;
   }
 }
+@media (max-height: 500px) {
+  /* A rotated phone keeps its 32px header buttons so the practice stage keeps
+     its height, but a finger gets the full 44px: the hit area reaches past
+     the drawn button into the header's own padding. Text holds the 12px floor. */
+  .header-actions .btn-sm {
+    position: relative;
+    font-size: 0.75rem;
+  }
+  .header-actions .btn-sm::after {
+    content: "";
+    position: absolute;
+    inset: -6px 0;
+  }
+  /* The initial stands for the name here too, so a signed-in header still
+     fits on one row beside the plan. */
+  .header-door.is-signed-in {
+    justify-content: center;
+    min-width: 44px;
+    padding-inline: 0.2rem;
+  }
+  .header-door.is-signed-in .door-name {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}

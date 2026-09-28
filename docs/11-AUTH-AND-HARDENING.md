@@ -9,8 +9,10 @@
 > The two coexist on purpose. The internal logins work with no backend at all,
 > which is what makes them useful for QA on a deploy where the worker is not
 > wired up. In the account panel they sit behind an "Acceso interno"
-> disclosure, which opens automatically when no worker is configured, because
-> then it is the only way in.
+> disclosure. On a deploy with a worker (the live site) that disclosure only
+> appears when the page is opened as `index.html?staff` (or `#staff`), so
+> visitors see one way in; with no worker configured it is always there,
+> because then it is the only way in. It never opens by itself.
 
 ## Internal accounts
 

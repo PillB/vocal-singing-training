@@ -880,3 +880,56 @@ test.describe("The menu, read by someone who has never seen it", () => {
     await expect(page.locator("#btn-account-pricing")).toHaveText("Ver tu plan");
   });
 });
+
+test.describe("One way in, and the panel says true things about saving", () => {
+  test("a visitor on a deploy with accounts is not shown the staff login", async ({ page }) => {
+    const license = await mintLicense({ origin: BASE });
+    await install(page, {}, license);
+    await boot(page);
+    await openPanel(page);
+    await expect(page.locator("#account-signin")).toBeVisible();
+    // "Acceso interno" sat under the Google button as a second way in, and its
+    // form's button said "Entrar", the header door's own word.
+    await expect(page.locator(".account-internal")).toBeHidden();
+  });
+
+  test("staff who ask for it still get the staff login", async ({ page }) => {
+    const license = await mintLicense({ origin: BASE });
+    await install(page, {}, license);
+    await page.addInitScript(() => sessionStorage.setItem("vt_e2e", "1"));
+    await page.goto(`${BASE}/index.html?staff`, { waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => !!window.VTBilling && !!window.VTAccount);
+    await openPanel(page);
+    await expect(page.locator(".account-internal")).toBeVisible();
+  });
+
+  test("the unreachable panel does not tell you to close it to retry beside a retry button", async ({ page }) => {
+    await install(page, { offline: true }, null);
+    await boot(page);
+    await openPanel(page);
+    await expect(page.locator("#account-retry")).toBeVisible();
+    await expect(page.locator("#account-offline")).not.toContainText(/Cierra y vuelve/);
+    await page.click("#account-retry");
+    // Pressing it used to leave focus on the page behind the dialog.
+    await expect.poll(() => page.evaluate(() => !!document.activeElement.closest("#account-modal"))).toBe(true);
+  });
+
+  test("signed in, home and history stop saying progress stays in this browser", async ({ page }) => {
+    const license = await mintLicense({ origin: BASE });
+    await install(page, {
+      signedIn: true,
+      account: { id: "a", email: "x@example.test", displayName: null, locale: null, role: "member", trialUsed: false, createdAt: 1 },
+      entitlement: { pro: false, plan: null, status: "free", source: null, periodEnd: null }
+    }, license);
+    await boot(page);
+    await expect(page.locator("#start-step3-sub")).toHaveText("Tu progreso se guarda en tu cuenta.");
+    await expect(page.locator("#history-sub")).toContainText("se guardan en tu cuenta");
+  });
+
+  test("signed out, home says where progress lives and how to take it along", async ({ page }) => {
+    const license = await mintLicense({ origin: BASE });
+    await install(page, {}, license);
+    await boot(page);
+    await expect(page.locator("#start-step3-sub")).toContainText("Con Entrar lo llevas");
+  });
+});

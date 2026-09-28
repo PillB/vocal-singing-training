@@ -186,7 +186,7 @@
       funnelStates: "Al abrir el panel de cuenta, qué vio la gente",
       funnelOutcomes: "Al pulsar la prueba, qué pasó",
       funnelNote:
-        "Cada porcentaje es una sola proporción con su margen, condicionada al paso anterior. Sirve para encontrar un paso por el que nadie pasa, no para medir una mejora de unos puntos. «Recibió respuesta» pasa casi siempre por construcción: mira qué pasó al pulsar la prueba, sobre todo «le pedimos entrar primero».",
+        "Cada porcentaje es una sola proporción con su margen, condicionada al paso anterior. Cada fila mira solo el paso de encima: la prueba también se puede pulsar desde la ventana Pro sin entrar, así que «De» puede ser mayor que los navegadores de la fila anterior, y las filas no se multiplican entre sí. Sirve para encontrar un paso por el que nadie pasa, no para medir una mejora de unos puntos. «Recibió respuesta» pasa casi siempre por construcción: mira qué pasó al pulsar la prueba, sobre todo «le pedimos entrar primero».",
       ingestTitle: "Llegada de estadísticas (últimos 7 días)",
       ingestLast: "Último evento guardado: {date}",
       ingestNone: "Todavía no se ha guardado ningún evento.",
@@ -367,7 +367,7 @@
       funnelStates: "What people saw when the account panel opened",
       funnelOutcomes: "What happened when people pressed the trial",
       funnelNote:
-        "Each percentage is one proportion with its margin, conditional on the step before it. It finds a step nobody gets through; it cannot measure an improvement of a few points. “Got an answer” passes almost always by construction: read what happened when people pressed the trial, above all “we asked them to sign in first”.",
+        "Each percentage is one proportion with its margin, conditional on the step before it. Each row looks only at the step above it: the trial can also be pressed from the Pro window without signing in, so “Of” can be larger than the row above's browsers, and the rows do not multiply into one chain. It finds a step nobody gets through; it cannot measure an improvement of a few points. “Got an answer” passes almost always by construction: read what happened when people pressed the trial, above all “we asked them to sign in first”.",
       ingestTitle: "Statistics arriving (last 7 days)",
       ingestLast: "Last event stored: {date}",
       ingestNone: "No event has been stored yet.",

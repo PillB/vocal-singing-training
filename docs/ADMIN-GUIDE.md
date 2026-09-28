@@ -919,7 +919,11 @@ How to read it:
   browsers. Nothing here is tied to an account, which is also why a person's
   statistics cannot be found by their email.
 - **Each row is conditional on the one above:** of the browsers that opened
-  the account panel, how many started signing in, and so on. The **Margen (95
+  the account panel, how many started signing in, and so on. Each row looks
+  only at the step above it, not at the whole path: the trial can also be
+  pressed from the Pro window without signing in, so a row's **De** (Of) can
+  be larger than the row above's **Navegadores**, and the rates don't multiply
+  into one overall rate. The **Margen (95
   %)** column is the honest range for that rate. With a few dozen browsers the
   range is wide, so use this to spot a step **nobody** gets through, not to
   judge a change of a few points. It is not an A/B test.

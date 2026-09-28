@@ -5704,7 +5704,18 @@
       // where cancelling lives. Four kinds of access, four different words, so
       // colour is never the only thing that tells them apart.
       const label = planLabel(plan);
-      btn.textContent = label.text;
+      // Inside an exercise on a phone the header row has room for "Pro" but
+      // not "Probar Pro", so the verb sits in its own span that the stylesheet
+      // drops there. Everywhere else the button reads, and is named, in full.
+      const cut = plan.kind === "free" ? label.text.lastIndexOf("Pro") : -1;
+      if (cut > 0) {
+        const verb = document.createElement("span");
+        verb.className = "pro-verb";
+        verb.textContent = label.text.slice(0, cut);
+        btn.replaceChildren(verb, label.text.slice(cut));
+      } else {
+        btn.textContent = label.text;
+      }
       btn.title = label.title;
       // The accessible name is the visible label; the title says what opens.
       btn.removeAttribute("aria-label");
@@ -5887,7 +5898,8 @@
         tag.textContent = tt("value.tagGift");
         tag.className = "value-pulse-tag is-gift";
       } else if (plan.kind === "canceled") {
-        tag.textContent = tt("value.tagEnding");
+        tag.textContent =
+          plan.days === null ? tt("value.tagEnding") : tt("value.tagEndingDays", { n: String(plan.days) });
         tag.className = "value-pulse-tag is-ending";
       } else if (plan.kind === "paid") {
         tag.textContent = tt("value.tagPro");

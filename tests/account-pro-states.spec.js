@@ -573,6 +573,20 @@ test.describe("The same claim wherever it appears", () => {
     expect((await homeTag(page)).text).toBe("Pro");
   });
 
+  test("a cancelled subscription says on the home card when it ends", async ({ page }) => {
+    const license = await mintLicense({ origin: BASE });
+    await install(page, {
+      signedIn: true,
+      account: { ...member, trialUsed: false },
+      entitlement: { pro: true, plan: "pro_monthly", status: "canceled", source: "paid", periodEnd: NOW() + 10 * DAY }
+    }, license);
+    await boot(page);
+    await expect.poll(() => homeTag(page).then((t) => t && t.kind)).toBe("is-ending");
+    // "Termina" alone left the date to the account panel; the header button
+    // and this tag both carry it now.
+    expect((await homeTag(page)).text).toMatch(/^Termina · \d+d$/);
+  });
+
   test("a free visitor's home card says free, not nothing", async ({ page }) => {
     const license = await mintLicense({ origin: BASE });
     await install(page, {}, license);
@@ -830,6 +844,48 @@ test.describe("The menu, read by someone who has never seen it", () => {
     }
   }
 
+  for (const width of [320, 390]) {
+    for (const [name, opts] of Object.entries(STATES)) {
+      test(`${width}px, ${name}: inside an exercise the header stays one row`, async ({ browser }) => {
+        // The exercise screen has no Más menu, so the offer and the door sit on
+        // the row with the language switch. Full-length labels there wrapped
+        // the header to a second row, and the stage hid its guide to make room
+        // (stage-design.spec.js checks the guide itself).
+        const ctx = await browser.newContext({ viewport: { width, height: width === 320 ? 640 : 844 } });
+        const page = await ctx.newPage();
+        const license = await mintLicense({ origin: BASE });
+        await install(page, { ...opts, account: opts.account && { ...opts.account, displayName: "Maximiliano Alejandro" } }, license);
+        await boot(page);
+        if (opts.signedIn) await expect(page.locator("#btn-pricing")).not.toHaveAttribute("data-plan", "free");
+        await page.evaluate(() => window.VTApp.openExercise("s4-lip-trills"));
+        await expect(page.locator("#view-exercise")).toHaveClass(/active/);
+        await page.waitForTimeout(300);
+        const { row, headerBottom } = await page.evaluate(() => ({
+          row: ["btn-nav-home", "btn-account", "btn-pricing", "btn-lang"]
+            .map((id) => {
+              const el = document.getElementById(id);
+              const r = el.getBoundingClientRect();
+              return r.width ? { id, top: Math.round(r.top), bottom: r.bottom, text: el.innerText.trim(), w: r.width, h: r.height } : null;
+            })
+            .filter(Boolean),
+          headerBottom: document.querySelector("header.app-header").getBoundingClientRect().bottom
+        }));
+        expect(new Set(row.map((c) => c.top)).size, JSON.stringify(row)).toBe(1);
+        // Nothing below that row: the header ends with it.
+        expect(headerBottom - row[0].bottom).toBeLessThanOrEqual(10);
+        for (const c of row) {
+          expect(c.h, c.id).toBeGreaterThanOrEqual(44);
+          expect(c.w, c.id).toBeGreaterThanOrEqual(44);
+        }
+        // The offer is still there for someone without Pro, as "Pro".
+        const offer = row.find((c) => c.id === "btn-pricing");
+        if (opts.signedIn) expect(offer).toBeUndefined();
+        else expect(offer && offer.text).toBe("Pro");
+        await ctx.close();
+      });
+    }
+  }
+
   for (const [name, opts] of Object.entries(STATES)) {
     test(`${name}: one element about Pro in the header and its menu, and the home card offers nothing already held`, async ({ page }) => {
       await page.setViewportSize({ width: 390, height: 844 });
@@ -842,7 +898,10 @@ test.describe("The menu, read by someone who has never seen it", () => {
         [...document.querySelectorAll(".app-header button, .app-header span, .app-header a")]
           .filter((el) => {
             const r = el.getBoundingClientRect();
-            return r.width && r.height && !el.querySelector("button, span");
+            // Leaves, except that a button counts as one thing whatever
+            // spans it is built from.
+            if (!r.width || !r.height || el.querySelector("button")) return false;
+            return el.tagName === "BUTTON" ? true : !el.closest("button") && !el.querySelector("span");
           })
           .map((el) => (el.textContent || "").trim())
           .filter((t) => /\b(pro|prueba|regalo|suscripci[oó]n)\b/i.test(t))

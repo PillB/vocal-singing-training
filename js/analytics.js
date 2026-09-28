@@ -275,9 +275,14 @@
   /**
    * @param {string} name
    * @param {Record<string, unknown>} [props]
+   * @returns {"recorded" | "held" | ""} What became of it: written down, waiting
+   *   for an answer to the region bar, or refused. A caller that writes its own
+   *   "already reported" mark to the device must write it only on "recorded" —
+   *   see the trial_first_practice mark in js/app.js. "held" is not a promise:
+   *   a refusal throws held events away.
    */
   function track(name, props) {
-    if (!name) return;
+    if (!name) return "";
     const now = new Date();
     const region = regionReason();
     // Where the law wants the visitor asked first, keeping the event on the
@@ -287,10 +292,10 @@
     // keys — so holding it costs the visitor nothing.
     if (HELD_REASONS.includes(region)) {
       hold(String(name), props || {}, now);
-      return;
+      return "held";
     }
     // A refusal, or a gate that should be on this page and is not.
-    if (region) return;
+    if (region) return "";
     const bag = read();
     bag.events = bag.events || [];
     bag.events.push({
@@ -307,6 +312,7 @@
     } catch {
       /* ignore */
     }
+    return "recorded";
   }
 
   function summary() {

@@ -623,6 +623,14 @@
     if (!doc || barShown) return;
     if (verdict !== "eu" || consent()) return;
     if (global.navigator?.globalPrivacyControl === true) return;
+    // A deployment with no worker keeps nothing and sends nothing, so there is
+    // nothing to ask about. This has to be its own check rather than riding the
+    // remoteState() guard below: askWorker() settles "no_endpoint" without ever
+    // awaiting, so settle() calls this from the gate's own init, and the gate is
+    // loaded before js/analytics.js — remoteState is undefined at that moment and
+    // the guard cannot see the reason. Every other verdict arrives after a fetch,
+    // by which time analytics.js is there.
+    if (!apiBase()) return;
     const state = global.VTAnalytics?.remoteState?.();
     // Nothing is sent from an automated browser or a deployment with no worker,
     // so there is nothing to consent to and the bar would be pure noise.

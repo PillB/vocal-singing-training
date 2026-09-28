@@ -24,7 +24,8 @@ const ENDPOINT = "https://events.test/v1/events";
  * Open the site in its own context, with the worker stubbed.
  * @param {import('@playwright/test').Browser} browser Browser.
  * @param {{timezoneId?: string, locale: string, geo?: object|"fail", geoStatus?: number,
- *          gpc?: boolean, human?: boolean, storage?: Record<string, string>}} opts Case.
+ *          gpc?: boolean, human?: boolean, storage?: Record<string, string>,
+ *          noWorker?: boolean}} opts Case.
  * @returns {Promise<{ctx: object, page: object, sent: {batches: object[], geo: number}}>} Case.
  */
 async function open(browser, opts) {
@@ -65,14 +66,33 @@ async function open(browser, opts) {
     } catch {
       /* ignore */
     }
-    window.VT_ANALYTICS_ENDPOINT = o.endpoint;
+    if (o.endpoint) window.VT_ANALYTICS_ENDPOINT = o.endpoint;
+    // A deployment with no worker: the endpoint is derived from the worker URL in
+    // js/billing-config.js, so it has to be blanked before that file is read.
+    if (o.noWorker) {
+      let held;
+      Object.defineProperty(window, "VT_BILLING_CONFIG", {
+        configurable: true,
+        get: () => held,
+        set: (v) => {
+          if (v && v.verification) v.verification.apiBaseUrl = "";
+          held = v;
+        }
+      });
+    }
     if (o.human) {
       Object.defineProperty(Navigator.prototype, "webdriver", { get: () => false, configurable: true });
     }
     if (o.gpc) {
       Object.defineProperty(Navigator.prototype, "globalPrivacyControl", { get: () => true, configurable: true });
     }
-  }, { endpoint: ENDPOINT, gpc: !!opts.gpc, human: opts.human !== false, storage: opts.storage || {} });
+  }, {
+    endpoint: opts.noWorker ? "" : ENDPOINT,
+    noWorker: !!opts.noWorker,
+    gpc: !!opts.gpc,
+    human: opts.human !== false,
+    storage: opts.storage || {}
+  });
   await page.goto(BASE + "/", { waitUntil: "domcontentloaded" });
   await page.waitForFunction(() => !!window.VTAnalytics && !!window.VTRegion);
   return { ctx, page, sent };
@@ -457,6 +477,54 @@ test.describe("EU rules only in the EU", () => {
     // And it offers the way back in, so the choice is a switch rather than a
     // door that locks behind them.
     await expect(off).toHaveText("Allow again");
+    await ctx.close();
+  });
+
+  test("a deployment with no worker asks nothing, because it sends nothing", async ({ browser }) => {
+    // The runbook allows a deploy with no worker, and js/region-gate.js says in
+    // its own comment that a bar about statistics nobody sends would be noise.
+    // It very nearly was: with no endpoint askWorker() settles without awaiting,
+    // so settle() drew the bar from the gate's own init — before js/analytics.js
+    // had loaded, which is what the guard on remoteState() relies on.
+    const { ctx, page, sent } = await open(browser, {
+      timezoneId: "Europe/Madrid",
+      locale: "es-ES",
+      noWorker: true
+    });
+    expect(await page.evaluate(() => window.VTRegion.report().source)).toBe("no_endpoint");
+    // Still the strict verdict, so the A/B id is not minted either.
+    expect(await page.evaluate(() => window.VTRegion.verdict())).toBe("eu");
+    expect(await page.evaluate(() => window.VTRegion.inert())).toBe(true);
+    expect(await page.evaluate(() => window.VTAnalytics.remoteState().reason)).toBe("no_endpoint");
+    await page.waitForTimeout(300);
+    await expect(page.locator(bar)).toHaveCount(0);
+    expect(sent.geo).toBe(0);
+    expect(sent.batches).toEqual([]);
+    expect(await page.evaluate(() => localStorage.getItem("vt_ab_v1"))).toBeNull();
+    await ctx.close();
+  });
+
+  test("an event says whether it was kept, so nothing marks itself reported too early", async ({ browser }) => {
+    // js/app.js writes vt_trial_first_practice_v1 to say "this browser's trial
+    // has been reported once". It used to write it before track() had decided,
+    // which put a mark on the device before the visitor answered the bar and, on
+    // a refusal, silenced that funnel step for the browser for ever because the
+    // event was dropped and the mark is never cleared. The mark now follows this
+    // return value, so the contract is what the fix rests on.
+    const { ctx, page } = await open(browser, { timezoneId: "Europe/Madrid", locale: "es-ES" });
+    await page.waitForFunction(() => window.VTRegion.verdict() !== "pending");
+    const call = () => page.evaluate(() => window.VTAnalytics.track("trial_first_practice", { kind: "local" }));
+    // Asked and not yet answered: waiting, which is not a promise it will be sent.
+    expect(await call()).toBe("held");
+    expect(await page.evaluate(() => localStorage.getItem("vt_trial_first_practice_v1"))).toBeNull();
+    // Refused: dropped, so nothing may write itself down as reported.
+    await page.locator(`${bar} [data-region-reject]`).click();
+    expect(await call()).toBe("");
+    expect(await page.evaluate(() => localStorage.getItem("vt_trial_first_practice_v1"))).toBeNull();
+    // Allowed again from the footer switch: kept, and only now may a mark go down.
+    await page.locator("footer.app-footer [data-privacy-toggle]").click();
+    expect(await page.evaluate(() => window.VTRegion.consent())).toBe("granted");
+    expect(await call()).toBe("recorded");
     await ctx.close();
   });
 

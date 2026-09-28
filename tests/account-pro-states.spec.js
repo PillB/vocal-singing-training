@@ -359,7 +359,7 @@ test.describe("Signed in: the header names which kind of access this is", () => 
       entitlement: { pro: true, plan: "pro_monthly", status: "canceled", source: "paid", periodEnd: ends(9) }
     }, license);
     await boot(page);
-    await expect(page.locator("#btn-pricing")).toHaveText("Pro · termina");
+    await expect(page.locator("#btn-pricing")).toHaveText(/^Pro · termina en \d+ días$/);
     await expect(page.locator("#btn-pricing")).toHaveClass(/plan-ending/);
     await page.click("#btn-pricing");
     expect(await page.locator("#pricing-status").textContent()).toMatch(/no se renueva/i);
@@ -680,7 +680,7 @@ test.describe("Colour is never the only thing that says which state this is", ()
     { source: "trial", status: "active", label: /^Prueba · \d+ días$/ },
     { source: "gift", status: "active", label: /^Regalo · \d+ días$/ },
     { source: "paid", status: "active", label: /^Pro · activo$/ },
-    { source: "paid", status: "canceled", label: /^Pro · termina$/ }
+    { source: "paid", status: "canceled", label: /^Pro · termina en \d+ días$/ }
   ];
 
   for (const c of CASES) {

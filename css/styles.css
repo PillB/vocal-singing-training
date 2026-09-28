@@ -7311,7 +7311,7 @@ body.view-exercise .highway-stage {
    ──────────────────────────────────────────────────────────────────────────
    #btn-pricing is the only thing in the header about Pro. With nothing held it
    is the gold offer ("Probar Pro"); with something held its words are the plan
-   ("Prueba · 5 días", "Regalo · 20 días", "Pro · activo", "Pro · termina") in
+   ("Prueba · 5 días", "Regalo · 20 días", "Pro · activo", "Pro · termina en 10 días") in
    the colours the old status pill used, and pressing it opens that plan. The
    words carry the state; the colour only agrees with them. */
 #btn-pricing.plan-trial,

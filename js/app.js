@@ -5665,7 +5665,13 @@
           cls: "plan-gift"
         };
       case "canceled":
-        return { text: tt("nav.planEnding"), title: tt("nav.subscriptionTitle"), cls: "plan-ending" };
+        // When it ends is the whole news here, so it is said, not left to
+        // the panel.
+        return {
+          text: plan.days === null ? tt("nav.planEnding") : tt("nav.planEndingDays", { d: days(plan.days) }),
+          title: tt("nav.subscriptionTitle"),
+          cls: "plan-ending"
+        };
       case "paid":
         return { text: tt("nav.planPaid"), title: tt("nav.subscriptionTitle"), cls: "plan-paid" };
       default:

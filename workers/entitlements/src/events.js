@@ -1209,12 +1209,13 @@ export async function ingestSummary(db, at) {
  * rate is a pairwise transition and **the chain does not multiply out**: the
  * product of the rates is not the end-to-end rate, and nobody should read it as
  * one. That is deliberate rather than a shortcut. The trial has two entry
- * points, the pricing page and the account panel, so a press can reach
- * trial_cta_view and trial_click without ever touching signin_start. A strict
- * cumulative denominator would report those presses as nought, hiding the whole
- * anonymous and local-trial path, which is exactly the path worth watching
- * before checkout exists. One row per browser comes back from D1, which at this
- * traffic is hundreds of rows, not millions.
+ * points, the Pro window and the account panel (TRIAL_CTA in js/app.js), and
+ * only the second is downstream of signing in, so a press in the Pro window
+ * reaches trial_cta_view and trial_click without ever touching signin_start or
+ * account_panel_open. A strict cumulative denominator would report those
+ * presses as nought, hiding the whole anonymous and local-trial path, which is
+ * exactly the path worth watching before checkout exists. One row per browser
+ * comes back from D1, which at this traffic is hundreds of rows, not millions.
  */
 export const FUNNEL_STEPS = [
   { key: "app_open", label: "opened the site" },
@@ -1374,8 +1375,8 @@ export async function handleFunnel(env, url, deps) {
       readMe:
         "Each rate is one proportion with a 95% Wilson interval, conditional on the step before it " +
         "and on that step alone, not on all the steps before it. They are pairwise transitions, so do " +
-        "not multiply them together: the trial can be pressed from the pricing page without signing " +
-        "in, so later steps include browsers that never reached the earlier ones. " +
+        "not multiply them together: the trial can be pressed in the Pro window without signing in, " +
+        "so later steps include browsers that never reached the earlier ones. " +
         "This finds a step nobody gets through; it cannot detect an improvement of a few points. " +
         "trial_result has a rate near 1 by construction, because every branch of both buttons ends " +
         "in one; read trialOutcomes instead, where needs_account is a press that worked and still " +

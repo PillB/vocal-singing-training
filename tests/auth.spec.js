@@ -24,7 +24,9 @@ async function boot(page) {
       /* ignore */
     }
   });
-  await page.goto(BASE, { waitUntil: "domcontentloaded" });
+  // On a deploy with accounts the staff login only appears for staff who ask
+  // for it, which is what these tests are.
+  await page.goto(`${BASE}/index.html?staff`, { waitUntil: "domcontentloaded" });
 }
 
 function loadSecretsIfPresent() {

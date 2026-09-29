@@ -188,12 +188,14 @@ test.describe("Pro dialog before checkout is live", () => {
     expect(keys.indexOf("summary")).toBeGreaterThan(keys.indexOf("btn-start-trial"));
   });
 
-  test("after starting the trial the note stays and nothing asks to pay", async ({ page }) => {
+  test("after starting the trial nothing asks to pay, and nothing says Pro is still to come", async ({ page }) => {
     await boot(page);
     await openPricing(page);
     await page.click("#btn-start-trial");
     await expect(page.locator("#btn-start-trial")).toBeHidden();
-    await expect(page.locator("#pricing-health-note")).toBeVisible();
+    // The note says "Sigue practicando gratis; Pro se activará cuando estén
+    // listos", which is false the moment the trial starts: Pro is on.
+    await expect(page.locator("#pricing-health-note")).toBeHidden();
     await expect(page.locator("#pricing-pay-note")).toBeHidden();
     await expect(page.locator('#pricing-grid .plan-cta[data-plan="pro_monthly"]')).toHaveText("Aún no disponible");
     await expect(page.locator('#pricing-grid .plan-cta[data-plan="pro_monthly"]')).toBeDisabled();

@@ -297,6 +297,10 @@
       return await running;
     } finally {
       running = null;
+      // The emits above run while `running` is still set, so every listener
+      // was last told "syncing" and the account panel said "Guardando…" after
+      // the save had finished. Tell them once more, now that it has.
+      emit();
     }
   }
 

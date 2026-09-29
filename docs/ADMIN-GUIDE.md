@@ -453,6 +453,12 @@ the real database id, while the copy on GitHub has placeholders on purpose.
 
 Do this once each time you open a new Terminal window for maintenance.
 
+**Before step 1, check Node.** Run `node -v`. It must print `v22` or higher,
+because every command in this section runs Wrangler 4, which refuses anything
+older and stops with a message about Node.js. If it prints `v20` or `v21`,
+install the LTS version from [nodejs.org](https://nodejs.org) (the macOS
+installer), close Terminal, open a new window and run `node -v` again.
+
 **1. Go to the right folder.** The path of the checkout is in the private notes.
 
 ```bash

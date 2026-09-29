@@ -7470,20 +7470,22 @@ body.view-exercise .door-avatar {
      dropped under it: a 74px header became 130px. Here the controls keep
      their row and the title takes what is left: the tagline goes first, then
      the name wraps onto a second line beside the mark. */
-  body:not(.view-exercise) .header-inner {
+  /* Scoped to the studio's own header: admin, guide and privacy pages share
+     the .brand markup but not this row. */
+  body:not(.view-exercise) .app-header:has(#header-nav) .header-inner {
     flex-wrap: nowrap;
   }
-  body:not(.view-exercise) .brand {
+  body:not(.view-exercise) .app-header:has(#header-nav) .brand {
     flex: 1 1 0;
     min-width: 0;
     container-type: inline-size;
   }
-  body:not(.view-exercise) .header-actions {
+  body:not(.view-exercise) .app-header:has(#header-nav) .header-actions {
     flex: 0 0 auto;
   }
 }
 @container (max-width: 20rem) {
-  .brand p {
+  .app-header:has(#header-nav) .brand p {
     display: none;
   }
 }

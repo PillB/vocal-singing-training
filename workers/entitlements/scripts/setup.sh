@@ -46,14 +46,17 @@ die() { printf '\n%s\n' "$*" >&2; exit 1; }
 [ -n "${CLOUDFLARE_API_TOKEN:-}" ] || die \
   "CLOUDFLARE_API_TOKEN is not set. Add it to the environment, not to a file."
 
-# wrangler 4 needs Node 20 or newer, and so does the key generation below. A
-# Mac with an older Homebrew node fails several steps later with a much
-# less obvious message, so say it here instead.
+# wrangler 4 needs Node 22 or newer: wrangler@4.137.0 declares
+# "engines": { "node": ">=22.0.0" }, and its bin/wrangler.js refuses before
+# running anything with "Wrangler requires at least Node.js v22.0.0". This guard
+# said 20 until a fact-check caught it, which let Node 20 and 21 through to that
+# refusal halfway down the script. `wr()` below asks for wrangler@4, so the
+# floor is whatever the newest 4.x wants; raise this number, do not lower it.
 command -v node >/dev/null 2>&1 || die \
-  "node is not installed. Install Node 20 or newer (https://nodejs.org) and re-run."
+  "node is not installed. Install Node 22 or newer (https://nodejs.org) and re-run."
 NODE_MAJOR=$(node -p 'process.versions.node.split(".")[0]')
-[ "$NODE_MAJOR" -ge 20 ] 2>/dev/null || die \
-  "node $(node --version) is too old. wrangler 4 needs Node 20 or newer."
+[ "$NODE_MAJOR" -ge 22 ] 2>/dev/null || die \
+  "node $(node --version) is too old. wrangler 4 needs Node 22 or newer."
 
 wr() { npx --yes wrangler@4 "$@"; }
 

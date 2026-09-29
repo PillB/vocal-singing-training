@@ -138,8 +138,8 @@ Things to know:
 - **The address must be the one they sign in with.** For Gmail, dots and
   capital letters matter to this site even though Gmail ignores them:
   `ana.perez@gmail.com` and `anaperez@gmail.com` are two different accounts
-  here. When in doubt, ask them to sign in first, tap their name at the top
-  right and read you the address after **Sesión iniciada como** (Signed in
+  here. When in doubt, ask them to sign in first, tap their name (on a phone,
+  the circle with their initial) at the top right and read you the address after **Sesión iniciada como** (Signed in
   as), then give Pro to that.
 
 ### Step 3. Tell them how to get in
@@ -153,14 +153,14 @@ Send them something like:
 
 ### Step 4. Check it worked
 
-After they sign in, the top bar names what they have: an amber **REGALO**
-(Gift) tag next to their name, and the **Pro** button now reads **Suscripción**
-(Subscription). Their account panel (their name at the top right) says **Pro
-de regalo · termina el …** (Gifted Pro · ends …). Go by the panel: it always
-names the end date, while the top bar only names the kind of access. A free
-trial shows **Prueba** (Trial) with the days left instead of REGALO.
+After they sign in, the top bar names what they have: the amber button next to
+their name, which read **Probar Pro** (Try Pro), now reads **Regalo · 30 días**
+(Gift · 30 days). Their account panel (their name at the top right; on a phone,
+the circle with their initial) says **Pro de regalo · termina el …** (Gifted Pro
+· ends …). Go by the panel for the exact date: the button counts days, the panel
+names the day. A free trial reads **Prueba · 7 días** (Trial · 7 days) instead.
 
-![The top bar of a tester with gifted Pro: the amber REGALO tag next to their name](admin-guide/06-tester-header-gift.png)
+![The top bar of a tester with gifted Pro: the amber Regalo · 30 días button next to their name](admin-guide/06-tester-header-gift.png)
 
 ![The tester's account panel: gifted Pro and its end date](admin-guide/07-tester-account-pro.png)
 
@@ -187,12 +187,13 @@ reads **Quitado el …** (Removed on …) with no button:
 ![The same look-up after removing Pro](admin-guide/10-lookup-after-remove.png)
 
 **When they notice:** the next time they open or reload the site, as soon as
-the page hears back from the server. The REGALO tag goes, the button reads
-**Pro** again, and their panel says **Plan gratis** (Free plan).
+the page hears back from the server. The button goes back to **Probar Pro**
+(or **Ver Pro**, if they already used their free trial), and their panel says
+**Plan gratis** (Free plan).
 
 | Before | After their next reload |
 |---|---|
-| ![Before: the REGALO tag and the Suscripción button](admin-guide/09-bruno-before.png) | ![After: no tag, and the button reads Pro again](admin-guide/11-bruno-after-reload.png) |
+| ![Before: the button reads Regalo · 30 días](admin-guide/09-bruno-before.png) | ![After: the button reads Probar Pro again](admin-guide/11-bruno-after-reload.png) |
 
 ![The tester's account panel after Pro was removed: Plan gratis, and the free trial on offer](admin-guide/12-bruno-account-after.png)
 
@@ -299,7 +300,8 @@ when they redeem it.
 **How they redeem it:** they press **Entrar** (Sign in) at the top right and
 sign in with Google. The same panel then shows **¿Tienes un código de regalo?**
 (Have a gift code?): they type the code there and press **Canjear** (Redeem).
-Someone already signed in taps their name at the top right to open that panel.
+Someone already signed in taps their name (on a phone, their initial) at the
+top right to open that panel.
 Dashes, spaces and small letters don't matter. The copied message walks them
 through the same steps.
 
@@ -333,8 +335,8 @@ ask them to try again, and note in this guide that the exemption did not hold.
 
 **"I signed in but I don't have Pro."**
 1. Ask them to reload the page.
-2. Ask them to tap their name at the top right and read you the address after
-   **Sesión iniciada como** (Signed in as).
+2. Ask them to tap their name (on a phone, their initial) at the top right and
+   read you the address after **Sesión iniciada como** (Signed in as).
 3. Look up **that** address. If it has no Pro, you probably gave Pro to a
    different spelling. Give it to this one, and remove the other if you like.
    Looking up the address you originally used will show **Nunca ha entrado con
@@ -1092,9 +1094,9 @@ in this order:
    with **Entrar** using a second Google account that is **not** a Google test
    user (does Google's exemption hold?). Its panel offers **Empezar 7 días
    gratis**: don't press it, so the account stays useful for the next test.
-5. Give that account 1 day. On its next reload: the REGALO tag, and **Pro de
-   regalo · termina el …** in its panel.
-6. Remove it and reload: no tag, **Pro** again, and **Plan gratis**.
+5. Give that account 1 day. On its next reload: **Regalo · 1 día** on the
+   header's Pro button, and **Pro de regalo · termina el …** in its panel.
+6. Remove it and reload: **Probar Pro** again, and **Plan gratis**.
 7. **Estadísticas** → **Leer estadísticas** shows a table or "no data yet",
    not an error.
 8. The day after, once 09:17 UTC has passed: the worker's page in the

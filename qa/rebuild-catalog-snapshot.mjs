@@ -135,7 +135,6 @@ const snap = {
     "#btn-pricing",
     "#pricing-modal",
     "#pricing-grid",
-    "#billing-pill",
     "#btn-account",
     "#account-modal",
     "#login-form",

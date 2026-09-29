@@ -687,3 +687,67 @@ test("the webhook and claim routes still behave exactly as before", async () => 
   assert.equal(refreshed.status, 200);
   assert.ok(refreshed.body.token);
 });
+
+test("the admin role follows today's ADMIN_EMAILS, not the one stored at first sign-in", async () => {
+  // Signed in once as an ordinary member, then added to the list later.
+  const env = freshEnv({ ADMIN_EMAILS: "admin@example.test" });
+  const late = await signInByEmail(env, "late-admin@example.test", NOW);
+  assert.equal(late.body.account.role, "member");
+
+  env.ADMIN_EMAILS = "admin@example.test, Late-Admin@example.test";
+  const promoted = await call(req("GET", "/v1/me", { token: late.token }), env, { now: NOW + 10 });
+  assert.equal(promoted.body.account.role, "admin", "the site shows the tools the routes already allow");
+  const allowed = await call(req("GET", "/v1/admin/gift-codes", { token: late.token }), env, { now: NOW + 11 });
+  assert.equal(allowed.status, 200);
+
+  // Taken off the list again: the stored row still says admin, the answer must not.
+  const founder = await signInByEmail(env, "admin@example.test", NOW + 20);
+  assert.equal(founder.body.account.role, "admin");
+  env.ADMIN_EMAILS = "late-admin@example.test";
+  const demoted = await call(req("GET", "/v1/me", { token: founder.token }), env, { now: NOW + 30 });
+  assert.equal(demoted.body.account.role, "member");
+  const refused = await call(req("GET", "/v1/admin/gift-codes", { token: founder.token }), env, { now: NOW + 31 });
+  assert.equal(refused.status, 403);
+});
+
+test("admin lookup says whether, how and when the person has signed in", async () => {
+  const env = freshEnv();
+  const admin = await signInByEmail(env, "admin@example.test", NOW);
+
+  // Gifted before the friend ever signs in: the account exists, nobody has used it.
+  await call(
+    req("POST", "/v1/admin/grants", { token: admin.token, body: { email: "friend@example.test", days: 30 } }),
+    env,
+    { now: NOW + 10 }
+  );
+  const before = await call(
+    req("GET", "/v1/admin/account?email=friend@example.test", { token: admin.token }),
+    env,
+    { now: NOW + 20 }
+  );
+  assert.equal(before.status, 200);
+  assert.deepEqual(before.body.signIns, { methods: [], lastSeenAt: null, activeSessions: 0 });
+  assert.equal(before.body.account.role, "member");
+
+  const friend = await signInByEmail(env, "friend@example.test", NOW + 100);
+  const after = await call(
+    req("GET", "/v1/admin/account?email=Friend@Example.test", { token: admin.token }),
+    env,
+    { now: NOW + 200 }
+  );
+  assert.deepEqual(after.body.signIns.methods, ["email"]);
+  assert.equal(after.body.signIns.lastSeenAt, NOW + 101);
+  assert.equal(after.body.signIns.activeSessions, 1);
+
+  // Signing out everywhere leaves the history but no live session.
+  await call(req("POST", "/v1/auth/logout", { token: friend.token, body: { everywhere: true } }), env, {
+    now: NOW + 300
+  });
+  const out = await call(
+    req("GET", "/v1/admin/account?email=friend@example.test", { token: admin.token }),
+    env,
+    { now: NOW + 400 }
+  );
+  assert.deepEqual(out.body.signIns.methods, ["email"]);
+  assert.equal(out.body.signIns.activeSessions, 0);
+});

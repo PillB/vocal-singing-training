@@ -148,9 +148,12 @@ with the judges' fix: the whole session no longer ends from an unlabelled ×.
   records one exposure per experiment, only once the thing under test has
   actually been shown. `?ab_<key>=<variant>` shows an arm without joining the
   experiment.
-- `js/analytics.js` sends events to `VT_ANALYTICS_ENDPOINT`. Nothing is sent
-  while that is empty (today), from automated browsers, or when the browser
-  sends Global Privacy Control or Do Not Track.
+- `js/analytics.js` sends events to `VT_ANALYTICS_ENDPOINT`, which
+  `js/experiments-config.js` derives from the worker URL in
+  `js/billing-config.js`. Nothing is sent when there is no worker, from
+  automated browsers, or when the browser sends Global Privacy Control. Do Not
+  Track is not read (dropped 2026-09-24: no law requires it, the specification
+  was discontinued in 2019).
 - The worker (`workers/entitlements/src/events.js`) stores the events and
   exposures, and answers results for an admin. The results show in the account
   panel and at `GET /v1/admin/experiments/results?experiment=<key>`.
@@ -252,12 +255,368 @@ traffic can.
 - `privacy.html` and guide section 14 list exactly the fields sent, and
   `tests/ab-events.spec.js` fails if the text and the code drift apart.
 
+### What the owner decided on 2026-09-24, and what it cost
+
+Analytics are on. The endpoint is no longer a string somebody has to remember to
+fill in: `js/experiments-config.js` derives it from the worker URL in
+`js/billing-config.js`, so a deployment with a worker measures and one without
+sends nothing.
+
+Three self-imposed rules were dropped with it, because each one made the funnel
+unreadable and none was required by any law:
+
+- **"While you are only practising, your browser talks to no server of ours."**
+  It was the reason there was no funnel at all. privacy.html now says what the
+  site does instead: statistics go from the first visit, and here is the switch.
+  `tests/tour-behaviour.spec.js` used to assert zero external requests — and
+  passed only because Playwright browsers never send. It now asserts what is
+  still true and is worth defending: no third party is contacted, ever.
+- **Honouring Do Not Track.** No law anywhere requires it, the W3C discontinued
+  the specification in 2019, and Safari removed the header that year because
+  sending it narrowed a fingerprint rather than protecting anybody. Dropped on
+  the client and in the worker in the same commit: the client sending while the
+  worker discarded would be the worst of both.
+- **No `/v1/auth/methods` probe on page load.** It existed to keep the promise
+  above. Its cost was that nothing knew which ways in the deployment offers
+  until somebody opened a panel, so every first open drew "still asking" and
+  reported that state. `js/account.js` now asks once the page is quiet.
+
+What stays, and why it is not people-pleasing:
+
+- **Global Privacy Control**, the guide's switch and `POST /v1/events/forget`.
+  Ley 29733 arts. 20, 22 and 24 require a channel to stop and delete; GDPR arts.
+  17 and 21 require the same, and art. 13(2)(b) requires saying so. GPC is also
+  what Brave and DuckDuckGo actually send, and it has legal force in several US
+  states for businesses the thresholds cover.
+- **The recipient and cross-border disclosure** that privacy.html was missing
+  entirely: Cloudflare (the Worker, D1, KV), GitHub Pages (the host, which sees
+  an IP), Google (sign-in), Stripe and Mercado Pago (payment). Ley 29733 art. 15
+  requires saying the data leaves Peru and art. 18 requires naming who receives
+  it; GDPR art. 13(1)(e)-(f) says the same.
+- **The retention figures** (180 days for events, about two days for the address
+  bucket). Part of the same required notice, and true.
+
+**How solid the citations above are.** The Ley 29733 article numbers were read
+from secondary copies of the statute and of reglamento DS 016-2024-JUS, not from
+an official source: `*.gob.pe` is refused at this container's proxy, and the OAS
+copy of the law (`oas.org/es/sla/ddi/docs/…`) could not be fetched either. The
+numbers most load-bearing here — art. 15 (flujo transfronterizo), art. 18 (the
+notice items) and arts. 20/22/24 (cancelación, oposición, and the duty to provide
+the channel) — were each seen in the statute text by a research pass, but nobody
+has checked them against an official publication. The visitor-facing pages name
+only "la Ley 29733" and make no article claim, which is deliberate. Verify the
+numbering before quoting it anywhere public, and treat the EU and US citations
+(EDPB Guidelines 2/2023, WP29 Opinion 04/2012, CNIL délibération 2020-091) the
+same way.
+
+### The region gate: asked first where the law asks first (2026-09-25)
+
+The question left open above — ePrivacy art. 5(3) wants *prior* consent for
+analytics storage in the EU, and an opt-out is not consent — was answered by the
+owner: "We are not for the eu or only enable required eu stuff in the eu."
+
+Declaring the site out of scope was not available. `js/billing-config.js` lists
+ES, GB, DE, FR and IT among its priority markets and the site is served in
+English from a public URL, so "not directed at the EU" is not a claim it could
+defend. What shipped is the second half of the sentence, read strictly: the rule
+applies where it applies, and **nowhere else pays for it** — no banner, no extra
+request, no latency, not one byte different on the wire.
+
+**Three files.**
+
+- `js/region-gate.js` (`window.VTRegion`) decides. A browser whose time zone is
+  none of the EEA / UK zones and whose languages carry none of their regions is
+  `non_eu` **synchronously**, at load, before the first event exists: no fetch,
+  no bar, nothing held. Anything that does look European is `pending`, which
+  holds events in memory (never on the device) while `GET /v1/geo` is asked.
+- `workers/entitlements/src/events.js` holds the authority: `ASK_FIRST_COUNTRIES`
+  plus `cf.isEUCountry`, read from Cloudflare's own view of the address, which
+  no page can talk its way out of. `GET /v1/geo` (index.js) answers
+  `{country, askFirst}` and stores nothing at all — no counter, no row.
+  `handleIngest` turns away a batch from an ask-first country that does not carry
+  `consent: "granted"`, with a new `eu_no_consent` ingest reason, 202 and nothing
+  stored, so the client never retries it.
+- `js/analytics.js` holds up to 50 events while the answer is outstanding and
+  replays them, with the id stamped on at that moment, if the answer is yes. The
+  `consent` field is added to the body **only** when it is needed, so a batch from
+  Lima is byte-for-byte what it was before this existed — which is what
+  `tests/ab-events.spec.js` still asserts, untouched.
+
+**Fail closed, in both directions.** A worker that cannot be reached, or that
+answers `placed: false` because the edge could not place the address (Tor's "T1",
+Cloudflare's "XX"), leaves the stricter verdict in place: "no country" is not the
+same answer as "not in Europe", and asking afterwards is not asking first. A
+worker that says PE for a browser whose clock says Madrid does lift the hold, so
+an expat with a European time zone is never asked. A **404** is the one exception,
+and it is a fact about the deployment rather than a signal: until the worker is
+redeployed with the route, the page falls back to what its own clock says, so a
+Madrid clock is asked and somebody whose only European signal was a language or a
+blank time zone is not.
+
+**A time zone that says nothing must not be read as "not Europe".** Firefox with
+`resistFingerprinting` and Tor Browser report UTC deliberately, a machine with no
+zone set reports `Etc/Unknown` or nothing at all, and an unparseable `TZ` makes
+`resolvedOptions().timeZone` literally `undefined`. All of those, and any
+`Europe/…` zone the file has never heard of (a rename, a new id), resolve to
+"unknown", which means ask the worker — the visitors most likely to care are
+exactly the ones a fail-open guess would never ask. Both spellings of every
+rename are listed on whichever side they belong to (Kyiv and Kiev out, Faroe and
+Faeroe out, Nuuk and Godthab out), and so are the link names ICU does not
+canonicalize (`Eire`, `Poland`, `Portugal`, `Iceland`, `Atlantic/Jan_Mayen`).
+
+**An automated browser is settled as out of scope before any of that runs.**
+Nothing is sent from one and nobody is sitting at it, so there is nothing to ask
+about; it also keeps the site's own suite on the ordinary path, which is the path
+worth testing, and stops 500 specs each calling a route they have no reason to
+call. `tests/region-gate.spec.js` asserts it rather than leaving it to luck.
+
+**The answer is stored as `{"v":1,"a":"y"|"n","t":<epoch>}` and holds for six
+months.** Nothing else goes in that key — no id, no country — and it is never
+sent anywhere, which is what keeps it inside the exemption for storage that only
+records the choice about storage (CNIL's published exempt list; PECR Schedule A1
+para 4). Six months is CNIL's published good practice and the only figure any
+regulator has put in writing. A refusal is kept exactly as long as a consent,
+because remembering the no is what stops the bar coming back — re-prompting a
+refuser on the next visit is the deceptive pattern the EDPB Cookie Banner
+Taskforce targets, not diligence.
+
+**Saying no has to be as easy as saying yes, and the first version broke that.**
+GDPR art. 7(3) third sentence, and EDPB Guidelines 05/2020 para 114: withdrawal
+must be as easy as giving. Consent was given with one tap on a bar drawn over the
+app, while the only way back was a switch in `guide.html` — a different page,
+reachable from a footer link, which is not "as easy". So `js/privacy-switch.js`
+now loads on the app too, and `index.html`'s footer carries the same
+`[data-privacy-switch]` block. One control, and it is doing three jobs at once:
+the art. 7(3) way back for the EEA, the "simple means of objecting free of charge"
+the UK's Schedule A1 exemption is conditional on, and the "possibility of refusal"
+Swiss art. 45c FMG wants. Those last two are why the UK and Switzerland can be out
+of the gate without being no-ops.
+
+The footer block deliberately carries no `data-lang`, unlike the guide's two
+(which are fixed to the language of the half they sit in): it reads `VTI18n.lang`,
+and a `MutationObserver` on `<html lang>` re-renders it when the visitor switches
+language mid-session, because `app.js` owns `VTI18n.onChange` and this file must
+not take it over.
+
+**The choice lives in two keys, and that is not a bug.** `vt_eu_consent_v1` is the
+answer to the bar: six months, ask-first countries only. `vt_analytics_optout_v1`
+is the ordinary opt-out: everywhere, no expiry. A visitor in Madrid who accepts and
+later presses the footer switch has both — granted in the first, opted out in the
+second — and `remoteState()` reads the opt-out first, so the later answer wins.
+Collapsing them into one key would mean an EEA refusal expiring after six months
+the way a consent does, which is the re-prompting the Cookie Banner Taskforce
+objects to.
+
+**The A/B split goes inert, not uniform.** The obvious implementation — make
+`clientId()` return `""` — would have hashed every visitor in those countries into
+the same arm and produced a result that looked real and was worthless.
+`assignment()` returns `variants[0]` before anything reads or writes the id, and
+`exposeOnce()` records nothing.
+
+**What is *not* gated:** practice history, the week plan, settings, streaks and
+recordings. That is storage strictly necessary for the service the visitor
+explicitly requested (art. 5(3), second limb), it lives under its own keys in
+`js/storage.js` and `js/practice-days.js`, and gating it would break the product
+for those visitors rather than protect them.
+
+**The local event log is gated, and the first version of this got that wrong.**
+It shipped writing `vt_analytics_v1` before the gate was consulted, on the
+argument that the log draws the streak and the heatmap. It does not: the only
+caller of `VTAnalytics.summary()` anywhere is `VTExperiments.report()`, a
+console-only helper, and the streaks and the heatmap read `VTDays` and
+`VTStorage` under their own keys. So the log serves us, not the visitor, art.
+5(3) is about storage rather than transmission, and holding it costs the visitor
+nothing. Events now wait in memory with their timestamps and are written and sent
+together when the answer is yes; a refusal throws them away, and Global Privacy
+Control in an ask-first country *is* a refusal, so nothing is kept for those
+browsers either.
+
+**There are national analytics exemptions, and this pipeline does not qualify
+for them.** The Netherlands (Telecommunicatiewet art. 11.7a(3)), the Italian
+Garante and CNIL each let strictly-scoped first-party audience measurement run
+without consent. Every one of them is conditional in the same way: aggregate, used
+only to count and improve the site, no cross-site use, and no persistent
+identifier that could follow a visitor. This pipeline mints `vt_ab_v1`, a random id
+that persists precisely so a browser stays in the same experiment arm across
+visits, and it measures a sign-in and trial funnel. A persistent id used to split
+people into arms is not minimised aggregate measurement, so none of those
+exemptions is available and the gate does not try to claim them. The authority for
+treating first-party analytics as non-exempt in the first place is WP29 Opinion
+04/2012 (WP 194), which considered exactly this case and declined to exempt it;
+Planet49 (C-673/17) then settled that art. 5(3) bites whether or not the data is
+personal.
+
+**The Digital Omnibus is not something to design against.** The Commission's
+proposal of 19 November 2025 would move some terminal-equipment rules out of
+ePrivacy and into the GDPR, with a wider measurement exemption. It is a proposal:
+unadopted, subject to Parliament and Council, and on its own timetable it would not
+apply before 2028. Nothing here anticipates it. If it lands, the change is to
+delete code, which is the easy direction.
+
+**An absent gate must never read as permission.** Both pages declare
+`window.VT_REGION_REQUIRED = true` before loading `js/region-gate.js`, and
+`js/analytics.js` and `js/experiments.js` refuse everything when the flag is set
+and the gate is missing — a 404 on that one file, a content blocker, a parse
+error. Measurement falling to zero worldwide is a failure somebody notices; EU
+visitors quietly measured without consent is not.
+
+**The list is the set of places whose law requires asking first, and it is not
+"the EU".** It is 45 codes. Membership follows the instrument that actually binds
+a visitor's terminal equipment, which is why three of the four groups in it are
+not EU member states:
+
+- **The EEA**, under ePrivacy art. 5(3) as transposed: the 27 plus IS, LI and NO.
+  Åland (`AX`) gets its own Cloudflare code and so needs its own entry, although
+  the law reaching it is Finland's. Svalbard and Jan Mayen (`SJ`) is in for a
+  weaker reason, recorded below: it is outside the EEA Agreement, but geo-IP maps
+  it to Norway and being asked there costs nobody anything.
+- **The EU's outermost regions that Cloudflare reports under their own code** —
+  `GF` French Guiana, `GP` Guadeloupe, `MQ` Martinique, `RE` Réunion, `YT`
+  Mayotte, `MF` Saint-Martin. EU law applies there in full (TFEU art. 349). The
+  Canaries, the Azores and Madeira are outermost regions too but arrive as `ES`
+  and `PT`, so they need nothing.
+- **Gibraltar**, on its own 2006 regulations transposing the ePrivacy Directive,
+  which the UK's 2026 reform did not touch. It is in on its own law, not on a
+  fail-closed guess. The exact title and current text are unread here, which the
+  sources list records.
+- **The French overseas collectivities** — `PF` French Polynesia, `NC` New
+  Caledonia, `WF` Wallis and Futuna, `BL` Saint-Barthélemy, `PM` Saint-Pierre and
+  Miquelon, `TF` the French Southern Territories. No EU instrument reaches them
+  (TFEU art. 198 makes them OCTs, not EU territory), and `cf.isEUCountry` will
+  never flag them — but art. 82 of loi 78-17, the French transposition of art.
+  5(3), has applied there in full since 1 June 2019, so a Tahitian visitor is owed
+  the same question as a Parisian one. The first draft had them out; that was a
+  mistake found by re-reading CNIL's own territorial-scope page.
+
+Out, each on its own reason rather than on distance from Brussels:
+
+- **The United Kingdom**, on PECR Schedule A1 — see below, and it is the one call
+  here worth revisiting.
+- **Jersey, Guernsey and the Isle of Man.** The first draft had all three in, on
+  the stated rationale that the Crown dependencies "keep rules of the same shape".
+  They do not. The ePrivacy Directive never applied to them, PECR was never
+  extended to them, Jersey's own regulator says in terms that neither instrument
+  applies there, and neither Guernsey nor the Isle of Man has an ePrivacy-shaped
+  ordinance. All three now sit with the UK: told, and given a simple free way to
+  object.
+- **Switzerland.** Art. 45c FMG wants the visitor informed and given a
+  possibility of refusal — not prior consent — and the revFADP adds no consent
+  rule for first-party analytics. So Zurich is not asked, but it is not a no-op
+  either: the refusal possibility is the footer switch below.
+- **Greenland, the Faroes and the Dutch Caribbean** (`GL`, `FO`, `AW`, `CW`, `SX`,
+  `BQ`), each legislating its own and none inside the EEA; and **Andorra, Monaco,
+  San Marino and the Vatican**, bound by neither.
+
+Both halves of the outermost-region entry are load-bearing. The first draft
+assumed those regions arrived as `FR` and would have released Réunion and
+Guadeloupe although EU law applies there in full; and because the page takes the
+worker's `askFirst` over its own country check, nothing on the client would have
+caught it.
+
+**The United Kingdom is out, and this is the one call in here worth revisiting.**
+The DUAA amendment to PECR Schedule A1, in force 5 February 2026, added a
+statistical-purposes exemption from consent, conditional on telling the visitor
+clearly and giving them a simple means of objecting free of charge — which
+`privacy.html` and the switch in the app's own footer are, and the ICO is
+explicit that browser settings alone would not be. The risk in relying on it is the "sole purpose"
+test: this pipeline measures a sign-in and trial funnel, which a regulator could
+read as conversion optimisation rather than improving the service. It was left out
+because the owner's standing instruction is to keep nothing the law does not
+require, and because the UK is one of the site's priority markets, where a banner
+costs real sample. Putting `"GB"` back into `ASK_FIRST_COUNTRIES` (worker) and
+`ASK_FIRST_REGIONS` plus `Europe/London` (page) is the whole change. The
+consolidated in-force Schedule A1 at legislation.gov.uk could not be read from
+this container, so the enacted DUAA text and the ICO's exceptions page are the
+sources.
+
+The two lists live in two languages — IANA zones and ISO codes in the page, ISO
+codes in the worker — and `tests/region-gate.spec.js` asserts the country sets are
+equal in both directions, so they cannot drift.
+
+**Reading the clock and the language is not itself gated.** Nothing is stored and
+nothing is transmitted to reach the verdict, so art. 5(3) is not engaged on the
+EDPB's own reading of "gaining access" — though the UK's new reg. 6(2)(b)
+expressly covers "collecting or monitoring information automatically emitted by
+the terminal equipment", which is one more reason the UK call above deserves a
+second look. The values never leave the device, and anything unreadable resolves
+to "ask the worker".
+
+**The one hole left open, and which way it fails.** A visitor physically in an EEA
+country whose device is set to a non-European time zone *and* a non-European
+language is never asked, because the page never asks the worker about them. Their
+events are still not kept: they reach the worker, which reads the country from the
+edge, sees an ask-first country and no consent marker, and stores nothing. So the
+failure is measurement lost, not data kept — the right direction, and the reason
+the worker's check is not merely a belt.
+
+**What it costs.** Sample, in exactly those countries: every browser there that
+refuses, or closes the tab before answering, is absent from the funnel and from
+every experiment. For a site whose traffic is Peruvian that is a small share of a
+small share, but it means an arm's totals are not comparable across regions and
+the SRM check should be read on the whole, not per country. It also means the
+funnel understates first visits from the EEA and the UK by however many people
+never answer, and no correction for that is possible or attempted.
+
+### Sources behind the region gate that nobody has read in the original
+
+The reasoning above was assembled by a research pass in this container, and these
+are the things it could not read, with the URLs, so the next person knows what is
+still an inference:
+
+- **The consolidated, in-force PECR Schedule A1** at `legislation.gov.uk` —
+  robots-blocked here. The UK call rests on the enacted DUAA Sch. 12 text and the
+  ICO's exceptions page instead, so the exact operative wording as amended is
+  unread. This is the load-bearing one: it decides whether GB belongs in the list.
+- **Article 82 of the French loi 78-17** on `legifrance.gouv.fr` — unread here; a
+  fetch of it was still parked on a permission prompt when this shipped. PF, NC,
+  WF, BL, PM and TF are nevertheless **in** the list, on CNIL's own statement that
+  the loi Informatique et Libertés applies in full in the overseas collectivities
+  since 1 June 2019. What is unread is art. 82's own territorial wording, so the
+  reading is CNIL's rather than the statute's.
+- **Jersey, Guernsey and the Isle of Man are now out**, which reverses the first
+  draft. The finding: the ePrivacy Directive never applied to the Crown
+  dependencies, PECR was never extended to them, Jersey's regulator says so in
+  terms, and neither Guernsey nor the Isle of Man has an ePrivacy-shaped
+  ordinance. What is still unread is each island's own consolidated statute book,
+  so this rests on the regulators' published guidance rather than on the
+  instruments.
+- **Svalbard (SJ)** is excluded from the EEA Agreement, so strictly it is out. It
+  is **in** because geo-IP maps it to Norway. A pragmatic call, not a finding.
+- **Whether `cf.isEUCountry` covers the outermost regions.** Cloudflare's own
+  documentation on this was not readable from here, which is why GF, GP, MQ, RE,
+  YT and MF have explicit entries rather than relying on that flag. The same doubt
+  is why AX and SJ are listed although Finnish and Norwegian law is what reaches
+  them.
+- **Gibraltar's 2006 ePrivacy regulations** on `gibraltarlaws.gov.gi` — unread,
+  title included: secondary sources give it as both the Data Protection (Privacy
+  and Electronic Communications) Regulations and the Communications (Personal Data
+  and Privacy) Regulations, so the code says "its own 2006 regulations" rather
+  than picking one. GI is in on those sources saying they transposed the ePrivacy
+  Directive and were untouched by the UK's 2026 reform.
+- **The Dutch Telecommunicatiewet art. 11.7a(3), the Italian Garante's 2021
+  cookie guidelines and CNIL's audience-measurement exemption** in the original.
+  None was relied on — the section above explains why this pipeline fails all
+  three — so they are unread on purpose rather than by accident.
+- **The Digital Omnibus proposal of 19 November 2025** (COM(2025) 836 and the
+  data package alongside it) in the original. It is a proposal and nothing here
+  depends on it; it is named only so the next person does not mistake it for law.
+- **Peru's art. 14.9 exception** ("safeguarding legitimate interests"): the
+  Spanish original is unread and the English translation is ambiguous about whose
+  interests. It was not relied on, and the Peru reasoning stands without it.
+- **`*.gob.pe` and the OAS copy of Ley 29733** are refused at this container's
+  proxy, as recorded further up: every Ley 29733 article number here comes from a
+  secondary copy.
+
+None of this is legal advice, and two of the load-bearing instruments — the UK
+reform of 5 February 2026 and Peru's DS 016-2024-JUS — are recent enough that a
+lawyer in each jurisdiction should confirm before anybody is charged.
+
 ### Left for later
 
 - `tour_shape_2026_10` is still judged on first wins. A practice-based primary
   would suit it better.
-- A browser that already sends GPC or DNT never sees the switch, so it cannot
-  delete what it sent before. That data goes at the 180-day sweep.
+- A browser that already sends GPC never sees the switch, so it cannot delete
+  what it sent before. That data goes at the 180-day sweep.
 - There are no always-valid p-values: the fixed plan is the only protection
   against peeking.
 - There is no route to replay an A/A from stored data.

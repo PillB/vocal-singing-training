@@ -6624,6 +6624,107 @@ body:not(.view-exercise) .app-header {
   display: block;
 }
 
+/* ──────────────────────────────────────────────────────────────────────────
+   Header: the plan you hold, and the offer you do not
+   ──────────────────────────────────────────────────────────────────────────
+   Appended as an override block rather than edited in place, the way the phone
+   layout pass sits after the flow overhaul, so the two branches working on this
+   file merge without a conflict.
+
+   The site's own owner read the old header as "Pro, not active" and found that
+   confusing, and he was right for a reason the colour name hides: a 25%-alpha
+   gradient over the header bar (rgba(15,20,25,.82) composited on #0c1118 gives
+   #0e1319) is invisible, so the chip never read as a chip. What shouted was
+   gold text at weight 800 — a label, not an affordance. An offer has to read as
+   something you press. */
+.btn-pro {
+  background: rgba(240, 184, 80, 0.12);
+  border-color: rgba(240, 184, 80, 0.7);
+  color: #ffdb95;
+  font-weight: 700;
+}
+.btn-pro:hover,
+.btn-pro:focus-visible {
+  background: rgba(240, 184, 80, 0.22);
+  border-color: #f0b84f;
+}
+
+/* The status pill. Its old 0.72rem rendered at 11.52px everywhere except under
+   640px, where a media query raised it — so the floor the project tests on
+   phones was missed on every desktop. It carries meaning, so it holds the
+   floor at every width. */
+.billing-pill {
+  font-size: 0.75rem;
+}
+
+/* A gifted month and a subscription that has been cancelled are not the same
+   thing as paying, and the header used to draw all three in the paid green. */
+.billing-pill.is-gift {
+  background: rgba(240, 184, 80, 0.16);
+  border-color: rgba(240, 184, 80, 0.45);
+  color: #ffdb95;
+}
+.billing-pill.is-ending {
+  background: rgba(224, 108, 117, 0.14);
+  border-color: rgba(224, 108, 117, 0.45);
+  color: #f3b0b5;
+}
+
+/* The door into accounts sits outside the phone menu now, so it no longer
+   inherits .header-utils .btn-util's muted colour and 0.92 opacity. That is the
+   right direction — it is the one control a signed-out visitor needs to find —
+   but it should be deliberate, and it must not compete with the practice button,
+   which is the actual product. A plain visible control, no fill. */
+.header-door {
+  color: var(--text);
+  font-weight: 600;
+  border-color: var(--border-strong, var(--border));
+}
+.header-door:hover,
+.header-door:focus-visible {
+  border-color: var(--accent, #6eb4e8);
+}
+
+/* What an account is for, above the button that makes one. Small, quiet, and it
+   has to clear the 12px floor because it carries the price. */
+.account-offer {
+  margin: 0 0 0.6rem;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+/* The home card's plan tag carries the same four answers as the header pill, so
+   it needs the same two colours the header gained: a gifted month is not a
+   purchase, and a subscription that is ending is not one that renews. */
+.value-pulse-tag.is-gift {
+  color: #ffdb95;
+  border-color: rgba(240, 184, 80, 0.45);
+}
+.value-pulse-tag.is-ending {
+  color: #f3b0b5;
+  border-color: rgba(224, 108, 117, 0.45);
+}
+
+/* The pill's border is its only shape cue, and every state drew it under the
+   3:1 that WCAG 1.4.11 asks of a graphical object: 2.91 paid, 2.62 trial, 2.09
+   ending, computed against the header bar (rgba(15,20,25,.82) over --bg). The
+   word carries the state now, so this is not what makes the pill readable — its
+   text clears 8.7:1 — but a box you can barely see is a box worth not drawing
+   badly. Alphas raised to the first value that clears 3:1. */
+.billing-pill {
+  border-color: rgba(79, 212, 146, 0.55);
+}
+.billing-pill.is-trial {
+  border-color: rgba(110, 180, 232, 0.58);
+}
+.billing-pill.is-gift {
+  border-color: rgba(240, 184, 80, 0.55);
+}
+.billing-pill.is-ending {
+  border-color: rgba(224, 108, 117, 0.68);
+}
+
 /* —— Design: session-chrome ——
    The guided-session banner is one line, "Ejercicio 1 de 3 · Básicos de hoy",
    then Pausar (Reanudar while paused) and Terminar in words. The two-row box
@@ -7144,4 +7245,63 @@ body.view-exercise .highway-stage {
   body.view-exercise {
     overflow-x: clip;
   }
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   The phone header row, now that the door is on it
+   ──────────────────────────────────────────────────────────────────────────
+   Taking `#btn-account` out of the "Más" menu added a fifth control to a row
+   that already just fitted: brand, the nav pill's three links, the door, Más.
+   At 320 and 360 the natural widths add up past the viewport, and `.header-nav`
+   was the only shrinkable box in the row — so it shrank to 147px while its own
+   buttons kept their 197px, overflowed it, and `#btn-account` was laid out on
+   top of "Historial" and swallowed its clicks. tests/plan-history-design caught
+   it at both widths; at 390 the overlap missed the click point by nine pixels,
+   which is the kind of luck that hides a defect.
+
+   Two changes, no control hidden and no label shortened: the row's horizontal
+   padding pays for the door, and the pill scrolls instead of overflowing, so
+   whatever does not fit is reachable by a swipe rather than sitting underneath
+   another button. The 44px tap floor and the 12px text floor are untouched. */
+@media (max-width: 420px) {
+  /* The same selector the phone-header pass uses (specificity matters here: a
+     bare `.header-actions .btn-sm` loses to
+     `body:not(.view-exercise) .app-header:has(#btn-more) .header-actions .btn-sm`
+     however late it appears). */
+  body:not(.view-exercise) .app-header:has(#btn-more) .header-actions {
+    gap: 0.3rem;
+  }
+  body:not(.view-exercise) .app-header:has(#btn-more) .header-actions .btn-sm {
+    padding-inline: 0.25rem;
+  }
+  body:not(.view-exercise) .app-header:has(#btn-more) .header-nav {
+    flex: 1 1 auto;
+    min-width: 0;
+    gap: 0.1rem;
+    padding: 0.12rem;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  body:not(.view-exercise) .app-header:has(#btn-more) .header-nav::-webkit-scrollbar {
+    display: none;
+  }
+  body:not(.view-exercise) .app-header:has(#btn-more) .header-nav .nav-link {
+    padding-inline: 0.3rem;
+    flex: 0 0 auto;
+  }
+}
+
+/* The same statistics switch in the app's footer (index.html), not only in the
+   guide: consent is given with one tap on the region bar, so the way back has to
+   be on the same page (GDPR art. 7(3)). It sits under the footer's own small
+   print, so it reads as one quiet line rather than the guide's card. */
+.app-footer .privacy-switch {
+  justify-content: center;
+  margin: 0.6rem auto 0;
+  max-width: 34rem;
+  font-size: 0.85rem;
+  background: transparent;
+  border-color: rgba(148, 163, 184, 0.25);
 }

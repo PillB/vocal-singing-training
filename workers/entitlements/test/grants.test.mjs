@@ -55,12 +55,15 @@ test("safePlan only lets through plans we actually sell", () => {
 });
 
 test("trialSeconds follows TRIAL_DAYS and stays sane", () => {
+  // The default is 7 days as of 2026-09-24 (docs/35-PRICING.md): the only
+  // randomised experiment on trial length favoured 7 over 30, and the owner
+  // took it. An explicit TRIAL_DAYS still wins over the default.
   assert.equal(trialSeconds({ TRIAL_DAYS: "30" }), 30 * DAY);
   assert.equal(trialSeconds({ TRIAL_DAYS: "7" }), 7 * DAY);
-  assert.equal(trialSeconds({}), 30 * DAY);
-  assert.equal(trialSeconds({ TRIAL_DAYS: "0" }), 30 * DAY);
-  assert.equal(trialSeconds({ TRIAL_DAYS: "-5" }), 30 * DAY);
-  assert.equal(trialSeconds({ TRIAL_DAYS: "nonsense" }), 30 * DAY);
+  assert.equal(trialSeconds({}), 7 * DAY);
+  assert.equal(trialSeconds({ TRIAL_DAYS: "0" }), 7 * DAY);
+  assert.equal(trialSeconds({ TRIAL_DAYS: "-5" }), 7 * DAY);
+  assert.equal(trialSeconds({ TRIAL_DAYS: "nonsense" }), 7 * DAY);
   assert.equal(trialSeconds({ TRIAL_DAYS: "999999" }), MAX_GRANT_DAYS * DAY);
 });
 

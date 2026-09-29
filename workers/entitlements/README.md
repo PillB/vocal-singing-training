@@ -73,9 +73,10 @@ routes above are untouched):
 | POST | `/v1/auth/logout` | Drops the bearer session. |
 | GET | `/v1/me` | The account, its entitlement, and a fresh license token when entitled. |
 | POST | `/v1/me/link` | `{provider, sessionId}` — attaches a checkout the visitor paid for anonymously. |
-| POST | `/v1/me/trial` | Starts the one free month. `409 {reason:"trial_used"}` the second time. |
+| POST | `/v1/me/trial` | Starts the one free trial. `409 {reason:"trial_used"}` the second time. |
 | POST | `/v1/me/redeem` | `{code}` — redeems a gift code. |
 | GET/PUT/DELETE | `/v1/me/progress` | Saved progress for one profile. `PUT` takes `{profileId, doc, baseRev}` and answers `409` with the server's copy when the revision moved. |
+| GET | `/v1/admin/funnel?days=N` | The account and trial funnel, one proportion per step with a Wilson interval, conditional on the step before it. Not an A/B comparison — it finds a step nobody gets through, and cannot detect a few points of improvement. |
 | POST/GET | `/v1/admin/gift-codes` | Mint or list gift codes. |
 | POST | `/v1/admin/gift-codes/revoke` | Stop a code being redeemed again. |
 | POST/GET | `/v1/admin/grants` | Gift months straight to an email, or list an account's grants. |
@@ -87,8 +88,8 @@ Anonymous usage events and A/B results (`src/events.js`; also need `DB`):
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| POST | `/v1/events` | A batch of up to 25 events from the site's beacon (`text/plain` JSON). `200 {ok, accepted, dropped}`; `202` and nothing stored for GPC/DNT, automated user agents, or `EVENTS_ENABLED=false`; `403` from any origin but `SITE_ORIGIN`; `429` past a limit (below). |
-| POST | `/v1/events/forget` | `{cid}` → deletes every event and exposure for that browser id: `200 {ok, deleted: {events, exposures}}`. Sent by the guide's opt-out switch. Always allowed (GPC, DNT and the kill switch do not stop a deletion); origin-checked, 30 per address per hour. |
+| POST | `/v1/events` | A batch of up to 25 events from the site's beacon (`text/plain` JSON). `200 {ok, accepted, dropped}`; `202` and nothing stored for GPC (`sec-gpc: 1`), automated user agents, or `EVENTS_ENABLED=false`; `403` from any origin but `SITE_ORIGIN`; `429` past a limit (below). |
+| POST | `/v1/events/forget` | `{cid}` → deletes every event and exposure for that browser id: `200 {ok, deleted: {events, exposures}}`. Sent by the guide's opt-out switch. Always allowed (GPC and the kill switch do not stop a deletion); origin-checked, 30 per address per hour. |
 | GET | `/v1/admin/experiments` | Every registered experiment with exposures per arm and the sample-ratio check, plus `ingest`: the last 7 days of ingest counters and when the last event arrived. |
 | GET | `/v1/admin/experiments/results?experiment=KEY` | The preset primary metric and guardrails per arm, the sample-ratio check, the instrumentation check (`eventMix`), where the test stands against its plan (`horizon`), and a one-word `readMe`. `event`/`kind`/`from`/`to` ask for one exploratory metric instead; `control` and `weights` override the registry's. `404` for a key not in the registry. |
 
@@ -165,7 +166,7 @@ Public, committed in `wrangler.toml`:
 | `LICENSE_TTL_SECONDS` | Token lifetime (clamped to 60…2592000). |
 | `STRIPE_PRICE_PRO_MONTHLY` / `STRIPE_PRICE_PRO_YEARLY` | Optional price → plan mapping. |
 | `MP_PLAN_PRO_MONTHLY` / `MP_PLAN_PRO_YEARLY` | Optional `preapproval_plan_id` → plan mapping. |
-| `TRIAL_DAYS` | Length of the free trial. One per account, ever. Default 30. |
+| `TRIAL_DAYS` | Length of the free trial, in days. One per account, ever. Default 7. |
 | `ADMIN_EMAILS` | Comma-separated emails allowed to gift and revoke months, and to read A/B results. |
 | `GOOGLE_CLIENT_ID` | Google Sign-In client id. Public by design. Empty disables Google sign-in. |
 | `EMAIL_PROVIDER` | `resend`, `brevo` or `mailersend`. Empty disables email sign-in rather than dropping codes silently. |

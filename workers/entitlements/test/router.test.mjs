@@ -85,7 +85,7 @@ test("health reports booleans and the site origin, never key material", async ()
     accountsConfigured: false,
     // Events need the same D1 binding, so a payments-only deployment has none.
     eventsEnabled: false,
-    authMethods: { email: false, google: false, googleClientId: null, trialDays: 30 },
+    authMethods: { email: false, google: false, googleClientId: null, trialDays: 7 },
     siteOrigin: TEST_ORIGIN
   });
   const text = JSON.stringify(body);

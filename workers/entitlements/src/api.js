@@ -122,6 +122,24 @@ export async function requireSession(env, request, now) {
 }
 
 /**
+ * Client-safe view of an account, with `role` read from the current
+ * `ADMIN_EMAILS` rather than from the row.
+ *
+ * The row's role is written once, at the account's first sign-in, but the
+ * admin routes check `isAdmin` against today's list. Reporting the stored role
+ * would show the gifting tools to someone removed from the list (every action
+ * then fails with `forbidden`) and hide them from someone added after they
+ * first signed in (who could use every route but never sees a button).
+ *
+ * @param {Object} account Account row.
+ * @param {Object} env Worker env bindings.
+ * @returns {Object} Public account.
+ */
+export function publicAccountFor(account, env) {
+  return { ...toPublicAccount(account), role: isAdmin(account, env) ? "admin" : "member" };
+}
+
+/**
  * Turn a resolved entitlement into a signed license token the browser can
  * verify with the key it already has.
  *
@@ -177,7 +195,7 @@ export async function buildMePayload(env, account, now) {
   const minted = await licenseTokenForResolution(resolution, account, env, now).catch(() => null);
   return {
     ok: true,
-    account: toPublicAccount(account),
+    account: publicAccountFor(account, env),
     entitlement: {
       pro: resolution.pro,
       plan: resolution.plan,
@@ -751,7 +769,7 @@ export async function handleAdminCreateGrant(request, env, deps) {
     },
     at
   );
-  return json({ ok: true, account: toPublicAccount(account), grant: toPublicGrant(grant, at) }, 200, cors);
+  return json({ ok: true, account: publicAccountFor(account, env), grant: toPublicGrant(grant, at) }, 200, cors);
 }
 
 /**
@@ -780,6 +798,43 @@ export async function handleAdminRevokeGrant(request, env, deps) {
 }
 
 /**
+ * How, and how recently, an account has signed in — for the admin lookup.
+ *
+ * An admin can gift months to an address before its owner ever signs in, and
+ * the most common support question after that is "I signed in and I don't see
+ * Pro". Almost always the person signed in with a different address. An empty
+ * `methods` list answers that at a glance: nobody has ever signed in as this
+ * address.
+ *
+ * @param {Object} db D1 binding.
+ * @param {string} accountId Account id.
+ * @param {number} at Unix seconds.
+ * @returns {Promise<{methods: string[], lastSeenAt: number|null, activeSessions: number}>} Summary.
+ */
+export async function signInSummary(db, accountId, at) {
+  const identities = await db
+    .prepare("SELECT DISTINCT provider FROM identities WHERE account_id = ?1 ORDER BY provider")
+    .bind(accountId)
+    .all();
+  const sessions = await db
+    .prepare(
+      `SELECT MAX(last_seen_at) AS last_seen,
+              SUM(CASE WHEN revoked_at IS NULL AND expires_at > ?2 THEN 1 ELSE 0 END) AS active
+       FROM sessions WHERE account_id = ?1`
+    )
+    .bind(accountId, at)
+    .first();
+  const lastSeen = sessions && sessions.last_seen !== null && sessions.last_seen !== undefined
+    ? Number(sessions.last_seen)
+    : null;
+  return {
+    methods: ((identities && identities.results) || []).map((row) => row.provider),
+    lastSeenAt: lastSeen,
+    activeSessions: Number((sessions && sessions.active) || 0)
+  };
+}
+
+/**
  * GET /v1/admin/account?email= — look somebody up and see everything they hold.
  * @param {Request} request Incoming request.
  * @param {Object} env Worker env bindings.
@@ -803,7 +858,7 @@ export async function handleAdminLookupAccount(request, env, url, deps) {
   return json(
     {
       ok: true,
-      account: toPublicAccount(account),
+      account: publicAccountFor(account, env),
       entitlement: {
         pro: resolution.pro,
         plan: resolution.plan,
@@ -812,7 +867,8 @@ export async function handleAdminLookupAccount(request, env, url, deps) {
         periodEnd: resolution.periodEnd
       },
       grants: grants.map((row) => toPublicGrant(row, at)),
-      paid: resolution.paid
+      paid: resolution.paid,
+      signIns: await signInSummary(env.DB, account.id, at)
     },
     200,
     cors

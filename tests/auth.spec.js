@@ -24,7 +24,9 @@ async function boot(page) {
       /* ignore */
     }
   });
-  await page.goto(BASE, { waitUntil: "domcontentloaded" });
+  // On a deploy with accounts the staff login only appears for staff who ask
+  // for it, which is what these tests are.
+  await page.goto(`${BASE}/index.html?staff`, { waitUntil: "domcontentloaded" });
 }
 
 function loadSecretsIfPresent() {
@@ -86,6 +88,10 @@ test.describe("Auth — accounts & hardening", () => {
     await boot(page);
     await page.click("#btn-account");
     await expect(page.locator("#account-modal")).toBeVisible();
+    // The internal login is behind its disclosure now, in every state: it is a
+    // staff door, not a fallback to put in front of visitors. A staff member
+    // opens it, which is the one extra click this asserts.
+    await page.click(".account-internal > summary");
     await page.fill("#login-username", "admin.pablo");
     await page.fill("#login-password", "definitely-wrong-password-xxx");
     await page.click("#login-submit");
@@ -100,6 +106,7 @@ test.describe("Auth — accounts & hardening", () => {
     const admin = secrets.admins[0];
     await boot(page);
     await page.click("#btn-account");
+    await page.click(".account-internal > summary");
     await page.fill("#login-username", admin.username);
     await page.fill("#login-password", admin.password);
     await page.click("#login-submit");
@@ -121,6 +128,7 @@ test.describe("Auth — accounts & hardening", () => {
     const t = secrets.testers[0];
     await boot(page);
     await page.click("#btn-account");
+    await page.click(".account-internal > summary");
     await page.fill("#login-username", t.username);
     await page.fill("#login-password", t.password);
     await page.click("#login-submit");

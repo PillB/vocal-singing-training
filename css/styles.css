@@ -127,7 +127,8 @@ body.view-exercise .main {
 body.view-exercise .header-actions .btn-sm {
   min-height: 32px;
   padding: 0.24rem 0.5rem;
-  font-size: 0.74rem;
+  /* 12px, the project's text floor (0.74rem drew 11.84px). */
+  font-size: 0.75rem;
 }
 /* Exercise: hide low-priority chrome so stage owns the fold */
 body.view-exercise #btn-history,
@@ -6624,6 +6625,107 @@ body:not(.view-exercise) .app-header {
   display: block;
 }
 
+/* ──────────────────────────────────────────────────────────────────────────
+   Header: the plan you hold, and the offer you do not
+   ──────────────────────────────────────────────────────────────────────────
+   Appended as an override block rather than edited in place, the way the phone
+   layout pass sits after the flow overhaul, so the two branches working on this
+   file merge without a conflict.
+
+   The site's own owner read the old header as "Pro, not active" and found that
+   confusing, and he was right for a reason the colour name hides: a 25%-alpha
+   gradient over the header bar (rgba(15,20,25,.82) composited on #0c1118 gives
+   #0e1319) is invisible, so the chip never read as a chip. What shouted was
+   gold text at weight 800 — a label, not an affordance. An offer has to read as
+   something you press. */
+.btn-pro {
+  background: rgba(240, 184, 80, 0.12);
+  border-color: rgba(240, 184, 80, 0.7);
+  color: #ffdb95;
+  font-weight: 700;
+}
+.btn-pro:hover,
+.btn-pro:focus-visible {
+  background: rgba(240, 184, 80, 0.22);
+  border-color: #f0b84f;
+}
+
+/* The status pill. Its old 0.72rem rendered at 11.52px everywhere except under
+   640px, where a media query raised it — so the floor the project tests on
+   phones was missed on every desktop. It carries meaning, so it holds the
+   floor at every width. */
+.billing-pill {
+  font-size: 0.75rem;
+}
+
+/* A gifted month and a subscription that has been cancelled are not the same
+   thing as paying, and the header used to draw all three in the paid green. */
+.billing-pill.is-gift {
+  background: rgba(240, 184, 80, 0.16);
+  border-color: rgba(240, 184, 80, 0.45);
+  color: #ffdb95;
+}
+.billing-pill.is-ending {
+  background: rgba(224, 108, 117, 0.14);
+  border-color: rgba(224, 108, 117, 0.45);
+  color: #f3b0b5;
+}
+
+/* The door into accounts sits outside the phone menu now, so it no longer
+   inherits .header-utils .btn-util's muted colour and 0.92 opacity. That is the
+   right direction — it is the one control a signed-out visitor needs to find —
+   but it should be deliberate, and it must not compete with the practice button,
+   which is the actual product. A plain visible control, no fill. */
+.header-door {
+  color: var(--text);
+  font-weight: 600;
+  border-color: var(--border-strong, var(--border));
+}
+.header-door:hover,
+.header-door:focus-visible {
+  border-color: var(--accent, #6eb4e8);
+}
+
+/* What an account is for, above the button that makes one. Small, quiet, and it
+   has to clear the 12px floor because it carries the price. */
+.account-offer {
+  margin: 0 0 0.6rem;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+/* The home card's plan tag carries the same four answers as the header pill, so
+   it needs the same two colours the header gained: a gifted month is not a
+   purchase, and a subscription that is ending is not one that renews. */
+.value-pulse-tag.is-gift {
+  color: #ffdb95;
+  border-color: rgba(240, 184, 80, 0.45);
+}
+.value-pulse-tag.is-ending {
+  color: #f3b0b5;
+  border-color: rgba(224, 108, 117, 0.45);
+}
+
+/* The pill's border is its only shape cue, and every state drew it under the
+   3:1 that WCAG 1.4.11 asks of a graphical object: 2.91 paid, 2.62 trial, 2.09
+   ending, computed against the header bar (rgba(15,20,25,.82) over --bg). The
+   word carries the state now, so this is not what makes the pill readable — its
+   text clears 8.7:1 — but a box you can barely see is a box worth not drawing
+   badly. Alphas raised to the first value that clears 3:1. */
+.billing-pill {
+  border-color: rgba(79, 212, 146, 0.55);
+}
+.billing-pill.is-trial {
+  border-color: rgba(110, 180, 232, 0.58);
+}
+.billing-pill.is-gift {
+  border-color: rgba(240, 184, 80, 0.55);
+}
+.billing-pill.is-ending {
+  border-color: rgba(224, 108, 117, 0.68);
+}
+
 /* —— Design: session-chrome ——
    The guided-session banner is one line, "Ejercicio 1 de 3 · Básicos de hoy",
    then Pausar (Reanudar while paused) and Terminar in words. The two-row box
@@ -7143,5 +7245,247 @@ body.view-exercise .highway-stage {
 @media (max-width: 360px) {
   body.view-exercise {
     overflow-x: clip;
+  }
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   The phone header row, now that the door is on it
+   ──────────────────────────────────────────────────────────────────────────
+   Taking `#btn-account` out of the "Más" menu added a fifth control to a row
+   that already just fitted: brand, the nav pill's three links, the door, Más.
+   At 320 and 360 the natural widths add up past the viewport, and `.header-nav`
+   was the only shrinkable box in the row — so it shrank to 147px while its own
+   buttons kept their 197px, overflowed it, and `#btn-account` was laid out on
+   top of "Historial" and swallowed its clicks. tests/plan-history-design caught
+   it at both widths; at 390 the overlap missed the click point by nine pixels,
+   which is the kind of luck that hides a defect.
+
+   Two changes, no control hidden and no label shortened: the row's horizontal
+   padding pays for the door, and the pill scrolls instead of overflowing, so
+   whatever does not fit is reachable by a swipe rather than sitting underneath
+   another button. The 44px tap floor and the 12px text floor are untouched. */
+@media (max-width: 420px) {
+  /* The same selector the phone-header pass uses (specificity matters here: a
+     bare `.header-actions .btn-sm` loses to
+     `body:not(.view-exercise) .app-header:has(#btn-more) .header-actions .btn-sm`
+     however late it appears). */
+  body:not(.view-exercise) .app-header:has(#btn-more) .header-actions {
+    gap: 0.3rem;
+  }
+  body:not(.view-exercise) .app-header:has(#btn-more) .header-actions .btn-sm {
+    padding-inline: 0.25rem;
+  }
+  body:not(.view-exercise) .app-header:has(#btn-more) .header-nav {
+    flex: 1 1 auto;
+    min-width: 0;
+    gap: 0.1rem;
+    padding: 0.12rem;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  body:not(.view-exercise) .app-header:has(#btn-more) .header-nav::-webkit-scrollbar {
+    display: none;
+  }
+  body:not(.view-exercise) .app-header:has(#btn-more) .header-nav .nav-link {
+    padding-inline: 0.3rem;
+    flex: 0 0 auto;
+  }
+}
+
+/* The same statistics switch in the app's footer (index.html), not only in the
+   guide: consent is given with one tap on the region bar, so the way back has to
+   be on the same page (GDPR art. 7(3)). It sits under the footer's own small
+   print, so it reads as one quiet line rather than the guide's card. */
+.app-footer .privacy-switch {
+  justify-content: center;
+  margin: 0.6rem auto 0;
+  max-width: 34rem;
+  font-size: 0.85rem;
+  background: transparent;
+  border-color: rgba(148, 163, 184, 0.25);
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   One element about Pro, and a door that looks like one
+   ──────────────────────────────────────────────────────────────────────────
+   #btn-pricing is the only thing in the header about Pro. With nothing held it
+   is the gold offer ("Probar Pro"); with something held its words are the plan
+   ("Prueba · 5 días", "Regalo · 20 días", "Pro · activo", "Pro · termina en 10 días") in
+   the colours the old status pill used, and pressing it opens that plan. The
+   words carry the state; the colour only agrees with them. */
+#btn-pricing.plan-trial,
+#btn-pricing.plan-gift,
+#btn-pricing.plan-paid,
+#btn-pricing.plan-ending {
+  font-weight: 700;
+  opacity: 1;
+}
+#btn-pricing.plan-trial {
+  background: rgba(110, 180, 232, 0.16);
+  border-color: rgba(110, 180, 232, 0.58);
+  color: #b7dbf5;
+}
+#btn-pricing.plan-gift {
+  background: rgba(240, 184, 80, 0.16);
+  border-color: rgba(240, 184, 80, 0.55);
+  color: #ffdb95;
+}
+#btn-pricing.plan-paid {
+  background: rgba(79, 212, 146, 0.16);
+  border-color: rgba(79, 212, 146, 0.55);
+  color: #9aecc4;
+}
+#btn-pricing.plan-ending {
+  background: rgba(224, 108, 117, 0.14);
+  border-color: rgba(224, 108, 117, 0.68);
+  color: #f3b0b5;
+}
+
+/* Signed in, the door is your initial in a circle and, where there is room,
+   your name: an account button, not a stray word. */
+.header-door.is-signed-in {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding-inline-start: 0.35rem;
+}
+.door-avatar {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #6eb4e8, #9b8ff5);
+  color: #0c1118;
+  font-size: 0.8rem;
+  font-weight: 800;
+  line-height: 1;
+}
+.door-name {
+  max-width: 6.5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 640px) {
+  /* On a phone the row has no room for a name of any length, so the initial
+     stands for it; the accessible name still starts with the name. */
+  body:not(.view-exercise) .app-header:has(#btn-more) .header-door.is-signed-in {
+    justify-content: center;
+    min-width: var(--min-tap);
+    padding-inline: 0;
+  }
+  /* "Plan" is the shortest word on the row; with the row's tight padding it
+     drew 41px wide, under the 44px floor. */
+  body:not(.view-exercise) .app-header:has(#btn-more) .header-nav .nav-link {
+    min-width: var(--min-tap);
+  }
+  body:not(.view-exercise) .app-header:has(#btn-more) .header-door.is-signed-in .door-name {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+@media (max-width: 374px) {
+  /* Below 375px the row cannot hold the mark, the three sections whole, the
+     door and "Más": something had to give, and until now it was "Historial",
+     scrolled out of sight inside the nav pill ("Histo" at 320, gone entirely
+     beside a plan pill). The mark is decoration here — it is not a link, and
+     the title it stands for is already read to screen readers — so it goes,
+     and every section stays whole. */
+  body:not(.view-exercise) .app-header:has(#btn-more) .brand {
+    display: none;
+  }
+}
+@media (max-height: 500px) {
+  /* A rotated phone keeps its 32px header buttons so the practice stage keeps
+     its height, but a finger gets the full 44px: the hit area reaches past
+     the drawn button into the header's own padding. Text holds the 12px floor. */
+  .header-actions .btn-sm {
+    position: relative;
+    font-size: 0.75rem;
+  }
+  .header-actions .btn-sm::after {
+    content: "";
+    position: absolute;
+    inset: -6px 0;
+  }
+  /* The initial stands for the name here too, so a signed-in header still
+     fits on one row beside the plan. */
+  .header-door.is-signed-in {
+    justify-content: center;
+    min-width: 44px;
+    padding-inline: 0.2rem;
+  }
+  .header-door.is-signed-in .door-name {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+/* Inside an exercise the header is compact chrome over the stage: the
+   avatar shrinks with its row's 32px buttons. */
+body.view-exercise .door-avatar {
+  width: 1.35rem;
+  height: 1.35rem;
+  font-size: 0.7rem;
+}
+@media (max-width: 640px) {
+  /* Inside an exercise a phone's header row holds Practicar, the door, the
+     offer and the language switch, and a second row takes the stage guide's
+     room. So the offer shortens to "Pro", the door to its initial, and a plan
+     you hold waits on the home screen, the way Plan and Historial already do. */
+  body.view-exercise #btn-pricing .pro-verb {
+    display: none;
+  }
+  body.view-exercise #btn-pricing[data-plan]:not([data-plan="free"]) {
+    display: none;
+  }
+  body.view-exercise .header-door.is-signed-in {
+    justify-content: center;
+    min-width: var(--min-tap);
+    padding-inline: 0;
+  }
+  body.view-exercise .header-door.is-signed-in .door-name {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+@media (min-width: 1000px), (max-height: 500px) and (min-width: 800px) {
+  /* Signed in with a long name and a plan label ("Pro · termina en 10 días"),
+     the controls outgrew the space beside the title and the whole row
+     dropped under it: a 74px header became 130px. Here the controls keep
+     their row and the title takes what is left: the tagline goes first, then
+     the name wraps onto a second line beside the mark. */
+  /* Scoped to the studio's own header: admin, guide and privacy pages share
+     the .brand markup but not this row. */
+  body:not(.view-exercise) .app-header:has(#header-nav) .header-inner {
+    flex-wrap: nowrap;
+  }
+  body:not(.view-exercise) .app-header:has(#header-nav) .brand {
+    flex: 1 1 0;
+    min-width: 0;
+    container-type: inline-size;
+  }
+  body:not(.view-exercise) .app-header:has(#header-nav) .header-actions {
+    flex: 0 0 auto;
+  }
+}
+@container (max-width: 20rem) {
+  .app-header:has(#header-nav) .brand p {
+    display: none;
   }
 }

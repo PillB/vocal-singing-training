@@ -159,8 +159,11 @@ async function installWorker(page, stub, license) {
         ],
         ingest: {
           since: "2026-09-17",
-          days: [{ day: "2026-09-23", counts: { accepted: 1240, unknown_event: 2 } }],
-          totals: { accepted: 1240, unknown_event: 2 },
+          // eu_no_consent is here because the readout used to leave it out of its
+          // refusal list, so batches turned away for want of an EEA answer were
+          // in neither column and the numbers did not add up to what was posted.
+          days: [{ day: "2026-09-23", counts: { accepted: 1240, unknown_event: 2, eu_no_consent: 9 } }],
+          totals: { accepted: 1240, unknown_event: 2, eu_no_consent: 9 },
           lastAcceptedAt: 1790000000
         }
       });
@@ -297,8 +300,18 @@ test.describe("Accounts, gifted months and saved progress", () => {
     // Nor claim it merely could not check, because it never asked.
     await expect(page.locator("#account-checking")).toBeHidden();
     await expect(page.locator("#account-offline")).toBeHidden();
-    // And the internal QA form stays reachable, because it is the only way in.
-    await expect(page.locator("#login-username")).toBeVisible();
+    // There is no worker to ask, so there is nothing to retry either.
+    await expect(page.locator("#account-retry-row")).toBeHidden();
+    // And the internal staff login is NOT presented. It used to expand itself
+    // here, so an ordinary visitor was shown a Usuario/Contraseña form as the
+    // only thing on the panel they could touch, with focus inside it.
+    await expect(page.locator("#login-username")).toBeHidden();
+    expect(await page.locator(".account-internal").evaluate((d) => d.open)).toBe(false);
+    expect(
+      await page.evaluate(() =>
+        document.querySelector("#account-modal").contains(document.activeElement)
+      )
+    ).toBe(true);
   });
 
   test("Google-only deploy: a blocked Google script does not leave an empty panel", async ({ page }) => {
@@ -323,8 +336,14 @@ test.describe("Accounts, gifted months and saved progress", () => {
     // not ask the worker" — both of those would misdirect the reader.
     await expect(page.locator("#account-unconfigured")).toBeHidden();
     await expect(page.locator("#account-offline")).toBeHidden();
-    // And the way in that does work is open, with focus somewhere real.
-    await expect(page.locator("#login-username")).toBeVisible();
+    // The control this state deserves is "try again": the usual cause is an
+    // extension the visitor can switch off, and a retry clears both the cached
+    // worker answer and the cached "Google will not load" verdict.
+    await expect(page.locator("#account-retry")).toBeVisible();
+    // The staff form is not what a blocked visitor is shown.
+    await expect(page.locator("#login-username")).toBeHidden();
+    expect(await page.locator(".account-internal").evaluate((d) => d.open)).toBe(false);
+    // Focus is somewhere real inside the panel.
     expect(
       await page.evaluate(() =>
         document.querySelector("#account-modal").contains(document.activeElement)
@@ -376,7 +395,8 @@ test.describe("Accounts, gifted months and saved progress", () => {
     // The press and the label have to read the same flag. Before, the label came
     // from the worker's default trial length while the press fell back to the
     // browser-local trial, so a visitor who clicked before the answer landed was
-    // promised 30 days and given 7.
+    // promised a different length from the one they got. The two lengths agree at
+    // 7 days now, but the flag they read must still be the same one.
     const license = await mintLicense({ origin: BASE });
     const stub = createWorkerStub({ methods: { email: true, google: false } });
     await patchBillingConfig(page, {
@@ -433,7 +453,10 @@ test.describe("Accounts, gifted months and saved progress", () => {
     // The request is bounded, so this resolves into a state with a way forward.
     await expect(page.locator("#account-offline")).toBeVisible({ timeout: 15000 });
     await expect(page.locator("#account-checking")).toBeHidden();
-    await expect(page.locator("#login-username")).toBeVisible();
+    // "Close and reopen this panel" was the whole recovery, in prose, while the
+    // only tappable thing was the staff form. There is a real button now.
+    await expect(page.locator("#account-retry")).toBeVisible();
+    await expect(page.locator("#login-username")).toBeHidden();
   });
 
   test("the shipped build is pointed at a deployed worker", async () => {
@@ -465,7 +488,10 @@ test.describe("Accounts, gifted months and saved progress", () => {
     await expect(page.locator("#account-modal")).toBeVisible();
     await expect(page.locator("#account-signin")).toBeHidden();
     await expect(page.locator("#account-unconfigured")).toBeVisible();
-    await expect(page.locator("#login-username")).toBeVisible();
+    // A worker answered, so asking it again is meaningful; the staff form is
+    // still not the visitor's way in.
+    await expect(page.locator("#account-retry")).toBeVisible();
+    await expect(page.locator("#login-username")).toBeHidden();
   });
 
   test("with only Google wired up, the email form stays out of the way", async ({ page }) => {
@@ -610,7 +636,12 @@ test.describe("Accounts, gifted months and saved progress", () => {
     // arrivals line says the pipeline is alive.
     await expect(box).toContainText("Plan cumplido el");
     await expect(box).toContainText("Reparto parejo entre versiones (p = 0.620)");
-    await expect(box.locator(".ab-ingest")).toContainText(/1[,.\u00a0]?240 eventos guardados, 2 descartados, 0 envíos rechazados/);
+    await expect(box.locator(".ab-ingest")).toContainText(/1[,.\u00a0]?240 eventos guardados, 2 descartados, 9 envíos rechazados/);
+    // Named, so an admin can see which refusal it was...
+    await expect(box.locator(".ab-ingest")).toContainText("Rechazos: eu_no_consent 9");
+    // ...and not painted as a broken pipeline, because a visitor who has not
+    // answered the bar yet is the system working exactly as intended.
+    await expect(box.locator(".ab-ingest.ab-warn")).toHaveCount(0);
   });
 
   test("before its plan is met a test shows counts and the date, never a comparison", async ({ page }) => {

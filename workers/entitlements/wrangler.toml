@@ -38,7 +38,7 @@ STRIPE_PRICE_PRO_YEARLY = ""
 MP_PLAN_PRO_MONTHLY = ""
 MP_PLAN_PRO_YEARLY = ""
 # Length of the free trial, in days. One per account, ever.
-TRIAL_DAYS = "30"
+TRIAL_DAYS = "7"
 # Comma-separated emails allowed to gift and revoke months. Read on every
 # request, so removing an address takes effect on the next deploy.
 # Set it with `wrangler secret put ADMIN_EMAILS`, NOT here: this repository is

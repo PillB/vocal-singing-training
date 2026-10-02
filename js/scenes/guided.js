@@ -395,9 +395,17 @@
       [10, 9],
       [10, 6]
     ];
+    // Before any name gives way, the others shorten to four letters and a dot
+    // ("Educ.", "Inic."): every step keeps a name, the current one in full
+    const abbr = all.map((q) => {
+      if (q.i === cur || q.text.length <= 5) return q;
+      const t = q.text.slice(0, 4).replace(/[\s·.,-]+$/, "") + ".";
+      return Object.assign({}, q, { text: t });
+    });
     for (const [size, gap] of tries) {
       const last = size === 10 && gap === 6;
       let list = all.slice();
+      if (last && !layoutLabels(ctx, list, x, w, size, cur, gap)) list = abbr.slice();
       while (list.length) {
         const out = layoutLabels(ctx, list, x, w, size, cur, gap);
         if (out) {
@@ -2393,7 +2401,9 @@
         const b = Math.min(s.t1, g.end != null ? g.end : this.vad.t);
         if (b > a) talk += b - a;
       });
-      return `${dur} · ${L("voz", "voice")} ${Math.round((talk / Math.max(0.1, len)) * 100)}%`;
+      // Share of the part spent talking: "voz 74%" read like a score
+      const pct = Math.round((talk / Math.max(0.1, len)) * 100);
+      return `${dur} · ${L(`hablando el ${pct} %`, `talking ${pct}% of it`)}`;
     }
     stop() {
       this.live = false;

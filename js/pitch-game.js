@@ -15,6 +15,24 @@
   };
 
   const LOCK_MS = 800; // hold in-zone to "clear" a challenge note
+  // Everything below counts time, not frames: a 120 Hz screen used to build
+  // combo and score twice as fast as a 60 Hz one. Combo stays in "frames at
+  // 60 fps" so the rating thresholds read the same as before.
+  const FRAME_MS = 1000 / 60;
+  const SCORE_STEP_MS = 100; // score once per 100 ms in the zone
+  // Vibrato swings ±50–100 cents several times a second, so one stray frame
+  // (or half a vibrato cycle) outside the zone must not end a streak or flash
+  // a new word. A quality has to hold this long before it counts as a change.
+  const OFF_GRACE_MS = 200;
+  const STABLE_MS = 180;
+  const FLASH_MS = 300;
+  // The ear hears the centre of a vibrato, not its peaks: classify the mean
+  // deviation over about one vibrato cycle rather than each frame.
+  const CENTRE_MS = 200;
+  // Hysteresis at the zone edges: staying in a zone allows a few cents more
+  // than entering it, so a note sung right on an edge doesn't flicker.
+  const EDGE_CENTS = 6;
+  const RANK = { perfect: 0, good: 1, close: 2, off: 3 };
   const NOTE_POOL = ["A2", "B2", "C3", "D3", "E3", "F3", "G3", "A3"];
 
   /**
@@ -43,6 +61,15 @@
       this.goods = 0;
       this.totalSamples = 0;
       this.inZoneSamples = 0;
+      this.totalMs = 0;
+      this.inZoneMs = 0;
+      this._scoreMs = 0;
+      this._lockMs = 0;
+      this._offMs = 0;
+      this._candQuality = null;
+      this._candMs = 0;
+      this._stableQuality = "—";
+      this._win = [];
       this.lockProgress = 0; // 0–1
       this.lockStart = null;
       this.lastQuality = "—";
@@ -83,76 +110,105 @@
      * @param {number} dtMs
      */
     tick(cents, voiced, dtMs = 16) {
+      const dt = Math.max(0, Math.min(100, Number(dtMs) || 0));
       if (!voiced || cents == null || Number.isNaN(cents)) {
-        this.lockStart = null;
+        this._lockMs = 0;
         this.lockProgress = 0;
-        this.combo = Math.max(0, this.combo - 0.02); // gentle decay only when silent long - skip
+        // gentle decay while silent (0.02 per 60 fps frame, as before)
+        this.combo = Math.max(0, this.combo - (0.02 * dt) / FRAME_MS);
         this.lastQuality = "—";
+        this._candQuality = null;
+        this._candMs = 0;
+        this._stableQuality = "—";
+        this._win = [];
         this._emit();
         return this.snapshot();
       }
 
-      const abs = Math.abs(cents);
+      this._win.push({ c: cents, dt: Math.max(1, dt) });
+      let span = 0;
+      for (let i = this._win.length - 1; i >= 0; i--) {
+        span += this._win[i].dt;
+        if (span > CENTRE_MS) {
+          this._win.splice(0, i);
+          break;
+        }
+      }
+      let sum = 0;
+      let w = 0;
+      for (const p of this._win) {
+        sum += p.c * p.dt;
+        w += p.dt;
+      }
+      const abs = Math.abs(sum / w);
+      const prevRank = RANK[this.lastQuality] != null ? RANK[this.lastQuality] : 3;
+      const edge = (z) => ZONES[z] + (prevRank <= RANK[z] ? EDGE_CENTS : 0);
       let quality = "off";
       let pts = 0;
-      if (abs <= ZONES.perfect) {
+      if (abs <= edge("perfect")) {
         quality = "perfect";
         pts = 10;
-        this.perfects++;
-      } else if (abs <= ZONES.good) {
+      } else if (abs <= edge("good")) {
         quality = "good";
         pts = 6;
-        this.goods++;
-      } else if (abs <= ZONES.close) {
+      } else if (abs <= edge("close")) {
         quality = "close";
         pts = 2;
-      } else {
-        quality = "off";
-        pts = 0;
       }
 
       this.totalSamples++;
+      this.totalMs += dt;
+      if (quality === "perfect") this.perfects += dt / FRAME_MS;
+      else if (quality === "good") this.goods += dt / FRAME_MS;
+
       if (quality === "perfect" || quality === "good") {
         this.inZoneSamples++;
-        this.combo += 1;
+        this.inZoneMs += dt;
+        this._offMs = 0;
+        this.combo += dt / FRAME_MS;
         this.maxCombo = Math.max(this.maxCombo, Math.floor(this.combo));
-        // score every ~6 frames to avoid inflation
-        if (this.totalSamples % 6 === 0) {
+        this._scoreMs += dt;
+        while (this._scoreMs >= SCORE_STEP_MS) {
+          this._scoreMs -= SCORE_STEP_MS;
           const mult = 1 + Math.min(4, Math.floor(this.combo / 30)) * 0.25;
           this.score += Math.round(pts * mult);
         }
-        // lock-on progress
-        if (!this.lockStart) this.lockStart = performance.now();
-        const held = performance.now() - this.lockStart;
-        this.lockProgress = Math.min(1, held / LOCK_MS);
+        // lock-on progress, counted in frame time
+        this._lockMs += dt;
+        this.lockProgress = Math.min(1, this._lockMs / LOCK_MS);
         if (this.lockProgress >= 1 && this.challengeMode) {
           this._clearChallengeNote();
         }
-      } else {
-        if (quality === "off") {
+      } else if (quality === "off") {
+        this._offMs += dt;
+        if (this._offMs >= OFF_GRACE_MS) {
           this.combo = 0;
-          this.lockStart = null;
+          this._lockMs = 0;
           this.lockProgress = 0;
-        } else {
-          // close — slow lock
-          this.lockStart = null;
-          this.lockProgress = Math.max(0, this.lockProgress - 0.05);
         }
+      } else {
+        // close: the lock drains slowly instead of resetting
+        this._offMs = 0;
+        this._lockMs = Math.max(0, this._lockMs - dt * 0.5);
+        this.lockProgress = Math.min(1, this._lockMs / LOCK_MS);
       }
 
-      if (quality !== this.lastQuality && quality !== "—") {
-        this.flash = {
-          text: flashText(quality),
-          color:
-            quality === "perfect"
-              ? "#7ddeb0"
-              : quality === "good"
-                ? "#9fd0f0"
-                : quality === "close"
-                  ? "#e0a84a"
-                  : "#e06c75",
-          until: performance.now() + 450
-        };
+      // A word only when the quality has settled, and never for "off": the
+      // dot's position already shows which way to move.
+      if (quality === this._candQuality) this._candMs += dt;
+      else {
+        this._candQuality = quality;
+        this._candMs = dt;
+      }
+      if (this._candMs >= STABLE_MS && quality !== this._stableQuality) {
+        this._stableQuality = quality;
+        if (quality !== "off") {
+          this.flash = {
+            text: flashText(quality),
+            color: quality === "perfect" ? "#7ddeb0" : quality === "good" ? "#9fd0f0" : "#e0a84a",
+            until: performance.now() + FLASH_MS
+          };
+        }
         if (this.onHit) {
           this.onHit({ quality, points: pts, combo: Math.floor(this.combo) });
         }
@@ -165,12 +221,12 @@
     _clearChallengeNote() {
       this.challengeCleared++;
       this.score += 50 + Math.floor(this.combo / 10) * 5;
-      this.lockStart = null;
+      this._lockMs = 0;
       this.lockProgress = 0;
       this.flash = {
         text: flashText("locked"),
         color: "#7ddeb0",
-        until: performance.now() + 700
+        until: performance.now() + FLASH_MS
       };
       const note = this.currentChallengeNote();
       this.challengeIndex++;
@@ -186,8 +242,8 @@
     }
 
     accuracyPct() {
-      if (!this.totalSamples) return 0;
-      return Math.round((this.inZoneSamples / this.totalSamples) * 100);
+      if (!this.totalMs) return 0;
+      return Math.round((this.inZoneMs / this.totalMs) * 100);
     }
 
     snapshot() {
@@ -197,8 +253,8 @@
         score: this.score,
         combo: Math.floor(this.combo),
         maxCombo: this.maxCombo,
-        perfects: this.perfects,
-        goods: this.goods,
+        perfects: Math.round(this.perfects),
+        goods: Math.round(this.goods),
         accuracyPct: this.accuracyPct(),
         lockProgress: this.lockProgress,
         quality: this.lastQuality,

@@ -12,6 +12,9 @@ async function boot(page, lang = "es") {
   const warnings = [];
   page.on("console", (m) => {
     const t = m.text();
+    // A network refusal (the sign-in probe to the worker, unreachable from a
+    // test box) is not the picture's error; script errors and [viz] notes are
+    if (t.startsWith("Failed to load resource")) return;
     if (m.type() === "error" || t.startsWith("[viz]")) warnings.push(t.slice(0, 300));
   });
   page.on("pageerror", (e) => warnings.push(String(e.message || e)));

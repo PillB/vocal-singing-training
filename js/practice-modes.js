@@ -8527,7 +8527,7 @@
           <span class="mode-phase" data-stage>${L("Inhala por la nariz", "Inhale through the nose")}</span>
           <strong class="mode-big" data-count>${this.state.inSec}</strong>
         </div>
-        <p class="mode-meta">${L("Ciclos", "Cycles")} <strong data-cy>0</strong> · ${this.state
+        <p class="mode-meta"><span data-cy-k>${L("Ciclo", "Cycle")}</span> <strong data-cy>1</strong> · ${this.state
           .inSec}–${this.state.holdSec}–${this.state.outSec} · ${L(
           "manos en costillas bajas y abdomen; los hombros no suben",
           "hands on the low ribs and belly; the shoulders stay down"
@@ -8633,6 +8633,11 @@
       this.state.clock = 0;
       this.state.cycles = 0;
       this._markedTo = 0;
+      // While practising the count is the cycle you are in: one lasts 14 s,
+      // so "completed" would read 0 through most of a short take
+      this.hud?.classList.remove("is-replay");
+      if (this.$("[data-cy-k]")) this.$("[data-cy-k]").textContent = L("Ciclo", "Cycle");
+      if (this.$("[data-cy]")) this.$("[data-cy]").textContent = "1";
       if (this.viz) {
         this.viz.reset();
         this._markAhead();
@@ -8652,7 +8657,7 @@
         this.state.stage = (this.state.stage + 1) % 3;
         if (this.state.stage === 0) {
           this.state.cycles += 1;
-          if (this.$("[data-cy]")) this.$("[data-cy]").textContent = String(this.state.cycles);
+          if (this.$("[data-cy]")) this.$("[data-cy]").textContent = String(this.state.cycles + 1);
         }
         // A zero-length stage (no hold) is skipped by the loop condition
       }
@@ -8673,6 +8678,17 @@
     },
     onStop() {
       const n = this.state.cycles || 0;
+      const pat = `${this.state.inSec}–${this.state.holdSec}–${this.state.outSec}`;
+      if (this.$("[data-cy-k]")) this.$("[data-cy-k]").textContent = L("Ciclos completos", "Full cycles");
+      if (this.$("[data-cy]")) this.$("[data-cy]").textContent = String(n);
+      if (this.viz) {
+        this.viz.setText(
+          L(`${n} ${n === 1 ? "ciclo completo" : "ciclos completos"}`, `${n} full ${n === 1 ? "cycle" : "cycles"}`),
+          pat,
+          L("una guía: el micrófono no ve las costillas", "a guide: the mic cannot see your ribs")
+        );
+        this.hud?.classList.add("is-replay");
+      }
       return {
         patches: n > 0 ? { cycles: n } : {},
         summary: L(
@@ -10602,7 +10618,8 @@
       const pv = typeof global.VTGetPitchViz === "function" ? global.VTGetPitchViz() : null;
       if (pv?.setOverlay && st.track) {
         this._ownsOverlay = true;
-        pv.setOverlay((ctx, geo, layer) => this._overlay(ctx, geo, layer));
+        // The bubble strip stays on the frozen highway after Stop (keepOnStop)
+        pv.setOverlay((ctx, geo, layer) => this._overlay(ctx, geo, layer), { keepOnStop: true });
       }
       this._lockLadder();
       this._pushTarget();
@@ -10757,11 +10774,8 @@
       st.review = true;
       this.hud?.classList.add("is-replay");
       const pv = typeof global.VTGetPitchViz === "function" ? global.VTGetPitchViz() : null;
-      if (pv && this._ownsOverlay) {
-        pv.setOverlay?.(null);
-        pv.setNoteQueue?.(null);
-        this._ownsOverlay = false;
-      }
+      // The strip stays for the review; _destroyViz clears it when the exercise closes
+      if (pv && this._ownsOverlay) pv.setNoteQueue?.(null);
       const ev = this.$("[data-ev]");
       if (ev && st.track) ev.textContent = this._mapModel().summary;
       this.viz?.draw();

@@ -615,8 +615,8 @@
       autoPiano: true,
       autoArpeggio: true,
       autoRecord: true,
-      cue: "Finish each phrase without a mid-breath. Each phrase is measured against the goal you pick; tap +1 per stanza.",
-      cueEs: "Termina cada frase sin respirar a mitad. Cada frase se mide contra la meta que eliges; marca +1 por estrofa.",
+      cue: "Finish each phrase without a mid-phrase pause. Each phrase is measured against the goal you pick; tap +1 per stanza.",
+      cueEs: "Termina cada frase sin pausa a mitad. Cada frase se mide contra la meta que eliges; marca +1 por estrofa.",
       metricHints: { repsFeel: "stanzaTaps", repsBetter: "stanzaTaps" }
     },
     "s15-sh-air-ladder": {
@@ -712,8 +712,8 @@
       ownsTarget: true,
       /** Read by js/app.js: no chord loop or progression window under the notes */
       noProgression: true,
-      cue: "Hum ten soft targets: each counts when held ~1.5 s near the centre. Lip buzz is yours to feel — not scored.",
-      cueEs: "Tararea diez objetivos suaves: cada uno cuenta al sostenerlo ~1,5 s cerca del centro. El zumbido lo sientes tú — no se puntúa.",
+      cue: "Hum five soft targets: each counts when held ~1.5 s near the centre. Lip buzz is yours to feel — not scored.",
+      cueEs: "Tararea cinco objetivos suaves: cada uno cuenta al sostenerlo ~1,5 s cerca del centro. El zumbido lo sientes tú — no se puntúa.",
       metricHints: { targets: "notesHeld" }
     },
     "s8-breath-support": {

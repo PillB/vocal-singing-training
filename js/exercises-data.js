@@ -762,7 +762,7 @@ window.VT_EXERCISES = {
         { id: "repsBetter", label: "Song B phrase-complete reps", type: "number", target: 5, unit: "" },
         { id: "accuracy", label: "Note accuracy (self)", type: "scale", min: 1, max: 5 },
         { id: "closure", label: "Closure quality", type: "scale", min: 1, max: 5 },
-        { id: "phraseBreath", label: "Phrase without mid-breath", type: "scale", min: 1, max: 5 }
+        { id: "phraseBreath", label: "Phrase without a mid-phrase pause", type: "scale", min: 1, max: 5 }
       ],
       audio: { timer: true, record: true, piano: true, progressions: true, songs: true, pitchViz: true },
       timerDefaultSec: 1200,

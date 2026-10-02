@@ -294,6 +294,40 @@
   function font(px, weight = 600, mono = false) {
     return `${weight} ${px}px ${mono ? "ui-monospace, SFMono-Regular, monospace" : "system-ui, -apple-system, 'Segoe UI', sans-serif"}`;
   }
+  /**
+   * Draw the first of `cands` that fits `maxW` whole: never squeezed (no
+   * fillText maxWidth). With opts.px the font steps down to opts.min (10) first;
+   * with opts.cut the last resort is the longest whole-word start plus "…".
+   * Returns the text drawn, or "" when nothing fit.
+   */
+  function drawWhole(ctx, cands, x, y, maxW, opts = {}) {
+    const list = (Array.isArray(cands) ? cands : [cands]).filter(Boolean).map(String);
+    if (!list.length || !(maxW > 0)) return "";
+    const sizes = [];
+    if (opts.px) for (let px = opts.px; px >= (opts.min || 10); px--) sizes.push(px);
+    else sizes.push(null);
+    for (const px of sizes) {
+      if (px) ctx.font = font(px, opts.weight || 600, opts.mono);
+      for (const t of list) {
+        if (ctx.measureText(t).width <= maxW) {
+          ctx.fillText(t, x, y);
+          return t;
+        }
+      }
+    }
+    if (opts.cut) {
+      const words = list[0].split(" ");
+      while (words.length > 1) {
+        words.pop();
+        const t = words.join(" ").replace(/[\s,;:·—–-]+$/, "") + "…";
+        if (ctx.measureText(t).width <= maxW) {
+          ctx.fillText(t, x, y);
+          return t;
+        }
+      }
+    }
+    return "";
+  }
   /** Text with a dark backing so it stays readable over lanes and traces. */
   function label(ctx, text, x, y, opts = {}) {
     ctx.font = opts.font || font(12, 700);
@@ -551,8 +585,7 @@
               ctx.fillStyle = m.color;
               ctx.textAlign = "left";
               ctx.textBaseline = "bottom";
-              ctx.fillText(m.text, x + 3, padT + plotH - 2, Math.max(30, w - padR - x - 6));
-              labelEnd = x + 3 + tw;
+              if (drawWhole(ctx, m.text, x + 3, padT + plotH - 2, w - padR - x - 6)) labelEnd = x + 3 + tw;
             }
           }
           return;
@@ -651,11 +684,10 @@
       // Words: banner (what to do now) left, big number right
       const lineY = compact ? 11 : 15;
       if (this.banner) {
-        ctx.font = font(compact || w < 360 ? 13 : 15, 800);
         ctx.fillStyle = C.text;
         ctx.textAlign = "left";
         ctx.textBaseline = "middle";
-        ctx.fillText(this.banner, padL + 2, lineY, w * 0.74);
+        drawWhole(ctx, this.banner, padL + 2, lineY, w * 0.74, { px: compact || w < 360 ? 13 : 15, min: 11, weight: 800, cut: true });
       }
       if (this.big) {
         ctx.font = font(compact ? 16 : w < 360 ? 18 : 22, 800, true);
@@ -665,11 +697,10 @@
         ctx.fillText(this.big, w - padR - 2, lineY);
       }
       if (this.sub && !compact) {
-        ctx.font = font(11, 600);
         ctx.fillStyle = C.muted;
         ctx.textAlign = "left";
         ctx.textBaseline = "bottom";
-        ctx.fillText(this.sub, padL + 2, h - 3 - stripH, w - padL - padR);
+        drawWhole(ctx, this.sub, padL + 2, h - 3 - stripH, w - padL - padR, { px: 11, min: 10, cut: true });
       }
     }
 
@@ -770,8 +801,7 @@
       const title = this.done ? this.o.doneText || L("Listo", "Done") : cur?.label || "";
       ctx.textAlign = "left";
       ctx.fillStyle = C.text;
-      ctx.font = font(w < 360 ? 15 : 17, 800);
-      ctx.fillText(title, pad, pad + 12, cx - ringR - pad * 2);
+      drawWhole(ctx, title, pad, pad + 12, cx - ringR - pad * 2, { px: w < 360 ? 15 : 17, min: 12, weight: 800, cut: true });
       if (!this.done && phases.length > 1) {
         ctx.font = font(11, 700);
         ctx.fillStyle = C.muted;
@@ -820,11 +850,10 @@
         x += segW + 3;
       });
       if (this.note) {
-        ctx.font = font(11, 600);
         ctx.fillStyle = C.muted;
         ctx.textAlign = "left";
         ctx.textBaseline = "top";
-        ctx.fillText(this.note, pad, barY + barH + 3, bw);
+        drawWhole(ctx, this.note, pad, barY + barH + 3, bw, { px: 11, min: 10, cut: true });
       }
     }
   }
@@ -933,11 +962,11 @@
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       const hasSub = it.sub && h >= 34;
-      ctx.fillText(mark + text, x + w / 2, box.y + (hasSub ? h * 0.36 : h / 2) + 0.5, w - 6);
+      drawWhole(ctx, [mark + text, it.short ? mark + it.short : "", done ? "✓" : ""], x + w / 2, box.y + (hasSub ? h * 0.36 : h / 2) + 0.5, w - 6);
       if (hasSub) {
-        ctx.font = font(10, 600);
+        ctx.font = font(11, 600);
         ctx.fillStyle = done ? C.done : C.faint;
-        ctx.fillText(it.sub, x + w / 2, box.y + h * 0.72, w - 6);
+        drawWhole(ctx, [it.sub, it.subShort], x + w / 2, box.y + h * 0.72, w - 6);
       }
       x += w + gap;
     });
@@ -975,7 +1004,7 @@
         ctx.fillStyle = b.stroke || C.target;
         ctx.textAlign = "center";
         ctx.textBaseline = "bottom";
-        ctx.fillText(b.label, bx + bw / 2, barY - 3, Math.max(40, bw + 30));
+        drawWhole(ctx, [b.label, b.short], bx + bw / 2, barY - 3, Math.max(40, bw + 30));
       }
     });
     (opts.ghosts || []).forEach((g) => {
@@ -1107,7 +1136,7 @@
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
           const txt = (inGood && g.end != null ? "✓ " : "") + fmtSec(len);
-          ctx.fillText(txt, (a + b) / 2, y + h / 2 + 0.5, b - a - 4);
+          drawWhole(ctx, [txt, fmtSec(len), inGood && g.end != null ? "✓" : ""], (a + b) / 2, y + h / 2 + 0.5, b - a - 4);
         }
       }
     });
@@ -1312,14 +1341,8 @@
 
   /** Words in a box, shrinking the font until they fit (down to `min`). */
   function fitText(ctx, text, x, y, maxW, px, weight = 800, min = 10) {
-    let size = px;
-    ctx.font = font(size, weight);
-    while (size > min && ctx.measureText(text).width > maxW) {
-      size -= 1;
-      ctx.font = font(size, weight);
-    }
-    ctx.fillText(text, x, y, maxW);
-    return size;
+    drawWhole(ctx, text, x, y, maxW, { px, min, weight, cut: true });
+    return parseInt(ctx.font, 10) || min;
   }
 
   /** A soft chime or tick for eyes-closed practice (phase changes). */
@@ -1383,6 +1406,7 @@
     sparkline,
     glyph,
     fitText,
+    drawWhole,
     fmtSec,
     fmtNum,
     chime,

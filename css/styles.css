@@ -1420,7 +1420,7 @@ body.home-zero #pro-insights-panel {
   height: min(76dvh, 700px, var(--stage-avail));
   overflow: hidden;
   border-radius: 12px;
-  background: rgba(6, 10, 16, 0.88);
+  background: rgb(6, 10, 16);
   border: 1px solid var(--border);
   /* 10% top/bottom negative space for horizontal HUD rails; right free for note keys */
   --hud-band: 10%;
@@ -2762,6 +2762,18 @@ body.view-exercise .stage-below.is-fitted {
 }
 
 @media (max-width: 640px) {
+  /* Sound without the piano (speech drills): the options stay expanded with no
+     🎹+ to fold them, so they wrap and keep their words instead of running off */
+  #piano-mini-opts.hud-br:not(.piano-opts-compact):not(.piano-opts-expanded) {
+    flex-wrap: wrap;
+    width: auto;
+    max-width: 100%;
+    justify-content: flex-start;
+    row-gap: 0.25rem;
+  }
+  #piano-mini-opts:not(.piano-opts-compact):not(.piano-opts-expanded) .piano-opt span {
+    display: inline;
+  }
   :root {
     --header-h: 58px;
   }

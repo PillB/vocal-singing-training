@@ -183,9 +183,9 @@ test.describe("breath and SOVT pictures", () => {
       const pv = window.VTGetPitchViz();
       const m = window.VTApp.getState().modeInstance;
       const stones = m.state.rows.flatMap((r) => r.stones.map((s) => s.state));
-      return { overlay: pv.overlay, queue: pv.noteQueue, review: m.state.review, stones, ev: document.querySelector("#mode-hud [data-ev]").textContent };
+      return { overlay: typeof pv.overlay, queue: pv.noteQueue, review: m.state.review, stones, ev: document.querySelector("#mode-hud [data-ev]").textContent };
     });
-    expect(after.overlay, "the strip goes with the take").toBeNull();
+    expect(after.overlay, "the strip stays for the review").toBe("function");
     expect(after.queue).toBeNull();
     expect(after.review).toBe(true);
     expect(after.stones).toContain("trill");

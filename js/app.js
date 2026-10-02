@@ -2935,7 +2935,9 @@
       const owned = profile.ownsTarget ? state.modeInstance?.state?.wantName : null;
       const note = effectiveNoteName(owned || profile.refPitch || ex.audio?.refPitch);
       if (note) {
-        const f = await VTPiano.playRefPitch(note, sec, true);
+        // An owning mode sounds each target itself (about 1.5 s): a 4 s replay
+        // on top kept the piano ringing, and a hold waits for the piano to stop
+        const f = await VTPiano.playRefPitch(note, owned ? Math.min(sec, 1.5) : sec, true);
         if (f) {
           state.practice.setTargetFreq(f);
           if (state.pitchViz) state.pitchViz.setTargetFreq(f);
@@ -3801,6 +3803,7 @@
           ? "settling"
           : "variable";
     const g = stats.game;
+    const profile0 = pitchProfile;
     // Free singing (a siren): no target, so the readout names the nearest note
     // and says where you sit in it, without "sharp"/"flat"
     const near = !!stats.nearest;
@@ -3821,11 +3824,11 @@
       <span><strong>${es ? "Tú" : "You"}</strong> ${stats.voiceName || "—"}</span>
       <span><strong>Cents</strong> ${acc > 0 ? "+" : ""}${acc}¢ · ${near ? centreWord : accWordLong}</span>
       <span><strong>${es ? "Precisión" : "Precision"}</strong> ±${prec}¢ · ${precWord}</span>
-      ${g ? `<span><strong>${es ? "Juego" : "Game"}</strong> ${g.score} pts · ${g.accuracyPct}%</span>` : ""}
+      ${g && !profile0?.noGameScore ? `<span><strong>${es ? "Juego" : "Game"}</strong> ${g.score} pts · ${g.accuracyPct}%</span>` : ""}
     `;
     // Live cents in TR corner for non-challenge pitch modes
     const profile = state.exercise ? getProfile(state.exercise) : null;
-    if (profile?.showPitch && !profile?.pitchChallenge) {
+    if (profile?.showPitch && (!profile?.pitchChallenge || profile?.noGameScore)) {
       const q = $("#hud-quality");
       const accEl = $("#hud-acc");
       if (q) {
@@ -3855,7 +3858,7 @@
         combo.title = v;
       }
     }
-    if (g) updateGameHud(g);
+    if (g && !profile?.noGameScore) updateGameHud(g);
   }
 
   async function startPitchViz() {
@@ -3938,7 +3941,7 @@
       reps: "Repeticiones",
       repsFeel: "Reps frase completa (canción A)",
       repsBetter: "Reps frase completa (canción B)",
-      phraseBreath: "Frase sin respirar a mitad",
+      phraseBreath: "Frase sin pausa a mitad",
       pitchComfort: "Comodidad de tono",
       accuracy: "Exactitud",
       precision: "Precisión (estabilidad)",

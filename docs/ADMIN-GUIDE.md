@@ -455,6 +455,12 @@ the real database id, while the copy on GitHub has placeholders on purpose.
 
 Do this once each time you open a new Terminal window for maintenance.
 
+**Before step 1, check Node.** Run `node -v`. It must print `v22` or higher,
+because every command in this section runs Wrangler 4, which refuses anything
+older and stops with a message about Node.js. If it prints `v20` or `v21`,
+install the LTS version from [nodejs.org](https://nodejs.org) (the macOS
+installer), close Terminal, open a new window and run `node -v` again.
+
 **1. Go to the right folder.** The path of the checkout is in the private notes.
 
 ```bash
@@ -717,29 +723,42 @@ have yet:
    live now, so you can go back to it (8.10):
 
    ```bash
-   npx --yes wrangler@4 deployments list
+   npx --yes wrangler@4 deployments status
    ```
 
-   The newest entry's **Version ID** goes in the private notes.
-2. Get the latest code:
+   On its `Version(s):` line, the id after `(100%)` is the version live now.
+   It goes in the private notes.
+2. Get the latest code. This keeps the real ids in `wrangler.toml` as a local
+   change, which is where they belong (it needs git 2.27 or newer):
 
    ```bash
-   git checkout main
-   git pull
+   git checkout -m main && git pull --ff-only --autostash --no-stat
    ```
 
-   If git refuses because `wrangler.toml` has local changes, run `git stash`,
-   then `git pull`, then `git stash pop`. Those local changes are the real ids;
-   never commit them.
+   It should end with `Applied autostash.` or `Already up to date.`. If it says
+   `Not possible to fast-forward` or `resulted in conflicts`, stop. Never
+   commit the ids.
 3. Check the ids again (the `grep` in 8.0), then deploy:
 
    ```bash
    npx --yes wrangler@4 deploy
    ```
 
-   It lists the bindings (the database and store should show real ids, not
-   `TODO_REPLACE`), then prints the worker's address, the daily schedule
-   `17 9 * * *`, and a new **Version ID**. Note that id too.
+   It lists the bindings: the store (`env.ENTITLEMENTS`) with its real id, and
+   the database (`env.DB`) by its name only, which is normal. Then it prints
+   the worker's address, the daily schedule `17 9 * * *`, and a new
+   **Current Version ID**. Note that id too. If it stops to ask:
+
+   - **last updated via the script API**: answer `y`, unless someone changed
+     the worker outside Wrangler and this guide. A deploy keeps every secret.
+   - **differs from the remote configuration of your Worker set via the
+     Cloudflare Dashboard**: answer `y` only if every difference it lists is
+     one you just merged into `wrangler.toml`. Otherwise answer `n`, and find
+     out what was changed in the dashboard.
+   - **conflicts with an existing remote secret**: answer `n` and stop. A
+     variable in `wrangler.toml` would replace that secret.
+   - An offer to register a workers.dev subdomain: answer `n` and stop. You
+     are signed in to the wrong account.
 4. Check health (8.1: **Estadísticas anónimas: activo**, **Prueba gratis: 7
    días**), look someone up on the admin page, and press **Leer estadísticas**
    (8.13).
@@ -848,10 +867,25 @@ before quoting the privacy page's "no IP address is stored" about logs.
 
 ### 8.10 Undo a bad deploy
 
+Go back to the id you noted before the deploy (8.7, step 1). If you don't have
+it, this shows the history, oldest first. The last entry is the one live now,
+and the entry above it is the version before. Each entry's id is on its
+`Version(s):` line, after `(100%)`.
+
 ```bash
 npx --yes wrangler@4 deployments list
+```
+
+Then put that version back:
+
+```bash
 npx --yes wrangler@4 rollback VERSION-ID -m "why"
 ```
+
+It asks for a message (press Enter to keep yours), then **Are you sure you want
+to deploy this Worker Version to 100% of traffic?** (answer `y`). If secrets
+changed since that version, it lists them and asks again (answer `y`). It ends
+with `Current Version ID:` and the old id.
 
 A rollback restores the code, and may restore the secrets that version had, so
 check the admin list (section 7) afterwards. It does **not** roll back the
@@ -1077,7 +1111,7 @@ Three layers, from most to least automatic:
 | 7. Admin list | an admin taken off ADMIN_EMAILS is refused at once… · an admin added… after first signing in… | `secret put`, local |
 | 8.1–8.2 Health, clean-up | maintenance: server status and clean-up · maintenance: an old worker's missing statistics field… | `curl` shape checked against the code |
 | 8.3–8.6 Lists, delete, sign out everywhere | a session that ends mid-use returns to sign-in… | each query, local, with the address read by `read -r` (an apostrophe included), and deleting one browser's statistics |
-| 8.7–8.10 Deploy, backup, logs, rollback | the sandbox's trial length is the one wrangler.toml deploys · admin.html loads the same versions… | build checked with `deploy --dry-run`; account-only export, restore and deleting again from the log, local; the rollback clean-up, local; others by `--help` only |
+| 8.7–8.10 Deploy, backup, logs, rollback | the sandbox's trial length is the one wrangler.toml deploys · admin.html loads the same versions… | build checked with `deploy --dry-run`; the deploy and rollback prompts and what `deployments` prints, read from Wrangler 4's source; account-only export, restore and deleting again from the log, local; the rollback clean-up, local; others by `--help` only |
 | 8.13 Statistics | statistics: the funnel and arrivals… · statistics: an empty window, a member, and a worker without the route | |
 | 8.14 Data export | | the export, local, checked as JSON |
 | Phone, English | on a phone… · works in English too | |

@@ -272,7 +272,11 @@
    * Speech/silence with the room's own floor, a short hangover, and pauses
    * dated from when the sound actually stopped.
    *
-   * - Floor: the 10th percentile of the last 6 s of level. Sound must clear it
+   * - Floor: the 10th percentile of the last 6 s of quiet level. Only quiet
+   *   frames teach it (the engine's gate closed, or below floor + margin), plus
+   *   sound that has stayed steady for a second (a fan, a hum in the room):
+   *   speech swings 10 dB and more between syllables, so a learner who talks
+   *   from the first frame never becomes the floor. Sound must clear it
    *   by `marginDb` and also clear the engine's own sensitivity gate
    *   (`frame.sounding`), so a fan does not read as speech and a quiet room
    *   does not turn a breath into a word.
@@ -289,6 +293,7 @@
       this.minPauseSec = opts.minPauseSec != null ? opts.minPauseSec : 0.25;
       this.cb = opts;
       this._floorRing = new Ring(Math.round(6 * 30));
+      this._recentRing = new Ring(30);
       this._floorAcc = 0;
       this.floorDb = -70;
       this.reset();
@@ -303,6 +308,7 @@
       this.speechStart = null;
       this.levelDb = -140;
       this._floorRing.clear();
+      this._recentRing.clear();
       this._floorAcc = 0;
     }
     get pauseLen() {
@@ -328,7 +334,14 @@
       this._floorAcc += dt;
       if (this._floorAcc >= 1 / 30) {
         this._floorAcc = 0;
-        this._floorRing.push(db);
+        this._recentRing.push(db);
+        const quiet = !frame.sounding || db <= this.floorDb + this.marginDb;
+        let steady = false;
+        if (!quiet && this._recentRing.count >= this._recentRing.n) {
+          const r = this._recentRing.last();
+          steady = percentile(r, 0.9) - percentile(r, 0.1) < 6;
+        }
+        if (quiet || steady) this._floorRing.push(db);
         if (this._floorRing.count >= 15) {
           this.floorDb = Math.max(-90, percentile(this._floorRing.last(), 0.1));
         }

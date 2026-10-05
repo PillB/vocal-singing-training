@@ -35,7 +35,10 @@ test.describe("Retention features", () => {
     await expect(open).toContainText("Poner un recordatorio");
     await open.click();
     await expect(page.locator("#reminder-modal")).toBeVisible();
-    await expect(page.locator("#chk-reminders")).toBeFocused();
+    // Off, the time comes first and the main button turns the reminder on.
+    await expect(page.locator("#rem-time-1")).toBeFocused();
+    await expect(page.locator("#reminder-done")).toHaveText("Activar recordatorio");
+    await expect(page.locator("#chk-reminders")).toBeHidden();
     await expect(page.locator("#btn-ics-daily")).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(page.locator("#reminder-modal")).toBeHidden();
@@ -53,15 +56,22 @@ test.describe("Retention features", () => {
     });
     await page.reload({ waitUntil: "networkidle" });
     await page.click("#btn-reminder");
-    await page.check("#chk-reminders");
     await page.fill("#rem-time-1", "19:30");
-    await page.waitForTimeout(100);
+    await page.click("#reminder-done");
+    await expect(page.locator("#reminder-modal")).toBeHidden();
     const cfg = await page.evaluate(() => VTReminders.getConfig());
     expect(cfg.enabled).toBe(true);
     expect(cfg.times[0]).toBe("19:30");
-    await page.click("#reminder-done");
-    await expect(page.locator("#reminder-modal")).toBeHidden();
-    await expect(page.locator("#btn-reminder")).toContainText("Recordatorio: 19:30");
+    // The week card shows the time the way the time field does (12 or 24 h).
+    await expect(page.locator("#btn-reminder")).toContainText(/Recordatorio: (19:30|7:30\s?(PM|p\.\s?m\.))/i);
+    // Set, the box is the way to turn it off, and the main button just closes.
+    await page.click("#btn-reminder");
+    await expect(page.locator("#chk-reminders")).toBeChecked();
+    await expect(page.locator("#reminder-done")).toHaveText("Listo");
+    await page.uncheck("#chk-reminders");
+    await page.click("#reminder-cancel");
+    expect((await page.evaluate(() => VTReminders.getConfig())).enabled).toBe(false);
+    await expect(page.locator("#btn-reminder")).toContainText("Poner un recordatorio");
   });
 
   test("rest day covers one missed day, once, and never a gap it cannot cover", async ({ page }) => {

@@ -4824,10 +4824,11 @@
    */
   function openRowHtml(ex, meta, cls = "") {
     // Each part of the meta stays on one line ("último puntaje 7/10" never splits).
+    // The dot travels with the part after it, so a wrapped line never ends in "·".
     const parts = meta
       .filter(Boolean)
-      .map((m) => `<span>${escapeHtml(m)}</span>`)
-      .join(" · ");
+      .map((m, i) => `<span>${i ? "· " : ""}${escapeHtml(m)}</span>`)
+      .join(" ");
     return `<button type="button" class="open-row${cls ? " " + cls : ""}" data-open-ex="${escapeHtml(ex.id)}">
         <span class="open-row-text"><strong>${escapeHtml(exName(ex))}</strong><span class="meta">${parts}</span></span>
         <span class="open-row-go" aria-hidden="true">${escapeHtml(tt("history.open"))} →</span>
@@ -6295,7 +6296,11 @@
     const lock = $("#pro-insights-lock");
     const panel = $("#pro-insights-panel");
     if (lock) lock.hidden = isProUser;
-    if (panel) panel.classList.toggle("is-locked", !isProUser);
+    if (panel) {
+      panel.classList.toggle("is-locked", !isProUser);
+      // One Pro offer at a time: a moment banner speaks for Pro already.
+      panel.hidden = !isProUser && !$("#value-banner")?.hidden;
+    }
     const focus = $("#pro-coach-focus");
     if (focus) {
       focus.textContent = isProUser
@@ -6405,7 +6410,7 @@
     const remLabel = $("#btn-reminder-label");
     if (remLabel) {
       remLabel.textContent =
-        cfg.enabled && cfg.times[0] ? tt("retain.openOn", { time: cfg.times[0] }) : tt("retain.open");
+        cfg.enabled && cfg.times[0] ? tt("retain.openOn", { time: clockTime(cfg.times[0]) }) : tt("retain.open");
     }
 
     // Welcome back after ≥2 days. With the daily loop the start panel itself
@@ -6469,12 +6474,31 @@
    * of Practicar six screens down.
    */
   /**
+   * "18:30" as the time field shows it: the browser's own 12- or 24-hour clock,
+   * so the week card and the dialog read the same.
+   */
+  function clockTime(hhmm) {
+    const [h, m] = String(hhmm || "").split(":").map(Number);
+    if (!Number.isFinite(h) || !Number.isFinite(m)) return String(hhmm || "");
+    try {
+      return new Date(2000, 0, 1, h, m).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    } catch {
+      return String(hhmm);
+    }
+  }
+
+  /**
    * While the reminder is off, the dialog's main button turns it on: a person
    * who picks a time and taps the big button expects a reminder, not a closed
    * dialog with the box still unticked. "Ahora no" closes without one.
    */
   function syncReminderActions() {
     const on = !!$("#chk-reminders")?.checked;
+    // Off, the main button is the one way to turn it on; on, the ticked box is
+    // the way to turn it off. A box and a button for the same thing read as
+    // two steps.
+    const toggle = $("#chk-reminders")?.closest(".retain-toggle");
+    if (toggle) toggle.hidden = !on;
     const done = $("#reminder-done");
     if (done) done.textContent = tt(on ? "retain.done" : "retain.turnOn");
     const cancel = $("#reminder-cancel");
@@ -6487,7 +6511,8 @@
     renderRetentionChrome();
     syncReminderActions();
     modal.hidden = false;
-    window.VTFocusTrap?.activate?.(modal, { initialFocus: $("#chk-reminders") });
+    const on = !!$("#chk-reminders")?.checked;
+    window.VTFocusTrap?.activate?.(modal, { initialFocus: $(on ? "#chk-reminders" : "#rem-time-1") });
     const finish = () => {
       modal.hidden = true;
       window.VTFocusTrap?.release?.(modal);
@@ -6704,6 +6729,8 @@
     banner.dataset.momentId = moment.id;
     const cta = $("#value-pulse-cta");
     if (cta) cta.hidden = true;
+    const teaser = $("#pro-insights-panel");
+    if (teaser && teaser.classList.contains("is-locked")) teaser.hidden = true;
   }
 
   function hideValueBanner() {

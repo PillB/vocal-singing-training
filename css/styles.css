@@ -7505,6 +7505,31 @@ body.loop-on #start-panel .loop-remind-btn {
 #reminder-modal .modal-actions {
   margin-top: 0.85rem;
 }
+/* One setting per row, checkboxes big enough to hit. */
+#reminder-modal .retain-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+}
+#reminder-modal .retain-head {
+  margin-bottom: 0.35rem;
+}
+#reminder-modal .retain-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+#reminder-modal .retain-actions {
+  margin-top: 0.5rem;
+}
+#reminder-modal input[type="checkbox"] {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+#reminder-modal .retain-toggle[hidden] {
+  display: none;
+}
 /* Historial: the record, then the progress, then profiles, then any offer. */
 #view-history .value-banner {
   margin: 1rem 0 0;
@@ -7528,6 +7553,8 @@ body.loop-on #start-panel .loop-remind-btn {
 /* Small labels in the progress card stay at 12px on every screen, and an
    achievement's name wraps instead of ending in "…". */
 #view-history .value-stat span,
+#view-history .value-pulse-tag,
+#view-history .pro-lock,
 #view-history .pro-ach-badge,
 #view-history .pro-ach-badge small,
 #view-history .pro-profile-field,

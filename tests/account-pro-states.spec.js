@@ -846,11 +846,11 @@ test.describe("The menu, read by someone who has never seen it", () => {
 
   for (const width of [320, 390]) {
     for (const [name, opts] of Object.entries(STATES)) {
-      test(`${width}px, ${name}: inside an exercise the header stays one row`, async ({ browser }) => {
-        // The exercise screen has no Más menu, so the offer and the door sit on
-        // the row with the language switch. Full-length labels there wrapped
-        // the header to a second row, and the stage hid its guide to make room
-        // (stage-design.spec.js checks the guide itself).
+      test(`${width}px, ${name}: inside an exercise the header is the same one row`, async ({ browser }) => {
+        // One header on every screen (design: one-header). The exercise screen
+        // used to have its own row (Practicar, the door, "Pro", the language),
+        // without Plan and Historial; now it is the row every other screen has,
+        // and the offer and the plan live in Más there too.
         const ctx = await browser.newContext({ viewport: { width, height: width === 320 ? 640 : 844 } });
         const page = await ctx.newPage();
         const license = await mintLicense({ origin: BASE });
@@ -861,13 +861,12 @@ test.describe("The menu, read by someone who has never seen it", () => {
         await expect(page.locator("#view-exercise")).toHaveClass(/active/);
         await page.waitForTimeout(300);
         const { row, headerBottom } = await page.evaluate(() => ({
-          row: ["btn-nav-home", "btn-account", "btn-pricing", "btn-lang"]
-            .map((id) => {
-              const el = document.getElementById(id);
-              const r = el.getBoundingClientRect();
-              return r.width ? { id, top: Math.round(r.top), bottom: r.bottom, text: el.innerText.trim(), w: r.width, h: r.height } : null;
-            })
-            .filter(Boolean),
+          row: ["btn-nav-home", "btn-plan", "btn-history", "btn-account", "btn-more"].map((id) => {
+            const el = document.getElementById(id);
+            const r = el.getBoundingClientRect();
+            const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+            return { id, top: Math.round(r.top), bottom: r.bottom, w: r.width, h: r.height, hit: !!top && el.contains(top) };
+          }),
           headerBottom: document.querySelector("header.app-header").getBoundingClientRect().bottom
         }));
         expect(new Set(row.map((c) => c.top)).size, JSON.stringify(row)).toBe(1);
@@ -876,11 +875,11 @@ test.describe("The menu, read by someone who has never seen it", () => {
         for (const c of row) {
           expect(c.h, c.id).toBeGreaterThanOrEqual(44);
           expect(c.w, c.id).toBeGreaterThanOrEqual(44);
+          expect(c.hit, c.id).toBe(true);
         }
-        // The offer is still there for someone without Pro, as "Pro".
-        const offer = row.find((c) => c.id === "btn-pricing");
-        if (opts.signedIn) expect(offer).toBeUndefined();
-        else expect(offer && offer.text).toBe("Pro");
+        await expect(page.locator("#btn-pricing")).toBeHidden();
+        await page.click("#btn-more");
+        await expect(page.locator("#btn-pricing")).toBeVisible();
         await ctx.close();
       });
     }
@@ -928,7 +927,9 @@ test.describe("The menu, read by someone who has never seen it", () => {
         await expect(page.locator("#btn-pricing")).not.toHaveAttribute("data-plan", "free");
         const g = await page.evaluate(() => {
           const rect = (el) => el.getBoundingClientRect();
-          const ids = ["btn-nav-home", "btn-account", "btn-pricing", "btn-lang", "btn-tour"];
+          // A laptop folds the tour and the guide into "Ayuda ▾"; wider, both show.
+          const help = innerWidth < 1100 ? ["btn-help"] : ["btn-tour", "link-guide"];
+          const ids = ["btn-nav-home", "btn-account", "btn-pricing", "btn-lang", ...help];
           const boxes = ids.map((id) => rect(document.getElementById(id)));
           return {
             tops: boxes.map((b) => Math.round(b.top)),

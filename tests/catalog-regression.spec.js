@@ -167,14 +167,17 @@ test.describe("Catalog & structure regression", () => {
     await page.click("#btn-history");
     await expect(page.locator("#view-history")).toHaveClass(/active/);
     await expect(page.locator("#history-list")).toBeVisible();
-    await page.click("#btn-history-back");
+    // No "← Volver" on the page: the lit tab says where you are, and
+    // Practicar is one tap away in the same header.
+    await page.click("#btn-nav-home");
+    await expect(page.locator("#view-home")).toHaveClass(/active/);
     await page.click("#btn-plan");
     await expect(page.locator("#view-plan")).toHaveClass(/active/);
     // Scope to plan view (btn-open-plan also exists hidden on exercise shell)
     await expect(page.locator("#view-plan .plan-grid")).toBeVisible();
     await expect(page.locator("#view-plan #btn-plan-start")).toBeVisible();
     await expect(page.locator("#view-plan #element-chips")).toBeAttached();
-    await page.click("#btn-plan-back");
+    await page.click("#btn-nav-home");
     await expect(page.locator("#view-home")).toHaveClass(/active/);
   });
 

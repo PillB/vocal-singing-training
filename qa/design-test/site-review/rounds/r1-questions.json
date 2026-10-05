@@ -1,0 +1,62 @@
+{
+ "exercise-header": {
+  "title": "Top of an exercise screen",
+  "job": "A learner who has just opened an exercise can tell which exercise it is, get back to where they came from, and reach the site's other sections (Plan, Historial, help) without losing their way.",
+  "states": "exercise-from-list,exercise-pitch",
+  "vps": "phone,desktop",
+  "arms": {
+   "A": {
+    "caption": "'Inicio' and '← Atrás' both return to the top of Practicar. 'Canto' returns to Practicar with the singing list selected, at the top of the page. '?' replays the on-screen tips for this screen. On a phone, the Back button leaves the site. If you have practised, leaving asks whether to save first."
+   },
+   "B": {
+    "url": "http://127.0.0.1:8811",
+    "caption": "'← Ejercicios' returns to the exercise list, scrolled to the card you opened, which is outlined for a moment; an exercise opened from Practicar's start card says '← Practicar' and returns there. 'Ayuda' replays the on-screen tips for this screen. Practicar, Plan, Historial and 'Más' work as on every other screen. On a phone, the Back button does the same as '← Ejercicios'. If you have practised, leaving asks whether to save first."
+   }
+  }
+ },
+ "header-find": {
+  "title": "Finding everything from the top bar",
+  "job": "A learner can see where they are and find each part of the site from the top bar: the three sections, signing in, Pro, the language, the guided tour and the written guide.",
+  "states": "home-returning,menu-new",
+  "vps": "phone,desktop",
+  "arms": {
+   "A": {
+    "caption": "On a phone, 'Más' opens a menu with Probar Pro, English and Tour (the guided tour). The written guide is linked from the page footer. On a phone, the Back button leaves the site from any section, and a reload always opens Practicar."
+   },
+   "B": {
+    "url": "http://127.0.0.1:8811",
+    "caption": "On a phone, 'Más' opens a menu with Probar Pro, English and, under 'Ayuda', Recorrido (the guided tour) and Guía (the written guide). The written guide is also linked from the page footer. On a laptop narrower than 1100px, Recorrido and Guía fold into one 'Ayuda' menu. On a phone, the Back button returns to the previous section, and a reload stays on the section you were in."
+   }
+  }
+ },
+ "catalog-tracks": {
+  "title": "The exercise list and its two tracks",
+  "job": "A learner understands what each of the two tracks is for, picks the one they want, and finds an exercise in it.",
+  "states": "catalog,home-catalog-vocal",
+  "vps": "phone,desktop",
+  "arms": {
+   "A": {
+    "caption": "The two tabs switch the list below between the speaking and the singing exercises. Tapping a card opens that exercise."
+   },
+   "B": {
+    "url": "http://127.0.0.1:8811",
+    "caption": "The two tabs switch the list below between the speaking and the singing exercises. Tapping a card opens that exercise."
+   }
+  }
+ },
+ "plan-history-top": {
+  "title": "Top of the Plan and Historial pages",
+  "job": "A learner who opened Plan or Historial understands where they are and how to get back to practising.",
+  "states": "plan-new,history-rich-btn",
+  "vps": "phone,desktop",
+  "arms": {
+   "A": {
+    "caption": "'← Volver' returns to Practicar. Practicar in the top bar does the same. On a phone, the Back button leaves the site."
+   },
+   "B": {
+    "url": "http://127.0.0.1:8811",
+    "caption": "Practicar in the top bar returns to practising. On a phone, the Back button returns to the previous section."
+   }
+  }
+ }
+}

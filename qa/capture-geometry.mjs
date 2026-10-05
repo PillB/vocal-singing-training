@@ -186,14 +186,14 @@ async function main() {
   await page.waitForTimeout(200);
   await shot(page, "04_history");
   pages.push(await dumpGeometry(page, "04_history"));
-  await page.click("#btn-history-back");
+  await page.click("#btn-nav-home");
 
   // Plan
   await page.click("#btn-plan");
   await page.waitForTimeout(200);
   await shot(page, "05_plan");
   pages.push(await dumpGeometry(page, "05_plan"));
-  await page.click("#btn-plan-back");
+  await page.click("#btn-nav-home");
 
   // English toggle home
   await page.click("#btn-lang");

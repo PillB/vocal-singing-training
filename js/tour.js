@@ -573,7 +573,8 @@
     const home = document.getElementById("view-home");
     const ex = document.getElementById("view-exercise");
     if (home && !home.classList.contains("active")) {
-      document.getElementById("btn-back-home")?.click();
+      if (global.VTApp?.goHome) global.VTApp.goHome();
+      else document.getElementById("btn-back-home")?.click();
       const leave = document.getElementById("leave-cancel");
       if (leave && !document.getElementById("leave-modal")?.hidden) leave.click();
       home.classList.add("active");

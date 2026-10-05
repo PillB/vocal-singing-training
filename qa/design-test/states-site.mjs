@@ -174,6 +174,17 @@ export const states = {
       await scrollToEl(p, ".guide-card");
     }
   },
+  // Opened the way most people open one: a tap on its card in the list.
+  "exercise-from-list": {
+    label: "ejercicio abierto desde la lista, antes de empezar",
+    days: RET3,
+    tab: "singing",
+    action: async (p) => {
+      await scrollToEl(p, '#exercise-list .card-ex[data-id="s4-lip-trills"]');
+      await p.click('#exercise-list .card-ex[data-id="s4-lip-trills"]');
+      await p.waitForTimeout(1000);
+    }
+  },
   "exercise-pitch": {
     label: "ejercicio de afinación abierto, antes de empezar",
     days: RET3,

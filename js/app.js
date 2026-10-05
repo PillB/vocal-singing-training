@@ -9,6 +9,8 @@
     tierFilter: "all", // all | basic | advanced
     view: "home", // home | exercise | history | plan
     exercise: null,
+    // Where the open exercise came from: { view, catalog, track, id, y }
+    exOrigin: null,
     structured: false,
     timer: {
       remaining: 0,
@@ -831,6 +833,46 @@
     });
     // Wider than a phone the items are a plain row again; nothing is "open".
     window.matchMedia?.("(max-width: 640px)")?.addEventListener?.("change", () => setHeaderMenu(false));
+    bindHelpMenu();
+  }
+
+  /* On a laptop the tour and the guide fold into "Ayuda ▾" (css: one-header). */
+  function setHelpMenu(open, opts = {}) {
+    const btn = $("#btn-help");
+    const items = $("#header-help-items");
+    if (!btn || !items) return;
+    btn.setAttribute("aria-expanded", String(open));
+    items.classList.toggle("is-open", open);
+    if (!open && opts.focus) btn.focus();
+  }
+
+  function bindHelpMenu() {
+    const btn = $("#btn-help");
+    const items = $("#header-help-items");
+    if (!btn || !items) return;
+    const isOpen = () => btn.getAttribute("aria-expanded") === "true";
+    btn.addEventListener("click", () => setHelpMenu(!isOpen()));
+    items.addEventListener(
+      "click",
+      (e) => {
+        if (!isOpen() || !e.target.closest("button, a")) return;
+        btn.focus({ preventScroll: true });
+        setHelpMenu(false);
+      },
+      true
+    );
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape" || !isOpen()) return;
+      e.preventDefault();
+      setHelpMenu(false, { focus: true });
+    });
+    document.addEventListener("click", (e) => {
+      if (isOpen() && !btn.contains(e.target) && !items.contains(e.target)) setHelpMenu(false);
+    });
+    items.addEventListener("focusout", (e) => {
+      if (e.relatedTarget && !items.contains(e.relatedTarget) && e.relatedTarget !== btn) setHelpMenu(false);
+    });
+    window.matchMedia?.("(min-width: 641px) and (max-width: 1099px)")?.addEventListener?.("change", () => setHelpMenu(false));
   }
 
   /** Paint the header nav so the current section is always identifiable. */
@@ -844,7 +886,142 @@
     });
   }
 
+  /* —— Addresses: every view has one, so Back, reload and a shared link work ——
+     #plan, #historial and #ejercicio/<id>; Practicar is the bare address. The
+     browser's Back runs the same code as the buttons (onRoute), so leaving a
+     started exercise still asks first. Leaving an exercise for the place it
+     was opened from steps the history back instead of adding an entry, so the
+     phone's Back from Practicar still leaves the site rather than reopening
+     the exercise. */
+  const route = { ready: false, silent: 0, backTo: null, pendingBack: false, pendingTimer: 0, leftY: 0, reopening: false };
+
+  function hashFor(name) {
+    if (name === "plan") return "#plan";
+    if (name === "history") return "#historial";
+    if (name === "exercise" && state.exercise) return `#ejercicio/${state.exercise.id}`;
+    return "";
+  }
+
+  /** What an address asks for, or null for the bare page and any hash this file does not own (#staff). */
+  function parseRoute(hash) {
+    const m = /^#(plan|historial|ejercicio\/([\w-]+))$/.exec(hash || "");
+    if (!m) return null;
+    if (m[1] === "plan") return { type: "plan" };
+    if (m[1] === "historial") return { type: "history" };
+    return { type: "exercise", id: m[2] };
+  }
+
+  function writeRoute(name, prev) {
+    if (!route.ready || route.silent || route.pendingBack) return;
+    const want = hashFor(name);
+    if ((location.hash || "") === want || (!want && !parseRoute(location.hash))) return;
+    const url = want || location.pathname + location.search;
+    try {
+      // The page you leave keeps its scroll position, for when Back returns to it.
+      if (prev && prev !== "exercise") history.replaceState({ ...(history.state || {}), y: route.leftY }, "");
+      if (prev === "exercise" && name !== "exercise" && route.backTo === want) {
+        // Back to where the exercise was opened from: the entry is already
+        // there, one step back. The URL follows when popstate arrives.
+        route.backTo = null;
+        route.pendingBack = true;
+        clearTimeout(route.pendingTimer);
+        route.pendingTimer = setTimeout(() => {
+          route.pendingBack = false;
+        }, 1500);
+        history.back();
+      } else if (prev === "exercise") {
+        // One exercise to the next, or out to somewhere else: one entry.
+        history.replaceState({ vt: name }, "", url);
+        if (name !== "exercise") route.backTo = null;
+      } else {
+        if (name === "exercise") route.backTo = hashFor(prev);
+        history.pushState({ vt: name }, "", url);
+      }
+    } catch {
+      /* file:// or a sandboxed frame: the views still work without addresses */
+    }
+  }
+
+  function routeMatchesView(t) {
+    if (!t) return state.view === "home";
+    if (t.type === "exercise") return state.view === "exercise" && state.exercise?.id === t.id;
+    return state.view === t.type;
+  }
+
+  async function onRoute() {
+    if (route.pendingBack) {
+      // Our own history.back(): the view already changed. Anything opened
+      // while it was on its way gets its address now.
+      route.pendingBack = false;
+      clearTimeout(route.pendingTimer);
+      if (!routeMatchesView(parseRoute(location.hash))) writeRoute(state.view, null);
+      return;
+    }
+    const t = parseRoute(location.hash);
+    if (routeMatchesView(t)) return;
+    setHeaderMenu(false);
+    if (window.VTTour?.isActive?.()) window.VTTour.end?.(false);
+    if ($("#pricing-modal") && !$("#pricing-modal").hidden) closePricing();
+    if ($("#account-modal") && !$("#account-modal").hidden) closeAccount();
+    route.silent += 1;
+    try {
+      if (t?.type === "exercise") {
+        // Forward into the exercise you just left: same way back as before.
+        route.reopening = true;
+        try {
+          if (findExercise(t.id)) openExercise(t.id, false);
+        } finally {
+          route.reopening = false;
+        }
+        return;
+      }
+      const fromExercise = state.view === "exercise";
+      const dest = t ? { type: t.type } : { type: "home", restore: fromExercise && state.exOrigin?.catalog ? state.exOrigin : null };
+      if (fromExercise) {
+        const left = await leaveExercise(dest);
+        // "Seguir aquí": the exercise stays, so its address comes back.
+        if (!left && state.view === "exercise") {
+          route.silent -= 1;
+          try {
+            history.pushState({ vt: "exercise" }, "", hashFor("exercise"));
+          } catch {
+            /* ignore */
+          }
+          route.silent += 1;
+        }
+      } else {
+        navigateDestination(dest);
+        // Back to a page you scrolled: the same place on it.
+        const y = history.state?.y;
+        if (y) window.scrollTo({ top: y, behavior: "instant" });
+      }
+    } finally {
+      route.silent -= 1;
+    }
+  }
+
+  /** Open whatever the address names, once, when the page loads. */
+  function applyInitialRoute() {
+    try {
+      // The views scroll themselves (setView, returnToCatalog, onRoute); the
+      // browser's own restoring fought them.
+      history.scrollRestoration = "manual";
+    } catch {
+      /* ignore */
+    }
+    const t = parseRoute(location.hash);
+    if (t?.type === "plan") renderPlan();
+    else if (t?.type === "history") renderHistory();
+    else if (t?.type === "exercise" && findExercise(t.id)) forceOpenExercise(t.id, false);
+    route.ready = true;
+    window.addEventListener("popstate", () => {
+      onRoute();
+    });
+  }
+
   function setView(name) {
+    const prev = state.view;
+    route.leftY = window.scrollY;
     state.view = name;
     $$(".view").forEach((v) => v.classList.remove("active"));
     const map = {
@@ -858,6 +1035,11 @@
     document.body.classList.toggle("view-exercise", name === "exercise");
     syncHeaderNav(name);
     setHeaderMenu(false);
+    setHelpMenu(false);
+    writeRoute(name, prev);
+    // A new page starts at its top; the exercise scrolls itself, and a return
+    // to the catalog puts you back at your card (returnToCatalog).
+    if (prev !== name && name !== "exercise") window.scrollTo({ top: 0, behavior: "instant" });
     if (name !== "exercise") {
       document.body.classList.remove("practice-live");
       hideStepDone();
@@ -1401,7 +1583,10 @@
           }</span>
         </span>
       `;
-      btn.addEventListener("click", () => openExercise(ex.id, false));
+      btn.addEventListener("click", () => {
+        openingFromCatalog = true;
+        openExercise(ex.id, false);
+      });
       list.appendChild(btn);
     });
     renderTodayBasics();
@@ -1575,19 +1760,51 @@
     return s && s.path === "basics" && s.order?.includes(ex.id) ? s.track || null : null;
   }
 
-  function updateExerciseBreadcrumb(ex, routineTrack) {
-    const track = routineTrack || ex?.track || state.tab || "vocal";
-    const trackLabel = tt(track === "vocal" ? "tab.vocalShort" : "tab.singingShort");
-    const title = ex
-      ? `${ex.number}. ${window.VTI18n ? VTI18n.exTitle(ex) : ex.title}`
-      : "—";
-    const bcTrack = $("#bc-track");
-    const bcCur = $("#bc-current");
-    if (bcTrack) {
-      bcTrack.textContent = trackLabel;
-      bcTrack.dataset.track = track;
+  /** Set by a catalog card's click, read by the open that follows it. */
+  let openingFromCatalog = false;
+
+  /** The exercise's way back says where it goes: the catalog, Practicar, Plan or Historial. */
+  function syncExerciseBack() {
+    const btn = $("#btn-back-home");
+    if (!btn) return;
+    const o = state.exOrigin || { view: "home" };
+    const key =
+      o.view === "plan"
+        ? "ex.backPlan"
+        : o.view === "history"
+          ? "ex.backHistory"
+          : o.catalog && !state.structured
+            ? "ex.backCatalog"
+            : "ex.backPractice";
+    btn.textContent = tt(key);
+    btn.setAttribute("aria-label", tt(key + "Aria"));
+  }
+
+  /** The exercise's own way back: to where it was opened from, at the same place. */
+  function leaveExerciseBack() {
+    const o = state.exOrigin || { view: "home" };
+    if (o.view === "plan" || o.view === "history") return leaveExercise({ type: o.view });
+    return leaveExercise({ type: "home", restore: o.catalog && !state.structured ? o : null });
+  }
+
+  /**
+   * Back on Practicar after an exercise opened from the catalog: the same
+   * track, the list where it was, and the card you opened outlined for a
+   * moment so the eye finds it.
+   */
+  function returnToCatalog(o) {
+    if (o.track && o.track !== state.tab) setTab(o.track);
+    const card = $(`#exercise-list .card-ex[data-id="${o.id}"]`);
+    window.scrollTo({ top: o.y || 0, behavior: "instant" });
+    if (!card) return;
+    const r = card.getBoundingClientRect();
+    const hh = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--header-h")) || 60;
+    if (r.top < hh || r.bottom > window.innerHeight) {
+      window.scrollTo({ top: window.scrollY + r.top - hh - 16, behavior: "instant" });
     }
-    if (bcCur) bcCur.textContent = title;
+    card.focus({ preventScroll: true });
+    card.classList.add("is-returned");
+    setTimeout(() => card.classList.remove("is-returned"), 2000);
   }
 
   function resetSessionPractice() {
@@ -1846,6 +2063,7 @@
     if (destination.type === "home") {
       setView("home");
       renderExerciseList();
+      if (destination.restore) returnToCatalog(destination.restore);
     } else if (destination.type === "history") {
       renderHistory();
     } else if (destination.type === "plan") {
@@ -1867,6 +2085,18 @@
     state.pendingMicro = false;
     stopPractice(true);
     hideStepDone();
+    // Where this exercise was opened from, so the way back can name it and
+    // land there: a catalog card brings you back to that card.
+    if (state.view !== "exercise" && !(route.reopening && state.exOrigin?.id === id)) {
+      state.exOrigin = {
+        view: state.view === "plan" || state.view === "history" ? state.view : "home",
+        catalog: state.view === "home" && openingFromCatalog,
+        track: state.tab,
+        id,
+        y: window.scrollY
+      };
+    }
+    openingFromCatalog = false;
     state.exercise = ex;
     state.structured = !!fromStructured;
     state.reviewChecks = { auditory: false, visual: false, transcription: false };
@@ -1992,12 +2222,12 @@
     // Inside today's basics every step is a warm-up of the routine's track,
     // whatever catalog track and tier the exercise has on its own.
     const routineTrack = basicsRoutineTrack(ex);
-    const badgeTrack = routineTrack || ex.track;
-    $("#ex-track-badge").textContent = routineTrack
+    const kind = $("#ex-track-badge");
+    kind.textContent = routineTrack
       ? tt("badge.basics")
       : `${tt(ex.track === "vocal" ? "badge.vocal" : "badge.singing")} · ${tierLabel(tier, ex.track)}`;
-    $("#ex-track-badge").style.borderColor = badgeTrack === "vocal" ? "var(--vocal)" : "var(--singing)";
-    updateExerciseBreadcrumb(ex, routineTrack);
+    kind.dataset.track = routineTrack || ex.track;
+    syncExerciseBack();
     const I = window.VTI18n;
     const original = I?.exField ? I.exField(ex, "original") : ex.original;
     const research = I?.exField ? I.exField(ex, "research") : ex.research;
@@ -5226,25 +5456,19 @@
       if (state.view === "exercise") leaveExercise({ type: "plan" });
       else renderPlan();
     });
+    // Practicar from anywhere is the top of Practicar; the exercise's own
+    // "← Ejercicios" is the way back to your place in the catalog.
     $("#btn-nav-home")?.addEventListener("click", () => {
       if (state.view === "exercise") leaveExercise({ type: "home" });
-      else setView("home");
+      else if (state.view !== "home") setView("home");
+      else window.scrollTo({ top: 0, behavior: scrollBehavior() });
     });
     $("#btn-session-pause").addEventListener("click", pauseStructured);
     $("#btn-session-resume").addEventListener("click", resumeStructured);
     $("#btn-session-end").addEventListener("click", endStructured);
 
     $("#btn-back-home").addEventListener("click", () => {
-      leaveExercise({ type: "home" });
-    });
-    // Breadcrumbs: Inicio → home; track → home with that tab selected
-    $("#bc-home")?.addEventListener("click", () => {
-      leaveExercise({ type: "home" });
-    });
-    $("#bc-track")?.addEventListener("click", async () => {
-      const track = $("#bc-track")?.dataset?.track || state.tab || "vocal";
-      const left = await leaveExercise({ type: "home" });
-      if (left || state.view === "home") setTab(track);
+      leaveExerciseBack();
     });
 
     $("#btn-practice-start")?.addEventListener("click", startPractice);
@@ -5569,14 +5793,6 @@
     $("#plan-focus-more").addEventListener("click", togglePlanElements);
     $("#btn-plan-improved").addEventListener("click", () => submitWeekReview(true));
     $("#btn-plan-continue").addEventListener("click", () => submitWeekReview(false));
-    $("#btn-plan-back").addEventListener("click", () => {
-      setView("home");
-      renderExerciseList();
-    });
-    $("#btn-history-back").addEventListener("click", () => {
-      setView("home");
-      renderExerciseList();
-    });
 
     // Warn on tab close if meaningful unsaved practice
     window.addEventListener("beforeunload", (e) => {
@@ -7922,7 +8138,9 @@
     openPricing,
     closePricing,
     openAccount,
-    closeAccount
+    closeAccount,
+    /** Practicar, from wherever you are; leaving a started exercise still asks first. */
+    goHome: () => (state.view === "exercise" ? leaveExercise({ type: "home" }) : setView("home"))
   };
 
   function init() {
@@ -8003,11 +8221,15 @@
       toast(tt("toast.pausedSession"));
     }
 
-    // Interactive intro tour (first visit or header Tour button)
+    // An address (#plan, #historial, #ejercicio/<id>) opens its view.
+    applyInitialRoute();
+
+    // Interactive intro tour (first visit or header Tour button). It is a
+    // tour of Practicar, so an address that opened another view skips it.
     if (window.VTTour) {
       VTTour.bindReplayButton();
       VTTour.bindUiHelpButton?.();
-      VTTour.maybeAutoStart();
+      if (state.view === "home") VTTour.maybeAutoStart();
     }
     // Ensure default 1-nota is reflected in select even before first exercise
     setPlayMode("oneNote", { silent: true });

@@ -387,18 +387,61 @@ test.describe("Phone: one-row header with Más", () => {
     await expect(page.locator(".tour-card")).toBeVisible();
   });
 
-  test("the exercise view and a wide screen keep today's header", async ({ page }) => {
+  test("the exercise view has the same header; a wide screen shows the menu's items", async ({ page }) => {
+    // One header on every screen (design: one-header): the exercise view used
+    // to swap in its own row, without Plan and Historial and with Pro and the
+    // language on it, two rows tall on a phone.
     await boot(page, { days: RET3, tab: "singing" });
+    const row = () =>
+      page.evaluate(() =>
+        ["btn-nav-home", "btn-plan", "btn-history", "btn-account", "btn-more"].map((id) => {
+          const r = document.getElementById(id).getBoundingClientRect();
+          return { id, top: Math.round(r.top), h: Math.round(r.height) };
+        })
+      );
+    const home = await row();
+    const homeH = await page.evaluate(() => document.querySelector(".app-header").getBoundingClientRect().height);
     await page.evaluate(() => VTApp.openExercise("s4-lip-trills"));
     await page.clock.runFor(500);
-    await expect(page.locator("#btn-more")).toBeHidden();
-    await expect(page.locator("#btn-pricing")).toBeVisible();
+    await expect(page.locator("#btn-more")).toBeVisible();
+    await expect(page.locator("#btn-plan")).toBeVisible();
+    await expect(page.locator("#btn-history")).toBeVisible();
+    await expect(page.locator("#btn-pricing")).toBeHidden();
+    expect(await row()).toEqual(home);
+    const exH = await page.evaluate(() => document.querySelector(".app-header").getBoundingClientRect().height);
+    expect(Math.abs(exH - homeH)).toBeLessThanOrEqual(1);
     await page.evaluate(() => VTApp.setView("home"));
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.clock.runFor(300);
     await expect(page.locator("#btn-more")).toBeHidden();
-    await expect(page.locator("#btn-pricing")).toBeVisible();
-    await expect(page.locator("#btn-lang")).toBeVisible();
+    for (const id of ["#btn-pricing", "#btn-lang", "#btn-tour", "#link-guide"]) await expect(page.locator(id)).toBeVisible();
+    await expect(page.locator("#header-help-label")).toBeHidden();
+    await expect(page.locator("#btn-help")).toBeHidden();
+    // A laptop folds the two into "Ayuda ▾", which opens and closes like Más.
+    await page.setViewportSize({ width: 1024, height: 720 });
+    await page.clock.runFor(300);
+    await expect(page.locator("#btn-tour")).toBeHidden();
+    const help = page.locator("#btn-help");
+    await expect(help).toBeVisible();
+    await help.click();
+    await expect(help).toHaveAttribute("aria-expanded", "true");
+    await expect(page.locator("#link-guide")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#btn-tour")).toBeHidden();
+    await expect(help).toBeFocused();
+    await help.click();
+    await page.locator("#btn-tour").click();
+    await expect(page.locator(".tour-card")).toBeVisible();
+  });
+
+  test("Más names its help: the tour and the written guide, under Ayuda", async ({ page }) => {
+    await boot(page, { days: RET3, tab: "singing" });
+    await page.click("#btn-more");
+    await expect(page.locator("#header-help-label")).toHaveText("Ayuda");
+    const guide = page.locator("#link-guide");
+    await expect(guide).toBeVisible();
+    await expect(guide).toHaveAttribute("href", /^guide\.html/);
+    expect((await guide.boundingBox()).height).toBeGreaterThanOrEqual(44);
   });
 
   test("at 320 and 360 the row fits and stays pinned", async ({ page }) => {

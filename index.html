@@ -10,7 +10,7 @@
     <meta name="color-scheme" content="dark" />
     <meta name="theme-color" content="#0c1118" />
     <title>Entrenamiento vocal y de canto</title>
-    <link rel="stylesheet" href="css/styles.css?v=20261002a" />
+    <link rel="stylesheet" href="css/styles.css?v=20261005a" />
     <link rel="stylesheet" href="css/exercise-viz.css?v=20261002a" />
     <link rel="stylesheet" href="css/scenes/speech.css?v=20261002a" />
     <link rel="stylesheet" href="css/scenes/speech-shape.css?v=20261002a" />
@@ -51,7 +51,17 @@
                  status pill beside a second button, two things about one plan. -->
             <button type="button" class="btn btn-pro btn-sm" id="btn-pricing" data-i18n="nav.proTry" title="Pro">Probar Pro</button>
             <button type="button" class="btn btn-ghost btn-sm btn-util" id="btn-lang" data-i18n="nav.lang" data-i18n-aria="nav.langAria">English</button>
-            <button type="button" class="btn btn-ghost btn-sm btn-util" id="btn-tour" data-i18n="nav.tour" data-i18n-title="nav.tourTitle">Tour</button>
+            <!-- Help, in one place and in words: the tour and the written guide.
+                 Wide screens show both; a laptop folds them into "Ayuda ▾"; on a
+                 phone they sit in Más under the label "Ayuda" (css: one-header). -->
+            <div class="header-help" id="header-help">
+              <button type="button" class="btn btn-ghost btn-sm btn-util header-help-toggle" id="btn-help" aria-expanded="false" aria-controls="header-help-items"><span data-i18n="nav.help">Ayuda</span> <span class="header-more-caret" aria-hidden="true">▾</span></button>
+              <span class="header-utils-label" id="header-help-label" data-i18n="nav.help">Ayuda</span>
+              <div class="header-help-items" id="header-help-items">
+                <button type="button" class="btn btn-ghost btn-sm btn-util" id="btn-tour" data-i18n="nav.tour" data-i18n-title="nav.tourTitle">Recorrido</button>
+                <a class="btn btn-ghost btn-sm btn-util" id="link-guide" href="guide.html" data-i18n="nav.guide" data-i18n-title="nav.guideTitle">Guía</a>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -158,7 +168,7 @@
             <li>
               <span class="start-step-n" aria-hidden="true"></span>
               <strong data-i18n="start.step1">Elige un ejercicio</strong>
-              <span class="muted" data-i18n="start.step1sub">Vocal para hablar en público, Canto para cantar.</span>
+              <span class="muted" data-i18n="start.step1sub">Hablar para presentaciones, Cantar para canciones.</span>
             </li>
             <li>
               <span class="start-step-n" aria-hidden="true"></span>
@@ -203,14 +213,15 @@
           <div class="catalog-head">
             <div class="catalog-head-text">
               <h3 id="catalog-heading" data-i18n="home.catalog">Catálogo de ejercicios</h3>
-              <p class="muted catalog-pick" data-i18n="home.catalogPick">Elige tu camino: vocal o canto</p>
+              <p class="muted catalog-pick" data-i18n="home.catalogPick">Elige qué entrenar: hablar o cantar.</p>
             </div>
           </div>
 
           <div
             class="track-switch tabs"
             role="tablist"
-            aria-label="Training track"
+            data-i18n-aria="home.trackAria"
+            aria-label="Qué entrenar"
             id="track-switch"
           >
             <button
@@ -221,13 +232,11 @@
               aria-selected="true"
               aria-controls="exercise-list"
               id="tab-vocal"
-              data-i18n-aria="tab.vocal"
-              aria-label="Entrenamiento vocal"
             >
               <span class="track-ico" aria-hidden="true">🎙</span>
               <span class="track-label">
-                <span class="track-label-short" data-i18n="tab.vocalShort">Vocal</span>
-                <span class="track-label-full" data-i18n="tab.vocal">Entrenamiento vocal</span>
+                <span class="track-label-short" data-i18n="tab.vocalShort">Hablar</span>
+                <span class="track-label-full" data-i18n="tab.vocal">presentaciones, dicción</span>
               </span>
             </button>
             <button
@@ -238,13 +247,11 @@
               aria-selected="false"
               aria-controls="exercise-list"
               id="tab-singing"
-              data-i18n-aria="tab.singing"
-              aria-label="Entrenamiento de canto"
             >
               <span class="track-ico" aria-hidden="true">♪</span>
               <span class="track-label">
-                <span class="track-label-short" data-i18n="tab.singingShort">Canto</span>
-                <span class="track-label-full" data-i18n="tab.singing">Entrenamiento de canto</span>
+                <span class="track-label-short" data-i18n="tab.singingShort">Cantar</span>
+                <span class="track-label-full" data-i18n="tab.singing">canciones, afinación</span>
               </span>
             </button>
           </div>
@@ -252,7 +259,7 @@
           <p class="track-blurb" id="home-track-sub" data-i18n="home.vocalSub">
             Clase: dicción, volumen, conexión y revisión. Expresión: pausas, tono, ritmo, gestos e historias.
           </p>
-          <h4 class="track-title sr-title" id="home-track-title" data-i18n="home.vocalTitle">Entrenamiento vocal</h4>
+          <h4 class="track-title sr-title" id="home-track-title" data-i18n="home.vocalTitle">Hablar</h4>
 
           <div class="toolbar tier-toolbar">
             <div class="tier-filters" role="group" data-i18n-aria="home.tierAria">
@@ -399,23 +406,16 @@
       <section id="view-exercise" class="view">
         <!-- Ultra-compact title row — practice stage is the main screen -->
         <div class="panel-header exercise-header-compact">
-          <div class="ex-header-main">
-            <nav class="ex-breadcrumb" id="ex-breadcrumb" data-i18n-aria="bc.nav" aria-label="Ruta de navegación">
-              <button type="button" class="ex-bc-link" id="bc-home" data-i18n="bc.home">Inicio</button>
-              <span class="ex-bc-sep" aria-hidden="true">›</span>
-              <button type="button" class="ex-bc-link" id="bc-track" data-track="vocal">Vocal</button>
-              <span class="ex-bc-sep" aria-hidden="true">›</span>
-              <span class="ex-bc-current" id="bc-current" aria-current="page">Ejercicio</span>
-            </nav>
-            <div class="ex-title-row">
-              <span class="badge" id="ex-track-badge">Vocal</span>
-              <h2 id="ex-title">Ejercicio</h2>
-              <p class="sub" id="structured-progress" hidden></p>
-            </div>
+          <!-- One row: the way back names where it goes (js/app.js
+               syncExerciseBack), the exercise, then help in a word. -->
+          <button type="button" class="btn btn-ghost btn-sm btn-back-compact" id="btn-back-home" data-i18n="ex.backPractice">← Practicar</button>
+          <div class="ex-title-row">
+            <h2 id="ex-title">Ejercicio</h2>
+            <span class="ex-kind" id="ex-track-badge"></span>
+            <p class="sub" id="structured-progress" hidden></p>
           </div>
           <div class="ex-header-actions">
-            <button type="button" class="btn btn-ghost btn-sm btn-ui-help" id="btn-ui-help" data-i18n="uiTour.help" data-i18n-aria="uiTour.helpAria" data-i18n-title="uiTour.helpAria" aria-label="Cómo usar esta pantalla" title="Cómo usar esta pantalla">?</button>
-            <button type="button" class="btn btn-ghost btn-sm btn-back-compact" id="btn-back-home" data-i18n="ex.back">← Atrás</button>
+            <button type="button" class="btn btn-ghost btn-sm btn-ui-help" id="btn-ui-help" data-i18n="uiTour.help" data-i18n-aria="uiTour.helpAria" data-i18n-title="uiTour.helpAria" aria-label="Cómo usar esta pantalla" title="Cómo usar esta pantalla">Ayuda</button>
           </div>
         </div>
 
@@ -722,7 +722,6 @@
             <h2 data-i18n="history.title">Historial</h2>
             <p class="sub" id="history-sub" data-i18n="history.sub">Grabaciones y progreso en este navegador.</p>
           </div>
-          <button type="button" class="btn btn-ghost" id="btn-history-back" data-i18n="history.back">← Volver</button>
         </div>
         <div class="card" id="history-list"></div>
         <aside id="ad-slot-history" class="ad-slot" hidden aria-label="Studio tip"></aside>
@@ -734,7 +733,6 @@
             <h2 data-i18n="plan.title">Plan de mejora de 12 semanas</h2>
             <p class="sub" data-i18n="plan.sub">Un elemento a la vez. Graba y revisa cada semana.</p>
           </div>
-          <button type="button" class="btn btn-ghost" id="btn-plan-back" data-i18n="history.back">← Volver</button>
         </div>
 
         <div class="plan-grid">
@@ -1103,7 +1101,7 @@
     </div>
 
     <script src="js/focus-trap.js?v=20260924c"></script>
-    <script src="js/i18n.js?v=20261002a"></script>
+    <script src="js/i18n.js?v=20261005a"></script>
     <script src="js/exercises-data.js?v=20261002a"></script>
     <script src="js/exercises-locale-es.js?v=20261002a"></script>
     <script src="js/practice-profiles.js?v=20261002a"></script>
@@ -1150,7 +1148,7 @@
     <script src="js/metrics.js?v=20260924c"></script>
     <script src="js/session.js?v=20260924c"></script>
     <script src="js/daily-loop.js?v=20260924c"></script>
-    <script src="js/tour.js?v=20260924c"></script>
-    <script src="js/app.js?v=20261002a"></script>
+    <script src="js/tour.js?v=20261005a"></script>
+    <script src="js/app.js?v=20261005a"></script>
   </body>
 </html>

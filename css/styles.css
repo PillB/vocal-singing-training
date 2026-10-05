@@ -103,38 +103,16 @@ a {
   border-bottom: 1px solid var(--border);
 }
 
-/* Exercise view: compact chrome so sticky highway keeps fold space */
-body.view-exercise .app-header .brand p,
-body.view-exercise .app-header .brand-mark {
-  display: none;
-}
-body.view-exercise .header-inner {
-  padding: 0.35rem 0.85rem;
-  gap: 0.35rem 0.55rem;
-}
-body.view-exercise .app-header .brand h1 {
-  font-size: 0.88rem;
-}
+/* The site header is the same on every screen (design: one-header); only
+   the footer steps aside while an exercise is open. */
 body.view-exercise {
-  /* Must match real sticky .app-header height (compact brand). Was 42px → Back sat under header hits. */
-  --header-h: 56px;
+  /* Fallbacks until js syncHeaderHeightVar measures the real heights. */
+  --header-h: 58px;
   --ex-chrome-h: 2.75rem;
 }
 body.view-exercise .main {
   padding-top: 0.3rem;
   padding-bottom: 1.25rem;
-}
-body.view-exercise .header-actions .btn-sm {
-  min-height: 32px;
-  padding: 0.24rem 0.5rem;
-  /* 12px, the project's text floor (0.74rem drew 11.84px). */
-  font-size: 0.75rem;
-}
-/* Exercise: hide low-priority chrome so stage owns the fold */
-body.view-exercise #btn-history,
-body.view-exercise #btn-plan,
-body.view-exercise #btn-tour {
-  display: none;
 }
 body.view-exercise .app-footer {
   display: none;
@@ -185,7 +163,7 @@ body:not(.view-exercise) .main {
 .header-inner {
   max-width: var(--max);
   margin: 0 auto;
-  padding: 0.85rem 1.25rem;
+  padding: 0.4rem 1.25rem;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -487,52 +465,6 @@ body.home-zero #practice-heatmap-wrap {
 }
 body.home-zero #pro-insights-panel {
   padding-bottom: 0.35rem;
-}
-
-/* Exercise breadcrumbs (NN/g wayfinding) */
-.ex-header-main {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  min-width: 0;
-  flex: 1 1 auto;
-}
-.ex-breadcrumb {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.2rem 0.35rem;
-  font-size: 0.75rem;
-  line-height: 1.2;
-  color: var(--text-muted);
-}
-.ex-bc-link {
-  appearance: none;
-  border: 0;
-  background: transparent;
-  color: #9ec8ee;
-  font: inherit;
-  font-weight: 650;
-  padding: 0.15rem 0.25rem;
-  border-radius: 6px;
-  cursor: pointer;
-  text-decoration: none;
-}
-.ex-bc-link:hover {
-  color: #d7ecff;
-  background: rgba(100, 160, 220, 0.12);
-}
-.ex-bc-sep {
-  opacity: 0.45;
-  user-select: none;
-}
-.ex-bc-current {
-  color: var(--text);
-  font-weight: 650;
-  max-width: min(52vw, 18rem);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 /* Card track accent */
@@ -1318,9 +1250,10 @@ body.home-zero #pro-insights-panel {
 
 .exercise-header-compact {
   display: flex;
+  flex-wrap: nowrap;
   align-items: center;
   justify-content: space-between;
-  gap: 0.4rem;
+  gap: 0.5rem;
   margin-bottom: 0.15rem;
   padding: 0.2rem 0.15rem;
   min-height: 2.5rem;
@@ -1339,46 +1272,56 @@ body.home-zero #pro-insights-panel {
   flex: 0 0 auto;
   margin-left: auto;
 }
+/* One row (design: one-header): the way back, the exercise's name with what
+   kind it is under it, then Ayuda. */
 .exercise-header-compact .ex-title-row {
   display: flex;
-  flex-wrap: nowrap;
-  align-items: center;
-  gap: 0.35rem 0.45rem;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 0.5rem;
+  row-gap: 0;
   min-width: 0;
-  flex: 1 1 auto;
+  flex: 1 1 0;
   overflow: hidden;
 }
 .exercise-header-compact h2 {
-  font-size: 0.92rem;
+  flex: 1 1 100%;
+  min-width: 0;
+  font-size: 0.95rem;
   margin: 0;
-  line-height: 1.2;
+  line-height: 1.25;
   letter-spacing: -0.02em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: min(52vw, 28rem);
 }
+.exercise-header-compact .ex-kind,
 .exercise-header-compact .sub {
   margin: 0;
-  font-size: 0.72rem;
-  /* keep structured progress on one line when present */
+  /* 12px, the text floor */
+  font-size: 0.75rem;
+  line-height: 1.3;
+  color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 12rem;
+  min-width: 0;
 }
-.exercise-header-compact .badge {
-  flex: 0 0 auto;
-  font-size: 0.68rem;
-  padding: 0.12rem 0.4rem;
+.exercise-header-compact .ex-kind {
+  flex: 0 1 auto;
+  font-weight: 650;
+}
+.exercise-header-compact .sub {
+  flex: 0 1 auto;
+  max-width: 12rem;
 }
 .btn-back-compact {
   flex: 0 0 auto;
   white-space: nowrap;
   min-height: 40px;
   min-width: 2.75rem;
-  padding: 0.3rem 0.65rem;
-  font-size: 0.78rem;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.8rem;
   position: relative;
   z-index: 31;
   pointer-events: auto;
@@ -1389,6 +1332,18 @@ body.home-zero #pro-insights-panel {
   position: relative;
   z-index: 32;
   pointer-events: auto;
+}
+/* A pointer screen: the exercise row stays as short as the old breadcrumb was,
+   so the stage keeps its height under the full site header. */
+@media (min-width: 641px) and (min-height: 501px) {
+  .exercise-header-compact {
+    min-height: 0;
+    padding-block: 0.1rem;
+  }
+  .exercise-header-compact .btn-back-compact,
+  .exercise-header-compact .btn-ui-help {
+    min-height: 36px;
+  }
 }
 
 /* Sticky only the highway frame — not piano/metrics */
@@ -2493,8 +2448,9 @@ html[lang^="es"] .hud-cents-only .hud-combo strong::before {
 .btn-ui-help {
   min-width: var(--min-tap);
   min-height: var(--min-tap);
-  padding: 0.2rem 0.45rem;
-  font-weight: 800;
+  padding: 0.2rem 0.7rem;
+  font-size: 0.8rem;
+  font-weight: 750;
   border-radius: 999px;
   border: 1px solid var(--border);
   background: rgba(40, 70, 110, 0.35);
@@ -4322,8 +4278,8 @@ body.account-open {
   opacity: 1;
 }
 
-/* On exercise view, sit just under sticky header */
-body.view-exercise .toast.show {
+/* Under the sticky header, never on top of Practicar / Plan / Historial */
+.toast.show {
   top: max(calc(var(--header-h, 58px) + 0.35rem), var(--safe-top, 0px));
 }
 
@@ -4553,6 +4509,60 @@ footer a {
 .header-utils .btn-util:hover {
   color: var(--text);
   opacity: 1;
+}
+a.btn-util {
+  text-decoration: none;
+}
+/* Help (design: one-header). Wide screens: "Recorrido" and "Guía" on the row.
+   A laptop: one "Ayuda ▾" that opens the two. A phone: both in Más, under
+   the label "Ayuda". */
+.header-help,
+.header-help-items {
+  display: contents;
+}
+.header-help-toggle,
+.header-utils-label {
+  display: none;
+}
+@media (min-width: 641px) and (max-width: 1099px) {
+  .app-header:has(#btn-more) .header-help {
+    display: block;
+    position: relative;
+  }
+  .app-header:has(#btn-more) .header-help-toggle {
+    display: inline-flex;
+  }
+  .app-header:has(#btn-more) .header-help-toggle[aria-expanded="true"] .header-more-caret {
+    transform: rotate(180deg);
+  }
+  .app-header:has(#btn-more) .header-help-items {
+    display: none;
+  }
+  .app-header:has(#btn-more) .header-help-items.is-open {
+    display: flex;
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    z-index: 50;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.35rem;
+    min-width: 10rem;
+    padding: 0.45rem;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: var(--bg-elevated);
+    box-shadow: var(--shadow);
+  }
+  .app-header:has(#btn-more) .header-help-items.is-open .btn {
+    justify-content: flex-start;
+  }
+}
+
+/* Back from an exercise to the catalog: the card you opened, outlined for a moment */
+.card-ex.is-returned {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* —— Start panel: the one decision point on home —— */
@@ -5245,12 +5255,6 @@ body.loop-first #home-tour-invite .btn {
   }
 }
 
-/* Exercise view keeps its compact chrome: nav tiering must not add height */
-body.view-exercise .header-nav {
-  background: none;
-  border-color: transparent;
-  padding: 0;
-}
 
 /* —— Exercise stage: guidance instead of dead space —— */
 .stage-guide {
@@ -5389,30 +5393,30 @@ body.home-zero:not(.loop-on) #start-panel .start-sub {
      and shrank labels to ~10.9px on a 34px target. Give the actions their own
      full-width row that wraps left-to-right, and drop the decorative brand
      mark and tagline on a phone to pay for the taller, readable buttons. */
-  body:not(.view-exercise) .header-inner {
+  body .header-inner {
     flex-direction: column;
     align-items: stretch;
     gap: 0.45rem;
     padding: 0.5rem 0.9rem 0.6rem;
   }
-  body:not(.view-exercise) .app-header .brand-mark,
-  body:not(.view-exercise) .app-header .brand p {
+  body .app-header .brand-mark,
+  body .app-header .brand p {
     display: none;
   }
-  body:not(.view-exercise) .brand {
+  body .brand {
     min-width: 0;
   }
-  body:not(.view-exercise) .brand h1 {
+  body .brand h1 {
     font-size: 0.95rem;
     line-height: 1.25;
   }
-  body:not(.view-exercise) .header-actions {
+  body .header-actions {
     max-width: none;
     flex-wrap: wrap;
     justify-content: flex-start;
     gap: 0.35rem;
   }
-  body:not(.view-exercise) .header-actions .btn-sm {
+  body .header-actions .btn-sm {
     min-height: var(--min-tap);
     padding: 0.35rem 0.7rem;
     font-size: 0.8rem;
@@ -5556,21 +5560,21 @@ body.home-zero:not(.loop-on) #start-panel .start-sub {
 
 /* Very narrow phones: keep the header legible instead of caging it */
 @media (max-width: 400px) {
-  body:not(.view-exercise) .header-actions {
+  body .header-actions {
     max-width: none;
     gap: 0.3rem;
   }
-  body:not(.view-exercise) .header-actions .btn-sm {
+  body .header-actions .btn-sm {
     min-height: var(--min-tap);
     padding: 0.35rem 0.6rem;
     font-size: 0.78rem;
   }
-  body:not(.view-exercise) .brand h1 {
+  body .brand h1 {
     font-size: 0.9rem;
     max-width: none;
     white-space: normal;
   }
-  body:not(.view-exercise) .header-inner {
+  body .header-inner {
     padding-left: 0.7rem;
     padding-right: 0.7rem;
   }
@@ -5586,7 +5590,7 @@ body.home-zero:not(.loop-on) #start-panel .start-sub {
   display: none;
 }
 @media (max-width: 640px) {
-  body:not(.view-exercise) .app-header:has(#btn-more) .header-inner {
+  body .app-header:has(#btn-more) .header-inner {
     position: relative;
     flex-direction: row;
     flex-wrap: nowrap;
@@ -5594,18 +5598,18 @@ body.home-zero:not(.loop-on) #start-panel .start-sub {
     gap: 0.4rem;
     padding: 0.375rem 0.6rem;
   }
-  body:not(.view-exercise) .app-header:has(#btn-more) .brand {
+  body .app-header:has(#btn-more) .brand {
     flex: 0 0 auto;
     gap: 0;
   }
-  body:not(.view-exercise) .app-header:has(#btn-more) .brand-mark {
+  body .app-header:has(#btn-more) .brand-mark {
     display: grid;
     width: 36px;
     height: 36px;
     border-radius: 10px;
     font-size: 1rem;
   }
-  body:not(.view-exercise) .app-header:has(#btn-more) .brand h1 {
+  body .app-header:has(#btn-more) .brand h1 {
     position: absolute;
     width: 1px;
     height: 1px;
@@ -5613,38 +5617,38 @@ body.home-zero:not(.loop-on) #start-panel .start-sub {
     clip-path: inset(50%);
     white-space: nowrap;
   }
-  body:not(.view-exercise) .app-header:has(#btn-more) .header-actions {
+  body .app-header:has(#btn-more) .header-actions {
     flex: 1 1 auto;
     min-width: 0;
     flex-wrap: nowrap;
     justify-content: flex-end;
     gap: 0.3rem;
   }
-  body:not(.view-exercise) .app-header:has(#btn-more) .header-nav {
+  body .app-header:has(#btn-more) .header-nav {
     flex-wrap: nowrap;
     min-width: 0;
   }
-  body:not(.view-exercise) .app-header:has(#btn-more) .header-more {
+  body .app-header:has(#btn-more) .header-more {
     display: inline-flex;
     flex: 0 0 auto;
     gap: 0.3rem;
     min-width: var(--min-tap);
     font-weight: 650;
   }
-  body:not(.view-exercise) .app-header:has(#btn-more) .header-more[aria-expanded="true"] {
+  body .app-header:has(#btn-more) .header-more[aria-expanded="true"] {
     background: rgba(110, 180, 232, 0.2);
     box-shadow: inset 0 0 0 1px rgba(110, 180, 232, 0.5);
   }
-  body:not(.view-exercise) .app-header:has(#btn-more) .header-more[aria-expanded="true"] .header-more-caret {
+  body .app-header:has(#btn-more) .header-more[aria-expanded="true"] .header-more-caret {
     transform: rotate(180deg);
   }
   .header-more-caret {
     display: inline-block;
   }
-  body:not(.view-exercise) .app-header:has(#btn-more) .header-utils {
+  body .app-header:has(#btn-more) .header-utils {
     display: none;
   }
-  body:not(.view-exercise) .app-header:has(#btn-more) .header-utils.is-open {
+  body .app-header:has(#btn-more) .header-utils.is-open {
     display: flex;
     position: absolute;
     top: calc(100% + 4px);
@@ -5660,11 +5664,22 @@ body.home-zero:not(.loop-on) #start-panel .start-sub {
     background: var(--bg-elevated);
     box-shadow: var(--shadow);
   }
-  body:not(.view-exercise) .app-header:has(#btn-more) .header-utils.is-open .btn {
+  body .app-header:has(#btn-more) .header-utils.is-open .btn {
     justify-content: flex-start;
     width: 100%;
     padding-inline: 0.9rem;
     font-size: 0.9rem;
+  }
+  body .app-header:has(#btn-more) .header-utils.is-open .header-utils-label {
+    display: block;
+    margin: 0.3rem 0.9rem 0;
+    padding-top: 0.45rem;
+    border-top: 1px solid var(--border);
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
   }
 }
 @media (max-width: 360px) {
@@ -5678,15 +5693,15 @@ body.home-zero:not(.loop-on) #start-panel .start-sub {
 }
 @media (max-width: 359px) {
   /* 320px: the row still fits, with tighter pills (text stays at 12px). */
-  body:not(.view-exercise) .app-header:has(#btn-more) .header-inner {
+  body .app-header:has(#btn-more) .header-inner {
     gap: 0.3rem;
     padding-inline: 0.45rem;
   }
-  body:not(.view-exercise) .app-header:has(#btn-more) .header-actions,
-  body:not(.view-exercise) .app-header:has(#btn-more) .header-nav {
+  body .app-header:has(#btn-more) .header-actions,
+  body .app-header:has(#btn-more) .header-nav {
     gap: 0.15rem;
   }
-  body:not(.view-exercise) .app-header:has(#btn-more) .header-actions .btn-sm {
+  body .app-header:has(#btn-more) .header-actions .btn-sm {
     padding-inline: 0.45rem;
     font-size: 0.75rem;
   }
@@ -5955,7 +5970,7 @@ body.loop-on .start-steps {
   }
 }
 /* Scrolled text no longer shows through the sticky header (it was 82% opaque). */
-body:not(.view-exercise) .app-header {
+body .app-header {
   background: var(--bg);
 }
 
@@ -6939,52 +6954,12 @@ body.view-exercise .stage-coach .mode-hud,
   border-color: rgba(150, 180, 215, 0.45);
 }
 @media (max-width: 640px), (max-height: 500px) {
-  body.view-exercise .ex-bc-link {
-    /* 44px hit box, same line: the padding reaches over the rows around it */
-    padding-block: 15px;
-    margin-block: -15px;
-  }
-  body.view-exercise .btn-back-compact {
+  body.view-exercise .btn-back-compact,
+  body.view-exercise .btn-ui-help {
     min-height: var(--min-tap);
-  }
-  body.view-exercise .header-actions .btn-sm {
-    min-height: var(--min-tap);
-    min-width: var(--min-tap);
-    font-size: 0.75rem;
-  }
-  /* The exercise header in two rows at most: where you are and the ?/Atrás
-     buttons, then the exercise's name in full (it was a third row of
-     buttons under "4. Trinos de…"). */
-  body.view-exercise .exercise-header-compact {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas: "bc act" "title title";
-    align-items: center;
-    gap: 0.1rem 0.4rem;
-  }
-  body.view-exercise .exercise-header-compact .ex-header-main {
-    display: contents;
-  }
-  body.view-exercise .ex-breadcrumb {
-    grid-area: bc;
-    flex-wrap: nowrap;
-    min-width: 0;
-  }
-  body.view-exercise .exercise-header-compact .ex-title-row {
-    grid-area: title;
-  }
-  body.view-exercise .exercise-header-compact .ex-header-actions {
-    grid-area: act;
-  }
-  body.view-exercise .exercise-header-compact h2 {
-    max-width: none;
   }
   .hud-tr .hud-challenge {
     min-height: var(--min-tap);
-  }
-  body.view-exercise .exercise-header-compact .badge,
-  body.view-exercise .exercise-header-compact .sub {
-    font-size: 0.75rem;
   }
   .status-pill,
   .hold-live {
@@ -7139,11 +7114,7 @@ body.view-exercise .stage-coach .mode-hud,
   }
   body.view-exercise .exercise-header-compact {
     top: 0;
-    grid-template-areas: "title act";
     padding-block: 0;
-  }
-  body.view-exercise .ex-breadcrumb {
-    display: none;
   }
   /* In a routine the banner's Pausar and Terminar join that same row (two
      rows took 108px of 390). The banner keeps no height of its own and stays
@@ -7279,15 +7250,15 @@ body.view-exercise .highway-stage {
 @media (max-width: 420px) {
   /* The same selector the phone-header pass uses (specificity matters here: a
      bare `.header-actions .btn-sm` loses to
-     `body:not(.view-exercise) .app-header:has(#btn-more) .header-actions .btn-sm`
+     `body .app-header:has(#btn-more) .header-actions .btn-sm`
      however late it appears). */
-  body:not(.view-exercise) .app-header:has(#btn-more) .header-actions {
+  body .app-header:has(#btn-more) .header-actions {
     gap: 0.3rem;
   }
-  body:not(.view-exercise) .app-header:has(#btn-more) .header-actions .btn-sm {
+  body .app-header:has(#btn-more) .header-actions .btn-sm {
     padding-inline: 0.25rem;
   }
-  body:not(.view-exercise) .app-header:has(#btn-more) .header-nav {
+  body .app-header:has(#btn-more) .header-nav {
     flex: 1 1 auto;
     min-width: 0;
     gap: 0.1rem;
@@ -7297,10 +7268,10 @@ body.view-exercise .highway-stage {
     scrollbar-width: none;
     -webkit-overflow-scrolling: touch;
   }
-  body:not(.view-exercise) .app-header:has(#btn-more) .header-nav::-webkit-scrollbar {
+  body .app-header:has(#btn-more) .header-nav::-webkit-scrollbar {
     display: none;
   }
-  body:not(.view-exercise) .app-header:has(#btn-more) .header-nav .nav-link {
+  body .app-header:has(#btn-more) .header-nav .nav-link {
     padding-inline: 0.3rem;
     flex: 0 0 auto;
   }
@@ -7385,17 +7356,17 @@ body.view-exercise .highway-stage {
 @media (max-width: 640px) {
   /* On a phone the row has no room for a name of any length, so the initial
      stands for it; the accessible name still starts with the name. */
-  body:not(.view-exercise) .app-header:has(#btn-more) .header-door.is-signed-in {
+  body .app-header:has(#btn-more) .header-door.is-signed-in {
     justify-content: center;
     min-width: var(--min-tap);
     padding-inline: 0;
   }
   /* "Plan" is the shortest word on the row; with the row's tight padding it
      drew 41px wide, under the 44px floor. */
-  body:not(.view-exercise) .app-header:has(#btn-more) .header-nav .nav-link {
+  body .app-header:has(#btn-more) .header-nav .nav-link {
     min-width: var(--min-tap);
   }
-  body:not(.view-exercise) .app-header:has(#btn-more) .header-door.is-signed-in .door-name {
+  body .app-header:has(#btn-more) .header-door.is-signed-in .door-name {
     position: absolute;
     width: 1px;
     height: 1px;
@@ -7411,7 +7382,7 @@ body.view-exercise .highway-stage {
      beside a plan pill). The mark is decoration here — it is not a link, and
      the title it stands for is already read to screen readers — so it goes,
      and every section stays whole. */
-  body:not(.view-exercise) .app-header:has(#btn-more) .brand {
+  body .app-header:has(#btn-more) .brand {
     display: none;
   }
 }
@@ -7444,38 +7415,6 @@ body.view-exercise .highway-stage {
     white-space: nowrap;
   }
 }
-/* Inside an exercise the header is compact chrome over the stage: the
-   avatar shrinks with its row's 32px buttons. */
-body.view-exercise .door-avatar {
-  width: 1.35rem;
-  height: 1.35rem;
-  font-size: 0.7rem;
-}
-@media (max-width: 640px) {
-  /* Inside an exercise a phone's header row holds Practicar, the door, the
-     offer and the language switch, and a second row takes the stage guide's
-     room. So the offer shortens to "Pro", the door to its initial, and a plan
-     you hold waits on the home screen, the way Plan and Historial already do. */
-  body.view-exercise #btn-pricing .pro-verb {
-    display: none;
-  }
-  body.view-exercise #btn-pricing[data-plan]:not([data-plan="free"]) {
-    display: none;
-  }
-  body.view-exercise .header-door.is-signed-in {
-    justify-content: center;
-    min-width: var(--min-tap);
-    padding-inline: 0;
-  }
-  body.view-exercise .header-door.is-signed-in .door-name {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
-}
 @media (min-width: 1000px), (max-height: 500px) and (min-width: 800px) {
   /* Signed in with a long name and a plan label ("Pro · termina en 10 días"),
      the controls outgrew the space beside the title and the whole row
@@ -7484,15 +7423,15 @@ body.view-exercise .door-avatar {
      the name wraps onto a second line beside the mark. */
   /* Scoped to the studio's own header: admin, guide and privacy pages share
      the .brand markup but not this row. */
-  body:not(.view-exercise) .app-header:has(#header-nav) .header-inner {
+  body .app-header:has(#header-nav) .header-inner {
     flex-wrap: nowrap;
   }
-  body:not(.view-exercise) .app-header:has(#header-nav) .brand {
+  body .app-header:has(#header-nav) .brand {
     flex: 1 1 0;
     min-width: 0;
     container-type: inline-size;
   }
-  body:not(.view-exercise) .app-header:has(#header-nav) .header-actions {
+  body .app-header:has(#header-nav) .header-actions {
     flex: 0 0 auto;
   }
 }

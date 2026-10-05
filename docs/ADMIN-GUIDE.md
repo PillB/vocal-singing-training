@@ -456,10 +456,11 @@ the real database id, while the copy on GitHub has placeholders on purpose.
 Do this once each time you open a new Terminal window for maintenance.
 
 **Before step 1, check Node.** Run `node -v`. It must print `v22` or higher,
-because every command in this section runs Wrangler 4, which refuses anything
-older and stops with a message about Node.js. If it prints `v20` or `v21`,
-install the LTS version from [nodejs.org](https://nodejs.org) (the macOS
-installer), close Terminal, open a new window and run `node -v` again.
+because most commands in this section run Wrangler 4, which refuses anything
+older and stops with a message about Node.js. If it prints a lower version, or
+`command not found`, install the LTS version from
+[nodejs.org](https://nodejs.org) (the macOS installer), close Terminal, open a
+new window and run `node -v` again.
 
 **1. Go to the right folder.** The path of the checkout is in the private notes.
 
@@ -868,9 +869,11 @@ before quoting the privacy page's "no IP address is stored" about logs.
 ### 8.10 Undo a bad deploy
 
 Go back to the id you noted before the deploy (8.7, step 1). If you don't have
-it, this shows the history, oldest first. The last entry is the one live now,
-and the entry above it is the version before. Each entry's id is on its
-`Version(s):` line, after `(100%)`.
+it, this shows the history, oldest first, so the last entry is the one live
+now. Pick the newest entry from before the bad deploy: its `Created:` time
+tells you which, and a secret you set afterwards adds an entry of its own
+(`Source: Secret Change`). Each entry's id is on its `Version(s):` line, after
+`(100%)`.
 
 ```bash
 npx --yes wrangler@4 deployments list

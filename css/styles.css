@@ -7773,6 +7773,19 @@ body.ex-ended #btn-practice-start {
     padding-inline: 0.3rem;
   }
 }
+/* Round 6. Below 380px "🎹 ▾" alone (its name stays in the aria-label):
+   the word pushed the button to a row of its own, which a short step's
+   lane paid for (about 90px of lane at 360x740). */
+@media (max-width: 380px) {
+  #btn-toggle-piano .piano-word {
+    display: none;
+  }
+}
+/* Wider, the word goes only when it would wrap (English's "My range" is
+   longer than "A mi voz"): js fitPianoWord. */
+#btn-toggle-piano.piano-word-off .piano-word {
+  display: none;
+}
 /* After the time is up the settings rows step aside for the rating. */
 body.ex-ended .hud-bc,
 body.ex-ended #piano-mini-opts {

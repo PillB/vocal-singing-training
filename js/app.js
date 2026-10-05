@@ -751,6 +751,17 @@
       const el = document.getElementById(id);
       if (el) ro.observe(el);
     });
+    // "🎹 Piano ▾" drops its word when it would take a row of its own.
+    const opts = $("#piano-mini-opts");
+    if (opts) {
+      let lastW = 0;
+      new ResizeObserver(() => {
+        const w = Math.round(opts.getBoundingClientRect().width);
+        if (w === lastW) return;
+        lastW = w;
+        fitPianoWord();
+      }).observe(opts);
+    }
     // On a phone on its side the banner's Pausar and Terminar sit in the
     // exercise header's row, which keeps their width free (design: landscape).
     const ctl = $("#session-banner .controls-row");
@@ -1328,9 +1339,14 @@
     const returning = saved > 0 || guided;
     const key = guided ? "Guided" : returning ? "Back" : "New";
     kicker.textContent = tt("start.kicker" + key);
-    title.textContent = returning
-      ? tt(saved === 1 ? "start.titleBack1" : "start.titleBack", { n: saved })
-      : tt("start.titleNew");
+    // A routine left half-way is named by where it stands: "Llevas 0 sesiones
+    // guardadas" greeted someone who had just stepped out of step 1.
+    const s = guided ? VTSession.get() : null;
+    title.textContent = s?.order?.length
+      ? tt("start.titleGuided", { n: Math.min(s.index + 1, s.order.length), total: s.order.length })
+      : returning
+        ? tt(saved === 1 ? "start.titleBack1" : "start.titleBack", { n: saved })
+        : tt("start.titleNew");
     sub.textContent = tt("start.sub" + key);
     if (label) label.textContent = tt(guided ? "home.nextStepLabelGuided" : "home.nextStepLabel");
     if (cta) cta.textContent = tt("start.cta" + key);
@@ -1818,6 +1834,30 @@
     wrap.dataset.on = "1";
     wrap.hidden = false;
     syncStageNow(true);
+  }
+
+  /**
+   * "🎹 Piano ▾": the word is its own span, which a narrow phone drops so
+   * the octave, "A mi voz" and the piano share one row (css).
+   */
+  function setPianoToggleLabel(btn, open) {
+    btn.innerHTML = `<span aria-hidden="true">🎹</span> <span class="piano-word">${escapeHtml(
+      tt("piano.word")
+    )}</span> <span aria-hidden="true">${open ? "▴" : "▾"}</span>`;
+    fitPianoWord();
+  }
+
+  /** Measured with the word shown; only the folded row (options closed) counts. */
+  function fitPianoWord() {
+    const btn = $("#btn-toggle-piano");
+    const oct = $("#oct-controls");
+    const opts = $("#piano-mini-opts");
+    if (!btn || !oct || !opts) return;
+    btn.classList.remove("piano-word-off");
+    if (btn.hidden || opts.classList.contains("piano-opts-expanded") || !oct.offsetParent) return;
+    if (btn.getBoundingClientRect().top > oct.getBoundingClientRect().bottom - 4) {
+      btn.classList.add("piano-word-off");
+    }
   }
 
   /**
@@ -2571,7 +2611,7 @@
     if (tbtn) {
       tbtn.hidden = !showPiano;
       tbtn.setAttribute("aria-expanded", "false");
-      tbtn.textContent = tt("piano.more");
+      setPianoToggleLabel(tbtn, false);
       tbtn.title = tt("piano.showPanel");
       // "🎹+" alone is read out as an emoji; the button says what it opens
       tbtn.setAttribute("aria-label", tbtn.title);
@@ -5928,7 +5968,7 @@
       }
       const btn = $("#btn-toggle-piano");
       if (btn) {
-        btn.textContent = state.pianoOpen ? tt("piano.less") : tt("piano.more");
+        setPianoToggleLabel(btn, !!state.pianoOpen);
         btn.title = state.pianoOpen ? tt("piano.hidePanel") : tt("piano.showPanel");
         btn.setAttribute("aria-label", btn.title);
         btn.setAttribute("aria-expanded", String(!!state.pianoOpen));

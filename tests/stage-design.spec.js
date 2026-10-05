@@ -255,6 +255,35 @@ test.describe("Start floor: the stage's controls on a phone", () => {
     await expect(page.locator("#oct-controls .oct-k")).toHaveText("octave");
     await expect(page.locator("#oct-controls .oct-auto span")).toHaveText("My range");
   });
+
+  for (const vp of [
+    { width: 390, height: 844 },
+    { width: 360, height: 740 }
+  ]) {
+    test(`${vp.width}px: octave, "A mi voz" and the piano share one row, in Spanish and English`, async ({ page }) => {
+      await page.setViewportSize(vp);
+      await boot(page);
+      await open(page, "s4-lip-trills");
+      const row = () =>
+        page.evaluate(() => {
+          const r = (id) => document.getElementById(id).getBoundingClientRect();
+          const btn = document.getElementById("btn-toggle-piano");
+          return {
+            oneRow: Math.abs(r("btn-toggle-piano").top - r("oct-controls").top) < 8,
+            word: getComputedStyle(btn.querySelector(".piano-word")).display !== "none",
+            label: btn.getAttribute("aria-label")
+          };
+        });
+      await expect.poll(async () => (await row()).oneRow).toBe(true);
+      const es = await row();
+      // The word goes only where it would wrap; the button keeps its name.
+      expect(es.word).toBe(vp.width > 380);
+      expect(es.label).toBeTruthy();
+      await page.evaluate(() => window.VTI18n.setLang("en"));
+      await expect.poll(async () => (await row()).oneRow).toBe(true);
+      expect((await row()).label).toBeTruthy();
+    });
+  }
 });
 
 test.describe("Coach strip: the mode and its cue on the stage", () => {

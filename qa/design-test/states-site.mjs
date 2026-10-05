@@ -332,6 +332,28 @@ export const states = {
   },
 
   // ---- English -------------------------------------------------------------
+  // Round 6 prototypes for the phone's menu button, relabelled in the page
+  // (not in the code) to test its name before building it.
+  "home-returning-menu-b": {
+    label: "inicio, alguien que ya cantó 3 días",
+    days: RET3,
+    action: async (p) => {
+      await p.evaluate(() => {
+        const b = document.querySelector("#btn-more");
+        b.innerHTML = '<span aria-hidden="true">☰</span> <span>Menú</span>';
+      });
+    }
+  },
+  "home-returning-menu-c": {
+    label: "inicio, alguien que ya cantó 3 días",
+    days: RET3,
+    action: async (p) => {
+      await p.evaluate(() => {
+        const b = document.querySelector("#btn-more");
+        b.innerHTML = '<span aria-hidden="true">☰</span> <span>Más</span>';
+      });
+    }
+  },
   "home-en-new": { label: "home, English, nothing practised yet", seed: { vt_lang: "en" } },
   "home-en-returning": { label: "home, English, sang 3 days", days: RET3, seed: { vt_lang: "en" } }
 };

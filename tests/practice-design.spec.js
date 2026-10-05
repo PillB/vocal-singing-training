@@ -273,6 +273,16 @@ test.describe("Step done: a guided step's clock runs out", () => {
     await expect(page.locator("#structured-nav")).toBeVisible();
   });
 
+  test("stepping out of a routine, home names where it stands, not a count of saves", async ({ page }) => {
+    await boot(page);
+    await startMinimo(page);
+    await page.locator("#btn-back-home").click();
+    await page.clock.runFor(400);
+    await expect(page.locator("#view-home")).toHaveClass(/active/);
+    await expect(page.locator("#start-title")).toHaveText("Vas por el ejercicio 1 de 2");
+    await expect(page.locator("#btn-next-step")).toContainText("Seguir la sesión");
+  });
+
   test("past the first step, Terminar asks first; Seguir keeps the place", async ({ page }) => {
     await boot(page);
     await startMinimo(page);

@@ -395,7 +395,10 @@ test.describe("Rating: one tap after a take", () => {
     await page.locator("#leave-save").click();
     await expect(page.locator("#leave-modal")).toBeHidden();
     await expect(page.locator("#rate-q")).toBeFocused();
-    await cardInView(page);
+    // "Puntuar ahora" asks for the card itself (cardFirst), on main too: once
+    // the scroll settles the review is above the screen. The review-first
+    // check only passed when it read the page before that scroll had run.
+    await cardInView(page, { cardFirst: true });
     await page.locator('.rate-btn[data-feel="hard"]').click();
     await page.clock.runFor(600);
     await expect(page.locator("#view-home")).toHaveClass(/active/);

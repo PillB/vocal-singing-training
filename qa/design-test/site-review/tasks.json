@@ -1,0 +1,308 @@
+{
+ "about": "First-click tasks for the whole-site review of October 2026. Each task starts on the screen named by state and vp (states.mjs plus states-site.mjs). hit = controls on the path to doing the task (a closed menu that holds the control counts); near = a reasonable first step that is not on the path; scroll = the control is below the first screen, so 'I would scroll' is a right first move.",
+ "tasks": [
+  {
+   "id": "start-first",
+   "state": "home-new",
+   "vp": "phone",
+   "task": "Es tu primera vez en esta aplicación y quieres empezar a practicar ya mismo.",
+   "hit": [
+    "#btn-next-step"
+   ],
+   "near": [
+    ".track-pick-btn",
+    "[data-tour-invite-start]"
+   ]
+  },
+  {
+   "id": "speak-track",
+   "state": "home-new",
+   "vp": "phone",
+   "task": "No quieres cantar: quieres hablar mejor en las presentaciones del trabajo. Quieres que la aplicación te dé ejercicios para eso.",
+   "hit": [
+    ".track-pick-btn[data-track=vocal]",
+    "#tab-vocal"
+   ],
+   "near": []
+  },
+  {
+   "id": "history",
+   "state": "home-returning",
+   "vp": "phone",
+   "task": "Quieres ver qué practicaste los días anteriores y cómo te fue.",
+   "hit": [
+    "#btn-history"
+   ],
+   "near": [
+    "#loop-today"
+   ]
+  },
+  {
+   "id": "plan",
+   "state": "home-returning",
+   "vp": "phone",
+   "task": "Quieres seguir un programa de varias semanas que te diga en qué trabajar cada semana.",
+   "hit": [
+    "#btn-plan"
+   ],
+   "near": [
+    "#btn-more-ways",
+    "#btn-structured"
+   ]
+  },
+  {
+   "id": "language",
+   "state": "home-returning",
+   "vp": "phone",
+   "task": "Prefieres usar la aplicación en inglés.",
+   "hit": [
+    "#btn-lang",
+    "#btn-more"
+   ],
+   "near": []
+  },
+  {
+   "id": "account",
+   "state": "home-returning",
+   "vp": "phone",
+   "task": "Quieres guardar tu progreso en una cuenta para no perderlo si cambias de teléfono.",
+   "hit": [
+    "#btn-account"
+   ],
+   "near": [
+    "#btn-more"
+   ]
+  },
+  {
+   "id": "price",
+   "state": "home-returning",
+   "vp": "phone",
+   "task": "Quieres saber qué incluye la versión de pago y cuánto cuesta.",
+   "hit": [
+    "#btn-pricing",
+    "#btn-more",
+    "#btn-value-pro",
+    "#value-banner-cta"
+   ],
+   "near": [
+    "#btn-account"
+   ]
+  },
+  {
+   "id": "tour-again",
+   "state": "home-returning",
+   "vp": "phone",
+   "task": "Quieres que la aplicación te vuelva a enseñar cómo funciona, paso a paso.",
+   "hit": [
+    "#btn-tour",
+    "#btn-more",
+    "[data-tour-invite-start]"
+   ],
+   "near": [
+    "a[href*='guide']"
+   ]
+  },
+  {
+   "id": "choose-exercise",
+   "state": "home-returning",
+   "vp": "phone",
+   "scroll": true,
+   "task": "No quieres lo que te propone la aplicación: quieres elegir tú un ejercicio concreto de una lista.",
+   "hit": [
+    "#catalog-panel",
+    "#btn-more-ways",
+    "#today-basics"
+   ],
+   "near": [
+    ".loop-tier"
+   ]
+  },
+  {
+   "id": "reminder",
+   "state": "home-returning",
+   "vp": "phone",
+   "scroll": true,
+   "task": "Quieres que la aplicación te recuerde practicar todas las tardes.",
+   "hit": [
+    "#retain-panel",
+    "#chk-reminders"
+   ],
+   "near": [
+    "#loop-goal-sel",
+    "#btn-more"
+   ]
+  },
+  {
+   "id": "ex-start",
+   "state": "exercise",
+   "vp": "phone",
+   "task": "Ya abriste un ejercicio y quieres empezar a hacerlo.",
+   "hit": [
+    "#btn-practice-start"
+   ],
+   "near": []
+  },
+  {
+   "id": "ex-howto",
+   "state": "exercise",
+   "vp": "phone",
+   "scroll": true,
+   "task": "No sabes bien cómo se hace este ejercicio y quieres leer las instrucciones.",
+   "hit": [
+    "#btn-stage-guide-more",
+    "#btn-toggle-guide",
+    "#btn-ui-help",
+    ".guide-card"
+   ],
+   "near": []
+  },
+  {
+   "id": "ex-back",
+   "state": "exercise",
+   "vp": "phone",
+   "task": "Quieres salir de este ejercicio y volver a la pantalla principal.",
+   "hit": [
+    "#btn-back-home",
+    "#bc-home",
+    "#btn-nav-home"
+   ],
+   "near": [
+    "#bc-track"
+   ]
+  },
+  {
+   "id": "ex-record",
+   "state": "exercise-vocal",
+   "vp": "phone",
+   "task": "Quieres grabarte mientras haces el ejercicio, para escucharte después.",
+   "hit": [
+    "#opt-auto-record",
+    "#chk-auto-record"
+   ],
+   "near": []
+  },
+  {
+   "id": "ex-lower",
+   "state": "exercise-pitch",
+   "vp": "phone",
+   "task": "Las notas que suenan son demasiado altas para tu voz. Quieres que suenen más graves.",
+   "hit": [
+    "#btn-oct-down"
+   ],
+   "near": [
+    "#oct-controls",
+    "#chk-range-auto"
+   ]
+  },
+  {
+   "id": "rate-hard",
+   "state": "rating",
+   "vp": "phone",
+   "task": "Acabas de terminar este paso del ejercicio y quieres anotar que te costó.",
+   "hit": [
+    ".rate-btn[data-feel=hard]",
+    "#btn-step-done-rate"
+   ],
+   "near": []
+  },
+  {
+   "id": "guided-next",
+   "state": "step-end",
+   "vp": "phone",
+   "task": "Se acabó el tiempo de este paso. Quieres pasar al siguiente.",
+   "hit": [
+    "#btn-step-done-next",
+    "#btn-next-structured"
+   ],
+   "near": []
+  },
+  {
+   "id": "plan-start",
+   "state": "plan-new",
+   "vp": "phone",
+   "task": "Estás en el plan de varias semanas y quieres empezar la primera semana.",
+   "hit": [
+    "#btn-plan-start",
+    "#element-chips"
+   ],
+   "near": [
+    "#plan-exercise-list"
+   ]
+  },
+  {
+   "id": "pro-trial",
+   "state": "pricing",
+   "vp": "phone",
+   "scroll": true,
+   "task": "Quieres probar gratis la versión de pago unos días.",
+   "hit": [
+    "#btn-start-trial",
+    "#btn-account-trial",
+    "[data-plan] button"
+   ],
+   "near": []
+  },
+  {
+   "id": "d-language",
+   "state": "home-returning",
+   "vp": "desktop",
+   "task": "Prefieres usar la aplicación en inglés.",
+   "hit": [
+    "#btn-lang",
+    "#btn-more"
+   ],
+   "near": []
+  },
+  {
+   "id": "d-guide",
+   "state": "home-returning",
+   "vp": "desktop",
+   "scroll": true,
+   "task": "Quieres leer un manual completo de cómo usar el sitio.",
+   "hit": [
+    "a[href*='guide']",
+    "#btn-tour",
+    "#btn-more"
+   ],
+   "near": []
+  },
+  {
+   "id": "d-history",
+   "state": "home-returning",
+   "vp": "desktop",
+   "task": "Quieres ver qué practicaste los días anteriores y cómo te fue.",
+   "hit": [
+    "#btn-history"
+   ],
+   "near": [
+    "#loop-today"
+   ]
+  },
+  {
+   "id": "d-another",
+   "state": "exercise",
+   "vp": "desktop",
+   "task": "Terminaste con este ejercicio y quieres elegir otro de la misma lista de canto.",
+   "hit": [
+    "#bc-track",
+    "#btn-back-home",
+    "#bc-home",
+    "#btn-nav-home"
+   ],
+   "near": []
+  },
+  {
+   "id": "d-plan",
+   "state": "home-returning",
+   "vp": "desktop",
+   "task": "Quieres seguir un programa de varias semanas que te diga en qué trabajar cada semana.",
+   "hit": [
+    "#btn-plan"
+   ],
+   "near": [
+    "#btn-more-ways",
+    "#btn-structured"
+   ]
+  }
+ ]
+}

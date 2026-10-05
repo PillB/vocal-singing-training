@@ -30,7 +30,7 @@ async function openExercise(page, ex) {
     const found = all.find((e) => e.id === id);
     if (!found) return false;
     for (const c of document.querySelectorAll("#exercise-list .card-ex")) {
-      const num = c.querySelector(".num")?.textContent?.trim();
+      const num = c.dataset.num;
       if (num === String(found.number)) {
         c.click();
         return true;
@@ -299,7 +299,7 @@ test.describe("Game HUD less-scroll smoke", () => {
     await boot(page);
     await page.click('.tab[data-tab="singing"]');
     await page.click('.tier-chip[data-tier="basic"]');
-    await page.locator("#exercise-list .card-ex").nth(1).click();
+    await page.locator('#exercise-list .card-ex[data-id="s2-solfege-chords"]').click();
     await expect(page.locator(".hud-tl")).toBeVisible();
     await expect(page.locator(".hud-tr")).toBeVisible();
     await expect(page.locator(".hud-bl")).toBeVisible();

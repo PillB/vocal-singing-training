@@ -131,8 +131,8 @@ test.describe("Copy & i18n (learner-facing)", () => {
     await page.locator('.tab[data-tab="singing"]').click();
     await page.waitForTimeout(150);
     const opened = await page.evaluate(() => {
-      const cards = [...document.querySelectorAll("#exercise-list .card-ex")];
-      const c = cards.find((el) => /SH|aire|Escalera/i.test(el.textContent || ""));
+      // By id: the catalog order is not this test's subject.
+      const c = document.querySelector('#exercise-list .card-ex[data-id="s15-sh-air-ladder"]');
       if (c) {
         c.click();
         return true;
@@ -167,8 +167,7 @@ test.describe("Copy & i18n (learner-facing)", () => {
     await page.locator('.tab[data-tab="singing"]').click();
     await page.waitForTimeout(100);
     await page.evaluate(() => {
-      const cards = [...document.querySelectorAll("#exercise-list .card-ex")];
-      const c = cards.find((el) => /SH|Escalera|aire/i.test(el.textContent || ""));
+      const c = document.querySelector('#exercise-list .card-ex[data-id="s15-sh-air-ladder"]');
       c?.click();
     });
     await expect(page.locator("#view-exercise")).toHaveClass(/active/);

@@ -122,14 +122,16 @@ test.describe("Naming: one button, sizes that choose, other ways folded", () => 
     await expect(more).toHaveAttribute("aria-expanded", "false");
     await expect(more).toHaveAttribute("aria-controls", "start-alt");
     expect((await more.boundingBox()).height).toBeGreaterThanOrEqual(44);
-    for (const id of ["#btn-continue", "#btn-structured", "#session-path"]) await expect(page.locator(id)).toBeHidden();
+    for (const id of ["#btn-pick-exercise", "#btn-continue", "#btn-structured", "#session-path"]) await expect(page.locator(id)).toBeHidden();
 
     // Keyboard opens it; the controls it reveals are real and reachable.
     await more.focus();
     await page.keyboard.press("Enter");
     await expect(more).toHaveAttribute("aria-expanded", "true");
-    for (const id of ["#btn-continue", "#btn-structured", "#session-path"]) await expect(page.locator(id)).toBeVisible();
+    for (const id of ["#btn-pick-exercise", "#btn-continue", "#btn-structured", "#session-path"]) await expect(page.locator(id)).toBeVisible();
     await expect(page.locator(".start-path > span")).toHaveText("Sesión guiada:");
+    await page.keyboard.press("Tab");
+    await expect(page.locator("#btn-pick-exercise")).toBeFocused();
     await page.keyboard.press("Tab");
     await expect(page.locator("#btn-continue")).toBeFocused();
     // Still one primary on the panel.

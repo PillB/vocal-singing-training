@@ -591,6 +591,16 @@ test.describe("Billing & subscriptions", () => {
 
   test("value pulse board and pricing value stack are present", async ({ page }) => {
     await page.goto(BASE + "/?e2e=1&t=" + Date.now(), { waitUntil: "networkidle" });
+    // "Tu progreso" lives in Historial and shows once something is saved.
+    await page.evaluate(() => {
+      const at = new Date().toISOString();
+      localStorage.setItem(
+        "vt_progress_v1",
+        JSON.stringify({ "v1-diction": { completedCount: 1, lastAt: at, lastScore: 6, history: [{ at, score: 6, durationSec: 60, metrics: {} }] } })
+      );
+    });
+    await page.reload({ waitUntil: "networkidle" });
+    await page.click("#btn-history");
     await expect(page.locator("#value-pulse")).toBeVisible();
     await expect(page.locator("#vp-sessions")).toBeVisible();
     await page.click("#btn-pricing");

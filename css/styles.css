@@ -7440,3 +7440,82 @@ body.view-exercise .highway-stage {
     display: none;
   }
 }
+
+/* —— Design: site-review round 2 ——
+   Practicar keeps the daily task and the list; the record (Tu progreso) moved
+   to Historial and the reminder became a small dialog. */
+/* Catalog rows carry no number chip any more: the text starts at the edge. */
+#exercise-list .card-ex {
+  padding-left: 0.95rem;
+}
+@media (max-width: 340px) {
+  #exercise-list .card-ex {
+    padding-left: 0.8rem;
+  }
+}
+/* A jump to the list ("Elegir un ejercicio ↓", a return from an exercise)
+   lands with the heading below the sticky header, not under it. */
+#catalog-panel {
+  scroll-margin-top: calc(var(--header-h, 64px) + 8px);
+}
+#catalog-heading:focus {
+  outline: none;
+}
+#catalog-heading:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+/* The week card's way in to the reminder: quiet, under the goal. */
+.loop-remind-btn {
+  justify-self: start;
+  gap: 0.35rem;
+}
+body.loop-on #start-panel .loop-remind-btn {
+  grid-column: 1 / -1;
+}
+/* The reminder dialog: the old panel's rows inside a modal card. */
+#reminder-modal .retain-panel {
+  margin: 0;
+  padding: 1.15rem 1.25rem 1.05rem;
+  border-color: var(--border);
+  background: var(--bg-card);
+}
+#reminder-modal .retain-title {
+  font-size: 1.15rem;
+}
+#reminder-modal .retain-head {
+  flex-direction: column;
+  align-items: flex-start;
+}
+#reminder-modal .retain-toggle,
+#reminder-modal .retain-check,
+#reminder-modal .retain-field {
+  min-height: var(--min-tap);
+  font-size: 0.9rem;
+  color: var(--text);
+}
+#reminder-modal .retain-hint {
+  margin: 0.25rem 0 0;
+  font-size: 0.8rem;
+}
+#reminder-modal .retain-actions .btn {
+  min-height: var(--min-tap);
+}
+#reminder-modal .modal-actions {
+  margin-top: 0.85rem;
+}
+/* Historial: the banner and the progress card follow the record. */
+#view-history .value-banner {
+  margin: 1rem 0 0;
+}
+#view-history .value-pulse {
+  margin-top: 1rem;
+}
+/* First visit on a phone: the two-step explainer repeated the card above it
+   and pushed the list below the first screen. */
+@media (max-width: 640px) {
+  body.home-zero.loop-first #start-steps {
+    display: none;
+  }
+}

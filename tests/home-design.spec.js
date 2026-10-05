@@ -82,7 +82,7 @@ test.describe("First visit: what to train, then the Mínimo", () => {
     const pick = page.locator("#track-pick");
     await expect(pick).toBeVisible();
     await expect(page.locator("#track-pick-q")).toHaveText("¿Qué quieres entrenar?");
-    await expect(page.locator("#start-title")).toHaveText(`Empieza con 3${NBSP}minutos. Mañana, los mismos 3.`);
+    await expect(page.locator("#start-title")).toHaveText(`Entrena tu voz 3${NBSP}minutos al día.`);
     // The site's default track is unchanged: a new browser starts on Vocal.
     expect(await pressed(page)).toEqual([
       ["singing", "false"],
@@ -162,7 +162,7 @@ test.describe("First visit: what to train, then the Mínimo", () => {
   test("English reads in its own words", async ({ page }) => {
     await boot(page, { lang: "en", tab: "singing" });
     await expect(page.locator("#track-pick-q")).toHaveText("What do you want to train?");
-    await expect(page.locator("#start-title")).toHaveText(`Start with 3${NBSP}minutes. Tomorrow, the same 3.`);
+    await expect(page.locator("#start-title")).toHaveText(`Train your voice 3${NBSP}minutes a day.`);
     await expect(page.locator("#next-step-title")).toHaveText(/^Lip trills 1:30 → trill solfège 1:30$/);
     await expect(page.locator("#next-step-why")).toHaveText("No book or sheet music: just your voice and the mic.");
     await expect(page.locator("#btn-next-step")).toHaveText(`▶ Start (3${NBSP}min)`);

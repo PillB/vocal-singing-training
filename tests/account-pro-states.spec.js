@@ -906,7 +906,7 @@ test.describe("The menu, read by someone who has never seen it", () => {
           .filter((t) => /\b(pro|prueba|regalo|suscripci[oó]n)\b/i.test(t))
       );
       expect(words).toHaveLength(1);
-      // "Pro: exportar y coach" is an offer; someone holding Pro is not sold it.
+      // "Ver qué añade Pro" is an offer; someone holding Pro is not sold it.
       if (opts.signedIn) await expect(page.locator("#btn-value-pro")).toBeHidden();
       else await expect(page.locator("#btn-value-pro")).toBeAttached();
     });

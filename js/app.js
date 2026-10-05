@@ -1056,8 +1056,6 @@
       renderValuePulse();
       renderRetentionChrome();
       renderNextStepCard();
-      // Gentle trial/progress prompts only on home (never during live practice)
-      setTimeout(() => showValueMoment(), 400);
       try {
         window.VTAds?.renderSlot?.("home");
       } catch {
@@ -1220,7 +1218,7 @@
       if (whyEl) whyEl.textContent = tt("daily.why");
     } else {
       const name = window.VTI18n ? VTI18n.exTitle(sug.ex) : sug.ex.title;
-      titleEl.textContent = `${sug.ex.number}. ${name}`;
+      titleEl.textContent = name;
       if (whyEl)
         whyEl.textContent = tt(
           sug.reason === "structured" ? "home.nextStepWhyGuided" : "home.nextStepWhy"
@@ -1424,6 +1422,19 @@
   }
 
   /**
+   * The catalog's reading order. On Cantar the warm-ups and technique come
+   * first, and the class group runs from the shortest exercise to the songs,
+   * so the list starts where a practice starts. The data keeps its order (and
+   * its numbers): guided routes and "Continuar" walk it as written.
+   */
+  function catalogOrder(list) {
+    if (state.tab !== "singing") return list;
+    const group = (t) => list.filter((ex) => (ex.tier || "basic") === t);
+    const byLength = (a, b) => (a.durationMin || 0) - (b.durationMin || 0);
+    return [...group("advanced"), ...group("basic").slice().sort(byLength)];
+  }
+
+  /**
    * A group's short name on its track, for the filter chips, the card badge
    * and the counts line. The groups are named for what they hold (Clase,
    * Técnica, Expresión), not for a level: "Básico" read as "my daily basics",
@@ -1506,11 +1517,24 @@
 
   function renderExerciseList() {
     const list = $("#exercise-list");
-    const exercises = filteredExercises();
+    const exercises = catalogOrder(filteredExercises());
     const grouped = state.tierFilter === "all";
     list.innerHTML = "";
     list.className = `grid track-${state.tab}`;
 
+    // The filter chips read in the list's order (on Cantar, Técnica first).
+    const chipRow = $(".tier-filters");
+    if (chipRow) {
+      const order = state.tab === "singing" ? ["all", "advanced", "basic"] : ["all", "basic", "advanced"];
+      const now = [...chipRow.querySelectorAll(".tier-chip")].map((c) => c.dataset.tier).join();
+      // Moved only when the order changes: moving a chip would drop its focus.
+      if (now !== order.join()) {
+        order.forEach((t) => {
+          const chip = chipRow.querySelector(`.tier-chip[data-tier="${t}"]`);
+          if (chip) chipRow.appendChild(chip);
+        });
+      }
+    }
     $$(".tier-chip").forEach((c) => {
       const on = c.dataset.tier === state.tierFilter;
       c.classList.toggle("selected", on);
@@ -1568,11 +1592,13 @@
       btn.className = `card card-ex track-${track}`;
       btn.dataset.track = track;
       btn.dataset.id = ex.id;
-      // A row: number, name, what you do, then minutes and tools. The sessions
-      // badge (top right) only shows once there is a session to count, and the
-      // group badge only once filtered (grouped, the head names the group).
+      // The class number stays in the data, not on screen: in reading order the
+      // numbers ran 4…14, then 1, 2, 3, 15…27, and looked like missing items.
+      btn.dataset.num = String(ex.number);
+      // A row: name, what you do, then minutes and tools. The sessions badge
+      // (top right) only shows once there is a session to count, and the group
+      // badge only once filtered (grouped, the head names the group).
       btn.innerHTML = `
-        <span class="num">${ex.number}</span>
         <span class="card-ex-body">
           ${sessions ? `<span class="badge done">${sessLabel}</span>` : ""}
           <h3>${exName(ex)}</h3>
@@ -2215,9 +2241,7 @@
     if (!ex) return;
     hideMicBlocked();
 
-    $("#ex-title").textContent = `${ex.number}. ${
-      window.VTI18n ? VTI18n.exTitle(ex) : ex.title
-    }`;
+    $("#ex-title").textContent = window.VTI18n ? VTI18n.exTitle(ex) : ex.title;
     const tier = ex.tier || "basic";
     // Inside today's basics every step is a warm-up of the routine's track,
     // whatever catalog track and tier the exercise has on its own.
@@ -4508,14 +4532,12 @@
       openExercise(ex.id, false);
     });
     $("#fw-remind")?.addEventListener("click", () => {
-      setView("home");
       const chk = $("#chk-reminders");
       if (chk && !chk.checked) {
         chk.checked = true;
         chk.dispatchEvent(new Event("change", { bubbles: true }));
       }
-      $("#retain-panel")?.scrollIntoView({ behavior: scrollBehavior(), block: "center" });
-      toast(tt("retain.firstWinRemind"));
+      openReminders();
     });
     $("#fw-same")?.addEventListener("click", () => openExercise(ex.id, false));
     $("#fw-next")?.addEventListener("click", () => {
@@ -4985,6 +5007,14 @@
       }
 
       list.innerHTML = html;
+
+      // "Tu progreso" follows the record it adds up; with nothing practised it
+      // would only show zeros and a locked offer.
+      const progressCard = $("#value-pulse");
+      if (progressCard) progressCard.hidden = !daysHtml && !recent.length;
+      renderValuePulse();
+      // Gentle trial and progress prompts live here, never during practice.
+      setTimeout(() => showValueMoment(), 400);
 
       $$("[data-open-ex]", list).forEach((btn) => {
         btn.addEventListener("click", () => openExercise(btn.dataset.openEx));
@@ -5474,6 +5504,12 @@
     $("#btn-practice-start")?.addEventListener("click", startPractice);
     $("#btn-practice-stop")?.addEventListener("click", () => stopPractice(false));
     $("#btn-continue")?.addEventListener("click", continuePractice);
+    // The list is the one way in "Otras formas" did not offer: jump to it and
+    // put focus on its heading, so a keyboard or screen reader lands there too.
+    $("#btn-pick-exercise")?.addEventListener("click", () => {
+      $("#catalog-panel")?.scrollIntoView({ behavior: scrollBehavior(), block: "start" });
+      $("#catalog-heading")?.focus({ preventScroll: true });
+    });
 
     // Mic sensitivity (1–10) — persists + applies live while practicing
     // Level 10 ≈ 3× more sensitive than legacy max (soft SH/air)
@@ -6209,8 +6245,10 @@
     // "Pro: exportar y coach" and its price anchor are an offer. They stayed on
     // this card for people already holding Pro: a second "Pro" button asking
     // them to buy what the tag beside the title says they have.
+    // One offer at a time: while a moment banner speaks for Pro just above,
+    // the card's own button waits.
     const cta = $("#value-pulse-cta");
-    if (cta) cta.hidden = plan.kind !== "free";
+    if (cta) cta.hidden = plan.kind !== "free" || !$("#value-banner")?.hidden;
 
     renderProStudio(pulse, isProUser);
   }
@@ -6225,7 +6263,10 @@
       sel.innerHTML = list
         .map(
           (p) =>
-            `<option value="${escapeHtml(p.id)}"${p.id === activeId ? " selected" : ""}>${escapeHtml(p.name || p.id)}</option>`
+            `<option value="${escapeHtml(p.id)}"${p.id === activeId ? " selected" : ""}>${escapeHtml(
+              // The first profile is stored as "Default"; it reads as the main one.
+              !p.name || p.name === "Default" ? tt("pro.profileMain") : p.name
+            )}</option>`
         )
         .join("");
       if (list.some((p) => p.id === prev)) sel.value = prev;
@@ -6344,17 +6385,20 @@
     const loopOn = !!window.VTLoop && !!window.VTDays;
 
     // Rest days (the old "freeze"): the ledger spends them on real misses; this
-    // only reports one it has just spent, once.
-    const fl = $("#retain-freeze-label");
-    if (fl) {
-      fl.textContent = tt("retain.freezesLeft", { n: String(VTReminders.freezesLeft()) });
-      const fr = VTReminders.tryApplyFreeze();
-      if (fr.applied) {
-        // The start panel says it in its own words; the toast is the fallback.
-        if (loopOn) window.VTLoop.noteRest(fr);
-        else toast(tt("retain.freezeUsed", { n: String(fr.left) }), { durationMs: 3200 });
-        fl.textContent = tt("retain.freezesLeft", { n: String(fr.left) });
-      }
+    // only reports one it has just spent, once. The week card already shows
+    // the days left, so the reminder dialog does not repeat them.
+    const fr = VTReminders.tryApplyFreeze();
+    if (fr.applied) {
+      // The start panel says it in its own words; the toast is the fallback.
+      if (loopOn) window.VTLoop.noteRest(fr);
+      else toast(tt("retain.freezeUsed", { n: String(fr.left) }), { durationMs: 3200 });
+    }
+
+    // The week card's way in to the reminder says whether one is set.
+    const remLabel = $("#btn-reminder-label");
+    if (remLabel) {
+      remLabel.textContent =
+        cfg.enabled && cfg.times[0] ? tt("retain.openOn", { time: cfg.times[0] }) : tt("retain.open");
     }
 
     // Welcome back after ≥2 days. With the daily loop the start panel itself
@@ -6412,7 +6456,38 @@
     return window.VTDays?.dayKey?.() || new Date().toISOString().slice(0, 10);
   }
 
+  /**
+   * The daily reminder is a setting, so it lives in a small dialog opened from
+   * the week card (and from the finishing card), not as a panel at the bottom
+   * of Practicar six screens down.
+   */
+  function openReminders() {
+    const modal = $("#reminder-modal");
+    if (!modal || !modal.hidden) return;
+    renderRetentionChrome();
+    modal.hidden = false;
+    window.VTFocusTrap?.activate?.(modal, { initialFocus: $("#chk-reminders") });
+    const finish = () => {
+      modal.hidden = true;
+      window.VTFocusTrap?.release?.(modal);
+      modal.onkeydown = null;
+      modal.onclick = null;
+      renderRetentionChrome();
+    };
+    $("#reminder-done").onclick = finish;
+    modal.onkeydown = (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        finish();
+      }
+    };
+    modal.onclick = (e) => {
+      if (e.target === modal) finish();
+    };
+  }
+
   function bindRetention() {
+    $("#btn-reminder")?.addEventListener("click", openReminders);
     const saveTimes = () => {
       const isPro = !!window.VTBilling?.can?.("extra_reminders");
       const times = [$("#rem-time-1")?.value || "18:00"];
@@ -6469,7 +6544,6 @@
       VTReminders.downloadIcs({ freq: "WEEKLY", time: $("#rem-time-1")?.value, isEs: isEsLang() });
       toast(tt("retain.icsDownloaded"));
     });
-    $("#btn-micro-5")?.addEventListener("click", () => startMicroSession("s15-sh-air-ladder"));
     $("#wb-micro")?.addEventListener("click", () => startMicroSession("s15-sh-air-ladder"));
     $("#wb-air")?.addEventListener("click", () => startMicroSession("s15-sh-air-ladder"));
     $("#wb-last")?.addEventListener("click", () => {
@@ -6546,7 +6620,8 @@
     $("#btn-profile-rename")?.addEventListener("click", () => {
       const p = VTStorage?.getActiveProfile?.();
       if (!p) return;
-      const name = window.prompt(tt("pro.profileNamePrompt"), p.name || "");
+      const shown = !p.name || p.name === "Default" ? tt("pro.profileMain") : p.name;
+      const name = window.prompt(tt("pro.profileNamePrompt"), shown);
       if (name == null) return;
       VTStorage.renameProfile(p.id, name);
       renderValuePulse();
@@ -6597,6 +6672,8 @@
     text.textContent = tt("value.moment." + moment.id, vars);
     banner.hidden = false;
     banner.dataset.momentId = moment.id;
+    const cta = $("#value-pulse-cta");
+    if (cta) cta.hidden = true;
   }
 
   function hideValueBanner() {
@@ -6605,6 +6682,7 @@
     const id = banner.dataset.momentId;
     if (id && window.VTValuePulse?.dismiss) VTValuePulse.dismiss(id);
     banner.hidden = true;
+    renderValuePulse();
   }
 
   function renderPricingModal() {
@@ -8110,6 +8188,8 @@
     syncHeaderHeightVar,
     renderValuePulse,
     showValueMoment,
+    startMicroSession,
+    openReminders,
     applyPianoOptionsHot,
     get _hotApplyPromise() {
       return state._hotApplyPromise;
@@ -8197,12 +8277,7 @@
         renderNextStepCard();
         renderTodayBasics();
       },
-      focusReminders: () => {
-        if (state.view !== "home") setView("home");
-        const panel = $("#retain-panel");
-        panel?.scrollIntoView({ block: "center", behavior: scrollBehavior() });
-        $("#chk-reminders")?.focus({ preventScroll: true });
-      }
+      focusReminders: () => openReminders()
     });
     bind();
     bindHeaderMenu();

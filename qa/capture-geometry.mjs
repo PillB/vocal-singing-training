@@ -231,7 +231,7 @@ async function main() {
       if (!found) return false;
       const cards = [...document.querySelectorAll("#exercise-list .card-ex")];
       for (const c of cards) {
-        const num = c.querySelector(".num")?.textContent?.trim();
+        const num = c.dataset.num;
         if (num === String(found.number)) {
           c.click();
           return true;
@@ -291,7 +291,7 @@ async function main() {
   await page.click('.tab[data-tab="singing"]');
   await page.click('.tier-chip[data-tier="basic"]');
   await page.waitForTimeout(120);
-  await page.locator("#exercise-list .card-ex").nth(1).click();
+  await page.locator("#exercise-list .card-ex[data-id='s2-solfege-chords']").click();
   await page.waitForTimeout(280);
   await page.evaluate(() => window.scrollTo(0, 0));
   await shot(page, "mobile_solfege");

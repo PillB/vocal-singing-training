@@ -134,6 +134,26 @@ export const states = {
   },
 
   // ---- Home, lower down --------------------------------------------------
+  "home-catalog-singing": {
+    label: "catálogo, pista Cantar",
+    days: RET3,
+    action: async (p) => scrollToEl(p, "#catalog-panel")
+  },
+  "reminder-open": {
+    label: "inicio, al buscar dónde poner un recordatorio diario",
+    days: RET3,
+    // Wherever the design keeps the reminder: a dialog off the week card
+    // (site review round 2), else the panel at the bottom of Practicar.
+    action: async (p) => {
+      const b = await p.$("#btn-reminder");
+      if (b && (await b.isVisible())) {
+        await b.click();
+        await p.waitForTimeout(400);
+      } else {
+        await scrollToEl(p, "#retain-panel");
+      }
+    }
+  },
   "home-catalog-vocal": {
     label: "catálogo, pista Vocal",
     days: RET3,

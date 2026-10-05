@@ -131,7 +131,7 @@ test.describe("Exercise-specific practice modes", () => {
     await forceEn(page);
     await page.click('.tab[data-tab="singing"]');
     await page.click('.tier-chip[data-tier="basic"]');
-    await page.locator("#exercise-list .card-ex").first().click();
+    await page.locator("#exercise-list .card-ex[data-id='s1-vocal-fry']").click();
     await expect(page.locator(".mode-panel.mode-pitchHold")).toBeVisible();
     await expect(page.locator("#pitch-block")).toBeVisible();
     await expect(page.locator("#hold-display")).toBeVisible();
@@ -261,7 +261,7 @@ test.describe("Exercise-specific practice modes", () => {
     await forceEn(page);
     await page.click('.tab[data-tab="singing"]');
     await page.click('.tier-chip[data-tier="basic"]');
-    await page.locator("#exercise-list .card-ex").nth(1).click();
+    await page.locator("#exercise-list .card-ex[data-id='s2-solfege-chords']").click();
     await expect(page.locator("#chk-sustain")).toBeVisible();
     await expect(page.locator("#chk-arpeggio")).toBeVisible();
     await expect(page.locator("#chk-one-note")).toBeVisible();
@@ -332,7 +332,7 @@ test.describe("Exercise-specific practice modes", () => {
     await forceEn(page);
     await page.click('.tab[data-tab="singing"]');
     await page.click('.tier-chip[data-tier="basic"]');
-    await page.locator("#exercise-list .card-ex").nth(1).click();
+    await page.locator("#exercise-list .card-ex[data-id='s2-solfege-chords']").click();
     await expect(page.locator("#highway-stage")).toBeVisible();
     await expect(page.locator(".hud-tl")).toBeVisible();
     await expect(page.locator(".hud-bl #btn-practice-start")).toBeVisible();
@@ -370,7 +370,7 @@ test.describe("Exercise-specific practice modes", () => {
     await forceEn(page);
     await page.click('.tab[data-tab="singing"]');
     await page.click('.tier-chip[data-tier="basic"]');
-    await page.locator("#exercise-list .card-ex").nth(1).click();
+    await page.locator("#exercise-list .card-ex[data-id='s2-solfege-chords']").click();
     // Piano panel is collapsed by default — open it for progression list
     await page.locator("#btn-toggle-piano").click();
     await expect(page.locator("#prog-buttons")).toContainText("Wide jumps");

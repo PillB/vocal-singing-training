@@ -10,7 +10,7 @@
     <meta name="color-scheme" content="dark" />
     <meta name="theme-color" content="#0c1118" />
     <title>Entrenamiento vocal y de canto</title>
-    <link rel="stylesheet" href="css/styles.css?v=20261005a" />
+    <link rel="stylesheet" href="css/styles.css?v=20261005b" />
     <link rel="stylesheet" href="css/exercise-viz.css?v=20261002a" />
     <link rel="stylesheet" href="css/scenes/speech.css?v=20261002a" />
     <link rel="stylesheet" href="css/scenes/speech-shape.css?v=20261002a" />
@@ -150,6 +150,7 @@
                 <span class="more-ways-caret" aria-hidden="true">▾</span>
               </button>
               <div class="start-alt" id="start-alt">
+                <button type="button" class="btn btn-ghost btn-sm" id="btn-pick-exercise" data-i18n="home.pickExercise">Elegir un ejercicio ↓</button>
                 <button type="button" class="btn btn-ghost btn-sm" id="btn-continue" data-i18n="home.continue">▶ Continuar práctica</button>
                 <button type="button" class="btn btn-ghost btn-sm" id="btn-structured" data-i18n="home.structured">
                   Iniciar sesión guiada
@@ -205,6 +206,9 @@
               <div class="loop-goal-bar" id="loop-goal-bar" aria-hidden="true"></div>
             </div>
             <button type="button" class="btn btn-ghost btn-sm loop-cards-btn" id="loop-cards-btn" hidden></button>
+            <button type="button" class="btn btn-ghost btn-sm loop-remind-btn" id="btn-reminder" aria-haspopup="dialog">
+              <span aria-hidden="true">🔔</span> <span id="btn-reminder-label" data-i18n="retain.open">Poner un recordatorio</span>
+            </button>
           </aside>
         </section>
 
@@ -212,7 +216,7 @@
         <section class="catalog-panel" id="catalog-panel" aria-labelledby="catalog-heading">
           <div class="catalog-head">
             <div class="catalog-head-text">
-              <h3 id="catalog-heading" data-i18n="home.catalog">Catálogo de ejercicios</h3>
+              <h3 id="catalog-heading" tabindex="-1" data-i18n="home.catalog">Catálogo de ejercicios</h3>
               <p class="muted catalog-pick" data-i18n="home.catalogPick">Elige qué entrenar: hablar o cantar.</p>
             </div>
           </div>
@@ -271,122 +275,12 @@
             <span class="muted" id="tier-counts" style="font-size: 0.85rem"></span>
           </div>
 
-          <!-- Today's basics in this track, each a shortcut to its exercise (filled by app.js) -->
-          <div class="today-basics" id="today-basics" role="group" aria-labelledby="today-basics-label" hidden></div>
 
           <div id="exercise-list" class="grid" aria-live="polite"></div>
         </section>
 
-        <!-- Value pulse: prove progress (competence) before asking for Pro -->
-        <div class="value-pulse card" id="value-pulse" aria-live="polite">
-          <div class="value-pulse-head">
-            <h3 class="value-pulse-title" data-i18n="value.pulseTitle">Tu estudio</h3>
-            <span class="value-pulse-tag" id="value-pulse-tag" hidden></span>
-          </div>
-          <div class="value-pulse-grid" id="value-pulse-grid">
-            <div class="value-stat"><strong id="vp-sessions">0</strong><span data-i18n="value.sessions">Sesiones</span></div>
-            <div class="value-stat"><strong id="vp-minutes">0</strong><span data-i18n="value.minutes">Minutos</span></div>
-            <div class="value-stat"><strong id="vp-streak">0</strong><span data-i18n="value.streak">Racha (días)</span></div>
-            <div class="value-stat"><strong id="vp-hold">—</strong><span data-i18n="value.bestHold">Mejor hold</span></div>
-            <div class="value-stat"><strong id="vp-ex">0</strong><span data-i18n="value.exercises">Ejercicios</span></div>
-          </div>
-          <p class="value-insights muted" id="value-insights" hidden></p>
-          <div class="value-pulse-cta" id="value-pulse-cta">
-            <button type="button" class="btn btn-sm btn-primary" id="btn-value-pro" data-i18n="value.ctaPro">
-              Pro: exportar y coach
-            </button>
-            <p class="muted value-anchor" data-i18n="value.anchor">
-              Una clase particular ≈ el año de Pro. Practica gratis siempre.
-            </p>
-          </div>
-
-          <!-- Pro studio: profiles, goals, insights, achievements -->
-          <div class="pro-studio" id="pro-studio">
-            <div class="pro-studio-row">
-              <label class="pro-profile-field" for="sel-profile">
-                <span class="pro-k" data-i18n="pro.profile">Perfil</span>
-                <select id="sel-profile" class="select-inline" aria-label="Practice profile"></select>
-              </label>
-              <button type="button" class="btn btn-ghost btn-xs" id="btn-profile-add" data-i18n="pro.profileAdd">+ Perfil</button>
-              <button type="button" class="btn btn-ghost btn-xs" id="btn-profile-rename" data-i18n="pro.profileRename">Renombrar</button>
-              <label class="pro-goal-field" for="sel-week-goal">
-                <span class="pro-k" data-i18n="pro.weekGoal">Meta semanal</span>
-                <select id="sel-week-goal" class="select-inline" aria-label="Weekly session goal">
-                  <option value="3">3</option>
-                  <option value="5">5</option>
-                  <option value="7">7</option>
-                </select>
-              </label>
-              <span class="pro-goal-progress muted" id="pro-goal-progress">0/3</span>
-            </div>
-            <div class="pro-insights" id="pro-insights-panel">
-              <div class="pro-insights-head">
-                <strong data-i18n="pro.insightsTitle">Insights Pro</strong>
-                <span class="pro-lock" id="pro-insights-lock" hidden data-i18n="pro.locked">Pro</span>
-              </div>
-              <div class="pro-spark" id="pro-spark" aria-hidden="true" title="28 days"></div>
-              <p class="pro-focus" id="pro-coach-focus"></p>
-              <p class="muted pro-hold-trend" id="pro-hold-trend"></p>
-            </div>
-            <div class="pro-achievements" id="pro-achievements">
-              <strong class="pro-ach-title" data-i18n="pro.achievements">Logros</strong>
-              <div class="pro-ach-grid" id="pro-ach-grid"></div>
-            </div>
-            <!-- Year-style practice heatmap (habit apps / GitHub contribution vibe) -->
-            <div class="practice-heatmap-wrap" id="practice-heatmap-wrap">
-              <div class="practice-heatmap-head">
-                <strong data-i18n="retain.heatmapTitle">Mapa de práctica</strong>
-                <span class="muted" data-i18n="retain.heatmapSub">26 semanas · cada casilla es un día</span>
-              </div>
-              <div class="practice-heatmap" id="practice-heatmap" role="img" aria-label="Mapa de práctica"></div>
-            </div>
-          </div>
-        </div>
-
         <!-- Free-tier native tip / ad slot (never during practice; off until adsEnabled) -->
         <aside id="ad-slot-home" class="ad-slot" hidden aria-label="Studio tip"></aside>
-
-        <div class="value-banner" id="value-banner" hidden role="status">
-          <p id="value-banner-text"></p>
-          <div class="value-banner-actions">
-            <button type="button" class="btn btn-sm btn-primary" id="value-banner-cta" data-i18n="value.bannerCta">Ver Pro</button>
-            <button type="button" class="btn btn-ghost btn-sm" id="value-banner-dismiss" data-i18n="value.bannerDismiss">Ahora no</button>
-          </div>
-        </div>
-
-        <!-- Comeback tools: kind reminders, calendar, welcome-back (research: no guilt) -->
-        <div class="retain-panel card" id="retain-panel">
-          <div class="retain-head">
-            <h3 class="retain-title" data-i18n="retain.title">Volver a practicar</h3>
-            <label class="retain-toggle muted">
-              <input type="checkbox" id="chk-reminders" />
-              <span data-i18n="retain.enable">Recordatorio amable</span>
-            </label>
-          </div>
-          <div class="retain-row">
-            <label class="retain-field" for="rem-time-1">
-              <span data-i18n="retain.time">Hora</span>
-              <input type="time" id="rem-time-1" value="18:00" />
-            </label>
-            <label class="retain-field" for="rem-time-2" id="rem-time-2-wrap" hidden>
-              <span data-i18n="retain.time2">2ª hora (Pro)</span>
-              <input type="time" id="rem-time-2" value="09:00" />
-            </label>
-            <label class="retain-check muted">
-              <input type="checkbox" id="chk-browser-notify" />
-              <span data-i18n="retain.browserNotify">Notificación del navegador</span>
-            </label>
-          </div>
-          <div class="retain-actions">
-            <button type="button" class="btn btn-sm btn-ghost" id="btn-ics-daily" data-i18n="retain.icsDaily">📅 Diario (calendario)</button>
-            <button type="button" class="btn btn-sm btn-ghost" id="btn-ics-weekly" data-i18n="retain.icsWeekly">📅 Semanal</button>
-            <button type="button" class="btn btn-sm btn-primary" id="btn-micro-5" data-i18n="retain.micro5">▶ 5 min</button>
-            <span class="muted retain-freeze" id="retain-freeze-label"></span>
-          </div>
-          <p class="muted retain-hint" data-i18n="retain.hint">
-            Sin culpa: el recordatorio es amable. También puedes añadir un evento a tu calendario.
-          </p>
-        </div>
 
         <div class="welcome-back card" id="welcome-back" hidden>
           <h3 data-i18n="retain.welcomeTitle">Bienvenido de nuevo</h3>
@@ -724,6 +618,78 @@
           </div>
         </div>
         <div class="card" id="history-list"></div>
+        <div class="value-banner" id="value-banner" hidden role="status">
+          <p id="value-banner-text"></p>
+          <div class="value-banner-actions">
+            <button type="button" class="btn btn-sm btn-primary" id="value-banner-cta" data-i18n="value.bannerCta">Ver Pro</button>
+            <button type="button" class="btn btn-ghost btn-sm" id="value-banner-dismiss" data-i18n="value.bannerDismiss">Ahora no</button>
+          </div>
+        </div>
+
+        <!-- Your progress: what practice added up to, then the one Pro offer.
+             Lives in Historial (the record); Practicar keeps the daily task. -->
+        <div class="value-pulse card" id="value-pulse" aria-live="polite">
+          <div class="value-pulse-head">
+            <h3 class="value-pulse-title" data-i18n="value.pulseTitle">Tu progreso</h3>
+            <span class="value-pulse-tag" id="value-pulse-tag" hidden></span>
+          </div>
+          <div class="value-pulse-grid" id="value-pulse-grid">
+            <div class="value-stat"><strong id="vp-sessions">0</strong><span data-i18n="value.sessions">Sesiones</span></div>
+            <div class="value-stat"><strong id="vp-minutes">0</strong><span data-i18n="value.minutes">Minutos</span></div>
+            <div class="value-stat"><strong id="vp-hold">—</strong><span data-i18n="value.bestHold">Nota más larga</span></div>
+            <div class="value-stat"><strong id="vp-ex">0</strong><span data-i18n="value.exercises">Ejercicios</span></div>
+          </div>
+          <p class="value-insights muted" id="value-insights" hidden></p>
+          <div class="value-pulse-cta" id="value-pulse-cta">
+            <button type="button" class="btn btn-sm btn-primary" id="btn-value-pro" data-i18n="value.ctaPro">Ver qué añade Pro</button>
+            <p class="muted value-anchor" data-i18n="value.anchor">
+              Una clase particular ≈ el año de Pro. Practica gratis siempre.
+            </p>
+          </div>
+
+          <!-- Pro studio: profiles, insights, achievements, practice map -->
+          <div class="pro-studio" id="pro-studio">
+            <div class="pro-studio-row">
+              <label class="pro-profile-field" for="sel-profile">
+                <span class="pro-k" data-i18n="pro.profile">Perfil</span>
+                <select id="sel-profile" class="select-inline" data-i18n-aria="pro.profileAria" aria-label="Perfil de práctica"></select>
+              </label>
+              <button type="button" class="btn btn-ghost btn-xs" id="btn-profile-add" data-i18n="pro.profileAdd">+ Perfil</button>
+              <button type="button" class="btn btn-ghost btn-xs" id="btn-profile-rename" data-i18n="pro.profileRename">Renombrar</button>
+              <label class="pro-goal-field" for="sel-week-goal">
+                <span class="pro-k" data-i18n="pro.weekGoal">Sesiones por semana</span>
+                <select id="sel-week-goal" class="select-inline" data-i18n-aria="pro.weekGoal" aria-label="Sesiones por semana">
+                  <option value="3">3</option>
+                  <option value="5">5</option>
+                  <option value="7">7</option>
+                </select>
+              </label>
+              <span class="pro-goal-progress muted" id="pro-goal-progress">0/3</span>
+            </div>
+            <div class="pro-insights" id="pro-insights-panel">
+              <div class="pro-insights-head">
+                <strong data-i18n="pro.insightsTitle">Análisis Pro</strong>
+                <span class="pro-lock" id="pro-insights-lock" hidden data-i18n="pro.locked">Pro</span>
+              </div>
+              <div class="pro-spark" id="pro-spark" aria-hidden="true" title="28 days"></div>
+              <p class="pro-focus" id="pro-coach-focus"></p>
+              <p class="muted pro-hold-trend" id="pro-hold-trend"></p>
+            </div>
+            <div class="pro-achievements" id="pro-achievements">
+              <strong class="pro-ach-title" data-i18n="pro.achievements">Logros</strong>
+              <div class="pro-ach-grid" id="pro-ach-grid"></div>
+            </div>
+            <!-- Year-style practice heatmap (habit apps / GitHub contribution vibe) -->
+            <div class="practice-heatmap-wrap" id="practice-heatmap-wrap">
+              <div class="practice-heatmap-head">
+                <strong data-i18n="retain.heatmapTitle">Mapa de práctica</strong>
+                <span class="muted" data-i18n="retain.heatmapSub">26 semanas · cada casilla es un día</span>
+              </div>
+              <div class="practice-heatmap" id="practice-heatmap" role="img" aria-label="Mapa de práctica"></div>
+            </div>
+          </div>
+        </div>
+
         <aside id="ad-slot-history" class="ad-slot" hidden aria-label="Studio tip"></aside>
       </section>
 
@@ -818,6 +784,44 @@
           <button type="button" class="btn btn-success" id="leave-save" data-i18n="leave.save">Puntuar ahora</button>
           <button type="button" class="btn btn-danger" id="leave-discard" data-i18n="leave.discard">Descartar</button>
           <button type="button" class="btn btn-ghost" id="leave-cancel" data-i18n="leave.stay">Seguir practicando</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Daily reminder: opened from the week card on Practicar and from the
+         finishing card. Settings, not practice: it starts nothing. -->
+    <div id="reminder-modal" class="modal-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="reminder-title">
+      <div class="modal-card retain-panel" id="retain-panel">
+        <div class="retain-head">
+          <h3 class="retain-title" id="reminder-title" data-i18n="retain.title">Recordatorio diario</h3>
+          <label class="retain-toggle muted">
+            <input type="checkbox" id="chk-reminders" />
+            <span data-i18n="retain.enable">Recordármelo cada día</span>
+          </label>
+        </div>
+        <div class="retain-row">
+          <label class="retain-field" for="rem-time-1">
+            <span data-i18n="retain.time">Hora</span>
+            <input type="time" id="rem-time-1" value="18:00" />
+          </label>
+          <label class="retain-field" for="rem-time-2" id="rem-time-2-wrap" hidden>
+            <span data-i18n="retain.time2">2ª hora (Pro)</span>
+            <input type="time" id="rem-time-2" value="09:00" />
+          </label>
+          <label class="retain-check muted">
+            <input type="checkbox" id="chk-browser-notify" />
+            <span data-i18n="retain.browserNotify">Notificación del navegador</span>
+          </label>
+        </div>
+        <div class="retain-actions">
+          <button type="button" class="btn btn-sm btn-ghost" id="btn-ics-daily" data-i18n="retain.icsDaily">📅 Diario (calendario)</button>
+          <button type="button" class="btn btn-sm btn-ghost" id="btn-ics-weekly" data-i18n="retain.icsWeekly">📅 Semanal</button>
+        </div>
+        <p class="muted retain-hint" data-i18n="retain.hint">
+          Sin culpa: el recordatorio es amable. También puedes añadir un evento a tu calendario.
+        </p>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-primary" id="reminder-done" data-i18n="retain.done">Listo</button>
         </div>
       </div>
     </div>
@@ -1101,7 +1105,7 @@
     </div>
 
     <script src="js/focus-trap.js?v=20260924c"></script>
-    <script src="js/i18n.js?v=20261005a"></script>
+    <script src="js/i18n.js?v=20261005b"></script>
     <script src="js/exercises-data.js?v=20261002a"></script>
     <script src="js/exercises-locale-es.js?v=20261002a"></script>
     <script src="js/practice-profiles.js?v=20261002a"></script>
@@ -1149,6 +1153,6 @@
     <script src="js/session.js?v=20260924c"></script>
     <script src="js/daily-loop.js?v=20260924c"></script>
     <script src="js/tour.js?v=20261005a"></script>
-    <script src="js/app.js?v=20261005a"></script>
+    <script src="js/app.js?v=20261005b"></script>
   </body>
 </html>

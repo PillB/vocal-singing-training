@@ -115,6 +115,7 @@
    "hit": [
     "#catalog-panel",
     "#btn-more-ways",
+    "#btn-pick-exercise",
     "#today-basics"
    ],
    "near": [
@@ -128,6 +129,7 @@
    "scroll": true,
    "task": "Quieres que la aplicación te recuerde practicar todas las tardes.",
    "hit": [
+    "#btn-reminder",
     "#retain-panel",
     "#chk-reminders"
    ],

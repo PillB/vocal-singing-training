@@ -76,7 +76,7 @@ async function openExercise(page, ex) {
       const all = [...VT_EXERCISES.vocal, ...VT_EXERCISES.singing];
       const found = all.find((e) => e.id === id);
       for (const c of document.querySelectorAll("#exercise-list .card-ex")) {
-        if (c.querySelector(".num")?.textContent?.trim() === String(found?.number)) {
+        if (c.dataset.num === String(found?.number)) {
           c.click();
           return;
         }

@@ -524,8 +524,8 @@ test.describe("Landscape: a phone on its side", () => {
         await expect
           .poll(() =>
             page.evaluate(() => {
-              const back = document.getElementById("btn-back-home").getBoundingClientRect();
-              return back.right <= document.getElementById("btn-session-resume").getBoundingClientRect().left;
+              const help = document.getElementById("btn-ui-help").getBoundingClientRect();
+              return help.right <= document.getElementById("btn-session-resume").getBoundingClientRect().left;
             })
           )
           .toBe(true);
@@ -546,6 +546,7 @@ test.describe("Landscape: a phone on its side", () => {
           stage: q("highway-stage"),
           exHeader: document.querySelector(".exercise-header-compact").getBoundingClientRect(),
           back: q("btn-back-home"),
+          help: q("btn-ui-help"),
           heading: q("ex-title"),
           progress: q("structured-progress"),
           title,
@@ -563,9 +564,13 @@ test.describe("Landscape: a phone on its side", () => {
         expect(b.bottom, `${phase}: in the header row`).toBeLessThanOrEqual(r.exHeader.bottom + 1);
         expect(b.right).toBeLessThanOrEqual(r.vw);
       }
-      expect(r.back.right, `${phase}: Atrás clear of Pausar`).toBeLessThanOrEqual(r.pause.left);
-      expect(r.heading.right).toBeLessThanOrEqual(r.back.left);
-      expect(r.progress.right).toBeLessThanOrEqual(r.back.left);
+      // One row, left to right: the way back, the title and the routine's
+      // line, Ayuda, then Pausar and Terminar (design: one-header).
+      expect(r.back.right, `${phase}: the way back before the title`).toBeLessThanOrEqual(r.heading.left);
+      expect(r.heading.right).toBeLessThanOrEqual(r.help.left);
+      expect(r.progress.left).toBeGreaterThanOrEqual(r.back.right);
+      expect(r.progress.right).toBeLessThanOrEqual(r.help.left);
+      expect(r.help.right, `${phase}: Ayuda clear of Pausar`).toBeLessThanOrEqual(r.pause.left);
       if (phase === "scrolled") {
         expect(r.scrollY).toBeGreaterThan(0);
         expect(Math.abs(r.exHeader.top), "the row stays at the top").toBeLessThanOrEqual(1);

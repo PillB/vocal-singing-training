@@ -7651,6 +7651,21 @@ body.ex-ended #btn-practice-start {
   #piano-mini-opts.piano-opts-expanded .piano-opt-arp {
     display: inline-flex;
   }
+  /* Octave, "A mi voz" and "Piano ▾" share one row on a 390px screen;
+     a narrower one moves "Piano ▾" to a second row instead of overflowing. */
+  #piano-mini-opts:not(.piano-opts-expanded) {
+    flex-wrap: wrap;
+    row-gap: 0.35rem;
+  }
+  #piano-mini-opts .hud-oct {
+    gap: 1px;
+  }
+  #piano-mini-opts .hud-oct .oct-auto {
+    padding: 0 0.15rem;
+  }
+  #piano-mini-opts .hud-piano-more {
+    padding-inline: 0.3rem;
+  }
 }
 /* After the time is up the settings rows step aside for the rating. */
 body.ex-ended .hud-bc,

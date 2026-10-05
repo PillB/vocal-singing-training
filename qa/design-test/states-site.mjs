@@ -263,6 +263,16 @@ export const states = {
       await p.waitForTimeout(900);
     }
   },
+  "exercise-piano": {
+    label: "ejercicio abierto, opciones del piano abiertas",
+    days: RET3,
+    action: async (p) => {
+      await p.evaluate(() => window.VTApp.openExercise("s4-lip-trills"));
+      await p.waitForTimeout(900);
+      await p.click("#btn-toggle-piano").catch(() => {});
+      await p.waitForTimeout(600);
+    }
+  },
   privacy: { label: "privacidad", url: "/privacy.html" },
   "guide-practica": {
     label: "guía, sección Practicar",

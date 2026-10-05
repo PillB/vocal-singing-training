@@ -927,8 +927,10 @@ test.describe("The menu, read by someone who has never seen it", () => {
         await expect(page.locator("#btn-pricing")).not.toHaveAttribute("data-plan", "free");
         const g = await page.evaluate(() => {
           const rect = (el) => el.getBoundingClientRect();
-          // A laptop folds the tour and the guide into "Ayuda ▾"; wider, both show.
-          const help = innerWidth < 1100 ? ["btn-help"] : ["btn-tour", "link-guide"];
+          // A laptop folds the tour and the guide into "Ayuda ▾"; wider, both
+          // show unless they would leave the title three lines tall.
+          const folded = innerWidth < 1100 || document.querySelector("header.app-header").classList.contains("help-fold");
+          const help = folded ? ["btn-help"] : ["btn-tour", "link-guide"];
           const ids = ["btn-nav-home", "btn-account", "btn-pricing", "btn-lang", ...help];
           const boxes = ids.map((id) => rect(document.getElementById(id)));
           return {
@@ -948,6 +950,31 @@ test.describe("The menu, read by someone who has never seen it", () => {
       });
     }
   }
+
+  test("1280px: the tour and the guide fold into Ayuda only while the row needs the room", async ({ page }) => {
+    // "Ver el tour" and "Leer la guía" beside a long name and "Pro · termina
+    // en 10 días" left the title three lines tall (93px header). That row
+    // folds them into "Ayuda ▾"; signed out, both sit in the row.
+    await page.setViewportSize({ width: 1280, height: 800 });
+    const license = await mintLicense({ origin: BASE });
+    await install(page, { ...STATES.ending, account: member({ displayName: "Maximiliano Alejandro de la Torre" }) }, license);
+    await boot(page);
+    await expect(page.locator("#btn-pricing")).not.toHaveAttribute("data-plan", "free");
+    const help = page.locator("#btn-help");
+    await expect(help).toBeVisible();
+    await expect(page.locator("#btn-tour")).toBeHidden();
+    const lines = () =>
+      page.evaluate(() => {
+        const range = document.createRange();
+        range.selectNodeContents(document.getElementById("brand-title"));
+        return new Set([...range.getClientRects()].filter((r) => r.width > 0).map((r) => Math.round(r.bottom))).size;
+      });
+    expect(await lines()).toBeLessThanOrEqual(2);
+    await help.click();
+    await expect(page.locator("#link-guide")).toBeVisible();
+    await page.locator("#btn-tour").click();
+    await expect(page.locator(".tour-card")).toBeVisible();
+  });
 
   test("the account panel names its plan button for what it opens", async ({ page }) => {
     const license = await mintLicense({ origin: BASE });

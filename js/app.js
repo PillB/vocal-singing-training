@@ -884,6 +884,44 @@
       if (e.relatedTarget && !items.contains(e.relatedTarget) && e.relatedTarget !== btn) setHelpMenu(false);
     });
     window.matchMedia?.("(min-width: 641px) and (max-width: 1099px)")?.addEventListener?.("change", () => setHelpMenu(false));
+    // The title's size moves with everything in the row (a name, the plan, the
+    // language), so it is the one thing to watch. Measured a frame later, so
+    // folding never resizes what the observer is reporting on.
+    const title = $("#brand-title");
+    if (title && window.ResizeObserver) {
+      let queued = false;
+      new ResizeObserver(() => {
+        if (queued) return;
+        queued = true;
+        requestAnimationFrame(() => {
+          queued = false;
+          fitHeaderHelp();
+        });
+      }).observe(title);
+    }
+  }
+
+  /*
+   * Wider than a laptop the tour and the guide sit in the header's row. A long
+   * name beside "Pro · termina en 10 días" left the title three lines tall
+   * there, so the row folds them into "Ayuda ▾" as a laptop does (css:
+   * help-fold). Measured unfolded each time, so a shorter row unfolds again.
+   */
+  function fitHeaderHelp() {
+    const header = $("header.app-header");
+    const title = $("#brand-title");
+    if (!header || !title) return;
+    const was = header.classList.contains("help-fold");
+    header.classList.remove("help-fold");
+    let fold = false;
+    if (window.matchMedia?.("(min-width: 1100px)")?.matches) {
+      const range = document.createRange();
+      range.selectNodeContents(title);
+      const lines = new Set([...range.getClientRects()].filter((r) => r.width > 0).map((r) => Math.round(r.bottom)));
+      fold = lines.size > 2;
+    }
+    header.classList.toggle("help-fold", fold);
+    if (was && !fold) setHelpMenu(false);
   }
 
   /** Paint the header nav so the current section is always identifiable. */
@@ -4034,11 +4072,13 @@
       let delta = r.top - Math.max(top, want);
       // A pictured exercise's review is what "¿Cómo te fue?" is answered from:
       // keep it whole on screen, and let the card show below it as room allows
-      // (unless the learner asked for the rating itself: "Calificar")
+      // (unless the learner asked for the rating itself: "Calificar"). It may
+      // come up to the card's own 8px under the sticky header: on a 1280x800
+      // laptop those pixels are what puts the question on screen.
       const review = document.querySelector(
         "#mode-focus .mode-panel.has-viz.is-replay, #mode-hud .mode-panel.has-viz.is-replay"
       );
-      if (review && !cardFirst) delta = Math.min(delta, review.getBoundingClientRect().top - top - 8);
+      if (review && !cardFirst) delta = Math.min(delta, review.getBoundingClientRect().top - top);
       if (Math.abs(delta) > 12) window.scrollBy({ top: delta, behavior: scrollBehavior() });
     });
   }

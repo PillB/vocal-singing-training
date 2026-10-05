@@ -2562,6 +2562,7 @@
     const guideBtn = $("#btn-toggle-guide");
     if (guideBtn) {
       guideBtn.textContent = tt("ex.showGuide");
+      guideBtn.setAttribute("aria-label", tt("ex.showGuideAria"));
       guideBtn.setAttribute("aria-expanded", "false");
     }
     state.metricsOpen = false;
@@ -4145,7 +4146,8 @@
       const q = $("#hud-quality");
       const accEl = $("#hud-acc");
       if (q) {
-        q.textContent = voiced ? `${acc > 0 ? "+" : ""}${acc}¢` : "—";
+        // Before any voice the box names what it will show, instead of a lone dash.
+        q.textContent = voiced ? `${acc > 0 ? "+" : ""}${acc}¢` : es ? "Afinación —" : "Tuning —";
         q.className =
           "hud-quality " +
           (!voiced
@@ -5746,6 +5748,7 @@
       const btn = $("#btn-toggle-guide");
       if (btn) {
         btn.textContent = state.guideOpen ? tt("ex.hideGuide") : tt("ex.showGuide");
+        btn.setAttribute("aria-label", tt(state.guideOpen ? "ex.hideGuideAria" : "ex.showGuideAria"));
         btn.setAttribute("aria-expanded", String(state.guideOpen));
       }
     });

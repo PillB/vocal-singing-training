@@ -7672,3 +7672,37 @@ body.ex-ended .hud-bc,
 body.ex-ended #piano-mini-opts {
   display: none !important;
 }
+/* Round 3b. On a wide screen the opened piano options take a row of their
+   own under Empezar and the microphone; on one row they ran off the right
+   edge and the microphone slider slid over the octave buttons. */
+@media (min-width: 641px) {
+  .hud-bottom-rail:has(#piano-mini-opts.piano-opts-expanded) {
+    flex-wrap: wrap;
+    row-gap: 0.35rem;
+  }
+  #piano-mini-opts.piano-opts-expanded {
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    max-width: none;
+    overflow: visible;
+  }
+}
+/* An unticked box on the dark rail was a dark square on near-black: draw it
+   light so it reads as something to tick. */
+.hud-bottom-rail input[type="checkbox"]:not(:checked) {
+  color-scheme: light;
+}
+/* "Micrófono" in words wherever the rail has room; a landscape phone or a
+   narrow tablet keeps "Mic", or the slider slid over the octave buttons. */
+.mic-sens-title .mic-short {
+  display: none;
+}
+@media (max-height: 500px), (min-width: 641px) and (max-width: 900px) {
+  .mic-sens-title .mic-full {
+    display: none;
+  }
+  .mic-sens-title .mic-short {
+    display: inline;
+  }
+}

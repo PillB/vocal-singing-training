@@ -25,7 +25,6 @@ const SELECTORS = [
   "#btn-pricing",
   "#pricing-modal",
   "#pricing-grid",
-  "#billing-pill",
   "#view-home",
   "#view-exercise",
   "#view-history",

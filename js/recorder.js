@@ -29,11 +29,16 @@
         this.audioUrl = null;
       }
 
+      // The take is for listening back to your own voice, so ask for it as
+      // the microphone heard it: auto gain flattens crescendos and swells,
+      // noise suppression eats a held "sss" and soft onsets. (Plain false is
+      // a preference, not a requirement, so browsers that can't comply still
+      // hand over a stream.)
       this.stream = await navigator.mediaDevices.getUserMedia({
         audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false
         }
       });
 

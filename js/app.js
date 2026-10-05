@@ -1806,7 +1806,7 @@
         // The silent stop skips the metrics reveal a normal stop does, so the
         // button below could be inside a collapsed card (VG-28). One tap on
         // the rating card saves and then goes where the learner was headed.
-        openMetricsPanel(true, { focus: true });
+        openMetricsPanel(true, { focus: true, cardFirst: true });
         toast(tt("leave.scrollSave"));
         // Stash intended destination after save
         state.pendingLeave = destination;
@@ -2044,6 +2044,9 @@
     state.timer.remaining = timerSec;
     $("#timer-display").textContent = timerSec ? formatTime(timerSec) : "—";
     $("#timer-display").style.opacity = timerSec ? "1" : "0.45";
+    // No clock for this exercise (its picture keeps its own time): no lone
+    // dash beside "En vivo"
+    $("#timer-display").hidden = !timerSec;
 
     $("#playback-area").innerHTML = "";
     $("#level-fill").style.width = "0%";
@@ -2116,6 +2119,7 @@
       }
       // Prefer full progression span when exercise has chords; else fixed window on ref
       const wantsProg =
+        !profile.noProgression &&
         !!(ex.progressions?.length ||
           ex.songs?.length ||
           ex.audio?.progressions ||
@@ -2145,8 +2149,9 @@
     if (gameHud) {
       gameHud.style.display = showPitchHud ? "" : "none";
       gameHud.style.opacity = "1";
-      gameHud.classList.toggle("hud-challenge", !!profile.pitchChallenge);
-      gameHud.classList.toggle("hud-cents-only", showPitchHud && !profile.pitchChallenge);
+      const scored = !!profile.pitchChallenge && !profile.noGameScore;
+      gameHud.classList.toggle("hud-challenge", scored);
+      gameHud.classList.toggle("hud-cents-only", showPitchHud && !scored);
     }
     const tr = $(".hud-tr");
     if (tr) tr.style.display = showPitchHud ? "" : "none";
@@ -2204,8 +2209,11 @@
     }
     // Lip trills, straws and the rate ladder keep the default chord and play
     // mode; their two menus only crowded a phone's stage and covered the
-    // exercise's name (design: start-floor).
-    if ((profile.mode === "sovtFlow" || profile.mode === "rateLadder") && $("#hud-prog-bar")) {
+    // exercise's name (design: start-floor). Staccato/legato and the placement
+    // A/B draw their own picture there, and the menus sat on top of it.
+    const noChordMenus = ["sovtFlow", "rateLadder", "staccatoLegato", "placementAB"];
+    // A mode that walks its own notes (profile.noProgression) has no chord loop to pick
+    if ((noChordMenus.includes(profile.mode) || profile.noProgression) && $("#hud-prog-bar")) {
       $("#hud-prog-bar").hidden = true;
     }
     if (pianoMini) {
@@ -2406,7 +2414,10 @@
     if ($("#chord-desc")) {
       $("#chord-desc").textContent = p.description || p.name || "";
     }
-    if (state.exercise?.audio?.pitchViz || state.exercise?.practice?.showPitch) {
+    if (
+      (state.exercise?.audio?.pitchViz || state.exercise?.practice?.showPitch) &&
+      !(state.exercise && getProfile(state.exercise)?.noProgression)
+    ) {
       lockHighwayForProgression(id);
     }
     if (!silent) applyPianoOptionsHot("prog:" + (p.name || id));
@@ -2426,7 +2437,7 @@
       syncPlayModeSelect();
 
       // Highway range + ghost lanes follow the selected progression immediately
-      if (profile?.showPitch || ex.audio?.pitchViz) {
+      if ((profile?.showPitch || ex.audio?.pitchViz) && !profile?.noProgression) {
         if (state.selectedProg) lockHighwayForProgression(state.selectedProg);
       }
 
@@ -2734,7 +2745,7 @@
     }
     // fill accuracy metric from game
     const accInput = $('#metrics-form [name="accuracy"]');
-    if (accInput && accInput.type === "range" && state.pitchGame) {
+    if (accInput && accInput.type === "range" && state.pitchGame && !getProfile(state.exercise)?.ownsMetrics) {
       const pct = state.pitchGame.accuracyPct();
       accInput.value = pct >= 80 ? 5 : pct >= 60 ? 4 : pct >= 40 ? 3 : 2;
       accInput.dispatchEvent(new Event("input"));
@@ -2860,10 +2871,19 @@
     return !el || el.checked !== false;
   }
 
+  /**
+   * Whether Empezar itself starts the piano: an exercise that wants sound,
+   * except s19, which opens on silent steps (its mode plays its own reference
+   * at the first sung step).
+   */
+  function soundsOnStart(ex, profile) {
+    return exerciseWantsSound(ex, profile) && profile?.mode !== "openSpace";
+  }
+
   async function startExerciseSound(ex, profile) {
     if (!ex || !window.VTPiano) return false;
     if (!autoPianoChecked()) return false;
-    if (!exerciseWantsSound(ex, profile)) return false;
+    if (!soundsOnStart(ex, profile)) return false;
 
     // Unlock Web Audio (recreates if context was closed by a prior mic stop)
     await VTPiano.ensure();
@@ -2882,7 +2902,9 @@
     }
     const sec = sustainOn ? Number($("#sustain-sec")?.value || 4) : 2.5;
     const inChallenge = !!(profile.pitchChallenge && state.pitchGame?.challengeMode);
+    // profile.noProgression: the mode walks its own notes; no chord loop under it
     const hasProg =
+      !profile.noProgression &&
       !!(ex.progressions?.length || ex.songs?.length || ex.audio?.progressions);
 
     // Ensure a progression is selected before looping
@@ -2913,7 +2935,9 @@
       const owned = profile.ownsTarget ? state.modeInstance?.state?.wantName : null;
       const note = effectiveNoteName(owned || profile.refPitch || ex.audio?.refPitch);
       if (note) {
-        const f = await VTPiano.playRefPitch(note, sec, true);
+        // An owning mode sounds each target itself (about 1.5 s): a 4 s replay
+        // on top kept the piano ringing, and a hold waits for the piano to stop
+        const f = await VTPiano.playRefPitch(note, owned ? Math.min(sec, 1.5) : sec, true);
         if (f) {
           state.practice.setTargetFreq(f);
           if (state.pitchViz) state.pitchViz.setTargetFreq(f);
@@ -3119,7 +3143,7 @@
           state.pitchViz.pushFrame(frame.voiceFreq, frame.targetFreq);
         }
         // Adaptive range: detect plateau short of target while trying (not silence)
-        if (profile.showPitch && state.rangeAuto) {
+        if (profile.showPitch && state.rangeAuto && !profile.freeRange) {
           const adapter = ensureRangeAdapter();
           if (adapter) {
             try {
@@ -3174,11 +3198,12 @@
           // Lock once to full challenge set so notes don't jump the Y-axis
           lockHighwayForNotes(state.pitchGame.challengeNotes);
         } else if (
-          ex.progressions?.length ||
-          ex.songs?.length ||
-          ex.audio?.progressions ||
-          profile.mode === "pitchChord" ||
-          profile.mode === "pitchSong"
+          !profile.noProgression &&
+          (ex.progressions?.length ||
+            ex.songs?.length ||
+            ex.audio?.progressions ||
+            profile.mode === "pitchChord" ||
+            profile.mode === "pitchSong")
         ) {
           lockHighwayForProgression(state.selectedProg);
         } else if (ref && !profile.ownsTarget) {
@@ -3470,10 +3495,11 @@
   /**
    * Expand or collapse the rating card (#metrics-card)
    * @param {boolean} open
-   * @param {{ reveal?: boolean, focus?: boolean, end?: "mic"|"time" }} [opts]
+   * @param {{ reveal?: boolean, focus?: boolean, end?: "mic"|"time", cardFirst?: boolean }} [opts]
    *   reveal (unless false): bring the card into view (revealRating); focus: move focus
    *   to its question (the learner asked to rate, or the exercise just ended);
-   *   end: the clock ran out, and whether the mic was on
+   *   end: the clock ran out, and whether the mic was on; cardFirst: the learner
+   *   asked for the rating itself, so it comes up even over a picture's review
    */
   function openMetricsPanel(open, opts = {}) {
     state.metricsOpen = !!open;
@@ -3491,7 +3517,7 @@
     state.rate.end = opts.end || null;
     paintRating();
     if (opts.focus) $("#rate-q")?.focus({ preventScroll: true });
-    if (opts.reveal !== false) revealRating();
+    if (opts.reveal !== false) revealRating(!!opts.cardFirst);
   }
 
   /* —— Rating: one tap after a take —— */
@@ -3591,7 +3617,7 @@
    * its side). An open "Más detalles" form is never measured; it may run past
    * the fold.
    */
-  function revealRating() {
+  function revealRating(cardFirst) {
     requestAnimationFrame(() => {
       const card = $("#metrics-card");
       if (!card || card.classList.contains("collapsed")) return;
@@ -3613,7 +3639,14 @@
         want = Math.min(vh * 0.45, vh - (el.getBoundingClientRect().bottom - r.top) - 24);
         if (want >= top) break;
       }
-      const delta = r.top - Math.max(top, want);
+      let delta = r.top - Math.max(top, want);
+      // A pictured exercise's review is what "¿Cómo te fue?" is answered from:
+      // keep it whole on screen, and let the card show below it as room allows
+      // (unless the learner asked for the rating itself: "Calificar")
+      const review = document.querySelector(
+        "#mode-focus .mode-panel.has-viz.is-replay, #mode-hud .mode-panel.has-viz.is-replay"
+      );
+      if (review && !cardFirst) delta = Math.min(delta, review.getBoundingClientRect().top - top - 8);
       if (Math.abs(delta) > 12) window.scrollBy({ top: delta, behavior: scrollBehavior() });
     });
   }
@@ -3770,16 +3803,32 @@
           ? "settling"
           : "variable";
     const g = stats.game;
+    const profile0 = pitchProfile;
+    // Free singing (a siren): no target, so the readout names the nearest note
+    // and says where you sit in it, without "sharp"/"flat"
+    const near = !!stats.nearest;
+    const centreWord = es
+      ? Math.abs(acc) <= 25
+        ? "centrado"
+        : acc > 0
+          ? "arriba del centro"
+          : "abajo del centro"
+      : Math.abs(acc) <= 25
+        ? "centred"
+        : acc > 0
+          ? "above centre"
+          : "below centre";
+    const targetLabel = near ? (es ? "Nota" : "Note") : es ? "Objetivo" : "Target";
     el.innerHTML = `
-      <span><strong>${es ? "Objetivo" : "Target"}</strong> ${stats.targetName || "—"}</span>
+      <span><strong>${targetLabel}</strong> ${stats.targetName || "—"}</span>
       <span><strong>${es ? "Tú" : "You"}</strong> ${stats.voiceName || "—"}</span>
-      <span><strong>Cents</strong> ${acc > 0 ? "+" : ""}${acc}¢ · ${accWordLong}</span>
+      <span><strong>Cents</strong> ${acc > 0 ? "+" : ""}${acc}¢ · ${near ? centreWord : accWordLong}</span>
       <span><strong>${es ? "Precisión" : "Precision"}</strong> ±${prec}¢ · ${precWord}</span>
-      ${g ? `<span><strong>${es ? "Juego" : "Game"}</strong> ${g.score} pts · ${g.accuracyPct}%</span>` : ""}
+      ${g && !profile0?.noGameScore ? `<span><strong>${es ? "Juego" : "Game"}</strong> ${g.score} pts · ${g.accuracyPct}%</span>` : ""}
     `;
     // Live cents in TR corner for non-challenge pitch modes
     const profile = state.exercise ? getProfile(state.exercise) : null;
-    if (profile?.showPitch && !profile?.pitchChallenge) {
+    if (profile?.showPitch && (!profile?.pitchChallenge || profile?.noGameScore)) {
       const q = $("#hud-quality");
       const accEl = $("#hud-acc");
       if (q) {
@@ -3794,7 +3843,7 @@
                 ? "close"
                 : "off");
       }
-      if (accEl) accEl.textContent = accWord;
+      if (accEl) accEl.textContent = near ? (Math.abs(acc) <= 25 ? centreWord : acc > 0 ? "↑" : "↓") : accWord;
       const score = $("#hud-score");
       const combo = $("#hud-combo");
       // Prefer short letter form in the tight TR strip
@@ -3809,7 +3858,7 @@
         combo.title = v;
       }
     }
-    if (g) updateGameHud(g);
+    if (g && !profile?.noGameScore) updateGameHud(g);
   }
 
   async function startPitchViz() {
@@ -3892,7 +3941,7 @@
       reps: "Repeticiones",
       repsFeel: "Reps frase completa (canción A)",
       repsBetter: "Reps frase completa (canción B)",
-      phraseBreath: "Frase sin respirar a mitad",
+      phraseBreath: "Frase sin pausa a mitad",
       pitchComfort: "Comodidad de tono",
       accuracy: "Exactitud",
       precision: "Precisión (estabilidad)",
@@ -4451,7 +4500,7 @@
       : stored;
     el.innerHTML = logs.length
       ? logs.map((l) => `<span class="pill">${l.seconds}s</span>`).join("")
-      : `<span class="muted">Holds appear here automatically (≥2s)</span>`;
+      : `<span class="muted">${escapeHtml(tt("ex.holdsEmpty"))}</span>`;
   }
 
   /* —— Recording —— */
@@ -5506,7 +5555,7 @@
     $("#btn-step-done-rate")?.addEventListener("click", () => {
       stepDoneChoice("rate");
       hideStepDone();
-      openMetricsPanel(true, { focus: true });
+      openMetricsPanel(true, { focus: true, cardFirst: true });
     });
     $("#step-done")?.addEventListener("keydown", (e) => {
       if (e.key !== "Escape") return;
@@ -5658,55 +5707,90 @@
     return !!B?.trialStartedAt?.();
   }
 
+  /**
+   * What the header's one Pro element says for a plan state, and how it looks.
+   * Shared by the header button and anything that must say the same thing.
+   * @param {{kind: string, days: number|null}} plan From headerPlanState().
+   * @returns {{text: string, title: string, cls: string}}
+   */
+  function planLabel(plan) {
+    const days = (n) => tt(n === 1 ? "nav.day" : "nav.days", { n: String(n) });
+    switch (plan.kind) {
+      case "trialAccount":
+      case "trialLocal":
+        return {
+          text: plan.days === null ? tt("nav.planTrial") : tt("nav.planTrialDays", { d: days(plan.days) }),
+          title: tt("nav.subscriptionTitle"),
+          cls: "plan-trial"
+        };
+      case "gift":
+        return {
+          text: plan.days === null ? tt("nav.planGift") : tt("nav.planGiftDays", { d: days(plan.days) }),
+          title: tt("nav.subscriptionTitle"),
+          cls: "plan-gift"
+        };
+      case "canceled":
+        // When it ends is the whole news here, so it is said, not left to
+        // the panel.
+        return {
+          text: plan.days === null ? tt("nav.planEnding") : tt("nav.planEndingDays", { d: days(plan.days) }),
+          title: tt("nav.subscriptionTitle"),
+          cls: "plan-ending"
+        };
+      case "paid":
+        return { text: tt("nav.planPaid"), title: tt("nav.subscriptionTitle"), cls: "plan-paid" };
+      default:
+        // The offer. "Probar" while a free trial is still on the table, "Ver"
+        // once it has been spent, so the word never promises what is gone.
+        return {
+          text: trialSpent() ? tt("nav.proSee") : tt("nav.proTry"),
+          title: tt("nav.proOffer"),
+          cls: "btn-pro"
+        };
+    }
+  }
+
   function updateBillingChrome() {
     const B = window.VTBilling;
     if (!B) return;
     const ent = B.getEntitlement();
     const cfg = B.cfg?.() || {};
     const prelaunch = isCheckoutPrelaunch();
-    const pill = $("#billing-pill");
     const btn = $("#btn-pricing");
     const plan = headerPlanState();
-    const held = plan.kind !== "free";
-    if (pill) {
-      pill.classList.remove("is-trial", "is-free", "is-gift", "is-ending");
-      // The pill is the status and nothing else. It shows only what is actually
-      // held, and it names which kind, because "Pro" in the paid green over a
-      // free trial is the single thing that misled the site's own owner.
-      if (plan.kind === "trialAccount" || plan.kind === "trialLocal") {
-        pill.hidden = false;
-        pill.textContent = plan.days === null
-          ? tt("nav.planTrial")
-          : tt("nav.planTrialDays", { n: String(plan.days) });
-        pill.classList.add("is-trial");
-      } else if (plan.kind === "gift") {
-        pill.hidden = false;
-        pill.textContent = tt("nav.planGift");
-        pill.classList.add("is-gift");
-      } else if (plan.kind === "canceled") {
-        pill.hidden = false;
-        pill.textContent = tt("nav.planEnding");
-        pill.classList.add("is-ending");
-      } else if (plan.kind === "paid") {
-        pill.hidden = false;
-        pill.textContent = "Pro";
-      } else {
-        pill.hidden = true;
-        pill.textContent = "";
-        pill.classList.add("is-free");
-      }
-    }
-    // Two elements saying "Pro" beside each other is what made the offer read
-    // as a badge already earned. Only one of them ever says it now: while
-    // nothing is held this button is the offer, and once something is held the
-    // pill carries the state and the button becomes the way to the plan — named
-    // for what it opens, which is also the route to cancelling.
     if (btn) {
-      btn.textContent = held ? tt("nav.subscription") : tt("nav.pro");
-      btn.title = held ? tt("nav.subscriptionTitle") : tt("nav.proOffer");
-      btn.setAttribute("aria-label", btn.title);
-      btn.classList.toggle("btn-pro", !held);
-      btn.classList.toggle("btn-ghost", held);
+      // One element about Pro, never two. It used to be a status pill beside a
+      // button (on main, a "Pro" button beside a "PRO" badge; after that, a
+      // "Prueba · 5 d" pill beside "Suscripción"): two things about one plan,
+      // side by side, one pressable and one not, and on a phone the pair pushed
+      // "Historial" off the row. Now the button is the plan. With nothing held
+      // it is the offer, in words that say it is one; with something held its
+      // label is what you hold, and pressing it opens that plan, which is also
+      // where cancelling lives. Four kinds of access, four different words, so
+      // colour is never the only thing that tells them apart.
+      const label = planLabel(plan);
+      // Inside an exercise on a phone the header row has room for "Pro" but
+      // not "Probar Pro", so the verb sits in its own span that the stylesheet
+      // drops there. Everywhere else the button reads, and is named, in full.
+      const cut = plan.kind === "free" ? label.text.lastIndexOf("Pro") : -1;
+      if (cut > 0) {
+        const verb = document.createElement("span");
+        verb.className = "pro-verb";
+        verb.textContent = label.text.slice(0, cut);
+        btn.replaceChildren(verb, label.text.slice(cut));
+      } else {
+        btn.textContent = label.text;
+      }
+      btn.title = label.title;
+      // The accessible name is the visible label; the title says what opens.
+      btn.removeAttribute("aria-label");
+      btn.classList.remove("btn-pro", "btn-ghost", "plan-trial", "plan-gift", "plan-paid", "plan-ending");
+      btn.classList.add(label.cls);
+      btn.dataset.plan = plan.kind;
+    }
+    const acctPricing = $("#btn-account-pricing");
+    if (acctPricing) {
+      acctPricing.textContent = plan.kind === "free" ? tt("nav.proSee") : tt("nav.planOpen");
     }
     const exp = $("#btn-export-progress");
     if (exp) exp.hidden = !B.can("export_progress");
@@ -5790,12 +5874,17 @@
     } catch {
       /* ignore */
     }
-    // Soft note for free users when checkout not live (no developer/issue jargon)
+    // Soft note for free users when checkout not live (no developer/issue jargon).
+    // Only for free users: "Sigue practicando gratis; Pro se activará cuando
+    // estén listos" was also told to people already holding Pro.
     const healthNote = $("#pricing-health-note");
     if (healthNote && B.getBillingHealth) {
       try {
         const h = B.getBillingHealth();
-        if (h && !h.ok && h.links && h.verificationRequired && !h.verificationConfigured) {
+        if (headerPlanState().kind !== "free") {
+          healthNote.hidden = true;
+          healthNote.textContent = "";
+        } else if (h && !h.ok && h.links && h.verificationRequired && !h.verificationConfigured) {
           // Links are live but entitlements cannot be verified — checkout is held.
           healthNote.hidden = false;
           healthNote.textContent = tt("pricing.verifyUnavailable");
@@ -5874,7 +5963,8 @@
         tag.textContent = tt("value.tagGift");
         tag.className = "value-pulse-tag is-gift";
       } else if (plan.kind === "canceled") {
-        tag.textContent = tt("value.tagEnding");
+        tag.textContent =
+          plan.days === null ? tt("value.tagEnding") : tt("value.tagEndingDays", { n: String(plan.days) });
         tag.className = "value-pulse-tag is-ending";
       } else if (plan.kind === "paid") {
         tag.textContent = tt("value.tagPro");
@@ -5899,6 +5989,12 @@
         insights.textContent = "";
       }
     }
+
+    // "Pro: exportar y coach" and its price anchor are an offer. They stayed on
+    // this card for people already holding Pro: a second "Pro" button asking
+    // them to buy what the tag beside the title says they have.
+    const cta = $("#value-pulse-cta");
+    if (cta) cta.hidden = plan.kind !== "free";
 
     renderProStudio(pulse, isProUser);
   }
@@ -6385,6 +6481,11 @@
     if (grid) {
       const plans = cfg.plans || [];
       const ent = B.getEntitlement();
+      // Which card is "Plan actual" follows the same reading as the header. The
+      // licence alone cannot tell a trial or a gift from a payment (both carry
+      // plan "pro_monthly"), so trial and gift holders were told the paid
+      // monthly card was their current plan, while the free card said so too.
+      const held = headerPlanState().kind;
       // Computed from the two prices on the cards, so the badge can never
       // disagree with the numbers printed next to it.
       const savingPct = B.annualSavingPct(plans, region);
@@ -6419,8 +6520,10 @@
           let disabled = false;
           let notYet = false;
           if (p.id === "free") {
-            ctaLabel = tt("pricing.current");
+            ctaLabel = held === "free" ? tt("pricing.current") : tt("pricing.freeAlways");
             disabled = true;
+          } else if (held === "trialAccount" || held === "gift") {
+            // Pro is held, but not by buying this card: leave it as an offer.
           } else if (ent.pro && (ent.plan === p.id || (ent.plan === "trial" && p.id !== "free"))) {
             if (ent.plan === p.id || ent.source === "demo") {
               ctaLabel = tt("pricing.current");
@@ -6668,7 +6771,10 @@
     if (!status || !status.available) return "";
     if (status.syncing) return tt("auth.syncing");
     if (status.lastError) return tt("auth.syncError");
-    return status.lastSyncedAt ? tt("auth.syncOk") : tt("auth.syncNever");
+    // "Aún no guardado" is only true of a device that has never synced. After a
+    // reload `lastSyncedAt` starts empty, but a revision on file means this
+    // device's progress has been in the account before.
+    return status.lastSyncedAt || status.rev > 0 ? tt("auth.syncOk") : tt("auth.syncNever");
   }
 
   /**
@@ -6756,7 +6862,28 @@
     // "Entra para guardar tu progreso" stayed on screen after signing in, so the
     // panel asked for something already done.
     const sub = $("#account-sub");
-    if (sub) sub.textContent = signedIn ? tt("auth.subSignedIn") : tt("auth.sub");
+    // Signed out with a sign-in on offer, the heading already says "Guarda tu
+    // progreso" and the offer line says what the account costs, so the lede
+    // only adds what neither says: practising never needs one.
+    if (sub) {
+      sub.textContent = signedIn
+        ? tt("auth.subSignedIn")
+        : accountSignIn().offered
+          ? tt("auth.subOffered")
+          : tt("auth.sub");
+    }
+    // Two places told a signed-in person their progress stays in this browser,
+    // which stopped being true the moment they signed in.
+    const step3 = $("#start-step3-sub");
+    if (step3) {
+      step3.textContent = signedIn
+        ? tt("start.step3subSignedIn")
+        : accountSignIn().offered
+          ? tt("start.step3subOffer")
+          : tt("start.step3sub");
+    }
+    const histSub = $("#history-sub");
+    if (histSub) histSub.textContent = signedIn ? tt("history.subSignedIn") : tt("history.sub");
     // The heading said "Cuenta" — the same defect the header button had, one
     // layer down: a room, not a reason. Signed out it names what you get.
     const title = $("#account-title");
@@ -6770,18 +6897,41 @@
       // act and not for the room: "Cuenta" is a destination nobody who has no
       // account has a reason to press. Signed in it becomes who you are, which
       // is what tells you at a glance that you are.
-      if (account && account.signedIn && account.account) {
-        btnAcc.textContent = (account.account.displayName || account.account.email || "").split("@")[0]
-          || tt("nav.account");
+      //
+      // Signed in, a bare name read as a label rather than a button, and it
+      // could be any length ("pablo.illescas.buendia") on a phone row that has
+      // none to spare. So it is drawn as an account button everywhere: your
+      // initial in a circle, the name beside it where there is room (CSS hides
+      // the name on phones). The accessible name starts with the name.
+      // A Google name is a full name ("Maria Fernanda de la Torre"); the
+      // header only needs the given name. Without one, the address's local part.
+      const acc = account && account.signedIn && account.account ? account.account : null;
+      const who = acc
+        ? ((acc.displayName || "").trim().split(/\s+/)[0] || (acc.email || "").split("@")[0])
+        : session
+          ? session.username.split(".")[0]
+          : "";
+      btnAcc.classList.toggle("is-signed-in", !!(who || (account && account.signedIn)));
+      if (who || (account && account.signedIn) || session) {
+        const name = who || tt("nav.account");
+        const initial = (name.trim()[0] || "?").toLocaleUpperCase();
+        btnAcc.replaceChildren();
+        const dot = document.createElement("span");
+        dot.className = "door-avatar";
+        dot.setAttribute("aria-hidden", "true");
+        dot.textContent = initial;
+        const label = document.createElement("span");
+        label.className = "door-name";
+        label.textContent = name;
+        btnAcc.append(dot, label);
         btnAcc.title = tt("nav.accountTitle");
-      } else if (session) {
-        btnAcc.textContent = session.username.split(".")[0] || tt("nav.account");
-        btnAcc.title = tt("nav.accountTitle");
+        btnAcc.setAttribute("aria-label", tt("nav.accountNamed", { name }));
       } else {
         btnAcc.textContent = tt("nav.signIn");
         btnAcc.title = tt("nav.signInTitle");
+        // The visible word leads the accessible name (WCAG 2.5.3).
+        btnAcc.setAttribute("aria-label", btnAcc.title);
       }
-      btnAcc.setAttribute("aria-label", btnAcc.title);
     }
     if (!out || !inn) return;
 
@@ -6846,6 +6996,21 @@
     if (internal && internal.dataset.autoOpen === "1") {
       internal.open = false;
       internal.dataset.autoOpen = "";
+    }
+    // Closed was not enough. On the live site, which has a real sign-in, a
+    // visitor still saw "Acceso interno" under the Google button: a second way
+    // in, whose form's button says "Entrar" like the header's door. It is a
+    // staff tool, so on a deploy with accounts it only appears for staff who
+    // ask for it (index.html?staff or #staff). A deploy with no worker at all
+    // keeps it, because there it is the only way QA gets in.
+    if (internal) {
+      let staffAsked = false;
+      try {
+        staffAsked = new URLSearchParams(location.search).has("staff") || location.hash === "#staff";
+      } catch {
+        /* ignore */
+      }
+      internal.hidden = offer.configured && !staffAsked;
     }
 
     if (!signedIn) {
@@ -7065,6 +7230,11 @@
         btn.disabled = false;
         btn.textContent = label;
         refreshAccountUI();
+        // Disabling the pressed button dropped focus to the page; put it back on
+        // whatever the panel now leads with.
+        const next = $(accountInitialFocus(false));
+        if (next && next.offsetParent !== null) next.focus({ preventScroll: true });
+        else if (btn.offsetParent !== null) btn.focus({ preventScroll: true });
       }
     });
     $("#btn-account-pricing")?.addEventListener("click", () => {
@@ -7732,7 +7902,7 @@
     /** True if current (or given) exercise should start piano/ref on Empezar when Auto is on. */
     wantsSound: (ex) => {
       const e = ex || state.exercise;
-      return exerciseWantsSound(e, e ? getProfile(e) : null);
+      return soundsOnStart(e, e ? getProfile(e) : null);
     },
     shouldPromptOnLeave,
     getPracticedSec,

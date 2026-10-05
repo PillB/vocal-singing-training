@@ -368,8 +368,17 @@ test.describe("History: days sung first, then what you did last", () => {
     await expect(list.locator("[data-play]")).toHaveCount(2);
     await expect(list.locator("[data-del]")).toHaveCount(2);
     await expect(list.locator(".hist-rec-empty")).toHaveCount(0);
+    // A take plays under its own row, where the tap was (at the foot of the
+    // list it started off screen on a phone).
+    const take = list.locator(".history-item", { has: page.locator("[data-play]") }).first();
+    await take.locator("[data-play]").click();
+    await expect(page.locator("#history-player audio")).toHaveCount(1);
+    expect(await take.evaluate((el) => el.nextElementSibling && el.nextElementSibling.id)).toBe("history-player");
     await list.locator("[data-ab-old]").click();
     await expect(page.locator("#history-player audio")).toHaveCount(2);
+    expect(
+      await list.locator(".history-item", { has: page.locator("[data-ab-old]") }).evaluate((el) => el.nextElementSibling && el.nextElementSibling.id)
+    ).toBe("history-player");
   });
 
   test("a brand-new browser keeps the one-message empty state", async ({ page }) => {

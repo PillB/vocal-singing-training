@@ -522,3 +522,14 @@ test.describe("Target lane: the note to sing is always the primary lane", () => 
     expect(r.badgeTopPx).toBeGreaterThanOrEqual(r.railBottom);
   });
 });
+
+test("the exercise's guide link opens the guide at its practice section, in either language", async ({ page }) => {
+  // Every other guide link is rewritten to the language's start; this one
+  // names its section, so it keeps it (#practica, #practica-en).
+  await boot(page, { lang: "es" });
+  const link = page.locator(".guide-site-link a");
+  await expect(link).toHaveAttribute("href", "guide.html#practica");
+  await page.evaluate(() => VTI18n.setLang("en"));
+  await expect(link).toHaveAttribute("href", "guide.html#practica-en");
+  await expect(page.locator('.app-footer a[href^="guide.html"]').first()).toHaveAttribute("href", "guide.html#que-es-en");
+});

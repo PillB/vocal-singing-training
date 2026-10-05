@@ -1333,7 +1333,8 @@
   /**
    * guide.html holds both languages in one file, so a bare `guide.html` link
    * always lands an English reader on the Spanish half. Point every static
-   * guide link at the right anchor for the current language.
+   * guide link at the right anchor for the current language. A link that
+   * names its section (data-guide-anchor) keeps it, in either language.
    */
   function syncGuideLinks() {
     const href = window.VTTour?.guideHref?.() || "guide.html";
@@ -1343,8 +1344,8 @@
     // switching back to Spanish takes the anchor off again.
     const clean = href === "guide.html#que-es" ? "guide.html" : href;
     $$('a[href^="guide.html"]').forEach((a) => {
-      if (a.hasAttribute("data-guide-anchor")) return;
-      a.href = clean;
+      const anchor = a.getAttribute("data-guide-anchor");
+      a.href = anchor ? window.VTTour?.guideHref?.(anchor) || `guide.html#${anchor}` : clean;
     });
   }
 
@@ -5281,6 +5282,9 @@
           if (!blob) return;
           const url = URL.createObjectURL(blob);
           const player = $("#history-player");
+          // Under the row that was tapped: at the foot of the list it played
+          // off screen on a phone.
+          btn.closest(".history-item")?.after(player);
           // Object URL only — escape if ever concatenated with user text
           player.replaceChildren();
           const audio = document.createElement("audio");
@@ -5318,6 +5322,7 @@
           const uOld = URL.createObjectURL(bOld);
           const uNew = URL.createObjectURL(bNew);
           const player = $("#history-player");
+          btn.closest(".history-item")?.after(player);
           player.innerHTML = `
             <div class="ab-player">
               <div><span class="muted">${tt("retain.audioOlder")}</span>

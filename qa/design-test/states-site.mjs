@@ -96,10 +96,19 @@ export const states = {
   // A returning visitor replaying the tour from the header.
   "tour-returning-1": { label: "tour repetido por alguien que ya practicó, paso 1", days: RET3, action: tourAt(1) },
   "tour-returning-2": { label: "tour repetido por alguien que ya practicó, paso 2", days: RET3, action: tourAt(2) },
+  "tour-returning-3": { label: "tour repetido por alguien que ya practicó, paso 3", days: RET3, action: tourAt(3) },
+  "tour-returning-4": { label: "tour repetido por alguien que ya practicó, paso 4", days: RET3, action: tourAt(4) },
+  "tour-returning-5": { label: "tour repetido por alguien que ya practicó, paso 5", days: RET3, action: tourAt(5) },
 
   // ---- Exercise coach-marks ------------------------------------------------
   "coach-pitch-1": { label: "ejercicio de afinación, ayuda en pantalla, paso 1", days: RET3, action: coachAt("s9-pitch-match", 1) },
   "coach-pitch-3": { label: "ejercicio de afinación, ayuda en pantalla, paso 3", days: RET3, action: coachAt("s9-pitch-match", 3) },
+  "coach-chords-1": { label: "ejercicio con acordes, ayuda en pantalla, paso 1", days: RET3, action: coachAt("s2-solfege-chords", 1) },
+  "coach-chords-2": { label: "ejercicio con acordes, ayuda en pantalla, paso 2", days: RET3, action: coachAt("s2-solfege-chords", 2) },
+  "coach-chords-3": { label: "ejercicio con acordes, ayuda en pantalla, paso 3", days: RET3, action: coachAt("s2-solfege-chords", 3) },
+  "coach-chords-4": { label: "ejercicio con acordes, ayuda en pantalla, paso 4", days: RET3, action: coachAt("s2-solfege-chords", 4) },
+  "coach-chords-5": { label: "ejercicio con acordes, ayuda en pantalla, paso 5", days: RET3, action: coachAt("s2-solfege-chords", 5) },
+  "coach-chords-6": { label: "ejercicio con acordes, ayuda en pantalla, paso 6", days: RET3, action: coachAt("s2-solfege-chords", 6) },
   "coach-speech-1": { label: "ejercicio de voz hablada, ayuda en pantalla, paso 1", days: RET3, tab: "vocal", action: coachAt("v1-diction", 1) },
   "coach-speech-2": { label: "ejercicio de voz hablada, ayuda en pantalla, paso 2", days: RET3, tab: "vocal", action: coachAt("v1-diction", 2) },
 

@@ -170,22 +170,22 @@ test.describe("First visit: what to train, then the Mínimo", () => {
     expect(text).not.toMatch(/Empieza|Cantar|Hablar|Tus básicos|minutos/);
   });
 
-  test("the tour's second step talks about the choice, not a changing exercise", async ({ page }) => {
+  test("the tour's first stop talks about the choice, then visits each place", async ({ page }) => {
     await boot(page, { tour: true });
     await page.locator("[data-tour-invite-start]").click();
     await expect(page.locator(".tour-card")).toBeVisible();
-    await page.locator("[data-tour-next]").click();
-    await expect(page.locator("[data-tour-title]")).toHaveText("Tus básicos de cada día");
+    await expect(page.locator("[data-tour-title]")).toHaveText("Practicar: tus básicos de cada día");
     await expect(page.locator("[data-tour-body]")).toContainText("Cantar o Hablar");
-    // The step about the other ways in is skipped: they are not on screen.
-    const texts = [];
+    const places = [];
     for (let i = 0; i < 6; i++) {
-      texts.push(await page.locator("[data-tour-title]").textContent());
-      const next = page.locator("[data-tour-next]");
-      if (/Listo|Done/.test((await next.textContent()) || "")) break;
-      await next.click();
+      const progress = (await page.locator("[data-tour-progress]").textContent()) || "";
+      places.push(progress.split("·")[1]?.trim());
+      const m = progress.match(/(\d+)\D+(\d+)/);
+      if (m && m[1] === m[2]) break;
+      await page.locator("[data-tour-next]").click();
+      await page.waitForTimeout(450);
     }
-    expect(texts.join(" | ")).not.toMatch(/deja que te guiemos/);
+    expect(places).toEqual(["Practicar", "Ejercicio", "Plan", "Historial", "Cuenta y ayuda"]);
   });
 
   test("the classic arm keeps the old first visit", async ({ page }) => {

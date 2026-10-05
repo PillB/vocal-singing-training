@@ -56,8 +56,8 @@ test.describe("Tour targets", () => {
       await page.locator("[data-tour-next]").click();
     }
     expect(report).toBeNull();
-    // First step is a centred welcome; the rest must all be anchored and visible.
-    for (const s of seen.slice(1)) {
+    // Every stop is anchored: the tour has no centred welcome card any more.
+    for (const s of seen) {
       expect(s.hasTarget, `${s.progress} is anchored to an element`).toBe(true);
       expect(s.onScreen, `${s.progress} target is on screen`).toBe(true);
     }
@@ -195,6 +195,9 @@ test.describe("Tour manners", () => {
     await boot(page);
     const snapshot = () =>
       page.evaluate(() => ({
+        view: window.VTApp.getState().view,
+        hash: location.hash,
+        history: history.length,
         tab: document.querySelector(".tab.active")?.dataset.tab || null,
         tier: document.querySelector(".tier-chip.selected")?.dataset.tier || null,
         cards: document.querySelectorAll("#exercise-list .card-ex").length,
@@ -203,15 +206,82 @@ test.describe("Tour manners", () => {
     const before = await snapshot();
     await page.evaluate(() => window.VTTour.start(true));
     await page.waitForTimeout(400);
+    // The tour opens the exercise, the Plan and the Historial on its way, and
+    // its last stop offers "Ahora no" beside the button that starts practice.
     for (let i = 0; i < 8; i += 1) {
       const p = progressNumbers(await page.locator("[data-tour-progress]").textContent());
-      await page.locator("[data-tour-next]").click();
-      await page.waitForTimeout(280);
       if (p && p.n === p.total) break;
+      await page.locator("[data-tour-next]").click();
+      await page.waitForTimeout(420);
     }
+    await expect(page.locator("[data-tour-skip]")).toHaveText("Ahora no");
+    await page.locator("[data-tour-skip]").click();
+    await page.waitForTimeout(400);
     // It used to switch track and tier to open a sample exercise and never put
     // them back: Vocal/Todos/20 cards went in, Canto/Básico/16 came out.
     expect(await snapshot()).toEqual(before);
+    expect(await page.evaluate(() => localStorage.getItem("vt_tour_v1"))).toBe("finished");
+  });
+
+  test("each stop opens its place, without adding to the back button", async ({ page }) => {
+    await boot(page);
+    const startLen = await page.evaluate(() => history.length);
+    await page.evaluate(() => window.VTTour.start(true));
+    await page.waitForTimeout(400);
+    const stops = [];
+    for (let i = 0; i < 8; i += 1) {
+      const s = await page.evaluate(() => ({
+        progress: document.querySelector("[data-tour-progress]").textContent,
+        view: window.VTApp.getState().view,
+        hash: location.hash,
+        len: history.length
+      }));
+      stops.push(s);
+      const p = progressNumbers(s.progress);
+      if (p && p.n === p.total) break;
+      await page.locator("[data-tour-next]").click();
+      await page.waitForTimeout(420);
+    }
+    expect(stops.map((s) => s.view)).toEqual(["home", "exercise", "plan", "history", "home"]);
+    expect(stops.map((s) => s.progress.split("·")[1]?.trim())).toEqual([
+      "Practicar",
+      "Ejercicio",
+      "Plan",
+      "Historial",
+      "Cuenta y ayuda"
+    ]);
+    for (const s of stops) {
+      expect(s.hash, `${s.progress}: the address stays put`).toBe("");
+      expect(s.len, `${s.progress}: nothing pushed onto the back button`).toBe(startLen);
+    }
+  });
+
+  test("the last stop's main button starts today's basics", async ({ page }) => {
+    await boot(page);
+    // A first visit has no basics of its own yet: the button starts the Mínimo.
+    const expected = await page.evaluate(
+      () =>
+        window.VTLoop.todayBasics("singing")?.order?.[0] ||
+        window.VTLoop.routine("singing", "min").order[0]
+    );
+    await page.evaluate(() => window.VTTour.start(true));
+    await page.waitForTimeout(400);
+    for (let i = 0; i < 8; i += 1) {
+      const p = progressNumbers(await page.locator("[data-tour-progress]").textContent());
+      if (p && p.n === p.total) break;
+      await page.locator("[data-tour-next]").click();
+      await page.waitForTimeout(420);
+    }
+    await expect(page.locator("[data-tour-next]")).toHaveText(/^Empezar mis \d+ min$/);
+    await page.locator("[data-tour-next]").click();
+    await page.waitForTimeout(700);
+    await expect(page.locator("#tour-root")).toBeHidden();
+    const s = await page.evaluate(() => ({
+      view: window.VTApp.getState().view,
+      id: window.VTApp.getState().exercise?.id || null,
+      stored: localStorage.getItem("vt_tour_v1")
+    }));
+    expect(s).toEqual({ view: "exercise", id: expected, stored: "finished" });
   });
 
   test("Enter on Skip closes the tour instead of advancing it", async ({ page }) => {
@@ -248,7 +318,7 @@ test.describe("Tour manners", () => {
     await boot(page);
     await page.evaluate(() => window.VTTour.start(true));
     await page.waitForTimeout(400);
-    await page.locator("[data-tour-next]").click(); // step 2 rings #next-step-card
+    await page.locator("[data-tour-next]").click(); // step 2 rings Empezar, on the exercise
     await page.waitForTimeout(450);
     const before = await page.evaluate(
       () => document.querySelector("[data-tour-progress]").textContent
@@ -269,8 +339,7 @@ test.describe("Tour manners", () => {
     await boot(page);
     await page.evaluate(() => window.VTTour.start(true));
     await page.waitForTimeout(400);
-    // A first visit has three steps (its start panel has no other ways in to
-    // point at); a returning one has four. Walk whichever runs, to its end.
+    // One stop per place, each with its own section of the guide.
     const hrefs = [];
     for (let i = 0; i < 6; i += 1) {
       hrefs.push(await page.locator("[data-tour-guide]").getAttribute("href"));

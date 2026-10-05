@@ -2153,6 +2153,47 @@
     }, 80);
   }
 
+  /**
+   * The exercise the site tour shows: the first of today's basics for the
+   * open track, which is the screen "Empezar" on Practicar leads to.
+   */
+  function tourExerciseId() {
+    const track = state.tab === "vocal" ? "vocal" : "singing";
+    const L = window.VTLoop;
+    const id = L?.todayBasics?.(track)?.order?.[0] || L?.routine?.(track, "min")?.order?.[0];
+    if (id && findExercise(id)) return id;
+    return suggestNextExercise()?.ex?.id || null;
+  }
+
+  /**
+   * One stop of the site tour: show a page as it is, without an address of
+   * its own, so Back after the tour goes where it went before. Resolves once
+   * the page has laid out (Historial reads its list first).
+   */
+  function tourShow(name) {
+    route.silent += 1;
+    let done = null;
+    try {
+      if (name === "plan") {
+        if (state.view !== "plan") renderPlan();
+      } else if (name === "history") {
+        if (state.view !== "history") done = renderHistory();
+      } else if (name === "exercise") {
+        const id = tourExerciseId();
+        if (id && !(state.view === "exercise" && state.exercise?.id === id)) {
+          forceOpenExercise(id, false);
+          // The stage sizes itself over the next frames (fitStageBelowContent at 80ms).
+          done = new Promise((r) => setTimeout(r, 160));
+        }
+      } else if (state.view !== "home") {
+        setView("home");
+      }
+    } finally {
+      route.silent -= 1;
+    }
+    return Promise.resolve(done).catch(() => {});
+  }
+
   function keysHaveProg(ex) {
     try {
       return progressionKeysFor(ex).length > 0;
@@ -8329,6 +8370,7 @@
     resetSessionPractice,
     openExercise: forceOpenExercise,
     setView,
+    tourShow,
     setTab,
     refreshStartPanel: renderNextStepCard,
     startDaily,

@@ -3641,8 +3641,60 @@ body.tour-active.tour-spot-on .tour-backdrop {
 .tour-close:focus-visible {
   color: var(--text);
 }
+/* Round 4: the guide link sits under the body, the way on to the written
+   guide for this stop; it is a 44px target like every other card control. */
 .tour-guide-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--min-tap, 44px);
+  margin: -0.7rem 0 0.2rem;
+  padding: 0 0.1rem;
+  font-size: 0.86rem;
+  color: var(--accent);
   text-decoration: none;
+}
+.tour-guide-link::after {
+  content: "\00a0↗";
+}
+.tour-guide-link:hover,
+.tour-guide-link:focus-visible {
+  text-decoration: underline;
+}
+/* The card waits out of sight while the tour opens the next place, so it
+   never flashes over the page it is leaving. */
+.tour-card-moving {
+  visibility: hidden;
+}
+.tour-spotlight.tour-spot-jump {
+  transition: none;
+}
+.tour-skip {
+  min-height: var(--min-tap, 44px);
+}
+/* The title takes focus so a screen reader starts each stop at its name; it is
+   not a control, so it draws no focus box. The spotlight's ring already marks
+   the target, so the target's own outline would be a second, square ring. */
+.tour-card h3:focus {
+  outline: none;
+}
+body.tour-spot-on .tour-highlight {
+  outline: none;
+}
+/* Last stop on a phone: the button that starts practice takes the full width,
+   with Atrás and Ahora no under it, instead of three buttons wrapping. */
+@media (max-width: 520px) {
+  .tour-card.tour-handoff .tour-nav {
+    display: contents;
+  }
+  .tour-card.tour-handoff [data-tour-next] {
+    order: -1;
+    flex: 1 1 100%;
+    min-height: var(--min-tap, 44px);
+  }
+  .tour-card.tour-handoff .tour-skip {
+    order: 1;
+    margin-left: auto;
+  }
 }
 
 /* First-visit invitation in the start panel, and the route from an exercise's
@@ -3728,6 +3780,12 @@ body.tour-active.tour-spot-on .tour-backdrop {
 body.tour-active {
   overscroll-behavior: contain;
 }
+/* While the tour runs, its scrolls are jumps: it measures straight after each
+   one, and since it moves between pages a smooth scroll left the ring sliding
+   for half a second after the card had arrived. */
+html:has(body.tour-active) {
+  scroll-behavior: auto;
+}
 body.tour-active .app-header,
 body.tour-active .main,
 body.tour-active .app-footer {
@@ -3751,7 +3809,8 @@ body.tour-active .app-footer * {
     width: auto !important;
     max-width: none;
     top: auto !important;
-    bottom: 16px !important;
+    /* Lifted above the EEA statistics question while it is showing */
+    bottom: var(--tour-sheet-bottom, 16px) !important;
     transform: none !important;
   }
   /* The practice screen keeps Start, the octave controls and the guide card in

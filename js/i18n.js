@@ -487,14 +487,35 @@
       "nav.tour": "Recorrido",
       // —— Design: phone-header —— Pro, Cuenta, idioma and Tour behind one button
       "nav.more": "Más",
-      "tour.s2b.title": "Tu siguiente ejercicio, ya elegido",
-      "tour.s2b.body":
-        "No tienes que decidir nada: esta tarjeta propone qué practicar hoy y el botón lo abre. Cambia cada vez que guardas una sesión.",
-      "tour.s2first.title": "Tus básicos de cada día",
-      "tour.s2first.body":
-        "Elige Cantar o Hablar y pulsa Empezar: unos minutos, siempre los mismos. Así se entrena una voz.",
-      "tour.close": "Cerrar tour",
-      "tour.guideLink": "Guía completa",
+      "tour.close": "Cerrar recorrido",
+      "tour.progressPlace": "Paso {n} de {total} · {place}",
+      "tour.place.practice": "Practicar",
+      "tour.place.exercise": "Ejercicio",
+      "tour.place.plan": "Plan",
+      "tour.place.history": "Historial",
+      "tour.place.more": "Cuenta y ayuda",
+      "tour.practice.titleFirst": "Practicar: tus básicos de cada día",
+      "tour.practice.bodyFirst": "Elige Cantar o Hablar y pulsa Empezar: unos minutos guiados, los mismos cada día. Más abajo están todos los ejercicios.",
+      "tour.practice.titleLoop": "Practicar: tus básicos de hoy",
+      "tour.practice.bodyLoop": "Empezar abre los ejercicios de hoy, uno tras otro: Mínimo, Esencial o Clase, según tu tiempo. Más abajo, «Otras formas de practicar» guarda Continuar y las sesiones guiadas.",
+      "tour.practice.title": "Practicar: tu siguiente ejercicio",
+      "tour.practice.body": "El botón abre un ejercicio elegido para hoy. Debajo puedes continuar lo último o iniciar una sesión guiada. Más abajo, todos los ejercicios.",
+      "tour.exercise.title": "Ejercicio: así se practica",
+      "tour.exercise.body": "Empezar enciende el micrófono y el piano, si el ejercicio lo usa. Con ⏺ Grabarme, la toma queda en Historial. «Ayuda» explica cada control de esta pantalla.",
+      "tour.plan.title": "Plan: 12 semanas, un tema por semana",
+      "tour.plan.body": "Eliges un elemento para la semana (aire, afinación, dicción…) y lo practicas. Al final te grabas y decides: sigues con él o pasas al siguiente.",
+      "tour.history.title": "Historial: tus días y tus grabaciones",
+      "tour.history.body": "Cada día que practicas queda marcado. Debajo, lo último que hiciste, para volver a abrirlo, tus grabaciones y tu progreso.",
+      "tour.more.title": "Entrar, Pro y ayuda",
+      "tour.more.bodyPhone": "Entrar guarda tu progreso en tu cuenta. En «Más» están Pro, English y la ayuda: este recorrido y la guía de uso.",
+      "tour.more.body": "Entrar guarda tu progreso en tu cuenta. Al lado: Pro, English y la ayuda, con este recorrido y la guía de uso.",
+      "tour.ctaFirst": "Empezar mis {min} min",
+      "tour.ctaLoop": "Empezar básicos",
+      "tour.cta": "Empezar",
+      "tour.notNow": "Ahora no",
+      "tour.skipHelp": "Saltar ayuda",
+      "tour.closeHelp": "Cerrar ayuda",
+      "tour.guideLink": "Más en la guía",
       "nav.accountTitle": "Tu cuenta y tu suscripción",
       "nav.langAria": "Cambiar idioma",
       "nav.tourTitle": "Recorrido guiado por el sitio",
@@ -526,67 +547,34 @@
       "tour.next": "Siguiente",
       "tour.finish": "Listo",
       "tour.progress": "Paso {n} de {total}",
-      "tour.s1.title": "Bienvenido a tu estudio de voz",
-      "tour.s1.body":
-        "Aquí practicas oratoria y canto en casa: micrófono, piano, métricas y un plan de 12 semanas. Todo se guarda en este navegador.",
-      "tour.s5.title": "O deja que te guiemos",
-      "tour.s5.body":
-        "Continuar retoma lo último. Una sesión guiada recorre en orden un grupo del catálogo (las tareas de la clase, Técnica o Expresión) o los dos, con pausa y progreso.",
-      "tour.s6.title": "Dónde está todo lo demás",
-      "tour.s6.body":
-        "Plan de 12 semanas, Historial con tus grabaciones, Entrar para guardar tu progreso, Pro e idioma. Lo que no quepa en este recorrido está en la Guía, y el botón Recorrido te trae de vuelta aquí.",
       "uiTour.help": "Ayuda",
-      "uiTour.start.title": "Empezar / Detener",
+      "uiTour.start.title": "Empezar",
       "uiTour.start.body":
-        "Un solo botón enciende el micrófono, el medidor y (si aplica) el piano. Detener apaga todo. Puedes cambiar opciones en vivo.",
-      "uiTour.mic.title": "Micrófono y nivel",
-      "uiTour.mic.body":
-        "La barra muestra tu energía. Sube o baja la sensibilidad si el mic te corta o capta ruido de fondo.",
+        "Enciende el micrófono (y el piano, si el ejercicio lo usa); Detener apaga todo. Marca ⏺ Grabarme antes si quieres escucharte después.",
       "uiTour.guide.title": "Pasos y consejos",
       "uiTour.guide.body":
-        "Abre «Cómo practicar» para la guía del ejercicio, pasos, tips y qué evitar. Las métricas se guardan al final.",
-      "uiTour.done.title": "Listo en esta pantalla",
-      "uiTour.done.body":
-        "Pulsa Empezar cuando quieras. El botón «Ayuda» de arriba repite estas indicaciones si las necesitas.",
-      "uiTour.hw.intro.title": "Escenario de afinación",
-      "uiTour.hw.intro.body":
-        "Esta pantalla es como un juego: la autopista de notas en el centro y controles en las esquinas. Menos scroll, más práctica.",
-      "uiTour.hw.canvas.title": "Autopista de notas",
+        "Aquí están los pasos, en orden. La explicación completa, con trucos y qué evitar, está en «Cómo practicar».",
+      "uiTour.hw.canvas.title": "La autopista de notas",
       "uiTour.hw.canvas.body":
-        "Carriles grises = mapa de la progresión; ámbar = acorde activo; verde = nota a cantar. Tu voz es el punto que deja rastro — apunta al carril correcto.",
-      "uiTour.hw.top.title": "Barra superior",
-      "uiTour.hw.top.body":
-        "Estado, tiempo y acorde actual a la izquierda. En el centro: progresión y modo (1 nota / arpegio / acordes). A la derecha: puntuación o cents.",
+        "La nota verde es la que toca cantar; tu voz es el punto que deja rastro. Lleva el punto a la nota verde.",
+      "uiTour.hw.score.title": "¿Vas afinado?",
+      "uiTour.hw.score.body":
+        "Este recuadro dice cuánto te separas de la nota, en cents: + vas agudo, − vas grave, cerca de 0 vas afinado. En los retos dice PERFECTO, BIEN o CERCA y suma puntos.",
       "uiTour.hw.prog.title": "Acordes y modo",
       "uiTour.hw.prog.body":
-        "Elige la progresión y el modo. Por defecto es «1 nota» (más fácil): oyes y apuntas a una nota a la vez. Luego prueba arpegio o acordes.",
-      "uiTour.hw.score.title": "Tu afinación en vivo",
-      "uiTour.hw.score.body":
-        "Ves si estás en el tono (PERFECTO / BIEN / CERCA) o cuántos cents te faltan. En modo reto también hay puntos y combo.",
-      "uiTour.hw.oct.title": "Registro (octava)",
+        "«Acordes» elige la secuencia de acordes que suena de fondo. «Modo» decide qué toca el piano: «1 nota», solo la que cantas (empieza por ahí); «Arpegio», las notas del acorde una a una; «Acordes», todas juntas.",
+      "uiTour.hw.oct.title": "Si no te llega la voz",
       "uiTour.hw.oct.body":
-        "Si las notas quedan muy graves o agudas para tu voz, usa − / + o deja «Rango» auto: si intentas y no alcanzas, mueve una octava.",
-      "uiTour.hw.mode.title": "1 nota por defecto",
-      "uiTour.hw.mode.body":
-        "«1 nota» suena una nota y te da un objetivo claro. «Arpegio» desglosa el acorde. «Acordes» apila todas las voces — más avanzado.",
-      "uiTour.hw.cue.title": "Pista del ejercicio",
-      "uiTour.hw.cue.body":
-        "Justo bajo la autopista ves la consigna corta del modo (qué hacer ahora). El texto se muestra completo, sin recortes.",
-      "uiTour.sp.intro.title": "Escenario de voz hablada",
-      "uiTour.sp.intro.body":
-        "Aquí no hay autopista de notas: el panel central guía el ejercicio (pausas, volumen, dicción…). Los controles siguen en las esquinas.",
-      "uiTour.sp.focus.title": "Panel del ejercicio",
+        "− y + mueven las notas una octava abajo o arriba. «A mi voz» lo hace sola si intentas una nota y no llegas.",
+      "uiTour.sp.focus.title": "Qué hacer ahora",
       "uiTour.sp.focus.body":
-        "Lee la consigna grande y reacciona en voz alta. El medidor de nivel confirma que el mic te oye.",
-      "uiTour.hold.intro.title": "Sostenidos de voz",
-      "uiTour.hold.intro.body":
-        "Este ejercicio mide cuánto mantienes la voz con energía. Empieza, canta o habla sostenido, y suelta al terminar.",
-      "uiTour.hold.live.title": "Contador en vivo",
+        "Este panel te guía paso a paso y marca el tiempo. Haz lo que dice, en voz alta.",
+      "uiTour.hold.live.title": "Contador de sostenido",
       "uiTour.hold.live.body":
-        "El reloj de sostenido sube mientras hay voz. Hay un pequeño margen si el mic parpadea — no te cortes al primer silencio breve.",
-      "uiTour.hold.block.title": "Historial de holds",
+        "Sube mientras mantienes la voz. Un corte breve del micrófono no lo reinicia.",
+      "uiTour.hold.block.title": "Tus sostenidos",
       "uiTour.hold.block.body":
-        "Los sostenidos ≥2s se registran solos. Revisa la racha y apunta a mejorar tu máximo con calma.",
+        "Cada sostenido de 2 s o más se apunta solo aquí. Intenta superar tu máximo, sin forzar.",
       "session.banner": "Sesión guiada",
       "session.pause": "Pausar",
       "session.resume": "Reanudar",
@@ -1510,14 +1498,35 @@
       "nav.tour": "Tour",
       // —— Design: phone-header —— Pro, Account, language and Tour behind one button
       "nav.more": "More",
-      "tour.s2b.title": "Your next exercise, already picked",
-      "tour.s2b.body":
-        "You do not have to decide anything: this card suggests what to practise today and the button opens it. It changes every time you save a session.",
-      "tour.s2first.title": "Your everyday basics",
-      "tour.s2first.body":
-        "Pick Singing or Speaking and press Start: a few minutes, the same every day. That is how a voice is trained.",
       "tour.close": "Close tour",
-      "tour.guideLink": "Full guide",
+      "tour.progressPlace": "Step {n} of {total} · {place}",
+      "tour.place.practice": "Practice",
+      "tour.place.exercise": "Exercise",
+      "tour.place.plan": "Plan",
+      "tour.place.history": "History",
+      "tour.place.more": "Account and help",
+      "tour.practice.titleFirst": "Practice: your everyday basics",
+      "tour.practice.bodyFirst": "Choose Singing or Speaking and press Start: a few guided minutes, the same every day. Every exercise is further down.",
+      "tour.practice.titleLoop": "Practice: today’s basics",
+      "tour.practice.bodyLoop": "Start opens today’s exercises, one after another: Minimum, Essential or Class, depending on your time. Further down, “Other ways to practise” holds Continue and the guided sessions.",
+      "tour.practice.title": "Practice: your next exercise",
+      "tour.practice.body": "The button opens an exercise picked for today. Below it you can continue where you left off or start a guided session. Every exercise is further down.",
+      "tour.exercise.title": "Exercise: how practice works",
+      "tour.exercise.body": "Start turns on the microphone, and the piano if the exercise uses it. With ⏺ Record me, the take is kept in History. “Help” explains every control on this screen.",
+      "tour.plan.title": "Plan: 12 weeks, one theme a week",
+      "tour.plan.body": "You pick one element for the week (breath, tuning, diction…) and practise it. At the end you record yourself and decide: stay with it or move on to the next.",
+      "tour.history.title": "History: your days and your recordings",
+      "tour.history.body": "Every day you practise is marked. Below: what you did last, to open it again, your recordings and your progress.",
+      "tour.more.title": "Sign in, Pro and help",
+      "tour.more.bodyPhone": "Sign in keeps your progress in your account. “More” holds Pro, Español and help: this tour and the user guide.",
+      "tour.more.body": "Sign in keeps your progress in your account. Beside it: Pro, Español and help, with this tour and the user guide.",
+      "tour.ctaFirst": "Start my {min} min",
+      "tour.ctaLoop": "Start basics",
+      "tour.cta": "Start",
+      "tour.notNow": "Not now",
+      "tour.skipHelp": "Skip help",
+      "tour.closeHelp": "Close help",
+      "tour.guideLink": "More in the guide",
       "nav.accountTitle": "Your account and subscription",
       "nav.langAria": "Change language",
       "nav.tourTitle": "Guided tour of the site",
@@ -1549,67 +1558,34 @@
       "tour.next": "Next",
       "tour.finish": "Done",
       "tour.progress": "Step {n} of {total}",
-      "tour.s1.title": "Welcome to your voice studio",
-      "tour.s1.body":
-        "Practice speaking and singing at home: mic, piano, metrics, and a 12-week plan. Everything stays in this browser.",
-      "tour.s5.title": "Or let us lead",
-      "tour.s5.body":
-        "Continue picks up where you left off. A guided session walks one catalog group in order (the class homework, Technique or Expression) or both, with pause and progress.",
-      "tour.s6.title": "Where everything else lives",
-      "tour.s6.body":
-        "The 12-week plan, History with your recordings, Sign in to keep your progress, Pro and language. Anything a tour cannot hold is in the Guide, and the Tour button brings you back here.",
       "uiTour.help": "Help",
-      "uiTour.start.title": "Start / Stop",
+      "uiTour.start.title": "Start",
       "uiTour.start.body":
-        "One button turns on the mic, level meter, and piano when needed. Stop shuts everything down. You can change options live.",
-      "uiTour.mic.title": "Mic and level",
-      "uiTour.mic.body":
-        "The bar shows your energy. Raise or lower sensitivity if the mic cuts out or picks up room noise.",
+        "Turns on the microphone (and the piano, if the exercise uses it); Stop turns everything off. Tick ⏺ Record me first if you want to hear yourself afterwards.",
       "uiTour.guide.title": "Steps and tips",
       "uiTour.guide.body":
-        "Open “How to practice” for steps, tips, and what to avoid. Save metrics when you’re done.",
-      "uiTour.done.title": "You’re set on this screen",
-      "uiTour.done.body":
-        "Hit Start when ready. The Help button above replays these tips anytime.",
-      "uiTour.hw.intro.title": "Pitch stage",
-      "uiTour.hw.intro.body":
-        "This layout is game-like: pitch highway in the center, controls in the corners. Less scrolling, more singing.",
-      "uiTour.hw.canvas.title": "Note highway",
+        "Here are the steps, in order. The full explanation, with tips and what to avoid, is in “How to practice”.",
+      "uiTour.hw.canvas.title": "The note highway",
       "uiTour.hw.canvas.body":
-        "Grey lanes = progression map; amber = active chord; green = target note. Your voice is the glowing trail — aim for the right lane.",
-      "uiTour.hw.top.title": "Top rail",
-      "uiTour.hw.top.body":
-        "Status, timer, and current chord on the left. Center: progression + mode (1 note / arpeggio / chords). Right: score or cents.",
+        "The green note is the one to sing; your voice is the dot that leaves a trail. Bring the dot to the green note.",
+      "uiTour.hw.score.title": "Are you in tune?",
+      "uiTour.hw.score.body":
+        "This box shows how far you are from the note, in cents: + is too high, − is too low, near 0 is in tune. In challenges it says PERFECT, GOOD or CLOSE and keeps score.",
       "uiTour.hw.prog.title": "Chords and mode",
       "uiTour.hw.prog.body":
-        "Pick a progression and play mode. Default is “1 note” (easiest): one target at a time. Later try arpeggio or full chords.",
-      "uiTour.hw.score.title": "Live pitch feedback",
-      "uiTour.hw.score.body":
-        "See if you’re on pitch (PERFECT / GOOD / CLOSE) or how many cents off. Challenge mode adds points and combo.",
-      "uiTour.hw.oct.title": "Range (octave)",
+        "“Chords” picks the chord sequence played underneath. “Mode” sets what the piano plays: “1 note”, only the one you sing (start there); “Arpeggio”, the chord’s notes one by one; “Chords”, all together.",
+      "uiTour.hw.oct.title": "If a note is out of reach",
       "uiTour.hw.oct.body":
-        "If notes sit too low or high for your voice, use − / + or leave Range auto on: when you try and plateau short, it shifts an octave.",
-      "uiTour.hw.mode.title": "1 note by default",
-      "uiTour.hw.mode.body":
-        "“1 note” plays and targets a single pitch — clearest for learning. Arpeggio breaks the chord; Chords stack voices — more advanced.",
-      "uiTour.hw.cue.title": "Exercise cue",
-      "uiTour.hw.cue.body":
-        "Just under the highway is the short mode prompt (what to do now). The text shows in full — no clipping.",
-      "uiTour.sp.intro.title": "Speech stage",
-      "uiTour.sp.intro.body":
-        "No pitch highway here: the center panel guides the drill (pauses, volume, diction…). Corner controls still run the session.",
-      "uiTour.sp.focus.title": "Exercise panel",
+        "− and + move the notes down or up an octave. “My range” does it for you when you try a note and can’t reach it.",
+      "uiTour.sp.focus.title": "What to do now",
       "uiTour.sp.focus.body":
-        "Read the big prompt and respond out loud. The level meter confirms the mic hears you.",
-      "uiTour.hold.intro.title": "Voice holds",
-      "uiTour.hold.intro.body":
-        "This exercise times how long you keep voiced energy. Start, sustain, then release when done.",
-      "uiTour.hold.live.title": "Live hold timer",
+        "This panel walks you through step by step and keeps time. Do what it says, out loud.",
+      "uiTour.hold.live.title": "Hold timer",
       "uiTour.hold.live.body":
-        "The hold clock rises while you have voice. Brief mic dropouts get a little grace — don’t cut off at the first flicker.",
-      "uiTour.hold.block.title": "Hold history",
+        "It rises while you keep your voice going. A brief microphone dropout does not reset it.",
+      "uiTour.hold.block.title": "Your holds",
       "uiTour.hold.block.body":
-        "Holds ≥2s log automatically. Check your streak and gently push your max.",
+        "Every hold of 2 s or more is noted here on its own. Try to beat your best, without forcing.",
       "session.banner": "Structured session",
       "session.pause": "Pause",
       "session.resume": "Resume",

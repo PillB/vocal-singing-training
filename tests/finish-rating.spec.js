@@ -405,6 +405,48 @@ test.describe("Rating: one tap after a take", () => {
     expect(r.metrics).toMatchObject({ ease: "2", steadiness: "2", transfer: "2" });
   });
 
+  test("the header's tour on an exercise leaves it the way Back does, asking first", async ({ page }) => {
+    await boot(page, { viewport: { width: 1280, height: 800 } });
+    const view = () => page.evaluate(() => window.VTApp.getState().view);
+    const tour = async () => {
+      if (!(await page.locator("#btn-tour").isVisible())) await page.locator("#btn-help").click();
+      await page.locator("#btn-tour").click();
+      await page.clock.runFor(1000);
+    };
+    // Nothing worth keeping yet: the exercise closes and the tour starts.
+    await openSingle(page, "s4-lip-trills");
+    await tour();
+    await expect(page.locator(".tour-card")).toBeVisible();
+    expect(await view()).toBe("home");
+    await page.keyboard.press("Escape");
+    await expect(page.locator(".tour-card")).toBeHidden();
+
+    // Practice worth keeping: it asks. Staying keeps the mic on and starts no tour.
+    await openSingle(page, "s4-lip-trills");
+    await start(page);
+    await page.clock.fastForward(50000);
+    await page.clock.runFor(500);
+    expect(await live(page)).toBe(true);
+    await tour();
+    await expect(page.locator("#leave-modal")).toBeVisible();
+    await page.locator("#leave-cancel").click();
+    await expect(page.locator("#leave-modal")).toBeHidden();
+    await page.clock.runFor(500);
+    await expect(page.locator(".tour-card")).toBeHidden();
+    expect(await live(page)).toBe(true);
+    expect(await view()).toBe("exercise");
+
+    // Descartar: the mic stops and the practice still counts, then the tour.
+    await tour();
+    await expect(page.locator("#leave-modal")).toBeVisible();
+    await page.locator("#leave-discard").click();
+    await page.clock.runFor(1000);
+    await expect(page.locator(".tour-card")).toBeVisible();
+    expect(await live(page)).toBe(false);
+    expect(await view()).toBe("home");
+    expect((await records(page, "s4-lip-trills")).day).not.toBeNull();
+  });
+
   test("a count nobody asked for is not scored as zero: Fácil reads as Fácil", async ({ page }) => {
     await boot(page);
     // Pace variation: two self-ratings and a count of key slowdowns.

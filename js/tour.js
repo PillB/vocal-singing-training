@@ -1030,7 +1030,18 @@
   }
 
   function start(fromButton) {
-    beginTour(homeSteps(), { fromButton: !!fromButton, pack: null, stay: false });
+    const go = () => beginTour(homeSteps(), { fromButton: !!fromButton, pack: null, stay: false });
+    // The header's tour can be pressed on an exercise. Leave it the way its own
+    // back button does first, so the mic, the piano, the timer and the
+    // recorder stop, and practice worth keeping asks before it goes. Staying
+    // ("Seguir practicando", "Puntuar ahora") starts no tour.
+    if (fromButton && global.VTApp?.getState?.()?.view === "exercise" && global.VTApp.goHome) {
+      Promise.resolve(global.VTApp.goHome()).then((left) => {
+        if (left !== false) go();
+      });
+      return;
+    }
+    go();
   }
 
   /**

@@ -91,6 +91,32 @@ test.describe("Pro features", () => {
     expect(r.names.some((n) => /Coach/i.test(n))).toBe(true);
   });
 
+  test("switching profile in Historial redraws the sessions beside the selector", async ({ page }) => {
+    await boot(page);
+    await page.evaluate(() => {
+      const at = new Date().toISOString();
+      localStorage.setItem(
+        "vt_profiles_v1",
+        JSON.stringify({
+          activeId: "default",
+          profiles: {
+            default: { id: "default", name: "Default", createdAt: at },
+            p_ana: { id: "p_ana", name: "Ana", createdAt: at }
+          }
+        })
+      );
+    });
+    await toProgress(page);
+    const row = page.locator('#history-list [data-open-ex="v1-diction"]');
+    await expect(row).toBeVisible();
+    await page.selectOption("#sel-profile", "p_ana");
+    // Ana has saved nothing: her list is empty, not the main profile's.
+    await expect(row).toHaveCount(0);
+    await expect(page.locator("#history-list")).toContainText("Aún no has guardado ninguna sesión");
+    await page.selectOption("#sel-profile", "default");
+    await expect(row).toBeVisible();
+  });
+
   test("insights and pulse expose spark + coachFocus", async ({ page }) => {
     await boot(page);
     const r = await page.evaluate(() => {

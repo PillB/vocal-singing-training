@@ -6950,11 +6950,22 @@
     });
   }
 
+  /**
+   * Another profile is another record. The selector sits in Historial, so the
+   * list beside it is redrawn from the new profile, and so are Practicar's
+   * cards (their done marks); home redraws the rest when it is next shown.
+   */
+  function showActiveProfile() {
+    renderValuePulse();
+    renderExerciseList();
+    if (state.view === "history") renderHistory();
+  }
+
   function bindProStudio() {
     $("#sel-profile")?.addEventListener("change", (e) => {
       const id = e.target.value;
       VTStorage?.setActiveProfile?.(id);
-      renderValuePulse();
+      showActiveProfile();
       toast(tt("pro.profileSwitched"), { durationMs: 1600, debounceMs: 200 });
     });
     $("#btn-profile-add")?.addEventListener("click", () => {
@@ -6978,7 +6989,7 @@
         toast(tt("pro.profileLimit", { n: String(max) }));
         return;
       }
-      renderValuePulse();
+      showActiveProfile();
       toast(tt("pro.profileCreated"));
     });
     $("#btn-profile-rename")?.addEventListener("click", () => {

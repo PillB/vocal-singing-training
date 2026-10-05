@@ -1,5 +1,5 @@
 {
- "about": "First-click tasks for the whole-site review of October 2026. Each task starts on the screen named by state and vp (states.mjs plus states-site.mjs). hit = controls on the path to doing the task (a closed menu that holds the control counts); near = a reasonable first step that is not on the path; scroll = the control is below the first screen, so 'I would scroll' is a right first move.",
+ "about": "First-click tasks for the whole-site review of October 2026. Each task starts on the screen named by state and vp (states.mjs plus states-site.mjs). hit = controls that do the task directly; via = a closed menu that holds the control; near = a reasonable first step that is not on the path; scroll = the control is below the first screen, so 'I would scroll' is a right first move.",
  "tasks": [
   {
    "id": "start-first",
@@ -56,10 +56,12 @@
    "vp": "phone",
    "task": "Prefieres usar la aplicación en inglés.",
    "hit": [
-    "#btn-lang",
-    "#btn-more"
+    "#btn-lang"
    ],
-   "near": []
+   "near": [],
+   "via": [
+    "#btn-more"
+   ]
   },
   {
    "id": "account",
@@ -69,9 +71,7 @@
    "hit": [
     "#btn-account"
    ],
-   "near": [
-    "#btn-more"
-   ]
+   "near": []
   },
   {
    "id": "price",
@@ -80,12 +80,14 @@
    "task": "Quieres saber qué incluye la versión de pago y cuánto cuesta.",
    "hit": [
     "#btn-pricing",
-    "#btn-more",
     "#btn-value-pro",
     "#value-banner-cta"
    ],
    "near": [
     "#btn-account"
+   ],
+   "via": [
+    "#btn-more"
    ]
   },
   {
@@ -95,11 +97,13 @@
    "task": "Quieres que la aplicación te vuelva a enseñar cómo funciona, paso a paso.",
    "hit": [
     "#btn-tour",
-    "#btn-more",
     "[data-tour-invite-start]"
    ],
    "near": [
     "a[href*='guide']"
+   ],
+   "via": [
+    "#btn-more"
    ]
   },
   {
@@ -128,8 +132,7 @@
     "#chk-reminders"
    ],
    "near": [
-    "#loop-goal-sel",
-    "#btn-more"
+    "#loop-goal-sel"
    ]
   },
   {
@@ -248,10 +251,12 @@
    "vp": "desktop",
    "task": "Prefieres usar la aplicación en inglés.",
    "hit": [
-    "#btn-lang",
-    "#btn-more"
+    "#btn-lang"
    ],
-   "near": []
+   "near": [],
+   "via": [
+    "#btn-more"
+   ]
   },
   {
    "id": "d-guide",
@@ -260,11 +265,12 @@
    "scroll": true,
    "task": "Quieres leer un manual completo de cómo usar el sitio.",
    "hit": [
-    "a[href*='guide']",
-    "#btn-tour",
-    "#btn-more"
+    "a[href*='guide']"
    ],
-   "near": []
+   "near": [
+    "#btn-tour"
+   ],
+   "via": []
   },
   {
    "id": "d-history",

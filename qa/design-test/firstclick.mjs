@@ -33,8 +33,11 @@
  *                  "hit": ["#btn-history"], "near": ["#btn-more"] } ] }
  *   hit   selectors of the controls that do the task. A badge counts as a hit
  *         when its control matches, is inside, or contains a match.
- *   near  selectors that are a reasonable first step without doing it yet
- *         (a menu the control is in). Scored apart from hits.
+ *   via   selectors of a closed menu that holds the control (the right first
+ *         tap, but only if the person guesses what the menu holds). Scored as
+ *         "on the path", apart from direct hits.
+ *   near  selectors that are a reasonable first step without doing it yet.
+ *         Scored apart from hits.
  *   scroll true when the control is not in the first screen and "I would
  *         scroll down" (answer 0) is the right first move.
  *
@@ -160,6 +163,7 @@ function markControls(tasks) {
     const tag = {};
     for (const t of tasks) {
       if (matchAny(el, t.hit)) tag[t.id] = "hit";
+      else if (matchAny(el, t.via)) tag[t.id] = "via";
       else if (matchAny(el, t.near)) tag[t.id] = "near";
     }
     key.push({
@@ -247,10 +251,10 @@ async function render() {
     const dir = path.join(out, k);
     fs.mkdirSync(dir, { recursive: true });
     await page.screenshot({ path: path.join(dir, "clean.png") });
-    const key = await page.evaluate(markControls, ts.map((t) => ({ id: t.id, hit: t.hit, near: t.near || [] })));
+    const key = await page.evaluate(markControls, ts.map((t) => ({ id: t.id, hit: t.hit, via: t.via || [], near: t.near || [] })));
     await page.screenshot({ path: path.join(dir, "marked.png") });
     fs.writeFileSync(path.join(dir, "key.json"), JSON.stringify({ state: stateName, vp: vpName, errors, controls: key }, null, 1));
-    const missing = ts.filter((t) => !t.scroll && !key.some((c) => c.tasks[t.id] === "hit")).map((t) => t.id);
+    const missing = ts.filter((t) => !t.scroll && !key.some((c) => ["hit", "via"].includes(c.tasks[t.id]))).map((t) => t.id);
     index[k] = { controls: key.length, errors: errors.length, tasksWithoutAVisibleHit: missing };
     console.log(`${k}: ${key.length} controls${missing.length ? `; no visible right answer for ${missing.join(", ")}` : ""}${errors.length ? `; ${errors.length} page errors` : ""}`);
     await ctx.close();
@@ -347,10 +351,10 @@ function score() {
       else if (a.choice === 0) outcome = t.scroll ? "hit" : "scroll";
       else {
         const c = key.controls.find((x) => x.n === a.choice);
-        outcome = !c ? "wrong" : c.tasks[t.id] === "hit" ? "hit" : c.tasks[t.id] === "near" ? "near" : "wrong";
+        outcome = !c ? "wrong" : ["hit", "via", "near"].includes(c.tasks[t.id]) ? c.tasks[t.id] : "wrong";
       }
       per[arm] ??= {};
-      const s = (per[arm][t.id] ??= { n: 0, hit: 0, near: 0, scroll: 0, wrong: 0, giveup: 0, ease: [] });
+      const s = (per[arm][t.id] ??= { n: 0, hit: 0, via: 0, near: 0, scroll: 0, wrong: 0, giveup: 0, ease: [] });
       s.n++;
       s[outcome]++;
       if (typeof a.ease === "number") s.ease.push(a.ease);
@@ -359,28 +363,29 @@ function score() {
     }
   }
   const arms = Object.keys(per).sort();
-  const lines = ["| task | " + arms.map((a) => `${a} first-click right (near) | ${a} ease`).join(" | ") + " |", "|---|" + arms.map(() => "---|---|").join("")];
+  const lines = ["| task | " + arms.map((a) => `${a} direct + via menu (near) | ${a} ease`).join(" | ") + " |", "|---|" + arms.map(() => "---|---|").join("")];
   const tot = {};
   for (const t of tasks) {
     const cells = arms.map((a) => {
       const s = per[a][t.id];
       if (!s) return "— | —";
-      (tot[a] ??= { n: 0, hit: 0, near: 0, ease: [] }).n += s.n;
+      (tot[a] ??= { n: 0, hit: 0, via: 0, near: 0, ease: [] }).n += s.n;
       tot[a].hit += s.hit;
+      tot[a].via += s.via;
       tot[a].near += s.near;
       tot[a].ease.push(...s.ease);
       const e = s.ease.length ? (s.ease.reduce((x, y) => x + y, 0) / s.ease.length).toFixed(1) : "—";
-      return `${s.hit}/${s.n}${s.near ? ` (+${s.near})` : ""} | ${e}`;
+      return `${s.hit}${s.via ? `+${s.via}` : ""}/${s.n}${s.near ? ` (${s.near})` : ""} | ${e}`;
     });
     lines.push(`| ${t.id} | ${cells.join(" | ")} |`);
   }
   const mean = (xs) => (xs.length ? (xs.reduce((x, y) => x + y, 0) / xs.length).toFixed(2) : "—");
   lines.push(
     `| **all** | ${arms
-      .map((a) => `**${tot[a].hit}/${tot[a].n} = ${Math.round((100 * tot[a].hit) / tot[a].n)}%**${tot[a].near ? ` (+${tot[a].near})` : ""} | **${mean(tot[a].ease)}**`)
+      .map((a) => `**direct ${Math.round((100 * tot[a].hit) / tot[a].n)}%, on the path ${Math.round((100 * (tot[a].hit + tot[a].via)) / tot[a].n)}%** (${tot[a].hit}+${tot[a].via}/${tot[a].n}) | **${mean(tot[a].ease)}**`)
       .join(" | ")} |`
   );
-  const out = { arms: Object.fromEntries(arms.map((a) => [a, { ...tot[a], ease: Number(mean(tot[a].ease)), rate: tot[a].hit / tot[a].n }])), perTask: per, detail };
+  const out = { arms: Object.fromEntries(arms.map((a) => [a, { ...tot[a], ease: Number(mean(tot[a].ease)), direct: tot[a].hit / tot[a].n, onPath: (tot[a].hit + tot[a].via) / tot[a].n }])), perTask: per, detail };
   fs.mkdirSync(WORK, { recursive: true });
   fs.writeFileSync(path.join(WORK, "scores.json"), JSON.stringify(out, null, 1));
   fs.writeFileSync(path.join(WORK, "scores.md"), lines.join("\n") + "\n");

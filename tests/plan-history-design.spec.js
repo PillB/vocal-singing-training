@@ -299,6 +299,9 @@ test.describe("History: days sung first, then what you did last", () => {
     await expect(today).toHaveCount(1);
     await expect(today).toContainText("23");
     expect(await today.evaluate((el) => getComputedStyle(el).outlineStyle)).toBe("solid");
+    // The outline is named, in the key and to a screen reader.
+    await expect(today.locator(".sr-only")).toContainText("hoy");
+    await expect(list.locator(".hist-legend")).toHaveText("✓ día cantado · hoy");
 
     await expect(list.locator("#hist-recent-h")).toHaveText("Lo último que practicaste");
     const rows = list.locator(".hist-recent .history-item");
@@ -306,9 +309,9 @@ test.describe("History: days sung first, then what you did last", () => {
     await expect(rows).toHaveCount(3);
     await expect(list).not.toContainText("s2-humming");
     await expect(rows.nth(0)).toContainText("Trinos de labios");
-    await expect(rows.nth(0).locator(".meta")).toHaveText("hoy · 3 veces · último puntaje 7/10");
-    await expect(rows.nth(1).locator(".meta")).toHaveText("ayer · 3 veces · último puntaje 6/10");
-    await expect(rows.nth(2).locator(".meta")).toHaveText("14 set. · 1 vez · último puntaje 5/10");
+    await expect(rows.nth(0).locator(".meta")).toHaveText("hoy · 3 veces Último puntaje: 7/10");
+    await expect(rows.nth(1).locator(".meta")).toHaveText("ayer · 3 veces Último puntaje: 6/10");
+    await expect(rows.nth(2).locator(".meta")).toHaveText("14 set. · 1 vez Último puntaje: 5/10");
     await expect(rows.nth(0)).toContainText("Abrir →");
 
     // No recordings: one quiet line at the end, no empty block on top.
@@ -338,10 +341,10 @@ test.describe("History: days sung first, then what you did last", () => {
     await expect(list.locator("table.hist-cal caption")).toContainText("August");
     await expect(list.locator("td.is-rest")).toHaveCount(1);
     await expect(list.locator("td.is-rest")).toContainText("☾");
-    await expect(list.locator(".hist-legend")).toHaveText("✓ practice day · ☾ rest day");
+    await expect(list.locator(".hist-legend")).toHaveText("✓ practice day · ☾ rest day · today");
     await expect(list.locator("#hist-recent-h")).toHaveText("What you practised last");
     const rows = list.locator(".hist-recent .history-item");
-    await expect(rows.nth(0).locator(".meta")).toHaveText("yesterday · 2 times · last score 8/10");
+    await expect(rows.nth(0).locator(".meta")).toHaveText("yesterday · 2 times Last score: 8/10");
     // No score yet: the part is left out, not shown as a dash.
     await expect(rows.nth(1).locator(".meta")).toHaveText("4 days ago · once");
     await expect(rows.nth(0)).toContainText("Open →");

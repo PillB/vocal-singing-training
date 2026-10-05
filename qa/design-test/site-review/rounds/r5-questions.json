@@ -1,0 +1,77 @@
+{
+ "plan-choose": {
+  "title": "The Plan, choosing this week",
+  "job": "A learner on the Plan page understands what to choose for this week, what each choice trains, and how to start the week.",
+  "states": "plan-new,plan-picked",
+  "vps": "phone,desktop",
+  "arms": {
+   "A": {
+    "caption": "The Plan asks the learner to choose this week's element from a list of chips; the start button starts the week."
+   },
+   "B": {
+    "url": "http://127.0.0.1:8802",
+    "caption": "The Plan asks what to improve this week; a line under the choice says what it trains, and the start button names the week and the choice."
+   }
+  }
+ },
+ "history-early": {
+  "title": "Historial after a week or two",
+  "job": "A learner with a week or two of practice opens Historial and quickly sees what they have done and what is worth looking at.",
+  "states": "history-rich-btn",
+  "vps": "phone,desktop",
+  "arms": {
+   "A": {
+    "caption": "Historial shows the practice calendar, a year map of practised days, then the saved sessions."
+   },
+   "B": {
+    "url": "http://127.0.0.1:8802",
+    "caption": "Historial shows the practice calendar, then the saved sessions; the year map waits until there are a few weeks to show."
+   }
+  }
+ },
+ "step-next": {
+  "title": "A guided routine, between steps",
+  "job": "In a guided routine, when a step's time runs out and after the learner rates it, they know how to go on to the next step.",
+  "states": "step-end,step-rated",
+  "vps": "phone,desktop",
+  "arms": {
+   "A": {
+    "caption": "A card on the stage names the next step. After a one-tap rating, the score card explains the score; its last part opens the next step."
+   },
+   "B": {
+    "url": "http://127.0.0.1:8802",
+    "caption": "A card on the stage names the next step. After a one-tap rating, the score card puts the next step right under the score."
+   }
+  }
+ },
+ "end-ask": {
+  "title": "Terminar in the middle of a routine",
+  "job": "A learner who taps Terminar on step 2 of a routine understands what is happening and does not lose their place by a mis-tap.",
+  "states": "step2-end-ask",
+  "vps": "phone,land",
+  "arms": {
+   "A": {
+    "caption": "Shown: the screen right after tapping Terminar on step 2. Terminar ends the routine and goes home; starting again begins at step 1."
+   },
+   "B": {
+    "url": "http://127.0.0.1:8802",
+    "caption": "Shown: the screen right after tapping Terminar on step 2. Past the first step Terminar asks first; 'Seguir' takes Terminar's place."
+   }
+  }
+ },
+ "tour-plan": {
+  "title": "The tour's Plan stop",
+  "job": "On the tour's stop at the Plan, a newcomer learns what the Plan is for and what they would do there each week.",
+  "states": "tourc-3",
+  "vps": "phone,desktop",
+  "arms": {
+   "A": {
+    "caption": "The tour's third stop opens the Plan and explains it."
+   },
+   "B": {
+    "url": "http://127.0.0.1:8802",
+    "caption": "The tour's third stop opens the Plan and explains it in the Plan's new words."
+   }
+  }
+ }
+}

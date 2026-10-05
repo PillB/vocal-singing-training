@@ -214,7 +214,7 @@
         titleKey: "tour.plan.title",
         bodyKey: "tour.plan.body",
         target: "#plan-week-num",
-        also: ["#plan-week-rail", "#plan-pick", "#element-chips"],
+        also: ["#plan-week-rail", "#plan-pick", "#element-chips", "#plan-focus-more", "#plan-start-row"],
         place: "bottom",
         guideAnchor: "plan"
       },
@@ -430,7 +430,13 @@
       const b = o.getBoundingClientRect();
       const t = Math.min(top, b.top);
       const btm = Math.max(bottom, b.bottom);
-      if (btm - t > fit) break;
+      if (btm - t > fit) {
+        // Left out, so keep the ring (8px out from what it holds) off it: its
+        // edge sliced through "Ver otros 12" under the Plan's chips.
+        if (b.top >= bottom) bottom = Math.max(top + 1, Math.min(bottom, b.top - 12));
+        else if (b.bottom <= top) top = Math.min(bottom - 1, Math.max(top, b.bottom + 12));
+        break;
+      }
       left = Math.min(left, b.left);
       top = t;
       right = Math.max(right, b.right);

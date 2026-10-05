@@ -5201,6 +5201,9 @@ body.loop-first #home-tour-invite .btn {
 .open-row .meta > span {
   white-space: nowrap;
 }
+.open-row .meta > .meta-line {
+  display: block;
+}
 .open-row-go {
   flex: none;
   font-size: 0.85rem;
@@ -5308,6 +5311,15 @@ body.loop-first #home-tour-invite .btn {
 .hist-legend {
   margin: 0.4rem 0 0;
   font-size: 0.8rem;
+}
+.hist-key-today {
+  display: inline-block;
+  width: 0.9em;
+  height: 0.9em;
+  margin-right: 0.3em;
+  vertical-align: -0.1em;
+  border: 2px solid var(--text);
+  border-radius: 3px;
 }
 .hist-recent h3 {
   margin: 0 0 0.6rem;
@@ -7242,6 +7254,13 @@ body.view-exercise .stage-coach .mode-hud,
     display: block;
     flex: none;
     max-width: none;
+  }
+  /* "¿Terminar la rutina?" stands in this line; a quiet grey subtitle was easy
+     to miss beside the two answers (round 5 judges). */
+  body.view-exercise:has(#session-banner.visible.asking) #structured-progress:not([hidden]) {
+    color: var(--text);
+    font-weight: 750;
+    font-size: 0.95rem;
   }
   .hud-tm {
     order: 0;

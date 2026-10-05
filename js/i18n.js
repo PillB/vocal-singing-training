@@ -463,10 +463,11 @@
       // History: the days practised first, then what you did last
       "history.recent": "Lo último que practicaste",
       "history.daysPeriod": "en las últimas 5 semanas",
+      "history.today": "hoy",
       "history.daysTotal": "{n} en total desde el {date}",
       "history.times1": "1 vez",
       "history.timesN": "{n} veces",
-      "history.lastScore": "último puntaje {score}",
+      "history.lastScore": "Último puntaje: {score}",
       "history.open": "Abrir",
       "home.nextStepWhy": "Un ejercicio corto para mantener el hábito — sin presión.",
       "home.nextStepCta": "Abrir",
@@ -960,7 +961,6 @@
       "loop.stat.trills": "Hiciste trinos {n} días distintos. Así se construye una voz.",
       "loop.stat.weekday": "Tu día más fiel: los {day}.",
       "loop.remindCta": "▶ Mínimo, 3 min",
-      "loop.routineNextTitle": "Siguiente paso de la rutina",
       "loop.routineLastTitle": "Último paso hecho",
       "loop.routineFinish": "Terminar la rutina",
       // Vocal is speaking practice: where the loop says "cantar", the Vocal
@@ -1503,10 +1503,11 @@
       // History: the days practised first, then what you did last
       "history.recent": "What you practised last",
       "history.daysPeriod": "in the last 5 weeks",
+      "history.today": "today",
       "history.daysTotal": "{n} in all since {date}",
       "history.times1": "once",
       "history.timesN": "{n} times",
-      "history.lastScore": "last score {score}",
+      "history.lastScore": "Last score: {score}",
       "history.open": "Open",
       "home.nextStepWhy": "A short exercise to keep the habit — no pressure.",
       "home.nextStepCta": "Open",
@@ -1987,7 +1988,6 @@
       "loop.stat.trills": "You have done lip trills on {n} different days. That is how a voice gets built.",
       "loop.stat.weekday": "Your most faithful day: {day}.",
       "loop.remindCta": "\u25b6 Minimum, 3 min",
-      "loop.routineNextTitle": "Next step in the routine",
       "loop.routineLastTitle": "Last step done",
       "loop.routineFinish": "Finish the routine",
       // The Vocal track's wording where the loop says "sang" (see the ES block).

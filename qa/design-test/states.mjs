@@ -83,6 +83,18 @@ async function singStepThenStop(p) {
 }
 
 /** A guided step, singing, held until the session's start and mode toasts have cleared. */
+/**
+ * A live start can land a few seconds late, so a fixed jump of the clock
+ * sometimes stops short of 00:00. Run on until the step-done card shows.
+ */
+async function untilStepDone(p) {
+  for (let i = 0; i < 6; i++) {
+    if (await p.locator("#step-done").isVisible().catch(() => false)) return;
+    await p.clock.runFor(5000);
+    await p.waitForTimeout(400);
+  }
+}
+
 async function guidedLiveClear(p) {
   await p.click("#btn-next-step");
   await p.waitForTimeout(700);
@@ -219,6 +231,7 @@ export const states = {
       await p.waitForTimeout(200);
       await p.clock.runFor(85000);
       await p.waitForTimeout(900);
+      await untilStepDone(p);
     }
   },
   // Round 5: the step's time ran out and the learner pressed "Calificar este
@@ -234,6 +247,7 @@ export const states = {
       await p.waitForTimeout(200);
       await p.clock.runFor(85000);
       await p.waitForTimeout(900);
+      await untilStepDone(p);
       await p.click("#btn-step-done-rate").catch(() => {});
       await p.waitForTimeout(900);
     }
@@ -249,6 +263,7 @@ export const states = {
       await p.waitForTimeout(200);
       await p.clock.runFor(85000);
       await p.waitForTimeout(900);
+      await untilStepDone(p);
       await p.click("#btn-step-done-rate").catch(() => {});
       await p.waitForTimeout(900);
       await p.click('.rate-btn[data-feel="ok"]').catch(() => {});
@@ -267,6 +282,7 @@ export const states = {
       await p.waitForTimeout(200);
       await p.clock.runFor(85000);
       await p.waitForTimeout(900);
+      await untilStepDone(p);
       await p.click("#btn-step-done-next").catch(() => {});
       await p.waitForTimeout(3200);
     }
@@ -283,6 +299,7 @@ export const states = {
       await p.waitForTimeout(200);
       await p.clock.runFor(85000);
       await p.waitForTimeout(900);
+      await untilStepDone(p);
       await p.click("#btn-step-done-next").catch(() => {});
       await p.waitForTimeout(3200);
       await p.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));

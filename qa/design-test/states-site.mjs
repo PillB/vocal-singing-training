@@ -27,6 +27,8 @@ const RICH = {
     "v1-diction": hist("d", 1, 5, 9)
   })
 };
+// The days those sessions fell on, so the calendar, the list and the map agree.
+const RICH_DAYS = led(["2026-09-14", "2026-09-20", "2026-09-22", "2026-09-23"], 1);
 
 /** Scroll so the element's top sits just under the sticky header, without smooth scrolling. */
 async function scrollToEl(p, sel) {
@@ -162,7 +164,7 @@ export const states = {
   },
   "home-studio": {
     label: "inicio, sección Tu estudio",
-    days: RET3,
+    days: RICH_DAYS,
     seed: RICH,
     action: async (p) => scrollToEl(p, "#value-pulse")
   },
@@ -253,7 +255,7 @@ export const states = {
   },
   "history-rich-btn": {
     label: "Historial con práctica guardada",
-    days: RET3,
+    days: RICH_DAYS,
     seed: RICH,
     action: async (p) => {
       await p.click("#btn-history").catch(() => {});

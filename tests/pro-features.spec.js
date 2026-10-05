@@ -41,8 +41,12 @@ test.describe("Pro features", () => {
     await boot(page);
     await toProgress(page);
     await expect(page.locator("#pro-studio")).toBeVisible();
-    await expect(page.locator("#sel-profile")).toBeVisible();
-    await expect(page.locator("#pro-spark")).toBeVisible();
+    // Profiles are their own card, after the progress.
+    await expect(page.locator("#history-profiles #sel-profile")).toBeVisible();
+    // Locked, the chart is described, not drawn faint: faint bars read as an
+    // empty chart of your own data.
+    await expect(page.locator("#pro-spark")).toBeHidden();
+    await expect(page.locator("#pro-coach-focus")).toBeVisible();
     await expect(page.locator("#pro-ach-grid")).toBeVisible();
   });
 

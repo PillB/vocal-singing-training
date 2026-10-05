@@ -7505,17 +7505,48 @@ body.loop-on #start-panel .loop-remind-btn {
 #reminder-modal .modal-actions {
   margin-top: 0.85rem;
 }
-/* Historial: the banner and the progress card follow the record. */
+/* Historial: the record, then the progress, then profiles, then any offer. */
 #view-history .value-banner {
   margin: 1rem 0 0;
 }
-#view-history .value-pulse {
+#view-history .value-pulse,
+#view-history .history-profiles {
   margin-top: 1rem;
 }
-/* First visit on a phone: the two-step explainer repeated the card above it
-   and pushed the list below the first screen. */
-@media (max-width: 640px) {
-  body.home-zero.loop-first #start-steps {
-    display: none;
-  }
+#reminder-modal .modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+#view-history .value-pulse-grid {
+  grid-template-columns: repeat(auto-fit, minmax(5.5rem, 1fr));
+}
+#view-history .value-stat[hidden] {
+  display: none;
+}
+/* Small labels in the progress card stay at 12px on every screen, and an
+   achievement's name wraps instead of ending in "…". */
+#view-history .value-stat span,
+#view-history .pro-ach-badge,
+#view-history .pro-ach-badge small,
+#view-history .pro-profile-field,
+#view-history .pro-goal-field {
+  font-size: 0.75rem;
+}
+#view-history .pro-ach-badge small {
+  max-width: none;
+  white-space: normal;
+  overflow: visible;
+}
+#view-history .pro-goal-progress {
+  font-size: 0.85rem;
+}
+.history-profiles-title {
+  margin: 0;
+  font-size: 1rem;
+}
+.history-profiles-sub {
+  margin: 0.25rem 0 0.6rem;
+  font-size: 0.85rem;
 }

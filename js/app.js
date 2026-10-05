@@ -6193,6 +6193,9 @@
       "#vp-hold",
       pulse.bestHoldSec >= 0.5 ? `${Number(pulse.bestHoldSec).toFixed(1)}s` : "—"
     );
+    // A tile with only a dash reads as missing data: it waits for a held note.
+    const holdStat = $("#vp-hold-stat");
+    if (holdStat) holdStat.hidden = !(pulse.bestHoldSec >= 0.5);
     set("#vp-ex", String(pulse.exercisesTouched || 0));
 
     const B = window.VTBilling;
@@ -6233,10 +6236,8 @@
         insights.hidden = false;
         insights.textContent =
           tt("value.insightsPro") + " · " + VTValuePulse.narrative(pulse, isEsLang());
-      } else if (pulse.sessions > 0) {
-        insights.hidden = false;
-        insights.textContent = tt("value.insightsLocked");
       } else {
+        // Locked, the Análisis Pro teaser below says the same thing once.
         insights.hidden = true;
         insights.textContent = "";
       }
@@ -6283,7 +6284,10 @@
     }
     const gp = $("#pro-goal-progress");
     if (gp) {
-      gp.textContent = `${pulse.sessionsThisWeek || 0}/${pulse.weeklyTarget || 3}`;
+      gp.textContent = tt("pro.goalProgress", {
+        n: String(pulse.sessionsThisWeek || 0),
+        t: String(pulse.weeklyTarget || 3)
+      });
       gp.classList.toggle("is-met", !!pulse.goalMet);
     }
 
@@ -6309,6 +6313,9 @@
         })
         .join("");
       spark.classList.toggle("is-dim", !isProUser);
+      // Locked, faint bars read as an empty chart of your own data: the
+      // teaser text says what the chart would show instead.
+      spark.hidden = !isProUser;
     }
     const ht = $("#pro-hold-trend");
     if (ht) {
@@ -6461,10 +6468,24 @@
    * the week card (and from the finishing card), not as a panel at the bottom
    * of Practicar six screens down.
    */
+  /**
+   * While the reminder is off, the dialog's main button turns it on: a person
+   * who picks a time and taps the big button expects a reminder, not a closed
+   * dialog with the box still unticked. "Ahora no" closes without one.
+   */
+  function syncReminderActions() {
+    const on = !!$("#chk-reminders")?.checked;
+    const done = $("#reminder-done");
+    if (done) done.textContent = tt(on ? "retain.done" : "retain.turnOn");
+    const cancel = $("#reminder-cancel");
+    if (cancel) cancel.hidden = on;
+  }
+
   function openReminders() {
     const modal = $("#reminder-modal");
     if (!modal || !modal.hidden) return;
     renderRetentionChrome();
+    syncReminderActions();
     modal.hidden = false;
     window.VTFocusTrap?.activate?.(modal, { initialFocus: $("#chk-reminders") });
     const finish = () => {
@@ -6474,7 +6495,15 @@
       modal.onclick = null;
       renderRetentionChrome();
     };
-    $("#reminder-done").onclick = finish;
+    $("#reminder-done").onclick = () => {
+      const chk = $("#chk-reminders");
+      if (chk && !chk.checked) {
+        chk.checked = true;
+        chk.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+      finish();
+    };
+    $("#reminder-cancel").onclick = finish;
     modal.onkeydown = (e) => {
       if (e.key === "Escape") {
         e.preventDefault();
@@ -6516,6 +6545,7 @@
       }
       saveTimes();
       renderRetentionChrome();
+      syncReminderActions();
     });
     $("#rem-time-1")?.addEventListener("change", saveTimes);
     $("#rem-time-2")?.addEventListener("change", () => {

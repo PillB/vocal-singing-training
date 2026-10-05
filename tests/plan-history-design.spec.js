@@ -283,7 +283,7 @@ test.describe("History: days sung first, then what you did last", () => {
 
     // No recordings: one quiet line at the end, no empty block on top.
     await expect(list).not.toContainText("Grabaciones (en este dispositivo)");
-    await expect(list.locator(".hist-rec-empty")).toHaveText("Aún no hay grabaciones. Abre un ejercicio y usa Grabar.");
+    await expect(list.locator(".hist-rec-empty")).toHaveText("Aún no hay grabaciones. En un ejercicio, marca ⏺ Grabarme antes de Empezar.");
     // Saved reviews render under their heading.
     await expect(list).toContainText("Revisiones guardadas");
     await expect(list).toContainText("Semana 1: Afinación");

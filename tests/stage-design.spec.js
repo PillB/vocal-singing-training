@@ -223,7 +223,7 @@ test.describe("Start floor: the stage's controls on a phone", () => {
     await open(page, "s4-lip-trills");
     await expect(page.locator("#oct-controls .oct-k")).toHaveText("octava");
     await expect(page.locator("#oct-controls .oct-auto span")).toBeVisible();
-    await expect(page.locator("#oct-controls .oct-auto span")).toHaveText("Rango");
+    await expect(page.locator("#oct-controls .oct-auto span")).toHaveText("A mi voz");
     // The meter sits in the MIC label, right after its name
     const meter = await page.evaluate(() => {
       const m = document.getElementById("level-meter-wrap");
@@ -237,17 +237,23 @@ test.describe("Start floor: the stage's controls on a phone", () => {
     expect(meter.inLabel).toBe(true);
     expect(meter.afterTitle).toBe(true);
     expect(meter.gap).toBeLessThan(16);
-    // Empezar: full row width, at least 48px tall, nothing beside it
+    // Empezar: at least 48px tall and most of its row; the only thing beside
+    // it is "⏺ Grabarme" (phones record too), a full-size target.
     const s = await page.evaluate(() => {
       const b = document.getElementById("btn-practice-start").getBoundingClientRect();
+      const r = document.getElementById("opt-auto-record").getBoundingClientRect();
       const rail = document.getElementById("hud-bottom-rail").getBoundingClientRect();
-      return { w: b.width, h: b.height, railW: rail.width };
+      return { w: b.width, h: b.height, railW: rail.width, recH: r.height, recLeft: r.left, startRight: b.right, recTop: r.top, startTop: b.top };
     });
     expect(s.h).toBeGreaterThanOrEqual(48);
-    expect(s.w).toBeGreaterThan(s.railW * 0.8);
+    expect(s.w).toBeGreaterThan(s.railW * 0.5);
+    expect(s.recH).toBeGreaterThanOrEqual(44);
+    expect(s.recLeft).toBeGreaterThanOrEqual(s.startRight);
+    expect(Math.abs(s.recTop + s.recH / 2 - (s.startTop + s.h / 2))).toBeLessThan(4);
+    await expect(page.locator("#opt-auto-record")).toContainText("Grabarme");
     await page.evaluate(() => window.VTI18n.setLang("en"));
     await expect(page.locator("#oct-controls .oct-k")).toHaveText("octave");
-    await expect(page.locator("#oct-controls .oct-auto span")).toHaveText("Range");
+    await expect(page.locator("#oct-controls .oct-auto span")).toHaveText("My range");
   });
 });
 

@@ -7577,3 +7577,83 @@ body.loop-on #start-panel .loop-remind-btn {
   margin: 0.25rem 0 0.6rem;
   font-size: 0.85rem;
 }
+
+/* —— Design: site-review round 3 ——
+   The exercise screen: recording on phones too, labelled piano options, and
+   after the time is up the rating comes next. */
+.hud-bl #opt-auto-record {
+  min-height: var(--min-tap);
+  padding: 0 0.7rem;
+  gap: 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(8, 12, 18, 0.55);
+  color: var(--text);
+  white-space: nowrap;
+}
+.hud-bl #opt-auto-record:has(input:checked) {
+  border-color: rgba(240, 110, 110, 0.7);
+  background: rgba(70, 18, 18, 0.55);
+}
+.hud-bl #opt-auto-record input {
+  width: 1.1rem;
+  height: 1.1rem;
+  margin: 0;
+}
+body.ex-ended #stage-guide,
+body.ex-ended #view-exercise .guide-card {
+  display: none !important;
+}
+body.ex-ended #btn-practice-start {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
+  box-shadow: none;
+}
+@media (max-width: 640px) {
+  /* Phones record too: "⏺ Grabarme" sits beside Empezar. */
+  .hud-bl {
+    flex: 1 1 100%;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .hud-bl #btn-practice-start,
+  .hud-bl #btn-practice-stop {
+    flex: 1 1 auto;
+  }
+  .hud-bl #opt-auto-record {
+    display: inline-flex;
+    flex: none;
+    font-size: 0.85rem;
+  }
+  .mic-sens-title {
+    font-size: 0.75rem;
+  }
+  /* Opened piano options keep their words and wrap onto rows that fit. */
+  #piano-mini-opts.piano-opts-expanded {
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    row-gap: 0.35rem;
+    max-width: 100%;
+  }
+  #piano-mini-opts.piano-opts-expanded .piano-opt span {
+    display: inline;
+  }
+  #piano-mini-opts.piano-opts-expanded > .piano-opt,
+  #piano-mini-opts.piano-opts-expanded > .piano-opt-sec {
+    min-height: var(--min-tap);
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.8rem;
+  }
+  #piano-mini-opts.piano-opts-expanded .piano-opt-arp {
+    display: inline-flex;
+  }
+}
+/* After the time is up the settings rows step aside for the rating. */
+body.ex-ended .hud-bc,
+body.ex-ended #piano-mini-opts {
+  display: none !important;
+}

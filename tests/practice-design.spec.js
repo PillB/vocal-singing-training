@@ -137,7 +137,7 @@ test.describe("Step done: a guided step's clock runs out", () => {
         timer: document.querySelector("#timer-display").textContent
       };
     });
-    expect(st).toEqual({ live: false, engine: false, pill: "Listo", timer: "00:00" });
+    expect(st).toEqual({ live: false, engine: false, pill: "Tiempo", timer: "00:00" });
 
     // The card sits on the stage, inside the first screen.
     const geo = await page.evaluate(() => {

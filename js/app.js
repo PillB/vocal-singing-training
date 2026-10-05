@@ -2111,6 +2111,8 @@
     state.pendingMicro = false;
     stopPractice(true);
     hideStepDone();
+    setExerciseEnded(false);
+    state.pitchHeard = false;
     // Where this exercise was opened from, so the way back can name it and
     // land there: a catalog card brings you back to that card.
     if (state.view !== "exercise" && !(route.reopening && state.exOrigin?.id === id)) {
@@ -3249,6 +3251,7 @@
     const ex = state.exercise;
     if (!ex || state.practiceLive || state.practiceStarting) return;
     hideStepDone();
+    setExerciseEnded(false);
     const profile = getProfile(ex);
     // Generation token: Stop / leave / exercise switch aborts in-flight Start
     const gen = ++state.practiceGen;
@@ -3443,6 +3446,7 @@
         if (wantChallenge) challengeNote = state.pitchGame.startChallenge(8);
         state.pitchViz.startExternal();
         state.pitchRunning = true;
+        state.pitchHeard = false;
         const ref = profile.refPitch || ex.audio.refPitch;
         const shiftNote = (nm) =>
           nm && state.octaveShift && typeof VTShiftNoteName === "function"
@@ -3767,11 +3771,14 @@
       btn.setAttribute("aria-expanded", String(!!state.metricsOpen));
     }
     syncRoutineNav();
+    if (!state.metricsOpen) setExerciseEnded(false);
     if (!state.metricsOpen || !card) return;
     state.rate.end = opts.end || null;
     paintRating();
     if (opts.focus) $("#rate-q")?.focus({ preventScroll: true });
-    if (opts.reveal !== false) revealRating(!!opts.cardFirst);
+    // When the time is up the answers come first: the stage fills the screen,
+    // so keeping the whole review in view left them below the fold.
+    if (opts.reveal !== false) revealRating(!!opts.cardFirst || !!opts.end);
   }
 
   /* —— Rating: one tap after a take —— */
@@ -3960,8 +3967,24 @@
    */
   function showExerciseEnd(micWasOn) {
     if (rateQuiet()) return false;
+    setExerciseEnded(true);
     openMetricsPanel(true, { focus: true, end: micWasOn ? "mic" : "time" });
     return true;
+  }
+
+  /**
+   * After a single exercise's time is up the rating is the next step: the
+   * steps, the guide and (on phones) the settings rows step aside so "¿Cómo te
+   * fue?" sits under the stage, and Empezar becomes a quiet "Otra vez". It was
+   * the loudest thing on screen, with the rating a screen further down.
+   */
+  function setExerciseEnded(on) {
+    const was = document.body.classList.contains("ex-ended");
+    if (was === !!on) return;
+    document.body.classList.toggle("ex-ended", !!on);
+    const start = $("#btn-practice-start");
+    if (start) start.textContent = tt(on ? "practice.again" : "practice.start");
+    fitHighwayToViewport();
   }
 
   /**
@@ -4020,42 +4043,72 @@
     const es =
       (window.VTI18n && VTI18n.lang === "es") ||
       (document.documentElement.lang || "").startsWith("es");
-    const acc = stats.accuracyCents != null ? Math.round(stats.accuracyCents) : 0;
-    const prec = stats.precisionCents != null ? Math.round(stats.precisionCents) : 0;
+    // Nothing heard yet: say so, instead of "0¢ · en el tono · preciso".
+    // Once a voice is heard in this take, a short breath keeps its reading.
+    if (stats.voiceName && stats.voiceName !== "—") state.pitchHeard = true;
+    const voiced = !!state.pitchHeard && stats.accuracyCents != null;
+    const acc = voiced ? Math.round(stats.accuracyCents) : 0;
+    const prec = voiced && stats.precisionCents != null ? Math.round(stats.precisionCents) : 0;
+    const off = Math.abs(acc);
     // Short HUD words (long phrases overflow the TR corner)
-    const accWord = es
-      ? Math.abs(acc) <= 25
-        ? "tono"
-        : acc > 0
-          ? "↑ agudo"
-          : "↓ grave"
-      : Math.abs(acc) <= 25
-        ? "in"
-        : acc > 0
-          ? "↑ sharp"
-          : "↓ flat";
-    const accWordLong = es
-      ? Math.abs(acc) <= 25
-        ? "en el tono"
-        : acc > 0
-          ? "un poco agudo"
-          : "un poco grave"
-      : Math.abs(acc) <= 25
-        ? "on target"
-        : acc > 0
-          ? "a bit sharp"
-          : "a bit flat";
-    const precWord = es
-      ? prec <= 30
-        ? "estable (preciso)"
-        : prec <= 60
-          ? "ajustando"
-          : "variable"
-      : prec <= 30
-        ? "stable (precise)"
-        : prec <= 60
-          ? "settling"
-          : "variable";
+    const accWord = !voiced
+      ? "—"
+      : es
+        ? off <= 25
+          ? "tono"
+          : acc > 0
+            ? "↑ agudo"
+            : "↓ grave"
+        : off <= 25
+          ? "in"
+          : acc > 0
+            ? "↑ sharp"
+            : "↓ flat";
+    // Bands that match the size of the miss: 2 semitones off is not "a bit".
+    const accWordLong = !voiced
+      ? es
+        ? "canta para medir"
+        : "sing to measure"
+      : es
+        ? off <= 25
+          ? "afinado"
+          : off <= 60
+            ? acc > 0
+              ? "un poco agudo"
+              : "un poco grave"
+            : off <= 150
+              ? acc > 0
+                ? "agudo · baja"
+                : "grave · sube"
+              : acc > 0
+                ? "otra nota · baja"
+                : "otra nota · sube"
+        : off <= 25
+          ? "on pitch"
+          : off <= 60
+            ? acc > 0
+              ? "a bit sharp"
+              : "a bit flat"
+            : off <= 150
+              ? acc > 0
+                ? "sharp · go down"
+                : "flat · go up"
+              : acc > 0
+                ? "another note · go down"
+                : "another note · go up";
+    const precWord = !voiced
+      ? "—"
+      : es
+        ? prec <= 30
+          ? "voz firme"
+          : prec <= 60
+            ? "ajustando"
+            : "variable"
+        : prec <= 30
+          ? "steady"
+          : prec <= 60
+            ? "settling"
+            : "wavering";
     const g = stats.game;
     const profile0 = pitchProfile;
     // Free singing (a siren): no target, so the readout names the nearest note
@@ -4073,11 +4126,17 @@
           ? "above centre"
           : "below centre";
     const targetLabel = near ? (es ? "Nota" : "Note") : es ? "Objetivo" : "Target";
+    // A challenge draws its first note on Start: before that, the exercise's
+    // reference note is not the target, so none is named.
+    const target = pitchProfile?.pitchChallenge && !state.pitchRunning ? "—" : stats.targetName || "—";
+    const cents = `${acc > 0 ? "+" : ""}${acc}¢`;
     el.innerHTML = `
-      <span><strong>${targetLabel}</strong> ${stats.targetName || "—"}</span>
+      <span><strong>${targetLabel}</strong> ${target}</span>
       <span><strong>${es ? "Tú" : "You"}</strong> ${stats.voiceName || "—"}</span>
-      <span><strong>Cents</strong> ${acc > 0 ? "+" : ""}${acc}¢ · ${near ? centreWord : accWordLong}</span>
-      <span><strong>${es ? "Precisión" : "Precision"}</strong> ±${prec}¢ · ${precWord}</span>
+      <span><strong>${es ? "Afinación" : "Tuning"}</strong> ${
+        voiced ? `${near ? centreWord : accWordLong} (${cents})` : accWordLong
+      }</span>
+      <span><strong>${es ? "Estabilidad" : "Steadiness"}</strong> ${voiced ? `${precWord} (±${prec}¢)` : "—"}</span>
       ${g && !profile0?.noGameScore ? `<span><strong>${es ? "Juego" : "Game"}</strong> ${g.score} pts · ${g.accuracyPct}%</span>` : ""}
     `;
     // Live cents in TR corner for non-challenge pitch modes
@@ -4086,16 +4145,18 @@
       const q = $("#hud-quality");
       const accEl = $("#hud-acc");
       if (q) {
-        q.textContent = `${acc > 0 ? "+" : ""}${acc}¢`;
+        q.textContent = voiced ? `${acc > 0 ? "+" : ""}${acc}¢` : "—";
         q.className =
           "hud-quality " +
-          (Math.abs(acc) <= 15
-            ? "perfect"
-            : Math.abs(acc) <= 35
-              ? "good"
-              : Math.abs(acc) <= 60
-                ? "close"
-                : "off");
+          (!voiced
+            ? ""
+            : Math.abs(acc) <= 15
+              ? "perfect"
+              : Math.abs(acc) <= 35
+                ? "good"
+                : Math.abs(acc) <= 60
+                  ? "close"
+                  : "off");
       }
       if (accEl) accEl.textContent = near ? (Math.abs(acc) <= 25 ? centreWord : acc > 0 ? "↑" : "↓") : accWord;
       const score = $("#hud-score");

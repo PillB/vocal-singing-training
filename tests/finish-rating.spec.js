@@ -276,15 +276,22 @@ test.describe("Rating: one tap after a take", () => {
       engine: !!window.VTApp.getState().practice?.running,
       pill: document.querySelector("#practice-status").textContent
     }));
-    expect(st).toEqual({ live: false, engine: false, pill: "Listo" });
+    expect(st).toEqual({ live: false, engine: false, pill: "Tiempo" });
     await expect(page.locator("#step-done")).toBeHidden();
     await expect(page.locator("#metrics-card")).not.toHaveClass(/collapsed/);
     await expect(page.locator("#rate-done")).toHaveText("¡Listo! Se acabó el tiempo y el micrófono se apagó.");
     await expect(page.locator("#rate-q")).toBeFocused();
     await expect(page.locator("#rate-time")).toHaveText("Tiempo: 5:00 de 5:00 ✓");
     await expect(page.locator("#btn-rate-skip")).toHaveText("Salir sin puntuar");
-    const geo = await cardInView(page);
+    // At 00:00 the answers come first, even on a pictured exercise (after a
+    // Stop, the review still does): the stage filled the screen and left them
+    // below the fold.
+    const geo = await cardInView(page, { cardFirst: true });
     expect(geo.btns.every((b) => b.onTop)).toBe(true);
+    // The rating is the next step: Empezar steps back to "Otra vez" and the
+    // guide steps aside, so the answers sit under the stage.
+    await expect(page.locator("#btn-practice-start")).toHaveText("↻ Otra vez");
+    await expect(page.locator("#view-exercise .guide-card")).toBeHidden();
     // Nothing looks chosen before the learner chooses.
     await expect(page.locator(".rate-btn[aria-pressed='true']")).toHaveCount(0);
     for (const b of await page.locator(".rate-btn").all()) await expect(b).not.toBeFocused();

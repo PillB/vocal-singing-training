@@ -108,6 +108,36 @@ test.describe("Plan: one focus, its exercises, days counted", () => {
     expect(r.unknown).toEqual([]);
   });
 
+  test("the start button waits on a choice it names, and the choice is explained in a line", async ({ page }) => {
+    await boot(page, { days: ledger(["2026-09-22"]) });
+    await openPlan(page);
+    await expect(page.locator("#plan-pick")).toHaveText("¿Qué quieres mejorar esta semana?");
+    await expect(page.locator("#plan-start-hint")).toBeVisible();
+    await expect(page.locator("#plan-el-desc")).toBeHidden();
+    // Pressing it first goes straight to the choice it is waiting on.
+    await page.locator("#btn-plan-start").click();
+    await expect(page.locator("#element-chips .chip").first()).toBeFocused();
+    expect(await page.evaluate(() => VTStorage.getWeekPlan().status)).toBe("idle");
+
+    await page.locator("#element-chips .chip", { hasText: "Resonancia y velo del paladar" }).click();
+    await expect(page.locator("#plan-el-desc")).toHaveText(
+      "Resonancia y velo del paladar: una voz más llena y menos nasal, abriendo el fondo de la boca."
+    );
+    await expect(page.locator("#btn-plan-start")).toHaveText("Empezar la semana 1: Resonancia y velo del paladar");
+    await expect(page.locator("#plan-start-hint")).toBeHidden();
+    // Every focus has its line, in both languages.
+    const missing = await page.evaluate(() =>
+      ["es", "en"].flatMap((lang) =>
+        VT_WEEK_ELEMENTS.filter((el) => {
+          const slug = el.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+          const key = `plan.desc.${slug}`;
+          return !VTI18n.strings[lang]?.[key];
+        }).map((el) => `${lang}: ${el}`)
+      )
+    );
+    expect(missing).toEqual([]);
+  });
+
   test("ES, Canto: five chips first, the rest behind a real button, and a picked focus lists exercises that open", async ({ page }) => {
     await boot(page, { days: ledger(["2026-09-22"]) });
     await openPlan(page);
@@ -160,7 +190,7 @@ test.describe("Plan: one focus, its exercises, days counted", () => {
     await page.evaluate(() => VTApp.setView("home"));
     await openPlan(page);
     await expect(page.locator("#plan-start-row")).toBeHidden();
-    await expect(page.locator("#plan-status")).toHaveText("Foco de la semana: Afinación");
+    await expect(page.locator("#plan-status")).toHaveText("Esta semana mejoras: Afinación");
     await expect(page.locator("#plan-days")).toHaveText("0 de 7 días practicados esta semana");
     await expect(page.locator("#plan-review-when")).toHaveText("Se abre el miércoles, 30 de setiembre.");
   });

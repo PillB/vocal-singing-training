@@ -61,6 +61,28 @@ function tourAt(n) {
   };
 }
 
+/**
+ * Like tourAt, but never past the tour's last card: a shorter tour shows its
+ * last card again, so two designs with different numbers of stops can be
+ * compared stop by stop. n = Infinity is "the last card".
+ */
+function tourUpTo(n) {
+  return async (p) => {
+    await p.evaluate(() => window.VTTour.start(true));
+    await p.waitForTimeout(700);
+    for (let i = 1; i < n; i++) {
+      const last = await p.evaluate(() => {
+        const m = String(document.querySelector("[data-tour-progress]")?.textContent || "").match(/(\d+)\D+(\d+)/);
+        return !m || m[1] === m[2];
+      });
+      if (last) break;
+      await p.click("[data-tour-next]").catch(() => {});
+      await p.waitForTimeout(800);
+    }
+    await p.waitForTimeout(500);
+  };
+}
+
 /** Open an exercise and force its coach-marks, stepping to step n (1-based). */
 function coachAt(id, n) {
   return async (p) => {
@@ -93,6 +115,14 @@ export const states = {
   "tour-8": { label: "tour, paso 8", tour: false, action: tourAt(8) },
   "tour-9": { label: "tour, paso 9", tour: false, action: tourAt(9) },
   "tour-10": { label: "tour, paso 10", tour: false, action: tourAt(10) },
+  // Stop by stop, clamped to the last card (for comparing tours of different lengths).
+  "tourc-1": { label: "tour, primera tarjeta", tour: false, action: tourUpTo(1) },
+  "tourc-2": { label: "tour, segunda tarjeta (o la última)", tour: false, action: tourUpTo(2) },
+  "tourc-3": { label: "tour, tercera tarjeta (o la última)", tour: false, action: tourUpTo(3) },
+  "tourc-4": { label: "tour, cuarta tarjeta (o la última)", tour: false, action: tourUpTo(4) },
+  "tourc-5": { label: "tour, quinta tarjeta (o la última)", tour: false, action: tourUpTo(5) },
+  "tour-last": { label: "tour, última tarjeta", tour: false, action: tourUpTo(Infinity) },
+  "tour-returning-last": { label: "tour repetido por alguien que ya practicó, última tarjeta", days: RET3, action: tourUpTo(Infinity) },
   // A returning visitor replaying the tour from the header.
   "tour-returning-1": { label: "tour repetido por alguien que ya practicó, paso 1", days: RET3, action: tourAt(1) },
   "tour-returning-2": { label: "tour repetido por alguien que ya practicó, paso 2", days: RET3, action: tourAt(2) },
@@ -241,6 +271,16 @@ export const states = {
       await p.click("#btn-plan").catch(() => {});
       await p.clock.runFor(500);
       await p.waitForTimeout(700);
+    }
+  },
+  "plan-picked": {
+    label: "Plan, con algo elegido para la semana",
+    action: async (p) => {
+      await p.click("#btn-plan").catch(() => {});
+      await p.clock.runFor(500);
+      await p.waitForTimeout(500);
+      await p.click("#element-chips .chip:nth-child(3)").catch(() => {});
+      await p.waitForTimeout(500);
     }
   },
   "plan-end": {

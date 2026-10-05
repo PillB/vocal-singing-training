@@ -261,6 +261,57 @@ test.describe("Step done: a guided step's clock runs out", () => {
     await expect(page.locator("#step-done")).toBeHidden();
   });
 
+  test("while the card shows, the foot of the page has no second Siguiente", async ({ page }) => {
+    await boot(page);
+    await startMinimo(page);
+    await expect(page.locator("#structured-nav")).toBeVisible();
+    await runStepOut(page, 5);
+    await expect(page.locator("#step-done")).toBeVisible();
+    await expect(page.locator("#structured-nav")).toBeHidden();
+    await page.locator("#btn-step-done-more").click();
+    await expect(page.locator("#step-done")).toBeHidden();
+    await expect(page.locator("#structured-nav")).toBeVisible();
+  });
+
+  test("past the first step, Terminar asks first; Seguir keeps the place", async ({ page }) => {
+    await boot(page);
+    await startMinimo(page);
+    await runStepOut(page, 5);
+    await page.locator("#btn-step-done-next").click();
+    await page.clock.runFor(400);
+    expect(await page.evaluate(() => window.VTSession.get().index)).toBe(1);
+
+    await page.locator("#btn-session-end").click();
+    await expect(page.locator("#session-banner-text")).toHaveText("¿Terminar la rutina?\u00a0Vas en el 2 de 2.");
+    await expect(page.locator("#btn-session-end")).toBeHidden();
+    await expect(page.locator("#btn-session-pause")).toBeHidden();
+    await expect(page.locator("#btn-session-end-yes")).toHaveText("Sí, terminar");
+    // "Seguir" takes Terminar's place, so a second tap there keeps the routine.
+    await expect(page.locator("#btn-session-end-no")).toHaveText("Seguir");
+    await expect(page.locator("#btn-session-end-no")).toBeFocused();
+    const order = await page.$$eval("#session-banner .controls-row .btn:not([hidden])", (b) => b.map((x) => x.id));
+    expect(order).toEqual(["btn-session-end-yes", "btn-session-end-no"]);
+    expect(await page.evaluate(() => window.VTSession.get().status)).toBe("active");
+
+    await page.locator("#btn-session-end-no").click();
+    await expect(page.locator("#btn-session-end")).toBeVisible();
+    await expect(page.locator("#btn-session-end")).toBeFocused();
+    await expect(page.locator("#session-banner-text .session-banner-pos")).toHaveText("Ejercicio 2 de 2");
+    expect(await page.evaluate(() => window.VTSession.get().index)).toBe(1);
+
+    // Escape takes the question back too.
+    await page.locator("#btn-session-end").click();
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#btn-session-end-yes")).toBeHidden();
+
+    await page.locator("#btn-session-end").click();
+    await page.locator("#btn-session-end-yes").click();
+    await page.clock.runFor(300);
+    await expect(page.locator("#view-home")).toHaveClass(/active/);
+    await expect(page.locator("#session-banner")).not.toHaveClass(/visible/);
+    expect(await page.evaluate(() => window.VTSession.get())).toBe(null);
+  });
+
   test("English reads in its own words", async ({ page }) => {
     await boot(page, { lang: "en" });
     await startMinimo(page);

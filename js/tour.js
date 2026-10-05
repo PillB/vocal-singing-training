@@ -173,6 +173,17 @@
     const first = document.body.classList.contains("loop-first");
     const loopOn = !first && !!global.VTLoop?.isOn?.();
     const phone = isVisible(document.getElementById("btn-more"));
+    // Historial before any practice is an empty page: its card says what will
+    // fill it instead of describing marked days nobody can see.
+    const histEmpty = (() => {
+      try {
+        const S = global.VTStorage;
+        const n = (o) => (Array.isArray(o) ? o.length : Object.keys(o || {}).length);
+        return !!S && !n(S.getProgress?.()) && !n(S.getDays?.()?.days ?? S.getDays?.());
+      } catch {
+        return false;
+      }
+    })();
     return [
       {
         id: "practice",
@@ -203,7 +214,7 @@
         titleKey: "tour.plan.title",
         bodyKey: "tour.plan.body",
         target: "#plan-week-num",
-        also: ["#plan-week-rail", "#plan-pick"],
+        also: ["#plan-week-rail", "#plan-pick", "#element-chips"],
         place: "bottom",
         guideAnchor: "plan"
       },
@@ -212,7 +223,7 @@
         view: "history",
         placeKey: "tour.place.history",
         titleKey: "tour.history.title",
-        bodyKey: "tour.history.body",
+        bodyKey: histEmpty ? "tour.history.bodyEmpty" : "tour.history.body",
         target: [".hist-cal", "#history-list"],
         place: "bottom",
         guideAnchor: "guardar"
@@ -239,10 +250,12 @@
    * run. Families: highway | speech | hold
    */
   function packSteps(family) {
+    // Speaking exercises have no piano, so their card does not mention one.
+    const piano = !!global.VTApp?.getState?.()?.exercise?.audio?.piano;
     const start = {
       id: "ex-start",
       titleKey: "uiTour.start.title",
-      bodyKey: "uiTour.start.body",
+      bodyKey: piano ? "uiTour.start.bodyPiano" : "uiTour.start.body",
       target: "#btn-practice-start",
       also: ["#opt-auto-record"],
       place: "top",
@@ -267,6 +280,7 @@
           titleKey: "uiTour.hw.canvas.title",
           bodyKey: "uiTour.hw.canvas.body",
           target: "#pitch-canvas",
+          trim: [".hud-bottom-rail"],
           place: "bottom",
           requireVisible: true,
           guideAnchor: "autopista"
@@ -421,6 +435,16 @@
       top = t;
       right = Math.max(right, b.right);
       bottom = btm;
+    }
+    // Controls laid over the target (the exercise's bottom rail sits on the
+    // lane on a phone) are cut off the ring, so it holds only what the card names.
+    for (const sel of step.trim || []) {
+      const o = document.querySelector(sel);
+      if (!o || !isVisible(o)) continue;
+      const b = o.getBoundingClientRect();
+      if (b.bottom <= top || b.top >= bottom || b.right <= left || b.left >= right) continue;
+      if (b.top + b.height / 2 > (top + bottom) / 2) bottom = Math.max(top + 1, Math.min(bottom, b.top));
+      else top = Math.min(bottom - 1, Math.max(top, b.bottom));
     }
     return new DOMRect(left, top, right - left, bottom - top);
   }
@@ -747,9 +771,15 @@
     }
 
     el.classList.add("tour-highlight");
-    // Instant, not smooth: every measurement below is taken straight after
-    // this, and a smooth scroll is still moving when they are read.
-    if (scroll) {
+    // On a desktop a ring already in full view stays put: scrolling it to the
+    // middle anyway moved the page under people for nothing. Otherwise: instant,
+    // not smooth, since every measurement below is taken straight after this,
+    // and a smooth scroll is still moving when they are read.
+    const inView = (() => {
+      const b = targetRect(step, el);
+      return b.top >= stickyBottom() + 4 && b.bottom <= window.innerHeight - inset - 4;
+    })();
+    if (scroll && (sheet || !inView)) {
       el.scrollIntoView({ behavior: "auto", block: "center", inline: "nearest" });
       // scrollIntoView cannot centre a target near the end of the page, so it
       // can leave it under the sticky header — which on the practice screen is
@@ -766,7 +796,13 @@
     // On a phone the card is a bottom sheet positioned by CSS; JS only decides
     // whether a spotlight is worth drawing.
     if (!sheet) {
-      const placed = placeCard(step, r);
+      let placed = placeCard(step, r);
+      if (!placed && scroll && inView) {
+        // No room beside it where it stands: centre it after all, and retry.
+        el.scrollIntoView({ behavior: "auto", block: "center", inline: "nearest" });
+        r = targetRect(step, el);
+        placed = placeCard(step, r);
+      }
       if (!placed) centerCard();
     } else {
       u.card.classList.remove("tour-card-center");

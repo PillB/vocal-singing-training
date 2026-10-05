@@ -150,13 +150,26 @@ test.describe("Retention features", () => {
   test("practice heatmap and analytics exist", async ({ page }) => {
     await boot(page);
     // The map is part of "Tu progreso", in Historial, once something is saved.
+    // With practice from today only, the calendar above already shows it all,
+    // so the map waits.
     await page.evaluate(() => {
       const at = new Date().toISOString();
       localStorage.setItem("vt_progress_v1", JSON.stringify({ "v1-diction": { completedCount: 1, lastAt: at, lastScore: 6, history: [{ at, score: 6, durationSec: 60, metrics: {} }] } }));
+      const today = window.VTDays.dayKey();
+      localStorage.setItem("vt_days_v1", JSON.stringify({ v: 1, days: { [today]: { sec: 240, n: 2, ex: ["v1-diction"] } }, rest: { bank: 1, earnedAt: 0, used: [] }, backfilled: true }));
     });
     await page.reload({ waitUntil: "networkidle" });
     await page.click("#btn-history");
     await expect(page.locator("#view-history #value-pulse")).toBeVisible();
+    await expect(page.locator("#practice-heatmap")).toBeHidden();
+    // Practice from two months ago is further back than the calendar reaches.
+    await page.evaluate(() => {
+      const at = new Date().toISOString();
+      const old = new Date(Date.now() - 60 * 86400000).toISOString();
+      localStorage.setItem("vt_progress_v1", JSON.stringify({ "v1-diction": { completedCount: 2, lastAt: at, lastScore: 6, history: [{ at: old, score: 5, durationSec: 60, metrics: {} }, { at, score: 6, durationSec: 60, metrics: {} }] } }));
+    });
+    await page.reload({ waitUntil: "networkidle" });
+    await page.click("#btn-history");
     await expect(page.locator("#practice-heatmap")).toBeVisible();
     const r = await page.evaluate(() => {
       const hm = VTValuePulse.heatmap(4);

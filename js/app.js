@@ -1360,14 +1360,20 @@
     else toast(tt("toast.noExercises"));
   }
 
+  /** The step "¿Terminar la rutina?" was asked on; another step drops the question. */
+  let endAsking = null;
+
   function updateSessionBanner() {
     const banner = $("#session-banner");
     const s = VTSession.get();
     if (!s || s.status === "completed") {
+      endAsking = null;
       banner.classList.remove("visible");
+      syncEndAsk(false);
       syncStructuredProgress();
       return;
     }
+    if (endAsking != null && endAsking !== s.index) endAsking = null;
     banner.classList.add("visible");
     const trackLabel = tt(s.track === "vocal" ? "tab.vocalShort" : "tab.singingShort");
     const status = tt(s.status === "paused" ? "session.statusPaused" : "session.statusActive");
@@ -1389,11 +1395,46 @@
     const restParts = [s.status === "paused" ? status : "", name].filter(Boolean);
     rest.textContent = restParts.length ? "\u00a0· " + restParts.join(" · ") : "";
     const text = $("#session-banner-text");
+    if (endAsking != null) {
+      pos.textContent = tt("session.endAsk");
+      rest.textContent = "\u00a0" + tt("session.endAskRest", { n: Math.min(s.index + 1, s.order.length), total: s.order.length });
+    }
     text.replaceChildren(pos, rest);
     text.title = text.textContent;
-    $("#btn-session-resume").hidden = s.status !== "paused";
-    $("#btn-session-pause").hidden = s.status !== "active";
+    $("#btn-session-resume").hidden = endAsking != null || s.status !== "paused";
+    $("#btn-session-pause").hidden = endAsking != null || s.status !== "active";
+    syncEndAsk(endAsking != null);
     syncStructuredProgress();
+  }
+
+  function syncEndAsk(asking) {
+    $("#session-banner").classList.toggle("asking", asking);
+    $("#btn-session-end").hidden = asking;
+    $("#btn-session-end-yes").hidden = !asking;
+    $("#btn-session-end-no").hidden = !asking;
+  }
+
+  /**
+   * Terminar ends the routine, and a new one starts again at its first step.
+   * Past the first step it asks first (design review: Terminar threw the
+   * place away without a word); on the first there is no place to lose.
+   */
+  function askEndStructured() {
+    const s = VTSession.get();
+    if (!s || s.status === "completed" || !(s.index > 0)) {
+      endStructured();
+      return;
+    }
+    endAsking = s.index;
+    updateSessionBanner();
+    $("#btn-session-end-no")?.focus();
+  }
+
+  function cancelEndAsk() {
+    if (endAsking == null) return;
+    endAsking = null;
+    updateSessionBanner();
+    $("#btn-session-end")?.focus();
   }
 
   /**
@@ -1411,6 +1452,11 @@
       return;
     }
     sp.hidden = false;
+    // On a phone on its side this line stands in for the banner's, question included.
+    if (endAsking != null) {
+      sp.textContent = tt("session.endAsk");
+      return;
+    }
     const paused = VTSession.get()?.status === "paused" ? tt("session.statusPaused") : "";
     sp.textContent = [VTSession.progressLabel(), paused].filter(Boolean).join(" · ");
   }
@@ -3910,7 +3956,10 @@
    */
   function syncRoutineNav() {
     const nav = $("#structured-nav");
-    if (nav) nav.hidden = !state.structured || (!!state.metricsOpen && !rateQuiet());
+    // The step-done card over the stage names the next step itself; a second
+    // "Siguiente ejercicio" at the foot of the page read as another way on.
+    const doneShowing = $("#step-done") ? !$("#step-done").hidden : false;
+    if (nav) nav.hidden = !state.structured || doneShowing || (!!state.metricsOpen && !rateQuiet());
   }
 
   /**
@@ -3954,10 +4003,11 @@
     });
   }
 
-  /** After a save, scroll just far enough that the score itself is in view. */
+  /** After a save, scroll just far enough that the score itself (and a routine's way on) is in view. */
   function revealScore() {
     requestAnimationFrame(() => {
-      const big = $("#score-result .score-big");
+      // In a routine, down to its next-step button, which follows the score.
+      const big = $("#score-result #ps-routine-next") || $("#score-result .score-big");
       if (!big) return;
       const vh = window.innerHeight || 600;
       const b = big.getBoundingClientRect();
@@ -4604,10 +4654,13 @@
     const feelHtml = FEEL[opts.feel]
       ? `<p class="score-feel">${escapeHtml(tt("rate.feel", { feel: tt(`rate.${opts.feel}`) }))}</p>`
       : "";
+    // In a routine the way on comes straight after the score: under the
+    // breakdown it sat a screen and a half below the answer that saved it.
     box.innerHTML = `
       <div class="score-big">${VTMetrics.formatScore(result)}</div>
       ${feelHtml}
       ${compareHtml}
+      ${state.structured ? routineHtml : ""}
       <p>${result.summary}</p>
       <p class="muted" style="font-size:0.85rem;">${result.how}</p>
       <ul class="breakdown">
@@ -4622,7 +4675,7 @@
           .join("")}
       </ul>
       <div class="encourage">${tt("toast.sessionEncourage")}</div>
-      ${firstWinHtml}
+      ${state.structured ? "" : firstWinHtml}
     `;
 
     // Wire first-win / next-step CTAs (habit loop — kind only)
@@ -4763,6 +4816,7 @@
     const covered = Math.min(sr.height / 2, chrome ? chrome.getBoundingClientRect().bottom - sr.top : 0);
     box.style.paddingTop = covered > 2 ? `calc(1rem + ${Math.round(covered)}px)` : "";
     box.hidden = false;
+    syncRoutineNav();
     // Focus the way on, unless the learner is typing (a note in the rating form).
     const a = document.activeElement;
     if (!(a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))) $("#btn-step-done-next")?.focus();
@@ -4780,6 +4834,7 @@
     if (!box || box.hidden) return;
     const hadFocus = box.contains(document.activeElement);
     box.hidden = true;
+    syncRoutineNav();
     if (returnFocus && hadFocus) $("#btn-practice-start")?.focus();
   }
 
@@ -5194,6 +5249,17 @@
    * Display label for a week element. The stored value stays the English key so
    * plans saved before this change keep working; only the label is localized.
    */
+  /** One plain line on what a week element trains; "" when none is written. */
+  function weekElementDesc(el) {
+    const slug = String(el || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "");
+    const key = `plan.desc.${slug}`;
+    const out = tt(key);
+    return out === key ? "" : out;
+  }
+
   function weekElementLabel(el) {
     if (!el) return "—";
     const slug = String(el)
@@ -5263,6 +5329,22 @@
         : tt("plan.statusReview", { element: weekElementLabel(plan.element) });
 
     renderPlanChips(plan, track);
+
+    // The picked focus in one plain line, and the start button names it.
+    const desc = $("#plan-el-desc");
+    const descText = plan.element ? weekElementDesc(plan.element) : "";
+    desc.hidden = !descText;
+    // After a colon the line runs on in lower case: "Afinación: cantar justo…"
+    desc.innerHTML = descText
+      ? `<strong>${escapeHtml(weekElementLabel(plan.element))}:</strong> ${escapeHtml(
+          descText.charAt(0).toLowerCase() + descText.slice(1)
+        )}`
+      : "";
+    const startBtn = $("#btn-plan-start");
+    startBtn.textContent = plan.element
+      ? tt("plan.startWith", { n: plan.weekNumber, element: weekElementLabel(plan.element) })
+      : tt("plan.start");
+    $("#plan-start-hint").hidden = !!plan.element;
 
     const exs = plan.element ? planExercisesFor(plan.element, track) : [];
     const exList = $("#plan-exercise-list");
@@ -5392,6 +5474,8 @@
     const plan = VTStorage.getWeekPlan();
     if (!plan.element) {
       toast(tt("toast.pickElement"));
+      // Straight to the choice the button is waiting on.
+      $("#element-chips .chip:not([hidden])")?.focus();
       return;
     }
     beginPlanWeek(plan);
@@ -5600,7 +5684,18 @@
     });
     $("#btn-session-pause").addEventListener("click", pauseStructured);
     $("#btn-session-resume").addEventListener("click", resumeStructured);
-    $("#btn-session-end").addEventListener("click", endStructured);
+    $("#btn-session-end").addEventListener("click", askEndStructured);
+    $("#btn-session-end-yes")?.addEventListener("click", () => {
+      endAsking = null;
+      endStructured();
+    });
+    $("#btn-session-end-no")?.addEventListener("click", cancelEndAsk);
+    $("#session-banner")?.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && endAsking != null) {
+        e.stopPropagation();
+        cancelEndAsk();
+      }
+    });
 
     $("#btn-back-home").addEventListener("click", () => {
       leaveExerciseBack();
@@ -6468,6 +6563,15 @@
         "aria-label",
         tt(practised === 1 ? "retain.heatmapAria1" : "retain.heatmapAria", { n: practised, w: data.weeks })
       );
+      // Historial's calendar already shows the last five weeks. Until practice
+      // goes back further than that, the 26-week map only repeated it, mostly
+      // as empty squares, so it waits until it has something to add.
+      const wrap = $("#practice-heatmap-wrap");
+      const D = window.VTDays;
+      const sum = D?.summary?.();
+      const calFrom = sum?.practiceDays && D.weekStart ? D.addDays(D.weekStart(sum.today), -28) : null;
+      const firstCell = data.cells.find((c) => c.count > 0);
+      if (wrap) wrap.hidden = !!calFrom && (!firstCell || String(firstCell.date) >= calFrom);
     }
     updateHomeZeroClass();
   }

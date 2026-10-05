@@ -4551,8 +4551,12 @@ footer a {
 }
 .header-nav .nav-link.active {
   color: var(--text);
-  background: rgba(110, 180, 232, 0.2);
-  box-shadow: inset 0 0 0 1px rgba(110, 180, 232, 0.5);
+  background: rgba(110, 180, 232, 0.26);
+  /* A bar under the word as well as the tint, like every other pick on the
+     site: on a phone, a tint alone was too faint to tell where you are. */
+  box-shadow:
+    inset 0 0 0 1px rgba(110, 180, 232, 0.7),
+    inset 0 -3px 0 var(--accent);
 }
 .header-utils {
   display: flex;
@@ -5114,6 +5118,21 @@ body.loop-first #home-tour-invite .btn {
 .plan-pick {
   margin: 1rem 0 0.55rem;
   font-size: 1rem;
+}
+/* Round 5: the picked focus explained in one line, under the chips */
+.plan-el-desc {
+  margin: 0.6rem 0 0;
+  font-size: 0.92rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+.plan-el-desc strong {
+  color: var(--text);
+}
+.plan-start-hint {
+  flex: 1 1 100%;
+  margin: 0.15rem 0 0;
+  font-size: 0.86rem;
 }
 /* The picked focus says so in text, not only in colour. */
 #element-chips .chip[aria-pressed="true"]::before {
@@ -6850,6 +6869,15 @@ body .app-header {
   min-height: var(--min-tap);
   padding: 0.3rem 0.8rem;
   font-size: 0.85rem;
+}
+/* "¿Terminar la rutina?" with its two answers: where the line has no room
+   for all three, the answers drop to a row of their own, at the right. */
+.session-banner.visible.asking {
+  flex-wrap: wrap;
+  row-gap: 0.2rem;
+}
+.session-banner.asking .controls-row {
+  margin-left: auto;
 }
 /* The banner already says "Ejercicio n de N" */
 body:has(#session-banner.visible) #structured-progress {

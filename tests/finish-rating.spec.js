@@ -223,6 +223,26 @@ test.describe("Rating: one tap after a take", () => {
     await expect(page.locator("#rate-note")).toContainText("Guardado: 7.0 / 10");
     await expect(page.locator("#btn-rate-skip")).toBeHidden();
     await expect(page.locator("#ps-routine-next")).toBeVisible();
+    // The way on follows the score, not the breakdown, and is brought on
+    // screen (on the next frame, then a smooth scroll).
+    expect(
+      await page.evaluate(() => {
+        const list = document.querySelector("#score-result .breakdown");
+        const next = document.querySelector("#post-session-next");
+        return !!(next.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING);
+      })
+    ).toBe(true);
+    await page.clock.runFor(100);
+    await expect
+      .poll(
+        () =>
+          page.evaluate(() => {
+            const b = document.querySelector("#ps-routine-next").getBoundingClientRect();
+            return b.top >= 0 && b.bottom <= window.innerHeight;
+          }),
+        { timeout: 5000 }
+      )
+      .toBe(true);
 
     // One take, rated in place; the day counted once.
     let after = await records(page, "s4-lip-trills");

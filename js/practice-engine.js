@@ -362,6 +362,15 @@
       if (this.running) return;
       // Progressive constraints: Safari/Firefox reject some ideal combinations
       this.stream = await this._acquireMic();
+      // A phone or headset may ignore the request to leave the input alone.
+      // Automatic gain evens out exactly the loudness differences the volume
+      // exercises train, so the pictures say so rather than draw a false flat.
+      try {
+        const st = this.stream.getAudioTracks?.()[0]?.getSettings?.() || {};
+        this.processedInput = !!(st.autoGainControl || st.noiseSuppression);
+      } catch {
+        this.processedInput = false;
+      }
       // Prefer the shared piano AudioContext so getUserMedia never orphans
       // a second suspended context (classic "piano silent after mic" bug).
       const shared =
@@ -735,7 +744,23 @@
           airDetected,
           airRaw,
           hfRms,
-          airBand: bandHf
+          airBand: bandHf,
+          /**
+           * This frame alone, with no grace. `voiced` and `voiceFreq` bridge
+           * about a second of silence so a hold survives a flaky detector;
+           * anything that measures a pause, a note's length or an onset needs
+           * the raw edge instead, or a one-second pause reads as speech.
+           */
+          sounding: manual || rms >= holdRms || (hasPitch && rms >= holdRms * 0.55),
+          rawFreq: manual && manualKind === "air" ? null : hasPitch ? freq : null,
+          voiceRmsThreshold: voiceRms,
+          holdRmsThreshold: holdRms,
+          /** The input gain the MIC slider applies: rms / inputGain is the level the slider does not move. */
+          inputGain: this.inputGain ? this.inputGain.gain.value : 1,
+          processedInput: !!this.processedInput,
+          /** Time-domain samples of this frame; valid only during the callback. */
+          buf: this.buf,
+          sampleRate
         });
       }
 

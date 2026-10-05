@@ -169,7 +169,10 @@ function railAndTop(sel) {
     const b = el.getBoundingClientRect();
     if (b.height) rail = Math.max(rail, b.bottom);
   });
-  const el = document.querySelector(sel);
+  let el = document.querySelector(sel);
+  // On a rotated phone a picture's panel drops its title (the page header
+  // names the exercise): the picture itself is then the panel's top
+  if (el && !el.getBoundingClientRect().height) el = el.closest(".mode-panel")?.querySelector(".vz") || el;
   return { rail, top: el ? el.getBoundingClientRect().top : null };
 }
 
@@ -281,8 +284,8 @@ test.describe("Coach strip: the mode and its cue on the stage", () => {
       });
       expect(r.inRail).toBe(true);
       expect(r.hudIn).toBe(true);
-      expect(r.title).toBe("Juego de afinación");
-      expect(r.cue).toBe("Escucha primero, luego afina. Bloquea 8 notas en el carril verde.");
+      expect(r.title).toBe("Afinar nota · escucha y canta");
+      expect(r.cue).toBe("Escucha la nota entera primero, luego afínala. Fija 8 notas en la banda verde; una octava arriba también vale.");
       expect(r.cueWhole, "every line of the cue inside the strip").toBe(true);
       expect(r.clipped).toBe(false);
       expect(r.inStage).toBe(true);
@@ -310,6 +313,16 @@ test.describe("Coach strip: the mode and its cue on the stage", () => {
     await expect(page.locator("#stage-guide-k")).toHaveText("Qué vas a hacer");
     await expect(page.locator("#stage-guide-now")).toBeHidden();
     await start(page);
+    // Beside a live picture the picture's own stage is the step line: the
+    // clock's guess is not shown next to it
+    await expect(page.locator("#mode-focus .mode-panel.has-viz")).toBeVisible();
+    await expect(page.locator("#stage-guide")).toBeHidden();
+    // A panel without a picture (words only) still gets the clock's step
+    await page.evaluate(() => {
+      const panel = document.querySelector("#mode-focus .mode-panel.has-viz");
+      panel.querySelectorAll(".vz").forEach((v) => v.remove());
+      panel.classList.remove("has-viz");
+    });
     const now = page.locator("#stage-guide-now");
     await expect(now).toBeVisible();
     await expect(page.locator("#stage-now-k")).toHaveText(/^Ahora · paso 1 de (\d+)$/);
@@ -519,7 +532,10 @@ test.describe("Landscape: a phone on its side", () => {
       }
       const r = await page.evaluate(() => {
         const q = (id) => document.getElementById(id).getBoundingClientRect();
-        const title = document.querySelector("#mode-focus-panel .mode-title").getBoundingClientRect();
+        // The panel's title, or its picture where a rotated phone drops the title
+        let head = document.querySelector("#mode-focus-panel .mode-title");
+        if (!head.getBoundingClientRect().height) head = head.closest(".mode-panel").querySelector(".vz") || head;
+        const title = head.getBoundingClientRect();
         const pill = q("practice-status");
         return {
           scrollY,
@@ -715,9 +731,13 @@ test.describe("Pitch match challenge scores the note it asks for", () => {
         pv.chordLanes = [...(pv.chordLanes || []), lane];
       }
       pv.setTargetFreq(wantF);
+      // Past the listen window: the game scores what is sung
+      pv.setDisplay({ gameHold: false });
       for (let i = 0; i < 30; i++) pv.pushFrame(lane.freq, wantF);
       const snap = game.snapshot();
-      // …and on the asked note it is in tune
+      // …and on the asked note, after a breath, it is in tune (these frames
+      // arrive with ~0 ms between them, so the breath empties the window)
+      pv.pushFrame(null, wantF);
       for (let i = 0; i < 30; i++) pv.pushFrame(wantF, wantF);
       const onNote = game.snapshot();
       return {

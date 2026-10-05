@@ -464,6 +464,20 @@
       return peak;
     }
 
+    /**
+     * True while a note is actually sounding (or within `tailSec` after it),
+     * for modes that must not count the piano bleeding into the mic as the
+     * learner's voice. `playing` keeps every voice until stopAll(), so it
+     * can't answer this.
+     */
+    isSounding(tailSec = 0.25) {
+      if (!this.ctx || this.ctx.state !== "running") return false;
+      if (this.loopActive) return true;
+      // Nothing scheduled yet (or stopAll): silent, even in the context's first tailSec
+      if (!this.soundingUntil) return false;
+      return this.ctx.currentTime < this.soundingUntil + tailSec;
+    }
+
     /** True if context running and we recently scheduled voices. */
     isLive() {
       return !!(
@@ -534,6 +548,8 @@
         osc.stop(t0 + duration + 0.05);
         nodes.push(osc);
       }
+      // When the last scheduled voice ends, in context time (see isSounding)
+      this.soundingUntil = Math.max(this.soundingUntil || 0, t0 + duration + 0.05);
 
       // soft hammer noise
       const noiseDur = 0.03;
@@ -610,6 +626,7 @@
         /* ignore */
       }
       this.playing = [];
+      this.soundingUntil = 0;
       if (this.ctx && this.master) {
         this.master.gain.cancelScheduledValues(now);
         // Keep master audible for the next Start

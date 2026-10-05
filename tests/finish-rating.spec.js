@@ -126,10 +126,30 @@ const records = (page, id) =>
 /**
  * The whole rating card is on screen: its top no lower than 45% of it (or as
  * high as the end of the page allows) and its bottom above the fold.
+ *
+ * A pictured exercise (s4, s27) keeps its after-Stop review whole on screen
+ * instead, since that is what the question is answered from; the card follows
+ * below it. There the check is the review first, then the card after the
+ * learner's own scroll.
  */
-async function cardInView(page) {
+async function cardInView(page, { cardFirst = false } = {}) {
   // The reveal runs on the next frame (a faked clock here) and scrolls smoothly.
   await page.clock.runFor(100);
+  const review = page.locator("#mode-focus .mode-panel.has-viz.is-replay, #mode-hud .mode-panel.has-viz.is-replay");
+  // After Stop a picture's review comes first; "Calificar" asks for the card itself
+  if (!cardFirst && (await review.count())) {
+    const vh = await page.evaluate(() => innerHeight);
+    await expect
+      .poll(async () => {
+        const r = await review.first().boundingBox();
+        return r.y >= 0 && r.y + r.height <= vh + 1;
+      }, { message: "the picture's review stays on screen" })
+      .toBe(true);
+    await page.evaluate(() => {
+      const c = document.querySelector("#metrics-card").getBoundingClientRect();
+      window.scrollBy(0, c.top - Math.min(innerHeight * 0.45, innerHeight - c.height - 8));
+    });
+  }
   await expect
     .poll(
       () =>
@@ -184,7 +204,7 @@ test.describe("Rating: one tap after a take", () => {
     // The sliders wait under "Más detalles".
     await expect(page.locator("#rate-more")).not.toHaveAttribute("open", "");
     await expect(page.locator("#btn-complete")).toBeHidden();
-    const geo = await cardInView(page);
+    const geo = await cardInView(page, { cardFirst: true });
     expect(geo.qBelowChrome).toBe(true);
     geo.btns.forEach((b) => {
       expect(b.onTop).toBe(true);
@@ -394,6 +414,22 @@ test.describe("Rating: one tap after a take", () => {
       await expect(page.locator("#metrics-card #playback-area audio")).toHaveCount(1);
       if (viewport.short) {
         await page.clock.runFor(100);
+        // v1 is pictured: its review stays on screen, the answers are a scroll below
+        const review = page.locator("#mode-focus .mode-panel.has-viz.is-replay");
+        if (await review.count()) {
+          await page.clock.runFor(100);
+          await expect
+            .poll(async () => {
+              const r = await review.boundingBox();
+              return r.y >= 0 && r.y + r.height <= viewport.height + 1;
+            }, { message: "the picture's review stays on screen" })
+            .toBe(true);
+          // the learner's scroll: the answers just under the sticky chrome
+          await page.evaluate(() => {
+            const chrome = Math.max(...[...document.querySelectorAll(".app-header, .exercise-header-compact")].map((e) => e.getBoundingClientRect().bottom));
+            window.scrollTo({ top: scrollY + document.querySelector(".rate-row").getBoundingClientRect().top - chrome - 8, behavior: "instant" });
+          });
+        }
         await expect
           .poll(() =>
             page.evaluate(() =>

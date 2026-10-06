@@ -115,15 +115,16 @@
   }
 
   /**
-   * Turn a yes to the region bar into a no, and drop the log it allowed: the
-   * state a press on the bar's Reject leaves. Nothing to do anywhere the bar
-   * was not answered yes.
+   * Turn a yes to the region bar into a no, and drop the log and the A/B id it
+   * allowed: the state a press on the bar's Reject leaves. Nothing to do
+   * anywhere the bar was not answered yes.
    */
   function takeBackYes() {
     const R = global.VTRegion;
     if (R?.consent?.() !== "granted") return;
     R.setConsent?.(false);
     global.VTAnalytics?.clear?.();
+    global.VTExperiments?.reset?.();
   }
 
   function init() {

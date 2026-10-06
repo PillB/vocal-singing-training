@@ -863,6 +863,8 @@ test.describe("Admin page", () => {
     // css/styles.css that way, and index.html five of its scripts. And a file
     // two pages share has to carry the same stamp on both, or one of them keeps
     // the old copy (guide.html's stylesheet once fell behind index.html's).
+    // Anything after the path other than exactly ?v=<word> fails too, rather
+    // than slipping past the check: an empty ?v=, a second parameter or a #.
     const fs = require("fs");
     const root = path.join(__dirname, "..");
     const pages = fs.readdirSync(root).filter((name) => name.endsWith(".html"));
@@ -870,9 +872,10 @@ test.describe("Admin page", () => {
     const seen = {};
     for (const name of pages) {
       const html = fs.readFileSync(path.join(root, name), "utf8");
-      for (const m of html.matchAll(/(?:src|href)="((?:js|css)\/[^"?#]+)(?:\?v=(\w+))?"/g)) {
-        expect(m[2], `${name} loads ${m[1]} with no ?v=`).toBeTruthy();
-        (seen[m[1]] = seen[m[1]] || {})[name] = m[2];
+      for (const m of html.matchAll(/(?:src|href)\s*=\s*["']?(?:\.?\/)?((?:js|css)\/[^"'\s>?#]+)([^"'\s>]*)/g)) {
+        const stamp = /^\?v=(\w+)$/.exec(m[2]);
+        expect(stamp, `${name} loads ${m[1]}${m[2]}, not ${m[1]}?v=<version>`).toBeTruthy();
+        (seen[m[1]] = seen[m[1]] || {})[name] = stamp[1];
       }
     }
     expect(Object.keys(seen["css/styles.css"]).sort()).toEqual([...pages].sort());

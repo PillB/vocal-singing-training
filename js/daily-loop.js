@@ -486,7 +486,10 @@
     return arm("loop_home_2026_10") !== "classic";
   }
 
-  /** The loop owns the start panel: switched on, and a day already sung. */
+  /**
+   * The loop owns the start panel: switched on, and a day already sung. A
+   * guided session left open still keeps the panel's own copy (guidedNote).
+   */
   function isOn() {
     const D = days();
     return !!D && loopEnabled() && D.summary().practiceDays > 0;
@@ -961,6 +964,28 @@
     return !!(s && s.status !== "completed" && s.order?.length);
   }
 
+  /** A rest day just spent, in the panel's words, or "" when there is none to tell. */
+  function restLine(sum) {
+    const rest = lastRest && lastRest.on === sum.today ? lastRest : sum.rest.justUsed;
+    return rest?.days?.length
+      ? tt(rest.days.length === 1 ? "loop.subRest1" : "loop.subRestN", { n: rest.days.length, streak: sum.streak })
+      : "";
+  }
+
+  /**
+   * A guided session left open keeps the panel's own copy, and its button,
+   * which resumes it, stays the one primary. What the loop would have said
+   * goes at the top of that copy instead: the welcome back, and a rest day
+   * just spent. Null outside the loop's arm, where the old card and toast say
+   * them, and wherever the loop draws the panel itself.
+   * @returns {{ kicker: string, sub: string } | null}
+   */
+  function guidedNote() {
+    if (!isOn() || !guidedOpen()) return null;
+    const sum = days().summary();
+    return { kicker: !sum.todayDone && sum.comeback ? tl("loop.kickerBack") : "", sub: restLine(sum) };
+  }
+
   /** Re-render home the way the app does, so every part of the panel agrees. */
   function refresh() {
     if (hooks.refresh) hooks.refresh();
@@ -1129,10 +1154,7 @@
           : state === "sang"
             ? tl("loop.subSang", null, trackId)
             : tt(trackId === "vocal" ? "loop.subVocal" : "loop.sub");
-      const rest = lastRest && lastRest.on === sum.today ? lastRest : sum.rest.justUsed;
-      const restTxt = rest?.days?.length
-        ? tt(rest.days.length === 1 ? "loop.subRest1" : "loop.subRestN", { n: rest.days.length, streak: sum.streak })
-        : "";
+      const restTxt = restLine(sum);
       // Headline and button only: the kicker and title already say what today
       // is. The line shows for the one thing only it says, a rest day spent.
       sub.textContent = restTxt || subTxt;
@@ -1384,6 +1406,7 @@
     // The loop's arm of loop_home is served. This file loads in both arms, so
     // its presence on the page says nothing about which one this browser got.
     enabled: loopEnabled,
+    guidedNote,
     startTier,
     onPractice,
     onRoutineComplete,

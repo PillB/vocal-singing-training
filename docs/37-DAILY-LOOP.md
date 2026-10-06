@@ -119,6 +119,11 @@ From the first day sung, the start panel becomes **today's basics**:
   the button. The size and steps are in the chips below and in the exercise
   itself; the intro line shows only when it reports a rest day spent. A number
   and its unit never break across lines ("3 minutos").
+- A guided session left open (one from the catalog, or a size left half-way)
+  keeps the panel's own copy, and its one button resumes it. The loop's words
+  go at the top of that copy: "Qué bueno verte" on a comeback, and the line
+  for a rest day just spent. The classic arm keeps the old welcome-back card
+  and rest-day toast instead.
 - One naming scheme. The button says which size it starts ("▶ Empezar
   básicos" over "Esencial · 10 min"); under it, **Elige el tamaño de hoy:** is
   a segmented choice that only selects. Continuar and the guided sessions sit

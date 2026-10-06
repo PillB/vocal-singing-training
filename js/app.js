@@ -1432,7 +1432,11 @@
     }
     const returning = saved > 0 || guided;
     const key = guided ? "Guided" : returning ? "Back" : "New";
-    kicker.textContent = tt("start.kicker" + key);
+    // In the loop's arm an open guided session keeps this copy, so the loop's
+    // welcome back and a rest day just spent are said here, at the top, where
+    // someone coming back looks; the one button still resumes the session.
+    const note = guided ? window.VTLoop?.guidedNote?.() : null;
+    kicker.textContent = note?.kicker || tt("start.kicker" + key);
     // A routine left half-way is named by where it stands: "Llevas 0 sesiones
     // guardadas" greeted someone who had just stepped out of step 1.
     const s = guided ? VTSession.get() : null;
@@ -1441,7 +1445,7 @@
       : returning
         ? tt(saved === 1 ? "start.titleBack1" : "start.titleBack", { n: saved })
         : tt("start.titleNew");
-    sub.textContent = tt("start.sub" + key);
+    sub.textContent = note?.sub || tt("start.sub" + key);
     if (label) label.textContent = tt(guided ? "home.nextStepLabelGuided" : "home.nextStepLabel");
     if (cta) cta.textContent = tt("start.cta" + key);
   }
@@ -6904,8 +6908,9 @@
     // the days left, so the reminder dialog does not repeat them.
     const fr = VTReminders.tryApplyFreeze();
     if (fr.applied) {
-      // Rest days are the ledger's in both arms, and so is their event. The
-      // loop's start panel says it in its own words; the toast is the fallback.
+      // Rest days are the ledger's in both arms, and so is their event. In the
+      // loop's arm the start panel says so in its own words, a guided
+      // session's copy included; the classic arm keeps the toast.
       window.VTLoop?.noteRest?.(fr);
       if (!loopOn) toast(tt("retain.freezeUsed", { n: String(fr.left) }), { durationMs: 3200 });
     }
@@ -6918,7 +6923,9 @@
     }
 
     // Welcome back after ≥2 days. With the daily loop the start panel itself
-    // becomes the comeback screen, so this card would only repeat it lower down.
+    // becomes the comeback screen, so this card would only repeat it lower
+    // down, and its "▶ 5 min" would compete with the panel's one button. A
+    // guided session left open keeps the panel's copy, so its kicker says it.
     const days = VTReminders.daysSinceLastPractice();
     const wb = $("#welcome-back");
     if (wb) {

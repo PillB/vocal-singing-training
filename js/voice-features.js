@@ -36,6 +36,18 @@
   function median(arr) {
     return percentile(arr, 0.5);
   }
+  /**
+   * True when most neighbouring values of a pitch track (0 = none) stay
+   * within a semitone: a voice or a hum. A fan's noise gets a pitch too, but
+   * a random one each frame.
+   */
+  function heldPitch(hz) {
+    let held = 0;
+    for (let i = 1; i < hz.length; i++) {
+      if (hz[i] > 0 && hz[i - 1] > 0 && Math.abs(Math.log2(hz[i] / hz[i - 1])) < 1 / 12) held++;
+    }
+    return held * 2 > hz.length - 1;
+  }
   /** Seconds this frame covers (the engine caps a stalled tab at 50 ms). */
   function frameDt(frame) {
     return clamp(((frame && frame.dtMs) || 16) / 1000, 0, 0.1);
@@ -274,11 +286,13 @@
    *
    * - Floor: the 10th percentile of the last 6 s of quiet level. Only quiet
    *   frames teach it (the engine's gate closed for longer than a consonant,
-   *   `hangMs`, or below floor + margin), plus sound that has stayed steady
-   *   for a second (a fan, a hum in the room):
-   *   speech swings 10 dB and more between syllables, so a learner who talks
-   *   from the first frame never becomes the floor. Sound must clear it
-   *   by `marginDb` and also clear the engine's own sensitivity gate
+   *   `hangMs`, or below floor + margin), plus sound with no held pitch that
+   *   has stayed steady for a second (a fan, a hiss): speech swings 10 dB
+   *   and more between syllables, so a learner who talks from the first
+   *   frame never becomes the floor. A held pitch is a voice (a sung note,
+   *   an "mmm") and becomes the floor only as a hum that has been there all
+   *   take; the Space assist never does. Sound must clear the floor by
+   *   `marginDb` and also clear the engine's own sensitivity gate
    *   (`frame.sounding`), so a fan does not read as speech and a quiet room
    *   does not turn a breath into a word.
    * - A pause starts only after `hangMs` of quiet (stop consonants leave
@@ -294,7 +308,9 @@
       this.minPauseSec = opts.minPauseSec != null ? opts.minPauseSec : 0.25;
       this.cb = opts;
       this._floorRing = new Ring(Math.round(6 * 30));
+      // The last second of learning steps: level and pitch (0 = none)
       this._recentRing = new Ring(30);
+      this._recentHz = new Ring(30);
       this._floorAcc = 0;
       this.floorDb = -70;
       this.reset();
@@ -306,11 +322,15 @@
       this._quietSince = null;
       this._loudSince = null;
       this._closedSince = null;
+      this._quietestDb = null;
+      this._humSince = null;
+      this._humDb = null;
       this.pauseStart = null;
       this.speechStart = null;
       this.levelDb = -140;
       this._floorRing.clear();
       this._recentRing.clear();
+      this._recentHz.clear();
       this._floorAcc = 0;
     }
     get pauseLen() {
@@ -338,20 +358,13 @@
       this._floorAcc += dt;
       if (this._floorAcc >= 1 / 30) {
         this._floorAcc = 0;
-        this._recentRing.push(db);
-        // A consonant closes the gate for 40–100 ms inside a word: a soft
-        // speaker's dips would become the floor and their weaker syllables
-        // read as pauses. Only a gate still closed after the hangover is quiet.
-        const closed = this._closedSince != null && (this.t - this._closedSince) * 1000 >= this.hangMs;
-        const quiet = closed || db <= this.floorDb + this.marginDb;
-        let steady = false;
-        if (!quiet && this._recentRing.count >= this._recentRing.n) {
-          const r = this._recentRing.last();
-          steady = percentile(r, 0.9) - percentile(r, 0.1) < 6;
-        }
-        if (quiet || steady) this._floorRing.push(db);
-        if (this._floorRing.count >= 15) {
-          this.floorDb = Math.max(-90, percentile(this._floorRing.last(), 0.1));
+        if (frame.manualSound) {
+          // The Space assist fakes a flat level: never the room, and not part
+          // of any steady stretch either
+          this._recentRing.clear();
+          this._recentHz.clear();
+        } else {
+          this._learnFloor(frame, db);
         }
       }
       const loud = !!frame.sounding && db > this.floorDb + this.marginDb;
@@ -390,6 +403,51 @@
       }
       if (this.segments.length > 600) this.segments.splice(0, this.segments.length - 600);
       return this.state;
+    }
+    /** One learning step: does this frame's level belong to the room? */
+    _learnFloor(frame, db) {
+      this._recentRing.push(db);
+      this._recentHz.push(frame.rawFreq || 0);
+      // The quietest level that lasted (three steps, a tenth of a second)
+      if (this._recentRing.count >= 3) {
+        const m = median(this._recentRing.last(3));
+        if (this._quietestDb == null || m < this._quietestDb) this._quietestDb = m;
+      }
+      // A consonant closes the gate for 40–100 ms inside a word: a soft
+      // speaker's dips would become the floor and their weaker syllables
+      // read as pauses. Only a gate still closed after the hangover is quiet.
+      const closed = this._closedSince != null && (this.t - this._closedSince) * 1000 >= this.hangMs;
+      if (closed || db <= this.floorDb + this.marginDb) {
+        this._humSince = null;
+        this._floorRing.push(db);
+      } else if (this._steadyRoom(db)) {
+        this._floorRing.push(db);
+      }
+      if (this._floorRing.count >= 15) {
+        this.floorDb = Math.max(-90, percentile(this._floorRing.last(), 0.1));
+      }
+    }
+    /** Is the sound of the last second of learning steps the room? */
+    _steadyRoom(db) {
+      const r = this._recentRing.last();
+      if (r.length < this._recentRing.n || percentile(r, 0.9) - percentile(r, 0.1) >= 6) {
+        this._humSince = null;
+        return false;
+      }
+      // A fan or a hiss has no pitch, or a random one each frame (the pitch
+      // detector reports one for any noise at −40 dBFS and up)
+      if (!heldPitch(this._recentHz.last())) {
+        this._humSince = null;
+        return true;
+      }
+      // A held pitch is a voice (a sung note, an "mmm", a monotone phrase)
+      // unless it has held for 10 s and nothing quieter was heard all take:
+      // then it is a hum in the room
+      if (this._humSince == null || Math.abs(db - this._humDb) > 3) {
+        this._humSince = this.t - 1;
+        this._humDb = db;
+      }
+      return this.t - this._humSince >= 10 && db <= this._quietestDb + 3;
     }
     /** Closed pauses of at least `minSec`, as { start, len }. */
     pauses(minSec = this.minPauseSec) {

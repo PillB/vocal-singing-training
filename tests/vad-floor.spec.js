@@ -62,6 +62,38 @@ test.describe("pause floor (Vad)", () => {
     }
   });
 
+  test("a sung hold is a voice, not the room", async ({ page }) => {
+    // The soft-palate drill's sung step: two 9 s holds with a 1 s breath.
+    // Each hold used to become the floor and end in a pause ~1 s early.
+    let r = await sim(page, { parts: [QUIET(3), NOTE(9), QUIET(1), NOTE(9), QUIET(2)] });
+    expect(r.falsePauses, r.segs).toBe(0);
+    expect(r.talk, r.segs).toBeGreaterThan(17.5);
+    expect(r.silences[0].measured).toBeGreaterThan(0.85);
+    // A straight tone, no vibrato, held 20 s
+    r = await sim(page, { parts: [QUIET(1), NOTE(20, { vibDb: 0, vibCents: 0 })] });
+    expect(r.segs).toMatch(/^s1\.0\d-20\.99$/);
+  });
+
+  test("the Space assist is never the room", async ({ page }) => {
+    // Held 12 s, then pressed again 1.2 s after release
+    const r = await sim(page, { parts: [QUIET(2), SPACE(12), QUIET(1.2), SPACE(1.5), QUIET(1)] });
+    expect(r.falsePauses, r.segs).toBe(0);
+    expect(r.segs.match(/s/g), r.segs).toHaveLength(2);
+    expect(r.silences[0].measured).toBeGreaterThan(1.1);
+    expect(r.silences[0].measured).toBeLessThan(1.3);
+  });
+
+  test("a flat 'mmm' or monotone speech is not the room", async ({ page }) => {
+    // A 2.5 s filler between two runs of speech, no silence anywhere
+    let r = await sim(page, { parts: [SPEECH(4), NOTE(2.5, { level: -30, vibDb: 0.5, vibCents: 5 }), SPEECH(6)] });
+    expect(r.segs, "no pause inside the filler").toMatch(/^s0\.0\d-12\.50$/);
+    // Sonorant speech whose syllables dip only 4–6 dB, from the first frame
+    for (const dip of [-29, -31]) {
+      r = await sim(page, { parts: [SPEECH(20, { dip, voicedCons: true })] });
+      expect(r.segs, `dips at ${dip} dB`).not.toContain("p");
+    }
+  });
+
   test("silence, then speech: a 1.2 s pause measures 1.2 s", async ({ page }) => {
     const r = await sim(page, { parts: [QUIET(2), SPEECH(10), QUIET(1.2), SPEECH(4)] });
     expect(r.falsePauses).toBe(0);

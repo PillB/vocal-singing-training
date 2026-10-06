@@ -93,6 +93,32 @@ function staleView(kv, snapshot) {
   };
 }
 
+/**
+ * A view of a fake KV in which another webhook is processed in full while
+ * this one is at work: right after this one first reads `key` (and gets what
+ * was there before), the other runs to the end, so every later read sees
+ * what it wrote. Writes go through.
+ * @param {Object} kv Fake KV namespace.
+ * @param {string} key The read the other webhook comes in after.
+ * @param {function(): Promise<*>} other Processes the other webhook.
+ * @returns {Object} KV-shaped view.
+ */
+function overtakenView(kv, key, other) {
+  let overtaken = false;
+  return {
+    async get(name) {
+      const value = await kv.get(name);
+      if (name === key && !overtaken) {
+        overtaken = true;
+        await other();
+      }
+      return value;
+    },
+    put: (name, value, options) => kv.put(name, value, options),
+    delete: (name) => kv.delete(name)
+  };
+}
+
 test("an event is processed once and then recognised as a replay", async () => {
   const kv = createFakeKv();
   assert.equal(await markEventSeen(kv, "stripe", "evt_1"), true);
@@ -1032,6 +1058,76 @@ test("a charge that went through survives a concurrent write of an older copy of
     assert.equal(refunded.record.chargedAt, NOW + 55, status);
     assert.equal(refunded.record.periodEnd, NOW + 3600, `${status}: the refund ends it`);
     assert.equal(isTokenIssuable(await getEntitlement(kv, "lic_1"), NOW + 7200), false, status);
+  }
+});
+
+test("an earlier charge written after a later one leaves the later charge's own key alone", async () => {
+  const MONTH = 2678400;
+  const DAY = 86400;
+  const renewedAt = 55 + 30 * DAY;
+  /**
+   * A charge of the subscription, as either notification brings it.
+   * @param {string} topic Which notification brings it.
+   * @param {number} n Which charge: 1 the first, 2 the renewal.
+   * @param {number} approvedAt Seconds after NOW it went through.
+   * @returns {Object} Entitlement update descriptor.
+   */
+  const charge = (topic, n, approvedAt) => mercadoPagoUpdate(topic, topic === "payment"
+    ? {
+      id: 4000 + n,
+      status: "approved",
+      metadata: { preapproval_id: "pre_back" },
+      date_created: isoAt(approvedAt - 5),
+      date_approved: isoAt(approvedAt),
+      date_last_updated: isoAt(approvedAt + 6),
+      payer: { id: 9 }
+    }
+    : {
+      id: 800 + n,
+      preapproval_id: "pre_back",
+      status: "processed",
+      date_created: isoAt(approvedAt - 5),
+      date_last_updated: isoAt(approvedAt + 5),
+      payment: { id: 4000 + n, status: "approved", date_approved: isoAt(approvedAt) }
+    });
+
+  for (const topic of ["subscription_authorized_payment", "payment"]) {
+    const kv = createFakeKv();
+    const generateId = idSequence("lic_");
+    await upsertEntitlement(kv, mercadoPagoUpdate("subscription_preapproval", {
+      id: "pre_back",
+      status: "pending",
+      reason: "Vocal Studio Pro mensual",
+      date_last_updated: isoAt(0),
+      payer_id: 9
+    }), { now: NOW + 5, generateId });
+
+    // The first month's charge is processed a month late, at the same moment
+    // as the renewal's: it reads the license, the renewal is processed in
+    // full, and then the first charge writes.
+    const renewal = () => upsertEntitlement(kv, charge(topic, 2, renewedAt), { now: NOW + renewedAt + 30, generateId });
+    await upsertEntitlement(overtakenView(kv, chargedKey("lic_1"), renewal), charge(topic, 1, 55), {
+      now: NOW + renewedAt + 30,
+      generateId
+    });
+    const written = JSON.parse(kv.store.get(licenseKey("lic_1")).value);
+    assert.equal(written.chargedAt, NOW + 55, `${topic}: the record itself lost the renewal`);
+    assert.equal(kv.store.get(chargedKey("lic_1")).value, String(NOW + renewedAt), `${topic}: the renewal's key stays`);
+
+    // The subscriber then cancels: the renewal still buys its month.
+    await upsertEntitlement(kv, mercadoPagoUpdate("subscription_preapproval", {
+      id: "pre_back",
+      status: "cancelled",
+      reason: "Vocal Studio Pro mensual",
+      date_last_updated: isoAt(renewedAt + 300),
+      payer_id: 9
+    }), { now: NOW + renewedAt + 400, generateId });
+    const read = await getEntitlement(kv, "lic_1");
+    assert.equal(read.status, "canceled", topic);
+    assert.equal(read.chargedAt, NOW + renewedAt, topic);
+    assert.equal(read.periodEnd, NOW + renewedAt + MONTH, `${topic}: the month the renewal paid for`);
+    assert.equal(isTokenIssuable(read, NOW + renewedAt + 20 * DAY), true, `${topic}: still Pro 20 days into it`);
+    assert.equal(isTokenIssuable(read, NOW + renewedAt + MONTH), false, `${topic}: nothing past it`);
   }
 });
 

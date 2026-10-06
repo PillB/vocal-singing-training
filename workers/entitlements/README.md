@@ -223,7 +223,8 @@ same time cannot lose them: KV has no compare-and-swap, and the later of two
 concurrent writes of the record wins. Every read of a record applies them over
 it. `reversed:` holds the latest refunded or charged-back charge, and
 `charged:` the latest charge that went through (and so the interval it bought),
-as the record does.
+as the record does. `charged:` is read again just before each write and is
+never set back to an earlier charge.
 
 D1: one database bound as `DB`, optional. The schema is created on first use
 (`ensureSchema`, every statement `IF NOT EXISTS`), so there is no migration step
@@ -370,11 +371,16 @@ Consequences worth understanding before you ship:
   and cancels at once keeps the interval it bought) and a Mercado Pago refund
   survive that through their own keys, and KV's eventual consistency only
   delays them (another edge location can take up to about a minute to see a
-  write). Any other change can be lost to it, and so can a charge or a refund
-  processed at the same moment as another charge or its refund. A renewal's
-  new period end comes back with the next event that carries it. Worse, the
-  first two events for a new license (a checkout and its subscription's first
-  event) processed at once can each find no license and mint one. The claim
+  write). Any other change can be lost to it. A charge's key is read again
+  just before it is written and only moves on to a later charge, so an
+  earlier charge processed at the same moment as a later one sets it back only
+  when the later one's write lands in the instant between that read and that
+  write, or at an edge location that has not seen it yet. The refund of a
+  later charge processed at the same moment as the refund of an earlier one
+  can still be lost. A renewal's new period end comes back with the next
+  event that carries it. Worse, the first two events for a new license (a
+  checkout and its subscription's first event) processed at once can each
+  find no license and mint one. The claim
   then points at one record and the subscription index, which every later
   event follows, at the other, so the claimed copy never hears of a renewal
   or a cancellation and does not heal: a cancelled customer could keep Pro

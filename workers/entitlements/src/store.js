@@ -23,9 +23,14 @@
  * concurrent write of an older copy cannot lose it. KV is also eventually
  * consistent, so another edge location may not see such a key for up to about
  * a minute: the fact is then late, not lost. Changes that are not one-way (an
- * ordinary status or period update) can still be lost that way, and so can a
- * later charge, or the refund of one, processed at the same moment as an
- * earlier charge or its refund. Worse, the first two events for a new license
+ * ordinary status or period update) can still be lost that way. The charge's
+ * key is read again just before it is written and only ever moves on to a
+ * later charge, so an earlier charge processed alongside a later one sets it
+ * back only when the later one's write lands in the instant between that read
+ * and that write, or at an edge location that has not seen the later one yet.
+ * The refund's key is written from the record as it was read, so the refund
+ * of a later charge processed at the same moment as the refund of an earlier
+ * one can still be lost. Worse, the first two events for a new license
  * processed at once (a checkout and its subscription's first event) can each
  * find no license and mint one: the claim then points at one record and the
  * subscription index, which every later event follows, at the other, so the
@@ -659,7 +664,12 @@ export async function upsertEntitlement(kv, update, options) {
     await kv.put(paidKey(licenseId), "1");
   }
   if (!ended && Number.isFinite(update.periodEndFromCharge)) {
-    await kv.put(chargedKey(licenseId), String(record.chargedAt));
+    // Read again first: a later charge processed alongside this one may have
+    // written its own since this record was read, and the key only moves on.
+    const storedChargedAt = await readCharged(kv, licenseId);
+    if (storedChargedAt === null || record.chargedAt > storedChargedAt) {
+      await kv.put(chargedKey(licenseId), String(record.chargedAt));
+    }
   }
   if (Number.isFinite(update.reversedChargeAt)) {
     await kv.put(reversedKey(licenseId), JSON.stringify({

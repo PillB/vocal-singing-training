@@ -19,6 +19,7 @@ import {
   upsertEntitlement
 } from "../src/store.js";
 import { isAwaitingPayment, isTokenIssuable } from "../src/license.js";
+import { mapMercadoPagoResource } from "../src/mercadopago.js";
 import { createFakeKv } from "./fixtures.mjs";
 
 const NOW = 1770000000;
@@ -34,6 +35,42 @@ function idSequence(prefix) {
     n += 1;
     return `${prefix}${n}`;
   };
+}
+
+/**
+ * The update a Mercado Pago API resource maps to, as the webhook hands it to
+ * the store.
+ * @param {string} kind Notification kind.
+ * @param {Object} resource What the Mercado Pago API answers for it.
+ * @returns {Object} Entitlement update descriptor.
+ */
+function mercadoPagoUpdate(kind, resource) {
+  return mapMercadoPagoResource(kind, resource, {}).update;
+}
+
+/**
+ * An ISO date some seconds after NOW.
+ * @param {number} seconds Offset from NOW.
+ * @returns {string} ISO-8601 date.
+ */
+function isoAt(seconds) {
+  return new Date((NOW + seconds) * 1000).toISOString();
+}
+
+/**
+ * Every order of every non-empty selection of `items`.
+ * @param {Array} items Items to order.
+ * @returns {Array<Array>} Orders.
+ */
+function orderings(items) {
+  const result = [];
+  items.forEach((item, index) => {
+    result.push([item]);
+    for (const rest of orderings([...items.slice(0, index), ...items.slice(index + 1)])) {
+      result.push([item, ...rest]);
+    }
+  });
+  return result;
 }
 
 /**
@@ -550,6 +587,195 @@ test("a charge that went through buys its interval even when it is heard of afte
     occurredAt: NOW + 50
   }, { now: NOW + 200 });
   assert.equal(afterDeletion.record.periodEnd, NOW + 100);
+});
+
+test("a charge processed before its subscription is counted on the subscription's plan", async () => {
+  const MONTH = 2678400;
+  const YEAR = 31536000;
+  // A yearly subscriber pays and pauses or cancels two minutes later, and
+  // the charge is processed before the subscription's own notification,
+  // which already says it stopped. A charge does not say its plan, so the
+  // license is first counted as a month.
+  const charges = {
+    subscription_authorized_payment: {
+      id: 501,
+      preapproval_id: "pre_y",
+      status: "processed",
+      date_created: isoAt(50),
+      date_last_updated: isoAt(60),
+      payment: { id: 1001, status: "approved", date_approved: isoAt(55) }
+    },
+    payment: {
+      id: 1001,
+      status: "approved",
+      metadata: { preapproval_id: "pre_y" },
+      date_created: isoAt(50),
+      date_approved: isoAt(55),
+      date_last_updated: isoAt(61),
+      payer: { id: 9 }
+    }
+  };
+  const yearly = (status, nextPaymentAt) => mercadoPagoUpdate("subscription_preapproval", {
+    id: "pre_y",
+    status,
+    reason: "Vocal Studio Pro anual",
+    next_payment_date: isoAt(nextPaymentAt),
+    date_last_updated: isoAt(120),
+    payer_id: 9
+  });
+  for (const status of ["cancelled", "paused"]) {
+    for (const [topic, charge] of Object.entries(charges)) {
+      const label = `${topic}, then ${status}`;
+      const kv = createFakeKv();
+      const generateId = idSequence("lic_");
+      const first = await upsertEntitlement(kv, mercadoPagoUpdate(topic, charge), { now: NOW + 200, generateId });
+      assert.equal(first.record.periodEnd, NOW + 55 + MONTH, `${label}: no plan heard of yet`);
+      const stopped = await upsertEntitlement(kv, yearly(status, YEAR), { now: NOW + 200, generateId });
+      assert.equal(stopped.stale, false, label);
+      assert.equal(stopped.record.plan, "pro_yearly", label);
+      assert.equal(stopped.record.status, "canceled", label);
+      assert.equal(stopped.record.periodEnd, NOW + 55 + YEAR, `${label}: the year it paid for`);
+      const read = await getEntitlement(kv, "lic_1");
+      assert.equal(isTokenIssuable(read, NOW + 60 * 86400), true, `${label}: still Pro on day 60`);
+      assert.equal(isTokenIssuable(read, NOW + 55 + YEAR), false, `${label}: nothing past the year`);
+    }
+  }
+
+  // An authorized subscription's own next charge date stands: its charge is
+  // not counted past it.
+  let kv = createFakeKv();
+  let generateId = idSequence("lic_");
+  await upsertEntitlement(kv, mercadoPagoUpdate("payment", charges.payment), { now: NOW + 200, generateId });
+  const authorized = await upsertEntitlement(kv, yearly("authorized", YEAR - 3600), { now: NOW + 200, generateId });
+  assert.equal(authorized.record.plan, "pro_yearly");
+  assert.equal(authorized.record.periodEnd, NOW + YEAR - 3600);
+
+  // The charge's refund still ends the year, whichever comes first.
+  const refund = mercadoPagoUpdate("subscription_authorized_payment", {
+    ...charges.subscription_authorized_payment,
+    date_last_updated: isoAt(3600),
+    payment: { id: 1001, status: "refunded", date_approved: isoAt(55) }
+  });
+  for (const order of [["refund", "stop"], ["stop", "refund"]]) {
+    kv = createFakeKv();
+    generateId = idSequence("lic_");
+    await upsertEntitlement(kv, mercadoPagoUpdate("subscription_authorized_payment", charges.subscription_authorized_payment),
+      { now: NOW + 7200, generateId });
+    for (const step of order) {
+      await upsertEntitlement(kv, step === "refund" ? refund : yearly("cancelled", YEAR), { now: NOW + 7200, generateId });
+    }
+    const read = await getEntitlement(kv, "lic_1");
+    assert.equal(read.plan, "pro_yearly", order.join(", "));
+    assert.equal(read.periodEnd, NOW + 3600, `${order.join(", ")}: the refund ends it`);
+    assert.equal(isTokenIssuable(read, NOW + 7200), false, order.join(", "));
+  }
+});
+
+test("every order of a subscription's notifications gives a paid charge its interval and an unpaid one nothing", async () => {
+  const MONTH = 2678400;
+  const YEAR = 31536000;
+  const plans = [
+    { reason: "Vocal Studio Pro mensual", interval: MONTH, nextPaymentAt: 30 * 86400, day: 20 },
+    { reason: "Vocal Studio Pro anual", interval: YEAR, nextPaymentAt: YEAR, day: 60 }
+  ];
+  /**
+   * What the Mercado Pago API answers for each notification once the
+   * subscriber has paid (or not) and the subscription reached `status`.
+   * @param {Object} plan Entry of `plans`.
+   * @param {string} status Preapproval status.
+   * @param {string} paymentStatus Status of the first charge.
+   * @returns {Object<string, {kind: string, resource: Object}>} Resources.
+   */
+  const resources = (plan, status, paymentStatus) => ({
+    preapproval: {
+      kind: "subscription_preapproval",
+      resource: {
+        id: "pre_s",
+        status,
+        reason: plan.reason,
+        next_payment_date: isoAt(plan.nextPaymentAt),
+        date_last_updated: isoAt(120),
+        payer_id: 9
+      }
+    },
+    authorized_payment: {
+      kind: "subscription_authorized_payment",
+      resource: {
+        id: 502,
+        preapproval_id: "pre_s",
+        status: paymentStatus === "approved" ? "processed" : "recycling",
+        date_created: isoAt(50),
+        date_last_updated: isoAt(60),
+        payment: { id: 1002, status: paymentStatus, date_approved: paymentStatus === "approved" ? isoAt(55) : null }
+      }
+    },
+    payment: {
+      kind: "payment",
+      resource: {
+        id: 1002,
+        status: paymentStatus,
+        metadata: { preapproval_id: "pre_s" },
+        date_created: isoAt(50),
+        date_approved: paymentStatus === "approved" ? isoAt(55) : null,
+        date_last_updated: isoAt(61),
+        payer: { id: 9 }
+      }
+    }
+  });
+  /**
+   * Process `order` on a fresh store and read the license back.
+   * @param {Object<string, {kind: string, resource: Object}>} notifications Resources by name.
+   * @param {Array<string>} order Names in processing order.
+   * @returns {Promise<Object>} The license.
+   */
+  const processInOrder = async (notifications, order) => {
+    const kv = createFakeKv();
+    const generateId = idSequence("lic_");
+    for (const name of order) {
+      const { kind, resource } = notifications[name];
+      await upsertEntitlement(kv, mercadoPagoUpdate(kind, resource), { now: NOW + 200, generateId });
+    }
+    return getEntitlement(kv, "lic_1");
+  };
+  const orders = orderings(["preapproval", "authorized_payment", "payment"]);
+  assert.equal(orders.length, 15);
+
+  for (const plan of plans) {
+    for (const status of ["authorized", "cancelled", "paused"]) {
+      const notifications = resources(plan, status, "approved");
+      for (const order of orders) {
+        if (order.length === 1 && order[0] === "preapproval") {
+          // No charge processed yet: nothing has said the money arrived.
+          continue;
+        }
+        const label = `${plan.reason}, ${status}: ${order.join(", ")}`;
+        const read = await processInOrder(notifications, order);
+        if (!order.includes("preapproval")) {
+          // Nothing has said the plan yet: the charge buys the shorter one.
+          assert.equal(read.periodEnd, NOW + 55 + MONTH, label);
+        } else if (status === "authorized") {
+          assert.ok(read.periodEnd >= NOW + plan.nextPaymentAt, `${label}: through the next charge date`);
+          assert.ok(read.periodEnd <= NOW + 55 + plan.interval, `${label}: no more than the charge paid for`);
+        } else {
+          assert.equal(read.periodEnd, NOW + 55 + plan.interval, `${label}: the interval it paid for`);
+        }
+        const day = order.includes("preapproval") ? plan.day : 20;
+        assert.equal(isTokenIssuable(read, NOW + day * 86400), true, `${label}: Pro on day ${day}`);
+      }
+    }
+    for (const status of ["pending", "cancelled", "paused"]) {
+      for (const paymentStatus of ["rejected", "in_process", "refunded"]) {
+        const notifications = resources(plan, status, paymentStatus);
+        for (const order of orders) {
+          const label = `${plan.reason}, ${status}, charge ${paymentStatus}: ${order.join(", ")}`;
+          const read = await processInOrder(notifications, order);
+          for (const at of [NOW + 200, NOW + 86400, NOW + plan.day * 86400]) {
+            assert.equal(isTokenIssuable(read, at), false, `${label}: nothing paid, nothing at ${at - NOW}s`);
+          }
+        }
+      }
+    }
+  }
 });
 
 test("money given back ends the period at once and never lengthens it", async () => {

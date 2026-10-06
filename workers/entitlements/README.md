@@ -337,9 +337,14 @@ Consequences worth understanding before you ship:
   are still written. So is the one interval a charge that went through buys
   (a Mercado Pago charge, a one-time Stripe checkout): a subscription paused
   or cancelled minutes after it was paid for keeps that period even when the
-  pause or cancellation is processed first. It only ever lengthens the
-  period, its refund still ends it, and after a Stripe deletion it does
-  nothing.
+  pause or cancellation is processed first. The record keeps when the latest
+  such charge went through, and an update that brings a new plan counts that
+  charge again on it: a subscription's charge does not say its plan, so one
+  processed before the subscription's own notification is first counted as a
+  month, and a yearly subscriber who stops at once still keeps the year. It
+  only ever lengthens the period, never past an authorized subscription's own
+  next charge date in the update that sets it, its refund still ends it, and
+  after a Stripe deletion it does nothing.
 - **Same-second events resolve the same way in either order.** Stripe stamps
   events to the second. When two share a second, one that would make a
   `canceled` or `suspended` record entitling again is refused, and so is one
@@ -455,7 +460,9 @@ Preapproval `authorized` → `active`, `pending` →
 `pending`, `paused`/`cancelled`/anything else → `canceled`. An approved payment
 sets the period to one plan interval from its approval date, in whatever order
 it arrives (a paused or cancelled subscription keeps the period its charge
-paid for even when the pause or cancellation is processed first); an authorized
+paid for even when the pause or cancellation is processed first, and a charge
+processed before the subscription's notification, which is what says the plan,
+is counted again on that plan once it arrives); an authorized
 preapproval's `next_payment_date` sets it directly, and only while it is
 authorized. A payment's `date_of_expiration` (the voucher's deadline) and
 `next_retry_date` (a dunning date) are never used as a paid-through date. A

@@ -8547,7 +8547,8 @@
       // asked for rather than a batch turned away. eu_no_consent was missing
       // here, so batches refused for want of an EEA answer vanished from the
       // readout: accepted did not move, refused did not move, and the numbers
-      // simply did not add up to what was posted.
+      // simply did not add up to what was posted. tests/accounts.spec.js checks
+      // this list and the other two here against the worker's.
       const refusedKeys = [
         "origin_not_allowed",
         "rate_limited",

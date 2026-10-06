@@ -7,6 +7,8 @@
  * tokens the stub hands back are genuinely signed with a throwaway key, so the
  * signature check that decides Pro is the real one.
  */
+const path = require("path");
+const { pathToFileURL } = require("url");
 const { test, expect } = require("@playwright/test");
 const { mintLicense, patchBillingConfig } = require("./helpers/billing");
 
@@ -670,6 +672,39 @@ test.describe("Accounts, gifted months and saved progress", () => {
     await page.click("#ab-results-load");
     await expect(line).toContainText("Exposiciones: exposure_new 100, exposure_unregistered 10");
     await expect(line).not.toHaveClass(/ab-warn/);
+  });
+
+  test("every counter the worker keeps has a place in the arrivals line", async ({ page }) => {
+    // The worker's list of ingest reasons and this readout's are two copies of
+    // one list, and they have drifted before: eu_no_consent was added to the
+    // worker's alone, and batches it turned away vanished from the line. Every
+    // reason gets its own count here, so a new one the line does not handle
+    // breaks a sum or goes missing from the names.
+    const events = pathToFileURL(path.join(__dirname, "..", "workers", "entitlements", "src", "events.js")).href;
+    const { INGEST_REASONS } = await import(events);
+    expect(Object.keys(INGEST_REASONS).sort()).toEqual(["event", "exposure", "request"]);
+    const totals = {};
+    Object.values(INGEST_REASONS)
+      .flat()
+      .forEach((key, i) => {
+        totals[key] = 11 + i;
+      });
+    const sum = (keys) => keys.reduce((n, k) => n + totals[k], 0);
+    const droppedKeys = INGEST_REASONS.event.filter((k) => k !== "accepted");
+    // A deletion somebody asked for is not a batch turned away.
+    const refusedKeys = INGEST_REASONS.request.filter((k) => k !== "forget");
+
+    const license = await mintLicense({ origin: BASE });
+    const stub = createWorkerStub({ role: "admin", ingest: { since: "2026-09-17", totals, lastAcceptedAt: 1790000000 } });
+    await installWorker(page, stub, license);
+    await boot(page);
+    await signIn(page);
+    await page.click("#ab-results-load");
+    const line = page.locator("#ab-results .ab-ingest");
+    await expect(line).toContainText(
+      `${totals.accepted} eventos guardados, ${sum(droppedKeys)} descartados, ${sum(refusedKeys)} envíos rechazados`
+    );
+    for (const key of [...refusedKeys, ...INGEST_REASONS.exposure]) await expect(line).toContainText(`${key} ${totals[key]}`);
   });
 
   test("before its plan is met a test shows counts and the date, never a comparison", async ({ page }) => {

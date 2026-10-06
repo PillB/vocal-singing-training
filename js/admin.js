@@ -424,6 +424,8 @@
         automated: "navegadores automáticos",
         origin_not_allowed: "otro sitio",
         rate_limited: "demasiados seguidos",
+        body_too_large: "envíos demasiado grandes",
+        bad_request: "envíos mal formados",
         exposure_new: "exposiciones nuevas",
         exposure_recovered: "exposiciones recuperadas en otra visita",
         exposure_unregistered: "exposiciones a una prueba o versión que no existe",
@@ -469,6 +471,8 @@
         automated: "automated browsers",
         origin_not_allowed: "another site",
         rate_limited: "too many at once",
+        body_too_large: "requests too large",
+        bad_request: "malformed requests",
         exposure_new: "new exposures",
         exposure_recovered: "exposures recovered on a later visit",
         exposure_unregistered: "exposures to a test or arm that does not exist",
@@ -1407,10 +1411,13 @@
     }
     const totals = ingest.totals || {};
     const n = (key) => Number(totals[key]) || 0;
-    const dropped = ["unknown_event", "bad_cid", "not_an_object", "body_too_large", "bad_request"].reduce(
-      (sum, key) => sum + n(key),
-      0
-    );
+    // Grouped as the worker groups them (INGEST_REASONS in
+    // workers/entitlements/src/events.js): events dropped one by one are summed,
+    // and each whole request turned away has its own row. body_too_large and
+    // bad_request used to be summed in with the events, which mixed requests
+    // with events and made this "dropped" disagree with the A/B panel's.
+    // tests/admin.spec.js holds the two lists to each other.
+    const dropped = ["unknown_event", "bad_cid", "not_an_object"].reduce((sum, key) => sum + n(key), 0);
     nodes.push(
       el("p", {
         className: "muted",
@@ -1425,6 +1432,8 @@
       ["automated", n("automated")],
       ["origin_not_allowed", n("origin_not_allowed")],
       ["rate_limited", n("rate_limited")],
+      ["body_too_large", n("body_too_large")],
+      ["bad_request", n("bad_request")],
       ["dropped", dropped],
       // What became of the exposures among the events stored, which the worker
       // counts and this list used to leave out.

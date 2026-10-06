@@ -805,6 +805,47 @@ test.describe("Admin page", () => {
     await adminCtx.close();
   });
 
+  test("statistics: every counter the worker keeps is shown once, grouped as the worker groups it", async ({
+    browser
+  }) => {
+    // The worker's list of ingest reasons and this page's are two copies of one
+    // list. They drifted once (eu_no_consent), and this page also counted two
+    // whole requests turned away, body_too_large and bad_request, as events
+    // dropped, so its "dropped" did not match the A/B panel's for the same week.
+    // Every reason gets its own count here: each must be a row of its own, or
+    // be summed into the one row for events dropped one by one.
+    const { INGEST_REASONS } = await import(
+      pathToFileURL(path.join(__dirname, "..", "workers", "entitlements", "src", "events.js")).href
+    );
+    expect(Object.keys(INGEST_REASONS).sort()).toEqual(["event", "exposure", "request"]);
+    const totals = {};
+    Object.values(INGEST_REASONS)
+      .flat()
+      .forEach((key, i) => {
+        totals[key] = 11 + i;
+      });
+    const dropped = INGEST_REASONS.event.filter((k) => k !== "accepted").reduce((n, k) => n + totals[k], 0);
+    const own = ["accepted", ...INGEST_REASONS.request, ...INGEST_REASONS.exposure];
+
+    const { worker, admin } = await startWorker();
+    const adminCtx = await browser.newContext();
+    const page = await openAdmin(adminCtx, worker, admin);
+    await page.route(`${API}/v1/admin/experiments**`, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        headers: { "access-control-allow-origin": "*" },
+        body: JSON.stringify({ ok: true, experiments: [], ingest: { since: "2026-09-29", totals, lastAcceptedAt: 1790000000 } })
+      })
+    );
+    await page.click("#stats-load");
+    const counts = page.locator("#stats-result .admin-counts li strong");
+    await expect(counts.first()).toBeVisible();
+    const shown = (await counts.allTextContents()).map(Number).sort((a, b) => a - b);
+    expect(shown).toEqual([...own.map((k) => totals[k]), dropped].sort((a, b) => a - b));
+    await adminCtx.close();
+  });
+
   test("the sandbox's trial length is the one wrangler.toml deploys", async () => {
     const fs = require("fs");
     const toml = fs.readFileSync(path.join(__dirname, "..", "workers", "entitlements", "wrangler.toml"), "utf8");

@@ -962,6 +962,11 @@ How to read it:
   worker does not know yet, which happens when the site was updated and the
   worker was not. A steady stream after a merge means the worker needs its
   redeploy (8.7); a stray few are harmless.
+- **envíos demasiado grandes** (requests too large) and **envíos mal formados**
+  (malformed requests): whole requests turned away unread, rather than events
+  dropped one by one, so they are counted apart. The site rarely causes them
+  (a connection that drops mid-send); a steady stream is somebody posting at
+  the route by hand.
 - Only once an experiment is switched on: **exposiciones nuevas** (new
   exposures), browsers entered into a test; **exposiciones recuperadas en otra
   visita** (exposures recovered on a later visit), the ones among them whose

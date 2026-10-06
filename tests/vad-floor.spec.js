@@ -36,6 +36,7 @@ test.describe("clarity (VTPitchUtils.clarity)", () => {
   test("a voice or a hum reads periodic and a fan does not, at any level or sample rate", async ({ page }) => {
     await page.setContent("<!doctype html><title>clarity</title>");
     await page.addScriptTag({ url: BASE + "/js/pitch-visualizer.js" });
+    await page.addScriptTag({ url: BASE + "/js/practice-engine.js" });
     const out = await page.evaluate(() => {
       let seed = 7;
       const rnd = () => {
@@ -49,13 +50,24 @@ test.describe("clarity (VTPitchUtils.clarity)", () => {
         const r = Math.sqrt(s / x.length);
         return x.map((v) => v / r);
       };
+      // Noise through `order` one-pole low-passes at `hz`
+      const lowNoise = (n, sr, hz, order) => {
+        const lp = new Array(order).fill(0);
+        return norm(
+          Array.from({ length: n }, () => {
+            let v = gauss();
+            for (let j = 0; j < order; j++) v = lp[j] += (v - lp[j]) * ((2 * Math.PI * hz) / sr);
+            return v;
+          })
+        );
+      };
       const sounds = {
         white: (n) => norm(Array.from({ length: n }, gauss)),
-        // A fan's low rumble: noise under 150 Hz, the closest noise comes to a period
-        rumble: (n, sr) => {
-          let lp = 0;
-          return norm(Array.from({ length: n }, () => (lp += (gauss() - lp) * ((2 * Math.PI * 150) / sr))));
-        },
+        // A fan's low rumble: noise under 150 Hz, the closest noise comes to a
+        // period; and one with steeper skirts, under 200 or 250 Hz
+        rumble: (n, sr) => lowNoise(n, sr, 150, 1),
+        "rumble2-200": (n, sr) => lowNoise(n, sr, 200, 2),
+        "rumble2-250": (n, sr) => lowNoise(n, sr, 250, 2),
         // A vowel at 135 Hz with ±15 cents of vibrato and three formants
         vowel: (n, sr, f0 = 135) => {
           let ph = 0;
@@ -75,11 +87,14 @@ test.describe("clarity (VTPitchUtils.clarity)", () => {
         // Mains hum through a cheap supply: 120 Hz and its octave
         hum: (n, sr) => norm(Array.from({ length: n }, (_, i) => Math.sin((2 * Math.PI * 120 * i) / sr) + 0.5 * Math.sin((2 * Math.PI * 240 * i) / sr)))
       };
-      const res = {};
-      // 96 kHz: a 2048-sample frame is 21 ms, shorter than two periods of a
-      // low male voice
-      for (const sr of [48000, 44100, 96000]) {
-        const n = sr;
+      const res = { size: {} };
+      // On the frames the engine hands over: about 43 ms at any rate (a 96 kHz
+      // interface's 2048 samples last 21 ms, under two periods of a low male
+      // voice), read 30 times a second as the Vad does
+      for (const sr of [48000, 44100, 96000, 192000]) {
+        const size = window.VTPracticeEngine.frameSize(sr);
+        res.size[sr] = size;
+        const n = 2 * sr;
         const src = {};
         Object.keys(sounds).forEach((k) => (src[k] = sounds[k](n, sr)));
         // The same vowel from a low male voice, at 75 Hz
@@ -91,22 +106,29 @@ test.describe("clarity (VTPitchUtils.clarity)", () => {
           const g = Math.pow(10, db / 20);
           Object.keys(src).forEach((k) => {
             const vals = [];
-            for (let end = 2048; end <= n; end += 1600) {
-              const buf = Float32Array.from(src[k].slice(end - 2048, end), (v) => v * g);
+            for (let end = size; end <= n; end += Math.round(sr / 30)) {
+              const buf = Float32Array.from(src[k].slice(end - size, end), (v) => v * g);
               vals.push(window.VTPitchUtils.clarity(buf, sr));
             }
-            vals.sort((a, b) => a - b);
-            res[`${k} ${db} dB ${sr}`] = Math.round(vals[vals.length >> 1] * 100) / 100;
+            const med = (a) => {
+              const s = a.slice().sort((x, y) => x - y);
+              return (s[(s.length - 1) >> 1] + s[s.length >> 1]) / 2;
+            };
+            // The Vad's test: the median of a steady 0.6 s stretch (18 steps)
+            let top = 0;
+            for (let i = 0; i + 18 <= vals.length; i++) top = Math.max(top, med(vals.slice(i, i + 18)));
+            res[`${k} ${db} dB ${sr}`] = { med: Math.round(med(vals) * 100) / 100, top: Math.round(top * 100) / 100 };
           });
         }
       }
       res.silence = window.VTPitchUtils.clarity(new Float32Array(2048), 48000);
       return res;
     });
+    expect(out.size).toEqual({ 44100: 2048, 48000: 2048, 96000: 4096, 192000: 8192 });
     Object.keys(out).forEach((k) => {
-      if (/^(white|rumble)/.test(k)) expect(out[k], k).toBeLessThan(0.5);
-      else if (/^(vowel|vowel75|hum) /.test(k)) expect(out[k], k).toBeGreaterThan(0.9);
-      else if (/\+white/.test(k)) expect(out[k], k).toBeGreaterThanOrEqual(0.7);
+      if (/^(white|rumble)/.test(k)) expect(out[k].top, `${k}: the most periodic 0.6 s stretch`).toBeLessThan(0.5);
+      else if (/^(vowel|vowel75|hum) /.test(k)) expect(out[k].med, k).toBeGreaterThan(0.9);
+      else if (/\+white/.test(k)) expect(out[k].med, k).toBeGreaterThanOrEqual(0.7);
     });
     expect(out.silence).toBe(0);
   });
@@ -380,9 +402,10 @@ test.describe("pause floor (Vad)", () => {
   test("two soft 'mmm's at one level in a quiet room are not a hum", async ({ page }) => {
     // Talk from the first frame with no pause, so no quiet room has been
     // heard, and two 1 s fillers at one level, under every dip of the talk:
-    // the shape of a hum in two pauses. A stop consonant's closure shuts the
-    // gate for a few frames, which a room that holds it open never does.
-    const mmm = (level) => NOTE(1, { level, vibDb: 0.5, vibCents: 5 });
+    // the shape of a hum in two pauses. A stop consonant's closure falls to
+    // the quiet room, far under the fillers; nothing is quieter than a hum
+    // in a room that has one.
+    const mmm = (level, vibDb = 0.5) => NOTE(1, { level, vibDb, vibCents: 5 });
     for (const [peak, dip] of [
       [-25, -35],
       [-20, -36]
@@ -395,6 +418,18 @@ test.describe("pause floor (Vad)", () => {
           expect(r.falsePauses, label).toBe(0);
           expect(r.ended, label).toEqual([]);
         }
+      }
+      // A closure that falls only to just under the gate (−46.3 dB), only
+      // 2.5 dB under the fillers (a voiced stop's murmur), still shuts the
+      // gate for a few frames, which a room that holds it open never does
+      const murmur = NOTE(0.12, { level: -48, vibDb: 0 });
+      const talk = SPEECH(3, { peak, dip });
+      for (const seed of [1000, 8919, 16838]) {
+        const parts = [SPEECH(1.5, { peak, dip }), murmur, SPEECH(1.5, { peak, dip }), mmm(-45.5, 0.3), talk, mmm(-45.5, 0.3), talk];
+        const r = await sim(page, { seed, parts });
+        const label = `speech ${peak}/${dip} dB, a murmur at −48 dB, 'mmm' at −45.5 dB, seed ${seed} · ${r.segs}`;
+        expect(r.falsePauses, label).toBe(0);
+        expect(r.ended, label).toEqual([]);
       }
     }
   });

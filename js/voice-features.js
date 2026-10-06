@@ -332,7 +332,10 @@
    * the room: it is gone from `segments`, and the Vad is back to idle or to
    * the pause it interrupted (whose end is not reported a second time). A
    * pause held by a hum the floor learned only later is cut out of the
-   * speech then, and its onPauseEnd comes late (no onPause before it).
+   * speech then, and its onPauseEnd comes late (no onPause before it):
+   * `segments`, pauses() and talkSec have it, but a breath, phrase or talk
+   * clock a caller opened at onSpeech still spans it (a hum room, talked
+   * over from Start).
    */
   class Vad {
     constructor(opts = {}) {
@@ -534,8 +537,10 @@
       // Until the floor holds a room, it starts from the first one heard
       const known = this._floorRing.count >= 15;
       if (!known && this._openSteps >= OPEN_STEPS) return OPEN_STEPS;
-      // (a quiet step before the mic settled is the analyser's own silence)
-      if (!known && this._quietAt < OPEN_SETTLE_SEC && !this._shut && this._pauseRoom()) return PAUSE_STEPS;
+      // Once the gate has closed for a few frames since the mic settled, the
+      // room is quiet, whatever level it closed at: a room that holds the
+      // gate open never lets it close
+      if (!known && !this._shut && this._pauseRoom()) return PAUSE_STEPS;
       const steps = known && this.t - this._quietAt < ROOM_HEARD_SEC ? NEW_ROOM_STEPS : ROOM_STEPS;
       const r = this._recentRing.last(steps);
       if (r.length < steps || Math.max(...r) - Math.min(...r) >= ROOM_FLAT_DB) return 0;
@@ -553,6 +558,15 @@
      * such stretch could be a soft "mmm" or a held note; a room comes back
      * in every pause. A voice that stops in a quiet room closes the gate and
      * the room is heard instead, so this never runs there.
+     *
+     * It can still take a voice for the room in one case: a learner already
+     * talking 0.2 s after Start, in a quiet room, whose talk never closes
+     * the gate for 40 ms (few stops, no gap between words) and never dips
+     * 3 dB under two fillers ("mmm") said at one level. The second filler
+     * is then learned as the room, both read as pauses (the first told
+     * late), and talk as soft as them is lost until the first real silence
+     * teaches the floor the room again. Asking for a third stretch would
+     * spare that, at the cost of every hum room learned a pause later.
      */
     _pauseRoom() {
       const lv = this._recentRing.last();

@@ -84,6 +84,20 @@
    * Returns Hz or null.
    */
   function detectPitch(buf, sampleRate) {
+    // Over 48 kHz the engine's 43 ms frame holds more samples (4096 at
+    // 96 kHz): averaged down to 44.1–48 kHz, the search costs and finds what
+    // it does there (on all 4096 it took three times as long)
+    const D = Math.round(sampleRate / 48000);
+    if (D > 1) {
+      const x = new Float32Array(Math.floor(buf.length / D));
+      for (let i = 0; i < x.length; i++) {
+        let s = 0;
+        for (let k = 0; k < D; k++) s += buf[i * D + k];
+        x[i] = s / D;
+      }
+      buf = x;
+      sampleRate /= D;
+    }
     const SIZE = buf.length;
     let rms = 0;
     for (let i = 0; i < SIZE; i++) {
@@ -159,7 +173,9 @@
    * YIN's cumulative-mean-normalised difference (de Cheveigné & Kawahara,
    * 2002) over periods of 60–500 Hz, on the frame summed down to ~12 kHz:
    * a voice's period needs no more, and it takes under a tenth of
-   * detectPitch's time.
+   * detectPitch's time. The longest period it tries is half the frame,
+   * so the frame must last 34 ms to reach 60 Hz: the engine's lasts about
+   * 43 ms at any sample rate.
    */
   function clarity(buf, sampleRate) {
     const sr = sampleRate || 48000;
@@ -173,24 +189,16 @@
     }
     const rate = sr / D;
     const minLag = Math.floor(rate / 500);
-    const want = Math.ceil(rate / 60);
-    const half = Math.min(want, n >> 1);
-    // At 96 kHz the frame's 2048 samples last 21 ms, and periods past half
-    // of it (under 94 Hz: a low male voice) are compared on what is left,
-    // at least 6 ms, scaled to the full window. Any shorter and a fan's
-    // rumble starts to look periodic.
-    const maxLag = Math.max(half, Math.min(want, n - Math.round(rate * 0.006)));
-    const w = n - half;
+    const maxLag = Math.min(Math.ceil(rate / 60), n >> 1);
+    const w = n - maxLag;
     let run = 0;
     let best = 1;
     for (let lag = 1; lag <= maxLag; lag++) {
-      const m = Math.min(w, n - lag);
       let d = 0;
-      for (let i = 0; i < m; i++) {
+      for (let i = 0; i < w; i++) {
         const e = x[i] - x[i + lag];
         d += e * e;
       }
-      if (m < w) d *= w / m;
       run += d;
       if (lag >= minLag && run > 0) best = Math.min(best, (d * lag) / run);
     }

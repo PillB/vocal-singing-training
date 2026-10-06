@@ -46,9 +46,13 @@ async function stopVoice(page) {
  * the default sensitivity (−36 dBFS after its gain). Pass it to
  * page.addInitScript after useVoice(): it wraps the voice's getUserMedia.
  * A `gain` of 0.00055 is a quiet room's hiss instead (−70 dBFS), which opens
- * the gate only at sensitivity 10.
+ * the gate only at sensitivity 10. `{ gain, hz, order }` is a fan's low
+ * rumble instead: the noise through `order` one-pole low-passes at `hz`, at
+ * the same level for the same gain.
  */
-function fanInRoom(gain) {
+function fanInRoom(opts) {
+  const o = typeof opts === "number" ? { gain: opts } : opts || {};
+  const gain = o.gain;
   const gum = navigator.mediaDevices.getUserMedia;
   navigator.mediaDevices.getUserMedia = async (...args) => {
     const stream = await gum.apply(navigator.mediaDevices, args);
@@ -58,6 +62,19 @@ function fanInRoom(gain) {
       const buf = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate);
       const d = buf.getChannelData(0);
       for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      if (o.hz) {
+        const lp = new Array(o.order || 1).fill(0);
+        let sq = 0;
+        for (let i = 0; i < d.length; i++) {
+          let v = d[i];
+          for (let j = 0; j < lp.length; j++) v = lp[j] += (v - lp[j]) * ((2 * Math.PI * o.hz) / ac.sampleRate);
+          d[i] = v;
+          sq += v * v;
+        }
+        // White noise's own level: an rms of 1/√3
+        const k = 1 / Math.sqrt((3 * sq) / d.length);
+        for (let i = 0; i < d.length; i++) d[i] *= k;
+      }
       const src = ac.createBufferSource();
       src.buffer = buf;
       src.loop = true;

@@ -32,6 +32,18 @@
   /** Default 7/10 — more sensitive than legacy fixed 0.016 (fewer false cutoffs) */
   const DEFAULT_SENS = 7;
 
+  /**
+   * The analyser's frame: about 43 ms of samples at any rate, 2048 at
+   * 44.1–48 kHz, 4096 at 88.2–96 and 8192 at 176.4–192. A 96 kHz interface's
+   * 2048 samples last only 21 ms: a fan's level wobbles 5 dB from one frame
+   * to the next, and two periods of a low male voice no longer fit in it.
+   */
+  function frameSize(sampleRate) {
+    let n = 2048;
+    while (n < 32768 && n < (sampleRate || 48000) * 0.04) n *= 2;
+    return n;
+  }
+
   class PracticeEngine {
     constructor() {
       this.running = false;
@@ -405,7 +417,7 @@
       this.inputGain = this.audioCtx.createGain();
       this.inputGain.gain.value = this._gainFromSens(this.sensitivity);
       this.analyser = this.audioCtx.createAnalyser();
-      this.analyser.fftSize = 2048;
+      this.analyser.fftSize = frameSize(this.audioCtx.sampleRate);
       this.analyser.smoothingTimeConstant = 0.12;
       // WebKit can throw/hang if stream was produced by a different AudioContext
       try {
@@ -773,7 +785,7 @@
           /** The input gain the MIC slider applies: rms / inputGain is the level the slider does not move. */
           inputGain: this.inputGain ? this.inputGain.gain.value : 1,
           processedInput: !!this.processedInput,
-          /** Time-domain samples of this frame; valid only during the callback. */
+          /** Time-domain samples of this frame (about 43 ms at any rate); valid only during the callback. */
           buf: this.buf,
           sampleRate
         });
@@ -783,6 +795,7 @@
     }
   }
 
+  PracticeEngine.frameSize = frameSize;
   global.VTPracticeEngine = PracticeEngine;
   global.VT_HOLD_MIN_SEC = HOLD_MIN_SEC;
   global.VT_HOLD_GRACE_MS = HOLD_GRACE_MS;

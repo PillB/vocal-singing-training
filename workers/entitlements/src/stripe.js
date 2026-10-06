@@ -33,14 +33,18 @@ const STATUS_MAP = {
   active: "active",
   trialing: "active",
   past_due: "past_due",
-  unpaid: "past_due",
+  // "unpaid" means Stripe has stopped retrying, and "paused" that nothing is
+  // being charged. Stripe says to revoke access for both, and an unpaid
+  // subscription's period keeps rolling forward, so the "past_due" grace would
+  // never end. "suspended" never entitles until a payment brings it back.
+  unpaid: "suspended",
   // "incomplete" is a subscription whose FIRST payment never succeeded: the
   // same "money has not arrived" case as an unpaid checkout session, so it must
   // not fall into the entitling "past_due" grace state.
   incomplete: "pending",
   canceled: "canceled",
   incomplete_expired: "canceled",
-  paused: "past_due"
+  paused: "suspended"
 };
 
 /**
@@ -160,12 +164,13 @@ export function planFromInterval(interval, intervalCount) {
 }
 
 /**
- * Map a Stripe subscription status to our entitlement status.
+ * Map a Stripe subscription status to our entitlement status. A status Stripe
+ * adds later is "suspended": it never entitles until we know what it means.
  * @param {unknown} status Stripe subscription status.
- * @returns {string} "active" | "past_due" | "canceled".
+ * @returns {string} "active" | "past_due" | "pending" | "suspended" | "canceled".
  */
 export function mapStripeStatus(status) {
-  return STATUS_MAP[String(status)] || "past_due";
+  return STATUS_MAP[String(status)] || "suspended";
 }
 
 /**

@@ -32,9 +32,13 @@ export const PLAN_IDS = ["pro_monthly", "pro_yearly"];
 /**
  * Entitlement status values.
  * "pending" means a checkout completed but the money has not arrived yet
- * (delayed payment methods); it never entitles.
+ * (delayed payment methods); it never entitles, and the routes answer 202 so
+ * the browser keeps polling.
+ * "suspended" means a subscription that stopped paying without being
+ * cancelled (Stripe "unpaid" or "paused"); it never entitles either, but the
+ * routes answer 403 because there is nothing to wait for.
  */
-export const STATUS_IDS = ["active", "past_due", "canceled", "pending"];
+export const STATUS_IDS = ["active", "past_due", "canceled", "pending", "suspended"];
 
 /**
  * How long one paid interval lasts, used to give payment-only records (no
@@ -270,7 +274,8 @@ export function computeExpiry(entitlement, issuedAt, ttlSeconds) {
  * True when an entitlement still deserves a token.
  *
  * Rules, in order:
- *   - an unknown status, or "pending" (money not in yet), never entitles;
+ *   - an unknown status, "pending" (money not in yet) or "suspended" (a
+ *     subscription that stopped paying) never entitles;
  *   - a known period end that has passed never entitles, whatever the status —
  *     access stops at the end of what was paid for until a renewal moves it;
  *   - "canceled" needs a future period end, so it stops at once when we have
@@ -284,7 +289,9 @@ export function isTokenIssuable(entitlement, nowSeconds) {
   if (!entitlement || typeof entitlement !== "object") {
     return false;
   }
-  if (!STATUS_IDS.includes(entitlement.status) || entitlement.status === "pending") {
+  if (!STATUS_IDS.includes(entitlement.status)
+    || entitlement.status === "pending"
+    || entitlement.status === "suspended") {
     return false;
   }
   const periodEnd = Number.isFinite(entitlement.periodEnd) ? entitlement.periodEnd : null;

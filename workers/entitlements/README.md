@@ -49,6 +49,12 @@ answer **202 `{ok:false,reason:"pending"}`** and the browser keeps polling until
 `checkout.session.async_payment_succeeded` (→ `active`) or
 `async_payment_failed` (→ not entitled) settles it.
 
+A fifth stored status, `suspended`, is a subscription that stopped paying
+without being cancelled (Stripe `unpaid` or `paused`, or a Stripe status this
+worker does not know). It never issues a token either, but the routes answer
+**403 `{ok:false,reason:"inactive"}`**: there is nothing to wait for until a
+payment brings it back.
+
 ## Routes
 
 | Method | Path | Purpose |
@@ -332,12 +338,21 @@ https://pillb.github.io/vocal-singing-training/?billing=success&plan=pro_monthly
 ```
 
 Yearly: `plan=pro_yearly`. Status mapping: `active`/`trialing` → `active`;
-`past_due`/`unpaid` → `past_due` (a grace state that still entitles);
-`incomplete` → `pending`, because that is a subscription whose *first* payment
+`past_due` → `past_due` (a grace state that still entitles while Stripe
+retries); `unpaid`/`paused`/any status not listed here → `suspended`, which
+never entitles: Stripe has stopped retrying or is charging nothing, and an
+unpaid subscription's period keeps rolling forward, so a grace state would
+never end; `incomplete` → `pending`, because that is a subscription whose *first* payment
 never succeeded — the same "money has not arrived" case as an unpaid session, so
 it must not get the grace that an existing subscriber gets;
 `canceled`/`incomplete_expired` → `canceled`. Plan mapping: price id → `session.metadata.plan` → subscription
 interval (`month` → `pro_monthly`, `year` → `pro_yearly`).
+
+Stripe's Billing settings decide what happens when every retry of a failed
+payment has failed. *Cancel the subscription* or *Mark the subscription as
+unpaid* both end access here. *Leave the subscription past-due* keeps it in
+the `past_due` grace with a period that rolls forward each cycle, so access
+would never end; do not pick it with this worker.
 
 ### Mercado Pago
 

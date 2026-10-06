@@ -176,6 +176,14 @@ test("a pending entitlement never issues a token", () => {
   assert.equal(STATUS_IDS.includes("pending"), true);
 });
 
+test("a suspended entitlement never issues a token, whatever its period says", () => {
+  const now = 1770000000;
+  const suspended = createEntitlement({ status: "suspended", periodEnd: now + 29 * 86400 });
+  assert.equal(isTokenIssuable(suspended, now), false);
+  assert.equal(isTokenIssuable({ ...suspended, periodEnd: null }, now), false);
+  assert.equal(STATUS_IDS.includes("suspended"), true);
+});
+
 test("periodEndForPlan turns a charge into one paid interval", () => {
   const now = 1770000000;
   assert.equal(periodEndForPlan("pro_monthly", now), now + 2678400);

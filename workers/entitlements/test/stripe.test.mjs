@@ -122,12 +122,15 @@ test("status mapping covers every Stripe subscription status we expect", () => {
   assert.equal(mapStripeStatus("active"), "active");
   assert.equal(mapStripeStatus("trialing"), "active");
   assert.equal(mapStripeStatus("past_due"), "past_due");
-  assert.equal(mapStripeStatus("unpaid"), "past_due");
+  // Retries are over (unpaid) or nothing is being charged (paused): Stripe says
+  // to revoke access, and its period still rolls forward, so no grace.
+  assert.equal(mapStripeStatus("unpaid"), "suspended");
+  assert.equal(mapStripeStatus("paused"), "suspended");
   // A subscription whose first payment never succeeded gets no grace.
   assert.equal(mapStripeStatus("incomplete"), "pending");
   assert.equal(mapStripeStatus("canceled"), "canceled");
   assert.equal(mapStripeStatus("incomplete_expired"), "canceled");
-  assert.equal(mapStripeStatus("something_new"), "past_due");
+  assert.equal(mapStripeStatus("something_new"), "suspended", "an unknown status never entitles");
 });
 
 test("plan mapping prefers price ids, then metadata, then the interval", () => {

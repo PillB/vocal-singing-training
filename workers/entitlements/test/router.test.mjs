@@ -888,3 +888,31 @@ test("a one-time Stripe checkout paid by a delayed method counts from when the m
   assert.equal(refused.status, 403, "a failed payment gets no interval");
   assert.equal(refused.body.entitlement.periodEnd, null);
 });
+
+test("a Stripe subscription that stopped paying or is paused gives no token, even as its period rolls on", async () => {
+  for (const stripeStatus of ["unpaid", "paused", "a_status_stripe_adds_later"]) {
+    const env = createTestEnv();
+    const now = Math.floor(Date.now() / 1000);
+    await deliverStripe(env, checkoutEvent("cs_stop", "evt_s1", { plan: "pro_monthly", created: now - 100 * DAY }));
+    // Stripe keeps rolling an unpaid subscription's period forward.
+    await deliverStripe(env, {
+      id: "evt_s2",
+      type: "customer.subscription.updated",
+      created: now - 1,
+      data: { object: { id: "sub_router", status: stripeStatus, current_period_end: now + 29 * DAY } }
+    });
+    const claim = await claimFor(env, "stripe", "cs_stop");
+    assert.equal(claim.status, 403, `${stripeStatus}: retries are over, so is access`);
+    assert.equal(claim.body.reason, "inactive", `${stripeStatus}: refused, not left polling`);
+    assert.equal(claim.body.token, undefined);
+
+    // Paying the open invoice brings it back.
+    await deliverStripe(env, {
+      id: "evt_s3",
+      type: "invoice.paid",
+      created: now,
+      data: { object: { id: "in_back", subscription: "sub_router", lines: { data: [{ period: { end: now + 29 * DAY } }] } } }
+    });
+    assert.equal((await claimFor(env, "stripe", "cs_stop")).status, 200, `${stripeStatus}: paid again`);
+  }
+});

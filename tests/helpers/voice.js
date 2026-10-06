@@ -40,4 +40,33 @@ async function stopVoice(page) {
   await page.evaluate(() => window.__VTVoice && window.__VTVoice.stop());
 }
 
-module.exports = { useVoice, playVoice, stopVoice, voiceSource };
+/**
+ * A fan in the room: steady white noise at −50 dBFS mixed into the synthetic
+ * microphone from the first frame, loud enough to open the engine's gate at
+ * the default sensitivity (−36 dBFS after its gain). Pass it to
+ * page.addInitScript after useVoice(): it wraps the voice's getUserMedia.
+ */
+function fanInRoom() {
+  const gum = navigator.mediaDevices.getUserMedia;
+  navigator.mediaDevices.getUserMedia = async (...args) => {
+    const stream = await gum.apply(navigator.mediaDevices, args);
+    const { dest } = window.__VTVoice.h.nodes();
+    if (!window.__fan) {
+      const ac = dest.context;
+      const buf = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      const src = ac.createBufferSource();
+      src.buffer = buf;
+      src.loop = true;
+      const g = ac.createGain();
+      g.gain.value = 0.0055;
+      src.connect(g).connect(dest);
+      src.start();
+      window.__fan = src;
+    }
+    return stream;
+  };
+}
+
+module.exports = { useVoice, playVoice, stopVoice, voiceSource, fanInRoom };

@@ -3568,7 +3568,7 @@
         </div>
         <div class="viz-words">
           <strong class="mode-big" data-l>0 / ${st.claims}</strong>
-          <span data-st>${L("Di la afirmación y guarda silencio ~1 s (sin “¿sabes?”)", "State the claim, then hold ~1 s of silence (no “you know?”)")}</span>
+          <span data-st>${this._askWords()}</span>
         </div>
         <p class="mode-meta muted">${L(
           "Al callar verás cómo terminó tu frase frente a su propio medio (↘ cae, → plano, ↗ sube) y un anillo para el segundo de silencio. «Otra vez» repite la misma afirmación y deja la anterior a la vista.",
@@ -3578,6 +3578,9 @@
       this.$("[data-again]")?.addEventListener("click", () => this._toggleAgain());
       this._mountViz();
     },
+    _askWords() {
+      return L("Di la afirmación y guarda silencio ~1 s (sin “¿sabes?”)", "State the claim, then hold ~1 s of silence (no “you know?”)");
+    },
     _resetClaims() {
       const st = this.state;
       st.slots = [];
@@ -3585,6 +3588,7 @@
       st.shown = null;
       st.maybe = null;
       st.last = null;
+      st.lastWords = "";
       st.phase = "idle";
       st.again = false;
       st.review = false;
@@ -3596,6 +3600,7 @@
       this.hud.classList.add("has-viz");
       this.state.tracker = new S.ShapeTracker({
         onSpeech: (t) => this._onSpeech(t),
+        onTakeBack: (t) => this._onTakeBack(t),
         onPhrase: (p) => this._onPhrase(p)
       });
       this.viz = new V.Surface(this.hud, (ctx, w, h) => S.landingStrip(ctx, w, h, this.state), {
@@ -3631,6 +3636,19 @@
         // on, or the next claim — the next half second decides
         st.maybe = { start: t, gap: t - (st.cur.pauseFrom != null ? st.cur.pauseFrom : st.cur.end) };
         st.phase = "maybeTag";
+      }
+    },
+    /** The speech _onSpeech(t) saw was a fan or a hum: undo what it began. */
+    _onTakeBack(t) {
+      const st = this.state;
+      if (st.phase === "speaking" && st.cur && st.cur.start === t) {
+        st.cur = null;
+        st.shown = st.last;
+        st.phase = st.last ? "landed" : "idle";
+        this._status(st.last ? st.lastWords : this._askWords());
+      } else if (st.phase === "maybeTag" && st.maybe && st.maybe.start === t) {
+        st.maybe = null;
+        st.phase = "landing";
       }
     },
     _onPhrase(p) {
@@ -3733,6 +3751,7 @@
       const words = `${this._endWords(att.fin)} · ${L("pausa", "pause")} ${pause} s${att.landed ? " ✓" : ""}${
         att.tag ? " · " + L("¿etiqueta?", "tag?") : ""
       }`;
+      st.lastWords = words;
       this._status(words);
       this.viz?.caption?.(words, 0);
     },

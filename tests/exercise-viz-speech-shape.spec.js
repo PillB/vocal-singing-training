@@ -10,7 +10,7 @@
  * machine that drops frames does not move the checks.
  */
 const { test, expect } = require("@playwright/test");
-const { useVoice, playVoice } = require("./helpers/voice");
+const { useVoice, playVoice, fanInRoom } = require("./helpers/voice");
 
 const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";
 
@@ -37,6 +37,7 @@ async function boot(page, lang = "es", opts = {}) {
     });
   } else {
     await useVoice(page);
+    if (opts.fan) await page.addInitScript(fanInRoom);
   }
   await page.goto(BASE + "/?e2e", { waitUntil: "domcontentloaded" });
   await page.waitForFunction(() => !!window.VTApp?.openExercise);
@@ -155,6 +156,26 @@ test.describe("speech-shape pictures", () => {
     await page.locator("#btn-practice-stop").click();
     await expect(page.locator("#mode-focus .mode-panel")).toHaveClass(/is-replay/);
     expect(await modeState(page, () => window.VTApp.getState().modeInstance?.state?.review)).toBe(true);
+    expect(errors).toEqual([]);
+  });
+
+  test("v19 with a fan before the first word: the first claim starts with the voice", async ({ page }) => {
+    const errors = await boot(page, "es", { fan: true });
+    await openAndStart(page, "v19-authority-close");
+    // The fan reads as speech until the floor learns it (~0.6 s), then that
+    // speech is taken back: nothing has been said, so nothing is "speaking"
+    await untilModeTime(page, 2.5);
+    expect(await modeState(page, () => window.VTApp.getState().modeInstance.state.phase)).toBe("idle");
+    await expect(page.locator("#mode-focus [data-st]")).toContainText("Di la afirmación");
+    await playVoice(page, "claims");
+    await page.waitForFunction(() => (window.VTApp.getState().modeInstance?.state?.slots?.length || 0) >= 1, null, { timeout: 30000, polling: 100 });
+    const first = await modeState(page, () => {
+      const a = window.VTApp.getState().modeInstance.state.slots[0].attempts[0];
+      return { start: a.start, kind: a.fin && a.fin.kind };
+    });
+    // Its claim began with the voice, not with the fan at Start
+    expect(first.start).toBeGreaterThan(2.4);
+    expect(first.kind).toBe("fall");
     expect(errors).toEqual([]);
   });
 

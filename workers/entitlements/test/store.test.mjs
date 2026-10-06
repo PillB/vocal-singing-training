@@ -477,6 +477,81 @@ test("a charge without a subscription behind it entitles for exactly one interva
   assert.equal(shorter.record.periodEnd, NOW + 2678400 * 2, "a charge never shortens the period");
 });
 
+test("a charge that went through buys its interval even when it is heard of after a newer event", async () => {
+  const MONTH = 2678400;
+  const cancellation = {
+    provider: "mercadopago",
+    claimId: "pre_q",
+    subscriptionId: "pre_q",
+    plan: "pro_monthly",
+    status: "canceled",
+    occurredAt: NOW + 120
+  };
+  const charge = {
+    provider: "mercadopago",
+    claimId: "ap_q",
+    subscriptionId: "pre_q",
+    status: "active",
+    periodEndFromCharge: NOW + 55,
+    occurredAt: NOW + 60
+  };
+
+  // Subscribed, paid and cancelled within minutes, and the cancellation is
+  // processed first.
+  let kv = createFakeKv();
+  await upsertEntitlement(kv, cancellation, { now: NOW + 200, generateId: idSequence("lic_") });
+  const late = await upsertEntitlement(kv, charge, { now: NOW + 200 });
+  assert.equal(late.stale, true);
+  assert.equal(late.record.status, "canceled", "the cancellation still owns the status");
+  assert.equal(late.record.occurredAt, NOW + 120);
+  assert.equal(late.record.periodEnd, NOW + 55 + MONTH, "the month it paid for");
+  assert.equal(isTokenIssuable(await getEntitlement(kv, "lic_1"), NOW + 5 * 86400), true);
+
+  // It only ever lengthens the period.
+  const again = await upsertEntitlement(kv, { ...charge, periodEndFromCharge: NOW - MONTH }, { now: NOW + 300 });
+  assert.equal(again.record.periodEnd, NOW + 55 + MONTH);
+
+  // The refund of that charge still ends it, in either order.
+  const refund = {
+    provider: "mercadopago",
+    subscriptionId: "pre_q",
+    reversedAt: NOW + 3600,
+    reversedChargeAt: NOW + 55,
+    occurredAt: null
+  };
+  for (const order of [[cancellation, refund, charge], [cancellation, charge, refund]]) {
+    kv = createFakeKv();
+    const generateId = idSequence("lic_");
+    for (const update of order) {
+      await upsertEntitlement(kv, update, { now: NOW + 7200, generateId });
+    }
+    const read = await getEntitlement(kv, "lic_1");
+    assert.equal(read.periodEnd, NOW + 3600);
+    assert.equal(isTokenIssuable(read, NOW + 7200), false);
+  }
+
+  // A deleted subscription stays as its deletion left it.
+  kv = createFakeKv();
+  await upsertEntitlement(kv, {
+    provider: "stripe",
+    subscriptionId: "sub_q",
+    status: "canceled",
+    periodEnd: NOW + 100,
+    endedAt: NOW + 100,
+    terminal: true,
+    occurredAt: NOW + 100
+  }, { now: NOW + 100, generateId: idSequence("lic_") });
+  const afterDeletion = await upsertEntitlement(kv, {
+    provider: "stripe",
+    subscriptionId: "sub_q",
+    plan: "pro_monthly",
+    status: "active",
+    periodEndFromCharge: NOW + 50,
+    occurredAt: NOW + 50
+  }, { now: NOW + 200 });
+  assert.equal(afterDeletion.record.periodEnd, NOW + 100);
+});
+
 test("money given back ends the period at once and never lengthens it", async () => {
   const kv = createFakeKv();
   const generateId = idSequence("lic_");

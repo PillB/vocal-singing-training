@@ -207,13 +207,13 @@ Secrets — **never** in this repo, only `wrangler secret put`:
 KV: one namespace bound as `ENTITLEMENTS`.
 
 ```
-event:<provider>:<eventId>            "1"          30d TTL   idempotency
-lic:<licenseId>                       record JSON            the entitlement
-claim:<provider>:<sessionOrPaymentId> licenseId    90d TTL   ?billing=success lookup
-sub:<provider>:<subscriptionId>       licenseId              keeps one license per subscription
-paid:<licenseId>                      "1"                    a payment was confirmed (see below)
-ended:<licenseId>                     {endedAt, periodEnd}   the Stripe subscription was deleted
-reversed:<licenseId>                  {reversedChargeAt, reversedAt}  a Mercado Pago charge's money went back
+event:<provider>:<eventId>            "1"                             30d TTL   idempotency
+lic:<licenseId>                       record JSON                               the entitlement
+claim:<provider>:<sessionOrPaymentId> licenseId                       90d TTL   ?billing=success lookup
+sub:<provider>:<subscriptionId>       licenseId                                 keeps one license per subscription
+paid:<licenseId>                      "1"                                       a payment was confirmed (see below)
+ended:<licenseId>                     {endedAt, periodEnd}                      the Stripe subscription was deleted
+reversed:<licenseId>                  {reversedChargeAt, reversedAt}            a Mercado Pago charge's money went back
 ```
 
 `paid:`, `ended:` and `reversed:` repeat facts the record also holds, each in
@@ -334,7 +334,12 @@ Consequences worth understanding before you ship:
   retried `invoice.paid` arriving after `customer.subscription.deleted` is
   filed, not applied. Identity fields, a confirmed or failed payment, money
   given back, and the claim/subscription indexes are order-independent and
-  are still written.
+  are still written. So is the one interval a charge that went through buys
+  (a Mercado Pago charge, a one-time Stripe checkout): a subscription paused
+  or cancelled minutes after it was paid for keeps that period even when the
+  pause or cancellation is processed first. It only ever lengthens the
+  period, its refund still ends it, and after a Stripe deletion it does
+  nothing.
 - **Same-second events resolve the same way in either order.** Stripe stamps
   events to the second. When two share a second, one that would make a
   `canceled` or `suspended` record entitling again is refused, and so is one
@@ -448,7 +453,9 @@ charge, and the preapproval says what became of the subscription. Only its
 refund or chargeback does something (below).
 Preapproval `authorized` → `active`, `pending` →
 `pending`, `paused`/`cancelled`/anything else → `canceled`. An approved payment
-sets the period to one plan interval from its approval date; an authorized
+sets the period to one plan interval from its approval date, in whatever order
+it arrives (a paused or cancelled subscription keeps the period its charge
+paid for even when the pause or cancellation is processed first); an authorized
 preapproval's `next_payment_date` sets it directly, and only while it is
 authorized. A payment's `date_of_expiration` (the voucher's deadline) and
 `next_retry_date` (a dunning date) are never used as a paid-through date. A

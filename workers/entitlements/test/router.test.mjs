@@ -1523,3 +1523,73 @@ test("refunding an earlier Mercado Pago charge leaves the month a later charge p
   assert.equal(reopened.status, 403, "the refunded month stays closed");
   assert.equal(reopened.body.token, undefined);
 });
+
+test("a Mercado Pago subscription stopped before its first charge is processed keeps the month it paid for", async () => {
+  const MONTH = 2678400;
+  /**
+   * Subscribe, pay, and pause or cancel two minutes later. The worker reads
+   * Mercado Pago when it processes each notification, so the subscription's
+   * own notification already says it stopped, and it is processed before the
+   * charge's.
+   * @param {Object} env Env bindings.
+   * @param {string} id Preapproval id.
+   * @param {string} status "cancelled" | "paused".
+   * @param {string} topic Which notification brings the charge.
+   * @param {number} approvedAt When the charge went through, unix seconds.
+   * @returns {Promise<void>} Resolves when both are delivered.
+   */
+  async function payThenStop(env, id, status, topic, approvedAt) {
+    const at = (offset) => new Date((approvedAt + offset) * 1000).toISOString();
+    await deliverMercadoPago(env, "subscription_preapproval", {
+      id,
+      status,
+      reason: "Vocal Studio Pro mensual",
+      next_payment_date: at(30 * DAY),
+      date_last_updated: at(120),
+      payer_id: 5
+    });
+    await deliverMercadoPago(env, topic, topic === "payment"
+      ? {
+        id: `PAY-${id}`,
+        status: "approved",
+        metadata: { preapproval_id: id },
+        date_created: at(-5),
+        date_approved: at(0),
+        date_last_updated: at(6),
+        payer: { id: 5 }
+      }
+      : {
+        id: `AP-${id}`,
+        preapproval_id: id,
+        status: "processed",
+        date_created: at(-5),
+        date_last_updated: at(5),
+        payment: { id: 61, status: "approved", date_approved: at(0) }
+      });
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  for (const status of ["cancelled", "paused"]) {
+    for (const topic of ["subscription_authorized_payment", "payment"]) {
+      const label = `${status}, charge on ${topic}`;
+      const env = createTestEnv();
+      const id = `PRE-QUICK-${status}-${topic}`;
+      await payThenStop(env, id, status, topic, now - 5 * DAY);
+      const claim = await claimFor(env, "mercadopago", id);
+      assert.equal(claim.status, 200, `${label}: the money arrived`);
+      assert.equal(claim.body.entitlement.status, "canceled", label);
+      assert.equal(claim.body.entitlement.periodEnd, now - 5 * DAY + MONTH, `${label}: one month from the charge`);
+      const verified = await verifyLicenseToken(claim.body.token, env);
+      assert.equal(verified.valid, true, label);
+      assert.ok(verified.payload.exp <= now - 5 * DAY + MONTH, `${label}: the token ends with the month`);
+
+      // The same, a month on: the month it paid for is over.
+      const later = createTestEnv();
+      await payThenStop(later, id, status, topic, now - 40 * DAY);
+      const over = await claimFor(later, "mercadopago", id);
+      assert.equal(over.status, 403, `${label}: nothing past the month it paid for`);
+      assert.equal(over.body.entitlement.periodEnd, now - 40 * DAY + MONTH, label);
+      assert.equal(over.body.token, undefined, label);
+    }
+  }
+});

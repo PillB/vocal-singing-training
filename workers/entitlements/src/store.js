@@ -388,6 +388,20 @@ function noteReversal(record, update, now) {
 }
 
 /**
+ * Entitle a charge that went through for one plan interval of the plan the
+ * record holds, from when it went through. Never shortens the period.
+ * @param {Object} record Record being built.
+ * @param {Object} update Entitlement update descriptor.
+ * @returns {void}
+ */
+function extendForCharge(record, update) {
+  const charged = periodEndForPlan(record.plan, update.periodEndFromCharge);
+  if (charged !== null && (!Number.isFinite(record.periodEnd) || charged > record.periodEnd)) {
+    record.periodEnd = charged;
+  }
+}
+
+/**
  * End the period when the money went back, if the reversed charge is what
  * paid for it. A period running well past that charge's interval was paid for
  * by a later charge, so the refund of an earlier month leaves it alone. The
@@ -449,9 +463,10 @@ export function isStaleUpdate(record, update) {
  * Providers deliver out of order and retry, so an update whose `occurredAt` is
  * older than the stored one may not touch plan/status/periodEnd — otherwise a
  * late `invoice.paid` resurrects a subscription that was already deleted.
- * Identity fields, whether a payment was confirmed or failed, money given
- * back, and the claim/subscription indexes are order-independent and are still
- * applied.
+ * Identity fields, whether a payment was confirmed or failed, the interval a
+ * charge that went through paid for (unless the subscription was deleted),
+ * money given back, and the claim/subscription indexes are order-independent
+ * and are still applied.
  *
  * @param {Object} kv KV namespace.
  * @param {Object} update Descriptor: provider, plan, status, customerId,
@@ -536,10 +551,7 @@ export async function upsertEntitlement(kv, update, options) {
     }
     // A single charge with no subscription lifecycle behind it: entitle for one
     // plan interval from the charge. Never shortens an existing period.
-    const charged = periodEndForPlan(record.plan, update.periodEndFromCharge);
-    if (charged !== null && (!Number.isFinite(record.periodEnd) || charged > record.periodEnd)) {
-      record.periodEnd = charged;
-    }
+    extendForCharge(record, update);
     // The provider says access ended at a given time: it ended a subscription
     // because its money never came. Applied after the charge above so nothing
     // re-extends it. (Money given back is handled below, in any order.)
@@ -561,6 +573,13 @@ export async function upsertEntitlement(kv, update, options) {
       record.occurredAt = Math.floor(update.occurredAt);
     }
     record.updatedAt = now;
+  } else if (!ended) {
+    // Money that arrived is order-independent too: a charge still buys its
+    // interval when a newer event (a pause or cancellation processed first)
+    // was heard of before it. A paid subscription stopped early keeps the
+    // period it paid for. Not after a deletion, which stays as it left the
+    // license; a refund of the charge still ends it, below.
+    extendForCharge(record, update);
   }
   // After everything else, so neither a late refund nor a later update (a
   // subscription's next charge date) leaves open a period whose money went

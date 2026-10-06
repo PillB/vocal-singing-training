@@ -1182,6 +1182,41 @@ test("a paid subscription cancelled at once still keeps the period it paid for",
   assert.equal(verified.payload.periodEnd, periodEnd);
 });
 
+test("a delayed payment that settles after the subscription was cancelled at once buys no access", async () => {
+  // Documented in the README: the cancellation came while nothing was paid,
+  // and a deleted subscription stays as its deletion left it.
+  const env = createTestEnv();
+  const now = Math.floor(Date.now() / 1000);
+  await deliverStripe(env, checkoutEvent("cs_late_money", "evt_lm1", {
+    plan: "pro_monthly",
+    paymentStatus: "unpaid",
+    created: now - 4 * DAY
+  }));
+  await deliverStripe(env, {
+    id: "evt_lm2",
+    type: "customer.subscription.deleted",
+    created: now - 3 * DAY,
+    data: {
+      object: {
+        id: "sub_router",
+        status: "canceled",
+        current_period_end: now + 27 * DAY,
+        ended_at: now - 3 * DAY,
+        cancellation_details: { reason: "cancellation_requested" }
+      }
+    }
+  });
+  await deliverStripe(env, checkoutEvent("cs_late_money", "evt_lm3", {
+    type: "checkout.session.async_payment_succeeded",
+    plan: "pro_monthly",
+    created: now - DAY
+  }));
+  const claim = await claimFor(env, "stripe", "cs_late_money");
+  assert.equal(claim.status, 403);
+  assert.equal(claim.body.token, undefined);
+  assert.equal(claim.body.entitlement.periodEnd, now - 3 * DAY, "access ended when the subscription did");
+});
+
 test("an event from the same second as a cancellation cannot bring Pro back", async () => {
   const env = createTestEnv();
   const now = Math.floor(Date.now() / 1000);

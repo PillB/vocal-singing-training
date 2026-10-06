@@ -345,6 +345,12 @@ Consequences worth understanding before you ship:
 - **A deleted Stripe subscription stays deleted.** Stripe never reactivates
   one, so after `customer.subscription.deleted` no event for it changes the
   license, whatever its timestamp, and the deletion is also kept in `ended:`.
+  That includes money that arrives late: a subscription paid by a delayed
+  method (bank debit, boleto, OXXO) that is cancelled at once while the
+  payment is still processing was cancelled unpaid, so access ends at
+  `ended_at`, and the payment settling afterwards buys no access. Cancel such
+  a subscription at the end of its period instead, or refund the payment
+  once it settles.
 - **What concurrency can still do.** Two webhooks for one license processed at
   the same moment both read the record, and the later write wins. A confirmed
   payment, a deletion and a Mercado Pago refund survive that through their own

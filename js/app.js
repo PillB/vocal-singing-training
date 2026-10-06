@@ -2359,6 +2359,8 @@
    * arm, and with a guided session open, while the button started another.
    */
   function tourExerciseId() {
+    // The loop's files load in both arms, but its Mínimo is not where the classic arm's Empezar leads.
+    if (!loopArm()) return suggestNextExercise()?.ex?.id || null;
     const track = state.tab === "vocal" ? "vocal" : "singing";
     const L = window.VTLoop;
     if (loopDrewPanel()) {

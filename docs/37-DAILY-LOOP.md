@@ -2,7 +2,7 @@
 
 **Date:** 23 September 2026
 **Code:** `js/daily-loop.js` (new), `js/practice-days.js` (new), `js/app.js`, `js/session.js`, `js/storage.js`, `js/sync.js`, `js/reminders.js`, `js/value-pulse.js`, `js/practice-engine.js`, `js/practice-modes.js`, `js/analytics.js`, `js/experiments.js`, `js/experiments-config.js`, `js/i18n.js`, `index.html`, `css/styles.css`, `guide.html`
-**Tests:** `tests/daily-loop.spec.js` (new, 19 cases); `tests/retention.spec.js` (two cases rewritten for rest days and the loop's welcome back)
+**Tests:** `tests/daily-loop.spec.js` (new); `tests/retention.spec.js` (two cases rewritten for rest days and the loop's welcome back)
 **Research:** the full write-up, with every source and the claims that did not survive checking, is published separately as a readable page. This file is the engineering record.
 
 People walk through the lessons and leave. The catalog and the 12-week plan are
@@ -123,7 +123,8 @@ From the first day sung, the start panel becomes **today's basics**:
   keeps the panel's own copy, and its one button resumes it. The loop's words
   go at the top of that copy: "Qué bueno verte" on a comeback, and the line
   for a rest day just spent. The classic arm keeps the old welcome-back card
-  and rest-day toast instead.
+  and rest-day toast instead. A session left on a step that has since left
+  the catalog cannot be resumed, so the loop keeps the panel.
 - One naming scheme. The button says which size it starts ("▶ Empezar
   básicos" over "Esencial · 10 min"); under it, **Elige el tamaño de hoy:** is
   a segmented choice that only selects. Continuar and the guided sessions sit

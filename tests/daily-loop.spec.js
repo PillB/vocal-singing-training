@@ -611,6 +611,50 @@ test.describe("Daily loop", () => {
     await expect(page.locator("#welcome-back-body")).toContainText("Llevas 4 días");
   });
 
+  // A session whose step has since left the catalog cannot be resumed, so the
+  // panel never offers it: the loop keeps the panel and says welcome back.
+  test("a guided session left on a step no longer in the catalog does not hide the welcome back", async ({ page }) => {
+    const stale = { ...GUIDED, order: ["s4-lip-trills", "zz-removed", "s17-jaw-neck-release"] };
+    await boot(page, { days: ledger(AWAY, 0), session: stale });
+    const p = await panel(page);
+    expect(p.state).toBe("back");
+    expect(p.kicker).toBe("Qué bueno verte");
+    expect(p.primaries).toBe(1);
+    await page.locator("#btn-next-step").click();
+    await expect(page.locator("#view-exercise")).toHaveClass(/active/);
+    const r = await page.evaluate(() => ({ open: VTApp.getState().exercise?.id, path: VTStorage.getSession()?.path }));
+    expect(r.open).toBe("s4-lip-trills");
+    expect(r.path).toBe("basics");
+  });
+
+  /** The exercise the site tour's exercise stop shows, then the one Empezar opens. */
+  async function tourStopAndStart(page) {
+    await page.evaluate(() => VTApp.tourShow("exercise"));
+    await page.clock.runFor(400);
+    const shown = await page.evaluate(() => VTApp.getState().exercise?.id || null);
+    await page.evaluate(() => VTApp.tourShow("home"));
+    await page.clock.runFor(300);
+    await page.locator("#btn-next-step").click();
+    await page.clock.runFor(400);
+    return { shown, opened: await page.evaluate(() => VTApp.getState().exercise?.id || null) };
+  }
+
+  // The loop's files load in both arms, so its Mínimo was there for the tour
+  // to fall back on in the classic arm too, whose Empezar starts the class.
+  test("the classic arm, forced: the tour's exercise stop is the one its Empezar opens", async ({ page }) => {
+    await boot(page, { days: ledger(["2026-09-21", "2026-09-22"]), query: "?ab_loop_home_2026_10=classic" });
+    const r = await tourStopAndStart(page);
+    expect(r.opened).toBe("s17-jaw-neck-release");
+    expect(r.shown).toBe(r.opened);
+  });
+
+  test("the tour's exercise stop in the loop is today's first basic, where Empezar starts", async ({ page }) => {
+    await boot(page, { days: ledger(["2026-09-21", "2026-09-22"]) });
+    const r = await tourStopAndStart(page);
+    expect(r.opened).toBe("s4-lip-trills");
+    expect(r.shown).toBe(r.opened);
+  });
+
   test("experiments ship switched off: control for everyone, nothing exposed", async ({ page }) => {
     await boot(page, { days: ledger(["2026-09-22"]) });
     const r = await page.evaluate(() => {

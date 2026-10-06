@@ -958,10 +958,17 @@
     });
   }
 
-  /** A guided session that is open (active or paused) keeps the panel's own copy. */
+  /**
+   * A guided session that is open (active or paused) keeps the panel's own
+   * copy. One left on a step no longer in the catalog cannot be resumed and
+   * the panel does not offer it, so it keeps nothing.
+   */
   function guidedOpen() {
-    const s = global.VTSession?.get?.();
-    return !!(s && s.status !== "completed" && s.order?.length);
+    const S = global.VTSession;
+    const s = S?.get?.();
+    if (!(s && s.status !== "completed" && s.order?.length)) return false;
+    const id = S.currentExerciseId?.();
+    return !!id && (!hooks.findExercise || !!hooks.findExercise(id));
   }
 
   /** A rest day just spent, in the panel's words, or "" when there is none to tell. */

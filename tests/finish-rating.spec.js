@@ -614,13 +614,17 @@ test.describe("Rating: one tap after a take", () => {
 
   test("the written guide says some exercises always record, and keeping the take is still the learner's", async ({ page }) => {
     await page.goto(`${BASE}/guide.html`);
-    // The recording point under "Guardar, puntuar y el historial", in each language
+    // The recording point under "Guardar, puntuar y el historial", in each
+    // language. It leads with what is the learner's choice, keeping the take:
+    // a lead of "recording is optional" contradicted "some exercises always record"
     const es = page.locator("#guardar + p + ul > li").first();
-    await expect(es).toContainText("Grabarte");
+    await expect(es.locator("strong")).toHaveText("Guardar tu grabación");
+    await expect(es).not.toContainText("es opcional");
     await expect(es).toContainText(/algunos ejercicios graban siempre la toma/i);
     await expect(es).toContainText(/decides si la guardas/);
     const en = page.locator("#guardar-en + p + ul > li").first();
-    await expect(en).toContainText("Recording");
+    await expect(en.locator("strong")).toHaveText("Keeping your recording");
+    await expect(en).not.toContainText("is optional");
     await expect(en).toContainText(/some exercises always record the take/i);
     await expect(en).toContainText(/you decide whether to save it/);
   });

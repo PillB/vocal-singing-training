@@ -57,8 +57,11 @@ to `true`: `checkout.session.completed` with `payment_status` `paid` or
 subscription's own events say. Stripe documents that a subscription paid by a
 delayed method can turn `active` before the payment settles, and stay `active`
 after it fails, so those events alone never open access. Such a record answers
-202 while the payment may still arrive, and 403 once it has failed. Records
-stored before this field existed have no `paid` and go by their status alone.
+202 while the payment may still arrive, and 403 once it has failed. A failure
+(`async_payment_failed`) is remembered the same way (`paymentFailed`): until a
+payment is confirmed, no later event lifts the record or sets it waiting
+again, in whatever order the events arrive. Records stored before these fields
+existed have neither and go by their status alone.
 
 A fifth stored status, `suspended`, is a subscription that stopped paying
 without being cancelled (Stripe `unpaid` or `paused`, or a Stripe status this
@@ -305,7 +308,9 @@ interval from when the money arrived (31 days for `pro_monthly`, 365 for
 `pro_yearly`), and each renewal charge extends it. A charge never *shortens* an
 existing period. Stripe webhook sessions carry no line items, so a one-time
 Stripe Payment Link meant as a yearly pass needs `metadata.plan = pro_yearly`;
-without it the pass counts as one month.
+without it the pass counts as one month. A Stripe checkout that bought neither
+a subscription nor a one-time payment (a session in `setup` mode, which saves a
+card and charges nothing) entitles to nothing.
 
 Consequences worth understanding before you ship:
 
@@ -323,13 +328,15 @@ Consequences worth understanding before you ship:
   `date_last_updated`/`last_modified`), stored on the record. An update older
   than the stored one may not change plan, status or `periodEnd` — so a late or
   retried `invoice.paid` arriving after `customer.subscription.deleted` is
-  filed, not applied. Identity fields and the claim/subscription indexes are
-  order-independent and are still written.
+  filed, not applied. Identity fields, a confirmed or failed payment, and the
+  claim/subscription indexes are order-independent and are still written.
 - **Same-second events resolve the same way in either order.** Stripe stamps
   events to the second. When two share a second, one that would make a
-  `canceled` or `suspended` record entitling again is refused; any other pair
-  applies as it arrives (a checkout and its subscription's first events often
-  share a second, and must all apply).
+  `canceled` or `suspended` record entitling again is refused, and so is one
+  that would take a record back to `pending`, where every purchase starts (a
+  card checkout's subscription is created `incomplete` in the same second it
+  is paid for). Any other pair applies as it arrives (a checkout and its
+  subscription's first events often share a second, and must all apply).
 - **A deleted Stripe subscription stays deleted.** Stripe never reactivates
   one, so after `customer.subscription.deleted` no event for it changes the
   license, whatever its timestamp, and the deletion is also kept in `ended:`.
@@ -359,7 +366,7 @@ Subscribe exactly these events:
 | `checkout.session.async_payment_failed` | It never cleared → not entitled |
 | `customer.subscription.created` | First subscription state |
 | `customer.subscription.updated` | Plan change, renewal, status change |
-| `customer.subscription.deleted` | Cancellation. A subscription paid up to it keeps the period it paid for; one cancelled while unpaid (in dunning, never paid, or with `cancellation_details.reason` `payment_failed`/`payment_disputed`) ends at `ended_at` |
+| `customer.subscription.deleted` | Cancellation. A subscription paid up to it keeps the period it paid for; one cancelled while unpaid (in dunning, stopped or paused, never paid, or with `cancellation_details.reason` `payment_failed`/`payment_disputed`) ends at `ended_at`, whoever cancelled it |
 | `invoice.paid` | Successful renewal (moves `periodEnd` forward) |
 | `invoice.payment_failed` | Dunning → `past_due` |
 

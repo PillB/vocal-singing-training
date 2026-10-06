@@ -1179,3 +1179,132 @@ test("a failed invoice from the same second as the subscription going unpaid doe
   assert.equal(claim.status, 403);
   assert.equal(claim.body.token, undefined);
 });
+
+test("a Stripe subscription that stopped paying gets nothing back when it is then cancelled", async () => {
+  const now = Math.floor(Date.now() / 1000);
+  const cancelled = (id, periodEnd) => ({
+    id,
+    type: "customer.subscription.deleted",
+    created: now - 60,
+    data: {
+      object: {
+        id: "sub_router",
+        status: "canceled",
+        current_period_end: periodEnd,
+        ended_at: now - 60,
+        cancellation_details: { reason: "cancellation_requested" }
+      }
+    }
+  });
+
+  // Unpaid: retries ran out and Stripe keeps rolling the period forward; the
+  // operator (or the customer, in the portal) then cancels it.
+  const unpaid = createTestEnv();
+  await deliverStripe(unpaid, checkoutEvent("cs_unpaid_cancel", "evt_u1", { plan: "pro_monthly", created: now - 100 * DAY }));
+  await deliverStripe(unpaid, {
+    id: "evt_u2",
+    type: "invoice.paid",
+    created: now - 100 * DAY,
+    data: { object: { id: "in_u", subscription: "sub_router", lines: { data: [{ period: { end: now - 70 * DAY } }] } } }
+  });
+  for (const [id, created, periodEnd] of [["evt_u3", now - 40 * DAY, now - 10 * DAY], ["evt_u4", now - 10 * DAY, now + 20 * DAY]]) {
+    await deliverStripe(unpaid, {
+      id,
+      type: "customer.subscription.updated",
+      created,
+      data: { object: { id: "sub_router", status: "unpaid", current_period_end: periodEnd } }
+    });
+  }
+  assert.equal((await claimFor(unpaid, "stripe", "cs_unpaid_cancel")).status, 403);
+  await deliverStripe(unpaid, cancelled("evt_u5", now + 20 * DAY));
+  const afterUnpaid = await claimFor(unpaid, "stripe", "cs_unpaid_cancel");
+  assert.equal(afterUnpaid.status, 403, "the rolled-forward month was never paid for");
+  assert.equal(afterUnpaid.body.token, undefined);
+
+  // Paused: a trial ended with no card on file, then the customer cancels.
+  const paused = createTestEnv();
+  await deliverStripe(paused, checkoutEvent("cs_paused_cancel", "evt_v1", {
+    plan: "pro_monthly",
+    paymentStatus: "no_payment_required",
+    created: now - 20 * DAY
+  }));
+  await deliverStripe(paused, {
+    id: "evt_v2",
+    type: "customer.subscription.updated",
+    created: now - 5 * DAY,
+    data: { object: { id: "sub_router", status: "paused", current_period_end: now + 25 * DAY } }
+  });
+  await deliverStripe(paused, cancelled("evt_v3", now + 25 * DAY));
+  const afterPaused = await claimFor(paused, "stripe", "cs_paused_cancel");
+  assert.equal(afterPaused.status, 403, "nothing was paid after the trial");
+  assert.equal(afterPaused.body.token, undefined);
+});
+
+test("a paid card checkout keeps its access when the subscription's creation, from the same second, arrives last", async () => {
+  const env = createTestEnv();
+  const at = Math.floor(Date.now() / 1000) - 30;
+  // A card checkout: Stripe creates the subscription incomplete, takes the
+  // payment and activates it within one second, and delivers in any order.
+  await deliverStripe(env, {
+    id: "evt_c1",
+    type: "customer.subscription.updated",
+    created: at,
+    data: { object: { id: "sub_router", status: "active", current_period_end: at + 30 * DAY } }
+  });
+  await deliverStripe(env, {
+    id: "evt_c2",
+    type: "invoice.paid",
+    created: at,
+    data: { object: { id: "in_c", subscription: "sub_router", lines: { data: [{ period: { end: at + 30 * DAY } }] } } }
+  });
+  await deliverStripe(env, checkoutEvent("cs_card", "evt_c3", { plan: "pro_monthly", created: at }));
+  await deliverStripe(env, {
+    id: "evt_c4",
+    type: "customer.subscription.created",
+    created: at,
+    data: { object: { id: "sub_router", status: "incomplete", current_period_end: at + 30 * DAY } }
+  });
+  const claim = await claimFor(env, "stripe", "cs_card");
+  assert.equal(claim.status, 200, "a paid customer is not left waiting");
+  assert.equal(claim.body.entitlement.status, "active");
+  assert.equal((await verifyLicenseToken(claim.body.token, env)).valid, true);
+});
+
+test("a delayed payment that failed is refused, not awaited, after the subscription goes unpaid and active", async () => {
+  const env = createTestEnv();
+  const now = Math.floor(Date.now() / 1000);
+  await deliverStripe(env, checkoutEvent("cs_fail_then", "evt_h1", { paymentStatus: "unpaid", created: now - 10 }));
+  await deliverStripe(env, checkoutEvent("cs_fail_then", "evt_h2", {
+    type: "checkout.session.async_payment_failed",
+    paymentStatus: "unpaid",
+    created: now - 8
+  }));
+  assert.equal((await claimFor(env, "stripe", "cs_fail_then")).status, 403);
+  for (const [id, status, created] of [["evt_h3", "unpaid", now - 6], ["evt_h4", "active", now - 4]]) {
+    await deliverStripe(env, {
+      id,
+      type: "customer.subscription.updated",
+      created,
+      data: { object: { id: "sub_router", status, current_period_end: now + 20 * DAY } }
+    });
+  }
+  const claim = await claimFor(env, "stripe", "cs_fail_then");
+  assert.equal(claim.status, 403, "the browser must not keep polling for a payment that failed");
+  assert.equal(claim.body.reason, "inactive");
+  assert.equal(claim.body.token, undefined);
+});
+
+test("a Stripe setup session posted to the claim gives no Pro", async () => {
+  const env = createTestEnv();
+  const now = Math.floor(Date.now() / 1000);
+  await deliverStripe(env, checkoutEvent("cs_setup", "evt_setup", {
+    mode: "setup",
+    subscription: null,
+    paymentStatus: "no_payment_required",
+    created: now - 60
+  }));
+  const claim = await claimFor(env, "stripe", "cs_setup");
+  assert.equal(claim.status, 403);
+  assert.equal(claim.body.reason, "inactive");
+  assert.equal(claim.body.token, undefined);
+});

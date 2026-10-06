@@ -280,11 +280,18 @@ function mapCheckoutSession(session, env, statusOverride) {
   const byMetadata = normalizePlanId(session && session.metadata && session.metadata.plan);
   const plan = byPrice || byMetadata || "pro_monthly";
   const planSource = byPrice ? "price_id" : (byMetadata ? "metadata" : "default");
-  const status = statusOverride || (isCheckoutSessionPaid(session) ? "active" : "pending");
+  const subscriptionId = idOf(session && session.subscription);
+  let status = statusOverride || (isCheckoutSessionPaid(session) ? "active" : "pending");
+  // Only a subscription or a one-time payment is a purchase. A setup session
+  // saves a card for later and charges nothing, though Stripe reports it as
+  // needing no payment, so it entitles to nothing.
+  if (status === "active" && !subscriptionId && !(session && session.mode === "payment")) {
+    status = "canceled";
+  }
   return {
     provider: "stripe",
     claimId: idOf(session && session.id),
-    subscriptionId: idOf(session && session.subscription),
+    subscriptionId,
     customerId: idOf(session && session.customer),
     plan,
     planSource,
@@ -397,8 +404,10 @@ export function mapStripeEvent(event, env) {
       break;
     case "checkout.session.async_payment_failed":
       // The money never arrived: the record stays on file (so /v1/claim can
-      // explain itself) but never entitles.
+      // explain itself) but never entitles, and until a payment does arrive
+      // no later event lifts it or sets it waiting again.
       update = mapCheckoutSession(object, env, "canceled");
+      update.paymentFailed = true;
       break;
     case "customer.subscription.created":
     case "customer.subscription.updated":
@@ -427,10 +436,11 @@ export function mapStripeEvent(event, env) {
   if (update.status === "canceled" && !Number.isFinite(update.endedAt)) {
     update.endedAt = update.occurredAt;
   }
-  // A paid checkout with no subscription behind it (a one-time price) has no
-  // later event to end it: entitle one plan interval from when the money
-  // arrived, as for a Mercado Pago one-off payment. Webhook sessions carry no
-  // line items, so a yearly pass needs `metadata.plan` on its Payment Link.
+  // A paid checkout with no subscription behind it (a one-time price, mode
+  // "payment") has no later event to end it: entitle one plan interval from
+  // when the money arrived, as for a Mercado Pago one-off payment. Webhook
+  // sessions carry no line items, so a yearly pass needs `metadata.plan` on
+  // its Payment Link.
   if (event.type.startsWith("checkout.session.") && !update.subscriptionId && update.status === "active") {
     update.periodEndFromCharge = update.occurredAt ?? unixOrNull(object.created);
   }

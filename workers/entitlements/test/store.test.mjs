@@ -18,7 +18,7 @@ import {
   toPublicEntitlement,
   upsertEntitlement
 } from "../src/store.js";
-import { isTokenIssuable } from "../src/license.js";
+import { isAwaitingPayment, isTokenIssuable } from "../src/license.js";
 import { createFakeKv } from "./fixtures.mjs";
 
 const NOW = 1770000000;
@@ -328,6 +328,16 @@ test("two events from the same second: the one that ends access wins, in either 
       );
     }
   }
+  // Nothing from the same second goes back to where a purchase starts.
+  for (const settled of ["active", "past_due", "canceled", "suspended"]) {
+    assert.equal(
+      isStaleUpdate({ occurredAt: 10, status: settled }, { occurredAt: 10, status: "pending" }),
+      true,
+      `pending after ${settled}`
+    );
+  }
+  assert.equal(isStaleUpdate({ occurredAt: 10, status: "pending" }, { occurredAt: 10, status: "pending" }), false);
+  assert.equal(isStaleUpdate({ occurredAt: 10, status: "active" }, { occurredAt: 11, status: "pending" }), false);
   // Other same-second events still apply as they arrive: a checkout and its
   // subscription's first events often share a second.
   assert.equal(isStaleUpdate({ occurredAt: 10, status: "pending" }, { occurredAt: 10, status: "active" }), false);
@@ -615,21 +625,27 @@ test("a failed payment holds the license down until money arrives", async () => 
     subscriptionId: "sub_h",
     status: "canceled",
     paid: false,
+    paymentFailed: true,
     endedAt: NOW,
     occurredAt: NOW
   }, { now: NOW, generateId });
 
-  for (const status of ["active", "past_due"]) {
+  // Whatever the subscription says next, in whatever order: neither entitled
+  // nor waiting for a payment that failed.
+  let at = NOW;
+  for (const status of ["suspended", "active", "pending", "past_due", "active"]) {
+    at += 10;
     const lifted = await upsertEntitlement(kv, {
       provider: "stripe",
       subscriptionId: "sub_h",
       status,
       periodEnd: NOW + 99999,
-      occurredAt: NOW + 10
-    }, { now: NOW + 10, generateId });
+      occurredAt: at
+    }, { now: at, generateId });
     assert.equal(lifted.stale, true, status);
     assert.equal(lifted.record.status, "canceled", status);
     assert.equal(lifted.record.periodEnd, NOW, status);
+    assert.equal(isAwaitingPayment(lifted.record), false, status);
   }
 
   // The customer pays the open invoice after all.
@@ -639,14 +655,48 @@ test("a failed payment holds the license down until money arrives", async () => 
     status: "active",
     paid: true,
     periodEnd: NOW + 99999,
-    occurredAt: NOW + 20
-  }, { now: NOW + 20, generateId });
+    occurredAt: NOW + 100
+  }, { now: NOW + 100, generateId });
   assert.equal(paid.record.status, "active");
   assert.equal(paid.record.periodEnd, NOW + 99999);
+  assert.equal(paid.record.paymentFailed, false);
+  assert.equal(isTokenIssuable(paid.record, NOW + 101), true);
+});
+
+test("a failure delivered after a newer event still stops the license from waiting", async () => {
+  const kv = createFakeKv();
+  const generateId = idSequence("lic_");
+  await upsertEntitlement(kv, {
+    provider: "stripe",
+    claimId: "cs_f",
+    subscriptionId: "sub_f",
+    status: "pending",
+    paid: false,
+    occurredAt: NOW
+  }, { now: NOW, generateId });
+  await upsertEntitlement(kv, {
+    provider: "stripe",
+    subscriptionId: "sub_f",
+    status: "active",
+    periodEnd: NOW + 99999,
+    occurredAt: NOW + 20
+  }, { now: NOW + 20, generateId });
+  const failed = await upsertEntitlement(kv, {
+    provider: "stripe",
+    claimId: "cs_f",
+    status: "canceled",
+    paid: false,
+    paymentFailed: true,
+    occurredAt: NOW + 10
+  }, { now: NOW + 30, generateId });
+  assert.equal(failed.stale, true, "older than the subscription's update");
+  assert.equal(failed.record.paymentFailed, true, "the failure is kept all the same");
+  assert.equal(isAwaitingPayment(failed.record), false);
+  assert.equal(isTokenIssuable(failed.record, NOW + 30), false);
 });
 
 test("a cancellation ends a period that was never paid for when it took effect", async () => {
-  for (const [before, capped] of [["past_due", true], ["pending", true], ["active", false]]) {
+  for (const [before, capped] of [["past_due", true], ["suspended", true], ["pending", true], ["active", false]]) {
     const kv = createFakeKv();
     const generateId = idSequence("lic_");
     await upsertEntitlement(kv, {

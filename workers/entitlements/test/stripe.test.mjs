@@ -221,6 +221,32 @@ test("a checkout with no subscription behind it is entitled for one interval fro
   }
 });
 
+test("a setup session saves a card and buys nothing", () => {
+  for (const object of [
+    { id: "cs_setup", mode: "setup", subscription: null, payment_status: "no_payment_required" },
+    { id: "cs_unknown", subscription: null, payment_status: "paid" }
+  ]) {
+    const mapped = mapStripeEvent({
+      id: "evt_setup",
+      type: "checkout.session.completed",
+      created: NOW,
+      data: { object }
+    }, {});
+    assert.equal(mapped.handled, true, object.id);
+    assert.equal(mapped.update.status, "canceled", object.id);
+    assert.equal(mapped.update.paid, false, object.id);
+    assert.equal(mapped.update.periodEndFromCharge, undefined, `${object.id}: no interval for nothing bought`);
+  }
+  // A subscription's checkout with nothing to pay yet (a trial) still entitles.
+  const trial = mapStripeEvent({
+    id: "evt_trial",
+    type: "checkout.session.completed",
+    created: NOW,
+    data: { object: { id: "cs_trial", mode: "subscription", subscription: "sub_t", payment_status: "no_payment_required" } }
+  }, {});
+  assert.equal(trial.update.status, "active");
+});
+
 test("a completed-but-unpaid session is pending, not active", () => {
   // Delayed payment methods complete the session before the money arrives.
   for (const object of [
@@ -255,6 +281,8 @@ test("an async payment outcome settles a pending session either way", () => {
   }, {});
   assert.equal(failed.handled, true);
   assert.equal(failed.update.status, "canceled");
+  assert.equal(failed.update.paymentFailed, true, "the failure is kept until money arrives");
+  assert.equal(succeeded.update.paymentFailed, undefined);
   assert.equal(HANDLED_EVENT_TYPES.includes("checkout.session.async_payment_succeeded"), true);
   assert.equal(HANDLED_EVENT_TYPES.includes("checkout.session.async_payment_failed"), true);
 });

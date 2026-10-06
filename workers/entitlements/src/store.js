@@ -313,11 +313,15 @@ function capPeriodEnd(record, at) {
  * True when an update describes an older world than the record already holds.
  *
  * Stripe stamps events to the second, so two events from the same second
- * cannot be ordered by time. Then the one that ends access wins, in whichever
- * order they arrive: Stripe sends the last failed invoice and the cancellation
- * after it in the same second, and the invoice must not bring Pro back. Other
- * same-second events still apply as they arrive, since a checkout and its
- * subscription's first events often share a second.
+ * cannot be ordered by time. They then resolve the same way in either order:
+ *   - the one that ends access wins: Stripe sends the last failed invoice and
+ *     the cancellation after it in the same second, and the invoice must not
+ *     bring Pro back;
+ *   - nothing goes back to "pending", where every purchase starts: a card
+ *     checkout's subscription is created incomplete in the same second it is
+ *     paid for, and must not leave the paid license waiting.
+ * Other same-second events still apply as they arrive, since a checkout and
+ * its subscription's first events often share a second.
  *
  * @param {Object} record Stored entitlement record.
  * @param {Object} update Entitlement update descriptor.
@@ -329,6 +333,9 @@ export function isStaleUpdate(record, update) {
   }
   if (update.occurredAt !== record.occurredAt) {
     return update.occurredAt < record.occurredAt;
+  }
+  if (update.status === "pending") {
+    return record.status !== "pending";
   }
   return (record.status === "canceled" || record.status === "suspended")
     && (update.status === "active" || update.status === "past_due");
@@ -344,13 +351,13 @@ export function isStaleUpdate(record, update) {
  * Providers deliver out of order and retry, so an update whose `occurredAt` is
  * older than the stored one may not touch plan/status/periodEnd — otherwise a
  * late `invoice.paid` resurrects a subscription that was already deleted.
- * Identity fields, whether a payment was confirmed, and the claim/subscription
- * indexes are order-independent and are still applied.
+ * Identity fields, whether a payment was confirmed or failed, and the
+ * claim/subscription indexes are order-independent and are still applied.
  *
  * @param {Object} kv KV namespace.
  * @param {Object} update Descriptor: provider, plan, status, customerId,
  *   subscriptionId, periodEnd, periodEndFromCharge, endsAt, endedAt, paid,
- *   terminal, claimId, planSource, occurredAt.
+ *   paymentFailed, terminal, claimId, planSource, occurredAt.
  * @param {{now?: number, generateId?: function(): string}} [options] Injectables for tests.
  * @returns {Promise<{record: Object, created: boolean, stale: boolean}>} Stored
  *   record, whether it was new, and whether state was refused (out of order,
@@ -397,13 +404,22 @@ export async function upsertEntitlement(kv, update, options) {
   } else if (update.paid === false && record.paid !== true) {
     record.paid = false;
   }
+  // A payment that failed stays failed until money arrives, so the license
+  // answers 403 rather than waiting for it, whatever comes in between.
+  if (record.paid === true) {
+    if (record.paymentFailed) {
+      record.paymentFailed = false;
+    }
+  } else if (update.paymentFailed === true) {
+    record.paymentFailed = true;
+  }
 
-  // A license whose payment failed (recorded unpaid, then canceled) stays down
-  // until money actually arrives: Stripe keeps a subscription active after its
-  // delayed payment fails, and those later events must not lift it back.
-  const held = record.paid === false
-    && record.status === "canceled"
-    && (update.status === "active" || update.status === "past_due");
+  // A license whose payment failed stays down until money actually arrives:
+  // Stripe keeps a subscription active after its delayed payment fails, and
+  // those later events must not lift it back, nor set it waiting again.
+  const held = record.paymentFailed === true
+    && update.status !== undefined
+    && update.status !== "canceled";
   // A deleted Stripe subscription never comes back, so once its deletion is on
   // record no later event changes its state, whatever its timestamp. The
   // deletion itself applies even when it arrives after a newer event.
@@ -427,10 +443,12 @@ export async function upsertEntitlement(kv, update, options) {
     // (a refund, a chargeback), or ended a subscription that was never paid.
     // Applied after the charge above so nothing re-extends it.
     capPeriodEnd(record, update.endsAt);
-    // A subscription that ended while it was not paid up (in dunning, or never
-    // paid at all) keeps none of the period it was in: access ends when it
-    // ended. A paid one cancelled early keeps the period it paid for.
-    if (record.status === "canceled" && (before === "past_due" || before === "pending" || record.paid === false)) {
+    // A subscription that ended while it was not paid up (in dunning, stopped
+    // or paused, or never paid at all) keeps none of the period it was in:
+    // access ends when it ended. A paid one cancelled early keeps the period it
+    // paid for.
+    if (record.status === "canceled"
+      && (before === "past_due" || before === "suspended" || before === "pending" || record.paid === false)) {
       capPeriodEnd(record, update.endedAt);
     }
     if (update.terminal) {

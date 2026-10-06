@@ -315,12 +315,16 @@ export function isTokenIssuable(entitlement, nowSeconds) {
  * answer 202 and the browser keeps polling instead of giving up on a 403.
  * That is a "pending" record, or one the provider already treats as live (a
  * subscription can turn active while a delayed payment is still settling)
- * whose payment has not been confirmed.
+ * whose payment has not been confirmed. A payment that failed is not on its
+ * way, whatever status a later event left the record in.
  * @param {Object} entitlement Stored entitlement record.
  * @returns {boolean} Whether the payment is still expected.
  */
 export function isAwaitingPayment(entitlement) {
   if (!entitlement || typeof entitlement !== "object") {
+    return false;
+  }
+  if (entitlement.paymentFailed === true && entitlement.paid !== true) {
     return false;
   }
   if (entitlement.status === "pending") {

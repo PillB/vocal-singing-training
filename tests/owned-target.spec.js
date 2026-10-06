@@ -59,6 +59,60 @@ function targets(page) {
   });
 }
 
+/** Log every note the piano reference plays from now on. */
+function spyPiano(page) {
+  return page.evaluate(() => {
+    window.__refPlayed = [];
+    const P = window.VTPiano;
+    if (P.__spied) return;
+    P.__spied = true;
+    const orig = P.playRefPitch.bind(P);
+    P.playRefPitch = (note, sec, sustain) => {
+      window.__refPlayed.push({ note, sec });
+      return orig(note, sec, sustain);
+    };
+  });
+}
+
+const played = (page) => page.evaluate(() => window.__refPlayed.map((p) => p.note));
+
+/** What the highway shows: its ghost lanes and any chord lanes. */
+function highway(page) {
+  return page.evaluate(() => {
+    const v = window.VTGetPitchViz?.();
+    return {
+      lanes: (v?.progressionLanes || []).map((l) => l.name),
+      chordLanes: (v?.chordLanes || []).map((l) => l.name)
+    };
+  });
+}
+
+/**
+ * Every 40 ms from now on: the note on the mode's card against the one the
+ * pitch readout calls the target ("Objetivo …").
+ */
+function logReadout(page) {
+  return page.evaluate(() => {
+    window.__readout = [];
+    window.__readoutTimer = setInterval(() => {
+      const m = /Objetivo\s+(\S+)/.exec(document.querySelector("#pitch-stats")?.innerText || "");
+      window.__readout.push({
+        note: document.querySelector("#mode-hud [data-note]")?.textContent,
+        target: m ? m[1] : null
+      });
+    }, 40);
+  });
+}
+
+/** The targets the readout named while the card showed `note`. */
+async function readoutWhile(page, note) {
+  const log = await page.evaluate(() => {
+    clearInterval(window.__readoutTimer);
+    return window.__readout;
+  });
+  return log.filter((r) => r.note === note).map((r) => r.target);
+}
+
 test.describe("modes that own their target", () => {
   test("zone drill: an octave change mid-take moves the mode's note with the piano and the engine", async ({ page }) => {
     test.setTimeout(60_000);
@@ -66,10 +120,15 @@ test.describe("modes that own their target", () => {
     await openAndStart(page, "s21-chest-resonance");
     const before = await targets(page);
     expect(before.mode, "the first zone note is C3").toBe(48);
+    await spyPiano(page);
     // The learner presses the octave + in the bottom rail during the take
     await page.locator("#btn-oct-up").click();
     await expect.poll(async () => (await targets(page)).shift).toBe(1);
-    // …and sings the note the piano now plays
+    await page.waitForTimeout(700);
+    // The new note sounds once: two copies a few ms apart ring louder and
+    // put more piano into the mic
+    expect(await played(page), "C4, once").toEqual(["C4"]);
+    // …and the learner sings the note the piano now plays
     await playVoice(page, "follow");
     await page.waitForTimeout(400);
     const after = await targets(page);
@@ -85,22 +144,29 @@ test.describe("modes that own their target", () => {
     await boot(page);
     await openAndStart(page, "s27-lip-trill-solfege");
     expect((await targets(page)).mode).toBe(48);
+    await spyPiano(page);
     await page.locator("#btn-oct-up").click();
     await expect.poll(async () => (await targets(page)).shift).toBe(1);
-    await playVoice(page, "trill");
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(700);
     const after = await targets(page);
     expect(after.mode, "step 1 is C4 now").toBe(60);
     expect(after.engine).toBe(60);
     expect(after.viz, "the highway's target too").toBe(60);
-    const shown = await page.evaluate(() => ({
-      note: document.querySelector("#mode-hud [data-note]")?.textContent,
-      lanes: (window.VTGetPitchViz?.()?.progressionLanes || []).map((l) => l.name)
-    }));
-    expect(shown.note).toBe("C4");
-    expect(shown.lanes, "the lanes move with the octave").toEqual(["C4", "D4", "E4", "F4", "G4"]);
-    // Singing the note the piano plays walks the scale
-    await page.waitForFunction(() => (window.VTApp.getState().modeInstance.state.i || 0) >= 2, null, { timeout: 15_000 });
+    expect(await page.locator("#mode-hud [data-note]").textContent()).toBe("C4");
+    const hw = await highway(page);
+    expect(hw.lanes, "the lanes move with the octave").toEqual(["C4", "D4", "E4", "F4", "G4"]);
+    // No default progression's chord: the readout would score against it
+    expect(hw.chordLanes).toEqual([]);
+    expect(await played(page), "C4, once").toEqual(["C4"]);
+    // Singing the note the piano plays walks the scale, and the readout
+    // names the step's note as it goes
+    await logReadout(page);
+    await playVoice(page, "trill");
+    await page.waitForFunction(() => (window.VTApp.getState().modeInstance.state.i || 0) >= 3, null, { timeout: 15_000 });
+    const atD4 = await readoutWhile(page, "D4");
+    expect(atD4, "the readout's target while the step is D4").toContain("D4");
+    expect(atD4, "not a note of the default progression").not.toContain("E4");
+    expect((await highway(page)).chordLanes).toEqual([]);
     await stopVoice(page);
     await page.locator("#btn-practice-stop").click();
   });
@@ -126,13 +192,72 @@ test.describe("modes that own their target", () => {
       });
     });
     await openAndStart(page, "s27-lip-trill-solfege");
+    await spyPiano(page);
+    await logReadout(page);
     await playVoice(page, "highVoice");
     await expect.poll(async () => (await targets(page)).shift, { timeout: 15_000 }).toBe(1);
     await page.waitForTimeout(300);
     const after = await targets(page);
     expect(after.mode, "the mode moved with the octave").toBe(after.engine);
-    await page.waitForFunction(() => (window.VTApp.getState().modeInstance.state.i || 0) >= 2, null, { timeout: 15_000 });
+    // The app's piano hot-apply runs after the mode has moved: it must not
+    // put the default progression's lanes and chord back
+    const hw = await highway(page);
+    expect(hw.lanes, "the ladder at the new octave").toEqual(["C4", "D4", "E4", "F4", "G4"]);
+    expect(hw.chordLanes).toEqual([]);
+    expect((await played(page)).filter((n) => n === "C4"), "C4, once").toHaveLength(1);
+    await page.waitForFunction(() => (window.VTApp.getState().modeInstance.state.i || 0) >= 3, null, { timeout: 15_000 });
+    const atD4 = await readoutWhile(page, "D4");
+    expect(atD4, "the readout's target while the step is D4").toContain("D4");
+    expect(atD4, "not a note of the default progression").not.toContain("E4");
     await stopVoice(page);
+    await page.locator("#btn-practice-stop").click();
+  });
+
+  test("lip-trill solfège with Auto piano off: an octave change sounds the step's new note once, from the mode", async ({ page }) => {
+    await boot(page);
+    await page.evaluate(() => window.VTApp.openExercise("s27-lip-trill-solfege"));
+    await expect(page.locator("#view-exercise")).toHaveClass(/active/);
+    await page.evaluate(() => {
+      document.getElementById("chk-auto-piano").checked = false;
+    });
+    await page.locator("#btn-practice-start").click();
+    await page.waitForFunction(() => window.VTApp.getState().practiceLive);
+    // At step 3 (E3), as singing would
+    await page.evaluate(() => {
+      const m = window.VTApp.getState().modeInstance;
+      m.state.i = 2;
+      m._pushTarget();
+    });
+    await spyPiano(page);
+    await page.locator("#btn-oct-up").click();
+    await expect.poll(async () => (await targets(page)).mode).toBe(64);
+    await page.waitForTimeout(500);
+    const after = await targets(page);
+    expect(after.engine, "the engine follows the mode, not the shifted generic C3").toBe(64);
+    expect(after.viz).toBe(64);
+    // The app plays nothing with Auto piano off, so the mode cues its note
+    expect(await played(page)).toEqual(["E4"]);
+    expect(await page.locator("#mode-hud [data-note]").textContent()).toBe("E4");
+    await expect(page.locator("#pitch-stats")).toContainText("Objetivo E4");
+    // The row of stones is labelled with the root it is sung at now (C4)
+    expect(await page.evaluate(() => window.VTApp.getState().modeInstance.state.rows.at(-1).rootName)).toBe("Do4");
+    await page.locator("#btn-practice-stop").click();
+  });
+
+  test("lip-trill solfège: the piano panel's Sostener leaves the mode's lanes alone", async ({ page }) => {
+    await boot(page);
+    await openAndStart(page, "s27-lip-trill-solfege");
+    await page.locator("#btn-toggle-piano").click();
+    const before = await highway(page);
+    expect(before.lanes).toEqual(["C3", "D3", "E3", "F3", "G3"]);
+    await page.locator("#chk-sustain").click();
+    await page.evaluate(() => window.VTApp._hotApplyPromise);
+    await page.waitForTimeout(300);
+    const after = await highway(page);
+    expect(after.lanes, "the mode's ladder, not the default progression's").toEqual(before.lanes);
+    expect(after.chordLanes).toEqual([]);
+    const t = await targets(page);
+    expect(t.viz, "the highway still targets the step").toBe(t.mode);
     await page.locator("#btn-practice-stop").click();
   });
 

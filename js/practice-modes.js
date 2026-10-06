@@ -8430,6 +8430,16 @@
     return global.VTShiftNoteName(name, n) || name;
   }
 
+  /**
+   * Whether a mode that moves its note after an octave change sounds it again
+   * itself. With Auto piano on, the app's own hot-apply already plays the
+   * owning mode's note at the new octave, and two copies a few ms apart ring
+   * louder and put more piano into the mic. With it off, nothing else will.
+   */
+  function cueOnShift() {
+    return document.getElementById("chk-auto-piano")?.checked === false;
+  }
+
   /** Per-phase cue text, localized like the phase label itself. */
   function phaseCueFor(phase) {
     if (!phase) return "";
@@ -9456,7 +9466,8 @@
       }
       return out;
     },
-    _pushTarget() {
+    /** Aim at the current note and sound it (cue false: the app sounds it). */
+    _pushTarget(cue = true) {
       const st = this.state;
       // The octave this target was looked up at (see onFrame)
       st.shift = global.VTGetOctaveShift ? global.VTGetOctaveShift() : 0;
@@ -9481,7 +9492,7 @@
         global.VTSetPracticeTarget(st.wantFreq, sounded);
       }
       // A short cue, not a drone: while it sounds the hold is only provisional
-      if (global.VTPiano?.playRefPitch) global.VTPiano.playRefPitch(sounded, ZONE_REF_SEC, true).catch(() => {});
+      if (cue && global.VTPiano?.playRefPitch) global.VTPiano.playRefPitch(sounded, ZONE_REF_SEC, true).catch(() => {});
       if (this.$("[data-t]")) this.$("[data-t]").textContent = sounded;
     },
     _setChips() {
@@ -9621,7 +9632,7 @@
       // The learner's octave moved (auto range or the ± buttons): same note,
       // new pitch. The piano and the engine move at once, so the target does
       // too, or the hold waits for a note nothing plays any more.
-      if ((global.VTGetOctaveShift ? global.VTGetOctaveShift() : 0) !== st.shift) this._pushTarget();
+      if ((global.VTGetOctaveShift ? global.VTGetOctaveShift() : 0) !== st.shift) this._pushTarget(cueOnShift());
       const raw = K.rawOf(frame);
       const dt = raw.dt;
       st.clock += dt;
@@ -10480,7 +10491,8 @@
         /* ignore */
       }
     },
-    _pushTarget() {
+    /** Aim at the current step and sound it (cue false: the app sounds it). */
+    _pushTarget(cue = true) {
       if (!global.VTPitchUtils) return;
       // The octave this step was looked up at (see onFrame)
       this.state.shift = this._shift();
@@ -10499,7 +10511,7 @@
       // cancellation), so the gate stays shut while it rings. Counted down in
       // frame time like everything else here, not against the wall clock.
       this.state.refBlank = this.profile.refBlankMs == null ? 250 : this.profile.refBlankMs;
-      if (global.VTPiano?.playRefPitch && sounded) {
+      if (cue && global.VTPiano?.playRefPitch && sounded) {
         global.VTPiano.playRefPitch(sounded, 1.2, true).catch(() => {});
       }
       if (this.$("[data-syl]"))
@@ -10715,12 +10727,15 @@
       const st = this.state;
       if (st.review) return;
       // The learner's octave moved (auto range or the ± buttons): same step,
-      // new pitch. The ladder, the lanes and the step's note move with it;
-      // the hold so far was on the old note, so it starts again.
+      // new pitch. The ladder, the lanes, the step's note and the row's root
+      // move with it; the hold so far was on the old note, so it starts again.
       if (this._shift() !== st.shift) {
         st.acc = 0;
         this._lockLadder();
-        this._pushTarget();
+        this._pushTarget(cueOnShift());
+        const row = st.rows[st.rows.length - 1];
+        const K = this._kit();
+        if (row && K) row.rootName = K.noteName(st.rootMidi + this._shift());
       }
       this._feedTrack(frame);
       this._frameGate(frame);

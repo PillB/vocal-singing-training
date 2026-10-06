@@ -285,7 +285,9 @@
             state.pitchViz?.setTargetFreq(VT_NOTE_FREQ[nm]);
           }
         }
-      } else {
+      } else if (!(profile?.ownsTarget && state.practiceLive)) {
+        // During a take, a mode that owns its target moves its own note, lanes
+        // and range on its next frame: the generic refPitch is not its note.
         const ref = profile?.refPitch || ex.audio?.refPitch;
         if (ref) {
           const nm = window.VTShiftNoteName ? VTShiftNoteName(ref, next) : ref;
@@ -3038,8 +3040,11 @@
       syncSustainSecLabel();
       syncPlayModeSelect();
 
-      // Highway range + ghost lanes follow the selected progression immediately
-      if ((profile?.showPitch || ex.audio?.pitchViz) && !profile?.noProgression) {
+      // Highway range + ghost lanes follow the selected progression immediately.
+      // Not for a mode that owns its target: it plays no progression, and the
+      // default one's lanes and chord would replace the mode's own, so the
+      // readout would score the learner against that chord's notes.
+      if ((profile?.showPitch || ex.audio?.pitchViz) && !profile?.noProgression && !profile?.ownsTarget) {
         if (state.selectedProg) lockHighwayForProgression(state.selectedProg);
       }
 

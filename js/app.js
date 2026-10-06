@@ -38,6 +38,8 @@
     modeInstance: null,
     guideOpen: true,
     pianoOpen: false,
+    /** The learner's own ⏺ Grabarme tick while an always-recording exercise shows it forced */
+    recordChoice: false,
     /** Whole-octave material shift for singer range (−2…+2) */
     octaveShift: 0,
     rangeAuto: true,
@@ -2834,6 +2836,25 @@
     // Record opt only when exercise supports record
     const recOpt = $("#opt-auto-record");
     if (recOpt) recOpt.style.display = ex.audio.record ? "" : "none";
+    // Some exercises record every take whatever the box says (profile.autoRecord:
+    // their mode compares or reviews the take). There the box shows it, ticked
+    // and fixed; the learner's own tick is kept and comes back on the next
+    // exercise, so a forced tick never records one that did not ask for it.
+    const recChk = $("#chk-auto-record");
+    if (recOpt && recChk) {
+      const always = !!(profile.autoRecord && ex.audio.record);
+      if (always && !recChk.disabled) state.recordChoice = recChk.checked;
+      else if (!always && recChk.disabled) recChk.checked = state.recordChoice;
+      if (always) recChk.checked = true;
+      recChk.disabled = always;
+      if (always) {
+        recOpt.dataset.i18nTitle = "practice.recordAlways";
+        recOpt.title = tt("practice.recordAlways");
+      } else {
+        delete recOpt.dataset.i18nTitle;
+        recOpt.removeAttribute("title");
+      }
+    }
   }
 
   /**

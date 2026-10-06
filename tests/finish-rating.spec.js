@@ -573,6 +573,40 @@ test.describe("Rating: one tap after a take", () => {
     }
   });
 
+  test("an exercise that always records its take shows ⏺ Grabarme ticked; elsewhere the learner's choice is kept", async ({ page }) => {
+    await boot(page);
+    const box = page.locator("#chk-auto-record");
+    const opt = page.locator("#opt-auto-record");
+    // v1: recording is the learner's choice, off until they tick it
+    await openSingle(page, "v1-diction");
+    await expect(box).not.toBeChecked();
+    await expect(box).toBeEnabled();
+    // v10 records every take, whatever the box says: the box says so
+    await openSingle(page, "v10-power-pause");
+    await expect(opt).toBeVisible();
+    await expect(box).toBeChecked();
+    await expect(box).toBeDisabled();
+    await expect(opt).toHaveAttribute("title", /graba siempre la toma/);
+    await start(page);
+    await page.waitForTimeout(1200);
+    await page.clock.runFor(2000);
+    await page.locator("#btn-practice-stop").click();
+    // The take is offered, not saved: keeping it is the learner's tap
+    await expect(page.locator("#btn-save-rec")).toHaveText("Guardar en historial");
+    // Back on v1 the box is the learner's again, as they left it
+    await openSingle(page, "v1-diction");
+    await expect(box).not.toBeChecked();
+    await expect(box).toBeEnabled();
+    await expect(opt).not.toHaveAttribute("title", /graba/);
+    await box.check();
+    await openSingle(page, "v10-power-pause");
+    await openSingle(page, "v1-diction");
+    await expect(box, "a tick the learner chose survives the exercise that forced one").toBeChecked();
+    await openSingle(page, "v10-power-pause");
+    await page.evaluate(() => window.VTI18n.setLang("en"));
+    await expect(opt).toHaveAttribute("title", /always records the take/);
+  });
+
   test("English reads in its own words", async ({ page }) => {
     await boot(page, { lang: "en" });
     await openSingle(page, "s4-lip-trills");

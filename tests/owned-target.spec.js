@@ -76,6 +76,41 @@ function spyPiano(page) {
 
 const played = (page) => page.evaluate(() => window.__refPlayed.map((p) => p.note));
 
+/**
+ * Open the piano panel and wait until `sel` has stopped moving. The panel
+ * opens with a max-height transition and a smooth scroll, and Playwright
+ * checks only the first event of a click against the target: a press that
+ * lands while the control slides under the pointer is a mousedown on it and
+ * a mouseup beside it, which fires no click on it.
+ */
+async function openPianoPanel(page, sel) {
+  await page.locator("#btn-toggle-piano").click();
+  await expect(page.locator("#piano-block")).toHaveClass(/is-open/);
+  await page.evaluate(
+    (s) =>
+      new Promise((resolve) => {
+        const el = document.querySelector(s);
+        let last = "";
+        let since = 0;
+        let frames = 0;
+        const tick = (now) => {
+          const r = el.getBoundingClientRect();
+          const box = `${r.x},${r.y},${r.width},${r.height}`;
+          if (box !== last) {
+            last = box;
+            since = now;
+            frames = 0;
+          } else frames++;
+          // Still for a few frames and longer than the 0.25 s transition
+          if (frames >= 5 && now - since >= 300) resolve();
+          else requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      }),
+    sel
+  );
+}
+
 /** What the highway shows: its ghost lanes and any chord lanes. */
 function highway(page) {
   return page.evaluate(() => {
@@ -247,10 +282,13 @@ test.describe("modes that own their target", () => {
   test("lip-trill solfège: the piano panel's Sostener leaves the mode's lanes alone", async ({ page }) => {
     await boot(page);
     await openAndStart(page, "s27-lip-trill-solfege");
-    await page.locator("#btn-toggle-piano").click();
+    await openPianoPanel(page, "#chk-sustain");
     const before = await highway(page);
     expect(before.lanes).toEqual(["C3", "D3", "E3", "F3", "G3"]);
-    await page.locator("#chk-sustain").click();
+    const sustain = page.locator("#chk-sustain");
+    const was = await sustain.isChecked();
+    await sustain.click();
+    await expect(sustain, "the click reached Sostener").toBeChecked({ checked: !was });
     await page.evaluate(() => window.VTApp._hotApplyPromise);
     await page.waitForTimeout(300);
     const after = await highway(page);
@@ -287,7 +325,7 @@ test.describe("modes that own their target", () => {
           return orig(note, sec, sustain);
         };
       });
-      await page.locator("#btn-toggle-piano").click();
+      await openPianoPanel(page, "#btn-ref-pitch");
       await page.locator("#btn-ref-pitch").click();
       await expect.poll(() => page.evaluate(() => window.__refPlayed.length)).toBeGreaterThan(0);
       const played = await page.evaluate(() => window.__refPlayed[0]);

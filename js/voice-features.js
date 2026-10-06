@@ -273,8 +273,9 @@
    * dated from when the sound actually stopped.
    *
    * - Floor: the 10th percentile of the last 6 s of quiet level. Only quiet
-   *   frames teach it (the engine's gate closed, or below floor + margin), plus
-   *   sound that has stayed steady for a second (a fan, a hum in the room):
+   *   frames teach it (the engine's gate closed for longer than a consonant,
+   *   `hangMs`, or below floor + margin), plus sound that has stayed steady
+   *   for a second (a fan, a hum in the room):
    *   speech swings 10 dB and more between syllables, so a learner who talks
    *   from the first frame never becomes the floor. Sound must clear it
    *   by `marginDb` and also clear the engine's own sensitivity gate
@@ -304,6 +305,7 @@
       this.segments = []; // { kind: "speech"|"pause", start, end }
       this._quietSince = null;
       this._loudSince = null;
+      this._closedSince = null;
       this.pauseStart = null;
       this.speechStart = null;
       this.levelDb = -140;
@@ -330,12 +332,18 @@
       this.t += dt;
       const db = dbfs(frame.rms || 0);
       this.levelDb = db;
+      if (frame.sounding) this._closedSince = null;
+      else if (this._closedSince == null) this._closedSince = this.t - dt;
       // The floor learns ~30 times a second
       this._floorAcc += dt;
       if (this._floorAcc >= 1 / 30) {
         this._floorAcc = 0;
         this._recentRing.push(db);
-        const quiet = !frame.sounding || db <= this.floorDb + this.marginDb;
+        // A consonant closes the gate for 40–100 ms inside a word: a soft
+        // speaker's dips would become the floor and their weaker syllables
+        // read as pauses. Only a gate still closed after the hangover is quiet.
+        const closed = this._closedSince != null && (this.t - this._closedSince) * 1000 >= this.hangMs;
+        const quiet = closed || db <= this.floorDb + this.marginDb;
         let steady = false;
         if (!quiet && this._recentRing.count >= this._recentRing.n) {
           const r = this._recentRing.last();

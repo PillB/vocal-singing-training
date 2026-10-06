@@ -77,7 +77,8 @@ sync must never lose a session somebody actually did. So:
   cannot be recomputed from the entries.
 - The 12-week plan is a state machine, not a list, so it cannot be unioned. The
   honest answer is "whichever device got further": week, then completed
-  elements, then check-ins, then when the week started. A plan nobody touched
+  elements, then when the week started (a focus changed mid-week starts the
+  week again, so it wins), then check-ins. A plan nobody touched
   is not sent at all. Two plans still level differ only in the element picked
   for a week not started yet: one with an element beats one without, then the
   plan changed most recently wins (each carries the time it changed). Plans

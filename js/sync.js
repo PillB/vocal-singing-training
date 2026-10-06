@@ -259,8 +259,8 @@
    *
    * Plans are a single state machine, not a list, so they cannot be unioned:
    * the honest answer is "whichever device got further", compared on the week
-   * first, then on how many elements it finished, then on check-ins, then on
-   * when the week started.
+   * first, then on how many elements it finished, then on when the week
+   * started, then on check-ins.
    *
    * Two plans still level after that differ at most in the element picked for
    * a week not started yet. Nothing unpicks an element, so a plan with one is
@@ -276,18 +276,21 @@
   function mergeWeekPlan(local, remote) {
     if (!remote) return local || null;
     if (!local) return remote;
+    // When the week started comes before check-ins: changing a week's focus
+    // starts it again with none, and that restart is the newer state. Only
+    // plans saved before 23 Sep 2026 carry check-ins at all.
     const rank = (plan) => [
       Number(plan.weekNumber) || 0,
       (plan.completedElements || []).length,
-      (plan.checkIns || []).length,
-      ms(plan.startedAt)
+      ms(plan.startedAt),
+      (plan.checkIns || []).length
     ];
-    const [aw, ae, ac, as] = rank(local);
-    const [bw, be, bc, bs] = rank(remote);
+    const [aw, ae, as, ac] = rank(local);
+    const [bw, be, bs, bc] = rank(remote);
     if (aw !== bw) return aw > bw ? local : remote;
     if (ae !== be) return ae > be ? local : remote;
-    if (ac !== bc) return ac > bc ? local : remote;
     if (as !== bs) return as > bs ? local : remote;
+    if (ac !== bc) return ac > bc ? local : remote;
     if (!local.element !== !remote.element) return local.element ? local : remote;
     return ms(local.updatedAt) > ms(remote.updatedAt) ? local : remote;
   }

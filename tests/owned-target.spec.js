@@ -204,6 +204,27 @@ test.describe("modes that own their target", () => {
     expect(Math.max(...played.map((p) => p.sec))).toBeLessThanOrEqual(1.5);
   });
 
+  test("before Start, the readout names no target for a mode that picks its own", async ({ page }) => {
+    await boot(page);
+    const stats = page.locator("#pitch-stats");
+    // s7's generic reference is D3, but the mode's first note is C3 ("Do3")
+    await page.evaluate(() => window.VTApp.openExercise("s7-humming"));
+    await expect(page.locator("#view-exercise")).toHaveClass(/active/);
+    await expect(stats).toBeVisible();
+    await expect(stats).toContainText("Objetivo —");
+    await expect(stats).not.toContainText("D3");
+    // Once the take starts, the mode's own note is the target
+    await page.locator("#btn-practice-start").click();
+    await expect(stats).toContainText("Objetivo C3", { timeout: 6000 });
+    await page.locator("#btn-practice-stop").click();
+    // A siren has no note to hit: the readout names the nearest note once you
+    // sing, and nothing before
+    await page.evaluate(() => window.VTApp.openExercise("s5-sirens"));
+    await expect(stats).toContainText("Nota —");
+    await expect(stats).not.toContainText("Objetivo");
+    await expect(stats).not.toContainText("G2");
+  });
+
   test("five vowels: an octave change mid-take moves the note the vowels are read against", async ({ page }) => {
     await boot(page);
     await openAndStart(page, "s20-five-vowels");

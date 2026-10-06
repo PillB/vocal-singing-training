@@ -2646,7 +2646,9 @@
         targetName: refS || ref || "C3",
         voiceName: "—",
         accuracyCents: 0,
-        precisionCents: 0
+        precisionCents: 0,
+        // A siren has no note to hit: "Nota", as once it runs
+        nearest: !!profile.freeRange
       });
     }
     // Challenge only for pitchMatch-style (row lives below highway)
@@ -4460,9 +4462,13 @@
           ? "above centre"
           : "below centre";
     const targetLabel = near ? (es ? "Nota" : "Note") : es ? "Objetivo" : "Target";
-    // A challenge draws its first note on Start: before that, the exercise's
-    // reference note is not the target, so none is named.
-    const target = pitchProfile?.pitchChallenge && !state.pitchRunning ? "—" : stats.targetName || "—";
+    // A challenge draws its first note on Start, and a mode that owns its
+    // targets picks its own then: before that, the exercise's reference note
+    // is not the target, so none is named.
+    const target =
+      (pitchProfile?.pitchChallenge || pitchProfile?.ownsTarget) && !state.pitchRunning
+        ? "—"
+        : stats.targetName || "—";
     const cents = `${acc > 0 ? "+" : ""}${acc}¢`;
     el.innerHTML = `
       <span><strong>${targetLabel}</strong> ${target}</span>

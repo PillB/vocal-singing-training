@@ -59,6 +59,12 @@
     return (changedAt.get(profileId) || 0) > (pushedAt.get(profileId) || 0);
   }
 
+  /** Profiles other than the active one still holding changes, if they still exist. */
+  function otherUnpushed(active) {
+    const known = new Set((global.VTStorage.getProfiles?.().list || []).map((p) => p.id));
+    return [...changedAt.keys()].filter((id) => id !== active && known.has(id) && unpushed(id));
+  }
+
   const listeners = new Set();
   const dataListeners = new Set();
 
@@ -471,9 +477,7 @@
    */
   async function syncScheduled() {
     const active = global.VTStorage.getActiveProfileId();
-    const known = new Set((global.VTStorage.getProfiles?.().list || []).map((p) => p.id));
-    const others = [...changedAt.keys()].filter((id) => id !== active && known.has(id) && unpushed(id));
-    for (const id of [active, ...others]) {
+    for (const id of [active, ...otherUnpushed(active)]) {
       const res = await syncNow(id);
       if (!res.ok) return;
     }
@@ -504,7 +508,8 @@
       });
       return;
     }
-    for (const profileId of changedAt.keys()) {
+    const active = global.VTStorage.getActiveProfileId();
+    for (const profileId of [active, ...otherUnpushed(active)]) {
       if (!unpushed(profileId) || !confirmedRev.has(profileId)) continue;
       const body = { profileId, doc: localBag(profileId), baseRev: confirmedRev.get(profileId) };
       let bytes = Infinity;

@@ -280,21 +280,31 @@
 
   /* —— Speech and silence —— */
 
+  // The room's steadiness test: 0.6 s of learning steps within 4.5 dB. A
+  // rumbling fan wanders up to ~4 dB over that time; soft speech whose
+  // syllables swing only 8 dB slips under a looser or shorter test.
+  const ROOM_STEPS = 18;
+  const ROOM_FLAT_DB = 4.5;
+
   /**
    * Speech/silence with the room's own floor, a short hangover, and pauses
    * dated from when the sound actually stopped.
    *
-   * - Floor: the 10th percentile of the last 6 s of quiet level. Only quiet
-   *   frames teach it (the engine's gate closed for longer than a consonant,
-   *   `hangMs`, or below floor + margin), plus sound with no held pitch that
-   *   has stayed steady for a second (a fan, a hiss): speech swings 10 dB
-   *   and more between syllables, so a learner who talks from the first
-   *   frame never becomes the floor. A held pitch is a voice (a sung note,
-   *   an "mmm") and becomes the floor only as a hum that has been there all
-   *   take; the Space assist never does. Sound must clear the floor by
-   *   `marginDb` and also clear the engine's own sensitivity gate
-   *   (`frame.sounding`), so a fan does not read as speech and a quiet room
-   *   does not turn a breath into a word.
+   * - Floor: the 10th percentile of the last 6 s of quiet level, learned 30
+   *   times a second. Quiet is the engine's gate closed for longer than a
+   *   consonant (`hangMs`; a word's own dips must not teach it) or a level
+   *   within `marginDb` of the floor. Speech swings 10 dB and more between
+   *   syllables, so a learner who talks from the first frame never becomes
+   *   the floor.
+   * - A room loud enough to open the gate (a fan, or any room's hiss at
+   *   sensitivity 9–10) is learned from its steadiness instead: 0.6 s that
+   *   holds still with no held pitch is the room. The floor starts over from
+   *   it, and a pause it hid is dated from when the voice stopped. A held
+   *   pitch is a voice (a sung note, an "mmm") and becomes the floor only as
+   *   a hum that has been there all take; the Space assist never does.
+   * - Sound must clear the floor by `marginDb` and also clear the engine's
+   *   own sensitivity gate (`frame.sounding`), so a fan does not read as
+   *   speech and a quiet room does not turn a breath into a word.
    * - A pause starts only after `hangMs` of quiet (stop consonants leave
    *   100–250 ms gaps inside words) but is dated from the first quiet frame,
    *   so a 1.2 s pause measures 1.2 s.
@@ -308,8 +318,9 @@
       this.minPauseSec = opts.minPauseSec != null ? opts.minPauseSec : 0.25;
       this.cb = opts;
       this._floorRing = new Ring(Math.round(6 * 30));
-      // The last second of learning steps: level and pitch (0 = none)
+      // The last second of learning steps: level, time and pitch (0 = none)
       this._recentRing = new Ring(30);
+      this._recentT = new Ring(30);
       this._recentHz = new Ring(30);
       this._floorAcc = 0;
       this.floorDb = -70;
@@ -330,6 +341,7 @@
       this.levelDb = -140;
       this._floorRing.clear();
       this._recentRing.clear();
+      this._recentT.clear();
       this._recentHz.clear();
       this._floorAcc = 0;
     }
@@ -354,14 +366,17 @@
       this.levelDb = db;
       if (frame.sounding) this._closedSince = null;
       else if (this._closedSince == null) this._closedSince = this.t - dt;
-      // The floor learns ~30 times a second
+      // The floor learns 30 times a second at any frame rate: the remainder is
+      // kept (dropping it learned ~24 times a second at 60 fps and ~20 at 30),
+      // capped so a stalled tab does not learn a burst of copies of one frame
       this._floorAcc += dt;
       if (this._floorAcc >= 1 / 30) {
-        this._floorAcc = 0;
+        this._floorAcc = Math.min(this._floorAcc - 1 / 30, 1 / 30);
         if (frame.manualSound) {
           // The Space assist fakes a flat level: never the room, and not part
           // of any steady stretch either
           this._recentRing.clear();
+          this._recentT.clear();
           this._recentHz.clear();
         } else {
           this._learnFloor(frame, db);
@@ -407,6 +422,7 @@
     /** One learning step: does this frame's level belong to the room? */
     _learnFloor(frame, db) {
       this._recentRing.push(db);
+      this._recentT.push(this.t);
       this._recentHz.push(frame.rawFreq || 0);
       // The quietest level that lasted (three steps, a tenth of a second)
       if (this._recentRing.count >= 3) {
@@ -420,34 +436,63 @@
       if (closed || db <= this.floorDb + this.marginDb) {
         this._humSince = null;
         this._floorRing.push(db);
-      } else if (this._steadyRoom(db)) {
-        this._floorRing.push(db);
+        if (this._floorRing.count >= 15) {
+          this.floorDb = Math.max(-90, percentile(this._floorRing.last(), 0.1));
+        }
+        return;
       }
-      if (this._floorRing.count >= 15) {
-        this.floorDb = Math.max(-90, percentile(this._floorRing.last(), 0.1));
-      }
+      const kind = this._steadyRoom(db);
+      if (!kind) return;
+      // Steady sound above the floor is a new room: a fan heard before the
+      // floor knew it, or one switched on. The floor starts over from it, so
+      // it stops reading as speech now rather than after 6 s of it.
+      const before = this.floorDb;
+      this._floorRing.clear();
+      this._recentRing.last(kind === "hum" ? 30 : ROOM_STEPS).forEach((v) => this._floorRing.push(v));
+      this.floorDb = Math.max(-90, percentile(this._floorRing.last(), 0.1));
+      if (this.state === "speech" && this.floorDb > before) this._roomFound();
     }
-    /** Is the sound of the last second of learning steps the room? */
+    /**
+     * Is the sound of the last learning steps the room? "noise" (a fan, a
+     * hiss), "hum", or null for anything that could be a voice.
+     */
     _steadyRoom(db) {
-      const r = this._recentRing.last();
-      if (r.length < this._recentRing.n || percentile(r, 0.9) - percentile(r, 0.1) >= 6) {
+      const r = this._recentRing.last(ROOM_STEPS);
+      if (r.length < ROOM_STEPS || Math.max(...r) - Math.min(...r) >= ROOM_FLAT_DB) {
         this._humSince = null;
-        return false;
+        return null;
       }
       // A fan or a hiss has no pitch, or a random one each frame (the pitch
-      // detector reports one for any noise at −40 dBFS and up)
-      if (!heldPitch(this._recentHz.last())) {
+      // detector reports one for any noise at −40 dBFS and up): 0.6 s of it
+      // is the room. Speech swings 10 dB and more between syllables.
+      if (!heldPitch(this._recentHz.last(ROOM_STEPS))) {
         this._humSince = null;
-        return true;
+        return "noise";
       }
       // A held pitch is a voice (a sung note, an "mmm", a monotone phrase)
       // unless it has held for 10 s and nothing quieter was heard all take:
       // then it is a hum in the room
       if (this._humSince == null || Math.abs(db - this._humDb) > 3) {
-        this._humSince = this.t - 1;
+        this._humSince = this.t - ROOM_STEPS / 30;
         this._humDb = db;
       }
-      return this.t - this._humSince >= 10 && db <= this._quietestDb + 3;
+      return this.t - this._humSince >= 10 && db <= this._quietestDb + 3 ? "hum" : null;
+    }
+    /**
+     * The floor just rose under open speech: the pause began when the level
+     * fell to the room, which was up to a second ago, not now.
+     */
+    _roomFound() {
+      const lim = this.floorDb + this.marginDb;
+      const lv = this._recentRing.last();
+      const ts = this._recentT.last();
+      let i = lv.length;
+      while (i > 0 && lv[i - 1] <= lim) i--;
+      if (i === lv.length) return;
+      // From the last step that was still loud (the frame's 43 ms window
+      // trails the voice, so this is within a step of the real end)
+      const since = i > 0 ? ts[i - 1] : ts[0] - 1 / 30;
+      this._quietSince = Math.max(this.speechStart, since);
     }
     /** Closed pauses of at least `minSec`, as { start, len }. */
     pauses(minSec = this.minPauseSec) {

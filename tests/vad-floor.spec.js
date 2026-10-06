@@ -94,6 +94,66 @@ test.describe("pause floor (Vad)", () => {
     }
   });
 
+  /** Every real silence was closed as a pause of about its own length. */
+  function eachPauseMeasured(r, label) {
+    expect(r.silences.length, label).toBeGreaterThan(0);
+    r.silences.forEach((s, i) => {
+      expect(s.measured, `${label}: silence ${i + 1} (${s.sec} s) · ${r.segs}`).not.toBeNull();
+      expect(s.measured, `${label}: silence ${i + 1} · ${r.segs}`).toBeGreaterThan(s.sec - 0.1);
+      expect(s.measured, `${label}: silence ${i + 1} · ${r.segs}`).toBeLessThan(s.sec + 0.15);
+    });
+  }
+
+  test("a fan that opens the gate: every pause counts, the first one too", async ({ page }) => {
+    // The learner talks from the first frame over a fan 22 dB above the
+    // quiet room. The fan used to be learned only after ~1.5–1.9 s of it
+    // alone, so 1–1.2 s pauses read as speech.
+    for (const sec of [1.2, 1.0]) {
+      const r = await sim(page, { parts: turns(5, SPEECH(3, OVER_FAN), QUIET(sec)), fan: { db: -40 } });
+      eachPauseMeasured(r, `fan, ${sec} s pauses`);
+      expect(r.falsePauses).toBe(0);
+    }
+    // Ten seconds of talk, then the first pause
+    const r = await sim(page, { parts: [SPEECH(10, OVER_FAN), QUIET(1.5), SPEECH(5, OVER_FAN)], fan: { db: -40 } });
+    eachPauseMeasured(r, "fan, 10 s then 1.5 s");
+  });
+
+  test("sensitivity 10: the quiet room's own hiss opens the gate, pauses still count", async ({ page }) => {
+    const r = await sim(page, { parts: turns(5, SPEECH(3, { peak: -15, dip: -32 }), QUIET(1)), room: -55, sens: 10 });
+    eachPauseMeasured(r, "sensitivity 10");
+  });
+
+  test("a steady fan becomes the floor within a second, at 60 or 30 frames a second", async ({ page }) => {
+    for (const fps of [60, 30]) {
+      const r = await sim(page, { parts: [QUIET(3)], fan: { db: -40 }, fps, at: [1] });
+      expect(Math.abs(r.floorAt[1] - -40), `${fps} fps: floor at 1 s`).toBeLessThan(2);
+    }
+    // At 30 fps (a phone in low-power mode) the floor learned at ~20 steps a
+    // second and a talker's 1.2 s pauses never taught it
+    const r = await sim(page, { parts: turns(4, SPEECH(3, OVER_FAN), QUIET(1.2)), fan: { db: -40 }, fps: 30 });
+    eachPauseMeasured(r, "30 fps");
+  });
+
+  test("a fan switched on or off mid-take: the floor follows the room", async ({ page }) => {
+    // On during a 4 s pause: the room is the fan within a second, and the
+    // pauses after it count
+    let r = await sim(page, {
+      parts: [QUIET(1), SPEECH(5), QUIET(4), SPEECH(3), QUIET(1.2), SPEECH(3), QUIET(1.2), SPEECH(3)],
+      fan: { db: -40, from: 7 },
+      at: [8]
+    });
+    expect(Math.abs(r.floorAt[8] - -40), r.segs).toBeLessThan(2);
+    expect(r.silences[1].measured, r.segs).toBeGreaterThan(1.1);
+    expect(r.silences[2].measured, r.segs).toBeGreaterThan(1.1);
+    // Off after the second pause: the quiet room comes back as the floor
+    r = await sim(page, {
+      parts: [SPEECH(3, OVER_FAN), QUIET(1.2), SPEECH(3, OVER_FAN), QUIET(2), SPEECH(3), QUIET(1.2), SPEECH(3)],
+      fan: { db: -40, until: 7.5 }
+    });
+    eachPauseMeasured(r, "fan off");
+    expect(r.floor).toBeLessThan(-60);
+  });
+
   test("silence, then speech: a 1.2 s pause measures 1.2 s", async ({ page }) => {
     const r = await sim(page, { parts: [QUIET(2), SPEECH(10), QUIET(1.2), SPEECH(4)] });
     expect(r.falsePauses).toBe(0);

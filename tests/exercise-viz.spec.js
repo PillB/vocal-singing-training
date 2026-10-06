@@ -8,7 +8,7 @@ const { useVoice, playVoice } = require("./helpers/voice");
 
 const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";
 
-async function boot(page, lang = "es") {
+async function boot(page, lang = "es", init) {
   await page.addInitScript((l) => {
     try {
       localStorage.setItem("vt_tour_v1", "1");
@@ -19,8 +19,38 @@ async function boot(page, lang = "es") {
     }
   }, lang);
   await useVoice(page);
+  if (init) await page.addInitScript(init);
   await page.goto(BASE + "/?e2e", { waitUntil: "domcontentloaded" });
   await page.waitForFunction(() => !!window.VTApp?.openExercise);
+}
+
+/**
+ * A fan in the room: steady white noise at −50 dBFS mixed into the synthetic
+ * microphone from the first frame, loud enough to open the engine's gate at
+ * the default sensitivity (−36 dBFS after its gain). Runs after the voice's
+ * own getUserMedia, which it wraps.
+ */
+function fanInRoom() {
+  const gum = navigator.mediaDevices.getUserMedia;
+  navigator.mediaDevices.getUserMedia = async (...args) => {
+    const stream = await gum.apply(navigator.mediaDevices, args);
+    const { dest } = window.__VTVoice.h.nodes();
+    if (!window.__fan) {
+      const ac = dest.context;
+      const buf = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      const src = ac.createBufferSource();
+      src.buffer = buf;
+      src.loop = true;
+      const g = ac.createGain();
+      g.gain.value = 0.0055;
+      src.connect(g).connect(dest);
+      src.start();
+      window.__fan = src;
+    }
+    return stream;
+  };
 }
 
 async function openAndStart(page, id, voice) {
@@ -83,6 +113,18 @@ test.describe("exercise pictures", () => {
     await expect(page.locator("#mode-focus .mode-panel")).toHaveClass(/is-replay/);
     const toast = await page.evaluate(() => window.VTApp.getState().modeInstance?.state?.review);
     expect(toast).toBe(true);
+  });
+
+  test("power pause counts pauses with a fan running", async ({ page }) => {
+    await boot(page, "es", fanInRoom);
+    await openAndStart(page, "v10-power-pause", "speech");
+    // The same speaker (3 s talk, 1.2 s pause) over the fan: the fan is
+    // learned as the room in the first pause instead of reading as speech
+    await page.waitForTimeout(9500);
+    const n = Number(await page.locator("#mode-focus [data-p]").textContent());
+    const floor = await page.evaluate(() => window.VTApp.getState().modeInstance?.state?.vad?.floorDb);
+    expect(floor, "the fan is the room").toBeGreaterThan(-45);
+    expect(n, "1.2 s pauses count over the fan").toBeGreaterThanOrEqual(1);
   });
 
   test("English labels on the pause drill", async ({ page }) => {

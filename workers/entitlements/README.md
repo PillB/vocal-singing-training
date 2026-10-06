@@ -214,14 +214,16 @@ sub:<provider>:<subscriptionId>       licenseId                                 
 paid:<licenseId>                      "1"                                       a payment was confirmed (see below)
 ended:<licenseId>                     {endedAt, periodEnd}                      the Stripe subscription was deleted
 reversed:<licenseId>                  {reversedChargeAt, reversedAt}            a Mercado Pago charge's money went back
+charged:<licenseId>                   chargedAt                                 when the latest charge that went through was made
 ```
 
-`paid:`, `ended:` and `reversed:` repeat facts the record also holds, each in
-a key nothing else writes, so that two webhooks processed at the same time
-cannot lose them: KV has no compare-and-swap, and the later of two concurrent
-writes of the record wins. Every read of a record applies them over it.
-`reversed:` holds the latest refunded or charged-back charge, as the record
-does.
+`paid:`, `ended:`, `reversed:` and `charged:` repeat facts the record also
+holds, each in a key nothing else writes, so that two webhooks processed at the
+same time cannot lose them: KV has no compare-and-swap, and the later of two
+concurrent writes of the record wins. Every read of a record applies them over
+it. `reversed:` holds the latest refunded or charged-back charge, and
+`charged:` the latest charge that went through (and so the interval it bought),
+as the record does.
 
 D1: one database bound as `DB`, optional. The schema is created on first use
 (`ensureSchema`, every statement `IF NOT EXISTS`), so there is no migration step
@@ -307,8 +309,9 @@ just cancellations, and `/v1/license` refuses once `periodEnd` has passed. That
 is what stops a Mercado Pago Checkout Pro payment or a Stripe checkout for a
 one-time price — a one-off charge with no subscription lifecycle behind it —
 from becoming lifetime Pro: a payment-derived record is entitled for one plan
-interval from when the money arrived (31 days for `pro_monthly`, 365 for
-`pro_yearly`), and each renewal charge extends it. A charge never *shortens* an
+interval from when the money arrived (31 days for `pro_monthly`; for
+`pro_yearly`, to the same date next year, so 366 days when the year spans
+29 February), and each renewal charge extends it. A charge never *shortens* an
 existing period. Stripe webhook sessions carry no line items, so a one-time
 Stripe Payment Link meant as a yearly pass needs `metadata.plan = pro_yearly`;
 without it the pass counts as one month. A Stripe checkout that bought neither
@@ -363,20 +366,22 @@ Consequences worth understanding before you ship:
   once it settles.
 - **What concurrency can still do.** Two webhooks for one license processed at
   the same moment both read the record, and the later write wins. A confirmed
-  payment, a deletion and a Mercado Pago refund survive that through their own
-  keys, and KV's eventual consistency only delays them (another edge location
-  can take up to about a minute to see a write). Any other change can be lost
-  to it, and so can a refund processed at the same moment as the refund of
-  another charge. A renewal's new period end comes back with the next event
-  that carries it. Worse, the first two events for a new license (a checkout
-  and its subscription's first event) processed at once can each find no
-  license and mint one. The claim then points at one record and the
-  subscription index, which every later event follows, at the other, so the
-  claimed copy never hears of a renewal or a cancellation and does not heal:
-  a cancelled customer could keep Pro until the period it already holds runs
-  out, or for good if it holds none. Closing all of this needs one writer per
-  license (a Durable Object, or a D1 row updated only when its stored
-  `occurredAt` is older), which this worker does not have.
+  payment, a deletion, a charge that went through (so a subscriber who pays
+  and cancels at once keeps the interval it bought) and a Mercado Pago refund
+  survive that through their own keys, and KV's eventual consistency only
+  delays them (another edge location can take up to about a minute to see a
+  write). Any other change can be lost to it, and so can a charge or a refund
+  processed at the same moment as another charge or its refund. A renewal's
+  new period end comes back with the next event that carries it. Worse, the
+  first two events for a new license (a checkout and its subscription's first
+  event) processed at once can each find no license and mint one. The claim
+  then points at one record and the subscription index, which every later
+  event follows, at the other, so the claimed copy never hears of a renewal
+  or a cancellation and does not heal: a cancelled customer could keep Pro
+  until the period it already holds runs out, or for good if it holds none.
+  Closing all of this needs one writer per license (a Durable Object, or a D1
+  row updated only when its stored `occurredAt` is older), which this worker
+  does not have.
 
 ## Registering the webhooks
 
@@ -475,9 +480,9 @@ pays for a period of its own, brings access back. The refund of an earlier
 charge, whose period a later charge has already paid past, leaves the current
 period alone. A charge's period is counted as one interval of the record's
 plan from its approval, with a week of slack: a subscription's period runs to
-its next scheduled charge, not from when the charge went through, and a year
-can have 366 days. A reversed subscription charge changes neither the
-subscription's status nor its clock; a reversed one-off payment is `canceled`.
+its next scheduled charge, not from when the charge went through. A reversed
+subscription charge changes neither the subscription's status nor its clock; a
+reversed one-off payment is `canceled`.
 The plan comes from
 `MP_PLAN_PRO_MONTHLY`/`MP_PLAN_PRO_YEARLY`, else the preapproval `reason` or
 `external_reference`, else `auto_recurring`; when nothing says, it defaults to

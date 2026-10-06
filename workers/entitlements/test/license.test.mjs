@@ -218,6 +218,21 @@ test("periodEndForPlan turns a charge into one paid interval", () => {
   assert.equal(PLAN_INTERVAL_SECONDS.pro_yearly, 31536000);
 });
 
+test("periodEndForPlan runs a yearly charge to the same date next year, 29 February included", () => {
+  const at = (year, month, day) => Date.UTC(year, month - 1, day, 12) / 1000;
+  // A year that spans 29 February has 366 days.
+  assert.equal(periodEndForPlan("pro_yearly", at(2027, 4, 10)), at(2028, 4, 10));
+  assert.equal(periodEndForPlan("pro_yearly", at(2028, 1, 15)), at(2029, 1, 15));
+  assert.equal(at(2029, 1, 15) - at(2028, 1, 15), 366 * 86400);
+  // A charge on 29 February runs to 1 March, never short of a year.
+  assert.equal(periodEndForPlan("pro_yearly", at(2028, 2, 29)), at(2029, 3, 1));
+  // Any other year keeps 365 days, and a month keeps 31 days even in February.
+  assert.equal(periodEndForPlan("pro_yearly", at(2026, 4, 10)), at(2026, 4, 10) + 31536000);
+  assert.equal(periodEndForPlan("pro_monthly", at(2028, 2, 1)), at(2028, 2, 1) + 2678400);
+  // A time no Date can hold still gets its interval.
+  assert.equal(periodEndForPlan("pro_yearly", 1e13), 1e13 + 31536000);
+});
+
 test("buildTokenPayload normalises a missing period end to null", () => {
   const env = createTestEnv();
   const payload = buildTokenPayload(createEntitlement({ periodEnd: undefined }), env, 1770000000);

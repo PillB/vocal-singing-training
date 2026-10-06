@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  chargedKey,
   CLAIM_TTL_SECONDS,
   clearEventSeen,
   EVENT_TTL_SECONDS,
@@ -671,6 +672,62 @@ test("a charge processed before its subscription is counted on the subscription'
   }
 });
 
+test("a yearly subscriber who stops keeps a whole year that spans 29 February", async () => {
+  const at = (year, month, day) => Date.UTC(year, month - 1, day, 12) / 1000;
+  const iso = (seconds) => new Date(seconds * 1000).toISOString();
+  const chargedAt = at(2027, 4, 10);
+  const yearEnd = at(2028, 4, 10);
+  assert.equal(yearEnd - chargedAt, 366 * 86400);
+  // The subscription's own notification is read only after it stopped, so
+  // the record never takes its next charge date: the charge alone counts.
+  const charges = {
+    subscription_authorized_payment: {
+      id: 601,
+      preapproval_id: "pre_leap",
+      status: "processed",
+      date_created: iso(chargedAt - 5),
+      date_last_updated: iso(chargedAt + 5),
+      payment: { id: 2001, status: "approved", date_approved: iso(chargedAt) }
+    },
+    payment: {
+      id: 2001,
+      status: "approved",
+      metadata: { preapproval_id: "pre_leap" },
+      date_created: iso(chargedAt - 5),
+      date_approved: iso(chargedAt),
+      date_last_updated: iso(chargedAt + 6),
+      payer: { id: 9 }
+    }
+  };
+  const stopped = (status) => mercadoPagoUpdate("subscription_preapproval", {
+    id: "pre_leap",
+    status,
+    reason: "Vocal Studio Pro anual",
+    next_payment_date: iso(yearEnd),
+    date_last_updated: iso(chargedAt + 120),
+    payer_id: 9
+  });
+  for (const status of ["cancelled", "paused"]) {
+    for (const [topic, charge] of Object.entries(charges)) {
+      for (const order of [["charge", "stop"], ["stop", "charge"]]) {
+        const label = `${topic}, ${status}, ${order.join(" then ")}`;
+        const kv = createFakeKv();
+        const generateId = idSequence("lic_");
+        for (const step of order) {
+          const update = step === "charge" ? mercadoPagoUpdate(topic, charge) : stopped(status);
+          await upsertEntitlement(kv, update, { now: chargedAt + 200, generateId });
+        }
+        const read = await getEntitlement(kv, "lic_1");
+        assert.equal(read.plan, "pro_yearly", label);
+        assert.equal(read.status, "canceled", label);
+        assert.equal(read.periodEnd, yearEnd, `${label}: the same date next year`);
+        assert.equal(isTokenIssuable(read, yearEnd - 6 * 3600), true, `${label}: still Pro on its last day`);
+        assert.equal(isTokenIssuable(read, yearEnd), false, `${label}: nothing past the year`);
+      }
+    }
+  }
+});
+
 test("every order of a subscription's notifications gives a paid charge its interval and an unpaid one nothing", async () => {
   const MONTH = 2678400;
   const YEAR = 31536000;
@@ -915,6 +972,67 @@ test("a confirmed payment survives a concurrent write of an older copy of the re
   const read = await getEntitlement(kv, "lic_1");
   assert.equal(read.paid, true, "the confirmation's own key restores it");
   assert.equal(isTokenIssuable(read, NOW + 20), true);
+});
+
+test("a charge that went through survives a concurrent write of an older copy of the record", async () => {
+  const YEAR = 31536000;
+  for (const status of ["cancelled", "paused"]) {
+    const kv = createFakeKv();
+    const generateId = idSequence("lic_");
+    // A yearly subscription is created, and its pending notification processed.
+    await upsertEntitlement(kv, mercadoPagoUpdate("subscription_preapproval", {
+      id: "pre_cc",
+      status: "pending",
+      reason: "Vocal Studio Pro anual",
+      date_last_updated: isoAt(0),
+      payer_id: 9
+    }), { now: NOW + 5, generateId });
+
+    // The first charge and a cancellation or pause two minutes later are
+    // processed at once: the stop read the record before the charge was
+    // written, and wrote last.
+    const before = new Map(kv.store);
+    await upsertEntitlement(kv, mercadoPagoUpdate("subscription_authorized_payment", {
+      id: 701,
+      preapproval_id: "pre_cc",
+      status: "processed",
+      date_created: isoAt(50),
+      date_last_updated: isoAt(60),
+      payment: { id: 3001, status: "approved", date_approved: isoAt(55) }
+    }), { now: NOW + 200, generateId });
+    await upsertEntitlement(staleView(kv, before), mercadoPagoUpdate("subscription_preapproval", {
+      id: "pre_cc",
+      status,
+      reason: "Vocal Studio Pro anual",
+      next_payment_date: isoAt(55 + YEAR),
+      date_last_updated: isoAt(120),
+      payer_id: 9
+    }), { now: NOW + 200, generateId });
+
+    const written = JSON.parse(kv.store.get(licenseKey("lic_1")).value);
+    assert.equal(written.chargedAt, undefined, `${status}: the record itself lost the charge`);
+    assert.equal(written.periodEnd, null, status);
+    assert.equal(kv.store.get(chargedKey("lic_1")).value, String(NOW + 55), status);
+    const read = await getEntitlement(kv, "lic_1");
+    assert.equal(read.status, "canceled", status);
+    assert.equal(read.periodEnd, NOW + 55 + YEAR, `${status}: the charge's own key gives back the year it paid for`);
+    assert.equal(isTokenIssuable(read, NOW + 60 * 86400), true, `${status}: still Pro on day 60`);
+    assert.equal(isTokenIssuable(read, NOW + 55 + YEAR), false, `${status}: nothing past the year`);
+
+    // The next notification writes the charge back into the record, and the
+    // charge's refund still ends the year.
+    const refunded = await upsertEntitlement(kv, mercadoPagoUpdate("subscription_authorized_payment", {
+      id: 701,
+      preapproval_id: "pre_cc",
+      status: "processed",
+      date_created: isoAt(50),
+      date_last_updated: isoAt(3600),
+      payment: { id: 3001, status: "refunded", date_approved: isoAt(55) }
+    }), { now: NOW + 7200, generateId });
+    assert.equal(refunded.record.chargedAt, NOW + 55, status);
+    assert.equal(refunded.record.periodEnd, NOW + 3600, `${status}: the refund ends it`);
+    assert.equal(isTokenIssuable(await getEntitlement(kv, "lic_1"), NOW + 7200), false, status);
+  }
 });
 
 test("a failed payment holds the license down until money arrives", async () => {

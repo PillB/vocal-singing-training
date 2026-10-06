@@ -43,7 +43,9 @@ export const STATUS_IDS = ["active", "past_due", "canceled", "pending", "suspend
 /**
  * How long one paid interval lasts, used to give payment-only records (no
  * subscription lifecycle to follow) an enforceable period end.
- * Monthly gets 31 days so a 31-day month never expires early.
+ * Monthly gets 31 days so a 31-day month never expires early. Yearly gets 365
+ * days, and periodEndForPlan runs it to the same date next year when that is
+ * later, so a year that spans 29 February (366 days) never expires early.
  */
 export const PLAN_INTERVAL_SECONDS = {
   pro_monthly: 2678400,
@@ -51,7 +53,9 @@ export const PLAN_INTERVAL_SECONDS = {
 };
 
 /**
- * Period end for a single charge: when it was paid plus one plan interval.
+ * Period end for a single charge: when it was paid plus one plan interval. A
+ * yearly charge runs at least to the same date and time next year (a charge
+ * on 29 February, to 1 March).
  * @param {string} plan Plan id.
  * @param {number} chargedAt Unix seconds the charge was approved.
  * @returns {number|null} Unix seconds, or null when either input is unusable.
@@ -61,7 +65,15 @@ export function periodEndForPlan(plan, chargedAt) {
   if (!interval || !Number.isFinite(chargedAt)) {
     return null;
   }
-  return Math.floor(chargedAt) + interval;
+  const start = Math.floor(chargedAt);
+  if (plan !== "pro_yearly") {
+    return start + interval;
+  }
+  const date = new Date(start * 1000);
+  date.setUTCMonth(date.getUTCMonth() + 12);
+  const nextYear = Math.floor(date.getTime() / 1000);
+  // A time past what a Date can hold has no calendar: count the interval.
+  return Number.isFinite(nextYear) ? Math.max(start + interval, nextYear) : start + interval;
 }
 
 const textEncoder = new TextEncoder();

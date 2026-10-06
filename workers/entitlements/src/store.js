@@ -12,22 +12,24 @@
  *   paid:<licenseId>                      -> "1"        (a payment was confirmed)
  *   ended:<licenseId>                     -> {endedAt, periodEnd} (subscription deleted)
  *   reversed:<licenseId>                  -> {reversedChargeAt, reversedAt} (money given back)
+ *   charged:<licenseId>                   -> chargedAt  (latest charge that went through)
  *
  * KV has no compare-and-swap, so two webhooks for one license processed at the
  * same time can each read the record, and the later write wins with the other's
  * change lost. A fact that never changes back once true (a confirmed payment, a
- * deletion, money given back, which only ever moves on to a later charge) is
- * therefore also kept in a key of its own that only that fact ever writes, and
- * is read back over the record, so a concurrent write of an older copy cannot
- * lose it. KV is also eventually consistent, so another edge location may not
- * see such a key for up to about a minute: the fact is then late, not lost.
- * Changes that are not one-way (an ordinary status or period update) can still
- * be lost that way, and so can the refund of a later charge processed at the
- * same moment as the refund of an earlier one. Worse, the first two events for
- * a new license processed at once (a checkout and its subscription's first
- * event) can each find no license and mint one: the claim then points at one
- * record and the subscription index, which every later event follows, at the
- * other, so the claimed copy never hears of a renewal or a cancellation.
+ * deletion, a charge that went through or money given back, the last two only
+ * ever moving on to a later charge) is therefore also kept in a key of its own
+ * that only that fact ever writes, and is read back over the record, so a
+ * concurrent write of an older copy cannot lose it. KV is also eventually
+ * consistent, so another edge location may not see such a key for up to about
+ * a minute: the fact is then late, not lost. Changes that are not one-way (an
+ * ordinary status or period update) can still be lost that way, and so can a
+ * later charge, or the refund of one, processed at the same moment as an
+ * earlier charge or its refund. Worse, the first two events for a new license
+ * processed at once (a checkout and its subscription's first event) can each
+ * find no license and mint one: the claim then points at one record and the
+ * subscription index, which every later event follows, at the other, so the
+ * claimed copy never hears of a renewal or a cancellation.
  * Closing all of that needs a single writer per license (a Durable Object, or a
  * D1 row updated conditionally), which this store does not have.
  */
@@ -46,8 +48,7 @@ export const CLAIM_TTL_SECONDS = 7776000;
  * A refunded charge is still what paid for the current period when that period
  * ends up to a week past the charge's own plan interval. A subscription's
  * period runs to its next scheduled charge, which is not counted from the
- * moment the charge went through, and a year can have 366 days; the next
- * charge's period ends weeks later.
+ * moment the charge went through; the next charge's period ends weeks later.
  */
 export const REVERSAL_SLACK_SECONDS = 604800;
 
@@ -115,6 +116,15 @@ export function endedKey(licenseId) {
  */
 export function reversedKey(licenseId) {
   return `reversed:${licenseId}`;
+}
+
+/**
+ * Key for when the latest charge that went through on a license was made.
+ * @param {string} licenseId Opaque license id.
+ * @returns {string} KV key.
+ */
+export function chargedKey(licenseId) {
+  return `charged:${licenseId}`;
 }
 
 /**
@@ -189,6 +199,16 @@ export async function getEntitlement(kv, licenseId) {
       capPeriodEnd(record, ended.periodEnd);
     }
   }
+  // And the latest charge that went through, which still buys its interval
+  // unless the subscription was deleted. Before the refund below, so money
+  // given back still ends the period it paid for.
+  if (record && !Number.isFinite(record.endedAt)) {
+    const chargedAt = await readCharged(kv, licenseId);
+    if (chargedAt !== null && !(record.chargedAt >= chargedAt)) {
+      record.chargedAt = chargedAt;
+      extendForCharge(record, chargedAt);
+    }
+  }
   // And money given back: only Mercado Pago reports it.
   if (record && record.provider === "mercadopago") {
     const reversal = await readReversal(kv, licenseId);
@@ -238,6 +258,18 @@ async function readReversal(kv, licenseId) {
   } catch {
     return null;
   }
+}
+
+/**
+ * Read when the latest charge that went through on a license was made.
+ * @param {Object} kv KV namespace.
+ * @param {string} licenseId Opaque license id.
+ * @returns {Promise<number|null>} Unix seconds or null.
+ */
+async function readCharged(kv, licenseId) {
+  const raw = await kv.get(chargedKey(licenseId));
+  const chargedAt = raw ? Number(raw) : NaN;
+  return Number.isFinite(chargedAt) ? chargedAt : null;
 }
 
 /**
@@ -488,8 +520,9 @@ export function isStaleUpdate(record, update) {
  * charge that went through paid for (unless the subscription was deleted),
  * money given back, and the claim/subscription indexes are order-independent
  * and are still applied. The latest such charge is kept on the record
- * (`chargedAt`) and counted again on the plan an update brings, since a
- * subscription's charge does not say its plan.
+ * (`chargedAt`, and in `charged:` against a concurrent write) and counted
+ * again on the plan an update brings, since a subscription's charge does not
+ * say its plan.
  *
  * @param {Object} kv KV namespace.
  * @param {Object} update Descriptor: provider, plan, status, customerId,
@@ -624,6 +657,9 @@ export async function upsertEntitlement(kv, update, options) {
 
   if (update.paid === true) {
     await kv.put(paidKey(licenseId), "1");
+  }
+  if (!ended && Number.isFinite(update.periodEndFromCharge)) {
+    await kv.put(chargedKey(licenseId), String(record.chargedAt));
   }
   if (Number.isFinite(update.reversedChargeAt)) {
     await kv.put(reversedKey(licenseId), JSON.stringify({

@@ -1255,8 +1255,13 @@
     const opener = document.activeElement;
     // One string for every exercise was wrong for about half of them: it
     // promised a piano and a pitch readout, and the exercise the home page's
-    // own first-practice button opens has neither. Say what is true here.
-    const bodyKey = opts.piano ? "tour.mic.bodyPiano" : "tour.mic.body";
+    // own first-practice button opens has neither. Say what is true here:
+    // a paced exercise (opts.pacer) runs without the microphone too.
+    const bodyKey = opts.piano
+      ? "tour.mic.bodyPiano"
+      : opts.pacer
+        ? "tour.mic.bodyPacer"
+        : "tour.mic.body";
     let modal = document.getElementById("mic-primer");
     if (!modal) {
       modal = document.createElement("div");

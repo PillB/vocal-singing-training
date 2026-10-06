@@ -3631,6 +3631,8 @@
           if (state.view === "exercise" && state.exercise === ex) startPractice();
         }, {
           piano: exerciseWantsSound(ex, profile),
+          // A paced exercise runs on its clock with the microphone refused
+          pacer: !!profile.timeDriven,
           onDecline: () => toast(tt("tour.mic.declined"))
         });
         return;

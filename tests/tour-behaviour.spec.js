@@ -557,6 +557,29 @@ test.describe("Microphone primer", () => {
     await expect(page.locator("#mic-primer")).toBeHidden();
   });
 
+  test("it says what is true on an exercise that runs on its clock", async ({ page }) => {
+    const bodyFor = async (id, lang = "es") => {
+      await boot(page, { tour: "finished", lang });
+      await page.evaluate((x) => window.VTApp.openExercise(x, false), id);
+      await page.waitForTimeout(600);
+      await page.evaluate(() => sessionStorage.removeItem("vt_e2e"));
+      await page.locator("#btn-practice-start").click();
+      await expect(page.locator("#mic-primer")).toBeVisible();
+      return page.locator("#mic-primer [data-primer-body]").textContent();
+    };
+    // A paced exercise without a piano runs with the microphone refused: the
+    // primer must not say it cannot
+    const pacer = await bodyFor("v18-story-peak");
+    expect(pacer).not.toMatch(/no podrá funcionar/);
+    expect(pacer).toMatch(/sigue con su reloj/);
+    expect(pacer, "the privacy sentence is unchanged").toMatch(/^Nada se sube ni se graba solo: el audio se analiza en este dispositivo y se queda aquí\./);
+    expect(await bodyFor("v4-articulation-pen", "en")).toMatch(/still runs on its clock/);
+    // One with a piano keeps the piano's own words
+    expect(await bodyFor("s19-soft-palate-surprise")).toMatch(/El piano suena igual sin micrófono/);
+    // And one that measures the voice still says it needs the microphone
+    expect(await bodyFor("v1-diction")).toMatch(/no podrá funcionar/);
+  });
+
   test("it never appears once the microphone has been primed", async ({ page }) => {
     await boot(page, { tour: "finished", micPrimed: true });
     await page.evaluate(() => window.VTApp.openExercise("v1-diction", false));

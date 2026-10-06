@@ -560,6 +560,8 @@
         "Nada se sube ni se graba solo: el audio se analiza en este dispositivo y se queda aquí. Este ejercicio necesita el micrófono para medir tu voz; sin permiso no podrá funcionar.",
       "tour.mic.bodyPiano":
         "Nada se sube ni se graba solo: el audio se analiza en este dispositivo y se queda aquí. El piano suena igual sin micrófono, pero el ejercicio no podrá medir tu voz.",
+      "tour.mic.bodyPacer":
+        "Nada se sube ni se graba solo: el audio se analiza en este dispositivo y se queda aquí. Sin micrófono el ejercicio sigue con su reloj, pero no podrá escucharte ni grabarte.",
       "tour.mic.declined":
         "No hemos empezado. Pulsa Empezar cuando quieras: no volveremos a preguntar.",
       "tour.mic.ok": "Entendido, continuar",
@@ -1605,6 +1607,8 @@
         "Nothing is uploaded and nothing records by itself: audio is analysed on this device and stays here. This exercise needs the microphone to measure your voice; without permission it cannot run.",
       "tour.mic.bodyPiano":
         "Nothing is uploaded and nothing records by itself: audio is analysed on this device and stays here. The piano plays with or without the microphone, but the exercise cannot measure your voice.",
+      "tour.mic.bodyPacer":
+        "Nothing is uploaded and nothing records by itself: audio is analysed on this device and stays here. Without the microphone the exercise still runs on its clock, but it cannot hear or record you.",
       "tour.mic.declined":
         "Not started. Press Start whenever you are ready — we will not ask again.",
       "tour.mic.ok": "Got it, continue",

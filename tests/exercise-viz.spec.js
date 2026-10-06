@@ -165,6 +165,31 @@ test.describe("exercise pictures", () => {
     expect(n, vad.segs).toBe(2);
   });
 
+  test("power pause counts pauses over a fan's low rumble with the mic's own hiss under it", async ({ page }) => {
+    // A real mic adds its own hiss: here 18 dB under a 100 Hz rumble (−58
+    // and −76 dBFS before the gain). The weak hiss still made the rumble
+    // read as sitting high, so it got only the strict 4.5 dB test, which a
+    // rumble that wobbles 6 dB rarely passes: the floor stayed at −70, the
+    // take read as one stretch of speech and no pause counted (two runs in
+    // three). The noise is seeded, one the old code failed on; the sim's
+    // "rumble with the quiet room's hiss" case in tests/vad-floor.spec.js
+    // fails there on 19 of its 32 takes.
+    const raw = (db) => Math.pow(10, db / 20) * Math.sqrt(3);
+    await boot(page, "es", [fanInRoom, { gain: raw(-58), hz: 100, order: 2, hiss: raw(-76), seed: 15838 }]);
+    await openAndStart(page, "v10-power-pause");
+    // 2 s of the room alone, then the speaker (3 s talk, 1.2 s pause)
+    await page.waitForTimeout(1750);
+    await playVoice(page, "speech");
+    await page.waitForTimeout(10000);
+    const n = Number(await page.locator("#mode-focus [data-p]").textContent());
+    const vad = await page.evaluate(() => {
+      const v = window.VTApp.getState().modeInstance.state.vad;
+      return { floor: v.floorDb, segs: v.segments.map((g) => `${g.kind[0]}${g.start.toFixed(2)}`).join(" ") };
+    });
+    expect(vad.floor, `the rumble is the room · ${vad.segs}`).toBeGreaterThan(-55);
+    expect(n, vad.segs).toBe(2);
+  });
+
   for (const [db, gain] of [
     [-30, 0.03],
     [-38, 0.012]
@@ -188,6 +213,66 @@ test.describe("exercise pictures", () => {
       });
       expect(vad.floor, `the quiet room is the floor · ${vad.segs}`).toBeLessThan(-60);
       expect(vad.talk, `the whisper is talk · ${vad.segs}`).toBeGreaterThan(6);
+      expect(n, vad.segs).toBe(2);
+    });
+  }
+
+  test("power pause keeps whispered phrases of 6 s", async ({ page }) => {
+    // Deep into a long whispered phrase the floor used to need only 0.6 s
+    // within 4.5 dB to take a new room: 3 s after it last heard the quiet
+    // room, a stretch of the whisper passed, the floor jumped to it and the
+    // phrase was taken back (or the next one read as a pause). It failed
+    // one run in three; the sim's "whispered phrases of 6 s or more" case
+    // in tests/vad-floor.spec.js is the deterministic guard.
+    await boot(page, "es", [(w) => (window.__VTWhisper = w), { gain: 0.03, swingDb: 6, phraseMs: 6000 }]);
+    await openAndStart(page, "v10-power-pause");
+    // 1 s of the quiet room, then two 6 s whispered phrases with a 1.2 s pause
+    await page.waitForTimeout(750);
+    await playVoice(page, "speechWhisper");
+    await page.waitForTimeout(13800);
+    const n = Number(await page.locator("#mode-focus [data-p]").textContent());
+    const vad = await page.evaluate(() => {
+      const v = window.VTApp.getState().modeInstance.state.vad;
+      return { floor: v.floorDb, talk: v.talkSec, segs: v.segments.map((g) => `${g.kind[0]}${g.start.toFixed(2)}`).join(" ") };
+    });
+    expect(vad.floor, `the quiet room is the floor · ${vad.segs}`).toBeLessThan(-60);
+    expect(vad.talk, `both phrases are talk · ${vad.segs}`).toBeGreaterThan(11);
+    expect(n, vad.segs).toBe(1);
+  });
+
+  for (const [label, voice, why] of [
+    [
+      "power pause keeps whispered talk through a narrowband headset",
+      { gain: 0.03, swingDb: 6, lp: 3000, lpOrder: 4 },
+      // Through a headset's steep 3 kHz low-pass a whisper sits lower (0.29
+      // where the qa whisper reads 0.55), under the 0.3 that once marked a
+      // rumble: its 6 dB syllables passed the rumble's loose test, the floor
+      // jumped to the whisper after the lead-in and the take was erased
+      "the whisper is talk"
+    ],
+    [
+      "power pause hears a held 'sss' as a voice",
+      { gain: 0.03, swingDb: 1, bands: [5000, 7000], q: 1.5 },
+      // A held hiss (5–7 kHz, swinging 1 dB) has no period and holds
+      // stiller than a fan: 0.6–1.2 s into it the floor took it for a fan
+      // switched on, and each hiss was taken back as the room
+      "the hisses are talk"
+    ]
+  ]) {
+    test(label, async ({ page }) => {
+      await boot(page, "es", [(w) => (window.__VTWhisper = w), voice]);
+      await openAndStart(page, "v10-power-pause");
+      // 2 s of the quiet room, then 3 s phrases (or holds) with 1.2 s pauses
+      await page.waitForTimeout(1750);
+      await playVoice(page, "speechWhisper");
+      await page.waitForTimeout(10000);
+      const n = Number(await page.locator("#mode-focus [data-p]").textContent());
+      const vad = await page.evaluate(() => {
+        const v = window.VTApp.getState().modeInstance.state.vad;
+        return { floor: v.floorDb, talk: v.talkSec, segs: v.segments.map((g) => `${g.kind[0]}${g.start.toFixed(2)}`).join(" ") };
+      });
+      expect(vad.floor, `the quiet room is the floor · ${vad.segs}`).toBeLessThan(-60);
+      expect(vad.talk, `${why} · ${vad.segs}`).toBeGreaterThan(6);
       expect(n, vad.segs).toBe(2);
     });
   }

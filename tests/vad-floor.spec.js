@@ -133,11 +133,17 @@ test.describe("clarity (VTPitchUtils.clarity)", () => {
     expect(out.silence).toBe(0);
   });
 
-  test("how high a sound sits tells a fan's low rumble from a whisper, at any sample rate", async ({ page }) => {
+  test("how high a sound sits, and how still its high part holds, tells a fan's low rumble from a whisper, at any sample rate", async ({ page }) => {
     // The Vad's measure: the engine's hfRms over rms, scaled to 48 kHz, as
-    // the median of 0.6 s. Under 0.1 a noise may wobble like a low rumble;
-    // a whisper (noise through the mouth's band-passes) must read well over
-    // it, or a whisper's flat syllables are learned as the room.
+    // the median of 0.6 s. Under 0.1 (LOW_HF) a noise may wobble like a low
+    // rumble, so a rumble must read under half of that and a whisper over
+    // one and a half times it, or a whisper's flat syllables are learned as
+    // the room and erased. That holds for a whisper through a narrowband
+    // headset's low-pass and for a whisper's back vowels too (0.17–0.3; a
+    // threshold of 0.3 let those through). A rumble with the mic's own hiss
+    // under it reads as high as they do; what tells it apart is that its
+    // high part (the hiss) holds within 1 dB over 0.6 s while its level
+    // wobbles, where a whisper's follows its syllables.
     await page.setContent("<!doctype html><title>hf</title>");
     await page.addScriptTag({ url: BASE + "/js/practice-engine.js" });
     const out = await page.evaluate(() => {
@@ -155,51 +161,90 @@ test.describe("clarity (VTPitchUtils.clarity)", () => {
           return v;
         });
       };
-      // A band-pass as the Web Audio API's (0 dB at its centre)
-      const bandPass = (x, sr, f, q) => {
-        const w = (2 * Math.PI * f) / sr;
-        const al = Math.sin(w) / (2 * q);
-        const [b0, b2, a0, a1, a2] = [al, -al, 1 + al, -2 * Math.cos(w), 1 - al];
+      // Two-pole filters as the Web Audio API's
+      const biquad = (x, [b0, b1, b2, a0, a1, a2]) => {
         let [x1, x2, y1, y2] = [0, 0, 0, 0];
         return x.map((v) => {
-          const y = (b0 * v + b2 * x2 - a1 * y1 - a2 * y2) / a0;
+          const y = (b0 * v + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2) / a0;
           [x2, x1, y2, y1] = [x1, v, y1, y];
           return y;
         });
       };
+      const bandPass = (x, sr, f, q) => {
+        const w = (2 * Math.PI * f) / sr;
+        const al = Math.sin(w) / (2 * q);
+        return biquad(x, [al, 0, -al, 1 + al, -2 * Math.cos(w), 1 - al]);
+      };
+      const lowPass = (x, sr, f) => {
+        const w = (2 * Math.PI * f) / sr;
+        const al = Math.sin(w) / Math.SQRT2;
+        const c = Math.cos(w);
+        return biquad(x, [(1 - c) / 2, 1 - c, (1 - c) / 2, 1 + al, -2 * c, 1 - al]);
+      };
+      const level = (x, db) => {
+        let s = 0;
+        x.forEach((v) => (s += v * v));
+        const k = Math.pow(10, db / 20) / Math.sqrt(s / x.length);
+        return x.map((v) => v * k);
+      };
+      // Breath through the mouth's band-passes, 4.5 syllables a second that
+      // swing 6 dB; `lp`: then through a headset's steep low-pass at that
+      // many Hz
+      const whisper = (bands, lp) => (n, sr) => {
+        const w = white(n);
+        const parts = bands.map((f) => bandPass(w, sr, f, 1.2));
+        let x = w.map((_, i) => parts.reduce((t, p) => t + p[i], 0));
+        if (lp) x = lowPass(lowPass(x, sr, lp), sr, lp);
+        const syl = sr / 4.5;
+        return x.map((v, i) => ((i % syl) / syl < 0.62 ? v : v / 2));
+      };
       const sounds = {
         "rumble2-100": (n, sr) => lowNoise(n, sr, 100, 2),
         "rumble2-250": (n, sr) => lowNoise(n, sr, 250, 2),
-        whisper: (n, sr) => {
-          const w = white(n);
-          const a = bandPass(w, sr, 900, 1.2);
-          const b = bandPass(w, sr, 2400, 1.2);
-          return a.map((v, i) => v + b[i]);
+        // The mic's own hiss 14 and 18 dB under a 100 Hz rumble
+        "hissUnder14-100": (n, sr) => {
+          const h = level(white(n), -14);
+          return level(lowNoise(n, sr, 100, 2), 0).map((v, i) => v + h[i]);
         },
+        "hissUnder18-100": (n, sr) => {
+          const h = level(white(n), -18);
+          return level(lowNoise(n, sr, 100, 2), 0).map((v, i) => v + h[i]);
+        },
+        whisper: whisper([900, 2400]),
+        "whisper-headset": whisper([900, 2400], 3000),
+        "whisper-back": whisper([500, 1100]),
+        "whisper-back-headset": whisper([500, 1100], 3000),
         white
       };
       const proto = window.VTPracticeEngine.prototype;
       const res = {};
+      const pct = (a, p) => a.slice().sort((x, y) => x - y)[Math.round((a.length - 1) * p)];
       for (const sr of [44100, 48000, 96000]) {
         const size = window.VTPracticeEngine.frameSize(sr);
         Object.keys(sounds).forEach((k) => {
-          const x = sounds[k](sr, sr);
+          const x = sounds[k](2 * sr, sr);
           const vals = [];
+          const hfDb = [];
           for (let end = size; end + Math.round(sr / 30) <= x.length && vals.length < 18; end += Math.round(sr / 30)) {
             const buf = Float32Array.from(x.slice(end - size, end));
             let s = 0;
             buf.forEach((v) => (s += v * v));
-            vals.push((proto._hfRms(buf) / Math.sqrt(s / buf.length)) * (sr / 48000));
+            const hf = proto._hfRms(buf);
+            vals.push((hf / Math.sqrt(s / buf.length)) * (sr / 48000));
+            hfDb.push(20 * Math.log10(hf));
           }
-          vals.sort((a, b) => a - b);
-          res[`${k} ${sr}`] = Math.round(vals[vals.length >> 1] * 1000) / 1000;
+          res[`${k} ${sr}`] = { hf: Math.round(pct(vals, 0.5) * 1000) / 1000, still: Math.round((pct(hfDb, 0.9) - pct(hfDb, 0.1)) * 100) / 100 };
         });
       }
       return res;
     });
     Object.keys(out).forEach((k) => {
-      if (/^rumble/.test(k)) expect(out[k], k).toBeLessThan(0.06);
-      else expect(out[k], k).toBeGreaterThan(0.3);
+      if (/^rumble/.test(k)) expect(out[k].hf, k).toBeLessThan(0.05);
+      else if (/^hissUnder/.test(k)) expect(out[k].still, `${k}: its high part holds still`).toBeLessThan(1);
+      else if (/^whisper/.test(k)) {
+        expect(out[k].hf, k).toBeGreaterThan(0.15);
+        expect(out[k].still, `${k}: its high part follows the syllables`).toBeGreaterThan(4);
+      } else expect(out[k].hf, k).toBeGreaterThan(1);
     });
   });
 });
@@ -349,8 +394,7 @@ test.describe("pause floor (Vad)", () => {
     // (wobble 7 and hf 0.015 match 100 Hz two-pole noise in the engine's
     // frames). It never held within 4.5 dB that long, so it was never
     // learned: the pauses read as speech, with a 2 s lead-in or talking from
-    // Start. (A rumble with the room's hiss within ~20 dB of it reads as high
-    // and gets only the strict test, as before.)
+    // Start.
     const fan = { db: -40, wobble: 7, hf: 0.015 };
     for (const lead of [2, 0]) {
       for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
@@ -363,6 +407,29 @@ test.describe("pause floor (Vad)", () => {
         if (lead) {
           expect(r.ghost, `${label} · ${r.segs}`).toBeLessThan(0.15);
           expect(r.ended.filter((e) => e.start < lead - 0.2), `${label} · ${r.segs}`).toEqual([]);
+        }
+      }
+    }
+  });
+
+  test("a fan's low rumble with the quiet room's hiss 14–16 dB under it is still the room", async ({ page }) => {
+    // A real mic always adds its own hiss. Under a rumble 14–16 dB above it
+    // the hiss is weak, but it lifts how high the sound sits (0.18–0.3
+    // where the rumble alone reads 0.015, as high as some whispers): the
+    // rumble was refused the looser test, never held within 4.5 dB, and was
+    // never learned. The take read as one stretch of speech and no pause was
+    // measured. The hiss holds still while the rumble wobbles; a whisper's
+    // high part follows its syllables.
+    for (const db of [-46, -48]) {
+      const fan = { db, wobble: 7, hf: 0.015 };
+      for (const lead of [2, 0]) {
+        for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+          const parts = [...(lead ? [QUIET(lead)] : []), ...turns(3, SPEECH(3, OVER_FAN), QUIET(1.2))];
+          const r = await sim(page, { parts, fan, seed });
+          const label = `rumble at ${db} dB, ${lead} s lead-in, seed ${seed}`;
+          expect(r.falsePauses, `${label} · ${r.segs}`).toBe(0);
+          expect(Math.abs(r.floor - db), `${label}: the rumble is the room · ${r.segs}`).toBeLessThan(3);
+          eachPauseMeasured(r, label);
         }
       }
     }
@@ -388,6 +455,86 @@ test.describe("pause floor (Vad)", () => {
         expect(r.falsePauses, msg).toBe(0);
         expect(r.talk, msg).toBeGreaterThan(r.truthTalk - 0.5);
         expect(r.ghost, msg).toBeLessThan(0.15);
+        eachPauseMeasured(r, `${label}, seed ${seed}`);
+      }
+    }
+  });
+
+  test("whispered phrases of 6 s or more keep their words", async ({ page }) => {
+    // Once the floor has heard the quiet room, a new room must hold still
+    // for 1.2 s. From 3 s after the last quiet step it used to need only
+    // 0.6 s, so deep into a long whispered phrase (no period, syllables that
+    // swing 6 dB) a stretch passed: the floor jumped to the whisper, and the
+    // phrase was taken back or the next one read as a pause.
+    for (const [label, sec, peak, dip, lead] of [
+      ["6 s phrases at −30/−36 dB, 1 s lead-in", 6, -30, -36, 1],
+      ["6 s phrases at −35/−41 dB, 2 s lead-in", 6, -35, -41, 2],
+      ["8 s phrases at −30/−36 dB, 1 s lead-in", 8, -30, -36, 1],
+      ["8 s phrases at −35/−41 dB, 2 s lead-in", 8, -35, -41, 2]
+    ]) {
+      for (const seed of [1, 2, 3, 4, 5, 6]) {
+        const parts = [QUIET(lead), ...turns(3, SPEECH(sec, { peak, dip, whisper: true }), QUIET(1.2))];
+        const r = await sim(page, { parts, seed });
+        const msg = `${label}, seed ${seed} · ${r.segs}`;
+        expect(r.falsePauses, msg).toBe(0);
+        expect(r.talk, msg).toBeGreaterThan(r.truthTalk - 0.5);
+        eachPauseMeasured(r, `${label}, seed ${seed}`);
+      }
+    }
+  });
+
+  test("a whisper that sits lower (back vowels, a headset's low-pass) keeps its words", async ({ page }) => {
+    // How high a whisper sits depends on the mouth and the mic: the qa
+    // whisper reads 0.58, but whispered /o/ and /u/, or any whisper through
+    // a narrowband headset, read 0.15–0.3. Anything under 0.3 used to get
+    // the rumble's loose test (10th to 90th percentile within 6 dB), which a
+    // whisper's 6 dB syllables pass: after the lead-in it was learned as the
+    // room and the take erased, with no talk and no pause measured. Only a
+    // sound whose high part holds still (a rumble with the mic's hiss under
+    // it) gets that test now.
+    for (const [label, sec, peak, dip, lead, n] of [
+      ["3 s phrases at −30/−36 dB, 1 s lead-in", 3, -30, -36, 1, 4],
+      ["4 s phrases at −30/−38 dB, 1 s lead-in", 4, -30, -38, 1, 3],
+      ["6 s phrases at −35/−41 dB, 2 s lead-in", 6, -35, -41, 2, 3]
+    ]) {
+      for (const hf of [0.15, 0.22, 0.29]) {
+        for (const seed of [1, 2, 3]) {
+          const parts = [QUIET(lead), ...turns(n, SPEECH(sec, { peak, dip, whisper: true, hf }), QUIET(1.2))];
+          const r = await sim(page, { parts, seed });
+          const msg = `${label}, hf ${hf}, seed ${seed} · ${r.segs}`;
+          expect(r.falsePauses, msg).toBe(0);
+          expect(r.talk, msg).toBeGreaterThan(r.truthTalk - 0.5);
+          expect(r.floor, `${msg}: the quiet room is the floor`).toBeLessThan(-60);
+          eachPauseMeasured(r, `${label}, hf ${hf}, seed ${seed}`);
+        }
+      }
+    }
+  });
+
+  test("a held 'sss' is a voice, not the room", async ({ page }) => {
+    // Hisses held 1.5–5 s with 1.2 s breaths, after a lead-in in a quiet
+    // room: no period, and flatter than any word. Early in each one it
+    // passed for a fan switched on: the floor jumped to it, the hiss was
+    // taken back as the room, and the breaths after it were never measured.
+    // A new room that sits high must now hold still for 5 s. (A hiss said
+    // between two words, with no breath around it, read the same way.)
+    const sss = (sec, peak = -30, o = {}) => SPEECH(sec, Object.assign({ peak, dip: peak - 1.5, whisper: true }, o));
+    const held = (part, n) => [QUIET(2), ...turns(n, part, QUIET(1.2)), QUIET(1)];
+    for (const [label, parts] of [
+      ["four 3 s hisses", held(sss(3), 4)],
+      ["three 5 s hisses", held(sss(5), 3)],
+      ["four 2 s hisses", held(sss(2), 4)],
+      ["four 1.5 s hisses", held(sss(1.5), 4)],
+      ["four soft 3 s hisses at −40 dB", held(sss(3, -40), 4)],
+      ["four 3 s 'shhh' that sit lower (hf 0.3)", held(sss(3, -30, { hf: 0.3 }), 4)],
+      ["a 2 s hiss between two words", [QUIET(1), SPEECH(3), sss(2), SPEECH(3), QUIET(1.2), SPEECH(3)]]
+    ]) {
+      for (const seed of [1, 2, 3, 4, 5, 6]) {
+        const r = await sim(page, { parts, seed });
+        const msg = `${label}, seed ${seed} · ${r.segs}`;
+        expect(r.falsePauses, msg).toBe(0);
+        expect(r.talk, msg).toBeGreaterThan(r.truthTalk - 0.5);
+        expect(r.floor, `${label}, seed ${seed}: the quiet room is the floor · ${r.segs}`).toBeLessThan(-60);
         eachPauseMeasured(r, `${label}, seed ${seed}`);
       }
     }
@@ -458,6 +605,34 @@ test.describe("pause floor (Vad)", () => {
     expect(r.takenBack[0]).toBeGreaterThan(6.9);
   });
 
+  test("a white fan switched on in a pause: the pause runs on, and the room is the fan", async ({ page }) => {
+    // A broadband fan sits as high as a held "sss" and holds as still, so a
+    // new room that sits high must hold still for 5 s, longer than the
+    // pause it came on in. It comes back in the next pause, at the level it
+    // held before a voice came over it, and that tells it from a hiss: the
+    // floor learned it there but left the speech the fan had opened in
+    // place, and the 4 s pause read as 0.5 s.
+    for (const db of [-40, -45]) {
+      for (const seed of [1, 2, 3, 4, 5, 6]) {
+        const parts = [QUIET(1), SPEECH(3), QUIET(4), ...turns(3, SPEECH(3, OVER_FAN), QUIET(1.2))];
+        const r = await sim(page, { parts, seed, fan: { db, from: 4.5, wobble: 1, hf: 1.41 } });
+        const label = `white fan at ${db} dB, seed ${seed}`;
+        expect(r.falsePauses, `${label} · ${r.segs}`).toBe(0);
+        // Its end was told when the fan came on, and only then; the segments
+        // have it whole
+        expect(r.ended.filter((e) => e.start < 4.2), `${label} · ${r.segs}`).toHaveLength(1);
+        const first = r.segs.match(/ p4\.0\d-(\d+\.\d\d) /);
+        expect(first && Number(first[1]), `${label}: the 4 s pause · ${r.segs}`).toBeGreaterThan(7.9);
+        expect(first && Number(first[1]), `${label}: the 4 s pause · ${r.segs}`).toBeLessThan(8.15);
+        expect(Math.abs(r.floor - db), `${label}: the fan is the room · ${r.segs}`).toBeLessThan(3);
+        r.silences.slice(1).forEach((x, i) => {
+          expect(x.measured, `${label}: silence ${i + 2} · ${r.segs}`).not.toBeNull();
+          expect(Math.abs(x.measured - x.sec), `${label}: silence ${i + 2} · ${r.segs}`).toBeLessThan(0.15);
+        });
+      }
+    }
+  });
+
   test("a hum in the room from the first frame becomes the floor", async ({ page }) => {
     // A steady tone (mains hum, a fridge) from Start, a lead-in, then talk
     // with 1.2 s pauses. It has a pitch like a voice, so only a sound the
@@ -481,8 +656,8 @@ test.describe("pause floor (Vad)", () => {
     // Talk from the first frame, or after a lead-in too short for the take
     // to open with a second of the hum alone. Nothing told the hum from the
     // voice, and the floor stayed at −70 all take: no pause was measured.
-    // Now a pause at the level the take opened with, or the second pause at
-    // the level of the first, is the room; the first pause is then told late.
+    // Now a pause at the level the take opened with, or the third pause at
+    // the level of the first two, is the room; those two are then told late.
     for (const lead of [0, 0.3, 0.5]) {
       for (const [label, room] of [
         ["hum at −36 dB", { hum: { db: -36, hz: 120 } }],
@@ -501,6 +676,24 @@ test.describe("pause floor (Vad)", () => {
     for (const sec of [2, 0.8]) {
       const r = await sim(page, { parts: turns(4, SPEECH(3, OVER_FAN), QUIET(sec)), hum: { db: -36, hz: 120 } });
       eachPauseMeasured(r, `${sec} s pauses`);
+    }
+    // A hum under a fan, together just over the gate, so the gate shuts for
+    // a few frames on the room's own dips. Any 40 ms shut used to mean a
+    // quiet room and switched the pauses off as a way to learn it, so about
+    // one long take in four never learned this room: no pause measured in
+    // eight turns. A pause stretch at the level the gate shut at is still
+    // the room; one well over it (a filler) is not.
+    for (const seed of [2, 10, 22, 26]) {
+      const parts = turns(8, SPEECH(3, { peak: -25, dip: -40, stops: 0.2 }), QUIET(1.2));
+      const r = await sim(page, { parts, seed, hum: { db: -48, hz: 120 }, fan: { db: -50 } });
+      const label = `hum at −48 dB with a fan at −50, seed ${seed}`;
+      expect(r.falsePauses, `${label} · ${r.segs}`).toBe(0);
+      expect(r.floor, `${label}: the room is the floor · ${r.segs}`).toBeGreaterThan(-50);
+      // The first pauses may go before the room is learned (told late)
+      r.silences.slice(3).forEach((x, i) => {
+        expect(x.measured, `${label}: silence ${i + 4} · ${r.segs}`).not.toBeNull();
+        expect(Math.abs(x.measured - x.sec), `${label}: silence ${i + 4} · ${r.segs}`).toBeLessThan(0.2);
+      });
     }
   });
 
@@ -550,6 +743,20 @@ test.describe("pause floor (Vad)", () => {
         const label = `speech ${peak}/${dip} dB, a murmur at −48 dB, 'mmm' at −45.5 dB, seed ${seed} · ${r.segs}`;
         expect(r.falsePauses, label).toBe(0);
         expect(r.ended, label).toEqual([]);
+      }
+    }
+    // Talk with few stops or none never falls to the quiet room, so the two
+    // fillers were the hum's shape after all: the second was learned as the
+    // room, both read as pauses, and 2 s of talk as soft as them was lost.
+    // A hum now has to come back a third time.
+    for (const stops of [0.1, 0.05, 0]) {
+      const talk = SPEECH(3, { peak: -25, dip: -38, stops });
+      for (const seed of [1000, 8919, 16838]) {
+        const r = await sim(page, { seed, parts: [talk, mmm(-40), talk, mmm(-40), talk] });
+        const label = `${stops * 100} % stops, 'mmm' at −40 dB, seed ${seed} · ${r.segs}`;
+        expect(r.falsePauses, label).toBe(0);
+        expect(r.ended, label).toEqual([]);
+        expect(r.talk, label).toBeGreaterThan(r.truthTalk - 0.5);
       }
     }
   });

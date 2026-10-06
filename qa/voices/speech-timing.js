@@ -7,8 +7,10 @@
  * Knobs a spec can set on window before or during a take:
  *   __VTRateStepSec   seconds per rung for "rateSteps" (default 12)
  *   __VTSlowUntil     performance.now() until which "keyPoints" slows down
- *   __VTWhisper       { gain, swingDb } for "speechWhisper" (default 0.03,
- *                     about −30 dBFS after the MIC gain, and 6 dB)
+ *   __VTWhisper       { gain, swingDb, phraseMs, bands, q, lp, lpOrder }
+ *                     for "speechWhisper" (default 0.03, about −30 dBFS
+ *                     after the MIC gain, 6 dB, 3000 ms, band-passes at
+ *                     [900, 2400] Hz with a Q of 1.2, and no low-pass)
  */
 (function () {
   "use strict";
@@ -120,12 +122,15 @@
   /**
    * Whispered talk: no voice, only breath shaped by the mouth (noise through
    * band-passes at 900 and 2400 Hz), 4.5 syllables/s whose level swings only
-   * `swingDb`, 3 s phrases with 1.2 s pauses. It has no period, so to the
-   * pause floor it is as aperiodic as a fan, and it holds about as still as
-   * a fan's low rumble: only how high it sits tells them apart.
+   * `swingDb`, phrases of `phraseMs` (3 s) with 1.2 s pauses. It has no
+   * period, so to the pause floor it is as aperiodic as a fan, and it holds
+   * about as still as a fan's low rumble: only how high it sits tells them
+   * apart. `lp` sends it through `lpOrder` low-passes at that many Hz (a
+   * narrowband headset), which brings it down toward a rumble; `bands`
+   * [5000, 7000] with a 1 dB swing is a held "sss" instead.
    */
   V.define("speechWhisper", (h) => {
-    const o = Object.assign({ gain: 0.03, swingDb: 6 }, window.__VTWhisper);
+    const o = Object.assign({ gain: 0.03, swingDb: 6, phraseMs: 3000, bands: [900, 2400], q: 1.2, lp: 0, lpOrder: 2 }, window.__VTWhisper);
     const n = h.nodes();
     if (!n.whisper) {
       const ac = n.dest.context;
@@ -137,14 +142,21 @@
       src.loop = true;
       n.whisper = ac.createGain();
       n.whisper.gain.value = 0;
-      [900, 2400].forEach((f) => {
+      o.bands.forEach((f) => {
         const bp = ac.createBiquadFilter();
         bp.type = "bandpass";
         bp.frequency.value = f;
-        bp.Q.value = 1.2;
+        bp.Q.value = o.q;
         src.connect(bp).connect(n.whisper);
       });
-      n.whisper.connect(n.dest);
+      let out = n.whisper;
+      for (let k = 0; o.lp && k < o.lpOrder; k++) {
+        const lp = ac.createBiquadFilter();
+        lp.type = "lowpass";
+        lp.frequency.value = o.lp;
+        out = out.connect(lp);
+      }
+      out.connect(n.dest);
       src.start();
     }
     const low = Math.pow(10, -o.swingDb / 20);
@@ -154,7 +166,7 @@
     const tick = () => {
       if (!inPhrase) {
         inPhrase = true;
-        left = 3000;
+        left = o.phraseMs;
       }
       if (left <= 0) {
         inPhrase = false;

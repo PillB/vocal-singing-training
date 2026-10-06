@@ -29,9 +29,11 @@
  * - `hfRms` (the engine's first difference) over rms, at 48 kHz, is about
  *   2π × a sound's typical frequency ÷ 48 000. Each sound brings its own,
  *   as measured through the engine: a voice 0.09, a whisper or an unvoiced
- *   consonant 0.58, the quiet room's hiss (white) 1.41, a hum
- *   2·sin(π·hz/48 000), and a fan `fan.hf` (default 0.04, a rumble at
- *   ~250 Hz; one under 100 Hz reads 0.015, a white fan 1.41);
+ *   consonant 0.58 (a speech part's `hf`: a whispered /o/ or /u/, or a
+ *   whisper through a headset's 3–4 kHz low-pass, reads 0.2–0.3), the quiet
+ *   room's hiss (white) 1.41, a hum 2·sin(π·hz/48 000), and a fan `fan.hf`
+ *   (default 0.04, a rumble at ~250 Hz; one under 100 Hz reads 0.015, a
+ *   white fan 1.41);
  * - the Space assist forces rms ≥ 0.06 and `sounding`, with no pitch.
  */
 (function (global) {
@@ -60,7 +62,8 @@
    *            and `stops` is the share of consonants that are a stop's
    *            closure, the room alone. `whisper` has no period anywhere;
    *            `breathy` is the share of a vowel's power that has one
-   *            (default 1), the rest is breath
+   *            (default 1), the rest is breath; `hf` is how high that
+   *            breath sits (default 0.58, see above)
    *  tone    — a held note at `level` dB with `vibDb` of level wobble and
    *            `vibCents` of pitch vibrato at 5.5 Hz
    *  space   — the Space assist held down
@@ -82,6 +85,7 @@
         const peak = s.peak != null ? s.peak : -25;
         const dip = s.dip != null ? s.dip : -42;
         const rate = s.rate || 5;
+        const hfNoise = s.hf != null ? s.hf : HF_NOISE;
         let i = 0;
         let semis = 0;
         while (i < n) {
@@ -110,7 +114,7 @@
             p.push(db2p(db));
             hz.push(sh > 0 ? f0 : 0);
             per.push(sh);
-            hf2.push(sh * HF_VOICE * HF_VOICE + (1 - sh) * HF_NOISE * HF_NOISE);
+            hf2.push(sh * HF_VOICE * HF_VOICE + (1 - sh) * hfNoise * hfNoise);
             manual.push(0);
           }
         }

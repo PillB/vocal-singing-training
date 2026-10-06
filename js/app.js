@@ -1006,6 +1006,21 @@
       if (!routeMatchesView(parseRoute(location.hash))) writeRoute(state.view, null);
       return;
     }
+    if (state.leavePromptOpen && state.view === "exercise") {
+      // Back or Forward with the leave question open answers it "Seguir
+      // practicando", as Escape does: the exercise and its take stay, and so
+      // does its address. When the question came from an earlier Back, that
+      // Back's own "Seguir aquí" below sees the address back and adds none.
+      $("#leave-cancel")?.click();
+      if (!routeMatchesView(parseRoute(location.hash))) {
+        try {
+          history.pushState({ vt: "exercise" }, "", hashFor("exercise"));
+        } catch {
+          /* ignore */
+        }
+      }
+      return;
+    }
     const t = parseRoute(location.hash);
     if (routeMatchesView(t)) return;
     setHeaderMenu(false);
@@ -1034,8 +1049,8 @@
       const dest = t ? { type: t.type } : { type: "home", restore: fromExercise && state.exOrigin?.catalog ? state.exOrigin : null };
       if (fromExercise) {
         const left = await leaveExercise(dest);
-        // "Seguir aquí": the exercise stays, so its address comes back.
-        if (!left && state.view === "exercise") {
+        // "Seguir aquí": the exercise stays, so its address comes back, once.
+        if (!left && state.view === "exercise" && !routeMatchesView(parseRoute(location.hash))) {
           route.silent -= 1;
           try {
             history.pushState({ vt: "exercise" }, "", hashFor("exercise"));
@@ -2169,6 +2184,10 @@
 
   async function leaveExercise(destination) {
     // destination: { type: "home"|"exercise"|"history"|"plan"|"next", id? }
+    // The question is already on screen: whoever asked it acts on the answer.
+    // A second way out meanwhile (the browser's Back) used to skip the
+    // question and tear the take down under it.
+    if (state.leavePromptOpen) return false;
     if (shouldPromptOnLeave()) {
       const choice = await promptLeaveExercise();
       if (choice === "stay" || choice === "save") state.pendingMicro = false;

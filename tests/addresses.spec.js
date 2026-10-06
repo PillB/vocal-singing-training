@@ -120,6 +120,18 @@ async function bootPractice(page, { e2e = true } = {}) {
   await page.clock.runFor(500);
 }
 
+const live = (page) => page.evaluate(() => !!window.VTApp.getState().practiceLive);
+
+/** Open the exercise from Practicar, start it and sing past what counts as practice. */
+async function practise(page, id = "s4-lip-trills") {
+  await page.evaluate((x) => VTApp.openExercise(x), id);
+  await page.clock.runFor(300);
+  await page.locator("#btn-practice-start").click();
+  await expect.poll(() => live(page), { timeout: 10000 }).toBe(true);
+  await page.clock.fastForward(50000);
+  await page.clock.runFor(500);
+}
+
 test.describe("Back with a dialog open", () => {
   test.describe("the first-run microphone primer", () => {
     // A person's browser: the primer is muted under automation.
@@ -144,6 +156,54 @@ test.describe("Back with a dialog open", () => {
       await page.clock.runFor(1000);
       expect(await page.evaluate(() => ({ live: VTApp.getState().practiceLive, gum: window.__gum }))).toEqual({ live: false, gum: 0 });
     });
+  });
+
+  test("Back with the leave question open answers it 'Seguir practicando': the exercise and its take stay", async ({ page }) => {
+    await bootPractice(page);
+    await practise(page);
+    await page.locator("#btn-history").click();
+    await expect(page.locator("#leave-modal")).toBeVisible();
+    await page.goBack();
+    await page.clock.runFor(300);
+    await expect(page.locator("#leave-modal")).toBeHidden();
+    await expect(page.locator("#view-exercise")).toHaveClass(/active/);
+    expect(await hash(page)).toBe("#ejercicio/s4-lip-trills");
+    expect(await live(page)).toBe(true);
+    // Nothing was recorded on the way: the take is still to be rated.
+    expect(await page.evaluate(() => (window.VTStorage.getProgress()?.["s4-lip-trills"]?.history || []).length)).toBe(0);
+    // The way out still asks.
+    await page.goBack();
+    await page.clock.runFor(300);
+    await expect(page.locator("#leave-modal")).toBeVisible();
+    await page.locator("#leave-cancel").click();
+    await page.clock.runFor(300);
+    expect(await hash(page)).toBe("#ejercicio/s4-lip-trills");
+    expect(await live(page)).toBe(true);
+  });
+
+  test("a second Back while Back's own leave question is open keeps the exercise, and puts its address back once", async ({ page }) => {
+    await bootPractice(page);
+    await page.click("#btn-plan");
+    await page.click("#btn-nav-home");
+    await practise(page);
+    expect(await hash(page)).toBe("#ejercicio/s4-lip-trills");
+    await page.goBack();
+    await page.clock.runFor(300);
+    await expect(page.locator("#leave-modal")).toBeVisible();
+    await page.goBack();
+    await page.clock.runFor(300);
+    await expect(page.locator("#leave-modal")).toBeHidden();
+    await expect(page.locator("#view-exercise")).toHaveClass(/active/);
+    expect(await hash(page)).toBe("#ejercicio/s4-lip-trills");
+    expect(await live(page)).toBe(true);
+    // One entry for the exercise, not two: the next Back asks again.
+    await page.goBack();
+    await page.clock.runFor(300);
+    await expect(page.locator("#leave-modal")).toBeVisible();
+    await page.locator("#leave-discard").click();
+    await page.clock.runFor(300);
+    await expect(page.locator("#view-plan")).toHaveClass(/active/);
+    expect(await live(page)).toBe(false);
   });
 
   test("Back closes the reminder dialog and the loop's dialogs as 'Ahora no', with nothing switched on", async ({ page }) => {

@@ -238,6 +238,9 @@ function serverTakes(server, profileId = "default", ex = EX) {
 
 test.describe("Saved progress follows the learner", () => {
   test("a take updated after it was first recorded reaches the account", async ({ page }) => {
+    // Ninety seconds of live practice on the page clock: on a busy machine
+    // that alone can pass the default minute.
+    test.setTimeout(150000);
     const server = createServer();
     await boot(page, server);
 

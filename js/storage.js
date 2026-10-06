@@ -277,8 +277,13 @@
         weekKey: null
       });
     },
+    /**
+     * Goals are one value with nothing to union, so a sync keeps the one chosen
+     * last; `updatedAt` is when it was chosen. The default above has none, so
+     * it never wins over a goal somebody actually set.
+     */
     setGoals(g) {
-      writeSynced(LS.goals, g || {});
+      writeSynced(LS.goals, { ...(g || {}), updatedAt: new Date().toISOString() });
     },
 
     /** Local-day practice ledger; shape owned by js/practice-days.js. */
@@ -321,6 +326,9 @@
      * A sync names its profile rather than following the active one, because
      * the learner can switch profile while a sync is waiting on the network.
      *
+     * Goals are left out until somebody sets them: the default is not a
+     * choice, and must not travel as one.
+     *
      * Recordings are deliberately left out: they live in IndexedDB, run to
      * megabytes each, and belong to a storage tier this sync is not.
      *
@@ -337,7 +345,7 @@
         weekPlan: read(key(LS.weekPlan), defaultWeekPlan()),
         reviews: read(key(LS.reviews), []),
         holdLogs: read(key(LS.holdLogs), []),
-        goals: read(key(LS.goals), { weeklySessionsTarget: 3, weekKey: null }),
+        goals: read(key(LS.goals), null),
         achievements: read(key(LS.achievements), {}),
         days: read(key(LS.days), null),
         loop: read(key(LS.loop), null)

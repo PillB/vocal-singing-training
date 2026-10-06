@@ -821,7 +821,7 @@ test.describe("Accounts, gifted months and saved progress", () => {
         weekPlan: { weekNumber: 2, completedElements: [], checkIns: [] },
         reviews: [{ at: "2026-09-21T10:00:00.000Z", note: "local" }],
         holdLogs: [],
-        goals: { weeklySessionsTarget: 3 },
+        goals: { weeklySessionsTarget: 3, updatedAt: "2026-09-21T09:00:00.000Z" },
         achievements: { local: true }
       };
       const remote = {
@@ -837,10 +837,15 @@ test.describe("Accounts, gifted months and saved progress", () => {
         weekPlan: { weekNumber: 1, completedElements: [], checkIns: [] },
         reviews: [{ at: "2026-09-19T10:00:00.000Z", note: "remote" }],
         holdLogs: [],
-        goals: { weeklySessionsTarget: 5 },
+        goals: { weeklySessionsTarget: 5, updatedAt: "2026-09-19T09:00:00.000Z" },
         achievements: { remote: true }
       };
-      return window.VTSync.mergeBag(local, remote);
+      const merged = window.VTSync.mergeBag(local, remote);
+      // The same two bags the other way round, as the other device merges them.
+      const mirrored = window.VTSync.mergeBag({ ...remote, profileId: "default" }, local);
+      // A goal nobody set (a new device) and one saved before goals carried a time.
+      const unset = window.VTSync.mergeBag({ ...local, goals: null }, { ...remote, goals: { weeklySessionsTarget: 6 } });
+      return { ...merged, mirroredGoals: mirrored.goals, unsetGoals: unset.goals };
     });
 
     // Both takes survive, newest first.
@@ -853,8 +858,11 @@ test.describe("Accounts, gifted months and saved progress", () => {
     expect(merged.weekPlan.weekNumber).toBe(2);
     // Both review lines survive.
     expect(merged.reviews.length).toBe(2);
-    // A setting with no history takes the more recently saved side.
+    // A setting with no history takes the side chosen more recently, from
+    // either device, and a goal never set does not replace one that was.
     expect(merged.goals.weeklySessionsTarget).toBe(3);
+    expect(merged.mirroredGoals.weeklySessionsTarget).toBe(3);
+    expect(merged.unsetGoals.weeklySessionsTarget).toBe(6);
     // Achievements are a union: an award earned anywhere stays earned.
     expect(merged.achievements).toEqual({ remote: true, local: true });
   });

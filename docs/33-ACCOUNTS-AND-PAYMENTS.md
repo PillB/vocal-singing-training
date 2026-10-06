@@ -79,8 +79,10 @@ sync must never lose a session somebody actually did. So:
   honest answer is "whichever device got further": week, then completed
   elements, then check-ins.
 - Reviews and hold logs are unioned by content identity and sorted by time.
-- Goals are a single value with no history, so the more recently saved side
-  wins.
+- Goals are a single value with no history, so the one chosen most recently
+  wins. Each carries the time it was set; a default nobody set never wins over
+  a goal somebody did, and when neither side has a time the account's copy
+  decides, so devices agree.
 
 **Concurrency is a compare-and-swap.** Every write carries the `rev` the client
 last read; the server's `UPDATE ... WHERE rev = ?` is the guard. A `409` is not

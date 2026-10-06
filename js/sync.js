@@ -228,6 +228,24 @@
   }
 
   /**
+   * Pick between two copies of a setting by when each was chosen.
+   *
+   * A setting has no history to union, so the one chosen last wins. One never
+   * chosen (a default, or saved before settings carried the time) loses to one
+   * that was. When neither side can tell, the account's copy decides, so every
+   * device ends up with the same value rather than each keeping its own.
+   *
+   * @param {object|null} local This browser's copy.
+   * @param {object|null} remote The account's copy.
+   * @returns {object|null} The copy to keep.
+   */
+  function newerSetting(local, remote) {
+    if (!local) return remote || null;
+    if (!remote) return local;
+    return ms(local.updatedAt) > ms(remote.updatedAt) ? local : remote;
+  }
+
+  /**
    * Merge a whole sync bag.
    * @param {object} local This browser's bag.
    * @param {object} remote The account's bag, or null.
@@ -235,7 +253,6 @@
    */
   function mergeBag(local, remote) {
     if (!remote || typeof remote !== "object") return local;
-    const localNewer = ms(local.savedAt) >= ms(remote.savedAt);
     return {
       v: 1,
       profileId: local.profileId,
@@ -244,9 +261,9 @@
       weekPlan: mergeWeekPlan(local.weekPlan, remote.weekPlan),
       reviews: mergeLog(local.reviews, remote.reviews, 40),
       holdLogs: mergeLog(local.holdLogs, remote.holdLogs, 100),
-      // Settings are a single value with no history to union, so the bag that
-      // was saved more recently wins.
-      goals: localNewer ? local.goals : remote.goals,
+      // Not the bag's own savedAt: that is "now" on whichever device is
+      // syncing, so this device's goal always won and never came down.
+      goals: newerSetting(local.goals, remote.goals),
       achievements: {
         ...(remote.achievements || {}),
         ...(local.achievements || {})
@@ -257,7 +274,7 @@
   }
 
   /**
-   * Read one profile's bag, stamped so settings can be compared later.
+   * Read one profile's bag, stamped with when this copy was made.
    * @param {string} profileId Whose bag.
    * @returns {object} Sync bag.
    */

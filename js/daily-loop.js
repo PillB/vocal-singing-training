@@ -441,15 +441,26 @@
     }
   }
 
+  /** When a setting was chosen, in ms; 0 for one nobody chose. */
+  function chosenAt(value) {
+    const t = Date.parse(String(value || ""));
+    return Number.isFinite(t) ? t : 0;
+  }
+
   /**
    * Merge two devices' loop state. Everything earned is a union — a card or a
-   * milestone is never lost to a sync — and settings follow the local side.
+   * milestone is never lost to a sync. The size and the goal follow the latest
+   * choice on any device (`b` is the account's copy, which decides when
+   * neither side says when it chose): the default a new device writes on its
+   * first visit is not a choice, and used to replace the learner's own.
    */
   function merge(a, b) {
     if (!b) return a;
     if (!a) return b;
     const A = normalize(JSON.parse(JSON.stringify(a)));
     const B = normalize(JSON.parse(JSON.stringify(b)));
+    const tierFrom = chosenAt(A.tierAt) > chosenAt(B.tierAt) ? A : B;
+    const goalFrom = chosenAt(A.goalAt) > chosenAt(B.goalAt) ? A : B;
     const cards = { ...B.cards };
     Object.keys(A.cards).forEach((id) => {
       if (!cards[id] || A.cards[id] < cards[id]) cards[id] = A.cards[id];
@@ -461,8 +472,10 @@
     return {
       v: 1,
       seed: A.seed,
-      tier: A.tier || B.tier,
-      goal: A.goal,
+      tier: tierFrom.tier || A.tier || B.tier,
+      tierAt: tierFrom.tierAt || null,
+      goal: goalFrom.goal,
+      goalAt: goalFrom.goalAt || null,
       ms: [...new Set([...A.ms, ...B.ms])].sort((x, y) => x - y),
       cards,
       surprises: [...byDay.values()].sort((x, y) => (x.day < y.day ? -1 : 1)).slice(-60),
@@ -614,6 +627,7 @@
     const L = readLoop();
     if (L.tier === tier) return;
     L.tier = tier;
+    L.tierAt = new Date().toISOString();
     writeLoop(L);
     track("loop_tier_pick", { tier });
   }
@@ -622,6 +636,7 @@
     if (!GOALS.includes(goal)) return;
     const L = readLoop();
     L.goal = goal;
+    L.goalAt = new Date().toISOString();
     writeLoop(L);
     track("loop_goal_set", { goal });
   }
@@ -826,7 +841,11 @@
     const mb = D.markBasics({ len: tier, track: session.track });
     const L = readLoop();
     L.completions += 1;
-    L.tier = tier;
+    // Finishing a routine of a size picks that size for next time.
+    if (L.tier !== tier) {
+      L.tier = tier;
+      L.tierAt = new Date().toISOString();
+    }
     writeLoop(L);
     const sum = D.summary();
     const comeback = sum.comeback;

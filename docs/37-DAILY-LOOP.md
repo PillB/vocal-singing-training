@@ -156,7 +156,9 @@ From the first day sung, the start panel becomes **today's basics**:
 
 `vt_loop_v1` holds the chosen size and goal, milestones marked, cards found,
 surprises shown, comebacks, and a random seed. It is profile-scoped and synced;
-a merge unions the lists and keeps this device's settings.
+a merge unions the lists, and the size and goal follow the latest choice made
+on any device (each carries the time it was chosen). The default a new device
+writes on its first visit is not a choice and never replaces one.
 
 ### Surprises
 

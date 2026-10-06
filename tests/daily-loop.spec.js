@@ -679,10 +679,12 @@ test.describe("Daily loop", () => {
       const a = { v: 1, days: { "2026-09-20": { sec: 200, n: 1, ex: ["s4-lip-trills"] } }, rest: { bank: 0, earnedAt: 6, used: ["2026-09-19"] }, backfilled: true };
       const b = { v: 1, days: { "2026-09-21": { sec: 100, n: 1, ex: ["v1-diction"], basics: 1 } }, rest: { bank: 2, earnedAt: 0, used: [] }, backfilled: true };
       const m = VTDays.merge(a, b);
-      const la = { v: 1, ms: [1, 3], cards: { c01: "2026-09-20" }, surprises: [{ day: "2026-09-20", kind: "card", id: "c01" }], comebacks: [], tier: "ess" };
-      const lb = { v: 1, ms: [1, 3, 7], cards: { c02: "2026-09-21" }, surprises: [{ day: "2026-09-21", kind: "card", id: "c02" }], comebacks: ["2026-09-21"], tier: "min" };
+      const la = { v: 1, ms: [1, 3], cards: { c01: "2026-09-20" }, surprises: [{ day: "2026-09-20", kind: "card", id: "c01" }], comebacks: [], tier: "ess", tierAt: "2026-09-21T09:00:00.000Z" };
+      const lb = { v: 1, ms: [1, 3, 7], cards: { c02: "2026-09-21" }, surprises: [{ day: "2026-09-21", kind: "card", id: "c02" }], comebacks: ["2026-09-21"], tier: "min", tierAt: "2026-09-20T09:00:00.000Z", goal: "5-7", goalAt: "2026-09-20T09:00:00.000Z" };
       const lm = VTLoop.merge(la, lb);
-      return { days: Object.keys(m.days).sort(), basics: m.days["2026-09-21"].basics, bank: m.rest.bank, used: m.rest.used, lm };
+      // The other device merges the same two the other way round.
+      const back = VTLoop.merge(lb, la);
+      return { days: Object.keys(m.days).sort(), basics: m.days["2026-09-21"].basics, bank: m.rest.bank, used: m.rest.used, lm, back };
     });
     expect(r.days).toEqual(["2026-09-20", "2026-09-21"]);
     expect(r.basics).toBe(1);
@@ -692,7 +694,10 @@ test.describe("Daily loop", () => {
     expect(r.lm.ms).toEqual([1, 3, 7]);
     expect(Object.keys(r.lm.cards).sort()).toEqual(["c01", "c02"]);
     expect(r.lm.comebacks).toEqual(["2026-09-21"]);
-    expect(r.lm.tier).toBe("ess");
+    // Settings follow the latest choice, on both devices alike; a goal this
+    // device never picked (its default) does not replace one that was.
+    expect([r.lm.tier, r.back.tier]).toEqual(["ess", "ess"]);
+    expect([r.lm.goal, r.back.goal]).toEqual(["5-7", "5-7"]);
   });
 
   test("English and the Vocal track read in their own words", async ({ page }) => {

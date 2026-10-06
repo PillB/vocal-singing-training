@@ -6,8 +6,9 @@
  * a signed-in learner through the app instead: a take updated after it was
  * first recorded, a routine finished, a week reviewed, a setting changed, the
  * tab hidden or closed, a connection that drops, a profile switched while a
- * sync is out. Each one used to change this device and leave the account
- * behind, or mix up whose record was whose.
+ * sync is out, a new device signing in. Each one used to change this device
+ * and leave the account behind, mix up whose record was whose, or let a
+ * default overwrite somebody's choice.
  *
  * The worker is a fake at the network boundary that keeps one document per
  * profile and refuses a write on a stale revision, like
@@ -434,5 +435,33 @@ test.describe("Saved progress follows the learner", () => {
     await passQuietPeriod(page);
     await expect.poll(() => server.docs.default?.holdLogs?.length || 0).toBe(1);
     expect(server.docs.p_b?.holdLogs || []).toEqual([]);
+  });
+
+  test("a goal set on another device comes down, and a default never goes up over it", async ({ page }) => {
+    const server = createServer({
+      revs: { default: 3 },
+      docs: {
+        default: {
+          v: 1,
+          profileId: "default",
+          savedAt: "2026-09-20T10:00:00.000Z",
+          progress: {},
+          goals: { weeklySessionsTarget: 6, weekKey: null, updatedAt: "2026-09-20T09:00:00.000Z" },
+          loop: { v: 1, seed: "phone", tier: "ess", tierAt: "2026-09-20T09:00:00.000Z", goal: "5-7", goalAt: "2026-09-20T09:00:00.000Z", ms: [], cards: {}, surprises: [], since: 0, comebacks: [], completions: 0 }
+        }
+      }
+    });
+    // A new device: it has drawn home (writing its own defaults) and never chose anything.
+    await boot(page, server);
+
+    expect(server.docs.default.goals.weeklySessionsTarget).toBe(6);
+    expect(server.docs.default.loop.goal).toBe("5-7");
+    expect(server.docs.default.loop.tier).toBe("ess");
+    const local = await page.evaluate(() => ({
+      goals: window.VTStorage.getGoals().weeklySessionsTarget,
+      loopGoal: window.VTLoop.readLoop().goal,
+      tier: window.VTLoop.readLoop().tier
+    }));
+    expect(local).toEqual({ goals: 6, loopGoal: "5-7", tier: "ess" });
   });
 });

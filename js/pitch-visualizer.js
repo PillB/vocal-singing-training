@@ -173,16 +173,24 @@
     }
     const rate = sr / D;
     const minLag = Math.floor(rate / 500);
-    const maxLag = Math.min(Math.ceil(rate / 60), n >> 1);
-    const w = n - maxLag;
+    const want = Math.ceil(rate / 60);
+    const half = Math.min(want, n >> 1);
+    // At 96 kHz the frame's 2048 samples last 21 ms, and periods past half
+    // of it (under 94 Hz: a low male voice) are compared on what is left,
+    // at least 6 ms, scaled to the full window. Any shorter and a fan's
+    // rumble starts to look periodic.
+    const maxLag = Math.max(half, Math.min(want, n - Math.round(rate * 0.006)));
+    const w = n - half;
     let run = 0;
     let best = 1;
     for (let lag = 1; lag <= maxLag; lag++) {
+      const m = Math.min(w, n - lag);
       let d = 0;
-      for (let i = 0; i < w; i++) {
+      for (let i = 0; i < m; i++) {
         const e = x[i] - x[i + lag];
         d += e * e;
       }
+      if (m < w) d *= w / m;
       run += d;
       if (lag >= minLag && run > 0) best = Math.min(best, (d * lag) / run);
     }

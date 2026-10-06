@@ -33,7 +33,7 @@ async function sim(page, spec) {
 }
 
 test.describe("clarity (VTPitchUtils.clarity)", () => {
-  test("a voice or a hum reads periodic and a fan does not, at any level", async ({ page }) => {
+  test("a voice or a hum reads periodic and a fan does not, at any level or sample rate", async ({ page }) => {
     await page.setContent("<!doctype html><title>clarity</title>");
     await page.addScriptTag({ url: BASE + "/js/pitch-visualizer.js" });
     const out = await page.evaluate(() => {
@@ -57,15 +57,15 @@ test.describe("clarity (VTPitchUtils.clarity)", () => {
           return norm(Array.from({ length: n }, () => (lp += (gauss() - lp) * ((2 * Math.PI * 150) / sr))));
         },
         // A vowel at 135 Hz with ±15 cents of vibrato and three formants
-        vowel: (n, sr) => {
+        vowel: (n, sr, f0 = 135) => {
           let ph = 0;
           return norm(
             Array.from({ length: n }, (_, i) => {
-              ph += (2 * Math.PI * 135 * Math.pow(2, (15 * Math.sin((2 * Math.PI * 5.5 * i) / sr)) / 1200)) / sr;
+              ph += (2 * Math.PI * f0 * Math.pow(2, (15 * Math.sin((2 * Math.PI * 5.5 * i) / sr)) / 1200)) / sr;
               let v = 0;
-              for (let k = 1; k * 135 < 5000; k++) {
+              for (let k = 1; k * f0 < 5000; k++) {
                 let a = 1 / k;
-                [700, 1200, 2600].forEach((f) => (a *= 1 + 3 / (1 + Math.pow((k * 135 - f) / 150, 2))));
+                [700, 1200, 2600].forEach((f) => (a *= 1 + 3 / (1 + Math.pow((k * f0 - f) / 150, 2))));
                 v += a * Math.sin(k * ph);
               }
               return v;
@@ -76,10 +76,14 @@ test.describe("clarity (VTPitchUtils.clarity)", () => {
         hum: (n, sr) => norm(Array.from({ length: n }, (_, i) => Math.sin((2 * Math.PI * 120 * i) / sr) + 0.5 * Math.sin((2 * Math.PI * 240 * i) / sr)))
       };
       const res = {};
-      for (const sr of [48000, 44100]) {
+      // 96 kHz: a 2048-sample frame is 21 ms, shorter than two periods of a
+      // low male voice
+      for (const sr of [48000, 44100, 96000]) {
         const n = sr;
         const src = {};
         Object.keys(sounds).forEach((k) => (src[k] = sounds[k](n, sr)));
+        // The same vowel from a low male voice, at 75 Hz
+        src.vowel75 = sounds.vowel(n, sr, 75);
         // A voice or a hum under a fan as loud as itself
         src["vowel+white"] = src.vowel.map((v, i) => v + src.white[i]);
         src["hum+white"] = src.hum.map((v, i) => v + src.white[i]);
@@ -101,7 +105,7 @@ test.describe("clarity (VTPitchUtils.clarity)", () => {
     });
     Object.keys(out).forEach((k) => {
       if (/^(white|rumble)/.test(k)) expect(out[k], k).toBeLessThan(0.5);
-      else if (/^(vowel|hum) /.test(k)) expect(out[k], k).toBeGreaterThan(0.9);
+      else if (/^(vowel|vowel75|hum) /.test(k)) expect(out[k], k).toBeGreaterThan(0.9);
       else if (/\+white/.test(k)) expect(out[k], k).toBeGreaterThanOrEqual(0.7);
     });
     expect(out.silence).toBe(0);

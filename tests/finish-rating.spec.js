@@ -637,6 +637,20 @@ test.describe("Rating: one tap after a take", () => {
     await expect(page.locator("#rate-time")).toContainText("Time:");
     await expect(page.locator("#timer-display")).toHaveText(timer);
     await expect(page.locator("#practice-status")).toHaveText(await page.evaluate(() => VTI18n.t("practice.ready")));
+    // Rated, its score card follows a switch back too: the same score and ways on, in Spanish.
+    await page.locator('.rate-btn[data-feel="easy"]').click();
+    const card = page.locator("#score-result");
+    await expect(card).toContainText("How it went: Easy");
+    const score = await card.locator(".score-big").textContent();
+    const buttons = await card.locator("button").count();
+    await page.locator("#btn-lang").click();
+    await page.clock.runFor(500);
+    await expect(card).toBeVisible();
+    await expect(card).toContainText("Cómo te fue: Fácil");
+    await expect(card).toContainText(await page.evaluate(() => VTI18n.t("toast.sessionEncourage")));
+    await expect(card.locator(".score-big")).toHaveText(score);
+    await expect(card.locator("button")).toHaveCount(buttons);
+    expect(await card.innerText()).not.toMatch(/How it went|Easy|Not rated|Not counted|intention| of \d+:\d\d/);
   });
 
   test("muted under automation without the opt-in: the mic still stops, the form stays open for other specs", async ({ page }) => {

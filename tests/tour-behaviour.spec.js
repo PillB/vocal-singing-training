@@ -336,6 +336,22 @@ test.describe("Tour manners", () => {
     expect(r.label).toBe("Empezar");
   });
 
+  test("a start panel with nothing to suggest drops the loop's mark, so the tour does not read it as the loop's", async ({ page }) => {
+    await boot(page);
+    const panel = await page.evaluate(() => {
+      const card = document.querySelector("#next-step-card");
+      card.dataset.loop = "go";
+      // The loop leaves the panel to the app, and the catalog is empty.
+      window.VTLoop.renderHome = () => false;
+      const kept = Object.keys(window.VT_EXERCISES).map((k) => [k, window.VT_EXERCISES[k].splice(0)]);
+      window.VTApp.refreshStartPanel();
+      kept.forEach(([k, list]) => window.VT_EXERCISES[k].push(...list));
+      return { hidden: card.hidden, loop: card.dataset.loop ?? null };
+    });
+    expect(panel).toEqual({ hidden: true, loop: null });
+    expect(await page.evaluate(() => window.VTApp.loopDrewPanel())).toBe(false);
+  });
+
   test("Enter on Skip closes the tour instead of advancing it", async ({ page }) => {
     await boot(page);
     await page.evaluate(() => window.VTTour.start(true));

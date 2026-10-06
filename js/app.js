@@ -66,9 +66,10 @@
     /**
      * The rating card for this open: the one-tap answer, the saved result, why
      * it opened (the clock ran out), and the first save's comparison and
-     * first-win flag, which a changed answer keeps.
+     * first-win flag, which a changed answer keeps. The score card is written
+     * from these, with what the score was worked out from and the way on.
      */
-    rate: { feel: null, result: null, end: null, prevScore: null, firstWin: false },
+    rate: { feel: null, result: null, end: null, prevScore: null, firstWin: false, scored: null, nextId: null },
     /** The open exercise's steps when the stage shows them (no pitch canvas). */
     stageSteps: []
   };
@@ -1300,6 +1301,7 @@
     }
     if (!sug?.ex) {
       card.hidden = true;
+      delete card.dataset.loop;
       return;
     }
     card.hidden = false;
@@ -2336,6 +2338,15 @@
   }
 
   /**
+   * Whether the daily loop drew the start panel (it marks it), which is not
+   * the same as the loop being on: with a guided session open the panel's
+   * button resumes the session, loop or not. The tour asks this too.
+   */
+  function loopDrewPanel() {
+    return !!$("#next-step-card")?.dataset.loop;
+  }
+
+  /**
    * The exercise the site tour shows: the screen "Empezar" on Practicar leads
    * to. When the loop drew the start panel (it marks it) that is the first of
    * today's basics for the open track; otherwise the panel's button opens the
@@ -2346,7 +2357,7 @@
   function tourExerciseId() {
     const track = state.tab === "vocal" ? "vocal" : "singing";
     const L = window.VTLoop;
-    if ($("#next-step-card")?.dataset.loop) {
+    if (loopDrewPanel()) {
       const id = L?.todayBasics?.(track)?.order?.[0] || L?.routine?.(track, "min")?.order?.[0];
       if (id && findExercise(id)) return id;
     }
@@ -2874,6 +2885,13 @@
     const discard = $("#btn-discard-rec");
     if (discard) discard.textContent = tt("rate.takeDiscard");
     paintRating();
+    // A saved take's score card: the same numbers, worked out again for their words.
+    const r = state.rate;
+    if (r.result && r.scored && !$("#score-result")?.hidden) {
+      const { values, timeSec, targetSec } = r.scored;
+      r.result = VTMetrics.compute(ex.metrics, values, { timeSec, targetSec });
+      paintScore(ex);
+    }
     syncStructuredProgress();
   }
 
@@ -4118,7 +4136,7 @@
 
   /** A new exercise starts with nothing chosen. */
   function resetRating() {
-    state.rate = { feel: null, result: null, end: null, prevScore: null, firstWin: false };
+    state.rate = { feel: null, result: null, end: null, prevScore: null, firstWin: false, scored: null, nextId: null };
     const more = $("#rate-more");
     if (more) more.open = rateQuiet();
     paintRating();
@@ -4719,6 +4737,9 @@
     // step's own length when it had a timer: a 1:30 guided step used to be
     // measured against the catalog's 5 minutes.
     const take = takeTimes();
+    // What the score was worked out from, before the minutes below are filled
+    // in: a language switch works it out again in its words (relabelExercise).
+    const scored = { values: { ...values }, timeSec: take.done, targetSec: take.total };
     const result = VTMetrics.compute(ex.metrics, values, { timeSec: take.done, targetSec: take.total });
     // Stored as whole minutes, as before, so History and the Plan read it unchanged.
     (ex.metrics || []).filter((m) => VTMetrics.isTimeMetric(m)).forEach((m) => {
@@ -4799,20 +4820,6 @@
     const pending = state.pendingLeave;
     state.pendingLeave = null;
 
-    const box = $("#score-result");
-    box.hidden = false;
-    let compareHtml = "";
-    if (prevScore != null && result.score != null && Number.isFinite(Number(prevScore))) {
-      const a = Number(prevScore);
-      const b = Number(result.score);
-      const delta = b - a;
-      const arrow = delta > 0.05 ? "↑" : delta < -0.05 ? "↓" : "→";
-      compareHtml = `<p class="score-compare">${tt("retain.compare", {
-        prev: a.toFixed(1),
-        next: b.toFixed(1),
-        arrow
-      })}</p>`;
-    }
     // Inside a guided routine the next thing is the routine's next step; the
     // generic suggestion used to hijack it with an unrelated exercise opened
     // outside the session (no Next button, the wrong timer).
@@ -4823,28 +4830,86 @@
         : sessionNow
           ? VTSession.currentExerciseId()
           : null;
-    const routineNextEx = routineNextId ? findExercise(routineNextId) : null;
-    const nextSug = state.structured
-      ? routineNextEx
-        ? { ex: routineNextEx, reason: "structured" }
-        : null
-      : suggestNextExercise({ excludeId: ex.id });
-    const nextName = nextSug?.ex
-      ? (window.VTI18n ? VTI18n.exTitle(nextSug.ex) : nextSug.ex.title)
-      : "";
+    const nextEx = state.structured
+      ? (routineNextId && findExercise(routineNextId)) || null
+      : suggestNextExercise({ excludeId: ex.id })?.ex || null;
+
+    // The rating card says "Guardado" itself; a toast on top covered the
+    // exercise's back and Ayuda buttons.
+    if (!state.metricsOpen || rateQuiet()) toast(tt("toast.sessionSaved"));
+    Object.assign(state.rate, {
+      feel: opts.feel || null,
+      result,
+      prevScore,
+      firstWin: isFirstWin,
+      scored,
+      nextId: nextEx?.id || null
+    });
+    paintScore(ex);
+    paintRating();
+    revealScore();
+
+    // Post-session native tip (free only; never mid-practice) — research: end-of-task ads only
+    if (!wasSaved) {
+      try {
+        setTimeout(() => window.VTAds?.onPostSession?.(), 700);
+      } catch {
+        /* ignore */
+      }
+    }
+
+    // Advance past this step once — a second Save used to skip the next step
+    // without it ever being opened.
+    if (state.structured && !wasSaved && VTSession.currentExerciseId() === ex.id) {
+      VTSession.markCurrentComplete();
+      updateSessionBanner();
+    }
+
+    // Honor leave destination stashed when user chose Save on the leave modal
+    if (pending && pending.type && pending.type !== "next") {
+      setTimeout(() => navigateDestination(pending), 400);
+    }
+  }
+
+  /**
+   * The score card under a saved take, written from what the save kept in
+   * state.rate. A language switch writes it again (relabelExercise): its words
+   * were the save's language, under a screen in the other one.
+   * @param {object} ex the open exercise
+   */
+  function paintScore(ex) {
+    const r = state.rate;
+    const result = r.result;
+    const box = $("#score-result");
+    if (!box || !result) return;
+    box.hidden = false;
+    let compareHtml = "";
+    if (r.prevScore != null && result.score != null && Number.isFinite(Number(r.prevScore))) {
+      const a = Number(r.prevScore);
+      const b = Number(result.score);
+      const delta = b - a;
+      const arrow = delta > 0.05 ? "↑" : delta < -0.05 ? "↓" : "→";
+      compareHtml = `<p class="score-compare">${tt("retain.compare", {
+        prev: a.toFixed(1),
+        next: b.toFixed(1),
+        arrow
+      })}</p>`;
+    }
+    const nextEx = r.nextId ? findExercise(r.nextId) : null;
+    const nextName = nextEx ? (window.VTI18n ? VTI18n.exTitle(nextEx) : nextEx.title) : "";
     const routineHtml = state.structured
       ? `<div class="first-win-card" id="post-session-next">
-          ${routineNextEx ? "" : `<h4>${escapeHtml(tt("loop.routineLastTitle"))}</h4>`}
+          ${nextEx ? "" : `<h4>${escapeHtml(tt("loop.routineLastTitle"))}</h4>`}
           <div class="first-win-actions">
             <button type="button" class="btn btn-primary" id="ps-routine-next">${escapeHtml(
-              routineNextEx ? tt("stepDone.next", { name: nextName }) : tt("loop.routineFinish")
+              nextEx ? tt("stepDone.next", { name: nextName }) : tt("loop.routineFinish")
             )}</button>
           </div>
         </div>`
       : "";
     const firstWinHtml = state.structured
       ? routineHtml
-      : isFirstWin
+      : r.firstWin
       ? `<div class="first-win-card" id="first-win-card">
           <h4>${tt("retain.firstWinTitle")}</h4>
           <p>${tt("retain.firstWinBody")}</p>
@@ -4853,13 +4918,13 @@
             <button type="button" class="btn btn-sm" id="fw-remind">${tt("retain.firstWinRemind")}</button>
             <button type="button" class="btn btn-sm" id="fw-same">${tt("retain.firstWinSame")}</button>
             ${
-              nextSug?.ex
+              nextEx
                 ? `<button type="button" class="btn btn-ghost btn-sm" id="fw-next">${tt("retain.firstWinNext")}: ${nextName}</button>`
                 : ""
             }
           </div>
         </div>`
-      : nextSug?.ex
+      : nextEx
         ? `<div class="first-win-card" id="post-session-next">
             <h4>${tt("home.nextStepLabel")}</h4>
             <p class="muted">${tt("home.nextStepWhy")}</p>
@@ -4869,8 +4934,8 @@
             </div>
           </div>`
         : "";
-    const feelHtml = FEEL[opts.feel]
-      ? `<p class="score-feel">${escapeHtml(tt("rate.feel", { feel: tt(`rate.${opts.feel}`) }))}</p>`
+    const feelHtml = FEEL[r.feel]
+      ? `<p class="score-feel">${escapeHtml(tt("rate.feel", { feel: tt(`rate.${r.feel}`) }))}</p>`
       : "";
     // In a routine the way on comes straight after the score: under the
     // breakdown it sat a screen and a half below the answer that saved it.
@@ -4916,41 +4981,13 @@
     });
     $("#fw-same")?.addEventListener("click", () => openExercise(ex.id, false));
     $("#fw-next")?.addEventListener("click", () => {
-      if (nextSug?.ex) openExercise(nextSug.ex.id, false);
+      if (nextEx) openExercise(nextEx.id, false);
     });
     $("#ps-next")?.addEventListener("click", () => {
-      if (nextSug?.ex) openExercise(nextSug.ex.id, false);
+      if (nextEx) openExercise(nextEx.id, false);
     });
     $("#ps-same")?.addEventListener("click", () => openExercise(ex.id, false));
     $("#ps-routine-next")?.addEventListener("click", () => advanceStructured("next"));
-
-    // The rating card says "Guardado" itself; a toast on top covered the
-    // exercise's back and Ayuda buttons.
-    if (!state.metricsOpen || rateQuiet()) toast(tt("toast.sessionSaved"));
-    Object.assign(state.rate, { feel: opts.feel || null, result, prevScore, firstWin: isFirstWin });
-    paintRating();
-    revealScore();
-
-    // Post-session native tip (free only; never mid-practice) — research: end-of-task ads only
-    if (!wasSaved) {
-      try {
-        setTimeout(() => window.VTAds?.onPostSession?.(), 700);
-      } catch {
-        /* ignore */
-      }
-    }
-
-    // Advance past this step once — a second Save used to skip the next step
-    // without it ever being opened.
-    if (state.structured && !wasSaved && VTSession.currentExerciseId() === ex.id) {
-      VTSession.markCurrentComplete();
-      updateSessionBanner();
-    }
-
-    // Honor leave destination stashed when user chose Save on the leave modal
-    if (pending && pending.type && pending.type !== "next") {
-      setTimeout(() => navigateDestination(pending), 400);
-    }
   }
 
   /* —— Timer —— */
@@ -8738,6 +8775,7 @@
     openExercise: forceOpenExercise,
     setView,
     tourShow,
+    loopDrewPanel,
     setTab,
     refreshStartPanel: renderNextStepCard,
     startDaily,

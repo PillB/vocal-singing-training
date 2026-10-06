@@ -35,6 +35,15 @@ export const EVENT_TTL_SECONDS = 2592000;
 export const CLAIM_TTL_SECONDS = 7776000;
 
 /**
+ * A refunded charge is still what paid for the current period when that period
+ * ends up to a week past the charge's own plan interval. A subscription's
+ * period runs to its next scheduled charge, which is not counted from the
+ * moment the charge went through, and a year can have 366 days; the next
+ * charge's period ends weeks later.
+ */
+export const REVERSAL_SLACK_SECONDS = 604800;
+
+/**
  * Key for an event idempotency marker.
  * @param {string} provider "stripe" | "mercadopago".
  * @param {string} eventId Provider event id.
@@ -310,6 +319,49 @@ function capPeriodEnd(record, at) {
 }
 
 /**
+ * Remember a charge whose money went back (a refund, a chargeback): when the
+ * money left, and when the charge had gone through. Of several, the latest
+ * charge is kept, since it paid for the latest period. Applied whatever order
+ * the notifications arrive in.
+ * @param {Object} record Record being built.
+ * @param {Object} update Entitlement update descriptor.
+ * @param {number} now Unix seconds, for a reversal that does not say when.
+ * @returns {void}
+ */
+function noteReversal(record, update, now) {
+  if (!Number.isFinite(update.reversedChargeAt)) {
+    return;
+  }
+  const chargedAt = Math.floor(update.reversedChargeAt);
+  const at = Number.isFinite(update.reversedAt) ? Math.floor(update.reversedAt) : now;
+  if (!Number.isFinite(record.reversedChargeAt) || chargedAt > record.reversedChargeAt
+    || (chargedAt === record.reversedChargeAt && at < record.reversedAt)) {
+    record.reversedChargeAt = chargedAt;
+    record.reversedAt = at;
+  }
+}
+
+/**
+ * End the period when the money went back, if the reversed charge is what
+ * paid for it. A period running well past that charge's interval was paid for
+ * by a later charge, so the refund of an earlier month leaves it alone. The
+ * interval is counted on the plan the record holds now, which a subscription's
+ * own notification may only have taught it after the refund arrived.
+ * @param {Object} record Record being built.
+ * @returns {void}
+ */
+function endReversedPeriod(record) {
+  if (!Number.isFinite(record.reversedChargeAt) || !Number.isFinite(record.reversedAt)) {
+    return;
+  }
+  const paidThrough = periodEndForPlan(record.plan, record.reversedChargeAt);
+  if (paidThrough === null || !Number.isFinite(record.periodEnd)
+    || record.periodEnd <= paidThrough + REVERSAL_SLACK_SECONDS) {
+    capPeriodEnd(record, record.reversedAt);
+  }
+}
+
+/**
  * True when an update describes an older world than the record already holds.
  *
  * Stripe stamps events to the second, so two events from the same second
@@ -351,13 +403,15 @@ export function isStaleUpdate(record, update) {
  * Providers deliver out of order and retry, so an update whose `occurredAt` is
  * older than the stored one may not touch plan/status/periodEnd — otherwise a
  * late `invoice.paid` resurrects a subscription that was already deleted.
- * Identity fields, whether a payment was confirmed or failed, and the
- * claim/subscription indexes are order-independent and are still applied.
+ * Identity fields, whether a payment was confirmed or failed, money given
+ * back, and the claim/subscription indexes are order-independent and are still
+ * applied.
  *
  * @param {Object} kv KV namespace.
  * @param {Object} update Descriptor: provider, plan, status, customerId,
  *   subscriptionId, periodEnd, periodEndFromCharge, endsAt, endedAt, paid,
- *   paymentFailed, terminal, claimId, planSource, occurredAt.
+ *   paymentFailed, reversedAt, reversedChargeAt, terminal, claimId, planSource,
+ *   occurredAt.
  * @param {{now?: number, generateId?: function(): string}} [options] Injectables for tests.
  * @returns {Promise<{record: Object, created: boolean, stale: boolean}>} Stored
  *   record, whether it was new, and whether state was refused (out of order,
@@ -413,6 +467,7 @@ export async function upsertEntitlement(kv, update, options) {
   } else if (update.paymentFailed === true) {
     record.paymentFailed = true;
   }
+  noteReversal(record, update, now);
 
   // A license whose payment failed stays down until money actually arrives:
   // Stripe keeps a subscription active after its delayed payment fails, and
@@ -439,9 +494,9 @@ export async function upsertEntitlement(kv, update, options) {
     if (charged !== null && (!Number.isFinite(record.periodEnd) || charged > record.periodEnd)) {
       record.periodEnd = charged;
     }
-    // The provider says access ended at a given time: it took the money back
-    // (a refund, a chargeback), or ended a subscription that was never paid.
-    // Applied after the charge above so nothing re-extends it.
+    // The provider says access ended at a given time: it ended a subscription
+    // because its money never came. Applied after the charge above so nothing
+    // re-extends it. (Money given back is handled below, in any order.)
     capPeriodEnd(record, update.endsAt);
     // A subscription that ended while it was not paid up (in dunning, stopped
     // or paused, or never paid at all) keeps none of the period it was in:
@@ -461,6 +516,10 @@ export async function upsertEntitlement(kv, update, options) {
     }
     record.updatedAt = now;
   }
+  // After everything else, so neither a late refund nor a later update (a
+  // subscription's next charge date) leaves open a period whose money went
+  // back.
+  endReversedPeriod(record);
   if (!Number.isFinite(record.createdAt)) {
     record.createdAt = now;
   }

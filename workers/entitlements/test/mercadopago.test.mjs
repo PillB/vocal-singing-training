@@ -280,7 +280,7 @@ test("a subscription's charge that did not go through says nothing about the sub
   assert.equal(approved.periodEndFromCharge, isoToUnixSeconds("2026-03-01T10:05:00.000-05:00"));
 });
 
-test("a refund or chargeback ends access when the money left, on either topic", () => {
+test("a refund or chargeback says when the money left and which charge it was, on either topic", () => {
   const approved = "2026-03-01T10:00:00.000-05:00";
   const reversedAt = "2026-03-03T09:00:00.000-05:00";
   for (const status of ["refunded", "charged_back"]) {
@@ -293,10 +293,25 @@ test("a refund or chargeback ends access when the money left, on either topic", 
         date_last_updated: reversedAt,
         ...extra
       }, {});
-      assert.equal(mapped.status, "canceled", status);
-      assert.equal(mapped.endsAt, isoToUnixSeconds(reversedAt), status);
+      assert.equal(mapped.reversedAt, isoToUnixSeconds(reversedAt), status);
+      assert.equal(mapped.reversedChargeAt, isoToUnixSeconds(approved), status);
       assert.equal(mapped.periodEndFromCharge, null, `${status}: the charge it reverses must not extend again`);
     }
+    // A payment on its own ends with its money; a subscription's charge leaves
+    // the subscription's state and clock to the subscription's notifications.
+    const alone = mapPaymentResource({ id: 602, status, date_approved: approved, date_last_updated: reversedAt }, {});
+    assert.equal(alone.status, "canceled", status);
+    assert.equal(alone.occurredAt, isoToUnixSeconds(reversedAt), status);
+    const charge = mapPaymentResource({
+      id: 603,
+      status,
+      preapproval_id: "pre_x",
+      date_approved: approved,
+      date_last_updated: reversedAt
+    }, {});
+    assert.equal(charge.status, undefined, status);
+    assert.equal(charge.occurredAt, null, status);
+
     const authorized = mapAuthorizedPaymentResource({
       id: "ap_r",
       preapproval_id: "pre_x",
@@ -304,10 +319,24 @@ test("a refund or chargeback ends access when the money left, on either topic", 
       date_last_updated: reversedAt,
       payment: { status, date_approved: approved }
     }, {});
-    assert.equal(authorized.status, "canceled", status);
-    assert.equal(authorized.endsAt, isoToUnixSeconds(reversedAt), status);
+    assert.equal(authorized.status, undefined, status);
+    assert.equal(authorized.occurredAt, null, status);
+    assert.equal(authorized.reversedAt, isoToUnixSeconds(reversedAt), status);
+    assert.equal(authorized.reversedChargeAt, isoToUnixSeconds(approved), status);
     assert.equal(authorized.periodEndFromCharge, null, status);
   }
+
+  // Without a date of its own, the charge counts from the reversal.
+  const undated = mapAuthorizedPaymentResource({
+    id: "ap_u",
+    preapproval_id: "pre_x",
+    date_last_updated: reversedAt,
+    payment: { status: "refunded" }
+  }, {});
+  assert.equal(undated.reversedChargeAt, isoToUnixSeconds(reversedAt));
+  const approvedOnly = mapAuthorizedPaymentResource({ id: "ap_a", preapproval_id: "pre_x", payment: { status: "approved", date_approved: approved } }, {});
+  assert.equal(approvedOnly.reversedAt, undefined);
+  assert.equal(approvedOnly.reversedChargeAt, undefined);
 });
 
 test("a preapproval's next charge date is a period end only while it is authorized", () => {

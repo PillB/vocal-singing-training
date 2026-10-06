@@ -328,8 +328,9 @@ Consequences worth understanding before you ship:
   `date_last_updated`/`last_modified`), stored on the record. An update older
   than the stored one may not change plan, status or `periodEnd` — so a late or
   retried `invoice.paid` arriving after `customer.subscription.deleted` is
-  filed, not applied. Identity fields, a confirmed or failed payment, and the
-  claim/subscription indexes are order-independent and are still written.
+  filed, not applied. Identity fields, a confirmed or failed payment, money
+  given back, and the claim/subscription indexes are order-independent and
+  are still written.
 - **Same-second events resolve the same way in either order.** Stripe stamps
   events to the second. When two share a second, one that would make a
   `canceled` or `suspended` record entitling again is refused, and so is one
@@ -430,9 +431,18 @@ preapproval's `next_payment_date` sets it directly, and only while it is
 authorized. A payment's `date_of_expiration` (the voucher's deadline) and
 `next_retry_date` (a dunning date) are never used as a paid-through date. A
 `refunded` or `charged_back` payment, on either payment topic and whether or
-not it belongs to a subscription, ends access at the time it was reversed;
-only a later approved charge (or an authorized preapproval) brings it back. The
-plan comes from
+not it belongs to a subscription, ends the period that charge paid for at the
+time it was reversed, in whatever order the notifications arrive. The record
+remembers the reversal, so a later notification of the still-authorized
+subscription does not re-open that period; only a later approved charge, which
+pays for a period of its own, brings access back. The refund of an earlier
+charge, whose period a later charge has already paid past, leaves the current
+period alone. A charge's period is counted as one interval of the record's
+plan from its approval, with a week of slack: a subscription's period runs to
+its next scheduled charge, not from when the charge went through, and a year
+can have 366 days. A reversed subscription charge changes neither the
+subscription's status nor its clock; a reversed one-off payment is `canceled`.
+The plan comes from
 `MP_PLAN_PRO_MONTHLY`/`MP_PLAN_PRO_YEARLY`, else the preapproval `reason` or
 `external_reference`, else `auto_recurring`; when nothing says, it defaults to
 `pro_monthly` and records what it saw in the record's `planSource`.

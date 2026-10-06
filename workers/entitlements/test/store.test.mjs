@@ -718,6 +718,233 @@ test("a cancellation ends a period that was never paid for when it took effect",
   }
 });
 
+test("a refund ends the period its charge paid for, whatever order it arrives in", async () => {
+  const YEAR = 31536000;
+  for (const order of ["refund first", "cancellation first"]) {
+    const kv = createFakeKv();
+    const generateId = idSequence("lic_");
+    await upsertEntitlement(kv, {
+      provider: "mercadopago",
+      claimId: "pre_y",
+      subscriptionId: "pre_y",
+      plan: "pro_yearly",
+      status: "active",
+      periodEnd: NOW + YEAR - 5 * 86400,
+      occurredAt: NOW - 5 * 86400
+    }, { now: NOW, generateId });
+    const refund = {
+      provider: "mercadopago",
+      claimId: "pay_y",
+      subscriptionId: "pre_y",
+      reversedAt: NOW - 120,
+      reversedChargeAt: NOW - 5 * 86400,
+      occurredAt: null
+    };
+    const cancellation = {
+      provider: "mercadopago",
+      claimId: "pre_y",
+      subscriptionId: "pre_y",
+      status: "canceled",
+      occurredAt: NOW - 60
+    };
+    for (const update of order === "refund first" ? [refund, cancellation] : [cancellation, refund]) {
+      await upsertEntitlement(kv, update, { now: NOW, generateId });
+    }
+    const read = await getEntitlement(kv, "lic_1");
+    assert.equal(read.status, "canceled", order);
+    assert.equal(read.periodEnd, NOW - 120, `${order}: not the rest of the year`);
+    assert.equal(isTokenIssuable(read, NOW), false, order);
+  }
+
+  // A one-off payment's refund delivered after a newer notification still
+  // ends its interval.
+  const kv = createFakeKv();
+  const generateId = idSequence("lic_");
+  await upsertEntitlement(kv, {
+    provider: "mercadopago",
+    claimId: "pay_once",
+    plan: "pro_monthly",
+    status: "active",
+    periodEndFromCharge: NOW - 86400,
+    occurredAt: NOW
+  }, { now: NOW, generateId });
+  const late = await upsertEntitlement(kv, {
+    provider: "mercadopago",
+    claimId: "pay_once",
+    status: "canceled",
+    reversedAt: NOW - 100,
+    reversedChargeAt: NOW - 86400,
+    occurredAt: NOW - 100
+  }, { now: NOW, generateId });
+  assert.equal(late.stale, true);
+  assert.equal(late.record.periodEnd, NOW - 100);
+});
+
+test("a refund keeps the period closed until a charge pays past it", async () => {
+  const MONTH = 2678400;
+  const kv = createFakeKv();
+  const generateId = idSequence("lic_");
+  await upsertEntitlement(kv, {
+    provider: "mercadopago",
+    claimId: "pre_m",
+    subscriptionId: "pre_m",
+    plan: "pro_monthly",
+    status: "active",
+    periodEnd: NOW + 20 * 86400,
+    occurredAt: NOW - 10 * 86400
+  }, { now: NOW, generateId });
+  await upsertEntitlement(kv, {
+    provider: "mercadopago",
+    subscriptionId: "pre_m",
+    reversedAt: NOW - 60,
+    reversedChargeAt: NOW - 10 * 86400,
+    occurredAt: null
+  }, { now: NOW, generateId });
+
+  // The subscription's next charge date comes round again: still closed.
+  const again = await upsertEntitlement(kv, {
+    provider: "mercadopago",
+    claimId: "pre_m",
+    subscriptionId: "pre_m",
+    status: "active",
+    periodEnd: NOW + 20 * 86400,
+    occurredAt: NOW
+  }, { now: NOW, generateId });
+  assert.equal(again.record.periodEnd, NOW - 60);
+  assert.equal(isTokenIssuable(again.record, NOW), false);
+
+  // The next charge goes through and pays for a period of its own.
+  const charged = await upsertEntitlement(kv, {
+    provider: "mercadopago",
+    subscriptionId: "pre_m",
+    status: "active",
+    periodEndFromCharge: NOW + 20 * 86400,
+    occurredAt: NOW + 20 * 86400
+  }, { now: NOW + 20 * 86400, generateId });
+  assert.equal(charged.record.periodEnd, NOW + 20 * 86400 + MONTH);
+  assert.equal(isTokenIssuable(charged.record, NOW + 20 * 86400), true);
+});
+
+test("a refund of an earlier charge leaves a period a later charge paid for", async () => {
+  const kv = createFakeKv();
+  const generateId = idSequence("lic_");
+  await upsertEntitlement(kv, {
+    provider: "mercadopago",
+    claimId: "pre_o",
+    subscriptionId: "pre_o",
+    plan: "pro_monthly",
+    status: "active",
+    periodEnd: NOW + 21 * 86400,
+    occurredAt: NOW - 10 * 86400
+  }, { now: NOW, generateId });
+  const refunded = await upsertEntitlement(kv, {
+    provider: "mercadopago",
+    claimId: "pay_old",
+    subscriptionId: "pre_o",
+    reversedAt: NOW - 60,
+    reversedChargeAt: NOW - 40 * 86400,
+    occurredAt: null
+  }, { now: NOW, generateId });
+  assert.equal(refunded.record.status, "active");
+  assert.equal(refunded.record.periodEnd, NOW + 21 * 86400);
+  assert.equal(isTokenIssuable(refunded.record, NOW), true);
+
+  // The refund of the charge that paid for this month does end it, and an
+  // earlier refund noted after it does not undo that.
+  await upsertEntitlement(kv, {
+    provider: "mercadopago",
+    subscriptionId: "pre_o",
+    reversedAt: NOW - 30,
+    reversedChargeAt: NOW - 10 * 86400,
+    occurredAt: null
+  }, { now: NOW, generateId });
+  const earlier = await upsertEntitlement(kv, {
+    provider: "mercadopago",
+    subscriptionId: "pre_o",
+    reversedAt: NOW - 20,
+    reversedChargeAt: NOW - 70 * 86400,
+    occurredAt: null
+  }, { now: NOW, generateId });
+  assert.equal(earlier.record.periodEnd, NOW - 30);
+  assert.equal(earlier.record.reversedChargeAt, NOW - 10 * 86400);
+});
+
+test("a yearly charge's refund ends a period that runs a leap day past its interval", async () => {
+  const kv = createFakeKv();
+  const generateId = idSequence("lic_");
+  await upsertEntitlement(kv, {
+    provider: "mercadopago",
+    claimId: "pre_l",
+    subscriptionId: "pre_l",
+    plan: "pro_yearly",
+    status: "active",
+    periodEnd: NOW - 86400 + 366 * 86400,
+    occurredAt: NOW - 86400
+  }, { now: NOW, generateId });
+  const refunded = await upsertEntitlement(kv, {
+    provider: "mercadopago",
+    subscriptionId: "pre_l",
+    reversedAt: NOW - 60,
+    reversedChargeAt: NOW - 86400,
+    occurredAt: null
+  }, { now: NOW, generateId });
+  assert.equal(refunded.record.periodEnd, NOW - 60);
+});
+
+test("a refund that arrives before the subscription is counted on its plan once known", async () => {
+  const kv = createFakeKv();
+  const generateId = idSequence("lic_");
+  // The refund is the first thing heard of this license: no plan yet.
+  await upsertEntitlement(kv, {
+    provider: "mercadopago",
+    claimId: "pay_first",
+    subscriptionId: "pre_first",
+    reversedAt: NOW - 60,
+    reversedChargeAt: NOW - 5 * 86400,
+    occurredAt: null
+  }, { now: NOW, generateId });
+  // Then the yearly subscription itself, still authorized.
+  const yearly = await upsertEntitlement(kv, {
+    provider: "mercadopago",
+    claimId: "pre_first",
+    subscriptionId: "pre_first",
+    plan: "pro_yearly",
+    status: "active",
+    periodEnd: NOW + 360 * 86400,
+    occurredAt: NOW - 5 * 86400
+  }, { now: NOW, generateId });
+  assert.equal(yearly.record.periodEnd, NOW - 60, "the refunded year stays closed");
+  assert.equal(isTokenIssuable(yearly.record, NOW), false);
+});
+
+test("records stored before refunds were remembered keep their period", async () => {
+  const kv = createFakeKv();
+  await kv.put(licenseKey("lic_old"), JSON.stringify({
+    licenseId: "lic_old",
+    plan: "pro_monthly",
+    status: "active",
+    provider: "mercadopago",
+    customerId: null,
+    subscriptionId: "pre_old",
+    periodEnd: NOW + 20 * 86400,
+    occurredAt: NOW - 10 * 86400,
+    createdAt: NOW - 10 * 86400,
+    updatedAt: NOW - 10 * 86400
+  }));
+  await kv.put("sub:mercadopago:pre_old", "lic_old");
+  const renewed = await upsertEntitlement(kv, {
+    provider: "mercadopago",
+    subscriptionId: "pre_old",
+    status: "active",
+    periodEnd: NOW + 21 * 86400,
+    occurredAt: NOW
+  }, { now: NOW });
+  assert.equal(renewed.record.periodEnd, NOW + 21 * 86400);
+  assert.equal(renewed.record.reversedChargeAt, undefined);
+  assert.equal(isTokenIssuable(renewed.record, NOW), true);
+  assert.equal(isAwaitingPayment(renewed.record), false);
+});
+
 test("the client view carries no provider-internal ids", () => {
   const view = toPublicEntitlement({
     licenseId: "lic_1",

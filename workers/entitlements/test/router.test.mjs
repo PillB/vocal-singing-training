@@ -1308,3 +1308,110 @@ test("a Stripe setup session posted to the claim gives no Pro", async () => {
   assert.equal(claim.body.reason, "inactive");
   assert.equal(claim.body.token, undefined);
 });
+
+test("a Mercado Pago refund ends access whether it arrives before or after the cancellation", async () => {
+  for (const order of ["refund first", "cancellation first"]) {
+    const env = createTestEnv();
+    const preapproval = {
+      id: "PRE-ORDER",
+      status: "authorized",
+      reason: "Vocal Studio Pro anual",
+      next_payment_date: isoIn(360 * DAY),
+      date_last_updated: isoIn(-5 * DAY),
+      payer_id: 5
+    };
+    await deliverMercadoPago(env, "subscription_preapproval", preapproval);
+    await deliverMercadoPago(env, "subscription_authorized_payment", {
+      id: "AP-ORDER",
+      preapproval_id: "PRE-ORDER",
+      status: "processed",
+      date_created: isoIn(-5 * DAY),
+      date_last_updated: isoIn(-5 * DAY),
+      payment: { id: 41, status: "approved", date_approved: isoIn(-5 * DAY) }
+    });
+    assert.equal((await claimFor(env, "mercadopago", "PRE-ORDER")).status, 200, `${order}: paid first`);
+
+    // The operator refunds the year's charge, then cancels the subscription;
+    // the notifications land in either order.
+    const refund = ["payment", {
+      id: 41,
+      status: "refunded",
+      metadata: { preapproval_id: "PRE-ORDER" },
+      date_approved: isoIn(-5 * DAY),
+      date_created: isoIn(-5 * DAY),
+      date_last_updated: isoIn(-120)
+    }];
+    const cancellation = ["subscription_preapproval", { ...preapproval, status: "cancelled", date_last_updated: isoIn(-60) }];
+    for (const [kind, resource] of order === "refund first" ? [refund, cancellation] : [cancellation, refund]) {
+      await deliverMercadoPago(env, kind, resource);
+    }
+    const claim = await claimFor(env, "mercadopago", "PRE-ORDER");
+    assert.equal(claim.status, 403, `${order}: the year's money went back`);
+    assert.equal(claim.body.token, undefined, order);
+  }
+});
+
+test("refunding an earlier Mercado Pago charge leaves the month a later charge paid for", async () => {
+  const env = createTestEnv();
+  await deliverMercadoPago(env, "subscription_preapproval", {
+    id: "PRE-OLD",
+    status: "authorized",
+    reason: "Vocal Studio Pro mensual",
+    next_payment_date: isoIn(20 * DAY),
+    date_last_updated: isoIn(-10 * DAY),
+    payer_id: 5
+  });
+  await deliverMercadoPago(env, "subscription_authorized_payment", {
+    id: "AP-OLD",
+    preapproval_id: "PRE-OLD",
+    status: "processed",
+    date_created: isoIn(-40 * DAY),
+    date_last_updated: isoIn(-40 * DAY),
+    payment: { id: 51, status: "approved", date_approved: isoIn(-40 * DAY) }
+  });
+  await deliverMercadoPago(env, "subscription_authorized_payment", {
+    id: "AP-NEW",
+    preapproval_id: "PRE-OLD",
+    status: "processed",
+    date_created: isoIn(-10 * DAY),
+    date_last_updated: isoIn(-10 * DAY),
+    payment: { id: 52, status: "approved", date_approved: isoIn(-10 * DAY) }
+  });
+  assert.equal((await claimFor(env, "mercadopago", "PRE-OLD")).status, 200);
+
+  // Last month's charge is refunded as a goodwill gesture.
+  await deliverMercadoPago(env, "payment", {
+    id: 51,
+    status: "refunded",
+    metadata: { preapproval_id: "PRE-OLD" },
+    date_approved: isoIn(-40 * DAY),
+    date_created: isoIn(-40 * DAY),
+    date_last_updated: isoIn(-60)
+  });
+  const claim = await claimFor(env, "mercadopago", "PRE-OLD");
+  assert.equal(claim.status, 200, "this month was paid by a later charge");
+  assert.equal((await verifyLicenseToken(claim.body.token, env)).valid, true);
+
+  // The refund of this month's charge does end it, and a later notification
+  // of the still-authorized subscription does not re-open it.
+  await deliverMercadoPago(env, "payment", {
+    id: 52,
+    status: "refunded",
+    metadata: { preapproval_id: "PRE-OLD" },
+    date_approved: isoIn(-10 * DAY),
+    date_created: isoIn(-10 * DAY),
+    date_last_updated: isoIn(-30)
+  });
+  assert.equal((await claimFor(env, "mercadopago", "PRE-OLD")).status, 403);
+  await deliverMercadoPago(env, "subscription_preapproval", {
+    id: "PRE-OLD",
+    status: "authorized",
+    reason: "Vocal Studio Pro mensual",
+    next_payment_date: isoIn(20 * DAY),
+    date_last_updated: isoIn(-10),
+    payer_id: 5
+  });
+  const reopened = await claimFor(env, "mercadopago", "PRE-OLD");
+  assert.equal(reopened.status, 403, "the refunded month stays closed");
+  assert.equal(reopened.body.token, undefined);
+});

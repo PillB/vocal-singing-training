@@ -299,6 +299,37 @@ test.describe("modes that own their target", () => {
     await page.locator("#btn-practice-stop").click();
   });
 
+  test("the piano panel offers no chord progression to play over a mode that walks its own notes", async ({ page }) => {
+    await boot(page);
+    await openAndStart(page, "s27-lip-trill-solfege");
+    await openPianoPanel(page, "#btn-stop-piano");
+    // "Reproducir una vez" and "Bucle" played the default progression: its
+    // lanes, chord and target replaced the mode's for the rest of the take
+    await expect(page.locator("#btn-play-prog")).toBeHidden();
+    await expect(page.locator("#btn-loop-prog")).toBeHidden();
+    // The mode's own note is still a tap away, and the piano can be stopped
+    await expect(page.locator("#btn-ref-pitch")).toBeVisible();
+    await expect(page.locator("#btn-stop-piano")).toBeVisible();
+    expect((await highway(page)).lanes).toEqual(["C3", "D3", "E3", "F3", "G3"]);
+    const t = await targets(page);
+    expect(t.engine).toBe(t.mode);
+    expect(t.viz).toBe(t.mode);
+    await page.locator("#btn-practice-stop").click();
+    const hidden = (id) =>
+      page.evaluate((x) => {
+        window.VTApp.openExercise(x);
+        return ["#btn-play-prog", "#btn-loop-prog"].map((s) => document.querySelector(s).hidden);
+      }, id);
+    // The zone drills, the hummed targets and the siren pick their notes too
+    for (const id of ["s21-chest-resonance", "s7-humming", "s5-sirens"]) {
+      expect(await hidden(id), id).toEqual([true, true]);
+    }
+    // Exercises sung over chords still play them
+    for (const id of ["s2-solfege-chords", "s13-arpeggio-match"]) {
+      expect(await hidden(id), id).toEqual([false, false]);
+    }
+  });
+
   for (const c of [
     // s27 at step 3 (E3); its generic reference is C3
     { id: "s27-lip-trill-solfege", walk: "i", to: 2, want: "E3" },

@@ -3120,6 +3120,14 @@
     const inhaleBtn = $("#btn-inhale-ticks");
     if (refBtn) refBtn.hidden = !ex.audio.refPitch;
     if (inhaleBtn) inhaleBtn.hidden = !ex.audio.refPitch;
+    // A mode that walks its own notes plays no progression: the default one
+    // would replace its lanes, chord and target for the rest of the take
+    const profile = getProfile(ex);
+    const ownNotes = !!(profile.ownsTarget || profile.noProgression);
+    ["#btn-play-prog", "#btn-loop-prog"].forEach((s) => {
+      const b = $(s);
+      if (b) b.hidden = ownNotes;
+    });
     if ($("#songs-row")) $("#songs-row").hidden = !ex.songs;
     if (ex.songs) {
       $("#songs-row").innerHTML = ex.songs

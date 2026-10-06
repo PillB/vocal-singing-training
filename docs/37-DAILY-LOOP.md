@@ -158,7 +158,8 @@ From the first day sung, the start panel becomes **today's basics**:
 surprises shown, comebacks, and a random seed. It is profile-scoped and synced;
 a merge unions the lists, and the size and goal follow the latest choice made
 on any device (each carries the time it was chosen). The default a new device
-writes on its first visit is not a choice and never replaces one.
+writes on its first visit is not a choice and never replaces one. Between two
+goals saved before goals carried a time, the one that is not the default wins.
 
 ### Surprises
 

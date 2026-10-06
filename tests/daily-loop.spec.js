@@ -684,7 +684,11 @@ test.describe("Daily loop", () => {
       const lm = VTLoop.merge(la, lb);
       // The other device merges the same two the other way round.
       const back = VTLoop.merge(lb, la);
-      return { days: Object.keys(m.days).sort(), basics: m.days["2026-09-21"].basics, bank: m.rest.bank, used: m.rest.used, lm, back };
+      // Goals saved before they carried a time: the default ("3-5") then was
+      // pushed by every device, chosen or not.
+      const legacy = (mine, theirs) => VTLoop.merge({ ...la, goal: mine }, { ...lb, goal: theirs, goalAt: null }).goal;
+      const legacyGoals = [legacy("5-7", "3-5"), legacy("3-5", "5-7"), legacy("2-3", "5-7")];
+      return { days: Object.keys(m.days).sort(), basics: m.days["2026-09-21"].basics, bank: m.rest.bank, used: m.rest.used, lm, back, legacyGoals };
     });
     expect(r.days).toEqual(["2026-09-20", "2026-09-21"]);
     expect(r.basics).toBe(1);
@@ -698,6 +702,9 @@ test.describe("Daily loop", () => {
     // device never picked (its default) does not replace one that was.
     expect([r.lm.tier, r.back.tier]).toEqual(["ess", "ess"]);
     expect([r.lm.goal, r.back.goal]).toEqual(["5-7", "5-7"]);
+    // Without times, a goal other than the default was chosen, on either side;
+    // when both were, the account's copy decides.
+    expect(r.legacyGoals).toEqual(["5-7", "5-7", "5-7"]);
   });
 
   test("English and the Vocal track read in their own words", async ({ page }) => {

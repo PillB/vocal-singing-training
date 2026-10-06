@@ -36,6 +36,8 @@
    * bigger bag waits for the next visit's sync instead.
    */
   const KEEPALIVE_MAX_BYTES = 60000;
+  /** The weekly goal a profile has until somebody sets one (VTStorage.getGoals). */
+  const DEFAULT_WEEKLY_TARGET = 3;
 
   let timer = null;
   let running = null;
@@ -287,19 +289,32 @@
   /**
    * Pick between two copies of a setting by when each was chosen.
    *
-   * A setting has no history to union, so the one chosen last wins. One never
-   * chosen (a default, or saved before settings carried the time) loses to one
-   * that was. When neither side can tell, the account's copy decides, so every
-   * device ends up with the same value rather than each keeping its own.
+   * A setting has no history to union, so the one chosen last wins, and one
+   * never chosen (a default) loses to one that was. Copies saved before
+   * settings carried the time cannot say when: back then every device pushed
+   * its own, untouched defaults included, so the account often holds the
+   * default of a device where nobody chose anything. Between two of those, one
+   * that differs from the default is the one somebody chose. When that still
+   * cannot tell, the account's copy decides, so every device ends up with the
+   * same value rather than each keeping its own.
    *
    * @param {object|null} local This browser's copy.
    * @param {object|null} remote The account's copy.
+   * @param {function(object): boolean} isDefault Whether a copy holds the default.
    * @returns {object|null} The copy to keep.
    */
-  function newerSetting(local, remote) {
+  function newerSetting(local, remote, isDefault) {
     if (!local) return remote || null;
     if (!remote) return local;
-    return ms(local.updatedAt) > ms(remote.updatedAt) ? local : remote;
+    const a = ms(local.updatedAt);
+    const b = ms(remote.updatedAt);
+    if (a || b) return a > b ? local : remote;
+    return isDefault(remote) && !isDefault(local) ? local : remote;
+  }
+
+  /** Whether a copy of the goals still holds the weekly goal nobody set. */
+  function isDefaultGoals(goals) {
+    return (Number(goals.weeklySessionsTarget) || DEFAULT_WEEKLY_TARGET) === DEFAULT_WEEKLY_TARGET;
   }
 
   /**
@@ -320,7 +335,7 @@
       holdLogs: mergeLog(local.holdLogs, remote.holdLogs, 100),
       // Not the bag's own savedAt: that is "now" on whichever device is
       // syncing, so this device's goal always won and never came down.
-      goals: newerSetting(local.goals, remote.goals),
+      goals: newerSetting(local.goals, remote.goals, isDefaultGoals),
       achievements: {
         ...(remote.achievements || {}),
         ...(local.achievements || {})

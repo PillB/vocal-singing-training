@@ -448,11 +448,25 @@
   }
 
   /**
+   * Which side's goal a merge keeps: the latest choice. Goals saved before they
+   * carried the time cannot say when, and back then every device pushed its
+   * own, the default included, so between two of those a goal other than the
+   * default is the one somebody picked. Otherwise `B`, the account's copy.
+   */
+  function goalSide(A, B) {
+    const a = chosenAt(A.goalAt);
+    const b = chosenAt(B.goalAt);
+    if (a || b) return a > b ? A : B;
+    return B.goal === DEFAULT_GOAL && A.goal !== DEFAULT_GOAL ? A : B;
+  }
+
+  /**
    * Merge two devices' loop state. Everything earned is a union — a card or a
    * milestone is never lost to a sync. The size and the goal follow the latest
    * choice on any device (`b` is the account's copy, which decides when
    * neither side says when it chose): the default a new device writes on its
-   * first visit is not a choice, and used to replace the learner's own.
+   * first visit is not a choice, and used to replace the learner's own. A size
+   * nobody picked is null, so the one that was picked always shows through.
    */
   function merge(a, b) {
     if (!b) return a;
@@ -460,7 +474,7 @@
     const A = normalize(JSON.parse(JSON.stringify(a)));
     const B = normalize(JSON.parse(JSON.stringify(b)));
     const tierFrom = chosenAt(A.tierAt) > chosenAt(B.tierAt) ? A : B;
-    const goalFrom = chosenAt(A.goalAt) > chosenAt(B.goalAt) ? A : B;
+    const goalFrom = goalSide(A, B);
     const cards = { ...B.cards };
     Object.keys(A.cards).forEach((id) => {
       if (!cards[id] || A.cards[id] < cards[id]) cards[id] = A.cards[id];

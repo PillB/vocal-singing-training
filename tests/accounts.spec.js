@@ -845,7 +845,18 @@ test.describe("Accounts, gifted months and saved progress", () => {
       const mirrored = window.VTSync.mergeBag({ ...remote, profileId: "default" }, local);
       // A goal nobody set (a new device) and one saved before goals carried a time.
       const unset = window.VTSync.mergeBag({ ...local, goals: null }, { ...remote, goals: { weeklySessionsTarget: 6 } });
-      return { ...merged, mirroredGoals: mirrored.goals, unsetGoals: unset.goals };
+      // Both saved before goals carried a time, when every device pushed its
+      // own, default included: chosen here, chosen on the account, and chosen
+      // on both.
+      const legacy = (mine, theirs) =>
+        window.VTSync.mergeBag({ ...local, goals: { weeklySessionsTarget: mine } }, { ...remote, goals: { weeklySessionsTarget: theirs } })
+          .goals.weeklySessionsTarget;
+      return {
+        ...merged,
+        mirroredGoals: mirrored.goals,
+        unsetGoals: unset.goals,
+        legacyGoals: [legacy(5, 3), legacy(3, 5), legacy(4, 5)]
+      };
     });
 
     // Both takes survive, newest first.
@@ -863,6 +874,9 @@ test.describe("Accounts, gifted months and saved progress", () => {
     expect(merged.goals.weeklySessionsTarget).toBe(3);
     expect(merged.mirroredGoals.weeklySessionsTarget).toBe(3);
     expect(merged.unsetGoals.weeklySessionsTarget).toBe(6);
+    // Without times, the one that is not the default was chosen; when both
+    // were, the account's copy decides, so the devices agree.
+    expect(merged.legacyGoals).toEqual([5, 5, 5]);
     // Achievements are a union: an award earned anywhere stays earned.
     expect(merged.achievements).toEqual({ remote: true, local: true });
   });

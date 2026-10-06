@@ -522,6 +522,39 @@ test.describe("Saved progress follows the learner", () => {
     expect(local).toEqual({ goals: 6, loopGoal: "5-7", tier: "ess" });
   });
 
+  test("goals chosen before they carried a time are kept over another device's defaults", async ({ page }) => {
+    // Older builds pushed every device's goals, untouched defaults included,
+    // so the account holds those of a device where nobody chose anything.
+    const server = createServer({
+      revs: { default: 3 },
+      docs: {
+        default: {
+          v: 1,
+          profileId: "default",
+          savedAt: "2026-09-20T10:00:00.000Z",
+          progress: {},
+          goals: { weeklySessionsTarget: 3, weekKey: null },
+          loop: { v: 1, seed: "phone", tier: null, goal: "3-5", ms: [], cards: {}, surprises: [], since: 0, comebacks: [], completions: 0 }
+        }
+      }
+    });
+    // This device is where the learner chose, before choices carried a time.
+    await boot(page, server, {
+      seed: {
+        vt_goals_v1: { weeklySessionsTarget: 5, weekKey: null },
+        vt_loop_v1: { v: 1, seed: "laptop", tier: "ess", goal: "5-7", ms: [], cards: {}, surprises: [], since: 0, comebacks: [], completions: 2 }
+      }
+    });
+
+    expect(server.docs.default.goals.weeklySessionsTarget).toBe(5);
+    expect(server.docs.default.loop.goal).toBe("5-7");
+    const local = await page.evaluate(() => ({
+      goals: window.VTStorage.getGoals().weeklySessionsTarget,
+      loopGoal: window.VTLoop.readLoop().goal
+    }));
+    expect(local).toEqual({ goals: 5, loopGoal: "5-7" });
+  });
+
   test("a sync that brings another device's practice redraws Historial", async ({ page }) => {
     const server = createServer({
       revs: { default: 2 },

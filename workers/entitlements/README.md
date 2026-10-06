@@ -213,12 +213,15 @@ claim:<provider>:<sessionOrPaymentId> licenseId    90d TTL   ?billing=success lo
 sub:<provider>:<subscriptionId>       licenseId              keeps one license per subscription
 paid:<licenseId>                      "1"                    a payment was confirmed (see below)
 ended:<licenseId>                     {endedAt, periodEnd}   the Stripe subscription was deleted
+reversed:<licenseId>                  {reversedChargeAt, reversedAt}  a Mercado Pago charge's money went back
 ```
 
-`paid:` and `ended:` repeat facts the record also holds, each in a key nothing
-else writes, so that two webhooks processed at the same time cannot lose them:
-KV has no compare-and-swap, and the later of two concurrent writes of the
-record wins. Every read of a record applies them over it.
+`paid:`, `ended:` and `reversed:` repeat facts the record also holds, each in
+a key nothing else writes, so that two webhooks processed at the same time
+cannot lose them: KV has no compare-and-swap, and the later of two concurrent
+writes of the record wins. Every read of a record applies them over it.
+`reversed:` holds the latest refunded or charged-back charge, as the record
+does.
 
 D1: one database bound as `DB`, optional. The schema is created on first use
 (`ensureSchema`, every statement `IF NOT EXISTS`), so there is no migration step
@@ -342,14 +345,14 @@ Consequences worth understanding before you ship:
 - **A deleted Stripe subscription stays deleted.** Stripe never reactivates
   one, so after `customer.subscription.deleted` no event for it changes the
   license, whatever its timestamp, and the deletion is also kept in `ended:`.
-- **What concurrency can still do.** Two webhooks for one license processed
-  at the same moment both read the record, and the later write wins. A
-  confirmed payment and a deletion survive that through their own keys, and
-  KV's eventual consistency only delays them (another edge location can take
-  up to about a minute to see a write). Any other change can be lost to it,
-  a refund included. A renewal's new period end comes back with the next
-  event that carries it; a refund only if Mercado Pago notifies about that
-  payment again. Worse, the first two events for a new license (a checkout
+- **What concurrency can still do.** Two webhooks for one license processed at
+  the same moment both read the record, and the later write wins. A confirmed
+  payment, a deletion and a Mercado Pago refund survive that through their own
+  keys, and KV's eventual consistency only delays them (another edge location
+  can take up to about a minute to see a write). Any other change can be lost
+  to it, and so can a refund processed at the same moment as the refund of
+  another charge. A renewal's new period end comes back with the next event
+  that carries it. Worse, the first two events for a new license (a checkout
   and its subscription's first event) processed at once can each find no
   license and mint one. The claim then points at one record and the
   subscription index, which every later event follows, at the other, so the

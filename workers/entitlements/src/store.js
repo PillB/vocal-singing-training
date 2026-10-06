@@ -11,22 +11,25 @@
  *   sub:<provider>:<subscriptionId>       -> licenseId
  *   paid:<licenseId>                      -> "1"        (a payment was confirmed)
  *   ended:<licenseId>                     -> {endedAt, periodEnd} (subscription deleted)
+ *   reversed:<licenseId>                  -> {reversedChargeAt, reversedAt} (money given back)
  *
  * KV has no compare-and-swap, so two webhooks for one license processed at the
  * same time can each read the record, and the later write wins with the other's
- * change lost. A fact that never changes back once true is therefore also kept
- * in a key of its own that only that fact ever writes, and is read back over
- * the record, so a concurrent write of an older copy cannot lose it. KV is also
- * eventually consistent, so another edge location may not see such a key for
- * up to about a minute: the fact is then late, not lost. Changes that are not
- * one-way (an ordinary status or period update, a refund) can still be lost
- * that way. Worse, the first two events for a new license processed at once
- * (a checkout and its subscription's first event) can each find no license and
- * mint one: the claim then points at one record and the subscription index,
- * which every later event follows, at the other, so the claimed copy never
- * hears of a renewal or a cancellation. Closing all of that needs a single
- * writer per license (a Durable Object, or a D1 row updated conditionally),
- * which this store does not have.
+ * change lost. A fact that never changes back once true (a confirmed payment, a
+ * deletion, money given back, which only ever moves on to a later charge) is
+ * therefore also kept in a key of its own that only that fact ever writes, and
+ * is read back over the record, so a concurrent write of an older copy cannot
+ * lose it. KV is also eventually consistent, so another edge location may not
+ * see such a key for up to about a minute: the fact is then late, not lost.
+ * Changes that are not one-way (an ordinary status or period update) can still
+ * be lost that way, and so can the refund of a later charge processed at the
+ * same moment as the refund of an earlier one. Worse, the first two events for
+ * a new license processed at once (a checkout and its subscription's first
+ * event) can each find no license and mint one: the claim then points at one
+ * record and the subscription index, which every later event follows, at the
+ * other, so the claimed copy never hears of a renewal or a cancellation.
+ * Closing all of that needs a single writer per license (a Durable Object, or a
+ * D1 row updated conditionally), which this store does not have.
  */
 
 "use strict";
@@ -106,6 +109,15 @@ export function endedKey(licenseId) {
 }
 
 /**
+ * Key for the latest charge whose money went back on a license.
+ * @param {string} licenseId Opaque license id.
+ * @returns {string} KV key.
+ */
+export function reversedKey(licenseId) {
+  return `reversed:${licenseId}`;
+}
+
+/**
  * Check-then-set the idempotency marker for a webhook event.
  * @param {Object} kv KV namespace.
  * @param {string} provider "stripe" | "mercadopago".
@@ -177,6 +189,14 @@ export async function getEntitlement(kv, licenseId) {
       capPeriodEnd(record, ended.periodEnd);
     }
   }
+  // And money given back: only Mercado Pago reports it.
+  if (record && record.provider === "mercadopago") {
+    const reversal = await readReversal(kv, licenseId);
+    if (reversal) {
+      noteReversal(record, reversal, reversal.reversedAt);
+      endReversedPeriod(record);
+    }
+  }
   return record;
 }
 
@@ -194,6 +214,27 @@ async function readEnded(kv, licenseId) {
   try {
     const ended = JSON.parse(raw);
     return ended && Number.isFinite(ended.endedAt) && Number.isFinite(ended.periodEnd) ? ended : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Read the latest charge whose money went back on a license.
+ * @param {Object} kv KV namespace.
+ * @param {string} licenseId Opaque license id.
+ * @returns {Promise<{reversedChargeAt: number, reversedAt: number}|null>} Reversal or null.
+ */
+async function readReversal(kv, licenseId) {
+  const raw = await kv.get(reversedKey(licenseId));
+  if (!raw) {
+    return null;
+  }
+  try {
+    const reversal = JSON.parse(raw);
+    return reversal && Number.isFinite(reversal.reversedChargeAt) && Number.isFinite(reversal.reversedAt)
+      ? reversal
+      : null;
   } catch {
     return null;
   }
@@ -531,6 +572,12 @@ export async function upsertEntitlement(kv, update, options) {
 
   if (update.paid === true) {
     await kv.put(paidKey(licenseId), "1");
+  }
+  if (Number.isFinite(update.reversedChargeAt)) {
+    await kv.put(reversedKey(licenseId), JSON.stringify({
+      reversedChargeAt: record.reversedChargeAt,
+      reversedAt: record.reversedAt
+    }));
   }
   if (update.terminal && !stale) {
     await kv.put(endedKey(licenseId), JSON.stringify({

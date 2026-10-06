@@ -945,6 +945,69 @@ test("records stored before refunds were remembered keep their period", async ()
   assert.equal(isAwaitingPayment(renewed.record), false);
 });
 
+test("a refund survives a concurrent write of an older copy of the record", async () => {
+  const kv = createFakeKv();
+  const generateId = idSequence("lic_");
+  await upsertEntitlement(kv, {
+    provider: "mercadopago",
+    claimId: "pre_rc",
+    subscriptionId: "pre_rc",
+    plan: "pro_monthly",
+    status: "active",
+    periodEnd: NOW + 20 * 86400,
+    occurredAt: NOW - 10 * 86400
+  }, { now: NOW, generateId });
+
+  // The charge is refunded and the subscription cancelled together: the
+  // cancellation read the record before the refund was written, and wrote last.
+  const before = new Map(kv.store);
+  await upsertEntitlement(kv, {
+    provider: "mercadopago",
+    claimId: "pay_rc",
+    subscriptionId: "pre_rc",
+    reversedAt: NOW - 60,
+    reversedChargeAt: NOW - 10 * 86400,
+    occurredAt: null
+  }, { now: NOW, generateId });
+  await upsertEntitlement(staleView(kv, before), {
+    provider: "mercadopago",
+    claimId: "pre_rc",
+    subscriptionId: "pre_rc",
+    status: "canceled",
+    occurredAt: NOW - 30
+  }, { now: NOW, generateId });
+
+  const written = JSON.parse(kv.store.get(licenseKey("lic_1")).value);
+  assert.equal(written.reversedChargeAt, undefined, "the record itself lost the refund");
+  assert.equal(written.periodEnd, NOW + 20 * 86400);
+  const read = await getEntitlement(kv, "lic_1");
+  assert.equal(read.status, "canceled");
+  assert.equal(read.periodEnd, NOW - 60, "the refund's own key ends the period it paid for");
+  assert.equal(isTokenIssuable(read, NOW), false);
+
+  // The next notification writes the refund back into the record.
+  const next = await upsertEntitlement(kv, {
+    provider: "mercadopago",
+    claimId: "pre_rc",
+    subscriptionId: "pre_rc",
+    status: "canceled",
+    occurredAt: NOW
+  }, { now: NOW, generateId });
+  assert.equal(next.record.reversedChargeAt, NOW - 10 * 86400);
+  assert.equal(next.record.periodEnd, NOW - 60);
+
+  // A later charge that goes through still pays for a period of its own.
+  const charged = await upsertEntitlement(kv, {
+    provider: "mercadopago",
+    subscriptionId: "pre_rc",
+    status: "active",
+    periodEndFromCharge: NOW + 20 * 86400,
+    occurredAt: NOW + 20 * 86400
+  }, { now: NOW + 20 * 86400, generateId });
+  assert.equal(charged.record.periodEnd, NOW + 20 * 86400 + 2678400);
+  assert.equal(isTokenIssuable(await getEntitlement(kv, "lic_1"), NOW + 20 * 86400), true);
+});
+
 test("the client view carries no provider-internal ids", () => {
   const view = toPublicEntitlement({
     licenseId: "lic_1",

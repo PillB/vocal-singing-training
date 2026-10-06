@@ -41,6 +41,8 @@ function createWorkerStub(options) {
     rev: opts.rev || 0,
     // Overrides for the A/B results answer, merged over the default below.
     abResults: opts.abResults || null,
+    // Replaces the experiments list's ingest counters below.
+    ingest: opts.ingest || null,
     sentCode: "424242",
     calls: []
   };
@@ -157,7 +159,7 @@ async function installWorker(page, stub, license) {
           { experiment: "aa_2026_10", arms: [{ variant: "a", exposed: 412 }, { variant: "b", exposed: 398 }], srm: { p: 0.62, flagged: false } },
           { experiment: "loop_home_2026_10", arms: [], srm: { p: null, flagged: false } }
         ],
-        ingest: {
+        ingest: stub.ingest || {
           since: "2026-09-17",
           // eu_no_consent is here because the readout used to leave it out of its
           // refusal list, so batches turned away for want of an EEA answer were
@@ -642,6 +644,32 @@ test.describe("Accounts, gifted months and saved progress", () => {
     // ...and not painted as a broken pipeline, because a visitor who has not
     // answered the bar yet is the system working exactly as intended.
     await expect(box.locator(".ab-ingest.ab-warn")).toHaveCount(0);
+  });
+
+  test("exposures the worker set aside are in the arrivals line", async ({ page }) => {
+    // The worker counts each exposure it records and each it refuses, but the
+    // line only read the events. An exposure over one address's daily cap (a
+    // school, an office) left the panel showing fewer exposed browsers with no
+    // hint why.
+    const license = await mintLicense({ origin: BASE });
+    const totals = { accepted: 135, exposure_new: 100, exposure_capped: 25, exposure_unregistered: 10 };
+    const stub = createWorkerStub({ role: "admin", ingest: { since: "2026-09-17", totals, lastAcceptedAt: 1790000000 } });
+    await installWorker(page, stub, license);
+    await boot(page);
+    await signIn(page);
+    await page.click("#ab-results-load");
+    const line = page.locator("#ab-results .ab-ingest");
+    await expect(line).toContainText("135 eventos guardados, 0 descartados, 0 envíos rechazados");
+    await expect(line).toContainText("Exposiciones: exposure_new 100, exposure_unregistered 10, exposure_capped 25");
+    // A capped exposure can bias the split, so it is worth a look.
+    await expect(line).toHaveClass(/ab-warn/);
+
+    // An arm the registry does not know is forged traffic or a site and worker
+    // deployed out of step: named, but not the colour of a fault.
+    stub.ingest = { since: "2026-09-17", totals: { accepted: 135, exposure_new: 100, exposure_unregistered: 10 }, lastAcceptedAt: 1790000000 };
+    await page.click("#ab-results-load");
+    await expect(line).toContainText("Exposiciones: exposure_new 100, exposure_unregistered 10");
+    await expect(line).not.toHaveClass(/ab-warn/);
   });
 
   test("before its plan is met a test shows counts and the date, never a comparison", async ({ page }) => {

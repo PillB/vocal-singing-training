@@ -754,6 +754,57 @@ test.describe("Admin page", () => {
     await adminCtx.close();
   });
 
+  test("statistics: exposures the worker set aside are named", async ({ browser }) => {
+    // Once an experiment is on, the worker counts an exposure over one
+    // address's daily cap (a school, an office) and one for an arm its registry
+    // does not have, and neither showed anywhere on this page.
+    const { worker, admin } = await startWorker();
+    const day = new Date(worker.now() * 1000).toISOString().slice(0, 10);
+    const post = (events) =>
+      worker.fetch(
+        new Request("http://worker.local/v1/events", {
+          method: "POST",
+          headers: {
+            origin: worker.env.SITE_ORIGIN,
+            "content-type": "text/plain;charset=UTF-8",
+            "user-agent":
+              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Safari/537.36",
+            "cf-connecting-ip": "203.0.113.77"
+          },
+          body: JSON.stringify({ events })
+        })
+      );
+    const expose = (i, variant) => ({
+      name: "experiment_expose",
+      cid: `sbxexp${String(i).padStart(4, "0")}`,
+      day,
+      tz: 300,
+      props: { experiment: "aa_2026_10", variant, forced: false, enabled: true }
+    });
+    // 125 browsers behind one address, 25 over the cap of 100 a day...
+    for (let i = 0; i < 125; i += 25) {
+      await post(Array.from({ length: 25 }, (_, j) => expose(i + j, (i + j) % 2 ? "b" : "a")));
+    }
+    // ...and ten exposed to an arm that does not exist.
+    await post(Array.from({ length: 10 }, (_, j) => expose(500 + j, "zz")));
+
+    const adminCtx = await browser.newContext();
+    const page = await openAdmin(adminCtx, worker, admin);
+    await page.click("#stats-load");
+    const result = page.locator("#stats-result");
+    await expect(result).toContainText("guardados: 135");
+    await expect(result).toContainText("exposiciones nuevas: 100");
+    const capped = result.locator("li", { hasText: "exposiciones por encima del tope diario de una dirección: 25" });
+    await expect(capped).toHaveAttribute("data-tone", "error");
+    // An unknown arm is forged traffic or a site and worker deployed out of
+    // step: the registry doing its job, so not the colour of a fault.
+    const unknown = result.locator("li", { hasText: "exposiciones a una prueba o versión que no existe: 10" });
+    await expect(unknown).toHaveAttribute("data-tone", "");
+    await page.click("#admin-lang");
+    await expect(result).toContainText("exposures over one address's daily cap: 25");
+    await adminCtx.close();
+  });
+
   test("the sandbox's trial length is the one wrangler.toml deploys", async () => {
     const fs = require("fs");
     const toml = fs.readFileSync(path.join(__dirname, "..", "workers", "entitlements", "wrangler.toml"), "utf8");

@@ -8562,12 +8562,24 @@
       let line = tt("ab.ingest", { accepted: count(t.accepted), dropped: count(dropped), refused: count(refused) });
       const reasons = refusedKeys.filter((k) => t[k]).map((k) => `${k} ${count(t[k])}`);
       if (reasons.length) line += ` ${tt("ab.ingestReasons", { list: reasons.join(", ") })}`;
+      // What became of the exposures among the events kept
+      // (INGEST_REASONS.exposure), so they are in neither sum above. Without them
+      // the panel showed fewer exposed browsers than arrived and nothing said why.
+      const exposures = ["exposure_new", "exposure_recovered", "exposure_unregistered", "exposure_capped"]
+        .filter((k) => t[k])
+        .map((k) => `${k} ${count(t[k])}`);
+      if (exposures.length) line += ` ${tt("ab.ingestExposures", { list: exposures.join(", ") })}`;
       if (ingest.lastAcceptedAt) line += ` ${tt("ab.ingestLast", { when: date(ingest.lastAcceptedAt) })}`;
       // A wrong origin or a stuck limit is a broken pipeline; opted-out,
       // automated and eu_no_consent refusals are the system working, so they are
       // named above but must not colour the line — a site with EEA visitors who
-      // have not answered would otherwise read as broken for ever.
-      const broken = sum(["origin_not_allowed", "rate_limited"]) > 0;
+      // have not answered would otherwise read as broken for ever. A capped
+      // exposure (one address over its daily allowance: a school, an office) is
+      // only recorded if that browser comes back another day, so it can skew
+      // who is counted. An unregistered one is forged traffic or a site and
+      // worker deployed out of step, the registry doing its job, so it is named
+      // but not coloured.
+      const broken = sum(["origin_not_allowed", "rate_limited", "exposure_capped"]) > 0;
       return `<p class="${broken ? "ab-warn" : "muted"} ab-ingest">${esc(line)}</p>`;
     }
 

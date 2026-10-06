@@ -423,7 +423,11 @@
         opted_out: "navegador que pide no ser rastreado",
         automated: "navegadores automáticos",
         origin_not_allowed: "otro sitio",
-        rate_limited: "demasiados seguidos"
+        rate_limited: "demasiados seguidos",
+        exposure_new: "exposiciones nuevas",
+        exposure_recovered: "exposiciones recuperadas en otra visita",
+        exposure_unregistered: "exposiciones a una prueba o versión que no existe",
+        exposure_capped: "exposiciones por encima del tope diario de una dirección"
       }
     },
     en: {
@@ -464,7 +468,11 @@
         opted_out: "browser asks not to be tracked",
         automated: "automated browsers",
         origin_not_allowed: "another site",
-        rate_limited: "too many at once"
+        rate_limited: "too many at once",
+        exposure_new: "new exposures",
+        exposure_recovered: "exposures recovered on a later visit",
+        exposure_unregistered: "exposures to a test or arm that does not exist",
+        exposure_capped: "exposures over one address's daily cap"
       }
     }
   };
@@ -1417,17 +1425,29 @@
       ["automated", n("automated")],
       ["origin_not_allowed", n("origin_not_allowed")],
       ["rate_limited", n("rate_limited")],
-      ["dropped", dropped]
+      ["dropped", dropped],
+      // What became of the exposures among the events stored, which the worker
+      // counts and this list used to leave out.
+      ["exposure_new", n("exposure_new")],
+      ["exposure_recovered", n("exposure_recovered")],
+      ["exposure_unregistered", n("exposure_unregistered")],
+      ["exposure_capped", n("exposure_capped")]
     ];
     // Stored events are always listed, so a zero reads as a zero; the rest only
     // when something happened.
     const shown = rows.filter(([key, value]) => key === "accepted" || value > 0);
+    // A wrong origin or a stuck limit is a broken pipeline. A capped exposure
+    // (one address over its daily allowance: a school, an office) is recorded
+    // only if that browser comes back another day, so it can skew who is
+    // counted. An unknown arm is forged traffic or a site and worker deployed out
+    // of step, the registry doing its job, so it is listed but not coloured.
+    const faults = ["origin_not_allowed", "rate_limited", "exposure_capped"];
     nodes.push(
       el(
         "ul",
         { className: "admin-counts" },
         shown.map(([key, value]) =>
-          el("li", { "data-tone": (key === "origin_not_allowed" || key === "rate_limited") && value > 0 ? "error" : "" }, [
+          el("li", { "data-tone": faults.includes(key) && value > 0 ? "error" : "" }, [
             `${statsLabel("ingest", key)}: `,
             el("strong", { text: count(value) })
           ])

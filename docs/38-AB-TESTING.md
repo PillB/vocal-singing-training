@@ -227,7 +227,11 @@ traffic can.
    - `srm` is not flagged
    - the event-mix check is clean
    - the ingest counters show no unexpected `origin_not_allowed` or
-     `rate_limited`
+     `rate_limited`, and no large `exposure_capped` (one address over 100 new
+     exposures a day, a school or an office; each is recorded only if that
+     browser comes back another day). `exposure_unregistered` usually means
+     forged traffic or a site and worker deployed out of step. Both readouts,
+     the admin page and the A/B panel, list these.
    - the two arms do not differ
 
    About one A/A in twenty shows p < 0.05 by chance, so run it again before

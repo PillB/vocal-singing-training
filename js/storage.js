@@ -61,10 +61,13 @@
     return bag;
   }
 
-  /** Scoped key: default uses legacy keys (backward compatible). */
-  function scopedKey(base) {
-    const bag = ensureProfiles();
-    const id = bag.activeId || "default";
+  /**
+   * Scoped key: default uses legacy keys (backward compatible).
+   * @param {string} base Unscoped key.
+   * @param {string} [profileId] Whose key; the active profile when omitted.
+   */
+  function scopedKey(base, profileId) {
+    const id = profileId || ensureProfiles().activeId || "default";
     if (id === "default") return base;
     return `vt_prof_${id}_${base}`;
   }
@@ -75,14 +78,27 @@
   const syncedListeners = new Set();
 
   function writeSynced(base, value) {
-    write(scopedKey(base), value);
+    const id = ensureProfiles().activeId || "default";
+    write(scopedKey(base, id), value);
     syncedListeners.forEach((fn) => {
       try {
-        fn();
+        fn(id);
       } catch (err) {
         console.warn(err);
       }
     });
+  }
+
+  function defaultWeekPlan() {
+    return {
+      weekNumber: 1,
+      element: null,
+      status: "idle", // idle | active | review
+      startedAt: null,
+      checkIns: [],
+      reviews: [],
+      completedElements: []
+    };
   }
 
   const Storage = {
@@ -226,15 +242,7 @@
       else write(LS.session, session);
     },
     getWeekPlan() {
-      return read(scopedKey(LS.weekPlan), {
-        weekNumber: 1,
-        element: null,
-        status: "idle", // idle | active | review
-        startedAt: null,
-        checkIns: [],
-        reviews: [],
-        completedElements: []
-      });
+      return read(scopedKey(LS.weekPlan), defaultWeekPlan());
     },
     setWeekPlan(plan) {
       writeSynced(LS.weekPlan, plan);
@@ -298,7 +306,7 @@
 
     /**
      * Subscribe to writes of anything a sync carries.
-     * @param {function} fn Listener.
+     * @param {function(string): void} fn Called with the profile id written to.
      * @returns {function} Unsubscribe.
      */
     onSyncedChange(fn) {
@@ -307,54 +315,62 @@
     },
 
     /**
-     * Everything about the active profile that is worth carrying to another
-     * device, as one plain object.
+     * Everything about one profile that is worth carrying to another device,
+     * as one plain object.
+     *
+     * A sync names its profile rather than following the active one, because
+     * the learner can switch profile while a sync is waiting on the network.
      *
      * Recordings are deliberately left out: they live in IndexedDB, run to
      * megabytes each, and belong to a storage tier this sync is not.
      *
-     * @returns {object} Sync bag for the active profile.
+     * @param {string} [profileId] Whose bag; the active profile when omitted.
+     * @returns {object} Sync bag for that profile.
      */
-    readSyncBag() {
+    readSyncBag(profileId) {
+      const id = profileId || this.getActiveProfileId();
+      const key = (base) => scopedKey(base, id);
       return {
         v: 1,
-        profileId: this.getActiveProfileId(),
-        progress: this.getProgress(),
-        weekPlan: this.getWeekPlan(),
-        reviews: this.getReviews(),
-        holdLogs: this.getHoldLogs(),
-        goals: this.getGoals(),
-        achievements: this.getAchievementFlags(),
-        days: this.getDays(),
-        loop: this.getLoop()
+        profileId: id,
+        progress: read(key(LS.progress), {}),
+        weekPlan: read(key(LS.weekPlan), defaultWeekPlan()),
+        reviews: read(key(LS.reviews), []),
+        holdLogs: read(key(LS.holdLogs), []),
+        goals: read(key(LS.goals), { weeklySessionsTarget: 3, weekKey: null }),
+        achievements: read(key(LS.achievements), {}),
+        days: read(key(LS.days), null),
+        loop: read(key(LS.loop), null)
       };
     },
 
     /**
-     * Write a sync bag back over the active profile.
+     * Write a sync bag back over one profile.
      *
      * Each section is written only when the bag actually carries it, so a bag
      * from an older build cannot blank out a section it never knew about.
      *
      * @param {object} bag Sync bag, as produced by readSyncBag.
+     * @param {string} [profileId] Whose bag; the active profile when omitted.
      * @returns {{ ok: boolean }} Result.
      */
-    writeSyncBag(bag) {
+    writeSyncBag(bag, profileId) {
       if (!bag || typeof bag !== "object") return { ok: false };
+      const key = (base) => scopedKey(base, profileId || this.getActiveProfileId());
       if (bag.progress && typeof bag.progress === "object") {
-        write(scopedKey(LS.progress), bag.progress);
+        write(key(LS.progress), bag.progress);
       }
       if (bag.weekPlan && typeof bag.weekPlan === "object") {
-        write(scopedKey(LS.weekPlan), bag.weekPlan);
+        write(key(LS.weekPlan), bag.weekPlan);
       }
-      if (Array.isArray(bag.reviews)) write(scopedKey(LS.reviews), bag.reviews.slice(0, 40));
-      if (Array.isArray(bag.holdLogs)) write(scopedKey(LS.holdLogs), bag.holdLogs.slice(0, 100));
-      if (bag.goals && typeof bag.goals === "object") write(scopedKey(LS.goals), bag.goals);
+      if (Array.isArray(bag.reviews)) write(key(LS.reviews), bag.reviews.slice(0, 40));
+      if (Array.isArray(bag.holdLogs)) write(key(LS.holdLogs), bag.holdLogs.slice(0, 100));
+      if (bag.goals && typeof bag.goals === "object") write(key(LS.goals), bag.goals);
       if (bag.achievements && typeof bag.achievements === "object") {
-        write(scopedKey(LS.achievements), bag.achievements);
+        write(key(LS.achievements), bag.achievements);
       }
-      if (bag.days && typeof bag.days === "object") write(scopedKey(LS.days), bag.days);
-      if (bag.loop && typeof bag.loop === "object") write(scopedKey(LS.loop), bag.loop);
+      if (bag.days && typeof bag.days === "object") write(key(LS.days), bag.days);
+      if (bag.loop && typeof bag.loop === "object") write(key(LS.loop), bag.loop);
       return { ok: true };
     },
 

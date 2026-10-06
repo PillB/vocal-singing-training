@@ -4,8 +4,9 @@
  *
  * tests/accounts.spec.js checks a single sync and the merge rules. These follow
  * a signed-in learner through the app instead: a take updated after it was
- * first recorded, a routine finished, a week reviewed, a setting changed.
- * Each one used to change this device and leave the account behind.
+ * first recorded, a routine finished, a week reviewed, a setting changed, a
+ * profile switched while a sync is out. Each one used to change this device
+ * and leave the account behind, or mix up whose record was whose.
  *
  * The worker is a fake at the network boundary that keeps one document per
  * profile and refuses a write on a stale revision, like
@@ -32,7 +33,9 @@ function createServer(seed) {
     docs: { ...((seed && seed.docs) || {}) },
     revs: { ...((seed && seed.revs) || {}) },
     puts: [],
-    gets: []
+    gets: [],
+    // When set, a progress GET waits on this promise before answering.
+    holdGet: null
   };
 }
 
@@ -71,6 +74,7 @@ async function installWorker(page, server) {
     if (method === "GET") {
       const profileId = url.searchParams.get("profileId");
       server.gets.push(profileId);
+      if (server.holdGet) await server.holdGet;
       return json(200, { ok: true, rev: server.revs[profileId] || 0, doc: server.docs[profileId] || null, updatedAt: 1 });
     }
     let body = {};
@@ -94,7 +98,7 @@ async function installWorker(page, server) {
  * Open the site signed in, with `seed` written to localStorage once.
  * @param {import('@playwright/test').Page} page Page.
  * @param {object} server State from createServer.
- * @param {{seed?: object}} [opts] Keys to seed.
+ * @param {{seed?: object, settle?: boolean}} [opts] Keys to seed; whether to wait for the boot sync.
  */
 async function boot(page, server, opts = {}) {
   await installWorker(page, server);
@@ -140,6 +144,7 @@ async function boot(page, server, opts = {}) {
   await page.waitForFunction(() => !!window.VTApp && !!window.VTSync && !!window.VTDays && !!window.VTLoop);
   await page.clock.runFor(500);
   await expect.poll(() => page.evaluate(() => window.VTSync.isAvailable())).toBe(true);
+  if (opts.settle === false) return;
   // Signing in schedules a sync; let it land so later pushes are this test's own.
   await page.clock.runFor(9000);
   await expect.poll(() => server.puts.length).toBeGreaterThan(0);
@@ -151,6 +156,15 @@ async function passQuietPeriod(page) {
   await page.clock.runFor(9000);
   await page.waitForTimeout(300);
 }
+
+/** The learner and somebody else at home. */
+const TWO_PROFILES = {
+  activeId: "default",
+  profiles: {
+    default: { id: "default", name: "Default", createdAt: "2026-01-01T00:00:00Z" },
+    p_b: { id: "p_b", name: "Ana", createdAt: "2026-01-02T00:00:00Z" }
+  }
+};
 
 /** The take history the account holds for one exercise. */
 function serverTakes(server, profileId = "default", ex = EX) {
@@ -269,4 +283,49 @@ test.describe("Saved progress follows the learner", () => {
     expect(server.docs.default.holdLogs.map((h) => h.seconds)).toEqual([9.4]);
   });
 
+  test("switching profile while a sync is out keeps each record its own", async ({ page }) => {
+    const takeOf = (id, at) => ({ completedCount: 1, lastScore: 5, lastAt: at, history: [{ id, at, metrics: {}, score: 5, notes: "", durationSec: 60 }] });
+    const server = createServer();
+    await boot(page, server, {
+      settle: false,
+      seed: {
+        vt_profiles_v1: TWO_PROFILES,
+        vt_progress_v1: { "v1-diction": takeOf("take-of-A", "2026-09-20T10:00:00Z") },
+        "vt_prof_p_b_vt_progress_v1": { "v2-volume": takeOf("take-of-B", "2026-09-21T10:00:00Z") }
+      }
+    });
+
+    let release;
+    server.holdGet = new Promise((resolve) => (release = resolve));
+    await page.locator("#btn-history").click();
+    await page.clock.runFor(300);
+    const sync = page.evaluate(() => window.VTSync.syncNow());
+    await expect.poll(() => server.gets.length).toBeGreaterThan(0);
+    // The learner hands the phone over while the read is still out.
+    await page.locator("#sel-profile").selectOption("p_b");
+    server.holdGet = null;
+    release();
+    await sync;
+    await passQuietPeriod(page);
+
+    const local = await page.evaluate(() => {
+      const read = (k) => Object.keys(JSON.parse(localStorage.getItem(k) || "{}"));
+      return { a: read("vt_progress_v1"), b: read("vt_prof_p_b_vt_progress_v1") };
+    });
+    expect(local).toEqual({ a: ["v1-diction"], b: ["v2-volume"] });
+    expect(Object.keys(server.docs.default.progress)).toEqual(["v1-diction"]);
+    if (server.docs.p_b) expect(Object.keys(server.docs.p_b.progress)).toEqual(["v2-volume"]);
+  });
+
+  test("a change made just before switching profile is pushed for its owner", async ({ page }) => {
+    const server = createServer();
+    await boot(page, server, { seed: { vt_profiles_v1: TWO_PROFILES } });
+
+    await page.evaluate(() => window.VTStorage.addHoldLog(7));
+    await page.locator("#btn-history").click();
+    await page.locator("#sel-profile").selectOption("p_b");
+    await passQuietPeriod(page);
+    await expect.poll(() => server.docs.default?.holdLogs?.length || 0).toBe(1);
+    expect(server.docs.p_b?.holdLogs || []).toEqual([]);
+  });
 });

@@ -25,8 +25,20 @@
 
   let timer = null;
   let running = null;
+  let runningFor = null;
   let lastError = null;
   let lastSyncedAt = null;
+
+  // Which profiles hold changes the account has not had yet. Every synced write
+  // bumps `version`; a profile is pushed up to the version that was current
+  // when its bag was read, so a write that lands mid-sync is not forgotten.
+  let version = 0;
+  const changedAt = new Map();
+  const pushedAt = new Map();
+
+  function unpushed(profileId) {
+    return (changedAt.get(profileId) || 0) > (pushedAt.get(profileId) || 0);
+  }
 
   const listeners = new Set();
 
@@ -226,29 +238,41 @@
   }
 
   /**
-   * Read this browser's bag, stamped so settings can be compared later.
+   * Read one profile's bag, stamped so settings can be compared later.
+   * @param {string} profileId Whose bag.
    * @returns {object} Sync bag.
    */
-  function localBag() {
-    const bag = global.VTStorage.readSyncBag();
+  function localBag(profileId) {
+    const bag = global.VTStorage.readSyncBag(profileId);
     return { ...bag, savedAt: new Date().toISOString() };
   }
 
   /**
-   * Run one read-merge-write cycle.
+   * Run one read-merge-write cycle for one profile.
    *
    * The server's `409` is the whole concurrency story: it means the stored
    * revision moved while we were thinking, so we take its copy, merge, and try
    * again rather than overwriting somebody's evening.
    *
+   * The cycle reads and writes the profile it started for, by name. Following
+   * the active profile instead mixed two people's practice when the learner
+   * switched profile while the request was out.
+   *
+   * @param {string} [id] Profile to sync; the active one when omitted.
    * @returns {Promise<{ok: boolean, reason?: string, rev?: number}>} Result.
    */
-  async function syncNow() {
-    if (running) return running;
+  async function syncNow(id) {
+    const profileId = id || global.VTStorage.getActiveProfileId();
+    // One cycle at a time: a second ask for the same profile shares the one in
+    // flight, and one for another profile waits for it to finish.
+    while (running) {
+      if (runningFor === profileId) return running;
+      await running.catch(() => null);
+    }
     if (!isAvailable()) return { ok: false, reason: "signed_out" };
 
+    runningFor = profileId;
     running = (async () => {
-      const profileId = global.VTStorage.getActiveProfileId();
       for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
         const pulled = await global.VTAccount.request(
           "GET",
@@ -259,11 +283,12 @@
         if (!pulled.ok) return { ok: false, reason: pulled.offline ? "offline" : "error" };
 
         const serverRev = Number(pulled.data?.rev) || 0;
-        const merged = mergeBag(localBag(), pulled.data?.doc || null);
+        const seen = version;
+        const merged = mergeBag(localBag(profileId), pulled.data?.doc || null);
 
         // Write the merged result locally first: even if the push fails, this
         // device now holds everything both sides knew.
-        global.VTStorage.writeSyncBag(merged);
+        global.VTStorage.writeSyncBag(merged, profileId);
 
         const pushed = await global.VTAccount.request("PUT", "/v1/me/progress", {
           profileId,
@@ -272,6 +297,7 @@
         });
         if (pushed.ok) {
           writeRev(profileId, Number(pushed.data?.rev) || serverRev + 1);
+          pushedAt.set(profileId, Math.max(pushedAt.get(profileId) || 0, seen));
           lastError = null;
           lastSyncedAt = new Date().toISOString();
           emit();
@@ -297,6 +323,7 @@
       return await running;
     } finally {
       running = null;
+      runningFor = null;
       // The emits above run while `running` is still set, so every listener
       // was last told "syncing" and the account panel said "Guardando…" after
       // the save had finished. Tell them once more, now that it has.
@@ -315,10 +342,25 @@
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => {
       timer = null;
-      syncNow().catch(() => {
+      syncScheduled().catch(() => {
         /* reported through getStatus */
       });
     }, DEBOUNCE_MS);
+  }
+
+  /**
+   * The active profile, then any other profile still holding changes: a take
+   * saved just before the learner switched profile is pushed for its owner.
+   * @returns {Promise<void>}
+   */
+  async function syncScheduled() {
+    const active = global.VTStorage.getActiveProfileId();
+    const known = new Set((global.VTStorage.getProfiles?.().list || []).map((p) => p.id));
+    const others = [...changedAt.keys()].filter((id) => id !== active && known.has(id) && unpushed(id));
+    for (const id of [active, ...others]) {
+      const res = await syncNow(id);
+      if (!res.ok) return;
+    }
   }
 
   /**
@@ -358,7 +400,9 @@
     );
     if (!pulled.ok) return { ok: false, reason: pulled.offline ? "offline" : "error" };
     if (!pulled.data?.doc) return { ok: false, reason: "empty" };
-    global.VTStorage.writeSyncBag(pulled.data.doc);
+    // Into the profile that asked, even if the learner has switched since.
+    global.VTStorage.writeSyncBag(pulled.data.doc, profileId);
+    pushedAt.set(profileId, version);
     writeRev(profileId, Number(pulled.data.rev) || 0);
     lastSyncedAt = new Date().toISOString();
     emit();
@@ -381,7 +425,11 @@
 
   // Anything a sync carries was just written: a take, a day's practice, the
   // plan, a goal. Asking here, once, means no screen has to remember to.
-  global.VTStorage?.onSyncedChange?.(() => schedule());
+  global.VTStorage?.onSyncedChange?.((profileId) => {
+    version += 1;
+    changedAt.set(profileId, version);
+    schedule();
+  });
 
   if (typeof document !== "undefined" && global.VTAccount?.onChange) {
     // Signing in on a fresh device is the moment a sync is most wanted.

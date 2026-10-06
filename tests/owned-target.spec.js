@@ -136,6 +136,74 @@ test.describe("modes that own their target", () => {
     await page.locator("#btn-practice-stop").click();
   });
 
+  for (const c of [
+    // s27 at step 3 (E3); its generic reference is C3
+    { id: "s27-lip-trill-solfege", walk: "i", to: 2, want: "E3" },
+    // s21 at its second target (B2); its generic reference is A2
+    { id: "s21-chest-resonance", walk: "ni", to: 1, want: "B2" }
+  ]) {
+    test(`${c.id}: "Nota de referencia" mid-take sounds the mode's note and leaves its target`, async ({ page }) => {
+      await boot(page);
+      await openAndStart(page, c.id);
+      // Walk the mode to a later note, as singing would
+      await page.evaluate(({ key, to }) => {
+        const m = window.VTApp.getState().modeInstance;
+        m.state[key] = to;
+        m._pushTarget();
+      }, { key: c.walk, to: c.to });
+      const before = await targets(page);
+      expect(before.engine).toBe(before.mode);
+      await page.evaluate(() => {
+        window.__refPlayed = [];
+        const P = window.VTPiano;
+        const orig = P.playRefPitch.bind(P);
+        P.playRefPitch = (note, sec, sustain) => {
+          window.__refPlayed.push({ note, sec });
+          return orig(note, sec, sustain);
+        };
+      });
+      await page.locator("#btn-toggle-piano").click();
+      await page.locator("#btn-ref-pitch").click();
+      await expect.poll(() => page.evaluate(() => window.__refPlayed.length)).toBeGreaterThan(0);
+      const played = await page.evaluate(() => window.__refPlayed[0]);
+      expect(played.note, "the note the mode is waiting for").toBe(c.want);
+      // A long piano note at the right pitch would be heard as the singer
+      expect(played.sec).toBeLessThanOrEqual(1.5);
+      const after = await targets(page);
+      expect(after.mode, "the mode still waits for the same note").toBe(before.mode);
+      expect(after.engine, "and the engine targets it").toBe(before.mode);
+      if (after.viz != null) expect(after.viz, "and so does the highway").toBe(before.mode);
+      await page.locator("#btn-practice-stop").click();
+    });
+  }
+
+  test("a piano that will not wake replays the mode's note at Start, not the generic reference", async ({ page }) => {
+    await boot(page);
+    await page.evaluate(() => window.VTApp.openExercise("s21-chest-resonance"));
+    await expect(page.locator("#view-exercise")).toHaveClass(/active/);
+    // The audio context stays suspended whatever the app does, so Start takes
+    // its hard-recover path and replays the reference once more
+    await page.evaluate(async () => {
+      const P = window.VTPiano;
+      await P.ensure();
+      P.ctx.resume = async () => {};
+      await P.ctx.suspend();
+      P.unlock = async () => {};
+      window.__refPlayed = [];
+      const orig = P.playRefPitch.bind(P);
+      P.playRefPitch = (note, sec, sustain) => {
+        window.__refPlayed.push({ note, sec });
+        return orig(note, sec, sustain);
+      };
+    });
+    await page.locator("#btn-practice-start").click();
+    await expect.poll(() => page.evaluate(() => window.__refPlayed.length)).toBeGreaterThan(2);
+    const played = await page.evaluate(() => window.__refPlayed);
+    // s21 waits for C3 first; its generic reference is A2
+    expect(played.map((p) => p.note).filter((n) => n !== "C3"), "only the mode's note sounds").toEqual([]);
+    expect(Math.max(...played.map((p) => p.sec))).toBeLessThanOrEqual(1.5);
+  });
+
   test("five vowels: an octave change mid-take moves the note the vowels are read against", async ({ page }) => {
     await boot(page);
     await openAndStart(page, "s20-five-vowels");

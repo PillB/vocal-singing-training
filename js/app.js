@@ -3493,6 +3493,11 @@
       else state.selectedProg = "prog1";
     }
 
+    // A mode that owns its targets (profile.ownsTarget) already chose the first
+    // note in onStart(). Sound that one, not the generic refPitch: otherwise the
+    // reference the user hears — and the target this sets — is a different note
+    // from the one the mode is waiting for, so no hold can ever be credited.
+    const owned = profile.ownsTarget ? state.modeInstance?.state?.wantName : null;
     let started = false;
 
     if (inChallenge) {
@@ -3507,11 +3512,6 @@
       await playSelectedProgression(true);
       started = !!(VTPiano.loopActive || (VTPiano.playing && VTPiano.playing.length));
     } else {
-      // A mode that owns its targets (profile.ownsTarget) already chose the first
-      // note in onStart(). Sound that one, not the generic refPitch: otherwise the
-      // reference the user hears — and the target this sets — is a different note
-      // from the one the mode is waiting for, so no hold can ever be credited.
-      const owned = profile.ownsTarget ? state.modeInstance?.state?.wantName : null;
       const note = effectiveNoteName(owned || profile.refPitch || ex.audio?.refPitch);
       if (note) {
         // An owning mode sounds each target itself (about 1.5 s): a 4 s replay
@@ -3550,10 +3550,11 @@
         await VTPiano.unlock?.();
         await VTPiano.resume?.();
         if (hasProg) await playSelectedProgression(true);
-        else if (profile.refPitch || ex.audio?.refPitch) {
+        else if (owned || profile.refPitch || ex.audio?.refPitch) {
+          // The same note, and length, as the first try above
           await VTPiano.playRefPitch(
-            effectiveNoteName(profile.refPitch || ex.audio.refPitch),
-            sec,
+            effectiveNoteName(owned || profile.refPitch || ex.audio.refPitch),
+            owned ? Math.min(sec, 1.5) : sec,
             true
           );
         }
@@ -6265,11 +6266,19 @@
     });
 
     $("#btn-ref-pitch")?.addEventListener("click", async () => {
-      const note = effectiveNoteName(state.exercise?.audio?.refPitch || "A2");
+      // While a mode that owns its targets runs, the reference is the note it
+      // is waiting for, not the exercise's generic refPitch, and the target
+      // stays the mode's. Kept short like the mode's own cue (see
+      // startExerciseSound): a long note at the right pitch would be heard
+      // by the mic as the singer.
+      const owns = state.practiceLive && !!state.exercise && getProfile(state.exercise).ownsTarget;
+      const owned = owns ? state.modeInstance?.state?.wantName : null;
+      const note = effectiveNoteName(owned || state.exercise?.audio?.refPitch || "A2");
       const sustain = $("#chk-sustain")?.checked;
-      const sec = sustain ? Number($("#sustain-sec")?.value || 4) : 2.5;
+      const full = sustain ? Number($("#sustain-sec")?.value || 4) : 2.5;
+      const sec = owned ? Math.min(full, 1.5) : full;
       const f = await VTPiano.playRefPitch(note, sec, true);
-      if (f) {
+      if (f && !owns) {
         state.practice.setTargetFreq(f);
         if (state.pitchViz) state.pitchViz.setTargetFreq(f);
       }

@@ -9111,6 +9111,8 @@
     /** The note, at the octave the octave control asks for. */
     _target() {
       const st = this.state;
+      // The octave the note was looked up at (see onFrame)
+      st.shift = global.VTGetOctaveShift ? global.VTGetOctaveShift() : 0;
       const n = shiftedNote(st.refName);
       if (!n) return null;
       st.target = global.VTPitchUtils?.noteNameToDual ? global.VTPitchUtils.noteNameToDual(n) : n;
@@ -9154,6 +9156,9 @@
       const V = global.VTViz;
       const K = V?.scenes?.resonanceKit;
       if (!K || st.review) return;
+      // The octave moved mid-round: the vowels are read against the note the
+      // piano now plays, not the one it played before
+      if ((global.VTGetOctaveShift ? global.VTGetOctaveShift() : 0) !== st.shift) this._ref();
       const raw = K.rawOf(frame);
       const dt = raw.dt;
       st.t += dt;
@@ -9453,6 +9458,8 @@
     },
     _pushTarget() {
       const st = this.state;
+      // The octave this target was looked up at (see onFrame)
+      st.shift = global.VTGetOctaveShift ? global.VTGetOctaveShift() : 0;
       const notes = this._zoneNotes();
       const n = notes[st.ni % Math.max(1, notes.length)];
       if (!n) return;
@@ -9611,6 +9618,10 @@
       const st = this.state;
       const K = global.VTViz?.scenes?.resonanceKit;
       if (!K || st.review) return;
+      // The learner's octave moved (auto range or the ± buttons): same note,
+      // new pitch. The piano and the engine move at once, so the target does
+      // too, or the hold waits for a note nothing plays any more.
+      if ((global.VTGetOctaveShift ? global.VTGetOctaveShift() : 0) !== st.shift) this._pushTarget();
       const raw = K.rawOf(frame);
       const dt = raw.dt;
       st.clock += dt;
@@ -10471,6 +10482,8 @@
     },
     _pushTarget() {
       if (!global.VTPitchUtils) return;
+      // The octave this step was looked up at (see onFrame)
+      this.state.shift = this._shift();
       const midi = this.state.rootMidi + this.state.pattern[this.state.i];
       const name = global.VTPitchUtils.midiToName(midi);
       const sounded = shiftedNote(name);
@@ -10701,6 +10714,14 @@
     onFrame(frame) {
       const st = this.state;
       if (st.review) return;
+      // The learner's octave moved (auto range or the ± buttons): same step,
+      // new pitch. The ladder, the lanes and the step's note move with it;
+      // the hold so far was on the old note, so it starts again.
+      if (this._shift() !== st.shift) {
+        st.acc = 0;
+        this._lockLadder();
+        this._pushTarget();
+      }
       this._feedTrack(frame);
       this._frameGate(frame);
       const hold = this.profile.holdMs || 600;

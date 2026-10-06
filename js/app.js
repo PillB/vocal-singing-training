@@ -6327,13 +6327,17 @@
     });
     // A phone that locks, or a tab that closes, keeps what was practised.
     // localStorage writes are synchronous, so this lands before the page goes.
+    // The account copy would otherwise wait on an 8 s timer that dies with the
+    // page, so whatever is waiting (this take, or a save a moment ago) is sent
+    // now. After the record, so the take is part of it.
     window.addEventListener("pagehide", () => {
       if (state.view === "exercise") recordPracticeIfDue("pagehide");
+      window.VTSync?.flush?.({ unloading: true });
     });
     document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "hidden" && state.view === "exercise") {
-        recordPracticeIfDue("hidden");
-      }
+      if (document.visibilityState !== "hidden") return;
+      if (state.view === "exercise") recordPracticeIfDue("hidden");
+      window.VTSync?.flush?.();
     });
   }
 

@@ -190,9 +190,10 @@
    * @param {string} method HTTP method.
    * @param {string} path Path under the worker base.
    * @param {object|null} body JSON body, or null.
-   * @param {{auth?: boolean, timeoutMs?: number, token?: string}} [options] Whether
-   *   to send the session token, how long to wait before giving up, and a token
-   *   to send in place of the current one (sign-out, after forgetting it).
+   * @param {{auth?: boolean, timeoutMs?: number, token?: string, keepalive?: boolean}} [options]
+   *   Whether to send the session token, how long to wait before giving up, a
+   *   token to send in place of the current one (sign-out, after forgetting
+   *   it), and whether the request must outlive the page (a closing tab).
    * @returns {Promise<{ok: boolean, status: number, data: object|null, offline?: boolean}>} Result.
    */
   async function request(method, path, body, options) {
@@ -226,6 +227,7 @@
         body: body === null || body === undefined ? undefined : JSON.stringify(body),
         credentials: "omit",
         cache: "no-store",
+        keepalive: !!(options && options.keepalive),
         signal: abort ? abort.signal : undefined
       });
     } catch {

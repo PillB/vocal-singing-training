@@ -4,10 +4,10 @@
  *
  * tests/accounts.spec.js checks a single sync and the merge rules. These follow
  * a signed-in learner through the app instead: a take updated after it was
- * first recorded, a routine finished, a week reviewed, a setting changed, a
- * connection that drops, a profile switched while a sync is out. Each one
- * used to change this device and leave the account behind, or mix up whose
- * record was whose.
+ * first recorded, a routine finished, a week reviewed, a setting changed, the
+ * tab hidden or closed, a connection that drops, a profile switched while a
+ * sync is out. Each one used to change this device and leave the account
+ * behind, or mix up whose record was whose.
  *
  * The worker is a fake at the network boundary that keeps one document per
  * profile and refuses a write on a stale revision, like
@@ -124,6 +124,15 @@ async function boot(page, server, opts = {}) {
       } catch {
         /* ignore */
       }
+      // Fetch options are not visible to page.route; note the keepalive flag.
+      const realFetch = window.fetch;
+      window.__progressFetches = [];
+      window.fetch = function (input, init) {
+        if (String(input).includes("/v1/me/progress")) {
+          window.__progressFetches.push({ method: (init && init.method) || "GET", keepalive: !!(init && init.keepalive) });
+        }
+        return realFetch.apply(this, arguments);
+      };
       const AC = window.AudioContext || window.webkitAudioContext;
       async function fakeGUM() {
         let ctx = window.VTSharedAudioCtx;
@@ -287,6 +296,46 @@ test.describe("Saved progress follows the learner", () => {
     await passQuietPeriod(page);
     await expect.poll(() => server.docs.default?.loop?.tier).toBe("ess");
     expect(server.docs.default.holdLogs.map((h) => h.seconds)).toEqual([9.4]);
+  });
+
+  test("a take kept as the tab is hidden is pushed while the page is still there", async ({ page }) => {
+    const server = createServer();
+    await boot(page, server);
+
+    await page.evaluate((id) => window.VTApp.openExercise(id), EX);
+    await page.clock.runFor(300);
+    await page.locator("#btn-practice-start").click();
+    await page.clock.runFor(50000);
+    const before = server.puts.length;
+    // A phone locking: the page is hidden, then frozen. No quiet period passes.
+    await page.evaluate(() => {
+      Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await expect.poll(() => server.puts.length, { timeout: 4000 }).toBeGreaterThan(before);
+    await expect.poll(() => serverTakes(server)).toHaveLength(1);
+  });
+
+  test("closing the tab sends what is not on the account yet", async ({ page }) => {
+    const server = createServer();
+    await boot(page, server);
+    const rev = server.revs.default;
+    const reads = server.gets.length;
+
+    await page.evaluate((id) => window.VTApp.openExercise(id), EX);
+    await page.clock.runFor(300);
+    await page.locator("#btn-practice-start").click();
+    await page.clock.runFor(50000);
+    // The tab closing. (A real close cannot be watched from here: Playwright
+    // stops routing a page's requests once it is gone.)
+    await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: false })));
+
+    // One request the browser finishes on its own, on top of the revision this
+    // page last wrote: there is no time to read first.
+    await expect.poll(() => serverTakes(server), { timeout: 4000 }).toHaveLength(1);
+    expect(server.gets.length).toBe(reads);
+    expect(server.puts[server.puts.length - 1].baseRev).toBe(rev);
+    expect(await page.evaluate(() => window.__progressFetches.filter((f) => f.method === "PUT" && f.keepalive).length)).toBe(1);
   });
 
   test("a sync that fails says so, and is tried again", async ({ page }) => {

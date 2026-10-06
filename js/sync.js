@@ -30,6 +30,12 @@
   const RETRY_MS = [30000, 120000, 600000];
   /** Failures worth trying again; a signed-out or oversized bag is not. */
   const RETRYABLE = new Set(["offline", "error", "conflict"]);
+  /**
+   * Largest body sent as the page closes. Browsers refuse a keepalive request
+   * over 64 KiB (shared with anything else leaving at the same moment), so a
+   * bigger bag waits for the next visit's sync instead.
+   */
+  const KEEPALIVE_MAX_BYTES = 60000;
 
   let timer = null;
   let running = null;
@@ -44,6 +50,10 @@
   let version = 0;
   const changedAt = new Map();
   const pushedAt = new Map();
+  // The revision this page itself last wrote or read for each profile, for the
+  // one write a closing page gets. Kept in memory only, so it can never be a
+  // number left behind by another account or another tab.
+  const confirmedRev = new Map();
 
   function unpushed(profileId) {
     return (changedAt.get(profileId) || 0) > (pushedAt.get(profileId) || 0);
@@ -311,6 +321,7 @@
         });
         if (pushed.ok) {
           writeRev(profileId, Number(pushed.data?.rev) || serverRev + 1);
+          confirmedRev.set(profileId, Number(pushed.data?.rev) || serverRev + 1);
           pushedAt.set(profileId, Math.max(pushedAt.get(profileId) || 0, seen));
           lastError = null;
           lastSyncedAt = new Date().toISOString();
@@ -399,6 +410,58 @@
   }
 
   /**
+   * Push what is waiting now, because the page may not be here in 8 seconds.
+   *
+   * Hidden (a phone locking, another tab): the page usually lives on a little,
+   * so the whole read-merge-write cycle starts at once instead of after the
+   * quiet period. Closing: there is no time to read first, so each profile
+   * with changes the account has not had goes up in one request the browser
+   * finishes on its own, written on top of the revision this page last saw.
+   * If anyone else wrote since, the server refuses it and nothing is lost: the
+   * changes are still here, and the next visit's sync merges them.
+   *
+   * @param {{unloading?: boolean}} [opts] Whether the page is going away.
+   * @returns {void}
+   */
+  function flush(opts) {
+    if (!isAvailable()) return;
+    if (!(opts && opts.unloading)) {
+      if (!timer) return;
+      clearTimeout(timer);
+      timer = null;
+      syncScheduled().catch(() => {
+        /* reported through getStatus */
+      });
+      return;
+    }
+    for (const profileId of changedAt.keys()) {
+      if (!unpushed(profileId) || !confirmedRev.has(profileId)) continue;
+      const body = { profileId, doc: localBag(profileId), baseRev: confirmedRev.get(profileId) };
+      let bytes = Infinity;
+      try {
+        bytes = new Blob([JSON.stringify(body)]).size;
+      } catch {
+        bytes = Infinity;
+      }
+      if (bytes > KEEPALIVE_MAX_BYTES) continue;
+      // Not sent twice on the same base if the page closes again after a
+      // back-forward cache brought it back.
+      confirmedRev.delete(profileId);
+      const seen = version;
+      global.VTAccount.request("PUT", "/v1/me/progress", body, { keepalive: true })
+        .then((res) => {
+          // Only read when the page was kept after all.
+          if (!res.ok) return;
+          const rev = Number(res.data?.rev) || body.baseRev + 1;
+          writeRev(profileId, rev);
+          confirmedRev.set(profileId, rev);
+          pushedAt.set(profileId, Math.max(pushedAt.get(profileId) || 0, seen));
+        })
+        .catch(() => {});
+    }
+  }
+
+  /**
    * Current sync status, synchronously.
    * @returns {{available: boolean, syncing: boolean, lastSyncedAt: string|null,
    *            lastError: string|null, rev: number}} Status.
@@ -439,6 +502,7 @@
     global.VTStorage.writeSyncBag(pulled.data.doc, profileId);
     pushedAt.set(profileId, version);
     writeRev(profileId, Number(pulled.data.rev) || 0);
+    confirmedRev.set(profileId, Number(pulled.data.rev) || 0);
     lastError = null;
     lastSyncedAt = new Date().toISOString();
     emit();
@@ -448,6 +512,7 @@
   global.VTSync = {
     syncNow,
     schedule,
+    flush,
     pullOverwrite,
     getStatus,
     onChange,
@@ -471,6 +536,7 @@
     // Signing in on a fresh device is the moment a sync is most wanted.
     global.VTAccount.onChange((state) => {
       if (state.signedIn) schedule();
+      else confirmedRev.clear();
     });
     // A failed sync need not wait out its retry once the connection is back.
     global.addEventListener?.("online", () => {

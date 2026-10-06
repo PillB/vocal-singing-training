@@ -259,6 +259,47 @@ test("an async payment outcome settles a pending session either way", () => {
   assert.equal(HANDLED_EVENT_TYPES.includes("checkout.session.async_payment_failed"), true);
 });
 
+test("only events that confirm money arrived mark a license paid", () => {
+  const event = (type, object) => mapStripeEvent({ id: "evt_p", type, created: NOW, data: { object } }, {});
+  const session = { id: "cs_p", subscription: "sub_p" };
+  assert.equal(event("checkout.session.completed", { ...session, payment_status: "paid" }).update.paid, true);
+  assert.equal(event("checkout.session.completed", { ...session, payment_status: "no_payment_required" }).update.paid, true);
+  assert.equal(event("checkout.session.completed", { ...session, payment_status: "unpaid" }).update.paid, false);
+  assert.equal(event("checkout.session.async_payment_succeeded", session).update.paid, true);
+  assert.equal(event("checkout.session.async_payment_failed", session).update.paid, false);
+  assert.equal(event("invoice.paid", { id: "in_p", subscription: "sub_p" }).update.paid, true);
+  assert.equal(event("invoice.payment_failed", { id: "in_p", subscription: "sub_p" }).update.paid, undefined);
+  assert.equal(event("customer.subscription.updated", { id: "sub_p", status: "active" }).update.paid, undefined);
+});
+
+test("a cancellation says when it took effect, and whether it was ever paid for", () => {
+  const event = (type, object) => mapStripeEvent({ id: "evt_c", type, created: NOW, data: { object } }, {});
+  const failed = event("checkout.session.async_payment_failed", { id: "cs_c", subscription: "sub_c" });
+  assert.equal(failed.update.endedAt, NOW, "a failed payment ends when Stripe said so");
+
+  const requested = event("customer.subscription.deleted", {
+    id: "sub_c",
+    current_period_end: NOW + 1000,
+    ended_at: NOW - 5,
+    cancellation_details: { reason: "cancellation_requested" }
+  });
+  assert.equal(requested.update.endedAt, NOW - 5);
+  assert.equal(requested.update.endsAt, undefined, "a paid period cancelled early is kept");
+  assert.equal(requested.update.periodEnd, NOW + 1000);
+
+  for (const object of [
+    { id: "sub_c", current_period_end: NOW + 1000, ended_at: NOW - 5, cancellation_details: { reason: "payment_failed" } },
+    { id: "sub_c", current_period_end: NOW + 1000, ended_at: NOW - 5, cancellation_details: { reason: "payment_disputed" } },
+    { id: "sub_c", status: "incomplete_expired", current_period_end: NOW + 1000, ended_at: NOW - 5 }
+  ]) {
+    const type = object.status ? "customer.subscription.updated" : "customer.subscription.deleted";
+    assert.equal(event(type, object).update.endsAt, NOW - 5, JSON.stringify(object));
+  }
+
+  const live = event("customer.subscription.updated", { id: "sub_c", status: "active" });
+  assert.equal(live.update.endedAt, null);
+});
+
 test("every mapped event carries the time it happened", () => {
   const mapped = mapStripeEvent({
     id: "evt_t",

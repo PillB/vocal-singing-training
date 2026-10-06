@@ -276,6 +276,9 @@ export function computeExpiry(entitlement, issuedAt, ttlSeconds) {
  * Rules, in order:
  *   - an unknown status, "pending" (money not in yet) or "suspended" (a
  *     subscription that stopped paying) never entitles;
+ *   - a license recorded unpaid (`paid: false`) never entitles until a
+ *     payment is confirmed, whatever status the provider reports since;
+ *     records stored before `paid` existed have none and go by status alone;
  *   - a known period end that has passed never entitles, whatever the status —
  *     access stops at the end of what was paid for until a renewal moves it;
  *   - "canceled" needs a future period end, so it stops at once when we have
@@ -294,6 +297,9 @@ export function isTokenIssuable(entitlement, nowSeconds) {
     || entitlement.status === "suspended") {
     return false;
   }
+  if (entitlement.paid === false) {
+    return false;
+  }
   const periodEnd = Number.isFinite(entitlement.periodEnd) ? entitlement.periodEnd : null;
   if (periodEnd !== null && periodEnd <= nowSeconds) {
     return false;
@@ -302,6 +308,26 @@ export function isTokenIssuable(entitlement, nowSeconds) {
     return periodEnd !== null;
   }
   return true;
+}
+
+/**
+ * True while a license waits for money that has not arrived yet, so the routes
+ * answer 202 and the browser keeps polling instead of giving up on a 403.
+ * That is a "pending" record, or one the provider already treats as live (a
+ * subscription can turn active while a delayed payment is still settling)
+ * whose payment has not been confirmed.
+ * @param {Object} entitlement Stored entitlement record.
+ * @returns {boolean} Whether the payment is still expected.
+ */
+export function isAwaitingPayment(entitlement) {
+  if (!entitlement || typeof entitlement !== "object") {
+    return false;
+  }
+  if (entitlement.status === "pending") {
+    return true;
+  }
+  return entitlement.paid === false
+    && (entitlement.status === "active" || entitlement.status === "past_due");
 }
 
 /**

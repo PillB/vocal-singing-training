@@ -49,6 +49,17 @@ answer **202 `{ok:false,reason:"pending"}`** and the browser keeps polling until
 `checkout.session.async_payment_succeeded` (→ `active`) or
 `async_payment_failed` (→ not entitled) settles it.
 
+A Stripe record also remembers whether its money arrived (`paid`). An unpaid
+checkout sets it to `false`, and only an event that confirms a payment sets it
+to `true`: `checkout.session.completed` with `payment_status` `paid` or
+`no_payment_required`, `checkout.session.async_payment_succeeded`, or
+`invoice.paid`. While it is `false` no token is issued, whatever the
+subscription's own events say. Stripe documents that a subscription paid by a
+delayed method can turn `active` before the payment settles, and stay `active`
+after it fails, so those events alone never open access. Such a record answers
+202 while the payment may still arrive, and 403 once it has failed. Records
+stored before this field existed have no `paid` and go by their status alone.
+
 A fifth stored status, `suspended`, is a subscription that stopped paying
 without being cancelled (Stripe `unpaid` or `paused`, or a Stripe status this
 worker does not know). It never issues a token either, but the routes answer
@@ -197,7 +208,12 @@ event:<provider>:<eventId>            "1"          30d TTL   idempotency
 lic:<licenseId>                       record JSON            the entitlement
 claim:<provider>:<sessionOrPaymentId> licenseId    90d TTL   ?billing=success lookup
 sub:<provider>:<subscriptionId>       licenseId              keeps one license per subscription
+paid:<licenseId>                      "1"                    a payment was confirmed (see below)
 ```
+
+`paid:` repeats a fact the record also holds, in a key nothing else writes, so
+that two webhooks processed at the same time cannot lose it: KV has no
+compare-and-swap, and the later of two concurrent writes of the record wins.
 
 D1: one database bound as `DB`, optional. The schema is created on first use
 (`ensureSchema`, every statement `IF NOT EXISTS`), so there is no migration step
@@ -324,7 +340,7 @@ Subscribe exactly these events:
 | `checkout.session.async_payment_failed` | It never cleared → not entitled |
 | `customer.subscription.created` | First subscription state |
 | `customer.subscription.updated` | Plan change, renewal, status change |
-| `customer.subscription.deleted` | Cancellation |
+| `customer.subscription.deleted` | Cancellation. A subscription paid up to it keeps the period it paid for; one cancelled while unpaid (in dunning, never paid, or with `cancellation_details.reason` `payment_failed`/`payment_disputed`) ends at `ended_at` |
 | `invoice.paid` | Successful renewal (moves `periodEnd` forward) |
 | `invoice.payment_failed` | Dunning → `past_due` |
 
@@ -469,9 +485,11 @@ webhook → claim → token flow through the router with a fake `fetch`.
 - **Cancellations and failed renewals lingering.** `customer.subscription.deleted`,
   `invoice.payment_failed` and a paused Mercado Pago preapproval all flip the
   stored status; the next `/v1/license` call refuses or downgrades. Even with no
-  event at all, access stops at `periodEnd`.
+  event at all, access stops at `periodEnd`. A subscription cancelled while it
+  was not paid up keeps none of the unpaid period.
 - **Unpaid "completed" checkouts.** A delayed payment method that never clears
-  never yields a token.
+  never yields a token, even when the subscription turns `active` first or its
+  invoices keep coming after the payment failed.
 - **One-off payments becoming lifetime access**, and **stale events
   resurrecting a cancelled subscription** (see above).
 - **Spoofed webhooks.** No signature, no state change — and Mercado Pago

@@ -9,6 +9,13 @@
  *   lic:<licenseId>                       -> record JSON
  *   claim:<provider>:<sessionOrPaymentId> -> licenseId   (90d TTL)
  *   sub:<provider>:<subscriptionId>       -> licenseId
+ *   paid:<licenseId>                      -> "1"        (a payment was confirmed)
+ *
+ * KV has no compare-and-swap, so two webhooks for one license processed at the
+ * same time can each read the record, and the later write wins with the other's
+ * change lost. A fact that never changes back once true is therefore also kept
+ * in a key of its own that only that fact ever writes, and is read back over
+ * the record, so a concurrent write of an older copy cannot lose it.
  */
 
 "use strict";
@@ -61,6 +68,15 @@ export function subscriptionKey(provider, subscriptionId) {
 }
 
 /**
+ * Key for the marker that a payment was confirmed for a license.
+ * @param {string} licenseId Opaque license id.
+ * @returns {string} KV key.
+ */
+export function paidKey(licenseId) {
+  return `paid:${licenseId}`;
+}
+
+/**
  * Check-then-set the idempotency marker for a webhook event.
  * @param {Object} kv KV namespace.
  * @param {string} provider "stripe" | "mercadopago".
@@ -99,7 +115,7 @@ export async function clearEventSeen(kv, provider, eventId) {
 }
 
 /**
- * Read an entitlement record.
+ * Read an entitlement record, with the facts kept in their own keys applied.
  * @param {Object} kv KV namespace.
  * @param {string} licenseId Opaque license id.
  * @returns {Promise<Object|null>} Record or null.
@@ -112,11 +128,18 @@ export async function getEntitlement(kv, licenseId) {
   if (!raw) {
     return null;
   }
+  let record;
   try {
-    return JSON.parse(raw);
+    record = JSON.parse(raw);
   } catch {
     return null;
   }
+  // A record still saying "unpaid" may have lost a confirmation to a
+  // concurrent write; the confirmation's own key settles it.
+  if (record && record.paid === false && (await kv.get(paidKey(licenseId)))) {
+    record.paid = true;
+  }
+  return record;
 }
 
 /**
@@ -265,16 +288,17 @@ export function isStaleUpdate(record, update) {
  * Providers deliver out of order and retry, so an update whose `occurredAt` is
  * older than the stored one may not touch plan/status/periodEnd — otherwise a
  * late `invoice.paid` resurrects a subscription that was already deleted.
- * Identity fields and the claim/subscription indexes are order-independent and
- * are still applied.
+ * Identity fields, whether a payment was confirmed, and the claim/subscription
+ * indexes are order-independent and are still applied.
  *
  * @param {Object} kv KV namespace.
  * @param {Object} update Descriptor: provider, plan, status, customerId,
- *   subscriptionId, periodEnd, periodEndFromCharge, endsAt, claimId,
- *   planSource, occurredAt.
+ *   subscriptionId, periodEnd, periodEndFromCharge, endsAt, endedAt, paid,
+ *   claimId, planSource, occurredAt.
  * @param {{now?: number, generateId?: function(): string}} [options] Injectables for tests.
  * @returns {Promise<{record: Object, created: boolean, stale: boolean}>} Stored
- *   record, whether it was new, and whether state was refused as out of order.
+ *   record, whether it was new, and whether state was refused (out of order,
+ *   or a failed payment that nothing has paid since).
  */
 export async function upsertEntitlement(kv, update, options) {
   const opts = options || {};
@@ -309,8 +333,24 @@ export async function upsertEntitlement(kv, update, options) {
   applyIfPresent(record, "customerId", update.customerId);
   applyIfPresent(record, "subscriptionId", update.subscriptionId);
 
-  const stale = isStaleUpdate(record, update);
+  // So is money: once a payment is confirmed it stays confirmed, whatever order
+  // the events arrive in. "Not paid" only holds while no confirmation has been
+  // seen. Records stored before this field existed have none.
+  if (update.paid === true) {
+    record.paid = true;
+  } else if (update.paid === false && record.paid !== true) {
+    record.paid = false;
+  }
+
+  // A license whose payment failed (recorded unpaid, then canceled) stays down
+  // until money actually arrives: Stripe keeps a subscription active after its
+  // delayed payment fails, and those later events must not lift it back.
+  const held = record.paid === false
+    && record.status === "canceled"
+    && (update.status === "active" || update.status === "past_due");
+  const stale = held || isStaleUpdate(record, update);
   if (!stale) {
+    const before = existing ? record.status : null;
     applyIfPresent(record, "plan", update.plan);
     applyIfPresent(record, "status", update.status);
     applyIfPresent(record, "planSource", update.planSource);
@@ -323,9 +363,16 @@ export async function upsertEntitlement(kv, update, options) {
     if (charged !== null && (!Number.isFinite(record.periodEnd) || charged > record.periodEnd)) {
       record.periodEnd = charged;
     }
-    // The provider took the money back (a refund, a chargeback): access ends
-    // then, whatever was paid for. Applied last so nothing above re-extends it.
+    // The provider says access ended at a given time: it took the money back
+    // (a refund, a chargeback), or ended a subscription that was never paid.
+    // Applied after the charge above so nothing re-extends it.
     capPeriodEnd(record, update.endsAt);
+    // A subscription that ended while it was not paid up (in dunning, or never
+    // paid at all) keeps none of the period it was in: access ends when it
+    // ended. A paid one cancelled early keeps the period it paid for.
+    if (record.status === "canceled" && (before === "past_due" || before === "pending" || record.paid === false)) {
+      capPeriodEnd(record, update.endedAt);
+    }
     if (Number.isFinite(update.occurredAt)) {
       record.occurredAt = Math.floor(update.occurredAt);
     }
@@ -335,6 +382,9 @@ export async function upsertEntitlement(kv, update, options) {
     record.createdAt = now;
   }
 
+  if (update.paid === true) {
+    await kv.put(paidKey(licenseId), "1");
+  }
   await putEntitlement(kv, record);
   await putClaimIndex(kv, update.provider, update.claimId, licenseId);
   await putSubscriptionIndex(kv, update.provider, record.subscriptionId, licenseId);

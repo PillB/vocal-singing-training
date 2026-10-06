@@ -10,6 +10,7 @@ import {
   computeExpiry,
   createLicenseToken,
   generateLicenseId,
+  isAwaitingPayment,
   isLicenseIdShape,
   isTokenIssuable,
   PLAN_INTERVAL_SECONDS,
@@ -182,6 +183,30 @@ test("a suspended entitlement never issues a token, whatever its period says", (
   assert.equal(isTokenIssuable(suspended, now), false);
   assert.equal(isTokenIssuable({ ...suspended, periodEnd: null }, now), false);
   assert.equal(STATUS_IDS.includes("suspended"), true);
+});
+
+test("a license recorded unpaid never issues a token until a payment is confirmed", () => {
+  const now = 1770000000;
+  const live = createEntitlement({ status: "active", periodEnd: now + 99999 });
+  assert.equal(isTokenIssuable({ ...live, paid: false }, now), false);
+  assert.equal(isTokenIssuable({ ...live, status: "past_due", paid: false }, now), false);
+  assert.equal(isTokenIssuable({ ...live, status: "canceled", paid: false }, now), false);
+  assert.equal(isTokenIssuable({ ...live, paid: true }, now), true);
+  // Records stored before the field existed go by their status alone.
+  assert.equal("paid" in live, false);
+  assert.equal(isTokenIssuable(live, now), true);
+});
+
+test("only a license still waiting for its money is told to keep polling", () => {
+  const now = 1770000000;
+  const live = createEntitlement({ status: "active", periodEnd: now + 99999 });
+  assert.equal(isAwaitingPayment({ ...live, status: "pending" }), true);
+  assert.equal(isAwaitingPayment({ ...live, paid: false }), true);
+  assert.equal(isAwaitingPayment({ ...live, status: "past_due", paid: false }), true);
+  assert.equal(isAwaitingPayment({ ...live, status: "canceled", paid: false }), false, "a failed payment is not awaited");
+  assert.equal(isAwaitingPayment({ ...live, status: "suspended" }), false);
+  assert.equal(isAwaitingPayment(live), false);
+  assert.equal(isAwaitingPayment(null), false);
 });
 
 test("periodEndForPlan turns a charge into one paid interval", () => {

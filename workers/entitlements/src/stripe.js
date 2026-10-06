@@ -289,6 +289,10 @@ function mapCheckoutSession(session, env, statusOverride) {
     plan,
     planSource,
     status,
+    // Whether the money for this checkout arrived. The store keeps an unpaid
+    // license from entitling until a payment is confirmed, whatever the
+    // subscription's own events say in the meantime.
+    paid: status === "active",
     // A checkout session carries no period end; leave whatever the
     // subscription events recorded untouched.
     periodEnd: undefined
@@ -304,6 +308,13 @@ function mapCheckoutSession(session, env, statusOverride) {
  */
 function mapSubscription(subscription, env, deleted) {
   const { plan, planSource } = planForSubscription(subscription, env);
+  const stripeStatus = String(subscription && subscription.status);
+  const endedAt = unixOrNull(subscription && subscription.ended_at);
+  const reason = subscription && subscription.cancellation_details && subscription.cancellation_details.reason;
+  // Stripe ended it because the money never came: the first payment expired,
+  // or it gave up on a renewal or the charge was disputed. No part of the
+  // current period was paid for, so its period end is not a paid-through date.
+  const unpaid = stripeStatus === "incomplete_expired" || reason === "payment_failed" || reason === "payment_disputed";
   return {
     provider: "stripe",
     claimId: null,
@@ -312,7 +323,9 @@ function mapSubscription(subscription, env, deleted) {
     plan,
     planSource,
     status: deleted ? "canceled" : mapStripeStatus(subscription && subscription.status),
-    periodEnd: subscriptionPeriodEnd(subscription)
+    periodEnd: subscriptionPeriodEnd(subscription),
+    endedAt,
+    endsAt: unpaid && endedAt !== null ? endedAt : undefined
   };
 }
 
@@ -342,6 +355,9 @@ function mapInvoice(invoice, env, paid) {
     plan: byPrice || undefined,
     planSource: byPrice ? "price_id" : undefined,
     status: paid ? "active" : "past_due",
+    // A paid invoice confirms money arrived; a failed one says nothing about
+    // whether an earlier payment did.
+    paid: paid ? true : undefined,
     periodEnd: unixOrNull(line && line.period && line.period.end)
   };
 }
@@ -403,6 +419,11 @@ export function mapStripeEvent(event, env) {
   // When the event was emitted, so a delayed or retried delivery cannot undo a
   // newer one. Stripe guarantees neither ordering nor exactly-once delivery.
   update.occurredAt = unixOrNull(event.created);
+  // When a cancellation took effect (a failed async payment has no `ended_at`
+  // of its own). The store ends a period that was never paid for there.
+  if (update.status === "canceled" && !Number.isFinite(update.endedAt)) {
+    update.endedAt = update.occurredAt;
+  }
   // A paid checkout with no subscription behind it (a one-time price) has no
   // later event to end it: entitle one plan interval from when the money
   // arrived, as for a Mercado Pago one-off payment. Webhook sessions carry no

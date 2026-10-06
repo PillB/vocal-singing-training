@@ -18,6 +18,7 @@ import {
   toPublicEntitlement,
   upsertEntitlement
 } from "../src/store.js";
+import { isTokenIssuable } from "../src/license.js";
 import { createFakeKv } from "./fixtures.mjs";
 
 const NOW = 1770000000;
@@ -32,6 +33,25 @@ function idSequence(prefix) {
   return () => {
     n += 1;
     return `${prefix}${n}`;
+  };
+}
+
+/**
+ * A view of a fake KV whose reads answer from an older snapshot, the way a
+ * webhook processed at the same time as another (or at an edge location that
+ * has not seen the latest write yet) reads the record. Writes go through.
+ * @param {Object} kv Fake KV namespace.
+ * @param {Map} snapshot Copy of `kv.store` taken earlier.
+ * @returns {Object} KV-shaped view.
+ */
+function staleView(kv, snapshot) {
+  return {
+    async get(key) {
+      const entry = snapshot.get(key);
+      return entry === undefined ? null : entry.value;
+    },
+    put: (key, value, options) => kv.put(key, value, options),
+    delete: (key) => kv.delete(key)
   };
 }
 
@@ -368,6 +388,174 @@ test("money given back ends the period at once and never lengthens it", async ()
     occurredAt: NOW + 200
   }, { now: NOW + 200, generateId });
   assert.equal(later.record.periodEnd, NOW + 100);
+});
+
+test("a confirmed payment stays confirmed, whatever order the events arrive in", async () => {
+  const kv = createFakeKv();
+  const generateId = idSequence("lic_");
+  const unpaid = await upsertEntitlement(kv, {
+    provider: "stripe",
+    claimId: "cs_p",
+    subscriptionId: "sub_p",
+    status: "pending",
+    paid: false,
+    occurredAt: NOW
+  }, { now: NOW, generateId });
+  assert.equal(unpaid.record.paid, false);
+
+  // The subscription turns active before the money arrives: still not paid.
+  const active = await upsertEntitlement(kv, {
+    provider: "stripe",
+    subscriptionId: "sub_p",
+    status: "active",
+    periodEnd: NOW + 1000,
+    occurredAt: NOW + 1
+  }, { now: NOW + 1, generateId });
+  assert.equal(active.record.status, "active");
+  assert.equal(active.record.paid, false);
+  assert.equal(isTokenIssuable(active.record, NOW + 2), false);
+
+  const paid = await upsertEntitlement(kv, {
+    provider: "stripe",
+    subscriptionId: "sub_p",
+    status: "active",
+    paid: true,
+    occurredAt: NOW + 2
+  }, { now: NOW + 2, generateId });
+  assert.equal(paid.record.paid, true);
+  assert.equal(isTokenIssuable(paid.record, NOW + 3), true);
+
+  // A late "unpaid" (the checkout, delivered last) cannot undo it.
+  const late = await upsertEntitlement(kv, {
+    provider: "stripe",
+    claimId: "cs_p",
+    status: "pending",
+    paid: false,
+    occurredAt: NOW
+  }, { now: NOW + 3, generateId });
+  assert.equal(late.record.paid, true);
+  assert.equal(late.record.status, "active");
+
+  // An "unpaid" that is itself out of order still counts while nothing has
+  // been confirmed: the money had not arrived when it was sent.
+  const other = createFakeKv();
+  await upsertEntitlement(other, {
+    provider: "stripe",
+    subscriptionId: "sub_q",
+    status: "active",
+    occurredAt: NOW + 5
+  }, { now: NOW, generateId });
+  const reordered = await upsertEntitlement(other, {
+    provider: "stripe",
+    claimId: "cs_q",
+    subscriptionId: "sub_q",
+    status: "pending",
+    paid: false,
+    occurredAt: NOW + 4
+  }, { now: NOW, generateId });
+  assert.equal(reordered.stale, true);
+  assert.equal(reordered.record.paid, false);
+  assert.equal(isTokenIssuable(reordered.record, NOW + 6), false);
+});
+
+test("a confirmed payment survives a concurrent write of an older copy of the record", async () => {
+  const kv = createFakeKv();
+  const generateId = idSequence("lic_");
+  await upsertEntitlement(kv, {
+    provider: "stripe",
+    claimId: "cs_c",
+    subscriptionId: "sub_c",
+    status: "pending",
+    paid: false,
+    occurredAt: NOW
+  }, { now: NOW, generateId });
+
+  // The payment settles. The confirmation and the subscription's own update
+  // are processed at once: the second read the record before the first wrote.
+  const before = new Map(kv.store);
+  await upsertEntitlement(kv, {
+    provider: "stripe",
+    subscriptionId: "sub_c",
+    status: "active",
+    paid: true,
+    periodEnd: NOW + 1000,
+    occurredAt: NOW + 10
+  }, { now: NOW + 10, generateId });
+  await upsertEntitlement(staleView(kv, before), {
+    provider: "stripe",
+    subscriptionId: "sub_c",
+    status: "active",
+    periodEnd: NOW + 1000,
+    occurredAt: NOW + 10
+  }, { now: NOW + 10, generateId });
+
+  const written = JSON.parse(kv.store.get(licenseKey("lic_1")).value);
+  assert.equal(written.paid, false, "the record itself lost the confirmation");
+  const read = await getEntitlement(kv, "lic_1");
+  assert.equal(read.paid, true, "the confirmation's own key restores it");
+  assert.equal(isTokenIssuable(read, NOW + 20), true);
+});
+
+test("a failed payment holds the license down until money arrives", async () => {
+  const kv = createFakeKv();
+  const generateId = idSequence("lic_");
+  await upsertEntitlement(kv, {
+    provider: "stripe",
+    claimId: "cs_h",
+    subscriptionId: "sub_h",
+    status: "canceled",
+    paid: false,
+    endedAt: NOW,
+    occurredAt: NOW
+  }, { now: NOW, generateId });
+
+  for (const status of ["active", "past_due"]) {
+    const lifted = await upsertEntitlement(kv, {
+      provider: "stripe",
+      subscriptionId: "sub_h",
+      status,
+      periodEnd: NOW + 99999,
+      occurredAt: NOW + 10
+    }, { now: NOW + 10, generateId });
+    assert.equal(lifted.stale, true, status);
+    assert.equal(lifted.record.status, "canceled", status);
+    assert.equal(lifted.record.periodEnd, NOW, status);
+  }
+
+  // The customer pays the open invoice after all.
+  const paid = await upsertEntitlement(kv, {
+    provider: "stripe",
+    subscriptionId: "sub_h",
+    status: "active",
+    paid: true,
+    periodEnd: NOW + 99999,
+    occurredAt: NOW + 20
+  }, { now: NOW + 20, generateId });
+  assert.equal(paid.record.status, "active");
+  assert.equal(paid.record.periodEnd, NOW + 99999);
+});
+
+test("a cancellation ends a period that was never paid for when it took effect", async () => {
+  for (const [before, capped] of [["past_due", true], ["pending", true], ["active", false]]) {
+    const kv = createFakeKv();
+    const generateId = idSequence("lic_");
+    await upsertEntitlement(kv, {
+      provider: "stripe",
+      subscriptionId: "sub_e",
+      status: before,
+      periodEnd: NOW + 2000,
+      occurredAt: NOW
+    }, { now: NOW, generateId });
+    const ended = await upsertEntitlement(kv, {
+      provider: "stripe",
+      subscriptionId: "sub_e",
+      status: "canceled",
+      periodEnd: NOW + 2000,
+      endedAt: NOW + 100,
+      occurredAt: NOW + 100
+    }, { now: NOW + 100, generateId });
+    assert.equal(ended.record.periodEnd, capped ? NOW + 100 : NOW + 2000, before);
+  }
 });
 
 test("the client view carries no provider-internal ids", () => {

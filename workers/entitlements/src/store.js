@@ -19,9 +19,14 @@
  * the record, so a concurrent write of an older copy cannot lose it. KV is also
  * eventually consistent, so another edge location may not see such a key for
  * up to about a minute: the fact is then late, not lost. Changes that are not
- * one-way (an ordinary status or period update) can still be lost that way;
- * closing that needs a single writer per license (a Durable Object, or a D1
- * row updated conditionally), which this store does not have.
+ * one-way (an ordinary status or period update, a refund) can still be lost
+ * that way. Worse, the first two events for a new license processed at once
+ * (a checkout and its subscription's first event) can each find no license and
+ * mint one: the claim then points at one record and the subscription index,
+ * which every later event follows, at the other, so the claimed copy never
+ * hears of a renewal or a cancellation. Closing all of that needs a single
+ * writer per license (a Durable Object, or a D1 row updated conditionally),
+ * which this store does not have.
  */
 
 "use strict";

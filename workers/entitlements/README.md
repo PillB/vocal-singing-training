@@ -345,11 +345,18 @@ Consequences worth understanding before you ship:
   at the same moment both read the record, and the later write wins. A
   confirmed payment and a deletion survive that through their own keys, and
   KV's eventual consistency only delays them (another edge location can take
-  up to about a minute to see a write). Any other change can be lost to it:
-  for example, a renewal's new period end, until the next event corrects it.
-  Closing that needs one writer per license (a Durable Object, or a D1 row
-  updated only when its stored `occurredAt` is older), which this worker
-  does not have.
+  up to about a minute to see a write). Any other change can be lost to it,
+  a refund included. A renewal's new period end comes back with the next
+  event that carries it; a refund only if Mercado Pago notifies about that
+  payment again. Worse, the first two events for a new license (a checkout
+  and its subscription's first event) processed at once can each find no
+  license and mint one. The claim then points at one record and the
+  subscription index, which every later event follows, at the other, so the
+  claimed copy never hears of a renewal or a cancellation and does not heal:
+  a cancelled customer could keep Pro until the period it already holds runs
+  out, or for good if it holds none. Closing all of this needs one writer per
+  license (a Durable Object, or a D1 row updated only when its stored
+  `occurredAt` is older), which this worker does not have.
 
 ## Registering the webhooks
 

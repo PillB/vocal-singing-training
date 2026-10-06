@@ -5,8 +5,9 @@
  * tests/accounts.spec.js checks a single sync and the merge rules. These follow
  * a signed-in learner through the app instead: a take updated after it was
  * first recorded, a routine finished, a week reviewed, a setting changed, a
- * profile switched while a sync is out. Each one used to change this device
- * and leave the account behind, or mix up whose record was whose.
+ * connection that drops, a profile switched while a sync is out. Each one
+ * used to change this device and leave the account behind, or mix up whose
+ * record was whose.
  *
  * The worker is a fake at the network boundary that keeps one document per
  * profile and refuses a write on a stale revision, like
@@ -34,6 +35,9 @@ function createServer(seed) {
     revs: { ...((seed && seed.revs) || {}) },
     puts: [],
     gets: [],
+    // "abort" drops every progress request as a dead connection would;
+    // "put" answers every write with a server error.
+    fail: null,
     // When set, a progress GET waits on this promise before answering.
     holdGet: null
   };
@@ -71,6 +75,7 @@ async function installWorker(page, server) {
       });
     }
     if (url.pathname !== "/v1/me/progress") return json(404, { ok: false, reason: "not_found" });
+    if (server.fail === "abort") return route.abort("internetdisconnected").catch(() => {});
     if (method === "GET") {
       const profileId = url.searchParams.get("profileId");
       server.gets.push(profileId);
@@ -85,6 +90,7 @@ async function installWorker(page, server) {
     }
     const profileId = body.profileId;
     server.puts.push({ profileId, baseRev: body.baseRev, doc: body.doc });
+    if (server.fail === "put") return json(500, { ok: false, reason: "internal" });
     if (Number(body.baseRev || 0) !== (server.revs[profileId] || 0)) {
       return json(409, { ok: false, reason: "conflict" });
     }
@@ -281,6 +287,58 @@ test.describe("Saved progress follows the learner", () => {
     await passQuietPeriod(page);
     await expect.poll(() => server.docs.default?.loop?.tier).toBe("ess");
     expect(server.docs.default.holdLogs.map((h) => h.seconds)).toEqual([9.4]);
+  });
+
+  test("a sync that fails says so, and is tried again", async ({ page }) => {
+    const server = createServer();
+    await boot(page, server);
+
+    server.fail = "abort";
+    await page.evaluate(() => window.VTStorage.addHoldLog(5));
+    await passQuietPeriod(page);
+    await expect.poll(() => page.evaluate(() => window.VTSync.getStatus().lastError)).toBe("offline");
+    await page.evaluate(() => window.VTApp.openAccount());
+    await expect(page.locator("#account-sync")).toHaveText("No se pudo guardar. Lo intentaremos de nuevo.");
+    await page.evaluate(() => window.VTApp.closeAccount());
+
+    // The connection comes back without a word; the retry finds it.
+    server.fail = null;
+    await page.clock.runFor(31000);
+    await page.waitForTimeout(300);
+    await expect.poll(() => server.docs.default?.holdLogs?.length || 0).toBe(1);
+    await expect.poll(() => page.evaluate(() => window.VTSync.getStatus().lastError)).toBe(null);
+  });
+
+  test("a write the worker refused is tried again, as the panel promises", async ({ page }) => {
+    const server = createServer();
+    await boot(page, server);
+    const rev = server.revs.default;
+
+    server.fail = "put";
+    await page.evaluate(() => window.VTApp.openAccount());
+    await page.locator("#btn-account-sync").click();
+    await expect(page.locator("#account-sync")).toHaveText("No se pudo guardar. Lo intentaremos de nuevo.");
+
+    server.fail = null;
+    await page.clock.runFor(31000);
+    await page.waitForTimeout(300);
+    await expect.poll(() => server.revs.default).toBe(rev + 1);
+    await expect(page.locator("#account-sync")).toHaveText("Progreso guardado en tu cuenta.");
+  });
+
+  test("the connection coming back starts a sync", async ({ page }) => {
+    const server = createServer();
+    await boot(page, server);
+
+    server.fail = "abort";
+    await page.evaluate(() => window.VTStorage.addHoldLog(5));
+    await passQuietPeriod(page);
+    await expect.poll(() => page.evaluate(() => window.VTSync.getStatus().lastError)).toBe("offline");
+
+    server.fail = null;
+    await page.evaluate(() => window.dispatchEvent(new Event("online")));
+    await passQuietPeriod(page);
+    await expect.poll(() => server.docs.default?.holdLogs?.length || 0).toBe(1);
   });
 
   test("switching profile while a sync is out keeps each record its own", async ({ page }) => {

@@ -22,12 +22,21 @@
   const MAX_ATTEMPTS = 3;
   /** Quiet period after a change before pushing, so a session does not write per rep. */
   const DEBOUNCE_MS = 8000;
+  /**
+   * Waits before trying a failed sync again, the last one repeating while it
+   * keeps failing: soon enough for a dropped connection that comes straight
+   * back, sparse enough not to hammer a worker that is down.
+   */
+  const RETRY_MS = [30000, 120000, 600000];
+  /** Failures worth trying again; a signed-out or oversized bag is not. */
+  const RETRYABLE = new Set(["offline", "error", "conflict"]);
 
   let timer = null;
   let running = null;
   let runningFor = null;
   let lastError = null;
   let lastSyncedAt = null;
+  let failures = 0;
 
   // Which profiles hold changes the account has not had yet. Every synced write
   // bumps `version`; a profile is pushed up to the version that was current
@@ -280,7 +289,12 @@
           null
         );
         if (pulled.status === 401) return { ok: false, reason: "signed_out" };
-        if (!pulled.ok) return { ok: false, reason: pulled.offline ? "offline" : "error" };
+        if (!pulled.ok) {
+          // Usually the whole of an offline sync: the read fails before any
+          // write is tried. Say so, or the panel keeps "saved" from last time.
+          lastError = pulled.offline ? "offline" : "error";
+          return { ok: false, reason: lastError };
+        }
 
         const serverRev = Number(pulled.data?.rev) || 0;
         const seen = version;
@@ -319,11 +333,14 @@
       return { ok: false, reason: "conflict" };
     })();
 
+    let result = null;
     try {
-      return await running;
+      result = await running;
+      return result;
     } finally {
       running = null;
       runningFor = null;
+      retryIfFailed(result);
       // The emits above run while `running` is still set, so every listener
       // was last told "syncing" and the account panel said "Guardando…" after
       // the save had finished. Tell them once more, now that it has.
@@ -332,12 +349,30 @@
   }
 
   /**
+   * After a failed cycle, try again later, waiting longer each time it fails.
+   * The panel promises exactly this ("Lo intentaremos de nuevo"). A change
+   * already waiting to be pushed keeps its own, sooner, timer.
+   * @param {{ok: boolean, reason?: string}|null} result The cycle's result.
+   * @returns {void}
+   */
+  function retryIfFailed(result) {
+    if (result && result.ok) {
+      failures = 0;
+      return;
+    }
+    if (result && !RETRYABLE.has(result.reason)) return;
+    failures += 1;
+    if (!timer) schedule(RETRY_MS[Math.min(failures, RETRY_MS.length) - 1]);
+  }
+
+  /**
    * Ask for a sync once the practising has settled down.
    * Called on every write of synced data (see the listener below): the timer
    * collapses a burst into one write, which matters on a free-tier database.
+   * @param {number} [delayMs] How long to wait; the quiet period by default.
    * @returns {void}
    */
-  function schedule() {
+  function schedule(delayMs = DEBOUNCE_MS) {
     if (!isAvailable()) return;
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => {
@@ -345,7 +380,7 @@
       syncScheduled().catch(() => {
         /* reported through getStatus */
       });
-    }, DEBOUNCE_MS);
+    }, delayMs);
   }
 
   /**
@@ -404,6 +439,7 @@
     global.VTStorage.writeSyncBag(pulled.data.doc, profileId);
     pushedAt.set(profileId, version);
     writeRev(profileId, Number(pulled.data.rev) || 0);
+    lastError = null;
     lastSyncedAt = new Date().toISOString();
     emit();
     return { ok: true };
@@ -435,6 +471,10 @@
     // Signing in on a fresh device is the moment a sync is most wanted.
     global.VTAccount.onChange((state) => {
       if (state.signedIn) schedule();
+    });
+    // A failed sync need not wait out its retry once the connection is back.
+    global.addEventListener?.("online", () => {
+      if (lastError) schedule();
     });
   }
 })(window);

@@ -2467,11 +2467,13 @@
     forceOpenExercise(id, fromStructured);
   }
 
-  function renderExercise() {
-    const ex = state.exercise;
-    if (!ex) return;
-    hideMicBlocked();
-
+  /**
+   * The open exercise's own words: its name, badge, way back, original,
+   * research, steps, tips and mistakes. Written on every open, and again on a
+   * language switch (relabelExercise).
+   * @returns {string[]} the steps, for the stage's guide
+   */
+  function renderExerciseText(ex) {
     $("#ex-title").textContent = window.VTI18n ? VTI18n.exTitle(ex) : ex.title;
     const tier = ex.tier || "basic";
     // Inside today's basics every step is a warm-up of the routine's track,
@@ -2510,6 +2512,15 @@
     $("#ex-mistakes").innerHTML = (mistakes || [])
       .map((m) => `<li>${escapeHtml(m)}</li>`)
       .join("");
+    return steps;
+  }
+
+  function renderExercise() {
+    const ex = state.exercise;
+    if (!ex) return;
+    hideMicBlocked();
+
+    const steps = renderExerciseText(ex);
 
     // Timer (integrated into cockpit — always show display when timer exists)
     // Micro-session: 5 min soft cap for comeback practice
@@ -2805,6 +2816,65 @@
     // Record opt only when exercise supports record
     const recOpt = $("#opt-auto-record");
     if (recOpt) recOpt.style.display = ex.audio.record ? "" : "none";
+  }
+
+  /**
+   * Whether this open holds something a fresh render would throw away: a take
+   * started or stopped, its recording, a rating.
+   */
+  function exerciseUnderWay() {
+    return !!(
+      state.practiceLive ||
+      state.practiceStarting ||
+      state.sessionPractice?.everStarted ||
+      $("#playback-area")?.childElementCount ||
+      state.rate?.feel ||
+      state.rate?.result
+    );
+  }
+
+  /**
+   * A language switch on an exercise under way: the same screen, in the other
+   * language. Rendering it again opened it fresh, which mid-take put Empezar
+   * over a live microphone and a running clock (the time sung after it was
+   * not counted), and after Stop removed the take's recording and its Save.
+   * The mode's own panel and the details form keep their words until the
+   * next open: rebuilding them would lose what they hold.
+   */
+  function relabelExercise() {
+    const ex = state.exercise;
+    if (!ex) return;
+    const profile = getProfile(ex);
+    renderStageGuide(renderExerciseText(ex), !profile.showPitch);
+    const cue = $("#mode-cue");
+    if (cue) cue.textContent = (window.VTI18n?.lang === "es" && profile.cueEs) || profile.cue || tt("practice.hint");
+    // The switch put these back to their defaults (data-i18n); say what is true now.
+    const pill = $("#practice-status");
+    if (pill) pill.textContent = tt(state.practiceLive ? "practice.live" : "practice.ready");
+    const start = $("#btn-practice-start");
+    if (start) start.textContent = tt(document.body.classList.contains("ex-ended") ? "practice.again" : "practice.start");
+    const guideBtn = $("#btn-toggle-guide");
+    if (guideBtn) {
+      guideBtn.textContent = tt(state.guideOpen ? "ex.hideGuide" : "ex.showGuide");
+      guideBtn.setAttribute("aria-label", tt(state.guideOpen ? "ex.hideGuideAria" : "ex.showGuideAria"));
+    }
+    const metricsBtn = $("#btn-toggle-metrics");
+    if (metricsBtn) metricsBtn.textContent = tt(state.metricsOpen ? "metrics.hide" : "metrics.show");
+    const piano = $("#btn-toggle-piano");
+    if (piano && !piano.hidden) {
+      setPianoToggleLabel(piano, !!state.pianoOpen);
+      piano.title = tt(state.pianoOpen ? "piano.hidePanel" : "piano.showPanel");
+      piano.setAttribute("aria-label", piano.title);
+    }
+    // The take's words, not its recording.
+    const takeK = $("#rate-take-k");
+    if (takeK) takeK.textContent = tt("rate.take");
+    const save = $("#btn-save-rec");
+    if (save) save.textContent = tt(save.disabled ? "rate.takeSaved" : "rate.takeSave");
+    const discard = $("#btn-discard-rec");
+    if (discard) discard.textContent = tt("rate.takeDiscard");
+    paintRating();
+    syncStructuredProgress();
   }
 
   /** Progression keys available for the open exercise */
@@ -8691,7 +8761,10 @@
       VTI18n.init();
       VTI18n.onChange = () => {
         renderExerciseList();
-        if (state.view === "exercise" && state.exercise) renderExercise();
+        if (state.view === "exercise" && state.exercise) {
+          if (exerciseUnderWay()) relabelExercise();
+          else renderExercise();
+        }
         if ($("#step-done") && !$("#step-done").hidden) renderStepDone();
         // Plan and history build their copy at render time, so a language
         // switch has to re-render them or they stay in the old language.

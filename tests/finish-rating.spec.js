@@ -591,6 +591,54 @@ test.describe("Rating: one tap after a take", () => {
     await expect(page.locator("#rate-note")).toContainText("Saved:");
   });
 
+  test("a language switch mid-take changes the words, not the take: the mic, the clock and Stop stay", async ({ page }) => {
+    await boot(page, { viewport: { width: 1280, height: 800 } });
+    await openSingle(page, "s4-lip-trills");
+    await start(page);
+    await page.clock.fastForward(20000);
+    await page.clock.runFor(500);
+    const clocks = () =>
+      page.evaluate(() => ({ sung: window.VTApp.getPracticedSec(), left: window.VTApp.getState().timer.remaining }));
+    const before = await clocks();
+    const esTitle = await page.locator("#ex-title").textContent();
+    await page.locator("#btn-lang").click();
+    await page.clock.runFor(500);
+    expect(await live(page)).toBe(true);
+    await expect(page.locator("#btn-practice-stop")).toBeVisible();
+    await expect(page.locator("#btn-practice-start")).toBeHidden();
+    await expect(page.locator("#practice-status")).toHaveText(await page.evaluate(() => VTI18n.t("practice.live")));
+    await expect(page.locator("#ex-title")).not.toHaveText(esTitle);
+    await expect(page.locator("#btn-back-home")).toHaveText(await page.evaluate(() => VTI18n.t("ex.backPractice")));
+    // The time keeps counting as practice, and the clock does not start over.
+    await page.clock.fastForward(5000);
+    await page.clock.runFor(500);
+    const after = await clocks();
+    expect(after.sung - before.sung).toBeGreaterThan(5);
+    expect(after.left).toBeLessThan(before.left - 5);
+  });
+
+  test("a language switch after Stop keeps the take's recording, its Save and the time sung", async ({ page }) => {
+    await boot(page, { viewport: { width: 1280, height: 800 } });
+    await openSingle(page, "v1-diction");
+    await page.evaluate(() => (document.querySelector("#chk-auto-record").checked = true));
+    await start(page);
+    // MediaRecorder hands over its data on its own clock.
+    await page.waitForTimeout(1200);
+    await page.clock.fastForward(28000);
+    await page.clock.runFor(2000);
+    await page.locator("#btn-practice-stop").click();
+    await expect(page.locator("#btn-save-rec")).toHaveText("Guardar en historial");
+    const timer = await page.locator("#timer-display").textContent();
+    await page.locator("#btn-lang").click();
+    await page.clock.runFor(500);
+    await expect(page.locator("#metrics-card #playback-area audio")).toHaveCount(1);
+    await expect(page.locator("#btn-save-rec")).toHaveText("Save to history");
+    await expect(page.locator("#btn-discard-rec")).toHaveText("Discard");
+    await expect(page.locator("#rate-time")).toContainText("Time:");
+    await expect(page.locator("#timer-display")).toHaveText(timer);
+    await expect(page.locator("#practice-status")).toHaveText(await page.evaluate(() => VTI18n.t("practice.ready")));
+  });
+
   test("muted under automation without the opt-in: the mic still stops, the form stays open for other specs", async ({ page }) => {
     await boot(page, { rateOn: false });
     await openSingle(page, "s4-lip-trills");

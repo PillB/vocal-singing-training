@@ -398,5 +398,12 @@ export function mapStripeEvent(event, env) {
   // When the event was emitted, so a delayed or retried delivery cannot undo a
   // newer one. Stripe guarantees neither ordering nor exactly-once delivery.
   update.occurredAt = unixOrNull(event.created);
+  // A paid checkout with no subscription behind it (a one-time price) has no
+  // later event to end it: entitle one plan interval from when the money
+  // arrived, as for a Mercado Pago one-off payment. Webhook sessions carry no
+  // line items, so a yearly pass needs `metadata.plan` on its Payment Link.
+  if (event.type.startsWith("checkout.session.") && !update.subscriptionId && update.status === "active") {
+    update.periodEndFromCharge = update.occurredAt ?? unixOrNull(object.created);
+  }
   return { handled: true, update };
 }

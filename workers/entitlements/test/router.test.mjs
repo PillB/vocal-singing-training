@@ -831,3 +831,60 @@ test("a refunded Mercado Pago subscription charge ends access until a charge goe
   const restored = await handleRequest(postJson("/v1/license", { licenseId }), env);
   assert.equal(restored.status, 200);
 });
+
+test("a one-time Stripe checkout entitles for one plan interval, not forever", async () => {
+  const env = createTestEnv();
+  const paidAt = Math.floor(Date.now() / 1000) - 60;
+  await deliverStripe(env, checkoutEvent("cs_once", "evt_once", {
+    mode: "payment",
+    subscription: null,
+    plan: "pro_monthly",
+    created: paidAt
+  }));
+  const claim = await claimFor(env, "stripe", "cs_once");
+  assert.equal(claim.status, 200);
+  assert.equal(claim.body.entitlement.periodEnd, paidAt + 2678400, "one month from the payment");
+  const verified = await verifyLicenseToken(claim.body.token, env);
+  assert.equal(verified.payload.periodEnd, paidAt + 2678400);
+
+  // The same purchase made 400 days ago has run out.
+  const old = createTestEnv();
+  await deliverStripe(old, checkoutEvent("cs_old", "evt_old", {
+    mode: "payment",
+    subscription: null,
+    plan: "pro_yearly",
+    created: paidAt - 400 * DAY
+  }));
+  const expired = await claimFor(old, "stripe", "cs_old");
+  assert.equal(expired.status, 403);
+  assert.equal(expired.body.reason, "inactive");
+  assert.equal(expired.body.token, undefined);
+});
+
+test("a one-time Stripe checkout paid by a delayed method counts from when the money arrived", async () => {
+  const env = createTestEnv();
+  const now = Math.floor(Date.now() / 1000);
+  const once = { mode: "payment", subscription: null, plan: "pro_monthly" };
+  await deliverStripe(env, checkoutEvent("cs_once_async", "evt_oa1", { ...once, paymentStatus: "unpaid", created: now - 3 * DAY }));
+  assert.equal((await claimFor(env, "stripe", "cs_once_async")).status, 202);
+  await deliverStripe(env, checkoutEvent("cs_once_async", "evt_oa2", {
+    ...once,
+    type: "checkout.session.async_payment_succeeded",
+    created: now - 60
+  }));
+  const settled = await claimFor(env, "stripe", "cs_once_async");
+  assert.equal(settled.status, 200);
+  assert.equal(settled.body.entitlement.periodEnd, now - 60 + 2678400);
+
+  const failed = createTestEnv();
+  await deliverStripe(failed, checkoutEvent("cs_once_fail", "evt_of1", { ...once, paymentStatus: "unpaid", created: now - 3 * DAY }));
+  await deliverStripe(failed, checkoutEvent("cs_once_fail", "evt_of2", {
+    ...once,
+    type: "checkout.session.async_payment_failed",
+    paymentStatus: "unpaid",
+    created: now - 60
+  }));
+  const refused = await claimFor(failed, "stripe", "cs_once_fail");
+  assert.equal(refused.status, 403, "a failed payment gets no interval");
+  assert.equal(refused.body.entitlement.periodEnd, null);
+});

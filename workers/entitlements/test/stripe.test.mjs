@@ -184,6 +184,40 @@ test("checkout.session.completed maps to an active entitlement keyed on the sess
   assert.equal(mapped.update.periodEnd, undefined);
 });
 
+test("a checkout with no subscription behind it is entitled for one interval from the payment", () => {
+  const once = mapStripeEvent({
+    id: "evt_once",
+    type: "checkout.session.completed",
+    created: NOW,
+    data: { object: { id: "cs_once", mode: "payment", subscription: null, payment_status: "paid" } }
+  }, {});
+  assert.equal(once.update.subscriptionId, null);
+  assert.equal(once.update.periodEndFromCharge, NOW);
+
+  // A subscription's checkout leaves the period to the subscription's events.
+  const recurring = mapStripeEvent({
+    id: "evt_rec",
+    type: "checkout.session.completed",
+    created: NOW,
+    data: { object: { id: "cs_rec", mode: "subscription", subscription: "sub_rec", payment_status: "paid" } }
+  }, {});
+  assert.equal(recurring.update.periodEndFromCharge, undefined);
+
+  // Money that has not arrived, or never will, buys no interval.
+  for (const [type, paymentStatus] of [
+    ["checkout.session.completed", "unpaid"],
+    ["checkout.session.async_payment_failed", "unpaid"]
+  ]) {
+    const mapped = mapStripeEvent({
+      id: "evt_x",
+      type,
+      created: NOW,
+      data: { object: { id: "cs_x", mode: "payment", subscription: null, payment_status: paymentStatus } }
+    }, {});
+    assert.equal(mapped.update.periodEndFromCharge, undefined, type);
+  }
+});
+
 test("a completed-but-unpaid session is pending, not active", () => {
   // Delayed payment methods complete the session before the money arrives.
   for (const object of [

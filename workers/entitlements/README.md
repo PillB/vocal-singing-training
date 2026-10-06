@@ -274,11 +274,14 @@ secret store.
 
 A token's `exp` is capped at the record's `periodEnd` for **every** status, not
 just cancellations, and `/v1/license` refuses once `periodEnd` has passed. That
-is what stops a Mercado Pago Checkout Pro payment — a one-off charge with no
-subscription lifecycle behind it — from becoming lifetime Pro: a payment-derived
-record is entitled for one plan interval from its approval date (31 days for
-`pro_monthly`, 365 for `pro_yearly`), and each renewal charge extends it.
-A charge never *shortens* an existing period.
+is what stops a Mercado Pago Checkout Pro payment or a Stripe checkout for a
+one-time price — a one-off charge with no subscription lifecycle behind it —
+from becoming lifetime Pro: a payment-derived record is entitled for one plan
+interval from when the money arrived (31 days for `pro_monthly`, 365 for
+`pro_yearly`), and each renewal charge extends it. A charge never *shortens* an
+existing period. Stripe webhook sessions carry no line items, so a one-time
+Stripe Payment Link meant as a yearly pass needs `metadata.plan = pro_yearly`;
+without it the pass counts as one month.
 
 Consequences worth understanding before you ship:
 

@@ -450,6 +450,37 @@ test.describe("Rating: one tap after a take", () => {
     expect((await records(page, "s4-lip-trills")).day).not.toBeNull();
   });
 
+  test("the header's guide on an exercise opens beside it: the take keeps running", async ({ page, context }) => {
+    await boot(page, { viewport: { width: 1280, height: 800 } });
+    const dialogs = [];
+    page.on("dialog", (d) => {
+      dialogs.push(d.type());
+      d.dismiss().catch(() => {});
+    });
+    await openSingle(page, "s4-lip-trills");
+    await start(page);
+    await page.clock.fastForward(50000);
+    await page.clock.runFor(500);
+    if (!(await page.locator("#link-guide").isVisible())) await page.locator("#btn-help").click();
+    const [guide] = await Promise.all([
+      context.waitForEvent("page", { timeout: 5000 }),
+      page.locator("#link-guide").click()
+    ]);
+    expect(guide.url()).toContain("/guide.html");
+    await guide.close();
+    // The exercise did not ask to be left, because it was not.
+    expect(dialogs).toEqual([]);
+    expect(page.url()).toContain("#ejercicio/s4-lip-trills");
+    expect(await live(page)).toBe(true);
+    expect((await records(page, "s4-lip-trills")).takes).toBe(0);
+    // Elsewhere it is an ordinary link in the same tab.
+    await page.locator("#btn-nav-home").click();
+    await page.locator("#leave-discard").click();
+    await page.clock.runFor(500);
+    await expect(page.locator("#view-home")).toHaveClass(/active/);
+    await expect(page.locator("#link-guide")).not.toHaveAttribute("target", /.+/);
+  });
+
   test("a count nobody asked for is not scored as zero: Fácil reads as Fácil", async ({ page }) => {
     await boot(page);
     // Pace variation: two self-ratings and a count of key slowdowns.

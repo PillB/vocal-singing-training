@@ -1103,6 +1103,17 @@
     const target = $(map[name]);
     if (target) target.classList.add("active");
     document.body.classList.toggle("view-exercise", name === "exercise");
+    // On an exercise the header's guide opens beside it, as the exercise's own
+    // guide link does: leaving the tab mid-take dropped the take and its
+    // rating without the app's own question.
+    const guide = $("#link-guide");
+    if (guide && name === "exercise") {
+      guide.target = "_blank";
+      guide.rel = "noopener";
+    } else if (guide) {
+      guide.removeAttribute("target");
+      guide.removeAttribute("rel");
+    }
     syncHeaderNav(name);
     setHeaderMenu(false);
     setHelpMenu(false);

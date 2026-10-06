@@ -44,7 +44,10 @@ function createServer(seed) {
     holdGet: null,
     // When set, a progress PUT waits on this promise before answering, as a
     // slow database round trip does.
-    holdPut: null
+    holdPut: null,
+    // Profiles whose writes the worker turns down, with the reason it gives
+    // (a fourth profile is "profile_limit").
+    refuse: {}
   };
 }
 
@@ -97,6 +100,7 @@ async function installWorker(page, server) {
     server.puts.push({ profileId, baseRev: body.baseRev, doc: body.doc });
     if (server.holdPut) await server.holdPut;
     if (server.fail === "put") return json(500, { ok: false, reason: "internal" });
+    if (server.refuse[profileId]) return json(400, { ok: false, reason: server.refuse[profileId] });
     if (Number(body.baseRev || 0) !== (server.revs[profileId] || 0)) {
       return json(409, { ok: false, reason: "conflict" });
     }
@@ -186,6 +190,22 @@ const TWO_PROFILES = {
     p_b: { id: "p_b", name: "Ana", createdAt: "2026-01-02T00:00:00Z" }
   }
 };
+
+/** An account whose plan has an element picked on the phone, not started yet. */
+function pickedOnPhone() {
+  return createServer({
+    revs: { default: 3 },
+    docs: {
+      default: {
+        v: 1,
+        profileId: "default",
+        savedAt: "2026-09-20T10:00:00.000Z",
+        progress: {},
+        weekPlan: { weekNumber: 1, element: "Volume", status: "idle", startedAt: null, checkIns: [], reviews: [], completedElements: [] }
+      }
+    }
+  });
+}
 
 /**
  * Save a held note and let its push go out, held at the worker.
@@ -534,6 +554,73 @@ test.describe("Saved progress follows the learner", () => {
     expect(server.docs.p_b?.holdLogs || []).toEqual([]);
   });
 
+  test("a profile the account turns down holds up no other, and is not tried again on a timer", async ({ page }) => {
+    const server = createServer();
+    // The account already keeps three other profiles: this one is a fourth.
+    server.refuse.p_b = "profile_limit";
+    await boot(page, server, { seed: { vt_profiles_v1: TWO_PROFILES } });
+
+    await page.evaluate(() => window.VTStorage.addHoldLog(7));
+    await page.locator("#btn-history").click();
+    await page.locator("#sel-profile").selectOption("p_b");
+    await passQuietPeriod(page);
+    await expect.poll(() => server.puts.filter((p) => p.profileId === "p_b").length).toBeGreaterThan(0);
+    await expect.poll(() => serverHolds(server)).toEqual([7]);
+    await expect.poll(() => page.evaluate(() => window.VTSync.getStatus().lastError)).toBe("refused");
+
+    // Asking again would get the same answer: no retry comes round for it.
+    const refused = server.puts.filter((p) => p.profileId === "p_b").length;
+    await page.clock.runFor(130000);
+    await page.waitForTimeout(300);
+    expect(server.puts.filter((p) => p.profileId === "p_b").length).toBe(refused);
+  });
+
+  test("a profile deleted while a sync is out is not synced, and leaves nothing behind", async ({ page }) => {
+    const server = createServer();
+    await boot(page, server, { seed: { vt_profiles_v1: TWO_PROFILES } });
+    const leftOf = (id) => page.evaluate((id) => Object.keys(localStorage).filter((k) => k.startsWith(`vt_prof_${id}_`)), id);
+
+    // A held note for each profile, both waiting on the same sync.
+    await page.evaluate(() => {
+      window.VTStorage.setActiveProfile("p_b");
+      window.VTStorage.addHoldLog(4);
+      window.VTStorage.setActiveProfile("default");
+      window.VTStorage.addHoldLog(1);
+    });
+    let release;
+    server.holdGet = new Promise((resolve) => (release = resolve));
+    const reads = server.gets.length;
+    await page.clock.runFor(9000);
+    await expect.poll(() => server.gets.length).toBeGreaterThan(reads);
+    // Ana's profile is deleted while the learner's own read is still out.
+    await page.evaluate(() => window.VTStorage.deleteProfile("p_b"));
+    expect(await leftOf("p_b")).toEqual([]);
+    server.holdGet = null;
+    release();
+    await expect.poll(() => serverHolds(server)).toEqual([1]);
+    await passQuietPeriod(page);
+
+    expect(server.gets).not.toContain("p_b");
+    expect(server.docs.p_b).toBeUndefined();
+    expect(await leftOf("p_b")).toEqual([]);
+
+    // Deleted while its own read is out: what comes back is not written for it.
+    const p3 = await page.evaluate(() => {
+      const made = window.VTStorage.createProfile("Luis");
+      window.VTStorage.setActiveProfile("default");
+      return made.id;
+    });
+    server.holdGet = new Promise((resolve) => (release = resolve));
+    const sync = page.evaluate((id) => window.VTSync.syncNow(id), p3);
+    await expect.poll(() => server.gets).toContain(p3);
+    await page.evaluate((id) => window.VTStorage.deleteProfile(id), p3);
+    server.holdGet = null;
+    release();
+    expect(await sync).toEqual({ ok: false, reason: "deleted" });
+    expect(server.docs[p3]).toBeUndefined();
+    expect(await leftOf(p3)).toEqual([]);
+  });
+
   test("a goal set on another device comes down, and a default never goes up over it", async ({ page }) => {
     const server = createServer({
       revs: { default: 3 },
@@ -593,6 +680,30 @@ test.describe("Saved progress follows the learner", () => {
       loopGoal: window.VTLoop.readLoop().goal
     }));
     expect(local).toEqual({ goals: 5, loopGoal: "5-7" });
+  });
+
+  test("a week picked on another device is not undone by a new device's untouched plan", async ({ page }) => {
+    const server = pickedOnPhone();
+    // A new device: the plan on it is the one every profile starts with.
+    await boot(page, server);
+
+    expect(server.docs.default.weekPlan.element).toBe("Volume");
+    expect(await page.evaluate(() => window.VTStorage.getWeekPlan().element)).toBe("Volume");
+  });
+
+  test("picking another element after the account's came down keeps the new pick", async ({ page }) => {
+    const server = pickedOnPhone();
+    await boot(page, server);
+
+    await page.locator("#btn-plan").click();
+    await page.clock.runFor(300);
+    await page.locator("#element-chips .chip:not([hidden]):not(.selected)").first().click();
+    const picked = await page.evaluate(() => window.VTStorage.getWeekPlan().element);
+    expect(picked).not.toBe("Volume");
+
+    await passQuietPeriod(page);
+    await expect.poll(() => server.docs.default.weekPlan.element).toBe(picked);
+    expect(await page.evaluate(() => window.VTStorage.getWeekPlan().element)).toBe(picked);
   });
 
   test("a sync that brings another device's practice redraws Historial", async ({ page }) => {

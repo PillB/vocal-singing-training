@@ -77,7 +77,12 @@ sync must never lose a session somebody actually did. So:
   cannot be recomputed from the entries.
 - The 12-week plan is a state machine, not a list, so it cannot be unioned. The
   honest answer is "whichever device got further": week, then completed
-  elements, then check-ins.
+  elements, then check-ins, then when the week started. A plan nobody touched
+  is not sent at all. Two plans still level differ only in the element picked
+  for a week not started yet: one with an element beats one without, then the
+  plan changed most recently wins (each carries the time it changed). Plans
+  saved before they carried a time cannot say, so the account's copy decides
+  and devices agree.
 - Reviews and hold logs are unioned by content identity and sorted by time.
 - Goals are a single value with no history, so the one chosen most recently
   wins. Each carries the time it was set; a default nobody set never wins over
@@ -102,7 +107,11 @@ layer asks for the sync itself, so no screen has to remember to. A write that
 lands while a sync is out gets a sync of its own after it. A read or write that
 takes longer than 45 seconds (above D1's long tail) counts as a dropped
 connection, and a failed sync is tried again after 30 seconds, 2 minutes, then
-every 10 minutes.
+every 10 minutes. A write the worker turns down with a `400` (a fourth profile,
+`profile_limit`) is not retried on a timer, since it would be turned down
+again; the next sync asks once more. One profile failing does not hold up the
+others; only being offline or signed out ends the round. A profile deleted on
+this device is skipped, so nothing of it is written back.
 
 ---
 

@@ -28,8 +28,13 @@
    * back, sparse enough not to hammer a worker that is down.
    */
   const RETRY_MS = [30000, 120000, 600000];
-  /** Failures worth trying again; a signed-out or oversized bag is not. */
+  /**
+   * Failures worth trying again. A signed-out or oversized bag is not, nor a
+   * write the worker turned down (a fourth profile): it would say the same.
+   */
   const RETRYABLE = new Set(["offline", "error", "conflict"]);
+  /** Failures every profile would meet alike, so a sync of several stops at one. */
+  const STOPS_ALL = new Set(["offline", "signed_out"]);
   /**
    * Largest body sent as the page closes. Browsers refuse a keepalive request
    * over 64 KiB (shared with anything else leaving at the same moment), so a
@@ -69,10 +74,15 @@
     return (changedAt.get(profileId) || 0) > (pushedAt.get(profileId) || 0);
   }
 
+  /** Whether a profile is no longer on this browser (deleted). */
+  function deleted(profileId) {
+    const list = global.VTStorage.getProfiles?.().list;
+    return Array.isArray(list) && !list.some((p) => p.id === profileId);
+  }
+
   /** Profiles other than the active one still holding changes, if they still exist. */
   function otherUnpushed(active) {
-    const known = new Set((global.VTStorage.getProfiles?.().list || []).map((p) => p.id));
-    return [...changedAt.keys()].filter((id) => id !== active && known.has(id) && unpushed(id));
+    return [...changedAt.keys()].filter((id) => id !== active && !deleted(id) && unpushed(id));
   }
 
   const listeners = new Set();
@@ -249,14 +259,22 @@
    *
    * Plans are a single state machine, not a list, so they cannot be unioned:
    * the honest answer is "whichever device got further", compared on the week
-   * first, then on how many elements it finished, then on check-ins.
+   * first, then on how many elements it finished, then on check-ins, then on
+   * when the week started.
    *
-   * @param {object} local This browser's plan.
-   * @param {object} remote The account's plan.
-   * @returns {object} The further-along plan.
+   * Two plans still level after that differ at most in the element picked for
+   * a week not started yet. Nothing unpicks an element, so a plan with one is
+   * ahead of a plan without; between two picks, the plan changed last wins.
+   * Plans saved before they carried a time cannot say when, so the account's
+   * copy decides, and every device ends up with the same plan rather than each
+   * keeping its own.
+   *
+   * @param {object|null} local This browser's plan, or null if never written.
+   * @param {object|null} remote The account's plan.
+   * @returns {object|null} The further-along plan.
    */
   function mergeWeekPlan(local, remote) {
-    if (!remote) return local;
+    if (!remote) return local || null;
     if (!local) return remote;
     const rank = (plan) => [
       Number(plan.weekNumber) || 0,
@@ -269,7 +287,9 @@
     if (aw !== bw) return aw > bw ? local : remote;
     if (ae !== be) return ae > be ? local : remote;
     if (ac !== bc) return ac > bc ? local : remote;
-    return as >= bs ? local : remote;
+    if (as !== bs) return as > bs ? local : remote;
+    if (!local.element !== !remote.element) return local.element ? local : remote;
+    return ms(local.updatedAt) > ms(remote.updatedAt) ? local : remote;
   }
 
   /**
@@ -392,6 +412,9 @@
       if (same && !(result && result.ok && unpushed(profileId))) return cycle;
     }
     if (!isAvailable()) return { ok: false, reason: "signed_out" };
+    // A profile deleted while this waited has nothing left to sync, and its bag
+    // written back would leave keys behind that no profile owns.
+    if (deleted(profileId)) return { ok: false, reason: "deleted" };
 
     runningFor = profileId;
     running = (async () => {
@@ -409,6 +432,8 @@
           lastError = pulled.offline ? "offline" : "error";
           return { ok: false, reason: lastError };
         }
+        // Deleted while the read was out: what came back is nobody's here now.
+        if (deleted(profileId)) return { ok: false, reason: "deleted" };
 
         const serverRev = Number(pulled.data?.rev) || 0;
         const seen = version;
@@ -441,6 +466,13 @@
           lastError = "too_large";
           emit();
           return { ok: false, reason: "too_large" };
+        }
+        if (pushed.status === 400) {
+          // Turned down for what it is (a fourth profile on the account), not
+          // for when it was sent: the same write would be turned down again.
+          lastError = "refused";
+          emit();
+          return { ok: false, reason: "refused" };
         }
         lastError = pushed.offline ? "offline" : "error";
         emit();
@@ -504,13 +536,26 @@
   /**
    * The active profile, then any other profile still holding changes: a take
    * saved just before the learner switched profile is pushed for its owner.
+   * A failure that belongs to one profile (a write turned down, a bag too
+   * large) does not keep the others back; only one every profile would meet
+   * alike, offline or signed out, ends the round. A profile that did go up
+   * after one that failed does not make the panel say all is saved.
    * @returns {Promise<void>}
    */
   async function syncScheduled() {
     const active = global.VTStorage.getActiveProfileId();
+    let failed = null;
     for (const id of [active, ...otherUnpushed(active)]) {
+      // Deleted while an earlier profile synced.
+      if (deleted(id)) continue;
       const res = await syncNow(id);
-      if (!res.ok) return;
+      if (res.ok || res.reason === "deleted") continue;
+      if (STOPS_ALL.has(res.reason)) return;
+      failed = failed || res.reason;
+    }
+    if (failed && !lastError) {
+      lastError = failed;
+      emit();
     }
   }
 
@@ -609,6 +654,7 @@
     );
     if (!pulled.ok) return { ok: false, reason: pulled.offline ? "offline" : "error" };
     if (!pulled.data?.doc) return { ok: false, reason: "empty" };
+    if (deleted(profileId)) return { ok: false, reason: "deleted" };
     // Into the profile that asked, even if the learner has switched since.
     global.VTStorage.writeSyncBag(pulled.data.doc, profileId);
     pushedAt.set(profileId, version);

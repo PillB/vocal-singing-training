@@ -244,8 +244,12 @@
     getWeekPlan() {
       return read(scopedKey(LS.weekPlan), defaultWeekPlan());
     },
+    /**
+     * `updatedAt` is when the plan last changed: between two copies at the same
+     * point of the plan, a sync keeps the one changed last (js/sync.js).
+     */
     setWeekPlan(plan) {
-      writeSynced(LS.weekPlan, plan);
+      writeSynced(LS.weekPlan, { ...(plan || {}), updatedAt: new Date().toISOString() });
     },
     getSettings() {
       return read(LS.settings, { lastTab: "vocal", maleRange: true });
@@ -326,8 +330,8 @@
      * A sync names its profile rather than following the active one, because
      * the learner can switch profile while a sync is waiting on the network.
      *
-     * Goals are left out until somebody sets them: the default is not a
-     * choice, and must not travel as one.
+     * Goals and the week plan are left out until somebody sets them: the
+     * default is not a choice, and must not travel as one.
      *
      * Recordings are deliberately left out: they live in IndexedDB, run to
      * megabytes each, and belong to a storage tier this sync is not.
@@ -342,7 +346,7 @@
         v: 1,
         profileId: id,
         progress: read(key(LS.progress), {}),
-        weekPlan: read(key(LS.weekPlan), defaultWeekPlan()),
+        weekPlan: read(key(LS.weekPlan), null),
         reviews: read(key(LS.reviews), []),
         holdLogs: read(key(LS.holdLogs), []),
         goals: read(key(LS.goals), null),

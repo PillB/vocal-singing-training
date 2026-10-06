@@ -881,6 +881,46 @@ test.describe("Accounts, gifted months and saved progress", () => {
     expect(merged.achievements).toEqual({ remote: true, local: true });
   });
 
+  test("two plans at the same point keep the element picked, and the devices agree on it", async ({ page }) => {
+    await boot(page);
+    const picks = await page.evaluate(() => {
+      const plan = (element, updatedAt) => ({
+        weekNumber: 1,
+        element,
+        status: "idle",
+        startedAt: null,
+        checkIns: [],
+        reviews: [],
+        completedElements: [],
+        ...(updatedAt ? { updatedAt } : {})
+      });
+      // Each pair merged both ways: first this device's copy over the account's,
+      // then the other way round, as the other device merges them.
+      const both = (mine, theirs) => [
+        window.VTSync.mergeWeekPlan(mine, theirs)?.element ?? null,
+        window.VTSync.mergeWeekPlan(theirs, mine)?.element ?? null
+      ];
+      return {
+        neverWritten: both(null, plan("Volume")),
+        untouched: both(plan(null), plan("Volume")),
+        untouchedLater: both(plan(null, "2026-09-22T09:00:00.000Z"), plan("Volume")),
+        later: both(plan("Volume", "2026-09-20T09:00:00.000Z"), plan("Diction", "2026-09-21T09:00:00.000Z")),
+        stamped: both(plan("Volume"), plan("Diction", "2026-09-21T09:00:00.000Z")),
+        legacy: both(plan("Volume"), plan("Diction"))
+      };
+    });
+    // A plan nobody picked anything in never replaces one somebody did.
+    expect(picks.neverWritten).toEqual(["Volume", "Volume"]);
+    expect(picks.untouched).toEqual(["Volume", "Volume"]);
+    expect(picks.untouchedLater).toEqual(["Volume", "Volume"]);
+    // Between two picks, the later one, from either device.
+    expect(picks.later).toEqual(["Diction", "Diction"]);
+    expect(picks.stamped).toEqual(["Diction", "Diction"]);
+    // Picks saved before plans carried a time: the account's copy decides, so
+    // the device that syncs next takes it and both end up with the same plan.
+    expect(picks.legacy).toEqual(["Diction", "Volume"]);
+  });
+
   test("sync does nothing at all while signed out", async ({ page }) => {
     await boot(page);
     const status = await page.evaluate(() => window.VTSync.getStatus());

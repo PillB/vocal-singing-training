@@ -17,17 +17,18 @@
  * KV has no compare-and-swap, so two webhooks for one license processed at the
  * same time can each read the record, and the later write wins with the other's
  * change lost. A fact that never changes back once true (a confirmed payment, a
- * deletion, a charge that went through or money given back, the last two only
- * ever moving on to a later charge) is therefore also kept in a key of its own
- * that only that fact ever writes, and is read back over the record, so a
- * concurrent write of an older copy cannot lose it. KV is also eventually
+ * deletion, a charge that went through or money given back, the last two
+ * meant only to move on to a later charge) is therefore also kept in a key of
+ * its own that only that fact ever writes, and is read back over the record, so
+ * a concurrent write of an older copy cannot lose it. KV is also eventually
  * consistent, so another edge location may not see such a key for up to about
  * a minute: the fact is then late, not lost. Changes that are not one-way (an
- * ordinary status or period update) can still be lost that way. The charge's
- * key is read again just before it is written and only ever moves on to a
- * later charge, so an earlier charge processed alongside a later one sets it
- * back only when the later one's write lands in the instant between that read
- * and that write, or at an edge location that has not seen the later one yet.
+ * ordinary status or period update, a charge that was turned down) can still
+ * be lost that way. The charge's key is read again just before it is written
+ * and is written only for a later charge than the one read, so an earlier
+ * charge processed alongside a later one can set it back, but only when the
+ * later one's write lands in the instant between that read and that write, or
+ * at an edge location that has not seen the later one yet.
  * The refund's key is written from the record as it was read, so the refund
  * of a later charge processed at the same moment as the refund of an earlier
  * one can still be lost. Worse, the first two events for a new license
@@ -445,6 +446,44 @@ function noteCharge(record, update) {
 }
 
 /**
+ * Remember when the latest charge that was turned down was due. Applied
+ * whatever order the notifications arrive in. Records stored before this
+ * existed have none.
+ * @param {Object} record Record being built.
+ * @param {Object} update Entitlement update descriptor.
+ * @returns {void}
+ */
+function noteDecline(record, update) {
+  if (!Number.isFinite(update.declinedAt)) {
+    return;
+  }
+  const declinedAt = Math.floor(update.declinedAt);
+  if (!Number.isFinite(record.declinedAt) || declinedAt > record.declinedAt) {
+    record.declinedAt = declinedAt;
+  }
+}
+
+/**
+ * End a stopped subscription's period when it stopped, if a charge was turned
+ * down before it stopped and none has gone through since. The period its
+ * authorization set (the next charge date) was never paid for. It keeps
+ * whatever an earlier charge paid for, and a charge that goes through later
+ * still buys its own interval.
+ * @param {Object} record Record being built.
+ * @param {unknown} stoppedAt Unix seconds it stopped, or anything else to
+ *   leave the period alone.
+ * @returns {void}
+ */
+function endDeclinedPeriod(record, stoppedAt) {
+  if (!Number.isFinite(record.declinedAt) || !Number.isFinite(stoppedAt)
+    || record.chargedAt >= record.declinedAt || record.declinedAt > stoppedAt) {
+    return;
+  }
+  const paidThrough = periodEndForPlan(record.plan, record.chargedAt);
+  capPeriodEnd(record, paidThrough !== null && paidThrough > stoppedAt ? paidThrough : stoppedAt);
+}
+
+/**
  * Entitle a charge that went through for one plan interval of the plan the
  * record holds, from when it went through. Never shortens the period.
  * @param {Object} record Record being built.
@@ -527,13 +566,16 @@ export function isStaleUpdate(record, update) {
  * and are still applied. The latest such charge is kept on the record
  * (`chargedAt`, and in `charged:` against a concurrent write) and counted
  * again on the plan an update brings, since a subscription's charge does not
- * say its plan.
+ * say its plan. The latest Mercado Pago charge that was turned down is kept
+ * too (`declinedAt`, in the record only): a subscription that stopped after
+ * it, with no charge gone through since, keeps none of the period its
+ * authorization set.
  *
  * @param {Object} kv KV namespace.
  * @param {Object} update Descriptor: provider, plan, status, customerId,
  *   subscriptionId, periodEnd, periodEndFromCharge, endsAt, endedAt, paid,
- *   paymentFailed, reversedAt, reversedChargeAt, terminal, claimId, planSource,
- *   occurredAt.
+ *   paymentFailed, reversedAt, reversedChargeAt, declinedAt, terminal, claimId,
+ *   planSource, occurredAt.
  * @param {{now?: number, generateId?: function(): string}} [options] Injectables for tests.
  * @returns {Promise<{record: Object, created: boolean, stale: boolean}>} Stored
  *   record, whether it was new, and whether state was refused (out of order,
@@ -590,6 +632,7 @@ export async function upsertEntitlement(kv, update, options) {
     record.paymentFailed = true;
   }
   noteReversal(record, update, now);
+  noteDecline(record, update);
 
   // A license whose payment failed stays down until money actually arrives:
   // Stripe keeps a subscription active after its delayed payment fails, and
@@ -651,6 +694,15 @@ export async function upsertEntitlement(kv, update, options) {
     // period it paid for. Not after a deletion, which stays as it left the
     // license; a refund of the charge still ends it, below.
     extendForCharge(record, update.periodEndFromCharge);
+  }
+  // A Mercado Pago subscription that stopped after a charge was turned down,
+  // with none gone through since, keeps none of the period its authorization
+  // set (Mercado Pago may leave the next charge date on it), whichever of the
+  // decline and the stop is processed first. A stopped record's clock is the
+  // stopped subscription's own: a charge that does not go through never moves
+  // it.
+  if (!ended && record.provider === "mercadopago" && record.status === "canceled") {
+    endDeclinedPeriod(record, record.occurredAt);
   }
   // After everything else, so neither a late refund nor a later update (a
   // subscription's next charge date) leaves open a period whose money went

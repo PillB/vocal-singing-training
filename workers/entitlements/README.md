@@ -223,8 +223,9 @@ same time cannot lose them: KV has no compare-and-swap, and the later of two
 concurrent writes of the record wins. Every read of a record applies them over
 it. `reversed:` holds the latest refunded or charged-back charge, and
 `charged:` the latest charge that went through (and so the interval it bought),
-as the record does. `charged:` is read again just before each write and is
-never set back to an earlier charge.
+as the record does. `charged:` is read again just before each write and only
+moves on to a later charge, except in the race described under "What
+concurrency can still do" below.
 
 D1: one database bound as `DB`, optional. The schema is created on first use
 (`ensureSchema`, every statement `IF NOT EXISTS`), so there is no migration step
@@ -372,13 +373,16 @@ Consequences worth understanding before you ship:
   survive that through their own keys, and KV's eventual consistency only
   delays them (another edge location can take up to about a minute to see a
   write). Any other change can be lost to it. A charge's key is read again
-  just before it is written and only moves on to a later charge, so an
-  earlier charge processed at the same moment as a later one sets it back only
-  when the later one's write lands in the instant between that read and that
-  write, or at an edge location that has not seen it yet. The refund of a
-  later charge processed at the same moment as the refund of an earlier one
-  can still be lost. A renewal's new period end comes back with the next
-  event that carries it. Worse, the first two events for a new license (a
+  just before it is written and is written only for a later charge than the
+  one it read, so an earlier charge processed at the same moment as a later
+  one can set it back, but only when the later one's write lands in the
+  instant between that read and that write, or at an edge location that has
+  not seen it yet. The refund of a later charge processed at the same moment
+  as the refund of an earlier one can still be lost. So can a Mercado Pago
+  charge that was turned down, which is kept only in the record: a
+  subscription that then stops keeps the period its authorization set. A
+  renewal's new period end comes back with the next event that carries it.
+  Worse, the first two events for a new license (a
   checkout and its subscription's first event) processed at once can each
   find no license and mint one. The claim
   then points at one record and the subscription index, which every later
@@ -465,8 +469,17 @@ a `preapproval_id`, or an authorized payment whose payment is not `approved`,
 or that is not `processed` when it has no payment yet) moves neither the
 status nor the record's `occurredAt`, so the subscription's own notifications,
 even older ones, still set its state and period: Mercado Pago retries the
-charge, and the preapproval says what became of the subscription. Only its
-refund or chargeback does something (below).
+charge, and the preapproval says what became of the subscription. Two things
+about such a charge still count. Its refund or chargeback ends the period it
+paid for (below). And when it was `rejected` or `cancelled`, the record
+remembers when it was due: a subscription paused or cancelled after that, with
+no charge gone through since, keeps none of the period its authorization set
+(Mercado Pago may clear the next charge date when it stops, or leave it),
+whichever of the decline and the stop is processed first. Access then ends
+when it stopped, or where an earlier charge's interval ends if that is later.
+A charge that goes through afterwards, a retry included, still buys its
+interval. Until it stops, an authorized subscription still runs to its next
+charge date even when its charge was turned down.
 Preapproval `authorized` → `active`, `pending` →
 `pending`, `paused`/`cancelled`/anything else → `canceled`. An approved payment
 sets the period to one plan interval from its approval date, in whatever order

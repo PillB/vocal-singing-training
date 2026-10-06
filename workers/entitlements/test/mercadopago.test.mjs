@@ -299,6 +299,45 @@ test("a subscription's charge that did not go through says nothing about the sub
   assert.equal(approved.periodEndFromCharge, isoToUnixSeconds("2026-03-01T10:05:00.000-05:00"));
 });
 
+test("a subscription's charge that was turned down says when it was due, on either topic", () => {
+  const due = "2026-03-01T10:00:00.000-05:00";
+  const updated = "2026-03-01T10:00:35.000-05:00";
+  for (const status of ["rejected", "cancelled"]) {
+    const charge = mapPaymentResource({
+      id: 504,
+      status,
+      metadata: { preapproval_id: "pre_d" },
+      date_created: due,
+      date_last_updated: updated
+    }, {});
+    assert.equal(charge.declinedAt, isoToUnixSeconds(due), status);
+    assert.equal(charge.status, undefined, `${status}: still says nothing about the subscription`);
+    assert.equal(charge.occurredAt, null, status);
+    const alone = mapPaymentResource({ id: 505, status, date_created: due, date_last_updated: updated }, {});
+    assert.equal(alone.declinedAt, undefined, `${status}: a payment on its own has no subscription to stop`);
+
+    const authorized = mapAuthorizedPaymentResource({
+      id: "ap_d",
+      preapproval_id: "pre_d",
+      status: "recycling",
+      debit_date: due,
+      date_created: "2026-02-28T10:00:00.000-05:00",
+      date_last_updated: updated,
+      payment: { status }
+    }, {});
+    assert.equal(authorized.declinedAt, isoToUnixSeconds(due), status);
+    assert.equal(authorized.occurredAt, null, status);
+  }
+  for (const payment of [{ status: "approved", date_approved: due }, { status: "in_process" }, { status: "refunded", date_approved: due }]) {
+    const mapped = mapAuthorizedPaymentResource({ id: "ap_n", preapproval_id: "pre_d", debit_date: due, payment }, {});
+    assert.equal(mapped.declinedAt, undefined, payment.status);
+    const onPaymentTopic = mapPaymentResource({ id: 506, preapproval_id: "pre_d", date_created: due, ...payment }, {});
+    assert.equal(onPaymentTopic.declinedAt, undefined, payment.status);
+  }
+  const noPaymentYet = mapAuthorizedPaymentResource({ id: "ap_y", preapproval_id: "pre_d", status: "recycling", debit_date: due }, {});
+  assert.equal(noPaymentYet.declinedAt, undefined, "nothing was turned down yet");
+});
+
 test("a refund or chargeback says when the money left and which charge it was, on either topic", () => {
   const approved = "2026-03-01T10:00:00.000-05:00";
   const reversedAt = "2026-03-03T09:00:00.000-05:00";

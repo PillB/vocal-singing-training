@@ -1666,3 +1666,181 @@ test("a yearly Mercado Pago subscriber who stops at once keeps the year when the
     }
   }
 });
+
+/**
+ * A yearly subscription's notifications on the day its card was authorized
+ * and its first charge was turned down, 35 seconds later, and on the day it
+ * stopped. Each entry is the notification kind and what the API answers.
+ * @param {string} id Preapproval id.
+ * @param {number} start When the subscription was created, unix seconds.
+ * @returns {Object<string, [string, Object]>} Notifications by name.
+ */
+function declinedFirstChargeSteps(id, start) {
+  const at = (offset) => new Date((start + offset) * 1000).toISOString();
+  const nextYear = new Date((start + 55) * 1000);
+  nextYear.setUTCMonth(nextYear.getUTCMonth() + 12);
+  const preapproval = (status, updated, nextPayment) => ["subscription_preapproval", {
+    id,
+    status,
+    reason: "Vocal Studio Pro anual",
+    auto_recurring: { frequency: 12, frequency_type: "months" },
+    next_payment_date: nextPayment,
+    date_created: at(0),
+    date_last_updated: at(updated),
+    payer_id: 5
+  }];
+  return {
+    pending: preapproval("pending", 0, null),
+    authorized: preapproval("authorized", 20, nextYear.toISOString()),
+    declined: ["subscription_authorized_payment", {
+      id: `AP-${id}`,
+      preapproval_id: id,
+      status: "recycling",
+      date_created: at(50),
+      debit_date: at(50),
+      date_last_updated: at(60),
+      payment: { id: 93, status: "rejected" }
+    }],
+    declinedPayment: ["payment", {
+      id: `PAY-${id}`,
+      status: "rejected",
+      metadata: { preapproval_id: id },
+      date_created: at(50),
+      date_last_updated: at(60),
+      payer: { id: 5 }
+    }],
+    // Five days on. Mercado Pago may clear the next charge date or leave it.
+    cancelled: preapproval("cancelled", 5 * DAY, null),
+    cancelledKeepsDate: preapproval("cancelled", 5 * DAY, nextYear.toISOString()),
+    paused: preapproval("paused", 5 * DAY, null)
+  };
+}
+
+test("a Mercado Pago subscription whose first charge was turned down keeps nothing once it stops, in any order", async () => {
+  const start = Math.floor(Date.now() / 1000) - 60 * DAY;
+  const orders = [
+    ["pending", "declined", "authorized", "cancelled"],
+    ["declined", "authorized", "cancelled"],
+    ["pending", "authorized", "declined", "cancelled"],
+    ["pending", "declined", "authorized", "cancelledKeepsDate"],
+    ["pending", "declined", "authorized", "paused"],
+    ["pending", "declinedPayment", "authorized", "cancelled"],
+    ["pending", "authorized", "cancelled", "declined"]
+  ];
+  for (const [index, order] of orders.entries()) {
+    const label = order.join(" > ");
+    const env = createTestEnv();
+    const id = `PRE-DECLINED-${index}`;
+    const steps = declinedFirstChargeSteps(id, start);
+    for (const name of order) {
+      const response = await deliverMercadoPago(env, ...steps[name]);
+      assert.equal(response.status, 200, `${label}: ${name}`);
+    }
+    const claim = await claimFor(env, "mercadopago", id);
+    assert.equal(claim.status, 403, `${label}: nothing was ever paid for`);
+    assert.equal(claim.body.token, undefined, label);
+  }
+
+  // Until it stops, an authorized subscription still runs to its next charge
+  // date, whether or not its charge went through.
+  const env = createTestEnv();
+  const steps = declinedFirstChargeSteps("PRE-DECLINED-RUNNING", start);
+  for (const name of ["pending", "declined", "authorized"]) {
+    await deliverMercadoPago(env, ...steps[name]);
+  }
+  const running = await claimFor(env, "mercadopago", "PRE-DECLINED-RUNNING");
+  assert.equal(running.status, 200);
+  assert.equal(running.body.entitlement.status, "active");
+  assert.equal(running.body.entitlement.periodEnd, Date.parse(steps.authorized[1].next_payment_date) / 1000);
+});
+
+test("a Mercado Pago subscription whose first charge goes through on a retry keeps the year, even once it stops", async () => {
+  const start = Math.floor(Date.now() / 1000) - 60 * DAY;
+  const at = (offset) => new Date((start + offset) * 1000).toISOString();
+  // The retry went through three days in, before the subscriber stopped.
+  const retriedAt = start + 3 * DAY;
+  const nextYear = new Date(retriedAt * 1000);
+  nextYear.setUTCMonth(nextYear.getUTCMonth() + 12);
+  const yearEnd = Math.floor(nextYear.getTime() / 1000);
+  for (const topic of ["subscription_authorized_payment", "payment"]) {
+    for (const retryLast of [true, false]) {
+      const label = `retry on ${topic}${retryLast ? ", processed last" : ", processed before the stop"}`;
+      const env = createTestEnv();
+      const id = `PRE-RETRIED-${topic}-${retryLast}`;
+      const steps = declinedFirstChargeSteps(id, start);
+      const retry = topic === "payment"
+        ? ["payment", {
+          id: `PAY-RETRY-${id}`,
+          status: "approved",
+          metadata: { preapproval_id: id },
+          date_created: at(3 * DAY - 5),
+          date_approved: at(3 * DAY),
+          date_last_updated: at(3 * DAY + 6),
+          payer: { id: 5 }
+        }]
+        : ["subscription_authorized_payment", {
+          ...steps.declined[1],
+          status: "processed",
+          date_last_updated: at(3 * DAY + 5),
+          payment: { id: 94, status: "approved", date_approved: at(3 * DAY) }
+        }];
+      const order = retryLast
+        ? [steps.pending, steps.declined, steps.authorized, steps.cancelled, retry]
+        : [steps.pending, steps.declined, steps.authorized, retry, steps.cancelled];
+      for (const step of order) {
+        await deliverMercadoPago(env, ...step);
+      }
+      const claim = await claimFor(env, "mercadopago", id);
+      assert.equal(claim.status, 200, `${label}: the year was paid for`);
+      assert.equal(claim.body.entitlement.status, "canceled", label);
+      assert.equal(claim.body.entitlement.periodEnd, yearEnd, `${label}: one year from the retry`);
+      const verified = await verifyLicenseToken(claim.body.token, env);
+      assert.equal(verified.valid, true, label);
+      assert.ok(verified.payload.exp <= yearEnd, label);
+    }
+  }
+});
+
+test("a Mercado Pago charge turned down after one that went through leaves the year it paid for", async () => {
+  // Paid sixty days ago; a charge out of schedule was turned down thirty days
+  // ago, and the subscriber cancelled ten days later.
+  const now = Math.floor(Date.now() / 1000);
+  const paidAt = now - 60 * DAY;
+  const at = (offset) => new Date((paidAt + offset) * 1000).toISOString();
+  const nextYear = new Date(paidAt * 1000);
+  nextYear.setUTCMonth(nextYear.getUTCMonth() + 12);
+  const yearEnd = Math.floor(nextYear.getTime() / 1000);
+  const preapproval = (status, updated, nextPayment) => ({
+    id: "PRE-PAID-THEN-DECLINED",
+    status,
+    reason: "Vocal Studio Pro anual",
+    next_payment_date: nextPayment,
+    date_last_updated: at(updated),
+    payer_id: 5
+  });
+  const env = createTestEnv();
+  await deliverMercadoPago(env, "subscription_preapproval", preapproval("authorized", -30, nextYear.toISOString()));
+  await deliverMercadoPago(env, "subscription_authorized_payment", {
+    id: "AP-PAID",
+    preapproval_id: "PRE-PAID-THEN-DECLINED",
+    status: "processed",
+    date_created: at(-5),
+    debit_date: at(-5),
+    date_last_updated: at(5),
+    payment: { id: 95, status: "approved", date_approved: at(0) }
+  });
+  await deliverMercadoPago(env, "subscription_authorized_payment", {
+    id: "AP-DECLINED",
+    preapproval_id: "PRE-PAID-THEN-DECLINED",
+    status: "recycling",
+    date_created: at(30 * DAY),
+    debit_date: at(30 * DAY),
+    date_last_updated: at(30 * DAY + 10),
+    payment: { id: 96, status: "rejected" }
+  });
+  await deliverMercadoPago(env, "subscription_preapproval", preapproval("cancelled", 40 * DAY, null));
+  const claim = await claimFor(env, "mercadopago", "PRE-PAID-THEN-DECLINED");
+  assert.equal(claim.status, 200, "the year was paid for");
+  assert.equal(claim.body.entitlement.status, "canceled");
+  assert.equal(claim.body.entitlement.periodEnd, yearEnd, "one year from the charge that went through");
+});

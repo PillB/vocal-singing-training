@@ -199,6 +199,16 @@ function isReversedPayment(status) {
 }
 
 /**
+ * True for a payment that was turned down or called off, so no money came in.
+ * @param {unknown} status Payment status.
+ * @returns {boolean} Whether it was rejected or cancelled.
+ */
+function isDeclinedPayment(status) {
+  const value = String(status);
+  return value === "rejected" || value === "cancelled";
+}
+
+/**
  * Map the status of a one-off payment (Checkout Pro, a payment link) to our
  * entitlement status. Nothing retries it, so there is no grace state: an
  * approved payment entitles, one still on its way (an unpaid cash voucher, a
@@ -400,6 +410,11 @@ export function mapPaymentResource(payment, env) {
     // which period that was. A later approved charge brings access back.
     reversedAt: reversed ? occurredAt : undefined,
     reversedChargeAt: reversed ? chargeTime(payment, occurredAt) : undefined,
+    // A subscription's charge that was turned down: the store ends the period
+    // when the subscription stops, unless a charge has gone through since.
+    declinedAt: subscriptionId && isDeclinedPayment(payment && payment.status)
+      ? chargeTime(payment, occurredAt)
+      : undefined,
     occurredAt: silent ? null : occurredAt
   };
 }
@@ -497,6 +512,13 @@ export function mapAuthorizedPaymentResource(authorized, env) {
     reversedAt: reversed ? occurredAt : undefined,
     reversedChargeAt: reversed
       ? chargeTime(payment, isoToUnixSeconds(authorized && authorized.debit_date)
+        || isoToUnixSeconds(authorized && authorized.date_created)
+        || occurredAt)
+      : undefined,
+    // A charge that was turned down, as on the payment topic. Dated by when it
+    // was due, so a retry that goes through later is the newer of the two.
+    declinedAt: isDeclinedPayment(paymentStatus)
+      ? (isoToUnixSeconds(authorized && authorized.debit_date)
         || isoToUnixSeconds(authorized && authorized.date_created)
         || occurredAt)
       : undefined,

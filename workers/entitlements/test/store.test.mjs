@@ -19,7 +19,7 @@ import {
   toPublicEntitlement,
   upsertEntitlement
 } from "../src/store.js";
-import { isAwaitingPayment, isTokenIssuable } from "../src/license.js";
+import { isAwaitingPayment, isTokenIssuable, periodEndForPlan } from "../src/license.js";
 import { mapMercadoPagoResource } from "../src/mercadopago.js";
 import { createFakeKv } from "./fixtures.mjs";
 
@@ -855,6 +855,123 @@ test("every order of a subscription's notifications gives a paid charge its inte
           for (const at of [NOW + 200, NOW + 86400, NOW + plan.day * 86400]) {
             assert.equal(isTokenIssuable(read, at), false, `${label}: nothing paid, nothing at ${at - NOW}s`);
           }
+        }
+      }
+    }
+  }
+});
+
+test("every order of an authorized subscription whose charge was turned down gives nothing once it stops", async () => {
+  const STOP = 5 * 86400;
+  const RETRY = 3 * 86400;
+  const plans = [
+    { reason: "Vocal Studio Pro mensual", plan: "pro_monthly", months: 1, day: 20 },
+    { reason: "Vocal Studio Pro anual", plan: "pro_yearly", months: 12, day: 60 }
+  ];
+  /**
+   * What the Mercado Pago API answers for each notification: the card was
+   * authorized, its first charge was turned down 35 seconds later, and the
+   * subscription stopped five days on. Optionally a retry went through on day 3.
+   * @param {Object} plan Entry of `plans`.
+   * @param {string} stopStatus "cancelled" | "paused".
+   * @param {boolean} keepsDate Whether the stopped preapproval keeps its next charge date.
+   * @returns {Object<string, {kind: string, resource: Object}>} Resources.
+   */
+  const resources = (plan, stopStatus, keepsDate) => {
+    const next = new Date((NOW + 55) * 1000);
+    next.setUTCMonth(next.getUTCMonth() + plan.months);
+    const preapproval = (status, updated, nextPayment) => ({
+      kind: "subscription_preapproval",
+      resource: {
+        id: "pre_d",
+        status,
+        reason: plan.reason,
+        next_payment_date: nextPayment,
+        date_last_updated: isoAt(updated),
+        payer_id: 9
+      }
+    });
+    return {
+      authorized: preapproval("authorized", 20, next.toISOString()),
+      stopped: preapproval(stopStatus, STOP, keepsDate ? next.toISOString() : null),
+      declinedCharge: {
+        kind: "subscription_authorized_payment",
+        resource: {
+          id: 503,
+          preapproval_id: "pre_d",
+          status: "recycling",
+          debit_date: isoAt(50),
+          date_created: isoAt(50),
+          date_last_updated: isoAt(60),
+          payment: { id: 1003, status: "rejected" }
+        }
+      },
+      declinedPayment: {
+        kind: "payment",
+        resource: {
+          id: 1003,
+          status: "rejected",
+          metadata: { preapproval_id: "pre_d" },
+          date_created: isoAt(50),
+          date_last_updated: isoAt(61),
+          payer: { id: 9 }
+        }
+      },
+      retry: {
+        kind: "payment",
+        resource: {
+          id: 1004,
+          status: "approved",
+          metadata: { preapproval_id: "pre_d" },
+          date_created: isoAt(RETRY - 5),
+          date_approved: isoAt(RETRY),
+          date_last_updated: isoAt(RETRY + 6),
+          payer: { id: 9 }
+        }
+      }
+    };
+  };
+  /**
+   * Process `order` on a fresh store and read the license back.
+   * @param {Object<string, {kind: string, resource: Object}>} notifications Resources by name.
+   * @param {Array<string>} order Names in processing order.
+   * @returns {Promise<Object>} The license.
+   */
+  const processInOrder = async (notifications, order) => {
+    const kv = createFakeKv();
+    const generateId = idSequence("lic_");
+    for (const name of order) {
+      const { kind, resource } = notifications[name];
+      await upsertEntitlement(kv, mercadoPagoUpdate(kind, resource), { now: NOW + STOP + 60, generateId });
+    }
+    return getEntitlement(kv, "lic_1");
+  };
+  const declined = orderings(["authorized", "stopped", "declinedCharge", "declinedPayment"])
+    .filter((order) => order.includes("stopped") && (order.includes("declinedCharge") || order.includes("declinedPayment")));
+  const retried = orderings(["authorized", "stopped", "declinedCharge", "declinedPayment", "retry"])
+    .filter((order) => order.includes("stopped") && order.includes("retry"));
+
+  for (const plan of plans) {
+    for (const stopStatus of ["cancelled", "paused"]) {
+      for (const keepsDate of [false, true]) {
+        const notifications = resources(plan, stopStatus, keepsDate);
+        const kind = `${plan.reason}, ${stopStatus}${keepsDate ? " keeping its next charge date" : ""}`;
+        for (const order of declined) {
+          const label = `${kind}: ${order.join(", ")}`;
+          const read = await processInOrder(notifications, order);
+          for (const at of [NOW + STOP + 60, NOW + 20 * 86400, NOW + plan.day * 86400]) {
+            assert.equal(isTokenIssuable(read, at), false, `${label}: nothing paid, nothing at ${at - NOW}s`);
+          }
+        }
+        // A retry that went through buys its interval, whatever it is processed after.
+        const nextPayment = Date.parse(notifications.authorized.resource.next_payment_date) / 1000;
+        const retryEnd = periodEndForPlan(plan.plan, NOW + RETRY);
+        for (const order of retried) {
+          const label = `${kind}, retried: ${order.join(", ")}`;
+          const read = await processInOrder(notifications, order);
+          assert.ok(read.periodEnd >= nextPayment, `${label}: the interval the retry paid for`);
+          assert.ok(read.periodEnd <= retryEnd, `${label}: no more than the retry paid for`);
+          assert.equal(isTokenIssuable(read, NOW + plan.day * 86400), true, `${label}: Pro on day ${plan.day}`);
         }
       }
     }

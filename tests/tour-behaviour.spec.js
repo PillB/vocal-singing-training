@@ -27,6 +27,29 @@ const progressNumbers = (text) => {
   return m ? { n: Number(m[1]), total: Number(m[2]) } : null;
 };
 
+/** Walk the site tour: the exercise its exercise stop shows, the last button's label, and what that button opens. */
+async function walkTour(page) {
+  await page.evaluate(() => window.VTTour.start(true));
+  await page.waitForTimeout(400);
+  let shown = null;
+  for (let i = 0; i < 8; i += 1) {
+    const s = await page.evaluate(() => ({
+      view: window.VTApp.getState().view,
+      id: window.VTApp.getState().exercise?.id || null
+    }));
+    if (s.view === "exercise") shown = s.id;
+    const p = progressNumbers(await page.locator("[data-tour-progress]").textContent());
+    if (p && p.n === p.total) break;
+    await page.locator("[data-tour-next]").click();
+    await page.waitForTimeout(420);
+  }
+  const label = (await page.locator("[data-tour-next]").textContent()).trim();
+  await page.locator("[data-tour-next]").click();
+  await page.waitForTimeout(700);
+  const opened = await page.evaluate(() => window.VTApp.getState().exercise?.id || null);
+  return { shown, label, opened };
+}
+
 test.describe("Tour targets", () => {
   test("every home step points at something really on screen", async ({ page }) => {
     await boot(page);
@@ -282,6 +305,35 @@ test.describe("Tour manners", () => {
       stored: localStorage.getItem("vt_tour_v1")
     }));
     expect(s).toEqual({ view: "exercise", id: expected, stored: "finished" });
+  });
+
+  test("the exercise stop shows what the last stop's button opens, in the classic arm", async ({ page }) => {
+    // The classic arm's panel suggests an exercise of its own, not the Mínimo.
+    await boot(page, { query: "?ab_loop_home_2026_10=classic" });
+    const r = await walkTour(page);
+    expect(r.opened).toBeTruthy();
+    expect(r.shown).toBe(r.opened);
+  });
+
+  test("with a guided session left open, the tour shows and starts the step the panel resumes", async ({ page }) => {
+    await boot(page);
+    // A returning visitor, so the loop is on, with a guided session open.
+    await page.evaluate(() => {
+      const D = window.VTDays;
+      VTStorage.setDays({ v: 1, days: { [D.addDays(D.dayKey(), -1)]: { sec: 120, n: 1, ex: ["s4-lip-trills"] } }, rest: { bank: 0, earnedAt: 0, used: [] }, backfilled: true });
+      window.VTApp.setTab("singing");
+      window.VTApp.startStructured("daily");
+    });
+    await page.waitForTimeout(300);
+    await page.evaluate(() => window.VTApp.goHome());
+    await page.waitForTimeout(300);
+    expect(await page.evaluate(() => window.VTLoop.isOn())).toBe(true);
+    const current = await page.evaluate(() => window.VTSession.currentExerciseId());
+    const r = await walkTour(page);
+    expect(r.shown).toBe(current);
+    expect(r.opened).toBe(current);
+    // Its button resumes the session; it does not start the basics.
+    expect(r.label).toBe("Empezar");
   });
 
   test("Enter on Skip closes the tour instead of advancing it", async ({ page }) => {

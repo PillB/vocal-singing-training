@@ -2336,14 +2336,20 @@
   }
 
   /**
-   * The exercise the site tour shows: the first of today's basics for the
-   * open track, which is the screen "Empezar" on Practicar leads to.
+   * The exercise the site tour shows: the screen "Empezar" on Practicar leads
+   * to. When the loop drew the start panel (it marks it) that is the first of
+   * today's basics for the open track; otherwise the panel's button opens the
+   * suggestion: the guided session's current step, the daily class or the next
+   * exercise. Asking whether the loop is on showed the Mínimo in the classic
+   * arm, and with a guided session open, while the button started another.
    */
   function tourExerciseId() {
     const track = state.tab === "vocal" ? "vocal" : "singing";
     const L = window.VTLoop;
-    const id = L?.todayBasics?.(track)?.order?.[0] || L?.routine?.(track, "min")?.order?.[0];
-    if (id && findExercise(id)) return id;
+    if ($("#next-step-card")?.dataset.loop) {
+      const id = L?.todayBasics?.(track)?.order?.[0] || L?.routine?.(track, "min")?.order?.[0];
+      if (id && findExercise(id)) return id;
+    }
     return suggestNextExercise()?.ex?.id || null;
   }
 

@@ -169,9 +169,18 @@
    * that button leads to; the last turns the end of the tour into the first
    * practice ("Empezar mis 3 min"), with "Ahora no" beside it.
    */
+  /**
+   * Whether the daily loop drew the start panel (it marks it), which is not
+   * the same as the loop being on: with a guided session open the panel's
+   * button resumes the session, loop or not.
+   */
+  function loopPanel() {
+    return !!document.getElementById("next-step-card")?.dataset.loop;
+  }
+
   function homeSteps() {
     const first = document.body.classList.contains("loop-first");
-    const loopOn = !first && !!global.VTLoop?.isOn?.();
+    const loopOn = !first && loopPanel();
     const phone = isVisible(document.getElementById("btn-more"));
     // Historial before any practice is an empty page: its card says what will
     // fill it instead of describing marked days nobody can see.
@@ -894,7 +903,7 @@
       const min = r ? Math.max(1, Math.round(r.totalSec / 60)) : 3;
       return t("tour.ctaFirst", { min: String(min) });
     }
-    return t(global.VTLoop?.isOn?.() ? "tour.ctaLoop" : "tour.cta");
+    return t(loopPanel() ? "tour.ctaLoop" : "tour.cta");
   }
 
   /**

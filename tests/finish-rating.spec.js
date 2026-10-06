@@ -612,6 +612,19 @@ test.describe("Rating: one tap after a take", () => {
     await expect(box).toHaveAccessibleDescription(/always records the take/);
   });
 
+  test("the written guide says some exercises always record, and keeping the take is still the learner's", async ({ page }) => {
+    await page.goto(`${BASE}/guide.html`);
+    // The recording point under "Guardar, puntuar y el historial", in each language
+    const es = page.locator("#guardar + p + ul > li").first();
+    await expect(es).toContainText("Grabarte");
+    await expect(es).toContainText(/algunos ejercicios graban siempre la toma/i);
+    await expect(es).toContainText(/decides si la guardas/);
+    const en = page.locator("#guardar-en + p + ul > li").first();
+    await expect(en).toContainText("Recording");
+    await expect(en).toContainText(/some exercises always record the take/i);
+    await expect(en).toContainText(/you decide whether to save it/);
+  });
+
   test("English reads in its own words", async ({ page }) => {
     await boot(page, { lang: "en" });
     await openSingle(page, "s4-lip-trills");

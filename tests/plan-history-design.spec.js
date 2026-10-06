@@ -371,7 +371,11 @@ test.describe("History: days sung first, then what you did last", () => {
 
     // No recordings: one quiet line at the end, no empty block on top.
     await expect(list).not.toContainText("Grabaciones (en este dispositivo)");
-    await expect(list.locator(".hist-rec-empty")).toHaveText("Aún no hay grabaciones. En un ejercicio, marca ⏺ Grabarme antes de Empezar.");
+    // Ticking the box is not the whole story: some exercises always record, and
+    // a take only reaches this list when the learner keeps it.
+    await expect(list.locator(".hist-rec-empty")).toHaveText(
+      "Aún no hay grabaciones. Marca ⏺ Grabarme antes de Empezar (algunos ejercicios graban siempre la toma) y, al terminar, toca Guardar en historial."
+    );
     // Saved reviews render under their heading.
     await expect(list).toContainText("Revisiones guardadas");
     await expect(list).toContainText("Semana 1: Afinación");
@@ -403,6 +407,9 @@ test.describe("History: days sung first, then what you did last", () => {
     // No score yet: the part is left out, not shown as a dash.
     await expect(rows.nth(1).locator(".meta")).toHaveText("4 days ago · once");
     await expect(rows.nth(0)).toContainText("Open →");
+    await expect(list.locator(".hist-rec-empty")).toHaveText(
+      "No recordings yet. Tick ⏺ Record me before Start (some exercises always record the take) and, when you finish, tap Save to history."
+    );
   });
 
   test("recordings keep their list, players and compare, after the days and the recent list", async ({ page }) => {

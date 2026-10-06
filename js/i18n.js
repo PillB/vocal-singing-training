@@ -406,7 +406,8 @@
       "home.nextStepWhyGuided": "El siguiente ejercicio de tu sesión guiada.",
       "group.count": "{n} ejercicios",
       "history.recordings": "Grabaciones (en este dispositivo)",
-      "history.noRecordings": "Aún no hay grabaciones. En un ejercicio, marca ⏺ Grabarme antes de Empezar.",
+      "history.noRecordings":
+        "Aún no hay grabaciones. Marca ⏺ Grabarme antes de Empezar (algunos ejercicios graban siempre la toma) y, al terminar, toca Guardar en historial.",
       "history.noSessions": "Aún no has guardado ninguna sesión.",
       "history.loading": "Cargando…",
       "history.emptyCta": "▶ Empezar a practicar",
@@ -1457,7 +1458,8 @@
       "home.nextStepWhyGuided": "The next exercise in your guided session.",
       "group.count": "{n} exercises",
       "history.recordings": "Recordings (this device)",
-      "history.noRecordings": "No recordings yet. In an exercise, tick ⏺ Record me before Start.",
+      "history.noRecordings":
+        "No recordings yet. Tick ⏺ Record me before Start (some exercises always record the take) and, when you finish, tap Save to history.",
       "history.noSessions": "No completed sessions yet.",
       "history.loading": "Loading…",
       "history.emptyCta": "▶ Start practising",

@@ -239,6 +239,54 @@ test.describe("Plan: one focus, its exercises, days counted", () => {
     await expect(page.locator("#plan-completed-elements")).toContainText("Afinación");
   });
 
+  test("a week under way changes focus only when asked, and then starts again", async ({ page }) => {
+    await boot(page, {
+      days: ledger(["2026-09-14", "2026-09-16", "2026-09-17", "2026-09-22"]),
+      plan: weekPlan({ weekNumber: 3, element: "Pitch accuracy", status: "active", startedAt: "2026-09-14T15:00:00.000Z" })
+    });
+    await openPlan(page);
+    await expect(page.locator("#plan-review-body")).toBeVisible();
+    const chip = page.locator("#element-chips .chip", { hasText: "Apoyo del aire" });
+    if (!(await chip.isVisible())) await page.locator("#plan-focus-more").click();
+    const asked = [];
+    const answer = (yes) =>
+      page.once("dialog", (d) => {
+        asked.push(d.message());
+        if (yes) d.accept();
+        else d.dismiss();
+      });
+    const stored = () => page.evaluate(() => VTStorage.getWeekPlan());
+
+    // "Cancelar": the week stays as it was.
+    answer(false);
+    await chip.click();
+    expect(asked).toEqual(["¿Cambiar el foco de esta semana a Apoyo del aire? La semana vuelve a empezar hoy, y la revisión se abre siete días después."]);
+    let plan = await stored();
+    expect(plan).toMatchObject({ weekNumber: 3, element: "Pitch accuracy", status: "active", startedAt: "2026-09-14T15:00:00.000Z" });
+    await expect(page.locator("#plan-status")).toHaveText("Esta semana mejoras: Afinación");
+    await expect(page.locator("#plan-review-body")).toBeVisible();
+
+    // "Aceptar": the new focus, the same week number, started again today.
+    answer(true);
+    await chip.click();
+    plan = await stored();
+    expect(plan).toMatchObject({ weekNumber: 3, element: "Breath support", status: "active", reviews: [] });
+    expect(await page.evaluate((iso) => VTDays.dayKey(new Date(iso)), plan.startedAt)).toBe("2026-09-23");
+    await expect(page.locator("#plan-status")).toHaveText("Esta semana mejoras: Apoyo del aire");
+    // The review waits for the new week's seven days, so "Mejoró" cannot file
+    // it under a focus that was never trained.
+    await expect(page.locator("#plan-review-body")).toBeHidden();
+    await expect(page.locator("#plan-review-when")).toContainText("30");
+
+    // Before the week starts a chip is just a choice: nothing to ask.
+    await page.evaluate(() => VTStorage.setWeekPlan({ ...VTStorage.getWeekPlan(), status: "idle", startedAt: null }));
+    await page.evaluate(() => VTApp.setView("home"));
+    await openPlan(page);
+    await page.locator("#element-chips .chip", { hasText: "Afinación" }).click();
+    expect(asked).toHaveLength(2);
+    expect((await stored()).element).toBe("Pitch accuracy");
+  });
+
   test("EN, Vocal: speaking elements first, Start this week, days in English", async ({ page }) => {
     await boot(page, { lang: "en", tab: "vocal", days: ledger(["2026-09-23"]) });
     await openPlan(page);
@@ -261,8 +309,15 @@ test.describe("Plan: one focus, its exercises, days counted", () => {
     // The start button gave way to the week's exercises.
     await expect(page.locator("#plan-exercise-list .open-row").first()).toBeFocused();
     // A singing element picked from "Show more" lists its singing exercises.
+    // The week is under way, so the change asks first.
     await page.locator("#plan-focus-more").click();
+    const asked = [];
+    page.once("dialog", (d) => {
+      asked.push(d.message());
+      d.accept();
+    });
     await page.locator("#element-chips .chip", { hasText: "Pitch accuracy" }).click();
+    expect(asked).toEqual(["Change this week’s focus to Pitch accuracy? The week starts again today, and the review opens seven days later."]);
     await expect(page.locator("#plan-exercise-list .open-row").first()).toContainText("Single-Note Pitch Match");
     await expect(page.locator("#plan-exercise-list .open-row").first()).toContainText("Singing");
   });

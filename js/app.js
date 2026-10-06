@@ -5566,8 +5566,19 @@
 
   function pickPlanElement(el) {
     const p = VTStorage.getWeekPlan();
-    p.element = el;
-    VTStorage.setWeekPlan(p);
+    if (p.status !== "idle" && p.element && el !== p.element) {
+      // A week under way trains one thing and is reviewed seven days on. A tap
+      // used to switch it silently, and "Mejoró" then filed the review under a
+      // focus never trained. Another focus starts the week again, asked first.
+      if (!confirm(tt("plan.changeConfirm", { element: weekElementLabel(el) }))) return;
+      p.element = el;
+      p.startedAt = null;
+      p.checkIns = [];
+      beginPlanWeek(p);
+    } else {
+      p.element = el;
+      VTStorage.setWeekPlan(p);
+    }
     renderPlan();
     // The chips were rebuilt: keep keyboard focus on the one just picked.
     $("#element-chips .chip.selected")?.focus();

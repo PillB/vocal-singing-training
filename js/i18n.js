@@ -461,6 +461,7 @@
       "plan.exMeta": "~{min} min",
       "plan.days": "{n} de 7 días practicados esta semana",
       "plan.reviewOpensOn": "Se abre el {date}.",
+      "plan.changeConfirm": "¿Cambiar el foco de esta semana a {element}? La semana vuelve a empezar hoy, y la revisión se abre siete días después.",
       // History: the days practised first, then what you did last
       "history.recent": "Lo último que practicaste",
       "history.daysPeriod": "en las últimas 5 semanas",
@@ -1503,6 +1504,7 @@
       "plan.exMeta": "~{min} min",
       "plan.days": "{n} of 7 days practised this week",
       "plan.reviewOpensOn": "Opens on {date}.",
+      "plan.changeConfirm": "Change this week’s focus to {element}? The week starts again today, and the review opens seven days later.",
       // History: the days practised first, then what you did last
       "history.recent": "What you practised last",
       "history.daysPeriod": "in the last 5 weeks",

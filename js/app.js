@@ -7241,7 +7241,12 @@
     renderExerciseList();
     if (state.view === "history") renderHistory();
     else if (state.view === "plan") renderPlan();
-    else if (state.view === "home") renderNextStepCard();
+    else if (state.view === "home") {
+      // As a tab coming back does: the classic arm's welcome-back card counts
+      // days away from the same record the start panel reads.
+      renderRetentionChrome();
+      renderNextStepCard();
+    }
   }
 
   function bindProStudio() {

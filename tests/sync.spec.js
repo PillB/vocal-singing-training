@@ -114,7 +114,8 @@ async function installWorker(page, server) {
  * Open the site signed in, with `seed` written to localStorage once.
  * @param {import('@playwright/test').Page} page Page.
  * @param {object} server State from createServer.
- * @param {{seed?: object, settle?: boolean}} [opts] Keys to seed; whether to wait for the boot sync.
+ * @param {{seed?: object, settle?: boolean, query?: string}} [opts] Keys to seed; whether to wait for
+ *   the boot sync; a query string for the address, such as an experiment arm.
  */
 async function boot(page, server, opts = {}) {
   await installWorker(page, server);
@@ -165,7 +166,7 @@ async function boot(page, server, opts = {}) {
     },
     { seed: opts.seed || null }
   );
-  await page.goto(BASE + "/", { waitUntil: "domcontentloaded" });
+  await page.goto(BASE + "/" + (opts.query || ""), { waitUntil: "domcontentloaded" });
   await page.waitForFunction(() => !!window.VTApp && !!window.VTSync && !!window.VTDays && !!window.VTLoop);
   await page.clock.runFor(500);
   await expect.poll(() => page.evaluate(() => window.VTSync.isAvailable())).toBe(true);
@@ -707,6 +708,69 @@ test.describe("Saved progress follows the learner", () => {
     await passQuietPeriod(page);
     await expect.poll(() => server.docs.default.weekPlan.element).toBe(picked);
     expect(await page.evaluate(() => window.VTStorage.getWeekPlan().element)).toBe(picked);
+  });
+
+  test("a week's focus changed here outlasts the account's earlier start of that week", async ({ page }) => {
+    // A plan saved before 23 Sep can still carry hand-logged check-ins. The
+    // changed focus starts the week again with none, and is the newer state.
+    const plan = {
+      weekNumber: 1,
+      element: "Pitch accuracy",
+      status: "active",
+      startedAt: "2026-09-21T15:00:00.000Z",
+      checkIns: [{ date: "2026-09-21" }, { date: "2026-09-22" }],
+      reviews: [],
+      completedElements: [],
+      updatedAt: "2026-09-22T15:00:00.000Z"
+    };
+    const server = createServer({
+      revs: { default: 3 },
+      docs: { default: { v: 1, profileId: "default", savedAt: "2026-09-22T15:00:00.000Z", progress: {}, weekPlan: plan } }
+    });
+    await boot(page, server, { seed: { vt_week_plan_v1: plan } });
+
+    await page.locator("#btn-plan").click();
+    await page.clock.runFor(300);
+    page.once("dialog", (d) => d.accept());
+    const chip = page.locator("#element-chips .chip:not([hidden]):not(.selected)").first();
+    const label = await chip.textContent();
+    await chip.click();
+    const picked = await page.evaluate(() => window.VTStorage.getWeekPlan());
+    expect(picked.element).not.toBe("Pitch accuracy");
+    expect(picked.checkIns).toEqual([]);
+
+    await passQuietPeriod(page);
+    await expect.poll(() => server.docs.default.weekPlan.element).toBe(picked.element);
+    const after = await page.evaluate(() => window.VTStorage.getWeekPlan());
+    expect(after.element).toBe(picked.element);
+    expect(after.startedAt).toBe(picked.startedAt);
+    // The Plan redrawn by the sync still shows the new focus picked.
+    await expect(page.locator("#element-chips .chip.selected")).toHaveText(label);
+  });
+
+  test("in the classic arm, a sync that brings recent practice puts the welcome-back card away", async ({ page }) => {
+    const server = createServer({
+      revs: { default: 2 },
+      docs: {
+        default: {
+          v: 1,
+          profileId: "default",
+          progress: {},
+          days: { v: 1, days: { "2026-09-15": { sec: 120, n: 1, ex: [EX] }, "2026-09-22": { sec: 90, n: 1, ex: [EX] } }, rest: { bank: 0, earnedAt: 0, used: [] }, backfilled: true }
+        }
+      }
+    });
+    const days = { v: 1, days: { "2026-09-15": { sec: 120, n: 1, ex: [EX] }, "2026-09-16": { sec: 60, n: 1, ex: [EX] }, "2026-09-17": { sec: 60, n: 1, ex: [EX] } }, rest: { bank: 0, earnedAt: 0, used: [] }, backfilled: true };
+    await boot(page, server, { seed: { vt_days_v1: days }, settle: false, query: "?ab_loop_home_2026_10=classic" });
+    await expect(page.locator("#welcome-back")).toBeVisible();
+    await expect(page.locator("#welcome-back-body")).toContainText("6");
+
+    // The sync signing in asked for brings yesterday's practice from the phone.
+    await passQuietPeriod(page);
+    await expect.poll(() => server.puts.length).toBeGreaterThan(0);
+    await expect.poll(() => page.evaluate(() => window.VTReminders.daysSinceLastPractice())).toBe(1);
+    await expect(page.locator("#welcome-back")).toBeHidden();
+    expect(await page.evaluate(() => window.VTApp.getState().view)).toBe("home");
   });
 
   test("a sync that brings another device's practice redraws Historial", async ({ page }) => {

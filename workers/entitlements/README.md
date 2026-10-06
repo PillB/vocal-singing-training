@@ -356,11 +356,20 @@ value is absent are omitted). After that the notification body is treated as a
 | `subscription_preapproval` | `GET /preapproval/{id}` |
 | `subscription_authorized_payment` | `GET /authorized_payments/{id}` |
 
-Payment `approved` / preapproval `authorized` → `active`; `paused`/`cancelled` →
-`canceled`; anything else → `past_due`. An approved payment sets the period to
-one plan interval from its approval date; a preapproval's `next_payment_date`
-sets it directly. `next_retry_date` is a dunning date and is never used as a
-paid-through date. The plan comes from
+Only money that arrived entitles. A one-off payment `approved` → `active`;
+`pending`/`in_process`/`authorized`/`in_mediation` → `pending` (an unpaid cash
+voucher, a card under review, a hold not yet captured: `/v1/claim` answers 202
+and the browser keeps polling); anything else (`rejected`, `cancelled`, an
+expired voucher) → `canceled` with no period, so it never yields a token. A
+subscription's charge (a payment carrying a `preapproval_id`) that is not
+approved changes nothing: Mercado Pago retries it, and the subscription's own
+notifications carry its state. Preapproval `authorized` → `active`, `pending` →
+`pending`, `paused`/`cancelled`/anything else → `canceled`. An approved payment
+sets the period to one plan interval from its approval date; an authorized
+preapproval's `next_payment_date` sets it directly, and only while it is
+authorized. A payment's `date_of_expiration` (the voucher's deadline) and
+`next_retry_date` (a dunning date) are never used as a paid-through date. The
+plan comes from
 `MP_PLAN_PRO_MONTHLY`/`MP_PLAN_PRO_YEARLY`, else the preapproval `reason` or
 `external_reference`, else `auto_recurring`; when nothing says, it defaults to
 `pro_monthly` and records what it saw in the record's `planSource`.

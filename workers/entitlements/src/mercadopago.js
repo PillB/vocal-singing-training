@@ -189,13 +189,16 @@ export async function fetchMercadoPagoResource(kind, id, env, options) {
 }
 
 /**
- * Map a Mercado Pago payment status to our entitlement status.
+ * Map the status of a subscription's charge (an authorized payment) to our
+ * entitlement status. Only an approved charge has brought money in; one still
+ * in flight or turned down is the "past_due" grace while Mercado Pago retries.
+ * "authorized" is a card hold that was never captured, so it is not paid yet.
  * @param {unknown} status Payment status.
  * @returns {string} "active" | "past_due" | "canceled".
  */
 export function mapPaymentStatus(status) {
   const value = String(status);
-  if (value === "approved" || value === "authorized") {
+  if (value === "approved") {
     return "active";
   }
   if (value === "cancelled" || value === "canceled" || value === "refunded" || value === "charged_back") {
@@ -205,19 +208,40 @@ export function mapPaymentStatus(status) {
 }
 
 /**
+ * Map the status of a one-off payment (Checkout Pro, a payment link) to our
+ * entitlement status. Nothing retries it, so there is no grace state: an
+ * approved payment entitles, one still on its way (an unpaid cash voucher, a
+ * card under review, a hold not yet captured, a dispute) is "pending", which
+ * never entitles, and anything else did not bring money in.
+ * @param {unknown} status Payment status.
+ * @returns {string} "active" | "pending" | "canceled".
+ */
+export function mapOneOffPaymentStatus(status) {
+  const value = String(status);
+  if (value === "approved") {
+    return "active";
+  }
+  if (value === "pending" || value === "in_process" || value === "authorized" || value === "in_mediation") {
+    return "pending";
+  }
+  return "canceled";
+}
+
+/**
  * Map a Mercado Pago preapproval status to our entitlement status.
+ * A preapproval still "pending" has no authorized card behind it yet.
  * @param {unknown} status Preapproval status.
- * @returns {string} "active" | "past_due" | "canceled".
+ * @returns {string} "active" | "pending" | "canceled".
  */
 export function mapPreapprovalStatus(status) {
   const value = String(status);
   if (value === "authorized") {
     return "active";
   }
-  if (value === "paused" || value === "cancelled" || value === "canceled") {
-    return "canceled";
+  if (value === "pending") {
+    return "pending";
   }
-  return "past_due";
+  return "canceled";
 }
 
 /**
@@ -346,22 +370,36 @@ export function mapPaymentResource(payment, env) {
     || planFromText(metadata.plan)
     || planFromText(payment && payment.description);
   const subscriptionId = (payment && (payment.preapproval_id || metadata.preapproval_id)) || null;
+  const approved = String(payment && payment.status) === "approved";
+  // A subscription's charge that has not gone through says nothing new about
+  // the subscription: Mercado Pago retries it, and the preapproval and
+  // authorized-payment notifications carry the subscription's own state. It
+  // only records which license its payment id belongs to.
+  const silent = Boolean(subscriptionId) && !approved;
   // Checkout Pro / payment links have no subscription lifecycle behind them, so
   // nothing would ever expire this record. Entitle for one plan interval from
-  // the approval instead; a renewal payment extends it.
-  const chargedAt = isoToUnixSeconds(payment && payment.date_approved)
-    || isoToUnixSeconds(payment && payment.date_created);
+  // the approval instead; a renewal payment extends it. Only money that arrived
+  // buys time: an unpaid voucher or a turned-down card gets none.
+  const chargedAt = approved
+    ? (isoToUnixSeconds(payment && payment.date_approved) || isoToUnixSeconds(payment && payment.date_created))
+    : null;
+  // A subscription's charge does not say which plan the subscription is on, so
+  // only explicit text may set it; the monthly default would downgrade a
+  // yearly subscription.
+  const plan = subscriptionId ? (byText || undefined) : (byText || "pro_monthly");
   return {
     provider: "mercadopago",
     claimId: payment && payment.id !== undefined && payment.id !== null ? String(payment.id) : null,
     subscriptionId: subscriptionId ? String(subscriptionId) : null,
     customerId: payment && payment.payer && payment.payer.id ? String(payment.payer.id) : null,
-    plan: byText || "pro_monthly",
-    planSource: byText ? "payment_text" : "default(payment)",
-    status: mapPaymentStatus(payment && payment.status),
-    periodEnd: isoToUnixSeconds(payment && payment.date_of_expiration),
+    plan: silent ? undefined : plan,
+    planSource: silent || !plan ? undefined : (byText ? "payment_text" : "default(payment)"),
+    status: silent ? undefined : mapOneOffPaymentStatus(payment && payment.status),
+    // `date_of_expiration` is the voucher's or payment's deadline, not a
+    // paid-through date, so it never becomes the period end.
+    periodEnd: undefined,
     periodEndFromCharge: chargedAt,
-    occurredAt: resourceOccurredAt(payment)
+    occurredAt: silent ? null : resourceOccurredAt(payment)
   };
 }
 
@@ -376,6 +414,7 @@ export function mapPreapprovalResource(preapproval, env) {
   const id = preapproval && preapproval.id !== undefined && preapproval.id !== null
     ? String(preapproval.id)
     : null;
+  const status = mapPreapprovalStatus(preapproval && preapproval.status);
   return {
     provider: "mercadopago",
     claimId: id,
@@ -383,8 +422,12 @@ export function mapPreapprovalResource(preapproval, env) {
     customerId: preapproval && preapproval.payer_id ? String(preapproval.payer_id) : null,
     plan,
     planSource,
-    status: mapPreapprovalStatus(preapproval && preapproval.status),
-    periodEnd: isoToUnixSeconds(preapproval && preapproval.next_payment_date),
+    status,
+    // The next charge date marks the end of a paid period only while the
+    // subscription is authorized. On one never authorized it is a charge that
+    // may never happen, and a paused or cancelled one keeps the period end it
+    // already had.
+    periodEnd: status === "active" ? isoToUnixSeconds(preapproval && preapproval.next_payment_date) : undefined,
     occurredAt: resourceOccurredAt(preapproval)
   };
 }

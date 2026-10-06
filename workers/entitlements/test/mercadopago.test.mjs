@@ -9,8 +9,10 @@ import {
   isoToUnixSeconds,
   mapAuthorizedPaymentResource,
   mapMercadoPagoResource,
+  mapOneOffPaymentStatus,
   mapPaymentResource,
   mapPaymentStatus,
+  mapPreapprovalResource,
   mapPreapprovalStatus,
   normalizeTimestampSeconds,
   parseMercadoPagoSignatureHeader,
@@ -212,16 +214,80 @@ test("the notification target comes from the body or the query string", () => {
 });
 
 test("status mapping follows the documented resource states", () => {
+  // A subscription's charge: only an approved one is paid; one that is still
+  // in flight or failed is the dunning grace while Mercado Pago retries.
   assert.equal(mapPaymentStatus("approved"), "active");
-  assert.equal(mapPaymentStatus("authorized"), "active");
+  assert.equal(mapPaymentStatus("authorized"), "past_due", "authorized is not captured: no money yet");
   assert.equal(mapPaymentStatus("pending"), "past_due");
   assert.equal(mapPaymentStatus("rejected"), "past_due");
   assert.equal(mapPaymentStatus("cancelled"), "canceled");
   assert.equal(mapPaymentStatus("refunded"), "canceled");
+
+  // A one-off payment has no retries behind it: settling, or not entitled.
+  assert.equal(mapOneOffPaymentStatus("approved"), "active");
+  for (const status of ["pending", "in_process", "authorized", "in_mediation"]) {
+    assert.equal(mapOneOffPaymentStatus(status), "pending", status);
+  }
+  for (const status of ["rejected", "cancelled", "refunded", "charged_back", "something_new"]) {
+    assert.equal(mapOneOffPaymentStatus(status), "canceled", status);
+  }
+
   assert.equal(mapPreapprovalStatus("authorized"), "active");
-  assert.equal(mapPreapprovalStatus("pending"), "past_due");
+  assert.equal(mapPreapprovalStatus("pending"), "pending", "a card never authorized never entitles");
   assert.equal(mapPreapprovalStatus("paused"), "canceled");
   assert.equal(mapPreapprovalStatus("cancelled"), "canceled");
+  assert.equal(mapPreapprovalStatus("something_new"), "canceled", "an unknown state never extends access");
+});
+
+test("only an approved payment buys time, and only from its approval", () => {
+  for (const status of ["pending", "in_process", "authorized", "rejected", "cancelled"]) {
+    const mapped = mapPaymentResource({
+      id: 501,
+      status,
+      date_created: "2026-03-01T10:00:00.000-05:00",
+      date_last_updated: "2026-03-01T10:00:00.000-05:00",
+      date_of_expiration: "2026-03-04T10:00:00.000-05:00"
+    }, {});
+    assert.equal(mapped.periodEndFromCharge, null, status);
+    assert.equal(mapped.periodEnd, undefined, `${status}: a voucher's deadline is not a paid-through date`);
+  }
+});
+
+test("a subscription's charge that did not go through says nothing about the subscription", () => {
+  const rejected = mapPaymentResource({
+    id: 502,
+    status: "rejected",
+    metadata: { preapproval_id: "pre_r" },
+    description: "Pro mensual",
+    date_created: "2026-03-01T10:00:00.000-05:00",
+    date_last_updated: "2026-03-01T10:00:00.000-05:00"
+  }, {});
+  assert.equal(rejected.subscriptionId, "pre_r");
+  assert.equal(rejected.claimId, "502", "the payment id still finds the subscription's license");
+  assert.equal(rejected.status, undefined);
+  assert.equal(rejected.plan, undefined);
+  assert.equal(rejected.periodEndFromCharge, null);
+  assert.equal(rejected.occurredAt, null, "it must not move the subscription's clock either");
+
+  const approved = mapPaymentResource({
+    id: 503,
+    status: "approved",
+    preapproval_id: "pre_r",
+    date_approved: "2026-03-01T10:05:00.000-05:00"
+  }, {});
+  assert.equal(approved.status, "active");
+  assert.equal(approved.plan, undefined, "the monthly default must not overwrite a yearly subscription");
+  assert.equal(approved.periodEndFromCharge, isoToUnixSeconds("2026-03-01T10:05:00.000-05:00"));
+});
+
+test("a preapproval's next charge date is a period end only while it is authorized", () => {
+  const nextPayment = "2027-03-01T00:00:00.000-05:00";
+  const authorized = mapPreapprovalResource({ id: "pre_a", status: "authorized", next_payment_date: nextPayment }, {});
+  assert.equal(authorized.periodEnd, isoToUnixSeconds(nextPayment));
+  for (const status of ["pending", "cancelled", "paused"]) {
+    const mapped = mapPreapprovalResource({ id: "pre_a", status, next_payment_date: nextPayment }, {});
+    assert.equal(mapped.periodEnd, undefined, status);
+  }
 });
 
 test("plan derivation reads configured plan ids, then text, then recurrence", () => {
@@ -391,7 +457,9 @@ test("preapproval and authorized payment resources key on the preapproval id", (
   assert.equal(preapproval.update.subscriptionId, "pre_9");
   assert.equal(preapproval.update.claimId, "pre_9");
   assert.equal(preapproval.update.customerId, "55");
-  assert.equal(preapproval.update.periodEnd, 1769922000);
+  // Paused: the period it already paid for stays on the record; the next
+  // charge date is not a paid-through date while nothing is being charged.
+  assert.equal(preapproval.update.periodEnd, undefined);
 
   const authorized = mapAuthorizedPaymentResource({
     id: "ap_2",

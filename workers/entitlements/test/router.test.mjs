@@ -60,14 +60,73 @@ function checkoutEvent(sessionId, eventId, overrides) {
     data: {
       object: {
         id: sessionId,
+        mode: opts.mode,
         customer: "cus_router",
-        subscription: "sub_router",
+        subscription: opts.subscription === undefined ? "sub_router" : opts.subscription,
         payment_status: opts.paymentStatus || "paid",
-        metadata: { plan: "pro_yearly" }
+        metadata: { plan: opts.plan || "pro_yearly" }
       }
     }
   };
 }
+
+/**
+ * Deliver a signed Stripe event through the router.
+ * @param {Object} env Env bindings.
+ * @param {Object} event Stripe event.
+ * @returns {Promise<Response>} Webhook response.
+ */
+async function deliverStripe(env, event) {
+  return handleRequest(await signedStripeRequest(event, env), env);
+}
+
+/**
+ * Claim a checkout session, payment or preapproval id and read the answer.
+ * @param {Object} env Env bindings.
+ * @param {string} provider "stripe" | "mercadopago".
+ * @param {string} sessionId Session, payment or preapproval id.
+ * @returns {Promise<{status: number, body: Object}>} HTTP status and parsed body.
+ */
+async function claimFor(env, provider, sessionId) {
+  const response = await handleRequest(postJson("/v1/claim", { provider, sessionId }), env);
+  return { status: response.status, body: await response.json() };
+}
+
+let mpNotificationSeq = 0;
+
+/**
+ * Deliver a signed Mercado Pago notification whose API read answers `resource`.
+ * @param {Object} env Env bindings.
+ * @param {string} kind Notification kind ("payment", "subscription_preapproval", …).
+ * @param {Object} resource What the Mercado Pago API returns for it.
+ * @returns {Promise<Response>} Webhook response.
+ */
+async function deliverMercadoPago(env, kind, resource) {
+  mpNotificationSeq += 1;
+  const dataId = String(resource.id);
+  const notification = { id: 7000 + mpNotificationSeq, type: kind, action: `${kind}.updated`, data: { id: dataId } };
+  const ts = String(Math.floor(Date.now() / 1000));
+  const requestId = `req-mp-${mpNotificationSeq}`;
+  const v1 = await hmacSha256Hex(env.MP_WEBHOOK_SECRET, buildMercadoPagoManifest({ dataId, requestId, ts }));
+  return handleRequest(
+    postJson("/v1/webhooks/mercadopago", JSON.stringify(notification), {
+      headers: { "x-signature": `ts=${ts},v1=${v1}`, "x-request-id": requestId }
+    }),
+    env,
+    { fetchImpl: async () => ({ ok: true, status: 200, async json() { return resource; } }) }
+  );
+}
+
+/**
+ * An ISO date some seconds away from now (negative is the past).
+ * @param {number} seconds Offset from now.
+ * @returns {string} ISO-8601 date.
+ */
+function isoIn(seconds) {
+  return new Date((Math.floor(Date.now() / 1000) + seconds) * 1000).toISOString();
+}
+
+const DAY = 86400;
 
 test("health reports booleans and the site origin, never key material", async () => {
   const env = createTestEnv();
@@ -583,4 +642,127 @@ test("an API failure answers 500 so Mercado Pago retries", async () => {
     env
   );
   assert.equal(claim.status, 200);
+});
+
+test("an unpaid Mercado Pago cash voucher waits, and one that expires unpaid never entitles", async () => {
+  const env = createTestEnv();
+  const voucher = {
+    id: "PAY-VOUCHER",
+    status: "pending",
+    status_detail: "pending_waiting_payment",
+    external_reference: "pro_yearly",
+    date_created: isoIn(-3600),
+    date_last_updated: isoIn(-3600),
+    date_approved: null,
+    // The voucher's own deadline, not a paid-through date.
+    date_of_expiration: isoIn(3 * DAY),
+    payer: { id: 7 }
+  };
+  assert.equal((await deliverMercadoPago(env, "payment", voucher)).status, 200);
+
+  const waiting = await claimFor(env, "mercadopago", "PAY-VOUCHER");
+  assert.equal(waiting.status, 202, "nobody has paid the voucher yet");
+  assert.equal(waiting.body.reason, "pending");
+  assert.equal(waiting.body.token, undefined);
+
+  // The voucher runs out unpaid and Mercado Pago cancels the payment.
+  await deliverMercadoPago(env, "payment", { ...voucher, status: "cancelled", status_detail: "expired", date_last_updated: isoIn(-60) });
+  const expired = await claimFor(env, "mercadopago", "PAY-VOUCHER");
+  assert.equal(expired.status, 403);
+  assert.equal(expired.body.reason, "inactive");
+  assert.equal(expired.body.token, undefined);
+});
+
+test("a Mercado Pago payment still under review, only authorized, or turned down buys no time", async () => {
+  for (const [status, plan, expected] of [
+    ["in_process", "pro_yearly", 202],
+    ["authorized", "pro_monthly", 202],
+    ["rejected", "pro_monthly", 403]
+  ]) {
+    const env = createTestEnv();
+    const id = `PAY-${status}`;
+    await deliverMercadoPago(env, "payment", {
+      id,
+      status,
+      external_reference: plan,
+      date_created: isoIn(-3600),
+      date_last_updated: isoIn(-3600),
+      payer: { id: 7 }
+    });
+    const claim = await claimFor(env, "mercadopago", id);
+    assert.equal(claim.status, expected, status);
+    assert.equal(claim.body.token, undefined, `${status} must not be signed`);
+  }
+});
+
+test("a Mercado Pago renewal charge that has not gone through leaves the subscription as it was", async () => {
+  const env = createTestEnv();
+  const paidThrough = Math.floor(Date.now() / 1000) + DAY;
+  await deliverMercadoPago(env, "subscription_preapproval", {
+    id: "PRE-RENEW",
+    status: "authorized",
+    reason: "Vocal Studio Pro anual",
+    next_payment_date: new Date(paidThrough * 1000).toISOString(),
+    date_last_updated: isoIn(-20 * DAY),
+    payer_id: 5
+  });
+  const before = await claimFor(env, "mercadopago", "PRE-RENEW");
+  assert.equal(before.status, 200);
+  assert.equal(before.body.entitlement.plan, "pro_yearly");
+
+  for (const status of ["rejected", "in_process"]) {
+    await deliverMercadoPago(env, "payment", {
+      id: `PAY-REN-${status}`,
+      status,
+      metadata: { preapproval_id: "PRE-RENEW" },
+      description: "Pro mensual",
+      date_created: isoIn(-60),
+      date_last_updated: isoIn(-60),
+      payer: { id: 5 }
+    });
+    const after = await claimFor(env, "mercadopago", "PRE-RENEW");
+    assert.equal(after.status, 200, `${status}: the period already paid for still holds`);
+    assert.equal(after.body.entitlement.status, "active", `${status}: Mercado Pago retries; the charge is not a cancellation`);
+    assert.equal(after.body.entitlement.periodEnd, paidThrough, `${status}: a charge that did not go through buys no time`);
+    assert.equal(after.body.entitlement.plan, "pro_yearly", `${status}: the charge's text cannot change the plan`);
+  }
+});
+
+test("a Mercado Pago renewal charge that is not approved opens nothing on its own", async () => {
+  // The charge's notification can land before its subscription's: the payment
+  // id is then recorded against a license that knows nothing else yet.
+  const env = createTestEnv();
+  await deliverMercadoPago(env, "payment", {
+    id: "PAY-ORPHAN",
+    status: "rejected",
+    metadata: { preapproval_id: "PRE-LATER" },
+    date_created: isoIn(-60),
+    date_last_updated: isoIn(-60),
+    payer: { id: 5 }
+  });
+  const claim = await claimFor(env, "mercadopago", "PAY-ORPHAN");
+  assert.notEqual(claim.status, 200);
+  assert.equal(claim.body.token, undefined);
+});
+
+test("a Mercado Pago subscription that was never authorized never entitles", async () => {
+  const env = createTestEnv();
+  const preapproval = {
+    id: "PRE-PENDING",
+    status: "pending",
+    reason: "Vocal Studio Pro anual",
+    // When Mercado Pago would charge, if the card were ever authorized.
+    next_payment_date: isoIn(365 * DAY),
+    date_last_updated: isoIn(-120),
+    payer_id: 5
+  };
+  await deliverMercadoPago(env, "subscription_preapproval", preapproval);
+  const waiting = await claimFor(env, "mercadopago", "PRE-PENDING");
+  assert.equal(waiting.status, 202);
+  assert.equal(waiting.body.token, undefined);
+
+  await deliverMercadoPago(env, "subscription_preapproval", { ...preapproval, status: "cancelled", date_last_updated: isoIn(-60) });
+  const cancelled = await claimFor(env, "mercadopago", "PRE-PENDING");
+  assert.equal(cancelled.status, 403, "a subscription nobody paid for keeps no period");
+  assert.equal(cancelled.body.token, undefined);
 });

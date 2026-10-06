@@ -269,12 +269,15 @@ export async function upsertEntitlement(kv, update, options) {
   const existing = existingId ? await getEntitlement(kv, existingId) : null;
   const licenseId = (existing && existing.licenseId) || existingId || mintId();
 
+  // A license first heard of through an update that carries no status (a
+  // subscription's charge that has not gone through) starts as "pending": we
+  // know nothing that entitles it yet.
   const record = existing
     ? { ...existing, licenseId }
     : {
       licenseId,
       plan: "pro_monthly",
-      status: "past_due",
+      status: "pending",
       provider: update.provider,
       customerId: null,
       subscriptionId: null,

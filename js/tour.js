@@ -251,11 +251,21 @@
    */
   function packSteps(family) {
     // Speaking exercises have no piano, so their card does not mention one.
-    const piano = !!global.VTApp?.getState?.()?.exercise?.audio?.piano;
+    const ex = global.VTApp?.getState?.()?.exercise;
+    const piano = !!ex?.audio?.piano;
+    // One that records every take shows ⏺ Grabarme ticked and fixed: the card
+    // does not ask the learner to tick it
+    const always = !!(ex?.practice?.autoRecord && ex?.audio?.record);
     const start = {
       id: "ex-start",
       titleKey: "uiTour.start.title",
-      bodyKey: piano ? "uiTour.start.bodyPiano" : "uiTour.start.body",
+      bodyKey: piano
+        ? always
+          ? "uiTour.start.bodyPianoRec"
+          : "uiTour.start.bodyPiano"
+        : always
+          ? "uiTour.start.bodyRec"
+          : "uiTour.start.body",
       target: "#btn-practice-start",
       also: ["#opt-auto-record"],
       place: "top",

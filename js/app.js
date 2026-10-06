@@ -2849,12 +2849,16 @@
       else if (!always && recChk.disabled) recChk.checked = state.recordChoice;
       if (always) recChk.checked = true;
       recChk.disabled = always;
+      // A title shows only to a mouse: a screen reader hears the same words
+      // from the hidden note, or the box is just "checked, unavailable"
       if (always) {
         recOpt.dataset.i18nTitle = "practice.recordAlways";
         recOpt.title = tt("practice.recordAlways");
+        recChk.setAttribute("aria-describedby", "record-always-note");
       } else {
         delete recOpt.dataset.i18nTitle;
         recOpt.removeAttribute("title");
+        recChk.removeAttribute("aria-describedby");
       }
     }
   }

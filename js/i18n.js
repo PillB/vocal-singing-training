@@ -578,6 +578,10 @@
         "Pulsa Empezar: se enciende el micrófono y corre el tiempo. El mismo botón, ya como Detener, lo para. Marca ⏺ Grabarme antes si quieres escucharte después.",
       "uiTour.start.bodyPiano":
         "Pulsa Empezar: se encienden el micrófono y el piano, y corre el tiempo. El mismo botón, ya como Detener, lo para. Marca ⏺ Grabarme antes si quieres escucharte después.",
+      "uiTour.start.bodyRec":
+        "Pulsa Empezar: se enciende el micrófono y corre el tiempo. El mismo botón, ya como Detener, lo para. Este ejercicio graba siempre la toma (⏺ Grabarme ya está marcado); al terminar decides si la guardas.",
+      "uiTour.start.bodyPianoRec":
+        "Pulsa Empezar: se encienden el micrófono y el piano, y corre el tiempo. El mismo botón, ya como Detener, lo para. Este ejercicio graba siempre la toma (⏺ Grabarme ya está marcado); al terminar decides si la guardas.",
       "uiTour.guide.title": "Pasos y consejos",
       "uiTour.guide.body":
         "Aquí están los pasos, en orden. La explicación completa, con trucos y qué evitar, está en «Pasos y consejos», más abajo.",
@@ -1625,6 +1629,10 @@
         "Press Start: the microphone comes on and the time runs. The same button, now Stop, ends it. Tick ⏺ Record me first if you want to hear yourself afterwards.",
       "uiTour.start.bodyPiano":
         "Press Start: the microphone and the piano come on, and the time runs. The same button, now Stop, ends it. Tick ⏺ Record me first if you want to hear yourself afterwards.",
+      "uiTour.start.bodyRec":
+        "Press Start: the microphone comes on and the time runs. The same button, now Stop, ends it. This exercise always records the take (⏺ Record me is already ticked); when you finish, you decide whether to keep it.",
+      "uiTour.start.bodyPianoRec":
+        "Press Start: the microphone and the piano come on, and the time runs. The same button, now Stop, ends it. This exercise always records the take (⏺ Record me is already ticked); when you finish, you decide whether to keep it.",
       "uiTour.guide.title": "Steps and tips",
       "uiTour.guide.body":
         "Here are the steps, in order. The full explanation, with tips and what to avoid, is in “Steps and tips”, further down.",

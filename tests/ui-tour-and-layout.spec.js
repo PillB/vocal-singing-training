@@ -154,6 +154,37 @@ test.describe("Interactive exercise UI tours", () => {
     await page.locator("[data-tour-skip]").click();
   });
 
+  test("the Start card does not ask to tick ⏺ Grabarme where it is ticked and fixed", async ({ page }) => {
+    await boot(page);
+    const startCard = async (id) => {
+      await page.evaluate((x) => window.VTApp.openExercise(x), id);
+      await expect(page.locator("#view-exercise")).toBeVisible();
+      await page.evaluate(() => sessionStorage.removeItem("vt_e2e"));
+      await page.click("#btn-ui-help");
+      await expect(page.locator("#tour-root")).toBeVisible({ timeout: 3000 });
+      for (let k = 0; k < 6; k++) {
+        if ((await page.locator("[data-tour-title]").textContent()) === "Empezar") break;
+        await page.locator("[data-tour-next]").click();
+      }
+      await expect(page.locator("[data-tour-title]")).toHaveText("Empezar");
+      const body = await page.locator("[data-tour-body]").textContent();
+      await page.locator("[data-tour-skip]").click();
+      await expect(page.locator("#tour-root")).toBeHidden();
+      await page.evaluate(() => sessionStorage.setItem("vt_e2e", "1"));
+      return body;
+    };
+    // v1: recording is the learner's choice
+    expect(await startCard("v1-diction")).toMatch(/Marca ⏺ Grabarme antes/);
+    // v10 and s3 record every take: the box is already ticked
+    for (const id of ["v10-power-pause", "s3-song-stanzas"]) {
+      const body = await startCard(id);
+      expect(body, id).not.toMatch(/Marca ⏺ Grabarme/);
+      expect(body, id).toMatch(/graba siempre la toma/);
+    }
+    // s3 has a piano, and its card still says so
+    expect(await startCard("s3-song-stanzas")).toMatch(/el micrófono y el piano/);
+  });
+
   test("speech family tour targets mode-focus", async ({ page }) => {
     await boot(page);
     await openSpeechExercise(page);

@@ -581,12 +581,15 @@ test.describe("Rating: one tap after a take", () => {
     await openSingle(page, "v1-diction");
     await expect(box).not.toBeChecked();
     await expect(box).toBeEnabled();
+    await expect(box).toHaveAccessibleDescription("");
     // v10 records every take, whatever the box says: the box says so
     await openSingle(page, "v10-power-pause");
     await expect(opt).toBeVisible();
     await expect(box).toBeChecked();
     await expect(box).toBeDisabled();
     await expect(opt).toHaveAttribute("title", /graba siempre la toma/);
+    // …to a screen reader too, which does not read the label's title
+    await expect(box).toHaveAccessibleDescription(/graba siempre la toma/);
     await start(page);
     await page.waitForTimeout(1200);
     await page.clock.runFor(2000);
@@ -598,6 +601,7 @@ test.describe("Rating: one tap after a take", () => {
     await expect(box).not.toBeChecked();
     await expect(box).toBeEnabled();
     await expect(opt).not.toHaveAttribute("title", /graba/);
+    await expect(box).toHaveAccessibleDescription("");
     await box.check();
     await openSingle(page, "v10-power-pause");
     await openSingle(page, "v1-diction");
@@ -605,6 +609,7 @@ test.describe("Rating: one tap after a take", () => {
     await openSingle(page, "v10-power-pause");
     await page.evaluate(() => window.VTI18n.setLang("en"));
     await expect(opt).toHaveAttribute("title", /always records the take/);
+    await expect(box).toHaveAccessibleDescription(/always records the take/);
   });
 
   test("English reads in its own words", async ({ page }) => {

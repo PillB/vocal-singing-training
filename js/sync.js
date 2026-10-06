@@ -306,8 +306,8 @@
 
   /**
    * Ask for a sync once the practising has settled down.
-   * Safe to call after every saved result: the timer collapses a burst into one
-   * write, which matters on a free-tier database.
+   * Called on every write of synced data (see the listener below): the timer
+   * collapses a burst into one write, which matters on a free-tier database.
    * @returns {void}
    */
   function schedule() {
@@ -378,6 +378,10 @@
     mergeWeekPlan,
     mergeLog
   };
+
+  // Anything a sync carries was just written: a take, a day's practice, the
+  // plan, a goal. Asking here, once, means no screen has to remember to.
+  global.VTStorage?.onSyncedChange?.(() => schedule());
 
   if (typeof document !== "undefined" && global.VTAccount?.onChange) {
     // Signing in on a fresh device is the moment a sync is most wanted.

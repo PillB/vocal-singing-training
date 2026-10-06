@@ -2132,7 +2132,6 @@
     sp.creditedSec = sec;
     const day = window.VTDays?.record?.({ exerciseId: ex.id, sec: delta, bump: inserted, source });
     if (inserted) {
-      window.VTSync?.schedule?.();
       try {
         window.VTAnalytics?.track?.("practice_recorded", {
           exerciseId: ex.id,
@@ -4785,9 +4784,6 @@
     });
     sp.entryId = savedEntry.id;
     sp.creditedSec = Math.max(sp.creditedSec || 0, elapsedSec);
-    // Ask for a sync rather than doing one: the scheduler collapses a whole
-    // practice session's saves into a single write.
-    window.VTSync?.schedule?.();
     const sessionsAfter = totalSessionsSaved();
     // First *rated* take: automatically kept steps are practice, but the
     // first-win card is about the first time somebody reviewed their own work.

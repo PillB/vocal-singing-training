@@ -69,6 +69,22 @@
     return `vt_prof_${id}_${base}`;
   }
 
+  // Told whenever something a sync carries is written (js/sync.js listens), so
+  // no caller has to remember to ask for a sync after saving. writeSyncBag
+  // writes what a sync brought back and deliberately does not tell them.
+  const syncedListeners = new Set();
+
+  function writeSynced(base, value) {
+    write(scopedKey(base), value);
+    syncedListeners.forEach((fn) => {
+      try {
+        fn();
+      } catch (err) {
+        console.warn(err);
+      }
+    });
+  }
+
   const Storage = {
     MAX_PROFILES_FREE,
     MAX_PROFILES_PRO,
@@ -199,7 +215,7 @@
       row.history = row.history.slice(0, 50);
       if (entry.score != null) row.lastScore = entry.score;
       if (!row.lastAt || entry.at > row.lastAt) row.lastAt = entry.at;
-      write(scopedKey(LS.progress), all);
+      writeSynced(LS.progress, all);
       return entry;
     },
     getSession() {
@@ -221,7 +237,7 @@
       });
     },
     setWeekPlan(plan) {
-      write(scopedKey(LS.weekPlan), plan);
+      writeSynced(LS.weekPlan, plan);
     },
     getSettings() {
       return read(LS.settings, { lastTab: "vocal", maleRange: true });
@@ -235,7 +251,7 @@
     saveReview(review) {
       const all = this.getReviews();
       all.unshift(review);
-      write(scopedKey(LS.reviews), all.slice(0, 40));
+      writeSynced(LS.reviews, all.slice(0, 40));
     },
     getHoldLogs() {
       return read(scopedKey(LS.holdLogs), []);
@@ -243,7 +259,7 @@
     addHoldLog(seconds) {
       const all = this.getHoldLogs();
       all.unshift({ at: new Date().toISOString(), seconds });
-      write(scopedKey(LS.holdLogs), all.slice(0, 100));
+      writeSynced(LS.holdLogs, all.slice(0, 100));
       return all;
     },
 
@@ -254,7 +270,7 @@
       });
     },
     setGoals(g) {
-      write(scopedKey(LS.goals), g || {});
+      writeSynced(LS.goals, g || {});
     },
 
     /** Local-day practice ledger; shape owned by js/practice-days.js. */
@@ -262,7 +278,7 @@
       return read(scopedKey(LS.days), null);
     },
     setDays(bag) {
-      write(scopedKey(LS.days), bag);
+      writeSynced(LS.days, bag);
     },
 
     /** Daily-loop memory; shape owned by js/daily-loop.js. */
@@ -270,14 +286,24 @@
       return read(scopedKey(LS.loop), null);
     },
     setLoop(bag) {
-      write(scopedKey(LS.loop), bag);
+      writeSynced(LS.loop, bag);
     },
 
     getAchievementFlags() {
       return read(scopedKey(LS.achievements), {});
     },
     setAchievementFlags(f) {
-      write(scopedKey(LS.achievements), f || {});
+      writeSynced(LS.achievements, f || {});
+    },
+
+    /**
+     * Subscribe to writes of anything a sync carries.
+     * @param {function} fn Listener.
+     * @returns {function} Unsubscribe.
+     */
+    onSyncedChange(fn) {
+      syncedListeners.add(fn);
+      return () => syncedListeners.delete(fn);
     },
 
     /**

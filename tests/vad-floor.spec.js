@@ -273,6 +273,29 @@ test.describe("pause floor (Vad)", () => {
     eachPauseMeasured(r, "30 fps");
   });
 
+  test("a fan's low rumble that wobbles from frame to frame is still the room", async ({ page }) => {
+    // A fan whose noise sits under ~100 Hz: its level swings ~1.5 dB from one
+    // frame to the next and 6–7 dB from its lowest to its highest over 0.6 s
+    // (wobble 7 matches 100 Hz two-pole noise in the engine's frames). It
+    // never held within 4.5 dB that long, so it was never learned: the pauses
+    // read as speech, with a 2 s lead-in or talking from Start.
+    const fan = { db: -40, wobble: 7 };
+    for (const lead of [2, 0]) {
+      for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+        const parts = [...(lead ? [QUIET(lead)] : []), ...turns(3, SPEECH(3, OVER_FAN), QUIET(1.2))];
+        const r = await sim(page, { parts, fan, seed });
+        const label = `${lead} s lead-in, seed ${seed}`;
+        expect(r.falsePauses, `${label} · ${r.segs}`).toBe(0);
+        expect(Math.abs(r.floor - fan.db), `${label}: the fan is the room · ${r.segs}`).toBeLessThan(3);
+        eachPauseMeasured(r, label);
+        if (lead) {
+          expect(r.ghost, `${label} · ${r.segs}`).toBeLessThan(0.15);
+          expect(r.ended.filter((e) => e.start < lead - 0.2), `${label} · ${r.segs}`).toEqual([]);
+        }
+      }
+    }
+  });
+
   test("a fan switched on or off mid-take: the floor follows the room", async ({ page }) => {
     // On during a 4 s pause: the room is the fan within a second, and the
     // pauses after it count

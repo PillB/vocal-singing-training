@@ -78,11 +78,12 @@
    *
    * A frame's `rms` is one number per screen refresh over a 43 ms window, which
    * cannot see a lip trill (flutter at 15–35 Hz is one cycle per window) or the
-   * first 50 ms of an onset. The engine hands over its latest 2048 samples each
-   * frame; only the ones that arrived since the previous frame are new, so
-   * those are cut into 2.5 ms blocks. The envelope value is the RMS of the last
-   * 12.5 ms — at least one pitch period for voices above 80 Hz, so the voice's
-   * own waveform does not ripple through it, and short enough to follow 35 Hz.
+   * first 50 ms of an onset. The engine hands over its latest ~43 ms of samples
+   * each frame (2048 at 44.1–48 kHz); only the ones that arrived since the
+   * previous frame are new, so those are cut into 2.5 ms blocks. The envelope
+   * value is the RMS of the last 12.5 ms — at least one pitch period for voices
+   * above 80 Hz, so the voice's own waveform does not ripple through it, and
+   * short enough to follow 35 Hz.
    */
   class Envelope {
     constructor(opts = {}) {
@@ -268,8 +269,8 @@
 
   /* —— Speech and silence —— */
 
-  // The room's steadiness test: 0.6 s of learning steps within 4.5 dB. A
-  // rumbling fan wanders up to ~4 dB over that time; soft speech whose
+  // The room's steadiness test: 0.6 s of learning steps within 4.5 dB. A fan
+  // rumbling at 150–250 Hz wanders 3–4 dB over that time; soft speech whose
   // syllables swing only 8 dB slips under a looser or shorter test.
   const ROOM_STEPS = 18;
   const ROOM_FLAT_DB = 4.5;
@@ -281,6 +282,10 @@
   // The engine's `clarity` (how periodic a frame is), as the median of a
   // steady stretch: under NOISY there is no voice in it (a fan, a hiss)
   const NOISY = 0.5;
+  // Such a stretch may instead hold its 10th to 90th percentiles within
+  // 6 dB: a fan rumbling under ~100 Hz swings 1.5–2 dB from one step to the
+  // next, so its extremes over 0.6 s span 6–7 dB
+  const NOISE_SPREAD_DB = 6;
   // A sound the take opened with is the room whatever its clarity (a hum, a
   // fan with a motor's tone) once it has held within OPEN_FLAT_DB for
   // OPEN_STEPS (1 s), counted from when the mic settled: the first frames
@@ -310,10 +315,12 @@
    * - A room loud enough to open the gate (a fan, or any room's hiss at
    *   sensitivity 9–10) is learned from its steadiness instead: 0.6 s that
    *   holds still with no period in it (the engine's `clarity`, which works
-   *   at any level) is the room. The floor starts over from it, speech it
-   *   was read as until then is taken back, and a pause it hid is dated from
-   *   when the voice stopped. Within 3 s of a quiet room, a new one must
-   *   hold still for 1.2 s.
+   *   at any level) is the room. Still is within 4.5 dB, or 6 dB from its
+   *   10th to its 90th percentile: a fan's low rumble wobbles 1.5–2 dB from
+   *   frame to frame. The floor starts over from it, speech it was read as
+   *   until then is taken back, and a pause it hid is dated from when the
+   *   voice stopped. Within 3 s of a quiet room, a new one must hold still
+   *   for 1.2 s.
    * - A steady sound with a period is a voice (a sung note, a soft held
    *   vowel, an "mmm"), unless the take opened with it and heard nothing
    *   else for a second: a hum in the room, learned the same way. Before the
@@ -543,12 +550,15 @@
       if (!known && !this._shut && this._pauseRoom()) return PAUSE_STEPS;
       const steps = known && this.t - this._quietAt < ROOM_HEARD_SEC ? NEW_ROOM_STEPS : ROOM_STEPS;
       const r = this._recentRing.last(steps);
-      if (r.length < steps || Math.max(...r) - Math.min(...r) >= ROOM_FLAT_DB) return 0;
+      if (r.length < steps) return 0;
       // Speech swings 10 dB and more between syllables, and its vowels have a
       // period even when they are too soft for the pitch detector. No
       // clarity from the engine (−1): no way to tell.
       const c = median(this._recentClarity.last(steps));
-      return c != null && c >= 0 && c < NOISY ? steps : 0;
+      if (c == null || c < 0 || c >= NOISY) return 0;
+      if (Math.max(...r) - Math.min(...r) < ROOM_FLAT_DB) return steps;
+      // A low rumble's extremes span more than that, but most of it holds still
+      return percentile(r, 0.9) - percentile(r, 0.1) < NOISE_SPREAD_DB ? steps : 0;
     }
     /**
      * A hum in a pause, before the floor has heard any quiet room: the last

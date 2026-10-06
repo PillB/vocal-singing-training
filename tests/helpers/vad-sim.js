@@ -130,8 +130,10 @@
     const fan = env.fan || null;
     let wob = 0;
     for (let i = 0; i < ms; i++) {
-      // A real fan's level wanders: ±1.5 dB frame to frame, as measured on
-      // low-rumble noise through the engine (white noise is far steadier)
+      // A real fan's level wanders from frame to frame (white noise is far
+      // steadier): the default wobble of 4 moves ~0.9 dB a step, like a
+      // rumble at 150–250 Hz through the engine; 7 moves ~1.5 dB, like one
+      // under 100 Hz
       if (i % 10 === 0) wob = (rnd() - 0.5) * 2 * (fan && fan.wobble != null ? fan.wobble : 4);
       let v = db2p(room + wob * 0.1);
       if (fan && during(fan, i)) v += db2p(fan.db + wob);

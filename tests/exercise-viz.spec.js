@@ -140,6 +140,26 @@ test.describe("exercise pictures", () => {
     expect(n, vad.segs).toBe(2);
   });
 
+  test("power pause counts pauses over a fan's low rumble at 100 Hz", async ({ page }) => {
+    // Noise under 100 Hz wobbles ~1.5 dB from frame to frame and 6 dB over
+    // 0.6 s: it was often never learned as the room, the take read as one
+    // stretch of speech and the pauses went uncounted
+    await boot(page, "es", [fanInRoom, { gain: 0.009, hz: 100, order: 2 }]);
+    await openAndStart(page, "v10-power-pause");
+    // 2 s of the fan alone, then the speaker (3 s talk, 1.2 s pause)
+    await page.waitForTimeout(1750);
+    await playVoice(page, "speech");
+    await page.waitForTimeout(10000);
+    const n = Number(await page.locator("#mode-focus [data-p]").textContent());
+    const vad = await page.evaluate(() => {
+      const v = window.VTApp.getState().modeInstance.state.vad;
+      return { floor: v.floorDb, segs: v.segments.map((g) => `${g.kind[0]}${g.start.toFixed(2)}`).join(" ") };
+    });
+    expect(vad.floor, `the fan is the room · ${vad.segs}`).toBeGreaterThan(-45);
+    expect(vad.segs, "nothing said before the voice").toMatch(/^s2\./);
+    expect(n, vad.segs).toBe(2);
+  });
+
   test("power pause counts no pause before the first word, with a fan running", async ({ page }) => {
     await boot(page, "es", fanInRoom);
     await openAndStart(page, "v10-power-pause");

@@ -315,18 +315,30 @@ test.describe("modes that own their target", () => {
     expect(t.engine).toBe(t.mode);
     expect(t.viz).toBe(t.mode);
     await page.locator("#btn-practice-stop").click();
+    // The progression chips and their description go with the two buttons: a
+    // chip toasted "Opciones aplicadas · <progression>" and played nothing
     const hidden = (id) =>
       page.evaluate((x) => {
         window.VTApp.openExercise(x);
-        return ["#btn-play-prog", "#btn-loop-prog"].map((s) => document.querySelector(s).hidden);
+        return ["#btn-play-prog", "#btn-loop-prog", "#prog-buttons", "#chord-desc"].map(
+          (s) => document.querySelector(s).hidden
+        );
       }, id);
-    // The zone drills, the hummed targets and the siren pick their notes too
-    for (const id of ["s21-chest-resonance", "s7-humming", "s5-sirens"]) {
-      expect(await hidden(id), id).toEqual([true, true]);
+    // The zone drills, the hummed targets, the siren and the scale walks pick
+    // their notes too
+    for (const id of [
+      "s21-chest-resonance",
+      "s7-humming",
+      "s5-sirens",
+      "s10-five-note",
+      "s16-major-scale-coord"
+    ]) {
+      expect(await hidden(id), id).toEqual([true, true, true, true]);
     }
-    // Exercises sung over chords still play them
+    // Exercises sung over chords still list their progressions and play them
     for (const id of ["s2-solfege-chords", "s13-arpeggio-match"]) {
-      expect(await hidden(id), id).toEqual([false, false]);
+      expect(await hidden(id), id).toEqual([false, false, false, false]);
+      expect(await page.locator("#prog-buttons .prog-btn").count(), id).toBeGreaterThan(0);
     }
   });
 

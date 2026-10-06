@@ -3121,10 +3121,11 @@
     if (refBtn) refBtn.hidden = !ex.audio.refPitch;
     if (inhaleBtn) inhaleBtn.hidden = !ex.audio.refPitch;
     // A mode that walks its own notes plays no progression: the default one
-    // would replace its lanes, chord and target for the rest of the take
+    // would replace its lanes, chord and target for the rest of the take. The
+    // chips and their description go too, or they list chords nothing plays
     const profile = getProfile(ex);
     const ownNotes = !!(profile.ownsTarget || profile.noProgression);
-    ["#btn-play-prog", "#btn-loop-prog"].forEach((s) => {
+    ["#btn-play-prog", "#btn-loop-prog", "#prog-buttons", "#chord-desc"].forEach((s) => {
       const b = $(s);
       if (b) b.hidden = ownNotes;
     });

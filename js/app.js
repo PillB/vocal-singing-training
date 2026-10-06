@@ -960,6 +960,27 @@
     return { type: "exercise", id: m[2] };
   }
 
+  /**
+   * A view's history entry. An exercise's says whether it was open as a step
+   * of the guided session, which its address alone does not (guidedStep).
+   */
+  function routeEntry(name) {
+    return name === "exercise" ? { vt: name, guided: !!state.structured } : { vt: name };
+  }
+
+  /**
+   * Whether an exercise an address reopens (a reload, Forward) is the guided
+   * session's current step. Reopened as a single exercise it had no
+   * "Siguiente", the catalog's timer, and finishing it did not move the
+   * routine on. One opened from the catalog says so in its entry and stays
+   * single.
+   */
+  function guidedStep(id) {
+    if (history.state?.guided === false) return false;
+    const s = VTSession.get();
+    return !!(s && s.status !== "completed" && s.order?.length && VTSession.currentExerciseId() === id);
+  }
+
   function writeRoute(name, prev) {
     if (!route.ready || route.silent || route.pendingBack) return;
     const want = hashFor(name);
@@ -980,11 +1001,11 @@
         history.back();
       } else if (prev === "exercise") {
         // One exercise to the next, or out to somewhere else: one entry.
-        history.replaceState({ vt: name }, "", url);
+        history.replaceState(routeEntry(name), "", url);
         if (name !== "exercise") route.backTo = null;
       } else {
         if (name === "exercise") route.backTo = hashFor(prev);
-        history.pushState({ vt: name }, "", url);
+        history.pushState(routeEntry(name), "", url);
       }
     } catch {
       /* file:// or a sandboxed frame: the views still work without addresses */
@@ -1014,7 +1035,7 @@
       $("#leave-cancel")?.click();
       if (!routeMatchesView(parseRoute(location.hash))) {
         try {
-          history.pushState({ vt: "exercise" }, "", hashFor("exercise"));
+          history.pushState(routeEntry("exercise"), "", hashFor("exercise"));
         } catch {
           /* ignore */
         }
@@ -1039,7 +1060,7 @@
         // Forward into the exercise you just left: same way back as before.
         route.reopening = true;
         try {
-          if (findExercise(t.id)) openExercise(t.id, false);
+          if (findExercise(t.id)) openExercise(t.id, guidedStep(t.id));
         } finally {
           route.reopening = false;
         }
@@ -1053,7 +1074,7 @@
         if (!left && state.view === "exercise" && !routeMatchesView(parseRoute(location.hash))) {
           route.silent -= 1;
           try {
-            history.pushState({ vt: "exercise" }, "", hashFor("exercise"));
+            history.pushState(routeEntry("exercise"), "", hashFor("exercise"));
           } catch {
             /* ignore */
           }
@@ -1082,7 +1103,7 @@
     const t = parseRoute(location.hash);
     if (t?.type === "plan") renderPlan();
     else if (t?.type === "history") renderHistory();
-    else if (t?.type === "exercise" && findExercise(t.id)) forceOpenExercise(t.id, false);
+    else if (t?.type === "exercise" && findExercise(t.id)) forceOpenExercise(t.id, guidedStep(t.id));
     route.ready = true;
     window.addEventListener("popstate", () => {
       onRoute();

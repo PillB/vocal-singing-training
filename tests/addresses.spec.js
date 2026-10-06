@@ -73,6 +73,44 @@ test("an exercise has its own address, and Back from it returns to where it was 
   expect(await hash(page)).toBe("#historial");
 });
 
+test("a guided step stays in its routine through a reload, and through Back then Forward", async ({ page }) => {
+  await boot(page);
+  await page.click("#btn-next-step");
+  await expect(page.locator("#view-exercise")).toHaveClass(/active/);
+  const step = () =>
+    page.evaluate(() => ({
+      id: VTApp.getState().exercise?.id,
+      structured: !!VTApp.getState().structured,
+      timer: document.querySelector("#timer-display").textContent,
+      index: VTSession.get()?.index
+    }));
+  const before = await step();
+  expect(before.structured).toBe(true);
+  await expect(page.locator("#structured-nav")).toBeVisible();
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.waitForFunction(() => !!window.VTApp?.openExercise);
+  await expect(page.locator("#view-exercise")).toHaveClass(/active/);
+  expect(await step()).toEqual(before);
+  await expect(page.locator("#structured-nav")).toBeVisible();
+  await page.goBack();
+  await expect(page.locator("#view-home")).toHaveClass(/active/);
+  await page.goForward();
+  await expect(page.locator("#view-exercise")).toHaveClass(/active/);
+  expect(await step()).toEqual(before);
+  await expect(page.locator("#structured-nav")).toBeVisible();
+  // The same exercise opened from the catalog is a single exercise, and a
+  // reload keeps it one.
+  await page.goBack();
+  await expect(page.locator("#view-home")).toHaveClass(/active/);
+  await page.evaluate((id) => VTApp.openExercise(id), before.id);
+  await expect(page.locator("#structured-nav")).toBeHidden();
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.waitForFunction(() => !!window.VTApp?.openExercise);
+  await expect(page.locator("#view-exercise")).toHaveClass(/active/);
+  expect((await step()).structured).toBe(false);
+  await expect(page.locator("#structured-nav")).toBeHidden();
+});
+
 /* —— Back with a dialog open ——
    A dialog sits over the page Back changes, so Back answers it the way its own
    "not now" does and the page under it is the one the address names. */

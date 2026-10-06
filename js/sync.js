@@ -36,6 +36,13 @@
    * bigger bag waits for the next visit's sync instead.
    */
   const KEEPALIVE_MAX_BYTES = 60000;
+  /**
+   * Longest a read or write may take before it counts as a dropped connection
+   * and goes to the retry. Without a limit, a request that never answers holds
+   * up every sync after it, the retry included. Above the slowest D1 round
+   * trips operators report (39 s, docs/34), so a slow write is not cut off.
+   */
+  const REQUEST_TIMEOUT_MS = 45000;
   /** The weekly goal a profile has until somebody sets one (VTStorage.getGoals). */
   const DEFAULT_WEEKLY_TARGET = 3;
 
@@ -392,7 +399,8 @@
         const pulled = await global.VTAccount.request(
           "GET",
           `/v1/me/progress?profileId=${encodeURIComponent(profileId)}`,
-          null
+          null,
+          { timeoutMs: REQUEST_TIMEOUT_MS }
         );
         if (pulled.status === 401) return { ok: false, reason: "signed_out" };
         if (!pulled.ok) {
@@ -412,11 +420,12 @@
         global.VTStorage.writeSyncBag(merged, profileId);
         if (recordOf(merged) !== recordOf(local)) dataChanged(profileId);
 
-        const pushed = await global.VTAccount.request("PUT", "/v1/me/progress", {
-          profileId,
-          doc: merged,
-          baseRev: serverRev
-        });
+        const pushed = await global.VTAccount.request(
+          "PUT",
+          "/v1/me/progress",
+          { profileId, doc: merged, baseRev: serverRev },
+          { timeoutMs: REQUEST_TIMEOUT_MS }
+        );
         if (pushed.ok) {
           writeRev(profileId, Number(pushed.data?.rev) || serverRev + 1);
           confirmed.set(profileId, { rev: Number(pushed.data?.rev) || serverRev + 1, doc: merged });
@@ -595,7 +604,8 @@
     const pulled = await global.VTAccount.request(
       "GET",
       `/v1/me/progress?profileId=${encodeURIComponent(profileId)}`,
-      null
+      null,
+      { timeoutMs: REQUEST_TIMEOUT_MS }
     );
     if (!pulled.ok) return { ok: false, reason: pulled.offline ? "offline" : "error" };
     if (!pulled.data?.doc) return { ok: false, reason: "empty" };

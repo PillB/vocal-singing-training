@@ -99,7 +99,10 @@ Syncing is debounced by 8 seconds after anything it carries is written (a take,
 a day's practice, the plan, a review, a goal), so a practice session is one write
 rather than one per repetition. That matters on a free-tier database. The storage
 layer asks for the sync itself, so no screen has to remember to. A write that
-lands while a sync is out gets a sync of its own after it.
+lands while a sync is out gets a sync of its own after it. A read or write that
+takes longer than 45 seconds (above D1's long tail) counts as a dropped
+connection, and a failed sync is tried again after 30 seconds, 2 minutes, then
+every 10 minutes.
 
 ---
 

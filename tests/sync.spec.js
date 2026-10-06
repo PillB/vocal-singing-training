@@ -450,6 +450,29 @@ test.describe("Saved progress follows the learner", () => {
     await expect(page.locator("#account-sync")).toHaveText("Progreso guardado en tu cuenta.");
   });
 
+  test("a read the worker never answers gives up, and is tried again", async ({ page }) => {
+    const server = createServer();
+    await boot(page, server);
+
+    let release;
+    server.holdGet = new Promise((resolve) => (release = resolve));
+    const reads = server.gets.length;
+    await page.evaluate(() => window.VTStorage.addHoldLog(5));
+    await page.clock.runFor(9000);
+    await expect.poll(() => server.gets.length).toBeGreaterThan(reads);
+    // Longer than any database round trip: the read is given up as a dropped
+    // connection, rather than holding up every sync after it.
+    await page.clock.runFor(46000);
+    await expect.poll(() => page.evaluate(() => window.VTSync.getStatus().lastError)).toBe("offline");
+    expect(await page.evaluate(() => window.VTSync.getStatus().syncing)).toBe(false);
+
+    server.holdGet = null;
+    release();
+    await page.clock.runFor(31000);
+    await page.waitForTimeout(300);
+    await expect.poll(() => serverHolds(server)).toEqual([5]);
+  });
+
   test("the connection coming back starts a sync", async ({ page }) => {
     const server = createServer();
     await boot(page, server);

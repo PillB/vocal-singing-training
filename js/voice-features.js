@@ -288,6 +288,14 @@
   const OPEN_SETTLE_SEC = 0.2;
   const OPEN_STEPS = 30;
   const OPEN_FLAT_DB = 3;
+  // Until the floor has heard a quiet room, a hum the learner talked over
+  // from the start is learned from the pauses in the talk: a stretch of
+  // PAUSE_STEPS (0.6 s) within PAUSE_FLAT_DB at the quietest level the take
+  // has heard, after a voice, that comes back at the same level (or that the
+  // take opened with for OPEN_MIN_STEPS before the first word)
+  const PAUSE_STEPS = 18;
+  const PAUSE_FLAT_DB = 3;
+  const OPEN_MIN_STEPS = 3;
 
   /**
    * Speech/silence with the room's own floor, a short hangover, and pauses
@@ -308,8 +316,11 @@
    *   hold still for 1.2 s.
    * - A steady sound with a period is a voice (a sung note, a soft held
    *   vowel, an "mmm"), unless the take opened with it and heard nothing
-   *   else for a second: a hum in the room, learned the same way. The Space
-   *   assist never teaches the floor.
+   *   else for a second: a hum in the room, learned the same way. Before the
+   *   floor has heard any quiet room, a hum the learner talked over from the
+   *   first frame is learned from the pauses instead: 0.6 s at the quietest
+   *   level heard that comes back in a second pause (or that the take opened
+   *   with). The Space assist never teaches the floor.
    * - Sound must clear the floor by `marginDb` and also clear the engine's
    *   own sensitivity gate (`frame.sounding`), so a fan does not read as
    *   speech and a quiet room does not turn a breath into a word.
@@ -319,7 +330,9 @@
    * Callbacks: onSpeech(t), onPause(tStart), onPauseEnd(tStart, len), and
    * onTakeBack(t) when the speech onSpeech(t) opened turns out to have been
    * the room: it is gone from `segments`, and the Vad is back to idle or to
-   * the pause it interrupted (whose end is not reported a second time).
+   * the pause it interrupted (whose end is not reported a second time). A
+   * pause held by a hum the floor learned only later is cut out of the
+   * speech then, and its onPauseEnd comes late (no onPause before it).
    */
   class Vad {
     constructor(opts = {}) {
@@ -357,6 +370,13 @@
       this._openLoDb = Infinity;
       this._openHiDb = -Infinity;
       this._openSteps = 0;
+      // The quietest learning step since the mic settled, and the steady
+      // stretches heard at about that level while no quiet room had been:
+      // { lvl, start, end } (start null: the take opened with it)
+      this._lowDb = Infinity;
+      this._hums = [];
+      this._late = null;
+      this._shut = false;
       this.pauseStart = null;
       this.speechStart = null;
       this.levelDb = -140;
@@ -387,6 +407,9 @@
       this.levelDb = db;
       if (frame.sounding) this._closedSince = null;
       else if (this._closedSince == null) this._closedSince = this.t - dt;
+      // A room that holds the gate open never lets it close: a stop
+      // consonant or a breath in a quiet room does, for a few frames
+      if (this._closedSince != null && this.t >= OPEN_SETTLE_SEC && (this.t - this._closedSince) * 1000 >= this.onsetMs) this._shut = true;
       // The floor learns 30 times a second at any frame rate: the remainder is
       // kept (dropping it learned ~24 times a second at 60 fps and ~20 at 30),
       // capped so a stalled tab does not learn a burst of copies of one frame
@@ -450,11 +473,29 @@
       this._recentRing.push(db);
       this._recentT.push(this.t);
       this._recentClarity.push(frame.clarity != null ? frame.clarity : -1);
-      if (this.t >= OPEN_SETTLE_SEC && this._openSteps >= 0) {
-        this._openLoDb = Math.min(this._openLoDb, db);
-        this._openHiDb = Math.max(this._openHiDb, db);
-        this._openSteps = this._openHiDb - this._openLoDb < OPEN_FLAT_DB ? this._openSteps + 1 : -1;
+      if (this.t >= OPEN_SETTLE_SEC) {
+        this._lowDb = Math.min(this._lowDb, db);
+        if (this._openSteps >= 0) {
+          const lo = Math.min(this._openLoDb, db);
+          const hi = Math.max(this._openHiDb, db);
+          if (hi - lo < OPEN_FLAT_DB) {
+            this._openLoDb = lo;
+            this._openHiDb = hi;
+            this._openSteps++;
+          } else {
+            // What the take opened with before the first word: a pause back
+            // at its level is the same room
+            if (this._openSteps >= OPEN_MIN_STEPS) {
+              this._hums.push({ lvl: (this._openLoDb + this._openHiDb) / 2, start: null, end: this.t });
+            }
+            this._openSteps = -1;
+          }
+        }
       }
+      // A stretch ends when a voice comes back over it (3 dB short of the
+      // margin: a voice that clears a stretch a little quieter than this one)
+      const h = this._hums[this._hums.length - 1];
+      if (h && h.end == null && db > h.lvl + this.marginDb - PAUSE_FLAT_DB) h.end = this.t - 1 / 60;
       // A consonant closes the gate for 40–100 ms inside a word: a soft
       // speaker's dips would become the floor and their weaker syllables
       // read as pauses. Only a gate still closed after the hangover is quiet.
@@ -476,20 +517,25 @@
       this._floorRing.clear();
       this._recentRing.last(steps).forEach((v) => this._floorRing.push(v));
       this.floorDb = Math.max(-90, percentile(this._floorRing.last(), 0.1));
+      this._hums = [];
+      if (this._late) this._heardLate(this._late);
+      this._late = null;
       if (this.state === "speech" && this.floorDb > before) this._roomFound();
     }
     /**
      * How many of the last learning steps are a room the floor should start
      * over from (0: none). A fan or a hiss is steady with no period, and can
      * come on at any time. A sound with a period (a sung note, a soft held
-     * vowel, an "mmm") is a voice, unless the take opened with it and has
-     * heard nothing else: a hum in the room. Later, with talk on top of it,
-     * a hum alone in a pause cannot be told from a monotone voice.
+     * vowel, an "mmm") is a voice, unless it is a hum in the room: the take
+     * opened with it and heard nothing else, or, before any quiet room was
+     * heard, it fills a pause in the talk (_pauseRoom).
      */
     _steadyRoom() {
       // Until the floor holds a room, it starts from the first one heard
       const known = this._floorRing.count >= 15;
       if (!known && this._openSteps >= OPEN_STEPS) return OPEN_STEPS;
+      // (a quiet step before the mic settled is the analyser's own silence)
+      if (!known && this._quietAt < OPEN_SETTLE_SEC && !this._shut && this._pauseRoom()) return PAUSE_STEPS;
       const steps = known && this.t - this._quietAt < ROOM_HEARD_SEC ? NEW_ROOM_STEPS : ROOM_STEPS;
       const r = this._recentRing.last(steps);
       if (r.length < steps || Math.max(...r) - Math.min(...r) >= ROOM_FLAT_DB) return 0;
@@ -498,6 +544,60 @@
       // clarity from the engine (−1): no way to tell.
       const c = median(this._recentClarity.last(steps));
       return c != null && c >= 0 && c < NOISY ? steps : 0;
+    }
+    /**
+     * A hum in a pause, before the floor has heard any quiet room: the last
+     * 0.6 s holds still at the quietest level the take has heard, after a
+     * voice at least `marginDb` above it, and the take has held still at
+     * that level before, in an earlier pause or before the first word. One
+     * such stretch could be a soft "mmm" or a held note; a room comes back
+     * in every pause. A voice that stops in a quiet room closes the gate and
+     * the room is heard instead, so this never runs there.
+     */
+    _pauseRoom() {
+      const lv = this._recentRing.last();
+      const ts = this._recentT.last();
+      const n = lv.length;
+      if (n <= PAUSE_STEPS) return false;
+      const r = lv.slice(n - PAUSE_STEPS);
+      if (Math.max(...r) - Math.min(...r) >= PAUSE_FLAT_DB) return false;
+      const lvl = median(r);
+      if (lvl > this._lowDb + PAUSE_FLAT_DB) return false;
+      const last = this._hums[this._hums.length - 1];
+      // The same stretch, still going (no voice has come back over it)
+      if (last && last.end == null && Math.abs(last.lvl - lvl) < PAUSE_FLAT_DB) return false;
+      // A pause starts after a voice: from its last step over the stretch
+      let i = n - PAUSE_STEPS;
+      while (i > 0 && lv[i - 1] <= lvl + this.marginDb) i--;
+      if (i === 0) return false;
+      const voice = ts[i - 1];
+      const same = this._hums.filter((x) => Math.abs(x.lvl - lvl) < PAUSE_FLAT_DB && x.end != null && x.end <= voice);
+      if (same.length) {
+        // Pauses heard at this level before were the room too
+        this._late = same.filter((x) => x.start != null);
+        return true;
+      }
+      this._hums.push({ lvl, start: voice, end: null });
+      if (this._hums.length > 8) this._hums.shift();
+      return false;
+    }
+    /**
+     * Earlier pauses the floor could not hear at the time (it learned the
+     * hum they held only now): cut out of the open speech, and their end
+     * told now, so a pause count still counts them.
+     */
+    _heardLate(list) {
+      let seg = this.segments[this.segments.length - 1];
+      if (this.state !== "speech" || !seg || seg.kind !== "speech") return;
+      list.forEach((h) => {
+        if (h.start <= seg.start || h.end <= h.start) return;
+        seg.end = h.start;
+        this.segments.push({ kind: "pause", start: h.start, end: h.end });
+        seg = { kind: "speech", start: h.end, end: null };
+        this.segments.push(seg);
+        this.speechStart = h.end;
+        if (this.cb.onPauseEnd) this.cb.onPauseEnd(h.start, h.end - h.start);
+      });
     }
     /**
      * The floor just rose under open speech. Speech that never cleared the

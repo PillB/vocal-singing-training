@@ -46,7 +46,9 @@
    *  silence — the room alone
    *  speech  — syllables at `rate` a second: a consonant at `dip` dB, then a
    *            vowel rising to `peak` dB (±3 dB from one to the next) and
-   *            sagging; `voicedCons` keeps the pitch through the consonant
+   *            sagging; `voicedCons` keeps the pitch through the consonant,
+   *            and `stops` is the share of consonants that are a stop's
+   *            closure, the room alone
    *  tone    — a held note at `level` dB with `vibDb` of level wobble and
    *            `vibCents` of pitch vibrato at 5.5 Hz
    *  space   — the Space assist held down
@@ -72,6 +74,7 @@
           const consMs = Math.round(sylMs * (0.2 + 0.2 * rnd()));
           const pk = peak + (rnd() - 0.5) * 6;
           const dp = dip + (rnd() - 0.5) * 4;
+          const stop = s.stops ? rnd() < s.stops : false;
           // Intonation moves a little from one syllable to the next
           semis = Math.max(-4, Math.min(4, semis + (rnd() - 0.5) * 3));
           const f0 = 135 * Math.pow(2, semis / 12);
@@ -79,8 +82,8 @@
             let db;
             let voiced;
             if (k < consMs) {
-              db = dp;
-              voiced = !!s.voicedCons;
+              db = stop ? -Infinity : dp;
+              voiced = !!s.voicedCons && !stop;
             } else {
               const u = (k - consMs) / Math.max(1, sylMs - consMs);
               const shape = u < 0.2 ? u / 0.2 : 1 - 0.35 * ((u - 0.2) / 0.8);

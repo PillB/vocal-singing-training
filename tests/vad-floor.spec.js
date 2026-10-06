@@ -331,6 +331,70 @@ test.describe("pause floor (Vad)", () => {
     }
   });
 
+  test("a hum the learner talks over from Start is learned from the pauses", async ({ page }) => {
+    // Talk from the first frame, or after a lead-in too short for the take
+    // to open with a second of the hum alone. Nothing told the hum from the
+    // voice, and the floor stayed at −70 all take: no pause was measured.
+    // Now a pause at the level the take opened with, or the second pause at
+    // the level of the first, is the room; the first pause is then told late.
+    for (const lead of [0, 0.3, 0.5]) {
+      for (const [label, room] of [
+        ["hum at −36 dB", { hum: { db: -36, hz: 120 } }],
+        ["hum at −36 dB with a fan at −38", { hum: { db: -36, hz: 120 }, fan: { db: -38 } }],
+        ["hum at −42 dB, under the pitch detector", { hum: { db: -42, hz: 100 } }]
+      ]) {
+        const parts = [...(lead ? [QUIET(lead)] : []), ...turns(5, SPEECH(3, OVER_FAN), QUIET(1.2))];
+        const r = await sim(page, Object.assign({ parts }, room));
+        const msg = `${label}, ${lead} s lead-in · ${r.segs}`;
+        expect(r.falsePauses, msg).toBe(0);
+        expect(Math.abs(r.floor - room.hum.db), msg).toBeLessThan(3);
+        eachPauseMeasured(r, `${label}, ${lead} s lead-in`);
+      }
+    }
+    // Longer pauses, and a short 0.8 s one
+    for (const sec of [2, 0.8]) {
+      const r = await sim(page, { parts: turns(4, SPEECH(3, OVER_FAN), QUIET(sec)), hum: { db: -36, hz: 120 } });
+      eachPauseMeasured(r, `${sec} s pauses`);
+    }
+  });
+
+  test("sensitivity 10: a hum about as loud as the room's hiss", async ({ page }) => {
+    // The hiss alone is noise and is learned in 0.6 s. A hum 0–3 dB under it
+    // gives the room a period, so the fan test reads it as a voice.
+    const loud = { peak: -15, dip: -32 };
+    for (const rel of [0, -2, -3]) {
+      for (const lead of [0, 0.4]) {
+        const parts = [...(lead ? [QUIET(lead)] : []), ...turns(5, SPEECH(3, loud), QUIET(1.2))];
+        const r = await sim(page, { parts, room: -56, sens: 10, hum: { db: -56 + rel, hz: 120 } });
+        const label = `hum ${rel} dB against the hiss, ${lead} s lead-in`;
+        expect(r.falsePauses, `${label} · ${r.segs}`).toBe(0);
+        eachPauseMeasured(r, label);
+      }
+    }
+  });
+
+  test("two soft 'mmm's at one level in a quiet room are not a hum", async ({ page }) => {
+    // Talk from the first frame with no pause, so no quiet room has been
+    // heard, and two 1 s fillers at one level, under every dip of the talk:
+    // the shape of a hum in two pauses. A stop consonant's closure shuts the
+    // gate for a few frames, which a room that holds it open never does.
+    const mmm = (level) => NOTE(1, { level, vibDb: 0.5, vibCents: 5 });
+    for (const [peak, dip] of [
+      [-25, -35],
+      [-20, -36]
+    ]) {
+      for (const level of [-37, -43]) {
+        const talk = SPEECH(3, { peak, dip, stops: 0.3 });
+        for (const seed of [1000, 8919, 16838]) {
+          const r = await sim(page, { seed, parts: [talk, mmm(level), talk, mmm(level + 1), talk] });
+          const label = `speech ${peak}/${dip} dB, 'mmm' at ${level} dB, seed ${seed} · ${r.segs}`;
+          expect(r.falsePauses, label).toBe(0);
+          expect(r.ended, label).toEqual([]);
+        }
+      }
+    }
+  });
+
   test("speech misread as a room for a moment does not replace the room", async ({ page }) => {
     // Syllables that swing only 8 dB with unvoiced consonants, after a 1 s
     // lead-in, 40 s with no pause. A stretch of it can hold still for 0.6 s;

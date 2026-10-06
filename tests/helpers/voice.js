@@ -45,8 +45,10 @@ async function stopVoice(page) {
  * microphone from the first frame, loud enough to open the engine's gate at
  * the default sensitivity (−36 dBFS after its gain). Pass it to
  * page.addInitScript after useVoice(): it wraps the voice's getUserMedia.
+ * A `gain` of 0.00055 is a quiet room's hiss instead (−70 dBFS), which opens
+ * the gate only at sensitivity 10.
  */
-function fanInRoom() {
+function fanInRoom(gain) {
   const gum = navigator.mediaDevices.getUserMedia;
   navigator.mediaDevices.getUserMedia = async (...args) => {
     const stream = await gum.apply(navigator.mediaDevices, args);
@@ -60,7 +62,7 @@ function fanInRoom() {
       src.buffer = buf;
       src.loop = true;
       const g = ac.createGain();
-      g.gain.value = 0.0055;
+      g.gain.value = gain || 0.0055;
       src.connect(g).connect(dest);
       src.start();
       window.__fan = src;

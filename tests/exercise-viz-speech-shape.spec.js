@@ -179,6 +179,33 @@ test.describe("speech-shape pictures", () => {
     expect(errors).toEqual([]);
   });
 
+  test("v17 with a fan in the room: the fan's first moments are thinking silence too", async ({ page }) => {
+    const errors = await boot(page, "es", { fan: true });
+    await openAndStart(page, "v17-strategic-concision");
+    // The fan reads as a voice until the floor learns it (~0.6 s), and the
+    // gate's silence stood still meanwhile; that speech is taken back, and
+    // so is the silence it held up
+    await untilModeTime(page, 2.9);
+    const q = await modeState(page, () => {
+      const st = window.VTApp.getState().modeInstance.state;
+      return { silent: st.qs[0].silent, gateOk: st.qs[0].gateOk, t: st.tracker.t, phase: st.phase };
+    });
+    expect(q.silent, JSON.stringify(q)).toBeGreaterThan(q.t - 0.3);
+    expect(q.gateOk, JSON.stringify(q)).toBe(true);
+    expect(q.phase).toBe("think");
+    expect(errors).toEqual([]);
+  });
+
+  test("v18 with a fan in the room: the fan's first moments are no speech in the loudness bins", async ({ page }) => {
+    const errors = await boot(page, "es", { fan: true });
+    await openAndStart(page, "v18-story-peak");
+    await untilModeTime(page, 2.6);
+    const bins = await modeState(page, () => window.VTApp.getState().modeInstance.state.ebins.map((b) => [b.t, b.sp]));
+    expect(bins.length).toBeGreaterThanOrEqual(4);
+    expect(bins.filter((b) => b[1]), JSON.stringify(bins)).toEqual([]);
+    expect(errors).toEqual([]);
+  });
+
   test("v17 gate: the thinking silence opens the door, the answer is timed, silence closes it, an ‘eeh’ is asked about", async ({ page }) => {
     const errors = await boot(page);
     await openAndStart(page, "v17-strategic-concision", "qaGate");

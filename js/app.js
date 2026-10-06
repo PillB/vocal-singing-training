@@ -6872,6 +6872,15 @@
     toast(tt("retain.microStarted"), { durationMs: 2200 });
   }
 
+  /**
+   * The daily loop's arm of loop_home_2026_10 is served. Its files load in
+   * both arms, so asking whether they loaded put the classic arm on the loop's
+   * reminder and hid its welcome back and rest-day notice.
+   */
+  function loopArm() {
+    return !!window.VTDays && !!window.VTLoop?.enabled?.();
+  }
+
   function renderRetentionChrome() {
     if (!window.VTReminders) return;
     const isEs = isEsLang();
@@ -6888,16 +6897,17 @@
     const bn = $("#chk-browser-notify");
     if (bn) bn.checked = !!cfg.browserNotify;
 
-    const loopOn = !!window.VTLoop && !!window.VTDays;
+    const loopOn = loopArm();
 
     // Rest days (the old "freeze"): the ledger spends them on real misses; this
     // only reports one it has just spent, once. The week card already shows
     // the days left, so the reminder dialog does not repeat them.
     const fr = VTReminders.tryApplyFreeze();
     if (fr.applied) {
-      // The start panel says it in its own words; the toast is the fallback.
-      if (loopOn) window.VTLoop.noteRest(fr);
-      else toast(tt("retain.freezeUsed", { n: String(fr.left) }), { durationMs: 3200 });
+      // Rest days are the ledger's in both arms, and so is their event. The
+      // loop's start panel says it in its own words; the toast is the fallback.
+      window.VTLoop?.noteRest?.(fr);
+      if (!loopOn) toast(tt("retain.freezeUsed", { n: String(fr.left) }), { durationMs: 3200 });
     }
 
     // The week card's way in to the reminder says whether one is set.
@@ -6943,8 +6953,9 @@
       if (keep) {
         const tx = $("#remind-due-text");
         if (tx) tx.textContent = state.remindDue.message;
+        // The label names what the button starts (see #rd-start's click).
         const go = $("#rd-start");
-        if (go && loopOn) go.textContent = tt("loop.remindCta");
+        if (go) go.textContent = tt(loopOn ? "loop.remindCta" : "retain.micro5");
         try {
           if (!state.remindDue.tracked) {
             state.remindDue.tracked = true;
@@ -7116,11 +7127,12 @@
       const wb = $("#welcome-back");
       if (wb) wb.hidden = true;
     });
-    // The reminder's button starts today's Mínimo when the loop is there; the
-    // old one opened the Canto air ladder for everybody, Vocal users included.
+    // The reminder's button starts today's Mínimo in the loop's arm; the old
+    // one opened the Canto air ladder for everybody, Vocal users included, and
+    // the classic arm keeps it, so the loop never leaks into the comparison.
     $("#rd-start")?.addEventListener("click", () => {
       state.remindDue = null;
-      if (window.VTLoop?.startTier) window.VTLoop.startTier("min");
+      if (loopArm()) window.VTLoop.startTier("min");
       else startMicroSession("s15-sh-air-ladder");
     });
     $("#rd-dismiss")?.addEventListener("click", () => {

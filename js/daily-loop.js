@@ -1381,6 +1381,9 @@
     tomorrowTeaser,
     renderHome,
     isOn,
+    // The loop's arm of loop_home is served. This file loads in both arms, so
+    // its presence on the page says nothing about which one this browser got.
+    enabled: loopEnabled,
     startTier,
     onPractice,
     onRoutineComplete,

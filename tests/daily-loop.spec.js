@@ -26,12 +26,12 @@ function ledger(dayKeys, bank = 1) {
 
 /**
  * @param {import('@playwright/test').Page} page
- * @param {{ days?: object, loop?: object, lang?: string, query?: string, cardOn?: boolean, micDenied?: boolean, toasts?: boolean, now?: string }} opts
+ * @param {{ days?: object, loop?: object, reminders?: object, lang?: string, query?: string, cardOn?: boolean, micDenied?: boolean, toasts?: boolean, now?: string }} opts
  */
 async function boot(page, opts = {}) {
   await page.clock.install({ time: new Date(opts.now || NOW) });
   await page.addInitScript(
-    ({ days, loop, lang, cardOn, micDenied, toasts }) => {
+    ({ days, loop, reminders, lang, cardOn, micDenied, toasts }) => {
       try {
         localStorage.setItem("vt_tour_v1", "1");
         localStorage.setItem("vt_lang", lang);
@@ -45,10 +45,19 @@ async function boot(page, opts = {}) {
           sessionStorage.setItem("vt_seeded", "1");
           if (days) localStorage.setItem("vt_days_v1", JSON.stringify(days));
           if (loop) localStorage.setItem("vt_loop_v1", JSON.stringify(loop));
+          if (reminders) localStorage.setItem("vt_reminders_v1", JSON.stringify(reminders));
         }
       } catch {
         /* ignore */
       }
+      // Every toast shown, in order: a later one replaces the text of the first.
+      window.__toasts = [];
+      document.addEventListener("DOMContentLoaded", () => {
+        const el = document.querySelector("#toast");
+        if (!el) return;
+        const log = () => window.__toasts.push(el.textContent || "");
+        new MutationObserver(log).observe(el, { childList: true, characterData: true, subtree: true });
+      });
       const AC = window.AudioContext || window.webkitAudioContext;
       async function fakeGUM() {
         if (micDenied) {
@@ -76,7 +85,15 @@ async function boot(page, opts = {}) {
       navigator.mediaDevices.getUserMedia = fakeGUM;
       if (typeof MediaDevices !== "undefined") MediaDevices.prototype.getUserMedia = fakeGUM;
     },
-    { days: opts.days || null, loop: opts.loop || null, lang: opts.lang || "es", cardOn: !!opts.cardOn, micDenied: !!opts.micDenied, toasts: !!opts.toasts }
+    {
+      days: opts.days || null,
+      loop: opts.loop || null,
+      reminders: opts.reminders || null,
+      lang: opts.lang || "es",
+      cardOn: !!opts.cardOn,
+      micDenied: !!opts.micDenied,
+      toasts: !!opts.toasts
+    }
   );
   await page.goto(BASE + "/" + (opts.query || ""), { waitUntil: "domcontentloaded" });
   await page.waitForFunction(() => !!window.VTApp && !!window.VTLoop && !!window.VTDays);
@@ -107,6 +124,13 @@ const panel = (page) =>
     ),
     primaries: document.querySelectorAll("#start-panel .btn-practice").length
   }));
+
+/** A reminder set for 18:00, at 19:30 on a day not yet sung: its banner is up. */
+const DUE = {
+  days: ledger(["2026-09-21", "2026-09-22"]),
+  reminders: { enabled: true, times: ["18:00"], days: [0, 1, 2, 3, 4, 5, 6] },
+  now: "2026-09-23T19:30:00-05:00"
+};
 
 test.describe("Daily loop", () => {
   test("routines: the Mínimo never changes, Esencial rotates, every step is real", async ({ page }) => {
@@ -413,6 +437,80 @@ test.describe("Daily loop", () => {
     expect(p.loopOn).toBe(false);
     expect(p.state).toBeNull();
     await expect(page.locator("#loop-tiers")).toBeHidden();
+  });
+
+  // The loop's files load in both arms, so the classic arm's notices cannot
+  // hang on whether they loaded: the old panel never says "welcome back" or
+  // "rest day" itself, so the card and the toast have to.
+  test("the classic arm, forced: after days away the welcome-back card says it", async ({ page }) => {
+    await boot(page, {
+      days: ledger(["2026-09-15", "2026-09-16", "2026-09-17", "2026-09-18", "2026-09-19"], 0),
+      query: "?ab_loop_home_2026_10=classic"
+    });
+    expect((await panel(page)).state).toBeNull();
+    await expect(page.locator("#welcome-back")).toBeVisible();
+    await expect(page.locator("#welcome-back-body")).toContainText("Llevas 4 días");
+  });
+
+  test("the classic arm, forced: a rest day spent is said in a toast, and counted as in the loop", async ({ page }) => {
+    const week = ["2026-09-15", "2026-09-16", "2026-09-17", "2026-09-18", "2026-09-19", "2026-09-20", "2026-09-21"];
+    await boot(page, { days: ledger(week, 1), toasts: true, query: "?ab_loop_home_2026_10=classic" });
+    const r = await page.evaluate(() => ({
+      toasts: window.__toasts,
+      used: VTDays.read().rest.used,
+      restUsed: VTAnalytics.summary().counts.rest_used || 0
+    }));
+    expect(r.used).toEqual(["2026-09-22"]);
+    expect(r.toasts.join(" | ")).toMatch(/Usamos un día de descanso/);
+    // Rest days are the ledger's, in both arms, and so is their event.
+    expect(r.restUsed).toBe(1);
+  });
+
+  test("the loop says a rest day spent on its panel, not in a toast as well", async ({ page }) => {
+    const week = ["2026-09-15", "2026-09-16", "2026-09-17", "2026-09-18", "2026-09-19", "2026-09-20", "2026-09-21"];
+    await boot(page, { days: ledger(week, 1), toasts: true });
+    expect((await panel(page)).sub).toMatch(/día de descanso/);
+    const r = await page.evaluate(() => ({ toasts: window.__toasts, restUsed: VTAnalytics.summary().counts.rest_used || 0 }));
+    expect(r.toasts.join(" | ")).not.toMatch(/día de descanso/);
+    expect(r.restUsed).toBe(1);
+  });
+
+  test("the classic arm, forced: the reminder's button reads the old 5 min", async ({ page }) => {
+    await boot(page, { ...DUE, query: "?ab_loop_home_2026_10=classic" });
+    const go = page.locator("#rd-start");
+    await expect(go).toBeVisible();
+    await expect(go).toHaveText("▶ 5 min");
+  });
+
+  test("the classic arm, forced: the reminder starts the old 5-minute session, not the Mínimo", async ({ page }) => {
+    await boot(page, { ...DUE, query: "?ab_loop_home_2026_10=classic" });
+    await page.locator("#rd-start").click();
+    await page.clock.runFor(400);
+    const r = await page.evaluate(() => ({
+      open: VTApp.getState().exercise?.id,
+      total: VTApp.getState().timer.total,
+      path: VTStorage.getSession()?.path || null,
+      basicsStart: VTAnalytics.summary().counts.basics_start || 0,
+      tier: JSON.parse(localStorage.getItem("vt_loop_v1") || "{}").tier || null
+    }));
+    expect(r.open).toBe("s15-sh-air-ladder");
+    expect(r.total).toBe(300);
+    expect(r.path).not.toBe("basics");
+    // The loop's own events exist only in its arm.
+    expect(r.basicsStart).toBe(0);
+    expect(r.tier).toBeNull();
+  });
+
+  test("the reminder starts today's Mínimo in the loop", async ({ page }) => {
+    await boot(page, DUE);
+    const go = page.locator("#rd-start");
+    await expect(go).toBeVisible();
+    await expect(go).toHaveText("▶ Mínimo, 3 min");
+    await go.click();
+    await expect(page.locator("#view-exercise")).toHaveClass(/active/);
+    const s = await page.evaluate(() => VTStorage.getSession());
+    expect(s.path).toBe("basics");
+    expect(s.order).toEqual(["s4-lip-trills", "s27-lip-trill-solfege"]);
   });
 
   test("experiments ship switched off: control for everyone, nothing exposed", async ({ page }) => {

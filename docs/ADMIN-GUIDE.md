@@ -364,8 +364,8 @@ account, so both devices must be signed in with the **same** address:
 1. On the old device, if they still have it: open the account panel (their
    name at the top right), press **Guardar ahora** (Save now), and wait for
    **Progreso guardado en tu cuenta** (Progress saved to your account).
-2. On the new device: sign in with the same address, press **Guardar ahora**
-   there too, then reload the page.
+2. On the new device: sign in with the same address and press **Guardar
+   ahora** there too. Historial shows what arrived without a reload.
 
 Only the first practice profile moves, so it must be the one open on both
 devices when they press **Guardar ahora**. What moves: practice history and

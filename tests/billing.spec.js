@@ -409,6 +409,13 @@ test.describe("Billing & subscriptions", () => {
     const ent = await page.evaluate(() => VTBilling.getEntitlement());
     expect(ent.pro).toBe(true);
     expect(ent.source).toBe("license");
+    // That claim went out on an ordinary page load, not on the way back from
+    // paying, so the privacy page's list of when the browser writes to us has
+    // to name it.
+    await page.goto(BASE + "/privacy.html");
+    const policy = (await page.locator("main").textContent()).replace(/\s+/g, " ");
+    expect(policy).toContain("si el pago aún no se ha confirmado");
+    expect(policy).toContain("while a payment is not confirmed yet");
   });
 
   test("a checkout that never confirms stops retrying and says so", async ({ page }) => {

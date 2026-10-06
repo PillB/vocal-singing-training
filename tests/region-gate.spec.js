@@ -320,6 +320,24 @@ test.describe("EU rules only in the EU", () => {
     await ctx.close();
   });
 
+  test("the privacy page says the browser asks where it is, in both languages", async ({ browser }) => {
+    // The question to the worker is a request on page load from people who may
+    // never see a bar, and privacy.html lists when the browser writes to us.
+    // It was missing from that list.
+    const { ctx, page, sent } = await open(browser, {
+      timezoneId: "America/Lima",
+      locale: "es-ES",
+      geo: { ok: true, country: "PE", askFirst: false }
+    });
+    await page.waitForFunction(() => window.VTRegion.verdict() !== "pending");
+    expect(sent.geo).toBe(1);
+    await page.goto(BASE + "/privacy.html");
+    const policy = (await page.locator("main").textContent()).replace(/\s+/g, " ");
+    expect(policy).toContain("desde qué país entras");
+    expect(policy).toContain("which country you are visiting from");
+    await ctx.close();
+  });
+
   test("the browser's list of ask-first countries agrees with the worker's", async ({ browser }) => {
     // Two lists in two languages, and the worker's is the one that decides. If
     // they drift, a visitor is asked by one half and recorded by the other, so

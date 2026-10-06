@@ -368,6 +368,23 @@ test.describe("Saved progress follows the learner", () => {
     expect(await page.evaluate(() => window.__progressFetches.filter((f) => f.method === "PUT" && f.keepalive).length)).toBe(1);
   });
 
+  test("closing the tab after this device's progress was cleared keeps the account's takes", async ({ page }) => {
+    const take = { completedCount: 1, lastScore: 5, lastAt: "2026-09-20T10:00:00Z", history: [{ id: "t1", at: "2026-09-20T10:00:00Z", metrics: {}, score: 5, notes: "", durationSec: 60 }] };
+    const server = createServer();
+    await boot(page, server, { seed: { vt_progress_v1: { "v1-diction": take } } });
+    expect(Object.keys(server.docs.default.progress)).toEqual(["v1-diction"]);
+
+    // What "Borrar progreso local" in the admin panel does, then a held note,
+    // then the tab closes before the quiet period is up.
+    await page.evaluate(() => {
+      localStorage.removeItem("vt_progress_v1");
+      window.VTStorage.addHoldLog(3);
+    });
+    await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: false })));
+    await expect.poll(() => serverHolds(server), { timeout: 4000 }).toEqual([3]);
+    expect(Object.keys(server.docs.default.progress)).toEqual(["v1-diction"]);
+  });
+
   test("a change saved while a slow push is out follows it up", async ({ page }) => {
     const server = createServer();
     await boot(page, server);

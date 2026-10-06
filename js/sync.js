@@ -52,10 +52,11 @@
   let version = 0;
   const changedAt = new Map();
   const pushedAt = new Map();
-  // The revision this page itself last wrote or read for each profile, for the
-  // one write a closing page gets. Kept in memory only, so it can never be a
-  // number left behind by another account or another tab.
-  const confirmedRev = new Map();
+  // What this page itself last wrote or read for each profile, the revision and
+  // the copy the account held at it, for the one write a closing page gets.
+  // Kept in memory only, so it can never be a number left behind by another
+  // account or another tab.
+  const confirmed = new Map();
 
   function unpushed(profileId) {
     return (changedAt.get(profileId) || 0) > (pushedAt.get(profileId) || 0);
@@ -418,7 +419,7 @@
         });
         if (pushed.ok) {
           writeRev(profileId, Number(pushed.data?.rev) || serverRev + 1);
-          confirmedRev.set(profileId, Number(pushed.data?.rev) || serverRev + 1);
+          confirmed.set(profileId, { rev: Number(pushed.data?.rev) || serverRev + 1, doc: merged });
           pushedAt.set(profileId, Math.max(pushedAt.get(profileId) || 0, seen));
           lastError = null;
           lastSyncedAt = new Date().toISOString();
@@ -511,9 +512,12 @@
    * so the whole read-merge-write cycle starts at once instead of after the
    * quiet period. Closing: there is no time to read first, so each profile
    * with changes the account has not had goes up in one request the browser
-   * finishes on its own, written on top of the revision this page last saw.
-   * If anyone else wrote since, the server refuses it and nothing is lost: the
-   * changes are still here, and the next visit's sync merges them.
+   * finishes on its own, written on top of the revision this page last saw and
+   * merged with the copy the account held at it. While that revision stands,
+   * that copy is what a read would bring back, so anything removed here since
+   * (progress cleared from the admin panel) is merged back, not wiped from the
+   * account. If anyone else wrote since, the server refuses it and nothing is
+   * lost: the changes are still here, and the next visit's sync merges them.
    *
    * @param {{unloading?: boolean}} [opts] Whether the page is going away.
    * @returns {void}
@@ -531,8 +535,9 @@
     }
     const active = global.VTStorage.getActiveProfileId();
     for (const profileId of [active, ...otherUnpushed(active)]) {
-      if (!unpushed(profileId) || !confirmedRev.has(profileId)) continue;
-      const body = { profileId, doc: localBag(profileId), baseRev: confirmedRev.get(profileId) };
+      const last = confirmed.get(profileId);
+      if (!unpushed(profileId) || !last) continue;
+      const body = { profileId, doc: mergeBag(localBag(profileId), last.doc), baseRev: last.rev };
       let bytes = Infinity;
       try {
         bytes = new Blob([JSON.stringify(body)]).size;
@@ -542,7 +547,7 @@
       if (bytes > KEEPALIVE_MAX_BYTES) continue;
       // Not sent twice on the same base if the page closes again after a
       // back-forward cache brought it back.
-      confirmedRev.delete(profileId);
+      confirmed.delete(profileId);
       const seen = version;
       global.VTAccount.request("PUT", "/v1/me/progress", body, { keepalive: true })
         .then((res) => {
@@ -550,7 +555,7 @@
           if (!res.ok) return;
           const rev = Number(res.data?.rev) || body.baseRev + 1;
           writeRev(profileId, rev);
-          confirmedRev.set(profileId, rev);
+          confirmed.set(profileId, { rev, doc: body.doc });
           pushedAt.set(profileId, Math.max(pushedAt.get(profileId) || 0, seen));
         })
         .catch(() => {});
@@ -598,7 +603,7 @@
     global.VTStorage.writeSyncBag(pulled.data.doc, profileId);
     pushedAt.set(profileId, version);
     writeRev(profileId, Number(pulled.data.rev) || 0);
-    confirmedRev.set(profileId, Number(pulled.data.rev) || 0);
+    confirmed.set(profileId, { rev: Number(pulled.data.rev) || 0, doc: pulled.data.doc });
     lastError = null;
     lastSyncedAt = new Date().toISOString();
     dataChanged(profileId);
@@ -634,7 +639,7 @@
     // Signing in on a fresh device is the moment a sync is most wanted.
     global.VTAccount.onChange((state) => {
       if (state.signedIn) schedule();
-      else confirmedRev.clear();
+      else confirmed.clear();
     });
     // A failed sync need not wait out its retry once the connection is back.
     global.addEventListener?.("online", () => {

@@ -745,6 +745,79 @@ test("a Mercado Pago renewal charge that is not approved opens nothing on its ow
   assert.equal(claim.body.token, undefined);
 });
 
+/** Subscription charges that have not brought money in, on the authorized-payment topic. */
+const UNSETTLED_AUTHORIZED_PAYMENTS = [
+  { label: "rejected", status: "recycling", payment: { id: 881, status: "rejected" } },
+  { label: "in_process", status: "processed", payment: { id: 882, status: "in_process" } },
+  { label: "pending", status: "processed", payment: { id: 883, status: "pending" } },
+  { label: "no payment yet", status: "recycling" }
+];
+
+test("a Mercado Pago charge that has not gone through, delivered before its subscription, never signs without an end", async () => {
+  for (const charge of UNSETTLED_AUTHORIZED_PAYMENTS) {
+    const env = createTestEnv();
+    const preapprovalId = `PRE-AP-${charge.label}`;
+    const chargeId = `AP-${charge.label}`;
+    await deliverMercadoPago(env, "subscription_authorized_payment", {
+      id: chargeId,
+      preapproval_id: preapprovalId,
+      status: charge.status,
+      date_created: isoIn(-55),
+      date_last_updated: isoIn(-55),
+      ...(charge.payment ? { payment: charge.payment } : {})
+    });
+    const early = await claimFor(env, "mercadopago", chargeId);
+    assert.equal(early.body.token, undefined, `${charge.label}: the charge opens nothing on its own`);
+
+    // The subscription's own notification is older than the charge's.
+    const paidThrough = Math.floor(Date.now() / 1000) + 20 * DAY;
+    await deliverMercadoPago(env, "subscription_preapproval", {
+      id: preapprovalId,
+      status: "authorized",
+      reason: "Vocal Studio Pro mensual",
+      next_payment_date: new Date(paidThrough * 1000).toISOString(),
+      date_last_updated: isoIn(-60),
+      payer_id: 5
+    });
+    const claim = await claimFor(env, "mercadopago", preapprovalId);
+    assert.equal(claim.status, 200, charge.label);
+    assert.equal(claim.body.entitlement.periodEnd, paidThrough, `${charge.label}: the subscription still sets the period`);
+    const verified = await verifyLicenseToken(claim.body.token, env);
+    assert.equal(verified.valid, true, charge.label);
+    assert.equal(verified.payload.periodEnd, paidThrough, `${charge.label}: the token has a finite end`);
+    assert.ok(verified.payload.exp <= paidThrough, charge.label);
+  }
+});
+
+test("a Mercado Pago charge that has not gone through cannot reopen a subscription nobody paid for", async () => {
+  for (const charge of UNSETTLED_AUTHORIZED_PAYMENTS) {
+    const env = createTestEnv();
+    const preapprovalId = `PRE-NEVER-${charge.label}`;
+    const preapproval = {
+      id: preapprovalId,
+      status: "pending",
+      reason: "Vocal Studio Pro mensual",
+      next_payment_date: isoIn(30 * DAY),
+      date_last_updated: isoIn(-120),
+      payer_id: 5
+    };
+    await deliverMercadoPago(env, "subscription_preapproval", preapproval);
+    await deliverMercadoPago(env, "subscription_preapproval", { ...preapproval, status: "cancelled", date_last_updated: isoIn(-60) });
+    // A retry notice for the charge that never went through, newer than the cancellation.
+    await deliverMercadoPago(env, "subscription_authorized_payment", {
+      id: `AP-NEVER-${charge.label}`,
+      preapproval_id: preapprovalId,
+      status: charge.status,
+      date_created: isoIn(-55),
+      date_last_updated: isoIn(-55),
+      ...(charge.payment ? { payment: charge.payment } : {})
+    });
+    const claim = await claimFor(env, "mercadopago", preapprovalId);
+    assert.equal(claim.status, 403, charge.label);
+    assert.equal(claim.body.token, undefined, `${charge.label}: no period was ever paid for`);
+  }
+});
+
 test("a Mercado Pago subscription that was never authorized never entitles", async () => {
   const env = createTestEnv();
   const preapproval = {

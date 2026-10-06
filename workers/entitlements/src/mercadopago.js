@@ -189,25 +189,6 @@ export async function fetchMercadoPagoResource(kind, id, env, options) {
 }
 
 /**
- * Map the status of a subscription's charge (an authorized payment) to our
- * entitlement status. Only an approved charge has brought money in; one still
- * in flight or turned down is the "past_due" grace while Mercado Pago retries.
- * "authorized" is a card hold that was never captured, so it is not paid yet.
- * @param {unknown} status Payment status.
- * @returns {string} "active" | "past_due" | "canceled".
- */
-export function mapPaymentStatus(status) {
-  const value = String(status);
-  if (value === "approved") {
-    return "active";
-  }
-  if (value === "cancelled" || value === "canceled" || value === "refunded" || value === "charged_back") {
-    return "canceled";
-  }
-  return "past_due";
-}
-
-/**
  * True for a payment whose money went back to the payer.
  * @param {unknown} status Payment status.
  * @returns {boolean} Whether it was refunded or charged back.
@@ -476,9 +457,15 @@ export function mapPreapprovalResource(preapproval, env) {
  */
 export function mapAuthorizedPaymentResource(authorized, env) {
   const paymentStatus = authorized && authorized.payment && authorized.payment.status;
-  const status = paymentStatus
-    ? mapPaymentStatus(paymentStatus)
-    : (String(authorized && authorized.status) === "processed" ? "active" : "past_due");
+  // Only a charge whose money arrived says anything new. One still in flight
+  // or turned down (an uncaptured "authorized" hold included) leaves the
+  // subscription as it was, as on the payment topic: Mercado Pago retries it,
+  // and the preapproval notifications carry the subscription's state and
+  // period. It does not move the clock either, or the subscription's own,
+  // older notification would be refused as stale.
+  const approved = paymentStatus
+    ? String(paymentStatus) === "approved"
+    : String(authorized && authorized.status) === "processed";
   const subscriptionId = authorized && authorized.preapproval_id ? String(authorized.preapproval_id) : null;
   const payment = (authorized && authorized.payment) || {};
   const occurredAt = resourceOccurredAt(authorized);
@@ -488,7 +475,7 @@ export function mapAuthorizedPaymentResource(authorized, env) {
   const reversed = isReversedPayment(paymentStatus);
   // A recurring charge extends the period by one interval of whatever plan the
   // license already holds (the store knows it; this resource does not).
-  const chargedAt = status === "active"
+  const chargedAt = approved
     ? (isoToUnixSeconds(payment.date_approved)
       || isoToUnixSeconds(authorized && authorized.debit_date)
       || isoToUnixSeconds(authorized && authorized.date_created))
@@ -502,7 +489,7 @@ export function mapAuthorizedPaymentResource(authorized, env) {
     customerId: null,
     plan: undefined,
     planSource: undefined,
-    status: reversed ? undefined : status,
+    status: approved ? "active" : undefined,
     // `next_retry_date` is a dunning date, not a paid-through date: never let it
     // become the period end.
     periodEnd: undefined,
@@ -513,7 +500,7 @@ export function mapAuthorizedPaymentResource(authorized, env) {
         || isoToUnixSeconds(authorized && authorized.date_created)
         || occurredAt)
       : undefined,
-    occurredAt: reversed ? null : occurredAt
+    occurredAt: approved ? occurredAt : null
   };
 }
 

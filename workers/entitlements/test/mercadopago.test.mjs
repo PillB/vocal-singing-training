@@ -11,7 +11,6 @@ import {
   mapMercadoPagoResource,
   mapOneOffPaymentStatus,
   mapPaymentResource,
-  mapPaymentStatus,
   mapPreapprovalResource,
   mapPreapprovalStatus,
   normalizeTimestampSeconds,
@@ -214,14 +213,34 @@ test("the notification target comes from the body or the query string", () => {
 });
 
 test("status mapping follows the documented resource states", () => {
-  // A subscription's charge: only an approved one is paid; one that is still
-  // in flight or failed is the dunning grace while Mercado Pago retries.
-  assert.equal(mapPaymentStatus("approved"), "active");
-  assert.equal(mapPaymentStatus("authorized"), "past_due", "authorized is not captured: no money yet");
-  assert.equal(mapPaymentStatus("pending"), "past_due");
-  assert.equal(mapPaymentStatus("rejected"), "past_due");
-  assert.equal(mapPaymentStatus("cancelled"), "canceled");
-  assert.equal(mapPaymentStatus("refunded"), "canceled");
+  // A subscription's charge: only an approved one is paid. One that is still
+  // in flight or did not go through changes nothing and does not move the
+  // clock, while Mercado Pago retries it.
+  const approved = mapAuthorizedPaymentResource({
+    id: "ap_ok",
+    preapproval_id: "pre_s",
+    date_last_updated: "2026-03-01T10:00:00.000-05:00",
+    payment: { status: "approved" }
+  }, {});
+  assert.equal(approved.status, "active");
+  assert.equal(approved.occurredAt, isoToUnixSeconds("2026-03-01T10:00:00.000-05:00"));
+  for (const status of ["authorized", "pending", "in_process", "rejected", "cancelled", "something_new"]) {
+    const charge = mapAuthorizedPaymentResource({
+      id: "ap_no",
+      preapproval_id: "pre_s",
+      status: "processed",
+      date_last_updated: "2026-03-01T10:00:00.000-05:00",
+      payment: { status }
+    }, {});
+    assert.equal(charge.status, undefined, `${status}: no money yet, or none at all`);
+    assert.equal(charge.occurredAt, null, status);
+    assert.equal(charge.periodEndFromCharge, null, status);
+  }
+  for (const status of ["scheduled", "recycling", "cancelled"]) {
+    const charge = mapAuthorizedPaymentResource({ id: "ap_np", preapproval_id: "pre_s", status }, {});
+    assert.equal(charge.status, undefined, `${status} with no payment yet`);
+    assert.equal(charge.occurredAt, null, status);
+  }
 
   // A one-off payment has no retries behind it: settling, or not entitled.
   assert.equal(mapOneOffPaymentStatus("approved"), "active");
@@ -484,7 +503,7 @@ test("a dunning retry date never becomes the paid-through date", () => {
     next_retry_date: "2026-03-05T10:00:00.000-05:00",
     payment: { status: "rejected" }
   }, {});
-  assert.equal(failed.status, "past_due");
+  assert.equal(failed.status, undefined);
   assert.equal(failed.periodEnd, undefined);
   assert.equal(failed.periodEndFromCharge, null, "a failed charge buys no time");
 });
@@ -531,7 +550,8 @@ test("preapproval and authorized payment resources key on the preapproval id", (
   assert.equal(authorized.plan, undefined, "a renewal charge must not rewrite the plan");
 
   const recycling = mapAuthorizedPaymentResource({ id: "ap_3", preapproval_id: "pre_9", status: "recycling" }, {});
-  assert.equal(recycling.status, "past_due");
+  assert.equal(recycling.status, undefined, "a charge being retried leaves the subscription as it was");
+  assert.equal(recycling.subscriptionId, "pre_9");
 
   assert.equal(mapMercadoPagoResource("payment", null, {}).reason, "missing_resource");
   assert.equal(mapMercadoPagoResource("other", {}, {}).reason, "unhandled_kind");

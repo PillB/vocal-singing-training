@@ -320,9 +320,10 @@ Consequences worth understanding before you ship:
 - **The providers' own retries are what keep `periodEnd` moving.** Stripe
   retries a failing endpoint for up to ~3 days and `invoice.paid` /
   `customer.subscription.updated` carry the new period; Mercado Pago retries
-  too, and `subscription_authorized_payment` extends by one interval. If the
-  worker is down for longer than a billing period, expect expiries — watch for
-  repeated non-2xx in the Stripe/MP dashboards, and replay events from there.
+  too, and an approved `subscription_authorized_payment` extends by one
+  interval. If the worker is down for longer than a billing period, expect
+  expiries — watch for repeated non-2xx in the Stripe/MP dashboards, and
+  replay events from there.
 - **Out-of-order delivery cannot resurrect a dead entitlement.** Every update
   carries `occurredAt` (Stripe's `event.created`; Mercado Pago's
   `date_last_updated`/`last_modified`), stored on the record. An update older
@@ -428,10 +429,15 @@ Only money that arrived entitles. A one-off payment `approved` → `active`;
 `pending`/`in_process`/`authorized`/`in_mediation` → `pending` (an unpaid cash
 voucher, a card under review, a hold not yet captured: `/v1/claim` answers 202
 and the browser keeps polling); anything else (`rejected`, `cancelled`, an
-expired voucher) → `canceled` with no period, so it never yields a token. A
-subscription's charge (a payment carrying a `preapproval_id`) that is not
-approved changes nothing: Mercado Pago retries it, and the subscription's own
-notifications carry its state. Preapproval `authorized` → `active`, `pending` →
+expired voucher) → `canceled` with no period, so it never yields a token. On
+either topic, a subscription's charge that is not approved (a payment carrying
+a `preapproval_id`, or an authorized payment whose payment is not `approved`,
+or that is not `processed` when it has no payment yet) moves neither the
+status nor the record's `occurredAt`, so the subscription's own notifications,
+even older ones, still set its state and period: Mercado Pago retries the
+charge, and the preapproval says what became of the subscription. Only its
+refund or chargeback does something (below).
+Preapproval `authorized` → `active`, `pending` →
 `pending`, `paused`/`cancelled`/anything else → `canceled`. An approved payment
 sets the period to one plan interval from its approval date; an authorized
 preapproval's `next_payment_date` sets it directly, and only while it is

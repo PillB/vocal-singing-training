@@ -72,3 +72,117 @@ test("an exercise has its own address, and Back from it returns to where it was 
   await expect(page.locator("#view-history")).toHaveClass(/active/);
   expect(await hash(page)).toBe("#historial");
 });
+
+/* —— Back with a dialog open ——
+   A dialog sits over the page Back changes, so Back answers it the way its own
+   "not now" does and the page under it is the one the address names. */
+
+const PHONE_UA =
+  "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36";
+
+/** A page with a fake microphone that counts what was asked of it, on a faked clock. */
+async function bootPractice(page, { e2e = true } = {}) {
+  await page.clock.install({ time: new Date("2026-09-23T10:00:00-05:00") });
+  await page.addInitScript((e2e) => {
+    try {
+      localStorage.setItem("vt_tour_v1", "1");
+      localStorage.setItem("vt_ui_tour_off_v1", "1");
+      localStorage.setItem("vt_lang", "es");
+      localStorage.setItem("vt_settings_v1", JSON.stringify({ lastTab: "singing" }));
+      if (e2e) sessionStorage.setItem("vt_e2e", "1");
+    } catch {
+      /* ignore */
+    }
+    window.__gum = 0;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    async function fakeGUM() {
+      window.__gum += 1;
+      let ctx = window.VTSharedAudioCtx;
+      if (!ctx || ctx.state === "closed") {
+        ctx = new AC();
+        window.VTSharedAudioCtx = ctx;
+      }
+      const dest = ctx.createMediaStreamDestination();
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      g.gain.value = 0.00001;
+      osc.connect(g);
+      g.connect(dest);
+      osc.start();
+      return dest.stream;
+    }
+    if (!navigator.mediaDevices) Object.defineProperty(navigator, "mediaDevices", { value: {}, configurable: true });
+    navigator.mediaDevices.getUserMedia = fakeGUM;
+    if (typeof MediaDevices !== "undefined") MediaDevices.prototype.getUserMedia = fakeGUM;
+  }, e2e);
+  await page.goto(`${BASE}/index.html`, { waitUntil: "domcontentloaded" });
+  await page.waitForFunction(() => !!window.VTApp?.openExercise && !!window.VTLoop);
+  await page.clock.runFor(500);
+}
+
+test.describe("Back with a dialog open", () => {
+  test.describe("the first-run microphone primer", () => {
+    // A person's browser: the primer is muted under automation.
+    test.use({ userAgent: PHONE_UA });
+
+    test("Back closes it without answering it, and its button then starts nothing", async ({ page }) => {
+      await bootPractice(page, { e2e: false });
+      await page.evaluate(() => VTApp.openExercise("s4-lip-trills"));
+      await page.clock.runFor(300);
+      await page.locator("#btn-practice-start").click();
+      await expect(page.locator("#mic-primer")).toBeVisible();
+      await page.goBack();
+      await page.clock.runFor(300);
+      await expect(page.locator("#view-home")).toHaveClass(/active/);
+      await expect(page.locator("#mic-primer")).toBeHidden();
+      expect(await page.evaluate(() => document.body.classList.contains("modal-open"))).toBe(false);
+      // Back is not a "no": nothing is stored and no "we won't ask again" toast.
+      expect(await page.evaluate(() => localStorage.getItem("vt_mic_primed_v1"))).toBeNull();
+      await expect(page.locator("#toast")).not.toHaveClass(/show/);
+      // A press that still reaches the primer's button starts nothing off-screen.
+      await page.evaluate(() => document.querySelector("#mic-primer [data-primer-ok]").click());
+      await page.clock.runFor(1000);
+      expect(await page.evaluate(() => ({ live: VTApp.getState().practiceLive, gum: window.__gum }))).toEqual({ live: false, gum: 0 });
+    });
+  });
+
+  test("Back closes the reminder dialog and the loop's dialogs as 'Ahora no', with nothing switched on", async ({ page }) => {
+    await bootPractice(page);
+    await page.click("#btn-history");
+    await page.click("#btn-nav-home");
+    const open = (sel) => page.locator(sel).evaluate((m) => !m.hidden);
+    const trapped = () => page.evaluate(() => !!document.activeElement?.closest?.(".modal-overlay:not([hidden])"));
+
+    await page.evaluate(() => VTApp.openReminders());
+    expect(await open("#reminder-modal")).toBe(true);
+    await page.goBack();
+    await page.clock.runFor(300);
+    await expect(page.locator("#view-history")).toHaveClass(/active/);
+    expect(await open("#reminder-modal")).toBe(false);
+    expect(await trapped()).toBe(false);
+    expect(await page.evaluate(() => !!window.VTReminders.getConfig().enabled)).toBe(false);
+
+    await page.goForward();
+    await page.clock.runFor(300);
+    await expect(page.locator("#view-home")).toHaveClass(/active/);
+    await page.evaluate(() => VTLoop.openCards());
+    expect(await open("#loop-cards")).toBe(true);
+    await page.goBack();
+    await page.clock.runFor(300);
+    await expect(page.locator("#view-history")).toHaveClass(/active/);
+    expect(await open("#loop-cards")).toBe(false);
+    expect(await trapped()).toBe(false);
+
+    await page.goForward();
+    await page.clock.runFor(300);
+    await page.evaluate(() =>
+      VTLoop.showDone({ sum: VTDays.summary(), tier: "min", track: "singing", surprise: null, ms: 0, comeback: false, first: false })
+    );
+    expect(await open("#loop-done")).toBe(true);
+    await page.goBack();
+    await page.clock.runFor(300);
+    await expect(page.locator("#view-history")).toHaveClass(/active/);
+    expect(await open("#loop-done")).toBe(false);
+    expect(await trapped()).toBe(false);
+  });
+});

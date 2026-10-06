@@ -1172,6 +1172,15 @@
 
   /* —— The completion card —— */
 
+  /** How to close each of this file's dialogs while it is open, as its own close button does. */
+  const closeOpen = { done: null, cards: null };
+
+  /** Close whichever is open, for when the page under it changes (the browser's Back). */
+  function closeDialogs() {
+    closeOpen.done?.();
+    closeOpen.cards?.();
+  }
+
   function showDone(o) {
     const modal = $("#loop-done");
     if (!modal) return;
@@ -1246,6 +1255,7 @@
     modal.style.display = "";
     global.VTFocusTrap?.activate?.(modal, { initialFocus: close });
     const finish = (then) => {
+      closeOpen.done = null;
       modal.hidden = true;
       global.VTFocusTrap?.release?.(modal);
       close.onclick = null;
@@ -1254,6 +1264,7 @@
       modal.onclick = null;
       if (then) then();
     };
+    closeOpen.done = () => finish();
     close.onclick = () => finish();
     if (remind) {
       remind.onclick = () =>
@@ -1294,12 +1305,14 @@
     global.VTFocusTrap?.activate?.(modal, { initialFocus: close });
     track("loop_cards_open", { n: Object.keys(L.cards).length });
     const finish = () => {
+      closeOpen.cards = null;
       modal.hidden = true;
       global.VTFocusTrap?.release?.(modal);
       close.onclick = null;
       modal.onkeydown = null;
       modal.onclick = null;
     };
+    closeOpen.cards = finish;
     close.onclick = finish;
     modal.onkeydown = (e) => {
       if (e.key === "Escape") {
@@ -1375,6 +1388,7 @@
     drawSurprise,
     openCards,
     showDone,
+    closeDialogs,
     readLoop,
     merge,
     setTier,

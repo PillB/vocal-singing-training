@@ -1217,6 +1217,9 @@
 
   /* ── Microphone primer ────────────────────────────────────────────────── */
 
+  /** Closes the open primer without an answer; null while none is open. */
+  let closePrimer = null;
+
   function micPrimed() {
     try {
       return localStorage.getItem(MIC_PRIMED_KEY) === "1";
@@ -1273,6 +1276,7 @@
       document.body.appendChild(modal);
     }
     const close = () => {
+      closePrimer = null;
       modal.hidden = true;
       document.body.classList.remove("modal-open");
       window.VTFocusTrap?.release(modal);
@@ -1309,8 +1313,19 @@
     modal.hidden = false;
     document.body.classList.add("modal-open");
     document.addEventListener("keydown", onPrimerKey);
+    closePrimer = close;
     track("mic_primer_show", {});
     window.VTFocusTrap?.activate(modal, { initialFocus: ok, returnFocus: opener });
+  }
+
+  /**
+   * Close the primer without taking it as an answer, for when the page under it
+   * changes (the browser's Back). It is not a "no": nothing is stored, so the
+   * next Empezar asks again, and the "we won't ask again" toast is not shown on
+   * a page with no Empezar.
+   */
+  function closeMicPrimer() {
+    if (closePrimer) closePrimer();
   }
 
   /* ── Wiring ───────────────────────────────────────────────────────────── */
@@ -1395,6 +1410,7 @@
     markUiSeen,
     needsMicPrimer,
     showMicPrimer,
+    closeMicPrimer,
     guideHref
   };
 

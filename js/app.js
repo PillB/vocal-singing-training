@@ -1012,6 +1012,12 @@
     if (window.VTTour?.isActive?.()) window.VTTour.end?.(false);
     if ($("#pricing-modal") && !$("#pricing-modal").hidden) closePricing();
     if ($("#account-modal") && !$("#account-modal").hidden) closeAccount();
+    // The page under them is changing: the other dialogs close unanswered, as
+    // their own "Ahora no" does, so none is left holding the keyboard over a
+    // page it was not opened on.
+    window.VTTour?.closeMicPrimer?.();
+    closeReminders();
+    window.VTLoop?.closeDialogs?.();
     route.silent += 1;
     try {
       if (t?.type === "exercise") {
@@ -3445,7 +3451,11 @@
         // piano keeps playing and only the pitch readout is lost. Roughly half
         // the exercises that show it have no piano and no pitch readout at all,
         // including the one the home page's own first-practice button opens.
-        window.VTTour.showMicPrimer(() => startPractice(), {
+        window.VTTour.showMicPrimer(() => {
+          // Only for the exercise it was asked on, still on screen: a late
+          // answer must not open the mic behind another page.
+          if (state.view === "exercise" && state.exercise === ex) startPractice();
+        }, {
           piano: exerciseWantsSound(ex, profile),
           onDecline: () => toast(tt("tour.mic.declined"))
         });
@@ -6814,6 +6824,17 @@
     if (cancel) cancel.hidden = on;
   }
 
+  /** "Ahora no": close the reminder dialog without turning anything on. Back uses it too. */
+  function closeReminders() {
+    const modal = $("#reminder-modal");
+    if (!modal || modal.hidden) return;
+    modal.hidden = true;
+    window.VTFocusTrap?.release?.(modal);
+    modal.onkeydown = null;
+    modal.onclick = null;
+    renderRetentionChrome();
+  }
+
   function openReminders() {
     const modal = $("#reminder-modal");
     if (!modal || !modal.hidden) return;
@@ -6822,30 +6843,23 @@
     modal.hidden = false;
     const on = !!$("#chk-reminders")?.checked;
     window.VTFocusTrap?.activate?.(modal, { initialFocus: $(on ? "#chk-reminders" : "#rem-time-1") });
-    const finish = () => {
-      modal.hidden = true;
-      window.VTFocusTrap?.release?.(modal);
-      modal.onkeydown = null;
-      modal.onclick = null;
-      renderRetentionChrome();
-    };
     $("#reminder-done").onclick = () => {
       const chk = $("#chk-reminders");
       if (chk && !chk.checked) {
         chk.checked = true;
         chk.dispatchEvent(new Event("change", { bubbles: true }));
       }
-      finish();
+      closeReminders();
     };
-    $("#reminder-cancel").onclick = finish;
+    $("#reminder-cancel").onclick = closeReminders;
     modal.onkeydown = (e) => {
       if (e.key === "Escape") {
         e.preventDefault();
-        finish();
+        closeReminders();
       }
     };
     modal.onclick = (e) => {
-      if (e.target === modal) finish();
+      if (e.target === modal) closeReminders();
     };
   }
 

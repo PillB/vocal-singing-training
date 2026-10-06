@@ -4496,9 +4496,11 @@
     const targetLabel = near ? (es ? "Nota" : "Note") : es ? "Objetivo" : "Target";
     // A challenge draws its first note on Start, and a mode that owns its
     // targets picks its own then: before that, the exercise's reference note
-    // is not the target, so none is named.
+    // is not the target, so none is named. A siren names the note you are on,
+    // so until a voice is heard there is none (its G2 reference is not one).
     const target =
-      (pitchProfile?.pitchChallenge || pitchProfile?.ownsTarget) && !state.pitchRunning
+      ((pitchProfile?.pitchChallenge || pitchProfile?.ownsTarget) && !state.pitchRunning) ||
+      (pitchProfile?.freeRange && !state.pitchHeard)
         ? "—"
         : stats.targetName || "—";
     const cents = `${acc > 0 ? "+" : ""}${acc}¢`;

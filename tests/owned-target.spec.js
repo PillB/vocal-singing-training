@@ -388,6 +388,29 @@ test.describe("modes that own their target", () => {
     await expect(stats).not.toContainText("G2");
   });
 
+  test("a siren names no note until it hears one, also after an octave change mid-take", async ({ page }) => {
+    await boot(page);
+    const stats = page.locator("#pitch-stats");
+    await page.evaluate(() => window.VTApp.openExercise("s5-sirens"));
+    await expect(page.locator("#view-exercise")).toHaveClass(/active/);
+    await page.locator("#btn-practice-start").click();
+    await page.waitForFunction(() => window.VTApp.getState().pitchRunning);
+    // Nothing sung yet: the siren's G2 reference is not a note anybody is on
+    await page.waitForTimeout(800);
+    await expect(stats).toContainText("Nota —");
+    await expect(stats).not.toContainText("G2");
+    // The octave buttons move the reference (G3), not what the readout names
+    await page.locator("#btn-oct-up").click();
+    await page.waitForTimeout(800);
+    await expect(stats).toContainText("Nota —");
+    await expect(stats).not.toContainText(/G2|G3/);
+    // Once a voice is heard, the readout names the note it is on
+    await playVoice(page, "siren");
+    await expect(stats).toContainText(/Nota [A-G]#?\d/, { timeout: 6000 });
+    await stopVoice(page);
+    await page.locator("#btn-practice-stop").click();
+  });
+
   test("five vowels: an octave change mid-take moves the note the vowels are read against", async ({ page }) => {
     await boot(page);
     await openAndStart(page, "s20-five-vowels");

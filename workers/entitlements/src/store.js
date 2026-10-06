@@ -228,6 +228,22 @@ function applyIfPresent(target, field, value) {
 }
 
 /**
+ * End a record's period no later than `at`. Only ever shortens it.
+ * @param {Object} record Record being built.
+ * @param {unknown} at Unix seconds, or anything else to leave the period alone.
+ * @returns {void}
+ */
+function capPeriodEnd(record, at) {
+  if (!Number.isFinite(at)) {
+    return;
+  }
+  const end = Math.floor(at);
+  if (!Number.isFinite(record.periodEnd) || end < record.periodEnd) {
+    record.periodEnd = end;
+  }
+}
+
+/**
  * True when an update describes an older world than the record already holds.
  * @param {Object} record Stored entitlement record.
  * @param {Object} update Entitlement update descriptor.
@@ -254,8 +270,8 @@ export function isStaleUpdate(record, update) {
  *
  * @param {Object} kv KV namespace.
  * @param {Object} update Descriptor: provider, plan, status, customerId,
- *   subscriptionId, periodEnd, periodEndFromCharge, claimId, planSource,
- *   occurredAt.
+ *   subscriptionId, periodEnd, periodEndFromCharge, endsAt, claimId,
+ *   planSource, occurredAt.
  * @param {{now?: number, generateId?: function(): string}} [options] Injectables for tests.
  * @returns {Promise<{record: Object, created: boolean, stale: boolean}>} Stored
  *   record, whether it was new, and whether state was refused as out of order.
@@ -307,6 +323,9 @@ export async function upsertEntitlement(kv, update, options) {
     if (charged !== null && (!Number.isFinite(record.periodEnd) || charged > record.periodEnd)) {
       record.periodEnd = charged;
     }
+    // The provider took the money back (a refund, a chargeback): access ends
+    // then, whatever was paid for. Applied last so nothing above re-extends it.
+    capPeriodEnd(record, update.endsAt);
     if (Number.isFinite(update.occurredAt)) {
       record.occurredAt = Math.floor(update.occurredAt);
     }

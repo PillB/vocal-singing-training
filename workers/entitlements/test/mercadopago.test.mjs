@@ -280,6 +280,36 @@ test("a subscription's charge that did not go through says nothing about the sub
   assert.equal(approved.periodEndFromCharge, isoToUnixSeconds("2026-03-01T10:05:00.000-05:00"));
 });
 
+test("a refund or chargeback ends access when the money left, on either topic", () => {
+  const approved = "2026-03-01T10:00:00.000-05:00";
+  const reversedAt = "2026-03-03T09:00:00.000-05:00";
+  for (const status of ["refunded", "charged_back"]) {
+    for (const extra of [{}, { metadata: { preapproval_id: "pre_x" } }]) {
+      const mapped = mapPaymentResource({
+        id: 601,
+        status,
+        date_approved: approved,
+        date_created: approved,
+        date_last_updated: reversedAt,
+        ...extra
+      }, {});
+      assert.equal(mapped.status, "canceled", status);
+      assert.equal(mapped.endsAt, isoToUnixSeconds(reversedAt), status);
+      assert.equal(mapped.periodEndFromCharge, null, `${status}: the charge it reverses must not extend again`);
+    }
+    const authorized = mapAuthorizedPaymentResource({
+      id: "ap_r",
+      preapproval_id: "pre_x",
+      status: "processed",
+      date_last_updated: reversedAt,
+      payment: { status, date_approved: approved }
+    }, {});
+    assert.equal(authorized.status, "canceled", status);
+    assert.equal(authorized.endsAt, isoToUnixSeconds(reversedAt), status);
+    assert.equal(authorized.periodEndFromCharge, null, status);
+  }
+});
+
 test("a preapproval's next charge date is a period end only while it is authorized", () => {
   const nextPayment = "2027-03-01T00:00:00.000-05:00";
   const authorized = mapPreapprovalResource({ id: "pre_a", status: "authorized", next_payment_date: nextPayment }, {});

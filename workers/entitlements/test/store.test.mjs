@@ -337,6 +337,39 @@ test("a charge without a subscription behind it entitles for exactly one interva
   assert.equal(shorter.record.periodEnd, NOW + 2678400 * 2, "a charge never shortens the period");
 });
 
+test("money given back ends the period at once and never lengthens it", async () => {
+  const kv = createFakeKv();
+  const generateId = idSequence("lic_");
+  await upsertEntitlement(kv, {
+    provider: "mercadopago",
+    claimId: "pay_r",
+    plan: "pro_yearly",
+    status: "active",
+    periodEndFromCharge: NOW,
+    occurredAt: NOW
+  }, { now: NOW, generateId });
+
+  const refunded = await upsertEntitlement(kv, {
+    provider: "mercadopago",
+    claimId: "pay_r",
+    status: "canceled",
+    endsAt: NOW + 100,
+    occurredAt: NOW + 100
+  }, { now: NOW + 100, generateId });
+  assert.equal(refunded.record.status, "canceled");
+  assert.equal(refunded.record.periodEnd, NOW + 100, "not the rest of the year");
+
+  // An end later than the period already recorded does not lengthen it.
+  const later = await upsertEntitlement(kv, {
+    provider: "mercadopago",
+    claimId: "pay_r",
+    status: "canceled",
+    endsAt: NOW + 999999,
+    occurredAt: NOW + 200
+  }, { now: NOW + 200, generateId });
+  assert.equal(later.record.periodEnd, NOW + 100);
+});
+
 test("the client view carries no provider-internal ids", () => {
   const view = toPublicEntitlement({
     licenseId: "lic_1",

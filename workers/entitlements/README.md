@@ -368,7 +368,10 @@ notifications carry its state. Preapproval `authorized` → `active`, `pending` 
 sets the period to one plan interval from its approval date; an authorized
 preapproval's `next_payment_date` sets it directly, and only while it is
 authorized. A payment's `date_of_expiration` (the voucher's deadline) and
-`next_retry_date` (a dunning date) are never used as a paid-through date. The
+`next_retry_date` (a dunning date) are never used as a paid-through date. A
+`refunded` or `charged_back` payment, on either payment topic and whether or
+not it belongs to a subscription, ends access at the time it was reversed;
+only a later approved charge (or an authorized preapproval) brings it back. The
 plan comes from
 `MP_PLAN_PRO_MONTHLY`/`MP_PLAN_PRO_YEARLY`, else the preapproval `reason` or
 `external_reference`, else `auto_recurring`; when nothing says, it defaults to
@@ -469,6 +472,12 @@ webhook → claim → token flow through the router with a fake `fetch`.
 - **Sharing one license id.** A license id copied to a friend still verifies.
   There is no device binding and no account system; the mitigation is that a
   cancellation kills every copy at once.
+- **Refunds and disputes made in Stripe.** The worker does not subscribe to
+  `charge.refunded` or `charge.dispute.*`: a charge carries nothing the worker
+  can find a license by without a Stripe API key, which it does not hold. A
+  refunded Stripe customer keeps the period on record; cancelling their
+  subscription stops renewals but, like any paid cancellation, keeps the
+  period they had paid for.
 - **Protecting content that has already been downloaded.** Everything the site
   ships is public by definition. Only genuinely server-side value (data the
   worker holds back) can be withheld.

@@ -766,3 +766,68 @@ test("a Mercado Pago subscription that was never authorized never entitles", asy
   assert.equal(cancelled.status, 403, "a subscription nobody paid for keeps no period");
   assert.equal(cancelled.body.token, undefined);
 });
+
+test("a refunded or charged-back Mercado Pago payment ends access at once", async () => {
+  for (const [finalStatus, plan] of [["refunded", "pro_yearly"], ["charged_back", "pro_monthly"]]) {
+    const env = createTestEnv();
+    const id = `PAY-${finalStatus}`;
+    const approved = isoIn(-2 * DAY);
+    const payment = {
+      id,
+      status: "approved",
+      external_reference: plan,
+      date_created: approved,
+      date_approved: approved,
+      date_last_updated: approved,
+      payer: { id: 7 }
+    };
+    await deliverMercadoPago(env, "payment", payment);
+    const paid = await claimFor(env, "mercadopago", id);
+    assert.equal(paid.status, 200, `${finalStatus}: paid first`);
+
+    await deliverMercadoPago(env, "payment", { ...payment, status: finalStatus, date_last_updated: isoIn(-60) });
+    const after = await handleRequest(postJson("/v1/license", { licenseId: paid.body.licenseId }), env);
+    assert.equal(after.status, 403, `${finalStatus}: the money went back, so does the access`);
+    const body = await after.json();
+    assert.equal(body.reason, "inactive");
+    assert.equal(body.token, undefined);
+  }
+});
+
+test("a refunded Mercado Pago subscription charge ends access until a charge goes through again", async () => {
+  const env = createTestEnv();
+  await deliverMercadoPago(env, "subscription_preapproval", {
+    id: "PRE-REFUND",
+    status: "authorized",
+    reason: "Vocal Studio Pro mensual",
+    next_payment_date: isoIn(20 * DAY),
+    date_last_updated: isoIn(-10 * DAY),
+    payer_id: 5
+  });
+  const { body } = await claimFor(env, "mercadopago", "PRE-REFUND");
+  const licenseId = body.licenseId;
+  assert.equal(typeof licenseId, "string");
+
+  const charge = {
+    id: "AP-REFUND",
+    preapproval_id: "PRE-REFUND",
+    status: "processed",
+    date_created: isoIn(-10 * DAY),
+    date_last_updated: isoIn(-120),
+    payment: { id: 991, status: "refunded", date_approved: isoIn(-10 * DAY) }
+  };
+  await deliverMercadoPago(env, "subscription_authorized_payment", charge);
+  const refused = await handleRequest(postJson("/v1/license", { licenseId }), env);
+  assert.equal(refused.status, 403, "a refunded charge keeps none of the period it paid for");
+
+  // Next month's charge goes through.
+  await deliverMercadoPago(env, "subscription_authorized_payment", {
+    ...charge,
+    id: "AP-NEXT",
+    date_created: isoIn(-60),
+    date_last_updated: isoIn(-60),
+    payment: { id: 992, status: "approved", date_approved: isoIn(-60) }
+  });
+  const restored = await handleRequest(postJson("/v1/license", { licenseId }), env);
+  assert.equal(restored.status, 200);
+});

@@ -26,12 +26,22 @@
  *   with cn a noise's own 0.08–0.44 (white noise reads ~0.17, a low rumble up
  *   to ~0.45). The fit to the real function: a vowel or a hum under white
  *   noise as loud as itself reads ~0.8, at a fifth of the power ~0.55;
+ * - `hfRms` (the engine's first difference) over rms, at 48 kHz, is about
+ *   2π × a sound's typical frequency ÷ 48 000. Each sound brings its own,
+ *   as measured through the engine: a voice 0.09, a whisper or an unvoiced
+ *   consonant 0.58, the quiet room's hiss (white) 1.41, a hum
+ *   2·sin(π·hz/48 000), and a fan `fan.hf` (default 0.04, a rumble at
+ *   ~250 Hz; one under 100 Hz reads 0.015, a white fan 1.41);
  * - the Space assist forces rms ≥ 0.06 and `sounding`, with no pitch.
  */
 (function (global) {
   "use strict";
 
   const db2p = (db) => Math.pow(10, db / 10);
+  // hfRms ÷ rms of each sound (see above)
+  const HF_VOICE = 0.09;
+  const HF_NOISE = 0.58;
+  const HF_WHITE = 1.41;
 
   function prng(seed) {
     let s = seed >>> 0;
@@ -48,15 +58,20 @@
    *            vowel rising to `peak` dB (±3 dB from one to the next) and
    *            sagging; `voicedCons` keeps the pitch through the consonant,
    *            and `stops` is the share of consonants that are a stop's
-   *            closure, the room alone
+   *            closure, the room alone. `whisper` has no period anywhere;
+   *            `breathy` is the share of a vowel's power that has one
+   *            (default 1), the rest is breath
    *  tone    — a held note at `level` dB with `vibDb` of level wobble and
    *            `vibCents` of pitch vibrato at 5.5 Hz
    *  space   — the Space assist held down
-   * Returns a 1 kHz power envelope with a pitch per millisecond (0 = none).
+   * Returns a 1 kHz power envelope with a pitch per millisecond (0 = none),
+   * the share of the power that has that pitch, and hfRms² ÷ power.
    */
   function build(parts, rnd) {
     const p = [];
     const hz = [];
+    const per = [];
+    const hf2 = [];
     const manual = [];
     const truth = [];
     let t = 0;
@@ -90,8 +105,12 @@
               db = dp + (pk - dp) * Math.max(0, shape);
               voiced = true;
             }
+            // The periodic share of the sound, the rest noise
+            const sh = voiced && !s.whisper ? (s.breathy != null ? s.breathy : 1) : 0;
             p.push(db2p(db));
-            hz.push(voiced ? f0 : 0);
+            hz.push(sh > 0 ? f0 : 0);
+            per.push(sh);
+            hf2.push(sh * HF_VOICE * HF_VOICE + (1 - sh) * HF_NOISE * HF_NOISE);
             manual.push(0);
           }
         }
@@ -101,19 +120,23 @@
           const w = Math.sin(2 * Math.PI * 5.5 * ((start + i) / 1000));
           p.push(db2p(level + (s.vibDb != null ? s.vibDb : 1.5) * w));
           hz.push((s.hz || 220) * Math.pow(2, ((s.vibCents != null ? s.vibCents : 15) * w) / 1200));
+          per.push(1);
+          hf2.push(HF_VOICE * HF_VOICE);
           manual.push(0);
         }
       } else {
         for (let i = 0; i < n; i++) {
           p.push(0);
           hz.push(0);
+          per.push(0);
+          hf2.push(0);
           manual.push(s.kind === "space" ? 1 : 0);
         }
       }
       t += n;
       truth.push({ kind: s.kind, start: start / 1000, end: t / 1000 });
     });
-    return { p, hz, manual, truth, ms: t };
+    return { p, hz, per, hf2, manual, truth, ms: t };
   }
 
   const during = (x, i) => i / 1000 >= (x.from || 0) && i / 1000 < (x.until != null ? x.until : Infinity);
@@ -121,13 +144,16 @@
   /**
    * The room under everything: a bed, plus a fan and a hum (mains or a
    * motor: a steady tone at `hum.hz`) from their `from` seconds. `p` is all of
-   * it, `hum` the part with a period.
+   * it, `hum` the part with a period, `hf` its hfRms².
    */
   function bed(env, rnd, ms) {
     const out = new Float64Array(ms);
     const hum = new Float64Array(ms);
+    const hf = new Float64Array(ms);
     const room = env.room != null ? env.room : -62;
     const fan = env.fan || null;
+    const fanHf = fan && fan.hf != null ? fan.hf : 0.04;
+    const humHf = env.hum ? 2 * Math.sin((Math.PI * (env.hum.hz || 120)) / 48000) : 0;
     let wob = 0;
     for (let i = 0; i < ms; i++) {
       // A real fan's level wanders from frame to frame (white noise is far
@@ -136,11 +162,17 @@
       // under 100 Hz
       if (i % 10 === 0) wob = (rnd() - 0.5) * 2 * (fan && fan.wobble != null ? fan.wobble : 4);
       let v = db2p(room + wob * 0.1);
-      if (fan && during(fan, i)) v += db2p(fan.db + wob);
+      let h = v * HF_WHITE * HF_WHITE;
+      if (fan && during(fan, i)) {
+        const f = db2p(fan.db + wob);
+        v += f;
+        h += f * fanHf * fanHf;
+      }
       if (env.hum && during(env.hum, i)) hum[i] = db2p(env.hum.db);
       out[i] = v + hum[i];
+      hf[i] = h + hum[i] * humHf * humHf;
     }
-    return { p: out, hum };
+    return { p: out, hum, hf };
   }
 
   /**
@@ -164,13 +196,15 @@
       let voicePw = 0;
       let periodicPw = 0;
       let humPw = 0;
+      let hfPw = 0;
       let manual = false;
       let f0 = 0;
       for (let k = Math.max(0, end - 43); k < end; k++) {
         pw += sig.p[k] + room.p[k];
         c++;
-        if (sig.hz[k] > 0) periodicPw += sig.p[k];
+        periodicPw += sig.p[k] * sig.per[k];
         humPw += room.hum[k];
+        hfPw += sig.p[k] * sig.hf2[k] + room.hf[k];
         if (sig.hz[k] > 0 && sig.p[k] > room.p[k]) {
           voicedN++;
           voicePw += sig.p[k];
@@ -179,6 +213,8 @@
         if (sig.manual[k]) manual = true;
       }
       let rms = Math.sqrt(pw / Math.max(1, c));
+      // From the mic itself, before the Space assist's level (as the engine)
+      const hfRms = Math.sqrt(hfPw / Math.max(1, c));
       // The detector analyses nothing under −40 dBFS; above it, it finds the
       // voice when the voice carries most of the window, the hum when it
       // does, and makes a pitch up for anything else
@@ -197,7 +233,7 @@
         rawFreq = null;
       }
       const sounding = manual || rms >= holdRms || (rawFreq != null && rms >= holdRms * 0.55);
-      out.push({ dtMs, rms, sounding, rawFreq, clarity, manualSound: manual, t: tf / 1000 });
+      out.push({ dtMs, rms, sounding, rawFreq, clarity, hfRms, sampleRate: 48000, manualSound: manual, t: tf / 1000 });
     }
     return out;
   }
@@ -208,7 +244,7 @@
 
   /**
    * Run one take through a fresh Vad. spec: { parts, room (dB, default −62),
-   * fan: { db, from, until, wobble }, hum: { db, hz, from, until }, sens,
+   * fan: { db, from, until, wobble, hf }, hum: { db, hz, from, until }, sens,
    * fps, seed, at: [seconds to read the floor at] }.
    */
   function run(spec) {

@@ -271,7 +271,9 @@
 
   // The room's steadiness test: 0.6 s of learning steps within 4.5 dB. A fan
   // rumbling at 150–250 Hz wanders 3–4 dB over that time; soft speech whose
-  // syllables swing only 8 dB slips under a looser or shorter test.
+  // syllables swing only 8 dB slips under a looser or shorter test, and a
+  // whisper (no period, so clarity reads it as a fan) is learned as the room
+  // and erased. Only a low rumble gets a looser one (NOISE_SPREAD_DB).
   const ROOM_STEPS = 18;
   const ROOM_FLAT_DB = 4.5;
   // Within 3 s of the floor hearing its room quiet, a sound that would
@@ -282,10 +284,20 @@
   // The engine's `clarity` (how periodic a frame is), as the median of a
   // steady stretch: under NOISY there is no voice in it (a fan, a hiss)
   const NOISY = 0.5;
-  // Such a stretch may instead hold its 10th to 90th percentiles within
-  // 6 dB: a fan rumbling under ~100 Hz swings 1.5–2 dB from one step to the
-  // next, so its extremes over 0.6 s span 6–7 dB
+  // A low rumble's stretch may instead hold its 10th to 90th percentiles
+  // within 6 dB: under ~100 Hz a 43 ms frame holds only a few of its waves,
+  // so its level swings 1.5–2 dB from one step to the next and its extremes
+  // over 0.6 s span 6–7 dB
   const NOISE_SPREAD_DB = 6;
+  // Low is the engine's `hfRms` (its first difference) over `rms`, scaled to
+  // 48 kHz, under LOW_HF as the median of the stretch: about 2π × the
+  // sound's typical frequency ÷ 48 000, so under ~750 Hz. Measured through
+  // the engine: a rumble at 100 Hz 0.015, at 250 Hz 0.04; a whisper 0.58, a
+  // white fan 1.4 (steady enough for the strict test), a voice 0.08–0.1. A
+  // whisper's syllables swing as little as a rumble's level and it has no
+  // period either, but its sound sits high. A rumble with a hiss within
+  // ~20 dB of it reads as high too, and gets only the strict test.
+  const LOW_HF = 0.1;
   // A sound the take opened with is the room whatever its clarity (a hum, a
   // fan with a motor's tone) once it has held within OPEN_FLAT_DB for
   // OPEN_STEPS (1 s), counted from when the mic settled: the first frames
@@ -315,12 +327,14 @@
    * - A room loud enough to open the gate (a fan, or any room's hiss at
    *   sensitivity 9–10) is learned from its steadiness instead: 0.6 s that
    *   holds still with no period in it (the engine's `clarity`, which works
-   *   at any level) is the room. Still is within 4.5 dB, or 6 dB from its
-   *   10th to its 90th percentile: a fan's low rumble wobbles 1.5–2 dB from
-   *   frame to frame. The floor starts over from it, speech it was read as
-   *   until then is taken back, and a pause it hid is dated from when the
-   *   voice stopped. Within 3 s of a quiet room, a new one must hold still
-   *   for 1.2 s.
+   *   at any level) is the room. Still is within 4.5 dB or, for a sound
+   *   that sits low (the engine's `hfRms`), 6 dB from its 10th to its 90th
+   *   percentile: a fan's rumble under ~100 Hz wobbles 1.5–2 dB from frame
+   *   to frame, while a whisper, as flat and as aperiodic, sits high and
+   *   gets the strict test. The floor starts over from it, speech it was
+   *   read as until then is taken back, and a pause it hid is dated from
+   *   when the voice stopped. Within 3 s of a quiet room, a new one must
+   *   hold still for 1.2 s.
    * - A steady sound with a period is a voice (a sung note, a soft held
    *   vowel, an "mmm"), unless the take opened with it and heard nothing
    *   else for a second: a hum in the room, learned the same way. Before the
@@ -352,10 +366,12 @@
       this.minPauseSec = opts.minPauseSec != null ? opts.minPauseSec : 0.25;
       this.cb = opts;
       this._floorRing = new Ring(Math.round(6 * 30));
-      // The last 1.2 s of learning steps: level, time and clarity (−1 = none)
+      // The last 1.2 s of learning steps: level, time, clarity and how high
+      // the sound sits (−1 = none)
       this._recentRing = new Ring(NEW_ROOM_STEPS);
       this._recentT = new Ring(NEW_ROOM_STEPS);
       this._recentClarity = new Ring(NEW_ROOM_STEPS);
+      this._recentHf = new Ring(NEW_ROOM_STEPS);
       this._floorAcc = 0;
       this.floorDb = -70;
       this.reset();
@@ -394,6 +410,7 @@
       this._recentRing.clear();
       this._recentT.clear();
       this._recentClarity.clear();
+      this._recentHf.clear();
       this._floorAcc = 0;
     }
     get pauseLen() {
@@ -432,6 +449,7 @@
           this._recentRing.clear();
           this._recentT.clear();
           this._recentClarity.clear();
+          this._recentHf.clear();
         } else {
           this._learnFloor(frame, db);
         }
@@ -483,6 +501,7 @@
       this._recentRing.push(db);
       this._recentT.push(this.t);
       this._recentClarity.push(frame.clarity != null ? frame.clarity : -1);
+      this._recentHf.push(frame.hfRms != null && frame.rms > 0 ? (frame.hfRms / frame.rms) * ((frame.sampleRate || 48000) / 48000) : -1);
       if (this.t >= OPEN_SETTLE_SEC) {
         this._lowDb = Math.min(this._lowDb, db);
         if (this._openSteps >= 0) {
@@ -557,7 +576,10 @@
       const c = median(this._recentClarity.last(steps));
       if (c == null || c < 0 || c >= NOISY) return 0;
       if (Math.max(...r) - Math.min(...r) < ROOM_FLAT_DB) return steps;
-      // A low rumble's extremes span more than that, but most of it holds still
+      // A low rumble's extremes span more than that, but most of it holds
+      // still. Not a whisper's: it sits high. No hfRms: no way to tell.
+      const hf = median(this._recentHf.last(steps));
+      if (hf == null || hf < 0 || hf >= LOW_HF) return 0;
       return percentile(r, 0.9) - percentile(r, 0.1) < NOISE_SPREAD_DB ? steps : 0;
     }
     /**

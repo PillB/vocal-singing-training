@@ -7,6 +7,8 @@
  * Knobs a spec can set on window before or during a take:
  *   __VTRateStepSec   seconds per rung for "rateSteps" (default 12)
  *   __VTSlowUntil     performance.now() until which "keyPoints" slows down
+ *   __VTWhisper       { gain, swingDb } for "speechWhisper" (default 0.03,
+ *                     about −30 dBFS after the MIC gain, and 6 dB)
  */
 (function () {
   "use strict";
@@ -110,6 +112,59 @@
       h.setPitch(base * Math.pow(2, semis / 12), 0.04);
       h.voiceOn(0.27, 0.03);
       h.at(syl * 0.62, () => h.ramp(h.nodes().voice.gain, 0.04, 0.04));
+      h.at(syl, tick);
+    };
+    tick();
+  });
+
+  /**
+   * Whispered talk: no voice, only breath shaped by the mouth (noise through
+   * band-passes at 900 and 2400 Hz), 4.5 syllables/s whose level swings only
+   * `swingDb`, 3 s phrases with 1.2 s pauses. It has no period, so to the
+   * pause floor it is as aperiodic as a fan, and it holds about as still as
+   * a fan's low rumble: only how high it sits tells them apart.
+   */
+  V.define("speechWhisper", (h) => {
+    const o = Object.assign({ gain: 0.03, swingDb: 6 }, window.__VTWhisper);
+    const n = h.nodes();
+    if (!n.whisper) {
+      const ac = n.dest.context;
+      const buf = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      const src = ac.createBufferSource();
+      src.buffer = buf;
+      src.loop = true;
+      n.whisper = ac.createGain();
+      n.whisper.gain.value = 0;
+      [900, 2400].forEach((f) => {
+        const bp = ac.createBiquadFilter();
+        bp.type = "bandpass";
+        bp.frequency.value = f;
+        bp.Q.value = 1.2;
+        src.connect(bp).connect(n.whisper);
+      });
+      n.whisper.connect(n.dest);
+      src.start();
+    }
+    const low = Math.pow(10, -o.swingDb / 20);
+    const syl = 1000 / 4.5;
+    let inPhrase = false;
+    let left = 0;
+    const tick = () => {
+      if (!inPhrase) {
+        inPhrase = true;
+        left = 3000;
+      }
+      if (left <= 0) {
+        inPhrase = false;
+        h.ramp(n.whisper.gain, 0, 0.05);
+        h.at(1200, tick);
+        return;
+      }
+      h.ramp(n.whisper.gain, o.gain * (0.8 + Math.random() * 0.2), 0.03);
+      h.at(syl * 0.62, () => h.ramp(n.whisper.gain, o.gain * low, 0.04));
+      left -= syl;
       h.at(syl, tick);
     };
     tick();

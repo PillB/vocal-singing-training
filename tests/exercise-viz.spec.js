@@ -143,7 +143,12 @@ test.describe("exercise pictures", () => {
   test("power pause counts pauses over a fan's low rumble at 100 Hz", async ({ page }) => {
     // Noise under 100 Hz wobbles ~1.5 dB from frame to frame and 6 dB over
     // 0.6 s: it was often never learned as the room, the take read as one
-    // stretch of speech and the pauses went uncounted
+    // stretch of speech and the pauses went uncounted. Often, not always: the
+    // real rumble sometimes holds within 4.5 dB for 0.6 s, so the old test
+    // failed this case only about half the time, from Start or after any
+    // lead-in. The deterministic guards are in tests/vad-floor.spec.js: the
+    // wobbling rumble ("a fan's low rumble that wobbles…") and how high this
+    // same noise sits ("how high a sound sits…"). Here, the real engine.
     await boot(page, "es", [fanInRoom, { gain: 0.009, hz: 100, order: 2 }]);
     await openAndStart(page, "v10-power-pause");
     // 2 s of the fan alone, then the speaker (3 s talk, 1.2 s pause)
@@ -159,6 +164,33 @@ test.describe("exercise pictures", () => {
     expect(vad.segs, "nothing said before the voice").toMatch(/^s2\./);
     expect(n, vad.segs).toBe(2);
   });
+
+  for (const [db, gain] of [
+    [-30, 0.03],
+    [-38, 0.012]
+  ]) {
+    test(`power pause keeps whispered talk at about ${db} dBFS`, async ({ page }) => {
+      // A whisper has no period, so it reads as aperiodic as a fan, and its
+      // syllables swing only 6 dB, about as little as a fan's low rumble
+      // wobbles. After a 2 s lead-in in a quiet room it was learned as the
+      // room: the floor jumped to it and the take was erased, no talk and no
+      // pause counted.
+      await boot(page, "es", [(w) => (window.__VTWhisper = w), { gain, swingDb: 6 }]);
+      await openAndStart(page, "v10-power-pause");
+      // 2 s of the quiet room, then whispered phrases (3 s, 1.2 s pauses)
+      await page.waitForTimeout(1750);
+      await playVoice(page, "speechWhisper");
+      await page.waitForTimeout(10000);
+      const n = Number(await page.locator("#mode-focus [data-p]").textContent());
+      const vad = await page.evaluate(() => {
+        const v = window.VTApp.getState().modeInstance.state.vad;
+        return { floor: v.floorDb, talk: v.talkSec, segs: v.segments.map((g) => `${g.kind[0]}${g.start.toFixed(2)}`).join(" ") };
+      });
+      expect(vad.floor, `the quiet room is the floor · ${vad.segs}`).toBeLessThan(-60);
+      expect(vad.talk, `the whisper is talk · ${vad.segs}`).toBeGreaterThan(6);
+      expect(n, vad.segs).toBe(2);
+    });
+  }
 
   test("power pause counts no pause before the first word, with a fan running", async ({ page }) => {
     await boot(page, "es", fanInRoom);

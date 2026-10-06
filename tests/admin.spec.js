@@ -856,19 +856,29 @@ test.describe("Admin page", () => {
     expect(String(methods.body.trialDays)).toBe(deployed[1]);
   });
 
-  test("admin.html loads the same versions of shared files as the studio", async () => {
+  test("every page loads its own files with a version, and the same version of a shared file", async () => {
+    // The ?v= stamp is what makes a browser fetch a changed file after a deploy.
+    // A file loaded with none is served from the cache under the same address,
+    // so a reload can run new HTML on the old file: privacy.html loaded
+    // css/styles.css that way, and index.html five of its scripts. And a file
+    // two pages share has to carry the same stamp on both, or one of them keeps
+    // the old copy (guide.html's stylesheet once fell behind index.html's).
     const fs = require("fs");
-    const read = (name) => fs.readFileSync(path.join(__dirname, "..", name), "utf8");
-    const stamps = (html) => {
-      const out = {};
-      for (const m of html.matchAll(/(?:src|href)="((?:js|css)\/[\w.-]+)\?v=([\w]+)"/g)) out[m[1]] = m[2];
-      return out;
-    };
-    const studio = stamps(read("index.html"));
-    const admin = stamps(read("admin.html"));
-    const shared = Object.keys(admin).filter((file) => studio[file]);
-    expect(shared).toEqual(expect.arrayContaining(["css/styles.css", "js/billing-config.js", "js/account.js"]));
-    for (const file of shared) expect(`${file}?v=${admin[file]}`).toBe(`${file}?v=${studio[file]}`);
+    const root = path.join(__dirname, "..");
+    const pages = fs.readdirSync(root).filter((name) => name.endsWith(".html"));
+    expect(pages).toEqual(expect.arrayContaining(["index.html", "guide.html", "admin.html", "privacy.html"]));
+    const seen = {};
+    for (const name of pages) {
+      const html = fs.readFileSync(path.join(root, name), "utf8");
+      for (const m of html.matchAll(/(?:src|href)="((?:js|css)\/[^"?#]+)(?:\?v=(\w+))?"/g)) {
+        expect(m[2], `${name} loads ${m[1]} with no ?v=`).toBeTruthy();
+        (seen[m[1]] = seen[m[1]] || {})[name] = m[2];
+      }
+    }
+    expect(Object.keys(seen["css/styles.css"]).sort()).toEqual([...pages].sort());
+    for (const [file, byPage] of Object.entries(seen)) {
+      expect(new Set(Object.values(byPage)).size, `${file}: ${JSON.stringify(byPage)}`).toBe(1);
+    }
   });
 
   test("works in English too", async ({ browser }) => {

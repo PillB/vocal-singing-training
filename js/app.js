@@ -7171,6 +7171,21 @@
     if (state.view === "history") renderHistory();
   }
 
+  /**
+   * A sync brought in another device's practice. Redraw what shows the record
+   * on whatever view is open, or Historial went on saying nothing was saved
+   * until the learner left it and came back. Only the open view: renderHistory
+   * and renderPlan switch to their own view as they draw, which must never
+   * happen under somebody mid-exercise.
+   */
+  function showSyncedRecord() {
+    renderValuePulse();
+    renderExerciseList();
+    if (state.view === "history") renderHistory();
+    else if (state.view === "plan") renderPlan();
+    else if (state.view === "home") renderNextStepCard();
+  }
+
   function bindProStudio() {
     $("#sel-profile")?.addEventListener("change", (e) => {
       const id = e.target.value;
@@ -8284,7 +8299,6 @@
       const res = await window.VTSync?.syncNow?.();
       refreshAccountUI();
       if (res && !res.ok) accountErrorFor(res.reason);
-      else renderExerciseList();
     });
 
     function giftResult(text) {
@@ -8566,6 +8580,8 @@
       renderValuePulse();
     });
     window.VTSync?.onChange?.(() => refreshAccountUI());
+    // Whatever started the sync: signing in, a save, the button above.
+    window.VTSync?.onDataChange?.(() => showSyncedRecord());
   }
 
   function bindBilling() {

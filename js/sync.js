@@ -60,6 +60,7 @@
   }
 
   const listeners = new Set();
+  const dataListeners = new Set();
 
   function emit() {
     const status = getStatus();
@@ -80,6 +81,56 @@
   function onChange(fn) {
     listeners.add(fn);
     return () => listeners.delete(fn);
+  }
+
+  /**
+   * Subscribe to syncs that changed what this device holds for the active
+   * profile: another device's practice arrived, so whatever shows the record
+   * is out of date. Not called when a sync only pushed.
+   * @param {function} fn Listener.
+   * @returns {function} Unsubscribe.
+   */
+  function onDataChange(fn) {
+    dataListeners.add(fn);
+    return () => dataListeners.delete(fn);
+  }
+
+  /**
+   * Tell the data listeners, when the profile written to is the one on screen.
+   * @param {string} profileId The profile just written to.
+   */
+  function dataChanged(profileId) {
+    if (profileId !== global.VTStorage.getActiveProfileId()) return;
+    dataListeners.forEach((fn) => {
+      try {
+        fn();
+      } catch (err) {
+        console.warn(err);
+      }
+    });
+  }
+
+  /**
+   * JSON with every object's keys in order and empty fields dropped, so two
+   * bags holding the same things compare equal however they were built.
+   * @param {unknown} value Any JSON value.
+   * @returns {string} Canonical text.
+   */
+  function canonical(value) {
+    if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+    if (value && typeof value === "object") {
+      const keys = Object.keys(value)
+        .filter((k) => value[k] !== null && value[k] !== undefined)
+        .sort();
+      return `{${keys.map((k) => `${JSON.stringify(k)}:${canonical(value[k])}`).join(",")}}`;
+    }
+    return JSON.stringify(value === undefined ? null : value);
+  }
+
+  /** The parts of a bag that are the learner's record, as canonical text. */
+  function recordOf(bag) {
+    const { v, profileId, savedAt, ...record } = bag || {};
+    return canonical(record);
   }
 
   /** Revision bookkeeping, per profile, so several profiles can sync separately. */
@@ -325,11 +376,13 @@
 
         const serverRev = Number(pulled.data?.rev) || 0;
         const seen = version;
-        const merged = mergeBag(localBag(profileId), pulled.data?.doc || null);
+        const local = localBag(profileId);
+        const merged = mergeBag(local, pulled.data?.doc || null);
 
         // Write the merged result locally first: even if the push fails, this
         // device now holds everything both sides knew.
         global.VTStorage.writeSyncBag(merged, profileId);
+        if (recordOf(merged) !== recordOf(local)) dataChanged(profileId);
 
         const pushed = await global.VTAccount.request("PUT", "/v1/me/progress", {
           profileId,
@@ -522,6 +575,7 @@
     confirmedRev.set(profileId, Number(pulled.data.rev) || 0);
     lastError = null;
     lastSyncedAt = new Date().toISOString();
+    dataChanged(profileId);
     emit();
     return { ok: true };
   }
@@ -533,6 +587,7 @@
     pullOverwrite,
     getStatus,
     onChange,
+    onDataChange,
     isAvailable,
     // Exported for the test-suite: these are the whole correctness story.
     mergeBag,

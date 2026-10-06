@@ -7,8 +7,8 @@
  * first recorded, a routine finished, a week reviewed, a setting changed, the
  * tab hidden or closed, a connection that drops, a profile switched while a
  * sync is out, a new device signing in. Each one used to change this device
- * and leave the account behind, mix up whose record was whose, or let a
- * default overwrite somebody's choice.
+ * and leave the account behind, mix up whose record was whose, let a default
+ * overwrite somebody's choice, or leave the screen showing the old record.
  *
  * The worker is a fake at the network boundary that keeps one document per
  * profile and refuses a write on a stale revision, like
@@ -463,5 +463,60 @@ test.describe("Saved progress follows the learner", () => {
       tier: window.VTLoop.readLoop().tier
     }));
     expect(local).toEqual({ goals: 6, loopGoal: "5-7", tier: "ess" });
+  });
+
+  test("a sync that brings another device's practice redraws Historial", async ({ page }) => {
+    const server = createServer({
+      revs: { default: 2 },
+      docs: {
+        default: {
+          v: 1,
+          profileId: "default",
+          progress: {
+            "v1-diction": {
+              completedCount: 4,
+              lastScore: 80,
+              lastAt: "2026-09-22T10:00:00.000Z",
+              history: [{ id: "phone-take", at: "2026-09-22T10:00:00.000Z", metrics: {}, score: 80, notes: "", durationSec: 60 }]
+            }
+          },
+          days: { v: 1, days: { "2026-09-22": { sec: 60, n: 1, ex: ["v1-diction"] } }, rest: { bank: 0, earnedAt: 0, used: [] }, backfilled: true }
+        }
+      }
+    });
+    await boot(page, server, { settle: false });
+    await page.locator("#btn-history").click();
+    await page.clock.runFor(300);
+    await expect(page.locator("#history-list")).toContainText("Aún no has guardado ninguna sesión");
+
+    // The sync signing in asked for lands while Historial is open.
+    await passQuietPeriod(page);
+    await expect.poll(() => server.puts.length).toBeGreaterThan(0);
+    await expect(page.locator("#history-list")).not.toContainText("Aún no has guardado ninguna sesión");
+    await expect(page.locator("#vp-sessions")).toHaveText("4");
+    expect(await page.evaluate(() => window.VTApp.getState().view)).toBe("history");
+
+    // A sync with nothing new leaves the list alone rather than flashing it.
+    await page.evaluate(() => {
+      window.__listRedraws = 0;
+      new MutationObserver(() => (window.__listRedraws += 1)).observe(document.querySelector("#history-list"), { childList: true });
+    });
+    expect((await page.evaluate(() => window.VTSync.syncNow())).ok).toBe(true);
+    expect(await page.evaluate(() => window.__listRedraws)).toBe(0);
+  });
+
+  test("a sync landing mid-exercise leaves the learner in the exercise", async ({ page }) => {
+    const server = createServer({
+      revs: { default: 2 },
+      docs: { default: { v: 1, profileId: "default", progress: { "v1-diction": { completedCount: 4, lastScore: 80, lastAt: "2026-09-22T10:00:00.000Z", history: [] } } } }
+    });
+    await boot(page, server, { settle: false });
+    await page.evaluate((id) => window.VTApp.openExercise(id), EX);
+    await page.clock.runFor(300);
+
+    await passQuietPeriod(page);
+    await expect.poll(() => server.puts.length).toBeGreaterThan(0);
+    await expect.poll(() => page.evaluate(() => window.VTStorage.getProgress()["v1-diction"]?.completedCount)).toBe(4);
+    expect(await page.evaluate(() => window.VTApp.getState().view)).toBe("exercise");
   });
 });

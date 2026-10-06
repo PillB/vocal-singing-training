@@ -585,6 +585,13 @@
       return null;
     }
 
+    _clarity(buf, sampleRate) {
+      if (global.VTPitchUtils && global.VTPitchUtils.clarity) {
+        return global.VTPitchUtils.clarity(buf, sampleRate);
+      }
+      return null;
+    }
+
     _maybeEndHold(force) {
       if (!this.holdStart) return;
       const now = performance.now();
@@ -617,6 +624,7 @@
       const sampleRate = this.audioCtx.sampleRate || 48000;
       const bandHf = this._bandHf(sampleRate);
       let freq = this._detectPitch(this.buf, sampleRate);
+      const clarity = this._clarity(this.buf, sampleRate);
       const now = performance.now();
 
       // Manual assist (Space): key down OR post-keyup grace (a11y continuous count)
@@ -753,6 +761,13 @@
            */
           sounding: manual || rms >= holdRms || (hasPitch && rms >= holdRms * 0.55),
           rawFreq: manual && manualKind === "air" ? null : hasPitch ? freq : null,
+          /**
+           * How periodic the mic's own samples are, 0–1, at any level (null
+           * without VTPitchUtils): a voice or a hum near 1, a fan or a hiss
+           * under 0.5. `rawFreq` cannot tell them apart: it is null under
+           * −40 dBFS, and above it noise gets a pitch too.
+           */
+          clarity,
           voiceRmsThreshold: voiceRms,
           holdRmsThreshold: holdRms,
           /** The input gain the MIC slider applies: rms / inputGain is the level the slider does not move. */

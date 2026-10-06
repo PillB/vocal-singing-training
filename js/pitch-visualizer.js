@@ -151,6 +151,45 @@
   }
 
   /**
+   * How periodic a frame is, 0–1, at any level: a voice or a hum reads 0.7
+   * and up even under a fan as loud as itself; a fan's noise, a hiss or a
+   * breath stays under 0.5. detectPitch cannot say this: it reads nothing
+   * under −40 dBFS and names a pitch for any noise above it.
+   *
+   * YIN's cumulative-mean-normalised difference (de Cheveigné & Kawahara,
+   * 2002) over periods of 60–500 Hz, on the frame summed down to ~12 kHz:
+   * a voice's period needs no more, and it takes under a tenth of
+   * detectPitch's time.
+   */
+  function clarity(buf, sampleRate) {
+    const sr = sampleRate || 48000;
+    const D = Math.max(1, Math.round(sr / 12000));
+    const n = Math.floor(buf.length / D);
+    const x = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      let s = 0;
+      for (let k = 0; k < D; k++) s += buf[i * D + k];
+      x[i] = s;
+    }
+    const rate = sr / D;
+    const minLag = Math.floor(rate / 500);
+    const maxLag = Math.min(Math.ceil(rate / 60), n >> 1);
+    const w = n - maxLag;
+    let run = 0;
+    let best = 1;
+    for (let lag = 1; lag <= maxLag; lag++) {
+      let d = 0;
+      for (let i = 0; i < w; i++) {
+        const e = x[i] - x[i + lag];
+        d += e * e;
+      }
+      run += d;
+      if (lag >= minLag && run > 0) best = Math.min(best, (d * lag) / run);
+    }
+    return run > 0 ? Math.max(0, Math.min(1, 1 - best)) : 0;
+  }
+
+  /**
    * How the highway draws, for the exercise that owns the overlay. Every
    * default is the highway as it always was; an exercise passes only what it
    * changes, as the second argument of setOverlay(fn, display) (or later with
@@ -1636,6 +1675,7 @@
     midiToSolfege,
     midiToDualLabel,
     noteNameToDual,
-    detectPitch
+    detectPitch,
+    clarity
   };
 })(window);

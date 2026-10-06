@@ -563,7 +563,8 @@ test("a Mercado Pago notification is confirmed against the API before it is stor
           status: "authorized",
           payer_id: 12,
           reason: "Vocal Studio Pro anual",
-          next_payment_date: "2026-12-01T00:00:00.000-05:00"
+          // Ahead of whatever day the suite runs: the claim reads the clock.
+          next_payment_date: isoIn(60 * DAY)
         };
       }
     };
@@ -1595,7 +1596,6 @@ test("a Mercado Pago subscription stopped before its first charge is processed k
 });
 
 test("a yearly Mercado Pago subscriber who stops at once keeps the year when the charge is processed first", async () => {
-  const YEAR = 31536000;
   /**
    * Subscribe to the yearly plan, pay, and pause or cancel two minutes later.
    * Every notification about the charge is processed before the
@@ -1606,9 +1606,10 @@ test("a yearly Mercado Pago subscriber who stops at once keeps the year when the
    * @param {string} status "cancelled" | "paused".
    * @param {string} topic Which notification brings the charge.
    * @param {number} approvedAt When the charge went through, unix seconds.
+   * @param {number} yearEnd The same date a year on, unix seconds.
    * @returns {Promise<void>} Resolves when both are delivered.
    */
-  async function payThenStop(env, id, status, topic, approvedAt) {
+  async function payThenStop(env, id, status, topic, approvedAt, yearEnd) {
     const at = (offset) => new Date((approvedAt + offset) * 1000).toISOString();
     await deliverMercadoPago(env, topic, topic === "payment"
       ? {
@@ -1633,7 +1634,7 @@ test("a yearly Mercado Pago subscriber who stops at once keeps the year when the
       status,
       reason: "Vocal Studio Pro anual",
       auto_recurring: { frequency: 12, frequency_type: "months" },
-      next_payment_date: at(YEAR),
+      next_payment_date: at(yearEnd - approvedAt),
       date_last_updated: at(120),
       payer_id: 5
     });
@@ -1642,21 +1643,26 @@ test("a yearly Mercado Pago subscriber who stops at once keeps the year when the
   const now = Math.floor(Date.now() / 1000);
   // Day 60 of the year it paid for.
   const approvedAt = now - 60 * DAY;
+  // The same date next year, counted on the calendar: 366 days when the year
+  // spans 29 February, whatever day the suite runs.
+  const nextYear = new Date(approvedAt * 1000);
+  nextYear.setUTCMonth(nextYear.getUTCMonth() + 12);
+  const yearEnd = Math.floor(nextYear.getTime() / 1000);
   for (const status of ["cancelled", "paused"]) {
     for (const topic of ["subscription_authorized_payment", "payment"]) {
       const label = `${topic}, then ${status}`;
       const env = createTestEnv();
       const id = `PRE-YEAR-${status}-${topic}`;
-      await payThenStop(env, id, status, topic, approvedAt);
+      await payThenStop(env, id, status, topic, approvedAt, yearEnd);
       const claim = await claimFor(env, "mercadopago", id);
       assert.equal(claim.status, 200, `${label}: the year was paid for`);
       assert.equal(claim.body.entitlement.plan, "pro_yearly", label);
       assert.equal(claim.body.entitlement.status, "canceled", label);
-      assert.equal(claim.body.entitlement.periodEnd, approvedAt + YEAR, `${label}: one year from the charge`);
+      assert.equal(claim.body.entitlement.periodEnd, yearEnd, `${label}: one year from the charge`);
       const verified = await verifyLicenseToken(claim.body.token, env);
       assert.equal(verified.valid, true, label);
-      assert.equal(verified.payload.periodEnd, approvedAt + YEAR, label);
-      assert.ok(verified.payload.exp <= approvedAt + YEAR, `${label}: the token ends with the year`);
+      assert.equal(verified.payload.periodEnd, yearEnd, label);
+      assert.ok(verified.payload.exp <= yearEnd, `${label}: the token ends with the year`);
     }
   }
 });

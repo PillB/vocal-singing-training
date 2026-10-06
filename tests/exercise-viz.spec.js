@@ -127,6 +127,24 @@ test.describe("exercise pictures", () => {
     expect(n, "1.2 s pauses count over the fan").toBeGreaterThanOrEqual(1);
   });
 
+  test("power pause counts no pause before the first word, with a fan running", async ({ page }) => {
+    await boot(page, "es", fanInRoom);
+    await openAndStart(page, "v10-power-pause");
+    // The learner gathers their thoughts for 3 s over the fan, then talks
+    // (3 s, a 1.2 s pause, 3 s): one pause, not a phantom one after the fan
+    await page.waitForTimeout(3000);
+    await playVoice(page, "speech");
+    await page.waitForTimeout(6500);
+    const n = Number(await page.locator("#mode-focus [data-p]").textContent());
+    const segs = await page.evaluate(() =>
+      window.VTApp.getState()
+        .modeInstance.state.vad.segments.map((g) => `${g.kind[0]}${g.start.toFixed(2)}`)
+        .join(" ")
+    );
+    expect(segs, "nothing said during the lead-in").toMatch(/^s[3-9]\./);
+    expect(n, segs).toBe(1);
+  });
+
   test("English labels on the pause drill", async ({ page }) => {
     await boot(page, "en");
     await openAndStart(page, "v10-power-pause");

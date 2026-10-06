@@ -299,9 +299,10 @@
    * - A room loud enough to open the gate (a fan, or any room's hiss at
    *   sensitivity 9–10) is learned from its steadiness instead: 0.6 s that
    *   holds still with no held pitch is the room. The floor starts over from
-   *   it, and a pause it hid is dated from when the voice stopped. A held
-   *   pitch is a voice (a sung note, an "mmm") and becomes the floor only as
-   *   a hum that has been there all take; the Space assist never does.
+   *   it, speech it was read as until then is taken back, and a pause it hid
+   *   is dated from when the voice stopped. A held pitch is a voice (a sung
+   *   note, an "mmm") and becomes the floor only as a hum that has been there
+   *   all take; the Space assist never does.
    * - Sound must clear the floor by `marginDb` and also clear the engine's
    *   own sensitivity gate (`frame.sounding`), so a fan does not read as
    *   speech and a quiet room does not turn a breath into a word.
@@ -333,6 +334,12 @@
       this._quietSince = null;
       this._loudSince = null;
       this._closedSince = null;
+      // The loudest level of the open speech and of the loud run that may
+      // open it: speech that never rose above the room it turned out to be
+      // was that room
+      this._runPeakDb = -140;
+      this._peakDb = -140;
+      this._pauseTold = false;
       this._quietestDb = null;
       this._humSince = null;
       this._humDb = null;
@@ -386,22 +393,27 @@
       if (loud) {
         this._quietSince = null;
         if (this._loudSince == null) this._loudSince = this.t - dt;
+        if (this.state === "speech") this._peakDb = Math.max(this._peakDb, db);
+        else this._runPeakDb = Math.max(this._runPeakDb, db);
         if (this.state !== "speech" && (this.t - this._loudSince) * 1000 >= this.onsetMs) {
           const start = this._loudSince;
           if (this.state === "pause" && this.pauseStart != null) {
             const len = start - this.pauseStart;
             const seg = this.segments[this.segments.length - 1];
             if (seg && seg.kind === "pause") seg.end = start;
-            if (this.cb.onPauseEnd) this.cb.onPauseEnd(this.pauseStart, len);
+            if (this.cb.onPauseEnd && !this._pauseTold) this.cb.onPauseEnd(this.pauseStart, len);
           }
+          this._pauseTold = false;
           this.state = "speech";
           this.speechStart = start;
           this.pauseStart = null;
+          this._peakDb = this._runPeakDb;
           this.segments.push({ kind: "speech", start, end: null });
           if (this.cb.onSpeech) this.cb.onSpeech(start);
         }
       } else {
         this._loudSince = null;
+        this._runPeakDb = -140;
         if (this._quietSince == null) this._quietSince = this.t - dt;
         if (
           this.state === "speech" &&
@@ -450,7 +462,7 @@
       this._floorRing.clear();
       this._recentRing.last(kind === "hum" ? 30 : ROOM_STEPS).forEach((v) => this._floorRing.push(v));
       this.floorDb = Math.max(-90, percentile(this._floorRing.last(), 0.1));
-      if (this.state === "speech" && this.floorDb > before) this._roomFound();
+      if (this.state === "speech" && this.floorDb > before) this._roomFound(kind === "noise");
     }
     /**
      * Is the sound of the last learning steps the room? "noise" (a fan, a
@@ -479,11 +491,32 @@
       return this.t - this._humSince >= 10 && db <= this._quietestDb + 3 ? "hum" : null;
     }
     /**
-     * The floor just rose under open speech: the pause began when the level
+     * The floor just rose under open speech. Speech that never cleared the
+     * new floor was the room all along (`noise`: only when the room had no
+     * pitch, the stronger evidence); otherwise the pause began when the level
      * fell to the room, which was up to a second ago, not now.
      */
-    _roomFound() {
+    _roomFound(noise) {
       const lim = this.floorDb + this.marginDb;
+      const seg = this.segments[this.segments.length - 1];
+      if (noise && this._peakDb <= lim && seg && seg.kind === "speech") {
+        // A fan read as speech before the floor knew it: take it back, to
+        // nothing said yet or to the pause it interrupted
+        this.segments.pop();
+        const prev = this.segments[this.segments.length - 1];
+        if (prev && prev.kind === "pause") {
+          prev.end = null;
+          this.state = "pause";
+          this.pauseStart = prev.start;
+          // Its end was already reported when the fan came on: reporting it
+          // again when the learner speaks would count one pause twice
+          this._pauseTold = true;
+        } else {
+          this.state = "idle";
+        }
+        this.speechStart = null;
+        return;
+      }
       const lv = this._recentRing.last();
       const ts = this._recentT.last();
       let i = lv.length;

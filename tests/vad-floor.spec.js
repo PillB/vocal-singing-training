@@ -154,6 +154,42 @@ test.describe("pause floor (Vad)", () => {
     expect(r.floor).toBeLessThan(-60);
   });
 
+  test("a fan before the first word: no speech, no pause", async ({ page }) => {
+    // The fan alone: nothing said yet. It used to read as ~1.8 s of speech,
+    // then a pause.
+    let r = await sim(page, { parts: [QUIET(6)], fan: { db: -40 } });
+    expect(r.segs, "the fan alone").toBe("");
+    expect(r.state).toBe("idle");
+    expect(r.talk).toBe(0);
+    // The learner gathers their thoughts, then talks with 1.2 s pauses: the
+    // lead-in is not talk and no pause is reported for it (a 1.5–3 s one
+    // landed in the power-pause drill's count before a word was said)
+    for (const lead of [1.5, 3, 4]) {
+      r = await sim(page, { parts: [QUIET(lead), ...turns(3, SPEECH(3, OVER_FAN), QUIET(1.2))], fan: { db: -40 } });
+      const label = `${lead} s lead-in · ${r.segs}`;
+      expect(r.ghost, label).toBeLessThan(0.15);
+      expect(r.ended.filter((e) => e.start < lead - 0.2), label).toEqual([]);
+      eachPauseMeasured(r, `${lead} s lead-in`);
+    }
+    // Sensitivity 10, where the quiet room's own hiss opens the gate
+    const loud = { peak: -15, dip: -32 };
+    r = await sim(page, { parts: [QUIET(3), SPEECH(3, loud), QUIET(1), SPEECH(3, loud)], room: -55, sens: 10 });
+    expect(r.ghost, r.segs).toBeLessThan(0.15);
+    expect(r.ended, r.segs).toHaveLength(1);
+    eachPauseMeasured(r, "sensitivity 10, 3 s lead-in");
+  });
+
+  test("a fan switched on mid-pause: one pause, reported once", async ({ page }) => {
+    // The fan comes on 1 s into a 4 s pause. It read as speech from then
+    // on; now it is taken back and the pause runs on to the next word.
+    const r = await sim(page, { parts: [QUIET(1), SPEECH(5), QUIET(4), SPEECH(3)], fan: { db: -40, from: 7 } });
+    expect(r.segs).toMatch(/^s1\.0\d-6\.0\d p6\.0\d-10\.\d\d s10\.\d\d-1[23]\.\d\d$/);
+    expect(r.ghost, r.segs).toBeLessThan(0.15);
+    // Its end was told when the fan came on (the Vad could not know yet);
+    // it is not told a second time, so no drill counts it twice
+    expect(r.ended, r.segs).toHaveLength(1);
+  });
+
   test("silence, then speech: a 1.2 s pause measures 1.2 s", async ({ page }) => {
     const r = await sim(page, { parts: [QUIET(2), SPEECH(10), QUIET(1.2), SPEECH(4)] });
     expect(r.falsePauses).toBe(0);

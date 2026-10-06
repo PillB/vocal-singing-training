@@ -356,11 +356,17 @@
    */
   async function syncNow(id) {
     const profileId = id || global.VTStorage.getActiveProfileId();
-    // One cycle at a time: a second ask for the same profile shares the one in
-    // flight, and one for another profile waits for it to finish.
+    // One cycle at a time: one for another profile waits for the one in flight
+    // to finish. A second ask for the same profile shares it, unless something
+    // was written after it read the bag. That write is not in what it pushes,
+    // and this ask is the write's own timer running out (or the hidden-tab
+    // flush that cancelled it), so nothing else would ask again: go round once
+    // more for it.
     while (running) {
-      if (runningFor === profileId) return running;
-      await running.catch(() => null);
+      const cycle = running;
+      const same = runningFor === profileId;
+      const result = await cycle.catch(() => null);
+      if (same && !(result && result.ok && unpushed(profileId))) return cycle;
     }
     if (!isAvailable()) return { ok: false, reason: "signed_out" };
 

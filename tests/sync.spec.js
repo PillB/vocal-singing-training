@@ -5,10 +5,11 @@
  * tests/accounts.spec.js checks a single sync and the merge rules. These follow
  * a signed-in learner through the app instead: a take updated after it was
  * first recorded, a routine finished, a week reviewed, a setting changed, the
- * tab hidden or closed, a connection that drops, a profile switched while a
- * sync is out, a new device signing in. Each one used to change this device
- * and leave the account behind, mix up whose record was whose, let a default
- * overwrite somebody's choice, or leave the screen showing the old record.
+ * tab hidden or closed, a connection that drops or a worker slow to answer, a
+ * profile switched while a sync is out, a new device signing in. Each one used
+ * to change this device and leave the account behind, mix up whose record was
+ * whose, let a default overwrite somebody's choice, or leave the screen showing
+ * the old record.
  *
  * The worker is a fake at the network boundary that keeps one document per
  * profile and refuses a write on a stale revision, like
@@ -40,7 +41,10 @@ function createServer(seed) {
     // "put" answers every write with a server error.
     fail: null,
     // When set, a progress GET waits on this promise before answering.
-    holdGet: null
+    holdGet: null,
+    // When set, a progress PUT waits on this promise before answering, as a
+    // slow database round trip does.
+    holdPut: null
   };
 }
 
@@ -91,6 +95,7 @@ async function installWorker(page, server) {
     }
     const profileId = body.profileId;
     server.puts.push({ profileId, baseRev: body.baseRev, doc: body.doc });
+    if (server.holdPut) await server.holdPut;
     if (server.fail === "put") return json(500, { ok: false, reason: "internal" });
     if (Number(body.baseRev || 0) !== (server.revs[profileId] || 0)) {
       return json(409, { ok: false, reason: "conflict" });
@@ -181,6 +186,30 @@ const TWO_PROFILES = {
     p_b: { id: "p_b", name: "Ana", createdAt: "2026-01-02T00:00:00Z" }
   }
 };
+
+/**
+ * Save a held note and let its push go out, held at the worker.
+ * @param {import('@playwright/test').Page} page Page.
+ * @param {object} server State from createServer.
+ * @returns {Promise<function>} Lets the push answer.
+ */
+async function holdNoteWithPushOut(page, server) {
+  let release;
+  server.holdPut = new Promise((resolve) => (release = resolve));
+  const before = server.puts.length;
+  await page.evaluate(() => window.VTStorage.addHoldLog(1));
+  await page.clock.runFor(9000);
+  await expect.poll(() => server.puts.length).toBeGreaterThan(before);
+  return () => {
+    server.holdPut = null;
+    release();
+  };
+}
+
+/** The held notes the account holds, newest first. */
+function serverHolds(server, profileId = "default") {
+  return (server.docs[profileId]?.holdLogs || []).map((h) => h.seconds);
+}
 
 /** The take history the account holds for one exercise. */
 function serverTakes(server, profileId = "default", ex = EX) {
@@ -337,6 +366,34 @@ test.describe("Saved progress follows the learner", () => {
     expect(server.gets.length).toBe(reads);
     expect(server.puts[server.puts.length - 1].baseRev).toBe(rev);
     expect(await page.evaluate(() => window.__progressFetches.filter((f) => f.method === "PUT" && f.keepalive).length)).toBe(1);
+  });
+
+  test("a change saved while a slow push is out follows it up", async ({ page }) => {
+    const server = createServer();
+    await boot(page, server);
+
+    const answer = await holdNoteWithPushOut(page, server);
+    // Another note while that write waits on the database, which stays slow
+    // past the new note's own quiet period.
+    await page.evaluate(() => window.VTStorage.addHoldLog(2));
+    await page.clock.runFor(9000);
+    answer();
+    await expect.poll(() => serverHolds(server), { timeout: 4000 }).toEqual([2, 1]);
+  });
+
+  test("a change saved while a push is out goes up when the tab is hidden", async ({ page }) => {
+    const server = createServer();
+    await boot(page, server);
+
+    const answer = await holdNoteWithPushOut(page, server);
+    await page.evaluate(() => window.VTStorage.addHoldLog(2));
+    // The phone locks before the quiet period is up; the first write lands after.
+    await page.evaluate(() => {
+      Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    answer();
+    await expect.poll(() => serverHolds(server), { timeout: 4000 }).toEqual([2, 1]);
   });
 
   test("a sync that fails says so, and is tried again", async ({ page }) => {

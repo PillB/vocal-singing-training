@@ -1108,3 +1108,74 @@ test("a paid subscription cancelled at once still keeps the period it paid for",
   assert.equal(verified.payload.status, "canceled");
   assert.equal(verified.payload.periodEnd, periodEnd);
 });
+
+test("an event from the same second as a cancellation cannot bring Pro back", async () => {
+  const env = createTestEnv();
+  const now = Math.floor(Date.now() / 1000);
+  await deliverStripe(env, checkoutEvent("cs_tie", "evt_t1", { plan: "pro_monthly", created: now - 40 * DAY }));
+  // Dunning ends: Stripe emits the last failed invoice and the cancellation
+  // in the same second, and delivers them in either order.
+  await deliverStripe(env, {
+    id: "evt_t2",
+    type: "customer.subscription.deleted",
+    created: now - 5,
+    data: { object: { id: "sub_router", status: "canceled", current_period_end: now - 5, ended_at: now - 5 } }
+  });
+  assert.equal((await claimFor(env, "stripe", "cs_tie")).status, 403);
+
+  await deliverStripe(env, {
+    id: "evt_t3",
+    type: "invoice.payment_failed",
+    created: now - 5,
+    data: { object: { id: "in_tie", subscription: "sub_router", lines: { data: [{ period: { end: now + 25 * DAY } }] } } }
+  });
+  const tie = await claimFor(env, "stripe", "cs_tie");
+  assert.equal(tie.status, 403, "a same-second event must not undo the cancellation");
+  assert.equal(tie.body.token, undefined);
+});
+
+test("nothing that arrives after a Stripe subscription was deleted reopens it", async () => {
+  const env = createTestEnv();
+  const now = Math.floor(Date.now() / 1000);
+  await deliverStripe(env, checkoutEvent("cs_gone", "evt_g1", { plan: "pro_monthly", created: now - 40 * DAY }));
+  await deliverStripe(env, {
+    id: "evt_g2",
+    type: "customer.subscription.deleted",
+    created: now - 50,
+    data: { object: { id: "sub_router", status: "canceled", current_period_end: now - 60, ended_at: now - 50 } }
+  });
+  // Stripe never reactivates a deleted subscription, so a newer event for it
+  // (an old invoice paid late, say) does not bring the license back.
+  await deliverStripe(env, {
+    id: "evt_g3",
+    type: "invoice.paid",
+    created: now - 10,
+    data: { object: { id: "in_late_paid", subscription: "sub_router", lines: { data: [{ period: { end: now + 25 * DAY } }] } } }
+  });
+  const claim = await claimFor(env, "stripe", "cs_gone");
+  assert.equal(claim.status, 403);
+  assert.equal(claim.body.token, undefined);
+});
+
+test("a failed invoice from the same second as the subscription going unpaid does not reopen it", async () => {
+  const env = createTestEnv();
+  const now = Math.floor(Date.now() / 1000);
+  await deliverStripe(env, checkoutEvent("cs_last_retry", "evt_l1", { plan: "pro_monthly", created: now - 60 * DAY }));
+  // The last retry fails: Stripe marks the subscription unpaid and reports
+  // the failed invoice in the same second.
+  await deliverStripe(env, {
+    id: "evt_l2",
+    type: "customer.subscription.updated",
+    created: now - 5,
+    data: { object: { id: "sub_router", status: "unpaid", current_period_end: now + 20 * DAY } }
+  });
+  await deliverStripe(env, {
+    id: "evt_l3",
+    type: "invoice.payment_failed",
+    created: now - 5,
+    data: { object: { id: "in_last", subscription: "sub_router", lines: { data: [{ period: { end: now + 20 * DAY } }] } } }
+  });
+  const claim = await claimFor(env, "stripe", "cs_last_retry");
+  assert.equal(claim.status, 403);
+  assert.equal(claim.body.token, undefined);
+});

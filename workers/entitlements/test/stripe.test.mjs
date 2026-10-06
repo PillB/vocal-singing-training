@@ -298,6 +298,8 @@ test("a cancellation says when it took effect, and whether it was ever paid for"
 
   const live = event("customer.subscription.updated", { id: "sub_c", status: "active" });
   assert.equal(live.update.endedAt, null);
+  assert.equal(live.update.terminal, false);
+  assert.equal(requested.update.terminal, true, "a deleted subscription never comes back");
 });
 
 test("every mapped event carries the time it happened", () => {

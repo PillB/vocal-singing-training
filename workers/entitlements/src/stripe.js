@@ -325,7 +325,10 @@ function mapSubscription(subscription, env, deleted) {
     status: deleted ? "canceled" : mapStripeStatus(subscription && subscription.status),
     periodEnd: subscriptionPeriodEnd(subscription),
     endedAt,
-    endsAt: unpaid && endedAt !== null ? endedAt : undefined
+    endsAt: unpaid && endedAt !== null ? endedAt : undefined,
+    // Stripe never reactivates a deleted subscription: nothing after this may
+    // change the license's state.
+    terminal: deleted
   };
 }
 

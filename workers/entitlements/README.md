@@ -209,11 +209,13 @@ lic:<licenseId>                       record JSON            the entitlement
 claim:<provider>:<sessionOrPaymentId> licenseId    90d TTL   ?billing=success lookup
 sub:<provider>:<subscriptionId>       licenseId              keeps one license per subscription
 paid:<licenseId>                      "1"                    a payment was confirmed (see below)
+ended:<licenseId>                     {endedAt, periodEnd}   the Stripe subscription was deleted
 ```
 
-`paid:` repeats a fact the record also holds, in a key nothing else writes, so
-that two webhooks processed at the same time cannot lose it: KV has no
-compare-and-swap, and the later of two concurrent writes of the record wins.
+`paid:` and `ended:` repeat facts the record also holds, each in a key nothing
+else writes, so that two webhooks processed at the same time cannot lose them:
+KV has no compare-and-swap, and the later of two concurrent writes of the
+record wins. Every read of a record applies them over it.
 
 D1: one database bound as `DB`, optional. The schema is created on first use
 (`ensureSchema`, every statement `IF NOT EXISTS`), so there is no migration step
@@ -323,6 +325,23 @@ Consequences worth understanding before you ship:
   retried `invoice.paid` arriving after `customer.subscription.deleted` is
   filed, not applied. Identity fields and the claim/subscription indexes are
   order-independent and are still written.
+- **Same-second events resolve the same way in either order.** Stripe stamps
+  events to the second. When two share a second, one that would make a
+  `canceled` or `suspended` record entitling again is refused; any other pair
+  applies as it arrives (a checkout and its subscription's first events often
+  share a second, and must all apply).
+- **A deleted Stripe subscription stays deleted.** Stripe never reactivates
+  one, so after `customer.subscription.deleted` no event for it changes the
+  license, whatever its timestamp, and the deletion is also kept in `ended:`.
+- **What concurrency can still do.** Two webhooks for one license processed
+  at the same moment both read the record, and the later write wins. A
+  confirmed payment and a deletion survive that through their own keys, and
+  KV's eventual consistency only delays them (another edge location can take
+  up to about a minute to see a write). Any other change can be lost to it:
+  for example, a renewal's new period end, until the next event corrects it.
+  Closing that needs one writer per license (a Durable Object, or a D1 row
+  updated only when its stored `occurredAt` is older), which this worker
+  does not have.
 
 ## Registering the webhooks
 

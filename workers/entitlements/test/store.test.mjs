@@ -313,6 +313,116 @@ test("updates without timestamps are never treated as stale", async () => {
   assert.equal(isStaleUpdate({ occurredAt: 10 }, {}), false);
 });
 
+test("two events from the same second: the one that ends access wins, in either order", () => {
+  for (const ended of ["canceled", "suspended"]) {
+    for (const live of ["active", "past_due"]) {
+      assert.equal(
+        isStaleUpdate({ occurredAt: 10, status: ended }, { occurredAt: 10, status: live }),
+        true,
+        `${live} after ${ended}`
+      );
+      assert.equal(
+        isStaleUpdate({ occurredAt: 10, status: live }, { occurredAt: 10, status: ended }),
+        false,
+        `${ended} after ${live}`
+      );
+    }
+  }
+  // Other same-second events still apply as they arrive: a checkout and its
+  // subscription's first events often share a second.
+  assert.equal(isStaleUpdate({ occurredAt: 10, status: "pending" }, { occurredAt: 10, status: "active" }), false);
+  assert.equal(isStaleUpdate({ occurredAt: 10, status: "active" }, { occurredAt: 10, status: "past_due" }), false);
+  assert.equal(isStaleUpdate({ occurredAt: 10, status: "canceled" }, { occurredAt: 10, status: "canceled" }), false);
+  assert.equal(isStaleUpdate({ occurredAt: 10, status: "canceled" }, { occurredAt: 11, status: "active" }), false);
+});
+
+test("a deletion survives a concurrent write of an older copy of the record", async () => {
+  const kv = createFakeKv();
+  const generateId = idSequence("lic_");
+  await upsertEntitlement(kv, {
+    provider: "stripe",
+    claimId: "cs_race",
+    subscriptionId: "sub_race",
+    status: "active",
+    periodEnd: NOW + 20 * 86400,
+    occurredAt: NOW - 1000
+  }, { now: NOW - 1000, generateId });
+
+  // The deletion and an older invoice.paid are processed at once: the second
+  // read the record before the deletion was written, and wrote last.
+  const before = new Map(kv.store);
+  await upsertEntitlement(kv, {
+    provider: "stripe",
+    subscriptionId: "sub_race",
+    status: "canceled",
+    periodEnd: NOW - 5,
+    endedAt: NOW - 10,
+    terminal: true,
+    occurredAt: NOW - 10
+  }, { now: NOW, generateId });
+  await upsertEntitlement(staleView(kv, before), {
+    provider: "stripe",
+    subscriptionId: "sub_race",
+    status: "active",
+    periodEnd: NOW + 30 * 86400,
+    occurredAt: NOW - 50
+  }, { now: NOW, generateId });
+
+  const written = JSON.parse(kv.store.get(licenseKey("lic_1")).value);
+  assert.equal(written.status, "active", "the record itself lost the deletion");
+  const read = await getEntitlement(kv, "lic_1");
+  assert.equal(read.status, "canceled");
+  assert.equal(read.periodEnd, NOW - 5);
+  assert.equal(isTokenIssuable(read, NOW), false);
+
+  // Further events are refused against the deletion, not the lost write.
+  const next = await upsertEntitlement(kv, {
+    provider: "stripe",
+    subscriptionId: "sub_race",
+    status: "active",
+    periodEnd: NOW + 30 * 86400,
+    occurredAt: NOW + 100
+  }, { now: NOW + 100, generateId });
+  assert.equal(next.stale, true);
+  assert.equal(next.record.status, "canceled");
+  assert.equal(isTokenIssuable(await getEntitlement(kv, "lic_1"), NOW + 100), false);
+});
+
+test("a deletion processed at the same moment as an older event still wins", async () => {
+  const kv = createFakeKv();
+  const generateId = idSequence("lic_");
+  await upsertEntitlement(kv, {
+    provider: "stripe",
+    claimId: "cs_both",
+    subscriptionId: "sub_both",
+    status: "active",
+    plan: "pro_monthly",
+    periodEnd: NOW + 20 * 86400,
+    occurredAt: NOW - 1000
+  }, { now: NOW, generateId });
+  await Promise.all([
+    upsertEntitlement(kv, {
+      provider: "stripe",
+      subscriptionId: "sub_both",
+      status: "canceled",
+      periodEnd: NOW - 5,
+      endedAt: NOW - 10,
+      terminal: true,
+      occurredAt: NOW - 10
+    }, { now: NOW, generateId }),
+    upsertEntitlement(kv, {
+      provider: "stripe",
+      subscriptionId: "sub_both",
+      status: "active",
+      periodEnd: NOW + 30 * 86400,
+      occurredAt: NOW - 50
+    }, { now: NOW, generateId })
+  ]);
+  const read = await getEntitlement(kv, await getLicenseIdForSubscription(kv, "stripe", "sub_both"));
+  assert.equal(read.status, "canceled");
+  assert.equal(isTokenIssuable(read, NOW), false);
+});
+
 test("a charge without a subscription behind it entitles for exactly one interval", async () => {
   const kv = createFakeKv();
   const generateId = idSequence("lic_");

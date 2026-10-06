@@ -10,12 +10,18 @@
  *   claim:<provider>:<sessionOrPaymentId> -> licenseId   (90d TTL)
  *   sub:<provider>:<subscriptionId>       -> licenseId
  *   paid:<licenseId>                      -> "1"        (a payment was confirmed)
+ *   ended:<licenseId>                     -> {endedAt, periodEnd} (subscription deleted)
  *
  * KV has no compare-and-swap, so two webhooks for one license processed at the
  * same time can each read the record, and the later write wins with the other's
  * change lost. A fact that never changes back once true is therefore also kept
  * in a key of its own that only that fact ever writes, and is read back over
- * the record, so a concurrent write of an older copy cannot lose it.
+ * the record, so a concurrent write of an older copy cannot lose it. KV is also
+ * eventually consistent, so another edge location may not see such a key for
+ * up to about a minute: the fact is then late, not lost. Changes that are not
+ * one-way (an ordinary status or period update) can still be lost that way;
+ * closing that needs a single writer per license (a Durable Object, or a D1
+ * row updated conditionally), which this store does not have.
  */
 
 "use strict";
@@ -74,6 +80,15 @@ export function subscriptionKey(provider, subscriptionId) {
  */
 export function paidKey(licenseId) {
   return `paid:${licenseId}`;
+}
+
+/**
+ * Key for the marker a deleted subscription leaves on its license.
+ * @param {string} licenseId Opaque license id.
+ * @returns {string} KV key.
+ */
+export function endedKey(licenseId) {
+  return `ended:${licenseId}`;
 }
 
 /**
@@ -139,7 +154,35 @@ export async function getEntitlement(kv, licenseId) {
   if (record && record.paid === false && (await kv.get(paidKey(licenseId)))) {
     record.paid = true;
   }
+  // Likewise a subscription's record that does not show its deletion.
+  if (record && record.subscriptionId && !Number.isFinite(record.endedAt)) {
+    const ended = await readEnded(kv, licenseId);
+    if (ended) {
+      record.status = "canceled";
+      record.endedAt = ended.endedAt;
+      capPeriodEnd(record, ended.periodEnd);
+    }
+  }
   return record;
+}
+
+/**
+ * Read the marker a deleted subscription left on its license.
+ * @param {Object} kv KV namespace.
+ * @param {string} licenseId Opaque license id.
+ * @returns {Promise<{endedAt: number, periodEnd: number}|null>} Marker or null.
+ */
+async function readEnded(kv, licenseId) {
+  const raw = await kv.get(endedKey(licenseId));
+  if (!raw) {
+    return null;
+  }
+  try {
+    const ended = JSON.parse(raw);
+    return ended && Number.isFinite(ended.endedAt) && Number.isFinite(ended.periodEnd) ? ended : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -268,14 +311,27 @@ function capPeriodEnd(record, at) {
 
 /**
  * True when an update describes an older world than the record already holds.
+ *
+ * Stripe stamps events to the second, so two events from the same second
+ * cannot be ordered by time. Then the one that ends access wins, in whichever
+ * order they arrive: Stripe sends the last failed invoice and the cancellation
+ * after it in the same second, and the invoice must not bring Pro back. Other
+ * same-second events still apply as they arrive, since a checkout and its
+ * subscription's first events often share a second.
+ *
  * @param {Object} record Stored entitlement record.
  * @param {Object} update Entitlement update descriptor.
  * @returns {boolean} Whether the update must not change state.
  */
 export function isStaleUpdate(record, update) {
-  return Number.isFinite(update.occurredAt)
-    && Number.isFinite(record.occurredAt)
-    && update.occurredAt < record.occurredAt;
+  if (!Number.isFinite(update.occurredAt) || !Number.isFinite(record.occurredAt)) {
+    return false;
+  }
+  if (update.occurredAt !== record.occurredAt) {
+    return update.occurredAt < record.occurredAt;
+  }
+  return (record.status === "canceled" || record.status === "suspended")
+    && (update.status === "active" || update.status === "past_due");
 }
 
 /**
@@ -294,11 +350,11 @@ export function isStaleUpdate(record, update) {
  * @param {Object} kv KV namespace.
  * @param {Object} update Descriptor: provider, plan, status, customerId,
  *   subscriptionId, periodEnd, periodEndFromCharge, endsAt, endedAt, paid,
- *   claimId, planSource, occurredAt.
+ *   terminal, claimId, planSource, occurredAt.
  * @param {{now?: number, generateId?: function(): string}} [options] Injectables for tests.
  * @returns {Promise<{record: Object, created: boolean, stale: boolean}>} Stored
  *   record, whether it was new, and whether state was refused (out of order,
- *   or a failed payment that nothing has paid since).
+ *   after a deletion, or a failed payment that nothing has paid since).
  */
 export async function upsertEntitlement(kv, update, options) {
   const opts = options || {};
@@ -348,7 +404,11 @@ export async function upsertEntitlement(kv, update, options) {
   const held = record.paid === false
     && record.status === "canceled"
     && (update.status === "active" || update.status === "past_due");
-  const stale = held || isStaleUpdate(record, update);
+  // A deleted Stripe subscription never comes back, so once its deletion is on
+  // record no later event changes its state, whatever its timestamp. The
+  // deletion itself applies even when it arrives after a newer event.
+  const ended = Number.isFinite(record.endedAt);
+  const stale = ended || (!update.terminal && (held || isStaleUpdate(record, update)));
   if (!stale) {
     const before = existing ? record.status : null;
     applyIfPresent(record, "plan", update.plan);
@@ -373,6 +433,11 @@ export async function upsertEntitlement(kv, update, options) {
     if (record.status === "canceled" && (before === "past_due" || before === "pending" || record.paid === false)) {
       capPeriodEnd(record, update.endedAt);
     }
+    if (update.terminal) {
+      record.endedAt = Number.isFinite(update.endedAt)
+        ? Math.floor(update.endedAt)
+        : (Number.isFinite(update.occurredAt) ? Math.floor(update.occurredAt) : now);
+    }
     if (Number.isFinite(update.occurredAt)) {
       record.occurredAt = Math.floor(update.occurredAt);
     }
@@ -384,6 +449,12 @@ export async function upsertEntitlement(kv, update, options) {
 
   if (update.paid === true) {
     await kv.put(paidKey(licenseId), "1");
+  }
+  if (update.terminal && !stale) {
+    await kv.put(endedKey(licenseId), JSON.stringify({
+      endedAt: record.endedAt,
+      periodEnd: Number.isFinite(record.periodEnd) ? record.periodEnd : record.endedAt
+    }));
   }
   await putEntitlement(kv, record);
   await putClaimIndex(kv, update.provider, update.claimId, licenseId);

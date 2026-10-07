@@ -16,6 +16,13 @@ async function boot(page) {
       sessionStorage.setItem("vt_e2e", "1");
       localStorage.removeItem("vt_billing_v1");
       localStorage.removeItem("vt_profiles_v1");
+      // "Tu progreso" (profiles, insights, achievements) lives in Historial
+      // and shows once something has been saved.
+      const at = new Date().toISOString();
+      localStorage.setItem(
+        "vt_progress_v1",
+        JSON.stringify({ "v1-diction": { completedCount: 1, lastAt: at, lastScore: 6, history: [{ at, score: 6, durationSec: 60, metrics: {} }] } })
+      );
     } catch {
       /* ignore */
     }
@@ -23,12 +30,23 @@ async function boot(page) {
   await page.goto(BASE + "/?e2e=1&t=" + Date.now(), { waitUntil: "networkidle" });
 }
 
+/** Historial, where the progress card and its Pro studio live. */
+async function toProgress(page) {
+  await page.click("#btn-history");
+  await expect(page.locator("#view-history #value-pulse")).toBeVisible();
+}
+
 test.describe("Pro features", () => {
-  test("home shows pro studio chrome", async ({ page }) => {
+  test("Historial shows the progress card's pro studio chrome", async ({ page }) => {
     await boot(page);
+    await toProgress(page);
     await expect(page.locator("#pro-studio")).toBeVisible();
-    await expect(page.locator("#sel-profile")).toBeVisible();
-    await expect(page.locator("#pro-spark")).toBeVisible();
+    // Profiles are their own card, after the progress.
+    await expect(page.locator("#history-profiles #sel-profile")).toBeVisible();
+    // Locked, the chart is described, not drawn faint: faint bars read as an
+    // empty chart of your own data.
+    await expect(page.locator("#pro-spark")).toBeHidden();
+    await expect(page.locator("#pro-coach-focus")).toBeVisible();
     await expect(page.locator("#pro-ach-grid")).toBeVisible();
   });
 
@@ -43,6 +61,7 @@ test.describe("Pro features", () => {
       localStorage.removeItem("vt_billing_v1");
     });
     await page.reload({ waitUntil: "networkidle" });
+    await toProgress(page);
     page.once("dialog", async (d) => d.dismiss());
     await page.click("#btn-profile-add");
     await page.waitForTimeout(200);
@@ -60,6 +79,7 @@ test.describe("Pro features", () => {
     await page.evaluate(() => {
       if (!VTBilling.isPro()) VTBilling.activateDemo("pro_monthly");
     });
+    await toProgress(page);
     page.once("dialog", async (d) => d.accept("Coach"));
     await page.click("#btn-profile-add");
     await page.waitForTimeout(150);
@@ -69,6 +89,32 @@ test.describe("Pro features", () => {
     });
     expect(r.n).toBeGreaterThanOrEqual(2);
     expect(r.names.some((n) => /Coach/i.test(n))).toBe(true);
+  });
+
+  test("switching profile in Historial redraws the sessions beside the selector", async ({ page }) => {
+    await boot(page);
+    await page.evaluate(() => {
+      const at = new Date().toISOString();
+      localStorage.setItem(
+        "vt_profiles_v1",
+        JSON.stringify({
+          activeId: "default",
+          profiles: {
+            default: { id: "default", name: "Default", createdAt: at },
+            p_ana: { id: "p_ana", name: "Ana", createdAt: at }
+          }
+        })
+      );
+    });
+    await toProgress(page);
+    const row = page.locator('#history-list [data-open-ex="v1-diction"]');
+    await expect(row).toBeVisible();
+    await page.selectOption("#sel-profile", "p_ana");
+    // Ana has saved nothing: her list is empty, not the main profile's.
+    await expect(row).toHaveCount(0);
+    await expect(page.locator("#history-list")).toContainText("Aún no has guardado ninguna sesión");
+    await page.selectOption("#sel-profile", "default");
+    await expect(row).toBeVisible();
   });
 
   test("insights and pulse expose spark + coachFocus", async ({ page }) => {

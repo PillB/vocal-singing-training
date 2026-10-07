@@ -364,8 +364,8 @@ account, so both devices must be signed in with the **same** address:
 1. On the old device, if they still have it: open the account panel (their
    name at the top right), press **Guardar ahora** (Save now), and wait for
    **Progreso guardado en tu cuenta** (Progress saved to your account).
-2. On the new device: sign in with the same address, press **Guardar ahora**
-   there too, then reload the page.
+2. On the new device: sign in with the same address and press **Guardar
+   ahora** there too. Historial shows what arrived without a reload.
 
 Only the first practice profile moves, so it must be the one open on both
 devices when they press **Guardar ahora**. What moves: practice history and
@@ -962,6 +962,23 @@ How to read it:
   worker does not know yet, which happens when the site was updated and the
   worker was not. A steady stream after a merge means the worker needs its
   redeploy (8.7); a stray few are harmless.
+- **envíos demasiado grandes** (requests too large) and **envíos mal formados**
+  (malformed requests): whole requests turned away unread, rather than events
+  dropped one by one, so they are counted apart. The site rarely causes them
+  (a connection that drops mid-send); a steady stream is somebody posting at
+  the route by hand.
+- Only once an experiment is switched on: **exposiciones nuevas** (new
+  exposures), browsers entered into a test; **exposiciones recuperadas en otra
+  visita** (exposures recovered on a later visit), the ones among them whose
+  first report was lost and that a later visit brought in.
+- **exposiciones por encima del tope diario de una dirección** (exposures over
+  one address's daily cap), in red: more than 100 browsers behind one address
+  (a school, an office) were entered into a test on one day. Each is recorded
+  only if that browser comes back another day, so many of them can skew a
+  result.
+- **exposiciones a una prueba o versión que no existe** (exposures to a test or
+  arm that does not exist): forged traffic, or the site and the worker deployed
+  out of step. Not red: the worker is turning them away as it should.
 
 If the section says the server doesn't have this yet, the worker needs its
 redeploy (8.7).

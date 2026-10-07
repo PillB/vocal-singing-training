@@ -26,12 +26,12 @@ function ledger(dayKeys, bank = 1) {
 
 /**
  * @param {import('@playwright/test').Page} page
- * @param {{ days?: object, loop?: object, lang?: string, query?: string, cardOn?: boolean, micDenied?: boolean, toasts?: boolean, now?: string }} opts
+ * @param {{ days?: object, loop?: object, session?: object, reminders?: object, lang?: string, query?: string, cardOn?: boolean, micDenied?: boolean, toasts?: boolean, now?: string }} opts
  */
 async function boot(page, opts = {}) {
   await page.clock.install({ time: new Date(opts.now || NOW) });
   await page.addInitScript(
-    ({ days, loop, lang, cardOn, micDenied, toasts }) => {
+    ({ days, loop, session, reminders, lang, cardOn, micDenied, toasts }) => {
       try {
         localStorage.setItem("vt_tour_v1", "1");
         localStorage.setItem("vt_lang", lang);
@@ -45,10 +45,21 @@ async function boot(page, opts = {}) {
           sessionStorage.setItem("vt_seeded", "1");
           if (days) localStorage.setItem("vt_days_v1", JSON.stringify(days));
           if (loop) localStorage.setItem("vt_loop_v1", JSON.stringify(loop));
+          if (session) localStorage.setItem("vt_session_v1", JSON.stringify(session));
+          if (reminders) localStorage.setItem("vt_reminders_v1", JSON.stringify(reminders));
         }
       } catch {
         /* ignore */
       }
+      // Every toast shown, in order: a later one replaces the text of the
+      // first, sometimes in the same task, so each record is read on its own.
+      window.__toasts = [];
+      document.addEventListener("DOMContentLoaded", () => {
+        const el = document.querySelector("#toast");
+        if (!el) return;
+        const log = (recs) => recs.forEach((r) => r.addedNodes.forEach((n) => window.__toasts.push(n.textContent || "")));
+        new MutationObserver(log).observe(el, { childList: true });
+      });
       const AC = window.AudioContext || window.webkitAudioContext;
       async function fakeGUM() {
         if (micDenied) {
@@ -76,7 +87,16 @@ async function boot(page, opts = {}) {
       navigator.mediaDevices.getUserMedia = fakeGUM;
       if (typeof MediaDevices !== "undefined") MediaDevices.prototype.getUserMedia = fakeGUM;
     },
-    { days: opts.days || null, loop: opts.loop || null, lang: opts.lang || "es", cardOn: !!opts.cardOn, micDenied: !!opts.micDenied, toasts: !!opts.toasts }
+    {
+      days: opts.days || null,
+      loop: opts.loop || null,
+      session: opts.session || null,
+      reminders: opts.reminders || null,
+      lang: opts.lang || "es",
+      cardOn: !!opts.cardOn,
+      micDenied: !!opts.micDenied,
+      toasts: !!opts.toasts
+    }
   );
   await page.goto(BASE + "/" + (opts.query || ""), { waitUntil: "domcontentloaded" });
   await page.waitForFunction(() => !!window.VTApp && !!window.VTLoop && !!window.VTDays);
@@ -107,6 +127,13 @@ const panel = (page) =>
     ),
     primaries: document.querySelectorAll("#start-panel .btn-practice").length
   }));
+
+/** A reminder set for 18:00, at 19:30 on a day not yet sung: its banner is up. */
+const DUE = {
+  days: ledger(["2026-09-21", "2026-09-22"]),
+  reminders: { enabled: true, times: ["18:00"], days: [0, 1, 2, 3, 4, 5, 6] },
+  now: "2026-09-23T19:30:00-05:00"
+};
 
 test.describe("Daily loop", () => {
   test("routines: the Mínimo never changes, Esencial rotates, every step is real", async ({ page }) => {
@@ -415,6 +442,219 @@ test.describe("Daily loop", () => {
     await expect(page.locator("#loop-tiers")).toBeHidden();
   });
 
+  // The loop's files load in both arms, so the classic arm's notices cannot
+  // hang on whether they loaded: the old panel never says "welcome back" or
+  // "rest day" itself, so the card and the toast have to.
+  test("the classic arm, forced: after days away the welcome-back card says it", async ({ page }) => {
+    await boot(page, {
+      days: ledger(["2026-09-15", "2026-09-16", "2026-09-17", "2026-09-18", "2026-09-19"], 0),
+      query: "?ab_loop_home_2026_10=classic"
+    });
+    expect((await panel(page)).state).toBeNull();
+    await expect(page.locator("#welcome-back")).toBeVisible();
+    await expect(page.locator("#welcome-back-body")).toContainText("Llevas 4 días");
+  });
+
+  test("the classic arm, forced: a rest day spent is said in a toast, and counted as in the loop", async ({ page }) => {
+    const week = ["2026-09-15", "2026-09-16", "2026-09-17", "2026-09-18", "2026-09-19", "2026-09-20", "2026-09-21"];
+    await boot(page, { days: ledger(week, 1), toasts: true, query: "?ab_loop_home_2026_10=classic" });
+    const r = await page.evaluate(() => ({
+      toasts: window.__toasts,
+      used: VTDays.read().rest.used,
+      restUsed: VTAnalytics.summary().counts.rest_used || 0
+    }));
+    expect(r.used).toEqual(["2026-09-22"]);
+    expect(r.toasts.join(" | ")).toMatch(/Usamos un día de descanso/);
+    // Rest days are the ledger's, in both arms, and so is their event.
+    expect(r.restUsed).toBe(1);
+  });
+
+  test("the loop says a rest day spent on its panel, not in a toast as well", async ({ page }) => {
+    const week = ["2026-09-15", "2026-09-16", "2026-09-17", "2026-09-18", "2026-09-19", "2026-09-20", "2026-09-21"];
+    await boot(page, { days: ledger(week, 1), toasts: true });
+    expect((await panel(page)).sub).toMatch(/día de descanso/);
+    const r = await page.evaluate(() => ({ toasts: window.__toasts, restUsed: VTAnalytics.summary().counts.rest_used || 0 }));
+    expect(r.toasts.join(" | ")).not.toMatch(/día de descanso/);
+    expect(r.restUsed).toBe(1);
+  });
+
+  test("the classic arm, forced: the reminder's button reads the old 5 min", async ({ page }) => {
+    await boot(page, { ...DUE, query: "?ab_loop_home_2026_10=classic" });
+    const go = page.locator("#rd-start");
+    await expect(go).toBeVisible();
+    await expect(go).toHaveText("▶ 5 min");
+  });
+
+  test("the classic arm, forced: the reminder starts the old 5-minute session, not the Mínimo", async ({ page }) => {
+    await boot(page, { ...DUE, query: "?ab_loop_home_2026_10=classic" });
+    await page.locator("#rd-start").click();
+    await page.clock.runFor(400);
+    const r = await page.evaluate(() => ({
+      open: VTApp.getState().exercise?.id,
+      total: VTApp.getState().timer.total,
+      path: VTStorage.getSession()?.path || null,
+      basicsStart: VTAnalytics.summary().counts.basics_start || 0,
+      tier: JSON.parse(localStorage.getItem("vt_loop_v1") || "{}").tier || null
+    }));
+    expect(r.open).toBe("s15-sh-air-ladder");
+    expect(r.total).toBe(300);
+    expect(r.path).not.toBe("basics");
+    // The loop's own events exist only in its arm.
+    expect(r.basicsStart).toBe(0);
+    expect(r.tier).toBeNull();
+  });
+
+  test("the reminder starts today's Mínimo in the loop", async ({ page }) => {
+    await boot(page, DUE);
+    const go = page.locator("#rd-start");
+    await expect(go).toBeVisible();
+    await expect(go).toHaveText("▶ Mínimo, 3 min");
+    await go.click();
+    await expect(page.locator("#view-exercise")).toHaveClass(/active/);
+    const s = await page.evaluate(() => VTStorage.getSession());
+    expect(s.path).toBe("basics");
+    expect(s.order).toEqual(["s4-lip-trills", "s27-lip-trill-solfege"]);
+  });
+
+  // A guided session left open keeps the panel's own copy and its one button,
+  // which resumes it. In the loop's arm the loop's words go at the top of that
+  // copy; the classic arm's card would sit far below, and its "▶ 5 min" would
+  // start something else while the session waits.
+  const GUIDED = {
+    mode: "structured",
+    track: "singing",
+    path: "basic",
+    order: ["s4-lip-trills", "s27-lip-trill-solfege", "s17-jaw-neck-release"],
+    index: 1,
+    status: "paused",
+    startedAt: "2026-09-19T18:00:00-05:00",
+    pausedAt: "2026-09-19T18:05:00-05:00",
+    completedIds: ["s4-lip-trills"]
+  };
+  const AWAY = ["2026-09-15", "2026-09-16", "2026-09-17", "2026-09-18", "2026-09-19"];
+
+  test("a comeback with a guided session left open: its kicker says welcome back, its one button resumes", async ({ page }) => {
+    await boot(page, { days: ledger(AWAY, 0), session: GUIDED });
+    let p = await panel(page);
+    expect(p.state).toBeNull();
+    expect(p.kicker).toBe("Qué bueno verte");
+    expect(p.title).toBe("Vas por el ejercicio 2 de 3");
+    expect(p.cta).toBe("▶ Seguir la sesión");
+    expect(p.primaries).toBe(1);
+    await expect(page.locator("#welcome-back")).toBeHidden();
+
+    // Today's Mínimo left half-way is a guided session too: the button goes
+    // on with it, not with another routine.
+    const minimo = {
+      ...GUIDED,
+      path: "basics",
+      tier: "min",
+      order: ["s4-lip-trills", "s27-lip-trill-solfege"],
+      sec: { "s4-lip-trills": 90, "s27-lip-trill-solfege": 90 },
+      status: "active",
+      pausedAt: null
+    };
+    await page.evaluate((s) => localStorage.setItem("vt_session_v1", JSON.stringify(s)), minimo);
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => !!window.VTLoop);
+    await page.clock.runFor(500);
+    p = await panel(page);
+    expect(p.kicker).toBe("Qué bueno verte");
+    expect(p.cta).toBe("▶ Seguir la sesión");
+    await expect(page.locator("#welcome-back")).toBeHidden();
+    await page.locator("#btn-next-step").click();
+    await expect(page.locator("#view-exercise")).toHaveClass(/active/);
+    const r = await page.evaluate(() => ({
+      open: VTApp.getState().exercise?.id,
+      session: VTStorage.getSession(),
+      basicsStart: VTAnalytics.summary().counts.basics_start || 0
+    }));
+    expect(r.open).toBe("s27-lip-trill-solfege");
+    expect(r.session.path).toBe("basics");
+    expect(r.session.index).toBe(1);
+    expect(r.basicsStart).toBe(0);
+
+    // Done means done: once today is sung, it is no longer a comeback.
+    await page.evaluate((days) => localStorage.setItem("vt_days_v1", JSON.stringify(days)), ledger([...AWAY, TODAY], 0));
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => !!window.VTLoop);
+    await page.clock.runFor(500);
+    expect((await panel(page)).kicker).toBe("Sesión guiada en curso");
+  });
+
+  test("a rest day spent with a guided session paused: the panel says it, where the pause notice cannot replace it", async ({ page }) => {
+    const week = [...AWAY, "2026-09-20", "2026-09-21"];
+    await boot(page, { days: ledger(week, 1), session: GUIDED, toasts: true });
+    const p = await panel(page);
+    expect(p.state).toBeNull();
+    // A gap rest days covered was rest, not time away.
+    expect(p.kicker).toBe("Sesión guiada en curso");
+    expect(p.sub).toMatch(/Usamos un día de descanso/);
+    expect(p.cta).toBe("▶ Seguir la sesión");
+    await expect(page.locator("#welcome-back")).toBeHidden();
+    const r = await page.evaluate(() => ({ toasts: window.__toasts, restUsed: VTAnalytics.summary().counts.rest_used || 0 }));
+    expect(r.toasts.join(" | ")).toMatch(/sesión en pausa/);
+    expect(r.toasts.join(" | ")).not.toMatch(/día de descanso/);
+    expect(r.restUsed).toBe(1);
+    // The line is redrawn in the language switched to.
+    await page.locator("#btn-lang").click();
+    await expect(page.locator("#start-sub")).toContainText("We used a rest day");
+  });
+
+  test("the classic arm, forced: a guided session left open keeps its copy, and the old card says welcome back", async ({ page }) => {
+    await boot(page, { days: ledger(AWAY, 0), session: GUIDED, query: "?ab_loop_home_2026_10=classic" });
+    const p = await panel(page);
+    expect(p.state).toBeNull();
+    expect(p.kicker).toBe("Sesión guiada en curso");
+    expect(p.sub).toBe("Tienes una sesión guiada a medias. Sigue por donde ibas.");
+    await expect(page.locator("#welcome-back")).toBeVisible();
+    await expect(page.locator("#welcome-back-body")).toContainText("Llevas 4 días");
+  });
+
+  // A session whose step has since left the catalog cannot be resumed, so the
+  // panel never offers it: the loop keeps the panel and says welcome back.
+  test("a guided session left on a step no longer in the catalog does not hide the welcome back", async ({ page }) => {
+    const stale = { ...GUIDED, order: ["s4-lip-trills", "zz-removed", "s17-jaw-neck-release"] };
+    await boot(page, { days: ledger(AWAY, 0), session: stale });
+    const p = await panel(page);
+    expect(p.state).toBe("back");
+    expect(p.kicker).toBe("Qué bueno verte");
+    expect(p.primaries).toBe(1);
+    await page.locator("#btn-next-step").click();
+    await expect(page.locator("#view-exercise")).toHaveClass(/active/);
+    const r = await page.evaluate(() => ({ open: VTApp.getState().exercise?.id, path: VTStorage.getSession()?.path }));
+    expect(r.open).toBe("s4-lip-trills");
+    expect(r.path).toBe("basics");
+  });
+
+  /** The exercise the site tour's exercise stop shows, then the one Empezar opens. */
+  async function tourStopAndStart(page) {
+    await page.evaluate(() => VTApp.tourShow("exercise"));
+    await page.clock.runFor(400);
+    const shown = await page.evaluate(() => VTApp.getState().exercise?.id || null);
+    await page.evaluate(() => VTApp.tourShow("home"));
+    await page.clock.runFor(300);
+    await page.locator("#btn-next-step").click();
+    await page.clock.runFor(400);
+    return { shown, opened: await page.evaluate(() => VTApp.getState().exercise?.id || null) };
+  }
+
+  // The loop's files load in both arms, so its Mínimo was there for the tour
+  // to fall back on in the classic arm too, whose Empezar starts the class.
+  test("the classic arm, forced: the tour's exercise stop is the one its Empezar opens", async ({ page }) => {
+    await boot(page, { days: ledger(["2026-09-21", "2026-09-22"]), query: "?ab_loop_home_2026_10=classic" });
+    const r = await tourStopAndStart(page);
+    expect(r.opened).toBe("s17-jaw-neck-release");
+    expect(r.shown).toBe(r.opened);
+  });
+
+  test("the tour's exercise stop in the loop is today's first basic, where Empezar starts", async ({ page }) => {
+    await boot(page, { days: ledger(["2026-09-21", "2026-09-22"]) });
+    const r = await tourStopAndStart(page);
+    expect(r.opened).toBe("s4-lip-trills");
+    expect(r.shown).toBe(r.opened);
+  });
+
   test("experiments ship switched off: control for everyone, nothing exposed", async ({ page }) => {
     await boot(page, { days: ledger(["2026-09-22"]) });
     const r = await page.evaluate(() => {
@@ -439,10 +679,16 @@ test.describe("Daily loop", () => {
       const a = { v: 1, days: { "2026-09-20": { sec: 200, n: 1, ex: ["s4-lip-trills"] } }, rest: { bank: 0, earnedAt: 6, used: ["2026-09-19"] }, backfilled: true };
       const b = { v: 1, days: { "2026-09-21": { sec: 100, n: 1, ex: ["v1-diction"], basics: 1 } }, rest: { bank: 2, earnedAt: 0, used: [] }, backfilled: true };
       const m = VTDays.merge(a, b);
-      const la = { v: 1, ms: [1, 3], cards: { c01: "2026-09-20" }, surprises: [{ day: "2026-09-20", kind: "card", id: "c01" }], comebacks: [], tier: "ess" };
-      const lb = { v: 1, ms: [1, 3, 7], cards: { c02: "2026-09-21" }, surprises: [{ day: "2026-09-21", kind: "card", id: "c02" }], comebacks: ["2026-09-21"], tier: "min" };
+      const la = { v: 1, ms: [1, 3], cards: { c01: "2026-09-20" }, surprises: [{ day: "2026-09-20", kind: "card", id: "c01" }], comebacks: [], tier: "ess", tierAt: "2026-09-21T09:00:00.000Z" };
+      const lb = { v: 1, ms: [1, 3, 7], cards: { c02: "2026-09-21" }, surprises: [{ day: "2026-09-21", kind: "card", id: "c02" }], comebacks: ["2026-09-21"], tier: "min", tierAt: "2026-09-20T09:00:00.000Z", goal: "5-7", goalAt: "2026-09-20T09:00:00.000Z" };
       const lm = VTLoop.merge(la, lb);
-      return { days: Object.keys(m.days).sort(), basics: m.days["2026-09-21"].basics, bank: m.rest.bank, used: m.rest.used, lm };
+      // The other device merges the same two the other way round.
+      const back = VTLoop.merge(lb, la);
+      // Goals saved before they carried a time: the default ("3-5") then was
+      // pushed by every device, chosen or not.
+      const legacy = (mine, theirs) => VTLoop.merge({ ...la, goal: mine }, { ...lb, goal: theirs, goalAt: null }).goal;
+      const legacyGoals = [legacy("5-7", "3-5"), legacy("3-5", "5-7"), legacy("2-3", "5-7")];
+      return { days: Object.keys(m.days).sort(), basics: m.days["2026-09-21"].basics, bank: m.rest.bank, used: m.rest.used, lm, back, legacyGoals };
     });
     expect(r.days).toEqual(["2026-09-20", "2026-09-21"]);
     expect(r.basics).toBe(1);
@@ -452,7 +698,13 @@ test.describe("Daily loop", () => {
     expect(r.lm.ms).toEqual([1, 3, 7]);
     expect(Object.keys(r.lm.cards).sort()).toEqual(["c01", "c02"]);
     expect(r.lm.comebacks).toEqual(["2026-09-21"]);
-    expect(r.lm.tier).toBe("ess");
+    // Settings follow the latest choice, on both devices alike; a goal this
+    // device never picked (its default) does not replace one that was.
+    expect([r.lm.tier, r.back.tier]).toEqual(["ess", "ess"]);
+    expect([r.lm.goal, r.back.goal]).toEqual(["5-7", "5-7"]);
+    // Without times, a goal other than the default was chosen, on either side;
+    // when both were, the account's copy decides.
+    expect(r.legacyGoals).toEqual(["5-7", "5-7", "5-7"]);
   });
 
   test("English and the Vocal track read in their own words", async ({ page }) => {

@@ -223,7 +223,7 @@ test.describe("Start floor: the stage's controls on a phone", () => {
     await open(page, "s4-lip-trills");
     await expect(page.locator("#oct-controls .oct-k")).toHaveText("octava");
     await expect(page.locator("#oct-controls .oct-auto span")).toBeVisible();
-    await expect(page.locator("#oct-controls .oct-auto span")).toHaveText("Rango");
+    await expect(page.locator("#oct-controls .oct-auto span")).toHaveText("A mi voz");
     // The meter sits in the MIC label, right after its name
     const meter = await page.evaluate(() => {
       const m = document.getElementById("level-meter-wrap");
@@ -237,18 +237,53 @@ test.describe("Start floor: the stage's controls on a phone", () => {
     expect(meter.inLabel).toBe(true);
     expect(meter.afterTitle).toBe(true);
     expect(meter.gap).toBeLessThan(16);
-    // Empezar: full row width, at least 48px tall, nothing beside it
+    // Empezar: at least 48px tall and most of its row; the only thing beside
+    // it is "⏺ Grabarme" (phones record too), a full-size target.
     const s = await page.evaluate(() => {
       const b = document.getElementById("btn-practice-start").getBoundingClientRect();
+      const r = document.getElementById("opt-auto-record").getBoundingClientRect();
       const rail = document.getElementById("hud-bottom-rail").getBoundingClientRect();
-      return { w: b.width, h: b.height, railW: rail.width };
+      return { w: b.width, h: b.height, railW: rail.width, recH: r.height, recLeft: r.left, startRight: b.right, recTop: r.top, startTop: b.top };
     });
     expect(s.h).toBeGreaterThanOrEqual(48);
-    expect(s.w).toBeGreaterThan(s.railW * 0.8);
+    expect(s.w).toBeGreaterThan(s.railW * 0.5);
+    expect(s.recH).toBeGreaterThanOrEqual(44);
+    expect(s.recLeft).toBeGreaterThanOrEqual(s.startRight);
+    expect(Math.abs(s.recTop + s.recH / 2 - (s.startTop + s.h / 2))).toBeLessThan(4);
+    await expect(page.locator("#opt-auto-record")).toContainText("Grabarme");
     await page.evaluate(() => window.VTI18n.setLang("en"));
     await expect(page.locator("#oct-controls .oct-k")).toHaveText("octave");
-    await expect(page.locator("#oct-controls .oct-auto span")).toHaveText("Range");
+    await expect(page.locator("#oct-controls .oct-auto span")).toHaveText("My range");
   });
+
+  for (const vp of [
+    { width: 390, height: 844 },
+    { width: 360, height: 740 }
+  ]) {
+    test(`${vp.width}px: octave, "A mi voz" and the piano share one row, in Spanish and English`, async ({ page }) => {
+      await page.setViewportSize(vp);
+      await boot(page);
+      await open(page, "s4-lip-trills");
+      const row = () =>
+        page.evaluate(() => {
+          const r = (id) => document.getElementById(id).getBoundingClientRect();
+          const btn = document.getElementById("btn-toggle-piano");
+          return {
+            oneRow: Math.abs(r("btn-toggle-piano").top - r("oct-controls").top) < 8,
+            word: getComputedStyle(btn.querySelector(".piano-word")).display !== "none",
+            label: btn.getAttribute("aria-label")
+          };
+        });
+      await expect.poll(async () => (await row()).oneRow).toBe(true);
+      const es = await row();
+      // The word goes only where it would wrap; the button keeps its name.
+      expect(es.word).toBe(vp.width > 380);
+      expect(es.label).toBeTruthy();
+      await page.evaluate(() => window.VTI18n.setLang("en"));
+      await expect.poll(async () => (await row()).oneRow).toBe(true);
+      expect((await row()).label).toBeTruthy();
+    });
+  }
 });
 
 test.describe("Coach strip: the mode and its cue on the stage", () => {
@@ -524,8 +559,8 @@ test.describe("Landscape: a phone on its side", () => {
         await expect
           .poll(() =>
             page.evaluate(() => {
-              const back = document.getElementById("btn-back-home").getBoundingClientRect();
-              return back.right <= document.getElementById("btn-session-resume").getBoundingClientRect().left;
+              const help = document.getElementById("btn-ui-help").getBoundingClientRect();
+              return help.right <= document.getElementById("btn-session-resume").getBoundingClientRect().left;
             })
           )
           .toBe(true);
@@ -546,6 +581,7 @@ test.describe("Landscape: a phone on its side", () => {
           stage: q("highway-stage"),
           exHeader: document.querySelector(".exercise-header-compact").getBoundingClientRect(),
           back: q("btn-back-home"),
+          help: q("btn-ui-help"),
           heading: q("ex-title"),
           progress: q("structured-progress"),
           title,
@@ -563,9 +599,13 @@ test.describe("Landscape: a phone on its side", () => {
         expect(b.bottom, `${phase}: in the header row`).toBeLessThanOrEqual(r.exHeader.bottom + 1);
         expect(b.right).toBeLessThanOrEqual(r.vw);
       }
-      expect(r.back.right, `${phase}: Atrás clear of Pausar`).toBeLessThanOrEqual(r.pause.left);
-      expect(r.heading.right).toBeLessThanOrEqual(r.back.left);
-      expect(r.progress.right).toBeLessThanOrEqual(r.back.left);
+      // One row, left to right: the way back, the title and the routine's
+      // line, Ayuda, then Pausar and Terminar (design: one-header).
+      expect(r.back.right, `${phase}: the way back before the title`).toBeLessThanOrEqual(r.heading.left);
+      expect(r.heading.right).toBeLessThanOrEqual(r.help.left);
+      expect(r.progress.left).toBeGreaterThanOrEqual(r.back.right);
+      expect(r.progress.right).toBeLessThanOrEqual(r.help.left);
+      expect(r.help.right, `${phase}: Ayuda clear of Pausar`).toBeLessThanOrEqual(r.pause.left);
       if (phase === "scrolled") {
         expect(r.scrollY).toBeGreaterThan(0);
         expect(Math.abs(r.exHeader.top), "the row stays at the top").toBeLessThanOrEqual(1);

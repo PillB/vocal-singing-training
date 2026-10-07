@@ -1,0 +1,33 @@
+{
+ "history-progress": {
+  "title": "Historial for someone with saved practice",
+  "job": "A learner who opens Historial sees what they have done and can tell whether they are making progress.",
+  "states": "history-rich-btn",
+  "vps": "phone,desktop",
+  "full": true,
+  "arms": {
+   "A": {
+    "caption": "Totals, achievements and the practice map are on Practicar, below the exercise list, not here. 'Abrir' opens that exercise."
+   },
+   "B": {
+    "url": "http://127.0.0.1:8813",
+    "caption": "'Abrir' opens that exercise. Below the record: 'Tu progreso' (totals, weekly goal, achievements, practice map), then 'Perfiles', then at most one Pro offer."
+   }
+  }
+ },
+ "reminder": {
+  "title": "Setting a daily reminder",
+  "job": "A learner who wants a daily nudge to practise finds where to set it and sets it.",
+  "states": "home-returning,reminder-open",
+  "vps": "phone,desktop",
+  "arms": {
+   "A": {
+    "caption": "The reminder settings are in 'Volver a practicar' at the very bottom of Practicar, below the exercise list (the second screenshot is scrolled there)."
+   },
+   "B": {
+    "url": "http://127.0.0.1:8813",
+    "caption": "'🔔 Poner un recordatorio' on the week card opens a small dialog (the second screenshot). While the reminder is off, the main button reads 'Activar recordatorio' and turns it on; 'Ahora no' closes without one. Once set, the week-card button reads 'Recordatorio: 18:00'."
+   }
+  }
+ }
+}

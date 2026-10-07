@@ -2,7 +2,7 @@
 
 **Date:** 23 September 2026
 **Code:** `js/daily-loop.js` (new), `js/practice-days.js` (new), `js/app.js`, `js/session.js`, `js/storage.js`, `js/sync.js`, `js/reminders.js`, `js/value-pulse.js`, `js/practice-engine.js`, `js/practice-modes.js`, `js/analytics.js`, `js/experiments.js`, `js/experiments-config.js`, `js/i18n.js`, `index.html`, `css/styles.css`, `guide.html`
-**Tests:** `tests/daily-loop.spec.js` (new, 19 cases); `tests/retention.spec.js` (two cases rewritten for rest days and the loop's welcome back)
+**Tests:** `tests/daily-loop.spec.js` (new); `tests/retention.spec.js` (two cases rewritten for rest days and the loop's welcome back)
 **Research:** the full write-up, with every source and the claims that did not survive checking, is published separately as a readable page. This file is the engineering record.
 
 People walk through the lessons and leave. The catalog and the 12-week plan are
@@ -119,6 +119,12 @@ From the first day sung, the start panel becomes **today's basics**:
   the button. The size and steps are in the chips below and in the exercise
   itself; the intro line shows only when it reports a rest day spent. A number
   and its unit never break across lines ("3 minutos").
+- A guided session left open (one from the catalog, or a size left half-way)
+  keeps the panel's own copy, and its one button resumes it. The loop's words
+  go at the top of that copy: "Qué bueno verte" on a comeback, and the line
+  for a rest day just spent. The classic arm keeps the old welcome-back card
+  and rest-day toast instead. A session left on a step that has since left
+  the catalog cannot be resumed, so the loop keeps the panel.
 - One naming scheme. The button says which size it starts ("▶ Empezar
   básicos" over "Esencial · 10 min"); under it, **Elige el tamaño de hoy:** is
   a segmented choice that only selects. Continuar and the guided sessions sit
@@ -150,7 +156,10 @@ From the first day sung, the start panel becomes **today's basics**:
 
 `vt_loop_v1` holds the chosen size and goal, milestones marked, cards found,
 surprises shown, comebacks, and a random seed. It is profile-scoped and synced;
-a merge unions the lists and keeps this device's settings.
+a merge unions the lists, and the size and goal follow the latest choice made
+on any device (each carries the time it was chosen). The default a new device
+writes on its first visit is not a choice and never replaces one. Between two
+goals saved before goals carried a time, the one that is not the default wins.
 
 ### Surprises
 

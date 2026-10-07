@@ -27,6 +27,29 @@ const progressNumbers = (text) => {
   return m ? { n: Number(m[1]), total: Number(m[2]) } : null;
 };
 
+/** Walk the site tour: the exercise its exercise stop shows, the last button's label, and what that button opens. */
+async function walkTour(page) {
+  await page.evaluate(() => window.VTTour.start(true));
+  await page.waitForTimeout(400);
+  let shown = null;
+  for (let i = 0; i < 8; i += 1) {
+    const s = await page.evaluate(() => ({
+      view: window.VTApp.getState().view,
+      id: window.VTApp.getState().exercise?.id || null
+    }));
+    if (s.view === "exercise") shown = s.id;
+    const p = progressNumbers(await page.locator("[data-tour-progress]").textContent());
+    if (p && p.n === p.total) break;
+    await page.locator("[data-tour-next]").click();
+    await page.waitForTimeout(420);
+  }
+  const label = (await page.locator("[data-tour-next]").textContent()).trim();
+  await page.locator("[data-tour-next]").click();
+  await page.waitForTimeout(700);
+  const opened = await page.evaluate(() => window.VTApp.getState().exercise?.id || null);
+  return { shown, label, opened };
+}
+
 test.describe("Tour targets", () => {
   test("every home step points at something really on screen", async ({ page }) => {
     await boot(page);
@@ -56,8 +79,8 @@ test.describe("Tour targets", () => {
       await page.locator("[data-tour-next]").click();
     }
     expect(report).toBeNull();
-    // First step is a centred welcome; the rest must all be anchored and visible.
-    for (const s of seen.slice(1)) {
+    // Every stop is anchored: the tour has no centred welcome card any more.
+    for (const s of seen) {
       expect(s.hasTarget, `${s.progress} is anchored to an element`).toBe(true);
       expect(s.onScreen, `${s.progress} target is on screen`).toBe(true);
     }
@@ -195,6 +218,9 @@ test.describe("Tour manners", () => {
     await boot(page);
     const snapshot = () =>
       page.evaluate(() => ({
+        view: window.VTApp.getState().view,
+        hash: location.hash,
+        history: history.length,
         tab: document.querySelector(".tab.active")?.dataset.tab || null,
         tier: document.querySelector(".tier-chip.selected")?.dataset.tier || null,
         cards: document.querySelectorAll("#exercise-list .card-ex").length,
@@ -203,15 +229,127 @@ test.describe("Tour manners", () => {
     const before = await snapshot();
     await page.evaluate(() => window.VTTour.start(true));
     await page.waitForTimeout(400);
+    // The tour opens the exercise, the Plan and the Historial on its way, and
+    // its last stop offers "Ahora no" beside the button that starts practice.
     for (let i = 0; i < 8; i += 1) {
       const p = progressNumbers(await page.locator("[data-tour-progress]").textContent());
-      await page.locator("[data-tour-next]").click();
-      await page.waitForTimeout(280);
       if (p && p.n === p.total) break;
+      await page.locator("[data-tour-next]").click();
+      await page.waitForTimeout(420);
     }
+    await expect(page.locator("[data-tour-skip]")).toHaveText("Ahora no");
+    await page.locator("[data-tour-skip]").click();
+    await page.waitForTimeout(400);
     // It used to switch track and tier to open a sample exercise and never put
     // them back: Vocal/Todos/20 cards went in, Canto/Básico/16 came out.
     expect(await snapshot()).toEqual(before);
+    expect(await page.evaluate(() => localStorage.getItem("vt_tour_v1"))).toBe("finished");
+  });
+
+  test("each stop opens its place, without adding to the back button", async ({ page }) => {
+    await boot(page);
+    const startLen = await page.evaluate(() => history.length);
+    await page.evaluate(() => window.VTTour.start(true));
+    await page.waitForTimeout(400);
+    const stops = [];
+    for (let i = 0; i < 8; i += 1) {
+      const s = await page.evaluate(() => ({
+        progress: document.querySelector("[data-tour-progress]").textContent,
+        view: window.VTApp.getState().view,
+        hash: location.hash,
+        len: history.length
+      }));
+      stops.push(s);
+      const p = progressNumbers(s.progress);
+      if (p && p.n === p.total) break;
+      await page.locator("[data-tour-next]").click();
+      await page.waitForTimeout(420);
+    }
+    expect(stops.map((s) => s.view)).toEqual(["home", "exercise", "plan", "history", "home"]);
+    expect(stops.map((s) => s.progress.split("·")[1]?.trim())).toEqual([
+      "Practicar",
+      "Ejercicio",
+      "Plan",
+      "Historial",
+      "Cuenta y ayuda"
+    ]);
+    for (const s of stops) {
+      expect(s.hash, `${s.progress}: the address stays put`).toBe("");
+      expect(s.len, `${s.progress}: nothing pushed onto the back button`).toBe(startLen);
+    }
+  });
+
+  test("the last stop's main button starts today's basics", async ({ page }) => {
+    await boot(page);
+    // A first visit has no basics of its own yet: the button starts the Mínimo.
+    const expected = await page.evaluate(
+      () =>
+        window.VTLoop.todayBasics("singing")?.order?.[0] ||
+        window.VTLoop.routine("singing", "min").order[0]
+    );
+    await page.evaluate(() => window.VTTour.start(true));
+    await page.waitForTimeout(400);
+    for (let i = 0; i < 8; i += 1) {
+      const p = progressNumbers(await page.locator("[data-tour-progress]").textContent());
+      if (p && p.n === p.total) break;
+      await page.locator("[data-tour-next]").click();
+      await page.waitForTimeout(420);
+    }
+    await expect(page.locator("[data-tour-next]")).toHaveText(/^Empezar mis \d+ min$/);
+    await page.locator("[data-tour-next]").click();
+    await page.waitForTimeout(700);
+    await expect(page.locator("#tour-root")).toBeHidden();
+    const s = await page.evaluate(() => ({
+      view: window.VTApp.getState().view,
+      id: window.VTApp.getState().exercise?.id || null,
+      stored: localStorage.getItem("vt_tour_v1")
+    }));
+    expect(s).toEqual({ view: "exercise", id: expected, stored: "finished" });
+  });
+
+  test("the exercise stop shows what the last stop's button opens, in the classic arm", async ({ page }) => {
+    // The classic arm's panel suggests an exercise of its own, not the Mínimo.
+    await boot(page, { query: "?ab_loop_home_2026_10=classic" });
+    const r = await walkTour(page);
+    expect(r.opened).toBeTruthy();
+    expect(r.shown).toBe(r.opened);
+  });
+
+  test("with a guided session left open, the tour shows and starts the step the panel resumes", async ({ page }) => {
+    await boot(page);
+    // A returning visitor, so the loop is on, with a guided session open.
+    await page.evaluate(() => {
+      const D = window.VTDays;
+      VTStorage.setDays({ v: 1, days: { [D.addDays(D.dayKey(), -1)]: { sec: 120, n: 1, ex: ["s4-lip-trills"] } }, rest: { bank: 0, earnedAt: 0, used: [] }, backfilled: true });
+      window.VTApp.setTab("singing");
+      window.VTApp.startStructured("daily");
+    });
+    await page.waitForTimeout(300);
+    await page.evaluate(() => window.VTApp.goHome());
+    await page.waitForTimeout(300);
+    expect(await page.evaluate(() => window.VTLoop.isOn())).toBe(true);
+    const current = await page.evaluate(() => window.VTSession.currentExerciseId());
+    const r = await walkTour(page);
+    expect(r.shown).toBe(current);
+    expect(r.opened).toBe(current);
+    // Its button resumes the session; it does not start the basics.
+    expect(r.label).toBe("Empezar");
+  });
+
+  test("a start panel with nothing to suggest drops the loop's mark, so the tour does not read it as the loop's", async ({ page }) => {
+    await boot(page);
+    const panel = await page.evaluate(() => {
+      const card = document.querySelector("#next-step-card");
+      card.dataset.loop = "go";
+      // The loop leaves the panel to the app, and the catalog is empty.
+      window.VTLoop.renderHome = () => false;
+      const kept = Object.keys(window.VT_EXERCISES).map((k) => [k, window.VT_EXERCISES[k].splice(0)]);
+      window.VTApp.refreshStartPanel();
+      kept.forEach(([k, list]) => window.VT_EXERCISES[k].push(...list));
+      return { hidden: card.hidden, loop: card.dataset.loop ?? null };
+    });
+    expect(panel).toEqual({ hidden: true, loop: null });
+    expect(await page.evaluate(() => window.VTApp.loopDrewPanel())).toBe(false);
   });
 
   test("Enter on Skip closes the tour instead of advancing it", async ({ page }) => {
@@ -248,7 +386,7 @@ test.describe("Tour manners", () => {
     await boot(page);
     await page.evaluate(() => window.VTTour.start(true));
     await page.waitForTimeout(400);
-    await page.locator("[data-tour-next]").click(); // step 2 rings #next-step-card
+    await page.locator("[data-tour-next]").click(); // step 2 rings Empezar, on the exercise
     await page.waitForTimeout(450);
     const before = await page.evaluate(
       () => document.querySelector("[data-tour-progress]").textContent
@@ -269,8 +407,7 @@ test.describe("Tour manners", () => {
     await boot(page);
     await page.evaluate(() => window.VTTour.start(true));
     await page.waitForTimeout(400);
-    // A first visit has three steps (its start panel has no other ways in to
-    // point at); a returning one has four. Walk whichever runs, to its end.
+    // One stop per place, each with its own section of the guide.
     const hrefs = [];
     for (let i = 0; i < 6; i += 1) {
       hrefs.push(await page.locator("[data-tour-guide]").getAttribute("href"));
@@ -418,6 +555,29 @@ test.describe("Microphone primer", () => {
     await page.locator("#btn-practice-start").click();
     await page.waitForTimeout(300);
     await expect(page.locator("#mic-primer")).toBeHidden();
+  });
+
+  test("it says what is true on an exercise that runs on its clock", async ({ page }) => {
+    const bodyFor = async (id, lang = "es") => {
+      await boot(page, { tour: "finished", lang });
+      await page.evaluate((x) => window.VTApp.openExercise(x, false), id);
+      await page.waitForTimeout(600);
+      await page.evaluate(() => sessionStorage.removeItem("vt_e2e"));
+      await page.locator("#btn-practice-start").click();
+      await expect(page.locator("#mic-primer")).toBeVisible();
+      return page.locator("#mic-primer [data-primer-body]").textContent();
+    };
+    // A paced exercise without a piano runs with the microphone refused: the
+    // primer must not say it cannot
+    const pacer = await bodyFor("v18-story-peak");
+    expect(pacer).not.toMatch(/no podrá funcionar/);
+    expect(pacer).toMatch(/sigue con su reloj/);
+    expect(pacer, "the privacy sentence is unchanged").toMatch(/^Nada se sube ni se graba solo: el audio se analiza en este dispositivo y se queda aquí\./);
+    expect(await bodyFor("v4-articulation-pen", "en")).toMatch(/still runs on its clock/);
+    // One with a piano keeps the piano's own words
+    expect(await bodyFor("s19-soft-palate-surprise")).toMatch(/El piano suena igual sin micrófono/);
+    // And one that measures the voice still says it needs the microphone
+    expect(await bodyFor("v1-diction")).toMatch(/no podrá funcionar/);
   });
 
   test("it never appears once the microphone has been primed", async ({ page }) => {

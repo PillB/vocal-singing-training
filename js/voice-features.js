@@ -78,11 +78,12 @@
    *
    * A frame's `rms` is one number per screen refresh over a 43 ms window, which
    * cannot see a lip trill (flutter at 15–35 Hz is one cycle per window) or the
-   * first 50 ms of an onset. The engine hands over its latest 2048 samples each
-   * frame; only the ones that arrived since the previous frame are new, so
-   * those are cut into 2.5 ms blocks. The envelope value is the RMS of the last
-   * 12.5 ms — at least one pitch period for voices above 80 Hz, so the voice's
-   * own waveform does not ripple through it, and short enough to follow 35 Hz.
+   * first 50 ms of an onset. The engine hands over its latest ~43 ms of samples
+   * each frame (2048 at 44.1–48 kHz); only the ones that arrived since the
+   * previous frame are new, so those are cut into 2.5 ms blocks. The envelope
+   * value is the RMS of the last 12.5 ms — at least one pitch period for voices
+   * above 80 Hz, so the voice's own waveform does not ripple through it, and
+   * short enough to follow 35 Hz.
    */
   class Envelope {
     constructor(opts = {}) {
@@ -268,22 +269,171 @@
 
   /* —— Speech and silence —— */
 
+  // The room's steadiness test: 0.6 s of learning steps within 4.5 dB. A fan
+  // rumbling at 150–250 Hz wanders 3–4 dB over that time; soft speech whose
+  // syllables swing only 8 dB slips under a looser or shorter test, and a
+  // whisper (no period, so clarity reads it as a fan) is learned as the room
+  // and erased. Only a rumble gets a looser one (NOISE_SPREAD_DB).
+  const ROOM_STEPS = 18;
+  const ROOM_FLAT_DB = 4.5;
+  // Once the floor holds a room, a sound that would replace it must hold
+  // still twice as long: a stretch of speech misread as a room (a whisper's
+  // long phrase) must not throw away the room it has heard
+  const NEW_ROOM_STEPS = 36;
+  // ... of which the first TAIL_STEPS may be the voice before it fading out:
+  // a fan in a pause of just 1.2 s is learned in that pause
+  const TAIL_STEPS = 3;
+  // ... unless it comes back: a fan switched on under the talk is heard only
+  // in the pauses, too short for that. 0.4 s still at the level of an earlier
+  // still stretch that a voice then came over is the room, if that stretch
+  // held still for 0.8 s (BACK_HELD_STEPS) and stayed under the voice: a
+  // fan is under every frame of the talk, so no step falls PAUSE_FLAT_DB
+  // under the quietest it held, and neither does any step's high part
+  // (`hfRms`). A held "sss" said between words is not under them: the
+  // words' dips fall under it, or their high part does (a voiced word's sits
+  // about 20 dB under its level, a hiss's at its level). A whisper or an
+  // inhale 15 dB or more under the talk is under every word, as a fan is,
+  // and a whisper whose syllables swing only 3 dB holds still for its whole
+  // phrase.
+  const BACK_STEPS = 12;
+  const BACK_HELD_STEPS = 24;
+  // ... so if either sits high (see LOW_HF), the earlier one's high part
+  // must also have held within BACK_HF_STEADY_DB (its 10th to 90th
+  // percentiles in dB) over every 0.8 s of it. A white fan's holds within
+  // 0.2–0.5 dB: a 43 ms frame holds thousands of its waves. A whisper's
+  // follows its syllables, 2 dB and more over 0.8 s when its level swings
+  // 3 dB (one that moves only 2 dB can pass: see the class doc); an
+  // inhale's follows its swell, by 1–1.5 dB. A rumble's
+  // high part is its own level, which wobbles (a frame holds only a few of
+  // its waves), so the test is only for a sound that sits high.
+  const BACK_HF_STEADY_DB = 1.5;
+  // ... and one that sits high (see LOW_HF), as a held "sss" does, must hold
+  // still for 5 s: it has no period and is flatter than a fan, and only its
+  // length tells it from a hiss that has come to stay. A rumble keeps 1.2 s.
+  const HISS_ROOM_STEPS = 150;
+  // The engine's `clarity` (how periodic a frame is), as the median of a
+  // steady stretch: under NOISY there is no voice in it (a fan, a hiss)
+  const NOISY = 0.5;
+  // A low rumble's stretch may instead hold its 10th to 90th percentiles
+  // within 6 dB: under ~100 Hz a 43 ms frame holds only a few of its waves,
+  // so its level swings 1.5–2 dB from one step to the next and its extremes
+  // over 0.6 s span 6–7 dB
+  const NOISE_SPREAD_DB = 6;
+  // Low is the engine's `hfRms` (its first difference) over `rms`, scaled to
+  // 48 kHz, under LOW_HF as the median of the stretch: about 2π × the
+  // sound's typical frequency ÷ 48 000, so under ~750 Hz. Measured through
+  // the engine: a rumble at 100 Hz 0.015, at 250 Hz 0.04; a whisper 0.55, a
+  // back-vowel whisper or one through a headset's low-pass 0.15–0.3, a
+  // white fan 1.4 (steady enough for the strict test), a voice 0.08–0.1. A
+  // whisper's syllables swing as little as a rumble's level and it has no
+  // period either, but its sound sits high.
+  const LOW_HF = 0.1;
+  // A real mic adds its own hiss under a rumble (14–18 dB under it reads
+  // 0.18–0.3), and that hiss holds still: the 10th to 90th percentiles of
+  // `hfRms` in dB within HF_STEADY_DB (0.2–0.5 dB; a whisper's high part
+  // follows its syllables, 5–7 dB). Such a sound gets the loose test too.
+  // It sits low when its level wobbles HISS_UNDER_DB more than its high part
+  // (the wobble is a rumble's, over the hiss); a held "sss" or a white fan
+  // wobbles with its high part and sits high.
+  const HF_STEADY_DB = 2;
+  const HISS_UNDER_DB = 1.5;
+  // A sound the take opened with is the room whatever its clarity (a hum, a
+  // fan with a motor's tone) once it has held within OPEN_FLAT_DB for
+  // OPEN_STEPS (1 s), counted from when the mic settled: the first frames
+  // still hold the silence from before it opened
+  const OPEN_SETTLE_SEC = 0.2;
+  const OPEN_STEPS = 30;
+  const OPEN_FLAT_DB = 3;
+  // Until the floor has heard a quiet room, a hum the learner talked over
+  // from the start is learned from the pauses in the talk: a stretch of
+  // PAUSE_STEPS (0.6 s) within PAUSE_FLAT_DB at the quietest level the take
+  // has heard, after a voice, the third time it comes at the same level (or
+  // the first, at the level the take opened with for OPEN_MIN_STEPS before
+  // the first word)
+  const PAUSE_STEPS = 18;
+  const PAUSE_FLAT_DB = 3;
+  const OPEN_MIN_STEPS = 3;
+  // ... and that sits less than SHUT_DB over the quietest level the engine's
+  // gate has shut at: in a quiet room a stop or a breath shuts it far under
+  // any filler, and a voiced stop's murmur 2.5 dB under them; a hum near the
+  // gate shuts it only on its own dips
+  const SHUT_DB = 2;
+
   /**
    * Speech/silence with the room's own floor, a short hangover, and pauses
    * dated from when the sound actually stopped.
    *
-   * - Floor: the 10th percentile of the last 6 s of quiet level. Only quiet
-   *   frames teach it (the engine's gate closed, or below floor + margin), plus
-   *   sound that has stayed steady for a second (a fan, a hum in the room):
-   *   speech swings 10 dB and more between syllables, so a learner who talks
-   *   from the first frame never becomes the floor. Sound must clear it
-   *   by `marginDb` and also clear the engine's own sensitivity gate
-   *   (`frame.sounding`), so a fan does not read as speech and a quiet room
-   *   does not turn a breath into a word.
+   * - Floor: the 10th percentile of the last 6 s of quiet level, learned 30
+   *   times a second. Quiet is the engine's gate closed for longer than a
+   *   consonant (`hangMs`; a word's own dips must not teach it) or a level
+   *   within `marginDb` of the floor. Speech swings 10 dB and more between
+   *   syllables, so a learner who talks from the first frame never becomes
+   *   the floor.
+   * - A room loud enough to open the gate (a fan, or any room's hiss at
+   *   sensitivity 9–10) is learned from its steadiness instead: 0.6 s that
+   *   holds still with no period in it (the engine's `clarity`, which works
+   *   at any level) is the room. Still is within 4.5 dB or, for a sound
+   *   that sits low (the engine's `hfRms`) or whose high part holds still,
+   *   6 dB from its 10th to its 90th percentile: a fan's rumble under
+   *   ~100 Hz wobbles 1.5–2 dB from frame to frame over a mic's steady hiss,
+   *   while a whisper, as flat and as aperiodic, sits high, its high part
+   *   follows its syllables, and it gets the strict test. The floor starts
+   *   over from it, speech it was read as until then is taken back, and a
+   *   pause it hid is dated from when the voice stopped. Once the floor
+   *   holds a room, a new one must hold still for 1.2 s, or for 5 s if it
+   *   sits high (a whisper, a held "sss", a white fan: one switched on in
+   *   a silent lead-in reads as speech until the first word), unless it
+   *   comes back after a voice was heard over it: a fan switched on under
+   *   the talk, held still in one pause and then in the next, is the room
+   *   by 0.4 s into that one, and the pause before it is told late (or, if
+   *   the fan came on in a pause, runs on under it). A hiss said between
+   *   words with no silence around it does not come back: the words fall
+   *   under it, or their high part does, where they would sit over a fan.
+   *   Nor does a whisper whose syllables move it 3 dB or more, however far
+   *   under the words: it sits high, and its high part follows its
+   *   syllables, where a white fan's holds still (an inhale's follows its
+   *   swell, though less: see below). A known limit: a soft whisper whose
+   *   level moves only about 2 dB moves its high part 1.4–1.7 dB over
+   *   0.8 s, can pass for a fan, and if it alternates with voiced phrases
+   *   its phrases from the second on read as pauses. A fan that
+   *   sits high and whose high part wobbles as much (no broadband noise
+   *   does over a 43 ms frame) is learned only once it has held still for
+   *   5 s; the pauses until then read as speech.
+   * - An audible inhale is talk. It is as aperiodic, as still and sits as
+   *   high as a whispered syllable or a short "sss", and nothing in its
+   *   level tells them apart, so a breath loud enough to open the gate (a
+   *   close mic) reads as speech, as it always has: between two phrases with
+   *   no silence around it, the phrases run on through it; taken inside a
+   *   silence, it splits that silence in two. A quieter breath is silence.
+   *   One held still for 0.8 s or more, its swell barely moving its high
+   *   part, between two phrases that never fall under it (no stop, no gap)
+   *   can still pass for a fan switched on in a pause, and the second such
+   *   breath be learned as the room.
+   * - A steady sound with a period is a voice (a sung note, a soft held
+   *   vowel, an "mmm"), unless the take opened with it and heard nothing
+   *   else for a second: a hum in the room, learned the same way. Before the
+   *   floor has heard any quiet room, a hum the learner talked over from the
+   *   first frame is learned from the pauses instead: 0.6 s at the quietest
+   *   level heard that comes back in two more pauses (or that the take
+   *   opened with). The Space assist never teaches the floor.
+   * - Sound must clear the floor by `marginDb` and also clear the engine's
+   *   own sensitivity gate (`frame.sounding`), so a fan does not read as
+   *   speech and a quiet room does not turn a breath into a word.
    * - A pause starts only after `hangMs` of quiet (stop consonants leave
    *   100–250 ms gaps inside words) but is dated from the first quiet frame,
    *   so a 1.2 s pause measures 1.2 s.
-   * Callbacks: onSpeech(t), onPause(tStart), onPauseEnd(tStart, len).
+   * Callbacks: onSpeech(t), onPause(tStart), onPauseEnd(tStart, len), and
+   * onTakeBack(t) when the speech onSpeech(t) opened turns out to have been
+   * the room: it is gone from `segments`, and the Vad is back to idle or to
+   * the pause it interrupted (whose end is not reported a second time). A
+   * pause held by a hum the floor learned only later is cut out of the
+   * speech then, and its onPauseEnd comes late (no onPause before it):
+   * `segments`, pauses() and talkSec have it, but a breath, phrase or talk
+   * clock a caller opened at onSpeech still spans it (a hum room, talked
+   * over from Start). A pause a high fan came on in (a white fan) is told
+   * when it came on, at the length it had then; once the fan comes back in
+   * the next pause, `segments` runs that pause on to the next word, and a
+   * caller's clock opened when the fan came on still spans it.
    */
   class Vad {
     constructor(opts = {}) {
@@ -293,7 +443,13 @@
       this.minPauseSec = opts.minPauseSec != null ? opts.minPauseSec : 0.25;
       this.cb = opts;
       this._floorRing = new Ring(Math.round(6 * 30));
-      this._recentRing = new Ring(30);
+      // The last 1.2 s of learning steps: level, time, clarity, how high
+      // the sound sits (−1 = none) and the level of its high part
+      this._recentRing = new Ring(NEW_ROOM_STEPS);
+      this._recentT = new Ring(NEW_ROOM_STEPS);
+      this._recentClarity = new Ring(NEW_ROOM_STEPS);
+      this._recentHf = new Ring(NEW_ROOM_STEPS);
+      this._recentHfDb = new Ring(NEW_ROOM_STEPS);
       this._floorAcc = 0;
       this.floorDb = -70;
       this.reset();
@@ -304,11 +460,42 @@
       this.segments = []; // { kind: "speech"|"pause", start, end }
       this._quietSince = null;
       this._loudSince = null;
+      this._closedSince = null;
+      // The loudest level of the open speech and of the loud run that may
+      // open it: speech that never rose above the room it turned out to be
+      // was that room
+      this._runPeakDb = -140;
+      this._peakDb = -140;
+      this._pauseTold = false;
+      // The take's quietest and loudest learning steps since the mic
+      // settled, and how many it has held still for (−1: it moved)
+      this._openLoDb = Infinity;
+      this._openHiDb = -Infinity;
+      this._openSteps = 0;
+      // The quietest learning step since the mic settled, and the steady
+      // stretches heard at about that level while no quiet room had been:
+      // { lvl, start, end } (start null: the take opened with it)
+      this._lowDb = Infinity;
+      this._hums = [];
+      this._late = null;
+      this._shutDb = Infinity;
+      // Once the floor holds a room: the last still stretch heard since it
+      // was quiet ({ lvl, held, lo, hfLo, hfMove, high, start, end }: how
+      // many steps it held still, the quietest it held and its high part's,
+      // how far its high part moved over 0.8 s, whether it sat high, and
+      // when a voice came over it), and for how many steps in a row the
+      // sound has held still
+      this._stretch = null;
+      this._stillRun = 0;
       this.pauseStart = null;
       this.speechStart = null;
       this.levelDb = -140;
       this._floorRing.clear();
       this._recentRing.clear();
+      this._recentT.clear();
+      this._recentClarity.clear();
+      this._recentHf.clear();
+      this._recentHfDb.clear();
       this._floorAcc = 0;
     }
     get pauseLen() {
@@ -330,42 +517,56 @@
       this.t += dt;
       const db = dbfs(frame.rms || 0);
       this.levelDb = db;
-      // The floor learns ~30 times a second
+      if (frame.sounding) this._closedSince = null;
+      else if (this._closedSince == null) this._closedSince = this.t - dt;
+      // A room that holds the gate open never lets it close: a stop
+      // consonant or a breath in a quiet room does, for a few frames
+      if (this._closedSince != null && this.t >= OPEN_SETTLE_SEC && (this.t - this._closedSince) * 1000 >= this.onsetMs) {
+        this._shutDb = Math.min(this._shutDb, db);
+      }
+      // The floor learns 30 times a second at any frame rate: the remainder is
+      // kept (dropping it learned ~24 times a second at 60 fps and ~20 at 30),
+      // capped so a stalled tab does not learn a burst of copies of one frame
       this._floorAcc += dt;
       if (this._floorAcc >= 1 / 30) {
-        this._floorAcc = 0;
-        this._recentRing.push(db);
-        const quiet = !frame.sounding || db <= this.floorDb + this.marginDb;
-        let steady = false;
-        if (!quiet && this._recentRing.count >= this._recentRing.n) {
-          const r = this._recentRing.last();
-          steady = percentile(r, 0.9) - percentile(r, 0.1) < 6;
-        }
-        if (quiet || steady) this._floorRing.push(db);
-        if (this._floorRing.count >= 15) {
-          this.floorDb = Math.max(-90, percentile(this._floorRing.last(), 0.1));
+        this._floorAcc = Math.min(this._floorAcc - 1 / 30, 1 / 30);
+        if (frame.manualSound) {
+          // The Space assist fakes a flat level: never the room, and not part
+          // of any steady stretch either
+          this._recentRing.clear();
+          this._recentT.clear();
+          this._recentClarity.clear();
+          this._recentHf.clear();
+          this._recentHfDb.clear();
+        } else {
+          this._learnFloor(frame, db);
         }
       }
       const loud = !!frame.sounding && db > this.floorDb + this.marginDb;
       if (loud) {
         this._quietSince = null;
         if (this._loudSince == null) this._loudSince = this.t - dt;
+        if (this.state === "speech") this._peakDb = Math.max(this._peakDb, db);
+        else this._runPeakDb = Math.max(this._runPeakDb, db);
         if (this.state !== "speech" && (this.t - this._loudSince) * 1000 >= this.onsetMs) {
           const start = this._loudSince;
           if (this.state === "pause" && this.pauseStart != null) {
             const len = start - this.pauseStart;
             const seg = this.segments[this.segments.length - 1];
             if (seg && seg.kind === "pause") seg.end = start;
-            if (this.cb.onPauseEnd) this.cb.onPauseEnd(this.pauseStart, len);
+            if (this.cb.onPauseEnd && !this._pauseTold) this.cb.onPauseEnd(this.pauseStart, len);
           }
+          this._pauseTold = false;
           this.state = "speech";
           this.speechStart = start;
           this.pauseStart = null;
+          this._peakDb = this._runPeakDb;
           this.segments.push({ kind: "speech", start, end: null });
           if (this.cb.onSpeech) this.cb.onSpeech(start);
         }
       } else {
         this._loudSince = null;
+        this._runPeakDb = -140;
         if (this._quietSince == null) this._quietSince = this.t - dt;
         if (
           this.state === "speech" &&
@@ -382,6 +583,312 @@
       }
       if (this.segments.length > 600) this.segments.splice(0, this.segments.length - 600);
       return this.state;
+    }
+    /** One learning step: does this frame's level belong to the room? */
+    _learnFloor(frame, db) {
+      this._recentRing.push(db);
+      this._recentT.push(this.t);
+      this._recentClarity.push(frame.clarity != null ? frame.clarity : -1);
+      this._recentHf.push(frame.hfRms != null && frame.rms > 0 ? (frame.hfRms / frame.rms) * ((frame.sampleRate || 48000) / 48000) : -1);
+      const hfDb = frame.hfRms > 0 ? dbfs(frame.hfRms) : -140;
+      this._recentHfDb.push(hfDb);
+      if (this.t >= OPEN_SETTLE_SEC) {
+        this._lowDb = Math.min(this._lowDb, db);
+        if (this._openSteps >= 0) {
+          const lo = Math.min(this._openLoDb, db);
+          const hi = Math.max(this._openHiDb, db);
+          if (hi - lo < OPEN_FLAT_DB) {
+            this._openLoDb = lo;
+            this._openHiDb = hi;
+            this._openSteps++;
+          } else {
+            // What the take opened with before the first word: a pause back
+            // at its level is the same room
+            if (this._openSteps >= OPEN_MIN_STEPS) {
+              this._hums.push({ lvl: (this._openLoDb + this._openHiDb) / 2, start: null, end: this.t });
+            }
+            this._openSteps = -1;
+          }
+        }
+      }
+      // A stretch ends when a voice comes back over it (3 dB short of the
+      // margin: a voice that clears a stretch a little quieter than this one)
+      const h = this._hums[this._hums.length - 1];
+      if (h && h.end == null && db > h.lvl + this.marginDb - PAUSE_FLAT_DB) h.end = this.t - 1 / 60;
+      // A still stretch ends when a voice (a sound with a period) clears it,
+      // and is gone once a step, or its high part, falls under the quietest
+      // it held: the voice came instead of it (an "sss" between words), not
+      // over it (a fan)
+      const st = this._stretch;
+      if (st && st.end == null && db > st.lvl + this.marginDb && frame.clarity >= NOISY) st.end = this.t - 1 / 60;
+      if (st && st.end != null && (db < st.lo - PAUSE_FLAT_DB || hfDb < st.hfLo - PAUSE_FLAT_DB)) this._stretch = null;
+      // A consonant closes the gate for 40–100 ms inside a word: a soft
+      // speaker's dips would become the floor and their weaker syllables
+      // read as pauses. Only a gate still closed after the hangover is quiet.
+      const closed = this._closedSince != null && (this.t - this._closedSince) * 1000 >= this.hangMs;
+      if (closed || db <= this.floorDb + this.marginDb) {
+        this._stretch = null;
+        this._stillRun = 0;
+        this._floorRing.push(db);
+        if (this._floorRing.count >= 15) {
+          this.floorDb = Math.max(-90, percentile(this._floorRing.last(), 0.1));
+        }
+        return;
+      }
+      const steps = this._steadyRoom();
+      if (!steps) return;
+      // Steady sound above the floor is a new room: a fan heard before the
+      // floor knew it, or one switched on. The floor starts over from it, so
+      // it stops reading as speech now rather than after 6 s of it.
+      const before = this.floorDb;
+      this._floorRing.clear();
+      this._recentRing.last(steps).forEach((v) => this._floorRing.push(v));
+      this.floorDb = Math.max(-90, percentile(this._floorRing.last(), 0.1));
+      this._hums = [];
+      this._stretch = null;
+      this._stillRun = 0;
+      if (this._late) this._heardLate(this._late);
+      this._late = null;
+      if (this.state === "speech" && this.floorDb > before) this._roomFound();
+    }
+    /**
+     * How many of the last learning steps are a room the floor should start
+     * over from (0: none). A fan or a hiss is steady with no period, and can
+     * come on at any time. A sound with a period (a sung note, a soft held
+     * vowel, an "mmm") is a voice, unless it is a hum in the room: the take
+     * opened with it and heard nothing else, or, before any quiet room was
+     * heard, it fills a pause in the talk (_pauseRoom).
+     */
+    _steadyRoom() {
+      // Until the floor holds a room, it starts from the first one heard
+      const known = this._floorRing.count >= 15;
+      if (!known && this._openSteps >= OPEN_STEPS) return OPEN_STEPS;
+      if (!known && this._pauseRoom()) return PAUSE_STEPS;
+      if (!known) return this._still(ROOM_STEPS) ? ROOM_STEPS : 0;
+      const b = this._still(BACK_STEPS);
+      if (!b || b.lvl <= this.floorDb + this.marginDb || this._voiceIn(BACK_STEPS, b.lvl)) {
+        this._stillRun = 0;
+        return 0;
+      }
+      this._stillRun++;
+      if (this._cameBack(b)) return ROOM_STEPS;
+      // 1.2 s still, but for the last step or two of the voice before it (a
+      // pause of just 1.2 s), and how high the sound sits judged after them
+      if (!this._still(NEW_ROOM_STEPS)) return 0;
+      const l = this._still(NEW_ROOM_STEPS - TAIL_STEPS);
+      if (!l || this._voiceIn(NEW_ROOM_STEPS - TAIL_STEPS, l.lvl)) return 0;
+      return !l.high || this._stillRun >= HISS_ROOM_STEPS - BACK_STEPS ? NEW_ROOM_STEPS : 0;
+    }
+    /**
+     * Whether one of the last `steps` learning steps is a voice over the
+     * still sound at `lvl` (`marginDb` over it). _still's percentiles let a
+     * step or two through: at the very step a word comes in over a still
+     * stretch the 0.4 s test would hear the stretch come back, and a word's
+     * tail in the 1.2 s window makes a hiss right after it read as a rumble
+     * over a steady hiss (that test judges the sound after the tail).
+     */
+    _voiceIn(steps, lvl) {
+      return Math.max(...this._recentRing.last(steps)) > lvl + this.marginDb;
+    }
+    /**
+     * Whether the last `steps` learning steps hold still with no period in
+     * them: { lvl (their median), high (the sound sits high) }, or null.
+     */
+    _still(steps) {
+      const r = this._recentRing.last(steps);
+      if (r.length < steps) return null;
+      // Speech swings 10 dB and more between syllables, and its vowels have a
+      // period even when they are too soft for the pitch detector. No
+      // clarity from the engine (−1): no way to tell.
+      const c = median(this._recentClarity.last(steps));
+      if (c == null || c < 0 || c >= NOISY) return null;
+      // No hfRms from the engine (−1): neither low nor high
+      const hf = median(this._recentHf.last(steps));
+      const low = hf != null && hf >= 0 && hf < LOW_HF;
+      const spread = percentile(r, 0.9) - percentile(r, 0.1);
+      // A hiss holds its high part still (a whisper's follows its
+      // syllables); a level that wobbles more than that part is a rumble's
+      // over the hiss
+      const hd = this._recentHfDb.last(steps);
+      const hfSpread = percentile(hd, 0.9) - percentile(hd, 0.1);
+      const under = !low && hf != null && hf >= 0 && hfSpread < HF_STEADY_DB;
+      const high = hf != null && hf >= LOW_HF && !(under && spread >= hfSpread + HISS_UNDER_DB);
+      if (Math.max(...r) - Math.min(...r) < ROOM_FLAT_DB) return { lvl: median(r), high };
+      // A low rumble's extremes span more than that, but most of it holds
+      // still. Not a whisper's: it sits high and its high part moves.
+      if (!(low || under) || spread >= NOISE_SPREAD_DB) return null;
+      return { lvl: median(r), high };
+    }
+    /**
+     * A still stretch `b` (the last BACK_STEPS, over the floor's margin:
+     * _still's { lvl, high }) once the floor holds a room: true when an
+     * earlier one held still at that level for 0.8 s until a voice came
+     * over it, and no quiet step since, and no step under it (see
+     * _learnFloor), and, if either sits high, the earlier one's high part
+     * held still. A fan switched on under the talk holds every pause and
+     * stays under every word; a whisper, an "sss" or a breath ends in the
+     * quiet room, or the words said after it fall under it, or its high part
+     * follows its syllables. The pause that earlier stretch held is told
+     * late. A stretch well over the one still open (a fan switched on in a
+     * pause the room's hiss held) takes its place, from the same start.
+     */
+    _cameBack(b) {
+      const lvl = b.lvl;
+      const h = this._stretch;
+      if (
+        h &&
+        h.end != null &&
+        h.held > BACK_HELD_STEPS - BACK_STEPS &&
+        Math.abs(h.lvl - lvl) < PAUSE_FLAT_DB &&
+        !((b.high || h.high) && h.hfMove >= BACK_HF_STEADY_DB)
+      ) {
+        this._late = h.start != null ? [h] : null;
+        return true;
+      }
+      // The quietest this 0.4 s held, and its high part: its own steps, not
+      // the tail of the word before it (a step with a period), which can sit
+      // under a hiss said after it, and its high part far under
+      const cl = this._recentClarity.last(BACK_STEPS);
+      const own = (ring) => ring.last(BACK_STEPS).filter((_, i) => cl[i] < NOISY);
+      const lo = percentile(own(this._recentRing), 0.1);
+      const hfLo = percentile(own(this._recentHfDb), 0.1);
+      if (!h || h.end != null || lvl > h.lvl + this.marginDb - PAUSE_FLAT_DB) {
+        // From the last voice step over it, as a pause (none in reach: null)
+        const lv = this._recentRing.last();
+        const ts = this._recentT.last();
+        let i = lv.length - BACK_STEPS;
+        while (i > 0 && lv[i - 1] <= lvl + this.marginDb) i--;
+        this._stretch = { lvl, held: 1, lo, hfLo, hfMove: 0, high: b.high, start: i > 0 ? ts[i - 1] : h && h.end == null ? h.start : null, end: null };
+      } else {
+        // The same stretch, still holding: for how many steps, the quietest
+        // it has held, whether it sat high, and how far its high part moved
+        // over 0.8 s (once it has held that long)
+        h.held++;
+        h.lo = Math.min(h.lo, lo);
+        h.hfLo = Math.min(h.hfLo, hfLo);
+        h.high = h.high || b.high;
+        if (h.held > BACK_HELD_STEPS - BACK_STEPS) {
+          const hd = this._recentHfDb.last(BACK_HELD_STEPS);
+          h.hfMove = Math.max(h.hfMove, percentile(hd, 0.9) - percentile(hd, 0.1));
+        }
+      }
+      return false;
+    }
+    /**
+     * A hum in a pause, before the floor has heard any quiet room: the last
+     * 0.6 s holds still at the quietest level the take has heard, after a
+     * voice at least `marginDb` above it, and the take has held still at
+     * that level before, in two earlier pauses or before the first word.
+     * One such stretch could be a soft "mmm" or a held note; a room comes
+     * back in every pause. A voice that stops in a quiet room closes the
+     * gate and the room is heard instead; a stretch SHUT_DB or more over
+     * where the gate shut (a filler over a voiced stop's murmur) is not one.
+     *
+     * Two stretches are not enough: a learner already talking 0.2 s after
+     * Start, in a quiet room, whose talk never closes the gate for 40 ms
+     * (few stops, no gap between words) and never dips 3 dB under two
+     * fillers ("mmm") said at one level, had the second filler learned as
+     * the room, both read as pauses, and talk as soft as them lost until
+     * the first real silence. The cost: a hum room is learned a pause later
+     * (the first two told late). Three such fillers at one level, from a
+     * learner whose talk never once shuts the gate, are still a hum.
+     */
+    _pauseRoom() {
+      const lv = this._recentRing.last();
+      const ts = this._recentT.last();
+      const n = lv.length;
+      if (n <= PAUSE_STEPS) return false;
+      const r = lv.slice(n - PAUSE_STEPS);
+      if (Math.max(...r) - Math.min(...r) >= PAUSE_FLAT_DB) return false;
+      const lvl = median(r);
+      if (lvl > this._lowDb + PAUSE_FLAT_DB || lvl >= this._shutDb + SHUT_DB) return false;
+      const last = this._hums[this._hums.length - 1];
+      // The same stretch, still going (no voice has come back over it)
+      if (last && last.end == null && Math.abs(last.lvl - lvl) < PAUSE_FLAT_DB) return false;
+      // A pause starts after a voice: from its last step over the stretch
+      let i = n - PAUSE_STEPS;
+      while (i > 0 && lv[i - 1] <= lvl + this.marginDb) i--;
+      if (i === 0) return false;
+      const voice = ts[i - 1];
+      const same = this._hums.filter((x) => Math.abs(x.lvl - lvl) < PAUSE_FLAT_DB && x.end != null && x.end <= voice);
+      if (same.length >= 2 || same.some((x) => x.start == null)) {
+        // Pauses heard at this level before were the room too
+        this._late = same.filter((x) => x.start != null);
+        return true;
+      }
+      this._hums.push({ lvl, start: voice, end: null });
+      if (this._hums.length > 8) this._hums.shift();
+      return false;
+    }
+    /**
+     * Earlier pauses the floor could not hear at the time (it learned the
+     * hum they held only now): cut out of the open speech, and their end
+     * told now, so a pause count still counts them. One that began before
+     * the open speech (a fan switched on in a pause and opened it) runs the
+     * pause before on to where a voice came over it instead.
+     */
+    _heardLate(list) {
+      let seg = this.segments[this.segments.length - 1];
+      if (this.state !== "speech" || !seg || seg.kind !== "speech") return;
+      list.forEach((h) => {
+        if (h.end <= h.start) return;
+        if (h.start <= seg.start) {
+          // It came on in a pause and opened this speech: the pause ran on
+          // under it (its end was told when it came on, and is not again)
+          const prev = this.segments[this.segments.length - 2];
+          if (h.end > seg.start && prev && prev.kind === "pause" && prev.end === seg.start) {
+            prev.end = h.end;
+            seg.start = h.end;
+            this.speechStart = h.end;
+          }
+          return;
+        }
+        seg.end = h.start;
+        this.segments.push({ kind: "pause", start: h.start, end: h.end });
+        seg = { kind: "speech", start: h.end, end: null };
+        this.segments.push(seg);
+        this.speechStart = h.end;
+        if (this.cb.onPauseEnd) this.cb.onPauseEnd(h.start, h.end - h.start);
+      });
+    }
+    /**
+     * The floor just rose under open speech. Speech that never cleared the
+     * new floor, and does not now, was the room all along; otherwise the
+     * pause began when the level fell to the room, which was up to a second
+     * ago, not now.
+     */
+    _roomFound() {
+      const lim = this.floorDb + this.marginDb;
+      const seg = this.segments[this.segments.length - 1];
+      if (Math.max(this._peakDb, this.levelDb) <= lim && seg && seg.kind === "speech") {
+        // A fan or a hum read as speech before the floor knew it: take it
+        // back, to nothing said yet or to the pause it interrupted
+        this.segments.pop();
+        const prev = this.segments[this.segments.length - 1];
+        if (prev && prev.kind === "pause") {
+          prev.end = null;
+          this.state = "pause";
+          this.pauseStart = prev.start;
+          // Its end was already reported when the fan came on: reporting it
+          // again when the learner speaks would count one pause twice
+          this._pauseTold = true;
+        } else {
+          this.state = "idle";
+        }
+        this.speechStart = null;
+        this._loudSince = null;
+        if (this.cb.onTakeBack) this.cb.onTakeBack(seg.start);
+        return;
+      }
+      const lv = this._recentRing.last();
+      const ts = this._recentT.last();
+      let i = lv.length;
+      while (i > 0 && lv[i - 1] <= lim) i--;
+      if (i === lv.length) return;
+      // From the last step that was still loud (the frame's 43 ms window
+      // trails the voice, so this is within a step of the real end)
+      const since = i > 0 ? ts[i - 1] : ts[0] - 1 / 30;
+      this._quietSince = Math.max(this.speechStart, since);
     }
     /** Closed pauses of at least `minSec`, as { start, len }. */
     pauses(minSec = this.minPauseSec) {

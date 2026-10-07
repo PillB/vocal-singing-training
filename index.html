@@ -10,7 +10,7 @@
     <meta name="color-scheme" content="dark" />
     <meta name="theme-color" content="#0c1118" />
     <title>Entrenamiento vocal y de canto</title>
-    <link rel="stylesheet" href="css/styles.css?v=20261002a" />
+    <link rel="stylesheet" href="css/styles.css?v=20261005p" />
     <link rel="stylesheet" href="css/exercise-viz.css?v=20261002a" />
     <link rel="stylesheet" href="css/scenes/speech.css?v=20261002a" />
     <link rel="stylesheet" href="css/scenes/speech-shape.css?v=20261002a" />
@@ -51,7 +51,17 @@
                  status pill beside a second button, two things about one plan. -->
             <button type="button" class="btn btn-pro btn-sm" id="btn-pricing" data-i18n="nav.proTry" title="Pro">Probar Pro</button>
             <button type="button" class="btn btn-ghost btn-sm btn-util" id="btn-lang" data-i18n="nav.lang" data-i18n-aria="nav.langAria">English</button>
-            <button type="button" class="btn btn-ghost btn-sm btn-util" id="btn-tour" data-i18n="nav.tour" data-i18n-title="nav.tourTitle">Tour</button>
+            <!-- Help, in one place and in words: the tour and the written guide.
+                 Wide screens show both; a laptop folds them into "Ayuda ▾"; on a
+                 phone they sit in Más under the label "Ayuda" (css: one-header). -->
+            <div class="header-help" id="header-help">
+              <button type="button" class="btn btn-ghost btn-sm btn-util header-help-toggle" id="btn-help" aria-expanded="false" aria-controls="header-help-items"><span data-i18n="nav.help">Ayuda</span> <span class="header-more-caret" aria-hidden="true">▾</span></button>
+              <span class="header-utils-label" id="header-help-label" data-i18n="nav.help">Ayuda</span>
+              <div class="header-help-items" id="header-help-items">
+                <button type="button" class="btn btn-ghost btn-sm btn-util" id="btn-tour" data-i18n="nav.tour" data-i18n-title="nav.tourTitle">Ver el tour</button>
+                <a class="btn btn-ghost btn-sm btn-util" id="link-guide" href="guide.html" data-i18n="nav.guide" data-i18n-title="nav.guideTitle">Leer la guía</a>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -66,6 +76,10 @@
           <button type="button" class="btn btn-sm" id="btn-session-pause" data-i18n="session.pause" data-i18n-aria="session.pauseAria">Pausar</button>
           <button type="button" class="btn btn-sm btn-primary" id="btn-session-resume" hidden data-i18n="session.resume" data-i18n-aria="session.resumeAria">Reanudar</button>
           <button type="button" class="btn btn-sm btn-ghost" id="btn-session-end" data-i18n="session.end" data-i18n-aria="session.endAria">Terminar</button>
+          <!-- Past the first step Terminar asks first: the place in the routine is
+               lost. "Seguir" takes Terminar's spot, so a second tap there is safe. -->
+          <button type="button" class="btn btn-sm btn-ghost" id="btn-session-end-yes" hidden data-i18n="session.endYes" data-i18n-aria="session.endYesAria">Sí, terminar</button>
+          <button type="button" class="btn btn-sm btn-primary" id="btn-session-end-no" hidden data-i18n="session.endNo" data-i18n-aria="session.endNoAria">Seguir</button>
         </div>
       </div>
 
@@ -140,6 +154,7 @@
                 <span class="more-ways-caret" aria-hidden="true">▾</span>
               </button>
               <div class="start-alt" id="start-alt">
+                <button type="button" class="btn btn-ghost btn-sm" id="btn-pick-exercise" data-i18n="home.pickExercise">Elegir un ejercicio ↓</button>
                 <button type="button" class="btn btn-ghost btn-sm" id="btn-continue" data-i18n="home.continue">▶ Continuar práctica</button>
                 <button type="button" class="btn btn-ghost btn-sm" id="btn-structured" data-i18n="home.structured">
                   Iniciar sesión guiada
@@ -158,7 +173,7 @@
             <li>
               <span class="start-step-n" aria-hidden="true"></span>
               <strong data-i18n="start.step1">Elige un ejercicio</strong>
-              <span class="muted" data-i18n="start.step1sub">Vocal para hablar en público, Canto para cantar.</span>
+              <span class="muted" data-i18n="start.step1sub">Hablar para presentaciones, Cantar para canciones.</span>
             </li>
             <li>
               <span class="start-step-n" aria-hidden="true"></span>
@@ -195,6 +210,9 @@
               <div class="loop-goal-bar" id="loop-goal-bar" aria-hidden="true"></div>
             </div>
             <button type="button" class="btn btn-ghost btn-sm loop-cards-btn" id="loop-cards-btn" hidden></button>
+            <button type="button" class="btn btn-ghost btn-sm loop-remind-btn" id="btn-reminder" aria-haspopup="dialog">
+              <span aria-hidden="true">🔔</span> <span id="btn-reminder-label" data-i18n="retain.open">Poner un recordatorio</span>
+            </button>
           </aside>
         </section>
 
@@ -202,15 +220,16 @@
         <section class="catalog-panel" id="catalog-panel" aria-labelledby="catalog-heading">
           <div class="catalog-head">
             <div class="catalog-head-text">
-              <h3 id="catalog-heading" data-i18n="home.catalog">Catálogo de ejercicios</h3>
-              <p class="muted catalog-pick" data-i18n="home.catalogPick">Elige tu camino: vocal o canto</p>
+              <h3 id="catalog-heading" tabindex="-1" data-i18n="home.catalog">Catálogo de ejercicios</h3>
+              <p class="muted catalog-pick" data-i18n="home.catalogPick">Elige qué entrenar: hablar o cantar.</p>
             </div>
           </div>
 
           <div
             class="track-switch tabs"
             role="tablist"
-            aria-label="Training track"
+            data-i18n-aria="home.trackAria"
+            aria-label="Qué entrenar"
             id="track-switch"
           >
             <button
@@ -221,13 +240,11 @@
               aria-selected="true"
               aria-controls="exercise-list"
               id="tab-vocal"
-              data-i18n-aria="tab.vocal"
-              aria-label="Entrenamiento vocal"
             >
               <span class="track-ico" aria-hidden="true">🎙</span>
               <span class="track-label">
-                <span class="track-label-short" data-i18n="tab.vocalShort">Vocal</span>
-                <span class="track-label-full" data-i18n="tab.vocal">Entrenamiento vocal</span>
+                <span class="track-label-short" data-i18n="tab.vocalShort">Hablar</span>
+                <span class="track-label-full" data-i18n="tab.vocal">presentaciones, dicción</span>
               </span>
             </button>
             <button
@@ -238,13 +255,11 @@
               aria-selected="false"
               aria-controls="exercise-list"
               id="tab-singing"
-              data-i18n-aria="tab.singing"
-              aria-label="Entrenamiento de canto"
             >
               <span class="track-ico" aria-hidden="true">♪</span>
               <span class="track-label">
-                <span class="track-label-short" data-i18n="tab.singingShort">Canto</span>
-                <span class="track-label-full" data-i18n="tab.singing">Entrenamiento de canto</span>
+                <span class="track-label-short" data-i18n="tab.singingShort">Cantar</span>
+                <span class="track-label-full" data-i18n="tab.singing">canciones, afinación</span>
               </span>
             </button>
           </div>
@@ -252,7 +267,7 @@
           <p class="track-blurb" id="home-track-sub" data-i18n="home.vocalSub">
             Clase: dicción, volumen, conexión y revisión. Expresión: pausas, tono, ritmo, gestos e historias.
           </p>
-          <h4 class="track-title sr-title" id="home-track-title" data-i18n="home.vocalTitle">Entrenamiento vocal</h4>
+          <h4 class="track-title sr-title" id="home-track-title" data-i18n="home.vocalTitle">Hablar</h4>
 
           <div class="toolbar tier-toolbar">
             <div class="tier-filters" role="group" data-i18n-aria="home.tierAria">
@@ -264,122 +279,12 @@
             <span class="muted" id="tier-counts" style="font-size: 0.85rem"></span>
           </div>
 
-          <!-- Today's basics in this track, each a shortcut to its exercise (filled by app.js) -->
-          <div class="today-basics" id="today-basics" role="group" aria-labelledby="today-basics-label" hidden></div>
 
           <div id="exercise-list" class="grid" aria-live="polite"></div>
         </section>
 
-        <!-- Value pulse: prove progress (competence) before asking for Pro -->
-        <div class="value-pulse card" id="value-pulse" aria-live="polite">
-          <div class="value-pulse-head">
-            <h3 class="value-pulse-title" data-i18n="value.pulseTitle">Tu estudio</h3>
-            <span class="value-pulse-tag" id="value-pulse-tag" hidden></span>
-          </div>
-          <div class="value-pulse-grid" id="value-pulse-grid">
-            <div class="value-stat"><strong id="vp-sessions">0</strong><span data-i18n="value.sessions">Sesiones</span></div>
-            <div class="value-stat"><strong id="vp-minutes">0</strong><span data-i18n="value.minutes">Minutos</span></div>
-            <div class="value-stat"><strong id="vp-streak">0</strong><span data-i18n="value.streak">Racha (días)</span></div>
-            <div class="value-stat"><strong id="vp-hold">—</strong><span data-i18n="value.bestHold">Mejor hold</span></div>
-            <div class="value-stat"><strong id="vp-ex">0</strong><span data-i18n="value.exercises">Ejercicios</span></div>
-          </div>
-          <p class="value-insights muted" id="value-insights" hidden></p>
-          <div class="value-pulse-cta" id="value-pulse-cta">
-            <button type="button" class="btn btn-sm btn-primary" id="btn-value-pro" data-i18n="value.ctaPro">
-              Pro: exportar y coach
-            </button>
-            <p class="muted value-anchor" data-i18n="value.anchor">
-              Una clase particular ≈ el año de Pro. Practica gratis siempre.
-            </p>
-          </div>
-
-          <!-- Pro studio: profiles, goals, insights, achievements -->
-          <div class="pro-studio" id="pro-studio">
-            <div class="pro-studio-row">
-              <label class="pro-profile-field" for="sel-profile">
-                <span class="pro-k" data-i18n="pro.profile">Perfil</span>
-                <select id="sel-profile" class="select-inline" aria-label="Practice profile"></select>
-              </label>
-              <button type="button" class="btn btn-ghost btn-xs" id="btn-profile-add" data-i18n="pro.profileAdd">+ Perfil</button>
-              <button type="button" class="btn btn-ghost btn-xs" id="btn-profile-rename" data-i18n="pro.profileRename">Renombrar</button>
-              <label class="pro-goal-field" for="sel-week-goal">
-                <span class="pro-k" data-i18n="pro.weekGoal">Meta semanal</span>
-                <select id="sel-week-goal" class="select-inline" aria-label="Weekly session goal">
-                  <option value="3">3</option>
-                  <option value="5">5</option>
-                  <option value="7">7</option>
-                </select>
-              </label>
-              <span class="pro-goal-progress muted" id="pro-goal-progress">0/3</span>
-            </div>
-            <div class="pro-insights" id="pro-insights-panel">
-              <div class="pro-insights-head">
-                <strong data-i18n="pro.insightsTitle">Insights Pro</strong>
-                <span class="pro-lock" id="pro-insights-lock" hidden data-i18n="pro.locked">Pro</span>
-              </div>
-              <div class="pro-spark" id="pro-spark" aria-hidden="true" title="28 days"></div>
-              <p class="pro-focus" id="pro-coach-focus"></p>
-              <p class="muted pro-hold-trend" id="pro-hold-trend"></p>
-            </div>
-            <div class="pro-achievements" id="pro-achievements">
-              <strong class="pro-ach-title" data-i18n="pro.achievements">Logros</strong>
-              <div class="pro-ach-grid" id="pro-ach-grid"></div>
-            </div>
-            <!-- Year-style practice heatmap (habit apps / GitHub contribution vibe) -->
-            <div class="practice-heatmap-wrap" id="practice-heatmap-wrap">
-              <div class="practice-heatmap-head">
-                <strong data-i18n="retain.heatmapTitle">Mapa de práctica</strong>
-                <span class="muted" data-i18n="retain.heatmapSub">26 semanas · cada casilla es un día</span>
-              </div>
-              <div class="practice-heatmap" id="practice-heatmap" role="img" aria-label="Mapa de práctica"></div>
-            </div>
-          </div>
-        </div>
-
         <!-- Free-tier native tip / ad slot (never during practice; off until adsEnabled) -->
         <aside id="ad-slot-home" class="ad-slot" hidden aria-label="Studio tip"></aside>
-
-        <div class="value-banner" id="value-banner" hidden role="status">
-          <p id="value-banner-text"></p>
-          <div class="value-banner-actions">
-            <button type="button" class="btn btn-sm btn-primary" id="value-banner-cta" data-i18n="value.bannerCta">Ver Pro</button>
-            <button type="button" class="btn btn-ghost btn-sm" id="value-banner-dismiss" data-i18n="value.bannerDismiss">Ahora no</button>
-          </div>
-        </div>
-
-        <!-- Comeback tools: kind reminders, calendar, welcome-back (research: no guilt) -->
-        <div class="retain-panel card" id="retain-panel">
-          <div class="retain-head">
-            <h3 class="retain-title" data-i18n="retain.title">Volver a practicar</h3>
-            <label class="retain-toggle muted">
-              <input type="checkbox" id="chk-reminders" />
-              <span data-i18n="retain.enable">Recordatorio amable</span>
-            </label>
-          </div>
-          <div class="retain-row">
-            <label class="retain-field" for="rem-time-1">
-              <span data-i18n="retain.time">Hora</span>
-              <input type="time" id="rem-time-1" value="18:00" />
-            </label>
-            <label class="retain-field" for="rem-time-2" id="rem-time-2-wrap" hidden>
-              <span data-i18n="retain.time2">2ª hora (Pro)</span>
-              <input type="time" id="rem-time-2" value="09:00" />
-            </label>
-            <label class="retain-check muted">
-              <input type="checkbox" id="chk-browser-notify" />
-              <span data-i18n="retain.browserNotify">Notificación del navegador</span>
-            </label>
-          </div>
-          <div class="retain-actions">
-            <button type="button" class="btn btn-sm btn-ghost" id="btn-ics-daily" data-i18n="retain.icsDaily">📅 Diario (calendario)</button>
-            <button type="button" class="btn btn-sm btn-ghost" id="btn-ics-weekly" data-i18n="retain.icsWeekly">📅 Semanal</button>
-            <button type="button" class="btn btn-sm btn-primary" id="btn-micro-5" data-i18n="retain.micro5">▶ 5 min</button>
-            <span class="muted retain-freeze" id="retain-freeze-label"></span>
-          </div>
-          <p class="muted retain-hint" data-i18n="retain.hint">
-            Sin culpa: el recordatorio es amable. También puedes añadir un evento a tu calendario.
-          </p>
-        </div>
 
         <div class="welcome-back card" id="welcome-back" hidden>
           <h3 data-i18n="retain.welcomeTitle">Bienvenido de nuevo</h3>
@@ -399,23 +304,16 @@
       <section id="view-exercise" class="view">
         <!-- Ultra-compact title row — practice stage is the main screen -->
         <div class="panel-header exercise-header-compact">
-          <div class="ex-header-main">
-            <nav class="ex-breadcrumb" id="ex-breadcrumb" data-i18n-aria="bc.nav" aria-label="Ruta de navegación">
-              <button type="button" class="ex-bc-link" id="bc-home" data-i18n="bc.home">Inicio</button>
-              <span class="ex-bc-sep" aria-hidden="true">›</span>
-              <button type="button" class="ex-bc-link" id="bc-track" data-track="vocal">Vocal</button>
-              <span class="ex-bc-sep" aria-hidden="true">›</span>
-              <span class="ex-bc-current" id="bc-current" aria-current="page">Ejercicio</span>
-            </nav>
-            <div class="ex-title-row">
-              <span class="badge" id="ex-track-badge">Vocal</span>
-              <h2 id="ex-title">Ejercicio</h2>
-              <p class="sub" id="structured-progress" hidden></p>
-            </div>
+          <!-- One row: the way back names where it goes (js/app.js
+               syncExerciseBack), the exercise, then help in a word. -->
+          <button type="button" class="btn btn-ghost btn-sm btn-back-compact" id="btn-back-home" data-i18n="ex.backPractice">← Practicar</button>
+          <div class="ex-title-row">
+            <h2 id="ex-title">Ejercicio</h2>
+            <span class="ex-kind" id="ex-track-badge"></span>
+            <p class="sub" id="structured-progress" hidden></p>
           </div>
           <div class="ex-header-actions">
-            <button type="button" class="btn btn-ghost btn-sm btn-ui-help" id="btn-ui-help" data-i18n="uiTour.help" data-i18n-aria="uiTour.helpAria" data-i18n-title="uiTour.helpAria" aria-label="Cómo usar esta pantalla" title="Cómo usar esta pantalla">?</button>
-            <button type="button" class="btn btn-ghost btn-sm btn-back-compact" id="btn-back-home" data-i18n="ex.back">← Atrás</button>
+            <button type="button" class="btn btn-ghost btn-sm btn-ui-help" id="btn-ui-help" data-i18n="uiTour.help" data-i18n-aria="uiTour.helpAria" data-i18n-title="uiTour.helpAria" aria-label="Cómo usar esta pantalla" title="Cómo usar esta pantalla">Ayuda</button>
           </div>
         </div>
 
@@ -425,7 +323,7 @@
             <!-- Full-width top rail: status | acordes/modo (flex) | score/quality — no overlap -->
             <div class="hud-top-rail" id="hud-top-rail">
               <div class="hud-corner hud-tl">
-                <span class="status-pill" id="practice-status" data-i18n="practice.ready">Listo</span>
+                <span class="status-pill" id="practice-status" data-i18n="practice.ready">Tiempo</span>
                 <span class="timer-display" id="timer-display">05:00</span>
                 <span class="hold-live" id="hold-display" hidden title="Hold">↓0.0s</span>
                 <span class="chord-now" id="chord-now">—</span>
@@ -469,12 +367,14 @@
                 <button type="button" class="btn btn-danger btn-sm" id="btn-practice-stop" hidden data-i18n="practice.stop">■ Detener</button>
                 <label class="muted piano-opt hud-check" id="opt-auto-record">
                   <input type="checkbox" id="chk-auto-record" />
-                  <span data-i18n="practice.recordAlso">Grabar</span>
+                  <span data-i18n="practice.recordAlso">⏺ Grabarme</span>
                 </label>
+                <!-- Read to screen readers when the box is ticked and fixed (app.js) -->
+                <span id="record-always-note" hidden data-i18n="practice.recordAlways">Este ejercicio graba siempre la toma; al terminar decides si la guardas.</span>
               </div>
               <div class="hud-corner hud-bc" id="mic-sens-hud" title="">
                 <label class="mic-sens-label" for="mic-sensitivity">
-                  <span class="mic-sens-title" data-i18n="mic.sens">Mic</span>
+                  <span class="mic-sens-title"><span class="mic-full" data-i18n="mic.sens">Micrófono</span><span class="mic-short" aria-hidden="true">Mic</span></span>
                   <!-- The mic's level, right after its name: on its own at the left
                        edge it read as an empty, unlabelled pill. -->
                   <span class="level-meter practice-meter" id="level-meter-wrap" aria-hidden="true"><span id="level-fill"></span></span>
@@ -505,7 +405,7 @@
                   <button type="button" class="btn btn-ghost btn-xs oct-btn" id="btn-oct-up" data-i18n-aria="oct.upAria" title="+1 oct">+</button>
                   <label class="muted piano-opt oct-auto" data-i18n-title="range.autoTitle">
                     <input type="checkbox" id="chk-range-auto" checked />
-                    <span data-i18n="range.auto">Rango</span>
+                    <span data-i18n="range.auto">A mi voz</span>
                   </label>
                 </div>
                 <label class="muted piano-opt" title="One note at a time / 1 nota a la vez">
@@ -529,9 +429,9 @@
                 </label>
                 <label class="muted piano-opt" id="opt-auto-piano" title="Auto piano">
                   <input type="checkbox" id="chk-auto-piano" checked />
-                  <span data-i18n="piano.auto">Auto</span>
+                  <span data-i18n="piano.auto">Piano automático</span>
                 </label>
-                <button type="button" class="btn btn-ghost btn-xs hud-piano-more" id="btn-toggle-piano" aria-expanded="false" aria-controls="piano-block" data-i18n="piano.more" title="Piano y progresiones">🎹+</button>
+                <button type="button" class="btn btn-ghost btn-xs hud-piano-more" id="btn-toggle-piano" aria-expanded="false" aria-controls="piano-block" title="Piano y progresiones"><span aria-hidden="true">🎹</span> <span class="piano-word">Piano</span> <span aria-hidden="true">▾</span></button>
               </div>
             </div>
 
@@ -622,8 +522,8 @@
         <!-- Guide + metrics folded below fold — open only when user needs them -->
         <div class="card section guide-card collapsed">
           <div class="guide-header">
-            <h3 style="margin:0" data-i18n="ex.guide">Cómo practicar</h3>
-            <button type="button" class="btn btn-ghost btn-sm" id="btn-toggle-guide" aria-expanded="false" data-i18n="ex.showGuide">Mostrar pasos y consejos</button>
+            <h3 style="margin:0" data-i18n="ex.guide">Pasos y consejos</h3>
+            <button type="button" class="btn btn-ghost btn-sm" id="btn-toggle-guide" aria-expanded="false" data-i18n="ex.showGuide" data-i18n-aria="ex.showGuideAria" aria-label="Mostrar los pasos y consejos">Mostrar ▾</button>
           </div>
           <div id="guide-body">
             <div class="original-box" id="ex-original"></div>
@@ -641,7 +541,7 @@
               </div>
             </div>
             <p class="guide-site-link">
-              <a href="guide.html#practica" target="_blank" rel="noopener" data-i18n="ex.fullGuide"
+              <a href="guide.html#practica" target="_blank" rel="noopener" data-guide-anchor="practica" data-i18n="ex.fullGuide"
                 >Guía de uso del sitio</a
               >
             </p>
@@ -722,9 +622,90 @@
             <h2 data-i18n="history.title">Historial</h2>
             <p class="sub" id="history-sub" data-i18n="history.sub">Grabaciones y progreso en este navegador.</p>
           </div>
-          <button type="button" class="btn btn-ghost" id="btn-history-back" data-i18n="history.back">← Volver</button>
         </div>
         <div class="card" id="history-list"></div>
+
+        <!-- Your progress: what practice added up to, then the one Pro offer.
+             Lives in Historial (the record); Practicar keeps the daily task. -->
+        <div class="value-pulse card" id="value-pulse" aria-live="polite">
+          <div class="value-pulse-head">
+            <h3 class="value-pulse-title" data-i18n="value.pulseTitle">Tu progreso</h3>
+            <span class="value-pulse-tag" id="value-pulse-tag" hidden></span>
+          </div>
+          <div class="value-pulse-grid" id="value-pulse-grid">
+            <div class="value-stat"><strong id="vp-sessions">0</strong><span data-i18n="value.sessions">Sesiones</span></div>
+            <div class="value-stat"><strong id="vp-minutes">0</strong><span data-i18n="value.minutes">Minutos</span></div>
+            <div class="value-stat" id="vp-hold-stat"><strong id="vp-hold">—</strong><span data-i18n="value.bestHold">Nota más larga</span></div>
+            <div class="value-stat"><strong id="vp-ex">0</strong><span data-i18n="value.exercises">Ejercicios</span></div>
+          </div>
+          <p class="value-insights muted" id="value-insights" hidden></p>
+
+          <!-- Pro studio: weekly goal, insights, achievements, practice map -->
+          <div class="pro-studio" id="pro-studio">
+            <div class="pro-studio-row">
+              <label class="pro-goal-field" for="sel-week-goal">
+                <span class="pro-k" data-i18n="pro.weekGoal">Sesiones por semana</span>
+                <select id="sel-week-goal" class="select-inline" data-i18n-aria="pro.weekGoal" aria-label="Sesiones por semana">
+                  <option value="3">3</option>
+                  <option value="5">5</option>
+                  <option value="7">7</option>
+                </select>
+              </label>
+              <span class="pro-goal-progress muted" id="pro-goal-progress">0/3</span>
+            </div>
+            <div class="pro-achievements" id="pro-achievements">
+              <strong class="pro-ach-title" data-i18n="pro.achievements">Logros</strong>
+              <div class="pro-ach-grid" id="pro-ach-grid"></div>
+            </div>
+            <!-- Year-style practice heatmap (habit apps / GitHub contribution vibe) -->
+            <div class="practice-heatmap-wrap" id="practice-heatmap-wrap">
+              <div class="practice-heatmap-head">
+                <strong data-i18n="retain.heatmapTitle">Mapa de práctica</strong>
+                <span class="muted" data-i18n="retain.heatmapSub">26 semanas · cada casilla es un día</span>
+              </div>
+              <div class="practice-heatmap" id="practice-heatmap" role="img" aria-label="Mapa de práctica"></div>
+            </div>
+            <!-- Last in the card: what Pro adds comes after everything that is free. -->
+            <div class="pro-insights" id="pro-insights-panel">
+              <div class="pro-insights-head">
+                <strong data-i18n="pro.insightsTitle">Análisis Pro</strong>
+                <span class="pro-lock" id="pro-insights-lock" hidden data-i18n="pro.locked">Pro</span>
+              </div>
+              <div class="pro-spark" id="pro-spark" aria-hidden="true" title="28 days"></div>
+              <p class="pro-focus" id="pro-coach-focus"></p>
+              <p class="muted pro-hold-trend" id="pro-hold-trend"></p>
+            </div>
+          </div>
+          <div class="value-pulse-cta" id="value-pulse-cta">
+            <button type="button" class="btn btn-sm btn-primary" id="btn-value-pro" data-i18n="value.ctaPro">Ver qué añade Pro</button>
+            <p class="muted value-anchor" data-i18n="value.anchor">
+              Una clase particular ≈ el año de Pro. Practica gratis siempre.
+            </p>
+          </div>
+        </div>
+
+        <!-- Whose record this is: profiles are settings, kept apart from the progress. -->
+        <div class="card history-profiles" id="history-profiles">
+          <h3 class="history-profiles-title" data-i18n="pro.profilesTitle">Perfiles</h3>
+          <p class="muted history-profiles-sub" data-i18n="pro.profilesSub">Cada perfil guarda su propio historial, por ejemplo para otra persona de casa.</p>
+          <div class="pro-studio-row">
+            <label class="pro-profile-field" for="sel-profile">
+              <span class="pro-k" data-i18n="pro.profile">Perfil</span>
+              <select id="sel-profile" class="select-inline" data-i18n-aria="pro.profileAria" aria-label="Perfil de práctica"></select>
+            </label>
+            <button type="button" class="btn btn-ghost btn-xs" id="btn-profile-add" data-i18n="pro.profileAdd">+ Perfil</button>
+            <button type="button" class="btn btn-ghost btn-xs" id="btn-profile-rename" data-i18n="pro.profileRename">Renombrar</button>
+          </div>
+        </div>
+
+        <div class="value-banner" id="value-banner" hidden role="status">
+          <p id="value-banner-text"></p>
+          <div class="value-banner-actions">
+            <button type="button" class="btn btn-sm btn-primary" id="value-banner-cta" data-i18n="value.bannerCta">Ver Pro</button>
+            <button type="button" class="btn btn-ghost btn-sm" id="value-banner-dismiss" data-i18n="value.bannerDismiss">Ahora no</button>
+          </div>
+        </div>
+
         <aside id="ad-slot-history" class="ad-slot" hidden aria-label="Studio tip"></aside>
       </section>
 
@@ -732,9 +713,8 @@
         <div class="panel-header">
           <div>
             <h2 data-i18n="plan.title">Plan de mejora de 12 semanas</h2>
-            <p class="sub" data-i18n="plan.sub">Un elemento a la vez. Graba y revisa cada semana.</p>
+            <p class="sub" data-i18n="plan.sub">Cada semana mejoras una sola cosa. Al final te grabas y decides: sigues con ella o pasas a otra.</p>
           </div>
-          <button type="button" class="btn btn-ghost" id="btn-plan-back" data-i18n="history.back">← Volver</button>
         </div>
 
         <div class="plan-grid">
@@ -743,18 +723,23 @@
             <!-- The twelve weeks as a progress strip: where you are, not something to press -->
             <ol class="plan-week-rail" id="plan-week-rail" aria-hidden="true"></ol>
             <p class="muted plan-status" id="plan-status" hidden></p>
-            <h4 class="plan-pick" id="plan-pick" data-i18n="plan.pick">Elige el elemento</h4>
+            <h4 class="plan-pick" id="plan-pick" data-i18n="plan.pick">¿Qué quieres mejorar esta semana?</h4>
             <div class="element-chips" id="element-chips" role="group" aria-labelledby="plan-pick"></div>
             <button type="button" class="btn btn-ghost btn-sm plan-focus-more" id="plan-focus-more" aria-controls="element-chips" aria-expanded="false" hidden></button>
+            <!-- What the picked focus means, in one plain line: several names are a voice teacher's words -->
+            <p class="plan-el-desc" id="plan-el-desc" aria-live="polite" hidden></p>
+            <!-- Start comes straight after the choice and its line: under the exercise
+                 list it fell below a phone's first screen (round 5 judges). -->
+            <div class="controls-row" id="plan-start-row">
+              <button type="button" class="btn btn-primary" id="btn-plan-start" aria-describedby="plan-start-hint">Empezar esta semana</button>
+              <p class="muted plan-start-hint" id="plan-start-hint" data-i18n="plan.startHint">Elige primero qué quieres mejorar.</p>
+            </div>
             <!-- The exercises that train the picked element: the way from the plan to practice -->
             <div class="plan-exercises" id="plan-exercises" hidden>
               <p class="muted" data-i18n="plan.exLabel">Esta semana, practica:</p>
               <div class="history-list" id="plan-exercise-list"></div>
             </div>
             <p class="plan-days" id="plan-days" hidden></p>
-            <div class="controls-row" id="plan-start-row">
-              <button type="button" class="btn btn-primary" id="btn-plan-start" data-i18n="plan.start">Empezar esta semana</button>
-            </div>
           </div>
 
           <div class="card" id="plan-review-card">
@@ -769,12 +754,12 @@
                 <textarea id="plan-review-notes" data-i18n-placeholder="plan.notesPh" placeholder="¿Qué mejoró?"></textarea>
               </div>
               <div class="controls-row" style="margin-top: 0.75rem">
-                <button type="button" class="btn btn-success" id="btn-plan-improved" data-i18n="plan.improved">Mejoró → nuevo elemento</button>
-                <button type="button" class="btn" id="btn-plan-continue" data-i18n="plan.continue">Aún no → mismo elemento</button>
+                <button type="button" class="btn btn-success" id="btn-plan-improved" data-i18n="plan.improved">Mejoró: elegir otra cosa</button>
+                <button type="button" class="btn" id="btn-plan-continue" data-i18n="plan.continue">Aún no: otra semana con esto</button>
               </div>
             </div>
             <div id="plan-completed-wrap" hidden>
-              <h3 style="margin-top: 1.25rem" data-i18n="plan.completed">Elementos mejorados</h3>
+              <h3 style="margin-top: 1.25rem" data-i18n="plan.completed">Ya mejorado</h3>
               <div id="plan-completed-elements"></div>
             </div>
           </div>
@@ -820,6 +805,43 @@
           <button type="button" class="btn btn-success" id="leave-save" data-i18n="leave.save">Puntuar ahora</button>
           <button type="button" class="btn btn-danger" id="leave-discard" data-i18n="leave.discard">Descartar</button>
           <button type="button" class="btn btn-ghost" id="leave-cancel" data-i18n="leave.stay">Seguir practicando</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Daily reminder: opened from the week card on Practicar and from the
+         finishing card. Settings, not practice: it starts nothing. -->
+    <div id="reminder-modal" class="modal-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="reminder-title">
+      <div class="modal-card retain-panel" id="retain-panel">
+        <div class="retain-head">
+          <h3 class="retain-title" id="reminder-title" data-i18n="retain.title">Recordatorio diario</h3>
+          <label class="retain-toggle muted">
+            <input type="checkbox" id="chk-reminders" />
+            <span data-i18n="retain.enable">Recordármelo cada día</span>
+          </label>
+        </div>
+        <div class="retain-row">
+          <label class="retain-field" for="rem-time-1">
+            <span data-i18n="retain.time">Hora</span>
+            <input type="time" id="rem-time-1" value="18:00" />
+          </label>
+          <label class="retain-field" for="rem-time-2" id="rem-time-2-wrap" hidden>
+            <span data-i18n="retain.time2">2ª hora (Pro)</span>
+            <input type="time" id="rem-time-2" value="09:00" />
+          </label>
+          <label class="retain-check muted">
+            <input type="checkbox" id="chk-browser-notify" />
+            <span data-i18n="retain.browserNotify">Aviso en este dispositivo</span>
+          </label>
+        </div>
+        <div class="retain-actions">
+          <button type="button" class="btn btn-sm btn-ghost" id="btn-ics-daily" data-i18n="retain.icsDaily">📅 Calendario: cada día</button>
+          <button type="button" class="btn btn-sm btn-ghost" id="btn-ics-weekly" data-i18n="retain.icsWeekly">📅 Calendario: cada semana</button>
+        </div>
+        <p class="muted retain-hint" data-i18n="retain.hint">Los botones 📅 añaden a tu calendario un evento que se repite.</p>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" id="reminder-cancel" data-i18n="retain.notNow" hidden>Ahora no</button>
+          <button type="button" class="btn btn-primary" id="reminder-done">Listo</button>
         </div>
       </div>
     </div>
@@ -1103,17 +1125,17 @@
     </div>
 
     <script src="js/focus-trap.js?v=20260924c"></script>
-    <script src="js/i18n.js?v=20261002a"></script>
+    <script src="js/i18n.js?v=20261006b"></script>
     <script src="js/exercises-data.js?v=20261002a"></script>
     <script src="js/exercises-locale-es.js?v=20261002a"></script>
     <script src="js/practice-profiles.js?v=20261002a"></script>
-    <script src="js/storage.js?v=20260924c"></script>
+    <script src="js/storage.js?v=20261006b"></script>
     <script src="js/practice-days.js?v=20260924c"></script>
     <script src="js/billing-config.js?v=20260924a"></script>
     <script src="js/license.js?v=20260921a"></script>
     <script src="js/billing.js?v=20260922a"></script>
-    <script src="js/ads-config.js"></script>
-    <script src="js/ads.js"></script>
+    <script src="js/ads-config.js?v=20261006a"></script>
+    <script src="js/ads.js?v=20261006a"></script>
     <script src="js/value-pulse.js?v=20260924c"></script>
     <!-- The page declares that the region gate belongs on it, so that if
          js/region-gate.js ever 404s or fails to parse, js/analytics.js and
@@ -1121,36 +1143,36 @@
          absent gate as permission. -->
     <script>window.VT_REGION_REQUIRED = true;</script>
     <script src="js/region-gate.js?v=20260928a"></script>
-    <script src="js/analytics.js?v=20260928a"></script>
+    <script src="js/analytics.js?v=20261006b"></script>
     <script src="js/experiments-config.js?v=20260924e"></script>
     <script src="js/experiments.js?v=20260925a"></script>
-    <script src="js/privacy-switch.js?v=20260925a"></script>
+    <script src="js/privacy-switch.js?v=20261006b"></script>
     <script src="js/reminders.js?v=20260924c"></script>
-    <script src="js/auth-users.generated.js"></script>
-    <script src="js/auth.js"></script>
-    <script src="js/account.js?v=20260926a"></script>
-    <script src="js/sync.js?v=20260928a"></script>
+    <script src="js/auth-users.generated.js?v=20261006a"></script>
+    <script src="js/auth.js?v=20261006a"></script>
+    <script src="js/account.js?v=20261006b"></script>
+    <script src="js/sync.js?v=20261006b"></script>
     <script src="js/piano.js?v=20261002a"></script>
-    <script src="js/range-adapter.js"></script>
-    <script src="js/pitch-visualizer.js?v=20261002a"></script>
+    <script src="js/range-adapter.js?v=20261006a"></script>
+    <script src="js/pitch-visualizer.js?v=20261007a"></script>
     <script src="js/pitch-game.js?v=20261002a"></script>
-    <script src="js/practice-engine.js?v=20261002a"></script>
-    <script src="js/voice-features.js?v=20261002a"></script>
+    <script src="js/practice-engine.js?v=20261007a"></script>
+    <script src="js/voice-features.js?v=20261007a"></script>
     <script src="js/exercise-viz.js?v=20261002a"></script>
-    <script src="js/scenes/speech.js?v=20261002a"></script>
-    <script src="js/scenes/speech-shape.js?v=20261002a"></script>
+    <script src="js/scenes/speech.js?v=20261005g"></script>
+    <script src="js/scenes/speech-shape.js?v=20261007a"></script>
     <script src="js/scenes/volume.js?v=20261002a"></script>
-    <script src="js/scenes/guided.js?v=20261002a"></script>
+    <script src="js/scenes/guided.js?v=20261007a"></script>
     <script src="js/scenes/breath.js?v=20261002a"></script>
     <script src="js/scenes/pitch.js?v=20261002a"></script>
     <script src="js/scenes/dynamics.js?v=20261002a"></script>
-    <script src="js/scenes/resonance.js?v=20261002a"></script>
-    <script src="js/practice-modes.js?v=20261002a"></script>
+    <script src="js/scenes/resonance.js?v=20261007a"></script>
+    <script src="js/practice-modes.js?v=20261007a"></script>
     <script src="js/recorder.js?v=20261002a"></script>
     <script src="js/metrics.js?v=20260924c"></script>
     <script src="js/session.js?v=20260924c"></script>
-    <script src="js/daily-loop.js?v=20260924c"></script>
-    <script src="js/tour.js?v=20260924c"></script>
-    <script src="js/app.js?v=20261002a"></script>
+    <script src="js/daily-loop.js?v=20261006b"></script>
+    <script src="js/tour.js?v=20261006b"></script>
+    <script src="js/app.js?v=20261006b"></script>
   </body>
 </html>

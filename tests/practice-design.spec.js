@@ -137,7 +137,7 @@ test.describe("Step done: a guided step's clock runs out", () => {
         timer: document.querySelector("#timer-display").textContent
       };
     });
-    expect(st).toEqual({ live: false, engine: false, pill: "Listo", timer: "00:00" });
+    expect(st).toEqual({ live: false, engine: false, pill: "Tiempo", timer: "00:00" });
 
     // The card sits on the stage, inside the first screen.
     const geo = await page.evaluate(() => {
@@ -259,6 +259,67 @@ test.describe("Step done: a guided step's clock runs out", () => {
     await page.clock.runFor(300);
     await expect(page.locator("#view-home")).toHaveClass(/active/);
     await expect(page.locator("#step-done")).toBeHidden();
+  });
+
+  test("while the card shows, the foot of the page has no second Siguiente", async ({ page }) => {
+    await boot(page);
+    await startMinimo(page);
+    await expect(page.locator("#structured-nav")).toBeVisible();
+    await runStepOut(page, 5);
+    await expect(page.locator("#step-done")).toBeVisible();
+    await expect(page.locator("#structured-nav")).toBeHidden();
+    await page.locator("#btn-step-done-more").click();
+    await expect(page.locator("#step-done")).toBeHidden();
+    await expect(page.locator("#structured-nav")).toBeVisible();
+  });
+
+  test("stepping out of a routine, home names where it stands, not a count of saves", async ({ page }) => {
+    await boot(page);
+    await startMinimo(page);
+    await page.locator("#btn-back-home").click();
+    await page.clock.runFor(400);
+    await expect(page.locator("#view-home")).toHaveClass(/active/);
+    await expect(page.locator("#start-title")).toHaveText("Vas por el ejercicio 1 de 2");
+    await expect(page.locator("#btn-next-step")).toContainText("Seguir la sesión");
+  });
+
+  test("past the first step, Terminar asks first; Seguir keeps the place", async ({ page }) => {
+    await boot(page);
+    await startMinimo(page);
+    await runStepOut(page, 5);
+    await page.locator("#btn-step-done-next").click();
+    await page.clock.runFor(400);
+    expect(await page.evaluate(() => window.VTSession.get().index)).toBe(1);
+
+    await page.locator("#btn-session-end").click();
+    await expect(page.locator("#session-banner-text")).toHaveText("¿Terminar la rutina?\u00a0Vas en el 2 de 2.");
+    await expect(page.locator("#btn-session-end")).toBeHidden();
+    await expect(page.locator("#btn-session-pause")).toBeHidden();
+    await expect(page.locator("#btn-session-end-yes")).toHaveText("Sí, terminar");
+    // "Seguir" takes Terminar's place, so a second tap there keeps the routine.
+    await expect(page.locator("#btn-session-end-no")).toHaveText("Seguir");
+    await expect(page.locator("#btn-session-end-no")).toBeFocused();
+    const order = await page.$$eval("#session-banner .controls-row .btn:not([hidden])", (b) => b.map((x) => x.id));
+    expect(order).toEqual(["btn-session-end-yes", "btn-session-end-no"]);
+    expect(await page.evaluate(() => window.VTSession.get().status)).toBe("active");
+
+    await page.locator("#btn-session-end-no").click();
+    await expect(page.locator("#btn-session-end")).toBeVisible();
+    await expect(page.locator("#btn-session-end")).toBeFocused();
+    await expect(page.locator("#session-banner-text .session-banner-pos")).toHaveText("Ejercicio 2 de 2");
+    expect(await page.evaluate(() => window.VTSession.get().index)).toBe(1);
+
+    // Escape takes the question back too.
+    await page.locator("#btn-session-end").click();
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#btn-session-end-yes")).toBeHidden();
+
+    await page.locator("#btn-session-end").click();
+    await page.locator("#btn-session-end-yes").click();
+    await page.clock.runFor(300);
+    await expect(page.locator("#view-home")).toHaveClass(/active/);
+    await expect(page.locator("#session-banner")).not.toHaveClass(/visible/);
+    expect(await page.evaluate(() => window.VTSession.get())).toBe(null);
   });
 
   test("English reads in its own words", async ({ page }) => {
@@ -460,4 +521,15 @@ test.describe("Target lane: the note to sing is always the primary lane", () => 
     expect(r.safeTop > 0 || r.canvasTop >= r.railBottom, "canvas under the rail, or badge pushed down").toBe(true);
     expect(r.badgeTopPx).toBeGreaterThanOrEqual(r.railBottom);
   });
+});
+
+test("the exercise's guide link opens the guide at its practice section, in either language", async ({ page }) => {
+  // Every other guide link is rewritten to the language's start; this one
+  // names its section, so it keeps it (#practica, #practica-en).
+  await boot(page, { lang: "es" });
+  const link = page.locator(".guide-site-link a");
+  await expect(link).toHaveAttribute("href", "guide.html#practica");
+  await page.evaluate(() => VTI18n.setLang("en"));
+  await expect(link).toHaveAttribute("href", "guide.html#practica-en");
+  await expect(page.locator('.app-footer a[href^="guide.html"]').first()).toHaveAttribute("href", "guide.html#que-es-en");
 });

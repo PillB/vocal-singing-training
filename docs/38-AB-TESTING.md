@@ -227,7 +227,11 @@ traffic can.
    - `srm` is not flagged
    - the event-mix check is clean
    - the ingest counters show no unexpected `origin_not_allowed` or
-     `rate_limited`
+     `rate_limited`, and no large `exposure_capped` (one address over 100 new
+     exposures a day, a school or an office; each is recorded only if that
+     browser comes back another day). `exposure_unregistered` usually means
+     forged traffic or a site and worker deployed out of step. Both readouts,
+     the admin page and the A/B panel, list these.
    - the two arms do not differ
 
    About one A/A in twenty shows p < 0.05 by chance, so run it again before
@@ -401,11 +405,19 @@ not take it over.
 **The choice lives in two keys, and that is not a bug.** `vt_eu_consent_v1` is the
 answer to the bar: six months, ask-first countries only. `vt_analytics_optout_v1`
 is the ordinary opt-out: everywhere, no expiry. A visitor in Madrid who accepts and
-later presses the footer switch has both — granted in the first, opted out in the
-second — and `remoteState()` reads the opt-out first, so the later answer wins.
-Collapsing them into one key would mean an EEA refusal expiring after six months
-the way a consent does, which is the re-prompting the Cookie Banner Taskforce
-objects to.
+later presses the footer switch gets the opt-out, and the switch also turns their
+yes into a no and removes the event log (`js/privacy-switch.js`), because the yes
+covered keeping statistics on the device, not only sending them. The first version
+wrote only the opt-out: sending stopped, but `blockedReason()` still read the yes,
+so the log kept growing and the first experiment switched on would have minted a
+new A/B id. Now the device ends up exactly as a press on Reject leaves it.
+"Volver a permitir" clears the opt-out and answers the bar yes again, in one
+press. A browser that pressed the switch before this carries both a yes and the
+opt-out; the switch reads the opt-out as the later answer on load and does the
+same. When the no expires after six months the opt-out is still there, so the bar
+does not come back and events wait in memory without being written. Collapsing
+the two into one key would mean an EEA refusal expiring after six months the way
+a consent does, which is the re-prompting the Cookie Banner Taskforce objects to.
 
 **The A/B split goes inert, not uniform.** The obvious implementation — make
 `clientId()` return `""` — would have hashed every visitor in those countries into

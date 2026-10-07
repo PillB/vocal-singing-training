@@ -1,0 +1,77 @@
+{
+ "exercise-start": {
+  "title": "An exercise, just opened",
+  "job": "Someone who has just opened an exercise can tell how to start it, how long it runs, and how to record themselves to listen back.",
+  "states": "exercise",
+  "vps": "phone,desktop",
+  "arms": {
+   "A": {
+    "caption": "Empezar starts the exercise with the microphone. Recording yourself is an option among the settings; on phones it is not shown."
+   },
+   "B": {
+    "url": "http://127.0.0.1:8802",
+    "caption": "Empezar starts the exercise with the microphone. '⏺ Grabarme', ticked before Empezar, also records the session to listen back in Historial."
+   }
+  }
+ },
+ "exercise-pitch": {
+  "title": "A pitch exercise, before singing",
+  "job": "A learner on a pitch-matching exercise understands what the screen will tell them about their singing and what to do first.",
+  "states": "exercise-pitch",
+  "vps": "phone,desktop",
+  "arms": {
+   "A": {
+    "caption": "Empezar plays the note and listens. The numbers above the lane fill in while the learner sings."
+   },
+   "B": {
+    "url": "http://127.0.0.1:8802",
+    "caption": "Empezar plays the note and listens. The readout above the lane fills in while the learner sings: whether they are on the note and which way to move."
+   }
+  }
+ },
+ "exercise-timeup": {
+  "title": "An exercise when its time runs out",
+  "job": "A learner whose exercise timer has just reached zero knows the exercise is over and what to do next.",
+  "states": "exercise-timeup",
+  "vps": "phone,desktop",
+  "arms": {
+   "A": {
+    "caption": "When the time reaches 0:00 the exercise stops and asks how it went; answering saves the session."
+   },
+   "B": {
+    "url": "http://127.0.0.1:8802",
+    "caption": "When the time reaches 0:00 the exercise stops and asks how it went; answering saves the session. The start button repeats the exercise."
+   }
+  }
+ },
+ "exercise-piano": {
+  "title": "The exercise's piano options",
+  "job": "A learner who opens the piano options understands each one and can change what they need.",
+  "states": "exercise-piano",
+  "vps": "phone,desktop",
+  "arms": {
+   "A": {
+    "caption": "The piano button opens options: play the notes automatically, sustain them, and fit the exercise to the learner's range."
+   },
+   "B": {
+    "url": "http://127.0.0.1:8802",
+    "caption": "The piano button opens options: play the notes automatically, sustain them, and fit the exercise to the learner's range."
+   }
+  }
+ },
+ "exercise-speaking": {
+  "title": "A speaking exercise, just opened",
+  "job": "Someone practising their speaking voice can tell how to start this exercise and what it asks of them.",
+  "states": "exercise-vocal",
+  "vps": "phone",
+  "arms": {
+   "A": {
+    "caption": "Empezar starts the exercise with the microphone."
+   },
+   "B": {
+    "url": "http://127.0.0.1:8802",
+    "caption": "Empezar starts the exercise with the microphone. '⏺ Grabarme' also records the session."
+   }
+  }
+ }
+}

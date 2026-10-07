@@ -754,6 +754,98 @@ test.describe("Admin page", () => {
     await adminCtx.close();
   });
 
+  test("statistics: exposures the worker set aside are named", async ({ browser }) => {
+    // Once an experiment is on, the worker counts an exposure over one
+    // address's daily cap (a school, an office) and one for an arm its registry
+    // does not have, and neither showed anywhere on this page.
+    const { worker, admin } = await startWorker();
+    const day = new Date(worker.now() * 1000).toISOString().slice(0, 10);
+    const post = (events) =>
+      worker.fetch(
+        new Request("http://worker.local/v1/events", {
+          method: "POST",
+          headers: {
+            origin: worker.env.SITE_ORIGIN,
+            "content-type": "text/plain;charset=UTF-8",
+            "user-agent":
+              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Safari/537.36",
+            "cf-connecting-ip": "203.0.113.77"
+          },
+          body: JSON.stringify({ events })
+        })
+      );
+    const expose = (i, variant) => ({
+      name: "experiment_expose",
+      cid: `sbxexp${String(i).padStart(4, "0")}`,
+      day,
+      tz: 300,
+      props: { experiment: "aa_2026_10", variant, forced: false, enabled: true }
+    });
+    // 125 browsers behind one address, 25 over the cap of 100 a day...
+    for (let i = 0; i < 125; i += 25) {
+      await post(Array.from({ length: 25 }, (_, j) => expose(i + j, (i + j) % 2 ? "b" : "a")));
+    }
+    // ...and ten exposed to an arm that does not exist.
+    await post(Array.from({ length: 10 }, (_, j) => expose(500 + j, "zz")));
+
+    const adminCtx = await browser.newContext();
+    const page = await openAdmin(adminCtx, worker, admin);
+    await page.click("#stats-load");
+    const result = page.locator("#stats-result");
+    await expect(result).toContainText("guardados: 135");
+    await expect(result).toContainText("exposiciones nuevas: 100");
+    const capped = result.locator("li", { hasText: "exposiciones por encima del tope diario de una dirección: 25" });
+    await expect(capped).toHaveAttribute("data-tone", "error");
+    // An unknown arm is forged traffic or a site and worker deployed out of
+    // step: the registry doing its job, so not the colour of a fault.
+    const unknown = result.locator("li", { hasText: "exposiciones a una prueba o versión que no existe: 10" });
+    await expect(unknown).toHaveAttribute("data-tone", "");
+    await page.click("#admin-lang");
+    await expect(result).toContainText("exposures over one address's daily cap: 25");
+    await adminCtx.close();
+  });
+
+  test("statistics: every counter the worker keeps is shown once, grouped as the worker groups it", async ({
+    browser
+  }) => {
+    // The worker's list of ingest reasons and this page's are two copies of one
+    // list. They drifted once (eu_no_consent), and this page also counted two
+    // whole requests turned away, body_too_large and bad_request, as events
+    // dropped, so its "dropped" did not match the A/B panel's for the same week.
+    // Every reason gets its own count here: each must be a row of its own, or
+    // be summed into the one row for events dropped one by one.
+    const { INGEST_REASONS } = await import(
+      pathToFileURL(path.join(__dirname, "..", "workers", "entitlements", "src", "events.js")).href
+    );
+    expect(Object.keys(INGEST_REASONS).sort()).toEqual(["event", "exposure", "request"]);
+    const totals = {};
+    Object.values(INGEST_REASONS)
+      .flat()
+      .forEach((key, i) => {
+        totals[key] = 11 + i;
+      });
+    const dropped = INGEST_REASONS.event.filter((k) => k !== "accepted").reduce((n, k) => n + totals[k], 0);
+    const own = ["accepted", ...INGEST_REASONS.request, ...INGEST_REASONS.exposure];
+
+    const { worker, admin } = await startWorker();
+    const adminCtx = await browser.newContext();
+    const page = await openAdmin(adminCtx, worker, admin);
+    await page.route(`${API}/v1/admin/experiments**`, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        headers: { "access-control-allow-origin": "*" },
+        body: JSON.stringify({ ok: true, experiments: [], ingest: { since: "2026-09-29", totals, lastAcceptedAt: 1790000000 } })
+      })
+    );
+    await page.click("#stats-load");
+    const counts = page.locator("#stats-result .admin-counts li strong");
+    await expect(counts.first()).toBeVisible();
+    const shown = (await counts.allTextContents()).map(Number).sort((a, b) => a - b);
+    expect(shown).toEqual([...own.map((k) => totals[k]), dropped].sort((a, b) => a - b));
+    await adminCtx.close();
+  });
+
   test("the sandbox's trial length is the one wrangler.toml deploys", async () => {
     const fs = require("fs");
     const toml = fs.readFileSync(path.join(__dirname, "..", "workers", "entitlements", "wrangler.toml"), "utf8");
@@ -764,19 +856,32 @@ test.describe("Admin page", () => {
     expect(String(methods.body.trialDays)).toBe(deployed[1]);
   });
 
-  test("admin.html loads the same versions of shared files as the studio", async () => {
+  test("every page loads its own files with a version, and the same version of a shared file", async () => {
+    // The ?v= stamp is what makes a browser fetch a changed file after a deploy.
+    // A file loaded with none is served from the cache under the same address,
+    // so a reload can run new HTML on the old file: privacy.html loaded
+    // css/styles.css that way, and index.html five of its scripts. And a file
+    // two pages share has to carry the same stamp on both, or one of them keeps
+    // the old copy (guide.html's stylesheet once fell behind index.html's).
+    // Anything after the path other than exactly ?v=<word> fails too, rather
+    // than slipping past the check: an empty ?v=, a second parameter or a #.
     const fs = require("fs");
-    const read = (name) => fs.readFileSync(path.join(__dirname, "..", name), "utf8");
-    const stamps = (html) => {
-      const out = {};
-      for (const m of html.matchAll(/(?:src|href)="((?:js|css)\/[\w.-]+)\?v=([\w]+)"/g)) out[m[1]] = m[2];
-      return out;
-    };
-    const studio = stamps(read("index.html"));
-    const admin = stamps(read("admin.html"));
-    const shared = Object.keys(admin).filter((file) => studio[file]);
-    expect(shared).toEqual(expect.arrayContaining(["css/styles.css", "js/billing-config.js", "js/account.js"]));
-    for (const file of shared) expect(`${file}?v=${admin[file]}`).toBe(`${file}?v=${studio[file]}`);
+    const root = path.join(__dirname, "..");
+    const pages = fs.readdirSync(root).filter((name) => name.endsWith(".html"));
+    expect(pages).toEqual(expect.arrayContaining(["index.html", "guide.html", "admin.html", "privacy.html"]));
+    const seen = {};
+    for (const name of pages) {
+      const html = fs.readFileSync(path.join(root, name), "utf8");
+      for (const m of html.matchAll(/(?:src|href)\s*=\s*["']?(?:\.?\/)?((?:js|css)\/[^"'\s>?#]+)([^"'\s>]*)/g)) {
+        const stamp = /^\?v=(\w+)$/.exec(m[2]);
+        expect(stamp, `${name} loads ${m[1]}${m[2]}, not ${m[1]}?v=<version>`).toBeTruthy();
+        (seen[m[1]] = seen[m[1]] || {})[name] = stamp[1];
+      }
+    }
+    expect(Object.keys(seen["css/styles.css"]).sort()).toEqual([...pages].sort());
+    for (const [file, byPage] of Object.entries(seen)) {
+      expect(new Set(Object.values(byPage)).size, `${file}: ${JSON.stringify(byPage)}`).toBe(1);
+    }
   });
 
   test("works in English too", async ({ browser }) => {

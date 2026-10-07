@@ -32,6 +32,19 @@
   /** Default 7/10 — more sensitive than legacy fixed 0.016 (fewer false cutoffs) */
   const DEFAULT_SENS = 7;
 
+  /**
+   * The analyser's frame: about 43 ms of samples at 44.1 kHz and up, 2048 at
+   * 44.1–48 kHz, 4096 at 88.2–96 and 8192 at 176.4–192 (never fewer than 2048,
+   * so longer at lower rates). A 96 kHz interface's 2048 samples last only
+   * 21 ms: a fan's level wobbles 5 dB from one frame to the next, and two
+   * periods of a low male voice no longer fit in it.
+   */
+  function frameSize(sampleRate) {
+    let n = 2048;
+    while (n < 32768 && n < (sampleRate || 48000) * 0.04) n *= 2;
+    return n;
+  }
+
   class PracticeEngine {
     constructor() {
       this.running = false;
@@ -405,7 +418,7 @@
       this.inputGain = this.audioCtx.createGain();
       this.inputGain.gain.value = this._gainFromSens(this.sensitivity);
       this.analyser = this.audioCtx.createAnalyser();
-      this.analyser.fftSize = 2048;
+      this.analyser.fftSize = frameSize(this.audioCtx.sampleRate);
       this.analyser.smoothingTimeConstant = 0.12;
       // WebKit can throw/hang if stream was produced by a different AudioContext
       try {
@@ -585,6 +598,13 @@
       return null;
     }
 
+    _clarity(buf, sampleRate) {
+      if (global.VTPitchUtils && global.VTPitchUtils.clarity) {
+        return global.VTPitchUtils.clarity(buf, sampleRate);
+      }
+      return null;
+    }
+
     _maybeEndHold(force) {
       if (!this.holdStart) return;
       const now = performance.now();
@@ -617,6 +637,7 @@
       const sampleRate = this.audioCtx.sampleRate || 48000;
       const bandHf = this._bandHf(sampleRate);
       let freq = this._detectPitch(this.buf, sampleRate);
+      const clarity = this._clarity(this.buf, sampleRate);
       const now = performance.now();
 
       // Manual assist (Space): key down OR post-keyup grace (a11y continuous count)
@@ -753,12 +774,19 @@
            */
           sounding: manual || rms >= holdRms || (hasPitch && rms >= holdRms * 0.55),
           rawFreq: manual && manualKind === "air" ? null : hasPitch ? freq : null,
+          /**
+           * How periodic the mic's own samples are, 0–1, at any level (null
+           * without VTPitchUtils): a voice or a hum near 1, a fan or a hiss
+           * under 0.5. `rawFreq` cannot tell them apart: it is null under
+           * −40 dBFS, and above it noise gets a pitch too.
+           */
+          clarity,
           voiceRmsThreshold: voiceRms,
           holdRmsThreshold: holdRms,
           /** The input gain the MIC slider applies: rms / inputGain is the level the slider does not move. */
           inputGain: this.inputGain ? this.inputGain.gain.value : 1,
           processedInput: !!this.processedInput,
-          /** Time-domain samples of this frame; valid only during the callback. */
+          /** Time-domain samples of this frame (about 43 ms at 44.1 kHz and up); valid only during the callback. */
           buf: this.buf,
           sampleRate
         });
@@ -768,6 +796,7 @@
     }
   }
 
+  PracticeEngine.frameSize = frameSize;
   global.VTPracticeEngine = PracticeEngine;
   global.VT_HOLD_MIN_SEC = HOLD_MIN_SEC;
   global.VT_HOLD_GRACE_MS = HOLD_GRACE_MS;

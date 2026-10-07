@@ -4,9 +4,12 @@
  * prompt.
  *
  * Shape, and why:
- *  - The home tour is four steps. Long tours are abandoned, and everything the
- *    old twelve steps narrated about the practice screen is better said on the
- *    practice screen, which is what the exercise packs do.
+ *  - The site tour ("Recorrido") is five stops, one per place: Practicar, the
+ *    exercise screen, Plan, Historial, then the account and help in the
+ *    header. Each stop opens its page, without an address of its own, and the
+ *    tour puts the page back when it ends. Long tours are abandoned, so each
+ *    stop is one card; the detail of the exercise screen is said there, by
+ *    its own short help ("Ayuda"), which never opens inside a routine.
  *  - It does not open itself by default. The start panel offers it; the
  *    `tour_shape_2026_10` experiment (js/experiments-config.js) can put a share
  *    of visitors on the old auto-start behaviour to compare.
@@ -27,6 +30,8 @@
   const UI_SEEN_KEY = "vt_ui_tour_seen_v1";
   const MIC_PRIMED_KEY = "vt_mic_primed_v1";
   const AUTO_KEY = "vt_tour_auto_v1";
+  /** "1" once someone pressed "Saltar ayuda" on an exercise's help: no more automatic help. */
+  const UI_OFF_KEY = "vt_ui_tour_off_v1";
   const EXPERIMENT = "tour_shape_2026_10";
 
   /** Widths at or under this get the bottom-sheet card; CSS owns its position. */
@@ -139,123 +144,156 @@
     return !!readUiSeen()[family];
   }
 
+  function uiOff() {
+    try {
+      return localStorage.getItem(UI_OFF_KEY) === "1";
+    } catch {
+      return false;
+    }
+  }
+
+  function setUiOff() {
+    try {
+      localStorage.setItem(UI_OFF_KEY, "1");
+    } catch {
+      /* ignore */
+    }
+  }
+
   /* ── Steps ────────────────────────────────────────────────────────────── */
 
   /**
-   * Home tour. Four steps, all on the home view, all pointing at something in
-   * the first screen of a cold visit.
-   *
-   * The order follows the page: the recommended exercise first, because that is
-   * the single decision the start panel was built to present, then the two
-   * quieter ways in, then where everything else lives. The catalog narration
-   * the old tour led with pointed below the fold and is now the guide's job.
+   * The site tour: one stop per place, in the order a first session meets
+   * them. The first stop rings today's start (the track choice and the button,
+   * or the button and the routine sizes); the exercise stop opens the exercise
+   * that button leads to; the last turns the end of the tour into the first
+   * practice ("Empezar mis 3 min"), with "Ahora no" beside it.
    */
   function homeSteps() {
-    // A first visit shows what to train and today's basics (js/daily-loop.js),
-    // not an exercise that changes with every save.
     const first = document.body.classList.contains("loop-first");
+    const loopOn = !first && !!global.VTApp?.loopDrewPanel?.();
+    const phone = isVisible(document.getElementById("btn-more"));
+    // Historial before any practice is an empty page: its card says what will
+    // fill it instead of describing marked days nobody can see.
+    const histEmpty = (() => {
+      try {
+        const S = global.VTStorage;
+        const n = (o) => (Array.isArray(o) ? o.length : Object.keys(o || {}).length);
+        return !!S && !n(S.getProgress?.()) && !n(S.getDays?.()?.days ?? S.getDays?.());
+      } catch {
+        return false;
+      }
+    })();
     return [
       {
-        id: "welcome",
-        titleKey: "tour.s1.title",
-        bodyKey: "tour.s1.body",
-        target: null,
-        place: "center"
+        id: "practice",
+        view: "home",
+        placeKey: "tour.place.practice",
+        titleKey: first ? "tour.practice.titleFirst" : loopOn ? "tour.practice.titleLoop" : "tour.practice.title",
+        bodyKey: first ? "tour.practice.bodyFirst" : loopOn ? "tour.practice.bodyLoop" : "tour.practice.body",
+        target: ["#track-pick", "#next-step-card"],
+        also: ["#next-step-card", "#loop-tiers", "#btn-more-ways", "#start-alt"],
+        place: "right",
+        guideAnchor: "basicos"
       },
       {
-        id: "nextstep",
-        titleKey: first ? "tour.s2first.title" : "tour.s2b.title",
-        bodyKey: first ? "tour.s2first.body" : "tour.s2b.body",
-        target: first ? "#track-pick" : "#next-step-card",
-        place: "bottom",
-        guideAnchor: "inicio"
+        id: "exercise",
+        view: "exercise",
+        placeKey: "tour.place.exercise",
+        titleKey: "tour.exercise.title",
+        bodyKey: "tour.exercise.body",
+        target: "#btn-practice-start",
+        also: ["#opt-auto-record"],
+        place: "top",
+        guideAnchor: "practica"
       },
       {
-        id: "session",
-        titleKey: "tour.s5.title",
-        bodyKey: "tour.s5.body",
-        // The row, or the "Otras formas de practicar" toggle it folds behind
-        // once the daily loop owns the panel.
-        target: "#more-ways",
+        id: "plan",
+        view: "plan",
+        placeKey: "tour.place.plan",
+        titleKey: "tour.plan.title",
+        bodyKey: "tour.plan.body",
+        target: "#plan-week-num",
+        also: ["#plan-week-rail", "#plan-pick", "#element-chips", "#plan-focus-more", "#plan-start-row"],
         place: "bottom",
-        guideAnchor: "rutas"
+        guideAnchor: "plan"
       },
       {
-        id: "nav",
-        titleKey: "tour.s6.title",
-        bodyKey: "tour.s6.body",
-        target: ".header-actions",
+        id: "history",
+        view: "history",
+        placeKey: "tour.place.history",
+        titleKey: "tour.history.title",
+        bodyKey: histEmpty ? "tour.history.bodyEmpty" : "tour.history.body",
+        target: [".hist-cal", "#history-list"],
         place: "bottom",
-        // The header carries Plan, History, Pro and Account. Sending this step
-        // to the guide's introduction, which is where step 1 already goes, told
-        // a reader who clicked it nothing about the buttons it just described.
         guideAnchor: "guardar"
+      },
+      {
+        id: "more",
+        view: "home",
+        placeKey: "tour.place.more",
+        titleKey: "tour.more.title",
+        bodyKey: phone ? "tour.more.bodyPhone" : "tour.more.body",
+        target: ".header-door",
+        also: ["#btn-more", "#header-utils"],
+        place: "bottom",
+        guideAnchor: "pro",
+        handoff: true
       }
     ];
   }
 
   /**
-   * Exercise UI packs — only steps whose targets are really on screen run.
-   * Families: highway | speech | hold
+   * Exercise help ("Ayuda"), per kind of screen: three or four cards, each
+   * naming a control by what it does, never by where it sits (a phone stacks
+   * what a desktop puts in corners). Only steps whose targets are on screen
+   * run. Families: highway | speech | hold
    */
   function packSteps(family) {
-    const common = [
-      {
-        id: "ex-mic",
-        titleKey: "uiTour.mic.title",
-        bodyKey: "uiTour.mic.body",
-        target: "#mic-sens-hud",
-        place: "top",
-        requireVisible: true,
-        guideAnchor: "micro"
-      },
-      {
-        id: "ex-guide",
-        titleKey: "uiTour.guide.title",
-        bodyKey: "uiTour.guide.body",
-        target: ".guide-card",
-        place: "top",
-        requireVisible: true,
-        scrollTarget: true,
-        guideAnchor: "practica"
-      }
-    ];
+    // Speaking exercises have no piano, so their card does not mention one.
+    const ex = global.VTApp?.getState?.()?.exercise;
+    const piano = !!ex?.audio?.piano;
+    // One that records every take shows ⏺ Grabarme ticked and fixed: the card
+    // does not ask the learner to tick it
+    const always = !!(ex?.practice?.autoRecord && ex?.audio?.record);
+    const start = {
+      id: "ex-start",
+      titleKey: "uiTour.start.title",
+      bodyKey: piano
+        ? always
+          ? "uiTour.start.bodyPianoRec"
+          : "uiTour.start.bodyPiano"
+        : always
+          ? "uiTour.start.bodyRec"
+          : "uiTour.start.body",
+      target: "#btn-practice-start",
+      also: ["#opt-auto-record"],
+      place: "top",
+      requireVisible: true,
+      guideAnchor: "micro"
+    };
+    const guide = {
+      id: "ex-guide",
+      titleKey: "uiTour.guide.title",
+      bodyKey: "uiTour.guide.body",
+      target: ["#stage-guide", ".guide-card"],
+      place: "top",
+      requireVisible: true,
+      scrollTarget: true,
+      guideAnchor: "trucos"
+    };
 
     if (family === "highway") {
       return [
-        {
-          id: "hw-intro",
-          titleKey: "uiTour.hw.intro.title",
-          bodyKey: "uiTour.hw.intro.body",
-          target: "#practice-cockpit",
-          place: "bottom",
-          requireVisible: true,
-          guideAnchor: "practica"
-        },
         {
           id: "hw-canvas",
           titleKey: "uiTour.hw.canvas.title",
           bodyKey: "uiTour.hw.canvas.body",
           target: "#pitch-canvas",
+          trim: [".hud-bottom-rail"],
           place: "bottom",
           requireVisible: true,
           guideAnchor: "autopista"
-        },
-        {
-          id: "hw-top",
-          titleKey: "uiTour.hw.top.title",
-          bodyKey: "uiTour.hw.top.body",
-          target: "#hud-top-rail",
-          place: "bottom",
-          requireVisible: true
-        },
-        {
-          id: "hw-prog",
-          titleKey: "uiTour.hw.prog.title",
-          bodyKey: "uiTour.hw.prog.body",
-          target: "#hud-prog-bar",
-          place: "bottom",
-          requireVisible: true
         },
         {
           id: "hw-score",
@@ -266,10 +304,19 @@
           requireVisible: true,
           guideAnchor: "numeros"
         },
-        // Eight pitch exercises also log sustained notes. They show the hold
-        // readout and the hold strip on screen, and before this the highway
-        // pack never named either — detectUiFamily answers "highway" for all
-        // of them, so the hold pack below never ran for anybody.
+        // Chord exercises only: the sequence and what the piano plays of it
+        {
+          id: "hw-prog",
+          titleKey: "uiTour.hw.prog.title",
+          bodyKey: "uiTour.hw.prog.body",
+          target: "#hud-prog-bar",
+          place: "bottom",
+          requireVisible: true,
+          guideAnchor: "autopista"
+        },
+        // Eight pitch exercises also log sustained notes and show the hold
+        // readout; detectUiFamily answers "highway" for them, so the counter
+        // is explained here (filterSteps drops it where it is not shown).
         {
           id: "hw-hold",
           titleKey: "uiTour.hold.live.title",
@@ -280,14 +327,6 @@
           guideAnchor: "numeros"
         },
         {
-          id: "hw-start",
-          titleKey: "uiTour.start.title",
-          bodyKey: "uiTour.start.body",
-          target: "#btn-practice-start",
-          place: "top",
-          requireVisible: true
-        },
-        {
           id: "hw-oct",
           titleKey: "uiTour.hw.oct.title",
           bodyKey: "uiTour.hw.oct.body",
@@ -295,43 +334,12 @@
           place: "top",
           requireVisible: true
         },
-        {
-          id: "hw-mode",
-          titleKey: "uiTour.hw.mode.title",
-          bodyKey: "uiTour.hw.mode.body",
-          target: "#sel-play-mode",
-          place: "bottom",
-          requireVisible: true
-        },
-        {
-          id: "hw-cue",
-          titleKey: "uiTour.hw.cue.title",
-          bodyKey: "uiTour.hw.cue.body",
-          target: "#mode-cue",
-          place: "top",
-          requireVisible: true
-        },
-        ...common,
-        {
-          id: "hw-done",
-          titleKey: "uiTour.done.title",
-          bodyKey: "uiTour.done.body",
-          target: null,
-          place: "center"
-        }
+        start
       ];
     }
 
     if (family === "hold") {
       return [
-        {
-          id: "hold-intro",
-          titleKey: "uiTour.hold.intro.title",
-          bodyKey: "uiTour.hold.intro.body",
-          target: "#practice-cockpit",
-          place: "bottom",
-          requireVisible: true
-        },
         {
           id: "hold-live",
           titleKey: "uiTour.hold.live.title",
@@ -341,15 +349,7 @@
           requireVisible: true,
           guideAnchor: "numeros"
         },
-        {
-          id: "hold-start",
-          titleKey: "uiTour.start.title",
-          bodyKey: "uiTour.start.body",
-          target: "#btn-practice-start",
-          place: "top",
-          requireVisible: true
-        },
-        ...common,
+        start,
         {
           id: "hold-block",
           titleKey: "uiTour.hold.block.title",
@@ -357,28 +357,13 @@
           target: "#hold-block",
           place: "top",
           requireVisible: true
-        },
-        {
-          id: "hold-done",
-          titleKey: "uiTour.done.title",
-          bodyKey: "uiTour.done.body",
-          target: null,
-          place: "center"
         }
       ];
     }
 
-    // speech / generic non-pitch
+    // Everything without a pitch lane: speaking, and singing such as lip
+    // trills. The copy says what to do, not which track this is.
     return [
-      {
-        id: "sp-intro",
-        titleKey: "uiTour.sp.intro.title",
-        bodyKey: "uiTour.sp.intro.body",
-        target: "#practice-cockpit",
-        place: "bottom",
-        requireVisible: true,
-        guideAnchor: "practica"
-      },
       {
         id: "sp-focus",
         titleKey: "uiTour.sp.focus.title",
@@ -387,24 +372,11 @@
         // the stage's height, so a card could not sit clear of it
         target: "#mode-focus-panel",
         place: "bottom",
-        requireVisible: true
+        requireVisible: true,
+        guideAnchor: "practica"
       },
-      {
-        id: "sp-start",
-        titleKey: "uiTour.start.title",
-        bodyKey: "uiTour.start.body",
-        target: "#btn-practice-start",
-        place: "top",
-        requireVisible: true
-      },
-      ...common,
-      {
-        id: "sp-done",
-        titleKey: "uiTour.done.title",
-        bodyKey: "uiTour.done.body",
-        target: null,
-        place: "center"
-      }
+      start,
+      guide
     ];
   }
 
@@ -435,8 +407,62 @@
   function filterSteps(list) {
     return (list || []).filter((step) => {
       if (!step.target) return true;
-      return isVisible(document.querySelector(step.target));
+      // A stop on another page is checked when it opens that page.
+      if (step.view) return true;
+      return !!resolveTarget(step);
     });
+  }
+
+  /** The first of a step's targets that is on screen (a step may name fallbacks). */
+  function resolveTarget(step) {
+    for (const sel of [].concat(step.target || [])) {
+      const el = document.querySelector(sel);
+      if (isVisible(el)) return el;
+    }
+    return null;
+  }
+
+  /**
+   * The area a step points at: its target plus the neighbours it names in
+   * `also` ("Empezar" with "Grabarme", the account door with "Más"), so one
+   * ring holds what the card talks about. Neighbours join in order, and only
+   * while the ring still fits beside the card: on a phone the returning
+   * visitor's week card sits between the routine sizes and "Otras formas de
+   * practicar", and a ring around all of it pushed Empezar under the header.
+   */
+  function targetRect(step, el) {
+    let { left, top, right, bottom } = el.getBoundingClientRect();
+    const sheet = window.innerWidth <= SHEET_MAX_W;
+    const fit = window.innerHeight * (sheet ? 0.45 : MAX_SPOT_FRACTION);
+    for (const sel of step.also || []) {
+      const o = document.querySelector(sel);
+      if (!o || o === el || !isVisible(o)) continue;
+      const b = o.getBoundingClientRect();
+      const t = Math.min(top, b.top);
+      const btm = Math.max(bottom, b.bottom);
+      if (btm - t > fit) {
+        // Left out, so keep the ring (8px out from what it holds) off it: its
+        // edge sliced through "Ver otros 12" under the Plan's chips.
+        if (b.top >= bottom) bottom = Math.max(top + 1, Math.min(bottom, b.top - 12));
+        else if (b.bottom <= top) top = Math.min(bottom - 1, Math.max(top, b.bottom + 12));
+        break;
+      }
+      left = Math.min(left, b.left);
+      top = t;
+      right = Math.max(right, b.right);
+      bottom = btm;
+    }
+    // Controls laid over the target (the exercise's bottom rail sits on the
+    // lane on a phone) are cut off the ring, so it holds only what the card names.
+    for (const sel of step.trim || []) {
+      const o = document.querySelector(sel);
+      if (!o || !isVisible(o)) continue;
+      const b = o.getBoundingClientRect();
+      if (b.bottom <= top || b.top >= bottom || b.right <= left || b.left >= right) continue;
+      if (b.top + b.height / 2 > (top + bottom) / 2) bottom = Math.max(top + 1, Math.min(bottom, b.top));
+      else top = Math.min(bottom - 1, Math.max(top, b.bottom));
+    }
+    return new DOMRect(left, top, right - left, bottom - top);
   }
 
   /* ── Overlay ──────────────────────────────────────────────────────────── */
@@ -468,9 +494,9 @@
         <div class="tour-progress" data-tour-progress role="status"></div>
         <h3 id="tour-title" tabindex="-1" data-tour-title></h3>
         <p class="tour-body" id="tour-body" data-tour-body></p>
+        <a class="tour-guide-link" data-tour-guide href="guide.html" target="_blank" rel="noopener"></a>
         <div class="tour-actions">
-          <button type="button" class="btn btn-ghost btn-sm" data-tour-skip></button>
-          <a class="btn btn-ghost btn-sm tour-guide-link" data-tour-guide href="guide.html" target="_blank" rel="noopener"></a>
+          <button type="button" class="btn btn-ghost btn-sm tour-skip" data-tour-skip></button>
           <div class="tour-nav">
             <button type="button" class="btn btn-sm" data-tour-prev></button>
             <button type="button" class="btn btn-primary btn-sm" data-tour-next></button>
@@ -492,11 +518,13 @@
       prev: root.querySelector("[data-tour-prev]"),
       next: root.querySelector("[data-tour-next]")
     };
-    ui.skip.addEventListener("click", () => end("skip"));
+    // On the tour's last stop the quiet button is "Ahora no": the person has
+    // seen every stop, so it counts as finished, it just does not start.
+    ui.skip.addEventListener("click", () => end(isHandoff() ? "complete" : "skip"));
     ui.close.addEventListener("click", () => end("skip"));
     ui.prev.addEventListener("click", () => go(index - 1));
     ui.next.addEventListener("click", () => {
-      if (index >= stepList.length - 1) end("complete");
+      if (index >= stepList.length - 1) end("complete", { start: isHandoff() });
       else go(index + 1);
     });
     ui.guide.addEventListener("click", () => {
@@ -573,7 +601,8 @@
     const home = document.getElementById("view-home");
     const ex = document.getElementById("view-exercise");
     if (home && !home.classList.contains("active")) {
-      document.getElementById("btn-back-home")?.click();
+      if (global.VTApp?.goHome) global.VTApp.goHome();
+      else document.getElementById("btn-back-home")?.click();
       const leave = document.getElementById("leave-cancel");
       if (leave && !document.getElementById("leave-modal")?.hidden) leave.click();
       home.classList.add("active");
@@ -634,12 +663,24 @@
    * target — which is how the step explaining the play-mode select covered it
    * completely.
    */
+  /**
+   * Height of anything pinned over the bottom of the screen that the card must
+   * clear: the statistics question shown in the EEA sits above every layer, so
+   * a phone's bottom sheet under it had its buttons covered.
+   */
+  function bottomInset() {
+    const bar = document.querySelector("[data-region-consent]");
+    if (!bar || !isVisible(bar)) return 0;
+    const r = bar.getBoundingClientRect();
+    return r.height > 0 && r.bottom >= window.innerHeight - 1 ? Math.ceil(r.height) : 0;
+  }
+
   function placeCard(step, r) {
     const u = ui;
     const cw = u.card.offsetWidth;
     const ch = u.card.offsetHeight;
     const vw = window.innerWidth;
-    const vh = window.innerHeight;
+    const vh = window.innerHeight - bottomInset();
     const M = 12;
     const GAP = 12;
 
@@ -732,9 +773,11 @@
     hideSpot();
 
     const sheet = window.innerWidth <= SHEET_MAX_W;
-    const el = step.target ? document.querySelector(step.target) : null;
+    const el = step.target ? resolveTarget(step) : null;
+    const inset = bottomInset();
+    u.card.style.setProperty("--tour-sheet-bottom", `${inset + 16}px`);
 
-    if (!step.target || step.place === "center" || !isVisible(el)) {
+    if (!el || step.place === "center") {
       // A step with no target is about the page as a whole, so it should open
       // against the top of it. Replaying from the bottom used to put "Welcome
       // to your voice studio" over the reminder settings.
@@ -744,26 +787,38 @@
     }
 
     el.classList.add("tour-highlight");
-    // Instant, not smooth: every measurement below is taken straight after
-    // this, and a smooth scroll is still moving when they are read.
-    if (scroll) {
+    // On a desktop a ring already in full view stays put: scrolling it to the
+    // middle anyway moved the page under people for nothing. Otherwise: instant,
+    // not smooth, since every measurement below is taken straight after this,
+    // and a smooth scroll is still moving when they are read.
+    const inView = (() => {
+      const b = targetRect(step, el);
+      return b.top >= stickyBottom() + 4 && b.bottom <= window.innerHeight - inset - 4;
+    })();
+    if (scroll && (sheet || !inView)) {
       el.scrollIntoView({ behavior: "auto", block: "center", inline: "nearest" });
       // scrollIntoView cannot centre a target near the end of the page, so it
       // can leave it under the sticky header — which on the practice screen is
       // exactly what happened to the top-rail step: the ring was drawn around a
       // rail whose first line the header was covering.
-      const under = stickyBottom() - el.getBoundingClientRect().top;
+      const under = stickyBottom() - targetRect(step, el).top;
       if (under > 0) window.scrollBy({ top: -under - 8, behavior: "auto" });
     }
 
-    let r = el.getBoundingClientRect();
-    const vh = window.innerHeight;
+    let r = targetRect(step, el);
+    const vh = window.innerHeight - inset;
     const vw = window.innerWidth;
 
     // On a phone the card is a bottom sheet positioned by CSS; JS only decides
     // whether a spotlight is worth drawing.
     if (!sheet) {
-      const placed = placeCard(step, r);
+      let placed = placeCard(step, r);
+      if (!placed && scroll && inView) {
+        // No room beside it where it stands: centre it after all, and retry.
+        el.scrollIntoView({ behavior: "auto", block: "center", inline: "nearest" });
+        r = targetRect(step, el);
+        placed = placeCard(step, r);
+      }
       if (!placed) centerCard();
     } else {
       u.card.classList.remove("tour-card-center");
@@ -836,40 +891,86 @@
     document.body.classList.add("tour-spot-on");
   }
 
+  /** Is the open step the site tour's last stop, whose button starts practice? */
+  function isHandoff() {
+    return !currentPack && !!stepList[index]?.handoff && index === stepList.length - 1;
+  }
+
+  /** The last stop's button: the same practice the start panel's button begins. */
+  function handoffLabel() {
+    if (document.body.classList.contains("loop-first")) {
+      const track = global.VTApp?.getState?.()?.tab === "vocal" ? "vocal" : "singing";
+      const r = global.VTLoop?.routine?.(track, "min");
+      const min = r ? Math.max(1, Math.round(r.totalSec / 60)) : 3;
+      return t("tour.ctaFirst", { min: String(min) });
+    }
+    return t(global.VTApp?.loopDrewPanel?.() ? "tour.ctaLoop" : "tour.cta");
+  }
+
+  /**
+   * Open the page a stop is about. Resolves when it has laid out; the card is
+   * kept out of sight meanwhile, or it would point at the page being left.
+   */
+  function enterView(step) {
+    if (currentPack || !step.view || !global.VTApp?.tourShow) return null;
+    const now = global.VTApp.getState?.()?.view;
+    const sameExercise = step.view === "exercise" && now === "exercise";
+    if (now === step.view && !sameExercise) return null;
+    clearHighlight();
+    hideSpot();
+    ui.card.classList.add("tour-card-moving");
+    // On a new page the ring appears where its target is; sliding over from
+    // where it stood on the last page would point at nothing on the way.
+    ui.spot.classList.add("tour-spot-jump");
+    return global.VTApp.tourShow(step.view);
+  }
+
   function render() {
     const step = stepList[index];
     if (!step) return end("complete");
     const u = ensureUI();
     prepare(step);
+    const last = index >= stepList.length - 1;
+    const handoff = isHandoff();
     // Copy is written synchronously: beginTour unhides the popover before this
     // runs, so deferring the text showed an empty card for two frames.
     u.title.textContent = t(step.titleKey);
     u.body.textContent = t(step.bodyKey);
-    u.progress.textContent = t("tour.progress", {
-      n: String(index + 1),
-      total: String(stepList.length)
-    });
-    u.close.setAttribute("aria-label", t("tour.close"));
-    u.skip.textContent = t("tour.skip");
+    const nums = { n: String(index + 1), total: String(stepList.length) };
+    u.progress.textContent = step.placeKey
+      ? t("tour.progressPlace", { ...nums, place: t(step.placeKey) })
+      : t("tour.progress", nums);
+    u.close.setAttribute("aria-label", t(currentPack ? "tour.closeHelp" : "tour.close"));
+    u.skip.textContent = handoff ? t("tour.notNow") : t(currentPack ? "tour.skipHelp" : "tour.skip");
     u.prev.textContent = t("tour.prev");
     u.guide.textContent = t("tour.guideLink");
     u.guide.href = guideHref(step.guideAnchor);
-    u.next.textContent = index >= stepList.length - 1 ? t("tour.finish") : t("tour.next");
+    u.next.textContent = handoff ? handoffLabel() : last ? t("tour.finish") : t("tour.next");
+    u.card.classList.toggle("tour-handoff", handoff);
     u.prev.disabled = index === 0;
     u.prev.setAttribute("aria-disabled", String(index === 0));
+    // Nothing to go back to on the first card: out of sight, but its place kept.
+    u.prev.style.visibility = index === 0 ? "hidden" : "";
     track("tour_step", { pack: currentPack, stepId: step.id, n: index + 1, total: stepList.length });
+    const ready = enterView(step);
     // Placement waits for layout to settle after prepare()'s scroll, and reads
     // the card's real height — the old estimate was written before the copy.
-    requestAnimationFrame(() => {
+    Promise.resolve(ready).then(() => {
+      if (!active || stepList[index] !== step) return;
       requestAnimationFrame(() => {
-        positionStep(step);
-        // Focus the heading, not Next: an AT user used to hear "Next, button"
-        // on every step and never the step itself.
-        try {
-          u.title.focus({ preventScroll: true });
-        } catch {
-          u.title.focus();
-        }
+        requestAnimationFrame(() => {
+          if (!active || stepList[index] !== step) return;
+          positionStep(step);
+          u.card.classList.remove("tour-card-moving");
+          requestAnimationFrame(() => u.spot.classList.remove("tour-spot-jump"));
+          // Focus the heading, not Next: an AT user used to hear "Next, button"
+          // on every step and never the step itself.
+          try {
+            u.title.focus({ preventScroll: true });
+          } catch {
+            u.title.focus();
+          }
+        });
       });
     });
   }
@@ -939,7 +1040,18 @@
   }
 
   function start(fromButton) {
-    beginTour(homeSteps(), { fromButton: !!fromButton, pack: null, stay: false });
+    const go = () => beginTour(homeSteps(), { fromButton: !!fromButton, pack: null, stay: false });
+    // The header's tour can be pressed on an exercise. Leave it the way its own
+    // back button does first, so the mic, the piano, the timer and the
+    // recorder stop, and practice worth keeping asks before it goes. Staying
+    // ("Seguir practicando", "Puntuar ahora") starts no tour.
+    if (fromButton && global.VTApp?.getState?.()?.view === "exercise" && global.VTApp.goHome) {
+      Promise.resolve(global.VTApp.goHome()).then((left) => {
+        if (left !== false) go();
+      });
+      return;
+    }
+    go();
   }
 
   /**
@@ -977,13 +1089,18 @@
   function maybeExerciseTour(profile) {
     if (shouldBlockAuto()) return;
     if (active) return;
-    // Somebody who skipped the home tour does not want coach-marks either.
-    if (!finished()) return;
+    // Somebody who skipped the site tour does not want help opening by itself
+    // either, nor somebody who pressed "Saltar ayuda" on an exercise.
+    if (!finished() || uiOff()) return;
+    // Never inside a routine (today's basics, a guided session): it would
+    // stop a three-minute practice for a pack of cards. "Ayuda" is there.
+    if (global.VTApp?.getState?.()?.structured) return;
     const family = detectUiFamily(profile);
     if (isUiSeen(family)) return;
     setTimeout(() => {
       if (active) return;
       if (!document.body.classList.contains("view-exercise")) return;
+      if (global.VTApp?.getState?.()?.structured) return;
       startUiPack(family, { force: false });
     }, 700);
   }
@@ -994,7 +1111,7 @@
    *   finished. `false` closes without recording anything, for a replay that
    *   is being restarted.
    */
-  function end(reason) {
+  function end(reason, opts = {}) {
     const pack = currentPack;
     const stay = stayOnEnd;
     const step = stepList[index];
@@ -1017,13 +1134,22 @@
         n: index + 1,
         total: stepList.length
       });
-      if (pack) markUiSeen(pack);
-      else writeState(reason === "complete" ? "finished" : "dismissed");
+      if (pack) {
+        markUiSeen(pack);
+        // "Saltar ayuda": no more help opening by itself, on any exercise.
+        if (reason !== "complete") setUiOff();
+      } else writeState(reason === "complete" ? "finished" : "dismissed");
     }
     currentPack = null;
     stayOnEnd = false;
     stepList = [];
-    if (!stay) restorePlace();
+    if (opts.start) {
+      // The last stop's button: today's practice, from Practicar's own button.
+      resumeAt = null;
+      Promise.resolve(global.VTApp?.tourShow?.("home")).then(() => {
+        document.getElementById("btn-next-step")?.click();
+      });
+    } else if (!stay) restorePlace();
     // The start panel's invitation is built once and only re-read when the
     // panel re-renders, so without this the page the tour drops you back onto
     // is still asking whether you would like a tour.
@@ -1039,7 +1165,9 @@
     const at = resumeAt;
     resumeAt = null;
     if (at && at.view && at.view !== "exercise") {
-      global.VTApp?.setView?.(at.view);
+      // Silently: the stops never wrote an address, so the page's own is still right.
+      if (global.VTApp?.tourShow) global.VTApp.tourShow(at.view);
+      else global.VTApp?.setView?.(at.view);
     } else {
       goHome();
     }
@@ -1099,6 +1227,9 @@
 
   /* ── Microphone primer ────────────────────────────────────────────────── */
 
+  /** Closes the open primer without an answer; null while none is open. */
+  let closePrimer = null;
+
   function micPrimed() {
     try {
       return localStorage.getItem(MIC_PRIMED_KEY) === "1";
@@ -1134,8 +1265,13 @@
     const opener = document.activeElement;
     // One string for every exercise was wrong for about half of them: it
     // promised a piano and a pitch readout, and the exercise the home page's
-    // own first-practice button opens has neither. Say what is true here.
-    const bodyKey = opts.piano ? "tour.mic.bodyPiano" : "tour.mic.body";
+    // own first-practice button opens has neither. Say what is true here:
+    // a paced exercise (opts.pacer) runs without the microphone too.
+    const bodyKey = opts.piano
+      ? "tour.mic.bodyPiano"
+      : opts.pacer
+        ? "tour.mic.bodyPacer"
+        : "tour.mic.body";
     let modal = document.getElementById("mic-primer");
     if (!modal) {
       modal = document.createElement("div");
@@ -1155,6 +1291,7 @@
       document.body.appendChild(modal);
     }
     const close = () => {
+      closePrimer = null;
       modal.hidden = true;
       document.body.classList.remove("modal-open");
       window.VTFocusTrap?.release(modal);
@@ -1191,8 +1328,19 @@
     modal.hidden = false;
     document.body.classList.add("modal-open");
     document.addEventListener("keydown", onPrimerKey);
+    closePrimer = close;
     track("mic_primer_show", {});
     window.VTFocusTrap?.activate(modal, { initialFocus: ok, returnFocus: opener });
+  }
+
+  /**
+   * Close the primer without taking it as an answer, for when the page under it
+   * changes (the browser's Back). It is not a "no": nothing is stored, so the
+   * next Empezar asks again, and the "we won't ask again" toast is not shown on
+   * a page with no Empezar.
+   */
+  function closeMicPrimer() {
+    if (closePrimer) closePrimer();
   }
 
   /* ── Wiring ───────────────────────────────────────────────────────────── */
@@ -1277,6 +1425,7 @@
     markUiSeen,
     needsMicPrimer,
     showMicPrimer,
+    closeMicPrimer,
     guideHref
   };
 

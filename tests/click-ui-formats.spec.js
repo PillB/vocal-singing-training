@@ -151,7 +151,7 @@ async function openByMouse(page, id) {
   }
   const card = await page.evaluate((num) => {
     for (const c of document.querySelectorAll("#exercise-list .card-ex")) {
-      if (c.querySelector(".num")?.textContent?.trim() === String(num)) {
+      if (c.dataset.num === String(num)) {
         c.scrollIntoView({ block: "center", behavior: "instant" });
         const r = c.getBoundingClientRect();
         return { x: r.left + r.width / 2, y: r.top + r.height / 2 };

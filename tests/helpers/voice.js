@@ -40,4 +40,63 @@ async function stopVoice(page) {
   await page.evaluate(() => window.__VTVoice && window.__VTVoice.stop());
 }
 
-module.exports = { useVoice, playVoice, stopVoice, voiceSource };
+/**
+ * A fan in the room: steady white noise at −50 dBFS mixed into the synthetic
+ * microphone from the first frame, loud enough to open the engine's gate at
+ * the default sensitivity (−36 dBFS after its gain). Pass it to
+ * page.addInitScript after useVoice(): it wraps the voice's getUserMedia.
+ * A `gain` of 0.00055 is a quiet room's hiss instead (−70 dBFS), which opens
+ * the gate only at sensitivity 10. `{ gain, hz, order }` is a fan's low
+ * rumble instead: the noise through `order` one-pole low-passes at `hz`, at
+ * the same level for the same gain. `hiss` adds the mic's own white hiss
+ * under it at that gain, and `seed` makes the noise the same every run.
+ */
+function fanInRoom(opts) {
+  const o = typeof opts === "number" ? { gain: opts } : opts || {};
+  const gum = navigator.mediaDevices.getUserMedia;
+  navigator.mediaDevices.getUserMedia = async (...args) => {
+    const stream = await gum.apply(navigator.mediaDevices, args);
+    const { dest } = window.__VTVoice.h.nodes();
+    if (!window.__fan) {
+      const ac = dest.context;
+      let seed = o.seed >>> 0;
+      const rnd = o.seed
+        ? () => {
+            seed = (seed * 1664525 + 1013904223) >>> 0;
+            return seed / 4294967296;
+          }
+        : Math.random;
+      const noise = (gain, hz, order) => {
+        const buf = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate);
+        const d = buf.getChannelData(0);
+        for (let i = 0; i < d.length; i++) d[i] = rnd() * 2 - 1;
+        if (hz) {
+          const lp = new Array(order || 1).fill(0);
+          let sq = 0;
+          for (let i = 0; i < d.length; i++) {
+            let v = d[i];
+            for (let j = 0; j < lp.length; j++) v = lp[j] += (v - lp[j]) * ((2 * Math.PI * hz) / ac.sampleRate);
+            d[i] = v;
+            sq += v * v;
+          }
+          // White noise's own level: an rms of 1/√3
+          const k = 1 / Math.sqrt((3 * sq) / d.length);
+          for (let i = 0; i < d.length; i++) d[i] *= k;
+        }
+        const src = ac.createBufferSource();
+        src.buffer = buf;
+        src.loop = true;
+        const g = ac.createGain();
+        g.gain.value = gain;
+        src.connect(g).connect(dest);
+        src.start();
+        return src;
+      };
+      window.__fan = noise(o.gain || 0.0055, o.hz, o.order);
+      if (o.hiss) noise(o.hiss);
+    }
+    return stream;
+  };
+}
+
+module.exports = { useVoice, playVoice, stopVoice, voiceSource, fanInRoom };

@@ -1,0 +1,72 @@
+{
+ "tasks": [
+  {
+   "id": "history",
+   "state": "home-returning-menu-c",
+   "vp": "phone",
+   "task": "Quieres ver qué practicaste los días anteriores y cómo te fue.",
+   "hit": [
+    "#btn-history"
+   ],
+   "near": [
+    "#loop-today"
+   ]
+  },
+  {
+   "id": "language",
+   "state": "home-returning-menu-c",
+   "vp": "phone",
+   "task": "Prefieres usar la aplicación en inglés.",
+   "hit": [
+    "#btn-lang"
+   ],
+   "near": [],
+   "via": [
+    "#btn-more"
+   ]
+  },
+  {
+   "id": "account",
+   "state": "home-returning-menu-c",
+   "vp": "phone",
+   "task": "Quieres guardar tu progreso en una cuenta para no perderlo si cambias de teléfono.",
+   "hit": [
+    "#btn-account"
+   ],
+   "near": []
+  },
+  {
+   "id": "price",
+   "state": "home-returning-menu-c",
+   "vp": "phone",
+   "task": "Quieres saber qué incluye la versión de pago y cuánto cuesta.",
+   "hit": [
+    "#btn-pricing",
+    "#btn-value-pro",
+    "#value-banner-cta"
+   ],
+   "near": [
+    "#btn-account"
+   ],
+   "via": [
+    "#btn-more"
+   ]
+  },
+  {
+   "id": "tour-again",
+   "state": "home-returning-menu-c",
+   "vp": "phone",
+   "task": "Quieres que la aplicación te vuelva a enseñar cómo funciona, paso a paso.",
+   "hit": [
+    "#btn-tour",
+    "[data-tour-invite-start]"
+   ],
+   "near": [
+    "a[href*='guide']"
+   ],
+   "via": [
+    "#btn-more"
+   ]
+  }
+ ]
+}

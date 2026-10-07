@@ -320,6 +320,38 @@ test.describe("EU rules only in the EU", () => {
     await ctx.close();
   });
 
+  test("the privacy page says the browser asks where it is, in both languages", async ({ browser }) => {
+    // The question to the worker is a request on page load from people who may
+    // never see a bar, and privacy.html lists when the browser writes to us.
+    // It was missing from that list.
+    const { ctx, page, sent } = await open(browser, {
+      timezoneId: "America/Lima",
+      locale: "es-ES",
+      geo: { ok: true, country: "PE", askFirst: false }
+    });
+    await page.waitForFunction(() => window.VTRegion.verdict() !== "pending");
+    expect(sent.geo).toBe(1);
+    // It goes on asking while no answer is stored, which is not the same as
+    // until the bar is answered: an answer lapses after six months, and a
+    // browser that turned statistics off is never shown the bar again.
+    const lapsed = Math.floor(Date.now() / 1000) - 200 * 86400;
+    const off = await open(browser, {
+      timezoneId: "Europe/Madrid",
+      locale: "es-ES",
+      storage: { vt_eu_consent_v1: JSON.stringify({ v: 1, a: "n", t: lapsed }), vt_analytics_optout_v1: "1" }
+    });
+    await off.page.waitForFunction(() => window.VTRegion.verdict() !== "pending");
+    expect(off.sent.geo).toBe(1);
+    await off.page.waitForTimeout(300);
+    await expect(off.page.locator(bar)).toHaveCount(0);
+    await off.ctx.close();
+    await page.goto(BASE + "/privacy.html");
+    const policy = (await page.locator("main").textContent()).replace(/\s+/g, " ");
+    expect(policy).toContain("desde qué país entras, mientras no haya una respuesta guardada a la pregunta de estadísticas");
+    expect(policy).toContain("which country you are visiting from, while no answer to the statistics question is stored");
+    await ctx.close();
+  });
+
   test("the browser's list of ask-first countries agrees with the worker's", async ({ browser }) => {
     // Two lists in two languages, and the worker's is the one that decides. If
     // they drift, a visitor is asked by one half and recorded by the other, so
@@ -477,6 +509,79 @@ test.describe("EU rules only in the EU", () => {
     // And it offers the way back in, so the choice is a switch rather than a
     // door that locks behind them.
     await expect(off).toHaveText("Allow again");
+    await ctx.close();
+  });
+
+  test("taking the yes back keeps nothing more on the device, and one press gives it again", async ({ browser }) => {
+    // What the visitor agreed to here is keeping statistics on the device, not
+    // only sending them (art. 5(3) is about storage). The footer's switch used
+    // to stop the sending alone: the yes stayed on record, the log went on
+    // growing across reloads, and the first experiment switched on would have
+    // minted a new A/B id. Taking the yes back has to leave what a no leaves.
+    const { ctx, page, sent } = await open(browser, { timezoneId: "Europe/Madrid", locale: "es-ES" });
+    await page.locator(`${bar} [data-region-accept]`).click();
+    const eventBatches = () => sent.batches.filter((b) => b && Array.isArray(b.events));
+    await expect.poll(() => eventBatches().length).toBeGreaterThan(0);
+    const stored = () =>
+      page.evaluate(() => ({ log: localStorage.getItem("vt_analytics_v1"), ab: localStorage.getItem("vt_ab_v1") }));
+    expect((await stored()).log).not.toBeNull();
+
+    const box = page.locator("footer.app-footer [data-privacy-switch]");
+    const btn = box.locator("[data-privacy-toggle]");
+    await expect(btn).toHaveText("No enviar y borrar lo enviado");
+    await btn.click();
+    expect(
+      await page.evaluate(() => window.VTAnalytics.track("practice_start", { exerciseId: "s4-lip-trills" }))
+    ).toBe("");
+    expect(await stored()).toEqual({ log: null, ab: null });
+    // Not even once an experiment is switched on.
+    await page.evaluate(() => {
+      window.VT_EXPERIMENTS.aa_2026_10.enabled = true;
+      window.VTExperiments.exposeOnce("aa_2026_10");
+    });
+    expect(await stored()).toEqual({ log: null, ab: null });
+    // The same state a press on Rechazar leaves, so it holds on the next visit.
+    expect(await page.evaluate(() => window.VTRegion.consent())).toBe("denied");
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => !!window.VTAnalytics && !!window.VTRegion);
+    await page.waitForTimeout(300);
+    expect(await stored()).toEqual({ log: null, ab: null });
+    await expect(page.locator(bar)).toHaveCount(0);
+
+    // One press brings it all back; a second, "Permitir estadísticas", would
+    // make "Volver a permitir" a button that allows nothing.
+    await expect(btn).toHaveText("Volver a permitir");
+    const before = eventBatches().length;
+    await btn.click();
+    expect(await page.evaluate(() => window.VTRegion.consent())).toBe("granted");
+    await expect(box.locator("[data-privacy-state]")).toHaveText("Este navegador envía estadísticas anónimas.");
+    await trackAndFlush(page);
+    await expect.poll(() => eventBatches().length).toBeGreaterThan(before);
+    expect((await stored()).log).not.toBeNull();
+    await ctx.close();
+  });
+
+  test("a yes taken back before the switch recorded it as a no is read as one", async ({ browser }) => {
+    // Browsers that pressed the footer's switch while it only stopped the
+    // sending carry both a yes to the bar and the opt-out. The opt-out is the
+    // later answer, so it is the one that holds.
+    const at = Math.floor(Date.now() / 1000);
+    const { ctx, page } = await open(browser, {
+      timezoneId: "Europe/Madrid",
+      locale: "es-ES",
+      storage: {
+        vt_eu_consent_v1: JSON.stringify({ v: 1, a: "y", t: at }),
+        vt_analytics_optout_v1: "1",
+        vt_analytics_v1: JSON.stringify({ events: [{ name: "app_open", props: {}, t: new Date().toISOString() }] }),
+        vt_ab_v1: JSON.stringify({ cid: "before-the-switch", seen: { aa_2026_10: "b" } })
+      }
+    });
+    await expect.poll(() => page.evaluate(() => window.VTRegion.consent())).toBe("denied");
+    // What a press on Rechazar leaves: no log and no A/B id.
+    expect(await page.evaluate(() => localStorage.getItem("vt_analytics_v1"))).toBeNull();
+    expect(await page.evaluate(() => localStorage.getItem("vt_ab_v1"))).toBeNull();
+    expect(await page.evaluate(() => window.VTAnalytics.track("practice_start", {}))).toBe("");
+    await expect(page.locator("footer.app-footer [data-privacy-toggle]")).toHaveText("Volver a permitir");
     await ctx.close();
   });
 

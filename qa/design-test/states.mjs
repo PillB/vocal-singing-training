@@ -83,6 +83,18 @@ async function singStepThenStop(p) {
 }
 
 /** A guided step, singing, held until the session's start and mode toasts have cleared. */
+/**
+ * A live start can land a few seconds late, so a fixed jump of the clock
+ * sometimes stops short of 00:00. Run on until the step-done card shows.
+ */
+async function untilStepDone(p) {
+  for (let i = 0; i < 6; i++) {
+    if (await p.locator("#step-done").isVisible().catch(() => false)) return;
+    await p.clock.runFor(5000);
+    await p.waitForTimeout(400);
+  }
+}
+
 async function guidedLiveClear(p) {
   await p.click("#btn-next-step");
   await p.waitForTimeout(700);
@@ -219,6 +231,80 @@ export const states = {
       await p.waitForTimeout(200);
       await p.clock.runFor(85000);
       await p.waitForTimeout(900);
+      await untilStepDone(p);
+    }
+  },
+  // Round 5: the step's time ran out and the learner pressed "Calificar este
+  // ejercicio" on the overlay. Then the same after one tap on a middle rating.
+  "step-rate": {
+    label: "sesión guiada, calificando el paso 1 cuando acabó su tiempo",
+    days: RET3,
+    action: async (p) => {
+      await p.click("#btn-next-step");
+      await p.waitForTimeout(700);
+      await p.click("#btn-practice-start").catch(() => {});
+      await p.clock.runFor(10000);
+      await p.waitForTimeout(200);
+      await p.clock.runFor(85000);
+      await p.waitForTimeout(900);
+      await untilStepDone(p);
+      await p.click("#btn-step-done-rate").catch(() => {});
+      await p.waitForTimeout(900);
+    }
+  },
+  "step-rated": {
+    label: "sesión guiada, justo después de calificar el paso 1",
+    days: RET3,
+    action: async (p) => {
+      await p.click("#btn-next-step");
+      await p.waitForTimeout(700);
+      await p.click("#btn-practice-start").catch(() => {});
+      await p.clock.runFor(10000);
+      await p.waitForTimeout(200);
+      await p.clock.runFor(85000);
+      await p.waitForTimeout(900);
+      await untilStepDone(p);
+      await p.click("#btn-step-done-rate").catch(() => {});
+      await p.waitForTimeout(900);
+      await p.click('.rate-btn[data-feel="ok"]').catch(() => {});
+      await p.waitForTimeout(2600);
+    }
+  },
+  // Round 5: step 2 open after the step-done card's Siguiente.
+  "step2-idle": {
+    label: "sesión guiada, paso 2 abierto",
+    days: RET3,
+    action: async (p) => {
+      await p.click("#btn-next-step");
+      await p.waitForTimeout(700);
+      await p.click("#btn-practice-start").catch(() => {});
+      await p.clock.runFor(10000);
+      await p.waitForTimeout(200);
+      await p.clock.runFor(85000);
+      await p.waitForTimeout(900);
+      await untilStepDone(p);
+      await p.click("#btn-step-done-next").catch(() => {});
+      await p.waitForTimeout(3200);
+    }
+  },
+  // Round 5: step 2 open, the learner pressed Terminar in the session bar.
+  "step2-end-ask": {
+    label: "sesión guiada, paso 2 abierto, después de tocar Terminar",
+    days: RET3,
+    action: async (p) => {
+      await p.click("#btn-next-step");
+      await p.waitForTimeout(700);
+      await p.click("#btn-practice-start").catch(() => {});
+      await p.clock.runFor(10000);
+      await p.waitForTimeout(200);
+      await p.clock.runFor(85000);
+      await p.waitForTimeout(900);
+      await untilStepDone(p);
+      await p.click("#btn-step-done-next").catch(() => {});
+      await p.waitForTimeout(3200);
+      await p.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
+      await p.click("#btn-session-end").catch(() => {});
+      await p.waitForTimeout(500);
     }
   },
   // The moment a learner meets the rating: a guided step ran its 1:30 and

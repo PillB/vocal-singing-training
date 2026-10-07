@@ -488,6 +488,9 @@ export function mapAuthorizedPaymentResource(authorized, env) {
   // payment topic, and likewise leaves the subscription's state and clock to
   // the subscription's own notifications.
   const reversed = isReversedPayment(paymentStatus);
+  const dueAt = isoToUnixSeconds(authorized && authorized.debit_date)
+    || isoToUnixSeconds(authorized && authorized.date_created)
+    || occurredAt;
   // A recurring charge extends the period by one interval of whatever plan the
   // license already holds (the store knows it; this resource does not).
   const chargedAt = approved
@@ -516,12 +519,10 @@ export function mapAuthorizedPaymentResource(authorized, env) {
         || occurredAt)
       : undefined,
     // A charge that was turned down, as on the payment topic. Dated by when it
-    // was due, so a retry that goes through later is the newer of the two.
-    declinedAt: isDeclinedPayment(paymentStatus)
-      ? (isoToUnixSeconds(authorized && authorized.debit_date)
-        || isoToUnixSeconds(authorized && authorized.date_created)
-        || occurredAt)
-      : undefined,
+    // was due, so a retry that goes through later is the newer of the two. One
+    // not yet due when it was last updated was called off (stopping the
+    // subscription does that to its next charge), not turned down.
+    declinedAt: isDeclinedPayment(paymentStatus) && !(dueAt > occurredAt) ? dueAt : undefined,
     occurredAt: approved ? occurredAt : null
   };
 }

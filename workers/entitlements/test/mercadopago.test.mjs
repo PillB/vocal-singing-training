@@ -338,6 +338,33 @@ test("a subscription's charge that was turned down says when it was due, on eith
   assert.equal(noPaymentYet.declinedAt, undefined, "nothing was turned down yet");
 });
 
+test("a charge called off before it was due was not turned down", () => {
+  // Stopping a subscription calls off its next scheduled charge. Reported as
+  // cancelled with a debit date still ahead, it must not count as a decline:
+  // the store keeps only the latest one, so it would hide the first charge's
+  // real decline and leave a never-paid year signed.
+  const updated = "2026-03-10T10:00:00.000-05:00";
+  const calledOff = mapAuthorizedPaymentResource({
+    id: "ap_c",
+    preapproval_id: "pre_c",
+    status: "cancelled",
+    debit_date: "2027-03-01T10:00:00.000-05:00",
+    date_created: "2026-03-01T10:00:00.000-05:00",
+    date_last_updated: updated,
+    payment: { status: "cancelled" }
+  }, {});
+  assert.equal(calledOff.declinedAt, undefined);
+  const retriedLate = mapAuthorizedPaymentResource({
+    id: "ap_r",
+    preapproval_id: "pre_c",
+    status: "recycling",
+    debit_date: "2026-03-01T10:00:00.000-05:00",
+    date_last_updated: updated,
+    payment: { status: "rejected" }
+  }, {});
+  assert.equal(retriedLate.declinedAt, isoToUnixSeconds("2026-03-01T10:00:00.000-05:00"), "a charge that was due is still a decline");
+});
+
 test("a refund or chargeback says when the money left and which charge it was, on either topic", () => {
   const approved = "2026-03-01T10:00:00.000-05:00";
   const reversedAt = "2026-03-03T09:00:00.000-05:00";

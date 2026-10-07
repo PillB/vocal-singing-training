@@ -477,6 +477,8 @@ no charge gone through since, keeps none of the period its authorization set
 (Mercado Pago may clear the next charge date when it stops, or leave it),
 whichever of the decline and the stop is processed first. Access then ends
 when it stopped, or where an earlier charge's interval ends if that is later.
+A charge reported as turned down before it was even due was called off, as
+stopping a subscription does to its next charge, and is not a decline.
 A charge that goes through afterwards, a retry included, still buys its
 interval. Until it stops, an authorized subscription still runs to its next
 charge date even when its charge was turned down.

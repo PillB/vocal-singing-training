@@ -10,7 +10,9 @@ async function openSolfege(page) {
   await page.goto(BASE + "/?t=" + Date.now(), { waitUntil: "networkidle" });
   await page.click('.tab[data-tab="singing"]');
   await page.waitForTimeout(200);
-  await page.locator("#exercise-list").getByText(/progres|solfeo|Solfège|Solfege/i).first().click();
+  // By id: the catalog lists Técnica first, and its "Solfeo en trino de labios"
+  // (no chord menus) also matched a search for "solfeo".
+  await page.locator("#exercise-list .card-ex[data-id='s2-solfege-chords']").click();
   await page.waitForTimeout(400);
   await expect(page.locator("#btn-practice-start")).toBeVisible();
 }

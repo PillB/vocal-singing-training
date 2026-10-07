@@ -20,7 +20,7 @@ async function boot(page, { markHomeTour = true, clearUiTours = true } = {}) {
 async function openSolfege(page) {
   await page.click('.tab[data-tab="singing"]');
   await page.waitForTimeout(150);
-  await page.locator("#exercise-list").getByText(/progres|solfeo|Solfège|Solfege/i).first().click();
+  await page.locator("#exercise-list .card-ex[data-id='s2-solfege-chords']").click();
   await page.waitForTimeout(400);
   await expect(page.locator("#view-exercise")).toBeVisible();
 }

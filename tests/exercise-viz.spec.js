@@ -277,6 +277,61 @@ test.describe("exercise pictures", () => {
     });
   }
 
+  for (const [label, mix, pauses] of [
+    // Talk, a 1.5 s "sss", talk, another, talk, then one real pause
+    ["power pause hears a 'sss' said twice inside talk as talk", { plan: [["w", 3000], ["s", 1500], ["w", 2000], ["s", 1500], ["w", 3000], ["q", 1200], ["w", 2000]] }, 1],
+    // The same hiss 5 dB softer, three times: the tail of the word before
+    // it must not make it read as a rumble over a steady hiss
+    [
+      "power pause hears a soft 'sss' said three times inside talk as talk",
+      { plan: [["w", 3000], ["s", 1200], ["w", 2000], ["s", 1200], ["w", 2000], ["s", 1200], ["w", 3000], ["q", 1200], ["w", 2000]], gain: 0.016 },
+      1
+    ],
+    // sss-word, sss-word, a pause, the same again, a pause, a word
+    [
+      "power pause hears 'sss'-word-'sss'-word as talk",
+      { plan: [["s", 1200], ["w", 1000], ["s", 1200], ["w", 1000], ["q", 1200], ["s", 1200], ["w", 1000], ["s", 1200], ["w", 1000], ["q", 1200], ["w", 1500]] },
+      2
+    ],
+    // Whispered and voiced phrases in turn, no gap: a breathy whisper whose
+    // syllables dip only 3 dB (the stock whisper's bands)
+    [
+      "power pause hears a whisper alternating with voice as talk",
+      { plan: [["h", 2000], ["w", 2000], ["h", 2000], ["w", 2000], ["q", 1200], ["h", 2000], ["w", 2000]], bands: [900, 2400], q: 1.2, dip: 0.7 },
+      1
+    ],
+    // An audible inhale between phrases, no silence around it: talk (see
+    // VTFeatures.Vad), never the room
+    [
+      "power pause hears an audible inhale between phrases as talk",
+      { plan: [["w", 3000], ["b", 600], ["w", 3000], ["b", 600], ["w", 3000], ["b", 600], ["w", 3000], ["q", 1200], ["w", 2000]] },
+      1
+    ]
+  ]) {
+    test(label, async ({ page }) => {
+      // A still stretch that comes back at one level after a voice is a fan
+      // switched on under the talk. A hiss, a whisper or a breath said
+      // between words came back too: 0.4 s into the second one the floor
+      // jumped to it, each was cut out of the talk and read as a pause the
+      // learner never made (a hiss's of 1.2 s or more counted).
+      await boot(page, "es", [(m) => (window.__VTMix = m), mix]);
+      await openAndStart(page, "v10-power-pause");
+      // 2 s of the quiet room, then the plan
+      await page.waitForTimeout(1750);
+      await playVoice(page, "speechMix");
+      await page.waitForTimeout(mix.plan.reduce((t, [, ms]) => t + ms, 0) + 800);
+      const n = Number(await page.locator("#mode-focus [data-p]").textContent());
+      const vad = await page.evaluate(() => {
+        const v = window.VTApp.getState().modeInstance.state.vad;
+        return { floor: v.floorDb, talk: v.talkSec, segs: v.segments.map((g) => `${g.kind[0]}${g.start.toFixed(2)}`).join(" ") };
+      });
+      const said = mix.plan.filter(([k]) => k !== "q").reduce((t, [, ms]) => t + ms / 1000, 0);
+      expect(vad.talk, `all of it is talk · ${vad.segs}`).toBeGreaterThan(said - 1);
+      expect(vad.floor, `the quiet room is the floor · ${vad.segs}`).toBeLessThan(-60);
+      expect(n, vad.segs).toBe(pauses);
+    });
+  }
+
   test("power pause counts no pause before the first word, with a fan running", async ({ page }) => {
     await boot(page, "es", fanInRoom);
     await openAndStart(page, "v10-power-pause");

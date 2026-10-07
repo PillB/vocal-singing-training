@@ -11,6 +11,11 @@
  *                     for "speechWhisper" (default 0.03, about −30 dBFS
  *                     after the MIC gain, 6 dB, 3000 ms, band-passes at
  *                     [900, 2400] Hz with a Q of 1.2, and no low-pass)
+ *   __VTMix           { plan, gain, bands, q, dip, breath, seed } for
+ *                     "speechMix" (a plan of [kind, ms] pieces; default a
+ *                     held "sss" at 0.03 through [5000, 7000] Hz with a Q of
+ *                     1.5, whispered syllables dipping 6 dB between them,
+ *                     and an inhale at 0.008)
  */
 (function () {
   "use strict";
@@ -180,6 +185,82 @@
       h.at(syl, tick);
     };
     tick();
+  });
+
+  /**
+   * Words with another sound said between them and no silence around it: a
+   * plan of [kind, ms] pieces, "w" voiced words (the stock speaker's
+   * syllables), "s" a held hiss (noise through `bands`, swinging 1 dB at
+   * `gain`), "h" whispered syllables through the same bands (dipping to
+   * `dip` times `gain` between them), "b" an audible inhale (broadband
+   * breath noise at `breath`, swelling in and out) and "q" silence. Seeded:
+   * a take sounds the same every run.
+   */
+  V.define("speechMix", (h) => {
+    const o = Object.assign({ plan: [["w", 3000], ["s", 1500], ["w", 3000]], gain: 0.03, bands: [5000, 7000], q: 1.5, dip: 0.5, breath: 0.008, seed: 104729 }, window.__VTMix);
+    let sd = o.seed >>> 0;
+    const rnd = () => {
+      sd = (sd * 1664525 + 1013904223) >>> 0;
+      return sd / 4294967296;
+    };
+    const n = h.nodes();
+    if (!n.mixHiss) {
+      const ac = n.dest.context;
+      const buf = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = rnd() * 2 - 1;
+      // One noise source each, through its own filters and gain
+      const noise = (bands, q, offset) => {
+        const src = ac.createBufferSource();
+        src.buffer = buf;
+        src.loop = true;
+        const g = ac.createGain();
+        g.gain.value = 0;
+        bands.forEach((f) => {
+          const bp = ac.createBiquadFilter();
+          bp.type = "bandpass";
+          bp.frequency.value = f;
+          bp.Q.value = q;
+          src.connect(bp).connect(g);
+        });
+        g.connect(n.dest);
+        src.start(0, offset);
+        return g;
+      };
+      n.mixHiss = noise(o.bands, o.q, 0);
+      n.mixBreath = noise([700, 1800, 4000], 0.8, 0.7);
+    }
+    const syl = 1000 / 4.5;
+    const gain = 0.28;
+    let t = 0;
+    o.plan.forEach(([kind, ms]) => {
+      const t0 = t;
+      if (kind === "s") {
+        h.at(t0, () => h.ramp(n.mixHiss.gain, o.gain, 0.04));
+        for (let x = 150; x < ms - 60; x += 220) h.at(t0 + x, () => h.ramp(n.mixHiss.gain, o.gain * (0.89 + rnd() * 0.11), 0.05));
+        h.at(t0 + ms - 40, () => h.ramp(n.mixHiss.gain, 0, 0.04));
+      } else if (kind === "h") {
+        for (let x = 0; x + syl * 0.5 < ms; x += syl) {
+          h.at(t0 + x, () => h.ramp(n.mixHiss.gain, o.gain * (0.8 + rnd() * 0.2), 0.03));
+          h.at(t0 + x + syl * 0.62, () => h.ramp(n.mixHiss.gain, o.gain * o.dip, 0.04));
+        }
+        h.at(t0 + ms - 20, () => h.ramp(n.mixHiss.gain, 0, 0.05));
+      } else if (kind === "b") {
+        h.at(t0, () => h.ramp(n.mixBreath.gain, o.breath * 0.8, 0.12));
+        h.at(t0 + 150, () => h.ramp(n.mixBreath.gain, o.breath, Math.max(0.05, (ms - 300) / 1000)));
+        h.at(t0 + ms - 130, () => h.ramp(n.mixBreath.gain, 0, 0.12));
+      } else if (kind === "w") {
+        for (let x = 0; x + syl * 0.5 < ms; x += syl) {
+          h.at(t0 + x, () => {
+            h.setPitch(135 * Math.pow(2, ((rnd() - 0.5) * 4) / 12), 0.04);
+            h.voiceOn(gain * (0.75 + rnd() * 0.25), 0.03);
+          });
+          h.at(t0 + x + syl * 0.62, () => h.ramp(n.voice.gain, gain * 0.15, 0.04));
+        }
+        h.at(t0 + ms - 20, () => h.voiceOff(0.05));
+      }
+      t += ms;
+    });
   });
 
   /**

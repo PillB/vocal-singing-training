@@ -280,11 +280,23 @@
   // still twice as long: a stretch of speech misread as a room (a whisper's
   // long phrase) must not throw away the room it has heard
   const NEW_ROOM_STEPS = 36;
+  // ... of which the first TAIL_STEPS may be the voice before it fading out:
+  // a fan in a pause of just 1.2 s is learned in that pause
+  const TAIL_STEPS = 3;
   // ... unless it comes back: a fan switched on under the talk is heard only
   // in the pauses, too short for that. 0.4 s still at the level of an earlier
-  // still stretch that a voice then came over is the room (a whisper or a
-  // held "sss" ends in a quiet breath, not under a voice).
+  // still stretch that a voice then came over is the room, if that stretch
+  // held still for 0.8 s (BACK_HELD_STEPS) and stayed under the voice: a
+  // fan is under every frame of the talk, so no step falls PAUSE_FLAT_DB
+  // under the quietest it held, and neither does any step's high part
+  // (`hfRms`). A held "sss" said between words is not under them: the
+  // words' dips fall under it, or their high part does (a voiced word's sits
+  // about 20 dB under its level, a hiss's at its level). A whisper's
+  // syllables hold still for 0.4 s only by chance, once or twice a phrase,
+  // and an inhale between two phrases for less than 0.8 s, where a fan
+  // holds the whole pause.
   const BACK_STEPS = 12;
+  const BACK_HELD_STEPS = 24;
   // ... and one that sits high (see LOW_HF), as a held "sss" does, must hold
   // still for 5 s: it has no period and is flatter than a fan, and only its
   // length tells it from a hiss that has come to stay. A rumble keeps 1.2 s.
@@ -359,11 +371,25 @@
    *   over from it, speech it was read as until then is taken back, and a
    *   pause it hid is dated from when the voice stopped. Once the floor
    *   holds a room, a new one must hold still for 1.2 s, or for 5 s if it
-   *   sits high (a whisper, a held "sss", a white fan), unless it comes back
-   *   after a voice was heard over it: a fan switched on under the talk,
-   *   held still in one pause and then in the next, is the room by 0.4 s
-   *   into that one, and the pause before it is told late (or, if the fan
-   *   came on in a pause, runs on under it).
+   *   sits high (a whisper, a held "sss", a white fan: one switched on in
+   *   a silent lead-in reads as speech until the first word), unless it
+   *   comes back after a voice was heard over it: a fan switched on under
+   *   the talk, held still in one pause and then in the next, is the room
+   *   by 0.4 s into that one, and the pause before it is told late (or, if
+   *   the fan came on in a pause, runs on under it). A hiss, a whisper or
+   *   an inhale said between words with no silence around it does not come
+   *   back: the words fall under it, or their high part does, where they
+   *   would sit over a fan, and a whisper or an inhale holds still for less
+   *   than a fan's pause.
+   * - An audible inhale is talk. It is as aperiodic, as still and sits as
+   *   high as a whispered syllable or a short "sss", and nothing in its
+   *   level tells them apart, so a breath loud enough to open the gate (a
+   *   close mic) reads as speech, as it always has: between two phrases with
+   *   no silence around it, the phrases run on through it; taken inside a
+   *   silence, it splits that silence in two. A quieter breath is silence.
+   *   One held still for 0.8 s or more between two phrases that never fall
+   *   under it (no stop, no gap) can pass for a fan switched on in a pause,
+   *   and the second such breath be learned as the room.
    * - A steady sound with a period is a voice (a sung note, a soft held
    *   vowel, an "mmm"), unless the take opened with it and heard nothing
    *   else for a second: a hum in the room, learned the same way. Before the
@@ -435,8 +461,10 @@
       this._late = null;
       this._shutDb = Infinity;
       // Once the floor holds a room: the last still stretch heard since it
-      // was quiet ({ lvl, start, end }, ended when a voice came over it), and
-      // for how many steps in a row the sound has held still
+      // was quiet ({ lvl, held, lo, hfLo, start, end }: how many steps it
+      // held still, the quietest it held and its high part's, and when a
+      // voice came over it), and for how many steps in a row the sound has
+      // held still
       this._stretch = null;
       this._stillRun = 0;
       this.pauseStart = null;
@@ -542,7 +570,8 @@
       this._recentT.push(this.t);
       this._recentClarity.push(frame.clarity != null ? frame.clarity : -1);
       this._recentHf.push(frame.hfRms != null && frame.rms > 0 ? (frame.hfRms / frame.rms) * ((frame.sampleRate || 48000) / 48000) : -1);
-      this._recentHfDb.push(frame.hfRms > 0 ? dbfs(frame.hfRms) : -140);
+      const hfDb = frame.hfRms > 0 ? dbfs(frame.hfRms) : -140;
+      this._recentHfDb.push(hfDb);
       if (this.t >= OPEN_SETTLE_SEC) {
         this._lowDb = Math.min(this._lowDb, db);
         if (this._openSteps >= 0) {
@@ -566,9 +595,13 @@
       // margin: a voice that clears a stretch a little quieter than this one)
       const h = this._hums[this._hums.length - 1];
       if (h && h.end == null && db > h.lvl + this.marginDb - PAUSE_FLAT_DB) h.end = this.t - 1 / 60;
-      // A still stretch ends when a voice (a sound with a period) clears it
+      // A still stretch ends when a voice (a sound with a period) clears it,
+      // and is gone once a step, or its high part, falls under the quietest
+      // it held: the voice came instead of it (an "sss" between words), not
+      // over it (a fan)
       const st = this._stretch;
       if (st && st.end == null && db > st.lvl + this.marginDb && frame.clarity >= NOISY) st.end = this.t - 1 / 60;
+      if (st && st.end != null && (db < st.lo - PAUSE_FLAT_DB || hfDb < st.hfLo - PAUSE_FLAT_DB)) this._stretch = null;
       // A consonant closes the gate for 40–100 ms inside a word: a soft
       // speaker's dips would become the floor and their weaker syllables
       // read as pauses. Only a gate still closed after the hangover is quiet.
@@ -613,15 +646,29 @@
       if (!known && this._pauseRoom()) return PAUSE_STEPS;
       if (!known) return this._still(ROOM_STEPS) ? ROOM_STEPS : 0;
       const b = this._still(BACK_STEPS);
-      if (!b || b.lvl <= this.floorDb + this.marginDb) {
+      if (!b || b.lvl <= this.floorDb + this.marginDb || this._voiceIn(BACK_STEPS, b.lvl)) {
         this._stillRun = 0;
         return 0;
       }
       this._stillRun++;
       if (this._cameBack(b.lvl)) return ROOM_STEPS;
-      const l = this._still(NEW_ROOM_STEPS);
-      if (!l) return 0;
+      // 1.2 s still, but for the last step or two of the voice before it (a
+      // pause of just 1.2 s), and how high the sound sits judged after them
+      if (!this._still(NEW_ROOM_STEPS)) return 0;
+      const l = this._still(NEW_ROOM_STEPS - TAIL_STEPS);
+      if (!l || this._voiceIn(NEW_ROOM_STEPS - TAIL_STEPS, l.lvl)) return 0;
       return !l.high || this._stillRun >= HISS_ROOM_STEPS - BACK_STEPS ? NEW_ROOM_STEPS : 0;
+    }
+    /**
+     * Whether one of the last `steps` learning steps is a voice over the
+     * still sound at `lvl` (`marginDb` over it). _still's percentiles let a
+     * step or two through: at the very step a word comes in over a still
+     * stretch the 0.4 s test would hear the stretch come back, and a word's
+     * tail in the 1.2 s window makes a hiss right after it read as a rumble
+     * over a steady hiss (that test judges the sound after the tail).
+     */
+    _voiceIn(steps, lvl) {
+      return Math.max(...this._recentRing.last(steps)) > lvl + this.marginDb;
     }
     /**
      * Whether the last `steps` learning steps hold still with no period in
@@ -655,26 +702,41 @@
     /**
      * A still stretch at `lvl` (the last BACK_STEPS, over the floor's
      * margin) once the floor holds a room: true when an earlier one held
-     * still at that level until a voice came over it, and no quiet step
-     * since. A fan switched on under the talk holds every pause; a whisper,
-     * an "sss" or a breath ends in the quiet room. The pause that earlier
-     * stretch held is told late. A stretch well over the one still open (a
-     * fan switched on in a pause the room's hiss held) takes its place,
-     * from the same start.
+     * still at that level for 0.8 s until a voice came over it, and no
+     * quiet step since, and no step under it (see _learnFloor). A fan
+     * switched on under the talk holds every pause and stays under every
+     * word; a whisper, an "sss" or a breath ends in the quiet room, or the
+     * words said after it fall under it. The pause that earlier stretch
+     * held is told late. A stretch well over the one still open (a fan
+     * switched on in a pause the room's hiss held) takes its place, from the
+     * same start.
      */
     _cameBack(lvl) {
       const h = this._stretch;
-      if (h && h.end != null && Math.abs(h.lvl - lvl) < PAUSE_FLAT_DB) {
+      if (h && h.end != null && h.held > BACK_HELD_STEPS - BACK_STEPS && Math.abs(h.lvl - lvl) < PAUSE_FLAT_DB) {
         this._late = h.start != null ? [h] : null;
         return true;
       }
+      // The quietest this 0.4 s held, and its high part: its own steps, not
+      // the tail of the word before it (a step with a period), which can sit
+      // under a hiss said after it, and its high part far under
+      const cl = this._recentClarity.last(BACK_STEPS);
+      const own = (ring) => ring.last(BACK_STEPS).filter((_, i) => cl[i] < NOISY);
+      const lo = percentile(own(this._recentRing), 0.1);
+      const hfLo = percentile(own(this._recentHfDb), 0.1);
       if (!h || h.end != null || lvl > h.lvl + this.marginDb - PAUSE_FLAT_DB) {
         // From the last voice step over it, as a pause (none in reach: null)
         const lv = this._recentRing.last();
         const ts = this._recentT.last();
         let i = lv.length - BACK_STEPS;
         while (i > 0 && lv[i - 1] <= lvl + this.marginDb) i--;
-        this._stretch = { lvl, start: i > 0 ? ts[i - 1] : h && h.end == null ? h.start : null, end: null };
+        this._stretch = { lvl, held: 1, lo, hfLo, start: i > 0 ? ts[i - 1] : h && h.end == null ? h.start : null, end: null };
+      } else {
+        // The same stretch, still holding: for how many steps, and the
+        // quietest it has held
+        h.held++;
+        h.lo = Math.min(h.lo, lo);
+        h.hfLo = Math.min(h.hfLo, hfLo);
       }
       return false;
     }

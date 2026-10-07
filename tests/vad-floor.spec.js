@@ -547,10 +547,9 @@ test.describe("pause floor (Vad)", () => {
     // too: 0.4 s into the second one the floor jumped to it, it was cut out
     // of the talk and told as a pause the learner never made. The talk
     // between them falls under the hiss, or its high part under the hiss's
-    // (a voice sits low), and a fan never does; a whisper holds still only
-    // by chance, and an inhale for less than a fan's pause. An inhale is
-    // talk, as it always was: nothing tells it from a whispered syllable, so
-    // one taken inside a silence splits it in two.
+    // (a voice sits low), and a fan never does. An inhale is talk, as it
+    // always was: nothing tells it from a whispered syllable, so one taken
+    // inside a silence splits it in two.
     const sss = (sec, peak = -30, o = {}) => SPEECH(sec, Object.assign({ peak, dip: peak - 1.5, whisper: true }, o));
     const whisper = (sec) => SPEECH(sec, { peak: -30, dip: -36, whisper: true });
     // Breath noise: flat, and it sits higher than a whisper
@@ -568,6 +567,38 @@ test.describe("pause floor (Vad)", () => {
       ["a 0.6 s inhale at −40 dB between phrases with stop consonants", phrases(breath(0.6, -40), { stops: 0.2 })],
       ["a loud 0.6 s inhale at −35 dB between phrases", phrases(breath(0.6, -35))],
       ["an inhale inside a silence", [QUIET(1), ...turns(3, talk(3), [QUIET(0.4), breath(0.6, -44), QUIET(0.5)]).flat(), QUIET(1.2), talk(3)]]
+    ]) {
+      for (const seed of [1, 2, 3, 4, 5, 6]) {
+        const r = await sim(page, { parts, seed });
+        const msg = `${label}, seed ${seed} · ${r.segs}`;
+        expect(r.falsePauses, msg).toBe(0);
+        expect(r.talk, msg).toBeGreaterThan(r.truthTalk - 0.5);
+        expect(r.floor, `${label}, seed ${seed}: the quiet room is the floor · ${r.segs}`).toBeLessThan(-60);
+        eachPauseMeasured(r, `${label}, seed ${seed}`);
+      }
+    }
+  });
+
+  test("a whisper far under the talk, or a longer inhale between phrases, is talk", async ({ page }) => {
+    // A whisper 15–20 dB under the voice, or an inhale of 1–1.5 s, is under
+    // every word, as a fan switched on under the talk would be: the second
+    // whispered phrase or inhale came back and was learned as the room, cut
+    // out of the talk and told as a pause, in talk with a few stop
+    // consonants too. A fan's high part holds still; a whisper's follows its
+    // syllables, even when they swing only 3 dB, and this inhale's its swell.
+    const whisper = (sec, peak, swing, o = {}) => SPEECH(sec, Object.assign({ peak, dip: peak - swing, whisper: true }, o));
+    const breath = (sec, peak) => SPEECH(sec, { peak, dip: peak - 1.5, whisper: true, hf: 0.8 });
+    const talk = (sec, o = {}) => SPEECH(sec, Object.assign({}, OVER_FAN, o));
+    // Three whispered phrases, each followed by a voiced one, then a pause
+    const alternate = (w, o) => [QUIET(1), ...[0, 1, 2].flatMap(() => [w, talk(2, o)]), QUIET(1.2), talk(2, o)];
+    const phrases = (b, o) => [QUIET(1), ...turns(4, talk(3, o), b), QUIET(1.2), talk(3, o)];
+    for (const [label, parts] of [
+      ["a whisper at −38 dB (3 dB swing) alternating with voice, 10% stops", alternate(whisper(2, -38, 3), { stops: 0.1 })],
+      ["a whisper at −40 dB (3 dB swing) alternating with voice", alternate(whisper(2, -40, 3))],
+      ["a whisper at −42 dB (3 dB swing) alternating with voice, 20% stops", alternate(whisper(2, -42, 3), { stops: 0.2 })],
+      ["a whisper that sits lower (hf 0.25) alternating with voice", alternate(whisper(2, -30, 4, { hf: 0.25 }))],
+      ["a 1.2 s inhale at −42 dB between phrases, 10% stops", phrases(breath(1.2, -42), { stops: 0.1 })],
+      ["a 1.5 s inhale at −40 dB between phrases, 10% stops", phrases(breath(1.5, -40), { stops: 0.1 })]
     ]) {
       for (const seed of [1, 2, 3, 4, 5, 6]) {
         const r = await sim(page, { parts, seed });

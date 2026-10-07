@@ -300,6 +300,13 @@ test.describe("exercise pictures", () => {
       { plan: [["h", 2000], ["w", 2000], ["h", 2000], ["w", 2000], ["q", 1200], ["h", 2000], ["w", 2000]], bands: [900, 2400], q: 1.2, dip: 0.7 },
       1
     ],
+    // The same whisper half as loud, about 20 dB under the voice: every
+    // word stays over it, as it would over a fan
+    [
+      "power pause hears a soft whisper alternating with voice as talk",
+      { plan: [["h", 2000], ["w", 2000], ["h", 2000], ["w", 2000], ["q", 1200], ["h", 2000], ["w", 2000]], bands: [900, 2400], q: 1.2, dip: 0.7, gain: 0.015 },
+      1
+    ],
     // An audible inhale between phrases, no silence around it: talk (see
     // VTFeatures.Vad), never the room
     [

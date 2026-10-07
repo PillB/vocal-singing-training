@@ -33,14 +33,18 @@ const STATUS_MAP = {
   active: "active",
   trialing: "active",
   past_due: "past_due",
-  unpaid: "past_due",
+  // "unpaid" means Stripe has stopped retrying, and "paused" that nothing is
+  // being charged. Stripe says to revoke access for both, and an unpaid
+  // subscription's period keeps rolling forward, so the "past_due" grace would
+  // never end. "suspended" never entitles until a payment brings it back.
+  unpaid: "suspended",
   // "incomplete" is a subscription whose FIRST payment never succeeded: the
   // same "money has not arrived" case as an unpaid checkout session, so it must
   // not fall into the entitling "past_due" grace state.
   incomplete: "pending",
   canceled: "canceled",
   incomplete_expired: "canceled",
-  paused: "past_due"
+  paused: "suspended"
 };
 
 /**
@@ -160,12 +164,13 @@ export function planFromInterval(interval, intervalCount) {
 }
 
 /**
- * Map a Stripe subscription status to our entitlement status.
+ * Map a Stripe subscription status to our entitlement status. A status Stripe
+ * adds later is "suspended": it never entitles until we know what it means.
  * @param {unknown} status Stripe subscription status.
- * @returns {string} "active" | "past_due" | "canceled".
+ * @returns {string} "active" | "past_due" | "pending" | "suspended" | "canceled".
  */
 export function mapStripeStatus(status) {
-  return STATUS_MAP[String(status)] || "past_due";
+  return STATUS_MAP[String(status)] || "suspended";
 }
 
 /**
@@ -275,15 +280,26 @@ function mapCheckoutSession(session, env, statusOverride) {
   const byMetadata = normalizePlanId(session && session.metadata && session.metadata.plan);
   const plan = byPrice || byMetadata || "pro_monthly";
   const planSource = byPrice ? "price_id" : (byMetadata ? "metadata" : "default");
-  const status = statusOverride || (isCheckoutSessionPaid(session) ? "active" : "pending");
+  const subscriptionId = idOf(session && session.subscription);
+  let status = statusOverride || (isCheckoutSessionPaid(session) ? "active" : "pending");
+  // Only a subscription or a one-time payment is a purchase. A setup session
+  // saves a card for later and charges nothing, though Stripe reports it as
+  // needing no payment, so it entitles to nothing.
+  if (status === "active" && !subscriptionId && !(session && session.mode === "payment")) {
+    status = "canceled";
+  }
   return {
     provider: "stripe",
     claimId: idOf(session && session.id),
-    subscriptionId: idOf(session && session.subscription),
+    subscriptionId,
     customerId: idOf(session && session.customer),
     plan,
     planSource,
     status,
+    // Whether the money for this checkout arrived. The store keeps an unpaid
+    // license from entitling until a payment is confirmed, whatever the
+    // subscription's own events say in the meantime.
+    paid: status === "active",
     // A checkout session carries no period end; leave whatever the
     // subscription events recorded untouched.
     periodEnd: undefined
@@ -299,6 +315,13 @@ function mapCheckoutSession(session, env, statusOverride) {
  */
 function mapSubscription(subscription, env, deleted) {
   const { plan, planSource } = planForSubscription(subscription, env);
+  const stripeStatus = String(subscription && subscription.status);
+  const endedAt = unixOrNull(subscription && subscription.ended_at);
+  const reason = subscription && subscription.cancellation_details && subscription.cancellation_details.reason;
+  // Stripe ended it because the money never came: the first payment expired,
+  // or it gave up on a renewal or the charge was disputed. No part of the
+  // current period was paid for, so its period end is not a paid-through date.
+  const unpaid = stripeStatus === "incomplete_expired" || reason === "payment_failed" || reason === "payment_disputed";
   return {
     provider: "stripe",
     claimId: null,
@@ -307,7 +330,12 @@ function mapSubscription(subscription, env, deleted) {
     plan,
     planSource,
     status: deleted ? "canceled" : mapStripeStatus(subscription && subscription.status),
-    periodEnd: subscriptionPeriodEnd(subscription)
+    periodEnd: subscriptionPeriodEnd(subscription),
+    endedAt,
+    endsAt: unpaid && endedAt !== null ? endedAt : undefined,
+    // Stripe never reactivates a deleted subscription: nothing after this may
+    // change the license's state.
+    terminal: deleted
   };
 }
 
@@ -337,6 +365,9 @@ function mapInvoice(invoice, env, paid) {
     plan: byPrice || undefined,
     planSource: byPrice ? "price_id" : undefined,
     status: paid ? "active" : "past_due",
+    // A paid invoice confirms money arrived; a failed one says nothing about
+    // whether an earlier payment did.
+    paid: paid ? true : undefined,
     periodEnd: unixOrNull(line && line.period && line.period.end)
   };
 }
@@ -373,8 +404,10 @@ export function mapStripeEvent(event, env) {
       break;
     case "checkout.session.async_payment_failed":
       // The money never arrived: the record stays on file (so /v1/claim can
-      // explain itself) but never entitles.
+      // explain itself) but never entitles, and until a payment does arrive
+      // no later event lifts it or sets it waiting again.
       update = mapCheckoutSession(object, env, "canceled");
+      update.paymentFailed = true;
       break;
     case "customer.subscription.created":
     case "customer.subscription.updated":
@@ -398,5 +431,18 @@ export function mapStripeEvent(event, env) {
   // When the event was emitted, so a delayed or retried delivery cannot undo a
   // newer one. Stripe guarantees neither ordering nor exactly-once delivery.
   update.occurredAt = unixOrNull(event.created);
+  // When a cancellation took effect (a failed async payment has no `ended_at`
+  // of its own). The store ends a period that was never paid for there.
+  if (update.status === "canceled" && !Number.isFinite(update.endedAt)) {
+    update.endedAt = update.occurredAt;
+  }
+  // A paid checkout with no subscription behind it (a one-time price, mode
+  // "payment") has no later event to end it: entitle one plan interval from
+  // when the money arrived, as for a Mercado Pago one-off payment. Webhook
+  // sessions carry no line items, so a yearly pass needs `metadata.plan` on
+  // its Payment Link.
+  if (event.type.startsWith("checkout.session.") && !update.subscriptionId && update.status === "active") {
+    update.periodEndFromCharge = update.occurredAt ?? unixOrNull(object.created);
+  }
   return { handled: true, update };
 }

@@ -60,14 +60,73 @@ function checkoutEvent(sessionId, eventId, overrides) {
     data: {
       object: {
         id: sessionId,
+        mode: opts.mode,
         customer: "cus_router",
-        subscription: "sub_router",
+        subscription: opts.subscription === undefined ? "sub_router" : opts.subscription,
         payment_status: opts.paymentStatus || "paid",
-        metadata: { plan: "pro_yearly" }
+        metadata: { plan: opts.plan || "pro_yearly" }
       }
     }
   };
 }
+
+/**
+ * Deliver a signed Stripe event through the router.
+ * @param {Object} env Env bindings.
+ * @param {Object} event Stripe event.
+ * @returns {Promise<Response>} Webhook response.
+ */
+async function deliverStripe(env, event) {
+  return handleRequest(await signedStripeRequest(event, env), env);
+}
+
+/**
+ * Claim a checkout session, payment or preapproval id and read the answer.
+ * @param {Object} env Env bindings.
+ * @param {string} provider "stripe" | "mercadopago".
+ * @param {string} sessionId Session, payment or preapproval id.
+ * @returns {Promise<{status: number, body: Object}>} HTTP status and parsed body.
+ */
+async function claimFor(env, provider, sessionId) {
+  const response = await handleRequest(postJson("/v1/claim", { provider, sessionId }), env);
+  return { status: response.status, body: await response.json() };
+}
+
+let mpNotificationSeq = 0;
+
+/**
+ * Deliver a signed Mercado Pago notification whose API read answers `resource`.
+ * @param {Object} env Env bindings.
+ * @param {string} kind Notification kind ("payment", "subscription_preapproval", …).
+ * @param {Object} resource What the Mercado Pago API returns for it.
+ * @returns {Promise<Response>} Webhook response.
+ */
+async function deliverMercadoPago(env, kind, resource) {
+  mpNotificationSeq += 1;
+  const dataId = String(resource.id);
+  const notification = { id: 7000 + mpNotificationSeq, type: kind, action: `${kind}.updated`, data: { id: dataId } };
+  const ts = String(Math.floor(Date.now() / 1000));
+  const requestId = `req-mp-${mpNotificationSeq}`;
+  const v1 = await hmacSha256Hex(env.MP_WEBHOOK_SECRET, buildMercadoPagoManifest({ dataId, requestId, ts }));
+  return handleRequest(
+    postJson("/v1/webhooks/mercadopago", JSON.stringify(notification), {
+      headers: { "x-signature": `ts=${ts},v1=${v1}`, "x-request-id": requestId }
+    }),
+    env,
+    { fetchImpl: async () => ({ ok: true, status: 200, async json() { return resource; } }) }
+  );
+}
+
+/**
+ * An ISO date some seconds away from now (negative is the past).
+ * @param {number} seconds Offset from now.
+ * @returns {string} ISO-8601 date.
+ */
+function isoIn(seconds) {
+  return new Date((Math.floor(Date.now() / 1000) + seconds) * 1000).toISOString();
+}
+
+const DAY = 86400;
 
 test("health reports booleans and the site origin, never key material", async () => {
   const env = createTestEnv();
@@ -504,7 +563,8 @@ test("a Mercado Pago notification is confirmed against the API before it is stor
           status: "authorized",
           payer_id: 12,
           reason: "Vocal Studio Pro anual",
-          next_payment_date: "2026-12-01T00:00:00.000-05:00"
+          // Ahead of whatever day the suite runs: the claim reads the clock.
+          next_payment_date: isoIn(60 * DAY)
         };
       }
     };
@@ -583,4 +643,1204 @@ test("an API failure answers 500 so Mercado Pago retries", async () => {
     env
   );
   assert.equal(claim.status, 200);
+});
+
+test("an unpaid Mercado Pago cash voucher waits, and one that expires unpaid never entitles", async () => {
+  const env = createTestEnv();
+  const voucher = {
+    id: "PAY-VOUCHER",
+    status: "pending",
+    status_detail: "pending_waiting_payment",
+    external_reference: "pro_yearly",
+    date_created: isoIn(-3600),
+    date_last_updated: isoIn(-3600),
+    date_approved: null,
+    // The voucher's own deadline, not a paid-through date.
+    date_of_expiration: isoIn(3 * DAY),
+    payer: { id: 7 }
+  };
+  assert.equal((await deliverMercadoPago(env, "payment", voucher)).status, 200);
+
+  const waiting = await claimFor(env, "mercadopago", "PAY-VOUCHER");
+  assert.equal(waiting.status, 202, "nobody has paid the voucher yet");
+  assert.equal(waiting.body.reason, "pending");
+  assert.equal(waiting.body.token, undefined);
+
+  // The voucher runs out unpaid and Mercado Pago cancels the payment.
+  await deliverMercadoPago(env, "payment", { ...voucher, status: "cancelled", status_detail: "expired", date_last_updated: isoIn(-60) });
+  const expired = await claimFor(env, "mercadopago", "PAY-VOUCHER");
+  assert.equal(expired.status, 403);
+  assert.equal(expired.body.reason, "inactive");
+  assert.equal(expired.body.token, undefined);
+});
+
+test("a Mercado Pago payment still under review, only authorized, or turned down buys no time", async () => {
+  for (const [status, plan, expected] of [
+    ["in_process", "pro_yearly", 202],
+    ["authorized", "pro_monthly", 202],
+    ["rejected", "pro_monthly", 403]
+  ]) {
+    const env = createTestEnv();
+    const id = `PAY-${status}`;
+    await deliverMercadoPago(env, "payment", {
+      id,
+      status,
+      external_reference: plan,
+      date_created: isoIn(-3600),
+      date_last_updated: isoIn(-3600),
+      payer: { id: 7 }
+    });
+    const claim = await claimFor(env, "mercadopago", id);
+    assert.equal(claim.status, expected, status);
+    assert.equal(claim.body.token, undefined, `${status} must not be signed`);
+  }
+});
+
+test("a Mercado Pago renewal charge that has not gone through leaves the subscription as it was", async () => {
+  const env = createTestEnv();
+  const paidThrough = Math.floor(Date.now() / 1000) + DAY;
+  await deliverMercadoPago(env, "subscription_preapproval", {
+    id: "PRE-RENEW",
+    status: "authorized",
+    reason: "Vocal Studio Pro anual",
+    next_payment_date: new Date(paidThrough * 1000).toISOString(),
+    date_last_updated: isoIn(-20 * DAY),
+    payer_id: 5
+  });
+  const before = await claimFor(env, "mercadopago", "PRE-RENEW");
+  assert.equal(before.status, 200);
+  assert.equal(before.body.entitlement.plan, "pro_yearly");
+
+  for (const status of ["rejected", "in_process"]) {
+    await deliverMercadoPago(env, "payment", {
+      id: `PAY-REN-${status}`,
+      status,
+      metadata: { preapproval_id: "PRE-RENEW" },
+      description: "Pro mensual",
+      date_created: isoIn(-60),
+      date_last_updated: isoIn(-60),
+      payer: { id: 5 }
+    });
+    const after = await claimFor(env, "mercadopago", "PRE-RENEW");
+    assert.equal(after.status, 200, `${status}: the period already paid for still holds`);
+    assert.equal(after.body.entitlement.status, "active", `${status}: Mercado Pago retries; the charge is not a cancellation`);
+    assert.equal(after.body.entitlement.periodEnd, paidThrough, `${status}: a charge that did not go through buys no time`);
+    assert.equal(after.body.entitlement.plan, "pro_yearly", `${status}: the charge's text cannot change the plan`);
+  }
+});
+
+test("a Mercado Pago renewal charge that is not approved opens nothing on its own", async () => {
+  // The charge's notification can land before its subscription's: the payment
+  // id is then recorded against a license that knows nothing else yet.
+  const env = createTestEnv();
+  await deliverMercadoPago(env, "payment", {
+    id: "PAY-ORPHAN",
+    status: "rejected",
+    metadata: { preapproval_id: "PRE-LATER" },
+    date_created: isoIn(-60),
+    date_last_updated: isoIn(-60),
+    payer: { id: 5 }
+  });
+  const claim = await claimFor(env, "mercadopago", "PAY-ORPHAN");
+  assert.notEqual(claim.status, 200);
+  assert.equal(claim.body.token, undefined);
+});
+
+/** Subscription charges that have not brought money in, on the authorized-payment topic. */
+const UNSETTLED_AUTHORIZED_PAYMENTS = [
+  { label: "rejected", status: "recycling", payment: { id: 881, status: "rejected" } },
+  { label: "in_process", status: "processed", payment: { id: 882, status: "in_process" } },
+  { label: "pending", status: "processed", payment: { id: 883, status: "pending" } },
+  { label: "no payment yet", status: "recycling" }
+];
+
+test("a Mercado Pago charge that has not gone through, delivered before its subscription, never signs without an end", async () => {
+  for (const charge of UNSETTLED_AUTHORIZED_PAYMENTS) {
+    const env = createTestEnv();
+    const preapprovalId = `PRE-AP-${charge.label}`;
+    const chargeId = `AP-${charge.label}`;
+    await deliverMercadoPago(env, "subscription_authorized_payment", {
+      id: chargeId,
+      preapproval_id: preapprovalId,
+      status: charge.status,
+      date_created: isoIn(-55),
+      date_last_updated: isoIn(-55),
+      ...(charge.payment ? { payment: charge.payment } : {})
+    });
+    const early = await claimFor(env, "mercadopago", chargeId);
+    assert.equal(early.body.token, undefined, `${charge.label}: the charge opens nothing on its own`);
+
+    // The subscription's own notification is older than the charge's.
+    const paidThrough = Math.floor(Date.now() / 1000) + 20 * DAY;
+    await deliverMercadoPago(env, "subscription_preapproval", {
+      id: preapprovalId,
+      status: "authorized",
+      reason: "Vocal Studio Pro mensual",
+      next_payment_date: new Date(paidThrough * 1000).toISOString(),
+      date_last_updated: isoIn(-60),
+      payer_id: 5
+    });
+    const claim = await claimFor(env, "mercadopago", preapprovalId);
+    assert.equal(claim.status, 200, charge.label);
+    assert.equal(claim.body.entitlement.periodEnd, paidThrough, `${charge.label}: the subscription still sets the period`);
+    const verified = await verifyLicenseToken(claim.body.token, env);
+    assert.equal(verified.valid, true, charge.label);
+    assert.equal(verified.payload.periodEnd, paidThrough, `${charge.label}: the token has a finite end`);
+    assert.ok(verified.payload.exp <= paidThrough, charge.label);
+  }
+});
+
+test("a Mercado Pago charge that has not gone through cannot reopen a subscription nobody paid for", async () => {
+  for (const charge of UNSETTLED_AUTHORIZED_PAYMENTS) {
+    const env = createTestEnv();
+    const preapprovalId = `PRE-NEVER-${charge.label}`;
+    const preapproval = {
+      id: preapprovalId,
+      status: "pending",
+      reason: "Vocal Studio Pro mensual",
+      next_payment_date: isoIn(30 * DAY),
+      date_last_updated: isoIn(-120),
+      payer_id: 5
+    };
+    await deliverMercadoPago(env, "subscription_preapproval", preapproval);
+    await deliverMercadoPago(env, "subscription_preapproval", { ...preapproval, status: "cancelled", date_last_updated: isoIn(-60) });
+    // A retry notice for the charge that never went through, newer than the cancellation.
+    await deliverMercadoPago(env, "subscription_authorized_payment", {
+      id: `AP-NEVER-${charge.label}`,
+      preapproval_id: preapprovalId,
+      status: charge.status,
+      date_created: isoIn(-55),
+      date_last_updated: isoIn(-55),
+      ...(charge.payment ? { payment: charge.payment } : {})
+    });
+    const claim = await claimFor(env, "mercadopago", preapprovalId);
+    assert.equal(claim.status, 403, charge.label);
+    assert.equal(claim.body.token, undefined, `${charge.label}: no period was ever paid for`);
+  }
+});
+
+test("a Mercado Pago subscription that was never authorized never entitles", async () => {
+  const env = createTestEnv();
+  const preapproval = {
+    id: "PRE-PENDING",
+    status: "pending",
+    reason: "Vocal Studio Pro anual",
+    // When Mercado Pago would charge, if the card were ever authorized.
+    next_payment_date: isoIn(365 * DAY),
+    date_last_updated: isoIn(-120),
+    payer_id: 5
+  };
+  await deliverMercadoPago(env, "subscription_preapproval", preapproval);
+  const waiting = await claimFor(env, "mercadopago", "PRE-PENDING");
+  assert.equal(waiting.status, 202);
+  assert.equal(waiting.body.token, undefined);
+
+  await deliverMercadoPago(env, "subscription_preapproval", { ...preapproval, status: "cancelled", date_last_updated: isoIn(-60) });
+  const cancelled = await claimFor(env, "mercadopago", "PRE-PENDING");
+  assert.equal(cancelled.status, 403, "a subscription nobody paid for keeps no period");
+  assert.equal(cancelled.body.token, undefined);
+});
+
+test("a refunded or charged-back Mercado Pago payment ends access at once", async () => {
+  for (const [finalStatus, plan] of [["refunded", "pro_yearly"], ["charged_back", "pro_monthly"]]) {
+    const env = createTestEnv();
+    const id = `PAY-${finalStatus}`;
+    const approved = isoIn(-2 * DAY);
+    const payment = {
+      id,
+      status: "approved",
+      external_reference: plan,
+      date_created: approved,
+      date_approved: approved,
+      date_last_updated: approved,
+      payer: { id: 7 }
+    };
+    await deliverMercadoPago(env, "payment", payment);
+    const paid = await claimFor(env, "mercadopago", id);
+    assert.equal(paid.status, 200, `${finalStatus}: paid first`);
+
+    await deliverMercadoPago(env, "payment", { ...payment, status: finalStatus, date_last_updated: isoIn(-60) });
+    const after = await handleRequest(postJson("/v1/license", { licenseId: paid.body.licenseId }), env);
+    assert.equal(after.status, 403, `${finalStatus}: the money went back, so does the access`);
+    const body = await after.json();
+    assert.equal(body.reason, "inactive");
+    assert.equal(body.token, undefined);
+  }
+});
+
+test("a refunded Mercado Pago subscription charge ends access until a charge goes through again", async () => {
+  const env = createTestEnv();
+  await deliverMercadoPago(env, "subscription_preapproval", {
+    id: "PRE-REFUND",
+    status: "authorized",
+    reason: "Vocal Studio Pro mensual",
+    next_payment_date: isoIn(20 * DAY),
+    date_last_updated: isoIn(-10 * DAY),
+    payer_id: 5
+  });
+  const { body } = await claimFor(env, "mercadopago", "PRE-REFUND");
+  const licenseId = body.licenseId;
+  assert.equal(typeof licenseId, "string");
+
+  const charge = {
+    id: "AP-REFUND",
+    preapproval_id: "PRE-REFUND",
+    status: "processed",
+    date_created: isoIn(-10 * DAY),
+    date_last_updated: isoIn(-120),
+    payment: { id: 991, status: "refunded", date_approved: isoIn(-10 * DAY) }
+  };
+  await deliverMercadoPago(env, "subscription_authorized_payment", charge);
+  const refused = await handleRequest(postJson("/v1/license", { licenseId }), env);
+  assert.equal(refused.status, 403, "a refunded charge keeps none of the period it paid for");
+
+  // Next month's charge goes through.
+  await deliverMercadoPago(env, "subscription_authorized_payment", {
+    ...charge,
+    id: "AP-NEXT",
+    date_created: isoIn(-60),
+    date_last_updated: isoIn(-60),
+    payment: { id: 992, status: "approved", date_approved: isoIn(-60) }
+  });
+  const restored = await handleRequest(postJson("/v1/license", { licenseId }), env);
+  assert.equal(restored.status, 200);
+});
+
+test("a one-time Stripe checkout entitles for one plan interval, not forever", async () => {
+  const env = createTestEnv();
+  const paidAt = Math.floor(Date.now() / 1000) - 60;
+  await deliverStripe(env, checkoutEvent("cs_once", "evt_once", {
+    mode: "payment",
+    subscription: null,
+    plan: "pro_monthly",
+    created: paidAt
+  }));
+  const claim = await claimFor(env, "stripe", "cs_once");
+  assert.equal(claim.status, 200);
+  assert.equal(claim.body.entitlement.periodEnd, paidAt + 2678400, "one month from the payment");
+  const verified = await verifyLicenseToken(claim.body.token, env);
+  assert.equal(verified.payload.periodEnd, paidAt + 2678400);
+
+  // The same purchase made 400 days ago has run out.
+  const old = createTestEnv();
+  await deliverStripe(old, checkoutEvent("cs_old", "evt_old", {
+    mode: "payment",
+    subscription: null,
+    plan: "pro_yearly",
+    created: paidAt - 400 * DAY
+  }));
+  const expired = await claimFor(old, "stripe", "cs_old");
+  assert.equal(expired.status, 403);
+  assert.equal(expired.body.reason, "inactive");
+  assert.equal(expired.body.token, undefined);
+});
+
+test("a one-time Stripe checkout paid by a delayed method counts from when the money arrived", async () => {
+  const env = createTestEnv();
+  const now = Math.floor(Date.now() / 1000);
+  const once = { mode: "payment", subscription: null, plan: "pro_monthly" };
+  await deliverStripe(env, checkoutEvent("cs_once_async", "evt_oa1", { ...once, paymentStatus: "unpaid", created: now - 3 * DAY }));
+  assert.equal((await claimFor(env, "stripe", "cs_once_async")).status, 202);
+  await deliverStripe(env, checkoutEvent("cs_once_async", "evt_oa2", {
+    ...once,
+    type: "checkout.session.async_payment_succeeded",
+    created: now - 60
+  }));
+  const settled = await claimFor(env, "stripe", "cs_once_async");
+  assert.equal(settled.status, 200);
+  assert.equal(settled.body.entitlement.periodEnd, now - 60 + 2678400);
+
+  const failed = createTestEnv();
+  await deliverStripe(failed, checkoutEvent("cs_once_fail", "evt_of1", { ...once, paymentStatus: "unpaid", created: now - 3 * DAY }));
+  await deliverStripe(failed, checkoutEvent("cs_once_fail", "evt_of2", {
+    ...once,
+    type: "checkout.session.async_payment_failed",
+    paymentStatus: "unpaid",
+    created: now - 60
+  }));
+  const refused = await claimFor(failed, "stripe", "cs_once_fail");
+  assert.equal(refused.status, 403, "a failed payment gets no interval");
+  const periodEnd = refused.body.entitlement.periodEnd;
+  assert.ok(periodEnd === null || periodEnd <= now, `no period ahead of now, got ${periodEnd}`);
+});
+
+test("a Stripe subscription that stopped paying or is paused gives no token, even as its period rolls on", async () => {
+  for (const stripeStatus of ["unpaid", "paused", "a_status_stripe_adds_later"]) {
+    const env = createTestEnv();
+    const now = Math.floor(Date.now() / 1000);
+    await deliverStripe(env, checkoutEvent("cs_stop", "evt_s1", { plan: "pro_monthly", created: now - 100 * DAY }));
+    // Stripe keeps rolling an unpaid subscription's period forward.
+    await deliverStripe(env, {
+      id: "evt_s2",
+      type: "customer.subscription.updated",
+      created: now - 1,
+      data: { object: { id: "sub_router", status: stripeStatus, current_period_end: now + 29 * DAY } }
+    });
+    const claim = await claimFor(env, "stripe", "cs_stop");
+    assert.equal(claim.status, 403, `${stripeStatus}: retries are over, so is access`);
+    assert.equal(claim.body.reason, "inactive", `${stripeStatus}: refused, not left polling`);
+    assert.equal(claim.body.token, undefined);
+
+    // Paying the open invoice brings it back.
+    await deliverStripe(env, {
+      id: "evt_s3",
+      type: "invoice.paid",
+      created: now,
+      data: { object: { id: "in_back", subscription: "sub_router", lines: { data: [{ period: { end: now + 29 * DAY } }] } } }
+    });
+    assert.equal((await claimFor(env, "stripe", "cs_stop")).status, 200, `${stripeStatus}: paid again`);
+  }
+});
+
+test("a Stripe subscription that turns active before a delayed payment settles gives no token yet", async () => {
+  const env = createTestEnv();
+  const now = Math.floor(Date.now() / 1000);
+  await deliverStripe(env, checkoutEvent("cs_delay", "evt_d1", { paymentStatus: "unpaid", created: now - 5 }));
+  // Stripe documents that a subscription paid by a delayed method can go
+  // straight to active while the payment is still processing.
+  await deliverStripe(env, {
+    id: "evt_d2",
+    type: "customer.subscription.created",
+    created: now - 5,
+    data: { object: { id: "sub_router", status: "active", current_period_end: now + 365 * DAY } }
+  });
+  const waiting = await claimFor(env, "stripe", "cs_delay");
+  assert.equal(waiting.status, 202, "the money has not arrived");
+  assert.equal(waiting.body.reason, "pending");
+  assert.equal(waiting.body.token, undefined);
+
+  // The payment settles.
+  await deliverStripe(env, {
+    id: "evt_d3",
+    type: "invoice.paid",
+    created: now - 1,
+    data: { object: { id: "in_settled", subscription: "sub_router", lines: { data: [{ period: { end: now + 365 * DAY } }] } } }
+  });
+  const settled = await claimFor(env, "stripe", "cs_delay");
+  assert.equal(settled.status, 200);
+  assert.equal((await verifyLicenseToken(settled.body.token, env)).valid, true);
+});
+
+test("the unpaid checkout counts even when it is delivered after the subscription's events", async () => {
+  const env = createTestEnv();
+  const now = Math.floor(Date.now() / 1000);
+  await deliverStripe(env, {
+    id: "evt_r1",
+    type: "customer.subscription.created",
+    created: now - 4,
+    data: { object: { id: "sub_router", status: "active", current_period_end: now + 365 * DAY } }
+  });
+  // Emitted a second earlier, delivered later.
+  await deliverStripe(env, checkoutEvent("cs_late_unpaid", "evt_r2", { paymentStatus: "unpaid", created: now - 5 }));
+  const claim = await claimFor(env, "stripe", "cs_late_unpaid");
+  assert.equal(claim.status, 202);
+  assert.equal(claim.body.token, undefined);
+});
+
+test("a first invoice that failed gives no grace to a checkout that was never paid", async () => {
+  const env = createTestEnv();
+  const now = Math.floor(Date.now() / 1000);
+  await deliverStripe(env, checkoutEvent("cs_first_fail", "evt_ff1", { paymentStatus: "unpaid", created: now - 10 }));
+  await deliverStripe(env, {
+    id: "evt_ff2",
+    type: "invoice.payment_failed",
+    created: now - 5,
+    data: {
+      object: {
+        id: "in_first",
+        subscription: "sub_router",
+        billing_reason: "subscription_create",
+        lines: { data: [{ period: { end: now + 30 * DAY } }] }
+      }
+    }
+  });
+  const claim = await claimFor(env, "stripe", "cs_first_fail");
+  assert.notEqual(claim.status, 200);
+  assert.equal(claim.body.token, undefined, "no month of Pro for a payment that failed");
+});
+
+test("a delayed payment that failed stays refused, whatever the subscription says next", async () => {
+  const env = createTestEnv();
+  const now = Math.floor(Date.now() / 1000);
+  await deliverStripe(env, {
+    id: "evt_x1",
+    type: "customer.subscription.created",
+    created: now - 10,
+    data: { object: { id: "sub_router", status: "incomplete", current_period_end: now + 365 * DAY } }
+  });
+  await deliverStripe(env, checkoutEvent("cs_failed", "evt_x2", { paymentStatus: "unpaid", created: now - 9 }));
+  await deliverStripe(env, checkoutEvent("cs_failed", "evt_x3", {
+    type: "checkout.session.async_payment_failed",
+    paymentStatus: "unpaid",
+    created: now - 8
+  }));
+  const failed = await claimFor(env, "stripe", "cs_failed");
+  assert.equal(failed.status, 403, "the subscription's year was never paid for");
+  assert.equal(failed.body.token, undefined);
+
+  // Stripe documents that the subscription can stay active after a delayed
+  // payment fails, and its invoice events keep coming.
+  await deliverStripe(env, {
+    id: "evt_x4",
+    type: "invoice.payment_failed",
+    created: now - 6,
+    data: { object: { id: "in_x", subscription: "sub_router", lines: { data: [{ period: { end: now + 30 * DAY } }] } } }
+  });
+  await deliverStripe(env, {
+    id: "evt_x5",
+    type: "customer.subscription.updated",
+    created: now - 4,
+    data: { object: { id: "sub_router", status: "active", current_period_end: now + 365 * DAY } }
+  });
+  const still = await claimFor(env, "stripe", "cs_failed");
+  assert.equal(still.status, 403);
+  assert.equal(still.body.token, undefined);
+});
+
+test("a subscription cancelled after its renewal kept failing keeps none of the unpaid period", async () => {
+  const env = createTestEnv();
+  const now = Math.floor(Date.now() / 1000);
+  const start = now - 51 * DAY;
+  await deliverStripe(env, checkoutEvent("cs_dunning", "evt_n1", { plan: "pro_monthly", created: start }));
+  await deliverStripe(env, {
+    id: "evt_n2",
+    type: "invoice.paid",
+    created: start,
+    data: { object: { id: "in_paid", subscription: "sub_router", lines: { data: [{ period: { end: start + 30 * DAY } }] } } }
+  });
+  await deliverStripe(env, {
+    id: "evt_n3",
+    type: "invoice.payment_failed",
+    created: start + 30 * DAY,
+    data: { object: { id: "in_unpaid", subscription: "sub_router", lines: { data: [{ period: { end: start + 60 * DAY } }] } } }
+  });
+  // Retries are exhausted and Stripe cancels the subscription. Its period end
+  // is still the end of the month nobody paid for.
+  await deliverStripe(env, {
+    id: "evt_n4",
+    type: "customer.subscription.deleted",
+    created: now,
+    data: { object: { id: "sub_router", status: "canceled", current_period_end: start + 60 * DAY, ended_at: now, canceled_at: now } }
+  });
+  const claim = await claimFor(env, "stripe", "cs_dunning");
+  assert.equal(claim.status, 403, "the last paid period ended three weeks ago");
+  assert.equal(claim.body.token, undefined);
+});
+
+test("Stripe saying it cancelled for a failed payment ends access when it ended", async () => {
+  const env = createTestEnv();
+  const now = Math.floor(Date.now() / 1000);
+  await deliverStripe(env, checkoutEvent("cs_reason", "evt_q1", { plan: "pro_monthly", created: now - 40 * DAY }));
+  // The dunning events were never seen here; the cancellation says why.
+  await deliverStripe(env, {
+    id: "evt_q2",
+    type: "customer.subscription.deleted",
+    created: now,
+    data: {
+      object: {
+        id: "sub_router",
+        status: "canceled",
+        current_period_end: now + 20 * DAY,
+        ended_at: now,
+        cancellation_details: { reason: "payment_failed" }
+      }
+    }
+  });
+  const claim = await claimFor(env, "stripe", "cs_reason");
+  assert.equal(claim.status, 403);
+  assert.equal(claim.body.token, undefined);
+});
+
+test("a paid subscription cancelled at once still keeps the period it paid for", async () => {
+  const env = createTestEnv();
+  const now = Math.floor(Date.now() / 1000);
+  const periodEnd = now + 20 * DAY;
+  await deliverStripe(env, checkoutEvent("cs_paid_cancel", "evt_p1", { plan: "pro_monthly", created: now - 10 * DAY }));
+  await deliverStripe(env, {
+    id: "evt_p2",
+    type: "invoice.paid",
+    created: now - 10 * DAY,
+    data: { object: { id: "in_p", subscription: "sub_router", lines: { data: [{ period: { end: periodEnd } }] } } }
+  });
+  await deliverStripe(env, {
+    id: "evt_p3",
+    type: "customer.subscription.deleted",
+    created: now,
+    data: {
+      object: {
+        id: "sub_router",
+        status: "canceled",
+        current_period_end: periodEnd,
+        ended_at: now,
+        cancellation_details: { reason: "cancellation_requested" }
+      }
+    }
+  });
+  const claim = await claimFor(env, "stripe", "cs_paid_cancel");
+  assert.equal(claim.status, 200);
+  const verified = await verifyLicenseToken(claim.body.token, env);
+  assert.equal(verified.payload.status, "canceled");
+  assert.equal(verified.payload.periodEnd, periodEnd);
+});
+
+test("a delayed payment that settles after the subscription was cancelled at once buys no access", async () => {
+  // Documented in the README: the cancellation came while nothing was paid,
+  // and a deleted subscription stays as its deletion left it.
+  const env = createTestEnv();
+  const now = Math.floor(Date.now() / 1000);
+  await deliverStripe(env, checkoutEvent("cs_late_money", "evt_lm1", {
+    plan: "pro_monthly",
+    paymentStatus: "unpaid",
+    created: now - 4 * DAY
+  }));
+  await deliverStripe(env, {
+    id: "evt_lm2",
+    type: "customer.subscription.deleted",
+    created: now - 3 * DAY,
+    data: {
+      object: {
+        id: "sub_router",
+        status: "canceled",
+        current_period_end: now + 27 * DAY,
+        ended_at: now - 3 * DAY,
+        cancellation_details: { reason: "cancellation_requested" }
+      }
+    }
+  });
+  await deliverStripe(env, checkoutEvent("cs_late_money", "evt_lm3", {
+    type: "checkout.session.async_payment_succeeded",
+    plan: "pro_monthly",
+    created: now - DAY
+  }));
+  const claim = await claimFor(env, "stripe", "cs_late_money");
+  assert.equal(claim.status, 403);
+  assert.equal(claim.body.token, undefined);
+  assert.equal(claim.body.entitlement.periodEnd, now - 3 * DAY, "access ended when the subscription did");
+});
+
+test("an event from the same second as a cancellation cannot bring Pro back", async () => {
+  const env = createTestEnv();
+  const now = Math.floor(Date.now() / 1000);
+  await deliverStripe(env, checkoutEvent("cs_tie", "evt_t1", { plan: "pro_monthly", created: now - 40 * DAY }));
+  // Dunning ends: Stripe emits the last failed invoice and the cancellation
+  // in the same second, and delivers them in either order.
+  await deliverStripe(env, {
+    id: "evt_t2",
+    type: "customer.subscription.deleted",
+    created: now - 5,
+    data: { object: { id: "sub_router", status: "canceled", current_period_end: now - 5, ended_at: now - 5 } }
+  });
+  assert.equal((await claimFor(env, "stripe", "cs_tie")).status, 403);
+
+  await deliverStripe(env, {
+    id: "evt_t3",
+    type: "invoice.payment_failed",
+    created: now - 5,
+    data: { object: { id: "in_tie", subscription: "sub_router", lines: { data: [{ period: { end: now + 25 * DAY } }] } } }
+  });
+  const tie = await claimFor(env, "stripe", "cs_tie");
+  assert.equal(tie.status, 403, "a same-second event must not undo the cancellation");
+  assert.equal(tie.body.token, undefined);
+});
+
+test("nothing that arrives after a Stripe subscription was deleted reopens it", async () => {
+  const env = createTestEnv();
+  const now = Math.floor(Date.now() / 1000);
+  await deliverStripe(env, checkoutEvent("cs_gone", "evt_g1", { plan: "pro_monthly", created: now - 40 * DAY }));
+  await deliverStripe(env, {
+    id: "evt_g2",
+    type: "customer.subscription.deleted",
+    created: now - 50,
+    data: { object: { id: "sub_router", status: "canceled", current_period_end: now - 60, ended_at: now - 50 } }
+  });
+  // Stripe never reactivates a deleted subscription, so a newer event for it
+  // (an old invoice paid late, say) does not bring the license back.
+  await deliverStripe(env, {
+    id: "evt_g3",
+    type: "invoice.paid",
+    created: now - 10,
+    data: { object: { id: "in_late_paid", subscription: "sub_router", lines: { data: [{ period: { end: now + 25 * DAY } }] } } }
+  });
+  const claim = await claimFor(env, "stripe", "cs_gone");
+  assert.equal(claim.status, 403);
+  assert.equal(claim.body.token, undefined);
+});
+
+test("a failed invoice from the same second as the subscription going unpaid does not reopen it", async () => {
+  const env = createTestEnv();
+  const now = Math.floor(Date.now() / 1000);
+  await deliverStripe(env, checkoutEvent("cs_last_retry", "evt_l1", { plan: "pro_monthly", created: now - 60 * DAY }));
+  // The last retry fails: Stripe marks the subscription unpaid and reports
+  // the failed invoice in the same second.
+  await deliverStripe(env, {
+    id: "evt_l2",
+    type: "customer.subscription.updated",
+    created: now - 5,
+    data: { object: { id: "sub_router", status: "unpaid", current_period_end: now + 20 * DAY } }
+  });
+  await deliverStripe(env, {
+    id: "evt_l3",
+    type: "invoice.payment_failed",
+    created: now - 5,
+    data: { object: { id: "in_last", subscription: "sub_router", lines: { data: [{ period: { end: now + 20 * DAY } }] } } }
+  });
+  const claim = await claimFor(env, "stripe", "cs_last_retry");
+  assert.equal(claim.status, 403);
+  assert.equal(claim.body.token, undefined);
+});
+
+test("a Stripe subscription that stopped paying gets nothing back when it is then cancelled", async () => {
+  const now = Math.floor(Date.now() / 1000);
+  const cancelled = (id, periodEnd) => ({
+    id,
+    type: "customer.subscription.deleted",
+    created: now - 60,
+    data: {
+      object: {
+        id: "sub_router",
+        status: "canceled",
+        current_period_end: periodEnd,
+        ended_at: now - 60,
+        cancellation_details: { reason: "cancellation_requested" }
+      }
+    }
+  });
+
+  // Unpaid: retries ran out and Stripe keeps rolling the period forward; the
+  // operator (or the customer, in the portal) then cancels it.
+  const unpaid = createTestEnv();
+  await deliverStripe(unpaid, checkoutEvent("cs_unpaid_cancel", "evt_u1", { plan: "pro_monthly", created: now - 100 * DAY }));
+  await deliverStripe(unpaid, {
+    id: "evt_u2",
+    type: "invoice.paid",
+    created: now - 100 * DAY,
+    data: { object: { id: "in_u", subscription: "sub_router", lines: { data: [{ period: { end: now - 70 * DAY } }] } } }
+  });
+  for (const [id, created, periodEnd] of [["evt_u3", now - 40 * DAY, now - 10 * DAY], ["evt_u4", now - 10 * DAY, now + 20 * DAY]]) {
+    await deliverStripe(unpaid, {
+      id,
+      type: "customer.subscription.updated",
+      created,
+      data: { object: { id: "sub_router", status: "unpaid", current_period_end: periodEnd } }
+    });
+  }
+  assert.equal((await claimFor(unpaid, "stripe", "cs_unpaid_cancel")).status, 403);
+  await deliverStripe(unpaid, cancelled("evt_u5", now + 20 * DAY));
+  const afterUnpaid = await claimFor(unpaid, "stripe", "cs_unpaid_cancel");
+  assert.equal(afterUnpaid.status, 403, "the rolled-forward month was never paid for");
+  assert.equal(afterUnpaid.body.token, undefined);
+
+  // Paused: a trial ended with no card on file, then the customer cancels.
+  const paused = createTestEnv();
+  await deliverStripe(paused, checkoutEvent("cs_paused_cancel", "evt_v1", {
+    plan: "pro_monthly",
+    paymentStatus: "no_payment_required",
+    created: now - 20 * DAY
+  }));
+  await deliverStripe(paused, {
+    id: "evt_v2",
+    type: "customer.subscription.updated",
+    created: now - 5 * DAY,
+    data: { object: { id: "sub_router", status: "paused", current_period_end: now + 25 * DAY } }
+  });
+  await deliverStripe(paused, cancelled("evt_v3", now + 25 * DAY));
+  const afterPaused = await claimFor(paused, "stripe", "cs_paused_cancel");
+  assert.equal(afterPaused.status, 403, "nothing was paid after the trial");
+  assert.equal(afterPaused.body.token, undefined);
+});
+
+test("a paid card checkout keeps its access when the subscription's creation, from the same second, arrives last", async () => {
+  const env = createTestEnv();
+  const at = Math.floor(Date.now() / 1000) - 30;
+  // A card checkout: Stripe creates the subscription incomplete, takes the
+  // payment and activates it within one second, and delivers in any order.
+  await deliverStripe(env, {
+    id: "evt_c1",
+    type: "customer.subscription.updated",
+    created: at,
+    data: { object: { id: "sub_router", status: "active", current_period_end: at + 30 * DAY } }
+  });
+  await deliverStripe(env, {
+    id: "evt_c2",
+    type: "invoice.paid",
+    created: at,
+    data: { object: { id: "in_c", subscription: "sub_router", lines: { data: [{ period: { end: at + 30 * DAY } }] } } }
+  });
+  await deliverStripe(env, checkoutEvent("cs_card", "evt_c3", { plan: "pro_monthly", created: at }));
+  await deliverStripe(env, {
+    id: "evt_c4",
+    type: "customer.subscription.created",
+    created: at,
+    data: { object: { id: "sub_router", status: "incomplete", current_period_end: at + 30 * DAY } }
+  });
+  const claim = await claimFor(env, "stripe", "cs_card");
+  assert.equal(claim.status, 200, "a paid customer is not left waiting");
+  assert.equal(claim.body.entitlement.status, "active");
+  assert.equal((await verifyLicenseToken(claim.body.token, env)).valid, true);
+});
+
+test("a delayed payment that failed is refused, not awaited, after the subscription goes unpaid and active", async () => {
+  const env = createTestEnv();
+  const now = Math.floor(Date.now() / 1000);
+  await deliverStripe(env, checkoutEvent("cs_fail_then", "evt_h1", { paymentStatus: "unpaid", created: now - 10 }));
+  await deliverStripe(env, checkoutEvent("cs_fail_then", "evt_h2", {
+    type: "checkout.session.async_payment_failed",
+    paymentStatus: "unpaid",
+    created: now - 8
+  }));
+  assert.equal((await claimFor(env, "stripe", "cs_fail_then")).status, 403);
+  for (const [id, status, created] of [["evt_h3", "unpaid", now - 6], ["evt_h4", "active", now - 4]]) {
+    await deliverStripe(env, {
+      id,
+      type: "customer.subscription.updated",
+      created,
+      data: { object: { id: "sub_router", status, current_period_end: now + 20 * DAY } }
+    });
+  }
+  const claim = await claimFor(env, "stripe", "cs_fail_then");
+  assert.equal(claim.status, 403, "the browser must not keep polling for a payment that failed");
+  assert.equal(claim.body.reason, "inactive");
+  assert.equal(claim.body.token, undefined);
+});
+
+test("a Stripe setup session posted to the claim gives no Pro", async () => {
+  const env = createTestEnv();
+  const now = Math.floor(Date.now() / 1000);
+  await deliverStripe(env, checkoutEvent("cs_setup", "evt_setup", {
+    mode: "setup",
+    subscription: null,
+    paymentStatus: "no_payment_required",
+    created: now - 60
+  }));
+  const claim = await claimFor(env, "stripe", "cs_setup");
+  assert.equal(claim.status, 403);
+  assert.equal(claim.body.reason, "inactive");
+  assert.equal(claim.body.token, undefined);
+});
+
+test("a Mercado Pago refund ends access whether it arrives before or after the cancellation", async () => {
+  for (const order of ["refund first", "cancellation first"]) {
+    const env = createTestEnv();
+    const preapproval = {
+      id: "PRE-ORDER",
+      status: "authorized",
+      reason: "Vocal Studio Pro anual",
+      next_payment_date: isoIn(360 * DAY),
+      date_last_updated: isoIn(-5 * DAY),
+      payer_id: 5
+    };
+    await deliverMercadoPago(env, "subscription_preapproval", preapproval);
+    await deliverMercadoPago(env, "subscription_authorized_payment", {
+      id: "AP-ORDER",
+      preapproval_id: "PRE-ORDER",
+      status: "processed",
+      date_created: isoIn(-5 * DAY),
+      date_last_updated: isoIn(-5 * DAY),
+      payment: { id: 41, status: "approved", date_approved: isoIn(-5 * DAY) }
+    });
+    assert.equal((await claimFor(env, "mercadopago", "PRE-ORDER")).status, 200, `${order}: paid first`);
+
+    // The operator refunds the year's charge, then cancels the subscription;
+    // the notifications land in either order.
+    const refund = ["payment", {
+      id: 41,
+      status: "refunded",
+      metadata: { preapproval_id: "PRE-ORDER" },
+      date_approved: isoIn(-5 * DAY),
+      date_created: isoIn(-5 * DAY),
+      date_last_updated: isoIn(-120)
+    }];
+    const cancellation = ["subscription_preapproval", { ...preapproval, status: "cancelled", date_last_updated: isoIn(-60) }];
+    for (const [kind, resource] of order === "refund first" ? [refund, cancellation] : [cancellation, refund]) {
+      await deliverMercadoPago(env, kind, resource);
+    }
+    const claim = await claimFor(env, "mercadopago", "PRE-ORDER");
+    assert.equal(claim.status, 403, `${order}: the year's money went back`);
+    assert.equal(claim.body.token, undefined, order);
+  }
+});
+
+test("refunding an earlier Mercado Pago charge leaves the month a later charge paid for", async () => {
+  const env = createTestEnv();
+  await deliverMercadoPago(env, "subscription_preapproval", {
+    id: "PRE-OLD",
+    status: "authorized",
+    reason: "Vocal Studio Pro mensual",
+    next_payment_date: isoIn(20 * DAY),
+    date_last_updated: isoIn(-10 * DAY),
+    payer_id: 5
+  });
+  await deliverMercadoPago(env, "subscription_authorized_payment", {
+    id: "AP-OLD",
+    preapproval_id: "PRE-OLD",
+    status: "processed",
+    date_created: isoIn(-40 * DAY),
+    date_last_updated: isoIn(-40 * DAY),
+    payment: { id: 51, status: "approved", date_approved: isoIn(-40 * DAY) }
+  });
+  await deliverMercadoPago(env, "subscription_authorized_payment", {
+    id: "AP-NEW",
+    preapproval_id: "PRE-OLD",
+    status: "processed",
+    date_created: isoIn(-10 * DAY),
+    date_last_updated: isoIn(-10 * DAY),
+    payment: { id: 52, status: "approved", date_approved: isoIn(-10 * DAY) }
+  });
+  assert.equal((await claimFor(env, "mercadopago", "PRE-OLD")).status, 200);
+
+  // Last month's charge is refunded as a goodwill gesture.
+  await deliverMercadoPago(env, "payment", {
+    id: 51,
+    status: "refunded",
+    metadata: { preapproval_id: "PRE-OLD" },
+    date_approved: isoIn(-40 * DAY),
+    date_created: isoIn(-40 * DAY),
+    date_last_updated: isoIn(-60)
+  });
+  const claim = await claimFor(env, "mercadopago", "PRE-OLD");
+  assert.equal(claim.status, 200, "this month was paid by a later charge");
+  assert.equal((await verifyLicenseToken(claim.body.token, env)).valid, true);
+
+  // The refund of this month's charge does end it, and a later notification
+  // of the still-authorized subscription does not re-open it.
+  await deliverMercadoPago(env, "payment", {
+    id: 52,
+    status: "refunded",
+    metadata: { preapproval_id: "PRE-OLD" },
+    date_approved: isoIn(-10 * DAY),
+    date_created: isoIn(-10 * DAY),
+    date_last_updated: isoIn(-30)
+  });
+  assert.equal((await claimFor(env, "mercadopago", "PRE-OLD")).status, 403);
+  await deliverMercadoPago(env, "subscription_preapproval", {
+    id: "PRE-OLD",
+    status: "authorized",
+    reason: "Vocal Studio Pro mensual",
+    next_payment_date: isoIn(20 * DAY),
+    date_last_updated: isoIn(-10),
+    payer_id: 5
+  });
+  const reopened = await claimFor(env, "mercadopago", "PRE-OLD");
+  assert.equal(reopened.status, 403, "the refunded month stays closed");
+  assert.equal(reopened.body.token, undefined);
+});
+
+test("a Mercado Pago subscription stopped before its first charge is processed keeps the month it paid for", async () => {
+  const MONTH = 2678400;
+  /**
+   * Subscribe, pay, and pause or cancel two minutes later. The worker reads
+   * Mercado Pago when it processes each notification, so the subscription's
+   * own notification already says it stopped, and it is processed before the
+   * charge's.
+   * @param {Object} env Env bindings.
+   * @param {string} id Preapproval id.
+   * @param {string} status "cancelled" | "paused".
+   * @param {string} topic Which notification brings the charge.
+   * @param {number} approvedAt When the charge went through, unix seconds.
+   * @returns {Promise<void>} Resolves when both are delivered.
+   */
+  async function payThenStop(env, id, status, topic, approvedAt) {
+    const at = (offset) => new Date((approvedAt + offset) * 1000).toISOString();
+    await deliverMercadoPago(env, "subscription_preapproval", {
+      id,
+      status,
+      reason: "Vocal Studio Pro mensual",
+      next_payment_date: at(30 * DAY),
+      date_last_updated: at(120),
+      payer_id: 5
+    });
+    await deliverMercadoPago(env, topic, topic === "payment"
+      ? {
+        id: `PAY-${id}`,
+        status: "approved",
+        metadata: { preapproval_id: id },
+        date_created: at(-5),
+        date_approved: at(0),
+        date_last_updated: at(6),
+        payer: { id: 5 }
+      }
+      : {
+        id: `AP-${id}`,
+        preapproval_id: id,
+        status: "processed",
+        date_created: at(-5),
+        date_last_updated: at(5),
+        payment: { id: 61, status: "approved", date_approved: at(0) }
+      });
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  for (const status of ["cancelled", "paused"]) {
+    for (const topic of ["subscription_authorized_payment", "payment"]) {
+      const label = `${status}, charge on ${topic}`;
+      const env = createTestEnv();
+      const id = `PRE-QUICK-${status}-${topic}`;
+      await payThenStop(env, id, status, topic, now - 5 * DAY);
+      const claim = await claimFor(env, "mercadopago", id);
+      assert.equal(claim.status, 200, `${label}: the money arrived`);
+      assert.equal(claim.body.entitlement.status, "canceled", label);
+      assert.equal(claim.body.entitlement.periodEnd, now - 5 * DAY + MONTH, `${label}: one month from the charge`);
+      const verified = await verifyLicenseToken(claim.body.token, env);
+      assert.equal(verified.valid, true, label);
+      assert.ok(verified.payload.exp <= now - 5 * DAY + MONTH, `${label}: the token ends with the month`);
+
+      // The same, a month on: the month it paid for is over.
+      const later = createTestEnv();
+      await payThenStop(later, id, status, topic, now - 40 * DAY);
+      const over = await claimFor(later, "mercadopago", id);
+      assert.equal(over.status, 403, `${label}: nothing past the month it paid for`);
+      assert.equal(over.body.entitlement.periodEnd, now - 40 * DAY + MONTH, label);
+      assert.equal(over.body.token, undefined, label);
+    }
+  }
+});
+
+test("a yearly Mercado Pago subscriber who stops at once keeps the year when the charge is processed first", async () => {
+  /**
+   * Subscribe to the yearly plan, pay, and pause or cancel two minutes later.
+   * Every notification about the charge is processed before the
+   * subscription's own, which already says it stopped: the license is first
+   * heard of through a charge, and a charge does not say its plan.
+   * @param {Object} env Env bindings.
+   * @param {string} id Preapproval id.
+   * @param {string} status "cancelled" | "paused".
+   * @param {string} topic Which notification brings the charge.
+   * @param {number} approvedAt When the charge went through, unix seconds.
+   * @param {number} yearEnd The same date a year on, unix seconds.
+   * @returns {Promise<void>} Resolves when both are delivered.
+   */
+  async function payThenStop(env, id, status, topic, approvedAt, yearEnd) {
+    const at = (offset) => new Date((approvedAt + offset) * 1000).toISOString();
+    await deliverMercadoPago(env, topic, topic === "payment"
+      ? {
+        id: `PAY-${id}`,
+        status: "approved",
+        metadata: { preapproval_id: id },
+        date_created: at(-5),
+        date_approved: at(0),
+        date_last_updated: at(6),
+        payer: { id: 5 }
+      }
+      : {
+        id: `AP-${id}`,
+        preapproval_id: id,
+        status: "processed",
+        date_created: at(-5),
+        date_last_updated: at(5),
+        payment: { id: 62, status: "approved", date_approved: at(0) }
+      });
+    await deliverMercadoPago(env, "subscription_preapproval", {
+      id,
+      status,
+      reason: "Vocal Studio Pro anual",
+      auto_recurring: { frequency: 12, frequency_type: "months" },
+      next_payment_date: at(yearEnd - approvedAt),
+      date_last_updated: at(120),
+      payer_id: 5
+    });
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  // Day 60 of the year it paid for.
+  const approvedAt = now - 60 * DAY;
+  // The same date next year, counted on the calendar: 366 days when the year
+  // spans 29 February, whatever day the suite runs.
+  const nextYear = new Date(approvedAt * 1000);
+  nextYear.setUTCMonth(nextYear.getUTCMonth() + 12);
+  const yearEnd = Math.floor(nextYear.getTime() / 1000);
+  for (const status of ["cancelled", "paused"]) {
+    for (const topic of ["subscription_authorized_payment", "payment"]) {
+      const label = `${topic}, then ${status}`;
+      const env = createTestEnv();
+      const id = `PRE-YEAR-${status}-${topic}`;
+      await payThenStop(env, id, status, topic, approvedAt, yearEnd);
+      const claim = await claimFor(env, "mercadopago", id);
+      assert.equal(claim.status, 200, `${label}: the year was paid for`);
+      assert.equal(claim.body.entitlement.plan, "pro_yearly", label);
+      assert.equal(claim.body.entitlement.status, "canceled", label);
+      assert.equal(claim.body.entitlement.periodEnd, yearEnd, `${label}: one year from the charge`);
+      const verified = await verifyLicenseToken(claim.body.token, env);
+      assert.equal(verified.valid, true, label);
+      assert.equal(verified.payload.periodEnd, yearEnd, label);
+      assert.ok(verified.payload.exp <= yearEnd, `${label}: the token ends with the year`);
+    }
+  }
+});
+
+/**
+ * A yearly subscription's notifications on the day its card was authorized
+ * and its first charge was turned down, 35 seconds later, and on the day it
+ * stopped. Each entry is the notification kind and what the API answers.
+ * @param {string} id Preapproval id.
+ * @param {number} start When the subscription was created, unix seconds.
+ * @returns {Object<string, [string, Object]>} Notifications by name.
+ */
+function declinedFirstChargeSteps(id, start) {
+  const at = (offset) => new Date((start + offset) * 1000).toISOString();
+  const nextYear = new Date((start + 55) * 1000);
+  nextYear.setUTCMonth(nextYear.getUTCMonth() + 12);
+  const preapproval = (status, updated, nextPayment) => ["subscription_preapproval", {
+    id,
+    status,
+    reason: "Vocal Studio Pro anual",
+    auto_recurring: { frequency: 12, frequency_type: "months" },
+    next_payment_date: nextPayment,
+    date_created: at(0),
+    date_last_updated: at(updated),
+    payer_id: 5
+  }];
+  return {
+    pending: preapproval("pending", 0, null),
+    authorized: preapproval("authorized", 20, nextYear.toISOString()),
+    declined: ["subscription_authorized_payment", {
+      id: `AP-${id}`,
+      preapproval_id: id,
+      status: "recycling",
+      date_created: at(50),
+      debit_date: at(50),
+      date_last_updated: at(60),
+      payment: { id: 93, status: "rejected" }
+    }],
+    declinedPayment: ["payment", {
+      id: `PAY-${id}`,
+      status: "rejected",
+      metadata: { preapproval_id: id },
+      date_created: at(50),
+      date_last_updated: at(60),
+      payer: { id: 5 }
+    }],
+    // Five days on. Mercado Pago may clear the next charge date or leave it.
+    cancelled: preapproval("cancelled", 5 * DAY, null),
+    cancelledKeepsDate: preapproval("cancelled", 5 * DAY, nextYear.toISOString()),
+    paused: preapproval("paused", 5 * DAY, null)
+  };
+}
+
+test("a Mercado Pago subscription whose first charge was turned down keeps nothing once it stops, in any order", async () => {
+  const start = Math.floor(Date.now() / 1000) - 60 * DAY;
+  const orders = [
+    ["pending", "declined", "authorized", "cancelled"],
+    ["declined", "authorized", "cancelled"],
+    ["pending", "authorized", "declined", "cancelled"],
+    ["pending", "declined", "authorized", "cancelledKeepsDate"],
+    ["pending", "declined", "authorized", "paused"],
+    ["pending", "declinedPayment", "authorized", "cancelled"],
+    ["pending", "authorized", "cancelled", "declined"]
+  ];
+  for (const [index, order] of orders.entries()) {
+    const label = order.join(" > ");
+    const env = createTestEnv();
+    const id = `PRE-DECLINED-${index}`;
+    const steps = declinedFirstChargeSteps(id, start);
+    for (const name of order) {
+      const response = await deliverMercadoPago(env, ...steps[name]);
+      assert.equal(response.status, 200, `${label}: ${name}`);
+    }
+    const claim = await claimFor(env, "mercadopago", id);
+    assert.equal(claim.status, 403, `${label}: nothing was ever paid for`);
+    assert.equal(claim.body.token, undefined, label);
+  }
+
+  // Until it stops, an authorized subscription still runs to its next charge
+  // date, whether or not its charge went through.
+  const env = createTestEnv();
+  const steps = declinedFirstChargeSteps("PRE-DECLINED-RUNNING", start);
+  for (const name of ["pending", "declined", "authorized"]) {
+    await deliverMercadoPago(env, ...steps[name]);
+  }
+  const running = await claimFor(env, "mercadopago", "PRE-DECLINED-RUNNING");
+  assert.equal(running.status, 200);
+  assert.equal(running.body.entitlement.status, "active");
+  assert.equal(running.body.entitlement.periodEnd, Date.parse(steps.authorized[1].next_payment_date) / 1000);
+});
+
+test("a Mercado Pago subscription whose first charge goes through on a retry keeps the year, even once it stops", async () => {
+  const start = Math.floor(Date.now() / 1000) - 60 * DAY;
+  const at = (offset) => new Date((start + offset) * 1000).toISOString();
+  // The retry went through three days in, before the subscriber stopped.
+  const retriedAt = start + 3 * DAY;
+  const nextYear = new Date(retriedAt * 1000);
+  nextYear.setUTCMonth(nextYear.getUTCMonth() + 12);
+  const yearEnd = Math.floor(nextYear.getTime() / 1000);
+  for (const topic of ["subscription_authorized_payment", "payment"]) {
+    for (const retryLast of [true, false]) {
+      const label = `retry on ${topic}${retryLast ? ", processed last" : ", processed before the stop"}`;
+      const env = createTestEnv();
+      const id = `PRE-RETRIED-${topic}-${retryLast}`;
+      const steps = declinedFirstChargeSteps(id, start);
+      const retry = topic === "payment"
+        ? ["payment", {
+          id: `PAY-RETRY-${id}`,
+          status: "approved",
+          metadata: { preapproval_id: id },
+          date_created: at(3 * DAY - 5),
+          date_approved: at(3 * DAY),
+          date_last_updated: at(3 * DAY + 6),
+          payer: { id: 5 }
+        }]
+        : ["subscription_authorized_payment", {
+          ...steps.declined[1],
+          status: "processed",
+          date_last_updated: at(3 * DAY + 5),
+          payment: { id: 94, status: "approved", date_approved: at(3 * DAY) }
+        }];
+      const order = retryLast
+        ? [steps.pending, steps.declined, steps.authorized, steps.cancelled, retry]
+        : [steps.pending, steps.declined, steps.authorized, retry, steps.cancelled];
+      for (const step of order) {
+        await deliverMercadoPago(env, ...step);
+      }
+      const claim = await claimFor(env, "mercadopago", id);
+      assert.equal(claim.status, 200, `${label}: the year was paid for`);
+      assert.equal(claim.body.entitlement.status, "canceled", label);
+      assert.equal(claim.body.entitlement.periodEnd, yearEnd, `${label}: one year from the retry`);
+      const verified = await verifyLicenseToken(claim.body.token, env);
+      assert.equal(verified.valid, true, label);
+      assert.ok(verified.payload.exp <= yearEnd, label);
+    }
+  }
+});
+
+test("a Mercado Pago charge turned down after one that went through leaves the year it paid for", async () => {
+  // Paid sixty days ago; a charge out of schedule was turned down thirty days
+  // ago, and the subscriber cancelled ten days later.
+  const now = Math.floor(Date.now() / 1000);
+  const paidAt = now - 60 * DAY;
+  const at = (offset) => new Date((paidAt + offset) * 1000).toISOString();
+  const nextYear = new Date(paidAt * 1000);
+  nextYear.setUTCMonth(nextYear.getUTCMonth() + 12);
+  const yearEnd = Math.floor(nextYear.getTime() / 1000);
+  const preapproval = (status, updated, nextPayment) => ({
+    id: "PRE-PAID-THEN-DECLINED",
+    status,
+    reason: "Vocal Studio Pro anual",
+    next_payment_date: nextPayment,
+    date_last_updated: at(updated),
+    payer_id: 5
+  });
+  const env = createTestEnv();
+  await deliverMercadoPago(env, "subscription_preapproval", preapproval("authorized", -30, nextYear.toISOString()));
+  await deliverMercadoPago(env, "subscription_authorized_payment", {
+    id: "AP-PAID",
+    preapproval_id: "PRE-PAID-THEN-DECLINED",
+    status: "processed",
+    date_created: at(-5),
+    debit_date: at(-5),
+    date_last_updated: at(5),
+    payment: { id: 95, status: "approved", date_approved: at(0) }
+  });
+  await deliverMercadoPago(env, "subscription_authorized_payment", {
+    id: "AP-DECLINED",
+    preapproval_id: "PRE-PAID-THEN-DECLINED",
+    status: "recycling",
+    date_created: at(30 * DAY),
+    debit_date: at(30 * DAY),
+    date_last_updated: at(30 * DAY + 10),
+    payment: { id: 96, status: "rejected" }
+  });
+  await deliverMercadoPago(env, "subscription_preapproval", preapproval("cancelled", 40 * DAY, null));
+  const claim = await claimFor(env, "mercadopago", "PRE-PAID-THEN-DECLINED");
+  assert.equal(claim.status, 200, "the year was paid for");
+  assert.equal(claim.body.entitlement.status, "canceled");
+  assert.equal(claim.body.entitlement.periodEnd, yearEnd, "one year from the charge that went through");
 });

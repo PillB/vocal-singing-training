@@ -189,35 +189,60 @@ export async function fetchMercadoPagoResource(kind, id, env, options) {
 }
 
 /**
- * Map a Mercado Pago payment status to our entitlement status.
+ * True for a payment whose money went back to the payer.
  * @param {unknown} status Payment status.
- * @returns {string} "active" | "past_due" | "canceled".
+ * @returns {boolean} Whether it was refunded or charged back.
  */
-export function mapPaymentStatus(status) {
+function isReversedPayment(status) {
   const value = String(status);
-  if (value === "approved" || value === "authorized") {
+  return value === "refunded" || value === "charged_back";
+}
+
+/**
+ * True for a payment that was turned down or called off, so no money came in.
+ * @param {unknown} status Payment status.
+ * @returns {boolean} Whether it was rejected or cancelled.
+ */
+function isDeclinedPayment(status) {
+  const value = String(status);
+  return value === "rejected" || value === "cancelled";
+}
+
+/**
+ * Map the status of a one-off payment (Checkout Pro, a payment link) to our
+ * entitlement status. Nothing retries it, so there is no grace state: an
+ * approved payment entitles, one still on its way (an unpaid cash voucher, a
+ * card under review, a hold not yet captured, a dispute) is "pending", which
+ * never entitles, and anything else did not bring money in.
+ * @param {unknown} status Payment status.
+ * @returns {string} "active" | "pending" | "canceled".
+ */
+export function mapOneOffPaymentStatus(status) {
+  const value = String(status);
+  if (value === "approved") {
     return "active";
   }
-  if (value === "cancelled" || value === "canceled" || value === "refunded" || value === "charged_back") {
-    return "canceled";
+  if (value === "pending" || value === "in_process" || value === "authorized" || value === "in_mediation") {
+    return "pending";
   }
-  return "past_due";
+  return "canceled";
 }
 
 /**
  * Map a Mercado Pago preapproval status to our entitlement status.
+ * A preapproval still "pending" has no authorized card behind it yet.
  * @param {unknown} status Preapproval status.
- * @returns {string} "active" | "past_due" | "canceled".
+ * @returns {string} "active" | "pending" | "canceled".
  */
 export function mapPreapprovalStatus(status) {
   const value = String(status);
   if (value === "authorized") {
     return "active";
   }
-  if (value === "paused" || value === "cancelled" || value === "canceled") {
-    return "canceled";
+  if (value === "pending") {
+    return "pending";
   }
-  return "past_due";
+  return "canceled";
 }
 
 /**
@@ -346,23 +371,66 @@ export function mapPaymentResource(payment, env) {
     || planFromText(metadata.plan)
     || planFromText(payment && payment.description);
   const subscriptionId = (payment && (payment.preapproval_id || metadata.preapproval_id)) || null;
+  const approved = String(payment && payment.status) === "approved";
+  const reversed = isReversedPayment(payment && payment.status);
+  const occurredAt = resourceOccurredAt(payment);
+  // A subscription's charge that has not gone through says nothing new about
+  // the subscription: Mercado Pago retries it, and the preapproval and
+  // authorized-payment notifications carry the subscription's own state. It
+  // only records which license its payment id belongs to. One whose money went
+  // back says nothing about the subscription's state either: the reversal
+  // below ends the period it paid for, without moving the subscription's clock.
+  const silent = Boolean(subscriptionId) && !approved;
   // Checkout Pro / payment links have no subscription lifecycle behind them, so
   // nothing would ever expire this record. Entitle for one plan interval from
-  // the approval instead; a renewal payment extends it.
-  const chargedAt = isoToUnixSeconds(payment && payment.date_approved)
-    || isoToUnixSeconds(payment && payment.date_created);
+  // the approval instead; a renewal payment extends it. Only money that arrived
+  // buys time: an unpaid voucher or a turned-down card gets none.
+  const chargedAt = approved
+    ? (isoToUnixSeconds(payment && payment.date_approved) || isoToUnixSeconds(payment && payment.date_created))
+    : null;
+  // A subscription's charge does not say which plan the subscription is on, so
+  // only explicit text may set it; the monthly default would downgrade a
+  // yearly subscription.
+  const plan = subscriptionId ? (byText || undefined) : (byText || "pro_monthly");
   return {
     provider: "mercadopago",
     claimId: payment && payment.id !== undefined && payment.id !== null ? String(payment.id) : null,
     subscriptionId: subscriptionId ? String(subscriptionId) : null,
     customerId: payment && payment.payer && payment.payer.id ? String(payment.payer.id) : null,
-    plan: byText || "pro_monthly",
-    planSource: byText ? "payment_text" : "default(payment)",
-    status: mapPaymentStatus(payment && payment.status),
-    periodEnd: isoToUnixSeconds(payment && payment.date_of_expiration),
+    plan: silent ? undefined : plan,
+    planSource: silent || !plan ? undefined : (byText ? "payment_text" : "default(payment)"),
+    status: silent ? undefined : mapOneOffPaymentStatus(payment && payment.status),
+    // `date_of_expiration` is the voucher's or payment's deadline, not a
+    // paid-through date, so it never becomes the period end.
+    periodEnd: undefined,
     periodEndFromCharge: chargedAt,
-    occurredAt: resourceOccurredAt(payment)
+    // Money given back (a refund, a chargeback) takes the access it paid for
+    // with it, from the moment it left, whether the payment stood alone or was
+    // a subscription's charge. When the charge went through tells the store
+    // which period that was. A later approved charge brings access back.
+    reversedAt: reversed ? occurredAt : undefined,
+    reversedChargeAt: reversed ? chargeTime(payment, occurredAt) : undefined,
+    // A subscription's charge that was turned down: the store ends the period
+    // when the subscription stops, unless a charge has gone through since.
+    declinedAt: subscriptionId && isDeclinedPayment(payment && payment.status)
+      ? chargeTime(payment, occurredAt)
+      : undefined,
+    occurredAt: silent ? null : occurredAt
   };
+}
+
+/**
+ * When a reversed charge had gone through. A charge is never reversed before
+ * it was made, so without a date of its own the reversal's time stands in,
+ * which counts its period no shorter than it was.
+ * @param {Object} payment Payment (or an authorized payment's `payment`).
+ * @param {number|null} fallback Unix seconds to use when the payment says nothing.
+ * @returns {number|null} Unix seconds or null.
+ */
+function chargeTime(payment, fallback) {
+  return isoToUnixSeconds(payment && payment.date_approved)
+    || isoToUnixSeconds(payment && payment.date_created)
+    || fallback;
 }
 
 /**
@@ -376,6 +444,7 @@ export function mapPreapprovalResource(preapproval, env) {
   const id = preapproval && preapproval.id !== undefined && preapproval.id !== null
     ? String(preapproval.id)
     : null;
+  const status = mapPreapprovalStatus(preapproval && preapproval.status);
   return {
     provider: "mercadopago",
     claimId: id,
@@ -383,8 +452,12 @@ export function mapPreapprovalResource(preapproval, env) {
     customerId: preapproval && preapproval.payer_id ? String(preapproval.payer_id) : null,
     plan,
     planSource,
-    status: mapPreapprovalStatus(preapproval && preapproval.status),
-    periodEnd: isoToUnixSeconds(preapproval && preapproval.next_payment_date),
+    status,
+    // The next charge date marks the end of a paid period only while the
+    // subscription is authorized. On one never authorized it is a charge that
+    // may never happen, and a paused or cancelled one keeps the period end it
+    // already had.
+    periodEnd: status === "active" ? isoToUnixSeconds(preapproval && preapproval.next_payment_date) : undefined,
     occurredAt: resourceOccurredAt(preapproval)
   };
 }
@@ -399,14 +472,28 @@ export function mapPreapprovalResource(preapproval, env) {
  */
 export function mapAuthorizedPaymentResource(authorized, env) {
   const paymentStatus = authorized && authorized.payment && authorized.payment.status;
-  const status = paymentStatus
-    ? mapPaymentStatus(paymentStatus)
-    : (String(authorized && authorized.status) === "processed" ? "active" : "past_due");
+  // Only a charge whose money arrived says anything new. One still in flight
+  // or turned down (an uncaptured "authorized" hold included) leaves the
+  // subscription as it was, as on the payment topic: Mercado Pago retries it,
+  // and the preapproval notifications carry the subscription's state and
+  // period. It does not move the clock either, or the subscription's own,
+  // older notification would be refused as stale.
+  const approved = paymentStatus
+    ? String(paymentStatus) === "approved"
+    : String(authorized && authorized.status) === "processed";
   const subscriptionId = authorized && authorized.preapproval_id ? String(authorized.preapproval_id) : null;
   const payment = (authorized && authorized.payment) || {};
+  const occurredAt = resourceOccurredAt(authorized);
+  // A refunded or charged-back charge ends the period it paid for, as on the
+  // payment topic, and likewise leaves the subscription's state and clock to
+  // the subscription's own notifications.
+  const reversed = isReversedPayment(paymentStatus);
+  const dueAt = isoToUnixSeconds(authorized && authorized.debit_date)
+    || isoToUnixSeconds(authorized && authorized.date_created)
+    || occurredAt;
   // A recurring charge extends the period by one interval of whatever plan the
   // license already holds (the store knows it; this resource does not).
-  const chargedAt = status === "active"
+  const chargedAt = approved
     ? (isoToUnixSeconds(payment.date_approved)
       || isoToUnixSeconds(authorized && authorized.debit_date)
       || isoToUnixSeconds(authorized && authorized.date_created))
@@ -420,12 +507,23 @@ export function mapAuthorizedPaymentResource(authorized, env) {
     customerId: null,
     plan: undefined,
     planSource: undefined,
-    status,
+    status: approved ? "active" : undefined,
     // `next_retry_date` is a dunning date, not a paid-through date: never let it
     // become the period end.
     periodEnd: undefined,
     periodEndFromCharge: chargedAt,
-    occurredAt: resourceOccurredAt(authorized)
+    reversedAt: reversed ? occurredAt : undefined,
+    reversedChargeAt: reversed
+      ? chargeTime(payment, isoToUnixSeconds(authorized && authorized.debit_date)
+        || isoToUnixSeconds(authorized && authorized.date_created)
+        || occurredAt)
+      : undefined,
+    // A charge that was turned down, as on the payment topic. Dated by when it
+    // was due, so a retry that goes through later is the newer of the two. One
+    // not yet due when it was last updated was called off (stopping the
+    // subscription does that to its next charge), not turned down.
+    declinedAt: isDeclinedPayment(paymentStatus) && !(dueAt > occurredAt) ? dueAt : undefined,
+    occurredAt: approved ? occurredAt : null
   };
 }
 

@@ -32,14 +32,20 @@ export const PLAN_IDS = ["pro_monthly", "pro_yearly"];
 /**
  * Entitlement status values.
  * "pending" means a checkout completed but the money has not arrived yet
- * (delayed payment methods); it never entitles.
+ * (delayed payment methods); it never entitles, and the routes answer 202 so
+ * the browser keeps polling.
+ * "suspended" means a subscription that stopped paying without being
+ * cancelled (Stripe "unpaid" or "paused"); it never entitles either, but the
+ * routes answer 403 because there is nothing to wait for.
  */
-export const STATUS_IDS = ["active", "past_due", "canceled", "pending"];
+export const STATUS_IDS = ["active", "past_due", "canceled", "pending", "suspended"];
 
 /**
  * How long one paid interval lasts, used to give payment-only records (no
  * subscription lifecycle to follow) an enforceable period end.
- * Monthly gets 31 days so a 31-day month never expires early.
+ * Monthly gets 31 days so a 31-day month never expires early. Yearly gets 365
+ * days, and periodEndForPlan runs it to the same date next year when that is
+ * later, so a year that spans 29 February (366 days) never expires early.
  */
 export const PLAN_INTERVAL_SECONDS = {
   pro_monthly: 2678400,
@@ -47,7 +53,9 @@ export const PLAN_INTERVAL_SECONDS = {
 };
 
 /**
- * Period end for a single charge: when it was paid plus one plan interval.
+ * Period end for a single charge: when it was paid plus one plan interval. A
+ * yearly charge runs at least to the same date and time next year (a charge
+ * on 29 February, to 1 March).
  * @param {string} plan Plan id.
  * @param {number} chargedAt Unix seconds the charge was approved.
  * @returns {number|null} Unix seconds, or null when either input is unusable.
@@ -57,7 +65,15 @@ export function periodEndForPlan(plan, chargedAt) {
   if (!interval || !Number.isFinite(chargedAt)) {
     return null;
   }
-  return Math.floor(chargedAt) + interval;
+  const start = Math.floor(chargedAt);
+  if (plan !== "pro_yearly") {
+    return start + interval;
+  }
+  const date = new Date(start * 1000);
+  date.setUTCMonth(date.getUTCMonth() + 12);
+  const nextYear = Math.floor(date.getTime() / 1000);
+  // A time past what a Date can hold has no calendar: count the interval.
+  return Number.isFinite(nextYear) ? Math.max(start + interval, nextYear) : start + interval;
 }
 
 const textEncoder = new TextEncoder();
@@ -270,7 +286,11 @@ export function computeExpiry(entitlement, issuedAt, ttlSeconds) {
  * True when an entitlement still deserves a token.
  *
  * Rules, in order:
- *   - an unknown status, or "pending" (money not in yet), never entitles;
+ *   - an unknown status, "pending" (money not in yet) or "suspended" (a
+ *     subscription that stopped paying) never entitles;
+ *   - a license recorded unpaid (`paid: false`) never entitles until a
+ *     payment is confirmed, whatever status the provider reports since;
+ *     records stored before `paid` existed have none and go by status alone;
  *   - a known period end that has passed never entitles, whatever the status —
  *     access stops at the end of what was paid for until a renewal moves it;
  *   - "canceled" needs a future period end, so it stops at once when we have
@@ -284,7 +304,12 @@ export function isTokenIssuable(entitlement, nowSeconds) {
   if (!entitlement || typeof entitlement !== "object") {
     return false;
   }
-  if (!STATUS_IDS.includes(entitlement.status) || entitlement.status === "pending") {
+  if (!STATUS_IDS.includes(entitlement.status)
+    || entitlement.status === "pending"
+    || entitlement.status === "suspended") {
+    return false;
+  }
+  if (entitlement.paid === false) {
     return false;
   }
   const periodEnd = Number.isFinite(entitlement.periodEnd) ? entitlement.periodEnd : null;
@@ -295,6 +320,30 @@ export function isTokenIssuable(entitlement, nowSeconds) {
     return periodEnd !== null;
   }
   return true;
+}
+
+/**
+ * True while a license waits for money that has not arrived yet, so the routes
+ * answer 202 and the browser keeps polling instead of giving up on a 403.
+ * That is a "pending" record, or one the provider already treats as live (a
+ * subscription can turn active while a delayed payment is still settling)
+ * whose payment has not been confirmed. A payment that failed is not on its
+ * way, whatever status a later event left the record in.
+ * @param {Object} entitlement Stored entitlement record.
+ * @returns {boolean} Whether the payment is still expected.
+ */
+export function isAwaitingPayment(entitlement) {
+  if (!entitlement || typeof entitlement !== "object") {
+    return false;
+  }
+  if (entitlement.paymentFailed === true && entitlement.paid !== true) {
+    return false;
+  }
+  if (entitlement.status === "pending") {
+    return true;
+  }
+  return entitlement.paid === false
+    && (entitlement.status === "active" || entitlement.status === "past_due");
 }
 
 /**

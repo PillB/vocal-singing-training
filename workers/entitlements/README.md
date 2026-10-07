@@ -49,6 +49,26 @@ answer **202 `{ok:false,reason:"pending"}`** and the browser keeps polling until
 `checkout.session.async_payment_succeeded` (→ `active`) or
 `async_payment_failed` (→ not entitled) settles it.
 
+A Stripe record also remembers whether its money arrived (`paid`). An unpaid
+checkout sets it to `false`, and only an event that confirms a payment sets it
+to `true`: `checkout.session.completed` with `payment_status` `paid` or
+`no_payment_required`, `checkout.session.async_payment_succeeded`, or
+`invoice.paid`. While it is `false` no token is issued, whatever the
+subscription's own events say. Stripe documents that a subscription paid by a
+delayed method can turn `active` before the payment settles, and stay `active`
+after it fails, so those events alone never open access. Such a record answers
+202 while the payment may still arrive, and 403 once it has failed. A failure
+(`async_payment_failed`) is remembered the same way (`paymentFailed`): until a
+payment is confirmed, no later event lifts the record or sets it waiting
+again, in whatever order the events arrive. Records stored before these fields
+existed have neither and go by their status alone.
+
+A fifth stored status, `suspended`, is a subscription that stopped paying
+without being cancelled (Stripe `unpaid` or `paused`, or a Stripe status this
+worker does not know). It never issues a token either, but the routes answer
+**403 `{ok:false,reason:"inactive"}`**: there is nothing to wait for until a
+payment brings it back.
+
 ## Routes
 
 | Method | Path | Purpose |
@@ -187,11 +207,25 @@ Secrets — **never** in this repo, only `wrangler secret put`:
 KV: one namespace bound as `ENTITLEMENTS`.
 
 ```
-event:<provider>:<eventId>            "1"          30d TTL   idempotency
-lic:<licenseId>                       record JSON            the entitlement
-claim:<provider>:<sessionOrPaymentId> licenseId    90d TTL   ?billing=success lookup
-sub:<provider>:<subscriptionId>       licenseId              keeps one license per subscription
+event:<provider>:<eventId>            "1"                             30d TTL   idempotency
+lic:<licenseId>                       record JSON                               the entitlement
+claim:<provider>:<sessionOrPaymentId> licenseId                       90d TTL   ?billing=success lookup
+sub:<provider>:<subscriptionId>       licenseId                                 keeps one license per subscription
+paid:<licenseId>                      "1"                                       a payment was confirmed (see below)
+ended:<licenseId>                     {endedAt, periodEnd}                      the Stripe subscription was deleted
+reversed:<licenseId>                  {reversedChargeAt, reversedAt}            a Mercado Pago charge's money went back
+charged:<licenseId>                   chargedAt                                 when the latest charge that went through was made
 ```
+
+`paid:`, `ended:`, `reversed:` and `charged:` repeat facts the record also
+holds, each in a key nothing else writes, so that two webhooks processed at the
+same time cannot lose them: KV has no compare-and-swap, and the later of two
+concurrent writes of the record wins. Every read of a record applies them over
+it. `reversed:` holds the latest refunded or charged-back charge, and
+`charged:` the latest charge that went through (and so the interval it bought),
+as the record does. `charged:` is read again just before each write and only
+moves on to a later charge, except in the race described under "What
+concurrency can still do" below.
 
 D1: one database bound as `DB`, optional. The schema is created on first use
 (`ensureSchema`, every statement `IF NOT EXISTS`), so there is no migration step
@@ -274,11 +308,17 @@ secret store.
 
 A token's `exp` is capped at the record's `periodEnd` for **every** status, not
 just cancellations, and `/v1/license` refuses once `periodEnd` has passed. That
-is what stops a Mercado Pago Checkout Pro payment — a one-off charge with no
-subscription lifecycle behind it — from becoming lifetime Pro: a payment-derived
-record is entitled for one plan interval from its approval date (31 days for
-`pro_monthly`, 365 for `pro_yearly`), and each renewal charge extends it.
-A charge never *shortens* an existing period.
+is what stops a Mercado Pago Checkout Pro payment or a Stripe checkout for a
+one-time price — a one-off charge with no subscription lifecycle behind it —
+from becoming lifetime Pro: a payment-derived record is entitled for one plan
+interval from when the money arrived (31 days for `pro_monthly`; for
+`pro_yearly`, to the same date next year, so 366 days when the year spans
+29 February), and each renewal charge extends it. A charge never *shortens* an
+existing period. Stripe webhook sessions carry no line items, so a one-time
+Stripe Payment Link meant as a yearly pass needs `metadata.plan = pro_yearly`;
+without it the pass counts as one month. A Stripe checkout that bought neither
+a subscription nor a one-time payment (a session in `setup` mode, which saves a
+card and charges nothing) entitles to nothing.
 
 Consequences worth understanding before you ship:
 
@@ -288,16 +328,70 @@ Consequences worth understanding before you ship:
 - **The providers' own retries are what keep `periodEnd` moving.** Stripe
   retries a failing endpoint for up to ~3 days and `invoice.paid` /
   `customer.subscription.updated` carry the new period; Mercado Pago retries
-  too, and `subscription_authorized_payment` extends by one interval. If the
-  worker is down for longer than a billing period, expect expiries — watch for
-  repeated non-2xx in the Stripe/MP dashboards, and replay events from there.
+  too, and an approved `subscription_authorized_payment` extends by one
+  interval. If the worker is down for longer than a billing period, expect
+  expiries — watch for repeated non-2xx in the Stripe/MP dashboards, and
+  replay events from there.
 - **Out-of-order delivery cannot resurrect a dead entitlement.** Every update
   carries `occurredAt` (Stripe's `event.created`; Mercado Pago's
   `date_last_updated`/`last_modified`), stored on the record. An update older
   than the stored one may not change plan, status or `periodEnd` — so a late or
   retried `invoice.paid` arriving after `customer.subscription.deleted` is
-  filed, not applied. Identity fields and the claim/subscription indexes are
-  order-independent and are still written.
+  filed, not applied. Identity fields, a confirmed or failed payment, money
+  given back, and the claim/subscription indexes are order-independent and
+  are still written. So is the one interval a charge that went through buys
+  (a Mercado Pago charge, a one-time Stripe checkout): a subscription paused
+  or cancelled minutes after it was paid for keeps that period even when the
+  pause or cancellation is processed first. The record keeps when the latest
+  such charge went through, and an update that brings a new plan counts that
+  charge again on it: a subscription's charge does not say its plan, so one
+  processed before the subscription's own notification is first counted as a
+  month, and a yearly subscriber who stops at once still keeps the year. It
+  only ever lengthens the period, never past an authorized subscription's own
+  next charge date in the update that sets it, its refund still ends it, and
+  after a Stripe deletion it does nothing.
+- **Same-second events resolve the same way in either order.** Stripe stamps
+  events to the second. When two share a second, one that would make a
+  `canceled` or `suspended` record entitling again is refused, and so is one
+  that would take a record back to `pending`, where every purchase starts (a
+  card checkout's subscription is created `incomplete` in the same second it
+  is paid for). Any other pair applies as it arrives (a checkout and its
+  subscription's first events often share a second, and must all apply).
+- **A deleted Stripe subscription stays deleted.** Stripe never reactivates
+  one, so after `customer.subscription.deleted` no event for it changes the
+  license, whatever its timestamp, and the deletion is also kept in `ended:`.
+  That includes money that arrives late: a subscription paid by a delayed
+  method (bank debit, boleto, OXXO) that is cancelled at once while the
+  payment is still processing was cancelled unpaid, so access ends at
+  `ended_at`, and the payment settling afterwards buys no access. Cancel such
+  a subscription at the end of its period instead, or refund the payment
+  once it settles.
+- **What concurrency can still do.** Two webhooks for one license processed at
+  the same moment both read the record, and the later write wins. A confirmed
+  payment, a deletion, a charge that went through (so a subscriber who pays
+  and cancels at once keeps the interval it bought) and a Mercado Pago refund
+  survive that through their own keys, and KV's eventual consistency only
+  delays them (another edge location can take up to about a minute to see a
+  write). Any other change can be lost to it. A charge's key is read again
+  just before it is written and is written only for a later charge than the
+  one it read, so an earlier charge processed at the same moment as a later
+  one can set it back, but only when the later one's write lands in the
+  instant between that read and that write, or at an edge location that has
+  not seen it yet. The refund of a later charge processed at the same moment
+  as the refund of an earlier one can still be lost. So can a Mercado Pago
+  charge that was turned down, which is kept only in the record: a
+  subscription that then stops keeps the period its authorization set. A
+  renewal's new period end comes back with the next event that carries it.
+  Worse, the first two events for a new license (a
+  checkout and its subscription's first event) processed at once can each
+  find no license and mint one. The claim
+  then points at one record and the subscription index, which every later
+  event follows, at the other, so the claimed copy never hears of a renewal
+  or a cancellation and does not heal: a cancelled customer could keep Pro
+  until the period it already holds runs out, or for good if it holds none.
+  Closing all of this needs one writer per license (a Durable Object, or a D1
+  row updated only when its stored `occurredAt` is older), which this worker
+  does not have.
 
 ## Registering the webhooks
 
@@ -315,7 +409,7 @@ Subscribe exactly these events:
 | `checkout.session.async_payment_failed` | It never cleared → not entitled |
 | `customer.subscription.created` | First subscription state |
 | `customer.subscription.updated` | Plan change, renewal, status change |
-| `customer.subscription.deleted` | Cancellation |
+| `customer.subscription.deleted` | Cancellation. A subscription paid up to it keeps the period it paid for; one cancelled while unpaid (in dunning, stopped or paused, never paid, or with `cancellation_details.reason` `payment_failed`/`payment_disputed`) ends at `ended_at`, whoever cancelled it |
 | `invoice.paid` | Successful renewal (moves `periodEnd` forward) |
 | `invoice.payment_failed` | Dunning → `past_due` |
 
@@ -329,12 +423,21 @@ https://pillb.github.io/vocal-singing-training/?billing=success&plan=pro_monthly
 ```
 
 Yearly: `plan=pro_yearly`. Status mapping: `active`/`trialing` → `active`;
-`past_due`/`unpaid` → `past_due` (a grace state that still entitles);
-`incomplete` → `pending`, because that is a subscription whose *first* payment
+`past_due` → `past_due` (a grace state that still entitles while Stripe
+retries); `unpaid`/`paused`/any status not listed here → `suspended`, which
+never entitles: Stripe has stopped retrying or is charging nothing, and an
+unpaid subscription's period keeps rolling forward, so a grace state would
+never end; `incomplete` → `pending`, because that is a subscription whose *first* payment
 never succeeded — the same "money has not arrived" case as an unpaid session, so
 it must not get the grace that an existing subscriber gets;
 `canceled`/`incomplete_expired` → `canceled`. Plan mapping: price id → `session.metadata.plan` → subscription
 interval (`month` → `pro_monthly`, `year` → `pro_yearly`).
+
+Stripe's Billing settings decide what happens when every retry of a failed
+payment has failed. *Cancel the subscription* or *Mark the subscription as
+unpaid* both end access here. *Leave the subscription past-due* keeps it in
+the `past_due` grace with a period that rolls forward each cycle, so access
+would never end; do not pick it with this worker.
 
 ### Mercado Pago
 
@@ -356,11 +459,52 @@ value is absent are omitted). After that the notification body is treated as a
 | `subscription_preapproval` | `GET /preapproval/{id}` |
 | `subscription_authorized_payment` | `GET /authorized_payments/{id}` |
 
-Payment `approved` / preapproval `authorized` → `active`; `paused`/`cancelled` →
-`canceled`; anything else → `past_due`. An approved payment sets the period to
-one plan interval from its approval date; a preapproval's `next_payment_date`
-sets it directly. `next_retry_date` is a dunning date and is never used as a
-paid-through date. The plan comes from
+Only money that arrived entitles. A one-off payment `approved` → `active`;
+`pending`/`in_process`/`authorized`/`in_mediation` → `pending` (an unpaid cash
+voucher, a card under review, a hold not yet captured: `/v1/claim` answers 202
+and the browser keeps polling); anything else (`rejected`, `cancelled`, an
+expired voucher) → `canceled` with no period, so it never yields a token. On
+either topic, a subscription's charge that is not approved (a payment carrying
+a `preapproval_id`, or an authorized payment whose payment is not `approved`,
+or that is not `processed` when it has no payment yet) moves neither the
+status nor the record's `occurredAt`, so the subscription's own notifications,
+even older ones, still set its state and period: Mercado Pago retries the
+charge, and the preapproval says what became of the subscription. Two things
+about such a charge still count. Its refund or chargeback ends the period it
+paid for (below). And when it was `rejected` or `cancelled`, the record
+remembers when it was due: a subscription paused or cancelled after that, with
+no charge gone through since, keeps none of the period its authorization set
+(Mercado Pago may clear the next charge date when it stops, or leave it),
+whichever of the decline and the stop is processed first. Access then ends
+when it stopped, or where an earlier charge's interval ends if that is later.
+A charge reported as turned down before it was even due was called off, as
+stopping a subscription does to its next charge, and is not a decline.
+A charge that goes through afterwards, a retry included, still buys its
+interval. Until it stops, an authorized subscription still runs to its next
+charge date even when its charge was turned down.
+Preapproval `authorized` → `active`, `pending` →
+`pending`, `paused`/`cancelled`/anything else → `canceled`. An approved payment
+sets the period to one plan interval from its approval date, in whatever order
+it arrives (a paused or cancelled subscription keeps the period its charge
+paid for even when the pause or cancellation is processed first, and a charge
+processed before the subscription's notification, which is what says the plan,
+is counted again on that plan once it arrives); an authorized
+preapproval's `next_payment_date` sets it directly, and only while it is
+authorized. A payment's `date_of_expiration` (the voucher's deadline) and
+`next_retry_date` (a dunning date) are never used as a paid-through date. A
+`refunded` or `charged_back` payment, on either payment topic and whether or
+not it belongs to a subscription, ends the period that charge paid for at the
+time it was reversed, in whatever order the notifications arrive. The record
+remembers the reversal, so a later notification of the still-authorized
+subscription does not re-open that period; only a later approved charge, which
+pays for a period of its own, brings access back. The refund of an earlier
+charge, whose period a later charge has already paid past, leaves the current
+period alone. A charge's period is counted as one interval of the record's
+plan from its approval, with a week of slack: a subscription's period runs to
+its next scheduled charge, not from when the charge went through. A reversed
+subscription charge changes neither the subscription's status nor its clock; a
+reversed one-off payment is `canceled`.
+The plan comes from
 `MP_PLAN_PRO_MONTHLY`/`MP_PLAN_PRO_YEARLY`, else the preapproval `reason` or
 `external_reference`, else `auto_recurring`; when nothing says, it defaults to
 `pro_monthly` and records what it saw in the record's `planSource`.
@@ -439,9 +583,11 @@ webhook → claim → token flow through the router with a fake `fetch`.
 - **Cancellations and failed renewals lingering.** `customer.subscription.deleted`,
   `invoice.payment_failed` and a paused Mercado Pago preapproval all flip the
   stored status; the next `/v1/license` call refuses or downgrades. Even with no
-  event at all, access stops at `periodEnd`.
+  event at all, access stops at `periodEnd`. A subscription cancelled while it
+  was not paid up keeps none of the unpaid period.
 - **Unpaid "completed" checkouts.** A delayed payment method that never clears
-  never yields a token.
+  never yields a token, even when the subscription turns `active` first or its
+  invoices keep coming after the payment failed.
 - **One-off payments becoming lifetime access**, and **stale events
   resurrecting a cancelled subscription** (see above).
 - **Spoofed webhooks.** No signature, no state change — and Mercado Pago
@@ -460,6 +606,12 @@ webhook → claim → token flow through the router with a fake `fetch`.
 - **Sharing one license id.** A license id copied to a friend still verifies.
   There is no device binding and no account system; the mitigation is that a
   cancellation kills every copy at once.
+- **Refunds and disputes made in Stripe.** The worker does not subscribe to
+  `charge.refunded` or `charge.dispute.*`: a charge carries nothing the worker
+  can find a license by without a Stripe API key, which it does not hold. A
+  refunded Stripe customer keeps the period on record; cancelling their
+  subscription stops renewals but, like any paid cancellation, keeps the
+  period they had paid for.
 - **Protecting content that has already been downloaded.** Everything the site
   ships is public by definition. Only genuinely server-side value (data the
   worker holds back) can be withheld.

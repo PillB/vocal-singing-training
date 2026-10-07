@@ -122,12 +122,15 @@ test("status mapping covers every Stripe subscription status we expect", () => {
   assert.equal(mapStripeStatus("active"), "active");
   assert.equal(mapStripeStatus("trialing"), "active");
   assert.equal(mapStripeStatus("past_due"), "past_due");
-  assert.equal(mapStripeStatus("unpaid"), "past_due");
+  // Retries are over (unpaid) or nothing is being charged (paused): Stripe says
+  // to revoke access, and its period still rolls forward, so no grace.
+  assert.equal(mapStripeStatus("unpaid"), "suspended");
+  assert.equal(mapStripeStatus("paused"), "suspended");
   // A subscription whose first payment never succeeded gets no grace.
   assert.equal(mapStripeStatus("incomplete"), "pending");
   assert.equal(mapStripeStatus("canceled"), "canceled");
   assert.equal(mapStripeStatus("incomplete_expired"), "canceled");
-  assert.equal(mapStripeStatus("something_new"), "past_due");
+  assert.equal(mapStripeStatus("something_new"), "suspended", "an unknown status never entitles");
 });
 
 test("plan mapping prefers price ids, then metadata, then the interval", () => {
@@ -184,6 +187,66 @@ test("checkout.session.completed maps to an active entitlement keyed on the sess
   assert.equal(mapped.update.periodEnd, undefined);
 });
 
+test("a checkout with no subscription behind it is entitled for one interval from the payment", () => {
+  const once = mapStripeEvent({
+    id: "evt_once",
+    type: "checkout.session.completed",
+    created: NOW,
+    data: { object: { id: "cs_once", mode: "payment", subscription: null, payment_status: "paid" } }
+  }, {});
+  assert.equal(once.update.subscriptionId, null);
+  assert.equal(once.update.periodEndFromCharge, NOW);
+
+  // A subscription's checkout leaves the period to the subscription's events.
+  const recurring = mapStripeEvent({
+    id: "evt_rec",
+    type: "checkout.session.completed",
+    created: NOW,
+    data: { object: { id: "cs_rec", mode: "subscription", subscription: "sub_rec", payment_status: "paid" } }
+  }, {});
+  assert.equal(recurring.update.periodEndFromCharge, undefined);
+
+  // Money that has not arrived, or never will, buys no interval.
+  for (const [type, paymentStatus] of [
+    ["checkout.session.completed", "unpaid"],
+    ["checkout.session.async_payment_failed", "unpaid"]
+  ]) {
+    const mapped = mapStripeEvent({
+      id: "evt_x",
+      type,
+      created: NOW,
+      data: { object: { id: "cs_x", mode: "payment", subscription: null, payment_status: paymentStatus } }
+    }, {});
+    assert.equal(mapped.update.periodEndFromCharge, undefined, type);
+  }
+});
+
+test("a setup session saves a card and buys nothing", () => {
+  for (const object of [
+    { id: "cs_setup", mode: "setup", subscription: null, payment_status: "no_payment_required" },
+    { id: "cs_unknown", subscription: null, payment_status: "paid" }
+  ]) {
+    const mapped = mapStripeEvent({
+      id: "evt_setup",
+      type: "checkout.session.completed",
+      created: NOW,
+      data: { object }
+    }, {});
+    assert.equal(mapped.handled, true, object.id);
+    assert.equal(mapped.update.status, "canceled", object.id);
+    assert.equal(mapped.update.paid, false, object.id);
+    assert.equal(mapped.update.periodEndFromCharge, undefined, `${object.id}: no interval for nothing bought`);
+  }
+  // A subscription's checkout with nothing to pay yet (a trial) still entitles.
+  const trial = mapStripeEvent({
+    id: "evt_trial",
+    type: "checkout.session.completed",
+    created: NOW,
+    data: { object: { id: "cs_trial", mode: "subscription", subscription: "sub_t", payment_status: "no_payment_required" } }
+  }, {});
+  assert.equal(trial.update.status, "active");
+});
+
 test("a completed-but-unpaid session is pending, not active", () => {
   // Delayed payment methods complete the session before the money arrives.
   for (const object of [
@@ -218,8 +281,53 @@ test("an async payment outcome settles a pending session either way", () => {
   }, {});
   assert.equal(failed.handled, true);
   assert.equal(failed.update.status, "canceled");
+  assert.equal(failed.update.paymentFailed, true, "the failure is kept until money arrives");
+  assert.equal(succeeded.update.paymentFailed, undefined);
   assert.equal(HANDLED_EVENT_TYPES.includes("checkout.session.async_payment_succeeded"), true);
   assert.equal(HANDLED_EVENT_TYPES.includes("checkout.session.async_payment_failed"), true);
+});
+
+test("only events that confirm money arrived mark a license paid", () => {
+  const event = (type, object) => mapStripeEvent({ id: "evt_p", type, created: NOW, data: { object } }, {});
+  const session = { id: "cs_p", subscription: "sub_p" };
+  assert.equal(event("checkout.session.completed", { ...session, payment_status: "paid" }).update.paid, true);
+  assert.equal(event("checkout.session.completed", { ...session, payment_status: "no_payment_required" }).update.paid, true);
+  assert.equal(event("checkout.session.completed", { ...session, payment_status: "unpaid" }).update.paid, false);
+  assert.equal(event("checkout.session.async_payment_succeeded", session).update.paid, true);
+  assert.equal(event("checkout.session.async_payment_failed", session).update.paid, false);
+  assert.equal(event("invoice.paid", { id: "in_p", subscription: "sub_p" }).update.paid, true);
+  assert.equal(event("invoice.payment_failed", { id: "in_p", subscription: "sub_p" }).update.paid, undefined);
+  assert.equal(event("customer.subscription.updated", { id: "sub_p", status: "active" }).update.paid, undefined);
+});
+
+test("a cancellation says when it took effect, and whether it was ever paid for", () => {
+  const event = (type, object) => mapStripeEvent({ id: "evt_c", type, created: NOW, data: { object } }, {});
+  const failed = event("checkout.session.async_payment_failed", { id: "cs_c", subscription: "sub_c" });
+  assert.equal(failed.update.endedAt, NOW, "a failed payment ends when Stripe said so");
+
+  const requested = event("customer.subscription.deleted", {
+    id: "sub_c",
+    current_period_end: NOW + 1000,
+    ended_at: NOW - 5,
+    cancellation_details: { reason: "cancellation_requested" }
+  });
+  assert.equal(requested.update.endedAt, NOW - 5);
+  assert.equal(requested.update.endsAt, undefined, "a paid period cancelled early is kept");
+  assert.equal(requested.update.periodEnd, NOW + 1000);
+
+  for (const object of [
+    { id: "sub_c", current_period_end: NOW + 1000, ended_at: NOW - 5, cancellation_details: { reason: "payment_failed" } },
+    { id: "sub_c", current_period_end: NOW + 1000, ended_at: NOW - 5, cancellation_details: { reason: "payment_disputed" } },
+    { id: "sub_c", status: "incomplete_expired", current_period_end: NOW + 1000, ended_at: NOW - 5 }
+  ]) {
+    const type = object.status ? "customer.subscription.updated" : "customer.subscription.deleted";
+    assert.equal(event(type, object).update.endsAt, NOW - 5, JSON.stringify(object));
+  }
+
+  const live = event("customer.subscription.updated", { id: "sub_c", status: "active" });
+  assert.equal(live.update.endedAt, null);
+  assert.equal(live.update.terminal, false);
+  assert.equal(requested.update.terminal, true, "a deleted subscription never comes back");
 });
 
 test("every mapped event carries the time it happened", () => {

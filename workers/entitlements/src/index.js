@@ -39,7 +39,7 @@
 import { routeAccountApi, authMethods, requireAdmin } from "./api.js";
 import { asksFirst, callerCountry, routeEventsApi } from "./events.js";
 import { ensureSchema, sweepExpired } from "./db.js";
-import { buildJwks, createLicenseToken, isLicenseIdShape, isTokenIssuable } from "./license.js";
+import { buildJwks, createLicenseToken, isAwaitingPayment, isLicenseIdShape, isTokenIssuable } from "./license.js";
 import { mapStripeEvent, verifyStripeSignature } from "./stripe.js";
 import { confirmAndMapNotification, resolveNotificationTarget, verifyMercadoPagoSignature } from "./mercadopago.js";
 import {
@@ -140,7 +140,7 @@ function parseJsonObject(text) {
  */
 async function respondWithToken(record, env, cors) {
   const now = Math.floor(Date.now() / 1000);
-  if (record.status === "pending") {
+  if (isAwaitingPayment(record)) {
     // A delayed payment method has not settled yet; the browser keeps polling.
     return json({ ok: false, reason: "pending", entitlement: toPublicEntitlement(record) }, 202, cors);
   }

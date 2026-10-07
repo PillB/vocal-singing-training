@@ -301,8 +301,9 @@
   // must also have held within BACK_HF_STEADY_DB (its 10th to 90th
   // percentiles in dB) over every 0.8 s of it. A white fan's holds within
   // 0.2–0.5 dB: a 43 ms frame holds thousands of its waves. A whisper's
-  // follows its syllables, 2 dB and more over 0.8 s even when its level
-  // swings only 3 dB; an inhale's follows its swell, by 1–1.5 dB. A rumble's
+  // follows its syllables, 2 dB and more over 0.8 s when its level swings
+  // 3 dB (one that moves only 2 dB can pass: see the class doc); an
+  // inhale's follows its swell, by 1–1.5 dB. A rumble's
   // high part is its own level, which wobbles (a frame holds only a few of
   // its waves), so the test is only for a sound that sits high.
   const BACK_HF_STEADY_DB = 1.5;
@@ -388,9 +389,13 @@
    *   the fan came on in a pause, runs on under it). A hiss said between
    *   words with no silence around it does not come back: the words fall
    *   under it, or their high part does, where they would sit over a fan.
-   *   Nor does a whisper, however far under the words: it sits high, and
-   *   its high part follows its syllables, where a white fan's holds still
-   *   (an inhale's follows its swell, though less: see below). A fan that
+   *   Nor does a whisper whose syllables move it 3 dB or more, however far
+   *   under the words: it sits high, and its high part follows its
+   *   syllables, where a white fan's holds still (an inhale's follows its
+   *   swell, though less: see below). A known limit: a soft whisper whose
+   *   level moves only about 2 dB moves its high part 1.4–1.7 dB over
+   *   0.8 s, can pass for a fan, and if it alternates with voiced phrases
+   *   its phrases from the second on read as pauses. A fan that
    *   sits high and whose high part wobbles as much (no broadband noise
    *   does over a 43 ms frame) is learned only once it has held still for
    *   5 s; the pauses until then read as speech.

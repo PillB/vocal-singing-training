@@ -1640,6 +1640,70 @@ test("a refund survives a concurrent write of an older copy of the record", asyn
   assert.equal(isTokenIssuable(await getEntitlement(kv, "lic_1"), NOW + 20 * 86400), true);
 });
 
+test("an older update still teaches a record its plan, but never replaces a plan the provider named", async () => {
+  const kv = createFakeKv();
+  const generateId = idSequence("lic_");
+  const chargedAt = NOW - 100;
+  // Heard of first through a subscription's charge, which does not say the plan.
+  await upsertEntitlement(kv, {
+    provider: "mercadopago",
+    claimId: "pay_1",
+    subscriptionId: "pre_1",
+    status: "active",
+    periodEndFromCharge: chargedAt,
+    occurredAt: NOW - 90
+  }, { now: NOW, generateId });
+  // The subscription's own notification, last changed before the charge.
+  const learned = await upsertEntitlement(kv, {
+    provider: "mercadopago",
+    claimId: "pre_1",
+    subscriptionId: "pre_1",
+    plan: "pro_yearly",
+    planSource: "auto_recurring",
+    status: "active",
+    periodEnd: NOW + 300 * 86400,
+    occurredAt: NOW - 200
+  }, { now: NOW, generateId });
+  assert.equal(learned.stale, true, "its state is older than the charge's");
+  assert.equal(learned.record.plan, "pro_yearly", "but the plan it names is learned");
+  assert.equal(learned.record.periodEnd, periodEndForPlan("pro_yearly", chargedAt), "and the charge counts a year");
+
+  // An even older update naming another plan (before a plan change) is not.
+  const older = await upsertEntitlement(kv, {
+    provider: "mercadopago",
+    claimId: "pre_1",
+    subscriptionId: "pre_1",
+    plan: "pro_monthly",
+    planSource: "preapproval_plan_id",
+    status: "active",
+    occurredAt: NOW - 300
+  }, { now: NOW, generateId });
+  assert.equal(older.record.plan, "pro_yearly");
+  assert.equal(older.record.periodEnd, periodEndForPlan("pro_yearly", chargedAt));
+
+  // Nor does an older update whose plan is only a default teach anything.
+  const kv2 = createFakeKv();
+  await upsertEntitlement(kv2, {
+    provider: "mercadopago",
+    claimId: "pay_2",
+    subscriptionId: "pre_2",
+    status: "active",
+    periodEndFromCharge: chargedAt,
+    occurredAt: NOW - 90
+  }, { now: NOW, generateId });
+  const guessed = await upsertEntitlement(kv2, {
+    provider: "mercadopago",
+    claimId: "pre_2",
+    subscriptionId: "pre_2",
+    plan: "pro_yearly",
+    planSource: "default(no_hints)",
+    status: "active",
+    occurredAt: NOW - 200
+  }, { now: NOW, generateId });
+  assert.equal(guessed.record.plan, "pro_monthly");
+  assert.equal(guessed.record.periodEnd, periodEndForPlan("pro_monthly", chargedAt));
+});
+
 test("the client view carries no provider-internal ids", () => {
   const view = toPublicEntitlement({
     licenseId: "lic_1",

@@ -1856,3 +1856,60 @@ test("a Mercado Pago charge turned down after one that went through leaves the y
   assert.equal(claim.body.entitlement.status, "canceled");
   assert.equal(claim.body.entitlement.periodEnd, yearEnd, "one year from the charge that went through");
 });
+
+test("a yearly Mercado Pago subscriber keeps the year when the first charge is processed before the subscription", async () => {
+  // Bought 40 days ago. The subscription's own notification was last changed
+  // when it was authorized, a few seconds before its first charge went
+  // through, so processed after the charge it is the older of the two.
+  const authorizedAt = Math.floor(Date.now() / 1000) - 40 * DAY;
+  const at = (offset) => new Date((authorizedAt + offset) * 1000).toISOString();
+  const approvedAt = authorizedAt + 3;
+  const nextYear = new Date(approvedAt * 1000);
+  nextYear.setUTCMonth(nextYear.getUTCMonth() + 12);
+  const yearEnd = Math.floor(nextYear.getTime() / 1000);
+  const preapproval = (id) => ["subscription_preapproval", {
+    id,
+    status: "authorized",
+    reason: "Vocal Studio Pro",
+    auto_recurring: { frequency: 12, frequency_type: "months" },
+    next_payment_date: at(365 * DAY),
+    date_created: at(-30),
+    last_modified: at(0),
+    payer_id: 5
+  }];
+  const charge = (id, topic) => topic === "payment"
+    ? ["payment", {
+      id: `PAY-${id}`,
+      status: "approved",
+      metadata: { preapproval_id: id },
+      date_created: at(2),
+      date_approved: at(3),
+      date_last_updated: at(4),
+      payer: { id: 5 }
+    }]
+    : ["subscription_authorized_payment", {
+      id: `AP-${id}`,
+      preapproval_id: id,
+      status: "processed",
+      date_created: at(2),
+      debit_date: at(2),
+      date_last_updated: at(5),
+      payment: { id: 95, status: "approved", date_approved: at(3) }
+    }];
+  for (const topic of ["payment", "subscription_authorized_payment"]) {
+    for (const chargeFirst of [true, false]) {
+      const label = `${topic}${chargeFirst ? " first" : " last"}`;
+      const env = createTestEnv();
+      const id = `PRE-YEARLY-${topic}-${chargeFirst}`;
+      const steps = chargeFirst ? [charge(id, topic), preapproval(id)] : [preapproval(id), charge(id, topic)];
+      for (const step of steps) {
+        assert.equal((await deliverMercadoPago(env, ...step)).status, 200, label);
+      }
+      const claim = await claimFor(env, "mercadopago", id);
+      assert.equal(claim.status, 200, `${label}: day 40 of a year paid for`);
+      assert.equal(claim.body.entitlement.plan, "pro_yearly", label);
+      assert.equal(claim.body.entitlement.status, "active", label);
+      assert.equal(claim.body.entitlement.periodEnd, yearEnd, `${label}: a year from the charge, not a month`);
+    }
+  }
+});

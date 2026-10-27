@@ -499,6 +499,18 @@ function extendForCharge(record, chargedAt) {
 }
 
 /**
+ * True when a plan was read from something the provider said (a price or
+ * plan id, metadata, the recurrence), not assumed. Assumed plans are recorded
+ * as "default" or "default(...)", and records heard of only through a charge
+ * have none.
+ * @param {unknown} planSource How an update or a record got its plan.
+ * @returns {boolean} Whether the plan is known.
+ */
+function isKnownPlanSource(planSource) {
+  return typeof planSource === "string" && planSource !== "" && !planSource.startsWith("default");
+}
+
+/**
  * End the period when the money went back, if the reversed charge is what
  * paid for it. A period running well past that charge's interval was paid for
  * by a later charge, so the refund of an earlier month leaves it alone. The
@@ -688,6 +700,22 @@ export async function upsertEntitlement(kv, update, options) {
     }
     record.updatedAt = now;
   } else if (!ended) {
+    // Which plan a subscription is on does not go out of date the way its
+    // state does: a subscription's charge does not say it, and is often
+    // processed before the subscription's own notification, which is then
+    // older than the charge. A record that holds only the default plan learns
+    // it from such an update all the same, and counts its latest charge again
+    // on it, or a yearly subscriber would get a month. A plan the record
+    // already learned from the provider is left alone: an older update may
+    // name the plan it was on before a change.
+    if (update.plan && isKnownPlanSource(update.planSource) && !isKnownPlanSource(record.planSource)) {
+      const planBefore = record.plan;
+      record.plan = update.plan;
+      record.planSource = update.planSource;
+      if (record.plan !== planBefore) {
+        extendForCharge(record, record.chargedAt);
+      }
+    }
     // Money that arrived is order-independent too: a charge still buys its
     // interval when a newer event (a pause or cancellation processed first)
     // was heard of before it. A paid subscription stopped early keeps the

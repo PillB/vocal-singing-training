@@ -611,6 +611,37 @@ test.describe("pause floor (Vad)", () => {
     }
   });
 
+  test("a very flat soft whisper alternating with voice is talk", async ({ page }) => {
+    // The same soft whisper with every syllable at one level, dipping only
+    // 1.5 dB between them (the qa whisper whose syllables dip to 0.85–0.9 of
+    // their gain): its high part moves 1.3 dB over 0.8 s, under the 1.5 dB
+    // that tells a whisper from a white fan switched on under the talk (a
+    // fan's holds within 0.2–0.5 dB). The second whispered phrase came back
+    // and was learned as the room 0.4 s in, cut out of the talk and told as
+    // a pause. One that dips 1 dB moves its high part 0.9 dB, so a lower
+    // threshold only moves the edge. Its level is as still as a fan's; its
+    // syllables still come 4–6 times a second, which a fan's level does not.
+    const whisper = (sec, peak, swing, o = {}) => SPEECH(sec, Object.assign({ peak, dip: peak - swing, whisper: true }, o));
+    const talk = (sec, o = {}) => SPEECH(sec, Object.assign({}, OVER_FAN, o));
+    const alternate = (w, o) => [QUIET(1), ...[0, 1, 2].flatMap(() => [w, talk(2, o)]), QUIET(1.2), talk(2, o)];
+    const flat = (peak, swing) => whisper(2, peak, swing, { spread: 0 });
+    for (const [label, parts] of [
+      ["a whisper at −38 dB, syllables at one level dipping 1.5 dB", alternate(flat(-38, 1.5))],
+      ["a whisper at −40 dB, syllables at one level dipping 1.5 dB", alternate(flat(-40, 1.5))],
+      ["a whisper at −40 dB, syllables at one level dipping 1 dB", alternate(flat(-40, 1))],
+      ["a whisper at −38 dB dipping 1.5 dB, voice with 10% stops", alternate(flat(-38, 1.5), { stops: 0.1 })]
+    ]) {
+      for (const seed of [1, 2, 3, 4, 5, 6]) {
+        const r = await sim(page, { parts, seed });
+        const msg = `${label}, seed ${seed} · ${r.segs}`;
+        expect(r.falsePauses, msg).toBe(0);
+        expect(r.talk, msg).toBeGreaterThan(r.truthTalk - 0.5);
+        expect(r.floor, `${label}, seed ${seed}: the quiet room is the floor · ${r.segs}`).toBeLessThan(-60);
+        eachPauseMeasured(r, `${label}, seed ${seed}`);
+      }
+    }
+  });
+
   test("a fan switched on or off mid-take: the floor follows the room", async ({ page }) => {
     // On during a 4 s pause: the room is the fan within a second, and the
     // pauses after it count
@@ -700,6 +731,29 @@ test.describe("pause floor (Vad)", () => {
           expect(x.measured, `${label}: silence ${i + 2} · ${r.segs}`).not.toBeNull();
           expect(Math.abs(x.measured - x.sec), `${label}: silence ${i + 2} · ${r.segs}`).toBeLessThan(0.15);
         });
+      }
+    }
+  });
+
+  test("a white fan switched on in a silent lead-in is the room before the first word", async ({ page }) => {
+    // The floor has heard the quiet room; 0.6–0.8 s after Start a broadband
+    // fan comes on, 1.2–2.4 s before the first word. A new room that sits
+    // high must hold still for 5 s (a held "sss" must stay talk), so the fan
+    // read as speech from when it came on until the first word: 1.2–2.4 s of
+    // talk the learner never said. The pauses after it were measured.
+    for (const [label, db, from, lead] of [
+      ["a fan at −40 dB on at 0.8 s, 2 s lead-in", -40, 0.8, 2],
+      ["a fan at −45 dB on at 0.6 s, 3 s lead-in", -45, 0.6, 3]
+    ]) {
+      for (const seed of [1, 2, 3, 4, 5, 6]) {
+        const parts = [QUIET(lead), ...turns(4, SPEECH(3, OVER_FAN), QUIET(1.2))];
+        const r = await sim(page, { parts, seed, fan: { db, from, wobble: 1, hf: 1.41 } });
+        const msg = `${label}, seed ${seed} · ${r.segs}`;
+        expect(r.ghost, `nothing said before the first word · ${msg}`).toBeLessThan(0.15);
+        expect(r.ended.filter((e) => e.start < lead - 0.2), `no pause in the lead-in · ${msg}`).toEqual([]);
+        expect(r.falsePauses, msg).toBe(0);
+        expect(Math.abs(r.floor - db), `the fan is the room · ${msg}`).toBeLessThan(3);
+        eachPauseMeasured(r, `${label}, seed ${seed}`);
       }
     }
   });
@@ -825,6 +879,48 @@ test.describe("pause floor (Vad)", () => {
       for (const seed of [1000, 8919, 16838]) {
         const r = await sim(page, { seed, parts: [talk, mmm(-40), talk, mmm(-40), talk] });
         const label = `${stops * 100} % stops, 'mmm' at −40 dB, seed ${seed} · ${r.segs}`;
+        expect(r.falsePauses, label).toBe(0);
+        expect(r.ended, label).toEqual([]);
+        expect(r.talk, label).toBeGreaterThan(r.truthTalk - 0.5);
+      }
+    }
+  });
+
+  /** Talk from the first frame with `k` 1 s fillers at one level between its phrases. */
+  const fillers = (k, talk, filler) => Array.from({ length: k + 1 }, (_, i) => [talk, ...(i < k ? [filler] : [])]).flat();
+
+  test("three 'mmm's at one level in talk with no stop consonant are not a hum", async ({ page }) => {
+    // Talk from the first frame that never once shuts the gate (no stop, no
+    // gap between words) and three 1 s fillers at one level, under every
+    // dip of it: the shape of a hum the learner talked over from Start,
+    // which the floor learns the third time a pause comes back at its
+    // level. The third filler was learned as the room, all three read as
+    // pauses, and 3.2–3.4 s of talk as soft as them was lost.
+    const mmm = NOTE(1, { level: -40, vibDb: 0.5, vibCents: 5 });
+    const talk = SPEECH(3, { peak: -25, dip: -38 });
+    for (const seed of [1, 2, 3, 4, 5, 6]) {
+      const r = await sim(page, { seed, parts: fillers(3, talk, mmm) });
+      const label = `seed ${seed} · ${r.segs}`;
+      expect(r.falsePauses, label).toBe(0);
+      expect(r.ended, label).toEqual([]);
+      expect(r.talk, label).toBeGreaterThan(r.truthTalk - 0.5);
+    }
+  });
+
+  test("three or four 'mmm's at one level in talk with few stop consonants are not a hum", async ({ page }) => {
+    // The same with one consonant in 20 or 33 a stop: a take may have none
+    // before the fillers, or none a learning step hears, so the fillers are
+    // still the quietest level it has heard, and the third (or fourth) was
+    // learned as the room.
+    const mmm = NOTE(1, { level: -40, vibDb: 0.5, vibCents: 5 });
+    for (const [k, stops] of [
+      [4, 0.03],
+      [3, 0.05]
+    ]) {
+      const talk = SPEECH(3, { peak: -25, dip: -38, stops });
+      for (const seed of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) {
+        const r = await sim(page, { seed, parts: fillers(k, talk, mmm) });
+        const label = `${k} fillers, ${stops * 100} % stops, seed ${seed} · ${r.segs}`;
         expect(r.falsePauses, label).toBe(0);
         expect(r.ended, label).toEqual([]);
         expect(r.talk, label).toBeGreaterThan(r.truthTalk - 0.5);

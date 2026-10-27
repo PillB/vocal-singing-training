@@ -277,6 +277,14 @@ test.describe("exercise pictures", () => {
     });
   }
 
+  // The volume ladder's take (v13-volume-ladder: levels 1 2 3 4 5 3 1, the
+  // first and last an almost-whisper "h", the voiced steps at 0.4 to 1.25 of
+  // the stock voice) said with no gap between the steps, twice, a 1.2 s
+  // pause after each, then a word
+  const ladder = (() => {
+    const once = [["h", 2000], ["w", 2000, 0.4], ["w", 2000, 0.7], ["w", 2000], ["w", 2000, 1.25], ["w", 2000, 0.7], ["h", 2000]];
+    return [...once, ["q", 1200], ...once, ["q", 1200], ["w", 2000]];
+  })();
   for (const [label, mix, pauses] of [
     // Talk, a 1.5 s "sss", talk, another, talk, then one real pause
     ["power pause hears a 'sss' said twice inside talk as talk", { plan: [["w", 3000], ["s", 1500], ["w", 2000], ["s", 1500], ["w", 3000], ["q", 1200], ["w", 2000]] }, 1],
@@ -307,6 +315,27 @@ test.describe("exercise pictures", () => {
       { plan: [["h", 2000], ["w", 2000], ["h", 2000], ["w", 2000], ["q", 1200], ["h", 2000], ["w", 2000]], bands: [900, 2400], q: 1.2, dip: 0.7, gain: 0.015 },
       1
     ],
+    // The soft whisper flatter still, its syllables dipping to 0.85 or 0.9
+    // of their level: its high part moves only 1.4–1.7 dB over 0.8 s, under
+    // the 1.5 dB that tells a whisper from a white fan switched on under the
+    // talk, and from the second whispered phrase on it was learned as the
+    // room, cut out of the talk and counted as a pause
+    [
+      "power pause hears a very flat soft whisper alternating with voice as talk",
+      { plan: [["h", 2000], ["w", 2000], ["h", 2000], ["w", 2000], ["q", 1200], ["h", 2000], ["w", 2000]], bands: [900, 2400], q: 1.2, dip: 0.85, gain: 0.015 },
+      1
+    ],
+    [
+      "power pause hears a soft whisper whose syllables barely dip, alternating with voice, as talk",
+      { plan: [["h", 2000], ["w", 2000], ["h", 2000], ["w", 2000], ["q", 1200], ["h", 2000], ["w", 2000]], bands: [900, 2400], q: 1.2, dip: 0.9, gain: 0.015 },
+      1
+    ],
+    // The volume ladder with that flat whisper as its level 1. v13 itself
+    // reads its steps from the engine's gate, with no pause floor; a drill
+    // that has one hears the same take. The soft step's vowels hold their
+    // high part under the whisper's, so the whisper never comes back as a
+    // fan would: both whispers of each ladder are talk.
+    ["power pause hears a volume ladder's almost-whisper as talk", { plan: ladder, bands: [900, 2400], q: 1.2, dip: 0.85, gain: 0.015 }, 2],
     // An audible inhale between phrases, no silence around it: talk (see
     // VTFeatures.Vad), never the room
     [
@@ -355,6 +384,30 @@ test.describe("exercise pictures", () => {
     );
     expect(segs, "nothing said during the lead-in").toMatch(/^s[3-9]\./);
     expect(n, segs).toBe(1);
+  });
+
+  test("power pause reads nothing before the first word when a fan comes on in the lead-in", async ({ page }) => {
+    // The quiet room first, then a fan (white noise, −36 dBFS after the MIC
+    // gain) switched on 0.8 s after Start, 1.2 s before the first word. A
+    // new room that sits high must hold still for 5 s (a held "sss" must
+    // stay talk), so the fan read as speech from when it came on until the
+    // first word, and the take's talk began 1.2 s before the learner's. The
+    // sim's "white fan switched on in a silent lead-in" case in
+    // tests/vad-floor.spec.js is the deterministic guard.
+    await boot(page, "es", [fanInRoom, { gain: 0.0055, from: 0.8, seed: 7919 }]);
+    await openAndStart(page, "v10-power-pause");
+    // 2 s of the room (the fan from 0.8 s), then the speaker (3 s talk, 1.2 s pause)
+    await page.waitForTimeout(1750);
+    await playVoice(page, "speech");
+    await page.waitForTimeout(10000);
+    const n = Number(await page.locator("#mode-focus [data-p]").textContent());
+    const vad = await page.evaluate(() => {
+      const v = window.VTApp.getState().modeInstance.state.vad;
+      return { floor: v.floorDb, segs: v.segments.map((g) => `${g.kind[0]}${g.start.toFixed(2)}`).join(" ") };
+    });
+    expect(vad.segs, "nothing said before the voice").toMatch(/^s(1\.[7-9]|[2-9]\.)/);
+    expect(vad.floor, `the fan is the room · ${vad.segs}`).toBeGreaterThan(-45);
+    expect(n, vad.segs).toBe(2);
   });
 
   test("English labels on the pause drill", async ({ page }) => {

@@ -193,8 +193,9 @@
    * syllables), "s" a held hiss (noise through `bands`, swinging 1 dB at
    * `gain`), "h" whispered syllables through the same bands (dipping to
    * `dip` times `gain` between them), "b" an audible inhale (broadband
-   * breath noise at `breath`, swelling in and out) and "q" silence. Seeded:
-   * a take sounds the same every run.
+   * breath noise at `breath`, swelling in and out) and "q" silence. A third
+   * number on a piece scales its level (["w", 2000, 0.4]: soft words).
+   * Seeded: a take sounds the same every run.
    */
   V.define("speechMix", (h) => {
     const o = Object.assign({ plan: [["w", 3000], ["s", 1500], ["w", 3000]], gain: 0.03, bands: [5000, 7000], q: 1.5, dip: 0.5, breath: 0.008, seed: 104729 }, window.__VTMix);
@@ -233,29 +234,32 @@
     const syl = 1000 / 4.5;
     const gain = 0.28;
     let t = 0;
-    o.plan.forEach(([kind, ms]) => {
+    o.plan.forEach(([kind, ms, level = 1]) => {
       const t0 = t;
+      const hiss = o.gain * level;
       if (kind === "s") {
-        h.at(t0, () => h.ramp(n.mixHiss.gain, o.gain, 0.04));
-        for (let x = 150; x < ms - 60; x += 220) h.at(t0 + x, () => h.ramp(n.mixHiss.gain, o.gain * (0.89 + rnd() * 0.11), 0.05));
+        h.at(t0, () => h.ramp(n.mixHiss.gain, hiss, 0.04));
+        for (let x = 150; x < ms - 60; x += 220) h.at(t0 + x, () => h.ramp(n.mixHiss.gain, hiss * (0.89 + rnd() * 0.11), 0.05));
         h.at(t0 + ms - 40, () => h.ramp(n.mixHiss.gain, 0, 0.04));
       } else if (kind === "h") {
         for (let x = 0; x + syl * 0.5 < ms; x += syl) {
-          h.at(t0 + x, () => h.ramp(n.mixHiss.gain, o.gain * (0.8 + rnd() * 0.2), 0.03));
-          h.at(t0 + x + syl * 0.62, () => h.ramp(n.mixHiss.gain, o.gain * o.dip, 0.04));
+          h.at(t0 + x, () => h.ramp(n.mixHiss.gain, hiss * (0.8 + rnd() * 0.2), 0.03));
+          h.at(t0 + x + syl * 0.62, () => h.ramp(n.mixHiss.gain, hiss * o.dip, 0.04));
         }
         h.at(t0 + ms - 20, () => h.ramp(n.mixHiss.gain, 0, 0.05));
       } else if (kind === "b") {
-        h.at(t0, () => h.ramp(n.mixBreath.gain, o.breath * 0.8, 0.12));
-        h.at(t0 + 150, () => h.ramp(n.mixBreath.gain, o.breath, Math.max(0.05, (ms - 300) / 1000)));
+        const br = o.breath * level;
+        h.at(t0, () => h.ramp(n.mixBreath.gain, br * 0.8, 0.12));
+        h.at(t0 + 150, () => h.ramp(n.mixBreath.gain, br, Math.max(0.05, (ms - 300) / 1000)));
         h.at(t0 + ms - 130, () => h.ramp(n.mixBreath.gain, 0, 0.12));
       } else if (kind === "w") {
+        const g = gain * level;
         for (let x = 0; x + syl * 0.5 < ms; x += syl) {
           h.at(t0 + x, () => {
             h.setPitch(135 * Math.pow(2, ((rnd() - 0.5) * 4) / 12), 0.04);
-            h.voiceOn(gain * (0.75 + rnd() * 0.25), 0.03);
+            h.voiceOn(g * (0.75 + rnd() * 0.25), 0.03);
           });
-          h.at(t0 + x + syl * 0.62, () => h.ramp(n.voice.gain, gain * 0.15, 0.04));
+          h.at(t0 + x + syl * 0.62, () => h.ramp(n.voice.gain, g * 0.15, 0.04));
         }
         h.at(t0 + ms - 20, () => h.voiceOff(0.05));
       }

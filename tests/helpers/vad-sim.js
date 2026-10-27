@@ -57,10 +57,12 @@
    * Parts, each { kind, sec, ... }:
    *  silence — the room alone
    *  speech  — syllables at `rate` a second: a consonant at `dip` dB, then a
-   *            vowel rising to `peak` dB (±3 dB from one to the next) and
-   *            sagging; `voicedCons` keeps the pitch through the consonant,
-   *            and `stops` is the share of consonants that are a stop's
-   *            closure, the room alone. `whisper` has no period anywhere;
+   *            vowel rising to `peak` dB and sagging. From one syllable to
+   *            the next the peak moves ±3 dB and the dip ±2 dB, times
+   *            `spread` (default 1; 0 puts every syllable at one level, a
+   *            very flat whisper). `voicedCons` keeps the pitch through the
+   *            consonant, and `stops` is the share of consonants that are a
+   *            stop's closure, the room alone. `whisper` has no period anywhere;
    *            `breathy` is the share of a vowel's power that has one
    *            (default 1), the rest is breath; `hf` is how high that
    *            breath sits (default 0.58, see above)
@@ -86,13 +88,14 @@
         const dip = s.dip != null ? s.dip : -42;
         const rate = s.rate || 5;
         const hfNoise = s.hf != null ? s.hf : HF_NOISE;
+        const spread = s.spread != null ? s.spread : 1;
         let i = 0;
         let semis = 0;
         while (i < n) {
           const sylMs = Math.round((1000 / rate) * (0.75 + 0.5 * rnd()));
           const consMs = Math.round(sylMs * (0.2 + 0.2 * rnd()));
-          const pk = peak + (rnd() - 0.5) * 6;
-          const dp = dip + (rnd() - 0.5) * 4;
+          const pk = peak + (rnd() - 0.5) * 6 * spread;
+          const dp = dip + (rnd() - 0.5) * 4 * spread;
           const stop = s.stops ? rnd() < s.stops : false;
           // Intonation moves a little from one syllable to the next
           semis = Math.max(-4, Math.min(4, semis + (rnd() - 0.5) * 3));

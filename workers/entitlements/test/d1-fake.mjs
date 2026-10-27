@@ -8,6 +8,8 @@
  *
  * Only the surface the worker actually uses is implemented: `prepare`, `bind`,
  * `first`, `all`, `run`, `batch` and `exec`.
+ *
+ * Needs Node 22.13 or later, where `node:sqlite` loads without a flag.
  */
 
 import { DatabaseSync } from "node:sqlite";
@@ -30,6 +32,63 @@ function coerce(value) {
     return Number(value);
   }
   return value;
+}
+
+/**
+ * Rewrite a statement's numbered parameters (`?1`, `?2`, each as often as it
+ * likes, which D1 accepts) as bare `?`s, with the bound values repeated in the
+ * order the `?`s now come. `node:sqlite` binds numbered parameters only from
+ * Node 22.20 on, and before that refuses them ("column index out of range"),
+ * which would fail the tests on an older Node 22 over something production
+ * never sees. A bare `?` takes the number after the largest one before it, as
+ * in SQLite. Quoted text, quoted names and comments are left alone. As SQLite
+ * does, a parameter with no value bound is NULL, and more values than the
+ * largest parameter number is an error.
+ * @param {string} sql SQL text.
+ * @param {unknown[]} params Values bound to ?1, ?2, … in order.
+ * @returns {{sql: string, params: unknown[]}} The statement with only bare
+ *   `?`s, and one value for each.
+ */
+export function expandNumberedParameters(sql, params) {
+  let text = "";
+  const values = [];
+  let largest = 0;
+  let i = 0;
+  while (i < sql.length) {
+    const ch = sql[i];
+    let end = i + 1;
+    if (ch === "'" || ch === "\"" || ch === "`" || ch === "[") {
+      const close = ch === "[" ? "]" : ch;
+      end = sql.indexOf(close, i + 1);
+      // A quote written twice is one quote inside the text.
+      while (end !== -1 && close !== "]" && sql[end + 1] === close) {
+        end = sql.indexOf(close, end + 2);
+      }
+      end = end === -1 ? sql.length : end + 1;
+    } else if (ch === "-" && sql[i + 1] === "-") {
+      end = sql.indexOf("\n", i);
+      end = end === -1 ? sql.length : end;
+    } else if (ch === "/" && sql[i + 1] === "*") {
+      end = sql.indexOf("*/", i + 2);
+      end = end === -1 ? sql.length : end + 2;
+    } else if (ch === "?") {
+      while (end < sql.length && sql[end] >= "0" && sql[end] <= "9") {
+        end += 1;
+      }
+      const number = end > i + 1 ? Number(sql.slice(i + 1, end)) : largest + 1;
+      largest = Math.max(largest, number);
+      values.push(number <= params.length ? params[number - 1] : null);
+      text += "?";
+      i = end;
+      continue;
+    }
+    text += sql.slice(i, end);
+    i = end;
+  }
+  if (params.length > largest) {
+    throw new RangeError(`column index out of range: ${params.length} values for ${largest} parameters`);
+  }
+  return { sql: text, params: values };
 }
 
 /** One prepared statement, optionally already bound. */
@@ -55,13 +114,23 @@ class FakeD1PreparedStatement {
   }
 
   /**
+   * The statement as `node:sqlite` takes it on any Node 22.13 or later, with
+   * its values.
+   * @returns {{statement: import('node:sqlite').StatementSync, params: unknown[]}} Statement and values.
+   */
+  prepared() {
+    const { sql, params } = expandNumberedParameters(this.sql, this.params);
+    return { statement: this.db.prepare(sql), params };
+  }
+
+  /**
    * First row, or one column of it.
    * @param {string} [column] Column name.
    * @returns {Promise<Object|unknown|null>} Row, value, or null.
    */
   async first(column) {
-    const statement = this.db.prepare(this.sql);
-    const row = statement.get(...this.params);
+    const { statement, params } = this.prepared();
+    const row = statement.get(...params);
     if (row === undefined || row === null) {
       return null;
     }
@@ -74,8 +143,8 @@ class FakeD1PreparedStatement {
    * @returns {Promise<{results: Object[], success: boolean, meta: Object}>} D1-shaped result.
    */
   async all() {
-    const statement = this.db.prepare(this.sql);
-    const rows = statement.all(...this.params).map((row) => ({ ...row }));
+    const { statement, params } = this.prepared();
+    const rows = statement.all(...params).map((row) => ({ ...row }));
     return { results: rows, success: true, meta: { rows_read: rows.length } };
   }
 
@@ -84,8 +153,8 @@ class FakeD1PreparedStatement {
    * @returns {Promise<{success: boolean, meta: {changes: number, last_row_id: number}}>} D1-shaped result.
    */
   async run() {
-    const statement = this.db.prepare(this.sql);
-    const info = statement.run(...this.params);
+    const { statement, params } = this.prepared();
+    const info = statement.run(...params);
     return {
       success: true,
       meta: {

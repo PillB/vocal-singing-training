@@ -10,7 +10,9 @@ import {
   computeExpiry,
   createLicenseToken,
   generateLicenseId,
+  isAwaitingPayment,
   isLicenseIdShape,
+  isSuspended,
   isTokenIssuable,
   PLAN_INTERVAL_SECONDS,
   periodEndForPlan,
@@ -176,6 +178,64 @@ test("a pending entitlement never issues a token", () => {
   assert.equal(STATUS_IDS.includes("pending"), true);
 });
 
+test("a suspended entitlement never issues a token, whatever its period says", () => {
+  const now = 1770000000;
+  const suspended = createEntitlement({ status: "suspended", periodEnd: now + 29 * 86400 });
+  assert.equal(isTokenIssuable(suspended, now), false);
+  assert.equal(isTokenIssuable({ ...suspended, periodEnd: null }, now), false);
+  assert.equal(STATUS_IDS.includes("suspended"), true);
+});
+
+test("a license recorded unpaid never issues a token until a payment is confirmed", () => {
+  const now = 1770000000;
+  const live = createEntitlement({ status: "active", periodEnd: now + 99999 });
+  assert.equal(isTokenIssuable({ ...live, paid: false }, now), false);
+  assert.equal(isTokenIssuable({ ...live, status: "past_due", paid: false }, now), false);
+  assert.equal(isTokenIssuable({ ...live, status: "canceled", paid: false }, now), false);
+  assert.equal(isTokenIssuable({ ...live, paid: true }, now), true);
+  // Records stored before the field existed go by their status alone.
+  assert.equal("paid" in live, false);
+  assert.equal(isTokenIssuable(live, now), true);
+});
+
+test("only a license still waiting for its money is told to keep polling", () => {
+  const now = 1770000000;
+  const live = createEntitlement({ status: "active", periodEnd: now + 99999 });
+  assert.equal(isAwaitingPayment({ ...live, status: "pending" }), true);
+  assert.equal(isAwaitingPayment({ ...live, paid: false }), true);
+  assert.equal(isAwaitingPayment({ ...live, status: "past_due", paid: false }), true);
+  assert.equal(isAwaitingPayment({ ...live, status: "canceled", paid: false }), false, "a failed payment is not awaited");
+  assert.equal(isAwaitingPayment({ ...live, status: "suspended" }), false);
+  assert.equal(isAwaitingPayment(live), false);
+  assert.equal(isAwaitingPayment(null), false);
+});
+
+test("only a refusal a later payment can undo is suspended", () => {
+  const now = 1770000000;
+  const sub = createEntitlement({ status: "active", periodEnd: now + 99999 });
+  // A payment can bring these back: the routes answer 402, not 403.
+  assert.equal(isSuspended({ ...sub, status: "suspended" }, now), true, "Stripe unpaid or paused");
+  assert.equal(isSuspended({ ...sub, status: "suspended", periodEnd: now - 10 }, now), true);
+  assert.equal(isSuspended({ ...sub, status: "canceled", paid: false, paymentFailed: true, periodEnd: now - 10 }, now), true,
+    "a delayed payment that failed on a subscription whose invoice can still be paid");
+  const refunded = { ...sub, provider: "mercadopago", reversedChargeAt: now - 900, reversedAt: now - 60, periodEnd: now - 60 };
+  assert.equal(isSuspended(refunded, now), true, "a refunded charge on a still-authorized subscription");
+
+  // Nothing can: they stay 403.
+  assert.equal(isSuspended(sub, now), false, "entitled");
+  assert.equal(isSuspended({ ...sub, status: "suspended", endedAt: now - 5 }, now), false, "deleted");
+  assert.equal(isSuspended({ ...sub, status: "suspended", subscriptionId: null }, now), false);
+  assert.equal(isSuspended({ ...sub, status: "canceled", paid: false, paymentFailed: true, subscriptionId: null }, now), false,
+    "a one-time payment that failed");
+  assert.equal(isSuspended({ ...sub, status: "canceled", periodEnd: now - 10 }, now), false, "cancelled, period over");
+  assert.equal(isSuspended({ ...sub, periodEnd: now - 10 }, now), false, "a period that ran out");
+  assert.equal(isSuspended({ ...refunded, status: "canceled" }, now), false, "refunded, then the subscription stopped");
+  assert.equal(isSuspended({ ...refunded, periodEnd: now - 3600 }, now), false, "the period had ended before the refund");
+  assert.equal(isSuspended({ ...refunded, subscriptionId: null, status: "canceled" }, now), false, "a refunded one-off payment");
+  assert.equal(isSuspended({ ...sub, status: "pending" }, now), false, "waiting is 202, not 402");
+  assert.equal(isSuspended(null, now), false);
+});
+
 test("periodEndForPlan turns a charge into one paid interval", () => {
   const now = 1770000000;
   assert.equal(periodEndForPlan("pro_monthly", now), now + 2678400);
@@ -183,6 +243,21 @@ test("periodEndForPlan turns a charge into one paid interval", () => {
   assert.equal(periodEndForPlan("free", now), null);
   assert.equal(periodEndForPlan("pro_monthly", null), null);
   assert.equal(PLAN_INTERVAL_SECONDS.pro_yearly, 31536000);
+});
+
+test("periodEndForPlan runs a yearly charge to the same date next year, 29 February included", () => {
+  const at = (year, month, day) => Date.UTC(year, month - 1, day, 12) / 1000;
+  // A year that spans 29 February has 366 days.
+  assert.equal(periodEndForPlan("pro_yearly", at(2027, 4, 10)), at(2028, 4, 10));
+  assert.equal(periodEndForPlan("pro_yearly", at(2028, 1, 15)), at(2029, 1, 15));
+  assert.equal(at(2029, 1, 15) - at(2028, 1, 15), 366 * 86400);
+  // A charge on 29 February runs to 1 March, never short of a year.
+  assert.equal(periodEndForPlan("pro_yearly", at(2028, 2, 29)), at(2029, 3, 1));
+  // Any other year keeps 365 days, and a month keeps 31 days even in February.
+  assert.equal(periodEndForPlan("pro_yearly", at(2026, 4, 10)), at(2026, 4, 10) + 31536000);
+  assert.equal(periodEndForPlan("pro_monthly", at(2028, 2, 1)), at(2028, 2, 1) + 2678400);
+  // A time no Date can hold still gets its interval.
+  assert.equal(periodEndForPlan("pro_yearly", 1e13), 1e13 + 31536000);
 });
 
 test("buildTokenPayload normalises a missing period end to null", () => {

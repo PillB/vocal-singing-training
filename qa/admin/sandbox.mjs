@@ -15,7 +15,7 @@
  * - Google is the one thing it cannot do. "Sign in as" writes the same session
  *   the Google route writes once Google has vouched for an address.
  *
- * Needs Node 22 or newer (for node:sqlite). No install, no network. Both
+ * Needs Node 22.13 or newer (for node:sqlite). No install, no network. Both
  * servers listen on 127.0.0.1 only and answer only requests addressed to it,
  * and the site server never hands out dotfiles (.git, .env and the like).
  */

@@ -666,7 +666,9 @@ test("malformed JSON is refused without a stack trace escaping", async () => {
 
 test("the webhook and claim routes still behave exactly as before", async () => {
   const env = freshEnv();
-  const record = createEntitlement({ periodEnd: NOW + 40 * DAY });
+  // These two routes read the clock themselves, not the injected one: the
+  // period runs 40 days past whatever day the suite runs.
+  const record = createEntitlement({ periodEnd: Math.floor(Date.now() / 1000) + 40 * DAY });
   await putEntitlement(env.ENTITLEMENTS, record);
   await putClaimIndex(env.ENTITLEMENTS, "stripe", "cs_anon", record.licenseId);
 

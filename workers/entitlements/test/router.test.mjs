@@ -2031,6 +2031,55 @@ test("a Stripe subscriber who pays and cancels at once keeps the month, in whate
   assert.deepEqual(outcomes, { "200 canceled month": 120 }, "every order keeps the month it paid for");
 });
 
+test("a first month's checkout delivered after a dunning cancellation does not pay for the month the cancellation ended", async () => {
+  const T = Math.floor(Date.now() / 1000) - 20 * DAY;
+  const p1 = T + 30 * DAY;
+  const p2 = T + 60 * DAY;
+  const endedAt = p1 + 2 * DAY;
+  const subscription = (status, periodEnd, extra) => ({
+    id: "sub_late_cs",
+    customer: "cus_late_cs",
+    status,
+    metadata: { plan: "pro_monthly" },
+    items: { data: [{ price: { id: "price_m", recurring: { interval: "month", interval_count: 1 } }, current_period_end: periodEnd }] },
+    ...extra
+  });
+  const invoice = (id, periodEnd) => ({ id, customer: "cus_late_cs", subscription: "sub_late_cs", lines: { data: [{ period: { end: periodEnd } }] } });
+  // The first month is paid; the renewal fails, and the customer cancels two
+  // days into dunning, with nothing paid for the second month.
+  const events = {
+    created: ["customer.subscription.created", subscription("incomplete", p1), T],
+    paid1: ["invoice.paid", invoice("in_late_1", p1), T],
+    active: ["customer.subscription.updated", subscription("active", p1), T],
+    checkout: ["checkout.session.completed", {
+      id: "cs_late_cs", mode: "subscription", customer: "cus_late_cs", subscription: "sub_late_cs", payment_status: "paid", metadata: { plan: "pro_monthly" }
+    }, T + 1],
+    failed2: ["invoice.payment_failed", invoice("in_late_2", p2), p1],
+    pastDue: ["customer.subscription.updated", subscription("past_due", p2), p1],
+    deleted: ["customer.subscription.deleted", subscription("canceled", p2, {
+      ended_at: endedAt,
+      cancellation_details: { reason: "cancellation_requested" }
+    }), endedAt]
+  };
+  const orders = {
+    "in the order they happened": ["created", "paid1", "active", "checkout", "failed2", "pastDue", "deleted"],
+    "the checkout last": ["created", "paid1", "active", "failed2", "pastDue", "deleted", "checkout"],
+    "the first invoice last": ["created", "active", "checkout", "failed2", "pastDue", "deleted", "paid1"]
+  };
+  for (const [name, keys] of Object.entries(orders)) {
+    const env = createTestEnv();
+    for (const [index, key] of keys.entries()) {
+      const [type, object, created] = events[key];
+      const response = await deliverStripe(env, { id: `evt_late_cs_${index}_${key}`, type, created, data: { object } });
+      assert.equal(response.status, 200, `${name}: ${type}`);
+    }
+    const claim = await claimFor(env, "stripe", "cs_late_cs");
+    assert.equal(claim.status, 200, name);
+    assert.equal(claim.body.entitlement.status, "canceled", name);
+    assert.equal(claim.body.entitlement.periodEnd, endedAt, `${name}: the second month was never paid for`);
+  }
+});
+
 test("a yearly Stripe subscription bought through a link that names no plan stays yearly, in any order", async () => {
   // No price ids configured and no metadata.plan: only the subscription's
   // price interval says the plan. The checkout lands a second after the rest.

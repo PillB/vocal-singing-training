@@ -418,8 +418,12 @@ Consequences worth understanding before you ship:
   was cancelled, so it keeps the period it paid for, as it would have in the
   order the events happened: up to the deletion's own period end
   (`periodEndIfPaid`, also kept in `ended:`), and no further than the period
-  the paid invoice covered. Status and everything else stay as the deletion
-  left them.
+  that payment paid for. For an invoice that is its own period; a checkout
+  names none, so it paid for the period it was made in, and restores the
+  deletion's period only when one plan interval from the checkout (plus a
+  week, as for a refund) reaches its end. A first month's checkout delivered
+  after a cancellation in a later month's dunning restores nothing. Status
+  and everything else stay as the deletion left them.
 - **What concurrency can still do.** Two webhooks for one license processed at
   the same moment both read the record, and the later write wins. A confirmed
   payment, a deletion, a charge that went through (so a subscriber who pays

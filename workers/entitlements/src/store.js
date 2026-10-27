@@ -569,6 +569,35 @@ function endReversedPeriod(record) {
 }
 
 /**
+ * The period end a payment restores to a Stripe subscription deleted while it
+ * was not known to be paid, or null when it restores nothing. Only a payment
+ * made before the deletion restores anything: up to the deletion's own period
+ * end (`periodEndIfPaid`), and no further than the period the payment paid
+ * for. A payment that names no period of its own (a checkout) paid for the
+ * period it was made in, so it restores the deletion's period only when one
+ * plan interval from then, with the same week's slack as a refund, reaches
+ * it: a first month's checkout delivered after a later month's deletion paid
+ * for the first month, not the one the deletion ended.
+ * @param {Object} record Deleted subscription's record.
+ * @param {{occurredAt?: number, periodEnd?: number}} payment When the payment
+ *   was made, and the period end it names, if any.
+ * @returns {number|null} Restored period end, or null.
+ */
+function periodRestoredBy(record, payment) {
+  if (!Number.isFinite(record.periodEndIfPaid) || !Number.isFinite(record.endedAt)
+    || !Number.isFinite(payment.occurredAt) || payment.occurredAt > record.endedAt) {
+    return null;
+  }
+  if (Number.isFinite(payment.periodEnd)) {
+    return Math.min(Math.floor(payment.periodEnd), record.periodEndIfPaid);
+  }
+  const paidThrough = periodEndForPlan(record.plan, payment.occurredAt);
+  return paidThrough !== null && paidThrough + REVERSAL_SLACK_SECONDS >= record.periodEndIfPaid
+    ? record.periodEndIfPaid
+    : null;
+}
+
+/**
  * True when an update describes an older world than the record already holds.
  *
  * Stripe stamps events to the second, so two events from the same second
@@ -774,15 +803,13 @@ export async function upsertEntitlement(kv, update, options) {
   // before the deletion shows it was paid up when it was cancelled, so it
   // keeps the period it paid for after all, as it would have in the order the
   // events happened: up to the deletion's own period end, and no further than
-  // the period the paid invoice covered. A payment made after the deletion
+  // the period the payment paid for (an invoice's own period; a checkout's
+  // plan interval from when it was paid). A payment made after the deletion
   // buys nothing.
   let restored = false;
-  if (ended && update.paid === true && Number.isFinite(record.periodEndIfPaid)
-    && Number.isFinite(update.occurredAt) && update.occurredAt <= record.endedAt) {
-    const paidThrough = Number.isFinite(update.periodEnd)
-      ? Math.min(Math.floor(update.periodEnd), record.periodEndIfPaid)
-      : record.periodEndIfPaid;
-    if (!Number.isFinite(record.periodEnd) || paidThrough > record.periodEnd) {
+  if (ended && update.paid === true) {
+    const paidThrough = periodRestoredBy(record, update);
+    if (paidThrough !== null && (!Number.isFinite(record.periodEnd) || paidThrough > record.periodEnd)) {
       record.periodEnd = paidThrough;
       record.updatedAt = now;
       restored = true;

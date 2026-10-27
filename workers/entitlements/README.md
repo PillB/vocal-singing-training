@@ -594,23 +594,34 @@ The plan comes from
 ## Local testing
 
 ```bash
-# Worker on http://127.0.0.1:8787
-wrangler dev
+cd workers/entitlements
+
+# Worker on http://127.0.0.1:8787, with local KV and D1 (the placeholder ids
+# in wrangler.toml are fine locally; nothing reaches Cloudflare)
+wrangler dev --local
+curl http://127.0.0.1:8787/v1/health
 
 # Stripe CLI: forwards real signed events and prints a local whsec_…
 stripe listen \
-  --events checkout.session.completed,customer.subscription.created,customer.subscription.updated,customer.subscription.deleted,invoice.paid,invoice.payment_failed \
+  --events checkout.session.completed,checkout.session.async_payment_succeeded,checkout.session.async_payment_failed,customer.subscription.created,customer.subscription.updated,customer.subscription.deleted,invoice.paid,invoice.payment_failed \
   --forward-to http://127.0.0.1:8787/v1/webhooks/stripe
 
 stripe trigger checkout.session.completed
 ```
 
-`stripe listen` prints its own webhook secret — put *that* one in
-`workers/entitlements/.dev.vars` as `STRIPE_WEBHOOK_SECRET=whsec_…` while
-developing. **Add `.dev.vars` to the repo's `.gitignore` before you create it**;
-it is not ignored today.
+That is the same eight events as the live endpoint (see "Registering the
+webhooks"). `stripe listen` prints its own webhook secret — put *that* one in
+`workers/entitlements/.dev.vars` as `STRIPE_WEBHOOK_SECRET=whsec_…`, with
+`LICENSE_PRIVATE_KEY_PKCS8_B64` (a throwaway key from
+`node scripts/generate-keys.mjs`) and the Mercado Pago secrets you test with.
+`.dev.vars` and `.wrangler/` are in the repository's `.gitignore`.
 
-Unit tests (Node 20+, no network, no Workers runtime):
+Every named export of `src/index.js` must be a function: the Workers runtime
+reads them as handlers and refuses to start on anything else (a test checks
+it). Constants go in `src/limits.js` or the module that uses them.
+
+Unit tests (Node 22.5+, for `node:sqlite` in the D1 fake; no network, no
+Workers runtime):
 
 ```bash
 node --test workers/entitlements/test     # or: npm test --prefix workers/entitlements

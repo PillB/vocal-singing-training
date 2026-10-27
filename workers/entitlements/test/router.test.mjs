@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 
 import { hmacSha256Hex, verifyLicenseToken } from "../src/license.js";
 import { buildMercadoPagoManifest } from "../src/mercadopago.js";
-import { MAX_BODY_BYTES, handleRequest } from "../src/index.js";
+import * as entry from "../src/index.js";
+import { handleRequest } from "../src/index.js";
+import { MAX_BODY_BYTES } from "../src/limits.js";
 import { getEntitlement } from "../src/store.js";
 import { createTestEnv, TEST_ORIGIN } from "./fixtures.mjs";
 
@@ -530,6 +532,20 @@ test("license 404s for unknown, malformed and deleted ids", async () => {
     const response = await handleRequest(postJson("/v1/license", body), env);
     assert.equal(response.status, 404);
     assert.deepEqual(await response.json(), { ok: false, reason: "not_found" });
+  }
+});
+
+test("the entry module exports only what the Workers runtime can start", () => {
+  // workerd reads each named export of the entry module as a handler or a
+  // class and refuses to start on anything else, so `wrangler dev` failed on
+  // "Incorrect type for map entry 'MAX_BODY_BYTES'".
+  for (const [name, value] of Object.entries(entry)) {
+    if (name === "default") {
+      assert.equal(typeof value.fetch, "function");
+      assert.equal(typeof value.scheduled, "function");
+    } else {
+      assert.equal(typeof value, "function", `${name} is a ${typeof value}`);
+    }
   }
 });
 

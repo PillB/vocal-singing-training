@@ -32,6 +32,10 @@
  *        RESEND_API_KEY | BREVO_API_KEY | MAILERSEND_API_KEY
  *
  * Nothing in this file logs a secret, a token or a raw webhook body.
+ *
+ * Every named export of this module must be a function: the Workers runtime
+ * takes the entry module's named exports for handlers and refuses to start
+ * on anything else. Constants live in limits.js.
  */
 
 "use strict";
@@ -48,6 +52,7 @@ import {
   isTokenIssuable
 } from "./license.js";
 import { mapStripeEvent, verifyStripeSignature } from "./stripe.js";
+import { MAX_BODY_BYTES, MAX_SESSION_ID_LENGTH } from "./limits.js";
 import { confirmAndMapNotification, resolveNotificationTarget, verifyMercadoPagoSignature } from "./mercadopago.js";
 import {
   clearEventSeen,
@@ -67,12 +72,6 @@ const RETRY_ALWAYS = new Set(["api_error", "api_bad_json", "api_unreachable"]);
 
 /** How long a resource the API refuses (404, 403, …) is retried: one day. */
 const RETRY_REFUSED_SECONDS = 86400;
-
-/** Reject anything larger than 1 MiB; real webhooks are a few KB. */
-export const MAX_BODY_BYTES = 1048576;
-
-/** Longest checkout-session / payment id we will look up. */
-export const MAX_SESSION_ID_LENGTH = 200;
 
 /**
  * CORS headers for a request, restricted to the configured site origin.

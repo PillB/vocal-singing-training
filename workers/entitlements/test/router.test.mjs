@@ -368,8 +368,12 @@ test("an async payment failure leaves the session unentitled", async () => {
     postJson("/v1/claim", { provider: "stripe", sessionId: "cs_fail" }),
     env
   );
-  assert.equal(response.status, 403);
-  assert.equal((await response.json()).reason, "inactive");
+  // Refused, but not for good: the subscription's invoice can still be paid,
+  // so the browser keeps the checkout to claim again (402, not 403).
+  assert.equal(response.status, 402);
+  const body = await response.json();
+  assert.equal(body.reason, "suspended");
+  assert.equal(body.token, undefined);
 });
 
 test("a subscription whose first payment failed issues no token", async () => {
@@ -892,7 +896,10 @@ test("a refunded Mercado Pago subscription charge ends access until a charge goe
   };
   await deliverMercadoPago(env, "subscription_authorized_payment", charge);
   const refused = await handleRequest(postJson("/v1/license", { licenseId }), env);
-  assert.equal(refused.status, 403, "a refunded charge keeps none of the period it paid for");
+  assert.equal(refused.status, 402, "a refunded charge keeps none of the period it paid for");
+  const refusedBody = await refused.json();
+  assert.equal(refusedBody.reason, "suspended", "the subscription is still authorized and charges again");
+  assert.equal(refusedBody.token, undefined);
 
   // Next month's charge goes through.
   await deliverMercadoPago(env, "subscription_authorized_payment", {
@@ -977,8 +984,8 @@ test("a Stripe subscription that stopped paying or is paused gives no token, eve
       data: { object: { id: "sub_router", status: stripeStatus, current_period_end: now + 29 * DAY } }
     });
     const claim = await claimFor(env, "stripe", "cs_stop");
-    assert.equal(claim.status, 403, `${stripeStatus}: retries are over, so is access`);
-    assert.equal(claim.body.reason, "inactive", `${stripeStatus}: refused, not left polling`);
+    assert.equal(claim.status, 402, `${stripeStatus}: retries are over, so is access`);
+    assert.equal(claim.body.reason, "suspended", `${stripeStatus}: refused, not left polling`);
     assert.equal(claim.body.token, undefined);
 
     // Paying the open invoice brings it back.
@@ -1075,7 +1082,8 @@ test("a delayed payment that failed stays refused, whatever the subscription say
     created: now - 8
   }));
   const failed = await claimFor(env, "stripe", "cs_failed");
-  assert.equal(failed.status, 403, "the subscription's year was never paid for");
+  assert.equal(failed.status, 402, "the subscription's year was never paid for");
+  assert.equal(failed.body.reason, "suspended", "but its invoice can still be paid");
   assert.equal(failed.body.token, undefined);
 
   // Stripe documents that the subscription can stay active after a delayed
@@ -1093,7 +1101,7 @@ test("a delayed payment that failed stays refused, whatever the subscription say
     data: { object: { id: "sub_router", status: "active", current_period_end: now + 365 * DAY } }
   });
   const still = await claimFor(env, "stripe", "cs_failed");
-  assert.equal(still.status, 403);
+  assert.equal(still.status, 402);
   assert.equal(still.body.token, undefined);
 });
 
@@ -1285,7 +1293,8 @@ test("a failed invoice from the same second as the subscription going unpaid doe
     data: { object: { id: "in_last", subscription: "sub_router", lines: { data: [{ period: { end: now + 20 * DAY } }] } } }
   });
   const claim = await claimFor(env, "stripe", "cs_last_retry");
-  assert.equal(claim.status, 403);
+  assert.equal(claim.status, 402);
+  assert.equal(claim.body.reason, "suspended");
   assert.equal(claim.body.token, undefined);
 });
 
@@ -1324,7 +1333,7 @@ test("a Stripe subscription that stopped paying gets nothing back when it is the
       data: { object: { id: "sub_router", status: "unpaid", current_period_end: periodEnd } }
     });
   }
-  assert.equal((await claimFor(unpaid, "stripe", "cs_unpaid_cancel")).status, 403);
+  assert.equal((await claimFor(unpaid, "stripe", "cs_unpaid_cancel")).status, 402, "unpaid: a payment could still bring it back");
   await deliverStripe(unpaid, cancelled("evt_u5", now + 20 * DAY));
   const afterUnpaid = await claimFor(unpaid, "stripe", "cs_unpaid_cancel");
   assert.equal(afterUnpaid.status, 403, "the rolled-forward month was never paid for");
@@ -1388,7 +1397,7 @@ test("a delayed payment that failed is refused, not awaited, after the subscript
     paymentStatus: "unpaid",
     created: now - 8
   }));
-  assert.equal((await claimFor(env, "stripe", "cs_fail_then")).status, 403);
+  assert.equal((await claimFor(env, "stripe", "cs_fail_then")).status, 402);
   for (const [id, status, created] of [["evt_h3", "unpaid", now - 6], ["evt_h4", "active", now - 4]]) {
     await deliverStripe(env, {
       id,
@@ -1398,8 +1407,10 @@ test("a delayed payment that failed is refused, not awaited, after the subscript
     });
   }
   const claim = await claimFor(env, "stripe", "cs_fail_then");
-  assert.equal(claim.status, 403, "the browser must not keep polling for a payment that failed");
-  assert.equal(claim.body.reason, "inactive");
+  // Not 202: nothing is on its way, so the browser must not keep polling. Not
+  // 403 either: the subscription's invoice can still be paid.
+  assert.equal(claim.status, 402, "the browser must not keep polling for a payment that failed");
+  assert.equal(claim.body.reason, "suspended");
   assert.equal(claim.body.token, undefined);
 });
 
@@ -1511,7 +1522,7 @@ test("refunding an earlier Mercado Pago charge leaves the month a later charge p
     date_created: isoIn(-10 * DAY),
     date_last_updated: isoIn(-30)
   });
-  assert.equal((await claimFor(env, "mercadopago", "PRE-OLD")).status, 403);
+  assert.equal((await claimFor(env, "mercadopago", "PRE-OLD")).status, 402);
   await deliverMercadoPago(env, "subscription_preapproval", {
     id: "PRE-OLD",
     status: "authorized",
@@ -1521,7 +1532,8 @@ test("refunding an earlier Mercado Pago charge leaves the month a later charge p
     payer_id: 5
   });
   const reopened = await claimFor(env, "mercadopago", "PRE-OLD");
-  assert.equal(reopened.status, 403, "the refunded month stays closed");
+  assert.equal(reopened.status, 402, "the refunded month stays closed");
+  assert.equal(reopened.body.reason, "suspended", "until the still-authorized subscription charges again");
   assert.equal(reopened.body.token, undefined);
 });
 

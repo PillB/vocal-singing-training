@@ -57,17 +57,53 @@ to `true`: `checkout.session.completed` with `payment_status` `paid` or
 subscription's own events say. Stripe documents that a subscription paid by a
 delayed method can turn `active` before the payment settles, and stay `active`
 after it fails, so those events alone never open access. Such a record answers
-202 while the payment may still arrive, and 403 once it has failed. A failure
-(`async_payment_failed`) is remembered the same way (`paymentFailed`): until a
-payment is confirmed, no later event lifts the record or sets it waiting
-again, in whatever order the events arrive. Records stored before these fields
-existed have neither and go by their status alone.
+202 while the payment may still arrive. Once it has failed it answers 402
+`{reason:"suspended"}` while the subscription is still there (its invoice can
+still be paid), and 403 for a one-time payment or once the subscription is
+deleted. A failure (`async_payment_failed`) is remembered the same way
+(`paymentFailed`): until a payment is confirmed, no later event lifts the
+record or sets it waiting again, in whatever order the events arrive. Records
+stored before these fields existed have neither and go by their status alone.
 
 A fifth stored status, `suspended`, is a subscription that stopped paying
 without being cancelled (Stripe `unpaid` or `paused`, or a Stripe status this
-worker does not know). It never issues a token either, but the routes answer
-**403 `{ok:false,reason:"inactive"}`**: there is nothing to wait for until a
-payment brings it back.
+worker does not know). It never issues a token either, and the routes answer
+**402 `{ok:false,reason:"suspended"}`**: there is nothing to wait for, but a
+payment can still bring it back.
+
+### 402 or 403: whether a payment can still undo it
+
+A refusal is **402 `{reason:"suspended"}`** when a later payment on the same
+subscription can entitle the license again, and **403 `{reason:"inactive"}`**
+when nothing can. The difference matters to the site's client as it ships
+(`js/license.js`, `js/billing.js`): on a 403 it deletes the stored license id,
+and stops retrying a checkout's claim on `inactive`; on any other refusal it
+keeps both. A browser with no account that has forgotten its license never asks
+for it again, so a 403 for something a payment later undoes would lose that
+customer's Pro for good.
+
+402, on a subscription that has not been deleted:
+
+- `suspended` (Stripe `unpaid` or `paused`): paying the open invoice, or
+  resuming, makes it active again;
+- a delayed payment that failed, with nothing paid since: Stripe keeps the
+  subscription and its invoice can still be paid (`/v1/claim` answers 402 too,
+  so the site keeps the checkout and claims it again on each visit for a week,
+  and from the pricing panel's re-check button after that);
+- a Mercado Pago subscription still `authorized` whose period ended when a
+  charge's money went back (a refund or a chargeback): it charges again.
+
+403 for everything else that is refused: a deleted Stripe subscription, a
+paused or cancelled Mercado Pago one, a one-off payment that failed, was never
+paid or was refunded, a setup session, and a period that ran out.
+
+**What a suspended customer keeps.** No new token is issued, but the site's
+client keeps the token it already holds until that token expires: at most
+`LICENSE_TTL_SECONDS` (72h by default) after it was issued, and never past the
+`periodEnd` it carries. Answering 403 would only shorten that to the first
+page load once the token is `revalidateHours` old (24h by default), at the cost
+of the license. After the payment, the next `/v1/license` call (any page load
+once the old token has expired or is a day old) gets a token again.
 
 ## Routes
 
@@ -75,8 +111,8 @@ payment brings it back.
 |--------|------|---------|
 | POST | `/v1/webhooks/stripe` | Signed Stripe events. 400 on a bad signature. |
 | POST | `/v1/webhooks/mercadopago` | Signed Mercado Pago notifications; state is then re-read from the MP API. |
-| POST | `/v1/claim` | `{provider, sessionId}` → `200 {ok, licenseId, token, entitlement}`, `202 {ok:false,reason:"pending"}` while the webhook is still in flight *or* while an async payment settles, `404` for garbage. |
-| POST | `/v1/license` | `{licenseId}` → a fresh token from live KV state. `404` unknown, `202 {reason:"pending"}` while an async payment settles, `403 {reason:"inactive"}` once the paid period has ended. |
+| POST | `/v1/claim` | `{provider, sessionId}` → `200 {ok, licenseId, token, entitlement}`, `202 {ok:false,reason:"pending"}` while the webhook is still in flight *or* while an async payment settles, `402 {reason:"suspended"}` and `403 {reason:"inactive"}` as for `/v1/license`, `404` for garbage. |
+| POST | `/v1/license` | `{licenseId}` → a fresh token from live KV state. `404` unknown, `202 {reason:"pending"}` while an async payment settles, `402 {reason:"suspended"}` while a later payment can still bring it back, `403 {reason:"inactive"}` once nothing can (see "402 or 403" above). |
 | GET | `/v1/jwks` | The public key as a JWK set, with `kid`. |
 | GET | `/v1/health` | `{ok, stripeConfigured, mercadopagoConfigured, signingKeyConfigured, siteOrigin, accountsConfigured, authMethods}` — booleans and the public Google client id only. |
 
@@ -323,8 +359,11 @@ card and charges nothing) entitles to nothing.
 Consequences worth understanding before you ship:
 
 - **A missed renewal webhook ends access at `periodEnd`, by design.** We prefer
-  a paying customer briefly losing Pro (one `/v1/license` call after the
-  provider catches up restores it) over a cancelled customer keeping it forever.
+  a paying customer losing Pro over a cancelled customer keeping it forever.
+  A period that ran out answers 403, and the site's client forgets its license
+  on a 403, so this loss is brief only for a signed-in account (its next check
+  after the provider catches up restores it); a browser with no account keeps
+  it until the customer signs in or support steps in.
 - **The providers' own retries are what keep `periodEnd` moving.** Stripe
   retries a failing endpoint for up to ~3 days and `invoice.paid` /
   `customer.subscription.updated` carry the new period; Mercado Pago retries
@@ -497,7 +536,10 @@ not it belongs to a subscription, ends the period that charge paid for at the
 time it was reversed, in whatever order the notifications arrive. The record
 remembers the reversal, so a later notification of the still-authorized
 subscription does not re-open that period; only a later approved charge, which
-pays for a period of its own, brings access back. The refund of an earlier
+pays for a period of its own, brings access back. Meanwhile the routes answer
+402 `{reason:"suspended"}` while the subscription is still authorized, so the
+browser keeps the license to get that access back with (403 once it is
+paused or cancelled, and for a one-off payment). The refund of an earlier
 charge, whose period a later charge has already paid past, leaves the current
 period alone. A charge's period is counted as one interval of the record's
 plan from its approval, with a week of slack: a subscription's period runs to

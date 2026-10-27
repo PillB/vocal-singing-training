@@ -12,6 +12,7 @@ import {
   generateLicenseId,
   isAwaitingPayment,
   isLicenseIdShape,
+  isSuspended,
   isTokenIssuable,
   PLAN_INTERVAL_SECONDS,
   periodEndForPlan,
@@ -207,6 +208,32 @@ test("only a license still waiting for its money is told to keep polling", () =>
   assert.equal(isAwaitingPayment({ ...live, status: "suspended" }), false);
   assert.equal(isAwaitingPayment(live), false);
   assert.equal(isAwaitingPayment(null), false);
+});
+
+test("only a refusal a later payment can undo is suspended", () => {
+  const now = 1770000000;
+  const sub = createEntitlement({ status: "active", periodEnd: now + 99999 });
+  // A payment can bring these back: the routes answer 402, not 403.
+  assert.equal(isSuspended({ ...sub, status: "suspended" }, now), true, "Stripe unpaid or paused");
+  assert.equal(isSuspended({ ...sub, status: "suspended", periodEnd: now - 10 }, now), true);
+  assert.equal(isSuspended({ ...sub, status: "canceled", paid: false, paymentFailed: true, periodEnd: now - 10 }, now), true,
+    "a delayed payment that failed on a subscription whose invoice can still be paid");
+  const refunded = { ...sub, provider: "mercadopago", reversedChargeAt: now - 900, reversedAt: now - 60, periodEnd: now - 60 };
+  assert.equal(isSuspended(refunded, now), true, "a refunded charge on a still-authorized subscription");
+
+  // Nothing can: they stay 403.
+  assert.equal(isSuspended(sub, now), false, "entitled");
+  assert.equal(isSuspended({ ...sub, status: "suspended", endedAt: now - 5 }, now), false, "deleted");
+  assert.equal(isSuspended({ ...sub, status: "suspended", subscriptionId: null }, now), false);
+  assert.equal(isSuspended({ ...sub, status: "canceled", paid: false, paymentFailed: true, subscriptionId: null }, now), false,
+    "a one-time payment that failed");
+  assert.equal(isSuspended({ ...sub, status: "canceled", periodEnd: now - 10 }, now), false, "cancelled, period over");
+  assert.equal(isSuspended({ ...sub, periodEnd: now - 10 }, now), false, "a period that ran out");
+  assert.equal(isSuspended({ ...refunded, status: "canceled" }, now), false, "refunded, then the subscription stopped");
+  assert.equal(isSuspended({ ...refunded, periodEnd: now - 3600 }, now), false, "the period had ended before the refund");
+  assert.equal(isSuspended({ ...refunded, subscriptionId: null, status: "canceled" }, now), false, "a refunded one-off payment");
+  assert.equal(isSuspended({ ...sub, status: "pending" }, now), false, "waiting is 202, not 402");
+  assert.equal(isSuspended(null, now), false);
 });
 
 test("periodEndForPlan turns a charge into one paid interval", () => {

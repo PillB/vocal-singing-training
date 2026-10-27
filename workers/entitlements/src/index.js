@@ -39,7 +39,14 @@
 import { routeAccountApi, authMethods, requireAdmin } from "./api.js";
 import { asksFirst, callerCountry, routeEventsApi } from "./events.js";
 import { ensureSchema, sweepExpired } from "./db.js";
-import { buildJwks, createLicenseToken, isAwaitingPayment, isLicenseIdShape, isTokenIssuable } from "./license.js";
+import {
+  buildJwks,
+  createLicenseToken,
+  isAwaitingPayment,
+  isLicenseIdShape,
+  isSuspended,
+  isTokenIssuable
+} from "./license.js";
 import { mapStripeEvent, verifyStripeSignature } from "./stripe.js";
 import { confirmAndMapNotification, resolveNotificationTarget, verifyMercadoPagoSignature } from "./mercadopago.js";
 import {
@@ -132,7 +139,13 @@ function parseJsonObject(text) {
 
 /**
  * Issue a fresh token for an entitlement, or explain why we will not:
- * 202 while an async payment is still settling, 403 once it is not entitled.
+ * 202 while an async payment is still settling, 402 while it is refused but a
+ * later payment on its subscription can bring it back, 403 once nothing can.
+ *
+ * The 402 is for the site's client as it is deployed: js/license.js forgets
+ * the license on a 403 and keeps it on any other refusal, and js/billing.js
+ * stops retrying a checkout's claim on reason "inactive" and keeps retrying on
+ * any other. A browser that forgot its license never gets Pro back from it.
  * @param {Object} record Stored entitlement record.
  * @param {Object} env Worker env bindings.
  * @param {Object} cors CORS headers.
@@ -145,7 +158,9 @@ async function respondWithToken(record, env, cors) {
     return json({ ok: false, reason: "pending", entitlement: toPublicEntitlement(record) }, 202, cors);
   }
   if (!isTokenIssuable(record, now)) {
-    return json({ ok: false, reason: "inactive", entitlement: toPublicEntitlement(record) }, 403, cors);
+    return isSuspended(record, now)
+      ? json({ ok: false, reason: "suspended", entitlement: toPublicEntitlement(record) }, 402, cors)
+      : json({ ok: false, reason: "inactive", entitlement: toPublicEntitlement(record) }, 403, cors);
   }
   const { token } = await createLicenseToken(record, env, now);
   return json(

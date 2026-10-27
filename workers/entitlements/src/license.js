@@ -35,8 +35,9 @@ export const PLAN_IDS = ["pro_monthly", "pro_yearly"];
  * (delayed payment methods); it never entitles, and the routes answer 202 so
  * the browser keeps polling.
  * "suspended" means a subscription that stopped paying without being
- * cancelled (Stripe "unpaid" or "paused"); it never entitles either, but the
- * routes answer 403 because there is nothing to wait for.
+ * cancelled (Stripe "unpaid" or "paused"); it never entitles either, and the
+ * routes answer 402 (see isSuspended): nothing is on its way, but a payment
+ * can still bring it back.
  */
 export const STATUS_IDS = ["active", "past_due", "canceled", "pending", "suspended"];
 
@@ -344,6 +345,44 @@ export function isAwaitingPayment(entitlement) {
   }
   return entitlement.paid === false
     && (entitlement.status === "active" || entitlement.status === "past_due");
+}
+
+/**
+ * True when a license is refused now but a later payment on the same
+ * subscription can entitle it again, so the routes answer 402
+ * `{reason:"suspended"}` rather than 403 `{reason:"inactive"}`. The site's
+ * client forgets a license it is answered 403 for, and a browser with no
+ * account then never asks for it again, so 403 is kept for what no payment
+ * can undo. Suspended means, on a subscription that has not been deleted:
+ *   - status "suspended": it stopped paying without being cancelled (Stripe
+ *     "unpaid" or "paused"), and paying the open invoice or resuming it
+ *     makes it active again;
+ *   - a payment that failed with nothing paid since (a delayed payment method
+ *     that did not clear): the subscription's invoice can still be paid;
+ *   - a Mercado Pago subscription still authorized whose period ended when a
+ *     charge's money went back (a refund, a chargeback): it charges again.
+ * Never a one-off payment (nothing charges it again), a deleted Stripe
+ * subscription, a paused or cancelled Mercado Pago one, or a period that ran
+ * out.
+ * @param {Object} entitlement Stored entitlement record.
+ * @param {number} nowSeconds Unix seconds.
+ * @returns {boolean} Whether the refusal can still be undone by a payment.
+ */
+export function isSuspended(entitlement, nowSeconds) {
+  if (!entitlement || typeof entitlement !== "object" || !entitlement.subscriptionId
+    || Number.isFinite(entitlement.endedAt) || isTokenIssuable(entitlement, nowSeconds)) {
+    return false;
+  }
+  if (entitlement.status === "suspended") {
+    return true;
+  }
+  if (entitlement.paymentFailed === true && entitlement.paid !== true) {
+    return true;
+  }
+  return entitlement.provider === "mercadopago"
+    && entitlement.status === "active"
+    && Number.isFinite(entitlement.reversedAt)
+    && entitlement.periodEnd === entitlement.reversedAt;
 }
 
 /**

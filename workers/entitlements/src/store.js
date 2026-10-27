@@ -9,8 +9,8 @@
  *   lic:<licenseId>                       -> record JSON
  *   claim:<provider>:<sessionOrPaymentId> -> licenseId   (90d TTL)
  *   sub:<provider>:<subscriptionId>       -> licenseId
- *   paid:<licenseId>                      -> "1"        (a payment was confirmed)
- *   ended:<licenseId>                     -> {endedAt, periodEnd, periodEndIfPaid?} (subscription deleted)
+ *   paid:<licenseId>                      -> {paidAt?, periodEnd?} (a payment was confirmed: the latest one)
+ *   ended:<licenseId>                     -> {endedAt, periodEnd, periodEndIfPaid?, paidAtWhenEnded?} (subscription deleted)
  *   reversed:<licenseId>                  -> {reversedChargeAt, reversedAt} (money given back)
  *   charged:<licenseId>                   -> chargedAt  (latest charge that went through)
  *   refused:<provider>:<eventId>          -> unix secs  (API first refused its resource, 30d TTL)
@@ -29,7 +29,11 @@
  * and is written only for a later charge than the one read, so an earlier
  * charge processed alongside a later one can set it back, but only when the
  * later one's write lands in the instant between that read and that write, or
- * at an edge location that has not seen the later one yet.
+ * at an edge location that has not seen the later one yet. The payment's key
+ * works the same way, and says when the latest payment was made and the period
+ * it named, so a payment made before a Stripe deletion still restores the
+ * period the deletion ended when the two are processed at once, whichever
+ * record wins (the deletion's key says which payment it already knew of).
  * The refund's key is written from the record as it was read, so the refund
  * of a later charge processed at the same moment as the refund of an earlier
  * one can still be lost. Worse, the first two events for a new license
@@ -227,7 +231,14 @@ export async function getEntitlement(kv, licenseId) {
   }
   // A record still saying "unpaid" may have lost a confirmation to a
   // concurrent write; the confirmation's own key settles it.
-  if (record && record.paid === false && (await kv.get(paidKey(licenseId)))) {
+  let payment;
+  const readPayment = async () => {
+    if (payment === undefined) {
+      payment = await readPaid(kv, licenseId);
+    }
+    return payment;
+  };
+  if (record && record.paid === false && (await readPayment())) {
     record.paid = true;
   }
   // Likewise a subscription's record that does not show its deletion.
@@ -239,6 +250,25 @@ export async function getEntitlement(kv, licenseId) {
       capPeriodEnd(record, ended.periodEnd);
       if (Number.isFinite(ended.periodEndIfPaid)) {
         record.periodEndIfPaid = ended.periodEndIfPaid;
+      }
+      if (Number.isFinite(ended.paidAtWhenEnded)) {
+        record.paidAtWhenEnded = ended.paidAtWhenEnded;
+      }
+    }
+  }
+  // A payment made before a Stripe deletion that ended a period it did not
+  // know to be paid restores that period (see upsertEntitlement), also when
+  // the payment was processed at the same moment as the deletion and one of
+  // the two records lost the other's write: the payment's own key says when
+  // it was made and what it paid for. Only a payment later than any the
+  // deletion knew of: one it knew of did not make it paid up.
+  if (record && Number.isFinite(record.endedAt) && Number.isFinite(record.periodEndIfPaid)) {
+    const paid = await readPayment();
+    if (paid && Number.isFinite(paid.paidAt) && !(record.paidAtWhenEnded >= paid.paidAt)) {
+      const paidThrough = periodRestoredBy(record, { occurredAt: paid.paidAt, periodEnd: paid.periodEnd });
+      if (paidThrough !== null && !(record.periodEnd >= paidThrough)) {
+        record.periodEnd = paidThrough;
+        record.paid = true;
       }
     }
   }
@@ -265,10 +295,11 @@ export async function getEntitlement(kv, licenseId) {
 
 /**
  * Read the marker a deleted subscription left on its license: when it ended,
- * the period it left, and the period a payment made before it would restore.
+ * the period it left, the period a payment made before it would restore, and
+ * when the latest payment it knew of was made.
  * @param {Object} kv KV namespace.
  * @param {string} licenseId Opaque license id.
- * @returns {Promise<{endedAt: number, periodEnd: number, periodEndIfPaid?: number}|null>} Marker or null.
+ * @returns {Promise<{endedAt: number, periodEnd: number, periodEndIfPaid?: number, paidAtWhenEnded?: number}|null>} Marker or null.
  */
 async function readEnded(kv, licenseId) {
   const raw = await kv.get(endedKey(licenseId));
@@ -281,6 +312,57 @@ async function readEnded(kv, licenseId) {
   } catch {
     return null;
   }
+}
+
+/**
+ * Read the payment confirmed on a license: when the latest one was made and
+ * the period end it named. A key that holds "1" (written before the key held
+ * more) or an undated payment says only that one was confirmed.
+ * @param {Object} kv KV namespace.
+ * @param {string} licenseId Opaque license id.
+ * @returns {Promise<{paidAt?: number, periodEnd?: number}|null>} Payment, or null when none was confirmed.
+ */
+async function readPaid(kv, licenseId) {
+  const raw = await kv.get(paidKey(licenseId));
+  if (!raw) {
+    return null;
+  }
+  let paid = null;
+  try {
+    paid = JSON.parse(raw);
+  } catch {
+    paid = null;
+  }
+  return paid && typeof paid === "object" ? paid : {};
+}
+
+/**
+ * Keep a confirmed payment in its own key: when it was made, and the period
+ * end it named (an invoice's; a checkout names none). Read again first, as
+ * for a charge: only a later payment moves the key on, and never one made
+ * after the subscription's deletion past one made before it, which is the
+ * one that can restore the period the deletion ended.
+ * @param {Object} kv KV namespace.
+ * @param {string} licenseId Opaque license id.
+ * @param {Object} record Record being written.
+ * @param {Object} update The paid update.
+ * @returns {Promise<void>} Resolves when written, or at once when the key
+ *   already holds as late a payment.
+ */
+async function putPaid(kv, licenseId, record, update) {
+  const paidAt = Number.isFinite(update.occurredAt) ? Math.floor(update.occurredAt) : undefined;
+  const stored = await readPaid(kv, licenseId);
+  if (stored) {
+    const later = paidAt !== undefined && !(stored.paidAt >= paidAt);
+    const pastDeletion = Number.isFinite(record.endedAt) && paidAt > record.endedAt && stored.paidAt <= record.endedAt;
+    if (!later || pastDeletion) {
+      return;
+    }
+  }
+  await kv.put(paidKey(licenseId), JSON.stringify({
+    paidAt,
+    periodEnd: Number.isFinite(update.periodEnd) ? Math.floor(update.periodEnd) : undefined
+  }));
 }
 
 /**
@@ -650,7 +732,11 @@ export function isStaleUpdate(record, update) {
  * it, with no charge gone through since, keeps none of the period its
  * authorization set. A Stripe deletion that ended a period it did not know to
  * be paid keeps that period's end (`periodEndIfPaid`, also in `ended:`), and a
- * payment made before the deletion but processed after it restores it.
+ * payment made before the deletion but processed after it restores it. So
+ * does one processed at the same moment as the deletion: `paid:` keeps when
+ * the latest payment was made (`paidAt` on the record), and the deletion when
+ * the latest one it knew of was (`paidAtWhenEnded`, also in `ended:`), which
+ * restores nothing.
  *
  * @param {Object} kv KV namespace.
  * @param {Object} update Descriptor: provider, plan, status, customerId,
@@ -700,6 +786,11 @@ export async function upsertEntitlement(kv, update, options) {
   // seen. Records stored before this field existed have none.
   if (update.paid === true) {
     record.paid = true;
+    // When the latest payment it heard of was made, so a deletion can say
+    // which payments it knew of.
+    if (Number.isFinite(update.occurredAt) && !(record.paidAt >= update.occurredAt)) {
+      record.paidAt = Math.floor(update.occurredAt);
+    }
   } else if (update.paid === false && record.paid !== true) {
     record.paid = false;
   }
@@ -762,6 +853,9 @@ export async function upsertEntitlement(kv, update, options) {
       // would have left a paid-up subscription, for such a payment to restore.
       if (update.terminal && Number.isFinite(update.endedAt) && record.periodEnd > update.endedAt) {
         record.periodEndIfPaid = record.periodEnd;
+        if (Number.isFinite(record.paidAt)) {
+          record.paidAtWhenEnded = record.paidAt;
+        }
       }
       capPeriodEnd(record, update.endedAt);
     }
@@ -833,7 +927,7 @@ export async function upsertEntitlement(kv, update, options) {
   }
 
   if (update.paid === true) {
-    await kv.put(paidKey(licenseId), "1");
+    await putPaid(kv, licenseId, record, update);
   }
   if (!ended && Number.isFinite(update.periodEndFromCharge)) {
     // Read again first: a later charge processed alongside this one may have
@@ -853,7 +947,8 @@ export async function upsertEntitlement(kv, update, options) {
     await kv.put(endedKey(licenseId), JSON.stringify({
       endedAt: record.endedAt,
       periodEnd: Number.isFinite(record.periodEnd) ? record.periodEnd : record.endedAt,
-      ...(Number.isFinite(record.periodEndIfPaid) ? { periodEndIfPaid: record.periodEndIfPaid } : {})
+      ...(Number.isFinite(record.periodEndIfPaid) ? { periodEndIfPaid: record.periodEndIfPaid } : {}),
+      ...(Number.isFinite(record.paidAtWhenEnded) ? { paidAtWhenEnded: record.paidAtWhenEnded } : {})
     }));
   }
   await putEntitlement(kv, record);

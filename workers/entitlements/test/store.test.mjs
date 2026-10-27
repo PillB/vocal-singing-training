@@ -14,6 +14,7 @@ import {
   isStaleUpdate,
   licenseKey,
   markEventSeen,
+  paidKey,
   resolveExistingLicenseId,
   subscriptionKey,
   toPublicEntitlement,
@@ -1803,6 +1804,89 @@ test("a payment made before a Stripe deletion and heard of after it restores the
     assert.equal(read.status, "canceled");
     assert.equal(read.periodEnd, NOW + 30 * DAY);
   }
+});
+
+test("a payment processed at the same moment as the Stripe deletion it was made before keeps the period it paid for", async () => {
+  const DAY = 86400;
+  const T = NOW - 3600;
+  const periodEnd = T + 30 * DAY;
+  const subscription = { provider: "stripe", subscriptionId: "sub_once", plan: "pro_monthly", planSource: "metadata" };
+  const created = { ...subscription, status: "pending", periodEnd, occurredAt: T };
+  // The customer cancels a minute after paying.
+  const deletion = { ...subscription, status: "canceled", periodEnd, endedAt: T + 60, terminal: true, occurredAt: T + 60 };
+  const payments = {
+    invoice: { provider: "stripe", subscriptionId: "sub_once", status: "active", paid: true, periodEnd, occurredAt: T },
+    checkout: { ...subscription, claimId: "cs_once", status: "active", paid: true, occurredAt: T + 1 }
+  };
+  const atOnce = async (first, second) => {
+    const kv = createFakeKv();
+    const generateId = idSequence("lic_");
+    await upsertEntitlement(kv, created, { now: NOW, generateId });
+    // Both read the record before either wrote; the second one's record wins.
+    const before = new Map(kv.store);
+    await upsertEntitlement(staleView(kv, before), first, { now: NOW, generateId });
+    await upsertEntitlement(staleView(kv, before), second, { now: NOW, generateId });
+    return { kv, generateId };
+  };
+
+  for (const [name, payment] of Object.entries(payments)) {
+    for (const deletionLast of [false, true]) {
+      const label = `${name}, ${deletionLast ? "the deletion's" : "the payment's"} record written last`;
+      const { kv, generateId } = deletionLast ? await atOnce(payment, deletion) : await atOnce(deletion, payment);
+      const read = await getEntitlement(kv, "lic_1");
+      assert.equal(read.status, "canceled", label);
+      assert.equal(read.paid, true, label);
+      assert.equal(read.periodEnd, periodEnd, `${label}: it was paid up when it was cancelled`);
+      assert.equal(isTokenIssuable(read, NOW), true, label);
+      // The next event, refused against the deletion, keeps it.
+      await upsertEntitlement(kv, { ...subscription, status: "active", periodEnd, occurredAt: T + 30 }, { now: NOW, generateId });
+      assert.equal((await getEntitlement(kv, "lic_1")).periodEnd, periodEnd, label);
+    }
+  }
+
+  // Paid after the cancellation, processed at the same moment: buys nothing.
+  {
+    const { kv } = await atOnce(deletion, { ...payments.checkout, occurredAt: T + 120 });
+    const read = await getEntitlement(kv, "lic_1");
+    assert.equal(read.periodEnd, T + 60);
+    assert.equal(isTokenIssuable(read, NOW), false);
+  }
+
+  // A key written before it said when the payment was made ("1") still says
+  // one was confirmed, and restores nothing.
+  {
+    const { kv } = await atOnce(deletion, payments.invoice);
+    await kv.put(paidKey("lic_1"), "1");
+    await kv.put(licenseKey("lic_1"), JSON.stringify({ ...JSON.parse(kv.store.get(licenseKey("lic_1")).value), paid: false }));
+    const read = await getEntitlement(kv, "lic_1");
+    assert.equal(read.paid, true);
+    assert.equal(read.periodEnd, T + 60);
+  }
+});
+
+test("a payment a Stripe deletion already knew of does not restore the period it ended, at the same moment or not", async () => {
+  const DAY = 86400;
+  const T = NOW - 10 * DAY;
+  const periodEnd = NOW + 20 * DAY;
+  const subscription = { provider: "stripe", subscriptionId: "sub_knew", plan: "pro_monthly", planSource: "metadata" };
+  const kv = createFakeKv();
+  const generateId = idSequence("lic_");
+  await upsertEntitlement(kv, { ...subscription, status: "active", periodEnd, occurredAt: T }, { now: NOW, generateId });
+  await upsertEntitlement(kv, { provider: "stripe", subscriptionId: "sub_knew", status: "active", paid: true, periodEnd, occurredAt: T }, { now: NOW, generateId });
+  await upsertEntitlement(kv, { ...subscription, status: "suspended", periodEnd, occurredAt: NOW - 3 * DAY }, { now: NOW, generateId });
+  // Stripe had stopped trying to charge it when it was cancelled: it keeps
+  // none of the period, though the payment it knew of was made before.
+  const before = new Map(kv.store);
+  const deletion = { ...subscription, status: "canceled", periodEnd, endedAt: NOW - 2 * DAY, terminal: true, occurredAt: NOW - 2 * DAY };
+  await upsertEntitlement(kv, deletion, { now: NOW, generateId });
+  assert.equal((await getEntitlement(kv, "lic_1")).periodEnd, NOW - 2 * DAY);
+  // An older event processed at the same moment wins the record; the
+  // deletion's own key still says what the deletion knew.
+  await upsertEntitlement(staleView(kv, before), { ...subscription, status: "suspended", periodEnd, occurredAt: NOW - 3 * DAY + 1 }, { now: NOW, generateId });
+  const read = await getEntitlement(kv, "lic_1");
+  assert.equal(read.status, "canceled");
+  assert.equal(read.periodEnd, NOW - 2 * DAY);
+  assert.equal(isTokenIssuable(read, NOW), false);
 });
 
 test("the client view carries no provider-internal ids", () => {

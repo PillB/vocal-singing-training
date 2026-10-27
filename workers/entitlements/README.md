@@ -247,8 +247,9 @@ event:<provider>:<eventId>            "1"                             30d TTL   
 lic:<licenseId>                       record JSON                               the entitlement
 claim:<provider>:<sessionOrPaymentId> licenseId                       90d TTL   ?billing=success lookup
 sub:<provider>:<subscriptionId>       licenseId                                 keeps one license per subscription
-paid:<licenseId>                      "1"                                       a payment was confirmed (see below)
-ended:<licenseId>                     {endedAt, periodEnd, periodEndIfPaid?}    the Stripe subscription was deleted
+paid:<licenseId>                      {paidAt?, periodEnd?}                     the latest payment confirmed (see below)
+ended:<licenseId>                     {endedAt, periodEnd, periodEndIfPaid?,    the Stripe subscription was deleted
+                                       paidAtWhenEnded?}
 reversed:<licenseId>                  {reversedChargeAt, reversedAt}            a Mercado Pago charge's money went back
 charged:<licenseId>                   chargedAt                                 when the latest charge that went through was made
 refused:mercadopago:<notification>    unix seconds                    30d TTL   when the API first refused that notification's resource
@@ -260,9 +261,13 @@ same time cannot lose them: KV has no compare-and-swap, and the later of two
 concurrent writes of the record wins. Every read of a record applies them over
 it. `reversed:` holds the latest refunded or charged-back charge, and
 `charged:` the latest charge that went through (and so the interval it bought),
-as the record does. `charged:` is read again just before each write and only
-moves on to a later charge, except in the race described under "What
-concurrency can still do" below.
+as the record does. `paid:` holds when the latest confirmed payment was made
+and the period end it named (an invoice's; a checkout names none). A key
+written before it held that says `"1"`, which still means a payment was
+confirmed. `charged:` and `paid:` are read again just before each write and
+only move on to a later charge or payment (`paid:` never to one made after the
+subscription's deletion, past one made before it), except in the race
+described under "What concurrency can still do" below.
 
 D1: one database bound as `DB`, optional. The schema is created on first use
 (`ensureSchema`, every statement `IF NOT EXISTS`), so there is no migration step
@@ -413,33 +418,39 @@ Consequences worth understanding before you ship:
   deletion knew of the money: a payment *made before* the deletion but
   processed after it (a card checkout cancelled a minute later, whose
   `invoice.paid` and `checkout.session.completed` land after the
-  `customer.subscription.deleted`; a dunning invoice paid days before the
-  cancellation and delivered late) shows the subscription was paid up when it
-  was cancelled, so it keeps the period it paid for, as it would have in the
-  order the events happened: up to the deletion's own period end
+  `customer.subscription.deleted`, or are processed at the same moment as it;
+  a dunning invoice paid days before the cancellation and delivered late)
+  shows the subscription was paid up when it was cancelled, so it keeps the
+  period it paid for, as it would have in the order the events happened: up
+  to the deletion's own period end
   (`periodEndIfPaid`, also kept in `ended:`), and no further than the period
   that payment paid for. For an invoice that is its own period; a checkout
   names none, so it paid for the period it was made in, and restores the
   deletion's period only when one plan interval from the checkout (plus a
   week, as for a refund) reaches its end. A first month's checkout delivered
-  after a cancellation in a later month's dunning restores nothing. Status
-  and everything else stay as the deletion left them.
+  after a cancellation in a later month's dunning restores nothing, and so
+  does a payment the deletion already knew of (`paidAtWhenEnded`, also in
+  `ended:`): the subscription was in dunning or unpaid with it on record.
+  Status and everything else stay as the deletion left them.
 - **What concurrency can still do.** Two webhooks for one license processed at
   the same moment both read the record, and the later write wins. A confirmed
   payment, a deletion, a charge that went through (so a subscriber who pays
-  and cancels at once keeps the interval it bought) and a Mercado Pago refund
-  survive that through their own keys, and KV's eventual consistency only
-  delays them (another edge location can take up to about a minute to see a
-  write). Any other change can be lost to it. A charge's key is read again
-  just before it is written and is written only for a later charge than the
-  one it read, so an earlier charge processed at the same moment as a later
-  one can set it back, but only when the later one's write lands in the
-  instant between that read and that write, or at an edge location that has
-  not seen it yet. The refund of a later charge processed at the same moment
-  as the refund of an earlier one can still be lost. So can a Mercado Pago
-  charge that was turned down, which is kept only in the record: a
-  subscription that then stops keeps the period its authorization set. A
-  renewal's new period end comes back with the next event that carries it.
+  and cancels at once keeps the interval it bought, on Stripe too: `paid:`
+  says when the payment was made, so it restores the period the deletion
+  ended whichever of the two records wins) and a Mercado Pago refund survive
+  that through their own keys, and KV's eventual consistency only delays them
+  (another edge location can take up to about a minute to see a write). Any
+  other change can be lost to it. A charge's key, and a payment's, is read
+  again just before it is written and is written only for a later charge or
+  payment than the one it read, so an earlier one processed at the same
+  moment as a later one can set it back, but only when the later one's write
+  lands in the instant between that read and that write, or at an edge
+  location that has not seen it yet. The refund of a later charge processed
+  at the same moment as the refund of an earlier one can still be lost. So
+  can a Mercado Pago charge that was turned down, which is kept only in the
+  record: a subscription that then stops keeps the period its authorization
+  set. A renewal's new period end comes back with the next event that
+  carries it.
   Worse, the first two events for a new license (a
   checkout and its subscription's first event) processed at once can each
   find no license and mint one. The claim

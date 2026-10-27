@@ -278,13 +278,15 @@ test.describe("exercise pictures", () => {
   }
 
   // The volume ladder's take (v13-volume-ladder: levels 1 2 3 4 5 3 1, the
-  // first and last an almost-whisper "h", the voiced steps at 0.4 to 1.25 of
-  // the stock voice) said with no gap between the steps, twice, a 1.2 s
-  // pause after each, then a word
-  const ladder = (() => {
-    const once = [["h", 2000], ["w", 2000, 0.4], ["w", 2000, 0.7], ["w", 2000], ["w", 2000, 1.25], ["w", 2000, 0.7], ["h", 2000]];
+  // first and last an almost-whisper "h", the voiced steps at `lv` of the
+  // stock voice, by default 0.4 to 1.25) said with no gap between the steps,
+  // twice, a 1.2 s pause after each, then a word
+  const ladder = (lv = [0.4, 0.7, 1, 1.25, 0.7]) => {
+    const once = [["h", 2000], ...lv.map((l) => ["w", 2000, l]), ["h", 2000]];
     return [...once, ["q", 1200], ...once, ["q", 1200], ["w", 2000]];
-  })();
+  };
+  // Whispered and voiced phrases in turn four times, then a pause and one more of each
+  const fourTurns = [...[0, 1, 2, 3].flatMap(() => [["h", 2000], ["w", 2000]]), ["q", 1200], ["h", 2000], ["w", 2000]];
   for (const [label, mix, pauses] of [
     // Talk, a 1.5 s "sss", talk, another, talk, then one real pause
     ["power pause hears a 'sss' said twice inside talk as talk", { plan: [["w", 3000], ["s", 1500], ["w", 2000], ["s", 1500], ["w", 3000], ["q", 1200], ["w", 2000]] }, 1],
@@ -316,26 +318,41 @@ test.describe("exercise pictures", () => {
       1
     ],
     // The soft whisper flatter still, its syllables dipping to 0.85 or 0.9
-    // of their level: its high part moves only 1.4–1.7 dB over 0.8 s, under
-    // the 1.5 dB that tells a whisper from a white fan switched on under the
-    // talk, and from the second whispered phrase on it was learned as the
-    // room, cut out of the talk and counted as a pause
+    // of their level, in turn with voice four times: its high part moves
+    // only 1.4–1.7 dB over 0.8 s, under the 1.5 dB that tells a whisper from
+    // a white fan switched on under the talk, so a whispered phrase came
+    // back, was learned as the room 0.4 s in, cut out of the talk and
+    // counted as a pause (three or four pauses, 6 s of talk lost). Whispered
+    // only twice (h w h w q h w) it came back in 6 takes of 8 (0.85) and 3
+    // of 7 (0.9).
     [
       "power pause hears a very flat soft whisper alternating with voice as talk",
-      { plan: [["h", 2000], ["w", 2000], ["h", 2000], ["w", 2000], ["q", 1200], ["h", 2000], ["w", 2000]], bands: [900, 2400], q: 1.2, dip: 0.85, gain: 0.015 },
+      { plan: fourTurns, bands: [900, 2400], q: 1.2, dip: 0.85, gain: 0.015 },
       1
     ],
     [
       "power pause hears a soft whisper whose syllables barely dip, alternating with voice, as talk",
-      { plan: [["h", 2000], ["w", 2000], ["h", 2000], ["w", 2000], ["q", 1200], ["h", 2000], ["w", 2000]], bands: [900, 2400], q: 1.2, dip: 0.9, gain: 0.015 },
+      { plan: fourTurns, bands: [900, 2400], q: 1.2, dip: 0.9, gain: 0.015 },
       1
     ],
     // The volume ladder with that flat whisper as its level 1. v13 itself
     // reads its steps from the engine's gate, with no pause floor; a drill
-    // that has one hears the same take. The soft step's vowels hold their
-    // high part under the whisper's, so the whisper never comes back as a
+    // that has one hears the same take. The soft step's dips, and their high
+    // part, fall under the whisper's, so the whisper never comes back as a
     // fan would: both whispers of each ladder are talk.
-    ["power pause hears a volume ladder's almost-whisper as talk", { plan: ladder, bands: [900, 2400], q: 1.2, dip: 0.85, gain: 0.015 }, 2],
+    ["power pause hears a volume ladder's almost-whisper as talk", { plan: ladder(), bands: [900, 2400], q: 1.2, dip: 0.85, gain: 0.015 }, 2],
+    // A ladder whose voiced steps sit within 4 dB of each other (0.85 to
+    // 1.25 of the stock voice: "only two volumes", the mistake the exercise
+    // names) never falls under the whisper, and the last whisper of each
+    // ladder came back as the first one's room: cut out of the talk, run on
+    // into the pause after it (3.2 s, too long to count) and 2–4 s of talk
+    // lost. Seed 11: its whispers hold their high part flattest (with the
+    // stock seed the take failed one run in two)
+    [
+      "power pause hears the almost-whisper of a ladder whose voiced steps sit close together as talk",
+      { plan: ladder([0.85, 1, 1.15, 1.25, 1]), bands: [900, 2400], q: 1.2, dip: 0.85, gain: 0.015, seed: 11 },
+      2
+    ],
     // An audible inhale between phrases, no silence around it: talk (see
     // VTFeatures.Vad), never the room
     [
@@ -386,29 +403,73 @@ test.describe("exercise pictures", () => {
     expect(n, segs).toBe(1);
   });
 
-  test("power pause reads nothing before the first word when a fan comes on in the lead-in", async ({ page }) => {
+  for (const [label, from, lead, first] of [
     // The quiet room first, then a fan (white noise, −36 dBFS after the MIC
-    // gain) switched on 0.8 s after Start, 1.2 s before the first word. A
-    // new room that sits high must hold still for 5 s (a held "sss" must
-    // stay talk), so the fan read as speech from when it came on until the
-    // first word, and the take's talk began 1.2 s before the learner's. The
-    // sim's "white fan switched on in a silent lead-in" case in
-    // tests/vad-floor.spec.js is the deterministic guard.
-    await boot(page, "es", [fanInRoom, { gain: 0.0055, from: 0.8, seed: 7919 }]);
-    await openAndStart(page, "v10-power-pause");
-    // 2 s of the room (the fan from 0.8 s), then the speaker (3 s talk, 1.2 s pause)
-    await page.waitForTimeout(1750);
-    await playVoice(page, "speech");
-    await page.waitForTimeout(10000);
-    const n = Number(await page.locator("#mode-focus [data-p]").textContent());
-    const vad = await page.evaluate(() => {
-      const v = window.VTApp.getState().modeInstance.state.vad;
-      return { floor: v.floorDb, segs: v.segments.map((g) => `${g.kind[0]}${g.start.toFixed(2)}`).join(" ") };
+    // gain) switched on 0.8 s after Start, 1.2 s before the first word; or
+    // 0.6 s after Start, 2.4 s before it
+    ["power pause reads nothing before the first word when a fan comes on in the lead-in", 0.8, 1750, /^s(1\.[7-9]|[2-9]\.)/],
+    ["power pause reads nothing before the first word when a fan comes on early in a longer lead-in", 0.6, 2750, /^s(2\.[7-9]|[3-9]\.)/]
+  ]) {
+    test(label, async ({ page }) => {
+      // A new room that sits high must hold still for 5 s (a held "sss" must
+      // stay talk), so the fan read as speech from when it came on until the
+      // first word, and the take's talk began 1.2–2.4 s before the
+      // learner's. The sim's "white fan switched on in a silent lead-in"
+      // case in tests/vad-floor.spec.js is the deterministic guard.
+      await boot(page, "es", [fanInRoom, { gain: 0.0055, from, seed: 7919 }]);
+      await openAndStart(page, "v10-power-pause");
+      // The room (the fan from `from`), then the speaker (3 s talk, 1.2 s pause)
+      await page.waitForTimeout(lead);
+      await playVoice(page, "speech");
+      await page.waitForTimeout(10000);
+      const n = Number(await page.locator("#mode-focus [data-p]").textContent());
+      const vad = await page.evaluate(() => {
+        const v = window.VTApp.getState().modeInstance.state.vad;
+        return { floor: v.floorDb, segs: v.segments.map((g) => `${g.kind[0]}${g.start.toFixed(2)}`).join(" ") };
+      });
+      expect(vad.segs, "nothing said before the voice").toMatch(first);
+      expect(vad.floor, `the fan is the room · ${vad.segs}`).toBeGreaterThan(-45);
+      expect(n, vad.segs).toBe(2);
     });
-    expect(vad.segs, "nothing said before the voice").toMatch(/^s(1\.[7-9]|[2-9]\.)/);
-    expect(vad.floor, `the fan is the room · ${vad.segs}`).toBeGreaterThan(-45);
-    expect(n, vad.segs).toBe(2);
-  });
+  }
+
+  // Talk from Start with three 1 s "mmm" fillers at one level, 2–4 dB under
+  // the words' dips, between its phrases and no silence anywhere (the qa
+  // words never shut the gate: no stop consonant, no gap between words): no
+  // pause at all
+  for (const [label, id] of [
+    ["power pause counts no pause for three 'mmm' fillers at one level in talk from Start", "v10-power-pause"],
+    ["kill fillers does not count three 'mmm' fillers at one level, in talk from Start, as pauses", "v11-kill-fillers"]
+  ]) {
+    test(label, async ({ page }) => {
+      // Before the floor has heard any quiet room, a stretch at the quietest
+      // level heard that comes back in two more pauses is a hum the learner
+      // talked over from Start (VTFeatures.Vad): the third filler was learned
+      // as the room, all three were cut out of the talk and counted as
+      // pauses (in v11, pauses made instead of a filler) and 3.7 s of talk
+      // lost. The sim's "three 'mmm's at one level in talk with no stop
+      // consonant are not a hum" (row C40) is the deterministic guard.
+      const mix = { plan: [["w", 3000], ["m", 1000], ["w", 3000], ["m", 1000], ["w", 3000], ["m", 1000], ["w", 3000]], hum: 0.025 };
+      await boot(page, "es", [(m) => (window.__VTMix = m), mix]);
+      await page.evaluate((x) => window.VTApp.openExercise(x), id);
+      await expect(page.locator("#view-exercise")).toHaveClass(/active/);
+      // Already talking as the mic opens, so the floor hears no quiet room
+      // before the first word: the voice starts first (its audio needs a
+      // click on the page), then Start
+      await page.locator("#ex-title").click();
+      await playVoice(page, "speechMix");
+      await page.locator("#btn-practice-start").click();
+      await page.waitForTimeout(mix.plan.reduce((t, [, ms]) => t + ms, 0) + 800);
+      const n = Number(await page.locator("#mode-focus [data-p]").textContent());
+      const vad = await page.evaluate(() => {
+        const v = window.VTApp.getState().modeInstance.state.vad;
+        return { floor: v.floorDb, talk: v.talkSec, segs: v.segments.map((g) => `${g.kind[0]}${g.start.toFixed(2)}`).join(" ") };
+      });
+      const said = mix.plan.reduce((t, [, ms]) => t + ms / 1000, 0);
+      expect(vad.talk, `all of it is talk · ${vad.segs}`).toBeGreaterThan(said - 1);
+      expect(n, vad.segs).toBe(0);
+    });
+  }
 
   test("English labels on the pause drill", async ({ page }) => {
     await boot(page, "en");

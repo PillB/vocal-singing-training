@@ -11,11 +11,11 @@
  *                     for "speechWhisper" (default 0.03, about −30 dBFS
  *                     after the MIC gain, 6 dB, 3000 ms, band-passes at
  *                     [900, 2400] Hz with a Q of 1.2, and no low-pass)
- *   __VTMix           { plan, gain, bands, q, dip, breath, seed } for
+ *   __VTMix           { plan, gain, bands, q, dip, breath, hum, seed } for
  *                     "speechMix" (a plan of [kind, ms] pieces; default a
  *                     held "sss" at 0.03 through [5000, 7000] Hz with a Q of
  *                     1.5, whispered syllables dipping 6 dB between them,
- *                     and an inhale at 0.008)
+ *                     an inhale at 0.008 and an "mmm" at 0.035)
  */
 (function () {
   "use strict";
@@ -193,12 +193,14 @@
    * syllables), "s" a held hiss (noise through `bands`, swinging 1 dB at
    * `gain`), "h" whispered syllables through the same bands (dipping to
    * `dip` times `gain` between them), "b" an audible inhale (broadband
-   * breath noise at `breath`, swelling in and out) and "q" silence. A third
-   * number on a piece scales its level (["w", 2000, 0.4]: soft words).
-   * Seeded: a take sounds the same every run.
+   * breath noise at `breath`, swelling in and out), "m" a held "mmm" (a
+   * filler: the voice at one pitch and one level, `hum`; the words' dips
+   * sit at 0.042) and "q" silence. A third number on a piece scales its
+   * level (["w", 2000, 0.4]: soft words). Seeded: a take sounds the same
+   * every run.
    */
   V.define("speechMix", (h) => {
-    const o = Object.assign({ plan: [["w", 3000], ["s", 1500], ["w", 3000]], gain: 0.03, bands: [5000, 7000], q: 1.5, dip: 0.5, breath: 0.008, seed: 104729 }, window.__VTMix);
+    const o = Object.assign({ plan: [["w", 3000], ["s", 1500], ["w", 3000]], gain: 0.03, bands: [5000, 7000], q: 1.5, dip: 0.5, breath: 0.008, hum: 0.035, seed: 104729 }, window.__VTMix);
     let sd = o.seed >>> 0;
     const rnd = () => {
       sd = (sd * 1664525 + 1013904223) >>> 0;
@@ -252,6 +254,12 @@
         h.at(t0, () => h.ramp(n.mixBreath.gain, br * 0.8, 0.12));
         h.at(t0 + 150, () => h.ramp(n.mixBreath.gain, br, Math.max(0.05, (ms - 300) / 1000)));
         h.at(t0 + ms - 130, () => h.ramp(n.mixBreath.gain, 0, 0.12));
+      } else if (kind === "m") {
+        h.at(t0, () => {
+          h.setPitch(135 * 0.94, 0.03);
+          h.voiceOn(o.hum * level, 0.04);
+        });
+        h.at(t0 + ms - 20, () => h.voiceOff(0.05));
       } else if (kind === "w") {
         const g = gain * level;
         for (let x = 0; x + syl * 0.5 < ms; x += syl) {

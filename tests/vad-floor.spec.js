@@ -642,6 +642,34 @@ test.describe("pause floor (Vad)", () => {
     }
   });
 
+  test("a volume ladder's almost-whisper is talk", async ({ page }) => {
+    // v13's ladder (1 2 3 4 5 3 1) said twice with no gap between the steps,
+    // level 1 that flat whisper, a 1.2 s pause after each ladder. With a
+    // soft step 10 dB under the voice, its dips fall under the whisper and
+    // the whisper never comes back. A learner whose voiced steps sit within
+    // 4 dB of each other (the exercise's "only two volumes") never falls
+    // under it: the last whisper of each ladder came back as the first
+    // one's room, was cut out of the talk and ran on into the pause after it.
+    const flat = (peak, swing) => SPEECH(2, { peak, dip: peak - swing, whisper: true, spread: 0 });
+    const ladder = (w, steps) => [QUIET(1), ...[0, 1].flatMap(() => [w, ...steps.map(([peak, dip]) => SPEECH(2, { peak, dip })), w, QUIET(1.2)]), SPEECH(2, OVER_FAN)];
+    const stock = [[-30, -46], [-25, -41], [-20, -36], [-16, -32], [-25, -41]];
+    const narrow = [[-21.5, -37.5], [-20, -36], [-19, -35], [-18, -34], [-20, -36]];
+    for (const [label, parts] of [
+      ["the stock ladder, whisper at −38 dB dipping 1.5 dB", ladder(flat(-38, 1.5), stock)],
+      ["voiced steps within 4 dB, whisper at −40 dB dipping 1.5 dB", ladder(flat(-40, 1.5), narrow)],
+      ["voiced steps within 4 dB, whisper at −40 dB dipping 1 dB", ladder(flat(-40, 1), narrow)]
+    ]) {
+      for (const seed of [1, 2, 3, 4, 5, 6]) {
+        const r = await sim(page, { parts, seed });
+        const msg = `${label}, seed ${seed} · ${r.segs}`;
+        expect(r.falsePauses, msg).toBe(0);
+        expect(r.talk, msg).toBeGreaterThan(r.truthTalk - 0.5);
+        expect(r.floor, `${label}, seed ${seed}: the quiet room is the floor · ${r.segs}`).toBeLessThan(-60);
+        eachPauseMeasured(r, `${label}, seed ${seed}`);
+      }
+    }
+  });
+
   test("a fan switched on or off mid-take: the floor follows the room", async ({ page }) => {
     // On during a 4 s pause: the room is the fan within a second, and the
     // pauses after it count

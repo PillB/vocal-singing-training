@@ -33,6 +33,37 @@ test.describe("Copy & i18n (learner-facing)", () => {
     expect(orig).toMatch(/En pocas palabras|In short/i);
   });
 
+  test("the copy says where your progress lives: Historial, and the reminder on the week card", async ({ page }) => {
+    // The summary, goal, achievements and profiles moved from under Practicar's
+    // catalog to Historial, and the reminder to a dialog off the week card.
+    await bootEs(page);
+    const feat = await page.evaluate(() =>
+      ["es", "en"].map((l) => {
+        VTI18n.setLang(l);
+        return VTI18n.t("pricing.feat.value_pulse");
+      })
+    );
+    expect(feat[0]).toContain("Historial");
+    expect(feat[1]).toContain("History");
+    await page.goto(BASE + "/guide.html", { waitUntil: "domcontentloaded" });
+    /** The text of a guide section: its heading up to the next one. */
+    const section = (id) =>
+      page.evaluate((x) => {
+        let el = document.getElementById(x);
+        let out = "";
+        for (el = el.nextElementSibling; el && el.tagName !== "H2"; el = el.nextElementSibling) out += ` ${el.textContent}`;
+        return out.replace(/\s+/g, " ");
+      }, id);
+    const home = await section("inicio");
+    expect(home).not.toMatch(/Debajo del catálogo crecen/);
+    expect(home).toContain("Poner un recordatorio");
+    expect(await section("guardar")).toContain("Tu progreso");
+    const homeEn = await section("inicio-en");
+    expect(homeEn).not.toMatch(/Below the catalog, your summary/);
+    expect(homeEn).toContain("Set a reminder");
+    expect(await section("guardar-en")).toContain("Your progress");
+  });
+
   test("English lang shows English guide steps", async ({ page }) => {
     await page.addInitScript(() => {
       try {
@@ -131,8 +162,8 @@ test.describe("Copy & i18n (learner-facing)", () => {
     await page.locator('.tab[data-tab="singing"]').click();
     await page.waitForTimeout(150);
     const opened = await page.evaluate(() => {
-      const cards = [...document.querySelectorAll("#exercise-list .card-ex")];
-      const c = cards.find((el) => /SH|aire|Escalera/i.test(el.textContent || ""));
+      // By id: the catalog order is not this test's subject.
+      const c = document.querySelector('#exercise-list .card-ex[data-id="s15-sh-air-ladder"]');
       if (c) {
         c.click();
         return true;
@@ -167,8 +198,7 @@ test.describe("Copy & i18n (learner-facing)", () => {
     await page.locator('.tab[data-tab="singing"]').click();
     await page.waitForTimeout(100);
     await page.evaluate(() => {
-      const cards = [...document.querySelectorAll("#exercise-list .card-ex")];
-      const c = cards.find((el) => /SH|Escalera|aire/i.test(el.textContent || ""));
+      const c = document.querySelector('#exercise-list .card-ex[data-id="s15-sh-air-ladder"]');
       c?.click();
     });
     await expect(page.locator("#view-exercise")).toHaveClass(/active/);

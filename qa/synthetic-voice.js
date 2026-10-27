@@ -154,6 +154,8 @@
       airOff(0.02);
       vibrato(0);
       V.nodes.trillDepth.gain.value = 0;
+      // A scenario's own source (qa/voices/), if it added one
+      if (V.nodes.whisper) ramp(V.nodes.whisper.gain, 0, 0.02);
     }
   }
 

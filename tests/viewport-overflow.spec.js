@@ -44,7 +44,7 @@ async function openPitchExercise(page) {
       list[0];
     const cards = [...document.querySelectorAll("#exercise-list .card-ex")];
     for (const c of cards) {
-      if (c.querySelector(".num")?.textContent?.trim() === String(pitch?.number)) {
+      if (c.dataset.num === String(pitch?.number)) {
         c.click();
         return;
       }

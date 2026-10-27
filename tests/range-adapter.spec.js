@@ -250,7 +250,7 @@ test.describe("Range adapter & octave helpers", () => {
     await boot(page);
     await page.click('.tab[data-tab="singing"]');
     await page.waitForTimeout(150);
-    await page.locator("#exercise-list").getByText(/progres|solfeo|Solfège|Solfege/i).first().click();
+    await page.locator("#exercise-list .card-ex[data-id='s2-solfege-chords']").click();
     await page.waitForTimeout(300);
     await expect(page.locator("#oct-controls")).toBeVisible();
     await expect(page.locator("#btn-oct-up")).toBeVisible();
@@ -276,7 +276,7 @@ test.describe("Range adapter & octave helpers", () => {
   test("manual + then − returns to 0; auto toggle persists", async ({ page }) => {
     await boot(page);
     await page.click('.tab[data-tab="singing"]');
-    await page.locator("#exercise-list").getByText(/progres|solfeo|Solfège|Solfege/i).first().click();
+    await page.locator("#exercise-list .card-ex[data-id='s2-solfege-chords']").click();
     await page.waitForTimeout(250);
     await page.click("#btn-oct-up");
     await page.waitForTimeout(80);

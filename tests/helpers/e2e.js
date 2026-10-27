@@ -135,7 +135,7 @@ async function openExercise(page, exerciseId) {
     chip?.click();
     await new Promise((r) => setTimeout(r, 50));
     for (const c of document.querySelectorAll("#exercise-list .card-ex")) {
-      if (c.querySelector(".num")?.textContent?.trim() === String(found.number)) {
+      if (c.dataset.num === String(found.number)) {
         c.click();
         return true;
       }

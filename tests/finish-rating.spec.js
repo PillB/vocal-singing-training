@@ -223,6 +223,26 @@ test.describe("Rating: one tap after a take", () => {
     await expect(page.locator("#rate-note")).toContainText("Guardado: 7.0 / 10");
     await expect(page.locator("#btn-rate-skip")).toBeHidden();
     await expect(page.locator("#ps-routine-next")).toBeVisible();
+    // The way on follows the score, not the breakdown, and is brought on
+    // screen (on the next frame, then a smooth scroll).
+    expect(
+      await page.evaluate(() => {
+        const list = document.querySelector("#score-result .breakdown");
+        const next = document.querySelector("#post-session-next");
+        return !!(next.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING);
+      })
+    ).toBe(true);
+    await page.clock.runFor(100);
+    await expect
+      .poll(
+        () =>
+          page.evaluate(() => {
+            const b = document.querySelector("#ps-routine-next").getBoundingClientRect();
+            return b.top >= 0 && b.bottom <= window.innerHeight;
+          }),
+        { timeout: 5000 }
+      )
+      .toBe(true);
 
     // One take, rated in place; the day counted once.
     let after = await records(page, "s4-lip-trills");
@@ -276,15 +296,22 @@ test.describe("Rating: one tap after a take", () => {
       engine: !!window.VTApp.getState().practice?.running,
       pill: document.querySelector("#practice-status").textContent
     }));
-    expect(st).toEqual({ live: false, engine: false, pill: "Listo" });
+    expect(st).toEqual({ live: false, engine: false, pill: "Tiempo" });
     await expect(page.locator("#step-done")).toBeHidden();
     await expect(page.locator("#metrics-card")).not.toHaveClass(/collapsed/);
     await expect(page.locator("#rate-done")).toHaveText("¡Listo! Se acabó el tiempo y el micrófono se apagó.");
     await expect(page.locator("#rate-q")).toBeFocused();
     await expect(page.locator("#rate-time")).toHaveText("Tiempo: 5:00 de 5:00 ✓");
     await expect(page.locator("#btn-rate-skip")).toHaveText("Salir sin puntuar");
-    const geo = await cardInView(page);
+    // At 00:00 the answers come first, even on a pictured exercise (after a
+    // Stop, the review still does): the stage filled the screen and left them
+    // below the fold.
+    const geo = await cardInView(page, { cardFirst: true });
     expect(geo.btns.every((b) => b.onTop)).toBe(true);
+    // The rating is the next step: Empezar steps back to "Otra vez" and the
+    // guide steps aside, so the answers sit under the stage.
+    await expect(page.locator("#btn-practice-start")).toHaveText("↻ Otra vez");
+    await expect(page.locator("#view-exercise .guide-card")).toBeHidden();
     // Nothing looks chosen before the learner chooses.
     await expect(page.locator(".rate-btn[aria-pressed='true']")).toHaveCount(0);
     for (const b of await page.locator(".rate-btn").all()) await expect(b).not.toBeFocused();
@@ -368,7 +395,10 @@ test.describe("Rating: one tap after a take", () => {
     await page.locator("#leave-save").click();
     await expect(page.locator("#leave-modal")).toBeHidden();
     await expect(page.locator("#rate-q")).toBeFocused();
-    await cardInView(page);
+    // "Puntuar ahora" asks for the card itself (cardFirst), on main too: once
+    // the scroll settles the review is above the screen. The review-first
+    // check only passed when it read the page before that scroll had run.
+    await cardInView(page, { cardFirst: true });
     await page.locator('.rate-btn[data-feel="hard"]').click();
     await page.clock.runFor(600);
     await expect(page.locator("#view-home")).toHaveClass(/active/);
@@ -376,6 +406,79 @@ test.describe("Rating: one tap after a take", () => {
     expect(r.takes).toBe(1);
     expect(r.day.n).toBe(1);
     expect(r.metrics).toMatchObject({ ease: "2", steadiness: "2", transfer: "2" });
+  });
+
+  test("the header's tour on an exercise leaves it the way Back does, asking first", async ({ page }) => {
+    await boot(page, { viewport: { width: 1280, height: 800 } });
+    const view = () => page.evaluate(() => window.VTApp.getState().view);
+    const tour = async () => {
+      if (!(await page.locator("#btn-tour").isVisible())) await page.locator("#btn-help").click();
+      await page.locator("#btn-tour").click();
+      await page.clock.runFor(1000);
+    };
+    // Nothing worth keeping yet: the exercise closes and the tour starts.
+    await openSingle(page, "s4-lip-trills");
+    await tour();
+    await expect(page.locator(".tour-card")).toBeVisible();
+    expect(await view()).toBe("home");
+    await page.keyboard.press("Escape");
+    await expect(page.locator(".tour-card")).toBeHidden();
+
+    // Practice worth keeping: it asks. Staying keeps the mic on and starts no tour.
+    await openSingle(page, "s4-lip-trills");
+    await start(page);
+    await page.clock.fastForward(50000);
+    await page.clock.runFor(500);
+    expect(await live(page)).toBe(true);
+    await tour();
+    await expect(page.locator("#leave-modal")).toBeVisible();
+    await page.locator("#leave-cancel").click();
+    await expect(page.locator("#leave-modal")).toBeHidden();
+    await page.clock.runFor(500);
+    await expect(page.locator(".tour-card")).toBeHidden();
+    expect(await live(page)).toBe(true);
+    expect(await view()).toBe("exercise");
+
+    // Descartar: the mic stops and the practice still counts, then the tour.
+    await tour();
+    await expect(page.locator("#leave-modal")).toBeVisible();
+    await page.locator("#leave-discard").click();
+    await page.clock.runFor(1000);
+    await expect(page.locator(".tour-card")).toBeVisible();
+    expect(await live(page)).toBe(false);
+    expect(await view()).toBe("home");
+    expect((await records(page, "s4-lip-trills")).day).not.toBeNull();
+  });
+
+  test("the header's guide on an exercise opens beside it: the take keeps running", async ({ page, context }) => {
+    await boot(page, { viewport: { width: 1280, height: 800 } });
+    const dialogs = [];
+    page.on("dialog", (d) => {
+      dialogs.push(d.type());
+      d.dismiss().catch(() => {});
+    });
+    await openSingle(page, "s4-lip-trills");
+    await start(page);
+    await page.clock.fastForward(50000);
+    await page.clock.runFor(500);
+    if (!(await page.locator("#link-guide").isVisible())) await page.locator("#btn-help").click();
+    const [guide] = await Promise.all([
+      context.waitForEvent("page", { timeout: 5000 }),
+      page.locator("#link-guide").click()
+    ]);
+    expect(guide.url()).toContain("/guide.html");
+    await guide.close();
+    // The exercise did not ask to be left, because it was not.
+    expect(dialogs).toEqual([]);
+    expect(page.url()).toContain("#ejercicio/s4-lip-trills");
+    expect(await live(page)).toBe(true);
+    expect((await records(page, "s4-lip-trills")).takes).toBe(0);
+    // Elsewhere it is an ordinary link in the same tab.
+    await page.locator("#btn-nav-home").click();
+    await page.locator("#leave-discard").click();
+    await page.clock.runFor(500);
+    await expect(page.locator("#view-home")).toHaveClass(/active/);
+    await expect(page.locator("#link-guide")).not.toHaveAttribute("target", /.+/);
   });
 
   test("a count nobody asked for is not scored as zero: Fácil reads as Fácil", async ({ page }) => {
@@ -470,6 +573,63 @@ test.describe("Rating: one tap after a take", () => {
     }
   });
 
+  test("an exercise that always records its take shows ⏺ Grabarme ticked; elsewhere the learner's choice is kept", async ({ page }) => {
+    await boot(page);
+    const box = page.locator("#chk-auto-record");
+    const opt = page.locator("#opt-auto-record");
+    // v1: recording is the learner's choice, off until they tick it
+    await openSingle(page, "v1-diction");
+    await expect(box).not.toBeChecked();
+    await expect(box).toBeEnabled();
+    await expect(box).toHaveAccessibleDescription("");
+    // v10 records every take, whatever the box says: the box says so
+    await openSingle(page, "v10-power-pause");
+    await expect(opt).toBeVisible();
+    await expect(box).toBeChecked();
+    await expect(box).toBeDisabled();
+    await expect(opt).toHaveAttribute("title", /graba siempre la toma/);
+    // …to a screen reader too, which does not read the label's title
+    await expect(box).toHaveAccessibleDescription(/graba siempre la toma/);
+    await start(page);
+    await page.waitForTimeout(1200);
+    await page.clock.runFor(2000);
+    await page.locator("#btn-practice-stop").click();
+    // The take is offered, not saved: keeping it is the learner's tap
+    await expect(page.locator("#btn-save-rec")).toHaveText("Guardar en historial");
+    // Back on v1 the box is the learner's again, as they left it
+    await openSingle(page, "v1-diction");
+    await expect(box).not.toBeChecked();
+    await expect(box).toBeEnabled();
+    await expect(opt).not.toHaveAttribute("title", /graba/);
+    await expect(box).toHaveAccessibleDescription("");
+    await box.check();
+    await openSingle(page, "v10-power-pause");
+    await openSingle(page, "v1-diction");
+    await expect(box, "a tick the learner chose survives the exercise that forced one").toBeChecked();
+    await openSingle(page, "v10-power-pause");
+    await page.evaluate(() => window.VTI18n.setLang("en"));
+    await expect(opt).toHaveAttribute("title", /always records the take/);
+    await expect(box).toHaveAccessibleDescription(/always records the take/);
+  });
+
+  test("the written guide says some exercises always record, and keeping the take is still the learner's", async ({ page }) => {
+    await page.goto(`${BASE}/guide.html`);
+    // The recording point under "Guardar, puntuar y el historial", in each
+    // language. It leads with what is the learner's choice, keeping the take:
+    // a lead of "recording is optional" contradicted "some exercises always record".
+    // Plain strings: they match across the line breaks of the HTML source
+    const es = page.locator("#guardar + p + ul > li").first();
+    await expect(es.locator("strong")).toHaveText("Guardar tu grabación");
+    await expect(es).not.toContainText("es opcional");
+    await expect(es).toContainText("algunos ejercicios graban siempre la toma");
+    await expect(es).toContainText("decides si la guardas");
+    const en = page.locator("#guardar-en + p + ul > li").first();
+    await expect(en.locator("strong")).toHaveText("Keeping your recording");
+    await expect(en).not.toContainText("is optional");
+    await expect(en).toContainText("some exercises always record the take");
+    await expect(en).toContainText("you decide whether to save it");
+  });
+
   test("English reads in its own words", async ({ page }) => {
     await boot(page, { lang: "en" });
     await openSingle(page, "s4-lip-trills");
@@ -486,6 +646,68 @@ test.describe("Rating: one tap after a take", () => {
     await page.locator('.rate-btn[data-feel="hard"]').click();
     await expect(page.locator("#score-result")).toContainText("How it went: Hard");
     await expect(page.locator("#rate-note")).toContainText("Saved:");
+  });
+
+  test("a language switch mid-take changes the words, not the take: the mic, the clock and Stop stay", async ({ page }) => {
+    await boot(page, { viewport: { width: 1280, height: 800 } });
+    await openSingle(page, "s4-lip-trills");
+    await start(page);
+    await page.clock.fastForward(20000);
+    await page.clock.runFor(500);
+    const clocks = () =>
+      page.evaluate(() => ({ sung: window.VTApp.getPracticedSec(), left: window.VTApp.getState().timer.remaining }));
+    const before = await clocks();
+    const esTitle = await page.locator("#ex-title").textContent();
+    await page.locator("#btn-lang").click();
+    await page.clock.runFor(500);
+    expect(await live(page)).toBe(true);
+    await expect(page.locator("#btn-practice-stop")).toBeVisible();
+    await expect(page.locator("#btn-practice-start")).toBeHidden();
+    await expect(page.locator("#practice-status")).toHaveText(await page.evaluate(() => VTI18n.t("practice.live")));
+    await expect(page.locator("#ex-title")).not.toHaveText(esTitle);
+    await expect(page.locator("#btn-back-home")).toHaveText(await page.evaluate(() => VTI18n.t("ex.backPractice")));
+    // The time keeps counting as practice, and the clock does not start over.
+    await page.clock.fastForward(5000);
+    await page.clock.runFor(500);
+    const after = await clocks();
+    expect(after.sung - before.sung).toBeGreaterThan(5);
+    expect(after.left).toBeLessThan(before.left - 5);
+  });
+
+  test("a language switch after Stop keeps the take's recording, its Save and the time sung", async ({ page }) => {
+    await boot(page, { viewport: { width: 1280, height: 800 } });
+    await openSingle(page, "v1-diction");
+    await page.evaluate(() => (document.querySelector("#chk-auto-record").checked = true));
+    await start(page);
+    // MediaRecorder hands over its data on its own clock.
+    await page.waitForTimeout(1200);
+    await page.clock.fastForward(28000);
+    await page.clock.runFor(2000);
+    await page.locator("#btn-practice-stop").click();
+    await expect(page.locator("#btn-save-rec")).toHaveText("Guardar en historial");
+    const timer = await page.locator("#timer-display").textContent();
+    await page.locator("#btn-lang").click();
+    await page.clock.runFor(500);
+    await expect(page.locator("#metrics-card #playback-area audio")).toHaveCount(1);
+    await expect(page.locator("#btn-save-rec")).toHaveText("Save to history");
+    await expect(page.locator("#btn-discard-rec")).toHaveText("Discard");
+    await expect(page.locator("#rate-time")).toContainText("Time:");
+    await expect(page.locator("#timer-display")).toHaveText(timer);
+    await expect(page.locator("#practice-status")).toHaveText(await page.evaluate(() => VTI18n.t("practice.ready")));
+    // Rated, its score card follows a switch back too: the same score and ways on, in Spanish.
+    await page.locator('.rate-btn[data-feel="easy"]').click();
+    const card = page.locator("#score-result");
+    await expect(card).toContainText("How it went: Easy");
+    const score = await card.locator(".score-big").textContent();
+    const buttons = await card.locator("button").count();
+    await page.locator("#btn-lang").click();
+    await page.clock.runFor(500);
+    await expect(card).toBeVisible();
+    await expect(card).toContainText("Cómo te fue: Fácil");
+    await expect(card).toContainText(await page.evaluate(() => VTI18n.t("toast.sessionEncourage")));
+    await expect(card.locator(".score-big")).toHaveText(score);
+    await expect(card.locator("button")).toHaveCount(buttons);
+    expect(await card.innerText()).not.toMatch(/How it went|Easy|Not rated|Not counted|intention| of \d+:\d\d/);
   });
 
   test("muted under automation without the opt-in: the mic still stops, the form stays open for other specs", async ({ page }) => {

@@ -22,13 +22,71 @@
   const MAX_ATTEMPTS = 3;
   /** Quiet period after a change before pushing, so a session does not write per rep. */
   const DEBOUNCE_MS = 8000;
+  /**
+   * Waits before trying a failed sync again, the last one repeating while it
+   * keeps failing: soon enough for a dropped connection that comes straight
+   * back, sparse enough not to hammer a worker that is down.
+   */
+  const RETRY_MS = [30000, 120000, 600000];
+  /**
+   * Failures worth trying again. A signed-out or oversized bag is not, nor a
+   * write the worker turned down (a fourth profile): it would say the same.
+   */
+  const RETRYABLE = new Set(["offline", "error", "conflict"]);
+  /** Failures every profile would meet alike, so a sync of several stops at one. */
+  const STOPS_ALL = new Set(["offline", "signed_out"]);
+  /**
+   * Largest body sent as the page closes. Browsers refuse a keepalive request
+   * over 64 KiB (shared with anything else leaving at the same moment), so a
+   * bigger bag waits for the next visit's sync instead.
+   */
+  const KEEPALIVE_MAX_BYTES = 60000;
+  /**
+   * Longest a read or write may take before it counts as a dropped connection
+   * and goes to the retry. Without a limit, a request that never answers holds
+   * up every sync after it, the retry included. Above the slowest D1 round
+   * trips operators report (39 s, docs/34), so a slow write is not cut off.
+   */
+  const REQUEST_TIMEOUT_MS = 45000;
+  /** The weekly goal a profile has until somebody sets one (VTStorage.getGoals). */
+  const DEFAULT_WEEKLY_TARGET = 3;
 
   let timer = null;
   let running = null;
+  let runningFor = null;
   let lastError = null;
   let lastSyncedAt = null;
+  let failures = 0;
+
+  // Which profiles hold changes the account has not had yet. Every synced write
+  // bumps `version`; a profile is pushed up to the version that was current
+  // when its bag was read, so a write that lands mid-sync is not forgotten.
+  let version = 0;
+  const changedAt = new Map();
+  const pushedAt = new Map();
+  // What this page itself last wrote or read for each profile, the revision and
+  // the copy the account held at it, for the one write a closing page gets.
+  // Kept in memory only, so it can never be a number left behind by another
+  // account or another tab.
+  const confirmed = new Map();
+
+  function unpushed(profileId) {
+    return (changedAt.get(profileId) || 0) > (pushedAt.get(profileId) || 0);
+  }
+
+  /** Whether a profile is no longer on this browser (deleted). */
+  function deleted(profileId) {
+    const list = global.VTStorage.getProfiles?.().list;
+    return Array.isArray(list) && !list.some((p) => p.id === profileId);
+  }
+
+  /** Profiles other than the active one still holding changes, if they still exist. */
+  function otherUnpushed(active) {
+    return [...changedAt.keys()].filter((id) => id !== active && !deleted(id) && unpushed(id));
+  }
 
   const listeners = new Set();
+  const dataListeners = new Set();
 
   function emit() {
     const status = getStatus();
@@ -49,6 +107,56 @@
   function onChange(fn) {
     listeners.add(fn);
     return () => listeners.delete(fn);
+  }
+
+  /**
+   * Subscribe to syncs that changed what this device holds for the active
+   * profile: another device's practice arrived, so whatever shows the record
+   * is out of date. Not called when a sync only pushed.
+   * @param {function} fn Listener.
+   * @returns {function} Unsubscribe.
+   */
+  function onDataChange(fn) {
+    dataListeners.add(fn);
+    return () => dataListeners.delete(fn);
+  }
+
+  /**
+   * Tell the data listeners, when the profile written to is the one on screen.
+   * @param {string} profileId The profile just written to.
+   */
+  function dataChanged(profileId) {
+    if (profileId !== global.VTStorage.getActiveProfileId()) return;
+    dataListeners.forEach((fn) => {
+      try {
+        fn();
+      } catch (err) {
+        console.warn(err);
+      }
+    });
+  }
+
+  /**
+   * JSON with every object's keys in order and empty fields dropped, so two
+   * bags holding the same things compare equal however they were built.
+   * @param {unknown} value Any JSON value.
+   * @returns {string} Canonical text.
+   */
+  function canonical(value) {
+    if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+    if (value && typeof value === "object") {
+      const keys = Object.keys(value)
+        .filter((k) => value[k] !== null && value[k] !== undefined)
+        .sort();
+      return `{${keys.map((k) => `${JSON.stringify(k)}:${canonical(value[k])}`).join(",")}}`;
+    }
+    return JSON.stringify(value === undefined ? null : value);
+  }
+
+  /** The parts of a bag that are the learner's record, as canonical text. */
+  function recordOf(bag) {
+    const { v, profileId, savedAt, ...record } = bag || {};
+    return canonical(record);
   }
 
   /** Revision bookkeeping, per profile, so several profiles can sync separately. */
@@ -151,27 +259,40 @@
    *
    * Plans are a single state machine, not a list, so they cannot be unioned:
    * the honest answer is "whichever device got further", compared on the week
-   * first, then on how many elements it finished, then on check-ins.
+   * first, then on how many elements it finished, then on when the week
+   * started, then on check-ins.
    *
-   * @param {object} local This browser's plan.
-   * @param {object} remote The account's plan.
-   * @returns {object} The further-along plan.
+   * Two plans still level after that differ at most in the element picked for
+   * a week not started yet. Nothing unpicks an element, so a plan with one is
+   * ahead of a plan without; between two picks, the plan changed last wins.
+   * Plans saved before they carried a time cannot say when, so the account's
+   * copy decides, and every device ends up with the same plan rather than each
+   * keeping its own.
+   *
+   * @param {object|null} local This browser's plan, or null if never written.
+   * @param {object|null} remote The account's plan.
+   * @returns {object|null} The further-along plan.
    */
   function mergeWeekPlan(local, remote) {
-    if (!remote) return local;
+    if (!remote) return local || null;
     if (!local) return remote;
+    // When the week started comes before check-ins: changing a week's focus
+    // starts it again with none, and that restart is the newer state. Only
+    // plans saved before 23 Sep 2026 carry check-ins at all.
     const rank = (plan) => [
       Number(plan.weekNumber) || 0,
       (plan.completedElements || []).length,
-      (plan.checkIns || []).length,
-      ms(plan.startedAt)
+      ms(plan.startedAt),
+      (plan.checkIns || []).length
     ];
-    const [aw, ae, ac, as] = rank(local);
-    const [bw, be, bc, bs] = rank(remote);
+    const [aw, ae, as, ac] = rank(local);
+    const [bw, be, bs, bc] = rank(remote);
     if (aw !== bw) return aw > bw ? local : remote;
     if (ae !== be) return ae > be ? local : remote;
+    if (as !== bs) return as > bs ? local : remote;
     if (ac !== bc) return ac > bc ? local : remote;
-    return as >= bs ? local : remote;
+    if (!local.element !== !remote.element) return local.element ? local : remote;
+    return ms(local.updatedAt) > ms(remote.updatedAt) ? local : remote;
   }
 
   /**
@@ -197,6 +318,37 @@
   }
 
   /**
+   * Pick between two copies of a setting by when each was chosen.
+   *
+   * A setting has no history to union, so the one chosen last wins, and one
+   * never chosen (a default) loses to one that was. Copies saved before
+   * settings carried the time cannot say when: back then every device pushed
+   * its own, untouched defaults included, so the account often holds the
+   * default of a device where nobody chose anything. Between two of those, one
+   * that differs from the default is the one somebody chose. When that still
+   * cannot tell, the account's copy decides, so every device ends up with the
+   * same value rather than each keeping its own.
+   *
+   * @param {object|null} local This browser's copy.
+   * @param {object|null} remote The account's copy.
+   * @param {function(object): boolean} isDefault Whether a copy holds the default.
+   * @returns {object|null} The copy to keep.
+   */
+  function newerSetting(local, remote, isDefault) {
+    if (!local) return remote || null;
+    if (!remote) return local;
+    const a = ms(local.updatedAt);
+    const b = ms(remote.updatedAt);
+    if (a || b) return a > b ? local : remote;
+    return isDefault(remote) && !isDefault(local) ? local : remote;
+  }
+
+  /** Whether a copy of the goals still holds the weekly goal nobody set. */
+  function isDefaultGoals(goals) {
+    return (Number(goals.weeklySessionsTarget) || DEFAULT_WEEKLY_TARGET) === DEFAULT_WEEKLY_TARGET;
+  }
+
+  /**
    * Merge a whole sync bag.
    * @param {object} local This browser's bag.
    * @param {object} remote The account's bag, or null.
@@ -204,7 +356,6 @@
    */
   function mergeBag(local, remote) {
     if (!remote || typeof remote !== "object") return local;
-    const localNewer = ms(local.savedAt) >= ms(remote.savedAt);
     return {
       v: 1,
       profileId: local.profileId,
@@ -213,9 +364,9 @@
       weekPlan: mergeWeekPlan(local.weekPlan, remote.weekPlan),
       reviews: mergeLog(local.reviews, remote.reviews, 40),
       holdLogs: mergeLog(local.holdLogs, remote.holdLogs, 100),
-      // Settings are a single value with no history to union, so the bag that
-      // was saved more recently wins.
-      goals: localNewer ? local.goals : remote.goals,
+      // Not the bag's own savedAt: that is "now" on whichever device is
+      // syncing, so this device's goal always won and never came down.
+      goals: newerSetting(local.goals, remote.goals, isDefaultGoals),
       achievements: {
         ...(remote.achievements || {}),
         ...(local.achievements || {})
@@ -226,52 +377,87 @@
   }
 
   /**
-   * Read this browser's bag, stamped so settings can be compared later.
+   * Read one profile's bag, stamped with when this copy was made.
+   * @param {string} profileId Whose bag.
    * @returns {object} Sync bag.
    */
-  function localBag() {
-    const bag = global.VTStorage.readSyncBag();
+  function localBag(profileId) {
+    const bag = global.VTStorage.readSyncBag(profileId);
     return { ...bag, savedAt: new Date().toISOString() };
   }
 
   /**
-   * Run one read-merge-write cycle.
+   * Run one read-merge-write cycle for one profile.
    *
    * The server's `409` is the whole concurrency story: it means the stored
    * revision moved while we were thinking, so we take its copy, merge, and try
    * again rather than overwriting somebody's evening.
    *
+   * The cycle reads and writes the profile it started for, by name. Following
+   * the active profile instead mixed two people's practice when the learner
+   * switched profile while the request was out.
+   *
+   * @param {string} [id] Profile to sync; the active one when omitted.
    * @returns {Promise<{ok: boolean, reason?: string, rev?: number}>} Result.
    */
-  async function syncNow() {
-    if (running) return running;
+  async function syncNow(id) {
+    const profileId = id || global.VTStorage.getActiveProfileId();
+    // One cycle at a time: one for another profile waits for the one in flight
+    // to finish. A second ask for the same profile shares it, unless something
+    // was written after it read the bag. That write is not in what it pushes,
+    // and this ask is the write's own timer running out (or the hidden-tab
+    // flush that cancelled it), so nothing else would ask again: go round once
+    // more for it.
+    while (running) {
+      const cycle = running;
+      const same = runningFor === profileId;
+      const result = await cycle.catch(() => null);
+      if (same && !(result && result.ok && unpushed(profileId))) return cycle;
+    }
     if (!isAvailable()) return { ok: false, reason: "signed_out" };
+    // A profile deleted while this waited has nothing left to sync, and its bag
+    // written back would leave keys behind that no profile owns.
+    if (deleted(profileId)) return { ok: false, reason: "deleted" };
 
+    runningFor = profileId;
     running = (async () => {
-      const profileId = global.VTStorage.getActiveProfileId();
       for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
         const pulled = await global.VTAccount.request(
           "GET",
           `/v1/me/progress?profileId=${encodeURIComponent(profileId)}`,
-          null
+          null,
+          { timeoutMs: REQUEST_TIMEOUT_MS }
         );
         if (pulled.status === 401) return { ok: false, reason: "signed_out" };
-        if (!pulled.ok) return { ok: false, reason: pulled.offline ? "offline" : "error" };
+        if (!pulled.ok) {
+          // Usually the whole of an offline sync: the read fails before any
+          // write is tried. Say so, or the panel keeps "saved" from last time.
+          lastError = pulled.offline ? "offline" : "error";
+          return { ok: false, reason: lastError };
+        }
+        // Deleted while the read was out: what came back is nobody's here now.
+        if (deleted(profileId)) return { ok: false, reason: "deleted" };
 
         const serverRev = Number(pulled.data?.rev) || 0;
-        const merged = mergeBag(localBag(), pulled.data?.doc || null);
+        const seen = version;
+        const local = localBag(profileId);
+        const merged = mergeBag(local, pulled.data?.doc || null);
 
         // Write the merged result locally first: even if the push fails, this
         // device now holds everything both sides knew.
-        global.VTStorage.writeSyncBag(merged);
+        global.VTStorage.writeSyncBag(merged, profileId);
+        if (recordOf(merged) !== recordOf(local)) dataChanged(profileId);
 
-        const pushed = await global.VTAccount.request("PUT", "/v1/me/progress", {
-          profileId,
-          doc: merged,
-          baseRev: serverRev
-        });
+        const pushed = await global.VTAccount.request(
+          "PUT",
+          "/v1/me/progress",
+          { profileId, doc: merged, baseRev: serverRev },
+          { timeoutMs: REQUEST_TIMEOUT_MS }
+        );
         if (pushed.ok) {
           writeRev(profileId, Number(pushed.data?.rev) || serverRev + 1);
+          confirmed.set(profileId, { rev: Number(pushed.data?.rev) || serverRev + 1, doc: merged });
+          pushedAt.set(profileId, Math.max(pushedAt.get(profileId) || 0, seen));
           lastError = null;
           lastSyncedAt = new Date().toISOString();
           emit();
@@ -284,6 +470,13 @@
           emit();
           return { ok: false, reason: "too_large" };
         }
+        if (pushed.status === 400) {
+          // Turned down for what it is (a fourth profile on the account), not
+          // for when it was sent: the same write would be turned down again.
+          lastError = "refused";
+          emit();
+          return { ok: false, reason: "refused" };
+        }
         lastError = pushed.offline ? "offline" : "error";
         emit();
         return { ok: false, reason: lastError };
@@ -293,10 +486,14 @@
       return { ok: false, reason: "conflict" };
     })();
 
+    let result = null;
     try {
-      return await running;
+      result = await running;
+      return result;
     } finally {
       running = null;
+      runningFor = null;
+      retryIfFailed(result);
       // The emits above run while `running` is still set, so every listener
       // was last told "syncing" and the account panel said "Guardando…" after
       // the save had finished. Tell them once more, now that it has.
@@ -305,20 +502,121 @@
   }
 
   /**
-   * Ask for a sync once the practising has settled down.
-   * Safe to call after every saved result: the timer collapses a burst into one
-   * write, which matters on a free-tier database.
+   * After a failed cycle, try again later, waiting longer each time it fails.
+   * The panel promises exactly this ("Lo intentaremos de nuevo"). A change
+   * already waiting to be pushed keeps its own, sooner, timer.
+   * @param {{ok: boolean, reason?: string}|null} result The cycle's result.
    * @returns {void}
    */
-  function schedule() {
+  function retryIfFailed(result) {
+    if (result && result.ok) {
+      failures = 0;
+      return;
+    }
+    if (result && !RETRYABLE.has(result.reason)) return;
+    failures += 1;
+    if (!timer) schedule(RETRY_MS[Math.min(failures, RETRY_MS.length) - 1]);
+  }
+
+  /**
+   * Ask for a sync once the practising has settled down.
+   * Called on every write of synced data (see the listener below): the timer
+   * collapses a burst into one write, which matters on a free-tier database.
+   * @param {number} [delayMs] How long to wait; the quiet period by default.
+   * @returns {void}
+   */
+  function schedule(delayMs = DEBOUNCE_MS) {
     if (!isAvailable()) return;
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => {
       timer = null;
-      syncNow().catch(() => {
+      syncScheduled().catch(() => {
         /* reported through getStatus */
       });
-    }, DEBOUNCE_MS);
+    }, delayMs);
+  }
+
+  /**
+   * The active profile, then any other profile still holding changes: a take
+   * saved just before the learner switched profile is pushed for its owner.
+   * A failure that belongs to one profile (a write turned down, a bag too
+   * large) does not keep the others back; only one every profile would meet
+   * alike, offline or signed out, ends the round. A profile that did go up
+   * after one that failed does not make the panel say all is saved.
+   * @returns {Promise<void>}
+   */
+  async function syncScheduled() {
+    const active = global.VTStorage.getActiveProfileId();
+    let failed = null;
+    for (const id of [active, ...otherUnpushed(active)]) {
+      // Deleted while an earlier profile synced.
+      if (deleted(id)) continue;
+      const res = await syncNow(id);
+      if (res.ok || res.reason === "deleted") continue;
+      if (STOPS_ALL.has(res.reason)) return;
+      failed = failed || res.reason;
+    }
+    if (failed && !lastError) {
+      lastError = failed;
+      emit();
+    }
+  }
+
+  /**
+   * Push what is waiting now, because the page may not be here in 8 seconds.
+   *
+   * Hidden (a phone locking, another tab): the page usually lives on a little,
+   * so the whole read-merge-write cycle starts at once instead of after the
+   * quiet period. Closing: there is no time to read first, so each profile
+   * with changes the account has not had goes up in one request the browser
+   * finishes on its own, written on top of the revision this page last saw and
+   * merged with the copy the account held at it. While that revision stands,
+   * that copy is what a read would bring back, so anything removed here since
+   * (progress cleared from the admin panel) is merged back, not wiped from the
+   * account. If anyone else wrote since, the server refuses it and nothing is
+   * lost: the changes are still here, and the next visit's sync merges them.
+   *
+   * @param {{unloading?: boolean}} [opts] Whether the page is going away.
+   * @returns {void}
+   */
+  function flush(opts) {
+    if (!isAvailable()) return;
+    if (!(opts && opts.unloading)) {
+      if (!timer) return;
+      clearTimeout(timer);
+      timer = null;
+      syncScheduled().catch(() => {
+        /* reported through getStatus */
+      });
+      return;
+    }
+    const active = global.VTStorage.getActiveProfileId();
+    for (const profileId of [active, ...otherUnpushed(active)]) {
+      const last = confirmed.get(profileId);
+      if (!unpushed(profileId) || !last) continue;
+      const body = { profileId, doc: mergeBag(localBag(profileId), last.doc), baseRev: last.rev };
+      let bytes = Infinity;
+      try {
+        bytes = new Blob([JSON.stringify(body)]).size;
+      } catch {
+        bytes = Infinity;
+      }
+      if (bytes > KEEPALIVE_MAX_BYTES) continue;
+      // Not sent twice on the same base if the page closes again after a
+      // back-forward cache brought it back.
+      confirmed.delete(profileId);
+      const seen = version;
+      global.VTAccount.request("PUT", "/v1/me/progress", body, { keepalive: true })
+        .then((res) => {
+          // Only read when the page was kept after all.
+          if (!res.ok) return;
+          const rev = Number(res.data?.rev) || body.baseRev + 1;
+          writeRev(profileId, rev);
+          confirmed.set(profileId, { rev, doc: body.doc });
+          pushedAt.set(profileId, Math.max(pushedAt.get(profileId) || 0, seen));
+        })
+        .catch(() => {});
+    }
   }
 
   /**
@@ -354,13 +652,20 @@
     const pulled = await global.VTAccount.request(
       "GET",
       `/v1/me/progress?profileId=${encodeURIComponent(profileId)}`,
-      null
+      null,
+      { timeoutMs: REQUEST_TIMEOUT_MS }
     );
     if (!pulled.ok) return { ok: false, reason: pulled.offline ? "offline" : "error" };
     if (!pulled.data?.doc) return { ok: false, reason: "empty" };
-    global.VTStorage.writeSyncBag(pulled.data.doc);
+    if (deleted(profileId)) return { ok: false, reason: "deleted" };
+    // Into the profile that asked, even if the learner has switched since.
+    global.VTStorage.writeSyncBag(pulled.data.doc, profileId);
+    pushedAt.set(profileId, version);
     writeRev(profileId, Number(pulled.data.rev) || 0);
+    confirmed.set(profileId, { rev: Number(pulled.data.rev) || 0, doc: pulled.data.doc });
+    lastError = null;
     lastSyncedAt = new Date().toISOString();
+    dataChanged(profileId);
     emit();
     return { ok: true };
   }
@@ -368,9 +673,11 @@
   global.VTSync = {
     syncNow,
     schedule,
+    flush,
     pullOverwrite,
     getStatus,
     onChange,
+    onDataChange,
     isAvailable,
     // Exported for the test-suite: these are the whole correctness story.
     mergeBag,
@@ -379,10 +686,23 @@
     mergeLog
   };
 
+  // Anything a sync carries was just written: a take, a day's practice, the
+  // plan, a goal. Asking here, once, means no screen has to remember to.
+  global.VTStorage?.onSyncedChange?.((profileId) => {
+    version += 1;
+    changedAt.set(profileId, version);
+    schedule();
+  });
+
   if (typeof document !== "undefined" && global.VTAccount?.onChange) {
     // Signing in on a fresh device is the moment a sync is most wanted.
     global.VTAccount.onChange((state) => {
       if (state.signedIn) schedule();
+      else confirmed.clear();
+    });
+    // A failed sync need not wait out its retry once the connection is back.
+    global.addEventListener?.("online", () => {
+      if (lastError) schedule();
     });
   }
 })(window);

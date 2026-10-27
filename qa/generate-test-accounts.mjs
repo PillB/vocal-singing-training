@@ -137,4 +137,7 @@ fs.writeFileSync(generatedPath, generatedJs);
 
 console.log("Wrote secrets →", secretsPath, "(gitignored)");
 console.log("Wrote hashes  →", generatedPath);
+// index.html loads the file under a ?v= stamp, and a browser keeps the old copy
+// until that stamp changes.
+console.log("Now bump js/auth-users.generated.js?v= in index.html.");
 console.log("Accounts:", accounts.map((a) => `${a.username}(${a.role})`).join(", "));

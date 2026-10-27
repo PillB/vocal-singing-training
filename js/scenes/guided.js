@@ -2782,7 +2782,7 @@
       this.topics = cfg.topics || [];
       this.topicIndex = 0;
       this.topic = this.topics.length ? this.topics[0] : "";
-      this.vad = global.VTFeatures ? new global.VTFeatures.Vad({}) : null;
+      this.vad = global.VTFeatures ? new global.VTFeatures.Vad({ onTakeBack: (t) => this._takeBack(t) }) : null;
       this.bins = [];
       this.pauses = [];
       this.t = 0;
@@ -2799,6 +2799,14 @@
       setText(this.mode.hud.querySelector("[data-topic-text]"), this.topic);
       this.caption(L("Tema: ", "Topic: ") + this.topic, 0);
       this.draw();
+    }
+    /** The speech heard from t was a fan or a hum: its seconds get no bar. */
+    _takeBack(t) {
+      const segs = this.vad.segments;
+      for (let s = Math.max(0, Math.floor(t)); s < this.bins.length; s++) {
+        const spoke = segs.some((g) => g.kind === "speech" && g.start < s + 1 && (g.end != null ? g.end : this.vad.t) > s);
+        if (!spoke) this.bins[s] = -1;
+      }
     }
     start() {
       this.begin();

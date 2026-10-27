@@ -877,7 +877,8 @@
   function rungSub(m, r, i) {
     if (r.end != null) return r.rel != null ? pct(r.rel) : "—";
     if (i === m.current && !m.review && !m.done) return clockUp(m.remaining);
-    return `${Math.round(r.sec)} s`;
+    // The same clock as the live rung: "1:15" beside "75 s" read as two lengths.
+    return clockUp(r.sec);
   }
 
   /** The live headline: what is happening now, in words, with a glyph. */
@@ -2015,7 +2016,7 @@
   function topicSub(m, k, i) {
     if (k.end != null) return k.stars.length ? `★ ${k.stars.length}` : "—";
     if (i === m.current && !m.review && !m.done) return clockUp(m.remaining);
-    return `${Math.round(k.sec)} s`;
+    return clockUp(k.sec);
   }
 
   /** The card: which topic, the topic itself, the frame, and one slow cue. */
@@ -2357,7 +2358,7 @@
           short: p.short,
           // A narrow chip with its check: "Preg." rather than a condensed "Pregunta"
           shortest: p.short.length > 5 ? p.short.slice(0, 4) + "." : p.short,
-          sub: slot && slot.step === i && !m.done ? clockUp(slot.b - now) : `${p.sec} s`,
+          sub: slot && slot.step === i && !m.done ? clockUp(slot.b - now) : clockUp(p.sec),
           done: !!slot && !m.done && i < slot.step
         })),
         { current: slot && !m.done ? slot.step : -1, frac: slot && !m.done ? clamp((now - slot.a) / Math.max(0.1, slot.b - slot.a), 0, 1) : null }

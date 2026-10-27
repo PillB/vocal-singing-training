@@ -8,11 +8,11 @@
  * that only what the mic can hear is ever patched into the metrics.
  */
 const { test, expect } = require("@playwright/test");
-const { useVoice, playVoice, stopVoice } = require("./helpers/voice");
+const { useVoice, playVoice, stopVoice, fanInRoom } = require("./helpers/voice");
 
 const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";
 
-async function boot(page, lang = "es") {
+async function boot(page, lang = "es", init) {
   await page.context().grantPermissions(["microphone"]).catch(() => {});
   await page.addInitScript((l) => {
     try {
@@ -24,6 +24,7 @@ async function boot(page, lang = "es") {
     }
   }, lang);
   await useVoice(page);
+  if (init) await page.addInitScript(init);
   await page.goto(BASE + "/?e2e", { waitUntil: "domcontentloaded" });
   await page.waitForFunction(() => !!window.VTApp?.openExercise);
 }
@@ -315,6 +316,22 @@ test.describe("guided pictures", () => {
     await stopAndExpectReview(page);
     const labels = await vizState(page, () => window.VTApp.getState().modeInstance.viz.chapters.map((c) => c.label));
     expect(labels[0]).toMatch(/Minuto 1/);
+  });
+
+  test("v7 with a fan in the room: no bar of voice before the first word", async ({ page }) => {
+    // The fan reads as a voice until the floor learns it (~0.6 s), and its
+    // first second drew a bar the Vad later took back
+    await boot(page, "es", fanInRoom);
+    await open(page, "v7-record-review", { minSec: 4, maxSec: 60 });
+    await start(page);
+    await page.waitForTimeout(2500);
+    const r = await vizState(page, () => {
+      const v = window.VTApp.getState().modeInstance.viz;
+      return { bins: v.bins.slice(), segs: v.vad.segments.length, t: v.t };
+    });
+    expect(r.t).toBeGreaterThan(2);
+    expect(r.segs, JSON.stringify(r)).toBe(0);
+    expect(r.bins.filter((b) => b >= 0), JSON.stringify(r)).toEqual([]);
   });
 
   test("v9 draws this week and the twelve at open, and opens the plan", async ({ page }) => {

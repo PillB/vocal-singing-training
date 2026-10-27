@@ -1,5 +1,5 @@
 /**
- * Retention: reminders, ICS, rest days, micro-session, welcome-back.
+ * Retention: reminders, ICS, rest days, welcome-back.
  */
 const { test, expect } = require("@playwright/test");
 
@@ -20,24 +20,58 @@ async function boot(page) {
 }
 
 test.describe("Retention features", () => {
-  test("retain panel and ICS helpers exist", async ({ page }) => {
+  test("the reminder is a dialog off the week card, with the calendar helpers", async ({ page }) => {
     await boot(page);
-    await expect(page.locator("#retain-panel")).toBeVisible();
+    // Practicar does not carry the settings: they open from the week card.
+    await expect(page.locator("#view-home #retain-panel")).toHaveCount(0);
+    await expect(page.locator("#btn-micro-5")).toHaveCount(0);
+    await page.evaluate(() => {
+      const D = window.VTDays;
+      VTStorage.setDays({ v: 1, days: { [D.addDays(D.dayKey(), -1)]: { sec: 120, n: 1, ex: ["s4-lip-trills"] } }, rest: { bank: 0, earnedAt: 0, used: [] }, backfilled: true });
+    });
+    await page.reload({ waitUntil: "networkidle" });
+    const open = page.locator("#btn-reminder");
+    await expect(open).toBeVisible();
+    await expect(open).toContainText("Poner un recordatorio");
+    await open.click();
+    await expect(page.locator("#reminder-modal")).toBeVisible();
+    // Off, the time comes first and the main button turns the reminder on.
+    await expect(page.locator("#rem-time-1")).toBeFocused();
+    await expect(page.locator("#reminder-done")).toHaveText("Activar recordatorio");
+    await expect(page.locator("#chk-reminders")).toBeHidden();
     await expect(page.locator("#btn-ics-daily")).toBeVisible();
-    await expect(page.locator("#btn-micro-5")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#reminder-modal")).toBeHidden();
+    await expect(open).toBeFocused();
     const ics = await page.evaluate(() => window.VTReminders.buildIcs({ isEs: true }));
     expect(ics).toContain("BEGIN:VCALENDAR");
     expect(ics).toContain("RRULE:FREQ=DAILY");
   });
 
-  test("reminder config persists", async ({ page }) => {
+  test("reminder config persists, and the week card says it is set", async ({ page }) => {
     await boot(page);
-    await page.check("#chk-reminders");
+    await page.evaluate(() => {
+      const D = window.VTDays;
+      VTStorage.setDays({ v: 1, days: { [D.addDays(D.dayKey(), -1)]: { sec: 120, n: 1, ex: ["s4-lip-trills"] } }, rest: { bank: 0, earnedAt: 0, used: [] }, backfilled: true });
+    });
+    await page.reload({ waitUntil: "networkidle" });
+    await page.click("#btn-reminder");
     await page.fill("#rem-time-1", "19:30");
-    await page.waitForTimeout(100);
+    await page.click("#reminder-done");
+    await expect(page.locator("#reminder-modal")).toBeHidden();
     const cfg = await page.evaluate(() => VTReminders.getConfig());
     expect(cfg.enabled).toBe(true);
     expect(cfg.times[0]).toBe("19:30");
+    // The week card shows the time the way the time field does (12 or 24 h).
+    await expect(page.locator("#btn-reminder")).toContainText(/Recordatorio: (19:30|7:30\s?(PM|p\.\s?m\.))/i);
+    // Set, the box is the way to turn it off, and the main button just closes.
+    await page.click("#btn-reminder");
+    await expect(page.locator("#chk-reminders")).toBeChecked();
+    await expect(page.locator("#reminder-done")).toHaveText("Listo");
+    await page.uncheck("#chk-reminders");
+    await page.click("#reminder-cancel");
+    expect((await page.evaluate(() => VTReminders.getConfig())).enabled).toBe(false);
+    await expect(page.locator("#btn-reminder")).toContainText("Poner un recordatorio");
   });
 
   test("rest day covers one missed day, once, and never a gap it cannot cover", async ({ page }) => {
@@ -76,8 +110,10 @@ test.describe("Retention features", () => {
   });
 
   test("micro-session opens exercise with 5 min timer", async ({ page }) => {
+    // The "▶ 5 min" button left the reminders (they configure, they do not
+    // start practice); the micro session itself still backs welcome-back.
     await boot(page);
-    await page.click("#btn-micro-5");
+    await page.evaluate(() => window.VTApp.startMicroSession("s15-sh-air-ladder"));
     await page.waitForTimeout(400);
     await expect(page.locator("#view-exercise")).toHaveClass(/active/);
     const t = await page.locator("#timer-display").textContent();
@@ -113,6 +149,27 @@ test.describe("Retention features", () => {
 
   test("practice heatmap and analytics exist", async ({ page }) => {
     await boot(page);
+    // The map is part of "Tu progreso", in Historial, once something is saved.
+    // With practice from today only, the calendar above already shows it all,
+    // so the map waits.
+    await page.evaluate(() => {
+      const at = new Date().toISOString();
+      localStorage.setItem("vt_progress_v1", JSON.stringify({ "v1-diction": { completedCount: 1, lastAt: at, lastScore: 6, history: [{ at, score: 6, durationSec: 60, metrics: {} }] } }));
+      const today = window.VTDays.dayKey();
+      localStorage.setItem("vt_days_v1", JSON.stringify({ v: 1, days: { [today]: { sec: 240, n: 2, ex: ["v1-diction"] } }, rest: { bank: 1, earnedAt: 0, used: [] }, backfilled: true }));
+    });
+    await page.reload({ waitUntil: "networkidle" });
+    await page.click("#btn-history");
+    await expect(page.locator("#view-history #value-pulse")).toBeVisible();
+    await expect(page.locator("#practice-heatmap")).toBeHidden();
+    // Practice from two months ago is further back than the calendar reaches.
+    await page.evaluate(() => {
+      const at = new Date().toISOString();
+      const old = new Date(Date.now() - 60 * 86400000).toISOString();
+      localStorage.setItem("vt_progress_v1", JSON.stringify({ "v1-diction": { completedCount: 2, lastAt: at, lastScore: 6, history: [{ at: old, score: 5, durationSec: 60, metrics: {} }, { at, score: 6, durationSec: 60, metrics: {} }] } }));
+    });
+    await page.reload({ waitUntil: "networkidle" });
+    await page.click("#btn-history");
     await expect(page.locator("#practice-heatmap")).toBeVisible();
     const r = await page.evaluate(() => {
       const hm = VTValuePulse.heatmap(4);

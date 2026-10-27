@@ -13,6 +13,7 @@
  *   ended:<licenseId>                     -> {endedAt, periodEnd, periodEndIfPaid?} (subscription deleted)
  *   reversed:<licenseId>                  -> {reversedChargeAt, reversedAt} (money given back)
  *   charged:<licenseId>                   -> chargedAt  (latest charge that went through)
+ *   refused:<provider>:<eventId>          -> unix secs  (API first refused its resource, 30d TTL)
  *
  * KV has no compare-and-swap, so two webhooks for one license processed at the
  * same time can each read the record, and the later write wins with the other's
@@ -151,6 +152,39 @@ export async function markEventSeen(kv, provider, eventId) {
   }
   await kv.put(key, "1", { expirationTtl: EVENT_TTL_SECONDS });
   return true;
+}
+
+/**
+ * Key for when a notification's resource was first refused by the provider's
+ * API (not found, forbidden).
+ * @param {string} provider "mercadopago".
+ * @param {string} eventId Notification id.
+ * @returns {string} KV key.
+ */
+export function refusedKey(provider, eventId) {
+  return `refused:${provider}:${eventId}`;
+}
+
+/**
+ * Remember when a notification's resource was first refused, and say how
+ * long ago that was. The first refusal is now.
+ * @param {Object} kv KV namespace.
+ * @param {string} provider "mercadopago".
+ * @param {string} eventId Notification id.
+ * @param {number} now Unix seconds.
+ * @returns {Promise<number>} Seconds since the first refusal.
+ */
+export async function noteRefusal(kv, provider, eventId, now) {
+  if (!eventId) {
+    return 0;
+  }
+  const key = refusedKey(provider, eventId);
+  const first = Number(await kv.get(key));
+  if (Number.isFinite(first) && first > 0) {
+    return now - first;
+  }
+  await kv.put(key, String(now), { expirationTtl: EVENT_TTL_SECONDS });
+  return 0;
 }
 
 /**

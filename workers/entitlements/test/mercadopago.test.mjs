@@ -516,8 +516,21 @@ test("an API failure is reported instead of trusted", async () => {
   const failing = fakeFetch({ status: 404 });
   const result = await confirmAndMapNotification({ kind: "payment", id: "1" }, env, { fetchImpl: failing });
   assert.equal(result.handled, false);
-  assert.equal(result.reason, "api_error");
+  assert.equal(result.reason, "not_found");
   assert.equal(result.status, 404);
+
+  // The API's own trouble, against a refusal about the resource or the token.
+  for (const [status, reason] of [[410, "not_found"], [400, "api_refused"], [401, "api_refused"], [403, "api_refused"],
+    [429, "api_error"], [500, "api_error"], [503, "api_error"]]) {
+    const answer = await confirmAndMapNotification({ kind: "payment", id: "1" }, env, { fetchImpl: fakeFetch({ status }) });
+    assert.deepEqual([answer.handled, answer.reason, answer.status], [false, reason, status], String(status));
+  }
+  const offline = await confirmAndMapNotification({ kind: "payment", id: "1" }, env, {
+    fetchImpl: async () => {
+      throw new TypeError("fetch failed");
+    }
+  });
+  assert.deepEqual([offline.handled, offline.reason], [false, "api_unreachable"]);
 
   const badJson = fakeFetch({ status: 200 });
   const parsed = await confirmAndMapNotification({ kind: "payment", id: "1" }, env, { fetchImpl: badJson });

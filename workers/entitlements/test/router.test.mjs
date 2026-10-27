@@ -649,6 +649,67 @@ test("an API failure answers 500 so Mercado Pago retries", async () => {
   assert.equal(claim.status, 200);
 });
 
+test("a notification whose resource the API refuses is retried for a day, then acknowledged", async () => {
+  /**
+   * Deliver one signed notification for data.id 123456 (what the dashboard's
+   * simulator sends) whose API read answers `fetchImpl`, at `now`.
+   * @param {Object} env Env bindings.
+   * @param {number} notificationId The notification's own id.
+   * @param {function} fetchImpl What the API read does.
+   * @param {number} now Unix seconds, for the worker's clock.
+   * @returns {Promise<{status: number, body: Object}>} The webhook's answer.
+   */
+  async function deliver(env, notificationId, fetchImpl, now) {
+    const raw = JSON.stringify({ id: notificationId, type: "payment", action: "payment.updated", data: { id: "123456" } });
+    const ts = String(Math.floor(Date.now() / 1000));
+    const v1 = await hmacSha256Hex(env.MP_WEBHOOK_SECRET, buildMercadoPagoManifest({ dataId: "123456", ts }));
+    const response = await handleRequest(
+      postJson("/v1/webhooks/mercadopago", raw, { headers: { "x-signature": `ts=${ts},v1=${v1}` } }),
+      env,
+      { fetchImpl, now }
+    );
+    return { status: response.status, body: await response.json() };
+  }
+  const answer = (status, body) => async () => ({ ok: status < 300, status, async json() { return body; } });
+  const now = Math.floor(Date.now() / 1000);
+
+  // Not found, or refused for this access token: retried while a read that
+  // lags the notification, or a wrong token, can still be put right.
+  for (const status of [404, 403]) {
+    const env = createTestEnv();
+    const refused = answer(status, { message: "Payment not found" });
+    const first = await deliver(env, 1001, refused, now);
+    assert.deepEqual([first.status, first.body.ok], [500, false], `${status}: first refusal`);
+    assert.equal((await deliver(env, 1001, refused, now + 3600)).status, 500, `${status}: an hour on`);
+    const dayOn = await deliver(env, 1001, refused, now + DAY + 60);
+    assert.equal(dayOn.status, 200, `${status}: a day on, Mercado Pago is told to stop`);
+    assert.equal(dayOn.body.ok, true);
+    assert.equal(dayOn.body.reason, status === 404 ? "not_found" : "api_refused");
+    const again = await deliver(env, 1001, refused, now + 2 * DAY);
+    assert.deepEqual([again.status, again.body.reason], [200, "duplicate"], `${status}: and stays acknowledged`);
+  }
+
+  // A lagging read that turns up within the day is applied as usual.
+  const env = createTestEnv();
+  assert.equal((await deliver(env, 1002, answer(404, {}), now)).status, 500);
+  const found = await deliver(env, 1002, answer(200, { id: 123456, status: "approved", external_reference: "pro_monthly" }), now + 900);
+  assert.equal(found.status, 200);
+  assert.deepEqual(found.body, { ok: true });
+  assert.equal((await claimFor(env, "mercadopago", "123456")).status, 200);
+
+  // The API's own trouble is retried for as long as Mercado Pago keeps trying.
+  const unreachable = async () => {
+    throw new TypeError("fetch failed");
+  };
+  const badJson = async () => ({ ok: true, status: 200, async json() { throw new SyntaxError("not json"); } });
+  for (const [label, fetchImpl] of [["429", answer(429, {})], ["500", answer(500, {})], ["503", answer(503, {})],
+    ["unreachable", unreachable], ["bad json", badJson]]) {
+    const stuck = createTestEnv();
+    assert.equal((await deliver(stuck, 1003, fetchImpl, now)).status, 500, `${label}: at once`);
+    assert.equal((await deliver(stuck, 1003, fetchImpl, now + 3 * DAY)).status, 500, `${label}: three days on`);
+  }
+});
+
 test("an unpaid Mercado Pago cash voucher waits, and one that expires unpaid never entitles", async () => {
   const env = createTestEnv();
   const voucher = {

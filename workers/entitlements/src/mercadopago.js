@@ -152,6 +152,26 @@ export function resolveNotificationTarget(body, url) {
 }
 
 /**
+ * Why an API read failed, by its HTTP status. "api_error" (429, 5xx) is the
+ * API's own trouble and passes. "not_found" (404, 410) and "api_refused" (any
+ * other 4xx) are about the resource or the access token: a notification the
+ * dashboard simulates, a resource of another application, an access token
+ * from the wrong account. Retrying those cannot help unless someone fixes
+ * the configuration (see RETRY_REFUSED_SECONDS in index.js).
+ * @param {number} status HTTP status of a failed read.
+ * @returns {string} "api_error" | "not_found" | "api_refused".
+ */
+export function apiFailureReason(status) {
+  if (status === 404 || status === 410) {
+    return "not_found";
+  }
+  if (status >= 400 && status < 500 && status !== 429) {
+    return "api_refused";
+  }
+  return "api_error";
+}
+
+/**
  * Fetch a Mercado Pago resource with the configured access token.
  * @param {string} kind Notification kind (key of RESOURCE_ENDPOINTS).
  * @param {string} id Resource id.
@@ -169,15 +189,20 @@ export async function fetchMercadoPagoResource(kind, id, env, options) {
     return { ok: false, status: 0, reason: "access_token_not_configured" };
   }
   const doFetch = (options && options.fetchImpl) || fetch;
-  const response = await doFetch(`${MP_API_BASE}${path}${encodeURIComponent(id)}`, {
-    method: "GET",
-    headers: {
-      authorization: `Bearer ${token}`,
-      accept: "application/json"
-    }
-  });
+  let response;
+  try {
+    response = await doFetch(`${MP_API_BASE}${path}${encodeURIComponent(id)}`, {
+      method: "GET",
+      headers: {
+        authorization: `Bearer ${token}`,
+        accept: "application/json"
+      }
+    });
+  } catch {
+    return { ok: false, status: 0, reason: "api_unreachable" };
+  }
   if (!response.ok) {
-    return { ok: false, status: response.status, reason: "api_error" };
+    return { ok: false, status: response.status, reason: apiFailureReason(response.status) };
   }
   let body = null;
   try {

@@ -251,6 +251,7 @@ paid:<licenseId>                      "1"                                       
 ended:<licenseId>                     {endedAt, periodEnd, periodEndIfPaid?}    the Stripe subscription was deleted
 reversed:<licenseId>                  {reversedChargeAt, reversedAt}            a Mercado Pago charge's money went back
 charged:<licenseId>                   chargedAt                                 when the latest charge that went through was made
+refused:mercadopago:<notification>    unix seconds                    30d TTL   when the API first refused that notification's resource
 ```
 
 `paid:`, `ended:`, `reversed:` and `charged:` repeat facts the record also
@@ -516,6 +517,25 @@ value is absent are omitted). After that the notification body is treated as a
 | `payment` | `GET /v1/payments/{id}` |
 | `subscription_preapproval` | `GET /preapproval/{id}` |
 | `subscription_authorized_payment` | `GET /authorized_payments/{id}` |
+
+When that read fails, the webhook answers 500 so Mercado Pago sends the
+notification again, or 200 so it stops:
+
+| The API | Answer |
+|---------|--------|
+| `429`, `5xx`, no answer, a body that is not JSON | `500`, for as long as Mercado Pago keeps retrying |
+| `404`/`410` (`not_found`), any other `4xx` (`api_refused`) | `500` for a day from the first such answer, then `200 {ok:true, reason}` |
+
+A resource the API will not show this access token is either one that does
+not exist for it (the dashboard's *simulate notification* sends `data.id`
+123456; a notification for another application) or a configuration mistake
+(an access token from another account or from test mode). The day covers a
+read that lags its notification and gives the operator time to fix a token
+while Mercado Pago is still retrying; after it the notification is
+acknowledged, or Mercado Pago would retry it for good. Every refusal is
+logged with its status (`mercadopago notification not applied`), and when
+the first one happened is kept in `refused:mercadopago:<notification>` for
+30 days.
 
 Only money that arrived entitles. A one-off payment `approved` → `active`;
 `pending`/`in_process`/`authorized`/`in_mediation` → `pending` (an unpaid cash

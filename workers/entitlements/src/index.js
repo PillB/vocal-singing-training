@@ -54,9 +54,19 @@ import {
   getEntitlement,
   getLicenseIdForClaim,
   markEventSeen,
+  noteRefusal,
   toPublicEntitlement,
   upsertEntitlement
 } from "./store.js";
+
+/**
+ * Mercado Pago API failures retried for as long as Mercado Pago keeps trying:
+ * the API's own trouble (429, 5xx), a body that is not JSON, no answer at all.
+ */
+const RETRY_ALWAYS = new Set(["api_error", "api_bad_json", "api_unreachable"]);
+
+/** How long a resource the API refuses (404, 403, …) is retried: one day. */
+const RETRY_REFUSED_SECONDS = 86400;
 
 /** Reject anything larger than 1 MiB; real webhooks are a few KB. */
 export const MAX_BODY_BYTES = 1048576;
@@ -248,11 +258,20 @@ async function handleMercadoPagoWebhook(request, env, url, options) {
   try {
     const mapped = await confirmAndMapNotification(target, env, options || {});
     if (!mapped.handled) {
-      console.warn("mercadopago notification not applied", target.kind, mapped.reason);
-      // 500 on an API failure so Mercado Pago retries; 200 when we simply do
-      // not care about this notification kind.
-      const retryable = mapped.reason === "api_error" || mapped.reason === "api_bad_json";
-      if (retryable) {
+      console.warn("mercadopago notification not applied", target.kind, mapped.reason, mapped.status || "");
+      // 500 so Mercado Pago retries when the API itself failed; 200 when we
+      // simply do not care about this notification kind. A resource the API
+      // refuses (not found, forbidden) is retried for a day from the first
+      // refusal, which covers a read that lags the notification and gives an
+      // operator time to fix an access token, and then acknowledged: Mercado
+      // Pago otherwise retries a simulated or foreign notification forever.
+      let retry = RETRY_ALWAYS.has(mapped.reason);
+      if (!retry && (mapped.reason === "not_found" || mapped.reason === "api_refused")) {
+        const now = options && Number.isFinite(options.now) ? Math.floor(options.now) : Math.floor(Date.now() / 1000);
+        const refusedFor = await noteRefusal(env.ENTITLEMENTS, "mercadopago", target.eventId, now);
+        retry = refusedFor < RETRY_REFUSED_SECONDS;
+      }
+      if (retry) {
         await clearEventSeen(env.ENTITLEMENTS, "mercadopago", target.eventId);
         return json({ ok: false, reason: mapped.reason }, 500);
       }

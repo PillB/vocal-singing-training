@@ -1086,8 +1086,9 @@ The server is the real worker code on a real SQLite database kept in memory;
 stopping the script (Ctrl+C) forgets everything. It starts with forty made-up
 browsers' statistics, so **Estadísticas** has something to show. The one thing it cannot do is
 Google: "sign in as" writes the same session the Google route writes once
-Google has confirmed who someone is. It needs Node 22 or newer and nothing
-else.
+Google has confirmed who someone is. It needs Node 22.13 or newer and nothing
+else. Older versions stop at once with `No such built-in module: node:sqlite`,
+because before 22.13 Node kept its built-in SQLite behind a flag.
 
 **Retaking the screenshots** after the account panel or the admin page
 changes (the first command is needed once per computer):

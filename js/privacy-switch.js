@@ -7,7 +7,8 @@
  * page actually does. Opting out stops sending, asks the worker to delete what
  * this browser already sent (POST /v1/events/forget), and replaces the random
  * browser id, so nothing sent later could be tied to what was deleted. Events
- * that stay on this device are untouched, because they never left it.
+ * that stay on this device are untouched, because they never left it — except
+ * where the visitor was asked first (below).
  *
  * guide.html does not load js/i18n.js (a 100 KB table for two sentences), so
  * this file keeps its own Spanish and English strings. A block with `data-lang`
@@ -23,7 +24,10 @@
  *
  * In the countries that require being asked first (js/region-gate.js) this is
  * also where somebody who said no to the bar can change their mind, and where
- * the section says so instead of claiming statistics are being sent.
+ * the section says so instead of claiming statistics are being sent. There the
+ * yes to the bar was a yes to keeping statistics on the device, not only to
+ * sending them, so stopping is also a no to the bar: nothing more is kept and
+ * the log kept so far goes. "Volver a permitir" is a yes to the bar again.
  */
 (function (global) {
   "use strict";
@@ -110,12 +114,26 @@
     });
   }
 
+  /**
+   * Turn a yes to the region bar into a no, and drop the log and the A/B id it
+   * allowed: the state a press on the bar's Reject leaves. Nothing to do
+   * anywhere the bar was not answered yes.
+   */
+  function takeBackYes() {
+    const R = global.VTRegion;
+    if (R?.consent?.() !== "granted") return;
+    R.setConsent?.(false);
+    global.VTAnalytics?.clear?.();
+    global.VTExperiments?.reset?.();
+  }
+
   function init() {
     document.querySelectorAll("[data-privacy-toggle]").forEach((btn) => {
       btn.addEventListener("click", () => {
         const A = global.VTAnalytics;
+        const R = global.VTRegion;
         if (btn.dataset.privacyAction === "grant") {
-          global.VTRegion?.setConsent?.(true);
+          R?.setConsent?.(true);
           render();
           return;
         }
@@ -129,11 +147,27 @@
           } catch {
             /* the opt-out below still holds */
           }
+          takeBackYes();
         }
         A.setOptOut(out);
+        // "Volver a permitir" is a yes. Where a no to the bar stands, or the bar
+        // was never answered, it has to be the bar's answer too, or the button
+        // would allow nothing and only lead to "Permitir estadísticas".
+        if (!out && R?.setConsent && R.consent?.() !== "granted") {
+          if (R.consent?.() === "denied" || R.verdict?.() === "eu") R.setConsent(true);
+        }
         render();
       });
     });
+    // A browser that pressed the switch while it only stopped the sending still
+    // carries the yes next to the opt-out. The bar is never shown to an opted-out
+    // browser and the switch offers no yes while opted out, so the opt-out is
+    // the later answer.
+    try {
+      if (global.VTAnalytics?.remoteState?.().optedOut) takeBackYes();
+    } catch {
+      /* the opt-out still stops the sending */
+    }
     render();
     // The region gate settles a moment after load, and the answer to its bar
     // changes what this section should say.

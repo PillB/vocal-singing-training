@@ -1,0 +1,77 @@
+{
+ "tour-start": {
+  "title": "The tour, first card",
+  "job": "A first-time visitor who opens the tour learns what this site is for and what to do first.",
+  "states": "tourc-1",
+  "vps": "phone,desktop",
+  "arms": {
+   "A": {
+    "caption": "The tour opens with a centred welcome card, then points at today's basics, then lists where everything else is, all on the home page."
+   },
+   "B": {
+    "url": "http://127.0.0.1:8802",
+    "caption": "The tour's first stop rings today's basics on the home page; later stops open an exercise, the Plan, Historial and the header."
+   }
+  }
+ },
+ "tour-stops": {
+  "title": "The tour, stop by stop",
+  "job": "By the end of the tour, a newcomer knows where practice, the 12-week plan, their history and recordings, sign-in and help are, and what each is for.",
+  "states": "tourc-2,tourc-3,tourc-4,tourc-5",
+  "vps": "phone",
+  "arms": {
+   "A": {
+    "caption": "A three-card tour that stays on the home page. A tour shorter than four more cards repeats its last card in the later screenshots."
+   },
+   "B": {
+    "url": "http://127.0.0.1:8802",
+    "caption": "A five-stop tour that opens each place in turn (an exercise, Plan, Historial, the header), each card naming its place."
+   }
+  }
+ },
+ "tour-end": {
+  "title": "The tour, last card",
+  "job": "At the tour's last card, a newcomer knows how to begin their first practice, or how to leave the tour and find it again later.",
+  "states": "tour-last",
+  "vps": "phone,desktop",
+  "arms": {
+   "A": {
+    "caption": "The last card lists the other places; its main button closes the tour."
+   },
+   "B": {
+    "url": "http://127.0.0.1:8802",
+    "caption": "The last card points at sign-in and the menu; its main button starts today's basics, and 'Ahora no' closes the tour."
+   }
+  }
+ },
+ "help-pitch": {
+  "title": "Help on a pitch exercise",
+  "job": "A learner who presses Ayuda on a pitch exercise quickly learns what the screen shows and what its controls do.",
+  "states": "coach-pitch-1,coach-pitch-3",
+  "vps": "phone,desktop",
+  "arms": {
+   "A": {
+    "caption": "Help walks the screen region by region, in up to twelve cards. Shown: cards 1 and 3."
+   },
+   "B": {
+    "url": "http://127.0.0.1:8802",
+    "caption": "Help explains up to six things by what they do: the note lane, the tuning box, chords and mode, the octave buttons, Empezar with Grabarme. Shown: cards 1 and 3."
+   }
+  }
+ },
+ "help-speech": {
+  "title": "Help on a speaking exercise",
+  "job": "A learner who presses Ayuda on a speaking exercise knows what to do now and how to start.",
+  "states": "coach-speech-1,coach-speech-2",
+  "vps": "phone",
+  "arms": {
+   "A": {
+    "caption": "Help walks the screen region by region in six cards. Shown: cards 1 and 2."
+   },
+   "B": {
+    "url": "http://127.0.0.1:8802",
+    "caption": "Help has three cards: what to do now, Empezar, and the steps and tips. Shown: cards 1 and 2."
+   }
+  }
+ }
+}

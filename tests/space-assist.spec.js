@@ -31,9 +31,9 @@ async function bootSh(page) {
   await page.goto(BASE, { waitUntil: "domcontentloaded" });
   await page.locator('.tab[data-tab="singing"]').click();
   await page.waitForTimeout(120);
+  // By id: the first card whose text mentions "aire" depends on the catalog's order.
   await page.evaluate(() => {
-    const cards = [...document.querySelectorAll("#exercise-list .card-ex")];
-    cards.find((el) => /SH|Escalera|aire/i.test(el.textContent || ""))?.click();
+    document.querySelector('#exercise-list .card-ex[data-id="s15-sh-air-ladder"]')?.click();
   });
   await page.waitForSelector("#btn-practice-start");
 }

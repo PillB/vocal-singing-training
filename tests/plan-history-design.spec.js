@@ -108,6 +108,36 @@ test.describe("Plan: one focus, its exercises, days counted", () => {
     expect(r.unknown).toEqual([]);
   });
 
+  test("the start button waits on a choice it names, and the choice is explained in a line", async ({ page }) => {
+    await boot(page, { days: ledger(["2026-09-22"]) });
+    await openPlan(page);
+    await expect(page.locator("#plan-pick")).toHaveText("¿Qué quieres mejorar esta semana?");
+    await expect(page.locator("#plan-start-hint")).toBeVisible();
+    await expect(page.locator("#plan-el-desc")).toBeHidden();
+    // Pressing it first goes straight to the choice it is waiting on.
+    await page.locator("#btn-plan-start").click();
+    await expect(page.locator("#element-chips .chip").first()).toBeFocused();
+    expect(await page.evaluate(() => VTStorage.getWeekPlan().status)).toBe("idle");
+
+    await page.locator("#element-chips .chip", { hasText: "Resonancia y velo del paladar" }).click();
+    await expect(page.locator("#plan-el-desc")).toHaveText(
+      "Resonancia y velo del paladar: una voz más llena y menos nasal, abriendo el fondo de la boca."
+    );
+    await expect(page.locator("#btn-plan-start")).toHaveText("Empezar la semana 1: Resonancia y velo del paladar");
+    await expect(page.locator("#plan-start-hint")).toBeHidden();
+    // Every focus has its line, in both languages.
+    const missing = await page.evaluate(() =>
+      ["es", "en"].flatMap((lang) =>
+        VT_WEEK_ELEMENTS.filter((el) => {
+          const slug = el.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+          const key = `plan.desc.${slug}`;
+          return !VTI18n.strings[lang]?.[key];
+        }).map((el) => `${lang}: ${el}`)
+      )
+    );
+    expect(missing).toEqual([]);
+  });
+
   test("ES, Canto: five chips first, the rest behind a real button, and a picked focus lists exercises that open", async ({ page }) => {
     await boot(page, { days: ledger(["2026-09-22"]) });
     await openPlan(page);
@@ -160,7 +190,7 @@ test.describe("Plan: one focus, its exercises, days counted", () => {
     await page.evaluate(() => VTApp.setView("home"));
     await openPlan(page);
     await expect(page.locator("#plan-start-row")).toBeHidden();
-    await expect(page.locator("#plan-status")).toHaveText("Foco de la semana: Afinación");
+    await expect(page.locator("#plan-status")).toHaveText("Esta semana mejoras: Afinación");
     await expect(page.locator("#plan-days")).toHaveText("0 de 7 días practicados esta semana");
     await expect(page.locator("#plan-review-when")).toHaveText("Se abre el miércoles, 30 de setiembre.");
   });
@@ -209,6 +239,54 @@ test.describe("Plan: one focus, its exercises, days counted", () => {
     await expect(page.locator("#plan-completed-elements")).toContainText("Afinación");
   });
 
+  test("a week under way changes focus only when asked, and then starts again", async ({ page }) => {
+    await boot(page, {
+      days: ledger(["2026-09-14", "2026-09-16", "2026-09-17", "2026-09-22"]),
+      plan: weekPlan({ weekNumber: 3, element: "Pitch accuracy", status: "active", startedAt: "2026-09-14T15:00:00.000Z" })
+    });
+    await openPlan(page);
+    await expect(page.locator("#plan-review-body")).toBeVisible();
+    const chip = page.locator("#element-chips .chip", { hasText: "Apoyo del aire" });
+    if (!(await chip.isVisible())) await page.locator("#plan-focus-more").click();
+    const asked = [];
+    const answer = (yes) =>
+      page.once("dialog", (d) => {
+        asked.push(d.message());
+        if (yes) d.accept();
+        else d.dismiss();
+      });
+    const stored = () => page.evaluate(() => VTStorage.getWeekPlan());
+
+    // "Cancelar": the week stays as it was.
+    answer(false);
+    await chip.click();
+    expect(asked).toEqual(["¿Cambiar el foco de esta semana a Apoyo del aire? La semana vuelve a empezar hoy, y la revisión se abre siete días después."]);
+    let plan = await stored();
+    expect(plan).toMatchObject({ weekNumber: 3, element: "Pitch accuracy", status: "active", startedAt: "2026-09-14T15:00:00.000Z" });
+    await expect(page.locator("#plan-status")).toHaveText("Esta semana mejoras: Afinación");
+    await expect(page.locator("#plan-review-body")).toBeVisible();
+
+    // "Aceptar": the new focus, the same week number, started again today.
+    answer(true);
+    await chip.click();
+    plan = await stored();
+    expect(plan).toMatchObject({ weekNumber: 3, element: "Breath support", status: "active", reviews: [] });
+    expect(await page.evaluate((iso) => VTDays.dayKey(new Date(iso)), plan.startedAt)).toBe("2026-09-23");
+    await expect(page.locator("#plan-status")).toHaveText("Esta semana mejoras: Apoyo del aire");
+    // The review waits for the new week's seven days, so "Mejoró" cannot file
+    // it under a focus that was never trained.
+    await expect(page.locator("#plan-review-body")).toBeHidden();
+    await expect(page.locator("#plan-review-when")).toContainText("30");
+
+    // Before the week starts a chip is just a choice: nothing to ask.
+    await page.evaluate(() => VTStorage.setWeekPlan({ ...VTStorage.getWeekPlan(), status: "idle", startedAt: null }));
+    await page.evaluate(() => VTApp.setView("home"));
+    await openPlan(page);
+    await page.locator("#element-chips .chip", { hasText: "Afinación" }).click();
+    expect(asked).toHaveLength(2);
+    expect((await stored()).element).toBe("Pitch accuracy");
+  });
+
   test("EN, Vocal: speaking elements first, Start this week, days in English", async ({ page }) => {
     await boot(page, { lang: "en", tab: "vocal", days: ledger(["2026-09-23"]) });
     await openPlan(page);
@@ -231,8 +309,15 @@ test.describe("Plan: one focus, its exercises, days counted", () => {
     // The start button gave way to the week's exercises.
     await expect(page.locator("#plan-exercise-list .open-row").first()).toBeFocused();
     // A singing element picked from "Show more" lists its singing exercises.
+    // The week is under way, so the change asks first.
     await page.locator("#plan-focus-more").click();
+    const asked = [];
+    page.once("dialog", (d) => {
+      asked.push(d.message());
+      d.accept();
+    });
     await page.locator("#element-chips .chip", { hasText: "Pitch accuracy" }).click();
+    expect(asked).toEqual(["Change this week’s focus to Pitch accuracy? The week starts again today, and the review opens seven days later."]);
     await expect(page.locator("#plan-exercise-list .open-row").first()).toContainText("Single-Note Pitch Match");
     await expect(page.locator("#plan-exercise-list .open-row").first()).toContainText("Singing");
   });
@@ -269,6 +354,9 @@ test.describe("History: days sung first, then what you did last", () => {
     await expect(today).toHaveCount(1);
     await expect(today).toContainText("23");
     expect(await today.evaluate((el) => getComputedStyle(el).outlineStyle)).toBe("solid");
+    // The outline is named, in the key and to a screen reader.
+    await expect(today.locator(".sr-only")).toContainText("hoy");
+    await expect(list.locator(".hist-legend")).toHaveText("✓ día cantado · hoy");
 
     await expect(list.locator("#hist-recent-h")).toHaveText("Lo último que practicaste");
     const rows = list.locator(".hist-recent .history-item");
@@ -276,14 +364,18 @@ test.describe("History: days sung first, then what you did last", () => {
     await expect(rows).toHaveCount(3);
     await expect(list).not.toContainText("s2-humming");
     await expect(rows.nth(0)).toContainText("Trinos de labios");
-    await expect(rows.nth(0).locator(".meta")).toHaveText("hoy · 3 veces · último puntaje 7/10");
-    await expect(rows.nth(1).locator(".meta")).toHaveText("ayer · 3 veces · último puntaje 6/10");
-    await expect(rows.nth(2).locator(".meta")).toHaveText("14 set. · 1 vez · último puntaje 5/10");
+    await expect(rows.nth(0).locator(".meta")).toHaveText("hoy · 3 veces Último puntaje: 7/10");
+    await expect(rows.nth(1).locator(".meta")).toHaveText("ayer · 3 veces Último puntaje: 6/10");
+    await expect(rows.nth(2).locator(".meta")).toHaveText("14 set. · 1 vez Último puntaje: 5/10");
     await expect(rows.nth(0)).toContainText("Abrir →");
 
     // No recordings: one quiet line at the end, no empty block on top.
     await expect(list).not.toContainText("Grabaciones (en este dispositivo)");
-    await expect(list.locator(".hist-rec-empty")).toHaveText("Aún no hay grabaciones. Abre un ejercicio y usa Grabar.");
+    // Ticking the box is not the whole story: some exercises always record, and
+    // a take only reaches this list when the learner keeps it.
+    await expect(list.locator(".hist-rec-empty")).toHaveText(
+      "Aún no hay grabaciones. Marca ⏺ Grabarme antes de Empezar (algunos ejercicios graban siempre la toma) y, al terminar, toca Guardar en historial."
+    );
     // Saved reviews render under their heading.
     await expect(list).toContainText("Revisiones guardadas");
     await expect(list).toContainText("Semana 1: Afinación");
@@ -308,13 +400,16 @@ test.describe("History: days sung first, then what you did last", () => {
     await expect(list.locator("table.hist-cal caption")).toContainText("August");
     await expect(list.locator("td.is-rest")).toHaveCount(1);
     await expect(list.locator("td.is-rest")).toContainText("☾");
-    await expect(list.locator(".hist-legend")).toHaveText("✓ practice day · ☾ rest day");
+    await expect(list.locator(".hist-legend")).toHaveText("✓ practice day · ☾ rest day · today");
     await expect(list.locator("#hist-recent-h")).toHaveText("What you practised last");
     const rows = list.locator(".hist-recent .history-item");
-    await expect(rows.nth(0).locator(".meta")).toHaveText("yesterday · 2 times · last score 8/10");
+    await expect(rows.nth(0).locator(".meta")).toHaveText("yesterday · 2 times Last score: 8/10");
     // No score yet: the part is left out, not shown as a dash.
     await expect(rows.nth(1).locator(".meta")).toHaveText("4 days ago · once");
     await expect(rows.nth(0)).toContainText("Open →");
+    await expect(list.locator(".hist-rec-empty")).toHaveText(
+      "No recordings yet. Tick ⏺ Record me before Start (some exercises always record the take) and, when you finish, tap Save to history."
+    );
   });
 
   test("recordings keep their list, players and compare, after the days and the recent list", async ({ page }) => {
@@ -335,8 +430,17 @@ test.describe("History: days sung first, then what you did last", () => {
     await expect(list.locator("[data-play]")).toHaveCount(2);
     await expect(list.locator("[data-del]")).toHaveCount(2);
     await expect(list.locator(".hist-rec-empty")).toHaveCount(0);
+    // A take plays under its own row, where the tap was (at the foot of the
+    // list it started off screen on a phone).
+    const take = list.locator(".history-item", { has: page.locator("[data-play]") }).first();
+    await take.locator("[data-play]").click();
+    await expect(page.locator("#history-player audio")).toHaveCount(1);
+    expect(await take.evaluate((el) => el.nextElementSibling && el.nextElementSibling.id)).toBe("history-player");
     await list.locator("[data-ab-old]").click();
     await expect(page.locator("#history-player audio")).toHaveCount(2);
+    expect(
+      await list.locator(".history-item", { has: page.locator("[data-ab-old]") }).evaluate((el) => el.nextElementSibling && el.nextElementSibling.id)
+    ).toBe("history-player");
   });
 
   test("a brand-new browser keeps the one-message empty state", async ({ page }) => {

@@ -304,7 +304,8 @@
         r.run = null;
       });
       if (F && K) {
-        st.vad = new F.Vad();
+        // A fan or a hum taken back as speech ended no phrase
+        st.vad = new F.Vad({ onTakeBack: () => (st.tookBack = true) });
         st.rt = new K.RateTrack({ windowSec: 4 });
         st.slow = new K.SlowValue(0.8);
         if (st.rungs.length) {
@@ -402,9 +403,10 @@
       const dt = Math.min(0.25, Math.max(0, (now - st.last) / 1000));
       st.last = now;
       const before = st.vad.state;
+      st.tookBack = false;
       st.vad.feed(frame);
       st.rt.feed(frame);
-      const phraseEnded = before === "speech" && st.vad.state === "pause";
+      const phraseEnded = before === "speech" && st.vad.state === "pause" && !st.tookBack;
       if (!st.done) {
         st.remaining -= dt;
         const r = st.rungs[st.current];
@@ -587,8 +589,9 @@
         k.end = null;
         k.stars = [];
         k.firstWord = null;
+        k.firstAt = null;
       });
-      if (F) st.vad = new F.Vad({});
+      if (F) st.vad = new F.Vad({ onTakeBack: (t) => this._takeBack(t) });
       if (this.$("[data-n]")) this.$("[data-n]").textContent = "0";
       const b = this.$("[data-next-topic]");
       if (b) b.disabled = false;
@@ -634,6 +637,7 @@
       if (st.running && st.vad) {
         k.start = st.vad.t;
         k.firstWord = null;
+        k.firstAt = null;
         k.stars = [];
         st.logged = st.topics.reduce((s, x) => s + x.stars.length, 0);
         if (this.$("[data-n]")) this.$("[data-n]").textContent = String(st.logged);
@@ -668,6 +672,14 @@
       this._words();
       if (!auto) this.viz?.draw();
     },
+    /** The first word a topic heard was a fan or a hum: none said yet. */
+    _takeBack(t) {
+      this.state.topics.forEach((k) => {
+        if (k.firstAt !== t) return;
+        k.firstWord = null;
+        k.firstAt = null;
+      });
+    },
     onStart() {
       this._resetTopics();
       const st = this.state;
@@ -690,6 +702,7 @@
       const k = st.topics[st.current];
       if (k && k.start != null && k.firstWord == null && st.vad.state === "speech" && st.vad.speechStart != null) {
         k.firstWord = Math.max(0, st.vad.speechStart - k.start);
+        k.firstAt = st.vad.speechStart;
       }
       if (!st.done) {
         st.remaining -= dt;
@@ -784,7 +797,7 @@
       if (!V || !F || !K || !V.scenes.volumeCount) return;
       this.hud.classList.add("has-viz");
       this.state.kit = new K.LevelKit();
-      this.state.vad = new F.Vad({});
+      this.state.vad = new F.Vad({ onTakeBack: (t) => this._takeBack(t) });
       // .volume-lane: the name the page has always given this exercise's level picture
       this.viz = new V.Surface(this.hud, (ctx, w, h) => V.scenes.volumeCount(ctx, w, h, this.state), {
         className: "volume-lane vz-volume",
@@ -814,6 +827,7 @@
     },
     _openBreath(start) {
       const st = this.state;
+      const status = this.$("[data-status]");
       st.cur = {
         start,
         ref: st.nextRef,
@@ -822,9 +836,22 @@
         trace: [],
         soundSec: 0,
         lastSample: -1,
-        blind: st.blind
+        blind: st.blind,
+        said: status ? status.textContent : null
       };
-      if (this.$("[data-status]")) this.$("[data-status]").textContent = L("Contando…", "Counting…");
+      if (status) status.textContent = L("Contando…", "Counting…");
+    },
+    /**
+     * The breath was opened by a fan or a hum the Vad took for a voice: it
+     * would never close, and the first real count would run on from it.
+     */
+    _takeBack(t) {
+      const st = this.state;
+      const b = st.cur;
+      if (!b || b.start !== t) return;
+      st.cur = null;
+      const status = this.$("[data-status]");
+      if (status && b.said != null) status.textContent = b.said;
     },
     _breathStats(b) {
       const K = global.VTVolumeKit;
@@ -1865,6 +1892,7 @@
       st.run = 0;
       st.runStart = null;
       st.lastSpeech = null;
+      st.since = null;
       st.overlapNow = 0;
       st.lastWords = 0;
       st.scenarios.forEach((s) => {
@@ -1876,7 +1904,7 @@
         s.longest = 0;
         s.fact = false;
       });
-      if (F) st.vad = new F.Vad({ hangMs: 250 });
+      if (F) st.vad = new F.Vad({ hangMs: 250, onTakeBack: (t) => this._takeBack(t) });
       const b = this.$("[data-next-scenario]");
       if (b) b.disabled = false;
       const f = this.$("[data-fact]");
@@ -1914,6 +1942,25 @@
       if (sc) sc.longest = Math.max(sc.longest, len);
       st.runStart = null;
       st.run = 0;
+    },
+    /** The speech heard from t was a fan or a hum: none of it was you. */
+    _takeBack(t) {
+      const st = this.state;
+      const g = st.since;
+      if (g && g.from === t) {
+        g.sc.talk = Math.max(0, g.sc.talk - g.talk);
+        g.sc.overlap = Math.max(0, g.sc.overlap - g.over);
+        st.overlapNow = Math.max(0, st.overlapNow - g.over);
+        st.since = null;
+      }
+      if (st.lastSpeech != null && st.lastSpeech >= t) {
+        const prev = st.vad.segments.filter((x) => x.kind === "speech").pop();
+        st.lastSpeech = prev && prev.end != null ? prev.end : null;
+      }
+      if (st.runStart != null && st.runStart >= t) {
+        st.runStart = null;
+        st.run = 0;
+      } else if (st.runStart != null) st.run = Math.max(0, (st.lastSpeech != null ? st.lastSpeech : t) - st.runStart);
     },
     _nextScenario(auto) {
       const st = this.state;
@@ -1977,10 +2024,14 @@
         if (prevKind && prevKind !== st.slot.kind) st.overlapNow = 0;
         const speaking = st.vad.state === "speech";
         if (speaking) {
+          // What this run of speech adds, in case it turns out to be the room
+          if (!st.since || st.since.from !== st.vad.speechStart) st.since = { from: st.vad.speechStart, sc, talk: 0, over: 0 };
           sc.talk += dt;
+          st.since.talk += dt;
           if (st.slot.kind === "them") {
             sc.overlap += dt;
             st.overlapNow += dt;
+            st.since.over += dt;
           }
         }
         if (u >= sc.sec) this._nextScenario(true);
@@ -2440,6 +2491,7 @@
       st.replacements = 0;
       st.pauses = 0;
       st.hesCount = 0;
+      st.since = null;
       st.last = performance.now();
       st.rounds.forEach((r) => {
         r.start = null;
@@ -2451,7 +2503,7 @@
         r.talk = 0;
       });
       if (F && K) {
-        st.vad = new F.Vad({ onPauseEnd: (start, len) => this._pauseClosed(len) });
+        st.vad = new F.Vad({ onPauseEnd: (start, len) => this._pauseClosed(len), onTakeBack: (t) => this._takeBack(t) });
         st.hes = new K.Hesitations({ onFound: (hit) => this._hesFound(hit) });
       }
       ["[data-f]", "[data-r]", "[data-p]", "[data-hes]"].forEach((s) => {
@@ -2500,6 +2552,14 @@
       st.pauses += 1;
       st.rounds[st.current]?.pauses.push(len);
       if (this.$("[data-p]")) this.$("[data-p]").textContent = String(st.pauses);
+    },
+    /** The speech heard from t was a fan or a hum: not talk. */
+    _takeBack(t) {
+      const st = this.state;
+      const g = st.since;
+      if (!g || g.from !== t) return;
+      g.r.talk = Math.max(0, g.r.talk - g.talk);
+      st.since = null;
     },
     _hesFound(hit) {
       const st = this.state;
@@ -2557,7 +2617,13 @@
       st.vad.feed(frame);
       st.hes.feed(frame);
       const r = st.rounds[st.current];
-      if (r && st.vad.state === "speech") r.talk += global.VTViz.speechTiming.frameDt(frame);
+      if (r && st.vad.state === "speech") {
+        const d = global.VTViz.speechTiming.frameDt(frame);
+        // What this run of speech adds, in case it turns out to be the room
+        if (!st.since || st.since.from !== st.vad.speechStart) st.since = { from: st.vad.speechStart, r, talk: 0 };
+        r.talk += d;
+        st.since.talk += d;
+      }
       if (!st.done) {
         st.remaining -= dt;
         st.frac = clamp(1 - st.remaining / (r?.sec || 1), 0, 1);
@@ -3089,7 +3155,8 @@
       this.hud.classList.add("has-viz");
       this.state.tracker = new S.ShapeTracker({
         onPhrase: (p) => this._burst(p),
-        onPauseEnd: (s, len) => this._pauseEnd(s, len)
+        onPauseEnd: (s, len) => this._pauseEnd(s, len),
+        onTakeBack: (t) => this._takeBack(t)
       });
       this.viz = new V.Surface(this.hud, (ctx, w, h) => S.concisionGate(ctx, w, h, this.state), {
         label: L(
@@ -3121,6 +3188,22 @@
       const st = this.state;
       const q = st.qs[st.q];
       if (st.phase === "answer" && q && q.aStart != null && start >= q.aStart && len >= 0.5) q.pauses += 1;
+    },
+    /**
+     * The sound heard from t was a fan or a hum: it was thinking silence,
+     * and an answer it began has not begun.
+     */
+    _takeBack(t) {
+      const st = this.state;
+      const q = st.qs[st.q];
+      if (!q || !st.tracker) return;
+      if (st.phase === "answer" && q.aStart === t) {
+        q.aStart = null;
+        q.pauses = 0;
+        st.phase = "think";
+        this.viz?.caption?.(q.gateOk ? L("Puerta abierta: responde", "Gate open: answer") : "", 0);
+      }
+      if (st.phase === "think") q.silent += Math.max(0, st.tracker.t - Math.max(t, q.shownAt));
     },
     _tick() {
       const st = this.state;
@@ -3355,7 +3438,7 @@
       const S = V && V.scenes;
       if (!S || !S.ShapeTracker || !S.storyArc) return;
       this.hud.classList.add("has-viz");
-      this.state.tracker = new S.ShapeTracker({ syllables: true });
+      this.state.tracker = new S.ShapeTracker({ syllables: true, onTakeBack: (t) => this._takeBack(t) });
       this.viz = new V.Surface(this.hud, (ctx, w, h) => S.storyArc(ctx, w, h, this.state), {
         label: L(
           "Arco de historia: las partes de la historia como una barra según su tiempo, y debajo tu volumen con huecos en las pausas y una bandera donde marcas el pico.",
@@ -3388,9 +3471,23 @@
       if (!e || !e.n || !F) return;
       st.ebins.push({ t: (e.k + 0.5) * 0.5, db: e.dbs.length ? F.percentile(e.dbs, 0.9) : null, sp: e.sp / e.n > 0.4 });
       if (st.ebins.length > 1440) st.ebins.splice(0, st.ebins.length - 1440);
-      const dbs = st.ebins.filter((b) => b.sp && b.db != null).map((b) => b.db);
-      st.medDb = dbs.length >= 4 ? F.median(dbs) : null;
+      this._medDb();
       e.n = 0;
+    },
+    _medDb() {
+      const st = this.state;
+      const dbs = st.ebins.filter((b) => b.sp && b.db != null).map((b) => b.db);
+      st.medDb = dbs.length >= 4 ? global.VTFeatures.median(dbs) : null;
+    },
+    /** The sound from t was a fan or a hum: its half-seconds were no speech. */
+    _takeBack(t) {
+      const st = this.state;
+      // (a half-second centred after t was mostly the room)
+      st.ebins.forEach((b) => {
+        if (b.t >= t) b.sp = false;
+      });
+      if (st._eb && (st._eb.k + 0.5) * 0.5 >= t) st._eb.sp = 0;
+      if (global.VTFeatures) this._medDb();
     },
     _advance(t) {
       const st = this.state;
@@ -3568,7 +3665,7 @@
         </div>
         <div class="viz-words">
           <strong class="mode-big" data-l>0 / ${st.claims}</strong>
-          <span data-st>${L("Di la afirmación y guarda silencio ~1 s (sin “¿sabes?”)", "State the claim, then hold ~1 s of silence (no “you know?”)")}</span>
+          <span data-st>${this._askWords()}</span>
         </div>
         <p class="mode-meta muted">${L(
           "Al callar verás cómo terminó tu frase frente a su propio medio (↘ cae, → plano, ↗ sube) y un anillo para el segundo de silencio. «Otra vez» repite la misma afirmación y deja la anterior a la vista.",
@@ -3578,6 +3675,9 @@
       this.$("[data-again]")?.addEventListener("click", () => this._toggleAgain());
       this._mountViz();
     },
+    _askWords() {
+      return L("Di la afirmación y guarda silencio ~1 s (sin “¿sabes?”)", "State the claim, then hold ~1 s of silence (no “you know?”)");
+    },
     _resetClaims() {
       const st = this.state;
       st.slots = [];
@@ -3585,6 +3685,7 @@
       st.shown = null;
       st.maybe = null;
       st.last = null;
+      st.lastWords = "";
       st.phase = "idle";
       st.again = false;
       st.review = false;
@@ -3596,6 +3697,7 @@
       this.hud.classList.add("has-viz");
       this.state.tracker = new S.ShapeTracker({
         onSpeech: (t) => this._onSpeech(t),
+        onTakeBack: (t) => this._onTakeBack(t),
         onPhrase: (p) => this._onPhrase(p)
       });
       this.viz = new V.Surface(this.hud, (ctx, w, h) => S.landingStrip(ctx, w, h, this.state), {
@@ -3631,6 +3733,19 @@
         // on, or the next claim — the next half second decides
         st.maybe = { start: t, gap: t - (st.cur.pauseFrom != null ? st.cur.pauseFrom : st.cur.end) };
         st.phase = "maybeTag";
+      }
+    },
+    /** The speech _onSpeech(t) saw was a fan or a hum: undo what it began. */
+    _onTakeBack(t) {
+      const st = this.state;
+      if (st.phase === "speaking" && st.cur && st.cur.start === t) {
+        st.cur = null;
+        st.shown = st.last;
+        st.phase = st.last ? "landed" : "idle";
+        this._status(st.last ? st.lastWords : this._askWords());
+      } else if (st.phase === "maybeTag" && st.maybe && st.maybe.start === t) {
+        st.maybe = null;
+        st.phase = "landing";
       }
     },
     _onPhrase(p) {
@@ -3733,6 +3848,7 @@
       const words = `${this._endWords(att.fin)} · ${L("pausa", "pause")} ${pause} s${att.landed ? " ✓" : ""}${
         att.tag ? " · " + L("¿etiqueta?", "tag?") : ""
       }`;
+      st.lastWords = words;
       this._status(words);
       this.viz?.caption?.(words, 0);
     },
@@ -8430,6 +8546,16 @@
     return global.VTShiftNoteName(name, n) || name;
   }
 
+  /**
+   * Whether a mode that moves its note after an octave change sounds it again
+   * itself. With Auto piano on, the app's own hot-apply already plays the
+   * owning mode's note at the new octave, and two copies a few ms apart ring
+   * louder and put more piano into the mic. With it off, nothing else will.
+   */
+  function cueOnShift() {
+    return document.getElementById("chk-auto-piano")?.checked === false;
+  }
+
   /** Per-phase cue text, localized like the phase label itself. */
   function phaseCueFor(phase) {
     if (!phase) return "";
@@ -9111,6 +9237,8 @@
     /** The note, at the octave the octave control asks for. */
     _target() {
       const st = this.state;
+      // The octave the note was looked up at (see onFrame)
+      st.shift = global.VTGetOctaveShift ? global.VTGetOctaveShift() : 0;
       const n = shiftedNote(st.refName);
       if (!n) return null;
       st.target = global.VTPitchUtils?.noteNameToDual ? global.VTPitchUtils.noteNameToDual(n) : n;
@@ -9154,6 +9282,9 @@
       const V = global.VTViz;
       const K = V?.scenes?.resonanceKit;
       if (!K || st.review) return;
+      // The octave moved mid-round: the vowels are read against the note the
+      // piano now plays, not the one it played before
+      if ((global.VTGetOctaveShift ? global.VTGetOctaveShift() : 0) !== st.shift) this._ref();
       const raw = K.rawOf(frame);
       const dt = raw.dt;
       st.t += dt;
@@ -9451,8 +9582,11 @@
       }
       return out;
     },
-    _pushTarget() {
+    /** Aim at the current note and sound it (cue false: the app sounds it). */
+    _pushTarget(cue = true) {
       const st = this.state;
+      // The octave this target was looked up at (see onFrame)
+      st.shift = global.VTGetOctaveShift ? global.VTGetOctaveShift() : 0;
       const notes = this._zoneNotes();
       const n = notes[st.ni % Math.max(1, notes.length)];
       if (!n) return;
@@ -9474,7 +9608,7 @@
         global.VTSetPracticeTarget(st.wantFreq, sounded);
       }
       // A short cue, not a drone: while it sounds the hold is only provisional
-      if (global.VTPiano?.playRefPitch) global.VTPiano.playRefPitch(sounded, ZONE_REF_SEC, true).catch(() => {});
+      if (cue && global.VTPiano?.playRefPitch) global.VTPiano.playRefPitch(sounded, ZONE_REF_SEC, true).catch(() => {});
       if (this.$("[data-t]")) this.$("[data-t]").textContent = sounded;
     },
     _setChips() {
@@ -9611,6 +9745,10 @@
       const st = this.state;
       const K = global.VTViz?.scenes?.resonanceKit;
       if (!K || st.review) return;
+      // The learner's octave moved (auto range or the ± buttons): same note,
+      // new pitch. The piano and the engine move at once, so the target does
+      // too, or the hold waits for a note nothing plays any more.
+      if ((global.VTGetOctaveShift ? global.VTGetOctaveShift() : 0) !== st.shift) this._pushTarget(cueOnShift());
       const raw = K.rawOf(frame);
       const dt = raw.dt;
       st.clock += dt;
@@ -10469,8 +10607,11 @@
         /* ignore */
       }
     },
-    _pushTarget() {
+    /** Aim at the current step and sound it (cue false: the app sounds it). */
+    _pushTarget(cue = true) {
       if (!global.VTPitchUtils) return;
+      // The octave this step was looked up at (see onFrame)
+      this.state.shift = this._shift();
       const midi = this.state.rootMidi + this.state.pattern[this.state.i];
       const name = global.VTPitchUtils.midiToName(midi);
       const sounded = shiftedNote(name);
@@ -10486,7 +10627,7 @@
       // cancellation), so the gate stays shut while it rings. Counted down in
       // frame time like everything else here, not against the wall clock.
       this.state.refBlank = this.profile.refBlankMs == null ? 250 : this.profile.refBlankMs;
-      if (global.VTPiano?.playRefPitch && sounded) {
+      if (cue && global.VTPiano?.playRefPitch && sounded) {
         global.VTPiano.playRefPitch(sounded, 1.2, true).catch(() => {});
       }
       if (this.$("[data-syl]"))
@@ -10701,6 +10842,17 @@
     onFrame(frame) {
       const st = this.state;
       if (st.review) return;
+      // The learner's octave moved (auto range or the ± buttons): same step,
+      // new pitch. The ladder, the lanes, the step's note and the row's root
+      // move with it; the hold so far was on the old note, so it starts again.
+      if (this._shift() !== st.shift) {
+        st.acc = 0;
+        this._lockLadder();
+        this._pushTarget(cueOnShift());
+        const row = st.rows[st.rows.length - 1];
+        const K = this._kit();
+        if (row && K) row.rootName = K.noteName(st.rootMidi + this._shift());
+      }
       this._feedTrack(frame);
       this._frameGate(frame);
       const hold = this.profile.holdMs || 600;

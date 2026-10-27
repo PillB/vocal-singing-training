@@ -192,14 +192,15 @@ test.describe("Catalog rows", () => {
 test.describe("Singing groups named for what they hold", () => {
   const NAMES = {
     es: {
-      heads: ["Ejercicios de la clase", "Calentamientos y técnica"],
-      chips: ["Todos", "Clase", "Técnica"],
+      // Cantar reads warm-ups first (site review round 2).
+      heads: ["Calentamientos y técnica", "Ejercicios de la clase"],
+      chips: ["Todos", "Técnica", "Clase"],
       vocal: ["Todos", "Clase", "Expresión"],
       old: /Básico|Avanzado/
     },
     en: {
-      heads: ["Class exercises", "Warm-ups & technique"],
-      chips: ["All", "Class", "Technique"],
+      heads: ["Warm-ups & technique", "Class exercises"],
+      chips: ["All", "Technique", "Class"],
       vocal: ["All", "Class", "Expression"],
       old: /\bBasic\b|\bAdvanced\b/
     }
@@ -218,11 +219,11 @@ test.describe("Singing groups named for what they hold", () => {
       // Labels only: the chips still filter by the stored tier.
       expect(await page.locator(".tier-chip").evaluateAll((els) => els.map((c) => c.dataset.tier))).toEqual([
         "all",
-        "basic",
-        "advanced"
+        "advanced",
+        "basic"
       ]);
       await page.click('.tier-chip[data-tier="basic"]');
-      await expect(page.locator("#tier-counts")).toContainText(`${N.chips[1]}: 16`);
+      await expect(page.locator("#tier-counts")).toContainText(`${N.chips[2]}: 16`);
 
       await page.click('.tab[data-tab="vocal"]');
       expect(await page.locator(".tier-chip").allTextContents()).toEqual(N.vocal);
@@ -235,7 +236,7 @@ test.describe("Singing groups named for what they hold", () => {
     await boot(page, { lang: "es" });
     await page.evaluate(() => VTI18n.setLang("en"));
     await expect(page.locator(".tier-chip[data-tier='advanced']")).toHaveText("Technique");
-    await expect(page.locator("#exercise-list .grid-group-head").nth(1)).toContainText("Warm-ups & technique");
+    await expect(page.locator("#exercise-list .grid-group-head").nth(0)).toContainText("Warm-ups & technique");
   });
 
   test("the stored tiers are unchanged", async ({ page }) => {
@@ -249,27 +250,18 @@ test.describe("Singing groups named for what they hold", () => {
 });
 
 test.describe("Today's basics in the catalog", () => {
-  test("a first visit sees no basics line and no tags", async ({ page }) => {
+  // The rows carry a "Hoy en tus básicos" tag. The line of shortcuts that used
+  // to sit above the list repeated the start panel one screen lower, so it went.
+  test("a first visit sees no tags, and there is no shortcut line", async ({ page }) => {
     await boot(page, { lang: "es" });
-    await expect(page.locator("#today-basics")).toBeHidden();
+    await expect(page.locator("#today-basics")).toHaveCount(0);
     await expect(page.locator("#exercise-list .card-ex-today")).toHaveCount(0);
   });
 
-  test("the Mínimo: a line above the list opens each exercise, and their rows say so", async ({ page }) => {
+  test("the Mínimo: its rows say so", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await boot(page, { lang: "es", days: ledger() });
-    const box = page.locator("#today-basics");
-    await expect(box).toBeVisible();
-    await expect(box).toContainText("Tus básicos de hoy (Mínimo)");
-    const ids = await box.locator(".today-basics-ex").evaluateAll((els) => els.map((b) => b.dataset.id));
-    expect(ids).toEqual(["s4-lip-trills", "s27-lip-trill-solfege"]);
-    // The line sits right above the list, before the first group head.
-    const [boxBottom, listTop] = await page.evaluate(() => [
-      document.getElementById("today-basics").getBoundingClientRect().bottom,
-      document.getElementById("exercise-list").getBoundingClientRect().top
-    ]);
-    expect(listTop - boxBottom).toBeLessThan(40);
-
+    await expect(page.locator("#today-basics")).toHaveCount(0);
     const tagged = await page.locator("#exercise-list .card-ex-today").evaluateAll((els) =>
       els.map((t) => t.closest(".card-ex").dataset.id).sort()
     );
@@ -277,60 +269,63 @@ test.describe("Today's basics in the catalog", () => {
     await expect(page.locator('#exercise-list .card-ex[data-id="s4-lip-trills"] .card-ex-today')).toHaveText(
       "Hoy en tus básicos"
     );
-
-    // Targets hold the phone floor.
-    const hs = await box.locator("button").evaluateAll((els) => els.map((b) => b.getBoundingClientRect().height));
-    expect(Math.min(...hs)).toBeGreaterThanOrEqual(44);
-
-    await box.locator('.today-basics-ex[data-id="s27-lip-trill-solfege"]').click();
-    await expect(page.locator("#view-exercise")).toHaveClass(/active/);
-    await expect(page.locator("#view-exercise")).toContainText("Solfeo en trino de labios");
   });
 
-  test("Esencial folds after three and unfolds by keyboard", async ({ page }) => {
+  test("Esencial: every routine exercise in this catalog is tagged, and nothing else", async ({ page }) => {
     await boot(page, { lang: "es", days: ledger(), loop: loopState("ess") });
     const order = await page.evaluate(() => VTLoop.routine("singing", "ess").order);
     expect(order.length).toBe(7);
-    const box = page.locator("#today-basics");
-    await expect(box).toContainText("(Esencial)");
-    await expect(box.locator(".today-basics-ex")).toHaveCount(3);
-    const more = box.locator(".today-basics-more");
-    await expect(more).toHaveText("+4 más");
-    await expect(more).toHaveAttribute("aria-expanded", "false");
-    await more.focus();
-    await page.keyboard.press("Enter");
-    await expect(box.locator(".today-basics-ex")).toHaveCount(7);
-    await expect(box.locator(".today-basics-more")).toHaveAttribute("aria-expanded", "true");
-    await expect(box.locator(".today-basics-more")).toBeFocused();
-    expect(await box.locator(".today-basics-ex").evaluateAll((els) => els.map((b) => b.dataset.id))).toEqual(order);
-    // Every routine exercise in this catalog is tagged, and nothing else.
     const tagged = await page.locator("#exercise-list .card-ex-today").evaluateAll((els) =>
       els.map((t) => t.closest(".card-ex").dataset.id).sort()
     );
     expect(tagged).toEqual([...order].sort());
   });
 
-  test("picking another size on the start panel updates the line", async ({ page }) => {
+  test("picking another size on the start panel updates the tags", async ({ page }) => {
     await boot(page, { lang: "es", days: ledger() });
-    await expect(page.locator("#today-basics .today-basics-ex")).toHaveCount(2);
+    await expect(page.locator("#exercise-list .card-ex-today")).toHaveCount(2);
     await page.locator('#loop-tiers [data-tier="ess"]').click();
-    await expect(page.locator("#today-basics")).toContainText("(Esencial)");
     await expect(page.locator("#exercise-list .card-ex-today")).toHaveCount(7);
   });
 
   test("English, and the Vocal track (whose basics start with a Canto warm-up)", async ({ page }) => {
     await boot(page, { lang: "en", tab: "vocal", days: ledger() });
-    const box = page.locator("#today-basics");
-    await expect(box).toContainText("Today's basics (Minimum)");
-    expect(await box.locator(".today-basics-ex").evaluateAll((els) => els.map((b) => b.dataset.id))).toEqual([
-      "s4-lip-trills",
-      "v1-diction"
-    ]);
     await expect(page.locator('#exercise-list .card-ex[data-id="v1-diction"] .card-ex-today')).toHaveText(
       "In today's basics"
     );
-    // The Canto warm-up is not in the Vocal list, but the line still opens it.
-    await box.locator('.today-basics-ex[data-id="s4-lip-trills"]').click();
-    await expect(page.locator("#view-exercise")).toHaveClass(/active/);
+    // The Canto warm-up is not in the Vocal list; the start panel starts it.
+    await expect(page.locator('#exercise-list .card-ex[data-id="s4-lip-trills"]')).toHaveCount(0);
+  });
+});
+
+test.describe("Reading order", () => {
+  test("Cantar starts with warm-ups, the class group runs short to long, and no row shows a number", async ({ page }) => {
+    await boot(page, { lang: "es" });
+    const r = await page.evaluate(() => ({
+      heads: [...document.querySelectorAll("#exercise-list .grid-group-head")].map((h) => h.firstElementChild.textContent),
+      first: document.querySelector("#exercise-list .card-ex").dataset.id,
+      last: [...document.querySelectorAll("#exercise-list .card-ex")].pop().dataset.id,
+      nums: document.querySelectorAll("#exercise-list .num").length,
+      chips: [...document.querySelectorAll(".tier-chip")].map((c) => c.dataset.tier),
+      title: document.querySelector("#exercise-list .card-ex h3").textContent
+    }));
+    expect(r.heads).toEqual(["Calentamientos y técnica", "Ejercicios de la clase"]);
+    expect(r.first).toBe("s4-lip-trills");
+    expect(r.last).toBe("s3-song-stanzas");
+    expect(r.nums).toBe(0);
+    expect(r.chips).toEqual(["all", "advanced", "basic"]);
+    expect(r.title).not.toMatch(/^\d/);
+    // The data keeps its order: guided routes walk it as written.
+    expect(await page.evaluate(() => VT_EXERCISES.singing[0].id)).toBe("s1-vocal-fry");
+  });
+
+  test("Hablar keeps its order: Clase, then Expresión", async ({ page }) => {
+    await boot(page, { lang: "es", tab: "vocal" });
+    const r = await page.evaluate(() => ({
+      first: document.querySelector("#exercise-list .card-ex").dataset.id,
+      chips: [...document.querySelectorAll(".tier-chip")].map((c) => c.dataset.tier)
+    }));
+    expect(r.first).toBe("v1-diction");
+    expect(r.chips).toEqual(["all", "basic", "advanced"]);
   });
 });

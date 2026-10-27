@@ -1,0 +1,79 @@
+{
+ "home-first": {
+  "title": "Practicar on a first visit",
+  "job": "Someone who has never seen the site understands within a few seconds what it is for and how to start.",
+  "states": "home-new",
+  "vps": "phone,desktop",
+  "arms": {
+   "A": {
+    "caption": "Empezar starts a 3-minute routine of two exercises with the microphone. The exercise list continues below."
+   },
+   "B": {
+    "url": "http://127.0.0.1:8812",
+    "caption": "Empezar starts a 3-minute routine of two exercises with the microphone. The exercise list continues below."
+   }
+  }
+ },
+ "home-returning": {
+  "title": "Practicar for someone who has practised before",
+  "job": "A learner who has practised on earlier days sees what to do today, can pick another exercise, and is not distracted by things that belong elsewhere.",
+  "states": "home-returning",
+  "vps": "phone,desktop",
+  "full": true,
+  "arms": {
+   "A": {
+    "caption": "'Otras formas de practicar' opens: continue where you left off, or start a guided session. Below the exercise list, 'Tu estudio' shows totals, a weekly session goal, achievements, a practice map and Pro offers, and 'Volver a practicar' sets a daily reminder or starts a 5-minute exercise."
+   },
+   "B": {
+    "url": "http://127.0.0.1:8812",
+    "caption": "'Otras formas de practicar' opens: pick an exercise (jumps to the list), continue where you left off, or start a guided session. '🔔 Poner un recordatorio' opens a small dialog to set a daily reminder. Totals, achievements and the practice map are in Historial, under 'Tu progreso'."
+   }
+  }
+ },
+ "catalog-order": {
+  "title": "The exercise list",
+  "job": "A learner looking for an exercise can scan the list, understand how it is organised, and find a good place to start.",
+  "states": "home-catalog-singing,home-catalog-vocal",
+  "vps": "phone,desktop",
+  "arms": {
+   "A": {
+    "caption": "Tapping a card opens that exercise. A row of shortcuts above the list opens each exercise in today's basics; 'Hoy en tus básicos' marks the same exercises in the list."
+   },
+   "B": {
+    "url": "http://127.0.0.1:8812",
+    "caption": "Tapping a card opens that exercise. 'Hoy en tus básicos' marks the exercises in today's basics."
+   }
+  }
+ },
+ "history-progress": {
+  "title": "Historial for someone with saved practice",
+  "job": "A learner who opens Historial sees what they have done and can tell whether they are making progress.",
+  "states": "history-rich-btn",
+  "vps": "phone,desktop",
+  "full": true,
+  "arms": {
+   "A": {
+    "caption": "Totals, achievements and the practice map are on Practicar, below the exercise list, not here. 'Abrir' opens that exercise."
+   },
+   "B": {
+    "url": "http://127.0.0.1:8812",
+    "caption": "'Abrir' opens that exercise. Pro offers appear here at most one at a time."
+   }
+  }
+ },
+ "reminder": {
+  "title": "Setting a daily reminder",
+  "job": "A learner who wants a daily nudge to practise finds where to set it and sets it.",
+  "states": "home-returning,reminder-open",
+  "vps": "phone,desktop",
+  "arms": {
+   "A": {
+    "caption": "The reminder settings are in 'Volver a practicar' at the very bottom of Practicar, below the exercise list (the second screenshot is scrolled there)."
+   },
+   "B": {
+    "url": "http://127.0.0.1:8812",
+    "caption": "'🔔 Poner un recordatorio' on the week card opens a small dialog (the second screenshot). Once a reminder is set, the button reads 'Recordatorio: 18:00'."
+   }
+  }
+ }
+}

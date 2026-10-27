@@ -122,14 +122,16 @@ test.describe("Naming: one button, sizes that choose, other ways folded", () => 
     await expect(more).toHaveAttribute("aria-expanded", "false");
     await expect(more).toHaveAttribute("aria-controls", "start-alt");
     expect((await more.boundingBox()).height).toBeGreaterThanOrEqual(44);
-    for (const id of ["#btn-continue", "#btn-structured", "#session-path"]) await expect(page.locator(id)).toBeHidden();
+    for (const id of ["#btn-pick-exercise", "#btn-continue", "#btn-structured", "#session-path"]) await expect(page.locator(id)).toBeHidden();
 
     // Keyboard opens it; the controls it reveals are real and reachable.
     await more.focus();
     await page.keyboard.press("Enter");
     await expect(more).toHaveAttribute("aria-expanded", "true");
-    for (const id of ["#btn-continue", "#btn-structured", "#session-path"]) await expect(page.locator(id)).toBeVisible();
+    for (const id of ["#btn-pick-exercise", "#btn-continue", "#btn-structured", "#session-path"]) await expect(page.locator(id)).toBeVisible();
     await expect(page.locator(".start-path > span")).toHaveText("Sesión guiada:");
+    await page.keyboard.press("Tab");
+    await expect(page.locator("#btn-pick-exercise")).toBeFocused();
     await page.keyboard.press("Tab");
     await expect(page.locator("#btn-continue")).toBeFocused();
     // Still one primary on the panel.
@@ -209,28 +211,24 @@ test.describe("Naming: one button, sizes that choose, other ways folded", () => 
     expect((await options(page)).map((o) => o[0])).toEqual(["basic", "advanced", "full", "daily"]);
   });
 
-  test("the tour's guided-session step points at the toggle", async ({ page }) => {
+  test("the tour's practice stop rings the guided-session toggle and names it", async ({ page }) => {
     await boot(page, { days: RET3, tab: "singing" });
     await page.evaluate(() => window.VTTour.start(true));
-    const titles = [];
-    for (let i = 0; i < 6; i += 1) {
-      await page.clock.runFor(400);
-      const s = await page.evaluate(() => {
-        const hl = document.querySelector(".tour-highlight")?.getBoundingClientRect();
-        const t = document.querySelector("#btn-more-ways").getBoundingClientRect();
-        return {
-          title: document.querySelector("[data-tour-title]").textContent,
-          covers: !!hl && hl.left <= t.left + 1 && hl.right >= t.right - 1 && hl.top <= t.top + 1 && hl.bottom >= t.bottom - 1
-        };
-      });
-      titles.push(s);
-      const next = page.locator("[data-tour-next]");
-      if (/Listo|Done/.test((await next.textContent()) || "")) break;
-      await next.click();
-    }
-    const step = titles.find((x) => /deja que te guiemos/.test(x.title));
-    expect(step, JSON.stringify(titles)).toBeTruthy();
-    expect(step.covers).toBe(true);
+    await page.clock.runFor(400);
+    // The ring grows into place with a CSS transition, which runs on real time.
+    await page.waitForTimeout(400);
+    const s = await page.evaluate(() => {
+      const sp = document.querySelector("[data-tour-spot]").getBoundingClientRect();
+      const t = document.querySelector("#btn-more-ways").getBoundingClientRect();
+      return {
+        progress: document.querySelector("[data-tour-progress]").textContent,
+        body: document.querySelector("[data-tour-body]").textContent,
+        covers: sp.left <= t.left + 1 && sp.right >= t.right - 1 && sp.top <= t.top + 1 && sp.bottom >= t.bottom - 1
+      };
+    });
+    expect(s.progress).toMatch(/Practicar/);
+    expect(s.body).toContain("Otras formas de practicar");
+    expect(s.covers, JSON.stringify(s)).toBe(true);
   });
 });
 

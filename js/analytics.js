@@ -114,7 +114,9 @@
    * Read separately from remoteBlockedReason() because this one governs the
    * write to the device, which Global Privacy Control, the opt-out switch in the
    * app's footer and in the guide, and automation do not: those three stop events
-   * leaving, not being kept here.
+   * leaving, not being kept here. Where the visitor said yes to the region bar,
+   * js/privacy-switch.js turns that yes into a no when the switch is pressed, so
+   * there the switch stops the keeping too, through this reason.
    * @returns {"" | "eu_pending" | "eu_unanswered" | "eu_refused" | "no_region_gate"} Reason.
    */
   function regionReason() {
@@ -329,8 +331,19 @@
     return { total: events.length, counts, recent: events.slice(-20) };
   }
 
+  /**
+   * Remove the log from the device, and anything waiting to be written to it.
+   * Removed rather than emptied, because an empty log is still something kept,
+   * and js/privacy-switch.js calls this when a yes to the region bar is taken
+   * back.
+   */
   function clear() {
-    write({ events: [] });
+    held = [];
+    try {
+      localStorage.removeItem(LS_KEY);
+    } catch {
+      /* ignore */
+    }
   }
 
   /**

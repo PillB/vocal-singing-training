@@ -10,7 +10,7 @@
  * machine that drops frames does not move the checks.
  */
 const { test, expect } = require("@playwright/test");
-const { useVoice, playVoice } = require("./helpers/voice");
+const { useVoice, playVoice, fanInRoom } = require("./helpers/voice");
 
 const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";
 
@@ -37,6 +37,7 @@ async function boot(page, lang = "es", opts = {}) {
     });
   } else {
     await useVoice(page);
+    if (opts.fan) await page.addInitScript(fanInRoom);
   }
   await page.goto(BASE + "/?e2e", { waitUntil: "domcontentloaded" });
   await page.waitForFunction(() => !!window.VTApp?.openExercise);
@@ -155,6 +156,53 @@ test.describe("speech-shape pictures", () => {
     await page.locator("#btn-practice-stop").click();
     await expect(page.locator("#mode-focus .mode-panel")).toHaveClass(/is-replay/);
     expect(await modeState(page, () => window.VTApp.getState().modeInstance?.state?.review)).toBe(true);
+    expect(errors).toEqual([]);
+  });
+
+  test("v19 with a fan before the first word: the first claim starts with the voice", async ({ page }) => {
+    const errors = await boot(page, "es", { fan: true });
+    await openAndStart(page, "v19-authority-close");
+    // The fan reads as speech until the floor learns it (~0.6 s), then that
+    // speech is taken back: nothing has been said, so nothing is "speaking"
+    await untilModeTime(page, 2.5);
+    expect(await modeState(page, () => window.VTApp.getState().modeInstance.state.phase)).toBe("idle");
+    await expect(page.locator("#mode-focus [data-st]")).toContainText("Di la afirmación");
+    await playVoice(page, "claims");
+    await page.waitForFunction(() => (window.VTApp.getState().modeInstance?.state?.slots?.length || 0) >= 1, null, { timeout: 30000, polling: 100 });
+    const first = await modeState(page, () => {
+      const a = window.VTApp.getState().modeInstance.state.slots[0].attempts[0];
+      return { start: a.start, kind: a.fin && a.fin.kind };
+    });
+    // Its claim began with the voice, not with the fan at Start
+    expect(first.start).toBeGreaterThan(2.4);
+    expect(first.kind).toBe("fall");
+    expect(errors).toEqual([]);
+  });
+
+  test("v17 with a fan in the room: the fan's first moments are thinking silence too", async ({ page }) => {
+    const errors = await boot(page, "es", { fan: true });
+    await openAndStart(page, "v17-strategic-concision");
+    // The fan reads as a voice until the floor learns it (~0.6 s), and the
+    // gate's silence stood still meanwhile; that speech is taken back, and
+    // so is the silence it held up
+    await untilModeTime(page, 2.9);
+    const q = await modeState(page, () => {
+      const st = window.VTApp.getState().modeInstance.state;
+      return { silent: st.qs[0].silent, gateOk: st.qs[0].gateOk, t: st.tracker.t, phase: st.phase };
+    });
+    expect(q.silent, JSON.stringify(q)).toBeGreaterThan(q.t - 0.3);
+    expect(q.gateOk, JSON.stringify(q)).toBe(true);
+    expect(q.phase).toBe("think");
+    expect(errors).toEqual([]);
+  });
+
+  test("v18 with a fan in the room: the fan's first moments are no speech in the loudness bins", async ({ page }) => {
+    const errors = await boot(page, "es", { fan: true });
+    await openAndStart(page, "v18-story-peak");
+    await untilModeTime(page, 2.6);
+    const bins = await modeState(page, () => window.VTApp.getState().modeInstance.state.ebins.map((b) => [b.t, b.sp]));
+    expect(bins.length).toBeGreaterThanOrEqual(4);
+    expect(bins.filter((b) => b[1]), JSON.stringify(bins)).toEqual([]);
     expect(errors).toEqual([]);
   });
 

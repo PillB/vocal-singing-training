@@ -4,11 +4,11 @@
  * qa/voices/volume.js. Levels are dB against the learner's own voice.
  */
 const { test, expect } = require("@playwright/test");
-const { useVoice, playVoice, stopVoice } = require("./helpers/voice");
+const { useVoice, playVoice, stopVoice, fanInRoom } = require("./helpers/voice");
 
 const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";
 
-async function boot(page, lang = "es") {
+async function boot(page, lang = "es", room) {
   const warnings = [];
   page.on("console", (m) => {
     const t = m.text();
@@ -28,6 +28,17 @@ async function boot(page, lang = "es") {
     }
   }, lang);
   await useVoice(page);
+  // A room under the voice: { sens, gain } (tests/helpers/voice.js fanInRoom)
+  if (room) {
+    await page.addInitScript((n) => {
+      try {
+        localStorage.setItem("vt_mic_sens", String(n));
+      } catch {
+        /* ignore */
+      }
+    }, room.sens || 7);
+    await page.addInitScript(fanInRoom, room.gain);
+  }
   await page.goto(BASE + "/?e2e", { waitUntil: "domcontentloaded" });
   await page.waitForFunction(() => !!window.VTApp?.openExercise);
   return warnings;
@@ -123,6 +134,33 @@ test.describe("volume pictures", () => {
     await ctx.close();
     expect(warnings).toEqual([]);
   });
+
+  for (const [label, room] of [
+    ["a fan in the room", { gain: 0.0055 }],
+    ["sensitivity 10 in a quiet room", { sens: 10, gain: 0.00055 }]
+  ]) {
+    test(`steady count, ${label}: the first breath starts with the voice and reads even`, async ({ page }) => {
+      // The room opens the gate and reads as a voice until the floor learns
+      // it; the Vad then takes that speech back. The breath it had opened
+      // stayed open through the silent lead-in and ran into the first count:
+      // 'el final subió 32 dB sobre el inicio' for an even count.
+      const warnings = await boot(page, "es", room);
+      await openAndStart(page, "v2-volume");
+      await page.waitForTimeout(3000);
+      await playVoice(page, "count");
+      await expect
+        .poll(async () => (await breathDiffs(page)).length, { timeout: 20000, intervals: [500] })
+        .toBeGreaterThanOrEqual(1);
+      const first = await modeState(page, () => {
+        const b = window.VTApp.getState().modeInstance.state.breaths[0];
+        return { start: b.start, len: b.len, diff: b.stats.diff };
+      });
+      expect(first.start, JSON.stringify(first)).toBeGreaterThan(2.8);
+      expect(Math.abs(first.diff), JSON.stringify(first)).toBeLessThan(3);
+      await expect(page.locator("#mode-focus [data-fade]")).toContainText(/Respiración 1: pareja/);
+      expect(warnings).toEqual([]);
+    });
+  }
 
   test("volume ladder: each tread sets at its level, ≥3 dB up is a distinct step", async ({ page }) => {
     const warnings = await boot(page);

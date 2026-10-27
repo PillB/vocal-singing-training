@@ -846,11 +846,11 @@ test.describe("The menu, read by someone who has never seen it", () => {
 
   for (const width of [320, 390]) {
     for (const [name, opts] of Object.entries(STATES)) {
-      test(`${width}px, ${name}: inside an exercise the header stays one row`, async ({ browser }) => {
-        // The exercise screen has no Más menu, so the offer and the door sit on
-        // the row with the language switch. Full-length labels there wrapped
-        // the header to a second row, and the stage hid its guide to make room
-        // (stage-design.spec.js checks the guide itself).
+      test(`${width}px, ${name}: inside an exercise the header is the same one row`, async ({ browser }) => {
+        // One header on every screen (design: one-header). The exercise screen
+        // used to have its own row (Practicar, the door, "Pro", the language),
+        // without Plan and Historial; now it is the row every other screen has,
+        // and the offer and the plan live in Más there too.
         const ctx = await browser.newContext({ viewport: { width, height: width === 320 ? 640 : 844 } });
         const page = await ctx.newPage();
         const license = await mintLicense({ origin: BASE });
@@ -861,13 +861,12 @@ test.describe("The menu, read by someone who has never seen it", () => {
         await expect(page.locator("#view-exercise")).toHaveClass(/active/);
         await page.waitForTimeout(300);
         const { row, headerBottom } = await page.evaluate(() => ({
-          row: ["btn-nav-home", "btn-account", "btn-pricing", "btn-lang"]
-            .map((id) => {
-              const el = document.getElementById(id);
-              const r = el.getBoundingClientRect();
-              return r.width ? { id, top: Math.round(r.top), bottom: r.bottom, text: el.innerText.trim(), w: r.width, h: r.height } : null;
-            })
-            .filter(Boolean),
+          row: ["btn-nav-home", "btn-plan", "btn-history", "btn-account", "btn-more"].map((id) => {
+            const el = document.getElementById(id);
+            const r = el.getBoundingClientRect();
+            const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+            return { id, top: Math.round(r.top), bottom: r.bottom, w: r.width, h: r.height, hit: !!top && el.contains(top) };
+          }),
           headerBottom: document.querySelector("header.app-header").getBoundingClientRect().bottom
         }));
         expect(new Set(row.map((c) => c.top)).size, JSON.stringify(row)).toBe(1);
@@ -876,11 +875,11 @@ test.describe("The menu, read by someone who has never seen it", () => {
         for (const c of row) {
           expect(c.h, c.id).toBeGreaterThanOrEqual(44);
           expect(c.w, c.id).toBeGreaterThanOrEqual(44);
+          expect(c.hit, c.id).toBe(true);
         }
-        // The offer is still there for someone without Pro, as "Pro".
-        const offer = row.find((c) => c.id === "btn-pricing");
-        if (opts.signedIn) expect(offer).toBeUndefined();
-        else expect(offer && offer.text).toBe("Pro");
+        await expect(page.locator("#btn-pricing")).toBeHidden();
+        await page.click("#btn-more");
+        await expect(page.locator("#btn-pricing")).toBeVisible();
         await ctx.close();
       });
     }
@@ -907,7 +906,7 @@ test.describe("The menu, read by someone who has never seen it", () => {
           .filter((t) => /\b(pro|prueba|regalo|suscripci[oó]n)\b/i.test(t))
       );
       expect(words).toHaveLength(1);
-      // "Pro: exportar y coach" is an offer; someone holding Pro is not sold it.
+      // "Ver qué añade Pro" is an offer; someone holding Pro is not sold it.
       if (opts.signedIn) await expect(page.locator("#btn-value-pro")).toBeHidden();
       else await expect(page.locator("#btn-value-pro")).toBeAttached();
     });
@@ -928,7 +927,11 @@ test.describe("The menu, read by someone who has never seen it", () => {
         await expect(page.locator("#btn-pricing")).not.toHaveAttribute("data-plan", "free");
         const g = await page.evaluate(() => {
           const rect = (el) => el.getBoundingClientRect();
-          const ids = ["btn-nav-home", "btn-account", "btn-pricing", "btn-lang", "btn-tour"];
+          // A laptop folds the tour and the guide into "Ayuda ▾"; wider, both
+          // show unless they would leave the title three lines tall.
+          const folded = innerWidth < 1100 || document.querySelector("header.app-header").classList.contains("help-fold");
+          const help = folded ? ["btn-help"] : ["btn-tour", "link-guide"];
+          const ids = ["btn-nav-home", "btn-account", "btn-pricing", "btn-lang", ...help];
           const boxes = ids.map((id) => rect(document.getElementById(id)));
           return {
             tops: boxes.map((b) => Math.round(b.top)),
@@ -947,6 +950,31 @@ test.describe("The menu, read by someone who has never seen it", () => {
       });
     }
   }
+
+  test("1280px: the tour and the guide fold into Ayuda only while the row needs the room", async ({ page }) => {
+    // "Ver el tour" and "Leer la guía" beside a long name and "Pro · termina
+    // en 10 días" left the title three lines tall (93px header). That row
+    // folds them into "Ayuda ▾"; signed out, both sit in the row.
+    await page.setViewportSize({ width: 1280, height: 800 });
+    const license = await mintLicense({ origin: BASE });
+    await install(page, { ...STATES.ending, account: member({ displayName: "Maximiliano Alejandro de la Torre" }) }, license);
+    await boot(page);
+    await expect(page.locator("#btn-pricing")).not.toHaveAttribute("data-plan", "free");
+    const help = page.locator("#btn-help");
+    await expect(help).toBeVisible();
+    await expect(page.locator("#btn-tour")).toBeHidden();
+    const lines = () =>
+      page.evaluate(() => {
+        const range = document.createRange();
+        range.selectNodeContents(document.getElementById("brand-title"));
+        return new Set([...range.getClientRects()].filter((r) => r.width > 0).map((r) => Math.round(r.bottom))).size;
+      });
+    expect(await lines()).toBeLessThanOrEqual(2);
+    await help.click();
+    await expect(page.locator("#link-guide")).toBeVisible();
+    await page.locator("#btn-tour").click();
+    await expect(page.locator(".tour-card")).toBeVisible();
+  });
 
   test("the account panel names its plan button for what it opens", async ({ page }) => {
     const license = await mintLicense({ origin: BASE });

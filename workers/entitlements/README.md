@@ -445,7 +445,10 @@ Consequences worth understanding before you ship:
   payment than the one it read, so an earlier one processed at the same
   moment as a later one can set it back, but only when the later one's write
   lands in the instant between that read and that write, or at an edge
-  location that has not seen it yet. The refund of a later charge processed
+  location that has not seen it yet. That can also undo a period a later
+  payment restored after a cancellation, when an older payment (in practice a
+  first month's checkout resent by hand weeks later) is processed at the same
+  moment. The refund of a later charge processed
   at the same moment as the refund of an earlier one can still be lost. So
   can a Mercado Pago charge that was turned down, which is kept only in the
   record: a subscription that then stops keeps the period its authorization

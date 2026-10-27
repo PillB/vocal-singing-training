@@ -483,8 +483,13 @@ unpaid subscription's period keeps rolling forward, so a grace state would
 never end; `incomplete` → `pending`, because that is a subscription whose *first* payment
 never succeeded — the same "money has not arrived" case as an unpaid session, so
 it must not get the grace that an existing subscriber gets;
-`canceled`/`incomplete_expired` → `canceled`. Plan mapping: price id → `session.metadata.plan` → subscription
-interval (`month` → `pro_monthly`, `year` → `pro_yearly`).
+`canceled`/`incomplete_expired` → `canceled`. Plan mapping: price id
+(`STRIPE_PRICE_PRO_*`) → `metadata.plan` → the subscription price's interval
+(`month` → `pro_monthly`, `year` → `pro_yearly`). A subscription's checkout
+session names the plan only through a configured price id or its own
+`metadata.plan`; when it has neither it says nothing about the plan, and the
+subscription's events decide it, whichever order they arrive in. Only a
+one-time checkout with neither counts as `pro_monthly`.
 
 Stripe's Billing settings decide what happens when every retry of a failed
 payment has failed. *Cancel the subscription* or *Mark the subscription as

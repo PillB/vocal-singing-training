@@ -278,9 +278,14 @@ function mapCheckoutSession(session, env, statusOverride) {
     : null;
   const byPrice = planFromPriceId(lineItem && lineItem.price && lineItem.price.id, env);
   const byMetadata = normalizePlanId(session && session.metadata && session.metadata.plan);
-  const plan = byPrice || byMetadata || "pro_monthly";
-  const planSource = byPrice ? "price_id" : (byMetadata ? "metadata" : "default");
   const subscriptionId = idOf(session && session.subscription);
+  // A subscription's checkout that names no plan says nothing about it: the
+  // subscription's own events carry its price and interval, and a default
+  // here, applied after them, would turn a yearly subscriber monthly. Only a
+  // one-time payment, with nothing else to go by, falls back to a month.
+  const named = byPrice || byMetadata;
+  const plan = named || (subscriptionId ? undefined : "pro_monthly");
+  const planSource = byPrice ? "price_id" : (byMetadata ? "metadata" : (subscriptionId ? undefined : "default"));
   let status = statusOverride || (isCheckoutSessionPaid(session) ? "active" : "pending");
   // Only a subscription or a one-time payment is a purchase. A setup session
   // saves a card for later and charges nothing, though Stripe reports it as

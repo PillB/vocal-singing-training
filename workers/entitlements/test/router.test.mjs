@@ -1953,3 +1953,40 @@ test("a Stripe subscriber who pays and cancels at once keeps the month, in whate
   }
   assert.deepEqual(outcomes, { "200 canceled month": 120 }, "every order keeps the month it paid for");
 });
+
+test("a yearly Stripe subscription bought through a link that names no plan stays yearly, in any order", async () => {
+  // No price ids configured and no metadata.plan: only the subscription's
+  // price interval says the plan. The checkout lands a second after the rest.
+  const T = Math.floor(Date.now() / 1000) - 60;
+  const yearEnd = T + 365 * DAY;
+  const subscription = (status) => ({
+    id: "sub_yearly_link",
+    customer: "cus_yl",
+    status,
+    metadata: {},
+    items: { data: [{ price: { id: "price_y", recurring: { interval: "year", interval_count: 1 } }, current_period_end: yearEnd }] }
+  });
+  const events = [
+    ["customer.subscription.created", subscription("incomplete"), T],
+    ["invoice.paid", { id: "in_yl", customer: "cus_yl", subscription: "sub_yearly_link", lines: { data: [{ price: { id: "price_y" }, period: { end: yearEnd } }] } }, T],
+    ["customer.subscription.updated", subscription("active"), T],
+    ["checkout.session.completed", {
+      id: "cs_yearly_link", mode: "subscription", customer: "cus_yl", subscription: "sub_yearly_link", payment_status: "paid", metadata: {}
+    }, T + 1]
+  ];
+  const orders = (items) => (items.length <= 1
+    ? [items]
+    : items.flatMap((item, i) => orders([...items.slice(0, i), ...items.slice(i + 1)]).map((rest) => [item, ...rest])));
+  const plans = {};
+  for (const order of orders(events)) {
+    const env = createTestEnv({ STRIPE_PRICE_PRO_MONTHLY: "", STRIPE_PRICE_PRO_YEARLY: "" });
+    for (const [index, [type, object, created]] of order.entries()) {
+      await deliverStripe(env, { id: `evt_yl_${index}_${type}`, type, created, data: { object } });
+    }
+    const claim = await claimFor(env, "stripe", "cs_yearly_link");
+    assert.equal(claim.status, 200);
+    const verified = await verifyLicenseToken(claim.body.token, env);
+    plans[verified.payload.plan] = (plans[verified.payload.plan] || 0) + 1;
+  }
+  assert.deepEqual(plans, { pro_yearly: 24 }, "the token says the plan that was bought");
+});

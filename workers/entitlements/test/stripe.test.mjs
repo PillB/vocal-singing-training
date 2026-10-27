@@ -187,6 +187,22 @@ test("checkout.session.completed maps to an active entitlement keyed on the sess
   assert.equal(mapped.update.periodEnd, undefined);
 });
 
+test("a subscription's checkout that names no plan leaves the plan to the subscription", () => {
+  const checkout = (object) => mapStripeEvent({
+    id: "evt_plan",
+    type: "checkout.session.completed",
+    created: NOW,
+    data: { object: { id: "cs_plan", payment_status: "paid", metadata: {}, ...object } }
+  }, { STRIPE_PRICE_PRO_MONTHLY: "", STRIPE_PRICE_PRO_YEARLY: "" }).update;
+  const recurring = checkout({ mode: "subscription", subscription: "sub_plan" });
+  assert.equal(recurring.plan, undefined, "the subscription's price says it, not a default");
+  assert.equal(recurring.planSource, undefined);
+  const named = checkout({ mode: "subscription", subscription: "sub_plan", metadata: { plan: "pro_yearly" } });
+  assert.deepEqual([named.plan, named.planSource], ["pro_yearly", "metadata"]);
+  const once = checkout({ mode: "payment", subscription: null });
+  assert.deepEqual([once.plan, once.planSource], ["pro_monthly", "default"], "a one-time payment has nothing else to go by");
+});
+
 test("a checkout with no subscription behind it is entitled for one interval from the payment", () => {
   const once = mapStripeEvent({
     id: "evt_once",

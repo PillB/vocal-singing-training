@@ -635,8 +635,8 @@ Every named export of `src/index.js` must be a function: the Workers runtime
 reads them as handlers and refuses to start on anything else (a test checks
 it). Constants go in `src/limits.js` or the module that uses them.
 
-Unit tests (Node 22.5+, for `node:sqlite` in the D1 fake; no network, no
-Workers runtime):
+Unit tests (Node 22.13 or later, where `node:sqlite`, which the D1 fake runs
+on, loads without a flag; no network, no Workers runtime):
 
 ```bash
 node --test workers/entitlements/test     # or: npm test --prefix workers/entitlements

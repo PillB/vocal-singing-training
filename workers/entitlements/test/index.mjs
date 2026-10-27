@@ -8,6 +8,7 @@
  * directory recursion Node 20 does) still work unchanged.
  */
 
+import "./d1-fake.test.mjs";
 import "./license.test.mjs";
 import "./stripe.test.mjs";
 import "./mercadopago.test.mjs";

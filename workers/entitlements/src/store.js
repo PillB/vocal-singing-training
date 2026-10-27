@@ -10,7 +10,7 @@
  *   claim:<provider>:<sessionOrPaymentId> -> licenseId   (90d TTL)
  *   sub:<provider>:<subscriptionId>       -> licenseId
  *   paid:<licenseId>                      -> "1"        (a payment was confirmed)
- *   ended:<licenseId>                     -> {endedAt, periodEnd} (subscription deleted)
+ *   ended:<licenseId>                     -> {endedAt, periodEnd, periodEndIfPaid?} (subscription deleted)
  *   reversed:<licenseId>                  -> {reversedChargeAt, reversedAt} (money given back)
  *   charged:<licenseId>                   -> chargedAt  (latest charge that went through)
  *
@@ -203,6 +203,9 @@ export async function getEntitlement(kv, licenseId) {
       record.status = "canceled";
       record.endedAt = ended.endedAt;
       capPeriodEnd(record, ended.periodEnd);
+      if (Number.isFinite(ended.periodEndIfPaid)) {
+        record.periodEndIfPaid = ended.periodEndIfPaid;
+      }
     }
   }
   // And the latest charge that went through, which still buys its interval
@@ -227,10 +230,11 @@ export async function getEntitlement(kv, licenseId) {
 }
 
 /**
- * Read the marker a deleted subscription left on its license.
+ * Read the marker a deleted subscription left on its license: when it ended,
+ * the period it left, and the period a payment made before it would restore.
  * @param {Object} kv KV namespace.
  * @param {string} licenseId Opaque license id.
- * @returns {Promise<{endedAt: number, periodEnd: number}|null>} Marker or null.
+ * @returns {Promise<{endedAt: number, periodEnd: number, periodEndIfPaid?: number}|null>} Marker or null.
  */
 async function readEnded(kv, licenseId) {
   const raw = await kv.get(endedKey(licenseId));
@@ -581,7 +585,9 @@ export function isStaleUpdate(record, update) {
  * say its plan. The latest Mercado Pago charge that was turned down is kept
  * too (`declinedAt`, in the record only): a subscription that stopped after
  * it, with no charge gone through since, keeps none of the period its
- * authorization set.
+ * authorization set. A Stripe deletion that ended a period it did not know to
+ * be paid keeps that period's end (`periodEndIfPaid`, also in `ended:`), and a
+ * payment made before the deletion but processed after it restores it.
  *
  * @param {Object} kv KV namespace.
  * @param {Object} update Descriptor: provider, plan, status, customerId,
@@ -688,6 +694,12 @@ export async function upsertEntitlement(kv, update, options) {
     // paid for.
     if (record.status === "canceled"
       && (before === "past_due" || before === "suspended" || before === "pending" || record.paid === false)) {
+      // A deletion is final, but what it knew of the money may not be: a
+      // payment made before it can be processed after it. Keep the period it
+      // would have left a paid-up subscription, for such a payment to restore.
+      if (update.terminal && Number.isFinite(update.endedAt) && record.periodEnd > update.endedAt) {
+        record.periodEndIfPaid = record.periodEnd;
+      }
       capPeriodEnd(record, update.endedAt);
     }
     if (update.terminal) {
@@ -723,6 +735,25 @@ export async function upsertEntitlement(kv, update, options) {
     // license; a refund of the charge still ends it, below.
     extendForCharge(record, update.periodEndFromCharge);
   }
+  // A Stripe subscription deleted while no payment had been seen (or while in
+  // dunning) kept none of its period. A payment confirmed afterwards but made
+  // before the deletion shows it was paid up when it was cancelled, so it
+  // keeps the period it paid for after all, as it would have in the order the
+  // events happened: up to the deletion's own period end, and no further than
+  // the period the paid invoice covered. A payment made after the deletion
+  // buys nothing.
+  let restored = false;
+  if (ended && update.paid === true && Number.isFinite(record.periodEndIfPaid)
+    && Number.isFinite(update.occurredAt) && update.occurredAt <= record.endedAt) {
+    const paidThrough = Number.isFinite(update.periodEnd)
+      ? Math.min(Math.floor(update.periodEnd), record.periodEndIfPaid)
+      : record.periodEndIfPaid;
+    if (!Number.isFinite(record.periodEnd) || paidThrough > record.periodEnd) {
+      record.periodEnd = paidThrough;
+      record.updatedAt = now;
+      restored = true;
+    }
+  }
   // A Mercado Pago subscription that stopped after a charge was turned down,
   // with none gone through since, keeps none of the period its authorization
   // set (Mercado Pago may leave the next charge date on it), whichever of the
@@ -757,10 +788,11 @@ export async function upsertEntitlement(kv, update, options) {
       reversedAt: record.reversedAt
     }));
   }
-  if (update.terminal && !stale) {
+  if ((update.terminal && !stale) || restored) {
     await kv.put(endedKey(licenseId), JSON.stringify({
       endedAt: record.endedAt,
-      periodEnd: Number.isFinite(record.periodEnd) ? record.periodEnd : record.endedAt
+      periodEnd: Number.isFinite(record.periodEnd) ? record.periodEnd : record.endedAt,
+      ...(Number.isFinite(record.periodEndIfPaid) ? { periodEndIfPaid: record.periodEndIfPaid } : {})
     }));
   }
   await putEntitlement(kv, record);

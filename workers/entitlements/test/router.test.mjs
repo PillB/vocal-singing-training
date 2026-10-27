@@ -1913,3 +1913,43 @@ test("a yearly Mercado Pago subscriber keeps the year when the first charge is p
     }
   }
 });
+
+test("a Stripe subscriber who pays and cancels at once keeps the month, in whatever order the events arrive", async () => {
+  const T = Math.floor(Date.now() / 1000) - 3600;
+  const periodEnd = T + 30 * DAY;
+  const subscription = (status, extra) => ({
+    id: "sub_quick",
+    customer: "cus_quick",
+    status,
+    metadata: { plan: "pro_monthly" },
+    items: { data: [{ price: { id: "price_m", recurring: { interval: "month", interval_count: 1 } }, current_period_end: periodEnd }] },
+    ...extra
+  });
+  // A card checkout, and the customer cancels a minute later.
+  const events = [
+    ["customer.subscription.created", subscription("incomplete"), T],
+    ["customer.subscription.deleted", subscription("canceled", {
+      ended_at: T + 60,
+      cancellation_details: { reason: "cancellation_requested" }
+    }), T + 60],
+    ["invoice.paid", { id: "in_quick", customer: "cus_quick", subscription: "sub_quick", lines: { data: [{ period: { end: periodEnd } }] } }, T],
+    ["customer.subscription.updated", subscription("active"), T],
+    ["checkout.session.completed", {
+      id: "cs_quick", mode: "subscription", customer: "cus_quick", subscription: "sub_quick", payment_status: "paid", metadata: { plan: "pro_monthly" }
+    }, T + 1]
+  ];
+  const orders = (items) => (items.length <= 1
+    ? [items]
+    : items.flatMap((item, i) => orders([...items.slice(0, i), ...items.slice(i + 1)]).map((rest) => [item, ...rest])));
+  const outcomes = {};
+  for (const order of orders(events)) {
+    const env = createTestEnv();
+    for (const [index, [type, object, created]] of order.entries()) {
+      await deliverStripe(env, { id: `evt_quick_${index}_${type}`, type, created, data: { object } });
+    }
+    const claim = await claimFor(env, "stripe", "cs_quick");
+    const outcome = `${claim.status} ${claim.body.entitlement && claim.body.entitlement.status} ${claim.body.entitlement && claim.body.entitlement.periodEnd === periodEnd ? "month" : claim.body.entitlement && claim.body.entitlement.periodEnd}`;
+    outcomes[outcome] = (outcomes[outcome] || 0) + 1;
+  }
+  assert.deepEqual(outcomes, { "200 canceled month": 120 }, "every order keeps the month it paid for");
+});

@@ -1704,6 +1704,107 @@ test("an older update still teaches a record its plan, but never replaces a plan
   assert.equal(guessed.record.periodEnd, periodEndForPlan("pro_monthly", chargedAt));
 });
 
+test("a payment made before a Stripe deletion and heard of after it restores the period it paid for", async () => {
+  const DAY = 86400;
+  const deletion = (endedAt, periodEnd) => ({
+    provider: "stripe",
+    subscriptionId: "sub_r",
+    status: "canceled",
+    periodEnd,
+    endedAt,
+    terminal: true,
+    occurredAt: endedAt
+  });
+  const setUp = async (before) => {
+    const kv = createFakeKv();
+    const generateId = idSequence("lic_");
+    await upsertEntitlement(kv, {
+      provider: "stripe",
+      claimId: "cs_r",
+      subscriptionId: "sub_r",
+      status: before,
+      periodEnd: NOW + 30 * DAY,
+      occurredAt: NOW - 5 * DAY
+    }, { now: NOW, generateId });
+    const ended = await upsertEntitlement(kv, deletion(NOW - DAY, NOW + 30 * DAY), { now: NOW, generateId });
+    assert.equal(ended.record.periodEnd, NOW - DAY, `${before}: nothing was known to be paid when it was deleted`);
+    return { kv, generateId };
+  };
+
+  // First payment, or the dunning invoice, paid two days before the deletion.
+  for (const before of ["pending", "past_due"]) {
+    const { kv, generateId } = await setUp(before);
+    const paid = await upsertEntitlement(kv, {
+      provider: "stripe",
+      subscriptionId: "sub_r",
+      status: "active",
+      paid: true,
+      periodEnd: NOW + 30 * DAY,
+      occurredAt: NOW - 3 * DAY
+    }, { now: NOW, generateId });
+    assert.equal(paid.record.status, "canceled", `${before}: still deleted`);
+    assert.equal(paid.record.periodEnd, NOW + 30 * DAY, `${before}: it was paid up when it was cancelled`);
+    const read = await getEntitlement(kv, "lic_1");
+    assert.equal(isTokenIssuable(read, NOW), true, before);
+  }
+
+  // Paid after the deletion: buys nothing.
+  {
+    const { kv, generateId } = await setUp("pending");
+    const late = await upsertEntitlement(kv, {
+      provider: "stripe",
+      claimId: "cs_r",
+      status: "active",
+      paid: true,
+      occurredAt: NOW - DAY + 1
+    }, { now: NOW, generateId });
+    assert.equal(late.record.periodEnd, NOW - DAY);
+  }
+
+  // An invoice of an earlier period, delivered late: it paid for that period only.
+  {
+    const { kv, generateId } = await setUp("past_due");
+    const old = await upsertEntitlement(kv, {
+      provider: "stripe",
+      subscriptionId: "sub_r",
+      status: "active",
+      paid: true,
+      periodEnd: NOW - 2 * DAY,
+      occurredAt: NOW - 32 * DAY
+    }, { now: NOW, generateId });
+    assert.equal(old.record.periodEnd, NOW - DAY);
+  }
+
+  // The deletion's record lost to a concurrent write: its own key still lets
+  // the payment restore the period, and then carries the restored period.
+  {
+    const kv = createFakeKv();
+    const generateId = idSequence("lic_");
+    await upsertEntitlement(kv, {
+      provider: "stripe",
+      claimId: "cs_r",
+      subscriptionId: "sub_r",
+      status: "pending",
+      periodEnd: NOW + 30 * DAY,
+      occurredAt: NOW - 5 * DAY
+    }, { now: NOW, generateId });
+    const olderCopy = kv.store.get(licenseKey("lic_1")).value;
+    await upsertEntitlement(kv, deletion(NOW - DAY, NOW + 30 * DAY), { now: NOW, generateId });
+    await kv.put(licenseKey("lic_1"), olderCopy);
+    await upsertEntitlement(kv, {
+      provider: "stripe",
+      claimId: "cs_r",
+      status: "active",
+      paid: true,
+      occurredAt: NOW - 3 * DAY
+    }, { now: NOW, generateId });
+    await kv.put(licenseKey("lic_1"), olderCopy);
+    const read = await getEntitlement(kv, "lic_1");
+    assert.equal(read.status, "canceled");
+    assert.equal(read.periodEnd, NOW + 30 * DAY);
+  }
+});
+
 test("the client view carries no provider-internal ids", () => {
   const view = toPublicEntitlement({
     licenseId: "lic_1",

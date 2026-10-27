@@ -248,7 +248,7 @@ lic:<licenseId>                       record JSON                               
 claim:<provider>:<sessionOrPaymentId> licenseId                       90d TTL   ?billing=success lookup
 sub:<provider>:<subscriptionId>       licenseId                                 keeps one license per subscription
 paid:<licenseId>                      "1"                                       a payment was confirmed (see below)
-ended:<licenseId>                     {endedAt, periodEnd}                      the Stripe subscription was deleted
+ended:<licenseId>                     {endedAt, periodEnd, periodEndIfPaid?}    the Stripe subscription was deleted
 reversed:<licenseId>                  {reversedChargeAt, reversedAt}            a Mercado Pago charge's money went back
 charged:<licenseId>                   chargedAt                                 when the latest charge that went through was made
 ```
@@ -408,7 +408,17 @@ Consequences worth understanding before you ship:
   payment is still processing was cancelled unpaid, so access ends at
   `ended_at`, and the payment settling afterwards buys no access. Cancel such
   a subscription at the end of its period instead, or refund the payment
-  once it settles.
+  once it settles. The one thing a later event can still change is what the
+  deletion knew of the money: a payment *made before* the deletion but
+  processed after it (a card checkout cancelled a minute later, whose
+  `invoice.paid` and `checkout.session.completed` land after the
+  `customer.subscription.deleted`; a dunning invoice paid days before the
+  cancellation and delivered late) shows the subscription was paid up when it
+  was cancelled, so it keeps the period it paid for, as it would have in the
+  order the events happened: up to the deletion's own period end
+  (`periodEndIfPaid`, also kept in `ended:`), and no further than the period
+  the paid invoice covered. Status and everything else stay as the deletion
+  left them.
 - **What concurrency can still do.** Two webhooks for one license processed at
   the same moment both read the record, and the later write wins. A confirmed
   payment, a deletion, a charge that went through (so a subscriber who pays

@@ -31,7 +31,7 @@ async function openById(page, id) {
     const found = all.find((e) => e.id === eid);
     if (!found) return false;
     for (const c of document.querySelectorAll("#exercise-list .card-ex")) {
-      if (c.querySelector(".num")?.textContent?.trim() === String(found.number)) {
+      if (c.dataset.num === String(found.number)) {
         c.click();
         return true;
       }
@@ -114,8 +114,7 @@ test.describe("First-viewport game stage (fold)", () => {
         document.querySelector("#btn-continue"),
         document.querySelector(".hero"),
         document.querySelector(".tabs"),
-        document.querySelector("#exercise-list"),
-        document.querySelector("#value-pulse")
+        document.querySelector("#exercise-list")
       ].filter(Boolean);
       const boxes = cands.map((el) => {
         const b = el.getBoundingClientRect();

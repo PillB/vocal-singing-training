@@ -57,6 +57,7 @@
    * closes with the shape of its ending.
    *
    * opts: onPhrase(phrase), onSpeech(t), onPauseEnd(start, len), onBin(bin),
+   *       onTakeBack(t) (the speech onSpeech(t) told of was the room),
    *       syllables (also run VTFeatures.SyllableRate).
    * phrase: { start, end, bins: [{ t, m (MIDI or null), db, s }], fin, medDb }
    */
@@ -67,7 +68,8 @@
         hangMs: opts.hangMs != null ? opts.hangMs : 220,
         onSpeech: (t) => this._speech(t),
         onPause: (t) => this._pause(t),
-        onPauseEnd: (s, len) => this.o.onPauseEnd && this.o.onPauseEnd(s, len)
+        onPauseEnd: (s, len) => this.o.onPauseEnd && this.o.onPauseEnd(s, len),
+        onTakeBack: (t) => this._takeBack(t)
       });
       this.pitch = new F.StablePitch({ maxJump: 7 });
       this.syll = opts.syllables ? new F.SyllableRate() : null;
@@ -156,6 +158,11 @@
     _speech(t) {
       this.cur = { start: t, end: null };
       if (this.o.onSpeech) this.o.onSpeech(t);
+    }
+    /** A fan or a hum read as speech: no phrase began, so Stop closes none. */
+    _takeBack(t) {
+      if (this.cur && this.cur.start === t) this.cur = null;
+      if (this.o.onTakeBack) this.o.onTakeBack(t);
     }
     _pause(t) {
       const p = this.cur;

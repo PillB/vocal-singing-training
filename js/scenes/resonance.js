@@ -327,10 +327,11 @@
   /* —— Take capture: the frames' samples, stitched back into audio —— */
 
   /**
-   * Each frame hands over the analyser's latest 2048 samples; consecutive
-   * frames overlap. The stream advances in whole render quanta (128 samples),
-   * so the new part is found by matching the overlap exactly; when the
-   * overlap is silent (nothing to match) the frame's own duration decides.
+   * Each frame hands over the analyser's latest 43 ms of samples (2048 at
+   * 48 kHz); consecutive frames overlap. The stream advances in whole render
+   * quanta (128 samples), so the new part is found by matching the overlap
+   * exactly; when the overlap is silent (nothing to match) the frame's own
+   * duration decides.
    * The result is the take as audio, for A/B playback without a second
    * recorder on the microphone.
    */

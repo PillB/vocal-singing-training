@@ -7,6 +7,8 @@
  * tokens the stub hands back are genuinely signed with a throwaway key, so the
  * signature check that decides Pro is the real one.
  */
+const path = require("path");
+const { pathToFileURL } = require("url");
 const { test, expect } = require("@playwright/test");
 const { mintLicense, patchBillingConfig } = require("./helpers/billing");
 
@@ -41,6 +43,8 @@ function createWorkerStub(options) {
     rev: opts.rev || 0,
     // Overrides for the A/B results answer, merged over the default below.
     abResults: opts.abResults || null,
+    // Replaces the experiments list's ingest counters below.
+    ingest: opts.ingest || null,
     sentCode: "424242",
     calls: []
   };
@@ -157,7 +161,7 @@ async function installWorker(page, stub, license) {
           { experiment: "aa_2026_10", arms: [{ variant: "a", exposed: 412 }, { variant: "b", exposed: 398 }], srm: { p: 0.62, flagged: false } },
           { experiment: "loop_home_2026_10", arms: [], srm: { p: null, flagged: false } }
         ],
-        ingest: {
+        ingest: stub.ingest || {
           since: "2026-09-17",
           // eu_no_consent is here because the readout used to leave it out of its
           // refusal list, so batches turned away for want of an EEA answer were
@@ -644,6 +648,65 @@ test.describe("Accounts, gifted months and saved progress", () => {
     await expect(box.locator(".ab-ingest.ab-warn")).toHaveCount(0);
   });
 
+  test("exposures the worker set aside are in the arrivals line", async ({ page }) => {
+    // The worker counts each exposure it records and each it refuses, but the
+    // line only read the events. An exposure over one address's daily cap (a
+    // school, an office) left the panel showing fewer exposed browsers with no
+    // hint why.
+    const license = await mintLicense({ origin: BASE });
+    const totals = { accepted: 135, exposure_new: 100, exposure_capped: 25, exposure_unregistered: 10 };
+    const stub = createWorkerStub({ role: "admin", ingest: { since: "2026-09-17", totals, lastAcceptedAt: 1790000000 } });
+    await installWorker(page, stub, license);
+    await boot(page);
+    await signIn(page);
+    await page.click("#ab-results-load");
+    const line = page.locator("#ab-results .ab-ingest");
+    await expect(line).toContainText("135 eventos guardados, 0 descartados, 0 envíos rechazados");
+    await expect(line).toContainText("Exposiciones: exposure_new 100, exposure_unregistered 10, exposure_capped 25");
+    // A capped exposure can bias the split, so it is worth a look.
+    await expect(line).toHaveClass(/ab-warn/);
+
+    // An arm the registry does not know is forged traffic or a site and worker
+    // deployed out of step: named, but not the colour of a fault.
+    stub.ingest = { since: "2026-09-17", totals: { accepted: 135, exposure_new: 100, exposure_unregistered: 10 }, lastAcceptedAt: 1790000000 };
+    await page.click("#ab-results-load");
+    await expect(line).toContainText("Exposiciones: exposure_new 100, exposure_unregistered 10");
+    await expect(line).not.toHaveClass(/ab-warn/);
+  });
+
+  test("every counter the worker keeps has a place in the arrivals line", async ({ page }) => {
+    // The worker's list of ingest reasons and this readout's are two copies of
+    // one list, and they have drifted before: eu_no_consent was added to the
+    // worker's alone, and batches it turned away vanished from the line. Every
+    // reason gets its own count here, so a new one the line does not handle
+    // breaks a sum or goes missing from the names.
+    const events = pathToFileURL(path.join(__dirname, "..", "workers", "entitlements", "src", "events.js")).href;
+    const { INGEST_REASONS } = await import(events);
+    expect(Object.keys(INGEST_REASONS).sort()).toEqual(["event", "exposure", "request"]);
+    const totals = {};
+    Object.values(INGEST_REASONS)
+      .flat()
+      .forEach((key, i) => {
+        totals[key] = 11 + i;
+      });
+    const sum = (keys) => keys.reduce((n, k) => n + totals[k], 0);
+    const droppedKeys = INGEST_REASONS.event.filter((k) => k !== "accepted");
+    // A deletion somebody asked for is not a batch turned away.
+    const refusedKeys = INGEST_REASONS.request.filter((k) => k !== "forget");
+
+    const license = await mintLicense({ origin: BASE });
+    const stub = createWorkerStub({ role: "admin", ingest: { since: "2026-09-17", totals, lastAcceptedAt: 1790000000 } });
+    await installWorker(page, stub, license);
+    await boot(page);
+    await signIn(page);
+    await page.click("#ab-results-load");
+    const line = page.locator("#ab-results .ab-ingest");
+    await expect(line).toContainText(
+      `${totals.accepted} eventos guardados, ${sum(droppedKeys)} descartados, ${sum(refusedKeys)} envíos rechazados`
+    );
+    for (const key of [...refusedKeys, ...INGEST_REASONS.exposure]) await expect(line).toContainText(`${key} ${totals[key]}`);
+  });
+
   test("before its plan is met a test shows counts and the date, never a comparison", async ({ page }) => {
     const license = await mintLicense({ origin: BASE });
     const readyAt = Math.floor(Date.UTC(2026, 10, 20, 15) / 1000);
@@ -821,7 +884,7 @@ test.describe("Accounts, gifted months and saved progress", () => {
         weekPlan: { weekNumber: 2, completedElements: [], checkIns: [] },
         reviews: [{ at: "2026-09-21T10:00:00.000Z", note: "local" }],
         holdLogs: [],
-        goals: { weeklySessionsTarget: 3 },
+        goals: { weeklySessionsTarget: 3, updatedAt: "2026-09-21T09:00:00.000Z" },
         achievements: { local: true }
       };
       const remote = {
@@ -837,10 +900,26 @@ test.describe("Accounts, gifted months and saved progress", () => {
         weekPlan: { weekNumber: 1, completedElements: [], checkIns: [] },
         reviews: [{ at: "2026-09-19T10:00:00.000Z", note: "remote" }],
         holdLogs: [],
-        goals: { weeklySessionsTarget: 5 },
+        goals: { weeklySessionsTarget: 5, updatedAt: "2026-09-19T09:00:00.000Z" },
         achievements: { remote: true }
       };
-      return window.VTSync.mergeBag(local, remote);
+      const merged = window.VTSync.mergeBag(local, remote);
+      // The same two bags the other way round, as the other device merges them.
+      const mirrored = window.VTSync.mergeBag({ ...remote, profileId: "default" }, local);
+      // A goal nobody set (a new device) and one saved before goals carried a time.
+      const unset = window.VTSync.mergeBag({ ...local, goals: null }, { ...remote, goals: { weeklySessionsTarget: 6 } });
+      // Both saved before goals carried a time, when every device pushed its
+      // own, default included: chosen here, chosen on the account, and chosen
+      // on both.
+      const legacy = (mine, theirs) =>
+        window.VTSync.mergeBag({ ...local, goals: { weeklySessionsTarget: mine } }, { ...remote, goals: { weeklySessionsTarget: theirs } })
+          .goals.weeklySessionsTarget;
+      return {
+        ...merged,
+        mirroredGoals: mirrored.goals,
+        unsetGoals: unset.goals,
+        legacyGoals: [legacy(5, 3), legacy(3, 5), legacy(4, 5)]
+      };
     });
 
     // Both takes survive, newest first.
@@ -853,10 +932,56 @@ test.describe("Accounts, gifted months and saved progress", () => {
     expect(merged.weekPlan.weekNumber).toBe(2);
     // Both review lines survive.
     expect(merged.reviews.length).toBe(2);
-    // A setting with no history takes the more recently saved side.
+    // A setting with no history takes the side chosen more recently, from
+    // either device, and a goal never set does not replace one that was.
     expect(merged.goals.weeklySessionsTarget).toBe(3);
+    expect(merged.mirroredGoals.weeklySessionsTarget).toBe(3);
+    expect(merged.unsetGoals.weeklySessionsTarget).toBe(6);
+    // Without times, the one that is not the default was chosen; when both
+    // were, the account's copy decides, so the devices agree.
+    expect(merged.legacyGoals).toEqual([5, 5, 5]);
     // Achievements are a union: an award earned anywhere stays earned.
     expect(merged.achievements).toEqual({ remote: true, local: true });
+  });
+
+  test("two plans at the same point keep the element picked, and the devices agree on it", async ({ page }) => {
+    await boot(page);
+    const picks = await page.evaluate(() => {
+      const plan = (element, updatedAt) => ({
+        weekNumber: 1,
+        element,
+        status: "idle",
+        startedAt: null,
+        checkIns: [],
+        reviews: [],
+        completedElements: [],
+        ...(updatedAt ? { updatedAt } : {})
+      });
+      // Each pair merged both ways: first this device's copy over the account's,
+      // then the other way round, as the other device merges them.
+      const both = (mine, theirs) => [
+        window.VTSync.mergeWeekPlan(mine, theirs)?.element ?? null,
+        window.VTSync.mergeWeekPlan(theirs, mine)?.element ?? null
+      ];
+      return {
+        neverWritten: both(null, plan("Volume")),
+        untouched: both(plan(null), plan("Volume")),
+        untouchedLater: both(plan(null, "2026-09-22T09:00:00.000Z"), plan("Volume")),
+        later: both(plan("Volume", "2026-09-20T09:00:00.000Z"), plan("Diction", "2026-09-21T09:00:00.000Z")),
+        stamped: both(plan("Volume"), plan("Diction", "2026-09-21T09:00:00.000Z")),
+        legacy: both(plan("Volume"), plan("Diction"))
+      };
+    });
+    // A plan nobody picked anything in never replaces one somebody did.
+    expect(picks.neverWritten).toEqual(["Volume", "Volume"]);
+    expect(picks.untouched).toEqual(["Volume", "Volume"]);
+    expect(picks.untouchedLater).toEqual(["Volume", "Volume"]);
+    // Between two picks, the later one, from either device.
+    expect(picks.later).toEqual(["Diction", "Diction"]);
+    expect(picks.stamped).toEqual(["Diction", "Diction"]);
+    // Picks saved before plans carried a time: the account's copy decides, so
+    // the device that syncs next takes it and both end up with the same plan.
+    expect(picks.legacy).toEqual(["Diction", "Volume"]);
   });
 
   test("sync does nothing at all while signed out", async ({ page }) => {

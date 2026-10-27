@@ -30,7 +30,7 @@ async function openExercise(page, ex) {
     const found = all.find((e) => e.id === id);
     if (!found) return false;
     for (const c of document.querySelectorAll("#exercise-list .card-ex")) {
-      const num = c.querySelector(".num")?.textContent?.trim();
+      const num = c.dataset.num;
       if (num === String(found.number)) {
         c.click();
         return true;
@@ -167,14 +167,17 @@ test.describe("Catalog & structure regression", () => {
     await page.click("#btn-history");
     await expect(page.locator("#view-history")).toHaveClass(/active/);
     await expect(page.locator("#history-list")).toBeVisible();
-    await page.click("#btn-history-back");
+    // No "← Volver" on the page: the lit tab says where you are, and
+    // Practicar is one tap away in the same header.
+    await page.click("#btn-nav-home");
+    await expect(page.locator("#view-home")).toHaveClass(/active/);
     await page.click("#btn-plan");
     await expect(page.locator("#view-plan")).toHaveClass(/active/);
     // Scope to plan view (btn-open-plan also exists hidden on exercise shell)
     await expect(page.locator("#view-plan .plan-grid")).toBeVisible();
     await expect(page.locator("#view-plan #btn-plan-start")).toBeVisible();
     await expect(page.locator("#view-plan #element-chips")).toBeAttached();
-    await page.click("#btn-plan-back");
+    await page.click("#btn-nav-home");
     await expect(page.locator("#view-home")).toHaveClass(/active/);
   });
 
@@ -296,7 +299,7 @@ test.describe("Game HUD less-scroll smoke", () => {
     await boot(page);
     await page.click('.tab[data-tab="singing"]');
     await page.click('.tier-chip[data-tier="basic"]');
-    await page.locator("#exercise-list .card-ex").nth(1).click();
+    await page.locator('#exercise-list .card-ex[data-id="s2-solfege-chords"]').click();
     await expect(page.locator(".hud-tl")).toBeVisible();
     await expect(page.locator(".hud-tr")).toBeVisible();
     await expect(page.locator(".hud-bl")).toBeVisible();

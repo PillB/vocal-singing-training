@@ -441,15 +441,40 @@
     }
   }
 
+  /** When a setting was chosen, in ms; 0 for one nobody chose. */
+  function chosenAt(value) {
+    const t = Date.parse(String(value || ""));
+    return Number.isFinite(t) ? t : 0;
+  }
+
+  /**
+   * Which side's goal a merge keeps: the latest choice. Goals saved before they
+   * carried the time cannot say when, and back then every device pushed its
+   * own, the default included, so between two of those a goal other than the
+   * default is the one somebody picked. Otherwise `B`, the account's copy.
+   */
+  function goalSide(A, B) {
+    const a = chosenAt(A.goalAt);
+    const b = chosenAt(B.goalAt);
+    if (a || b) return a > b ? A : B;
+    return B.goal === DEFAULT_GOAL && A.goal !== DEFAULT_GOAL ? A : B;
+  }
+
   /**
    * Merge two devices' loop state. Everything earned is a union — a card or a
-   * milestone is never lost to a sync — and settings follow the local side.
+   * milestone is never lost to a sync. The size and the goal follow the latest
+   * choice on any device (`b` is the account's copy, which decides when
+   * neither side says when it chose): the default a new device writes on its
+   * first visit is not a choice, and used to replace the learner's own. A size
+   * nobody picked is null, so the one that was picked always shows through.
    */
   function merge(a, b) {
     if (!b) return a;
     if (!a) return b;
     const A = normalize(JSON.parse(JSON.stringify(a)));
     const B = normalize(JSON.parse(JSON.stringify(b)));
+    const tierFrom = chosenAt(A.tierAt) > chosenAt(B.tierAt) ? A : B;
+    const goalFrom = goalSide(A, B);
     const cards = { ...B.cards };
     Object.keys(A.cards).forEach((id) => {
       if (!cards[id] || A.cards[id] < cards[id]) cards[id] = A.cards[id];
@@ -461,8 +486,10 @@
     return {
       v: 1,
       seed: A.seed,
-      tier: A.tier || B.tier,
-      goal: A.goal,
+      tier: tierFrom.tier || A.tier || B.tier,
+      tierAt: tierFrom.tierAt || null,
+      goal: goalFrom.goal,
+      goalAt: goalFrom.goalAt || null,
       ms: [...new Set([...A.ms, ...B.ms])].sort((x, y) => x - y),
       cards,
       surprises: [...byDay.values()].sort((x, y) => (x.day < y.day ? -1 : 1)).slice(-60),
@@ -486,7 +513,10 @@
     return arm("loop_home_2026_10") !== "classic";
   }
 
-  /** The loop owns the start panel: switched on, and a day already sung. */
+  /**
+   * The loop owns the start panel: switched on, and a day already sung. A
+   * guided session left open still keeps the panel's own copy (guidedNote).
+   */
   function isOn() {
     const D = days();
     return !!D && loopEnabled() && D.summary().practiceDays > 0;
@@ -611,6 +641,7 @@
     const L = readLoop();
     if (L.tier === tier) return;
     L.tier = tier;
+    L.tierAt = new Date().toISOString();
     writeLoop(L);
     track("loop_tier_pick", { tier });
   }
@@ -619,6 +650,7 @@
     if (!GOALS.includes(goal)) return;
     const L = readLoop();
     L.goal = goal;
+    L.goalAt = new Date().toISOString();
     writeLoop(L);
     track("loop_goal_set", { goal });
   }
@@ -823,7 +855,11 @@
     const mb = D.markBasics({ len: tier, track: session.track });
     const L = readLoop();
     L.completions += 1;
-    L.tier = tier;
+    // Finishing a routine of a size picks that size for next time.
+    if (L.tier !== tier) {
+      L.tier = tier;
+      L.tierAt = new Date().toISOString();
+    }
     writeLoop(L);
     const sum = D.summary();
     const comeback = sum.comeback;
@@ -955,10 +991,39 @@
     });
   }
 
-  /** A guided session that is open (active or paused) keeps the panel's own copy. */
+  /**
+   * A guided session that is open (active or paused) keeps the panel's own
+   * copy. One left on a step no longer in the catalog cannot be resumed and
+   * the panel does not offer it, so it keeps nothing.
+   */
   function guidedOpen() {
-    const s = global.VTSession?.get?.();
-    return !!(s && s.status !== "completed" && s.order?.length);
+    const S = global.VTSession;
+    const s = S?.get?.();
+    if (!(s && s.status !== "completed" && s.order?.length)) return false;
+    const id = S.currentExerciseId?.();
+    return !!id && (!hooks.findExercise || !!hooks.findExercise(id));
+  }
+
+  /** A rest day just spent, in the panel's words, or "" when there is none to tell. */
+  function restLine(sum) {
+    const rest = lastRest && lastRest.on === sum.today ? lastRest : sum.rest.justUsed;
+    return rest?.days?.length
+      ? tt(rest.days.length === 1 ? "loop.subRest1" : "loop.subRestN", { n: rest.days.length, streak: sum.streak })
+      : "";
+  }
+
+  /**
+   * A guided session left open keeps the panel's own copy, and its button,
+   * which resumes it, stays the one primary. What the loop would have said
+   * goes at the top of that copy instead: the welcome back, and a rest day
+   * just spent. Null outside the loop's arm, where the old card and toast say
+   * them, and wherever the loop draws the panel itself.
+   * @returns {{ kicker: string, sub: string } | null}
+   */
+  function guidedNote() {
+    if (!isOn() || !guidedOpen()) return null;
+    const sum = days().summary();
+    return { kicker: !sum.todayDone && sum.comeback ? tl("loop.kickerBack") : "", sub: restLine(sum) };
   }
 
   /** Re-render home the way the app does, so every part of the panel agrees. */
@@ -1129,10 +1194,7 @@
           : state === "sang"
             ? tl("loop.subSang", null, trackId)
             : tt(trackId === "vocal" ? "loop.subVocal" : "loop.sub");
-      const rest = lastRest && lastRest.on === sum.today ? lastRest : sum.rest.justUsed;
-      const restTxt = rest?.days?.length
-        ? tt(rest.days.length === 1 ? "loop.subRest1" : "loop.subRestN", { n: rest.days.length, streak: sum.streak })
-        : "";
+      const restTxt = restLine(sum);
       // Headline and button only: the kicker and title already say what today
       // is. The line shows for the one thing only it says, a rest day spent.
       sub.textContent = restTxt || subTxt;
@@ -1171,6 +1233,15 @@
   }
 
   /* —— The completion card —— */
+
+  /** How to close each of this file's dialogs while it is open, as its own close button does. */
+  const closeOpen = { done: null, cards: null };
+
+  /** Close whichever is open, for when the page under it changes (the browser's Back). */
+  function closeDialogs() {
+    closeOpen.done?.();
+    closeOpen.cards?.();
+  }
 
   function showDone(o) {
     const modal = $("#loop-done");
@@ -1246,6 +1317,7 @@
     modal.style.display = "";
     global.VTFocusTrap?.activate?.(modal, { initialFocus: close });
     const finish = (then) => {
+      closeOpen.done = null;
       modal.hidden = true;
       global.VTFocusTrap?.release?.(modal);
       close.onclick = null;
@@ -1254,6 +1326,7 @@
       modal.onclick = null;
       if (then) then();
     };
+    closeOpen.done = () => finish();
     close.onclick = () => finish();
     if (remind) {
       remind.onclick = () =>
@@ -1294,12 +1367,14 @@
     global.VTFocusTrap?.activate?.(modal, { initialFocus: close });
     track("loop_cards_open", { n: Object.keys(L.cards).length });
     const finish = () => {
+      closeOpen.cards = null;
       modal.hidden = true;
       global.VTFocusTrap?.release?.(modal);
       close.onclick = null;
       modal.onkeydown = null;
       modal.onclick = null;
     };
+    closeOpen.cards = finish;
     close.onclick = finish;
     modal.onkeydown = (e) => {
       if (e.key === "Escape") {
@@ -1368,6 +1443,10 @@
     tomorrowTeaser,
     renderHome,
     isOn,
+    // The loop's arm of loop_home is served. This file loads in both arms, so
+    // its presence on the page says nothing about which one this browser got.
+    enabled: loopEnabled,
+    guidedNote,
     startTier,
     onPractice,
     onRoutineComplete,
@@ -1375,6 +1454,7 @@
     drawSurprise,
     openCards,
     showDone,
+    closeDialogs,
     readLoop,
     merge,
     setTier,

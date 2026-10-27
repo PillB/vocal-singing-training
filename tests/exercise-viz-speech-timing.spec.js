@@ -7,11 +7,11 @@
  * that patches only measured values.
  */
 const { test, expect } = require("@playwright/test");
-const { useVoice, playVoice, stopVoice } = require("./helpers/voice");
+const { useVoice, playVoice, stopVoice, fanInRoom } = require("./helpers/voice");
 
 const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";
 
-async function boot(page, lang = "es") {
+async function boot(page, lang = "es", init) {
   await page.addInitScript((l) => {
     try {
       localStorage.setItem("vt_tour_v1", "1");
@@ -22,6 +22,7 @@ async function boot(page, lang = "es") {
     }
   }, lang);
   await useVoice(page);
+  if (init) await page.addInitScript(init);
   await page.goto(BASE + "/?e2e", { waitUntil: "domcontentloaded" });
   await page.waitForFunction(() => !!window.VTApp?.openExercise);
 }
@@ -184,6 +185,44 @@ test.describe("speech timing pictures", () => {
     const res = await stopAndResult(page);
     expect(res.patches, "metaphors spoken are the learner's taps; vividness stays theirs").toEqual({ metaphorCount: 1 });
     expect(res.summary).toMatch(/Metáforas por tema: 1 → 0/);
+  });
+
+  test("v8 with a fan in the room: the time to the first word starts with the voice", async ({ page }) => {
+    // The fan reads as a voice until the floor learns it, and the first word
+    // was set there: 0.0 s. The Vad takes that speech back; so does the topic.
+    await boot(page, "es", fanInRoom);
+    await openEx(page, "v8-fluency-metaphors");
+    await start(page, "topicTalk");
+    await page.waitForTimeout(4500);
+    const fw = await modeState(page, (st) => st.topics[0].firstWord);
+    // The speaker starts 2.4 s after the voice begins
+    expect(fw).toBeGreaterThan(1.8);
+    expect(fw).toBeLessThan(3.6);
+  });
+
+  test("v11 with a fan in the room: the round's talk starts with the voice", async ({ page }) => {
+    // The fan's first moments read as talk until the floor learned it
+    await boot(page, "es", fanInRoom);
+    await openEx(page, "v11-kill-fillers");
+    await start(page);
+    await page.waitForTimeout(2500);
+    const r = await modeState(page, (st) => ({ talk: st.rounds[0].talk, t: st.vad.t, segs: st.vad.segments.length }));
+    expect(r.t).toBeGreaterThan(2);
+    expect(r.talk, JSON.stringify(r)).toBe(0);
+  });
+
+  test("v6 with a fan in the room: the first turn starts with the voice", async ({ page }) => {
+    // A 1 s lead-in over the fan, then talk: the turn and the talk time used
+    // to start at the fan's first frame
+    await boot(page, "es", fanInRoom);
+    await openEx(page, "v6-connect");
+    await start(page);
+    await page.waitForTimeout(1000);
+    await playVoice(page, "speech");
+    await page.waitForTimeout(2500);
+    const r = await modeState(page, (st) => ({ runStart: st.runStart, talk: st.scenarios[0].talk, t: st.vad.t }));
+    expect(r.runStart, JSON.stringify(r)).toBeGreaterThan(1);
+    expect(r.talk, JSON.stringify(r)).toBeLessThan(r.t - 1);
   });
 
   test("v6 turn lanes: their turn left quiet reads quiet, talking through it is tallied", async ({ page }) => {

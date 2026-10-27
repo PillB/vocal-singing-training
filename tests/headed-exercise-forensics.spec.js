@@ -240,7 +240,7 @@ async function openExerciseByMouse(page, exerciseId) {
   // Find card by number
   const cardPt = await page.evaluate((num) => {
     for (const c of document.querySelectorAll("#exercise-list .card-ex")) {
-      if (c.querySelector(".num")?.textContent?.trim() === String(num)) {
+      if (c.dataset.num === String(num)) {
         const r = c.getBoundingClientRect();
         if (r.width < 4 || r.height < 4) return null;
         // scroll only this card once

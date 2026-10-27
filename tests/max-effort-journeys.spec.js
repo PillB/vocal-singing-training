@@ -5,10 +5,12 @@ const { test, expect } = require("@playwright/test");
 const { boot, openExercise, startPractice, stopPractice, centerHitsSelf } = require("./helpers/e2e");
 
 test.describe("Max-effort journeys (Musk)", () => {
-  test("home: tabs, tiers, cards, pricing, value pulse visible", async ({ page }) => {
+  test("home: start panel, tabs, tiers, cards, pricing", async ({ page }) => {
     await boot(page);
     await expect(page.locator("#view-home")).toHaveClass(/active/);
-    await expect(page.locator("#value-pulse")).toBeVisible();
+    await expect(page.locator("#start-panel")).toBeVisible();
+    // The progress card moved to Historial: Practicar keeps the daily task.
+    await expect(page.locator("#view-home #value-pulse")).toHaveCount(0);
     await page.locator('.tab[data-tab="singing"]').click();
     await expect(page.locator("#exercise-list .card-ex").first()).toBeVisible();
     await page.locator('.tier-chip[data-tier="basic"]').click();

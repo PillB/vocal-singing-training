@@ -25,6 +25,7 @@
  * Usage:  npm run serve   (in another shell)
  *         node qa/design-test/harness.mjs --inject my-patch.mjs --states home-returning,exercise --vps phone,desktop
  *         node qa/design-test/harness.mjs --b http://127.0.0.1:8801 --states pricing --vps phone --out /tmp/pricing
+ *         node qa/design-test/harness.mjs --solo --states plan,history --vps phone --full   (one site only)
  *
  * Writes <out>/<state>__<vp>__<A|B>.png, metrics.json and summary.md.
  * <out> defaults to $DT_WORK/renders/harness; DT_WORK defaults to
@@ -48,6 +49,7 @@ const USAGE = `Usage: node qa/design-test/harness.mjs (--inject <patch.mjs> | --
   --out <dir>          output folder (default: $DT_WORK/renders/harness)
   --lang es|en         site language to seed (default: es)
   --full               also save a full-page JPEG of every render
+  --solo               render arm A only (a record of one site, no challenger)
 
 Environment: BASE_URL, CHROME_PATH, DT_WORK.`;
 
@@ -66,7 +68,8 @@ function fail(msg) {
   console.error(`harness: ${msg}\n\n${USAGE}`);
   process.exit(2);
 }
-if (!args.b && !args.inject) fail("--b <challenger url> or --inject <patch.mjs> is required");
+const SOLO = !!args.solo;
+if (!SOLO && !args.b && !args.inject) fail("--b <challenger url> or --inject <patch.mjs> is required");
 
 // Paths on the command line are relative to where the command was typed
 // (npm run changes the working directory to the repo root).
@@ -327,7 +330,7 @@ for (const s of states) {
   for (const v of vps) {
     const key = `${s}__${v}`;
     results[key] = {};
-    for (const arm of ["A", "B"]) results[key][arm] = await renderOne(browser, arm, ARMS[arm], s, v);
+    for (const arm of SOLO ? ["A"] : ["A", "B"]) results[key][arm] = await renderOne(browser, arm, ARMS[arm], s, v);
   }
 }
 await browser.close();
@@ -349,8 +352,12 @@ const pick = (m) => ({
 });
 for (const [k, v] of Object.entries(results)) {
   const a = pick(v.A.m || {});
-  const b = pick(v.B.m || {});
+  const b = pick((v.B || v.A).m || {});
   for (const metric of Object.keys(a)) if (String(a[metric]) !== String(b[metric])) rows.push([k, metric, a[metric], b[metric]]);
+  if (SOLO) {
+    if (v.A.errors.length) rows.push([k, "page errors", v.A.errors.length, "-"]);
+    continue;
+  }
   if (v.A.errors.length || v.B.errors.length) rows.push([k, "page errors", v.A.errors.length, v.B.errors.length]);
 }
 const md = rows

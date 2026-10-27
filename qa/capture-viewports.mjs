@@ -203,7 +203,7 @@ async function openPitchExercise(page) {
     if (!pitch) return false;
     const cards = [...document.querySelectorAll("#exercise-list .card-ex")];
     for (const c of cards) {
-      if (c.querySelector(".num")?.textContent?.trim() === String(pitch.number)) {
+      if (c.dataset.num === String(pitch.number)) {
         c.click();
         return pitch.id;
       }

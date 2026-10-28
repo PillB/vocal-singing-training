@@ -88,6 +88,12 @@ Stripe / Mercado Pago checkout
 
 Prices in config are **display**; real charge = Stripe/MP product prices.
 
+> **Out of date.** The prices and the "~20% save" in this table are the July 2026
+> ones. They changed on 2026-09-22; the current display prices are in
+> `js/billing-config.js` and the reasoning is in
+> [`35-PRICING.md`](./35-PRICING.md). Do not create a provider plan from this
+> table.
+
 ---
 
 ## Go-live checklist (Stripe) — step by step
@@ -171,7 +177,7 @@ Official: [Subscriptions](https://www.mercadopago.com.pe/developers/en/docs/subs
 ### Step by step
 
 1. Create a [Mercado Pago Developers](https://www.mercadopago.com.pe/developers) application (Peru / your country).  
-2. Create a **subscription plan** (preapproval) or Checkout preference for monthly/yearly (display hints: S/ 35, S/ 279).  
+2. Create a **subscription plan** (preapproval) or Checkout preference for monthly/yearly, at the soles prices in `js/billing-config.js` (see [`35-PRICING.md`](./35-PRICING.md); the S/ 35 / S/ 279 hints this step used to give are out of date).  
 3. Configure **return / back URLs** to your site (HTTPS; no localhost in production):
 
 ```text

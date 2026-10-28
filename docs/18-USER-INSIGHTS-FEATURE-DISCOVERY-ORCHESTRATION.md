@@ -386,3 +386,24 @@ Refresh methods: mine praise + pain; first-lesson / D1 retention dominates edtec
 15. https://loyalty.cx/edtech-retention-problem/  
 16. https://www.reddit.com/r/singing/comments/1eezmzr/  
 17. https://journals.kmanpub.com/index.php/aitechbesosci/article/view/4724
+
+---
+
+# Source check (2026-10-28)
+
+Phase 6 says no recommendation conflicts with primary sources. Few of the sources
+are primary. What they actually support:
+
+| Claim used above | What the source is | How far it goes |
+|---|---|---|
+| ~85% of edtech users abandon before week 3 (source 14) | A blog by an engagement-tools vendor (Digia, 9 July 2026) | The page cites no study or dataset for 85%. Unverified; do not quote it |
+| Education apps D1 18.8% vs Duolingo 55% (source 15) | A retention-services vendor (loyalty.cx, 2025) | Neither figure has a source on the page. Unverified |
+| Push in the first 90 days, ⅓ higher retention (source 8) | A push-notification vendor (Airship) | Users who got a push against users who did not, no method given: correlation, not effect |
+| Guilt copy increases uninstalls (Playbook rule 4) | Complaint threads on r/duolingo | Shows that some users resent guilt copy; says nothing about uninstall rates |
+| Habits outlast motivation (validation pass 2) | "X/lang discourse 2026", no link | Unsourced |
+| Reminders help (Themes C, H) | Source 17, a randomised trial (150 adults, 9 weeks) | Supports reminders *while they run*; the same trial found consistency fell sharply once they stopped, a caution this report does not mention |
+
+The user voices are English-language Reddit threads. None is identified as
+coming from Peru or Latin America, and nobody was interviewed or tested, so the
+themes are hypotheses about this product's users, not findings. The streak
+freezes in F-05 were later replaced by rest days ([37-DAILY-LOOP.md](37-DAILY-LOOP.md)).

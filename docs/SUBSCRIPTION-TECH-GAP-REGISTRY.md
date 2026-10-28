@@ -3,7 +3,7 @@
 | ID | Gap | Severity | Status | Fix / next |
 |----|-----|----------|--------|------------|
 | ST-01 | Empty Stripe/MP payment links | P0 | **Open (ops)** | Paste live URLs in `billing-config.js` |
-| ST-02 | `demoUnlockEnabled: true` | P0 | **Open (ops)** | Set `false` after links live |
+| ST-02 | `demoUnlockEnabled: true` | P0 | **Closed** | Ships `false` in `js/billing-config.js`; checkout stays closed until verification and links exist (VG-01) |
 | ST-03 | Soft forgeable checkout return | P0 | **Mitigated** | session_id required when demo off; host allowlist; webhook path |
 | ST-04 | No live webhook signature verify | P1 | **Implemented** | `workers/entitlements/` verifies Stripe + MP signatures over the raw body; deploy pending |
 | ST-05 | No in-app Customer Portal | P2 | **Closed (wire)** | `customerPortalUrl` + `#btn-manage-billing` — paste live portal URL |
@@ -21,3 +21,4 @@
 | 2026-07-16 | Registry created; ST-03 mitigated; ST-07 closed |
 | 2026-07-16 | ST-05/ST-09 closed (portal UI + health strip) |
 | 2026-07-16 | Re-orchestration: ST-08/10/11/12 closed; worker README 2026 refresh; operator one-pager |
+| 2026-10-28 | ST-02 marked closed: the row still said open after `demoUnlockEnabled` shipped `false` (VG-01, 2026-09-19) |

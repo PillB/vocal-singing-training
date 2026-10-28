@@ -4,6 +4,7 @@
 **Code:** `js/tour.js`, `js/experiments.js`, `js/experiments-config.js`, `guide.html`, `css/styles.css`, `js/i18n.js`, `js/app.js`, `index.html`
 **Scope:** onboarding and documentation only. No exercise, audio, scoring, billing or account behaviour was changed.
 **Tests:** `tests/tour-geometry.spec.js` (new, 10 cases), `tests/tour-behaviour.spec.js` (new, 25 cases), plus guide cases added to `tests/max-effort-journeys.spec.js`, `tests/viewport-overflow.spec.js` and `tests/live-pages.spec.js`.
+**Later changes (noted 2026-10-28):** the home tour now has five stops that open each place (site review round 4, `qa/design-test/site-review/rounds/r4-results.md`), not the four described below; and `tour_shape_2026_10` is now planned at 160 people per arm for a 30% → 45% effect ([38-AB-TESTING.md](38-AB-TESTING.md)), not ruled out as below.
 
 The site had a tour that described a home page deleted in the September
 redesign, and no written documentation of any kind. This is what was measured,
@@ -105,8 +106,13 @@ tour step. It documents what a user cannot work out by looking:
 
 - **The pitch highway's whole vocabulary** — green primary lane, amber active,
   grey dashed ghost, lane height = ±35 cents, the blue precision ribbon, the
-  800ms lock ring, and the 65–400 Hz detector range that is why a very high
-  soprano or a very low bass sees nothing.
+  800ms lock ring, and the 65–400 Hz detector range. (Correction, 2026-10-28,
+  from synthetic tones run through `detectPitch` in `js/pitch-visualizer.js`:
+  below 65 Hz it does read nothing, but above about 400 Hz, G4, it does not go
+  blank. It reads an octave low, as `js/scenes/pitch.js` says, and from about
+  800 Hz an octave and a fifth low, which octave folding cannot repair. 400 Hz
+  sits in the middle of most women's and children's singing range, so this is
+  not only "a very high soprano". The guide's own wording has the same problem.)
 - **What each number means**, including the ones whose names do not explain
   them.
 - **Which exercises need the microphone and which do not**, and what a denied

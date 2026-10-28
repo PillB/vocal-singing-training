@@ -639,8 +639,27 @@
    *   at one level are not a hum (below). So with samples the floor learns
    *   less than without, never more, but for a white sound. Without them
    *   (the node sim) the rules above alone decide: the soft flat whisper
-   *   can pass for a fan, and a white fan switched on in a silent lead-in
-   *   reads as speech until the first word.
+   *   can pass for a fan, a white fan switched on in a silent lead-in
+   *   reads as speech until the first word, an "sss" held 5 s is learned
+   *   as the room, and three "mmm"s at one level in talk from Start are a
+   *   hum. The level sim can show none of the spectral rules.
+   *   What they need: `buf` must still hold the frame's own samples when
+   *   `feed` is called (the engine writes the next frame over it, so a
+   *   caller that keeps frames and feeds them later hands the floor
+   *   another frame's sound). The engine asks for a mic with no processing:
+   *   automatic gain or noise suppression (`processedInput`) pushes a fan
+   *   down under the talk, so one switched on mid-talk would fail the
+   *   band test and read as speech until it held 1.2 s in one pause.
+   *   Known limits: a hiss with nothing under 2 kHz (a mic's steep low cut)
+   *   there from Start reads as an "sss" does, is learned neither as the
+   *   sound the take opened with nor as the first room, and can read as
+   *   talk until the first pause learns it (about 1 s before the first
+   *   word); a fan that is not white, switched on in a silent lead-in,
+   *   still waits 1.2 s, or 5 s if it sits high; a held "sss" over a room
+   *   that fills the low bands reads like a hiss and still meets the 5 s
+   *   rule; a whisper over a fan within the margin is silence where it
+   *   dips (the margin is on the level, not per band); and a held /f/ or
+   *   /θ/, flat and weak, has not been measured.
    * - An audible inhale is talk. It is as aperiodic, as still and sits as
    *   high as a whispered syllable or a short "sss", and nothing in its
    *   level tells them apart, so a breath loud enough to open the gate (a

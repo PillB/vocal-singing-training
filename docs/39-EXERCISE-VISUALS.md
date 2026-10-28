@@ -21,7 +21,10 @@ way, and how to test it.
 4. **Built** a shared measuring kit and drawing kit, then one picture per exercise,
    family by family, each with its own synthetic voices and spec.
 5. **Validated** by driving every exercise again, a blind before/after review by three
-   judges per exercise, and the full test suite.
+   judges per exercise, and the full test suite. The judges were simulated reviewers
+   (model personas, as in the design test of [38-AB-TESTING.md](38-AB-TESTING.md)), not
+   learners or voice teachers. So the review shows whether a picture reads clearly from
+   screenshots, not whether it helps anyone sing or speak better.
 
 ## Rules every picture follows
 
@@ -83,7 +86,7 @@ through; "fills in" is what Stop writes to the session's metrics.
 | Exercise | Picture | Measured | Guided | Fills in |
 |---|---|---|---|---|
 | v1 Mejor dicción | A staircase of four pace rungs. Rung 1 measures your own comfortable, over-articulated pace as 100 %; one slowly eased dot shows where you sit on the current rung. After Stop, the pace you read at on each rung and your phrase length between breaths. | Syllable rate (aprox.), speech and pause runs | Rung targets | duration (20 s or more) |
-| v10 Pausa medida | A gauge that grows while you are silent, with the 1–3 s "pausa de poder" band; your last pauses as bars; speech and silence over the last 20 s; three takes side by side after Stop. | Pause lengths | The three takes | pause count |
+| v10 Pausa medida | A gauge that grows while you are silent, with the 0.8–3 s "pausa de poder" band (`minPauseSec` 0.8 in `js/practice-profiles.js`); your last pauses as bars; speech and silence over the last 20 s; three takes side by side after Stop. | Pause lengths | The three takes | pause count |
 | v11 Eliminar rellenos | Three rounds. A ring fills as a silence grows long enough to replace a filler; your taps and possible hesitation sounds (hollow ○, aprox.) sit on a strip; one row per round after Stop. | Silences, a hesitation hint (voiced, one pitch, flat, 0.4–1.6 s) | Taps for fillers caught and pauses made | fewest taps in a 20 s round |
 | v14 Variar el ritmo | A pace river against your own base band from take 1; "Punto clave" raises a flag that becomes an anchor if you slowed or paused within 5 s. | Pace against your base, pauses | Which moments are key points | most anchors in a take |
 | v8 Metáforas | A topic card with the frame "… es como ___ porque ___", a fluency ribbon of speech and silence, the time to the first word, stars for metaphors you mark. | First-word time, gaps | Topics, metaphor taps | metaphors marked |
@@ -201,8 +204,11 @@ recordings before any threshold is tightened:
 ## How far to trust the evidence
 
 The physics, physiology and perception facts behind these rules are solid: poor
-pitch singing is mostly a vocal-motor problem; vibrato spans about ±50–100 cents and is
-heard at its centre; level drops about 6 dB each time the distance to the mic doubles;
+pitch singing is mostly a problem of mapping a heard pitch onto the voice, not of
+hearing it (Pfordresher & Brown 2007, Music Perception 25(2): "mismapping of pitch onto
+action"); vibrato spans about ±50–100 cents and is
+heard at its centre; level drops about 6 dB each time the distance to the mic doubles
+(in the open; less in a reverberant room, where reflected sound adds back);
 formant estimates fail at high pitch; "chest" and "head" are registers, not places
 where sound resonates. What is weak is every claim that a visual display leads to
 lasting improvement: studies of real-time visual feedback for singing are small, short

@@ -277,6 +277,62 @@ test.describe("exercise pictures", () => {
     });
   }
 
+  for (const [label, holdMs, wait, talk, pauses] of [
+    // Three 6 s holds with 1.2 s breaths; read as the third ends
+    ["power pause hears a 'sss' held 6 s as a voice", 6000, 21500, 15, [2]],
+    // Two 8 s holds with a 1.2 s breath, and the start of a third (the
+    // second breath is counted once the third hold begins)
+    ["power pause hears a 'sss' held 8 s as a voice", 8000, 20000, 14, [1, 2]]
+  ]) {
+    test(label, async ({ page }) => {
+      // A soft held hiss (5–7 kHz, its syllables dipping 1.5 dB) sits high
+      // and has no period, and a new room that sits high is learned once it
+      // has held still for 5 s (a hiss that came to stay): 5 s into the
+      // first hold the floor took it, and the whole take was taken back, no
+      // talk and no pause. Nothing in it is under 1.6 kHz, as in no room's
+      // sound (VTFeatures.Vad): it is talk however long it is held.
+      await boot(page, "es", [(w) => (window.__VTWhisper = w), { gain: 0.016, swingDb: 1.5, phraseMs: holdMs, bands: [5000, 7000] }]);
+      await openAndStart(page, "v10-power-pause");
+      // 2 s of the quiet room, then the holds with 1.2 s breaths
+      await page.waitForTimeout(1750);
+      await playVoice(page, "speechWhisper");
+      await page.waitForTimeout(wait);
+      const n = Number(await page.locator("#mode-focus [data-p]").textContent());
+      const vad = await page.evaluate(() => {
+        const v = window.VTApp.getState().modeInstance.state.vad;
+        return { floor: v.floorDb, talk: v.talkSec, segs: v.segments.map((g) => `${g.kind[0]}${g.start.toFixed(2)}`).join(" ") };
+      });
+      expect(vad.floor, `the quiet room is the floor · ${vad.segs}`).toBeLessThan(-60);
+      expect(vad.talk, `the holds are talk · ${vad.segs}`).toBeGreaterThan(talk);
+      expect(pauses, `pauses counted · ${vad.segs}`).toContain(n);
+    });
+  }
+
+  test("power pause hears a held 'sss' the take opens with as a voice", async ({ page }) => {
+    // The learner already holding an "sss" (3 s holds, 1.2 s breaths) as the
+    // mic opens: a still sound the take opened with and heard nothing else
+    // for a second is the room (a hum, a fan), so the first hold was taken
+    // back as the room, its breath went uncounted and its 3 s of talk were
+    // lost. Nothing in it is under 1.6 kHz, as in no room's sound
+    // (VTFeatures.Vad).
+    await boot(page, "es", [(w) => (window.__VTWhisper = w), { gain: 0.03, swingDb: 1, bands: [5000, 7000], q: 1.5 }]);
+    await page.evaluate((x) => window.VTApp.openExercise(x), "v10-power-pause");
+    await expect(page.locator("#view-exercise")).toHaveClass(/active/);
+    // The hiss starts first (its audio needs a click on the page), then Start
+    await page.locator("#ex-title").click();
+    await playVoice(page, "speechWhisper");
+    await page.locator("#btn-practice-start").click();
+    await page.waitForTimeout(11000);
+    const n = Number(await page.locator("#mode-focus [data-p]").textContent());
+    const vad = await page.evaluate(() => {
+      const v = window.VTApp.getState().modeInstance.state.vad;
+      return { floor: v.floorDb, talk: v.talkSec, segs: v.segments.map((g) => `${g.kind[0]}${g.start.toFixed(2)}`).join(" ") };
+    });
+    expect(vad.floor, `the quiet room is the floor · ${vad.segs}`).toBeLessThan(-60);
+    expect(vad.talk, `the holds are talk, the first one too · ${vad.segs}`).toBeGreaterThan(7);
+    expect(n, vad.segs).toBe(2);
+  });
+
   // The volume ladder's take (v13-volume-ladder: levels 1 2 3 4 5 3 1, the
   // first and last an almost-whisper "h", the voiced steps at `lv` of the
   // stock voice, by default 0.4 to 1.25) said with no gap between the steps,
@@ -324,7 +380,9 @@ test.describe("exercise pictures", () => {
     // back, was learned as the room 0.4 s in, cut out of the talk and
     // counted as a pause (three or four pauses, 6 s of talk lost). Whispered
     // only twice (h w h w q h w) it came back in 6 takes of 8 (0.85) and 3
-    // of 7 (0.9).
+    // of 7 (0.9). A fan stays under the talk in every band it fills, where
+    // the talk's quiet frames fall far under a whisper's high band, and a
+    // whisper's shape moves with its formants (VTFeatures.Vad).
     [
       "power pause hears a very flat soft whisper alternating with voice as talk",
       { plan: fourTurns, bands: [900, 2400], q: 1.2, dip: 0.85, gain: 0.015 },
@@ -414,8 +472,11 @@ test.describe("exercise pictures", () => {
       // A new room that sits high must hold still for 5 s (a held "sss" must
       // stay talk), so the fan read as speech from when it came on until the
       // first word, and the take's talk began 1.2–2.4 s before the
-      // learner's. The sim's "white fan switched on in a silent lead-in"
-      // case in tests/vad-floor.spec.js is the deterministic guard.
+      // learner's. Its spectrum is flat to the top, as no voice's is: it is
+      // the room 0.6 s after it came on (VTFeatures.Vad). The level sim
+      // cannot see that; the deterministic guard is "a white fan switched on
+      // in a silent lead-in is the room within 0.6 s" in
+      // tests/vad-floor.spec.js, on the take's sound.
       await boot(page, "es", [fanInRoom, { gain: 0.0055, from, seed: 7919 }]);
       await openAndStart(page, "v10-power-pause");
       // The room (the fan from `from`), then the speaker (3 s talk, 1.2 s pause)
@@ -447,8 +508,9 @@ test.describe("exercise pictures", () => {
       // talked over from Start (VTFeatures.Vad): the third filler was learned
       // as the room, all three were cut out of the talk and counted as
       // pauses (in v11, pauses made instead of a filler) and 3.7 s of talk
-      // lost. The sim's "three 'mmm's at one level in talk with no stop
-      // consonant are not a hum" (row C40) is the deterministic guard.
+      // lost. A hum's spectral lines go on under the talk; a filler's stop
+      // (VTFeatures.Vad). The level sim cannot see that, so these takes are
+      // the guard.
       const mix = { plan: [["w", 3000], ["m", 1000], ["w", 3000], ["m", 1000], ["w", 3000], ["m", 1000], ["w", 3000]], hum: 0.025 };
       await boot(page, "es", [(m) => (window.__VTMix = m), mix]);
       await page.evaluate((x) => window.VTApp.openExercise(x), id);

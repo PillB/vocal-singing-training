@@ -378,8 +378,10 @@
   //   filler's lines) the talk's quietest frames fall far under it.
   // - A whisper's spectrum moves with its formants; a fan's holds its shape.
   // - Electronic hiss and a white fan are flat to the top of the spectrum;
-  //   every sound a person makes is band-limited (breath and a whisper fade
-  //   by 4–5 kHz, an /s/ peaks near 7 kHz and is 20 dB down under 3 kHz).
+  //   almost every sound a person makes is band-limited (breath and a
+  //   whisper fade by 4–5 kHz, an /s/ peaks near 7 kHz and is 20 dB down
+  //   under 3 kHz). A held /f/ or /θ/ can be as flat, which is why the white
+  //   rule waits for no voice heard yet (see WHITE_DB).
   // A frame without samples (the node sim) gets the rules above unchanged.
   const SPEC_EDGES = [100, 200, 350, 550, 800, 1150, 1600, 2200, 3000, 4200, 6000, 8500, 12500];
   const LINE_MAX_HZ = 4000;
@@ -399,8 +401,8 @@
   // held still), which reads only how still the high part's level is (a flat
   // whisper holds as still as a fan), and which only a white stretch (see
   // WHITE_DB) may fail: a white fan whose level wobbles moves its high part
-  // as much as a whisper, and no voice is white. So with samples the floor
-  // learns less than without, never more, but for a white fan.
+  // as much as a whisper. So with samples the floor learns less than
+  // without, never more, but for a white sound before the first voice.
   const PERSIST_STEPS = 24;
   const PERSIST_MIN_STEPS = 9;
   const PERSIST_DB = 3;
@@ -675,12 +677,14 @@
    *   cost 0.05–0.1 ms a frame on average (one FFT per learning step, 2048
    *   or 4096 samples), the hum's line test 2–3 ms in the step it runs, and
    *   the first FFT plan about 13 ms, once.
-   *   Known limits: an /f/ or /θ/ held 0.6 s or more in a silent lead-in,
-   *   before any voice, is learned as a white fan and taken back (its talk
-   *   lost; the floor is the quiet room again once it ends); a hiss with
-   *   nothing under 2 kHz (a mic's steep low cut) there from Start reads as
-   *   an "sss" does and is learned only at the first pause after the first
-   *   word, where it has gone on under the talk: the speech read from Start
+   *   Known limits: an /f/ or /θ/ held 0.6 s or more before the first
+   *   voiced sound is learned as a white fan and taken back, with whatever
+   *   speech it opened (an audible inhale or whispered words just before it,
+   *   with no silence between, go with it; the floor is the quiet room again
+   *   once it ends); a hiss with nothing under 2 kHz (a mic's steep low cut)
+   *   there from Start reads as an "sss" does and is learned only at the
+   *   first pause after the first word, where it has gone on under the
+   *   talk: the speech read from Start
    *   is then cut to begin at the first word (`segments`, talkSec), but
    *   until that pause it reads as talk however long the lead-in, and a
    *   caller's clock opened at onSpeech still spans it; a fan that is not
@@ -1210,8 +1214,9 @@
       }
       if (h.shape == null) h.shape = shapeSpread(h.own, bed);
       // ... and either its high part held still (the test without
-      // samples), or it is white (no voice is: a white fan whose level
-      // wobbles moves its high part as much as a whisper does)
+      // samples), or it is white (a white fan whose level wobbles moves its
+      // high part as much as a whisper does; a held /f/ can be white too,
+      // but it stops while the person voices, so it fails the band test)
       if (h.white == null) h.white = whiteSpread(h.own) <= WHITE_DB;
       return persist <= PERSIST_DB && h.shape <= SHAPE_DB && (old || h.white);
     }

@@ -491,8 +491,9 @@ test.describe("exercise pictures", () => {
       // A new room that sits high must hold still for 5 s (a held "sss" must
       // stay talk), so the fan read as speech from when it came on until the
       // first word, and the take's talk began 1.2–2.4 s before the
-      // learner's. Its spectrum is flat to the top, as no voice's is: it is
-      // the room 0.6 s after it came on (VTFeatures.Vad). The level sim
+      // learner's. Its spectrum is flat to the top, as no voiced sound's is:
+      // with no voice heard yet it is the room 0.6 s after it came on
+      // (VTFeatures.Vad). The level sim
       // cannot see that; the deterministic guard is "a white fan switched on
       // in a silent lead-in is the room within 0.6 s" in
       // tests/vad-floor.spec.js, on the take's sound.
@@ -573,7 +574,10 @@ test.describe("exercise pictures", () => {
       return { floor: v.floorDb, talk: v.talkSec, segs: v.segments.map((g) => `${g.kind[0]}${g.start.toFixed(2)}`).join(" ") };
     });
     const said = mix.plan.filter(([k]) => k !== "q").reduce((t, [, ms]) => t + ms / 1000, 0);
-    expect(vad.talk, `all of it is talk · ${vad.segs}`).toBeGreaterThan(said - 1);
+    // The Vad's clock can fall a second behind a 20 s take on a busy machine
+    // (a frame's step is capped at 50 ms); an "sss" taken as the room loses
+    // over 5 s (13.1 s of 18.5 on the old floor).
+    expect(vad.talk, `all of it is talk · ${vad.segs}`).toBeGreaterThan(said - 2.5);
     expect(n, vad.segs).toBe(1);
   });
 

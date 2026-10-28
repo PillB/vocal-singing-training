@@ -423,20 +423,33 @@
   const LINE_KEEP_STEPS = 150;
   // A new room whose spectrum is flat from 350 Hz to the top band (the mean
   // power of each band over 0.6 s within WHITE_DB) is learned after 0.6 s
-  // whether it sits high or not: no voice is white (a held "sss"'s bands
-  // under 3 kHz sit 20–40 dB under its peak; white rooms measured 0.5–1.3,
-  // pink noise 12, a person's sounds 8 and more).
+  // whether it sits high or not, but only while no voice has been heard (no
+  // step with a period over the floor's margin since the Vad began): a white
+  // fan switched on in the silent lead-in. White rooms measured 0.5–1.3,
+  // pink noise 12, a held "sss" more (its bands under 3 kHz sit 20–40 dB
+  // under its peak), breath and whispers 8 and more. An /f/ or a /θ/ is
+  // noise made at the lips or the teeth with nothing in front to shape it,
+  // and some are as flat as a fan: recorded at the start of words ("three",
+  // "four", "five", 30 speakers, 48 kHz) /f/ read 3.7–20 dB, median 11, and
+  // /θ/ 4.3–34, median 13, one in ten of them 6 or less. A held one was
+  // learned as the room 0.6 s in and its talk lost, so once a voice has been
+  // heard a white fan switched on is learned as without samples: when it
+  // comes back in the next pause (`_cameBack`), or once it has held 1.2 s
+  // (5 s if it sits high).
   const WHITE_DB = 4;
   const WHITE_FROM_BAND = 2;
   // A still sound whose spectrum, room and all, has nothing under 1.6 kHz
   // (the power of the bands from 100 Hz to 1.6 kHz SIBILANT_DB or more under
-  // that from 3 to 8.5 kHz) is never learned as a new room: not after 5 s
-  // high (HISS_ROOM_STEPS), not as the sound the take opened with, not as
-  // the first room the floor hears. That is an "sss" or a "shh" (−22 dB or
-  // lower through the engine; a person can hold one for 20 s and more),
-  // never a fan, a hiss or a rumble (white noise −5.6, pink +4, every room
-  // measured −5.9 or higher). Over a room that fills the low bands it reads
-  // higher and the 5 s rule stays.
+  // that from 3 to 8.5 kHz, in most of its steps: the median over them, so
+  // a step or two of the word before it cannot fill its low bands) is not
+  // learned as a new room: not after 5 s high (HISS_ROOM_STEPS), not as the
+  // sound the take opened with, not as the first room the floor hears, and
+  // from the pauses (`_pauseRoom`) only if its bands went on under the talk,
+  // as a room's do. That is an "sss" or a "shh" (−22 dB or lower through
+  // the engine; a person can hold one for 20 s and more), never a fan or a
+  // rumble (white noise −5.6, pink +4, every room measured −5.9 or higher);
+  // a hiss through a steep low cut reads as one. Over a room that fills the
+  // low bands it reads higher and the 5 s rule stays.
   const SIBILANT_DB = -15;
   const SIB_LOW = [0, 6];
   const SIB_HIGH = [8, 11];
@@ -624,42 +637,60 @@
    *   room's spectrum (12 bands from 100 Hz to 12.5 kHz, and the bins under
    *   4 kHz) and uses three things a level cannot show: a room sound adds
    *   to the voice, while a sound the person makes stops while they voice;
-   *   a whisper's shape moves with its formants; no voice is white. A
-   *   stretch comes back as the room only if, besides the above, in every
+   *   a whisper's shape moves with its formants; no voiced sound is white.
+   *   A stretch comes back as the room only if, besides the above, in every
    *   band it fills the talk's quietest frames over it stayed within 3 dB
    *   of its own (a whisper, an inhale or an "sss" between phrases is gone
    *   under the talk where the voice is weak) and its shape held still, so
    *   a soft, flat whisper alternating with voice is talk however little
    *   its level moves; a white stretch may fail the high-part test (a white
-   *   fan whose level wobbles). A new room flat from 350 Hz to the top of
-   *   the spectrum (a white fan, a hiss) is the room after 0.6 s however
-   *   high it sits, so one switched on in a silent lead-in is the room
-   *   before the first word. A still sound with nothing under 1.6 kHz (an
-   *   "sss", a "shh", held for any length) is never the room. Three "mmm"s
-   *   at one level are not a hum (below). So with samples the floor learns
-   *   less than without, never more, but for a white sound. Without them
-   *   (the node sim) the rules above alone decide: the soft flat whisper
-   *   can pass for a fan, a white fan switched on in a silent lead-in
-   *   reads as speech until the first word, an "sss" held 5 s is learned
-   *   as the room, and three "mmm"s at one level in talk from Start are a
-   *   hum. The level sim can show none of the spectral rules.
+   *   fan whose level wobbles). Before any voice has been heard, a new room
+   *   flat from 350 Hz to the top of the spectrum (a white fan, a hiss) is
+   *   the room after 0.6 s however high it sits, so one switched on in a
+   *   silent lead-in is the room before the first word. After one, a white
+   *   sound is learned as any other: a held /f/ or /θ/ is as flat as a fan
+   *   (recorded ones read 3.7 dB and more, a white fan 0.5–1.3), and one
+   *   held between phrases or right after words is talk. A still sound with
+   *   nothing under 1.6 kHz in most of its steps (an "sss", a "shh", held
+   *   for any length) is not the room: not after 5 s, not as the sound the
+   *   take opened with, not as the first room, and from the pauses before
+   *   the floor has heard a quiet room only if its bands went on under the
+   *   talk, as a room's do and an "sss"'s do not, so an "sss" between
+   *   phrases is talk in talk from Start too. Three "mmm"s at one level are
+   *   not a hum (below). So with samples the floor learns less than
+   *   without, never more, but for a white sound before the first voice
+   *   (and the lead-in of a hiss it learns from the pauses, below). Without
+   *   them (the node sim) the rules above alone decide: the soft flat
+   *   whisper can pass for a fan, a white fan switched on in a silent
+   *   lead-in reads as speech until the first word, an "sss" held 5 s is
+   *   learned as the room, and three "mmm"s at one level in talk from Start
+   *   are a hum. The level sim can show none of the spectral rules.
    *   What they need: `buf` must still hold the frame's own samples when
    *   `feed` is called (the engine writes the next frame over it, so a
    *   caller that keeps frames and feeds them later hands the floor
    *   another frame's sound). The engine asks for a mic with no processing:
    *   automatic gain or noise suppression (`processedInput`) pushes a fan
    *   down under the talk, so one switched on mid-talk would fail the
-   *   band test and read as speech until it held 1.2 s in one pause.
-   *   Known limits: a hiss with nothing under 2 kHz (a mic's steep low cut)
-   *   there from Start reads as an "sss" does, is learned neither as the
-   *   sound the take opened with nor as the first room, and can read as
-   *   talk until the first pause learns it (about 1 s before the first
-   *   word); a fan that is not white, switched on in a silent lead-in,
-   *   still waits 1.2 s, or 5 s if it sits high; a held "sss" over a room
-   *   that fills the low bands reads like a hiss and still meets the 5 s
-   *   rule; a whisper over a fan within the margin is silence where it
-   *   dips (the margin is on the level, not per band); and a held /f/ or
-   *   /θ/, flat and weak, has not been measured.
+   *   band test and read as speech until it held 1.2 s in one pause. They
+   *   cost 0.05–0.1 ms a frame on average (one FFT per learning step, 2048
+   *   or 4096 samples), the hum's line test 2–3 ms in the step it runs, and
+   *   the first FFT plan about 13 ms, once.
+   *   Known limits: an /f/ or /θ/ held 0.6 s or more in a silent lead-in,
+   *   before any voice, is learned as a white fan and taken back (its talk
+   *   lost; the floor is the quiet room again once it ends); a hiss with
+   *   nothing under 2 kHz (a mic's steep low cut) there from Start reads as
+   *   an "sss" does and is learned only at the first pause after the first
+   *   word, where it has gone on under the talk: the speech read from Start
+   *   is then cut to begin at the first word (`segments`, talkSec), but
+   *   until that pause it reads as talk however long the lead-in, and a
+   *   caller's clock opened at onSpeech still spans it; a fan that is not
+   *   white, switched on in a silent lead-in, still waits 1.2 s, or 5 s if
+   *   it sits high; once a voice has been heard a white fan switched on in
+   *   a pause waits to come back in the next one, as without samples; a
+   *   held "sss" over a room that fills the low bands reads like a hiss and
+   *   still meets the 5 s rule, as does a held /f/ or /θ/ (it fills them);
+   *   and a whisper over a fan within the margin is silence where it dips
+   *   (the margin is on the level, not per band).
    * - An audible inhale is talk. It is as aperiodic, as still and sits as
    *   high as a whispered syllable or a short "sss", and nothing in its
    *   level tells them apart, so a breath loud enough to open the gate (a
@@ -680,7 +711,11 @@
    *   went on under the talk between the last two: a hum's lines are in
    *   every frame of the talk, an "mmm" stops and the talk's harmonics move
    *   off its lines, so three "mmm"s at one level in talk from Start are
-   *   not a hum. The Space assist never teaches the floor.
+   *   not a hum. A still sound with nothing under 1.6 kHz learned this way
+   *   must have gone on under that talk in every band it fills (a hiss
+   *   through a steep low cut does, an "sss" does not), and if the take
+   *   opened with it, the speech it was read as from Start is cut to begin
+   *   where the first voice came. The Space assist never teaches the floor.
    * - Sound must clear the floor by `marginDb` and also clear the engine's
    *   own sensitivity gate (`frame.sounding`), so a fan does not read as
    *   speech and a quiet room does not turn a breath into a word.
@@ -698,7 +733,10 @@
    * over from Start). A pause a high fan came on in (a white fan) is told
    * when it came on, at the length it had then; once the fan comes back in
    * the next pause, `segments` runs that pause on to the next word, and a
-   * caller's clock opened when the fan came on still spans it.
+   * caller's clock opened when the fan came on still spans it. Speech read
+   * from Start over a hiss the take opened with, learned from the pauses,
+   * is cut to begin at the first word (no onTakeBack: the speech is still
+   * there), and a caller's clock opened at Start still spans the lead-in.
    */
   class Vad {
     constructor(opts = {}) {
@@ -739,7 +777,8 @@
       this._openSteps = 0;
       // The quietest learning step since the mic settled, and the steady
       // stretches heard at about that level while no quiet room had been:
-      // { lvl, start, end } (start null: the take opened with it)
+      // { lvl, start, end } (start null: the take opened with it; then sib:
+      // it had nothing under 1.6 kHz, see SIBILANT_DB)
       this._lowDb = Infinity;
       this._hums = [];
       this._late = null;
@@ -752,9 +791,13 @@
       // sound has held still
       this._stretch = null;
       this._stillRun = 0;
+      // Whether a voice (a learning step with a period over the floor's
+      // margin) has been heard: a white sound is learned only before one
+      this._voiced = false;
       // The spectra of the last learning steps (null: the frame had no
-      // samples), the bins under LINE_MAX_HZ of the last 5 s ({ t, lines, hz }),
-      // and the bands of the quiet steps the floor learned from
+      // samples), the bins under LINE_MAX_HZ and the bands of the last 5 s
+      // ({ t, lines, hz, bands }), and the bands of the quiet steps the floor
+      // learned from
       this._recentSpec = [];
       this._lineHist = [];
       this._quietBands = [];
@@ -867,8 +910,8 @@
       this._recentHfDb.push(hfDb);
       // The frame's samples are valid only now: take their spectrum. The
       // bins of the step that leaves the last 5 s are written over (each
-      // step's bands are kept as they are: the quiet room's and a stretch's
-      // hold on to them)
+      // step's bands are kept as they are: the quiet room's, a stretch's and
+      // the last 5 s's hold on to them)
       const gone = this._lineHist.length >= LINE_KEEP_STEPS ? this._lineHist.shift() : null;
       const sp = frame.buf && frame.buf.length ? spectrumOf(frame.buf, frame.sampleRate || 48000, gone && gone.lines) : null;
       this._recentSpec.push(sp);
@@ -878,6 +921,7 @@
         line.t = this.t;
         line.lines = sp.lines;
         line.hz = sp.hz;
+        line.bands = sp.bands;
         this._lineHist.push(line);
       } else this._lineHist.length = 0;
       if (this.t >= OPEN_SETTLE_SEC) {
@@ -891,9 +935,11 @@
             this._openSteps++;
           } else {
             // What the take opened with before the first word: a pause back
-            // at its level is the same room
+            // at its level is the same room (its steps are the ones before
+            // this one)
             if (this._openSteps >= OPEN_MIN_STEPS) {
-              this._hums.push({ lvl: (this._openLoDb + this._openHiDb) / 2, start: null, end: this.t });
+              const sib = this._sibilant(Math.min(this._openSteps, NEW_ROOM_STEPS - 1), 1);
+              this._hums.push({ lvl: (this._openLoDb + this._openHiDb) / 2, start: null, end: this.t, sib });
             }
             this._openSteps = -1;
           }
@@ -932,6 +978,7 @@
         }
         return;
       }
+      if (frame.clarity >= NOISY) this._voiced = true;
       const steps = this._steadyRoom();
       if (!steps) return;
       // Steady sound above the floor is a new room: a fan heard before the
@@ -970,8 +1017,9 @@
       }
       this._stillRun++;
       if (this._cameBack(b)) return ROOM_STEPS;
-      // Flat to the top of the spectrum: a white fan or hiss, never a voice
-      const w = this._stillRun >= ROOM_STEPS - BACK_STEPS ? this._still(ROOM_STEPS) : null;
+      // Flat to the top of the spectrum, before any voice: a white fan or
+      // hiss switched on in the lead-in (a held /f/ is as flat: see WHITE_DB)
+      const w = !this._voiced && this._stillRun >= ROOM_STEPS - BACK_STEPS ? this._still(ROOM_STEPS) : null;
       if (w && !this._voiceIn(ROOM_STEPS, w.lvl) && this._white(ROOM_STEPS)) return ROOM_STEPS;
       // 1.2 s still, but for the last step or two of the voice before it (a
       // pause of just 1.2 s), and how high the sound sits judged after them
@@ -982,25 +1030,29 @@
       if (this._sibilant(NEW_ROOM_STEPS - TAIL_STEPS)) return 0;
       return this._stillRun >= HISS_ROOM_STEPS - BACK_STEPS ? NEW_ROOM_STEPS : 0;
     }
-    /** Whether the last `steps` learning steps' spectrum has nothing under 1.6 kHz (see SIBILANT_DB). */
-    _sibilant(steps) {
-      const sp = this._recentSpec.slice(-steps);
+    /**
+     * Whether most of the `steps` learning steps before the last `skip` have
+     * nothing under 1.6 kHz (see SIBILANT_DB): the median of each step's
+     * ratio, so a step or two of the word before cannot fill its low bands.
+     */
+    _sibilant(steps, skip = 0) {
+      const n = this._recentSpec.length - skip;
+      const sp = this._recentSpec.slice(Math.max(0, n - steps), n);
       if (sp.length < steps || sp.some((x) => !x)) return false;
-      const pow = (b0, b1) => {
+      const pow = (x, b0, b1) => {
         let s = 0;
-        for (let k = b0; k < b1; k++) {
-          let m = 0;
-          for (const x of sp) m += Math.pow(10, x.bands[k] / 10);
-          if (!Number.isFinite(m)) return NaN;
-          s += (m / sp.length) * (SPEC_EDGES[k + 1] - SPEC_EDGES[k]);
-        }
+        for (let k = b0; k < b1; k++) s += Math.pow(10, x.bands[k] / 10) * (SPEC_EDGES[k + 1] - SPEC_EDGES[k]);
         return s;
       };
-      const lo = pow(SIB_LOW[0], SIB_LOW[1]);
-      const hi = pow(SIB_HIGH[0], SIB_HIGH[1]);
-      // no band up to 8.5 kHz at this sample rate: no verdict
-      if (!(lo >= 0) || !(hi > 0)) return false;
-      return pdb(lo) - pdb(hi) < SIBILANT_DB;
+      const r = new Float64Array(sp.length);
+      for (let i = 0; i < sp.length; i++) {
+        const lo = pow(sp[i], SIB_LOW[0], SIB_LOW[1]);
+        const hi = pow(sp[i], SIB_HIGH[0], SIB_HIGH[1]);
+        // no band up to 8.5 kHz at this sample rate: no verdict
+        if (!(lo >= 0) || !(hi > 0)) return false;
+        r[i] = pdb(lo) - pdb(hi);
+      }
+      return percentile(r, 0.5) < SIBILANT_DB;
     }
     /**
      * Whether one of the last `steps` learning steps is a voice over the
@@ -1093,7 +1145,7 @@
           if (!sp) h.sb = null;
           else if (cnow < NOISY) {
             h.sb.push(sp.bands);
-            if (h.sb.length > 300) h.sb.shift();
+            if (h.sb.length > PERSIST_STEPS) h.sb.shift();
           }
         }
         h.lo = Math.min(h.lo, lo);
@@ -1115,8 +1167,9 @@
     }
     /**
      * A voice just came over still stretch `st`: keep the 10th percentile and
-     * the median of each band over its last 0.8 s and how far its shape
-     * moved, and start collecting the voice's bands.
+     * the median of each band over its last 0.8 s, and those bands, from
+     * which _underVoice judges how far its shape moved, and start collecting
+     * the voice's bands.
      */
     _freeze(st) {
       if (!st.sb || st.sb.length < PERSIST_MIN_STEPS) {
@@ -1209,6 +1262,26 @@
       return median(d) <= LINE_STOP_DB;
     }
     /**
+     * Did the still stretch now ending the take's last PAUSE_STEPS go on
+     * under the talk heard in (from, to]: in each band it fills, the talk's
+     * 10th percentile at most PERSIST_DB under its own? null: no verdict.
+     */
+    _bandsGoOn(from, to) {
+      const S = this._recentSpec.slice(-PAUSE_STEPS);
+      if (S.length < PAUSE_STEPS || S.some((x) => !x)) return null;
+      const T = this._lineHist.filter((x) => x.t > from && x.t <= to);
+      if (T.length < PERSIST_MIN_STEPS) return null;
+      const own = S.map((x) => x.bands);
+      const s10 = bandPct(own, 0.1);
+      const smed = bandPct(own, 0.5);
+      const v10 = bandPct(T.map((x) => x.bands), 0.1);
+      let top = -Infinity;
+      smed.forEach((x) => x > top && (top = x));
+      let persist = -Infinity;
+      for (let k = 0; k < smed.length; k++) if (smed[k] >= top - BAND_OCC_DB) persist = Math.max(persist, s10[k] - v10[k]);
+      return persist <= PERSIST_DB;
+    }
+    /**
      * A hum in a pause, before the floor has heard any quiet room: the last
      * 0.6 s holds still at the quietest level the take has heard, after a
      * voice at least `marginDb` above it, and the take has held still at
@@ -1249,9 +1322,14 @@
       // Three stretches at one level, but their lines stopped under the talk
       // between the last two: "mmm"s, not a hum
       const lines = !opened && same.length >= 2 ? this._linesGoOn(Math.max(...same.map((x) => x.end)), voice) : null;
-      if ((same.length >= 2 && lines !== false) || opened) {
-        // Pauses heard at this level before were the room too
-        this._late = same.filter((x) => x.start != null);
+      let room = (same.length >= 2 && lines !== false) || opened;
+      // One with nothing under 1.6 kHz must have gone on under the talk
+      // since: a hiss through a steep low cut does, an "sss" does not
+      if (room && this._sibilant(PAUSE_STEPS)) room = this._bandsGoOn(Math.max(...same.map((x) => x.end)), voice) === true;
+      if (room) {
+        // Pauses heard at this level before were the room too, and so was
+        // the take's start if it opened with a hiss like this one
+        this._late = same.filter((x) => x.start != null || x.sib);
         return true;
       }
       this._hums.push({ lvl, start: voice, end: null });
@@ -1263,12 +1341,21 @@
      * hum they held only now): cut out of the open speech, and their end
      * told now, so a pause count still counts them. One that began before
      * the open speech (a fan switched on in a pause and opened it) runs the
-     * pause before on to where a voice came over it instead.
+     * pause before on to where a voice came over it instead. A hiss the take
+     * opened with (read as speech from Start) cuts that first speech to
+     * begin where the first voice came.
      */
     _heardLate(list) {
       let seg = this.segments[this.segments.length - 1];
       if (this.state !== "speech" || !seg || seg.kind !== "speech") return;
       list.forEach((h) => {
+        if (h.start == null) {
+          if (this.segments.length === 1 && seg.start < h.end) {
+            seg.start = h.end;
+            this.speechStart = h.end;
+          }
+          return;
+        }
         if (h.end <= h.start) return;
         if (h.start <= seg.start) {
           // It came on in a pause and opened this speech: the pause ran on

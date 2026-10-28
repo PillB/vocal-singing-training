@@ -417,6 +417,25 @@ test.describe("exercise pictures", () => {
       "power pause hears an audible inhale between phrases as talk",
       { plan: [["w", 3000], ["b", 600], ["w", 3000], ["b", 600], ["w", 3000], ["b", 600], ["w", 3000], ["q", 1200], ["w", 2000]] },
       1
+    ],
+    // A held "fff": noise through one broad band-pass, its first-order
+    // skirts at about 400 Hz and 12 kHz, as flat between them as a white
+    // fan. Held 3 s between phrases with silence around it, or 1.5 s right
+    // after words, it was learned as a white fan switched on, 0.6 s in: the
+    // hold was cut out of the talk and run into the pauses around it (two
+    // pauses, 3 s of talk lost), or each one read as the pause after it
+    // (4.5 s lost). Once a voice has been heard a sound is no longer
+    // learned for being white (VTFeatures.Vad).
+    ["power pause hears an 'fff' held between phrases as talk", { plan: [["w", 3000], ["q", 1200], ["s", 3000], ["q", 1200], ["w", 3000], ["q", 1200], ["w", 2000]], bands: [2191], q: 0.19 }, 3],
+    [
+      "power pause hears a soft 'fff' held between phrases as talk",
+      { plan: [["w", 3000], ["q", 1200], ["s", 3000], ["q", 1200], ["w", 3000], ["q", 1200], ["w", 2000]], bands: [2191], q: 0.19, gain: 0.012 },
+      3
+    ],
+    [
+      "power pause hears an 'fff' said right after words as talk",
+      { plan: [...[0, 1, 2].flatMap(() => [["w", 2500], ["s", 1500], ["q", 1200]]), ["w", 2000]], bands: [2191], q: 0.19 },
+      3
     ]
   ]) {
     test(label, async ({ page }) => {
@@ -532,6 +551,31 @@ test.describe("exercise pictures", () => {
       expect(n, vad.segs).toBe(0);
     });
   }
+
+  test("power pause hears an 'sss' said between phrases, in talk from Start, as talk", async ({ page }) => {
+    // Already talking as the mic opens, so the floor has heard no quiet
+    // room, with a 1.5 s "sss" between phrases and no silence around it:
+    // the "sss" is the quietest still sound heard, and the first room is
+    // learned from such a sound. A still sound with nothing under 1.6 kHz
+    // is not (VTFeatures.Vad), judged step by step, so the word's tail
+    // before the "sss" cannot fill its low bands: one pause, the real one.
+    const mix = { plan: [["w", 3000], ["s", 1500], ["w", 3000], ["s", 1500], ["w", 3000], ["s", 1500], ["w", 3000], ["q", 1200], ["w", 2000]] };
+    await boot(page, "es", [(m) => (window.__VTMix = m), mix]);
+    await page.evaluate((x) => window.VTApp.openExercise(x), "v10-power-pause");
+    await expect(page.locator("#view-exercise")).toHaveClass(/active/);
+    await page.locator("#ex-title").click();
+    await playVoice(page, "speechMix");
+    await page.locator("#btn-practice-start").click();
+    await page.waitForTimeout(mix.plan.reduce((t, [, ms]) => t + ms, 0) + 800);
+    const n = Number(await page.locator("#mode-focus [data-p]").textContent());
+    const vad = await page.evaluate(() => {
+      const v = window.VTApp.getState().modeInstance.state.vad;
+      return { floor: v.floorDb, talk: v.talkSec, segs: v.segments.map((g) => `${g.kind[0]}${g.start.toFixed(2)}`).join(" ") };
+    });
+    const said = mix.plan.filter(([k]) => k !== "q").reduce((t, [, ms]) => t + ms / 1000, 0);
+    expect(vad.talk, `all of it is talk · ${vad.segs}`).toBeGreaterThan(said - 1);
+    expect(n, vad.segs).toBe(1);
+  });
 
   test("English labels on the pause drill", async ({ page }) => {
     await boot(page, "en");

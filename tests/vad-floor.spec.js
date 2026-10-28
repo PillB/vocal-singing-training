@@ -885,6 +885,7 @@ test.describe("pause floor on the take's sound (Vad, frames with their samples)"
 
   const take = (page, spec) => page.evaluate((s) => window.VTVadAudio.run(s), spec);
   const HISS = (sec, o = {}) => Object.assign({ kind: "hiss", sec }, o);
+  const FRIC = (sec, o = {}) => Object.assign({ kind: "fricative", sec }, o);
   // A time to read the floor at, to the hundredth (as `floorAt` keys it)
   const at = (t) => Math.round(t * 100) / 100;
   /** A white fan switched on `from` s into a `lead` s silent lead-in, then four 3 s phrases with 1.2 s pauses. */
@@ -899,9 +900,9 @@ test.describe("pause floor on the take's sound (Vad, frames with their samples)"
     // comes on, 1.2–2.4 s before the first word. A new room that sits high
     // must hold still for 5 s (a held "sss" must stay talk), so by its level
     // alone the fan read as speech from when it came on until the first
-    // word. Its spectrum is flat to the top, as no voice's is: it is the
-    // room 0.6 s after it came on, and the speech it was read as is taken
-    // back.
+    // word. Its spectrum is flat to the top, and no voice has been heard
+    // yet: it is the room 0.6 s after it came on, and the speech it was
+    // read as is taken back.
     for (const [label, db, from, lead, sr] of [
       ["a fan at −40 dB on at 0.8 s, 2 s lead-in", -40, 0.8, 2, 48000],
       ["a fan at −45 dB on at 0.6 s, 3 s lead-in", -45, 0.6, 3, 48000],
@@ -946,6 +947,64 @@ test.describe("pause floor on the take's sound (Vad, frames with their samples)"
     }
   });
 
+  test("a held /f/ or /θ/ after the first word is talk, not the room", async ({ page }) => {
+    test.setTimeout(120000);
+    // An /f/ or a /θ/ is noise made at the lips or the teeth, with no
+    // cavity in front to shape it: as flat from a few hundred hertz to the
+    // top of the spectrum as a white fan (/f/ and /θ/ recorded at the start
+    // of words read 3.7 dB and more from 350 Hz to 12.5 kHz, a white fan
+    // 0.5–1.3). Held 3 s between phrases, silence around it, or 1.5 s right
+    // after words, it was learned as a white fan switched on, 0.6 s in: the
+    // hold was taken back or read as a pause, and its talk lost. Once a
+    // voice has been heard, a sound is no longer learned for being white.
+    for (const [label, parts] of [
+      ["an /f/ at −35 dB held 3 s between phrases", [QUIET(1), SPEECH(2.5), QUIET(1.2), FRIC(3), QUIET(1.2), SPEECH(2.5), QUIET(1.2), SPEECH(2)]],
+      ["an /f/ at −35 dB held 1.5 s right after words, three times", [QUIET(1), ...[0, 1, 2].flatMap(() => [SPEECH(2.5), FRIC(1.5), QUIET(1.2)]), SPEECH(2)]],
+      ["a /θ/ (600 Hz to 8 kHz) at −30 dB held 3 s between phrases", [QUIET(1), SPEECH(2.5), QUIET(1.2), FRIC(3, { db: -30, hp: 600, lp: 8000 }), QUIET(1.2), SPEECH(2.5), QUIET(1.2), SPEECH(2)]]
+    ]) {
+      for (const seed of [1, 2, 3]) {
+        const r = await take(page, { seed, parts });
+        const msg = `${label}, seed ${seed} · ${r.segs}`;
+        expect(r.takenBack, `nothing taken back · ${msg}`).toEqual([]);
+        expect(r.falsePauses, msg).toBe(0);
+        expect(r.talk, msg).toBeGreaterThan(r.truthTalk - 0.5);
+        expect(r.floor, `the quiet room is the floor · ${msg}`).toBeLessThan(-60);
+        eachPauseMeasured(r, `${label}, seed ${seed}`);
+      }
+    }
+  });
+
+  test("an 'sss' between phrases is talk, not the room, in talk from Start too", async ({ page }) => {
+    test.setTimeout(120000);
+    // Talk from the first frame, so the floor has heard no quiet room, with
+    // an "sss" between phrases and no silence around it, or a take that
+    // opens with one: the "sss" is the quietest still sound heard. The test
+    // for nothing under 1.6 kHz once took the mean power of the last 0.6 s,
+    // and a step or two of the word before the "sss" filled its low bands,
+    // so in about half the takes the "sss" was learned as the first room
+    // and each one after it read as a pause; and a pause back at the level
+    // the take opened with, or the third still stretch at one level, was
+    // learned with no such test at all. Each step is judged on its own now,
+    // and a still sound with nothing under 1.6 kHz learned from the pauses
+    // must have gone on under the talk, as a room does.
+    const SP = { peak: -14, dip: -26 };
+    const sss = (sec, o = {}) => HISS(sec, Object.assign({ db: -34 }, o));
+    for (const [label, parts] of [
+      ["three 1.5 s holds at −34 dB between 3 s phrases", [...turns(4, SPEECH(3, SP), sss(1.5)), QUIET(1.2), SPEECH(2, SP)]],
+      ["four 1 s holds dipping 0.5 dB between 2 s phrases", [...turns(5, SPEECH(2, SP), sss(1, { swingDb: 0.5 })), QUIET(1.2), SPEECH(2, SP)]],
+      ["a take that opens with a 2 s hold, then two between phrases", [sss(2), ...turns(3, SPEECH(3, SP), sss(1.5)), QUIET(1.2), SPEECH(2, SP)]]
+    ]) {
+      for (const seed of [1, 2, 3]) {
+        const r = await take(page, { seed, parts });
+        const msg = `${label}, seed ${seed} · ${r.segs}`;
+        expect(r.takenBack, `nothing taken back · ${msg}`).toEqual([]);
+        expect(r.falsePauses, msg).toBe(0);
+        expect(r.talk, msg).toBeGreaterThan(r.truthTalk - 0.5);
+        expect(r.floor, `the quiet room is the floor · ${msg}`).toBeLessThan(-60);
+      }
+    }
+  });
+
   test("the same takes without their samples get the level rules' verdicts", async ({ page }) => {
     test.setTimeout(120000);
     // Frames with no `buf` (the level sim, or any caller that sends none):
@@ -969,35 +1028,59 @@ test.describe("pause floor on the take's sound (Vad, frames with their samples)"
     }
   });
 
-  test("a known limit: a hiss with nothing under 2 kHz, there from Start, can read as talk until the first pause", async ({ page }) => {
+  test("a hiss with nothing under 2 kHz, there from Start, is the room from the first pause, and the lead-in is not talk", async ({ page }) => {
     test.setTimeout(120000);
     // A room no measurement has found: white noise through four high-passes
     // at 3 kHz (nothing under 2 kHz, as through a steep low cut), loud enough
-    // to open the gate from the first frame, then a 1 s lead-in and talk.
+    // to open the gate from the first frame, then a silent lead-in and talk.
     // With nothing under 1.6 kHz it reads as a held "sss" does, so it is
     // learned neither as the sound the take opened with nor as the first
-    // room: in some takes it reads as talk until the first pause learns it
-    // (a 1 s ghost before the first word; the floor ends where it would
-    // have). By level alone it is the room before the first word. If no
-    // take shows the ghost any more, the limit is gone: say so in the
-    // Vad's doc and here. If one shows more than the lead-in, or the floor
-    // does not end at the hiss, the limit has grown.
-    const hiss = (seed, buf) => ({ seed, buf, fan: { db: -26, hp: 3000, from: 0 }, parts: [QUIET(1), ...turns(4, SPEECH(3, { peak: -6, dip: -16 }), QUIET(1.2))] });
-    let ghosts = 0;
-    for (const seed of [1, 2, 3, 4, 5, 6]) {
-      const r = await take(page, hiss(seed, true));
-      const msg = `seed ${seed} · ${r.segs}`;
-      if (r.ghost >= 0.15) {
-        ghosts++;
-        expect(r.segs, `read as talk from Start · ${msg}`).toMatch(/^s0\.0\d-/);
-        expect(r.ghost, `the lead-in and no more · ${msg}`).toBeLessThan(1.2);
+    // room. It went on under the talk, as an "sss" does not: the first pause
+    // after the first word learns it, and the lead-in it was read as is cut
+    // out of the talk, however long it was (it was talk, the whole lead-in,
+    // in some takes of 1 s and every take of 4 s). Until that pause the
+    // floor is not the hiss: the lead-in reads as talk while it lasts, and
+    // a caller's clock opened at Start spans it (the Vad's doc). By level
+    // alone the hiss is the room before the first word.
+    for (const [db, lead] of [[-26, 1], [-31, 4]]) {
+      const hiss = (seed, buf) => ({ seed, buf, fan: { db, hp: 3000, from: 0 }, parts: [QUIET(lead), ...turns(4, SPEECH(3, { peak: -6, dip: -16 }), QUIET(1.2))], at: [at(lead + 1.5)] });
+      for (const seed of [1, 2, 3]) {
+        const r = await take(page, hiss(seed, true));
+        const msg = `${db} dB, a ${lead} s lead-in, seed ${seed} · ${r.segs}`;
+        expect(r.ghost, `the lead-in is not talk · ${msg}`).toBeLessThan(0.15);
+        const first = Number(r.segs.match(/^s([\d.]+)-/)[1]);
+        expect(first, `the talk starts with the first word · ${msg}`).toBeGreaterThan(lead - 0.05);
+        expect(first, `the talk starts with the first word · ${msg}`).toBeLessThan(lead + 0.1);
+        expect(r.floorAt[at(lead + 1.5)], `not the room yet in the first phrase (the known limit) · ${msg}`).toBeLessThan(db - 10);
+        expect(r.takenBack, msg).toEqual([]);
+        expect(r.falsePauses, msg).toBe(0);
+        expect(Math.abs(r.floor - db), `the hiss is the room · ${msg}`).toBeLessThan(3);
+        eachPauseMeasured(r, `${db} dB, a ${lead} s lead-in, seed ${seed}`);
+        const m = await take(page, hiss(seed, false));
+        expect(m.ghost, `by level alone the room before the first word · ${m.segs}`).toBeLessThan(0.15);
       }
-      expect(r.falsePauses, msg).toBe(0);
-      expect(Math.abs(r.floor + 26), `the hiss is the room by the end · ${msg}`).toBeLessThan(3);
-      eachPauseMeasured(r, `seed ${seed}`);
-      const m = await take(page, hiss(seed, false));
-      expect(m.ghost, `by level alone the room before the first word · ${m.segs}`).toBeLessThan(0.15);
     }
-    expect(ghosts, "takes with the ghost (the Vad doc's known limit)").toBeGreaterThan(0);
+  });
+
+  test("a known limit: an /f/ held in the silent lead-in, before any voice, is learned as a white fan", async ({ page }) => {
+    test.setTimeout(120000);
+    // The floor has heard the quiet room and no voice yet, and a held /f/
+    // is as flat as a white fan switched on there: 0.6 s in it is the room,
+    // and the speech it was read as is taken back, 3 s of talk; the floor is
+    // the quiet room again once the /f/ ends, and the pauses after the first
+    // word are measured. By level alone it is talk. If a take no longer
+    // loses the /f/, the limit is gone: say so in the Vad's doc and here.
+    const parts = [QUIET(2), FRIC(3), QUIET(1.2), ...turns(3, SPEECH(2.5), QUIET(1.2))];
+    for (const seed of [1, 2, 3]) {
+      const r = await take(page, { seed, parts });
+      const msg = `seed ${seed} · ${r.segs}`;
+      expect(r.takenBack, `the /f/ taken back as the room · ${msg}`).toHaveLength(1);
+      expect(r.talk, `the /f/ lost, and no more · ${msg}`).toBeGreaterThan(r.truthTalk - 3.5);
+      expect(r.falsePauses, msg).toBe(0);
+      expect(r.floor, `the quiet room is the floor · ${msg}`).toBeLessThan(-60);
+      expect(r.silences.filter((x) => x.start > 6).every((x) => Math.abs(x.measured - x.sec) < 0.15), `the pauses after the first word · ${msg}`).toBe(true);
+      const m = await take(page, { seed, parts, buf: false });
+      expect(m.talk, `by level alone the /f/ is talk · ${m.segs}`).toBeGreaterThan(m.truthTalk - 0.5);
+    }
   });
 });

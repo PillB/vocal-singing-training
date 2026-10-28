@@ -104,6 +104,10 @@
    *  hiss    — noise through band-passes at `bands` (5000 and 7000 Hz) with
    *            a Q of `q` (1.2), syllables at 4.5 a second at `db` dipping
    *            `swingDb` (1.5) between them: a held "sss"
+   *  fricative — noise through a one-pole high-pass at `hp` (500 Hz) and a
+   *            one-pole low-pass at `lp` (12 000 Hz), flat between them, at
+   *            `db` (−35), its level swaying `swayDb` (0.5) either way over
+   *            2 s, 60 ms in and out: a held /f/ or /θ/
    * The room: white noise at `room` dB (−62) from the first sample, and a
    * `fan` { db, from, until, hp } from `from` s: white noise, or through four
    * one-pole high-passes at `hp` Hz (nothing under ~2 kHz: a hiss with no
@@ -217,6 +221,19 @@
           g += (target - g) / tau;
           wave[i0 + k] += x[k] * g;
         }
+      } else if (p.kind === "fricative") {
+        const x = white(len, rnd);
+        onePole(x, p.hp || 500, sr, 1, true);
+        onePole(x, p.lp || 12000, sr, 1, false);
+        unit(x);
+        const a = amp(p.db != null ? p.db : -35);
+        const sway = p.swayDb != null ? p.swayDb : 0.5;
+        const ph = rnd() * 2 * Math.PI;
+        const fade = Math.round(0.06 * sr);
+        for (let k = 0; k < len; k++) {
+          const e = Math.min(1, (k + 1) / fade, (len - k) / fade);
+          wave[i0 + k] += x[k] * a * e * amp(sway * Math.sin((Math.PI * k) / sr + ph));
+        }
       }
       truth.push({ kind: p.kind, start: t, end: t + p.sec });
       t += p.sec;
@@ -297,7 +314,7 @@
       while (at.length && vad.t >= at[0]) floorAt[at.shift()] = Math.round(vad.floorDb * 10) / 10;
     });
     const T = vad.t;
-    const voice = new Set(["speech", "hiss"]);
+    const voice = new Set(["speech", "hiss", "fricative"]);
     const segs = vad.segments.map((g) => ({ kind: g.kind, start: g.start, end: g.end != null ? g.end : T }));
     // Speech read where there was only the room (a fan heard as a voice)
     let ghost = 0;

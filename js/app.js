@@ -3228,9 +3228,11 @@
           const map = VT_NOTE_FREQ || {};
           let pick = noteName || ch.notes?.[1] || ch.notes?.[0];
           if (!one) {
+            // The singing register, 120–280 Hz, moved with the material
+            const reg = Math.pow(2, state.octaveShift || 0);
             for (const n of ch.notes || []) {
               const f = map[n];
-              if (f && f >= 120 && f <= 280) {
+              if (f && f >= 120 * reg && f <= 280 * reg) {
                 pick = n;
                 break;
               }

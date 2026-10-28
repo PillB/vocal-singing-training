@@ -1,0 +1,563 @@
+/**
+ * Synthetic voices for testing a pitch detector, sample by sample, with the
+ * true F0 of every sample: a glottal source (Rosenberg-C pulses, one per
+ * period, with jitter and shimmer) through a cascade of five vowel
+ * formants (male, female and child sets), and the variations that break
+ * detectors: spectral tilt (pressed to breathy), a weak or missing
+ * fundamental, a strong second harmonic, vibrato, aspiration noise, a fan
+ * or mains hum underneath, onsets and releases, glides, speech-like
+ * contours; plus noise and silence alone. Then the frames the practice
+ * engine (js/practice-engine.js) hands the detector: the analyser's last
+ * frameSize(sr) samples (2048 at 44.1 and 48 kHz) after the MIC gain, once
+ * per animation frame (60 a second, ±0.55 ms of jitter, on 128-sample
+ * render quanta).
+ *
+ * Works in a page (window.VTPitchSim) and in Node (module.exports). Same
+ * spec and seed, same samples.
+ *
+ *   const r = VTPitchSim.render({ kind: "vowel", voice: "female", vowel: "a", f0: 880 }, 48000);
+ *   // r.x: samples at the mic (before the MIC gain), r.f0: true F0 per sample (0 = unvoiced),
+ *   // r.env: the voice's envelope (0-1)
+ *   const fr = VTPitchSim.frames(r, 48000);   // [{ buf, end, truth, voiced }]
+ *
+ * Formants: Peterson & Barney 1952 (i, a, u) and Hillenbrand et al. 1995
+ * (e, o; their /eɪ/ and /oʊ/), F1-F3 for men, women and children; F4-F5
+ * typical values. The Rosenberg-C pulse: Rosenberg 1971.
+ */
+(function (root) {
+  "use strict";
+
+  const FORMANTS = {
+    male: {
+      a: [730, 1090, 2440, 3400, 4500],
+      e: [476, 2089, 2691, 3500, 4500],
+      i: [270, 2290, 3010, 3500, 4500],
+      o: [497, 910, 2459, 3400, 4500],
+      u: [300, 870, 2240, 3400, 4500]
+    },
+    female: {
+      a: [850, 1220, 2810, 4100, 5000],
+      e: [536, 2530, 3047, 4200, 5000],
+      i: [310, 2790, 3310, 4200, 5000],
+      o: [555, 1035, 2828, 4100, 5000],
+      u: [370, 950, 2670, 4100, 5000]
+    },
+    child: {
+      a: [1030, 1370, 3170, 4600, 5600],
+      e: [564, 2656, 3323, 4600, 5600],
+      i: [370, 3200, 3730, 4600, 5600],
+      o: [597, 1137, 3050, 4600, 5600],
+      u: [430, 1170, 3260, 4600, 5600]
+    }
+  };
+  const BANDWIDTHS = [80, 100, 140, 200, 260];
+  /**
+   * Open phase (tp) and closing phase (tn) of the pulse, as shares of the
+   * period, per voice. Women's glottal pulses stay open longer than men's
+   * and children's longer still (open quotient about 0.6 / 0.7 / 0.8 in
+   * modal voice; Holmberg, Hillman & Perkell 1988), which gives them a
+   * stronger fundamental against the second harmonic. Pressed: short, abrupt
+   * closure; breathy: long, smooth closure, a low-pass and (in the grid)
+   * aspiration noise.
+   */
+  const TILT = {
+    male: {
+      pressed: { tp: 0.36, tn: 0.08, lp: 0 },
+      modal: { tp: 0.42, tn: 0.16, lp: 0 },
+      breathy: { tp: 0.5, tn: 0.32, lp: 1200 }
+    },
+    female: {
+      pressed: { tp: 0.4, tn: 0.1, lp: 0 },
+      modal: { tp: 0.5, tn: 0.2, lp: 0 },
+      breathy: { tp: 0.55, tn: 0.35, lp: 1500 }
+    },
+    child: {
+      pressed: { tp: 0.42, tn: 0.12, lp: 0 },
+      modal: { tp: 0.55, tn: 0.25, lp: 0 },
+      breathy: { tp: 0.58, tn: 0.36, lp: 1800 }
+    }
+  };
+  const OS = 4;
+
+  function prng(seed) {
+    let a = (seed >>> 0) || 1;
+    return () => {
+      a = (a + 0x6d2b79f5) >>> 0;
+      let t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function gauss(rnd) {
+    return Math.sqrt(-2 * Math.log(rnd() + 1e-12)) * Math.cos(2 * Math.PI * rnd());
+  }
+  function rmsOf(x, mask) {
+    let s = 0;
+    let n = 0;
+    for (let i = 0; i < x.length; i++) {
+      if (mask && !mask(i)) continue;
+      s += x[i] * x[i];
+      n++;
+    }
+    return n ? Math.sqrt(s / n) : 0;
+  }
+
+  /** Windowed-sinc low-pass for the decimation (Blackman). */
+  const _fir = {};
+  function decimFir(taps) {
+    if (_fir[taps]) return _fir[taps];
+    const h = new Float64Array(taps);
+    const fc = 0.45 / OS;
+    const M = taps - 1;
+    let s = 0;
+    for (let i = 0; i < taps; i++) {
+      const k = i - M / 2;
+      const sinc = k === 0 ? 2 * fc : Math.sin(2 * Math.PI * fc * k) / (Math.PI * k);
+      const w = 0.42 - 0.5 * Math.cos((2 * Math.PI * i) / M) + 0.08 * Math.cos((4 * Math.PI * i) / M);
+      h[i] = sinc * w;
+      s += h[i];
+    }
+    for (let i = 0; i < taps; i++) h[i] /= s;
+    return (_fir[taps] = h);
+  }
+  function decimate(y, n) {
+    const h = decimFir(128);
+    const out = new Float32Array(n);
+    const half = h.length >> 1;
+    for (let i = 0; i < n; i++) {
+      const c = i * OS + half;
+      let acc = 0;
+      for (let k = 0; k < h.length; k++) {
+        const j = c - k;
+        if (j >= 0 && j < y.length) acc += h[k] * y[j];
+      }
+      out[i] = acc;
+    }
+    return out;
+  }
+
+  /** RBJ biquad coefficients. */
+  function biquad(type, f, q, gainDb, sr) {
+    const w = (2 * Math.PI * Math.min(f, sr * 0.45)) / sr;
+    const cs = Math.cos(w);
+    const sn = Math.sin(w);
+    const al = sn / (2 * q);
+    let b0, b1, b2, a0, a1, a2;
+    if (type === "hp") {
+      b0 = (1 + cs) / 2;
+      b1 = -(1 + cs);
+      b2 = (1 + cs) / 2;
+      a0 = 1 + al;
+      a1 = -2 * cs;
+      a2 = 1 - al;
+    } else if (type === "lp") {
+      b0 = (1 - cs) / 2;
+      b1 = 1 - cs;
+      b2 = (1 - cs) / 2;
+      a0 = 1 + al;
+      a1 = -2 * cs;
+      a2 = 1 - al;
+    } else if (type === "bp") {
+      b0 = al;
+      b1 = 0;
+      b2 = -al;
+      a0 = 1 + al;
+      a1 = -2 * cs;
+      a2 = 1 - al;
+    } else {
+      const A = Math.pow(10, gainDb / 40);
+      b0 = 1 + al * A;
+      b1 = -2 * cs;
+      b2 = 1 - al * A;
+      a0 = 1 + al / A;
+      a1 = -2 * cs;
+      a2 = 1 - al / A;
+    }
+    return [b0 / a0, b1 / a0, b2 / a0, a1 / a0, a2 / a0];
+  }
+  /**
+   * A biquad whose frequency follows fn(i) (Hz), coefficients updated every
+   * 32 samples, applied in place.
+   */
+  function sweepFilter(x, sr, type, fn, q, gainDb) {
+    let z1 = 0;
+    let z2 = 0;
+    let c = null;
+    for (let i = 0; i < x.length; i++) {
+      if (i % 32 === 0) {
+        const f = fn(i);
+        if (f > 0) c = biquad(type, f, q, gainDb, sr);
+      }
+      if (!c) continue;
+      const v = x[i];
+      const y = c[0] * v + z1;
+      z1 = c[1] * v - c[3] * y + z2;
+      z2 = c[2] * v - c[4] * y;
+      x[i] = y;
+    }
+    return x;
+  }
+
+  /**
+   * The voice at OS × sr: pulses at f0[i] (output-rate arrays, read at
+   * i = floor(j / OS)), shaped by env, through five formants that may change
+   * per sample (formantAt(i) → [F1..F5]); then decimated to sr.
+   */
+  function voice(f0, env, formantAt, sr, o, rnd) {
+    const n = f0.length;
+    const fs = sr * OS;
+    const N = n * OS;
+    const tv = TILT[o.voice] || TILT.male;
+    const tilt = tv[o.tilt || "modal"] || tv.modal;
+    const tp = tilt.tp;
+    const tn = tilt.tn;
+    const jit = o.jitter != null ? o.jitter : 0.002;
+    const shim = o.shimmer != null ? o.shimmer : 0.02;
+    const exc = new Float64Array(N);
+    const asp = o.aspDb != null ? new Float64Array(N) : null;
+    let ph = 0;
+    let pf = 0;
+    let pa = 1;
+    let aspLp = 0;
+    for (let j = 0; j < N; j++) {
+      const i = (j / OS) | 0;
+      const f = f0[i];
+      if (!(f > 0) || !(env[i] > 0)) {
+        ph = 0;
+        pf = 0;
+        continue;
+      }
+      if (pf === 0) {
+        pf = f * Math.exp(jit * gauss(rnd));
+        pa = Math.max(0.2, 1 + shim * gauss(rnd));
+      }
+      ph += pf / fs;
+      if (ph >= 1) {
+        ph -= 1;
+        pf = f * Math.exp(jit * gauss(rnd));
+        pa = Math.max(0.2, 1 + shim * gauss(rnd));
+      }
+      let d = 0;
+      let g = 0;
+      if (ph <= tp) {
+        d = ((0.5 * Math.PI) / tp) * Math.sin((Math.PI * ph) / tp);
+        g = 0.5 * (1 - Math.cos((Math.PI * ph) / tp));
+      } else if (ph <= tp + tn) {
+        d = (-Math.PI / (2 * tn)) * Math.sin((Math.PI * (ph - tp)) / (2 * tn));
+        g = Math.cos((Math.PI * (ph - tp)) / (2 * tn));
+      }
+      exc[j] = d * pa * env[i];
+      if (asp) {
+        // Turbulence at the glottis while it is open, high-passed at ~400 Hz
+        const w = gauss(rnd);
+        aspLp += (w - aspLp) * ((2 * Math.PI * 400) / fs);
+        asp[j] = (w - aspLp) * (0.25 + g) * env[i];
+      }
+    }
+    const tract = (src) => {
+      const y = new Float64Array(N);
+      const st = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+      let co = null;
+      for (let j = 0; j < N; j++) {
+        if (j % 64 === 0) {
+          const F = formantAt((j / OS) | 0);
+          co = F.map((fr, k) => {
+            const bw = BANDWIDTHS[k] * (o.bwScale || 1);
+            const T = 1 / fs;
+            const C = -Math.exp(-2 * Math.PI * bw * T);
+            const B = 2 * Math.exp(-Math.PI * bw * T) * Math.cos(2 * Math.PI * fr * T);
+            return [1 - B - C, B, C];
+          });
+        }
+        let v = src[j];
+        for (let k = 0; k < 5; k++) {
+          const c = co[k];
+          const out = c[0] * v + c[1] * st[2 * k] + c[2] * st[2 * k + 1];
+          st[2 * k + 1] = st[2 * k];
+          st[2 * k] = out;
+          v = out;
+        }
+        y[j] = v;
+      }
+      return y;
+    };
+    // Radiation is in the source already (the flow's derivative)
+    let x = decimate(tract(exc), n);
+    if (tilt.lp) sweepFilter(x, sr, "lp", () => tilt.lp, 0.6);
+    if (asp) {
+      const a = decimate(tract(asp), n);
+      const core = (i) => env[i] > 0.5;
+      const rv = rmsOf(x, core);
+      const ra = rmsOf(a, core);
+      const k = ra > 0 ? (rv / ra) * Math.pow(10, -o.aspDb / 20) : 0;
+      for (let i = 0; i < n; i++) x[i] += a[i] * k;
+    }
+    return x;
+  }
+
+  /** Noise of a kind, rms 1. */
+  function noise(kind, n, sr, rnd) {
+    const x = new Float32Array(n);
+    const w = () => gauss(rnd);
+    if (kind === "white") for (let i = 0; i < n; i++) x[i] = w();
+    else if (kind === "pink") {
+      // Paul Kellet's filter
+      let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+      for (let i = 0; i < n; i++) {
+        const v = w();
+        b0 = 0.99886 * b0 + v * 0.0555179;
+        b1 = 0.99332 * b1 + v * 0.0750759;
+        b2 = 0.969 * b2 + v * 0.153852;
+        b3 = 0.8665 * b3 + v * 0.3104856;
+        b4 = 0.55 * b4 + v * 0.5329522;
+        b5 = -0.7616 * b5 - v * 0.016898;
+        x[i] = b0 + b1 + b2 + b3 + b4 + b5 + b6 + v * 0.5362;
+        b6 = v * 0.115926;
+      }
+    } else if (kind === "rumble" || kind === "fan") {
+      // A fan: noise under ~200 Hz (two one-pole low-passes), and for "fan"
+      // the motor's broadband hiss 12 dB under it
+      const a = (2 * Math.PI * 200) / sr;
+      let l1 = 0;
+      let l2 = 0;
+      for (let i = 0; i < n; i++) {
+        l1 += (w() - l1) * a;
+        l2 += (l1 - l2) * a;
+        x[i] = l2;
+      }
+      const r = rmsOf(x);
+      for (let i = 0; i < n; i++) x[i] /= r;
+      if (kind === "fan") for (let i = 0; i < n; i++) x[i] += 0.25 * w();
+    } else if (kind === "breath" || kind === "sss") {
+      for (let i = 0; i < n; i++) x[i] = w();
+      if (kind === "breath") {
+        sweepFilter(x, sr, "bp", () => 1400, 0.5);
+        // an exhalation: swells and fades over ~1.6 s
+        for (let i = 0; i < n; i++) x[i] *= 0.3 + 0.7 * Math.sin((Math.PI * ((i / sr) % 1.6)) / 1.6);
+      } else {
+        sweepFilter(x, sr, "hp", () => 3500, 0.7);
+        sweepFilter(x, sr, "hp", () => 3500, 0.7);
+      }
+    } else if (kind === "hum") {
+      for (let i = 0; i < n; i++) {
+        const t = i / sr;
+        x[i] = Math.sin(2 * Math.PI * 60 * t) + 0.5 * Math.sin(2 * Math.PI * 120 * t) + 0.25 * Math.sin(2 * Math.PI * 180 * t);
+      }
+    } else if (kind === "clicks") {
+      // keyboard-like clicks: 4 a second, decaying noise bursts
+      for (let i = 0; i < n; i++) {
+        const t = (i / sr) % 0.25;
+        x[i] = t < 0.012 ? w() * Math.exp(-t / 0.002) : 0;
+      }
+    }
+    const r = rmsOf(x);
+    if (r > 0) for (let i = 0; i < n; i++) x[i] /= r;
+    return x;
+  }
+
+  /**
+   * Render one signal. spec:
+   *  kind: "vowel" (steady), "onset" (silence, attack, hold, release, silence),
+   *        "glide" (f0 → f0b, log-linear), "speech" (phrases of syllables),
+   *        "noise" (noise only: spec.noise = "white" | "pink" | "rumble" |
+   *        "fan" | "breath" | "sss" | "hum" | "clicks" | "silence")
+   *  voice: "male" | "female" | "child"; vowel: a e i o u
+   *  f0, f0b (Hz), sec, seed, levelDb (rms of the voiced part at the mic,
+   *  dBFS, default −30), tilt: modal | pressed | breathy, fund: full | weak |
+   *  none (H1 −14 dB / −30 dB), h2Db (a peak of that many dB on the 2nd
+   *  harmonic), vibCents (±, 5.5 Hz or vibHz), jitter (relative period sd),
+   *  shimmer (relative amplitude sd), aspDb (harmonics over aspiration, dB),
+   *  fanDb / humDb (voice over a fan / a 60 Hz hum, dB), hp (a mic's
+   *  high-pass, Hz, 2nd order), f1track (F1 raised to 1.1 × F0 when F0 is
+   *  above it, as sopranos do), style (speech: "calm" | "lively")
+   * Returns { x, f0, env, sr }.
+   */
+  function render(spec, sr) {
+    const s = Object.assign({ kind: "vowel", voice: "male", vowel: "a", f0: 220, sec: 0.7, seed: 1, levelDb: -30, tilt: "modal" }, spec || {});
+    const rnd = prng(s.seed * 7919 + Math.round((s.f0 || 1) * 10));
+    const n = Math.round(s.sec * sr);
+    const f0 = new Float32Array(n);
+    const env = new Float32Array(n);
+    let formantIdx = null;
+    let cons = null;
+    const set = FORMANTS[s.voice] || FORMANTS.male;
+    if (s.kind === "noise") {
+      const x = s.noise === "silence" ? new Float32Array(n) : noise(s.noise || "white", n, sr, rnd);
+      const g = Math.pow(10, (s.levelDb != null ? s.levelDb : -40) / 20);
+      for (let i = 0; i < n; i++) x[i] *= g;
+      return { x, f0, env, sr };
+    }
+    const vibPh = rnd() * 2 * Math.PI;
+    const vib = (t) => (s.vibCents ? Math.pow(2, (s.vibCents * Math.sin(2 * Math.PI * (s.vibHz || 5.5) * t + vibPh)) / 1200) : 1);
+    if (s.kind === "vowel" || s.kind === "onset") {
+      const pre = s.kind === "onset" ? 0.25 : 0;
+      const att = s.kind === "onset" ? 0.04 : 0.02;
+      const rel = s.kind === "onset" ? 0.08 : 0.02;
+      const post = s.kind === "onset" ? 0.25 : 0;
+      const on = pre;
+      const off = s.sec - post;
+      for (let i = 0; i < n; i++) {
+        const t = i / sr;
+        if (t < on || t >= off) continue;
+        f0[i] = s.f0 * vib(t);
+        const a = Math.min(1, (t - on) / att, (off - t) / rel);
+        env[i] = 0.5 - 0.5 * Math.cos(Math.PI * Math.max(0, a));
+      }
+    } else if (s.kind === "glide") {
+      for (let i = 0; i < n; i++) {
+        const t = i / sr;
+        const u = Math.min(1, Math.max(0, (t - 0.05) / (s.sec - 0.1)));
+        f0[i] = s.f0 * Math.pow(s.f0b / s.f0, u) * vib(t);
+        env[i] = Math.min(1, t / 0.02, (s.sec - t) / 0.02);
+      }
+    } else if (s.kind === "speech") {
+      // Phrases of syllables: an unvoiced consonant (a fricative or a stop's
+      // closure and burst), then a voiced vowel. F0: the speaker's base,
+      // a declination of 2 semitones over the phrase, a pitch accent on some
+      // syllables, a rise at the end of half the phrases.
+      const base = (spec && spec.f0) || { male: 110, female: 205, child: 280 }[s.voice] || 150;
+      const accent = (s.style === "lively" ? 7 : 3) * ({ male: 1, female: 1.2, child: 1.4 }[s.voice] || 1);
+      formantIdx = new Int8Array(n);
+      cons = new Float32Array(n);
+      let t = 0.15;
+      while (t < s.sec - 0.4) {
+        const syl = 4 + Math.floor(rnd() * 5);
+        const p0 = t;
+        const rise = rnd() < 0.5;
+        let pend = p0;
+        for (let k = 0; k < syl && t < s.sec - 0.3; k++) {
+          const fric = rnd() < 0.6;
+          const cd = fric ? 0.05 + 0.05 * rnd() : 0.04;
+          const c0 = Math.round(t * sr);
+          const c1 = Math.round((t + cd) * sr);
+          for (let i = c0; i < c1 && i < n; i++) {
+            const u = (i - c0) / Math.max(1, c1 - c0);
+            cons[i] = fric ? Math.sin(Math.PI * u) : u > 0.75 ? 1 : 0;
+          }
+          t += cd;
+          const vd = 0.11 + 0.11 * rnd();
+          const v0 = Math.round(t * sr);
+          const v1 = Math.round((t + vd) * sr);
+          const acc = rnd() < 0.4 ? accent * (0.5 + 0.5 * rnd()) : 0;
+          const vi = Math.floor(rnd() * 5);
+          for (let i = v0; i < v1 && i < n; i++) {
+            const tt = i / sr;
+            const u = (i - v0) / Math.max(1, v1 - v0);
+            const decl = (-2 * (tt - p0)) / Math.max(0.5, syl * 0.25);
+            const fin = rise && k === syl - 1 ? 5 * u : 0;
+            // the accent peaks mid-vowel; a small drift inside the vowel
+            const st = decl + acc * Math.sin(Math.PI * u) + fin + 0.5 * Math.sin(2 * Math.PI * 3 * tt);
+            f0[i] = base * Math.pow(2, st / 12) * vib(tt);
+            env[i] = Math.min(1, u / 0.15, (1 - u) / 0.2);
+            formantIdx[i] = vi;
+          }
+          t += vd;
+          pend = t;
+        }
+        t = pend + 0.25 + 0.2 * rnd();
+      }
+    }
+    const F0 = (i) => {
+      for (let k = i; k >= 0 && k > i - 2000; k--) if (f0[k] > 0) return f0[k];
+      return s.f0 || 200;
+    };
+    const fixed = set[s.vowel] || set.a;
+    const formantAt = (i) => {
+      const F = formantIdx ? set["aeiou"[formantIdx[i]]] : fixed;
+      if (!s.f1track) return F;
+      const f = F0(i);
+      return f * 1.1 > F[0] ? [f * 1.1, Math.max(F[1], f * 1.1 + 300), F[2], F[3], F[4]] : F;
+    };
+    let x = voice(f0, env, formantAt, sr, s, rnd);
+    // A weak or missing fundamental: high-passes that follow F0
+    if (s.fund === "weak") {
+      sweepFilter(x, sr, "hp", (i) => 1.5 * F0(i), 0.7071);
+      sweepFilter(x, sr, "hp", (i) => 1.5 * F0(i), 0.7071);
+    } else if (s.fund === "none") {
+      for (let k = 0; k < 4; k++) sweepFilter(x, sr, "hp", (i) => 1.6 * F0(i), 0.7071);
+    }
+    if (s.h2Db) sweepFilter(x, sr, "peak", (i) => 2 * F0(i), 3, s.h2Db);
+    if (s.hp) sweepFilter(x, sr, "hp", () => s.hp, 0.7071);
+    // Level: the voiced part's rms
+    const core = (i) => env[i] > 0.5;
+    const r = rmsOf(x, core);
+    const g = r > 0 ? Math.pow(10, s.levelDb / 20) / r : 0;
+    for (let i = 0; i < n; i++) x[i] *= g;
+    const lv = Math.pow(10, s.levelDb / 20);
+    if (cons) {
+      // the consonants' noise, ~8 dB under the vowels
+      const nz = noise("white", n, sr, rnd);
+      sweepFilter(nz, sr, "hp", () => 2500, 0.7);
+      const k = lv * Math.pow(10, -8 / 20) * 1.4;
+      for (let i = 0; i < n; i++) x[i] += nz[i] * cons[i] * k;
+    }
+    if (s.fanDb != null) {
+      const nz = noise("fan", n, sr, rnd);
+      const k = lv * Math.pow(10, -s.fanDb / 20);
+      for (let i = 0; i < n; i++) x[i] += nz[i] * k;
+    }
+    if (s.humDb != null) {
+      const nz = noise("hum", n, sr, rnd);
+      const k = lv * Math.pow(10, -s.humDb / 20);
+      for (let i = 0; i < n; i++) x[i] += nz[i] * k;
+    }
+    return { x, f0, env, sr };
+  }
+
+  /** The engine's frame length (js/practice-engine.js frameSize). */
+  function frameSize(sr) {
+    let n = 2048;
+    while (n < 32768 && n < (sr || 48000) * 0.04) n *= 2;
+    return n;
+  }
+  /** The MIC gain at a sensitivity (js/practice-engine.js _gainFromSens). */
+  function gainFromSens(s) {
+    const t = (s - 1) / 9;
+    return Math.min(8, 0.7 + t * 5.7 + t * t * 1.4);
+  }
+
+  /**
+   * The frames the engine reads: every animation frame (fps, default 60,
+   * ±0.55 ms jitter) the analyser's last frameSize(sr) samples, ending on a
+   * 128-sample render quantum, after the MIC gain at `sens` (default 7).
+   * Each: { buf, end, t, truth (Hz: the voiced samples' mean log F0, or 0),
+   * voiced (share of the window's samples that are voiced) }.
+   */
+  function frames(sig, sr, o = {}) {
+    const N = o.size || frameSize(sr);
+    const g = o.gain != null ? o.gain : gainFromSens(o.sens || 7);
+    const x = new Float32Array(sig.x.length);
+    for (let i = 0; i < x.length; i++) x[i] = sig.x[i] * g;
+    const rnd = prng(o.seed || 3);
+    const fps = o.fps || 60;
+    const out = [];
+    let tf = 0;
+    const endMs = (x.length / sr) * 1000;
+    for (;;) {
+      tf += 1000 / fps + (rnd() - 0.5) * 1.1;
+      if (tf > endMs) break;
+      const end = Math.floor(((tf / 1000) * sr) / 128) * 128;
+      if (end < N || end > x.length) continue;
+      let v = 0;
+      let lg = 0;
+      for (let i = end - N; i < end; i++) {
+        if (sig.f0[i] > 0 && sig.env[i] > 0.1) {
+          v++;
+          lg += Math.log(sig.f0[i]);
+        }
+      }
+      out.push({ buf: x.subarray(end - N, end), end, t: end / sr, truth: v ? Math.exp(lg / v) : 0, voiced: v / N });
+    }
+    return out;
+  }
+
+  /** Cents from b to a. */
+  function cents(a, b) {
+    return 1200 * Math.log2(a / b);
+  }
+
+  const API = { FORMANTS, TILT, render, frames, frameSize, gainFromSens, noise, cents, prng };
+  root.VTPitchSim = API;
+  if (typeof module !== "undefined" && module.exports) module.exports = API;
+})(typeof window !== "undefined" ? window : globalThis);

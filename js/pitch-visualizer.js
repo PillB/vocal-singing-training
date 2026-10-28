@@ -79,9 +79,116 @@
     return { text: t.length < String(text || "").length ? t + "…" : t, font };
   }
 
+  /*
+   * Pitch over the whole singing range, ~50–1500 Hz (a bass's A1 to a
+   * soprano's or a child's F#6), from the normalised square difference
+   * function (NSDF) of McLeod & Wyvill (2005), "A smarter way to find
+   * pitch": n(τ) = 2 r(τ) / m(τ), r the autocorrelation and
+   * m(τ) = Σ x[i]² + x[i+τ]² over the same n − τ samples. Unlike the raw
+   * autocorrelation it does not shrink with the lag, so a long period (a
+   * bass) and a short one (a soprano) compete on equal terms.
+   *
+   * The frame: 2048 samples (43–46 ms at 44.1–48 kHz). Its longest lag
+   * searched, sr / 50 (960 samples at 48 kHz), still leaves 1088 products,
+   * more than one period at 50 Hz; at sr / 43 the overlap would be under a
+   * period. The shortest lag, sr / 1500 (32 samples), keeps a female /i/'s
+   * second formant (2.8–3.2 kHz, 15–17 samples) from passing for a period.
+   */
+  const PITCH_LO_HZ = 50;
+  const PITCH_HI_HZ = 1500;
+  /** MPM: the first key maximum within K of the highest one. */
+  const MPM_K = 0.9;
+  /** Under this, the frame has no period: noise, breath, a hiss, silence. */
+  const MIN_CLARITY = 0.55;
   /**
-   * Autocorrelation pitch detection (time-domain).
-   * Returns Hz or null.
+   * Above this pitch a candidate must also be nearly as periodic as the best
+   * key maximum: its aperiodicity 1 − n under APER_C × the best one's plus
+   * APER_EPS. A female /i/ at 932 Hz has her third harmonic on her second
+   * formant: the key maximum at 2/3 of the period reads 0.957 against 0.999,
+   * passes K, and would read a fifth up (1398 Hz). Its aperiodicity, 0.043,
+   * is 40 times the best one's.
+   */
+  const APER_FROM_HZ = 400;
+  const APER_C = 3;
+  const APER_EPS = 0.02;
+  /**
+   * A dominant second harmonic (H2 on the first formant) puts a key maximum
+   * at half the period. Twice that lag is then far more periodic: its
+   * aperiodicity is under OCT_RATIO of the half's (0.005 against 0.053 for a
+   * child's C5 on /a/). A voice whose period really is the shorter lag is as
+   * aperiodic or more at twice the lag (jitter only adds), so this never
+   * fires on it. Never down to a pitch under OCT_FLOOR_HZ: a 50/60 Hz mains
+   * hum under a 100–130 Hz voice makes twice the lag "more periodic" too.
+   */
+  const OCT_RATIO = 0.2;
+  const OCT_MIN_APER = 0.01;
+  const OCT_FLOOR_HZ = 72;
+  /**
+   * A reading under HUM_HZ needs harmonics above HUM_SPLIT_HZ (a voice there
+   * has its formants above it: 18 % of the power or more in every vowel
+   * measured). A mains hum (50/60 Hz and its first harmonics) or a fan's
+   * rumble has under 3 %.
+   */
+  const HUM_HZ = 70;
+  const HUM_SPLIT_HZ = 220;
+  const HUM_MIN_SHARE = 0.08;
+
+  /** Radix-2 FFT tables and scratch, per size. */
+  const _fft = {};
+  function fftPlan(n) {
+    if (_fft[n]) return _fft[n];
+    const bits = Math.round(Math.log2(n));
+    const rev = new Uint32Array(n);
+    for (let i = 0; i < n; i++) {
+      let r = 0;
+      for (let b = 0; b < bits; b++) r |= ((i >> b) & 1) << (bits - 1 - b);
+      rev[i] = r;
+    }
+    const cos = new Float64Array(n >> 1);
+    const sin = new Float64Array(n >> 1);
+    for (let i = 0; i < n >> 1; i++) {
+      cos[i] = Math.cos((2 * Math.PI * i) / n);
+      sin[i] = Math.sin((2 * Math.PI * i) / n);
+    }
+    return (_fft[n] = { rev, cos, sin, re: new Float64Array(n), im: new Float64Array(n), nsdf: new Float64Array(n) });
+  }
+  /** In-place complex FFT (sign −1) or unscaled inverse (sign +1). */
+  function fftInPlace(re, im, plan, sign) {
+    const n = re.length;
+    const rev = plan.rev;
+    for (let i = 0; i < n; i++) {
+      const j = rev[i];
+      if (j > i) {
+        let t = re[i];
+        re[i] = re[j];
+        re[j] = t;
+        t = im[i];
+        im[i] = im[j];
+        im[j] = t;
+      }
+    }
+    for (let size = 2; size <= n; size <<= 1) {
+      const half = size >> 1;
+      const step = n / size;
+      for (let i = 0; i < n; i += size) {
+        for (let j = 0, k = 0; j < half; j++, k += step) {
+          const wr = plan.cos[k];
+          const wi = sign * plan.sin[k];
+          const a = i + j;
+          const b = a + half;
+          const xr = re[b] * wr - im[b] * wi;
+          const xi = re[b] * wi + im[b] * wr;
+          re[b] = re[a] - xr;
+          im[b] = im[a] - xi;
+          re[a] += xr;
+          im[a] += xi;
+        }
+      }
+    }
+  }
+
+  /**
+   * Pitch of one frame (Hz), or null when the frame has none.
    */
   function detectPitch(buf, sampleRate) {
     // Over 48 kHz the engine's 43 ms frame holds more samples (4096 at
@@ -98,84 +205,122 @@
       buf = x;
       sampleRate /= D;
     }
-    const SIZE = buf.length;
-    let rms = 0;
-    for (let i = 0; i < SIZE; i++) {
-      const val = buf[i];
-      rms += val * val;
+    const N = buf.length;
+    let mean = 0;
+    for (let i = 0; i < N; i++) mean += buf[i];
+    mean /= N;
+    let energy = 0;
+    for (let i = 0; i < N; i++) {
+      const v = buf[i] - mean;
+      energy += v * v;
     }
-    rms = Math.sqrt(rms / SIZE);
-    if (rms < 0.01) return null; // silence
+    if (Math.sqrt(energy / N) < 0.01) return null; // silence
+    const minLag = Math.max(2, Math.floor(sampleRate / PITCH_HI_HZ));
+    const maxLag = Math.min(Math.ceil(sampleRate / PITCH_LO_HZ), N - 64);
+    if (maxLag <= minLag + 2) return null;
 
-    // Normalize
-    let r1 = 0;
-    let r2 = SIZE - 1;
-    const thres = 0.2;
-    for (let i = 0; i < SIZE / 2; i++) {
-      if (Math.abs(buf[i]) < thres) {
-        r1 = i;
-        break;
+    // r(τ) for every lag at once: |FFT|² of the frame, zero-padded past
+    // N + maxLag so the circular product equals the linear one
+    let M = 1;
+    while (M < N + maxLag + 2) M <<= 1;
+    const plan = fftPlan(M);
+    const re = plan.re;
+    const im = plan.im;
+    for (let i = 0; i < M; i++) {
+      re[i] = i < N ? buf[i] - mean : 0;
+      im[i] = 0;
+    }
+    fftInPlace(re, im, plan, -1);
+    const kSplit = Math.ceil((HUM_SPLIT_HZ * M) / sampleRate);
+    let pAll = 0;
+    let pHigh = 0;
+    for (let i = 0; i < M; i++) {
+      const p = re[i] * re[i] + im[i] * im[i];
+      re[i] = p;
+      im[i] = 0;
+      pAll += p;
+      if ((i <= M >> 1 ? i : M - i) >= kSplit) pHigh += p;
+    }
+    fftInPlace(re, im, plan, 1);
+    const L = maxLag + 2;
+    const nsdf = plan.nsdf;
+    let m = 2 * energy;
+    for (let t = 0; t < L; t++) {
+      if (t > 0) {
+        const a = buf[t - 1] - mean;
+        const b = buf[N - t] - mean;
+        m -= a * a + b * b;
       }
-    }
-    for (let i = 1; i < SIZE / 2; i++) {
-      if (Math.abs(buf[SIZE - i]) < thres) {
-        r2 = SIZE - i;
-        break;
-      }
+      nsdf[t] = m > 0 ? (2 * re[t]) / M / m : 0;
     }
 
-    const trimmed = buf.slice(r1, r2);
-    const n = trimmed.length;
-    if (n < 32) return null;
-
-    // Male mid-low focus: ~65–400 Hz (C2–G4)
-    const minLag = Math.floor(sampleRate / 400);
-    const maxLag = Math.floor(sampleRate / 65);
-    const corr = new Float32Array(maxLag);
-
-    for (let lag = minLag; lag < maxLag && lag < n; lag++) {
-      let sum = 0;
-      for (let i = 0; i < n - lag; i++) {
-        sum += trimmed[i] * trimmed[i + lag];
-      }
-      corr[lag] = sum;
+    // Key maxima: the top of each positive lobe after the first
+    // negative-going zero crossing, at a lag of sr / 1500 or more, refined
+    // by a parabola through its three samples
+    const keys = [];
+    let t = 1;
+    while (t < L && nsdf[t] > 0) t++;
+    let top = -1;
+    const close = () => {
+      const a = nsdf[top - 1];
+      const b = nsdf[top];
+      const c = nsdf[top + 1];
+      const den = a - 2 * b + c;
+      const sh = den < 0 ? Math.max(-0.5, Math.min(0.5, (0.5 * (a - c)) / den)) : 0;
+      keys.push({ lag: top + sh, n: Math.min(1, b - 0.25 * (a - c) * sh) });
+      top = -1;
+    };
+    for (; t < L - 1; t++) {
+      if (nsdf[t] > 0) {
+        if (t >= minLag && nsdf[t] >= nsdf[t - 1] && nsdf[t] >= nsdf[t + 1] && (top < 0 || nsdf[t] > nsdf[top])) top = t;
+      } else if (top >= 0) close();
     }
+    if (top >= 0) close();
+    if (!keys.length) return null;
+    let best = 0;
+    for (const q of keys) if (q.n > best) best = q.n;
+    if (best < MIN_CLARITY) return null;
 
-    let bestLag = -1;
-    let bestVal = -1;
-    for (let lag = minLag + 1; lag < maxLag - 1 && lag < n; lag++) {
-      const v = corr[lag];
-      if (v > corr[lag - 1] && v >= corr[lag + 1] && v > bestVal) {
-        bestVal = v;
-        bestLag = lag;
-      }
+    const kMin = MPM_K * best;
+    const aperMax = APER_C * (1 - best) + APER_EPS;
+    let pick = null;
+    for (const q of keys) {
+      if (q.n < kMin) continue;
+      if (sampleRate / q.lag >= APER_FROM_HZ && 1 - q.n > aperMax) continue;
+      pick = q;
+      break;
     }
-    if (bestLag <= 0) return null;
-
-    // Parabolic interpolation
-    const y0 = corr[bestLag - 1] || 0;
-    const y1 = corr[bestLag];
-    const y2 = corr[bestLag + 1] || 0;
-    const denom = 2 * (2 * y1 - y2 - y0);
-    const shift = denom !== 0 ? (y2 - y0) / denom : 0;
-    const lag = bestLag + shift;
-    const freq = sampleRate / lag;
-    if (freq < 60 || freq > 500) return null;
-    return freq;
+    if (!pick) return null;
+    const near = (lag) => {
+      let w = null;
+      for (const q of keys) if (Math.abs(q.lag - lag) <= Math.max(2, 0.03 * lag) && (!w || q.n > w.n)) w = q;
+      return w;
+    };
+    for (let i = 0; i < 2; i++) {
+      const lag2 = 2 * pick.lag;
+      if (lag2 > L - 2 || sampleRate / lag2 < OCT_FLOOR_HZ) break;
+      const w = near(lag2);
+      if (!w || 1 - pick.n < OCT_MIN_APER || 1 - w.n > OCT_RATIO * (1 - pick.n)) break;
+      pick = w;
+    }
+    if (pick.n < MIN_CLARITY) return null;
+    const freq = sampleRate / pick.lag;
+    if (freq < HUM_HZ && pHigh < HUM_MIN_SHARE * pAll) return null;
+    return freq >= PITCH_LO_HZ && freq <= PITCH_HI_HZ * 1.06 ? freq : null;
   }
 
   /**
    * How periodic a frame is, 0–1, at any level: a voice or a hum reads 0.7
    * and up even under a fan as loud as itself; a fan's noise, a hiss or a
    * breath stays under 0.5. detectPitch cannot say this: it reads nothing
-   * under −40 dBFS and names a pitch for any noise above it.
+   * under −40 dBFS, however periodic the frame.
    *
    * YIN's cumulative-mean-normalised difference (de Cheveigné & Kawahara,
    * 2002) over periods of 60–500 Hz, on the frame summed down to ~12 kHz:
-   * a voice's period needs no more, and it takes under a tenth of
-   * detectPitch's time. The longest period it tries is half the frame,
-   * so the frame must last 34 ms to reach 60 Hz: the engine's lasts about
-   * 43 ms at any sample rate.
+   * a voice's period needs no more (a higher voice repeats at twice its
+   * period too), and it takes about 0.1–0.25 ms a frame. The longest
+   * period it tries is half the frame, so the frame must last 34 ms to
+   * reach 60 Hz: the engine's lasts about 43 ms at any sample rate.
    */
   function clarity(buf, sampleRate) {
     const sr = sampleRate || 48000;
@@ -559,13 +704,16 @@
       if (!chord || !chord.notes || !chord.notes.length) return;
       const map = global.VT_NOTE_FREQ || {};
       const oneNote = !!opts.oneNote;
+      // The singing register, 120–280 Hz, moved with the material by the
+      // octave control (the chord's notes arrive already shifted)
+      const reg = Math.pow(2, global.VTGetOctaveShift ? global.VTGetOctaveShift() : 0);
       let noteList = chord.notes.slice();
       if (oneNote) {
         let pick = opts.noteName || chord.notes[0];
         if (!opts.noteName) {
           for (const n of chord.notes) {
             const f = map[n];
-            if (f && f >= 120 && f <= 280) {
+            if (f && f >= 120 * reg && f <= 280 * reg) {
               pick = n;
               break;
             }
@@ -605,7 +753,7 @@
         pick = chord.notes[1] || chord.notes[0];
         for (const n of chord.notes) {
           const f = map[n];
-          if (f && f >= 120 && f <= 280) {
+          if (f && f >= 120 * reg && f <= 280 * reg) {
             pick = n;
             break;
           }
@@ -918,9 +1066,12 @@
     _drawKeyboard(ctx, w, h, targetMidi, voiceMidi) {
       const y0 = h - 40;
       const kh = 36;
-      // white keys C2–C4-ish 15 keys
+      // white keys C2–C4-ish 15 keys, moved with the material by the octave
+      // control (at +2 they are C4–C6, where the shifted notes are)
+      const lo = 36 + 12 * (global.VTGetOctaveShift ? global.VTGetOctaveShift() : 0);
+      const hi = lo + 24;
       const whites = [];
-      for (let m = 36; m <= 60; m++) {
+      for (let m = lo; m <= hi; m++) {
         const name = NOTE_NAMES[((m % 12) + 12) % 12];
         if (!name.includes("#")) whites.push(m);
       }
@@ -949,7 +1100,7 @@
       whites.forEach((m, i) => {
         const pc = ((m % 12) + 12) % 12;
         // black after C D F G A (0,2,5,7,9)
-        if ([0, 2, 5, 7, 9].includes(pc) && m + 1 <= 60) {
+        if ([0, 2, 5, 7, 9].includes(pc) && m + 1 <= hi) {
           const bm = m + 1;
           const x = (i + 1) * ww - ww * 0.3;
           const isTarget = targetMidi != null && Math.round(targetMidi) === bm;

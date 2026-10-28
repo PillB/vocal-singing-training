@@ -6481,7 +6481,7 @@
           this,
           kit.idleCard(L("Desliza de grave a agudo y vuelve", "Glide low to high and back"), [
             L("Verás hasta dónde llegas y dónde salta la voz", "You will see how far you reach and where the voice jumps"),
-            L("Por encima de ~Sol4 el micrófono solo estima (aprox.)", "Above ~G4 the mic only estimates (approx.)")
+            L("Por encima de ~Do6 el micrófono solo estima (aprox.)", "Above ~C6 the mic only estimates (approx.)")
           ], arc),
           { range: { min: 43, max: 69, pad: 0, minSpan: 14 }, lanes: this._lanes(43, 69), primaryLane: false, chordBadge: false }
         );
@@ -6566,8 +6566,9 @@
       let q = 0;
       if (f) {
         let raw = kit.hzToMidi(f);
-        // Above ~400 Hz the detector reads an octave low: a sudden octave drop
-        // in the middle of a glide is folded back up and marked "aprox."
+        // The detector can still read a frame an octave low, most often above
+        // ~C6: a sudden octave drop in the middle of a glide is folded back up
+        // and marked "aprox."
         const p = st.prevM;
         const gap = now - st.prevAt;
         if (p != null && gap < 400 && p >= 60) {
@@ -6583,9 +6584,9 @@
         st.med.push(raw);
         if (st.med.length > 3) st.med.shift();
         m = st.med.length === 3 ? pzMedian(st.med) : raw;
-        if (m > 67) q = 1;
+        if (m > 84) q = 1;
         if (st.gapStart != null || st.runFrom == null) st.runFrom = now;
-        if (p != null && Math.max(m, p) <= 67 && now - st.lastBreakAt > 400) {
+        if (p != null && Math.max(m, p) <= 84 && now - st.lastBreakAt > 400) {
           // A jump: the line leapt in one step, in the middle of a glide (median
           // of three frames, so one stray frame is not a jump; not at an onset)
           if (now - st.prevAt < 80 && now - st.runFrom > 150 && !unfoldFlip && Math.abs(m - p) > 2.5) this._break(now, (m + p) / 2, "jump");
@@ -6613,7 +6614,7 @@
         st.med.length = 0;
         if (st.prevM != null && st.gapStart == null) st.gapStart = now;
         // Sound, but no pitch, right after a high note: above what the mic can measure
-        if (snd && st.prevM != null && st.prevM >= 64 && now - st.lastPitchAt > 150 && now - st.lastPitchAt < 1500 && now - st.lastCeilAt > 1000) {
+        if (snd && st.prevM != null && st.prevM >= 84 && now - st.lastPitchAt > 150 && now - st.lastPitchAt < 1500 && now - st.lastCeilAt > 1000) {
           st.lastCeilAt = now;
           st.viz.ceil.push(now);
           if (st.viz.ceil.length > 30) st.viz.ceil.shift();
@@ -6719,7 +6720,7 @@
       let lo = st.range.min;
       let hi = st.range.max;
       if (ext.lo - 2 < lo) lo = Math.max(34, Math.floor(ext.lo - 5));
-      if (ext.hi + 2 > hi) hi = Math.min(79, Math.ceil(ext.hi + 5));
+      if (ext.hi + 2 > hi) hi = Math.min(91, Math.ceil(ext.hi + 5));
       if (lo === st.range.min && hi === st.range.max) return;
       st.range = { min: lo, max: hi };
       const pv = pzHighway();
@@ -8125,7 +8126,7 @@
         const rms = frame.rms || 0;
         run.peakRms = Math.max(run.peakRms, rms);
         const f = frame.rawFreq;
-        const midi = f && f >= 60 && f <= 1100 ? 69 + 12 * Math.log2(f / 440) : null;
+        const midi = f && f >= 60 && f <= 1600 ? 69 + 12 * Math.log2(f / 440) : null;
         const db = rms > 0 ? Math.max(-100, 20 * Math.log10(rms / (frame.inputGain || 1))) : -100;
         run.samples.push({ t: st.t, midi, db });
         if (st.medMidi == null && midi != null) st.medMidi = midi;
@@ -8971,7 +8972,7 @@
           const rms = frame.rms || 0;
           if (rms > 0) st.phrase.dbs.push(20 * Math.log10(rms));
           const f = frame.rawFreq || frame.voiceFreq || 0;
-          if (f > 60 && f < 1000) st.phrase.midis.push(69 + 12 * Math.log2(f / 440));
+          if (f > 60 && f < 1600) st.phrase.midis.push(69 + 12 * Math.log2(f / 440));
         }
       } else if (st.phrase) {
         st.pgap += dt;
@@ -10478,7 +10479,8 @@
    * against the shipped detector rather than guessed:
    *
    * 1. `detectPitch` reads a lip trill SHARP. The lips flutter at 25–30 Hz, which
-   *    is below the 65 Hz search floor in js/pitch-visualizer.js, so the flap
+   *    is below the search floor in js/pitch-visualizer.js (65 Hz when this was
+   *    measured, 50 Hz since the detector became NSDF), so the flap
    *    lands inside the analysis window instead of being resolved, and the
    *    autocorrelation peak drifts up — of the order of +30…+60 cents at C3–D3,
    *    less as pitch rises. A symmetric ±40¢ band (what `scaleSteps` uses) sits

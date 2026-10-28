@@ -143,7 +143,7 @@ it. Drawings that guide rather than measure say so ("Dibujo guía, no una medida
 
 | Exercise | Picture | Measured | Guided | Fills in |
 |---|---|---|---|---|
-| s5 Sirenas | Free range: your line, a range bar per siren, register jumps and short cuts marked with words. Above ~400 Hz a reading an octave low is folded back and marked "aprox." | Range, breaks | Nothing fixed | sirens |
+| s5 Sirenas | Free range: your line, a range bar per siren, register jumps and short cuts marked with words. Above ~C6 (1050 Hz) the top is marked "aprox.", and a reading that drops an octave mid-glide is folded back up and marked "aprox." | Range, breaks | Nothing fixed | sirens |
 | s1 Fry → /A/ | Creak versus clear tone live; a 2 s bar for the current clear hold; a shelf of recent holds. | Creak or clear, hold length | Steps | longest clear hold |
 | s7 Resonancia con hum | Ten soft targets as stones on their lanes, the next ones waiting to the right; a stone locks after 1.5 s within ±45 ¢. | Pitch | The targets | targets |
 | s9 Afinar una nota | Listen first (1.8 s, nothing scored), then sing; chips show each note with its offset; an octave away counts. | Pitch offset | Rounds | matches, accuracy (3 or more) |

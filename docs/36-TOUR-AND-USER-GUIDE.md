@@ -106,13 +106,18 @@ tour step. It documents what a user cannot work out by looking:
 
 - **The pitch highway's whole vocabulary** — green primary lane, amber active,
   grey dashed ghost, lane height = ±35 cents, the blue precision ribbon, the
-  800ms lock ring, and the 65–400 Hz detector range. (Correction, 2026-10-28,
-  from synthetic tones run through `detectPitch` in `js/pitch-visualizer.js`:
-  below 65 Hz it does read nothing, but above about 400 Hz, G4, it does not go
-  blank. It reads an octave low, as `js/scenes/pitch.js` says, and from about
-  800 Hz an octave and a fifth low, which octave folding cannot repair. 400 Hz
-  sits in the middle of most women's and children's singing range, so this is
-  not only "a very high soprano". The guide's own wording has the same problem.)
+  800ms lock ring, and the detector's range: A1 to C6 (55–1050 Hz), less
+  surely up to F♯6 (about 1500 Hz), so a woman's or a child's voice reads in
+  its own octave. (Until 2026-10-28 the guide said 65–400 Hz and told a high
+  voice to drop an octave. Synthetic tones run through the old autocorrelation
+  `detectPitch` showed that was wrong twice: above about 400 Hz, G4, it did
+  not go blank but read an octave low, and from about 800 Hz an octave and a
+  fifth low, which octave folding cannot repair; 400 Hz sits in the middle of
+  most women's and children's singing range. `detectPitch` in
+  `js/pitch-visualizer.js` is now an NSDF (McLeod & Wyvill) detector over
+  50–1500 Hz, the engine's gate is 55–1600 Hz, and noise, breath and a hiss
+  get no pitch. The guide's note "If your voice never appears" now says this
+  and no longer asks anyone to sing an octave lower.)
 - **What each number means**, including the ones whose names do not explain
   them.
 - **Which exercises need the microphone and which do not**, and what a denied

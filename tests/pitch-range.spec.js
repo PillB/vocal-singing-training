@@ -18,11 +18,28 @@
  * - Low voices stay as they are. A bass's E2 and a baritone's G2–C3 with a
  *   strong second harmonic (10–13 dB over the fundamental) read their own
  *   note, never the octave above.
- * - Silence and noise (white, pink, a fan, a breath, an "sss") give no
- *   pitch.
+ * - A child's or a woman's pressed /a/ at B4–F♯5 with ±50, ±80 or ±100
+ *   cents of vibrato never reads the octave above (her H2 on F1, and the
+ *   vibrato hiding that from the lags alone).
+ * - A soft, dark bass (H1 strongest, little above 200 Hz) at B1–C♯2 reads
+ *   his note, and a bass's A1 reads even sung a little flat.
+ * - A whistle above the top (1568–3136 Hz) gives no pitch, not an octave
+ *   or a twelfth of it; a bright tone at the top (1175–1480 Hz) reads its
+ *   note, not the octave below.
+ * - A man's voice over a sine hum 12 dB under it reads his note, not a
+ *   period his voice and the hum share (55 Hz for A2 over 60 Hz).
+ * - A bright, pressed female /i/ at D♯4 and F4, a high harmonic on her
+ *   second formant, reads her note, not two semitones sharp.
+ * - Speech at five syllables a second, up to 9 semitones a syllable, reads
+ *   its first formant (550–1100 Hz) on under 2 % of its frames (a woman's
+ *   /a/ and /o/, a man's /o/), a child's /a/ on under 5 %.
+ * - Silence and noise (white, pink, a fan, a breath, an "sss", a 50 or
+ *   60 Hz buzz) give no pitch.
  * - In the app, an A5 sung into an exercise shows "A5" as your note, and a
  *   man's A2 still shows "A2". In the sirens the A5 is drawn inside the
- *   window (it used to stop at G5) and not marked "aprox.".
+ *   window (it used to stop at G5) and not marked "aprox.", and an octave
+ *   drop (a baritone's E4 to E3, a soprano's A5 to A4) is drawn where it is
+ *   sung and counted as a jump, not folded back up.
  * - A chord's tone to sing moves with the octave control: the singing
  *   register (120–280 Hz) is shifted with the material, so at +2 the target
  *   is C5, not the chord's bass note C4.
@@ -100,6 +117,7 @@ async function measure(page, cases) {
         pitched: est.length / n,
         within: rows.filter((r) => r.est != null && Math.abs(cents(r)) <= 50).length / n,
         up: rows.filter((r) => r.est != null && Math.abs(cents(r) - 1200) <= 100).length / n,
+        off: rows.filter((r) => r.est != null && r.truth > 0 && Math.abs(cents(r)) > 100).length / n,
         median: sorted.length ? Math.round(sorted[sorted.length >> 1] * 10) / 10 : null,
         h2: c.spec.kind === "noise" ? null : Math.round((harmDb(sig.x, 2 * c.spec.f0, sr) - harmDb(sig.x, c.spec.f0, sr)) * 10) / 10
       };
@@ -142,6 +160,97 @@ test.describe("detectPitch through the engine, on synthetic voices", () => {
     expect(off, "cases where under 95 % of the frames read within 50 cents").toEqual([]);
   });
 
+  test("a child's or a woman's pressed /a/ at B4–F♯5 with wide vibrato never reads the octave above", async ({ page }) => {
+    await detectorPage(page);
+    const cases = [];
+    const notes = { B4: 493.88, C5: 523.25, D5: 587.33, E5: 659.26, "F#5": 739.99 };
+    for (const sr of [48000, 44100])
+      for (const voice of ["child", "female"])
+        for (const [note, f0] of Object.entries(notes))
+          for (const vib of [50, 80, 100]) cases.push({ sr, label: `${voice} pressed /a/ ${note} ±${vib} c at ${sr / 1000} kHz`, spec: { kind: "vowel", voice, vowel: "a", f0, tilt: "pressed", vibCents: vib, sec: 1.0 } });
+    const res = await measure(page, cases);
+    const up = res.filter((r) => r.up > 0).map((r) => `${r.label}: ${pct(r.up)} of frames an octave up, reads ${r.median} Hz`);
+    expect(up, "cases with any frame an octave up").toEqual([]);
+    const off = res.filter((r) => r.within < 0.9).map((r) => `${r.label}: ${pct(r.within)} within 50 c, reads ${r.median ?? "nothing"} Hz`);
+    expect(off, "cases where under 90 % of the frames read within 50 cents").toEqual([]);
+  });
+
+  test("a soft, dark bass at B1–C♯2 reads his note, and a bass's A1 even a little flat", async ({ page }) => {
+    await detectorPage(page);
+    const cases = [];
+    for (const sr of [48000, 44100]) {
+      for (const [note, f0] of [["B1", 61.74], ["C2", 65.41], ["C#2", 69.3]])
+        for (const vowel of "ou") cases.push({ sr, label: `dark male /${vowel}/ ${note} (${f0} Hz) at ${sr / 1000} kHz`, spec: { kind: "vowel", voice: "male", vowel, f0, dark: 150, sec: 0.8 } });
+      cases.push({ sr, label: `soft dark male /u/ C2 at −45 dBFS at ${sr / 1000} kHz`, spec: { kind: "vowel", voice: "male", vowel: "u", f0: 65.41, dark: 200, levelDb: -45, sec: 0.8 } });
+      for (const f0 of [55, 53.5]) cases.push({ sr, label: `male /o/ ${f0} Hz (A1${f0 < 55 ? ", 47 c flat" : ""}) at ${sr / 1000} kHz`, spec: { kind: "vowel", voice: "male", vowel: "o", f0, sec: 0.8 } });
+    }
+    const res = await measure(page, cases);
+    const bad = res.filter((r) => r.within < 0.9).map((r) => `${r.label}: ${pct(r.within)} within 50 c, reads ${r.median ?? "nothing"} Hz`);
+    expect(bad, "cases where under 90 % of the frames read within 50 cents").toEqual([]);
+  });
+
+  test("a whistle above the top gives no pitch; a bright tone at the top reads its note", async ({ page }) => {
+    await detectorPage(page);
+    const cases = [];
+    for (const sr of [48000, 44100]) {
+      for (const [f0, vib] of [[1568, 0], [2000, 0], [2637, 40], [3136, 0]]) cases.push({ sr, whistle: true, label: `a whistle at ${f0} Hz${vib ? ` ±${vib} c` : ""} at ${sr / 1000} kHz`, spec: { kind: "tone", f0, partials: 1, vibCents: vib, sec: 0.8 } });
+      for (const f0 of [1175, 1319, 1397, 1480]) cases.push({ sr, label: `a bright tone (30 harmonics, −6 dB an octave) at ${f0} Hz at ${sr / 1000} kHz`, spec: { kind: "tone", f0, partials: 30, tiltDb: -6, sec: 0.8 } });
+    }
+    const res = await measure(page, cases);
+    const sung = res.filter((r, i) => cases[i].whistle && r.pitched > 0.05).map((r) => `${r.label}: a pitch on ${pct(r.pitched)} of frames (median ${r.median} Hz)`);
+    expect(sung, "whistles with a pitch on over 5 % of their frames").toEqual([]);
+    const off = res.filter((r, i) => !cases[i].whistle && r.within < 0.9).map((r) => `${r.label}: ${pct(r.within)} within 50 c, reads ${r.median ?? "nothing"} Hz`);
+    expect(off, "tones where under 90 % of the frames read within 50 cents").toEqual([]);
+  });
+
+  test("a man's voice over a sine hum 12 dB under it reads his note", async ({ page }) => {
+    await detectorPage(page);
+    const cases = [];
+    for (const sr of [48000, 44100])
+      for (const [vowel, note, f0, hum] of [["o", "A2", 110, "sine60"], ["a", "A2", 110, "sine60"], ["a", "C3", 130.81, "sine60"], ["o", "A2", 110, "sine50"]])
+        cases.push({ sr, label: `male /${vowel}/ ${note} over a ${hum.slice(4)} Hz sine 12 dB under him at ${sr / 1000} kHz`, spec: { kind: "vowel", voice: "male", vowel, f0, humDb: 12, humKind: hum, sec: 0.8 } });
+    const res = await measure(page, cases);
+    const bad = res.filter((r) => r.within < 0.9).map((r) => `${r.label}: ${pct(r.within)} within 50 c, reads ${r.median ?? "nothing"} Hz`);
+    expect(bad, "cases where under 90 % of the frames read within 50 cents").toEqual([]);
+  });
+
+  test("a bright, pressed female /i/ at D♯4 and F4 reads her note, not two semitones sharp", async ({ page }) => {
+    await detectorPage(page);
+    const cases = [];
+    for (const sr of [48000, 44100])
+      for (const [note, f0] of [["D#4", 311.13], ["F4", 349.23]])
+        cases.push({ sr, label: `bright pressed female /i/ ${note} (${f0} Hz), formants 0.6 × as wide, at ${sr / 1000} kHz`, spec: { kind: "vowel", voice: "female", vowel: "i", f0, tilt: "pressed", bright: true, bwScale: 0.6, sec: 0.8 } });
+    const res = await measure(page, cases);
+    const bad = res.filter((r) => r.within < 0.9).map((r) => `${r.label}: ${pct(r.within)} within 50 c, reads ${r.median ?? "nothing"} Hz`);
+    expect(bad, "cases where under 90 % of the frames read within 50 cents").toEqual([]);
+  });
+
+  test("speech that moves 5 semitones a syllable rarely reads its first formant", async ({ page }) => {
+    await detectorPage(page);
+    // Five syllables a second, each voiced for 0.144 s and gliding (ease in,
+    // ease out) to the next of these offsets from the speaker's base, with a
+    // fall of 2 semitones every 3 s: up to 9 semitones in a syllable. Within
+    // a 43 ms frame the pitch moves a semitone or more, every lag reads
+    // 0.5–0.8, and the first formant's ringing can pass K.
+    const offs = [-5, -3.9, 4, 2.1, 1.6, -0.1, -4.4, -3.2, -1.3, -4.2, 4, -3.5, -0.7, 0.4, -1.2, 3.2, 2.3, 3.9, -0.5, -1.1, -3.8, 0.4, 4.2, 2.8, -4.2, 0.1, -1.5, 1, -2.3, -0.1, -3, 1.2, 3, 3.3, -3.8, 4.6, 3.9, 1.3, 2.1, -0.7];
+    const speech = (base) => {
+      const p = [];
+      for (let k = 0; k + 1 < offs.length; k++) {
+        const t0 = 0.1 + k / 5;
+        const st = (u) => offs[k] + (offs[k + 1] - offs[k]) * u * u * (3 - 2 * u) - (2 * (t0 + (0.72 * u) / 5)) / 3;
+        for (let j = 0; j < 8; j++) p.push([t0 + (0.72 * j) / 8 / 5, t0 + (0.72 * (j + 1)) / 8 / 5, base * 2 ** (st(j / 8) / 12), base * 2 ** (st((j + 1) / 8) / 12)]);
+      }
+      return p;
+    };
+    const cases = [];
+    for (const sr of [48000, 44100])
+      for (const [voice, base, vowel, max] of [["male", 120, "o", 0.02], ["female", 210, "a", 0.02], ["female", 210, "o", 0.02], ["female", 260, "a", 0.02], ["child", 300, "a", 0.05]])
+        cases.push({ sr, max, label: `${voice} /${vowel}/ around ${base} Hz at ${sr / 1000} kHz`, spec: { kind: "path", voice, vowel, path: speech(base), sec: 8 } });
+    const res = await measure(page, cases);
+    const bad = res.filter((r, i) => r.off > cases[i].max).map((r, i) => `${r.label}: ${pct(r.off)} of frames more than a semitone off`);
+    expect(bad, "cases with over 2 % of frames (a child's /a/: 5 %) more than a semitone off").toEqual([]);
+  });
+
   test("silence and noise give no pitch", async ({ page }) => {
     await detectorPage(page);
     const sounds = [
@@ -152,7 +261,10 @@ test.describe("detectPitch through the engine, on synthetic voices", () => {
       ["pink", -40],
       ["fan", -35],
       ["breath", -35],
-      ["sss", -30]
+      ["sss", -30],
+      ["buzz60", -34],
+      ["buzz50", -34],
+      ["square60", -30]
     ];
     const cases = [];
     for (const sr of [48000, 44100])
@@ -250,6 +362,44 @@ test.describe("the note the app shows", () => {
     expect(st.max, "the top of the siren window (MIDI)").toBeGreaterThanOrEqual(83);
     expect(st.approx, "an A5 is measured, not estimated").toBe(false);
   });
+
+  // A glide up to a note, a held note, then a deliberate octave drop held
+  // for 3 s. The siren used to fold any octave drop from C4 up back up an
+  // octave and mark it "aprox.", as if the detector had slipped.
+  for (const [who, voice, from, hi, lo, hiM, loM] of [
+    ["a baritone's E4 to E3", "male", 110, 329.63, 164.81, 64, 52],
+    ["a soprano's A5 to A4", "female", 293.66, 880, 440, 81, 69]
+  ]) {
+    test(`an octave drop in the sirens, ${who}, is drawn where it is sung and counted as a jump`, async ({ page }) => {
+      await singInto(page, { kind: "path", voice, vowel: "a", sec: 8, path: [[0.3, 2.3, from, hi], [2.3, 3.8, hi], [3.8, 6.8, lo]] });
+      await page.goto(BASE + "/?e2e", { waitUntil: "domcontentloaded" });
+      await page.waitForFunction(() => !!window.VTApp?.openExercise);
+      await page.evaluate(() => window.VTApp.openExercise("s5-sirens"));
+      await expect(page.locator("#view-exercise")).toHaveClass(/active/);
+      await page.waitForTimeout(300);
+      await page.locator("#btn-practice-start").click();
+      await page.waitForFunction(() => !!window.__micOn, null, { timeout: 15000 });
+      // The siren's line every 100 ms over the voice's 6.8 s
+      const seen = await page.evaluate(async () => {
+        const t0 = performance.now();
+        const out = [];
+        while (performance.now() - t0 < 6900) {
+          const st = window.VTApp.getState().modeInstance.state;
+          out.push({ t: performance.now() - t0, m: st.prevM, q: st.prevQ });
+          await new Promise((r) => setTimeout(r, 100));
+        }
+        const st = window.VTApp.getState().modeInstance.state;
+        return { out, breaks: st.viz.breaks.map((b) => ({ m: b.m, kind: b.kind })) };
+      });
+      // While the low note is held (3.8–6.8 s, give or take the start)
+      const low = seen.out.filter((s) => s.t > 4600 && s.t < 6400 && s.m != null);
+      expect(low.length, "readings while the low note is held").toBeGreaterThan(10);
+      const drawn = low.filter((s) => Math.abs(s.m - loM) <= 1 && !s.q).length;
+      expect(drawn / low.length, `share of the low note drawn at MIDI ${loM}, not folded up to ${hiM}: ${JSON.stringify(low.map((s) => Math.round(s.m)))}`).toBeGreaterThanOrEqual(0.9);
+      const jumps = seen.breaks.filter((b) => b.kind === "jump" && b.m > loM + 2 && b.m < hiM - 2);
+      expect(jumps.length, `a jump between ${loM} and ${hiM}: ${JSON.stringify(seen.breaks)}`).toBeGreaterThanOrEqual(1);
+    });
+  }
 });
 
 test.describe("material moved by the octave control", () => {

@@ -344,6 +344,15 @@
         const t = i / sr;
         x[i] = Math.sin(2 * Math.PI * 60 * t) + 0.5 * Math.sin(2 * Math.PI * 120 * t) + 0.25 * Math.sin(2 * Math.PI * 180 * t);
       }
+    } else if (kind === "sine50" || kind === "sine60") {
+      const f = kind === "sine50" ? 50 : 60;
+      for (let i = 0; i < n; i++) x[i] = Math.sin((2 * Math.PI * f * i) / sr);
+    } else if (kind === "buzz50" || kind === "buzz60") {
+      // a ground loop's buzz: every harmonic of the mains, falling 1.2 × 6 dB an octave
+      const f = kind === "buzz50" ? 50 : 60;
+      for (let k = 1; k <= 40 && k * f < sr / 2; k++) for (let i = 0; i < n; i++) x[i] += Math.sin((2 * Math.PI * k * f * i) / sr + k) / Math.pow(k, 1.2);
+    } else if (kind === "square60") {
+      for (let i = 0; i < n; i++) x[i] = Math.sin((2 * Math.PI * 60 * i) / sr) >= 0 ? 1 : -1;
     } else if (kind === "clicks") {
       // keyboard-like clicks: 4 a second, decaying noise bursts
       for (let i = 0; i < n; i++) {
@@ -359,18 +368,27 @@
   /**
    * Render one signal. spec:
    *  kind: "vowel" (steady), "onset" (silence, attack, hold, release, silence),
-   *        "glide" (f0 → f0b, log-linear), "speech" (phrases of syllables),
+   *        "glide" (f0 → f0b, log-linear), "path" (spec.path: segments
+   *        [t0, t1, f0, f0 at t1], glides and held notes; a gap between
+   *        two is silence),
+   *        "speech" (phrases of syllables), "tone" (no voice: `partials`
+   *        harmonics of f0 falling `tiltDb` an octave; 1 is a whistle),
    *        "noise" (noise only: spec.noise = "white" | "pink" | "rumble" |
-   *        "fan" | "breath" | "sss" | "hum" | "clicks" | "silence")
+   *        "fan" | "breath" | "sss" | "hum" | "clicks" | "silence" |
+   *        "sine50" | "sine60" | "buzz50" | "buzz60" | "square60")
    *  voice: "male" | "female" | "child"; vowel: a e i o u
    *  f0, f0b (Hz), sec, seed, levelDb (rms of the voiced part at the mic,
    *  dBFS, default −30), tilt: modal | pressed | breathy, fund: full | weak |
    *  none (H1 −14 dB / −30 dB), h2Db (a peak of that many dB on the 2nd
    *  harmonic), vibCents (±, 5.5 Hz or vibHz), jitter (relative period sd),
    *  shimmer (relative amplitude sd), aspDb (harmonics over aspiration, dB),
-   *  fanDb / humDb (voice over a fan / a 60 Hz hum, dB), hp (a mic's
-   *  high-pass, Hz, 2nd order), f1track (F1 raised to 1.1 × F0 when F0 is
-   *  above it, as sopranos do), style (speech: "calm" | "lively")
+   *  fanDb / humDb (voice over a fan / a 60 Hz hum, dB; humKind: that
+   *  noise kind instead of "hum"), hp (a mic's high-pass, Hz, 2nd order),
+   *  dark (a soft, dark voice: a 4th-order low-pass at that many Hz),
+   *  bright (true: +6 dB an octave, a first difference), bwScale
+   *  (the formants' bandwidths times this),
+   *  f1track (F1 raised to 1.1 × F0 when F0 is above it, as sopranos do),
+   *  style (speech: "calm" | "lively")
    * Returns { x, f0, env, sr }.
    */
   function render(spec, sr) {
@@ -389,6 +407,24 @@
       return { x, f0, env, sr };
     }
     const vibPh = rnd() * 2 * Math.PI;
+    if (s.kind === "tone") {
+      // No voice: `partials` harmonics of f0 (1: a whistle), falling tiltDb
+      // an octave, at levelDb, with the vibrato
+      const x = new Float32Array(n);
+      let ph = 0;
+      for (let i = 0; i < n; i++) {
+        const t = i / sr;
+        f0[i] = s.f0 * (s.vibCents ? Math.pow(2, (s.vibCents * Math.sin(2 * Math.PI * (s.vibHz || 5.5) * t + vibPh)) / 1200) : 1);
+        env[i] = Math.min(1, t / 0.02, (s.sec - t) / 0.02);
+        ph += (2 * Math.PI * f0[i]) / sr;
+        let v = 0;
+        for (let k = 1; k <= (s.partials || 1) && k * f0[i] < sr / 2; k++) v += Math.pow(10, ((s.tiltDb || 0) * Math.log2(k)) / 20) * Math.sin(k * ph + k);
+        x[i] = v * env[i];
+      }
+      const g = Math.pow(10, s.levelDb / 20) / (rmsOf(x, (i) => env[i] > 0.5) || 1);
+      for (let i = 0; i < n; i++) x[i] *= g;
+      return { x, f0, env, sr };
+    }
     const vib = (t) => (s.vibCents ? Math.pow(2, (s.vibCents * Math.sin(2 * Math.PI * (s.vibHz || 5.5) * t + vibPh)) / 1200) : 1);
     if (s.kind === "vowel" || s.kind === "onset") {
       const pre = s.kind === "onset" ? 0.25 : 0;
@@ -410,6 +446,28 @@
         const u = Math.min(1, Math.max(0, (t - 0.05) / (s.sec - 0.1)));
         f0[i] = s.f0 * Math.pow(s.f0b / s.f0, u) * vib(t);
         env[i] = Math.min(1, t / 0.02, (s.sec - t) / 0.02);
+      }
+    } else if (s.kind === "path") {
+      // A scripted line: per segment [t0, t1, f0 (Hz), f0 at t1] (a
+      // log-linear glide; without the fourth, a held note). Segments back
+      // to back are one sung line (a step from one to the next is not a new
+      // onset); a gap between two is silence, each side ramped in 20 ms.
+      const segs = s.path || [];
+      const runs = [];
+      for (const q of segs) {
+        const r = runs[runs.length - 1];
+        if (r && Math.abs(q[0] - r.off) < 1e-9) {
+          r.segs.push(q);
+          r.off = q[1];
+        } else runs.push({ on: q[0], off: q[1], segs: [q] });
+      }
+      for (let i = 0; i < n; i++) {
+        const t = i / sr;
+        const r = runs.find((q) => t >= q.on && t < q.off);
+        if (!r) continue;
+        const g = r.segs.find((q) => t >= q[0] && t < q[1]);
+        f0[i] = (g[3] ? g[2] * Math.pow(g[3] / g[2], (t - g[0]) / (g[1] - g[0])) : g[2]) * vib(t);
+        env[i] = Math.min(1, (t - r.on) / 0.02, (r.off - t) / 0.02);
       }
     } else if (s.kind === "speech") {
       // Phrases of syllables: an unvoiced consonant (a fricative or a stop's
@@ -478,6 +536,8 @@
       for (let k = 0; k < 4; k++) sweepFilter(x, sr, "hp", (i) => 1.6 * F0(i), 0.7071);
     }
     if (s.h2Db) sweepFilter(x, sr, "peak", (i) => 2 * F0(i), 3, s.h2Db);
+    if (s.dark) for (let k = 0; k < 2; k++) sweepFilter(x, sr, "lp", () => s.dark, 0.7071);
+    if (s.bright) for (let i = n - 1; i > 0; i--) x[i] -= x[i - 1];
     if (s.hp) sweepFilter(x, sr, "hp", () => s.hp, 0.7071);
     // Level: the voiced part's rms
     const core = (i) => env[i] > 0.5;
@@ -498,7 +558,7 @@
       for (let i = 0; i < n; i++) x[i] += nz[i] * k;
     }
     if (s.humDb != null) {
-      const nz = noise("hum", n, sr, rnd);
+      const nz = noise(s.humKind || "hum", n, sr, rnd);
       const k = lv * Math.pow(10, -s.humDb / 20);
       for (let i = 0; i < n; i++) x[i] += nz[i] * k;
     }

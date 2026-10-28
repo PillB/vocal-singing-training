@@ -115,9 +115,17 @@ tour step. It documents what a user cannot work out by looking:
   fifth low, which octave folding cannot repair; 400 Hz sits in the middle of
   most women's and children's singing range. `detectPitch` in
   `js/pitch-visualizer.js` is now an NSDF (McLeod & Wyvill) detector over
-  50–1500 Hz, the engine's gate is 55–1600 Hz, and noise, breath and a hiss
-  get no pitch. The guide's note "If your voice never appears" now says this
-  and no longer asks anyone to sing an octave lower.)
+  50–1500 Hz; above that (a whistle, a G6) it reads nothing rather than an
+  octave of it. The engine's gate is 52–1600 Hz, so a bass's A1 still reads
+  sung up to 90 cents flat, a soft, dark one (little above 200 Hz) too. Noise,
+  breath, a hiss and a 50 or 60 Hz hum or buzz get no pitch, and a voice over
+  a hum 12 dB under it reads its own note; the price is that a pitch within
+  1 % of 50 or 60 Hz reads nothing, so a bass between A♯1 and B1 is blank
+  for the 34 cents around 60 Hz. A rectified buzz at 100 or 120 Hz, or a
+  whistle inside the range, still reads: a man sings there, a soprano too.
+  The guide's note "If your voice never appears" now says this and no
+  longer asks anyone to sing an octave lower. The guide names the octave
+  helper by its button, «A mi voz» / "My range".)
 - **What each number means**, including the ones whose names do not explain
   them.
 - **Which exercises need the microphone and which do not**, and what a denied

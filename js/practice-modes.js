@@ -6566,12 +6566,15 @@
       let q = 0;
       if (f) {
         let raw = kit.hzToMidi(f);
-        // The detector can still read a frame an octave low, most often above
-        // ~C6: a sudden octave drop in the middle of a glide is folded back up
-        // and marked "aprox."
+        // From C6 (MIDI 84) up the detector still reads a frame an octave
+        // low now and then (6 % of a held C6–F6 against 1–3 % lower down):
+        // a sudden octave drop there, in the middle of a glide, is folded
+        // back up and marked "aprox.". Under C6 an octave drop is the
+        // singer's own (a baritone's E4 to E3, a soprano's A5 to A4) and is
+        // drawn where it is sung, a jump.
         const p = st.prevM;
         const gap = now - st.prevAt;
-        if (p != null && gap < 400 && p >= 60) {
+        if (p != null && gap < 400 && p >= 84) {
           // The glide can move ~10 semitones a second between two frames
           const tol = 3 + (10 * gap) / 1000;
           if (p - raw > 12 - tol && Math.abs(raw + 12 - p) < tol) {

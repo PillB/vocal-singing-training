@@ -98,40 +98,134 @@
   const PITCH_HI_HZ = 1500;
   /** MPM: the first key maximum within K of the highest one. */
   const MPM_K = 0.9;
-  /** Under this, the frame has no period: noise, breath, a hiss, silence. */
+  /**
+   * Under this, the frame has no period: noise, breath, a hiss, silence.
+   * A breathy or aspirated voice's lost frames are mostly not these: at
+   * 0.45 its wrong-or-missing share moved by 0.2 % at most, while a fan or a
+   * rumble got a pitch on 6–7 % of frames instead of 1–2 %.
+   */
   const MIN_CLARITY = 0.55;
   /**
-   * Above this pitch a candidate must also be nearly as periodic as the best
-   * key maximum: its aperiodicity 1 − n under APER_C × the best one's plus
+   * From this pitch a candidate must also be nearly as periodic as the best
+   * key maximum within APER_SPAN times its lag (the period, if the candidate
+   * is a part of it): its aperiodicity 1 − n under APER_C × that one's plus
    * APER_EPS. A female /i/ at 932 Hz has her third harmonic on her second
    * formant: the key maximum at 2/3 of the period reads 0.957 against 0.999,
    * passes K, and would read a fifth up (1398 Hz). Its aperiodicity, 0.043,
-   * is 40 times the best one's.
+   * is 40 times the period's. The same happens lower wherever a harmonic
+   * sits on a formant: a bright female /i/ at 349 Hz, her eighth harmonic on
+   * F2, has a key maximum at 7/8 of her period (399 Hz). The span reaches a
+   * third of a period (a child's /ʌ/ at 285 Hz with a weak fundamental read
+   * 855 Hz without it) but not a 50/60 Hz hum's period under a voice from
+   * 250 Hz, which can be the more periodic lag.
    */
-  const APER_FROM_HZ = 400;
+  const APER_FROM_HZ = 250;
   const APER_C = 3;
   const APER_EPS = 0.02;
+  const APER_SPAN = 3.06;
+  /**
+   * However aperiodic the best key maximum, a candidate from APER_FROM_HZ
+   * that is not the best must keep its aperiodicity under APER_CAP, and a
+   * pitch from HI_FROM_HZ needs a best key maximum of HI_MIN_BEST: when the
+   * pitch moves fast within the frame (speech, 5 syllables a second) every
+   * lag reads 0.5–0.7, and the first formant's ringing (a man's /a/ at
+   * 700–800 Hz) would pass K. On such speech the readings off by more than
+   * 60 cents fell from 5.7 % of the voiced frames to 0.6 %; the frames read
+   * nothing instead.
+   */
+  const APER_CAP = 0.25;
+  const HI_FROM_HZ = 400;
+  const HI_MIN_BEST = 0.7;
+  /**
+   * A period shorter than the search allows (over 1500 Hz: a whistle, a
+   * soprano's G6) still makes a key maximum, kept, under the shortest lag.
+   * If it would be picked, the frame reads nothing, not an octave of it,
+   * but only if it is the frame's own period: as periodic as the best key
+   * maximum (aperiodicity under SHORT_C times) and nothing under it in the
+   * spectrum. A voice whose harmonic on a formant made the lobe (a child's
+   * /i/ at 1241 Hz, H3 on F3) is 20 times as aperiodic there, and has its
+   * first harmonic below (−19 dB of its strongest or more); a whistle has
+   * only noise there (−28 dB or less; SHORT_LOW is −23 dB).
+   */
+  const SHORT_C = 1.5;
+  const SHORT_LOW = 0.005;
   /**
    * A dominant second harmonic (H2 on the first formant) puts a key maximum
-   * at half the period. Twice that lag is then far more periodic: its
-   * aperiodicity is under OCT_RATIO of the half's (0.005 against 0.053 for a
-   * child's C5 on /a/). A voice whose period really is the shorter lag is as
-   * aperiodic or more at twice the lag (jitter only adds), so this never
-   * fires on it. Never down to a pitch under OCT_FLOOR_HZ: a 50/60 Hz mains
-   * hum under a 100–130 Hz voice makes twice the lag "more periodic" too.
+   * at half the period L. Twice that lag is then more periodic, since the
+   * odd harmonics (H1, H3...) are what differs between the frame and itself
+   * L later. Twice the lag is taken when its aperiodicity is under OCT_RATIO
+   * of the half's (0.005 against 0.053 for a child's C5 on /a/), or when
+   * the aperiodicities at L, 2L and 3L (a1, a2, a3) say so with vibrato: a
+   * modulation's aperiodicity grows with the square of the lag (a1 : a2 : a3
+   * = 1 : 4 : 9), a noise's not at all (1 : 1 : 1), jitter's in proportion
+   * (1 : 2 : 3), while the odd harmonics add the same amount at L and 3L and
+   * none at 2L. (5 a1 + 3 a3 − 8 a2) / (8 a1) is 0 for any mix of the first
+   * three and 1 for odd harmonics alone. A child's pressed /a/ at D5 with
+   * ±80 cents of vibrato reads 0.7–0.9; a soprano's D6 with the same
+   * vibrato −0.1–0.2. Under LINE_FROM_HZ it must reach OCT_ODD, 2L at least
+   * as periodic as L; from there, where the spectrum has the last word
+   * (below), OCT_ODD_HI with 2L up to OCT_ODD_A2_HI times as aperiodic: a
+   * child's pressed C5 with ±100 cents of vibrato reads 0.47–0.61 with
+   * a2/a1 up to 1.7. Never down to a pitch under OCT_FLOOR_HZ: a 50/60 Hz
+   * mains hum under a 100–130 Hz voice makes twice the lag "more periodic"
+   * too.
    */
   const OCT_RATIO = 0.2;
+  const OCT_ODD = 0.6;
+  const OCT_ODD_HI = 0.45;
+  const OCT_ODD_A2_HI = 1.8;
   const OCT_MIN_APER = 0.01;
   const OCT_FLOOR_HZ = 72;
   /**
-   * A reading under HUM_HZ needs harmonics above HUM_SPLIT_HZ (a voice there
-   * has its formants above it: 18 % of the power or more in every vowel
-   * measured). A mains hum (50/60 Hz and its first harmonics) or a fan's
-   * rumble has under 3 %.
+   * Odd harmonics, or noise in a formant? Breath or shimmer filtered by a
+   * first formant near half the pitch (a woman's /e/ at 1064 Hz, F1 536 Hz;
+   * her /i/ at 605 Hz, F1 310 Hz) also differs from itself one period later
+   * and not two: to the lags it is an odd harmonic, and it sent 5 % of such
+   * frames an octave down. In the spectrum (Hann window over the frame) it is
+   * a band some 80 Hz wide; a harmonic is a line. From LINE_FROM_HZ the
+   * octave down needs the lower pitch's H1 (at half the higher pitch) and H3
+   * to stand LINE_H1 and LINE_H3 (power ratios, 15 and 3 dB) over the
+   * spectrum 40–80 Hz to either side. Over 3500 octave-down candidates on
+   * high voices (breathy, modal and pressed, ±0–100 cents of vibrato), a
+   * true one's H1 stood 18 dB or more in 99 % of them, the formant's noise
+   * under 13.5 dB in 99 %. Under LINE_FROM_HZ the harmonics are too close
+   * for a 43 ms frame to tell a line from a band, and no first formant is
+   * that low.
    */
-  const HUM_HZ = 70;
-  const HUM_SPLIT_HZ = 220;
-  const HUM_MIN_SHARE = 0.08;
+  const LINE_FROM_HZ = 320;
+  const LINE_H1 = 30;
+  const LINE_H3 = 2;
+  /**
+   * Keys at lags under REFINE_MINLAGS × the shortest lag get their height
+   * from r(τ) itself at the fractional lag (the spectrum's cosine sum, a
+   * Newton step or two from the parabola's estimate), not the parabola
+   * through three samples: a bright tone at 1158–1480 Hz has a key maximum
+   * one or two samples wide, and the parabola under-reads it enough that K
+   * passes to twice the period, an octave low.
+   */
+  const REFINE_MINLAGS = 4;
+  /**
+   * Mains: a reading within MAINS_TOL of 50 or 60 Hz is a hum or a buzz
+   * (a transformer, a ground loop, a fridge), not a bass, unless a shorter
+   * key maximum is within MAINS_K of the best: a voice over the hum, read at
+   * its own period. A single 43 ms frame cannot tell a bass on that pitch
+   * from a buzz, so the cost is a bass's: between A♯1 (58.3 Hz) and B1
+   * (61.7 Hz) he reads nothing within 17 cents of 60 Hz, as under A1 within
+   * 17 cents of 50 Hz.
+   */
+  const MAINS_HZ = [50, 60];
+  const MAINS_TOL = 0.01;
+  const MAINS_K = 0.8;
+  /**
+   * A sine hum within 12 dB of a man's voice (110–150 Hz) can pull him to
+   * a period both share, under LOW_HZ (55 Hz for 110 Hz over 60 Hz). Under
+   * LOW_HZ the key maximum at a half or a third of the pick is taken if it
+   * reaches LOW_K of the best: the hum-pulled voice's own period reads
+   * 0.88–0.90 of it, a bass's half period no more than 0.79 even with his
+   * H2 12 dB over the rest.
+   */
+  const LOW_HZ = 80;
+  const LOW_K = 0.85;
 
   /** Radix-2 FFT tables and scratch, per size. */
   const _fft = {};
@@ -150,7 +244,16 @@
       cos[i] = Math.cos((2 * Math.PI * i) / n);
       sin[i] = Math.sin((2 * Math.PI * i) / n);
     }
-    return (_fft[n] = { rev, cos, sin, re: new Float64Array(n), im: new Float64Array(n), nsdf: new Float64Array(n) });
+    return (_fft[n] = {
+      rev,
+      cos,
+      sin,
+      re: new Float64Array(n),
+      im: new Float64Array(n),
+      pow: new Float64Array((n >> 1) + 1),
+      nsdf: new Float64Array(n),
+      m: new Float64Array(n)
+    });
   }
   /** In-place complex FFT (sign −1) or unscaled inverse (sign +1). */
   function fftInPlace(re, im, plan, sign) {
@@ -185,6 +288,78 @@
         }
       }
     }
+  }
+
+  /**
+   * r(τ) at a fractional lag from the power spectrum pow[0..kMax] of an
+   * M-point transform (the cosine sum the inverse FFT samples at whole
+   * lags), with its first two derivatives: [r, r', r''].
+   */
+  function lagSum(pow, kMax, M, tau) {
+    const th = (2 * Math.PI * tau) / M;
+    const c1 = Math.cos(th);
+    const s1 = Math.sin(th);
+    let c = 1;
+    let s = 0;
+    let r = pow[0];
+    let d1 = 0;
+    let d2 = 0;
+    for (let k = 1; k <= kMax; k++) {
+      const cn = c * c1 - s * s1;
+      s = s * c1 + c * s1;
+      c = cn;
+      const p = 2 * pow[k];
+      r += p * c;
+      d1 -= k * p * s;
+      d2 -= k * k * p * c;
+    }
+    const w = (2 * Math.PI) / M;
+    return [r / M, (d1 * w) / M, (d2 * w * w) / M];
+  }
+
+  /** Power spectrum (bins 0..M/2) of the mean-removed frame under a Hann window, zero-padded to M. */
+  const _hannWin = {};
+  function hannPower(buf, mean, plan) {
+    const N = buf.length;
+    const M = plan.re.length;
+    let w = _hannWin[N];
+    if (!w) {
+      w = _hannWin[N] = new Float64Array(N);
+      for (let i = 0; i < N; i++) w[i] = 0.5 - 0.5 * Math.cos((2 * Math.PI * (i + 0.5)) / N);
+    }
+    const re = plan.re;
+    const im = plan.im;
+    for (let i = 0; i < M; i++) {
+      re[i] = i < N ? (buf[i] - mean) * w[i] : 0;
+      im[i] = 0;
+    }
+    fftInPlace(re, im, plan, -1);
+    const out = new Float64Array((M >> 1) + 1);
+    for (let i = 0; i <= M >> 1; i++) out[i] = re[i] * re[i] + im[i] * im[i];
+    return out;
+  }
+  /**
+   * How far a line near f (within 3 %) stands over the spectrum 40–80 Hz to
+   * either side of it: the ratio of its highest bin to their mean power.
+   */
+  function lineOver(P, M, sr, f) {
+    const bin = sr / M;
+    const c = Math.round(f / bin);
+    const w = Math.max(1, Math.ceil((0.03 * f) / bin));
+    let pk = 0;
+    for (let b = Math.max(1, c - w); b <= c + w && b < P.length; b++) if (P[b] > pk) pk = P[b];
+    let s = 0;
+    let n = 0;
+    for (const sg of [-1, 1]) {
+      for (let b = Math.ceil(40 / bin); b <= Math.floor(80 / bin); b++) {
+        const k = c + sg * b;
+        if (k > 0 && k < P.length) {
+          s += P[k];
+          n++;
+        }
+      }
+    }
+    return n && s > 0 ? pk / (s / n) : Infinity;
   }
 
   /**
@@ -226,24 +401,29 @@
     const plan = fftPlan(M);
     const re = plan.re;
     const im = plan.im;
+    const pow = plan.pow;
     for (let i = 0; i < M; i++) {
       re[i] = i < N ? buf[i] - mean : 0;
       im[i] = 0;
     }
     fftInPlace(re, im, plan, -1);
-    const kSplit = Math.ceil((HUM_SPLIT_HZ * M) / sampleRate);
     let pAll = 0;
-    let pHigh = 0;
     for (let i = 0; i < M; i++) {
       const p = re[i] * re[i] + im[i] * im[i];
       re[i] = p;
       im[i] = 0;
-      pAll += p;
-      if ((i <= M >> 1 ? i : M - i) >= kSplit) pHigh += p;
+      if (i <= M >> 1) {
+        pow[i] = p;
+        pAll += p;
+      }
     }
+    // The bins that hold all but 1e-6 of the power, for lagSum
+    let kMax = M >> 1;
+    for (let acc = 0; kMax > 1 && acc + pow[kMax] < 1e-6 * pAll; kMax--) acc += pow[kMax];
     fftInPlace(re, im, plan, 1);
     const L = maxLag + 2;
     const nsdf = plan.nsdf;
+    const mm = plan.m;
     let m = 2 * energy;
     for (let t = 0; t < L; t++) {
       if (t > 0) {
@@ -251,61 +431,154 @@
         const b = buf[N - t] - mean;
         m -= a * a + b * b;
       }
+      mm[t] = m;
       nsdf[t] = m > 0 ? (2 * re[t]) / M / m : 0;
     }
 
     // Key maxima: the top of each positive lobe after the first
-    // negative-going zero crossing, at a lag of sr / 1500 or more, refined
-    // by a parabola through its three samples
+    // negative-going zero crossing, refined by a parabola through its three
+    // samples. A lobe whose top is under sr / 1500 is kept, marked short: if
+    // it is the one picked, the period is shorter than the search allows (a
+    // whistle, a soprano's G6) and the frame reads nothing, not an octave of
+    // it.
     const keys = [];
     let t = 1;
     while (t < L && nsdf[t] > 0) t++;
     let top = -1;
+    const refineBelow = REFINE_MINLAGS * minLag;
     const close = () => {
       const a = nsdf[top - 1];
       const b = nsdf[top];
       const c = nsdf[top + 1];
       const den = a - 2 * b + c;
       const sh = den < 0 ? Math.max(-0.5, Math.min(0.5, (0.5 * (a - c)) / den)) : 0;
-      keys.push({ lag: top + sh, n: Math.min(1, b - 0.25 * (a - c) * sh) });
+      let lag = top + sh;
+      let n = b - 0.25 * (a - c) * sh;
+      if (top < refineBelow) {
+        // r(τ) itself near the top: Newton on the cosine sum, kept only
+        // where it reads higher than the sample at the top
+        const mAt = (x) => {
+          const i = Math.min(L - 2, Math.floor(x));
+          return mm[i] + (mm[i + 1] - mm[i]) * (x - i);
+        };
+        let x = lag;
+        n = b;
+        lag = top;
+        for (let it = 0; it < 3; it++) {
+          const g = lagSum(pow, kMax, M, x);
+          const v = (2 * g[0]) / mAt(x);
+          if (v > n) {
+            n = v;
+            lag = x;
+          }
+          if (!(g[2] < 0)) break;
+          const dx = Math.max(-0.5, Math.min(0.5, -g[1] / g[2]));
+          if (Math.abs(dx) < 1e-3) break;
+          x = Math.max(top - 1, Math.min(top + 1, x + dx));
+        }
+      }
+      keys.push({ lag, n: Math.min(1, n) });
       top = -1;
     };
     for (; t < L - 1; t++) {
       if (nsdf[t] > 0) {
-        if (t >= minLag && nsdf[t] >= nsdf[t - 1] && nsdf[t] >= nsdf[t + 1] && (top < 0 || nsdf[t] > nsdf[top])) top = t;
+        if (nsdf[t] >= nsdf[t - 1] && nsdf[t] >= nsdf[t + 1] && (top < 0 || nsdf[t] > nsdf[top])) top = t;
       } else if (top >= 0) close();
     }
     if (top >= 0) close();
     if (!keys.length) return null;
     let best = 0;
-    for (const q of keys) if (q.n > best) best = q.n;
+    for (const q of keys) if (q.lag >= minLag && q.n > best) best = q.n;
     if (best < MIN_CLARITY) return null;
 
     const kMin = MPM_K * best;
-    const aperMax = APER_C * (1 - best) + APER_EPS;
-    let pick = null;
-    for (const q of keys) {
-      if (q.n < kMin) continue;
-      if (sampleRate / q.lag >= APER_FROM_HZ && 1 - q.n > aperMax) continue;
-      pick = q;
-      break;
-    }
-    if (!pick) return null;
+    let hann = null;
     const near = (lag) => {
       let w = null;
       for (const q of keys) if (Math.abs(q.lag - lag) <= Math.max(2, 0.03 * lag) && (!w || q.n > w.n)) w = q;
       return w;
     };
+    const ok = (q, k) => {
+      if (q.n < k) return false;
+      // Shorter than the search allows (SHORT_C, SHORT_LOW): only as the
+      // frame's own period, as periodic as the best key maximum and with
+      // nothing under it in the spectrum
+      if (q.lag < minLag) {
+        if (1 - q.n > SHORT_C * (1 - best) + 1e-4) return false;
+        if (!hann) hann = hannPower(buf, mean, plan);
+        const bin = sampleRate / M;
+        let low = 0;
+        let peak = 0;
+        for (let b = Math.round(80 / bin); b < hann.length; b++) {
+          if (hann[b] > peak) peak = hann[b];
+          if (b * bin <= (0.8 * sampleRate) / q.lag && hann[b] > low) low = hann[b];
+        }
+        return low < SHORT_LOW * peak;
+      }
+      if (sampleRate / q.lag < APER_FROM_HZ || q.n >= best) return true;
+      if (1 - q.n > APER_CAP) return false;
+      // The best key maximum up to APER_SPAN times the lag: the period, if
+      // the candidate is a part of it
+      let nb = 0;
+      for (const o of keys) if (o.lag > q.lag && o.lag <= APER_SPAN * q.lag && o.n > nb) nb = o.n;
+      return q.n >= nb || 1 - q.n <= APER_C * (1 - nb) + APER_EPS;
+    };
+    let pick = null;
+    for (const q of keys) {
+      if (!ok(q, kMin)) continue;
+      pick = q;
+      break;
+    }
+    if (!pick) return null;
     for (let i = 0; i < 2; i++) {
       const lag2 = 2 * pick.lag;
       if (lag2 > L - 2 || sampleRate / lag2 < OCT_FLOOR_HZ) break;
       const w = near(lag2);
-      if (!w || 1 - pick.n < OCT_MIN_APER || 1 - w.n > OCT_RATIO * (1 - pick.n)) break;
+      const a1 = 1 - pick.n;
+      if (!w || a1 < OCT_MIN_APER) break;
+      const a2 = 1 - w.n;
+      const fp = sampleRate / pick.lag;
+      const hi = fp >= LINE_FROM_HZ;
+      let down = a2 <= OCT_RATIO * a1;
+      if (!down && a2 <= (hi ? OCT_ODD_A2_HI : 1) * a1) {
+        const w3 = near(3 * pick.lag);
+        if (w3) down = (5 * a1 + 3 * (1 - w3.n) - 8 * a2) / (8 * a1) >= (hi ? OCT_ODD_HI : OCT_ODD);
+      }
+      // From LINE_FROM_HZ, only if the lower pitch's first and third
+      // harmonics are lines in the spectrum, not a formant's band of noise
+      if (down && hi) {
+        if (!hann) hann = hannPower(buf, mean, plan);
+        down = lineOver(hann, M, sampleRate, fp / 2) >= LINE_H1 && lineOver(hann, M, sampleRate, 1.5 * fp) >= LINE_H3;
+      }
+      if (!down) break;
       pick = w;
     }
-    if (pick.n < MIN_CLARITY) return null;
-    const freq = sampleRate / pick.lag;
-    if (freq < HUM_HZ && pHigh < HUM_MIN_SHARE * pAll) return null;
+    // Under LOW_HZ: a voice a loud hum pulled to a period both share?
+    if (sampleRate / pick.lag < LOW_HZ) {
+      for (const d of [2, 3]) {
+        const h = near(pick.lag / d);
+        if (h && h.lag >= minLag && h.n >= LOW_K * best && ok(h, 0)) {
+          pick = h;
+          break;
+        }
+      }
+    }
+    if (pick.n < MIN_CLARITY || pick.lag < minLag) return null;
+    if (sampleRate / pick.lag >= HI_FROM_HZ && best < HI_MIN_BEST) return null;
+    let freq = sampleRate / pick.lag;
+    if (MAINS_HZ.some((h) => Math.abs(freq - h) <= MAINS_TOL * h)) {
+      // A hum, or a voice over one: the voice's own period, if there is one
+      let alt = null;
+      for (const q of keys) {
+        if (q.lag >= pick.lag) break;
+        if (q.lag >= minLag && ok(q, MAINS_K * best)) {
+          alt = q;
+          break;
+        }
+      }
+      if (!alt) return null;
+      freq = sampleRate / alt.lag;
+    }
     return freq >= PITCH_LO_HZ && freq <= PITCH_HI_HZ * 1.06 ? freq : null;
   }
 

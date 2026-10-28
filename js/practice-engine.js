@@ -27,8 +27,12 @@
   /** Base thresholds at sensitivity = 5 (mid). Higher sensitivity lowers them. */
   const VOICE_RMS_BASE = 0.012;
   const HOLD_RMS_BASE = 0.008;
-  /** Pitches a frame may report: a bass's A1 up to where detectPitch stops (~1590 Hz) */
-  const PITCH_MIN = 55;
+  /**
+   * Pitches a frame may report: a bass's A1 (55 Hz), sung up to 90 cents
+   * flat, up to where detectPitch stops (its shortest lag, 1500 Hz at 48 kHz
+   * and 1521 Hz at 44.1 kHz) with a margin
+   */
+  const PITCH_MIN = 52;
   const PITCH_MAX = 1600;
   /** Default 7/10 — more sensitive than legacy fixed 0.016 (fewer false cutoffs) */
   const DEFAULT_SENS = 7;

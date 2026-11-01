@@ -1832,12 +1832,6 @@
       "name": "Async arrow function"
     },
     {
-      "file": "tests/all-flows-robust.spec.js",
-      "sha": "840b55f7306cf58ca8db8b5af47010dd09c72bfe716624faaea035f3e47119a2",
-      "complexity": 35,
-      "name": "Async arrow function"
-    },
-    {
       "file": "tests/audio-regression.spec.js",
       "sha": "16ae075350a96369a8f766b60fd26a92feeb0fe998d78e2cf8dd6514c8a4b3ac",
       "complexity": 26,

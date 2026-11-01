@@ -163,13 +163,14 @@ async function openByMouse(page, id) {
   else await page.evaluate(async (exId) => window.VTApp?.openExercise?.(exId), id);
 
   await page.waitForSelector("#view-exercise.active", { timeout: 8000 });
+  // wait-may-fail: headed sweep; the next probe records a missing Start as an issue.
   await page
     .waitForFunction(() => {
       const b = document.getElementById("btn-practice-start");
       if (!b || b.hidden) return false;
       const r = b.getBoundingClientRect();
       return r.width >= 8 && r.height >= 8;
-    }, { timeout: 8000 })
+    }, null, { timeout: 8000 })
     .catch(() => {});
   await page
     .evaluate(() => {

@@ -128,6 +128,7 @@ test.describe("Max-effort journeys (Musk)", () => {
     await page.keyboard.press("Enter");
     await page.waitForFunction(
       () => !document.querySelector("#btn-practice-stop")?.hidden,
+      null,
       { timeout: 12000 }
     );
     await page.waitForTimeout(500);

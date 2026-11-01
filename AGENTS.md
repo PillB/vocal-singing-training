@@ -18,15 +18,25 @@ For **every feature and meaningful design/implementation decision**:
    choice, and why?** If you can name a valid evidence-backed objection,
    revise the choice before merging. Compare with the feasible evidence-based
    ideal, not the cheapest way to meet a task's minimum wording.
+   Give particular weight to **methodological and scientific correctness**
+   (is the measurement valid for this voice, this microphone, this room? is
+   the pedagogy supported by voice-science evidence or only by tradition?),
+   to current state-of-the-art techniques, and to the **usability and
+   intuitiveness of the user flow**: a learner who has never seen the app
+   must know what to do next, what the screen is measuring, and why a take
+   did or did not count. Quality-of-life features (resume, undo, clear
+   errors, keyboard paths, sensible defaults) are part of "correct".
 4. Explicitly record *every* trade-off (performance, false positives vs
    abstention, device support, privacy, accessibility, scope, pedagogy,
    maintenance) in the change summary and issue ledger. Never silently absorb
    one. Never describe a heuristic as a medical diagnosis or a ground-truth
    assessment of vocal skill.
 5. After **one failed fix hypothesis**, stop repeating the same guess; search
-   current online documentation/issue reports for similar failures, cite the
-   authoritative evidence, refine the root cause, then retest both failure and
-   success paths.
+   current online documentation/issue reports for how others solved a
+   similar error, cite the authoritative evidence, refine the root cause, then
+   retest both failure and success paths. Record the failed hypothesis and the
+   source that corrected it in the ledger row, so the next agent does not try
+   it again.
 
 ## Falsifiable test contract — every task and every round
 
@@ -39,6 +49,32 @@ that nothing threw is insufficient. Preserve the original regression as a
 negative test and a nearby valid positive case. Include boundaries, resets,
 interruptions, rapid clicks, denied/late permissions, keyboard, mobile,
 localization, offline mode and realistic noisy input when applicable.
+
+### Tautological tests considered harmful
+
+A test is only worth having if it can fail. Before writing one, write down
+the goal of the correct behaviour **and** the specific wrong behaviour, and
+model both: the test must pass on the correct code and turn red if the
+defect comes back. Rejected patterns (each has shipped in this repo before):
+
+- asserting that a mock returns what the mock was told to return, or that a
+  function exists / a string appears in a file;
+- an oracle computed by the code under test (re-deriving the expected score
+  with the same formula);
+- "nothing threw" as the only assertion;
+- a wait or probe whose failure is swallowed (`waitFor*().catch(() => {})`)
+  so the test carries on against a page that never reached the state — now
+  a lint error unless a `// wait-may-fail: <reason>` comment names what
+  checks the outcome instead (`qa/lint-playwright-waits.mjs`);
+- a flow test that can pass without the flow happening (e.g. Start never
+  became visible, so the Start/Stop block was skipped). Assert the
+  precondition explicitly (see `openedIssues()` in
+  `tests/all-flows-robust.spec.js`).
+
+Prove falsifiability with a mutation: plant the defect, watch the test go
+red, restore. `node qa/mutate.mjs` does this for the audio and lint
+contracts and fails CI when any planted defect survives; add a mutant there
+for every new contract you write.
 
 Every task and every numbered round must:
 
@@ -75,22 +111,93 @@ avoid claiming 36-exercise reports cover later additions.
 
 ## Automated gates
 
-- `npm run lint` — includes `chore(lint)`: parser-based ESLint cyclomatic
-  `complexity` maximum **15** and a Node contract test that checks both a
-  good and deliberately bad fixture. `eslint.config.mjs` specifies the rule.
-- `qa/lint-complexity.mjs` rejects *all new or changed* functions exceeding 15.
-  `qa/complexity-baseline.json` is a fingerprinted **legacy-debt exception
-  list**, not a license for new complexity. Do not regenerate it as a routine
-  way to pass the build. Any exception needs an itemized risk review and an
-  explicit maintainer decision; prefer splitting the function.
-- `npm run test:core` — runs lint, deterministic catalog and Node/Worker tests.
-- `npx playwright test tests/production-contracts.spec.js --project=chromium`
-  — browser regression contract; requires a Chromium binary and a local server.
-- `npm test` — core gate plus the full Playwright suite.
+### chore(lint): cyclomatic-complexity ceiling (code)
 
-CI on pull requests should run the gates and retain artifacts on failure.
+`eslint.config.mjs` — the rule itself:
+
+```js
+export default [
+  {
+    files: ["**/*.{js,mjs,cjs}"],
+    ignores: ["node_modules/**", "tests/fixtures/**", "qa/design-test/site-review/**"],
+    languageOptions: { ecmaVersion: "latest" },
+    rules: { complexity: ["error", { max: 15, variant: "modified" }] }
+  }
+];
+```
+
+`qa/lint-complexity.mjs` runs it over `js/ qa/ tests/ workers/` and root
+modules, and compares each over-ceiling function by source hash against
+`qa/complexity-baseline.json` (legacy debt only):
+
+- every **new or edited** function must be <= 15; editing an exempt function
+  drops its exemption;
+- exclusions are exact paths (`qa/fixtures`, `tests/fixtures`, …), never a
+  folder name; `.cjs` is scanned; a `.ts`/`.jsx` file fails the gate
+  because it cannot be parsed;
+- the baseline **may only shrink**: `npm run lint:prune` removes exemptions
+  for code that was fixed and never adds one; CI runs
+  `node qa/lint-complexity.mjs --baseline-ref origin/<base>` and fails if the
+  baseline gained an entry. There is deliberately no flag that blesses new
+  debt — split the function.
+
+Per task / per round, the lint test is part of the round's evidence:
+
+```sh
+npm run lint            # complexity + Playwright-wait lint + qa/lint-gate.test.mjs
+node qa/mutate.mjs lint # every planted loophole in the gate must be caught
+```
+
+`qa/lint-gate.test.mjs` holds positive and negative controls for each rule
+(15 passes / 16 fails, edited exemption, new debt, prune never adds, folder
+names, `.cjs`, `.ts`, baseline growth against a git ref, misbound and
+swallowed waits).
+
+### Test layers
+
+- `npm run test:core` — lint, catalog regression, Node/Worker unit and
+  contract tests (`tests/node/*.test.mjs`, `workers/entitlements/test`).
+- `node qa/mutate.mjs` — mutation check; CI runs it on every PR.
+- `npx playwright test --project=chromium` — the **PR gate**: headless,
+  deterministic, one generated test per exercise where a suite walks the
+  catalog, so shards balance and a failure names the exercise. No retries
+  (a retry hides flakiness); traces are kept on failure.
+- `npm run test:sweep` (`--project=sweep`) — headed watch sweeps with a real
+  pointer, slowMo, screenshots and reports. Nightly and on manual dispatch,
+  never on the PR gate. `tests/node/playwright-projects.test.mjs` fails if a
+  spec that forces `headless: false` is not in the sweep list.
+- `npm run test:live` — the deployed GitHub Pages site (nightly).
+
+CI (`.github/workflows/quality.yml`) runs contracts → browser contracts → 4
+gate shards on every PR, and the sweeps + live check nightly. A blocked or
+un-run test is **unverified**, not passed.
+
 Avoid committing `.env`, account secrets or recordings; never auto-correct
 historical scores without a trustworthy provenance signal and learner consent.
+
+## QA / red-team thread protocol
+
+A separate QA thread checks other threads' work. It works in two modes:
+
+1. **Structured checks, in order** — for each change: reproduce the original
+   defect on the base commit, confirm the fix on the head commit, run the
+   positive control (a planted defect the check must catch), then re-test
+   sibling exercises that share the mechanic. Record each in the QA ledger
+   with commit SHAs.
+2. **Surprise spot-checks** informed by published failure modes of
+   AI-generated ("vibe-coded") apps: authorization enforced only in the
+   client (CVE-2025-48757 class); paywalled content shipped in public static
+   files; secrets or admin hashes in the bundle; missing security headers /
+   CSP with `innerHTML` sinks; tests with high coverage but low mutation
+   score; swallowed errors and waits; race conditions across async callbacks
+   (late MediaRecorder chunks, double clicks, permission prompts);
+   hallucinated APIs or wrong call signatures (the misbound
+   `waitForFunction` options); copy that claims what the code does not do
+   (privacy, medical or scoring claims); and layout that only works at the
+   developer's viewport (360 px Android, 200 % zoom, landscape phones).
+
+Findings go to the owning thread with a red-today test; the owner states the
+trade-off of the fix to the user.
 
 ## Research anchors and non-negotiable product limits
 

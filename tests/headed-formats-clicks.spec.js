@@ -100,6 +100,7 @@ async function installCursor(page) {
 async function waitLayout(page) {
   await dismissBlockingOverlays(page);
   await reflowStage(page);
+  // wait-may-fail: headed sweep; probeLayout() afterwards records 0×0 Start/stage.
   await page
     .waitForFunction(() => {
       const b = document.getElementById("btn-practice-start");
@@ -108,7 +109,7 @@ async function waitLayout(page) {
       const br = b.getBoundingClientRect();
       const sr = s.getBoundingClientRect();
       return br.width >= 8 && br.height >= 8 && sr.width >= 40 && sr.height >= 40;
-    }, { timeout: 10000 })
+    }, null, { timeout: 10000 })
     .catch(() => {});
   await reflowStage(page);
 }

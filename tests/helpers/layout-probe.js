@@ -53,11 +53,14 @@ async function dismissBlockingOverlays(page) {
     } catch {
       /* ignore */
     }
+    // Only end a tour that is actually running. VTTour.end() on an idle tour
+    // still runs restorePlace(), which navigates home — so an unguarded call
+    // here used to yank every test off the exercise it had just opened, and
+    // the next wait for the exercise's Start button hung until the test's
+    // whole budget ran out. The app guards its own call the same way
+    // (js/app.js: `if (VTTour.isActive()) VTTour.end(false)`).
     try {
-      window.VTTour?.stop?.();
-      window.VTTour?.end?.();
-      window.VTTour?.close?.();
-      window.VTTour?.dismiss?.();
+      if (window.VTTour?.isActive?.()) window.VTTour.end(false);
     } catch {
       /* ignore */
     }

@@ -261,10 +261,12 @@ async function openExerciseByMouse(page, exerciseId) {
     }, exerciseId);
   }
 
+  // wait-may-fail: headed sweep; practiceProbe() then records start_not_visible as P0.
   await page
     .waitForSelector("#view-exercise.active", { timeout: 8000 })
     .catch(() => {});
   // Wait for Start to have size — NO fitHighway loop
+  // wait-may-fail: as above, the open probe reports a Start without layout.
   await page
     .waitForFunction(
       () => {
@@ -273,6 +275,7 @@ async function openExerciseByMouse(page, exerciseId) {
         const r = b.getBoundingClientRect();
         return r.width >= 8 && r.height >= 8;
       },
+      null,
       { timeout: 8000 }
     )
     .catch(() => {});

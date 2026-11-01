@@ -466,6 +466,9 @@ test.describe("Rating: one tap after a take", () => {
       context.waitForEvent("page", { timeout: 5000 }),
       page.locator("#link-guide").click()
     ]);
+    // A new tab's url() is "" (then about:blank) until its first navigation
+    // commits, so read it after the navigation rather than at the event.
+    await guide.waitForURL(/\/guide\.html/, { timeout: 10000 });
     expect(guide.url()).toContain("/guide.html");
     await guide.close();
     // The exercise did not ask to be left, because it was not.

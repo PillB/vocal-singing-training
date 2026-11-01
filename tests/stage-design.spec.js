@@ -144,13 +144,16 @@ function lineCount(id) {
 /**
  * Scroll so the stage is stuck under the exercise header and still inside its
  * card: the card holds the stage and the short rows under it, so past that
- * the stage leaves with the card, as it should. The piano panel under the
- * stage gives it room to stay.
+ * the stage leaves with the card, as it should. With the piano closed that
+ * is the ~15px the card's bottom rows leave, enough to prove the sticky
+ * offsets. On a phone the stage gives way to an open piano (it would cover
+ * its buttons or lose its lanes), so the piano stays closed here; the open
+ * piano has its own contract in production-contracts.spec.js.
  */
 async function scrollIntoStuck(page) {
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
-  if (await page.locator("#piano-block").isHidden()) await page.locator("#btn-toggle-piano").click();
-  await page.waitForTimeout(150);
+  if (await page.locator("#piano-block").isVisible()) await page.locator("#btn-toggle-piano").click();
+  await expect(page.locator("#piano-block")).toBeHidden();
   return page.evaluate(() => {
     const ex = document.querySelector(".exercise-header-compact").getBoundingClientRect();
     const st = document.getElementById("highway-stage").getBoundingClientRect();
@@ -643,7 +646,7 @@ test.describe("Landscape: a phone on its side", () => {
       expect(r.ex).toBeGreaterThanOrEqual(0);
       // Scrolled, it sticks right under the exercise header
       const stuck = await scrollIntoStuck(page);
-      expect(stuck.room, `${id}: room to stay stuck`).toBeGreaterThan(20);
+      expect(stuck.room, `${id}: room to stay stuck`).toBeGreaterThan(6);
       await page.waitForTimeout(100);
       r = await page.evaluate(() => ({
         stageTop: document.getElementById("highway-stage").getBoundingClientRect().top,

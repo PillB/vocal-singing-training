@@ -1385,11 +1385,13 @@ body.home-zero #pro-insights-panel {
   --hud-safe-r: 15%; /* dual letter+solfège labels — slightly wider for large type */
 }
 
-/* An expanded piano is ordinary content after the stage. Keeping the stage
-   sticky while the page scrolls to its controls paints its high z-index over
-   the very buttons the learner has opened (even though they remain in the
-   accessibility tree). Unstick only while the panel is expanded. */
-.game-stage:has(#piano-block.is-open) .highway-stage {
+/* An expanded piano is ordinary content after the stage. Where the screen
+   has room, fitHighwayToViewport() shrinks the stage so stage and piano fit
+   together and the stage stays sticky (VG-30). Where it does not (landscape
+   phones, long song lists on small phones) it sets .piano-unstick and the
+   stage scrolls away, so its high z-index never paints over the buttons the
+   learner has just opened (WCAG 2.2 SC 2.4.11). */
+.game-stage.piano-unstick .highway-stage {
   position: relative;
   top: auto;
 }
@@ -2666,6 +2668,14 @@ body.view-exercise .metrics-card-collapsible.collapsed .metrics-sub-compact {
   margin-top: 0.45rem !important;
   padding-top: 0.45rem !important;
   border-top: 1px solid var(--border) !important;
+}
+
+/* Opened, the cap was only there to animate: a song list longer than it put
+   "Detener piano" inside a scroll box of its own on a 360px phone, a scroll
+   inside the page scroll that a thumb has to find. The page scrolls instead. */
+.piano-inline.is-open.is-settled {
+  max-height: none;
+  overflow: visible;
 }
 
 .piano-toggle-row {

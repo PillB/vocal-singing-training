@@ -502,114 +502,227 @@
    * CSS max-height alone cannot know layout Y; explicit geometry avoids bottom overflow.
    * Multi-format: visualViewport + safe-area + multi-pass clamp so Start stays clickable.
    */
+  function clearStageFit(stage) {
+    stage.style.height = "";
+    stage.style.maxHeight = "";
+    stage.style.minHeight = "";
+  }
+
+  function setStageHeight(stage, h, maxH = h) {
+    stage.style.maxHeight = `${maxH}px`;
+    stage.style.height = `${h}px`;
+  }
+
+  /** Keep the stage's top in view so the sticky geometry matches the measure. */
+  function anchorStageTop(stage) {
+    try {
+      const anchor =
+        document.getElementById("ex-title") || document.getElementById("practice-cockpit") || stage;
+      const ar = anchor.getBoundingClientRect();
+      if (ar.top < 0 || ar.top > (window.innerHeight || 600) * 0.35) {
+        // "instant": html has scroll-behavior: smooth, so "auto" glided and
+        // the stage below was measured mid-scroll.
+        anchor.scrollIntoView({ block: "start", behavior: "instant" });
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  /**
+   * The lowest the stage sits at rest. It is sticky, so a page scrolled by a
+   * few pixels lifts it to its sticky offset; measured then, the stage came
+   * out that much too tall once the page was back at the top (VG-30: 400px
+   * against a 390px landscape phone). When the stage starts high enough that
+   * the top of the page is where it rests, size it for that position.
+   */
+  function stageRestTop(stage, vh) {
+    let top = Math.max(0, stage.getBoundingClientRect().top);
+    const cock = document.getElementById("practice-cockpit");
+    if (cock && stage.parentElement === cock) {
+      const cs = getComputedStyle(cock);
+      const restTop =
+        cock.getBoundingClientRect().top +
+        window.scrollY +
+        (parseFloat(cs.borderTopWidth) || 0) +
+        (parseFloat(cs.paddingTop) || 0);
+      if (restTop <= vh * 0.35) top = Math.max(top, restTop);
+    }
+    return top;
+  }
+
+  /** Prefer tall for low vision, but never past the visual bottom. */
+  function preferredStageHeight(vh, maxH) {
+    const share = vh < 500 ? 0.9 : vh < 700 ? 0.8 : 0.76;
+    const cap = vh < 500 ? 360 : vh < 700 ? 460 : 720;
+    return Math.max(120, Math.min(maxH, Math.round(vh * share), cap));
+  }
+
+  /** Multi-pass: borders, subpixels and sticky can push the bottom past the screen. */
+  function clampStageToScreen(stage, visualBottom) {
+    for (let pass = 0; pass < 3; pass++) {
+      const rb = stage.getBoundingClientRect();
+      if (rb.bottom <= visualBottom - 1) return;
+      setStageHeight(stage, Math.max(100, Math.floor(visualBottom - rb.top - (6 + pass * 4))));
+    }
+  }
+
+  /** Start must sit fully inside the visual viewport (critical for short + landscape). */
+  function keepStartOnScreen(stage, visualBottom) {
+    const start = document.getElementById("btn-practice-start");
+    if (!start || start.hidden) return;
+    const sb = start.getBoundingClientRect();
+    if (sb.bottom <= visualBottom - 2 && sb.height >= 1) return;
+    const over = sb.bottom - (visualBottom - 4);
+    if (over > 0) {
+      setStageHeight(stage, Math.max(100, Math.floor(stage.getBoundingClientRect().height - over - 4)));
+    }
+  }
+
+  /** Resize the pitch canvas to the new stage box; redraw idle when not live. */
+  function redrawPitchForStage() {
+    const viz = state.pitchViz;
+    if (!viz) return;
+    if (!state.practiceLive && typeof viz.redrawIdle === "function") viz.redrawIdle();
+    else if (typeof viz._resize === "function") viz._resize();
+  }
+
+  /** What pitch lanes need between the rails to read a note at all. */
+  const MIN_LANES_PX = 180;
+
+  /**
+   * The shortest the stage can be and still show what sits between its rails:
+   * the mode panel whole, or a usable band of pitch lanes. The rails wrap to
+   * two or three rows on a phone, so a share of the screen is not a floor: at
+   * 45% of a 390x844 screen pitch match kept 64px of lanes under its rails.
+   * Reads the rails syncStageInsets() has just measured.
+   */
+  function stageFloor(stage) {
+    const railT = parseFloat(stage.style.getPropertyValue("--rail-t")) || 0;
+    const railH = parseFloat(stage.style.getPropertyValue("--rail-h")) || 0;
+    const panel = document.getElementById("mode-focus-panel");
+    const shown = panel && !panel.hidden && panel.getBoundingClientRect().height > 0;
+    return Math.max(260, Math.ceil(railT + railH + Math.max(MIN_LANES_PX, shown ? panel.scrollHeight : 0)));
+  }
+
+  /** Gaps revealBelowStickyRows() leaves above and below what it reveals. */
+  const REVEAL_GAP_TOP = 4;
+  const REVEAL_GAP_BOTTOM = 8;
+
+  /** Height of the rows that stay stuck above the stage: header and Back row. */
+  function stickyChromeHeight() {
+    const root = getComputedStyle(document.documentElement);
+    return (
+      (parseFloat(root.getPropertyValue("--header-h")) || 0) +
+      (parseFloat(root.getPropertyValue("--ex-chrome-h")) || 0)
+    );
+  }
+
+  /**
+   * An open piano panel sits in the stage's card, under the sticky stage.
+   * Left alone, the stage paints over the very buttons the learner just
+   * opened (WCAG 2.2 SC 2.4.11, focus not obscured). Once stuck, the stage
+   * covers the chrome plus its own height, and whatever lies between it and
+   * the panel can slide under it; so where the panel fits below a stuck stage
+   * no shorter than stageFloor(), the stage shrinks to that and stays sticky
+   * (VG-30). Where it does not (phones, whose rails wrap; the long song list),
+   * the card gets .piano-unstick and the stage scrolls away while the panel
+   * is open.
+   * Returns the height cap for the stage (Infinity when no piano is open).
+   */
+  function fitStageBesidePiano(stage, visualBottom, safeBottom) {
+    const cock = document.getElementById("practice-cockpit");
+    const piano = document.getElementById("piano-block");
+    const open = !!(state.pianoOpen && piano && !piano.hidden);
+    let room = Infinity;
+    if (open) {
+      const panel =
+        piano.getBoundingClientRect().height + (parseFloat(getComputedStyle(piano).marginTop) || 0);
+      const band =
+        visualBottom - REVEAL_GAP_BOTTOM - Math.max(0, safeBottom) - stickyChromeHeight() - REVEAL_GAP_TOP;
+      room = Math.floor(band - panel);
+    }
+    const unstick = open && room < stageFloor(stage);
+    cock?.classList.toggle("piano-unstick", unstick);
+    return unstick ? Infinity : room;
+  }
+
+  /**
+   * The least scroll that shows a box (top, height h) between coverBottom and
+   * visualBottom. Negative scrolls up. A box taller than the band keeps its top.
+   */
+  function scrollDeltaToShow(top, h, coverBottom, visualBottom) {
+    const slack = top - coverBottom;
+    if (slack < 0) return slack;
+    return Math.max(0, Math.min(top + h - visualBottom, slack));
+  }
+
+  /**
+   * Scroll so `el` sits below everything stuck above it: the header rows and,
+   * while it is sticky, the stage. The browser cannot do this for us. A box
+   * the stage paints over still counts as inside the viewport, so neither
+   * scrollIntoView("nearest") nor moving focus scrolls (WCAG 2.2 SC 2.4.11).
+   * Scrolling the page never lifts content above chrome + stage height
+   * without first sticking the stage there, so that line is the cover.
+   */
+  function revealBelowStickyRows(el, behavior = "instant") {
+    const stage = document.getElementById("highway-stage");
+    if (!el?.getBoundingClientRect || !stage) return;
+    const { vh, offsetTop, safeBottom } = getViewportMetrics();
+    const sticky = getComputedStyle(stage).position === "sticky";
+    const cover =
+      stickyChromeHeight() + (sticky ? stage.getBoundingClientRect().height : 0) + REVEAL_GAP_TOP;
+    const r = el.getBoundingClientRect();
+    const bottom = offsetTop + vh - REVEAL_GAP_BOTTOM - Math.max(0, safeBottom);
+    const dy = scrollDeltaToShow(r.top, r.height, cover, bottom);
+    if (Math.abs(dy) > 1) window.scrollBy({ top: dy, behavior });
+  }
+
+  /** Run `fn` once the panel's opening transition ends (or 400 ms, if none runs). */
+  function afterPanelOpens(panel, fn) {
+    let done = false;
+    const onEnd = (e) => {
+      if (e.target === panel && e.propertyName === "max-height") finish();
+    };
+    function finish() {
+      if (done) return;
+      done = true;
+      panel.removeEventListener("transitionend", onEnd);
+      fn();
+    }
+    panel.addEventListener("transitionend", onEnd);
+    setTimeout(finish, 400);
+  }
+
   function fitHighwayToViewport() {
     try {
       syncHeaderHeightVar();
       const stage = document.getElementById("highway-stage");
-      if (!stage || !document.body.classList.contains("view-exercise")) {
-        if (stage) {
-          stage.style.height = "";
-          stage.style.maxHeight = "";
-          stage.style.minHeight = "";
-        }
+      if (!stage) return;
+      if (!document.body.classList.contains("view-exercise")) {
+        clearStageFit(stage);
         return;
       }
-      // Keep stage top in view so sticky geometry matches measure
-      try {
-        const title = document.getElementById("ex-title");
-        const cock = document.getElementById("practice-cockpit");
-        const anchor = title || cock || stage;
-        const ar = anchor.getBoundingClientRect();
-        if (ar.top < 0 || ar.top > (window.innerHeight || 600) * 0.35) {
-          // "instant": html has scroll-behavior: smooth, so "auto" glided and
-          // the stage below was measured mid-scroll.
-          anchor.scrollIntoView({ block: "start", behavior: "instant" });
-        }
-      } catch {
-        /* ignore */
-      }
+      anchorStageTop(stage);
       syncStageInsets();
-      const r = stage.getBoundingClientRect();
       const { vh, offsetTop, safeBottom } = getViewportMetrics();
       // Gap: short/landscape + safe-area (home indicator)
       const gap = (vh < 500 ? 12 : 8) + Math.max(0, safeBottom);
       // Visual bottom of the usable screen (visualViewport may be offset)
       const visualBottom = offsetTop + vh;
-      // Size for the lowest the stage sits at rest. It is sticky, so a page
-      // scrolled by a few pixels lifts it to its sticky offset; measured then,
-      // the stage came out that much too tall once the page was back at the
-      // top (VG-30: 400px against a 390px landscape phone). When the stage
-      // starts high enough that the top of the page is where it rests, size it
-      // for that position.
-      let top = Math.max(0, r.top);
-      const cock = document.getElementById("practice-cockpit");
-      if (cock && stage.parentElement === cock) {
-        const cs = getComputedStyle(cock);
-        const restTop =
-          cock.getBoundingClientRect().top +
-          window.scrollY +
-          (parseFloat(cs.borderTopWidth) || 0) +
-          (parseFloat(cs.paddingTop) || 0);
-        if (restTop <= vh * 0.35) top = Math.max(top, restTop);
-      }
-      // Remaining space under stage top within the *visual* viewport
-      const avail = Math.floor(visualBottom - top - gap);
-      let maxH = Math.max(120, avail);
-      // Prefer tall for low vision but never past visual bottom
-      const prefer = Math.min(
-        maxH,
-        Math.round(vh * (vh < 500 ? 0.9 : vh < 700 ? 0.8 : 0.76)),
-        vh < 500 ? 360 : vh < 700 ? 460 : 720
-      );
-      let h = Math.max(120, Math.min(prefer, maxH));
+      const top = stageRestTop(stage, vh);
+      const maxH = Math.max(120, Math.floor(visualBottom - top - gap));
+      const pianoCap = fitStageBesidePiano(stage, visualBottom, safeBottom);
+      const h = Math.min(preferredStageHeight(vh, maxH), pianoCap);
       stage.style.minHeight = "0";
-      stage.style.maxHeight = `${maxH}px`;
-      stage.style.height = `${h}px`;
-      // Multi-pass: borders/subpixels / sticky can push y2 past visual bottom
-      for (let pass = 0; pass < 3; pass++) {
-        const rb = stage.getBoundingClientRect();
-        if (rb.bottom <= visualBottom - 1) break;
-        const fix = Math.max(
-          100,
-          Math.floor(visualBottom - rb.top - (pass === 0 ? 6 : pass === 1 ? 10 : 14))
-        );
-        stage.style.maxHeight = `${fix}px`;
-        stage.style.height = `${fix}px`;
-      }
+      setStageHeight(stage, h, Math.min(maxH, pianoCap));
+      clampStageToScreen(stage, visualBottom);
       // Rails re-measured at the fitted height, so mode-focus and the lanes
       // never run under Start/Mic (hit-target safety) or the top controls.
       syncStageInsets();
       fitStageGuide();
-      // Ensure Start is fully inside visual viewport (critical for short + land)
-      try {
-        const start = document.getElementById("btn-practice-start");
-        if (start && !start.hidden) {
-          const sb = start.getBoundingClientRect();
-          if (sb.bottom > visualBottom - 2 || sb.height < 1) {
-            const rb = stage.getBoundingClientRect();
-            const over = sb.bottom - (visualBottom - 4);
-            if (over > 0) {
-              const nh = Math.max(100, Math.floor(rb.height - over - 4));
-              stage.style.maxHeight = `${nh}px`;
-              stage.style.height = `${nh}px`;
-            }
-          }
-        }
-      } catch {
-        /* ignore */
-      }
-      // Resize pitch canvas to new stage box; redraw idle if not live
-      try {
-        if (state.pitchViz) {
-          if (!state.practiceLive && typeof state.pitchViz.redrawIdle === "function") {
-            state.pitchViz.redrawIdle();
-          } else if (typeof state.pitchViz._resize === "function") {
-            state.pitchViz._resize();
-          }
-        }
-      } catch {
-        /* ignore */
-      }
+      keepStartOnScreen(stage, visualBottom);
+      redrawPitchForStage();
     } catch {
       /* ignore */
     }
@@ -6024,7 +6137,8 @@
   }
 
   /* —— Bindings —— */
-  function bind() {
+  /** Tabs, catalog chips, top nav and the guided-session banner. */
+  function bindNavigation() {
     $$(".tab").forEach((t) => t.addEventListener("click", () => setTab(t.dataset.tab)));
 
     $$(".tier-chip").forEach((c) => {
@@ -6080,7 +6194,10 @@
     $("#btn-back-home").addEventListener("click", () => {
       leaveExerciseBack();
     });
+  }
 
+  /** Start, Stop, Continue and the jump to the exercise list. */
+  function bindPracticeButtons() {
     $("#btn-practice-start")?.addEventListener("click", startPractice);
     $("#btn-practice-stop")?.addEventListener("click", () => stopPractice(false));
     $("#btn-continue")?.addEventListener("click", continuePractice);
@@ -6090,7 +6207,9 @@
       $("#catalog-panel")?.scrollIntoView({ behavior: scrollBehavior(), block: "start" });
       $("#catalog-heading")?.focus({ preventScroll: true });
     });
+  }
 
+  function bindMicSensitivity() {
     // Mic sensitivity (1–10) — persists + applies live while practicing
     // Level 10 ≈ 3× more sensitive than legacy max (soft SH/air)
     const micRange = $("#mic-sensitivity");
@@ -6119,7 +6238,9 @@
       applyMicSens(saved);
       micRange.addEventListener("input", () => applyMicSens(micRange.value));
     }
+  }
 
+  function bindManualSpace() {
     // Hold Space to supplement sound autodetection (non-highway exercises only)
     const isTypingTarget = (el) => {
       if (!el || !el.tagName) return false;
@@ -6251,6 +6372,10 @@
     });
     // Expose for practice start/stop
     state._updateManualHintVisibility = updateManualHintVisibility;
+  }
+
+  /** The exercise guide card and the stage's link into it. */
+  function bindGuideToggles() {
     $("#btn-stage-guide-more")?.addEventListener("click", () => {
       const btn = $("#btn-toggle-guide");
       if (!btn) return;
@@ -6268,37 +6393,59 @@
         btn.setAttribute("aria-expanded", String(state.guideOpen));
       }
     });
-    $("#btn-toggle-piano")?.addEventListener("click", () => {
-      state.pianoOpen = !state.pianoOpen;
-      const block = $("#piano-block");
-      const mini = $("#piano-mini-opts");
-      if (block) {
-        if (state.pianoOpen) {
-          block.hidden = false;
-          // next frame so max-height transition can run
-          requestAnimationFrame(() => block.classList.add("is-open"));
-          // Bring progressions into view only when user asked
-          block.scrollIntoView({ behavior: scrollBehavior(), block: "nearest" });
-        } else {
-          block.classList.remove("is-open");
-          setTimeout(() => {
-            if (!state.pianoOpen) block.hidden = true;
-          }, 220);
-        }
+  }
+
+  /** Open or close the piano panel under the stage. */
+  function togglePianoPanel() {
+    state.pianoOpen = !state.pianoOpen;
+    const block = $("#piano-block");
+    const mini = $("#piano-mini-opts");
+    if (block) {
+      if (state.pianoOpen) {
+        block.hidden = false;
+        // next frame so max-height transition can run
+        requestAnimationFrame(() => block.classList.add("is-open"));
+        // Opened, size the stage beside the panel and bring the panel into
+        // view below whatever stays stuck over it (only when user asked).
+        afterPanelOpens(block, () => {
+          if (!state.pianoOpen) return;
+          block.classList.add("is-settled");
+          fitHighwayToViewport();
+          revealBelowStickyRows(block, scrollBehavior());
+        });
+      } else {
+        // Back under the cap first, so closing animates from a height.
+        block.classList.remove("is-settled");
+        void block.offsetHeight;
+        block.classList.remove("is-open");
+        setTimeout(() => {
+          if (state.pianoOpen) return;
+          block.hidden = true;
+          fitHighwayToViewport();
+        }, 220);
       }
-      // Expand secondary BR opts when piano panel open (progressive disclosure)
-      if (mini) {
-        mini.classList.toggle("piano-opts-expanded", !!state.pianoOpen);
-        mini.classList.toggle("piano-opts-compact", !state.pianoOpen);
-      }
-      const btn = $("#btn-toggle-piano");
-      if (btn) {
-        setPianoToggleLabel(btn, !!state.pianoOpen);
-        btn.title = state.pianoOpen ? tt("piano.hidePanel") : tt("piano.showPanel");
-        btn.setAttribute("aria-label", btn.title);
-        btn.setAttribute("aria-expanded", String(!!state.pianoOpen));
-      }
-    });
+    }
+    // Expand secondary BR opts when piano panel open (progressive disclosure)
+    if (mini) {
+      mini.classList.toggle("piano-opts-expanded", !!state.pianoOpen);
+      mini.classList.toggle("piano-opts-compact", !state.pianoOpen);
+    }
+    const btn = $("#btn-toggle-piano");
+    if (btn) {
+      setPianoToggleLabel(btn, !!state.pianoOpen);
+      btn.title = state.pianoOpen ? tt("piano.hidePanel") : tt("piano.showPanel");
+      btn.setAttribute("aria-label", btn.title);
+      btn.setAttribute("aria-expanded", String(!!state.pianoOpen));
+    }
+  }
+
+  function bindPianoPanel() {
+    $("#piano-block")?.addEventListener("focusin", (e) => revealBelowStickyRows(e.target));
+    $("#btn-toggle-piano")?.addEventListener("click", togglePianoPanel);
+  }
+
+  /** Metrics form, timer and recorder. */
+  function bindTakeTools() {
     $("#btn-toggle-metrics")?.addEventListener("click", () => {
       openMetricsPanel(!state.metricsOpen);
     });
@@ -6309,7 +6456,10 @@
 
     $("#btn-rec-start")?.addEventListener("click", startRecording);
     $("#btn-rec-stop")?.addEventListener("click", stopRecording);
+  }
 
+  /** Progressions, play modes, sustain, auto piano and the vocal-range octave. */
+  function bindPianoOptions() {
     $("#btn-play-prog")?.addEventListener("click", () => playSelectedProgression(false));
     $("#btn-loop-prog")?.addEventListener("click", () => playSelectedProgression(true));
     $("#sel-progression")?.addEventListener("change", (e) => {
@@ -6356,7 +6506,10 @@
     $("#chk-range-auto")?.addEventListener("change", (e) => {
       setRangeAuto(!!e.target.checked);
     });
+  }
 
+  /** Reference pitch, inhale ticks and the legacy start/stop stubs. */
+  function bindReferenceCues() {
     $("#btn-ref-pitch")?.addEventListener("click", async () => {
       // While a mode that owns its targets runs, the reference is the note it
       // is waiting for, not the exercise's generic refPitch, and the target
@@ -6385,7 +6538,10 @@
     $("#btn-pitch-stop")?.addEventListener("click", () => stopPractice(false));
     $("#btn-hold-start")?.addEventListener("click", startPractice);
     $("#btn-hold-stop")?.addEventListener("click", () => stopPractice(false));
+  }
 
+  /** Save, one-tap rating and the guided step's done card. */
+  function bindRating() {
     $("#btn-complete").addEventListener("click", () => completeExercise());
     $$(".rate-btn").forEach((b) => b.addEventListener("click", () => rateFeel(b.dataset.feel)));
     $("#btn-rate-skip")?.addEventListener("click", leaveUnrated);
@@ -6412,13 +6568,18 @@
       stepDoneChoice("close");
       hideStepDone(true);
     });
+  }
 
+  /** The week plan view. */
+  function bindPlanButtons() {
     $("#btn-open-plan").addEventListener("click", renderPlan);
     $("#btn-plan-start").addEventListener("click", startWeekPlan);
     $("#plan-focus-more").addEventListener("click", togglePlanElements);
     $("#btn-plan-improved").addEventListener("click", () => submitWeekReview(true));
     $("#btn-plan-continue").addEventListener("click", () => submitWeekReview(false));
+  }
 
+  function bindPageLifecycle() {
     // Warn on tab close if meaningful unsaved practice
     window.addEventListener("beforeunload", (e) => {
       if (shouldPromptOnLeave()) {
@@ -6440,6 +6601,21 @@
       if (state.view === "exercise") recordPracticeIfDue("hidden");
       window.VTSync?.flush?.();
     });
+  }
+
+  function bind() {
+    bindNavigation();
+    bindPracticeButtons();
+    bindMicSensitivity();
+    bindManualSpace();
+    bindGuideToggles();
+    bindPianoPanel();
+    bindTakeTools();
+    bindPianoOptions();
+    bindReferenceCues();
+    bindRating();
+    bindPlanButtons();
+    bindPageLifecycle();
   }
 
   // ── Billing / pricing overlay (Stripe + Mercado Pago) ──

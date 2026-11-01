@@ -159,12 +159,6 @@
     },
     {
       "file": "js/app.js",
-      "sha": "712dcfc508fe1fd1a487e29ccc31672ff8d5232bcb43c0608bd0f24172e1bb2d",
-      "complexity": 48,
-      "name": "Function 'bind'"
-    },
-    {
-      "file": "js/app.js",
       "sha": "42d729c956e6e6511e5cc34bae2eb5f25dfceb4cf87b86ca8708ebeaaf898272",
       "complexity": 17,
       "name": "Function 'bindAccount'"
@@ -186,12 +180,6 @@
       "sha": "884d50512b7850b177eff8f8300d4344243fe43b22c2380820d4cbd7df161b98",
       "complexity": 17,
       "name": "Function 'exerciseSummary'"
-    },
-    {
-      "file": "js/app.js",
-      "sha": "f5e28723af6af0bafb271a5a7288847643bb5b9b4f63fe68d625f9216a82ff41",
-      "complexity": 36,
-      "name": "Function 'fitHighwayToViewport'"
     },
     {
       "file": "js/app.js",

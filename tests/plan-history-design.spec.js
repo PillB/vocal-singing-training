@@ -114,7 +114,9 @@ test.describe("Plan: one focus, its exercises, days counted", () => {
     await expect(page.locator("#plan-pick")).toHaveText("¿Qué quieres mejorar esta semana?");
     await expect(page.locator("#plan-start-hint")).toBeVisible();
     await expect(page.locator("#plan-el-desc")).toBeHidden();
-    // Pressing it first goes straight to the choice it is waiting on.
+    // The no-selection action must say what it actually does: focus choices,
+    // not begin a week. The old 'Empezar esta semana' label failed this contract.
+    await expect(page.locator("#btn-plan-start")).toHaveText("Elegir qué mejorar");
     await page.locator("#btn-plan-start").click();
     await expect(page.locator("#element-chips .chip").first()).toBeFocused();
     expect(await page.evaluate(() => VTStorage.getWeekPlan().status)).toBe("idle");

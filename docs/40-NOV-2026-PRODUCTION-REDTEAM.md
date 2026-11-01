@@ -5,7 +5,7 @@
 ## Boundaries of evidence
 
 - Read repository strategy, requirements, catalog snapshot, reliability/QA, live forensics, UI red-team and implementation; statically inspected audio engine, pitch visualizer, guided scenes, progression map, app timing, worker and representative tests. Frozen catalog: **47 exercises (20 speaking, 27 singing), 40 registered modes, 13 progressions**. Older reports saying 36 are historical.
-- Direct public-browser interaction: **Home → Hablar → Mejor dicción** (idle next rung, guidance, geometry), **Home → Cantar → Afinar una nota** (six progression/mode/challenge/octave/range combinations), and independent QA's **Soltar mandíbula y cuello** (Start/Stop/phase/reflect/save). These are sampled live observations, NOT 6 rounds × 47 exercises.
+- Direct public-browser interaction: **all 47 exercise cards opened to their idle/ready screens**, with visible control rectangles and labels inventoried, horizontal document width and interactive-rectangle intersections measured, then returned to catalog. Also **Home → Hablar → Mejor dicción** (idle next rung), **Home → Cantar → Afinar una nota** (six progression/mode/challenge/octave/range combinations), **Escalera de aire SH** (mic primer decline and expanded safety instructions), and independent QA's **Soltar mandíbula y cuello** (Start/Stop/phase/reflect/save). This verifies navigation and *ready-state* geometry, NOT 6 live rounds × 47 exercises.
 - Browser screenshots observed at ~1348×926 desktop. Local Playwright binary was absent; its download through the present environment returned a truncated/0-byte archive even with approved network access. This is an **environmental execution blocker**, not a passing/failing visual suite. CI must run the full suite elsewhere. No physical microphone, iOS Safari, device-permission grant, payment production endpoint or real voice corpus was used in this audit.
 
 ## Z-pattern visual and reading-order inventory (observed)
@@ -39,7 +39,7 @@
 
 ## Complete exercise inventory and coverage status
 
-Every ID below is in the frozen catalog and statically exercised by existing source/test contracts. `LIVE` means direct UI sample in this audit (not full microphone/per-tick acceptance); `CODE` is code/catalog only.
+Every ID below is in the frozen catalog and was opened for a live ready-state DOM/geometry scan. `LIVE` means an **additional direct control/flow sample** in this audit (not full microphone/per-tick acceptance); `CODE` means ready-state navigation/geometry plus code/catalog review only. The SH air ladder also received a primer-decline/guide inspection; it is listed `LIVE` below.
 
 | ID | Exercise (Spanish) | Mode | Required sound contract | Audit |
 |---|---|---|---|---|
@@ -77,7 +77,7 @@ Every ID below is in the frozen catalog and statically exercised by existing sou
 | s12-easy-onset | Ataque suave | onsetReps | Piano-capable | CODE |
 | s13-arpeggio-match | Arpegios afinados | pitchChord | Piano-capable | CODE |
 | s14-staccato-legato | Staccato vs legato | staccatoLegato | Piano-capable | CODE |
-| s15-sh-air-ladder | Escalera de aire SH | shAirLadder | Unvoiced air / no piano | CODE |
+| s15-sh-air-ladder | Escalera de aire SH | shAirLadder | Unvoiced air / no piano | LIVE |
 | s16-major-scale-coord | Coordinación en escala mayor | scaleSteps | Piano-capable | CODE |
 | s17-jaw-neck-release | Soltar mandíbula y cuello | releaseFlow | Silent guided / no mic | LIVE |
 | s18-costal-breath | Respiración costo-abdominal (apoyo) | breathCycle | Silent guided / no piano | CODE |
@@ -90,6 +90,60 @@ Every ID below is in the frozen catalog and statically exercised by existing sou
 | s25-zone-tour | Recorrido por las tres zonas | resonanceZone | Piano-capable | CODE |
 | s26-placement-compare | Comparar colocaciones (A/B) | placementAB | Piano-capable | CODE |
 | s27-lip-trill-solfege | Solfeo en trino de labios | trillSolfege | Piano-capable | CODE |
+
+### Runtime control inventory of all 47 ready states (public desktop)
+
+Live scan at approximately 1348px content width / 1363px inner viewport. Every card reached an exercise view and returned to the catalog. **Zero horizontal document overflows and zero intersections larger than 200px² between visible button/link/select rectangles** were found. This geometric check is deliberately narrow: it cannot detect clipped *text* inside a canvas, overlaps with decorative HUD graphics, obscured focus states, inaccessible checkbox labels, or narrow-screen problems. Small native checkboxes (13–18px) are counted for follow-up; their wrapping labels may provide larger actual hit targets, so this is **not** a claim of a WCAG violation. Control counts include Back, Help, Start, guide and reflection controls; the third column lists controls distinctive to the exercise.
+
+| Exercise | Visible controls at idle | Distinctive actions/options (alongside shared HUD) | Sub-24px native inputs |
+|---|---:|---|---:|
+| v1-diction | 9 | Siguiente peldaño | 1 |
+| v2-volume | 9 | A ciegas | 1 |
+| v3-soft-palate | 9 | Quitar / añadir número | 0 |
+| v4-articulation-pen | 9 | Siguiente | 1 |
+| v5-neutral-ears | 9 | Siguiente | 1 |
+| v6-connect | 10 | Siguiente situación; Aprendí un dato real | 1 |
+| v7-record-review | 12 | Otro tema; record/review options | 4 |
+| v8-fluency-metaphors | 11 | Siguiente tema; Dije una metáfora; Otro tema | 1 |
+| v9-12-week | 10 | Abrir el plan (two entry controls) | 1 |
+| v10-power-pause | 9 | Siguiente toma | 1 |
+| v11-kill-fillers | 11 | Siguiente ronda; Noté un relleno; Pausé en su lugar | 1 |
+| v12-melodic-speech | 17 | Siguiente toma; octave/range; one-note/arpeggio/sustain/duration/auto-piano | 6 |
+| v13-volume-ladder | 9 | Historia | 1 |
+| v14-pace-variation | 10 | Siguiente toma; Punto clave | 1 |
+| v15-gestures | 9 | Siguiente | 1 |
+| v16-facial-expression | 9 | Siguiente | 1 |
+| v17-strategic-concision | 9 | Siguiente pregunta | 1 |
+| v18-story-peak | 10 | Marcar el pico ahora; Pasar a la siguiente parte | 1 |
+| v19-authority-close | 9 | Otra vez | 1 |
+| v20-energy-match | 9 | Siguiente toma | 1 |
+| s1-vocal-fry | 12 | Pasar a /A/ clara; shared piano options | 2 |
+| s2-solfege-chords | 13 | Progresión; modo piano; shared octave | 2 |
+| s3-song-stanzas | 18 | Progresión; modo piano; 4/6/8s; Canción A/B +1 | 2 |
+| s4-lip-trills | 13 | Paso a /A/ | 2 |
+| s5-sirens | 11 | Shared octave, range, piano | 2 |
+| s6-straw | 13 | Sin pajita: /u/→/A/ | 2 |
+| s7-humming | 11 | Shared octave, range, piano | 2 |
+| s8-breath-support | 13 | Paso 2: /A/ | 2 |
+| s9-pitch-match | 14 | Progresión; modo piano; Reto | 3 |
+| s10-five-note | 11 | Shared octave, range, piano | 2 |
+| s11-dynamics | 13 | Duración de cada regulador | 2 |
+| s12-easy-onset | 13 | Saltar ejemplos | 2 |
+| s13-arpeggio-match | 13 | Progresión; modo piano | 2 |
+| s14-staccato-legato | 13 | Siguiente fase | 2 |
+| s15-sh-air-ladder | 8 | Space-assisted air ladder (keyboard guidance) | 1 |
+| s16-major-scale-coord | 11 | Shared octave, range, piano | 2 |
+| s17-jaw-neck-release | 8 | Siguiente (disabled outside active take after patch) | 0 |
+| s18-costal-breath | 7 | Silent guided steps | 0 |
+| s19-soft-palate-surprise | 13 | Siguiente | 2 |
+| s20-five-vowels | 12 | Shared octave, range, piano | 2 |
+| s21-chest-resonance | 12 | Shared octave, range, piano | 2 |
+| s22-mid-voice-hola | 12 | Shared octave, range, piano | 2 |
+| s23-mask-ya | 13 | Siguiente fase | 2 |
+| s24-nana-high | 12 | Shared octave, range, piano | 2 |
+| s25-zone-tour | 12 | Shared octave, range, piano | 2 |
+| s26-placement-compare | 13 | Toma lista | 2 |
+| s27-lip-trill-solfege | 10 | Shared octave, range, piano | 1 |
 
 ## Tiered issues and root causes
 
@@ -110,6 +164,7 @@ Every ID below is in the frozen catalog and statically exercised by existing sou
 | P3-13 | P3 | `En vivo · release Flow`; `¡1 días cantados!` | Missing localized mode names, interpolated plural | **Open**; all 40 mode-name and 0/1/2 locale assertions |
 | P3-14 | P3 | Historical docs claim 36 exercises despite 47 current | Documentation lag | **Open**, frozen snapshot is authoritative |
 | P2-15 | P2 | Static red-team scan flags five `innerHTML` template concatenations in `js/app.js` | Translation/template strings rendered into HTML without uniformly applying text-only sinks | **Triage open**: observed flagged paths at audit lines ~1748, 1939, 1952, 5574, 8476. Several already escape dynamic content; prove source provenance and hostile-payload tests before calling them exploitable or safe |
+| P2-16 | P2 | `v12-melodic-speech` places 17 idle controls into a crowded bottom HUD. Auto-piano is unchecked yet one-note/arpeggio/sustain/duration controls remain prominent; text/decoration looks compressed around mic sensitivity, octave and range. | Shared piano controls are exposed regardless of whether the optional accompaniment is enabled; desktop interactive rectangles technically do not intersect | **Open**; use progressive disclosure tied to Auto piano with keyboard and responsive layout tests; screenshot at ~1348px observed, 320/390px and 200% zoom untested |
 
 ### Scientific trade-offs that must not be hidden
 
@@ -117,10 +172,11 @@ Every ID below is in the frozen catalog and statically exercised by existing sou
 - Mapping C0 is better than silently dropping notes or playing wrong labels, but phone speakers may not produce 16Hz and the detector does not score it. The warning is an interim guard; a world-class release should restrict unachievable note targets and personalize the singer's tessitura.
 - On tab hide, stopping the entire active take and resetting its visible timer sacrifices uninterrupted background practice; it prevents unearned hidden minutes, stuck microphones and corrupted guided chapters. The user is told to restart. A true pause/resume feature would require coordinated audio/recording/phase checkpoints, not just a countdown pause.
 - ESLint complexity limit is 20 for all new code, with **223 explicit, ratcheted legacy exceptions in 60 files**. Making the whole legacy base ≤20 requires substantial refactoring and additional regression coverage; that debt is not disguised as a clean codebase.
+- The 901 Playwright tests run as **four independent GitHub Actions shards**, each with one browser worker (per Playwright's CI stability advice). This lowers elapsed feedback time and limits inter-test resource contention at the expense of four browser installations, greater concurrent CI capacity and more total setup minutes. Every shard must pass; no shard is silently sampled or skipped.
 
 ## Rounds ledger and next falsifiable acceptance matrix
 
-Five analysis axes were reviewed at representative code/scene level: catalog and pedagogy, mathematical pitch/timing, UI hierarchy and labels, audio/recording architecture, privacy/payment integration. Five adversarial axes were sampled: harmonic/noise inputs, octave limits, frame cadence/background state, misleading enabled controls, test oracle independence. Four visual axes were observed on desktop exemplars: information hierarchy, approximate geometry/fold, available controls, empty-state feedback. **Per-exercise exhaustive five/five/four passes and six live takes are NOT complete.**
+Five analysis axes were reviewed at representative code/scene level: catalog and pedagogy, mathematical pitch/timing, UI hierarchy and labels, audio/recording architecture, privacy/payment integration. Five adversarial axes were sampled: harmonic/noise inputs, octave limits, frame cadence/background state, misleading enabled controls, test oracle independence. Four visual axes were observed on desktop exemplars: information hierarchy, approximate geometry/fold, available controls, empty-state feedback. A single **ready-state UI/geometry pass covered 47/47 exercise pages**, while **per-exercise exhaustive five/five/four passes and six live takes are NOT complete**.
 
 For each of 47 exercises, run 6 rounds with independent oracle:
 
@@ -141,3 +197,4 @@ Every round must compare **correct vs deliberately wrong behavior**, e.g. 440Hz�
 - **Release remains blocked** by real mic/device, false-score/feedback, auth/payment, six-round per-exercise live sweeps and Pages SHA verification. No source push alone establishes production readiness.
 
 Research: [original YIN](https://pubmed.ncbi.nlm.nih.gov/12002874/), [librosa YIN reference behavior](https://librosa.org/doc/main/api/generated/librosa.yin.html), [WCAG 2.2](https://www.w3.org/TR/WCAG22/), [MDN rAF background behavior](https://developer.mozilla.org/en-US/docs/Web/API/Window/requestAnimationFrame), [MDN MediaRecorder MIME support](https://developer.mozilla.org/en-US/docs/Web/API/MediaRecorder/isTypeSupported_static), [NIDCD vocal health](https://www.nidcd.nih.gov/health/taking-care-your-voice), [OWASP ASVS](https://owasp.org/projects/asvs), [Playwright best practices](https://playwright.dev/docs/best-practices).
+CI scaling reference: [Playwright's official sharding guidance](https://playwright.dev/docs/test-sharding) and [CI worker recommendations](https://playwright.dev/docs/ci).

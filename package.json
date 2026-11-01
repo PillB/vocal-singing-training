@@ -3,7 +3,10 @@
   "version": "1.0.0",
   "description": "Self-paced Vocal & Singing Training practice site",
   "scripts": {
-    "test": "node qa/check-catalog.mjs && node --test workers/entitlements/test && playwright test",
+    "test": "npm run lint && npm run test:signal && node qa/check-catalog.mjs && node --test workers/entitlements/test && playwright test",
+    "lint": "node qa/check-complexity.mjs",
+    "chore:lint": "npm run lint",
+    "test:signal": "node qa/pitch-estimator.test.mjs && node qa/piano-range.test.mjs && node qa/guided-clock.test.mjs && node qa/microphone-race.test.mjs",
     "test:e2e": "playwright test",
     "test:catalog": "node qa/check-catalog.mjs",
     "test:mobile": "node qa/capture-mobile.mjs",
@@ -36,11 +39,17 @@
     "serve": "python3 -m http.server 8765",
     "start": "python3 -m http.server 8765"
   },
-  "keywords": ["vocal", "singing", "training", "education"],
+  "keywords": [
+    "vocal",
+    "singing",
+    "training",
+    "education"
+  ],
   "author": "PillB",
   "license": "MIT",
   "devDependencies": {
     "@playwright/test": "^1.61.1",
+    "eslint": "^9.39.5",
     "playwright": "^1.61.1"
   }
 }

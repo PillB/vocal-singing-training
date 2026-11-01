@@ -306,6 +306,12 @@
     }
 
     if (!opts.silent) {
+      // The lowest option can move accompaniment below the range that phone
+      // speakers and our pitch detector can reproduce/measure reliably.
+      if (next === -2) {
+        toast(tt("range.lowOctaveCaution"), { durationMs: 4800 });
+        return true;
+      }
       const side = opts.decision?.side;
       if (opts.source === "auto" && side === "high") {
         toast(tt("range.shiftedDown"), { durationMs: 3200 });
@@ -6393,9 +6399,26 @@
       window.VTSync?.flush?.({ unloading: true });
     });
     document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState !== "hidden") return;
-      if (state.view === "exercise") recordPracticeIfDue("hidden");
-      window.VTSync?.flush?.();
+      if (document.visibilityState === "hidden") {
+        if (state.view === "exercise") recordPracticeIfDue("hidden");
+        if (state.practiceLive || state.practiceStarting) {
+          // A hidden microphone may keep recording while rAF stops: pausing
+          // only the visible clock would credit invisible sustained holds and
+          // corrupt review timestamps. Close mic/recorder/piano together.
+          stopPractice(true);
+          // The next Start remounts the phase runner from phase 1, therefore
+          // its timer must also restart from the beginning (never 0:30 left
+          // to do an initial 2:00 guided sequence).
+          resetTimer();
+          state._interruptedByVisibility = true;
+        }
+        window.VTSync?.flush?.();
+        return;
+      }
+      if (state._interruptedByVisibility && state.view === "exercise") {
+        state._interruptedByVisibility = false;
+        toast(tt("toast.backgroundStopped"), { durationMs: 4200 });
+      }
     });
   }
 

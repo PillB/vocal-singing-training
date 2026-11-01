@@ -58,27 +58,6 @@ async function sampleAudio(page) {
     }
     const st = window.VTApp?.getState?.();
     const ex = st?.exercise;
-    const profile = ex && window.VTPracticeProfiles
-      ? null
-      : null;
-    // Mirror app exerciseWantsSound logic
-    const wants = !!(
-      ex &&
-      (ex.audio?.piano ||
-        ex.audio?.refPitch ||
-        ex.progressions ||
-        ex.audio?.progressions ||
-        ex.songs ||
-        (st &&
-          (() => {
-            try {
-              // profile via app getProfile if exposed — fall back to DOM auto-piano + pitch block
-              return false;
-            } catch {
-              return false;
-            }
-          })()))
-    );
     const autoOn = document.querySelector("#chk-auto-piano")?.checked !== false;
     const pitchShown = !!(
       document.querySelector("#pitch-block") &&
@@ -98,25 +77,15 @@ async function sampleAudio(page) {
       autoOn,
       pitchShown,
       miniPiano,
-      wantsHeuristic: wants || pitchShown || miniPiano,
       master: P?.master?.gain?.value ?? null,
       id: ex?.id
     };
   });
 }
 
-/** Prefer live VTApp.wantsSound (profile.autoPiano / progressions / ref). */
-async function expectsPianoSound(page, ex) {
-  const live = await page.evaluate(() => {
-    try {
-      return !!window.VTApp?.wantsSound?.();
-    } catch {
-      return null;
-    }
-  });
-  if (live != null) return live;
-  // Fallback: catalog flags only (s15 SH air has no piano — must not match mode regex)
-  return !!(ex.hasPiano || ex.hasPitchViz || ex.showPitch);
+/** Frozen contract: deliberately independent from VTApp.wantsSound(). */
+function expectsPianoSound(ex) {
+  return ex.hasPiano === true;
 }
 
 test.describe("Sound verification: all exercises Empezar", () => {
@@ -151,12 +120,10 @@ test.describe("Sound verification: all exercises Empezar", () => {
       for (const ex of ordered) {
         try {
           await openEx(page, ex.id);
-          // Force auto piano ON when control exists (user-visible default)
-          await page.evaluate(() => {
-            const a = document.querySelector("#chk-auto-piano");
-            if (a) a.checked = true;
-          });
-          const wantSound = await expectsPianoSound(page, ex);
+          // Enable through the actual input handler, not an unobserved DOM edit.
+          const auto = page.locator("#chk-auto-piano");
+          if (await auto.isVisible() && await auto.isEnabled()) await auto.check();
+          const wantSound = expectsPianoSound(ex);
 
           await page.click("#btn-practice-start");
           await page.waitForTimeout(ex.mode === "weekPlan" ? 300 : 500);

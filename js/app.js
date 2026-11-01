@@ -7373,6 +7373,17 @@
     renderValuePulse();
   }
 
+  /** Keep locale/count choice outside the already-complex pricing renderer. */
+  function pricingPersonalProof(p) {
+    const sessions = Number(p.sessions) || 0;
+    return tt(sessions === 1 ? "pricing.personalHaveOne" : "pricing.personalHave", {
+      sessions: String(sessions),
+      minutes: String(p.minutes || 0),
+      streak: String(p.streak || 0),
+      hold: p.bestHoldSec >= 0.5 ? Number(p.bestHoldSec).toFixed(1) : "0"
+    });
+  }
+
   function renderPricingModal() {
     const B = window.VTBilling;
     if (!B) return;
@@ -7434,12 +7445,7 @@
       if (!p.sessions && p.bestHoldSec < 0.5) {
         personal.textContent = tt("pricing.personalEmpty");
       } else {
-        personal.textContent = tt("pricing.personalHave", {
-          sessions: String(p.sessions || 0),
-          minutes: String(p.minutes || 0),
-          streak: String(p.streak || 0),
-          hold: p.bestHoldSec >= 0.5 ? Number(p.bestHoldSec).toFixed(1) : "0"
-        });
+        personal.textContent = pricingPersonalProof(p);
       }
     }
     const rails = $("#pricing-rails");

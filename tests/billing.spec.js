@@ -614,6 +614,15 @@ test.describe("Billing & subscriptions", () => {
     await expect(page.locator("#pricing-modal")).toBeVisible();
     await expect(page.locator("#pricing-value-stack")).toBeVisible();
     await expect(page.locator("#pricing-personal")).toBeVisible();
+    // One saved session is singular, in both languages. The previous copy
+    // said '1 sesiones', and generic plural interpolation would regress it.
+    await expect(page.locator("#pricing-personal")).toContainText("Hasta hoy: 1 sesión ·");
+    await expect(page.locator("#pricing-personal")).not.toContainText("1 sesiones");
+    await page.locator("#pricing-close").click();
+    await page.locator("#btn-lang").click();
+    await page.locator("#btn-pricing").click();
+    await expect(page.locator("#pricing-personal")).toContainText("So far: 1 session ·");
+    await expect(page.locator("#pricing-personal")).not.toContainText("1 sessions");
     const pulse = await page.evaluate(() => window.VTValuePulse?.compute?.());
     expect(pulse).toBeTruthy();
     expect(typeof pulse.sessions).toBe("number");

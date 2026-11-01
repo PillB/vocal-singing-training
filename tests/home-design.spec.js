@@ -469,3 +469,26 @@ test.describe("Phone: one-row header with Más", () => {
     }
   });
 });
+
+test.describe("The page keeps its one h1 for screen readers at every width (QA-04)", () => {
+  // Wrong behaviour this rejects: below 375px the header hid the brand with
+  // display: none, which took the page's only level-1 heading out of the
+  // accessibility tree. 375px is the control: the brand shows there.
+  for (const width of [320, 360, 375]) {
+    test(`${width}px: one level-1 heading, named, and the row keeps every section`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 740 });
+      await boot(page);
+      const h1 = page.getByRole("heading", { level: 1 });
+      await expect(h1).toHaveCount(1);
+      await expect(h1).toHaveAccessibleName("Entrenamiento vocal y de canto");
+      // The name is read once: the mark that repeats it is gone where the title is hidden.
+      const marks = await page.getByRole("img", { name: "Entrenamiento vocal y de canto" }).count();
+      const shown = await page.locator(".app-header .brand").evaluate((b) => b.getBoundingClientRect().width > 2);
+      expect(marks, "the mark shows only beside a visible title").toBe(shown ? 1 : 0);
+      expect(shown, "the brand is visible from 375px").toBe(width >= 375);
+      // The reason the brand gives way: the nav keeps "Historial" whole.
+      const nav = await page.locator("#btn-history").evaluate((b) => b.scrollWidth <= b.clientWidth + 1 && b.getBoundingClientRect().right <= innerWidth);
+      expect(nav, "Historial whole and on screen").toBe(true);
+    });
+  }
+});

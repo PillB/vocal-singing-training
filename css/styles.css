@@ -7538,10 +7538,20 @@ body.view-exercise .highway-stage {
   /* Below 375px the row cannot hold the mark, the three sections whole, the
      door and "Más": something had to give, and until now it was "Historial",
      scrolled out of sight inside the nav pill ("Histo" at 320, gone entirely
-     beside a plan pill). The mark is decoration here — it is not a link, and
-     the title it stands for is already read to screen readers — so it goes,
-     and every section stays whole. */
+     beside a plan pill). The mark is decoration here (it is not a link), so
+     it goes, and every section stays whole. The title stays for screen
+     readers: display: none took the page's only h1 out of the accessibility
+     tree too (QA-04), so the brand is hidden visually, not removed, and only
+     the mark, which would read the same name twice, is dropped. */
   body .app-header:has(#btn-more) .brand {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  body .app-header:has(#btn-more) .brand-mark {
     display: none;
   }
 }

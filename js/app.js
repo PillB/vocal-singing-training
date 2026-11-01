@@ -4167,13 +4167,17 @@
   /* —— Rating: one tap after a take —— */
   /** Self-ratings a one-tap answer sets, on the 1–5 sliders. */
   const FEEL = { easy: 5, ok: 3, hard: 2 };
+  // An explicit rated Save is an intentional learner report, unlike passive
+  // auto-credit on navigation. Fifteen real seconds is a credible minimum for
+  // a short take; the stricter 15–45 s rule remains for automatic credit.
+  const RATED_MIN_TAKE_SEC = 15;
 
   /** One invariant shared by one-tap, detailed Save, and automatic practice.
    * Rating an unopened or negligible run is not evidence of a completed take.
    */
   function canSaveRatedTake() {
     const practiced = getPracticedSec();
-    const required = practiceCreditSec();
+    const required = RATED_MIN_TAKE_SEC;
     if (state.sessionPractice.everStarted && practiced >= required) return true;
     const message = tt("rate.practiceFirst", {
       s: Math.max(1, Math.ceil(required - practiced))
@@ -4243,9 +4247,9 @@
     if (note) {
       note.textContent = r.result
         ? tt("rate.saved", { score: VTMetrics.formatScore(r.result) })
-        : !state.sessionPractice.everStarted || getPracticedSec() < practiceCreditSec()
+        : !state.sessionPractice.everStarted || getPracticedSec() < RATED_MIN_TAKE_SEC
           ? tt("rate.practiceFirst", {
-              s: Math.max(1, Math.ceil(practiceCreditSec() - getPracticedSec()))
+              s: Math.max(1, Math.ceil(RATED_MIN_TAKE_SEC - getPracticedSec()))
             })
           : tt("rate.hint");
     }

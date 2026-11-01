@@ -34,19 +34,26 @@ test("no-start one-tap and detailed Save cannot create a perfect score, achievem
   expect(await page.locator("#first-win-card").count()).toBe(0);
 });
 
-test("a qualifying real take saves once and re-rating updates the same history entry", async ({ page }) => {
+test("a 14-second take is rejected; resumed practice beyond 15 seconds saves and re-rates once", async ({ page }) => {
   await page.clock.install();
   await boot(page, { mic: "silent" });
   await openExercise(page, "s4-lip-trills");
   await page.locator("#btn-practice-start").click();
   await expect.poll(() => page.evaluate(() => VTApp.getState().practiceLive)).toBe(true);
   // The app's real practice clock, not a mocked persisted progress row.
-  await page.clock.fastForward(50000);
+  await page.clock.fastForward(14000);
+  await page.locator("#btn-practice-stop").click();
+  await page.locator('.rate-btn[data-feel="ok"]').click();
+  const premature = await progress(page, "s4-lip-trills");
+  expect(premature.progress?.completedCount || 0).toBe(0);
+  await page.locator("#btn-practice-start").click();
+  await expect.poll(() => page.evaluate(() => VTApp.getState().practiceLive)).toBe(true);
+  await page.clock.fastForward(3000);
   await page.locator("#btn-practice-stop").click();
   await page.locator('.rate-btn[data-feel="ok"]').click();
   const first = await progress(page, "s4-lip-trills");
   expect(first.progress?.completedCount).toBe(1);
-  expect(first.progress.history[0].durationSec).toBeGreaterThanOrEqual(45);
+  expect(first.progress.history[0].durationSec).toBeGreaterThanOrEqual(15);
   const id = first.progress.history[0].id;
   await page.locator('.rate-btn[data-feel="hard"]').click();
   const second = await progress(page, "s4-lip-trills");

@@ -10,6 +10,17 @@ const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";
 
 async function boot(page, lang = "es", room) {
   const warnings = [];
+  // The real account worker is out of scope for offline picture tests. Supply
+  // a valid, deterministic methods response so external CORS/network status
+  // cannot mask a real rendering error or generate a false positive warning.
+  await page.route("**/v1/auth/methods", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: { "access-control-allow-origin": "*" },
+      body: JSON.stringify({ email: false, google: false, trialDays: 7 })
+    })
+  );
   page.on("console", (m) => {
     const t = m.text();
     // A network refusal (the sign-in probe to the worker, unreachable from a

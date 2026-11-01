@@ -156,7 +156,7 @@ before/after and key animation frames with actual time stamps.
 | VT-011 P2 historical trust | Previous false zero-duration score/streak entries may already exist | No trustworthy provenance/consent to repair | **Open.** Do not silently erase; optional one-time transparency/opt-in correction with backup. |
 | VT-012 P1 release evidence | Browser binaries unavailable locally (download produced invalid/zero-byte Chromium ZIP), cannot run patched UI tests | CI/runtime environment, no real mic | **Open:** GitHub Actions Chromium contract/full suite and post-merge live run are release gates. A source patch alone does not prove live correctness. |
 | VT-013 P2 UX localization | Some English/Spanish mixed copy and plural/wording quirks seen in live review (`1 días`, persona string) | Dynamic labels beyond static i18n dictionary | **Open:** bilingual copy/fold/ARIA sweep in six iterations, not safe to auto-correct all without screen context. |
-| VT-014 P1 experiment/recording privacy | Analytics/auth/entitlement workers exist; browser progress and recording state differ from server billing metadata | Existing multi-store architecture; docs "all practice data stays browser" requires precise data-flow validation | **Open:** privacy-network/consent and authenticated endpoint threat model; no production security certification implied. |
+| VT-014 P1 experiment/recording privacy | Analytics/auth/entitlement workers exist; browser progress and recording state differ from server billing metadata | Existing multi-store architecture; README incorrectly claimed "all practice data stays browser" while the live footer says accounts may sync progress and sends anonymous statistics | **README patched** with conditional sync/anonymous statistics/opt-out disclosure. **Open:** verify exact data flow, opt-out deletion and authenticated endpoint threat model; no production security certification implied. |
 | VT-015 P2 vocal inference | Reference speaker bleed, background fan, AGC, voice fry/unvoiced, very low/high voices can fool a frequency-only widget | Single mic pitch estimate is not a source classifier or diagnosis | **Open:** labeled gender/range/device corpus, headphones/noise calibration, test false-credit bounds, UI uncertainty cues. Do not promise objective vocal correctness. |
 | VT-016 P1 neighboring-note false credit | Trill solfège accepted up to **+120 cents** because of an old detector's sharp bias; the next chromatic semitone could be scored as the current note | Detector-specific tolerance left unchanged after new YIN estimator; s27 | **Patched, unit-pass:** default +50/−40-cent band; deliberate +100-cent test cannot advance, +30-cent hold does. **Trade-off:** legitimate human trills that read sharp by more than 50 cents may fail to advance until a labeled trill corpus justifies retuning. |
 
@@ -191,7 +191,8 @@ coverage table above.
    advancement, translation re-render, parser lint and a new Actions job;
    browser/CI must confirm.
 
-**Before merge:** run `npm run test:core`; run the complete Chromium suite,
+**Before merge:** run `npm run test:core`; run the dedicated Chromium regression
+contract job and all four virtual-display Chromium suite shards,
 inspect artifacts and failures, and complete manual mic, keyboard/focus,
 browser permissions and screen-reader tests. **After deploy:** recapture the
 published site at desktop, 390/360/landscape; repeat direct routes, A/B and

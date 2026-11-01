@@ -26,10 +26,10 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm run test:core
 
-  browser:
+  browser-contracts:
     needs: contracts
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 20
     env:
       CI: '1'
       MIC_HELP: '0'
@@ -41,13 +41,44 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts
       - run: npx playwright install --with-deps chromium
-      - name: Chromium user journeys and production regressions
-        run: npx playwright test --project=chromium --workers=2
+      - name: Chromium production regression contracts (headed-safe)
+        run: xvfb-run -a npx playwright test tests/production-contracts.spec.js --project=chromium --workers=2 --global-timeout=900000
+      - name: Preserve production-contract failures
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-contract-failures
+          path: |
+            test-results/
+            playwright-report/
+          if-no-files-found: ignore
+
+  browser:
+    needs: browser-contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    env:
+      CI: '1'
+      MIC_HELP: '0'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npx playwright install --with-deps chromium
+      - name: Chromium full journey suite (shard ${{ matrix.shard }} of 4)
+        run: xvfb-run -a npx playwright test --project=chromium --workers=2 --shard=${{ matrix.shard }}/4 --global-timeout=3000000 --max-failures=25
       - name: Preserve browser failures for forensic review
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: browser-failures
+          name: browser-failures-${{ matrix.shard }}
           path: |
             test-results/
             playwright-report/

@@ -83,4 +83,8 @@ Vanilla HTML / CSS / JS — no build step. Web Audio API (piano), MediaRecorder 
 
 ## Privacy
 
-All practice data and recordings stay in your browser on this device.
+Audio recordings are kept on this device. Practice history is stored in the
+browser by default; if you sign in and enable account features, some progress
+can sync with the account service. The app also sends anonymous usage
+statistics unless you opt out via the privacy control. See
+[privacy.html](privacy.html) for the scope, controls and retention information.

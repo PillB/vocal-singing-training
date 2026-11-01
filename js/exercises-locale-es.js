@@ -69,14 +69,14 @@
   },
   "v4-articulation-pen": {
     "original": "Cuenta hasta 60 con un bolígrafo en la boca, buscando claridad.",
-    "research": "La resistencia entrena los músculos del habla para una entrega más nítida.",
+    "research": "El contraste de articulación puede ayudarte a notar cómo pronuncias las consonantes. El bolígrafo es opcional; no está demostrado que este ejercicio fortalezca los músculos del habla.",
     "steps": [
-      "Coloca un bolígrafo o palillo limpio suavemente entre los dientes (sin morder fuerte).",
+      "Opción más segura: cuenta exagerando las consonantes, sin objetos. Si eliges la variante original, usa un objeto limpio y romo, mantenlo quieto y no lo muerdas.",
       "Cuenta del 1 al 60 buscando consonantes inteligibles.",
-      "Quítate el bolígrafo y cuenta del 1 al 20 — nota la facilidad y claridad."
+      "Cuenta del 1 al 20 normalmente (retira antes el objeto si lo usaste); compara claridad y comodidad sin asumir una mejora automática."
     ],
     "tips": [
-      "Es entrenamiento de resistencia para el habla.",
+      "Usa el contraste para notar la articulación, sin forzar la mandíbula ni asumir ganancias de fuerza.",
       "Trabaja punta de lengua y labios para consonantes nítidas.",
       "Solo objetos seguros y limpios."
     ],
@@ -782,19 +782,19 @@
   },
   "s18-costal-breath": {
     "original": "Respiración costo-abdominal: inhala bajo por la nariz, retén un momento y gasta el aire despacio y parejo en la espiración.",
-    "research": "De los tres tipos de respiración, solo la costo-abdominal permite que el diafragma descienda del todo (cerca del 60 % de capacidad frente a un 25 % de la clavicular). El diafragma no se controla de forma voluntaria; los intercostales y los abdominales sí, y eso es lo que entrena el apoyo.",
+    "research": "Los patrones de respiración varían entre cantantes. Explora el movimiento cómodo de las costillas bajas y el abdomen, y una espiración pareja; no existe un porcentaje de capacidad ni una técnica única demostrada como óptima para todos.",
     "steps": [
       "De pie, o en el borde de la silla con las piernas abiertas — nada apretado en la cintura.",
-      "Una mano en las costillas bajas y otra en el abdomen. Los hombros NO suben.",
+      "Una mano en las costillas bajas y otra en el abdomen. Mantén cómodos el cuello y los hombros.",
       "Inhala por la nariz en 4 tiempos: las manos se abren, las clavículas se quedan quietas.",
-      "Retén 2 tiempos para preparar el cierre de las cuerdas, en posición activa para la fonación.",
+      "Haz una pausa suave de hasta 2 tiempos solo si resulta cómoda; no cierres ni aprietes la garganta.",
       "Espira en 8 tiempos, parejo, manteniendo las costillas anchas todo lo que puedas — esa resistencia es el apoyo.",
       "Repite el ciclo; ni hinchar hasta reventar ni vaciar hasta la sensación de vacío."
     ],
     "tips": [
       "Chi sa ben respirare, sa ben cantare: el control del aire es la base de toda la técnica vocal.",
-      "Los agudos y los pasajes fuertes gastan más aire, así que la reserva se construye antes de necesitarla.",
-      "El impulso inicial es un empujón abdominal ligero, parecido a una tos, y luego se mantiene esa presión.",
+      "Las notas y dinámicas requieren coordinación, no simplemente más aire o presión.",
+      "Inicia la espiración suavemente, sin empujar como en una tos ni tensar el abdomen de forma sostenida.",
       "Tumbado o dormido ya respiras así: lo estás recuperando, no aprendiéndolo de cero."
     ],
     "mistakes": [
@@ -806,7 +806,7 @@
   },
   "s19-soft-palate-surprise": {
     "original": "Encuentra el paladar blando con cara de sorpresa y con el instante previo al bostezo, y luego canta desde ese espacio.",
-    "research": "El paladar blando es la primera herramienta de colocación que un principiante puede sentir de verdad: elevarlo da amplitud y resonancia y evita un sonido plano. La imagen de clase es la diferencia entre hablar al aire libre y hablar dentro de una capilla.",
+    "research": "La posición del paladar blando modifica la resonancia oral y nasal. La imagen del prebostezo puede servir para explorar el color del sonido, pero no corrige por sí sola la afinación ni garantiza mayor amplitud.",
     "steps": [
       "Imagina que te dan una noticia sorprendente: la mandíbula cae sola y el espacio crece.",
       "Busca el instante justo antes de bostezar y párate ahí: esa es la posición, no el bostezo.",
@@ -887,7 +887,7 @@
       "Cantar debería avanzar hacia la facilidad de hablar, y esta zona es donde se nota.",
       "Si la zona media se siente pesada, estás subiendo peso de la zona grave.",
       "Los medios son el puente: reconocerlos es lo que evita cantarlo todo desde un único lugar.",
-      "Mantén el paladar blando arriba también aquí, o el sonido se vuelve plano."
+      "Explora una resonancia oral cómoda; el paladar cambia la nasalidad, no garantiza la afinación."
     ],
     "mistakes": [
       "Colorear de más una zona que debe sonar normal",
@@ -901,10 +901,10 @@
     "research": "Un sonido nasal exagerado es la forma más rápida de localizar la zona de resonancia superior. La exageración es el buscador, no el sonido final: una vez encontrado el lugar, el color se equilibra.",
     "steps": [
       "Exagera a propósito: «YA, YA, YA» lo más nasal y brillante que puedas.",
-      "Fíjate dónde zumba — nariz, pómulos, frente. Ese es el lugar que estás aprendiendo.",
+      "Nota las sensaciones de vibración en la cara. Son una pista sobre el timbre, no un lugar físico adonde viaja el sonido.",
       "Repítelo sobre objetivos que suben, manteniendo esa misma dirección de zumbido.",
-      "Cuando el lugar esté claro, quita algo de brillo sin moverte de ese sitio.",
-      "Termina con un par de vueltas de «YA» con color normal, todavía en la máscara."
+      "Cuando reconozcas esa sensación, reduce algo el brillo sin apretar ni intentar mover físicamente el sonido.",
+      "Termina con un par de vueltas de «YA» en un timbre natural; compara comodidad y facilidad."
     ],
     "tips": [
       "Se supone que suena feo en esta fase: el ejercicio es un buscador, no el sonido con el que vas a interpretar.",
@@ -990,7 +990,7 @@
   },
   "s27-lip-trill-solfege": {
     "original": "El mismo trino de labios, ahora con una escala encima: 1-2-3-4-5-4-3-2-1 sobre el burbujeo, y después toda la pasada sube medio tono y la repites.",
-    "research": "Estrechar el tracto en los labios devuelve contrapresión a las cuerdas: baja la presión necesaria para arrancar la nota y suaviza el choque entre pliegues. Así la escala cuesta esfuerzo de calentamiento y no esfuerzo de canto, y la mejora medida es mayor en voces sin entrenar. Con los labios burbujeando no puedes pronunciar do-re-mi, así que el solfeo vive en el oído y en la afinación, y se traspasa a la vocal abierta justo después.",
+    "research": "Los trinos de labios son ejercicios de tracto vocal semiocluido. La interacción acústica puede facilitar la fonación, pero los beneficios y cambios de rango varían según la persona. Detente ante molestias. El solfeo se oye en las notas del trino y luego se explora con /A/.",
     "steps": [
       "Primero el burbujeo sin nota: labios sueltos, aire constante, mandíbula colgando.",
       "Añade la primera nota por debajo del burbujeo sin que los labios se paren.",
@@ -1003,7 +1003,7 @@
       "Si los labios se paran, manda más aire en vez de apretar más — o apoya dos dedos en las mejillas.",
       "El burbujeo debe ir al mismo ritmo mientras subes. Si se acelera o se corta, estás empujando.",
       "Mantén el volumen parejo en toda la pasada: subir de volumen al subir de nota es justo el hábito que esto quita.",
-      "Con el trino llegarás honestamente dos o tres semitonos por encima de tu rango en vocal abierta. Ese margen es el objetivo del ejercicio, no tu nota más aguda nueva."
+      "El trino puede sentirse más fácil cerca de tu límite cómodo, pero no garantiza ganar semitonos. Quédate en un rango sin esfuerzo."
     ],
     "mistakes": [
       "Dejar que el trino se pare entre notas",

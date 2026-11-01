@@ -10183,17 +10183,27 @@
       if (q("[data-cue]")) q("[data-cue]").textContent = phaseCueFor(st.phases[cueIdx]);
       if (q("[data-facts]")) q("[data-facts]").textContent = this._factsText();
     },
-    /** "Take done": ends the take being sung; with nothing recorded it still marks one. */
+    /** "Take done" only completes actual captured audio, never an empty take. */
     _markTake() {
       const st = this.state;
       if (st.review || (st.stage !== "A" && st.stage !== "B")) return;
-      if (st.recording && st.cur && st.cur.sound >= 0.3) {
+      // Match the automatic completion threshold; 300 ms can be a cough,
+      // click, or incidental voiced fragment, not a comparable sung phrase.
+      if (st.recording && st.cur && st.cur.sound >= 1.2) {
         this._endTake();
         return;
       }
       if (st.recording) this._dropTake();
-      st[st.stage] = { name: st.stage, noAudio: true, pts: [], dur: 0 };
-      this._advance();
+      // Previously two clicks before Start produced a gold 2/2 and "Listen
+      // to both", although neither take existed. There is no comparison to
+      // perform without audio. Show a real recovery cue and stay on this take.
+      const message = L(
+        "Todavía no hay audio. Pulsa Empezar y canta la frase antes de cerrar la toma.",
+        "No audio yet. Press Start and sing the phrase before finishing this take."
+      );
+      if (this.$("[data-status]")) this.$("[data-status]").textContent = message;
+      this.viz?.caption?.(message, 0);
+      this.viz?.draw();
     },
     _advance() {
       const st = this.state;
@@ -10474,26 +10484,23 @@
    * s27 lip-trill solfège — a scale carried on the bubble, root walking up and
    * back down. This is deliberately NOT `scaleSteps` with a different cue.
    *
-   * Two things make a trill different from a vowel scale, and both were measured
-   * against the shipped detector rather than guessed:
+   * Two things make a trill different from a vowel scale:
    *
-   * 1. `detectPitch` reads a lip trill SHARP. The lips flutter at 25–30 Hz, which
-   *    is below the 65 Hz search floor in js/pitch-visualizer.js, so the flap
-   *    lands inside the analysis window instead of being resolved, and the
-   *    autocorrelation peak drifts up — of the order of +30…+60 cents at C3–D3,
-   *    less as pitch rises. A symmetric ±40¢ band (what `scaleSteps` uses) sits
-   *    below a correctly sung trill and never advances. So the acceptance window
-   *    here is ASYMMETRIC: tolerant sharp, tight flat. Tight on the flat side
-   *    matters — a wide-open flat side would lock on the note before it at the
-   *    two half steps in the pattern.
+   * 1. A lip trill's flutter can perturb F0. An older detector had an observed
+   *    sharp-side bias and this mode once accepted pitches up to +120 cents;
+   *    that would *also* accept the adjacent semitone as a correct note.
+   *    The current YIN estimator has different error characteristics, so the
+   *    old detector-specific allowance is invalid. Use a bounded −40..+50
+   *    cent gate while a real-voice trill corpus is collected. Frames outside
+   *    the gate are uncertain/wrong for this step, not evidence of a failing
+   *    singing technique.
    * 2. A trill scatters frame to frame, so a hard `else acc = 0` reset (again
    *    what `scaleSteps` does) throws away the whole accumulator on one stray
    *    frame. The accumulator bleeds at half fill rate instead, which needs
    *    about 1.2s of continuously bad frames to undo a full 600ms lock.
    *
-   * The sharp-side figure comes from simulating trills through the real
-   * `detectPitch`, not from recordings of actual students, so every constant is
-   * overridable from the profile.
+   * The tolerance is a practical guard against false neighboring-note credit,
+   * not a validated human-trill accuracy estimate. Profile overrides remain.
    */
   Modes.trillSolfege = baseMode({
     id: "trillSolfege",
@@ -10877,21 +10884,34 @@
         else this.viz?.draw();
       }
     },
+    /** The legacy voiced flag has silence grace; verify a fresh powered frame. */
+    _isFreshTrillPitch(frame, f) {
+      const floor = Math.max(0.02, (frame.airRmsThreshold || 0.006) * 3);
+      return !!frame.voiced && (frame.rms || 0) >= floor && f > 0 && f !== this.state.lastFreq;
+    },
+    /** Keep numerical acceptance separate from audio-frame validity. */
+    _creditTrillPitch(med, dt) {
+      const cents = 100 * (global.VTPitchUtils.freqToMidi(med) -
+        global.VTPitchUtils.freqToMidi(this.state.wantFreq));
+      const lo = this.profile.centsLo == null ? -40 : this.profile.centsLo;
+      const hi = this.profile.centsHi == null ? 50 : this.profile.centsHi;
+      if (cents >= lo && cents <= hi) {
+        this.state.acc += dt;
+        if (this.state.acc >= (this.profile.holdMs || 600)) this._advance();
+      } else {
+        this.state.acc = Math.max(0, this.state.acc - dt * 0.5);
+      }
+    },
     /** The pitch gate that walks the scale (see the note above the mode). */
     _frameGate(frame) {
       const dt = frame.dtMs || 16;
-      const rms = frame.rms || 0;
       if (!this.state.wantFreq || !global.VTPitchUtils) return;
       // The clock-only fallback frame carries voiceFreq 0, not null.
       const f = frame.voiceFreq || 0;
-      // `voiced` stays true through a grace window after the sound stops, and
-      // `voiceFreq` repeats its last value bit for bit while it does. Require
-      // real energy, and ignore a pitch that has not changed at all.
-      const floor = Math.max(0.02, (frame.airRmsThreshold || 0.006) * 3);
-      const live = !!frame.voiced && rms >= floor && f > 0 && f !== this.state.lastFreq;
+      // Reference piano notes must not score the next note through the mic.
       const blanked = this.state.refBlank > 0;
       if (blanked) this.state.refBlank -= dt;
-      if (!live || blanked) {
+      if (!this._isFreshTrillPitch(frame, f) || blanked) {
         if (!blanked && f <= 0) this.state.acc = Math.max(0, this.state.acc - dt * 0.5);
         return;
       }
@@ -10900,19 +10920,7 @@
       this.state.hist.push(f);
       if (this.state.hist.length > n) this.state.hist.shift();
       const med = this._median();
-      if (med == null) return;
-      const cents =
-        (global.VTPitchUtils.freqToMidi(med) -
-          global.VTPitchUtils.freqToMidi(this.state.wantFreq)) *
-        100;
-      const lo = this.profile.centsLo == null ? -40 : this.profile.centsLo;
-      const hi = this.profile.centsHi == null ? 120 : this.profile.centsHi;
-      if (cents >= lo && cents <= hi) {
-        this.state.acc += dt;
-        if (this.state.acc >= (this.profile.holdMs || 600)) this._advance();
-      } else {
-        this.state.acc = Math.max(0, this.state.acc - dt * 0.5);
-      }
+      if (med != null) this._creditTrillPitch(med, dt);
     },
     onStop() {
       const st = this.state;

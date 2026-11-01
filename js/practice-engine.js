@@ -27,8 +27,8 @@
   /** Base thresholds at sensitivity = 5 (mid). Higher sensitivity lowers them. */
   const VOICE_RMS_BASE = 0.012;
   const HOLD_RMS_BASE = 0.008;
-  const PITCH_MIN = 55;
-  const PITCH_MAX = 520;
+  const PITCH_MIN = 52;
+  const PITCH_MAX = 1060;
   /** Default 7/10 — more sensitive than legacy fixed 0.016 (fewer false cutoffs) */
   const DEFAULT_SENS = 7;
 
@@ -64,6 +64,9 @@
       this.recording = false;
       this.recBlob = null;
       this.recUrl = null;
+      // A late MediaRecorder stop event must never attach an older take to a
+      // newer session (or mix their timeslice chunks).
+      this._recordingEpoch = 0;
 
       // Auto-hold state
       this.voiced = false;
@@ -318,7 +321,9 @@
     /**
      * Cross-browser mic acquisition.
      * Safari/Firefox may reject advanced constraints; fall back to simple audio:true.
-     * Each attempt is time-bounded so a hung permission dialog cannot block piano forever.
+     * Do not fan out concurrent prompts: the user may simply be reading the
+     * browser's permission dialog. Time out one prompt, then stop trying;
+     * only a fast constraints failure can trigger a weaker request.
      */
     async _acquireMic() {
       if (!navigator.mediaDevices?.getUserMedia) {
@@ -342,30 +347,41 @@
         { audio: true }
       ];
       let lastErr;
-      const withTimeout = (p, ms) =>
-        Promise.race([
-          p,
-          new Promise((_, rej) =>
-            setTimeout(() => rej(new Error("getUserMedia timeout")), ms)
-          )
-        ]);
-      for (const constraints of attempts) {
-        const pending = navigator.mediaDevices.getUserMedia(constraints);
+      const withTimeout = async (p, ms) => {
+        let timer;
         try {
+          return await Promise.race([
+            p,
+            new Promise((_, reject) => {
+              timer = setTimeout(() => {
+                const err = new Error("Microphone permission timed out");
+                err.name = "TimeoutError";
+                reject(err);
+              }, ms);
+            })
+          ]);
+        } finally {
+          clearTimeout(timer);
+        }
+      };
+      for (const constraints of attempts) {
+        let pending;
+        try {
+          pending = Promise.resolve(navigator.mediaDevices.getUserMedia(constraints));
           return await withTimeout(
             pending,
-            // Shorter bound: piano can still start if mic is denied/hangs
-            4000
+            // Allow human-paced permissions, including assistive technology.
+            30000
           );
         } catch (e) {
           lastErr = e;
           console.warn("[VT] getUserMedia attempt failed", e?.name || e?.message || e);
           // A prompt answered after the timeout would otherwise hand over a
           // live stream nobody owns, leaving the browser's mic indicator on.
-          pending.then((s) => s.getTracks().forEach((t) => t.stop())).catch(() => {});
+          pending?.then((s) => s.getTracks().forEach((t) => t.stop())).catch(() => {});
           // A refusal is final: asking twice more with looser constraints only
           // repeats it (and, on some browsers, the prompt).
-          if (e && (e.name === "NotAllowedError" || e.name === "SecurityError")) break;
+          if (e && (e.name === "NotAllowedError" || e.name === "SecurityError" || e.name === "TimeoutError")) break;
         }
       }
       throw lastErr || new Error("getUserMedia failed");
@@ -471,7 +487,8 @@
     }
 
     async _startRecorder() {
-      this.recChunks = [];
+      const chunks = [];
+      this.recChunks = chunks;
       this.recBlob = null;
       if (this.recUrl) {
         URL.revokeObjectURL(this.recUrl);
@@ -496,10 +513,39 @@
         // Last resort: no options
         this.mediaRecorder = new MediaRecorder(this.stream);
       }
-      this.mediaRecorder.ondataavailable = (e) => {
-        if (e.data && e.data.size) this.recChunks.push(e.data);
+      const recorder = this.mediaRecorder;
+      const stream = this.stream;
+      const epoch = ++this._recordingEpoch;
+      const startedAt = this.startedAt;
+      // The app may install a new callback for the next exercise before this
+      // recorder's queued stop event fires. Bind delivery to the originating
+      // take, never the mutable callback of the current exercise.
+      const onReady = this.onRecordingReady;
+      const releaseTracks = () => {
+        stream?.getTracks?.().forEach((track) => track.stop());
+        if (this.stream === stream) this.stream = null;
       };
-      this.mediaRecorder.start(250);
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size) chunks.push(e.data);
+      };
+      // stop() only *queues* the final dataavailable event. A blob assembled
+      // immediately after stop() loses the last slice (or an entire short
+      // recording). The spec orders dataavailable BEFORE this stop event.
+      recorder.onstop = () => {
+        releaseTracks();
+        if (epoch !== this._recordingEpoch) return;
+        this.recording = false;
+        if (this.mediaRecorder === recorder) this.mediaRecorder = null;
+        if (!chunks.length) return;
+        this.recBlob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
+        this.recUrl = URL.createObjectURL(this.recBlob);
+        onReady?.({
+          blob: this.recBlob,
+          url: this.recUrl,
+          durationMs: Math.max(0, performance.now() - startedAt)
+        });
+      };
+      recorder.start(250);
       this.recording = true;
     }
 
@@ -515,26 +561,17 @@
       this.raf = null;
       this.running = false;
 
-      let recResult = null;
+      let recorderStopping = false;
       if (this.mediaRecorder && this.mediaRecorder.state !== "inactive") {
         try {
           this.mediaRecorder.stop();
+          recorderStopping = true;
         } catch {
           /* ignore */
         }
       }
-      if (this.recording && this.recChunks.length) {
-        this.recBlob = new Blob(this.recChunks, {
-          type: (this.mediaRecorder && this.mediaRecorder.mimeType) || "audio/webm"
-        });
-        this.recUrl = URL.createObjectURL(this.recBlob);
-        recResult = {
-          blob: this.recBlob,
-          url: this.recUrl,
-          durationMs: performance.now() - this.startedAt
-        };
-        if (this.onRecordingReady) this.onRecordingReady(recResult);
-      }
+      // The event handler owns the final slice and releases the stream after
+      // that event. With no active recorder, release it immediately.
       this.recording = false;
       this.mediaRecorder = null;
 
@@ -558,14 +595,15 @@
       // permanently "closed" (silent piano until hard reload). Disconnect only.
       this.audioCtx = null;
       this._ownsAudioCtx = false;
-      if (this.stream) {
+      if (this.stream && !recorderStopping) {
         this.stream.getTracks().forEach((t) => t.stop());
         this.stream = null;
       }
       this.voiceFreq = null;
       this.currentHoldSec = 0;
       this._status("idle");
-      return recResult;
+      // Recorded take (if any) is delivered asynchronously via onRecordingReady.
+      return null;
     }
 
     setTargetFreq(f) {

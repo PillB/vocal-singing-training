@@ -426,7 +426,7 @@ test.describe("Prepared daily class session", () => {
     expect(open.tooShort.holds, "a hold under 1.5s does not").toBe(0);
     expect(open.silentPhase.holds, "the silent setup phases never log holds").toBe(0);
 
-    // placementAB: the take counter is the protocol, and it caps at two
+    // placementAB: clicks without real audio must never fabricate two takes
     const ab = await page.evaluate(() => {
       const m = window.VTPracticeModes.get("placementAB");
       const host = document.createElement("div");
@@ -441,8 +441,8 @@ test.describe("Prepared daily class session", () => {
       host.remove();
       return res;
     });
-    expect(ab.takes).toBe(2);
-    expect(ab.patches.takes).toBe(2);
+    expect(ab.takes).toBe(0);
+    expect(ab.patches.takes).toBe(0);
   });
 
   test("zone targets follow the octave shift and the highway", async ({ page }) => {

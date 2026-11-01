@@ -3801,8 +3801,20 @@
           setTimeout(() => showValueMoment("hold_pr"), 500);
         }
       };
+      // The final MediaRecorder chunk arrives asynchronously after Stop.
+      // If the learner has already opened another exercise, never attach the
+      // old take to that exercise's player (and release the stale object URL).
+      const recordingExerciseId = ex.id;
+      const recordingTake = state.sessionPractice;
       state.practice.onRecordingReady = (result) => {
-        if (result) showPlayback(result);
+        if (!result) return;
+        if (state.view !== "exercise" ||
+            state.exercise?.id !== recordingExerciseId ||
+            state.sessionPractice !== recordingTake) {
+          URL.revokeObjectURL(result.url);
+          return;
+        }
+        showPlayback(result);
       };
 
       if (profile.showPitch) {
@@ -4156,6 +4168,22 @@
   /** Self-ratings a one-tap answer sets, on the 1–5 sliders. */
   const FEEL = { easy: 5, ok: 3, hard: 2 };
 
+  /** One invariant shared by one-tap, detailed Save, and automatic practice.
+   * Rating an unopened or negligible run is not evidence of a completed take.
+   */
+  function canSaveRatedTake() {
+    const practiced = getPracticedSec();
+    const required = practiceCreditSec();
+    if (state.sessionPractice.everStarted && practiced >= required) return true;
+    const message = tt("rate.practiceFirst", {
+      s: Math.max(1, Math.ceil(required - practiced))
+    });
+    const note = $("#rate-note");
+    if (note) note.textContent = message;
+    toast(message);
+    return false;
+  }
+
   /**
    * Muted under automation like the step-done card: the single-exercise ending
    * stays a toast, "Más detalles" starts open so specs that fill the form and
@@ -4215,7 +4243,11 @@
     if (note) {
       note.textContent = r.result
         ? tt("rate.saved", { score: VTMetrics.formatScore(r.result) })
-        : tt("rate.hint");
+        : !state.sessionPractice.everStarted || getPracticedSec() < practiceCreditSec()
+          ? tt("rate.practiceFirst", {
+              s: Math.max(1, Math.ceil(practiceCreditSec() - getPracticedSec()))
+            })
+          : tt("rate.hint");
     }
     const kicker = $("#rate-done");
     if (kicker) {
@@ -4310,6 +4342,8 @@
   function rateFeel(feel) {
     const v = FEEL[feel];
     if (!v || !state.exercise) return;
+    // Rejected taps must not silently change the score sliders either.
+    if (!canSaveRatedTake()) return;
     $$('#metrics-form input[type="range"]').forEach((input) => {
       if (input.dataset.measured === "1") return;
       input.value = String(v);
@@ -4757,6 +4791,11 @@
   function completeExercise(opts = {}) {
     const ex = state.exercise;
     if (!ex) return;
+    // A self-rating describes a real attempt; merely opening this screen must
+    // never create a completed session, perfect score, streak day or first-win.
+    // The same threshold already guards the unrated auto-save path. Checking
+    // before stopPractice means an accidental early tap won't end the take.
+    if (!canSaveRatedTake()) return;
     if (state.practiceLive) stopPractice(true);
     else if (state.pitchRunning) stopPitchViz();
     flushPracticeClock();
@@ -7341,6 +7380,22 @@
     if (teaser && teaser.classList.contains("is-locked")) teaser.hidden = true;
   }
 
+  /** Keep an already visible upgrade message in the selected language.
+   * Do not choose a new moment: doing so would alter dismissal/experiment state.
+   */
+  function relabelValueBanner() {
+    const banner = $("#value-banner");
+    const text = $("#value-banner-text");
+    const id = banner?.dataset.momentId;
+    if (!banner || banner.hidden || !text || !id) return;
+    const stats = window.VTValuePulse?.compute?.() || {};
+    const trialDays = window.VTBilling?.trialDaysLeft?.();
+    text.textContent = tt("value.moment." + id, {
+      n: String(id === "trial_ending" ? (trialDays ?? 0) : (stats.sessions ?? 0)),
+      s: Number(stats.bestHoldSec || 0).toFixed(1)
+    });
+  }
+
   function hideValueBanner() {
     const banner = $("#value-banner");
     if (!banner) return;
@@ -8939,6 +8994,7 @@
         updateBillingChrome();
         refreshAccountUI();
         renderValuePulse();
+        relabelValueBanner();
         if ($("#pricing-modal") && !$("#pricing-modal").hidden) renderPricingModal();
       };
     }

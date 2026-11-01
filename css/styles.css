@@ -1385,6 +1385,15 @@ body.home-zero #pro-insights-panel {
   --hud-safe-r: 15%; /* dual letter+solfège labels — slightly wider for large type */
 }
 
+/* An expanded piano is ordinary content after the stage. Keeping the stage
+   sticky while the page scrolls to its controls paints its high z-index over
+   the very buttons the learner has opened (even though they remain in the
+   accessibility tree). Unstick only while the panel is expanded. */
+.game-stage:has(#piano-block.is-open) .highway-stage {
+  position: relative;
+  top: auto;
+}
+
 /* Short viewports (landscape phones, small laptops): fill remaining height exactly */
 @media (max-height: 500px) {
   :root {

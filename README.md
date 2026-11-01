@@ -30,14 +30,29 @@ the footer of every page and from each step of the in-app tour.
 
 ## Run locally
 
-Open `index.html` in a modern browser, or:
+Open `index.html` in a modern browser, or run a local server:
 
 ```bash
-npx serve.
-# or: python3 -m http.server 8080
+npm ci
+npm run serve
 ```
 
 Microphone access requires a secure context (`localhost` or HTTPS).
+
+## Quality and release checks
+
+```bash
+npm run lint        # cyclomatic complexity <= 15 for new/changed functions
+npm run test:core   # lint, catalog, DSP/recorder and Worker contracts
+npm test            # above + full Playwright browser suite
+```
+
+The [production audit and open-issue ledger](docs/40-PRODUCTION-AUDIT-2026-11-01.md)
+records reproducible defects, research sources, mitigations, trade-offs and
+release gates. In particular, green unit tests do not certify acoustic
+accuracy on real voices or that the deployed GitHub Pages version was updated.
+The contributor engineering contract is [AGENTS.md](AGENTS.md); pull requests
+are checked by `.github/workflows/quality.yml`.
 
 ## Live site
 
@@ -64,6 +79,7 @@ Vanilla HTML / CSS / JS — no build step. Web Audio API (piano), MediaRecorder 
 - [Auth & hardening](docs/11-AUTH-AND-HARDENING.md) 
 - [The tour, the user guide and the A/B machinery](docs/36-TOUR-AND-USER-GUIDE.md)
 - [The daily loop: basics every day, rest days and surprises](docs/37-DAILY-LOOP.md)
+- [2026 production audit, issue ledger and release gates](docs/40-PRODUCTION-AUDIT-2026-11-01.md)
 
 ## Privacy
 

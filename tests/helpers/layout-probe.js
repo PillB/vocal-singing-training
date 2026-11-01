@@ -297,16 +297,30 @@ async function assertLastClick(page, expectedId, opts = {}) {
  * @param {string} sel
  * @param {string} [expectLogId] defaults to sel without #
  */
+/** The box once it stops moving (a smooth scroll, a panel opening). */
+async function settledBox(loc) {
+  let prev = await loc.boundingBox();
+  for (let i = 0; i < 12; i++) {
+    await loc.page().waitForTimeout(50);
+    const box = await loc.boundingBox();
+    if (box && prev && Math.abs(box.x - prev.x) < 0.5 && Math.abs(box.y - prev.y) < 0.5) return box;
+    prev = box;
+  }
+  return prev;
+}
+
 async function mouseClickAndLog(page, sel, expectLogId) {
   const id = expectLogId || sel.replace(/^#/, "");
   await dismissBlockingOverlays(page);
+  // Re-fit first, then bring the control into view: reflowStage() scrolls to
+  // the top, so re-fitting after the scroll left a control below the fold
+  // and the mouse pressed the page under the viewport's bottom edge.
   await reflowStage(page);
   const loc = page.locator(sel).first();
   await loc.scrollIntoViewIfNeeded().catch(() => {});
-  await reflowStage(page);
 
   const beforeN = await page.evaluate(() => (window.__vtClickLog || []).length);
-  const box = await loc.boundingBox();
+  const box = await settledBox(loc);
   if (!box || box.width < 1) {
     return { ok: false, reason: "no_box", logOk: false };
   }

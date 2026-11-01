@@ -144,46 +144,73 @@ export async function violations(files, root = process.cwd()) {
 export const signature = (v) => `${v.file}:${v.sha}:${v.complexity}`;
 
 /**
+ * Entries of `a` beyond what `b` covers, counted per signature. A function
+ * expression's hash does not include the name it is bound to, so two pasted
+ * copies of one exempt arrow share a signature; a set would let the second
+ * copy ride on the first's exemption (QA-07). A multiset does not.
+ */
+export function surplus(a, b) {
+  const left = new Map();
+  for (const v of b) left.set(signature(v), (left.get(signature(v)) || 0) + 1);
+  return a.filter((v) => {
+    const k = signature(v);
+    const n = left.get(k) || 0;
+    if (n > 0) {
+      left.set(k, n - 1);
+      return false;
+    }
+    return true;
+  });
+}
+
+/**
  * Compare current violations with the exemption list.
- * newDebt: over the ceiling and not exempt (a new function, or an exempt one
- * that was edited and so no longer matches its hash). stale: an exemption
- * whose function no longer exists in that exact form.
+ * newDebt: over the ceiling and not exempt (a new function, an exempt one
+ * that was edited and so no longer matches its hash, or one more copy of an
+ * exempt function than the baseline lists). stale: an exemption whose
+ * function no longer exists in that exact form (or in that many copies).
  */
 export function classify(current, baseline) {
-  const exceptions = new Set(baseline.map(signature));
-  const active = new Set(current.map(signature));
   return {
-    newDebt: current.filter((v) => !exceptions.has(signature(v))),
-    stale: baseline.filter((v) => !active.has(signature(v)))
+    newDebt: surplus(current, baseline),
+    stale: surplus(baseline, current)
   };
 }
 
 /** The baseline minus stale entries. Never adds anything. */
 export function pruneBaseline(baseline, current) {
-  const active = new Set(current.map(signature));
-  return baseline.filter((v) => active.has(signature(v)));
+  const stale = new Set(surplus(baseline, current));
+  return baseline.filter((v) => !stale.has(v));
 }
 
-/** Exemptions present in `next` that `prev` did not have: debt being blessed. */
+/** Exemptions present in `next` beyond what `prev` had: debt being blessed. */
 export function grownExemptions(prev, next) {
-  const known = new Set(prev.map(signature));
-  return next.filter((v) => !known.has(signature(v)));
+  return surplus(next, prev);
 }
 
 function readBaseline(file) {
   return JSON.parse(readFileSync(file, "utf8")).entries;
 }
 
-function baselineAtRef(ref, root) {
+const git = (args, root) =>
+  execFileSync("git", args, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+
+/**
+ * The baseline at `ref`: its entries; "none" when the ref exists but has no
+ * baseline yet (the PR that introduces the gate); null when the ref itself
+ * cannot be resolved, which must fail rather than skip (QA-08: a typo or an
+ * unfetched branch silently turned the check off).
+ */
+export function baselineAtRef(ref, root) {
   try {
-    const text = execFileSync("git", ["show", `${ref}:qa/complexity-baseline.json`], {
-      cwd: root,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"]
-    });
-    return JSON.parse(text).entries;
+    git(["rev-parse", "--verify", "--quiet", `${ref}^{commit}`], root);
   } catch {
     return null;
+  }
+  try {
+    return JSON.parse(git(["show", `${ref}:qa/complexity-baseline.json`], root)).entries;
+  } catch {
+    return "none";
   }
 }
 
@@ -204,8 +231,14 @@ function report(newDebt, stale) {
 
 function checkRef(ref, baseline, root) {
   const prev = baselineAtRef(ref, root);
-  if (!prev) {
-    console.log(`NOTE: ${ref} has no complexity baseline; growth check skipped.`);
+  if (prev === null) {
+    console.error(`FAIL: --baseline-ref ${JSON.stringify(ref)} does not resolve to a commit; the growth check cannot run.`);
+    return false;
+  }
+  if (prev === "none") {
+    // Bootstrap only: removing the file on the base branch cannot open this,
+    // because the plain gate then fails every legacy violation as new debt.
+    console.log(`NOTE: ${ref} has no complexity baseline yet; growth check starts once it does.`);
     return true;
   }
   const grown = grownExemptions(prev, baseline);
@@ -237,6 +270,10 @@ export async function main(args, root = process.cwd()) {
     return newDebt.length ? 1 : 0;
   }
   const ref = argValue(args, "--baseline-ref");
+  if (args.includes("--baseline-ref") && !ref) {
+    console.error("FAIL: --baseline-ref was given no ref (an empty base_ref?); the growth check cannot run.");
+    return 1;
+  }
   const refOk = ref ? checkRef(ref, baseline, root) : true;
   if (newDebt.length || stale.length) {
     report(newDebt, stale);

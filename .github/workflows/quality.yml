@@ -49,7 +49,7 @@ jobs:
   browser-contracts:
     needs: contracts
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     env:
       CI: '1'
       MIC_HELP: '0'
@@ -63,8 +63,8 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - name: Chromium production regression contracts (headed-safe)
         run: xvfb-run -a npx playwright test tests/production-contracts.spec.js --project=chromium --workers=2 --global-timeout=900000
-      - name: Mutation check (the open piano and the sticky stage)
-        run: node qa/mutate.mjs stage
+      - name: Mutation check (open piano and sticky stage; per-exercise flow test)
+        run: node qa/mutate.mjs stage flows
       - name: Preserve production-contract failures
         if: failure()
         uses: actions/upload-artifact@v4

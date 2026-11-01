@@ -43,7 +43,37 @@ const LAYOUT_HARD = new Set([
   "mode_focus_covers_start"
 ]);
 
+/**
+ * Errors the flow must not raise. An uncaught exception on Start used to pass
+ * all 16 sampled flows (QA-10, FM4): nothing listened. Allowed errors are
+ * listed with the reason they are not the app's fault; anything else fails.
+ */
+const ENTITLEMENTS = /^https:\/\/vocal-studio-entitlements\.[^/]+\.workers\.dev\//;
+const ERROR_ALLOW = [
+  {
+    // The account worker allows only the Pages origin (checked 2026-11-01:
+    // Access-Control-Allow-Origin: https://pillb.github.io), so from the test
+    // server the sign-in methods request is refused. Live, it is not.
+    why: "entitlements worker CORS from 127.0.0.1",
+    test: (e) => ENTITLEMENTS.test(e.url) || /Access to fetch at 'https:\/\/vocal-studio-entitlements\./.test(e.text)
+  }
+];
+
+function watchErrors(page) {
+  const errors = [];
+  page.on("pageerror", (e) => errors.push({ kind: "pageerror", text: String(e?.message || e), url: "" }));
+  page.on("console", (m) => {
+    if (m.type() === "error") errors.push({ kind: "console.error", text: m.text(), url: m.location()?.url || "" });
+  });
+  return errors;
+}
+
+function unexpectedErrors(errors) {
+  return errors.filter((e) => !ERROR_ALLOW.some((a) => a.test(e)));
+}
+
 async function bootFlow(page, vp) {
+  const errors = watchErrors(page);
   await page.setViewportSize({ width: vp.width, height: vp.height });
   await page.addInitScript(installClickLogInit);
   await boot(page, { lang: "es", tourDone: true, mic: "silent" });
@@ -52,6 +82,7 @@ async function bootFlow(page, vp) {
   await page.addStyleTag({
     content: `#tour-root,.tour-backdrop{display:none!important;pointer-events:none!important}`
   });
+  return errors;
 }
 
 async function waitForStageLayout(page) {
@@ -131,16 +162,33 @@ async function dragSlider(page, box, from, to, steps) {
   await page.mouse.up();
 }
 
-/** Drag the mic sensitivity slider like a user, then restore it. */
+/** What the app made of the slider: its label, the saved level, the engine's level. */
+const micPlumbing = (page) =>
+  page.evaluate(() => ({
+    slider: document.getElementById("mic-sensitivity")?.value,
+    label: document.getElementById("mic-sens-val")?.textContent.trim(),
+    saved: localStorage.getItem("vt_mic_sens"),
+    engine: String(window.VTApp?.getState?.()?.practice?.getSensitivity?.() ?? "")
+  }));
+
+/**
+ * Drag the mic sensitivity slider like a user, then restore it. A native range
+ * input moves under the mouse even when its handler is dead (QA-10, FM5: 7 to
+ * 4 with the handler disabled), so "the value changed" proves nothing; the
+ * label, the saved level and the engine must all follow the slider.
+ */
 async function dragMic(page) {
   const slider = page.locator("#mic-sensitivity");
   if (!(await slider.isVisible().catch(() => false))) return null;
   const v0 = await slider.inputValue();
   const box = await slider.boundingBox();
   if (box) await dragSlider(page, box, 0.7, 0.35, 10);
-  const v1 = await slider.inputValue();
+  const moved = await micPlumbing(page);
   if (box) await dragSlider(page, box, 0.35, 0.7, 8);
-  return { id: "mic-sensitivity", action: "drag", ok: String(v0) !== String(v1), v0, v1 };
+  const back = await micPlumbing(page);
+  const follows = (m) => m.label === m.slider && m.saved === m.slider && m.engine === m.slider;
+  const ok = moved.slider !== String(v0) && follows(moved) && follows(back);
+  return { id: "mic-sensitivity", action: "drag", ok, v0, moved, back };
 }
 
 async function toggleGuide(page) {
@@ -171,17 +219,16 @@ async function waitLive(page, ms) {
     .catch(() => false);
 }
 
-/** Press Start with the mouse; one recovery press if the first did not go live. */
+/**
+ * Press Start once with the mouse. There is no second "recovery" press: it
+ * hid a Start that swallowed the first click, which a learner meets as a
+ * dead button (QA-10, FM2).
+ */
 async function pressStart(page) {
   await clearClickLog(page);
   await reflowStage(page);
   const st = await mouseClickAndLog(page, "#btn-practice-start", "btn-practice-start");
-  let live = await waitLive(page, 3000);
-  if (!live) {
-    await reflowStage(page);
-    await page.locator("#btn-practice-start").click({ timeout: 4000 }).catch(() => {});
-    live = await waitLive(page, 3000);
-  }
+  const live = await waitLive(page, 3000);
   return { st, live };
 }
 
@@ -209,7 +256,7 @@ async function startStop(page, entry) {
   }
   entry.live = live;
   if (!live) {
-    hard.push({ code: "start_no_live", msg: "Did not enter live after Start" });
+    hard.push({ code: "start_no_live", msg: "One press of Start did not go live" });
     return { hard, soft };
   }
   await reflowStage(page);
@@ -221,7 +268,7 @@ async function startStop(page, entry) {
   entry.clicks.push({ id: "btn-practice-stop", ...sp });
   entry.stopped = stopped;
   if (!stopped) hard.push({ code: "stop_fail", msg: "Stop click did not end live" });
-  if (!sp.logOk) soft.push({ code: "stop_log_mismatch", recent: sp.recent });
+  if (!sp.logOk) hard.push({ code: "stop_log_mismatch", recent: sp.recent });
   return { hard, soft };
 }
 
@@ -271,10 +318,11 @@ async function runExerciseFlow(page, exId) {
 
   const mic = await dragMic(page);
   if (mic) entry.clicks.push(mic);
+  if (mic && !mic.ok) hard.push({ code: "mic_slider_dead", detail: mic });
   const guide = await toggleGuide(page);
   if (guide) {
     entry.clicks.push(guide);
-    if (!guide.logOk) entry.issues.push({ code: "click_log_mismatch", detail: guide });
+    if (!guide.logOk) hard.push({ code: "click_log_mismatch", detail: guide });
   }
   const mode = await currentMode(page);
   hard.push(...(await openedIssues(page, exId, mode)));
@@ -303,13 +351,16 @@ test.describe("all flows on every exercise (desktop)", () => {
 
   for (const exId of ALL_IDS) {
     test(`${exId}: layout, click log, mic, Start/Stop, back`, async ({ page }, testInfo) => {
-      await bootFlow(page, VIEWPORTS[0]);
+      const errors = await bootFlow(page, VIEWPORTS[0]);
       const { entry, hard } = await runExerciseFlow(page, exId);
+      entry.errors = errors;
       await testInfo.attach("flow.json", {
         body: JSON.stringify(entry, null, 2),
         contentType: "application/json"
       });
       expect(hard, `Hard flow issues for ${exId}:\n${JSON.stringify(hard, null, 2)}`).toEqual([]);
+      expect(entry.issues, `Soft flow issues for ${exId}`).toEqual([]);
+      expect(unexpectedErrors(errors), `Errors during the ${exId} flow`).toEqual([]);
     });
   }
 });
@@ -331,13 +382,15 @@ test.describe("sample flows on other viewports", () => {
   for (const vp of VIEWPORTS.slice(1)) {
     for (const exId of SAMPLE_EX) {
       test(`${vp.name} ${vp.width}x${vp.height} / ${exId}`, async ({ page }, testInfo) => {
-        await bootFlow(page, vp);
+        const errors = await bootFlow(page, vp);
         const { entry, hard } = await runSampleFlow(page, exId);
+        entry.errors = errors;
         await testInfo.attach("flow.json", {
           body: JSON.stringify(entry, null, 2),
           contentType: "application/json"
         });
         expect(hard, JSON.stringify(hard, null, 2)).toEqual([]);
+        expect(unexpectedErrors(errors), `Errors during the ${exId} flow`).toEqual([]);
       });
     }
   }

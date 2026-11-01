@@ -8,7 +8,7 @@
  *
  *   node qa/mutate.mjs            # the Node sets (audio, lint)
  *   node qa/mutate.mjs audio      # one set
- *   node qa/mutate.mjs stage      # browser set: needs Playwright's Chromium
+ *   node qa/mutate.mjs stage flows  # browser sets: need Playwright's Chromium
  *
  * Exit code 1 when any mutant survives or an anchor no longer matches (so a
  * refactor that moves the code cannot silently retire its mutant).
@@ -17,7 +17,11 @@ import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-const AUDIO_TESTS = ["tests/node/audio-contract.test.mjs", "tests/node/audio-mutant-killers.test.mjs"];
+const AUDIO_TESTS = [
+  "tests/node/audio-contract.test.mjs",
+  "tests/node/audio-mutant-killers.test.mjs",
+  "tests/node/hold-duration.test.mjs"
+];
 const LINT_TESTS = ["qa/lint-gate.test.mjs"];
 const node = (tests) => [process.execPath, "--test", ...tests];
 const PIANO_SPEC = [
@@ -31,6 +35,15 @@ const PIANO_SPEC = [
   "-g",
   "expanded piano"
 ];
+const FLOW_SPEC = [
+  ...PIANO_SPEC.slice(0, 3),
+  "tests/all-flows-robust.spec.js",
+  "--project=chromium",
+  "--workers=4",
+  "--reporter=dot",
+  "-g",
+  "^.*(v1-diction|s9-pitch-match|s15-sh-air-ladder|s4-lip-trills): layout"
+];
 
 export const MUTANTS = {
   audio: [
@@ -43,14 +56,21 @@ export const MUTANTS = {
     ["M8 stale take may publish after a newer take", "js/practice-engine.js", "if (epoch !== this._recordingEpoch) return;", ""],
     ["M9 stale callback instead of take-bound callback", "js/practice-engine.js", "onReady?.({", "this.onRecordingReady?.({"],
     ["M10 mic tracks released while the recorder flushes", "js/practice-engine.js", "if (this.stream && !recorderStopping) {", "if (this.stream) {"],
-    ["M11 empty take published", "js/practice-engine.js", "if (!chunks.length) return;", ""]
+    ["M11 empty take published", "js/practice-engine.js", "if (!chunks.length) return;", ""],
+    ["M12 trill hold accrues at 2x (QA-09)", "js/practice-modes.js", "        this.state.acc += dt;", "        this.state.acc += dt * 2;"],
+    ["M13 NoteGate hold accrues at 2x (every pitch-hold mode)", "js/scenes/pitch.js", "        this.acc += dt;\n        this.outMs = 0;", "        this.acc += dt * 2;\n        this.outMs = 0;"],
+    ["M14 NoteGate counts the reference note's blank", "js/scenes/pitch.js", "        this.blank -= dt;\n        this.cents = null;\n        return false;", "        this.blank -= dt;"],
+    ["M15 NoteGate band ignores its tolerance", "js/scenes/pitch.js", "      if (Math.abs(best.c) <= this.o.tol) {", "      if (Math.abs(best.c) <= this.o.tol * 2) {"]
   ].map(([name, file, from, to]) => ({ name, file, from, to, cmd: node(AUDIO_TESTS) })),
   lint: [
     ["L1 folders skipped by name again", "qa/lint-complexity.mjs", "if (!EXCLUDED_PATHS.has(name)) visit(name);", "if (!EXCLUDED_PATHS.has(name) && !/^(?:fixtures|geometry)$/.test(item.name)) visit(name);"],
     ["L2 .cjs not scanned", "qa/lint-complexity.mjs", "export const SCANNED = /\\.(?:js|mjs|cjs)$/;", "export const SCANNED = /\\.(?:js|mjs)$/;"],
-    ["L3 prune blesses current debt", "qa/lint-complexity.mjs", "return baseline.filter((v) => active.has(signature(v)));", "return current;"],
-    ["L4 baseline growth not checked", "qa/lint-complexity.mjs", "return next.filter((v) => !known.has(signature(v)));", "return [];"],
-    ["L5 edited exemption kept", "qa/lint-complexity.mjs", "newDebt: current.filter((v) => !exceptions.has(signature(v))),", "newDebt: current.filter((v) => !baseline.some((b) => b.file === v.file && b.name === v.name) && !exceptions.has(signature(v))),"],
+    ["L3 prune blesses current debt", "qa/lint-complexity.mjs", "return baseline.filter((v) => !stale.has(v));", "return current;"],
+    ["L4 baseline growth not checked", "qa/lint-complexity.mjs", "return surplus(next, prev);", "return [];"],
+    ["L5 edited exemption kept", "qa/lint-complexity.mjs", "newDebt: surplus(current, baseline),", "newDebt: surplus(current, baseline).filter((v) => !baseline.some((b) => b.file === v.file && b.name === v.name)),"],
+    ["L8 signature ignores multiplicity (QA-07)", "qa/lint-complexity.mjs", "      left.set(k, n - 1);\n", ""],
+    ["L9 unresolvable --baseline-ref skips the check (QA-08)", "qa/lint-complexity.mjs", "    return null;\n  }\n  try {\n    return JSON.parse", "    return \"none\";\n  }\n  try {\n    return JSON.parse"],
+    ["L10 empty --baseline-ref skips the check", "qa/lint-complexity.mjs", "if (args.includes(\"--baseline-ref\") && !ref) {", "if (false) {"],
     ["L6 misplaced wait options not flagged", "qa/lint-playwright-waits.mjs", "if (node.arguments.length !== 2) return false;", "if (node.arguments.length !== 99) return false;"],
     ["L7 empty wait-may-fail reason accepted", "qa/lint-playwright-waits.mjs", "/wait-may-fail:\\s*\\S/", "/wait-may-fail:/"]
   ].map(([name, file, from, to]) => ({ name, file, from, to, cmd: node(LINT_TESTS) })),
@@ -62,7 +82,15 @@ export const MUTANTS = {
     ["S4 long song list scrolls inside the panel again", "css/styles.css", ".piano-inline.is-open.is-settled {\n  max-height: none;", ".piano-inline.is-open.is-settled {\n  max-height: 420px;"],
     ["S6 a share of the screen as the floor again (64px of lanes on a phone)", "js/app.js", "return Math.max(260, Math.ceil(railT + railH + Math.max(MIN_LANES_PX, shown ? panel.scrollHeight : 0)));", "return Math.max(260, Math.round(innerHeight * 0.45));"],
     ["S5 the stage stays sticky over a panel it cannot sit beside", "css/styles.css", ".game-stage.piano-unstick .highway-stage {\n  position: relative;", ".game-stage.piano-unstick .highway-stage {\n  position: sticky;"]
-  ].map(([name, file, from, to]) => ({ name, file, from, to, cmd: PIANO_SPEC }))
+  ].map(([name, file, from, to]) => ({ name, file, from, to, cmd: PIANO_SPEC })),
+  // The per-exercise flow test (QA-10: FM2, FM4 and FM5 survived it before).
+  flows: [
+    ["FM1 Start does nothing", "js/app.js", '$("#btn-practice-start")?.addEventListener("click", startPractice);', '$("#btn-practice-start")?.addEventListener("click", () => {});'],
+    ["FM2 the first Start click is swallowed", "js/app.js", '$("#btn-practice-start")?.addEventListener("click", startPractice);', '{ let n = 0; $("#btn-practice-start")?.addEventListener("click", () => { if (++n > 1) startPractice(); }); }'],
+    ["FM3 Stop does nothing", "js/app.js", '$("#btn-practice-stop")?.addEventListener("click", () => stopPractice(false));', '$("#btn-practice-stop")?.addEventListener("click", () => {});'],
+    ["FM4 an uncaught exception on every Start", "js/app.js", "async function startPractice() {\n    const ex = state.exercise;", 'async function startPractice() {\n    setTimeout(() => { throw new Error("planted"); }, 0);\n    const ex = state.exercise;'],
+    ["FM5 the mic slider is disconnected", "js/app.js", "const applyMicSens = (raw) => {\n", "const applyMicSens = (raw) => {\n      if (micRange?.dataset.ready) return;\n      if (micRange) micRange.dataset.ready = '1';\n"]
+  ].map(([name, file, from, to]) => ({ name, file, from, to, cmd: FLOW_SPEC }))
 };
 
 export const DEFAULT_SETS = ["audio", "lint"];

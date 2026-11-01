@@ -163,3 +163,33 @@ test("a swallowed waitFor*().catch(() => {}) needs a stated reason", () => {
   assert.equal(findSwallowedWaits(handled).length, 0);
   assert.equal(findSwallowedWaits(emptyReason).length, 1, "an empty reason is not a reason");
 });
+
+test("a pasted copy of an exempt function expression is new debt (QA-07)", async () => {
+  // A function expression's hash leaves out the name it is bound to, so both
+  // copies share one signature. Counted as a set, the copy inherited the
+  // exemption; counted per occurrence, it is one copy too many.
+  const arrow = (name) => `export const ${name} = (n) => {\n${Array.from({ length: 18 }, (_, i) => `  if (n === ${i}) return ${i};`).join("\n")}\n  return -1;\n};\n`;
+  const root = tempProject({ "js/a.js": arrow("original") });
+  const one = await violations(["js/a.js"], root);
+  assert.equal(one.length, 1);
+  writeFileSync(path.join(root, "qa/complexity-baseline.json"), JSON.stringify({ ceiling: 15, entries: one }));
+  assert.equal(await quiet(() => main([], root)), 0, "control: the one exempt copy passes");
+  writeFileSync(path.join(root, "js/a.js"), arrow("original") + arrow("pasted"));
+  const two = await violations(["js/a.js"], root);
+  assert.equal(two[0].sha, two[1].sha, "control: the copies really share a signature");
+  assert.deepEqual(classify(two, one).newDebt.length, 1, "the pasted copy rode on the exemption");
+  assert.equal(await quiet(() => main([], root)), 1, "the gate passed a pasted copy of exempt debt");
+  assert.deepEqual(grownExemptions(one, two).length, 1, "a doubled exemption is growth");
+  assert.deepEqual(pruneBaseline(two, one), [two[0]], "prune keeps only as many copies as exist");
+});
+
+test("--baseline-ref fails closed on a ref that does not resolve (QA-08)", async () => {
+  const root = tempProject({ "js/ok.js": branchy("ok", 3) });
+  const git = (...a) => execFileSync("git", a, { cwd: root, stdio: "ignore" });
+  git("init", "-q");
+  git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "no baseline yet");
+  assert.equal(await quiet(() => main(["--baseline-ref", "HEAD"], root)), 0, "a base without a baseline bootstraps");
+  assert.equal(await quiet(() => main(["--baseline-ref", "origin/does-not-exist"], root)), 1, "an unresolvable ref skipped the check");
+  assert.equal(await quiet(() => main(["--baseline-ref", ""], root)), 1, "an empty ref skipped the check");
+  assert.equal(await quiet(() => main(["--baseline-ref"], root)), 1, "a missing ref skipped the check");
+});

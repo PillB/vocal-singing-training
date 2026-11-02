@@ -6804,24 +6804,39 @@
     renderProStudio(pulse, isProUser);
   }
 
+  /**
+   * How a profile reads in the picker and in the rename prompt. The first one
+   * is stored as "Default" and reads as the main one; a name that is empty
+   * (stored so before names were checked) reads "Perfil 2", "Perfil 3", never
+   * as a second "Principal".
+   * @param {{id: string, name?: string}} p Profile.
+   * @param {number} index Its place in the list.
+   * @returns {string} What to show.
+   */
+  function profileLabel(p, index) {
+    if (p.name && !(p.id === "default" && p.name === "Default")) return p.name;
+    return p.id === "default" ? tt("pro.profileMain") : `${tt("pro.profile")} ${index + 1}`;
+  }
+
   function renderProStudio(pulse, isProUser) {
     const es = isEsLang();
     // Profiles
     const sel = $("#sel-profile");
     if (sel && window.VTStorage?.getProfiles) {
       const { activeId, list } = VTStorage.getProfiles();
-      const prev = sel.value;
       sel.innerHTML = list
         .map(
-          (p) =>
+          (p, i) =>
             `<option value="${escapeHtml(p.id)}"${p.id === activeId ? " selected" : ""}>${escapeHtml(
-              // The first profile is stored as "Default"; it reads as the main one.
-              !p.name || p.name === "Default" ? tt("pro.profileMain") : p.name
+              profileLabel(p, i)
             )}</option>`
         )
         .join("");
-      if (list.some((p) => p.id === prev)) sel.value = prev;
-      else sel.value = activeId;
+      // The picker shows the profile that is active, always. It used to put
+      // the previous choice back when that profile still existed, so after
+      // "+ Perfil" it kept saying "Principal" while the new one was in use and
+      // "Renombrar" renamed the one nobody could see.
+      sel.value = activeId;
     }
     const goalSel = $("#sel-week-goal");
     if (goalSel) {
@@ -7274,7 +7289,8 @@
       if (name == null) return;
       const res = VTStorage.createProfile(name, { maxSlots: max });
       if (!res.ok) {
-        toast(tt("pro.profileLimit", { n: String(max) }));
+        // A blank name is not a full house, and the limit message said so.
+        toast(res.reason === "blank" ? tt("pro.profileBlank") : tt("pro.profileLimit", { n: String(max) }));
         return;
       }
       showActiveProfile();
@@ -7283,10 +7299,13 @@
     $("#btn-profile-rename")?.addEventListener("click", () => {
       const p = VTStorage?.getActiveProfile?.();
       if (!p) return;
-      const shown = !p.name || p.name === "Default" ? tt("pro.profileMain") : p.name;
+      const list = VTStorage?.getProfiles?.()?.list || [];
+      const shown = profileLabel(p, Math.max(0, list.findIndex((x) => x.id === p.id)));
       const name = window.prompt(tt("pro.profileNamePrompt"), shown);
       if (name == null) return;
-      VTStorage.renameProfile(p.id, name);
+      const res = VTStorage.renameProfile(p.id, name);
+      // The old name stays when nothing is left of the new one.
+      if (res && res.reason === "blank") toast(tt("pro.profileBlank"));
       renderValuePulse();
     });
     $("#sel-week-goal")?.addEventListener("change", (e) => {

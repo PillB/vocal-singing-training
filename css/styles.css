@@ -3290,6 +3290,17 @@ body.view-exercise .stage-below.is-fitted {
   gap: 0.3rem;
   font-size: 0.78rem;
 }
+/* A long profile name must shrink the picker, not widen the page: a select
+   takes the width of its longest option unless it is told it may be narrower. */
+.pro-profile-field {
+  min-width: 0;
+  max-width: 100%;
+}
+.pro-profile-field select {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 16rem;
+}
 .pro-k {
   color: var(--text-muted);
   font-weight: 650;

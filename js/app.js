@@ -640,16 +640,15 @@
   function growStageForContent(stage, railTop, railBottom) {
     const h = stage.getBoundingClientRect().height;
     let need = railTop + railBottom + STAGE_MIN_LANES;
-    // A mode panel that runs past its box is cut off (the wrapper scrolls, the
-    // picture's panel clips): give it the rows it lacks.
+    // A mode panel that is cut off with no way to scroll to the rest (a picture's
+    // panel clips) gets the rows it lacks. A long step list is left alone: its
+    // wrapper scrolls, by design.
     const focus = $("#mode-focus");
     if (focus && !focus.hidden) {
       const wrap = $("#mode-focus-panel");
-      const panel = wrap?.querySelector(".mode-panel");
-      const over = Math.max(
-        wrap ? wrap.scrollHeight - wrap.clientHeight : 0,
-        panel ? panel.scrollHeight - panel.clientHeight : 0
-      );
+      const cutOff = (el) =>
+        el && /^(hidden|clip)$/.test(getComputedStyle(el).overflowY) ? el.scrollHeight - el.clientHeight : 0;
+      const over = Math.max(cutOff(wrap), cutOff(wrap?.querySelector(".mode-panel")));
       if (over > 1) need = Math.max(need, h + over);
     }
     if (h >= need - 0.5) return false;

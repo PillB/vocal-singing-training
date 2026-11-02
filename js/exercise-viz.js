@@ -204,9 +204,23 @@
       this._raf = 0;
       this._resize();
       if (global.ResizeObserver) {
+        // A frame later: _resize() sets the canvas's own size, which can
+        // resize the box being observed, and doing that inside the callback
+        // is what Chrome reports as a "ResizeObserver loop" window error.
+        this._roRaf = 0;
         this._ro = new ResizeObserver(() => {
-          this._resize();
-          this.draw();
+          if (!global.requestAnimationFrame) {
+            this._resize();
+            this.draw();
+            return;
+          }
+          cancelAnimationFrame(this._roRaf);
+          this._roRaf = requestAnimationFrame(() => {
+            this._roRaf = 0;
+            if (!this.ctx) return;
+            this._resize();
+            this.draw();
+          });
         });
         this._ro.observe(this.wrap);
       }
@@ -273,6 +287,7 @@
     destroy() {
       if (this._ro) this._ro.disconnect();
       if (this._raf && global.cancelAnimationFrame) cancelAnimationFrame(this._raf);
+      if (this._roRaf && global.cancelAnimationFrame) cancelAnimationFrame(this._roRaf);
       clearTimeout(this._capT);
       if (this.wrap.parentNode) this.wrap.parentNode.removeChild(this.wrap);
       this.ctx = null;

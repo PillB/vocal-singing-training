@@ -146,6 +146,10 @@
     let lastKey = "";
     let lastAt = 0;
     const report = (kind, detail) => {
+      // Chrome reports "ResizeObserver loop completed with undelivered
+      // notifications" as a window error when a layout settles over two
+      // frames. Nothing failed, so it is not the learner's "Algo falló".
+      if (/ResizeObserver loop/.test(String(detail?.message ?? detail))) return;
       console.error("[VT]", kind, detail);
       // Quiet during automated e2e unless explicitly debugging
       if (sessionStorage.getItem("vt_e2e") === "1" && sessionStorage.getItem("vt_debug") !== "1") {
@@ -757,23 +761,34 @@
       if (el) ro.observe(el);
     });
     // "🎹 Piano ▾" drops its word when it would take a row of its own.
+    // Measured a frame later, as the header's title is: dropping the word
+    // resizes the very box this observer reports on, which Chrome flags as a
+    // "ResizeObserver loop" when done inside the callback.
     const opts = $("#piano-mini-opts");
     if (opts) {
       let lastW = 0;
+      let optsRaf = 0;
       new ResizeObserver(() => {
-        const w = Math.round(opts.getBoundingClientRect().width);
-        if (w === lastW) return;
-        lastW = w;
-        fitPianoWord();
+        cancelAnimationFrame(optsRaf);
+        optsRaf = requestAnimationFrame(() => {
+          const w = Math.round(opts.getBoundingClientRect().width);
+          if (w === lastW) return;
+          lastW = w;
+          fitPianoWord();
+        });
       }).observe(opts);
     }
     // On a phone on its side the banner's Pausar and Terminar sit in the
     // exercise header's row, which keeps their width free (design: landscape).
     const ctl = $("#session-banner .controls-row");
     if (ctl) {
+      let ctlRaf = 0;
       new ResizeObserver(() => {
-        const w = Math.ceil(ctl.getBoundingClientRect().width);
-        if (w) document.body.style.setProperty("--session-ctl-w", `${w}px`);
+        cancelAnimationFrame(ctlRaf);
+        ctlRaf = requestAnimationFrame(() => {
+          const w = Math.ceil(ctl.getBoundingClientRect().width);
+          if (w) document.body.style.setProperty("--session-ctl-w", `${w}px`);
+        });
       }).observe(ctl);
     }
   }

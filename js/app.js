@@ -3456,6 +3456,8 @@
     if (pill) {
       pill.textContent = live ? tt("practice.live") : tt("practice.ready");
       pill.classList.toggle("live", live);
+      // "Tiempo" labels the clock: an exercise with no clock has nothing to label
+      pill.hidden = !live && !(state.timer.total > 0);
     }
     syncStageNow();
     // Practice clock for leave-prompt (≥10% of exercise)

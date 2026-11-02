@@ -2452,6 +2452,12 @@ html[lang^="es"] .hud-cents-only .hud-combo strong::before {
   padding: 0;
   display: none;
 }
+/* The top-left corner of an exercise with no clock and no hold readout (a
+   speech drill: no chord badge either) was left as an empty box */
+.hud-tl:not(:has(> :not([hidden]))),
+.highway-stage:has(.mode-focus-live) .hud-tl:not(:has(> :not([hidden]):not(.chord-now))) {
+  display: none;
+}
 
 .ex-header-actions {
   display: flex;
@@ -2801,7 +2807,7 @@ body.view-exercise .stage-below.is-fitted {
     max-width: min(50%, 11rem);
   }
   .hud-tl .chord-now {
-    max-width: 4.5rem;
+    max-width: 6.6rem; /* "Am · A2 La" and "Bb · A#2 La♯" whole at 390px */
   }
   .hold-live {
     max-width: 3.4rem;

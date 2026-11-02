@@ -4040,15 +4040,28 @@
    * how to allow it, a retry, and — inside a guided routine — a way on.
    * @param {boolean} canRun true when the piano or the clock still runs
    */
+  function micBlockMessageKey(canRun, reason) {
+    const failure = reason || state.practice.lastCaptureError;
+    const failureName = typeof failure === "string" ? failure : failure?.name;
+    const failureMessage = typeof failure === "object" ? failure?.message : "";
+    let messageKey = canRun ? "mic.blocked.partial" : "mic.blocked.none";
+    if (failureName === "interrupted") messageKey = "mic.blocked.interrupted";
+    else if (["NotReadableError", "AbortError"].includes(failureName)) messageKey = "mic.blocked.busy";
+    else if (failureName === "NotFoundError") messageKey = "mic.blocked.missing";
+    else if (failureName === "TimeoutError") messageKey = "mic.blocked.pending";
+    else if (/no live audio track|AudioContext|MediaStreamSource/i.test(failureMessage || "")) {
+      messageKey = "mic.blocked.disconnected";
+    }
+    return messageKey;
+  }
+
   function showMicBlocked(canRun, reason) {
     const box = $("#mic-blocked");
     if (!box) {
       toast(tt("toast.mic"));
       return;
     }
-    $("#mic-blocked-text").textContent = tt(reason === "interrupted"
-      ? "mic.blocked.interrupted"
-      : canRun ? "mic.blocked.partial" : "mic.blocked.none");
+    $("#mic-blocked-text").textContent = tt(micBlockMessageKey(canRun, reason));
     const retry = $("#btn-mic-retry");
     const skip = $("#btn-mic-skip");
     if (retry) {

@@ -79,6 +79,49 @@ test("microphone track ending stops scoring and exposes an explicit retry", asyn
   await expect(page.locator("#mic-blocked")).toBeHidden();
 });
 
+test("busy, denied, missing, and delayed microphones show distinct guidance before Retry succeeds", async ({ page }) => {
+  test.setTimeout(60000);
+  await boot(page, { lang: "en", tourDone: true, mic: "silent" });
+  await openExercise(page, "v1-diction");
+  await page.evaluate(() => {
+    const md = navigator.mediaDevices;
+    const goodMic = md.getUserMedia.bind(md);
+    window.__captureFailure = "NotReadableError";
+    window.__captureAttempts = 0;
+    const failOrRecover = async (constraints) => {
+      window.__captureAttempts++;
+      if (!window.__captureFailure) return goodMic(constraints);
+      const error = new Error("device already in use");
+      error.name = window.__captureFailure;
+      throw error;
+    };
+    md.getUserMedia = failOrRecover;
+    if (typeof MediaDevices !== "undefined") MediaDevices.prototype.getUserMedia = failOrRecover;
+  });
+  await page.locator("#btn-practice-start").click();
+  await expect(page.locator("#mic-blocked-text")).toContainText("other apps");
+  expect(await page.evaluate(() => window.__captureAttempts)).toBe(1);
+  await page.evaluate(() => { window.__captureFailure = "NotAllowedError"; });
+  await page.locator("#btn-mic-retry").click();
+  await expect(page.locator("#mic-blocked-text")).toContainText("address bar");
+  expect(await page.evaluate(() => window.__captureAttempts)).toBe(2);
+  await page.evaluate(() => { window.__captureFailure = "NotFoundError"; });
+  await page.locator("#btn-mic-retry").click();
+  await expect(page.locator("#mic-blocked-text")).toContainText("No microphone is available");
+  expect(await page.evaluate(() => window.__captureAttempts)).toBe(3);
+  await page.evaluate(() => { window.__captureFailure = "TimeoutError"; });
+  await page.locator("#btn-mic-retry").click();
+  await expect(page.locator("#mic-blocked-text")).toContainText("permission prompt is still open");
+  expect(await page.evaluate(() => window.__captureAttempts)).toBe(4);
+  await page.evaluate(() => { window.__captureFailure = null; });
+  await page.locator("#btn-mic-retry").click();
+  await expect.poll(() => page.evaluate(() => window.VTApp.getState().practiceLive), {
+    timeout: 12000
+  }).toBe(true);
+  expect(await page.evaluate(() => window.__captureAttempts)).toBe(5);
+  await page.locator("#btn-practice-stop").click();
+});
+
 test("recording with a live practice reuses one stream and preserves the microphone", async ({ page }) => {
   test.setTimeout(60000);
   await startWithMic(page, "v1-diction");

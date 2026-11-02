@@ -386,7 +386,8 @@
           if (!["OverconstrainedError", "TypeError", "NotSupportedError"].includes(e?.name)) break;
         }
       }
-      throw lastErr || new Error("getUserMedia failed");
+      this.lastCaptureError = lastErr || new Error("getUserMedia failed");
+      throw this.lastCaptureError;
     }
 
     async _setupInputGraph() {
@@ -504,11 +505,13 @@
 
     async start({ record = false } = {}) {
       if (this.running) return;
+      this.lastCaptureError = null;
       this.stream = await this._acquireMic();
       const audioTrack = this.stream.getAudioTracks?.()[0];
       if (!audioTrack || audioTrack.readyState === "ended") {
         this._discardFailedInput();
-        throw new Error("Microphone supplied no live audio track");
+        this.lastCaptureError = new Error("Microphone supplied no live audio track");
+        throw this.lastCaptureError;
       }
       // A phone or headset may ignore the request to leave the input alone.
       // Automatic gain evens out exactly the loudness differences the volume
@@ -522,6 +525,7 @@
       try {
         await this._setupInputGraph();
       } catch (e) {
+        this.lastCaptureError = e;
         this._discardFailedInput();
         throw e;
       }

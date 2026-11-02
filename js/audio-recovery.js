@@ -25,6 +25,11 @@
       previousStatus?.(status);
       if (!["mic-muted", "mic-ended", "input-interrupted"].includes(status)) return;
       if (state().view !== "exercise" || !engine.running) return;
+      if (status === "input-interrupted" && engine._audioClockStalled) {
+        // Only rebuild when the render clock actually froze: ordinary track
+        // mutes and AudioContext.statechange should reuse the good graph.
+        piano._needsFreshContext = true;
+      }
       // Holding a stale pitch is not practice. End the take and require a new
       // user gesture; the browser may need to ask for the mic again.
       hideSound();
@@ -57,6 +62,9 @@
       // Unlock that shared context on the original tap too, before the OS
       // permission sheet can consume user activation.
       if (app.getProfile(state().exercise)?.mode === "weekPlan") return;
+      if (piano._needsFreshContext) {
+        if (piano.rebuildStalledContext()) piano._needsFreshContext = false;
+      }
       if (piano.ctx?.state === "running") return;
       piano.unlock().catch((err) => console.warn("[VT] Audio gesture unlock failed", err));
     }, true);

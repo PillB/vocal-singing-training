@@ -196,6 +196,106 @@ test("interrupted shared AudioContext stops stale scoring and offers microphone 
   expect(st).toEqual({ live: true, micLive: "live", soundCtx: "running" });
 });
 
+test("running-but-frozen audio clock rejects stale singing frames and requires a new gesture", async ({ page }) => {
+  test.setTimeout(60000);
+  await startWithMic(page);
+  const initial = await page.evaluate(() => {
+    const p = window.VTApp.getState().practice;
+    return { clock: p.audioCtx.currentTime, state: p.audioCtx.state, holds: p.holds.length };
+  });
+  expect(initial.state).toBe("running");
+  // Simulate the documented WebKit renderer stall: rAF and the last analyser
+  // samples continue, the context claims running, but audio time cannot move.
+  const frozen = await page.evaluate(() => {
+    const ctx = window.VTApp.getState().practice.audioCtx;
+    window.__frozenContext = ctx;
+    const time = ctx.currentTime;
+    Object.defineProperty(ctx, "currentTime", { configurable: true, get: () => time });
+    return ctx.currentTime;
+  });
+  expect(frozen).toBeGreaterThanOrEqual(initial.clock);
+  await expect.poll(() => page.evaluate(() => window.VTApp.getState().practice._audioClockStalled), {
+    timeout: 4500
+  }).toBe(true);
+  const scoreTruth = () => page.evaluate(() => {
+    const s = window.VTApp.getState();
+    const game = s.pitchGame?.snapshot();
+    return { lastVoiceAt: s.practice.lastVoiceAt, holdSec: s.practice.currentHoldSec,
+      score: game?.score, cleared: game?.challengeCleared };
+  });
+  const atSuspicion = await scoreTruth();
+  await page.waitForTimeout(230);
+  expect(await scoreTruth(), "no score, hold or last-sample time advances on the frozen buffer")
+    .toEqual(atSuspicion);
+  await expect(page.locator("#mic-blocked")).toBeVisible({ timeout: 6000 });
+  const stopped = await page.evaluate(() => {
+    const s = window.VTApp.getState();
+    return { live: s.practiceLive, running: s.practice.running, holds: s.practice.holds.length,
+      paused: s.practice._analysisPaused, raf: s.practice.raf, ctxState: window.VTPiano.ctx.state };
+  });
+  expect(stopped).toMatchObject({ live: false, running: false, paused: false, raf: null, ctxState: "running" });
+  expect(stopped.holds, "a frozen voiced buffer cannot invent a new hold").toBe(initial.holds);
+  await page.locator("#btn-mic-retry").click();
+  await expect.poll(() => page.evaluate(() => window.VTApp.getState().practiceLive), { timeout: 12000 })
+    .toBe(true);
+  await expect(page.locator("#mic-blocked")).toBeHidden();
+  const replacement = await page.evaluate(async () => {
+    const fresh = window.VTPiano.ctx;
+    const before = fresh.currentTime;
+    await new Promise((resolve) => setTimeout(resolve, 240));
+    return { newContext: fresh !== window.__frozenContext, state: fresh.state,
+      progress: fresh.currentTime - before,
+      sameGraph: fresh === window.VTApp.getState().practice.audioCtx };
+  });
+  expect(replacement, "Retry must abandon the frozen graph and restart audio time")
+    .toMatchObject({ newContext: true, state: "running", sameGraph: true });
+  expect(replacement.progress, "new renderer must actually advance").toBeGreaterThan(0.05);
+});
+
+test("held pitch stays visible through a brief dropout but only fresh audio earns points", async ({ page }) => {
+  test.setTimeout(60000);
+  await startWithMic(page);
+  const evidence = await page.evaluate(() => {
+    const s = window.VTApp.getState();
+    const p = s.practice;
+    cancelAnimationFrame(p.raf); // Only the two deliberately modeled frame classes may enter.
+    p.raf = null;
+    const viz = s.pitchViz;
+    const game = s.pitchGame;
+    game.reset();
+    // This exercise may begin with a listen-only overlay. Test the scoring
+    // contract explicitly in an active score window, not in a held bar.
+    viz.setDisplay({ game: true, gameHold: false, chordLanes: false, stats: "target" });
+    const target = viz.targetFreq;
+    const feed = () => {
+      viz.lastIngestAt = performance.now() - 40;
+      viz.pushFrame(target, target);
+    };
+    const silence = new Float32Array(2048);
+    p.voiceFreq = target; // Last frame had a measured note.
+    const noPitch = p._detectPitch(silence, p.audioCtx.sampleRate);
+    p._rms(silence);
+    for (let i = 0; i < 15; i++) feed();
+    const afterSilence = game.snapshot();
+    const heldDisplay = viz.voiceFreq;
+    const tone = new Float32Array(2048);
+    for (let i = 0; i < tone.length; i++) tone[i] = Math.sin(2 * Math.PI * target * i / p.audioCtx.sampleRate) * 0.3;
+    const measured = p._detectPitch(tone, p.audioCtx.sampleRate);
+    p._rms(tone);
+    for (let i = 0; i < 15; i++) feed();
+    return { noPitch, target, measured, heldDisplay,
+      silenceScore: afterSilence.score, silenceCleared: afterSilence.challengeCleared,
+      freshScore: game.snapshot().score };
+  });
+  expect(evidence.noPitch, "silence has no valid detector estimate").toBeNull();
+  expect(evidence.heldDisplay, "a brief dropout retains a readable pitch marker").toBe(evidence.target);
+  expect(evidence.silenceScore, "15 stale displayed notes must earn no points").toBe(0);
+  expect(evidence.silenceCleared).toBe(0);
+  expect(evidence.measured, "new pitched audio remains measurable").toBeGreaterThan(evidence.target * 0.98);
+  expect(evidence.measured).toBeLessThan(evidence.target * 1.02);
+  expect(evidence.freshScore, "15 real measured notes must earn points").toBeGreaterThan(0);
+});
+
 for (const viewport of [{ width: 360, height: 740 }, { width: 844, height: 390 }]) {
   test(`recovery control is not occluded at ${viewport.width}×${viewport.height}`, async ({ page }) => {
     test.setTimeout(60000);

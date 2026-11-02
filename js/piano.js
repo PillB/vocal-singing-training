@@ -332,7 +332,9 @@
       if (!this._observedContexts.has(ctx)) {
         this._observedContexts.add(ctx);
         ctx.addEventListener?.("statechange", () => {
-          this.onStateChange?.(ctx.state);
+          // A retired iOS context can close *after* its replacement starts.
+          // Do not let that stale event override the new graph's UI state.
+          if (this.ctx === ctx) this.onStateChange?.(ctx.state);
         });
       }
       try {
@@ -399,6 +401,26 @@
         }
       }
       return this.ctx;
+    }
+
+    /** User-tap recovery for WebKit's running-but-frozen render clock. */
+    rebuildStalledContext() {
+      const AC = getAudioContextCtor();
+      if (!AC) return false;
+      let fresh;
+      try { fresh = new AC({ latencyHint: "interactive" }); }
+      catch {
+        try { fresh = new AC(); } catch { return false; }
+      }
+      const retired = this.ctx;
+      this.stopAll();
+      this._wireGraph(fresh);
+      try { retired?.close?.()?.catch?.(() => {}); } catch { /* old Safari device may be stuck */ }
+      // Both playback sources are scheduled synchronously in the tap, before
+      // a resume promise can yield and lose Safari's transient activation.
+      this._primeSoundSync();
+      if (fresh.state !== "running") fresh.resume().catch(() => {});
+      return true;
     }
 
     /**

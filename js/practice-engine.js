@@ -27,8 +27,13 @@
   /** Base thresholds at sensitivity = 5 (mid). Higher sensitivity lowers them. */
   const VOICE_RMS_BASE = 0.012;
   const HOLD_RMS_BASE = 0.008;
-  const PITCH_MIN = 55;
-  const PITCH_MAX = 520;
+  /**
+   * Pitches a frame may report: a bass's A1 (55 Hz), sung up to 90 cents
+   * flat, up to where detectPitch stops (its shortest lag, 1500 Hz at 48 kHz
+   * and 1521 Hz at 44.1 kHz) with a margin
+   */
+  const PITCH_MIN = 52;
+  const PITCH_MAX = 1600;
   /** Default 7/10 — more sensitive than legacy fixed 0.016 (fewer false cutoffs) */
   const DEFAULT_SENS = 7;
 
@@ -777,8 +782,9 @@
           /**
            * How periodic the mic's own samples are, 0–1, at any level (null
            * without VTPitchUtils): a voice or a hum near 1, a fan or a hiss
-           * under 0.5. `rawFreq` cannot tell them apart: it is null under
-           * −40 dBFS, and above it noise gets a pitch too.
+           * under 0.5. `rawFreq` says less: it is null under −40 dBFS
+           * however periodic the sound, and above it a fan or a rumble still
+           * gets a pitch on about 1 % of frames.
            */
           clarity,
           voiceRmsThreshold: voiceRms,

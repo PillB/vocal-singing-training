@@ -49,14 +49,16 @@ function railClashes() {
 }
 
 for (const vp of [
-  { width: 1280, height: 800 },
-  { width: 1440, height: 900 },
-  { width: 1180, height: 820 }
+  { width: 1280, height: 800, lang: "es" },
+  { width: 1440, height: 900, lang: "es" },
+  { width: 1180, height: 820, lang: "es" },
+  // English labels are a different length
+  { width: 1180, height: 820, lang: "en" }
 ]) {
-  test(`${vp.width}x${vp.height}: no exercise's bottom rail overlaps`, async ({ page }) => {
+  test(`${vp.lang} ${vp.width}x${vp.height}: no exercise's bottom rail overlaps`, async ({ page }) => {
     test.setTimeout(120000);
-    await page.setViewportSize(vp);
-    await boot(page);
+    await page.setViewportSize({ width: vp.width, height: vp.height });
+    await boot(page, { lang: vp.lang });
     await page.waitForFunction(() => !!window.VTApp?.openExercise && !!window.VT_EXERCISES);
     const ids = await page.evaluate(() =>
       Object.values(window.VT_EXERCISES)

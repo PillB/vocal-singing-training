@@ -7756,8 +7756,8 @@
      * The attack of a run from the fast envelope: where it really started and
      * how fast it rose to where its fast rise ends (VTFeatures.attackLevel,
      * cut by VTFeatures.riseTime as s12 is). A rise under ~14 ms is a hammer
-     * (a glottal "slap"), unless frames were dropped and the attack was not
-     * seen. The 12,5 ms smoothing alone reads an instant step as ~10 ms; a
+     * (a glottal "slap"), unless audio was lost inside it and the attack was
+     * not seen. The 12,5 ms smoothing alone reads an instant step as ~10 ms; a
      * 30 ms attack reads ~25 ms.
      */
     _attack(run) {
@@ -7783,7 +7783,9 @@
       if (!rise || rise.ms == null) return;
       run.t0 = Math.min(run.t0, this._tOfIdx(run.startTotal - back + rise.i10));
       run.riseMs = rise.ms;
-      run.hammer = run.maxDt > st.bufMs + 6 ? null : run.riseMs <= 14;
+      // Audio lost inside the attack (a stalled tab) leaves it unmeasured
+      const lost = E.lostSince ? E.lostSince(run.startTotal - back) : run.maxDt > st.bufMs + 6;
+      run.hammer = lost ? null : run.riseMs <= 14;
     },
     /** Where the sound really ended: the last moment within 15 dB of its peak. */
     _release(run, lastSnd) {

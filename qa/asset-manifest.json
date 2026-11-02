@@ -144,8 +144,8 @@
     "sha": "a0e0e06dc4bcd25e"
   },
   "js/practice-modes.js": {
-    "v": "20261102a",
-    "sha": "dc343d7886117d0f"
+    "v": "20261102b",
+    "sha": "d57460cd2abb24ae"
   },
   "js/practice-profiles.js": {
     "v": "20261002a",
@@ -212,8 +212,8 @@
     "sha": "88e94f2ad7eab14e"
   },
   "js/sync.js": {
-    "v": "20261006b",
-    "sha": "499c66119f555428"
+    "v": "20261102a",
+    "sha": "319c1ae39b89c93d"
   },
   "js/tour.js": {
     "v": "20261006b",
@@ -224,7 +224,7 @@
     "sha": "6a70c4249ad8e832"
   },
   "js/voice-features.js": {
-    "v": "20261102b",
-    "sha": "a9edeea9170596c9"
+    "v": "20261102c",
+    "sha": "333d373a2fe9d42e"
   }
 }

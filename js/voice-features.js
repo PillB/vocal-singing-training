@@ -73,6 +73,10 @@
 
   /* —— Fast envelope —— */
 
+  // Samples of the last frame looked for in the next one (0,7 ms at 48 kHz):
+  // floats copied from the same audio match exactly, a wrong place never does
+  const TAIL_N = 32;
+
   /**
    * Loudness at 400 values a second, from the samples of each frame.
    *
@@ -96,6 +100,9 @@
       this._accN = 0;
       this._blockN = 0;
       this._primed = false;
+      this._tail = null;
+      this._tailOf = 0;
+      this._gaps = new Ring(16);
       /** Total blocks ever pushed: a clock in envelope samples */
       this.total = 0;
     }
@@ -104,10 +111,17 @@
       if (!buf || !buf.length) return 0;
       const sr = frame.sampleRate || 48000;
       this._blockN = Math.max(16, Math.round((sr * this.blockMs) / 1000));
-      let n = this._primed
-        ? Math.round(((frame.dtMs || 16) / 1000) * sr)
-        : Math.round(0.02 * sr);
+      let n = Math.round(0.02 * sr);
+      if (this._primed) {
+        const est = Math.round(((frame.dtMs || 16) / 1000) * sr);
+        const k = this._newSince(buf, est);
+        n = k != null ? k : est;
+        // More new audio than the buffer holds: some never reached us
+        if (n >= buf.length) this._gaps.push(this.total);
+      }
       this._primed = true;
+      this._tail = buf.length > TAIL_N ? buf.slice(buf.length - TAIL_N) : null;
+      this._tailOf = buf.length;
       n = clamp(n, 0, buf.length);
       let pushed = 0;
       for (let i = buf.length - n; i < buf.length; i++) {
@@ -128,6 +142,36 @@
       }
       return pushed;
     }
+    /**
+     * How many of this frame's samples are new: where the last frame's final
+     * samples sit in this one. The engine hands over its latest ~43 ms each
+     * frame, but audio arrives in the device's chunks on its own clock, so a
+     * frame can hold no new audio or a chunk more than its own time (in
+     * Chromium three frames in four did): counting the frame's time re-read
+     * old audio and skipped new, a step or a dip inside a slow rise. Where
+     * the tail repeats (a periodic test tone), the match nearest `est` wins.
+     * The whole buffer when the tail is not in it (more new audio than it
+     * holds); null when the tail cannot tell (flat, as digital silence is),
+     * and the frame's time is used, as before.
+     */
+    _newSince(buf, est) {
+      const tail = this._tail;
+      const N = buf.length;
+      if (!tail || this._tailOf !== N || !tail.some((v) => v !== tail[0])) return null;
+      const K = tail.length;
+      let best = null;
+      for (let k = 0; k <= N - K; k++) {
+        const at = N - k - K;
+        let j = 0;
+        while (j < K && buf[at + j] === tail[j]) j++;
+        if (j === K && (best == null || Math.abs(k - est) < Math.abs(best - est))) best = k;
+      }
+      return best == null ? N : best;
+    }
+    /** True when audio was lost at or after envelope sample `idx` (a stalled tab). */
+    lostSince(idx) {
+      return this._gaps.last(this._gaps.count).some((at) => at >= idx);
+    }
     /** The last `sec` seconds of envelope, oldest first. */
     window(sec) {
       return this.ring.last(Math.round(sec * this.rate));
@@ -138,6 +182,8 @@
       this._acc = 0;
       this._accN = 0;
       this._primed = false;
+      this._tail = null;
+      this._gaps.clear();
       this.total = 0;
     }
   }

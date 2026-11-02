@@ -80,11 +80,13 @@ async function boot(page, opts = {}) {
 
       if (mic === "deny") {
         if (navigator.mediaDevices) {
-          navigator.mediaDevices.getUserMedia = async () => {
+          const deny = async () => {
             const err = new Error("Permission denied");
             err.name = "NotAllowedError";
             throw err;
           };
+          navigator.mediaDevices.getUserMedia = deny;
+          if (typeof MediaDevices !== "undefined") MediaDevices.prototype.getUserMedia = deny;
         }
         return;
       }
@@ -94,8 +96,11 @@ async function boot(page, opts = {}) {
 
       const AC = window.AudioContext || window.webkitAudioContext;
       if (!navigator.mediaDevices || !AC) return;
-      navigator.mediaDevices.getUserMedia = async () => {
-        const ctx = new AC();
+      const syntheticMic = async () => {
+        // WebKit can dispatch getUserMedia through the prototype; intercept both
+        // and share the same Web Audio context as the production audio graph.
+        const ctx = window.VTPiano?.ctx || window.VTSharedAudioCtx || new AC();
+        window.VTSharedAudioCtx = ctx;
         const dest = ctx.createMediaStreamDestination();
         const osc = ctx.createOscillator();
         const g = ctx.createGain();
@@ -106,6 +111,8 @@ async function boot(page, opts = {}) {
         osc.start();
         return dest.stream;
       };
+      navigator.mediaDevices.getUserMedia = syntheticMic;
+      if (typeof MediaDevices !== "undefined") MediaDevices.prototype.getUserMedia = syntheticMic;
     },
     { lang, tourDone, mic: wantRealMic ? "real" : mic, clearBilling }
   );

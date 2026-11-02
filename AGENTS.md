@@ -101,6 +101,16 @@ Every task and every numbered round must:
    human-browser hit tests, real microphone/audio tests and the applicable
    security/privacy checks are verified. A blocked test stays a release gate.
 
+For **mobile audio/Safari** tasks, separately test output unlock on the actual
+tap (before any permission `await`), a denied/late/busy microphone, single
+stream ownership while recording, asynchronous MP4/AAC or WebM finalization,
+temporary track `mute`/`unmute`, sustained mute, track `ended`, Web Audio
+`interrupted`/`suspended`, AudioSession interruption and foreground restore,
+lock/call/AirPods/wired-headset routing, replay after Stop, and 360×740 / 390×844
+/ 844×390 visible hit targets. CI WebKit emulation is not physical iOS Safari;
+require actual-device acoustic playback and permission-cycle signoff. Never
+infer speaker audibility merely from an oscillator having been scheduled.
+
 For a six-iteration exercise deep dive, vary one dimension per iteration:
 default, alternative controls, boundary values, interruptions, responsive /
 keyboard, and return/reset/replay. Capture a left-to-right Z reading-order
@@ -236,6 +246,9 @@ trade-off of the fix to the user.
   useful intervention, not proof of uniform outcomes or guaranteed range gains.
 - W3C MediaStream Recording: `dataavailable` precedes `stop`; callbacks and
   stream ownership must be bound to the originating take.
+- MDN/WebKit AudioContext interruption and WebKit AudioSession routing bugs:
+  retain explicit user-gesture recovery, avoid an untested universal output
+  route override, and prove audio with physical hardware before release.
 - W3C WCAG 2.2 2.4.11: focused controls must not disappear beneath sticky
   content. Inspect actual hit-test targets, not screenshots alone.
 - NIDCD voice-care guidance: any report of pain, strain or ongoing hoarseness

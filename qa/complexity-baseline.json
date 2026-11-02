@@ -549,12 +549,6 @@
     },
     {
       "file": "js/practice-engine.js",
-      "sha": "df5933092bf1a1d8d849a29a9c9e9b897e3cec2294446c9b6b4bae004e6e2c2e",
-      "complexity": 28,
-      "name": "Async method 'start'"
-    },
-    {
-      "file": "js/practice-engine.js",
       "sha": "d01d1e14381838fa02a7bfe2e8e5969764c675bff9ec130cf61bfba98133a3c8",
       "complexity": 17,
       "name": "Method '_airRaw'"
@@ -1626,12 +1620,6 @@
       "sha": "0146d859c8076138e2edb6b5b85e67db1408095f0dcf2f72851b1c0d84bbe393",
       "complexity": 16,
       "name": "Function 'beginTour'"
-    },
-    {
-      "file": "js/tour.js",
-      "sha": "8757d1a11ba534e74d947b6e8f350706eff1bef0a92dd9fc1629d6e80cbdbd30",
-      "complexity": 18,
-      "name": "Function 'end'"
     },
     {
       "file": "js/tour.js",

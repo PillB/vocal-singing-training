@@ -699,8 +699,18 @@
       const now = performance.now();
       const dt = Math.min(50, now - (this.lastIngestAt || now));
       this.lastIngestAt = now;
-      this._ingest(voiceFreq || null, dt);
+      this._ingest(this._scoreableExternalPitch(voiceFreq), dt);
       this._draw();
+    }
+
+    /** Grace-held labels remain visible, but never earn a fresh pitch point. */
+    _scoreableExternalPitch(displayFreq) {
+      const practice = global.VTApp?.getState?.()?.practice;
+      if (!this.external || !practice?.running) return displayFreq || null;
+      const measured = practice._latestRawPitch;
+      if (!measured || practice._latestRms < practice._holdRms() * 0.55) return null;
+      if (practice.isManualEffective?.() && practice._manualKind === "air") return null;
+      return measured;
     }
 
     async start() {

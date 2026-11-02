@@ -4866,7 +4866,9 @@
       sec: Math.max(0, elapsedSec - (sp.creditedSec || 0)),
       saved: true,
       bump: insertedNow,
-      source: "save"
+      source: "save",
+      // The day the take was sung: a rating given after midnight is still for it.
+      day: savedEntry.day
     });
     sp.entryId = savedEntry.id;
     sp.creditedSec = Math.max(sp.creditedSec || 0, elapsedSec);
@@ -5298,9 +5300,14 @@
   }
 
   /** How long ago, in words: "hoy", "ayer", "hace 3 días", then a date. */
-  function relativeDay(iso) {
+  /**
+   * "hoy", "ayer", "hace 3 días" or a date, for a moment. `day` is the local day
+   * the take was saved on, when it says: counted from that day, "ayer" agrees
+   * with the calendar above it whatever zone the page is in now.
+   */
+  function relativeDay(iso, day) {
     const D = window.VTDays;
-    const d = new Date(iso);
+    const d = day && D?.parseDay?.(day) ? D.parseDay(day) : new Date(iso);
     if (!D || !Number.isFinite(d.getTime())) return "";
     const n = Math.max(0, D.diffDays(D.dayKey(d), D.dayKey()));
     if (n < 7 && typeof Intl.RelativeTimeFormat === "function") {
@@ -5423,7 +5430,9 @@
   /** ["hoy", "3 veces", { line: "Último puntaje: 7/10" }] */
   function historyRowMeta(p) {
     const n = Number(p.completedCount) || 0;
-    const parts = [p.lastAt ? relativeDay(p.lastAt) : ""];
+    // The newest take says which day it was sung on; older records do not.
+    const last = p.lastAt ? (p.history || []).find((h) => h && h.at === p.lastAt) : null;
+    const parts = [p.lastAt ? relativeDay(p.lastAt, last?.day) : ""];
     if (n) parts.push(n === 1 ? tt("history.times1") : tt("history.timesN", { n }));
     if (p.lastScore != null && Number.isFinite(Number(p.lastScore))) {
       const score = Number(p.lastScore).toLocaleString(locale(), { maximumFractionDigits: 1 });

@@ -21,6 +21,18 @@
   }
 
   /**
+   * The local day a saved take belongs to. Takes saved since the day was
+   * written down (js/storage.js) carry it; older ones are placed by their time
+   * in the zone the page is in now. Working it out from the time alone moved a
+   * take rated after midnight, or sung before a change of time zone, to the
+   * wrong day.
+   */
+  function takeDay(h) {
+    if (h && typeof h.day === "string" && /^\d{4}-\d{2}-\d{2}$/.test(h.day)) return h.day;
+    return h && h.at ? dayKey(h.at) : null;
+  }
+
+  /**
    * Days practised in the plan's current week. They used to be logged by hand
    * ("Registro del día"); the Plan now counts them from the practice-day
    * ledger, and a hand-logged week keeps what it logged.
@@ -55,7 +67,7 @@
       (row.history || []).forEach((h) => {
         totalSec += Number(h.durationSec) || 0;
         if (h.at) {
-          const d = dayKey(h.at);
+          const d = takeDay(h);
           if (d) days.add(d);
           if (!lastAt || h.at > lastAt) lastAt = h.at;
         }
@@ -135,7 +147,7 @@
     const dayCounts = {};
     Object.keys(progress).forEach((exId) => {
       (progress[exId].history || []).forEach((h) => {
-        const d = dayKey(h.at);
+        const d = takeDay(h);
         if (d) dayCounts[d] = (dayCounts[d] || 0) + 1;
       });
     });
@@ -159,7 +171,8 @@
     let sessionsThisWeek = 0;
     Object.keys(progress).forEach((exId) => {
       (progress[exId].history || []).forEach((h) => {
-        if (h.at && h.at >= weekStart.toISOString()) sessionsThisWeek += 1;
+        const d = takeDay(h);
+        if (d && d >= weekKey) sessionsThisWeek += 1;
       });
     });
 
@@ -255,25 +268,30 @@
    * @returns {{ cells: { date: string, count: number }[], weeks: number, max: number }}
    */
   function heatmap(weeks = 26) {
-    const progress = global.VTStorage?.getProgress?.() || {};
-    const holds = global.VTStorage?.getHoldLogs?.() || [];
     const counts = {};
-    Object.keys(progress).forEach((exId) => {
-      (progress[exId].history || []).forEach((h) => {
+    // The day ledger is the record of which days were practised, written in the
+    // zone each take was sung in; Historial's calendar and counter read it alone.
+    // The map reads it alone as well. Placing takes by their time in whatever
+    // zone the page is in now added days the calendar did not have.
+    const ledgerDays = global.VTDays?.read?.()?.days;
+    if (ledgerDays) {
+      Object.keys(ledgerDays).forEach((k) => {
+        if (global.VTDays.counts(ledgerDays[k])) counts[k] = Math.max(1, Number(ledgerDays[k].n) || 1);
+      });
+    } else {
+      const progress = global.VTStorage?.getProgress?.() || {};
+      const holds = global.VTStorage?.getHoldLogs?.() || [];
+      Object.keys(progress).forEach((exId) => {
+        (progress[exId].history || []).forEach((h) => {
+          const d = takeDay(h);
+          if (d) counts[d] = (counts[d] || 0) + 1;
+        });
+      });
+      holds.forEach((h) => {
         const d = dayKey(h.at);
         if (d) counts[d] = (counts[d] || 0) + 1;
       });
-    });
-    holds.forEach((h) => {
-      const d = dayKey(h.at);
-      if (d) counts[d] = (counts[d] || 0) + 1;
-    });
-
-    // Guided steps recorded in the day ledger count too, a day at a time.
-    const ledgerDays = global.VTDays?.read?.()?.days || {};
-    Object.keys(ledgerDays).forEach((k) => {
-      if (!counts[k] && global.VTDays.counts(ledgerDays[k])) counts[k] = Math.max(1, Number(ledgerDays[k].n) || 1);
-    });
+    }
 
     const cells = [];
     const nDays = Math.max(7, Math.min(52, weeks) * 7);

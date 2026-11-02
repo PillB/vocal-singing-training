@@ -235,15 +235,20 @@
   }
 
   /**
-   * Record practice on today's row.
-   * @param {{ exerciseId?: string, sec?: number, saved?: boolean, bump?: boolean, source?: string }} rec
+   * Record practice on a day's row: today's, unless the practice belongs to an
+   * earlier day. A take rated after midnight is still the take that was sung
+   * the day before, so the rating gives its own day (`day`) rather than
+   * crediting a second one. A day that is not a day key, or is still to come,
+   * is today.
+   * @param {{ exerciseId?: string, sec?: number, saved?: boolean, bump?: boolean, source?: string, day?: string }} rec
    * @returns {{ day: string, becameDay: boolean, row: object }}
    *   `becameDay` is true for the record that turned today into a practice day —
    *   the moment worth marking.
    */
   function record(rec = {}) {
     const bag = read();
-    const k = dayKey();
+    const today = dayKey();
+    const k = typeof rec.day === "string" && parseDay(rec.day) && rec.day <= today ? rec.day : today;
     const row = bag.days[k] || (bag.days[k] = { sec: 0, n: 0, ex: [] });
     const before = counts(row);
     row.sec = Math.round((Number(row.sec) || 0) + Math.max(0, Number(rec.sec) || 0));
@@ -257,7 +262,7 @@
     }
     earnRest(bag);
     write(bag);
-    return { day: k, becameDay: !before && counts(row), row };
+    return { day: k, becameDay: k === today && !before && counts(row), row };
   }
 
   /**

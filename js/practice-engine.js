@@ -36,6 +36,11 @@
   // than counting an entire 300-ms stale note as genuine singing.
   const AUDIO_CLOCK_SUSPECT_MS = 60;
   const AUDIO_CLOCK_FAILED_MS = 1400;
+  // The most stall one check can add. A check that follows a long gap (the
+  // page was hidden or frozen, the main thread was blocked, a test jumped its
+  // fake clock) saw nothing in between: it may skip its own frame, but only
+  // checks that keep finding the clock still may add up to a failed input.
+  const AUDIO_CLOCK_MAX_STEP_MS = 250;
   /** Default 7/10 — more sensitive than legacy fixed 0.016 (fewer false cutoffs) */
   const DEFAULT_SENS = 7;
 
@@ -65,9 +70,7 @@
       /** Byte frequency data for sibilant band (2–8 kHz) */
       this._freqBytes = null;
       this.raf = null;
-      this._audioClockTime = null;
-      this._audioClockMovedAt = 0;
-      this._audioClockStalled = false;
+      this._resetAudioClockWatch(0);
 
       this.mediaRecorder = null;
       this.recChunks = [];
@@ -479,6 +482,9 @@
           if (this._analysisPaused) {
             this._analysisPaused = false;
             this._lastFrameAt = performance.now();
+            // A real resume starts a new suspicion window; WebKit can still
+            // say "running" over a frozen clock, and that is caught afresh.
+            this._resetAudioClockWatch(this._lastFrameAt);
             this._loop();
           }
           return;
@@ -549,9 +555,7 @@
       this.startedAt = performance.now();
       this.running = true;
       this._lastFrameAt = performance.now();
-      this._audioClockTime = null;
-      this._audioClockMovedAt = performance.now();
-      this._audioClockStalled = false;
+      this._resetAudioClockWatch(performance.now());
       this._watchMicTrack(audioTrack, this.stream);
       this._watchAudioContext(this.audioCtx, this.stream);
       await this._startOptionalRecorder(record);
@@ -641,8 +645,7 @@
       this._contextWatcher?.ctx?.removeEventListener?.("statechange", this._contextWatcher.onState);
       this._contextWatcher = null;
       this._analysisPaused = false;
-      this._audioClockTime = null;
-      this._audioClockStalled = false;
+      this._resetAudioClockWatch(0);
 
       let recorderStopping = false;
       if (this.mediaRecorder && this.mediaRecorder.state !== "inactive") {
@@ -706,17 +709,32 @@
       if (this.onStatus) this.onStatus(s);
     }
 
-    /** Never score cached samples from an audio render clock that stopped. */
+    _resetAudioClockWatch(now) {
+      this._audioClockTime = null;
+      this._audioClockCheckedAt = now;
+      this._audioClockStalledMs = 0;
+      this._audioClockStalled = false;
+    }
+
+    /**
+     * Never score cached samples from an audio render clock that stopped.
+     * The stall is the time the checks themselves kept finding the clock
+     * still, each check adding at most AUDIO_CLOCK_MAX_STEP_MS: one 28-second
+     * gap between two checks is not 28 seconds of evidence.
+     */
     _audioClockHealthy(now) {
       const clock = this.audioCtx?.currentTime;
       if (!Number.isFinite(clock)) return true;
+      const step = Math.min(AUDIO_CLOCK_MAX_STEP_MS, Math.max(0, now - (this._audioClockCheckedAt || now)));
+      this._audioClockCheckedAt = now;
       if (this._audioClockTime == null || clock > this._audioClockTime + 0.001 || clock < this._audioClockTime) {
         this._audioClockTime = clock;
-        this._audioClockMovedAt = now;
+        this._audioClockStalledMs = 0;
         this._audioClockStalled = false;
         return true;
       }
-      const stalledFor = now - this._audioClockMovedAt;
+      this._audioClockStalledMs += step;
+      const stalledFor = this._audioClockStalledMs;
       if (stalledFor < AUDIO_CLOCK_SUSPECT_MS) return true;
       if (!this._audioClockStalled) {
         this._audioClockStalled = true;

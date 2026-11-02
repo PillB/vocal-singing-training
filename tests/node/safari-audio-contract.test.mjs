@@ -185,6 +185,83 @@ test("interrupted AudioContext pauses analyser scoring immediately and resumes o
   assert.equal(ctx.listeners.has("statechange"), false, "old listeners cannot end a later exercise");
 });
 
+// The watchdog compares the audio render clock with the page clock. The page
+// clock can jump while the audio clock does not get a chance to tick between
+// two checks: an iPhone back from the lock screen, a blocked main thread, or a
+// Playwright test that fast-forwards its fake clock 28 s (PR #25's CI red on
+// finish-rating "the take's recording is in the card"). One such check proves
+// nothing about the frames in between, so it may skip its own frame and end a
+// hold at its last real sample, but it may not fail the input on its own.
+const FRAME_MS = 16;
+const checksToFail = (stalled) => Math.ceil((1400 - stalled) / FRAME_MS);
+
+function frozenChecksUntilRetry(engine, states, t) {
+  for (let i = 1; i <= 400; i++) {
+    engine._audioClockHealthy(t + i * FRAME_MS);
+    if (states.includes("input-interrupted")) return i;
+  }
+  return null;
+}
+
+test("one long gap between clock checks is not a frozen input; frozen frames still are", async () => {
+  const { engine } = practiceEnv();
+  const states = [];
+  engine.onStatus = (s) => states.push(s);
+  await engine.start();
+  const ctx = engine.audioCtx;
+  ctx.currentTime = 1;
+  let t = performance.now() + FRAME_MS;
+  assert.equal(engine._audioClockHealthy(t), true, "the first reading is the baseline");
+  t += 28000;
+  assert.equal(engine._audioClockHealthy(t), false, "a frame after an unobserved gap is not scored");
+  assert.equal(engine._audioClockStalled, true, "and a hold cannot run on through it");
+  assert.equal(states.includes("input-interrupted"), false, "one 28 s gap is not 1.4 s of stall");
+  assert.ok(!engine._analysisPaused, "the frame pump keeps running");
+  ctx.currentTime = 1.003;
+  t += FRAME_MS;
+  assert.equal(engine._audioClockHealthy(t), true, "the clock moved: fresh audio again");
+  assert.equal(engine._audioClockStalled, false);
+  assert.equal(frozenChecksUntilRetry(engine, states, t), checksToFail(0),
+    "a clock frozen across ordinary frames still asks for Retry after 1.4 s");
+  engine.stop();
+});
+
+test("a gap adds at most a quarter second; a clock that stays frozen after it still fails", async () => {
+  const { engine } = practiceEnv();
+  const states = [];
+  engine.onStatus = (s) => states.push(s);
+  await engine.start();
+  engine.audioCtx.currentTime = 2;
+  const t = performance.now() + FRAME_MS;
+  engine._audioClockHealthy(t);
+  engine._audioClockHealthy(t + 28000);
+  assert.equal(states.includes("input-interrupted"), false);
+  assert.equal(frozenChecksUntilRetry(engine, states, t + 28000), checksToFail(250));
+  engine.stop();
+});
+
+test("a real resume starts a fresh suspicion window", async () => {
+  const { engine } = practiceEnv();
+  const states = [];
+  engine.onStatus = (s) => states.push(s);
+  await engine.start();
+  const ctx = engine.audioCtx;
+  ctx.currentTime = 3;
+  // Frames from a few seconds ago, so the resume below is the latest check.
+  let t = performance.now() - 5000;
+  engine._audioClockHealthy(t);
+  for (let i = 0; i < 80; i++) engine._audioClockHealthy((t += FRAME_MS));
+  assert.equal(states.includes("input-interrupted"), false, "1.28 s of stall: suspect, not failed");
+  ctx.state = "interrupted";
+  ctx.emit("statechange");
+  ctx.state = "running";
+  ctx.emit("statechange");
+  assert.ok(!engine._analysisPaused);
+  assert.equal(frozenChecksUntilRetry(engine, states, performance.now()), checksToFail(0),
+    "the stall before the interruption does not carry over");
+  engine.stop();
+});
+
 test("busy iOS microphone is attempted once; unsupported constraints may be relaxed", async () => {
   const busy = practiceEnv({ firstError: "NotReadableError" });
   await assert.rejects(busy.engine.start(), /device error/);

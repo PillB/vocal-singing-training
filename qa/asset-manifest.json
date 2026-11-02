@@ -136,16 +136,16 @@
     "sha": "6c28a1d0204d4cc1"
   },
   "js/pitch-visualizer.js": {
-    "v": "20261102c",
-    "sha": "df29ba0872e6e6a4"
+    "v": "20261102d",
+    "sha": "d4b121e799355658"
   },
   "js/practice-days.js": {
     "v": "20260924c",
     "sha": "d6f3241cd75638a8"
   },
   "js/practice-engine.js": {
-    "v": "20261102b",
-    "sha": "f64626bb8f24b507"
+    "v": "20261102c",
+    "sha": "e96c9b2638176c85"
   },
   "js/practice-modes.js": {
     "v": "20261102c",

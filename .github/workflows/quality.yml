@@ -63,8 +63,8 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - name: Chromium production regression contracts (headed-safe)
         run: xvfb-run -a npx playwright test tests/production-contracts.spec.js --project=chromium --workers=2 --global-timeout=900000
-      - name: Mutation check (open piano and sticky stage; per-exercise flow test)
-        run: node qa/mutate.mjs stage a11y flows billing audit
+      - name: Mutation check (open piano and sticky stage; per-exercise flow test; what a pitch frame may score)
+        run: node qa/mutate.mjs stage a11y flows billing scoring audit
       - name: Preserve production-contract failures
         if: failure()
         uses: actions/upload-artifact@v4

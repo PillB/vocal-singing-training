@@ -703,14 +703,15 @@
       this._draw();
     }
 
-    /** Grace-held labels remain visible, but never earn a fresh pitch point. */
+    /**
+     * Grace-held labels remain visible, but never earn a fresh pitch point:
+     * during live practice the score follows what the engine just measured
+     * (VTPracticeEngine#scoringPitch), not the label it keeps on screen.
+     */
     _scoreableExternalPitch(displayFreq) {
       const practice = global.VTApp?.getState?.()?.practice;
-      if (!this.external || !practice?.running) return displayFreq || null;
-      const measured = practice._latestRawPitch;
-      if (!measured || practice._latestRms < practice._holdRms() * 0.55) return null;
-      if (practice.isManualEffective?.() && practice._manualKind === "air") return null;
-      return measured;
+      if (!this.external || !practice?.running || !practice.scoringPitch) return displayFreq || null;
+      return practice.scoringPitch();
     }
 
     async start() {

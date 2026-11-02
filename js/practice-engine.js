@@ -772,6 +772,18 @@
       return null;
     }
 
+    /**
+     * The pitch the latest analysed frame may score: the detector's own fresh
+     * reading with real energy behind it. Never the grace-held display value
+     * (voiceFreq bridges a dropout on screen), never the SH/S air assist.
+     */
+    scoringPitch() {
+      const measured = this._latestRawPitch;
+      if (!measured || this._latestRms < this._holdRms() * 0.55) return null;
+      if (this.isManualEffective() && this._manualKind === "air") return null;
+      return measured;
+    }
+
     _clarity(buf, sampleRate) {
       if (global.VTPitchUtils && global.VTPitchUtils.clarity) {
         return global.VTPitchUtils.clarity(buf, sampleRate);

@@ -7274,6 +7274,64 @@
     }
   }
 
+  /**
+   * A page left open does not hear about what happens outside it. Three ways
+   * it went stale, and what answers each:
+   *
+   *   another tab wrote   the browser says so ("storage"); redraw what shows
+   *                       the record, so a profile switched or a take saved in
+   *                       tab A is in tab B without a reload.
+   *   it is shown again   a sync (a read and a write, so at most once a
+   *                       minute), and /v1/me if it never answered, so a
+   *                       browser left open picks up another device's practice
+   *                       and the account panel stops saying "Plan gratis".
+   *   a new day began     Plan and Historial work out "today" when they draw,
+   *                       so the open one is drawn again on the new day. Home
+   *                       has its own redraw (bindRetention).
+   */
+  function watchOutsideChanges() {
+    // Keys that hold the learner's record, plan, settings or account. Counters
+    // and queues the app writes all the time (analytics, the mic slider) would
+    // redraw every other tab for nothing.
+    const RECORD_KEY = /(^|_)(profiles|progress|session|week_plan|reviews|hold_logs|goals|achievements|days|loop|reminders|streak_freeze|settings)_v1$/;
+    const PULL_EVERY_MS = 60 * 1000;
+    let redrawTimer = null;
+    let lastPull = 0;
+    let shownDay = window.VTDays?.dayKey?.() || "";
+
+    window.addEventListener("storage", (e) => {
+      if (e.storageArea && e.storageArea !== window.localStorage) return;
+      if (e.key && !RECORD_KEY.test(e.key)) return;
+      // A write is often several keys in a row; draw once.
+      clearTimeout(redrawTimer);
+      redrawTimer = setTimeout(() => showSyncedRecord(), 120);
+    });
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState !== "visible") return;
+      const acct = window.VTAccount?.getState?.();
+      if (acct && acct.signedIn) {
+        // The first /v1/me may have been missed; the panel and the door both
+        // read the answer.
+        if (!acct.account) {
+          Promise.resolve(window.VTAccount.refresh?.())
+            .then(() => refreshAccountUI())
+            .catch(() => {});
+        }
+        if (Date.now() - lastPull >= PULL_EVERY_MS) {
+          lastPull = Date.now();
+          window.VTSync?.schedule?.(0);
+        }
+      }
+      const today = window.VTDays?.dayKey?.() || "";
+      if (today && today !== shownDay) {
+        shownDay = today;
+        if (state.view === "plan") renderPlan();
+        else if (state.view === "history") renderHistory();
+      }
+    });
+  }
+
   function bindProStudio() {
     $("#sel-profile")?.addEventListener("change", (e) => {
       const id = e.target.value;
@@ -7332,6 +7390,7 @@
       renderValuePulse();
       toast(tt("pro.goalSet", { n: String(n) }), { durationMs: 1500 });
     });
+    watchOutsideChanges();
   }
 
   function showValueMoment(forceId) {

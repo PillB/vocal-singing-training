@@ -32,6 +32,10 @@
  *        RESEND_API_KEY | BREVO_API_KEY | MAILERSEND_API_KEY
  *
  * Nothing in this file logs a secret, a token or a raw webhook body.
+ *
+ * Every named export of this module must be a function: the Workers runtime
+ * takes the entry module's named exports for handlers and refuses to start
+ * on anything else. Constants live in limits.js.
  */
 
 "use strict";
@@ -39,23 +43,35 @@
 import { routeAccountApi, authMethods, requireAdmin } from "./api.js";
 import { asksFirst, callerCountry, routeEventsApi } from "./events.js";
 import { ensureSchema, sweepExpired } from "./db.js";
-import { buildJwks, createLicenseToken, isLicenseIdShape, isTokenIssuable } from "./license.js";
+import {
+  buildJwks,
+  createLicenseToken,
+  isAwaitingPayment,
+  isLicenseIdShape,
+  isSuspended,
+  isTokenIssuable
+} from "./license.js";
 import { mapStripeEvent, verifyStripeSignature } from "./stripe.js";
+import { MAX_BODY_BYTES, MAX_SESSION_ID_LENGTH } from "./limits.js";
 import { confirmAndMapNotification, resolveNotificationTarget, verifyMercadoPagoSignature } from "./mercadopago.js";
 import {
   clearEventSeen,
   getEntitlement,
   getLicenseIdForClaim,
   markEventSeen,
+  noteRefusal,
   toPublicEntitlement,
   upsertEntitlement
 } from "./store.js";
 
-/** Reject anything larger than 1 MiB; real webhooks are a few KB. */
-export const MAX_BODY_BYTES = 1048576;
+/**
+ * Mercado Pago API failures retried for as long as Mercado Pago keeps trying:
+ * the API's own trouble (429, 5xx), a body that is not JSON, no answer at all.
+ */
+const RETRY_ALWAYS = new Set(["api_error", "api_bad_json", "api_unreachable"]);
 
-/** Longest checkout-session / payment id we will look up. */
-export const MAX_SESSION_ID_LENGTH = 200;
+/** How long a resource the API refuses (404, 403, …) is retried: one day. */
+const RETRY_REFUSED_SECONDS = 86400;
 
 /**
  * CORS headers for a request, restricted to the configured site origin.
@@ -132,7 +148,13 @@ function parseJsonObject(text) {
 
 /**
  * Issue a fresh token for an entitlement, or explain why we will not:
- * 202 while an async payment is still settling, 403 once it is not entitled.
+ * 202 while an async payment is still settling, 402 while it is refused but a
+ * later payment on its subscription can bring it back, 403 once nothing can.
+ *
+ * The 402 is for the site's client as it is deployed: js/license.js forgets
+ * the license on a 403 and keeps it on any other refusal, and js/billing.js
+ * stops retrying a checkout's claim on reason "inactive" and keeps retrying on
+ * any other. A browser that forgot its license never gets Pro back from it.
  * @param {Object} record Stored entitlement record.
  * @param {Object} env Worker env bindings.
  * @param {Object} cors CORS headers.
@@ -140,12 +162,14 @@ function parseJsonObject(text) {
  */
 async function respondWithToken(record, env, cors) {
   const now = Math.floor(Date.now() / 1000);
-  if (record.status === "pending") {
+  if (isAwaitingPayment(record)) {
     // A delayed payment method has not settled yet; the browser keeps polling.
     return json({ ok: false, reason: "pending", entitlement: toPublicEntitlement(record) }, 202, cors);
   }
   if (!isTokenIssuable(record, now)) {
-    return json({ ok: false, reason: "inactive", entitlement: toPublicEntitlement(record) }, 403, cors);
+    return isSuspended(record, now)
+      ? json({ ok: false, reason: "suspended", entitlement: toPublicEntitlement(record) }, 402, cors)
+      : json({ ok: false, reason: "inactive", entitlement: toPublicEntitlement(record) }, 403, cors);
   }
   const { token } = await createLicenseToken(record, env, now);
   return json(
@@ -233,11 +257,20 @@ async function handleMercadoPagoWebhook(request, env, url, options) {
   try {
     const mapped = await confirmAndMapNotification(target, env, options || {});
     if (!mapped.handled) {
-      console.warn("mercadopago notification not applied", target.kind, mapped.reason);
-      // 500 on an API failure so Mercado Pago retries; 200 when we simply do
-      // not care about this notification kind.
-      const retryable = mapped.reason === "api_error" || mapped.reason === "api_bad_json";
-      if (retryable) {
+      console.warn("mercadopago notification not applied", target.kind, mapped.reason, mapped.status || "");
+      // 500 so Mercado Pago retries when the API itself failed; 200 when we
+      // simply do not care about this notification kind. A resource the API
+      // refuses (not found, forbidden) is retried for a day from the first
+      // refusal, which covers a read that lags the notification and gives an
+      // operator time to fix an access token, and then acknowledged: Mercado
+      // Pago otherwise retries a simulated or foreign notification forever.
+      let retry = RETRY_ALWAYS.has(mapped.reason);
+      if (!retry && (mapped.reason === "not_found" || mapped.reason === "api_refused")) {
+        const now = options && Number.isFinite(options.now) ? Math.floor(options.now) : Math.floor(Date.now() / 1000);
+        const refusedFor = await noteRefusal(env.ENTITLEMENTS, "mercadopago", target.eventId, now);
+        retry = refusedFor < RETRY_REFUSED_SECONDS;
+      }
+      if (retry) {
         await clearEventSeen(env.ENTITLEMENTS, "mercadopago", target.eventId);
         return json({ ok: false, reason: mapped.reason }, 500);
       }

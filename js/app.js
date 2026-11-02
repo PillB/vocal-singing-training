@@ -3815,6 +3815,11 @@
         }
       };
       state.practice.onHoldLogged = (sec) => {
+        // Counting aloud is not a held note: the engine logs any voicing of
+        // 2 s or more, so a speaking drill (no hold readout) logs nothing.
+        // Singing is unchanged until the owner decides whether trills and
+        // sirens count toward the longest note.
+        if (!showHold && ex.track !== "singing") return;
         if (window.VTStorage) VTStorage.addHoldLog(sec);
         renderHoldHistory();
         const input = $('#metrics-form [name="maxHold"]');

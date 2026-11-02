@@ -115,6 +115,17 @@
       }
     }
 
+    // Practice time comes from the day ledger, which is not capped. The history
+    // keeps the newest 50 takes of each exercise, so past that its sum stops
+    // growing while Sesiones (completedCount) goes on. The history still sets a
+    // floor for a record whose ledger has not caught up with it.
+    let ledgerSec = 0;
+    if (ledger) {
+      Object.values(global.VTDays.read().days || {}).forEach((row) => {
+        ledgerSec += Number(row?.sec) || 0;
+      });
+    }
+    totalSec = Math.max(totalSec, ledgerSec);
     const minutes = Math.round(totalSec / 60);
     const avgScore = lastScoreN ? lastScoreSum / lastScoreN : null;
 

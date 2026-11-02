@@ -10,6 +10,45 @@
     <meta name="color-scheme" content="dark" />
     <meta name="theme-color" content="#0c1118" />
     <title>Entrenamiento vocal y de canto</title>
+    <script>
+      /* Until the app has started the page says it is busy (the script at the
+         end of the page ends it), so a screen reader does not read a page whose
+         buttons are not wired yet. */
+      (function () {
+        var h = document.documentElement;
+        new MutationObserver(function (_, watch) {
+          if (!document.body) return;
+          document.body.setAttribute("aria-busy", "true");
+          watch.disconnect();
+        }).observe(h, { childList: true });
+        /* A visitor whose language is English is shown the page in English or
+           not at all: the markup is Spanish, and the scripts that translate it
+           are the last thing the page loads, so until then the first paint was
+           Spanish. The page is held here and let go as soon as i18n.js has
+           translated it. Whatever else happens, it is let go: when a script
+           fails to load or throws, and after four seconds. A page that was
+           never translated says it is Spanish. */
+        try {
+          if (localStorage.getItem("vt_lang") !== "en") return;
+        } catch (e) {
+          return;
+        }
+        h.lang = "en";
+        h.classList.add("vt-i18n-pending");
+        var letGo = function () {
+          if (!h.classList.contains("vt-i18n-pending")) return;
+          h.classList.remove("vt-i18n-pending");
+          h.lang = "es";
+        };
+        window.addEventListener("error", letGo, true);
+        setTimeout(letGo, 4000);
+      })();
+    </script>
+    <style>
+      html.vt-i18n-pending body {
+        visibility: hidden;
+      }
+    </style>
     <link rel="stylesheet" href="css/styles.css?v=20261005p" />
     <link rel="stylesheet" href="css/exercise-viz.css?v=20261002a" />
     <link rel="stylesheet" href="css/scenes/speech.css?v=20261002a" />
@@ -1124,8 +1163,69 @@
       </div>
     </div>
 
+    <script>
+      /* With site data blocked the browser throws as soon as a script so much as
+         reads window.localStorage or window.sessionStorage, and every script
+         here reads them. Where that happens the name is given a store that lives
+         only in this page, so the app starts and simply keeps nothing; where
+         storage works nothing is replaced. */
+      (function () {
+        ["localStorage", "sessionStorage"].forEach(function (name) {
+          try {
+            window[name].getItem("vt_probe");
+            return;
+          } catch (e) {
+            /* blocked: swap it below */
+          }
+          var mem = {};
+          var keys = function () {
+            return Object.keys(mem);
+          };
+          var store = {
+            getItem: function (k) {
+              return Object.prototype.hasOwnProperty.call(mem, k) ? mem[k] : null;
+            },
+            setItem: function (k, v) {
+              mem[String(k)] = String(v);
+            },
+            removeItem: function (k) {
+              delete mem[String(k)];
+            },
+            clear: function () {
+              mem = {};
+            },
+            key: function (i) {
+              var all = keys();
+              return i >= 0 && i < all.length ? all[i] : null;
+            }
+          };
+          Object.defineProperty(store, "length", {
+            get: function () {
+              return keys().length;
+            }
+          });
+          try {
+            Object.defineProperty(window, name, { value: store, configurable: true });
+          } catch (e) {
+            /* the page keeps what it had */
+          }
+        });
+      })();
+    </script>
     <script src="js/focus-trap.js?v=20260924c"></script>
     <script src="js/i18n.js?v=20261006b"></script>
+    <script>
+      /* Put the page in the visitor's language now, not after the last script:
+         it only needs i18n.js. Safe to repeat; the app's own start does it too. */
+      try {
+        VTI18n.init();
+      } catch (e) {
+        /* the page stays as it was written, which is Spanish */
+        document.documentElement.lang = "es";
+      } finally {
+        document.documentElement.classList.remove("vt-i18n-pending");
+      }
+    </script>
     <script src="js/exercises-data.js?v=20261002a"></script>
     <script src="js/exercises-locale-es.js?v=20261002a"></script>
     <script src="js/practice-profiles.js?v=20261002a"></script>
@@ -1174,5 +1274,19 @@
     <script src="js/daily-loop.js?v=20261006b"></script>
     <script src="js/tour.js?v=20261006b"></script>
     <script src="js/app.js?v=20261006b"></script>
+    <script>
+      /* The app starts when the page has been read (its own listener is above
+         this one), so by the time this runs it is wired. Busy ends then, or
+         when the page has loaded, whichever comes first, so a script that
+         fails cannot leave it busy. */
+      (function () {
+        var ready = function () {
+          if (document.body) document.body.removeAttribute("aria-busy");
+        };
+        if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", ready);
+        else ready();
+        window.addEventListener("load", ready);
+      })();
+    </script>
   </body>
 </html>

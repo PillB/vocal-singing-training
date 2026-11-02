@@ -2538,6 +2538,8 @@
   function renderExercise() {
     const ex = state.exercise;
     if (!ex) return;
+    // The last exercise's chord or note is not this one's
+    if ($("#chord-now")) $("#chord-now").textContent = "—";
     hideMicBlocked();
 
     const steps = renderExerciseText(ex);

@@ -608,6 +608,9 @@
 
     stopAll() {
       this.loopActive = false;
+      // A new pass: the note and chord callbacks the stopped pass scheduled
+      // (one setTimeout each, no handle) see a stale number and do nothing.
+      this._passGen = (this._passGen || 0) + 1;
       if (this.loopTimer) {
         clearTimeout(this.loopTimer);
         this.loopTimer = null;
@@ -730,6 +733,8 @@
       // Flatten to sequential note events when oneNote (or arpeggio for audio + single targets)
       const melodic = !!oneNote;
       const broken = melodic || !!arpeggio;
+      // This pass's number, taken after the stopAll() above
+      const gen = this._passGen;
 
       const playOnce = () => {
         if (!this.loopActive && loop) return;
@@ -756,6 +761,7 @@
             if (this.onChordChange || this.onNoteChange) {
               const delay = Math.max(0, (when - this.ctx.currentTime) * 1000);
               setTimeout(() => {
+                if (gen !== this._passGen) return;
                 const mini = { name: ev.chord.name, notes: [ev.note], oneNote: true };
                 if (this.onNoteChange) this.onNoteChange(ev.note, ev.chord, ei, prog);
                 if (this.onChordChange) this.onChordChange(mini, ev.cidx, prog, { oneNote: true, noteName: ev.note });
@@ -790,6 +796,7 @@
           if (this.onChordChange) {
             const delay = Math.max(0, (when - this.ctx.currentTime) * 1000);
             setTimeout(() => {
+              if (gen !== this._passGen) return;
               if (this.onChordChange) this.onChordChange(ch, idx, prog, { oneNote: false });
             }, delay);
           }

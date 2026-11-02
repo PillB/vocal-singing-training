@@ -2555,6 +2555,8 @@
     if (!ex) return;
     // The last exercise's chord or note is not this one's
     if ($("#chord-now")) $("#chord-now").textContent = "—";
+    // A microphone notice put away on the last visit shows again on this one
+    state.micBlockedClosed = false;
     hideMicBlocked();
 
     const steps = renderExerciseText(ex);
@@ -3907,6 +3909,8 @@
       // Mic first: getUserMedia dialog often suspends AudioContext if piano
       // already started — then solfege/ref sound goes silent for the whole session.
       let micOk = !needsMic && !wantRecord;
+      // Why the microphone did not open: no device at all is not a refusal
+      let micError = null;
       if (needsMic || wantRecord) {
         try {
           await state.practice.start({ record: wantRecord });
@@ -3914,6 +3918,7 @@
         } catch (e) {
           console.error(e);
           micOk = false;
+          micError = e?.name || null;
         }
       }
       if (!stillThisStart()) {
@@ -3974,7 +3979,7 @@
       if (!micOk && !soundOk && !profile.timeDriven) {
         state.practiceStarting = false;
         setPracticeUI(false);
-        showMicBlocked(false);
+        showMicBlocked(false, { reason: micError });
         return;
       }
 
@@ -3989,8 +3994,9 @@
       // The step clock runs whenever the step is live. It used to wait for the
       // mic, so with the mic refused and the piano playing the timer sat still
       // and a guided step could never end (VG-40).
-      if (ex.audio.timer && state.timer.total > 0) startTimer();
-      if ((needsMic || wantRecord) && !micOk) showMicBlocked(true);
+      const clockRuns = !!(ex.audio.timer && state.timer.total > 0);
+      if (clockRuns) startTimer();
+      if ((needsMic || wantRecord) && !micOk) showMicBlocked(true, { reason: micError, piano: soundOk, clock: clockRuns });
       else hideMicBlocked();
 
       // Keep piano awake while practicing (tab blur / OS audio policies)
@@ -4012,12 +4018,14 @@
       }
 
       if (!micOk && soundOk) {
-        toast(tt("toast.pianoOnly"));
+        // "Allow the mic" cannot help when there is no microphone
+        toast(tt(isMicMissing(micError) ? "mic.missing.toast" : "toast.pianoOnly"));
       } else if (wantPiano && !soundOk) {
         toast(tt("toast.pianoFail"));
       } else {
+        // "grabando" only when a stream is open to record from
         toast(
-          wantRecord
+          wantRecord && micOk
             ? tt("toast.liveRec", { mode: modeDisplayName(profile.mode) })
             : tt("toast.live", { mode: modeDisplayName(profile.mode) })
         );
@@ -4057,20 +4065,35 @@
     state._modeTicker = requestAnimationFrame(tick);
   }
 
+  /** getUserMedia found no device (or none that fits): there is nothing to allow. */
+  function isMicMissing(reason) {
+    return reason === "NotFoundError" || reason === "OverconstrainedError";
+  }
+
   /**
-   * A refused microphone, said where the learner is looking and kept there:
-   * how to allow it, a retry, and — inside a guided routine — a way on.
+   * A refused or missing microphone, said where the learner is looking and
+   * kept there: what still runs, how to get the mic back, a retry, and —
+   * inside a guided routine — a way on. When the exercise runs without the
+   * mic the notice can be put away (✕ or Escape) for this visit, since it
+   * sits over the stage's controls (VG-40 keeps it where it is).
    * @param {boolean} canRun true when the piano or the clock still runs
+   * @param {{reason?: string|null, piano?: boolean, clock?: boolean}} [why]
+   *   reason: the getUserMedia error name; piano / clock: what keeps going
    */
-  function showMicBlocked(canRun) {
+  function showMicBlocked(canRun, why = {}) {
     const box = $("#mic-blocked");
     if (!box) {
       toast(tt("toast.mic"));
       return;
     }
-    $("#mic-blocked-text").textContent = tt(canRun ? "mic.blocked.partial" : "mic.blocked.none");
+    if (canRun && state.micBlockedClosed) return;
+    const missing = isMicMissing(why.reason);
+    const runs = why.piano && why.clock ? "mic.runs.both" : why.piano ? "mic.runs.piano" : why.clock ? "mic.runs.clock" : "mic.runs.steps";
+    const key = `${missing ? "mic.missing" : "mic.blocked"}.${canRun ? "partial" : "none"}`;
+    $("#mic-blocked-text").textContent = tt(key, { runs: tt(runs) });
     const retry = $("#btn-mic-retry");
     const skip = $("#btn-mic-skip");
+    const close = $("#btn-mic-close");
     if (retry) {
       retry.textContent = tt("mic.blocked.retry");
       retry.onclick = () => {
@@ -4084,9 +4107,45 @@
       skip.hidden = !state.structured;
       skip.onclick = () => advanceStructured("skip");
     }
+    // Only when the exercise goes on without the mic: otherwise the notice is
+    // the only way on.
+    if (close) {
+      close.hidden = !canRun;
+      close.setAttribute("aria-label", tt("a11y.close"));
+      close.onclick = closeMicBlocked;
+    }
+    box.onkeydown = (e) => {
+      if (e.key === "Escape" && canRun) {
+        e.preventDefault();
+        e.stopPropagation();
+        closeMicBlocked();
+      }
+    };
     box.hidden = false;
     try {
       window.VTAnalytics?.track?.("mic_blocked", { exerciseId: state.exercise?.id, canRun: !!canRun });
+    } catch {
+      /* ignore */
+    }
+  }
+
+  /** Put the notice away for this visit and hand focus to the stage's own controls. */
+  function closeMicBlocked() {
+    const box = $("#mic-blocked");
+    const hadFocus = !!box && box.contains(document.activeElement);
+    state.micBlockedClosed = true;
+    hideMicBlocked();
+    if (!hadFocus && document.activeElement && document.activeElement !== document.body) return;
+    const next = ["#btn-practice-start", "#btn-practice-stop"]
+      .map((sel) => $(sel))
+      .find((el) => el && !el.hidden && !el.disabled && el.getBoundingClientRect().width > 0);
+    const stage = $("#highway-stage");
+    try {
+      if (next) next.focus({ preventScroll: true });
+      else if (stage) {
+        if (!stage.hasAttribute("tabindex")) stage.setAttribute("tabindex", "-1");
+        stage.focus({ preventScroll: true });
+      }
     } catch {
       /* ignore */
     }

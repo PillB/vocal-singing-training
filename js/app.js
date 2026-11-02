@@ -8861,7 +8861,9 @@
       }
       const json = VTBilling.exportProgressJson();
       if (!json) return;
-      const day = new Date().toISOString().slice(0, 10);
+      // The learner's own date: the UTC one is a day off in the evening in the
+      // Americas and the morning in Asia.
+      const day = window.VTDays?.dayKey?.() || new Date().toISOString().slice(0, 10);
       // JSON pack
       const blob = new Blob([json], { type: "application/json" });
       const a = document.createElement("a");

@@ -16,6 +16,9 @@
  *   BASE_URL=https://pillb.github.io/vocal-singing-training/ \
  *   OUT=/tmp/audit node qa/audit/forensic-audit.mjs
  * Env: IDS=a,b  ITER=1,3  SECS=8  CONC=4  CHROME_PATH=…
+ * Do not edit the served files while it runs: it reads whatever is on disk, and
+ * a stylesheet changed mid-run put six Tab stops in the ledger that the final
+ * build does not have.
  */
 import { chromium } from "playwright";
 import fs from "node:fs";
@@ -236,6 +239,22 @@ async function focusPath(page, max = 45) {
   await page.evaluate(() => document.activeElement?.blur());
   for (let i = 0; i < max; i++) {
     await page.keyboard.press("Tab");
+    // The page scrolls smoothly: measure once the glide has stopped
+    await page.evaluate(
+      () =>
+        new Promise((res) => {
+          let y = scrollY;
+          let still = 0;
+          const t0 = performance.now();
+          const tick = () => {
+            still = scrollY === y ? still + 1 : 0;
+            y = scrollY;
+            if (still >= 6 || performance.now() - t0 > 2000) res();
+            else requestAnimationFrame(tick);
+          };
+          requestAnimationFrame(tick);
+        })
+    );
     path_.push(
       await page.evaluate(() => {
         const el = document.activeElement;

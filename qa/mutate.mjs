@@ -110,7 +110,7 @@ export const MUTANTS = {
     .concat(
       [
         ["A6 Tab leaves focus under the sticky rows (WCAG 2.4.11)", "css/styles.css", "html:has(body.view-exercise) {\n  scroll-padding-top", "html:has(body.view-exercise-off) {\n  scroll-padding-top"],
-        ["A7 the bottom rail crushes the mic box again (v12)", "css/styles.css", "  /* Never narrower than its name, meter, slider and value */\n  min-width: min-content;", "  min-width: 10rem;"],
+        ["A7 the bottom rail cannot wrap again (v12's mic box crushed)", "css/styles.css", "  flex-wrap: wrap;\n  align-items: center;\n  gap: 0.45rem;\n  max-height: none;", "  flex-wrap: nowrap;\n  align-items: center;\n  gap: 0.45rem;\n  max-height: none;"],
         ["A8 \"Reto\" back to a 13 px target", "css/styles.css", "  min-height: 24px;\n  font-size: 0.68rem;", "  font-size: 0.68rem;"],
         ["A9 the Stop toast centred over ← Back again", "js/app.js", "    placeToast(el);\n", ""]
       ].map(([name, file, from, to]) => ({

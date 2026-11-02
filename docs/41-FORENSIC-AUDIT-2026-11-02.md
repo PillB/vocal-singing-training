@@ -47,6 +47,15 @@ mutants (`node qa/mutate.mjs audit`): a label no longer counting, any label
 excusing any box, a checkbox named by its value, a covered control reported
 as itself, a live region counted as clipped.
 
+## Round 2 ledger (the fixed build)
+
+The same 6 × 47 run on the fixed build gave 18 findings, none a crash:
+12 phone titles cut with "…" (accepted below) and 6 covered Tab stops. The 6
+were an artefact of the run, not the page: the stylesheet was edited while the
+audit was reading it. Re-running those seven exercises on the final stylesheet
+gives no finding. (Lesson kept in the driver's header: do not edit served
+files during a run.)
+
 ## Real findings and their root causes
 
 Ranked by how much a learner loses.
@@ -92,8 +101,9 @@ The slider's thumb sat on the octave "−" and the value "7" on "0 octava".
 mic box shrank to its `10rem` floor while its slider and value did not, and
 the rail let children overflow.
 **Fix:** the rail wraps when its controls do not fit (the stage already reads
-the rail's height for the lanes), and the mic box is never narrower than its
-own content.
+the rail's height for the lanes). I first also gave the mic box a
+content-width floor; a planted defect showed the wrap alone is what holds the
+test, so the floor was removed rather than kept untested.
 **Tests:** `tests/bottom-rail.spec.js`: every exercise at 1180, 1280 and
 1440 px; red on v12 at all three; a planted overlap proves the check sees one.
 

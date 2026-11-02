@@ -41,15 +41,15 @@
 html {
   scroll-behavior: smooth;
 }
-/* The app's sticky header (js keeps --header-h true), and in an exercise the
-   ← Back row too (--ex-chrome-h), cover the top of the window. Declared as
-   scroll padding, the browser keeps a focused control below them when Tab
-   scrolls it into view; without it Tab left "Siguiente →" and the chord
-   menus under them (WCAG 2.4.11). Only the app page: the guide and privacy
-   pages have no script to measure their header and set their own margins. */
-html:has(#view-exercise) {
-  scroll-padding-top: calc(var(--header-h, 58px) + 0.5rem);
-}
+/* In an exercise the sticky header (js keeps --header-h true) and the ← Back
+   row (--ex-chrome-h) cover the top of the window. Declared as scroll
+   padding, the browser keeps a focused control below them when Tab scrolls
+   it into view; without it Tab left "Siguiente →" and the chord menus under
+   them (WCAG 2.4.11). Exercises only: a 120-stop Tab walk of the home page
+   finds nothing covered, and the same padding there moved the tour's own
+   scrolling (tests/tour-behaviour.spec.js "puts the page back"). The guide
+   and privacy pages have no script to measure their header and set their
+   own margins. */
 html:has(body.view-exercise) {
   scroll-padding-top: calc(var(--header-h, 58px) + var(--ex-chrome-h, 0px) + 0.5rem);
 }
@@ -1921,8 +1921,7 @@ body.view-exercise.practice-live #pitch-game-hud {
 /* Mic: single compact row [meter | MIC | slider | 7] — never wrap / never past stage */
 .hud-bc {
   flex: 1 1 12rem;
-  /* Never narrower than its name, meter, slider and value */
-  min-width: min-content;
+  min-width: 10rem;
   max-width: min(22rem, 42%);
   width: auto;
   transform: none;

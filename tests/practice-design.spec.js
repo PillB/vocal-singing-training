@@ -199,7 +199,9 @@ test.describe("Step done: a guided step's clock runs out", () => {
   test("Calificar este ejercicio opens the one-tap rating and moves focus to its question", async ({ page }) => {
     await boot(page);
     await startMinimo(page);
-    await runStepOut(page, 5);
+    // A five-second simulated step is too short to be a completed rated take.
+    // Run the actual 90 s guided step to test the legitimate one-tap path.
+    await runStepOut(page);
     await page.locator("#btn-step-done-rate").click();
     await expect(page.locator("#step-done")).toBeHidden();
     await expect(page.locator("#metrics-card")).not.toHaveClass(/collapsed/);

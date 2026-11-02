@@ -426,7 +426,7 @@ test.describe("Prepared daily class session", () => {
     expect(open.tooShort.holds, "a hold under 1.5s does not").toBe(0);
     expect(open.silentPhase.holds, "the silent setup phases never log holds").toBe(0);
 
-    // placementAB: the take counter is the protocol, and it caps at two
+    // placementAB: clicks without real audio must never fabricate two takes
     const ab = await page.evaluate(() => {
       const m = window.VTPracticeModes.get("placementAB");
       const host = document.createElement("div");
@@ -441,8 +441,8 @@ test.describe("Prepared daily class session", () => {
       host.remove();
       return res;
     });
-    expect(ab.takes).toBe(2);
-    expect(ab.patches.takes).toBe(2);
+    expect(ab.takes).toBe(0);
+    expect(ab.patches.takes, "no recorded audio must not create a take patch").toBeUndefined();
   });
 
   test("zone targets follow the octave shift and the highway", async ({ page }) => {
@@ -564,8 +564,9 @@ test.describe("Prepared daily class session", () => {
     await boot(page);
 
     const r = await page.evaluate(() => {
-      // A lip trill reads sharp through this app's detector and scatters frame
-      // to frame, so the gate is asymmetric and bleeds instead of resetting.
+      // Trills can scatter around the intended pitch, but must not be allowed
+      // to claim the neighboring semitone as correct. The gate bleeds rather
+      // than resetting through short, off-pitch dropouts.
       // Drive it with frames shaped like a real trill rather than a clean tone.
       function run(centsOff, frames, opts = {}) {
         const m = window.VTPracticeModes.get("trillSolfege");
@@ -602,7 +603,8 @@ test.describe("Prepared daily class session", () => {
       const STEP = 60;
       return {
         onPitch: run(0, STEP * 9 + 40),
-        sharp: run(60, STEP * 2),
+        sharp: run(30, STEP * 2),
+        adjacent: run(100, STEP * 2),
         flat: run(-80, STEP * 4),
         wayOff: run(300, STEP * 4),
         dropout: run(0, 76, { badAt: [50, 56] }),
@@ -645,7 +647,8 @@ test.describe("Prepared daily class session", () => {
     // The summary lands in a toast and the results panel, so it is Spanish here
     expect(r.onPitch.summary).toMatch(/1 pasada · raíz alcanzada C#3/i);
 
-    expect(r.sharp.step, "a trill read sharp still counts — that is the point").toBeGreaterThan(0);
+    expect(r.sharp.step, "a modestly sharp trill still counts").toBeGreaterThan(0);
+    expect(r.adjacent.step, "a neighboring semitone never counts as the target").toBe(0);
     expect(r.flat.step, "but a note this flat is the note below, not a sharp trill").toBe(0);
     expect(r.wayOff.step, "and a target missed by a third never counts").toBe(0);
 

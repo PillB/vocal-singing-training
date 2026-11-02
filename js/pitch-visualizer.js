@@ -80,95 +80,82 @@
   }
 
   /**
-   * Autocorrelation pitch detection (time-domain).
-   * Returns Hz or null.
+   * Confidence-gated YIN/CMND fundamental-frequency estimator.
+   *
+   * The old raw-autocorrelation search stopped at 400 Hz, so a perfectly
+   * pitched A4 (440 Hz) was reported as A3 (220 Hz). It also assigned pitched
+   * notes to white noise. The first sufficiently periodic YIN difference
+   * minimum rejects both errors; rejecting uncertain frames is safer than
+   * awarding a false correct note. This still cannot prove the sound came
+   * from a human rather than the reference speaker.
+   *
+   * Approximately 52–1060 Hz covers most practice targets, not every transposition.
+   * Synthetic regression tests are necessary but not a substitute for a
+   * labeled human-voice/device corpus.
    */
   function detectPitch(buf, sampleRate) {
-    // Over 48 kHz the engine's 43 ms frame holds more samples (4096 at
-    // 96 kHz): averaged down to 44.1–48 kHz, the search costs and finds what
-    // it does there (on all 4096 it took three times as long)
-    const D = Math.round(sampleRate / 48000);
-    if (D > 1) {
-      const x = new Float32Array(Math.floor(buf.length / D));
-      for (let i = 0; i < x.length; i++) {
-        let s = 0;
-        for (let k = 0; k < D; k++) s += buf[i * D + k];
-        x[i] = s / D;
-      }
-      buf = x;
-      sampleRate /= D;
-    }
-    const SIZE = buf.length;
-    let rms = 0;
-    for (let i = 0; i < SIZE; i++) {
-      const val = buf[i];
-      rms += val * val;
-    }
-    rms = Math.sqrt(rms / SIZE);
-    if (rms < 0.01) return null; // silence
-
-    // Normalize
-    let r1 = 0;
-    let r2 = SIZE - 1;
-    const thres = 0.2;
-    for (let i = 0; i < SIZE / 2; i++) {
-      if (Math.abs(buf[i]) < thres) {
-        r1 = i;
-        break;
-      }
-    }
-    for (let i = 1; i < SIZE / 2; i++) {
-      if (Math.abs(buf[SIZE - i]) < thres) {
-        r2 = SIZE - i;
-        break;
-      }
-    }
-
-    const trimmed = buf.slice(r1, r2);
-    const n = trimmed.length;
-    if (n < 32) return null;
-
-    // Male mid-low focus: ~65–400 Hz (C2–G4)
-    const minLag = Math.floor(sampleRate / 400);
-    const maxLag = Math.floor(sampleRate / 65);
-    const corr = new Float32Array(maxLag);
-
-    for (let lag = minLag; lag < maxLag && lag < n; lag++) {
+    const sr = sampleRate || 48000;
+    const decimate = Math.max(1, Math.round(sr / 12000));
+    const n = Math.floor(buf.length / decimate);
+    if (n < 64) return null;
+    const x = new Float32Array(n);
+    let power = 0;
+    for (let i = 0; i < n; i++) {
       let sum = 0;
-      for (let i = 0; i < n - lag; i++) {
-        sum += trimmed[i] * trimmed[i + lag];
-      }
-      corr[lag] = sum;
+      for (let j = 0; j < decimate; j++) sum += buf[i * decimate + j];
+      const v = sum / decimate;
+      x[i] = v;
+      power += v * v;
     }
+    if (Math.sqrt(power / n) < 0.01) return null;
 
-    let bestLag = -1;
-    let bestVal = -1;
-    for (let lag = minLag + 1; lag < maxLag - 1 && lag < n; lag++) {
-      const v = corr[lag];
-      if (v > corr[lag - 1] && v >= corr[lag + 1] && v > bestVal) {
-        bestVal = v;
-        bestLag = lag;
+    const rate = sr / decimate;
+    const minLag = Math.max(2, Math.floor(rate / 1060));
+    const maxLag = Math.min(Math.ceil(rate / 52), Math.floor(n / 2));
+    if (minLag >= maxLag - 1) return null;
+    const window = n - maxLag;
+    const cmnd = new Float32Array(maxLag + 1);
+    let cumulative = 0;
+    for (let lag = 1; lag <= maxLag; lag++) {
+      let difference = 0;
+      for (let i = 0; i < window; i++) {
+        const d = x[i] - x[i + lag];
+        difference += d * d;
       }
+      cumulative += difference;
+      cmnd[lag] = cumulative > 0 ? (difference * lag) / cumulative : 1;
     }
-    if (bestLag <= 0) return null;
-
-    // Parabolic interpolation
-    const y0 = corr[bestLag - 1] || 0;
-    const y1 = corr[bestLag];
-    const y2 = corr[bestLag + 1] || 0;
-    const denom = 2 * (2 * y1 - y2 - y0);
-    const shift = denom !== 0 ? (y2 - y0) / denom : 0;
-    const lag = bestLag + shift;
-    const freq = sampleRate / lag;
-    if (freq < 60 || freq > 500) return null;
-    return freq;
+    // A pitch above the measurable band can have a perfect second-period
+    // minimum *inside* the band (e.g. 1500 Hz masquerading as 750 Hz).
+    // Reject when its earlier period is already unambiguously periodic.
+    for (let shortLag = 2; shortLag < minLag; shortLag++) {
+      if (cmnd[shortLag] < 0.18 &&
+          cmnd[shortLag] <= cmnd[shortLag - 1] &&
+          cmnd[shortLag] <= cmnd[shortLag + 1]) return null;
+    }
+    let lag = minLag;
+    while (lag <= maxLag) {
+      if (cmnd[lag] < 0.18) {
+        while (lag < maxLag && cmnd[lag + 1] < cmnd[lag]) lag++;
+        const before = cmnd[lag - 1] ?? cmnd[lag];
+        const mid = cmnd[lag];
+        const after = cmnd[lag + 1] ?? cmnd[lag];
+        const denom = before - 2 * mid + after;
+        const offset = denom ? Math.max(-0.5, Math.min(0.5, 0.5 * (before - after) / denom)) : 0;
+        const freq = rate / (lag + offset);
+        return freq >= 52 && freq <= 1060 ? freq : null;
+      }
+      lag++;
+    }
+    return null;
   }
 
   /**
-   * How periodic a frame is, 0–1, at any level: a voice or a hum reads 0.7
-   * and up even under a fan as loud as itself; a fan's noise, a hiss or a
-   * breath stays under 0.5. detectPitch cannot say this: it reads nothing
-   * under −40 dBFS and names a pitch for any noise above it.
+   * An approximate frame-periodicity cue, 0–1, not a voice detector. The
+   * older raw-autocorrelation pitch function named notes for unvoiced noise;
+   * detectPitch now rejects uncertain frames with its own YIN threshold.
+   * Neither heuristic proves that the source is a human voice (the piano
+   * speaker can be periodic too), and the values depend on noise/device.
    *
    * YIN's cumulative-mean-normalised difference (de Cheveigné & Kawahara,
    * 2002) over periods of 60–500 Hz, on the frame summed down to ~12 kHz:
@@ -712,8 +699,18 @@
       const now = performance.now();
       const dt = Math.min(50, now - (this.lastIngestAt || now));
       this.lastIngestAt = now;
-      this._ingest(voiceFreq || null, dt);
+      this._ingest(this._scoreableExternalPitch(voiceFreq), dt);
       this._draw();
+    }
+
+    /** Grace-held labels remain visible, but never earn a fresh pitch point. */
+    _scoreableExternalPitch(displayFreq) {
+      const practice = global.VTApp?.getState?.()?.practice;
+      if (!this.external || !practice?.running) return displayFreq || null;
+      const measured = practice._latestRawPitch;
+      if (!measured || practice._latestRms < practice._holdRms() * 0.55) return null;
+      if (practice.isManualEffective?.() && practice._manualKind === "air") return null;
+      return measured;
     }
 
     async start() {

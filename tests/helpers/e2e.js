@@ -80,11 +80,13 @@ async function boot(page, opts = {}) {
 
       if (mic === "deny") {
         if (navigator.mediaDevices) {
-          navigator.mediaDevices.getUserMedia = async () => {
+          const deny = async () => {
             const err = new Error("Permission denied");
             err.name = "NotAllowedError";
             throw err;
           };
+          navigator.mediaDevices.getUserMedia = deny;
+          if (typeof MediaDevices !== "undefined") MediaDevices.prototype.getUserMedia = deny;
         }
         return;
       }
@@ -94,8 +96,12 @@ async function boot(page, opts = {}) {
 
       const AC = window.AudioContext || window.webkitAudioContext;
       if (!navigator.mediaDevices || !AC) return;
-      navigator.mediaDevices.getUserMedia = async () => {
-        const ctx = new AC();
+      const syntheticMic = async () => {
+        // Linux WebKit dispatches getUserMedia via the prototype, bypassing
+        // an instance-only stub. Use the same context as Practice, otherwise
+        // the fixture itself exhausts Safari's audio-context budget.
+        const ctx = window.VTPiano?.ctx || window.VTSharedAudioCtx || new AC();
+        window.VTSharedAudioCtx = ctx;
         const dest = ctx.createMediaStreamDestination();
         const osc = ctx.createOscillator();
         const g = ctx.createGain();
@@ -106,6 +112,8 @@ async function boot(page, opts = {}) {
         osc.start();
         return dest.stream;
       };
+      navigator.mediaDevices.getUserMedia = syntheticMic;
+      if (typeof MediaDevices !== "undefined") MediaDevices.prototype.getUserMedia = syntheticMic;
     },
     { lang, tourDone, mic: wantRealMic ? "real" : mic, clearBilling }
   );
@@ -153,6 +161,7 @@ async function openExercise(page, exerciseId) {
         const r = b.getBoundingClientRect();
         return r.width >= 8 && r.height >= 8;
       },
+      null,
       { timeout: 10000 }
     )
     .catch(() => {});

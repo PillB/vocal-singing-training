@@ -486,6 +486,14 @@ test.describe("Rating: one tap after a take", () => {
     // Pace variation: two self-ratings and a count of key slowdowns.
     await openSingle(page, "v14-pace-variation");
     await page.locator("#btn-toggle-metrics").click();
+    // Before this integrity fix, a no-Start click fabricated a 10/10 and a
+    // streak day. Preserve that concrete negative test before the valid take.
+    await page.locator('.rate-btn[data-feel="easy"]').click();
+    await expect(page.locator("#score-result")).toBeHidden();
+    expect((await records(page, "v14-pace-variation")).takes).toBe(0);
+    await start(page);
+    await page.clock.fastForward(16000);
+    await page.locator("#btn-practice-stop").click();
     await page.locator('.rate-btn[data-feel="easy"]').click();
     await expect(page.locator("#score-result .score-big")).toHaveText("10.0 / 10");
     await expect(page.locator("#score-result")).toContainText("Cómo te fue: Fácil");

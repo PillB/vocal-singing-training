@@ -3801,8 +3801,20 @@
           setTimeout(() => showValueMoment("hold_pr"), 500);
         }
       };
+      // The final MediaRecorder chunk arrives asynchronously after Stop.
+      // If the learner has already opened another exercise, never attach the
+      // old take to that exercise's player (and release the stale object URL).
+      const recordingExerciseId = ex.id;
+      const recordingTake = state.sessionPractice;
       state.practice.onRecordingReady = (result) => {
-        if (result) showPlayback(result);
+        if (!result) return;
+        if (state.view !== "exercise" ||
+            state.exercise?.id !== recordingExerciseId ||
+            state.sessionPractice !== recordingTake) {
+          URL.revokeObjectURL(result.url);
+          return;
+        }
+        showPlayback(result);
       };
 
       if (profile.showPitch) {
@@ -4028,13 +4040,28 @@
    * how to allow it, a retry, and — inside a guided routine — a way on.
    * @param {boolean} canRun true when the piano or the clock still runs
    */
-  function showMicBlocked(canRun) {
+  function micBlockMessageKey(canRun, reason) {
+    const failure = reason || state.practice.lastCaptureError;
+    const failureName = typeof failure === "string" ? failure : failure?.name;
+    const failureMessage = typeof failure === "object" ? failure?.message : "";
+    let messageKey = canRun ? "mic.blocked.partial" : "mic.blocked.none";
+    if (failureName === "interrupted") messageKey = "mic.blocked.interrupted";
+    else if (["NotReadableError", "AbortError"].includes(failureName)) messageKey = "mic.blocked.busy";
+    else if (failureName === "NotFoundError") messageKey = "mic.blocked.missing";
+    else if (failureName === "TimeoutError") messageKey = "mic.blocked.pending";
+    else if (/no live audio track|AudioContext|MediaStreamSource/i.test(failureMessage || "")) {
+      messageKey = "mic.blocked.disconnected";
+    }
+    return messageKey;
+  }
+
+  function showMicBlocked(canRun, reason) {
     const box = $("#mic-blocked");
     if (!box) {
       toast(tt("toast.mic"));
       return;
     }
-    $("#mic-blocked-text").textContent = tt(canRun ? "mic.blocked.partial" : "mic.blocked.none");
+    $("#mic-blocked-text").textContent = tt(micBlockMessageKey(canRun, reason));
     const retry = $("#btn-mic-retry");
     const skip = $("#btn-mic-skip");
     if (retry) {
@@ -4057,6 +4084,7 @@
       /* ignore */
     }
   }
+
 
   function hideMicBlocked() {
     const box = $("#mic-blocked");
@@ -4155,6 +4183,26 @@
   /* —— Rating: one tap after a take —— */
   /** Self-ratings a one-tap answer sets, on the 1–5 sliders. */
   const FEEL = { easy: 5, ok: 3, hard: 2 };
+  // An explicit rated Save is an intentional learner report, unlike passive
+  // auto-credit on navigation. Fifteen real seconds is a credible minimum for
+  // a short take; the stricter 15–45 s rule remains for automatic credit.
+  const RATED_MIN_TAKE_SEC = 15;
+
+  /** One invariant shared by one-tap, detailed Save, and automatic practice.
+   * Rating an unopened or negligible run is not evidence of a completed take.
+   */
+  function canSaveRatedTake() {
+    const practiced = getPracticedSec();
+    const required = RATED_MIN_TAKE_SEC;
+    if (state.sessionPractice.everStarted && practiced >= required) return true;
+    const message = tt("rate.practiceFirst", {
+      s: Math.max(1, Math.ceil(required - practiced))
+    });
+    const note = $("#rate-note");
+    if (note) note.textContent = message;
+    toast(message);
+    return false;
+  }
 
   /**
    * Muted under automation like the step-done card: the single-exercise ending
@@ -4215,7 +4263,11 @@
     if (note) {
       note.textContent = r.result
         ? tt("rate.saved", { score: VTMetrics.formatScore(r.result) })
-        : tt("rate.hint");
+        : !state.sessionPractice.everStarted || getPracticedSec() < RATED_MIN_TAKE_SEC
+          ? tt("rate.practiceFirst", {
+              s: Math.max(1, Math.ceil(RATED_MIN_TAKE_SEC - getPracticedSec()))
+            })
+          : tt("rate.hint");
     }
     const kicker = $("#rate-done");
     if (kicker) {
@@ -4310,6 +4362,8 @@
   function rateFeel(feel) {
     const v = FEEL[feel];
     if (!v || !state.exercise) return;
+    // Rejected taps must not silently change the score sliders either.
+    if (!canSaveRatedTake()) return;
     $$('#metrics-form input[type="range"]').forEach((input) => {
       if (input.dataset.measured === "1") return;
       input.value = String(v);
@@ -4757,6 +4811,11 @@
   function completeExercise(opts = {}) {
     const ex = state.exercise;
     if (!ex) return;
+    // A self-rating describes a real attempt; merely opening this screen must
+    // never create a completed session, perfect score, streak day or first-win.
+    // The same threshold already guards the unrated auto-save path. Checking
+    // before stopPractice means an accidental early tap won't end the take.
+    if (!canSaveRatedTake()) return;
     if (state.practiceLive) stopPractice(true);
     else if (state.pitchRunning) stopPitchViz();
     flushPracticeClock();
@@ -5229,7 +5288,11 @@
       state.recorder.onLevel = (lvl) => {
         $("#level-fill").style.width = `${Math.round(lvl * 100)}%`;
       };
-      await state.recorder.start();
+      // Reuse an active practice stream. A second getUserMedia on iOS may
+      // interrupt playback or mute the first stream, and is not needed.
+      await state.recorder.start({
+        stream: state.practice.running ? state.practice.stream : null
+      });
       $("#btn-rec-start").disabled = true;
       $("#btn-rec-stop").disabled = false;
       toast(tt("toast.recording"));
@@ -7341,6 +7404,22 @@
     if (teaser && teaser.classList.contains("is-locked")) teaser.hidden = true;
   }
 
+  /** Keep an already visible upgrade message in the selected language.
+   * Do not choose a new moment: doing so would alter dismissal/experiment state.
+   */
+  function relabelValueBanner() {
+    const banner = $("#value-banner");
+    const text = $("#value-banner-text");
+    const id = banner?.dataset.momentId;
+    if (!banner || banner.hidden || !text || !id) return;
+    const stats = window.VTValuePulse?.compute?.() || {};
+    const trialDays = window.VTBilling?.trialDaysLeft?.();
+    text.textContent = tt("value.moment." + id, {
+      n: String(id === "trial_ending" ? (trialDays ?? 0) : (stats.sessions ?? 0)),
+      s: Number(stats.bestHoldSec || 0).toFixed(1)
+    });
+  }
+
   function hideValueBanner() {
     const banner = $("#value-banner");
     if (!banner) return;
@@ -8874,6 +8953,11 @@
       return state._hotApplyPromise;
     },
     getState: () => state,
+    // Small integration surface for platform audio interruption recovery.
+    // Status listeners may end an interrupted take without fabricating credit.
+    stopPractice,
+    showMicBlocked,
+    startExerciseSound,
     /** True if current (or given) exercise should start piano/ref on Empezar when Auto is on. */
     wantsSound: (ex) => {
       const e = ex || state.exercise;
@@ -8939,6 +9023,7 @@
         updateBillingChrome();
         refreshAccountUI();
         renderValuePulse();
+        relabelValueBanner();
         if ($("#pricing-modal") && !$("#pricing-modal").hidden) renderPricingModal();
       };
     }

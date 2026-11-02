@@ -4365,6 +4365,40 @@
   }
 
   /**
+   * Chrome writes a recording's WebM with no length in it, so the player reports
+   * Infinity: no total time, and a bar that cannot be dragged until the take has
+   * played through. Asking for a time far past the end makes the browser read to
+   * the end and learn the length; once it reports one, the player goes back to
+   * the start. A player that was about to play, or already was, plays on from
+   * there: the seek itself ends the clip.
+   * @param {HTMLAudioElement|null} audio The player for a recording.
+   */
+  function fixUnknownDuration(audio) {
+    if (!audio) return;
+    const fix = () => {
+      if (audio.duration !== Infinity) return;
+      const resume = audio.autoplay || !audio.paused;
+      audio.autoplay = false;
+      const learned = () => {
+        if (!Number.isFinite(audio.duration)) return;
+        audio.removeEventListener("durationchange", learned);
+        audio.addEventListener(
+          "seeked",
+          () => {
+            if (resume) audio.play().catch(() => {});
+          },
+          { once: true }
+        );
+        audio.currentTime = 0;
+      };
+      audio.addEventListener("durationchange", learned);
+      audio.currentTime = 1e7;
+    };
+    if (audio.readyState >= 1) fix();
+    else audio.addEventListener("loadedmetadata", fix, { once: true });
+  }
+
+  /**
    * The take's recording, in the rating card: the stage-below strip it used to
    * sit in is covered by the sticky stage, so its player and Save could not be
    * reached. A recording means a take just ended, so the card opens (quietly:
@@ -4381,13 +4415,15 @@
         <button type="button" class="btn btn-sm btn-ghost" id="btn-discard-rec">${escapeHtml(tt("rate.takeDiscard"))}</button>
       </div>
     `;
+    fixUnknownDuration(area.querySelector("audio"));
     const save = $("#btn-save-rec");
     save?.addEventListener("click", async () => {
       try {
         await VTStorage.saveRecording({
           exerciseId: state.exercise.id,
           blob: result.blob,
-          label: `${state.exercise.title} · ${new Date().toLocaleString()}`,
+          // In the page's own language, as the rows in Historial are drawn.
+          label: `${exName(state.exercise)} · ${new Date().toLocaleString(locale())}`,
           meta: { durationMs: result.durationMs }
         });
         save.textContent = tt("rate.takeSaved");
@@ -5404,7 +5440,12 @@
     loading.textContent = tt("history.loading");
     list.replaceChildren(loading);
     try {
-      const recs = await VTStorage.listRecordings();
+      // The recordings are the only part of this page kept in IndexedDB. If they
+      // cannot be read, the days, the last practice and the progress still show.
+      const recs = await VTStorage.listRecordings().catch((e) => {
+        console.warn("[VT] recordings unavailable", e);
+        return [];
+      });
       const progress = VTStorage.getProgress();
       const reviews = VTStorage.getReviews();
       const track = pageTrack();
@@ -5443,15 +5484,19 @@
         html += `<div class="history-list">`;
         for (const r of recs) {
           const ex = findExercise(r.exerciseId);
+          // The name is drawn now, in the page's language: the label stored with
+          // the take is the language it was saved in (older ones, the English
+          // catalogue title). It is only shown for a take whose exercise has left
+          // the catalogue, and as text. The date and size are the meta line's.
           html += `
-            <div class="history-item" data-id="${r.id}">
+            <div class="history-item" data-id="${escapeHtml(r.id)}">
               <div>
-                <strong>${r.label}</strong>
-                <div class="meta">${ex ? exName(ex) : r.exerciseId} · ${new Date(r.createdAt).toLocaleString(locale())} · ${Math.round((r.size || 0) / 1024)} KB</div>
+                <strong>${escapeHtml(ex ? exName(ex) : r.label)}</strong>
+                <div class="meta">${escapeHtml(new Date(r.createdAt).toLocaleString(locale()))} · ${Math.round((r.size || 0) / 1024)} KB</div>
               </div>
               <div class="controls-row">
-                <button type="button" class="btn btn-sm" data-play="${r.id}">${tt("history.play")}</button>
-                <button type="button" class="btn btn-sm btn-danger" data-del="${r.id}">${tt("history.delete")}</button>
+                <button type="button" class="btn btn-sm" data-play="${escapeHtml(r.id)}">${tt("history.play")}</button>
+                <button type="button" class="btn btn-sm btn-danger" data-del="${escapeHtml(r.id)}">${tt("history.delete")}</button>
               </div>
             </div>`;
         }
@@ -5466,10 +5511,10 @@
             const older = sorted[1];
             const ex = findExercise(exId);
             html += `<div class="history-item">
-              <div><strong>${ex ? exName(ex) : exId}</strong>
+              <div><strong>${escapeHtml(ex ? exName(ex) : exId)}</strong>
               <div class="meta">${tt("retain.audioCompareMeta")}</div></div>
               <div class="controls-row">
-                <button type="button" class="btn btn-sm" data-ab-old="${older.id}" data-ab-new="${newer.id}">${tt("retain.audioCompareBtn")}</button>
+                <button type="button" class="btn btn-sm" data-ab-old="${escapeHtml(older.id)}" data-ab-new="${escapeHtml(newer.id)}">${tt("retain.audioCompareBtn")}</button>
               </div>
             </div>`;
           });
@@ -5518,6 +5563,7 @@
           audio.controls = true;
           audio.autoplay = true;
           audio.src = url;
+          fixUnknownDuration(audio);
           player.appendChild(audio);
         });
       });
@@ -5556,6 +5602,7 @@
               <div><span class="muted">${tt("retain.audioNewer")}</span>
                 <audio class="audio-player" controls src="${uNew}"></audio></div>
             </div>`;
+          $$("audio", player).forEach(fixUnknownDuration);
           try {
             window.VTAnalytics?.track?.("audio_compare", {});
           } catch {

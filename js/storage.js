@@ -402,6 +402,11 @@
       });
     },
 
+    /**
+     * Keep a take. Recordings live in one IndexedDB store for the whole browser,
+     * so each carries the profile it was made in: "Cada perfil guarda su propio
+     * historial" has to hold for the audio too.
+     */
     async saveRecording({ exerciseId, blob, label, meta }) {
       const db = await this.openDb();
       const id = crypto.randomUUID ? crypto.randomUUID() : `rec_${Date.now()}`;
@@ -409,6 +414,7 @@
       const record = {
         id,
         exerciseId,
+        profileId: this.getActiveProfileId(),
         label: label || "Practice take",
         mimeType: blob.type || "audio/webm",
         createdAt: new Date().toISOString(),
@@ -419,19 +425,32 @@
       return new Promise((resolve, reject) => {
         const tx = db.transaction(DB_STORE, "readwrite");
         tx.objectStore(DB_STORE).put(record);
-        tx.oncomplete = () => resolve({ id, createdAt: record.createdAt, size: record.size, exerciseId, label: record.label });
+        tx.oncomplete = () =>
+          resolve({ id, createdAt: record.createdAt, size: record.size, exerciseId, label: record.label, profileId: record.profileId });
         tx.onerror = () => reject(tx.error);
       });
     },
 
+    /**
+     * The active profile's takes, newest first. A take saved before recordings
+     * knew about profiles has no profileId and belongs to the main one, where it
+     * was made. With site data blocked the database never opens: there is
+     * nothing to list, and Historial still has its record to show.
+     */
     async listRecordings(exerciseId = null) {
-      const db = await this.openDb();
+      let db;
+      try {
+        db = await this.openDb();
+      } catch {
+        return [];
+      }
+      const active = this.getActiveProfileId();
       return new Promise((resolve, reject) => {
         const tx = db.transaction(DB_STORE, "readonly");
         const store = tx.objectStore(DB_STORE);
         const req = store.getAll();
         req.onsuccess = () => {
-          let rows = req.result || [];
+          let rows = (req.result || []).filter((r) => recordingProfile(r) === active);
           rows = rows
             .map((r) => ({
               id: r.id,
@@ -450,30 +469,50 @@
       });
     },
 
+    /** One take's audio, or null for an id that is not the active profile's. */
     async getRecordingBlob(id) {
       const db = await this.openDb();
+      const active = this.getActiveProfileId();
       return new Promise((resolve, reject) => {
         const tx = db.transaction(DB_STORE, "readonly");
         const req = tx.objectStore(DB_STORE).get(id);
         req.onsuccess = () => {
           const r = req.result;
-          if (!r) return resolve(null);
+          if (!r || recordingProfile(r) !== active) return resolve(null);
           resolve(new Blob([r.data], { type: r.mimeType || "audio/webm" }));
         };
         req.onerror = () => reject(req.error);
       });
     },
 
+    /**
+     * Delete one take. An id from another profile is left where it is.
+     * @returns {Promise<boolean>} Whether a take was deleted.
+     */
     async deleteRecording(id) {
       const db = await this.openDb();
+      const active = this.getActiveProfileId();
       return new Promise((resolve, reject) => {
         const tx = db.transaction(DB_STORE, "readwrite");
-        tx.objectStore(DB_STORE).delete(id);
-        tx.oncomplete = () => resolve();
+        const store = tx.objectStore(DB_STORE);
+        let removed = false;
+        const req = store.get(id);
+        req.onsuccess = () => {
+          if (req.result && recordingProfile(req.result) === active) {
+            store.delete(id);
+            removed = true;
+          }
+        };
+        tx.oncomplete = () => resolve(removed);
         tx.onerror = () => reject(tx.error);
       });
     }
   };
+
+  /** The profile a stored take belongs to: the main one when it predates profiles. */
+  function recordingProfile(record) {
+    return (record && record.profileId) || "default";
+  }
 
   global.VTStorage = Storage;
 })(window);

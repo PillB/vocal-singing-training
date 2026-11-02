@@ -5699,6 +5699,10 @@
     const plan = VTStorage.getWeekPlan();
     const track = pageTrack();
     const idle = plan.status === "idle";
+    // A week is over seven days after it started, reviewed or not: the review
+    // below opens then, and the lines above it stop saying "this week".
+    const start = planStartDay(plan);
+    const weekOver = !idle && !!start && (window.VTDays?.dayKey?.() || "") >= window.VTDays?.addDays?.(start, 7);
     renderPlanWeekRail(plan);
     $("#plan-week-num").textContent = tt("plan.weekN", { n: plan.weekNumber });
     // Before the week starts, "Elige el elemento" and the start button say it all.
@@ -5706,7 +5710,7 @@
     status.hidden = idle;
     status.textContent = idle
       ? ""
-      : plan.status === "active"
+      : plan.status === "active" && !weekOver
         ? tt("plan.statusActive", { element: weekElementLabel(plan.element) })
         : tt("plan.statusReview", { element: weekElementLabel(plan.element) });
 
@@ -5745,7 +5749,7 @@
     // Days are counted from practice, not logged by hand.
     const days = $("#plan-days");
     days.hidden = idle;
-    days.textContent = idle ? "" : tt("plan.days", { n: planWeekDays(plan) });
+    days.textContent = idle ? "" : tt(weekOver ? "plan.daysPast" : "plan.days", { n: planWeekDays(plan) });
     // Once the week is under way its exercises are the next step, not this button.
     $("#plan-start-row").hidden = !idle;
 
@@ -5828,10 +5832,10 @@
     const improved = plan.completedElements || [];
     $("#plan-completed-wrap").hidden = !improved.length;
     $("#plan-completed-elements").innerHTML = improved
-      .map((e) => `<span class="pill">${escapeHtml(weekElementLabel(e))}</span>`)
+      .map((e) => `<span class="pill pill-word">${escapeHtml(weekElementLabel(e))}</span>`)
       .join(" ");
 
-    const reviews = (plan.reviews || []).slice(0, 8);
+    const reviews = (plan.reviews || []).slice(0, 12);
     $("#plan-reviews-card").hidden = !reviews.length;
     $("#plan-reviews").innerHTML = reviews.map(planReviewRow).join("");
   }

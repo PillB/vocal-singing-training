@@ -598,6 +598,9 @@
       } catch {
         /* ignore */
       }
+      // Fitting the screen came first; the stage is never shorter than what is
+      // on it, so a very small screen scrolls instead of losing its lanes.
+      syncStageInsets();
       // Resize pitch canvas to new stage box; redraw idle if not live
       try {
         if (state.pitchViz) {
@@ -613,6 +616,43 @@
     } catch {
       /* ignore */
     }
+  }
+
+  /** Fewest px of lanes a pitch stage keeps between its two rails. */
+  const STAGE_MIN_LANES = 60;
+
+  /**
+   * The stage is sized to the screen, but never to less than it holds: its top
+   * rail, its bottom rail and, between them, either lanes of STAGE_MIN_LANES or
+   * a speaking exercise's mode panel with its words whole. On the smallest
+   * phones (320x568) the rails alone take most of the screen, so the stage
+   * grows past it and the page scrolls; anywhere the content fits, nothing
+   * changes and the whole stage stays on one screen.
+   * @param {HTMLElement} stage #highway-stage.
+   * @param {number} railTop Px from the stage's top to the top rail's bottom.
+   * @param {number} railBottom Px the bottom rail and its gap take from the stage's bottom.
+   * @returns {boolean} True when the stage was made taller.
+   */
+  function growStageForContent(stage, railTop, railBottom) {
+    const h = stage.getBoundingClientRect().height;
+    let need = railTop + railBottom + STAGE_MIN_LANES;
+    // A mode panel that runs past its box is cut off (the wrapper scrolls, the
+    // picture's panel clips): give it the rows it lacks.
+    const focus = $("#mode-focus");
+    if (focus && !focus.hidden) {
+      const wrap = $("#mode-focus-panel");
+      const panel = wrap?.querySelector(".mode-panel");
+      const over = Math.max(
+        wrap ? wrap.scrollHeight - wrap.clientHeight : 0,
+        panel ? panel.scrollHeight - panel.clientHeight : 0
+      );
+      if (over > 1) need = Math.max(need, h + over);
+    }
+    if (h >= need - 0.5) return false;
+    const px = `${Math.ceil(need)}px`;
+    stage.style.maxHeight = px;
+    stage.style.height = px;
+    return true;
   }
 
   /**
@@ -645,7 +685,8 @@
         stage.style.getPropertyValue("--rail-t") !== t || stage.style.getPropertyValue("--rail-h") !== b;
       stage.style.setProperty("--rail-t", t);
       stage.style.setProperty("--rail-h", b);
-      return moved;
+      const grew = growStageForContent(stage, Math.ceil(railBottom) + 4, clear);
+      return moved || grew;
     } catch {
       return false;
     }

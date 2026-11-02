@@ -8,7 +8,7 @@
  *
  *   node qa/mutate.mjs            # the Node sets (audio, lint)
  *   node qa/mutate.mjs audio      # one set
- *   node qa/mutate.mjs stage a11y flows billing scoring  # browser sets: need Playwright's Chromium
+ *   node qa/mutate.mjs stage a11y flows billing scoring range audit  # browser sets: need Playwright's Chromium
  *
  * Exit code 1 when any mutant survives or an anchor no longer matches (so a
  * refactor that moves the code cannot silently retire its mutant).
@@ -23,7 +23,8 @@ const AUDIO_TESTS = [
   "tests/node/hold-duration.test.mjs",
   "tests/node/attack-rise.test.mjs",
   "tests/node/sync-late-signin.test.mjs",
-  "tests/node/safari-audio-contract.test.mjs"
+  "tests/node/safari-audio-contract.test.mjs",
+  "tests/node/piano-range.test.mjs"
 ];
 const LINT_TESTS = ["qa/lint-gate.test.mjs", "tests/node/asset-versions.test.mjs", "tests/node/csp.test.mjs", "tests/node/env-noise.test.mjs"];
 const node = (tests) => [process.execPath, "--test", ...tests];
@@ -76,7 +77,8 @@ export const MUTANTS = {
     ["M25 lost audio after the note settled spoils the onset", "js/voice-features.js", "some((at) => at >= idx && at < to)", "some((at) => at >= idx)"],
     ["M26 one long gap between clock checks counts in full (PR #25 CI red)", "js/practice-engine.js", "const step = Math.min(AUDIO_CLOCK_MAX_STEP_MS, Math.max(0, now - (this._audioClockCheckedAt || now)));", "const step = Math.max(0, now - (this._audioClockCheckedAt || now));"],
     ["M27 a frozen clock never adds up to Retry", "js/practice-engine.js", "      this._audioClockStalledMs += step;\n", ""],
-    ["M28 a resume keeps the stall from before the interruption", "js/practice-engine.js", "            this._resetAudioClockWatch(this._lastFrameAt);\n", ""]
+    ["M28 a resume keeps the stall from before the interruption", "js/practice-engine.js", "            this._resetAudioClockWatch(this._lastFrameAt);\n", ""],
+    ["M29 the note table stops at C1 again (octave -2 plays chords without their bass, PR #24)", "js/piano.js", "for (let oct = 0; oct <= 8; oct++) {", "for (let oct = 1; oct <= 6; oct++) {"]
   ].map(([name, file, from, to]) => ({ name, file, from, to, cmd: node(AUDIO_TESTS) })),
   lint: [
     ["L1 folders skipped by name again", "qa/lint-complexity.mjs", "if (!EXCLUDED_PATHS.has(name)) visit(name);", "if (!EXCLUDED_PATHS.has(name) && !/^(?:fixtures|geometry)$/.test(item.name)) visit(name);"],
@@ -106,6 +108,18 @@ export const MUTANTS = {
     from,
     to,
     cmd: [...PIANO_SPEC.slice(0, 3), "tests/safari-mobile-recovery.spec.js", "tests/stage-design.spec.js", "--project=chromium", "--workers=2", "--reporter=dot", "-g", "held pitch stays visible|Pitch match challenge"]
+  })),
+  // The octave buttons (PR #24's P0-02): -2 must say its bass may be unheard and unscored.
+  range: [
+    ["R1 octave -2 shown without its caution", "js/app.js", "if (moved && !opts.silent && state.octaveShift === -2) toast(", "if (moved && !opts.silent && state.octaveShift === -9) toast("],
+    ["R2 the auto range reaches -2 without the caution", "js/app.js", "        shiftOctave(dec.shift, { source: \"auto\", decision: dec });", "        applyOctaveShift(dec.shift, { source: \"auto\", decision: dec });"],
+    ["R3 the - button reaches -2 without the caution", "js/app.js", "    shiftOctave(state.octaveShift + delta, { source: \"manual\" });", "    applyOctaveShift(state.octaveShift + delta, { source: \"manual\" });"]
+  ].map(([name, file, from, to]) => ({
+    name,
+    file,
+    from,
+    to,
+    cmd: [...PIANO_SPEC.slice(0, 3), "tests/range-adapter.spec.js", "--project=chromium", "--workers=2", "--reporter=dot", "-g", "octave −2"]
   })),
   // The open piano and the sticky stage (production-contracts "expanded piano").
   stage: [

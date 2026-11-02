@@ -273,6 +273,33 @@ test.describe("Range adapter & octave helpers", () => {
     expect(locked.firstLane).toBeTruthy();
   });
 
+  test("reaching octave −2 warns that the bass may be inaudible and unscored", async ({ page }) => {
+    await boot(page);
+    await page.click('.tab[data-tab="singing"]');
+    await page.locator("#exercise-list .card-ex[data-id='s2-solfege-chords']").click();
+    await expect(page.locator("#btn-oct-down")).toBeVisible();
+    const toastEl = page.locator("#toast");
+    await page.click("#btn-oct-down");
+    await expect(page.locator("#oct-label")).toHaveText(/^[−-]1$/);
+    await expect(toastEl).not.toContainText(/−2/);
+    await page.click("#btn-oct-down");
+    await expect(page.locator("#oct-label")).toHaveText(/^[−-]2$/);
+    await expect(toastEl).toContainText(/−2.*(inaudible|inaudibles)/);
+    // The chords it now plays all have a frequency (C0 used to be missing).
+    const missing = await page.evaluate(() => {
+      const prog = window.VTTransposeProgression(window.VT_PROGRESSIONS.prog1, -2);
+      return prog.chords.flatMap((c) => c.notes).filter((n) => !window.VT_NOTE_FREQ[n]);
+    });
+    expect(missing).toEqual([]);
+    await page.click("#btn-oct-up");
+    await expect(page.locator("#oct-label")).toHaveText(/^[−-]1$/);
+    await expect(toastEl).not.toContainText(/inaudible/);
+    // The auto range's own decision to go lower gets the same caution.
+    await page.evaluate(() => window.VTGetRangeAdapter().onShift({ shift: -2, delta: -1, side: "high", reason: "test" }));
+    await expect(page.locator("#oct-label")).toHaveText(/^[−-]2$/);
+    await expect(toastEl).toContainText(/−2.*(inaudible|inaudibles)/);
+  });
+
   test("manual + then − returns to 0; auto toggle persists", async ({ page }) => {
     await boot(page);
     await page.click('.tab[data-tab="singing"]');

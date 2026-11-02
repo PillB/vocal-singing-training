@@ -241,7 +241,7 @@
       auto: savedAuto,
       octaveShift: savedShift,
       onShift: (dec) => {
-        applyOctaveShift(dec.shift, { source: "auto", decision: dec });
+        shiftOctave(dec.shift, { source: "auto", decision: dec });
       }
     });
     return state.rangeAdapter;
@@ -364,7 +364,19 @@
   }
 
   function nudgeOctave(delta) {
-    applyOctaveShift(state.octaveShift + delta, { source: "manual" });
+    shiftOctave(state.octaveShift + delta, { source: "manual" });
+  }
+
+  /**
+   * Every octave move (buttons, auto range, test hook) goes through here.
+   * Octave −2 puts the bass at 16–31 Hz: below what phone speakers play and
+   * below the pitch detector's floor, so it says so instead of the usual
+   * shift toast (PR #24's P0-02 follow-up).
+   */
+  function shiftOctave(next, opts = {}) {
+    const moved = applyOctaveShift(next, opts);
+    if (moved && !opts.silent && state.octaveShift === -2) toast(tt("range.lowOctaveCaution"), { durationMs: 4800 });
+    return moved;
   }
 
   function setRangeAuto(on) {
@@ -423,7 +435,8 @@
 
   window.VTLockHighwayNotes = lockHighwayForNotes;
   window.VTLockHighwayProg = lockHighwayForProgression;
-  window.VTApplyOctaveShift = applyOctaveShift;
+  window.VTApplyOctaveShift = shiftOctave;
+  window.VTGetRangeAdapter = () => ensureRangeAdapter();
   window.VTGetOctaveShift = () => state.octaveShift;
 
   /** Note name after current octave shift (for ref/challenge/target). */

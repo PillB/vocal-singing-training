@@ -3658,6 +3658,16 @@
         return;
       }
 
+      // "↻ Otra vez" after a rated take starts a new take: its own practice
+      // clock, its own history entry and an unanswered card. The saved flag
+      // used to carry over, so the second take was never recorded and leaving
+      // it did not ask.
+      if (state.sessionPractice.saved) {
+        resetSessionPractice();
+        resetRating();
+        const scored = $("#score-result");
+        if (scored) scored.hidden = true;
+      }
       state.practiceStarting = true;
       setPracticeUI(false); // hides/disables Start while bootstrapping
       try {

@@ -1438,7 +1438,8 @@
    * guide.html holds both languages in one file, so a bare `guide.html` link
    * always lands an English reader on the Spanish half. Point every static
    * guide link at the right anchor for the current language. A link that
-   * names its section (data-guide-anchor) keeps it, in either language.
+   * names its section (data-guide-anchor) keeps it, in either language. The
+   * privacy page is the same, so its links are pointed here too.
    */
   function syncGuideLinks() {
     const href = window.VTTour?.guideHref?.() || "guide.html";
@@ -1450,6 +1451,11 @@
     $$('a[href^="guide.html"]').forEach((a) => {
       const anchor = a.getAttribute("data-guide-anchor");
       a.href = anchor ? window.VTTour?.guideHref?.(anchor) || `guide.html#${anchor}` : clean;
+    });
+    // privacy.html holds both languages in one file as well: an English reader
+    // opens the English half, and switching back takes the anchor off again.
+    $$('a[href^="privacy.html"]').forEach((a) => {
+      a.setAttribute("href", window.VTI18n?.lang === "en" ? "privacy.html#en" : "privacy.html");
     });
   }
 

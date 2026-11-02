@@ -89,10 +89,10 @@
   /* —— The clock of a guided drill —— */
 
   /**
-   * Steps on a clock. Time comes from the frames: `clock` is practice time
-   * (capped per frame, like VTFeatures.Vad.t, so a hidden tab pauses the
-   * guide instead of skipping steps), `rec` is time into the recording (the
-   * engine's own elapsed time) so a step can be found again in the take.
+   * Steps use actual visible elapsed time, not the <=100ms signal-feature
+   * frame delta. Otherwise a 1 FPS browser takes ten real seconds to advance
+   * a one-second phase while the app's wall timer runs normally.
+   * The app pauses its wall timer on tab hide; hidden frames never advance us.
    */
   class Run {
     constructor(phases) {
@@ -133,7 +133,9 @@
       return this.done ? this.count : this.index;
     }
     tick(frame) {
-      const dt = clamp(((frame && frame.dtMs) || 16) / 1000, 0, 0.1);
+      if (global.document?.hidden) return false;
+      const rawMs = Number(frame?.wallDtMs ?? frame?.dtMs ?? 0);
+      const dt = Number.isFinite(rawMs) ? Math.max(0, rawMs / 1000) : 0;
       this.clock += dt;
       this.rec = frame && frame.elapsedMs != null ? frame.elapsedMs / 1000 : this.rec + dt;
       if (this.done) return false;
@@ -2270,7 +2272,11 @@
       this.run = new Run(cfg.phases || []);
       this.vad = cfg.mic && global.VTFeatures ? new global.VTFeatures.Vad({}) : null;
       this.preCue = cfg.preCue || 4;
-      this.mode.hud.querySelector("[data-next-step]")?.addEventListener("click", () => this.skip());
+      const nextStep = this.mode.hud.querySelector("[data-next-step]");
+      if (nextStep) {
+        nextStep.disabled = true; // no invisible click that does nothing before Start
+        nextStep.addEventListener("click", () => this.skip());
+      }
       this._words(true);
       this.draw();
     }
@@ -2317,6 +2323,8 @@
     start() {
       this.begin();
       this.run.reset();
+      const nextStep = this.mode.hud.querySelector("[data-next-step]");
+      if (nextStep) nextStep.disabled = this.run.done;
       this.vad?.reset();
       if (this.cfg.onStart) this.cfg.onStart(this);
       this._words(true);
@@ -2407,6 +2415,8 @@
     }
     stop() {
       this.live = false;
+      const nextStep = this.mode.hud.querySelector("[data-next-step]");
+      if (nextStep) nextStep.disabled = true;
       if (this.cfg.recorded) {
         const chs = this.cfg.chapters ? this.cfg.chapters(this) : this.stepChapters();
         if (!chs.length && this.run.clock >= 1) {

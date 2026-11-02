@@ -6,7 +6,7 @@
 (function (global) {
   "use strict";
 
-  /** Build chromatic map C1–C6 so octave-shifted progressions always resolve. */
+  /** Build chromatic map C0–B8: selectable ±2 shifts must never lose notes. */
   function buildNoteFreqMap() {
     const sharp = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
     const flatPrefer = {
@@ -17,7 +17,7 @@
       "A#": "Bb"
     };
     const map = {};
-    for (let oct = 1; oct <= 6; oct++) {
+    for (let oct = 0; oct <= 8; oct++) {
       for (let i = 0; i < 12; i++) {
         // MIDI: C4 = 60 → 12*(oct+1)+i with C=0
         const midi = 12 * (oct + 1) + i;
@@ -79,7 +79,8 @@
 
   function freqForNote(name, octaveShift) {
     const shifted = shiftNoteName(name, octaveShift);
-    return NOTE_FREQ[shifted] || NOTE_FREQ[name] || null;
+    // Never play the original octave while the UI displays a shifted note.
+    return NOTE_FREQ[shifted] || null;
   }
 
   /** Chord progressions in mid-lower piano range for men */

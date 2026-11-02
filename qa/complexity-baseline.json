@@ -1,0 +1,345 @@
+{
+  "js/account.js": {
+    "Async function 'request' #1": 21
+  },
+  "js/admin.js": {
+    "Async function 'give' #1": 25
+  },
+  "js/ads.js": {
+    "Function 'isPracticeActive' #1": 28,
+    "Function 'renderNativeCard' #1": 23,
+    "Function 'renderSlot' #1": 25
+  },
+  "js/app.js": {
+    "Function 'applyOctaveShift' #1": 52,
+    "Function 'fitHighwayToViewport' #1": 36,
+    "Async function 'onRoute' #1": 35,
+    "Function 'setView' #1": 23,
+    "Function 'suggestNextExercise' #1": 22,
+    "Function 'renderStartPanel' #1": 34,
+    "Function 'tourExerciseId' #1": 21,
+    "Function 'renderExerciseText' #1": 26,
+    "Function 'renderExercise' #1": 117,
+    "Function 'relabelExercise' #1": 27,
+    "Function 'selectProgression' #1": 23,
+    "Async arrow function #1": 24,
+    "Async function 'playSelectedProgression' #1": 23,
+    "Arrow function #1": 33,
+    "Function 'modeDisplayName' #1": 28,
+    "Function 'setPracticeUI' #1": 28,
+    "Async function 'startExerciseSound' #1": 89,
+    "Async function 'startPractice' #1": 120,
+    "Arrow function #2": 25,
+    "Function 'stopPractice' #1": 23,
+    "Function 'updatePitchStatsLabel' #1": 102,
+    "Function 'completeExercise' #1": 72,
+    "Function 'paintScore' #1": 28,
+    "Function 'historyDaysHtml' #1": 22,
+    "Function 'bind' #1": 48,
+    "Arrow function #3": 22,
+    "Function 'headerPlanState' #1": 24,
+    "Function 'updateBillingChrome' #1": 74,
+    "Function 'renderValuePulse' #1": 33,
+    "Function 'renderProStudio' #1": 51,
+    "Function 'renderRetentionChrome' #1": 41,
+    "Function 'showValueMoment' #1": 25,
+    "Function 'renderPricingModal' #1": 52,
+    "Arrow function #4": 29,
+    "Function 'refreshAccountUI' #1": 100,
+    "Async function 'renderAbResults' #1": 45,
+    "Function 'bindBilling' #1": 34
+  },
+  "js/auth.js": {
+    "Async function 'login' #1": 21
+  },
+  "js/billing.js": {
+    "Function 'detectRegion' #1": 43,
+    "Function 'getEntitlement' #1": 53,
+    "Function 'activate' #1": 22,
+    "Function 'getBillingHealth' #1": 32,
+    "Function 'handleReturnFromCheckout' #1": 27,
+    "Function 'exportProgressJson' #1": 38
+  },
+  "js/daily-loop.js": {
+    "Function 'onRoutineComplete' #1": 22,
+    "Function 'renderHome' #1": 46,
+    "Function 'showDone' #1": 25
+  },
+  "js/exercise-viz.js": {
+    "Method '_paint' #1": 32,
+    "Method '_paint' #2": 21,
+    "Arrow function #1": 27
+  },
+  "js/license.js": {
+    "Async function 'verifyToken' #1": 22
+  },
+  "js/metrics.js": {
+    "Method 'compute' #1": 36
+  },
+  "js/piano.js": {
+    "Async method 'playProgression' #1": 23
+  },
+  "js/pitch-game.js": {
+    "Method 'tick' #1": 29
+  },
+  "js/pitch-visualizer.js": {
+    "Method 'setTargetFromChord' #1": 26,
+    "Method '_ingest' #1": 35,
+    "Method '_drawIdle' #1": 27,
+    "Method '_draw' #1": 84
+  },
+  "js/practice-engine.js": {
+    "Async method 'start' #1": 28,
+    "Method '_loop' #1": 72
+  },
+  "js/practice-modes.js": {
+    "Method 'onFrame' #1": 38,
+    "Method 'onFrame' #2": 30,
+    "Method 'onStop' #1": 24,
+    "Method 'onFrame' #3": 41,
+    "Method '_weekModel' #1": 59,
+    "Method 'onFrame' #4": 26,
+    "Method '_compare' #1": 22,
+    "Method '_closeTake' #1": 24,
+    "Method 'onFrame' #5": 28,
+    "Method 'frame' #1": 24,
+    "Method 'stop' #1": 26,
+    "Method 'onFrame' #6": 38,
+    "Method 'observe' #1": 21,
+    "Method 'frame' #2": 35,
+    "Method 'picture' #1": 22,
+    "Method 'onFrame' #7": 42,
+    "Method 'onFrame' #8": 45,
+    "Method '_pianoNote' #1": 21,
+    "Method 'onFrame' #9": 49,
+    "Method 'onFrame' #10": 22,
+    "Method '_endSwell' #1": 34,
+    "Method '_words' #1": 24,
+    "Method 'onFrame' #11": 47,
+    "Method '_segment' #1": 30,
+    "Method 'onFrame' #12": 54,
+    "Method 'onFrame' #13": 25,
+    "Method '_spaceFrame' #1": 23,
+    "Method 'onFrame' #14": 37,
+    "Method 'onFrame' #15": 83,
+    "Method 'onStop' #2": 36,
+    "Method '_facts' #1": 24,
+    "Method 'onFrame' #16": 37,
+    "Method '_feedTrack' #1": 22,
+    "Method 'onFrame' #17": 22,
+    "Method '_frameGate' #1": 24,
+    "Method 'onStop' #3": 23
+  },
+  "js/privacy-switch.js": {
+    "Arrow function #1": 22
+  },
+  "js/range-adapter.js": {
+    "Method 'feed' #1": 39
+  },
+  "js/scenes/breath.js": {
+    "Method 'feed' #1": 39,
+    "Method 'feed' #2": 29,
+    "Function 'sovtRibbon' #1": 37,
+    "Arrow function #1": 41,
+    "Function 'sovt' #1": 35,
+    "Function 'sovtWords' #1": 45,
+    "Arrow function #2": 22,
+    "Function 'ladder' #1": 46,
+    "Function 'breathLanes' #1": 35
+  },
+  "js/scenes/dynamics.js": {
+    "Function 'onsetPlot' #1": 31,
+    "Function 'artStatsLine' #1": 27,
+    "Function 'articulation' #1": 29
+  },
+  "js/scenes/guided.js": {
+    "Function 'artYawns' #1": 24,
+    "Function 'artGesture' #1": 22,
+    "Function 'artNumbers' #1": 43,
+    "Arrow function #1": 28,
+    "Function 'guided' #1": 63,
+    "Function 'artAndWords' #1": 27,
+    "Function 'words' #1": 22,
+    "Function 'chapterReview' #1": 100,
+    "Function 'takeRibbon' #1": 33,
+    "Function 'take' #1": 68,
+    "Function 'weekPaint' #1": 39,
+    "Function 'weeks' #1": 33
+  },
+  "js/scenes/pitch.js": {
+    "Function 'header' #1": 22,
+    "Function 'drawTrace' #1": 31,
+    "Function 'pitchSiren' #1": 21,
+    "Function 'pitchHold' #1": 26,
+    "Arrow function #1": 40
+  },
+  "js/scenes/resonance.js": {
+    "Function 'formants' #1": 31,
+    "Function 'vowels' #1": 23,
+    "Function 'roundPage' #1": 68,
+    "Function 'zones' #1": 23,
+    "Function 'zoneLane' #1": 78,
+    "Function 'sideSpeech' #1": 23,
+    "Function 'sideBright' #1": 25,
+    "Function 'sideSoft' #1": 22,
+    "Function 'seamsReview' #1": 27,
+    "Function 'abTakes' #1": 26,
+    "Function 'takeLane' #1": 42,
+    "Function 'abFacts' #1": 42
+  },
+  "js/scenes/speech-shape.js": {
+    "Function 'melodyRibbon' #1": 34,
+    "Arrow function #1": 21,
+    "Function 'landingStrip' #1": 32,
+    "Function 'slotRow' #1": 28,
+    "Function 'claimCard' #1": 30,
+    "Function 'landingResult' #1": 30,
+    "Arrow function #2": 28,
+    "Function 'concisionGate' #1": 60,
+    "Arrow function #3": 21,
+    "Function 'storyArc' #1": 48
+  },
+  "js/scenes/speech.js": {
+    "Function 'pause' #1": 41,
+    "Function 'reviewTakes' #1": 26,
+    "Function 'rateLadder' #1": 35,
+    "Function 'stairs' #1": 29,
+    "Function 'fillerRounds' #1": 55,
+    "Function 'fillerReview' #1": 21,
+    "Function 'paceRiver' #1": 21,
+    "Function 'riverPlot' #1": 21,
+    "Function 'topicRibbon' #1": 25,
+    "Function 'topicCard' #1": 36,
+    "Function 'turns' #1": 38,
+    "Function 'beads' #1": 21,
+    "Function 'beadGrid' #1": 22
+  },
+  "js/scenes/volume.js": {
+    "Method 'feed' #1": 26,
+    "Function 'volumeCount' #1": 38,
+    "Function 'countLive' #1": 21,
+    "Function 'ladderHeader' #1": 24,
+    "Function 'stairsBody' #1": 63,
+    "Function 'storyBody' #1": 25,
+    "Function 'energyTriad' #1": 25,
+    "Function 'channelChart' #1": 31
+  },
+  "js/sync.js": {
+    "Function 'mergeProgress' #1": 24,
+    "Async arrow function #1": 24
+  },
+  "js/tour.js": {
+    "Function 'placeStep' #1": 26
+  },
+  "js/value-pulse.js": {
+    "Function 'compute' #1": 33,
+    "Function 'narrative' #1": 24
+  },
+  "js/voice-features.js": {
+    "Method 'feed' #1": 29,
+    "Method '_learnFloor' #1": 29,
+    "Method 'feed' #2": 21
+  },
+  "workers/entitlements/src/api.js": {
+    "Async function 'routeAccountApi' #1": 43
+  },
+  "workers/entitlements/src/events.js": {
+    "Function 'sanitizeEvent' #1": 23,
+    "Async function 'handleIngest' #1": 27
+  },
+  "workers/entitlements/src/google.js": {
+    "Async function 'verifyGoogleIdToken' #1": 30
+  },
+  "workers/entitlements/src/index.js": {
+    "Async function 'handleRequest' #1": 23
+  },
+  "workers/entitlements/src/license.js": {
+    "Async function 'verifyLicenseToken' #1": 23
+  },
+  "workers/entitlements/src/mercadopago.js": {
+    "Function 'resolveNotificationTarget' #1": 28,
+    "Function 'mapPaymentResource' #1": 24
+  },
+  "workers/entitlements/src/stripe.js": {
+    "Function 'mapInvoice' #1": 22
+  },
+  "qa/capture-mobile.mjs": {
+    "Function 'audit' #1": 36
+  },
+  "qa/capture-viewports.mjs": {
+    "Arrow function #1": 29
+  },
+  "qa/check-catalog.mjs": {
+    "Function 'main' #1": 75
+  },
+  "qa/design-test/firstclick.mjs": {
+    "Async function 'render' #1": 24,
+    "Function 'score' #1": 28
+  },
+  "qa/design-test/harness.mjs": {
+    "Function 'measure' #1": 22,
+    "Async function 'renderOne' #1": 25
+  },
+  "qa/drive-exercises.mjs": {
+    "Arrow function #1": 21
+  },
+  "tests/accounts.spec.js": {
+    "Async arrow function #1": 46
+  },
+  "tests/all-flows-robust.spec.js": {
+    "Async arrow function #1": 35
+  },
+  "tests/audio-regression.spec.js": {
+    "Async arrow function #1": 26
+  },
+  "tests/catalog-regression.spec.js": {
+    "Arrow function #1": 27
+  },
+  "tests/click-ui-live-log.spec.js": {
+    "Async function 'probeControl' #1": 67
+  },
+  "tests/exercise-features.spec.js": {
+    "Async arrow function #1": 89
+  },
+  "tests/exercise-live-forensics.spec.js": {
+    "Async arrow function #1": 91
+  },
+  "tests/exercise-ui-forensics.spec.js": {
+    "Async function 'exerciseControl' #1": 30,
+    "Async arrow function #1": 83
+  },
+  "tests/exercise-viz-pitch.spec.js": {
+    "Arrow function #1": 22
+  },
+  "tests/format-hit-clicks.spec.js": {
+    "Async arrow function #1": 24
+  },
+  "tests/fullscreen-all-clicks.spec.js": {
+    "Async arrow function #1": 29
+  },
+  "tests/headed-exercise-forensics.spec.js": {
+    "Function 'writeMarkdown' #1": 25,
+    "Async arrow function #1": 74
+  },
+  "tests/headed-formats-clicks.spec.js": {
+    "Async arrow function #1": 38
+  },
+  "tests/helpers/click-ui-live-report.js": {
+    "Function 'writeMarkdown' #1": 54
+  },
+  "tests/helpers/layout-probe.js": {
+    "Arrow function #1": 41
+  },
+  "tests/helpers/ui-forensics.js": {
+    "Arrow function #1": 50,
+    "Arrow function #2": 23,
+    "Function 'writeMarkdownReport' #1": 41
+  },
+  "tests/helpers/vad-sim.js": {
+    "Arrow function #1": 26
+  },
+  "tests/sound-all-exercises.spec.js": {
+    "Async arrow function #1": 25,
+    "Async arrow function #2": 41
+  }
+}

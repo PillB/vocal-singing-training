@@ -79,88 +79,146 @@
     return { text: t.length < String(text || "").length ? t + "…" : t, font };
   }
 
+  /** Box-filter downsampling keeps period comparisons affordable at 192kHz. */
+  function compactPitchSamples(buf, sampleRate) {
+    const D = Math.max(1, Math.round(sampleRate / 12000));
+    const n = Math.floor(buf.length / D);
+    const x = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      let sum = 0;
+      for (let k = 0; k < D; k++) sum += buf[i * D + k];
+      x[i] = sum / D;
+    }
+    return { x, rate: sampleRate / D };
+  }
+
+  /** Equal-overlap cumulative-mean-normalized difference, YIN-style. */
+  function pitchPeriodCurve(x, rate) {
+    const n = x.length;
+    const minLag = Math.max(2, Math.floor(rate / 1500));
+    const maxLag = Math.min(Math.ceil(rate / 60), Math.floor(n / 2));
+    if (minLag + 2 >= maxLag) return null;
+    const width = n - maxLag;
+    const normalized = new Float32Array(maxLag + 1);
+    let running = 0;
+    // Equal overlap for every period makes short and long periods comparable.
+    for (let lag = 1; lag <= maxLag; lag++) {
+      let diff = 0;
+      for (let i = 0; i < width; i++) {
+        const delta = x[i] - x[i + lag];
+        diff += delta * delta;
+      }
+      running += diff;
+      const value = running > 0 ? (diff * lag) / running : 1;
+      normalized[lag] = value;
+    }
+    return { normalized, minLag, maxLag };
+  }
+
+  /** Sub-sample peak fit: a high voice has only 8–15 samples per period. */
+  function refinedLag(normalized, lag) {
+    const y0 = normalized[lag - 1];
+    const y1 = normalized[lag];
+    const y2 = normalized[lag + 1];
+    const denom = y0 - 2 * y1 + y2;
+    const adjustment = denom ? Math.max(-1, Math.min(1, 0.5 * (y0 - y2) / denom)) : 0;
+    return lag + adjustment;
+  }
+
+  /** Hann-windowed energy at one known frequency; recurrence avoids per-sample trig. */
+  function spectralPower(windowed, rate, freq) {
+    const phase = 2 * Math.PI * freq / rate;
+    const stepCos = Math.cos(phase);
+    const stepSin = Math.sin(phase);
+    let re = 0;
+    let im = 0;
+    let co = 1;
+    let si = 0;
+    for (let i = 0; i < windowed.length; i++) {
+      re += windowed[i] * co;
+      im += windowed[i] * si;
+      const nextCos = co * stepCos - si * stepSin;
+      si = si * stepCos + co * stepSin;
+      co = nextCos;
+    }
+    return re * re + im * im;
+  }
+
+  /** Returns true for a formant, subharmonic, or interference component. */
+  function hasOffGridEnergy({ normalized, minLag, maxLag }, x, rate, chosenFreq) {
+    const windowed = new Float32Array(x.length);
+    for (let i = 0; i < x.length; i++) {
+      windowed[i] = x[i] * (0.5 - 0.5 * Math.cos(2 * Math.PI * i / (x.length - 1)));
+    }
+    let dominant = 0;
+    for (let harmonic = 1; harmonic <= 8; harmonic++) {
+      if (chosenFreq * harmonic >= rate * 0.48) break;
+      dominant = Math.max(dominant, spectralPower(windowed, rate, chosenFreq * harmonic));
+    }
+    if (dominant <= 0) return true;
+    for (let lag = minLag; lag < maxLag - 1; lag++) {
+      if (normalized[lag] > 0.17 ||
+          normalized[lag] > normalized[lag - 1] ||
+          normalized[lag] > normalized[lag + 1]) continue;
+      const f = rate / refinedLag(normalized, lag);
+      if (f < 65 || f > rate * 0.48) continue;
+      const ratio = f / chosenFreq;
+      if (Math.abs(ratio - Math.round(ratio)) < 0.045) continue;
+      if (spectralPower(windowed, rate, f) > dominant * 0.006) return true;
+    }
+    return false;
+  }
+
   /**
-   * Autocorrelation pitch detection (time-domain).
-   * Returns Hz or null.
+   * A low note's upper formants can overwhelm its fundamental. Identify the
+   * shortest credible YIN trough, then reject a frame with non-harmonic
+   * energy that would otherwise earn a clearly incorrect note.
+   */
+  function selectPitchLag(curve, x, rate) {
+    const { normalized, minLag, maxLag } = curve;
+    let best = Infinity;
+    for (let lag = minLag; lag < maxLag - 1; lag++) {
+      if (normalized[lag] < best &&
+          normalized[lag] <= normalized[lag - 1] &&
+          normalized[lag] <= normalized[lag + 1]) best = normalized[lag];
+    }
+    if (best > 0.17) return null;
+
+    const credible = Math.min(0.17, best + 0.05);
+    for (let lag = minLag; lag < maxLag - 1; lag++) {
+      if (normalized[lag] <= credible &&
+          normalized[lag] <= normalized[lag - 1] &&
+          normalized[lag] <= normalized[lag + 1]) {
+        const selected = refinedLag(normalized, lag);
+        return hasOffGridEnergy(curve, x, rate, rate / selected) ? null : selected;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Pitch in Hz or null for silence/nonperiodic frames. Raw autocorrelation
+   * used to call 440Hz "220Hz" and assign a note to loud noise. This combines
+   * normalized difference with an independent period-confidence threshold;
+   * see the synthetic counterexample tests in qa/pitch-estimator.test.mjs.
    */
   function detectPitch(buf, sampleRate) {
-    // Over 48 kHz the engine's 43 ms frame holds more samples (4096 at
-    // 96 kHz): averaged down to 44.1–48 kHz, the search costs and finds what
-    // it does there (on all 4096 it took three times as long)
-    const D = Math.round(sampleRate / 48000);
-    if (D > 1) {
-      const x = new Float32Array(Math.floor(buf.length / D));
-      for (let i = 0; i < x.length; i++) {
-        let s = 0;
-        for (let k = 0; k < D; k++) s += buf[i * D + k];
-        x[i] = s / D;
-      }
-      buf = x;
-      sampleRate /= D;
-    }
-    const SIZE = buf.length;
-    let rms = 0;
-    for (let i = 0; i < SIZE; i++) {
+    if (!buf || !buf.length || !Number.isFinite(sampleRate) || sampleRate <= 0) return null;
+    let energy = 0;
+    for (let i = 0; i < buf.length; i++) {
       const val = buf[i];
-      rms += val * val;
+      if (!Number.isFinite(val)) return null;
+      energy += val * val;
     }
-    rms = Math.sqrt(rms / SIZE);
-    if (rms < 0.01) return null; // silence
-
-    // Normalize
-    let r1 = 0;
-    let r2 = SIZE - 1;
-    const thres = 0.2;
-    for (let i = 0; i < SIZE / 2; i++) {
-      if (Math.abs(buf[i]) < thres) {
-        r1 = i;
-        break;
-      }
-    }
-    for (let i = 1; i < SIZE / 2; i++) {
-      if (Math.abs(buf[SIZE - i]) < thres) {
-        r2 = SIZE - i;
-        break;
-      }
-    }
-
-    const trimmed = buf.slice(r1, r2);
-    const n = trimmed.length;
-    if (n < 32) return null;
-
-    // Male mid-low focus: ~65–400 Hz (C2–G4)
-    const minLag = Math.floor(sampleRate / 400);
-    const maxLag = Math.floor(sampleRate / 65);
-    const corr = new Float32Array(maxLag);
-
-    for (let lag = minLag; lag < maxLag && lag < n; lag++) {
-      let sum = 0;
-      for (let i = 0; i < n - lag; i++) {
-        sum += trimmed[i] * trimmed[i + lag];
-      }
-      corr[lag] = sum;
-    }
-
-    let bestLag = -1;
-    let bestVal = -1;
-    for (let lag = minLag + 1; lag < maxLag - 1 && lag < n; lag++) {
-      const v = corr[lag];
-      if (v > corr[lag - 1] && v >= corr[lag + 1] && v > bestVal) {
-        bestVal = v;
-        bestLag = lag;
-      }
-    }
-    if (bestLag <= 0) return null;
-
-    // Parabolic interpolation
-    const y0 = corr[bestLag - 1] || 0;
-    const y1 = corr[bestLag];
-    const y2 = corr[bestLag + 1] || 0;
-    const denom = 2 * (2 * y1 - y2 - y0);
-    const shift = denom !== 0 ? (y2 - y0) / denom : 0;
-    const lag = bestLag + shift;
-    const freq = sampleRate / lag;
-    if (freq < 60 || freq > 500) return null;
+    if (Math.sqrt(energy / buf.length) < 0.01) return null;
+    const { x, rate } = compactPitchSamples(buf, sampleRate);
+    if (x.length < 64) return null;
+    const curve = pitchPeriodCurve(x, rate);
+    if (!curve) return null;
+    const lag = selectPitchLag(curve, x, rate);
+    if (lag == null) return null;
+    const freq = rate / lag;
+    if (!Number.isFinite(freq) || freq < 65 || freq > 1350) return null;
     return freq;
   }
 

@@ -27,8 +27,10 @@
   /** Base thresholds at sensitivity = 5 (mid). Higher sensitivity lowers them. */
   const VOICE_RMS_BASE = 0.012;
   const HOLD_RMS_BASE = 0.008;
-  const PITCH_MIN = 55;
-  const PITCH_MAX = 520;
+  const PITCH_MIN = 65;
+  // Match the pitch estimator's tested C2–E6 domain; rejecting >520Hz here
+  // made high notes vanish even after the detector identified them correctly.
+  const PITCH_MAX = 1350;
   /** Default 7/10 — more sensitive than legacy fixed 0.016 (fewer false cutoffs) */
   const DEFAULT_SENS = 7;
 
@@ -48,6 +50,8 @@
   class PracticeEngine {
     constructor() {
       this.running = false;
+      this._starting = false;
+      this._startGen = 0;
       this.audioCtx = null;
       this._ownsAudioCtx = false;
       this.stream = null;
@@ -342,13 +346,13 @@
         { audio: true }
       ];
       let lastErr;
-      const withTimeout = (p, ms) =>
-        Promise.race([
-          p,
-          new Promise((_, rej) =>
-            setTimeout(() => rej(new Error("getUserMedia timeout")), ms)
-          )
-        ]);
+      const withTimeout = (pending, ms) => new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("getUserMedia timeout")), ms);
+        pending.then(
+          (stream) => { clearTimeout(timer); resolve(stream); },
+          (error) => { clearTimeout(timer); reject(error); }
+        );
+      });
       for (const constraints of attempts) {
         const pending = navigator.mediaDevices.getUserMedia(constraints);
         try {
@@ -372,9 +376,17 @@
     }
 
     async start({ record = false } = {}) {
-      if (this.running) return;
+      if (this.running || this._starting) return;
+      const generation = ++this._startGen;
+      this._starting = true;
+      try {
       // Progressive constraints: Safari/Firefox reject some ideal combinations
-      this.stream = await this._acquireMic();
+      const stream = await this._acquireMic();
+      if (generation !== this._startGen) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+      this.stream = stream;
       // A phone or headset may ignore the request to leave the input alone.
       // Automatic gain evens out exactly the loudness differences the volume
       // exercises train, so the pictures say so rather than draw a false flat.
@@ -384,66 +396,8 @@
       } catch {
         this.processedInput = false;
       }
-      // Prefer the shared piano AudioContext so getUserMedia never orphans
-      // a second suspended context (classic "piano silent after mic" bug).
-      const shared =
-        (global.VTPiano && global.VTPiano.ctx && global.VTPiano.ctx.state !== "closed"
-          ? global.VTPiano.ctx
-          : null) ||
-        (global.VTSharedAudioCtx && global.VTSharedAudioCtx.state !== "closed"
-          ? global.VTSharedAudioCtx
-          : null);
-      if (shared) {
-        this.audioCtx = shared;
-        this._ownsAudioCtx = false;
-      } else {
-        const AC = window.AudioContext || window.webkitAudioContext;
-        this.audioCtx = new AC();
-        this._ownsAudioCtx = true;
-        global.VTSharedAudioCtx = this.audioCtx;
-      }
-      if (this.audioCtx.state === "suspended" || this.audioCtx.state === "interrupted") {
-        try {
-          await this.audioCtx.resume();
-        } catch (e) {
-          console.warn("PracticeEngine resume failed", e);
-        }
-      }
-      // Also nudge piano if it shares this context
-      try {
-        await global.VTPiano?.resume?.();
-      } catch {
-        /* ignore */
-      }
-      this.inputGain = this.audioCtx.createGain();
-      this.inputGain.gain.value = this._gainFromSens(this.sensitivity);
-      this.analyser = this.audioCtx.createAnalyser();
-      this.analyser.fftSize = frameSize(this.audioCtx.sampleRate);
-      this.analyser.smoothingTimeConstant = 0.12;
-      // WebKit can throw/hang if stream was produced by a different AudioContext
-      try {
-        this.source = this.audioCtx.createMediaStreamSource(this.stream);
-        this.source.connect(this.inputGain);
-        this.inputGain.connect(this.analyser);
-      } catch (e) {
-        console.warn("[VT] createMediaStreamSource failed — level/pitch may be flat", e);
-        this.source = null;
-        // Keep analyser graph alive with silence so RMS reads stay defined
-        try {
-          const silent = this.audioCtx.createBufferSource();
-          const buf = this.audioCtx.createBuffer(1, 1, this.audioCtx.sampleRate);
-          silent.buffer = buf;
-          silent.loop = true;
-          silent.connect(this.inputGain);
-          this.inputGain.connect(this.analyser);
-          silent.start();
-          this._silentSource = silent;
-        } catch {
-          /* ignore */
-        }
-      }
-      this.buf = new Float32Array(this.analyser.fftSize);
-      this._freqBytes = new Uint8Array(this.analyser.frequencyBinCount);
+      await this._connectCapture(generation);
+      if (generation !== this._startGen) return;
 
       this.voiced = false;
       this.holdStart = null;
@@ -465,9 +419,75 @@
           this.mediaRecorder = null;
         }
       }
+      if (generation !== this._startGen) return;
 
       this._status("listening");
       this._loop();
+      } catch (error) {
+        if (generation === this._startGen) this.stop();
+        throw error;
+      } finally {
+        if (generation === this._startGen) this._starting = false;
+      }
+    }
+
+    /** Shared context and microphone graph; abort if Stop happened during resume. */
+    async _connectCapture(generation) {
+      const shared =
+        (global.VTPiano && global.VTPiano.ctx && global.VTPiano.ctx.state !== "closed"
+          ? global.VTPiano.ctx : null) ||
+        (global.VTSharedAudioCtx && global.VTSharedAudioCtx.state !== "closed"
+          ? global.VTSharedAudioCtx : null);
+      if (shared) {
+        this.audioCtx = shared;
+        this._ownsAudioCtx = false;
+      } else {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        this.audioCtx = new AC();
+        this._ownsAudioCtx = true;
+        global.VTSharedAudioCtx = this.audioCtx;
+      }
+      if (this.audioCtx.state === "suspended" || this.audioCtx.state === "interrupted") {
+        try {
+          await this.audioCtx.resume();
+        } catch (e) {
+          console.warn("PracticeEngine resume failed", e);
+        }
+      }
+      try {
+        await global.VTPiano?.resume?.();
+      } catch {
+        /* ignore */
+      }
+      if (generation !== this._startGen) return;
+      this.inputGain = this.audioCtx.createGain();
+      this.inputGain.gain.value = this._gainFromSens(this.sensitivity);
+      this.analyser = this.audioCtx.createAnalyser();
+      this.analyser.fftSize = frameSize(this.audioCtx.sampleRate);
+      this.analyser.smoothingTimeConstant = 0.12;
+      try {
+        this.source = this.audioCtx.createMediaStreamSource(this.stream);
+        this.source.connect(this.inputGain);
+        this.inputGain.connect(this.analyser);
+      } catch (e) {
+        console.warn("[VT] createMediaStreamSource failed — level/pitch may be flat", e);
+        this.source = null;
+        // Keep analyser graph alive with silence so RMS reads stay defined.
+        try {
+          const silent = this.audioCtx.createBufferSource();
+          const buf = this.audioCtx.createBuffer(1, 1, this.audioCtx.sampleRate);
+          silent.buffer = buf;
+          silent.loop = true;
+          silent.connect(this.inputGain);
+          this.inputGain.connect(this.analyser);
+          silent.start();
+          this._silentSource = silent;
+        } catch {
+          /* ignore */
+        }
+      }
+      this.buf = new Float32Array(this.analyser.fftSize);
+      this._freqBytes = new Uint8Array(this.analyser.frequencyBinCount);
     }
 
     async _startRecorder() {
@@ -504,6 +524,8 @@
     }
 
     stop() {
+      this._startGen++;
+      this._starting = false;
       // Finalize open hold if long enough
       this._maybeEndHold(true);
       // End Space assist immediately (no grace after stop)
@@ -727,7 +749,8 @@
       const frameFreq =
         manual && manualKind === "air" ? null : this.voiceFreq;
 
-      const dtMs = Math.min(50, now - (this._lastFrameAt || now));
+      const wallDtMs = Math.max(0, now - (this._lastFrameAt || now));
+      const dtMs = Math.min(50, wallDtMs);
       this._lastFrameAt = now;
       // Grace UI spans full silence window so green/amber doesn't drop before hold ends
       const inGraceWindow =
@@ -750,6 +773,9 @@
           recording: this.recording,
           elapsedMs: now - this.startedAt,
           dtMs,
+          // Signal statistics use capped dtMs; guided timelines must keep up
+          // with the real wall timer when a foreground frame is delayed.
+          wallDtMs,
           holdGrace: !!this.holdStart && !strongVoice && inGraceWindow,
           holdSolid:
             activelyHolding ||

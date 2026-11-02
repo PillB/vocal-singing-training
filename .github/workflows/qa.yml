@@ -1,0 +1,70 @@
+name: Independent QA and browser regression
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Complexity and static contracts
+        run: |
+          npm run chore:lint
+          npm run test:catalog
+      - name: Independent numeric/audio/timer controls
+        run: npm run test:signal
+      - name: Entitlement worker contracts
+        run: npm run test:worker
+
+  browser-shards:
+    needs: contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        shardIndex: [1, 2, 3, 4]
+        shardTotal: [4]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Install all project browsers
+        run: npx playwright install --with-deps chromium firefox webkit
+      - name: Serve site locally
+        run: |
+          npm run serve > /tmp/vocal-ci-server.log 2>&1 &
+          curl --fail --retry 20 --retry-delay 1 --retry-connrefused http://127.0.0.1:8765/
+      - name: Browser, mobile and cross-engine regression
+        run: npx playwright test --workers=1 --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
+        env:
+          CI: 'true'
+      - name: Preserve failed traces and screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-failure-artifacts-shard-${{ matrix.shardIndex }}
+          path: |
+            test-results/
+            playwright-report/
+            /tmp/vocal-ci-server.log
+          if-no-files-found: ignore
+          retention-days: 14

@@ -8252,20 +8252,21 @@
     });
     $("#admin-clear-billing")?.addEventListener("click", () => {
       if (!window.VTAuth?.isAdmin?.()) return;
+      if (!window.confirm(tt("auth.confirmClearBilling"))) return;
       window.VTBilling?.clearEntitlement?.();
       updateBillingChrome();
     });
     $("#admin-clear-progress")?.addEventListener("click", () => {
       if (!window.VTAuth?.isAdmin?.()) return;
-      try {
-        localStorage.removeItem("vt_progress_v1");
-        localStorage.removeItem("vt_session_v1");
-        localStorage.removeItem("vt_hold_logs_v1");
-      } catch {
-        /* ignore */
-      }
+      // The active profile's record, whole: it used to remove the main
+      // profile's three keys whoever was active, and nothing else.
+      if (!window.confirm(tt("auth.confirmClearProgress"))) return;
+      const done = window.VTStorage?.clearProfileData?.(window.VTStorage.getActiveProfileId?.());
+      if (done && !done.ok) return;
       toast(tt("auth.toast.cleared"));
+      renderValuePulse();
       renderExerciseList();
+      if (state.view === "history") renderHistory();
     });
     window.VTAuth?.onChange?.(() => {
       refreshAccountUI();

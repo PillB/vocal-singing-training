@@ -211,6 +211,26 @@
       return Array.from(String(name ?? "").trim()).slice(0, 32).join("").trim();
     },
 
+    /**
+     * Forget one profile's practice on this browser and keep the profile:
+     * the same keys deleteProfile() removes, for any profile, the main one
+     * included (its keys are the unscoped ones). Writes nothing a sync would
+     * hear about.
+     * @param {string} [profileId] Whose record; the active profile when omitted.
+     * @returns {{ ok: boolean }} Result.
+     */
+    clearProfileData(profileId) {
+      const id = profileId || this.getActiveProfileId();
+      try {
+        [LS.progress, LS.holdLogs, LS.weekPlan, LS.reviews, LS.goals, LS.achievements, LS.days, LS.loop].forEach(
+          (base) => localStorage.removeItem(scopedKey(base, id))
+        );
+      } catch {
+        return { ok: false };
+      }
+      return { ok: true };
+    },
+
     getProgress() {
       return read(scopedKey(LS.progress), {});
     },

@@ -7361,6 +7361,24 @@
     });
   }
 
+  /**
+   * Put the banner away. Its buttons go with it, and when one of them had focus
+   * it would drop to the page: the next Tab would start again at the logo, and
+   * Pro's dialog, opened from "Ver Pro", would have no control to give focus
+   * back to. Focus moves to the nearest control that stays, the profile card's
+   * just above the banner.
+   */
+  function putAwayValueBanner(banner) {
+    const hadFocus = banner.contains(document.activeElement);
+    banner.hidden = true;
+    renderValuePulse();
+    if (!hadFocus) return;
+    ["#btn-profile-rename", "#btn-profile-add", "#sel-profile", "#btn-value-pro"]
+      .map((sel) => $(sel))
+      .find((el) => el && !el.disabled && el.offsetParent !== null)
+      ?.focus({ preventScroll: true });
+  }
+
   function showValueMoment(forceId) {
     const B = window.VTBilling;
     const VP = window.VTValuePulse;
@@ -7372,18 +7390,25 @@
     } catch {
       /* ignore */
     }
+    const banner = $("#value-banner");
+    const text = $("#value-banner-text");
+    if (!banner || !text) return;
     const ent = B?.getEntitlement?.() || { pro: false };
     const stats = VP.compute();
     let moment = forceId
       ? { id: forceId, priority: 99, sessions: stats.sessions, bestHoldSec: stats.bestHoldSec, trialDaysLeft: B?.trialDaysLeft?.() }
       : VP.suggestUpgradeMoment(stats, ent);
-    if (!moment || VP.isDismissed(moment.id)) return;
+    // Nothing to say for the record now open (another profile, a dismissed
+    // moment, Pro bought meanwhile): a banner left over from the last one is not
+    // true. It is put away without being dismissed, so it can come back for the
+    // record it was written for.
+    const nothingToSay = () => {
+      if (!banner.hidden) putAwayValueBanner(banner);
+    };
+    if (!moment || VP.isDismissed(moment.id)) return nothingToSay();
     // If already full pro (paid/demo), skip soft upsells except trial ending
-    if (ent.pro && ent.source !== "trial" && moment.id !== "trial_ending") return;
+    if (ent.pro && ent.source !== "trial" && moment.id !== "trial_ending") return nothingToSay();
 
-    const banner = $("#value-banner");
-    const text = $("#value-banner-text");
-    if (!banner || !text) return;
     const vars = {
       n: String(moment.sessions ?? moment.trialDaysLeft ?? 0),
       s: moment.bestHoldSec != null ? Number(moment.bestHoldSec).toFixed(1) : "0"
@@ -7402,8 +7427,7 @@
     if (!banner) return;
     const id = banner.dataset.momentId;
     if (id && window.VTValuePulse?.dismiss) VTValuePulse.dismiss(id);
-    banner.hidden = true;
-    renderValuePulse();
+    putAwayValueBanner(banner);
   }
 
   function renderPricingModal() {

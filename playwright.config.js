@@ -9,10 +9,12 @@ const slowMo = Number(process.env.SLOWMO || (headed ? 80 : 0)) || 0;
 const requestedPort = Number(process.env.VT_TEST_PORT);
 const testPort = Number.isInteger(requestedPort) && requestedPort >= 1024 && requestedPort <= 65535
   ? requestedPort : 8765;
-// Specs and helpers build absolute URLs from BASE_URL (84 places fall back to
-// :8765), so a custom port must reach them too, not only `baseURL` and the
-// server. The config is evaluated in the runner and in every worker.
-if (!process.env.BASE_URL && testPort !== 8765) process.env.BASE_URL = `http://127.0.0.1:${testPort}`;
+// Specs and helpers build absolute URLs from BASE_URL or VT_BASE (both fall
+// back to :8765), so a custom port must reach them too, not only `baseURL` and
+// the server. The config is evaluated in the runner and in every worker.
+for (const key of ["BASE_URL", "VT_BASE"]) {
+  if (!process.env[key] && testPort !== 8765) process.env[key] = `http://127.0.0.1:${testPort}`;
+}
 
 // Headed "watch" sweeps: real windows, slowMo pointer paths, screenshots and
 // report files written into qa/ and docs/. They are forensic tools for a human

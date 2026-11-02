@@ -141,6 +141,23 @@ modules, and compares each over-ceiling function by source hash against
   baseline gained an entry. There is deliberately no flag that blesses new
   debt — split the function.
 
+What the measure is, stated as a trade-off (QA-11, QA-12):
+
+- It is ESLint's **modified** cyclomatic complexity: a whole `switch` counts
+  as one decision, not one per `case`. A 40-case dispatch therefore passes,
+  where classic McCabe would fail it. Classic would flag one more function
+  today (`mapStripeEvent` in the account worker, 17), which belongs to the
+  payments work and is left for its owner; until then the ceiling does not
+  see a long `switch`, so review one by eye.
+- The gate parses `.js/.mjs/.cjs` only, so logic in an inline `<script>`
+  inside an HTML page escapes it. It cannot grow there unseen: every page's
+  Content Security Policy allows only inline scripts by hash and the CSP test
+  (`tests/node/csp.test.mjs`, mutant L13) fails on any other inline script.
+
+Console errors the flow test and the audit ledger may ignore are the two
+lines of the account worker refusing the test server's origin and an offline
+third party, nothing else (`qa/env-noise.cjs`, QA-14; mutants L14, L15, AU6).
+
 Per task / per round, the lint test is part of the round's evidence:
 
 ```sh

@@ -25,6 +25,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCENARIO_BY_MODE } from "../drive-exercises.mjs";
+import envNoise from "../env-noise.cjs";
+
+const { errorLine } = envNoise;
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const QA = path.join(HERE, "..");
@@ -94,7 +97,7 @@ async function newPage(browser, vp, lang) {
   const errors = [];
   page.on("pageerror", (e) => errors.push("pageerror: " + String(e.message || e).slice(0, 240)));
   page.on("console", (m) => {
-    if (m.type() === "error") errors.push("console: " + m.text().slice(0, 240));
+    if (m.type() === "error") errors.push("console: " + errorLine(m.text().slice(0, 240), m.location()?.url));
   });
   return { ctx, page, errors };
 }

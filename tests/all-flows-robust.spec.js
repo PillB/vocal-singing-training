@@ -23,6 +23,7 @@ const {
   mouseClickAndLog
 } = require("./helpers/layout-probe");
 const SNAPSHOT = require("./fixtures/catalog-snapshot.json");
+const { isEnvNoise, errorLine } = require("../qa/env-noise.cjs");
 
 const VIEWPORTS = [
   { name: "desktop", width: 1280, height: 800 },
@@ -48,16 +49,9 @@ const LAYOUT_HARD = new Set([
  * all 16 sampled flows (QA-10, FM4): nothing listened. Allowed errors are
  * listed with the reason they are not the app's fault; anything else fails.
  */
-const ENTITLEMENTS = /^https:\/\/vocal-studio-entitlements\.[^/]+\.workers\.dev\//;
-const ERROR_ALLOW = [
-  {
-    // The account worker allows only the Pages origin (checked 2026-11-01:
-    // Access-Control-Allow-Origin: https://pillb.github.io), so from the test
-    // server the sign-in methods request is refused. Live, it is not.
-    why: "entitlements worker CORS from 127.0.0.1",
-    test: (e) => ENTITLEMENTS.test(e.url) || /Access to fetch at 'https:\/\/vocal-studio-entitlements\./.test(e.text)
-  }
-];
+// What counts as the environment's doing (the account worker refusing the test
+// server's origin, an offline third party) is qa/env-noise.cjs, narrow on purpose
+// and tested in tests/node/env-noise.test.mjs (QA-14).
 
 function watchErrors(page) {
   const errors = [];
@@ -69,7 +63,7 @@ function watchErrors(page) {
 }
 
 function unexpectedErrors(errors) {
-  return errors.filter((e) => !ERROR_ALLOW.some((a) => a.test(e)));
+  return errors.filter((e) => !isEnvNoise(errorLine(e.text, e.url)));
 }
 
 async function bootFlow(page, vp) {

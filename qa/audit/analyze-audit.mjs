@@ -19,8 +19,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import envNoise from "../env-noise.cjs";
 
-const ENV_NOISE = /Access-Control-Allow-Origin|vocal-studio-entitlements|ERR_NAME_NOT_RESOLVED|net::ERR_|Failed to load resource|CORS/;
+const { isEnvNoise } = envNoise;
 
 /** Modes with no take to start: the 12-week plan is a schedule, not an exercise with a mic. */
 const NO_TAKE = new Set(["weekPlan"]);
@@ -125,7 +126,7 @@ function checkFocus(rec, out) {
 
 function checkErrors(rec, out) {
   const all = [...(rec.errors || []), ...(rec.iterations?.[5]?.errors || [])];
-  for (const e of new Set(all)) if (!ENV_NOISE.test(e)) out.push(["errors", e]);
+  for (const e of new Set(all)) if (!isEnvNoise(e.replace(/^console: /, ""))) out.push(["errors", e]);
 }
 
 export function findings(rec) {

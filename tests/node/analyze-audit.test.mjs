@@ -10,7 +10,10 @@ const tick = (focus) => ({ focus, hud: "", status: "", pitch: "", cue: "" });
 const clean = {
   id: "x",
   mode: "pitchMatch",
-  errors: ["console: Access to fetch at 'https://vocal-studio-entitlements.vocalstudio-pe.workers.dev' blocked by CORS policy"],
+  errors: [
+    "console: Access to fetch at 'https://vocal-studio-entitlements.vocalstudio-pe.workers.dev/v1/auth/methods' from origin 'http://127.0.0.1:8765' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' <http://127.0.0.1:8765/index.html>",
+    "console: Failed to load resource: net::ERR_FAILED <https://vocal-studio-entitlements.vocalstudio-pe.workers.dev/v1/auth/methods>"
+  ],
   focus: [{ id: "btn-practice-start", text: "Start", inView: true, obscured: false, outline: true }],
   inventory: { overlaps: { controls: [], clipped: [] }, rows: [[{ kind: "control", inView: true, hit: "self", small: false, text: "Start" }]] },
   iterations: {
@@ -59,4 +62,12 @@ test("timers are not counts: a clock that runs on silence is not progress", () =
   const rec = structuredClone(clean);
   rec.iterations[3].silent.ticks = [tick("Reps 0 · 0:05 · 12 s"), tick("Reps 0 · 0:09 · 16 s")];
   assert.deepEqual(findings(rec), []);
+});
+
+test("the worker's genuine failures and the app's own missing files are findings, not environment noise (QA-14)", () => {
+  const bad = structuredClone(clean);
+  bad.errors.push("console: Failed to load resource: the server responded with a status of 500 () <https://vocal-studio-entitlements.vocalstudio-pe.workers.dev/v1/events>");
+  bad.errors.push("console: Failed to load resource: the server responded with a status of 404 (File not found) <http://127.0.0.1:8765/js/app.js>");
+  const got = findings(bad).filter(([k]) => k === "errors");
+  assert.equal(got.length, 2, JSON.stringify(got));
 });

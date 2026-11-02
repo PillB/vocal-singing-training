@@ -24,7 +24,7 @@ const AUDIO_TESTS = [
   "tests/node/attack-rise.test.mjs",
   "tests/node/sync-late-signin.test.mjs"
 ];
-const LINT_TESTS = ["qa/lint-gate.test.mjs", "tests/node/asset-versions.test.mjs", "tests/node/csp.test.mjs"];
+const LINT_TESTS = ["qa/lint-gate.test.mjs", "tests/node/asset-versions.test.mjs", "tests/node/csp.test.mjs", "tests/node/env-noise.test.mjs"];
 const node = (tests) => [process.execPath, "--test", ...tests];
 const PIANO_SPEC = [
   process.execPath,
@@ -87,6 +87,8 @@ export const MUTANTS = {
     ["L11 an edited asset keeps its cached version", "qa/asset-versions.mjs", "else if (rec.sha !== hashOf(text) && rec.v === v) {", "else if (false) {"],
     ["L12 pages may disagree on an asset's version", "qa/asset-versions.mjs", "if (seen && seen.v !== v) problems.push", "if (false) problems.push"],
     ["L13 an inline script without its CSP hash passes", "tests/node/csp.test.mjs", "    if (!scripts.includes(sha256(body))) problems.push", "    if (false) problems.push"],
+    ["L14 any error from the worker's host is ignored (QA-14)", "qa/env-noise.cjs", "return url.startsWith(WORKER);", "return true;"],
+    ["L15 a failed load of the app's own file counts as offline noise", "qa/env-noise.cjs", "return url !== \"\" && !LOCAL.test(url);", "return url !== \"\";"],
     ["L7 empty wait-may-fail reason accepted", "qa/lint-playwright-waits.mjs", "/wait-may-fail:\\s*\\S/", "/wait-may-fail:/"]
   ].map(([name, file, from, to]) => ({ name, file, from, to, cmd: node(LINT_TESTS) })),
   // The open piano and the sticky stage (production-contracts "expanded piano").
@@ -135,7 +137,15 @@ export const MUTANTS = {
     from,
     to,
     cmd: [...PIANO_SPEC.slice(0, 3), "tests/audit-probes.spec.js", "--project=chromium", "--reporter=dot"]
-  })),
+  })).concat([
+    {
+      name: "AU6 the ledger hides every failed load as environment noise (QA-14)",
+      file: "qa/audit/analyze-audit.mjs",
+      from: 'if (!isEnvNoise(e.replace(/^console: /, "")))',
+      to: 'if (!/Failed to load resource|CORS/.test(e))',
+      cmd: node(["tests/node/analyze-audit.test.mjs"])
+    }
+  ]),
   // The per-exercise flow test (QA-10: FM2, FM4 and FM5 survived it before).
   flows: [
     ["FM1 Start does nothing", "js/app.js", '$("#btn-practice-start")?.addEventListener("click", startPractice);', '$("#btn-practice-start")?.addEventListener("click", () => {});'],

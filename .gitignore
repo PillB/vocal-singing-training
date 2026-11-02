@@ -6,9 +6,10 @@ test-results/
 *.log
 .env
 .env.*
-# Wrangler local secrets for workers/entitlements
+# Wrangler local secrets and local state for workers/entitlements
 .dev.vars
 .dev.vars.*
+.wrangler/
 # Intermediate output of workers/entitlements/scripts/setup.sh. Not secret —
 # the public JWK belongs in js/billing-config.js, not loose in the tree.
 workers/entitlements/jwk.public.json

@@ -7713,6 +7713,11 @@ body.loop-on #start-panel .loop-remind-btn {
   white-space: normal;
   overflow: visible;
 }
+/* A tile label wraps rather than ending in "…" ("NOTA MÁS …" for "Nota más larga"). */
+#view-history .value-stat span {
+  white-space: normal;
+  overflow: visible;
+}
 #view-history .pro-goal-progress {
   font-size: 0.85rem;
 }

@@ -5388,7 +5388,8 @@
         const mark = d.state === "done" ? "✓" : d.state === "rest" ? "☾" : "";
         const said = d.state === "missed" ? "" : trackText("loop.dayState." + d.state, null, track);
         // Today is outlined; a screen reader hears it as well.
-        const label = d.isToday ? [tt("history.today"), said].filter(Boolean).join(", ") : said;
+        // Today is named once: an open day's own words already start with "hoy".
+        const label = d.isToday && d.state !== "today" ? [tt("history.today"), said].filter(Boolean).join(", ") : said;
         rows += `<td class="is-${d.state}${d.isToday ? " is-today" : ""}">${Number(d.key.slice(8))}${
           mark ? `<span class="hist-mark" aria-hidden="true">${mark}</span>` : ""
         }${label ? `<span class="sr-only">: ${escapeHtml(label)}</span>` : ""}</td>`;

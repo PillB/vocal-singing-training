@@ -985,6 +985,17 @@
           <p class="account-plan" id="account-plan"></p>
           <p class="muted account-sync" id="account-sync"></p>
 
+          <!-- Practice another account saved on this browser: asked before
+               anything is merged or sent (VTSync ownerState). -->
+          <div class="account-other-owner" id="account-other-owner" role="group" aria-labelledby="account-other-owner-q" hidden>
+            <p class="account-other-owner-q" id="account-other-owner-q" data-i18n="auth.ownerQuestion">Este dispositivo guarda práctica de otra cuenta. ¿La añadimos a esta?</p>
+            <div class="controls-row">
+              <button type="button" class="btn btn-primary btn-sm" id="btn-owner-add" data-i18n="auth.ownerAdd">Añadir la práctica de este dispositivo a esta cuenta</button>
+              <button type="button" class="btn btn-sm" id="btn-owner-mine" data-i18n="auth.ownerMine">Usar solo la de mi cuenta</button>
+            </div>
+            <p class="muted account-other-owner-help" data-i18n="auth.ownerHelp">Con «Usar solo la de mi cuenta», la práctica de este dispositivo se aparta y no se envía a esta cuenta.</p>
+          </div>
+
           <div class="account-actions controls-row">
             <button type="button" class="btn btn-primary btn-sm" id="btn-account-trial" hidden data-i18n="auth.startTrial">Empezar prueba gratis</button>
             <button type="button" class="btn btn-sm" id="btn-account-pricing" data-i18n="nav.pro">Pro</button>

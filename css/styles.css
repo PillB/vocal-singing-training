@@ -3402,6 +3402,26 @@ body.view-exercise .stage-below.is-fitted {
   white-space: nowrap;
 }
 
+/* Account panel: the question about practice another account left on this
+   browser (it sits with the profile rules because both are about whose record
+   a browser holds). */
+.account-other-owner {
+  margin: 0 0 0.75rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-elevated);
+}
+.account-other-owner-q {
+  margin: 0 0 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 650;
+}
+.account-other-owner-help {
+  margin: 0.5rem 0 0;
+  font-size: 0.8rem;
+}
+
 /* ── Value pulse (home progress proof) ── */
 .value-pulse {
   margin: 0.65rem 0 0.85rem;

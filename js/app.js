@@ -7796,6 +7796,11 @@
     const status = window.VTSync?.getStatus?.();
     if (!status || !status.available) return "";
     if (status.syncing) return tt("auth.syncing");
+    if (status.lastError === "refused") {
+      // Turned down for what it is, and the same write would be turned down
+      // again, so no line here may promise another try.
+      return tt(status.refusedReason === "profile_limit" ? "auth.syncRefused" : "auth.syncRefusedOther");
+    }
     if (status.lastError) return tt("auth.syncError");
     // "Aún no guardado" is only true of a device that has never synced. After a
     // reload `lastSyncedAt` starts empty, but a revision on file means this
@@ -8080,6 +8085,14 @@
       syncEl.textContent = line;
     }
 
+    // This browser holds practice another account saved here: one question,
+    // asked before anything is merged or sent (VTSync decides, see ownerState).
+    const ownerBox = $("#account-other-owner");
+    if (ownerBox) {
+      const status = window.VTSync?.getStatus?.();
+      ownerBox.hidden = !(account && account.signedIn && status && status.otherOwner);
+    }
+
     // The trial is offered only to a signed-in account that has never used it.
     const trialBtn = $("#btn-account-trial");
     if (trialBtn) {
@@ -8243,7 +8256,21 @@
     $("#account-modal")?.addEventListener("click", (e) => {
       if (e.target === $("#account-modal")) closeAccount();
     });
-    $("#btn-logout")?.addEventListener("click", async () => {
+    $("#btn-logout")?.addEventListener("click", async (e) => {
+      const btn = e.currentTarget;
+      // The practice saved a moment ago may still be waiting out the quiet
+      // period before it is sent. It belongs to the account that is leaving,
+      // so it goes there first, for a few seconds at most; after that this
+      // browser holds it, and the next account to sign in is asked about it.
+      btn.disabled = true;
+      try {
+        await Promise.race([
+          Promise.resolve(window.VTSync?.flush?.()).catch(() => null),
+          new Promise((resolve) => setTimeout(resolve, 3000))
+        ]);
+      } finally {
+        btn.disabled = false;
+      }
       // One button, both layers: an internal QA session and a real account can
       // both be live, and "Salir" has to mean signed out of everything.
       window.VTAuth?.logout?.();
@@ -8433,6 +8460,36 @@
       }
     });
 
+    // This browser holds practice another account saved here. Neither choice
+    // sends anything before it is made (see ownerState in sync.js).
+    $("#btn-owner-add")?.addEventListener("click", async (e) => {
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      accountError(null);
+      try {
+        const res = await window.VTSync?.addDeviceToAccount?.();
+        if (res && res.ok) toast(tt("auth.ownerAdded"));
+        else if (res) accountErrorFor(res.reason);
+      } finally {
+        btn.disabled = false;
+        refreshAccountUI();
+      }
+    });
+    $("#btn-owner-mine")?.addEventListener("click", async (e) => {
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      accountError(null);
+      try {
+        const res = await window.VTSync?.useAccountOnly?.();
+        if (res && res.ok) toast(tt("auth.ownerMineDone"));
+        else if (res) accountErrorFor(res.reason);
+      } finally {
+        btn.disabled = false;
+        refreshAccountUI();
+        showSyncedRecord();
+      }
+    });
+
     $("#btn-account-trial")?.addEventListener("click", async () => {
       trackFunnel("trial_click", { where: "panel" });
       const res = await window.VTAccount?.startTrial?.();
@@ -8469,7 +8526,8 @@
     $("#btn-account-sync")?.addEventListener("click", async () => {
       const res = await window.VTSync?.syncNow?.();
       refreshAccountUI();
-      if (res && !res.ok) accountErrorFor(res.reason);
+      // Waiting for the answer to the question above is not a failure.
+      if (res && !res.ok && res.reason !== "other_owner") accountErrorFor(res.reason);
     });
 
     function giftResult(text) {

@@ -52,7 +52,11 @@
       const target = event.target?.closest?.(
         "#btn-practice-start, #btn-mic-retry, #mic-primer [data-primer-ok]"
       );
-      if (!target || state().view !== "exercise" || !app.wantsSound()) return;
+      if (!target || state().view !== "exercise") return;
+      // Even a speaking-only exercise uses Web Audio for its mic analyser.
+      // Unlock that shared context on the original tap too, before the OS
+      // permission sheet can consume user activation.
+      if (app.getProfile(state().exercise)?.mode === "weekPlan") return;
       if (piano.ctx?.state === "running") return;
       piano.unlock().catch((err) => console.warn("[VT] Audio gesture unlock failed", err));
     }, true);

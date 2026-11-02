@@ -223,12 +223,12 @@ test("interrupted mobile sound exposes a real tap recovery; lost microphone ends
   for (const id of ["mic-blocked", "sound-blocked", "btn-sound-resume", "btn-practice-start", "btn-practice-stop"]) {
     nodes.set(id, { hidden: true, listeners: {}, addEventListener(name, fn) { this.listeners[name] = fn; } });
   }
-  let stopped = 0, micBlocked = null, replayed = 0, unlocked = 0;
+  let stopped = 0, micBlocked = null, replayed = 0, unlocked = 0, wantsSound = false;
   const exercise = { id: "s2-solfege-chords" };
   const practice = { running: true, onStatus: null };
   const appState = { view: "exercise", practiceLive: true, exercise, practice };
   const app = {
-    getState: () => appState, wantsSound: () => true, getProfile: () => ({ mode: "pitchChord" }),
+    getState: () => appState, wantsSound: () => wantsSound, getProfile: () => ({ mode: "pitchChord" }),
     stopPractice(silent) { assert.equal(silent, true); stopped++; practice.running = false; appState.practiceLive = false; },
     showMicBlocked(canRun, reason) { micBlocked = { canRun, reason }; },
     async startExerciseSound() { replayed++; }
@@ -251,7 +251,8 @@ test("interrupted mobile sound exposes a real tap recovery; lost microphone ends
   listeners.get("click:true")({
     target: { closest(selector) { assert.match(selector, /mic-primer/); return {}; } }
   });
-  assert.equal(unlocked, 1, "initial Start/primer confirmation must unlock before permission await");
+  assert.equal(unlocked, 1, "even a speaking-only mic analyser must unlock before permission await");
+  wantsSound = true;
   piano.ctx.state = "interrupted";
   piano.onStateChange("interrupted");
   assert.equal(nodes.get("sound-blocked").hidden, false, "silent context needs a visible tap target");

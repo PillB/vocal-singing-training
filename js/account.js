@@ -33,6 +33,12 @@
    * what the signature check says.
    */
   const LS_PLAN_KEY = "vt_account_plan_v1";
+  /**
+   * Longest /v1/me may take. Without a limit a host that accepts the request and
+   * never answers holds every later refresh (the account panel's, the sync's)
+   * on the same promise for as long as the browser waits.
+   */
+  const ME_TIMEOUT_MS = 15000;
   /** Google Identity Services, loaded on demand so a signed-out visitor pays nothing for it. */
   const GIS_SRC = "https://accounts.google.com/gsi/client";
 
@@ -74,6 +80,8 @@
    */
   let googleReady = null;
   let refreshing = null;
+  /** The session token `refreshing` was asked for. */
+  let refreshingFor = null;
   let gisPromise = null;
 
   const listeners = new Set();
@@ -521,10 +529,14 @@
    * @returns {Promise<{ok: boolean, reason?: string}>} Result.
    */
   function refresh() {
-    if (refreshing) return refreshing;
     if (!session?.token) return Promise.resolve({ ok: false, reason: "no_session" });
-    refreshing = (async () => {
-      const res = await request("GET", "/v1/me", null);
+    const token = session.token;
+    // One ask at a time, but only for the same sign-in: an answer about
+    // somebody who has since signed out is not an answer about whoever is here.
+    if (refreshing && refreshingFor === token) return refreshing;
+    const mine = (async () => {
+      const res = await request("GET", "/v1/me", null, { timeoutMs: ME_TIMEOUT_MS });
+      if (session?.token !== token) return { ok: false, reason: "signed_out" };
       if (res.ok && res.data) {
         await adopt(res.data);
         return { ok: true, claims: global.VTLicense?.getClaims?.() || null };
@@ -537,13 +549,14 @@
       if (res.status === 0) return { ok: false, reason: "offline" };
       return { ok: false, reason: res.data?.reason || "error" };
     })();
-    try {
-      return refreshing;
-    } finally {
-      refreshing.finally(() => {
-        refreshing = null;
-      });
-    }
+    refreshing = mine;
+    refreshingFor = token;
+    mine
+      .finally(() => {
+        if (refreshing === mine) refreshing = null;
+      })
+      .catch(() => {});
+    return mine;
   }
 
   /**

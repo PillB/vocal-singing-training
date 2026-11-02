@@ -6437,7 +6437,9 @@
    * surfaces cannot disagree.
    *
    * @returns {{kind: "free"|"trialLocal"|"trialAccount"|"gift"|"paid"|"canceled",
-   *            days: number|null}} What to show, and days left where that is known.
+   *            days: number|null, until: string, pastDue?: boolean}} What to show, and
+   *            days left where that is known. `pastDue`: a "paid" access whose
+   *            last payment did not go through.
    */
   function headerPlanState() {
     const ent = window.VTBilling?.getEntitlement?.() || { pro: false, status: "free" };
@@ -6478,7 +6480,10 @@
       if (held.source === "gift" || held.source === "comp") {
         return { kind: "gift", days: daysLeft(held.periodEnd), until };
       }
-      return { kind: "paid", days: null, until };
+      // A payment that failed still holds Pro until the period it paid for
+      // ends, and is the same "paid" access, but it is not "renewing": the
+      // label says so (planLabel), and promises nothing about what comes next.
+      return { kind: "paid", days: null, until, pastDue: held.status === "past_due" };
     }
     // Signed out, or signed in with nothing: the browser's own view. Its dates
     // are ISO strings rather than unix seconds.
@@ -6489,7 +6494,9 @@
     if (ent.status === "trial") {
       return { kind: "trialLocal", days: daysLeft(ent.expiresAt), until: isoUntil(ent.expiresAt) };
     }
-    if (ent.pro) return { kind: "paid", days: null, until: isoUntil(ent.expiresAt) };
+    if (ent.pro) {
+      return { kind: "paid", days: null, until: isoUntil(ent.expiresAt), pastDue: ent.licenseStatus === "past_due" };
+    }
     return { kind: "free", days: null, until: "" };
   }
 
@@ -6512,7 +6519,7 @@
   /**
    * What the header's one Pro element says for a plan state, and how it looks.
    * Shared by the header button and anything that must say the same thing.
-   * @param {{kind: string, days: number|null}} plan From headerPlanState().
+   * @param {{kind: string, days: number|null, pastDue?: boolean}} plan From headerPlanState().
    * @returns {{text: string, title: string, cls: string}}
    */
   function planLabel(plan) {
@@ -6540,6 +6547,9 @@
           cls: "plan-ending"
         };
       case "paid":
+        if (plan.pastDue) {
+          return { text: tt("nav.planPastDue"), title: tt("nav.subscriptionTitle"), cls: "plan-ending" };
+        }
         return { text: tt("nav.planPaid"), title: tt("nav.subscriptionTitle"), cls: "plan-paid" };
       default:
         // The offer. "Probar" while a free trial is still on the table, "Ver"
@@ -7390,13 +7400,15 @@
       // shown to a reader, and a free trial described as a monthly
       // subscription. It now says which kind of access this is, in words, and it
       // reads the same source as the header so the two cannot disagree.
+      // "1 día" and "7 días": the line used to say "día(s)" for both.
+      const daysLeft = (n) => tt(n === 1 ? "pricing.trialLeftOne" : "pricing.trialLeft", { n: String(n) });
       if (plan.kind === "trialAccount") {
         status.textContent = plan.days === null
           ? tt("pricing.statusTrial")
-          : `${tt("pricing.statusTrial")} · ${tt("pricing.trialLeft", { n: String(plan.days) })}`;
+          : `${tt("pricing.statusTrial")} · ${daysLeft(plan.days)}`;
       } else if (plan.kind === "trialLocal") {
         const left = plan.days === null ? (B.trialDaysLeft?.() ?? 0) : plan.days;
-        status.textContent = `${tt("pricing.trial")} · ${tt("pricing.trialLeft", { n: String(left) })}`;
+        status.textContent = `${tt("pricing.trial")} · ${daysLeft(left)}`;
       } else if (plan.kind === "gift") {
         status.textContent = plan.until
           ? tt("pricing.statusGiftUntil", { date: plan.until })
@@ -7405,6 +7417,8 @@
         status.textContent = plan.until
           ? tt("pricing.statusCanceled", { date: plan.until })
           : tt("pricing.statusCanceledNoDate");
+      } else if (plan.kind === "paid" && plan.pastDue) {
+        status.textContent = tt("pricing.statusPastDue");
       } else if (plan.kind === "paid") {
         const demo = ent.source === "demo" ? ` (${tt("pricing.statusDemo")})` : "";
         status.textContent = (plan.until
@@ -7670,9 +7684,12 @@
   const ACCOUNT_ERROR_KEYS = {
     bad_email: "auth.err.email",
     bad_code: "auth.err.code",
-    no_code: "auth.err.code",
+    // The fifth wrong try burns the code (workers/entitlements/src/accounts.js):
+    // waiting does not bring it back, and even the right digits get "no_code"
+    // after that. Both say so, and the code step offers a new one.
+    no_code: "auth.err.codeBurned",
     expired: "auth.err.code",
-    too_many_attempts: "auth.err.rate",
+    too_many_attempts: "auth.err.codeBurned",
     rate_limited: "auth.err.rate",
     offline: "auth.err.offline",
     not_found: "auth.err.giftNotFound",
@@ -7735,13 +7752,44 @@
       return tt("auth.planExpired");
     }
     if (!entitlement || !entitlement.pro) return tt("auth.planFree");
-    const date = accountDate(entitlement.periodEnd);
-    if (entitlement.status === "canceled" && date) return tt("auth.planCanceled", { date });
-    if (entitlement.source === "trial") return tt("auth.planTrial", { date });
-    if (entitlement.source === "gift" || entitlement.source === "comp") {
-      return tt("auth.planGift", { date });
+    return planLineFor(entitlement.status, entitlement.source, accountDate(entitlement.periodEnd));
+  }
+
+  /**
+   * The line for access that is held: where it came from, and how it stands.
+   * @param {string} status "active", "canceled" or "past_due".
+   * @param {string} source "trial", "gift", "comp" or a payment.
+   * @param {string} date When it ends, already written out; "" when unknown.
+   * @returns {string} The line.
+   */
+  function planLineFor(status, source, date) {
+    // A payment that failed is not renewing, and nothing is promised about
+    // what happens next: the licence simply runs to the end of the period paid.
+    if (status === "past_due") return tt("auth.planPastDue");
+    if (status === "canceled" && date) return tt("auth.planCanceled", { date });
+    if (source === "trial") return date ? tt("auth.planTrial", { date }) : tt("nav.planTrial");
+    if (source === "gift" || source === "comp") {
+      return date ? tt("auth.planGift", { date }) : tt("nav.planGift");
     }
     return date ? tt("auth.planPaid", { date }) : tt("auth.planPaidOpen");
+  }
+
+  /**
+   * The plan line for the signed-in account. The worker's entitlement is the
+   * authority. Until it has answered (a /v1/me that failed or is still out)
+   * the header's own reading stands in, so this panel cannot say "Plan gratis"
+   * under a header that says Pro.
+   * @param {object|null} account VTAccount.getState().
+   * @returns {string} The line.
+   */
+  function accountPlanLineFor(account) {
+    if (account.entitlement) return accountPlanLine(account.entitlement);
+    const plan = headerPlanState();
+    if (plan.kind === "free") return accountPlanLine(null);
+    const source =
+      plan.kind === "trialAccount" || plan.kind === "trialLocal" ? "trial" : plan.kind === "gift" ? "gift" : "paid";
+    const status = plan.kind === "canceled" ? "canceled" : plan.pastDue ? "past_due" : "active";
+    return planLineFor(status, source, plan.until || "");
   }
 
   function accountSyncLine() {
@@ -8011,13 +8059,18 @@
           name: session.displayName || session.username,
           role: session.role
         });
+      } else {
+        // Signed in, but /v1/me has not said who: no line rather than the
+        // previous person's.
+        who.textContent = "";
       }
+      who.hidden = !who.textContent;
     }
 
     const planEl = $("#account-plan");
     if (planEl) {
       planEl.hidden = !(account && account.signedIn);
-      if (account && account.signedIn) planEl.textContent = accountPlanLine(account.entitlement);
+      if (account && account.signedIn) planEl.textContent = accountPlanLineFor(account);
     }
 
     const syncEl = $("#account-sync");
@@ -8139,6 +8192,16 @@
     // never touches it. The answer redraws the panel through onChange.
     const asking = window.VTAccount?.ensureMethods?.();
     mountGoogleButton();
+    // Signed in but never told who: the /v1/me at load was missed (offline, a
+    // restart). Ask again now that somebody is looking, or this panel keeps
+    // saying nothing about who is signed in, and "Plan gratis" under a header
+    // that says Pro.
+    const acctNow = window.VTAccount?.getState?.();
+    if (acctNow && acctNow.signedIn && !acctNow.account) {
+      Promise.resolve(window.VTAccount.refresh?.())
+        .then(() => refreshAccountUI())
+        .catch(() => {});
+    }
     // What the visitor ends up looking at is the state worth counting, and on
     // the first open of a page load that is not knowable yet: nothing probes
     // /v1/auth/methods before this, so accountPanelState() would read "checking"
@@ -8293,6 +8356,8 @@
         codeForm.dataset.email = email;
       }
       accountError(null);
+      const resend = $("#account-code-resend");
+      if (resend) resend.hidden = true;
       const sent = $("#account-or");
       if (sent) sent.hidden = true;
       const google = $("#account-google");
@@ -8306,6 +8371,8 @@
       const codeForm = $("#account-code-form");
       if (emailForm) emailForm.hidden = false;
       if (codeForm) codeForm.hidden = true;
+      const resend = $("#account-code-resend");
+      if (resend) resend.hidden = true;
       const google = $("#account-google");
       if (google) google.hidden = false;
       accountError(null);
@@ -8340,10 +8407,31 @@
       } else {
         trackFunnel("signin_fail", { method: "email", reason: funnelReason(res && res.reason) });
         accountErrorFor(res && res.reason);
+        // A burned code stays burned: the only way on is a new one, so the
+        // step offers it where the message is.
+        const resend = $("#account-code-resend");
+        if (resend) resend.hidden = !(res && (res.reason === "too_many_attempts" || res.reason === "no_code"));
       }
     });
 
     $("#account-code-back")?.addEventListener("click", showEmailStep);
+
+    $("#account-code-resend")?.addEventListener("click", async (e) => {
+      const btn = e.currentTarget;
+      const email = $("#account-code-form")?.dataset.email || "";
+      btn.disabled = true;
+      try {
+        const res = await window.VTAccount?.startEmailSignIn?.(email);
+        if (res && res.ok) {
+          if ($("#account-code")) $("#account-code").value = "";
+          showCodeStep(email);
+        } else {
+          accountErrorFor(res && res.reason);
+        }
+      } finally {
+        btn.disabled = false;
+      }
+    });
 
     $("#btn-account-trial")?.addEventListener("click", async () => {
       trackFunnel("trial_click", { where: "panel" });

@@ -100,6 +100,10 @@ function practiceEnv({ graphFails = false, firstError = null } = {}) {
   class FakeContext {
     state = "running";
     sampleRate = 48000;
+    listeners = new Map();
+    addEventListener(name, fn) { this.listeners.set(name, fn); }
+    removeEventListener(name) { this.listeners.delete(name); }
+    emit(name) { this.listeners.get(name)?.(); }
     createGain() { return { gain: { value: 1 }, connect() {}, disconnect() {} }; }
     createAnalyser() { return { fftSize: 2048, frequencyBinCount: 1024, getFloatTimeDomainData() {} }; }
     createMediaStreamSource() {
@@ -153,6 +157,32 @@ test("a brief iOS mute recovers; sustained mute and ended track ask for explicit
   track.emit("ended");
   assert.equal(states.includes("mic-ended"), true);
   engine.stop();
+});
+
+test("interrupted AudioContext pauses analyser scoring immediately and resumes only on real input", async () => {
+  const { engine, flushTimers } = practiceEnv();
+  const states = [];
+  engine.onStatus = (s) => states.push(s);
+  await engine.start();
+  const ctx = engine.audioCtx;
+  assert.equal(engine.running, true);
+  assert.notEqual(engine.raf, null);
+  ctx.state = "interrupted";
+  ctx.emit("statechange");
+  assert.equal(engine.raf, null, "a suspended graph cannot keep scoring its last analyser buffer");
+  assert.equal(engine._analysisPaused, true);
+  ctx.state = "running";
+  ctx.emit("statechange");
+  flushTimers();
+  assert.equal(engine._analysisPaused, false);
+  assert.notEqual(engine.raf, null, "real resumed input restarts the frame pump");
+  assert.equal(states.includes("input-interrupted"), false, "a brief phone-route change is recoverable");
+  ctx.state = "suspended";
+  ctx.emit("statechange");
+  flushTimers();
+  assert.equal(states.includes("input-interrupted"), true, "persistent graph suspension must surface Retry");
+  engine.stop();
+  assert.equal(ctx.listeners.has("statechange"), false, "old listeners cannot end a later exercise");
 });
 
 test("busy iOS microphone is attempted once; unsupported constraints may be relaxed", async () => {

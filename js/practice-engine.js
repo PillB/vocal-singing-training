@@ -458,6 +458,39 @@
       }
     }
 
+    _watchAudioContext(ctx, stream) {
+      if (!ctx?.addEventListener) return;
+      const onState = () => {
+        if (!this.running || this.stream !== stream) return;
+        if (ctx.state === "running") {
+          clearTimeout(this._ctxLossTimer);
+          this._ctxLossTimer = null;
+          if (this._analysisPaused) {
+            this._analysisPaused = false;
+            this._lastFrameAt = performance.now();
+            this._loop();
+          }
+          return;
+        }
+        if (!["suspended", "interrupted"].includes(ctx.state)) return;
+        if (!this._analysisPaused) {
+          this._analysisPaused = true;
+          if (this.raf) cancelAnimationFrame(this.raf);
+          this.raf = null;
+          this._maybeEndHold(true); // Close at last real sample, not at resume.
+        }
+        clearTimeout(this._ctxLossTimer);
+        this._ctxLossTimer = setTimeout(() => {
+          if (this.running && this.stream === stream && this._analysisPaused) {
+            this._status("input-interrupted");
+          }
+        }, 1200);
+      };
+      ctx.addEventListener("statechange", onState);
+      this._contextWatcher = { ctx, onState };
+      onState();
+    }
+
     async _startOptionalRecorder(record) {
       if (!record) return;
       try {
@@ -503,10 +536,11 @@
       this.running = true;
       this._lastFrameAt = performance.now();
       this._watchMicTrack(audioTrack, this.stream);
+      this._watchAudioContext(this.audioCtx, this.stream);
       await this._startOptionalRecorder(record);
 
       this._status("listening");
-      this._loop();
+      if (!this._analysisPaused) this._loop();
     }
 
     async _startRecorder() {
@@ -585,6 +619,11 @@
       this.running = false;
       clearTimeout(this._micMuteTimer);
       this._micMuteTimer = null;
+      clearTimeout(this._ctxLossTimer);
+      this._ctxLossTimer = null;
+      this._contextWatcher?.ctx?.removeEventListener?.("statechange", this._contextWatcher.onState);
+      this._contextWatcher = null;
+      this._analysisPaused = false;
 
       let recorderStopping = false;
       if (this.mediaRecorder && this.mediaRecorder.state !== "inactive") {

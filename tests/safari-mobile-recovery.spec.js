@@ -132,28 +132,19 @@ test("recording with a live practice reuses one stream and preserves the microph
   if (!owned.nativeRecorder) console.log("[WebKit] MediaRecorder not exposed; deferred MP4 encoder fixture used");
 });
 
-test("interrupted Web Audio shows hittable recovery and resumes on a new tap", async ({ page }, testInfo) => {
+test("interrupted shared AudioContext stops stale scoring and offers microphone Retry", async ({ page }) => {
   test.setTimeout(60000);
   await startWithMic(page);
-  await page.evaluate(async () => {
-    const piano = window.VTPiano;
-    await piano.ctx.suspend();
-    piano.onStateChange?.("interrupted");
-  });
-  await expect(page.locator("#sound-blocked")).toBeVisible({ timeout: 7000 });
-  const hit = await centerHitsSelf(page, "#btn-sound-resume");
-  expect(hit.ok, `${testInfo.project.name} sound recovery obscured by ${JSON.stringify(hit.top)}`).toBe(true);
-  // WebKit occasionally auto-recovers after a foreground/focus event and
-  // hides the alert before a Playwright locator click can begin. Accept that
-  // only if the context is genuinely running; otherwise click by coordinates.
-  const beforeTap = await page.evaluate(() => window.VTPiano.ctx?.state);
-  if (beforeTap !== "running") {
-    const box = await page.locator("#btn-sound-resume").boundingBox();
-    if (box) await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
-  }
+  await page.evaluate(async () => window.VTPiano.ctx.suspend());
+  await expect(page.locator("#mic-blocked")).toBeVisible({ timeout: 7000 });
+  await expect.poll(() => page.evaluate(() => window.VTApp.getState().practiceLive)).toBe(false);
+  await expect.poll(() => page.evaluate(() => window.VTApp.getState().practice.running)).toBe(false);
+  await page.locator("#btn-mic-retry").click();
+  await expect.poll(() => page.evaluate(() => window.VTApp.getState().practiceLive), { timeout: 10000 })
+    .toBe(true);
   await expect.poll(() => page.evaluate(() => window.VTPiano.ctx?.state), { timeout: 10000 })
     .toBe("running");
-  await expect(page.locator("#sound-blocked")).toBeHidden();
+  await expect(page.locator("#mic-blocked")).toBeHidden();
   const st = await page.evaluate(() => ({
     live: window.VTApp.getState().practiceLive,
     micLive: window.VTApp.getState().practice.stream?.getAudioTracks()[0]?.readyState,
@@ -167,11 +158,9 @@ for (const viewport of [{ width: 360, height: 740 }, { width: 844, height: 390 }
     test.setTimeout(60000);
     await page.setViewportSize(viewport);
     await startWithMic(page);
-    await page.evaluate(async () => {
-      const piano = window.VTPiano;
-      await piano.ctx.suspend();
-      piano.onStateChange?.("interrupted");
-    });
+    // Force exactly the UI state for a sound-only output interruption. The
+    // functional shared-context interruption is tested independently above.
+    await page.evaluate(() => { document.getElementById("sound-blocked").hidden = false; });
     await expect(page.locator("#sound-blocked")).toBeVisible({ timeout: 7000 });
     const hit = await centerHitsSelf(page, "#btn-sound-resume");
     expect(hit.ok, `Recovery overlaps ${JSON.stringify(hit.top)} at ${viewport.width}×${viewport.height}`)

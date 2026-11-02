@@ -23,7 +23,7 @@
     const previousStatus = engine.onStatus;
     engine.onStatus = (status) => {
       previousStatus?.(status);
-      if (status !== "mic-muted" && status !== "mic-ended") return;
+      if (!["mic-muted", "mic-ended", "input-interrupted"].includes(status)) return;
       if (state().view !== "exercise" || !engine.running) return;
       // Holding a stale pitch is not practice. End the take and require a new
       // user gesture; the browser may need to ask for the mic again.

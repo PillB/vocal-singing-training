@@ -744,8 +744,14 @@
           // Strict one-note-at-a-time: combobox duration applies to EACH note
           // (not divided across tones of a chord)
           const events = [];
+          const pitchClass = (n) => String(n).replace(/-?\d+$/, "");
           prog.chords.forEach((ch, cidx) => {
-            (ch.notes || []).forEach((n) => {
+            const notes = ch.notes || [];
+            notes.forEach((n, i) => {
+              // The voicing's left-hand bass doubles a chord tone an octave
+              // down (C2 under C3): it is under the lanes and not a note to
+              // sing, so one note at a time walks the tones above it.
+              if (i === 0 && notes.length > 3 && notes.slice(1).some((m) => pitchClass(m) === pitchClass(n))) return;
               events.push({ note: n, chord: ch, cidx });
             });
           });

@@ -416,6 +416,10 @@ body:not(.view-exercise) .main {
     box-shadow 0.15s ease,
     transform 0.12s ease;
 }
+.track-tab {
+  /* A wide label (larger text, a long word) shrinks the tab, not the page */
+  min-width: 0;
+}
 .track-ico {
   font-size: 1.15rem;
   line-height: 1;
@@ -432,6 +436,7 @@ body:not(.view-exercise) .main {
 .track-label-short {
   font-size: 0.95rem;
   letter-spacing: 0.01em;
+  overflow-wrap: anywhere;
 }
 .track-label-full {
   font-size: 0.68rem;
@@ -847,6 +852,9 @@ body.home-zero #pro-insights-panel {
 
 .history-list {
   display: grid;
+  /* One column that may shrink below its rows' longest unbreakable line;
+     the implicit auto column took that line's width and widened the page */
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.65rem;
 }
 
@@ -5591,6 +5599,13 @@ body.home-zero:not(.loop-on) #start-panel .start-sub {
     min-height: var(--min-tap);
     padding: 0 0.2rem;
   }
+  /* The Pro dialog's "more" disclosure was a 21px line */
+  #pricing-modal .plan-more > summary {
+    display: flex;
+    align-items: center;
+    gap: 0.25em;
+    min-height: var(--min-tap);
+  }
 
   /* ── Readability ──────────────────────────────────────────────────────
      Nothing that carries meaning should render below 12px on a phone. */
@@ -5976,7 +5991,12 @@ body.loop-on .start-steps {
 .loop-tier-name {
   font-size: 0.92rem;
   font-weight: 700;
-  white-space: nowrap;
+  /* A name that does not fit (larger text) breaks inside its own segment
+     instead of running into the next one */
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: break-word;
+  text-align: center;
 }
 .loop-tier-min {
   font-size: 0.8rem;
@@ -7857,5 +7877,23 @@ body.ex-ended #piano-mini-opts {
   }
   .mic-sens-title .mic-short {
     display: inline;
+  }
+}
+
+/* Forced colours (Windows high contrast) drop gradients, backgrounds and
+   box-shadows, which were the main button's only outline, the current section's
+   only mark and a pressed toggle's only sign. */
+@media (forced-colors: active) {
+  .btn-practice {
+    border: 1px solid ButtonText;
+  }
+  .header-nav .nav-link[aria-current="page"] {
+    border-color: Highlight;
+    text-decoration: underline 3px;
+    text-underline-offset: 0.3em;
+  }
+  [aria-pressed="true"] {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
   }
 }

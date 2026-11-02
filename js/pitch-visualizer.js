@@ -196,6 +196,20 @@
   const LINE_H1 = 30;
   const LINE_H3 = 2;
   /**
+   * A candidate that passes the aperiodicity test above can still be a part
+   * of the longer period, and the spectrum says so. A woman's /i/ at 932 Hz
+   * with ±60 cents of vibrato: the key maximum at 2/3 of the period reads
+   * within 0.03 of the period's own, and the pitch came out a fifth up
+   * (1398 Hz) on half the frames. The Hann spectrum has no line at 1398 Hz,
+   * nothing is sung between H1 and H2: it stands under 1/60 of the line at
+   * 932 Hz. Of some 17 000 candidates that were the right pitch (weak or
+   * missing fundamentals, a phone's low cut, noise, wide vibrato) the
+   * weakest stood 9 dB under the longer period's line; of 1100 that were a
+   * third, a fourth or a fifth too high, none stood less than 16 dB under.
+   * A candidate under FUND_REL (−12 dB) of that line is part of it.
+   */
+  const FUND_REL = 0.063;
+  /**
    * Keys at lags under REFINE_MINLAGS × the shortest lag get their height
    * from r(τ) itself at the fractional lag (the spectrum's cosine sum, a
    * Newton step or two from the parabola's estimate), not the parabola
@@ -338,6 +352,15 @@
     for (let i = 0; i <= M >> 1; i++) out[i] = re[i] * re[i] + im[i] * im[i];
     return out;
   }
+  /** The highest bin of a power spectrum within 3 % of f. */
+  function peakNear(P, M, sr, f) {
+    const bin = sr / M;
+    const c = Math.round(f / bin);
+    const w = Math.max(1, Math.ceil((0.03 * f) / bin));
+    let pk = 0;
+    for (let b = Math.max(1, c - w); b <= c + w && b < P.length; b++) if (P[b] > pk) pk = P[b];
+    return pk;
+  }
   /**
    * How far a line near f (within 3 %) stands over the spectrum 40–80 Hz to
    * either side of it: the ratio of its highest bin to their mean power.
@@ -345,9 +368,7 @@
   function lineOver(P, M, sr, f) {
     const bin = sr / M;
     const c = Math.round(f / bin);
-    const w = Math.max(1, Math.ceil((0.03 * f) / bin));
-    let pk = 0;
-    for (let b = Math.max(1, c - w); b <= c + w && b < P.length; b++) if (P[b] > pk) pk = P[b];
+    const pk = peakNear(P, M, sr, f);
     let s = 0;
     let n = 0;
     for (const sg of [-1, 1]) {
@@ -519,9 +540,15 @@
       if (1 - q.n > APER_CAP) return false;
       // The best key maximum up to APER_SPAN times the lag: the period, if
       // the candidate is a part of it
-      let nb = 0;
-      for (const o of keys) if (o.lag > q.lag && o.lag <= APER_SPAN * q.lag && o.n > nb) nb = o.n;
-      return q.n >= nb || 1 - q.n <= APER_C * (1 - nb) + APER_EPS;
+      let nk = null;
+      for (const o of keys) if (o.lag > q.lag && o.lag <= APER_SPAN * q.lag && (!nk || o.n > nk.n)) nk = o;
+      const nb = nk ? nk.n : 0;
+      if (q.n >= nb) return true;
+      if (1 - q.n > APER_C * (1 - nb) + APER_EPS) return false;
+      // Close enough: a part of that period or a pitch of its own? Its line
+      // in the spectrum must not stand far under the period's (FUND_REL)
+      if (!hann) hann = hannPower(buf, mean, plan);
+      return peakNear(hann, M, sampleRate, sampleRate / q.lag) >= FUND_REL * peakNear(hann, M, sampleRate, sampleRate / nk.lag);
     };
     let pick = null;
     for (const q of keys) {

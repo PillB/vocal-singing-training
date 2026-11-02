@@ -225,6 +225,22 @@ test.describe("detectPitch through the engine, on synthetic voices", () => {
     expect(bad, "cases where under 90 % of the frames read within 50 cents").toEqual([]);
   });
 
+  test("a woman's or a child's /i/ with ±60 c of vibrato, a harmonic on her second formant, reads her note, not a fourth or a fifth above", async ({ page }) => {
+    await detectorPage(page);
+    // Her third (or fourth) harmonic lands on F2 and carries most of the
+    // power: a key maximum at 2/3 (3/4) of the period is almost as periodic as
+    // the period itself, and under vibrato the lags cannot tell them apart.
+    const cases = [];
+    for (const sr of [48000, 44100]) {
+      for (const f0 of [920, 940, 960]) cases.push({ sr, label: `female modal /i/ ${f0} Hz at ${sr / 1000} kHz`, spec: { kind: "vowel", voice: "female", vowel: "i", f0, tilt: "modal", vibCents: 60, sec: 0.8 } });
+      for (const f0 of [700, 720, 800, 840]) cases.push({ sr, label: `female pressed /i/ ${f0} Hz at ${sr / 1000} kHz`, spec: { kind: "vowel", voice: "female", vowel: "i", f0, tilt: "pressed", vibCents: 60, sec: 0.8 } });
+      for (const f0 of [780, 800, 820, 840]) cases.push({ sr, label: `child pressed /i/ ${f0} Hz at ${sr / 1000} kHz`, spec: { kind: "vowel", voice: "child", vowel: "i", f0, tilt: "pressed", vibCents: 60, sec: 0.8 } });
+    }
+    const res = await measure(page, cases);
+    const bad = res.filter((r) => r.within < 0.9).map((r) => `${r.label}: ${pct(r.within)} within 50 c, ${pct(r.off)} off by more than 100 c, median ${r.median ?? "nothing"} Hz`);
+    expect(bad, "cases where under 90 % of the frames read within 50 cents").toEqual([]);
+  });
+
   test("speech that moves 5 semitones a syllable rarely reads its first formant", async ({ page }) => {
     await detectorPage(page);
     // Five syllables a second, each voiced for 0.144 s and gliding (ease in,

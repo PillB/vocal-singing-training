@@ -58,6 +58,13 @@
   /** In-flight probe, so two callers on the same open share one request. */
   let methodsPending = null;
   /**
+   * Which probe is the newest. A probe that was superseded (somebody pressed
+   * "try again" while it was still out) must not write its late answer over
+   * the newer one: a stale failure landing last put the admin page back on
+   * "server did not answer" after the server had answered.
+   */
+  let methodsGen = 0;
+  /**
    * Whether Google's script could actually be loaded in this browser: null
    * until we have tried, then true or false. The worker naming Google as a
    * method and a browser being able to run it are different facts — an
@@ -288,9 +295,10 @@
   async function getMethods() {
     if (methods) return methods;
     if (methodsPending) return methodsPending;
+    const gen = (methodsGen += 1);
     methodsPending = (async () => {
       const res = await request("GET", "/v1/auth/methods", null, { auth: false, timeoutMs: 6000 });
-      methods = res.ok && res.data
+      const answer = res.ok && res.data
         ? {
           email: !!res.data.email,
           google: !!res.data.google,
@@ -302,6 +310,10 @@
         // something terminal to draw, and ensureMethods() throws it away so
         // the next open asks again.
         : { email: false, google: false, googleClientId: null, trialDays: 7, ok: false };
+      // Only the newest probe writes. A superseded one hands its own caller
+      // the newer answer when there is one, and leaves the state alone.
+      if (gen !== methodsGen) return methods || answer;
+      methods = answer;
       methodsPending = null;
       return methods;
     })();
@@ -326,6 +338,7 @@
    * @returns {Promise<object|null>} The methods, or null with no worker.
    */
   function refreshMethods() {
+    methodsGen += 1;
     methods = null;
     methodsPending = null;
     googleReady = null;
@@ -425,7 +438,16 @@
    * @returns {Promise<{ok: boolean, reason?: string}>} Whether the button drew.
    */
   async function renderGoogleButton(container, options) {
+    // A failed probe is cached only so the panel has something to draw. It is
+    // not a reason to say Google is not set up: ask again. If the worker still
+    // does not answer, say that, so the caller can show "server did not answer"
+    // instead of blaming an extension.
+    if (methods && methods.ok === false) methods = null;
     const available = await getMethods();
+    if (available.ok === false && isConfigured()) {
+      container.innerHTML = "";
+      return { ok: false, reason: "unreachable" };
+    }
     if (!available.google || !available.googleClientId) {
       // Clear on the way out too: what a deploy offers can change between one
       // open and the next, and a button drawn earlier must not outlive it.

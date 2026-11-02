@@ -5926,7 +5926,7 @@
     const startBtn = $("#btn-plan-start");
     startBtn.textContent = plan.element
       ? tt("plan.startWith", { n: plan.weekNumber, element: weekElementLabel(plan.element) })
-      : tt("plan.start");
+      : tt("plan.chooseFocus");
     $("#plan-start-hint").hidden = !!plan.element;
 
     const exs = plan.element ? planExercisesFor(plan.element, track) : [];

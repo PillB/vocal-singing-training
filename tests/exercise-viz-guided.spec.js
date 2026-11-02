@@ -110,7 +110,10 @@ test.describe("guided pictures", () => {
       };
     });
     await open(page, "s17-jaw-neck-release");
+    // Next does nothing before Start, so it is not offered as if it did (PR #24).
+    await expect(page.locator("#mode-focus [data-next-step]")).toBeDisabled();
     await start(page);
+    await expect(page.locator("#mode-focus [data-next-step]")).toBeEnabled();
     const remain = page.locator("#mode-focus [data-remain]");
     const first = await remain.textContent();
     await expect.poll(() => remain.textContent(), { timeout: 3000 }).not.toBe(first);
@@ -122,6 +125,8 @@ test.describe("guided pictures", () => {
     expect(after).toBe(before + 1);
     // Stand tall first, as the exercise says; then the jaw
     await expect(page.locator("#mode-focus [data-phase]")).toHaveText(/Mandíbula/);
+    await page.evaluate(() => document.getElementById("btn-practice-stop").click());
+    await expect(page.locator("#mode-focus [data-next-step]"), "after Stop there is no step to skip").toBeDisabled();
   });
 
   test("s17 walks the exercise's own five steps; the posture step is not counted as a release", async ({ page }) => {

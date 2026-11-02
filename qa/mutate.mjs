@@ -8,7 +8,7 @@
  *
  *   node qa/mutate.mjs            # the Node sets (audio, lint)
  *   node qa/mutate.mjs audio      # one set
- *   node qa/mutate.mjs stage a11y flows billing scoring range audit  # browser sets: need Playwright's Chromium
+ *   node qa/mutate.mjs stage a11y flows billing scoring controls audit  # browser sets: need Playwright's Chromium
  *
  * Exit code 1 when any mutant survives or an anchor no longer matches (so a
  * refactor that moves the code cannot silently retire its mutant).
@@ -48,6 +48,12 @@ const FLOW_SPEC = [
   "-g",
   "^.*(v1-diction|s9-pitch-match|s15-sh-air-ladder|s4-lip-trills): layout"
 ];
+
+const CONTROL_SPECS = {
+  range: ["tests/range-adapter.spec.js", "-g", "octave −2"],
+  guided: ["tests/exercise-viz-guided.spec.js", "-g", "s17 release paces"],
+  copy: ["tests/plan-history-design.spec.js", "tests/billing.spec.js", "-g", "the start button waits on a choice|Choose what to improve|value pulse board"]
+};
 
 export const MUTANTS = {
   audio: [
@@ -109,17 +115,22 @@ export const MUTANTS = {
     to,
     cmd: [...PIANO_SPEC.slice(0, 3), "tests/safari-mobile-recovery.spec.js", "tests/stage-design.spec.js", "--project=chromium", "--workers=2", "--reporter=dot", "-g", "held pitch stays visible|Pitch match challenge"]
   })),
-  // The octave buttons (PR #24's P0-02): -2 must say its bass may be unheard and unscored.
-  range: [
-    ["R1 octave -2 shown without its caution", "js/app.js", "if (moved && !opts.silent && state.octaveShift === -2) toast(", "if (moved && !opts.silent && state.octaveShift === -9) toast("],
-    ["R2 the auto range reaches -2 without the caution", "js/app.js", "        shiftOctave(dec.shift, { source: \"auto\", decision: dec });", "        applyOctaveShift(dec.shift, { source: \"auto\", decision: dec });"],
-    ["R3 the - button reaches -2 without the caution", "js/app.js", "    shiftOctave(state.octaveShift + delta, { source: \"manual\" });", "    applyOctaveShift(state.octaveShift + delta, { source: \"manual\" });"]
-  ].map(([name, file, from, to]) => ({
+  // Controls ported from PR #24: each says what it does, or is off when it cannot act.
+  controls: [
+    ["R1 octave -2 shown without its caution", "js/app.js", "if (moved && !opts.silent && state.octaveShift === -2) toast(", "if (moved && !opts.silent && state.octaveShift === -9) toast(", "range"],
+    ["R2 the auto range reaches -2 without the caution", "js/app.js", "        shiftOctave(dec.shift, { source: \"auto\", decision: dec });", "        applyOctaveShift(dec.shift, { source: \"auto\", decision: dec });", "range"],
+    ["R3 the - button reaches -2 without the caution", "js/app.js", "    shiftOctave(state.octaveShift + delta, { source: \"manual\" });", "    applyOctaveShift(state.octaveShift + delta, { source: \"manual\" });", "range"],
+    ["G1 guided Next offered before Start", "js/scenes/guided.js", "        nextStep.disabled = true; //", "        nextStep.disabled = false; //", "guided"],
+    ["G2 guided Next still offered after Stop", "js/scenes/guided.js", "      this.live = false;\n      this._nextStepDisabled(true);\n", "      this.live = false;\n", "guided"],
+    ["C1 the Plan button says it starts a week it cannot start", "js/app.js", "      : tt(\"plan.chooseFocus\");", "      : tt(\"plan.startWith\", { n: plan.weekNumber, element: \"\" });", "copy"],
+    ["C2 one saved session read as \"1 sesiones\"", "js/i18n.js", "\"pricing.personalHave\": \"Sesiones guardadas: {sessions} ·", "\"pricing.personalHave\": \"Hasta hoy: {sessions} sesiones ·", "copy"],
+    ["C3 one saved session read as \"1 sessions\"", "js/i18n.js", "\"pricing.personalHave\": \"Saved sessions: {sessions} ·", "\"pricing.personalHave\": \"So far: {sessions} sessions ·", "copy"]
+  ].map(([name, file, from, to, area]) => ({
     name,
     file,
     from,
     to,
-    cmd: [...PIANO_SPEC.slice(0, 3), "tests/range-adapter.spec.js", "--project=chromium", "--workers=2", "--reporter=dot", "-g", "octave −2"]
+    cmd: [...PIANO_SPEC.slice(0, 3), ...CONTROL_SPECS[area], "--project=chromium", "--workers=2", "--reporter=dot"]
   })),
   // The open piano and the sticky stage (production-contracts "expanded piano").
   stage: [

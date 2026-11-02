@@ -2270,7 +2270,11 @@
       this.run = new Run(cfg.phases || []);
       this.vad = cfg.mic && global.VTFeatures ? new global.VTFeatures.Vad({}) : null;
       this.preCue = cfg.preCue || 4;
-      this.mode.hud.querySelector("[data-next-step]")?.addEventListener("click", () => this.skip());
+      const nextStep = this.mode.hud.querySelector("[data-next-step]");
+      if (nextStep) {
+        nextStep.disabled = true; // before Start it would be a click that does nothing (PR #24)
+        nextStep.addEventListener("click", () => this.skip());
+      }
       this._words(true);
       this.draw();
     }
@@ -2317,6 +2321,7 @@
     start() {
       this.begin();
       this.run.reset();
+      this._nextStepDisabled(this.run.done);
       this.vad?.reset();
       if (this.cfg.onStart) this.cfg.onStart(this);
       this._words(true);
@@ -2405,8 +2410,13 @@
       const pct = Math.round((talk / Math.max(0.1, len)) * 100);
       return `${dur} · ${L(`hablando el ${pct} %`, `talking ${pct}% of it`)}`;
     }
+    _nextStepDisabled(off) {
+      const b = this.mode.hud?.querySelector("[data-next-step]");
+      if (b) b.disabled = off;
+    }
     stop() {
       this.live = false;
+      this._nextStepDisabled(true);
       if (this.cfg.recorded) {
         const chs = this.cfg.chapters ? this.cfg.chapters(this) : this.stepChapters();
         if (!chs.length && this.run.clock >= 1) {

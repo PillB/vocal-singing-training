@@ -64,8 +64,8 @@
     "sha": "4c03c708ee923b1a"
   },
   "js/app.js": {
-    "v": "20261102e",
-    "sha": "38ceda6b825725ea"
+    "v": "20261102f",
+    "sha": "b8c0ffb8577ec720"
   },
   "js/audio-recovery.js": {
     "v": "20261102b",
@@ -116,8 +116,8 @@
     "sha": "178ba56877e20400"
   },
   "js/i18n.js": {
-    "v": "20261102c",
-    "sha": "abb6b385790fd562"
+    "v": "20261102d",
+    "sha": "383af136c363aa99"
   },
   "js/license.js": {
     "v": "20261102a",
@@ -184,8 +184,8 @@
     "sha": "b625414e32c1539e"
   },
   "js/scenes/guided.js": {
-    "v": "20261007a",
-    "sha": "1d218daa933e5250"
+    "v": "20261102a",
+    "sha": "1e8ef03c5a734516"
   },
   "js/scenes/pitch.js": {
     "v": "20261002a",

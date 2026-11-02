@@ -284,6 +284,8 @@
   let source = "guess";
   const listeners = [];
   let barShown = false;
+  /** Watches the bar's height while it is up, so the page keeps room for it. */
+  let barWatch = null;
   let styled = false;
 
   function timeZone() {
@@ -574,9 +576,11 @@
   border:1px solid var(--border,#3d4f68);background:var(--bg-soft,#243041);color:inherit}
 .region-consent button:hover{border-color:var(--accent,#6eb4e8)}
 .region-consent a{color:var(--accent,#6eb4e8);text-decoration:underline}
+body.region-consent-open{padding-bottom:var(--region-consent-h,0px)}
 @media (max-width:480px){.region-consent-inner{justify-content:stretch}
   .region-consent-actions{width:100%}
-  .region-consent button{flex:1 1 8rem}}`;
+  .region-consent button{flex:1 1 8rem}
+  .region-consent a{display:inline-flex;align-items:center;min-height:var(--min-tap,44px)}}`;
     const el = global.document.createElement("style");
     el.setAttribute("data-region-consent-style", "1");
     el.textContent = css;
@@ -589,6 +593,8 @@
     if (!bar) return;
     const t = T[lang()];
     bar.setAttribute("lang", lang());
+    // The region's name follows the language, like the words inside it.
+    bar.setAttribute("aria-label", t.title);
     const text = bar.querySelector("[data-region-consent-text]");
     if (text) text.innerHTML = "";
     if (text) {
@@ -603,13 +609,43 @@
     const more = bar.querySelector("[data-region-more]");
     if (yes) yes.textContent = t.accept;
     if (no) no.textContent = t.reject;
-    if (more) more.textContent = t.more;
+    if (more) {
+      more.textContent = t.more;
+      // privacy.html holds both languages; an English reader opens the English half.
+      more.setAttribute("href", lang() === "en" ? "privacy.html#en" : "privacy.html");
+    }
+  }
+
+  /**
+   * The bar is fixed to the bottom of the screen, so the page keeps room for it
+   * (body.region-consent-open pads the end of the page by the bar's height) and
+   * tells the app, which sizes the exercise stage to what is left above it.
+   * @param {Element | null} bar The bar, or null once it is gone.
+   */
+  function reserveRoom(bar) {
+    const doc = global.document;
+    if (!doc?.body) return;
+    if (bar) {
+      doc.documentElement.style.setProperty("--region-consent-h", `${Math.ceil(bar.getBoundingClientRect().height)}px`);
+      doc.body.classList.add("region-consent-open");
+    } else {
+      doc.documentElement.style.removeProperty("--region-consent-h");
+      doc.body.classList.remove("region-consent-open");
+    }
+    try {
+      global.dispatchEvent(new Event("resize"));
+    } catch {
+      /* no Event constructor: the next resize catches up */
+    }
   }
 
   function hideBar() {
     const bar = global.document?.querySelector("[data-region-consent]");
     if (bar) bar.remove();
     barShown = false;
+    barWatch?.disconnect();
+    barWatch = null;
+    reserveRoom(null);
   }
 
   /**
@@ -657,6 +693,14 @@
     doc.body.appendChild(bar);
     barShown = true;
     renderBar();
+    reserveRoom(bar);
+    // The bar's height changes with the language and when its buttons wrap.
+    try {
+      barWatch = new ResizeObserver(() => reserveRoom(bar));
+      barWatch.observe(bar);
+    } catch {
+      /* no ResizeObserver: the height it had when it opened stands */
+    }
     bar.querySelector("[data-region-accept]")?.addEventListener("click", () => setConsent(true));
     bar.querySelector("[data-region-reject]")?.addEventListener("click", () => setConsent(false));
     // The app switches language under the bar's feet; i18n writes <html lang>.

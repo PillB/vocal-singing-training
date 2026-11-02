@@ -533,8 +533,12 @@
       const { vh, offsetTop, safeBottom } = getViewportMetrics();
       // Gap: short/landscape + safe-area (home indicator)
       const gap = (vh < 500 ? 12 : 8) + Math.max(0, safeBottom);
-      // Visual bottom of the usable screen (visualViewport may be offset)
-      const visualBottom = offsetTop + vh;
+      // Visual bottom of the usable screen (visualViewport may be offset), above
+      // the statistics question when the EEA bar is up (region-gate.js sets
+      // --region-consent-h on <html> while it is).
+      const consentH =
+        parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--region-consent-h")) || 0;
+      const visualBottom = offsetTop + vh - consentH;
       // Size for the lowest the stage sits at rest. It is sticky, so a page
       // scrolled by a few pixels lifts it to its sticky offset; measured then,
       // the stage came out that much too tall once the page was back at the

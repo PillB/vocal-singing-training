@@ -4395,10 +4395,13 @@ body.account-open {
   transform: translate(0, calc(-50% - 6px));
   width: 100%;
   box-sizing: border-box;
-  padding: 0.25rem 0.75rem;
+  /* Two lines of 0.8rem at 1.2 plus this padding and the border are 37.5 px:
+     the desktop row is 39 px, so a summary that wraps (a wider font than the
+     one this was drawn in) still stands inside it. */
+  padding: 0.15rem 0.75rem;
   border-radius: 14px;
   font-size: 0.8rem;
-  line-height: 1.25;
+  line-height: 1.2;
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;

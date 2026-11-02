@@ -579,12 +579,6 @@
     },
     {
       "file": "js/practice-modes.js",
-      "sha": "ab7cbd08a315663f882ba68ebb5449648d996bc156cbaf62aea46ee633667a04",
-      "complexity": 16,
-      "name": "Method '_attack'"
-    },
-    {
-      "file": "js/practice-modes.js",
       "sha": "402ba83c37079cde1072124cb385fae7219ff7c6b3afa5db7b4bb19c45ed8251",
       "complexity": 17,
       "name": "Method '_brightFrame'"
@@ -942,12 +936,6 @@
       "sha": "14959800be9fc18a8a5e2ea892d4b5e6b5ecf240188954ae20b753cb33c47b96",
       "complexity": 19,
       "name": "Async function 'askWorker'"
-    },
-    {
-      "file": "js/region-gate.js",
-      "sha": "2b02039afc2107d1cfd2cf89c03a419db2f2b3e4f7587faac21f7d8e55714a1e",
-      "complexity": 17,
-      "name": "Function 'maybeShowBar'"
     },
     {
       "file": "js/scenes/breath.js",
@@ -1680,12 +1668,6 @@
       "sha": "f722f11ddcc8a59d6c1d9eeb96db9ac1b7e2bf7a6643381b8964279aa21fb2fa",
       "complexity": 16,
       "name": "Function 'suggestUpgradeMoment'"
-    },
-    {
-      "file": "js/voice-features.js",
-      "sha": "670e53b71ba7095a42944cb0582adc430627fb0da0b76cc88edd4fc152e1efd2",
-      "complexity": 17,
-      "name": "Method '_analyse'"
     },
     {
       "file": "js/voice-features.js",

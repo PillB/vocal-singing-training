@@ -2,6 +2,16 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
+    <!-- Content Security Policy (a meta tag: GitHub Pages cannot send headers,
+         so frame-ancestors and reporting are not available). Scripts run only
+         from this site, Google's sign-in client, and the one inline flag below
+         by its hash (it must stay inline: it is what keeps analytics off if
+         js/region-gate.js fails to load). Styles allow inline because the app
+         renders style attributes in its templates. Turning on ads
+         (js/ads-config.js) needs the ad hosts added here first; the CSP tests
+         fail on any violation. tests/node/csp.test.mjs checks every inline
+         script's hash is listed. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-jup4jIH0JhrgZhTaTnfk0rGi+ceKUBbGwEpXI/1l8is=' https://accounts.google.com/gsi/client; style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; connect-src 'self' https://vocal-studio-entitlements.vocalstudio-pe.workers.dev https://accounts.google.com/gsi/; frame-src https://accounts.google.com/gsi/; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
       name="description"
@@ -10,7 +20,7 @@
     <meta name="color-scheme" content="dark" />
     <meta name="theme-color" content="#0c1118" />
     <title>Entrenamiento vocal y de canto</title>
-    <link rel="stylesheet" href="css/styles.css?v=20261101a" />
+    <link rel="stylesheet" href="css/styles.css?v=20261101b" />
     <link rel="stylesheet" href="css/exercise-viz.css?v=20261002a" />
     <link rel="stylesheet" href="css/scenes/speech.css?v=20261002a" />
     <link rel="stylesheet" href="css/scenes/speech-shape.css?v=20261002a" />
@@ -585,7 +595,7 @@
               <details class="rate-more" id="rate-more">
                 <summary data-i18n="rate.more">Más detalles</summary>
                 <div class="rate-more-body">
-                  <form id="metrics-form" class="metrics-form" onsubmit="return false;"></form>
+                  <form id="metrics-form" class="metrics-form"></form>
                   <div class="controls-row">
                     <button type="button" class="btn btn-success" id="btn-complete" data-i18n="rate.saveDetails">Guardar con estos detalles</button>
                   </div>
@@ -1131,9 +1141,9 @@
     <script src="js/practice-profiles.js?v=20261002a"></script>
     <script src="js/storage.js?v=20261006b"></script>
     <script src="js/practice-days.js?v=20260924c"></script>
-    <script src="js/billing-config.js?v=20260924a"></script>
-    <script src="js/license.js?v=20260921a"></script>
-    <script src="js/billing.js?v=20260922a"></script>
+    <script src="js/billing-config.js?v=20261102a"></script>
+    <script src="js/license.js?v=20261102a"></script>
+    <script src="js/billing.js?v=20261102a"></script>
     <script src="js/ads-config.js?v=20261006a"></script>
     <script src="js/ads.js?v=20261006a"></script>
     <script src="js/value-pulse.js?v=20260924c"></script>
@@ -1142,7 +1152,7 @@
          js/experiments.js keep nothing and send nothing rather than reading an
          absent gate as permission. -->
     <script>window.VT_REGION_REQUIRED = true;</script>
-    <script src="js/region-gate.js?v=20260928a"></script>
+    <script src="js/region-gate.js?v=20261102a"></script>
     <script src="js/analytics.js?v=20261006b"></script>
     <script src="js/experiments-config.js?v=20260924e"></script>
     <script src="js/experiments.js?v=20260925a"></script>
@@ -1157,7 +1167,7 @@
     <script src="js/pitch-visualizer.js?v=20261101a"></script>
     <script src="js/pitch-game.js?v=20261002a"></script>
     <script src="js/practice-engine.js?v=20261101a"></script>
-    <script src="js/voice-features.js?v=20261007a"></script>
+    <script src="js/voice-features.js?v=20261102b"></script>
     <script src="js/exercise-viz.js?v=20261002a"></script>
     <script src="js/scenes/speech.js?v=20261005g"></script>
     <script src="js/scenes/speech-shape.js?v=20261007a"></script>
@@ -1167,12 +1177,12 @@
     <script src="js/scenes/pitch.js?v=20261002a"></script>
     <script src="js/scenes/dynamics.js?v=20261002a"></script>
     <script src="js/scenes/resonance.js?v=20261007a"></script>
-    <script src="js/practice-modes.js?v=20261101a"></script>
+    <script src="js/practice-modes.js?v=20261102a"></script>
     <script src="js/recorder.js?v=20261002a"></script>
     <script src="js/metrics.js?v=20260924c"></script>
     <script src="js/session.js?v=20260924c"></script>
     <script src="js/daily-loop.js?v=20261006b"></script>
     <script src="js/tour.js?v=20261006b"></script>
-    <script src="js/app.js?v=20261101a"></script>
+    <script src="js/app.js?v=20261101b"></script>
   </body>
 </html>

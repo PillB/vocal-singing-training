@@ -613,33 +613,35 @@
   }
 
   /**
-   * Show the bar only when there is a real question to ask: a country that
-   * requires asking, no answer yet, something that would actually be sent, and
-   * no browser-level refusal already on the record — Global Privacy Control is
-   * a no, and asking again after a no is what the law calls a dark pattern.
+   * Is there a real question to ask? A country that requires asking, no
+   * answer yet, and no browser-level refusal already on the record — Global
+   * Privacy Control is a no, and asking again after a no is what the law
+   * calls a dark pattern.
    */
-  function maybeShowBar() {
-    const doc = global.document;
-    if (!doc || barShown) return;
-    if (verdict !== "eu" || consent()) return;
-    if (global.navigator?.globalPrivacyControl === true) return;
+  function worthAsking() {
+    if (verdict !== "eu" || consent()) return false;
+    if (global.navigator?.globalPrivacyControl === true) return false;
     // A deployment with no worker keeps nothing and sends nothing, so there is
     // nothing to ask about. This has to be its own check rather than riding the
     // remoteState() guard below: askWorker() settles "no_endpoint" without ever
     // awaiting, so settle() calls this from the gate's own init, and the gate is
     // loaded before js/analytics.js — remoteState is undefined at that moment and
-    // the guard cannot see the reason. Every other verdict arrives after a fetch,
-    // by which time analytics.js is there.
-    if (!apiBase()) return;
+    // the guard cannot see the reason.
+    return !!apiBase();
+  }
+
+  /**
+   * Nothing is sent from an automated browser, a deployment with no worker,
+   * or a browser whose sending was switched off, so there is nothing to
+   * consent to and the bar would be pure noise (or, after a no, a nag).
+   */
+  function nothingToConsentTo() {
     const state = global.VTAnalytics?.remoteState?.();
-    // Nothing is sent from an automated browser or a deployment with no worker,
-    // so there is nothing to consent to and the bar would be pure noise.
     const mine = ["eu_pending", "eu_unanswered", "eu_refused"];
-    if (state && state.reason && !mine.includes(state.reason)) return;
-    if (!doc.body) {
-      doc.addEventListener("DOMContentLoaded", maybeShowBar, { once: true });
-      return;
-    }
+    return !!(state && state.reason && !mine.includes(state.reason));
+  }
+
+  function buildBar(doc) {
     injectStyles();
     const bar = doc.createElement("div");
     bar.className = "region-consent";
@@ -666,6 +668,22 @@
     } catch {
       /* no MutationObserver: the bar keeps the language it opened in */
     }
+  }
+
+  /** Show the bar only when there is a real question to ask (see above). */
+  function maybeShowBar() {
+    const doc = global.document;
+    if (!doc || barShown || !worthAsking()) return;
+    // js/analytics.js loads after this file. A verdict that lands before it
+    // has run (a fast or cached worker answer) could not see an opt-out, and
+    // a visitor who had switched sending off was asked again. So decide only
+    // once every script on the page has run.
+    if (doc.readyState === "loading" || !doc.body) {
+      doc.addEventListener("DOMContentLoaded", maybeShowBar, { once: true });
+      return;
+    }
+    if (nothingToConsentTo()) return;
+    buildBar(doc);
   }
 
   /** Everything this file decided, for whoever is sitting at the browser. */

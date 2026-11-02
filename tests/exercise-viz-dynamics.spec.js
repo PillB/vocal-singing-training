@@ -220,9 +220,20 @@ test.describe("dynamics pictures", () => {
   test("s14 sloppy: long staccato with hammered starts; a broken, sliding legato", async ({ page }) => {
     await boot(page);
     await openAndStart(page, "s14-staccato-legato", "articulationSloppy");
-    await page.waitForTimeout(6500);
+    // Every attack of this voice is a 4 ms slap. Wait for eight that were
+    // measured (a frame dropped under load leaves one unmeasured, never "not
+    // hammered"), then most must carry ▲: before the rise was measured against
+    // where it ends, a vibrato crest made 2 of 13 and CI saw 1.
+    const attacks = () =>
+      (window.VTApp.getState().modeInstance?.state?.runs || [])
+        .filter((r) => r.phaseIdx === 0 && r.t1 != null && r.hammer != null)
+        .map((r) => r.hammer);
+    await expect.poll(() => modeState(page, attacks).then((a) => a.length), { timeout: 30000 }).toBeGreaterThanOrEqual(8);
+    const measured = await modeState(page, attacks);
+    const share = measured.filter(Boolean).length / measured.length;
+    expect(share, `${measured.filter(Boolean).length} of ${measured.length} 4 ms attacks marked ▲`).toBeGreaterThanOrEqual(0.75);
     const s0 = await modeState(page, () => window.VTApp.getState().modeInstance.state.stats(0));
-    expect(s0.hammers, "4 ms attacks are marked ▲").toBeGreaterThanOrEqual(2);
+    expect(s0.hammers).toBeGreaterThanOrEqual(6);
     expect(s0.medGap).toBeLessThan(0.15);
     await page.locator("#mode-focus [data-next-phase]").click();
     await page.waitForFunction(() => (window.VTApp.getState().modeInstance?.state?.stats(1)?.breaks || 0) >= 2, null, { timeout: 20000 });

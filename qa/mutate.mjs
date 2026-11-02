@@ -8,7 +8,7 @@
  *
  *   node qa/mutate.mjs            # the Node sets (audio, lint)
  *   node qa/mutate.mjs audio      # one set
- *   node qa/mutate.mjs stage a11y flows  # browser sets: need Playwright's Chromium
+ *   node qa/mutate.mjs stage a11y flows billing  # browser sets: need Playwright's Chromium
  *
  * Exit code 1 when any mutant survives or an anchor no longer matches (so a
  * refactor that moves the code cannot silently retire its mutant).
@@ -20,9 +20,10 @@ import path from "node:path";
 const AUDIO_TESTS = [
   "tests/node/audio-contract.test.mjs",
   "tests/node/audio-mutant-killers.test.mjs",
-  "tests/node/hold-duration.test.mjs"
+  "tests/node/hold-duration.test.mjs",
+  "tests/node/attack-rise.test.mjs"
 ];
-const LINT_TESTS = ["qa/lint-gate.test.mjs"];
+const LINT_TESTS = ["qa/lint-gate.test.mjs", "tests/node/asset-versions.test.mjs", "tests/node/csp.test.mjs"];
 const node = (tests) => [process.execPath, "--test", ...tests];
 const PIANO_SPEC = [
   process.execPath,
@@ -60,7 +61,11 @@ export const MUTANTS = {
     ["M12 trill hold accrues at 2x (QA-09)", "js/practice-modes.js", "        this.state.acc += dt;", "        this.state.acc += dt * 2;"],
     ["M13 NoteGate hold accrues at 2x (every pitch-hold mode)", "js/scenes/pitch.js", "        this.acc += dt;\n        this.outMs = 0;", "        this.acc += dt * 2;\n        this.outMs = 0;"],
     ["M14 NoteGate counts the reference note's blank", "js/scenes/pitch.js", "        this.blank -= dt;\n        this.cents = null;\n        return false;", "        this.blank -= dt;"],
-    ["M15 NoteGate band ignores its tolerance", "js/scenes/pitch.js", "      if (Math.abs(best.c) <= this.o.tol) {", "      if (Math.abs(best.c) <= this.o.tol * 2) {"]
+    ["M15 NoteGate band ignores its tolerance", "js/scenes/pitch.js", "      if (Math.abs(best.c) <= this.o.tol) {", "      if (Math.abs(best.c) <= this.o.tol * 2) {"],
+    ["M16 s14 rise against the loudest moment again (CI red, PR #23)", "js/practice-modes.js", "      const rise = top != null && top > noise * 1.5 ? F.riseTime(seg, noise, top, rate, n) : null;", "      const rise = F.riseTime(seg, noise, peak, rate, n);"],
+    ["M17 rise crossings rounded to 2,5 ms samples", "js/voice-features.js", "ms: ((at(i, hi) - at(i10, lo)) * 1000) / rate", "ms: ((i - i10) * 1000) / rate"],
+    ["M18 attack level taken at the steepest step", "js/voice-features.js", "return seg[i - 1];", "return seg[steep];"],
+    ["M19 hammer threshold doubled", "js/practice-modes.js", "run.riseMs <= 14;", "run.riseMs <= 28;"]
   ].map(([name, file, from, to]) => ({ name, file, from, to, cmd: node(AUDIO_TESTS) })),
   lint: [
     ["L1 folders skipped by name again", "qa/lint-complexity.mjs", "if (!EXCLUDED_PATHS.has(name)) visit(name);", "if (!EXCLUDED_PATHS.has(name) && !/^(?:fixtures|geometry)$/.test(item.name)) visit(name);"],
@@ -72,6 +77,9 @@ export const MUTANTS = {
     ["L9 unresolvable --baseline-ref skips the check (QA-08)", "qa/lint-complexity.mjs", "    return null;\n  }\n  try {\n    return JSON.parse", "    return \"none\";\n  }\n  try {\n    return JSON.parse"],
     ["L10 empty --baseline-ref skips the check", "qa/lint-complexity.mjs", "if (args.includes(\"--baseline-ref\") && !ref) {", "if (false) {"],
     ["L6 misplaced wait options not flagged", "qa/lint-playwright-waits.mjs", "if (node.arguments.length !== 2) return false;", "if (node.arguments.length !== 99) return false;"],
+    ["L11 an edited asset keeps its cached version", "qa/asset-versions.mjs", "else if (rec.sha !== hashOf(text) && rec.v === v) {", "else if (false) {"],
+    ["L12 pages may disagree on an asset's version", "qa/asset-versions.mjs", "if (seen && seen.v !== v) problems.push", "if (false) problems.push"],
+    ["L13 an inline script without its CSP hash passes", "tests/node/csp.test.mjs", "    if (!scripts.includes(sha256(body))) problems.push", "    if (false) problems.push"],
     ["L7 empty wait-may-fail reason accepted", "qa/lint-playwright-waits.mjs", "/wait-may-fail:\\s*\\S/", "/wait-may-fail:/"]
   ].map(([name, file, from, to]) => ({ name, file, from, to, cmd: node(LINT_TESTS) })),
   // The open piano and the sticky stage (production-contracts "expanded piano").
@@ -100,7 +108,21 @@ export const MUTANTS = {
     ["FM3 Stop does nothing", "js/app.js", '$("#btn-practice-stop")?.addEventListener("click", () => stopPractice(false));', '$("#btn-practice-stop")?.addEventListener("click", () => {});'],
     ["FM4 an uncaught exception on every Start", "js/app.js", "async function startPractice() {\n    const ex = state.exercise;", 'async function startPractice() {\n    setTimeout(() => { throw new Error("planted"); }, 0);\n    const ex = state.exercise;'],
     ["FM5 the mic slider is disconnected", "js/app.js", "const applyMicSens = (raw) => {\n", "const applyMicSens = (raw) => {\n      if (micRange?.dataset.ready) return;\n      if (micRange) micRange.dataset.ready = '1';\n"]
-  ].map(([name, file, from, to]) => ({ name, file, from, to, cmd: FLOW_SPEC }))
+  ].map(([name, file, from, to]) => ({ name, file, from, to, cmd: FLOW_SPEC })),
+  // Console routes to Pro (QA-05), each closed by one freeze.
+  billing: [
+    ["B1 the config object left writable", "js/billing-config.js", "    return Object.freeze(o);", "    return o;"],
+    ["B2 only the config's top level frozen", "js/billing-config.js", '    Object.values(o).forEach((v) => v && typeof v === "object" && freeze(v));\n', ""],
+    ["B3 the config binding left replaceable", "js/billing-config.js", '  Object.defineProperty(global, "VT_BILLING_CONFIG", { value: held, writable: false, configurable: false, enumerable: true });', ""],
+    ["B4 VTBilling's answers left replaceable", "js/billing.js", "value: Object.freeze(global.VTBilling)", "value: global.VTBilling"],
+    ["B5 VTLicense's claims left replaceable", "js/license.js", "value: Object.freeze(global.VTLicense)", "value: global.VTLicense"]
+  ].map(([name, file, from, to]) => ({
+    name,
+    file,
+    from,
+    to,
+    cmd: [...PIANO_SPEC.slice(0, 3), "tests/console-unlock.spec.js", "--project=chromium", "--workers=4", "--reporter=dot", "-g", "console:"]
+  }))
 };
 
 export const DEFAULT_SETS = ["audio", "lint"];

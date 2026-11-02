@@ -3,6 +3,12 @@
  * focus to the control that opened it.
  */
 const { test, expect } = require("@playwright/test");
+// These tests stand in for the account worker at fake hosts
+// (https://entitlements.test, .invalid), which the page's Content Security
+// Policy rightly refuses. The policy itself is tested in tests/csp.spec.js
+// against the real worker host; here it is bypassed so account logic is
+// what is under test.
+test.use({ bypassCSP: true });
 const { patchBillingConfig } = require("./helpers/billing");
 
 const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";

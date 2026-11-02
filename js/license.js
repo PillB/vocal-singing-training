@@ -435,6 +435,8 @@
     init,
     LS_KEY
   };
+  // QA-05: `VTLicense.getClaims = () => ({ plan: "pro_yearly" })` must not unlock Pro
+  Object.defineProperty(global, "VTLicense", { value: Object.freeze(global.VTLicense), writable: false, configurable: false, enumerable: true });
 
   // Fail closed until the signature check finishes.
   if (read()?.token) state = "checking";

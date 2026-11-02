@@ -2,12 +2,22 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
+    <!-- Content Security Policy (a meta tag: GitHub Pages cannot send headers,
+         so frame-ancestors and reporting are not available). Scripts run only
+         from this site, Google's sign-in client, and the one inline flag below
+         by its hash (it must stay inline: it is what keeps analytics off if
+         js/region-gate.js fails to load). Styles allow inline because the app
+         renders style attributes in its templates. Turning on ads
+         (js/ads-config.js) needs the ad hosts added here first; the CSP tests
+         fail on any violation. tests/node/csp.test.mjs checks every inline
+         script's hash is listed. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-jup4jIH0JhrgZhTaTnfk0rGi+ceKUBbGwEpXI/1l8is=' https://accounts.google.com/gsi/client; style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; connect-src 'self' https://vocal-studio-entitlements.vocalstudio-pe.workers.dev https://accounts.google.com/gsi/; frame-src https://accounts.google.com/gsi/; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <!-- Anyone can load this page; only an account on the worker's ADMIN_EMAILS
          list gets an answer from the routes it calls. Keep it out of search. -->
     <meta name="robots" content="noindex, nofollow" />
     <title>Admin · Estudio Vocal</title>
-    <link rel="stylesheet" href="css/styles.css?v=20261101a" />
+    <link rel="stylesheet" href="css/styles.css?v=20261101b" />
     <link rel="stylesheet" href="css/admin.css?v=20260926a" />
   </head>
   <body class="admin-page">
@@ -197,7 +207,7 @@
     <!-- js/analytics.js and js/region-gate.js are left out on purpose: nothing
          an admin does here should enter the funnel this page reads. Keep the
          ?v= stamps equal to index.html's for the files both load. -->
-    <script src="js/billing-config.js?v=20260924a"></script>
+    <script src="js/billing-config.js?v=20261102a"></script>
     <script src="js/account.js?v=20261006b"></script>
     <script src="js/admin.js?v=20261006b"></script>
   </body>

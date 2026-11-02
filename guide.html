@@ -2,13 +2,23 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
+    <!-- Content Security Policy (a meta tag: GitHub Pages cannot send headers,
+         so frame-ancestors and reporting are not available). Scripts run only
+         from this site, Google's sign-in client, and the one inline flag below
+         by its hash (it must stay inline: it is what keeps analytics off if
+         js/region-gate.js fails to load). Styles allow inline because the app
+         renders style attributes in its templates. Turning on ads
+         (js/ads-config.js) needs the ad hosts added here first; the CSP tests
+         fail on any violation. tests/node/csp.test.mjs checks every inline
+         script's hash is listed. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-jup4jIH0JhrgZhTaTnfk0rGi+ceKUBbGwEpXI/1l8is=' https://accounts.google.com/gsi/client; style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; connect-src 'self' https://vocal-studio-entitlements.vocalstudio-pe.workers.dev https://accounts.google.com/gsi/; frame-src https://accounts.google.com/gsi/; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
       name="description"
       content="Guía de uso de Estudio Vocal: cómo practicar, cómo leer la autopista de afinación, qué significan los números y cómo guardar tu progreso."
     />
     <title>Guía de uso · Estudio Vocal</title>
-    <link rel="stylesheet" href="css/styles.css?v=20261101a" />
+    <link rel="stylesheet" href="css/styles.css?v=20261101b" />
     <style>
       .guide-wrap {
         max-width: 46rem;
@@ -1409,14 +1419,14 @@
          because the endpoint is derived from the worker URL it holds: without it
          this page would say nothing is being sent while the app sends, and the
          delete button would have nowhere to send the deletion. -->
-    <script src="js/billing-config.js?v=20260924a"></script>
+    <script src="js/billing-config.js?v=20261102a"></script>
     <script src="js/experiments-config.js?v=20260924e"></script>
     <!-- The page declares that the region gate belongs on it, so that if
          js/region-gate.js ever 404s or fails to parse, js/analytics.js and
          js/experiments.js keep nothing and send nothing rather than reading an
          absent gate as permission. -->
     <script>window.VT_REGION_REQUIRED = true;</script>
-    <script src="js/region-gate.js?v=20260928a"></script>
+    <script src="js/region-gate.js?v=20261102a"></script>
     <script src="js/analytics.js?v=20261006b"></script>
     <script src="js/experiments.js?v=20260925a"></script>
     <script src="js/privacy-switch.js?v=20261006b"></script>

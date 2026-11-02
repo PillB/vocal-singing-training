@@ -144,20 +144,49 @@ modules, and compares each over-ceiling function by source hash against
 Per task / per round, the lint test is part of the round's evidence:
 
 ```sh
-npm run lint            # complexity + Playwright-wait lint + qa/lint-gate.test.mjs
+npm run lint            # complexity + Playwright-wait lint + asset versions + qa/lint-gate.test.mjs
 node qa/mutate.mjs lint # every planted loophole in the gate must be caught
 ```
 
 `qa/lint-gate.test.mjs` holds positive and negative controls for each rule
 (15 passes / 16 fails, edited exemption, new debt, prune never adds, folder
-names, `.cjs`, `.ts`, baseline growth against a git ref, misbound and
-swallowed waits).
+names, `.cjs`, `.ts`, baseline growth against a git ref, an unresolvable or
+empty ref, a pasted copy of an exempt function, misbound and swallowed waits).
+
+Edited a script or stylesheet a page loads? Run `npm run assets:bump`: it
+gives each changed file a new `?v=` in every page and records its hash in
+`qa/asset-manifest.json`. `npm run lint` fails on a file whose content
+changed under the same version (GitHub Pages caches for ten minutes, so a
+visitor would run new HTML against an old script).
+
+Every page carries the same Content Security Policy meta. An inline
+`<script>` needs its sha256 in `script-src` (`tests/node/csp.test.mjs` says
+which one is missing); inline `on*=` handlers never run under it, so bind
+events in JS. A new third-party host (ads, a font CDN) must be added to the
+policy, and `tests/csp.spec.js` fails on any violation during a visit.
+
+### Billing config is frozen (QA-05)
+
+`VT_BILLING_CONFIG`, `VTBilling` and `VTLicense` are frozen and their window
+bindings locked once each script has run, so a console line cannot turn on
+the QA unlock, loosen the license check or replace an answer
+(`tests/console-unlock.spec.js`, mutation set `billing`). A test that needs
+a different config patches it as the page loads, with `patchBillingConfig`
+or `enableQaPro` from `tests/helpers/billing.js` (they compose); assigning to
+the config from `page.evaluate` silently does nothing. This raises the bar
+and no more: a script that runs before the page's own, or an edited copy of
+the files, can still unlock the client-side Pro features. Paid access itself
+rests on the server-signed license.
 
 ### Test layers
 
 - `npm run test:core` — lint, catalog regression, Node/Worker unit and
   contract tests (`tests/node/*.test.mjs`, `workers/entitlements/test`).
-- `node qa/mutate.mjs` — mutation check; CI runs it on every PR.
+- `node qa/mutate.mjs` — mutation check of the Node sets (audio, lint); CI
+  runs it on every PR. `node qa/mutate.mjs stage a11y flows billing` runs the
+  browser sets (sticky stage and piano, the phone h1, the per-exercise flow
+  test, the console routes to Pro); CI runs those after the production
+  contracts. Each set first proves its tests green on the unmutated code.
 - `npx playwright test --project=chromium` — the **PR gate**: headless,
   deterministic, one generated test per exercise where a suite walks the
   catalog, so shards balance and a failure names the exercise. No retries

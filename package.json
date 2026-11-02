@@ -6,7 +6,7 @@
     "test": "npm run test:core && playwright test --project=chromium",
     "test:core": "npm run lint && node qa/check-catalog.mjs && node --test \"tests/node/*.test.mjs\" \"workers/entitlements/test/*.test.mjs\"",
     "test:unit": "node --test \"tests/node/*.test.mjs\"",
-    "lint": "node qa/lint-complexity.mjs && node qa/lint-playwright-waits.mjs && node --test qa/lint-gate.test.mjs",
+    "lint": "node qa/lint-complexity.mjs && node qa/lint-playwright-waits.mjs && node qa/asset-versions.mjs && node --test qa/lint-gate.test.mjs",
     "lint:complexity": "node qa/lint-complexity.mjs",
     "lint:prune": "node qa/lint-complexity.mjs --prune-baseline",
     "test:e2e": "playwright test --project=chromium",
@@ -41,7 +41,8 @@
     "design-test:decide": "python3 qa/design-test/decide.py",
     "design-test:notes": "python3 qa/design-test/notes.py",
     "serve": "python3 -m http.server 8765",
-    "start": "python3 -m http.server 8765"
+    "start": "python3 -m http.server 8765",
+    "assets:bump": "node qa/asset-versions.mjs --bump"
   },
   "keywords": [
     "vocal",

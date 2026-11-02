@@ -11,6 +11,12 @@
  * Each procedure in docs/ADMIN-GUIDE.md has a test here with the same name.
  */
 const { test, expect } = require("@playwright/test");
+// These tests stand in for the account worker at fake hosts
+// (https://entitlements.test, .invalid), which the page's Content Security
+// Policy rightly refuses. The policy itself is tested in tests/csp.spec.js
+// against the real worker host; here it is bypassed so account logic is
+// what is under test.
+test.use({ bypassCSP: true });
 const fs = require("fs");
 const path = require("path");
 const { pathToFileURL } = require("url");

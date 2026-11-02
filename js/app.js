@@ -6446,6 +6446,9 @@
 
   /** Metrics form, timer and recorder. */
   function bindTakeTools() {
+    // Enter in a field must not submit (and reload) the page. This was an
+    // inline onsubmit, which the Content Security Policy does not run.
+    $("#metrics-form")?.addEventListener("submit", (e) => e.preventDefault());
     $("#btn-toggle-metrics")?.addEventListener("click", () => {
       openMetricsPanel(!state.metricsOpen);
     });

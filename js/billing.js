@@ -1021,4 +1021,6 @@
     openCustomerPortal,
     isPortalUrl
   };
+  // QA-05: `VTBilling.isPro = () => true` from the console must not unlock Pro
+  Object.defineProperty(global, "VTBilling", { value: Object.freeze(global.VTBilling), writable: false, configurable: false, enumerable: true });
 })(window);

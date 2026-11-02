@@ -1061,6 +1061,64 @@
   /* —— Onsets —— */
 
   /**
+   * How long an onset takes to rise: from where it first crosses 10 % of the
+   * way from the noise floor to `steady`, to where it first crosses 90 %.
+   * Both onset pictures (s12, s14) cut their rise this one way; what they
+   * measure it against is theirs (OnsetCapture: the level the note settles
+   * at; s14: `attackLevel`). Never the loudest moment that follows: vibrato
+   * through the vowel's formants swings the level ±1–2 dB, and a crest a
+   * tenth of a second later pushes the 90 % mark past the attack (a 4 ms
+   * attack read as 25–65 ms). { i10, i90, ms }; i90 is -1 and ms null when it
+   * never reaches 90 %, and null when it never starts.
+   */
+  function riseTime(seg, noise, steady, rate, end = seg.length) {
+    const lo = noise + (steady - noise) * 0.1;
+    const hi = noise + (steady - noise) * 0.9;
+    // Where between two samples the level crossed: a 2,5 ms sample would
+    // otherwise round a 13 ms rise to 12,5 or 15 ms, either side of a threshold
+    const at = (i, lvl) => (i > 0 && seg[i] > seg[i - 1] ? i - (seg[i] - lvl) / (seg[i] - seg[i - 1]) : i);
+    let i10 = -1;
+    for (let i = 0; i < end; i++) {
+      if (i10 < 0 && seg[i] >= lo) i10 = i;
+      if (i10 >= 0 && seg[i] >= hi) return { i10, i90: i, ms: ((at(i, hi) - at(i10, lo)) * 1000) / rate };
+    }
+    return i10 < 0 ? null : { i10, i90: -1, ms: null };
+  }
+
+  /**
+   * The level an attack rises to: where its fast rise ends, the first two
+   * steps after the steepest one that each climb under a fifth of its
+   * slope, if the fast rise does not then resume within `holdN` samples
+   * (30 ms). A level swing (vibrato climbs ~0,005 of the level per ms, a 4 ms
+   * attack ~0,07) does not move it, and neither does breath before the
+   * voice: the steepest step is the voice's own, so the end is after it. A
+   * frame that repeats audio it already gave, or skips some (rAF and the
+   * audio callback run on their own clocks), puts a pause or a dip inside a
+   * slow rise; the rise goes on after it, so that pause is not its end.
+   * Null when the rise has not ended by `end`.
+   */
+  function attackLevel(seg, from, end = seg.length, holdN = 12) {
+    let steep = -1;
+    let dmax = 0;
+    for (let i = Math.max(1, from); i < end; i++) {
+      const d = seg[i] - seg[i - 1];
+      if (d > dmax) {
+        dmax = d;
+        steep = i;
+      }
+    }
+    if (steep < 0) return null;
+    const resumes = (i) => {
+      for (let j = i + 1; j < Math.min(end, i + holdN); j++) if (seg[j] - seg[j - 1] >= dmax * 0.4) return true;
+      return false;
+    };
+    for (let i = steep + 1; i + 1 < end; i++) {
+      if (seg[i] - seg[i - 1] < dmax * 0.2 && seg[i + 1] - seg[i] < dmax * 0.2 && !resumes(i)) return seg[i - 1];
+    }
+    return null;
+  }
+
+  /**
    * The first 300 ms of each sound after at least `minGapMs` of quiet, cut
    * from the fast envelope, with the numbers that tell a breathy, a balanced
    * and an abrupt onset apart:
@@ -1127,18 +1185,9 @@
       const settle = seg.slice(Math.min(settleFrom, seg.length - 10));
       const steady = median(settle) || 1e-6;
       const noise = percentile(seg.slice(0, back), 0.2) || 0;
-      const lo = noise + (steady - noise) * 0.1;
-      const hi = noise + (steady - noise) * 0.9;
-      let i10 = -1;
-      let i90 = -1;
-      for (let i = 0; i < seg.length; i++) {
-        if (i10 < 0 && seg[i] >= lo) i10 = i;
-        if (i10 >= 0 && seg[i] >= hi) {
-          i90 = i;
-          break;
-        }
-      }
-      const riseMs = i10 >= 0 && i90 >= 0 ? ((i90 - i10) * 1000) / rate : 300;
+      const rise = riseTime(seg, noise, steady, rate);
+      const riseMs = rise && rise.ms != null ? rise.ms : 300;
+      const i10 = rise ? rise.i10 : -1;
       let peak = 0;
       const first = seg.slice(Math.max(0, i10), Math.max(0, i10) + Math.round(0.1 * rate));
       for (let i = 0; i < first.length; i++) peak = Math.max(peak, first[i]);
@@ -1220,6 +1269,8 @@
     RelativeLevel,
     SyllableRate,
     OnsetCapture,
+    riseTime,
+    attackLevel,
     StablePitch,
     dbfs,
     percentile,

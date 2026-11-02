@@ -7754,12 +7754,16 @@
     },
     /**
      * The attack of a run from the fast envelope: where it really started and
-     * how fast it rose. A rise under ~14 ms is a hammer (a glottal "slap"),
-     * unless frames were dropped and the attack was not seen.
+     * how fast it rose to where its fast rise ends (VTFeatures.attackLevel,
+     * cut by VTFeatures.riseTime as s12 is). A rise under ~14 ms is a hammer
+     * (a glottal "slap"), unless frames were dropped and the attack was not
+     * seen. The 12,5 ms smoothing alone reads an instant step as ~10 ms; a
+     * 30 ms attack reads ~25 ms.
      */
     _attack(run) {
       const st = this.state;
       const E = st.env;
+      const F = global.VTFeatures;
       run.attackDone = true;
       if (!E || !E.total) return;
       const rate = E.rate;
@@ -7768,25 +7772,17 @@
       const seg = E.window(since / rate);
       if (seg.length < since || seg.length < back + 8) return;
       const n = Math.min(seg.length, back + Math.round(0.12 * rate));
-      const head = seg.slice(0, back);
-      const noise = global.VTFeatures.percentile(head, 0.2) || 0;
+      const noise = F.percentile(seg.slice(0, back), 0.2) || 0;
       let peak = 0;
       for (let i = 0; i < n; i++) peak = Math.max(peak, seg[i]);
       if (peak <= noise * 1.5) return;
-      const lo = noise + (peak - noise) * 0.1;
-      const hi = noise + (peak - noise) * 0.9;
-      let i10 = -1;
-      let i90 = -1;
-      for (let i = 0; i < n; i++) {
-        if (i10 < 0 && seg[i] >= lo) i10 = i;
-        if (i10 >= 0 && seg[i] >= hi) {
-          i90 = i;
-          break;
-        }
-      }
-      if (i10 < 0 || i90 < 0) return;
-      run.t0 = Math.min(run.t0, this._tOfIdx(run.startTotal - back + i10));
-      run.riseMs = ((i90 - i10) * 1000) / rate;
+      // Where it starts, against its loudest; how it rises, against where the rise ends
+      const start = F.riseTime(seg, noise, peak, rate, n);
+      const top = start ? F.attackLevel(seg, start.i10, n) : null;
+      const rise = top != null && top > noise * 1.5 ? F.riseTime(seg, noise, top, rate, n) : null;
+      if (!rise || rise.ms == null) return;
+      run.t0 = Math.min(run.t0, this._tOfIdx(run.startTotal - back + rise.i10));
+      run.riseMs = rise.ms;
       run.hammer = run.maxDt > st.bufMs + 6 ? null : run.riseMs <= 14;
     },
     /** Where the sound really ended: the last moment within 15 dB of its peak. */

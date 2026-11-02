@@ -7413,7 +7413,9 @@
       n: String(moment.sessions ?? moment.trialDaysLeft ?? 0),
       s: moment.bestHoldSec != null ? Number(moment.bestHoldSec).toFixed(1) : "0"
     };
-    text.textContent = tt("value.moment." + moment.id, vars);
+    // One day left reads "1 día", not "1 días": the singular has its own line.
+    const oneDay = moment.id === "trial_ending" && vars.n === "1";
+    text.textContent = tt("value.moment." + moment.id + (oneDay ? "_one" : ""), vars);
     banner.hidden = false;
     banner.dataset.momentId = moment.id;
     const cta = $("#value-pulse-cta");

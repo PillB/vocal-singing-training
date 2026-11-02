@@ -17,6 +17,8 @@
  *   node qa/audit/analyze-audit.mjs /tmp/audit/audit.json > ledger.md
  */
 import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const ENV_NOISE = /Access-Control-Allow-Origin|vocal-studio-entitlements|ERR_NAME_NOT_RESOLVED|net::ERR_|Failed to load resource|CORS/;
 
@@ -146,4 +148,6 @@ function main(file) {
   process.stdout.write(lines.join("\n") + "\n");
 }
 
-if (process.argv[2]) main(process.argv[2]);
+// Only as a script: Playwright's runner imports tests/node/*.test.mjs (which
+// import this file) with "test" as its own first argument
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main(process.argv[2]);

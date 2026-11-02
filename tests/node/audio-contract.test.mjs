@@ -142,7 +142,7 @@ function engine(extraGlobals = {}) {
   runInNewContext(read("js/practice-engine.js"), {
     window: win, MediaRecorder: DeferredMediaRecorder, URL: url,
     Float32Array, Uint8Array, Blob, performance, queueMicrotask,
-    cancelAnimationFrame() {}, Math, console, ...extraGlobals
+    cancelAnimationFrame() {}, clearTimeout, Math, console, ...extraGlobals
   });
   const tracks = [];
   const instance = new win.VTPracticeEngine();

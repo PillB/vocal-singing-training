@@ -561,12 +561,6 @@
     },
     {
       "file": "js/practice-engine.js",
-      "sha": "df5933092bf1a1d8d849a29a9c9e9b897e3cec2294446c9b6b4bae004e6e2c2e",
-      "complexity": 28,
-      "name": "Async method 'start'"
-    },
-    {
-      "file": "js/practice-engine.js",
       "sha": "d01d1e14381838fa02a7bfe2e8e5969764c675bff9ec130cf61bfba98133a3c8",
       "complexity": 17,
       "name": "Method '_airRaw'"
@@ -1832,12 +1826,6 @@
       "name": "Async arrow function"
     },
     {
-      "file": "tests/all-flows-robust.spec.js",
-      "sha": "840b55f7306cf58ca8db8b5af47010dd09c72bfe716624faaea035f3e47119a2",
-      "complexity": 35,
-      "name": "Async arrow function"
-    },
-    {
       "file": "tests/audio-regression.spec.js",
       "sha": "16ae075350a96369a8f766b60fd26a92feeb0fe998d78e2cf8dd6514c8a4b3ac",
       "complexity": 26,
@@ -1925,12 +1913,6 @@
       "file": "tests/format-hit-clicks.spec.js",
       "sha": "90c596867973c7179183ec1260a65b3a03eb8a1258aeacf36782b85188e28f81",
       "complexity": 24,
-      "name": "Async arrow function"
-    },
-    {
-      "file": "tests/fullscreen-all-clicks.spec.js",
-      "sha": "5a296878d323d3df77c571e923d1399ae21bda4d3ef6e3fccb9b488aab252643",
-      "complexity": 29,
       "name": "Async arrow function"
     },
     {

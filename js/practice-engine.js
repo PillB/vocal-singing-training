@@ -381,16 +381,102 @@
           pending?.then((s) => s.getTracks().forEach((t) => t.stop())).catch(() => {});
           // A refusal is final: asking twice more with looser constraints only
           // repeats it (and, on some browsers, the prompt).
-          if (e && (e.name === "NotAllowedError" || e.name === "SecurityError" || e.name === "TimeoutError")) break;
+          // A busy/disconnected microphone is not a constraint-compatibility
+          // problem. Retrying it can trigger a second Safari capture session.
+          if (!["OverconstrainedError", "TypeError", "NotSupportedError"].includes(e?.name)) break;
         }
       }
       throw lastErr || new Error("getUserMedia failed");
     }
 
+    async _setupInputGraph() {
+      // One audio context for piano and pitch analysis. Creating a second one
+      // after an iOS microphone prompt often leaves it suspended.
+      const shared =
+        (global.VTPiano?.ctx?.state !== "closed" ? global.VTPiano?.ctx : null) ||
+        (global.VTSharedAudioCtx?.state !== "closed" ? global.VTSharedAudioCtx : null);
+      if (shared) {
+        this.audioCtx = shared;
+        this._ownsAudioCtx = false;
+      } else {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) throw new Error("AudioContext not available");
+        this.audioCtx = new AC();
+        this._ownsAudioCtx = true;
+        global.VTSharedAudioCtx = this.audioCtx;
+      }
+      if (["suspended", "interrupted"].includes(this.audioCtx.state)) {
+        await this.audioCtx.resume();
+      }
+      await global.VTPiano?.resume?.();
+      this.inputGain = this.audioCtx.createGain();
+      this.inputGain.gain.value = this._gainFromSens(this.sensitivity);
+      this.analyser = this.audioCtx.createAnalyser();
+      this.analyser.fftSize = frameSize(this.audioCtx.sampleRate);
+      this.analyser.smoothingTimeConstant = 0.12;
+      // Never replace a failed microphone node with silence and report a
+      // healthy session. A blank green 'live' state is worse than Retry.
+      this.source = this.audioCtx.createMediaStreamSource(this.stream);
+      this.source.connect(this.inputGain);
+      this.inputGain.connect(this.analyser);
+      this.buf = new Float32Array(this.analyser.fftSize);
+      this._freqBytes = new Uint8Array(this.analyser.frequencyBinCount);
+    }
+
+    _discardFailedInput() {
+      try { this.source?.disconnect(); } catch { /* no connected source */ }
+      try { this.inputGain?.disconnect(); } catch { /* no connected gain */ }
+      this.source = null;
+      this.inputGain = null;
+      this.analyser = null;
+      this.stream?.getTracks?.().forEach((track) => track.stop());
+      this.stream = null;
+      this.audioCtx = null;
+      this._ownsAudioCtx = false;
+      this.running = false;
+    }
+
+    _watchMicTrack(track, stream) {
+      const stillOwned = () => this.running && this.stream === stream;
+      const reportLoss = (kind) => {
+        if (stillOwned()) this._status(kind);
+      };
+      track.addEventListener?.("ended", () => reportLoss("mic-ended"));
+      track.addEventListener?.("mute", () => {
+        // iOS briefly mutes on focus/audio-route switches; don't stop a take
+        // for one transient sample, but never score through a sustained mute.
+        clearTimeout(this._micMuteTimer);
+        this._micMuteTimer = setTimeout(() => {
+          if (stillOwned() && track.muted) reportLoss("mic-muted");
+        }, 1200);
+      });
+      track.addEventListener?.("unmute", () => clearTimeout(this._micMuteTimer));
+      if (track.muted) {
+        this._micMuteTimer = setTimeout(() => {
+          if (stillOwned() && track.muted) reportLoss("mic-muted");
+        }, 1200);
+      }
+    }
+
+    async _startOptionalRecorder(record) {
+      if (!record) return;
+      try {
+        await this._startRecorder();
+      } catch (e) {
+        console.warn("MediaRecorder unavailable; practice continues without file recording", e);
+        this.recording = false;
+        this.mediaRecorder = null;
+      }
+    }
+
     async start({ record = false } = {}) {
       if (this.running) return;
-      // Progressive constraints: Safari/Firefox reject some ideal combinations
       this.stream = await this._acquireMic();
+      const audioTrack = this.stream.getAudioTracks?.()[0];
+      if (!audioTrack || audioTrack.readyState === "ended") {
+        this._discardFailedInput();
+        throw new Error("Microphone supplied no live audio track");
+      }
       // A phone or headset may ignore the request to leave the input alone.
       // Automatic gain evens out exactly the loudness differences the volume
       // exercises train, so the pictures say so rather than draw a false flat.
@@ -400,66 +486,12 @@
       } catch {
         this.processedInput = false;
       }
-      // Prefer the shared piano AudioContext so getUserMedia never orphans
-      // a second suspended context (classic "piano silent after mic" bug).
-      const shared =
-        (global.VTPiano && global.VTPiano.ctx && global.VTPiano.ctx.state !== "closed"
-          ? global.VTPiano.ctx
-          : null) ||
-        (global.VTSharedAudioCtx && global.VTSharedAudioCtx.state !== "closed"
-          ? global.VTSharedAudioCtx
-          : null);
-      if (shared) {
-        this.audioCtx = shared;
-        this._ownsAudioCtx = false;
-      } else {
-        const AC = window.AudioContext || window.webkitAudioContext;
-        this.audioCtx = new AC();
-        this._ownsAudioCtx = true;
-        global.VTSharedAudioCtx = this.audioCtx;
-      }
-      if (this.audioCtx.state === "suspended" || this.audioCtx.state === "interrupted") {
-        try {
-          await this.audioCtx.resume();
-        } catch (e) {
-          console.warn("PracticeEngine resume failed", e);
-        }
-      }
-      // Also nudge piano if it shares this context
       try {
-        await global.VTPiano?.resume?.();
-      } catch {
-        /* ignore */
-      }
-      this.inputGain = this.audioCtx.createGain();
-      this.inputGain.gain.value = this._gainFromSens(this.sensitivity);
-      this.analyser = this.audioCtx.createAnalyser();
-      this.analyser.fftSize = frameSize(this.audioCtx.sampleRate);
-      this.analyser.smoothingTimeConstant = 0.12;
-      // WebKit can throw/hang if stream was produced by a different AudioContext
-      try {
-        this.source = this.audioCtx.createMediaStreamSource(this.stream);
-        this.source.connect(this.inputGain);
-        this.inputGain.connect(this.analyser);
+        await this._setupInputGraph();
       } catch (e) {
-        console.warn("[VT] createMediaStreamSource failed — level/pitch may be flat", e);
-        this.source = null;
-        // Keep analyser graph alive with silence so RMS reads stay defined
-        try {
-          const silent = this.audioCtx.createBufferSource();
-          const buf = this.audioCtx.createBuffer(1, 1, this.audioCtx.sampleRate);
-          silent.buffer = buf;
-          silent.loop = true;
-          silent.connect(this.inputGain);
-          this.inputGain.connect(this.analyser);
-          silent.start();
-          this._silentSource = silent;
-        } catch {
-          /* ignore */
-        }
+        this._discardFailedInput();
+        throw e;
       }
-      this.buf = new Float32Array(this.analyser.fftSize);
-      this._freqBytes = new Uint8Array(this.analyser.frequencyBinCount);
 
       this.voiced = false;
       this.holdStart = null;
@@ -470,17 +502,8 @@
       this.startedAt = performance.now();
       this.running = true;
       this._lastFrameAt = performance.now();
-
-      // Recording is optional — never fail the whole practice session if MediaRecorder is unsupported
-      if (record) {
-        try {
-          await this._startRecorder();
-        } catch (e) {
-          console.warn("MediaRecorder unavailable; practice continues without file recording", e);
-          this.recording = false;
-          this.mediaRecorder = null;
-        }
-      }
+      this._watchMicTrack(audioTrack, this.stream);
+      await this._startOptionalRecorder(record);
 
       this._status("listening");
       this._loop();
@@ -560,6 +583,8 @@
       if (this.raf) cancelAnimationFrame(this.raf);
       this.raf = null;
       this.running = false;
+      clearTimeout(this._micMuteTimer);
+      this._micMuteTimer = null;
 
       let recorderStopping = false;
       if (this.mediaRecorder && this.mediaRecorder.state !== "inactive") {

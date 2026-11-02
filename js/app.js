@@ -4040,13 +4040,15 @@
    * how to allow it, a retry, and — inside a guided routine — a way on.
    * @param {boolean} canRun true when the piano or the clock still runs
    */
-  function showMicBlocked(canRun) {
+  function showMicBlocked(canRun, reason) {
     const box = $("#mic-blocked");
     if (!box) {
       toast(tt("toast.mic"));
       return;
     }
-    $("#mic-blocked-text").textContent = tt(canRun ? "mic.blocked.partial" : "mic.blocked.none");
+    $("#mic-blocked-text").textContent = tt(reason === "interrupted"
+      ? "mic.blocked.interrupted"
+      : canRun ? "mic.blocked.partial" : "mic.blocked.none");
     const retry = $("#btn-mic-retry");
     const skip = $("#btn-mic-skip");
     if (retry) {
@@ -4069,6 +4071,7 @@
       /* ignore */
     }
   }
+
 
   function hideMicBlocked() {
     const box = $("#mic-blocked");
@@ -5272,7 +5275,11 @@
       state.recorder.onLevel = (lvl) => {
         $("#level-fill").style.width = `${Math.round(lvl * 100)}%`;
       };
-      await state.recorder.start();
+      // Reuse an active practice stream. A second getUserMedia on iOS may
+      // interrupt playback or mute the first stream, and is not needed.
+      await state.recorder.start({
+        stream: state.practice.running ? state.practice.stream : null
+      });
       $("#btn-rec-start").disabled = true;
       $("#btn-rec-stop").disabled = false;
       toast(tt("toast.recording"));
@@ -8933,6 +8940,11 @@
       return state._hotApplyPromise;
     },
     getState: () => state,
+    // Small integration surface for platform audio interruption recovery.
+    // Status listeners may end an interrupted take without fabricating credit.
+    stopPractice,
+    showMicBlocked,
+    startExerciseSound,
     /** True if current (or given) exercise should start piano/ref on Empezar when Auto is on. */
     wantsSound: (ex) => {
       const e = ex || state.exercise;

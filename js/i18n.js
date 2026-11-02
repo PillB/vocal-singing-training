@@ -997,6 +997,9 @@
       "mic.blocked.none": "El micrófono está bloqueado, así que este ejercicio no puede escucharte. Para activarlo, toca el candado de la barra de direcciones, luego Micrófono y Permitir.",
       "mic.blocked.partial": "Sin micrófono: el piano y el reloj siguen, pero no puedo escucharte. Para activarlo, toca el candado de la barra de direcciones, luego Micrófono y Permitir.",
       "mic.blocked.retry": "Reintentar",
+      "mic.blocked.interrupted": "iPhone o Safari interrumpió el micrófono (por bloqueo, otra app o cambio de audio). Toca Reintentar para volver a escucharte.",
+      "sound.interrupted": "El sonido se interrumpió al cambiar de app, bloquear la pantalla o cambiar la salida de audio.",
+      "sound.resume": "Reactivar sonido",
       "mic.blocked.skip": "Saltar este paso",
       "leave.title": "¿Puntuar esta práctica?",
       "leave.body":
@@ -2035,6 +2038,9 @@
       "mic.blocked.none": "The microphone is blocked, so this exercise cannot hear you. To allow it, tap the padlock in the address bar, then Microphone, then Allow.",
       "mic.blocked.partial": "No microphone: the piano and the clock keep going, but I cannot hear you. To allow it, tap the padlock in the address bar, then Microphone, then Allow.",
       "mic.blocked.retry": "Try again",
+      "mic.blocked.interrupted": "Your phone or browser interrupted the microphone (screen lock, another app, or audio route change). Tap Try again to restore listening.",
+      "sound.interrupted": "Audio was interrupted by switching apps, locking the screen, or changing the audio output.",
+      "sound.resume": "Restore sound",
       "mic.blocked.skip": "Skip this step",
       "leave.title": "Rate this practice?",
       "leave.body":

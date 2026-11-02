@@ -310,6 +310,8 @@
       this.onChordChange = null;
       this._monitor = null; // AnalyserNode on master for audibility checks
       this._visibilityBound = false;
+      this._observedContexts = new WeakSet();
+      this.onStateChange = null;
     }
 
     _wireGraph(ctx) {
@@ -327,6 +329,12 @@
       this.comp.connect(ctx.destination);
       this._monitor = ctx.createAnalyser();
       this._monitor.fftSize = 1024;
+      if (!this._observedContexts.has(ctx)) {
+        this._observedContexts.add(ctx);
+        ctx.addEventListener?.("statechange", () => {
+          this.onStateChange?.(ctx.state);
+        });
+      }
       try {
         this.master.connect(this._monitor);
       } catch {
@@ -355,7 +363,7 @@
       document.addEventListener("pointerdown", () => {
         // Opportunistic unlock on any user gesture (Safari policy)
         if (this.ctx && (this.ctx.state === "suspended" || this.ctx.state === "interrupted")) {
-          this.resume().catch(() => {});
+          this.unlock().catch(() => {});
         }
       }, { passive: true });
     }
@@ -398,16 +406,21 @@
      * (Safari, Chrome, Firefox, Edge, Opera, mobile WebViews).
      * Buffer-source blip is more reliable than oscillator-only on some WebKit builds.
      */
-    async unlock() {
-      await this.ensure();
-      try {
-        if (this.ctx.state === "suspended" || this.ctx.state === "interrupted") {
-          await this.ctx.resume();
-        }
-      } catch {
-        /* ignore */
+    _unlockGraphSync() {
+      if (!this.ctx || this.ctx.state === "closed") {
+        this.playing = [];
+        this.master = null;
+        this.comp = null;
+        this._monitor = null;
+        this._wireGraph(getSharedAudioContext());
+      } else if (!this.master || !this.comp) {
+        this._wireGraph(this.ctx);
       }
-      // Dual prime: silent buffer + tiny oscillator (covers WebKit + Gecko quirks)
+    }
+
+    _primeSoundSync() {
+      // Both sources MUST start before the first await: iOS can revoke the
+      // transient user activation when an AudioContext.resume promise yields.
       try {
         const t = this.ctx.currentTime;
         const frames = Math.max(1, Math.floor(this.ctx.sampleRate * 0.02));
@@ -438,13 +451,29 @@
       } catch (e) {
         console.warn("Piano unlock osc blip failed", e);
       }
+    }
+
+    async unlock() {
+      this._unlockGraphSync();
+      // Invoke resume during the tap too; awaiting it comes only after both
+      // sound sources are scheduled under the original user activation.
+      let resumed;
+      try {
+        if (["suspended", "interrupted"].includes(this.ctx.state)) {
+          resumed = this.ctx.resume();
+        }
+      } catch (e) {
+        console.warn("Piano gesture resume failed", e);
+      }
+      this._primeSoundSync();
+      if (resumed) await resumed.catch((e) => console.warn("Piano gesture resume rejected", e));
       // Second resume after scheduling (Safari sometimes needs it)
       try {
         if (this.ctx.state !== "running") await this.ctx.resume();
       } catch {
         /* ignore */
       }
-      return this.ctx?.state === "running" || this.ctx?.state === "suspended";
+      return this.ctx?.state === "running";
     }
 
     /** Peak absolute sample on master bus (0 if silent / not ready). */

@@ -71,7 +71,7 @@
      * first-win flag, which a changed answer keeps. The score card is written
      * from these, with what the score was worked out from and the way on.
      */
-    rate: { feel: null, result: null, end: null, prevScore: null, firstWin: false, scored: null, nextId: null },
+    rate: { feel: null, result: null, end: null, prevScore: null, firstWin: false, scored: null, nextId: null, summary: null },
     /** The open exercise's steps when the stage shows them (no pitch canvas). */
     stageSteps: []
   };
@@ -134,9 +134,51 @@
       return;
     }
     el.textContent = text;
+    placeToast(el);
     el.classList.add("show");
     clearTimeout(toast._t);
-    toast._t = setTimeout(() => el.classList.remove("show"), opts.durationMs || 2800);
+    // Long enough to read: ~20 characters a second after the first glance
+    const readMs = Math.min(8000, Math.max(2800, 1500 + text.length * 50));
+    toast._t = setTimeout(hideToast, opts.durationMs || readMs);
+  }
+
+  function hideToast() {
+    clearTimeout(toast._t);
+    $("#toast")?.classList.remove("show");
+    $(".exercise-header-compact")?.classList.remove("toast-over");
+  }
+
+  /**
+   * In an exercise the row under the header holds ← Back, the title and Help.
+   * Centred under the header, a phone-width toast covered the way back (and
+   * Help) for its whole life, the moment after Stop when leaving is likeliest.
+   * There it takes the title's place instead, between the two buttons, in
+   * two lines at most (the take's summary stays whole in the rating card).
+   * Elsewhere it keeps its place under the header.
+   */
+  function placeToast(el) {
+    const row = document.body.classList.contains("view-exercise") ? $(".exercise-header-compact") : null;
+    const back = row && $("#btn-back-home");
+    const acts = row && row.querySelector(".ex-header-actions");
+    const r = row && row.getBoundingClientRect();
+    if (!back || !acts || !r || r.height < 1) {
+      $(".exercise-header-compact")?.classList.remove("toast-over");
+      el.classList.remove("in-row");
+      el.style.removeProperty("left");
+      el.style.removeProperty("top");
+      el.style.removeProperty("max-width");
+      return;
+    }
+    const left = back.getBoundingClientRect().right + 6;
+    const right = acts.getBoundingClientRect().left - 6;
+    el.classList.add("in-row");
+    // The title steps back while the toast holds its place (still read out)
+    row.classList.add("toast-over");
+    // In the title's own place (from its left edge, up to 420 px) and centred
+    // on the row, so it covers the title instead of leaving letters beside it
+    el.style.left = `${Math.round(left)}px`;
+    el.style.top = `${Math.round(r.top + r.height / 2)}px`;
+    el.style.maxWidth = `${Math.max(120, Math.round(Math.min(420, right - left)))}px`;
   }
 
   /** Global error surfacing — fail visibly (vibe-code silent-failure defense). */
@@ -4202,20 +4244,34 @@
       clearInterval(state._pianoKeepAlive);
       state._pianoKeepAlive = null;
     }
+    const modeResult = takeModeResult();
+    haltTake();
+    if (modeResult?.patches) applyMetricPatches(modeResult.patches);
+    setPracticeUI(false);
+    $("#level-fill").style.width = "0%";
+    if (!silent) announceStop(modeResult);
+  }
+
+  /** The mode's own end of the take: its patches and summary, or null. */
+  function takeModeResult() {
     // Snapshot pitch game BEFORE mode onStop (architecture review critical fix)
     if (state.pitchGame) {
       window.VTAppPitchGameSnap = state.pitchGame.snapshot();
     }
-    let modeResult = null;
     try {
       if (state.modeInstance) {
-        modeResult = state.modeInstance.onStop({
+        return state.modeInstance.onStop({
           pitchGame: window.VTAppPitchGameSnap || null
         });
       }
     } catch (e) {
       console.warn(e);
     }
+    return null;
+  }
+
+  /** Stop the engine, the clock, the piano and the pitch picture. */
+  function haltTake() {
     if (state.practiceLive || state.practice.running) {
       try {
         state.practice.setManualSound?.(false, null, { forceClear: true });
@@ -4233,18 +4289,21 @@
       state.pitchRunning = false;
       if (getProfile(state.exercise).showPitch) ensurePitchViz();
     }
-    if (modeResult?.patches) applyMetricPatches(modeResult.patches);
-    setPracticeUI(false);
-    $("#level-fill").style.width = "0%";
-    if (!silent) {
-      toast(modeResult?.summary ? `⏹ ${modeResult.summary}` : tt("toast.stopped"));
-      // Musk-mode UX: after a real stop, open reflect/save so metrics aren't hidden.
-      // Detener hides itself; its focus goes to the question, not the page top.
-      const a = document.activeElement;
-      const lost = !a || a === document.body || a.id === "btn-practice-stop";
-      openMetricsPanel(true, { focus: lost && !rateQuiet() });
-    }
   }
+
+  /** After a real Stop: say what was measured, keep it, and ask how it went. */
+  function announceStop(modeResult) {
+    const summary = modeResult?.summary || null;
+    toast(summary ? `⏹ ${summary}` : tt("toast.stopped"));
+    // The toast goes in seconds; what was measured stays beside the question
+    state.rate.summary = summary;
+    // Musk-mode UX: after a real stop, open reflect/save so metrics aren't hidden.
+    // Detener hides itself; its focus goes to the question, not the page top.
+    const a = document.activeElement;
+    const lost = !a || a === document.body || a.id === "btn-practice-stop";
+    openMetricsPanel(true, { focus: lost && !rateQuiet() });
+  }
+
 
   /**
    * Expand or collapse the rating card (#metrics-card)
@@ -4330,10 +4389,18 @@
 
   /** A new exercise starts with nothing chosen. */
   function resetRating() {
-    state.rate = { feel: null, result: null, end: null, prevScore: null, firstWin: false, scored: null, nextId: null };
+    state.rate = { feel: null, result: null, end: null, prevScore: null, firstWin: false, scored: null, nextId: null, summary: null };
     const more = $("#rate-more");
     if (more) more.open = rateQuiet();
     paintRating();
+  }
+
+  /** The take's measured summary under the time, in the language it was measured in. */
+  function paintTakeSummary(summary) {
+    const el = $("#rate-sum");
+    if (!el) return;
+    el.hidden = !summary;
+    el.textContent = summary ? `${tt("rate.take")} ${summary}` : "";
   }
 
   /** Write the card's state: the time, the answer chosen, the note, the way out. */
@@ -4350,6 +4417,7 @@
         : VTMetrics.clock(done);
       time.replaceChildren(document.createTextNode(`${tt("rate.time")} `), strong);
     }
+    paintTakeSummary(r.summary);
     // A timed take fills the minutes itself; the field is there for practice
     // the clock never saw.
     $$("#metrics-form .field-time").forEach((f) => {
@@ -9192,10 +9260,7 @@
       startRoutine: (r) => startStructured(r.path || "basics", r),
       startDaily,
       toast: (msg, opts) => toast(msg, opts),
-      hideToast: () => {
-        clearTimeout(toast._t);
-        $("#toast")?.classList.remove("show");
-      },
+      hideToast,
       refresh: () => {
         renderNextStepCard();
         renderTodayBasics();

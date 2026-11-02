@@ -628,7 +628,7 @@
   /** The onset's numbers, longest wording first (the card writes the first that fits). */
   function onsetNumbers(res) {
     if (!res || res.model) return [""];
-    if (res.kind2 === "unmeasured") return [L("la pantalla se saltó cuadros: sin medida", "the screen skipped frames: no measure"), L("sin medida", "no measure")];
+    if (res.kind2 === "unmeasured") return [L("la página se trabó y perdió parte del sonido: sin medida", "the page stalled and missed part of it: no measure"), L("sin medida", "no measure")];
     const r = Math.round(res.riseMs);
     const o = fmtNum(res.overshoot, 1);
     const a = Math.round(res.leadMs);

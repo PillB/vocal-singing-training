@@ -315,12 +315,6 @@
     },
     {
       "file": "js/app.js",
-      "sha": "a33e34b91e8b44405633d3348607bb029514c86530fd6eabe78193b15a699792",
-      "complexity": 23,
-      "name": "Function 'stopPractice'"
-    },
-    {
-      "file": "js/app.js",
       "sha": "3ccf2294cd34e344a142fb1b544e3830f33bcdab66ef01ddfb63021d98f0d85b",
       "complexity": 22,
       "name": "Function 'suggestNextExercise'"

@@ -22,6 +22,17 @@ import { fileURLToPath } from "node:url";
 
 const ENV_NOISE = /Access-Control-Allow-Origin|vocal-studio-entitlements|ERR_NAME_NOT_RESOLVED|net::ERR_|Failed to load resource|CORS/;
 
+/** Modes with no take to start: the 12-week plan is a schedule, not an exercise with a mic. */
+const NO_TAKE = new Set(["weekPlan"]);
+
+/**
+ * Modes whose count rises on silence by design, each with the reason a
+ * reviewer accepted. Anything else that counts on silence or noise is a finding.
+ */
+export const QUIET_COUNTS_BY_DESIGN = {
+  concisionGate: "the gate opens on the 2,5 s thinking pause itself; the answer is timed after it"
+};
+
 const changes = (ticks, key) => new Set((ticks || []).map((t) => t?.[key])).size;
 const nums = (s) => (String(s || "").match(/\d+/g) || []).map(Number);
 
@@ -36,13 +47,14 @@ function countsUp(ticks) {
 }
 
 function checkTakes(rec, out) {
+  if (NO_TAKE.has(rec.mode)) return;
   for (const [n, how] of [[1, "mouse"], [2, "keyboard"]]) {
     const it = rec.iterations?.[n];
     if (!it) continue;
     if (it.failure) out.push(["start/stop", `iteration ${n} (${how}) threw: ${it.failure}`]);
     if (it.started === false) out.push(["start/stop", `${how} Start did not start the take`]);
     if (it.stopped === false) out.push(["start/stop", `${how} Stop did not stop the take`]);
-    if (it.ticks && rec.mode !== "weekPlan") {
+    if (it.ticks) {
       const moving = ["focus", "hud", "status", "pitch", "cue"].some((k) => changes(it.ticks, k) > 1);
       if (!moving) out.push(["feedback", `${how}: nothing on screen changed in ${it.ticks.length / 2} s of singing`]);
     }
@@ -52,7 +64,7 @@ function checkTakes(rec, out) {
 
 function checkQuiet(rec, out) {
   const it = rec.iterations?.[3];
-  if (!it) return;
+  if (!it || QUIET_COUNTS_BY_DESIGN[rec.mode]) return;
   if (it.failure) out.push(["quiet", `boundary run threw: ${it.failure}`]);
   for (const run of [it.silent, it.noise].filter(Boolean)) {
     const up = countsUp(run.ticks);
@@ -62,7 +74,7 @@ function checkQuiet(rec, out) {
 
 function checkInterrupt(rec, out) {
   const it = rec.iterations?.[4];
-  if (!it || rec.mode === "weekPlan") return;
+  if (!it || NO_TAKE.has(rec.mode)) return;
   if (it.failure) out.push(["leave", `interruption run threw: ${it.failure}`]);
   const live = (g) => g?.live || 0;
   if (live(it.afterDouble?.gum) > 1) out.push(["mic", `double Start opened ${it.afterDouble.gum.live} mic tracks`]);
@@ -106,7 +118,7 @@ function checkLayout(where, inv, out) {
 function checkFocus(rec, out) {
   for (const f of rec.focus || []) {
     if (f.id === "body") continue;
-    if (f.obscured) out.push(["focus", `Tab stop "${f.text || f.id}" is covered`]);
+    if (f.obscured) out.push(["focus", `Tab stop "${f.text || f.id}" is covered${f.by ? ` by ${f.by}` : ""}`]);
     if (!f.outline) out.push(["focus", `Tab stop "${f.text || f.id}" shows no focus ring`]);
   }
 }

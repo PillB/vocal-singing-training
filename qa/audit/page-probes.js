@@ -16,7 +16,8 @@
   function visible(el) {
     if (!el || !el.getBoundingClientRect) return false;
     const r = el.getBoundingClientRect();
-    if (r.width < 1 || r.height < 1) return false;
+    // 1 px and under is the screen-reader-only pattern (a live region), not something on screen
+    if (r.width <= 1 || r.height <= 1) return false;
     const cs = getComputedStyle(el);
     return cs.visibility !== "hidden" && cs.display !== "none" && Number(cs.opacity) > 0.02;
   }
@@ -36,10 +37,36 @@
     return t.replace(/\s+/g, " ").trim();
   }
 
+  // A form control's name is its label's text, never its value ("on" for a checkbox)
   function label(el) {
     const aria = el.getAttribute("aria-label") || "";
-    const text = (el.innerText || el.value || "").replace(/\s+/g, " ").trim();
-    return (aria || text || el.getAttribute("title") || el.getAttribute("placeholder") || "").slice(0, 90);
+    const own = el.labels && el.labels.length ? el.labels[0].innerText : "";
+    const text = (own || el.innerText || (el.type === "checkbox" || el.type === "radio" ? "" : el.value) || "").replace(/\s+/g, " ").trim();
+    return (aria || text || el.getAttribute("title") || el.getAttribute("placeholder") || el.id || "").slice(0, 90);
+  }
+
+  const tooSmall = (r) => r.width < 24 || r.height < 24;
+
+  /**
+   * Under 24 × 24 px with no way round it (WCAG 2.5.8). A label activates its
+   * control, so a checkbox inside a big enough label is a big enough target.
+   */
+  function smallTarget(el, r) {
+    if (!tooSmall(r)) return false;
+    return ![...(el.labels || [])].some((l) => visible(l) && !tooSmall(l.getBoundingClientRect()));
+  }
+
+  /** What sits on top of an element's centre: "self", "offscreen", or the coverer. */
+  function coverer(el, r) {
+    const x = r.left + r.width / 2;
+    const y = r.top + r.height / 2;
+    if (x < 0 || y < 0 || x > innerWidth || y > innerHeight) return "offscreen";
+    const top = document.elementFromPoint(x, y);
+    if (!top) return "none";
+    if (top === el || el.contains(top) || top.contains(el)) return "self";
+    // A label over its own control is the same target
+    if (el.labels && [...el.labels].some((l) => l === top || l.contains(top))) return "self";
+    return (top.id ? "#" + top.id : top.tagName.toLowerCase()) + "." + String(top.className || "").split(" ")[0];
   }
 
   function parseRgb(s) {
@@ -75,16 +102,6 @@
     return Math.round(((Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)) * 100) / 100;
   }
 
-  function hit(el, r) {
-    const x = r.left + r.width / 2;
-    const y = r.top + r.height / 2;
-    if (x < 0 || y < 0 || x > innerWidth || y > innerHeight) return "offscreen";
-    const top = document.elementFromPoint(x, y);
-    if (!top) return "none";
-    if (top === el || el.contains(top) || top.contains(el)) return "self";
-    return (top.id ? "#" + top.id : top.tagName.toLowerCase()) + "." + String(top.className || "").split(" ")[0];
-  }
-
   function describe(el, kind) {
     const r = el.getBoundingClientRect();
     const cs = getComputedStyle(el);
@@ -103,8 +120,8 @@
       disabled: !!el.disabled || el.getAttribute("aria-disabled") === "true",
       font: parseFloat(cs.fontSize),
       contrast: contrast(el),
-      hit: kind === "control" ? hit(el, r) : undefined,
-      small: kind === "control" && (r.width < 24 || r.height < 24)
+      hit: kind === "control" ? coverer(el, r) : undefined,
+      small: kind === "control" && smallTarget(el, r)
     };
   }
 
@@ -190,5 +207,5 @@
     };
   }
 
-  window.__audit = { zInventory, overlaps, snapshot, visible };
+  window.__audit = { zInventory, overlaps, snapshot, visible, label, smallTarget, coverer };
 })();

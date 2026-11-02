@@ -183,9 +183,10 @@ rests on the server-signed license.
 - `npm run test:core` — lint, catalog regression, Node/Worker unit and
   contract tests (`tests/node/*.test.mjs`, `workers/entitlements/test`).
 - `node qa/mutate.mjs` — mutation check of the Node sets (audio, lint); CI
-  runs it on every PR. `node qa/mutate.mjs stage a11y flows billing` runs the
-  browser sets (sticky stage and piano, the phone h1, the per-exercise flow
-  test, the console routes to Pro); CI runs those after the production
+  runs it on every PR. `node qa/mutate.mjs stage a11y flows billing audit`
+  runs the browser sets (sticky stage and piano, one h1 and the language of
+  each half on every page, the per-exercise flow test, the console routes to
+  Pro, the forensic audit's own probes); CI runs those after the production
   contracts. Each set first proves its tests green on the unmutated code.
 - `npx playwright test --project=chromium` — the **PR gate**: headless,
   deterministic, one generated test per exercise where a suite walks the

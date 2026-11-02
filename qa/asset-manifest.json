@@ -40,8 +40,8 @@
     "sha": "93d225ed63fd919a"
   },
   "css/styles.css": {
-    "v": "20261101b",
-    "sha": "7bca195ecd8f6b68"
+    "v": "20261102e",
+    "sha": "0beeebcde0188e17"
   },
   "js/account.js": {
     "v": "20261006b",
@@ -64,8 +64,8 @@
     "sha": "4c03c708ee923b1a"
   },
   "js/app.js": {
-    "v": "20261101b",
-    "sha": "f62acecb04e91d24"
+    "v": "20261102c",
+    "sha": "d825c08071207d4c"
   },
   "js/auth-users.generated.js": {
     "v": "20261006a",
@@ -112,8 +112,8 @@
     "sha": "178ba56877e20400"
   },
   "js/i18n.js": {
-    "v": "20261101a",
-    "sha": "d0375f8088b0d073"
+    "v": "20261102a",
+    "sha": "f79e51e930a6b535"
   },
   "js/license.js": {
     "v": "20261102a",
@@ -144,8 +144,8 @@
     "sha": "a0e0e06dc4bcd25e"
   },
   "js/practice-modes.js": {
-    "v": "20261102b",
-    "sha": "d57460cd2abb24ae"
+    "v": "20261102c",
+    "sha": "9dc0b225676685fe"
   },
   "js/practice-profiles.js": {
     "v": "20261002a",
@@ -176,8 +176,8 @@
     "sha": "7e48f57ef7398d75"
   },
   "js/scenes/dynamics.js": {
-    "v": "20261002a",
-    "sha": "b0fb60d249445592"
+    "v": "20261102a",
+    "sha": "b625414e32c1539e"
   },
   "js/scenes/guided.js": {
     "v": "20261007a",
@@ -224,7 +224,7 @@
     "sha": "6a70c4249ad8e832"
   },
   "js/voice-features.js": {
-    "v": "20261102c",
-    "sha": "333d373a2fe9d42e"
+    "v": "20261102d",
+    "sha": "8412b26127f49cf1"
   }
 }

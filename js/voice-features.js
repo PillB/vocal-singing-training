@@ -168,9 +168,9 @@
       }
       return best == null ? N : best;
     }
-    /** True when audio was lost at or after envelope sample `idx` (a stalled tab). */
-    lostSince(idx) {
-      return this._gaps.last(this._gaps.count).some((at) => at >= idx);
+    /** True when audio was lost from envelope sample `idx` on (before `to`): a stalled tab. */
+    lostSince(idx, to = Infinity) {
+      return this._gaps.last(this._gaps.count).some((at) => at >= idx && at < to);
     }
     /** The last `sec` seconds of envelope, oldest first. */
     window(sec) {
@@ -1245,7 +1245,10 @@
       else if (riseMs <= t.abruptRiseMs && overshoot >= t.abruptOvershoot) kind = "abrupt";
       // Normalised shape for drawing: 0..1 against the settled level
       const shape = Array.from(seg, (v) => clamp((v - noise) / Math.max(1e-6, (steady - noise) * 1.6), 0, 1));
-      return { kind, riseMs, overshoot, leadMs, shape, pitched: p.pitchAt != null, onsetIndex: back };
+      // Audio lost in the rise or before the note settled: the shape is not the voice's
+      const from = p.startTotal - back;
+      const lost = this.env.lostSince(from, from + settleFrom);
+      return { kind, riseMs, overshoot, leadMs, shape, pitched: p.pitchAt != null, onsetIndex: back, lost };
     }
     /**
      * Set thresholds from the learner's own examples of each kind, halfway

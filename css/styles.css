@@ -41,6 +41,18 @@
 html {
   scroll-behavior: smooth;
 }
+/* The app's sticky header (js keeps --header-h true), and in an exercise the
+   ← Back row too (--ex-chrome-h), cover the top of the window. Declared as
+   scroll padding, the browser keeps a focused control below them when Tab
+   scrolls it into view; without it Tab left "Siguiente →" and the chord
+   menus under them (WCAG 2.4.11). Only the app page: the guide and privacy
+   pages have no script to measure their header and set their own margins. */
+html:has(#view-exercise) {
+  scroll-padding-top: calc(var(--header-h, 58px) + 0.5rem);
+}
+html:has(body.view-exercise) {
+  scroll-padding-top: calc(var(--header-h, 58px) + var(--ex-chrome-h, 0px) + 0.5rem);
+}
 
 body {
   margin: 0;
@@ -1713,6 +1725,9 @@ body.home-zero #pro-insights-panel {
   display: flex;
   align-items: center;
   gap: 0.2rem;
+  /* The whole label is the switch's target: 24 px at least (WCAG 2.5.8);
+     the 13 px box with 11 px text alone was a 13 × 17 target */
+  min-height: 24px;
   font-size: 0.68rem;
   font-weight: 700;
   color: var(--text);
@@ -1824,10 +1839,14 @@ body.view-exercise.practice-live #pitch-game-hud {
   z-index: 40;
   display: flex;
   flex-direction: row;
-  flex-wrap: nowrap;
+  /* One row while Start, the mic and the piano options fit; a second row
+     when they do not. Kept to one row, the mic box shrank under its own
+     slider at 1280–1440 px (v12's seven piano options) and the slider lay on
+     the octave buttons. The stage reads the rail's height (--rail-h), so the
+     lanes end above a second row. */
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.45rem;
-  /* One control row tall enough for Start + compact mic (no wrap) */
   max-height: none;
   min-height: 2.75rem;
   pointer-events: none; /* children re-enable */
@@ -1902,7 +1921,8 @@ body.view-exercise.practice-live #pitch-game-hud {
 /* Mic: single compact row [meter | MIC | slider | 7] — never wrap / never past stage */
 .hud-bc {
   flex: 1 1 12rem;
-  min-width: 10rem;
+  /* Never narrower than its name, meter, slider and value */
+  min-width: min-content;
   max-width: min(22rem, 42%);
   width: auto;
   transform: none;
@@ -2540,6 +2560,12 @@ body.view-exercise .metrics-card-collapsible.collapsed .metrics-sub-compact {
 .rate-time strong {
   color: var(--text);
   font-variant-numeric: tabular-nums;
+}
+/* What the exercise measured in the take, kept after the toast has gone */
+.rate-sum {
+  margin: 0.15rem 0 0;
+  font-size: 0.95rem;
+  color: var(--text-muted);
 }
 /* The answers are the card's main action: equal weight, none looks chosen
    until it is, and then it wears the shared selected look (Design:
@@ -4359,6 +4385,35 @@ body.account-open {
 /* Under the sticky header, never on top of Practicar / Plan / Historial */
 .toast.show {
   top: max(calc(var(--header-h, 58px) + 0.35rem), var(--safe-top, 0px));
+}
+
+/* In an exercise: in the title's place, between ← Back and Help (js
+   placeToast sets left, top and max-width from the row), two lines at most,
+   so it never reaches the stage's strip. The take's summary, which can be
+   longer, also stays whole in the rating card (#rate-sum), and screen
+   readers hear the whole toast (role="status"). */
+.toast.in-row {
+  transform: translate(0, calc(-50% - 6px));
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.25rem 0.75rem;
+  border-radius: 14px;
+  font-size: 0.8rem;
+  line-height: 1.25;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+.toast.in-row.show {
+  transform: translate(0, -50%);
+}
+.exercise-header-compact .ex-title-row {
+  transition: opacity 0.2s ease;
+}
+.exercise-header-compact.toast-over .ex-title-row {
+  opacity: 0;
 }
 
 .muted {

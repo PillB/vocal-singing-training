@@ -241,13 +241,13 @@ async function focusPath(page, max = 45) {
         const el = document.activeElement;
         if (!el || el === document.body) return { id: "body" };
         const r = el.getBoundingClientRect();
-        const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
-        const obscured = !!top && top !== el && !el.contains(top);
+        const by = window.__audit.coverer(el, r);
         return {
           id: el.id || el.tagName.toLowerCase(),
-          text: (el.getAttribute("aria-label") || el.innerText || "").replace(/\s+/g, " ").trim().slice(0, 50),
+          text: window.__audit.label(el).slice(0, 50),
           inView: r.bottom > 0 && r.top < innerHeight && r.width > 0,
-          obscured,
+          obscured: by !== "self" && by !== "offscreen",
+          by,
           outline: getComputedStyle(el).outlineStyle !== "none" || getComputedStyle(el).boxShadow !== "none"
         };
       })

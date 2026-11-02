@@ -74,7 +74,7 @@ function* frames(x, { frameMs = (HOP / SR) * 1000, chunk = 1, phaseMs = 0, stall
 function measureS14(rampMs, am, schedule = {}) {
   const m = W.VTPracticeModes.get("staccatoLegato");
   const env = new F.Envelope({ keepSec: 3 });
-  m.state = { env, bufMs: (BUF / SR) * 1000, t: 0 };
+  m.state = { env, t: 0 };
   const { x, onSample } = voice(rampMs, am);
   let run = null;
   for (const f of frames(x, schedule)) {
@@ -82,9 +82,8 @@ function measureS14(rampMs, am, schedule = {}) {
     m.state.t = f.t;
     // The engine's sound edge sees the note in the frame it starts in
     if (!run && f.end > onSample + 0.005 * SR) {
-      run = { t0: f.t, startTotal: env.total, maxDt: 0, attackDone: false, hammer: null };
+      run = { t0: f.t, startTotal: env.total, attackDone: false, hammer: null };
     }
-    if (run && f.t - run.t0 < 0.2) run.maxDt = Math.max(run.maxDt, f.dtMs);
     if (run && !run.attackDone && f.t - run.t0 >= 0.13) m._attack(run);
   }
   return run;
@@ -213,4 +212,44 @@ test("s12 cuts its rise the same way: a 4 ms attack in a vibrato trough stays un
   assert.equal(bound, 22);
   assert.ok(rise(4) < bound, `4 ms attack read as ${rise(4).toFixed(1)} ms`);
   assert.ok(rise(30) > bound, `30 ms attack read as ${rise(30).toFixed(1)} ms`);
+});
+
+/** s12's capture of one note, fed in engine frames (optionally with a stall). */
+function captureS12(rampMs, schedule = {}) {
+  let got = null;
+  const cap = new F.OnsetCapture({ onOnset: (r) => (got = r) });
+  const { x, onSample } = voice(rampMs, 0.15, 1);
+  for (const f of frames(x, schedule)) {
+    const on = f.end > onSample + 0.005 * SR;
+    cap.feed({ ...f, sounding: on, rawFreq: on ? 220 : 0 });
+  }
+  return got;
+}
+
+test("s12: audio lost in the rise marks the onset unmeasured; lost after the note settled does not", () => {
+  // Wrong behaviour rejected: guessing loss from a late frame (dt > buffer
+  // + 6 ms). A 45 ms frame loses 2 ms of a 43 ms buffer and passed; a late
+  // frame whose audio all arrived was thrown away. The envelope knows exactly.
+  assert.equal(captureS12(4).lost, false, "control: nothing lost");
+  assert.equal(captureS12(4, { stallAt: 0.31 }).lost, true, "a stall inside the rise");
+  // 0.5 s is past the 190 ms the rise and settle need, but before the take
+  // is analysed (340 ms in): an unbounded check would call it lost
+  assert.equal(captureS12(4, { stallAt: 0.5 }).lost, false, "a stall after the note settled");
+});
+
+test("s12 mode: 'not measured' follows the lost audio, not how late a frame came", () => {
+  const base = W.VTPracticeModes.get("onsetReps");
+  const mode = Object.assign(Object.create(base), { $: () => null, _head: () => "", viz: null });
+  const take = (lost, maxDt) => {
+    mode.state = {
+      startArmed: true, review: false, phase: "free", soundStart: 1, target: 5, refs: null,
+      onsets: [], counts: { balanced: 0, breathy: 0, abrupt: 0, unmeasured: 0 },
+      // The old guess's inputs, set to give the wrong answer each time
+      maxDt, bufMs: 43
+    };
+    mode._onOnset({ riseMs: 40, leadMs: 20, overshoot: 1.05, lost });
+    return mode.state.latest.kind2;
+  };
+  assert.equal(take(false, 50), "balanced", "a late frame that lost nothing is measured");
+  assert.equal(take(true, 0), "unmeasured", "audio lost on time-looking frames is not");
 });

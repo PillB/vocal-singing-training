@@ -4,7 +4,7 @@
 // (a clean record, or the account worker refusing localhost, as a finding).
 import test from "node:test";
 import assert from "node:assert/strict";
-import { findings } from "../../qa/audit/analyze-audit.mjs";
+import { findings, QUIET_COUNTS_BY_DESIGN } from "../../qa/audit/analyze-audit.mjs";
 
 const tick = (focus) => ({ focus, hud: "", status: "", pitch: "", cue: "" });
 const clean = {
@@ -37,6 +37,22 @@ test("each defect is named once, under its check", () => {
   for (const k of ["errors", "focus", "layout", "start/stop", "feedback", "quiet", "mic", "leave"]) {
     assert.ok(got.includes(k), `missing ${k} in ${JSON.stringify(findings(bad))}`);
   }
+});
+
+test("the plan has no take, and a count accepted on silence says why; other modes still flag both", () => {
+  const plan = structuredClone(clean);
+  plan.mode = "weekPlan";
+  plan.iterations[1] = { started: false, stopped: false };
+  assert.deepEqual(findings(plan), [], "the 12-week plan has no Start");
+  const gate = structuredClone(clean);
+  gate.mode = "concisionGate";
+  gate.iterations[3].silent.ticks = [tick("Puertas abiertas 0/5"), tick("Puertas abiertas 1/5")];
+  assert.deepEqual(findings(gate), []);
+  assert.match(QUIET_COUNTS_BY_DESIGN.concisionGate, /pause/, "the exemption carries its reason");
+  // Controls: the same records under an ordinary mode are findings
+  plan.mode = gate.mode = "pitchMatch";
+  assert.ok(findings(plan).some(([k]) => k === "start/stop"));
+  assert.ok(findings(gate).some(([k]) => k === "quiet"));
 });
 
 test("timers are not counts: a clock that runs on silence is not progress", () => {

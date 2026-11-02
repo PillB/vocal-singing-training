@@ -779,6 +779,7 @@
       // exercise's clock at 00:00, or "Calificar este ejercicio" in a routine).
       "rate.q": "¿Cómo te fue?",
       "rate.time": "Tiempo:",
+      "rate.take": "Esta toma:",
       "rate.easy": "Fácil",
       "rate.ok": "Normal",
       "rate.hard": "Me costó",
@@ -1822,6 +1823,7 @@
       // Design: rating
       "rate.q": "How did it go?",
       "rate.time": "Time:",
+      "rate.take": "This take:",
       "rate.easy": "Easy",
       "rate.ok": "OK",
       "rate.hard": "Hard",

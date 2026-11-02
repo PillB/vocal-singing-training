@@ -8384,14 +8384,21 @@
       if (r.riseMs <= 22 && (r.overshoot >= 1.35 || r.riseMs <= 14)) return "abrupt";
       return "balanced";
     },
+    /**
+     * Audio that never reached the analyser in the rise (a stalled tab). The
+     * envelope knows exactly; a frame late enough to lose samples (the engine
+     * caps dt at 50 ms) is only the guess for a capture that cannot tell.
+     */
+    _lostRise(res) {
+      const st = this.state;
+      return res.lost != null ? res.lost : st.maxDt > (st.bufMs || 43) + 6;
+    },
     _onOnset(res) {
       const st = this.state;
       // The take's first sound (or one that followed noise) had no silence before it
       if (!st.startArmed || st.review) return;
-      const span = st.bufMs || 43;
       res.t = st.soundStart;
-      // A frame late enough to lose samples of the rise (the engine caps dt at 50 ms)
-      const unmeasured = st.maxDt > span + 6;
+      const unmeasured = this._lostRise(res);
       if (st.phase === "contrast") {
         const ask = st.asks[st.step];
         if (unmeasured) {

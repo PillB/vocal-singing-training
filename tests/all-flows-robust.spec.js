@@ -57,10 +57,6 @@ async function measureLayout(page, entry, report, exId) {
   for (const issue of layout.issues) {
     const full = layout.startHit?.top ? { ...issue, top: layout.startHit.top } : issue;
     if (!["stage_overflow_y", "start_offscreen", "start_hit_miss", "mode_focus_covers_start"].includes(issue.code)) continue;
-    if (layout.start && layout.start.w < 8) {
-      entry.issues.push({ ...full, code: "start_zero_size" });
-      continue;
-    }
     entry.ok = false;
     entry.issues.push(full);
     report.summary.issues.push({ exerciseId: exId, ...full });
@@ -128,7 +124,14 @@ async function stopLive(page, entry, report, exId) {
 }
 
 async function startStop(page, entry, report, exId, mode) {
-  if (mode === "weekPlan" || !(await page.locator("#btn-practice-start").isVisible())) return;
+  if (mode === "weekPlan") return;
+  if (!(await page.locator("#btn-practice-start").isVisible())) {
+    entry.ok = false;
+    const issue = { code: "start_missing", msg: "Non-plan exercise has no visible Start button" };
+    entry.issues.push(issue);
+    report.summary.issues.push({ exerciseId: exId, ...issue });
+    return;
+  }
   await clearClickLog(page);
   await reflowStage(page);
   const start = await mouseClickAndLog(page, "#btn-practice-start", "btn-practice-start");
@@ -281,6 +284,7 @@ for (let batch = 0; batch < 4; batch++) test(`all flows: desktop layout + click 
       "stage_overflow_y",
       "start_offscreen",
       "start_hit_miss",
+      "start_missing",
       "mode_focus_covers_start",
       "start_no_live",
       "stop_fail",

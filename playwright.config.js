@@ -38,12 +38,12 @@ module.exports = {
     {
       name: "firefox",
       use: { browserName: "firefox" },
-      testMatch: /(cross-browser-audio|safari-mobile-recovery)\.spec\.js/
+      testMatch: /(cross-browser-audio|safari-mobile-recovery|exercise-start-visibility)\.spec\.js/
     },
     {
       name: "webkit",
       use: { browserName: "webkit" },
-      testMatch: /(cross-browser-audio|safari-mobile-recovery)\.spec\.js/
+      testMatch: /(cross-browser-audio|safari-mobile-recovery|exercise-start-visibility)\.spec\.js/
     },
     {
       name: "mobile-chrome",
@@ -51,7 +51,7 @@ module.exports = {
         browserName: "chromium",
         ...devices["Pixel 7"]
       },
-      testMatch: /(cross-browser-audio|safari-mobile-recovery)\.spec\.js/
+      testMatch: /(cross-browser-audio|safari-mobile-recovery|exercise-start-visibility)\.spec\.js/
     },
     {
       name: "mobile-safari",
@@ -59,7 +59,7 @@ module.exports = {
         browserName: "webkit",
         ...devices["iPhone 14"]
       },
-      testMatch: /(cross-browser-audio|safari-mobile-recovery)\.spec\.js/
+      testMatch: /(cross-browser-audio|safari-mobile-recovery|exercise-start-visibility)\.spec\.js/
     }
   ],
   reporter: [["list"]],

@@ -1647,12 +1647,6 @@
     },
     {
       "file": "js/tour.js",
-      "sha": "8757d1a11ba534e74d947b6e8f350706eff1bef0a92dd9fc1629d6e80cbdbd30",
-      "complexity": 18,
-      "name": "Function 'end'"
-    },
-    {
-      "file": "js/tour.js",
       "sha": "c3fe8848271351da6b199063bc2d581d8d0d0abb093ed481634fb9fafcc51b60",
       "complexity": 16,
       "name": "Function 'packSteps'"

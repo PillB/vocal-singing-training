@@ -46,18 +46,27 @@ function installClickLogInit() {
  * Force-hide tour / modals that steal hits.
  * @param {import('@playwright/test').Page} page
  */
+function dismissActiveTourPreservingRoute() {
+  try {
+    // An idle tour must not navigate. Active tour dismissal can restore its
+    // original route (Home), which must not invalidate a layout probe.
+    if (!window.VTTour?.isActive?.()) return;
+    const app = window.VTApp;
+    const previousView = app?.getState?.()?.view;
+    window.VTTour.end("dismiss");
+    if (previousView === "exercise" && app?.getState?.()?.view !== "exercise") {
+      app.setView("exercise");
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
 async function dismissBlockingOverlays(page) {
+  await page.evaluate(dismissActiveTourPreservingRoute);
   await page.evaluate(() => {
     try {
       localStorage.setItem("vt_tour_v1", "1");
-    } catch {
-      /* ignore */
-    }
-    try {
-      window.VTTour?.stop?.();
-      window.VTTour?.end?.();
-      window.VTTour?.close?.();
-      window.VTTour?.dismiss?.();
     } catch {
       /* ignore */
     }
@@ -76,7 +85,7 @@ async function dismissBlockingOverlays(page) {
     });
     const leave = document.getElementById("leave-modal");
     if (leave) {
-      document.getElementById("leave-discard")?.click();
+      if (!leave.hidden) document.getElementById("leave-discard")?.click();
       leave.hidden = true;
       leave.style.display = "none";
     }

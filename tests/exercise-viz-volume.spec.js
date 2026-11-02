@@ -70,6 +70,23 @@ async function openAndStart(page, id, voice) {
   await page.evaluate((x) => window.VTApp.openExercise(x), id);
   await expect(page.locator("#view-exercise")).toHaveClass(/active/);
   await page.locator("#btn-practice-start").click();
+  await page.waitForFunction(() => window.VTApp.getState().practiceLive ||
+    document.getElementById("mic-blocked")?.hidden === false, null, { timeout: 10000 });
+  const capture = await page.evaluate(() => {
+    const s = window.VTApp.getState();
+    const voice = window.__VTVoice;
+    const voiceTrack = voice.nodes?.dest?.stream.getAudioTracks()[0];
+    return {
+      live: s.practiceLive,
+      micBlocked: document.getElementById("mic-blocked").hidden === false,
+      status: document.getElementById("mic-blocked-text").textContent,
+      track: s.practice.stream?.getAudioTracks()[0]?.readyState,
+      voiceTrack: voiceTrack?.readyState,
+      context: window.VTPiano.ctx?.state,
+      sameAudioContext: voice.ctx === window.VTPiano.ctx
+    };
+  });
+  expect(capture.live, `${id} synthetic mic failed: ${JSON.stringify(capture)}`).toBe(true);
   await page.waitForTimeout(250);
   if (voice) await playVoice(page, voice);
 }

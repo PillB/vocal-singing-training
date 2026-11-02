@@ -18,10 +18,50 @@
       this.onLevel = null;
       this.startedAt = null;
       this.elapsedMs = 0;
+      this._starting = false;
+      this._ownsStream = true;
+      this._ownsContext = true;
+      this._generation = 0;
+      this._stopResolver = null;
+      this._stopPending = null;
     }
 
-    async start() {
-      if (this.recording) return;
+    _chooseMime() {
+      if (typeof MediaRecorder.isTypeSupported !== "function") return "";
+      for (const type of ["audio/webm;codecs=opus", "audio/mp4", "audio/webm"]) {
+        if (MediaRecorder.isTypeSupported(type)) return type;
+      }
+      return "";
+    }
+
+    _onStopped(recorder, generation) {
+      const valid = generation === this._generation;
+      if (!valid) return; // An old final chunk must never tear down a new take.
+      const mime = recorder.mimeType || this.chunks[0]?.type || "application/octet-stream";
+      const result = valid && this.chunks.length
+        ? {
+          blob: new Blob(this.chunks, { type: mime }),
+          durationMs: performance.now() - (this.startedAt || performance.now())
+        }
+        : null;
+      if (result) {
+        this.blob = result.blob;
+        this.audioUrl = URL.createObjectURL(result.blob);
+        result.url = this.audioUrl;
+        this.elapsedMs = result.durationMs;
+      }
+      this.recording = false;
+      this._stopMeter();
+      this._stopTracks();
+      const resolve = this._stopResolver;
+      this._stopResolver = null;
+      this._stopPending = null;
+      resolve?.(result);
+    }
+
+    async start({ stream = null } = {}) {
+      if (this.recording || this._starting) return;
+      this._starting = true;
       this.chunks = [];
       this.blob = null;
       if (this.audioUrl) {
@@ -34,70 +74,64 @@
       // noise suppression eats a held "sss" and soft onsets. (Plain false is
       // a preference, not a requirement, so browsers that can't comply still
       // hand over a stream.)
-      this.stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: false
-        }
-      });
-
-      const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-        ? "audio/webm;codecs=opus"
-        : MediaRecorder.isTypeSupported("audio/webm")
-          ? "audio/webm"
-          : "";
-
-      this.mediaRecorder = mime
-        ? new MediaRecorder(this.stream, { mimeType: mime })
-        : new MediaRecorder(this.stream);
-
-      this.mediaRecorder.ondataavailable = (e) => {
-        if (e.data && e.data.size) this.chunks.push(e.data);
-      };
-
-      this.mediaRecorder.onstop = () => {
-        this.blob = new Blob(this.chunks, {
-          type: this.mediaRecorder.mimeType || "audio/webm"
+      this._ownsStream = !stream;
+      const generation = ++this._generation;
+      try {
+        this.stream = stream || await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
         });
-        this.audioUrl = URL.createObjectURL(this.blob);
+        if (generation !== this._generation) {
+          this._stopTracks();
+          return;
+        }
+        if (!this.stream.getAudioTracks?.().some((t) => t.readyState !== "ended")) {
+          throw new Error("Recorder has no live microphone track");
+        }
+        const mime = this._chooseMime();
+        this.mediaRecorder = mime
+          ? new MediaRecorder(this.stream, { mimeType: mime })
+          : new MediaRecorder(this.stream);
+        const recorder = this.mediaRecorder;
+        recorder.ondataavailable = (e) => {
+          if (generation === this._generation && e.data?.size) this.chunks.push(e.data);
+        };
+        recorder.onstop = () => this._onStopped(recorder, generation);
+        // A borrowed practice stream already drives the main level meter.
+        // Opening an extra AudioContext on iOS can suspend piano playback.
+        if (this._ownsStream) this._startMeter(this.stream);
+        recorder.start(250);
+        this.recording = true;
+        this.startedAt = performance.now();
+        this.elapsedMs = 0;
+      } catch (e) {
         this._stopMeter();
         this._stopTracks();
-      };
-
-      this._startMeter(this.stream);
-      this.mediaRecorder.start(250);
-      this.recording = true;
-      this.startedAt = performance.now();
-      this.elapsedMs = 0;
+        this.mediaRecorder = null;
+        throw e;
+      } finally {
+        this._starting = false;
+      }
     }
 
     stop() {
-      return new Promise((resolve) => {
-        if (!this.mediaRecorder || this.mediaRecorder.state === "inactive") {
-          this.recording = false;
-          resolve(null);
-          return;
-        }
-        this.mediaRecorder.onstop = () => {
-          this.blob = new Blob(this.chunks, {
-            type: this.mediaRecorder.mimeType || "audio/webm"
-          });
-          this.audioUrl = URL.createObjectURL(this.blob);
-          this.elapsedMs = performance.now() - (this.startedAt || performance.now());
-          this.recording = false;
-          this._stopMeter();
-          this._stopTracks();
-          resolve({ blob: this.blob, url: this.audioUrl, durationMs: this.elapsedMs });
-        };
-        this.mediaRecorder.stop();
+      if (this._stopPending) return this._stopPending;
+      if (!this.mediaRecorder || this.mediaRecorder.state === "inactive") {
+        this.recording = false;
+        return Promise.resolve(null);
+      }
+      this._stopPending = new Promise((resolve) => {
+        this._stopResolver = resolve;
+        try { this.mediaRecorder.stop(); } catch { this._onStopped(this.mediaRecorder, this._generation); }
       });
+      return this._stopPending;
     }
 
     _startMeter(stream) {
       try {
         const AC = window.AudioContext || window.webkitAudioContext;
-        this.ctx = new AC();
+        this.ctx = global.VTPiano?.ctx?.state !== "closed" ? global.VTPiano?.ctx : null;
+        this._ownsContext = !this.ctx;
+        if (!this.ctx) this.ctx = new AC();
         const source = this.ctx.createMediaStreamSource(stream);
         this.analyser = this.ctx.createAnalyser();
         this.analyser.fftSize = 256;
@@ -124,22 +158,26 @@
     _stopMeter() {
       if (this.raf) cancelAnimationFrame(this.raf);
       this.raf = null;
-      if (this.ctx) {
+      if (this.ctx && this._ownsContext) {
         this.ctx.close().catch(() => {});
-        this.ctx = null;
       }
+      this.ctx = null;
       this.analyser = null;
       if (this.onLevel) this.onLevel(0);
     }
 
     _stopTracks() {
-      if (this.stream) {
+      if (this.stream && this._ownsStream) {
         this.stream.getTracks().forEach((t) => t.stop());
-        this.stream = null;
       }
+      this.stream = null;
     }
 
     clear() {
+      this._generation++;
+      this._stopResolver?.(null);
+      this._stopResolver = null;
+      this._stopPending = null;
       if (this.recording) {
         try {
           this.mediaRecorder.stop();

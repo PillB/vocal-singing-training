@@ -1111,7 +1111,25 @@
    *   finished. `false` closes without recording anything, for a replay that
    *   is being restarted.
    */
+  function recordTourEnd(reason, pack, step) {
+    if (!reason) return;
+    track(`tour_${reason}`, {
+      pack,
+      lastStepId: step?.id || null,
+      n: index + 1,
+      total: stepList.length
+    });
+    if (pack) {
+      markUiSeen(pack);
+      // "Saltar ayuda": no more unsolicited help for any exercise.
+      if (reason !== "complete") setUiOff();
+    } else writeState(reason === "complete" ? "finished" : "dismissed");
+  }
+
   function end(reason, opts = {}) {
+    // An idle close must be inert: external overlay cleanup and a rapid
+    // repeat-dismiss must never navigate away from an unrelated exercise.
+    if (!active) return;
     const pack = currentPack;
     const stay = stayOnEnd;
     const step = stepList[index];
@@ -1127,19 +1145,7 @@
       ui.root.hidden = true;
       window.VTFocusTrap?.release(ui.card);
     }
-    if (reason) {
-      track(`tour_${reason}`, {
-        pack,
-        lastStepId: step?.id || null,
-        n: index + 1,
-        total: stepList.length
-      });
-      if (pack) {
-        markUiSeen(pack);
-        // "Saltar ayuda": no more help opening by itself, on any exercise.
-        if (reason !== "complete") setUiOff();
-      } else writeState(reason === "complete" ? "finished" : "dismissed");
-    }
+    recordTourEnd(reason, pack, step);
     currentPack = null;
     stayOnEnd = false;
     stepList = [];

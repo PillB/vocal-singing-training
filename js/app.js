@@ -7520,6 +7520,12 @@
             toast(tt("pricing.toast.demo"));
             updateBillingChrome();
             renderPricingModal();
+          } else if (res.mode === "signin_required") {
+            // Same handling as the trial's needs_account branch below: the press
+            // worked, and it sent them one step back rather than nowhere.
+            toast(tt("pricing.checkoutNeedsAccount"), { durationMs: 4600 });
+            closePricing();
+            openAccount();
           } else if (res.mode === "verification_unavailable") {
             toast(tt("pricing.toast.verifyUnavailable"), { durationMs: 5200 });
           } else if (res.mode === "unconfigured") {

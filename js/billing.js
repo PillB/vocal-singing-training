@@ -202,6 +202,22 @@
   }
 
   /** True once the entitlements worker URL and its public key are both configured. */
+  /**
+   * What the account layer says about this browser, defensively.
+   *
+   * Null when this build has no account layer at all, which is not the same as
+   * a signed-out visitor: a deployment without accounts must still be able to
+   * take a payment the old way.
+   * @returns {object|null} Account state, or null.
+   */
+  function accountState() {
+    try {
+      return global.VTAccount?.getState?.() || null;
+    } catch {
+      return null;
+    }
+  }
+
   function verificationConfigured() {
     try {
       return !!global.VTLicense?.isConfigured?.();
@@ -574,6 +590,17 @@
         // Never send someone to pay when we cannot turn that payment into a
         // verifiable entitlement — they would come back to a free account.
         return { ok: false, mode: "verification_unavailable", message: null };
+      }
+      // A payment made while signed out is tied to this browser's storage and
+      // to nothing else: the card keeps charging every month while the same
+      // person's next phone shows free, and no operator route exists to move
+      // that licence onto an account afterwards. So where this deployment can
+      // sign somebody in, it has to, before the money moves. The free trial
+      // already works this way (trial_result outcome "needs_account" in
+      // js/app.js); this is the same gate on the paid path.
+      const account = accountState();
+      if (account && account.configured && !account.signedIn) {
+        return { ok: false, mode: "signin_required", plan: planId, provider: providerId || null };
       }
       try {
         sessionStorage.setItem(

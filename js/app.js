@@ -7432,6 +7432,10 @@
     putAwayValueBanner(banner);
   }
 
+  // The coach summary (Análisis Pro, the downloaded .txt) names a weak metric by
+  // the label this page shows it under, not by its id.
+  window.VTValuePulse?.setMetricLabeler?.(metricLabel);
+
   function renderPricingModal() {
     const B = window.VTBilling;
     if (!B) return;

@@ -221,6 +221,60 @@
     };
   }
 
+  /** "Pace / rate control" -> "pace-rate-control", as the plan.el.* keys spell it. */
+  function slug(text) {
+    return String(text || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "");
+  }
+
+  /**
+   * A plan focus in the interface language. The plan stores the English name so
+   * plans saved earlier keep working; the words shown come from plan.el.*.
+   */
+  function elementName(el) {
+    const key = `plan.el.${slug(el)}`;
+    const out = global.VTI18n?.t?.(key);
+    return out && out !== key ? out : String(el || "");
+  }
+
+  /**
+   * The page's own way of naming a metric (js/app.js: metricLabel), handed over
+   * once it exists. Its Spanish names live in that file, and a second copy here
+   * would drift.
+   */
+  let metricLabeler = null;
+  function setMetricLabeler(fn) {
+    metricLabeler = typeof fn === "function" ? fn : null;
+  }
+
+  /** The catalogue's definition of a metric id, as the exercises declare it. */
+  function metricDef(id) {
+    const catalog = global.VT_EXERCISES || {};
+    for (const track of Object.keys(catalog)) {
+      for (const ex of catalog[track] || []) {
+        const def = (ex.metrics || []).find((m) => m && m.id === id);
+        if (def) return def;
+      }
+    }
+    // Not in the catalogue any more: "pitchComfort" reads "Pitch comfort".
+    const words = String(id).replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase();
+    return { id, label: words.charAt(0).toUpperCase() + words.slice(1) };
+  }
+
+  /** A metric id as a learner reads it, in the interface language. */
+  function metricName(id) {
+    const def = metricDef(id);
+    try {
+      const named = metricLabeler && metricLabeler(def);
+      if (named) return named;
+    } catch {
+      /* fall back to the catalogue's own label */
+    }
+    return def.label || String(id);
+  }
+
   function coachFocus(stats, isEs) {
     const s = stats || compute();
     if (s.sessions === 0) {
@@ -240,8 +294,8 @@
     }
     if (s.weakestMetric) {
       return isEs
-        ? `Foco: tu métrica más baja reciente es «${s.weakestMetric}» (~${s.weakestAvg.toFixed(1)}/5). Repite ese ejercicio con calma.`
-        : `Focus: your lowest recent metric is “${s.weakestMetric}” (~${s.weakestAvg.toFixed(1)}/5). Revisit that drill calmly.`;
+        ? `Foco: tu métrica más baja reciente es «${metricName(s.weakestMetric)}» (~${s.weakestAvg.toFixed(1)}/5). Repite ese ejercicio con calma.`
+        : `Focus: your lowest recent metric is “${metricName(s.weakestMetric)}” (~${s.weakestAvg.toFixed(1)}/5). Revisit that drill calmly.`;
     }
     if (!s.goalMet) {
       return isEs
@@ -337,7 +391,7 @@
     const parts = [];
     if (isEs) {
       parts.push(
-        `Has completado ${s.sessions} sesión${s.sessions === 1 ? "" : "es"} en ${s.exercisesTouched} ejercicio${s.exercisesTouched === 1 ? "" : "s"}` +
+        `Has completado ${s.sessions} ${s.sessions === 1 ? "sesión" : "sesiones"} en ${s.exercisesTouched} ejercicio${s.exercisesTouched === 1 ? "" : "s"}` +
           (s.minutes ? ` (~${s.minutes} min de práctica registrada)` : "") +
           "."
       );
@@ -347,11 +401,11 @@
         parts.push(`Mejor sostenido: ${s.bestHoldSec.toFixed(1)}s.`);
       }
       if (s.avgScore != null) {
-        parts.push(`Puntaje medio reciente: ${s.avgScore.toFixed(1)}/5.`);
+        parts.push(`Puntaje medio reciente: ${s.avgScore.toFixed(1)}/10.`);
       }
       if (s.planElement) {
         parts.push(
-          `Plan 12 semanas: semana ${s.planWeek || "—"}, foco «${s.planElement}» (${s.checkIns} registros).`
+          `Plan 12 semanas: semana ${s.planWeek || "—"}, foco «${elementName(s.planElement)}» (${s.checkIns} ${s.checkIns === 1 ? "registro" : "registros"}).`
         );
       }
       parts.push(
@@ -366,10 +420,10 @@
       if (s.streak > 1) parts.push(`Active streak: ${s.streak} days.`);
       else if (s.activeDays > 0) parts.push(`Days with practice: ${s.activeDays}.`);
       if (s.bestHoldSec >= 2) parts.push(`Best hold: ${s.bestHoldSec.toFixed(1)}s.`);
-      if (s.avgScore != null) parts.push(`Recent avg score: ${s.avgScore.toFixed(1)}/5.`);
+      if (s.avgScore != null) parts.push(`Recent avg score: ${s.avgScore.toFixed(1)}/10.`);
       if (s.planElement) {
         parts.push(
-          `12-week plan: week ${s.planWeek || "—"}, focus “${s.planElement}” (${s.checkIns} check-ins).`
+          `12-week plan: week ${s.planWeek || "—"}, focus “${elementName(s.planElement)}” (${s.checkIns} ${s.checkIns === 1 ? "check-in" : "check-ins"}).`
         );
       }
       parts.push(
@@ -439,6 +493,7 @@
     heatmap,
     suggestUpgradeMoment,
     isDismissed,
-    dismiss
+    dismiss,
+    setMetricLabeler
   };
 })(window);

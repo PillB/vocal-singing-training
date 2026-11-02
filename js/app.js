@@ -7415,7 +7415,9 @@
     if (ent.pro && ent.source !== "trial" && moment.id !== "trial_ending") return nothingToSay();
 
     const vars = {
-      n: String(moment.sessions ?? moment.trialDaysLeft ?? 0),
+      // The trial's own line counts days; the others count sessions. A moment
+      // asked for by name carries both figures.
+      n: String((moment.id === "trial_ending" ? moment.trialDaysLeft : moment.sessions) ?? 0),
       s: moment.bestHoldSec != null ? Number(moment.bestHoldSec).toFixed(1) : "0"
     };
     // One day left reads "1 día", not "1 días": the singular has its own line.

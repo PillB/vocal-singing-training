@@ -297,7 +297,7 @@ to forget — deploying is enough.
 | `grants` | **Trial, gift and comp are the same row.** `revoked_at` is how any of them is taken back. |
 | `gift_codes` / `gift_redemptions` | Codes and who used them. A unique index makes double redemption impossible. |
 | `license_links` | Which paid licenses belong to which account. |
-| `progress` | One document per `(account, profile)` with a `rev` for compare-and-swap. |
+| `progress` | One document per `(account, profile)` with a `rev` for compare-and-swap. A first write is one guarded `INSERT ... SELECT ... ON CONFLICT DO NOTHING`, so the profile cap and "is this profile already there" are decided by the write itself rather than by a count taken just before it. |
 | `rate_limits` | Per-IP and per-email counters for the sign-in routes, and the event route's buckets. |
 | `events` / `exposures` / `ingest_daily` | Anonymous usage events and A/B exposures; see "What the events tables hold" above. |
 

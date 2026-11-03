@@ -246,14 +246,23 @@ KV: one namespace bound as `ENTITLEMENTS`.
 event:<provider>:<eventId>            "1"                             30d TTL   idempotency
 lic:<licenseId>                       record JSON                               the entitlement
 claim:<provider>:<sessionOrPaymentId> licenseId                       90d TTL   ?billing=success lookup
+pay:<provider>:<paymentId>            licenseId                      400d TTL   lets a refund or a dispute find what it paid for
 sub:<provider>:<subscriptionId>       licenseId                                 keeps one license per subscription
 paid:<licenseId>                      {paidAt?, periodEnd?}                     the latest payment confirmed (see below)
 ended:<licenseId>                     {endedAt, periodEnd, periodEndIfPaid?,    the Stripe subscription was deleted
                                        paidAtWhenEnded?}
-reversed:<licenseId>                  {reversedChargeAt, reversedAt}            a Mercado Pago charge's money went back
+reversed:<licenseId>                  {reversedChargeAt, reversedAt}            a charge's money went back (refund, chargeback)
 charged:<licenseId>                   chargedAt                                 when the latest charge that went through was made
-refused:mercadopago:<notification>    unix seconds                    30d TTL   when the API first refused that notification's resource
+refused:<provider>:<eventId>          unix seconds                    30d TTL   when that event was first unprocessable (an MP resource
+                                                                                its API refuses; a Stripe refund of a payment we do
+                                                                                not know). Retried for a day, then acknowledged
 ```
+
+`pay:` is a lookup rather than a repeated fact: money going back names its
+payment and nothing else this worker knows, so a payment is written down the
+first time it is seen beside something that does identify the license — a
+checkout session, or an invoice on an API version that still names one. It
+outlives a yearly plan plus the card networks' dispute windows (400 days).
 
 `paid:`, `ended:`, `reversed:` and `charged:` repeat facts the record also
 holds, each in a key nothing else writes, so that two webhooks processed at the
@@ -484,6 +493,9 @@ Subscribe exactly these events:
 | `customer.subscription.deleted` | Cancellation. A subscription paid up to it keeps the period it paid for; one cancelled while unpaid (in dunning, stopped or paused, never paid, or with `cancellation_details.reason` `payment_failed`/`payment_disputed`) ends at `ended_at`, whoever cancelled it |
 | `invoice.paid` | Successful renewal (moves `periodEnd` forward) |
 | `invoice.payment_failed` | Dunning → `past_due` |
+| `charge.refunded` | Money given back in full ends the access that charge paid for. A partial refund changes nothing |
+| `charge.dispute.created` | A chargeback was opened: access ends when it is opened, not when it is lost |
+| `charge.dispute.funds_withdrawn` | The same, for a dispute whose funds were taken before any `created` reached us |
 
 Copy that endpoint's `whsec_…` into `STRIPE_WEBHOOK_SECRET`. **Test mode and
 live mode have different secrets and usually different endpoints.**
@@ -621,13 +633,13 @@ curl http://127.0.0.1:8787/v1/health
 
 # Stripe CLI: forwards real signed events and prints a local whsec_…
 stripe listen \
-  --events checkout.session.completed,checkout.session.async_payment_succeeded,checkout.session.async_payment_failed,customer.subscription.created,customer.subscription.updated,customer.subscription.deleted,invoice.paid,invoice.payment_failed \
+  --events checkout.session.completed,checkout.session.async_payment_succeeded,checkout.session.async_payment_failed,customer.subscription.created,customer.subscription.updated,customer.subscription.deleted,invoice.paid,invoice.payment_failed,charge.refunded,charge.dispute.created,charge.dispute.funds_withdrawn \
   --forward-to http://127.0.0.1:8787/v1/webhooks/stripe
 
 stripe trigger checkout.session.completed
 ```
 
-That is the same eight events as the live endpoint (see "Registering the
+That is the same eleven events as the live endpoint (see "Registering the
 webhooks"). `stripe listen` prints its own webhook secret — put *that* one in
 `workers/entitlements/.dev.vars` as `STRIPE_WEBHOOK_SECRET=whsec_…`, with
 `LICENSE_PRIVATE_KEY_PKCS8_B64` (a throwaway key from
@@ -717,12 +729,22 @@ webhook → claim → token flow through the router with a fake `fetch`.
 - **Sharing one license id.** A license id copied to a friend still verifies.
   There is no device binding and no account system; the mitigation is that a
   cancellation kills every copy at once.
-- **Refunds and disputes made in Stripe.** The worker does not subscribe to
-  `charge.refunded` or `charge.dispute.*`: a charge carries nothing the worker
-  can find a license by without a Stripe API key, which it does not hold. A
-  refunded Stripe customer keeps the period on record; cancelling their
-  subscription stops renewals but, like any paid cancellation, keeps the
-  period they had paid for.
+- **A refunded Stripe subscription renewal.** Refunds and disputes of a
+  *one-time* payment do end the access they bought: the checkout session names
+  its payment intent, that is kept in a `pay:` index, and the refunded charge
+  and the dispute both name the same payment intent. A subscription's renewal
+  is the gap. Its charge is paid against an invoice, and Stripe's current API
+  version carries no payment intent on an invoice webhook at all — the field
+  was removed, and the `payments` that replaced it is only sent when it is
+  expanded, which a webhook never does. So a renewal's payment is never seen
+  before its refund and cannot be matched to a license. (An account on an
+  older API version does send `invoice.payment_intent`, and that is read, so
+  there the renewal is covered too.) The remedy is the one that always worked:
+  cancel the subscription in Stripe, which ends renewals, and revoke the grant
+  from the admin page if the current period should go too.
+- **A dispute that is won.** Access ended when the dispute was opened and
+  nothing puts it back automatically: there is no "un-refund" in this store.
+  Give the time back from **Dar Pro** on the admin page.
 - **Protecting content that has already been downloaded.** Everything the site
   ships is public by definition. Only genuinely server-side value (data the
   worker holds back) can be withheld.

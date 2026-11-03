@@ -8,6 +8,7 @@
  *   event:<provider>:<eventId>            -> "1"        (idempotency, 30d TTL)
  *   lic:<licenseId>                       -> record JSON
  *   claim:<provider>:<sessionOrPaymentId> -> licenseId   (90d TTL)
+ *   pay:<provider>:<paymentId>            -> licenseId   (400d TTL)
  *   sub:<provider>:<subscriptionId>       -> licenseId
  *   paid:<licenseId>                      -> {paidAt?, periodEnd?} (a payment was confirmed: the latest one)
  *   ended:<licenseId>                     -> {endedAt, periodEnd, periodEndIfPaid?, paidAtWhenEnded?} (subscription deleted)
@@ -56,6 +57,18 @@ export const EVENT_TTL_SECONDS = 2592000;
 export const CLAIM_TTL_SECONDS = 7776000;
 
 /**
+ * Payment -> license lookups live 400 days.
+ *
+ * This index exists so that money going back can find the access it bought:
+ * a refunded or disputed charge names its payment and nothing else we know.
+ * It therefore has to outlive the longest thing a single payment can buy — a
+ * year — plus the card networks' dispute windows, which run to 120 days from
+ * the transaction and can be opened near the end of the term. 400 days covers
+ * both with room, and is still a bound, so the store does not grow for ever.
+ */
+export const PAYMENT_TTL_SECONDS = 34560000;
+
+/**
  * A refunded charge is still what paid for the current period when that period
  * ends up to a week past the charge's own plan interval. A subscription's
  * period runs to its next scheduled charge, which is not counted from the
@@ -100,6 +113,16 @@ export function claimKey(provider, claimId) {
  */
 export function subscriptionKey(provider, subscriptionId) {
   return `sub:${provider}:${subscriptionId}`;
+}
+
+/**
+ * Key for the payment -> license index.
+ * @param {string} provider "stripe" | "mercadopago".
+ * @param {string} paymentId Payment intent / payment id.
+ * @returns {string} KV key.
+ */
+export function paymentKey(provider, paymentId) {
+  return `pay:${provider}:${paymentId}`;
 }
 
 /**
@@ -282,8 +305,11 @@ export async function getEntitlement(kv, licenseId) {
       extendForCharge(record, chargedAt);
     }
   }
-  // And money given back: only Mercado Pago reports it.
-  if (record && record.provider === "mercadopago") {
+  // And money given back. Both providers report it: Mercado Pago on the
+  // payment itself, Stripe as a refunded charge or a dispute. The key is read
+  // over the record because a refund processed alongside another event can
+  // lose its write, and money that went back must not come back with it.
+  if (record) {
     const reversal = await readReversal(kv, licenseId);
     if (reversal) {
       noteReversal(record, reversal, reversal.reversedAt);
@@ -464,6 +490,38 @@ export async function putClaimIndex(kv, provider, claimId, licenseId) {
 }
 
 /**
+ * Resolve the license id recorded for a payment id.
+ * @param {Object} kv KV namespace.
+ * @param {string} provider "stripe" | "mercadopago".
+ * @param {string} paymentId Payment intent / payment id.
+ * @returns {Promise<string|null>} License id or null.
+ */
+export async function getLicenseIdForPayment(kv, provider, paymentId) {
+  if (!paymentId) {
+    return null;
+  }
+  return (await kv.get(paymentKey(provider, paymentId))) || null;
+}
+
+/**
+ * Point a payment id at a license, so a refund or a dispute of that payment
+ * can find what it paid for. Written whenever a payment is first heard of
+ * alongside something that identifies the license; the money going back names
+ * only the payment.
+ * @param {Object} kv KV namespace.
+ * @param {string} provider "stripe" | "mercadopago".
+ * @param {string} paymentId Payment intent / payment id.
+ * @param {string} licenseId Opaque license id.
+ * @returns {Promise<void>} Resolves when written.
+ */
+export async function putPaymentIndex(kv, provider, paymentId, licenseId) {
+  if (!paymentId || !licenseId) {
+    return;
+  }
+  await kv.put(paymentKey(provider, paymentId), licenseId, { expirationTtl: PAYMENT_TTL_SECONDS });
+}
+
+/**
  * Point a subscription id at a license.
  * @param {Object} kv KV namespace.
  * @param {string} provider "stripe" | "mercadopago".
@@ -490,7 +548,12 @@ export async function resolveExistingLicenseId(kv, update) {
   if (bySubscription) {
     return bySubscription;
   }
-  return getLicenseIdForClaim(kv, update.provider, update.claimId);
+  const byClaim = await getLicenseIdForClaim(kv, update.provider, update.claimId);
+  if (byClaim) {
+    return byClaim;
+  }
+  // Last, because only money going back arrives with nothing else to go by.
+  return getLicenseIdForPayment(kv, update.provider, update.paymentId);
 }
 
 /**
@@ -529,15 +592,25 @@ function capPeriodEnd(record, at) {
  * the notifications arrive in.
  * @param {Object} record Record being built.
  * @param {Object} update Entitlement update descriptor.
+ * A dispute names the payment it is about but not when that payment was taken,
+ * so it asks for the latest charge this license counted (`reverseLatestCharge`)
+ * instead of naming an instant. Failing even that — a license that heard of a
+ * period but never of a charge — the reversal's own moment stands in, which
+ * ends access when the money went back rather than leaving it open. That is
+ * the direction a chargeback calls for.
+ *
  * @param {number} now Unix seconds, for a reversal that does not say when.
  * @returns {void}
  */
 function noteReversal(record, update, now) {
-  if (!Number.isFinite(update.reversedChargeAt)) {
+  const at = Number.isFinite(update.reversedAt) ? Math.floor(update.reversedAt) : now;
+  const named = Number.isFinite(update.reversedChargeAt)
+    ? Math.floor(update.reversedChargeAt)
+    : (update.reverseLatestCharge === true ? (Number.isFinite(record.chargedAt) ? record.chargedAt : at) : null);
+  if (named === null) {
     return;
   }
-  const chargedAt = Math.floor(update.reversedChargeAt);
-  const at = Number.isFinite(update.reversedAt) ? Math.floor(update.reversedAt) : now;
+  const chargedAt = named;
   if (!Number.isFinite(record.reversedChargeAt) || chargedAt > record.reversedChargeAt
     || (chargedAt === record.reversedChargeAt && at < record.reversedAt)) {
     record.reversedChargeAt = chargedAt;
@@ -741,8 +814,9 @@ export function isStaleUpdate(record, update) {
  * @param {Object} kv KV namespace.
  * @param {Object} update Descriptor: provider, plan, status, customerId,
  *   subscriptionId, periodEnd, periodEndFromCharge, endsAt, endedAt, paid,
- *   paymentFailed, reversedAt, reversedChargeAt, declinedAt, terminal, claimId,
- *   planSource, occurredAt.
+ *   paymentFailed, reversedAt, reversedChargeAt, reverseLatestCharge,
+ *   declinedAt, terminal, claimId, paymentId, requireExisting, planSource,
+ *   occurredAt.
  * @param {{now?: number, generateId?: function(): string}} [options] Injectables for tests.
  * @returns {Promise<{record: Object, created: boolean, stale: boolean}>} Stored
  *   record, whether it was new, and whether state was refused (out of order,
@@ -754,6 +828,15 @@ export async function upsertEntitlement(kv, update, options) {
   const mintId = typeof opts.generateId === "function" ? opts.generateId : generateLicenseId;
 
   const existingId = await resolveExistingLicenseId(kv, update);
+  // Money going back, and nothing else, says "only if you already know this
+  // one". A refund or a dispute carries no plan, no period and no status, so a
+  // license minted from one would be an empty record that entitles nothing and
+  // that the real checkout, arriving afterwards, would never find. The caller
+  // decides what to do about not knowing it yet: Stripe's are retried for a
+  // day, as a resource Mercado Pago's API has not caught up on is.
+  if (!existingId && update.requireExisting === true) {
+    return { record: null, created: false, stale: true, missing: true };
+  }
   const existing = existingId ? await getEntitlement(kv, existingId) : null;
   const licenseId = (existing && existing.licenseId) || existingId || mintId();
 
@@ -937,7 +1020,7 @@ export async function upsertEntitlement(kv, update, options) {
       await kv.put(chargedKey(licenseId), String(record.chargedAt));
     }
   }
-  if (Number.isFinite(update.reversedChargeAt)) {
+  if (Number.isFinite(update.reversedChargeAt) || update.reverseLatestCharge === true) {
     await kv.put(reversedKey(licenseId), JSON.stringify({
       reversedChargeAt: record.reversedChargeAt,
       reversedAt: record.reversedAt
@@ -953,6 +1036,7 @@ export async function upsertEntitlement(kv, update, options) {
   }
   await putEntitlement(kv, record);
   await putClaimIndex(kv, update.provider, update.claimId, licenseId);
+  await putPaymentIndex(kv, update.provider, update.paymentId, licenseId);
   await putSubscriptionIndex(kv, update.provider, record.subscriptionId, licenseId);
 
   return { record, created: !existing, stale };

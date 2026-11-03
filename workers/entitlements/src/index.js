@@ -189,9 +189,10 @@ async function respondWithToken(record, env, cors) {
  * Handle POST /v1/webhooks/stripe.
  * @param {Request} request Incoming request.
  * @param {Object} env Worker env bindings.
+ * @param {{now?: number}} [options] Injectable clock, for tests.
  * @returns {Promise<Response>} Response.
  */
-async function handleStripeWebhook(request, env) {
+async function handleStripeWebhook(request, env, options) {
   const body = await readRawBody(request);
   if (!body.ok) {
     return json({ ok: false, reason: body.reason }, 413);
@@ -218,7 +219,24 @@ async function handleStripeWebhook(request, env) {
     return json({ ok: true, reason: mapped.reason }, 200);
   }
   try {
-    const { record } = await upsertEntitlement(env.ENTITLEMENTS, mapped.update);
+    const { record, missing } = await upsertEntitlement(env.ENTITLEMENTS, mapped.update);
+    if (missing) {
+      // Money went back on a payment this worker has never heard of. Usually
+      // that is a payment taken outside this product, on the same Stripe
+      // account, which will never match and must not be retried for ever.
+      // But it is also what an out-of-order delivery looks like — a refund
+      // ahead of the checkout that paid — so it is retried for a day from the
+      // first attempt, the same window a resource Mercado Pago's API has not
+      // caught up on gets, and then acknowledged.
+      const now = options && Number.isFinite(options.now) ? Math.floor(options.now) : Math.floor(Date.now() / 1000);
+      const waitedFor = await noteRefusal(env.ENTITLEMENTS, "stripe", event.id, now);
+      console.warn("stripe event names a license we do not know", event.type, waitedFor);
+      if (waitedFor < RETRY_REFUSED_SECONDS) {
+        await clearEventSeen(env.ENTITLEMENTS, "stripe", event.id);
+        return json({ ok: false, reason: "unknown_license" }, 500);
+      }
+      return json({ ok: true, reason: "unknown_license" }, 200);
+    }
     console.log("stripe entitlement updated", event.type, record.status, record.plan);
   } catch (error) {
     // The marker is already set; drop it so Stripe's retry is not dismissed.
@@ -418,7 +436,7 @@ export async function handleRequest(request, env, options) {
       return json({ ok: false, reason: "method_not_allowed" }, 405, { allow: "POST" });
     }
     return path === "/v1/webhooks/stripe"
-      ? handleStripeWebhook(request, env)
+      ? handleStripeWebhook(request, env, options)
       : handleMercadoPagoWebhook(request, env, url, options);
   }
 

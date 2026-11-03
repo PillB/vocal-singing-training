@@ -211,6 +211,26 @@ than it sounds, because not one of those providers documents whether a
 100%-off coupon is even possible. Whichever rail Pablo ends up on, and if he
 changes rails later, gifting works the same way.
 
+### When money goes back
+
+A refund or a chargeback ends the access that payment bought, on both rails.
+Mercado Pago reports it on the payment itself; Stripe as a refunded charge or
+as a dispute, matched to the licence through the payment it names. Three things
+about it are worth knowing before you use it:
+
+- **A partial refund changes nothing.** Giving somebody a fifth of their money
+  back is a goodwill gesture, not the end of what they bought, so access stays.
+- **A chargeback ends access when it is opened**, not when it is lost, which is
+  also Stripe's own advice. **A dispute you then win restores nothing by
+  itself** — there is no un-refund — so give the time back with *Dar Pro* on
+  the admin page.
+- **Refunding a Stripe subscription renewal does not reach us.** Stripe's
+  current API carries no payment identifier on an invoice webhook, so a
+  renewal's charge is never seen before its refund and cannot be matched.
+  Cancel the subscription in Stripe, which stops renewals, and revoke the
+  grant from the admin page if the period they are in should go too. A
+  one-time pass — the yearly one — is matched and does end.
+
 ---
 
 ## What it costs to run
@@ -277,7 +297,7 @@ a debugger.
 
 | Command | Covers |
 |---------|--------|
-| `npm run test:worker` | 386 node cases: schema, sessions, grants, gift codes, progress CAS, Google token verification, email, the API router, the webhooks of both providers, and one asserting the old anonymous flow is unchanged. 381 pass; the 5 marked `todo` are the open questions above and the three findings still being worked. |
+| `npm run test:worker` | 394 node cases: schema, sessions, grants, gift codes, progress CAS, Google token verification, email, the API router, the webhooks of both providers, money going back, and one asserting the old anonymous flow is unchanged. 391 pass; the 3 marked `todo` are the grace-period question above, the price allow-list, and a concurrent first purchase that can mint two licences. |
 | `npx playwright test tests/accounts.spec.js` | 32 browser cases: sign-in, gifts, admin tools, the trial, sync and merge, phone layout and tap targets. |
 | `npx playwright test tests/billing.spec.js` | 28 browser cases: the pricing panel, region detection, the sign-in gate before checkout. |
 | `npx playwright test tests/admin.spec.js` | 41 browser cases, one per procedure in the admin guide, against the real worker on a real database. |

@@ -15,7 +15,7 @@
  * this tree and confirmed each one fails for the stated reason. They arrived with every test marked `todo` so the suite stayed
  * green while the findings were still open; a `todo` here is therefore a known
  * open defect, not a test that does not matter, and the marker comes off as
- * each one is fixed. W4 and W6 are fixed and running. W1, W2, W3, W5 and W7 are
+ * each one is fixed. W2, W4, W5 and W6 are fixed and running. W1, W3 and W7 are
  * still open: W7 and the amount floor in W3 are decisions for the operator
  * rather than faults, and are named as such in docs/33-ACCOUNTS-AND-PAYMENTS.md.
  */
@@ -68,7 +68,7 @@ test("W1 new-customer race: the three events Stripe sends together mint ONE lice
   assert.notEqual(await claimAt(env, "stripe", "cs_w1", 200), 200, "an unpaid-cancelled customer is not Pro 160 days later");
 });
 
-test("W2 Stripe: charge.refunded ends the access the refunded payment bought", { todo: "QA-W-02 Stripe refunds and disputes are ignored (README documents it)" }, async () => {
+test("W2 Stripe: charge.refunded ends the access the refunded payment bought", async () => {
   const env = createTestEnv({ ENTITLEMENTS: createFakeKv() });
   await stripe(env, ev("e1", "checkout.session.completed", 0, { id: "cs_w2", mode: "payment", customer: "cus_w2", payment_intent: "pi_w2", payment_status: "paid", metadata: { plan: "pro_yearly" } }));
   assert.equal(await claimAt(env, "stripe", "cs_w2", 1), 200, "control: paid, so entitled");
@@ -96,7 +96,7 @@ test("W4 MP preapproval: the billed recurrence decides the plan, not a word in t
   assert.equal(body.entitlement.plan, "pro_monthly");
 });
 
-test("W5 Stripe: a paid checkout whose subscription events never arrive is bounded, not open-ended", { todo: "QA-W-05 active + periodEnd null = Pro for ever" }, async () => {
+test("W5 Stripe: a paid checkout whose subscription events never arrive is bounded, not open-ended", async () => {
   const env = createTestEnv({ ENTITLEMENTS: createFakeKv() });
   await stripe(env, ev("e1", "checkout.session.completed", 0, { id: "cs_w5", mode: "subscription", customer: "cus_w5", subscription: "sub_w5", payment_status: "paid" }));
   assert.equal(await claimAt(env, "stripe", "cs_w5", 10), 200, "control: paid, entitled now");

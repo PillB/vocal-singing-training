@@ -25,7 +25,12 @@ export const HANDLED_EVENT_TYPES = [
   "customer.subscription.updated",
   "customer.subscription.deleted",
   "invoice.paid",
-  "invoice.payment_failed"
+  "invoice.payment_failed",
+  // Money going back. Mercado Pago has always ended the access its refunds
+  // paid for; these are the Stripe side of the same rule.
+  "charge.refunded",
+  "charge.dispute.created",
+  "charge.dispute.funds_withdrawn"
 ];
 
 /** Stripe subscription status -> our entitlement status. */
@@ -305,9 +310,114 @@ function mapCheckoutSession(session, env, statusOverride) {
     // license from entitling until a payment is confirmed, whatever the
     // subscription's own events say in the meantime.
     paid: status === "active",
+    // The payment behind this checkout, so money going back can find the
+    // access it bought: a refunded charge and a dispute name their payment
+    // intent and nothing else this worker knows. A subscription's checkout
+    // carries none (its money is on an invoice), so this is how a one-time
+    // pass — the case a refund leaves entitled for up to a year — is matched.
+    paymentId: idOf(session && session.payment_intent),
     // A checkout session carries no period end; leave whatever the
     // subscription events recorded untouched.
     periodEnd: undefined
+  };
+}
+
+/**
+ * The payment intent behind an invoice, in whichever shape the account's API
+ * version sends.
+ *
+ * Stripe's 2025 "basil" version removed `invoice.payment_intent` and put the
+ * payments on `invoice.payments` instead — which a webhook does NOT carry,
+ * because that field is only returned when it is expanded, and a webhook
+ * expands nothing. So on a current API version a renewal's charge cannot be
+ * matched to its subscription from the webhook alone, and a refund of one is
+ * not handled: the operator cancels the subscription in Stripe, which does end
+ * access, or revokes by hand. Both shapes are read anyway, because an account
+ * on an older version still sends the first, and reading a field that is not
+ * there costs nothing.
+ * @param {Object} invoice Stripe invoice.
+ * @returns {string|null} Payment intent id or null.
+ */
+function paymentIdForInvoice(invoice) {
+  const direct = idOf(invoice && invoice.payment_intent);
+  if (direct) {
+    return direct;
+  }
+  const payments = invoice && invoice.payments && Array.isArray(invoice.payments.data)
+    ? invoice.payments.data
+    : [];
+  for (const entry of payments) {
+    const id = idOf(entry && entry.payment && entry.payment.payment_intent);
+    if (id) {
+      return id;
+    }
+  }
+  return null;
+}
+
+/**
+ * Map a charge whose money went back onto an entitlement update.
+ *
+ * Only a charge refunded in full. A partial refund is a goodwill gesture or a
+ * proration, not the end of what was bought, and taking access away for one
+ * would punish the customer for being given something.
+ *
+ * The charge says exactly when it was taken, so the store can tell whether it
+ * is the charge that paid for the period the license is in: the refund of an
+ * earlier month leaves a later month's access alone.
+ * @param {Object} charge Stripe charge.
+ * @returns {Object} Entitlement update descriptor.
+ */
+function mapRefundedCharge(charge) {
+  return {
+    provider: "stripe",
+    claimId: null,
+    subscriptionId: null,
+    paymentId: idOf(charge && charge.payment_intent),
+    customerId: idOf(charge && charge.customer),
+    // Never mint a license from money going back: see upsertEntitlement.
+    requireExisting: true,
+    reversedChargeAt: unixOrNull(charge && charge.created)
+  };
+}
+
+/**
+ * Whether a charge has been refunded in full.
+ * @param {Object} charge Stripe charge.
+ * @returns {boolean} Whether all of the money went back.
+ */
+function isFullyRefunded(charge) {
+  if (charge && charge.refunded === true) {
+    return true;
+  }
+  const amount = Number(charge && charge.amount);
+  const back = Number(charge && charge.amount_refunded);
+  return Number.isFinite(amount) && Number.isFinite(back) && amount > 0 && back >= amount;
+}
+
+/**
+ * Map a dispute onto an entitlement update.
+ *
+ * A dispute is money on its way back, and the card networks give it to the
+ * cardholder by default unless it is contested and won. Access ends when it is
+ * opened rather than when it is lost, which is also what Stripe's own guidance
+ * says to do. A dispute that is later won restores nothing by itself: there is
+ * no "un-refund" in this store, so the operator gifts the access back from the
+ * admin page, which `docs/33-ACCOUNTS-AND-PAYMENTS.md` says.
+ *
+ * Unlike a refund, a dispute names its payment but not when that payment was
+ * taken, so it reverses whichever charge this license last counted.
+ * @param {Object} dispute Stripe dispute.
+ * @returns {Object} Entitlement update descriptor.
+ */
+function mapDispute(dispute) {
+  return {
+    provider: "stripe",
+    claimId: null,
+    subscriptionId: null,
+    paymentId: idOf(dispute && dispute.payment_intent),
+    requireExisting: true,
+    reverseLatestCharge: true
   };
 }
 
@@ -373,6 +483,7 @@ function mapInvoice(invoice, env, paid) {
     // A paid invoice confirms money arrived; a failed one says nothing about
     // whether an earlier payment did.
     paid: paid ? true : undefined,
+    paymentId: paid ? paymentIdForInvoice(invoice) : null,
     periodEnd: unixOrNull(line && line.period && line.period.end)
   };
 }
@@ -427,26 +538,66 @@ export function mapStripeEvent(event, env) {
     case "invoice.payment_failed":
       update = mapInvoice(object, env, false);
       break;
+    case "charge.refunded":
+      // Mercado Pago has always ended access when its money went back; Stripe
+      // did not, so a refunded yearly pass kept up to 366 days of Pro and the
+      // two providers disagreed (QA round 4, QA-W-02).
+      if (!isFullyRefunded(object)) {
+        return { handled: false, reason: "partial_refund" };
+      }
+      update = mapRefundedCharge(object);
+      break;
+    case "charge.dispute.created":
+    case "charge.dispute.funds_withdrawn":
+      update = mapDispute(object);
+      break;
     default:
       return { handled: false, reason: "unhandled_event_type" };
   }
-  if (!update.subscriptionId && !update.claimId) {
+  if (!update.subscriptionId && !update.claimId && !update.paymentId) {
     return { handled: false, reason: "no_license_identity" };
   }
   // When the event was emitted, so a delayed or retried delivery cannot undo a
   // newer one. Stripe guarantees neither ordering nor exactly-once delivery.
   update.occurredAt = unixOrNull(event.created);
+  // Money went back when its event says it did. A charge that does not say
+  // when it was taken (and a dispute never does) reverses whichever charge the
+  // license last counted instead, so the store can still tell whether what
+  // went back is what paid for the period the license is in.
+  if (event.type === "charge.refunded" || event.type.startsWith("charge.dispute.")) {
+    update.reversedAt = update.occurredAt;
+    if (!Number.isFinite(update.reversedChargeAt)) {
+      update.reverseLatestCharge = true;
+    }
+  }
   // When a cancellation took effect (a failed async payment has no `ended_at`
   // of its own). The store ends a period that was never paid for there.
   if (update.status === "canceled" && !Number.isFinite(update.endedAt)) {
     update.endedAt = update.occurredAt;
   }
-  // A paid checkout with no subscription behind it (a one-time price, mode
-  // "payment") has no later event to end it: entitle one plan interval from
-  // when the money arrived, as for a Mercado Pago one-off payment. Webhook
-  // sessions carry no line items, so a yearly pass needs `metadata.plan` on
-  // its Payment Link.
-  if (event.type.startsWith("checkout.session.") && !update.subscriptionId && update.status === "active") {
+  // A checkout whose money arrived buys one plan interval from the moment it
+  // arrived. This is a floor, never a ceiling: `extendForCharge` only ever
+  // lengthens a period, and a subscription event that carries the real
+  // `current_period_end` replaces it outright.
+  //
+  // It has to apply to a subscription's checkout too, and used to not. A
+  // one-time price (mode "payment") has no later event to end it, which is why
+  // this was here; but a subscription's checkout was left with `periodEnd`
+  // null, and null is for ever. The three events Stripe sends for a new
+  // subscription normally fix that within seconds — and then this bound is
+  // invisible, because every one of them sets a longer period. The case it
+  // closes is the one where they never arrive at all: a webhook endpoint
+  // configured for `checkout.session.completed` alone, a signing secret
+  // rotated between events, or a subscription event dropped. Before this, that
+  // sold one month and gave Pro for life (QA round 4, QA-W-05).
+  //
+  // A webhook's session carries no line items, so a checkout that is not
+  // monthly needs `metadata.plan` on its Payment Link to be counted as what it
+  // is — the same requirement a yearly one-time pass already has. Without it a
+  // yearly subscriber whose subscription events all go missing is bounded to a
+  // month rather than to a year, which is the safe direction to be wrong in,
+  // and any one of those events puts the year back.
+  if (event.type.startsWith("checkout.session.") && update.status === "active") {
     update.periodEndFromCharge = update.occurredAt ?? unixOrNull(object.created);
   }
   return { handled: true, update };

@@ -36,18 +36,44 @@ export const QUIET_COUNTS_BY_DESIGN = {
 
 const changes = (ticks, key) => new Set((ticks || []).map((t) => t?.[key])).size;
 
-/** The lines of a tick that carry numbers a learner reads. */
+/**
+ * The lines of a tick that carry numbers a learner reads. #mode-cue is left out on purpose: it is the
+ * exercise's instruction, set once when the mode mounts, so it cannot carry a score that moves.
+ */
 const COUNT_FIELDS = ["focus", "hud", "status", "pitch"];
-/** Timers and percentages are not counts: "1:30", "2,5 s", "80 %". A letter after the s ("3 sílabas") makes it a word, not seconds. */
-const NOT_A_COUNT = /\d+:\d\d|\d+(?:[.,]\d+)?\s?s(?![\p{L}\d])|\d+\s?%/gu;
+const NUM = String.raw`\d+(?:[.,]\d+)?`;
+const NOT_WORD = String.raw`(?![\p{L}\d])`;
+/**
+ * Numbers that are not counts. A clock ("1:30"), a quantity with a unit ("2,5 s", "120 ms", "80 bpm", "-18 dB", "6¢"), a
+ * percentage with or without decimals ("87 %", "12,5%"), a pitch offset ("+6¢", "±18¢") and a note name with its octave
+ * ("C3", "F#4", "Sib2"). A letter after the unit makes it a word, not a unit ("3 sílabas", "2 horas").
+ */
+const NOT_A_COUNT = new RegExp(
+  [
+    String.raw`\d+:\d\d`,
+    `${NUM}\\s?%`,
+    `${NUM}\\s?(?:ms|min|kHz|Hz|bpm|BPM|dB|s|h|¢|cents?)${NOT_WORD}`,
+    String.raw`(?<![\p{L}\d])[+\-−±]\s?${NUM}\s?(?:¢|cents?)?${NOT_WORD}`,
+    String.raw`(?<![\p{L}\d])(?:[A-G]|Do|Re|Mi|Fa|Sol|La|Si)[#b♯♭]?-?\d${NOT_WORD}`
+  ].join("|"),
+  "gu"
+);
+/** "1.200" and "1,200" are one thousand two hundred, one count; a separator is not the end of a number. */
+const THOUSANDS = /(?<![\d.,])\d{1,3}(?:[.,\u202f\u00a0]\d{3})+(?!\d)/g;
+/** Words that put a number in a range or a position ("DEL 1 AL 10", "from 2 to 8"), not in front of a count. */
+const RANGE_WORDS = new Set(["del", "al", "de", "a", "to", "from", "hasta", "of", "entre", "y", "and", "at", "en", "in"]);
 
-/** Every count on a tick, keyed by its line and the word in front of it ("hud:Reps"), numbered when a word repeats. */
+/** Every count on a tick, keyed by its line and the lower-cased word in front of it ("hud:reps"), numbered when a word repeats. */
 function countsOf(tick) {
   const seen = new Map();
   for (const field of COUNT_FIELDS) {
-    const text = String(tick?.[field] || "").replace(NOT_A_COUNT, " ");
+    const text = String(tick?.[field] || "")
+      .replace(NOT_A_COUNT, " ")
+      .replace(THOUSANDS, (n) => n.replace(/\D/g, ""));
     for (const m of text.matchAll(/(\p{L}*)\s*(\d+)/gu)) {
-      const base = `${field}:${m[1]}`;
+      const word = m[1].toLowerCase();
+      if (RANGE_WORDS.has(word)) continue;
+      const base = `${field}:${word}`;
       const n = [...seen.keys()].filter((k) => k.startsWith(base + "#")).length;
       seen.set(`${base}#${n}`, Number(m[2]));
     }
@@ -106,6 +132,8 @@ function checkQuiet(rec, out) {
 function checkInterrupt(rec, out) {
   const it = rec.iterations?.[4];
   if (!it) return;
+  // A run that threw is a finding for every mode, the plan page included
+  if (it.failure) out.push(["leave", `interruption run threw: ${it.failure}`]);
   // The plan page has no Start to double-press, but a microphone left on there is still a finding
   if (!NO_TAKE.has(rec.mode)) checkLeave(it, out);
   const live = (g) => g?.live || 0;
@@ -114,7 +142,6 @@ function checkInterrupt(rec, out) {
 
 function checkLeave(it, out) {
   const live = (g) => g?.live || 0;
-  if (it.failure) out.push(["leave", `interruption run threw: ${it.failure}`]);
   if (live(it.afterDouble?.gum) > 1) out.push(["mic", `double Start opened ${it.afterDouble.gum.live} mic tracks`]);
   if (it.leavePrompt === false && it.afterHidden?.live) out.push(["leave", "Back mid-take left without asking"]);
   if (it.afterStay && it.afterStay.view !== "view-exercise") out.push(["leave", "Stay in the leave prompt did not keep the exercise"]);

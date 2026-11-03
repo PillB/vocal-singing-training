@@ -98,3 +98,60 @@ test("blind spot: the concision gate may open on silence, but a harness failure 
   const g = clean("concisionGate"); g.iterations[3].failure = "boundary run threw"; only(g, "quiet");
   const n = clean("concisionGate"); n.iterations[3].noise.ticks = [tick("Puertas 0/5"), tick("Puertas 4/5")]; only(n, "quiet");
 });
+
+// ---- Part 3: false alarms the red team found in a real ledger (round 4e) ----
+// Each test pairs the line the learner sees (must stay quiet) with a control that must still be reported,
+// so a counter that stopped counting would turn the control red.
+const silentRun = (a, b) => { const r = clean(); r.iterations[3].silent.ticks = [a, b]; return r; };
+const quietOnly = (a, b) => assert.deepEqual(findings(silentRun(a, b)), [], `${JSON.stringify(a)} → ${JSON.stringify(b)} must not be a count`);
+
+test("false alarm: a note name with its octave is not a count (and a count beside it still is)", () => {
+  quietOnly(tick("", "", { pitch: "Objetivo C3 Tú C3" }), tick("", "", { pitch: "Objetivo D4 Tú F#4" }));
+  quietOnly(tick("", "", { pitch: "Objetivo Sib2" }), tick("", "", { pitch: "Objetivo Sol3" }));
+  only(silentRun(tick("", "Aciertos 0", { pitch: "Objetivo C3" }), tick("", "Aciertos 2", { pitch: "Objetivo D4" })), "quiet");
+});
+test("false alarm: a pitch offset in cents is not a count (and a count beside it still is)", () => {
+  quietOnly(tick("", "", { pitch: "afinado (+6¢) voz firme (±18¢)" }), tick("", "", { pitch: "afinado (+8¢) voz firme (±16¢)" }));
+  quietOnly(tick("", "", { pitch: "−12 cents" }), tick("", "", { pitch: "+30 cents" }));
+  // a signed offset with no unit written after it
+  // one sign per record, the number growing, so that a sign dropped from the list turns exactly its record red
+  for (const sign of ["+", "-", "−", "±"]) quietOnly(tick("", "", { pitch: `desvío ${sign}4` }), tick("", "", { pitch: `desvío ${sign}12` }));
+  only(silentRun(tick("", "", { pitch: "(+6¢) Aciertos 0" }), tick("", "", { pitch: "(+8¢) Aciertos 3" })), "quiet");
+});
+test("false alarm: a percentage with decimals is not a count", () => {
+  quietOnly(tick("En la zona 87,5 %"), tick("En la zona 97.2%"));
+  only(silentRun(tick("En la zona 87,5 % Objetivos 0"), tick("En la zona 97,2 % Objetivos 4")), "quiet");
+});
+// One unit per record, each unsigned, so that dropping one unit from the list turns exactly its own record red
+const UNITS = [["120 ms", "340 ms"], ["2 min", "3 min"], ["220 Hz", "233 Hz"], ["2 kHz", "3 kHz"], ["80 bpm", "84 bpm"], ["80 BPM", "84 BPM"], ["18 dB", "27 dB"], ["3 h", "4 h"], ["12 cents", "15 cents"]];
+for (const [a, b] of UNITS) {
+  test(`false alarm: "${a}" is a quantity with a unit, not a count`, () => {
+    quietOnly(tick("", a), tick("", b));
+    only(silentRun(tick("", `${a} Reps 0`), tick("", `${b} Reps 2`)), "quiet");
+  });
+}
+// One range word per record, for the same reason
+const RANGES = [["DEL 1 AL 10", "DEL 2 AL 11"], ["Paso 1 de 5", "Paso 1 de 6"], ["Notas 1 a 5", "Notas 1 a 6"], ["Sing from 2 to 8", "Sing from 3 to 9"], ["Hasta 5", "Hasta 6"], ["Of 5", "Of 6"], ["Entre 2 y 8", "Entre 3 y 9"], ["Rows 1 and 4", "Rows 1 and 5"], ["Compás at 4", "Compás at 5"], ["Sección en 3", "Sección en 4"], ["Row in 3", "Row in 4"]];
+for (const [a, b] of RANGES) {
+  test(`false alarm: the number in "${a}" is a position, not a count`, () => {
+    quietOnly(tick("", a), tick("", b));
+    only(silentRun(tick("", `${a} Aciertos 0`), tick("", `${b} Aciertos 2`)), "quiet");
+  });
+}
+test("false alarm: the same word in another case is the same count, so its rise is still seen", () => {
+  only(silentRun(tick("", "Reps 0"), tick("", "REPS 3")), "quiet");
+  quietOnly(tick("", "Reps 2"), tick("", "REPS 2"));
+});
+test("a thousands separator joins a count and is named as one number", () => {
+  const f = findings(silentRun(tick("", "Puntos 1.200"), tick("", "Puntos 1.300")));
+  assert.deepEqual(f, [["quiet", "silent: on-screen counts rose (puntos 1200→1300) — review"]]);
+  assert.deepEqual(findings(silentRun(tick("", "Puntos 1.200"), tick("", "Puntos 1.200"))), []);
+});
+test("a word that only starts like a unit is still a count ('5 hits' is not 5 h)", () => {
+  only(silentRun(tick("", "5 hits"), tick("", "9 hits")), "quiet");
+});
+test("the plan page's thrown interruption run is reported, as every other mode's is", () => {
+  const w = clean("weekPlan"); w.iterations[4].failure = "page closed"; only(w, "leave");
+  const p = clean("pitchMatch"); p.iterations[4].failure = "page closed"; only(p, "leave");
+  assert.equal(findings(clean("weekPlan")).length, 0);
+});

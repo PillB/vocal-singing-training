@@ -129,6 +129,42 @@ test.describe("guided pictures", () => {
     await expect(page.locator("#mode-focus [data-next-step]"), "after Stop there is no step to skip").toBeDisabled();
   });
 
+  test("s17: Enter on Next past the last step leaves keyboard focus on Stop, not the top of the page", async ({ page }) => {
+    await boot(page, "en");
+    await open(page, "s17-jaw-neck-release");
+    await start(page);
+    const next = page.locator("#mode-focus [data-next-step]");
+    await expect(next).toBeEnabled();
+    await next.focus();
+    let presses = 0;
+    while (!(await next.isDisabled()) && presses < 12) {
+      await page.keyboard.press("Enter");
+      presses++;
+      await page.waitForTimeout(80);
+    }
+    expect(presses, "Enter walks every step until Next has nothing left to skip").toBeGreaterThan(1);
+    await expect(next).toBeDisabled();
+    const active = await page.evaluate(() => document.activeElement?.id || document.activeElement?.tagName);
+    expect(active, "focus moved to the take's own button as Next disabled").toBe("btn-practice-stop");
+    await page.keyboard.press("Enter");
+    await expect(page.locator("#btn-practice-start"), "Enter on the focused Stop ends the take").toBeVisible();
+  });
+
+  test("s17: a take that ends while Next has keyboard focus hands it to Start, not the top of the page", async ({ page }) => {
+    await boot(page, "en");
+    await open(page, "s17-jaw-neck-release");
+    await start(page);
+    const next = page.locator("#mode-focus [data-next-step]");
+    await expect(next).toBeEnabled();
+    await next.focus();
+    // The take's clock runs out (the app's own stop, as its timer calls it)
+    await page.evaluate(() => window.VTApp.stopPractice(true));
+    await expect(page.locator("#btn-practice-start")).toBeVisible();
+    await expect(next).toBeDisabled();
+    await expect.poll(() => page.evaluate(() => document.activeElement?.id || document.activeElement?.tagName),
+      { message: "focus followed the take's button from Stop to Start" }).toBe("btn-practice-start");
+  });
+
   test("s17 walks the exercise's own five steps; the posture step is not counted as a release", async ({ page }) => {
     await boot(page);
     const out = await page.evaluate(() => {

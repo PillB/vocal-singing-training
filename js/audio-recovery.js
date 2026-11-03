@@ -6,6 +6,128 @@
 (function (global) {
   "use strict";
 
+  // What a finger or a key can use on the stage: the banner leaves all of it free
+  const CONTROLS = "button, input, select, textarea, label, a[href], [role='button']";
+  const BAND_GAP = 4;
+  // Controls a banner must leave free above all: a learner who cannot reach
+  // Stop cannot end the take.
+  const KEEP_CLEAR = ["btn-practice-stop", "btn-practice-start"];
+
+  /** The sticky header and exercise bar's height, as app.js measures it. */
+  function stickyChromeHeight() {
+    try {
+      const root = global.getComputedStyle(document.documentElement);
+      return (parseFloat(root.getPropertyValue("--header-h")) || 0) + (parseFloat(root.getPropertyValue("--ex-chrome-h")) || 0);
+    } catch {
+      return 0;
+    }
+  }
+
+  /**
+   * The stage's horizontal bands that hold no control, top to bottom, inside
+   * the window and below the sticky header and exercise bar (a stage
+   * scrolled under them is hidden there). On a phone the stage is a stack of
+   * rails (selects, octave and piano buttons, Stop, the mic slider); the
+   * bands between them hold words (the status row, the step's cue), which a
+   * banner may cover for a while.
+   */
+  function freeBands(stage, banner) {
+    const s = stage.getBoundingClientRect();
+    const top = Math.max(s.top, 0, stickyChromeHeight());
+    const bottom = Math.min(s.bottom, global.innerHeight || s.bottom);
+    const taken = Array.from(stage.querySelectorAll(CONTROLS), (c) => {
+      if (banner.contains(c)) return null;
+      const r = c.getBoundingClientRect();
+      return { top: r.top, bottom: r.bottom, w: r.width, h: r.height, weight: KEEP_CLEAR.includes(c.id) ? 100 : 1 };
+    })
+      .filter((r) => r && r.w > 0 && r.h > 0 && r.bottom > top && r.top < bottom)
+      .sort((a, b) => a.top - b.top);
+    const bands = [];
+    let y = top;
+    for (const r of taken) {
+      if (r.top > y) bands.push({ top: y, h: r.top - y });
+      y = Math.max(y, r.bottom);
+    }
+    if (bottom > y) bands.push({ top: y, h: bottom - y });
+    return { stageTop: s.top, top, bottom, bands, taken };
+  }
+
+  /**
+   * Where a banner `h` tall covers the fewest controls when no band holds
+   * it (a 320 px phone with the piano panel open): never Start or Stop if
+   * any place spares them, then as few others as it can.
+   */
+  function leastCovered({ top, bottom, bands, taken }, h) {
+    const tops = [top, bottom - h, ...bands.flatMap((b) => [b.top, b.top + b.h - h])].map((t) =>
+      Math.max(top, Math.min(bottom - h, t))
+    );
+    const cost = (t) => taken.reduce((n, c) => n + (c.top < t + h && c.bottom > t ? c.weight : 0), 0);
+    return tops.reduce((best, t) => (cost(t) < cost(best) ? t : best), tops[0]);
+  }
+
+  /**
+   * Put the "sound paused" banner where it covers no control. Centred on the
+   * stage it hid the octave buttons, the range box and the piano toggle on a
+   * 320 px phone, and Stop on a phone turned sideways (QA round 5, PNO-02).
+   * It takes the first free band it fits, else its one-line form ("Sound
+   * paused" and the button; the full sentence stays for screen readers) in
+   * the first band that holds that, else the place that covers least.
+   */
+  function placeSound(el) {
+    const stage = el.offsetParent;
+    if (!stage || typeof el.getBoundingClientRect !== "function") return;
+    el.classList.remove("is-compact");
+    el.style.removeProperty("top");
+    el.style.removeProperty("transform");
+    const room = freeBands(stage, el);
+    if (room.bottom <= room.top) return;
+    const fits = () => room.bands.find((b) => b.h >= el.offsetHeight + 2 * BAND_GAP);
+    let band = fits();
+    if (!band) {
+      el.classList.add("is-compact");
+      band = fits();
+    }
+    const h = el.offsetHeight;
+    const y = band ? band.top + (band.h - h) / 2 : leastCovered(room, h);
+    el.style.top = `${Math.round(y - room.stageTop)}px`;
+    el.style.transform = "translateX(-50%)";
+  }
+
+  /**
+   * A banner that is up follows the page: the phone turning, the window or
+   * the language (its sentence grows or shrinks) changing under it, a rail
+   * of the stage growing or shrinking (a select's new label, the piano
+   * panel), and the page scrolling the stage under the sticky chrome.
+   */
+  function followSound(el) {
+    if (!el) return;
+    const again = () => {
+      if (!el.hidden) placeSound(el);
+    };
+    let queued = false;
+    const nextFrame = () => {
+      if (el.hidden || queued) return;
+      queued = true;
+      (global.requestAnimationFrame || ((fn) => setTimeout(fn, 16)))(() => {
+        queued = false;
+        again();
+      });
+    };
+    global.addEventListener?.("resize", again);
+    global.addEventListener?.("orientationchange", () => setTimeout(again, 150));
+    global.addEventListener?.("scroll", nextFrame, { passive: true });
+    if (typeof global.MutationObserver === "function") {
+      new global.MutationObserver(again).observe(el, { childList: true, characterData: true, subtree: true });
+    }
+    const stage = el.parentElement;
+    if (stage && typeof global.ResizeObserver === "function") {
+      // The banner is out of flow: placing it resizes none of these.
+      const rails = new global.ResizeObserver(nextFrame);
+      rails.observe(stage);
+      for (const rail of stage.children) if (rail !== el) rails.observe(rail);
+    }
+  }
+
   function install() {
     const app = global.VTApp;
     const piano = global.VTPiano;
@@ -17,8 +139,12 @@
     const showSound = () => {
       if (state().view !== "exercise" || !state().practiceLive) return;
       if (!app.wantsSound() || !$('mic-blocked')?.hidden) return;
-      if ($("sound-blocked")) $("sound-blocked").hidden = false;
+      const el = $("sound-blocked");
+      if (!el) return;
+      el.hidden = false;
+      placeSound(el);
     };
+    followSound($("sound-blocked"));
 
     const previousStatus = engine.onStatus;
     engine.onStatus = (status) => {
@@ -102,7 +228,11 @@
     const session = global.navigator?.audioSession;
     session?.addEventListener?.("statechange", () => {
       if (session.state === "interrupted") {
-        setTimeout(showSound, 1200);
+        // A short interruption that is over by then shows nothing, as on the
+        // piano's own path.
+        setTimeout(() => {
+          if (session.state === "interrupted") showSound();
+        }, 1200);
       } else if (session.state === "active" && piano.ctx?.state === "running") {
         hideSound();
       }

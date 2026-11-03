@@ -4291,11 +4291,11 @@
     const failureName = typeof failure === "string" ? failure : failure?.name;
     const failureMessage = typeof failure === "object" ? failure?.message : "";
     let messageKey = canRun ? "mic.blocked.partial" : "mic.blocked.none";
-    if (failureName === "interrupted") messageKey = "mic.blocked.interrupted";
+    if (["interrupted", "AudioResumeTimeout"].includes(failureName)) messageKey = "mic.blocked.interrupted";
     else if (["NotReadableError", "AbortError"].includes(failureName)) messageKey = "mic.blocked.busy";
     else if (failureName === "NotFoundError") messageKey = "mic.blocked.missing";
     else if (failureName === "TimeoutError") messageKey = "mic.blocked.pending";
-    else if (/no live audio track|AudioContext|MediaStreamSource/i.test(failureMessage || "")) {
+    else if (/no live audio track|AudioContext|MediaStreamSource|ended while Start built/i.test(failureMessage || "")) {
       messageKey = "mic.blocked.disconnected";
     }
     return messageKey;

@@ -122,6 +122,22 @@ test("busy, denied, missing, and delayed microphones show distinct guidance befo
   await page.locator("#btn-practice-stop").click();
 });
 
+test("a resume that timed out and a microphone that ended while Start built the graph each get their own message", async ({ page }) => {
+  await boot(page, { lang: "en", tourDone: true, mic: "silent" });
+  await openExercise(page, "v1-diction");
+  const said = (reason) =>
+    page.evaluate((r) => {
+      window.VTApp.showMicBlocked(false, r);
+      return document.getElementById("mic-blocked-text").textContent;
+    }, reason);
+  const t = (key) => page.evaluate((k) => window.VTI18n.t(k), key);
+  // The engine's own errors (tests/node/start-recovery.test.mjs pins their names).
+  expect(await said({ name: "AudioResumeTimeout", message: "Resuming the audio context took over 8000 ms" })).toBe(await t("mic.blocked.interrupted"));
+  expect(await said({ name: "Error", message: "Microphone ended while Start built the audio graph" })).toBe(await t("mic.blocked.disconnected"));
+  // A permission prompt left open is still the prompt's message.
+  expect(await said({ name: "TimeoutError", message: "Microphone permission timed out" })).toBe(await t("mic.blocked.pending"));
+});
+
 test("Stop while the permission prompt is up cancels that Start; the microphone granted later is released", async ({ page }) => {
   test.setTimeout(60000);
   await boot(page, { lang: "en", tourDone: true, mic: "silent" });
@@ -367,3 +383,116 @@ for (const viewport of [{ width: 360, height: 740 }, { width: 844, height: 390 }
       .toBe(true);
   });
 }
+
+/** What the up "sound paused" banner covers, and whether its button is on screen. */
+function bannerView() {
+  const banner = document.getElementById("sound-blocked");
+  const b = banner.getBoundingClientRect();
+  const covered = [...document.querySelectorAll("button, input, select, textarea, label, a[href], [role='button']")]
+    .filter((c) => !banner.contains(c))
+    .map((c) => ({ id: c.id || String(c.className).slice(0, 30) || c.tagName, r: c.getBoundingClientRect() }))
+    .filter(({ r }) => r.width > 0 && r.height > 0)
+    .map(({ id, r }) => ({ id, w: Math.min(b.right, r.right) - Math.max(b.left, r.left), h: Math.min(b.bottom, r.bottom) - Math.max(b.top, r.top) }))
+    .filter((o) => o.w > 0.5 && o.h > 0.5)
+    .map((o) => o.id);
+  const btn = document.getElementById("btn-sound-resume").getBoundingClientRect();
+  return { covered, top: b.top, inView: btn.top >= 0 && btn.bottom <= innerHeight && btn.left >= 0 && btn.right <= innerWidth,
+    said: banner.textContent.replace(/\s+/g, " ").trim() };
+}
+
+async function raiseSoundBanner(page) {
+  await page.evaluate(() => {
+    Object.defineProperty(window.VTPiano.ctx, "state", { get: () => "interrupted", configurable: true });
+    window.VTPiano.onStateChange("interrupted");
+  });
+  await expect(page.locator("#sound-blocked")).toBeVisible({ timeout: 7000 });
+}
+
+/**
+ * Keep the banner where it was put: every other path that shows it again
+ * (Start's own check 2 s after its click, the 1.2 s check after any piano
+ * state change) also places it again, and a test of one trigger must not
+ * pass on another's placement.
+ */
+async function holdSoundBanner(page) {
+  await page.evaluate(() => { window.VTPiano.onStateChange = () => {}; });
+  await page.waitForTimeout(1300); // a check scheduled before this has run
+}
+
+// QA round 5 (PNO-02): centred on the stage, the banner hid the octave
+// buttons, the range box and the piano toggle at 320 px, and Stop on a phone
+// turned sideways. Raised the way a real interruption raises it.
+for (const viewport of [{ width: 320, height: 568 }, { width: 568, height: 320 }, { width: 390, height: 844 }]) {
+  test(`the sound-paused banner covers no control at ${viewport.width}×${viewport.height}`, async ({ page }) => {
+    test.setTimeout(60000);
+    await page.setViewportSize(viewport);
+    await startWithMic(page);
+    await raiseSoundBanner(page);
+    const out = await page.evaluate(bannerView);
+    expect(out.covered, "every control stays free; Stop above all").toEqual([]);
+    expect(out.inView, "Restore sound is on screen").toBe(true);
+    expect(out.said, "the banner still holds the whole sentence").toContain("Audio was interrupted");
+    // What a screen reader is given: the whole sentence, once, and not the short line drawn for the eye
+    const aria = await page.locator("#sound-blocked").ariaSnapshot();
+    expect(aria, aria).toContain("Audio was interrupted");
+    expect(aria, aria).not.toContain("Sound paused");
+    const hit = await centerHitsSelf(page, "#btn-sound-resume");
+    expect(hit.ok, `Restore sound is under ${JSON.stringify(hit.top)}`).toBe(true);
+  });
+}
+
+test("the sound-paused banner moves off the controls a rail brings up under it", async ({ page }) => {
+  test.setTimeout(60000);
+  await page.setViewportSize({ width: 320, height: 568 });
+  await startWithMic(page);
+  await raiseSoundBanner(page);
+  await holdSoundBanner(page);
+  expect((await page.evaluate(bannerView)).covered).toEqual([]);
+  // At 320 px the banner sits in the band over the status corner, above the
+  // chord and mode selects. The corner goes (a row of the rail that hides),
+  // and the selects come up to where the banner is.
+  const before = await page.evaluate(() => {
+    const sel = document.getElementById("sel-progression").getBoundingClientRect().top;
+    document.querySelector("#hud-top-rail .hud-tl").style.display = "none";
+    return { sel, banner: document.getElementById("sound-blocked").getBoundingClientRect().top };
+  });
+  const moved = await page.evaluate(() => document.getElementById("sel-progression").getBoundingClientRect().top);
+  expect(moved, `the selects came up (${JSON.stringify(before)})`).toBeLessThan(before.sel - 20);
+  await expect.poll(async () => (await page.evaluate(bannerView)).covered, { timeout: 2000 }).toEqual([]);
+});
+
+test("the sound-paused banner never sits under the sticky header when the stage has scrolled under it", async ({ page }) => {
+  test.setTimeout(60000);
+  await page.setViewportSize({ width: 320, height: 568 });
+  await startWithMic(page);
+  // An open piano panel unsticks the stage on a small phone; scrolling back
+  // up takes the stage's top under the sticky header and exercise bar.
+  const box = await page.locator("#btn-toggle-piano").boundingBox();
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  await expect(page.locator("#piano-block")).toHaveClass(/is-open.*is-settled|is-settled.*is-open/);
+  await expect(page.locator(".game-stage")).toHaveClass(/piano-unstick/);
+  const chrome = await page.evaluate(() => {
+    const root = getComputedStyle(document.documentElement);
+    return (parseFloat(root.getPropertyValue("--header-h")) || 0) + (parseFloat(root.getPropertyValue("--ex-chrome-h")) || 0);
+  });
+  await page.evaluate((c) => {
+    const s = document.getElementById("highway-stage").getBoundingClientRect();
+    window.scrollBy({ top: s.top - (c - 40), behavior: "instant" });
+  }, chrome);
+  await expect.poll(() => page.evaluate(() => document.getElementById("highway-stage").getBoundingClientRect().top),
+    { message: "the stage's top is under the sticky chrome" }).toBeLessThan(chrome - 20);
+  await raiseSoundBanner(page);
+  const out = await page.evaluate(bannerView);
+  expect(out.top, `the banner starts below the chrome (${chrome}px)`).toBeGreaterThanOrEqual(chrome - 0.5);
+  // With the panel open no band of a 320 px stage holds even the one-line
+  // form: it covers what it must, never Stop.
+  expect(out.covered, `covers ${out.covered}`).not.toContain("btn-practice-stop");
+  expect(out.covered.length, `the place that covers least: one control and its label, not ${out.covered}`).toBeLessThanOrEqual(2);
+  expect(out.inView).toBe(true);
+  const hit = await centerHitsSelf(page, "#btn-sound-resume");
+  expect(hit.ok, `Restore sound is under ${JSON.stringify(hit.top)}`).toBe(true);
+  // Scrolling further moves the stage under the chrome; the banner follows.
+  await holdSoundBanner(page);
+  await page.evaluate(() => window.scrollBy({ top: 60, behavior: "instant" }));
+  await expect.poll(async () => (await page.evaluate(bannerView)).top, { timeout: 2000 }).toBeGreaterThanOrEqual(chrome - 0.5);
+});

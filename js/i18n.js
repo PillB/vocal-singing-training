@@ -1006,6 +1006,7 @@
       "mic.blocked.disconnected": "El micrófono dejó de enviar audio. Revisa la conexión o los auriculares y toca Reintentar para comenzar de nuevo.",
       "sound.interrupted": "El sonido se interrumpió al cambiar de app, bloquear la pantalla o cambiar la salida de audio.",
       "sound.resume": "Reactivar sonido",
+      "sound.short": "Sonido en pausa",
       "mic.blocked.skip": "Saltar este paso",
       "leave.title": "¿Puntuar esta práctica?",
       "leave.body":
@@ -2053,6 +2054,7 @@
       "mic.blocked.disconnected": "The microphone stopped supplying audio. Check the connection or headset and tap Try again to restart.",
       "sound.interrupted": "Audio was interrupted by switching apps, locking the screen, or changing the audio output.",
       "sound.resume": "Restore sound",
+      "sound.short": "Sound paused",
       "mic.blocked.skip": "Skip this step",
       "leave.title": "Rate this practice?",
       "leave.body":

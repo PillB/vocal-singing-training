@@ -2279,6 +2279,19 @@
    *   chapterHint(phase, drill) (a chapter's "what to listen for"; default:
    *   the step's intent or cue), partialNote (say how far a short take got).
    */
+  /** Where focus goes when a HUD button it sat on disables: the visible Stop, else Start. */
+  function nextFocus() {
+    return ["btn-practice-stop", "btn-practice-start"]
+      .map((id) => document.getElementById(id))
+      .find((el) => el && !el.hidden && !el.disabled && el.getClientRects().length > 0);
+  }
+
+  /** Focus that fell to the page (its button hidden or disabled) goes to the take's button. */
+  function refocusIfLost() {
+    const a = document.activeElement;
+    if (!a || a === document.body || a.disabled || !a.getClientRects().length) nextFocus()?.focus();
+  }
+
   class Drill extends Panel {
     constructor(mode, cfg) {
       const buttons = (cfg.buttons || []).slice();
@@ -2370,8 +2383,7 @@
       this.caption(r.done ? this.doneText() : r.cur.label, 0);
       if (this.cfg.chime) V.chime(r.done ? "done" : "phase");
       if (this.cfg.onStep) this.cfg.onStep(r.index, this);
-      const b = this.mode.hud?.querySelector("[data-next-step]");
-      if (b) b.disabled = r.done;
+      this._nextStepDisabled(r.done);
     }
     /** The words the picture draws, kept in the page for screen readers and tests. */
     _words(full) {
@@ -2432,7 +2444,16 @@
     }
     _nextStepDisabled(off) {
       const b = this.mode.hud?.querySelector("[data-next-step]");
-      if (b) b.disabled = off;
+      if (!b) return;
+      // A disabled button drops keyboard focus to the top of the page: hand
+      // it to the take's own button first (Stop while live, else Start)
+      const held = off && !b.disabled && document.activeElement === b;
+      b.disabled = off;
+      if (!held) return;
+      nextFocus()?.focus();
+      // A take that ends (its clock, or Stop) disables Next before the app
+      // swaps Stop for Start in the same task: look again once it has
+      setTimeout(refocusIfLost, 0);
     }
     stop() {
       this.live = false;

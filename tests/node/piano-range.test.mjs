@@ -62,3 +62,72 @@ test("octave −2 draws no lane below C1: the highway keeps the notes a voice ca
     }
   }
 });
+
+test("one-note mode at octave −2 draws no lane below C1 either: a lone low tone is shown in the C1 octave", () => {
+  const win = { addEventListener() {}, removeEventListener() {}, devicePixelRatio: 1 };
+  const ctx = { window: win, console, Float32Array, performance, setTimeout, clearTimeout, requestAnimationFrame: () => 1, cancelAnimationFrame() {} };
+  vm.runInNewContext(fs.readFileSync(new URL("../../js/piano.js", import.meta.url), "utf8"), ctx);
+  vm.runInNewContext(fs.readFileSync(new URL("../../js/pitch-visualizer.js", import.meta.url), "utf8"), ctx);
+  const canvas = {
+    style: {}, width: 300, height: 200,
+    getContext: () => ({ setTransform() {}, scale() {} }),
+    getBoundingClientRect: () => ({ width: 300, height: 200 })
+  };
+  const viz = new win.VTPitchVisualizer(canvas);
+  const F = win.VT_NOTE_FREQ;
+  const C1 = F.C1;
+  const pitchClass = (name) => String(name).replace(/-?\d+$/, "");
+  let lone = 0;
+  for (const [id, progression] of Object.entries(win.VT_PROGRESSIONS)) {
+    const low = win.VTTransposeProgression(progression, -2);
+    viz.setProgressionRange(low);
+    for (const chord of low.chords) {
+      for (const note of chord.notes) {
+        // What the piano hands the highway in one-note mode (piano.js onChordChange)
+        viz.setTargetFromChord({ name: chord.name, notes: [note], oneNote: true }, { oneNote: true, noteName: note });
+        const lanes = Array.from(viz.chordLanes, (l) => l.name); // a local array: the vm's fails deepEqual
+        assert.equal(viz.chordLanes.filter((l) => l.freq < C1 - 0.01).length, 0, `${id}/${chord.name}/${note}: lanes ${lanes}`);
+        assert.ok(viz.targetFreq >= C1 - 0.01, `${id}/${chord.name}/${note}: target ${viz.targetFreq} Hz`);
+        // pzChord.observe matches lanes[0].name to the note the piano plays
+        assert.deepEqual(lanes, [note], `${id}/${chord.name}/${note}: the lane keeps the played note's name: ${lanes}`);
+        const shown = viz.chordLanes[0].shown || note;
+        assert.equal(pitchClass(shown), pitchClass(note), `${id}/${chord.name}/${note}: drawn as ${shown}`);
+        assert.ok(Math.abs(viz.chordLanes[0].freq - F[shown]) < 0.01, `${id}/${chord.name}/${note}: drawn where ${shown} is`);
+        if (F[note] < C1 - 0.01) lone++;
+      }
+    }
+  }
+  assert.ok(lone >= 50, `control: ${lone} one-note events below C1 were checked`);
+});
+
+test("a chord with every tone under C1 is shown an octave up, each tone by its own name", () => {
+  const win = { addEventListener() {}, removeEventListener() {}, devicePixelRatio: 1 };
+  const ctx = { window: win, console, Float32Array, performance, setTimeout, clearTimeout, requestAnimationFrame: () => 1, cancelAnimationFrame() {} };
+  vm.runInNewContext(fs.readFileSync(new URL("../../js/piano.js", import.meta.url), "utf8"), ctx);
+  vm.runInNewContext(fs.readFileSync(new URL("../../js/pitch-visualizer.js", import.meta.url), "utf8"), ctx);
+  const canvas = {
+    style: {}, width: 300, height: 200,
+    getContext: () => ({ setTransform() {}, scale() {} }),
+    getBoundingClientRect: () => ({ width: 300, height: 200 })
+  };
+  const viz = new win.VTPitchVisualizer(canvas);
+  const C1 = win.VT_NOTE_FREQ.C1;
+  // A one-note chord with no note named (the first tone is the pick), and a whole triad at 16-25 Hz
+  const F = win.VT_NOTE_FREQ;
+  const shown = () => Array.from(viz.chordLanes, (l) => l.shown);
+  const names = () => Array.from(viz.chordLanes, (l) => l.name);
+  viz.setTargetFromChord({ name: "C", notes: ["C0"], oneNote: true }, { oneNote: true });
+  assert.deepEqual(shown(), ["C1"], "the lone tone gets a lane where a lane may be");
+  assert.deepEqual(names(), ["C0"], "named for the note the piano plays");
+  viz.setTargetFromChord({ name: "C", notes: ["C0", "E0", "G0"] }, {});
+  assert.deepEqual(shown(), ["C1", "E1", "G1"]);
+  assert.deepEqual(names(), ["C0", "E0", "G0"]);
+  assert.deepEqual(Array.from(viz.chordLanes, (l) => l.freq), [F.C1, F.E1, F.G1]);
+  assert.equal(viz.chordLanes.filter((l) => l.freq < C1 - 0.01).length, 0);
+  // Feedback names the lane the singer sees
+  assert.equal(viz.nearestActiveLane(F.E1).name, "E1");
+  // A chord with tones above the floor keeps them as they are: nothing lifted, nothing renamed
+  viz.setTargetFromChord({ name: "C", notes: ["C1", "E1", "G1"] }, {});
+  assert.deepEqual(names(), ["C1", "E1", "G1"]);
+  assert.deepEqual(shown(), [undefined, undefined, undefined]);
+});

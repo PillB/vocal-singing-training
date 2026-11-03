@@ -350,6 +350,153 @@ test.describe("Range adapter & octave helpers", () => {
     await page.click("#btn-practice-stop");
   });
 
+  // QA round 5 on PR #27 (qa/round4/pr27/piano): the octave −2 safeguards each had no test of their own.
+  async function openChords(page) {
+    await page.click('.tab[data-tab="singing"]');
+    await page.locator("#exercise-list .card-ex[data-id='s2-solfege-chords']").click();
+    await expect(page.locator("#btn-oct-down")).toBeVisible();
+  }
+  const overlap = (a, c) =>
+    Math.max(0, Math.min(a.x + a.width, c.x + c.width) - Math.max(a.x, c.x)) *
+    Math.max(0, Math.min(a.y + a.height, c.y + c.height) - Math.max(a.y, c.y));
+
+  for (const lang of ["es", "en"]) {
+    test(`octave −2 caution (${lang}) is the short line, clear of Back and Help at 320 px`, async ({ page }) => {
+      // The long hint (108-129 characters) covered Back and Help on phones; it lives on the label
+      await page.setViewportSize({ width: 320, height: 640 });
+      await page.addInitScript((l) => localStorage.setItem("vt_lang", l), lang);
+      await boot(page);
+      await openChords(page);
+      await page.click("#btn-oct-down");
+      await page.click("#btn-oct-down");
+      await expect(page.locator("#oct-label")).toHaveText(/^[−-]2$/);
+      await expect(page.locator("#toast")).toHaveClass(/show/);
+      const r = await page.evaluate(() => {
+        const box = (sel) => {
+          const q = document.querySelector(sel).getBoundingClientRect();
+          return { x: q.x, y: q.y, width: q.width, height: q.height };
+        };
+        return {
+          text: document.querySelector("#toast").textContent,
+          short: window.VTI18n.t("range.lowOctaveCaution"),
+          toast: box("#toast"),
+          back: box("#btn-back-home"),
+          help: box("#btn-ui-help")
+        };
+      });
+      expect(r.text, "the toast says the short caution").toBe(r.short);
+      expect(r.text.length, r.text).toBeLessThanOrEqual(60);
+      expect(overlap(r.toast, r.back), "the toast leaves Back free").toBe(0);
+      expect(overlap(r.toast, r.help), "the toast leaves Help free").toBe(0);
+    });
+  }
+
+  test("octave −2: a caution due in a take is dropped once the learner is back at −1", async ({ page }) => {
+    await page.context().grantPermissions(["microphone"]);
+    await page.addInitScript(() => {
+      navigator.mediaDevices.getUserMedia = async () => {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        const dest = ctx.createMediaStreamDestination();
+        g.gain.value = 0.00001;
+        osc.connect(g);
+        g.connect(dest);
+        osc.start();
+        return dest.stream;
+      };
+    });
+    await boot(page);
+    await openChords(page);
+    await page.evaluate(() => {
+      const auto = document.querySelector("#chk-auto-piano");
+      if (auto) auto.checked = true;
+    });
+    await page.click("#btn-practice-start");
+    await expect(page.locator("#btn-practice-stop")).toBeVisible();
+    await page.evaluate(() => window.VTApplyOctaveShift(-1));
+    await page.evaluate(() => window.VTApp._hotApplyPromise);
+    await page.evaluate(() => {
+      window.__toasts = [];
+      const el = document.querySelector("#toast");
+      new MutationObserver(() => window.__toasts.push(el.textContent)).observe(el, { childList: true, characterData: true, subtree: true });
+    });
+    // Two moves in one tick: the caution for −2 waits on the piano's restart, and by then it is −1 again
+    await page.evaluate(() => {
+      window.VTApplyOctaveShift(-2);
+      window.VTApplyOctaveShift(-1);
+    });
+    await page.evaluate(() => window.VTApp._hotApplyPromise);
+    await page.waitForTimeout(400);
+    await expect(page.locator("#oct-label")).toHaveText(/^[−-]1$/);
+    const shown = await page.evaluate(() => window.__toasts);
+    expect(shown.filter((t) => /inaudible/.test(t)), `no −2 caution at −1: ${JSON.stringify(shown)}`).toEqual([]);
+    await page.click("#btn-practice-stop");
+  });
+
+  test("octave −2 reached by a silent move raises no caution", async ({ page }) => {
+    await boot(page);
+    await openChords(page);
+    // Every text the toast shows, kept: a negative toContainText would wait for a caution to fade
+    await page.evaluate(() => {
+      window.__toasts = [];
+      const el = document.querySelector("#toast");
+      new MutationObserver(() => window.__toasts.push(el.textContent)).observe(el, { childList: true, characterData: true, subtree: true });
+      window.VTApplyOctaveShift(-1, { silent: true });
+      window.VTApplyOctaveShift(-2, { silent: true });
+    });
+    await expect(page.locator("#oct-label")).toHaveText(/^[−-]2$/);
+    await page.waitForTimeout(300);
+    const shown = await page.evaluate(() => window.__toasts);
+    expect(shown.filter((t) => /inaudible/.test(t)), `no caution: ${JSON.stringify(shown)}`).toEqual([]);
+    await expect(page.locator("#oct-label"), "the label still says it").toHaveClass(/oct-caution/);
+    // Control: the same move without the option does raise it
+    await page.evaluate(() => {
+      window.VTApplyOctaveShift(-1, { silent: true });
+      window.VTApplyOctaveShift(-2);
+    });
+    await expect.poll(() => page.evaluate(() => window.__toasts.some((t) => /inaudible/.test(t)))).toBe(true);
+  });
+
+  for (const [stored, label, low] of [["-9", /^[−-]2$/, true], ["-2.9", /^[−-]2$/, true], ["9", /^\+?2$/, false], ["abc", /^0$/, false]]) {
+    test(`octave −2 is the floor: a stored ${stored} restores inside −2..+2`, async ({ page }) => {
+      // Below −2 the note table has no frequency, and the piano would play silence
+      await page.addInitScript((v) => localStorage.setItem("vt_octave_shift", v), stored);
+      await boot(page);
+      await openChords(page);
+      await expect(page.locator("#oct-label")).toHaveText(label);
+      const shift = await page.evaluate(() => window.VTGetOctaveShift());
+      expect(shift).toBeGreaterThanOrEqual(-2);
+      expect(shift).toBeLessThanOrEqual(2);
+      if (low) await expect(page.locator("#oct-label")).toHaveClass(/oct-caution/);
+    });
+  }
+
+  test("octave −2 is as low as the auto range goes: a plateau there moves no further", async ({ page }) => {
+    await boot(page);
+    const r = await page.evaluate(() => {
+      const A = new window.VTRangeAdapter({ auto: true, octaveShift: -2 });
+      const t0 = 20_000;
+      let fakeNow = t0;
+      const realNow = performance.now.bind(performance);
+      performance.now = () => fakeNow;
+      let decision = null;
+      try {
+        // The climb and plateau that move 0 to −1 in the test above
+        for (let i = 0; i < 65; i++) {
+          fakeNow = t0 + i * 40;
+          const f = i < 30 ? 220 + (i / 29) * 110 : 328 + (i % 3) * 0.8;
+          decision = A.feed({ voiceFreq: f, targetFreq: 440, rms: 0.045, voiced: true, holdSolid: true }) || decision;
+        }
+      } finally {
+        performance.now = realNow;
+      }
+      return { shift: A.octaveShift, decision };
+    });
+    expect(r.decision, "no move below −2").toBeNull();
+    expect(r.shift).toBe(-2);
+  });
+
   test("manual + then − returns to 0; auto toggle persists", async ({ page }) => {
     await boot(page);
     await page.click('.tab[data-tab="singing"]');

@@ -41,6 +41,25 @@
   // fake clock) saw nothing in between: it may skip its own frame, but only
   // checks that keep finding the clock still may add up to a failed input.
   const AUDIO_CLOCK_MAX_STEP_MS = 250;
+  // How long Start waits for a suspended audio context to resume. iOS keeps
+  // resume() pending through a call or an "interrupted" session, with the
+  // microphone already granted and Start and Stop both hidden; past this the
+  // Start fails with Retry. An iPhone resume after the prompt takes about a
+  // second, so a rare slow one shows Retry instead of leaving the learner stuck.
+  const RESUME_WAIT_MS = 8000;
+
+  /**
+   * `promise`, or a rejection named AudioResumeTimeout once `ms` pass first:
+   * the app says the audio was interrupted, not that a permission prompt is
+   * still open (that is the microphone request's TimeoutError).
+   */
+  function within(promise, ms, what) {
+    let timer;
+    const late = new Promise((_, reject) => {
+      timer = setTimeout(() => reject(Object.assign(new Error(`${what} took over ${ms} ms`), { name: "AudioResumeTimeout" })), ms);
+    });
+    return Promise.race([Promise.resolve(promise), late]).finally(() => clearTimeout(timer));
+  }
   /** Default 7/10 — more sensitive than legacy fixed 0.016 (fewer false cutoffs) */
   const DEFAULT_SENS = 7;
 
@@ -431,9 +450,9 @@
     async _setupInputGraph(gen = this._startGen, stream = this.stream) {
       const { ctx, owns } = this._inputContext();
       if (["suspended", "interrupted"].includes(ctx.state)) {
-        await ctx.resume();
+        await within(ctx.resume(), RESUME_WAIT_MS, "Resuming the audio context");
       }
-      await global.VTPiano?.resume?.();
+      await within(global.VTPiano?.resume?.(), RESUME_WAIT_MS, "Resuming the piano");
       if (gen !== this._startGen) return;
       this.audioCtx = ctx;
       this._ownsAudioCtx = owns;
@@ -607,6 +626,9 @@
         this._releaseStale(stream);
         return;
       }
+      // A call or an unplugged headset can end the track while the graph is
+      // built; its "ended" event came before anyone listened for it.
+      if (!graphError && audioTrack.readyState === "ended") graphError = new Error("Microphone ended while Start built the audio graph");
       if (graphError) {
         this.lastCaptureError = graphError;
         this._discardFailedInput();
@@ -1092,10 +1114,11 @@
   }
   PracticeEngine.prototype._loop = function guardedAnalysisFrame() {
     if (!this.running || !this.analyser) return;
-    // Frames stopped for longer than the silence window (a hidden tab stops
-    // rAF while the mic stays open): close an open hold at its last real
+    // No voice for longer than the silence window, heard or not (a hidden
+    // tab stops rAF while the mic stays open; a stall can fall inside a
+    // silence the loop was bridging): close an open hold at its last real
     // sample instead of crediting the time nobody heard (PR #24).
-    if (this._lastFrameAt && performance.now() - this._lastFrameAt > this._silenceEndMs()) this._maybeEndHold(true);
+    if (this.holdStart && performance.now() - this.lastVoiceAt > this._silenceEndMs()) this._maybeEndHold(true);
     if (!this._audioClockHealthy(performance.now())) {
       if (this.running && !this._analysisPaused) {
         this.raf = requestAnimationFrame(() => this._loop());

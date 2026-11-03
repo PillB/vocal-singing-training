@@ -274,7 +274,8 @@ test("busy iOS microphone is attempted once; unsupported constraints may be rela
 
 test("piano schedules its Safari unlock sounds before its first async resume yields", async () => {
   const win = {};
-  runInNewContext(source("piano"), { window: win, Math, console });
+  // The piano bounds a resume by a timer (RESUME_WAIT_MS), as a browser has
+  runInNewContext(source("piano"), { window: win, Math, console, setTimeout, clearTimeout });
   const calls = [];
   let finishResume;
   const ctx = {

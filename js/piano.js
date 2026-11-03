@@ -269,6 +269,32 @@
 
   /** Safari rejects exponentialRamp if value ≤ 0; keep a tiny floor. */
   const GAIN_EPS = 0.0001;
+  // iOS can keep resume() pending through a call or an "interrupted"
+  // session. A Start that awaits it would wait forever with the microphone
+  // granted; past this the piano reports "not running" and Start goes on
+  // (the engine's own resume wait then offers Retry).
+  const RESUME_WAIT_MS = 8000;
+  // A resume asked for while an earlier one is still pending past its 8 s
+  // still gets this long: the interruption may just have ended.
+  const RESUME_RETRY_MS = 250;
+  const clockNow = () => (typeof performance !== "undefined" ? performance.now() : Date.now());
+
+  /** Wait for `promise` at most `ms`; true if it settled in time. */
+  function settledWithin(promise, ms) {
+    let timer;
+    const late = new Promise((resolve) => {
+      timer = setTimeout(() => resolve(false), ms);
+    });
+    return Promise.race([Promise.resolve(promise).then(() => true, () => true), late]).finally(() => clearTimeout(timer));
+  }
+  /**
+   * How long each chord (or each note, one at a time) sounds: the 3/4/5 s
+   * control when held or one note at a time, else chordSec.
+   */
+  function stepSeconds(chordSec, held, sustainSec) {
+    if (!held) return Number(chordSec) || 2.2;
+    return Math.max(1.5, Math.min(5.5, Number(sustainSec) || Number(chordSec) || 4));
+  }
   function safeExpRamp(param, value, time) {
     const v = Math.max(GAIN_EPS, Number(value) || GAIN_EPS);
     try {
@@ -334,7 +360,9 @@
         ctx.addEventListener?.("statechange", () => {
           // A retired iOS context can close *after* its replacement starts.
           // Do not let that stale event override the new graph's UI state.
-          if (this.ctx === ctx) this.onStateChange?.(ctx.state);
+          if (this.ctx !== ctx) return;
+          if (ctx.state === "running") this._resumeWait = null;
+          this.onStateChange?.(ctx.state);
         });
       }
       try {
@@ -383,7 +411,7 @@
       // Safari iOS: "suspended" | "interrupted"; both need resume()
       if (this.ctx.state === "suspended" || this.ctx.state === "interrupted") {
         try {
-          await this.ctx.resume();
+          await this._awaitResume(this.ctx.resume(), "Piano ensure resume failed");
         } catch (e) {
           console.warn("Piano ensure resume failed", e);
         }
@@ -475,6 +503,29 @@
       }
     }
 
+    /**
+     * Wait for `resuming` (this.ctx.resume()) at most RESUME_WAIT_MS; true if
+     * it settled. iOS can hold every resume through a call or Siri, and Start
+     * asks for one at each piano step (unlock, ensure, resume, the
+     * progression's own): every resume of this context shares the first
+     * one's 8 s, so a held session costs Start one wait, not one per step.
+     */
+    _awaitResume(resuming, what) {
+      const ctx = this.ctx;
+      const now = clockNow();
+      const held = this._resumeWait?.ctx === ctx ? this._resumeWait : null;
+      if (!held) this._resumeWait = { ctx, until: now + RESUME_WAIT_MS };
+      const done = () => {
+        if (this._resumeWait?.ctx === ctx) this._resumeWait = null;
+      };
+      Promise.resolve(resuming).then(done, (e) => {
+        console.warn(what, e);
+        done();
+      });
+      const left = held ? Math.max(RESUME_RETRY_MS, held.until - now) : RESUME_WAIT_MS;
+      return settledWithin(resuming, left);
+    }
+
     async unlock() {
       this._unlockGraphSync();
       // Invoke resume during the tap too; awaiting it comes only after both
@@ -488,10 +539,10 @@
         console.warn("Piano gesture resume failed", e);
       }
       this._primeSoundSync();
-      if (resumed) await resumed.catch((e) => console.warn("Piano gesture resume rejected", e));
+      if (resumed && !(await this._awaitResume(resumed, "Piano gesture resume rejected"))) return false;
       // Second resume after scheduling (Safari sometimes needs it)
       try {
-        if (this.ctx.state !== "running") await this.ctx.resume();
+        if (this.ctx.state !== "running") await this._awaitResume(this.ctx.resume(), "Piano second resume failed");
       } catch {
         /* ignore */
       }
@@ -690,7 +741,7 @@
       if (!this.ctx) return this.ensure();
       if (this.ctx.state === "suspended" || this.ctx.state === "interrupted") {
         try {
-          await this.ctx.resume();
+          await this._awaitResume(this.ctx.resume(), "Piano resume failed");
         } catch (e) {
           console.warn("Piano resume failed", e);
         }
@@ -728,6 +779,33 @@
       return PROGRESSIONS;
     }
 
+    /**
+     * The context running, the graph wired and the master up, before a
+     * progression plays. Every resume here is bounded (_awaitResume), so a
+     * session iOS holds cannot hold Start with it.
+     */
+    async _readyToPlay() {
+      await this.ensure();
+      await this.resume();
+      // If still not running (autoplay policy), try unlock path once
+      if (this.ctx && this.ctx.state !== "running") {
+        await this.unlock();
+      }
+      this.stopAll();
+      // Ensure context is running after stopAll
+      if (this.ctx.state === "suspended") {
+        try {
+          await this._awaitResume(this.ctx.resume(), "Piano resume before playing failed");
+        } catch {
+          /* ignore */
+        }
+      }
+      if (this.ctx.state === "closed") {
+        await this.ensure();
+      }
+      if (this.master) this.master.gain.setValueAtTime(0.7, this.ctx.currentTime);
+    }
+
     async playProgression(
       progId,
       {
@@ -742,25 +820,7 @@
         octaveShift = 0
       } = {}
     ) {
-      await this.ensure();
-      await this.resume();
-      // If still not running (autoplay policy), try unlock path once
-      if (this.ctx && this.ctx.state !== "running") {
-        await this.unlock();
-      }
-      this.stopAll();
-      // Ensure context is running after stopAll
-      if (this.ctx.state === "suspended") {
-        try {
-          await this.ctx.resume();
-        } catch {
-          /* ignore */
-        }
-      }
-      if (this.ctx.state === "closed") {
-        await this.ensure();
-      }
-      if (this.master) this.master.gain.setValueAtTime(0.7, this.ctx.currentTime);
+      await this._readyToPlay();
       const baseProg = PROGRESSIONS[progId];
       if (!baseProg) {
         console.warn("Unknown progression", progId);
@@ -771,12 +831,7 @@
       // Play + callbacks use transposed copy so highway targets match audio
       const prog = transposeProgression(baseProg, oct);
 
-      // Hold duration from combobox (3–5s) or chordSec when sustain is off
-      let stepSec = Number(chordSec) || 2.2;
-      if (sustain || oneNote) {
-        // one-note mode always uses the 3s/4s/5s control (per note, not per chord)
-        stepSec = Math.max(1.5, Math.min(5.5, Number(sustainSec) || Number(chordSec) || 4));
-      }
+      const stepSec = stepSeconds(chordSec, sustain || oneNote, sustainSec);
 
       // Flatten to sequential note events when oneNote (or arpeggio for audio + single targets)
       const melodic = !!oneNote;

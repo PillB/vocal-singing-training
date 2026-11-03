@@ -6634,6 +6634,38 @@ body .app-header {
   overflow-y: auto;
   overscroll-behavior: contain;
 }
+/* Its one-line form, for a band between a phone's rails (audio-recovery.js
+   placeSound): the full sentence stays for screen readers */
+.sound-blocked-short {
+  display: none;
+}
+.sound-blocked.is-compact {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.4rem 0.3rem 0.75rem;
+  overflow: visible;
+}
+.sound-blocked.is-compact[hidden] {
+  display: none;
+}
+.sound-blocked.is-compact .sound-blocked-short {
+  display: block;
+  flex: 1 1 auto;
+  margin: 0;
+  font-weight: 600;
+}
+.sound-blocked.is-compact #sound-blocked-text {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}
+.sound-blocked.is-compact #btn-sound-resume {
+  flex: none;
+}
 
 /* —— Design: step-end —— */
 /* A guided step's clock ran out: the stage says so and holds the way on.

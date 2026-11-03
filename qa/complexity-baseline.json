@@ -447,12 +447,6 @@
     },
     {
       "file": "js/piano.js",
-      "sha": "d96cfd70e09be899f7322f617dfa4fce9dfa42d0d2ca19aa92396ba3884ff1a1",
-      "complexity": 23,
-      "name": "Async method 'playProgression'"
-    },
-    {
-      "file": "js/piano.js",
       "sha": "49e3180a466feeb4bb61b5243a70a94a0c1b25d18b3fb32dcf435040f2efe6f7",
       "complexity": 16,
       "name": "Method 'playNote'"

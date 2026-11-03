@@ -824,7 +824,7 @@
         const a = Math.abs(cents);
         if (a < bestAbs) {
           bestAbs = a;
-          best = { name: L.name, freq: L.freq, midi: L.midi, cents };
+          best = { name: L.shown || L.name, freq: L.freq, midi: L.midi, cents };
         }
       });
       return best;
@@ -1837,13 +1837,44 @@
     }
   }
 
-  // A chord's tones below the lane floor get no lane (see LANE_FLOOR_HZ);
-  // the chord-lane builder itself is legacy code kept byte-for-byte.
+  /** `name` moved up whole octaves until it is at or above the lane floor. */
+  function liftToFloor(name, map) {
+    let n = name;
+    for (let i = 0; i < 3 && map[n] < LANE_FLOOR_HZ; i++) {
+      const m = /^([A-G](?:#|b)?)(-?\d+)$/i.exec(String(n));
+      if (!m) return n;
+      n = m[1] + (parseInt(m[2], 10) + 1);
+    }
+    return n;
+  }
+
+  // No lane below the floor (see LANE_FLOOR_HZ): a chord's tones under it
+  // get none, and a chord with nothing above it (one-note mode plays one
+  // tone at a time) is shown in the lowest octave a lane may have. A lifted
+  // lane is drawn and scored there, and `shown` names it; its `name` stays
+  // the note the piano plays, which the modes match lanes against
+  // (practice-modes.js pzChord.observe). The chord-lane builder itself is
+  // legacy code kept byte-for-byte.
   const chordTarget = PitchVisualizer.prototype.setTargetFromChord;
   PitchVisualizer.prototype.setTargetFromChord = function setAudibleChordTarget(chord, opts) {
     const map = global.VT_NOTE_FREQ || {};
-    const notes = chord?.notes?.filter((n) => !(map[n] < LANE_FLOOR_HZ));
-    return chordTarget.call(this, notes?.length ? { ...chord, notes } : chord, opts);
+    if (!chord?.notes?.length) return chordTarget.call(this, chord, opts);
+    const played = new Map(); // lifted name -> the note played
+    const lift = (n) => {
+      const up = liftToFloor(n, map);
+      if (up !== n) played.set(up, n);
+      return up;
+    };
+    const kept = chord.notes.filter((n) => !(map[n] < LANE_FLOOR_HZ));
+    const notes = kept.length ? kept : chord.notes.map(lift);
+    const pick = opts?.noteName ? { ...opts, noteName: lift(opts.noteName) } : opts;
+    const out = chordTarget.call(this, { ...chord, notes }, pick);
+    for (const lane of this.chordLanes || []) {
+      if (!played.has(lane.name)) continue;
+      lane.shown = lane.name;
+      lane.name = played.get(lane.name);
+    }
+    return out;
   };
 
   global.VTPitchVisualizer = PitchVisualizer;

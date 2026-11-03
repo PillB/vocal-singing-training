@@ -14,14 +14,16 @@
   const LS_KEY = "vt_reminders_v1";
   const FREEZE_KEY = "vt_streak_freeze_v1";
 
+  // {min} is the practice the button starts: the loop's Mínimo, or 5 minutes in
+  // the classic arm. A number written here would disagree with the button.
   const GENTLE_MESSAGES_ES = [
     "Unos minutos de voz te esperan cuando quieras.",
-    "Hoy también cuenta: 5 minutos bastan para mantener el hábito.",
+    "Hoy también cuenta: {min} minutos bastan para mantener el hábito.",
     "Tu estudio está listo. Sin presión — solo un rato de práctica."
   ];
   const GENTLE_MESSAGES_EN = [
     "A few minutes of voice when you’re ready.",
-    "Today counts too: 5 minutes is enough to keep the habit.",
+    "Today counts too: {min} minutes is enough to keep the habit.",
     "Your studio is ready. No pressure — just a short practice."
   ];
 
@@ -126,9 +128,39 @@
     });
   }
 
-  function pickMessage(isEs) {
+  /**
+   * Minutes of the practice a reminder asks for: the loop's Mínimo when the
+   * loop is on (3, or 5 in the dormant five-minute arm), else the classic
+   * micro-session's 5.
+   */
+  function practiceMinutes(track = "singing") {
+    try {
+      const loop = global.VTLoop;
+      if (loop?.enabled?.() && loop.routine) {
+        const r = loop.routine(track, "min");
+        if (r && r.totalSec > 0) return Math.max(1, Math.round(r.totalSec / 60));
+      }
+    } catch {
+      /* fall through to the classic 5 */
+    }
+    return 5;
+  }
+
+  /** Which of the gentle messages: an index, so the choice outlives a language switch. */
+  function pickMessageIndex() {
+    return Math.floor(Math.random() * GENTLE_MESSAGES_EN.length);
+  }
+
+  /** The message at `index` in a language, with its minutes. */
+  function messageAt(index, isEs, min) {
     const list = isEs ? GENTLE_MESSAGES_ES : GENTLE_MESSAGES_EN;
-    return list[Math.floor(Math.random() * list.length)];
+    const i = Number.isInteger(index) && index >= 0 && index < list.length ? index : 0;
+    const n = Number.isFinite(min) && min > 0 ? min : practiceMinutes();
+    return list[i].replace("{min}", String(n));
+  }
+
+  function pickMessage(isEs, min) {
+    return messageAt(pickMessageIndex(), isEs, min);
   }
 
   function markNotified() {
@@ -162,13 +194,18 @@
 
   /**
    * Evaluate due state; optionally fire browser notification once per day.
-   * @returns {{ due: boolean, message: string, daysAway: number|null }}
+   * `messageIndex` names the sentence, so a caller that keeps it can say it
+   * again in whatever language is on screen later.
+   * @param {boolean} isEs
+   * @param {number} [min] minutes the reminder's button starts (default: practiceMinutes())
+   * @returns {{ due: boolean, message: string, messageIndex: number, daysAway: number|null }}
    */
-  function evaluate(isEs) {
+  function evaluate(isEs, min) {
     const cfg = getConfig();
     const daysAway = daysSinceLastPractice();
     const due = isDue(cfg);
-    const message = pickMessage(!!isEs);
+    const messageIndex = pickMessageIndex();
+    const message = messageAt(messageIndex, !!isEs, min);
     if (due && cfg.browserNotify) {
       const title = isEs ? "Estudio de voz" : "Voice studio";
       maybeBrowserNotify(title, message);
@@ -177,7 +214,7 @@
       // In-app only still counts as notified so we don't re-spam each paint
       // Caller can choose not to mark — we mark when banner shown
     }
-    return { due, message, daysAway, cfg };
+    return { due, message, messageIndex, daysAway, cfg };
   }
 
   // ——— Rest days (the old "streak freeze") ———
@@ -235,20 +272,23 @@
   }
 
   /**
-   * @param {{ time?: string, freq?: 'DAILY'|'WEEKLY', isEs?: boolean }} opts
+   * @param {{ time?: string, freq?: 'DAILY'|'WEEKLY', isEs?: boolean, min?: number }} opts
+   *   min: minutes the event says (default: practiceMinutes())
    */
   function buildIcs(opts = {}) {
     const isEs = !!opts.isEs;
     const time = opts.time || getConfig().times[0] || "18:00";
     const [hh, mm] = time.split(":").map(Number);
     const start = new Date();
-    start.setHours(hh || 18, mm || 0, 0, 0);
+    // An hour of 0 is midnight, not "missing": `hh || 18` made 00:30 into 18:30.
+    start.setHours(Number.isFinite(hh) ? hh : 18, Number.isFinite(mm) ? mm : 0, 0, 0);
     if (start < new Date()) start.setDate(start.getDate() + 1);
     const end = new Date(start.getTime() + 15 * 60000);
     const freq = opts.freq === "WEEKLY" ? "WEEKLY" : "DAILY";
+    const min = Number.isFinite(opts.min) && opts.min > 0 ? opts.min : practiceMinutes();
     const summary = isEs
-      ? "Práctica de voz · Estudio Vocal (10–15 min)"
-      : "Voice practice · Vocal Studio (10–15 min)";
+      ? `Práctica de voz · Estudio Vocal (${min} min)`
+      : `Voice practice · Vocal Studio (${min} min)`;
     const desc = isEs
       ? "Recordatorio amable: abre el estudio y haz una micro-sesión. Sin presión."
       : "Kind reminder: open the studio for a micro-session. No pressure.";
@@ -313,6 +353,8 @@
     daysSinceLastPractice,
     requestBrowserPermission,
     maybeBrowserNotify,
+    practiceMinutes,
+    messageAt,
     getFreezeState,
     freezesLeft,
     freezeAllowance,

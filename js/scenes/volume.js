@@ -889,7 +889,7 @@
   function ladderInstruction(m) {
     const pos = m.pos;
     const lv = m.seq[pos];
-    if (pos === 0) return L("casi susurro, la frase entera", "near-whisper, the whole sentence");
+    if (pos === 0) return L("la frase entera, aún con claridad", "the whole sentence, still clear");
     const prevLv = m.seq[pos - 1];
     if (lv === m.levels.length - 1) return L("sala llena, sin gritar", "full room, no shouting");
     if (lv > prevLv) return L(`más fuerte que el ${levelNum(prevLv)}`, `louder than ${levelNum(prevLv)}`);

@@ -9082,7 +9082,13 @@
             relabelExercise();
             // A take is running: its panel changes when it stops. Otherwise now.
             if (state.practiceLive || state.practiceStarting) state.langChangedMidTake = true;
-            else state.modeInstance?.relabel?.();
+            else {
+              try {
+                state.modeInstance?.relabel?.();
+              } catch (err) {
+                console.warn("[VT] relabel", err);
+              }
+            }
             if (!$("#mic-blocked")?.hidden) relabelMicBlocked();
           } else {
             state.langChangedMidTake = false;

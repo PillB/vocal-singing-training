@@ -289,14 +289,14 @@
         const parts = [...swap.keys()]
           .filter((k) => k.length >= 4)
           .sort((a, b) => b.length - a.length)
-          .map((k) => [new RegExp("(?<![\\p{L}\\p{N}])" + k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?![\\p{L}\\p{N}])", "gu"), swap.get(k)]);
+          .map((k) => [new RegExp("(^|[^\\p{L}\\p{N}])" + k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?![\\p{L}\\p{N}])", "gu"), swap.get(k)]);
         const text = (v) => {
           const t = v.trim();
           if (!t) return v;
           if (swap.has(t)) return v.replace(t, () => swap.get(t));
           if (exact.has(t)) return v.replace(t, () => exact.get(t));
           let out = v;
-          for (const [re, to] of parts) out = out.replace(re, () => to);
+          for (const [re, to] of parts) out = out.replace(re, (m, before) => before + to);
           return out;
         };
         const w = document.createTreeWalker(this.hud, NodeFilter.SHOW_TEXT);

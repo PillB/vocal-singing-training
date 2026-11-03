@@ -781,49 +781,75 @@ page's look-up shows **Sesiones abiertas: 0** (Open sessions: 0).
 Needed only when a change to `workers/entitlements` is merged. The site itself
 redeploys on its own when `main` changes; the worker does not.
 
-**The first redeploy after the statistics and 7-day-trial changes** (September
-2026) turns on several things at once. Do it the same day those changes reach
-`main`, because until then the site asks the worker for routes it does not
-have yet:
+#### The short version
 
-- The look-up's sign-in lines (**Entra con Google · última vez …**) and
-  **Sesiones abiertas**.
-- New trials last 7 days. Trials already running keep their end date.
-- Anonymous statistics start being stored, with the delete switch and the
-  Europe consent check. The three tables they need are created on the first
-  request; there is no migration step.
-- The **Estadísticas** section of the admin page starts answering.
-- The daily clean-up at 09:17 UTC ([8.2](#82-clean-up-expired-data)).
+```bash
+cd ~/vocal-singing-training          # wherever your checkout is
+git checkout -m main && git pull --ff-only --autostash --no-stat
+workers/entitlements/scripts/redeploy.sh
+```
 
-1. Get ready as in [8.0](#80-get-the-terminal-ready), and write down what is
-   live now, so you can go back to it (8.10):
+That script is this whole section done in one command. It asks before each
+deploy, checks the worker's own health between them, and refuses to go on if
+anything comes back wrong. To see what is live without deploying anything:
+
+```bash
+workers/entitlements/scripts/redeploy.sh --check
+```
+
+`--check` needs no Cloudflare sign-in: `/v1/health` is public. It prints one
+line per feature, and it tells "off" apart from "this worker is older than the
+field", which is the difference that matters when you are deciding whether a
+redeploy is needed at all.
+
+#### Why two deploys and not one
+
+The first deploy goes up with `EVENTS_ENABLED=false`. Storing anonymous
+statistics is the only thing in this worker that writes a database row for
+every visitor action, and Cloudflare's free D1 plan has stopped accepting
+writes past 100,000 a day since 1 September 2026 — for the rest of the day,
+until midnight UTC, and for *every* query, so sign-in, gifts and progress
+saving fail too, not just statistics. (The free plan also caps rows *read* at
+5 million a day.) So: put the new code up with that firehose off, check it,
+then turn statistics on with a plain deploy. If something is wrong you find out
+on a worker that is barely writing, and 8.10 puts the old one back.
+
+A deploy never touches secrets, the database or the KV store — Cloudflare's own
+documentation says secrets are never deleted by a deployment. Admins, the
+licence signing key and everybody's Pro survive it. `--var EVENTS_ENABLED:false`
+overrides that one value for that one deploy, and the second, plain deploy puts
+`wrangler.toml`'s `"true"` back.
+
+#### What the script does, step by step
+
+Do it by hand if you prefer; these are the same commands in the same order.
+
+1. **Check you can.** Node 22 or newer (wrangler 4 refuses below that), `git`,
+   `curl`, and a terminal signed in to Cloudflare ([8.0](#80-get-the-terminal-ready)).
+2. **Check `wrangler.toml` still has the real ids** and not `TODO_REPLACE`.
+   They stay an uncommitted local change: this repository is public.
+
+   ```bash
+   grep -n 'id = ' workers/entitlements/wrangler.toml
+   ```
+3. **Write down what is live now**, so you can go back to it:
 
    ```bash
    npx --yes wrangler@4 deployments status
    ```
 
    On its `Version(s):` line, the id after `(100%)` is the version live now.
-   It goes in the private notes.
-2. Get the latest code. This keeps the real ids in `wrangler.toml` as a local
-   change, which is where they belong (it needs git 2.27 or newer):
+   It goes in your private notes; 8.10 rolls back to it.
+4. **Deploy with statistics off:**
 
    ```bash
-   git checkout -m main && git pull --ff-only --autostash --no-stat
-   ```
-
-   It should end with `Applied autostash.` or `Already up to date.`. If it says
-   `Not possible to fast-forward` or `resulted in conflicts`, stop. Never
-   commit the ids.
-3. Check the ids again (the `grep` in 8.0), then deploy:
-
-   ```bash
-   npx --yes wrangler@4 deploy
+   cd workers/entitlements && npx --yes wrangler@4 deploy --var EVENTS_ENABLED:false
    ```
 
    It lists the bindings: the store (`env.ENTITLEMENTS`) with its real id, and
-   the database (`env.DB`) by its name only, which is normal. Then it prints
-   the worker's address, the daily schedule `17 9 * * *`, and a new
-   **Current Version ID**. Note that id too. If it stops to ask:
+   the database (`env.DB`) by name only, which is normal. Then the worker's
+   address, the daily schedule `17 9 * * *`, and a new **Current Version ID**.
+   Note that id too. If it stops to ask:
 
    - **last updated via the script API**: answer `y`, unless someone changed
      the worker outside Wrangler and this guide. A deploy keeps every secret.
@@ -835,9 +861,50 @@ have yet:
      variable in `wrangler.toml` would replace that secret.
    - An offer to register a workers.dev subdomain: answer `n` and stop. You
      are signed in to the wrong account.
-4. Check health (8.1: **Estadísticas anónimas: activo**, **Prueba gratis: 7
-   días**), look someone up on the admin page, and press **Leer estadísticas**
-   (8.13).
+5. **Check it took.** Either `redeploy.sh --check`, or health on the admin page
+   ([8.1](#81-is-the-server-healthy)). All of these must be true:
+   **Cuentas y regalos: activo**, **Firma de licencias Pro: activo**,
+   **Prueba gratis: 7 días**, **Estadísticas anónimas: apagado** (on purpose,
+   at this stage), **Reportes: activo**.
+6. **Look at the admin page** before going on: look somebody up and see their
+   sign-in line, open **Quién tiene Pro**
+   ([3.1](#31-who-has-pro-all-of-it-at-once)), open **Lo que nos cuenta la
+   gente** ([6.1](#61-what-people-report)). Empty lists are fine; errors are
+   not.
+7. **Deploy again, plainly**, which turns statistics on:
+
+   ```bash
+   npx --yes wrangler@4 deploy
+   ```
+8. **Check again** (**Estadísticas anónimas: activo** now), then press
+   **Leer estadísticas** ([8.13](#813-read-the-statistics)): a table, or "no
+   data yet", never an error. Note the new version id.
+
+If anything looks wrong at any point: `npx --yes wrangler@4 rollback`, and
+section [8.10](#810-undo-a-bad-deploy). You can roll back to any of the last
+100 versions, and a rollback does not change the database, the store or the
+secrets.
+
+#### What the first redeploy after November 2026 turns on
+
+Do it the same day those changes reach `main`, because until then the site asks
+the worker for routes it does not have yet:
+
+- New trials last 7 days. Trials already running keep their end date.
+- The look-up's sign-in lines (**Entra con Google · última vez …**) and
+  **Sesiones abiertas**.
+- Anonymous statistics start being stored, with the delete switch and the
+  Europe consent check. The **Estadísticas** section starts answering.
+- **Reportar un problema** starts reaching us, and **Lo que nos cuenta la
+  gente** starts answering ([6.1](#61-what-people-report)).
+- **Quién tiene Pro** starts answering ([3.1](#31-who-has-pro-all-of-it-at-once)).
+- The daily clean-up at 09:17 UTC ([8.2](#82-clean-up-expired-data)).
+
+**There is no migration step.** Every table the worker needs is created on the
+first request that needs it, from one idempotent list of statements with a
+version number beside it (`workers/entitlements/src/schema.js`). Nothing has to
+be run against the database by hand, and a redeploy never drops or rewrites a
+table that is already there.
 
 **Optional, once:** give the statistics their own key for the per-network
 counters, instead of one derived from the licence signing key. Run
@@ -845,12 +912,11 @@ counters, instead of one derived from the licence signing key. Run
 and paste what the first command printed. Nothing needs to keep it: if it is
 ever lost, set a new one, which only restarts those counters.
 
-Deploying keeps every secret, the database and the store as they are: admins,
-the signing key and everyone's Pro are unaffected. `scripts/setup.sh` also
-deploys and is safe to re-run, but **run it without `ADMIN_EMAIL` set**: given
-that variable it replaces the whole admin list with that one address. Never
-pass it `--rotate-key` unless the private key leaked, because every Pro
-licence stops verifying until the site ships the new public key.
+`workers/entitlements/scripts/setup.sh` also deploys and is safe to re-run, but
+**run it without `ADMIN_EMAIL` set**: given that variable it replaces the whole
+admin list with that one address. Never pass it `--rotate-key` unless the
+private key leaked, because every Pro licence stops verifying until the site
+ships the new public key.
 
 ### 8.8 Back up the accounts database
 
@@ -986,23 +1052,37 @@ npx --yes wrangler@4 d1 execute vocal-studio-accounts --remote --command "DELETE
   CPU per request. Signing a licence is the heaviest step. If sign-in starts
   failing with errors under load, the fix is the $5-a-month Workers plan, not a
   code change.
-- **Statistics share the database with accounts.** The free plan allows
-  100,000 rows written a day. A browser sends about 65 statistics requests an
-  hour of practice, each writing a few rows (an estimate from the code, not
-  measured), so a few hundred hours of practice a day fit. If the database
-  runs out of writes, sign-in, gifts and progress saving fail too, not just
-  statistics. The database's page in the Cloudflare dashboard shows rows
+- **Statistics and reports share the database with accounts.** The free plan
+  allows **100,000 rows written and 5 million rows read a day**, and
+  Cloudflare has been enforcing both since 1 September 2026: past either one,
+  *every* query fails until midnight UTC, so sign-in, gifts and progress
+  saving go down with statistics, not just statistics. Stored data is not
+  affected, and Cloudflare emails the account when a limit is hit. A browser
+  sends about 65 statistics requests an hour of practice, each writing a few
+  rows (an estimate from the code, not measured), so a few hundred hours of
+  practice a day fit. Problem reports are capped on purpose — 10 an hour and
+  30 a day per address, 40 a day per account, 500 a day for the whole
+  deployment — so no amount of reporting, honest or not, can spend that
+  budget. The database's page in the Cloudflare dashboard shows rows read and
   written per day.
-- **The statistics kill switch:** in the Mac checkout's
-  `workers/entitlements/wrangler.toml`, change `EVENTS_ENABLED = "true"` to
-  `"false"` and deploy (8.7). The worker then stores nothing and writes no
-  counters for statistics, and health shows **Estadísticas anónimas:
-  apagado**. Browsers keep sending until the site stops too, which is a
-  change to `js/experiments-config.js`; the requests are cheap because they
-  are refused before anything is written. Set it back to `"true"` and deploy
-  to resume. **Never commit from the Mac checkout**: its `wrangler.toml` holds
-  the real ids. To make a switch-off permanent, change it in a pull request
-  from a clean copy of the repository.
+- **The statistics kill switch**, without editing anything:
+
+  ```bash
+  cd workers/entitlements && npx --yes wrangler@4 deploy --var EVENTS_ENABLED:false
+  ```
+
+  The worker then stores nothing and writes no counters for statistics, and
+  health shows **Estadísticas anónimas: apagado**. A later plain `deploy` puts
+  `wrangler.toml`'s `"true"` back, so this is a switch, not an edit. Browsers
+  keep sending until the site stops too, which is a change to
+  `js/experiments-config.js`; those requests are cheap because they are refused
+  before anything is written. **Never commit from the Mac checkout**: its
+  `wrangler.toml` holds the real ids. To make a switch-off permanent, change
+  `EVENTS_ENABLED` in a pull request from a clean copy of the repository.
+- **The reports kill switch** is the same shape:
+  `npx --yes wrangler@4 deploy --var REPORTS_ENABLED:false`. The form then
+  tells people the channel is closed and shows them their report as copyable
+  text with the issues link, so nothing anybody typed is lost.
 - The codes list on the admin page shows the latest 100 codes.
 - Look-ups show up to 200 history rows per person.
 
@@ -1209,7 +1289,7 @@ Three layers, from most to least automatic:
 | 7. Admin list | an admin taken off ADMIN_EMAILS is refused at once… · an admin added… after first signing in… | `secret put`, local |
 | 8.1–8.2 Health, clean-up | maintenance: server status and clean-up · maintenance: an old worker's missing statistics field… | `curl` shape checked against the code |
 | 8.3–8.6 Lists, delete, sign out everywhere | a session that ends mid-use returns to sign-in… | each query, local, with the address read by `read -r` (an apostrophe included), and deleting one browser's statistics |
-| 8.7–8.10 Deploy, backup, logs, rollback | the sandbox's trial length is the one wrangler.toml deploys · admin.html loads the same versions… | build checked with `deploy --dry-run`; the deploy and rollback prompts and what `deployments` prints, read from Wrangler 4's source; account-only export, restore and deleting again from the log, local; the rollback clean-up, local; others by `--help` only |
+| 8.7–8.10 Deploy, backup, logs, rollback | the sandbox's trial length is the one wrangler.toml deploys · admin.html loads the same versions… | `qa/check-redeploy.mjs` runs `redeploy.sh --check` against stub workers (deployed, pre-deploy, mid-deploy, non-JSON, down, absent) and proves its go/no-go probe refuses a worker that did not come back right; `--var`, `--keep-vars`, "secrets are never deleted by a deployment", `deployments status --json` and the 100-version rollback window checked against Cloudflare's docs on 2026-11-03, and the free-tier 100,000 writes / 5 million reads a day against D1's pricing page; build checked with `deploy --dry-run`; the deploy and rollback prompts read from Wrangler 4's source; account-only export, restore and deleting again from the log, local; the rollback clean-up, local |
 | 8.13 Statistics | statistics: the funnel and arrivals… · statistics: an empty window, a member, and a worker without the route | |
 | 8.14 Data export | | the export, local, checked as JSON |
 | Phone, English | on a phone… · works in English too | |

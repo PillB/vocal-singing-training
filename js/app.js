@@ -4301,7 +4301,9 @@
 
   /** Stop the engine, the clock, the piano and the pitch picture. */
   function haltTake() {
-    if (state.practiceLive || state.practice.running) {
+    // A Start still waiting on the permission prompt is stopped too, so the
+    // microphone it gets later is released instead of going live (PR #24).
+    if (state.practiceLive || state.practice.running || state.practice.starting) {
       try {
         state.practice.setManualSound?.(false, null, { forceClear: true });
         state._spaceDown = false;

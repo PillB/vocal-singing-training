@@ -60,6 +60,10 @@
   class PracticeEngine {
     constructor() {
       this.running = false;
+      // Each Start takes a number; stop() moves it on, so a Start that Stop
+      // cancelled while the permission prompt was up never goes live.
+      this._startGen = 0;
+      this._startingGen = 0;
       this.audioCtx = null;
       this._ownsAudioCtx = false;
       this.stream = null;
@@ -519,31 +523,76 @@
       }
     }
 
+    /** True while a Start waits on the microphone or its graph (stop() cancels it). */
+    get starting() {
+      return !this.running && this._startingGen !== 0 && this._startingGen === this._startGen;
+    }
+
     async start({ record = false } = {}) {
       if (this.running) return;
+      const gen = ++this._startGen;
+      this._startingGen = gen;
+      try {
+        await this._startSession(gen, record);
+      } finally {
+        if (this._startingGen === gen) this._startingGen = 0;
+      }
+    }
+
+    /**
+     * The microphone for Start number `gen`, or null when Stop (or a newer
+     * Start) came first. A stream granted that late is released here: no
+     * graph, no "listening", no frame for a drill that never started (PR #24).
+     */
+    async _captureFor(gen) {
+      const stream = await this._acquireMic();
+      if (gen === this._startGen) return stream;
+      stream?.getTracks?.().forEach((track) => track.stop());
+      return null;
+    }
+
+    /**
+     * A phone or headset may ignore the request to leave the input alone.
+     * Automatic gain evens out exactly the loudness differences the volume
+     * exercises train, so the pictures say so rather than draw a false flat.
+     */
+    _noteInputProcessing(track) {
+      try {
+        const st = track.getSettings?.() || {};
+        this.processedInput = !!(st.autoGainControl || st.noiseSuppression);
+      } catch {
+        this.processedInput = false;
+      }
+    }
+
+    async _startSession(gen, record) {
       this.lastCaptureError = null;
-      this.stream = await this._acquireMic();
+      const stream = await this._captureFor(gen);
+      if (!stream) return;
+      this.stream = stream;
       const audioTrack = this.stream.getAudioTracks?.()[0];
       if (!audioTrack || audioTrack.readyState === "ended") {
         this._discardFailedInput();
         this.lastCaptureError = new Error("Microphone supplied no live audio track");
         throw this.lastCaptureError;
       }
-      // A phone or headset may ignore the request to leave the input alone.
-      // Automatic gain evens out exactly the loudness differences the volume
-      // exercises train, so the pictures say so rather than draw a false flat.
-      try {
-        const st = this.stream.getAudioTracks?.()[0]?.getSettings?.() || {};
-        this.processedInput = !!(st.autoGainControl || st.noiseSuppression);
-      } catch {
-        this.processedInput = false;
-      }
+      this._noteInputProcessing(audioTrack);
+      let graphError = null;
       try {
         await this._setupInputGraph();
       } catch (e) {
-        this.lastCaptureError = e;
+        graphError = e;
+      }
+      if (gen !== this._startGen) {
+        // Stop came while the graph was built (an iPhone resume can take a
+        // while): it released the stream, and a half-built graph is no error.
+        if (this.stream === stream) this._discardFailedInput();
+        return;
+      }
+      if (graphError) {
+        this.lastCaptureError = graphError;
         this._discardFailedInput();
-        throw e;
+        throw graphError;
       }
 
       this.voiced = false;
@@ -559,6 +608,7 @@
       this._watchMicTrack(audioTrack, this.stream);
       this._watchAudioContext(this.audioCtx, this.stream);
       await this._startOptionalRecorder(record);
+      if (gen !== this._startGen) return; // stopped while the recorder started
 
       this._status("listening");
       if (!this._analysisPaused) this._loop();
@@ -628,6 +678,7 @@
     }
 
     stop() {
+      this._startGen++; // a Start still waiting on the mic or its graph is cancelled
       // Finalize open hold if long enough
       this._maybeEndHold(true);
       // End Space assist immediately (no grace after stop)
@@ -990,6 +1041,10 @@
   const analyseFrame = PracticeEngine.prototype._loop;
   PracticeEngine.prototype._loop = function guardedAnalysisFrame() {
     if (!this.running || !this.analyser) return;
+    // Frames stopped for longer than the silence window (a hidden tab stops
+    // rAF while the mic stays open): close an open hold at its last real
+    // sample instead of crediting the time nobody heard (PR #24).
+    if (this._lastFrameAt && performance.now() - this._lastFrameAt > SILENCE_END_MS) this._maybeEndHold(true);
     if (!this._audioClockHealthy(performance.now())) {
       if (this.running && !this._analysisPaused) {
         this.raf = requestAnimationFrame(() => this._loop());

@@ -122,6 +122,44 @@ test("busy, denied, missing, and delayed microphones show distinct guidance befo
   await page.locator("#btn-practice-stop").click();
 });
 
+test("Stop while the permission prompt is up cancels that Start; the microphone granted later is released", async ({ page }) => {
+  test.setTimeout(60000);
+  await boot(page, { lang: "en", tourDone: true, mic: "silent" });
+  await openExercise(page, "v1-diction");
+  await page.evaluate(() => {
+    const md = navigator.mediaDevices;
+    const goodMic = md.getUserMedia.bind(md);
+    window.__grants = [];
+    window.__tracks = [];
+    const askAndWait = (constraints) =>
+      new Promise((resolve, reject) => {
+        window.__grants.push(() => goodMic(constraints).then((s) => {
+          window.__tracks.push(...s.getTracks());
+          resolve(s);
+        }, reject));
+      });
+    md.getUserMedia = askAndWait;
+    if (typeof MediaDevices !== "undefined") MediaDevices.prototype.getUserMedia = askAndWait;
+  });
+  await page.locator("#btn-practice-start").click();
+  await expect.poll(() => page.evaluate(() => window.__grants.length)).toBe(1);
+  expect(await page.evaluate(() => window.VTApp.getState().practice.starting)).toBe(true);
+  // Leaving the take (Back, another exercise, the next step) runs this Stop.
+  await page.evaluate(() => window.VTApp.stopPractice(true));
+  expect(await page.evaluate(() => window.VTApp.getState().practice.starting), "Stop cancels the pending Start").toBe(false);
+  await page.evaluate(() => window.__grants[0]());
+  await expect.poll(() => page.evaluate(() => window.__tracks.length)).toBe(1);
+  await expect.poll(() => page.evaluate(() => window.__tracks.every((t) => t.readyState === "ended")), {
+    message: "the microphone granted after Stop is released"
+  }).toBe(true);
+  const after = await page.evaluate(() => ({
+    running: window.VTApp.getState().practice.running,
+    stream: !!window.VTApp.getState().practice.stream,
+    live: window.VTApp.getState().practiceLive
+  }));
+  expect(after).toEqual({ running: false, stream: false, live: false });
+});
+
 test("recording with a live practice reuses one stream and preserves the microphone", async ({ page }) => {
   test.setTimeout(60000);
   await startWithMic(page, "v1-diction");

@@ -312,8 +312,12 @@ test.describe("Home and retention: red-team fixes", () => {
     await expect(page.locator("#welcome-back")).toBeHidden();
     let f = await focusInfo(page);
     expect(f.shown, "after #wb-dismiss focus is on " + f.id).toBe(true);
-    // due card
-    const p2 = await page.context().newPage();
+    // due card. The first page is closed: another open tab that shares this
+    // storage would see the reminder seeded here, be the one to announce it, and
+    // mark it told (one announcement per day, in whichever tab sees it first).
+    const ctx = page.context();
+    await page.close();
+    const p2 = await ctx.newPage();
     await p2.setViewportSize(LAPTOP);
     await boot(p2, { lang: "en", days: ledger([-3, -2, -1]), reminders: REMINDER_ON(["00:01"]) });
     await expect(p2.locator("#remind-due")).toBeVisible();

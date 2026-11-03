@@ -182,9 +182,29 @@
     return counts(bag.days[key]) || bag.rest.used.includes(key);
   }
 
-  /** What a day was: done, rest, missed, today (still open) or future. */
-  function dayState(bag, key, today) {
-    if (key < today) return counts(bag.days[key]) ? "done" : bag.rest.used.includes(key) ? "rest" : "missed";
+  /** The first day that was practised or rested: nothing earlier was missed. */
+  function firstCovered(bag) {
+    let first = null;
+    Object.keys(bag.days).forEach((k) => {
+      if (counts(bag.days[k]) && (!first || k < first)) first = k;
+    });
+    (bag.rest.used || []).forEach((k) => {
+      if (!first || k < first) first = k;
+    });
+    return first;
+  }
+
+  /**
+   * What a day was: done, rest, missed, before (earlier than the first day
+   * practised, so there was nothing to miss), today (still open) or future.
+   * `first` is firstCovered(bag), worked out once by the caller.
+   */
+  function dayState(bag, key, today, first) {
+    if (key < today) {
+      if (counts(bag.days[key])) return "done";
+      if (bag.rest.used.includes(key)) return "rest";
+      return first === undefined || (first && key >= first) ? "missed" : "before";
+    }
     if (key === today) return counts(bag.days[key]) ? "done" : "today";
     return "future";
   }
@@ -235,15 +255,20 @@
   }
 
   /**
-   * Record practice on today's row.
-   * @param {{ exerciseId?: string, sec?: number, saved?: boolean, bump?: boolean, source?: string }} rec
+   * Record practice on a day's row: today's, unless the practice belongs to an
+   * earlier day. A take rated after midnight is still the take that was sung
+   * the day before, so the rating gives its own day (`day`) rather than
+   * crediting a second one. A day that is not a day key, or is still to come,
+   * is today.
+   * @param {{ exerciseId?: string, sec?: number, saved?: boolean, bump?: boolean, source?: string, day?: string }} rec
    * @returns {{ day: string, becameDay: boolean, row: object }}
    *   `becameDay` is true for the record that turned today into a practice day —
    *   the moment worth marking.
    */
   function record(rec = {}) {
     const bag = read();
-    const k = dayKey();
+    const today = dayKey();
+    const k = typeof rec.day === "string" && parseDay(rec.day) && rec.day <= today ? rec.day : today;
     const row = bag.days[k] || (bag.days[k] = { sec: 0, n: 0, ex: [] });
     const before = counts(row);
     row.sec = Math.round((Number(row.sec) || 0) + Math.max(0, Number(rec.sec) || 0));
@@ -257,7 +282,7 @@
     }
     earnRest(bag);
     write(bag);
-    return { day: k, becameDay: !before && counts(row), row };
+    return { day: k, becameDay: k === today && !before && counts(row), row };
   }
 
   /**
@@ -320,9 +345,10 @@
     // This week, Monday to Sunday.
     const ws = weekStart(today);
     const week = [];
+    const first = firstCovered(bag);
     for (let i = 0; i < 7; i += 1) {
       const k = addDays(ws, i);
-      week.push({ key: k, state: dayState(bag, k, today), isToday: k === today, basics: Number(bag.days[k]?.basics) > 0 });
+      week.push({ key: k, state: dayState(bag, k, today, first), isToday: k === today, basics: Number(bag.days[k]?.basics) > 0 });
     }
 
     const totalSec = practiced.reduce((n, k) => n + (Number(bag.days[k].sec) || 0), 0);
@@ -358,8 +384,9 @@
     const bag = read(opts);
     const today = opts.today || dayKey();
     const out = [];
+    const first = firstCovered(bag);
     for (let k = from; k && k <= to && out.length < 366; k = addDays(k, 1)) {
-      out.push({ key: k, state: dayState(bag, k, today), isToday: k === today });
+      out.push({ key: k, state: dayState(bag, k, today, first), isToday: k === today });
     }
     return out;
   }

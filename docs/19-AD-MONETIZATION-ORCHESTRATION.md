@@ -20,6 +20,7 @@
 - Duolingo: free = ads + limits; Super = ad-free; **ads &lt;~10% revenue**, strategic “stick” for conversion — [case synthesis 2026](https://muhammadjubairhasan.medium.com/business-case-study-duolingo-gamifying-education-and-building-a-habit-forming-empire-ba1d81411848)
 - User backlash when free becomes “ads every few minutes / energy + ads” — Reddit r/duolingo, r/languagelearning; X posts 2025–2026
 - GitHub Pages: ads allowed if site not *primarily* commercial spam; project sites OK for secondary monetization — [GitHub community](https://github.com/orgs/community/discussions/186793)
+  - Primary source (checked 2026-10-28): GitHub's own [usage limits](https://docs.github.com/en/pages/getting-started-with-github-pages/github-pages-limits) say Pages is not allowed as free hosting for an online business or a site "primarily directed at … facilitating commercial transactions or providing commercial software as a service (SaaS)". A community thread is not policy; whether a free practice site with a Pro upgrade fits that rule is an open question to settle before paid plans go live.
 
 ### Preamble
 Establish an evidence-based baseline for **passive ad income that does not damage learning focus or Pro conversion** on a **practice-first voice app**.

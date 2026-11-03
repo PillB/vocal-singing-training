@@ -55,7 +55,9 @@ async function dismissBlockingOverlays(page) {
     }
     try {
       window.VTTour?.stop?.();
-      window.VTTour?.end?.();
+      // end() routes back home even when no tour runs, which would close the
+      // exercise the caller has just opened: only end a tour that is running
+      if (window.VTTour?.isActive?.()) window.VTTour.end();
       window.VTTour?.close?.();
       window.VTTour?.dismiss?.();
     } catch {

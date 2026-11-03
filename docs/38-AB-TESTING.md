@@ -46,8 +46,10 @@ Everything is in `qa/design-test/`, with the commands in its README.
   screens one image per arm. Anything a still image cannot show, such as what
   a button does, is given as a neutral behaviour note per design number.
   Nothing says which design is today's.
-- **Judges.** Three independent evaluators per question, each able to read
-  only its brief and the images:
+- **Judges.** Three evaluators per question, each a separate call able to read
+  only its brief and the images (separate, but not independent in the
+  statistical sense: they are personas of the same model family and share its
+  blind spots):
   - Rosa, a Peruvian beginner on an Android phone
   - a senior product and usability designer
   - an accessibility specialist who runs sessions with adults over 60
@@ -129,6 +131,12 @@ with the judges' fix: the whole session no longer ends from an unlabelled ×.
   above today's by at least two of three judges. The designs were written to
   fix problems an audit had already found, so many wins are expected. But the
   rate is high enough that a narrow win should be read as a tie.
+- **Even 3 of 3 is not a significant result.** If three truly independent
+  judges had no preference, a challenger would get 3 of 3 one time in eight
+  (p = 0.125) and 2 of 3 or better half the time, so the ship rule cannot
+  reach p < 0.05 on any single question. Judges that share one model agree
+  more often than independent ones would, which makes 3 of 3 weaker still.
+  Read the verdicts as a structured expert review, not as a test.
 - **Context changes answers.** The round-1 pricing winner (one plan with a
   monthly/yearly toggle) beat today's dialog 3/3. In round 2 an honest
   pre-launch alternative was also shown, and the round-1 winner then lost 0/3,
@@ -200,6 +208,14 @@ All are sized for two-sided alpha 0.05 and 80% power, with arms weighted 1:1.
 | `loop_home_2026_10` | loop / classic | 355 | 28 | 30% → 40% | share with a practice day, days 21–28 | practice days 0–28; microphone refused 0–28 |
 | `loop_surprise_2026_10` | surprises / none | 250 | 28 | +1.5 days | practice days, 0–28 | finished routines 0–28 |
 | `loop_minimo_len_2026_10` | three / five | 565 | 28 | +1 day | practice days, 0–28 | unfinished Mínimo share 0–28 |
+
+Windows are half-open and counted in 24-hour periods from the first exposure,
+by the time an event reached the worker (`computeMetric` in
+`workers/entitlements/src/events.js`): "days 21–28" means from day 21 up to,
+not including, day 28, which [37-DAILY-LOOP.md](37-DAILY-LOOP.md) writes as
+days 21–27. The two "+N days" plans assume a mean of 6 and an SD of 6 practice
+days in 28 (`js/experiments-config.js`), a guess with no data behind it yet;
+the A/A test is the first chance to measure the real SD and resize them.
 
 At the traffic a friends-and-family beta brings, only large effects can be
 seen. Report "no detectable difference", never "no difference". Colours and

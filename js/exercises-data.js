@@ -102,16 +102,18 @@ window.VT_EXERCISES = {
       title: "Improve Articulation (Pen)",
       durationMin: 3,
       original: "Count to 60 with pen in mouth focusing on achieving clarity.",
-      research: "Resistance articulation drills strengthen speech muscles for clearer delivery.",
+      research:
+        "The pen makes you notice and exaggerate how the lips, tongue and jaw move. This is not strength training: speech uses only a small part of the lips’ force.",
       steps: [
         "Place a clean pen or chopstick gently between your teeth (do not bite hard).",
         "Count 1 to 60 aiming for intelligible consonants.",
         "Remove the pen and count 1 to 20 — notice the ease and clarity boost."
       ],
       tips: [
-        "This is resistance training for speech muscles.",
+        "The pen is a reminder to move the lips and tongue more, not a way to build strength.",
         "Over-work tongue tip and lips for crisp consonants.",
-        "Use only safe, clean objects."
+        "Use only safe, clean objects.",
+        "Stop if the jaw hurts."
       ],
       mistakes: ["Clenching the jaw", "Skipping the pen-off contrast", "Unsafe objects"],
       metrics: [
@@ -411,7 +413,7 @@ window.VT_EXERCISES = {
         "Volume shows confidence and authority when controlled. Laddering builds flexible dynamics for different rooms and moments.",
       steps: [
         "Pick one sentence (8–12 words).",
-        "Say it at level 1 (almost whisper) → 2 soft → 3 conversational → 4 projected → 5 full room (not shout).",
+        "Say it at level 1 (very soft voice, not a whisper) → 2 soft → 3 conversational → 4 projected → 5 full room (not shout).",
         "Return 5 → 3 → 1 with the same sentence.",
         "Then deliver a 60s story using at least 3 different volume levels on purpose."
       ],
@@ -850,7 +852,7 @@ window.VT_EXERCISES = {
       progressions: ["prog1", "prog3"]
     },
 
-    /* ─── CLASS TIER (Bruno Gotelli basic course, months 1–2) ───
+    /* ─── CLASS TIER (a teacher's basic course, months 1–2) ───
        Placement, resonance zones and the pre-warm-up work the class notes drill
        but the homework spine never covered. These are the spine of the prepared
        daily session (VT_STRUCTURED.singing_daily). */
@@ -864,7 +866,7 @@ window.VT_EXERCISES = {
       original:
         "Before vocalising, release the jaw and neck so they cannot interfere with placement.",
       research:
-        "Muscular relaxation lowers resistance to muscle lengthening and improves the response to motor commands, so it is the standard opener before breath and placement work.",
+        "Loosening the jaw and neck can make tension easier to notice and let go of, so it comes before the breath and placement work.",
       steps: [
         "Stand tall, shoulders down, nothing tight at the waist or the collar.",
         "Let the jaw hang: place two fingers on the hinge and let the mouth fall open with no push.",
@@ -900,21 +902,21 @@ window.VT_EXERCISES = {
       title: "Low Rib & Belly Breath (Apoyo)",
       durationMin: 4,
       original:
-        "Costo-abdominal breathing: inhale low through the nose, hold briefly, then spend the air slowly and evenly on a controlled exhale.",
+        "Costo-abdominal breathing: inhale low through the nose, pause briefly, then spend the air slowly and evenly on a controlled exhale.",
       research:
-        "Of the three breathing patterns, only the costo-abdominal one lets the diaphragm descend fully (roughly 60% of capacity vs about 25% for clavicular). The diaphragm is not under direct voluntary control — the ribs and abdominal wall are, and that is what apoyo trains.",
+        "You cannot feel the diaphragm directly (it has few sensory receptors) and it only works on the in-breath; what you can feel and train is the ribs and the abdominal wall, and that is the apoyo.",
       steps: [
         "Stand, or sit on the edge of the chair with the legs open — nothing tight at the waist.",
         "One hand on the lowest ribs, one on the belly. Shoulders must NOT rise.",
         "Inhale through the nose for 4 counts — the hands move out, the collarbones stay still.",
-        "Hold 2 counts to set the fold closure, ready to sing.",
+        "Pause 2 counts with the throat open, not closed: the air waits, it is not trapped.",
         "Exhale for 8 counts, evenly, keeping the ribs wide as long as you can — that resistance is the apoyo.",
         "Repeat the cycle; do not fill to bursting and do not empty to the vacuum feeling."
       ],
       tips: [
         "Chi sa ben respirare, sa ben cantare — air control is the base of every other technique here.",
         "High notes and loud passages cost more air, so build the reserve before you need it.",
-        "The initial impulse is a light abdominal push, like a small cough, then you hold that pressure.",
+        "The exhale starts gently, with no push: keeping the ribs wide is what slows the air.",
         "Lying down or half asleep you already breathe this way — you are recovering it, not learning it."
       ],
       mistakes: [
@@ -941,7 +943,7 @@ window.VT_EXERCISES = {
       original:
         "Find the soft palate with a surprised face and the instant before a yawn, then sing from that inner space.",
       research:
-        "The soft palate is the first placement handle a beginner can actually feel: raising it adds width and resonance and stops the tone going flat — the class image is the difference between speaking outdoors and speaking inside a chapel.",
+        "The soft palate is the first placement handle a beginner can actually feel: raising it adds width and resonance and stops the tone going dull — the class image is the difference between speaking outdoors and speaking inside a chapel.",
       steps: [
         "Imagine you just heard surprising news — the jaw drops on its own, the space grows.",
         "Find the instant just before a yawn and stop there; that is the position, not the yawn itself.",
@@ -1067,7 +1069,7 @@ window.VT_EXERCISES = {
         "Singing should progress towards the ease of talking — this zone is where you feel that.",
         "If the middle feels heavy, you are carrying low-zone weight up into it.",
         "Middle is the bridge: recognising it is what stops you singing everything from one place.",
-        "Keep the soft palate up even here, or the tone goes flat."
+        "Keep the soft palate up even here, or the tone goes dull."
       ],
       mistakes: [
         "Over-colouring a zone that should sound ordinary",
@@ -1091,12 +1093,12 @@ window.VT_EXERCISES = {
       title: "Mask Finder (\"YA\")",
       durationMin: 3,
       original:
-        "Deliberately nasal and bright 'YA, YA, YA' to locate the upper mask: nose, front of the face, sinuses, forehead.",
+        "Deliberately nasal and bright 'YA, YA, YA' to find the upper mask, the buzz you may feel in the nose, the front of the face, the sinuses and the forehead.",
       research:
         "An exaggerated nasal sound is the quickest way to locate the upper resonance area. The exaggeration is the finder, not the final tone — once the place is found the sound is balanced back.",
       steps: [
         "Exaggerate on purpose: 'YA, YA, YA' as nasal and bright as you can make it.",
-        "Notice where it buzzes — nose, cheekbones, forehead. That is the place you are learning.",
+        "Notice where you feel the buzz — it may be in the nose, cheekbones or forehead. That sensation is what you are learning to find.",
         "Repeat it on rising targets keeping that same buzzing address.",
         "Once the place is clear, take some of the brightness out while staying in the same spot.",
         "End with a couple of 'YA' rounds at a normal colour, still in the mask."

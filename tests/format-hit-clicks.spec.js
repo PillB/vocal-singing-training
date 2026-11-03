@@ -193,7 +193,10 @@ test.describe("Format hit-clicks matrix", () => {
               };
             });
             exEntry.checks.geometry = geom;
-            if (geom.stageBottom > geom.visualBottom + 2) {
+            // On a ~320px phone the two rails and 60px of lanes need more than the
+            // screen, so the stage takes that height and the page scrolls (cross-01);
+            // Start is still hit-tested and clicked below.
+            if (geom.stageBottom > geom.visualBottom + 2 && vp.width > 340) {
               exEntry.ok = false;
               exEntry.checks.stageOverflow = true;
               vpEntry.issues.push({

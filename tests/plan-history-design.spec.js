@@ -226,7 +226,9 @@ test.describe("Plan: one focus, its exercises, days counted", () => {
       plan: weekPlan({ element: "Pitch accuracy", status: "active", startedAt: "2026-09-14T15:00:00.000Z" })
     });
     await openPlan(page);
-    await expect(page.locator("#plan-days")).toHaveText("3 de 7 días practicados esta semana");
+    // Nine days after it started the week is over: the line says so.
+    await expect(page.locator("#plan-status")).toHaveText("Lista para revisar: Afinación");
+    await expect(page.locator("#plan-days")).toHaveText("3 de 7 días practicados en esa semana");
     await expect(page.locator("#plan-review-when")).toBeHidden();
     await expect(page.locator("#plan-review-body")).toBeVisible();
     await page.locator("#btn-plan-improved").click();
@@ -263,7 +265,8 @@ test.describe("Plan: one focus, its exercises, days counted", () => {
     expect(asked).toEqual(["¿Cambiar el foco de esta semana a Apoyo del aire? La semana vuelve a empezar hoy, y la revisión se abre siete días después."]);
     let plan = await stored();
     expect(plan).toMatchObject({ weekNumber: 3, element: "Pitch accuracy", status: "active", startedAt: "2026-09-14T15:00:00.000Z" });
-    await expect(page.locator("#plan-status")).toHaveText("Esta semana mejoras: Afinación");
+    // Started nine days ago: the week is over and ready to review.
+    await expect(page.locator("#plan-status")).toHaveText("Lista para revisar: Afinación");
     await expect(page.locator("#plan-review-body")).toBeVisible();
 
     // "Aceptar": the new focus, the same week number, started again today.

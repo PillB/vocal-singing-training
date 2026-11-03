@@ -416,6 +416,10 @@ body:not(.view-exercise) .main {
     box-shadow 0.15s ease,
     transform 0.12s ease;
 }
+.track-tab {
+  /* A wide label (larger text, a long word) shrinks the tab, not the page */
+  min-width: 0;
+}
 .track-ico {
   font-size: 1.15rem;
   line-height: 1;
@@ -432,6 +436,7 @@ body:not(.view-exercise) .main {
 .track-label-short {
   font-size: 0.95rem;
   letter-spacing: 0.01em;
+  overflow-wrap: anywhere;
 }
 .track-label-full {
   font-size: 0.68rem;
@@ -847,6 +852,9 @@ body.home-zero #pro-insights-panel {
 
 .history-list {
   display: grid;
+  /* One column that may shrink below its rows' longest unbreakable line;
+     the implicit auto column took that line's width and widened the page */
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.65rem;
 }
 
@@ -2139,6 +2147,23 @@ html[lang^="es"] .hud-bc.is-manual .mic-sens-title::after {
   min-width: 3.1rem;
   font-size: 0.74rem;
 }
+/* Sound without a piano (speech drills): the options have no "Piano ▾" to fold
+   them, so on a laptop they wrap and give way instead of running over the mic
+   box and the octave "−" beside them (v12 in Spanish). */
+#piano-mini-opts.hud-br:not(.piano-opts-compact):not(.piano-opts-expanded) {
+  flex: 0 1 auto;
+  min-width: 0;
+  flex-wrap: wrap;
+  row-gap: 0.25rem;
+}
+/* .hud-bottom-rail > .hud-corner (overflow: visible) outranks .hud-bc's own
+   hidden, so the mic box spilled onto its neighbour when squeezed */
+.hud-bottom-rail > .hud-bc {
+  overflow: hidden;
+}
+.hud-bottom-rail:has(> #piano-mini-opts.hud-br:not(.piano-opts-compact):not(.piano-opts-expanded)) > .hud-bc {
+  flex: 0 0 auto;
+}
 
 .hud-check {
   background: rgba(12, 18, 26, 0.7);
@@ -2433,6 +2458,12 @@ html[lang^="es"] .hud-cents-only .hud-combo strong::before {
   margin: 0;
   min-height: 0;
   padding: 0;
+  display: none;
+}
+/* The top-left corner of an exercise with no clock and no hold readout (a
+   speech drill: no chord badge either) was left as an empty box */
+.hud-tl:not(:has(> :not([hidden]))),
+.highway-stage:has(.mode-focus-live) .hud-tl:not(:has(> :not([hidden]):not(.chord-now))) {
   display: none;
 }
 
@@ -2784,7 +2815,7 @@ body.view-exercise .stage-below.is-fitted {
     max-width: min(50%, 11rem);
   }
   .hud-tl .chord-now {
-    max-width: 4.5rem;
+    max-width: 6.6rem; /* "Am · A2 La" and "Bb · A#2 La♯" whole at 390px */
   }
   .hold-live {
     max-width: 3.4rem;
@@ -3290,6 +3321,17 @@ body.view-exercise .stage-below.is-fitted {
   gap: 0.3rem;
   font-size: 0.78rem;
 }
+/* A long profile name must shrink the picker, not widen the page: a select
+   takes the width of its longest option unless it is told it may be narrower. */
+.pro-profile-field {
+  min-width: 0;
+  max-width: 100%;
+}
+.pro-profile-field select {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 16rem;
+}
 .pro-k {
   color: var(--text-muted);
   font-weight: 650;
@@ -3389,6 +3431,26 @@ body.view-exercise .stage-below.is-fitted {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Account panel: the question about practice another account left on this
+   browser (it sits with the profile rules because both are about whose record
+   a browser holds). */
+.account-other-owner {
+  margin: 0 0 0.75rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-elevated);
+}
+.account-other-owner-q {
+  margin: 0 0 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 650;
+}
+.account-other-owner-help {
+  margin: 0.5rem 0 0;
+  font-size: 0.8rem;
 }
 
 /* ── Value pulse (home progress proof) ── */
@@ -3681,8 +3743,9 @@ body.tour-spot-on .tour-highlight {
   outline: none;
 }
 /* Last stop on a phone: the button that starts practice takes the full width,
-   with Atrás and Ahora no under it, instead of three buttons wrapping. */
-@media (max-width: 520px) {
+   with Atrás and Ahora no under it, instead of three buttons wrapping. The
+   sheet is also what a phone on its side gets (see the next block). */
+@media (max-width: 520px), (max-height: 500px) {
   .tour-card.tour-handoff .tour-nav {
     display: contents;
   }
@@ -3800,8 +3863,10 @@ body.tour-active .app-footer * {
 /* Phone: a bottom sheet. Both anchors are pinned, so the card spans the width
    instead of shrink-wrapping — `width: auto` with only `left` set used to
    collapse the centred card to ~209px, which is what a first-time mobile
-   visitor met on the welcome step. JS leaves position alone at this width. */
-@media (max-width: 520px) {
+   visitor met on the welcome step. JS leaves position alone at this width.
+   A short screen (a phone on its side, 844x390) gets the sheet too: a floating
+   card 280-300px tall in 390px has no band beside or above the target. */
+@media (max-width: 520px), (max-height: 500px) {
   .tour-card,
   .tour-card-center {
     left: 12px !important;
@@ -3818,6 +3883,36 @@ body.tour-active .app-footer * {
   .tour-card.tour-sheet-top {
     top: 12px !important;
     bottom: auto !important;
+  }
+}
+/* On a short, wide screen the sheet is one compact band (about 160px): the
+   guide link beside the buttons, tighter spacing, so the page keeps a band
+   free for the ring. */
+@media (max-height: 500px) and (min-width: 521px) {
+  .tour-card {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    column-gap: 1rem;
+    padding: 0.55rem 1rem 0.5rem;
+  }
+  .tour-card > .tour-progress,
+  .tour-card > h3,
+  .tour-card > .tour-body {
+    grid-column: 1 / -1;
+  }
+  .tour-card > .tour-guide-link {
+    grid-column: 1;
+    margin: 0;
+  }
+  .tour-card > .tour-actions {
+    grid-column: 2;
+  }
+  .tour-card h3 {
+    margin-bottom: 0.2rem;
+  }
+  .tour-body {
+    margin-bottom: 0.3rem;
+    line-height: 1.4;
   }
 }
 
@@ -5195,6 +5290,13 @@ body.loop-first #home-tour-invite .btn {
   margin: 1rem 0 0;
   font-weight: 700;
 }
+/* A focus name in a pill ("Ya mejorado"): a word, not the code figure .pill was
+   made for, so it reads in the page font and never splits across lines. */
+.pill-word {
+  font-family: inherit;
+  display: inline-block;
+  white-space: nowrap;
+}
 #plan-start-row {
   margin-top: 1.1rem;
 }
@@ -5591,6 +5693,13 @@ body.home-zero:not(.loop-on) #start-panel .start-sub {
     min-height: var(--min-tap);
     padding: 0 0.2rem;
   }
+  /* The Pro dialog's "more" disclosure was a 21px line */
+  #pricing-modal .plan-more > summary {
+    display: flex;
+    align-items: center;
+    gap: 0.25em;
+    min-height: var(--min-tap);
+  }
 
   /* ── Readability ──────────────────────────────────────────────────────
      Nothing that carries meaning should render below 12px on a phone. */
@@ -5976,7 +6085,12 @@ body.loop-on .start-steps {
 .loop-tier-name {
   font-size: 0.92rem;
   font-weight: 700;
-  white-space: nowrap;
+  /* A name that does not fit (larger text) breaks inside its own segment
+     instead of running into the next one */
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: break-word;
+  text-align: center;
 }
 .loop-tier-min {
   font-size: 0.8rem;
@@ -6530,6 +6644,20 @@ body .app-header {
 .mic-blocked p {
   margin: 0 0 0.5rem;
 }
+/* ✕ only when the exercise goes on without the mic; the text keeps clear of it */
+.mic-blocked-close {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.25rem;
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0;
+  font-size: 0.95rem;
+  line-height: 1;
+}
+.mic-blocked:has(> .mic-blocked-close:not([hidden])) > p {
+  padding-right: 2.1rem;
+}
 .mic-blocked-actions {
   display: flex;
   flex-wrap: wrap;
@@ -6893,6 +7021,8 @@ body .app-header {
   display: flex;
   flex: 1 1 auto;
   min-width: 0;
+  /* The text ends where its buttons begin; only the routine's name gives way. */
+  overflow: hidden;
   white-space: nowrap;
   font-size: 0.9rem;
   font-weight: 650;
@@ -6928,6 +7058,11 @@ body .app-header {
 /* The banner already says "Ejercicio n de N" */
 body:has(#session-banner.visible) #structured-progress {
   display: none;
+}
+/* A toast that points at the banner ("reanuda desde el aviso superior") sits
+   under it, not on top of the buttons it names. */
+body:has(#session-banner.visible):not(.view-exercise) .toast.show {
+  top: max(calc(var(--header-h, 58px) + var(--session-banner-h, 3.5rem) + 0.85rem), var(--safe-top, 0px));
 }
 @media (max-width: 400px) {
   .session-banner.visible {
@@ -7026,6 +7161,16 @@ body.view-exercise .stage-coach .mode-hud,
 }
 .stage-coach .controls-row .btn {
   margin-left: 0;
+}
+/* A count a mode's +1 buttons change (s3's A and B stanzas) sits in the buttons' row:
+   the .mode-meta lines are hidden here, and a tap must show something. */
+.stage-coach .pz-lab {
+  display: inline-block;
+  margin: 0 0 0 0.4rem;
+  font-size: 0.82rem;
+  font-weight: 650;
+  color: var(--text);
+  white-space: nowrap;
 }
 /* ...at the strip's right end, so a 44px button does not open a gap in the
    middle of the line ("Acorde / solfeo · 0 [+1] · Canta…") */
@@ -7300,19 +7445,30 @@ body.view-exercise .stage-coach .mode-hud,
     order: 0;
     flex: 1 1 auto;
   }
+  /* One row while Empezar, the mic and the piano options fit side by side.
+     A phone on its side is 640-740px wide, where they do not (about 250 +
+     250 + 330): the piano options then drop to a row of their own instead of
+     the mic box being squeezed to a sliver the neighbours paint over. */
   .hud-bottom-rail {
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
+    row-gap: 0.3rem;
+  }
+  .hud-bottom-rail > .hud-bl {
+    flex: 0 0 auto; /* not the phone rail's full-width row */
   }
   .hud-bc {
     order: 0;
     flex: 1 1 8rem;
+    min-width: 11rem; /* the label, level, slider and number need about 10.8rem */
     width: auto;
   }
   .hud-br {
-    flex: 0 0 auto;
+    flex: 0 1 auto;
+    min-width: 0;
+    margin-left: auto;
   }
   #piano-mini-opts {
-    max-width: none;
+    max-width: 100%;
     overflow: visible;
   }
   .highway-stage:has(.mode-focus-live) .hud-bottom-rail {
@@ -7611,6 +7767,10 @@ body.view-exercise .highway-stage {
   justify-self: start;
   gap: 0.35rem;
 }
+/* The classic arm's own way in to the reminder, under its start panel. */
+.start-remind {
+  margin: 0.4rem 0 0;
+}
 body.loop-on #start-panel .loop-remind-btn {
   grid-column: 1 / -1;
 }
@@ -7706,6 +7866,11 @@ body.loop-on #start-panel .loop-remind-btn {
   white-space: normal;
   overflow: visible;
 }
+/* A tile label wraps rather than ending in "…" ("NOTA MÁS …" for "Nota más larga"). */
+#view-history .value-stat span {
+  white-space: normal;
+  overflow: visible;
+}
 #view-history .pro-goal-progress {
   font-size: 0.85rem;
 }
@@ -7757,14 +7922,20 @@ body.ex-ended #btn-practice-start {
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    min-width: 0;
   }
   .hud-bl #btn-practice-start,
   .hud-bl #btn-practice-stop {
-    flex: 1 1 auto;
+    flex: 1 1 0;
   }
   .hud-bl #opt-auto-record {
     display: inline-flex;
-    flex: none;
+    /* At the normal size the pill keeps its width; with larger text it wraps
+       its words inside itself instead of running past the stage */
+    flex: 0 1 auto;
+    min-width: 0;
+    white-space: normal;
+    line-height: 1.15;
     font-size: 0.85rem;
   }
   .mic-sens-title {
@@ -7857,5 +8028,23 @@ body.ex-ended #piano-mini-opts {
   }
   .mic-sens-title .mic-short {
     display: inline;
+  }
+}
+
+/* Forced colours (Windows high contrast) drop gradients, backgrounds and
+   box-shadows, which were the main button's only outline, the current section's
+   only mark and a pressed toggle's only sign. */
+@media (forced-colors: active) {
+  .btn-practice {
+    border: 1px solid ButtonText;
+  }
+  .header-nav .nav-link[aria-current="page"] {
+    border-color: Highlight;
+    text-decoration: underline 3px;
+    text-underline-offset: 0.3em;
+  }
+  [aria-pressed="true"] {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
   }
 }

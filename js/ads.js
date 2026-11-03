@@ -253,7 +253,8 @@
   function renderAdSensePlaceholder(el, client, slot, slotId) {
     el.hidden = false;
     el.classList.add("ad-slot", "ad-slot--adsense");
-    el.setAttribute("aria-label", "Advertisement");
+    el.setAttribute("aria-label", typeof global.t === "function" ? global.t("ads.label") : "Advertisement");
+    el.setAttribute("data-i18n-aria", "ads.label");
     el.innerHTML = `
       <ins class="adsbygoogle"
         style="display:block"

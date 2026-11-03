@@ -88,7 +88,7 @@ test("all flows: layout + click-log + mic on all exercises (desktop)", async ({
           const br = b.getBoundingClientRect();
           const sr = s.getBoundingClientRect();
           return br.width >= 8 && br.height >= 8 && sr.width >= 40 && sr.height >= 40;
-        }, { timeout: 8000 })
+        }, null, { timeout: 8000 })
         .catch(() => {});
       await reflowStage(page);
 

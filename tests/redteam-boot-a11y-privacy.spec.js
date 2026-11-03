@@ -728,7 +728,7 @@ test.describe("cross-06: text zoom on a phone", () => {
     // The phone rail's own rule (Start and "Grabarme" sharing the row when text is
     // larger) sits in the block the take batch owns, so this case is held back until
     // that rule lands with the integration.
-    test.fixme(`150 percent text keeps the record button inside the stage (${lang})`, async ({ browser }) => {
+    test(`150 percent text keeps the record button inside the stage (${lang})`, async ({ browser }) => {
       const { ctx, page } = await open(browser, { vp: PHONE, lang, zoom: 150, days: [-3, -2, -1] });
       await boot(page, "#ejercicio/s9-pitch-match");
       await page.waitForSelector("#opt-auto-record", { state: "visible" });

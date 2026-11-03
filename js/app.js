@@ -5702,7 +5702,7 @@
         }
         // Practised and rest days carry a mark as well as a colour.
         const mark = d.state === "done" ? "✓" : d.state === "rest" ? "☾" : "";
-        const said = d.state === "missed" ? "" : trackText("loop.dayState." + d.state, null, track);
+        const said = d.state === "missed" || d.state === "before" ? "" : trackText("loop.dayState." + d.state, null, track);
         // Today is outlined; a screen reader hears it as well.
         // Today is named once: an open day's own words already start with "hoy".
         const label = d.isToday && d.state !== "today" ? [tt("history.today"), said].filter(Boolean).join(", ") : said;

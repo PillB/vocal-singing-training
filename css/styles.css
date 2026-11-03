@@ -7912,14 +7912,20 @@ body.ex-ended #btn-practice-start {
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    min-width: 0;
   }
   .hud-bl #btn-practice-start,
   .hud-bl #btn-practice-stop {
-    flex: 1 1 auto;
+    flex: 1 1 0;
   }
   .hud-bl #opt-auto-record {
     display: inline-flex;
-    flex: none;
+    /* At the normal size the pill keeps its width; with larger text it wraps
+       its words inside itself instead of running past the stage */
+    flex: 0 1 auto;
+    min-width: 0;
+    white-space: normal;
+    line-height: 1.15;
     font-size: 0.85rem;
   }
   .mic-sens-title {

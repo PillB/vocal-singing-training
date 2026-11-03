@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Self-paced Vocal & Singing Training practice site",
   "scripts": {
-    "test": "node qa/check-catalog.mjs && node qa/check-redeploy.mjs && node qa/check-tiers.mjs && node --test workers/entitlements/test && playwright test",
+    "test": "node qa/check-catalog.mjs && node qa/check-redeploy.mjs && node qa/check-tiers.mjs && node --test qa/check-tiers.test.mjs && node --test workers/entitlements/test && playwright test",
     "test:e2e": "playwright test",
     "test:catalog": "node qa/check-catalog.mjs",
     "test:mobile": "node qa/capture-mobile.mjs",

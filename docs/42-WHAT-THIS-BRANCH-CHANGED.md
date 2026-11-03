@@ -374,7 +374,7 @@ Nine cases adopted from QA, one changed from printing what it observed to assert
 
 Not a payment fault. The question nobody had written down: what belongs in each tier, and whether the split is worth its price.
 
-**Two Pro features that were never built.** `priority_progressions` and `no_limits` came off the pricing cards in July 2026 when VG-02 was fixed, and were left behind in `can()` and in both dictionaries. So `can("no_limits")` answered *yes* to every Pro subscriber while nothing in the product meant anything by it, and finished marketing copy for a feature that does not exist sat one config line away from being shown again. Both are deleted, and `qa/check-tiers.mjs` (in `npm test`) now fails the build if `can()`, the plan cards and the two dictionaries disagree again, or if a capability exists that no plan sells. It caught a bug in itself on its first run, which is the point of it: a regex meant for the `plans:` array matched a payment provider's `id` above it, paired that with the first plan's features, and then reported that there is no free plan at all.
+**Two Pro features that were never built.** `priority_progressions` and `no_limits` came off the pricing cards in July 2026 when VG-02 was fixed, and were left behind in `can()` and in both dictionaries. So `can("no_limits")` answered *yes* to every Pro subscriber while nothing in the product meant anything by it, and finished marketing copy for a feature that does not exist sat one config line away from being shown again. Both are deleted, and `qa/check-tiers.mjs` (in `npm test`) now fails the build if the names in `can()`, the plan cards and the two dictionaries disagree again, or if a capability exists that no plan sells. **Corrected on 3 November 2026:** the sentence above first said it fails if `can()` disagrees, and that was more than the check does. It compares names and never evaluates `can()`, which needs a browser, so a gate that stops answering yes for something a Pro card sells passed it. QA planted twelve defects and two classes survived; section 22 is what closed them. It caught a bug in itself on its first run, which is the point of it: a regex meant for the `plans:` array matched a payment provider's `id` above it, paired that with the first plan's features, and then reported that there is no free plan at all.
 
 **The price's stated justification does not hold.** `docs/35-PRICING.md` had been using cross-device sync as half the reason the price can sit above the Spanish-language competitor. Sync is free: `PUT /v1/me/progress` asks `requireSession` and nothing else, and `MAX_PROFILES` is 3 on the server for everybody. That was the right call — losing progress in one browser was a P0 for everybody — but it cannot also be the thing Pro is sold on. The pricing doc is corrected in both places it said so, with the date.
 
@@ -388,8 +388,54 @@ Not a payment fault. The question nobody had written down: what belongs in each 
 
 **Before:** `putProgress` asked the two questions a first write raises — is this profile already stored, and is the account already at its cap — with a read, and then acted on the answer. Both halves were a race.
 
-Two devices writing the same brand-new profile both read "no row", both reached the `INSERT`, and the loser threw `UNIQUE constraint failed`. Nothing catches it, so the learner whose phone and laptop both woke up got a 500 where the documented answer is a 409 carrying the winner's copy to merge against. `js/sync.js` does the right thing with either — it merges and retries on a 409, and treats an error as retryable — so the cost was a failed sync cycle and a Worker exception rather than lost practice. The server was the side that was wrong. The second half leaves a lasting wrong state: an account one profile short of the cap, opening two at once, ended up holding four with a cap of three, and that cap is a storage-cost guard which turned out to be guarding only against sequential writes.
+Two devices writing the same brand-new profile both read "no row", both reached the `INSERT`, and the loser threw `UNIQUE constraint failed`. Nothing on the route's own path catches it: the worker's entry point turns any unhandled throw into `500 internal_error` and one `console.error` line carrying the message, so the learner whose phone and laptop both woke up got a 500 where the documented answer is a 409 carrying the winner's copy to merge against — and the only trace of it anywhere was a log line nobody is watching. `js/sync.js` does the right thing with either — it merges and retries on a 409, and treats an error as retryable — so the cost was a failed sync cycle and a Worker exception rather than lost practice. The server was the side that was wrong. The second half leaves a lasting wrong state: an account one profile short of the cap, opening two at once, ended up holding four with a cap of three, and that cap is a storage-cost guard which turned out to be guarding only against sequential writes.
 
 **After:** one guarded `INSERT ... SELECT ... ON CONFLICT DO NOTHING` decides both, because a guarded write plus `changedRows` is the only atomic condition test D1 gives us. The `WHERE` clause carries the cap and is also what makes the statement parse: SQLite's upsert page says the parser "might not be able to tell if the ON keyword is introducing the UPSERT or if it is the ON clause of a join", and so "the SELECT statement should always include a WHERE clause". Zero rows changed means the write did not land, and the branch after it asks the table which of the two reasons it was rather than guessing — an unreadable row count lands there too, which is the direction worth being wrong in, because a write that did land comes back as a conflict against its own copy and the client merges and retries losing nothing.
 
 **Both halves were reproduced before anything changed**, with the three sequential controls green throughout, which is what says these were races and not a broken cap. Six mutants were run against the fix and all six die: a cap nothing reaches, a cap off by one, no upsert clause, an always-stored answer, the two refusal reasons swapped, and no lookup of who won. VG-57.
+
+## 22. A check nobody had tried to fool
+
+Section 20 added `qa/check-tiers.mjs` so the three hand-maintained lists of what
+is free and what is Pro could not drift apart again. It shipped the same day,
+and nothing had tried to defeat it. QA attacked it the next hour, planted twelve
+defects, and two classes of them survived.
+
+**The differentiator claim was tested with one regex over the whole file**, so
+either language satisfied it. Replace the English sentence and the check stayed
+green; replace the Spanish one and it stayed green too. Both were reproduced
+before the fix. The claim is the only thing we can say to a buyer that no
+verified competitor can say back, and half of it could have been deleted in a
+translation pass with the build still green. The two dictionaries are read
+separately now, with a third check that there are exactly two of those strings
+at all, so a missing one cannot read as a passing one.
+
+**And the check never evaluates `can()`.** It cannot: `can()` lives in the page
+and needs a browser. So a `map` that stops overriding a key a Pro card sells, or
+overrides it with `false`, leaves every name in all three lists in place. Three
+such defects were planted and all three passed, each of them a feature a
+subscriber paid for and would not get. That half is now
+`tests/tier-values.spec.js`, which asks the real `can()` in a real browser, once
+as a free visitor and once as a subscriber, and holds the answers to the plan
+cards: everything the Free card lists is yes for both, and everything only a Pro
+card lists is no for one and yes for the other. Four mutants, all of which fail
+that spec and pass the name check.
+
+**The check is now itself tested**, in `qa/check-tiers.test.mjs`: nine cases that
+copy the four files it reads, plant one defect, and run it against the copy. A
+check nobody has tried to fool is a belief rather than a check, and this one was
+a belief for about four hours.
+
+**One QA claim did not survive checking**, and is recorded rather than repeated.
+A `free` table that says no to a key the Free card promises was reported as
+passing. It does not: each of the five Free-card keys was set to `false` in turn
+and the check caught all five. What is genuinely dead code is the `free` value of
+a key the `map` overrides, which QA retracted on its own.
+
+**And a tenth case closes VG-52 for this directory.** `qa/check-tiers.test.mjs`
+is not in `workers/entitlements/test`, so the completeness guard from section 15
+cannot see it. One test reads `package.json` and fails if any `qa/*.test.mjs` is
+not named in the `test` script, which is the same hole in the same shape: a test
+file nobody runs is worse than no test, because it reads as coverage.
+
+VG-58.

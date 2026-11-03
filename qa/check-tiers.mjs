@@ -26,6 +26,18 @@
  * card". They are the one place a list may name something other than a
  * capability of its own.
  *
+ * **What this check cannot see, and what does.** It compares NAMES. It never
+ * evaluates `can()`, because `can()` needs a browser, so a `map` that stops
+ * overriding a key the Pro card sells, or overrides it with `false`, leaves
+ * every name in place and passes here while a paying subscriber is refused.
+ * Three such defects were planted on 3 November 2026 and all three passed.
+ * `tests/tier-values.spec.js` closes that half: it asks the real `can()` in a
+ * real browser, as a free visitor and as a subscriber, and holds the answers to
+ * the plan cards. Both are in `npm test`; neither covers the other's half.
+ *
+ * This check is itself tested, in `qa/check-tiers.test.mjs`, because a check
+ * nobody has tried to fool is a belief rather than a check.
+ *
  * Run: `node qa/check-tiers.mjs` (part of `npm test`). Exit 1 on any
  * disagreement, naming it.
  */
@@ -33,7 +45,10 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
-const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
+// TIERS_ROOT lets qa/check-tiers.test.mjs run this check against a copy of the
+// four files it reads with one defect planted, which is the only way to know
+// the check fails when it should. It defaults to the repository.
+const ROOT = process.env.TIERS_ROOT || path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), "utf8");
 
 /** The two keys that name another card's list rather than a capability. */
@@ -177,9 +192,25 @@ expectNone(
 // And the claim the pricing panel leads with has to be the claim the evidence
 // supports, so the two cannot drift apart silently.
 const i18n = read("js/i18n.js");
+// One regex over the whole file was satisfied by EITHER language, so the claim
+// could be deleted from one of them and nothing would notice. Measured both ways
+// on 3 November 2026: with the English sentence replaced the check stayed green,
+// and so did it with the Spanish one. The two dictionaries are read separately
+// now, Spanish first and English second, which is the order `featureStrings`
+// above already relies on. The value pattern allows an escaped quote so that a
+// sentence with one in it does not silently read as empty.
+const proof1 = [...i18n.matchAll(/"pricing\.proof1":\s*"((?:[^"\\]|\\.)*)"/g)].map((m) => m[1]);
 expectNone(
-  "the pricing panel's first proof line no longer says free practice is uncapped, which is the whole differentiator in docs/35-PRICING.md",
-  /"pricing\.proof1":\s*"[^"]*(gratis, siempre|free, always)/.test(i18n) ? [] : ["pricing.proof1"]
+  "js/i18n.js does not carry exactly two `pricing.proof1` strings, so there is no saying which language is which",
+  proof1.length === 2 ? [] : [`${proof1.length} found, expected 2`]
+);
+expectNone(
+  "the Spanish pricing panel's first proof line no longer says free practice is uncapped, which is the whole differentiator in docs/35-PRICING.md",
+  /gratis, siempre/.test(proof1[0] || "") ? [] : ["pricing.proof1 (es)"]
+);
+expectNone(
+  "the English pricing panel's first proof line no longer says free practice is uncapped, which is the whole differentiator in docs/35-PRICING.md",
+  /free, always/.test(proof1[1] || "") ? [] : ["pricing.proof1 (en)"]
 );
 const pricingDoc = read("docs/35-PRICING.md");
 expectNone(

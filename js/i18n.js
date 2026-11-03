@@ -867,7 +867,7 @@
       "game.flash.off": "BÚSCALA",
       "game.flash.locked": "FIJADO ✓",
       "game.flash.round": "¡RONDA LISTA!",
-      "toast.structuredStart": "Sesión guiada {track} · {path} ({n} ejercicios)",
+      "toast.structuredStart": "Sesión guiada · {track} · {path} ({n} ejercicios)",
       "toast.pausedSession": "Tienes una sesión en pausa — reanuda desde el aviso superior",
       "toast.loopOneNote": "Bucle: 1 nota a la vez · {sec}s c/u…",
       "toast.loopSustain": "Bucle con sostenido de {sec}s…",

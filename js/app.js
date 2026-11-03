@@ -1502,15 +1502,21 @@
           ? tt("loop.banner", { tier: tt("loop.tier." + (s.tier || "min")) })
           : tt("session.bannerTitle", { track: trackLabel });
     // One line (design: session-chrome): where you are first and never cut,
-    // then "En pausa" only when it is and the routine's name, which a narrow
-    // phone cuts with "…". The title keeps the whole line for a pointer.
+    // then "En pausa" only when it is, the route's name and the routine's
+    // name, which a narrow phone cuts with "…". The title keeps the whole line
+    // for a pointer. The route used to ride in the position, which cannot
+    // shrink, and ran on under Pausar and Terminar.
+    const total = s.order.length;
     const pos = document.createElement("span");
     pos.className = "session-banner-pos";
-    pos.textContent = VTSession.progressLabel();
+    pos.textContent = tt("session.progress", { n: Math.min(s.index + 1, total), total });
     const rest = document.createElement("span");
     rest.className = "session-banner-rest";
+    // The basics and the daily class say their own name in the title.
+    const routeKey = `home.path.${s.path}`;
+    const route = s.path && s.path !== "daily" && s.path !== "basics" ? pathName(s.path, s.track) : "";
     // A no-break space: a flex item drops its leading space ("2· Básicos")
-    const restParts = [s.status === "paused" ? status : "", name].filter(Boolean);
+    const restParts = [s.status === "paused" ? status : "", route && route !== routeKey ? route : "", name].filter(Boolean);
     rest.textContent = restParts.length ? "\u00a0· " + restParts.join(" · ") : "";
     const text = $("#session-banner-text");
     if (endAsking != null) {

@@ -6893,6 +6893,8 @@ body .app-header {
   display: flex;
   flex: 1 1 auto;
   min-width: 0;
+  /* The text ends where its buttons begin; only the routine's name gives way. */
+  overflow: hidden;
   white-space: nowrap;
   font-size: 0.9rem;
   font-weight: 650;
@@ -6928,6 +6930,11 @@ body .app-header {
 /* The banner already says "Ejercicio n de N" */
 body:has(#session-banner.visible) #structured-progress {
   display: none;
+}
+/* A toast that points at the banner ("reanuda desde el aviso superior") sits
+   under it, not on top of the buttons it names. */
+body:has(#session-banner.visible):not(.view-exercise) .toast.show {
+  top: max(calc(var(--header-h, 58px) + var(--session-banner-h, 3.5rem) + 0.85rem), var(--safe-top, 0px));
 }
 @media (max-width: 400px) {
   .session-banner.visible {

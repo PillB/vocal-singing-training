@@ -533,3 +533,62 @@
 .admin-pill.st-duplicate {
   color: var(--text-muted);
 }
+
+/* ------------------------------------------------------------------ *
+ * Giving Pro: what kind, and who holds it (added 2 nov 2026)
+ * ------------------------------------------------------------------ */
+
+/* The gift-or-test-account choice. A fieldset rather than a select, because
+   there are two options and both need a sentence of their own. */
+.admin-kind {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.admin-kind legend {
+  padding: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+.admin-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.1rem;
+  margin: 0.35rem 0 0.2rem;
+}
+.admin-choices label {
+  display: inline-flex;
+  align-items: center;
+  /* The whole label is the target, and it is tall enough to hit on a phone. */
+  min-height: 2.75rem;
+  gap: 0.45rem;
+  cursor: pointer;
+}
+.admin-choices input[type="radio"] {
+  width: 1.15rem;
+  height: 1.15rem;
+  margin: 0;
+  accent-color: var(--accent);
+}
+.admin-kind .admin-small {
+  margin: 0;
+}
+
+/* An address in the holders table: it reads as a link and acts as a button,
+   because tapping it looks the account up rather than going anywhere. */
+.admin-linkish {
+  padding: 0;
+  min-height: 2.75rem;
+  background: none;
+  border: 0;
+  font: inherit;
+  color: var(--accent);
+  text-align: left;
+  text-decoration: underline;
+  word-break: break-all;
+  cursor: pointer;
+}
+.admin-linkish:hover,
+.admin-linkish:focus-visible {
+  color: #cfe6f8;
+}

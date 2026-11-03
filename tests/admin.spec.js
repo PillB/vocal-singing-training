@@ -99,13 +99,14 @@ async function openAdmin(context, worker, session, options) {
   await wire(page, worker, session, options);
   await page.goto(`${BASE}/admin.html`, { waitUntil: "domcontentloaded" });
   await expect(page.locator("body")).not.toHaveAttribute("data-gate", "checking", { timeout: 10000 });
-  // boot() fires the reports read without waiting for it, so the page is
-  // usable before it lands. A test that changes the session right after this
-  // would otherwise race that request — and a 401 on it signs the admin out,
-  // correctly, but before the test has pressed anything. The counts line is
-  // filled by the answer, even when there are no reports at all.
+  // boot() fires the reports and holders reads without waiting for them, so
+  // the page is usable before they land. A test that changes the session right
+  // after this would otherwise race those requests — and a 401 on one signs
+  // the admin out, correctly, but before the test has pressed anything. Both
+  // counts lines are filled by the answers, even when there is nothing to list.
   if ((await page.locator("body").getAttribute("data-gate")) === "admin") {
     await expect(page.locator("#reports-counts")).not.toBeEmpty({ timeout: 10000 });
+    await expect(page.locator("#holders-counts")).not.toBeEmpty({ timeout: 10000 });
   }
   return page;
 }
@@ -1057,7 +1058,8 @@ test.describe("Admin page", () => {
     await expect(page.locator("#stats .admin-chips")).toHaveAttribute("aria-label", "Period");
     await expect(page.locator('#stats [data-window="28"]')).toHaveText("28 days");
     await lookUp(page, "ana.tester@example.com");
-    await expect(page.getByRole("button", { name: "Remove access" })).toBeVisible();
+    // Scoped, because the holders list below now offers the same button.
+    await expect(page.locator("#lookup-result").getByRole("button", { name: "Remove access" })).toBeVisible();
     await expect(page.locator("[data-testid=lookup-status]")).toContainText("Has Pro until");
     await page.click("#admin-lang");
     await expect(page.locator("h1")).toHaveText("Panel de admin");
@@ -1093,5 +1095,204 @@ test.describe("Admin page", () => {
     );
     expect(tiny).toEqual([]);
     await ctx.close();
+  });
+
+  // ----- Who holds Pro. The lookup answers "what does this person hold"; this
+  // answers the one that had no answer, which is the one you ask when you want
+  // to know how many testers are still comped.
+
+  test("who has Pro: a gift and a test account, told apart, and one taken back from the list", async ({ browser }) => {
+    const { worker, admin } = await startWorker();
+    const adminCtx = await browser.newContext();
+    const page = await openAdmin(adminCtx, worker, admin);
+
+    // Given through the form, which is how an operator does it: a month for a
+    // friend, and a tester comped with no end date.
+    await page.fill("#give-email", "amiga@example.com");
+    await page.fill("#give-days", "30");
+    await page.fill("#give-note", "familia");
+    await page.click("#give-submit");
+    await expect(page.locator("#give-result")).toContainText("tiene Pro hasta el");
+
+    await page.fill("#give-email", "qa.tester@example.com");
+    // The chip is the point: "no end date" is a length, not a missing date.
+    await page.click('#give .admin-chips [data-days="3650"]');
+    await expect(page.locator("#give-days")).toHaveValue("3650");
+    await page.check('#give input[name="give-kind"][value="comp"]');
+    await page.fill("#give-note", "cuenta de pruebas");
+    await page.click("#give-submit");
+    await expect(page.locator("#give-result")).toContainText("tiene Pro hasta el");
+
+    // What the worker stored is what the radio said, not a default.
+    const stored = await worker.call("GET", "/v1/admin/grants?kind=comp", { token: admin.token });
+    expect(stored.body.grants.map((g) => g.email)).toEqual(["qa.tester@example.com"]);
+    expect(stored.body.grants[0].openEnded).toBe(true);
+
+    // The list the form just added to. Default filter is what is running.
+    await page.locator("a[href='#holders']").click();
+    const rows = page.locator("[data-testid=holders-table] tbody tr");
+    await expect(rows).toHaveCount(2);
+    const tester = rows.filter({ hasText: "qa.tester@example.com" });
+    const friend = rows.filter({ hasText: "amiga@example.com" });
+    await expect(tester).toHaveAttribute("data-kind", "comp");
+    await expect(friend).toHaveAttribute("data-kind", "gift");
+    // The open-ended one says so in words; no date ten years out.
+    await expect(tester).toContainText("sin fecha de fin");
+    await expect(tester).not.toContainText("2036");
+    await expect(friend).toContainText("→");
+    await expect(page.locator("#holders-counts")).toContainText("1 regalos y 1 cuentas de pruebas vigentes");
+    await expect(page.locator("#holders-counts")).toContainText("2 en total");
+
+    // Filtering by kind is the question "which of these are our own accounts".
+    await page.click('#holders [data-grant-kind="comp"]');
+    await expect(rows).toHaveCount(1);
+    await expect(rows.first()).toContainText("qa.tester@example.com");
+    await page.click('#holders [data-grant-kind=""]');
+    await expect(rows).toHaveCount(2);
+
+    // Taking it back from here warns about the same things the account view
+    // warns about, and really revokes the grant.
+    let question = "";
+    page.once("dialog", (dialog) => {
+      question = dialog.message();
+      dialog.accept();
+    });
+    await rows.filter({ hasText: "amiga@example.com" }).getByRole("button", { name: "Quitar acceso" }).click();
+    await expect(page.locator("#lookup-result")).toContainText("se quitó el acceso");
+    expect(question).toContain("amiga@example.com");
+    expect(question).toContain("hasta 3 días");
+    // It left the running list, and the worker agrees it is gone.
+    await expect(rows).toHaveCount(1);
+    await expect(rows.first()).toContainText("qa.tester@example.com");
+    const after = await worker.call("GET", "/v1/admin/account?email=amiga@example.com", { token: admin.token });
+    expect(after.body.entitlement.pro).toBe(false);
+    expect(after.body.grants[0].status).toBe("revoked");
+
+    // And it is still findable under "taken back", which is the other half of
+    // "examine who holds which kind".
+    await page.click('#holders [data-grant-state="revoked"]');
+    await expect(rows).toHaveCount(1);
+    await expect(rows.first()).toContainText("amiga@example.com");
+    await expect(rows.first()).toHaveAttribute("data-status", "revoked");
+    await adminCtx.close();
+  });
+
+  test("who has Pro: saying no to the confirmation leaves the grant alone", async ({ browser }) => {
+    const { worker, admin } = await startWorker();
+    await worker.call("POST", "/v1/admin/grants", {
+      token: admin.token,
+      body: { email: "amiga@example.com", days: 30, note: "familia" }
+    });
+    const adminCtx = await browser.newContext();
+    const page = await openAdmin(adminCtx, worker, admin);
+    const rows = page.locator("[data-testid=holders-table] tbody tr");
+    await expect(rows).toHaveCount(1);
+    page.once("dialog", (dialog) => dialog.dismiss());
+    await rows.first().getByRole("button", { name: "Quitar acceso" }).click();
+    // The row is still there and still running, and the button works again.
+    await expect(rows).toHaveCount(1);
+    await expect(rows.first()).toHaveAttribute("data-status", "active");
+    await expect(rows.first().getByRole("button", { name: "Quitar acceso" })).toBeEnabled();
+    const after = await worker.call("GET", "/v1/admin/account?email=amiga@example.com", { token: admin.token });
+    expect(after.body.entitlement.pro).toBe(true);
+    await adminCtx.close();
+  });
+
+  test("who has Pro: tapping an address looks that account up", async ({ browser }) => {
+    const { worker, admin } = await startWorker();
+    await worker.call("POST", "/v1/admin/grants", {
+      token: admin.token,
+      body: { email: "qa.tester@example.com", days: 3650, kind: "comp", note: "QA" }
+    });
+    const adminCtx = await browser.newContext();
+    const page = await openAdmin(adminCtx, worker, admin);
+    await page.locator("[data-testid=holders-table] tbody tr").first().getByRole("button", { name: "qa.tester@example.com" }).click();
+    await expect(page.locator("#lookup-email")).toHaveValue("qa.tester@example.com");
+    await expect(page.locator("[data-testid=lookup-status]")).toContainText("Tiene Pro");
+    await expect(page.locator("[data-testid=grants-table] tbody tr").first()).toContainText("Cortesía");
+    await adminCtx.close();
+  });
+
+  test("who has Pro: older grants come on asking, newest first", async ({ browser }) => {
+    const { worker, admin } = await startWorker();
+    const account = await worker.signIn("muchos@example.com");
+    const now = worker.now();
+    // Seeded straight into the database: thirty gifts, a day apart, so the
+    // page boundary is unambiguous and nothing depends on insert order.
+    for (let i = 0; i < 30; i += 1) {
+      await worker.sql(
+        `INSERT INTO grants (id, account_id, kind, plan, starts_at, ends_at, source, note, created_at, updated_at)
+         VALUES (?1, ?2, 'gift', 'pro_monthly', ?3, ?4, 'admin', ?5, ?3, ?3)`,
+        `g-seed-${String(i).padStart(2, "0")}`,
+        account.accountId,
+        now - i * DAY,
+        now + (300 - i) * DAY,
+        `regalo ${i}`
+      );
+    }
+    const adminCtx = await browser.newContext();
+    const page = await openAdmin(adminCtx, worker, admin);
+    const rows = page.locator("[data-testid=holders-table] tbody tr");
+    await expect(rows).toHaveCount(25);
+    // Newest first: the one created today, not the one from a month ago.
+    await expect(rows.first()).toContainText("regalo 0");
+    await expect(page.locator("#holders-counts")).toContainText("30 en total");
+    await page.click("#holders-more");
+    await expect(rows).toHaveCount(30);
+    await expect(rows.last()).toContainText("regalo 29");
+    // No row twice: thirty distinct notes across both pages.
+    const notes = await rows.evaluateAll((list) =>
+      list.map((tr) => tr.querySelector('[data-label="Nota"]').textContent)
+    );
+    expect(new Set(notes).size).toBe(30);
+    await adminCtx.close();
+  });
+
+  test("who has Pro: a worker older than this list says to redeploy it", async ({ browser }) => {
+    const { worker, admin } = await startWorker();
+    const adminCtx = await browser.newContext();
+    const page = await adminCtx.newPage();
+    await wire(page, worker, admin);
+    // What a deploy from before this list answers: it has POST on the path,
+    // so GET is a method mismatch, not a missing route.
+    await page.route(`${API}/v1/admin/grants?*`, (route) =>
+      route.fulfill({
+        status: 405,
+        contentType: "application/json",
+        body: JSON.stringify({ ok: false, reason: "method_not_allowed" })
+      })
+    );
+    await page.goto(`${BASE}/admin.html`, { waitUntil: "domcontentloaded" });
+    await expect(page.locator("body")).toHaveAttribute("data-gate", "admin", { timeout: 10000 });
+    await expect(page.locator("#holders-counts")).toContainText("Redespliega el worker");
+    await expect(page.locator("[data-testid=holders-table]")).toHaveCount(0);
+    // And giving Pro still works, which is the point of saying it this way.
+    await page.fill("#give-email", "amiga@example.com");
+    await page.click("#give-submit");
+    await expect(page.locator("#give-result")).toContainText("tiene Pro hasta el");
+    await adminCtx.close();
+  });
+
+  test("who has Pro: the list reads in English too", async ({ browser }) => {
+    const { worker, admin } = await startWorker();
+    await worker.call("POST", "/v1/admin/grants", {
+      token: admin.token,
+      body: { email: "qa.tester@example.com", days: 3650, kind: "comp", note: "QA" }
+    });
+    const adminCtx = await browser.newContext();
+    const page = await openAdmin(adminCtx, worker, admin, { lang: "en" });
+    await expect(page.locator("#holders-title")).toHaveText("Who has Pro");
+    await expect(page.locator('#holders [data-grant-kind="comp"]')).toHaveText("Test accounts");
+    await expect(page.locator('#holders [data-grant-state="active"]')).toHaveText("Running");
+    const row = page.locator("[data-testid=holders-table] tbody tr").first();
+    await expect(row).toContainText("no end date");
+    await expect(page.locator("#holders-counts")).toContainText("test accounts running");
+    await expect(page.locator('#give input[name="give-kind"][value="comp"]')).toBeAttached();
+    await expect(page.locator("#give fieldset legend")).toHaveText("What you are giving");
+    // Switching back redraws rows that were built in the other language.
+    await page.click("#admin-lang");
+    await expect(page.locator("#holders-title")).toHaveText("Quién tiene Pro");
+    await expect(row).toContainText("sin fecha de fin");
+    await adminCtx.close();
   });
 });

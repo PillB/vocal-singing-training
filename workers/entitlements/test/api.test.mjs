@@ -352,6 +352,7 @@ test("a member cannot reach any admin route", async () => {
     ["GET", "/v1/admin/gift-codes", undefined],
     ["POST", "/v1/admin/gift-codes/revoke", { code: "VOCAL-AAAA-AAAA" }],
     ["POST", "/v1/admin/grants", { email: "victim@example.test", days: 3650 }],
+    ["GET", "/v1/admin/grants", undefined],
     ["POST", "/v1/admin/grants/revoke", { grantId: "grant_x" }],
     ["GET", "/v1/admin/account?email=victim@example.test", undefined],
     ["GET", "/v1/admin/reports", undefined],
@@ -754,4 +755,126 @@ test("admin lookup says whether, how and when the person has signed in", async (
   );
   assert.deepEqual(out.body.signIns.methods, ["email"]);
   assert.equal(out.body.signIns.activeSessions, 0);
+});
+
+test("an admin can see who holds Pro we handed out, and which kind", async () => {
+  const env = freshEnv();
+  const admin = await signInByEmail(env, "admin@example.test", NOW);
+  const give = (email, body, at) =>
+    call(req("POST", "/v1/admin/grants", { token: admin.token, body: { email, ...body } }), env, { now: at });
+
+  // A tester comped with no end date, a friend given a month, a gift already
+  // taken back, and one that ran out last year.
+  const tester = await give("tester@example.test", { kind: "comp", days: 3650, note: "QA" }, NOW + 10);
+  assert.equal(tester.status, 200, JSON.stringify(tester.body));
+  assert.equal(tester.body.grant.openEnded, true);
+  const friend = await give("friend@example.test", { days: 30, note: "familia" }, NOW + 20);
+  assert.equal(friend.body.grant.openEnded, false);
+  const taken = await give("expartner@example.test", { days: 30 }, NOW + 30);
+  await call(
+    req("POST", "/v1/admin/grants/revoke", { token: admin.token, body: { grantId: taken.body.grant.id } }),
+    env,
+    { now: NOW + 40 }
+  );
+  const over = await give("lapsed@example.test", { days: 1 }, NOW + 50);
+  const later = NOW + 10 * DAY;
+
+  const all = await call(req("GET", "/v1/admin/grants", { token: admin.token }), env, { now: later });
+  assert.equal(all.status, 200, JSON.stringify(all.body));
+  // Newest first, and every row names the address rather than an account id.
+  assert.deepEqual(
+    all.body.grants.map((g) => g.email),
+    ["lapsed@example.test", "expartner@example.test", "friend@example.test", "tester@example.test"]
+  );
+  assert.equal(all.body.more, false);
+  assert.equal(all.body.counts.comp.active, 1);
+  assert.equal(all.body.counts.gift.active, 1);
+  assert.equal(all.body.counts.gift.revoked, 1);
+  assert.equal(all.body.counts.gift.expired, 1);
+  assert.equal(all.body.counts.trial.active, 0);
+
+  // The filters are the two questions an operator actually asks.
+  const comps = await call(req("GET", "/v1/admin/grants?kind=comp", { token: admin.token }), env, { now: later });
+  assert.deepEqual(comps.body.grants.map((g) => g.email), ["tester@example.test"]);
+  assert.equal(comps.body.grants[0].openEnded, true);
+
+  const live = await call(req("GET", "/v1/admin/grants?state=active", { token: admin.token }), env, { now: later });
+  assert.deepEqual(
+    live.body.grants.map((g) => g.email).sort(),
+    ["friend@example.test", "tester@example.test"]
+  );
+  const gone = await call(req("GET", "/v1/admin/grants?state=revoked", { token: admin.token }), env, { now: later });
+  assert.deepEqual(gone.body.grants.map((g) => g.email), ["expartner@example.test"]);
+  const done = await call(req("GET", "/v1/admin/grants?state=expired", { token: admin.token }), env, { now: later });
+  assert.deepEqual(done.body.grants.map((g) => g.email), ["lapsed@example.test"]);
+  assert.ok(over.body.grant.id);
+
+  // And it pages by key, so no row is repeated or skipped at a boundary.
+  const first = await call(req("GET", "/v1/admin/grants?limit=2", { token: admin.token }), env, { now: later });
+  assert.equal(first.body.grants.length, 2);
+  assert.equal(first.body.more, true);
+  const last = first.body.grants[1];
+  // The cursor is `createdAt`, and the row carries it: without that field the
+  // admin page has nothing to page on and the "show older" button is a lie.
+  assert.equal(Number.isFinite(last.createdAt), true, "every row must carry its paging key");
+  const next = await call(
+    req(
+      "GET",
+      `/v1/admin/grants?limit=2&before=${last.createdAt}&beforeId=${encodeURIComponent(last.id)}`,
+      { token: admin.token }
+    ),
+    env,
+    { now: later }
+  );
+  const seen = [...first.body.grants, ...next.body.grants].map((g) => g.email);
+  assert.equal(new Set(seen).size, seen.length, "a page boundary must not repeat a row");
+  assert.equal(seen.length, 4);
+});
+
+test("a grant's length is what makes it open-ended, not a flag", async () => {
+  const env = freshEnv();
+  const admin = await signInByEmail(env, "admin@example.test", NOW);
+  // The cap itself is what "no end date" means, and it reads as such.
+  const capped = await call(
+    req("POST", "/v1/admin/grants", { token: admin.token, body: { email: "a@example.test", days: 3650 } }),
+    env,
+    { now: NOW + 10 }
+  );
+  assert.equal(capped.status, 200, JSON.stringify(capped.body));
+  assert.equal(capped.body.grant.openEnded, true);
+  assert.equal((capped.body.grant.endsAt - capped.body.grant.startsAt) / DAY, 3650);
+  // Past it is refused rather than silently clamped: the admin page already
+  // says "between 1 and 3650", so the answer matches what it told the operator.
+  const huge = await call(
+    req("POST", "/v1/admin/grants", { token: admin.token, body: { email: "a@example.test", days: 99999 } }),
+    env,
+    { now: NOW + 11 }
+  );
+  assert.equal(huge.status, 400);
+  assert.equal(huge.body.reason, "bad_days");
+  // A day under the cap is a dated grant, and the page shows its date.
+  const long = await call(
+    req("POST", "/v1/admin/grants", { token: admin.token, body: { email: "b@example.test", days: 3649 } }),
+    env,
+    { now: NOW + 20 }
+  );
+  assert.equal(long.body.grant.openEnded, false);
+  // Saying nothing takes the default; saying nonsense is refused rather than
+  // rounded into a month, which is what `Number(x) || 30` used to do.
+  const quiet = await call(
+    req("POST", "/v1/admin/grants", { token: admin.token, body: { email: "d@example.test" } }),
+    env,
+    { now: NOW + 25 }
+  );
+  assert.equal(quiet.status, 200);
+  assert.equal((quiet.body.grant.endsAt - quiet.body.grant.startsAt) / DAY, 30);
+  for (const days of [0, -5, "many", null, "", 3651, 1.5e400, [], {}]) {
+    const bad = await call(
+      req("POST", "/v1/admin/grants", { token: admin.token, body: { email: "c@example.test", days } }),
+      env,
+      { now: NOW + 30 }
+    );
+    assert.equal(bad.status, 400, `days=${days} must be refused`);
+    assert.equal(bad.body.reason, "bad_days");
+  }
 });

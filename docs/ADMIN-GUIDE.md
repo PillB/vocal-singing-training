@@ -21,9 +21,11 @@ page has an **English** button in its top bar if you prefer.
 | Give a tester Pro | Admin page | [1](#1-give-a-tester-pro) |
 | Take Pro away | Admin page | [2](#2-remove-pro-from-someone) |
 | See what someone has | Admin page | [3](#3-see-what-someone-has) |
+| See who has Pro, and which kind | Admin page | [3.1](#31-who-has-pro-all-of-it-at-once) |
 | Add more days | Admin page | [4](#4-give-more-days) |
 | Hand out a code | Admin page | [5](#5-gift-codes) |
 | Answer a support message | This guide | [6](#6-support-answers) |
+| Read what people report as broken | Admin page | [6.1](#61-what-people-report) |
 | Add or remove an admin | Mac terminal | [7](#7-add-or-remove-an-admin) |
 | Health, clean-up, lists, deleting data, signing someone out, backups, logs, deploys | Admin page and Mac terminal | [8](#8-maintenance) |
 | See how sign-in and the free trial are doing | Admin page | [8.13](#813-read-the-statistics) |
@@ -110,12 +112,18 @@ any address someone made a Google account with).
 
 1. In **Dar Pro a una persona** (Give Pro to a person), type their address in
    **Correo** (Email).
-2. Set **Días** (Days), or press 7, 30, 90 or 365.
-3. Optionally write a **Nota** (Note) for yourself, such as "Beta round 2". The
+2. Set **Días** (Days), or press 7, 30, 90, 365 or **Sin fecha de fin** (No end
+   date).
+3. Under **Qué le estás dando** (What you are giving), leave **Regalo** (Gift)
+   for a real person, or pick **Cuenta de pruebas** (Test account) for one of
+   ours. Both give exactly the same Pro; the label is so
+   [3.1](#31-who-has-pro-all-of-it-at-once) can tell your own test accounts
+   apart from gifts you handed to people.
+4. Optionally write a **Nota** (Note) for yourself, such as "Beta round 2". The
    person doesn't see it, but can ask for it with the rest of their data
    ([8.14](#814-send-someone-the-data-we-hold)), so write only what you would
    show them.
-4. Press **Dar Pro** (Give Pro).
+5. Press **Dar Pro** (Give Pro).
 
 ![The Give Pro form, filled in for a tester](admin-guide/03-give-form.png)
 
@@ -133,6 +141,10 @@ expected until they sign in.
 Things to know:
 
 - **Days count from today**, not from when they first sign in.
+- **"Sin fecha de fin" is 3650 days**, not a missing end date. Ten years is
+  indistinguishable from forever for a tester, and it keeps taking it back the
+  same single press as any other gift. The lists say "sin fecha de fin" rather
+  than printing a date in 2036.
 - **The account does not need to exist yet.** Giving Pro creates it, and the
   person has Pro the moment they sign in with that address.
 - **The address must be the one they sign in with.** For Gmail, dots and
@@ -265,6 +277,33 @@ days) copies the address into the Give Pro form.
 On a phone, each row of the table becomes a small card:
 
 ![The same look-up on a phone](admin-guide/20-phone-lookup.png)
+
+### 3.1 Who has Pro, all of it at once
+
+Section 3 answers "what does this person have". **Quién tiene Pro** (Who has
+Pro) answers the other question: who has what. It is every trial, gift and test
+account this deployment ever handed out, newest first — not paid subscriptions,
+which live with the payment provider.
+
+Two rows of chips filter it:
+
+- **Tipo** (Kind): **Todo**, **Regalos** (gifts), **Pruebas** (our own test
+  accounts, the comps) or **Prueba gratis** (free trials).
+- **Estado** (State): **Vigentes** (running now, the default), **Vencidos**
+  (ended), **Quitados** (taken back) or **Todos**.
+
+The line above the table counts what is running: *"2 regalos y 4 cuentas de
+pruebas vigentes · 31 en total"*. **Pruebas + Vigentes** is the answer to "how
+many test accounts am I still paying attention to".
+
+Each row has the address, what they were given, the dates (or **Sin fecha de
+fin**), your note, its state, and **Quitar acceso** (Remove access) while it is
+still running. Removing from here asks the same question as section
+[2](#2-remove-pro-from-someone), warns about anything else that keeps them on
+Pro, and then shows you their account. Tapping an address looks that account up.
+
+**Ver más antiguos** (Show older) loads the next 25. Twenty-five is one screen,
+and the list is ordered so a page boundary can never repeat or skip a row.
 
 ## 4. Give more days
 
@@ -401,6 +440,38 @@ privately (the private notes say how).
 
 **"I paid and don't have Pro."** Checkout is not open yet, so nobody can have
 paid. Once it is, see the payments runbook, [docs/34](34-PERU-OPERATOR-RUNBOOK.md).
+
+### 6.1 What people report
+
+In the studio's footer, and in both halves of the user guide, there is
+**Reportar un problema** (Report a problem). It opens a short form — a fault or
+an idea, where in the site, how bad it is, what happened — and the reporter
+gets a number like **VS-7KQ4M2XPRD** to quote. They do not need an account.
+
+**Lo que nos cuenta la gente** (What people tell us) on the admin page is where
+those land, in the reporter's own words.
+
+- **Estado** (State) starts on **Sin cerrar** (not closed): what still needs
+  doing. The other chips are **Sin leer** (unread) and **Todos**.
+- **Tipo** (Kind) is **Fallos** (faults) or **Ideas**.
+- Each card shows what they wrote, the page they were on, the build, their
+  browser and screen size, and, if they left one, an address to answer — as a
+  **mailto:** link, so you don't retype it.
+- **Estado** and **Nota nuestra** (Our note) move it along: **Sin leer** →
+  **En curso** → **Arreglado**, **No se hará** or **Repetido**. The reporter can
+  see the state of their own reports; **they never see your note**.
+- **Ver más antiguos** loads the next 25.
+
+What we keep, and for how long, is in `privacy.html`: no IP address is stored
+with a report, only a fixed list of environment facts, card-shaped runs of
+digits are removed before the row is written, closed reports are deleted after
+180 days, and open ones are kept while they are open. If somebody asks for a
+report to be deleted, they quote their **VS-** number
+([8.5](#85-delete-someones-account-and-data) has the delete commands).
+
+Testers have their own page, **/qa/**, which says which build is live, what to
+look at, what is switched off on purpose, and turns a failed check into a filed
+report in one press. `qa/README.md` says how to add a charter to it.
 
 ## 7. Add or remove an admin
 
@@ -578,7 +649,11 @@ then, press it every few weeks.
 
 ### 8.3 Who has Pro right now
 
-In the Mac terminal ([8.0](#80-get-the-terminal-ready)), read-only:
+**The admin page does this now**: see
+[3.1](#31-who-has-pro-all-of-it-at-once), which is filterable and needs no
+terminal. The query below is the same list from the Mac terminal
+([8.0](#80-get-the-terminal-ready)), read-only, for when you want it as text or
+the page cannot be reached:
 
 ```bash
 npx --yes wrangler@4 d1 execute vocal-studio-accounts --remote --command "SELECT a.email, g.kind, g.note, datetime(g.ends_at, 'unixepoch') AS ends_utc FROM grants g JOIN accounts a ON a.id = g.account_id WHERE g.revoked_at IS NULL AND g.starts_at <= unixepoch() AND g.ends_at > unixepoch() ORDER BY g.ends_at"
@@ -1128,7 +1203,9 @@ Three layers, from most to least automatic:
 | 2. Remove Pro | remove Pro: the tester loses it on their next load · removing one of two gifts warns… · remove a free trial… · blocking the free trial after removing a gift… | trial block, local |
 | 3. See what someone has | look up an address nobody has used… · notes and names are shown as text… | |
 | 4. More days | give more days: a shorter gift never shortens access… | |
+| 3.1 Who has Pro | who has Pro: a gift and a test account, told apart, and one taken back from the list · saying no to the confirmation… · tapping an address… · older grants come on asking, newest first · a worker older than this list says to redeploy it · the list reads in English too | |
 | 5. Gift codes | gift codes: create, redeem, used up, cancel · cancelling a code does not take days… | |
+| 6.1 What people report | reports: read one, triage it, and filter… · a signed-out reporter is named as one… · older ones are a button away… · a worker without the route leaves the section empty… | |
 | 7. Admin list | an admin taken off ADMIN_EMAILS is refused at once… · an admin added… after first signing in… | `secret put`, local |
 | 8.1–8.2 Health, clean-up | maintenance: server status and clean-up · maintenance: an old worker's missing statistics field… | `curl` shape checked against the code |
 | 8.3–8.6 Lists, delete, sign out everywhere | a session that ends mid-use returns to sign-in… | each query, local, with the address read by `read -r` (an apostrophe included), and deleting one browser's statistics |

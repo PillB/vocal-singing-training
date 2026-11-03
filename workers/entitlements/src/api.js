@@ -31,9 +31,12 @@ import {
 import { callerIp, ensureSchema, hitRateLimit, normalizeEmail, nowSec, sweepExpired } from "./db.js";
 import { emailConfigured, sendLoginCode } from "./email.js";
 import {
+  MAX_GRANT_DAYS,
+  countGrants,
   createGiftCode,
   createGrant,
   linkLicense,
+  listAllGrants,
   listGrants,
   redeemGiftCode,
   resolveEntitlement,
@@ -612,6 +615,31 @@ export async function handleDeleteProgress(request, env, url, deps) {
 }
 
 /**
+ * A whole number of days from a request body, or why it is not one.
+ *
+ * `undefined` means the caller did not say, and takes the default. Anything
+ * else that is not a whole number of days inside the bounds is refused, not
+ * rounded: `Number(x) || 30` turned a typed `0`, an empty field and the word
+ * "many" into a month, which is the opposite of what the operator asked for in
+ * all three cases. `createGrant` and `createGiftCode` still clamp, as the last
+ * line rather than the first.
+ *
+ * @param {unknown} value Raw `days` from the body.
+ * @param {number} fallback Days to use when the caller said nothing.
+ * @returns {{ok: boolean, days?: number}} Result.
+ */
+export function readDays(value, fallback) {
+  if (value === undefined) {
+    return { ok: true, days: Math.floor(fallback) };
+  }
+  const days = typeof value === "number" || typeof value === "string" ? Math.floor(Number(value)) : NaN;
+  if (!Number.isFinite(days) || days < 1 || days > MAX_GRANT_DAYS) {
+    return { ok: false };
+  }
+  return { ok: true, days };
+}
+
+/**
  * Require an admin session.
  * @param {Object} env Worker env bindings.
  * @param {Request} request Incoming request.
@@ -647,11 +675,15 @@ export async function handleAdminCreateGiftCode(request, env, deps) {
   if (!parsed.ok) {
     return json({ ok: false, reason: parsed.reason }, 400, cors);
   }
+  const asked = readDays(parsed.body.days, Math.floor(trialSeconds(env) / 86400));
+  if (!asked.ok) {
+    return json({ ok: false, reason: "bad_days" }, 400, cors);
+  }
   const created = await createGiftCode(
     env.DB,
     {
       plan: parsed.body.plan,
-      days: parsed.body.days || Math.floor(trialSeconds(env) / 86400),
+      days: asked.days,
       maxRedemptions: parsed.body.maxRedemptions,
       note: parsed.body.note,
       createdBy: admin.account.id,
@@ -751,10 +783,11 @@ export async function handleAdminCreateGrant(request, env, deps) {
   if (!email) {
     return json({ ok: false, reason: "bad_email" }, 400, cors);
   }
-  const days = Math.floor(Number(parsed.body.days) || 30);
-  if (!Number.isFinite(days) || days < 1) {
+  const asked = readDays(parsed.body.days, 30);
+  if (!asked.ok) {
     return json({ ok: false, reason: "bad_days" }, 400, cors);
   }
+  const days = asked.days;
   const { account } = await ensureAccount(env.DB, email, { adminEmails: adminEmails(env) }, at);
   const grant = await createGrant(
     env.DB,
@@ -770,6 +803,53 @@ export async function handleAdminCreateGrant(request, env, deps) {
     at
   );
   return json({ ok: true, account: publicAccountFor(account, env), grant: toPublicGrant(grant, at) }, 200, cors);
+}
+
+/**
+ * GET /v1/admin/grants — who holds Pro we handed out, and which kind.
+ *
+ * The account lookup answers "what does this person hold". This answers the
+ * question that had no answer: which testers are still comped, which gifts run
+ * out this week, who did we give something to and forget about. Filterable by
+ * kind and state, newest first, paged by key.
+ *
+ * @param {Request} request Incoming request.
+ * @param {Object} env Worker env bindings.
+ * @param {URL} url Parsed URL.
+ * @param {Object} deps Injectables.
+ * @returns {Promise<Response>} Response.
+ */
+export async function handleAdminListGrants(request, env, url, deps) {
+  const { json, cors } = deps;
+  const at = nowSec(deps.now);
+  const admin = await requireAdmin(env, request, at);
+  if (!admin.ok) {
+    return json({ ok: false, reason: admin.reason }, admin.status, cors);
+  }
+  const page = await listAllGrants(env.DB, {
+    kind: url.searchParams.get("kind") || "",
+    state: url.searchParams.get("state") || "",
+    limit: url.searchParams.get("limit"),
+    before: url.searchParams.get("before"),
+    beforeId: url.searchParams.get("beforeId") || "",
+    at
+  });
+  return json(
+    {
+      ok: true,
+      // `createdAt` is the paging key, and `email` is the only part of this
+      // list anybody can act on; neither belongs in the member-facing shape.
+      grants: page.grants.map((row) => ({
+        ...toPublicGrant(row, at),
+        email: row.email,
+        createdAt: Number(row.created_at)
+      })),
+      more: page.more,
+      counts: await countGrants(env.DB, at)
+    },
+    200,
+    cors
+  );
 }
 
 /**
@@ -959,7 +1039,13 @@ export async function routeAccountApi(request, env, url, path, deps) {
     return method === "POST" ? handleAdminRevokeGiftCode(request, env, deps) : notAllowed("POST");
   }
   if (path === "/v1/admin/grants") {
-    return method === "POST" ? handleAdminCreateGrant(request, env, deps) : notAllowed("POST");
+    if (method === "POST") {
+      return handleAdminCreateGrant(request, env, deps);
+    }
+    if (method === "GET") {
+      return handleAdminListGrants(request, env, url, deps);
+    }
+    return notAllowed("GET, POST");
   }
   if (path === "/v1/admin/grants/revoke") {
     return method === "POST" ? handleAdminRevokeGrant(request, env, deps) : notAllowed("POST");

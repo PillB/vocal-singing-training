@@ -36,6 +36,7 @@
       navLookup: "Buscar",
       navGive: "Dar Pro",
       navCodes: "Códigos",
+      navHolders: "Quién tiene Pro",
       navReports: "Reportes",
       navStats: "Estadísticas",
       navMaintenance: "Mantenimiento",
@@ -51,6 +52,12 @@
       uses: "Usos",
       noteLabel: "Nota (la persona puede pedir verla)",
       giveSubmit: "Dar Pro",
+      daysOpen: "Sin fecha de fin",
+      giveKindLegend: "Qué le estás dando",
+      giveKindGift: "Regalo (amigos y familia)",
+      giveKindComp: "Cuenta de pruebas (nuestra)",
+      giveKindHelp:
+        "Las dos dan lo mismo. La diferencia es para nosotros: abajo puedes ver por separado quién tiene un regalo y quién es una cuenta de pruebas.",
       codesTitle: "Códigos de regalo",
       codesHelp:
         "Quien recibe el código entra en el estudio con «Entrar» y lo escribe en «¿Tienes un código de regalo?». Sus días cuentan desde que lo canjea.",
@@ -68,6 +75,30 @@
         "Borra sesiones vencidas, códigos de entrada usados, contadores viejos y estadísticas de más de 180 días. El servidor lo hace solo cada día a las 04:17 (hora de Lima); este botón lo hace ahora. No toca cuentas, regalos ni progreso.",
       sweepRun: "Limpiar ahora",
       guideLink: "Guía de admin (paso a paso)",
+
+      holdersTitle: "Quién tiene Pro",
+      holdersHelp:
+        "Todo lo que hemos dado a mano: regalos, cuentas de pruebas y pruebas gratis. Para ver todo lo de una persona, toca su correo.",
+      holdersKind: "Tipo",
+      holdersState: "Estado",
+      holdersRefresh: "Actualizar",
+      holdersMore: "Ver más antiguos",
+      holdersEmpty: "Con este filtro no hay nadie.",
+      holdersCounts: "{regalos} regalos y {pruebas} cuentas de pruebas vigentes · {total} en total",
+      holdersStale: "La lista puede estar desactualizada. {failure}",
+      holdersOld: "El servidor aún no tiene esta lista. Redespliega el worker (guía, sección 8.7).",
+      holdersGone: "ese acceso ya no existe",
+      hKindAll: "Todo",
+      hKindGift: "Regalos",
+      hKindComp: "Pruebas",
+      hKindTrial: "Prueba gratis",
+      hStateActive: "Vigentes",
+      hStateExpired: "Vencidos",
+      hStateRevoked: "Quitados",
+      hStateAll: "Todos",
+      colWho: "Quién",
+      openEnded: "Sin fecha de fin",
+      openEndedFrom: "Desde el {date}, sin fecha de fin",
 
       reportsTitle: "Lo que nos cuenta la gente",
       reportsHelp:
@@ -267,6 +298,7 @@
       navLookup: "Look up",
       navGive: "Give Pro",
       navCodes: "Codes",
+      navHolders: "Who has Pro",
       navReports: "Reports",
       navStats: "Statistics",
       navMaintenance: "Maintenance",
@@ -282,6 +314,12 @@
       uses: "Uses",
       noteLabel: "Note (the person may ask to see it)",
       giveSubmit: "Give Pro",
+      daysOpen: "No end date",
+      giveKindLegend: "What you are giving",
+      giveKindGift: "A gift (friends and family)",
+      giveKindComp: "A test account (ours)",
+      giveKindHelp:
+        "Both give exactly the same thing. The difference is for us: below you can see gifts and test accounts apart from each other.",
       codesTitle: "Gift codes",
       codesHelp:
         "Whoever gets the code signs in on the studio with “Sign in” and types it under “Have a gift code?”. Their days count from when they redeem it.",
@@ -299,6 +337,30 @@
         "Deletes expired sessions, used sign-in codes, old counters and statistics older than 180 days. The server does this by itself every day at 04:17 Lima time; this button does it now. Accounts, gifts and progress are untouched.",
       sweepRun: "Clean up now",
       guideLink: "Admin guide (step by step)",
+
+      holdersTitle: "Who has Pro",
+      holdersHelp:
+        "Everything we handed out by hand: gifts, test accounts and free trials. To see everything one person holds, tap their address.",
+      holdersKind: "Kind",
+      holdersState: "State",
+      holdersRefresh: "Refresh",
+      holdersMore: "Show older",
+      holdersEmpty: "Nobody matches this filter.",
+      holdersCounts: "{regalos} gifts and {pruebas} test accounts running · {total} in total",
+      holdersStale: "This list may be out of date. {failure}",
+      holdersOld: "This server does not have the list yet. Redeploy the worker (guide, section 8.7).",
+      holdersGone: "that grant is not there any more",
+      hKindAll: "All",
+      hKindGift: "Gifts",
+      hKindComp: "Test accounts",
+      hKindTrial: "Free trials",
+      hStateActive: "Running",
+      hStateExpired: "Ended",
+      hStateRevoked: "Taken back",
+      hStateAll: "All",
+      colWho: "Who",
+      openEnded: "No end date",
+      openEndedFrom: "From {date}, no end date",
 
       reportsTitle: "What people tell us",
       reportsHelp:
@@ -834,15 +896,21 @@
     reportRows = [];
     reportMore = false;
     reportCounts = null;
+    grantSeq += 1;
+    grantRows = [];
+    grantMore = false;
+    grantCounts = null;
     const statsButton = $("#stats-load");
     if (statsButton) statsButton.disabled = false;
     $("#lookup-result")?.replaceChildren();
     $("#stats-result")?.replaceChildren();
     $("#reports-list")?.replaceChildren();
-    const moreButton = $("#reports-more");
-    if (moreButton) moreButton.hidden = true;
-    ["#give-result", "#code-result", "#code-copy-status", "#sweep-result", "#reports-counts"].forEach((sel) =>
-      setMessage($(sel), "", "")
+    $("#holders-list")?.replaceChildren();
+    [$("#reports-more"), $("#holders-more")].forEach((button) => {
+      if (button) button.hidden = true;
+    });
+    ["#give-result", "#code-result", "#code-copy-status", "#sweep-result", "#reports-counts", "#holders-counts"].forEach(
+      (sel) => setMessage($(sel), "", "")
     );
     const box = $("#code-new");
     if (box) box.hidden = true;
@@ -926,6 +994,7 @@
     // sent is the one thing on this page that may need doing today, and a
     // worker too old to have the route simply leaves the section empty.
     loadReports();
+    loadHolders();
   }
 
   // -------------------------------------------------------------- lookup
@@ -1154,11 +1223,14 @@
     const email = ($("#give-email")?.value || "").trim();
     const days = Number($("#give-days")?.value);
     const note = ($("#give-note")?.value || "").trim();
+    // Both kinds entitle identically; the label is so the list below can tell
+    // our own test accounts apart from gifts to real people.
+    const kind = form.querySelector('input[name="give-kind"]:checked')?.value === "comp" ? "comp" : "gift";
     if (!isEmail(email)) return setMessage(result, t("badEmail"), "error");
     if (!Number.isInteger(days) || days < 1 || days > 3650) return setMessage(result, t("badDays"), "error");
     setBusy(form, true);
     setMessage(result, t("working"), "");
-    const res = await api("POST", "/v1/admin/grants", { email, days, note }, { timeoutMs: 8000 });
+    const res = await api("POST", "/v1/admin/grants", { email, days, note, kind }, { timeoutMs: 8000 });
     setBusy(form, false);
     if (res.status === 0) {
       // The request may have reached the worker and only the answer got
@@ -1187,6 +1259,8 @@
       : t("given", { email: account.email, date: fmtDate(grant.endsAt) });
     setMessage(result, text, noChange ? "info" : "ok");
     if (fresh) renderAccount(fresh, { text, tone: noChange ? "info" : "ok" });
+    // The list below now has a row it did not have.
+    loadHolders();
     const noteInput = $("#give-note");
     if (noteInput) noteInput.value = "";
   }
@@ -1590,6 +1664,199 @@
     });
   }
 
+  // --------------------------------------------------------------- holders
+
+  /**
+   * Who holds Pro we handed out.
+   *
+   * The lookup above answers "what does this person hold". This answers the
+   * question that had no answer: who holds what. `grantState` starts on
+   * "active" because that is the question worth asking most days — which
+   * testers are still comped, which gifts run out this week — not the archive.
+   */
+  let grantKind = "";
+  let grantState = "active";
+  let grantRows = [];
+  let grantMore = false;
+  let grantCounts = null;
+  // Each load takes a number, so a slow answer never paints over a newer filter.
+  let grantSeq = 0;
+
+  /**
+   * The dates cell. An open-ended gift is the longest grant the worker allows,
+   * not a null end date, so say so in words rather than printing a date in
+   * 2036 that nobody meant.
+   * @param {Object} grant Grant from the worker.
+   * @returns {string} Dates text.
+   */
+  function holderDates(grant) {
+    if (grant.openEnded) return t("openEndedFrom", { date: fmtDate(grant.startsAt) });
+    return t("range", { from: fmtDate(grant.startsAt), to: fmtDate(grant.endsAt) });
+  }
+
+  /** Every grant this deployment has, whatever its kind or state. */
+  function grantTotal(counts) {
+    let total = 0;
+    Object.values(counts || {}).forEach((byState) => {
+      Object.values(byState || {}).forEach((n) => {
+        total += Number(n) || 0;
+      });
+    });
+    return total;
+  }
+
+  /**
+   * One row: who, what we gave them, until when, and the one action.
+   * @param {Object} row Grant with `email` and `createdAt`.
+   * @returns {HTMLElement} Table row.
+   */
+  function holderRow(row) {
+    // The address is the way into the account, because "who is this" is the
+    // next question after seeing a row, every time.
+    const who = el("button", { type: "button", className: "admin-linkish", "data-holder-email": row.email, text: row.email });
+    who.addEventListener("click", () => {
+      const input = $("#lookup-email");
+      if (input) input.value = row.email;
+      $("#lookup")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      lookup(row.email);
+    });
+
+    const canRevoke = row.status === "active" || row.status === "scheduled";
+    let action = el("span", { className: "muted", text: t("notSet") });
+    if (canRevoke) {
+      action = el("button", { type: "button", className: "btn btn-danger btn-sm", "data-grant": row.id, text: t("revoke") });
+      action.addEventListener("click", () => revokeHolder(row, action));
+    }
+
+    return el("tr", { "data-status": row.status, "data-kind": row.kind, "data-testid": "holder-row" }, [
+      el("td", { "data-label": t("colWho") }, [who]),
+      el("td", { "data-label": t("colKind"), text: sourceLabel(row) }),
+      el("td", { "data-label": t("colDates"), text: holderDates(row) }),
+      el("td", { "data-label": t("colStatus") }, [
+        el("span", { className: `admin-pill st-${row.status}`, text: grantStatusText(row) })
+      ]),
+      el("td", { "data-label": t("colNote"), text: row.note || t("notSet") }),
+      el("td", { "data-label": t("colAction") }, [action])
+    ]);
+  }
+
+  /** Draw what the last load read, in the page's current language. */
+  function renderHolders() {
+    const box = $("#holders-list");
+    if (!box) return;
+    if (!grantRows.length) {
+      box.replaceChildren(el("p", { className: "muted", text: grantCounts ? t("holdersEmpty") : "" }));
+    } else {
+      const table = el("table", { className: "admin-table", "data-testid": "holders-table" });
+      table.appendChild(
+        el("thead", {}, [
+          el("tr", {}, [
+            el("th", { scope: "col", text: t("colWho") }),
+            el("th", { scope: "col", text: t("colKind") }),
+            el("th", { scope: "col", text: t("colDates") }),
+            el("th", { scope: "col", text: t("colStatus") }),
+            el("th", { scope: "col", text: t("colNote") }),
+            el("th", { scope: "col", text: t("colAction") })
+          ])
+        ])
+      );
+      const body = el("tbody");
+      grantRows.forEach((row) => body.appendChild(holderRow(row)));
+      table.appendChild(body);
+      box.replaceChildren(table);
+    }
+    const more = $("#holders-more");
+    if (more) {
+      more.hidden = !grantMore;
+      more.textContent = t("holdersMore");
+    }
+    if (grantCounts) {
+      const gifts = (grantCounts.gift && grantCounts.gift.active) || 0;
+      const comps = (grantCounts.comp && grantCounts.comp.active) || 0;
+      setMessage(
+        $("#holders-counts"),
+        t("holdersCounts", { regalos: gifts, pruebas: comps, total: grantTotal(grantCounts) }),
+        ""
+      );
+    }
+  }
+
+  /** Name each chip in the page's language and mark the chosen ones. */
+  function markHolderFilters() {
+    const kindNames = { "": t("hKindAll"), gift: t("hKindGift"), comp: t("hKindComp"), trial: t("hKindTrial") };
+    const stateNames = { active: t("hStateActive"), expired: t("hStateExpired"), revoked: t("hStateRevoked"), "": t("hStateAll") };
+    document.querySelectorAll("#holders [data-grant-kind]").forEach((chip) => {
+      const value = chip.getAttribute("data-grant-kind");
+      chip.textContent = kindNames[value] || value;
+      chip.setAttribute("aria-pressed", value === grantKind ? "true" : "false");
+    });
+    document.querySelectorAll("#holders [data-grant-state]").forEach((chip) => {
+      const value = chip.getAttribute("data-grant-state");
+      chip.textContent = stateNames[value] || value;
+      chip.setAttribute("aria-pressed", value === grantState ? "true" : "false");
+    });
+  }
+
+  /**
+   * Read a page of grants.
+   * @param {{append?: boolean}} [options] Append the next page instead of replacing.
+   * @returns {Promise<void>} Resolves when drawn.
+   */
+  async function loadHolders(options) {
+    const append = !!(options && options.append);
+    const seq = ++grantSeq;
+    const params = new URLSearchParams({ limit: "25" });
+    if (grantKind) params.set("kind", grantKind);
+    if (grantState) params.set("state", grantState);
+    if (append && grantRows.length) {
+      const last = grantRows[grantRows.length - 1];
+      params.set("before", String(last.createdAt));
+      params.set("beforeId", last.id);
+    }
+    const res = await api("GET", `/v1/admin/grants?${params.toString()}`, null, { timeoutMs: 10000 });
+    if (seq !== grantSeq) return;
+    if (!res.ok) {
+      // 405 means this worker has POST /v1/admin/grants but not GET: a deploy
+      // older than this list, which is a different thing to do about it.
+      const why = res.status === 405 ? t("holdersOld") : t("holdersStale", { failure: failureText(res) });
+      setMessage($("#holders-counts"), why, "error");
+      return;
+    }
+    const page = (res.data && res.data.grants) || [];
+    grantRows = append ? grantRows.concat(page) : page;
+    grantMore = !!(res.data && res.data.more);
+    grantCounts = (res.data && res.data.counts) || {};
+    renderHolders();
+  }
+
+  /**
+   * Take one grant back from this list.
+   *
+   * It looks the account up first and hands the real grant to `revokeGrant`,
+   * so the confirmation still names whatever else keeps this person on Pro —
+   * the same warning the account view gives — and so the admin ends up
+   * looking at the account they just changed instead of a row that moved.
+   * @param {Object} row The grant as drawn here.
+   * @param {HTMLButtonElement} button The button that was pressed.
+   * @returns {Promise<void>} Resolves when the list is redrawn.
+   */
+  async function revokeHolder(row, button) {
+    button.disabled = true;
+    const input = $("#lookup-email");
+    if (input) input.value = row.email;
+    const data = await lookup(row.email);
+    const grant = data && (Array.isArray(data.grants) ? data.grants : []).find((g) => g.id === row.id);
+    button.disabled = false;
+    if (!grant) {
+      // The account or the grant is gone, so the list we are holding is stale.
+      setMessage($("#holders-counts"), t("holdersStale", { failure: t("holdersGone") }), "error");
+      await loadHolders();
+      return;
+    }
+    await revokeGrant(row.email, grant, button, data);
+    await loadHolders();
+  }
+
   // --------------------------------------------------------------- reports
 
   /**
@@ -1846,6 +2113,8 @@
         renderStats();
         markReportFilters();
         renderReports();
+        markHolderFilters();
+        renderHolders();
         reloadCodes();
         loadHealth();
       } else {
@@ -1920,12 +2189,39 @@
       await loadReports({ append: true });
       button.disabled = false;
     });
+    document.querySelectorAll("#holders [data-grant-kind]").forEach((chip) => {
+      chip.addEventListener("click", () => {
+        grantKind = chip.getAttribute("data-grant-kind");
+        markHolderFilters();
+        if (gate === "admin") loadHolders();
+      });
+    });
+    document.querySelectorAll("#holders [data-grant-state]").forEach((chip) => {
+      chip.addEventListener("click", () => {
+        grantState = chip.getAttribute("data-grant-state");
+        markHolderFilters();
+        if (gate === "admin") loadHolders();
+      });
+    });
+    $("#holders-refresh")?.addEventListener("click", async (event) => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      await loadHolders();
+      button.disabled = false;
+    });
+    $("#holders-more")?.addEventListener("click", async (event) => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      await loadHolders({ append: true });
+      button.disabled = false;
+    });
     markReportFilters();
+    markHolderFilters();
   }
 
   applyStaticText();
   bind();
   boot();
 
-  window.VTAdmin = { boot, lookup, loadReports, t };
+  window.VTAdmin = { boot, lookup, loadReports, loadHolders, t };
 })();

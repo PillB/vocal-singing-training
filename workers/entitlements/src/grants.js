@@ -34,6 +34,39 @@ export const DEFAULT_TRIAL_DAYS = 7;
 /** Upper bound on any single grant, so a typo cannot comp somebody for a decade. */
 export const MAX_GRANT_DAYS = 3650;
 
+/**
+ * What the admin page means by "no end date".
+ *
+ * A grant is always a row with an `ends_at`, and that is on purpose: one shape,
+ * one resolver, and revoking is one column whatever the length. So "open-ended"
+ * is the longest grant we allow rather than a null end, which would need a
+ * second path through `grantIsActive`, `toPublicGrant` and `resolveEntitlement`
+ * — three places where a bug grants Pro forever instead of ending it.
+ *
+ * Ten years is indistinguishable from forever for a tester, and it is still one
+ * tap to take back. `grantIsOpenEnded` is what the page reads to say so rather
+ * than printing a date in 2036.
+ */
+export const OPEN_ENDED_DAYS = MAX_GRANT_DAYS;
+
+/**
+ * Whether a grant was handed over with no end date in mind.
+ *
+ * Read from its length, not from a flag: a flag would be a second source of
+ * truth that an older row could not have, and the length is the thing the page
+ * is really asking about.
+ *
+ * @param {Object} row Grant row.
+ * @returns {boolean} True when it runs to the maximum we allow.
+ */
+export function grantIsOpenEnded(row) {
+  if (!row) {
+    return false;
+  }
+  const days = (Number(row.ends_at) - Number(row.starts_at)) / 86400;
+  return Number.isFinite(days) && days >= OPEN_ENDED_DAYS;
+}
+
 /** Gift codes use an unambiguous alphabet: no O/0, no I/1, no U (reads as V). */
 export const GIFT_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTVWXYZ23456789";
 
@@ -123,6 +156,8 @@ export function toPublicGrant(row, at) {
     note: row.note || null,
     source: row.source || null,
     revokedAt: revoked ? Number(row.revoked_at) : null,
+    // So the page can say "no end date" instead of a date ten years out.
+    openEnded: grantIsOpenEnded(row),
     status: revoked ? "revoked" : active ? "active" : Number(row.ends_at) <= at ? "expired" : "scheduled"
   };
 }
@@ -223,6 +258,113 @@ export async function listGrants(db, accountId, options) {
     : "SELECT * FROM grants WHERE account_id = ?1 AND revoked_at IS NULL ORDER BY created_at DESC LIMIT ?2";
   const res = await db.prepare(sql).bind(accountId, limit).all();
   return (res && res.results) || [];
+}
+
+/** The states a grant can be in, as the admin list filters on them. */
+export const GRANT_STATES = ["active", "scheduled", "expired", "revoked"];
+
+/**
+ * Every grant this deployment has handed out, newest first, with the address it
+ * was handed to — "who holds Pro, and which kind".
+ *
+ * The per-account lookup answers "what does this person hold". This answers the
+ * other question, the one that has no answer today: which of our testers are
+ * still comped, which gifts are about to run out, who did we give something to
+ * and forget. It joins `accounts` for the address because a list of account ids
+ * is not something anybody can act on.
+ *
+ * `before`/`beforeId` page by key rather than OFFSET, with the id breaking ties
+ * on the same second so a page boundary cannot repeat or skip a row.
+ *
+ * @param {Object} db D1 binding.
+ * @param {{kind?: string, state?: string, limit?: number, before?: number,
+ *          beforeId?: string, at?: number}} [options] Filters.
+ * @returns {Promise<{grants: Object[], more: boolean}>} A page of grant rows,
+ *   each with `email`.
+ */
+export async function listAllGrants(db, options) {
+  const opts = options || {};
+  const at = nowSec(opts.at);
+  const limit = Math.min(200, Math.max(1, Math.floor(Number(opts.limit) || 50)));
+  const where = [];
+  const binds = [];
+  if (GRANT_KINDS.includes(opts.kind)) {
+    binds.push(opts.kind);
+    where.push(`g.kind = ?${binds.length}`);
+  }
+  if (opts.state === "revoked") {
+    where.push("g.revoked_at IS NOT NULL");
+  } else if (opts.state === "active") {
+    binds.push(at);
+    where.push(`g.revoked_at IS NULL AND g.starts_at <= ?${binds.length} AND g.ends_at > ?${binds.length}`);
+  } else if (opts.state === "scheduled") {
+    binds.push(at);
+    where.push(`g.revoked_at IS NULL AND g.starts_at > ?${binds.length}`);
+  } else if (opts.state === "expired") {
+    binds.push(at);
+    where.push(`g.revoked_at IS NULL AND g.ends_at <= ?${binds.length}`);
+  }
+  if (Number.isFinite(Number(opts.before)) && Number(opts.before) > 0) {
+    binds.push(Math.floor(Number(opts.before)));
+    const cursor = binds.length;
+    if (typeof opts.beforeId === "string" && opts.beforeId) {
+      binds.push(opts.beforeId);
+      where.push(`(g.created_at < ?${cursor} OR (g.created_at = ?${cursor} AND g.id < ?${binds.length}))`);
+    } else {
+      where.push(`g.created_at < ?${cursor}`);
+    }
+  }
+  binds.push(limit + 1);
+  const res = await db
+    .prepare(
+      `SELECT g.id, g.account_id, g.kind, g.plan, g.starts_at, g.ends_at, g.note, g.source,
+              g.revoked_at, g.created_at, a.email AS email
+       FROM grants g JOIN accounts a ON a.id = g.account_id
+       ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
+       ORDER BY g.created_at DESC, g.id DESC
+       LIMIT ?${binds.length}`
+    )
+    .bind(...binds)
+    .all();
+  const rows = (res && res.results) || [];
+  return { grants: rows.slice(0, limit), more: rows.length > limit };
+}
+
+/**
+ * How many grants are in each state, by kind — the one line that says "four
+ * testers comped, two gifts running out".
+ * @param {Object} db D1 binding.
+ * @param {number} [now] Injected clock.
+ * @returns {Promise<Object<string, Object<string, number>>>} kind -> state -> count.
+ */
+export async function countGrants(db, now) {
+  const at = nowSec(now);
+  const res = await db
+    .prepare(
+      `SELECT kind,
+              CASE WHEN revoked_at IS NOT NULL THEN 'revoked'
+                   WHEN starts_at > ?1 THEN 'scheduled'
+                   WHEN ends_at <= ?1 THEN 'expired'
+                   ELSE 'active' END AS state,
+              COUNT(*) AS n
+       FROM grants GROUP BY kind, state`
+    )
+    .bind(at)
+    .all();
+  const out = {};
+  for (const kind of GRANT_KINDS) {
+    out[kind] = {};
+    for (const state of GRANT_STATES) {
+      out[kind][state] = 0;
+    }
+  }
+  for (const row of (res && res.results) || []) {
+    if (!out[row.kind]) {
+      out[row.kind] = {};
+    }
+    out[row.kind][row.state] = Number(row.n) || 0;
+  }
+  return out;
 }
 
 /**

@@ -17,6 +17,11 @@ charging strangers needs the RUC, and that is stage 4.
 
 ---
 
+> **Before any of this, read [the go-live gate](40-GO-LIVE-GATE.md).** This
+> runbook is the trámites and the accounts; that page is the order to switch
+> things on, what each step costs, what proves it worked and how to undo it.
+> Several steps here are only needed once a step there calls for them.
+
 ## Stage 0 — Decide what you are selling
 
 Before any account exists, settle three things, because the rest of the setup

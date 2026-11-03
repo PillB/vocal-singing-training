@@ -64,6 +64,11 @@ Vanilla HTML / CSS / JS — no build step. Web Audio API (piano), MediaRecorder 
 - [Auth & hardening](docs/11-AUTH-AND-HARDENING.md) 
 - [The tour, the user guide and the A/B machinery](docs/36-TOUR-AND-USER-GUIDE.md)
 - [The daily loop: basics every day, rest days and surprises](docs/37-DAILY-LOOP.md)
+- [**The go-live gate**: what is built and off, and the order to switch it on](docs/40-GO-LIVE-GATE.md)
+- [Accounts, payments and gifted months](docs/33-ACCOUNTS-AND-PAYMENTS.md)
+- [Peru operator runbook: trámites, accounts and keys, in order](docs/34-PERU-OPERATOR-RUNBOOK.md)
+- [Admin guide](docs/ADMIN-GUIDE.md)
+- [Value gap registry: what is open, and why each open thing was left](docs/VALUE-GAP-REGISTRY.md)
 
 ## Privacy
 

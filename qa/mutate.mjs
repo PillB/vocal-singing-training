@@ -353,7 +353,9 @@ function runTests([cmd, ...args], root) {
     execFileSync(cmd, args, { cwd: root, stdio: "pipe", timeout: 300000, maxBuffer: 64 * 1024 * 1024 });
     return true;
   } catch (e) {
-    lastFailure = `${e.stdout || ""}${e.stderr || ""}`.split("\n").slice(-80).join("\n");
+    // The web server logs every request, and its lines come after the reporter's: without this filter the
+    // last 80 lines were all "GET /js/..." and a red baseline in CI said nothing about which test failed.
+    lastFailure = `${e.stdout || ""}${e.stderr || ""}`.split("\n").filter((l) => !l.includes("[WebServer]") && l.trim()).slice(-120).join("\n");
     return false;
   }
 }
@@ -382,7 +384,7 @@ function main(sets) {
     const cmds = [...new Set(MUTANTS[set].map((m) => JSON.stringify(m.cmd)))];
     if (!cmds.every((c) => runTests(JSON.parse(c), process.cwd()))) {
       console.log(`RED      [${set}] the unmutated tests already fail; no mutant can be judged`);
-      console.log(`--- last 80 lines of the failing run ---\n${lastFailure}\n--- end ---`);
+      console.log(`--- last lines of the failing run (web-server request lines left out) ---\n${lastFailure}\n--- end ---`);
       bad++;
       continue;
     }

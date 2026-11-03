@@ -33,6 +33,18 @@
    * what the signature check says.
    */
   const LS_PLAN_KEY = "vt_account_plan_v1";
+  /**
+   * Set once `pro_paid_first` has actually been recorded, so it is sent once per
+   * browser and not on every `/v1/me` answer for as long as somebody pays.
+   *
+   * It is the outcome the trial-length test is read on (the primary metric of
+   * `trial_len_2026_11`), and the only thing in the statistics that comes from
+   * the account rather than from watching the page. Latched on the beacon being
+   * recorded rather than on sending it, so a visit with sending switched off, or
+   * one where the request failed, tries again next time instead of losing the
+   * only conversion this browser will ever report.
+   */
+  const LS_PAID_FIRST_KEY = "vt_pro_paid_first_v1";
   /** Google Identity Services, loaded on demand so a signed-out visitor pays nothing for it. */
   const GIS_SRC = "https://accounts.google.com/gsi/client";
 
@@ -181,6 +193,37 @@
     }
   }
 
+  /**
+   * Send `pro_paid_first` the first time this browser sees a paid period.
+   *
+   * `source` is "paid" only for a subscription the provider has actually paid
+   * for; a trial, a gift and a comp all report their own kind, so this cannot
+   * count free access as a conversion. Nothing about the account goes with it —
+   * the beacon carries the event name and the random browser id, like every
+   * other one.
+   * @param {Object|null} ent The entitlement from `/v1/me`.
+   */
+  function notePaidFirst(ent) {
+    if (!ent || ent.pro !== true || ent.source !== "paid") return;
+    try {
+      if (localStorage.getItem(LS_PAID_FIRST_KEY) === "1") return;
+    } catch {
+      /* private mode: send it, and accept that it may be sent again */
+    }
+    let kept = null;
+    try {
+      kept = global.VTAnalytics?.track?.("pro_paid_first", {});
+    } catch {
+      /* analytics never breaks the page */
+    }
+    if (kept !== "recorded") return;
+    try {
+      localStorage.setItem(LS_PAID_FIRST_KEY, "1");
+    } catch {
+      /* private mode */
+    }
+  }
+
   function emit() {
     const state = getState();
     listeners.forEach((fn) => {
@@ -270,6 +313,7 @@
   async function adopt(data) {
     snapshot = data;
     writeLastPlan(data && data.entitlement);
+    notePaidFirst(data && data.entitlement);
     if (data && data.token && global.VTLicense?.adopt) {
       await global.VTLicense.adopt(data.token, data.licenseId);
     } else if (global.VTLicense?.clear) {
@@ -653,6 +697,24 @@
       methods,
       // Null until the account panel has tried to load Google's script.
       googleReady,
+      /**
+       * How long THIS account's trial is, which is not always what
+       * `/v1/auth/methods` says: that route answers before anyone signs in and
+       * can only report the configured default, while the trial-length test
+       * gives each account 7 or 14 days. Falls back to the public answer until
+       * the first `/v1/me` lands, and to nothing when neither has.
+       */
+      trialDays: Number(snapshot?.trialDays) > 0
+        ? Number(snapshot.trialDays)
+        : Number(methods?.trialDays) > 0
+          ? Number(methods.trialDays)
+          : null,
+      /**
+       * Which arm of the trial-length test this account is in, as the worker
+       * assigned it. Null when the test is off, and null for an account that
+       * trialled before it was switched on. The page never chooses this.
+       */
+      trialArm: typeof snapshot?.trialArm === "string" ? snapshot.trialArm : null,
       // Pro is whatever the signature check says, never what this JSON claims.
       pro: !!global.VTLicense?.getClaims?.()
     };

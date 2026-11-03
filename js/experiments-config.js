@@ -165,6 +165,35 @@
         { id: "three", weight: 1 },
         { id: "five", weight: 1 }
       ]
+    },
+
+    /**
+     * How long should the free trial be? seven days, or fourteen?
+     *
+     * The one experiment on this list whose arm is NOT decided here. The arm
+     * decides how many days of Pro an account is given, so the worker assigns
+     * it from the account id and hands it back with the account; nothing in
+     * this file or in js/experiments.js may choose it, because a browser that
+     * could choose it could choose fourteen, or three thousand.
+     *
+     * So `enabled` below does not switch this test on. The worker's
+     * `TRIAL_LEN_EXPERIMENT` setting does. This entry is here because the arm
+     * ids and weights have to match the worker's registry for the result to be
+     * readable (a test fails if they differ), and because
+     * `VTExperiments.report()` reads this list. Leave `enabled` false: the
+     * local split is never consulted for this key.
+     *
+     * The exposure is recorded when a signed-in account is shown the offer,
+     * which is the moment the length is named on screen, and it carries the
+     * arm the worker gave. Nothing about the account goes with it; the row is
+     * keyed by the same random browser id as every other exposure.
+     */
+    trial_len_2026_11: {
+      enabled: false,
+      variants: [
+        { id: "seven", weight: 1 },
+        { id: "fourteen", weight: 1 }
+      ]
     }
   };
 })(window);

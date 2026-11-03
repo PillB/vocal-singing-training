@@ -206,6 +206,7 @@
       kindComp: "Cortesía",
       kindPaid: "Suscripción",
       fromCode: "con el código {code}",
+      trialArm: "prueba de {n} días",
       stActive: "Activo",
       stScheduled: "Programado",
       stExpired: "Vencido",
@@ -468,6 +469,7 @@
       kindComp: "Comp",
       kindPaid: "Subscription",
       fromCode: "with code {code}",
+      trialArm: "{n}-day trial",
       stActive: "Active",
       stScheduled: "Scheduled",
       stExpired: "Expired",
@@ -768,6 +770,15 @@
     const base = kindLabel(grant.kind);
     const src = String(grant.source || "");
     if (src.startsWith("gift_code:")) return `${base} (${t("fromCode", { code: displayCode(src.slice(10)) })})`;
+    // A trial that came out of the trial-length test says which arm it was,
+    // as its length rather than its arm name: an operator looking at one
+    // account wants to know what it was given, and "fourteen" is an answer
+    // only to somebody who already knows the experiment. Without the test
+    // running, no trial row carries this and the label is unchanged.
+    if (src.startsWith("trial:arm:")) {
+      const days = Math.round((Number(grant.endsAt) - Number(grant.startsAt)) / 86400);
+      if (Number.isFinite(days) && days > 0) return `${base} (${t("trialArm", { n: String(days) })})`;
+    }
     return base;
   }
 

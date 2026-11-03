@@ -200,6 +200,7 @@ All are sized for two-sided alpha 0.05 and 80% power, with arms weighted 1:1.
 | `loop_home_2026_10` | loop / classic | 355 | 28 | 30% → 40% | share with a practice day, days 21–28 | practice days 0–28; microphone refused 0–28 |
 | `loop_surprise_2026_10` | surprises / none | 250 | 28 | +1.5 days | practice days, 0–28 | finished routines 0–28 |
 | `loop_minimo_len_2026_10` | three / five | 565 | 28 | +1 day | practice days, 0–28 | unfinished Mínimo share 0–28 |
+| `trial_len_2026_11` | seven / fourteen | 432 | 28 | 5% → 10% | share reaching a first paid period, days 0–28 | trial-start share 0–7; practice days 0–28 |
 
 At the traffic a friends-and-family beta brings, only large effects can be
 seen. Report "no detectable difference", never "no difference". Colours and
@@ -214,6 +215,66 @@ Wilson interval (`wilson()` in `workers/entitlements/src/stats.js`): 0 of 20
 people passing a step bounds its rate below about 16%, which finds a broken
 step without an A/B test. It cannot show a 20% improvement; nothing at this
 traffic can.
+
+### The trial-length test is built, and probably not worth running
+
+`trial_len_2026_11` (added 2026-11-03) is the only experiment here whose
+treatment is money: the arm decides whether an account gets 7 or 14 free days
+of Pro. Three things follow from that, and they are why it does not look like
+the others.
+
+**The worker assigns the arm, not the browser.** Every other arm on this list
+is a hash of the browser id computed in `js/experiments.js`. A browser that
+could choose this one could choose fourteen days, or three thousand. So
+`workers/entitlements/src/grants.js` derives it from the account id under a
+worker secret (`trialArmFor`), writes it on the grant row it produced, and
+hands the page the arm it already applied. The page records the exposure with
+its own random browser id, so the `exposures` table still joins to nothing but
+a browser — the privacy promise on privacy.html is unchanged.
+
+**Two switches, and only one of them matters for what is given away.**
+
+| Switch | Where | Governs |
+|---|---|---|
+| `TRIAL_LEN_EXPERIMENT` | `wrangler.toml` (worker) | whether arms are assigned at all, and therefore how many days are given. **It overrides `TRIAL_DAYS`.** |
+| `enabled` in `js/experiments-config.js` | the site | nothing for this key. The local split is never consulted for it. Leave it false. |
+
+It also needs `LICENSE_ID_KEY` (or the signing key) to key the assignment. With
+neither, the test stays off rather than running with an arm anybody could work
+out in advance and farm addresses against.
+
+**It is exposed when the offer is shown, not when the trial starts.** The
+button says "Start 14 free days", so the offer is already the treatment.
+Counting only the people who went on to start would condition on something the
+treatment itself can move — a longer offer may well be taken up more often —
+and a difference in paid conversion could then be that sorting rather than the
+length. Everybody shown an offer belongs to the arm they were shown.
+
+**Now the honest part.** The primary metric is paid conversion, which is the
+2%-ish case this document already says nothing at this traffic can measure.
+432 per arm is sized for conversion *doubling* (5% → 10%). A believable 5% → 7%
+needs about 2,200 per arm; a 20% relative lift (5% → 6%) needs about 8,100.
+
+And the prior is that there is nothing to find. The only large randomised test
+of trial length — 337,724 users across six markets, quoted in
+`docs/35-PRICING.md` — found 7 days beat a 30-day control by 5.59% more
+subscriptions, and found **the 14-day arm not significant**. So the comparison
+this experiment runs is one that a test a thousand times larger already called
+null.
+
+It is built anyway for two reasons. The first is that the same document records
+a real counter-argument that external data cannot settle: a daily singing habit
+plausibly needs longer than a week, and the mechanism behind short trials
+winning is people forgetting, which is worse in a practice product than in
+most. If that matters anywhere it matters here, and the only way to find out is
+locally. The second is that the mechanism — a worker-assigned arm, recorded on
+the row it changed — is the thing that was missing, and it is reusable for any
+later question about what an account is given rather than what it is shown.
+
+**So: do not switch it on at a few hundred users.** Read the trial funnel's
+steps one at a time with a Wilson interval, as the section above says, which
+finds a broken step. If the trial is disappointing, the lever the external
+evidence supports is re-entry — reminders, the comeback path — not length.
 
 ### Running the first test
 

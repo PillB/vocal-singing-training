@@ -223,6 +223,7 @@ Public, committed in `wrangler.toml`:
 | `STRIPE_PRICE_PRO_MONTHLY` / `STRIPE_PRICE_PRO_YEARLY` | Optional price → plan mapping. Filling either one in also makes it an **allow-list** — see below. |
 | `MP_PLAN_PRO_MONTHLY` / `MP_PLAN_PRO_YEARLY` | Optional `preapproval_plan_id` → plan mapping. |
 | `TRIAL_DAYS` | Length of the free trial, in days. One per account, ever. Default 7. |
+| `TRIAL_LEN_EXPERIMENT` | `"on"` runs the trial-length A/B test (`trial_len_2026_11`): each account's trial is 7 or 14 days, assigned from its account id. **It overrides `TRIAL_DAYS`** — with the test on, that setting is ignored. Off (the default) everybody gets `TRIAL_DAYS`. It also needs `LICENSE_ID_KEY` or `LICENSE_PRIVATE_KEY_PKCS8_B64` to key the assignment with; without one the test stays off, because an arm anyone can predict is an arm anyone can pick. The browser cannot switch this on: the `enabled` flag in `js/experiments-config.js` governs only what the statistics record. |
 | `GOOGLE_CLIENT_ID` | Google Sign-In client id. Public by design. Empty disables Google sign-in. |
 | `EMAIL_PROVIDER` | `resend`, `brevo` or `mailersend`. Empty disables email sign-in rather than dropping codes silently. |
 | `EMAIL_FROM` / `EMAIL_FROM_NAME` | Sender of the code emails. Must be a verified sender at the provider. |

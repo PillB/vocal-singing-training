@@ -6646,7 +6646,11 @@
       noteTrialCtaView("pricing");
       if (canTrial) {
         const days = accounts
-          ? Number(acct.methods?.trialDays || 7) // the worker's TRIAL_DAYS, whose default is also 7
+          // This account's own length: TRIAL_DAYS normally, its arm's length
+          // while the trial-length test runs. Seven is the fallback for a
+          // worker that has not answered yet, and is also the default it would
+          // have given.
+          ? Number(acct.trialDays || 7)
           : Number(cfg.freeTrialDays || 0);
         trialBtn.textContent = tt(prelaunch ? "pricing.startTrialFree" : "pricing.startTrial", {
           n: String(days)
@@ -7661,6 +7665,36 @@
     const btn = $(sel.btn);
     if (!modal || modal.hidden || !btn || btn.hidden) return;
     trackFunnel("trial_cta_view", { where }, `cta:${where}`);
+    noteTrialArmExposure();
+  }
+
+  /** The trial-length test. Same key in the worker and in js/experiments-config.js. */
+  const TRIAL_LEN_EXPERIMENT = "trial_len_2026_11";
+
+  /**
+   * Where the trial-length test is exposed: the offer now on screen names the
+   * number of free days, so this is the moment the treatment is applied.
+   *
+   * Not when the trial starts, which would be the easier hook. Starting is
+   * something the treatment itself can move — a longer offer may well be taken
+   * up more often — so counting only the people who went on to start would
+   * compare two groups the test had already sorted, and a difference in paid
+   * conversion could be that sorting rather than the length. Everybody shown an
+   * offer belongs to the arm they were shown.
+   *
+   * The arm is the worker's, because it decides how much Pro is given away, and
+   * it is null while the test is off; this does nothing at all until then.
+   */
+  function noteTrialArmExposure() {
+    const acct = window.VTAccount?.getState?.() || null;
+    if (!acct || !acct.signedIn) return;
+    const arm = typeof acct.trialArm === "string" ? acct.trialArm : "";
+    if (!arm) return;
+    try {
+      window.VTExperiments?.exposeServerArm?.(TRIAL_LEN_EXPERIMENT, arm);
+    } catch {
+      /* analytics never breaks the page */
+    }
   }
 
   const ACCOUNT_ERROR_KEYS = {
@@ -7953,7 +7987,7 @@
     if (offerLine) {
       offerLine.hidden = !hasRealSignIn || signedIn;
       if (!offerLine.hidden) {
-        const days = Number(account && account.methods && account.methods.trialDays);
+        const days = Number(account && account.trialDays);
         offerLine.textContent = days > 0
           ? tt("auth.offer", { n: String(days) })
           : tt("auth.offerNoTrial");
@@ -8037,7 +8071,13 @@
       // same way the Pro dialog's button does. The neutral label is the fallback
       // for a worker that has not said yet; no label may name a month, because
       // the trial is seven days.
-      const trialDays = Number(account && account.methods && account.methods.trialDays);
+      //
+      // `account.trialDays` and not `account.methods.trialDays`: the public
+      // route answers before anybody signs in and can only report the
+      // configured default, while the trial-length test gives this account
+      // either seven days or fourteen. The button is where the number is
+      // promised, so the promise has to be the one that will be kept.
+      const trialDays = Number(account && account.trialDays);
       noteTrialCtaView("panel");
       if (trialDays > 0) {
         // The generic [data-i18n] applier calls t(key) with no params, so a key
@@ -8345,6 +8385,10 @@
       const res = await window.VTAccount?.startTrial?.();
       if (res && res.ok) {
         trackFunnel("trial_result", { outcome: "started", where: "panel", kind: "account" });
+        // `trial_result` fires on every outcome and a metric counts an event
+        // rather than reading its props, so "started" needs an event of its
+        // own to be measurable. It is a guardrail of the trial-length test.
+        trackFunnel("trial_started", { where: "panel", kind: "account" });
         toast(tt("pricing.toast.trialStarted", { n: res.days ?? "" }));
         refreshAccountUI();
         updateBillingChrome();
@@ -8737,6 +8781,7 @@
         const res = await window.VTAccount.startTrial();
         if (res && res.ok) {
           trackFunnel("trial_result", { outcome: "started", where: "pricing", kind: "account" });
+          trackFunnel("trial_started", { where: "pricing", kind: "account" });
           toast(tt("pricing.toast.trialStarted", { n: String(res.days ?? "") }));
         } else {
           trackFunnel("trial_result", {
@@ -8757,6 +8802,7 @@
         toast(tt("pricing.toast.trialUsed"), { durationMs: 4200 });
       } else {
         trackFunnel("trial_result", { outcome: "started", where: "pricing", kind: "local" });
+        trackFunnel("trial_started", { where: "pricing", kind: "local" });
         toast(tt("pricing.toast.trialStarted", { n: String(VTBilling.trialDaysLeft?.() ?? 0) }));
       }
       updateBillingChrome();

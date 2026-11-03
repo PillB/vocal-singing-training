@@ -52,6 +52,13 @@ MP_PLAN_PRO_MONTHLY = ""
 MP_PLAN_PRO_YEARLY = ""
 # Length of the free trial, in days. One per account, ever.
 TRIAL_DAYS = "7"
+# The trial-length A/B test. "on" gives each account 7 or 14 free days,
+# assigned from its account id in the worker, and IGNORES TRIAL_DAYS above.
+# Needs LICENSE_ID_KEY (or the signing key) to key the assignment; without
+# one it stays off rather than assigning an arm anybody could predict.
+# Read docs/38-AB-TESTING.md before switching it on: it gives away twice the
+# Pro to half the accounts, and it needs hundreds of them to say anything.
+TRIAL_LEN_EXPERIMENT = "off"
 # Comma-separated emails allowed to gift and revoke months. Read on every
 # request, so removing an address takes effect on the next deploy.
 # Set it with `wrangler secret put ADMIN_EMAILS`, NOT here: this repository is

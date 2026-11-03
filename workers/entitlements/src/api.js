@@ -45,6 +45,8 @@ import {
   safePlan,
   startTrial,
   toPublicGrant,
+  trialArmFromSource,
+  trialPlanFor,
   trialSeconds
 } from "./grants.js";
 import { googleConfigured, verifyGoogleIdToken } from "./google.js";
@@ -196,6 +198,7 @@ export async function licenseTokenForResolution(resolution, account, env, now) {
 export async function buildMePayload(env, account, now) {
   const resolution = await resolveEntitlement(env.DB, env.ENTITLEMENTS, account.id, now);
   const minted = await licenseTokenForResolution(resolution, account, env, now).catch(() => null);
+  const trial = await trialViewFor(env, account, resolution);
   return {
     ok: true,
     account: publicAccountFor(account, env),
@@ -209,8 +212,45 @@ export async function buildMePayload(env, account, now) {
     },
     grants: resolution.grants,
     paid: resolution.paid,
+    trialDays: trial.days,
+    trialArm: trial.arm,
     licenseId: minted ? minted.payload.sub : null,
     token: minted ? minted.token : null
+  };
+}
+
+/**
+ * The two trial facts a signed-in page needs: how long this account's trial is,
+ * and which arm of the trial-length test it belongs to.
+ *
+ * `days` is what the offer should say. Before the trial it is what the account
+ * would be given; afterwards it is the length of the trial it actually got, so
+ * the number on the screen is never a number that was never true.
+ *
+ * `arm` is null unless there is an arm. An account that trialled before the
+ * test was switched on has a trial row with no arm on it, and reporting the arm
+ * a hash would give it now would put a seven-day trial in the fourteen-day
+ * column. Before the trial starts the would-be arm is reported, because the
+ * offer itself names the length and is therefore already the treatment: the
+ * page records its exposure when it shows that offer, not when the trial
+ * begins, so that the people who saw a longer offer and did not take it stay in
+ * the arm they were offered.
+ *
+ * @param {Object} env Worker env bindings.
+ * @param {Object} account Account row.
+ * @param {Object} resolution Result of `resolveEntitlement`.
+ * @returns {Promise<{days: number, arm: string|null}>} What the page may say.
+ */
+async function trialViewFor(env, account, resolution) {
+  const plan = await trialPlanFor(env, account.id);
+  const row = ((resolution && resolution.grants) || []).find((g) => g && g.kind === "trial") || null;
+  if (!row) {
+    return { days: plan.days, arm: plan.arm };
+  }
+  const length = Math.round((Number(row.endsAt) - Number(row.startsAt)) / 86400);
+  return {
+    days: Number.isFinite(length) && length > 0 ? length : plan.days,
+    arm: trialArmFromSource(row.source)
   };
 }
 

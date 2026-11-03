@@ -286,6 +286,15 @@ cancellations happen on day 0–1 against 31% for 30-day trials. The owner made
 the call for 7 days on 2026-09-24. If it disappoints, the lever is re-entry
 (reminders, the comeback path), not length, and the change is one value.
 
+**The machinery to ask again locally exists and is switched off**
+(`trial_len_2026_11`, added 2026-11-03). The worker assigns each account 7 or
+14 days from its account id, writes the arm on the grant row, and the page
+records the exposure when it shows the offer. It needs 432 accounts per arm to
+see conversion doubling and about 2,200 to see 5% → 7%, against a randomised
+prior that already found 14 days non-significant, so it is not worth switching
+on at this site's traffic — `docs/38-AB-TESTING.md` has the full reasoning and
+the two switches. The counter-argument above is the only reason it is built.
+
 **Side effect worth having:** Mercado Pago's seller UI presets are 7 and 14
 days, so a 7-day trial needs no API call to configure.
 

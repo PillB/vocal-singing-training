@@ -22,8 +22,8 @@
 "use strict";
 
 import { getEntitlement } from "./store.js";
-import { isTokenIssuable, PLAN_IDS } from "./license.js";
-import { changedRows, mintId, nowSec } from "./db.js";
+import { isTokenIssuable, licenseIdSecret, PLAN_IDS } from "./license.js";
+import { changedRows, hmacSha256Hex, mintId, nowSec } from "./db.js";
 
 /** Grant kinds an operator (or the trial flow) can create. */
 export const GRANT_KINDS = ["trial", "gift", "comp"];
@@ -83,6 +83,146 @@ export function trialSeconds(env) {
   const raw = Number.parseInt(String(env && env.TRIAL_DAYS), 10);
   const days = Number.isFinite(raw) && raw > 0 ? Math.min(raw, MAX_GRANT_DAYS) : DEFAULT_TRIAL_DAYS;
   return days * 86400;
+}
+
+/**
+ * The arms of the trial-length test, and how many days each one gives.
+ *
+ * The day counts live here and nowhere else, because this is the one
+ * experiment whose treatment is money: the arm decides how much Pro an account
+ * is given away. js/experiments-config.js and EXPERIMENT_PRESETS carry the same
+ * key and the same arm ids so the statistics can be read, and neither carries a
+ * day count — a day count in a file the browser loads is a day count somebody
+ * can edit.
+ *
+ * The ids are words rather than numbers so that a stored result cannot be
+ * misread as a length if the lengths are ever changed.
+ *
+ * Equal weights are assumed by `trialArmFor` below, which picks with a modulo.
+ * Giving an arm a different share would need a weighted walk here and a
+ * matching weight in the two registries, which test/events.test.mjs pins.
+ */
+export const TRIAL_ARMS = [
+  { id: "seven", days: 7 },
+  { id: "fourteen", days: 14 }
+];
+
+/** The experiment key. The same string appears in both registries. */
+export const TRIAL_EXPERIMENT = "trial_len_2026_11";
+
+/** How an applied arm is written on the grant row it produced. */
+const TRIAL_SOURCE_PREFIX = "trial:arm:";
+
+/**
+ * Is the trial-length test running?
+ *
+ * Two conditions, both deliberate:
+ *
+ *  - `TRIAL_LEN_EXPERIMENT` is on. It is a worker setting rather than the
+ *    `enabled` flag in js/experiments-config.js, because a browser must not be
+ *    able to decide how long a free trial is. The client flag governs what the
+ *    statistics record; this one governs what is given away.
+ *  - there is a secret to key the assignment with. Without one the arm could
+ *    only come from a plain hash of the account id, which anybody can compute
+ *    in advance: they would grind addresses until one landed in the longer arm
+ *    before ever signing up. No secret therefore means no test rather than a
+ *    predictable one.
+ *
+ * @param {Object} env Worker env bindings.
+ * @returns {boolean} True when arms are assigned.
+ */
+export function trialExperimentOn(env) {
+  const flag = String((env && env.TRIAL_LEN_EXPERIMENT) || "").trim().toLowerCase();
+  if (flag !== "1" && flag !== "on" && flag !== "true" && flag !== "yes") {
+    return false;
+  }
+  return !!licenseIdSecret(env);
+}
+
+/**
+ * Which arm an account's trial goes in.
+ *
+ * Keyed on the account id and not the browser id: the trial is one per account
+ * (`accounts.trial_used_at`), so an arm per browser would offer one person two
+ * different lengths in two browsers and `startTrial` would have to pick one
+ * anyway.
+ *
+ * HMAC and not a bare hash, domain-separated from the licence-id derivation
+ * that shares the same secret, so that neither use can be made to reveal the
+ * other.
+ *
+ * @param {Object} env Worker env bindings.
+ * @param {string} accountId Account id.
+ * @returns {Promise<{id: string, days: number}|null>} The arm, or null when one
+ *   cannot be derived.
+ */
+export async function trialArmFor(env, accountId) {
+  const secret = licenseIdSecret(env);
+  const id = String(accountId === undefined || accountId === null ? "" : accountId);
+  if (!secret || !id) {
+    return null;
+  }
+  const mac = await hmacSha256Hex(secret, `trial-arm:v1:${TRIAL_EXPERIMENT}:${id}`);
+  const point = Number.parseInt(mac.slice(0, 8), 16);
+  if (!Number.isFinite(point)) {
+    return null;
+  }
+  return TRIAL_ARMS[point % TRIAL_ARMS.length];
+}
+
+/**
+ * How long this account's trial would run, and the arm that decided it.
+ *
+ * With the test off this is `TRIAL_DAYS` (default seven) for everybody, which
+ * is exactly today's behaviour. With it on the arm's length wins and
+ * `TRIAL_DAYS` is ignored — stated in the README, because an operator who sets
+ * both deserves to know which one loses.
+ *
+ * @param {Object} env Worker env bindings.
+ * @param {string} accountId Account id.
+ * @returns {Promise<{days: number, arm: string|null}>} Length and arm.
+ */
+export async function trialPlanFor(env, accountId) {
+  const configured = Math.floor(trialSeconds(env) / 86400);
+  if (!trialExperimentOn(env)) {
+    return { days: configured, arm: null };
+  }
+  const arm = await trialArmFor(env, accountId);
+  if (!arm) {
+    return { days: configured, arm: null };
+  }
+  return { days: Math.min(Math.max(1, arm.days), MAX_GRANT_DAYS), arm: arm.id };
+}
+
+/**
+ * The arm a trial grant was actually created under, read back off the row.
+ *
+ * The arm is written down when it is applied rather than recomputed later, and
+ * this is the only reader. A recomputed arm would change its answer when the
+ * secret is rotated or an arm is added, and the account would then be counted
+ * in an arm it was never given; it would also invent an arm for every account
+ * that trialled before the test was switched on, whose trial was the
+ * configured length whatever a hash says now.
+ *
+ * @param {unknown} source A grant row's `source`.
+ * @returns {string|null} The arm id, or null when the row names none.
+ */
+export function trialArmFromSource(source) {
+  const raw = String(source === undefined || source === null ? "" : source);
+  if (!raw.startsWith(TRIAL_SOURCE_PREFIX)) {
+    return null;
+  }
+  const arm = raw.slice(TRIAL_SOURCE_PREFIX.length);
+  return TRIAL_ARMS.some((a) => a.id === arm) ? arm : null;
+}
+
+/**
+ * The `source` to store on a trial grant for an arm.
+ * @param {string|null} arm Arm id, or null when the test is off.
+ * @returns {string} Row value.
+ */
+export function trialSourceFor(arm) {
+  return arm ? `${TRIAL_SOURCE_PREFIX}${arm}` : "trial";
 }
 
 /**
@@ -374,6 +514,11 @@ export async function countGrants(db, now) {
  * grant rows, so revoking a trial grant (say, for abuse) does not silently hand
  * the account a fresh one.
  *
+ * The length comes from `trialPlanFor`, so it is the configured `TRIAL_DAYS`
+ * normally and the account's arm while the trial-length test runs. The arm is
+ * recorded on the row it produced, which is what makes "what was this account
+ * actually given" answerable later without recomputing anything.
+ *
  * @param {Object} db D1 binding.
  * @param {Object} account Account row.
  * @param {Object} env Worker env bindings.
@@ -385,17 +530,24 @@ export async function startTrial(db, account, env, now) {
   if (account.trial_used_at !== null && account.trial_used_at !== undefined) {
     return { ok: false, reason: "trial_used" };
   }
-  const days = Math.floor(trialSeconds(env) / 86400);
+  const plan = await trialPlanFor(env, account.id);
   const grant = await createGrant(
     db,
-    { accountId: account.id, kind: "trial", plan: "pro_monthly", days, source: "trial", note: null },
+    {
+      accountId: account.id,
+      kind: "trial",
+      plan: "pro_monthly",
+      days: plan.days,
+      source: trialSourceFor(plan.arm),
+      note: null
+    },
     at
   );
   await db
     .prepare("UPDATE accounts SET trial_used_at = ?2, updated_at = ?2 WHERE id = ?1")
     .bind(account.id, at)
     .run();
-  return { ok: true, grant };
+  return { ok: true, grant, days: plan.days, arm: plan.arm };
 }
 
 /**

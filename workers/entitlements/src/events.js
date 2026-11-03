@@ -136,7 +136,21 @@ export const EVENT_NAMES = new Set([
   "trial_click",
   "trial_cta_view",
   "trial_first_practice",
-  "trial_result"
+  "trial_result",
+  // The two the trial-length test is read on, added 2026-11-03. Both fire from
+  // the same code in every arm.
+  //
+  // `trial_started` exists because `trial_result` fires on every outcome,
+  // refusals included, and a metric counts an event rather than reading its
+  // props — so "started a trial" could not be told from "tried and could not".
+  //
+  // `pro_paid_first` is the only thing in this list the site does not learn by
+  // watching the person: it is sent the first time the account's own licence
+  // says a paid period, which is the outcome a trial exists to produce. It is
+  // latched per browser, so somebody who was already paying when it shipped
+  // sends it once and lands outside every exposure window anyway.
+  "pro_paid_first",
+  "trial_started"
 ]);
 
 /**
@@ -246,6 +260,60 @@ export const EXPERIMENT_PRESETS = {
     plan: { nPerArm: 565, minDays: 28, mde: 1 },
     primary: { event: "practice_day", kind: "days", from: 0, to: 28 },
     guardrails: [{ event: "basics_incomplete", kind: "share", from: 0, to: 28 }]
+  },
+
+  /**
+   * How long should the free trial be?
+   *
+   * control "seven" — seven free days, which is what ships.
+   * treatment "fourteen" — fourteen.
+   *
+   * The one experiment here whose arm the browser does not choose. The arm
+   * decides how much Pro is given away, so the worker assigns it from the
+   * account id (grants.js `trialArmFor`) and writes it on the grant row it
+   * produced; the page is told which arm it got and reports the exposure with
+   * its own browser id, which is why the exposures table still joins to nothing
+   * but a browser. Switched on with the worker's `TRIAL_LEN_EXPERIMENT`, not
+   * with the `enabled` flag in js/experiments-config.js.
+   *
+   * Exposed when a signed-in account is shown the offer, not when the trial
+   * starts. The offer names the length ("Start 14 free days"), so it is already
+   * the treatment, and counting only the people who went on to start would
+   * condition on something the treatment itself moves — the longer offer could
+   * be taken up more often, and the arms would no longer be comparable.
+   *
+   * Primary: share who reach a first paid period within 28 days of that offer.
+   * Guardrails: share who start the trial at all in the first week (the other
+   * half of the question, and the first place a difference would show), and
+   * practice days in the 28 (a longer free run should not mean less practice).
+   *
+   * Plan: 432 per arm, at least 28 days. That is sized for conversion
+   * *doubling*, 5% -> 10%: n = 7.84 * (0.05*0.95 + 0.10*0.90) / 0.05^2. A more
+   * believable 5% -> 7% needs about 2,200 per arm. So this test can only ever
+   * see a very large effect at the traffic this site will have for a long time,
+   * and the honest reading of anything short of that is "no detectable
+   * difference". Run it last, after aa_2026_10 has shown the pipeline is sound.
+   *
+   * And the prior is that there is nothing to find: the only large randomised
+   * test of trial length (337,724 users, six markets — docs/35-PRICING.md)
+   * found seven days beat a thirty-day control and found **fourteen not
+   * significant**. docs/38-AB-TESTING.md says why it is built anyway and why
+   * it should not be switched on at a few hundred users.
+   *
+   * Both arms run identical code — a number in a label and a number of days in
+   * a grant — so no event belongs to one arm and every metric is comparable.
+   */
+  trial_len_2026_11: {
+    arms: ["seven", "fourteen"],
+    weights: [1, 1],
+    control: "seven",
+    armEvents: { seven: [], fourteen: [] },
+    plan: { nPerArm: 432, minDays: 28, mde: 0.05 },
+    primary: { event: "pro_paid_first", kind: "share", from: 0, to: 28 },
+    guardrails: [
+      { event: "trial_started", kind: "share", from: 0, to: 7 },
+      { event: "practice_day", kind: "days", from: 0, to: 28 }
+    ]
   }
 };
 

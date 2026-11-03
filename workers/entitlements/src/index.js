@@ -54,7 +54,8 @@ import {
   isAwaitingPayment,
   isLicenseIdShape,
   isSuspended,
-  isTokenIssuable
+  isTokenIssuable,
+  licenseIdSecret
 } from "./license.js";
 import { reportsEnabled, routeReportsApi } from "./reports.js";
 import { mapStripeEvent, verifyStripeSignature } from "./stripe.js";
@@ -219,7 +220,7 @@ async function handleStripeWebhook(request, env, options) {
     return json({ ok: true, reason: mapped.reason }, 200);
   }
   try {
-    const { record, missing } = await upsertEntitlement(env.ENTITLEMENTS, mapped.update);
+    const { record, missing } = await upsertEntitlement(env.ENTITLEMENTS, mapped.update, { idSecret: licenseIdSecret(env) });
     if (missing) {
       // Money went back on a payment this worker has never heard of. Usually
       // that is a payment taken outside this product, on the same Stripe
@@ -300,7 +301,7 @@ async function handleMercadoPagoWebhook(request, env, url, options) {
       }
       return json({ ok: true, reason: mapped.reason }, 200);
     }
-    const { record } = await upsertEntitlement(env.ENTITLEMENTS, mapped.update);
+    const { record } = await upsertEntitlement(env.ENTITLEMENTS, mapped.update, { idSecret: licenseIdSecret(env) });
     console.log("mercadopago entitlement updated", target.kind, record.status, record.plan);
   } catch (error) {
     await clearEventSeen(env.ENTITLEMENTS, "mercadopago", target.eventId);

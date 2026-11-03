@@ -37,18 +37,25 @@
  * record wins (the deletion's key says which payment it already knew of).
  * The refund's key is written from the record as it was read, so the refund
  * of a later charge processed at the same moment as the refund of an earlier
- * one can still be lost. Worse, the first two events for a new license
- * processed at once (a checkout and its subscription's first event) can each
- * find no license and mint one: the claim then points at one record and the
- * subscription index, which every later event follows, at the other, so the
- * claimed copy never hears of a renewal or a cancellation.
- * Closing all of that needs a single writer per license (a Durable Object, or a
- * D1 row updated conditionally), which this store does not have.
+ * one can still be lost.
+ *
+ * What it can no longer do is split one customer into two licenses. The first
+ * events for a new license (a checkout and its subscription's first event)
+ * processed at once each find no license, neither being able to see the
+ * other's write, and each used to mint a random id — leaving the claim index
+ * pointing at one record and the subscription index, which every later event
+ * follows, at the other, so the claimed copy never heard of a renewal or a
+ * cancellation. A new license's id is now derived from the subscription (or
+ * the one-off payment) it belongs to, so writers who cannot see each other
+ * still agree: see `deriveLicenseId`.
+ *
+ * Closing the rest of that needs a single writer per license (a Durable
+ * Object, or a D1 row updated conditionally), which this store does not have.
  */
 
 "use strict";
 
-import { generateLicenseId, periodEndForPlan } from "./license.js";
+import { deriveLicenseId, generateLicenseId, periodEndForPlan } from "./license.js";
 
 /** Idempotency markers live 30 days — well past any provider retry window. */
 export const EVENT_TTL_SECONDS = 2592000;
@@ -817,7 +824,10 @@ export function isStaleUpdate(record, update) {
  *   paymentFailed, reversedAt, reversedChargeAt, reverseLatestCharge,
  *   declinedAt, terminal, claimId, paymentId, requireExisting, planSource,
  *   occurredAt.
- * @param {{now?: number, generateId?: function(): string}} [options] Injectables for tests.
+ * @param {{now?: number, generateId?: function(): string, idSecret?: string}} [options]
+ *   `now` and `generateId` are injectables for tests. `idSecret` is the key
+ *   license ids are derived under (see `licenseIdSecret`); without it a new
+ *   license gets a random id, as it always did.
  * @returns {Promise<{record: Object, created: boolean, stale: boolean}>} Stored
  *   record, whether it was new, and whether state was refused (out of order,
  *   after a deletion, or a failed payment that nothing has paid since).
@@ -838,7 +848,15 @@ export async function upsertEntitlement(kv, update, options) {
     return { record: null, created: false, stale: true, missing: true };
   }
   const existing = existingId ? await getEntitlement(kv, existingId) : null;
-  const licenseId = (existing && existing.licenseId) || existingId || mintId();
+  // Found through an index when there is one. Otherwise derived from the thing
+  // the provider will keep naming — the subscription, or the one-off payment —
+  // so two webhooks for a brand-new customer that cannot see each other's
+  // writes still agree on one license instead of minting two. Random only when
+  // nothing can be derived: no secret, or an update that names neither.
+  const derived = opts.idSecret
+    ? await deriveLicenseId(opts.idSecret, update.provider, update.subscriptionId || update.claimId || "")
+    : null;
+  const licenseId = (existing && existing.licenseId) || existingId || derived || mintId();
 
   // A license first heard of through an update that carries no status (a
   // subscription's charge that has not gone through) starts as "pending": we

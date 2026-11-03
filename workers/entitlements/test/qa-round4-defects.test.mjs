@@ -47,7 +47,7 @@ async function claimAt(env, provider, sessionId, days) {
 }
 const ev = (id, type, created, object) => ({ id, type, created: T + created, data: { object } });
 
-test("W1 new-customer race: the three events Stripe sends together mint ONE license", { todo: "QA-W-01 split licenses: claim and subscription index point at different records" }, async () => {
+test("W1 new-customer race: the three events Stripe sends together mint ONE license", async () => {
   const env = createTestEnv({ ENTITLEMENTS: createFakeKv(), STRIPE_PRICE_PRO_MONTHLY: "price_m" });
   const kv = env.ENTITLEMENTS;
   const get = kv.get.bind(kv), put = kv.put.bind(kv);

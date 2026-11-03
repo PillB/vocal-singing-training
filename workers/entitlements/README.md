@@ -237,6 +237,7 @@ Secrets — **never** in this repo, only `wrangler secret put`:
 | `MP_WEBHOOK_SECRET` | Mercado Pago webhook signing secret. |
 | `MP_ACCESS_TOKEN` | Mercado Pago access token, used only for server-side reads. |
 | `LICENSE_PRIVATE_KEY_PKCS8_B64` | base64 PKCS#8 P-256 private key. |
+| `LICENSE_ID_KEY` | Optional. The key a new license id is derived under, so two webhooks for one new customer agree on one license. Without it a key derived from `LICENSE_PRIVATE_KEY_PKCS8_B64` is used; with neither, a new license gets a random id. Set it to keep derivation stable across a signing-key rotation. Any long random string. |
 | `RESEND_API_KEY` / `BREVO_API_KEY` / `MAILERSEND_API_KEY` | Only the one named by `EMAIL_PROVIDER`. |
 | `EVENTS_IP_KEY` | Optional. The key the rate-limit buckets are an HMAC under. Without it a key derived from `LICENSE_PRIVATE_KEY_PKCS8_B64` is used; with neither, `/v1/events` answers `503`. Any long random string. |
 
@@ -463,16 +464,21 @@ Consequences worth understanding before you ship:
   record: a subscription that then stops keeps the period its authorization
   set. A renewal's new period end comes back with the next event that
   carries it.
-  Worse, the first two events for a new license (a
-  checkout and its subscription's first event) processed at once can each
-  find no license and mint one. The claim
-  then points at one record and the subscription index, which every later
-  event follows, at the other, so the claimed copy never hears of a renewal
-  or a cancellation and does not heal: a cancelled customer could keep Pro
-  until the period it already holds runs out, or for good if it holds none.
-  Closing all of this needs one writer per license (a Durable Object, or a D1
-  row updated only when its stored `occurredAt` is older), which this worker
-  does not have.
+  What it can no longer do is split a new customer in two. The first events
+  for a new license (a checkout and its subscription's first event) processed
+  at once each find no license, because neither can see the other's write —
+  and each used to mint a random id, so the claim pointed at one record and
+  the subscription index, which every later event follows, at the other. The
+  claimed copy then never heard of a renewal or a cancellation and did not
+  heal. A new license's id is now derived from the subscription it belongs to
+  (or, for a one-off payment, from the payment), as an HMAC under
+  `LICENSE_ID_KEY` or the signing key, so writers who cannot see each other
+  agree with no registry and no extra read. An id is still looked up through
+  the indexes first, so nothing stored before this is affected, and without
+  either secret a new license still gets a random id.
+  Closing the rest of this needs one writer per license (a Durable Object, or
+  a D1 row updated only when its stored `occurredAt` is older), which this
+  worker does not have.
 
 ## Registering the webhooks
 

@@ -308,7 +308,7 @@ because the link could be made private.
 
 | Command | Covers |
 |---------|--------|
-| `npm run test:worker` | 405 node cases: schema, sessions, grants, gift codes, progress CAS, Google token verification, email, the API router, the webhooks of both providers, money going back, which prices are ours, and one asserting the old anonymous flow is unchanged. 402 pass; the 3 marked `todo` are the grace-period question above, the amount floor, and a concurrent first purchase that can mint two licences. |
+| `npm run test:worker` | 410 node cases: schema, sessions, grants, gift codes, progress CAS, Google token verification, email, the API router, the webhooks of both providers, money going back, which prices are ours, and one asserting the old anonymous flow is unchanged. 408 pass; the 2 marked `todo` are the grace-period question above and the amount floor, both of which are yours to answer. |
 | `npx playwright test tests/accounts.spec.js` | 32 browser cases: sign-in, gifts, admin tools, the trial, sync and merge, phone layout and tap targets. |
 | `npx playwright test tests/billing.spec.js` | 28 browser cases: the pricing panel, region detection, the sign-in gate before checkout. |
 | `npx playwright test tests/admin.spec.js` | 41 browser cases, one per procedure in the admin guide, against the real worker on a real database. |

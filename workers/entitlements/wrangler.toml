@@ -29,6 +29,11 @@ database_id = "TODO_REPLACE_WITH_D1_DATABASE_ID"
 SITE_ORIGIN = "https://pillb.github.io"
 # Key id advertised in the token header and in /v1/jwks. Bump on rotation.
 LICENSE_KEY_ID = "k1"
+# LICENSE_ID_KEY is a SECRET, not set here. It is the key a new licence id is
+# derived under so that two webhooks for one new customer agree on one licence.
+# Unset, a key derived from the signing key is used, which is fine; set it with
+# `wrangler secret put LICENSE_ID_KEY` only to keep derivation stable across a
+# signing-key rotation.
 # Token lifetime in seconds (72h). Clamped to 60..2592000 by the worker.
 LICENSE_TTL_SECONDS = "259200"
 # Optional: map provider price/plan ids onto our plan ids. Leave empty to fall

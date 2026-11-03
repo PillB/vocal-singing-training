@@ -64,8 +64,8 @@
     "sha": "319fd17f4fbb6fd1"
   },
   "js/app.js": {
-    "v": "20261103i",
-    "sha": "d319c6d7d31d1d83"
+    "v": "20261103l",
+    "sha": "c54abbde12158766"
   },
   "js/audio-recovery.js": {
     "v": "20261103c",
@@ -128,8 +128,8 @@
     "sha": "8e4162c28ab1f554"
   },
   "js/piano.js": {
-    "v": "20261103b",
-    "sha": "2eb90ae4f8e4bb7f"
+    "v": "20261103c",
+    "sha": "ef5bca2a65fad0ac"
   },
   "js/pitch-game.js": {
     "v": "20261002a",

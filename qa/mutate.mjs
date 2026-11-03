@@ -34,7 +34,10 @@ const AUDIO_TESTS = [
 ];
 const LINT_TESTS = ["qa/lint-gate.test.mjs", "tests/node/asset-versions.test.mjs", "tests/node/csp.test.mjs", "tests/node/env-noise.test.mjs", "tests/node/env-noise-killers.test.mjs", "tests/node/inline-script-pin.test.mjs", "tests/node/csp-pins.test.mjs", "tests/node/i18n-duplicate-keys.test.mjs", "tests/node/exercise-parity.test.mjs", "tests/node/playwright-projects.test.mjs"];
 const PAGES = ["index.html", "guide.html", "privacy.html", "admin.html"];
-const node = (tests) => [process.execPath, "--test", ...tests];
+// A mutant can leave a promise that never settles. Node 22 cancels such a test once the event loop
+// is empty; Node 24 (CI) waits on it until runTests' 5-minute timeout, so two of those ran the
+// contracts job out of time. Each test gets 30 s, ten times the slowest unmutated one.
+const node = (tests) => [process.execPath, "--test", "--test-timeout=30000", ...tests];
 const PIANO_SPEC = [
   process.execPath,
   "node_modules/@playwright/test/cli.js",
@@ -62,6 +65,8 @@ const CONTROL_SPECS = {
   copy: ["tests/plan-history-design.spec.js", "tests/billing.spec.js", "-g", "the start button waits on a choice|Choose what to improve|value pulse board"],
   mic: ["tests/safari-mobile-recovery.spec.js", "-g", "permission prompt is up"],
   micmsg: ["tests/safari-mobile-recovery.spec.js", "-g", "each get their own message"],
+  race: ["tests/safari-mobile-recovery.spec.js", "-g", "older prompt answered"],
+  orphan: ["tests/safari-mobile-recovery.spec.js", "-g", "replaced Start|Start replaced"],
   focus: ["tests/exercise-viz-guided.spec.js", "-g", "Enter on Next past the last step|ends while Next has keyboard focus"],
   banner: ["tests/safari-mobile-recovery.spec.js", "-g", "sound-paused banner"]
 };
@@ -196,6 +201,10 @@ export const MUTANTS = {
     ["M102 a resume that timed out is named like a permission prompt left open", "js/practice-engine.js", "{ name: \"AudioResumeTimeout\" })), ms);", "{ name: \"TimeoutError\" })), ms);"],
     ["M103 a lifted lane is named for the octave drawn, so one-note mode at -2 never matches the piano's note", "js/pitch-visualizer.js", "      lane.name = played.get(lane.name);\n", ""],
     ["M104 feedback names a lifted lane for the note under C1 it is not drawn at", "js/pitch-visualizer.js", "best = { name: L.shown || L.name, freq: L.freq", "best = { name: L.name, freq: L.freq"],
+    ["M105 a Stop no longer drops a progression still waiting for a held session (a replaced Start's chords play under the next take)", "js/piano.js", "if (asked.stop !== this._stopGen || asked.prog !== this._progGen) return null;", "if (asked.prog !== this._progGen) return null;"],
+    ["M106 an older progression that settles last plays over the newer one", "js/piano.js", "if (asked.stop !== this._stopGen || asked.prog !== this._progGen) return null;", "if (asked.stop !== this._stopGen) return null;"],
+    ["M107 a reference note asked for before a Stop sounds after it", "js/piano.js", "      if (asked !== this._stopGen) return null; // stopped while the context resumed\n", ""],
+    ["M108 a Stop forgets the sounds still waiting for the context", "js/piano.js", "      this._stopGen += 1;\n", ""],
     ["SB8 the banner with no free band covers Stop like any other control", "js/audio-recovery.js", "weight: KEEP_CLEAR.includes(c.id) ? 100 : 1", "weight: 1"],
     ["SB9 the banner with no free band overflows the largest band again", "js/audio-recovery.js", "const y = band ? band.top + (band.h - h) / 2 : leastCovered(room, h);", "const y = band ? band.top + (band.h - h) / 2 : room.bands.reduce((a, b) => (b.h > a.h ? b : a)).top;"]
   ].map(([name, file, from, to]) => ({ name, file, from, to, cmd: node(AUDIO_TESTS) })),
@@ -277,6 +286,13 @@ export const MUTANTS = {
     ["CP2 one saved session read as \"1 sesiones\"", "js/i18n.js", "\"pricing.personalHave\": \"Sesiones guardadas: {sessions} ·", "\"pricing.personalHave\": \"Hasta hoy: {sessions} sesiones ·", "copy"],
     ["CP3 one saved session read as \"1 sessions\"", "js/i18n.js", "\"pricing.personalHave\": \"Saved sessions: {sessions} ·", "\"pricing.personalHave\": \"So far: {sessions} sessions ·", "copy"],
     ["MC1 leaving a take while the mic prompt is up leaves its Start pending", "js/app.js", "if (state.practiceLive || state.practice.running || state.practice.starting) {", "if (state.practiceLive || state.practice.running) {", "mic"],
+    // QA round 6 (F2, app_race declaredOpen)
+    ["MC2 an older Start answered late ends the newer, live take with no word", "js/app.js", "    if (state.practiceStarting || state.practiceLive) {\n      if (state.soundGen === gen) VTPiano.stopAll();\n      return;\n    }\n    // Aborted mid-start", "    // Aborted mid-start", "race"],
+    ["MC3 an older Start answered late brings Start back under the newer prompt", "js/app.js", "if (state.practiceStarting || state.practiceLive) {\n      if (state.soundGen", "if (state.practiceLive) {\n      if (state.soundGen", "race"],
+    ["MC4 an older Start answered late stops the newer take's engine", "js/app.js", "if (state.practiceStarting || state.practiceLive) {\n      if (state.soundGen", "if (state.practiceStarting) {\n      if (state.soundGen", "race"],
+    ["MC5 a Start replaced while a held session resumed still asks for its chord loop", "js/app.js", "      if (!take.current()) return false;\n", "", "orphan"],
+    ["MC6 a chord loop a replaced Start began after the Stop plays on under the next take", "js/app.js", "      if (state.soundGen === gen) VTPiano.stopAll();\n", "", "orphan"],
+    ["MC7 no Start is marked as the one that reached its piano step", "js/app.js", "    state.soundGen = take.gen;\n", "", "orphan"],
     ["MB1 a resume that timed out tells the learner a permission prompt is still open", "js/app.js", "if ([\"interrupted\", \"AudioResumeTimeout\"].includes(failureName))", "if (failureName === \"interrupted\")", "micmsg"],
     ["MB2 a microphone that ended during Start is called blocked, not disconnected", "js/app.js", "|MediaStreamSource|ended while Start built/i", "|MediaStreamSource/i", "micmsg"]
   ].map(([name, file, from, to, area]) => ({

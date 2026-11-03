@@ -122,7 +122,7 @@ test("with no free band to hold it, the banner covers a row of two controls befo
 function hungPiano({ resume } = {}) {
   const clock = vclock(0);
   const param = () => ({ value: 1, setValueAtTime() {}, linearRampToValueAtTime() {}, exponentialRampToValueAtTime() {}, cancelScheduledValues() {}, setTargetAtTime() {} });
-  const node = () => ({ connect() {}, disconnect() {}, start() {}, stop() {}, gain: param(), frequency: param(), threshold: param(), knee: param(), ratio: param(), attack: param(), release: param(), getFloatTimeDomainData() {}, getByteTimeDomainData() {} });
+  const node = () => ({ connect() {}, disconnect() {}, start() {}, stop() {}, gain: param(), frequency: param(), Q: param(), detune: param(), threshold: param(), knee: param(), ratio: param(), attack: param(), release: param(), getFloatTimeDomainData() {}, getByteTimeDomainData() {} });
   class HungContext {
     state = "suspended";
     sampleRate = 48000;
@@ -199,7 +199,12 @@ test("a resume asked for after the shared 8 s still gets 250 ms: the interruptio
       return new Promise((resolve) => c.setTimeout(() => { ctx.state = "running"; resolve(); }, 100));
     }
   });
-  assert.equal(await (async () => { const p = piano.unlock(); await clock.advance(8100); return p; })(), false);
+  // Flags, not awaits: under a mutant the first unlock never settles, and Node 24's runner then
+  // waits on the test forever instead of failing it (the CI contracts job ran out of time).
+  let first = "pending";
+  piano.unlock().then((ok) => { first = ok; });
+  await clock.advance(8100);
+  assert.equal(first, false, "the held resume gave up after the shared 8 s");
   let unlocked = "pending";
   piano.unlock().then((ok) => { unlocked = ok; });
   await clock.advance(200);
@@ -216,6 +221,58 @@ test("a progression on a held session starts within 9 s instead of never", async
   assert.equal(started, true, "ensure 8 s, then 250 ms for each later resume");
 });
 
+// Review of the startPractice split: a Start replaced while iOS held the session went on to ask for
+// its chord loop, which then played under the next exercise. A Stop drops what is still waiting.
+test("a Stop while a progression waits for a held session drops it: no chord loop starts after the Stop", async () => {
+  const { clock, piano } = hungPiano();
+  let prog = "pending";
+  piano.playProgression("prog1", { loop: true }).then((p) => { prog = p; });
+  await clock.advance(1000);
+  piano.stopAll(); // the learner left the exercise while the session was held
+  await clock.advance(12_000);
+  assert.equal(prog, null, "the progression asked for before the Stop is not played");
+  assert.equal(piano.loopActive, false);
+  assert.equal(piano.playing.length, 0, "no voice sounds after the Stop");
+});
+
+test("a progression asked for after a Stop still plays on a held session", async () => {
+  const { clock, piano } = hungPiano();
+  piano.stopAll();
+  let prog = "pending";
+  piano.playProgression("prog1", { loop: true }).then((p) => { prog = p; });
+  await clock.advance(12_000);
+  assert.equal(prog?.chords?.length > 0, true, "only what was waiting at the Stop is dropped");
+  assert.equal(piano.loopActive, true);
+});
+
+test("a newer progression asked for while an older one waits for a held session replaces it", async () => {
+  const { clock, piano } = hungPiano();
+  const got = {};
+  piano.playProgression("prog1", { loop: true }).then((p) => { got.first = p; });
+  await clock.advance(1000);
+  piano.playProgression("prog2", { loop: true }).then((p) => { got.second = p; });
+  await clock.advance(12_000);
+  assert.equal(got.first, null, "the older request, which may settle last, does not play over the newer");
+  assert.equal(got.second?.chords?.length > 0, true);
+  assert.equal(piano.loopActive, true);
+});
+
+test("a reference note asked for before a Stop is not sounded after it", async () => {
+  const { clock, piano } = hungPiano();
+  let freq = "pending";
+  piano.playRefPitch("A2", 2, true).then((f) => { freq = f; });
+  await clock.advance(1000);
+  piano.stopAll();
+  await clock.advance(12_000);
+  assert.equal(freq, null);
+  assert.equal(piano.playing.length, 0);
+  let later = "pending";
+  piano.playRefPitch("A2", 2, true).then((f) => { later = f; });
+  await clock.advance(1000);
+  assert.equal(typeof later, "number", "a note asked for after the Stop sounds");
+  assert.equal(piano.playing.length > 0, true);
+});
+
 test("a session that came back and is held again gets its full 8 s again", async () => {
   let calls = 0;
   const { clock, piano, setState } = hungPiano({
@@ -225,9 +282,10 @@ test("a session that came back and is held again gets its full 8 s again", async
       return new Promise((resolve) => c.setTimeout(() => { ctx.state = "running"; resolve(); }, 2000));
     }
   });
-  const first = piano.unlock();
+  let first = "pending";
+  piano.unlock().then((ok) => { first = ok; });
   await clock.advance(8100);
-  assert.equal(await first, false);
+  assert.equal(first, false, "the first resume gave up after 8 s");
   setState("running"); // the call ended; iOS ran the context without settling the old resume
   await clock.advance(10_000);
   setState("suspended"); // the next call

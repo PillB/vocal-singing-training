@@ -69,12 +69,6 @@
     },
     {
       "file": "js/app.js",
-      "sha": "3d627888f2b5133b3bd153445fb9280631e8f0ceab3dcad8eb4a682245f07dd6",
-      "complexity": 25,
-      "name": "Arrow function"
-    },
-    {
-      "file": "js/app.js",
       "sha": "075ecbfc358ffda2dbfd69262befbf841150d0d5fe83df7bd36a925c529e45a4",
       "complexity": 18,
       "name": "Async arrow function"
@@ -132,12 +126,6 @@
       "sha": "0b084e03ece731eee82117d6803cb6a1fe7889d9c14cbd4da7896e204881183e",
       "complexity": 89,
       "name": "Async function 'startExerciseSound'"
-    },
-    {
-      "file": "js/app.js",
-      "sha": "026e78d7d8af5507062886db758c927ef59631d7432100e9c3999f7878fe402e",
-      "complexity": 120,
-      "name": "Async function 'startPractice'"
     },
     {
       "file": "js/app.js",

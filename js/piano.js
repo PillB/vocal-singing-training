@@ -338,6 +338,11 @@
       this._visibilityBound = false;
       this._observedContexts = new WeakSet();
       this.onStateChange = null;
+      // Every Stop (stopAll) bumps this: a sound still waiting for a held context when the
+      // learner stopped is dropped, not played after the Stop under the next exercise
+      this._stopGen = 0;
+      // Every progression asked for bumps this: the newest plays, an older one still waiting is dropped
+      this._progGen = 0;
     }
 
     _wireGraph(ctx) {
@@ -441,7 +446,7 @@
         try { fresh = new AC(); } catch { return false; }
       }
       const retired = this.ctx;
-      this.stopAll();
+      this._silence();
       this._wireGraph(fresh);
       try { retired?.close?.()?.catch?.(() => {}); } catch { /* old Safari device may be stuck */ }
       // Both playback sources are scheduled synchronously in the tap, before
@@ -690,7 +695,9 @@
     }
 
     async playRefPitch(noteName = "A2", duration = 2.0, sustain = true) {
+      const asked = this._stopGen;
       await this.ensure();
+      if (asked !== this._stopGen) return null; // stopped while the context resumed
       const f = NOTE_FREQ[noteName] || NOTE_FREQ.A2;
       this.playNote(f, this.ctx.currentTime + 0.02, duration, 0.5, sustain);
       return f;
@@ -701,14 +708,23 @@
     }
 
     async playInhaleTicks(seconds = 3) {
+      const asked = this._stopGen;
       await this.ensure();
+      if (asked !== this._stopGen) return;
       const t0 = this.ctx.currentTime + 0.05;
       for (let i = 0; i < seconds; i++) {
         this.playNote(NOTE_FREQ.C3, t0 + i, 0.12, 0.25);
       }
     }
 
+    /** The learner's Stop: silence now, and drop every sound still waiting for its context. */
     stopAll() {
+      this._stopGen += 1;
+      this._silence();
+    }
+
+    /** Every voice and the loop off, now. Pending sounds keep their turn (a progression silences before it plays). */
+    _silence() {
       this.loopActive = false;
       if (this.loopTimer) {
         clearTimeout(this.loopTimer);
@@ -791,8 +807,8 @@
       if (this.ctx && this.ctx.state !== "running") {
         await this.unlock();
       }
-      this.stopAll();
-      // Ensure context is running after stopAll
+      this._silence();
+      // Ensure context is running after the silence
       if (this.ctx.state === "suspended") {
         try {
           await this._awaitResume(this.ctx.resume(), "Piano resume before playing failed");
@@ -820,7 +836,10 @@
         octaveShift = 0
       } = {}
     ) {
+      const asked = { stop: this._stopGen, prog: ++this._progGen };
       await this._readyToPlay();
+      // A Stop, or a newer progression, while this one waited for a held context
+      if (asked.stop !== this._stopGen || asked.prog !== this._progGen) return null;
       const baseProg = PROGRESSIONS[progId];
       if (!baseProg) {
         console.warn("Unknown progression", progId);

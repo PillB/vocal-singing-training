@@ -138,6 +138,178 @@ test("a resume that timed out and a microphone that ended while Start built the 
   expect(await said({ name: "TimeoutError", message: "Microphone permission timed out" })).toBe(await t("mic.blocked.pending"));
 });
 
+/**
+ * A getUserMedia whose every request is a permission prompt the test answers,
+ * in any order: window.__prompts[i].grant() or .deny(). Granted tracks are
+ * kept in window.__tracks.
+ */
+async function promptsAnsweredByTest(page) {
+  await page.evaluate(() => {
+    const md = navigator.mediaDevices;
+    const goodMic = md.getUserMedia.bind(md);
+    window.__prompts = [];
+    window.__tracks = [];
+    const ask = (constraints) =>
+      new Promise((resolve, reject) => {
+        window.__prompts.push({
+          grant: () => goodMic(constraints).then((s) => {
+            window.__tracks.push(...s.getTracks());
+            resolve(s);
+          }, reject),
+          deny: () => reject(new DOMException("Permission denied", "NotAllowedError"))
+        });
+      });
+    md.getUserMedia = ask;
+    if (typeof MediaDevices !== "undefined") MediaDevices.prototype.getUserMedia = ask;
+  });
+}
+
+/** Start (prompt 1 up), leave the take, Start again (prompt 2 up). */
+async function twoPendingStarts(page) {
+  await boot(page, { lang: "en", tourDone: true, mic: "silent" });
+  await openExercise(page, "v1-diction");
+  await promptsAnsweredByTest(page);
+  await page.locator("#btn-practice-start").click();
+  await expect.poll(() => page.evaluate(() => window.__prompts.length)).toBe(1);
+  // Leaving the take (Back, another exercise, the next step) or Retry runs this Stop
+  await page.evaluate(() => window.VTApp.stopPractice(true));
+  await page.locator("#btn-practice-start").click();
+  await expect.poll(() => page.evaluate(() => window.__prompts.length)).toBe(2);
+}
+
+const settleAWhile = (page) => page.evaluate(() => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 400))));
+
+// QA round 6 (F2, app_race declaredOpen): the older Start's clean-up stopped
+// whatever take the engine ran, so its prompt answered late ended the newer,
+// live take with no message (0 tracks, status "Time").
+for (const answer of ["grant", "deny"]) {
+  test(`an older prompt answered (${answer}) after the newer Start went live leaves that take running`, async ({ page }) => {
+    test.setTimeout(60000);
+    await twoPendingStarts(page);
+    await page.evaluate(() => window.__prompts[1].grant());
+    await expect.poll(() => page.evaluate(() => window.VTApp.getState().practiceLive), { timeout: 15000 }).toBe(true);
+    await page.evaluate((a) => window.__prompts[0][a](), answer);
+    if (answer === "grant") {
+      await expect.poll(() => page.evaluate(() => window.__tracks[1]?.readyState), {
+        message: "the older Start's own microphone is released"
+      }).toBe("ended");
+    }
+    await settleAWhile(page);
+    const after = await page.evaluate(() => ({
+      live: window.VTApp.getState().practiceLive,
+      running: window.VTApp.getState().practice.running,
+      liveTracks: window.__tracks.filter((t) => t.readyState === "live").length
+    }));
+    expect(after, "the newer take runs on, on its own microphone").toEqual({ live: true, running: true, liveTracks: 1 });
+    await expect(page.locator("#btn-practice-stop")).toBeVisible();
+    await page.locator("#btn-practice-stop").click();
+    await expect.poll(() => page.evaluate(() => window.__tracks.every((t) => t.readyState === "ended")), {
+      message: "Stop ends that take and releases its microphone"
+    }).toBe(true);
+  });
+}
+
+test("an older prompt answered while the newer one is still up brings no Start back under it", async ({ page }) => {
+  test.setTimeout(60000);
+  await twoPendingStarts(page);
+  await page.evaluate(() => window.__prompts[0].grant());
+  await expect.poll(() => page.evaluate(() => window.__tracks[0]?.readyState), {
+    message: "the older Start's microphone is released"
+  }).toBe("ended");
+  await settleAWhile(page);
+  await expect(page.locator("#btn-practice-start"), "no third Start while the newer prompt is up").toBeHidden();
+  expect(await page.evaluate(() => window.VTApp.getState().practiceStarting)).toBe(true);
+  await page.evaluate(() => window.__prompts[1].grant());
+  await expect.poll(() => page.evaluate(() => window.VTApp.getState().practiceLive), { timeout: 15000 }).toBe(true);
+  expect(await page.evaluate(() => window.__tracks.filter((t) => t.readyState === "live").length)).toBe(1);
+  await page.locator("#btn-practice-stop").click();
+});
+
+/**
+ * Hold the piano the way iOS holds a session through a call: the nth resume a Start asks for in its piano
+ * step waits for window.__releasePiano(). Every progression asked for is logged (window.__asked).
+ */
+async function holdPianoInSoundStep(page, nth) {
+  await page.evaluate((n) => {
+    const P = window.VTPiano;
+    const st = () => window.VTApp.getState();
+    const resume = P.resume.bind(P);
+    const play = P.playProgression.bind(P);
+    let seen = 0;
+    window.__asked = [];
+    P.playProgression = (...args) => {
+      window.__asked.push(args[0]);
+      return play(...args);
+    };
+    P.resume = () => {
+      const s = st();
+      // Microphone up and the Start not live yet: its piano step (the chord drill uses the microphone)
+      if (!(s.practiceStarting && s.practice.running) || ++seen !== n) return resume();
+      return new Promise((done) => {
+        window.__releasePiano = () => done(resume());
+      });
+    };
+  }, nth);
+}
+
+/** Start the chord drill until its piano step is held, leave it for the breathing pacer (no microphone, no piano), Start that, then let the session go. */
+async function replaceHeldStart(page, nth) {
+  await boot(page, { lang: "en", tourDone: true, mic: "silent" });
+  await openExercise(page, "s2-solfege-chords");
+  await holdPianoInSoundStep(page, nth);
+  await page.locator("#btn-practice-start").click();
+  await expect.poll(() => page.evaluate(() => typeof window.__releasePiano), { timeout: 15000 }).toBe("function");
+  await openExercise(page, "s18-costal-breath"); // leaving the exercise runs Stop
+  await page.locator("#btn-practice-start").click();
+  await expect.poll(() => page.evaluate(() => window.VTApp.getState().practiceLive)).toBe(true);
+  await page.evaluate(() => window.__releasePiano());
+  await settleAWhile(page);
+  return page.evaluate(() => ({
+    asked: window.__asked,
+    loop: !!window.VTPiano.loopActive,
+    voices: window.VTPiano.playing.length,
+    live: window.VTApp.getState().practiceLive,
+    exercise: window.VTApp.getState().exercise?.id
+  }));
+}
+
+// Review of the startPractice split: a Start replaced while iOS held its piano went on to start its
+// chord loop, which then played (and set the targets) under the next exercise's take.
+test("a Start replaced while its piano step was held asks for no chord loop; the next Start plays its own", async ({ page }) => {
+  test.setTimeout(60000);
+  await boot(page, { lang: "en", tourDone: true, mic: "silent" });
+  await openExercise(page, "s2-solfege-chords");
+  await holdPianoInSoundStep(page, 1);
+  await page.locator("#btn-practice-start").click();
+  await expect.poll(() => page.evaluate(() => typeof window.__releasePiano), { timeout: 15000 }).toBe("function");
+  await promptsAnsweredByTest(page);
+  await openExercise(page, "s4-lip-trills"); // leaving the exercise runs Stop
+  await page.locator("#btn-practice-start").click();
+  await expect.poll(() => page.evaluate(() => window.__prompts.length)).toBe(1);
+  await page.evaluate(() => window.__releasePiano());
+  await settleAWhile(page);
+  const held = await page.evaluate(() => ({
+    asked: window.__asked,
+    loop: !!window.VTPiano.loopActive,
+    starting: window.VTApp.getState().practiceStarting
+  }));
+  expect(held, "while the next Start's prompt is up, the replaced one plays nothing").toEqual({ asked: [], loop: false, starting: true });
+  await page.evaluate(() => window.__prompts[0].grant());
+  await expect.poll(() => page.evaluate(() => window.VTApp.getState().practiceLive), { timeout: 15000 }).toBe(true);
+  await expect.poll(() => page.evaluate(() => !!window.VTPiano.loopActive), { message: "the next take plays its own chords" }).toBe(true);
+  expect(await page.evaluate(() => window.__asked.length)).toBe(1);
+  await page.locator("#btn-practice-stop").click();
+});
+
+test("a chord loop a replaced Start began after the Stop is stopped before the next take hears it", async ({ page }) => {
+  test.setTimeout(60000);
+  const after = await replaceHeldStart(page, 2);
+  expect(after.asked.length, "held inside its sound step, the replaced Start did ask for its loop").toBeGreaterThan(0);
+  expect({ ...after, asked: undefined }, "and that loop is stopped; the breathing take runs on").toEqual({
+    asked: undefined, loop: false, voices: 0, live: true, exercise: "s18-costal-breath"
+  });
+});
+
 test("Stop while the permission prompt is up cancels that Start; the microphone granted later is released", async ({ page }) => {
   test.setTimeout(60000);
   await boot(page, { lang: "en", tourDone: true, mic: "silent" });

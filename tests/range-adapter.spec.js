@@ -371,6 +371,18 @@ test.describe("Range adapter & octave helpers", () => {
       await page.click("#btn-oct-down");
       await expect(page.locator("#oct-label")).toHaveText(/^[−-]2$/);
       await expect(page.locator("#toast")).toHaveClass(/show/);
+      // Where it settles, not mid fly-in: at the click it is still sliding in over the row
+      await page.evaluate(async () => {
+        const el = document.querySelector("#toast");
+        await Promise.all(el.getAnimations({ subtree: true }).map((a) => a.finished.catch(() => {})));
+        const at = () => JSON.stringify(el.getBoundingClientRect());
+        for (let last = at(), i = 0; i < 30; i++) {
+          await new Promise((r) => requestAnimationFrame(r));
+          const now = at();
+          if (now === last) break;
+          last = now;
+        }
+      });
       const r = await page.evaluate(() => {
         const box = (sel) => {
           const q = document.querySelector(sel).getBoundingClientRect();

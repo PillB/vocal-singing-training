@@ -32,6 +32,11 @@ async function stopAndMeasure(page) {
   await page.evaluate(() => sessionStorage.removeItem("vt_e2e"));
   await page.locator("#btn-practice-stop").click();
   await expect(page.locator("#toast")).toHaveClass(/show/);
+  return measureToast(page);
+}
+
+/** Where the shown toast sits against ← Back, Help, the header row and the window. */
+function measureToast(page) {
   return page.evaluate(() => {
     const t = document.getElementById("toast");
     // CSS transitions run on the wall clock, not the test's: end them
@@ -45,6 +50,7 @@ async function stopAndMeasure(page) {
       text: t.textContent,
       back: hit(R(document.getElementById("btn-back-home"))),
       help: hit(R(document.querySelector(".ex-header-actions"))),
+      height: Math.round(tr.height),
       inRow: tr.top >= row.top - 1 && tr.bottom <= row.bottom + 1,
       inView: tr.left >= 0 && tr.right <= innerWidth,
       kept: sum && !sum.hidden ? sum.textContent : null,
@@ -80,6 +86,31 @@ for (const lang of ["es", "en"]) {
       expect(m.keptWhole).toBe(true);
     });
   }
+}
+
+// Found by CI, not by the audit: the runner draws "Segoe UI, system-ui" in DejaVu Sans,
+// which is wider than the font this was written in, so the summary wrapped to two
+// lines and the toast (42 px) stood out of the 39 px desktop row by 1.5 px each side.
+// A text that needs two lines at any font makes that the case being tested.
+const TWO_LINES =
+  "Esta toma: una frase larga que no cabe en una sola linea de la fila, con numeros 100% 12 s 3 reps 2 min, para que se parta en dos lineas";
+
+for (const vp of [VIEWPORTS[0], VIEWPORTS[2], VIEWPORTS[3]]) {
+  test(`${vp.width}x${vp.height}: a toast that wraps to two lines still fits inside the header row`, async ({ page }) => {
+    await page.setViewportSize(vp);
+    await boot(page, { lang: "es" });
+    await openExercise(page, "v1-diction");
+    await page.evaluate((t) => {
+      sessionStorage.removeItem("vt_e2e");
+      window.VTToast(t);
+    }, TWO_LINES);
+    await expect(page.locator("#toast")).toHaveClass(/show/);
+    const m = await measureToast(page);
+    expect(m.height, "control: the toast really wrapped (a one-line toast would pass anything)").toBeGreaterThan(30);
+    expect(m.inRow, `${m.height} px tall, inside the row`).toBe(true);
+    expect(m.back).toBe(false);
+    expect(m.help).toBe(false);
+  });
 }
 
 test("a long summary stays long enough to read; a short message still leaves at 2,8 s", async ({ page }) => {

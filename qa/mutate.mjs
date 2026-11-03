@@ -27,7 +27,7 @@ const AUDIO_TESTS = [
   "tests/node/piano-range.test.mjs",
   "tests/node/microphone-race.test.mjs"
 ];
-const LINT_TESTS = ["qa/lint-gate.test.mjs", "tests/node/asset-versions.test.mjs", "tests/node/csp.test.mjs", "tests/node/env-noise.test.mjs"];
+const LINT_TESTS = ["qa/lint-gate.test.mjs", "tests/node/asset-versions.test.mjs", "tests/node/csp.test.mjs", "tests/node/env-noise.test.mjs", "tests/node/inline-script-pin.test.mjs"];
 const node = (tests) => [process.execPath, "--test", ...tests];
 const PIANO_SPEC = [
   process.execPath,
@@ -107,6 +107,7 @@ export const MUTANTS = {
     ["L13 an inline script without its CSP hash passes", "tests/node/csp.test.mjs", "    if (!scripts.includes(sha256(body))) problems.push", "    if (false) problems.push"],
     ["L14 any error from the worker's host is ignored (QA-14)", "qa/env-noise.cjs", "return url.startsWith(WORKER);", "return true;"],
     ["L15 a failed load of the app's own file counts as offline noise", "qa/env-noise.cjs", "return url !== \"\" && !LOCAL.test(url);", "return url !== \"\";"],
+    ["L16 any inline script may ride on its CSP hash (QA-15)", "tests/node/inline-script-pin.test.mjs", "const unlisted = (html) => inlineScripts(html).filter((b) => !ALLOWED_INLINE.has(b));", "const unlisted = (html) => inlineScripts(html).filter(() => false);"],
     ["L7 empty wait-may-fail reason accepted", "qa/lint-playwright-waits.mjs", "/wait-may-fail:\\s*\\S/", "/wait-may-fail:/"]
   ].map(([name, file, from, to]) => ({ name, file, from, to, cmd: node(LINT_TESTS) })),
   // What a pitch frame may score (PR #25's grace-held label, the s9 challenge).
@@ -162,7 +163,8 @@ export const MUTANTS = {
         ["A6 Tab leaves focus under the sticky rows (WCAG 2.4.11)", "css/styles.css", "html:has(body.view-exercise) {\n  scroll-padding-top", "html:has(body.view-exercise-off) {\n  scroll-padding-top"],
         ["A7 the bottom rail cannot wrap again (v12's mic box crushed)", "css/styles.css", "  flex-wrap: wrap;\n  align-items: center;\n  gap: 0.45rem;\n  max-height: none;", "  flex-wrap: nowrap;\n  align-items: center;\n  gap: 0.45rem;\n  max-height: none;"],
         ["A8 \"Reto\" back to a 13 px target", "css/styles.css", "  min-height: 24px;\n  font-size: 0.68rem;", "  font-size: 0.68rem;"],
-        ["A9 the Stop toast centred over ← Back again", "js/app.js", "    placeToast(el);\n", ""]
+        ["A9 the Stop toast centred over ← Back again", "js/app.js", "    placeToast(el);\n", ""],
+        ["A10 a two-line toast taller than the desktop row (CI's wider font)", "css/styles.css", "  padding: 0.15rem 0.75rem;\n  border-radius: 14px;\n  font-size: 0.8rem;\n  line-height: 1.2;", "  padding: 0.25rem 0.75rem;\n  border-radius: 14px;\n  font-size: 0.8rem;\n  line-height: 1.25;"]
       ].map(([name, file, from, to]) => ({
         name,
         file,
@@ -220,11 +222,15 @@ export const MUTANTS = {
 
 export const DEFAULT_SETS = ["audio", "lint"];
 
+/** What the last failing command printed, so a red baseline in CI says which test failed. */
+let lastFailure = "";
+
 function runTests([cmd, ...args], root) {
   try {
-    execFileSync(cmd, args, { cwd: root, stdio: "ignore", timeout: 300000 });
+    execFileSync(cmd, args, { cwd: root, stdio: "pipe", timeout: 300000, maxBuffer: 64 * 1024 * 1024 });
     return true;
-  } catch {
+  } catch (e) {
+    lastFailure = `${e.stdout || ""}${e.stderr || ""}`.split("\n").slice(-80).join("\n");
     return false;
   }
 }
@@ -249,6 +255,7 @@ function main(sets) {
     const cmds = [...new Set(MUTANTS[set].map((m) => JSON.stringify(m.cmd)))];
     if (!cmds.every((c) => runTests(JSON.parse(c), process.cwd()))) {
       console.log(`RED      [${set}] the unmutated tests already fail; no mutant can be judged`);
+      console.log(`--- last 80 lines of the failing run ---\n${lastFailure}\n--- end ---`);
       bad++;
       continue;
     }

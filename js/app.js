@@ -174,11 +174,11 @@
     el.classList.add("in-row");
     // The title steps back while the toast holds its place (still read out)
     row.classList.add("toast-over");
-    // In the title's own place (from its left edge, up to 420 px) and centred
+    // In the title's own place (from its left edge, up to 560 px) and centred
     // on the row, so it covers the title instead of leaving letters beside it
     el.style.left = `${Math.round(left)}px`;
     el.style.top = `${Math.round(r.top + r.height / 2)}px`;
-    el.style.maxWidth = `${Math.max(120, Math.round(Math.min(420, right - left)))}px`;
+    el.style.maxWidth = `${Math.max(120, Math.round(Math.min(560, right - left)))}px`;
   }
 
   /** Global error surfacing — fail visibly (vibe-code silent-failure defense). */

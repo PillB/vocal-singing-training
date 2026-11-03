@@ -160,9 +160,12 @@ What the measure is, stated as a trade-off (QA-11, QA-12):
   payments work and is left for its owner; until then the ceiling does not
   see a long `switch`, so review one by eye.
 - The gate parses `.js/.mjs/.cjs` only, so logic in an inline `<script>`
-  inside an HTML page escapes it. It cannot grow there unseen: every page's
-  Content Security Policy allows only inline scripts by hash and the CSP test
-  (`tests/node/csp.test.mjs`, mutant L13) fails on any other inline script.
+  inside an HTML page escapes it. The CSP alone does not close that (QA-15):
+  a contributor can add the script and its hash. What does is
+  `tests/node/inline-script-pin.test.mjs`, which pins the inline scripts to
+  one list (today only the one-line region flag), so a new or longer one
+  needs that list edited on purpose (mutant L16); `tests/node/csp.test.mjs`
+  (mutant L13) separately fails an inline script whose hash is not listed.
 
 Console errors the flow test and the audit ledger may ignore are the two
 lines of the account worker refusing the test server's origin and an offline

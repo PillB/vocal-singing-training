@@ -24,6 +24,9 @@ import {
 import { createAccountEnv, TEST_ORIGIN } from "./fixtures.mjs";
 
 const BASE = "https://entitlements.test";
+
+/** What the scrub leaves where a card was. */
+const HIDDEN = "[n\u00famero oculto]";
 const NOW = 1800000000;
 const DAY = 86400;
 
@@ -162,6 +165,45 @@ test("a card number pasted into a report never reaches the database", async () =
     "two of them"
   );
 
+  // A number typed in FRONT of a card moves the card-shaped window across the
+  // join, so hiding only that window hid the card's first four digits and
+  // stored its last twelve, in order (QA round 5 re-attack). Twelve
+  // consecutive digits of a card is the card, so the whole run goes.
+  assert.equal(redactLongDigitRuns("123456789 4111 1111 1111 1111"), HIDDEN, "an order number in front");
+  assert.equal(redactLongDigitRuns("pago 1234567 4111-1111-1111-1111"), "pago [n\u00famero oculto]", "and with hyphens");
+  assert.equal(
+    redactLongDigitRuns("5555 5555 5555 5555 5555 5555 5555"),
+    HIDDEN,
+    "seven groups: no window of four may be hidden while the rest stays"
+  );
+
+  // The invisible separators. Each of these is what a paste out of a PDF, a
+  // rich-text field or a CJK keyboard actually carries, and every one of them
+  // leaked the whole card until the separator set became \\p{Zs} and \\p{Cf}
+  // rather than a hand-written list (QA round 5 re-attack found the thin and
+  // zero-width spaces still walking through the list version).
+  const SEPARATORS = {
+    "thin space": "\u2009",
+    "hair space": "\u200a",
+    "ideographic space": "\u3000",
+    "narrow no-break space": "\u202f",
+    "figure space": "\u2007",
+    "medium mathematical space": "\u205f",
+    "zero-width space": "\u200b",
+    "zero-width non-joiner": "\u200c",
+    "zero-width joiner": "\u200d",
+    "word joiner": "\u2060",
+    "byte-order mark": "\ufeff",
+    "soft hyphen": "\u00ad"
+  };
+  for (const [name, separator] of Object.entries(SEPARATORS)) {
+    assert.equal(
+      redactLongDigitRuns(["4111", "1111", "1111", "1111"].join(separator)),
+      HIDDEN,
+      name
+    );
+  }
+
   // Things a report about singing legitimately contains are left alone.
   assert.equal(redactLongDigitRuns("el do4 a 261.63 Hz"), "el do4 a 261.63 Hz");
   assert.equal(redactLongDigitRuns("duró 1200 ms"), "duró 1200 ms");
@@ -176,12 +218,32 @@ test("a card number pasted into a report never reaches the database", async () =
     "987 654 321 el 5 a las 10.30 y el 2026"
   );
   assert.equal(redactLongDigitRuns("10.30 11.45 12.00 13.15"), "10.30 11.45 12.00 13.15", "four times");
+  for (const decoy of [
+    "+54 9 11 5555-1234",
+    "+55 11 91234-5678",
+    "(415) 555-2671",
+    "192.168.100.200",
+    "8.8.8.8 8.8.4.4",
+    "Chrome/130.0.6723.92",
+    "v2026.11.03.1234",
+    "20261102a",
+    "1234 5678 9012",
+    "12 34 56 78 90 12 34"
+  ]) {
+    assert.equal(redactLongDigitRuns(decoy), decoy, `decoy: ${decoy}`);
+  }
   assert.equal(
     redactLongDigitRuns("2026-11-03 2026-11-04 2026-11-05"),
     "2026-11-03 2026-11-04 2026-11-05",
     "three dates"
   );
-  assert.equal(redactLongDigitRuns("41111111111111119999"), "41111111111111119999", "twenty digits is no card");
+  // This one used to be pinned the other way round, as "twenty digits is no
+  // card". It was the wrong judgement: a card with an expiry or a CVV typed
+  // onto the end of it is the commonest way one arrives, and there is no
+  // length at which twenty unbroken digits becomes something a report about
+  // singing needs. Any single unbroken run of thirteen or more now goes.
+  assert.equal(redactLongDigitRuns("41111111111111119999"), HIDDEN, "a card with four digits glued on");
+  assert.equal(redactLongDigitRuns("tarjeta 4111111111111111122026 x"), "tarjeta [n\u00famero oculto] x", "card and expiry");
 
   const env = freshEnv();
   const posted = await submit(env, {
@@ -193,6 +255,71 @@ test("a card number pasted into a report never reaches the database", async () =
   const stored = await env.DB.prepare("SELECT detail FROM reports WHERE id = ?1").bind(posted.body.reference).first();
   assert.equal(stored.detail.includes("4111"), false);
   assert.match(stored.detail, /\[número oculto\]/);
+});
+
+test("the day's write ceiling does not reopen at midnight for a request that began before it", async () => {
+  // The ceiling exists so that a public POST cannot spend the 100,000 D1 writes
+  // a day that sign-in, gifts and progress saving need. A Worker reads its clock
+  // once and may write seconds later, so a request that began at 23:59:59 can
+  // reach the limiter after midnight, when another request has already opened
+  // the new day. It then computes yesterday's window. The limiter used to treat
+  // any difference as a turnover, which reset the counter and dragged the window
+  // back to yesterday — so one such request per midnight reopened the whole
+  // day's ceiling, and the next request with a current clock reopened it again
+  // (QA round 5 re-attack).
+  const env = freshEnv();
+  const midnight = Math.floor(NOW / DAY) * DAY + DAY;
+
+  // One report after midnight opens today's bucket, then it is filled to the
+  // ceiling directly rather than by posting five hundred reports.
+  assert.equal((await submit(env, { kind: "bug", summary: "primero" }, { now: midnight + 1 })).status, 200);
+  await env.DB.prepare("UPDATE rate_limits SET count = ?1 WHERE bucket = 'rep:all'")
+    .bind(REPORT_LIMITS.perDeploymentDaily[0])
+    .run();
+  const before = (await env.DB.prepare("SELECT COUNT(*) AS n FROM reports").first()).n;
+
+  // The straggler from yesterday meets the full ceiling...
+  const straggler = await submit(
+    env,
+    { kind: "bug", summary: "desde ayer" },
+    { now: midnight - 1, ip: "198.51.100.1" }
+  );
+  assert.equal(straggler.status, 429);
+  assert.equal(straggler.body.reason, "too_busy");
+
+  // ...and, the point of the test, so does everybody after it.
+  for (let i = 0; i < 5; i += 1) {
+    const later = await submit(
+      env,
+      { kind: "bug", summary: "despues" },
+      { now: midnight + 10 + i, ip: `198.51.100.${20 + i}` }
+    );
+    assert.equal(later.status, 429, `request ${i} after the straggler`);
+  }
+  assert.equal((await env.DB.prepare("SELECT COUNT(*) AS n FROM reports").first()).n, before, "nothing was stored");
+
+  // Tomorrow is a new day, which is the behaviour the fix must not break.
+  assert.equal(
+    (await submit(env, { kind: "bug", summary: "manana" }, { now: midnight + DAY + 1, ip: "198.51.100.9" })).status,
+    200
+  );
+});
+
+test("one address cannot get a fresh hourly share by reading a clock from before the hour", async () => {
+  const env = freshEnv();
+  const HOUR = REPORT_LIMITS.perIp[1];
+  const turned = Math.floor(NOW / HOUR) * HOUR + HOUR;
+  const ip = "198.51.100.77";
+  for (let i = 0; i < REPORT_LIMITS.perIp[0]; i += 1) {
+    assert.equal((await submit(env, { kind: "bug", summary: `r${i}` }, { now: turned + 5 + i, ip })).status, 200);
+  }
+  assert.equal((await submit(env, { kind: "bug", summary: "stale" }, { now: turned - 1, ip })).status, 429);
+  assert.equal((await submit(env, { kind: "bug", summary: "after" }, { now: turned + 60, ip })).status, 429);
+  assert.equal(
+    (await env.DB.prepare("SELECT COUNT(*) AS n FROM reports").first()).n,
+    REPORT_LIMITS.perIp[0],
+    "the share was spent once, not twice"
+  );
 });
 
 test("typed text is clamped and stripped, and line breaks survive", () => {

@@ -207,9 +207,24 @@ export async function peekRateLimit(db, bucket, limit, windowSeconds, now, cost)
     .prepare("SELECT count, window_start FROM rate_limits WHERE bucket = ?1")
     .bind(bucket)
     .first();
-  const current = row && Number(row.window_start) === windowStart ? Number(row.count) : 0;
+  // A caller can read a clock that is OLDER than the window already stored:
+  // its request began before the boundary and reached this write after it,
+  // while another request had already opened the new window. Such a caller
+  // belongs to the window it finds, not to the one it would have opened —
+  // counting it in its own older window would hand it an empty bucket, which
+  // is a full fresh allowance every time the hour or the day turns over
+  // (QA round 5 re-attack). So the stored window wins whenever it is newer,
+  // and this function reports it as the window the caller is in.
+  const stored = row ? Number(row.window_start) : Number.NaN;
+  const effective = Number.isFinite(stored) && stored > windowStart ? stored : windowStart;
+  const current = Number.isFinite(stored) && stored === effective ? Number(row.count) : 0;
   const held = Number.isFinite(current) ? current : 0;
-  return { ok: held + step <= limit, count: held, retryAfter, windowStart };
+  return {
+    ok: held + step <= limit,
+    count: held,
+    retryAfter: effective === windowStart ? retryAfter : effective + window - at,
+    windowStart: effective
+  };
 }
 
 /**
@@ -253,11 +268,23 @@ export async function hitRateLimit(db, bucket, limit, windowSeconds, now, cost) 
   // A window that has turned over (or a bucket never seen) starts again at this
   // call's cost. The WHERE makes it a no-op for a row already in this window,
   // so two callers cannot both "start" it and lose each other's count.
+  //
+  // `<` and not `<>`, so a bucket can only ever move forward in time. This is
+  // belt and braces rather than the fix: the peek above adopts a newer stored
+  // window, so `room.windowStart` is never behind the row by the time we get
+  // here, and a mutation of this line alone fails no test. It is written as
+  // the invariant anyway, because with `<>` the bug came back the moment the
+  // peek was wrong — a caller reading an older clock reset the count AND
+  // dragged `window_start` backwards, so the next caller with a current clock
+  // saw a mismatch again and reset it once more, and one such request per
+  // boundary reopened the whole allowance. With `<`, the same mistake refuses
+  // the straggler instead of reopening the bucket: still wrong, but wrong in
+  // the direction that costs a request rather than the write budget.
   const started = await db
     .prepare(
       `INSERT INTO rate_limits (bucket, count, window_start) VALUES (?1, ?3, ?2)
        ON CONFLICT(bucket) DO UPDATE SET count = ?3, window_start = ?2
-       WHERE rate_limits.window_start <> ?2`
+       WHERE rate_limits.window_start < ?2`
     )
     .bind(bucket, room.windowStart, step)
     .run();

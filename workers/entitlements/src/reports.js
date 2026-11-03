@@ -150,72 +150,73 @@ export function isReferenceShape(value) {
   return typeof value === "string" && new RegExp(`^VS-[${REF_ALPHABET}]{${REF_LENGTH}}$`).test(value);
 }
 
-/** What is left between the digits of a card number somebody typed or pasted. */
-const DIGIT_SEPARATORS = " \t\r\n\u00a0\u202f\u2007.\u2013\u2014\\-";
+/**
+ * What is left between the digits of a card number somebody typed or pasted.
+ *
+ * Named classes rather than a hand-written list of code points, because the
+ * list was the bug twice over. `\p{Zs}` is every space separator \u2014 the no-break
+ * space off a web page, the narrow and figure spaces a formatter leaves, the
+ * thin and hair spaces, the ideographic space off a CJK keyboard. `\p{Cf}` is
+ * every format character, which is where the invisible ones live: the
+ * zero-width space, the zero-width joiner and non-joiner, the word joiner, the
+ * byte-order mark, the soft hyphen. A paste out of a PDF or a rich text field
+ * carries these, and each one that is not in the set leaks the whole card
+ * (QA round 5, then its re-attack, which found the thin and zero-width spaces
+ * still walking through). Tab, carriage return and newline are controls rather
+ * than separators, so they stay explicit.
+ */
+const DIGIT_SEPARATORS = "\\t\\r\\n\\p{Zs}\\p{Cf}.\\u2013\\u2014\\-";
 
 /** A run of digits and nothing but those separators between them. */
-const DIGIT_RUN = new RegExp(`[0-9](?:[0-9${DIGIT_SEPARATORS}]*[0-9])?`, "g");
+const DIGIT_RUN = new RegExp(`[0-9](?:[0-9${DIGIT_SEPARATORS}]*[0-9])?`, "gu");
 
 /** The marker a hidden number leaves behind. */
 const HIDDEN = "[número oculto]";
 
 /**
- * Hide a card number inside one run of digits and separators.
+ * Whether a run of digits and separators has a card in it anywhere.
  *
  * A card is 13 to 19 digits in groups of three or more — 4-4-4-4, 4-6-5 for
- * Amex, or one unbroken run — so the groups of the run are walked and the
- * first window of whole groups that adds up to a card is hidden. Walking
- * windows rather than testing the whole run matters: "a las 10.30 el
- * 4111 1111 1111 1111 falló" is one run, and judging it whole would find 20
- * digits, call it not-a-card and store the card.
- *
- * Every group in a window must be three digits or more, which is what keeps
- * ordinary prose safe: "987 654 321 el 5 a las 10.30" has groups of one and
- * two in it and is left alone, as is a twelve-digit phone number. A window's
- * LAST group may be shorter, because a thirteen-digit card is typed
+ * Amex, or one unbroken number — so the run's groups are walked and every
+ * window of whole groups is tried. Every group in a window must be three
+ * digits or more, which is what keeps ordinary prose safe: "987 654 321 el 5 a
+ * las 10.30" has groups of one and two in it, a Peruvian mobile is 9-3-3-3 off
+ * a 2-digit country code, and four clock times in a row are groups of two. A
+ * window's LAST group may be shorter, because a thirteen-digit card is typed
  * "4111 1111 1111 1".
  *
+ * A single unbroken group of thirteen digits or more counts on its own, however
+ * long it is. A card with the expiry and the CVV typed straight onto the end of
+ * it is still a card, and there is no length at which that stops being true —
+ * which is the one judgement here that changed: 20 unbroken digits used to be
+ * "not a card" and be stored as typed.
+ *
  * @param {string} run Digits and separators, nothing else.
- * @returns {string} The run with any card-shaped window hidden.
+ * @returns {boolean} True when the run must not be stored as typed.
  */
-function hideCardInRun(run) {
-  // Alternating [digits, separators, digits, …]; a run always starts and ends
-  // with a digit, so even positions are groups.
-  const parts = run.split(/([^0-9]+)/);
-  const out = [];
-  let i = 0;
-  while (i < parts.length) {
+function runHasCard(run) {
+  const groups = run.split(/[^0-9]+/u).filter(Boolean).map((group) => group.length);
+  if (groups.some((length) => length >= 13)) {
+    return true;
+  }
+  for (let i = 0; i < groups.length; i += 1) {
     let digits = 0;
-    let end = -1;
-    // Grow a window of whole groups from this one until it is a card, or until
-    // it cannot be (too many digits, or a short group that is not the last).
-    for (let j = i; j < parts.length; j += 2) {
-      const group = parts[j];
-      digits += group.length;
+    for (let j = i; j < groups.length; j += 1) {
+      digits += groups[j];
       if (digits > 19) {
         break;
       }
       if (digits >= 13) {
-        end = j;
-        break;
+        return true;
       }
-      // A group of one or two digits can only ever be the last in a window, so
-      // reaching one without having reached 13 digits ends the attempt.
-      if (group.length < 3) {
+      // A group of one or two digits can only ever be a window's last, so
+      // reaching one without having reached 13 digits ends this attempt.
+      if (groups[j] < 3) {
         break;
       }
     }
-    if (end < 0) {
-      out.push(parts[i], parts[i + 1] === undefined ? "" : parts[i + 1]);
-      i += 2;
-      continue;
-    }
-    out.push(HIDDEN);
-    // Keep the separator that followed the window, so the sentence still reads.
-    out.push(parts[end + 1] === undefined ? "" : parts[end + 1]);
-    i = end + 2;
   }
-  return out.join("");
+  return false;
 }
 
 /**
@@ -231,15 +232,24 @@ function hideCardInRun(run) {
  * web page, dots, " - ", or full-width digits from a CJK keyboard all walked
  * straight through it (QA round 5, QA-41). Full-width digits are folded to
  * ASCII first — it is a fair normalization of typed text in its own right —
- * and the separators are now the whole set somebody plausibly types.
+ * and the separators are the named Unicode classes rather than a list.
+ *
+ * **The whole run goes, not the card-shaped part of it.** Hiding only the
+ * matching window left the rest of the run readable, and a number typed in
+ * front of a card moves that window: "123456789 4111 1111 1111 1111" has a
+ * thirteen-digit window across the join, so the card's first four digits were
+ * hidden and its last twelve stored in order. Twelve consecutive digits of a
+ * card is the card. A run is digits and separators with no letters in it, so
+ * prose is not at risk — what the wider rule costs is a bare list of five or
+ * more three-digit numbers, which is a fair price.
  * @param {string} text Text a person typed.
  * @returns {string} The same text with card-shaped runs removed.
  */
 export function redactLongDigitRuns(text) {
-  const folded = String(text).replace(/[\uff10-\uff19]/g, (d) =>
+  const folded = String(text).replace(/[\uff10-\uff19]/gu, (d) =>
     String.fromCharCode(d.charCodeAt(0) - 0xff10 + 48)
   );
-  return folded.replace(DIGIT_RUN, (run) => (run.length < 13 ? run : hideCardInRun(run)));
+  return folded.replace(DIGIT_RUN, (run) => (run.length < 13 || !runHasCard(run) ? run : HIDDEN));
 }
 
 /**

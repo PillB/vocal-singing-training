@@ -514,6 +514,98 @@ test("the rate limiter can spend several hits at once and refuses what would ove
   assert.equal((await hitRateLimit(env.DB, "t:2", 10, 3600, NOW, 11)).ok, false);
 });
 
+test("a bucket only ever moves forward: a clock read in an older window cannot reopen it", async () => {
+  // A Worker request reads one clock and may write several seconds later, so a
+  // request that began just before the hour turned can reach the limiter after
+  // another request has already opened the new window. It then computes an
+  // older window than the one stored. The guarded upsert used to fire on any
+  // difference (`window_start <> ?`), which reset the count AND dragged the
+  // window backwards; the next caller with a current clock saw a difference
+  // again and reset it once more. One such request per boundary therefore
+  // handed out a whole fresh allowance, which on the report route is the day's
+  // write ceiling (QA round 5 re-attack).
+  const env = freshEnv();
+  await ensureSchema(env.DB);
+  const HOUR = 3600;
+  // An exact hour boundary, so "one second before" is genuinely the previous
+  // window rather than arithmetic that happens to agree.
+  const turned = Math.floor(NOW / HOUR) * HOUR + HOUR;
+  const stale = turned - 1;
+  const bucket = "t:boundary";
+  const row = async () =>
+    env.DB.prepare("SELECT count, window_start FROM rate_limits WHERE bucket = ?1").bind(bucket).first();
+
+  // Fill the new window.
+  for (let i = 0; i < 10; i += 1) {
+    assert.equal((await hitRateLimit(env.DB, bucket, 10, HOUR, turned + i)).ok, true, `fill ${i}`);
+  }
+  const full = await row();
+  assert.deepEqual([Number(full.count), Number(full.window_start)], [10, turned]);
+
+  // The straggler from the previous window is refused, and changes nothing.
+  const straggler = await hitRateLimit(env.DB, bucket, 10, HOUR, stale);
+  assert.equal(straggler.ok, false, "a call from the previous window cannot open room in this one");
+  const after = await row();
+  assert.deepEqual(
+    [Number(after.count), Number(after.window_start)],
+    [10, turned],
+    "and it did not move the bucket backwards"
+  );
+
+  // Which is the point: the next caller with a current clock still meets a full
+  // bucket, rather than the empty one the straggler used to leave behind.
+  assert.equal((await hitRateLimit(env.DB, bucket, 10, HOUR, turned + 30)).ok, false);
+
+  // A straggler that arrives while there IS room is counted in the window it
+  // found, not in its own: it spends a slot rather than being thrown away.
+  const second = "t:boundary2";
+  assert.equal((await hitRateLimit(env.DB, second, 3, HOUR, turned)).ok, true);
+  const counted = await hitRateLimit(env.DB, second, 3, HOUR, stale);
+  assert.equal(counted.ok, true);
+  const secondRow = await env.DB
+    .prepare("SELECT count, window_start FROM rate_limits WHERE bucket = ?1")
+    .bind(second)
+    .first();
+  assert.deepEqual([Number(secondRow.count), Number(secondRow.window_start)], [2, turned]);
+
+  // And the window still turns over normally when the clock really has moved on.
+  assert.equal((await hitRateLimit(env.DB, bucket, 10, HOUR, turned + HOUR + 1)).ok, true, "a new hour is a new allowance");
+  const next = await row();
+  assert.deepEqual([Number(next.count), Number(next.window_start)], [1, turned + HOUR]);
+});
+
+test("a window that is already full stays full however many stragglers arrive", async () => {
+  // The sharp form of the same attack. Fill the current window, then fire forty
+  // requests at it, a quarter of them reading a clock from before the boundary.
+  // Every one must be refused. Before the fix each straggler reset the row and
+  // reopened the whole allowance, so this admitted dozens.
+  //
+  // (One straggler arriving while the PREVIOUS window still has room is a
+  // different thing and is allowed to spend a slot there: a fixed window lets
+  // through up to 2x the limit across a boundary by design, which is why this
+  // test fills the window first rather than counting admissions from empty.)
+  const env = freshEnv();
+  await ensureSchema(env.DB);
+  const HOUR = 3600;
+  const turned = Math.floor(NOW / HOUR) * HOUR + HOUR;
+  const bucket = "t:mixed";
+  for (let i = 0; i < 10; i += 1) {
+    assert.equal((await hitRateLimit(env.DB, bucket, 10, HOUR, turned + i)).ok, true);
+  }
+
+  const calls = [];
+  for (let i = 0; i < 40; i += 1) {
+    calls.push(hitRateLimit(env.DB, bucket, 10, HOUR, i % 4 === 0 ? turned - 1 : turned + 20));
+  }
+  const results = await Promise.all(calls);
+  assert.equal(results.filter((r) => r.ok).length, 0, "the hour is spent, whichever clock they read");
+  const row = await env.DB
+    .prepare("SELECT count, window_start FROM rate_limits WHERE bucket = ?1")
+    .bind(bucket)
+    .first();
+  assert.deepEqual([Number(row.count), Number(row.window_start)], [10, turned], "and the row is untouched");
+});
+
 test("the first exposure is the arm for good; forced and switched-off views are not exposures", async () => {
   const env = freshEnv();
   await call(

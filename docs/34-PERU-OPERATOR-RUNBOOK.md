@@ -79,8 +79,15 @@ into it.
    ```bash
    wrangler secret put LICENSE_PRIVATE_KEY_PKCS8_B64
    ```
-7. **Set `ADMIN_EMAILS`** in `wrangler.toml` to your own email. This is what
-   makes the gifting panel appear for you and nobody else.
+7. **Set `ADMIN_EMAILS`** to your own email. This is what makes the gifting
+   panel appear for you and nobody else. Set it as a secret, not in
+   `wrangler.toml`:
+   ```bash
+   wrangler secret put ADMIN_EMAILS
+   ```
+   The worker reads it from `env` either way, so a secret behaves identically —
+   but this repository is public, and an address committed to `wrangler.toml` is
+   in its git history for ever, where it cannot be taken back out.
 8. **Deploy**:
    ```bash
    wrangler deploy
@@ -840,8 +847,16 @@ and each is one look away for somebody in Peru:
 | MP access token | Mercado Pago developer panel | `wrangler secret put MP_ACCESS_TOKEN` | **Yes** |
 | MP webhook secret | Mercado Pago webhook config | `wrangler secret put MP_WEBHOOK_SECRET` | **Yes** |
 | MP checkout URL | Mercado Pago plan | `js/billing-config.js` | No |
-| Admin emails | you | `ADMIN_EMAILS` in `wrangler.toml` | No |
+| Admin emails | you | `wrangler secret put ADMIN_EMAILS` | **Yes** — see below |
 
 Nothing marked **Yes** ever goes in the repository, in a message, or in a
 screenshot. If one leaks, rotate it: for the license key, generate a new pair,
 bump `LICENSE_KEY_ID` to `k2`, deploy, and publish the new JWK.
+
+`ADMIN_EMAILS` is the odd one: it is not a credential and the worker reads it
+from `env` whether it arrives as a var or as a secret. It is on the list anyway
+because this repository is public. An address written into `wrangler.toml` is
+published in the commit that adds it and stays in the history after any later
+edit, which is a permanent piece of personal information given away for nothing
+— `wrangler secret put ADMIN_EMAILS` costs the same keystrokes and gives it
+away to nobody. `scripts/setup.sh` already does it that way.

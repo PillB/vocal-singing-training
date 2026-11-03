@@ -223,11 +223,11 @@ Public, committed in `wrangler.toml`:
 | `STRIPE_PRICE_PRO_MONTHLY` / `STRIPE_PRICE_PRO_YEARLY` | Optional price → plan mapping. Filling either one in also makes it an **allow-list** — see below. |
 | `MP_PLAN_PRO_MONTHLY` / `MP_PLAN_PRO_YEARLY` | Optional `preapproval_plan_id` → plan mapping. |
 | `TRIAL_DAYS` | Length of the free trial, in days. One per account, ever. Default 7. |
-| `ADMIN_EMAILS` | Comma-separated emails allowed to gift and revoke months, and to read A/B results. |
 | `GOOGLE_CLIENT_ID` | Google Sign-In client id. Public by design. Empty disables Google sign-in. |
 | `EMAIL_PROVIDER` | `resend`, `brevo` or `mailersend`. Empty disables email sign-in rather than dropping codes silently. |
 | `EMAIL_FROM` / `EMAIL_FROM_NAME` | Sender of the code emails. Must be a verified sender at the provider. |
 | `EVENTS_ENABLED` | `"false"` stops recording anonymous events at once (nothing is stored, not even counters). Deletions still work. |
+| `REPORTS_ENABLED` | Problem reports and ideas from the site. Unlike `EVENTS_ENABLED` this defaults **on** when absent. `"false"` closes the route; the form then shows the reporter their own text to copy, so nothing they typed is lost. |
 
 Secrets — **never** in this repo, only `wrangler secret put`:
 
@@ -238,6 +238,7 @@ Secrets — **never** in this repo, only `wrangler secret put`:
 | `MP_ACCESS_TOKEN` | Mercado Pago access token, used only for server-side reads. |
 | `LICENSE_PRIVATE_KEY_PKCS8_B64` | base64 PKCS#8 P-256 private key. |
 | `LICENSE_ID_KEY` | Optional. The key a new license id is derived under, so two webhooks for one new customer agree on one license. Without it a key derived from `LICENSE_PRIVATE_KEY_PKCS8_B64` is used; with neither, a new license gets a random id. Set it to keep derivation stable across a signing-key rotation. Any long random string. |
+| `ADMIN_EMAILS` | Comma-separated emails allowed to gift and revoke months, read A/B results and read problem reports. Not cryptographic, and the worker reads it from `env` either way — but **this repository is public**, so a value in `wrangler.toml` publishes the address in git history for ever. `secret put` it. |
 | `RESEND_API_KEY` / `BREVO_API_KEY` / `MAILERSEND_API_KEY` | Only the one named by `EMAIL_PROVIDER`. |
 | `EVENTS_IP_KEY` | Optional. The key the rate-limit buckets are an HMAC under. Without it a key derived from `LICENSE_PRIVATE_KEY_PKCS8_B64` is used; with neither, `/v1/events` answers `503`. Any long random string. |
 

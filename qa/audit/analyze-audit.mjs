@@ -35,16 +35,38 @@ export const QUIET_COUNTS_BY_DESIGN = {
 };
 
 const changes = (ticks, key) => new Set((ticks || []).map((t) => t?.[key])).size;
-const nums = (s) => (String(s || "").match(/\d+/g) || []).map(Number);
 
-/** Counts that went up between the first and last tick (timers excluded by their ":" or "s"). */
+/** The lines of a tick that carry numbers a learner reads. */
+const COUNT_FIELDS = ["focus", "hud", "status", "pitch"];
+/** Timers and percentages are not counts: "1:30", "2,5 s", "80 %". A letter after the s ("3 sílabas") makes it a word, not seconds. */
+const NOT_A_COUNT = /\d+:\d\d|\d+(?:[.,]\d+)?\s?s(?![\p{L}\d])|\d+\s?%/gu;
+
+/** Every count on a tick, keyed by its line and the word in front of it ("hud:Reps"), numbered when a word repeats. */
+function countsOf(tick) {
+  const seen = new Map();
+  for (const field of COUNT_FIELDS) {
+    const text = String(tick?.[field] || "").replace(NOT_A_COUNT, " ");
+    for (const m of text.matchAll(/(\p{L}*)\s*(\d+)/gu)) {
+      const base = `${field}:${m[1]}`;
+      const n = [...seen.keys()].filter((k) => k.startsWith(base + "#")).length;
+      seen.set(`${base}#${n}`, Number(m[2]));
+    }
+  }
+  return seen;
+}
+
+/**
+ * Counts that went above where they began at any tick of the run. A count that first appears
+ * while the room is silent began at zero; one that rose and fell back still moved.
+ */
 function countsUp(ticks) {
   if (!ticks?.length) return [];
-  const strip = (s) => String(s || "").replace(/\d+:\d\d|\d+(?:[.,]\d+)?\s?s\b|\d+\s?%/g, "");
-  const a = nums(strip(ticks[0].focus) + " " + strip(ticks[0].hud));
-  const b = nums(strip(ticks.at(-1).focus) + " " + strip(ticks.at(-1).hud));
-  if (a.length !== b.length) return [];
-  return b.map((v, i) => (v > a[i] ? `${a[i]}→${v}` : null)).filter(Boolean);
+  const first = countsOf(ticks[0]);
+  const high = new Map();
+  for (const t of ticks.slice(1)) {
+    for (const [k, v] of countsOf(t)) if (v > (high.get(k) ?? first.get(k) ?? 0)) high.set(k, v);
+  }
+  return [...high].map(([k, v]) => `${k.split(":")[1].split("#")[0] || "count"} ${first.get(k) ?? 0}→${v}`);
 }
 
 /** What a take that ran should have shown: it started, it stopped, something moved, no microphone stayed open. */
@@ -72,9 +94,10 @@ function checkQuiet(rec, out) {
   const it = rec.iterations?.[3];
   if (!it) return;
   if (it.failure) out.push(["quiet", `boundary run threw: ${it.failure}`]);
-  // Exempt only the rising count, with its stated reason; a thrown run is reported above for every mode
-  if (QUIET_COUNTS_BY_DESIGN[rec.mode]) return;
   for (const run of [it.silent, it.noise].filter(Boolean)) {
+    // Exempt only the rising count of the silent run, which is what the stated reason (a pause) is about;
+    // a thrown run is reported above for every mode, and a count rising on noise is not a pause
+    if (QUIET_COUNTS_BY_DESIGN[rec.mode] && run === it.silent) continue;
     const up = countsUp(run.ticks);
     if (up.length) out.push(["quiet", `${run.scenario}: on-screen counts rose (${up.join(", ")}) — review`]);
   }
@@ -82,13 +105,19 @@ function checkQuiet(rec, out) {
 
 function checkInterrupt(rec, out) {
   const it = rec.iterations?.[4];
-  if (!it || NO_TAKE.has(rec.mode)) return;
-  if (it.failure) out.push(["leave", `interruption run threw: ${it.failure}`]);
+  if (!it) return;
+  // The plan page has no Start to double-press, but a microphone left on there is still a finding
+  if (!NO_TAKE.has(rec.mode)) checkLeave(it, out);
   const live = (g) => g?.live || 0;
+  if (live(it.final?.gum) > 0) out.push(["mic", `${it.final.gum.live} mic track(s) live after leaving the exercise`]);
+}
+
+function checkLeave(it, out) {
+  const live = (g) => g?.live || 0;
+  if (it.failure) out.push(["leave", `interruption run threw: ${it.failure}`]);
   if (live(it.afterDouble?.gum) > 1) out.push(["mic", `double Start opened ${it.afterDouble.gum.live} mic tracks`]);
   if (it.leavePrompt === false && it.afterHidden?.live) out.push(["leave", "Back mid-take left without asking"]);
   if (it.afterStay && it.afterStay.view !== "view-exercise") out.push(["leave", "Stay in the leave prompt did not keep the exercise"]);
-  if (live(it.final?.gum) > 0) out.push(["mic", `${it.final.gum.live} mic track(s) live after leaving the exercise`]);
 }
 
 function checkReplay(rec, out) {

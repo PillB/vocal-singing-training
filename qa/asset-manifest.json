@@ -40,8 +40,8 @@
     "sha": "93d225ed63fd919a"
   },
   "css/styles.css": {
-    "v": "20261103a",
-    "sha": "7390931be9d3d46c"
+    "v": "20261103b",
+    "sha": "3330881e89e89bff"
   },
   "js/account.js": {
     "v": "20261006b",
@@ -164,8 +164,8 @@
     "sha": "d92914eab4ecad7d"
   },
   "js/region-gate.js": {
-    "v": "20261102a",
-    "sha": "77182bd45d57a044"
+    "v": "20261103b",
+    "sha": "4e7e6793cda6c436"
   },
   "js/reminders.js": {
     "v": "20260924c",

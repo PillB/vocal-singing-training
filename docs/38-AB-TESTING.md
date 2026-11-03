@@ -276,6 +276,35 @@ steps one at a time with a Wilson interval, as the section above says, which
 finds a broken step. If the trial is disappointing, the lever the external
 evidence supports is re-entry — reminders, the comeback path — not length.
 
+**Four things about it that are true and are not defects.** They were measured
+by an attack on the mechanism (QA round 7) and are written down here rather
+than fixed, because each fix costs more than the thing it buys for a test that
+should not be run at this traffic:
+
+- **The result is browser-asserted.** `/v1/events` takes anonymous events with
+  no account, by design — that is what keeps the exposures table joined to
+  nothing but a browser id. A script with no account forged 440 exposures and a
+  22-against-44 split, and the results route reported p = 0.0049. So the
+  numbers are a measurement, not a count of money: privacy.html promises what
+  is *given* is keyed to an account, and says nothing about what is *measured*
+  being unforgeable. Anything that has to be trusted — what an account was
+  given, what it paid — is read from D1 and from the provider, never from this.
+  Making the paid half unforgeable means emitting it from the webhook, which is
+  a privacy.html change and a different promise.
+- **The offered arm is recomputed on every read.** Rotating `LICENSE_ID_KEY`
+  between the offer and the click changes it, so somebody can be shown one
+  length and given another across a rotation. What an account was *given* is
+  never recomputed: it is on the grant row, which is the number that matters
+  for a refund, a dispute, or an argument.
+- **The arm is readable before the trial is started**, so somebody who does not
+  like the length they are offered can register again for the other one. The
+  bound is a fresh address per re-roll, and the cost of one re-roll is seven
+  days of Pro.
+- **`/v1/auth/methods` names the shortest arm** while the test runs, because
+  there is no account yet to key on. Before, it named `TRIAL_DAYS`, which the
+  test overrides — a number no arm gives. The shortest, not the longest: a
+  promise broken at sign-up is worse than a pleasant surprise.
+
 ### Running the first test
 
 1. Deploy the entitlements worker (see `docs/34-PERU-OPERATOR-RUNBOOK.md`).

@@ -15,7 +15,7 @@
 
 "use strict";
 
-import { mintId, mintToken, normalizeEmail, nowSec, sha256Hex } from "./db.js";
+import { changedRows, mintId, mintToken, normalizeEmail, nowSec, sha256Hex } from "./db.js";
 
 /** How long a session lasts before the browser must sign in again (90 days). */
 export const SESSION_TTL_SECONDS = 7776000;
@@ -339,24 +339,69 @@ export async function consumeLoginCode(db, email, code, now) {
     return { ok: false, reason: "no_code" };
   }
   if (Number(row.expires_at) <= at) {
-    await db.prepare("UPDATE login_codes SET consumed_at = ?2 WHERE id = ?1").bind(row.id, at).run();
+    await db
+      .prepare("UPDATE login_codes SET consumed_at = ?2 WHERE id = ?1 AND consumed_at IS NULL")
+      .bind(row.id, at)
+      .run();
     return { ok: false, reason: "expired" };
+  }
+  // Take a guess off the code's allowance BEFORE judging it.
+  //
+  // The count used to be read in the SELECT above and written back after the
+  // hash was compared, so guesses arriving together all read the same number
+  // and every one of them was judged: a hundred parallel wrong guesses were a
+  // hundred one-in-a-million shots at somebody else's account, and the code
+  // was never burned (QA round 7). Six digits is a million values, and the
+  // sign-in that a lucky guess buys carries whatever that account holds. The
+  // per-IP limit held in that test, so the exposure is any source with more
+  // than one address.
+  //
+  // A guarded UPDATE and its changed-row count is the only condition test D1
+  // has that two requests cannot both pass. `RETURNING` would read the new
+  // count in the same statement, but it is not documented for D1, and
+  // `meta.changes` is what the rest of this worker already relies on.
+  const reserved = await db
+    .prepare(
+      `UPDATE login_codes SET attempts = attempts + 1
+       WHERE id = ?1 AND consumed_at IS NULL AND attempts < ?2`
+    )
+    .bind(row.id, LOGIN_CODE_MAX_ATTEMPTS)
+    .run();
+  if (changedRows(reserved) === 0) {
+    // Nothing left to spend, or the code was consumed between the read above
+    // and here. One extra read, on the refused path only, so the answer says
+    // which: a code somebody else already signed in with is gone, not
+    // over-guessed.
+    const after = await db
+      .prepare("SELECT attempts, consumed_at FROM login_codes WHERE id = ?1")
+      .bind(row.id)
+      .first();
+    const spent = !after || Number(after.attempts) >= LOGIN_CODE_MAX_ATTEMPTS;
+    return { ok: false, reason: spent ? "too_many_attempts" : "no_code" };
   }
   const expected = await sha256Hex(`${normalized}:${submitted}`);
   if (expected !== row.code_hash) {
-    const attempts = Number(row.attempts) + 1;
-    if (attempts >= LOGIN_CODE_MAX_ATTEMPTS) {
-      await db
-        .prepare("UPDATE login_codes SET attempts = ?2, consumed_at = ?3 WHERE id = ?1")
-        .bind(row.id, attempts, at)
-        .run();
-      return { ok: false, reason: "too_many_attempts" };
-    }
-    await db.prepare("UPDATE login_codes SET attempts = ?2 WHERE id = ?1").bind(row.id, attempts).run();
-    return { ok: false, reason: "bad_code" };
+    // Wrong. If that was the last of the allowance, burn the code so no later
+    // guess is judged at all, whoever sends it and however many arrive at
+    // once. Guarded on the count rather than on what this request read, so the
+    // guess that happens to be the fifth is the one that burns it.
+    const burned = await db
+      .prepare(
+        `UPDATE login_codes SET consumed_at = ?2
+         WHERE id = ?1 AND consumed_at IS NULL AND attempts >= ?3`
+      )
+      .bind(row.id, at, LOGIN_CODE_MAX_ATTEMPTS)
+      .run();
+    return { ok: false, reason: changedRows(burned) > 0 ? "too_many_attempts" : "bad_code" };
   }
-  await db.prepare("UPDATE login_codes SET consumed_at = ?2 WHERE id = ?1").bind(row.id, at).run();
-  return { ok: true };
+  // Right, and once: whoever flips this row is the one who signs in. Without
+  // the guard, five parallel submissions of the same right code signed in five
+  // times, which is not what "single use" means.
+  const consumed = await db
+    .prepare("UPDATE login_codes SET consumed_at = ?2 WHERE id = ?1 AND consumed_at IS NULL")
+    .bind(row.id, at)
+    .run();
+  return changedRows(consumed) > 0 ? { ok: true } : { ok: false, reason: "no_code" };
 }
 
 /**

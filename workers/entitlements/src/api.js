@@ -32,6 +32,7 @@ import { callerIp, ensureSchema, hitRateLimit, normalizeEmail, nowSec, sweepExpi
 import { emailConfigured, sendLoginCode } from "./email.js";
 import {
   MAX_GRANT_DAYS,
+  TRIAL_ARMS,
   countGrants,
   createGiftCode,
   createGrant,
@@ -46,6 +47,7 @@ import {
   startTrial,
   toPublicGrant,
   trialArmFromSource,
+  trialExperimentOn,
   trialPlanFor,
   trialSeconds
 } from "./grants.js";
@@ -272,8 +274,31 @@ export function authMethods(env) {
     email: emailConfigured(env),
     google: googleConfigured(env),
     googleClientId: ids[0] || null,
-    trialDays: Math.round(trialSeconds(env) / 86400)
+    trialDays: publicTrialDays(env)
   };
+}
+
+/**
+ * The trial length to name before anybody has signed in.
+ *
+ * With the length test off this is `TRIAL_DAYS`, which is what every account
+ * gets. With it on, `TRIAL_DAYS` is ignored and the length follows the
+ * account — which does not exist yet on this route — so the SHORTEST arm is
+ * named and `/v1/me` corrects it upward once there is an account to key on.
+ *
+ * This used to report `TRIAL_DAYS` either way, which with the test running is
+ * a number no arm gives (QA round 7). Naming the longest arm instead would
+ * promise fourteen days to somebody who is then given seven, and a promise
+ * broken at sign-up is worse than a pleasant surprise.
+ * @param {Object} env Worker env bindings.
+ * @returns {number} Days.
+ */
+function publicTrialDays(env) {
+  const configured = Math.round(trialSeconds(env) / 86400);
+  if (!trialExperimentOn(env)) {
+    return configured;
+  }
+  return Math.min(...TRIAL_ARMS.map((arm) => arm.days));
 }
 
 /**

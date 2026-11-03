@@ -41,6 +41,7 @@ import {
   trialPlanFor,
   trialSourceFor
 } from "../src/grants.js";
+import { authMethods } from "../src/api.js";
 import { handleRequest } from "../src/index.js";
 import { createAccountEnv } from "./fixtures.mjs";
 
@@ -319,4 +320,33 @@ test("the flag is read the way an operator would write it", () => {
   for (const no of ["off", "0", "false", "no", "", undefined, null, "maybe"]) {
     assert.equal(trialExperimentOn(env(no)), false, `${JSON.stringify(no)} should mean off`);
   }
+});
+
+test("the length named before sign-in is one an arm actually gives", async () => {
+  // `/v1/auth/methods` is the only public route that answers before a session
+  // exists, so it is where the pricing panel reads the trial length. With the
+  // test running, `TRIAL_DAYS` is ignored and the length follows the account —
+  // which this route has none of — so reporting `TRIAL_DAYS` was reporting a
+  // number no arm gives.
+  const off = createAccountEnv({ TRIAL_DAYS: "30" });
+  assert.equal(authMethods(off).trialDays, 30, "with the test off, the setting is the answer");
+
+  const on = createAccountEnv({ TRIAL_DAYS: "30", TRIAL_LEN_EXPERIMENT: "on" });
+  const named = authMethods(on).trialDays;
+  assert.equal(
+    TRIAL_ARMS.some((arm) => arm.days === named),
+    true,
+    `named ${named} days, which is not an arm`
+  );
+  assert.equal(named, Math.min(...TRIAL_ARMS.map((a) => a.days)), "the shortest, so nothing is over-promised");
+  assert.notEqual(named, 30, "and not the setting the test overrides");
+
+  // Without a key to assign with, the test cannot run, so the setting stands.
+  const unkeyed = createAccountEnv({
+    TRIAL_DAYS: "30",
+    TRIAL_LEN_EXPERIMENT: "on",
+    LICENSE_ID_KEY: "",
+    LICENSE_PRIVATE_KEY_PKCS8_B64: ""
+  });
+  assert.equal(authMethods(unkeyed).trialDays, 30);
 });

@@ -530,24 +530,57 @@ export async function startTrial(db, account, env, now) {
   if (account.trial_used_at !== null && account.trial_used_at !== undefined) {
     return { ok: false, reason: "trial_used" };
   }
-  const plan = await trialPlanFor(env, account.id);
-  const grant = await createGrant(
-    db,
-    {
-      accountId: account.id,
-      kind: "trial",
-      plan: "pro_monthly",
-      days: plan.days,
-      source: trialSourceFor(plan.arm),
-      note: null
-    },
-    at
-  );
-  await db
-    .prepare("UPDATE accounts SET trial_used_at = ?2, updated_at = ?2 WHERE id = ?1")
+  // Claim the one trial this account will ever get BEFORE writing the grant it
+  // buys. `account.trial_used_at` was read before any of this, and the marker
+  // used to be written after the grant, so two requests arriving together both
+  // read null, both wrote a grant, and the account held two trials; five at
+  // once held five (QA round 7). The part that costs money is what happens
+  // next: revoking "the trial" leaves the duplicate entitling, so the account
+  // still answers pro.
+  //
+  // A guarded UPDATE and its changed-row count is the only condition test D1
+  // has that two requests cannot both pass.
+  const claimed = await db
+    .prepare(
+      `UPDATE accounts SET trial_used_at = ?2, updated_at = ?2
+       WHERE id = ?1 AND trial_used_at IS NULL`
+    )
     .bind(account.id, at)
     .run();
-  return { ok: true, grant, days: plan.days, arm: plan.arm };
+  if (changedRows(claimed) === 0) {
+    return { ok: false, reason: "trial_used" };
+  }
+  const plan = await trialPlanFor(env, account.id);
+  try {
+    const grant = await createGrant(
+      db,
+      {
+        accountId: account.id,
+        kind: "trial",
+        plan: "pro_monthly",
+        days: plan.days,
+        source: trialSourceFor(plan.arm),
+        note: null
+      },
+      at
+    );
+    return { ok: true, grant, days: plan.days, arm: plan.arm };
+  } catch (error) {
+    // A claim is only worth holding if it bought something, so put it back.
+    // Guarded on the instant this request wrote, so a trial somebody else has
+    // since started is not taken off them.
+    //
+    // What this does not cover is the worker being killed between the two
+    // writes, which burns the trial without a grant. That is the cost of this
+    // order, and it is the right way round: the old order failed by giving a
+    // trial away twice, and the remedy for this one is a gift from the admin
+    // page.
+    await db
+      .prepare("UPDATE accounts SET trial_used_at = NULL WHERE id = ?1 AND trial_used_at = ?2")
+      .bind(account.id, at)
+      .run();
+    throw error;
+  }
 }
 
 /**

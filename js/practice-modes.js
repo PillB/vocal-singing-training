@@ -5767,8 +5767,9 @@
         <div class="pz-row">
           <button type="button" class="btn btn-sm" data-feel>${L("Canción A +1", "Song A +1")}</button>
           <button type="button" class="btn btn-sm" data-better>${L("Canción B +1", "Song B +1")}</button>
+          <span class="pz-lab" aria-live="polite">A <strong data-f>0</strong>/5 · B <strong data-b>0</strong>/5</span>
         </div>
-        <p class="mode-meta">A <strong data-f>0</strong>/5 · B <strong data-b>0</strong>/5 · ${L("frases a la meta", "phrases at goal")} <strong data-p>0</strong></p>
+        <p class="mode-meta">${L("frases a la meta", "phrases at goal")} <strong data-p>0</strong></p>
         <p class="mode-meta muted">${L("Marca +1 al terminar una estrofa. La línea mide cada frase: su largo, las pausas y si el volumen cae al final.", "Tap +1 when you finish a stanza. The line measures each phrase: its length, the pauses, and whether the level falls at the end.")}</p>
       `;
       this.hud.querySelectorAll("[data-goal]").forEach((b) =>

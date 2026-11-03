@@ -7027,6 +7027,16 @@ body.view-exercise .stage-coach .mode-hud,
 .stage-coach .controls-row .btn {
   margin-left: 0;
 }
+/* A count a mode's +1 buttons change (s3's A and B stanzas) sits in the buttons' row:
+   the .mode-meta lines are hidden here, and a tap must show something. */
+.stage-coach .pz-lab {
+  display: inline-block;
+  margin: 0 0 0 0.4rem;
+  font-size: 0.82rem;
+  font-weight: 650;
+  color: var(--text);
+  white-space: nowrap;
+}
 /* ...at the strip's right end, so a 44px button does not open a gap in the
    middle of the line ("Acorde / solfeo · 0 [+1] · Canta…") */
 .stage-coach .mode-panel > .btn,

@@ -55,8 +55,21 @@ function measureToast(page) {
       inView: tr.left >= 0 && tr.right <= innerWidth,
       kept: sum && !sum.hidden ? sum.textContent : null,
       titleOpacity: getComputedStyle(document.querySelector(".ex-title-row")).opacity,
-      keptWhole: !!sum && sum.scrollWidth <= sum.clientWidth + 1 && getComputedStyle(sum).textOverflow !== "ellipsis"
+      left: Math.round(tr.left),
+      centred: Math.abs((tr.left + tr.right) / 2 - innerWidth / 2) <= 2,
+      inRowClass: t.classList.contains("in-row"),
+      // Whole means seen and not cut: a hidden or collapsed line has no overflow either, and would pass
+      keptWhole: keptWhole(sum)
     };
+
+    function keptWhole(el) {
+      if (!el || el.hidden) return false;
+      const cs = getComputedStyle(el);
+      const r = el.getBoundingClientRect();
+      const seen = r.width > 0 && r.height > 0 && cs.display !== "none" && cs.visibility !== "hidden";
+      const uncut = el.scrollWidth <= el.clientWidth + 1 && el.scrollHeight <= el.clientHeight + 1 && cs.textOverflow !== "ellipsis";
+      return seen && uncut;
+    }
   });
 }
 
@@ -133,4 +146,71 @@ test("a long summary stays long enough to read; a short message still leaves at 
   expect(shown.length).toBeLessThan(30);
   await page.clock.runFor(2900);
   await expect(page.locator("#toast"), `"${shown}" gone after 2,8 s`).not.toHaveClass(/show/);
+});
+
+// The toast is placed when it is raised; the page can change under it (red-team 3 and 4).
+test("a toast that is up follows the page home: leaving the exercise puts it under the header, not at the old row", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 780 });
+  await boot(page, { lang: "es" });
+  await openExercise(page, "v1-diction");
+  await page.evaluate(() => {
+    sessionStorage.removeItem("vt_e2e");
+    window.VTToast("Mensaje que sigue a la pagina");
+  });
+  await expect(page.locator("#toast")).toHaveClass(/show/);
+  const inRow = await measureToast(page);
+  expect(inRow.inRowClass, "control: in the exercise the toast sits in the row").toBe(true);
+  expect(inRow.centred, "control: and not centred, so 'centred' below is a change").toBe(false);
+  await page.locator("#btn-back-home").click();
+  await expect(page.locator("#view-home")).toHaveClass(/active/);
+  await expect(page.locator("#toast")).toHaveClass(/show/);
+  const home = await measureToast(page);
+  expect(home.inRowClass, "no longer in the exercise's row").toBe(false);
+  expect(home.centred, `centred under the header, not left at x=${home.left}`).toBe(true);
+  await expect(page.locator(".exercise-header-compact")).not.toHaveClass(/toast-over/);
+});
+
+for (const [from, to] of [
+  [{ width: 320, height: 640 }, { width: 1280, height: 800 }],
+  [{ width: 360, height: 780 }, { width: 780, height: 360 }]
+]) {
+  test(`a toast that is up follows the window: ${from.width}x${from.height} to ${to.width}x${to.height}`, async ({ page }) => {
+    await page.setViewportSize(from);
+    await boot(page, { lang: "es" });
+    await openExercise(page, "v1-diction");
+    await page.evaluate(() => {
+      sessionStorage.removeItem("vt_e2e");
+      window.VTToast("Mensaje que sigue a la ventana");
+    });
+    await expect(page.locator("#toast")).toHaveClass(/show/);
+    const before = await measureToast(page);
+    await page.setViewportSize(to);
+    // The window event runs the same task as the resize; give the layout a frame
+    await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+    const after = await page.evaluate(() => {
+      const back = document.getElementById("btn-back-home").getBoundingClientRect();
+      const t = document.getElementById("toast");
+      return { wantLeft: Math.round(back.right + 6), left: parseInt(t.style.left, 10) };
+    });
+    expect(after.left, `the toast starts right of ← Back at the new width (${before.left} before)`).toBe(after.wantLeft);
+    const m = await measureToast(page);
+    expect(m.back).toBe(false);
+    expect(m.help).toBe(false);
+    expect(m.inRow).toBe(true);
+  });
+}
+
+test("a short message stays up for the 2,8 s floor, not for the 1,5 s plus 50 ms a letter alone", async ({ page }) => {
+  await page.clock.install();
+  await boot(page, { lang: "es" });
+  await openExercise(page, "v1-diction");
+  await page.evaluate(() => {
+    sessionStorage.removeItem("vt_e2e");
+    window.VTToast("Listo");
+  });
+  await expect(page.locator("#toast")).toHaveClass(/show/);
+  await page.clock.runFor(2600);
+  await expect(page.locator("#toast"), "five letters would be gone at 1,75 s without the floor").toHaveClass(/show/);
+  await page.clock.runFor(400);
+  await expect(page.locator("#toast")).not.toHaveClass(/show/);
 });

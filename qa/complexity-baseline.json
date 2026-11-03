@@ -189,12 +189,6 @@
     },
     {
       "file": "js/app.js",
-      "sha": "a2083b1592b140e1d533bc76833fcd8e6563a98359b46d19bbf09858642a6003",
-      "complexity": 24,
-      "name": "Function 'headerPlanState'"
-    },
-    {
-      "file": "js/app.js",
       "sha": "0ec785315e7edce81fe56d8cb4576ecde6b09dc7bf3bc093a0d06302f4049215",
       "complexity": 22,
       "name": "Function 'historyDaysHtml'"
@@ -288,12 +282,6 @@
       "sha": "1f5d24f85496f3e8e15dd49fd8ffc92ce153de08cee498b0e7d86e8c17b7d2f3",
       "complexity": 23,
       "name": "Function 'selectProgression'"
-    },
-    {
-      "file": "js/app.js",
-      "sha": "c2963c6dac522dc59650faad0d3a5717b62a581826e3776fa2c4c34e774d583c",
-      "complexity": 28,
-      "name": "Function 'setPracticeUI'"
     },
     {
       "file": "js/app.js",
@@ -462,12 +450,6 @@
       "sha": "14b996c539fe19739f3e460e5be53f82e54d819e2dd0e4887b7c41bac17ce9b6",
       "complexity": 19,
       "name": "Async function 'refresh'"
-    },
-    {
-      "file": "js/license.js",
-      "sha": "30342302196b24baaaa593b8010cd863c181263a84241a8557c6a3b1adfa61a3",
-      "complexity": 22,
-      "name": "Async function 'verifyToken'"
     },
     {
       "file": "js/metrics.js",

@@ -24,7 +24,8 @@ const AUDIO_TESTS = [
   "tests/node/attack-rise.test.mjs",
   "tests/node/sync-late-signin.test.mjs"
 ];
-const LINT_TESTS = ["qa/lint-gate.test.mjs", "tests/node/asset-versions.test.mjs", "tests/node/csp.test.mjs", "tests/node/env-noise.test.mjs", "tests/node/inline-script-pin.test.mjs"];
+const LINT_TESTS = ["qa/lint-gate.test.mjs", "tests/node/asset-versions.test.mjs", "tests/node/csp.test.mjs", "tests/node/env-noise.test.mjs", "tests/node/env-noise-killers.test.mjs", "tests/node/inline-script-pin.test.mjs", "tests/node/csp-pins.test.mjs", "tests/node/i18n-duplicate-keys.test.mjs"];
+const PAGES = ["index.html", "guide.html", "privacy.html", "admin.html"];
 const node = (tests) => [process.execPath, "--test", ...tests];
 const PIANO_SPEC = [
   process.execPath,
@@ -87,9 +88,18 @@ export const MUTANTS = {
     ["L11 an edited asset keeps its cached version", "qa/asset-versions.mjs", "else if (rec.sha !== hashOf(text) && rec.v === v) {", "else if (false) {"],
     ["L12 pages may disagree on an asset's version", "qa/asset-versions.mjs", "if (seen && seen.v !== v) problems.push", "if (false) problems.push"],
     ["L13 an inline script without its CSP hash passes", "tests/node/csp.test.mjs", "    if (!scripts.includes(sha256(body))) problems.push", "    if (false) problems.push"],
-    ["L14 any error from the worker's host is ignored (QA-14)", "qa/env-noise.cjs", "return url.startsWith(WORKER);", "return true;"],
-    ["L15 a failed load of the app's own file counts as offline noise", "qa/env-noise.cjs", "return url !== \"\" && !LOCAL.test(url);", "return url !== \"\";"],
+    ["L14 a failed load from any host is ignored (QA-14, QA-16 N1)", "qa/env-noise.cjs", "if (/Failed to load resource: net::ERR_FAILED\\b/.test(line)) return local && host === WORKER_HOST;", "if (/Failed to load resource: net::ERR_FAILED\\b/.test(line)) return true;"],
+    ["L15 a failed load of the app's own file counts as offline noise", "qa/env-noise.cjs", "return host !== \"\" && !LOCAL_HOSTS.has(host) &&", "return host !== \"\" &&"],
+    ["L17 a look-alike host counts as the worker (QA-16)", "qa/env-noise.cjs", "(host === WORKER_HOST || !host.includes(\"vocal-studio-entitlements\"))", "true"],
+    ["L18 a CORS refusal from any host is ignored (QA-16)", "qa/env-noise.cjs", "if (refused) return local && hostOf(refused[1]) === WORKER_HOST;", "if (refused) return true;"],
+    ["L23 the worker's refusal is noise for a deployed page too (red-team 9)", "qa/env-noise.cjs", "if (refused) return local && hostOf(refused[1]) === WORKER_HOST;", "if (refused) return hostOf(refused[1]) === WORKER_HOST;"],
+    ["L24 a failed worker call is noise for a deployed page too (red-team 9)", "qa/env-noise.cjs", "return local && host === WORKER_HOST;", "return host === WORKER_HOST;"],
+    ["L19 ERR_INTERNET_DISCONNECTED no longer counts as offline (QA-16 N3)", "qa/env-noise.cjs", "NAME_NOT_RESOLVED|INTERNET_DISCONNECTED", "NAME_NOT_RESOLVED"],
+    ["L20 every page loses its frame-src (blank sign-in button; QA-17)", PAGES, " frame-src https://accounts.google.com/gsi/;", ""],
+    ["L21 every page loses media-src blob: (a recorded take cannot play; QA-17)", PAGES, "media-src 'self' blob:;", "media-src 'self';"],
+    ["L22 script-src gains another host on every page (QA-18)", PAGES, "script-src 'self' ", "script-src 'self' https://cdnjs.cloudflare.com "],
     ["L16 any inline script may ride on its CSP hash (QA-15)", "tests/node/inline-script-pin.test.mjs", "const unlisted = (html) => inlineScripts(html).filter((b) => !ALLOWED_INLINE.has(b));", "const unlisted = (html) => inlineScripts(html).filter(() => false);"],
+    ["L25 a string key written twice in one table: the later wins silently (red-team 1)", "js/i18n.js", '      "rate.takeSum": "Esta toma:",\n', '      "rate.takeSum": "Esta toma:",\n      "rate.takeSum": "Tu grabación",\n'],
     ["L7 empty wait-may-fail reason accepted", "qa/lint-playwright-waits.mjs", "/wait-may-fail:\\s*\\S/", "/wait-may-fail:/"]
   ].map(([name, file, from, to]) => ({ name, file, from, to, cmd: node(LINT_TESTS) })),
   // The open piano and the sticky stage (production-contracts "expanded piano").
@@ -116,13 +126,22 @@ export const MUTANTS = {
         ["A7 the bottom rail cannot wrap again (v12's mic box crushed)", "css/styles.css", "  flex-wrap: wrap;\n  align-items: center;\n  gap: 0.45rem;\n  max-height: none;", "  flex-wrap: nowrap;\n  align-items: center;\n  gap: 0.45rem;\n  max-height: none;"],
         ["A8 \"Reto\" back to a 13 px target", "css/styles.css", "  min-height: 24px;\n  font-size: 0.68rem;", "  font-size: 0.68rem;"],
         ["A9 the Stop toast centred over ← Back again", "js/app.js", "    placeToast(el);\n", ""],
-        ["A10 a two-line toast taller than the desktop row (CI's wider font)", "css/styles.css", "  padding: 0.15rem 0.75rem;\n  border-radius: 14px;\n  font-size: 0.8rem;\n  line-height: 1.2;", "  padding: 0.25rem 0.75rem;\n  border-radius: 14px;\n  font-size: 0.8rem;\n  line-height: 1.25;"]
+        ["A10 a two-line toast taller than the desktop row (CI's wider font)", "css/styles.css", "  padding: 0.15rem 0.75rem;\n  border-radius: 14px;\n  font-size: 0.8rem;\n  line-height: 1.2;", "  padding: 0.25rem 0.75rem;\n  border-radius: 14px;\n  font-size: 0.8rem;\n  line-height: 1.25;"],
+        // Round-4 red team: the take's summary and a toast that follows the page
+        ["A11 the take's summary introduced as the recording again (\"Tu grabación Sin ritmo…\")", "js/app.js", 'el.textContent = summary ? `${tt("rate.takeSum")} ${summary}` : "";', 'el.textContent = summary ? `${tt("rate.take")} ${summary}` : "";'],
+        ["A12 a new take leaves the last take's numbers on the card", "js/app.js", "      clearTakeSummary();\n    }\n    paintPracticeControls(live);", "    }\n    paintPracticeControls(live);"],
+        ["A13 a take ended without the Stop announcement keeps the last take's numbers", "js/app.js", "    state.rate.summary = modeResult?.summary || null;\n    if (!silent) announceStop(modeResult);", "    if (!silent) state.rate.summary = modeResult?.summary || null;\n    if (!silent) announceStop(modeResult);"],
+        ["A14 a toast is placed once and never again", "js/app.js", "    watchToastPlace();\n    const row", "    const row"],
+        ["A15 no 2,8 s floor: a short message goes in under 2 s", "js/app.js", "Math.max(2800, 1500 + text.length * 50)", "Math.max(0, 1500 + text.length * 50)"],
+        ["A16 the title stays hidden after the toast has gone", "js/app.js", '    $("#toast")?.classList.remove("show");\n    $(".exercise-header-compact")?.classList.remove("toast-over");', '    $("#toast")?.classList.remove("show");'],
+        ["A17 a shown toast ignores the window turning", "js/app.js", '    window.addEventListener("resize", again);\n', ""],
+        ["A18 a shown toast ignores the view changing under it", "js/app.js", '    new MutationObserver(again).observe(document.body, { attributes: true, attributeFilter: ["class"] });\n', ""]
       ].map(([name, file, from, to]) => ({
         name,
         file,
         from,
         to,
-        specs: ["tests/focus-not-obscured.spec.js", "tests/bottom-rail.spec.js", "tests/target-size.spec.js", "tests/toast-placement.spec.js", "--workers=4"]
+        specs: ["tests/focus-not-obscured.spec.js", "tests/bottom-rail.spec.js", "tests/target-size.spec.js", "tests/toast-placement.spec.js", "tests/take-summary.spec.js", "--workers=4"]
       }))
     )
     .map(({ specs, ...m }) => ({ ...m, cmd: [...PIANO_SPEC.slice(0, 3), ...specs, "--project=chromium", "--reporter=dot"] })),
@@ -141,9 +160,30 @@ export const MUTANTS = {
     cmd: [...PIANO_SPEC.slice(0, 3), "tests/audit-probes.spec.js", "--project=chromium", "--reporter=dot"]
   })).concat([
     {
+      name: "AU7 an exempt mode's crashed run is dropped with its exemption (red-team 5, 11)",
+      file: "qa/audit/analyze-audit.mjs",
+      from: '    if (it.failure) out.push(["start/stop", `iteration ${n} (${how}) threw: ${it.failure}`]);\n    if (!NO_TAKE.has(rec.mode)) takeIssues(it, how, out);',
+      to: '    if (NO_TAKE.has(rec.mode)) continue;\n    if (it.failure) out.push(["start/stop", `iteration ${n} (${how}) threw: ${it.failure}`]);\n    takeIssues(it, how, out);',
+      cmd: node(["tests/node/analyze-audit.test.mjs"])
+    },
+    {
+      name: "AU9 concisionGate's crashed boundary run is dropped with its exemption (red-team 5, 11)",
+      file: "qa/audit/analyze-audit.mjs",
+      from: '  if (it.failure) out.push(["quiet", `boundary run threw: ${it.failure}`]);\n  // Exempt only the rising count, with its stated reason; a thrown run is reported above for every mode\n  if (QUIET_COUNTS_BY_DESIGN[rec.mode]) return;',
+      to: '  if (QUIET_COUNTS_BY_DESIGN[rec.mode]) return;\n  if (it.failure) out.push(["quiet", `boundary run threw: ${it.failure}`]);',
+      cmd: node(["tests/node/analyze-audit.test.mjs"])
+    },
+    {
+      name: "AU8 the ledger ignores that the page under test is a deployed one (red-team 9)",
+      file: "qa/audit/analyze-audit.mjs",
+      from: "const local = rec.local !== false;",
+      to: "const local = true;",
+      cmd: node(["tests/node/analyze-audit.test.mjs"])
+    },
+    {
       name: "AU6 the ledger hides every failed load as environment noise (QA-14)",
       file: "qa/audit/analyze-audit.mjs",
-      from: 'if (!isEnvNoise(e.replace(/^console: /, "")))',
+      from: 'if (!isEnvNoise(e.replace(/^console: /, ""), { local }))',
       to: 'if (!/Failed to load resource|CORS/.test(e))',
       cmd: node(["tests/node/analyze-audit.test.mjs"])
     }
@@ -162,13 +202,19 @@ export const MUTANTS = {
     ["B2 only the config's top level frozen", "js/billing-config.js", '    Object.values(o).forEach((v) => v && typeof v === "object" && freeze(v));\n', ""],
     ["B3 the config binding left replaceable", "js/billing-config.js", '  Object.defineProperty(global, "VT_BILLING_CONFIG", { value: held, writable: false, configurable: false, enumerable: true });', ""],
     ["B4 VTBilling's answers left replaceable", "js/billing.js", "value: Object.freeze(global.VTBilling)", "value: global.VTBilling"],
-    ["B5 VTLicense's claims left replaceable", "js/license.js", "value: Object.freeze(global.VTLicense)", "value: global.VTLicense"]
+    ["B5 VTLicense's claims left replaceable", "js/license.js", "value: Object.freeze(global.VTLicense)", "value: global.VTLicense"],
+    ["B6 the config frozen one level deep: the license public key stays writable (QA-26)", "js/billing-config.js", 'Object.values(o).forEach((v) => v && typeof v === "object" && freeze(v));', 'Object.values(o).forEach((v) => v && typeof v === "object" && Object.freeze(v));'],
+    ["B7 window.VTBilling left writable (QA-26)", "js/billing.js", 'Object.defineProperty(global, "VTBilling", { value: Object.freeze(global.VTBilling), writable: false,', 'Object.defineProperty(global, "VTBilling", { value: Object.freeze(global.VTBilling), writable: true,'],
+    ["B8 window.VTLicense left writable (QA-26)", "js/license.js", 'Object.defineProperty(global, "VTLicense", { value: Object.freeze(global.VTLicense), writable: false,', 'Object.defineProperty(global, "VTLicense", { value: Object.freeze(global.VTLicense), writable: true,'],
+    ["B9 a trial that starts in the year 2999 grants Pro (QA-24)", "js/billing.js", "    if (t0 > nowMs() + 300000) return false; // a start date in the future is not a start\n", ""],
+    ["B10 the signature check reads SubtleCrypto at call time again (QA-23)", "js/license.js", "return !!(await VERIFY.call(\n        SUBTLE,", "return !!(await crypto.subtle.verify(\n        "],
+    ["B11 the plan chip and insights follow the worker's unsigned reply (QA-25)", "js/app.js", "if (acct.pro && acct.entitlement && acct.entitlement.pro) return acct.entitlement;", "if (acct.entitlement && acct.entitlement.pro) return acct.entitlement;"]
   ].map(([name, file, from, to]) => ({
     name,
     file,
     from,
     to,
-    cmd: [...PIANO_SPEC.slice(0, 3), "tests/console-unlock.spec.js", "--project=chromium", "--workers=4", "--reporter=dot", "-g", "console:"]
+    cmd: [...PIANO_SPEC.slice(0, 3), "tests/console-unlock.spec.js", "tests/trust-console-gaps.spec.js", "--project=chromium", "--workers=4", "--reporter=dot"]
   }))
 };
 
@@ -187,16 +233,20 @@ function runTests([cmd, ...args], root) {
   }
 }
 
-/** @returns {"KILLED"|"SURVIVED"|"ANCHOR"} */
+/**
+ * A mutant changes one file, or the same text in every file of a list (a defect
+ * made on all four pages at once, which a "the pages agree" check cannot see).
+ * @returns {"KILLED"|"SURVIVED"|"ANCHOR"}
+ */
 export function tryMutant(m, root = process.cwd()) {
-  const file = path.join(root, m.file);
-  const src = readFileSync(file, "utf8");
-  if (src.split(m.from).length !== 2) return "ANCHOR";
-  writeFileSync(file, src.replace(m.from, m.to));
+  const files = [].concat(m.file).map((f) => path.join(root, f));
+  const sources = files.map((f) => readFileSync(f, "utf8"));
+  if (sources.some((src) => src.split(m.from).length !== 2)) return "ANCHOR";
+  files.forEach((f, i) => writeFileSync(f, sources[i].replace(m.from, m.to)));
   try {
     return runTests(m.cmd, root) ? "SURVIVED" : "KILLED";
   } finally {
-    writeFileSync(file, src);
+    files.forEach((f, i) => writeFileSync(f, sources[i]));
   }
 }
 

@@ -71,3 +71,23 @@ test("the worker's genuine failures and the app's own missing files are findings
   const got = findings(bad).filter(([k]) => k === "errors");
   assert.equal(got.length, 2, JSON.stringify(got));
 });
+
+test("a run that threw is a finding in every mode, including the two with an exemption (red-team 5, 11)", () => {
+  const week = { mode: "weekPlan", iterations: { 1: { failure: "page crashed", started: false, stopped: false } } };
+  assert.deepEqual(findings(week), [["start/stop", "iteration 1 (mouse) threw: page crashed"]], "the plan has no Start to miss, but a crash is still one");
+  const gate = { mode: "concisionGate", iterations: { 3: { failure: "page crashed" } } };
+  assert.deepEqual(findings(gate), [["quiet", "boundary run threw: page crashed"]]);
+  // The exemption itself is unchanged: its count may rise on silence, and no missing Start is reported for the plan
+  const rising = { mode: "concisionGate", iterations: { 3: { silent: { scenario: "silent", ticks: [tick("Reps 0"), tick("Reps 3")] } } } };
+  assert.deepEqual(findings(rising), []);
+});
+
+test("against a deployed page the worker's refusal is a broken sign-in, not the test server's origin (red-team 9)", () => {
+  const refusal = [
+    "console: Access to fetch at 'https://vocal-studio-entitlements.vocalstudio-pe.workers.dev/v1/auth/methods' from origin 'https://pillb.github.io' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' <https://pillb.github.io/vocal-singing-training/>",
+    "console: Failed to load resource: net::ERR_FAILED <https://vocal-studio-entitlements.vocalstudio-pe.workers.dev/v1/auth/methods>"
+  ];
+  const rec = (local) => ({ ...structuredClone(clean), errors: refusal, ...(local === undefined ? {} : { local }) });
+  assert.deepEqual(findings(rec(undefined)), [], "control: the same lines from a local page are noise");
+  assert.equal(findings(rec(false)).filter(([k]) => k === "errors").length, 2);
+});

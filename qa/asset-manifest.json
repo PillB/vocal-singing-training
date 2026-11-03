@@ -64,8 +64,8 @@
     "sha": "4c03c708ee923b1a"
   },
   "js/app.js": {
-    "v": "20261102d",
-    "sha": "bc4691b36830a7f9"
+    "v": "20261103c",
+    "sha": "5cc324b3b0bdb811"
   },
   "js/auth-users.generated.js": {
     "v": "20261006a",
@@ -80,8 +80,8 @@
     "sha": "b61963af1a8c5294"
   },
   "js/billing.js": {
-    "v": "20261102a",
-    "sha": "9b8a501ac59e386a"
+    "v": "20261103a",
+    "sha": "4b1faa1108a4b2c9"
   },
   "js/daily-loop.js": {
     "v": "20261006b",
@@ -112,12 +112,12 @@
     "sha": "178ba56877e20400"
   },
   "js/i18n.js": {
-    "v": "20261102a",
-    "sha": "f79e51e930a6b535"
+    "v": "20261103a",
+    "sha": "98258c284dbbf402"
   },
   "js/license.js": {
-    "v": "20261102a",
-    "sha": "509dfa45003503ed"
+    "v": "20261103c",
+    "sha": "0d505ccf6088cab1"
   },
   "js/metrics.js": {
     "v": "20260924c",

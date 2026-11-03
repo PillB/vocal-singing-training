@@ -47,26 +47,33 @@ function countsUp(ticks) {
   return b.map((v, i) => (v > a[i] ? `${a[i]}→${v}` : null)).filter(Boolean);
 }
 
+/** What a take that ran should have shown: it started, it stopped, something moved, no microphone stayed open. */
+function takeIssues(it, how, out) {
+  if (it.started === false) out.push(["start/stop", `${how} Start did not start the take`]);
+  if (it.stopped === false) out.push(["start/stop", `${how} Stop did not stop the take`]);
+  if (it.ticks) {
+    const moving = ["focus", "hud", "status", "pitch", "cue"].some((k) => changes(it.ticks, k) > 1);
+    if (!moving) out.push(["feedback", `${how}: nothing on screen changed in ${it.ticks.length / 2} s of singing`]);
+  }
+  if (it.gum && it.gum.live > 0 && it.stopped) out.push(["mic", `${how}: ${it.gum.live} mic track(s) still live after Stop`]);
+}
+
 function checkTakes(rec, out) {
-  if (NO_TAKE.has(rec.mode)) return;
   for (const [n, how] of [[1, "mouse"], [2, "keyboard"]]) {
     const it = rec.iterations?.[n];
     if (!it) continue;
+    // A run that threw is a finding for every mode: the exemption below excuses a missing Start, nothing more
     if (it.failure) out.push(["start/stop", `iteration ${n} (${how}) threw: ${it.failure}`]);
-    if (it.started === false) out.push(["start/stop", `${how} Start did not start the take`]);
-    if (it.stopped === false) out.push(["start/stop", `${how} Stop did not stop the take`]);
-    if (it.ticks) {
-      const moving = ["focus", "hud", "status", "pitch", "cue"].some((k) => changes(it.ticks, k) > 1);
-      if (!moving) out.push(["feedback", `${how}: nothing on screen changed in ${it.ticks.length / 2} s of singing`]);
-    }
-    if (it.gum && it.gum.live > 0 && it.stopped) out.push(["mic", `${how}: ${it.gum.live} mic track(s) still live after Stop`]);
+    if (!NO_TAKE.has(rec.mode)) takeIssues(it, how, out);
   }
 }
 
 function checkQuiet(rec, out) {
   const it = rec.iterations?.[3];
-  if (!it || QUIET_COUNTS_BY_DESIGN[rec.mode]) return;
+  if (!it) return;
   if (it.failure) out.push(["quiet", `boundary run threw: ${it.failure}`]);
+  // Exempt only the rising count, with its stated reason; a thrown run is reported above for every mode
+  if (QUIET_COUNTS_BY_DESIGN[rec.mode]) return;
   for (const run of [it.silent, it.noise].filter(Boolean)) {
     const up = countsUp(run.ticks);
     if (up.length) out.push(["quiet", `${run.scenario}: on-screen counts rose (${up.join(", ")}) — review`]);
@@ -126,7 +133,9 @@ function checkFocus(rec, out) {
 
 function checkErrors(rec, out) {
   const all = [...(rec.errors || []), ...(rec.iterations?.[5]?.errors || [])];
-  for (const e of new Set(all)) if (!isEnvNoise(e.replace(/^console: /, ""))) out.push(["errors", e]);
+  // The worker's refusal of a local page is the environment's doing; against a deployed page it is a broken sign-in
+  const local = rec.local !== false;
+  for (const e of new Set(all)) if (!isEnvNoise(e.replace(/^console: /, ""), { local })) out.push(["errors", e]);
 }
 
 export function findings(rec) {

@@ -43,3 +43,18 @@ test("script errors are never noise", () => {
   assert.equal(isEnvNoise("TypeError: x is undefined"), false);
   assert.equal(isEnvNoise(`TypeError: x is undefined at ${WORKER}/v1/auth/methods`), false);
 });
+
+test("a misspelt worker host that cannot be resolved is a configuration error, not an offline third party (QA-16)", () => {
+  assert.equal(isEnvNoise(errorLine("Failed to load resource: net::ERR_NAME_NOT_RESOLVED", "https://vocal-studio-entitlments.vocalstudio-pe.workers.dev/v1/events")), true, "stated blind spot: a typo that loses the worker's name looks like any offline host, so it stays hidden offline (online, any unresolved host fails the flow)");
+  assert.equal(isEnvNoise(errorLine("Failed to load resource: net::ERR_NAME_NOT_RESOLVED", "https://vocal-studio-entitlements.vocalstudio-pe.workers.deev/v1/events")), false);
+  assert.equal(isEnvNoise(errorLine("Failed to load resource: net::ERR_NAME_NOT_RESOLVED", `${WORKER}/v1/events`)), true, "control: the real worker offline is noise");
+});
+
+test("the worker's refusal is noise only for a page served from this machine (red-team 9)", () => {
+  const refusal = errorLine(CORS.replace("http://127.0.0.1:8765", "https://pillb.github.io"), "https://pillb.github.io/vocal-singing-training/");
+  const failed = errorLine("Failed to load resource: net::ERR_FAILED", `${WORKER}/v1/auth/methods`);
+  assert.equal(isEnvNoise(refusal), true, "control: default is a local page");
+  assert.equal(isEnvNoise(refusal, { local: false }), false);
+  assert.equal(isEnvNoise(failed, { local: false }), false);
+  assert.equal(isEnvNoise(failed, { local: true }), true, "control");
+});

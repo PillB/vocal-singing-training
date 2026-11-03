@@ -89,8 +89,8 @@ cover the top. WCAG 2.2, 2.4.11 Focus Not Obscured (Minimum).
 an exercise; both heights are already measured by `js/app.js`). The browser
 keeps focus clear of that band. The guide and privacy pages keep their own
 margins (no script measures their header).
-**Tests:** `tests/focus-not-obscured.spec.js`: two full Tab rounds in six
-exercises at 1280 and 390 px; red on the old build with 26 covered stops; a
+**Tests:** `tests/focus-not-obscured.spec.js`: two full Tab rounds (at most 90
+presses) in four exercises, a speech and a singing one of each kind, at 1280 and 390 px; red on the old build with 26 covered stops; a
 control proves the walk sees a covered stop.
 
 ### T3 — The mic slider lies on the octave buttons (v12, 1280–1440 px)
@@ -159,3 +159,57 @@ code; mutants M24, M25.
 - The audit's target-size rule accepts a control whose label is large enough;
   it does not check WCAG's spacing exception, so a small control with room
   around it is still reported.
+
+## QA round 4 and what it changed in this branch
+
+The QA thread attacked the build after round 2 (CSP, console freeze, trust
+boundary, env-noise filter, the baseline re-cut). Its report is
+`qa/round4/ROUND4-A-csp-trust.md` in the project files. What this branch took:
+
+| Finding | What changed | Test and mutants |
+|---|---|---|
+| QA-16 env-noise matched the worker by prefix | The worker is its whole host, read from `js/billing-config.js`; a look-alike host or a CORS refusal naming another host is not noise | `tests/node/env-noise-killers.test.mjs`, L14, L15, L17 to L19 |
+| QA-17, QA-18, QA-22 the CSP tests pinned almost nothing | Every directive is pinned per page with the reason for each source; every `.html` file in the root must be covered by both gates | `tests/node/csp-pins.test.mjs`, L20 to L22 (the same defect on all four pages) |
+| QA-19, QA-20 | Each page enforces its policy in a browser; Google's sign-in client, a recorded take and a human visit (geo, consent bar, analytics flush) run under it with no violation | `tests/csp-gaps.spec.js` |
+| QA-23 | The signature check and key import are captured at load | `tests/trust-console-gaps.spec.js` T5, B10 |
+| QA-24 | A trial started in the future is not a trial | T1, T2 (control), B9 |
+| QA-25 | The plan chip, insights panel and sparkline follow the verified license | T6, B11 |
+| QA-26, QA-27 | The key is frozen to full depth; both window bindings are locked | T3, T4, B6 to B8 |
+| QA-32 | AGENTS.md no longer calls the freeze Pro protection | |
+
+Left alone, with the reason:
+
+- QA-33: the nine over-ceiling functions #20 added or edited in the account
+  worker (among them `getEntitlement`, 28) are in the re-cut baseline. They are
+  the payments owner's code; the baseline can only shrink from here.
+- QA-28 (a token is a bearer of its subscription), QA-29 (no rate limit on
+  `/v1/license` and `/v1/claim`), QA-30, QA-31, QA-21: product or worker
+  decisions, listed for Pablo.
+- Trade-offs of the fixes above: the trial still lives in `localStorage`, so
+  clearing site data renews it; capturing `verify` at load raises the bar for
+  a console snippet only, since a script that runs before the page's own or an
+  edited copy of the files always wins on a static site; the plan chip no
+  longer shows Pro in the window between sign-in and the license token
+  arriving (it showed the worker's unsigned reply there before).
+
+### The red team on those fixes
+
+Five adversarial passes over the round-4 changes found defects in the fixes
+themselves. Each is fixed with a test that is red on the defect:
+
+| Found | Fixed | Test and mutants |
+|---|---|---|
+| The take's summary borrowed the label of the recording player (`rate.take`, "Tu grabación"), so numbers read as if they described the recording; the file also held a key twice (the later silently won) | Its own words, `rate.takeSum` ("Esta toma:" / "This take:"); a key written twice in one table now fails the build | `tests/node/i18n-duplicate-keys.test.mjs` (with a planted-duplicate control), `tests/take-summary.spec.js`, L25, A11 |
+| Take 1's numbers stayed on the card while take 2 ran, and a take that ended without the Stop announcement (leave, then "Puntuar ahora") kept take 1's numbers | A new take clears them; every end of a take keeps its own, or nothing | `tests/take-summary.spec.js`, A12, A13 |
+| A toast raised while the page changed (leaving an exercise without rating, rotating a phone) stayed at the old row's coordinates | A shown toast is placed again when the window or the view changes | `tests/toast-placement.spec.js`, A14, A17, A18 |
+| The "kept whole" check passed on a hidden or collapsed line (no overflow when nothing is drawn); the 2,8 s floor and the title coming back were not pinned | The oracle requires the line to be drawn and uncut; a five-letter message must outlast 2,6 s | `tests/toast-placement.spec.js`, A15, A16 |
+| The audit ledger dropped a mode's crashed run together with the exemption for that mode (`weekPlan`, `concisionGate`) | A crashed run is reported for every mode; the exemption excuses only what it names | `tests/node/analyze-audit.test.mjs`, AU7, AU9 |
+| The worker's CORS refusal counted as environment noise for the deployed site too, where it is a broken sign-in | Noise only for a page served from this machine; the driver records where it ran | `tests/node/env-noise.test.mjs`, `analyze-audit.test.mjs`, L23, L24, AU8 |
+| The plan chip's helper `headerPlanState` (25) and `verifyToken` (22) and `setPracticeUI` (28) lost their exemptions by being edited | Split into small functions; the baseline went from 353 to 350 | `npm run lint` |
+| Capturing `SubtleCrypto.prototype.verify` at load broke the test harness's stand-in, which offers only the instance's methods (the worker's site-client tests went red) | Falls back to the instance's own method where the prototype has none | `workers/entitlements/test/site-client.test.mjs` |
+
+Trade-offs of this round, for Pablo: the capture-at-load fallback means a
+runtime without `SubtleCrypto` on its prototype takes the instance's method at
+load (same bar: a later swap changes nothing); `setPracticeUI` is now four
+small functions in place of one 60-line one, and its behaviour is covered only
+by the existing specs plus the two lifecycle tests above.

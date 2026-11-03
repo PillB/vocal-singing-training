@@ -348,7 +348,6 @@
       "value.moment.first_save": "¡Primera sesión guardada! Así empieza un hábito. Mañana, 3 minutos bastan.",
       "home.nextStepLabel": "Siguiente paso",
       "nav.practice": "Practicar",
-      "nav.planShort": "Plan",
       "nav.sections": "Secciones",
       "session.progress": "Ejercicio {n} de {total}",
       "session.bannerTitle": "Sesión guiada · {track}",
@@ -779,7 +778,7 @@
       // exercise's clock at 00:00, or "Calificar este ejercicio" in a routine).
       "rate.q": "¿Cómo te fue?",
       "rate.time": "Tiempo:",
-      "rate.take": "Esta toma:",
+      "rate.takeSum": "Esta toma:",
       "rate.easy": "Fácil",
       "rate.ok": "Normal",
       "rate.hard": "Me costó",
@@ -1404,7 +1403,6 @@
       "value.moment.first_save": "First session saved! That’s how a habit starts. Tomorrow, 3 minutes is enough.",
       "home.nextStepLabel": "Next step",
       "nav.practice": "Practice",
-      "nav.planShort": "Plan",
       "nav.sections": "Sections",
       "session.progress": "Exercise {n} of {total}",
       "session.bannerTitle": "Guided session · {track}",
@@ -1823,7 +1821,7 @@
       // Design: rating
       "rate.q": "How did it go?",
       "rate.time": "Time:",
-      "rate.take": "This take:",
+      "rate.takeSum": "This take:",
       "rate.easy": "Easy",
       "rate.ok": "OK",
       "rate.hard": "Hard",

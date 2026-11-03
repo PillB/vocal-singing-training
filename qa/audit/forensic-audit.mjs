@@ -32,6 +32,8 @@ const { errorLine } = envNoise;
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const QA = path.join(HERE, "..");
 const BASE = (process.env.BASE_URL || "http://127.0.0.1:8765").replace(/\/$/, "");
+/** Whether the page under test is served from this machine (the worker refuses such an origin; a deployed page it must not refuse). */
+const LOCAL = /^https?:\/\/(?:127\.0\.0\.1|localhost)(?::|\/|$)/.test(BASE);
 const OUT = process.env.OUT || path.join(QA, "geometry", "audit");
 const SECS = Number(process.env.SECS || 8);
 const CONC = Number(process.env.CONC || 4);
@@ -296,7 +298,7 @@ const ITERATIONS = {
 
 async function auditDesktop(browser, ex) {
   const { ctx, page, errors } = await newPage(browser, DESKTOP, "es");
-  const rec = { id: ex.id, mode: ex.mode, title: ex.title, scenario: scenarioFor(ex), iterations: {}, errors };
+  const rec = { id: ex.id, mode: ex.mode, title: ex.title, scenario: scenarioFor(ex), iterations: {}, errors, local: LOCAL };
   try {
     await openEx(page, ex.id);
     rec.inventory = await inventory(page);
@@ -315,7 +317,7 @@ async function auditDesktop(browser, ex) {
 
 async function auditPhone(browser, ex) {
   const { ctx, page, errors } = await newPage(browser, PHONE, "en");
-  const rec = { errors };
+  const rec = { errors, local: LOCAL };
   try {
     await openEx(page, ex.id);
     rec.inventory = await inventory(page);

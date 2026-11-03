@@ -720,9 +720,19 @@ test.describe("s26 A/B", () => {
       const res = await page.evaluate(async () => {
         const P = CanvasRenderingContext2D.prototype;
         const orig = P.fillText;
+        // One draw = the texts written before the next microtask checkpoint, so two draws at
+        // different canvas sizes are never mixed in one comparison
         let frame = 0;
+        let open = false;
         const log = [];
         P.fillText = function (t, x, y, maxW) {
+          if (!open) {
+            open = true;
+            frame++;
+            queueMicrotask(() => {
+              open = false;
+            });
+          }
           const m = this.measureText(String(t));
           let w = m.width;
           if (maxW != null && maxW < w) w = maxW;
@@ -732,11 +742,6 @@ test.describe("s26 A/B", () => {
           log.push({ frame, c: this.canvas, t: String(t), x0: left, x1: left + w, y0: y - asc, y1: y + desc });
           return orig.apply(this, arguments);
         };
-        const tick = () => {
-          frame++;
-          if (frame < 40) requestAnimationFrame(tick);
-        };
-        requestAnimationFrame(tick);
         await new Promise((r) => setTimeout(r, 1500));
         P.fillText = orig;
         const label = log.filter((e) => /^(altura de A|A's pitch)$/.test(e.t));

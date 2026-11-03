@@ -967,8 +967,6 @@
       achievements_export: false,
       extra_reminders: false,
       extra_freezes: false,
-      priority_progressions: false,
-      no_limits: false,
       lesson_anchor: false,
       yearly_savings: false,
       ad_free: false,
@@ -986,8 +984,6 @@
       achievements_export: pro,
       extra_reminders: pro,
       extra_freezes: pro,
-      priority_progressions: pro,
-      no_limits: pro,
       lesson_anchor: pro,
       yearly_savings: pro,
       ad_free: pro

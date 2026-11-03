@@ -147,8 +147,15 @@ does. **Every verified competitor caps free practice. We do not.**
 | **Vocal Studio** | **everything, forever** |
 
 So Pro does not sell access. It sells convenience and continuity — no
-interstitials, export, profiles, insights, goals, streak freezes, cross-device
-sync. That tier lives lower in the market than the access tiers do:
+interstitials, export, profiles, insights, goals, streak freezes. That tier
+lives lower in the market than the access tiers do:
+
+**Corrected on 2026-11-03: cross-device sync is not one of them.** This
+paragraph used to list it, and `/v1/me/progress` asks only for a session, not
+for Pro — saved progress across devices is free to any signed-in account, by
+the decision that closed VG-16, which called losing progress in one browser a
+P0 for everybody. So it cannot justify the price. What is left is thinner than
+this section assumed, and `41-PRO-VS-FREE.md` is where that is faced.
 
 - **VocalGYM**, the Spanish-language direct competitor with a free-forever tier
   and a virtual piano: **$4.99/month**.
@@ -157,8 +164,11 @@ sync. That tier lives lower in the market than the access tiers do:
 - The category median, made of products that gate practice: **$14.99/month**.
 
 $7.99 sits between the convenience band and the access band. It is above the
-Spanish-language competitor, which the cross-device sync and the coach export
-have to justify. If they do not, this is the next number to revisit.
+Spanish-language competitor, and with sync out of the argument the coach export
+and the insights are what have to justify the gap. Nothing in the evidence says
+they do: see `41-PRO-VS-FREE.md`, which puts the three ways out in front of the
+operator. **This is the next number to revisit, and it is now the most likely
+one on this page to be wrong.**
 
 One warning from the same evidence: **Sing Sharp sells ad-removal alone as a
 $2.99 one-time purchase.** "No study-tip interstitials" is worth far less than
@@ -359,8 +369,8 @@ operator steps in [34-PERU-OPERATOR-RUNBOOK.md](34-PERU-OPERATOR-RUNBOOK.md):
    their checkout URLs in `js/billing-config.js`.
 2. Create two Creem products, $7.99 monthly and $49 yearly, once Creem approves
    a Peru-registered seller.
-3. **VG-20 blocks step 2.** The checkout host allowlist, the provider ids and
-   the worker's claim route are all still written around Stripe, so a Creem
-   checkout link would be refused by our own validation. That is a separate
-   piece of work.
+3. ~~**VG-20 blocks step 2.**~~ Done on 2026-11-03: the Creem rail is wired end
+   to end, the host allow-list takes `checkout.creem.io`, and the claim route
+   and `/v1/health` both know the provider. Nothing blocks step 2 but the
+   account itself.
 4. Confirm Creem's tax mode before the euro price is shown to anyone.

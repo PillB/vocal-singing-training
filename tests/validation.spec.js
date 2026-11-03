@@ -262,6 +262,16 @@ test.describe("Exercise-specific practice modes", () => {
     await page.click('.tab[data-tab="singing"]');
     await page.click('.tier-chip[data-tier="basic"]');
     await page.locator("#exercise-list .card-ex[data-id='s2-solfege-chords']").click();
+    // The piano options row opens collapsed now (the mobile layout work: see
+    // `piano-opts-compact` in css/styles.css, which hides every option but the
+    // octave), so a reader presses the piano button to see them. This case is
+    // about whether picking an arpeggio exercise takes the sustain option
+    // AWAY, so it has to look where a reader would look. Asserting them
+    // visible on open was true of the layout before the row could collapse,
+    // and had been failing ever since without being a defect in anything
+    // (VG-49).
+    await expect(page.locator("#chk-sustain")).toBeHidden();
+    await page.click("#btn-toggle-piano");
     await expect(page.locator("#chk-sustain")).toBeVisible();
     await expect(page.locator("#chk-arpeggio")).toBeVisible();
     await expect(page.locator("#chk-one-note")).toBeVisible();

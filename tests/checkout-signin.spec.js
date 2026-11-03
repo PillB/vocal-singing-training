@@ -36,15 +36,21 @@ async function boot(page, account) {
       /* ignore */
     }
   });
-  // Nothing should reach Stripe; if the gate leaks, this route proves it.
-  await page.route("https://buy.stripe.com/**", (route) =>
-    route.fulfill({ status: 200, contentType: "text/html", body: "<p>checkout</p>" })
-  );
+  // Nothing should reach a checkout host; if the gate leaks, these prove it.
+  for (const glob of ["https://buy.stripe.com/**", "https://checkout.creem.io/**"]) {
+    await page.route(glob, (route) =>
+      route.fulfill({ status: 200, contentType: "text/html", body: "<p>checkout</p>" })
+    );
+  }
   await page.goto(BASE + "/index.html", { waitUntil: "domcontentloaded" });
   await page.waitForFunction(() => !!window.VTBilling?.startCheckout);
   await page.evaluate((state) => {
     const cfg = window.VT_BILLING_CONFIG;
     cfg.providers.stripe.links.pro_monthly = "https://buy.stripe.com/test_gate";
+    // The international markets buy on Creem, so the panel press goes through
+    // that rail: without a link on it the press would be refused for having
+    // no link at all, before it ever reached the sign-in gate under test.
+    cfg.providers.creem.links.pro_monthly = "https://checkout.creem.io/ch_test_gate";
     // The pricing panel reads the account layer through getState(); replacing it
     // is the smallest way to stand in each of the three cases.
     if (state === null) {

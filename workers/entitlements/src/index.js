@@ -59,7 +59,8 @@ import {
 } from "./license.js";
 import { reportsEnabled, routeReportsApi } from "./reports.js";
 import { mapStripeEvent, verifyStripeSignature } from "./stripe.js";
-import { MAX_BODY_BYTES, MAX_SESSION_ID_LENGTH } from "./limits.js";
+import { CREEM_SIGNATURE_HEADER, mapCreemEvent, verifyCreemSignature } from "./creem.js";
+import { CLAIMABLE_PROVIDERS, MAX_BODY_BYTES, MAX_SESSION_ID_LENGTH } from "./limits.js";
 import { confirmAndMapNotification, resolveNotificationTarget, verifyMercadoPagoSignature } from "./mercadopago.js";
 import {
   clearEventSeen,
@@ -248,6 +249,75 @@ async function handleStripeWebhook(request, env, options) {
 }
 
 /**
+ * Handle POST /v1/webhooks/creem.
+ *
+ * The same shape as the Stripe handler, and for the same reasons: the raw body
+ * is read once (the signature is over those exact bytes), the event id is
+ * marked seen before anything is applied, and the marker is dropped again if
+ * the apply throws so Creem's retry is not dismissed as a duplicate.
+ *
+ * Creem's signature carries no timestamp, so a replay of a captured body
+ * verifies for ever and this marker is the whole of the defence. Creem retries
+ * an automatic delivery with the same event id, and a manual resend from the
+ * dashboard gets a new one, which is exactly the behaviour the marker wants.
+ * @param {Request} request Incoming request.
+ * @param {Object} env Worker env bindings.
+ * @param {{now?: number}} [options] Injectable clock, for tests.
+ * @returns {Promise<Response>} Response.
+ */
+async function handleCreemWebhook(request, env, options) {
+  const body = await readRawBody(request);
+  if (!body.ok) {
+    return json({ ok: false, reason: body.reason }, 413);
+  }
+  const verified = await verifyCreemSignature({
+    rawBody: body.text,
+    header: request.headers.get(CREEM_SIGNATURE_HEADER) || "",
+    secret: env.CREEM_WEBHOOK_SECRET
+  });
+  if (!verified.ok) {
+    console.warn("creem webhook rejected", verified.reason);
+    return json({ ok: false, reason: verified.reason }, 400);
+  }
+  const event = parseJsonObject(body.text);
+  if (!event || typeof event.id !== "string") {
+    return json({ ok: false, reason: "malformed_event" }, 400);
+  }
+  const fresh = await markEventSeen(env.ENTITLEMENTS, "creem", event.id);
+  if (!fresh) {
+    return json({ ok: true, reason: "duplicate" }, 200);
+  }
+  const mapped = mapCreemEvent(event, env);
+  if (!mapped.handled) {
+    return json({ ok: true, reason: mapped.reason }, 200);
+  }
+  try {
+    const { record, missing } = await upsertEntitlement(env.ENTITLEMENTS, mapped.update, { idSecret: licenseIdSecret(env) });
+    if (missing) {
+      // Money went back on a transaction this worker has never heard of:
+      // usually something else sold from the same Creem account, which will
+      // never match and must not be retried for ever. It is also what an
+      // out-of-order delivery looks like, so it is retried for a day from the
+      // first attempt — the same window the other rails get, and the whole of
+      // Creem's own 24 hours of retries — and then acknowledged.
+      const now = options && Number.isFinite(options.now) ? Math.floor(options.now) : Math.floor(Date.now() / 1000);
+      const waitedFor = await noteRefusal(env.ENTITLEMENTS, "creem", event.id, now);
+      console.warn("creem event names a license we do not know", event.eventType, waitedFor);
+      if (waitedFor < RETRY_REFUSED_SECONDS) {
+        await clearEventSeen(env.ENTITLEMENTS, "creem", event.id);
+        return json({ ok: false, reason: "unknown_license" }, 500);
+      }
+      return json({ ok: true, reason: "unknown_license" }, 200);
+    }
+    console.log("creem entitlement updated", event.eventType, record.status, record.plan);
+  } catch (error) {
+    await clearEventSeen(env.ENTITLEMENTS, "creem", event.id);
+    throw error;
+  }
+  return json({ ok: true }, 200);
+}
+
+/**
  * Handle POST /v1/webhooks/mercadopago.
  * @param {Request} request Incoming request.
  * @param {Object} env Worker env bindings.
@@ -325,7 +395,7 @@ async function handleClaim(request, env, cors) {
   const payload = parseJsonObject(body.text);
   const provider = payload && payload.provider;
   const sessionId = payload && payload.sessionId;
-  if (provider !== "stripe" && provider !== "mercadopago") {
+  if (typeof provider !== "string" || !CLAIMABLE_PROVIDERS.has(provider)) {
     return json({ ok: false, reason: "bad_request" }, 400, cors);
   }
   if (typeof sessionId !== "string" || !sessionId || sessionId.length > MAX_SESSION_ID_LENGTH) {
@@ -379,6 +449,10 @@ function handleHealth(env, cors) {
       ok: true,
       stripeConfigured: Boolean(env.STRIPE_WEBHOOK_SECRET),
       mercadopagoConfigured: Boolean(env.MP_WEBHOOK_SECRET && env.MP_ACCESS_TOKEN),
+      // The merchant-of-record rail. One secret, because Creem needs no
+      // server-side read to decide an entitlement: its webhook carries the
+      // whole of what the store needs, unlike Mercado Pago.
+      creemConfigured: Boolean(env.CREEM_WEBHOOK_SECRET),
       signingKeyConfigured: Boolean(env.LICENSE_PRIVATE_KEY_PKCS8_B64),
       accountsConfigured: Boolean(env.DB),
       eventsEnabled: Boolean(env.DB) && String(env.EVENTS_ENABLED || "").trim().toLowerCase() !== "false",
@@ -432,12 +506,17 @@ export async function handleRequest(request, env, options) {
     return new Response(null, { status: 204, headers: cors });
   }
 
-  if (path === "/v1/webhooks/stripe" || path === "/v1/webhooks/mercadopago") {
+  if (path === "/v1/webhooks/stripe"
+    || path === "/v1/webhooks/mercadopago"
+    || path === "/v1/webhooks/creem") {
     if (request.method !== "POST") {
       return json({ ok: false, reason: "method_not_allowed" }, 405, { allow: "POST" });
     }
-    return path === "/v1/webhooks/stripe"
-      ? handleStripeWebhook(request, env, options)
+    if (path === "/v1/webhooks/stripe") {
+      return handleStripeWebhook(request, env, options);
+    }
+    return path === "/v1/webhooks/creem"
+      ? handleCreemWebhook(request, env, options)
       : handleMercadoPagoWebhook(request, env, url, options);
   }
 

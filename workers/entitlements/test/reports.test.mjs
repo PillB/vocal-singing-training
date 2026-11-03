@@ -883,3 +883,137 @@ test("superscripts and circled digits are left alone", () => {
   const typed = "el error ⁴ pasa 3 veces y ① no abre";
   assert.equal(redactLongDigitRuns(typed), typed);
 });
+
+test("every separator a card can arrive with, one test per code point", () => {
+  // The separator set was a hand-written list of four dashes, and the other
+  // twenty-three in Unicode's dash category walked straight through it. U+2011
+  // is the one that matters: Word and Google Docs turn a typed hyphen inside a
+  // number into a non-breaking hyphen, so a card pasted out of an order
+  // confirmation was stored exactly as typed (QA round 7).
+  //
+  // One case per code point, named, so a separator dropped from the set fails
+  // a test that says which one it was rather than a single any-of assertion.
+  const separators = {
+    "U+0009 tab": "\u0009",
+    "U+000A line feed": "\u000a",
+    "U+000D carriage return": "\u000d",
+    "U+0085 next line": "\u0085",
+    "U+0020 space": "\u0020",
+    "U+00A0 no-break space": "\u00a0",
+    "U+2007 figure space": "\u2007",
+    "U+202F narrow no-break space": "\u202f",
+    "U+3000 ideographic space": "\u3000",
+    "U+2028 line separator": "\u2028",
+    "U+2029 paragraph separator": "\u2029",
+    "U+200B zero-width space": "\u200b",
+    "U+200D zero-width joiner": "\u200d",
+    "U+00AD soft hyphen": "\u00ad",
+    "U+FEFF byte-order mark": "\ufeff",
+    "U+002D hyphen-minus": "\u002d",
+    "U+2010 hyphen": "\u2010",
+    "U+2011 non-breaking hyphen": "\u2011",
+    "U+2012 figure dash": "\u2012",
+    "U+2013 en dash": "\u2013",
+    "U+2014 em dash": "\u2014",
+    "U+2015 horizontal bar": "\u2015",
+    "U+2212 minus sign": "\u2212",
+    "U+FF0D full-width hyphen": "\uff0d",
+    "U+FE58 small em dash": "\ufe58",
+    "U+FE63 small hyphen-minus": "\ufe63",
+    "U+002E full stop": "."
+  };
+  for (const [name, separator] of Object.entries(separators)) {
+    assert.equal(
+      redactLongDigitRuns(["4111", "1111", "1111", "1111"].join(separator)),
+      "[número oculto]",
+      `a card separated by ${name} was stored as typed`
+    );
+  }
+});
+
+test("a letter between the groups is not a separator, so two numbers stay two numbers", () => {
+  // The other half of the set: widening it must not make prose into one run.
+  assert.equal(
+    redactLongDigitRuns("pedido 1002345 del 2024-11-03"),
+    "pedido 1002345 del 2024-11-03"
+  );
+  assert.equal(redactLongDigitRuns("4111x1111x1111x1111"), "4111x1111x1111x1111");
+});
+
+test("thirteen digits is a card and twelve is not, group by group", () => {
+  // The threshold, from both sides, in the two shapes it has to hold for: one
+  // unbroken group, and groups of four where the last one is short.
+  assert.equal(redactLongDigitRuns("4".repeat(12)), "4".repeat(12));
+  assert.equal(redactLongDigitRuns("4".repeat(13)), "[número oculto]");
+  assert.equal(redactLongDigitRuns("4111 1111 1111"), "4111 1111 1111", "twelve digits in groups");
+  assert.equal(redactLongDigitRuns("4111 1111 1111 1"), "[número oculto]", "and thirteen");
+});
+
+test("a group of two can only ever end a window, so a clock is not a card", () => {
+  // The per-group minimum of three. Raise it to four and a 4-6-5 Amex stops
+  // being a card; drop it to two and a column of times becomes one.
+  assert.equal(
+    redactLongDigitRuns("3782 822463 10005"),
+    "[número oculto]",
+    "a 4-6-5 Amex is a card"
+  );
+  assert.equal(
+    redactLongDigitRuns("10:30 11:30 12:30 13:30 14:30 15:30 16:30"),
+    "10:30 11:30 12:30 13:30 14:30 15:30 16:30",
+    "seven clock times are fourteen digits and no card"
+  );
+  assert.equal(
+    redactLongDigitRuns("987 654 321 el 5 a las 10.30"),
+    "987 654 321 el 5 a las 10.30",
+    "a Peruvian mobile and a time"
+  );
+});
+
+test("nineteen digits in groups is a card and twenty is past the longest one", () => {
+  // The window cap. The unbroken rule above is what still catches twenty in a
+  // row; this is about a window of whole groups.
+  assert.equal(redactLongDigitRuns("4111 1111 1111 1111 111"), "[número oculto]", "nineteen");
+  // Twelve digits and then eight: the first window is twelve, the second is
+  // twenty, and twenty is past the longest card there is, so neither is one.
+  // Raise the cap by one and this is hidden.
+  assert.equal(
+    redactLongDigitRuns("123456789012 12345678"),
+    "123456789012 12345678",
+    "no window of whole groups lands between thirteen and nineteen"
+  );
+});
+
+test("an unbroken run past nineteen digits is still a card", () => {
+  // A card with the expiry and the CVV typed onto the end of it. This used to
+  // be stored as typed.
+  assert.equal(redactLongDigitRuns("4".repeat(25)), "[número oculto]");
+});
+
+test("what a legitimate report loses, stated exactly", () => {
+  // A comment here used to say a legitimate report loses nothing. It does lose
+  // something, and these are the shapes, so nobody has to rediscover them: two
+  // unrelated numbers that add to thirteen digits with only separators between
+  // them, and any unbroken thirteen-digit number.
+  //
+  // Hiding them is the chosen side to be wrong on — a hidden order number
+  // costs a sentence of a report, a stored card number cannot be taken back —
+  // and these assertions are here to make the cost visible rather than to
+  // defend it.
+  for (const text of [
+    "pedido 1002345 2024-11-03",
+    "987654321 2024-11-03",
+    "paso en 1730645400123",
+    "Screenshot_20241103-143025.png"
+  ]) {
+    assert.notEqual(redactLongDigitRuns(text), text, `${text} is left alone now`);
+  }
+  // And the ones it does not touch, so the cost is not worse than stated.
+  for (const text of [
+    "grabado 2024-11-03 14:30:25",
+    "v1.2.3 build 20241103",
+    "mi numero 987 654 321",
+    "48000 Hz, 1024 samples, 16 bits"
+  ]) {
+    assert.equal(redactLongDigitRuns(text), text, `${text} should be stored as typed`);
+  }
+});

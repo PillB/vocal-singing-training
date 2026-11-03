@@ -222,6 +222,7 @@ Public, committed in `wrangler.toml`:
 | `LICENSE_TTL_SECONDS` | Token lifetime (clamped to 60…2592000). |
 | `STRIPE_PRICE_PRO_MONTHLY` / `STRIPE_PRICE_PRO_YEARLY` | Optional price → plan mapping. Filling either one in also makes it an **allow-list** — see below. |
 | `MP_PLAN_PRO_MONTHLY` / `MP_PLAN_PRO_YEARLY` | Optional `preapproval_plan_id` → plan mapping. |
+| `CREEM_PRODUCT_PRO_MONTHLY` / `CREEM_PRODUCT_PRO_YEARLY` | Optional Creem product id → plan mapping. Filling either one in makes it an **allow-list** too, exactly as the Stripe prices do. |
 | `TRIAL_DAYS` | Length of the free trial, in days. One per account, ever. Default 7. |
 | `TRIAL_LEN_EXPERIMENT` | `"on"` runs the trial-length A/B test (`trial_len_2026_11`): each account's trial is 7 or 14 days, assigned from its account id. **It overrides `TRIAL_DAYS`** — with the test on, that setting is ignored. Off (the default) everybody gets `TRIAL_DAYS`. It also needs `LICENSE_ID_KEY` or `LICENSE_PRIVATE_KEY_PKCS8_B64` to key the assignment with; without one the test stays off, because an arm anyone can predict is an arm anyone can pick. The browser cannot switch this on: the `enabled` flag in `js/experiments-config.js` governs only what the statistics record. |
 | `GOOGLE_CLIENT_ID` | Google Sign-In client id. Public by design. Empty disables Google sign-in. |
@@ -236,6 +237,7 @@ Secrets — **never** in this repo, only `wrangler secret put`:
 |--------|---------|
 | `STRIPE_WEBHOOK_SECRET` | `whsec_…` for *this* endpoint (test and live differ). |
 | `MP_WEBHOOK_SECRET` | Mercado Pago webhook signing secret. |
+| `CREEM_WEBHOOK_SECRET` | Creem webhook signing secret, from Developers → Webhook. Empty refuses every Creem webhook with `secret_not_configured` rather than trusting an unsigned body. |
 | `MP_ACCESS_TOKEN` | Mercado Pago access token, used only for server-side reads. |
 | `LICENSE_PRIVATE_KEY_PKCS8_B64` | base64 PKCS#8 P-256 private key. |
 | `LICENSE_ID_KEY` | Optional. The key a new license id is derived under, so two webhooks for one new customer agree on one license. Without it a key derived from `LICENSE_PRIVATE_KEY_PKCS8_B64` is used; with neither, a new license gets a random id. Set it to keep derivation stable across a signing-key rotation. Any long random string. |
@@ -321,6 +323,7 @@ node scripts/generate-keys.mjs k1
 # 3. Secrets (each one reads from stdin; nothing touches the repo)
 wrangler secret put STRIPE_WEBHOOK_SECRET
 wrangler secret put MP_WEBHOOK_SECRET
+wrangler secret put CREEM_WEBHOOK_SECRET
 wrangler secret put MP_ACCESS_TOKEN
 wrangler secret put LICENSE_PRIVATE_KEY_PKCS8_B64
 wrangler secret put RESEND_API_KEY        # accounts only, matching EMAIL_PROVIDER
@@ -559,6 +562,71 @@ payment has failed. *Cancel the subscription* or *Mark the subscription as
 unpaid* both end access here. *Leave the subscription past-due* keeps it in
 the `past_due` grace with a period that rolls forward each cycle, so access
 would never end; do not pick it with this worker.
+
+### Creem
+
+This is the international rail. Creem is a **merchant of record**: it sells to
+the customer in its own name, charges and remits the tax, and pays us. That is
+the point of it — a Peru-registered seller cannot be a Stripe merchant (Peru is
+not a supported country on stripe.com/global, checked 2026-11-03), and a
+merchant of record needs no company in the customer's country. Mercado Pago
+stays the Peruvian and Latin American rail, where it takes the local methods
+Creem does not.
+
+Dashboard → Developers → *Webhook* → URL
+`https://<your-worker-host>/v1/webhooks/creem`, and copy the signing secret
+into `CREEM_WEBHOOK_SECRET` with `wrangler secret put`.
+
+Subscribe exactly these events:
+
+| Event | Why |
+|-------|-----|
+| `checkout.completed` | The checkout finished. `object.id` is the `ch_…` the browser comes back with, so this is what `/v1/claim` looks up |
+| `subscription.paid` | Money arrived for a period. **This is the one that entitles**, as Creem's own documentation says |
+| `subscription.active` | Synchronization only: a status and a period, and nothing about money |
+| `subscription.trialing` | A Creem-side trial. Entitles, like Stripe's `trialing` |
+| `subscription.update` | The subscription's own answer for its period, so a downgrade shortens it |
+| `subscription.paused` | Nothing is being charged: suspended until a payment brings it back |
+| `subscription.canceled` | Cancelled. The period already paid for is kept |
+| `subscription.expired` | Over. Terminal: Creem gives a new purchase a new subscription id |
+| `refund.created` | Money going back. A **full** refund ends the access its transaction bought |
+| `dispute.created` | A chargeback. Ends access the day it is raised |
+
+Then create **two products** — monthly and yearly — because Creem has no single
+link that offers both, and put their ids in `CREEM_PRODUCT_PRO_MONTHLY` and
+`CREEM_PRODUCT_PRO_YEARLY`. Filling either one in makes it an allow-list as
+well as a label, so a donation or a one-off lesson sold from the same Creem
+account cannot become Pro. Paste each product's share link into
+`js/billing-config.js` under `providers.creem.links`.
+
+Three things about this rail are not like Stripe's, and each one is a way to
+get it wrong:
+
+- **The signature has no timestamp.** It is the HMAC-SHA256 of the raw body
+  with the webhook secret, hex, in `creem-signature`. There is no replay window
+  to enforce, so a captured body verifies for ever and the `event:` marker is
+  the whole of the replay defence. What makes that enough is that no period is
+  ever counted from *now*: every instant in an update is read out of the body,
+  so a replay sets the period it set the first time. Creem retries an automatic
+  delivery with the same event id and gives a manual resend from the dashboard
+  a new one, which is exactly what the marker wants.
+- **A dispute carries no status and no reason.** Stripe's does, and there an
+  inquiry must be told from a chargeback or Pro is taken from somebody whose
+  money was never reversed. Creem sends an amount and a transaction whose
+  status is `chargeback`, so every `dispute.created` is a chargeback and there
+  is nothing to tell apart.
+- **Two time formats in one payload.** The envelope's `created_at`, and a
+  refund's and a dispute's own, are epoch **milliseconds**. A subscription's
+  `current_period_end_date`, `last_transaction_date` and `canceled_at` are
+  **ISO 8601 strings**. Reading one as the other is a thousand-fold error in a
+  date that decides access.
+
+The payment identity on this rail is the **transaction id** (`tran_…`). Creem
+names it on the paying events and names the same one again when the money goes
+back, which is what lets a refund say whether it is the payment that bought the
+period the licence is in — the thing Stripe's current API versions no longer
+make possible for a renewal at all (see "A refunded Stripe subscription
+renewal" below).
 
 ### Mercado Pago
 

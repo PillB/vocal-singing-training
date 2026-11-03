@@ -139,6 +139,9 @@ test("health reports booleans and the site origin, never key material", async ()
     ok: true,
     stripeConfigured: true,
     mercadopagoConfigured: true,
+    // The merchant-of-record rail. One secret, because its webhook carries
+    // everything the store needs and nothing has to be read back.
+    creemConfigured: true,
     signingKeyConfigured: true,
     // The account layer reports itself here too. `createTestEnv` has no D1
     // binding and no auth configuration, which is exactly the shape a
@@ -158,11 +161,12 @@ test("health reports booleans and the site origin, never key material", async ()
 
   const unconfigured = await handleRequest(
     new Request(`${BASE}/v1/health`),
-    createTestEnv({ STRIPE_WEBHOOK_SECRET: "", MP_ACCESS_TOKEN: "" })
+    createTestEnv({ STRIPE_WEBHOOK_SECRET: "", MP_ACCESS_TOKEN: "", CREEM_WEBHOOK_SECRET: "" })
   );
   const unconfiguredBody = await unconfigured.json();
   assert.equal(unconfiguredBody.stripeConfigured, false);
   assert.equal(unconfiguredBody.mercadopagoConfigured, false);
+  assert.equal(unconfiguredBody.creemConfigured, false);
 });
 
 test("unknown routes 404 and wrong methods 405", async () => {

@@ -27,6 +27,7 @@ const { test, expect } = require("@playwright/test");
 
 const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";
 const STRIPE_LINK = "https://buy.stripe.com/test_rail";
+const CREEM_LINK = "https://checkout.creem.io/ch_test_rail";
 const MP_LINK = "https://www.mercadopago.com.pe/subscriptions/checkout?preapproval_plan_id=test_rail";
 
 /** A /v1/health body, with only the fields this gate reads spelled out. */
@@ -67,7 +68,11 @@ async function boot(page, options) {
   // attempt is recorded and then aborted rather than answered, because a page
   // that actually navigates takes its own JavaScript with it, and several of
   // these tests ask the page another question after an allowed checkout.
-  for (const glob of ["https://buy.stripe.com/**", "https://www.mercadopago.com.pe/**"]) {
+  for (const glob of [
+    "https://buy.stripe.com/**",
+    "https://checkout.creem.io/**",
+    "https://www.mercadopago.com.pe/**"
+  ]) {
     await page.route(glob, (route) => {
       navigations.push(route.request().url());
       return route.abort("aborted");
@@ -92,9 +97,10 @@ async function boot(page, options) {
   await page.goto(`${BASE}/index.html`, { waitUntil: "domcontentloaded" });
   await page.waitForFunction(() => !!window.VTBilling?.startCheckout && !!window.VTAccount?.ensureRails);
   await page.evaluate(
-    ({ stripe, mp }) => {
+    ({ stripe, creem, mp }) => {
       const cfg = window.VT_BILLING_CONFIG;
       cfg.providers.stripe.links.pro_monthly = stripe;
+      cfg.providers.creem.links.pro_monthly = creem;
       cfg.providers.mercadopago.links.pro_monthly = mp;
       // Signed in, so the sign-in gate cannot be what refuses.
       const real = window.VTAccount;
@@ -103,7 +109,7 @@ async function boot(page, options) {
         getState: () => ({ configured: true, signedIn: true, account: { email: "a@example.com" } })
       };
     },
-    { stripe: STRIPE_LINK, mp: MP_LINK }
+    { stripe: STRIPE_LINK, creem: CREEM_LINK, mp: MP_LINK }
   );
   return { navigations };
 }
@@ -116,7 +122,7 @@ async function askTheWorker(page) {
 test.describe("a rail the worker cannot honour", () => {
   test("a worker with no Mercado Pago secret refuses that rail before the money moves", async ({ page }) => {
     const { navigations } = await boot(page, {
-      health: healthBody({ mercadopagoConfigured: false, stripeConfigured: true })
+      health: healthBody({ mercadopagoConfigured: false, stripeConfigured: true, creemConfigured: true })
     });
     await askTheWorker(page);
     const res = await page.evaluate(() => window.VTBilling.startCheckout("pro_monthly", "mercadopago"));
@@ -130,14 +136,14 @@ test.describe("a rail the worker cannot honour", () => {
   });
 
   test("one rail being down does not close the other", async ({ page }) => {
-    await boot(page, { health: healthBody({ mercadopagoConfigured: false, stripeConfigured: true }) });
+    await boot(page, { health: healthBody({ mercadopagoConfigured: false, stripeConfigured: true, creemConfigured: true }) });
     await askTheWorker(page);
     const res = await page.evaluate(() => window.VTBilling.startCheckout("pro_monthly", "stripe"));
     expect(res.mode).toBe("redirect");
   });
 
   test("and the other way round", async ({ page }) => {
-    await boot(page, { health: healthBody({ mercadopagoConfigured: true, stripeConfigured: false }) });
+    await boot(page, { health: healthBody({ mercadopagoConfigured: true, stripeConfigured: false, creemConfigured: false }) });
     await askTheWorker(page);
     const stripe = await page.evaluate(() => window.VTBilling.startCheckout("pro_monthly", "stripe"));
     expect(stripe.mode).toBe("provider_unavailable");
@@ -145,8 +151,69 @@ test.describe("a rail the worker cannot honour", () => {
     expect(mp.mode).toBe("redirect");
   });
 
+  test("a worker with no Creem secret refuses the international rail", async ({ page }) => {
+    // Creem is what the international markets are set to: it is a merchant of
+    // record, which is the only way a Peru-registered seller sells abroad at
+    // all. So this is the rail the first real sale goes out on, and the gate
+    // has to hold for it rather than only for the two it was written against.
+    const { navigations } = await boot(page, {
+      health: healthBody({ mercadopagoConfigured: true, creemConfigured: false })
+    });
+    await askTheWorker(page);
+    const res = await page.evaluate(() => window.VTBilling.startCheckout("pro_monthly", "creem"));
+    expect(res.ok).toBe(false);
+    expect(res.mode).toBe("provider_unavailable");
+    expect(res.provider).toBe("creem");
+    expect(navigations).toEqual([]);
+  });
+
+  test("a market with no rail of its own buys on Creem, not on Stripe", async ({ page }) => {
+    // Every international market names "creem", and the fallback for a market
+    // naming a rail money cannot arrive on is Creem too. It used to be Stripe,
+    // which a Peru-registered seller cannot hold an account with.
+    await boot(page, { health: healthBody({ mercadopagoConfigured: true, creemConfigured: true }) });
+    const rails = await page.evaluate(() => {
+      const cfg = window.VT_BILLING_CONFIG;
+      cfg.markets.push({ code: "ZZ", name: "Nowhere", currency: "USD", rail: "typo", priority: 3 });
+      return {
+        us: window.VTBilling.preferredRail("US"),
+        pe: window.VTBilling.preferredRail("PE"),
+        typo: window.VTBilling.preferredRail("ZZ"),
+        unknown: window.VTBilling.preferredRail("XX")
+      };
+    });
+    expect(rails).toEqual({ us: "creem", pe: "mercadopago", typo: "creem", unknown: "creem" });
+  });
+
+  test("a Creem checkout link is a legitimate destination", async ({ page }) => {
+    // The host allow-list is what stops a tampered config sending a buyer
+    // somewhere else, and until now it refused every Creem host there is.
+    const { navigations } = await boot(page, {
+      health: healthBody({ mercadopagoConfigured: true, creemConfigured: true })
+    });
+    await askTheWorker(page);
+    const res = await page.evaluate(() => window.VTBilling.startCheckout("pro_monthly", "creem"));
+    expect(res.mode).toBe("redirect");
+    // Polled: setting location.href returns before the navigation is made, and
+    // every other test here asserts the list is EMPTY, so none of them races.
+    await expect.poll(() => navigations.join(" ")).toContain("checkout.creem.io");
+  });
+
+  test("somewhere else is still refused, however the config was edited", async ({ page }) => {
+    const { navigations } = await boot(page, {
+      health: healthBody({ mercadopagoConfigured: true, creemConfigured: true })
+    });
+    await askTheWorker(page);
+    const res = await page.evaluate(() => {
+      window.VT_BILLING_CONFIG.providers.creem.links.pro_monthly = "https://creem.io.attacker.test/pay";
+      return window.VTBilling.startCheckout("pro_monthly", "creem");
+    });
+    expect(res.mode).not.toBe("redirect");
+    expect(navigations).toEqual([]);
+  });
+
   test("a worker that can honour both refuses neither", async ({ page }) => {
-    await boot(page, { health: healthBody({ mercadopagoConfigured: true, stripeConfigured: true }) });
+    await boot(page, { health: healthBody({ mercadopagoConfigured: true, stripeConfigured: true, creemConfigured: true }) });
     await askTheWorker(page);
     for (const rail of ["stripe", "mercadopago"]) {
       const res = await page.evaluate((r) => window.VTBilling.startCheckout("pro_monthly", r), rail);
@@ -157,7 +224,7 @@ test.describe("a rail the worker cannot honour", () => {
   // ----- the other direction: no answer is not a no
 
   test("a sale is not lost while the answer is still in the air", async ({ page }) => {
-    await boot(page, { health: healthBody({ mercadopagoConfigured: false, stripeConfigured: false }) });
+    await boot(page, { health: healthBody({ mercadopagoConfigured: false, stripeConfigured: false, creemConfigured: false }) });
     // Deliberately not awaiting the probe: this is the press that lands before
     // the worker has replied. Both rails would be refused once it does.
     const res = await page.evaluate(() => window.VTBilling.startCheckout("pro_monthly", "mercadopago"));
@@ -184,6 +251,7 @@ test.describe("a rail the worker cannot honour", () => {
     const known = await page.evaluate(() => window.VTAccount.knownRails());
     expect(known.mercadopago).toBe(null);
     expect(known.stripe).toBe(null);
+    expect(known.creem).toBe(null);
     const res = await page.evaluate(() => window.VTBilling.startCheckout("pro_monthly", "mercadopago"));
     expect(res.mode).toBe("redirect");
   });
@@ -199,7 +267,7 @@ test.describe("a rail the worker cannot honour", () => {
 
   test("the panel press says so, in plain words, and charges nothing", async ({ page }) => {
     const { navigations } = await boot(page, {
-      health: healthBody({ mercadopagoConfigured: false, stripeConfigured: false })
+      health: healthBody({ mercadopagoConfigured: false, stripeConfigured: false, creemConfigured: false })
     });
     await askTheWorker(page);
     await page.click("#btn-pricing");
@@ -228,7 +296,7 @@ test.describe("a rail the worker cannot honour", () => {
       return route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: healthBody({ mercadopagoConfigured: true, stripeConfigured: true })
+        body: healthBody({ mercadopagoConfigured: true, stripeConfigured: true, creemConfigured: true })
       });
     });
     await page.route("**/v1/auth/methods**", (route) =>

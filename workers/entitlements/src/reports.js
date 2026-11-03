@@ -165,16 +165,24 @@ export function isReferenceShape(value) {
  * still walking through). Tab, carriage return and newline are controls rather
  * than separators, so they stay explicit.
  *
- * The dashes have to be a list, because no class holds the ones a person
- * actually types: U+002D off the keyboard, the en and em dashes a text field
- * substitutes, the full-width hyphen U+FF0D off a CJK keyboard, and U+2212, the
- * real minus sign, which is what a paste out of a formatted document or a
- * spreadsheet carries (QA round 6). `\p{Pd}` would cover the dashes but not
- * U+2212, which is maths rather than punctuation, so it would be a class plus a
- * list and no shorter than the list.
+ * The dashes are `\p{Pd}`, the dash punctuation category, plus U+2212. That
+ * paragraph used to say the dashes had to be a hand-written list, because
+ * `\p{Pd}` does not hold U+2212 — the real minus sign, which is maths rather
+ * than punctuation and is what a paste out of a spreadsheet carries — so a
+ * class would be "a class plus a list and no shorter than the list". Measured,
+ * that was wrong in both halves: `\p{Pd}.\u2212` is shorter than the four
+ * dashes it replaced AND covers 27 code points instead of four. The four were
+ * leaking the other twenty-three, and one of them is not exotic at all: U+2011,
+ * the non-breaking hyphen, is what Word and Google Docs produce from a typed
+ * hyphen inside a number, so a card pasted out of an order confirmation was
+ * stored exactly as typed (QA round 7).
+ *
+ * U+0085, `\p{Zl}` and `\p{Zp}` are the three line breaks that are not
+ * \r or \n: the C1 next-line, U+2028 and U+2029. A card broken across lines by
+ * a paste out of a PDF arrives with one of them in it.
  */
 const DIGIT_SEPARATORS =
-  "\\t\\r\\n\\p{Zs}\\p{Cf}.\\u2013\\u2014\\-\\uff0d\\u2212";
+  "\\t\\r\\n\\u0085\\p{Zs}\\p{Zl}\\p{Zp}\\p{Cf}\\p{Pd}.\\u2212";
 
 /**
  * What counts as a digit: any decimal digit, not only the ASCII ones.
@@ -257,17 +265,32 @@ function runHasCard(run) {
  * Long digit runs replaced with a marker.
  *
  * Somebody who hit a problem on the checkout page may well paste the card they
- * were paying with into "what happened". Nothing else in a report about singing
- * is a thirteen-to-nineteen digit number, so the trade is one-sided and a
- * legitimate report loses nothing.
+ * were paying with into "what happened".
  *
  * **What this does and does not catch, stated exactly, because a comment here
  * used to say "we never store a card number" and that was not true.** It
  * catches a card written in groups of three digits or more, in any decimal
- * script, separated by any space, any invisible format character, a dot, or any
- * of the four dashes people type — which is every way a card is pasted or typed
- * out in practice. It does NOT catch a card whose digits are written one or two
- * at a time: "4 1 1 1 …" and "41 11 11 …" are stored as typed (QA round 6).
+ * script, separated by any space, any line break, any invisible format
+ * character, a dot, any dash in Unicode's dash category, or the minus sign —
+ * which is every way a card is pasted or typed out in practice. It does NOT
+ * catch a card whose digits are written one or two at a time: "4 1 1 1 …" and
+ * "41 11 11 …" are stored as typed (QA round 6).
+ *
+ * **A legitimate report does lose something, and this is what.** That sentence
+ * used to read "a legitimate report loses nothing", on the reasoning that
+ * nothing in a report about singing is a thirteen-to-nineteen digit number.
+ * Two unrelated numbers with only separators between them are, together: a
+ * ticket number beside a date ("pedido 1002345 2024-11-03"), a phone number
+ * beside a date, a millisecond timestamp, a screenshot's own filename. Each of
+ * those is hidden, whole, and the test suite pins the list so nobody has to
+ * find it again.
+ *
+ * That is the side chosen to be wrong on, not an oversight: a hidden order
+ * number costs a sentence of one report, and a stored card number cannot be
+ * taken back. The reporter is not told, which is the part worth improving —
+ * saying "we hid a long number in your message" would let them rephrase — and
+ * it is recorded as such in docs/VALUE-GAP-REGISTRY.md rather than left as a
+ * surprise.
  *
  * That gap is deliberate and it is the price of the group-of-three rule, which
  * is what keeps four clock times in a row, a list of three-digit numbers and a

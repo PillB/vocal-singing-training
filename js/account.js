@@ -434,9 +434,10 @@
           // a no: it must not stop a sale.
           stripe: typeof d.stripeConfigured === "boolean" ? d.stripeConfigured : null,
           mercadopago: typeof d.mercadopagoConfigured === "boolean" ? d.mercadopagoConfigured : null,
+          creem: typeof d.creemConfigured === "boolean" ? d.creemConfigured : null,
           ok: true
         }
-        : { stripe: null, mercadopago: null, ok: false };
+        : { stripe: null, mercadopago: null, creem: null, ok: false };
       railsPending = null;
       return rails;
     })();

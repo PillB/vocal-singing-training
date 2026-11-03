@@ -51,6 +51,7 @@ import {
 } from "./grants.js";
 import { googleConfigured, verifyGoogleIdToken } from "./google.js";
 import { buildTokenPayload, isLicenseIdShape, signPayload } from "./license.js";
+import { CLAIMABLE_PROVIDERS } from "./limits.js";
 import { deleteProgress, getProgress, listProgress, putProgress } from "./progress.js";
 import { getEntitlement, getLicenseIdForClaim } from "./store.js";
 
@@ -480,7 +481,8 @@ export async function handleLink(request, env, deps) {
   const provider = parsed.body.provider;
   if (typeof parsed.body.licenseId === "string" && isLicenseIdShape(parsed.body.licenseId)) {
     licenseId = parsed.body.licenseId;
-  } else if ((provider === "stripe" || provider === "mercadopago") && typeof parsed.body.sessionId === "string") {
+  } else if (typeof provider === "string" && CLAIMABLE_PROVIDERS.has(provider)
+    && typeof parsed.body.sessionId === "string") {
     const sessionId = parsed.body.sessionId.trim();
     if (!sessionId || sessionId.length > 200) {
       return json({ ok: false, reason: "bad_request" }, 400, cors);

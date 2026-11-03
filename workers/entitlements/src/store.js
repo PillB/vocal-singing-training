@@ -621,8 +621,23 @@ function noteReversal(record, update, now) {
     return;
   }
   const chargedAt = named;
+  const paymentId = typeof update.paymentId === "string" && update.paymentId ? update.paymentId : null;
+  // A reversal that names the payment the period was bought with outranks one
+  // that does not, whatever the two charge dates say.
+  //
+  // The dates cannot separate them on a rail where a refund names its
+  // transaction but not when that transaction was taken: every such reversal
+  // falls back to the record's own latest charge, so they all carry the same
+  // instant and the first one seen would keep the slot for ever. The refund of
+  // month one, then the refund of month two, left month two running — the
+  // second refund could not displace the first.
+  const namesPeriod = paymentId !== null
+    && typeof record.periodPaymentId === "string"
+    && paymentId === record.periodPaymentId
+    && record.reversedPaymentId !== record.periodPaymentId;
   if (!Number.isFinite(record.reversedChargeAt) || chargedAt > record.reversedChargeAt
-    || (chargedAt === record.reversedChargeAt && at < record.reversedAt)) {
+    || (chargedAt === record.reversedChargeAt && at < record.reversedAt)
+    || namesPeriod) {
     record.reversedChargeAt = chargedAt;
     record.reversedAt = at;
     // WHICH payment went back, when the provider names one. A refunded charge
@@ -630,7 +645,6 @@ function noteReversal(record, update, now) {
     // answer than any arithmetic about when the charge was taken: see
     // `endReversedPeriod`. Overwritten together with the instant above, so the
     // pair always describes the same reversal.
-    const paymentId = typeof update.paymentId === "string" && update.paymentId ? update.paymentId : null;
     if (paymentId) {
       record.reversedPaymentId = paymentId;
     } else {
@@ -834,16 +848,24 @@ function notePeriodPayment(record, update, before) {
       && Math.floor(update.periodEnd) === record.periodEnd && !claimsPeriod(record)) {
       record.periodPaymentId = paymentId;
       record.periodPaymentEnd = record.periodEnd;
+      record.periodPaymentNamed = true;
     }
     return;
   }
   if (paymentId) {
     record.periodPaymentId = paymentId;
     record.periodPaymentEnd = record.periodEnd;
+    // Whether this payment SAID what period it bought, or the period was
+    // worked out from it. A checkout that names no period of its own is bounded
+    // to one plan interval from when the money arrived, which is a guess that
+    // happens to be about a month — so a later event that names the real period
+    // may take the claim over from it, even though it lengthens nothing.
+    record.periodPaymentNamed = Number.isFinite(update.periodEnd);
     return;
   }
   delete record.periodPaymentId;
   delete record.periodPaymentEnd;
+  delete record.periodPaymentNamed;
 }
 
 /**
@@ -852,7 +874,9 @@ function notePeriodPayment(record, update, before) {
  * An id with no period beside it is one stored before this was recorded, and
  * counts as claiming the period: leaving it is what the store did before the
  * equal-end rule existed, and overwriting it on a guess is the direction that
- * costs a customer access.
+ * costs a customer access. An id recorded against a period that was inferred
+ * rather than named does not claim it, so a payment that names the same period
+ * takes it over.
  * @param {Object} record Record being built.
  * @returns {boolean} Whether a payment has claimed the period now held.
  */
@@ -860,7 +884,18 @@ function claimsPeriod(record) {
   if (typeof record.periodPaymentId !== "string" || !record.periodPaymentId) {
     return false;
   }
-  return !Number.isFinite(record.periodPaymentEnd) || record.periodPaymentEnd === record.periodEnd;
+  if (!Number.isFinite(record.periodPaymentEnd)) {
+    return true;
+  }
+  if (record.periodPaymentEnd !== record.periodEnd) {
+    return false;
+  }
+  // A claim made from an inferred period yields to one that names the same
+  // period, because the inference is a bound and the name is a fact. On the
+  // merchant-of-record rail a checkout names its transaction and no period, so
+  // without this the checkout's transaction would keep the claim and the
+  // refund of the subscription's own transaction would end nothing.
+  return record.periodPaymentNamed !== false;
 }
 
 /**

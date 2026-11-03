@@ -24,7 +24,13 @@
   const LS_KEY = "vt_billing_v1";
   const TRIAL_KEY = "vt_billing_trial_started_v1";
   const PLAN_IDS = new Set(["pro_monthly", "pro_yearly", "trial"]);
-  const PROVIDER_IDS = new Set(["stripe", "mercadopago", "demo", "internal", "auth"]);
+  const PROVIDER_IDS = new Set(["stripe", "mercadopago", "creem", "demo", "internal", "auth"]);
+  /**
+   * The providers money can actually come in on. `PROVIDER_IDS` is wider: it
+   * also holds the QA override sources and the account rail, none of which has
+   * a checkout link, so a market must not be able to name one as its rail.
+   */
+  const CHECKOUT_RAILS = new Set(["stripe", "mercadopago", "creem"]);
   /** Sources that unlock Pro without payment — QA only, gated by demoUnlockEnabled. */
   const OVERRIDE_SOURCES = new Set(["demo", "internal_account"]);
 
@@ -32,6 +38,12 @@
   const DEFAULT_CHECKOUT_HOSTS = [
     "buy.stripe.com",
     "checkout.stripe.com",
+    // Creem, the merchant of record. The API returns checkout.creem.io/<id>;
+    // a product's own share link from the dashboard is on creem.io, so both
+    // are allowed. Anything else needs `allowedCheckoutHosts`.
+    "checkout.creem.io",
+    "www.creem.io",
+    "creem.io",
     "www.mercadopago.com",
     "www.mercadopago.com.pe",
     "www.mercadopago.com.ar",
@@ -100,12 +112,20 @@
 
   function marketFor(code) {
     const m = (cfg().markets || []).find((x) => x.code === code);
-    return m || { code: "WW", name: "Worldwide", currency: "USD", rail: "stripe", priority: 3 };
+    return m || { code: "WW", name: "Worldwide", currency: "USD", rail: "creem", priority: 3 };
   }
 
+  /**
+   * The rail a region buys on. A market naming a rail money cannot arrive on —
+   * a typo, a QA source, a rail removed from the config — falls back to Creem,
+   * the merchant of record, rather than to a Stripe account a Peru-registered
+   * seller cannot hold.
+   * @param {string} region Two-letter region code.
+   * @returns {string} Provider id.
+   */
   function preferredRail(region) {
     const m = marketFor(region);
-    return m.rail === "mercadopago" ? "mercadopago" : "stripe";
+    return CHECKOUT_RAILS.has(m.rail) ? m.rail : "creem";
   }
 
   function nowMs() {

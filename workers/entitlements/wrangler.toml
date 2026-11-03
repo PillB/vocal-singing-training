@@ -50,6 +50,13 @@ STRIPE_PRICE_PRO_MONTHLY = ""
 STRIPE_PRICE_PRO_YEARLY = ""
 MP_PLAN_PRO_MONTHLY = ""
 MP_PLAN_PRO_YEARLY = ""
+# The Creem products, read the same way: a label, and an allow-list wherever
+# either is filled in. Creem is the merchant of record for the international
+# rail (it sells in its own name and handles the tax), which is why it is here
+# and a direct Stripe account is not: a Peru-registered seller cannot be a
+# Stripe merchant.
+CREEM_PRODUCT_PRO_MONTHLY = ""
+CREEM_PRODUCT_PRO_YEARLY = ""
 # Length of the free trial, in days. One per account, ever.
 TRIAL_DAYS = "7"
 # The trial-length A/B test. "on" gives each account 7 or 14 free days,
@@ -93,6 +100,7 @@ REPORTS_ENABLED = "true"
 #   STRIPE_WEBHOOK_SECRET          whsec_... for THIS endpoint (test and live differ)
 #   MP_WEBHOOK_SECRET              Mercado Pago webhook signing secret
 #   MP_ACCESS_TOKEN                Mercado Pago access token (server-side API reads)
+#   CREEM_WEBHOOK_SECRET           Creem webhook signing secret (Developers > Webhook)
 #   LICENSE_PRIVATE_KEY_PKCS8_B64  base64 PKCS#8 P-256 private key
 #                                  (scripts/generate-keys.mjs prints it)
 # Accounts only, and only for the provider named in EMAIL_PROVIDER:

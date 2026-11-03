@@ -87,12 +87,6 @@
     },
     {
       "file": "js/app.js",
-      "sha": "78df9620c2fc8ccf4f267de85761fd5dd82a8e4aa1ddae3fa26e30045a9d5a23",
-      "complexity": 19,
-      "name": "Async arrow function"
-    },
-    {
-      "file": "js/app.js",
       "sha": "c88b43983f5f78078cdaf0b315fb09d615a01d2d3ab26ed863c694e8ef8eb3cb",
       "complexity": 24,
       "name": "Async arrow function"
@@ -165,12 +159,6 @@
     },
     {
       "file": "js/app.js",
-      "sha": "767dca12ccf6d6cd1cd25b3fa71447d1f5c56282171deeac0f1826575b3f00f5",
-      "complexity": 34,
-      "name": "Function 'bindBilling'"
-    },
-    {
-      "file": "js/app.js",
       "sha": "d2d03cf0b93c8d1382f81f390124901c8cb478ff828052e3421c2e495cc3ac9c",
       "complexity": 73,
       "name": "Function 'completeExercise'"
@@ -186,12 +174,6 @@
       "sha": "59f96e1f5a763986d19e0af1f7ad74d6e84f38b0134cca21a140df5a80d2047f",
       "complexity": 18,
       "name": "Function 'fitStageGuide'"
-    },
-    {
-      "file": "js/app.js",
-      "sha": "a2083b1592b140e1d533bc76833fcd8e6563a98359b46d19bbf09858642a6003",
-      "complexity": 24,
-      "name": "Function 'headerPlanState'"
     },
     {
       "file": "js/app.js",
@@ -288,12 +270,6 @@
       "sha": "1f5d24f85496f3e8e15dd49fd8ffc92ce153de08cee498b0e7d86e8c17b7d2f3",
       "complexity": 23,
       "name": "Function 'selectProgression'"
-    },
-    {
-      "file": "js/app.js",
-      "sha": "c2963c6dac522dc59650faad0d3a5717b62a581826e3776fa2c4c34e774d583c",
-      "complexity": 28,
-      "name": "Function 'setPracticeUI'"
     },
     {
       "file": "js/app.js",
@@ -462,12 +438,6 @@
       "sha": "14b996c539fe19739f3e460e5be53f82e54d819e2dd0e4887b7c41bac17ce9b6",
       "complexity": 19,
       "name": "Async function 'refresh'"
-    },
-    {
-      "file": "js/license.js",
-      "sha": "30342302196b24baaaa593b8010cd863c181263a84241a8557c6a3b1adfa61a3",
-      "complexity": 22,
-      "name": "Async function 'verifyToken'"
     },
     {
       "file": "js/metrics.js",

@@ -1,6 +1,7 @@
 /**
- * The side pages (privacy, guide, admin) keep one h1 each and say which
- * language each half is in.
+ * The side pages (privacy, guide) keep one h1 each and say which language
+ * each half is in. (admin.html is not covered here: it has its own single h1
+ * and no English half.)
  *
  * Wrong behaviours rejected:
  * - privacy.html carried three level-1 headings: the site name in the header,

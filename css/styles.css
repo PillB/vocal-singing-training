@@ -828,6 +828,17 @@ body.home-zero #pro-insights-panel {
   margin: 0 0 0.45rem;
 }
 
+/* "Paso listo": the checkbox was 13 px and its label 22,8 px, under the 24 px
+   target of WCAG 2.5.8; the label is the target (QA FAL-01). */
+.review-step label {
+  min-height: 24px;
+}
+.review-step input[type="checkbox"] {
+  width: 1.15rem;
+  height: 1.15rem;
+  margin: 0;
+}
+
 .review-step ul {
   margin: 0;
   padding-left: 1.1rem;
@@ -7330,8 +7341,29 @@ body.view-exercise .stage-coach .mode-hud,
    session banner stays (one line), so Pausar and Terminar are on screen.
    The rails go back to one row each, MIC keeps its label. */
 @media (max-height: 500px) {
+  /* Out of the layout, the tab order and the accessibility tree, except the
+     site's h1: display: none took the page's only level-1 heading with it
+     (axe page-has-heading-one). js syncHeaderHeightVar reads position:
+     absolute as "takes no room". */
   body.view-exercise .app-header {
-    display: none;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    border: 0;
+    overflow: hidden;
+    visibility: hidden;
+  }
+  body.view-exercise .app-header .brand h1 {
+    visibility: visible;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
   body.view-exercise .exercise-header-compact {
     top: 0;
@@ -7428,6 +7460,16 @@ body.view-exercise .stage-coach .mode-hud,
   }
   .mode-focus.mode-focus-live .btn {
     margin-block: 0.1rem;
+  }
+}
+/* A phone on its side narrower than 800 px cannot hold Empezar, MIC and the
+   piano settings in one row: the mic box shrank under its own slider and the
+   slider lay on the octave "-" (568x320, 640x360, 667x375, 740x360). Two rows
+   there, as on a desktop at 1180-1440 px; the lanes end above them (--rail-h).
+   Costs about 42 px of a stage that is 280-330 px tall. */
+@media (max-height: 500px) and (max-width: 799.98px) {
+  .hud-bottom-rail {
+    flex-wrap: wrap;
   }
 }
 /* —— Design: sticky-bars ——

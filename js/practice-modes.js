@@ -524,7 +524,9 @@
       const phases = this.profile.phases || [];
       const n = phases.length || 5;
       const deck = METAPHOR_TOPICS;
-      const day = Math.floor(Date.now() / 86400000);
+      // The learner's calendar day, not the UTC one (which turned over at 19:00 in Lima; QA-36)
+      const dayKey = global.VTDays?.dayKey?.() || new Date().toISOString().slice(0, 10);
+      const day = Math.floor(Date.parse(`${dayKey}T00:00:00Z`) / 86400000);
       st.deckNext = (day * n) % deck.length;
       const draw = () => {
         const pair = deck[st.deckNext % deck.length];

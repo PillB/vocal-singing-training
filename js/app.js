@@ -146,6 +146,31 @@
     clearTimeout(toast._t);
     $("#toast")?.classList.remove("show");
     $(".exercise-header-compact")?.classList.remove("toast-over");
+    // A faded toast is still in the accessibility tree: a screen reader browsing
+    // the page would find the old message. The region stays, emptied once the
+    // fade (0,25 s) is over, so the next message is still announced. A message
+    // raised in that window keeps its text: the timer only empties a hidden toast.
+    clearTimeout(toast._clear);
+    toast._clear = setTimeout(() => {
+      const el = $("#toast");
+      if (el && !el.classList.contains("show")) el.textContent = "";
+    }, 400);
+  }
+
+  /** Narrowest span between ← Back and Help in which the toast still reads (px). */
+  const TOAST_MIN_ROOM = 120;
+
+  /**
+   * The free span of the exercise row between ← Back and Help, or null when no
+   * row is on screen (home, a dialog over it, the landscape layout's hidden row).
+   */
+  function toastRowSpan() {
+    const row = document.body.classList.contains("view-exercise") ? $(".exercise-header-compact") : null;
+    const back = row && $("#btn-back-home");
+    const acts = row && row.querySelector(".ex-header-actions");
+    const r = row && row.getBoundingClientRect();
+    if (!back || !acts || !r || r.height < 1) return null;
+    return { row, r, left: back.getBoundingClientRect().right + 6, right: acts.getBoundingClientRect().left - 6 };
   }
 
   /**
@@ -154,31 +179,52 @@
    * Help) for its whole life, the moment after Stop when leaving is likeliest.
    * There it takes the title's place instead, between the two buttons, in
    * two lines at most (the take's summary stays whole in the rating card).
-   * Elsewhere it keeps its place under the header.
+   * Where those buttons leave under 120 px (a 280 px phone, or text at 125%
+   * on a 320 px one) it stands just under the row instead, over the stage's
+   * strip and not over Help. Elsewhere it keeps its place under the header.
    */
   function placeToast(el) {
-    const row = document.body.classList.contains("view-exercise") ? $(".exercise-header-compact") : null;
-    const back = row && $("#btn-back-home");
-    const acts = row && row.querySelector(".ex-header-actions");
-    const r = row && row.getBoundingClientRect();
-    if (!back || !acts || !r || r.height < 1) {
+    watchToastPlace();
+    const span = toastRowSpan();
+    if (!span || span.right - span.left < TOAST_MIN_ROOM) {
       $(".exercise-header-compact")?.classList.remove("toast-over");
       el.classList.remove("in-row");
       el.style.removeProperty("left");
-      el.style.removeProperty("top");
       el.style.removeProperty("max-width");
+      if (span) el.style.top = `${Math.round(span.r.bottom + 4)}px`;
+      else el.style.removeProperty("top");
       return;
     }
-    const left = back.getBoundingClientRect().right + 6;
-    const right = acts.getBoundingClientRect().left - 6;
     el.classList.add("in-row");
     // The title steps back while the toast holds its place (still read out)
-    row.classList.add("toast-over");
+    span.row.classList.add("toast-over");
     // In the title's own place (from its left edge, up to 560 px) and centred
     // on the row, so it covers the title instead of leaving letters beside it
-    el.style.left = `${Math.round(left)}px`;
-    el.style.top = `${Math.round(r.top + r.height / 2)}px`;
-    el.style.maxWidth = `${Math.max(120, Math.round(Math.min(560, right - left)))}px`;
+    el.style.left = `${Math.round(span.left)}px`;
+    el.style.top = `${Math.round(span.r.top + span.r.height / 2)}px`;
+    el.style.maxWidth = `${Math.round(Math.min(560, span.right - span.left))}px`;
+  }
+
+  /**
+   * A toast that is up follows the page: the view changing under it ("leave
+   * without rating" raises one as it navigates home), the window turning, the
+   * language changing or the entrance animation settling must not leave it at
+   * the exercise row's old coordinates. Installed once, with the first toast.
+   */
+  function watchToastPlace() {
+    if (watchToastPlace._on) return;
+    watchToastPlace._on = true;
+    const again = () => {
+      const el = $("#toast");
+      if (el && el.classList.contains("show")) placeToast(el);
+    };
+    window.addEventListener("resize", again);
+    window.addEventListener("orientationchange", () => setTimeout(again, 150));
+    // A view's entrance animation moves the row a few px after the toast was placed
+    document.addEventListener("animationend", again, true);
+    // The view changing, and the language: Help is wider or narrower in the other one, and the
+    // switch rewrites the body's class as it re-renders (tests/toast-and-h1-gaps.spec.js "C" pins it)
+    new MutationObserver(again).observe(document.body, { attributes: true, attributeFilter: ["class"] });
   }
 
   /** Global error surfacing — fail visibly (vibe-code silent-failure defense). */
@@ -524,12 +570,11 @@
     try {
       const h = document.querySelector("header.app-header");
       if (h) {
-        // A rotated phone hides the header while an exercise is open (design:
-        // landscape); the sticky rows below it then start at the very top.
-        const hh =
-          getComputedStyle(h).display === "none"
-            ? 0
-            : Math.max(40, Math.ceil(h.getBoundingClientRect().height));
+        // A rotated phone takes the header out of the layout while an exercise is
+        // open (design: landscape: absolute, its h1 kept for screen readers); the
+        // sticky rows below it then start at the very top.
+        const cs = getComputedStyle(h);
+        const hh = cs.display === "none" || cs.position === "absolute" ? 0 : Math.max(40, Math.ceil(h.getBoundingClientRect().height));
         setVar("--header-h", `${hh}px`);
       }
       // Sticky ← Atrás row height — stage must stick below it so hits never land on stage/header
@@ -3592,6 +3637,20 @@
 
   function setPracticeUI(live) {
     state.practiceLive = live;
+    syncPracticeBodyState(live);
+    if (live) {
+      state.practiceStarting = false;
+      // A new take: the last one's numbers no longer describe what is on the card
+      clearTakeSummary();
+    }
+    paintPracticeControls(live);
+    syncStageNow();
+    if (live) enterLivePractice();
+    else flushPracticeClock();
+  }
+
+  /** The body class for the compact pitch strip, and the manual-sound state a stopped take must not keep. */
+  function syncPracticeBodyState(live) {
     // U7: body class drives compact vs expanded pitch score strip
     try {
       document.body.classList.toggle("practice-live", !!live);
@@ -3612,7 +3671,10 @@
     } catch {
       /* ignore */
     }
-    if (live) state.practiceStarting = false;
+  }
+
+  /** Start and Stop, and the status pill, for a take that is or is not running. */
+  function paintPracticeControls(live) {
     const start = $("#btn-practice-start");
     const stop = $("#btn-practice-stop");
     if (start) {
@@ -3626,35 +3688,33 @@
       pill.textContent = live ? tt("practice.live") : tt("practice.ready");
       pill.classList.toggle("live", live);
     }
-    syncStageNow();
-    // Practice clock for leave-prompt (≥10% of exercise)
-    if (live) {
-      state.sessionPractice.everStarted = true;
-      if (state.sessionPractice.liveSince == null) {
-        state.sessionPractice.liveSince = performance.now();
-      }
-      // Blur Start/Stop so Space is not consumed as button activation (browser default)
-      try {
-        start?.blur?.();
-        stop?.blur?.();
-        const stage = document.getElementById("highway-stage");
-        if (stage) {
-          if (!stage.hasAttribute("tabindex")) stage.setAttribute("tabindex", "-1");
-          stage.focus({ preventScroll: true });
-        } else {
-          document.body?.focus?.({ preventScroll: true });
-        }
-      } catch {
-        /* ignore */
-      }
-      // Remeasure bottom rail after live layout (mode panel may reflow)
-      requestAnimationFrame(() => {
-        fitHighwayToViewport();
-        setTimeout(fitHighwayToViewport, 60);
-      });
-    } else {
-      flushPracticeClock();
+  }
+
+  /** A take is running: the practice clock for the leave prompt (>=10% of the exercise), focus off the buttons, layout re-fitted. */
+  function enterLivePractice() {
+    state.sessionPractice.everStarted = true;
+    if (state.sessionPractice.liveSince == null) {
+      state.sessionPractice.liveSince = performance.now();
     }
+    // Blur Start/Stop so Space is not consumed as button activation (browser default)
+    try {
+      $("#btn-practice-start")?.blur?.();
+      $("#btn-practice-stop")?.blur?.();
+      const stage = document.getElementById("highway-stage");
+      if (stage) {
+        if (!stage.hasAttribute("tabindex")) stage.setAttribute("tabindex", "-1");
+        stage.focus({ preventScroll: true });
+      } else {
+        document.body?.focus?.({ preventScroll: true });
+      }
+    } catch {
+      /* ignore */
+    }
+    // Remeasure bottom rail after live layout (mode panel may reflow)
+    requestAnimationFrame(() => {
+      fitHighwayToViewport();
+      setTimeout(fitHighwayToViewport, 60);
+    });
   }
 
   /** Exercises that use piano/ref pitch should play sound by default on Start */
@@ -4296,6 +4356,9 @@
     if (modeResult?.patches) applyMetricPatches(modeResult.patches);
     setPracticeUI(false);
     $("#level-fill").style.width = "0%";
+    // This take's own words, kept whether or not the Stop is announced: a timer
+    // that ends the take must not leave the previous take's numbers on the card
+    state.rate.summary = modeResult?.summary || null;
     if (!silent) announceStop(modeResult);
   }
 
@@ -4345,7 +4408,7 @@
     const summary = modeResult?.summary || null;
     toast(summary ? `⏹ ${summary}` : tt("toast.stopped"));
     // The toast goes in seconds; what was measured stays beside the question
-    state.rate.summary = summary;
+    // (stopPractice has already kept it in state.rate.summary)
     // Musk-mode UX: after a real stop, open reflect/save so metrics aren't hidden.
     // Detener hides itself; its focus goes to the question, not the page top.
     const a = document.activeElement;
@@ -4444,12 +4507,18 @@
     paintRating();
   }
 
+  /** A new take starts: the last take's numbers no longer describe what is on the card. */
+  function clearTakeSummary() {
+    if (state.rate) state.rate.summary = null;
+    paintTakeSummary(null);
+  }
+
   /** The take's measured summary under the time, in the language it was measured in. */
   function paintTakeSummary(summary) {
     const el = $("#rate-sum");
     if (!el) return;
     el.hidden = !summary;
-    el.textContent = summary ? `${tt("rate.take")} ${summary}` : "";
+    el.textContent = summary ? `${tt("rate.takeSum")} ${summary}` : "";
   }
 
   /** Write the card's state: the time, the answer chosen, the note, the way out. */
@@ -6785,54 +6854,53 @@
   function headerPlanState() {
     const ent = window.VTBilling?.getEntitlement?.() || { pro: false, status: "free" };
     const acct = window.VTAccount?.getState?.() || null;
-    const signedIn = !!(acct && acct.signedIn);
-    const live = signedIn && acct.entitlement && acct.entitlement.pro ? acct.entitlement : null;
-    // Reload a signed-in browser and `signedIn` is true from the first frame,
-    // while `entitlement` only arrives when the worker answers — never, if the
-    // browser is offline. The licence token survives that gap but cannot say
-    // which kind of access it is: the trial grant issues plan "pro_monthly"
-    // exactly like a payment. So without the remembered kind below, a free
-    // trial reads as a paid subscription on every load, which is the one thing
-    // this whole reading exists to stop. It is used only while the licence
-    // still verifies, so a revoked gift does not keep its label.
-    const remembered = !live && signedIn && ent.pro && acct.lastPlan && acct.lastPlan.pro
-      ? acct.lastPlan
-      : null;
-    const held = live || remembered;
-    // Accepts either an ISO string (VTBilling) or unix seconds (the account
-    // layer), because the two halves of this answer are stored differently.
-    const daysLeft = (when) => {
-      const t = typeof when === "number" && Number.isFinite(when)
-        ? when * 1000
-        : Date.parse(when || "");
-      if (!Number.isFinite(t)) return null;
-      const d = Math.ceil((t - Date.now()) / 86400000);
-      return d >= 0 ? d : null;
-    };
-    if (held) {
-      // `periodEnd` is unix seconds here, which is what accountDate() reads.
-      const until = accountDate(held.periodEnd);
-      if (held.status === "canceled") {
-        return { kind: "canceled", days: daysLeft(held.periodEnd), until };
-      }
-      if (held.source === "trial") {
-        return { kind: "trialAccount", days: daysLeft(held.periodEnd), until };
-      }
-      if (held.source === "gift" || held.source === "comp") {
-        return { kind: "gift", days: daysLeft(held.periodEnd), until };
-      }
-      return { kind: "paid", days: null, until };
-    }
-    // Signed out, or signed in with nothing: the browser's own view. Its dates
-    // are ISO strings rather than unix seconds.
-    const isoUntil = (iso) => {
-      const t = Date.parse(iso || "");
-      return Number.isFinite(t) ? accountDate(t / 1000) : "";
-    };
-    if (ent.status === "trial") {
-      return { kind: "trialLocal", days: daysLeft(ent.expiresAt), until: isoUntil(ent.expiresAt) };
-    }
-    if (ent.pro) return { kind: "paid", days: null, until: isoUntil(ent.expiresAt) };
+    const held = acct && acct.signedIn ? heldAccountPlan(ent, acct) : null;
+    return held ? accountPlanState(held) : browserPlanState(ent);
+  }
+
+  /**
+   * Whole days from now until `when`, unix seconds (the account layer) or an
+   * ISO string (VTBilling), because the two halves of the header's answer are
+   * stored differently. Null when unknown or already past.
+   */
+  function planDaysLeft(when) {
+    const t = typeof when === "number" && Number.isFinite(when) ? when * 1000 : Date.parse(when || "");
+    if (!Number.isFinite(t)) return null;
+    const d = Math.ceil((t - Date.now()) / 86400000);
+    return d >= 0 ? d : null;
+  }
+
+  /**
+   * What a signed-in person holds, or null. The worker's reading counts only
+   * while the signed license backs it (`acct.pro`): its JSON alone is not proof
+   * (QA-25). Reload a signed-in browser and `entitlement` only arrives when the
+   * worker answers, never if the browser is offline; the license token survives
+   * that gap but cannot say which kind of access it is (the trial grant issues
+   * plan "pro_monthly" exactly like a payment), so without the remembered kind a
+   * free trial reads as a paid subscription on every load. The remembered kind
+   * is used only while the license still verifies, so a revoked gift does not
+   * keep its label.
+   */
+  function heldAccountPlan(ent, acct) {
+    if (acct.pro && acct.entitlement && acct.entitlement.pro) return acct.entitlement;
+    return ent.pro && acct.lastPlan && acct.lastPlan.pro ? acct.lastPlan : null;
+  }
+
+  /** The account layer's reading of what is held; `periodEnd` is unix seconds, which accountDate() reads. */
+  function accountPlanState(held) {
+    const until = accountDate(held.periodEnd);
+    if (held.status === "canceled") return { kind: "canceled", days: planDaysLeft(held.periodEnd), until };
+    if (held.source === "trial") return { kind: "trialAccount", days: planDaysLeft(held.periodEnd), until };
+    if (held.source === "gift" || held.source === "comp") return { kind: "gift", days: planDaysLeft(held.periodEnd), until };
+    return { kind: "paid", days: null, until };
+  }
+
+  /** Signed out, or signed in with nothing: the browser's own view. Its dates are ISO strings rather than unix seconds. */
+  function browserPlanState(ent) {
+    const t = Date.parse(ent.expiresAt || "");
+    const until = Number.isFinite(t) ? accountDate(t / 1000) : "";
+    if (ent.status === "trial") return { kind: "trialLocal", days: planDaysLeft(ent.expiresAt), until };
+    if (ent.pro) return { kind: "paid", days: null, until };
     return { kind: "free", days: null, until: "" };
   }
 
@@ -9019,6 +9087,193 @@
     window.VTSync?.onDataChange?.(() => showSyncedRecord());
   }
 
+  /** "Ya pagué": ask the worker again for the payment the browser is waiting on. */
+  function recheckPayment() {
+    const claiming = window.VTBilling?.resumePendingClaim?.({ force: true });
+    if (!claiming) {
+      toast(tt("pricing.toast.verifyFailed"), { durationMs: 5200 });
+      return;
+    }
+    toast(tt("pricing.toast.verifyPending"), { durationMs: 3600 });
+    claiming.then((res) => {
+      toast(res?.ok ? tt("pricing.toast.verifyOk") : tt("pricing.toast.verifyFailed"), {
+        durationMs: res?.ok ? 3600 : 6000
+      });
+      updateBillingChrome();
+      renderPricingModal();
+    });
+  }
+
+  /** Start the free trial from the pricing dialog: the account's when this deploy can sign someone in, else the browser's. */
+  async function startTrialFromPricing() {
+    trackFunnel("trial_click", { where: "pricing" });
+    // Which trial this is belongs to the worker, so ask before choosing:
+    // guessing "local" hands out a browser trial that a later server trial
+    // then duplicates, and guessing "server" sends someone to a panel that
+    // may have no way in. openPricing() has usually already asked, so this
+    // returns at once — but a click must never hang on the network, so a
+    // worker that has not answered by now counts as no worker.
+    await Promise.race([
+      window.VTAccount?.ensureMethods?.() || Promise.resolve(null),
+      new Promise((resolve) => setTimeout(resolve, 1200))
+    ]);
+    const acct = window.VTAccount?.getState?.() || null;
+    // Only hand the trial to the account layer once this deploy can actually
+    // sign someone in. A worker with no sign-in method would otherwise send
+    // them to a panel saying accounts are switched off, with the local trial
+    // they could have had now unreachable — the free trial would dead-end.
+    if (accountSignIn().offered) await startAccountTrial(acct);
+    else startLocalTrial();
+  }
+
+  /** The trial that belongs to an account; someone not signed in is sent to the panel first. */
+  async function startAccountTrial(acct) {
+    // Not signed in: send them to the panel rather than starting a trial
+    // this browser would forget and the next one would hand out again.
+    if (!acct?.signedIn) {
+      // Not a failure: the press worked and sent them to sign in. It is the
+      // step where the funnel most plausibly leaks, so it gets its own id
+      // rather than being folded into an error.
+      trackFunnel("trial_result", { outcome: "needs_account", where: "pricing", kind: "account" });
+      toast(tt("pricing.trialNeedsAccount"), { durationMs: 4200 });
+      closePricing();
+      openAccount();
+      return;
+    }
+    const res = await window.VTAccount.startTrial();
+    if (res && res.ok) {
+      trackFunnel("trial_result", { outcome: "started", where: "pricing", kind: "account" });
+      toast(tt("pricing.toast.trialStarted", { n: String(res.days ?? "") }));
+    } else {
+      trackFunnel("trial_result", { outcome: funnelReason(res && res.reason), where: "pricing", kind: "account" });
+      toast(tt("pricing.toast.trialUsed"), { durationMs: 4200 });
+    }
+    updateBillingChrome();
+    renderPricingModal();
+  }
+
+  /** The browser's own trial, for a deploy with no sign-in. */
+  function startLocalTrial() {
+    if (!window.VTBilling?.startTrial) return;
+    const res = VTBilling.startTrial();
+    if (!res.ok) {
+      trackFunnel("trial_result", { outcome: funnelReason(res.reason), where: "pricing", kind: "local" });
+      toast(tt("pricing.toast.trialUsed"), { durationMs: 4200 });
+    } else {
+      trackFunnel("trial_result", { outcome: "started", where: "pricing", kind: "local" });
+      toast(tt("pricing.toast.trialStarted", { n: String(VTBilling.trialDaysLeft?.() ?? 0) }));
+    }
+    updateBillingChrome();
+    renderPricingModal();
+  }
+
+  function openBillingPortal() {
+    if (!window.VTBilling?.openCustomerPortal) return;
+    const res = VTBilling.openCustomerPortal();
+    if (!res?.ok) {
+      toast(res?.message || tt("pricing.toast.portalUnconfigured"), { durationMs: 4200 });
+      return;
+    }
+    toast(tt("pricing.toast.portalOpened"));
+  }
+
+  /** The progress pack (JSON) and the coach summary (text), named for the learner's own day. */
+  function exportProgress() {
+    if (!window.VTBilling?.can("export_progress")) {
+      toast(tt("pricing.toast.exportNeedPro"));
+      openPricing();
+      return;
+    }
+    const json = VTBilling.exportProgressJson();
+    if (!json) return;
+    const day = dayKeyLocal(); // the learner's day: UTC named tomorrow's date after 19:00 in Lima (QA-36)
+    // JSON pack
+    const blob = new Blob([json], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `vocal-studio-progress-${day}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    // Human coach summary (.txt) — “coach pack” that is actually delivered
+    try {
+      const pulse = window.VTValuePulse?.compute?.();
+      const summary =
+        (window.VTValuePulse?.narrative?.(pulse, isEsLang()) || "") +
+        "\n\n---\n" +
+        (isEsLang()
+          ? "Exportado desde Estudio Vocal Pro · comparte este resumen con tu coach."
+          : "Exported from Vocal Studio Pro · share this summary with your coach.");
+      const tb = new Blob([summary], { type: "text/plain;charset=utf-8" });
+      const at = document.createElement("a");
+      at.href = URL.createObjectURL(tb);
+      at.download = `vocal-studio-coach-summary-${day}.txt`;
+      at.click();
+      URL.revokeObjectURL(at.href);
+    } catch {
+      /* ignore */
+    }
+    toast(tt("pricing.toast.exported"));
+  }
+
+  /** What happens when the page learns the billing answer changed, and on coming back from a checkout. */
+  function bindBillingEvents() {
+    VTBilling.onChange(() => {
+      updateBillingChrome();
+      renderValuePulse();
+      if ($("#pricing-modal") && !$("#pricing-modal").hidden) renderPricingModal();
+    });
+    const ret = VTBilling.handleReturnFromCheckout();
+    linkReturnedCheckout(ret);
+    announceCheckoutReturn(ret);
+    // Operator console health (not shown to casual users)
+    try {
+      const h = VTBilling.getBillingHealth?.();
+      if (h && !h.ok) console.info("[VTBilling] health:", h);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  /**
+   * Somebody who was signed in when they paid should own the subscription,
+   * not just the browser they happened to pay in. Attaching it here is what
+   * makes it show up on their phone afterwards.
+   */
+  function linkReturnedCheckout(ret) {
+    if (!(ret?.event === "success" && ret.sessionId && ret.provider)) return;
+    window.VTAccount?.linkCheckout?.({ provider: ret.provider, sessionId: ret.sessionId })
+      .then((res) => {
+        if (res?.ok) {
+          updateBillingChrome();
+          refreshAccountUI();
+        }
+      })
+      .catch(() => {
+        /* the anonymous claim path still grants Pro in this browser */
+      });
+  }
+
+  /** What the person is told on coming back from the checkout page. */
+  function announceCheckoutReturn(ret) {
+    if (ret?.event === "success" && ret.pendingVerification) {
+      // Payment recorded; Pro waits on the entitlement worker's signed license.
+      toast(tt("pricing.toast.verifyPending"), { durationMs: 4600 });
+      ret.claiming?.then((res) => {
+        toast(res?.ok ? tt("pricing.toast.verifyOk") : tt("pricing.toast.verifyFailed"), {
+          durationMs: res?.ok ? 3600 : 6000
+        });
+        updateBillingChrome();
+        if ($("#pricing-modal") && !$("#pricing-modal").hidden) renderPricingModal();
+      });
+    } else if (ret?.event === "success") {
+      toast(tt("pricing.toast.success"));
+    }
+    if (ret?.event === "cancel") toast(tt("pricing.toast.cancel"));
+    if (ret?.event === "error") {
+      toast(ret.message || tt("pricing.toast.checkoutError"), { durationMs: 4200 });
+    }
+  }
+
   function bindBilling() {
     $("#btn-pricing")?.addEventListener("click", openPricing);
     $("#btn-value-pro")?.addEventListener("click", openPricing);
@@ -9033,79 +9288,8 @@
     $("#pricing-modal")?.addEventListener("click", (e) => {
       if (e.target === $("#pricing-modal")) closePricing();
     });
-    $("#btn-recheck-payment")?.addEventListener("click", () => {
-      const claiming = window.VTBilling?.resumePendingClaim?.({ force: true });
-      if (!claiming) {
-        toast(tt("pricing.toast.verifyFailed"), { durationMs: 5200 });
-        return;
-      }
-      toast(tt("pricing.toast.verifyPending"), { durationMs: 3600 });
-      claiming.then((res) => {
-        toast(res?.ok ? tt("pricing.toast.verifyOk") : tt("pricing.toast.verifyFailed"), {
-          durationMs: res?.ok ? 3600 : 6000
-        });
-        updateBillingChrome();
-        renderPricingModal();
-      });
-    });
-    $("#btn-start-trial")?.addEventListener("click", async () => {
-      trackFunnel("trial_click", { where: "pricing" });
-      // Which trial this is belongs to the worker, so ask before choosing:
-      // guessing "local" hands out a browser trial that a later server trial
-      // then duplicates, and guessing "server" sends someone to a panel that
-      // may have no way in. openPricing() has usually already asked, so this
-      // returns at once — but a click must never hang on the network, so a
-      // worker that has not answered by now counts as no worker.
-      await Promise.race([
-        window.VTAccount?.ensureMethods?.() || Promise.resolve(null),
-        new Promise((resolve) => setTimeout(resolve, 1200))
-      ]);
-      const acct = window.VTAccount?.getState?.() || null;
-      // Only hand the trial to the account layer once this deploy can actually
-      // sign someone in. A worker with no sign-in method would otherwise send
-      // them to a panel saying accounts are switched off, with the local trial
-      // they could have had now unreachable — the free trial would dead-end.
-      if (accountSignIn().offered) {
-        // Not signed in: send them to the panel rather than starting a trial
-        // this browser would forget and the next one would hand out again.
-        if (!acct?.signedIn) {
-          // Not a failure: the press worked and sent them to sign in. It is the
-          // step where the funnel most plausibly leaks, so it gets its own id
-          // rather than being folded into an error.
-          trackFunnel("trial_result", { outcome: "needs_account", where: "pricing", kind: "account" });
-          toast(tt("pricing.trialNeedsAccount"), { durationMs: 4200 });
-          closePricing();
-          openAccount();
-          return;
-        }
-        const res = await window.VTAccount.startTrial();
-        if (res && res.ok) {
-          trackFunnel("trial_result", { outcome: "started", where: "pricing", kind: "account" });
-          toast(tt("pricing.toast.trialStarted", { n: String(res.days ?? "") }));
-        } else {
-          trackFunnel("trial_result", {
-          outcome: funnelReason(res && res.reason),
-          where: "pricing",
-          kind: "account"
-        });
-          toast(tt("pricing.toast.trialUsed"), { durationMs: 4200 });
-        }
-        updateBillingChrome();
-        renderPricingModal();
-        return;
-      }
-      if (!window.VTBilling?.startTrial) return;
-      const res = VTBilling.startTrial();
-      if (!res.ok) {
-        trackFunnel("trial_result", { outcome: funnelReason(res.reason), where: "pricing", kind: "local" });
-        toast(tt("pricing.toast.trialUsed"), { durationMs: 4200 });
-      } else {
-        trackFunnel("trial_result", { outcome: "started", where: "pricing", kind: "local" });
-        toast(tt("pricing.toast.trialStarted", { n: String(VTBilling.trialDaysLeft?.() ?? 0) }));
-      }
-      updateBillingChrome();
-      renderPricingModal();
-    });
+    $("#btn-recheck-payment")?.addEventListener("click", recheckPayment);
+    $("#btn-start-trial")?.addEventListener("click", startTrialFromPricing);
     $("#btn-demo-pro")?.addEventListener("click", () => {
       if (!window.VTBilling) return;
       VTBilling.activateDemo("pro_monthly");
@@ -9113,103 +9297,14 @@
       updateBillingChrome();
       renderPricingModal();
     });
-    $("#btn-manage-billing")?.addEventListener("click", () => {
-      if (!window.VTBilling?.openCustomerPortal) return;
-      const res = VTBilling.openCustomerPortal();
-      if (!res?.ok) {
-        toast(res?.message || tt("pricing.toast.portalUnconfigured"), { durationMs: 4200 });
-        return;
-      }
-      toast(tt("pricing.toast.portalOpened"));
-    });
-    $("#btn-export-progress")?.addEventListener("click", () => {
-      if (!window.VTBilling?.can("export_progress")) {
-        toast(tt("pricing.toast.exportNeedPro"));
-        openPricing();
-        return;
-      }
-      const json = VTBilling.exportProgressJson();
-      if (!json) return;
-      const day = new Date().toISOString().slice(0, 10);
-      // JSON pack
-      const blob = new Blob([json], { type: "application/json" });
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = `vocal-studio-progress-${day}.json`;
-      a.click();
-      URL.revokeObjectURL(a.href);
-      // Human coach summary (.txt) — “coach pack” that is actually delivered
-      try {
-        const pulse = window.VTValuePulse?.compute?.();
-        const summary =
-          (window.VTValuePulse?.narrative?.(pulse, isEsLang()) || "") +
-          "\n\n---\n" +
-          (isEsLang()
-            ? "Exportado desde Estudio Vocal Pro · comparte este resumen con tu coach."
-            : "Exported from Vocal Studio Pro · share this summary with your coach.");
-        const tb = new Blob([summary], { type: "text/plain;charset=utf-8" });
-        const at = document.createElement("a");
-        at.href = URL.createObjectURL(tb);
-        at.download = `vocal-studio-coach-summary-${day}.txt`;
-        at.click();
-        URL.revokeObjectURL(at.href);
-      } catch {
-        /* ignore */
-      }
-      toast(tt("pricing.toast.exported"));
-    });
+    $("#btn-manage-billing")?.addEventListener("click", openBillingPortal);
+    $("#btn-export-progress")?.addEventListener("click", exportProgress);
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape" && $("#pricing-modal") && !$("#pricing-modal").hidden) {
         closePricing();
       }
     });
-    if (window.VTBilling) {
-      VTBilling.onChange(() => {
-        updateBillingChrome();
-        renderValuePulse();
-        if ($("#pricing-modal") && !$("#pricing-modal").hidden) renderPricingModal();
-      });
-      const ret = VTBilling.handleReturnFromCheckout();
-      // Somebody who was signed in when they paid should own the subscription,
-      // not just the browser they happened to pay in. Attaching it here is what
-      // makes it show up on their phone afterwards.
-      if (ret?.event === "success" && ret.sessionId && ret.provider) {
-        window.VTAccount?.linkCheckout?.({ provider: ret.provider, sessionId: ret.sessionId })
-          .then((res) => {
-            if (res?.ok) {
-              updateBillingChrome();
-              refreshAccountUI();
-            }
-          })
-          .catch(() => {
-            /* the anonymous claim path still grants Pro in this browser */
-          });
-      }
-      if (ret?.event === "success" && ret.pendingVerification) {
-        // Payment recorded; Pro waits on the entitlement worker's signed license.
-        toast(tt("pricing.toast.verifyPending"), { durationMs: 4600 });
-        ret.claiming?.then((res) => {
-          toast(res?.ok ? tt("pricing.toast.verifyOk") : tt("pricing.toast.verifyFailed"), {
-            durationMs: res?.ok ? 3600 : 6000
-          });
-          updateBillingChrome();
-          if ($("#pricing-modal") && !$("#pricing-modal").hidden) renderPricingModal();
-        });
-      } else if (ret?.event === "success") {
-        toast(tt("pricing.toast.success"));
-      }
-      if (ret?.event === "cancel") toast(tt("pricing.toast.cancel"));
-      if (ret?.event === "error") {
-        toast(ret.message || tt("pricing.toast.checkoutError"), { durationMs: 4200 });
-      }
-      // Operator console health (not shown to casual users)
-      try {
-        const h = VTBilling.getBillingHealth?.();
-        if (h && !h.ok) console.info("[VTBilling] health:", h);
-      } catch {
-        /* ignore */
-      }
-    }
+    if (window.VTBilling) bindBillingEvents();
     updateBillingChrome();
     renderValuePulse();
     renderRetentionChrome();

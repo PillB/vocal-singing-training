@@ -59,10 +59,13 @@
   function read() {
     try {
       const raw = localStorage.getItem(LS_KEY);
-      return raw ? JSON.parse(raw) : { events: [] };
+      const bag = raw ? JSON.parse(raw) : null;
+      // Valid JSON of another kind (null, a number, an array, events that are not a list) is a fresh bag (QA-35)
+      if (bag && typeof bag === "object" && Array.isArray(bag.events)) return bag;
     } catch {
-      return { events: [] };
+      /* corrupt JSON */
     }
+    return { events: [] };
   }
 
   function write(bag) {

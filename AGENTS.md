@@ -155,10 +155,12 @@ What the measure is, stated as a trade-off (QA-11, QA-12):
 
 - It is ESLint's **modified** cyclomatic complexity: a whole `switch` counts
   as one decision, not one per `case`. A 40-case dispatch therefore passes,
-  where classic McCabe would fail it. Classic would flag one more function
-  today (`mapStripeEvent` in the account worker, 17), which belongs to the
-  payments work and is left for its owner; until then the ceiling does not
-  see a long `switch`, so review one by eye.
+  where classic McCabe would fail it. Measured on the merged tree (after #20),
+  classic flags the same functions as modified and only reports larger numbers
+  for the ones with a `switch` (`mapStripeEvent` in the account worker: 16
+  modified, 23 classic, and it is in the legacy baseline either way). So the
+  gap is not one known function: it is any *new* long `switch`, which the
+  ceiling does not see. Review one by eye.
 - The gate parses `.js/.mjs/.cjs` only, so logic in an inline `<script>`
   inside an HTML page escapes it. The CSP alone does not close that (QA-15):
   a contributor can add the script and its hash. What does is
@@ -205,8 +207,19 @@ a different config patches it as the page loads, with `patchBillingConfig`
 or `enableQaPro` from `tests/helpers/billing.js` (they compose); assigning to
 the config from `page.evaluate` silently does nothing. This raises the bar
 and no more: a script that runs before the page's own, or an edited copy of
-the files, can still unlock the client-side Pro features. Paid access itself
-rests on the server-signed license.
+the files, can still unlock the client-side Pro features. **It is deterrence
+against the one-line console snippet, not Pro protection** (QA round 4,
+QA-32): nothing Pro-only is computed on the server, so the signature guards a
+toggle in the page. Round 4 closed the routes a snippet could still take
+(`tests/trust-console-gaps.spec.js`, mutants B6 to B11): the license key is
+frozen to full depth, the window bindings cannot be swapped, the signature
+check is captured when the script loads (a later `SubtleCrypto.prototype.verify`
+stub does nothing), a trial dated in the future is not a trial, and the plan
+chip and insights follow the verified license, not the worker's unsigned JSON.
+What stays open and is a product decision, not a bug: the local 7-day trial is
+a mark in `localStorage` (clearing site data renews it); a license token is the
+bearer of its subscription, so a leaked token works until the subscription
+ends (QA-28); `VTStorage.createProfile` defaults to the Pro cap (QA-30).
 
 ### Test layers
 

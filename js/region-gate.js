@@ -604,12 +604,38 @@
     if (yes) yes.textContent = t.accept;
     if (no) no.textContent = t.reject;
     if (more) more.textContent = t.more;
+    reserveBarRoom();
   }
 
   function hideBar() {
     const bar = global.document?.querySelector("[data-region-consent]");
     if (bar) bar.remove();
     barShown = false;
+    reserveBarRoom();
+  }
+
+  /**
+   * Keep keyboard focus clear of the bar. It is fixed over the bottom of the
+   * window, and the browser's focus scroll only knows the padding it is told and
+   * cannot scroll past the end of the document:
+   * Tab left Start, the mic slider and the toggles under it (15 of 57 stops on
+   * a phone; WCAG 2.4.11, QA UIB-01). Its height changes with the width and the
+   * language, so this is read again on both.
+   */
+  function reserveBarRoom() {
+    const root = global.document?.documentElement;
+    if (!root) return;
+    const bar = global.document.querySelector("[data-region-consent]");
+    if (!bar) {
+      root.style.removeProperty("scroll-padding-bottom");
+      root.style.removeProperty("padding-bottom");
+      return;
+    }
+    const room = `${Math.ceil(bar.getBoundingClientRect().height) + 8}px`;
+    root.style.setProperty("scroll-padding-bottom", room);
+    // The last controls of a page (the toggles under an exercise) sit where the
+    // document ends: with nothing below them the window cannot scroll them clear
+    root.style.setProperty("padding-bottom", room);
   }
 
   /**
@@ -661,6 +687,7 @@
     renderBar();
     bar.querySelector("[data-region-accept]")?.addEventListener("click", () => setConsent(true));
     bar.querySelector("[data-region-reject]")?.addEventListener("click", () => setConsent(false));
+    global.addEventListener("resize", reserveBarRoom);
     // The app switches language under the bar's feet; i18n writes <html lang>.
     try {
       const obs = new MutationObserver(() => renderBar());

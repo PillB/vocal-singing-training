@@ -40,8 +40,8 @@
     "sha": "93d225ed63fd919a"
   },
   "css/styles.css": {
-    "v": "20261103b",
-    "sha": "a7a4b05f9e2f89d6"
+    "v": "20261103c",
+    "sha": "de93ca52d08f7b88"
   },
   "js/account.js": {
     "v": "20261006b",
@@ -60,12 +60,12 @@
     "sha": "a21095f2971b6300"
   },
   "js/analytics.js": {
-    "v": "20261006b",
-    "sha": "4c03c708ee923b1a"
+    "v": "20261103a",
+    "sha": "319fd17f4fbb6fd1"
   },
   "js/app.js": {
-    "v": "20261103b",
-    "sha": "aa61df975518b335"
+    "v": "20261103g",
+    "sha": "a8e130c2c10e1134"
   },
   "js/audio-recovery.js": {
     "v": "20261102b",
@@ -84,8 +84,8 @@
     "sha": "b61963af1a8c5294"
   },
   "js/billing.js": {
-    "v": "20261102a",
-    "sha": "9b8a501ac59e386a"
+    "v": "20261103a",
+    "sha": "4b1faa1108a4b2c9"
   },
   "js/daily-loop.js": {
     "v": "20261006b",
@@ -96,8 +96,8 @@
     "sha": "012bb5f186b7dfdd"
   },
   "js/exercises-data.js": {
-    "v": "20261101a",
-    "sha": "c9d81c3332b0860b"
+    "v": "20261103a",
+    "sha": "14c8baff210635df"
   },
   "js/exercises-locale-es.js": {
     "v": "20261101a",
@@ -116,12 +116,12 @@
     "sha": "178ba56877e20400"
   },
   "js/i18n.js": {
-    "v": "20261103a",
-    "sha": "7d046a1bf87cf5ce"
+    "v": "20261103b",
+    "sha": "c338df0433b4bea7"
   },
   "js/license.js": {
-    "v": "20261102a",
-    "sha": "509dfa45003503ed"
+    "v": "20261103d",
+    "sha": "d667f789ec86cbd9"
   },
   "js/metrics.js": {
     "v": "20260924c",
@@ -148,8 +148,8 @@
     "sha": "67a03e6af23e206d"
   },
   "js/practice-modes.js": {
-    "v": "20261102c",
-    "sha": "9dc0b225676685fe"
+    "v": "20261103a",
+    "sha": "c967e70077be5d32"
   },
   "js/practice-profiles.js": {
     "v": "20261002a",
@@ -168,8 +168,8 @@
     "sha": "9303675d4862baf5"
   },
   "js/region-gate.js": {
-    "v": "20261102a",
-    "sha": "77182bd45d57a044"
+    "v": "20261103b",
+    "sha": "4e7e6793cda6c436"
   },
   "js/reminders.js": {
     "v": "20260924c",
@@ -212,8 +212,8 @@
     "sha": "970c4630a8ee761b"
   },
   "js/storage.js": {
-    "v": "20261006b",
-    "sha": "88e94f2ad7eab14e"
+    "v": "20261103a",
+    "sha": "c258071819748ee6"
   },
   "js/sync.js": {
     "v": "20261102a",

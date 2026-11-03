@@ -177,6 +177,7 @@
     if (!started) return false;
     const t0 = Date.parse(started);
     if (!Number.isFinite(t0)) return false;
+    if (t0 > nowMs() + 300000) return false; // a start date in the future is not a start
     return nowMs() < t0 + days * 86400000;
   }
 

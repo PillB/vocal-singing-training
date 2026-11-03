@@ -22,13 +22,15 @@
   "use strict";
 
   const LS_KEY = "vt_license_v1";
-  // Captured at load: a console line that later swaps SubtleCrypto.prototype.verify cannot reach these.
+  // Captured at load: a console line that later swaps SubtleCrypto.prototype.verify cannot reach these,
+  // and neither can one that swaps Function.prototype.call/apply (they are invoked through APPLY, not as methods).
   // The prototype's methods where the browser has them (a swap on the instance cannot reach those);
   // the instance's own where a runtime offers only that (the test harness's stand-in, an older engine).
   const SUBTLE = global.crypto && global.crypto.subtle;
   const SUBTLE_PROTO = global.SubtleCrypto && global.SubtleCrypto.prototype;
   const VERIFY = (SUBTLE_PROTO && SUBTLE_PROTO.verify) || (SUBTLE && SUBTLE.verify);
   const IMPORT_KEY = (SUBTLE_PROTO && SUBTLE_PROTO.importKey) || (SUBTLE && SUBTLE.importKey);
+  const APPLY = Reflect.apply;
   const ISSUER = "vocal-studio-entitlements";
   const CLOCK_SKEW_S = 300;
   const DEFAULT_REVALIDATE_HOURS = 24;
@@ -136,14 +138,13 @@
     publicKeyJwkSource = fingerprint;
     publicKeyPromise = (async () => {
       try {
-        return await IMPORT_KEY.call(
-          SUBTLE,
+        return await APPLY(IMPORT_KEY, SUBTLE, [
           "jwk",
           jwk,
           { name: "ECDSA", namedCurve: "P-256" },
           false,
           ["verify"]
-        );
+        ]);
       } catch (err) {
         console.warn("[VTLicense] public key rejected:", err?.message || err);
         return null;
@@ -180,13 +181,12 @@
   /** Whether `signature` is the issuer's over `header.payload`. Uses the intrinsics captured at load. */
   async function signatureHolds(key, parts, signature) {
     try {
-      return !!(await VERIFY.call(
-        SUBTLE,
+      return !!(await APPLY(VERIFY, SUBTLE, [
         { name: "ECDSA", hash: "SHA-256" },
         key,
         signature,
         new TextEncoder().encode(parts[0] + "." + parts[1])
-      ));
+      ]));
     } catch {
       return false;
     }

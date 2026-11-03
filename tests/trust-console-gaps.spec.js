@@ -6,6 +6,7 @@
  *   T3 license public key is deep-frozen (depth >= 2)       green on 13b53ea, red on the "freeze depth 1 only" mutant
  *   T4 window.VTBilling / window.VTLicense cannot be swapped green on 13b53ea, red when the window binding is left writable
  *   T5 stubbing SubtleCrypto.verify from the console       red on 13b53ea, green when verify is captured at load
+ *   T5b/c/d importKey swapped, Function.prototype.call stubbed  red when either intrinsic or the call primitive is read at call time
  *   T6 an unsigned /v1/me reply saying pro:true             red on 13b53ea, green when the plan chip/insights follow the signature
  * Expected values are literals (7 days, "free"), never read back from the code under test.
  * Run:  BASE_URL=http://127.0.0.1:<port> npx playwright test tests/trust-console-gaps.spec.js --project=chromium
@@ -78,6 +79,47 @@ test("T5 stubbing the signature check from the console does not make a forged to
     SubtleCrypto.prototype.verify = async () => true;
     await VTLicense.adopt(b({ alg: "ES256" }) + "." + b({ iss: "vocal-studio-entitlements", sub: "x", aud: location.origin, plan: "pro_yearly", status: "active", provider: "stripe", iat: now, exp: now + 31536000, periodEnd: now + 31536000 }) + "." + "A".repeat(86));`);
   expect(await page.evaluate(() => window.VTBilling.isPro())).toBe(false);
+});
+
+const FORGE = `
+  const b = (o) => btoa(JSON.stringify(o)).replace(/\\+/g, "-").replace(/\\//g, "_").replace(/=+$/, "");
+  const now = Math.floor(Date.now() / 1000);
+  const claims = { iss: "vocal-studio-entitlements", sub: "x", aud: location.origin, plan: "pro_yearly", status: "active", provider: "stripe", iat: now, exp: now + 31536000, periodEnd: now + 31536000 };
+  const head = b({ alg: "ES256" }) + "." + b(claims);
+`;
+// A token signed with the attacker's own key, and the attacker's public half in JWK form
+const ATTACKER = `
+  const pair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
+  const sig = new Uint8Array(await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, pair.privateKey, new TextEncoder().encode(head)));
+  const forged = head + "." + btoa(String.fromCharCode(...sig)).replace(/\\+/g, "-").replace(/\\//g, "_").replace(/=+$/, "");
+  const attackerJwk = await crypto.subtle.exportKey("jwk", pair.publicKey);
+`;
+
+test("T5b swapping importKey from the console cannot make the page trust the attacker's key", async ({ page }) => {
+  await boot(page);
+  await run(page, FORGE + ATTACKER + `
+    const real = SubtleCrypto.prototype.importKey;
+    SubtleCrypto.prototype.importKey = function (fmt, jwk, ...rest) { return real.call(this, fmt, attackerJwk, ...rest); };
+    await VTLicense.adopt(forged);`);
+  expect(await page.evaluate(() => window.VTBilling.isPro()), "a token signed by the attacker's key was accepted").toBe(false);
+});
+
+test("T5c stubbing Function.prototype.call cannot fake the signature check", async ({ page }) => {
+  await boot(page);
+  await run(page, FORGE + `
+    const verify = SubtleCrypto.prototype.verify, call = Function.prototype.call;
+    Function.prototype.call = function (target, ...args) { return this === verify ? Promise.resolve(true) : Reflect.apply(call, this, [target, ...args]); };
+    await VTLicense.adopt(head + "." + "A".repeat(86));`);
+  expect(await page.evaluate(() => window.VTBilling.isPro()), "a forged signature passed with Function.prototype.call stubbed").toBe(false);
+});
+
+test("T5d stubbing Function.prototype.call cannot swap the public key", async ({ page }) => {
+  await boot(page);
+  await run(page, FORGE + ATTACKER + `
+    const importKey = SubtleCrypto.prototype.importKey, call = Function.prototype.call;
+    Function.prototype.call = function (target, fmt, jwk, ...rest) { return this === importKey ? Reflect.apply(call, this, [target, fmt, attackerJwk, ...rest]) : Reflect.apply(call, this, [target, fmt, jwk, ...rest]); };
+    await VTLicense.adopt(forged);`);
+  expect(await page.evaluate(() => window.VTBilling.isPro()), "the attacker's key was trusted with Function.prototype.call stubbed").toBe(false);
 });
 
 test("T6 a worker reply that says pro:true without a signed token leaves the Pro surfaces locked", async ({ page }) => {

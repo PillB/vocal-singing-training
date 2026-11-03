@@ -68,6 +68,7 @@ Vanilla HTML / CSS / JS — no build step. Web Audio API (piano), MediaRecorder 
 - [Accounts, payments and gifted months](docs/33-ACCOUNTS-AND-PAYMENTS.md)
 - [What Pro is for, and what Free keeps](docs/41-PRO-VS-FREE.md)
 - [What this branch changed, section by section](docs/42-WHAT-THIS-BRANCH-CHANGED.md)
+- [**When it breaks**: what you can see, what it costs, and what to switch on](docs/43-WHEN-IT-BREAKS.md)
 - [Peru operator runbook: trámites, accounts and keys, in order](docs/34-PERU-OPERATOR-RUNBOOK.md)
 - [Admin guide](docs/ADMIN-GUIDE.md)
 - [Value gap registry: what is open, and why each open thing was left](docs/VALUE-GAP-REGISTRY.md)

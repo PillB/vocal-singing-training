@@ -468,3 +468,115 @@ the allowance unnecessary rather than wrong.
 
 Found by QA round 10 as QA-66. The number above was measured here rather than
 taken from the report. VG-59.
+
+---
+
+## 24. What it costs, and what you see when it breaks
+
+Commit `TBD`. The part of the list that had had no attention at all.
+
+### The health route could not fail
+
+`/v1/health` answered `ok: true` from booleans read out of the configuration.
+Every one of them says whether a *secret is set*. None of them says whether
+anything *works*, so the route answered `ok: true` with
+`accountsConfigured: true` while D1 was past its daily row limit and every
+account route was answering 500. "Configured" and "working" are different
+questions and only one of them was being asked.
+
+`?probe=1` now also reads one row from D1 and one key from KV and answers **503**
+if either refuses. Three decisions in it are worth stating:
+
+- **It reads and never writes.** The KV free tier allows 1,000 writes a day
+  against 100,000 reads, so a probe once a minute — 1,440 operations a day — is
+  1.4% of the read allowance and **144% of the write allowance**. A write probe
+  would have been the monitoring eating the thing it was monitoring.
+- **A binding that is not bound reports `skipped`, and the alarm treats that as a
+  failure**, because the worker answers 200 in that state while every account
+  route refuses. That is what a deploy that lost a binding looks like.
+- **No error text is published.** The route is public, and a database error
+  message is not ours to publish.
+
+### Nobody had counted what anything costs
+
+Metered through the real handlers and pinned in `test/cost.test.mjs`:
+
+| What happens | KV writes | D1 statements |
+|--------------|-----------|---------------|
+| A new Stripe subscriber | 10 | 0 |
+| A new Creem subscriber | 11 | 0 |
+| A Stripe renewal | 5 | 0 |
+| A Creem renewal | 6 | 0 |
+| A browser re-checking its licence | 0 | 0 |
+| A whole email sign-in | 0 | 19 |
+| First saved-progress write | 0 | 6 |
+| Each later push | 0 | 7 |
+| A batch of 25 usage events | 0 | 1 |
+
+Against KV's free ceiling of 1,000 writes a day, eleven writes a subscriber is
+**about 90 new subscribers in one day**. That is a launch day, not a theoretical
+number, and past a free ceiling Cloudflare refuses rather than slows:
+"further operations of that type will fail with an error".
+
+### The finding that matters most is not ours, it is the providers'
+
+What a refused `kv.put` costs depends entirely on how patient the provider is,
+and the three rails differ by three orders of magnitude. Mercado Pago retries
+"cada 15 minutos, hasta que reciba la respuesta" with no documented maximum.
+Stripe "attempts to deliver events to your destination for up to three days".
+Creem's documented backoff is "30 seconds, 1 minute, 5 minutes and 1 hour" —
+about 1 h 6 m in total. The daily allowance resets at 00:00 UTC, so two rails
+come back and **on the international rail the sale is simply lost**, with nothing
+telling either party.
+
+There is a sharper case inside that one. Each webhook sets an idempotency marker
+in KV before doing the work and deletes it on failure so the retry is not
+dismissed as a duplicate. KV meters writes and deletes separately, so the delete
+normally survives a day that has run out of writes. If both budgets are gone the
+delete throws from inside the `catch`, the marker stays for its 30-day TTL, and
+the provider's retry is answered `200 duplicate` — a purchase lost permanently
+rather than until midnight. It needs both ceilings in one day, and it is written
+down because it is the only path where a later retry cannot recover.
+
+### A test that asks for the query plan, and what it found
+
+`cost.test.mjs`'s last cases ask SQLite for the plan of every statement a hot
+path runs and fail on a `SCAN` of a table that grows with use. Nothing a learner
+does scans. One thing an *operator* does: `/v1/admin/funnel`'s plan is
+`SCAN events USING COVERING INDEX idx_events_cid_name`, so it reads the whole
+events table whatever `days` window is asked for. At 25 events a learner-day and
+200 learners a day, the 180-day retention leaves about 900,000 rows, and
+5,000,000 ÷ 900,000 is **five opens of the admin stats page before the account's
+whole daily D1 read allowance is gone** — and what stops then is not the stats
+page, it is sign-in, saved progress and the trial, for everybody, until 00:00
+UTC. Two candidate indexes were tried and the planner scanned anyway, because a
+range index would cost a sort for the `GROUP BY`. The scan is asserted *as* the
+known exception with its threshold written beside it, so it cannot quietly
+spread, and the real fix — a daily rollup table — is named in
+`docs/43-WHEN-IT-BREAKS.md` §6 with the number rather than built.
+
+### The alarm, switched off
+
+`.github/workflows/health-ping.yml` calls the probe three times an hour and opens
+a GitHub issue when it fails, closing it on the next success. It is the only free
+push alert available: Cloudflare has no notification type for a Worker erroring
+or nearing a usage limit, and its Health Checks and usage-billing notifications
+are "Professional plans or higher". Two repository variables arm it, so merging
+this turns nothing on. Eight responses were put through the probe step before it
+was committed — healthy, 503, a 200 claiming health with a binding in error, a
+200 with both bindings unbound, a 404, nothing listening, a trailing-slash base
+URL, and the variable unset. One says healthy; the other seven open the issue.
+
+The weakness is GitHub's own: "In a public repository, scheduled workflows are
+automatically disabled when no repository activity has occurred in 60 days." A
+quiet two months turns the alarm off by itself. That is stated in the document
+rather than discovered later.
+
+### What is left is a decision, not code
+
+The $5/month Workers Paid plan converts every ceiling above from a refusal into
+about **$0.000055 a subscriber**. It is in `docs/40-GO-LIVE-GATE.md` §3 as the
+fourth decision, and it is the only one of the four with a deadline: it is worth
+answering before either checkout opens.
+
+VG-60. `docs/43-WHEN-IT-BREAKS.md` is the whole of it.

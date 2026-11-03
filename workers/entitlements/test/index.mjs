@@ -25,6 +25,7 @@ import "./trial-arm.test.mjs";
 import "./trial-killers.test.mjs";
 import "./progress.test.mjs";
 import "./progress-race.test.mjs";
+import "./cost.test.mjs";
 import "./google.test.mjs";
 import "./email.test.mjs";
 import "./api.test.mjs";

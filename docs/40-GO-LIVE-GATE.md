@@ -38,6 +38,8 @@ every step is safe to stop after.
 | The other six A/B tests | **Off** | `js/experiments-config.js` |
 | Ads / affiliate cards | **Off**, and every partner link is empty | `js/ads-config.js` `adsEnabled` |
 | Demo unlock | **Off**, and must stay off in anything public | `js/billing-config.js` `demoUnlockEnabled` |
+| Health probe | **On**, and public: `/v1/health?probe=1` reads D1 and KV and answers 503 if either refuses | nothing to switch |
+| The alarm that tells you it failed | **Off.** Two repository variables arm it | `.github/workflows/health-ping.yml`, `docs/43-WHEN-IT-BREAKS.md` §4.1 |
 | Terms page | Live, with three placeholders in it | `terms.html` |
 
 Two of those rows are the whole of why this page exists: **checkout is closed
@@ -274,7 +276,7 @@ approved account and units, and that is the only part of this that needs you.
 | What | When it starts costing | Roughly |
 |------|------------------------|---------|
 | GitHub Pages | never, at this size | free |
-| Cloudflare Workers, KV, D1 | only past the free ceilings | $5/month if you pass them |
+| Cloudflare Workers, KV, D1 | only past the free ceilings, and **past them it refuses rather than slows** | $5/month, and worth paying before the first checkout opens — `docs/43-WHEN-IT-BREAKS.md` §3 has the arithmetic |
 | Creem | only on a real sale | 3.9% + $0.40 |
 | Mercado Pago Perú | only on a real sale | per their tariff |
 | Transactional email | past the free tier | a few thousand emails free |
@@ -302,6 +304,15 @@ beside them in `docs/33-ACCOUNTS-AND-PAYMENTS.md`.
    mis-set, and risks refusing somebody who really did pay.
 3. **Whether gifted months stack.** Today: they do not — the longest end date
    wins.
+4. **Whether to pay Cloudflare the $5 a month.** Today: the free plan, which
+   refuses operations past its daily ceilings rather than billing for them.
+   The one that binds is KV's 1,000 writes a day, which is about 90 new
+   subscribers in a single day — and the day it runs out, Mercado Pago and
+   Stripe retry until it resets while **Creem gives up after about an hour, so
+   those sales are lost rather than delayed.** On the paid plan the same day
+   costs about $0.000055 a subscriber. This one has a deadline the others do
+   not: it is worth answering before either checkout opens, not after.
+   `docs/43-WHEN-IT-BREAKS.md` is the whole case.
 
 Two of the three carry a failing `todo` test, so the suite names them rather
 than letting them be forgotten.

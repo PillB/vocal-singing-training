@@ -1,0 +1,163 @@
+# Checks that the entitlements worker is actually working, and opens a GitHub
+# issue when it is not. GitHub emails you about issues in your own repository,
+# so this is the one push alert available for free — Cloudflare has no
+# notification type for a Worker erroring or nearing a usage limit, and its
+# Health Checks and usage-billing notifications are Professional plan or higher.
+# docs/43-WHEN-IT-BREAKS.md has the whole reasoning, what this catches and what
+# it does not.
+#
+# OFF until two repository variables are set, in
+# Settings > Secrets and variables > Actions > Variables:
+#
+#   ENTITLEMENTS_BASE   the worker's base URL, no trailing slash
+#   HEALTH_PING         on
+#
+# The URL lives in a variable rather than in this file because this repository
+# is public. Nothing secret is needed: /v1/health takes no key.
+#
+# Three times an hour, at 7, 27 and 47 minutes past. Not on the hour, because
+# GitHub names the start of every hour a high-load time when scheduled runs are
+# delayed and "some queued jobs may be dropped". Also worth knowing: "In a
+# public repository, scheduled workflows are automatically disabled when no
+# repository activity has occurred in 60 days", so a quiet two months turns
+# this alarm off by itself.
+name: Health ping
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "7,27,47 * * * *"
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: health-ping
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    # One variable arms the whole thing. Unset, every run skips in a second.
+    if: vars.HEALTH_PING == 'on'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe /v1/health?probe=1
+        id: probe
+        env:
+          BASE: ${{ vars.ENTITLEMENTS_BASE }}
+        run: |
+          set -uo pipefail
+          emit() { printf '%s=%s\n' "$1" "$2" >> "$GITHUB_OUTPUT"; }
+          emit_detail() {
+            {
+              printf 'detail<<PROBE_EOF\n'
+              printf '%s\n' "$1"
+              printf 'PROBE_EOF\n'
+            } >> "$GITHUB_OUTPUT"
+          }
+
+          if [ -z "${BASE:-}" ]; then
+            emit ok false
+            emit_detail "HEALTH_PING is on but ENTITLEMENTS_BASE is not set, so there is nothing to probe. Set it in Settings > Secrets and variables > Actions > Variables."
+            exit 0
+          fi
+
+          url="${BASE%/}/v1/health?probe=1"
+          code=$(curl -sS --max-time 20 -o body.json -w '%{http_code}' "$url" 2>curl.err || true)
+          code="${code:-000}"
+          body=$(head -c 1500 body.json 2>/dev/null || true)
+
+          # 000 means curl never got an answer: DNS, TLS, a timeout, or the
+          # worker is not there at all. The reason is in curl's own stderr.
+          if [ "$code" = "000" ]; then
+            emit ok false
+            emit_detail "No answer from the worker. curl said: $(head -c 400 curl.err 2>/dev/null)"
+            exit 0
+          fi
+
+          # 503 is the probe refusing on purpose (D1 or KV would not answer);
+          # anything else outside 200 is a route or deploy problem.
+          if [ "$code" != "200" ]; then
+            emit ok false
+            emit_detail "HTTP $code from /v1/health?probe=1. Body: $body"
+            exit 0
+          fi
+
+          # Both bindings must say "ok". A 200 whose body reports an error
+          # should never happen (the worker answers 503 for that), and
+          # "skipped" means the binding is not bound at all — which is a deploy
+          # mistake worth catching, because the worker still answers 200 while
+          # every account route refuses. If you ever deploy without D1 on
+          # purpose, this is the line to relax.
+          if ! jq -e '.ok == true and .probe.db == "ok" and .probe.kv == "ok"' body.json >/dev/null 2>&1; then
+            emit ok false
+            emit_detail "HTTP 200 but the body does not say everything is working. Body: $body"
+            exit 0
+          fi
+
+          emit ok true
+          emit_detail "HTTP 200, db and kv both answered."
+
+      - name: Open or close the alert issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OK: ${{ steps.probe.outputs.ok }}
+          DETAIL: ${{ steps.probe.outputs.detail }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -uo pipefail
+          TITLE="Health probe failing: the entitlements worker"
+
+          existing=$(gh issue list --state open --limit 50 --json number,title \
+            --jq "map(select(.title == \"$TITLE\")) | .[0].number // empty" 2>/dev/null || true)
+
+          if [ "$OK" = "true" ]; then
+            if [ -n "$existing" ]; then
+              {
+                echo "The probe is answering again, so this closes itself."
+                echo
+                echo "$DETAIL"
+                echo
+                echo "[This run]($RUN_URL)"
+              } > recovered.md
+              gh issue comment "$existing" --body-file recovered.md
+              gh issue close "$existing"
+              echo "Recovered; closed #$existing."
+            else
+              echo "Healthy."
+            fi
+            exit 0
+          fi
+
+          # One issue, one notification. A failure that is already filed is left
+          # alone rather than commented on every twenty minutes: the issue is the
+          # alarm, and the run history is the detail.
+          if [ -n "$existing" ]; then
+            echo "Still failing; #$existing is already open."
+            exit 0
+          fi
+
+          {
+            echo "The scheduled health probe could not confirm that the entitlements worker is working."
+            echo
+            echo "**What the probe saw**"
+            echo
+            echo "$DETAIL"
+            echo
+            echo "**What this means**"
+            echo
+            echo '`GET /v1/health?probe=1` reads one row from D1 and one key from KV and answers 503 if either refuses. A failure here is the worker being down, a binding past its daily limit, or a deploy that broke the routing. It does *not* say whether the payment webhooks are healthy: a wrong webhook secret is invisible from outside. See `docs/43-WHEN-IT-BREAKS.md`.'
+            echo
+            echo "**What to do**"
+            echo
+            echo "1. Open the URL yourself and read the body."
+            echo "2. Cloudflare dashboard, Workers, Logs — three days are kept on the free plan."
+            echo "3. If a daily limit is the cause it resets at 00:00 UTC, and on the Creem rail the purchases made while it was refusing are lost rather than delayed. That is section 2.1 of the document above."
+            echo
+            echo "This issue closes itself on the next successful probe."
+            echo
+            echo "[This run]($RUN_URL) · opened automatically by \`.github/workflows/health-ping.yml\`"
+          } > alert.md
+          gh issue create --title "$TITLE" --body-file alert.md
+          echo "Opened a new alert issue."

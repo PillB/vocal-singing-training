@@ -439,14 +439,65 @@ async function handleLicense(request, env, cors) {
 
 /**
  * Handle GET /v1/health.
+ *
+ * Without `?probe=1`, booleans read out of the configuration and nothing else:
+ * no database, no KV, no way to fail. With it, one read of each binding as well,
+ * and a 503 if either refuses — see the comment in the body for what that costs
+ * and why it reads rather than writes.
  * @param {Object} env Worker env bindings.
  * @param {Object} cors CORS headers.
- * @returns {Response} Response with booleans only.
+ * @param {URL} [url] Parsed request URL, for `?probe=1`.
+ * @returns {Promise<Response>} Response with booleans only.
  */
-function handleHealth(env, cors) {
+async function handleHealth(env, cors, url) {
+  // `?probe=1` is the only part of this route that can fail, and the reason it
+  // exists is that the rest of it cannot. Everything below is read out of the
+  // configuration, so this route answered `ok: true` with
+  // `accountsConfigured: true` while D1 was past its daily row limit and every
+  // account route was answering 500. "Configured" and "working" are different
+  // questions and only one of them was being asked.
+  //
+  // Reads only, deliberately. A write probe would spend the scarce thing: the
+  // KV free tier allows 1,000 writes a day against 100,000 reads
+  // (developers.cloudflare.com/kv/platform/pricing, read 3 November 2026), so a
+  // probe once a minute would eat the day's writes before noon. One D1 row read
+  // and one KV read per call, 1,440 a day at a probe a minute, which is 0.03% of
+  // D1's 5,000,000 daily row reads and 1.4% of KV's 100,000 reads.
+  //
+  // It is unauthenticated, like the rest of the route, so the honest statement of
+  // the exposure is this: at the Workers free plan's ceiling of 100,000 requests
+  // a day, probes alone would also reach KV's read ceiling — but a flood that
+  // large has already stopped the worker by the request limit, so this cannot be
+  // the thing that breaks first.
+  //
+  // Nothing about the failure is reported but that it failed. This route is
+  // public, and a database error message is not ours to publish.
+  const probe = url && url.searchParams.get("probe") === "1";
+  let checks;
+  if (probe) {
+    checks = { db: "skipped", kv: "skipped" };
+    if (env.DB) {
+      try {
+        await env.DB.prepare("SELECT 1 AS ok").first();
+        checks.db = "ok";
+      } catch {
+        checks.db = "error";
+      }
+    }
+    if (env.ENTITLEMENTS) {
+      try {
+        await env.ENTITLEMENTS.get("health:probe");
+        checks.kv = "ok";
+      } catch {
+        checks.kv = "error";
+      }
+    }
+  }
+  const working = !probe || (checks.db !== "error" && checks.kv !== "error");
   return json(
     {
-      ok: true,
+      ok: working,
+      ...(probe ? { probe: checks } : {}),
       stripeConfigured: Boolean(env.STRIPE_WEBHOOK_SECRET),
       mercadopagoConfigured: Boolean(env.MP_WEBHOOK_SECRET && env.MP_ACCESS_TOKEN),
       // The merchant-of-record rail. One secret, because Creem needs no
@@ -460,7 +511,7 @@ function handleHealth(env, cors) {
       authMethods: authMethods(env),
       siteOrigin: env.SITE_ORIGIN || ""
     },
-    200,
+    working ? 200 : 503,
     cors
   );
 }
@@ -584,7 +635,7 @@ export async function handleRequest(request, env, options) {
     if (request.method !== "GET") {
       return json({ ok: false, reason: "method_not_allowed" }, 405, { ...cors, allow: "GET" });
     }
-    return handleHealth(env, cors);
+    return handleHealth(env, cors, url);
   }
 
   return json({ ok: false, reason: "not_found" }, 404, cors);

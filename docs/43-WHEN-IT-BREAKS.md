@@ -1,0 +1,471 @@
+# When it breaks — what you can see, what it costs, and what to switch on
+
+Three questions this page answers, in this order:
+
+1. **If the payments stopped working right now, how would you find out?**
+2. **What does each thing a learner does actually cost, and which ceiling runs out first?**
+3. **What is worth switching on, what does it cost, and what does Cloudflare simply not offer?**
+
+The short version of the first answer, before the detail: **today you would find
+out because somebody emailed you.** Everything built into this product that could
+tell you something is a page you have to open. There is no alert, no email, no
+anything that arrives. A webhook that has been answering 500 for a week looks
+exactly like a webhook nobody called.
+
+The short version of the second: **Workers KV's free allowance of 1,000 writes a
+day is the first ceiling you will meet, and it sits around the one operation that
+must not fail — a purchase.** The arithmetic is in section 3.
+
+The short version of the third: **$5 a month.** Not for the capacity — the free
+capacity is larger than this product needs for a long time — but because past a
+free ceiling Cloudflare *refuses*, and past a paid inclusion it *bills*, and the
+bill at this product's scale is a fraction of a cent per subscriber.
+
+---
+
+## 1. What you can see today
+
+Measured from the code on this branch, not from memory.
+
+| Signal | Where it is | What it answers | What it cannot answer |
+|--------|-------------|-----------------|-----------------------|
+| `GET /v1/health` | public, no key | Is each rail *configured* — which secrets are set, which auth methods exist | Whether anything *works*. Before this branch this route could not fail at all: every value in it is read out of the configuration, so it answered `ok: true` with `accountsConfigured: true` while D1 was past its daily row limit and every account route was answering 500 |
+| `GET /v1/health?probe=1` | public, no key | **New on this branch.** Also reads one row from D1 and one key from KV, and answers **503** if either refuses. A binding that is not bound at all reports `skipped` | Why it failed. The route is public, so no error text is published. It also says nothing about the payment providers — a probe cannot buy anything |
+| Admin page → *Estadísticas* | `admin.html`, admin address required | The product funnel and A/B exposures over a window of days (`/v1/admin/funnel`, `/v1/admin/experiments`) | Health. These are product numbers. A day with no events looks the same whether nobody practised or the events route was refusing |
+| Admin page → *Lo que nos cuenta la gente* | `admin.html` | What users typed into the problem-report form (`/v1/admin/reports`) | Nothing, until somebody bothers to report. **This is currently the only path by which a failure reaches you at all**, and it only carries failures a user noticed and chose to describe |
+| Admin page → *Quién tiene Pro* | `admin.html` | Who holds Pro, by what kind of grant, and until when | Whether anybody was *refused* Pro they had paid for |
+| Workers Logs | Cloudflare dashboard | The 13 log lines the worker writes (below) | Anything older than **3 days** on the free plan, and anything past **200,000 log events in a day**, after which "a 1% head-based sample will be applied for the remainder of the day" |
+| The cron, 09:17 UTC | `wrangler.toml` `[triggers]` | — | Whether it ran. It deletes expired codes, sessions, rate-limit rows and data past the 180-day retention the privacy page promises, and reports nothing either way |
+| Cloudflare dashboard graphs | Cloudflare | Requests, errors, CPU time, KV and D1 operations | Anything, unless you open it |
+
+Every row in that table is a **pull**. Nothing in this product pushes.
+
+### What the worker logs, and what it does not
+
+Thirteen lines, all of them `console`, and `[observability] enabled = true` is
+already set in `wrangler.toml`, so they reach Workers Logs:
+
+| Line | Where | When |
+|------|-------|------|
+| `stripe entitlement updated` | `src/index.js` | A Stripe payment entitled somebody — the happy path |
+| `creem entitlement updated` | `src/index.js` | Same, Creem |
+| `mercadopago entitlement updated` | `src/index.js` | Same, Mercado Pago |
+| `stripe webhook rejected` | `src/index.js` | A signature did not verify — **wrong secret, or somebody probing** |
+| `creem webhook rejected` | `src/index.js` | Same, Creem |
+| `mercadopago webhook rejected` | `src/index.js` | Same, Mercado Pago |
+| `stripe event names a license we do not know` | `src/index.js` | A refund or renewal for a licence this worker has never seen |
+| `creem event names a license we do not know` | `src/index.js` | Same, Creem |
+| `mercadopago notification not applied` | `src/index.js` | A notification that mapped to nothing actionable |
+| `login code send failed` | `src/email.js` | The email provider refused a sign-in code — **nobody can sign in by email** |
+| `ingest counter` | `src/events.js` | The per-deployment event counter could not be written |
+| `report stored` | `src/reports.js` | A user reported a problem |
+| `unhandled error` | `src/index.js` | **Anything that threw.** The message only, never the body or headers |
+
+That last one is the catch-all, and it is where a ceiling failure lands: a
+`kv.put` that throws because the day's writes are gone is not caught anywhere in
+`handleRequest`, so it reaches the entry point's `catch`, logs
+`unhandled error <message>`, and answers 500. So the information does exist —
+for three days, in a console nobody is watching, as a line that does not say
+"we are out of KV writes" unless Cloudflare's own error message happens to.
+
+**There is no log line for a payment that was refused and lost.** The nearest
+thing is `unhandled error`, which is also what a null-pointer bug looks like.
+
+---
+
+## 2. Every way this breaks, and what you would actually notice
+
+Ordered by how likely it is to cost money. "Time to notice" assumes today's
+setup: nothing is watching.
+
+### 2.1 KV's daily write allowance runs out — 1,000 writes
+
+**What the learner sees.** They pay. The provider's page says the payment
+succeeded, because it did — the money moved. Then nothing: no Pro, and on the
+Peruvian rail no sign that anything is wrong beyond a page that will not unlock.
+
+**What happens inside.** `kv.put` throws. The webhook answers 500. What happens
+next is entirely up to the provider, and the three rails differ in a way that
+decides whether the sale survives:
+
+| Rail | Retry behaviour, from the provider's own docs | Outcome of a day that ran out of KV writes |
+|------|----------------------------------------------|--------------------------------------------|
+| Mercado Pago | 22-second confirmation timeout, then retries "cada 15 minutos, hasta que reciba la respuesta"; "Después del tercer intento, el plazo será prorrogado, pero los envíos continuarán sucediendo" — no documented maximum | **Recovers.** The allowance resets at 00:00 UTC and a retry lands after it |
+| Stripe | "Stripe attempts to deliver events to your destination for up to three days with an exponential back off in live mode" | **Recovers**, for the same reason, with three days of margin |
+| Creem | "with a progressive backoff period of 30 seconds, 1 minute, 5 minutes and 1 hour" — about 1 h 6 m 30 s in total, no documented maximum beyond those four, and no documented merchant notification | **The sale is lost.** Creem gives up long before midnight UTC, and nothing tells either of you |
+
+So the same ceiling is a delay on two rails and a silent lost sale on the third,
+and the third is the international one. That asymmetry is the single sharpest
+thing on this page.
+
+**The edge case inside the edge case.** Each webhook sets an idempotency marker
+in KV *before* doing the work (`markEventSeen`), and on any failure its `catch`
+deletes that marker so the provider's retry is not dismissed as a duplicate
+(`clearEventSeen`). KV meters writes and deletes separately — 1,000 of each a
+day — so the delete normally succeeds even when writes are gone, and the retry
+works. But if **deletes** are also exhausted, `clearEventSeen` throws from inside
+the `catch`, the marker stays, and the provider's retry is answered
+`200 duplicate`. The purchase is then lost *permanently*, not until midnight,
+because the marker lives 30 days (`EVENT_TTL_SECONDS`) and no provider retries
+that long — except Mercado Pago, which retries indefinitely and would recover at
+the 30-day mark. Deletes are far less used than writes here, so this needs both
+budgets gone in the same day; it is written down because it is the one path where
+a ceiling loses a sale that a later retry cannot recover.
+
+**Time to notice today:** when the buyer emails you.
+
+### 2.2 D1's daily row allowance runs out — 100,000 written, 5,000,000 read
+
+**What the learner sees.** Sign-in fails, saved progress stops syncing, the free
+trial cannot be started. Paying still works on the Stripe and Creem rails, which
+touch KV and not D1 — so you can be selling while nobody can log in.
+
+**Which half runs out first.** Almost certainly reads, and almost certainly
+because of one page: the admin *Estadísticas* panel. `/v1/admin/funnel`'s query
+plan is `SCAN events USING COVERING INDEX idx_events_cid_name` — it reads the
+whole `events` table regardless of the `days` window you ask for, because
+grouping by browser id would cost a sort otherwise. Two candidate indexes were
+tried (`(received_at, cid, name)` and `(cid, received_at, name)`) and the planner
+scanned anyway. The arithmetic is in section 3.4, and it is uncomfortable.
+
+**Time to notice today:** when a learner says their progress is not saving, or
+when you open the stats page and it errors.
+
+### 2.3 A webhook secret is wrong, rotated, or set on the wrong endpoint
+
+**What the learner sees.** Exactly what 2.1 looks like: paid, no Pro. Except it
+never recovers, because every retry is rejected the same way.
+
+**What happens inside.** `<rail> webhook rejected` is logged with the reason, and
+the worker answers **400**, which most providers treat as a permanent failure
+rather than something to retry. The 400 is right — a body that did not verify is
+not a body to act on — but it means a wrong secret converts every sale into a
+lost sale, with no recovery window at all.
+
+**This is the failure most likely to happen on the first day**, because it is the
+one that depends on copying a value correctly, and because test and live secrets
+differ on every provider. `/v1/health` tells you a secret is *set*; nothing tells
+you it is the *right* one. The go-live gate (`docs/40-GO-LIVE-GATE.md`) has the
+one-purchase proof for each rail, and that proof is the only thing that catches
+this.
+
+**Time to notice today:** the first buyer.
+
+### 2.4 The email provider's key expires or its account is suspended
+
+**What the learner sees.** The sign-in code never arrives. Google Sign-In still
+works, so only the people who chose email are locked out, which makes it look
+like their mail is at fault.
+
+**What happens inside.** `login code send failed <provider> <status>` is logged.
+The response to the browser is deliberately the same as a success, so an attacker
+cannot use the route to discover which addresses exist — which also means a
+*user* cannot tell a provider outage from a typo.
+
+**Time to notice today:** when somebody tells you they never got the code.
+
+### 2.5 The cron stops, or its sweep starts failing
+
+**What you lose.** The privacy page promises deletion at 180 days. A sweep that
+silently stops is a promise quietly broken, and it is also the thing holding the
+`events` table — and therefore 2.2's read ceiling — down.
+
+**Time to notice today:** never, by design. Nothing reports it.
+
+### 2.6 Storage fills — KV 1 GB, D1 5 GB
+
+Far away at this scale, and listed so it is not a surprise later. The things that
+grow are `events` (bounded by the 180-day sweep), `progress` (bounded at 512 KB a
+document, 3 profiles an account) and the per-event idempotency markers (bounded by
+their 30-day TTL). Nothing here grows without a bound.
+
+### 2.7 A provider changes its payload shape
+
+**What happens inside.** `<rail> notification not applied` or
+`<rail> event names a license we do not know`, logged, and then the retry logic in
+section 2.1's table decides what happens. This branch has already been bitten by
+four versions of this question — `docs/42-WHAT-THIS-BRANCH-CHANGED.md` sections
+19 and 20, and VG-51, VG-53, VG-54, VG-55, VG-56 in the registry — which is why
+the rule everywhere here is that an ambiguous payload may only ever *lengthen*
+access.
+
+**Time to notice today:** the first buyer after the change.
+
+### 2.8 The site itself
+
+GitHub Pages is a different system with its own status page, and the site is
+static: if Pages is down, nothing in this document applies, and if the worker is
+down the site still loads and simply cannot verify a licence. That split is
+deliberate and it is the one piece of good news on this page — a worker outage
+degrades the product, it does not remove it.
+
+---
+
+## 3. What it costs, with the arithmetic
+
+### 3.1 What each thing actually spends
+
+Measured on 3 November 2026 by metering the real handlers, and pinned in
+`workers/entitlements/test/cost.test.mjs` so the numbers below stay true or the
+build fails.
+
+| What happens | KV writes | D1 statements |
+|--------------|-----------|---------------|
+| A new Stripe subscriber, checkout → licence | **10** | 0 |
+| A new Creem subscriber | **11** | 0 |
+| A Stripe renewal | **5** | 0 |
+| A Creem renewal | **6** | 0 |
+| A browser re-checking its licence (`/v1/claim`) | **0** | 0 |
+| A whole email sign-in, code → session | 0 | **19** |
+| The first saved-progress write of a profile | 0 | **6** |
+| Each later progress push | 0 | **7** |
+| A heavy evening — twelve pushes | 0 | **84** |
+| A batch of 25 usage events | 0 | **1** |
+| `/v1/health` | 0 | 0 |
+| `/v1/health?probe=1` | 0 | 1, plus one KV read |
+
+Two things worth reading off that table. A browser checking its licence — the
+single most frequent thing that happens — costs **nothing** that is metered
+tightly, because claims are read-only and licences are cached. And saved progress
+never touches KV at all, so an evening of practice cannot eat into the budget a
+purchase needs. Both of those are properties worth keeping, which is why the test
+asserts them rather than merely measuring them.
+
+### 3.2 The ceilings, verbatim
+
+Read from Cloudflare's own documentation on 3 November 2026.
+
+| Resource | Free | What happens past it | Workers Paid |
+|----------|------|----------------------|--------------|
+| KV writes | 1,000/day | "further operations of that type will fail with an error"; resets 00:00 UTC | 1 million/month included, then **$5.00/million** |
+| KV reads | 100,000/day | same | 10 million/month, then $0.50/million |
+| KV deletes / lists | 1,000/day each | same | 1 million/month each, then $5.00/million |
+| KV storage | 1 GB | same | 1 GB, then $0.50/GB-month |
+| D1 rows written | 100,000/day | "D1 API will return errors to your client indicating that your daily limits have been exceeded" until 00:00 UTC | 50 million/month, then **$1.00/million** |
+| D1 rows read | 5,000,000/day | same | 25 billion/month, then $0.001/million |
+| D1 storage | 5 GB | same | 5 GB, then $0.75/GB-month |
+| Worker requests | 100,000/day | the worker stops answering | 10 million/month, then $0.30/million |
+| Worker CPU | 10 ms per invocation | the invocation is killed | 30 million CPU-ms/month, then $0.02/million |
+| Workers Logs | 200,000 events/day, 3 days kept | "After the limit is exceed, a 1% head-based sample will be applied for the remainder of the day" | 7 days kept |
+
+The Workers Paid plan has a "minimum charge of $5 USD per month for an account",
+and that one charge covers all of the above.
+
+A note on how D1 counts, because it is the one that surprises people: "Rows read
+measure how many rows a query reads (scans)", so a query that scans 5,000 rows to
+return one "would count as 5,000 rows read". And a write to a column an index
+covers counts as two rows written.
+
+### 3.3 Where the free plan actually runs out
+
+**KV writes are the binding constraint, and they bind on purchases.**
+
+- New subscribers: 1,000 ÷ 11 = **about 90 new Creem subscribers in one day**, or
+  100 on Stripe. That is a launch day, a press mention, or a TikTok. It is not a
+  theoretical number.
+- Renewals: a monthly subscriber renews once every ~30 days at 6 writes, so each
+  one costs about 0.2 writes a day. 1,000 ÷ 0.2 = **about 5,000 monthly
+  subscribers** before renewals alone fill the day. At S/ 19.90 that is roughly
+  S/ 99,500 a month in revenue, so the free write ceiling is nowhere near the
+  business's limit.
+- Mixed, realistically: at 500 subscribers, renewals cost about 100 writes a day
+  and leave room for 80-odd new ones.
+
+So the honest statement is that **the free tier's capacity is not the problem; the
+free tier's behaviour at the edge is.** You will not grow into this ceiling
+gradually. You will hit it on one unusual day, and on that day the international
+rail loses the sales rather than deferring them.
+
+**D1 writes are roughly an order of magnitude looser.** Only real D1 reports rows,
+so statements are the proxy here: if every statement wrote exactly one row, which
+over-counts, 100,000 rows a day would be about 5,200 email sign-ins or 1,190 heavy
+practice evenings. Nothing a learner does threatens this.
+
+**Worker requests** at 100,000 a day are not a constraint for a static site whose
+browser work is a cached licence check, an occasional progress push and one
+batched events call per session.
+
+### 3.4 The one read cost that grows: the stats page
+
+`/v1/admin/funnel` scans the whole `events` table. Put numbers on it:
+
+- 25 events per learner-day is what the browser batches.
+- At 200 learners a day that is 5,000 rows a day.
+- The cron keeps 180 days, so the steady state is **about 900,000 rows**.
+- 5,000,000 ÷ 900,000 = **about 5 opens of the stats page in a day** before the
+  entire account's D1 read allowance is gone.
+
+And when it is gone, it is not the stats page that stops — it is sign-in, saved
+progress and the trial, for every learner, until 00:00 UTC. **An admin refreshing
+a dashboard can take the product down.** This is the strongest argument on this
+page for the $5, and section 6 says what the real fix is.
+
+### 3.5 What the paid plan costs at this product's scale
+
+Past an inclusion you are billed, not refused. The bill:
+
+- A new Creem subscriber: 11 KV writes × $5.00/million = **$0.000055**, against
+  about $5.30 of revenue. **0.001% of the sale.**
+- 3,000 new subscribers in a day stays inside the monthly KV write inclusion.
+- 27,000 opens of the stats page a month stays inside the D1 read inclusion.
+
+**$5 a month converts every ceiling in section 3.2 from a refusal into a rounding
+error.** That is the whole case for it. It is not capacity.
+
+---
+
+## 4. What to switch on, and where
+
+Ordered cheapest first. Nothing here is required to go live; the first item is
+free and closes the biggest hole on this page.
+
+### 4.0 Doing nothing
+
+Worth stating as an option, with its price: a payment rail that breaks stays
+broken until a buyer writes to you, and on the Creem rail the sales made while it
+was broken are gone rather than delayed. If you are not selling yet, this is a
+perfectly reasonable place to be.
+
+### 4.1 Free — the health pinger in this repository
+
+`.github/workflows/health-ping.yml` is on this branch, **switched off**. When it
+is on it calls `/v1/health?probe=1` three times an hour, and on a failure it opens
+a GitHub issue — which emails you, because you are watching your own repository.
+On the next success it closes the issue again, so a blip is one notification and
+not a stream.
+
+Two settings arm it, both in **Settings → Secrets and variables → Actions →
+Variables** on GitHub, with no code change:
+
+| Variable | Value |
+|----------|-------|
+| `ENTITLEMENTS_BASE` | the worker's base URL, no trailing slash |
+| `HEALTH_PING` | `on` |
+
+The URL goes in a repository variable rather than in the file because **this
+repository is public**, and a variable is the cheapest way to keep it out of git
+history. Nothing else is needed: `/v1/health` takes no key.
+
+What it is honestly worth: it catches the worker being down, D1 refusing, KV
+refusing, a deploy that broke the routing, and a deploy that lost a binding —
+`?probe=1` reports `skipped` rather than `error` for a binding that is not bound
+at all, and the worker still answers 200 in that state while every account route
+refuses, so the workflow treats `skipped` as a failure too. It does **not** catch
+a wrong webhook secret, a provider that changed its payload, or a lost sale:
+section 2.3 onwards is not visible from outside. It is the cheap 60% and it is
+free.
+
+Eight responses were put through the probe step before it was committed — healthy,
+503, a 200 claiming health with a binding in error, a 200 with both bindings
+unbound, a 404, no server listening at all, a base URL with a trailing slash, and
+`ENTITLEMENTS_BASE` unset. One says healthy; the other seven open the issue. An
+alarm nobody has tried to make lie is not an alarm.
+
+What to know before relying on it, from GitHub's own documentation:
+
+- "The shortest interval you can run scheduled workflows is once every 5 minutes."
+- "The `schedule` event can be delayed during periods of high loads of GitHub
+  Actions workflow runs", "High load times include the start of every hour", and
+  "If the load is sufficiently high enough, some queued jobs may be dropped" —
+  which is why the schedule is at 7, 27 and 47 minutes past rather than on the
+  hour.
+- "In a public repository, scheduled workflows are automatically disabled when no
+  repository activity has occurred in 60 days." So a quiet two months silently
+  turns the alarm off. That is the one real weakness of this approach, and it is
+  the reason it is item 4.1 and not the only item.
+
+### 4.2 Free — Cloudflare budget alerts
+
+Cloudflare's **Budget alerts** email you when account-wide spend crosses a
+threshold you set. Worth setting to a low number, both as a spend guard and as a
+crude signal that something is generating far more traffic than you expected.
+Cloudflare's notifications page does not state whether this is available on the
+Free plan, so check your own dashboard rather than taking a number from here.
+
+### 4.3 $5/month — the Workers Paid plan
+
+The case is section 3.5. In one sentence: on the free plan an unusual day refuses
+operations and the international rail loses the sales; on the paid plan the same
+day costs cents. Switch it on **before** opening either checkout, not after,
+because the day you need it is the day you cannot predict.
+
+It also doubles Workers Logs retention from 3 days to 7, which matters when the
+thing you are investigating happened over a weekend.
+
+### 4.4 What Cloudflare does not offer, so you do not go looking
+
+Checked on 3 November 2026:
+
+- **There is no notification type for a Worker erroring or approaching a usage
+  limit.** The one you would want does not exist.
+- **Usage Based Billing notifications** are "Professional plans or higher" and
+  "available to Pay-as-you-go accounts only".
+- **Health Checks notifications** are "Professional plans or higher".
+
+So the free alerting story on Cloudflare is budget alerts and nothing else, and
+that is why 4.1 is an external pinger rather than a Cloudflare setting.
+
+---
+
+## 5. What was built for this, on this branch
+
+| Thing | Where | What it is for |
+|-------|-------|----------------|
+| `?probe=1` on `/v1/health` | `workers/entitlements/src/index.js` | A health route that can actually fail. One D1 row read and one KV read, 503 if either refuses, no error text published because the route is public |
+| `test/cost.test.mjs`, 12 cases | `workers/entitlements/test/` | Every number in section 3.1, asserted. Four KV-write budgets, a statement budget for sign-in, progress and events, and a proof that a claim spends no writes and progress spends no KV at all |
+| A query-plan guard | the last cases of `cost.test.mjs` | Asks SQLite for the plan of every statement a hot path runs, and fails on a `SCAN` of a table that grows with use. The admin funnel's known scan is asserted *as* the known exception, with its threshold, so it cannot quietly spread |
+| `.github/workflows/health-ping.yml` | repository root | Section 4.1. Off until two repository variables are set |
+
+The probe reads and never writes, deliberately: a probe once a minute would be
+1,440 KV operations a day, which is 1.4% of the free read allowance and **144% of
+the free write allowance.** A write probe would have been the monitoring eating
+the thing it was monitoring.
+
+---
+
+## 6. What was not built, and why
+
+**Alerting from inside the worker.** An email on failure needs the email
+provider, which is one of the things that can fail (2.4), and a worker that emails
+on every failed request emails a thousand times on a bad day. Alerting belongs
+outside the thing being watched, which is what 4.1 is.
+
+**A rollup table for the funnel.** This is the real fix for 3.4 and it is the
+largest piece of work on this page: a small table of daily per-step counts written
+as events arrive, so the stats page reads 180 rows rather than 900,000. It is not
+built because it is a schema change and a second write path on the hot route, and
+because the $5 plan removes the danger for a tenth of the effort. The threshold is
+written into the test's comment so the next person meets the number rather than
+rediscovering it.
+
+**Logpush, Analytics Engine, or any metrics endpoint.** All of them are either
+paid, or another moving part to maintain, and none of them answer a question
+section 4.1 does not.
+
+**A synthetic purchase check.** The only test that would catch 2.3 is a real
+purchase, and a real purchase moves real money and real tax. The go-live gate's
+one-purchase-per-rail proof is the human version of this, done once, deliberately.
+
+**The Creem retry-window mismatch — a decision, not an omission.**
+`RETRY_REFUSED_SECONDS` in `src/index.js` is 86,400: when an event names a licence
+this worker has never seen, the worker answers 500 and asks to be retried for a
+day before giving up and acknowledging. That window was chosen for Mercado Pago,
+whose API can lag behind its own notifications. Creem's documented backoff is
+about **1 hour 6 minutes**, so on the Creem rail the last 23 hours of that window
+are addressed to nobody. The worker is not wrong — asking for a retry that will
+not come costs nothing — but the number is advertising a patience the provider does
+not have, and the honest options are to leave it (one constant, three rails, the
+longest wins) or to make it per-rail. **Nothing is broken either way; it is worth
+knowing that on the Creem rail an out-of-order delivery has an hour to sort itself
+out and not a day.**
+
+---
+
+## Where the rest is
+
+- `docs/40-GO-LIVE-GATE.md` — the switch-on order, what each step costs, and what
+  proves it worked.
+- `docs/42-WHAT-THIS-BRANCH-CHANGED.md` — what changed in this branch, section by
+  section.
+- `docs/VALUE-GAP-REGISTRY.md` — VG-60 is this work.
+- `workers/entitlements/README.md` — the worker's own routes and data model.

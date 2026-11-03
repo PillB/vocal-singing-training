@@ -137,7 +137,7 @@
     },
     songFeel: {
       name: "Song A progression (G area)",
-      nameEs: "Progresión de la canción A (zona de G)",
+      nameEs: "Progresión canción A (G)",
       description: "G – Em – C – D · mid-low male",
       descriptionEs: "G – Em – C – D · registro medio-bajo masculino",
       chords: [
@@ -149,7 +149,7 @@
     },
     songBetter: {
       name: "Song B progression (C area)",
-      nameEs: "Progresión de la canción B (zona de C)",
+      nameEs: "Progresión canción B (C)",
       description: "C – G – Am – F · mid-low male",
       descriptionEs: "C – G – Am – F · registro medio-bajo masculino",
       chords: [
@@ -162,7 +162,7 @@
     /** Wider root jumps — trains larger intonation moves on the highway */
     progJump1: {
       name: "Wide jumps · C–E–Am–G",
-      nameEs: "Saltos amplios · C–E–Am–G",
+      nameEs: "Saltos · C–E–Am–G",
       description: "C – E – Am – G · bigger root leaps (3rds–5ths)",
       descriptionEs: "C – E – Am – G · saltos de fundamental más grandes (3.ª–5.ª)",
       wide: true,
@@ -175,7 +175,7 @@
     },
     progJump2: {
       name: "Wide jumps · Am–F–C–E",
-      nameEs: "Saltos amplios · Am–F–C–E",
+      nameEs: "Saltos · Am–F–C–E",
       description: "Am – F – C – E · pop leap progression",
       descriptionEs: "Am – F – C – E · progresión pop con saltos",
       wide: true,
@@ -188,7 +188,7 @@
     },
     progJump3: {
       name: "Wide jumps · D–Bb–F–C",
-      nameEs: "Saltos amplios · D–Bb–F–C",
+      nameEs: "Saltos · D–Bb–F–C",
       description: "D – Bb – F – C · larger horizontal jumps",
       descriptionEs: "D – Bb – F – C · saltos horizontales más grandes",
       wide: true,
@@ -201,7 +201,7 @@
     },
     progJump4: {
       name: "Octave span · G–Em–C–D",
-      nameEs: "Rango de octava · G–Em–C–D",
+      nameEs: "Octava · G–Em–C–D",
       description: "G – Em – C – D with open voicings (wide range on highway)",
       descriptionEs: "G – Em – C – D con acordes abiertos (rango amplio en la autopista de notas)",
       wide: true,
@@ -215,7 +215,7 @@
     /** Pro-only packs — new content (does not lock free progressions) */
     progPro1: {
       name: "Pro · Modal colors (Am–F–G–Em)",
-      nameEs: "Pro · Colores modales (Am–F–G–Em)",
+      nameEs: "Pro · Color modal (Am–F–G–Em)",
       description: "Am – F – G – Em · color changes for expressive singing (Pro)",
       descriptionEs: "Am – F – G – Em · cambios de color para cantar con expresión (Pro)",
       proOnly: true,
@@ -229,7 +229,7 @@
     },
     progPro2: {
       name: "Pro · Ladder leaps (C–G–Am–Em)",
-      nameEs: "Pro · Saltos en escalera (C–G–Am–Em)",
+      nameEs: "Pro · Escalera (C–G–Am–Em)",
       description: "C – G – Am – Em · larger horizontal jumps for pitch agility (Pro)",
       descriptionEs: "C – G – Am – Em · saltos horizontales más grandes para la agilidad de afinación (Pro)",
       proOnly: true,

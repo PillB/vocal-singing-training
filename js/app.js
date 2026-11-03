@@ -947,7 +947,96 @@
      was opened from steps the history back instead of adding an entry, so the
      phone's Back from Practicar still leaves the site rather than reopening
      the exercise. */
-  const route = { ready: false, silent: 0, backTo: null, pendingBack: false, pendingTimer: 0, leftY: 0, reopening: false };
+  const route = {
+    ready: false,
+    silent: 0,
+    backTo: null,
+    pendingBack: false,
+    pendingTimer: 0,
+    leftY: 0,
+    reopening: false,
+    restoring: false
+  };
+
+  /** Ends the restore in progress, if any (see restoreY). */
+  let stopRestore = null;
+
+  /**
+   * Put a page back at y once it is long enough to be there. Historial reads
+   * its list first and Practicar draws its lower sections over the next
+   * frames, so one scroll right after the render was clamped to the short
+   * page and then left behind by what arrived. Scrolls on each frame until the
+   * page is within 2px of y or 2 seconds have passed, and gives way at the
+   * learner's first wheel, touch, key or pointer press: a page that fights
+   * the person reading it is worse than one that never restored.
+   */
+  function restoreY(y, drawn) {
+    if (!(y > 0)) return;
+    if (stopRestore) stopRestore();
+    const quit = new AbortController();
+    let over = false;
+    const finish = () => {
+      if (over) return;
+      over = true;
+      quit.abort();
+      if (stopRestore === finish) {
+        stopRestore = null;
+        route.restoring = false;
+      }
+    };
+    stopRestore = finish;
+    route.restoring = true;
+    ["wheel", "touchstart", "keydown", "pointerdown"].forEach((ev) =>
+      window.addEventListener(ev, finish, { once: true, passive: true, signal: quit.signal })
+    );
+    Promise.resolve(drawn)
+      .catch(() => {})
+      .then(() => {
+        if (over) return;
+        const t0 = performance.now();
+        const step = () => {
+          if (over) return;
+          window.scrollTo({ top: y, behavior: "instant" });
+          if (Math.abs(window.scrollY - y) <= 2 || performance.now() - t0 > 2000) finish();
+          else requestAnimationFrame(step);
+        };
+        requestAnimationFrame(step);
+      });
+  }
+
+  /**
+   * Keyboard focus the browser scrolled to the top edge of the page lands
+   * under the sticky header (Shift+Tab put catalogue cards and "Ver otros 11"
+   * there, hidden). One frame after a keyboard focus, move the page down by
+   * what the header covers. The header's own controls, dialogs, the tour and
+   * the exercise view (its stage is sized to the screen) are left alone, so
+   * focus returning to the header never scrolls the page. A root
+   * scroll-padding was tried first and rejected: it scrolled the page whenever
+   * focus went back to the header's tour button.
+   */
+  function keepFocusClearOfHeader() {
+    document.addEventListener("focusin", (e) => {
+      const el = e.target;
+      if (!(el instanceof Element) || document.body.classList.contains("view-exercise")) return;
+      if (el.closest(".app-header, #tour-root, .modal-overlay, [role='dialog'], .region-consent")) return;
+      let keyboard = true;
+      try {
+        keyboard = el.matches(":focus-visible");
+      } catch {
+        /* an old browser: treat it as the keyboard */
+      }
+      if (!keyboard) return;
+      requestAnimationFrame(() => {
+        if (document.activeElement !== el) return;
+        const hdr = document.querySelector(".app-header")?.getBoundingClientRect();
+        const r = el.getBoundingClientRect();
+        if (!hdr || !hdr.height || !r.height) return;
+        if (r.top < hdr.bottom && r.bottom > 0) {
+          window.scrollBy({ top: r.top - hdr.bottom - 8, behavior: "instant" });
+        }
+      });
+    });
+  }
 
   function hashFor(name) {
     if (name === "plan") return "#plan";
@@ -974,6 +1063,16 @@
   }
 
   /**
+   * An exercise's entry also keeps where it was opened from: the address
+   * (`from`) and the card or page to land on (`origin`). They live in memory
+   * too, but a reload drops the memory, and without them the way back from
+   * the reloaded exercise had nowhere to go.
+   */
+  function exerciseEntry(backTo) {
+    return { ...routeEntry("exercise"), from: backTo ?? null, origin: state.exOrigin || null };
+  }
+
+  /**
    * Whether an exercise an address reopens (a reload, Forward) is the guided
    * session's current step. Reopened as a single exercise it had no
    * "Siguiente", the catalog's timer, and finishing it did not move the
@@ -991,10 +1090,13 @@
     const want = hashFor(name);
     if ((location.hash || "") === want || (!want && !parseRoute(location.hash))) return;
     const url = want || location.pathname + location.search;
+    // After a reload only the exercise's own entry still knows the way back.
+    const entryFrom = history.state?.vt === "exercise" && typeof history.state.from === "string" ? history.state.from : null;
+    const backTo = route.backTo ?? entryFrom;
     try {
       // The page you leave keeps its scroll position, for when Back returns to it.
       if (prev && prev !== "exercise") history.replaceState({ ...(history.state || {}), y: route.leftY }, "");
-      if (prev === "exercise" && name !== "exercise" && route.backTo === want) {
+      if (prev === "exercise" && name !== "exercise" && backTo === want) {
         // Back to where the exercise was opened from: the entry is already
         // there, one step back. The URL follows when popstate arrives.
         route.backTo = null;
@@ -1006,11 +1108,11 @@
         history.back();
       } else if (prev === "exercise") {
         // One exercise to the next, or out to somewhere else: one entry.
-        history.replaceState(routeEntry(name), "", url);
+        history.replaceState(name === "exercise" ? exerciseEntry(backTo) : routeEntry(name), "", url);
         if (name !== "exercise") route.backTo = null;
       } else {
         if (name === "exercise") route.backTo = hashFor(prev);
-        history.pushState(routeEntry(name), "", url);
+        history.pushState(name === "exercise" ? exerciseEntry(route.backTo) : routeEntry(name), "", url);
       }
     } catch {
       /* file:// or a sandboxed frame: the views still work without addresses */
@@ -1021,6 +1123,23 @@
     if (!t) return state.view === "home";
     if (t.type === "exercise") return state.view === "exercise" && state.exercise?.id === t.id;
     return state.view === t.type;
+  }
+
+  /**
+   * The address of the page that is showing, in place of one that names
+   * nothing (an exercise that does not exist): Back and a reload then agree
+   * with the screen. The entry keeps its scroll.
+   */
+  function showShownAddress() {
+    try {
+      history.replaceState(
+        { ...(state.view === "exercise" ? exerciseEntry(route.backTo) : routeEntry(state.view)), y: history.state?.y },
+        "",
+        hashFor(state.view) || location.pathname + location.search
+      );
+    } catch {
+      /* file:// or a sandboxed frame */
+    }
   }
 
   async function onRoute() {
@@ -1040,7 +1159,7 @@
       $("#leave-cancel")?.click();
       if (!routeMatchesView(parseRoute(location.hash))) {
         try {
-          history.pushState(routeEntry("exercise"), "", hashFor("exercise"));
+          history.pushState(exerciseEntry(route.backTo), "", hashFor("exercise"));
         } catch {
           /* ignore */
         }
@@ -1048,9 +1167,12 @@
       return;
     }
     const t = parseRoute(location.hash);
+    // The tour shows pages without addresses of their own, so Back can land on
+    // the very page it is showing: close it first, then compare (ending it
+    // puts the page it opened on back).
+    if (window.VTTour?.isActive?.()) window.VTTour.end?.(false);
     if (routeMatchesView(t)) return;
     setHeaderMenu(false);
-    if (window.VTTour?.isActive?.()) window.VTTour.end?.(false);
     if ($("#pricing-modal") && !$("#pricing-modal").hidden) closePricing();
     if ($("#account-modal") && !$("#account-modal").hidden) closeAccount();
     // The page under them is changing: the other dialogs close unanswered, as
@@ -1066,6 +1188,7 @@
         route.reopening = true;
         try {
           if (findExercise(t.id)) openExercise(t.id, guidedStep(t.id));
+          else showShownAddress();
         } finally {
           route.reopening = false;
         }
@@ -1079,17 +1202,21 @@
         if (!left && state.view === "exercise" && !routeMatchesView(parseRoute(location.hash))) {
           route.silent -= 1;
           try {
-            history.pushState(routeEntry("exercise"), "", hashFor("exercise"));
+            history.pushState(exerciseEntry(route.backTo), "", hashFor("exercise"));
           } catch {
             /* ignore */
           }
           route.silent += 1;
         }
       } else {
-        navigateDestination(dest);
-        // Back to a page you scrolled: the same place on it.
+        const drawn = navigateDestination(dest);
+        // Back to a page you scrolled: the same place on it, and again once it
+        // is drawn (Historial reads its list first).
         const y = history.state?.y;
-        if (y) window.scrollTo({ top: y, behavior: "instant" });
+        if (y) {
+          window.scrollTo({ top: y, behavior: "instant" });
+          restoreY(y, drawn);
+        }
       }
     } finally {
       route.silent -= 1;
@@ -1105,19 +1232,50 @@
     } catch {
       /* ignore */
     }
-    const t = parseRoute(location.hash);
+    let t = parseRoute(location.hash);
+    // An address for no exercise opens Practicar, so it says Practicar.
+    if (t?.type === "exercise" && !findExercise(t.id)) {
+      showShownAddress();
+      t = null;
+    }
+    let drawn = null;
     if (t?.type === "plan") renderPlan();
-    else if (t?.type === "history") renderHistory();
-    else if (t?.type === "exercise" && findExercise(t.id)) forceOpenExercise(t.id, guidedStep(t.id));
+    else if (t?.type === "history") drawn = renderHistory();
+    else if (t?.type === "exercise") forceOpenExercise(t.id, guidedStep(t.id));
+    // A reload (or the way back from another page) comes back where it was.
+    if (t?.type !== "exercise") restoreY(history.state?.y, drawn);
     route.ready = true;
     window.addEventListener("popstate", () => {
       onRoute();
     });
+    // The place on a page is kept in its history entry as the learner scrolls
+    // and as the page is left, so a reload or a Back from another page has it.
+    const keepY = () => {
+      try {
+        if (state.view === "exercise" || route.restoring || route.pendingBack || window.VTTour?.isActive?.()) return;
+        history.replaceState({ ...(history.state || {}), y: Math.round(window.scrollY) }, "");
+      } catch {
+        /* file:// or a sandboxed frame */
+      }
+    };
+    let keepTimer = 0;
+    window.addEventListener(
+      "scroll",
+      () => {
+        clearTimeout(keepTimer);
+        keepTimer = setTimeout(keepY, 250);
+      },
+      { passive: true }
+    );
+    window.addEventListener("pagehide", keepY);
+    keepFocusClearOfHeader();
   }
 
   function setView(name) {
     const prev = state.view;
     route.leftY = window.scrollY;
+    // A restore belongs to the page it was started for.
+    if (prev !== name && stopRestore) stopRestore();
     state.view = name;
     $$(".view").forEach((v) => v.classList.remove("active"));
     const map = {
@@ -2282,7 +2440,8 @@
       renderExerciseList();
       if (destination.restore) returnToCatalog(destination.restore);
     } else if (destination.type === "history") {
-      renderHistory();
+      // Resolves once the list is drawn, for restoreY.
+      return renderHistory();
     } else if (destination.type === "plan") {
       renderPlan();
     } else if (destination.type === "exercise" && destination.id) {
@@ -2306,7 +2465,13 @@
     state.pitchHeard = false;
     // Where this exercise was opened from, so the way back can name it and
     // land there: a catalog card brings you back to that card.
-    if (state.view !== "exercise" && !(route.reopening && state.exOrigin?.id === id)) {
+    // Opened by its address (a reload, Forward), the exercise's own entry still
+    // says where it was opened from.
+    const kept = history.state?.vt === "exercise" && (route.reopening || !route.ready) ? history.state.origin : null;
+    const keptOk = !!kept && typeof kept === "object" && ["home", "plan", "history"].includes(kept.view);
+    if (state.view !== "exercise" && keptOk) {
+      state.exOrigin = kept;
+    } else if (state.view !== "exercise" && !(route.reopening && state.exOrigin?.id === id)) {
       state.exOrigin = {
         view: state.view === "plan" || state.view === "history" ? state.view : "home",
         catalog: state.view === "home" && openingFromCatalog,

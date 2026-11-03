@@ -67,6 +67,7 @@ Vanilla HTML / CSS / JS — no build step. Web Audio API (piano), MediaRecorder 
 - [**The go-live gate**: what is built and off, and the order to switch it on](docs/40-GO-LIVE-GATE.md)
 - [Accounts, payments and gifted months](docs/33-ACCOUNTS-AND-PAYMENTS.md)
 - [What Pro is for, and what Free keeps](docs/41-PRO-VS-FREE.md)
+- [What this branch changed, section by section](docs/42-WHAT-THIS-BRANCH-CHANGED.md)
 - [Peru operator runbook: trámites, accounts and keys, in order](docs/34-PERU-OPERATOR-RUNBOOK.md)
 - [Admin guide](docs/ADMIN-GUIDE.md)
 - [Value gap registry: what is open, and why each open thing was left](docs/VALUE-GAP-REGISTRY.md)

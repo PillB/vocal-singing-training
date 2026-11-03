@@ -2139,6 +2139,23 @@ html[lang^="es"] .hud-bc.is-manual .mic-sens-title::after {
   min-width: 3.1rem;
   font-size: 0.74rem;
 }
+/* Sound without a piano (speech drills): the options have no "Piano ▾" to fold
+   them, so on a laptop they wrap and give way instead of running over the mic
+   box and the octave "−" beside them (v12 in Spanish). */
+#piano-mini-opts.hud-br:not(.piano-opts-compact):not(.piano-opts-expanded) {
+  flex: 0 1 auto;
+  min-width: 0;
+  flex-wrap: wrap;
+  row-gap: 0.25rem;
+}
+/* .hud-bottom-rail > .hud-corner (overflow: visible) outranks .hud-bc's own
+   hidden, so the mic box spilled onto its neighbour when squeezed */
+.hud-bottom-rail > .hud-bc {
+  overflow: hidden;
+}
+.hud-bottom-rail:has(> #piano-mini-opts.hud-br:not(.piano-opts-compact):not(.piano-opts-expanded)) > .hud-bc {
+  flex: 0 0 auto;
+}
 
 .hud-check {
   background: rgba(12, 18, 26, 0.7);
@@ -2433,6 +2450,12 @@ html[lang^="es"] .hud-cents-only .hud-combo strong::before {
   margin: 0;
   min-height: 0;
   padding: 0;
+  display: none;
+}
+/* The top-left corner of an exercise with no clock and no hold readout (a
+   speech drill: no chord badge either) was left as an empty box */
+.hud-tl:not(:has(> :not([hidden]))),
+.highway-stage:has(.mode-focus-live) .hud-tl:not(:has(> :not([hidden]):not(.chord-now))) {
   display: none;
 }
 
@@ -2784,7 +2807,7 @@ body.view-exercise .stage-below.is-fitted {
     max-width: min(50%, 11rem);
   }
   .hud-tl .chord-now {
-    max-width: 4.5rem;
+    max-width: 6.6rem; /* "Am · A2 La" and "Bb · A#2 La♯" whole at 390px */
   }
   .hold-live {
     max-width: 3.4rem;
@@ -6530,6 +6553,20 @@ body .app-header {
 .mic-blocked p {
   margin: 0 0 0.5rem;
 }
+/* ✕ only when the exercise goes on without the mic; the text keeps clear of it */
+.mic-blocked-close {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.25rem;
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0;
+  font-size: 0.95rem;
+  line-height: 1;
+}
+.mic-blocked:has(> .mic-blocked-close:not([hidden])) > p {
+  padding-right: 2.1rem;
+}
 .mic-blocked-actions {
   display: flex;
   flex-wrap: wrap;
@@ -7300,19 +7337,30 @@ body.view-exercise .stage-coach .mode-hud,
     order: 0;
     flex: 1 1 auto;
   }
+  /* One row while Empezar, the mic and the piano options fit side by side.
+     A phone on its side is 640-740px wide, where they do not (about 250 +
+     250 + 330): the piano options then drop to a row of their own instead of
+     the mic box being squeezed to a sliver the neighbours paint over. */
   .hud-bottom-rail {
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
+    row-gap: 0.3rem;
+  }
+  .hud-bottom-rail > .hud-bl {
+    flex: 0 0 auto; /* not the phone rail's full-width row */
   }
   .hud-bc {
     order: 0;
     flex: 1 1 8rem;
+    min-width: 11rem; /* the label, level, slider and number need about 10.8rem */
     width: auto;
   }
   .hud-br {
-    flex: 0 0 auto;
+    flex: 0 1 auto;
+    min-width: 0;
+    margin-left: auto;
   }
   #piano-mini-opts {
-    max-width: none;
+    max-width: 100%;
     overflow: visible;
   }
   .highway-stage:has(.mode-focus-live) .hud-bottom-rail {

@@ -608,6 +608,9 @@
 
     stopAll() {
       this.loopActive = false;
+      // A new pass: the note and chord callbacks the stopped pass scheduled
+      // (one setTimeout each, no handle) see a stale number and do nothing.
+      this._passGen = (this._passGen || 0) + 1;
       if (this.loopTimer) {
         clearTimeout(this.loopTimer);
         this.loopTimer = null;
@@ -730,6 +733,8 @@
       // Flatten to sequential note events when oneNote (or arpeggio for audio + single targets)
       const melodic = !!oneNote;
       const broken = melodic || !!arpeggio;
+      // This pass's number, taken after the stopAll() above
+      const gen = this._passGen;
 
       const playOnce = () => {
         if (!this.loopActive && loop) return;
@@ -739,8 +744,14 @@
           // Strict one-note-at-a-time: combobox duration applies to EACH note
           // (not divided across tones of a chord)
           const events = [];
+          const pitchClass = (n) => String(n).replace(/-?\d+$/, "");
           prog.chords.forEach((ch, cidx) => {
-            (ch.notes || []).forEach((n) => {
+            const notes = ch.notes || [];
+            notes.forEach((n, i) => {
+              // The voicing's left-hand bass doubles a chord tone an octave
+              // down (C2 under C3): it is under the lanes and not a note to
+              // sing, so one note at a time walks the tones above it.
+              if (i === 0 && notes.length > 3 && notes.slice(1).some((m) => pitchClass(m) === pitchClass(n))) return;
               events.push({ note: n, chord: ch, cidx });
             });
           });
@@ -756,6 +767,7 @@
             if (this.onChordChange || this.onNoteChange) {
               const delay = Math.max(0, (when - this.ctx.currentTime) * 1000);
               setTimeout(() => {
+                if (gen !== this._passGen) return;
                 const mini = { name: ev.chord.name, notes: [ev.note], oneNote: true };
                 if (this.onNoteChange) this.onNoteChange(ev.note, ev.chord, ei, prog);
                 if (this.onChordChange) this.onChordChange(mini, ev.cidx, prog, { oneNote: true, noteName: ev.note });
@@ -790,6 +802,7 @@
           if (this.onChordChange) {
             const delay = Math.max(0, (when - this.ctx.currentTime) * 1000);
             setTimeout(() => {
+              if (gen !== this._passGen) return;
               if (this.onChordChange) this.onChordChange(ch, idx, prog, { oneNote: false });
             }, delay);
           }

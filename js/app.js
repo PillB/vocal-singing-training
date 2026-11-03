@@ -146,6 +146,10 @@
     let lastKey = "";
     let lastAt = 0;
     const report = (kind, detail) => {
+      // Chrome reports "ResizeObserver loop completed with undelivered
+      // notifications" as a window error when a layout settles over two
+      // frames. Nothing failed, so it is not the learner's "Algo falló".
+      if (/ResizeObserver loop/.test(String(detail?.message ?? detail))) return;
       console.error("[VT]", kind, detail);
       // Quiet during automated e2e unless explicitly debugging
       if (sessionStorage.getItem("vt_e2e") === "1" && sessionStorage.getItem("vt_debug") !== "1") {
@@ -757,23 +761,34 @@
       if (el) ro.observe(el);
     });
     // "🎹 Piano ▾" drops its word when it would take a row of its own.
+    // Measured a frame later, as the header's title is: dropping the word
+    // resizes the very box this observer reports on, which Chrome flags as a
+    // "ResizeObserver loop" when done inside the callback.
     const opts = $("#piano-mini-opts");
     if (opts) {
       let lastW = 0;
+      let optsRaf = 0;
       new ResizeObserver(() => {
-        const w = Math.round(opts.getBoundingClientRect().width);
-        if (w === lastW) return;
-        lastW = w;
-        fitPianoWord();
+        cancelAnimationFrame(optsRaf);
+        optsRaf = requestAnimationFrame(() => {
+          const w = Math.round(opts.getBoundingClientRect().width);
+          if (w === lastW) return;
+          lastW = w;
+          fitPianoWord();
+        });
       }).observe(opts);
     }
     // On a phone on its side the banner's Pausar and Terminar sit in the
     // exercise header's row, which keeps their width free (design: landscape).
     const ctl = $("#session-banner .controls-row");
     if (ctl) {
+      let ctlRaf = 0;
       new ResizeObserver(() => {
-        const w = Math.ceil(ctl.getBoundingClientRect().width);
-        if (w) document.body.style.setProperty("--session-ctl-w", `${w}px`);
+        cancelAnimationFrame(ctlRaf);
+        ctlRaf = requestAnimationFrame(() => {
+          const w = Math.ceil(ctl.getBoundingClientRect().width);
+          if (w) document.body.style.setProperty("--session-ctl-w", `${w}px`);
+        });
       }).observe(ctl);
     }
   }
@@ -2538,6 +2553,10 @@
   function renderExercise() {
     const ex = state.exercise;
     if (!ex) return;
+    // The last exercise's chord or note is not this one's
+    if ($("#chord-now")) $("#chord-now").textContent = "—";
+    // A microphone notice put away on the last visit shows again on this one
+    state.micBlockedClosed = false;
     hideMicBlocked();
 
     const steps = renderExerciseText(ex);
@@ -3441,6 +3460,8 @@
     if (pill) {
       pill.textContent = live ? tt("practice.live") : tt("practice.ready");
       pill.classList.toggle("live", live);
+      // "Tiempo" labels the clock: an exercise with no clock has nothing to label
+      pill.hidden = !live && !(state.timer.total > 0);
     }
     syncStageNow();
     // Practice clock for leave-prompt (≥10% of exercise)
@@ -3658,6 +3679,16 @@
         return;
       }
 
+      // "↻ Otra vez" after a rated take starts a new take: its own practice
+      // clock, its own history entry and an unanswered card. The saved flag
+      // used to carry over, so the second take was never recorded and leaving
+      // it did not ask.
+      if (state.sessionPractice.saved) {
+        resetSessionPractice();
+        resetRating();
+        const scored = $("#score-result");
+        if (scored) scored.hidden = true;
+      }
       state.practiceStarting = true;
       setPracticeUI(false); // hides/disables Start while bootstrapping
       try {
@@ -3790,6 +3821,11 @@
         }
       };
       state.practice.onHoldLogged = (sec) => {
+        // Counting aloud is not a held note: the engine logs any voicing of
+        // 2 s or more, so a speaking drill (no hold readout) logs nothing.
+        // Singing is unchanged until the owner decides whether trills and
+        // sirens count toward the longest note.
+        if (!showHold && ex.track !== "singing") return;
         if (window.VTStorage) VTStorage.addHoldLog(sec);
         renderHoldHistory();
         const input = $('#metrics-form [name="maxHold"]');
@@ -3875,6 +3911,8 @@
       // Mic first: getUserMedia dialog often suspends AudioContext if piano
       // already started — then solfege/ref sound goes silent for the whole session.
       let micOk = !needsMic && !wantRecord;
+      // Why the microphone did not open: no device at all is not a refusal
+      let micError = null;
       if (needsMic || wantRecord) {
         try {
           await state.practice.start({ record: wantRecord });
@@ -3882,6 +3920,7 @@
         } catch (e) {
           console.error(e);
           micOk = false;
+          micError = e?.name || null;
         }
       }
       if (!stillThisStart()) {
@@ -3942,7 +3981,7 @@
       if (!micOk && !soundOk && !profile.timeDriven) {
         state.practiceStarting = false;
         setPracticeUI(false);
-        showMicBlocked(false);
+        showMicBlocked(false, { reason: micError });
         return;
       }
 
@@ -3957,8 +3996,9 @@
       // The step clock runs whenever the step is live. It used to wait for the
       // mic, so with the mic refused and the piano playing the timer sat still
       // and a guided step could never end (VG-40).
-      if (ex.audio.timer && state.timer.total > 0) startTimer();
-      if ((needsMic || wantRecord) && !micOk) showMicBlocked(true);
+      const clockRuns = !!(ex.audio.timer && state.timer.total > 0);
+      if (clockRuns) startTimer();
+      if ((needsMic || wantRecord) && !micOk) showMicBlocked(true, { reason: micError, piano: soundOk, clock: clockRuns });
       else hideMicBlocked();
 
       // Keep piano awake while practicing (tab blur / OS audio policies)
@@ -3980,12 +4020,14 @@
       }
 
       if (!micOk && soundOk) {
-        toast(tt("toast.pianoOnly"));
+        // "Allow the mic" cannot help when there is no microphone
+        toast(tt(isMicMissing(micError) ? "mic.missing.toast" : "toast.pianoOnly"));
       } else if (wantPiano && !soundOk) {
         toast(tt("toast.pianoFail"));
       } else {
+        // "grabando" only when a stream is open to record from
         toast(
-          wantRecord
+          wantRecord && micOk
             ? tt("toast.liveRec", { mode: modeDisplayName(profile.mode) })
             : tt("toast.live", { mode: modeDisplayName(profile.mode) })
         );
@@ -4025,20 +4067,35 @@
     state._modeTicker = requestAnimationFrame(tick);
   }
 
+  /** getUserMedia found no device (or none that fits): there is nothing to allow. */
+  function isMicMissing(reason) {
+    return reason === "NotFoundError" || reason === "OverconstrainedError";
+  }
+
   /**
-   * A refused microphone, said where the learner is looking and kept there:
-   * how to allow it, a retry, and — inside a guided routine — a way on.
+   * A refused or missing microphone, said where the learner is looking and
+   * kept there: what still runs, how to get the mic back, a retry, and —
+   * inside a guided routine — a way on. When the exercise runs without the
+   * mic the notice can be put away (✕ or Escape) for this visit, since it
+   * sits over the stage's controls (VG-40 keeps it where it is).
    * @param {boolean} canRun true when the piano or the clock still runs
+   * @param {{reason?: string|null, piano?: boolean, clock?: boolean}} [why]
+   *   reason: the getUserMedia error name; piano / clock: what keeps going
    */
-  function showMicBlocked(canRun) {
+  function showMicBlocked(canRun, why = {}) {
     const box = $("#mic-blocked");
     if (!box) {
       toast(tt("toast.mic"));
       return;
     }
-    $("#mic-blocked-text").textContent = tt(canRun ? "mic.blocked.partial" : "mic.blocked.none");
+    if (canRun && state.micBlockedClosed) return;
+    const missing = isMicMissing(why.reason);
+    const runs = why.piano && why.clock ? "mic.runs.both" : why.piano ? "mic.runs.piano" : why.clock ? "mic.runs.clock" : "mic.runs.steps";
+    const key = `${missing ? "mic.missing" : "mic.blocked"}.${canRun ? "partial" : "none"}`;
+    $("#mic-blocked-text").textContent = tt(key, { runs: tt(runs) });
     const retry = $("#btn-mic-retry");
     const skip = $("#btn-mic-skip");
+    const close = $("#btn-mic-close");
     if (retry) {
       retry.textContent = tt("mic.blocked.retry");
       retry.onclick = () => {
@@ -4052,9 +4109,45 @@
       skip.hidden = !state.structured;
       skip.onclick = () => advanceStructured("skip");
     }
+    // Only when the exercise goes on without the mic: otherwise the notice is
+    // the only way on.
+    if (close) {
+      close.hidden = !canRun;
+      close.setAttribute("aria-label", tt("a11y.close"));
+      close.onclick = closeMicBlocked;
+    }
+    box.onkeydown = (e) => {
+      if (e.key === "Escape" && canRun) {
+        e.preventDefault();
+        e.stopPropagation();
+        closeMicBlocked();
+      }
+    };
     box.hidden = false;
     try {
       window.VTAnalytics?.track?.("mic_blocked", { exerciseId: state.exercise?.id, canRun: !!canRun });
+    } catch {
+      /* ignore */
+    }
+  }
+
+  /** Put the notice away for this visit and hand focus to the stage's own controls. */
+  function closeMicBlocked() {
+    const box = $("#mic-blocked");
+    const hadFocus = !!box && box.contains(document.activeElement);
+    state.micBlockedClosed = true;
+    hideMicBlocked();
+    if (!hadFocus && document.activeElement && document.activeElement !== document.body) return;
+    const next = ["#btn-practice-start", "#btn-practice-stop"]
+      .map((sel) => $(sel))
+      .find((el) => el && !el.hidden && !el.disabled && el.getBoundingClientRect().width > 0);
+    const stage = $("#highway-stage");
+    try {
+      if (next) next.focus({ preventScroll: true });
+      else if (stage) {
+        if (!stage.hasAttribute("tabindex")) stage.setAttribute("tabindex", "-1");
+        stage.focus({ preventScroll: true });
+      }
     } catch {
       /* ignore */
     }

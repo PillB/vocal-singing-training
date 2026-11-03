@@ -467,6 +467,9 @@
             <!-- A denied microphone used to be a 2.8 s toast, then a frozen step
                  with nothing on screen that moved a guided session on (VG-40). -->
             <div id="mic-blocked" class="mic-blocked" role="alert" hidden>
+              <!-- Only when the exercise goes on without the mic: it sits over
+                   the stage's own controls, so it can be put away for the visit. -->
+              <button type="button" class="btn btn-ghost btn-xs mic-blocked-close" id="btn-mic-close" aria-label="Cerrar" data-i18n-aria="a11y.close" hidden>✕</button>
               <p id="mic-blocked-text"></p>
               <div class="mic-blocked-actions">
                 <button type="button" class="btn btn-sm" id="btn-mic-retry"></button>

@@ -441,10 +441,10 @@ window.VT_EXERCISES = {
       research:
         "Varying pace keeps audiences engaged. Slow on key ideas; allow processing time; avoid one-speed delivery.",
       steps: [
-        "Pick a message of about 90 s with one key idea.",
+        "Pick a message of about 90 s with 3 key ideas.",
         "First pass: an even pace.",
-        "Second pass: slow down only on the key idea (about half speed) and speed up the rest a little.",
-        "Third pass: mark 2 intentional “brakes” (pauses) before the key idea.",
+        "Second pass: slow down only on the key ideas (about half speed) and speed up the rest a little.",
+        "Third pass: put a “brake” (a pause) before each key idea, then slow down on it.",
         "Record it and pick the clearest version."
       ],
       tips: [

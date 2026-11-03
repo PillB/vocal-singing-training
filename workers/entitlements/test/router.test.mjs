@@ -1271,6 +1271,72 @@ test("a paid subscription cancelled at once still keeps the period it paid for",
   assert.equal(verified.payload.periodEnd, periodEnd);
 });
 
+test("a paid invoice for an earlier period cannot shorten a later one that was also paid", async () => {
+  // Stripe can emit a paid invoice for an EARLIER period after a later one: a
+  // redelivery with a fresh `created`, or collection re-attempted on an older
+  // invoice. The event-ordering guard does not catch it, because by event time
+  // it really is the newest thing we have heard. What is older is the PERIOD it
+  // names, and that used to replace the period end outright — so a subscriber
+  // who had paid two months was cut back to the end of the first
+  // (QA round 5 re-attack, D2).
+  //
+  // An invoice reports one billing period, so its period end is a floor on
+  // paid-through and never a ceiling. A subscription event still replaces it,
+  // because `current_period_end` is the provider's current answer.
+  const env = createTestEnv();
+  const now = Math.floor(Date.now() / 1000);
+  const MONTH = 31 * DAY;
+  const invoice = (id, eventId, endsAt, createdAt) => ({
+    id: eventId,
+    type: "invoice.paid",
+    created: createdAt,
+    data: {
+      object: {
+        id,
+        customer: "cus_router",
+        subscription: "sub_router",
+        lines: { data: [{ period: { start: endsAt - MONTH, end: endsAt } }] }
+      }
+    }
+  });
+
+  await deliverStripe(env, checkoutEvent("cs_order", "evt_o1", { mode: "subscription", created: now - 40 * DAY }));
+  await deliverStripe(env, invoice("in_m1", "evt_o2", now - 9 * DAY, now - 40 * DAY));
+  await deliverStripe(env, invoice("in_m2", "evt_o3", now + 22 * DAY, now - 9 * DAY));
+  const claimed = await claimFor(env, "stripe", "cs_order");
+  assert.equal(claimed.status, 200, JSON.stringify(claimed.body));
+  const licenseId = claimed.body.licenseId;
+  const before = await getEntitlement(env.ENTITLEMENTS, licenseId);
+  const paidThrough = before.periodEnd;
+  assert.ok(paidThrough > now + 20 * DAY, `two months paid: ${paidThrough - now}`);
+
+  // Month one arrives again, late, with a timestamp newer than month two's.
+  const late = await deliverStripe(env, invoice("in_m1", "evt_o4", now - 9 * DAY, now - 8 * DAY));
+  assert.equal(late.status, 200);
+  const after = await getEntitlement(env.ENTITLEMENTS, licenseId);
+  assert.equal(after.periodEnd, paidThrough, "the second month survived the first month's redelivery");
+  assert.equal((await claimFor(env, "stripe", "cs_order")).status, 200, "and they are still Pro");
+
+  // And the subscription's own event is still the authority, in both
+  // directions: a plan moved to a shorter period really does shorten it.
+  await deliverStripe(env, {
+    id: "evt_o5",
+    type: "customer.subscription.updated",
+    created: now - 7 * DAY,
+    data: {
+      object: {
+        id: "sub_router",
+        customer: "cus_router",
+        status: "active",
+        items: { data: [{ price: { id: "price_x", recurring: { interval: "month", interval_count: 1 } } }] },
+        current_period_end: now + 3 * DAY
+      }
+    }
+  });
+  const moved = await getEntitlement(env.ENTITLEMENTS, licenseId);
+  assert.equal(moved.periodEnd, now + 3 * DAY, "a subscription event replaces the period end");
+});
+
 test("a delayed payment that settles after the subscription was cancelled at once buys no access", async () => {
   // Documented in the README: the cancellation came while nothing was paid,
   // and a deleted subscription stays as its deletion left it.

@@ -30,8 +30,36 @@ export const HANDLED_EVENT_TYPES = [
   // paid for; these are the Stripe side of the same rule.
   "charge.refunded",
   "charge.dispute.created",
+  "charge.dispute.updated",
+  "charge.dispute.closed",
   "charge.dispute.funds_withdrawn"
 ];
+
+/**
+ * Dispute statuses that mean a formal chargeback: the money is on its way out
+ * of our balance, or already gone.
+ *
+ * The ones that are NOT here are the point. `warning_needs_response`,
+ * `warning_under_review` and `warning_closed` are **inquiries** — the issuer
+ * asking about a charge, which Stripe's own enum describes as "an inquiry
+ * closed without becoming a formal dispute". No money moves, most never become
+ * a chargeback, and the cardholder often does not know one was raised. Ending
+ * a subscriber's access on one takes Pro away from somebody who paid and whose
+ * payment was never reversed (QA round 5 re-attack, D1). `prevented` is a
+ * dispute stopped before becoming a chargeback, and `won` is one resolved in
+ * our favour; neither leaves us short.
+ *
+ * Checked against Stripe's Dispute object documentation on 2026-11-03 rather
+ * than from memory, because this list decides whether a paying customer keeps
+ * what they bought.
+ */
+const CHARGEBACK_STATUSES = new Set([
+  "needs_response",
+  "under_review",
+  "appeal_needs_response",
+  "appeal_under_review",
+  "lost"
+]);
 
 /** Stripe subscription status -> our entitlement status. */
 const STATUS_MAP = {
@@ -425,6 +453,7 @@ function mapRefundedCharge(charge) {
     customerId: idOf(charge && charge.customer),
     // Never mint a license from money going back: see upsertEntitlement.
     requireExisting: true,
+    isReversal: true,
     reversedChargeAt: unixOrNull(charge && charge.created)
   };
 }
@@ -455,16 +484,27 @@ function isFullyRefunded(charge) {
  *
  * Unlike a refund, a dispute names its payment but not when that payment was
  * taken, so it reverses whichever charge this license last counted.
+ *
+ * `charge.dispute.funds_withdrawn` is self-describing and always ends access.
+ * For the other three, the status decides: see `CHARGEBACK_STATUSES` for why an
+ * inquiry must not.
  * @param {Object} dispute Stripe dispute.
- * @returns {Object} Entitlement update descriptor.
+ * @param {boolean} fundsWithdrawn Whether the event itself says the money went.
+ * @returns {Object|null} Entitlement update descriptor, or null when this
+ *   dispute has taken no money and must change nothing.
  */
-function mapDispute(dispute) {
+function mapDispute(dispute, fundsWithdrawn) {
+  const status = String((dispute && dispute.status) || "");
+  if (!fundsWithdrawn && !CHARGEBACK_STATUSES.has(status)) {
+    return null;
+  }
   return {
     provider: "stripe",
     claimId: null,
     subscriptionId: null,
     paymentId: idOf(dispute && dispute.payment_intent),
     requireExisting: true,
+    isReversal: true,
     reverseLatestCharge: true
   };
 }
@@ -543,7 +583,16 @@ function mapInvoice(invoice, env, paid) {
     // whether an earlier payment did.
     paid: paid && !unlisted ? true : undefined,
     paymentId: paid && !unlisted ? paymentIdForInvoice(invoice) : null,
-    periodEnd: unixOrNull(line && line.period && line.period.end)
+    periodEnd: unixOrNull(line && line.period && line.period.end),
+    // An invoice is about one billing period, not the subscription's current
+    // state, so the period it names is a floor on paid-through and never a
+    // ceiling. A subscription event carries `current_period_end` and does
+    // replace it; an invoice must not. Stripe can emit a paid invoice for an
+    // EARLIER period after a later one — a redelivery, or collection
+    // re-attempted on an older invoice — and that used to drag the period end
+    // backwards, so a subscriber who had paid two months lost the second one
+    // (QA round 5 re-attack, D2).
+    periodEndIsFloor: true
   };
 }
 
@@ -607,8 +656,15 @@ export function mapStripeEvent(event, env) {
       update = mapRefundedCharge(object);
       break;
     case "charge.dispute.created":
+    case "charge.dispute.updated":
+    case "charge.dispute.closed":
     case "charge.dispute.funds_withdrawn":
-      update = mapDispute(object);
+      update = mapDispute(object, event.type === "charge.dispute.funds_withdrawn");
+      // An inquiry, a prevented dispute, or one we won. Acknowledged, so
+      // Stripe stops, and nothing is taken from a customer who still paid.
+      if (!update) {
+        return { handled: false, reason: "dispute_took_no_money" };
+      }
       break;
     default:
       return { handled: false, reason: "unhandled_event_type" };
@@ -623,7 +679,9 @@ export function mapStripeEvent(event, env) {
   // when it was taken (and a dispute never does) reverses whichever charge the
   // license last counted instead, so the store can still tell whether what
   // went back is what paid for the period the license is in.
-  if (event.type === "charge.refunded" || event.type.startsWith("charge.dispute.")) {
+  // `isReversal` and not the event name: a dispute that took no money reads as
+  // `charge.dispute.*` too, and must leave the license exactly as it was.
+  if (update.isReversal) {
     update.reversedAt = update.occurredAt;
     if (!Number.isFinite(update.reversedChargeAt)) {
       update.reverseLatestCharge = true;

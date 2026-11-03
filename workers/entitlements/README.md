@@ -498,11 +498,13 @@ Subscribe exactly these events:
 | `customer.subscription.created` | First subscription state |
 | `customer.subscription.updated` | Plan change, renewal, status change |
 | `customer.subscription.deleted` | Cancellation. A subscription paid up to it keeps the period it paid for; one cancelled while unpaid (in dunning, stopped or paused, never paid, or with `cancellation_details.reason` `payment_failed`/`payment_disputed`) ends at `ended_at`, whoever cancelled it |
-| `invoice.paid` | Successful renewal (moves `periodEnd` forward) |
+| `invoice.paid` | Successful renewal. Moves `periodEnd` **forward only**: an invoice reports one billing period, so a paid invoice for an earlier period redelivered after a later one cannot shorten access. A `customer.subscription.*` event carries `current_period_end` and does replace it |
 | `invoice.payment_failed` | Dunning → `past_due` |
 | `charge.refunded` | Money given back in full ends the access that charge paid for. A partial refund changes nothing |
-| `charge.dispute.created` | A chargeback was opened: access ends when it is opened, not when it is lost |
-| `charge.dispute.funds_withdrawn` | The same, for a dispute whose funds were taken before any `created` reached us |
+| `charge.dispute.created` | A chargeback was opened: access ends when it is opened, not when it is lost — **but only for a formal dispute.** An inquiry (`warning_*`), a `prevented` dispute and a `won` one take no money and change nothing |
+| `charge.dispute.updated` | An inquiry that became a formal dispute ends access here |
+| `charge.dispute.closed` | Closed as `lost` ends access; `won` and `warning_closed` leave it alone |
+| `charge.dispute.funds_withdrawn` | The money has left the balance, whatever the status says. Always ends access |
 
 Copy that endpoint's `whsec_…` into `STRIPE_WEBHOOK_SECRET`. **Test mode and
 live mode have different secrets and usually different endpoints.**
@@ -662,7 +664,7 @@ curl http://127.0.0.1:8787/v1/health
 
 # Stripe CLI: forwards real signed events and prints a local whsec_…
 stripe listen \
-  --events checkout.session.completed,checkout.session.async_payment_succeeded,checkout.session.async_payment_failed,customer.subscription.created,customer.subscription.updated,customer.subscription.deleted,invoice.paid,invoice.payment_failed,charge.refunded,charge.dispute.created,charge.dispute.funds_withdrawn \
+  --events checkout.session.completed,checkout.session.async_payment_succeeded,checkout.session.async_payment_failed,customer.subscription.created,customer.subscription.updated,customer.subscription.deleted,invoice.paid,invoice.payment_failed,charge.refunded,charge.dispute.created,charge.dispute.updated,charge.dispute.closed,charge.dispute.funds_withdrawn \
   --forward-to http://127.0.0.1:8787/v1/webhooks/stripe
 
 stripe trigger checkout.session.completed
@@ -771,6 +773,22 @@ webhook → claim → token flow through the router with a fake `fetch`.
   there the renewal is covered too.) The remedy is the one that always worked:
   cancel the subscription in Stripe, which ends renewals, and revoke the grant
   from the admin page if the current period should go too.
+
+  There is a route that would close this without any API call from the webhook
+  path, if the international rail ever is Stripe: the `InvoicePayment` object
+  that replaced the field carries both `invoice` and
+  `payment.payment_intent`, and it has its own `invoice_payment.paid` event.
+  Subscribing to it and keeping two indexes — payment intent → invoice from
+  that event, invoice → license from `invoice.paid` — lets a refund resolve
+  payment → invoice → license with no guessing and no ordering dependency.
+  It is not built, because a Peru-registered seller cannot be a Stripe
+  merchant (checked against `stripe.com/global` on 2026-11-03: Peru is not a
+  supported country) and the international rail is to be a merchant of record,
+  so this handler may never see a live event. Matching a refund by `customer`
+  instead was considered and rejected: a customer with any second purchase on
+  the account would have their Pro ended by the refund of something unrelated,
+  and taking paid access away on a guess is the wrong direction to be wrong
+  in.
 - **A dispute that is won.** Access ended when the dispute was opened and
   nothing puts it back automatically: there is no "un-refund" in this store.
   Give the time back from **Dar Pro** on the admin page.

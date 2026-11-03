@@ -929,7 +929,16 @@ export async function upsertEntitlement(kv, update, options) {
     applyIfPresent(record, "planSource", update.planSource);
     const ownPeriodEnd = update.periodEnd !== undefined && Number.isFinite(update.periodEnd);
     if (ownPeriodEnd) {
-      record.periodEnd = Math.floor(update.periodEnd);
+      const end = Math.floor(update.periodEnd);
+      // `periodEndIsFloor` is set by an event that reports one billing period
+      // rather than the subscription's current state: a paid invoice is
+      // evidence that a period WAS paid for, so it may lengthen access and
+      // must never shorten it. Everything else (a subscription event carrying
+      // `current_period_end`, a preapproval's next charge date) is the
+      // provider's current answer and replaces what we hold.
+      if (!update.periodEndIsFloor || !Number.isFinite(record.periodEnd) || end > record.periodEnd) {
+        record.periodEnd = end;
+      }
     }
     // A single charge with no subscription lifecycle behind it: entitle for one
     // plan interval from the charge. Never shortens an existing period. An

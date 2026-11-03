@@ -75,8 +75,10 @@ while it is up and is still read by screen readers. Toasts stay
 `1,5 s + 50 ms per character` (2,8–8 s): 58 characters of numbers could not be
 read in 2,8 s. The take's summary is also kept in the rating card
 ("Esta toma: …"), so nothing is lost when the toast goes.
-**Tests:** `tests/toast-placement.spec.js` (8 of 9 red on the old build:
-Back covered at every phone width, out of the row on desktop, gone at 2,8 s).
+**Tests:** `tests/toast-placement.spec.js` (red on the old build: Back covered
+at every phone width, out of the row on desktop, gone at 2,8 s; the number of
+red cases was stated here before and did not reproduce, QA FAL-07, so none is
+claimed now).
 
 ### T2 — Keyboard focus lands under the sticky rows (22 stops, 17 exercises)
 
@@ -90,8 +92,9 @@ an exercise; both heights are already measured by `js/app.js`). The browser
 keeps focus clear of that band. The guide and privacy pages keep their own
 margins (no script measures their header).
 **Tests:** `tests/focus-not-obscured.spec.js`: two full Tab rounds (at most 90
-presses) in four exercises, a speech and a singing one of each kind, at 1280 and 390 px; red on the old build with 26 covered stops; a
-control proves the walk sees a covered stop.
+presses) in four exercises, a speech and a singing one of each kind, at 1280 and 390 px; red on the old build (the count of covered stops stated
+here before did not reproduce, QA FAL-07, so none is claimed now); a control
+proves the walk sees a covered stop.
 
 ### T3 — The mic slider lies on the octave buttons (v12, 1280–1440 px)
 
@@ -171,7 +174,7 @@ boundary, env-noise filter, the baseline re-cut). Its report is
 | QA-16 env-noise matched the worker by prefix | The worker is its whole host, read from `js/billing-config.js`; a look-alike host or a CORS refusal naming another host is not noise | `tests/node/env-noise-killers.test.mjs`, L14, L15, L17 to L19 |
 | QA-17, QA-18, QA-22 the CSP tests pinned almost nothing | Every directive is pinned per page with the reason for each source; every `.html` file in the root must be covered by both gates | `tests/node/csp-pins.test.mjs`, L20 to L22 (the same defect on all four pages) |
 | QA-19, QA-20 | Each page enforces its policy in a browser; Google's sign-in client, a recorded take and a human visit (geo, consent bar, analytics flush) run under it with no violation | `tests/csp-gaps.spec.js` |
-| QA-23 | The signature check and key import are captured at load | `tests/trust-console-gaps.spec.js` T5, B10 |
+| QA-23 | The signature check and key import are captured at load and invoked through a `Reflect.apply` captured at load too (a stub of `Function.prototype.call` reached the first version; found by our own red team) | `tests/trust-console-gaps.spec.js` T5, T5b to T5d, B10, B12 to B14 |
 | QA-24 | A trial started in the future is not a trial | T1, T2 (control), B9 |
 | QA-25 | The plan chip, insights panel and sparkline follow the verified license | T6, B11 |
 | QA-26, QA-27 | The key is frozen to full depth; both window bindings are locked | T3, T4, B6 to B8 |
@@ -214,6 +217,46 @@ twice at once, and five mutants of the decision functions that the worker's
 tests do not catch, among them a failed Stripe event keeping its idempotency
 marker) are the account worker's, owned by the
 payments thread; this branch does not touch that code.
+
+### Part C: storage, the learner's day, drill parity and the audio envelope (`qa/round4/ROUND4-C-vibe-audio.md`)
+
+| Finding | What changed | Test and mutants |
+|---|---|---|
+| QA-35 Valid JSON of the wrong kind (`null`, `42`, an array) in `vt_settings_v1`, `vt_progress_v1`, `vt_hold_logs_v1`, `vt_session_v1` or `vt_analytics_v1` left a blank page until site data was cleared | `storage.read` returns the fallback when the parsed value's kind differs from the fallback's (a `null` fallback means "an object"); `analytics.read` wants an object with an `events` array | `tests/corrupt-storage.spec.js`, C-set mutants |
+| QA-36 The progress export's file name and the metronome-speech deck start used the UTC day (19:00 in Lima is already tomorrow) | Both read `VTDays.dayKey` | `tests/local-day.spec.js` |
+| QA-34 v13 and v14 had 4 steps in English and 5 in Spanish | The English text now says what the Spanish text and the practice mode already did | `tests/node/exercise-parity.test.mjs` pins every drill's step, tip and mistake counts across languages |
+| QA-37 Five envelope behaviours had no test | Pinned | `tests/node/envelope-killers.test.mjs`, M26 to M30 |
+
+Trade-offs: the kind check does not look inside the value (a settings object
+with a wrong field is still read as it is); the three legacy functions edited
+on the way (`setPracticeUI`, `headerPlanState`, `bindBilling`) lost their
+complexity exemption by being edited and are now small functions, so the
+baseline went from 353 to 348.
+
+### Part D: small phones, the consent bar and the audit ledger (`qa/round4/ROUND4-D-*.md`)
+
+| Finding | What changed | Test and mutants |
+|---|---|---|
+| UIB-01 The consent bar covered the last controls of every page, and focus could land under it | The bar reserves its height as `padding-bottom` and `scroll-padding-bottom` on `html` while it is shown and gives both back when it is answered or the window resizes | `tests/focus-consent-bar.spec.js`, D3 to D5 |
+| UIB-03 On a phone on its side the mic slider lay on the octave button | The rail wraps to a second row under 500 px of height and 800 px of width | `tests/rail-small-screens.spec.js`, D1 |
+| UIB-04 Shift+Tab from the first control left focus under the Back row | The Back row's height is part of the scroll padding going up | `tests/focus-reverse.spec.js`, D6 |
+| FAL-01 "Paso listo" was a 13 px checkbox below the fold | A 24 px target (WCAG 2.5.8) | `tests/target-size-below-fold.spec.js`, D2 |
+| FAL-03 The audit analyzer's layout, contrast, clipping, overlap, focus, mic, replay and phone rules had no test that turned red when one was dropped | Each rule is pinned | `tests/node/analyze-audit.test.mjs` and `analyze-audit-gaps.test.mjs`, AU10 to AU22 |
+| FAL-04 The analyzer did not read counts in status lines ("3 sílabas"), or a count that rose and fell back, and did not check the mic at the plan page | Counts are read from every status line, a rise is any value above the first tick's, and a mic left on at the plan page is a finding | AU23 to AU27 |
+| FAL-05 The exemptions in the ledger (modes with no take, modes that count on silence) could grow unseen | The set of modes is pinned; the exemption covers the silent run only, not the noise run | AU28 to AU30 |
+| FAL-07 Two numbers in this document ("8 of 9 red", "26 covered stops") did not reproduce | The numbers are removed from T1 and T2 above; the tests stay | |
+
+Left by decision, in the open:
+
+- UIB-02: at 200% text the wrapped rail swaps one failure (the slider on the
+  button) for another (a taller rail over the stage). Not fixed; the rail needs
+  a redesign, not another media query.
+- FAL-02, FAL-06, FAL-08 to FAL-10, UIB-05 to UIB-08 (the rail's invisible overlay,
+  the collapsed exemption that hides 94 controls from the layout check, the
+  complexity-growth check that is vacuous for this PR, unanchored sweep specs,
+  shard balance) were not taken this round.
+- The consent bar adds padding to `html` while it is shown, so the page is
+  taller by the bar's height for as long as it stays.
 
 ### The red team on those fixes
 

@@ -13,8 +13,10 @@ const slowMo = Number(process.env.SLOWMO || (headed ? 80 : 0)) || 0;
 // ~40 minutes and pushed PR #22's shard 4 past its 50-minute budget so 220
 // deterministic tests never ran. The `chromium` project is the PR gate; these
 // run in the `sweep` project (npm run test:sweep, nightly CI).
+// Anchored on the directory separator: a gate spec whose name merely ENDS like a sweep's
+// (`my-live-mouse-demo.spec.js`) must stay in the gate, not drop out of it unseen (QA FAL-09).
 const SWEEP_SPECS =
-  /(?:click-ui-formats|click-ui-live-log|exercise-live-forensics|exercise-ui-forensics|fullscreen-all-clicks|headed-exercise-forensics|headed-formats-clicks|live-mouse-demo)\.spec\.js$/;
+  /[\\/](?:click-ui-formats|click-ui-live-log|exercise-live-forensics|exercise-ui-forensics|fullscreen-all-clicks|headed-exercise-forensics|headed-formats-clicks|live-mouse-demo)\.spec\.js$/;
 
 /** @type {import('@playwright/test').PlaywrightTestConfig} */
 module.exports = {

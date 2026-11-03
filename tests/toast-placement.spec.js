@@ -73,6 +73,13 @@ function measureToast(page) {
   });
 }
 
+// page.clock.install() alone lets fake time run on with the wall clock, so a test that steps it by 2,6 s and
+// expects a 2,8 s toast still up has only 200 ms of slack: a loaded machine fails it. Pausing makes fake
+// time move by runFor() alone, and the margins below become exact.
+async function freezeClock(page) {
+  await page.clock.pauseAt(new Date(Date.now() + 60000));
+}
+
 async function takeAndStop(page, vp, lang) {
   await page.clock.install();
   await page.setViewportSize(vp);
@@ -204,6 +211,7 @@ test("a short message stays up for the 2,8 s floor, not for the 1,5 s plus 50 ms
   await page.clock.install();
   await boot(page, { lang: "es" });
   await openExercise(page, "v1-diction");
+  await freezeClock(page);
   await page.evaluate(() => {
     sessionStorage.removeItem("vt_e2e");
     window.VTToast("Listo");
@@ -242,6 +250,7 @@ test("a toast raised while the view is still moving ends up centred on the row o
 test("a faded toast leaves no message behind in the page, and the next one still shows", async ({ page }) => {
   await page.clock.install();
   await boot(page, { lang: "es" });
+  await freezeClock(page);
   await page.evaluate(() => {
     sessionStorage.removeItem("vt_e2e");
     window.VTToast("Primer mensaje");

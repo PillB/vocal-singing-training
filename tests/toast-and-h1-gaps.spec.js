@@ -195,8 +195,10 @@ test("D 844x390: with the site header out of the layout the exercise row sticks 
   await page.setViewportSize({ width: 844, height: 390 });
   await boot(page, { lang: "es" });
   await openExercise(page, "v1-diction");
-  // Scrolled: the row is stuck, so its top is the sticky offset itself
-  await page.evaluate(() => window.scrollTo(0, 400));
+  // Scrolled: the row is stuck, so its top is the sticky offset itself. The page's CSS says `scroll-behavior: smooth`, so a
+  // plain scrollTo is only started: two frames later the runner had moved 52 px of 180 and the control below failed (CI,
+  // twice, and once as an unexplained red baseline of the a11y mutation set). "instant" lands the scroll before it is read.
+  await page.evaluate(() => window.scrollTo({ top: 400, left: 0, behavior: "instant" }));
   await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
   const m = await page.evaluate(() => ({
     scrolled: window.scrollY,

@@ -144,8 +144,8 @@
     "sha": "d6f3241cd75638a8"
   },
   "js/practice-engine.js": {
-    "v": "20261103b",
-    "sha": "8fe1fbe3fbfc4d9d"
+    "v": "20261103c",
+    "sha": "67a03e6af23e206d"
   },
   "js/practice-modes.js": {
     "v": "20261102c",
@@ -184,8 +184,8 @@
     "sha": "b625414e32c1539e"
   },
   "js/scenes/guided.js": {
-    "v": "20261102a",
-    "sha": "1e8ef03c5a734516"
+    "v": "20261103a",
+    "sha": "056c731d1bc0cd81"
   },
   "js/scenes/pitch.js": {
     "v": "20261002a",
@@ -228,7 +228,7 @@
     "sha": "6a70c4249ad8e832"
   },
   "js/voice-features.js": {
-    "v": "20261102d",
-    "sha": "8412b26127f49cf1"
+    "v": "20261103a",
+    "sha": "98cb3c44762e9b48"
   }
 }

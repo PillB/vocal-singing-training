@@ -1064,6 +1064,32 @@
   // Its own rAF reschedule is only for clock verification; no stale frame
   // reaches _loop(), a mode, a hold, or the pitch game.
   const analyseFrame = PracticeEngine.prototype._loop;
+  /**
+   * The frame's `dtMs` is capped at 50 ms for the signal features (a hold, a
+   * pause, a pitch game must not jump after a stall). A timeline beside the
+   * app's step timer, which runs on wall time, needs the real time as well
+   * (a guided drill's steps: at 10 fps the capped time is half the wall
+   * time, so the step ended with the guide half-way): `wallDtMs`, the
+   * uncapped time since the frame before, from the same `_lastFrameAt` as
+   * the cap, so dtMs is always min(50, wallDtMs). _loop() builds the frame;
+   * its onFrame is relayed for that one call, and kept if the frame replaced it.
+   */
+  function analyseWithWallTime(engine) {
+    const deliver = engine.onFrame;
+    if (typeof deliver !== "function") return analyseFrame.call(engine);
+    const since = engine._lastFrameAt;
+    const relay = function relayFrame(frame) {
+      const now = engine._lastFrameAt;
+      if (frame) frame.wallDtMs = Math.max(0, now - (since || now));
+      return deliver.call(this, frame);
+    };
+    engine.onFrame = relay;
+    try {
+      return analyseFrame.call(engine);
+    } finally {
+      if (engine.onFrame === relay) engine.onFrame = deliver;
+    }
+  }
   PracticeEngine.prototype._loop = function guardedAnalysisFrame() {
     if (!this.running || !this.analyser) return;
     // Frames stopped for longer than the silence window (a hidden tab stops
@@ -1076,7 +1102,7 @@
       }
       return;
     }
-    return analyseFrame.call(this);
+    return analyseWithWallTime(this);
   };
 
   PracticeEngine.frameSize = frameSize;

@@ -439,3 +439,32 @@ not named in the `test` script, which is the same hole in the same shape: a test
 file nobody runs is worse than no test, because it reads as coverage.
 
 VG-58.
+
+## 23. A floor measured with a ruler that answers in float32
+
+Four tap-target cases, across four suites, compared a measured size against 44
+exactly. `getBoundingClientRect()` returns float32 geometry *after* the
+element's transform, and the site lifts a button on hover — `transform:
+translateY(-1px)` over 0.12 s, with the pointer resting wherever the last click
+left it. Stepped through 41 fractional positions of that lift in Chromium on
+3 November 2026, a box CSS makes exactly 44 px measures **43.99999237060547 at
+14 of them**. So `height < 44` called a compliant control too small about a
+third of the time, depending on where the pointer happened to be.
+
+That is the expensive kind of red. A test that fails on geometry nobody got
+wrong teaches the next person to re-run it instead of reading it, which is how
+`validation.spec.js` sat red for six weeks under a registry row that blamed a
+missing feature (section 20).
+
+The four now compare against one `tapFloorLimit()` whose allowance is 0.05 px:
+about 6,500 times the error that was measured, and ten times smaller than the
+smallest shortfall worth catching. Because this is a fix that makes four tests
+*more* permissive, which is the direction that hides defects, the allowance is
+pinned from both sides in `tests/tap-floor.spec.js`: a 44 px control clears it
+at every point of the lift, and a control that really is 43.5 px or 43 px clears
+it nowhere. A fifth case is a control that deliberately asserts nothing about
+the misread count, because a Chromium that computes the box exactly would make
+the allowance unnecessary rather than wrong.
+
+Found by QA round 10 as QA-66. The number above was measured here rather than
+taken from the report. VG-59.

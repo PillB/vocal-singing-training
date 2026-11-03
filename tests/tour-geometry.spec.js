@@ -16,6 +16,8 @@ const VIEWPORTS = [
   { name: "narrow", width: 320, height: 640 }
 ];
 
+const { tapFloorLimit } = require("./helpers/tap-floor");
+
 const MIN_TAP_PX = 44;
 const MIN_FONT_PX = 12;
 
@@ -37,7 +39,7 @@ async function boot(page, { tourDone = false } = {}) {
 
 /** One round trip per step: everything the assertions need, measured together. */
 async function measure(page) {
-  return page.evaluate(() => {
+  return page.evaluate((tapLimit) => {
     const card = document.querySelector(".tour-card");
     const spot = document.querySelector("[data-tour-spot]");
     const hl = document.querySelector(".tour-highlight");
@@ -126,13 +128,15 @@ async function measure(page) {
         getComputedStyle(document.querySelector(".tour-backdrop")).backgroundColor ===
           "rgba(0, 0, 0, 0)",
       minFontPx: Math.min(...leaves.map((el) => parseFloat(getComputedStyle(el).fontSize))),
-      smallTaps: taps.filter((t) => t.w < 44 || t.h < 44),
+      // `tapLimit` carries the float32 allowance: a box CSS makes 44 px measures
+      // 43.99999 part-way through the hover lift (tests/helpers/tap-floor.js).
+      smallTaps: taps.filter((t) => t.w < tapLimit || t.h < tapLimit),
       isLast: (() => {
         const m = document.querySelector("[data-tour-progress]").textContent.match(/(\d+)\D+(\d+)/);
         return !!m && m[1] === m[2];
       })()
     };
-  });
+  }, tapFloorLimit(MIN_TAP_PX));
 }
 
 /** Walk a running tour to the end, asserting every step as it goes. */

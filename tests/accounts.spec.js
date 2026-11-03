@@ -11,6 +11,7 @@ const path = require("path");
 const { pathToFileURL } = require("url");
 const { test, expect } = require("@playwright/test");
 const { mintLicense, patchBillingConfig } = require("./helpers/billing");
+const { tapFloorLimit } = require("./helpers/tap-floor");
 
 const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";
 const API = "https://entitlements.test";
@@ -1018,16 +1019,18 @@ test.describe("Accounts, gifted months and saved progress", () => {
     await boot(page);
     await signIn(page);
 
-    const small = await page.evaluate(() => {
+    const small = await page.evaluate((limit) => {
       const panel = document.querySelector("#account-logged-in");
       const out = [];
       panel.querySelectorAll("button, input, summary").forEach((el) => {
         if (el.offsetParent === null) return;
         const r = el.getBoundingClientRect();
-        if (r.height > 0 && r.height < 44) out.push({ id: el.id || el.className, h: Math.round(r.height) });
+        // The limit carries the float32 allowance (tests/helpers/tap-floor.js);
+        // the height is reported unrounded so a failure names the real number.
+        if (r.height > 0 && r.height < limit) out.push({ id: el.id || el.className, h: r.height });
       });
       return out;
-    });
+    }, tapFloorLimit(44));
     expect(small).toEqual([]);
   });
 

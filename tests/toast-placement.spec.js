@@ -73,6 +73,13 @@ function measureToast(page) {
   });
 }
 
+// page.clock.install() alone lets fake time run on with the wall clock, so a test that steps it by 2,6 s and
+// expects a 2,8 s toast still up has only 200 ms of slack: a loaded machine fails it. Pausing makes fake
+// time move by runFor() alone, and the margins below become exact.
+async function freezeClock(page) {
+  await page.clock.pauseAt(new Date(Date.now() + 60000));
+}
+
 async function takeAndStop(page, vp, lang) {
   await page.clock.install();
   await page.setViewportSize(vp);
@@ -115,7 +122,8 @@ for (const vp of [VIEWPORTS[0], VIEWPORTS[2], VIEWPORTS[3]]) {
     await openExercise(page, "v1-diction");
     await page.evaluate((t) => {
       sessionStorage.removeItem("vt_e2e");
-      window.VTToast(t);
+      // The take's summary is the one message the row may cut: the rating card keeps it whole
+      window.VTToast(t, { kept: true });
     }, TWO_LINES);
     await expect(page.locator("#toast")).toHaveClass(/show/);
     const m = await measureToast(page);
@@ -204,6 +212,7 @@ test("a short message stays up for the 2,8 s floor, not for the 1,5 s plus 50 ms
   await page.clock.install();
   await boot(page, { lang: "es" });
   await openExercise(page, "v1-diction");
+  await freezeClock(page);
   await page.evaluate(() => {
     sessionStorage.removeItem("vt_e2e");
     window.VTToast("Listo");
@@ -223,7 +232,7 @@ test("a toast raised while the view is still moving ends up centred on the row o
   const moving = await page.evaluate(() => {
     sessionStorage.removeItem("vt_e2e");
     window.VTApp.openExercise("v1-diction");
-    window.VTToast("Mensaje levantado en plena animacion", { durationMs: 20000 });
+    window.VTToast("Mensaje en animacion", { durationMs: 20000 });
     return document.getAnimations().length;
   });
   expect(moving, "control: an animation is running when the toast is placed").toBeGreaterThan(0);
@@ -242,6 +251,7 @@ test("a toast raised while the view is still moving ends up centred on the row o
 test("a faded toast leaves no message behind in the page, and the next one still shows", async ({ page }) => {
   await page.clock.install();
   await boot(page, { lang: "es" });
+  await freezeClock(page);
   await page.evaluate(() => {
     sessionStorage.removeItem("vt_e2e");
     window.VTToast("Primer mensaje");
@@ -263,3 +273,64 @@ test("a faded toast leaves no message behind in the page, and the next one still
   await page.clock.runFor(450);
   await expect(page.locator("#toast")).toHaveText("Tercer mensaje");
 });
+
+// Red-team 4e: two lines cut a message ("Toma 2: lento en cada idea clave (toca «Punto clave» al llegar)…" ended in an
+// ellipsis at 320 px). Only the take's summary, which the rating card keeps whole, may be cut in the row; any other
+// message that needs more lines stands just under the row, whole, and the title stays where it is.
+const LONG = {
+  es: "Toma 2: lento en cada idea clave (toca «Punto clave» al llegar) y un poco más vivo en los puentes.",
+  en: "Take 2: slow on each key idea (tap “Key point” as it starts), a little brisker on the bridges."
+};
+const SHORT = { es: "Guardado", en: "Saved" };
+
+/** Raise one message in an open exercise and say where it stands and whether any of it is cut. */
+async function raise(page, text, opts = {}) {
+  await page.evaluate(([t, o]) => { sessionStorage.removeItem("vt_e2e"); window.VTToast(t, o); }, [text, { durationMs: 600000, ...opts }]);
+  await expect(page.locator("#toast")).toHaveClass(/show/);
+  return page.evaluate(() => {
+    document.getAnimations().forEach((a) => a.finish());
+    const t = document.getElementById("toast");
+    const R = (s) => document.querySelector(s).getBoundingClientRect();
+    const hit = (b) => b.width > 0 && t.getBoundingClientRect().left < b.right && t.getBoundingClientRect().right > b.left && t.getBoundingClientRect().top < b.bottom && t.getBoundingClientRect().bottom > b.top;
+    const tr = t.getBoundingClientRect();
+    const cs = getComputedStyle(t);
+    return {
+      inRow: t.classList.contains("in-row"),
+      cut: t.scrollHeight > t.clientHeight + 1,
+      below: Math.round(tr.top - R(".exercise-header-compact").bottom),
+      back: hit(R("#btn-back-home")),
+      help: hit(R(".ex-header-actions")),
+      inView: tr.left >= 0 && tr.right <= innerWidth,
+      titleOpacity: getComputedStyle(document.querySelector(".ex-title-row")).opacity,
+      radius: parseFloat(cs.borderTopLeftRadius),
+      height: Math.round(tr.height)
+    };
+  });
+}
+
+for (const lang of ["es", "en"]) {
+  for (const vp of [VIEWPORTS[0], VIEWPORTS[1], VIEWPORTS[2]]) {
+    test(`${lang} ${vp.width}x${vp.height}: a message that two lines would cut stands under the row, whole; a short one stays in the row`, async ({ page }) => {
+      await page.setViewportSize(vp);
+      await boot(page, { lang });
+      await openExercise(page, "v1-diction");
+      await page.waitForTimeout(600); // the entrance animation moves the row for ~150 ms
+      // A summary first: the flag that lets the row cut it must not outlive it (the next message is not kept)
+      await raise(page, TWO_LINES, { kept: true });
+      const long = await raise(page, LONG[lang]);
+      expect(long.height, "control: the message really needs more than two lines here").toBeGreaterThan(45);
+      expect(long.inRow, "a message that is not the summary does not stand in the row").toBe(false);
+      expect(long.cut, "and none of it is cut").toBe(false);
+      expect(long.below, "just under the row").toBeGreaterThanOrEqual(0);
+      expect(long.below).toBeLessThanOrEqual(12);
+      expect(long.back || long.help, "covers neither ← Back nor Help").toBe(false);
+      expect(long.inView).toBe(true);
+      expect(long.titleOpacity, "the title keeps its place when the toast is not in it").toBe("1");
+      expect(long.radius, "corners the wrapped text does not run out of, not a 999 px pill").toBeLessThanOrEqual(30);
+      const short = await raise(page, SHORT[lang]);
+      expect(short.inRow, "control: a message that fits stays in the row").toBe(true);
+      expect(short.cut).toBe(false);
+      expect(short.titleOpacity).toBe("0");
+    });
+  }
+}

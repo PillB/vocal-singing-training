@@ -214,8 +214,12 @@ toggle in the page. Round 4 closed the routes a snippet could still take
 (`tests/trust-console-gaps.spec.js`, mutants B6 to B11): the license key is
 frozen to full depth, the window bindings cannot be swapped, the signature
 check is captured when the script loads (a later `SubtleCrypto.prototype.verify`
-stub does nothing), a trial dated in the future is not a trial, and the plan
-chip and insights follow the verified license, not the worker's unsigned JSON.
+stub does nothing, nor one of `Function.prototype.call`: the calls go through
+a `Reflect.apply` captured at load too), a trial dated in the future is not a
+trial, and the plan chip and insights follow the verified license, not the
+worker's unsigned JSON. Even so the check resists stubbing crypto, not a user
+who rewrites the rest of the runtime (`TextEncoder`, `Date.now`) or edits the
+files: do not test, or claim, more than that.
 What stays open and is a product decision, not a bug: the local 7-day trial is
 a mark in `localStorage` (clearing site data renews it); a license token is the
 bearer of its subscription, so a leaked token works until the subscription
@@ -226,11 +230,18 @@ ends (QA-28); `VTStorage.createProfile` defaults to the Pro cap (QA-30).
 - `npm run test:core` — lint, catalog regression, Node/Worker unit and
   contract tests (`tests/node/*.test.mjs`, `workers/entitlements/test`).
 - `node qa/mutate.mjs` — mutation check of the Node sets (audio, lint); CI
-  runs it on every PR. `node qa/mutate.mjs stage a11y flows billing audit`
+  runs it on every PR. `node qa/mutate.mjs stage a11y flows regress billing audit`
   runs the browser sets (sticky stage and piano, one h1 and the language of
   each half on every page, the per-exercise flow test, the console routes to
-  Pro, the forensic audit's own probes); CI runs those after the production
-  contracts. Each set first proves its tests green on the unmutated code.
+  Pro, the forensic audit's own probes, and `regress`: storage of the wrong
+  kind or refused, the learner's day, small phones, the consent bar); CI runs each set in its own job
+  (`mutation`, a matrix) beside the production contracts, because the browser sets
+  together outlived a single 30-minute job (QA-45). Each set first proves its
+  tests green on the unmutated code. An a11y mutant is judged by the one spec
+  written to catch it (`A11Y_KILLER` in `qa/mutate.mjs`; a mutant with no
+  entry is a build error); `MUTATE_WIDE=1 node qa/mutate.mjs a11y` (or
+  `--wide`) judges it by all six specs at once and runs nightly, so a spec
+  that stopped killing its mutant while another still does shows up there.
 - `npx playwright test --project=chromium` — the **PR gate**: headless,
   deterministic, one generated test per exercise where a suite walks the
   catalog, so shards balance and a failure names the exercise. No retries

@@ -18,7 +18,7 @@ const project = (name) => config.projects.find((p) => p.name === name);
 test("every spec that forces a visible browser is a sweep, never a PR gate test", () => {
   const headed = specs.filter(forcesHeaded);
   assert.ok(headed.length >= 5, "control: the repo does have headed sweeps to classify");
-  const leaked = headed.filter((f) => !sweep.test(f));
+  const leaked = headed.filter((f) => !sweep.test(`tests/${f}`));
   assert.deepEqual(leaked, [], `headed specs in the PR gate: ${leaked.join(", ")}`);
 });
 
@@ -31,9 +31,18 @@ test("each sweep pattern names a spec that exists", () => {
 test("the gate ignores exactly the sweeps and the sweep project runs only them", () => {
   assert.equal(project("chromium").testIgnore.source, sweep.source);
   assert.equal(project("sweep").testMatch.source, sweep.source);
-  const gate = specs.filter((f) => !sweep.test(f));
+  const gate = specs.filter((f) => !sweep.test(`tests/${f}`));
   assert.ok(gate.length > 50, "control: most specs remain in the PR gate");
   assert.ok(gate.includes("all-flows-robust.spec.js"), "the per-exercise flow matrix gates PRs");
+});
+
+test("a gate spec whose name only ends like a sweep's stays in the gate (QA FAL-09)", () => {
+  // Playwright matches the absolute path. The wrong behaviour: an unanchored pattern also matches a
+  // longer name, and the spec is dropped from the PR gate and run by nobody.
+  assert.equal(sweep.test("/work/tests/live-mouse-demo.spec.js"), true, "control: the real sweep is a sweep");
+  assert.equal(sweep.test("C:\\work\\tests\\live-mouse-demo.spec.js"), true, "control: on Windows paths too");
+  assert.equal(sweep.test("/work/tests/my-live-mouse-demo.spec.js"), false, "a longer name is not the sweep");
+  assert.equal(sweep.test("/work/tests/click-ui-formats-extra.spec.js"), false, "a longer name after it is not either");
 });
 
 test("CI never retries: a retry hides flakiness and re-runs timeouts at full cost", () => {

@@ -44,7 +44,7 @@
    */
   function read(key, fallback) {
     try {
-      const raw = localStorage.getItem(key);
+      const raw = unsaved.has(key) ? unsaved.get(key) : localStorage.getItem(key);
       if (!raw) return fallback;
       const value = JSON.parse(raw);
       return kindOf(value) === kindOf(fallback === null ? {} : fallback) ? value : fallback;
@@ -53,8 +53,50 @@
     }
   }
 
+  /**
+   * QA-47. localStorage can refuse a write: the site's quota is full (pillb.github.io is one origin for every
+   * project page of the account, so 5 MB is shared), storage is switched off, an old Safari private window.
+   * The throw used to escape ensureProfiles() on the first read and the app never booted. A refused value is
+   * kept here for the life of the page and read before localStorage, so the page works; nothing survives a
+   * reload, which the learner is told once (`vt:storage-unsaved`, js/app.js). Only what goes through this
+   * file is held: modules that keep their own keys (days ledger, analytics) manage their own failure.
+   */
+  const unsaved = new Map();
+  let unsavedAnnounced = false;
+
+  function noteUnsaved() {
+    try {
+      global.document.documentElement.dataset.storage = "memory";
+    } catch {
+      /* no document */
+    }
+    if (unsavedAnnounced) return;
+    unsavedAnnounced = true;
+    try {
+      global.dispatchEvent(new CustomEvent("vt:storage-unsaved"));
+    } catch {
+      /* no events */
+    }
+  }
+
   function write(key, value) {
-    localStorage.setItem(key, JSON.stringify(value));
+    const raw = JSON.stringify(value);
+    try {
+      localStorage.setItem(key, raw);
+      unsaved.delete(key);
+    } catch {
+      unsaved.set(key, raw);
+      noteUnsaved();
+    }
+  }
+
+  function remove(key) {
+    unsaved.delete(key);
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      /* storage is off: there is nothing stored to remove */
+    }
   }
 
   function defaultProfiles() {
@@ -120,6 +162,11 @@
   const Storage = {
     MAX_PROFILES_FREE,
     MAX_PROFILES_PRO,
+
+    /** Whether the browser has refused a save, so some of this page's data lives only until it is closed. */
+    isUnsaved() {
+      return unsaved.size > 0;
+    },
 
     getProfiles() {
       const bag = ensureProfiles();
@@ -192,14 +239,14 @@
       if (bag.activeId === id) bag.activeId = "default";
       write(LS.profiles, bag);
       try {
-        localStorage.removeItem(`vt_prof_${id}_${LS.progress}`);
-        localStorage.removeItem(`vt_prof_${id}_${LS.holdLogs}`);
-        localStorage.removeItem(`vt_prof_${id}_${LS.weekPlan}`);
-        localStorage.removeItem(`vt_prof_${id}_${LS.reviews}`);
-        localStorage.removeItem(`vt_prof_${id}_${LS.goals}`);
-        localStorage.removeItem(`vt_prof_${id}_${LS.achievements}`);
-        localStorage.removeItem(`vt_prof_${id}_${LS.days}`);
-        localStorage.removeItem(`vt_prof_${id}_${LS.loop}`);
+        remove(`vt_prof_${id}_${LS.progress}`);
+        remove(`vt_prof_${id}_${LS.holdLogs}`);
+        remove(`vt_prof_${id}_${LS.weekPlan}`);
+        remove(`vt_prof_${id}_${LS.reviews}`);
+        remove(`vt_prof_${id}_${LS.goals}`);
+        remove(`vt_prof_${id}_${LS.achievements}`);
+        remove(`vt_prof_${id}_${LS.days}`);
+        remove(`vt_prof_${id}_${LS.loop}`);
       } catch {
         /* ignore */
       }
@@ -254,7 +301,7 @@
       return read(LS.session, null);
     },
     setSession(session) {
-      if (!session) localStorage.removeItem(LS.session);
+      if (!session) remove(LS.session);
       else write(LS.session, session);
     },
     getWeekPlan() {

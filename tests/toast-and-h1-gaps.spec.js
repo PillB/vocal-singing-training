@@ -144,13 +144,61 @@ for (const c of [
   });
 }
 
+// UIA-01 at its edge. Where the row's free span ends and the toast moves under it depends on the font (Help is wider in
+// Spanish, the runner draws DejaVu), so the widths are not named: the page is swept 280 to 340 px in 5 px steps, the span
+// is measured at each, and the rule is checked against what was measured: a span of 120 px or more holds the toast between
+// ← Back and Help, a smaller one puts it 4 px under the row, whole. A threshold moved either way, or an offset that grew,
+// breaks it at the widths that fall between; and both placements must really occur, or the sweep proves nothing.
+for (const lang of ["es", "en"]) {
+  test(`A ${lang}: the toast stands in the row from a 120 px span and 4 px under it below that, at every width from 280 to 340`, async ({ page }) => {
+    await openWithToastsOn(page, { width: 280, height: 640 }, lang, 100);
+    // kept: the row may cut it, so the span alone decides where it stands
+    await page.evaluate((t) => window.VTToast(t, { durationMs: 600000, kept: true }), PAUSED[lang]);
+    const seen = { row: 0, under: 0 };
+    for (let width = 280; width <= 340; width += 5) {
+      await page.setViewportSize({ width, height: 640 });
+      await page.waitForTimeout(250); // the resize handler places the toast again; its transition runs on the wall clock
+      const m = await page.evaluate(() => {
+        document.getAnimations().forEach((a) => a.finish());
+        const R = (s) => document.querySelector(s).getBoundingClientRect();
+        const t = R("#toast");
+        const row = R(".exercise-header-compact");
+        return {
+          span: Math.round(R(".ex-header-actions").left - 6 - (R("#btn-back-home").right + 6)),
+          inRow: document.getElementById("toast").classList.contains("in-row"),
+          below: Math.round(t.top - row.bottom),
+          width: Math.round(t.width),
+          overBack: t.left < R("#btn-back-home").right && t.right > R("#btn-back-home").left && t.top < R("#btn-back-home").bottom && t.bottom > R("#btn-back-home").top,
+          overHelp: t.left < R(".ex-header-actions").right && t.right > R(".ex-header-actions").left && t.top < R(".ex-header-actions").bottom && t.bottom > R(".ex-header-actions").top
+        };
+      });
+      const at = `${lang} ${width}px (span ${m.span}px)`;
+      expect(m.inRow, `${at}: in the row exactly when the span is 120 px or more`).toBe(m.span >= 120);
+      expect(m.overBack, `${at}: covers ← Back`).toBe(false);
+      expect(m.overHelp, `${at}: covers Help`).toBe(false);
+      if (m.inRow) {
+        seen.row++;
+      } else {
+        seen.under++;
+        expect(m.below, `${at}: just under the row, not further down`).toBeGreaterThanOrEqual(0);
+        expect(m.below, `${at}: just under the row, not further down`).toBeLessThanOrEqual(12);
+        expect(m.width, `${at}: wide enough to read`).toBeGreaterThanOrEqual(120);
+      }
+    }
+    expect(seen.row, "control: the sweep reached widths where the row holds the toast").toBeGreaterThan(2);
+    expect(seen.under, "control: and widths where it stands under the row").toBeGreaterThan(2);
+  });
+}
+
 // UIA-04: taking the header out of the layout must also take its height out of the sticky offsets
 test("D 844x390: with the site header out of the layout the exercise row sticks to the top", async ({ page }) => {
   await page.setViewportSize({ width: 844, height: 390 });
   await boot(page, { lang: "es" });
   await openExercise(page, "v1-diction");
-  // Scrolled: the row is stuck, so its top is the sticky offset itself
-  await page.evaluate(() => window.scrollTo(0, 400));
+  // Scrolled: the row is stuck, so its top is the sticky offset itself. The page's CSS says `scroll-behavior: smooth`, so a
+  // plain scrollTo is only started: two frames later the runner had moved 52 px of 180 and the control below failed (CI,
+  // twice, and once as an unexplained red baseline of the a11y mutation set). "instant" lands the scroll before it is read.
+  await page.evaluate(() => window.scrollTo({ top: 400, left: 0, behavior: "instant" }));
   await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
   const m = await page.evaluate(() => ({
     scrolled: window.scrollY,

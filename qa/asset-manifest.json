@@ -40,8 +40,8 @@
     "sha": "93d225ed63fd919a"
   },
   "css/styles.css": {
-    "v": "20261103d",
-    "sha": "6d8a3b4dd28824a3"
+    "v": "20261103e",
+    "sha": "f8fb32a414fe163a"
   },
   "js/account.js": {
     "v": "20261006b",
@@ -64,8 +64,8 @@
     "sha": "319fd17f4fbb6fd1"
   },
   "js/app.js": {
-    "v": "20261103h",
-    "sha": "f2bffd260da7cbe5"
+    "v": "20261103i",
+    "sha": "d319c6d7d31d1d83"
   },
   "js/audio-recovery.js": {
     "v": "20261103c",
@@ -96,12 +96,12 @@
     "sha": "012bb5f186b7dfdd"
   },
   "js/exercises-data.js": {
-    "v": "20261103a",
-    "sha": "14c8baff210635df"
+    "v": "20261103c",
+    "sha": "b43c8eaa6c7b59ba"
   },
   "js/exercises-locale-es.js": {
-    "v": "20261101a",
-    "sha": "e323d70ba41f869c"
+    "v": "20261103b",
+    "sha": "2e248d169a7c6443"
   },
   "js/experiments-config.js": {
     "v": "20260924e",
@@ -116,8 +116,8 @@
     "sha": "178ba56877e20400"
   },
   "js/i18n.js": {
-    "v": "20261103c",
-    "sha": "35f30de37771eb69"
+    "v": "20261103d",
+    "sha": "ecbc436846850003"
   },
   "js/license.js": {
     "v": "20261103d",
@@ -208,12 +208,12 @@
     "sha": "5f2c4f4ee948f2a5"
   },
   "js/session.js": {
-    "v": "20260924c",
-    "sha": "970c4630a8ee761b"
+    "v": "20261103b",
+    "sha": "9caee4c0ff168c46"
   },
   "js/storage.js": {
-    "v": "20261103a",
-    "sha": "c258071819748ee6"
+    "v": "20261103c",
+    "sha": "f453142870b23007"
   },
   "js/sync.js": {
     "v": "20261102a",

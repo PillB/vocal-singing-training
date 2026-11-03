@@ -275,10 +275,10 @@
     "original": "Varía el ritmo para dar impacto: lento en lo importante, más vivo en el puente.",
     "research": "El ritmo monótono adormece; contrastes de tempo guían la atención.",
     "steps": [
-      "Elige un mensaje de ~90 s con una idea clave.",
+      "Elige un mensaje de ~90 s con 3 ideas clave.",
       "Primera pasada: ritmo uniforme.",
-      "Segunda: ralentiza solo en la idea clave (casi la mitad de velocidad) y acelera un poco el resto.",
-      "Tercera: marca 2 “frenos” intencionales antes de la idea clave.",
+      "Segunda: ralentiza solo en las ideas clave (casi la mitad de velocidad) y acelera un poco el resto.",
+      "Tercera: pon un «freno» (una pausa) antes de cada idea clave y luego ralentiza.",
       "Graba y elige la versión más clara."
     ],
     "tips": [

@@ -134,6 +134,7 @@
       return;
     }
     el.textContent = text;
+    el.classList.toggle("toast-kept", !!opts.kept);
     placeToast(el);
     el.classList.add("show");
     clearTimeout(toast._t);
@@ -178,31 +179,43 @@
    * Centred under the header, a phone-width toast covered the way back (and
    * Help) for its whole life, the moment after Stop when leaving is likeliest.
    * There it takes the title's place instead, between the two buttons, in
-   * two lines at most (the take's summary stays whole in the rating card).
-   * Where those buttons leave under 120 px (a 280 px phone, or text at 125%
-   * on a 320 px one) it stands just under the row instead, over the stage's
-   * strip and not over Help. Elsewhere it keeps its place under the header.
+   * two lines at most. Two lines cut a message, so only the take's summary
+   * (opts.kept: it stays whole in the rating card) may be cut there; any other
+   * message that needs more than two lines stands just under the row instead,
+   * as one that finds the row too narrow does: where those buttons leave under
+   * 120 px (a 280 px phone, or text at 125% on a 320 px one) it stands over the
+   * stage's strip and not over Help. Elsewhere it keeps its place under the header.
    */
   function placeToast(el) {
     watchToastPlace();
     const span = toastRowSpan();
-    if (!span || span.right - span.left < TOAST_MIN_ROOM) {
-      $(".exercise-header-compact")?.classList.remove("toast-over");
-      el.classList.remove("in-row");
-      el.style.removeProperty("left");
-      el.style.removeProperty("max-width");
-      if (span) el.style.top = `${Math.round(span.r.bottom + 4)}px`;
-      else el.style.removeProperty("top");
-      return;
-    }
+    if (span && span.right - span.left >= TOAST_MIN_ROOM && placeInRow(el, span)) return;
+    placeUnderRow(el, span);
+  }
+
+  /** Just under the row (or under the header when no row is on screen): the whole message, wrapped as long as it needs. */
+  function placeUnderRow(el, span) {
+    $(".exercise-header-compact")?.classList.remove("toast-over");
+    el.classList.remove("in-row");
+    el.style.removeProperty("left");
+    el.style.removeProperty("max-width");
+    if (span) el.style.top = `${Math.round(span.r.bottom + 4)}px`;
+    else el.style.removeProperty("top");
+  }
+
+  /** In the title's place; false (and left to placeUnderRow) when two lines would cut a message that is not the kept summary. */
+  function placeInRow(el, span) {
     el.classList.add("in-row");
-    // The title steps back while the toast holds its place (still read out)
-    span.row.classList.add("toast-over");
     // In the title's own place (from its left edge, up to 560 px) and centred
     // on the row, so it covers the title instead of leaving letters beside it
     el.style.left = `${Math.round(span.left)}px`;
     el.style.top = `${Math.round(span.r.top + span.r.height / 2)}px`;
     el.style.maxWidth = `${Math.round(Math.min(560, span.right - span.left))}px`;
+    const cut = el.scrollHeight > el.clientHeight + 1;
+    if (cut && !el.classList.contains("toast-kept")) return false;
+    // The title steps back while the toast holds its place (still read out)
+    span.row.classList.add("toast-over");
+    return true;
   }
 
   /**
@@ -4406,7 +4419,7 @@
   /** After a real Stop: say what was measured, keep it, and ask how it went. */
   function announceStop(modeResult) {
     const summary = modeResult?.summary || null;
-    toast(summary ? `⏹ ${summary}` : tt("toast.stopped"));
+    toast(summary ? `⏹ ${summary}` : tt("toast.stopped"), { kept: !!summary });
     // The toast goes in seconds; what was measured stays beside the question
     // (stopPractice has already kept it in state.rate.summary)
     // Musk-mode UX: after a real stop, open reflect/save so metrics aren't hidden.
@@ -9476,5 +9489,17 @@
     });
   }
 
+  /**
+   * QA-47: when the browser refuses a save the page still works from memory (js/storage.js), but nothing
+   * survives a reload. Say so once, whether the refusal came before this ran (the first read writes the
+   * default profile) or comes later.
+   */
+  function bindStorageNotice() {
+    const say = () => toast(tt("toast.storageUnsaved"));
+    window.addEventListener("vt:storage-unsaved", say);
+    if (window.VTStorage?.isUnsaved?.()) say();
+  }
+
   document.addEventListener("DOMContentLoaded", init);
+  document.addEventListener("DOMContentLoaded", bindStorageNotice);
 })();

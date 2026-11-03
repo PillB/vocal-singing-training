@@ -1,7 +1,8 @@
 name: Quality and production regressions
 
-# PR gate: lint + catalog + Node/Worker + mutation check, then the headless
-# Chromium suite in 4 balanced shards (one generated test per exercise).
+# PR gate: lint + catalog + Node/Worker + mutation check, the browser mutation sets
+# (one job each), then the headless Chromium suite in 4 balanced shards (one generated
+# test per exercise).
 # Nightly / manual: the headed "watch" sweeps (Playwright project `sweep`)
 # and the live GitHub Pages check. Those take ~40 min, write screenshots and
 # reports, and were never meant to gate a pull request.
@@ -63,8 +64,6 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - name: Chromium production regression contracts (headed-safe)
         run: xvfb-run -a npx playwright test tests/production-contracts.spec.js --project=chromium --workers=2 --global-timeout=900000
-      - name: Mutation check (open piano and sticky stage; per-exercise flow test; what a pitch frame may score; controls from PR #24)
-        run: node qa/mutate.mjs stage a11y flows billing scoring controls audit
       - name: Preserve production-contract failures
         if: failure()
         uses: actions/upload-artifact@v4
@@ -74,6 +73,32 @@ jobs:
             test-results/
             playwright-report/
           if-no-files-found: ignore
+
+  # The browser mutation sets, one job each. They ran as one step of browser-contracts and, once a11y grew
+  # to 26 mutants, outlived that job's 30 minute limit (cancelled, not red: QA-45). Each mutant is judged by
+  # the spec written to catch it; the nightly job below runs the a11y group wide as well. scoring and
+  # controls are the integration's (what a pitch frame may score; the controls and recovery from PR #24 and QA round 5).
+  mutation:
+    needs: contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        set: [stage, a11y, flows, regress, billing, scoring, controls, audit]
+    env:
+      CI: '1'
+      MIC_HELP: '0'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npx playwright install --with-deps chromium
+      - name: "Mutation check (${{ matrix.set }}): every planted defect must turn its test red"
+        run: node qa/mutate.mjs ${{ matrix.set }}
 
   safari-audio:
     needs: contracts
@@ -132,6 +157,27 @@ jobs:
             test-results/
             playwright-report/
           if-no-files-found: ignore
+
+  # Nightly: the a11y mutants against all six browser specs at once (MUTATE_WIDE). The PR job judges each by its
+  # own spec; this catches a mutant that one spec stopped killing while another still does.
+  mutation-wide:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      CI: '1'
+      MIC_HELP: '0'
+      MUTATE_WIDE: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npx playwright install --with-deps chromium
+      - name: Mutation check, a11y group against every browser spec
+        run: node qa/mutate.mjs a11y
 
   sweeps:
     if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.sweeps)

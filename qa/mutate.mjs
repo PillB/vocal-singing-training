@@ -8,7 +8,7 @@
  *
  *   node qa/mutate.mjs            # the Node sets (audio, lint)
  *   node qa/mutate.mjs audio      # one set
- *   node qa/mutate.mjs stage a11y flows billing  # browser sets: need Playwright's Chromium
+ *   node qa/mutate.mjs stage a11y flows regress billing audit  # browser sets: need Playwright's Chromium
  *
  * Exit code 1 when any mutant survives or an anchor no longer matches (so a
  * refactor that moves the code cannot silently retire its mutant).
@@ -261,7 +261,10 @@ export const MUTANTS = {
     ["FM3 Stop does nothing", "js/app.js", '$("#btn-practice-stop")?.addEventListener("click", () => stopPractice(false));', '$("#btn-practice-stop")?.addEventListener("click", () => {});'],
     ["FM4 an uncaught exception on every Start", "js/app.js", "async function startPractice() {\n    const ex = state.exercise;", 'async function startPractice() {\n    setTimeout(() => { throw new Error("planted"); }, 0);\n    const ex = state.exercise;'],
     ["FM5 the mic slider is disconnected", "js/app.js", "const applyMicSens = (raw) => {\n", "const applyMicSens = (raw) => {\n      if (micRange?.dataset.ready) return;\n      if (micRange) micRange.dataset.ready = '1';\n"]
-  ].map(([name, file, from, to]) => ({ name, file, from, to, cmd: FLOW_SPEC })).concat(
+  ].map(([name, file, from, to]) => ({ name, file, from, to, cmd: FLOW_SPEC })),
+  // Round 4 in the browser: storage of the wrong kind, a full or refused storage, the learner's day, the rail on a
+  // phone on its side, the consent bar. A set of its own so that no CI job outgrows its 30 minutes (QA-45).
+  regress: [].concat(
     // Round-4 part C: valid JSON of the wrong kind in storage, and the learner's own day
     [
       ["C1 a stored value of another kind (null, 42, an array) is used as it is (QA-35)", "js/storage.js", "return kindOf(value) === kindOf(fallback === null ? {} : fallback) ? value : fallback;", "return value;"],

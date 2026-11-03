@@ -216,11 +216,12 @@ ends (QA-28); `VTStorage.createProfile` defaults to the Pro cap (QA-30).
 - `npm run test:core` — lint, catalog regression, Node/Worker unit and
   contract tests (`tests/node/*.test.mjs`, `workers/entitlements/test`).
 - `node qa/mutate.mjs` — mutation check of the Node sets (audio, lint); CI
-  runs it on every PR. `node qa/mutate.mjs stage a11y flows billing audit`
+  runs it on every PR. `node qa/mutate.mjs stage a11y flows regress billing audit`
   runs the browser sets (sticky stage and piano, one h1 and the language of
   each half on every page, the per-exercise flow test, the console routes to
-  Pro, the forensic audit's own probes); CI runs each set in its own job
-  (`mutation`, a matrix) beside the production contracts, because the five
+  Pro, the forensic audit's own probes, and `regress`: storage of the wrong
+  kind or refused, the learner's day, small phones, the consent bar); CI runs each set in its own job
+  (`mutation`, a matrix) beside the production contracts, because the browser sets
   together outlived a single 30-minute job (QA-45). Each set first proves its
   tests green on the unmutated code. An a11y mutant is judged by the one spec
   written to catch it (`A11Y_KILLER` in `qa/mutate.mjs`; a mutant with no

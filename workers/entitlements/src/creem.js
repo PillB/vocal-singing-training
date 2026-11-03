@@ -433,28 +433,51 @@ function mapSubscription(subscription, env, eventType) {
 }
 
 /**
- * Whether a Creem refund took back everything the transaction had been paid.
+ * Whether a Creem refund put back everything the customer paid.
  *
- * Only a full refund ends access. A partial one is a goodwill gesture or a
- * proration, and ending access for it would punish the customer for being
- * given something. Creem sends no "fully refunded" flag, so the amounts are
- * compared; where they cannot be read the answer is no, because taking paid
- * access away on an unreadable number is the wrong direction to be wrong in.
- * @param {Object} refund Creem refund object.
+ * Three signals, each sufficient on its own, because each one alone has been
+ * seen to miss money that had in fact gone back:
+ *
+ * 1. The transaction's own status. `refunded` against `partialRefund` is
+ *    Creem's verdict, and it is the only signal that sees a refund quoted net
+ *    of a tax the customer paid: the docs' own example pays 1210 for a 1000
+ *    product, so a 1000 refund of one looks partial by every amount rule and
+ *    is not. (The documented statuses are pending, paid, refunded,
+ *    partialRefund, chargedBack, uncollectible, declined, canceled, void.)
+ * 2. The transaction's cumulative `refunded_amount` — "the amount that has
+ *    been refunded", a property of the transaction and not of this refund —
+ *    which is the only signal that sees money returned in two halves.
+ * 3. This refund's own `refund_amount` against what was paid, which is what
+ *    this function had at first and is still right for the ordinary case of
+ *    one refund for the whole charge.
+ *
+ * A genuine partial refund trips none of the three, so the direction of being
+ * wrong is unchanged: a goodwill gesture does not end a month somebody paid
+ * for. What the three cost together is a refund of everything whose
+ * transaction reports no status and no cumulative total and quotes less than
+ * `amount_paid`; that reads as partial, which is the safe way round.
+ * @param {Object} refund Creem refund object (the `object` of a refund.created).
  * @returns {boolean} Whether all of the money went back.
  */
 export function isFullCreemRefund(refund) {
   const transaction = (refund && refund.transaction) || null;
-  const back = Number(refund && refund.refund_amount);
+  if (transaction && transaction.status === "refunded") {
+    return true;
+  }
   const paid = Number(
     transaction && transaction.amount_paid !== undefined && transaction.amount_paid !== null
       ? transaction.amount_paid
       : transaction && transaction.amount
   );
-  if (!Number.isFinite(back) || !Number.isFinite(paid) || paid <= 0) {
+  if (!Number.isFinite(paid) || paid <= 0) {
     return false;
   }
-  return back >= paid;
+  const cumulative = Number(transaction && transaction.refunded_amount);
+  if (Number.isFinite(cumulative) && cumulative >= paid) {
+    return true;
+  }
+  const back = Number(refund && refund.refund_amount);
+  return Number.isFinite(back) && back >= paid;
 }
 
 /**
@@ -486,6 +509,37 @@ function mapReversal(object) {
 }
 
 /**
+ * Creem's own names for an environment that is not production. Its API
+ * documentation gives `mode` as test, prod or sandbox; its webhook examples
+ * also show `local`. Only the three that are certainly not production are
+ * listed, so an unrecognised value — a live one Creem renames, or one it adds
+ * — still entitles. Refusing an unknown mode would mean a renamed production
+ * value silently stops every real sale, which is a worse way to be wrong than
+ * honouring a mode we have not heard of.
+ */
+const NON_PRODUCTION_MODES = new Set(["test", "sandbox", "local"]);
+
+/**
+ * Whether an event from this environment may change an entitlement.
+ *
+ * A Creem test-mode purchase moves no money. If a test event can reach the
+ * live endpoint with a valid signature, honouring it hands out the paid tier
+ * for nothing, so by default it does not. `CREEM_ALLOW_TEST_MODE = "true"`
+ * lets it through, which is what you want while proving the rail works and is
+ * the one setting to put back before the first real sale.
+ * @param {Object} object The event's own object.
+ * @param {Object} env Worker env bindings.
+ * @returns {boolean} Whether the event may entitle.
+ */
+export function creemModeAllowed(object, env) {
+  const mode = typeof (object && object.mode) === "string" ? object.mode.trim().toLowerCase() : "";
+  if (!NON_PRODUCTION_MODES.has(mode)) {
+    return true;
+  }
+  return String((env && env.CREEM_ALLOW_TEST_MODE) || "").trim().toLowerCase() === "true";
+}
+
+/**
  * Map a verified Creem event onto an entitlement update descriptor.
  *
  * Returns `handled: false` with a safe reason for an event we subscribe to but
@@ -502,6 +556,9 @@ export function mapCreemEvent(event, env) {
   const object = event.object && typeof event.object === "object" ? event.object : null;
   if (!object) {
     return { handled: false, reason: "missing_object" };
+  }
+  if (!creemModeAllowed(object, env)) {
+    return { handled: false, reason: "test_mode" };
   }
   let update = null;
   switch (event.eventType) {

@@ -848,24 +848,16 @@ function notePeriodPayment(record, update, before) {
       && Math.floor(update.periodEnd) === record.periodEnd && !claimsPeriod(record)) {
       record.periodPaymentId = paymentId;
       record.periodPaymentEnd = record.periodEnd;
-      record.periodPaymentNamed = true;
     }
     return;
   }
   if (paymentId) {
     record.periodPaymentId = paymentId;
     record.periodPaymentEnd = record.periodEnd;
-    // Whether this payment SAID what period it bought, or the period was
-    // worked out from it. A checkout that names no period of its own is bounded
-    // to one plan interval from when the money arrived, which is a guess that
-    // happens to be about a month — so a later event that names the real period
-    // may take the claim over from it, even though it lengthens nothing.
-    record.periodPaymentNamed = Number.isFinite(update.periodEnd);
     return;
   }
   delete record.periodPaymentId;
   delete record.periodPaymentEnd;
-  delete record.periodPaymentNamed;
 }
 
 /**
@@ -874,9 +866,17 @@ function notePeriodPayment(record, update, before) {
  * An id with no period beside it is one stored before this was recorded, and
  * counts as claiming the period: leaving it is what the store did before the
  * equal-end rule existed, and overwriting it on a guess is the direction that
- * costs a customer access. An id recorded against a period that was inferred
- * rather than named does not claim it, so a payment that names the same period
- * takes it over.
+ * costs a customer access.
+ *
+ * There used to be a third rule here: a claim made from an INFERRED period
+ * (a checkout bounded to one plan interval from when the money arrived) yielded
+ * to a payment that named the same period. It was wrong, and it was only ever
+ * needed because a test fixture gave one payment two ids. A checkout's order
+ * and the first invoice of its subscription are one transaction with one id, so
+ * nothing legitimate needs to transfer a claim between two payments — while a
+ * mid-cycle upgrade or a proration DOES name the period the month's own payment
+ * bought, and under that rule it took the claim, so refunding the real payment
+ * ended nothing. First payment for a period keeps it, with no exceptions.
  * @param {Object} record Record being built.
  * @returns {boolean} Whether a payment has claimed the period now held.
  */
@@ -887,15 +887,7 @@ function claimsPeriod(record) {
   if (!Number.isFinite(record.periodPaymentEnd)) {
     return true;
   }
-  if (record.periodPaymentEnd !== record.periodEnd) {
-    return false;
-  }
-  // A claim made from an inferred period yields to one that names the same
-  // period, because the inference is a bound and the name is a fact. On the
-  // merchant-of-record rail a checkout names its transaction and no period, so
-  // without this the checkout's transaction would keep the claim and the
-  // refund of the subscription's own transaction would end nothing.
-  return record.periodPaymentNamed !== false;
+  return record.periodPaymentEnd === record.periodEnd;
 }
 
 /**
@@ -1119,8 +1111,18 @@ export async function upsertEntitlement(kv, update, options) {
     // charge processed before its subscription's notification was counted on
     // the default plan. Not past a period end the update sets itself (an
     // authorized subscription's next charge date).
-    const recount = record.plan !== planBefore && !ownPeriodEnd;
-    extendForCharge(record, recount ? record.chargedAt : update.periodEndFromCharge);
+    // ...and only when the update did NOT name one. A period the provider
+    // stated is at least as good as one plan interval counted from the charge,
+    // and on any payment taken mid-cycle it is far better: an upgrade, a
+    // proration or a renewal retried after dunning all name the period they
+    // belong to and are charged inside it, so counting an interval from the
+    // charge handed out up to a whole extra month every time (QA round 8,
+    // found while narrowing CR12). This is what the sentence above always
+    // said and the code did not do.
+    if (!ownPeriodEnd) {
+      const recount = record.plan !== planBefore;
+      extendForCharge(record, recount ? record.chargedAt : update.periodEndFromCharge);
+    }
     // The provider says access ended at a given time: it ended a subscription
     // because its money never came. Applied after the charge above so nothing
     // re-extends it. (Money given back is handled below, in any order.)

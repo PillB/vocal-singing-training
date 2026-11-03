@@ -179,3 +179,18 @@ test("the secrets wrangler.toml tells the operator to set are the ones the code 
     );
   }
 });
+
+test("every suite file is imported by the entry point, so nothing can be written and never run", () => {
+  // `node --test workers/entitlements/test` resolves the directory through its
+  // package.json main, so a suite absent from index.mjs is a file that passes
+  // locally, is never run by `npm test`, and is counted in no total anybody
+  // reports. creem.test.mjs was exactly that for a day: 32 cases, 16 of them
+  // red, inside a tree whose suite said 0 failures.
+  const dir = new URL("./", import.meta.url);
+  const entry = readFileSync(new URL("./index.mjs", dir), "utf8");
+  const missing = readdirSync(dir)
+    .filter((name) => name.endsWith(".test.mjs"))
+    .filter((name) => !entry.includes(`"./${name}"`))
+    .sort();
+  assert.deepEqual(missing, [], `suite files not imported by test/index.mjs: ${missing.join(", ")}`);
+});

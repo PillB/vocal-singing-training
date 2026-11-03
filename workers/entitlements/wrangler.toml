@@ -57,6 +57,15 @@ MP_PLAN_PRO_YEARLY = ""
 # Stripe merchant.
 CREEM_PRODUCT_PRO_MONTHLY = ""
 CREEM_PRODUCT_PRO_YEARLY = ""
+# Whether a Creem event from a non-production environment may entitle. Creem's
+# `mode` is test, prod or sandbox in its API docs and `local` in its webhook
+# examples; a purchase in any of the three non-production ones moves no money,
+# so by default it buys nothing here. Set to "true" while you are proving the
+# rail works end to end, and put it back before the first real sale. A mode
+# this worker does not recognise still entitles, deliberately: refusing an
+# unknown mode would mean a production value Creem renames silently stops
+# every real payment, which is the worse way to be wrong.
+CREEM_ALLOW_TEST_MODE = "false"
 # Length of the free trial, in days. One per account, ever.
 TRIAL_DAYS = "7"
 # The trial-length A/B test. "on" gives each account 7 or 14 free days,

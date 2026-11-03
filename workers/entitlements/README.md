@@ -223,6 +223,7 @@ Public, committed in `wrangler.toml`:
 | `STRIPE_PRICE_PRO_MONTHLY` / `STRIPE_PRICE_PRO_YEARLY` | Optional price → plan mapping. Filling either one in also makes it an **allow-list** — see below. |
 | `MP_PLAN_PRO_MONTHLY` / `MP_PLAN_PRO_YEARLY` | Optional `preapproval_plan_id` → plan mapping. |
 | `CREEM_PRODUCT_PRO_MONTHLY` / `CREEM_PRODUCT_PRO_YEARLY` | Optional Creem product id → plan mapping. Filling either one in makes it an **allow-list** too, exactly as the Stripe prices do. |
+| `CREEM_ALLOW_TEST_MODE` | `"true"` lets a Creem event whose `mode` is `test`, `sandbox` or `local` entitle. Defaults off: a test purchase moves no money, so honouring one hands out the paid tier for nothing. Switch it on to prove the rail end to end, and off again before the first real sale. An unrecognised mode entitles either way, so a live value Creem renames cannot silently stop every sale. |
 | `TRIAL_DAYS` | Length of the free trial, in days. One per account, ever. Default 7. |
 | `TRIAL_LEN_EXPERIMENT` | `"on"` runs the trial-length A/B test (`trial_len_2026_11`): each account's trial is 7 or 14 days, assigned from its account id. **It overrides `TRIAL_DAYS`** — with the test on, that setting is ignored. Off (the default) everybody gets `TRIAL_DAYS`. It also needs `LICENSE_ID_KEY` or `LICENSE_PRIVATE_KEY_PKCS8_B64` to key the assignment with; without one the test stays off, because an arm anyone can predict is an arm anyone can pick. The browser cannot switch this on: the `enabled` flag in `js/experiments-config.js` governs only what the statistics record. |
 | `GOOGLE_CLIENT_ID` | Google Sign-In client id. Public by design. Empty disables Google sign-in. |
@@ -599,7 +600,7 @@ well as a label, so a donation or a one-off lesson sold from the same Creem
 account cannot become Pro. Paste each product's share link into
 `js/billing-config.js` under `providers.creem.links`.
 
-Three things about this rail are not like Stripe's, and each one is a way to
+Five things about this rail are not like Stripe's, and each one is a way to
 get it wrong:
 
 - **The signature has no timestamp.** It is the HMAC-SHA256 of the raw body
@@ -620,6 +621,25 @@ get it wrong:
   `current_period_end_date`, `last_transaction_date` and `canceled_at` are
   **ISO 8601 strings**. Reading one as the other is a thousand-fold error in a
   date that decides access.
+- **"Was it a full refund" is three questions, not one.** The transaction's own
+  `status` is read first: `refunded` against `partialRefund`, Creem's verdict
+  and the only signal that sees a refund quoted net of a tax the customer paid
+  — the documented example pays 1210 for a 1000 product, so a 1000 refund of
+  one is the whole sale and looks like 83% of it. Then the transaction's
+  cumulative `refunded_amount`, which is the only signal that sees money
+  returned in two halves: comparing each refund's own amount with what was paid
+  calls each half a goodwill gesture and leaves a fully refunded month running.
+  Then this refund's own amount, which is right for the ordinary case. Any one
+  of the three is enough; a genuine part refund trips none of them.
+- **Test mode reaches the same endpoint.** Every Creem object carries a `mode`
+  — `test`, `prod` or `sandbox` in the API reference, and `local` in the
+  webhook examples. A test purchase moves no money, so an event from one of the
+  three non-production modes entitles nobody unless `CREEM_ALLOW_TEST_MODE` is
+  `"true"`, which is what you set while proving the rail works and put back
+  before the first real sale. A mode this worker does not recognise still
+  entitles, deliberately: refusing an unknown one would mean a production value
+  Creem renames stops every real payment, silently, which is the worse way to
+  be wrong.
 
 The payment identity on this rail is the **transaction id** (`tran_…`). Creem
 names it on the paying events and names the same one again when the money goes

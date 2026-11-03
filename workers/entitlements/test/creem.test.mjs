@@ -111,7 +111,7 @@ const checkout = (id, subscriptionId, over) => ({
   id,
   object: "checkout",
   status: "completed",
-  mode: "test",
+  mode: "prod",
   request_id: null,
   order: {
     id: "ord_1",
@@ -119,7 +119,11 @@ const checkout = (id, subscriptionId, over) => ({
     currency: "USD",
     status: "paid",
     type: "recurring",
-    transaction: "tran_first"
+    // The same transaction the first subscription.paid names. Creem's checkout
+    // order and that first invoice ARE one payment, and a fixture that gave
+    // them two ids was what made an inferred claim look like it had to be
+    // transferable between payments (QA round 8, CR12).
+    transaction: "tran_1"
   },
   product: { id: "prod_monthly", name: "Pro Monthly", billing_type: "recurring", billing_period: "every-month" },
   customer: { id: "cust_1", email: "singer@example.com" },
@@ -133,6 +137,7 @@ const subscription = (id, status, endDays, over) => ({
   id,
   object: "subscription",
   status,
+  mode: "prod",
   collection_method: "charge_automatically",
   product: { id: "prod_monthly", name: "Pro Monthly", billing_period: "every-month" },
   customer: { id: "cust_1", email: "singer@example.com" },
@@ -157,6 +162,7 @@ const refund = (id, transactionId, subscriptionId, atDays, over) => ({
   id,
   object: "refund",
   status: "succeeded",
+  mode: "prod",
   refund_amount: 1000,
   refund_currency: "USD",
   reason: "requested_by_customer",
@@ -173,6 +179,7 @@ const refund = (id, transactionId, subscriptionId, atDays, over) => ({
 const dispute = (id, transactionId, subscriptionId, atDays) => ({
   id,
   object: "dispute",
+  mode: "prod",
   amount: 1000,
   currency: "USD",
   transaction: { id: transactionId, status: "chargeback" },
@@ -461,6 +468,143 @@ test("an amount nobody can read is not a full refund", () => {
   assert.equal(isFullCreemRefund({ refund_amount: 1000, transaction: { amount_paid: 0 } }), false);
 });
 
+test("money that went back in two halves is money that went back", async () => {
+  // Each refund alone is partial, so comparing THIS refund's amount with what
+  // was paid says "goodwill gesture" twice and leaves a fully refunded month
+  // running. The transaction's own running total is what sees it.
+  const env = freshEnv();
+  await deliver(env, "evt_1", "checkout.completed", 0, checkout("ch_h1", "sub_h1"));
+  await deliver(env, "evt_2", "subscription.paid", 0, paid("sub_h1", "tran_1", 31, 0));
+  const first = await deliver(env, "evt_3", "refund.created", 5, refund("ref_1", "tran_1", "sub_h1", 5, {
+    refund_amount: 500,
+    transaction: { id: "tran_1", amount: 1000, amount_paid: 1000, status: "partialRefund", refunded_amount: 500 }
+  }));
+  assert.equal((await first.json()).reason, "partial_refund", "half the money is half the money");
+  assert.equal(await claim(env, "ch_h1", 6), 200);
+  await deliver(env, "evt_4", "refund.created", 6, refund("ref_2", "tran_1", "sub_h1", 6, {
+    refund_amount: 500,
+    transaction: { id: "tran_1", amount: 1000, amount_paid: 1000, status: "partialRefund", refunded_amount: 1000 }
+  }));
+  assert.equal(await claim(env, "ch_h1", 7), 403, "and two halves are the whole of it");
+});
+
+test("a refund quoted without the tax the customer paid is still the whole of it", async () => {
+  // Creem's own documented example pays 1210 for a 1000 product: 1000 of tax
+  // exclusive price and 210 of tax. A refund quoted at 1000 of that is the
+  // entire sale, and every amount rule reads it as 83% of one.
+  const env = freshEnv();
+  await deliver(env, "evt_1", "checkout.completed", 0, checkout("ch_h2", "sub_h2"));
+  await deliver(env, "evt_2", "subscription.paid", 0, paid("sub_h2", "tran_1", 31, 0));
+  await deliver(env, "evt_3", "refund.created", 5, refund("ref_1", "tran_1", "sub_h2", 5, {
+    refund_amount: 1000,
+    transaction: {
+      id: "tran_1", amount: 1000, amount_paid: 1210, tax_amount: 210,
+      status: "refunded", refunded_amount: 1000
+    }
+  }));
+  assert.equal(await claim(env, "ch_h2", 6), 403, "Creem said refunded; the arithmetic did not");
+});
+
+test("the status Creem documents for a part refund is read as one", () => {
+  // The enum is partialRefund. An earlier fixture here said
+  // "partially_refunded", which is nobody's spelling, so the test passed for
+  // the wrong reason: no status matched, and the amounts carried it.
+  const paidSoFar = (status, refunded) => isFullCreemRefund({
+    refund_amount: 400,
+    transaction: { id: "t", amount: 1000, amount_paid: 1000, status, refunded_amount: refunded }
+  });
+  assert.equal(paidSoFar("partialRefund", 400), false);
+  assert.equal(paidSoFar("partialRefund", 1000), true, "the total outranks the label");
+  assert.equal(paidSoFar("refunded", 400), true, "and the label outranks the amounts");
+  assert.equal(paidSoFar("paid", 400), false);
+  assert.equal(paidSoFar("chargedBack", 400), false, "a chargeback arrives as a dispute, not a refund");
+});
+
+test("the transaction's running total is read, not only this refund's amount", () => {
+  const t = (over) => isFullCreemRefund({ refund_amount: 10, transaction: { amount_paid: 1000, ...over } });
+  assert.equal(t({ refunded_amount: 1000 }), true);
+  assert.equal(t({ refunded_amount: 1001 }), true, "rounding up is still all of it");
+  assert.equal(t({ refunded_amount: 999 }), false);
+  assert.equal(t({}), false, "no total and a small refund is a small refund");
+  assert.equal(t({ refunded_amount: "many" }), false, "an unreadable total is not a full refund");
+  assert.equal(t({ refunded_amount: null }), false);
+});
+
+test("a test-mode purchase buys nothing, because no money moved", async () => {
+  // Creem test mode charges nobody. If a test event can reach the live
+  // endpoint with a valid signature, honouring it is Pro for free.
+  const env = freshEnv();
+  const response = await deliver(env, "evt_1", "checkout.completed", 0,
+    checkout("ch_m1", "sub_m1", { mode: "test" }));
+  assert.equal(response.status, 200, "acknowledged, so Creem stops retrying");
+  assert.equal((await response.json()).reason, "test_mode");
+  // 202 is "no license for this checkout yet", which is what the browser gets
+  // while it waits — and here it never stops being true.
+  assert.equal(await claim(env, "ch_m1", 1), 202, "and nothing was written");
+  assert.equal(env.ENTITLEMENTS.writes, 1, "only the event id was recorded");
+  for (const mode of ["sandbox", "local", "TEST", " Sandbox "]) {
+    const r = await deliver(env, `evt_${mode.trim()}`, "checkout.completed", 0,
+      checkout(`ch_${mode.trim()}`, "sub_m1", { mode }));
+    assert.equal((await r.json()).reason, "test_mode", mode);
+  }
+});
+
+test("and the operator can switch test mode on to prove the rail works", async () => {
+  const env = freshEnv({ CREEM_ALLOW_TEST_MODE: "true" });
+  await deliver(env, "evt_1", "checkout.completed", 0, checkout("ch_m2", "sub_m2", { mode: "test" }));
+  await deliver(env, "evt_2", "subscription.paid", 0, paid("sub_m2", "tran_1", 31, 0, { mode: "test" }));
+  assert.equal(await claim(env, "ch_m2", 1), 200);
+});
+
+test("a mode this worker has never heard of still entitles", async () => {
+  // Refusing an unknown mode would mean a production value Creem renames stops
+  // every real payment, silently, until somebody notices no licences are being
+  // issued. Only the three documented non-production names are refused.
+  const env = freshEnv();
+  await deliver(env, "evt_1", "checkout.completed", 0, checkout("ch_m3", "sub_m3", { mode: "live" }));
+  assert.equal(await claim(env, "ch_m3", 1), 200, "a renamed live mode");
+  await deliver(env, "evt_2", "checkout.completed", 0, checkout("ch_m4", "sub_m4", { mode: undefined }));
+  assert.equal(await claim(env, "ch_m4", 1), 200, "and an event that does not say");
+});
+
+test("a period the subscription moved before its invoice arrived is claimed by the invoice that paid for it", async () => {
+  // A state event replaces the period end and says nothing about money, so it
+  // leaves month one's payment id in place over a period month one did not buy.
+  // The paid event that follows lengthens nothing, and has to be able to take
+  // the claim — or the refund of month one ends month two. (This is the shape
+  // the first version of the identity rule got wrong, reached through a state
+  // event rather than through a missing payment id.)
+  const env = freshEnv();
+  await deliver(env, "evt_1", "checkout.completed", 0, checkout("ch_s1", "sub_s1"));
+  await deliver(env, "evt_2", "subscription.paid", 0, paid("sub_s1", "tran_1", 31, 0));
+  await deliver(env, "evt_3", "subscription.update", 30, subscription("sub_s1", "active", 62));
+  await deliver(env, "evt_4", "subscription.paid", 31, paid("sub_s1", "tran_2", 62, 31));
+  await deliver(env, "evt_5", "refund.created", 40, refund("ref_1", "tran_1", "sub_s1", 40));
+  assert.equal(await claim(env, "ch_s1", 41), 200, "month one's refund does not end month two");
+  await deliver(env, "evt_6", "refund.created", 42, refund("ref_2", "tran_2", "sub_s1", 42));
+  assert.equal(await claim(env, "ch_s1", 43), 403, "month two's own refund does");
+});
+
+test("an upgrade charge does not take the month from the payment that bought it", async () => {
+  // A proration or an upgrade ends with the same period the month's own
+  // payment bought, and names its own transaction. Letting the later one claim
+  // the period meant refunding the small charge ended a month it had not
+  // bought, and refunding the real one ended nothing.
+  const env = freshEnv();
+  await deliver(env, "evt_1", "checkout.completed", 0, checkout("ch_u1", "sub_u1"));
+  await deliver(env, "evt_2", "subscription.paid", 0, paid("sub_u1", "tran_1", 31, 0));
+  await deliver(env, "evt_3", "subscription.paid", 10, paid("sub_u1", "tran_upgrade", 31, 10, {
+    last_transaction: { id: "tran_upgrade", amount: 200, amount_paid: 200, status: "paid" }
+  }));
+  await deliver(env, "evt_4", "refund.created", 12, refund("ref_1", "tran_upgrade", "sub_u1", 12, {
+    refund_amount: 200,
+    transaction: { id: "tran_upgrade", amount: 200, amount_paid: 200, status: "refunded" }
+  }));
+  assert.equal(await claim(env, "ch_u1", 13), 200, "the upgrade's refund ends nothing it bought");
+  await deliver(env, "evt_5", "refund.created", 14, refund("ref_2", "tran_1", "sub_u1", 14));
+  assert.equal(await claim(env, "ch_u1", 15), 403, "the month's own payment still ends it");
+});
+
 test("a dispute carries no status, so every one of them is a chargeback", async () => {
   // The opposite of Stripe, where treating every dispute as a chargeback took
   // Pro from people whose money was never reversed (QA round 5, D3). Creem's
@@ -561,7 +705,7 @@ test("only a paid event says money arrived", () => {
 
 test("the transaction id is read wherever Creem puts it", () => {
   const monthly = (object) => mapCreemEvent({ id: "e", eventType: "checkout.completed", created_at: ms(0), object }, {});
-  assert.equal(monthly(checkout("ch_t", "sub_t")).update.paymentId, "tran_first", "a checkout's order names it");
+  assert.equal(monthly(checkout("ch_t", "sub_t")).update.paymentId, "tran_1", "a checkout's order names it");
   const fromPaid = mapCreemEvent(
     { id: "e", eventType: "subscription.paid", created_at: ms(0), object: paid("sub_t", "tran_p", 31, 0) },
     {}

@@ -2092,6 +2092,11 @@ html[lang^="es"] .hud-bc.is-manual .mic-sens-title::after {
   color: #9fd0ff;
   letter-spacing: 0.02em;
 }
+.hud-oct .oct-label.oct-caution {
+  color: #ffc56b;
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+}
 .hud-oct .oct-auto {
   margin-left: 0.12rem;
   gap: 0.18rem;

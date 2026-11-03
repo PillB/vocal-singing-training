@@ -407,34 +407,44 @@
       throw this.lastCaptureError;
     }
 
-    async _setupInputGraph() {
-      // One audio context for piano and pitch analysis. Creating a second one
-      // after an iOS microphone prompt often leaves it suspended.
+    /** The one audio context for piano and pitch analysis, and whether this engine made it. */
+    _inputContext() {
+      // Creating a second context after an iOS microphone prompt often
+      // leaves it suspended, so the piano's (or the last shared one) is reused.
       const shared =
         (global.VTPiano?.ctx?.state !== "closed" ? global.VTPiano?.ctx : null) ||
         (global.VTSharedAudioCtx?.state !== "closed" ? global.VTSharedAudioCtx : null);
-      if (shared) {
-        this.audioCtx = shared;
-        this._ownsAudioCtx = false;
-      } else {
-        const AC = window.AudioContext || window.webkitAudioContext;
-        if (!AC) throw new Error("AudioContext not available");
-        this.audioCtx = new AC();
-        this._ownsAudioCtx = true;
-        global.VTSharedAudioCtx = this.audioCtx;
-      }
-      if (["suspended", "interrupted"].includes(this.audioCtx.state)) {
-        await this.audioCtx.resume();
+      if (shared) return { ctx: shared, owns: false };
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) throw new Error("AudioContext not available");
+      const ctx = new AC();
+      global.VTSharedAudioCtx = ctx;
+      return { ctx, owns: true };
+    }
+
+    /**
+     * Build the analysis graph on `stream` for Start number `gen`. The resume
+     * can take a while on an iPhone; if Stop or a newer Start came meanwhile,
+     * nothing is built, so this Start cannot replace or orphan the nodes of
+     * the session that owns the engine now.
+     */
+    async _setupInputGraph(gen = this._startGen, stream = this.stream) {
+      const { ctx, owns } = this._inputContext();
+      if (["suspended", "interrupted"].includes(ctx.state)) {
+        await ctx.resume();
       }
       await global.VTPiano?.resume?.();
-      this.inputGain = this.audioCtx.createGain();
+      if (gen !== this._startGen) return;
+      this.audioCtx = ctx;
+      this._ownsAudioCtx = owns;
+      this.inputGain = ctx.createGain();
       this.inputGain.gain.value = this._gainFromSens(this.sensitivity);
-      this.analyser = this.audioCtx.createAnalyser();
-      this.analyser.fftSize = frameSize(this.audioCtx.sampleRate);
+      this.analyser = ctx.createAnalyser();
+      this.analyser.fftSize = frameSize(ctx.sampleRate);
       this.analyser.smoothingTimeConstant = 0.12;
       // Never replace a failed microphone node with silence and report a
       // healthy session. A blank green 'live' state is worse than Retry.
-      this.source = this.audioCtx.createMediaStreamSource(this.stream);
+      this.source = ctx.createMediaStreamSource(stream);
       this.source.connect(this.inputGain);
       this.inputGain.connect(this.analyser);
       this.buf = new Float32Array(this.analyser.fftSize);
@@ -565,6 +575,14 @@
       }
     }
 
+    /** A cancelled Start's own stream: stop its tracks, and drop it if the engine still points at it. */
+    _releaseStale(stream) {
+      stream.getTracks?.().forEach((track) => {
+        if (track.readyState !== "ended") track.stop();
+      });
+      if (this.stream === stream) this.stream = null;
+    }
+
     async _startSession(gen, record) {
       this.lastCaptureError = null;
       const stream = await this._captureFor(gen);
@@ -579,14 +597,14 @@
       this._noteInputProcessing(audioTrack);
       let graphError = null;
       try {
-        await this._setupInputGraph();
+        await this._setupInputGraph(gen, stream);
       } catch (e) {
         graphError = e;
       }
       if (gen !== this._startGen) {
-        // Stop came while the graph was built (an iPhone resume can take a
-        // while): it released the stream, and a half-built graph is no error.
-        if (this.stream === stream) this._discardFailedInput();
+        // Stop or a newer Start came while the graph was built: this Start
+        // ends quietly (no mic failure) and gives its own microphone back.
+        this._releaseStale(stream);
         return;
       }
       if (graphError) {
@@ -608,7 +626,6 @@
       this._watchMicTrack(audioTrack, this.stream);
       this._watchAudioContext(this.audioCtx, this.stream);
       await this._startOptionalRecorder(record);
-      if (gen !== this._startGen) return; // stopped while the recorder started
 
       this._status("listening");
       if (!this._analysisPaused) this._loop();
@@ -842,13 +859,21 @@
       return null;
     }
 
+    /** How long a silence ends a hold: the base window, longer at high sensitivity (as _loop counts it). */
+    _silenceEndMs() {
+      return SILENCE_END_MS + Math.max(0, this.sensitivity - 5) * 50;
+    }
+
     _maybeEndHold(force) {
       if (!this.holdStart) return;
       const now = performance.now();
       const silenceLong = force || now - this.lastVoiceAt >= SILENCE_END_MS;
       if (!silenceLong && !force) return;
       // Credit through last real voice, not trailing silence window
-      const endAt = this.lastVoiceAt > this.holdStart ? this.lastVoiceAt : now;
+      // A hold opens on a voiced frame, so lastVoiceAt >= holdStart while it
+      // is open; never credit time after the last voice (a one-frame hold
+      // before a hidden minute used to be logged as the minute).
+      const endAt = this.lastVoiceAt >= this.holdStart ? this.lastVoiceAt : now;
       const sec = (endAt - this.holdStart) / 1000;
       if (sec >= HOLD_MIN_SEC) {
         const entry = {
@@ -1044,7 +1069,7 @@
     // Frames stopped for longer than the silence window (a hidden tab stops
     // rAF while the mic stays open): close an open hold at its last real
     // sample instead of crediting the time nobody heard (PR #24).
-    if (this._lastFrameAt && performance.now() - this._lastFrameAt > SILENCE_END_MS) this._maybeEndHold(true);
+    if (this._lastFrameAt && performance.now() - this._lastFrameAt > this._silenceEndMs()) this._maybeEndHold(true);
     if (!this._audioClockHealthy(performance.now())) {
       if (this.running && !this._analysisPaused) {
         this.raf = requestAnimationFrame(() => this._loop());

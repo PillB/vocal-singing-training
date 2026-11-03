@@ -11,9 +11,12 @@ const testPort = Number.isInteger(requestedPort) && requestedPort >= 1024 && req
   ? requestedPort : 8765;
 // Specs and helpers build absolute URLs from BASE_URL or VT_BASE (both fall
 // back to :8765), so a custom port must reach them too, not only `baseURL` and
-// the server. The config is evaluated in the runner and in every worker.
+// the server; and a base given under one name is the base under the other
+// (else half the specs test the app at :8765). The config is evaluated in the
+// runner and in every worker.
+const givenBase = process.env.BASE_URL || process.env.VT_BASE || (testPort !== 8765 ? `http://127.0.0.1:${testPort}` : "");
 for (const key of ["BASE_URL", "VT_BASE"]) {
-  if (!process.env[key] && testPort !== 8765) process.env[key] = `http://127.0.0.1:${testPort}`;
+  if (!process.env[key] && givenBase) process.env[key] = givenBase;
 }
 
 // Headed "watch" sweeps: real windows, slowMo pointer paths, screenshots and

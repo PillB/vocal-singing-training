@@ -265,9 +265,14 @@
   function updateOctaveUI() {
     const lab = $("#oct-label");
     if (lab) {
+      // Octave −2 stays marked (and explained) however it was reached: a
+      // range restored from the last visit shows no toast.
+      const low = state.octaveShift === -2;
       lab.textContent = formatOctLabel(state.octaveShift);
-      lab.title =
-        state.octaveShift === 0
+      lab.classList.toggle("oct-caution", low);
+      lab.title = low
+        ? tt("range.lowOctaveHint")
+        : state.octaveShift === 0
           ? tt("range.octZero")
           : tt("range.octValue", { n: formatOctLabel(state.octaveShift) });
     }
@@ -375,8 +380,21 @@
    */
   function shiftOctave(next, opts = {}) {
     const moved = applyOctaveShift(next, opts);
-    if (moved && !opts.silent && state.octaveShift === -2) toast(tt("range.lowOctaveCaution"), { durationMs: 4800 });
+    if (moved && !opts.silent && state.octaveShift === -2) cautionLowOctave();
     return moved;
+  }
+
+  /**
+   * During a take the move restarts the piano, and its "applied" toast comes
+   * when the restart settles: the caution waits for it, or it would be
+   * replaced within milliseconds. The label keeps the full explanation.
+   */
+  function cautionLowOctave() {
+    const say = () => {
+      if (state.octaveShift === -2) toast(tt("range.lowOctaveCaution"));
+    };
+    if (state.practiceLive && state._hotApplyPromise) state._hotApplyPromise.then(say, say);
+    else say();
   }
 
   function setRangeAuto(on) {

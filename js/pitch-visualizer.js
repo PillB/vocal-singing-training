@@ -11,6 +11,19 @@
   /** Fixed-Do solfège (Spanish/LATAM: Si not Ti) — C=Do */
   const SOLFEGE = ["Do", "Do♯", "Re", "Re♯", "Mi", "Fa", "Fa♯", "Sol", "Sol♯", "La", "La♯", "Si"];
 
+  // No lane below C1. Octave −2 transposes a progression's bass to C0–B0
+  // (16–31 Hz): no voice sings there and the detector hears nothing, and
+  // showing those lanes squashed the singable range into the top of the
+  // highway. The note table stopped at C1 before PR #24 gave the piano C0.
+  const LANE_FLOOR_HZ = 32;
+
+  /** The note table without the tones below the lane floor. */
+  function laneFreqs(map) {
+    const out = {};
+    for (const [name, f] of Object.entries(map || {})) if (f >= LANE_FLOOR_HZ) out[name] = f;
+    return out;
+  }
+
   function freqToMidi(freq) {
     return 69 + 12 * Math.log2(freq / 440);
   }
@@ -516,7 +529,7 @@
      */
     setProgressionRange(prog) {
       if (!prog || !global.VTProgressionRange) return;
-      const r = global.VTProgressionRange(prog, global.VT_NOTE_FREQ);
+      const r = global.VTProgressionRange(prog, laneFreqs(global.VT_NOTE_FREQ));
       // Lock to full progression span (do not grow/shrink per chord)
       this.lockMidiRange(r.minMidi + 1, r.maxMidi - 1, { pad: 1.25, minSpan: 12 });
       // Ghost lanes: every unique pitch in the progression (dim until chord activates)
@@ -1680,6 +1693,15 @@
       };
     }
   }
+
+  // A chord's tones below the lane floor get no lane (see LANE_FLOOR_HZ);
+  // the chord-lane builder itself is legacy code kept byte-for-byte.
+  const chordTarget = PitchVisualizer.prototype.setTargetFromChord;
+  PitchVisualizer.prototype.setTargetFromChord = function setAudibleChordTarget(chord, opts) {
+    const map = global.VT_NOTE_FREQ || {};
+    const notes = chord?.notes?.filter((n) => !(map[n] < LANE_FLOOR_HZ));
+    return chordTarget.call(this, notes?.length ? { ...chord, notes } : chord, opts);
+  };
 
   global.VTPitchVisualizer = PitchVisualizer;
   global.VTPitchUtils = {

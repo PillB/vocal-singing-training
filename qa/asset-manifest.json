@@ -40,8 +40,8 @@
     "sha": "93d225ed63fd919a"
   },
   "css/styles.css": {
-    "v": "20261103a",
-    "sha": "0a973b3de7fd7c49"
+    "v": "20261103b",
+    "sha": "a7a4b05f9e2f89d6"
   },
   "js/account.js": {
     "v": "20261006b",
@@ -64,8 +64,8 @@
     "sha": "4c03c708ee923b1a"
   },
   "js/app.js": {
-    "v": "20261103a",
-    "sha": "d5b72a921afb0edd"
+    "v": "20261103b",
+    "sha": "aa61df975518b335"
   },
   "js/audio-recovery.js": {
     "v": "20261102b",
@@ -116,8 +116,8 @@
     "sha": "178ba56877e20400"
   },
   "js/i18n.js": {
-    "v": "20261102d",
-    "sha": "383af136c363aa99"
+    "v": "20261103a",
+    "sha": "7d046a1bf87cf5ce"
   },
   "js/license.js": {
     "v": "20261102a",
@@ -136,16 +136,16 @@
     "sha": "6c28a1d0204d4cc1"
   },
   "js/pitch-visualizer.js": {
-    "v": "20261102d",
-    "sha": "d4b121e799355658"
+    "v": "20261103a",
+    "sha": "08d7bd4e8d043976"
   },
   "js/practice-days.js": {
     "v": "20260924c",
     "sha": "d6f3241cd75638a8"
   },
   "js/practice-engine.js": {
-    "v": "20261103a",
-    "sha": "e79f19feb3b40084"
+    "v": "20261103b",
+    "sha": "8fe1fbe3fbfc4d9d"
   },
   "js/practice-modes.js": {
     "v": "20261102c",

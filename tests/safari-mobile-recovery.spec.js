@@ -147,11 +147,30 @@ test("Stop while the permission prompt is up cancels that Start; the microphone 
   // Leaving the take (Back, another exercise, the next step) runs this Stop.
   await page.evaluate(() => window.VTApp.stopPractice(true));
   expect(await page.evaluate(() => window.VTApp.getState().practice.starting), "Stop cancels the pending Start").toBe(false);
+  // Whatever the engine says or draws after the late grant is a take nobody started.
+  await page.evaluate(() => {
+    const p = window.VTApp.getState().practice;
+    const said = p.onStatus;
+    const drew = p.onFrame;
+    window.__afterStop = { statuses: [], frames: 0 };
+    p.onStatus = function (s, ...rest) {
+      window.__afterStop.statuses.push(s);
+      return said?.call(this, s, ...rest);
+    };
+    p.onFrame = function (...args) {
+      window.__afterStop.frames++;
+      return drew?.apply(this, args);
+    };
+  });
   await page.evaluate(() => window.__grants[0]());
   await expect.poll(() => page.evaluate(() => window.__tracks.length)).toBe(1);
   await expect.poll(() => page.evaluate(() => window.__tracks.every((t) => t.readyState === "ended")), {
     message: "the microphone granted after Stop is released"
   }).toBe(true);
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 250))));
+  const heard = await page.evaluate(() => window.__afterStop);
+  expect(heard.statuses, "nothing says it is listening").not.toContain("listening");
+  expect(heard.frames, "no frame reaches the drill").toBe(0);
   const after = await page.evaluate(() => ({
     running: window.VTApp.getState().practice.running,
     stream: !!window.VTApp.getState().practice.stream,

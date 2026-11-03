@@ -39,3 +39,20 @@ test("the gate ignores exactly the sweeps and the sweep project runs only them",
 test("CI never retries: a retry hides flakiness and re-runs timeouts at full cost", () => {
   assert.equal(config.retries, 0);
 });
+
+test("BASE_URL, VT_BASE and VT_TEST_PORT agree, so every spec tests the same server", async () => {
+  const { execFileSync } = await import("node:child_process");
+  const bases = (env) =>
+    JSON.parse(
+      execFileSync(
+        process.execPath,
+        ["-e", "require('./playwright.config.js'); console.log(JSON.stringify([process.env.BASE_URL || null, process.env.VT_BASE || null]))"],
+        { cwd: new URL("../..", import.meta.url), env: { PATH: process.env.PATH, ...env } }
+      ).toString()
+    );
+  assert.deepEqual(bases({}), [null, null], "the default :8765 is left to each spec's own fallback");
+  assert.deepEqual(bases({ VT_TEST_PORT: "8775" }), ["http://127.0.0.1:8775", "http://127.0.0.1:8775"]);
+  assert.deepEqual(bases({ BASE_URL: "https://staging.example" }), ["https://staging.example", "https://staging.example"]);
+  assert.deepEqual(bases({ VT_BASE: "https://staging.example" }), ["https://staging.example", "https://staging.example"]);
+  assert.deepEqual(bases({ BASE_URL: "https://a.example", VT_BASE: "https://b.example" }), ["https://a.example", "https://b.example"], "both given: neither is overwritten");
+});

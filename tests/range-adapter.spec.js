@@ -298,6 +298,56 @@ test.describe("Range adapter & octave helpers", () => {
     await page.evaluate(() => window.VTGetRangeAdapter().onShift({ shift: -2, delta: -1, side: "high", reason: "test" }));
     await expect(page.locator("#oct-label")).toHaveText(/^[−-]2$/);
     await expect(toastEl).toContainText(/−2.*(inaudible|inaudibles)/);
+    // The label keeps the caution, with the whole explanation, until it moves.
+    await expect(page.locator("#oct-label")).toHaveClass(/oct-caution/);
+    await expect(page.locator("#oct-label")).toHaveAttribute("title", /(inaudible|inaudibles).*(score|puntuar)/);
+    await page.click("#btn-oct-up");
+    await expect(page.locator("#oct-label")).not.toHaveClass(/oct-caution/);
+  });
+
+  test("octave −2 restored from the last visit is marked, though no toast says so", async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem("vt_octave_shift", "-2"));
+    await boot(page);
+    await page.click('.tab[data-tab="singing"]');
+    await page.locator("#exercise-list .card-ex[data-id='s2-solfege-chords']").click();
+    await expect(page.locator("#oct-label")).toHaveText(/^[−-]2$/);
+    await expect(page.locator("#oct-label")).toHaveClass(/oct-caution/);
+    await expect(page.locator("#oct-label")).toHaveAttribute("title", /(inaudible|inaudibles)/);
+  });
+
+  test("octave −2 in a take: the caution outlasts the piano's own restart toast", async ({ page }) => {
+    await page.context().grantPermissions(["microphone"]);
+    await page.addInitScript(() => {
+      navigator.mediaDevices.getUserMedia = async () => {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        const dest = ctx.createMediaStreamDestination();
+        g.gain.value = 0.00001;
+        osc.connect(g);
+        g.connect(dest);
+        osc.start();
+        return dest.stream;
+      };
+    });
+    await boot(page);
+    await page.click('.tab[data-tab="singing"]');
+    await page.locator("#exercise-list .card-ex[data-id='s2-solfege-chords']").click();
+    await page.evaluate(() => {
+      const auto = document.querySelector("#chk-auto-piano");
+      if (auto) auto.checked = true;
+    });
+    await page.click("#btn-practice-start");
+    await expect(page.locator("#btn-practice-stop")).toBeVisible();
+    await page.click("#btn-oct-down");
+    await page.evaluate(() => window.VTApp._hotApplyPromise);
+    await page.click("#btn-oct-down");
+    await expect(page.locator("#oct-label")).toHaveText(/^[−-]2$/);
+    const restarted = await page.evaluate(() => window.VTApp._hotApplyPromise);
+    expect(restarted, "the piano restarted at −2, so its own toast was due").toBe(true);
+    await page.evaluate(() => new Promise((r) => setTimeout(r, 50)));
+    await expect(page.locator("#toast")).toContainText(/−2.*(inaudible|inaudibles)/);
+    await page.click("#btn-practice-stop");
   });
 
   test("manual + then − returns to 0; auto toggle persists", async ({ page }) => {

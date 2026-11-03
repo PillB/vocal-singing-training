@@ -39,7 +39,7 @@
    * Localize once, where the profile is mounted, rather than at each read.
    */
   const PHASE_ES = {
-    "1 Whisper": "1 Susurro",
+    "1 Very soft": "1 Muy suave",
     "2 Soft": "2 Suave",
     "3 Conversational": "3 Conversacional",
     "4 Projected": "4 Proyectada",
@@ -1058,8 +1058,8 @@
       this.viz = new V.Surface(this.hud, (ctx, w, h) => V.scenes.volumeLadder(ctx, w, h, this.state), {
         className: "vz-volume",
         label: L(
-          "Escalera de volumen: un escalón por nivel, del susurro a la sala llena y de vuelta. Cada escalón queda a la altura que sostuviste, en dB frente a ti, con cuánto subió o bajó respecto al anterior.",
-          "Volume ladder: one step per level, from whisper to full room and back. Each step sets at the level you held, in dB against yourself, with how far it rose or fell from the one before."
+          "Escalera de volumen: un escalón por nivel, de lo más suave a la sala llena y de vuelta. Cada escalón queda a la altura que sostuviste, en dB frente a ti, con cuánto subió o bajó respecto al anterior.",
+          "Volume ladder: one step per level, from the softest to full room and back. Each step sets at the level you held, in dB against yourself, with how far it rose or fell from the one before."
         )
       });
       this.viz.draw();

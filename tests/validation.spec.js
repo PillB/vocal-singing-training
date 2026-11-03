@@ -262,6 +262,8 @@ test.describe("Exercise-specific practice modes", () => {
     await page.click('.tab[data-tab="singing"]');
     await page.click('.tier-chip[data-tier="basic"]');
     await page.locator("#exercise-list .card-ex[data-id='s2-solfege-chords']").click();
+    // The note options sit folded behind "Piano ▾" (progressive disclosure)
+    await page.click("#btn-toggle-piano");
     await expect(page.locator("#chk-sustain")).toBeVisible();
     await expect(page.locator("#chk-arpeggio")).toBeVisible();
     await expect(page.locator("#chk-one-note")).toBeVisible();

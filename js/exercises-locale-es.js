@@ -69,16 +69,17 @@
   },
   "v4-articulation-pen": {
     "original": "Cuenta hasta 60 con un bolígrafo en la boca, buscando claridad.",
-    "research": "La resistencia entrena los músculos del habla para una entrega más nítida.",
+    "research": "El bolígrafo te hace notar y exagerar cómo se mueven labios, lengua y mandíbula. No es entrenamiento de fuerza: al hablar se usa solo una pequeña parte de la fuerza de los labios.",
     "steps": [
       "Coloca un bolígrafo o palillo limpio suavemente entre los dientes (sin morder fuerte).",
       "Cuenta del 1 al 60 buscando consonantes inteligibles.",
       "Quítate el bolígrafo y cuenta del 1 al 20 — nota la facilidad y claridad."
     ],
     "tips": [
-      "Es entrenamiento de resistencia para el habla.",
+      "El bolígrafo te recuerda mover más labios y lengua; no es para ganar fuerza.",
       "Trabaja punta de lengua y labios para consonantes nítidas.",
-      "Solo objetos seguros y limpios."
+      "Solo objetos seguros y limpios.",
+      "Si te duele la mandíbula, para."
     ],
     "mistakes": [
       "Apretar la mandíbula",
@@ -213,7 +214,7 @@
     "research": "Los rellenos restan credibilidad. La solución no es hablar más rápido: es tolerar el silencio.",
     "steps": [
       "Elige un tema y habla 2 minutos sin cortarte a mitad.",
-      "Repasa o anota cada eh, ah, o sea, digamos, entonces…",
+      "Repasa o anota cada eh, este, ah, o sea, digamos, entonces…",
       "Repite el mismo tema: cada vez que quieras un relleno, cierra la boca y pausa 1 s.",
       "Haz 3 rondas. Busca menos rellenos cada vez, no la perfección.",
       "Anota tu mejor conteo de rellenos."
@@ -231,7 +232,7 @@
   },
   "v12-melodic-speech": {
     "original": "Amplía la tonalidad: el habla puede usar melodía como la música.",
-    "research": "La monotomía pierde atención. Variedad (subidas, bajadas, color) mantiene el interés.",
+    "research": "La monotonía pierde atención. Variedad (subidas, bajadas, color) mantiene el interés.",
     "steps": [
       "Lee un párrafo corto en monótono plano (base).",
       "Vuelve a leer con melodía exagerada: eleva palabras clave, cierra hacia abajo al final.",
@@ -242,7 +243,7 @@
     "tips": [
       "Cadencia hacia abajo al final suena a confianza; subir siempre puede sonar inseguro.",
       "Cambia la melodía por el significado, no al azar.",
-      "Grábate: el oído caza monotomía mejor que la memoria."
+      "Grábate: el oído caza monotonía mejor que la memoria."
     ],
     "mistakes": [
       "Sobreactuar sin sentido",
@@ -255,7 +256,7 @@
     "research": "El volumen con control transmite confianza; el grito tenso no.",
     "steps": [
       "Elige una frase corta que uses a menudo (8–12 palabras).",
-      "Dila en 5 niveles: 1 casi susurro → 2 suave → 3 conversación → 4 proyectada → 5 sala llena (sin gritar).",
+      "Dila en 5 niveles: 1 voz muy suave (no susurro) → 2 suave → 3 conversación → 4 proyectada → 5 sala llena (sin gritar).",
       "Vuelve 5 → 3 → 1 con la misma frase; repite la escalera 3 veces.",
       "Luego cuenta una historia de 60 s usando al menos 3 niveles, con intención.",
       "Mantén la misma claridad y dicción en todos los niveles."
@@ -759,7 +760,7 @@
   },
   "s17-jaw-neck-release": {
     "original": "Antes de vocalizar, suelta mandíbula y cuello para que no interfieran con la colocación.",
-    "research": "La relajación muscular baja la resistencia al alargamiento del músculo y mejora la respuesta a las órdenes motoras: por eso va antes del trabajo de aire y de colocación.",
+    "research": "Soltar la mandíbula y el cuello puede hacer que la tensión sea más fácil de notar y de soltar: por eso va antes del trabajo de aire y de colocación.",
     "steps": [
       "De pie, hombros bajos, nada apretado en la cintura ni en el cuello.",
       "Deja colgar la mandíbula: dos dedos en la bisagra y que la boca caiga sola, sin empujar.",
@@ -781,20 +782,20 @@
     ]
   },
   "s18-costal-breath": {
-    "original": "Respiración costo-abdominal: inhala bajo por la nariz, retén un momento y gasta el aire despacio y parejo en la espiración.",
-    "research": "De los tres tipos de respiración, solo la costo-abdominal permite que el diafragma descienda del todo (cerca del 60 % de capacidad frente a un 25 % de la clavicular). El diafragma no se controla de forma voluntaria; los intercostales y los abdominales sí, y eso es lo que entrena el apoyo.",
+    "original": "Respiración costo-abdominal: inhala bajo por la nariz, haz una pausa breve y gasta el aire despacio y parejo en la espiración.",
+    "research": "No puedes sentir el diafragma directamente (tiene pocos receptores) y solo trabaja al inhalar; lo que sí sientes y entrenas son las costillas y la pared abdominal, y eso es el apoyo.",
     "steps": [
       "De pie, o en el borde de la silla con las piernas abiertas — nada apretado en la cintura.",
       "Una mano en las costillas bajas y otra en el abdomen. Los hombros NO suben.",
       "Inhala por la nariz en 4 tiempos: las manos se abren, las clavículas se quedan quietas.",
-      "Retén 2 tiempos para preparar el cierre de las cuerdas, en posición activa para la fonación.",
+      "Pausa 2 tiempos con la garganta abierta, sin cerrar: el aire queda en suspenso, no atrapado.",
       "Espira en 8 tiempos, parejo, manteniendo las costillas anchas todo lo que puedas — esa resistencia es el apoyo.",
       "Repite el ciclo; ni hinchar hasta reventar ni vaciar hasta la sensación de vacío."
     ],
     "tips": [
       "Chi sa ben respirare, sa ben cantare: el control del aire es la base de toda la técnica vocal.",
       "Los agudos y los pasajes fuertes gastan más aire, así que la reserva se construye antes de necesitarla.",
-      "El impulso inicial es un empujón abdominal ligero, parecido a una tos, y luego se mantiene esa presión.",
+      "La espiración empieza suave, sin empujar: mantener las costillas anchas es lo que frena el aire.",
       "Tumbado o dormido ya respiras así: lo estás recuperando, no aprendiéndolo de cero."
     ],
     "mistakes": [
@@ -897,11 +898,11 @@
     ]
   },
   "s23-mask-ya": {
-    "original": "«YA, YA, YA» deliberadamente nasal y brillante para localizar la máscara superior: nariz, frente, senos paranasales.",
+    "original": "«YA, YA, YA» deliberadamente nasal y brillante para encontrar la máscara superior, el zumbido que puedes sentir en la nariz, en la parte delantera de la cara, en los senos paranasales y en la frente.",
     "research": "Un sonido nasal exagerado es la forma más rápida de localizar la zona de resonancia superior. La exageración es el buscador, no el sonido final: una vez encontrado el lugar, el color se equilibra.",
     "steps": [
       "Exagera a propósito: «YA, YA, YA» lo más nasal y brillante que puedas.",
-      "Fíjate dónde zumba — nariz, pómulos, frente. Ese es el lugar que estás aprendiendo.",
+      "Fíjate dónde sientes el zumbido: puede ser en la nariz, los pómulos o la frente. Esa sensación es lo que estás aprendiendo a encontrar.",
       "Repítelo sobre objetivos que suben, manteniendo esa misma dirección de zumbido.",
       "Cuando el lugar esté claro, quita algo de brillo sin moverte de ese sitio.",
       "Termina con un par de vueltas de «YA» con color normal, todavía en la máscara."

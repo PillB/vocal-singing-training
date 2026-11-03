@@ -331,7 +331,7 @@
       // Levels are relative to the learner (dB against their own treads), so
       // there are no absolute targets here: only the order of the steps.
       ladder: [
-        { label: "1 Whisper", labelEs: "1 Susurro" },
+        { label: "1 Very soft", labelEs: "1 Muy suave" },
         { label: "2 Soft", labelEs: "2 Suave" },
         { label: "3 Conversational", labelEs: "3 Conversación" },
         { label: "4 Projected", labelEs: "4 Proyectada" },
@@ -923,8 +923,8 @@
       autoPiano: false,
       autoRecord: false,
       pattern: { in: 4, hold: 2, out: 8 },
-      cue: "Inhale 4 · hold 2 · even exhale 8. Low ribs and belly move, shoulders do not.",
-      cueEs: "Inhala 4 · retén 2 · espira pareja 8. Costillas bajas y abdomen se mueven, los hombros no.",
+      cue: "Inhale 4 · pause 2 · even exhale 8. Low ribs and belly move, shoulders do not.",
+      cueEs: "Inhala 4 · pausa 2 · espira pareja 8. Costillas bajas y abdomen se mueven, los hombros no.",
       metricHints: {}
     },
     "s19-soft-palate-surprise": {

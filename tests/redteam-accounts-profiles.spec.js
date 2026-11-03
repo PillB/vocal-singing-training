@@ -219,6 +219,31 @@ test.describe("A shared browser: one account's practice never goes to the next",
     expect(await accountHas(worker, b.accountId, marker)).toBe(false);
   });
 
+  test("a save that waits for the owner's answer is not shown as a failed save", async ({ page }) => {
+    const worker = await startWorker();
+    const a = await worker.signIn("ana@example.com", { displayName: "Ana" });
+    const b = await worker.signIn("bruno@example.com", { displayName: "Bruno" });
+    await wire(page, worker);
+    await seed(page, { session: a });
+    await openApp(page);
+    await signedInAs(page, "ana@example.com");
+    await saveTake(page, "ana-private-3");
+    expect((await page.evaluate(() => window.VTSync.syncNow())).ok).toBe(true);
+    await signOutFromPanel(page);
+    await switchSession(page, b);
+    await signedInAs(page, "bruno@example.com");
+    // The scheduled round (what a take triggers) meets the same question.
+    await page.evaluate(() => window.VTSync.flush());
+    expect(await page.evaluate(() => window.VTSync.getStatus().lastError)).toBe(null);
+    await openPanel(page);
+    await expect(page.locator("#account-other-owner")).toBeVisible();
+    await expect(page.locator("#account-sync")).not.toContainText("No se pudo guardar");
+    // Answering leaves no error line behind either (a fresh account has no copy to pull).
+    await page.click("#btn-owner-mine");
+    await expect(page.locator("#account-other-owner")).toBeHidden();
+    expect(await page.evaluate(() => window.VTSync.getStatus().lastError)).toBe(null);
+  });
+
   test("'Usar solo la de mi cuenta' keeps A's takes out of B's record, and A gets them back", async ({ page }) => {
     const worker = await startWorker();
     const a = await worker.signIn("ana@example.com", { displayName: "Ana" });

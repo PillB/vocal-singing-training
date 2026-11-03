@@ -6814,7 +6814,9 @@
    * surfaces cannot disagree.
    *
    * @returns {{kind: "free"|"trialLocal"|"trialAccount"|"gift"|"paid"|"canceled",
-   *            days: number|null}} What to show, and days left where that is known.
+   *            days: number|null, until: string, pastDue?: boolean}} What to show, and
+   *            days left where that is known. `pastDue`: a "paid" access whose
+   *            last payment did not go through.
    */
   function headerPlanState() {
     const ent = window.VTBilling?.getEntitlement?.() || { pro: false, status: "free" };
@@ -6855,7 +6857,10 @@
       if (held.source === "gift" || held.source === "comp") {
         return { kind: "gift", days: daysLeft(held.periodEnd), until };
       }
-      return { kind: "paid", days: null, until };
+      // A payment that failed still holds Pro until the period it paid for
+      // ends, and is the same "paid" access, but it is not "renewing": the
+      // label says so (planLabel), and promises nothing about what comes next.
+      return { kind: "paid", days: null, until, pastDue: held.status === "past_due" };
     }
     // Signed out, or signed in with nothing: the browser's own view. Its dates
     // are ISO strings rather than unix seconds.
@@ -6866,7 +6871,9 @@
     if (ent.status === "trial") {
       return { kind: "trialLocal", days: daysLeft(ent.expiresAt), until: isoUntil(ent.expiresAt) };
     }
-    if (ent.pro) return { kind: "paid", days: null, until: isoUntil(ent.expiresAt) };
+    if (ent.pro) {
+      return { kind: "paid", days: null, until: isoUntil(ent.expiresAt), pastDue: ent.licenseStatus === "past_due" };
+    }
     return { kind: "free", days: null, until: "" };
   }
 
@@ -6889,7 +6896,7 @@
   /**
    * What the header's one Pro element says for a plan state, and how it looks.
    * Shared by the header button and anything that must say the same thing.
-   * @param {{kind: string, days: number|null}} plan From headerPlanState().
+   * @param {{kind: string, days: number|null, pastDue?: boolean}} plan From headerPlanState().
    * @returns {{text: string, title: string, cls: string}}
    */
   function planLabel(plan) {
@@ -6917,6 +6924,9 @@
           cls: "plan-ending"
         };
       case "paid":
+        if (plan.pastDue) {
+          return { text: tt("nav.planPastDue"), title: tt("nav.subscriptionTitle"), cls: "plan-ending" };
+        }
         return { text: tt("nav.planPaid"), title: tt("nav.subscriptionTitle"), cls: "plan-paid" };
       default:
         // The offer. "Probar" while a free trial is still on the table, "Ver"
@@ -7181,24 +7191,39 @@
     renderProStudio(pulse, isProUser);
   }
 
+  /**
+   * How a profile reads in the picker and in the rename prompt. The first one
+   * is stored as "Default" and reads as the main one; a name that is empty
+   * (stored so before names were checked) reads "Perfil 2", "Perfil 3", never
+   * as a second "Principal".
+   * @param {{id: string, name?: string}} p Profile.
+   * @param {number} index Its place in the list.
+   * @returns {string} What to show.
+   */
+  function profileLabel(p, index) {
+    if (p.name && !(p.id === "default" && p.name === "Default")) return p.name;
+    return p.id === "default" ? tt("pro.profileMain") : `${tt("pro.profile")} ${index + 1}`;
+  }
+
   function renderProStudio(pulse, isProUser) {
     const es = isEsLang();
     // Profiles
     const sel = $("#sel-profile");
     if (sel && window.VTStorage?.getProfiles) {
       const { activeId, list } = VTStorage.getProfiles();
-      const prev = sel.value;
       sel.innerHTML = list
         .map(
-          (p) =>
+          (p, i) =>
             `<option value="${escapeHtml(p.id)}"${p.id === activeId ? " selected" : ""}>${escapeHtml(
-              // The first profile is stored as "Default"; it reads as the main one.
-              !p.name || p.name === "Default" ? tt("pro.profileMain") : p.name
+              profileLabel(p, i)
             )}</option>`
         )
         .join("");
-      if (list.some((p) => p.id === prev)) sel.value = prev;
-      else sel.value = activeId;
+      // The picker shows the profile that is active, always. It used to put
+      // the previous choice back when that profile still existed, so after
+      // "+ Perfil" it kept saying "Principal" while the new one was in use and
+      // "Renombrar" renamed the one nobody could see.
+      sel.value = activeId;
     }
     const goalSel = $("#sel-week-goal");
     if (goalSel) {
@@ -7682,6 +7707,64 @@
     }
   }
 
+  /**
+   * A page left open does not hear about what happens outside it. Three ways
+   * it went stale, and what answers each:
+   *
+   *   another tab wrote   the browser says so ("storage"); redraw what shows
+   *                       the record, so a profile switched or a take saved in
+   *                       tab A is in tab B without a reload.
+   *   it is shown again   a sync (a read and a write, so at most once a
+   *                       minute), and /v1/me if it never answered, so a
+   *                       browser left open picks up another device's practice
+   *                       and the account panel stops saying "Plan gratis".
+   *   a new day began     Plan and Historial work out "today" when they draw,
+   *                       so the open one is drawn again on the new day. Home
+   *                       has its own redraw (bindRetention).
+   */
+  function watchOutsideChanges() {
+    // Keys that hold the learner's record, plan, settings or account. Counters
+    // and queues the app writes all the time (analytics, the mic slider) would
+    // redraw every other tab for nothing.
+    const RECORD_KEY = /(^|_)(profiles|progress|session|week_plan|reviews|hold_logs|goals|achievements|days|loop|reminders|streak_freeze|settings)_v1$/;
+    const PULL_EVERY_MS = 60 * 1000;
+    let redrawTimer = null;
+    let lastPull = 0;
+    let shownDay = window.VTDays?.dayKey?.() || "";
+
+    window.addEventListener("storage", (e) => {
+      if (e.storageArea && e.storageArea !== window.localStorage) return;
+      if (e.key && !RECORD_KEY.test(e.key)) return;
+      // A write is often several keys in a row; draw once.
+      clearTimeout(redrawTimer);
+      redrawTimer = setTimeout(() => showSyncedRecord(), 120);
+    });
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState !== "visible") return;
+      const acct = window.VTAccount?.getState?.();
+      if (acct && acct.signedIn) {
+        // The first /v1/me may have been missed; the panel and the door both
+        // read the answer.
+        if (!acct.account) {
+          Promise.resolve(window.VTAccount.refresh?.())
+            .then(() => refreshAccountUI())
+            .catch(() => {});
+        }
+        if (Date.now() - lastPull >= PULL_EVERY_MS) {
+          lastPull = Date.now();
+          window.VTSync?.schedule?.(0);
+        }
+      }
+      const today = window.VTDays?.dayKey?.() || "";
+      if (today && today !== shownDay) {
+        shownDay = today;
+        if (state.view === "plan") renderPlan();
+        else if (state.view === "history") renderHistory();
+      }
+    });
+  }
+
   function bindProStudio() {
     $("#sel-profile")?.addEventListener("change", (e) => {
       const id = e.target.value;
@@ -7707,7 +7790,8 @@
       if (name == null) return;
       const res = VTStorage.createProfile(name, { maxSlots: max });
       if (!res.ok) {
-        toast(tt("pro.profileLimit", { n: String(max) }));
+        // A blank name is not a full house, and the limit message said so.
+        toast(res.reason === "blank" ? tt("pro.profileBlank") : tt("pro.profileLimit", { n: String(max) }));
         return;
       }
       showActiveProfile();
@@ -7716,10 +7800,13 @@
     $("#btn-profile-rename")?.addEventListener("click", () => {
       const p = VTStorage?.getActiveProfile?.();
       if (!p) return;
-      const shown = !p.name || p.name === "Default" ? tt("pro.profileMain") : p.name;
+      const list = VTStorage?.getProfiles?.()?.list || [];
+      const shown = profileLabel(p, Math.max(0, list.findIndex((x) => x.id === p.id)));
       const name = window.prompt(tt("pro.profileNamePrompt"), shown);
       if (name == null) return;
-      VTStorage.renameProfile(p.id, name);
+      const res = VTStorage.renameProfile(p.id, name);
+      // The old name stays when nothing is left of the new one.
+      if (res && res.reason === "blank") toast(tt("pro.profileBlank"));
       renderValuePulse();
     });
     $("#sel-week-goal")?.addEventListener("change", (e) => {
@@ -7736,6 +7823,7 @@
       renderValuePulse();
       toast(tt("pro.goalSet", { n: String(n) }), { durationMs: 1500 });
     });
+    watchOutsideChanges();
   }
 
   /**
@@ -7836,13 +7924,15 @@
       // shown to a reader, and a free trial described as a monthly
       // subscription. It now says which kind of access this is, in words, and it
       // reads the same source as the header so the two cannot disagree.
+      // "1 día" and "7 días": the line used to say "día(s)" for both.
+      const daysLeft = (n) => tt(n === 1 ? "pricing.trialLeftOne" : "pricing.trialLeft", { n: String(n) });
       if (plan.kind === "trialAccount") {
         status.textContent = plan.days === null
           ? tt("pricing.statusTrial")
-          : `${tt("pricing.statusTrial")} · ${tt("pricing.trialLeft", { n: String(plan.days) })}`;
+          : `${tt("pricing.statusTrial")} · ${daysLeft(plan.days)}`;
       } else if (plan.kind === "trialLocal") {
         const left = plan.days === null ? (B.trialDaysLeft?.() ?? 0) : plan.days;
-        status.textContent = `${tt("pricing.trial")} · ${tt("pricing.trialLeft", { n: String(left) })}`;
+        status.textContent = `${tt("pricing.trial")} · ${daysLeft(left)}`;
       } else if (plan.kind === "gift") {
         status.textContent = plan.until
           ? tt("pricing.statusGiftUntil", { date: plan.until })
@@ -7851,6 +7941,8 @@
         status.textContent = plan.until
           ? tt("pricing.statusCanceled", { date: plan.until })
           : tt("pricing.statusCanceledNoDate");
+      } else if (plan.kind === "paid" && plan.pastDue) {
+        status.textContent = tt("pricing.statusPastDue");
       } else if (plan.kind === "paid") {
         const demo = ent.source === "demo" ? ` (${tt("pricing.statusDemo")})` : "";
         status.textContent = (plan.until
@@ -8116,9 +8208,12 @@
   const ACCOUNT_ERROR_KEYS = {
     bad_email: "auth.err.email",
     bad_code: "auth.err.code",
-    no_code: "auth.err.code",
+    // The fifth wrong try burns the code (workers/entitlements/src/accounts.js):
+    // waiting does not bring it back, and even the right digits get "no_code"
+    // after that. Both say so, and the code step offers a new one.
+    no_code: "auth.err.codeBurned",
     expired: "auth.err.code",
-    too_many_attempts: "auth.err.rate",
+    too_many_attempts: "auth.err.codeBurned",
     rate_limited: "auth.err.rate",
     offline: "auth.err.offline",
     not_found: "auth.err.giftNotFound",
@@ -8181,19 +8276,55 @@
       return tt("auth.planExpired");
     }
     if (!entitlement || !entitlement.pro) return tt("auth.planFree");
-    const date = accountDate(entitlement.periodEnd);
-    if (entitlement.status === "canceled" && date) return tt("auth.planCanceled", { date });
-    if (entitlement.source === "trial") return tt("auth.planTrial", { date });
-    if (entitlement.source === "gift" || entitlement.source === "comp") {
-      return tt("auth.planGift", { date });
+    return planLineFor(entitlement.status, entitlement.source, accountDate(entitlement.periodEnd));
+  }
+
+  /**
+   * The line for access that is held: where it came from, and how it stands.
+   * @param {string} status "active", "canceled" or "past_due".
+   * @param {string} source "trial", "gift", "comp" or a payment.
+   * @param {string} date When it ends, already written out; "" when unknown.
+   * @returns {string} The line.
+   */
+  function planLineFor(status, source, date) {
+    // A payment that failed is not renewing, and nothing is promised about
+    // what happens next: the licence simply runs to the end of the period paid.
+    if (status === "past_due") return tt("auth.planPastDue");
+    if (status === "canceled" && date) return tt("auth.planCanceled", { date });
+    if (source === "trial") return date ? tt("auth.planTrial", { date }) : tt("nav.planTrial");
+    if (source === "gift" || source === "comp") {
+      return date ? tt("auth.planGift", { date }) : tt("nav.planGift");
     }
     return date ? tt("auth.planPaid", { date }) : tt("auth.planPaidOpen");
+  }
+
+  /**
+   * The plan line for the signed-in account. The worker's entitlement is the
+   * authority. Until it has answered (a /v1/me that failed or is still out)
+   * the header's own reading stands in, so this panel cannot say "Plan gratis"
+   * under a header that says Pro.
+   * @param {object|null} account VTAccount.getState().
+   * @returns {string} The line.
+   */
+  function accountPlanLineFor(account) {
+    if (account.entitlement) return accountPlanLine(account.entitlement);
+    const plan = headerPlanState();
+    if (plan.kind === "free") return accountPlanLine(null);
+    const source =
+      plan.kind === "trialAccount" || plan.kind === "trialLocal" ? "trial" : plan.kind === "gift" ? "gift" : "paid";
+    const status = plan.kind === "canceled" ? "canceled" : plan.pastDue ? "past_due" : "active";
+    return planLineFor(status, source, plan.until || "");
   }
 
   function accountSyncLine() {
     const status = window.VTSync?.getStatus?.();
     if (!status || !status.available) return "";
     if (status.syncing) return tt("auth.syncing");
+    if (status.lastError === "refused") {
+      // Turned down for what it is, and the same write would be turned down
+      // again, so no line here may promise another try.
+      return tt(status.refusedReason === "profile_limit" ? "auth.syncRefused" : "auth.syncRefusedOther");
+    }
     if (status.lastError) return tt("auth.syncError");
     // "Aún no guardado" is only true of a device that has never synced. After a
     // reload `lastSyncedAt` starts empty, but a revision on file means this
@@ -8457,13 +8588,18 @@
           name: session.displayName || session.username,
           role: session.role
         });
+      } else {
+        // Signed in, but /v1/me has not said who: no line rather than the
+        // previous person's.
+        who.textContent = "";
       }
+      who.hidden = !who.textContent;
     }
 
     const planEl = $("#account-plan");
     if (planEl) {
       planEl.hidden = !(account && account.signedIn);
-      if (account && account.signedIn) planEl.textContent = accountPlanLine(account.entitlement);
+      if (account && account.signedIn) planEl.textContent = accountPlanLineFor(account);
     }
 
     const syncEl = $("#account-sync");
@@ -8471,6 +8607,14 @@
       const line = accountSyncLine();
       syncEl.hidden = !line;
       syncEl.textContent = line;
+    }
+
+    // This browser holds practice another account saved here: one question,
+    // asked before anything is merged or sent (VTSync decides, see ownerState).
+    const ownerBox = $("#account-other-owner");
+    if (ownerBox) {
+      const status = window.VTSync?.getStatus?.();
+      ownerBox.hidden = !(account && account.signedIn && status && status.otherOwner);
     }
 
     // The trial is offered only to a signed-in account that has never used it.
@@ -8585,6 +8729,16 @@
     // never touches it. The answer redraws the panel through onChange.
     const asking = window.VTAccount?.ensureMethods?.();
     mountGoogleButton();
+    // Signed in but never told who: the /v1/me at load was missed (offline, a
+    // restart). Ask again now that somebody is looking, or this panel keeps
+    // saying nothing about who is signed in, and "Plan gratis" under a header
+    // that says Pro.
+    const acctNow = window.VTAccount?.getState?.();
+    if (acctNow && acctNow.signedIn && !acctNow.account) {
+      Promise.resolve(window.VTAccount.refresh?.())
+        .then(() => refreshAccountUI())
+        .catch(() => {});
+    }
     // What the visitor ends up looking at is the state worth counting, and on
     // the first open of a page load that is not knowable yet: nothing probes
     // /v1/auth/methods before this, so accountPanelState() would read "checking"
@@ -8626,7 +8780,21 @@
     $("#account-modal")?.addEventListener("click", (e) => {
       if (e.target === $("#account-modal")) closeAccount();
     });
-    $("#btn-logout")?.addEventListener("click", async () => {
+    $("#btn-logout")?.addEventListener("click", async (e) => {
+      const btn = e.currentTarget;
+      // The practice saved a moment ago may still be waiting out the quiet
+      // period before it is sent. It belongs to the account that is leaving,
+      // so it goes there first, for a few seconds at most; after that this
+      // browser holds it, and the next account to sign in is asked about it.
+      btn.disabled = true;
+      try {
+        await Promise.race([
+          Promise.resolve(window.VTSync?.flush?.()).catch(() => null),
+          new Promise((resolve) => setTimeout(resolve, 3000))
+        ]);
+      } finally {
+        btn.disabled = false;
+      }
       // One button, both layers: an internal QA session and a real account can
       // both be live, and "Salir" has to mean signed out of everything.
       window.VTAuth?.logout?.();
@@ -8698,20 +8866,21 @@
     });
     $("#admin-clear-billing")?.addEventListener("click", () => {
       if (!window.VTAuth?.isAdmin?.()) return;
+      if (!window.confirm(tt("auth.confirmClearBilling"))) return;
       window.VTBilling?.clearEntitlement?.();
       updateBillingChrome();
     });
     $("#admin-clear-progress")?.addEventListener("click", () => {
       if (!window.VTAuth?.isAdmin?.()) return;
-      try {
-        localStorage.removeItem("vt_progress_v1");
-        localStorage.removeItem("vt_session_v1");
-        localStorage.removeItem("vt_hold_logs_v1");
-      } catch {
-        /* ignore */
-      }
+      // The active profile's record, whole: it used to remove the main
+      // profile's three keys whoever was active, and nothing else.
+      if (!window.confirm(tt("auth.confirmClearProgress"))) return;
+      const done = window.VTStorage?.clearProfileData?.(window.VTStorage.getActiveProfileId?.());
+      if (done && !done.ok) return;
       toast(tt("auth.toast.cleared"));
+      renderValuePulse();
       renderExerciseList();
+      if (state.view === "history") renderHistory();
     });
     window.VTAuth?.onChange?.(() => {
       refreshAccountUI();
@@ -8738,6 +8907,8 @@
         codeForm.dataset.email = email;
       }
       accountError(null);
+      const resend = $("#account-code-resend");
+      if (resend) resend.hidden = true;
       const sent = $("#account-or");
       if (sent) sent.hidden = true;
       const google = $("#account-google");
@@ -8751,6 +8922,8 @@
       const codeForm = $("#account-code-form");
       if (emailForm) emailForm.hidden = false;
       if (codeForm) codeForm.hidden = true;
+      const resend = $("#account-code-resend");
+      if (resend) resend.hidden = true;
       const google = $("#account-google");
       if (google) google.hidden = false;
       accountError(null);
@@ -8785,10 +8958,61 @@
       } else {
         trackFunnel("signin_fail", { method: "email", reason: funnelReason(res && res.reason) });
         accountErrorFor(res && res.reason);
+        // A burned code stays burned: the only way on is a new one, so the
+        // step offers it where the message is.
+        const resend = $("#account-code-resend");
+        if (resend) resend.hidden = !(res && (res.reason === "too_many_attempts" || res.reason === "no_code"));
       }
     });
 
     $("#account-code-back")?.addEventListener("click", showEmailStep);
+
+    $("#account-code-resend")?.addEventListener("click", async (e) => {
+      const btn = e.currentTarget;
+      const email = $("#account-code-form")?.dataset.email || "";
+      btn.disabled = true;
+      try {
+        const res = await window.VTAccount?.startEmailSignIn?.(email);
+        if (res && res.ok) {
+          if ($("#account-code")) $("#account-code").value = "";
+          showCodeStep(email);
+        } else {
+          accountErrorFor(res && res.reason);
+        }
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    // This browser holds practice another account saved here. Neither choice
+    // sends anything before it is made (see ownerState in sync.js).
+    $("#btn-owner-add")?.addEventListener("click", async (e) => {
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      accountError(null);
+      try {
+        const res = await window.VTSync?.addDeviceToAccount?.();
+        if (res && res.ok) toast(tt("auth.ownerAdded"));
+        else if (res) accountErrorFor(res.reason);
+      } finally {
+        btn.disabled = false;
+        refreshAccountUI();
+      }
+    });
+    $("#btn-owner-mine")?.addEventListener("click", async (e) => {
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      accountError(null);
+      try {
+        const res = await window.VTSync?.useAccountOnly?.();
+        if (res && res.ok) toast(tt("auth.ownerMineDone"));
+        else if (res) accountErrorFor(res.reason);
+      } finally {
+        btn.disabled = false;
+        refreshAccountUI();
+        showSyncedRecord();
+      }
+    });
 
     $("#btn-account-trial")?.addEventListener("click", async () => {
       trackFunnel("trial_click", { where: "panel" });
@@ -8826,7 +9050,8 @@
     $("#btn-account-sync")?.addEventListener("click", async () => {
       const res = await window.VTSync?.syncNow?.();
       refreshAccountUI();
-      if (res && !res.ok) accountErrorFor(res.reason);
+      // Waiting for the answer to the question above is not a failure.
+      if (res && !res.ok && res.reason !== "other_owner") accountErrorFor(res.reason);
     });
 
     function giftResult(text) {

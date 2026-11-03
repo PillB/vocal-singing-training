@@ -473,7 +473,7 @@ taken from the report. VG-59.
 
 ## 24. What it costs, and what you see when it breaks
 
-Commit `TBD`. The part of the list that had had no attention at all.
+Commit `789df8b`. The part of the list that had had no attention at all.
 
 ### The health route could not fail
 

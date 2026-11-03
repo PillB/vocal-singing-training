@@ -5259,6 +5259,13 @@ body.loop-first #home-tour-invite .btn {
   margin: 1rem 0 0;
   font-weight: 700;
 }
+/* A focus name in a pill ("Ya mejorado"): a word, not the code figure .pill was
+   made for, so it reads in the page font and never splits across lines. */
+.pill-word {
+  font-family: inherit;
+  display: inline-block;
+  white-space: nowrap;
+}
 #plan-start-row {
   margin-top: 1.1rem;
 }
@@ -7815,6 +7822,11 @@ body.loop-on #start-panel .loop-remind-btn {
 }
 #view-history .pro-ach-badge small {
   max-width: none;
+  white-space: normal;
+  overflow: visible;
+}
+/* A tile label wraps rather than ending in "…" ("NOTA MÁS …" for "Nota más larga"). */
+#view-history .value-stat span {
   white-space: normal;
   overflow: visible;
 }

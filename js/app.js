@@ -4681,6 +4681,40 @@
   }
 
   /**
+   * Chrome writes a recording's WebM with no length in it, so the player reports
+   * Infinity: no total time, and a bar that cannot be dragged until the take has
+   * played through. Asking for a time far past the end makes the browser read to
+   * the end and learn the length; once it reports one, the player goes back to
+   * the start. A player that was about to play, or already was, plays on from
+   * there: the seek itself ends the clip.
+   * @param {HTMLAudioElement|null} audio The player for a recording.
+   */
+  function fixUnknownDuration(audio) {
+    if (!audio) return;
+    const fix = () => {
+      if (audio.duration !== Infinity) return;
+      const resume = audio.autoplay || !audio.paused;
+      audio.autoplay = false;
+      const learned = () => {
+        if (!Number.isFinite(audio.duration)) return;
+        audio.removeEventListener("durationchange", learned);
+        audio.addEventListener(
+          "seeked",
+          () => {
+            if (resume) audio.play().catch(() => {});
+          },
+          { once: true }
+        );
+        audio.currentTime = 0;
+      };
+      audio.addEventListener("durationchange", learned);
+      audio.currentTime = 1e7;
+    };
+    if (audio.readyState >= 1) fix();
+    else audio.addEventListener("loadedmetadata", fix, { once: true });
+  }
+
+  /**
    * The take's recording, in the rating card: the stage-below strip it used to
    * sit in is covered by the sticky stage, so its player and Save could not be
    * reached. A recording means a take just ended, so the card opens (quietly:
@@ -4697,13 +4731,15 @@
         <button type="button" class="btn btn-sm btn-ghost" id="btn-discard-rec">${escapeHtml(tt("rate.takeDiscard"))}</button>
       </div>
     `;
+    fixUnknownDuration(area.querySelector("audio"));
     const save = $("#btn-save-rec");
     save?.addEventListener("click", async () => {
       try {
         await VTStorage.saveRecording({
           exerciseId: state.exercise.id,
           blob: result.blob,
-          label: `${state.exercise.title} · ${new Date().toLocaleString()}`,
+          // In the page's own language, as the rows in Historial are drawn.
+          label: `${exName(state.exercise)} · ${new Date().toLocaleString(locale())}`,
           meta: { durationMs: result.durationMs }
         });
         save.textContent = tt("rate.takeSaved");
@@ -5146,7 +5182,9 @@
       sec: Math.max(0, elapsedSec - (sp.creditedSec || 0)),
       saved: true,
       bump: insertedNow,
-      source: "save"
+      source: "save",
+      // The day the take was sung: a rating given after midnight is still for it.
+      day: savedEntry.day
     });
     sp.entryId = savedEntry.id;
     sp.creditedSec = Math.max(sp.creditedSec || 0, elapsedSec);
@@ -5578,9 +5616,14 @@
   }
 
   /** How long ago, in words: "hoy", "ayer", "hace 3 días", then a date. */
-  function relativeDay(iso) {
+  /**
+   * "hoy", "ayer", "hace 3 días" or a date, for a moment. `day` is the local day
+   * the take was saved on, when it says: counted from that day, "ayer" agrees
+   * with the calendar above it whatever zone the page is in now.
+   */
+  function relativeDay(iso, day) {
     const D = window.VTDays;
-    const d = new Date(iso);
+    const d = day && D?.parseDay?.(day) ? D.parseDay(day) : new Date(iso);
     if (!D || !Number.isFinite(d.getTime())) return "";
     const n = Math.max(0, D.diffDays(D.dayKey(d), D.dayKey()));
     if (n < 7 && typeof Intl.RelativeTimeFormat === "function") {
@@ -5661,7 +5704,8 @@
         const mark = d.state === "done" ? "✓" : d.state === "rest" ? "☾" : "";
         const said = d.state === "missed" ? "" : trackText("loop.dayState." + d.state, null, track);
         // Today is outlined; a screen reader hears it as well.
-        const label = d.isToday ? [tt("history.today"), said].filter(Boolean).join(", ") : said;
+        // Today is named once: an open day's own words already start with "hoy".
+        const label = d.isToday && d.state !== "today" ? [tt("history.today"), said].filter(Boolean).join(", ") : said;
         rows += `<td class="is-${d.state}${d.isToday ? " is-today" : ""}">${Number(d.key.slice(8))}${
           mark ? `<span class="hist-mark" aria-hidden="true">${mark}</span>` : ""
         }${label ? `<span class="sr-only">: ${escapeHtml(label)}</span>` : ""}</td>`;
@@ -5703,7 +5747,9 @@
   /** ["hoy", "3 veces", { line: "Último puntaje: 7/10" }] */
   function historyRowMeta(p) {
     const n = Number(p.completedCount) || 0;
-    const parts = [p.lastAt ? relativeDay(p.lastAt) : ""];
+    // The newest take says which day it was sung on; older records do not.
+    const last = p.lastAt ? (p.history || []).find((h) => h && h.at === p.lastAt) : null;
+    const parts = [p.lastAt ? relativeDay(p.lastAt, last?.day) : ""];
     if (n) parts.push(n === 1 ? tt("history.times1") : tt("history.timesN", { n }));
     if (p.lastScore != null && Number.isFinite(Number(p.lastScore))) {
       const score = Number(p.lastScore).toLocaleString(locale(), { maximumFractionDigits: 1 });
@@ -5720,7 +5766,12 @@
     loading.textContent = tt("history.loading");
     list.replaceChildren(loading);
     try {
-      const recs = await VTStorage.listRecordings();
+      // The recordings are the only part of this page kept in IndexedDB. If they
+      // cannot be read, the days, the last practice and the progress still show.
+      const recs = await VTStorage.listRecordings().catch((e) => {
+        console.warn("[VT] recordings unavailable", e);
+        return [];
+      });
       const progress = VTStorage.getProgress();
       const reviews = VTStorage.getReviews();
       const track = pageTrack();
@@ -5759,15 +5810,19 @@
         html += `<div class="history-list">`;
         for (const r of recs) {
           const ex = findExercise(r.exerciseId);
+          // The name is drawn now, in the page's language: the label stored with
+          // the take is the language it was saved in (older ones, the English
+          // catalogue title). It is only shown for a take whose exercise has left
+          // the catalogue, and as text. The date and size are the meta line's.
           html += `
-            <div class="history-item" data-id="${r.id}">
+            <div class="history-item" data-id="${escapeHtml(r.id)}">
               <div>
-                <strong>${r.label}</strong>
-                <div class="meta">${ex ? exName(ex) : r.exerciseId} · ${new Date(r.createdAt).toLocaleString(locale())} · ${Math.round((r.size || 0) / 1024)} KB</div>
+                <strong>${escapeHtml(ex ? exName(ex) : r.label)}</strong>
+                <div class="meta">${escapeHtml(new Date(r.createdAt).toLocaleString(locale()))} · ${Math.round((r.size || 0) / 1024)} KB</div>
               </div>
               <div class="controls-row">
-                <button type="button" class="btn btn-sm" data-play="${r.id}">${tt("history.play")}</button>
-                <button type="button" class="btn btn-sm btn-danger" data-del="${r.id}">${tt("history.delete")}</button>
+                <button type="button" class="btn btn-sm" data-play="${escapeHtml(r.id)}">${tt("history.play")}</button>
+                <button type="button" class="btn btn-sm btn-danger" data-del="${escapeHtml(r.id)}">${tt("history.delete")}</button>
               </div>
             </div>`;
         }
@@ -5782,10 +5837,10 @@
             const older = sorted[1];
             const ex = findExercise(exId);
             html += `<div class="history-item">
-              <div><strong>${ex ? exName(ex) : exId}</strong>
+              <div><strong>${escapeHtml(ex ? exName(ex) : exId)}</strong>
               <div class="meta">${tt("retain.audioCompareMeta")}</div></div>
               <div class="controls-row">
-                <button type="button" class="btn btn-sm" data-ab-old="${older.id}" data-ab-new="${newer.id}">${tt("retain.audioCompareBtn")}</button>
+                <button type="button" class="btn btn-sm" data-ab-old="${escapeHtml(older.id)}" data-ab-new="${escapeHtml(newer.id)}">${tt("retain.audioCompareBtn")}</button>
               </div>
             </div>`;
           });
@@ -5834,6 +5889,7 @@
           audio.controls = true;
           audio.autoplay = true;
           audio.src = url;
+          fixUnknownDuration(audio);
           player.appendChild(audio);
         });
       });
@@ -5872,6 +5928,7 @@
               <div><span class="muted">${tt("retain.audioNewer")}</span>
                 <audio class="audio-player" controls src="${uNew}"></audio></div>
             </div>`;
+          $$("audio", player).forEach(fixUnknownDuration);
           try {
             window.VTAnalytics?.track?.("audio_compare", {});
           } catch {
@@ -5959,6 +6016,10 @@
     const plan = VTStorage.getWeekPlan();
     const track = pageTrack();
     const idle = plan.status === "idle";
+    // A week is over seven days after it started, reviewed or not: the review
+    // below opens then, and the lines above it stop saying "this week".
+    const start = planStartDay(plan);
+    const weekOver = !idle && !!start && (window.VTDays?.dayKey?.() || "") >= window.VTDays?.addDays?.(start, 7);
     renderPlanWeekRail(plan);
     $("#plan-week-num").textContent = tt("plan.weekN", { n: plan.weekNumber });
     // Before the week starts, "Elige el elemento" and the start button say it all.
@@ -5966,7 +6027,7 @@
     status.hidden = idle;
     status.textContent = idle
       ? ""
-      : plan.status === "active"
+      : plan.status === "active" && !weekOver
         ? tt("plan.statusActive", { element: weekElementLabel(plan.element) })
         : tt("plan.statusReview", { element: weekElementLabel(plan.element) });
 
@@ -6005,7 +6066,7 @@
     // Days are counted from practice, not logged by hand.
     const days = $("#plan-days");
     days.hidden = idle;
-    days.textContent = idle ? "" : tt("plan.days", { n: planWeekDays(plan) });
+    days.textContent = idle ? "" : tt(weekOver ? "plan.daysPast" : "plan.days", { n: planWeekDays(plan) });
     // Once the week is under way its exercises are the next step, not this button.
     $("#plan-start-row").hidden = !idle;
 
@@ -6088,10 +6149,10 @@
     const improved = plan.completedElements || [];
     $("#plan-completed-wrap").hidden = !improved.length;
     $("#plan-completed-elements").innerHTML = improved
-      .map((e) => `<span class="pill">${escapeHtml(weekElementLabel(e))}</span>`)
+      .map((e) => `<span class="pill pill-word">${escapeHtml(weekElementLabel(e))}</span>`)
       .join(" ");
 
-    const reviews = (plan.reviews || []).slice(0, 8);
+    const reviews = (plan.reviews || []).slice(0, 12);
     $("#plan-reviews-card").hidden = !reviews.length;
     $("#plan-reviews").innerHTML = reviews.map(planReviewRow).join("");
   }
@@ -7677,6 +7738,24 @@
     });
   }
 
+  /**
+   * Put the banner away. Its buttons go with it, and when one of them had focus
+   * it would drop to the page: the next Tab would start again at the logo, and
+   * Pro's dialog, opened from "Ver Pro", would have no control to give focus
+   * back to. Focus moves to the nearest control that stays, the profile card's
+   * just above the banner.
+   */
+  function putAwayValueBanner(banner) {
+    const hadFocus = banner.contains(document.activeElement);
+    banner.hidden = true;
+    renderValuePulse();
+    if (!hadFocus) return;
+    ["#btn-profile-rename", "#btn-profile-add", "#sel-profile", "#btn-value-pro"]
+      .map((sel) => $(sel))
+      .find((el) => el && !el.disabled && el.offsetParent !== null)
+      ?.focus({ preventScroll: true });
+  }
+
   function showValueMoment(forceId) {
     const B = window.VTBilling;
     const VP = window.VTValuePulse;
@@ -7688,23 +7767,34 @@
     } catch {
       /* ignore */
     }
+    const banner = $("#value-banner");
+    const text = $("#value-banner-text");
+    if (!banner || !text) return;
     const ent = B?.getEntitlement?.() || { pro: false };
     const stats = VP.compute();
     let moment = forceId
       ? { id: forceId, priority: 99, sessions: stats.sessions, bestHoldSec: stats.bestHoldSec, trialDaysLeft: B?.trialDaysLeft?.() }
       : VP.suggestUpgradeMoment(stats, ent);
-    if (!moment || VP.isDismissed(moment.id)) return;
+    // Nothing to say for the record now open (another profile, a dismissed
+    // moment, Pro bought meanwhile): a banner left over from the last one is not
+    // true. It is put away without being dismissed, so it can come back for the
+    // record it was written for.
+    const nothingToSay = () => {
+      if (!banner.hidden) putAwayValueBanner(banner);
+    };
+    if (!moment || VP.isDismissed(moment.id)) return nothingToSay();
     // If already full pro (paid/demo), skip soft upsells except trial ending
-    if (ent.pro && ent.source !== "trial" && moment.id !== "trial_ending") return;
+    if (ent.pro && ent.source !== "trial" && moment.id !== "trial_ending") return nothingToSay();
 
-    const banner = $("#value-banner");
-    const text = $("#value-banner-text");
-    if (!banner || !text) return;
     const vars = {
-      n: String(moment.sessions ?? moment.trialDaysLeft ?? 0),
+      // The trial's own line counts days; the others count sessions. A moment
+      // asked for by name carries both figures.
+      n: String((moment.id === "trial_ending" ? moment.trialDaysLeft : moment.sessions) ?? 0),
       s: moment.bestHoldSec != null ? Number(moment.bestHoldSec).toFixed(1) : "0"
     };
-    text.textContent = tt("value.moment." + moment.id, vars);
+    // One day left reads "1 día", not "1 días": the singular has its own line.
+    const oneDay = moment.id === "trial_ending" && vars.n === "1";
+    text.textContent = tt("value.moment." + moment.id + (oneDay ? "_one" : ""), vars);
     banner.hidden = false;
     banner.dataset.momentId = moment.id;
     const cta = $("#value-pulse-cta");
@@ -7718,9 +7808,12 @@
     if (!banner) return;
     const id = banner.dataset.momentId;
     if (id && window.VTValuePulse?.dismiss) VTValuePulse.dismiss(id);
-    banner.hidden = true;
-    renderValuePulse();
+    putAwayValueBanner(banner);
   }
+
+  // The coach summary (Análisis Pro, the downloaded .txt) names a weak metric by
+  // the label this page shows it under, not by its id.
+  window.VTValuePulse?.setMetricLabeler?.(metricLabel);
 
   function renderPricingModal() {
     const B = window.VTBilling;
@@ -9143,7 +9236,9 @@
       }
       const json = VTBilling.exportProgressJson();
       if (!json) return;
-      const day = new Date().toISOString().slice(0, 10);
+      // The learner's own date: the UTC one is a day off in the evening in the
+      // Americas and the morning in Asia.
+      const day = window.VTDays?.dayKey?.() || new Date().toISOString().slice(0, 10);
       // JSON pack
       const blob = new Blob([json], { type: "application/json" });
       const a = document.createElement("a");

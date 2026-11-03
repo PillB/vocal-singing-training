@@ -33,6 +33,14 @@ LICENSE_KEY_ID = "k1"
 LICENSE_TTL_SECONDS = "259200"
 # Optional: map provider price/plan ids onto our plan ids. Leave empty to fall
 # back to checkout metadata, then to the subscription interval.
+#
+# Filling EITHER Stripe id in also turns this into an allow-list: a Stripe
+# subscription on a price that is not named here no longer entitles, so
+# anything else ever sold from the same Stripe account cannot become Pro. The
+# cost of that is a price you add in Stripe and forget here, which is then
+# refused — add the id and redeploy, or name the plan in that subscription's
+# metadata in the Stripe dashboard, which takes effect at once. See the
+# README's "Registering the webhooks" section.
 STRIPE_PRICE_PRO_MONTHLY = ""
 STRIPE_PRICE_PRO_YEARLY = ""
 MP_PLAN_PRO_MONTHLY = ""

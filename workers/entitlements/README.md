@@ -220,7 +220,7 @@ Public, committed in `wrangler.toml`:
 | `SITE_ORIGIN` | Exact site origin, e.g. `https://pillb.github.io`. Token audience and the only allowed CORS origin. |
 | `LICENSE_KEY_ID` | `kid` in the token header and the JWKS. Bump on rotation. |
 | `LICENSE_TTL_SECONDS` | Token lifetime (clamped to 60…2592000). |
-| `STRIPE_PRICE_PRO_MONTHLY` / `STRIPE_PRICE_PRO_YEARLY` | Optional price → plan mapping. |
+| `STRIPE_PRICE_PRO_MONTHLY` / `STRIPE_PRICE_PRO_YEARLY` | Optional price → plan mapping. Filling either one in also makes it an **allow-list** — see below. |
 | `MP_PLAN_PRO_MONTHLY` / `MP_PLAN_PRO_YEARLY` | Optional `preapproval_plan_id` → plan mapping. |
 | `TRIAL_DAYS` | Length of the free trial, in days. One per account, ever. Default 7. |
 | `ADMIN_EMAILS` | Comma-separated emails allowed to gift and revoke months, and to read A/B results. |
@@ -521,6 +521,28 @@ session names the plan only through a configured price id or its own
 `metadata.plan`; when it has neither it says nothing about the plan, and the
 subscription's events decide it, whichever order they arrive in. Only a
 one-time checkout with neither counts as `pro_monthly`.
+
+**The price table is also an allow-list, wherever it is filled in.** With
+`STRIPE_PRICE_PRO_*` empty — how this repository ships — nothing is gated and
+the mapping above is all it does. Fill either id in and a Stripe subscription
+on a price that is *not* named there is stored `suspended`: it issues no token,
+and a paid invoice on that price does not lift it. That is what stops anything
+else ever sold from the same Stripe account — a donation, a one-off lesson, a
+subscription at any price — from becoming Pro.
+
+The cost is a price you add in Stripe and forget here, which is then refused
+although the customer really paid. Two ways back, both of which have a test:
+
+1. **Name the plan in that subscription's `metadata.plan`** in the Stripe
+   dashboard (`pro_monthly` or `pro_yearly`). Metadata outranks the allow-list
+   because only the account's owner can set it, and editing it emits
+   `customer.subscription.updated`, so access returns within seconds and
+   nothing has to be deployed.
+2. **Add the price id to `wrangler.toml` and redeploy.** The next subscription
+   event — a renewal, or any edit in the dashboard — entitles it.
+
+Until either lands, the stop-gap is the one for every payment problem: give
+that account a gift from the admin page.
 
 Stripe's Billing settings decide what happens when every retry of a failed
 payment has failed. *Cancel the subscription* or *Mark the subscription as

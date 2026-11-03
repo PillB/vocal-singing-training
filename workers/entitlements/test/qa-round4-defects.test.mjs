@@ -76,7 +76,7 @@ test("W2 Stripe: charge.refunded ends the access the refunded payment bought", a
   assert.notEqual(await claimAt(env, "stripe", "cs_w2", 3), 200, "refunded on day 2, so not Pro on day 3");
 });
 
-test("W3 Stripe: a price that is not in the configured table does not entitle", { todo: "QA-W-03 STRIPE_PRICE_* is a label table, never an allowlist" }, async () => {
+test("W3 Stripe: a price that is not in the configured table does not entitle", async () => {
   const env = createTestEnv({ ENTITLEMENTS: createFakeKv(), STRIPE_PRICE_PRO_MONTHLY: "price_m", STRIPE_PRICE_PRO_YEARLY: "price_y" });
   await stripe(env, ev("e1", "checkout.session.completed", 0, { id: "cs_w3", mode: "subscription", customer: "cus_w3", subscription: "sub_w3", payment_status: "paid" }));
   await stripe(env, ev("e2", "customer.subscription.created", 0, { id: "sub_w3", customer: "cus_w3", status: "active", items: { data: [{ price: { id: "price_donation_1usd", recurring: { interval: "year", interval_count: 1 } }, current_period_end: T + 365 * DAY }] } }));

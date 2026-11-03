@@ -256,12 +256,15 @@ grace is safer for the business and a long one is kinder to a card that is
 merely retrying, so the number is a business choice rather than a correct
 answer. (QA round 4, QA-W-07.)
 
-**What is the smallest payment that may buy Pro?** Today any amount does:
-`STRIPE_PRICE_PRO_*` labels a price, it does not allow-list one, and a Mercado
-Pago payment of 0.01 PEN entitles. Exploiting it needs a payment taken on the
-operator's own accounts, so it starts to matter the day anything else is sold
-from them. The allow-list itself is a plain fix and is on the list; the floor
-underneath it is a number only the operator can name. (QA round 4, QA-W-03.)
+**What is the smallest payment that may buy Pro?** Half of this is now closed:
+`STRIPE_PRICE_PRO_*` is an allow-list wherever it is filled in, so a Stripe
+subscription on a price that is not ours no longer entitles. What is left is
+the amount. A Mercado Pago payment of one sol, approved, still buys whatever
+its description says — and the description is free text. A floor would stop
+that, and the number is one only the operator can name, because it depends on
+what the plans cost in soles and on what a legitimate partial or promotional
+payment might be. (QA round 4, QA-W-03; the open half has a failing test of its
+own in `workers/entitlements/test/price-table.test.mjs`.)
 
 **Do gifted months stack or overlap?** They overlap: whichever access runs
 longest wins, so two gifted months handed out on the same day are one month,
@@ -305,7 +308,7 @@ because the link could be made private.
 
 | Command | Covers |
 |---------|--------|
-| `npm run test:worker` | 394 node cases: schema, sessions, grants, gift codes, progress CAS, Google token verification, email, the API router, the webhooks of both providers, money going back, and one asserting the old anonymous flow is unchanged. 391 pass; the 3 marked `todo` are the grace-period question above, the price allow-list, and a concurrent first purchase that can mint two licences. |
+| `npm run test:worker` | 405 node cases: schema, sessions, grants, gift codes, progress CAS, Google token verification, email, the API router, the webhooks of both providers, money going back, which prices are ours, and one asserting the old anonymous flow is unchanged. 402 pass; the 3 marked `todo` are the grace-period question above, the amount floor, and a concurrent first purchase that can mint two licences. |
 | `npx playwright test tests/accounts.spec.js` | 32 browser cases: sign-in, gifts, admin tools, the trial, sync and merge, phone layout and tap targets. |
 | `npx playwright test tests/billing.spec.js` | 28 browser cases: the pricing panel, region detection, the sign-in gate before checkout. |
 | `npx playwright test tests/admin.spec.js` | 41 browser cases, one per procedure in the admin guide, against the real worker on a real database. |

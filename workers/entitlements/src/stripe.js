@@ -152,6 +152,44 @@ export function planFromPriceId(priceId, env) {
 }
 
 /**
+ * Whether the operator has written down which Stripe prices are theirs.
+ *
+ * `STRIPE_PRICE_PRO_MONTHLY` / `_YEARLY` started as labels: a way to know
+ * whether a subscription was monthly or yearly. They are also the only
+ * statement anywhere of what this product actually sells, so where they are
+ * filled in they are read as an allow-list too. Where they are empty — which
+ * is how the repository ships — nothing changes and a price says only what it
+ * says.
+ * @param {Object} env Worker env bindings.
+ * @returns {boolean} Whether at least one price id is configured.
+ */
+export function stripePriceTableConfigured(env) {
+  const read = (key) => (env && typeof env[key] === "string" ? env[key].trim() : "");
+  return Boolean(read("STRIPE_PRICE_PRO_MONTHLY") || read("STRIPE_PRICE_PRO_YEARLY"));
+}
+
+/**
+ * What a price id is, as far as this worker is concerned.
+ *
+ * Anything else sold from the same Stripe account — a donation, a one-off
+ * lesson, a different product — arrives through the same webhook and used to
+ * entitle, because the price table was a label table and never a gate
+ * (QA round 4, QA-W-03).
+ * @param {unknown} priceId Stripe price id.
+ * @param {Object} env Worker env bindings.
+ * @returns {"ours"|"unlisted"|"no_table"} Verdict.
+ */
+export function priceVerdict(priceId, env) {
+  if (planFromPriceId(priceId, env)) {
+    return "ours";
+  }
+  if (typeof priceId !== "string" || !priceId || !stripePriceTableConfigured(env)) {
+    return "no_table";
+  }
+  return "unlisted";
+}
+
+/**
  * Map a recurring interval to a plan id.
  * @param {unknown} interval Stripe interval ("month" | "year").
  * @param {number} [intervalCount] Interval count (12 months counts as yearly).
@@ -229,7 +267,17 @@ export function planForSubscription(subscription, env) {
   }
   const byMetadata = normalizePlanId(subscription && subscription.metadata && subscription.metadata.plan);
   if (byMetadata) {
+    // Metadata outranks the allow-list below on purpose: it is set by the
+    // account's owner and nobody else, so it is the same kind of statement as
+    // the price table, and it is the one remedy that needs no redeploy. Editing
+    // a subscription's metadata in the Stripe dashboard emits
+    // customer.subscription.updated, so the fix lands at once.
     return { plan: byMetadata, planSource: "metadata" };
+  }
+  if (priceVerdict(price && price.id, env) === "unlisted") {
+    // Not ours. The plan stays unnamed and the caller suspends the record: an
+    // interval or a default would turn somebody else's subscription into Pro.
+    return { plan: undefined, planSource: `unlisted_price`, unlisted: true };
   }
   const recurring = price && price.recurring ? price.recurring : null;
   const byInterval = planFromInterval(
@@ -429,7 +477,7 @@ function mapDispute(dispute) {
  * @returns {Object} Entitlement update descriptor.
  */
 function mapSubscription(subscription, env, deleted) {
-  const { plan, planSource } = planForSubscription(subscription, env);
+  const { plan, planSource, unlisted } = planForSubscription(subscription, env);
   const stripeStatus = String(subscription && subscription.status);
   const endedAt = unixOrNull(subscription && subscription.ended_at);
   const reason = subscription && subscription.cancellation_details && subscription.cancellation_details.reason;
@@ -444,7 +492,14 @@ function mapSubscription(subscription, env, deleted) {
     customerId: idOf(subscription && subscription.customer),
     plan,
     planSource,
-    status: deleted ? "canceled" : mapStripeStatus(subscription && subscription.status),
+    // A subscription on a price that is not ours is suspended rather than
+    // active: suspended issues no token and says a payment could still bring
+    // it back, which is exactly the situation — adding the price id and
+    // redeploying, or naming the plan in the subscription's metadata, makes
+    // the next event entitle it.
+    status: deleted
+      ? "canceled"
+      : (unlisted ? "suspended" : mapStripeStatus(subscription && subscription.status)),
     periodEnd: subscriptionPeriodEnd(subscription),
     endedAt,
     endsAt: unpaid && endedAt !== null ? endedAt : undefined,
@@ -466,6 +521,10 @@ function mapInvoice(invoice, env, paid) {
   const priceId = idOf(line && line.price)
     || idOf(line && line.pricing && line.pricing.price_details && line.pricing.price_details.price);
   const byPrice = planFromPriceId(priceId, env);
+  // The same gate as a subscription's own event, or a renewal of something
+  // that is not ours would lift the suspension it just received — and `paid`
+  // is one-way, so it must not be recorded for a price we do not sell.
+  const unlisted = !byPrice && priceVerdict(priceId, env) === "unlisted";
   const subscriptionId = idOf(invoice && invoice.subscription)
     || idOf(line && line.subscription)
     || idOf(
@@ -479,11 +538,11 @@ function mapInvoice(invoice, env, paid) {
     customerId: idOf(invoice && invoice.customer),
     plan: byPrice || undefined,
     planSource: byPrice ? "price_id" : undefined,
-    status: paid ? "active" : "past_due",
+    status: unlisted ? "suspended" : (paid ? "active" : "past_due"),
     // A paid invoice confirms money arrived; a failed one says nothing about
     // whether an earlier payment did.
-    paid: paid ? true : undefined,
-    paymentId: paid ? paymentIdForInvoice(invoice) : null,
+    paid: paid && !unlisted ? true : undefined,
+    paymentId: paid && !unlisted ? paymentIdForInvoice(invoice) : null,
     periodEnd: unixOrNull(line && line.period && line.period.end)
   };
 }

@@ -13,6 +13,7 @@
  * tests opt in with vt_stepdone_e2e.
  */
 const { test, expect } = require("@playwright/test");
+const { tapFloorLimit } = require("./helpers/tap-floor");
 
 const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";
 const NOW = "2026-09-23T10:00:00-05:00";
@@ -153,7 +154,7 @@ test.describe("Step done: a guided step's clock runs out", () => {
       };
     });
     expect(geo).toEqual({ inStage: true, inView: true, onTop: true, h: expect.any(Number) });
-    expect(geo.h).toBeGreaterThanOrEqual(44);
+    expect(geo.h).toBeGreaterThanOrEqual(tapFloorLimit(44));
 
     // The step ran its full length, so it counts.
     const row = await page.evaluate(() => JSON.parse(localStorage.getItem("vt_days_v1")).days["2026-09-23"]);

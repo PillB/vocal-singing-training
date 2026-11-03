@@ -9,6 +9,7 @@
 const path = require("path");
 const { pathToFileURL } = require("url");
 const { test, expect } = require("@playwright/test");
+const { tapFloorLimit } = require("./helpers/tap-floor");
 // These tests stand in for the worker's event and geo routes at a fake host
 // (https://events.test and friends), which the page's Content Security
 // Policy rightly refuses. The policy is tested in tests/csp.spec.js and
@@ -190,7 +191,7 @@ test.describe("anonymous events for A/B tests", () => {
       "Stop sending and delete what was sent"
     );
     const box = await btn.boundingBox();
-    expect(box.height).toBeGreaterThanOrEqual(44);
+    expect(box.height).toBeGreaterThanOrEqual(tapFloorLimit(44));
     await btn.click();
     await expect(es.locator("[data-privacy-state]")).toHaveText("Elegiste no enviar estadísticas desde este navegador.");
     await expect(btn).toHaveText("Volver a permitir");

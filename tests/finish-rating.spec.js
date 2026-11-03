@@ -16,6 +16,7 @@
  * vt_e2e so other specs keep their form; these tests opt in with vt_rate_e2e.
  */
 const { test, expect } = require("@playwright/test");
+const { tapFloorLimit } = require("./helpers/tap-floor");
 
 const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";
 const NOW = "2026-09-23T10:00:00-05:00";
@@ -208,7 +209,7 @@ test.describe("Rating: one tap after a take", () => {
     expect(geo.qBelowChrome).toBe(true);
     geo.btns.forEach((b) => {
       expect(b.onTop).toBe(true);
-      expect(b.h).toBeGreaterThanOrEqual(44);
+      expect(b.h).toBeGreaterThanOrEqual(tapFloorLimit(44));
     });
 
     await page.locator('.rate-btn[data-feel="ok"]').click();

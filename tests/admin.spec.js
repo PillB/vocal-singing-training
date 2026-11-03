@@ -168,14 +168,18 @@ test.describe("Admin page", () => {
     const context = await browser.newContext();
     const page = await context.newPage();
     await wire(page, worker, null);
-    await page.route(`${API}/**`, (route) => route.abort("failed"));
+    // One handler whose answer changes, rather than removing the outage route
+    // and wiring the worker back: an unroute races the press below, and the
+    // page asks once per press, so a request that lost that race left the page
+    // on "unreachable" for ever and the test failed under load.
+    const outage = { on: true };
+    await page.route(`${API}/**`, (route) => (outage.on ? route.abort("failed") : route.fallback()));
     await page.goto(`${BASE}/admin.html`, { waitUntil: "domcontentloaded" });
     await expect(page.locator("body")).toHaveAttribute("data-gate", "unreachable");
     await expect(page.locator("#gate-google-fallback")).toBeHidden();
 
     // Back up: Try again gets to sign-in.
-    await page.unroute(`${API}/**`);
-    await wire(page, worker, null);
+    outage.on = false;
     await page.click("#gate-retry");
     await expect(page.locator("body")).toHaveAttribute("data-gate", "signedOut");
     await context.close();

@@ -332,8 +332,21 @@ export function planFromAutoRecurring(autoRecurring) {
 }
 
 /**
- * Derive the plan for a preapproval: configured plan ids, then reason /
- * external_reference text, then the recurrence settings.
+ * Derive the plan for a preapproval: configured plan ids, then what is actually
+ * being billed, then reason / external_reference text.
+ *
+ * The order matters and used to be wrong. Free text came before the recurrence,
+ * so a plan whose label happened to contain "anual" — or "year", or "año" —
+ * while billing once a month bought a whole year of Pro for one monthly charge
+ * (QA round 4, QA-W-04). A label is what somebody typed into the Mercado Pago
+ * panel; `auto_recurring` is what the card is charged. When they disagree, the
+ * charge is the fact and the label is a guess, so the charge decides. Text is
+ * still read, because a preapproval can arrive with no recurrence block at all,
+ * but only then.
+ *
+ * `preapproval_plan_id` stays first: it is the operator's own mapping, set in
+ * wrangler.toml against the ids in their Mercado Pago account, and the only
+ * source here that is neither free text nor inference.
  * @param {Object} preapproval Preapproval resource.
  * @param {Object} env Worker env bindings.
  * @returns {{plan: string, planSource: string}} Plan id and how we got it.
@@ -347,16 +360,20 @@ export function planForPreapproval(preapproval, env) {
     return { plan: "pro_yearly", planSource: "preapproval_plan_id" };
   }
   const byReason = planFromText(preapproval && preapproval.reason);
+  const byReference = planFromText(preapproval && preapproval.external_reference);
+  const byRecurrence = planFromAutoRecurring(preapproval && preapproval.auto_recurring);
+  if (byRecurrence) {
+    // Say so when a label claimed something else, so an operator who meant the
+    // label can see why it was ignored rather than wondering.
+    const byText = byReason || byReference;
+    const source = byText && byText !== byRecurrence ? "auto_recurring_over_text" : "auto_recurring";
+    return { plan: byRecurrence, planSource: source };
+  }
   if (byReason) {
     return { plan: byReason, planSource: "reason" };
   }
-  const byReference = planFromText(preapproval && preapproval.external_reference);
   if (byReference) {
     return { plan: byReference, planSource: "external_reference" };
-  }
-  const byRecurrence = planFromAutoRecurring(preapproval && preapproval.auto_recurring);
-  if (byRecurrence) {
-    return { plan: byRecurrence, planSource: "auto_recurring" };
   }
   // Unknowable: default to monthly (the cheaper grant) and record what we saw.
   const seen = [

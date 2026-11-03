@@ -67,6 +67,22 @@ export function grantIsOpenEnded(row) {
   return Number.isFinite(days) && days >= OPEN_ENDED_DAYS;
 }
 
+/**
+ * How many rows a write actually changed.
+ *
+ * D1 reports this as `meta.changes`. A guarded UPDATE — one whose WHERE clause
+ * carries the condition the caller is really asking about — is the only atomic
+ * way to ask "was this still true when I wrote?", and this is how its answer is
+ * read. A missing or unreadable meta counts as 0, which refuses rather than
+ * grants: the safe direction when the database will not say.
+ * @param {Object} result The result of a D1 `run()`.
+ * @returns {number} Rows changed.
+ */
+export function changedRows(result) {
+  const n = Number(result && result.meta && result.meta.changes);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
 /** Gift codes use an unambiguous alphabet: no O/0, no I/1, no U (reads as V). */
 export const GIFT_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTVWXYZ23456789";
 
@@ -540,13 +556,32 @@ export async function redeemGiftCode(db, accountId, code, now) {
 
   // Counted only after the redemption row exists, so a rejected duplicate never
   // burns one of the code's uses.
-  await db
+  //
+  // This UPDATE is the only atomic test of "is there a use left": the SELECT
+  // above is a fast path that two accounts redeeming the last use of a code at
+  // the same moment both pass, because each reads the count before either
+  // writes it. Its changed-row count is therefore the real answer, and ignoring
+  // it is what granted a one-use code twice. The unique index on
+  // (code, account) catches the same account twice; nothing but this catches
+  // two different ones.
+  const counted = await db
     .prepare(
       `UPDATE gift_codes SET redeemed_count = redeemed_count + 1
        WHERE code_normalized = ?1 AND redeemed_count < max_redemptions`
     )
     .bind(normalized)
     .run();
+  if (changedRows(counted) < 1) {
+    // Somebody else took the last use between our read and this write. Undo
+    // both speculative writes, in the order that cannot leave a redemption row
+    // pointing at a grant that is gone.
+    await db
+      .prepare("DELETE FROM gift_redemptions WHERE code_normalized = ?1 AND account_id = ?2")
+      .bind(normalized, accountId)
+      .run();
+    await db.prepare("DELETE FROM grants WHERE id = ?1").bind(grant.id).run();
+    return { ok: false, reason: "exhausted" };
+  }
 
   return { ok: true, grant, days: Number(row.days) };
 }

@@ -221,6 +221,41 @@ thing likely to need a paid plan. Exact current limits are in the runbook.
 
 ---
 
+## Decisions still open, and what the code does meanwhile
+
+Three questions about payments are the operator's to answer; they are not bugs
+waiting on a fix. Each is written down here with the behaviour that is live
+until he answers, so nobody has to work out from the code which parts are
+deliberate.
+
+**A renewal is declined. How long does Pro last after that?** Today the
+entitlement keeps `past_due`, which still entitles, and `periodEnd` moves to
+the end of the period the customer did *not* pay for. On a yearly plan that is
+up to a free year if the provider's next event never arrives. A short fixed
+grace is safer for the business and a long one is kinder to a card that is
+merely retrying, so the number is a business choice rather than a correct
+answer. (QA round 4, QA-W-07.)
+
+**What is the smallest payment that may buy Pro?** Today any amount does:
+`STRIPE_PRICE_PRO_*` labels a price, it does not allow-list one, and a Mercado
+Pago payment of 0.01 PEN entitles. Exploiting it needs a payment taken on the
+operator's own accounts, so it starts to matter the day anything else is sold
+from them. The allow-list itself is a plain fix and is on the list; the floor
+underneath it is a number only the operator can name. (QA round 4, QA-W-03.)
+
+**Do gifted months stack or overlap?** They overlap: whichever access runs
+longest wins, so two gifted months handed out on the same day are one month,
+not two. That is intended and is how "One mechanism for trial, gift and comp"
+above works, but it surprises somebody who thought they were adding time.
+(QA round 4, QA-W-09.)
+
+The goal-behaviour tests for the first two live in
+`workers/entitlements/test/qa-round4-defects.test.mjs`, marked `todo` so the
+suite stays green while the question is open instead of being deleted and
+forgotten.
+
+---
+
 ## Rules that must not be broken
 
 - The ES256 private key is a wrangler secret. It never goes in the repo, never
@@ -242,9 +277,11 @@ a debugger.
 
 | Command | Covers |
 |---------|--------|
-| `npm run test:worker` | 212 node cases: schema, sessions, grants, gift codes, progress CAS, Google token verification, email, the API router, and one asserting the old anonymous flow is unchanged. |
-| `npx playwright test tests/accounts.spec.js` | 19 browser cases: sign-in, gifts, admin tools, the trial, sync and merge, phone layout and tap targets. |
-| `npx playwright test tests/billing.spec.js` | The existing 22, unchanged. |
+| `npm run test:worker` | 386 node cases: schema, sessions, grants, gift codes, progress CAS, Google token verification, email, the API router, the webhooks of both providers, and one asserting the old anonymous flow is unchanged. 381 pass; the 5 marked `todo` are the open questions above and the three findings still being worked. |
+| `npx playwright test tests/accounts.spec.js` | 32 browser cases: sign-in, gifts, admin tools, the trial, sync and merge, phone layout and tap targets. |
+| `npx playwright test tests/billing.spec.js` | 28 browser cases: the pricing panel, region detection, the sign-in gate before checkout. |
+| `npx playwright test tests/admin.spec.js` | 41 browser cases, one per procedure in the admin guide, against the real worker on a real database. |
+| `npx playwright test tests/checkout-rail.spec.js` | 10 browser cases: nobody is sent to pay on a rail the worker cannot honour, and no answer from the worker is not read as a no. |
 
 The worker tests run the **real SQL** against `node:sqlite` through a D1-shaped
 adapter, not a hand-written fake, so a statement that D1 would reject fails

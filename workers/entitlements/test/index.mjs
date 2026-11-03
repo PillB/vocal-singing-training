@@ -24,3 +24,7 @@ import "./api.test.mjs";
 import "./stats.test.mjs";
 import "./events.test.mjs";
 import "./reports.test.mjs";
+// QA round 4's five tests for mutants this suite let survive. Each one was
+// checked to fail against the mutant it targets before being adopted.
+import "./qa-round4-worker.test.mjs";
+import "./qa-round4-defects.test.mjs";

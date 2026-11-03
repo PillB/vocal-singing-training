@@ -25,9 +25,9 @@ function harmonic(freq) {
   });
 }
 
-function seededNoise(seed, gain = 0.2) {
+function seededNoise(seed, gain = 0.2, length = 2048) {
   let x = seed >>> 0;
-  return Float32Array.from({ length: 2048 }, () => {
+  return Float32Array.from({ length }, () => {
     x ^= x << 13; x ^= x >>> 17; x ^= x << 5;
     return gain * ((x >>> 0) / 0xffffffff * 2 - 1);
   });
@@ -64,6 +64,152 @@ test("uncertain pitch is withheld rather than displayed as a wrong octave", () =
     // On an unsupported frequency, returning a confident but unrelated note
     // is more harmful than showing '—' and asking for a range adjustment.
     assert.equal(got, null, `unsupported ${hz} Hz aliased to ${got}`);
+  }
+});
+
+// The engine's frame: 2048 samples at 44.1/48 kHz, 4096 at 96 kHz.
+const PITCH_RATES = [44100, 48000, 96000];
+const frameLength = (sampleRate) => 2048 * Math.max(1, Math.round(sampleRate / 48000));
+
+/** Partials h = 1..20 below `cap` Hz, partial h at amp(h), fixed phases. */
+function partials(hz, sampleRate, amp, cap = 0.45 * sampleRate) {
+  return Float32Array.from({ length: frameLength(sampleRate) }, (_, i) => {
+    let v = 0;
+    for (let h = 1; h <= 20 && h * hz < cap; h++) {
+      v += amp(h) * Math.sin(2 * Math.PI * hz * h * i / sampleRate + (h - 1) * 0.9);
+    }
+    return v;
+  });
+}
+
+test("weak fundamentals still resolve harmonic pitch (PR #24)", () => {
+  const { detectPitch } = pitchUtils();
+  for (const sampleRate of PITCH_RATES) {
+    for (const hz of [110, 220, 440]) {
+      // A dominant 3rd partial is realistic under vocal formants/filtering;
+      // its period dips under the YIN threshold first (110 Hz read as 330).
+      const frame = Float32Array.from({ length: frameLength(sampleRate) }, (_, i) => {
+        const t = 2 * Math.PI * hz * i / sampleRate;
+        return 0.01 * Math.sin(t) + 0.2 * Math.sin(2 * t) + 0.7 * Math.sin(3 * t);
+      });
+      const got = detectPitch(frame, sampleRate);
+      assert.ok(Number.isFinite(got) && Math.abs(errorCents(got, hz)) < 30,
+        `${sampleRate} Hz: weak F0 ${hz} Hz -> ${got} Hz`);
+    }
+  }
+});
+
+const noteHz = (midi) => 440 * Math.pow(2, (midi - 69) / 12);
+
+test("a weak fundamental under a loud 2nd partial is not read an octave low", () => {
+  // Two periods are as periodic as one. On the 12 kHz grid the pair often
+  // lands nearer a sample and looked deeper, so the deepest multiple read
+  // 880 Hz as 440 Hz and 116.5 Hz as 58.3 Hz.
+  const { detectPitch } = pitchUtils();
+  for (const sampleRate of PITCH_RATES) {
+    for (let midi = 40; midi <= 84; midi++) {
+      const hz = noteHz(midi);
+      for (const a1 of [0.01, 0.05, 0.1, 0.2]) {
+        const got = detectPitch(partials(hz, sampleRate, (h) => [a1, 0.22, 0.03][h - 1] || 0), sampleRate);
+        const label = `${sampleRate} Hz: ${hz.toFixed(2)} Hz with a1 ${a1} under 0.22 -> ${got} Hz`;
+        assert.ok(got == null || errorCents(got, hz) > -600, label);
+        if (a1 === 0.05) assert.ok(Number.isFinite(got) && Math.abs(errorCents(got, hz)) <= 50, label);
+      }
+    }
+  }
+});
+
+test("a weak fundamental under a loud 3rd partial is not read an octave low", () => {
+  // The first dip can be two periods of the 3rd partial, so 3x of it is two
+  // periods (493.9 Hz read as 246.9, C6 above the band as C5).
+  const { detectPitch } = pitchUtils();
+  for (const sampleRate of PITCH_RATES) {
+    for (let midi = 40; midi <= 84; midi++) {
+      for (const a1 of [0.01, 0.05]) {
+        const hz = noteHz(midi);
+        const got = detectPitch(partials(hz, sampleRate, (h) => [a1, 0.2, 0.7][h - 1] || 0), sampleRate);
+        assert.ok(got == null || errorCents(got, hz) > -600,
+          `${sampleRate} Hz: ${hz.toFixed(2)} Hz with a1 ${a1} under a loud 3rd partial -> ${got} Hz`);
+      }
+    }
+  }
+});
+
+test("a weak fundamental under a loud 4th or 6th partial keeps its own period", () => {
+  // Half the period is not periodic under a loud 4th partial. Under a loud
+  // 6th with quiet odd partials it is nearly as periodic, and nearly is not
+  // enough: an octave high is still a wrong note.
+  const { detectPitch } = pitchUtils();
+  const fourth = [0.05, 0.05, 0.03, 0.22];
+  const sixth = [0.02, 0.03, 0.06, 0.08, 0.004, 0.28, 0.03, 0.03, 0.06];
+  for (const sampleRate of PITCH_RATES) {
+    for (let midi = 40; midi <= 69; midi++) {
+      for (const amps of midi >= 50 && midi <= 55 ? [fourth, sixth] : [fourth]) {
+        const hz = noteHz(midi);
+        const got = detectPitch(partials(hz, sampleRate, (h) => amps[h - 1] || 0), sampleRate);
+        assert.ok(Number.isFinite(got) && Math.abs(errorCents(got, hz)) <= 50,
+          `${sampleRate} Hz: ${hz.toFixed(2)} Hz under a loud partial ${amps.indexOf(Math.max(...amps)) + 1} -> ${got} Hz`);
+      }
+    }
+  }
+});
+
+test("without decimation half a period is not taken for the period", () => {
+  // At 8 and 16 kHz the full-rate frame is the decimated one, and a window
+  // between troughs can read as deep (261.6 Hz with a loud 3rd partial was
+  // read as 523 Hz).
+  const { detectPitch } = pitchUtils();
+  for (const sampleRate of [8000, 16000]) {
+    for (let midi = 40; midi <= 84; midi++) {
+      const hz = noteHz(midi);
+      const got = detectPitch(partials(hz, sampleRate, (h) => [0.01, 0.2, 0.7][h - 1] || 0), sampleRate);
+      assert.ok(got == null || Math.abs(errorCents(got, hz) - 1200) > 100,
+        `${sampleRate} Hz: ${hz.toFixed(2)} Hz under a loud 3rd partial read an octave high: ${got} Hz`);
+    }
+  }
+});
+
+test("a bright voice's own period is not traded for a multiple of it", () => {
+  // A high, bright voice's period falls between the decimated samples and
+  // looks shallow there; only the full-rate frame shows it is periodic.
+  const { detectPitch } = pitchUtils();
+  for (const sampleRate of PITCH_RATES) {
+    for (let midi = 55; midi <= 84; midi++) {
+      const hz = 440 * Math.pow(2, (midi - 69) / 12);
+      const got = detectPitch(partials(hz, sampleRate, (h) => 0.12 / Math.sqrt(h), 5000), sampleRate);
+      assert.ok(Number.isFinite(got) && Math.abs(errorCents(got, hz)) <= 50,
+        `${sampleRate} Hz: bright ${hz.toFixed(2)} Hz -> ${got} Hz`);
+    }
+  }
+});
+
+test("beeps and whistles above the band are never named as a note", () => {
+  const { detectPitch } = pitchUtils();
+  for (const sampleRate of PITCH_RATES) {
+    for (let hz = 1360; hz <= 4000; hz += 40) {
+      const got = detectPitch(partials(hz, sampleRate, (h) => (h === 1 ? 0.3 : 0)), sampleRate);
+      assert.equal(got, null, `${sampleRate} Hz: a ${hz} Hz tone named ${got} Hz`);
+    }
+  }
+});
+
+test("a noisy voice at 10 dB SNR is withheld or right, never a wrong octave", () => {
+  const { detectPitch } = pitchUtils();
+  for (const sampleRate of PITCH_RATES) {
+    for (const tilt of [1, 1.5]) {
+      for (const hz of [82.41, 110, 146.83, 220, 329.63, 392, 440, 523.25, 659.25, 783.99, 880]) {
+        const voiced = partials(hz, sampleRate, (h) => 0.15 / Math.pow(h, tilt));
+        const voiceRms = Math.sqrt(voiced.reduce((sum, v) => sum + v * v, 0) / voiced.length);
+        for (let seed = 1; seed <= 8; seed++) {
+          const noise = seededNoise(seed * 2654435761, 1, voiced.length);
+          const noiseRms = Math.sqrt(noise.reduce((sum, v) => sum + v * v, 0) / noise.length);
+          const gain = voiceRms / (Math.pow(10, 10 / 20) * noiseRms);
+          const got = detectPitch(voiced.map((v, i) => v + gain * noise[i]), sampleRate);
+          assert.ok(got == null || Math.abs(errorCents(got, hz)) <= 100,
+            `${sampleRate} Hz, 1/h^${tilt}, seed ${seed}: ${hz} Hz misread as ${got} Hz`);
+        }
+      }
+    }
   }
 });
 

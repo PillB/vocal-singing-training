@@ -495,12 +495,6 @@
     },
     {
       "file": "js/pitch-visualizer.js",
-      "sha": "2e8cde549e6edf094ff66e228f57c635810b638233f77b42bdc29a0faa24f54e",
-      "complexity": 23,
-      "name": "Function 'detectPitch'"
-    },
-    {
-      "file": "js/pitch-visualizer.js",
       "sha": "73abbcc606d2dee206c135768d73cbabe18025eef6807c6c162fdc0dc59b603b",
       "complexity": 84,
       "name": "Method '_draw'"

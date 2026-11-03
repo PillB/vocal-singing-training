@@ -61,9 +61,9 @@ const CONTROL_SPECS = {
 
 export const MUTANTS = {
   audio: [
-    ["M1 YIN voicing threshold 0.18 -> 0.60 (noise accepted as pitch)", "js/pitch-visualizer.js", "if (cmnd[lag] < 0.18) {", "if (cmnd[lag] < 0.60) {"],
+    ["M1 YIN voicing threshold 0.18 -> 0.60 (noise accepted as pitch)", "js/pitch-visualizer.js", "if (cmnd[lag] >= 0.18) continue;", "if (cmnd[lag] >= 0.60) continue;"],
     ["M2 above-band alias guard dropped (1500 Hz read as 750)", "js/pitch-visualizer.js", "for (let shortLag = 2; shortLag < minLag; shortLag++) {", "for (let shortLag = 2; shortLag < 2; shortLag++) {"],
-    ["M4 parabolic interpolation removed", "js/pitch-visualizer.js", "const freq = rate / (lag + offset);", "const freq = rate / lag;"],
+    ["M4 parabolic interpolation removed", "js/pitch-visualizer.js", "return lag + (denom ? Math.max(-0.5, Math.min(0.5, 0.5 * (before - after) / denom)) : 0);", "return lag;"],
     ["M5 silence gate removed", "js/pitch-visualizer.js", "if (Math.sqrt(power / n) < 0.01) return null;", ""],
     ["M6 +150c (adjacent semitone) accepted as in tune", "js/practice-modes.js", "const hi = this.profile.centsHi == null ? 50 : this.profile.centsHi;", "const hi = this.profile.centsHi == null ? 150 : this.profile.centsHi;"],
     ["M7 -140c accepted as in tune", "js/practice-modes.js", "const lo = this.profile.centsLo == null ? -40 : this.profile.centsLo;", "const lo = this.profile.centsLo == null ? -140 : this.profile.centsLo;"],
@@ -119,7 +119,20 @@ export const MUTANTS = {
     ["M63 the drill's Vad left on the capped frame time", "js/scenes/guided.js", "new global.VTFeatures.Vad({ maxDt: STEP_MAX_SEC })", "new global.VTFeatures.Vad({})"],
     ["M64 the Vad ignores the wall time it was asked to keep", "js/voice-features.js", "    if (this.maxDt > 0) this.t += Math.max(0, wallDt(frame, this.maxDt) - frameDt(frame));\n", ""],
     ["M65 a Vad on wall time takes a hidden minute in one frame", "js/voice-features.js", "Math.min(ms / 1000, maxSec) : 0;", "ms / 1000 : 0;"],
-    ["M66 every Vad moves to wall time", "js/voice-features.js", "this.maxDt = opts.maxDt > 0 ? opts.maxDt : 0;", "this.maxDt = opts.maxDt > 0 ? opts.maxDt : 1;"]
+    ["M66 every Vad moves to wall time", "js/voice-features.js", "this.maxDt = opts.maxDt > 0 ? opts.maxDt : 0;", "this.maxDt = opts.maxDt > 0 ? opts.maxDt : 1;"],
+    // The weak-fundamental promotion (PR #24's 110 Hz with a loud 3rd partial read as 330 Hz).
+    ["M49 a weak fundamental's loud 3rd partial scored as the note again", "js/pitch-visualizer.js", "      lag = promoteLag(cmnd, lag, maxLag, buf, decimate);\n", ""],
+    ["M50 only the octave below is tried, not the 3rd or 4th multiple", "js/pitch-visualizer.js", "for (let k = 2; k <= 4 && k * at + 1 <= maxLag; k++) {", "for (let k = 2; k <= 2 && k * at + 1 <= maxLag; k++) {"],
+    ["M51 a weak fundamental whose 3rd partial is above the band is withheld again", "js/pitch-visualizer.js", "return promoted < minLag ? -1 : promoted;", "return -1;"],
+    ["M52 hasDeeperMultiple bar 0.35 -> 0.1 (the 3rd partial's multiple no longer far deeper)", "js/pitch-visualizer.js", "if (cmnd[m] < 0.35 * cmnd[at]) return true;", "if (cmnd[m] < 0.1 * cmnd[at]) return true;"],
+    ["M53 promotion without the full-rate confirmation", "js/pitch-visualizer.js", "    if (!(best < 0.35 * here)) return null;\n", ""],
+    ["M54 a period periodic at full rate still promoted (beeps named as notes)", "js/pitch-visualizer.js", "    if (here <= 0.06) return at;\n", ""],
+    ["M55 full-rate confirmation 0.35 -> 1 (noisy 880 Hz read as 440)", "js/pitch-visualizer.js", "if (!(best < 0.35 * here)) return null;", "if (!(best < 1 * here)) return null;"],
+    ["M67 the deepest multiple wins again, not the shortest as periodic (a weak 116.5 Hz under its 2nd partial read as 58.3)", "js/pitch-visualizer.js", "    const bar = best + 0.15 * (here - best);\n", "    const bar = best;\n"],
+    ["M68 a 3x pick that is two periods is kept (a weak 493.9 Hz under its loud 3rd partial read as 246.9)", "js/pitch-visualizer.js", "    return pick.k === 3 ? halfOfTriple(cmnd, pick, buf, decimate, width) : pick.lag;\n", "    return pick.lag;\n"],
+    ["M69 a confirmed above-band period is held to the 0.18 threshold again (C6 under its loud 3rd partial read as C5)", "js/pitch-visualizer.js", "const lag = start > minLag ? refinedLag(cmnd, start) : firstPeriod(cmnd, start, maxLag, buf, decimate);", "const lag = firstPeriod(cmnd, start, maxLag, buf, decimate);"],
+    ["M70 the half of a 3x pick need not be a dip (8 kHz 261.6 Hz under its loud 3rd partial read an octave high)", "js/pitch-visualizer.js", "    if (cmnd[lag - 1] < cmnd[lag] || cmnd[lag + 1] < cmnd[lag]) return pick.lag;\n", ""],
+    ["M71 the half of a 3x pick need only be nearly as periodic (a weak 146.8 Hz under its loud 6th partial read an octave high)", "js/pitch-visualizer.js", "<= 1.25 * pick.depth + 0.002 ? lag : pick.lag;", "<= 1.25 * pick.depth + 0.2 ? lag : pick.lag;"]
   ].map(([name, file, from, to]) => ({ name, file, from, to, cmd: node(AUDIO_TESTS) })),
   lint: [
     ["L1 folders skipped by name again", "qa/lint-complexity.mjs", "if (!EXCLUDED_PATHS.has(name)) visit(name);", "if (!EXCLUDED_PATHS.has(name) && !/^(?:fixtures|geometry)$/.test(item.name)) visit(name);"],

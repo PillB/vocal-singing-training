@@ -92,6 +92,171 @@
     return { text: t.length < String(text || "").length ? t + "…" : t, font };
   }
 
+  /** YIN cumulative-mean-normalised difference for lags 1..maxLag. */
+  function cmndCurve(x, maxLag) {
+    const window = x.length - maxLag;
+    const cmnd = new Float32Array(maxLag + 1);
+    let cumulative = 0;
+    for (let lag = 1; lag <= maxLag; lag++) {
+      let difference = 0;
+      for (let i = 0; i < window; i++) {
+        const d = x[i] - x[i + lag];
+        difference += d * d;
+      }
+      cumulative += difference;
+      cmnd[lag] = cumulative > 0 ? (difference * lag) / cumulative : 1;
+    }
+    return cmnd;
+  }
+
+  /** Normalised squared difference of the full-rate frame at one lag. */
+  function fullRateDifference(buf, lag, width) {
+    let d = 0;
+    let e = 0;
+    for (let i = 0; i < width; i++) {
+      const a = buf[i];
+      const b = buf[i + lag];
+      d += (a - b) * (a - b);
+      e += a * a + b * b;
+    }
+    return e > 0 ? d / e : 1;
+  }
+
+  /**
+   * Depth of the full-rate trough near a decimated lag, read between
+   * samples: a high, bright voice's period falls between 12 kHz samples
+   * and looks shallow there although it is perfectly periodic.
+   */
+  function fullRateDepth(buf, lag, decimate, width) {
+    const centre = Math.round(lag * decimate);
+    const near = [];
+    for (let L = centre - 2; L <= centre + 2; L++) near.push(fullRateDifference(buf, L, width));
+    let at = 2;
+    for (let i = 0; i < 5; i++) if (near[i] < near[at]) at = i;
+    const v = near[at];
+    const y0 = at > 0 ? near[at - 1] : fullRateDifference(buf, centre - 3, width);
+    const y2 = at < 4 ? near[at + 1] : fullRateDifference(buf, centre + 3, width);
+    const den = y0 - 2 * v + y2;
+    return den > 0 ? Math.max(0, v - (y0 - y2) * (y0 - y2) / (8 * den)) : v;
+  }
+
+  /** `lag` refined between samples by a parabola through its neighbours. */
+  function refinedLag(cmnd, lag) {
+    const before = cmnd[lag - 1] ?? cmnd[lag];
+    const mid = cmnd[lag];
+    const after = cmnd[lag + 1] ?? cmnd[lag];
+    const denom = before - 2 * mid + after;
+    return lag + (denom ? Math.max(-0.5, Math.min(0.5, 0.5 * (before - after) / denom)) : 0);
+  }
+
+  /** Whether a dip at 2–4× `at` is far deeper than `at` on the decimated curve. */
+  function hasDeeperMultiple(cmnd, at, maxLag) {
+    for (let k = 2; k <= 4 && k * at + 1 <= maxLag; k++) {
+      for (let m = k * at - 1; m <= k * at + 1; m++) {
+        if (cmnd[m] < 0.35 * cmnd[at]) return true;
+      }
+    }
+    return false;
+  }
+
+  /** The lowest decimated sample within one sample of `lag`. */
+  function dipNear(cmnd, lag) {
+    const centre = Math.round(lag);
+    let best = centre;
+    for (let m = centre - 1; m <= centre + 1; m++) if (cmnd[m] < cmnd[best]) best = m;
+    return best;
+  }
+
+  /** The dip at each 2–4× multiple of `at`, with its depth on the full-rate frame. */
+  function multipleDepths(cmnd, at, maxLag, buf, decimate, width) {
+    const unit = refinedLag(cmnd, at);
+    const found = [];
+    for (let k = 2; k <= 4 && k * unit + 2 <= maxLag; k++) {
+      const lag = dipNear(cmnd, k * unit);
+      found.push({ k, lag, depth: fullRateDepth(buf, refinedLag(cmnd, lag), decimate, width) });
+    }
+    return found;
+  }
+
+  /**
+   * The shortest multiple about as periodic as the deepest one, or null when
+   * none is far deeper than `here`. Two periods are as periodic as one, so
+   * the deepest is a toss-up between them (on the decimated grid, whichever
+   * lands nearer a sample): it read a weak 880 Hz under its loud 2nd partial
+   * as 440 Hz. "About as periodic" is within 15% of the way from the deepest
+   * up to `here`, which a noise floor raising every depth alike does not move.
+   */
+  function shortestPeriodic(found, here) {
+    const best = Math.min(...found.map((c) => c.depth));
+    if (!(best < 0.35 * here)) return null;
+    const bar = best + 0.15 * (here - best);
+    for (const c of found) if (c.depth <= bar) return c;
+    return null;
+  }
+
+  /**
+   * The 3rd multiple can be two periods: when the first dip is two periods
+   * of a loud 3rd partial (2/3 of the period), 3x lands on two periods
+   * (493.9 Hz read as 246.9). Its half is taken when it is a dip on the
+   * decimated curve too (without decimation, at 8–16 kHz, a full-rate window
+   * between troughs can read as deep) and the full-rate frame is as periodic
+   * there as at 3x.
+   */
+  function halfOfTriple(cmnd, pick, buf, decimate, width) {
+    const half = refinedLag(cmnd, pick.lag) / 2;
+    const lo = Math.floor(half);
+    const lag = cmnd[lo + 1] < cmnd[lo] ? lo + 1 : lo;
+    if (cmnd[lag - 1] < cmnd[lag] || cmnd[lag + 1] < cmnd[lag]) return pick.lag;
+    return fullRateDepth(buf, half, decimate, width) <= 1.25 * pick.depth + 0.002 ? lag : pick.lag;
+  }
+
+  /**
+   * A formant-dominated upper partial can dip under the threshold at a
+   * fraction of the true period (110 Hz with a loud 3rd partial read as
+   * 330 Hz). Only a shallow dip is reconsidered, and the move to a multiple
+   * must hold on the full-rate frame too.
+   */
+  function promoteLag(cmnd, at, maxLag, buf, decimate) {
+    const width = buf.length - (maxLag + 3) * decimate;
+    if (cmnd[at] <= 0.1 || width < 64) return at;
+    if (!hasDeeperMultiple(cmnd, at, maxLag)) return at;
+    const here = fullRateDepth(buf, at, decimate, width);
+    if (here <= 0.06) return at;
+    const pick = shortestPeriodic(multipleDepths(cmnd, at, maxLag, buf, decimate, width), here);
+    if (!pick) return at;
+    return pick.k === 3 ? halfOfTriple(cmnd, pick, buf, decimate, width) : pick.lag;
+  }
+
+  /** First dip under the threshold at or after `lag`, as a refined lag; null if none. */
+  function firstPeriod(cmnd, lag, maxLag, buf, decimate) {
+    for (; lag <= maxLag; lag++) {
+      if (cmnd[lag] >= 0.18) continue;
+      while (lag < maxLag && cmnd[lag + 1] < cmnd[lag]) lag++;
+      lag = promoteLag(cmnd, lag, maxLag, buf, decimate);
+      return refinedLag(cmnd, lag);
+    }
+    return null;
+  }
+
+  /**
+   * A pitch above the measurable band can have a perfect second-period
+   * minimum *inside* the band (e.g. 1500 Hz masquerading as 750 Hz). Reject
+   * when its earlier period is unambiguously periodic; a shallow one whose
+   * multiple is the real period moves there. Returns that period's lag (the
+   * full-rate frame confirmed it), minLag to search from, or -1 to reject.
+   */
+  function aboveBandStart(cmnd, minLag, maxLag, buf, decimate) {
+    for (let shortLag = 2; shortLag < minLag; shortLag++) {
+      if (cmnd[shortLag] < 0.18 &&
+          cmnd[shortLag] <= cmnd[shortLag - 1] &&
+          cmnd[shortLag] <= cmnd[shortLag + 1]) {
+        const promoted = promoteLag(cmnd, shortLag, maxLag, buf, decimate);
+        return promoted < minLag ? -1 : promoted;
+      }
+    }
+    return minLag;
+  }
+
   /**
    * Confidence-gated YIN/CMND fundamental-frequency estimator.
    *
@@ -99,8 +264,12 @@
    * pitched A4 (440 Hz) was reported as A3 (220 Hz). It also assigned pitched
    * notes to white noise. The first sufficiently periodic YIN difference
    * minimum rejects both errors; rejecting uncertain frames is safer than
-   * awarding a false correct note. This still cannot prove the sound came
-   * from a human rather than the reference speaker.
+   * awarding a false correct note. A shallow first dip with a far deeper
+   * multiple (a weak fundamental under a loud upper partial) moves to the
+   * shortest multiple that the full-rate frame shows is about as periodic as
+   * the deepest, and only when it is far deeper than the dip there. This
+   * still cannot prove the sound came from a human rather than the
+   * reference speaker.
    *
    * Approximately 52–1060 Hz covers most practice targets, not every transposition.
    * Synthetic regression tests are necessary but not a substitute for a
@@ -126,41 +295,15 @@
     const minLag = Math.max(2, Math.floor(rate / 1060));
     const maxLag = Math.min(Math.ceil(rate / 52), Math.floor(n / 2));
     if (minLag >= maxLag - 1) return null;
-    const window = n - maxLag;
-    const cmnd = new Float32Array(maxLag + 1);
-    let cumulative = 0;
-    for (let lag = 1; lag <= maxLag; lag++) {
-      let difference = 0;
-      for (let i = 0; i < window; i++) {
-        const d = x[i] - x[i + lag];
-        difference += d * d;
-      }
-      cumulative += difference;
-      cmnd[lag] = cumulative > 0 ? (difference * lag) / cumulative : 1;
-    }
-    // A pitch above the measurable band can have a perfect second-period
-    // minimum *inside* the band (e.g. 1500 Hz masquerading as 750 Hz).
-    // Reject when its earlier period is already unambiguously periodic.
-    for (let shortLag = 2; shortLag < minLag; shortLag++) {
-      if (cmnd[shortLag] < 0.18 &&
-          cmnd[shortLag] <= cmnd[shortLag - 1] &&
-          cmnd[shortLag] <= cmnd[shortLag + 1]) return null;
-    }
-    let lag = minLag;
-    while (lag <= maxLag) {
-      if (cmnd[lag] < 0.18) {
-        while (lag < maxLag && cmnd[lag + 1] < cmnd[lag]) lag++;
-        const before = cmnd[lag - 1] ?? cmnd[lag];
-        const mid = cmnd[lag];
-        const after = cmnd[lag + 1] ?? cmnd[lag];
-        const denom = before - 2 * mid + after;
-        const offset = denom ? Math.max(-0.5, Math.min(0.5, 0.5 * (before - after) / denom)) : 0;
-        const freq = rate / (lag + offset);
-        return freq >= 52 && freq <= 1060 ? freq : null;
-      }
-      lag++;
-    }
-    return null;
+    const cmnd = cmndCurve(x, maxLag);
+    const start = aboveBandStart(cmnd, minLag, maxLag, buf, decimate);
+    if (start < 0) return null;
+    // A promoted start can look shallow on the decimated grid (the half of
+    // two periods), so it is not held to the threshold again.
+    const lag = start > minLag ? refinedLag(cmnd, start) : firstPeriod(cmnd, start, maxLag, buf, decimate);
+    if (lag == null) return null;
+    const freq = rate / lag;
+    return freq >= 52 && freq <= 1060 ? freq : null;
   }
 
   /**

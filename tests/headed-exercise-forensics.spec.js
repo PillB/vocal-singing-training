@@ -435,6 +435,8 @@ test("headed mouse-only forensics: exercises × formats", async ({ page }) => {
   test.setTimeout(4 * 60 * 60 * 1000);
 
   ensureDir(SHOT_ROOT);
+  // qa/geometry/ is not tracked, so a fresh checkout does not have it
+  fs.mkdirSync(path.dirname(REPORT_JSON), { recursive: true });
   await page.addInitScript(installClickLogInit);
   await boot(page, { lang: "es", tourDone: true, mic: "silent" });
   await quietOverlays(page);
@@ -764,8 +766,15 @@ test("headed mouse-only forensics: exercises × formats", async ({ page }) => {
           // ── Space hold (keyboard) while live ──
           if (liveProbe.live) {
             console.log(`    … Space hold`);
-            // focus canvas/body with a soft click away from buttons
-            await page.mouse.click(Math.min(60, fmt.width * 0.15), Math.min(100, fmt.height * 0.2));
+            // Take focus off Start/Stop and put it on the stage, so Space cannot
+            // press a button. Not a click at a fixed point: at 390 px wide that
+            // point is "← Practicar", and the click leaves the exercise.
+            await page.evaluate(() => {
+              const el = document.getElementById("pitch-canvas") || document.getElementById("highway-stage");
+              if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur();
+              if (el && !el.hasAttribute("tabindex")) el.tabIndex = -1;
+              el?.focus({ preventScroll: true });
+            });
             await page.waitForTimeout(80);
             entry.images.push(
               await capture(page, fmt.name, ex.id, "11_space_before.png", {

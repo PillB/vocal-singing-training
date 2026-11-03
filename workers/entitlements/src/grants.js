@@ -23,7 +23,7 @@
 
 import { getEntitlement } from "./store.js";
 import { isTokenIssuable, PLAN_IDS } from "./license.js";
-import { mintId, nowSec } from "./db.js";
+import { changedRows, mintId, nowSec } from "./db.js";
 
 /** Grant kinds an operator (or the trial flow) can create. */
 export const GRANT_KINDS = ["trial", "gift", "comp"];
@@ -65,22 +65,6 @@ export function grantIsOpenEnded(row) {
   }
   const days = (Number(row.ends_at) - Number(row.starts_at)) / 86400;
   return Number.isFinite(days) && days >= OPEN_ENDED_DAYS;
-}
-
-/**
- * How many rows a write actually changed.
- *
- * D1 reports this as `meta.changes`. A guarded UPDATE — one whose WHERE clause
- * carries the condition the caller is really asking about — is the only atomic
- * way to ask "was this still true when I wrote?", and this is how its answer is
- * read. A missing or unreadable meta counts as 0, which refuses rather than
- * grants: the safe direction when the database will not say.
- * @param {Object} result The result of a D1 `run()`.
- * @returns {number} Rows changed.
- */
-export function changedRows(result) {
-  const n = Number(result && result.meta && result.meta.changes);
-  return Number.isFinite(n) && n > 0 ? n : 0;
 }
 
 /** Gift codes use an unambiguous alphabet: no O/0, no I/1, no U (reads as V). */

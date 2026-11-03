@@ -162,11 +162,76 @@ export function normalizeEmail(value) {
 }
 
 /**
+ * How many rows a write actually changed.
+ *
+ * A guarded write — one carrying the condition the caller is really asking
+ * about in its WHERE clause — is the only atomic way to ask "is this still
+ * true?", and this reads its answer. An unreadable count is 0, which refuses
+ * rather than allows: the safe direction when the database will not say.
+ * @param {Object} result The result of a D1 `run()`.
+ * @returns {number} Rows changed.
+ */
+export function changedRows(result) {
+  const n = Number(result && result.meta && result.meta.changes);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+/**
+ * Whether a bucket has room, without writing anything.
+ *
+ * Reads are cheap and writes are the scarce thing (D1's free plan allows
+ * 100,000 rows written a day and 5,000,000 read), so a caller that wants to
+ * refuse a flood for free asks this first. It is also the first half of
+ * `hitRateLimit` below.
+ *
+ * @param {Object} db D1 database binding.
+ * @param {string} bucket Caller-scoped key, e.g. `login:ip:1.2.3.4`.
+ * @param {number} limit Maximum hits per window.
+ * @param {number} windowSeconds Window length.
+ * @param {number} [now] Injected clock.
+ * @param {number} [cost] How many hits the caller means to spend (default 1).
+ * @returns {Promise<{ok: boolean, count: number, retryAfter: number, windowStart: number}>}
+ *   Whether there is room, the count already stored, when the window turns
+ *   over, and which window that is.
+ */
+export async function peekRateLimit(db, bucket, limit, windowSeconds, now, cost) {
+  const at = nowSec(now);
+  const step = Number.isFinite(cost) && cost >= 1 ? Math.floor(cost) : 1;
+  const window = Math.max(1, Math.floor(windowSeconds));
+  const windowStart = at - (at % window);
+  const retryAfter = windowStart + window - at;
+  if (step > limit) {
+    return { ok: false, count: 0, retryAfter, windowStart };
+  }
+  const row = await db
+    .prepare("SELECT count, window_start FROM rate_limits WHERE bucket = ?1")
+    .bind(bucket)
+    .first();
+  const current = row && Number(row.window_start) === windowStart ? Number(row.count) : 0;
+  const held = Number.isFinite(current) ? current : 0;
+  return { ok: held + step <= limit, count: held, retryAfter, windowStart };
+}
+
+/**
  * Fixed-window rate limit backed by the `rate_limits` table.
  *
  * Fixed windows can let through up to 2x the limit across a window boundary.
- * That is fine here: these limits exist to stop email-bombing and code
- * guessing, not to meter a paid API.
+ * That is fine for every limit here: they exist to stop email-bombing, code
+ * guessing and a flood of reports, not to meter a paid API.
+ *
+ * What is NOT fine, and was the bug, is a lost update. This read the count,
+ * decided, and wrote the new count back, so a hundred requests arriving
+ * together each read 0 and each wrote 1, and all hundred passed a limit of ten
+ * (QA round 5, QA-39). The deciding write is now a single guarded statement
+ * that carries both the window and the limit in its WHERE clause, so the
+ * database does the comparison and only one of two racing callers can take the
+ * last slot. The read that comes first is no longer the decision: it is there
+ * to refuse an already-full bucket without writing at all, and to report the
+ * count.
+ *
+ * A refused call writes nothing. That matters beyond tidiness: the report
+ * route's ceiling exists to stop a public POST spending the day's writes, and
+ * a ceiling that itself wrote a row per refusal would be no ceiling.
  *
  * @param {Object} db D1 database binding.
  * @param {string} bucket Caller-scoped key, e.g. `login:ip:1.2.3.4`.
@@ -176,37 +241,43 @@ export function normalizeEmail(value) {
  * @param {number} [cost] How many hits this call spends (default 1); a call
  *   that would take the count past the limit spends nothing and is refused.
  * @returns {Promise<{ok: boolean, count: number, retryAfter: number}>} Decision.
+ *   `count` is what this call believes the bucket reached; with callers racing,
+ *   the stored count may be higher. Nothing decides anything on it.
  */
 export async function hitRateLimit(db, bucket, limit, windowSeconds, now, cost) {
-  const at = nowSec(now);
   const step = Number.isFinite(cost) && cost >= 1 ? Math.floor(cost) : 1;
-  const windowStart = at - (at % Math.max(1, Math.floor(windowSeconds)));
-  const row = await db
-    .prepare("SELECT count, window_start FROM rate_limits WHERE bucket = ?1")
-    .bind(bucket)
-    .first();
-  if (!row || Number(row.window_start) !== windowStart) {
-    if (step > limit) {
-      return { ok: false, count: 0, retryAfter: windowStart + windowSeconds - at };
-    }
-    await db
-      .prepare(
-        `INSERT INTO rate_limits (bucket, count, window_start) VALUES (?1, ?3, ?2)
-         ON CONFLICT(bucket) DO UPDATE SET count = ?3, window_start = ?2`
-      )
-      .bind(bucket, windowStart, step)
-      .run();
+  const room = await peekRateLimit(db, bucket, limit, windowSeconds, now, cost);
+  if (!room.ok) {
+    return { ok: false, count: room.count, retryAfter: room.retryAfter };
+  }
+  // A window that has turned over (or a bucket never seen) starts again at this
+  // call's cost. The WHERE makes it a no-op for a row already in this window,
+  // so two callers cannot both "start" it and lose each other's count.
+  const started = await db
+    .prepare(
+      `INSERT INTO rate_limits (bucket, count, window_start) VALUES (?1, ?3, ?2)
+       ON CONFLICT(bucket) DO UPDATE SET count = ?3, window_start = ?2
+       WHERE rate_limits.window_start <> ?2`
+    )
+    .bind(bucket, room.windowStart, step)
+    .run();
+  if (changedRows(started) > 0) {
     return { ok: true, count: step, retryAfter: 0 };
   }
-  const count = Number(row.count) + step;
-  if (count > limit) {
-    return { ok: false, count: Number(row.count), retryAfter: windowStart + windowSeconds - at };
-  }
-  await db
-    .prepare("UPDATE rate_limits SET count = ?2 WHERE bucket = ?1")
-    .bind(bucket, count)
+  // Already in this window: the increment carries the limit, so the row moves
+  // only while there is room for this call's cost.
+  const counted = await db
+    .prepare(
+      `UPDATE rate_limits SET count = count + ?3
+       WHERE bucket = ?1 AND window_start = ?2 AND count + ?3 <= ?4`
+    )
+    .bind(bucket, room.windowStart, step, limit)
     .run();
-  return { ok: true, count, retryAfter: 0 };
+  if (changedRows(counted) < 1) {
+    // Somebody else took the room between the read above and this write.
+    return { ok: false, count: limit, retryAfter: room.retryAfter };
+  }
+  return { ok: true, count: room.count + step, retryAfter: 0 };
 }
 
 /**

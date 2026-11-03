@@ -11,7 +11,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { handleRequest } from "../src/index.js";
-import { resetSchemaMemo, sweepExpired } from "../src/db.js";
+import { ensureSchema, resetSchemaMemo, sweepExpired } from "../src/db.js";
 import {
   REPORT_LIMITS,
   clampText,
@@ -140,10 +140,48 @@ test("a card number pasted into a report never reaches the database", async () =
   // Fifteen and nineteen digits are cards too (Amex, some Maestro).
   assert.equal(redactLongDigitRuns("378282246310005"), "[número oculto]");
   assert.equal(redactLongDigitRuns("6759649826438453058"), "[número oculto]");
+  // A paste is rarely as tidy as a hand-typed card: every one of these walked
+  // straight through the first version of the scrub (QA round 5, QA-41).
+  assert.equal(redactLongDigitRuns("4111\n1111 1111 1111"), "[número oculto]", "a line break");
+  assert.equal(redactLongDigitRuns("4111  1111  1111  1111"), "[número oculto]", "two spaces");
+  assert.equal(redactLongDigitRuns("4111\u00a01111\u00a01111\u00a01111"), "[número oculto]", "no-break spaces");
+  assert.equal(redactLongDigitRuns("4111.1111.1111.1111"), "[número oculto]", "dots");
+  assert.equal(redactLongDigitRuns("4111 - 1111 - 1111 - 1111"), "[número oculto]", "space, dash, space");
+  assert.equal(redactLongDigitRuns("４１１１１１１１１１１１１１１１"), "[número oculto]", "full-width digits");
+  assert.equal(redactLongDigitRuns("3782 822463 10005"), "[número oculto]", "an Amex as Amex groups it");
+  assert.equal(redactLongDigitRuns("4111 1111 1111 1"), "[número oculto]", "a thirteen-digit card");
+  // A card after a number that is not one: judging the whole run of digits and
+  // separators would find twenty digits, call it not a card, and store it.
+  assert.equal(
+    redactLongDigitRuns("a las 10.30 el 4111 1111 1111 1111 falló"),
+    "a las 10.30 el [número oculto] falló"
+  );
+  assert.equal(
+    redactLongDigitRuns("4111 1111 1111 1111 y 5500 0000 0000 0004"),
+    "[número oculto] y [número oculto]",
+    "two of them"
+  );
+
   // Things a report about singing legitimately contains are left alone.
   assert.equal(redactLongDigitRuns("el do4 a 261.63 Hz"), "el do4 a 261.63 Hz");
   assert.equal(redactLongDigitRuns("duró 1200 ms"), "duró 1200 ms");
   assert.equal(redactLongDigitRuns("VS-7F3KQ2MXNP"), "VS-7F3KQ2MXNP");
+  // And so is ordinary prose with several numbers in it, which is what the
+  // wider separator set could have cost. Every one of these is a run of digits
+  // and separators as long as a card; what saves them is that a card's groups
+  // are three digits or more.
+  assert.equal(redactLongDigitRuns("+51 987 654 321"), "+51 987 654 321", "a phone number");
+  assert.equal(
+    redactLongDigitRuns("987 654 321 el 5 a las 10.30 y el 2026"),
+    "987 654 321 el 5 a las 10.30 y el 2026"
+  );
+  assert.equal(redactLongDigitRuns("10.30 11.45 12.00 13.15"), "10.30 11.45 12.00 13.15", "four times");
+  assert.equal(
+    redactLongDigitRuns("2026-11-03 2026-11-04 2026-11-05"),
+    "2026-11-03 2026-11-04 2026-11-05",
+    "three dates"
+  );
+  assert.equal(redactLongDigitRuns("41111111111111119999"), "41111111111111119999", "twenty digits is no card");
 
   const env = freshEnv();
   const posted = await submit(env, {
@@ -355,6 +393,116 @@ test("one address cannot post more than its share, and the deployment has a ceil
   const busy = await submit(env, { kind: "bug", summary: "y otro" }, { ip: "198.51.100.33", now: NOW + 102 });
   assert.equal(busy.status, 429);
   assert.equal(busy.body.reason, "too_busy");
+});
+
+/** How many rows the rate-limit table holds, and what one bucket says. */
+async function limitRows(env) {
+  const rows = await env.DB.prepare("SELECT bucket, count FROM rate_limits ORDER BY bucket").all();
+  return rows.results || rows;
+}
+
+/** How many reports are stored. */
+async function storedReports(env) {
+  return Number((await env.DB.prepare("SELECT COUNT(*) AS n FROM reports").first()).n);
+}
+
+/** Spend the whole day's ceiling, as a flood would have. */
+function spendTheCeiling(env, at) {
+  return env.DB
+    .prepare(
+      `INSERT INTO rate_limits (bucket, count, window_start) VALUES ('rep:all', ?1, ?2)
+       ON CONFLICT(bucket) DO UPDATE SET count = ?1, window_start = ?2`
+    )
+    .bind(REPORT_LIMITS.perDeploymentDaily[0], at - (at % REPORT_LIMITS.perDeploymentDaily[1]))
+    .run();
+}
+
+test("reports arriving at the same moment cannot all pass one address's share", async () => {
+  const env = freshEnv();
+  await ensureSchema(env.DB);
+  const ip = "198.51.100.77";
+  // Four times the hourly allowance, all in flight together. The limiter used
+  // to read the count, decide, and write the new count back, so every one of
+  // these read zero and every one of them passed (QA round 5, QA-39).
+  const burst = REPORT_LIMITS.perIp[0] * 4;
+  const answers = await Promise.all(
+    Array.from({ length: burst }, (_, i) => submit(env, { kind: "bug", summary: `a la vez ${i}` }, { ip, now: NOW }))
+  );
+  const accepted = answers.filter((a) => a.status === 200).length;
+  assert.equal(accepted, REPORT_LIMITS.perIp[0], `${accepted} of ${burst} got through a limit of ${REPORT_LIMITS.perIp[0]}`);
+  assert.equal(await storedReports(env), REPORT_LIMITS.perIp[0], "and that is what the database holds");
+  const bucket = await env.DB.prepare("SELECT count FROM rate_limits WHERE bucket = ?1").bind(`rep:ip:${ip}`).first();
+  assert.equal(Number(bucket.count), REPORT_LIMITS.perIp[0], "the stored count never ran past the limit");
+  for (const answer of answers.filter((a) => a.status !== 200)) {
+    assert.equal(answer.status, 429, JSON.stringify(answer.body));
+  }
+});
+
+test("the day's ceiling cannot be overspent by requests arriving together", async () => {
+  const env = freshEnv();
+  await ensureSchema(env.DB);
+  const window = NOW - (NOW % REPORT_LIMITS.perDeploymentDaily[1]);
+  await env.DB
+    .prepare(
+      `INSERT INTO rate_limits (bucket, count, window_start) VALUES ('rep:all', ?1, ?2)
+       ON CONFLICT(bucket) DO UPDATE SET count = ?1, window_start = ?2`
+    )
+    .bind(REPORT_LIMITS.perDeploymentDaily[0] - 1, window)
+    .run();
+  // One place left, twenty callers from twenty different addresses.
+  const answers = await Promise.all(
+    Array.from({ length: 20 }, (_, i) =>
+      submit(env, { kind: "bug", summary: `el último ${i}` }, { ip: `198.51.100.${100 + i}`, now: NOW })
+    )
+  );
+  assert.equal(answers.filter((a) => a.status === 200).length, 1, "exactly one took the last place");
+  assert.equal(await storedReports(env), 1);
+  const ceiling = await env.DB.prepare("SELECT count FROM rate_limits WHERE bucket = 'rep:all'").first();
+  assert.equal(Number(ceiling.count), REPORT_LIMITS.perDeploymentDaily[0]);
+});
+
+test("once the day's ceiling is reached, being refused costs the database nothing", async () => {
+  const env = freshEnv();
+  await ensureSchema(env.DB);
+  await spendTheCeiling(env, NOW);
+  const before = await limitRows(env);
+
+  // A flood does not come from one address: an IPv6 /64 hands out more than
+  // anybody can use. Each refusal used to write the two per-address buckets
+  // before the ceiling was even consulted, so the thing protecting the day's
+  // writes was itself spending them (QA round 5, QA-40).
+  for (let i = 0; i < 25; i += 1) {
+    const refused = await submit(env, { kind: "bug", summary: `desde otra red ${i}` }, {
+      ip: `2001:db8:0:${i.toString(16)}::1`,
+      now: NOW + i
+    });
+    assert.equal(refused.status, 429);
+    assert.equal(refused.body.reason, "too_busy");
+  }
+
+  const after = await limitRows(env);
+  assert.deepEqual(after, before, "not one row was written, added or moved");
+  assert.equal(await storedReports(env), 0);
+});
+
+test("a report this route would refuse anyway does not spend the reporter's share", async () => {
+  const env = freshEnv();
+  await ensureSchema(env.DB);
+  const ip = "198.51.100.200";
+  // A client bug, or somebody pressing send on an empty form. Validation runs
+  // before the limits, so it costs neither a slot nor a row (QA round 5,
+  // QA-43).
+  for (const body of [{}, { kind: "bug" }, { kind: "nonsense", summary: "x" }, { kind: "bug", summary: "   " }]) {
+    const refused = await submit(env, body, { ip, now: NOW });
+    assert.equal(refused.status, 400, JSON.stringify(refused.body));
+  }
+  assert.deepEqual(await limitRows(env), [], "nothing was counted against them");
+
+  // And their whole hourly allowance is still there.
+  for (let i = 0; i < REPORT_LIMITS.perIp[0]; i += 1) {
+    const ok = await submit(env, { kind: "bug", summary: `ahora sí ${i}` }, { ip, now: NOW + i });
+    assert.equal(ok.status, 200, `report ${i}`);
+  }
 });
 
 test("only an admin reads reports, and the list filters, counts and pages", async () => {

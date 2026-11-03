@@ -22,11 +22,23 @@
  * tier's 100,000 daily writes: per address, per account, and a flat ceiling for
  * the whole deployment per day. Past the ceiling reports are refused with a
  * reason the page can translate, and nothing else on the worker is affected.
+ *
+ * Two things about that cap are easy to get wrong, and were:
+ * - **The gates have to be atomic.** A limiter that reads the count, decides,
+ *   and writes the new count back lets a burst through together, because each
+ *   request reads the same count. `hitRateLimit` now carries the limit in its
+ *   write and refuses when the write changes no row.
+ * - **A refusal has to be free.** The order below matters: the deployment
+ *   ceiling is read first and WITHOUT writing, because the per-address buckets
+ *   each write a row, and a flood does not come from one address — an IPv6 /64
+ *   hands out more addresses than anybody can use. Checked in the other order,
+ *   every refusal still spent two writes, and the ceiling that exists to
+ *   protect the day's writes was spending them.
  */
 
 "use strict";
 
-import { callerIp, ensureSchema, hitRateLimit, mintId, normalizeEmail, nowSec } from "./db.js";
+import { callerIp, ensureSchema, hitRateLimit, mintId, normalizeEmail, nowSec, peekRateLimit } from "./db.js";
 
 /** What a reporter can be telling us. */
 export const REPORT_KINDS = new Set(["bug", "idea"]);
@@ -138,6 +150,74 @@ export function isReferenceShape(value) {
   return typeof value === "string" && new RegExp(`^VS-[${REF_ALPHABET}]{${REF_LENGTH}}$`).test(value);
 }
 
+/** What is left between the digits of a card number somebody typed or pasted. */
+const DIGIT_SEPARATORS = " \t\r\n\u00a0\u202f\u2007.\u2013\u2014\\-";
+
+/** A run of digits and nothing but those separators between them. */
+const DIGIT_RUN = new RegExp(`[0-9](?:[0-9${DIGIT_SEPARATORS}]*[0-9])?`, "g");
+
+/** The marker a hidden number leaves behind. */
+const HIDDEN = "[número oculto]";
+
+/**
+ * Hide a card number inside one run of digits and separators.
+ *
+ * A card is 13 to 19 digits in groups of three or more — 4-4-4-4, 4-6-5 for
+ * Amex, or one unbroken run — so the groups of the run are walked and the
+ * first window of whole groups that adds up to a card is hidden. Walking
+ * windows rather than testing the whole run matters: "a las 10.30 el
+ * 4111 1111 1111 1111 falló" is one run, and judging it whole would find 20
+ * digits, call it not-a-card and store the card.
+ *
+ * Every group in a window must be three digits or more, which is what keeps
+ * ordinary prose safe: "987 654 321 el 5 a las 10.30" has groups of one and
+ * two in it and is left alone, as is a twelve-digit phone number. A window's
+ * LAST group may be shorter, because a thirteen-digit card is typed
+ * "4111 1111 1111 1".
+ *
+ * @param {string} run Digits and separators, nothing else.
+ * @returns {string} The run with any card-shaped window hidden.
+ */
+function hideCardInRun(run) {
+  // Alternating [digits, separators, digits, …]; a run always starts and ends
+  // with a digit, so even positions are groups.
+  const parts = run.split(/([^0-9]+)/);
+  const out = [];
+  let i = 0;
+  while (i < parts.length) {
+    let digits = 0;
+    let end = -1;
+    // Grow a window of whole groups from this one until it is a card, or until
+    // it cannot be (too many digits, or a short group that is not the last).
+    for (let j = i; j < parts.length; j += 2) {
+      const group = parts[j];
+      digits += group.length;
+      if (digits > 19) {
+        break;
+      }
+      if (digits >= 13) {
+        end = j;
+        break;
+      }
+      // A group of one or two digits can only ever be the last in a window, so
+      // reaching one without having reached 13 digits ends the attempt.
+      if (group.length < 3) {
+        break;
+      }
+    }
+    if (end < 0) {
+      out.push(parts[i], parts[i + 1] === undefined ? "" : parts[i + 1]);
+      i += 2;
+      continue;
+    }
+    out.push(HIDDEN);
+    // Keep the separator that followed the window, so the sentence still reads.
+    out.push(parts[end + 1] === undefined ? "" : parts[end + 1]);
+    i = end + 2;
+  }
+  return out.join("");
+}
+
 /**
  * Long digit runs replaced with a marker.
  *
@@ -145,15 +225,21 @@ export function isReferenceShape(value) {
  * were paying with into "what happened". Nothing else in a report about
  * singing is a thirteen-to-nineteen digit number, so the trade is one-sided:
  * we never store a card number, and no legitimate report loses anything.
- * Spaces and dashes inside the run are how a card is actually typed.
+ *
+ * The first version of this accepted one space or hyphen between digits, which
+ * a paste very often is not: a line break, two spaces, a no-break space from a
+ * web page, dots, " - ", or full-width digits from a CJK keyboard all walked
+ * straight through it (QA round 5, QA-41). Full-width digits are folded to
+ * ASCII first — it is a fair normalization of typed text in its own right —
+ * and the separators are now the whole set somebody plausibly types.
  * @param {string} text Text a person typed.
  * @returns {string} The same text with card-shaped runs removed.
  */
 export function redactLongDigitRuns(text) {
-  return String(text).replace(/\b(?:\d[ -]?){12,18}\d\b/g, (match) => {
-    const digits = match.replace(/[^\d]/g, "");
-    return digits.length >= 13 && digits.length <= 19 ? "[número oculto]" : match;
-  });
+  const folded = String(text).replace(/[\uff10-\uff19]/g, (d) =>
+    String.fromCharCode(d.charCodeAt(0) - 0xff10 + 48)
+  );
+  return folded.replace(DIGIT_RUN, (run) => (run.length < 13 ? run : hideCardInRun(run)));
 }
 
 /**
@@ -548,6 +634,34 @@ export async function handleSubmitReport(request, env, deps) {
       ...cors,
       "retry-after": String(gate.retryAfter)
     });
+
+  // Validation first, because it writes nothing. A body this route would refuse
+  // anyway must not spend one of the reporter's ten hourly slots, and must not
+  // cost the database a row either (QA round 5, QA-43).
+  const parsed = sanitizeReport(body, { accountId, at });
+  if (!parsed.ok) {
+    return json({ ok: false, reason: parsed.reason }, 400, cors);
+  }
+
+  // Then the deployment ceiling, read WITHOUT writing. This order is the whole
+  // protection: the per-address buckets below each write a row, so checking
+  // them first meant a flood from rotating addresses — an IPv6 /64 hands out
+  // more than anyone can use — spent two writes per refusal even after the
+  // ceiling was reached, which is exactly what the ceiling exists to prevent
+  // (QA round 5, QA-40). Refused here, a request costs reads and nothing else.
+  const room = await peekRateLimit(
+    env.DB,
+    "rep:all",
+    REPORT_LIMITS.perDeploymentDaily[0],
+    REPORT_LIMITS.perDeploymentDaily[1],
+    at
+  );
+  if (!room.ok) {
+    // Deliberately its own reason: this is our ceiling, not the reporter's
+    // fault, and the page says so and offers the copy-it-yourself way out.
+    return limited(room, "too_busy");
+  }
+
   const ip = callerIp(request);
   const hourly = await hitRateLimit(env.DB, `rep:ip:${ip}`, REPORT_LIMITS.perIp[0], REPORT_LIMITS.perIp[1], at);
   if (!hourly.ok) {
@@ -575,6 +689,8 @@ export async function handleSubmitReport(request, env, deps) {
       return limited(perAccount);
     }
   }
+  // The ceiling is spent last, so a request the limits above turned away does
+  // not consume one of the day's five hundred.
   const ceiling = await hitRateLimit(
     env.DB,
     "rep:all",
@@ -583,15 +699,9 @@ export async function handleSubmitReport(request, env, deps) {
     at
   );
   if (!ceiling.ok) {
-    // Deliberately its own reason: this is our ceiling, not the reporter's
-    // fault, and the page says so and offers the copy-it-yourself way out.
     return limited(ceiling, "too_busy");
   }
 
-  const parsed = sanitizeReport(body, { accountId, at });
-  if (!parsed.ok) {
-    return json({ ok: false, reason: parsed.reason }, 400, cors);
-  }
   await insertReport(env.DB, parsed.report);
   console.log("report stored", parsed.report.kind, parsed.report.area, parsed.report.id);
   return json({ ok: true, reference: parsed.report.id, report: toPublicReport(rowShape(parsed.report)) }, 200, cors);

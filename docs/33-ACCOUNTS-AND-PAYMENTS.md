@@ -291,6 +291,14 @@ feature runs in the browser, so devtools can still reach them. What is closed is
 forged, shared and post-cancellation entitlements — not a determined person with
 a debugger.
 
+**Signing in before paying is a gate on our own page, not on the payment.** A
+checkout started from the pricing panel refuses while nobody is signed in, which
+is where essentially everybody starts. The payment links themselves are ordinary
+public URLs, so somebody who goes straight to one still pays anonymously; that
+payment is tied to their browser, and `POST /v1/me/link` attaches it to an
+account afterwards. The gate exists so the common path produces an account, not
+because the link could be made private.
+
 ---
 
 ## Tests

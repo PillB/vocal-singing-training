@@ -6960,6 +6960,10 @@
     if (t2 && cfg.times[1]) t2.value = cfg.times[1];
     const bn = $("#chk-browser-notify");
     if (bn) bn.checked = !!cfg.browserNotify;
+    // A browser without notifications (an iPhone outside the home screen) has
+    // nothing to tick: the row would only ever answer "permission not granted".
+    const notifyRow = bn?.closest(".retain-check");
+    if (notifyRow) notifyRow.hidden = !("Notification" in window);
 
     const loopOn = loopArm();
 
@@ -6972,26 +6976,41 @@
       // loop's arm the start panel says so in its own words, a guided
       // session's copy included; the classic arm keeps the toast.
       window.VTLoop?.noteRest?.(fr);
-      if (!loopOn) toast(tt("retain.freezeUsed", { n: String(fr.left) }), { durationMs: 3200 });
+      if (!loopOn) {
+        const used = fr.days?.length || 1;
+        toast(
+          used > 1
+            ? tt("retain.freezeUsedN", { d: String(used), n: String(fr.left) })
+            : tt("retain.freezeUsed", { n: String(fr.left) }),
+          { durationMs: 3200 }
+        );
+      }
     }
 
     // The week card's way in to the reminder says whether one is set.
+    const remText =
+      cfg.enabled && cfg.times[0] ? tt("retain.openOn", { time: clockTime(cfg.times[0]) }) : tt("retain.open");
     const remLabel = $("#btn-reminder-label");
-    if (remLabel) {
-      remLabel.textContent =
-        cfg.enabled && cfg.times[0] ? tt("retain.openOn", { time: clockTime(cfg.times[0]) }) : tt("retain.open");
-    }
+    if (remLabel) remLabel.textContent = remText;
+    // The classic arm has no week card: its way in sits in the start panel.
+    const classicLabel = $("#btn-reminder-classic-label");
+    if (classicLabel) classicLabel.textContent = remText;
+    const classicRemind = $("#start-remind");
+    if (classicRemind) classicRemind.hidden = loopOn;
 
     // Welcome back after ≥2 days. With the daily loop the start panel itself
     // becomes the comeback screen, so this card would only repeat it lower
     // down, and its "▶ 5 min" would compete with the panel's one button. A
     // guided session left open keeps the panel's copy, so its kicker says it.
+    // A gap the rest days covered is rest, not a lapse: the ledger says which.
     const days = VTReminders.daysSinceLastPractice();
+    const sumDays = window.VTDays?.summary?.();
+    const away = sumDays ? !sumDays.todayDone && sumDays.comeback : days != null && days >= 2;
     const wb = $("#welcome-back");
     if (wb) {
       const dismissed =
         sessionStorage.getItem("vt_wb_dismiss") === dayKeyLocal();
-      const show = !loopOn && days != null && days >= 2 && !dismissed;
+      const show = !loopOn && away && days != null && !dismissed;
       wb.hidden = !show;
       if (show) {
         const body = $("#welcome-back-body");
@@ -7003,12 +7022,14 @@
     // render during page load used to hide the banner the first had just shown:
     // it was never visible. What was shown today stays until dismissed or until
     // practice makes it moot.
-    const ev = VTReminders.evaluate(isEs);
+    const mins = minimoMinutes();
+    const ev = VTReminders.evaluate(isEs, mins);
     const rd = $("#remind-due");
     if (rd) {
       const today = dayKeyLocal();
       if (ev.due && cfg.enabled) {
-        state.remindDue = { day: today, message: ev.message };
+        // The choice of sentence is kept, not its words: they follow the language.
+        state.remindDue = { day: today, messageIndex: ev.messageIndex };
         VTReminders.markNotified();
       }
       const keep =
@@ -7019,10 +7040,10 @@
       rd.hidden = !keep;
       if (keep) {
         const tx = $("#remind-due-text");
-        if (tx) tx.textContent = state.remindDue.message;
+        if (tx) tx.textContent = VTReminders.messageAt(state.remindDue.messageIndex, isEs, mins);
         // The label names what the button starts (see #rd-start's click).
         const go = $("#rd-start");
-        if (go) go.textContent = tt(loopOn ? "loop.remindCta" : "retain.micro5");
+        if (go) go.textContent = tt(loopOn ? "loop.remindCta" : "retain.micro5", { min: String(mins) });
         try {
           if (!state.remindDue.tracked) {
             state.remindDue.tracked = true;
@@ -7032,6 +7053,28 @@
           /* ignore */
         }
       }
+    }
+  }
+
+  /** Minutes the reminder's button starts: the Mínimo of the track on screen in the loop, else 5. */
+  function minimoMinutes() {
+    return VTReminders.practiceMinutes(state.tab === "vocal" ? "vocal" : "singing");
+  }
+
+  /**
+   * Hand focus to home's next step (or its heading) before a card that holds
+   * it is hidden: a hidden control leaves focus on the page body, where Tab
+   * starts again from wherever the card was.
+   */
+  function moveFocusOutOf(box) {
+    const a = document.activeElement;
+    if (!box || !a || a === document.body || !box.contains(a)) return;
+    const cta = $("#btn-next-step");
+    const to = cta && cta.getClientRects().length && !cta.closest("[hidden]") ? cta : $("#start-title");
+    try {
+      to?.focus({ preventScroll: true });
+    } catch {
+      /* ignore */
     }
   }
 
@@ -7070,7 +7113,12 @@
     // the way to turn it off. A box and a button for the same thing read as
     // two steps.
     const toggle = $("#chk-reminders")?.closest(".retain-toggle");
-    if (toggle) toggle.hidden = !on;
+    if (toggle) {
+      // Unticking hides the row that holds focus: the button that replaces it
+      // takes focus first, or the dialog's Escape stops hearing the keyboard.
+      if (!on && toggle.contains(document.activeElement)) $("#reminder-done")?.focus();
+      toggle.hidden = !on;
+    }
     const done = $("#reminder-done");
     if (done) done.textContent = tt(on ? "retain.done" : "retain.turnOn");
     const cancel = $("#reminder-cancel");
@@ -7118,15 +7166,21 @@
 
   function bindRetention() {
     $("#btn-reminder")?.addEventListener("click", openReminders);
+    $("#btn-reminder-classic")?.addEventListener("click", openReminders);
     const saveTimes = () => {
       const isPro = !!window.VTBilling?.can?.("extra_reminders");
       const times = [$("#rem-time-1")?.value || "18:00"];
       if (isPro && $("#rem-time-2")?.value) times.push($("#rem-time-2").value);
-      VTReminders.setConfig({
+      const before = VTReminders.getConfig();
+      const next = VTReminders.setConfig({
         enabled: !!$("#chk-reminders")?.checked,
         times,
         browserNotify: !!$("#chk-browser-notify")?.checked
       });
+      // A reminder switched on, or moved, after its time has already passed
+      // today is not owed at once: the first one is tomorrow's.
+      const changed = (next.enabled && !before.enabled) || before.times.join() !== next.times.join();
+      if (changed && VTReminders.isDue(next)) VTReminders.markNotified();
     };
     $("#chk-reminders")?.addEventListener("change", async (e) => {
       if (e.target.checked) {
@@ -7162,21 +7216,21 @@
         const perm = await VTReminders.requestBrowserPermission();
         if (perm !== "granted") {
           e.target.checked = false;
-          toast(tt("retain.notifyDenied"));
+          // No Notification in this browser is not a refusal (the row is hidden then).
+          if (perm !== "unsupported") toast(tt("retain.notifyDenied"));
         }
       }
       saveTimes();
     });
     $("#btn-ics-daily")?.addEventListener("click", () => {
-      VTReminders.downloadIcs({ freq: "DAILY", time: $("#rem-time-1")?.value, isEs: isEsLang() });
+      VTReminders.downloadIcs({ freq: "DAILY", time: $("#rem-time-1")?.value, isEs: isEsLang(), min: minimoMinutes() });
       toast(tt("retain.icsDownloaded"));
     });
     $("#btn-ics-weekly")?.addEventListener("click", () => {
-      VTReminders.downloadIcs({ freq: "WEEKLY", time: $("#rem-time-1")?.value, isEs: isEsLang() });
+      VTReminders.downloadIcs({ freq: "WEEKLY", time: $("#rem-time-1")?.value, isEs: isEsLang(), min: minimoMinutes() });
       toast(tt("retain.icsDownloaded"));
     });
     $("#wb-micro")?.addEventListener("click", () => startMicroSession("s15-sh-air-ladder"));
-    $("#wb-air")?.addEventListener("click", () => startMicroSession("s15-sh-air-ladder"));
     $("#wb-last")?.addEventListener("click", () => {
       const prog = VTStorage.getProgress() || {};
       let lastId = null;
@@ -7192,6 +7246,7 @@
     $("#wb-dismiss")?.addEventListener("click", () => {
       sessionStorage.setItem("vt_wb_dismiss", dayKeyLocal());
       const wb = $("#welcome-back");
+      moveFocusOutOf(wb);
       if (wb) wb.hidden = true;
     });
     // The reminder's button starts today's Mínimo in the loop's arm; the old
@@ -7205,6 +7260,7 @@
     $("#rd-dismiss")?.addEventListener("click", () => {
       state.remindDue = null;
       const rd = $("#remind-due");
+      moveFocusOutOf(rd);
       if (rd) rd.hidden = true;
     });
     document.addEventListener("visibilitychange", () => {

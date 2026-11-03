@@ -7611,6 +7611,10 @@ body.view-exercise .highway-stage {
   justify-self: start;
   gap: 0.35rem;
 }
+/* The classic arm's own way in to the reminder, under its start panel. */
+.start-remind {
+  margin: 0.4rem 0 0;
+}
 body.loop-on #start-panel .loop-remind-btn {
   grid-column: 1 / -1;
 }

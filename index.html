@@ -93,12 +93,26 @@
             <button type="button" class="btn btn-ghost btn-sm" id="rd-dismiss" data-i18n="retain.wbDismiss">Cerrar</button>
           </div>
         </div>
+        <!-- Welcome back (classic arm only): said first, with the due reminder, not
+             under the catalog. Its "5 min" is a plain button, so the start
+             panel's one primary stays the only one on the first screen. -->
+        <div class="welcome-back card" id="welcome-back" hidden>
+          <h3 data-i18n="retain.welcomeTitle">Bienvenido de nuevo</h3>
+          <p id="welcome-back-body" data-i18n="retain.welcomeBody">
+            Llevas unos días sin practicar. 5 minutos bastan para retomar el hábito — sin presión.
+          </p>
+          <div class="welcome-back-actions">
+            <button type="button" class="btn btn-sm" id="wb-micro" data-i18n="retain.micro5">▶ 5 min</button>
+            <button type="button" class="btn btn-sm" id="wb-last" data-i18n="retain.wbLast">Último ejercicio</button>
+            <button type="button" class="btn btn-ghost btn-sm" id="wb-dismiss" data-i18n="retain.wbDismiss">Cerrar</button>
+          </div>
+        </div>
         <!-- Start panel: the single decision point on home. One primary action,
              a first-visit explainer, and the guided session as the quiet alternative. -->
         <section class="hero start-panel" id="start-panel" aria-labelledby="start-title">
           <div class="start-main">
             <p class="start-kicker" id="start-kicker" data-i18n="start.kickerNew">Empieza aquí</p>
-            <h2 class="start-title" id="start-title" data-i18n="start.titleNew">Tu primera práctica, en 5 minutos</h2>
+            <h2 class="start-title" id="start-title" tabindex="-1" data-i18n="start.titleNew">Tu primera práctica, en 5 minutos</h2>
             <p class="start-sub" id="start-sub" data-i18n="start.subNew">
               Un estudio de voz en el navegador: elige un ejercicio, practica con el micrófono y guarda cómo te fue.
             </p>
@@ -214,6 +228,14 @@
               <span aria-hidden="true">🔔</span> <span id="btn-reminder-label" data-i18n="retain.open">Poner un recordatorio</span>
             </button>
           </aside>
+
+          <!-- The classic arm has no week card above, so its way in to the
+               reminder dialog sits here (js/app.js renderRetentionChrome hides it in the loop arm). -->
+          <p class="start-remind" id="start-remind" hidden>
+            <button type="button" class="btn btn-ghost btn-sm loop-remind-btn" id="btn-reminder-classic" aria-haspopup="dialog">
+              <span aria-hidden="true">🔔</span> <span id="btn-reminder-classic-label" data-i18n="retain.open">Poner un recordatorio</span>
+            </button>
+          </p>
         </section>
 
         <!-- Catalog: primary IA (track switch + filters + list) — high contrast, above dense studio chrome when collapsed -->
@@ -285,19 +307,6 @@
 
         <!-- Free-tier native tip / ad slot (never during practice; off until adsEnabled) -->
         <aside id="ad-slot-home" class="ad-slot" hidden aria-label="Studio tip"></aside>
-
-        <div class="welcome-back card" id="welcome-back" hidden>
-          <h3 data-i18n="retain.welcomeTitle">Bienvenido de nuevo</h3>
-          <p id="welcome-back-body" data-i18n="retain.welcomeBody">
-            Llevas unos días sin practicar. 5 minutos bastan para retomar el hábito — sin presión.
-          </p>
-          <div class="welcome-back-actions">
-            <button type="button" class="btn btn-primary btn-sm" id="wb-micro" data-i18n="retain.micro5">▶ 5 min</button>
-            <button type="button" class="btn btn-sm" id="wb-air" data-i18n="retain.wbAir">Aire SH</button>
-            <button type="button" class="btn btn-sm" id="wb-last" data-i18n="retain.wbLast">Último ejercicio</button>
-            <button type="button" class="btn btn-ghost btn-sm" id="wb-dismiss" data-i18n="retain.wbDismiss">Cerrar</button>
-          </div>
-        </div>
 
       </section>
 

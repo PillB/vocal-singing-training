@@ -309,6 +309,7 @@
       "retain.microStarted": "Micro-sesión · 5 minutos",
       "retain.freezesLeft": "Días de descanso guardados: {n}",
       "retain.freezeUsed": "Usamos un día de descanso: tu racha sigue · quedan {n}",
+      "retain.freezeUsedN": "Usamos {d} días de descanso: tu racha sigue · quedan {n}",
       "retain.compare": "Progreso: {prev} {arrow} {next}",
       "retain.heatmapTitle": "Mapa de práctica",
       "retain.heatmapSub": "26 semanas · cada casilla es un día",
@@ -972,7 +973,7 @@
       "loop.stat.minutes": "Llevas {n} minutos cantados en total.",
       "loop.stat.trills": "Hiciste trinos {n} días distintos. Así se construye una voz.",
       "loop.stat.weekday": "Tu día más fiel: los {day}.",
-      "loop.remindCta": "▶ Mínimo, 3 min",
+      "loop.remindCta": "▶ Mínimo, {min} min",
       "loop.routineLastTitle": "Último paso hecho",
       "loop.routineFinish": "Terminar la rutina",
       // Vocal is speaking practice: where the loop says "cantar", the Vocal
@@ -1363,6 +1364,7 @@
       "retain.microStarted": "Micro-session · 5 minutes",
       "retain.freezesLeft": "Rest days saved: {n}",
       "retain.freezeUsed": "We used a rest day: your streak carries on · {n} left",
+      "retain.freezeUsedN": "We used {d} rest days: your streak carries on · {n} left",
       "retain.compare": "Progress: {prev} {arrow} {next}",
       "retain.heatmapTitle": "Practice map",
       "retain.heatmapSub": "26 weeks · each cell is a day",
@@ -2011,7 +2013,7 @@
       "loop.stat.minutes": "You have sung {n} minutes in total.",
       "loop.stat.trills": "You have done lip trills on {n} different days. That is how a voice gets built.",
       "loop.stat.weekday": "Your most faithful day: {day}.",
-      "loop.remindCta": "\u25b6 Minimum, 3 min",
+      "loop.remindCta": "\u25b6 Minimum, {min} min",
       "loop.routineLastTitle": "Last step done",
       "loop.routineFinish": "Finish the routine",
       // The Vocal track's wording where the loop says "sang" (see the ES block).

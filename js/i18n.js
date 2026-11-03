@@ -501,6 +501,8 @@
       "pricing.toast.trialUsed": "Ya usaste tu prueba gratis en este navegador",
       "pricing.toast.verifyUnavailable":
         "Aún no abrimos los pagos: solo activamos Pro cuando el cobro queda verificado de extremo a extremo. Sigue practicando gratis.",
+      "pricing.toast.railUnavailable":
+        "Ese medio de pago no está disponible ahora mismo, así que no te cobramos nada. Inténtalo en un rato; si sigue igual, cuéntanoslo con «Reportar un problema».",
       "pricing.toast.verifyPending":
         "Confirmando tu pago… Pro se activa en cuanto el proveedor nos confirme.",
       "pricing.toast.verifyOk": "¡Pago verificado! Pro activo en este navegador.",
@@ -1556,6 +1558,8 @@
       "pricing.toast.trialUsed": "You already used the free trial in this browser",
       "pricing.toast.verifyUnavailable":
         "Checkout isn’t open yet: we only switch Pro on once a payment is verified end to end. Keep practicing free.",
+      "pricing.toast.railUnavailable":
+        "That payment method isn’t available right now, so you have not been charged. Try again in a while, and if it stays that way, tell us with “Report a problem”.",
       "pricing.toast.verifyPending":
         "Confirming your payment… Pro switches on as soon as the provider confirms.",
       "pricing.toast.verifyOk": "Payment verified — Pro is active in this browser.",

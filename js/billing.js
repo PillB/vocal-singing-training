@@ -218,6 +218,19 @@
     }
   }
 
+  /**
+   * Which payment rails the worker says it can honour, or null when nobody has
+   * asked yet. Read defensively: a build with no account layer has none of this.
+   * @returns {object|null} `{stripe, mercadopago}` or null.
+   */
+  function accountRails() {
+    try {
+      return global.VTAccount?.knownRails?.() || null;
+    } catch {
+      return null;
+    }
+  }
+
   function verificationConfigured() {
     try {
       return !!global.VTLicense?.isConfigured?.();
@@ -601,6 +614,26 @@
       const account = accountState();
       if (account && account.configured && !account.signedIn) {
         return { ok: false, mode: "signin_required", plan: planId, provider: providerId || null };
+      }
+      // A rail the worker cannot honour is not a rail. Mercado Pago's webhook
+      // is refused outright until MP_WEBHOOK_SECRET and MP_ACCESS_TOKEN exist,
+      // and nothing is written for a payment whose webhook was refused, so the
+      // claim route — which only ever reads what the webhook wrote — answers
+      // "pending" until the browser gives up after seven days. A payment taken
+      // in that window is money taken for Pro that can never be issued, and
+      // the only remedy left is to gift the buyer a grant by hand.
+      //
+      // "Set the secret before the link goes live" is the operator's order and
+      // stays the first line of defence. This is the net under it, in the one
+      // place that can see both halves.
+      //
+      // Only an explicit no stops a sale. A worker we could not reach, or one
+      // too old to report the field, is not an answer, and refusing without an
+      // answer would turn a flaky network into a lost sale.
+      const rail = providerId || preferredRail(detectRegion());
+      const rails = accountRails();
+      if (rails && rails[rail] === false) {
+        return { ok: false, mode: "provider_unavailable", plan: planId, provider: rail };
       }
       try {
         sessionStorage.setItem(

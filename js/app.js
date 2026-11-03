@@ -7526,6 +7526,11 @@
             toast(tt("pricing.checkoutNeedsAccount"), { durationMs: 4600 });
             closePricing();
             openAccount();
+          } else if (res.mode === "provider_unavailable") {
+            // The worker said it cannot honour this rail, so the press stops
+            // here rather than sending them to pay for something we could not
+            // then switch on.
+            toast(tt("pricing.toast.railUnavailable"), { durationMs: 6000 });
           } else if (res.mode === "verification_unavailable") {
             toast(tt("pricing.toast.verifyUnavailable"), { durationMs: 5200 });
           } else if (res.mode === "unconfigured") {
@@ -7545,6 +7550,10 @@
     // means the card is right by the time anyone reads it, and — as with the
     // account panel — only because somebody opened the panel.
     window.VTAccount?.ensureMethods?.();
+    // And which rails it can honour, for the same reason: asked when the panel
+    // opens, so the answer is there by the time a plan is pressed, and never
+    // asked of somebody who never looks at the prices.
+    window.VTAccount?.ensureRails?.();
     // Remember the trigger before renderPricingModal() rebuilds the card.
     const opener = document.activeElement;
     renderPricingModal();

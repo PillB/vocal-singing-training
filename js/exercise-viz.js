@@ -34,6 +34,9 @@
     );
   }
   function L(es, en) {
+    /* A mode panel that is mounting, starting or stopping records each pair, so a
+       language switch during a take can swap the words in place. */
+    if (global.VTModeRecord) global.VTModeRecord(es, en);
     return isEs() ? es : en;
   }
 

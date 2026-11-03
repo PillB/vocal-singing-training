@@ -2887,8 +2887,9 @@
    * language. Rendering it again opened it fresh, which mid-take put Empezar
    * over a live microphone and a running clock (the time sung after it was
    * not counted), and after Stop removed the take's recording and its Save.
-   * The mode's own panel and the details form keep their words until the
-   * next open: rebuilding them would lose what they hold.
+   * The mode's own panel and the details form are not rebuilt (that would
+   * lose what they hold): the panel's words are swapped in place when the take
+   * stops (stopPractice), or at once when none is running (onChange).
    */
   function relabelExercise() {
     const ex = state.exercise;
@@ -4183,10 +4184,14 @@
         modeResult = state.modeInstance.onStop({
           pitchGame: window.VTAppPitchGameSnap || null
         });
+        // The language was switched during the take: the panel (built in the
+        // old one) and its review text now read in the new one
+        if (state.langChangedMidTake) state.modeInstance.relabel?.();
       }
     } catch (e) {
       console.warn(e);
     }
+    state.langChangedMidTake = false;
     if (state.practiceLive || state.practice.running) {
       try {
         state.practice.setManualSound?.(false, null, { forceClear: true });
@@ -9000,17 +9005,89 @@
     goHome: () => (state.view === "exercise" ? leaveExercise({ type: "home" }) : setView("home"))
   };
 
+  /**
+   * A language switch on an exercise that has not started: rebuilt in the new
+   * language like a fresh open, but the panels the learner had open (steps and
+   * tips, the rating card, the piano), the microphone notice and the scroll
+   * position stay where they were.
+   */
+  function renderExerciseInPlace() {
+    const keep = {
+      guide: !!state.guideOpen,
+      metrics: !!state.metricsOpen,
+      piano: !!state.pianoOpen,
+      mic: !!$("#mic-blocked") && !$("#mic-blocked").hidden,
+      y: window.scrollY
+    };
+    renderExercise();
+    if (keep.guide) $("#btn-toggle-guide")?.click();
+    if (keep.metrics) openMetricsPanel(true, { reveal: false });
+    if (keep.piano && !$("#btn-toggle-piano")?.hidden) $("#btn-toggle-piano")?.click();
+    if (keep.mic) {
+      relabelMicBlocked();
+      const box = $("#mic-blocked");
+      if (box) box.hidden = false;
+    }
+    // Opening the panels brought them into view; put the page back
+    const back = () => {
+      if (Math.abs(window.scrollY - keep.y) > 2) window.scrollTo({ top: keep.y, behavior: "instant" });
+    };
+    requestAnimationFrame(() => {
+      back();
+      requestAnimationFrame(back);
+    });
+    setTimeout(back, 250);
+  }
+
+  /**
+   * The microphone notice is written when it opens. After a language switch it
+   * says the same thing in the new language: the words on screen are matched
+   * against the old language's versions of its texts, and the new language's
+   * version of the one that matches is written.
+   */
+  function relabelMicBlocked() {
+    const I = window.VTI18n;
+    const textEl = $("#mic-blocked-text");
+    if (!I || !textEl) return;
+    const old = I.strings[I.lang === "es" ? "en" : "es"] || {};
+    const now = (textEl.textContent || "").trim();
+    const heads = Object.keys(old).filter((k) => /^mic\.(blocked|missing)\.(none|partial)$/.test(k) && typeof old[k] === "string");
+    const runs = Object.keys(old).filter((k) => /^mic\.runs\./.test(k));
+    for (const k of heads) {
+      const forms = old[k].includes("{runs}") ? runs.map((r) => [r, old[k].replace("{runs}", old[r])]) : [[null, old[k]]];
+      const hit = forms.find(([, text]) => text.trim() === now);
+      if (hit) {
+        textEl.textContent = I.t(k, hit[0] ? { runs: I.t(hit[0]) } : undefined);
+        break;
+      }
+    }
+    const retry = $("#btn-mic-retry");
+    if (retry) retry.textContent = tt("mic.blocked.retry");
+    const skip = $("#btn-mic-skip");
+    if (skip) skip.textContent = tt("mic.blocked.skip");
+    const close = $("#btn-mic-close");
+    if (close) close.setAttribute("aria-label", tt("a11y.close"));
+  }
+
   function init() {
     ensureRangeAdapter();
-    updateOctaveUI();
     installGlobalErrorHandlers();
     if (window.VTI18n) {
       VTI18n.init();
       VTI18n.onChange = () => {
         renderExerciseList();
+        updateOctaveUI();
         if (state.view === "exercise" && state.exercise) {
-          if (exerciseUnderWay()) relabelExercise();
-          else renderExercise();
+          if (exerciseUnderWay()) {
+            relabelExercise();
+            // A take is running: its panel changes when it stops. Otherwise now.
+            if (state.practiceLive || state.practiceStarting) state.langChangedMidTake = true;
+            else state.modeInstance?.relabel?.();
+            if (!$("#mic-blocked")?.hidden) relabelMicBlocked();
+          } else {
+            state.langChangedMidTake = false;
+            renderExerciseInPlace();
+          }
         }
         if ($("#step-done") && !$("#step-done").hidden) renderStepDone();
         // Plan and history build their copy at render time, so a language

@@ -202,13 +202,29 @@
 
     /**
      * A profile name as it is kept: trimmed, at most 32 characters, and never
-     * cut through the middle of one (an emoji is two UTF-16 units, and slicing
-     * units left half of it). "" when nothing is left.
+     * cut through the middle of one (an emoji is two UTF-16 units, and a flag
+     * or a family emoji is several code points). "" when nothing is left.
      * @param {unknown} name What was typed.
      * @returns {string} The name to store, or "".
      */
     cleanProfileName(name) {
-      return Array.from(String(name ?? "").trim()).slice(0, 32).join("").trim();
+      const text = String(name ?? "").trim();
+      const chars = Array.from(text);
+      if (chars.length <= 32) return text;
+      // Cut between whole characters as a person sees them (a flag or a family
+      // emoji is several code points) when the browser can say where they end.
+      if (typeof Intl !== "undefined" && Intl.Segmenter) {
+        let out = "";
+        let count = 0;
+        for (const part of new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(text)) {
+          const n = Array.from(part.segment).length;
+          if (count + n > 32) break;
+          out += part.segment;
+          count += n;
+        }
+        return out.trim();
+      }
+      return chars.slice(0, 32).join("").trim();
     },
 
     /**

@@ -46,13 +46,15 @@
     return !!(container && container.isConnected && !container.closest("[hidden]"));
   }
 
-  function isFocusable(el) {
+  function isFocusable(el, allowScripted) {
     if (!el || el.nodeType !== 1) return false;
     if (el.disabled) return false;
     if (el.tagName === "INPUT" && el.type === "hidden") return false;
     if (el.getAttribute("aria-hidden") === "true") return false;
     const ti = el.getAttribute("tabindex");
-    if (ti !== null && Number(ti) < 0) return false;
+    // A heading made focusable by script (tabindex="-1") cannot be tabbed to,
+    // but it can take focus back when the opener is gone.
+    if (ti !== null && Number(ti) < 0 && !allowScripted) return false;
     if (el.closest("[hidden]")) return false;
     if (inCollapsedDisclosure(el)) return false;
     return !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
@@ -136,7 +138,7 @@
     // fallbackFocus is read here, at the end, when its answer is the one that counts.
     if (!el || !el.isConnected || !isFocusable(el)) {
       el = resolve(trap.fallback, trap.container);
-      if (!el || !el.isConnected || !isFocusable(el)) return;
+      if (!el || !el.isConnected || !isFocusable(el, true)) return;
     }
     const active = document.activeElement;
     // Only take focus back if the dialog still had it.

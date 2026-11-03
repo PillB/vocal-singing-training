@@ -739,6 +739,8 @@
       const res = await syncNow(id);
       if (res.ok || res.reason === "deleted") continue;
       if (STOPS_ALL.has(res.reason)) return;
+      // Waiting for the owner question is not a failed save: the panel asks it.
+      if (res.reason === "other_owner") continue;
       failed = failed || res.reason;
     }
     if (failed && !lastError) {
@@ -873,6 +875,7 @@
     const me = accountId();
     if (!isAvailable() || !me) return { ok: false, reason: "signed_out" };
     writeOwner(me);
+    if (lastError === "other_owner") lastError = null;
     emit();
     const active = global.VTStorage.getActiveProfileId();
     const ids = localProfileIds().filter((id) => id === active || bagHasPractice(global.VTStorage.readSyncBag(id)));
@@ -915,6 +918,7 @@
       });
     }
     writeOwner(me);
+    if (lastError === "other_owner") lastError = null;
     restoreAside(me);
     let result = { ok: true };
     for (const id of ids) {

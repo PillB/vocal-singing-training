@@ -1030,8 +1030,8 @@
    * the person reading it is worse than one that never restored.
    */
   function restoreY(y, drawn) {
-    if (!(y > 0)) return;
     if (stopRestore) stopRestore();
+    if (!(y > 0)) return;
     const quit = new AbortController();
     let over = false;
     const finish = () => {
@@ -4141,8 +4141,8 @@
       state.practice.onHoldLogged = (sec) => {
         // Counting aloud is not a held note: the engine logs any voicing of
         // 2 s or more, so a speaking drill (no hold readout) logs nothing.
-        // Singing is unchanged until the owner decides whether trills and
-        // sirens count toward the longest note.
+        // Every singing exercise still logs its holds, trills and sirens
+        // included.
         if (!showHold && ex.track !== "singing") return;
         if (window.VTStorage) VTStorage.addHoldLog(sec);
         renderHoldHistory();

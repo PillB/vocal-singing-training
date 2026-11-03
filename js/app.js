@@ -2494,7 +2494,11 @@
    * @returns {string[]} the steps, for the stage's guide
    */
   function renderExerciseText(ex) {
-    $("#ex-title").textContent = window.VTI18n ? VTI18n.exTitle(ex) : ex.title;
+    const name = window.VTI18n ? VTI18n.exTitle(ex) : ex.title;
+    const titleEl = $("#ex-title");
+    titleEl.textContent = name;
+    // The one-row header cuts a long name on a phone; the full one stays on hover and long press
+    titleEl.title = name;
     const tier = ex.tier || "basic";
     // Inside today's basics every step is a warm-up of the routine's track,
     // whatever catalog track and tier the exercise has on its own.
@@ -2891,6 +2895,8 @@
     if (!ex) return;
     const profile = getProfile(ex);
     renderStageGuide(renderExerciseText(ex), !profile.showPitch);
+    relabelPianoPanel(ex);
+    updateOctaveUI();
     const cue = $("#mode-cue");
     if (cue) cue.textContent = (window.VTI18n?.lang === "es" && profile.cueEs) || profile.cue || tt("practice.hint");
     // The switch put these back to their defaults (data-i18n); say what is true now.
@@ -2985,6 +2991,99 @@
     if (sel.value !== mode) sel.value = mode;
   }
 
+  /** A progression's name and description in the page language (the data carries both). */
+  function progName(p, id) {
+    return (isEsLang() && p.nameEs) || p.name || id || "";
+  }
+  function progDesc(p) {
+    return (isEsLang() && p.descriptionEs) || p.description || "";
+  }
+
+  /**
+   * The line under the chips: the selected progression and, after ▶ or Bucle,
+   * how it plays (state.chordPlayHint). Written again by a language switch.
+   */
+  function paintChordDesc() {
+    const el = $("#chord-desc");
+    if (!el) return;
+    const p = (VTPiano?.getProgressions?.() || VT_PROGRESSIONS || {})[state.selectedProg];
+    if (!p) return;
+    let text = progDesc(p) || progName(p, state.selectedProg);
+    const h = state.chordPlayHint;
+    if (h) {
+      const es = isEsLang();
+      text += h.oneNote
+        ? es
+          ? " · 1 nota a la vez"
+          : " · one note at a time"
+        : h.arpeggio
+          ? es
+            ? " · arpegio"
+            : " · arpeggio"
+          : es
+            ? " · acordes"
+            : " · chords";
+      text += h.oneNote
+        ? es
+          ? ` · ${h.sustainSec}s por nota`
+          : ` · ${h.sustainSec}s per note`
+        : h.sustain
+          ? es
+            ? ` · sostenido ${h.sustainSec}s`
+            : ` · sustain ${h.sustainSec}s`
+          : "";
+    }
+    el.textContent = text;
+  }
+
+  /** Song cards of a song exercise (s3), in the page language. */
+  function renderSongCards(ex) {
+    const row = $("#songs-row");
+    if (!row) return;
+    row.hidden = !ex?.songs;
+    if (!ex?.songs) return;
+    const keys = { feel: "piano.songFeel", better: "piano.songBetter" };
+    row.innerHTML = ex.songs
+      .map(
+        (s) => `
+        <div class="card" style="padding:0.75rem;">
+          <strong>${escapeHtml(keys[s.id] ? tt(keys[s.id]) : s.title)}</strong>
+          <p class="muted" style="margin:0.25rem 0 0.5rem;font-size:0.85rem;">${escapeHtml(tt("piano.songKey"))} · ${escapeHtml(tt("piano.songTip"))}</p>
+          <button type="button" class="btn btn-sm btn-singing" data-song-prog="${escapeHtml(s.prog)}">${escapeHtml(tt("piano.songPlay"))}</button>
+        </div>`
+      )
+      .join("");
+    $$("[data-song-prog]", row).forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        selectProgression(btn.dataset.songProg);
+      });
+    });
+  }
+
+  /**
+   * A language switch on the piano panel: the chips, the select's options, the
+   * song cards and the description say it in the new language. Option text and
+   * chip text change; values, the choice and the playing piano do not.
+   */
+  function relabelPianoPanel(ex) {
+    const progs = VTPiano?.getProgressions?.() || VT_PROGRESSIONS || {};
+    $$("#sel-progression option").forEach((o) => {
+      const p = progs[o.value];
+      if (!p) return;
+      o.textContent = progName(p, o.value);
+      o.title = progDesc(p);
+    });
+    $$("#prog-buttons .prog-btn").forEach((b) => {
+      const p = progs[b.dataset.progId];
+      if (!p) return;
+      b.textContent = progName(p, b.dataset.progId);
+      b.title = progDesc(p);
+    });
+    renderSongCards(ex);
+    paintChordDesc();
+    syncSustainSecLabel();
+  }
+
   function fillProgressionSelect(keys) {
     const sel = $("#sel-progression");
     const bar = $("#hud-prog-bar");
@@ -3002,8 +3101,8 @@
       .map((id) => {
         const p = progs[id];
         if (!p) return "";
-        const label = p.name || id;
-        return `<option value="${id}" title="${(p.description || "").replace(/"/g, "&quot;")}">${label}</option>`;
+        const label = progName(p, id);
+        return `<option value="${id}" title="${progDesc(p).replace(/"/g, "&quot;")}">${label}</option>`;
       })
       .join("");
     sel.value = cur;
@@ -3019,16 +3118,15 @@
     $$(".prog-btn").forEach((b) => {
       b.classList.toggle("active", b.dataset.progId === id);
     });
-    if ($("#chord-desc")) {
-      $("#chord-desc").textContent = p.description || p.name || "";
-    }
+    state.chordPlayHint = null;
+    paintChordDesc();
     if (
       (state.exercise?.audio?.pitchViz || state.exercise?.practice?.showPitch) &&
       !(state.exercise && getProfile(state.exercise)?.noProgression)
     ) {
       lockHighwayForProgression(id);
     }
-    if (!silent) applyPianoOptionsHot("prog:" + (p.name || id));
+    if (!silent) applyPianoOptionsHot("prog:" + progName(p, id));
   }
 
   /**
@@ -3070,7 +3168,15 @@
                   ? tt("piano.modeArpeggio")
                   : what === "chords"
                     ? tt("piano.modeChords")
-                    : String(what);
+                    : /^oct:/.test(String(what))
+                      ? tt("range.shiftedManual", { n: String(what).slice(4) })
+                      : what === "sustain"
+                        ? tt("piano.sustain")
+                        : what === "auto"
+                          ? tt("piano.auto")
+                          : /^\d+s$/.test(String(what))
+                            ? tt("piano.secsLabel", { n: parseInt(what, 10) })
+                            : String(what);
           toast(tt("piano.hotApplied", { what: label }), { debounceMs: 450 });
         }
         return !!ok;
@@ -3099,8 +3205,8 @@
       b.type = "button";
       b.className = "prog-btn" + (state.selectedProg === id ? " active" : "");
       b.dataset.progId = id;
-      b.textContent = p.name;
-      b.title = p.description;
+      b.textContent = progName(p, id);
+      b.title = progDesc(p);
       b.addEventListener("click", () => selectProgression(id));
       progWrap.appendChild(b);
     });
@@ -3129,24 +3235,7 @@
       const b = $(s);
       if (b) b.hidden = ownNotes;
     });
-    if ($("#songs-row")) $("#songs-row").hidden = !ex.songs;
-    if (ex.songs) {
-      $("#songs-row").innerHTML = ex.songs
-        .map(
-          (s) => `
-        <div class="card" style="padding:0.75rem;">
-          <strong>${s.title}</strong>
-          <p class="muted" style="margin:0.25rem 0 0.5rem;font-size:0.85rem;">${s.keyHint} · Use stanzas you know. Practice with piano, not full copyrighted tracks.</p>
-          <button type="button" class="btn btn-sm btn-singing" data-song-prog="${s.prog}">Play song progression</button>
-        </div>`
-        )
-        .join("");
-      $$("[data-song-prog]").forEach((btn) => {
-        btn.addEventListener("click", async () => {
-          selectProgression(btn.dataset.songProg);
-        });
-      });
-    }
+    renderSongCards(ex);
   }
 
   function pianoOptions() {
@@ -3254,25 +3343,13 @@
         // Re-apply same lock (same option) — never shrink to current chord
         // prog is already transposed by playProgression
         if (state.pitchViz) state.pitchViz.setProgressionRange(prog);
-        const modeHint = opts.oneNote
-          ? isEsLang()
-            ? " · 1 nota a la vez"
-            : " · one note at a time"
-          : opts.arpeggio
-            ? isEsLang()
-              ? " · arpegio"
-              : " · arpeggio"
-            : isEsLang()
-              ? " · acordes"
-              : " · chords";
-        const holdHint = opts.oneNote
-          ? isEsLang()
-            ? ` · ${opts.sustainSec}s por nota`
-            : ` · ${opts.sustainSec}s per note`
-          : opts.sustain
-            ? ` · sustain ${opts.sustainSec}s`
-            : "";
-        $("#chord-desc").textContent = prog.description + modeHint + holdHint;
+        state.chordPlayHint = {
+          oneNote: !!opts.oneNote,
+          arpeggio: !!opts.arpeggio,
+          sustain: !!opts.sustain,
+          sustainSec: opts.sustainSec
+        };
+        paintChordDesc();
         const sec = String(opts.sustainSec);
         toast(
           loop
@@ -8961,6 +9038,7 @@
         if ($("#pricing-modal") && !$("#pricing-modal").hidden) renderPricingModal();
       };
     }
+    updateOctaveUI();
     syncGuideLinks();
     const settings = VTStorage.getSettings();
     state.tab = settings.lastTab || "vocal";

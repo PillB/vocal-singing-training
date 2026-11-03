@@ -189,7 +189,7 @@
 
           <!-- Daily loop: the lifetime count first, the week, then the streak.
                Replaces the first-visit explainer once there is a day sung. -->
-          <aside class="loop-today" id="loop-today" hidden aria-label="Práctica">
+          <aside class="loop-today" id="loop-today" hidden aria-label="Práctica" data-i18n-aria="loop.todayAria">
             <p class="loop-count"><strong id="loop-days">0</strong> <span id="loop-days-label"></span></p>
             <p class="loop-next-ms muted" id="loop-next-ms"></p>
             <p class="loop-week-k muted" id="loop-week-k" aria-hidden="true"></p>
@@ -325,17 +325,17 @@
               <div class="hud-corner hud-tl">
                 <span class="status-pill" id="practice-status" data-i18n="practice.ready">Tiempo</span>
                 <span class="timer-display" id="timer-display">05:00</span>
-                <span class="hold-live" id="hold-display" hidden title="Hold">↓0.0s</span>
+                <span class="hold-live" id="hold-display" hidden title="Sostenido" data-i18n-title="piano.holdTitle">↓0.0s</span>
                 <span class="chord-now" id="chord-now">—</span>
               </div>
               <div class="hud-corner hud-tm" id="hud-prog-bar" hidden>
                 <label class="hud-prog-field" for="sel-progression">
                   <span class="hud-prog-k" data-i18n="piano.chords">Acordes</span>
-                  <select id="sel-progression" class="select-inline hud-prog-select" aria-label="Progresión de acordes"></select>
+                  <select id="sel-progression" class="select-inline hud-prog-select" aria-label="Progresión de acordes" data-i18n-aria="piano.progAria"></select>
                 </label>
                 <label class="hud-prog-field" for="sel-play-mode">
                   <span class="hud-prog-k" data-i18n="piano.playMode">Modo</span>
-                  <select id="sel-play-mode" class="select-inline hud-prog-select" aria-label="Modo de piano">
+                  <select id="sel-play-mode" class="select-inline hud-prog-select" aria-label="Modo de piano" data-i18n-aria="piano.modeAria">
                     <option value="oneNote" data-i18n="piano.modeOneNote" selected>1 nota</option>
                     <option value="arpeggio" data-i18n="piano.modeArpeggio">Arpegio</option>
                     <option value="chords" data-i18n="piano.modeChords">Acordes</option>
@@ -408,15 +408,15 @@
                     <span data-i18n="range.auto">A mi voz</span>
                   </label>
                 </div>
-                <label class="muted piano-opt" title="One note at a time / 1 nota a la vez">
+                <label class="muted piano-opt" title="1 nota a la vez" data-i18n-title="piano.oneNoteTitle">
                   <input type="checkbox" id="chk-one-note" checked />
                   <span data-i18n="piano.oneNote">1 nota</span>
                 </label>
-                <label class="muted piano-opt piano-opt-arp" title="Arpeggio / Arpegio">
-                  <input type="checkbox" id="chk-arpeggio" aria-label="Arpeggio" />
+                <label class="muted piano-opt piano-opt-arp" title="Arpegio" data-i18n-title="piano.arpeggioTitle">
+                  <input type="checkbox" id="chk-arpeggio" />
                   <span data-i18n="piano.arpeggio">Arpegio</span>
                 </label>
-                <label class="muted piano-opt" title="Sustain / Sostener">
+                <label class="muted piano-opt" title="Sostener" data-i18n-title="piano.sustainTitle">
                   <input type="checkbox" id="chk-sustain" checked />
                   <span data-i18n="piano.sustain">Sostener</span>
                 </label>
@@ -427,7 +427,7 @@
                     <option value="5">5s</option>
                   </select>
                 </label>
-                <label class="muted piano-opt" id="opt-auto-piano" title="Auto piano">
+                <label class="muted piano-opt" id="opt-auto-piano" title="Piano automático" data-i18n-title="piano.auto">
                   <input type="checkbox" id="chk-auto-piano" checked />
                   <span data-i18n="piano.auto">Piano automático</span>
                 </label>
@@ -671,7 +671,7 @@
                 <strong data-i18n="pro.insightsTitle">Análisis Pro</strong>
                 <span class="pro-lock" id="pro-insights-lock" hidden data-i18n="pro.locked">Pro</span>
               </div>
-              <div class="pro-spark" id="pro-spark" aria-hidden="true" title="28 days"></div>
+              <div class="pro-spark" id="pro-spark" aria-hidden="true" title="28 días" data-i18n-title="pro.sparkTitle"></div>
               <p class="pro-focus" id="pro-coach-focus"></p>
               <p class="muted pro-hold-trend" id="pro-hold-trend"></p>
             </div>
@@ -1096,7 +1096,7 @@
           </ul>
           <p class="pricing-personal muted" id="pricing-personal" hidden></p>
         </div>
-        <div class="pricing-rails" id="pricing-rails" role="group" aria-label="Payment method"></div>
+        <div class="pricing-rails" id="pricing-rails" role="group" aria-label="Método de pago" data-i18n-aria="pricing.railsAria"></div>
         <div class="pricing-grid" id="pricing-grid"></div>
         <div class="pricing-foot">
           <button type="button" class="btn btn-sm" id="btn-export-progress" data-i18n="pricing.export" hidden>

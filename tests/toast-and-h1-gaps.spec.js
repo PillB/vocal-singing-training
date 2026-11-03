@@ -152,7 +152,8 @@ for (const c of [
 for (const lang of ["es", "en"]) {
   test(`A ${lang}: the toast stands in the row from a 120 px span and 4 px under it below that, at every width from 280 to 340`, async ({ page }) => {
     await openWithToastsOn(page, { width: 280, height: 640 }, lang, 100);
-    await page.evaluate((t) => window.VTToast(t, { durationMs: 600000 }), PAUSED[lang]);
+    // kept: the row may cut it, so the span alone decides where it stands
+    await page.evaluate((t) => window.VTToast(t, { durationMs: 600000, kept: true }), PAUSED[lang]);
     const seen = { row: 0, under: 0 };
     for (let width = 280; width <= 340; width += 5) {
       await page.setViewportSize({ width, height: 640 });

@@ -4368,7 +4368,8 @@ body.account-open {
   border: 1px solid var(--border);
   color: var(--text);
   padding: 0.75rem 1.15rem;
-  border-radius: 999px;
+  /* A pill for one line; a message that wraps keeps corners the text does not run out of */
+  border-radius: 1.4rem;
   box-shadow: var(--shadow);
   /* Above every overlay: the dialogs (.modal-overlay 100, pricing 120,
      account 125) and the tour (10000–10002). At 100 the pricing toasts drew

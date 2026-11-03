@@ -219,8 +219,14 @@ ends (QA-28); `VTStorage.createProfile` defaults to the Pro cap (QA-30).
   runs it on every PR. `node qa/mutate.mjs stage a11y flows billing audit`
   runs the browser sets (sticky stage and piano, one h1 and the language of
   each half on every page, the per-exercise flow test, the console routes to
-  Pro, the forensic audit's own probes); CI runs those after the production
-  contracts. Each set first proves its tests green on the unmutated code.
+  Pro, the forensic audit's own probes); CI runs each set in its own job
+  (`mutation`, a matrix) beside the production contracts, because the five
+  together outlived a single 30-minute job (QA-45). Each set first proves its
+  tests green on the unmutated code. An a11y mutant is judged by the one spec
+  written to catch it (`A11Y_KILLER` in `qa/mutate.mjs`; a mutant with no
+  entry is a build error); `MUTATE_WIDE=1 node qa/mutate.mjs a11y` (or
+  `--wide`) judges it by all six specs at once and runs nightly, so a spec
+  that stopped killing its mutant while another still does shows up there.
 - `npx playwright test --project=chromium` — the **PR gate**: headless,
   deterministic, one generated test per exercise where a suite walks the
   catalog, so shards balance and a failure names the exercise. No retries

@@ -64,8 +64,8 @@
     "sha": "319fd17f4fbb6fd1"
   },
   "js/app.js": {
-    "v": "20261103f",
-    "sha": "0fc6a0581b018cd1"
+    "v": "20261103g",
+    "sha": "a59aa38d5f238ef4"
   },
   "js/auth-users.generated.js": {
     "v": "20261006a",
@@ -112,8 +112,8 @@
     "sha": "178ba56877e20400"
   },
   "js/i18n.js": {
-    "v": "20261103a",
-    "sha": "98258c284dbbf402"
+    "v": "20261103b",
+    "sha": "e60e1d7e9d2cff80"
   },
   "js/license.js": {
     "v": "20261103d",
@@ -204,12 +204,12 @@
     "sha": "5f2c4f4ee948f2a5"
   },
   "js/session.js": {
-    "v": "20260924c",
-    "sha": "970c4630a8ee761b"
+    "v": "20261103a",
+    "sha": "9caee4c0ff168c46"
   },
   "js/storage.js": {
-    "v": "20261103a",
-    "sha": "c258071819748ee6"
+    "v": "20261103b",
+    "sha": "f453142870b23007"
   },
   "js/sync.js": {
     "v": "20261102a",

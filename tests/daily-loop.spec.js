@@ -271,6 +271,9 @@ test.describe("Daily loop", () => {
   });
 
   test("Mínimo run: two steps, the completion card, and home says done for today", async ({ page }) => {
+    // Two steps of 40 s of fake time each, drawn frame by frame: ~45 s on an idle machine, so the default 60 s
+    // is a coin flip on a busy one (it timed out in practiseStep, not in an assertion).
+    test.setTimeout(150000);
     await boot(page, { days: ledger(["2026-09-20", "2026-09-21", "2026-09-22"]), cardOn: true });
     await page.locator("#btn-next-step").click();
     await expect(page.locator("#view-exercise")).toHaveClass(/active/);

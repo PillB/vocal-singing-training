@@ -9418,5 +9418,17 @@
     });
   }
 
+  /**
+   * QA-47: when the browser refuses a save the page still works from memory (js/storage.js), but nothing
+   * survives a reload. Say so once, whether the refusal came before this ran (the first read writes the
+   * default profile) or comes later.
+   */
+  function bindStorageNotice() {
+    const say = () => toast(tt("toast.storageUnsaved"));
+    window.addEventListener("vt:storage-unsaved", say);
+    if (window.VTStorage?.isUnsaved?.()) say();
+  }
+
   document.addEventListener("DOMContentLoaded", init);
+  document.addEventListener("DOMContentLoaded", bindStorageNotice);
 })();

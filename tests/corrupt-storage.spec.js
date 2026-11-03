@@ -4,6 +4,10 @@
 // Sources of such a value in the wild: a sync write from the server, an import, another build's schema.
 // Adopted from the QA thread (round 4 part C, QA-35). Control: a clean boot passes. Currently red for: vt_settings_v1 (null, 42), vt_progress_v1 (null),
 // vt_hold_logs_v1 (42 at boot; null when the first exercise opens), vt_session_v1 (array, 42: usable but throws).
+// QA-44 (found on d59d574 by the QA thread, after the first fix): an OBJECT without `order` ({}, {"order":null}, {"path":"daily"})
+// passed a check of the container type and then threw at js/session.js progressLabel on every setView; the banner showed
+// "Sesion guiada" with no position and the rest of setView never ran. A reader that checks only the container type is not enough:
+// it has to check the fields the callers dereference (order is an array, index is a finite number).
 const { test, expect } = require("@playwright/test");
 
 const CASES = [
@@ -14,6 +18,12 @@ const CASES = [
   ["vt_hold_logs_v1", "null"],
   ["vt_session_v1", "[1,2,3]"],
   ["vt_session_v1", "42"],
+  // QA-44: valid JSON of the right container but without the fields the callers dereference
+  ["vt_session_v1", "{}"],
+  ["vt_session_v1", '{"order":null}'],
+  ["vt_session_v1", '{"path":"daily"}'],
+  ["vt_session_v1", '{"order":["v1-breath-flow"]}'],
+  ["vt_session_v1", '{"order":["v1-breath-flow"],"index":"0"}'],
   // Added with the fix: the same class in the event log (js/analytics.js reads it on every tracked event)
   ["vt_analytics_v1", "null"],
   ["vt_analytics_v1", "42"],
@@ -54,3 +64,36 @@ for (const [key, value] of CASES) {
     expect(errors).toEqual([]);
   });
 }
+
+// QA-44 at the reader itself: the stored value is judged by the fields callers use, not by its container.
+const SESSION_GOOD = { mode: "structured", track: "vocal", path: "basic", order: ["v1-breath-flow", "v2-lip-trill"], index: 1, status: "active", completedIds: ["v1-breath-flow"] };
+
+async function sessionAfterBoot(page, stored) {
+  await boot(page, { vt_session_v1: JSON.stringify(stored) });
+  return page.evaluate(() => {
+    const s = window.VTSession.get();
+    return s && { order: s.order, index: s.index, completedIds: s.completedIds };
+  });
+}
+
+test("a stored session with its order and index is read as it is", async ({ page }) => {
+  const s = await sessionAfterBoot(page, SESSION_GOOD);
+  expect(s).toEqual({ order: ["v1-breath-flow", "v2-lip-trill"], index: 1, completedIds: ["v1-breath-flow"] });
+});
+
+for (const bad of [{}, { order: null }, { path: "daily" }, { order: ["v1-breath-flow"] }, { order: ["v1-breath-flow"], index: "0" }, { order: "v1-breath-flow", index: 0 }, { order: [], index: NaN }]) {
+  test(`a stored session ${JSON.stringify(bad)} is no session`, async ({ page }) => {
+    expect(await sessionAfterBoot(page, bad)).toBeNull();
+  });
+}
+
+test("a stored session without completedIds still completes a step", async ({ page }) => {
+  const partial = { ...SESSION_GOOD };
+  delete partial.completedIds;
+  await boot(page, { vt_session_v1: JSON.stringify(partial) });
+  const r = await page.evaluate(() => {
+    const next = window.VTSession.markCurrentComplete();
+    return { completedIds: next.completedIds, index: next.index };
+  });
+  expect(r).toEqual({ completedIds: ["v2-lip-trill"], index: 2 });
+});

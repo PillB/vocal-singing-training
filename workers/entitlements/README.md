@@ -485,6 +485,29 @@ Consequences worth understanding before you ship:
   Closing the rest of this needs one writer per license (a Durable Object, or
   a D1 row updated only when its stored `occurredAt` is older), which this
   worker does not have.
+- **A period an event names only counts if it was still running when the
+  charge was taken.** Every rail answers "what did this money buy?" twice: the
+  event names a period, and the charge inside it implies one. The named period
+  wins, because any payment taken mid-cycle (an upgrade, a proration, an
+  invoice retried after dunning) names the period it belongs to and counting
+  an interval from the charge would hand out a free month on each one. But a
+  named period that had *already ended* at the moment of the charge cannot be
+  what the charge bought, and trusting one of those takes a month away from
+  somebody who has just renewed: Creem's `subscription.paid` fires on every
+  renewal and its docs never say whether the snapshot carries the new period
+  or the one just paid off. So the period end and the charge time are compared,
+  and an already-closed period falls back to the interval. At the exact
+  boundary the interval is counted, which can give away a month that was
+  already paid for, because locking out a payer is the worse failure.
+- **A Stripe renewal's period comes from the subscription's own invoice line,
+  not the invoice's first.** Stripe sorts an invoice's lines with pending
+  invoice items *including prorations* first, so after any plan change the
+  renewal invoice's first line is a proration ending at the period that just
+  closed. Reading it recorded the wrong month, and on a monthly-to-yearly
+  upgrade read the plan off the credit line and stored a year's payment as a
+  month. The line picked is the one whose period ends last among the lines that
+  are the subscription's own, in both the pre- and post-`2025-03-31` payload
+  shapes; a longer add-on invoice item on the same invoice does not count.
 
 ## Registering the webhooks
 

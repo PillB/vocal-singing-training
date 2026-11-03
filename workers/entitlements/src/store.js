@@ -1093,6 +1093,34 @@ export async function upsertEntitlement(kv, update, options) {
     applyIfPresent(record, "status", update.status);
     applyIfPresent(record, "planSource", update.planSource);
     const ownPeriodEnd = update.periodEnd !== undefined && Number.isFinite(update.periodEnd);
+    // A named period only stands in for the charge when it can be the period
+    // that charge bought: one that had already ended at the moment of the
+    // charge cannot be. A subscription snapshot serialised before the period
+    // rolled over, or an invoice line for the period that just closed, both
+    // name a period that is already over, and counting an interval from the
+    // charge is then the only account there is of what the money bought. A
+    // period still running when it was charged (an upgrade, a proration, an
+    // invoice retried after dunning) is named precisely because the charge is
+    // NOT a new month.
+    //
+    // Both ways of getting this wrong have been live in this file, and they
+    // are not equally bad. Counting an interval from every charge gave a free
+    // month on every payment taken mid-cycle (CR12, fixed in ee862ce).
+    // Trusting every named period took a month away from somebody who had
+    // just renewed (QA round 8c, OPC2; VG-53). So the boundary goes the
+    // generous way: a period ending at the very moment of the charge counts as
+    // over, and may hand out a month that was already paid for, because
+    // locking out a payer is the worse failure. `<` in place of `<=` there is
+    // caught by OPC2.
+    //
+    // `Number.isFinite` on the charge time is a guard for the reader, not a
+    // decision: `Math.floor(undefined)` is NaN and every comparison with NaN
+    // is false, so dropping it changes no outcome and no mutant of it dies.
+    // What is load-bearing is reading the period the EVENT named rather than
+    // the one the record already held (OPC3 is the case that separates them: a
+    // renewal collected after access had lapsed).
+    const namedPeriodIsCurrent = ownPeriodEnd
+      && !(Number.isFinite(update.periodEndFromCharge) && Math.floor(update.periodEnd) <= Math.floor(update.periodEndFromCharge));
     if (ownPeriodEnd) {
       const end = Math.floor(update.periodEnd);
       // `periodEndIsFloor` is set by an event that reports one billing period
@@ -1119,7 +1147,7 @@ export async function upsertEntitlement(kv, update, options) {
     // charge handed out up to a whole extra month every time (QA round 8,
     // found while narrowing CR12). This is what the sentence above always
     // said and the code did not do.
-    if (!ownPeriodEnd) {
+    if (!namedPeriodIsCurrent) {
       const recount = record.plan !== planBefore;
       extendForCharge(record, recount ? record.chargedAt : update.periodEndFromCharge);
     }

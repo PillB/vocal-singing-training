@@ -556,8 +556,93 @@ function mapSubscription(subscription, env, deleted) {
  * @param {boolean} paid Whether the invoice was paid.
  * @returns {Object} Entitlement update descriptor.
  */
+/**
+ * Whether an invoice line is something other than the subscription's own
+ * charge: a proration, or an invoice item (an add-on billed on the same
+ * invoice). Both API shapes are read, because which one arrives follows the
+ * API version the Stripe account is pinned to and that is not ours to choose:
+ * before 2025-03-31 a line carried `proration` and `type: "invoiceitem"`; since
+ * then the same two facts live at `parent.subscription_item_details.proration`
+ * and `parent.type === "invoice_item_details"` (both verbatim from
+ * docs.stripe.com/api/invoice-line-item/object, read 3 November 2026).
+ *
+ * The invoice-item clauses are what carry the weight: an invoice item's period
+ * is arbitrary, so a year-long add-on on a monthly renewal invoice reads as a
+ * year of Pro unless it is excluded (OPS5, OPS5d in own-period-end.test.mjs,
+ * which is what killed that mutant). The two proration clauses are belt and
+ * braces: a proration's period "ends at the period end of the subscription",
+ * so a proration can never end after the subscription's own line on the same
+ * invoice, and dropping either clause alone changes no documented outcome
+ * because `periodLineOf` then picks the same line by period end anyway. They
+ * stay because they say what the rule means, not because a test needs them.
+ *
+ * `parent.type` names which hash holds the details, so a line with
+ * `invoice_item_details` is already excluded by the type check and reading a
+ * proration flag out of that hash would be unreachable.
+ * @param {Object} line Invoice line.
+ * @returns {boolean} True when the line is not the subscription's own period.
+ */
+function isSideLine(line) {
+  if (!line || typeof line !== "object") {
+    return true;
+  }
+  const parent = line.parent && typeof line.parent === "object" ? line.parent : {};
+  const subscriptionItem = parent.subscription_item_details || {};
+  return line.proration === true || subscriptionItem.proration === true
+    || line.type === "invoiceitem" || parent.type === "invoice_item_details";
+}
+
+/**
+ * The line that says what period a paid invoice bought.
+ *
+ * Not `lines.data[0]`, which is what this used to read. An invoice's lines are
+ * "sorted as follows: (1) pending invoice items (including prorations) in
+ * reverse chronological order, (2) subscription items in reverse chronological
+ * order, and (3) invoice items added after invoice creation in chronological
+ * order" (docs.stripe.com/api/invoices/object, read 3 November 2026). So after
+ * any plan change the renewal invoice's FIRST line is a proration for the
+ * period that just closed, and reading it took a month from somebody who had
+ * just paid for one, and recorded a yearly upgrade as monthly (QA round 8c,
+ * OPS2/OPS2d/OPS3; VG-54).
+ *
+ * The rule: among the lines that are the subscription's own, the one whose
+ * period ends last. Taking the FIRST non-side line would give the same answer
+ * for every payload Stripe documents, since subscription items come in reverse
+ * chronological order, but that ordering is exactly what this function was
+ * burned trusting once, so the period end decides and not the position. The
+ * two halves back each other up, and the mutants say exactly how far:
+ *   - Dropping both, back to `lines.data[0]`, is caught three times (OPS2,
+ *     OPS2d, OPS3).
+ *   - Dropping the side-line filter is caught by the year-long add-on (OPS5,
+ *     OPS5d), which is the case the period end alone gets wrong.
+ *   - Reversing the period-end comparison is caught by nothing, because with
+ *     the filter in place a documented payload leaves only one subscription
+ *     line to choose from. It stays so that the answer does not rest on
+ *     Stripe's ordering.
+ *
+ * The fallbacks are for invoices that have no subscription line at all, where
+ * nothing on the invoice says what subscription period was bought: an invoice
+ * billed entirely of add-ons, or of the prorations of an immediate upgrade.
+ * The period an invoice names is a floor on paid-through and never a ceiling
+ * (`periodEndIsFloor` below), so the last-ending line is the one answer there
+ * that cannot shorten access, and the subscription's own next event replaces
+ * it outright. No test separates that from `lines[0]`: every payload the docs
+ * describe puts the same line first either way, so it is a choice of which way
+ * to be wrong on an undocumented shape, not a tested decision.
+ * @param {Object} invoice Stripe invoice.
+ * @returns {Object|null} The line, or null.
+ */
+function periodLineOf(invoice) {
+  const lines = invoice && invoice.lines && Array.isArray(invoice.lines.data) ? invoice.lines.data : [];
+  const ending = (line) => (line && line.period ? unixOrNull(line.period.end) : null);
+  const latest = (list) => list.reduce((best, line) => (
+    ending(line) !== null && (best === null || ending(line) > ending(best)) ? line : best
+  ), null);
+  return latest(lines.filter((line) => !isSideLine(line))) || latest(lines) || lines[0] || null;
+}
+
 function mapInvoice(invoice, env, paid) {
-  const line = invoice && invoice.lines && Array.isArray(invoice.lines.data) ? invoice.lines.data[0] : null;
+  const line = periodLineOf(invoice);
   const priceId = idOf(line && line.price)
     || idOf(line && line.pricing && line.pricing.price_details && line.pricing.price_details.price);
   const byPrice = planFromPriceId(priceId, env);

@@ -3398,10 +3398,29 @@
       weekPlan: es ? "Plan 12 semanas" : "12-week plan",
       recordOnly: es ? "Grabar y revisar" : "Record & review",
       pauseDetect: es ? "Pausas" : "Pauses",
-      fillerDetect: es ? "Muletillas" : "Fillers"
+      fillerDetect: es ? "Muletillas" : "Fillers",
+      countPace: es ? "Cuenta a ritmo" : "Paced counting",
+      articulationContrast: es ? "Contraste con bolígrafo" : "Pen contrast",
+      speechEnergy: es ? "Conversación" : "Conversation",
+      reviewSession: es ? "Grabar y revisar" : "Record & review",
+      metronomeSpeech: es ? "Fluidez con metáforas" : "Metaphor fluency",
+      keyPointPace: es ? "Ritmo y punto clave" : "Pace and key point",
+      gestureReps: es ? "Gestos con intención" : "Purposeful gestures",
+      facePhases: es ? "Expresión facial" : "Facial expression",
+      concisionGate: es ? "Puerta de concisión" : "Concision gate",
+      storyTimer: es ? "Historia con pico" : "Story with a peak",
+      authorityLand: es ? "Cierre con autoridad" : "Authority close",
+      energyMatch: es ? "Ajustar la energía" : "Energy match",
+      releaseFlow: es ? "Soltar mandíbula y cuello" : "Jaw & neck release",
+      breathCycle: es ? "Respiración costo-abdominal" : "Low rib & belly breath",
+      openSpace: es ? "Espacio interno" : "Inner space",
+      vowelLadder: es ? "Cinco vocales" : "Five vowels",
+      resonanceZone: es ? "Zonas de resonancia" : "Resonance zones",
+      placementAB: es ? "Comparar colocaciones" : "Placement compare",
+      trillSolfege: es ? "Solfeo en trino de labios" : "Lip-trill solfège"
     };
-    if (!modeId) return es ? "práctica" : "practice";
-    return map[modeId] || String(modeId).replace(/([A-Z])/g, " $1").trim();
+    // A mode with no name here is called plain "practice": its id never reaches the learner
+    return map[modeId] || (es ? "práctica" : "practice");
   }
 
   function setPracticeUI(live) {

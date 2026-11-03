@@ -437,7 +437,7 @@ test.describe("cross-12: the first seconds", () => {
     expect(early.cls, "held while it could still arrive").toContain("vt-i18n-pending");
     expect(early.vis).toBe("hidden");
     await expect
-      .poll(() => page.evaluate(() => getComputedStyle(document.body).visibility), { timeout: 8000, intervals: [250] })
+      .poll(() => page.evaluate(() => getComputedStyle(document.body).visibility), { timeout: 12000, intervals: [250] })
       .toBe("visible");
     const late = await page.evaluate(() => ({ cls: document.documentElement.className, lang: document.documentElement.lang, nav: document.getElementById("btn-history").textContent.trim() }));
     expect(late.cls).not.toContain("vt-i18n-pending");

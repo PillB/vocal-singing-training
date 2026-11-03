@@ -26,7 +26,8 @@
            are the last thing the page loads, so until then the first paint was
            Spanish. The page is held here and let go as soon as i18n.js has
            translated it. Whatever else happens, it is let go: when a script
-           fails to load or throws, and after four seconds. A page that was
+           fails to load or throws, and after eight seconds (a first visit on a slow
+           phone connection needs about four for the scripts alone). A page that was
            never translated says it is Spanish. */
         try {
           if (localStorage.getItem("vt_lang") !== "en") return;
@@ -41,7 +42,7 @@
           h.lang = "es";
         };
         window.addEventListener("error", letGo, true);
-        setTimeout(letGo, 4000);
+        setTimeout(letGo, 8000);
       })();
     </script>
     <style>

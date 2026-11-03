@@ -642,6 +642,14 @@
    * @returns {boolean} True when the stage was made taller.
    */
   function growStageForContent(stage, railTop, railBottom) {
+    // A screen on its side (500px or less high) keeps the stage on one screen:
+    // growing it would push Start below the fold, and its rails fold and wrap
+    // to fit (see the short-landscape rules in css).
+    try {
+      if (window.matchMedia("(max-height: 500px)").matches) return false;
+    } catch {
+      /* ignore */
+    }
     const h = stage.getBoundingClientRect().height;
     let need = railTop + railBottom + STAGE_MIN_LANES;
     // A mode panel that is cut off with no way to scroll to the rest (a picture's
@@ -653,7 +661,8 @@
       const cutOff = (el) =>
         el && /^(hidden|clip)$/.test(getComputedStyle(el).overflowY) ? el.scrollHeight - el.clientHeight : 0;
       const over = Math.max(cutOff(wrap), cutOff(wrap?.querySelector(".mode-panel")));
-      if (over > 1) need = Math.max(need, h + over);
+      // A few px of padding or rounding is not a row of words cut off.
+      if (over > 8) need = Math.max(need, h + over);
     }
     if (h >= need - 0.5) return false;
     const px = `${Math.ceil(need)}px`;

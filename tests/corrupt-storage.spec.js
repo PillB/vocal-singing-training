@@ -97,3 +97,24 @@ test("a stored session without completedIds still completes a step", async ({ pa
   });
   expect(r).toEqual({ completedIds: ["v2-lip-trill"], index: 2 });
 });
+
+// QA-35 for the event log, at the reader: the tracker is best-effort, so the app swallows its exception and a
+// log of the wrong kind never shows up as a page error. What does show is whether the next event is kept.
+// Wrong: a number, an array or `{events: 5}` is used as the log, track() throws on it, and every event after is lost.
+const PROBE = () => {
+  const result = window.VTAnalytics.track("qa35_probe", {});
+  const stored = JSON.parse(localStorage.getItem("vt_analytics_v1") || "null");
+  return { result, names: stored && Array.isArray(stored.events) ? stored.events.map((e) => e.name) : null };
+};
+
+test("control: with no stored log the next event is recorded", async ({ page }) => {
+  await boot(page, {});
+  expect(await page.evaluate(PROBE)).toEqual({ result: "recorded", names: expect.arrayContaining(["qa35_probe"]) });
+});
+
+for (const bad of ["null", "42", "[1,2]", '{"events":5}', '{"events":"x"}', '{"events":null}']) {
+  test(`vt_analytics_v1 = ${bad}: the next event starts a fresh log and is kept`, async ({ page }) => {
+    await boot(page, { vt_analytics_v1: bad });
+    expect(await page.evaluate(PROBE)).toEqual({ result: "recorded", names: expect.arrayContaining(["qa35_probe"]) });
+  });
+}

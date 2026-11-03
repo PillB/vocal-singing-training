@@ -23,17 +23,20 @@ async function exportName(page, at) {
     localStorage.setItem("vt_billing_trial_started_v1", now);
   }, new Date(at).toISOString());
   await boot(page, { lang: "es" });
-  const download = page.waitForEvent("download");
+  // The export is two files, the JSON pack and the coach's .txt; each is named on its own line of code
+  const names = [];
+  page.on("download", (d) => names.push(d.suggestedFilename()));
   await page.evaluate(() => document.getElementById("btn-export-progress").click());
-  return (await download).suggestedFilename();
+  await expect.poll(() => names.length).toBe(2);
+  return names.sort();
 }
 
 test("the export is named for the learner's day: 2 November at 20:30 in Lima", async ({ page }) => {
-  expect(await exportName(page, LIMA_EVENING)).toBe("vocal-studio-progress-2026-11-02.json");
+  expect(await exportName(page, LIMA_EVENING)).toEqual(["vocal-studio-coach-summary-2026-11-02.txt", "vocal-studio-progress-2026-11-02.json"]);
 });
 
 test("control: at noon the file carries the same date", async ({ page }) => {
-  expect(await exportName(page, LIMA_NOON)).toBe("vocal-studio-progress-2026-11-02.json");
+  expect(await exportName(page, LIMA_NOON)).toEqual(["vocal-studio-coach-summary-2026-11-02.txt", "vocal-studio-progress-2026-11-02.json"]);
 });
 
 /** The deck's starting card on a fresh open of the exercise at `at`. */

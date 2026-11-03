@@ -801,6 +801,18 @@ webhook → claim → token flow through the router with a fake `fetch`.
   prorated month two, because the sum cannot tell a prorated period from an
   unpaid one.
 
+  The second of those is narrowed, because as first written it was wrong in
+  both directions. A proration charged at once mid-cycle is an equal-end paid
+  invoice too, and it was taking the period over from the payment that bought
+  it: the refund of the proration then ended a month it had not bought, and
+  the refund of the real payment left that month running. When two payments
+  end the same period, the first one bought it and the later one topped it up,
+  so the record keeps the period its id was recorded for and an equal-end
+  invoice is taken only when no payment has claimed that period yet. A refund
+  of a top-up therefore ends nothing by identity and falls to the arithmetic,
+  which errs toward keeping access — the right side to err on for a credit the
+  customer did not ask to lose a month for.
+
   The remedy for a current-API renewal is the one that always worked:
   cancel the subscription in Stripe, which ends renewals, and revoke the grant
   from the admin page if the current period should go too.

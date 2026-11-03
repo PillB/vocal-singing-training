@@ -807,7 +807,17 @@ function endReversedPeriod(record) {
  *     event can announce the new period end before the invoice behind it
  *     arrives. Without this the id would stay on the previous month, and a
  *     refund of the previous month would end a prorated month two whose own
- *     length the arithmetic cannot guess.
+ *     length the arithmetic cannot guess. Only when no payment has claimed
+ *     THIS period yet, which is what `periodPaymentEnd` is for: a second
+ *     invoice ending with the period — a proration charged at once mid-cycle —
+ *     would otherwise take the period over from the payment that bought it,
+ *     and then the refund of the proration would end a month it did not buy
+ *     while the refund of the real payment would leave it running (QA round 7
+ *     again, falsifying the rule as first written). When two payments end the
+ *     same period, the first one is the one that bought it and the later one
+ *     only topped it up. A record stored before `periodPaymentEnd` existed
+ *     holds an id and no end: that id is left alone, which is how this behaved
+ *     before the clause was added at all.
  *
  * @param {Object} record Record being built.
  * @param {Object} update Entitlement update descriptor.
@@ -821,16 +831,36 @@ function notePeriodPayment(record, update, before) {
   const paymentId = typeof update.paymentId === "string" && update.paymentId ? update.paymentId : null;
   if (Number.isFinite(before) && record.periodEnd <= before) {
     if (paymentId && update.periodEndIsFloor === true && Number.isFinite(update.periodEnd)
-      && Math.floor(update.periodEnd) === record.periodEnd) {
+      && Math.floor(update.periodEnd) === record.periodEnd && !claimsPeriod(record)) {
       record.periodPaymentId = paymentId;
+      record.periodPaymentEnd = record.periodEnd;
     }
     return;
   }
   if (paymentId) {
     record.periodPaymentId = paymentId;
+    record.periodPaymentEnd = record.periodEnd;
     return;
   }
   delete record.periodPaymentId;
+  delete record.periodPaymentEnd;
+}
+
+/**
+ * Whether the id the record holds already names the period it is in.
+ *
+ * An id with no period beside it is one stored before this was recorded, and
+ * counts as claiming the period: leaving it is what the store did before the
+ * equal-end rule existed, and overwriting it on a guess is the direction that
+ * costs a customer access.
+ * @param {Object} record Record being built.
+ * @returns {boolean} Whether a payment has claimed the period now held.
+ */
+function claimsPeriod(record) {
+  if (typeof record.periodPaymentId !== "string" || !record.periodPaymentId) {
+    return false;
+  }
+  return !Number.isFinite(record.periodPaymentEnd) || record.periodPaymentEnd === record.periodEnd;
 }
 
 /**

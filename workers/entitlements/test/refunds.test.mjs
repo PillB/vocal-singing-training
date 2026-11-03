@@ -29,7 +29,7 @@ import test from "node:test";
 
 import { handleRequest } from "../src/index.js";
 import { HANDLED_EVENT_TYPES } from "../src/stripe.js";
-import { PAYMENT_TTL_SECONDS } from "../src/store.js";
+import { PAYMENT_TTL_SECONDS, getEntitlement, getLicenseIdForClaim, putEntitlement } from "../src/store.js";
 import { createFakeKv, createTestEnv } from "./fixtures.mjs";
 
 const DAY = 86400;
@@ -666,4 +666,65 @@ test("a prorated month announced by the subscription before its invoice arrives 
   assert.equal((await claim(env, "cs_e", 30)).status, 200, "month two was bought by its own payment");
   await deliver(env, "e6", "charge.refunded", 31, refunded("ch_e2", "pi_s2", 20));
   assert.equal((await claim(env, "cs_e", 32)).status, 403, "and its own refund ends it");
+});
+
+test("when two payments end the same period, the first is the one that bought it", async () => {
+  // The rule above, falsified and narrowed (QA round 7, second pass). A plan
+  // upgrade mid-cycle charges a proration at once, and its invoice line ends
+  // with the period already held — so it is an equal-end paid invoice too, and
+  // the rule as first written let it take the period over from the payment
+  // that actually bought it. Both directions then went wrong: the refund of
+  // the proration ended a month it had not bought, and the refund of the real
+  // payment left it running.
+  //
+  // When two payments end the same period, the first one bought it and the
+  // later one topped it up. A refund of the top-up ends nothing by identity
+  // and falls to the arithmetic, which errs toward keeping access — the right
+  // side to err on for a credit the customer did not ask to lose a month for.
+  const env = freshEnv();
+  await deliver(env, "e1", "checkout.session.completed", 0, subCheckout("cs_g", "sub_r"));
+  await deliver(env, "e2", "invoice.paid", 0, invoice("in_g1", "pi_base", 0, 31));
+  await deliver(env, "e3", "invoice.paid", 10, invoice("in_g2", "pi_prorate", 10, 31));
+  assert.equal((await claim(env, "cs_g", 11)).status, 200, "control: paid and inside the month");
+  await deliver(env, "e4", "charge.refunded", 12, refunded("ch_g2", "pi_prorate", 10));
+  assert.equal(
+    (await claim(env, "cs_g", 13)).status,
+    200,
+    "the proration went back, not the month"
+  );
+});
+
+test("and the refund of the payment that did buy it still ends the month", async () => {
+  // The other direction of the same case: the one the narrowed rule must not
+  // trade away. Without `periodPaymentEnd` the proration's id is what the
+  // reversal is compared against, the two ids differ, and a fully refunded
+  // month stays Pro.
+  const env = freshEnv();
+  await deliver(env, "e1", "checkout.session.completed", 0, subCheckout("cs_h", "sub_r"));
+  await deliver(env, "e2", "invoice.paid", 0, invoice("in_h1", "pi_base", 0, 31));
+  await deliver(env, "e3", "invoice.paid", 10, invoice("in_h2", "pi_prorate", 10, 31));
+  await deliver(env, "e4", "charge.refunded", 12, refunded("ch_h1", "pi_base", 0));
+  assert.equal((await claim(env, "cs_h", 13)).status, 403, "the month's own payment went back in full");
+});
+
+test("a record stored before the period's payment was dated keeps the id it has", async () => {
+  // The upgrade path. A license written by the commit before this one carries
+  // `periodPaymentId` and no `periodPaymentEnd`, so "has a payment claimed
+  // this period?" cannot be answered from the record. It is answered yes: the
+  // id stays, which is what the store did before the equal-end rule existed
+  // at all, and overwriting it on a guess is the direction that ends a month
+  // somebody paid for.
+  const env = freshEnv();
+  await deliver(env, "e1", "checkout.session.completed", 0, subCheckout("cs_i", "sub_r"));
+  await deliver(env, "e2", "invoice.paid", 0, invoice("in_i1", "pi_base", 0, 31));
+
+  const licenseId = await getLicenseIdForClaim(env.ENTITLEMENTS, "stripe", "cs_i");
+  const stored = await getEntitlement(env.ENTITLEMENTS, licenseId);
+  assert.equal(stored.periodPaymentId, "pi_base", "the payment that bought the month was recorded");
+  delete stored.periodPaymentEnd;
+  await putEntitlement(env.ENTITLEMENTS, stored);
+
+  await deliver(env, "e3", "invoice.paid", 10, invoice("in_i2", "pi_prorate", 10, 31));
+  await deliver(env, "e4", "charge.refunded", 12, refunded("ch_i1", "pi_base", 0));
+  assert.equal((await claim(env, "cs_i", 13)).status, 403, "the month's own payment went back in full");
 });

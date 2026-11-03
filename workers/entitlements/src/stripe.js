@@ -645,7 +645,12 @@ function mapInvoice(invoice, env, paid) {
   const line = periodLineOf(invoice);
   const priceId = idOf(line && line.price)
     || idOf(line && line.pricing && line.pricing.price_details && line.pricing.price_details.price);
-  const byPrice = planFromPriceId(priceId, env);
+  // A proration line's price is the plan the customer is leaving as often as the
+  // one they are joining (Stripe lists the credit for unused time, then the
+  // debit for the new plan), so it says nothing about the plan the subscription
+  // is on. The subscription's own event does. Only the subscription's own line
+  // may name a plan.
+  const byPrice = line && !isSideLine(line) ? planFromPriceId(priceId, env) : null;
   // The same gate as a subscription's own event, or a renewal of something
   // that is not ours would lift the suspension it just received — and `paid`
   // is one-way, so it must not be recorded for a price we do not sell.

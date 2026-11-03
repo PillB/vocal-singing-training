@@ -382,13 +382,32 @@ test("a paid event's period only ever lengthens, so a late renewal cannot lose a
   assert.equal(await claim(env, "ch_4", 50), 200, "month two stands");
 });
 
-test("a state event replaces the period, so a downgrade shortens it", async () => {
+// Reversed on 2026-11-03, and the old expectation is worth stating so nobody
+// restores it by accident: this used to assert 403, on the ground that a state
+// event is the subscription's own current answer and a downgrade should shorten
+// the period. Nothing Creem documents makes an active subscription's period end
+// move backwards, while a snapshot serialised before the period rolled over
+// does exactly that (the silence behind VG-53), so the old rule was a way for a
+// stale snapshot to take a month somebody had paid for. The reasoning is at
+// `periodEndIsFloor` in src/creem.js; the shortening paths that remain are
+// below.
+test("a state event cannot shorten a month that was paid for, whatever period its snapshot names", async () => {
   const env = freshEnv();
   await deliver(env, "evt_1", "checkout.completed", 0, checkout("ch_5", "sub_5"));
   await deliver(env, "evt_2", "subscription.paid", 0, paid("sub_5", "tran_1", 62, 0));
   assert.equal(await claim(env, "ch_5", 50), 200);
   await deliver(env, "evt_3", "subscription.update", 1, subscription("sub_5", "active", 40));
-  assert.equal(await claim(env, "ch_5", 50), 403, "the subscription's own answer is the period");
+  assert.equal(await claim(env, "ch_5", 50), 200, "they paid through day 62");
+  assert.equal(await claim(env, "ch_5", 63), 403, "and no further than that");
+});
+
+test("a state event still lengthens a period, which is the whole point of listening to it", async () => {
+  const env = freshEnv();
+  await deliver(env, "evt_1", "checkout.completed", 0, checkout("ch_5b", "sub_5b"));
+  await deliver(env, "evt_2", "subscription.paid", 0, paid("sub_5b", "tran_1", 31, 0));
+  assert.equal(await claim(env, "ch_5b", 40), 403);
+  await deliver(env, "evt_3", "subscription.update", 1, subscription("sub_5b", "active", 62));
+  assert.equal(await claim(env, "ch_5b", 40), 200, "the subscription now runs to day 62");
 });
 
 test("a trialing subscription entitles and a paused one does not", async () => {

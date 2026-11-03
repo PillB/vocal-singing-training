@@ -307,11 +307,24 @@ export function mapCreemStatus(status) {
  * @returns {number|null} Unix seconds or null.
  */
 function subscriptionPeriodEnd(subscription) {
-  return (
-    isoSeconds(subscription && subscription.current_period_end_date) ||
-    isoSeconds(subscription && subscription.canceled_at) ||
-    null
-  );
+  // `current_period_end_date` and nothing else. `canceled_at` is when the
+  // customer or the merchant cancelled: Creem's API reference describes it as
+  // "The date and time when the subscription was canceled, if applicable" and
+  // marks it nullable, while `current_period_end_date` is merely optional and
+  // `scheduled_cancel` is a documented status (read 3 November 2026). So for a
+  // subscription that will not renew, the cancel date is the click and is
+  // always in the past, and reading it as a period end replaced the end of a
+  // month that had been paid for with the moment somebody changed their mind.
+  // An absent period end is no statement, not a guess.
+  //
+  // Measured honesty: with `periodEndIsFloor` now true for every subscription
+  // event (see below), restoring this fallback changes no outcome that can be
+  // constructed — a cancel date is always at or before the period the record
+  // already holds, so the floor discards it, and no mutant of this line dies.
+  // It is removed because it is the wrong reading of the field, and because the
+  // floor above it is a judgement that may be revisited, at which point this
+  // line would be load-bearing and wrong again.
+  return isoSeconds(subscription && subscription.current_period_end_date) || null;
 }
 
 /**
@@ -420,10 +433,29 @@ function mapSubscription(subscription, env, eventType) {
     paid: paid && !unlisted ? true : undefined,
     paymentId: paid && !unlisted ? transactionIdOf(subscription) : null,
     periodEnd: subscriptionPeriodEnd(subscription),
-    // Only a paid event's period is a floor. A state event's is the
-    // subscription's own answer and replaces what the record holds, so a
-    // shortened period (a downgrade) is applied.
-    periodEndIsFloor: paid ? true : undefined,
+    // On this rail a subscription event's period can only ever LENGTHEN access,
+    // paid or not. That is a change of policy, made on 2026-11-03, and the
+    // reasoning is worth keeping because it is a judgement rather than a fact.
+    //
+    // It used to be only `subscription.paid` that was a floor, on the ground
+    // that a state event is the subscription's own current answer and a
+    // downward correction should be applied. The trouble is that no Creem event
+    // can be shown to make one. A plan change produces a NEW period end, which
+    // is later, not earlier. Ending a subscription early is `canceled`,
+    // `expired` or `scheduled_cancel` with a `canceled_at`, none of which needs
+    // `current_period_end_date` to move backwards. What demonstrably does
+    // produce an earlier end is a snapshot serialised before the period rolled
+    // over, which is the same documented silence that let a paid renewal buy
+    // nothing (VG-53): the docs do not say what a renewal's period dates hold.
+    //
+    // So the two readings are both guesses, and the tie-break is the direction
+    // of the error. Treating the answer as current risks locking a paying
+    // subscriber out of a month they paid for. Treating it as a floor risks
+    // leaving a provider-side downward correction unapplied for at most one
+    // period, after which a cancellation, an expiry or a refund ends access
+    // through its own path, none of which reads this field. Everywhere else in
+    // this worker the same tie-break goes the same way.
+    periodEndIsFloor: true,
     endedAt: status === "canceled" ? endedAt : undefined,
     // Creem does not bring an expired subscription back: a new purchase is a
     // new subscription with a new id. A cancellation is not terminal, because

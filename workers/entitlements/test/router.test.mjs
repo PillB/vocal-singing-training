@@ -146,6 +146,9 @@ test("health reports booleans and the site origin, never key material", async ()
     accountsConfigured: false,
     // Events need the same D1 binding, so a payments-only deployment has none.
     eventsEnabled: false,
+    // Reports need it too, and for the same reason: a payments-only deployment
+    // has nowhere to put one, so the page offers the copy-it-yourself way out.
+    reportsEnabled: false,
     authMethods: { email: false, google: false, googleClientId: null, trialDays: 7 },
     siteOrigin: TEST_ORIGIN
   });

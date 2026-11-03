@@ -23,3 +23,4 @@ import "./email.test.mjs";
 import "./api.test.mjs";
 import "./stats.test.mjs";
 import "./events.test.mjs";
+import "./reports.test.mjs";

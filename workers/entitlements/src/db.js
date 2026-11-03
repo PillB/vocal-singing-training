@@ -21,6 +21,15 @@ let schemaReady = new WeakSet();
 export const EVENT_RETENTION_SECONDS = 180 * 86400;
 
 /**
+ * A report we are done with — fixed, declined or a duplicate — is deleted by
+ * `sweepExpired` this long after it was last touched (180 days, the same
+ * number privacy.html gives for everything else here). An open report is kept
+ * for as long as it is open: losing a bug nobody has fixed yet would be worse
+ * than keeping it, and the reporter's own words are the whole value of it.
+ */
+export const CLOSED_REPORT_RETENTION_SECONDS = 180 * 86400;
+
+/**
  * Current time in unix seconds.
  * @param {number} [nowSeconds] Injected clock, for tests.
  * @returns {number} Unix seconds.
@@ -217,8 +226,9 @@ export function callerIp(request) {
 
 /**
  * Delete rows that have aged out: consumed or expired login codes, dead
- * sessions, stale rate-limit buckets, and usage events, exposures and ingest
- * counters past their retention.
+ * sessions, stale rate-limit buckets, usage events, exposures and ingest
+ * counters past their retention, and reports we have closed and kept long
+ * enough.
  *
  * Called opportunistically (never on the hot path of a login) so the free tier
  * is not slowly filled with garbage.
@@ -239,6 +249,12 @@ export async function sweepExpired(db, now) {
     db.prepare("DELETE FROM exposures WHERE first_at < ?1").bind(at - EVENT_RETENTION_SECONDS),
     db
       .prepare("DELETE FROM ingest_daily WHERE day < ?1")
-      .bind(new Date((at - EVENT_RETENTION_SECONDS) * 1000).toISOString().slice(0, 10))
+      .bind(new Date((at - EVENT_RETENTION_SECONDS) * 1000).toISOString().slice(0, 10)),
+    // Closed reports only, by `updated_at`: the clock starts when we finished
+    // with it, not when it arrived, so a bug that took four months to fix is
+    // not deleted two months later.
+    db
+      .prepare("DELETE FROM reports WHERE status IN ('fixed', 'wontfix', 'duplicate') AND updated_at < ?1")
+      .bind(at - CLOSED_REPORT_RETENTION_SECONDS)
   ]);
 }

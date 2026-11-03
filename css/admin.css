@@ -441,3 +441,95 @@
 .admin-guide-link {
   margin: 0.5rem 0 0;
 }
+
+/* ------------------------------------------------------------------ reports
+
+   The window on what people tell us (js/admin.js, `#reports`). One card per
+   report, the reporter's own words in `.admin-report-text`, which keeps their
+   line breaks: a bug report is often a numbered list, and collapsing it to one
+   paragraph loses the steps. */
+.admin-report {
+  border: 1px solid var(--border);
+  border-radius: 0.7rem;
+  padding: 0.85rem 0.95rem;
+  margin: 0.75rem 0 0;
+}
+.admin-report[data-status="new"] {
+  border-left: 3px solid var(--accent);
+}
+.admin-report[data-severity="blocks"] .admin-report-head h4 {
+  color: var(--danger);
+}
+.admin-report-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.4rem 0.6rem;
+}
+.admin-report-head h4 {
+  margin: 0;
+  font-size: 1rem;
+  flex: 1 1 14rem;
+}
+.admin-report-meta {
+  margin: 0.35rem 0 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.7rem;
+}
+.admin-report-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 0.5rem 0 0;
+  font-size: 0.9rem;
+}
+.admin-report-label {
+  display: block;
+  margin: 0.6rem 0 0;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+.admin-report-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.7rem;
+}
+.admin-report-actions .field {
+  margin: 0;
+  flex: 1 1 10rem;
+}
+.admin-report-actions select,
+.admin-report-actions input {
+  min-height: 2.75rem;
+}
+.admin-report-actions .btn {
+  min-height: 2.75rem;
+}
+.admin-reports-controls {
+  align-items: center;
+  gap: 0.5rem 0.9rem;
+}
+/* One colour per report status, on the same pill the gift codes use. New is
+   the accent, because it is the only one that means "do something". */
+.admin-pill.st-new {
+  border-color: rgba(110, 180, 232, 0.55);
+  color: #cfe6f8;
+}
+.admin-pill.st-triaged {
+  border-color: rgba(240, 184, 79, 0.55);
+  color: #ffe6b8;
+}
+.admin-pill.st-fixed {
+  border-color: rgba(79, 212, 146, 0.55);
+  color: #b8f2d5;
+}
+.admin-pill.st-wontfix,
+.admin-pill.st-duplicate {
+  color: var(--text-muted);
+}

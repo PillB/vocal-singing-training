@@ -8,7 +8,7 @@
     <meta name="robots" content="noindex, nofollow" />
     <title>Admin · Estudio Vocal</title>
     <link rel="stylesheet" href="css/styles.css?v=20261005p" />
-    <link rel="stylesheet" href="css/admin.css?v=20260926a" />
+    <link rel="stylesheet" href="css/admin.css?v=20261102a" />
   </head>
   <body class="admin-page">
     <header class="app-header">
@@ -73,6 +73,7 @@
           <a href="#lookup" data-t="navLookup">Buscar</a>
           <a href="#give" data-t="navGive">Dar Pro</a>
           <a href="#codes" data-t="navCodes">Códigos</a>
+          <a href="#reports" data-t="navReports">Reportes</a>
           <a href="#stats" data-t="navStats">Estadísticas</a>
           <a href="#maintenance" data-t="navMaintenance">Mantenimiento</a>
         </nav>
@@ -158,7 +159,35 @@
           <div id="code-list" class="admin-table-wrap"></div>
         </section>
 
-        <!-- 4. The account funnel and how statistics are arriving. Read only
+        <!-- 4. What people have told us is broken or missing. Loaded on boot,
+             because it is the thing most likely to need doing today. -->
+        <section class="admin-card" id="reports" aria-labelledby="reports-title">
+          <h2 id="reports-title" data-t="reportsTitle">Lo que nos cuenta la gente</h2>
+          <p class="muted" data-t="reportsHelp">
+            Lo que llega por «Reportar un problema», en las palabras de quien lo escribió. Cambiar el
+            estado es solo para nosotros: la persona ve su estado pero nunca tu nota.
+          </p>
+          <div class="admin-row admin-reports-controls">
+            <div class="admin-chips" role="group" aria-label="Estado" data-t-aria="reportsFilter">
+              <button type="button" class="btn btn-sm" data-report-status="open" aria-pressed="true">Sin cerrar</button>
+              <button type="button" class="btn btn-sm" data-report-status="new" aria-pressed="false">Sin leer</button>
+              <button type="button" class="btn btn-sm" data-report-status="" aria-pressed="false">Todos</button>
+            </div>
+            <div class="admin-chips" role="group" aria-label="Tipo" data-t-aria="reportsKind">
+              <button type="button" class="btn btn-sm" data-report-kind="" aria-pressed="true">Todo</button>
+              <button type="button" class="btn btn-sm" data-report-kind="bug" aria-pressed="false">Fallos</button>
+              <button type="button" class="btn btn-sm" data-report-kind="idea" aria-pressed="false">Ideas</button>
+            </div>
+            <button type="button" class="btn btn-ghost btn-sm" id="reports-refresh" data-t="reportsRefresh">Actualizar</button>
+          </div>
+          <p class="admin-message" id="reports-counts" aria-live="polite"></p>
+          <div id="reports-list" class="admin-result"></div>
+          <div class="controls-row">
+            <button type="button" class="btn btn-sm" id="reports-more" hidden data-t="reportsMore">Ver más antiguos</button>
+          </div>
+        </section>
+
+        <!-- 5. The account funnel and how statistics are arriving. Read only
              when asked, and from a page that sends none itself. -->
         <section class="admin-card" id="stats" aria-labelledby="stats-title">
           <h2 id="stats-title" data-t="statsTitle">Estadísticas</h2>
@@ -175,7 +204,7 @@
           <div id="stats-result" class="admin-result" aria-live="polite"></div>
         </section>
 
-        <!-- 5. Health and housekeeping. -->
+        <!-- 6. Health and housekeeping. -->
         <section class="admin-card" id="maintenance" aria-labelledby="maintenance-title">
           <h2 id="maintenance-title" data-t="maintenanceTitle">Mantenimiento</h2>
           <h3 data-t="healthTitle">Estado del servidor</h3>
@@ -199,6 +228,6 @@
          ?v= stamps equal to index.html's for the files both load. -->
     <script src="js/billing-config.js?v=20260924a"></script>
     <script src="js/account.js?v=20261006b"></script>
-    <script src="js/admin.js?v=20261006b"></script>
+    <script src="js/admin.js?v=20261102a"></script>
   </body>
 </html>

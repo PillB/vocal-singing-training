@@ -13,6 +13,10 @@
  * POST /v1/events and /v1/events/forget from the site,
  * GET /v1/admin/experiments[/results] and GET /v1/admin/funnel for an admin.
  *
+ * Bug reports and ideas are in the same D1 again (see reports.js):
+ * POST /v1/reports from the site and GET /v1/reports/mine for the person who
+ * sent them, GET /v1/admin/reports and POST /v1/admin/reports/update for us.
+ *
  * GET /v1/geo answers where the edge thinks a request came from, so the page can
  * tell whether it is in a country that requires asking before anything is kept.
  * It reads nothing and stores nothing, and only browsers that already look
@@ -26,7 +30,8 @@
  *        STRIPE_PRICE_PRO_MONTHLY, STRIPE_PRICE_PRO_YEARLY,
  *        MP_PLAN_PRO_MONTHLY, MP_PLAN_PRO_YEARLY,
  *        ADMIN_EMAILS, TRIAL_DAYS, GOOGLE_CLIENT_ID,
- *        EMAIL_PROVIDER, EMAIL_FROM, EMAIL_FROM_NAME, EVENTS_ENABLED
+ *        EMAIL_PROVIDER, EMAIL_FROM, EMAIL_FROM_NAME, EVENTS_ENABLED,
+ *        REPORTS_ENABLED
  *   secrets STRIPE_WEBHOOK_SECRET, MP_WEBHOOK_SECRET, MP_ACCESS_TOKEN,
  *        LICENSE_PRIVATE_KEY_PKCS8_B64, EVENTS_IP_KEY (optional),
  *        RESEND_API_KEY | BREVO_API_KEY | MAILERSEND_API_KEY
@@ -40,7 +45,7 @@
 
 "use strict";
 
-import { routeAccountApi, authMethods, requireAdmin } from "./api.js";
+import { readJsonBody, requireSession, routeAccountApi, authMethods, requireAdmin } from "./api.js";
 import { asksFirst, callerCountry, routeEventsApi } from "./events.js";
 import { ensureSchema, sweepExpired } from "./db.js";
 import {
@@ -51,6 +56,7 @@ import {
   isSuspended,
   isTokenIssuable
 } from "./license.js";
+import { reportsEnabled, routeReportsApi } from "./reports.js";
 import { mapStripeEvent, verifyStripeSignature } from "./stripe.js";
 import { MAX_BODY_BYTES, MAX_SESSION_ID_LENGTH } from "./limits.js";
 import { confirmAndMapNotification, resolveNotificationTarget, verifyMercadoPagoSignature } from "./mercadopago.js";
@@ -357,6 +363,7 @@ function handleHealth(env, cors) {
       signingKeyConfigured: Boolean(env.LICENSE_PRIVATE_KEY_PKCS8_B64),
       accountsConfigured: Boolean(env.DB),
       eventsEnabled: Boolean(env.DB) && String(env.EVENTS_ENABLED || "").trim().toLowerCase() !== "false",
+      reportsEnabled: reportsEnabled(env),
       authMethods: authMethods(env),
       siteOrigin: env.SITE_ORIGIN || ""
     },
@@ -449,6 +456,20 @@ export async function handleRequest(request, env, options) {
   });
   if (eventsResponse) {
     return eventsResponse;
+  }
+
+  // Before the account router too, for the same reason: `/v1/admin/reports`
+  // is inside the prefix it claims.
+  const reportsResponse = await routeReportsApi(request, env, url, path, {
+    json,
+    cors,
+    now: options && options.now,
+    requireAdmin,
+    requireSession,
+    readJsonBody
+  });
+  if (reportsResponse) {
+    return reportsResponse;
   }
 
   const accountResponse = await routeAccountApi(request, env, url, path, {

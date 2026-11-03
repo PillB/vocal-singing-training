@@ -1,5 +1,6 @@
 /**
- * Admin page: give and take back Pro, gift codes, and server housekeeping.
+ * Admin page: give and take back Pro, gift codes, what people have reported,
+ * and server housekeeping.
  *
  * Everything here is a thin client over the worker's `/v1/admin/*` routes,
  * which check the caller against `ADMIN_EMAILS` on every request. This page
@@ -7,8 +8,8 @@
  * `role` in `/v1/me`: a worker deployed before that field followed the list
  * could say "member" to a real admin, or "admin" to someone since removed.
  *
- * Nothing a person typed is ever put into the page as HTML. Names, notes and
- * addresses go in through `textContent`.
+ * Nothing a person typed is ever put into the page as HTML. Names, notes,
+ * addresses and the whole text of a bug report go in through `textContent`.
  */
 (function () {
   "use strict";
@@ -35,6 +36,7 @@
       navLookup: "Buscar",
       navGive: "Dar Pro",
       navCodes: "Códigos",
+      navReports: "Reportes",
       navStats: "Estadísticas",
       navMaintenance: "Mantenimiento",
       navLabel: "Secciones",
@@ -66,6 +68,55 @@
         "Borra sesiones vencidas, códigos de entrada usados, contadores viejos y estadísticas de más de 180 días. El servidor lo hace solo cada día a las 04:17 (hora de Lima); este botón lo hace ahora. No toca cuentas, regalos ni progreso.",
       sweepRun: "Limpiar ahora",
       guideLink: "Guía de admin (paso a paso)",
+
+      reportsTitle: "Lo que nos cuenta la gente",
+      reportsHelp:
+        "Lo que llega por «Reportar un problema», en las palabras de quien lo escribió. Cambiar el estado es solo para nosotros: la persona ve su estado pero nunca tu nota.",
+      reportsFilter: "Estado",
+      reportsKind: "Tipo",
+      reportsRefresh: "Actualizar",
+      reportsMore: "Ver más antiguos",
+      reportsEmpty: "Nada por aquí. Con este filtro no hay reportes.",
+      reportsCounts: "{nuevos} sin leer · {curso} en curso · {total} en total",
+      reportsStale: "La lista puede estar desactualizada. {failure}",
+      fOpen: "Sin cerrar",
+      fNew: "Sin leer",
+      fAll: "Todos",
+      fAllKinds: "Todo",
+      fBugs: "Fallos",
+      fIdeas: "Ideas",
+      rsNew: "Sin leer",
+      rsTriaged: "En curso",
+      rsFixed: "Arreglado",
+      rsWontfix: "No se hará",
+      rsDuplicate: "Repetido",
+      rKindBug: "Fallo",
+      rKindIdea: "Idea",
+      rAreaPractice: "Practicar",
+      rAreaAudio: "Micrófono o sonido",
+      rAreaExercises: "Ejercicios",
+      rAreaProgress: "Progreso",
+      rAreaAccount: "Cuenta",
+      rAreaPayment: "Pagos",
+      rAreaSite: "La página",
+      rAreaOther: "Otra cosa",
+      rSevBlocks: "No puede seguir",
+      rSevAnnoying: "Molesta",
+      rSevCosmetic: "Se ve raro",
+      rDetail: "Qué pasa",
+      rSteps: "Cómo verlo",
+      rWhere: "Página",
+      rBuild: "Versión",
+      rBrowser: "Navegador",
+      rScreen: "Pantalla",
+      rContact: "Responder a",
+      rFrom: "De {email}",
+      rAnon: "Sin cuenta",
+      rNote: "Nota nuestra (la persona no la ve)",
+      rSave: "Guardar",
+      rSaved: "Guardado.",
+      rStatusLabel: "Estado",
+      rNoDetail: "No escribió más.",
 
       working: "Un momento…",
       badEmail: "Escribe un correo válido.",
@@ -216,6 +267,7 @@
       navLookup: "Look up",
       navGive: "Give Pro",
       navCodes: "Codes",
+      navReports: "Reports",
       navStats: "Statistics",
       navMaintenance: "Maintenance",
       navLabel: "Sections",
@@ -247,6 +299,55 @@
         "Deletes expired sessions, used sign-in codes, old counters and statistics older than 180 days. The server does this by itself every day at 04:17 Lima time; this button does it now. Accounts, gifts and progress are untouched.",
       sweepRun: "Clean up now",
       guideLink: "Admin guide (step by step)",
+
+      reportsTitle: "What people tell us",
+      reportsHelp:
+        "What arrives through \u201cReport a problem\u201d, in the words the person wrote. Changing the status is for us: they see the status but never your note.",
+      reportsFilter: "Status",
+      reportsKind: "Kind",
+      reportsRefresh: "Refresh",
+      reportsMore: "Show older",
+      reportsEmpty: "Nothing here. No reports match this filter.",
+      reportsCounts: "{nuevos} unread · {curso} in hand · {total} in total",
+      reportsStale: "This list may be out of date. {failure}",
+      fOpen: "Not closed",
+      fNew: "Unread",
+      fAll: "All",
+      fAllKinds: "Everything",
+      fBugs: "Bugs",
+      fIdeas: "Ideas",
+      rsNew: "Unread",
+      rsTriaged: "In hand",
+      rsFixed: "Fixed",
+      rsWontfix: "Not doing",
+      rsDuplicate: "Duplicate",
+      rKindBug: "Bug",
+      rKindIdea: "Idea",
+      rAreaPractice: "Practising",
+      rAreaAudio: "Microphone or sound",
+      rAreaExercises: "Exercises",
+      rAreaProgress: "Progress",
+      rAreaAccount: "Account",
+      rAreaPayment: "Payments",
+      rAreaSite: "The site",
+      rAreaOther: "Something else",
+      rSevBlocks: "Cannot carry on",
+      rSevAnnoying: "Annoying",
+      rSevCosmetic: "Looks wrong",
+      rDetail: "What happens",
+      rSteps: "How to see it",
+      rWhere: "Page",
+      rBuild: "Version",
+      rBrowser: "Browser",
+      rScreen: "Screen",
+      rContact: "Reply to",
+      rFrom: "From {email}",
+      rAnon: "No account",
+      rNote: "Our note (they do not see it)",
+      rSave: "Save",
+      rSaved: "Saved.",
+      rStatusLabel: "Status",
+      rNoDetail: "They wrote nothing more.",
 
       working: "One moment…",
       badEmail: "Type a valid email address.",
@@ -729,11 +830,20 @@
     statsSeq += 1;
     statsData = null;
     statsAsked = false;
+    reportSeq += 1;
+    reportRows = [];
+    reportMore = false;
+    reportCounts = null;
     const statsButton = $("#stats-load");
     if (statsButton) statsButton.disabled = false;
     $("#lookup-result")?.replaceChildren();
     $("#stats-result")?.replaceChildren();
-    ["#give-result", "#code-result", "#code-copy-status", "#sweep-result"].forEach((sel) => setMessage($(sel), "", ""));
+    $("#reports-list")?.replaceChildren();
+    const moreButton = $("#reports-more");
+    if (moreButton) moreButton.hidden = true;
+    ["#give-result", "#code-result", "#code-copy-status", "#sweep-result", "#reports-counts"].forEach((sel) =>
+      setMessage($(sel), "", "")
+    );
     const box = $("#code-new");
     if (box) box.hidden = true;
     ["#lookup-form", "#give-form", "#code-form"].forEach((sel) => $(sel)?.reset());
@@ -812,6 +922,10 @@
     showGate("admin");
     renderCodes(probe.data && probe.data.giftCodes);
     loadHealth();
+    // Loaded without being asked, unlike the statistics: a report somebody
+    // sent is the one thing on this page that may need doing today, and a
+    // worker too old to have the route simply leaves the section empty.
+    loadReports();
   }
 
   // -------------------------------------------------------------- lookup
@@ -1476,6 +1590,244 @@
     });
   }
 
+  // --------------------------------------------------------------- reports
+
+  /**
+   * What the filter chips are on, and the page we are holding.
+   *
+   * `reportStatus` "open" is the worker's own shorthand for new + triaged, and
+   * it is the default because an admin opening this page wants what still
+   * needs doing, not the archive.
+   */
+  let reportStatus = "open";
+  let reportKind = "";
+  let reportRows = [];
+  let reportMore = false;
+  let reportCounts = null;
+  // Each load takes a number, so a slow answer never paints over a newer filter.
+  let reportSeq = 0;
+
+  /**
+   * Name one of a report's enumerated fields. A value the dictionary does not
+   * know shows as the worker sent it, never as nothing: a worker newer than
+   * this page must not make a report invisible.
+   * @param {string} prefix String-key prefix, e.g. "rArea".
+   * @param {string} value Code from the worker.
+   * @returns {string} Label.
+   */
+  function reportLabel(prefix, value) {
+    if (!value) return "";
+    const key = `${prefix}${String(value).charAt(0).toUpperCase()}${String(value).slice(1)}`;
+    const named = t(key);
+    return named === key ? String(value) : named;
+  }
+
+  /**
+   * One report as a card: their words, then what we know about where they
+   * were, then the two controls that move it along.
+   * @param {Object} report Report from the worker.
+   * @returns {HTMLElement} Card.
+   */
+  function reportCard(report) {
+    const env = report.environment || {};
+    const card = el("div", {
+      className: "admin-report",
+      "data-status": report.status,
+      "data-severity": report.severity || "",
+      "data-testid": "report-card"
+    });
+
+    const pills = [el("span", { className: "admin-pill", text: reportLabel("rKind", report.kind) })];
+    if (report.severity) {
+      pills.push(el("span", { className: "admin-pill", text: reportLabel("rSev", report.severity) }));
+    }
+    pills.push(el("span", { className: `admin-pill st-${report.status}`, text: reportLabel("rs", report.status) }));
+    card.appendChild(
+      el("div", { className: "admin-report-head" }, [el("h4", { text: report.summary }), ...pills])
+    );
+
+    const meta = [
+      el("span", { text: fmtDateTime(report.createdAt) }),
+      el("span", { text: reportLabel("rArea", report.area) }),
+      el("code", { text: report.reference })
+    ];
+    if (report.accountId) {
+      meta.push(el("span", { text: report.contact ? t("rFrom", { email: report.contact }) : t("rFrom", { email: report.accountId }) }));
+    } else {
+      meta.push(el("span", { text: t("rAnon") }));
+    }
+    card.appendChild(el("p", { className: "admin-report-meta" }, meta));
+
+    card.appendChild(el("span", { className: "admin-report-label", text: t("rDetail") }));
+    card.appendChild(el("p", { className: "admin-report-text", text: report.detail || t("rNoDetail") }));
+    if (report.steps) {
+      card.appendChild(el("span", { className: "admin-report-label", text: t("rSteps") }));
+      card.appendChild(el("p", { className: "admin-report-text", text: report.steps }));
+    }
+
+    const where = [];
+    if (report.page) where.push(el("span", { text: `${t("rWhere")}: ${report.page}` }));
+    if (report.build) where.push(el("span", { text: `${t("rBuild")}: ${report.build}` }));
+    if (env.ua) where.push(el("span", { text: `${t("rBrowser")}: ${env.ua}` }));
+    if (env.viewport) {
+      where.push(el("span", { text: `${t("rScreen")}: ${env.viewport}${env.screen ? ` (${env.screen})` : ""}` }));
+    }
+    if (report.contact) {
+      // A mailto, because answering somebody is the commonest next action and
+      // retyping an address off a screen is where typos come from.
+      where.push(
+        el("span", {}, [
+          `${t("rContact")}: `,
+          el("a", { href: `mailto:${report.contact}`, text: report.contact })
+        ])
+      );
+    }
+    if (where.length) {
+      card.appendChild(el("p", { className: "admin-report-meta" }, where));
+    }
+
+    const status = el("select", { id: `report-status-${report.reference}` });
+    ["new", "triaged", "fixed", "wontfix", "duplicate"].forEach((value) => {
+      const option = el("option", { value, text: reportLabel("rs", value) });
+      if (value === report.status) option.selected = true;
+      status.appendChild(option);
+    });
+    const note = el("input", {
+      type: "text",
+      maxlength: "1000",
+      id: `report-note-${report.reference}`,
+      autocomplete: "off",
+      value: report.adminNote || ""
+    });
+    const message = el("p", { className: "admin-message", "aria-live": "polite" });
+    const save = el("button", { type: "button", className: "btn btn-sm", text: t("rSave") });
+    save.addEventListener("click", () => saveReport(report, status.value, note.value, save, message));
+    card.appendChild(
+      el("div", { className: "admin-report-actions" }, [
+        el("label", { className: "field", for: status.id }, [el("span", { text: t("rStatusLabel") }), status]),
+        el("label", { className: "field", for: note.id }, [el("span", { text: t("rNote") }), note]),
+        save
+      ])
+    );
+    card.appendChild(message);
+    return card;
+  }
+
+  /** Draw what the last load read, in the page's current language. */
+  function renderReports() {
+    const box = $("#reports-list");
+    if (!box) return;
+    if (!reportRows.length) {
+      box.replaceChildren(el("p", { className: "muted", text: reportCounts ? t("reportsEmpty") : "" }));
+    } else {
+      box.replaceChildren(...reportRows.map(reportCard));
+    }
+    const more = $("#reports-more");
+    if (more) {
+      more.hidden = !reportMore;
+      more.textContent = t("reportsMore");
+    }
+    if (reportCounts) {
+      setMessage(
+        $("#reports-counts"),
+        t("reportsCounts", {
+          nuevos: reportCounts.new || 0,
+          curso: reportCounts.triaged || 0,
+          total: Object.values(reportCounts).reduce((sum, n) => sum + (Number(n) || 0), 0)
+        }),
+        (reportCounts.new || 0) > 0 ? "info" : ""
+      );
+    }
+  }
+
+  /** Name each chip in the page's language and mark the chosen ones. */
+  function markReportFilters() {
+    const statusNames = { open: t("fOpen"), new: t("fNew"), "": t("fAll") };
+    const kindNames = { "": t("fAllKinds"), bug: t("fBugs"), idea: t("fIdeas") };
+    document.querySelectorAll("#reports [data-report-status]").forEach((chip) => {
+      const value = chip.getAttribute("data-report-status");
+      chip.textContent = statusNames[value] || value;
+      chip.setAttribute("aria-pressed", value === reportStatus ? "true" : "false");
+    });
+    document.querySelectorAll("#reports [data-report-kind]").forEach((chip) => {
+      const value = chip.getAttribute("data-report-kind");
+      chip.textContent = kindNames[value] || value;
+      chip.setAttribute("aria-pressed", value === reportKind ? "true" : "false");
+    });
+  }
+
+  /**
+   * Read a page of reports.
+   * @param {{append?: boolean}} [options] Append the next page instead of replacing.
+   * @returns {Promise<void>} Resolves when drawn.
+   */
+  async function loadReports(options) {
+    const append = !!(options && options.append);
+    const seq = ++reportSeq;
+    const params = new URLSearchParams({ limit: "25" });
+    if (reportStatus) params.set("status", reportStatus);
+    if (reportKind) params.set("kind", reportKind);
+    if (append && reportRows.length) {
+      const last = reportRows[reportRows.length - 1];
+      params.set("before", String(last.createdAt));
+      params.set("beforeId", last.reference);
+    }
+    const res = await api("GET", `/v1/admin/reports?${params.toString()}`, null, { timeoutMs: 10000 });
+    if (seq !== reportSeq) return;
+    if (!res.ok) {
+      setMessage($("#reports-counts"), t("reportsStale", { failure: failureText(res) }), "error");
+      return;
+    }
+    const page = (res.data && res.data.reports) || [];
+    reportRows = append ? reportRows.concat(page) : page;
+    reportMore = !!(res.data && res.data.more);
+    reportCounts = (res.data && res.data.counts) || {};
+    renderReports();
+  }
+
+  /**
+   * Move one report along. The whole row comes back from the worker, so what
+   * is drawn afterwards is what is stored, never what we hoped we stored.
+   * @param {Object} report The report as drawn.
+   * @param {string} status Chosen status.
+   * @param {string} note Our note.
+   * @param {HTMLButtonElement} button The save button.
+   * @param {HTMLElement} message Where to say what happened.
+   * @returns {Promise<void>} Resolves when said.
+   */
+  async function saveReport(report, status, note, button, message) {
+    button.disabled = true;
+    setMessage(message, t("working"), "");
+    const res = await api(
+      "POST",
+      "/v1/admin/reports/update",
+      { reference: report.reference, status, note },
+      { timeoutMs: 10000 }
+    );
+    button.disabled = false;
+    if (!res.ok) {
+      setMessage(message, failureText(res), "error");
+      return;
+    }
+    const updated = res.data && res.data.report;
+    if (updated) {
+      const at = reportRows.findIndex((row) => row.reference === updated.reference);
+      if (at >= 0) reportRows[at] = updated;
+    }
+    reportCounts = (res.data && res.data.counts) || reportCounts;
+    // A report that no longer matches the filter leaves the list rather than
+    // sitting there claiming to be open.
+    const stillShown =
+      !reportStatus ||
+      (reportStatus === "open"
+        ? updated && (updated.status === "new" || updated.status === "triaged")
+        : updated && updated.status === reportStatus);
+    if (!stillShown) {
+      reportRows = reportRows.filter((row) => row.reference !== report.reference);
+    }
+    renderReports();
+  }
+
   // ---------------------------------------------------------------- wire
 
   function bind() {
@@ -1492,6 +1844,8 @@
       if (gate === "admin") {
         if (lastLookup) renderAccount(lastLookup);
         renderStats();
+        markReportFilters();
+        renderReports();
         reloadCodes();
         loadHealth();
       } else {
@@ -1540,11 +1894,38 @@
     });
     markStatsWindow();
     $("#stats-load")?.addEventListener("click", loadStats);
+    document.querySelectorAll("#reports [data-report-status]").forEach((chip) => {
+      chip.addEventListener("click", () => {
+        reportStatus = chip.getAttribute("data-report-status");
+        markReportFilters();
+        if (gate === "admin") loadReports();
+      });
+    });
+    document.querySelectorAll("#reports [data-report-kind]").forEach((chip) => {
+      chip.addEventListener("click", () => {
+        reportKind = chip.getAttribute("data-report-kind");
+        markReportFilters();
+        if (gate === "admin") loadReports();
+      });
+    });
+    $("#reports-refresh")?.addEventListener("click", async (event) => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      await loadReports();
+      button.disabled = false;
+    });
+    $("#reports-more")?.addEventListener("click", async (event) => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      await loadReports({ append: true });
+      button.disabled = false;
+    });
+    markReportFilters();
   }
 
   applyStaticText();
   bind();
   boot();
 
-  window.VTAdmin = { boot, lookup, t };
+  window.VTAdmin = { boot, lookup, loadReports, t };
 })();

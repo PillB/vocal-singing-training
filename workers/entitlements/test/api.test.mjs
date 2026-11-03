@@ -354,6 +354,8 @@ test("a member cannot reach any admin route", async () => {
     ["POST", "/v1/admin/grants", { email: "victim@example.test", days: 3650 }],
     ["POST", "/v1/admin/grants/revoke", { grantId: "grant_x" }],
     ["GET", "/v1/admin/account?email=victim@example.test", undefined],
+    ["GET", "/v1/admin/reports", undefined],
+    ["POST", "/v1/admin/reports/update", { reference: "VS-ABCDEFGHJK", status: "fixed" }],
     ["POST", "/v1/admin/sweep", {}]
   ];
   for (const [method, path, body] of attempts) {

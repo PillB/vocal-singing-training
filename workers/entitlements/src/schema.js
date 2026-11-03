@@ -18,7 +18,7 @@
  * Bump when a statement is added. Stored in `schema_meta` so `ensureSchema`
  * can skip the whole batch on the overwhelming majority of requests.
  */
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 /**
  * Table and index definitions, in dependency order.
@@ -191,5 +191,45 @@ export const SCHEMA_STATEMENTS = [
      reason TEXT NOT NULL,
      n INTEGER NOT NULL,
      PRIMARY KEY (day, reason)
-   )`
+   )`,
+
+  // Version 4: what people tell us is broken or missing (reports.js).
+  //
+  // `id` is the reference the reporter is shown and quotes back at us, so it
+  // is readable out loud: ten characters with no 0/O or 1/I/L in the alphabet.
+  // It is also the primary key, because a second "display id" column is one
+  // more thing that can disagree with the first.
+  //
+  // Everything in `summary`, `detail` and `steps` is text a person typed, so
+  // the route clamps and strips it before it ever gets here, and the admin
+  // page puts it in the document through `textContent`. `contact` is there
+  // only when the reporter typed an address to be answered at; a report with
+  // no contact is still a perfectly good report and most will have none.
+  //
+  // `account_id` is not a foreign key on purpose: a report from a signed-out
+  // visitor has none, and a report must outlive an account being deleted.
+  `CREATE TABLE IF NOT EXISTS reports (
+     id TEXT PRIMARY KEY,
+     created_at INTEGER NOT NULL,
+     updated_at INTEGER NOT NULL,
+     kind TEXT NOT NULL,
+     area TEXT,
+     severity TEXT,
+     summary TEXT NOT NULL,
+     detail TEXT NOT NULL DEFAULT '',
+     steps TEXT NOT NULL DEFAULT '',
+     page TEXT,
+     build TEXT,
+     locale TEXT,
+     env TEXT NOT NULL DEFAULT '{}',
+     contact TEXT,
+     account_id TEXT,
+     status TEXT NOT NULL DEFAULT 'new',
+     admin_note TEXT,
+     handled_by TEXT,
+     handled_at INTEGER
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_reports_status ON reports (status, created_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_reports_created ON reports (created_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_reports_account ON reports (account_id, created_at)`
 ];

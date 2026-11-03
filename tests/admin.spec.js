@@ -99,6 +99,14 @@ async function openAdmin(context, worker, session, options) {
   await wire(page, worker, session, options);
   await page.goto(`${BASE}/admin.html`, { waitUntil: "domcontentloaded" });
   await expect(page.locator("body")).not.toHaveAttribute("data-gate", "checking", { timeout: 10000 });
+  // boot() fires the reports read without waiting for it, so the page is
+  // usable before it lands. A test that changes the session right after this
+  // would otherwise race that request — and a 401 on it signs the admin out,
+  // correctly, but before the test has pressed anything. The counts line is
+  // filled by the answer, even when there are no reports at all.
+  if ((await page.locator("body").getAttribute("data-gate")) === "admin") {
+    await expect(page.locator("#reports-counts")).not.toBeEmpty({ timeout: 10000 });
+  }
   return page;
 }
 
@@ -619,6 +627,160 @@ test.describe("Admin page", () => {
     await expect(page.locator("body")).toHaveAttribute("data-gate", "signedOut");
     await expect(page.locator("#gate-error")).toContainText("Tu sesión terminó");
     expect(await page.evaluate(() => localStorage.getItem("vt_account_session_v1"))).toBeNull();
+    await adminCtx.close();
+  });
+
+  // ------------------------------------------------------------- reports
+
+  /**
+   * Send a report the way a browser does, through the worker's own route.
+   * @param {Object} worker Local worker.
+   * @param {Object} body Report body.
+   * @returns {Promise<string>} The reference the worker minted.
+   */
+  async function sendReport(worker, body) {
+    const res = await worker.call("POST", "/v1/reports", { body });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    return res.body.reference;
+  }
+
+  test("reports: read what somebody sent, and move it along", async ({ browser }) => {
+    const { worker, admin } = await startWorker();
+    const blocking = await sendReport(worker, {
+      kind: "bug",
+      area: "audio",
+      severity: "blocks",
+      summary: "el micrófono no se enciende en mi iPhone",
+      detail: "toco Empezar y no pasa nada,\nni con auriculares",
+      steps: "1. abrir el estudio\n2. tocar Empezar",
+      contact: "ana@example.com",
+      page: "/index.html#practice",
+      build: "20261102a",
+      locale: "es",
+      environment: { ua: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0)", viewport: "390x844" }
+    });
+    await sendReport(worker, { kind: "idea", area: "exercises", summary: "más escalas, por favor" });
+
+    const adminCtx = await browser.newContext();
+    const page = await openAdmin(adminCtx, worker, admin);
+    const cards = page.locator("#reports-list .admin-report");
+    await expect(cards).toHaveCount(2);
+    await expect(page.locator("#reports-counts")).toContainText("2 sin leer");
+
+    // Located by their words, not by position: both of these arrived in the
+    // same second, and the order within one second is not this test's subject
+    // (the paging test below seeds a minute apart and asserts newest first).
+    const idea = cards.filter({ hasText: "más escalas" });
+    const bug = cards.filter({ hasText: "el micrófono" });
+    await expect(idea).toContainText("más escalas, por favor");
+    await expect(idea).toContainText("Idea");
+    await expect(bug).toContainText("el micrófono no se enciende en mi iPhone");
+    await expect(bug).toContainText("Fallo");
+    await expect(bug).toContainText("No puede seguir");
+    // Their own words, their own line breaks, and where they were.
+    await expect(bug).toContainText("ni con auriculares");
+    await expect(bug).toContainText("tocar Empezar");
+    await expect(bug).toContainText("/index.html#practice");
+    await expect(bug).toContainText("iPhone");
+    await expect(bug).toContainText("390x844");
+    await expect(bug).toContainText(blocking);
+    // Answering somebody is one tap, not a retyped address.
+    await expect(bug.locator('a[href="mailto:ana@example.com"]')).toHaveCount(1);
+
+    // Move it along, with a note only we see.
+    await bug.locator(`#report-status-${blocking}`).selectOption("triaged");
+    await bug.locator(`#report-note-${blocking}`).fill("pasa solo en iOS 16, reproducido");
+    await bug.getByRole("button", { name: "Guardar" }).click();
+    await expect(page.locator("#reports-counts")).toContainText("1 sin leer");
+    await expect(bug).toContainText("En curso");
+    const row = await worker.env.DB.prepare("SELECT status, admin_note, handled_at FROM reports WHERE id = ?1")
+      .bind(blocking)
+      .first();
+    expect(row.status).toBe("triaged");
+    expect(row.admin_note).toBe("pasa solo en iOS 16, reproducido");
+    expect(Number(row.handled_at)).toBeGreaterThan(0);
+
+    // Filtering to the unread drops it, because it no longer is one.
+    await page.click('#reports [data-report-status="new"]');
+    await expect(page.locator("#reports-list .admin-report")).toHaveCount(1);
+    await expect(page.locator("#reports-list")).toContainText("más escalas");
+    // And filtering by kind narrows it the same way.
+    await page.click('#reports [data-report-status=""]');
+    await page.click('#reports [data-report-kind="bug"]');
+    await expect(page.locator("#reports-list .admin-report")).toHaveCount(1);
+    await expect(page.locator("#reports-list")).toContainText("el micrófono");
+    await adminCtx.close();
+  });
+
+  test("reports: a signed-out reporter is named as one, and a signed-in one by their address", async ({ browser }) => {
+    const { worker, admin } = await startWorker();
+    const tester = await worker.signIn("ana.tester@example.com", { displayName: "Ana" });
+    await worker.call("POST", "/v1/reports", {
+      token: tester.token,
+      body: { kind: "bug", summary: "con cuenta", contact: "ana.tester@example.com" }
+    });
+    await sendReport(worker, { kind: "bug", summary: "sin cuenta" });
+
+    const adminCtx = await browser.newContext();
+    const page = await openAdmin(adminCtx, worker, admin);
+    const cards = page.locator("#reports-list .admin-report");
+    await expect(cards).toHaveCount(2);
+    await expect(cards.filter({ hasText: "sin cuenta" })).toContainText("Sin cuenta");
+    await expect(cards.filter({ hasText: "con cuenta" })).toContainText("De ana.tester@example.com");
+    await adminCtx.close();
+  });
+
+  test("reports: older ones are a button away, not a scroll away", async ({ browser }) => {
+    const { worker, admin } = await startWorker();
+    // Seeded straight into the database: the route's own hourly limit per
+    // address is what stops abuse, and thirty reports from one address is
+    // exactly what it refuses.
+    const now = worker.now();
+    // References in the shape the worker mints, so a seeded row can also be
+    // saved from the page: VS- then ten characters of its readable alphabet.
+    const ALPHA = "23456789ABCDEFGHJKMNPQRSTVWXYZ";
+    for (let i = 0; i < 30; i += 1) {
+      await worker.sql(
+        `INSERT INTO reports (id, created_at, updated_at, kind, area, summary, detail, steps, env, status)
+         VALUES (?1, ?2, ?2, 'bug', 'site', ?3, '', '', '{}', 'new')`,
+        `VS-SEED2222${ALPHA[Math.floor(i / 30) % 30]}${ALPHA[i % 30]}`,
+        now - i * 60,
+        `reporte número ${i}`
+      );
+    }
+    const adminCtx = await browser.newContext();
+    const page = await openAdmin(adminCtx, worker, admin);
+    await expect(page.locator("#reports-list .admin-report")).toHaveCount(25);
+    await expect(page.locator("#reports-counts")).toContainText("30 sin leer");
+    const more = page.locator("#reports-more");
+    await expect(more).toBeVisible();
+    await more.click();
+    await expect(page.locator("#reports-list .admin-report")).toHaveCount(30);
+    await expect(more).toBeHidden();
+    // No report appears twice across the page boundary, and the newest is first.
+    const summaries = await page.locator("#reports-list .admin-report h4").allTextContents();
+    expect(new Set(summaries).size).toBe(30);
+    expect(summaries[0]).toContain("número 0");
+    expect(summaries[summaries.length - 1]).toContain("número 29");
+    await adminCtx.close();
+  });
+
+  test("reports: a worker without the route leaves the section empty rather than shouting", async ({ browser }) => {
+    const { worker, admin } = await startWorker();
+    const adminCtx = await browser.newContext();
+    const page = await adminCtx.newPage();
+    await wire(page, worker, admin);
+    // What an older deploy answers: the path is simply not there.
+    await page.route(`${API}/v1/admin/reports*`, (route) =>
+      route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ ok: false, reason: "not_found" }) })
+    );
+    await page.goto(`${BASE}/admin.html`, { waitUntil: "domcontentloaded" });
+    await expect(page.locator("body")).toHaveAttribute("data-gate", "admin", { timeout: 10000 });
+    // It says the list may be stale, and the rest of the page still works.
+    await expect(page.locator("#reports-counts")).toContainText(/Algo falló|desactualizada/);
+    await expect(page.locator("#reports-list .admin-report")).toHaveCount(0);
+    await lookUp(page, "admin@example.com");
+    await expect(page.locator("#lookup-result")).toContainText("Admin");
     await adminCtx.close();
   });
 

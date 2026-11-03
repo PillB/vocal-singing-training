@@ -537,8 +537,12 @@
       const { vh, offsetTop, safeBottom } = getViewportMetrics();
       // Gap: short/landscape + safe-area (home indicator)
       const gap = (vh < 500 ? 12 : 8) + Math.max(0, safeBottom);
-      // Visual bottom of the usable screen (visualViewport may be offset)
-      const visualBottom = offsetTop + vh;
+      // Visual bottom of the usable screen (visualViewport may be offset), above
+      // the statistics question when the EEA bar is up (region-gate.js sets
+      // --region-consent-h on <html> while it is).
+      const consentH =
+        parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--region-consent-h")) || 0;
+      const visualBottom = offsetTop + vh - consentH;
       // Size for the lowest the stage sits at rest. It is sticky, so a page
       // scrolled by a few pixels lifts it to its sticky offset; measured then,
       // the stage came out that much too tall once the page was back at the
@@ -602,6 +606,9 @@
       } catch {
         /* ignore */
       }
+      // Fitting the screen came first; the stage is never shorter than what is
+      // on it, so a very small screen scrolls instead of losing its lanes.
+      syncStageInsets();
       // Resize pitch canvas to new stage box; redraw idle if not live
       try {
         if (state.pitchViz) {
@@ -617,6 +624,42 @@
     } catch {
       /* ignore */
     }
+  }
+
+  /** Fewest px of lanes a pitch stage keeps between its two rails. */
+  const STAGE_MIN_LANES = 60;
+
+  /**
+   * The stage is sized to the screen, but never to less than it holds: its top
+   * rail, its bottom rail and, between them, either lanes of STAGE_MIN_LANES or
+   * a speaking exercise's mode panel with its words whole. On the smallest
+   * phones (320x568) the rails alone take most of the screen, so the stage
+   * grows past it and the page scrolls; anywhere the content fits, nothing
+   * changes and the whole stage stays on one screen.
+   * @param {HTMLElement} stage #highway-stage.
+   * @param {number} railTop Px from the stage's top to the top rail's bottom.
+   * @param {number} railBottom Px the bottom rail and its gap take from the stage's bottom.
+   * @returns {boolean} True when the stage was made taller.
+   */
+  function growStageForContent(stage, railTop, railBottom) {
+    const h = stage.getBoundingClientRect().height;
+    let need = railTop + railBottom + STAGE_MIN_LANES;
+    // A mode panel that is cut off with no way to scroll to the rest (a picture's
+    // panel clips) gets the rows it lacks. A long step list is left alone: its
+    // wrapper scrolls, by design.
+    const focus = $("#mode-focus");
+    if (focus && !focus.hidden) {
+      const wrap = $("#mode-focus-panel");
+      const cutOff = (el) =>
+        el && /^(hidden|clip)$/.test(getComputedStyle(el).overflowY) ? el.scrollHeight - el.clientHeight : 0;
+      const over = Math.max(cutOff(wrap), cutOff(wrap?.querySelector(".mode-panel")));
+      if (over > 1) need = Math.max(need, h + over);
+    }
+    if (h >= need - 0.5) return false;
+    const px = `${Math.ceil(need)}px`;
+    stage.style.maxHeight = px;
+    stage.style.height = px;
+    return true;
   }
 
   /**
@@ -649,7 +692,8 @@
         stage.style.getPropertyValue("--rail-t") !== t || stage.style.getPropertyValue("--rail-h") !== b;
       stage.style.setProperty("--rail-t", t);
       stage.style.setProperty("--rail-h", b);
-      return moved;
+      const grew = growStageForContent(stage, Math.ceil(railBottom) + 4, clear);
+      return moved || grew;
     } catch {
       return false;
     }
@@ -1566,7 +1610,8 @@
    * guide.html holds both languages in one file, so a bare `guide.html` link
    * always lands an English reader on the Spanish half. Point every static
    * guide link at the right anchor for the current language. A link that
-   * names its section (data-guide-anchor) keeps it, in either language.
+   * names its section (data-guide-anchor) keeps it, in either language. The
+   * privacy page is the same, so its links are pointed here too.
    */
   function syncGuideLinks() {
     const href = window.VTTour?.guideHref?.() || "guide.html";
@@ -1578,6 +1623,11 @@
     $$('a[href^="guide.html"]').forEach((a) => {
       const anchor = a.getAttribute("data-guide-anchor");
       a.href = anchor ? window.VTTour?.guideHref?.(anchor) || `guide.html#${anchor}` : clean;
+    });
+    // privacy.html holds both languages in one file as well: an English reader
+    // opens the English half, and switching back takes the anchor off again.
+    $$('a[href^="privacy.html"]').forEach((a) => {
+      a.setAttribute("href", window.VTI18n?.lang === "en" ? "privacy.html#en" : "privacy.html");
     });
   }
 

@@ -87,12 +87,6 @@
     },
     {
       "file": "js/app.js",
-      "sha": "78df9620c2fc8ccf4f267de85761fd5dd82a8e4aa1ddae3fa26e30045a9d5a23",
-      "complexity": 19,
-      "name": "Async arrow function"
-    },
-    {
-      "file": "js/app.js",
       "sha": "c88b43983f5f78078cdaf0b315fb09d615a01d2d3ab26ed863c694e8ef8eb3cb",
       "complexity": 24,
       "name": "Async arrow function"
@@ -162,12 +156,6 @@
       "sha": "42d729c956e6e6511e5cc34bae2eb5f25dfceb4cf87b86ca8708ebeaaf898272",
       "complexity": 17,
       "name": "Function 'bindAccount'"
-    },
-    {
-      "file": "js/app.js",
-      "sha": "767dca12ccf6d6cd1cd25b3fa71447d1f5c56282171deeac0f1826575b3f00f5",
-      "complexity": 34,
-      "name": "Function 'bindBilling'"
     },
     {
       "file": "js/app.js",

@@ -214,3 +214,52 @@ test("a short message stays up for the 2,8 s floor, not for the 1,5 s plus 50 ms
   await page.clock.runFor(400);
   await expect(page.locator("#toast")).not.toHaveClass(/show/);
 });
+
+// QA round 4 part B (UIA-06, UIA-07)
+test("a toast raised while the view is still moving ends up centred on the row once it settles", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 780 });
+  await boot(page, { lang: "es" });
+  // Raised in the same task that opens the exercise: the entrance animation has not run
+  const moving = await page.evaluate(() => {
+    sessionStorage.removeItem("vt_e2e");
+    window.VTApp.openExercise("v1-diction");
+    window.VTToast("Mensaje levantado en plena animacion", { durationMs: 20000 });
+    return document.getAnimations().length;
+  });
+  expect(moving, "control: an animation is running when the toast is placed").toBeGreaterThan(0);
+  await page.evaluate(() => {
+    document.getAnimations().forEach((a) => a.finish());
+    return new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+  });
+  const off = await page.evaluate(() => {
+    const t = document.getElementById("toast").getBoundingClientRect();
+    const row = document.querySelector(".exercise-header-compact").getBoundingClientRect();
+    return Math.abs((t.top + t.bottom) / 2 - (row.top + row.bottom) / 2);
+  });
+  expect(off, "the toast's centre is on the row's centre (px apart)").toBeLessThanOrEqual(1);
+});
+
+test("a faded toast leaves no message behind in the page, and the next one still shows", async ({ page }) => {
+  await page.clock.install();
+  await boot(page, { lang: "es" });
+  await page.evaluate(() => {
+    sessionStorage.removeItem("vt_e2e");
+    window.VTToast("Primer mensaje");
+  });
+  await expect(page.locator("#toast")).toHaveText("Primer mensaje");
+  await page.clock.runFor(3200);
+  await expect(page.locator("#toast")).not.toHaveClass(/show/);
+  await page.clock.runFor(500);
+  await expect(page.locator("#toast"), "emptied after the fade, still in the page for the next announcement").toHaveText("");
+  await expect(page.locator("#toast")).toHaveAttribute("role", "status");
+  await page.evaluate(() => window.VTToast("Segundo mensaje"));
+  await expect(page.locator("#toast")).toHaveText("Segundo mensaje");
+  await expect(page.locator("#toast")).toHaveClass(/show/);
+  // Hidden at 2,8 s, emptied at 3,2 s: a message raised at 2,9 s must not be wiped by the earlier one's timer
+  await page.clock.runFor(2900);
+  await expect(page.locator("#toast"), "control: the second message has faded and not yet been emptied").not.toHaveClass(/show/);
+  await expect(page.locator("#toast")).toHaveText("Segundo mensaje");
+  await page.evaluate(() => window.VTToast("Tercer mensaje"));
+  await page.clock.runFor(450);
+  await expect(page.locator("#toast")).toHaveText("Tercer mensaje");
+});

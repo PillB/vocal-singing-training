@@ -192,6 +192,29 @@ Left alone, with the reason:
   longer shows Pro in the window between sign-in and the license token
   arriving (it showed the worker's unsigned reply there before).
 
+### Part B: the toast and the page's heading (QA report `qa/round4/ROUND4-B-worker-ui.md`)
+
+| Finding | What changed | Test and mutants |
+|---|---|---|
+| UIA-01 The in-row toast covered Help on a 280 px phone, or a 320 px one with text at 125% (the room between Back and Help was under the 120 px floor) | Under 120 px of room the toast stands just under the row, whole, instead of on Help | `tests/toast-and-h1-gaps.spec.js` A (QA's, plus width and position), A19, A20 |
+| UIA-02, UIA-03 A toast placed once stayed there when the view, the window or the language changed ("session paused" toast fires on every load) | A shown toast is placed again on view change, resize, rotation, language (the switch rewrites the body class) and when the entrance animation ends | same file B, C; `tests/toast-placement.spec.js`; A14, A17, A18, A22 |
+| UIA-04 On a landscape phone the whole site header was `display: none`, so an open exercise had no h1 (axe `page-has-heading-one`) | The header leaves the layout, the tab order and the accessibility tree except the h1 (`visibility`), and `syncHeaderHeightVar` reads `position: absolute` as "takes no room" | D (QA's) and the sticky-offset test, A25, A26 |
+| UIA-05 The 374 px cut could move to 360 px unseen | 373, 374 and 375 px are pinned | E, A27 |
+| UIA-06 A toast placed during the view's entrance animation was 2 to 6 px off | Placed again at `animationend` | `tests/toast-placement.spec.js`, A22 |
+| UIA-07 A faded toast kept its text in the accessibility tree | The region stays (so the next message is still announced) and is emptied 0,4 s after it fades; a new toast cancels the pending clear | `tests/toast-placement.spec.js`, A23, A24 |
+| UIA-08 `--ex-chrome-h` is not re-measured on a text-size change without a resize | Left alone: no consumer is affected today | |
+
+Trade-offs: where the row has no room (a 280 px phone) the toast covers part of
+the stage's strip for its 3 to 8 s instead of Help, which is the lesser loss;
+at 200% text the row itself overflows, which is a layout limit of the row and
+not of the toast. The payments findings in the same report (QA-W-01 to
+QA-W-09: concurrent first-purchase events minting several licenses, no
+handling of Stripe refunds and disputes, no price or amount allowlist, gift codes redeemed
+twice at once, and five mutants of the decision functions that the worker's
+tests do not catch, among them a failed Stripe event keeping its idempotency
+marker) are the account worker's, owned by the
+payments thread; this branch does not touch that code.
+
 ### The red team on those fixes
 
 Five adversarial passes over the round-4 changes found defects in the fixes

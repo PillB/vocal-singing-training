@@ -40,8 +40,8 @@
     "sha": "93d225ed63fd919a"
   },
   "css/styles.css": {
-    "v": "20261102h",
-    "sha": "7343c8a09f7299d6"
+    "v": "20261103a",
+    "sha": "7390931be9d3d46c"
   },
   "js/account.js": {
     "v": "20261006b",
@@ -60,12 +60,12 @@
     "sha": "a21095f2971b6300"
   },
   "js/analytics.js": {
-    "v": "20261006b",
-    "sha": "4c03c708ee923b1a"
+    "v": "20261103a",
+    "sha": "319fd17f4fbb6fd1"
   },
   "js/app.js": {
-    "v": "20261103c",
-    "sha": "5cc324b3b0bdb811"
+    "v": "20261103f",
+    "sha": "0fc6a0581b018cd1"
   },
   "js/auth-users.generated.js": {
     "v": "20261006a",
@@ -92,8 +92,8 @@
     "sha": "012bb5f186b7dfdd"
   },
   "js/exercises-data.js": {
-    "v": "20261101a",
-    "sha": "c9d81c3332b0860b"
+    "v": "20261103a",
+    "sha": "14c8baff210635df"
   },
   "js/exercises-locale-es.js": {
     "v": "20261101a",
@@ -144,8 +144,8 @@
     "sha": "a0e0e06dc4bcd25e"
   },
   "js/practice-modes.js": {
-    "v": "20261102c",
-    "sha": "9dc0b225676685fe"
+    "v": "20261103a",
+    "sha": "c967e70077be5d32"
   },
   "js/practice-profiles.js": {
     "v": "20261002a",
@@ -208,8 +208,8 @@
     "sha": "970c4630a8ee761b"
   },
   "js/storage.js": {
-    "v": "20261006b",
-    "sha": "88e94f2ad7eab14e"
+    "v": "20261103a",
+    "sha": "c258071819748ee6"
   },
   "js/sync.js": {
     "v": "20261102a",

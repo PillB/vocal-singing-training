@@ -7318,8 +7318,29 @@ body.view-exercise .stage-coach .mode-hud,
    session banner stays (one line), so Pausar and Terminar are on screen.
    The rails go back to one row each, MIC keeps its label. */
 @media (max-height: 500px) {
+  /* Out of the layout, the tab order and the accessibility tree, except the
+     site's h1: display: none took the page's only level-1 heading with it
+     (axe page-has-heading-one). js syncHeaderHeightVar reads position:
+     absolute as "takes no room". */
   body.view-exercise .app-header {
-    display: none;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    border: 0;
+    overflow: hidden;
+    visibility: hidden;
+  }
+  body.view-exercise .app-header .brand h1 {
+    visibility: visible;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
   body.view-exercise .exercise-header-compact {
     top: 0;

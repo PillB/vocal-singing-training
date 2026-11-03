@@ -28,10 +28,26 @@
   const DB_STORE = "recordings";
   const DB_VERSION = 1;
 
+  /** "null" and "array" are kinds of their own: typeof says "object" for both. */
+  function kindOf(value) {
+    if (value === null) return "null";
+    return Array.isArray(value) ? "array" : typeof value;
+  }
+
+  /**
+   * A stored value, or `fallback` when it is missing, is not JSON, or is JSON of
+   * another kind than the fallback: null, a number or an array where an object
+   * belongs (an import, a sync write, another build's schema, an extension) is as
+   * unusable as invalid JSON, and used to stop the app booting until the site's
+   * data was cleared (QA-35). A null fallback stands for "an object or nothing".
+   * The kind is checked, not the fields inside.
+   */
   function read(key, fallback) {
     try {
       const raw = localStorage.getItem(key);
-      return raw ? JSON.parse(raw) : fallback;
+      if (!raw) return fallback;
+      const value = JSON.parse(raw);
+      return kindOf(value) === kindOf(fallback === null ? {} : fallback) ? value : fallback;
     } catch {
       return fallback;
     }

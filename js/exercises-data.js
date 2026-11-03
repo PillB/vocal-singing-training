@@ -410,10 +410,11 @@ window.VT_EXERCISES = {
       research:
         "Volume shows confidence and authority when controlled. Laddering builds flexible dynamics for different rooms and moments.",
       steps: [
-        "Pick one sentence (8–12 words).",
-        "Say it at level 1 (almost whisper) → 2 soft → 3 conversational → 4 projected → 5 full room (not shout).",
-        "Return 5 → 3 → 1 with the same sentence.",
-        "Then deliver a 60s story using at least 3 different volume levels on purpose."
+        "Pick one short sentence you use often (8–12 words).",
+        "Say it at 5 levels: 1 almost a whisper → 2 soft → 3 conversational → 4 projected → 5 full room (no shouting).",
+        "Come back down 5 → 3 → 1 with the same sentence; repeat the ladder 3 times.",
+        "Then tell a 60 s story using at least 3 levels, on purpose.",
+        "Keep the same clarity and diction at every level."
       ],
       tips: [
         "Projection comes from support + intention, not throat squeeze.",
@@ -440,10 +441,11 @@ window.VT_EXERCISES = {
       research:
         "Varying pace keeps audiences engaged. Slow on key ideas; allow processing time; avoid one-speed delivery.",
       steps: [
-        "Write 3 key points for a short talk.",
-        "Deliver with deliberate slow-down on each key point (+ pause after).",
-        "Use slightly faster pace on transitions/setup.",
-        "Record 90 seconds and mark where pace served meaning."
+        "Pick a message of about 90 s with one key idea.",
+        "First pass: an even pace.",
+        "Second pass: slow down only on the key idea (about half speed) and speed up the rest a little.",
+        "Third pass: mark 2 intentional “brakes” (pauses) before the key idea.",
+        "Record it and pick the clearest version."
       ],
       tips: [
         "Slow ≠ boring when intention is clear.",

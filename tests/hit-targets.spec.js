@@ -130,35 +130,29 @@ for (const vp of VIEWPORTS) {
     test("guide toggle center is hit-testable", async ({ page }) => {
       await openShLadder(page);
       const guide = page.locator("#btn-toggle-guide");
-      if (!(await guide.count())) {
-        test.skip();
-        return;
-      }
+      expect(await guide.count(), "the guide toggle is on the page (a missing control is a failure, not a skip: QA-57)").toBe(1);
       await guide.scrollIntoViewIfNeeded();
       await page.waitForTimeout(80);
       const r = await page.evaluate(() => {
         const btn = document.querySelector("#btn-toggle-guide");
-        if (!btn) return { skip: true };
+        if (!btn) return { missing: true };
         const br = btn.getBoundingClientRect();
         const vh = window.innerHeight;
-        // If still below fold after scroll, skip (layout extreme)
+        // Still out of the window after scrolling it into view is a layout defect to report, not a reason to skip
         if (br.top < 0 || br.bottom > vh + 2) {
-          return { skip: true, offscreen: true };
+          return { offscreen: true, top: br.top, bottom: br.bottom, vh };
         }
         const top = document.elementFromPoint(
           br.left + br.width / 2,
           br.top + br.height / 2
         );
         return {
-          skip: false,
           hits: !!(top && (top === btn || btn.contains(top))),
           top: top && { id: top.id, tag: top.tagName }
         };
       });
-      if (r.skip) {
-        test.skip();
-        return;
-      }
+      expect(r.missing, "the guide toggle is still there").toBeUndefined();
+      expect(r.offscreen, `the guide toggle is out of the window after scrolling to it (${JSON.stringify(r)})`).toBeUndefined();
       expect(r.hits).toBe(true);
     });
   });

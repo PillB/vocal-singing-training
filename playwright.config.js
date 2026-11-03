@@ -82,7 +82,8 @@ module.exports = {
       testMatch: /cross-browser-audio\.spec\.js/
     }
   ],
-  reporter: [["list"]],
+  // The second reporter fails the run on a skipped test nobody reviewed (QA-57): a skip is reported as a success
+  reporter: [["list"], ["./qa/no-skips-reporter.cjs"]],
   webServer: {
     command: "npm run serve",
     url: "http://127.0.0.1:8765",

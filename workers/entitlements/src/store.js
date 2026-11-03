@@ -791,6 +791,24 @@ function endReversedPeriod(record) {
  * anything (a renewal of a period already known, a retry) leaves it alone, so
  * the id always names the payment behind the period actually held.
  *
+ * Two things that are not an id arriving with a longer period matter as much,
+ * because the id is read as proof and a wrong one takes paid access away:
+ *
+ *   - money that lengthens the period and names NO payment clears the id.
+ *     Stripe omits the payment intent on an invoice settled from the
+ *     customer's credit balance or marked paid out of band, and on an account
+ *     whose API version stopped carrying the field. Keeping month one's id on
+ *     a period month two bought made the refund of month one end a month two
+ *     that had been paid for (QA round 7), in the one direction that costs a
+ *     customer access they own. Cleared, the arithmetic below answers, and it
+ *     answers that case right.
+ *   - a paid invoice for the very period the record ALREADY holds names that
+ *     period's money even though it lengthens nothing, because a subscription
+ *     event can announce the new period end before the invoice behind it
+ *     arrives. Without this the id would stay on the previous month, and a
+ *     refund of the previous month would end a prorated month two whose own
+ *     length the arithmetic cannot guess.
+ *
  * @param {Object} record Record being built.
  * @param {Object} update Entitlement update descriptor.
  * @param {number|null} before The period end before this update was applied.
@@ -801,13 +819,18 @@ function notePeriodPayment(record, update, before) {
     return;
   }
   const paymentId = typeof update.paymentId === "string" && update.paymentId ? update.paymentId : null;
-  if (!paymentId) {
-    return;
-  }
   if (Number.isFinite(before) && record.periodEnd <= before) {
+    if (paymentId && update.periodEndIsFloor === true && Number.isFinite(update.periodEnd)
+      && Math.floor(update.periodEnd) === record.periodEnd) {
+      record.periodPaymentId = paymentId;
+    }
     return;
   }
-  record.periodPaymentId = paymentId;
+  if (paymentId) {
+    record.periodPaymentId = paymentId;
+    return;
+  }
+  delete record.periodPaymentId;
 }
 
 /**

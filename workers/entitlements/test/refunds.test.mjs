@@ -592,3 +592,78 @@ test("a short prorated month is not ended by the refund of the month before it",
   await deliver(env, "e5", "charge.refunded", 31, refunded("ch_p2", "pi_s2", 20));
   assert.equal((await claim(env, "cs_p", 32)).status, 403);
 });
+
+test("a month paid for with no payment intent on it is not ended by the refund of the month before", async () => {
+  // The identity rule read as proof when it was only a leftover, and it cost a
+  // paying customer a month they owned (QA round 7).
+  //
+  // Stripe's current API versions carry no payment intent on an invoice at
+  // all, and an older account can still lose it on one invoice and not
+  // another: an invoice settled from the customer's credit balance or marked
+  // paid out of band has no payment on it, and an account's API version can
+  // change between two months. So month one names `pi_m1` and month two names
+  // nothing.
+  //
+  // Month two's invoice is what moved the period end to day 62, and it named
+  // no payment, so the id left on the record was month one's. The reversal
+  // then read "the payment that bought this period went back" off two ids
+  // that happened to match, and ended a month that was paid for.
+  //
+  // Delivery order is what exposes it. With the checkout first, the checkout
+  // is what the period is credited to and month one's invoice never becomes
+  // the period's payment; Stripe orders neither, and with month one's invoice
+  // first it does. That is why the earlier tests here did not see it.
+  const env = freshEnv();
+  await deliver(env, "e2", "invoice.paid", 0, invoice("in_c1", "pi_m1", 0, 31));
+  await deliver(env, "e1", "checkout.session.completed", 0, subCheckout("cs_c", "sub_r"));
+  await deliver(env, "e3", "invoice.paid", 31, invoice("in_c2", null, 31, 62));
+  assert.equal((await claim(env, "cs_c", 35)).status, 200, "control: month two is paid and live");
+
+  await deliver(env, "e4", "charge.refunded", 40, refunded("ch_c1", "pi_m1", 0));
+  assert.equal(
+    (await claim(env, "cs_c", 41)).status,
+    200,
+    "month one's money went back; month two was bought by a different payment"
+  );
+  // And the licence is still endable, so this is not a rule that never ends.
+  await deliver(env, "e5", "charge.refunded", 42, refunded("ch_c2", "pi_m1", 31));
+  assert.equal((await claim(env, "cs_c", 43)).status, 403, "a charge raised inside month two ends it");
+});
+
+test("the same, with a chargeback of the month before", async () => {
+  const env = freshEnv();
+  await deliver(env, "e2", "invoice.paid", 0, invoice("in_d1", "pi_m1", 0, 31));
+  await deliver(env, "e1", "checkout.session.completed", 0, subCheckout("cs_d", "sub_r"));
+  await deliver(env, "e3", "invoice.paid", 31, invoice("in_d2", null, 31, 62));
+  await deliver(env, "e4", "charge.dispute.created", 40, dispute("du_d", "pi_m1", "lost"));
+  assert.equal((await claim(env, "cs_d", 41)).status, 200, "the disputed month is not the month held");
+});
+
+test("a prorated month announced by the subscription before its invoice arrives keeps its own payment's name", async () => {
+  // The other half of the same fault. A subscription event can carry the new
+  // period end before the invoice that paid for it: a plan change emits
+  // `customer.subscription.updated` with the new `current_period_end`, and the
+  // invoice follows. The period had already moved by the time the invoice
+  // arrived, so nothing was "lengthened" by it and month two's payment went
+  // unrecorded, leaving month one's id on the record.
+  //
+  // A paid invoice for the very period the record already holds names that
+  // period's money, so it is recorded. Without that, this prorated month —
+  // day 20 to day 35, which is inside one monthly interval plus a week of the
+  // first charge — would be ended by the refund of month one, by the
+  // arithmetic the identity check exists to replace.
+  const env = freshEnv();
+  await deliver(env, "e1", "checkout.session.completed", 0, subCheckout("cs_e", "sub_r"));
+  await deliver(env, "e2", "invoice.paid", 0, invoice("in_e1", "pi_s1", 0, 20));
+  await deliver(env, "e3", "customer.subscription.updated", 20, {
+    id: "sub_r",
+    customer: "cus_r",
+    status: "active",
+    current_period_end: T + 35 * DAY
+  });
+  await deliver(env, "e4", "invoice.paid", 20, invoice("in_e2", "pi_s2", 20, 35));
+  await deliver(env, "e5", "charge.refunded", 25, refunded("ch_e1", "pi_s1", 0));
+  assert.equal((await claim(env, "cs_e", 30)).status, 200, "month two was bought by its own payment");
+  await deliver(env, "e6", "charge.refunded", 31, refunded("ch_e2", "pi_s2", 20));
+  assert.equal((await claim(env, "cs_e", 32)).status, 403, "and its own refund ends it");
+});

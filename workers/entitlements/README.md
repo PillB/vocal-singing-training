@@ -786,6 +786,21 @@ webhook → claim → token flow through the router with a fake `fetch`.
   The arithmetic remains for Mercado Pago, which indexes no payment intents,
   and for a Stripe payment that confirmed money without lengthening anything.
 
+  An id is proof only while it names the period actually held, and getting
+  that wrong costs a customer access they paid for. Two shapes do it, both
+  found by re-attacking the identity rule itself (QA round 7), and both now
+  pinned by tests: money that moves the period end out and names **no**
+  payment clears the id rather than leaving the previous month's on it — an
+  invoice settled from a credit balance or marked paid out of band carries
+  none, and an account's API version can change between two months; and a
+  paid invoice for the very period the record **already** holds is recorded as
+  that period's payment even though it lengthened nothing, because a plan
+  change emits the subscription's new period end before the invoice that paid
+  for it. Without the first, the refund of month one ended a month two that
+  had been paid for. Without the second, the same refund ended a short
+  prorated month two, because the sum cannot tell a prorated period from an
+  unpaid one.
+
   The remedy for a current-API renewal is the one that always worked:
   cancel the subscription in Stripe, which ends renewals, and revoke the grant
   from the admin page if the current period should go too.

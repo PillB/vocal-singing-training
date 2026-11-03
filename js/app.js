@@ -2730,7 +2730,11 @@
    * @returns {string[]} the steps, for the stage's guide
    */
   function renderExerciseText(ex) {
-    $("#ex-title").textContent = window.VTI18n ? VTI18n.exTitle(ex) : ex.title;
+    const name = window.VTI18n ? VTI18n.exTitle(ex) : ex.title;
+    const titleEl = $("#ex-title");
+    titleEl.textContent = name;
+    // The one-row header cuts a long name on a phone; the full one stays on hover and long press
+    titleEl.title = name;
     const tier = ex.tier || "basic";
     // Inside today's basics every step is a warm-up of the routine's track,
     // whatever catalog track and tier the exercise has on its own.
@@ -3123,14 +3127,17 @@
    * language. Rendering it again opened it fresh, which mid-take put Empezar
    * over a live microphone and a running clock (the time sung after it was
    * not counted), and after Stop removed the take's recording and its Save.
-   * The mode's own panel and the details form keep their words until the
-   * next open: rebuilding them would lose what they hold.
+   * The mode's own panel and the details form are not rebuilt (that would
+   * lose what they hold): the panel's words are swapped in place when the take
+   * stops (stopPractice), or at once when none is running (onChange).
    */
   function relabelExercise() {
     const ex = state.exercise;
     if (!ex) return;
     const profile = getProfile(ex);
     renderStageGuide(renderExerciseText(ex), !profile.showPitch);
+    relabelPianoPanel(ex);
+    updateOctaveUI();
     const cue = $("#mode-cue");
     if (cue) cue.textContent = (window.VTI18n?.lang === "es" && profile.cueEs) || profile.cue || tt("practice.hint");
     // The switch put these back to their defaults (data-i18n); say what is true now.
@@ -3225,6 +3232,99 @@
     if (sel.value !== mode) sel.value = mode;
   }
 
+  /** A progression's name and description in the page language (the data carries both). */
+  function progName(p, id) {
+    return (isEsLang() && p.nameEs) || p.name || id || "";
+  }
+  function progDesc(p) {
+    return (isEsLang() && p.descriptionEs) || p.description || "";
+  }
+
+  /**
+   * The line under the chips: the selected progression and, after ▶ or Bucle,
+   * how it plays (state.chordPlayHint). Written again by a language switch.
+   */
+  function paintChordDesc() {
+    const el = $("#chord-desc");
+    if (!el) return;
+    const p = (VTPiano?.getProgressions?.() || VT_PROGRESSIONS || {})[state.selectedProg];
+    if (!p) return;
+    let text = progDesc(p) || progName(p, state.selectedProg);
+    const h = state.chordPlayHint;
+    if (h) {
+      const es = isEsLang();
+      text += h.oneNote
+        ? es
+          ? " · 1 nota a la vez"
+          : " · one note at a time"
+        : h.arpeggio
+          ? es
+            ? " · arpegio"
+            : " · arpeggio"
+          : es
+            ? " · acordes"
+            : " · chords";
+      text += h.oneNote
+        ? es
+          ? ` · ${h.sustainSec}s por nota`
+          : ` · ${h.sustainSec}s per note`
+        : h.sustain
+          ? es
+            ? ` · sostenido ${h.sustainSec}s`
+            : ` · sustain ${h.sustainSec}s`
+          : "";
+    }
+    el.textContent = text;
+  }
+
+  /** Song cards of a song exercise (s3), in the page language. */
+  function renderSongCards(ex) {
+    const row = $("#songs-row");
+    if (!row) return;
+    row.hidden = !ex?.songs;
+    if (!ex?.songs) return;
+    const keys = { feel: "piano.songFeel", better: "piano.songBetter" };
+    row.innerHTML = ex.songs
+      .map(
+        (s) => `
+        <div class="card" style="padding:0.75rem;">
+          <strong>${escapeHtml(keys[s.id] ? tt(keys[s.id]) : s.title)}</strong>
+          <p class="muted" style="margin:0.25rem 0 0.5rem;font-size:0.85rem;">${escapeHtml(tt("piano.songKey"))} · ${escapeHtml(tt("piano.songTip"))}</p>
+          <button type="button" class="btn btn-sm btn-singing" data-song-prog="${escapeHtml(s.prog)}">${escapeHtml(tt("piano.songPlay"))}</button>
+        </div>`
+      )
+      .join("");
+    $$("[data-song-prog]", row).forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        selectProgression(btn.dataset.songProg);
+      });
+    });
+  }
+
+  /**
+   * A language switch on the piano panel: the chips, the select's options, the
+   * song cards and the description say it in the new language. Option text and
+   * chip text change; values, the choice and the playing piano do not.
+   */
+  function relabelPianoPanel(ex) {
+    const progs = VTPiano?.getProgressions?.() || VT_PROGRESSIONS || {};
+    $$("#sel-progression option").forEach((o) => {
+      const p = progs[o.value];
+      if (!p) return;
+      o.textContent = progName(p, o.value);
+      o.title = progDesc(p);
+    });
+    $$("#prog-buttons .prog-btn").forEach((b) => {
+      const p = progs[b.dataset.progId];
+      if (!p) return;
+      b.textContent = progName(p, b.dataset.progId);
+      b.title = progDesc(p);
+    });
+    renderSongCards(ex);
+    paintChordDesc();
+    syncSustainSecLabel();
+  }
+
   function fillProgressionSelect(keys) {
     const sel = $("#sel-progression");
     const bar = $("#hud-prog-bar");
@@ -3242,8 +3342,8 @@
       .map((id) => {
         const p = progs[id];
         if (!p) return "";
-        const label = p.name || id;
-        return `<option value="${id}" title="${(p.description || "").replace(/"/g, "&quot;")}">${label}</option>`;
+        const label = progName(p, id);
+        return `<option value="${id}" title="${progDesc(p).replace(/"/g, "&quot;")}">${label}</option>`;
       })
       .join("");
     sel.value = cur;
@@ -3259,16 +3359,15 @@
     $$(".prog-btn").forEach((b) => {
       b.classList.toggle("active", b.dataset.progId === id);
     });
-    if ($("#chord-desc")) {
-      $("#chord-desc").textContent = p.description || p.name || "";
-    }
+    state.chordPlayHint = null;
+    paintChordDesc();
     if (
       (state.exercise?.audio?.pitchViz || state.exercise?.practice?.showPitch) &&
       !(state.exercise && getProfile(state.exercise)?.noProgression)
     ) {
       lockHighwayForProgression(id);
     }
-    if (!silent) applyPianoOptionsHot("prog:" + (p.name || id));
+    if (!silent) applyPianoOptionsHot("prog:" + progName(p, id));
   }
 
   /**
@@ -3310,7 +3409,15 @@
                   ? tt("piano.modeArpeggio")
                   : what === "chords"
                     ? tt("piano.modeChords")
-                    : String(what);
+                    : /^oct:/.test(String(what))
+                      ? tt("range.shiftedManual", { n: String(what).slice(4) })
+                      : what === "sustain"
+                        ? tt("piano.sustain")
+                        : what === "auto"
+                          ? tt("piano.auto")
+                          : /^\d+s$/.test(String(what))
+                            ? tt("piano.secsLabel", { n: parseInt(what, 10) })
+                            : String(what);
           toast(tt("piano.hotApplied", { what: label }), { debounceMs: 450 });
         }
         return !!ok;
@@ -3339,8 +3446,8 @@
       b.type = "button";
       b.className = "prog-btn" + (state.selectedProg === id ? " active" : "");
       b.dataset.progId = id;
-      b.textContent = p.name;
-      b.title = p.description;
+      b.textContent = progName(p, id);
+      b.title = progDesc(p);
       b.addEventListener("click", () => selectProgression(id));
       progWrap.appendChild(b);
     });
@@ -3369,24 +3476,7 @@
       const b = $(s);
       if (b) b.hidden = ownNotes;
     });
-    if ($("#songs-row")) $("#songs-row").hidden = !ex.songs;
-    if (ex.songs) {
-      $("#songs-row").innerHTML = ex.songs
-        .map(
-          (s) => `
-        <div class="card" style="padding:0.75rem;">
-          <strong>${s.title}</strong>
-          <p class="muted" style="margin:0.25rem 0 0.5rem;font-size:0.85rem;">${s.keyHint} · Use stanzas you know. Practice with piano, not full copyrighted tracks.</p>
-          <button type="button" class="btn btn-sm btn-singing" data-song-prog="${s.prog}">Play song progression</button>
-        </div>`
-        )
-        .join("");
-      $$("[data-song-prog]").forEach((btn) => {
-        btn.addEventListener("click", async () => {
-          selectProgression(btn.dataset.songProg);
-        });
-      });
-    }
+    renderSongCards(ex);
   }
 
   function pianoOptions() {
@@ -3496,25 +3586,13 @@
         // Re-apply same lock (same option) — never shrink to current chord
         // prog is already transposed by playProgression
         if (state.pitchViz) state.pitchViz.setProgressionRange(prog);
-        const modeHint = opts.oneNote
-          ? isEsLang()
-            ? " · 1 nota a la vez"
-            : " · one note at a time"
-          : opts.arpeggio
-            ? isEsLang()
-              ? " · arpegio"
-              : " · arpeggio"
-            : isEsLang()
-              ? " · acordes"
-              : " · chords";
-        const holdHint = opts.oneNote
-          ? isEsLang()
-            ? ` · ${opts.sustainSec}s por nota`
-            : ` · ${opts.sustainSec}s per note`
-          : opts.sustain
-            ? ` · sustain ${opts.sustainSec}s`
-            : "";
-        $("#chord-desc").textContent = prog.description + modeHint + holdHint;
+        state.chordPlayHint = {
+          oneNote: !!opts.oneNote,
+          arpeggio: !!opts.arpeggio,
+          sustain: !!opts.sustain,
+          sustainSec: opts.sustainSec
+        };
+        paintChordDesc();
         const sec = String(opts.sustainSec);
         toast(
           loop
@@ -3640,10 +3718,29 @@
       weekPlan: es ? "Plan 12 semanas" : "12-week plan",
       recordOnly: es ? "Grabar y revisar" : "Record & review",
       pauseDetect: es ? "Pausas" : "Pauses",
-      fillerDetect: es ? "Muletillas" : "Fillers"
+      fillerDetect: es ? "Muletillas" : "Fillers",
+      countPace: es ? "Cuenta a ritmo" : "Paced counting",
+      articulationContrast: es ? "Contraste con bolígrafo" : "Pen contrast",
+      speechEnergy: es ? "Conversación" : "Conversation",
+      reviewSession: es ? "Grabar y revisar" : "Record & review",
+      metronomeSpeech: es ? "Fluidez con metáforas" : "Metaphor fluency",
+      keyPointPace: es ? "Ritmo y punto clave" : "Pace and key point",
+      gestureReps: es ? "Gestos con intención" : "Purposeful gestures",
+      facePhases: es ? "Expresión facial" : "Facial expression",
+      concisionGate: es ? "Puerta de concisión" : "Concision gate",
+      storyTimer: es ? "Historia con pico" : "Story with a peak",
+      authorityLand: es ? "Cierre con autoridad" : "Authority close",
+      energyMatch: es ? "Ajustar la energía" : "Energy match",
+      releaseFlow: es ? "Soltar mandíbula y cuello" : "Jaw & neck release",
+      breathCycle: es ? "Respiración costo-abdominal" : "Low rib & belly breath",
+      openSpace: es ? "Espacio interno" : "Inner space",
+      vowelLadder: es ? "Cinco vocales" : "Five vowels",
+      resonanceZone: es ? "Zonas de resonancia" : "Resonance zones",
+      placementAB: es ? "Comparar colocaciones" : "Placement compare",
+      trillSolfege: es ? "Solfeo en trino de labios" : "Lip-trill solfège"
     };
-    if (!modeId) return es ? "práctica" : "practice";
-    return map[modeId] || String(modeId).replace(/([A-Z])/g, " $1").trim();
+    // A mode with no name here is called plain "practice": its id never reaches the learner
+    return map[modeId] || (es ? "práctica" : "practice");
   }
 
   function setPracticeUI(live) {
@@ -4403,10 +4500,14 @@
         modeResult = state.modeInstance.onStop({
           pitchGame: window.VTAppPitchGameSnap || null
         });
+        // The language was switched during the take: the panel (built in the
+        // old one) and its review text now read in the new one
+        if (state.langChangedMidTake) state.modeInstance.relabel?.();
       }
     } catch (e) {
       console.warn(e);
     }
+    state.langChangedMidTake = false;
     if (state.practiceLive || state.practice.running) {
       try {
         state.practice.setManualSound?.(false, null, { forceClear: true });
@@ -9596,17 +9697,95 @@
     goHome: () => (state.view === "exercise" ? leaveExercise({ type: "home" }) : setView("home"))
   };
 
+  /**
+   * A language switch on an exercise that has not started: rebuilt in the new
+   * language like a fresh open, but the panels the learner had open (steps and
+   * tips, the rating card, the piano), the microphone notice and the scroll
+   * position stay where they were.
+   */
+  function renderExerciseInPlace() {
+    const keep = {
+      guide: !!state.guideOpen,
+      metrics: !!state.metricsOpen,
+      piano: !!state.pianoOpen,
+      mic: !!$("#mic-blocked") && !$("#mic-blocked").hidden,
+      y: window.scrollY
+    };
+    renderExercise();
+    if (keep.guide) $("#btn-toggle-guide")?.click();
+    if (keep.metrics) openMetricsPanel(true, { reveal: false });
+    if (keep.piano && !$("#btn-toggle-piano")?.hidden) $("#btn-toggle-piano")?.click();
+    if (keep.mic) {
+      relabelMicBlocked();
+      const box = $("#mic-blocked");
+      if (box) box.hidden = false;
+    }
+    // Opening the panels brought them into view; put the page back
+    const back = () => {
+      if (Math.abs(window.scrollY - keep.y) > 2) window.scrollTo({ top: keep.y, behavior: "instant" });
+    };
+    requestAnimationFrame(() => {
+      back();
+      requestAnimationFrame(back);
+    });
+    setTimeout(back, 250);
+  }
+
+  /**
+   * The microphone notice is written when it opens. After a language switch it
+   * says the same thing in the new language: the words on screen are matched
+   * against the old language's versions of its texts, and the new language's
+   * version of the one that matches is written.
+   */
+  function relabelMicBlocked() {
+    const I = window.VTI18n;
+    const textEl = $("#mic-blocked-text");
+    if (!I || !textEl) return;
+    const old = I.strings[I.lang === "es" ? "en" : "es"] || {};
+    const now = (textEl.textContent || "").trim();
+    const heads = Object.keys(old).filter((k) => /^mic\.(blocked|missing)\.(none|partial)$/.test(k) && typeof old[k] === "string");
+    const runs = Object.keys(old).filter((k) => /^mic\.runs\./.test(k));
+    for (const k of heads) {
+      const forms = old[k].includes("{runs}") ? runs.map((r) => [r, old[k].replace("{runs}", old[r])]) : [[null, old[k]]];
+      const hit = forms.find(([, text]) => text.trim() === now);
+      if (hit) {
+        textEl.textContent = I.t(k, hit[0] ? { runs: I.t(hit[0]) } : undefined);
+        break;
+      }
+    }
+    const retry = $("#btn-mic-retry");
+    if (retry) retry.textContent = tt("mic.blocked.retry");
+    const skip = $("#btn-mic-skip");
+    if (skip) skip.textContent = tt("mic.blocked.skip");
+    const close = $("#btn-mic-close");
+    if (close) close.setAttribute("aria-label", tt("a11y.close"));
+  }
+
   function init() {
     ensureRangeAdapter();
-    updateOctaveUI();
     installGlobalErrorHandlers();
     if (window.VTI18n) {
       VTI18n.init();
       VTI18n.onChange = () => {
         renderExerciseList();
+        updateOctaveUI();
         if (state.view === "exercise" && state.exercise) {
-          if (exerciseUnderWay()) relabelExercise();
-          else renderExercise();
+          if (exerciseUnderWay()) {
+            relabelExercise();
+            // A take is running: its panel changes when it stops. Otherwise now.
+            if (state.practiceLive || state.practiceStarting) state.langChangedMidTake = true;
+            else {
+              try {
+                state.modeInstance?.relabel?.();
+              } catch (err) {
+                console.warn("[VT] relabel", err);
+              }
+            }
+            if (!$("#mic-blocked")?.hidden) relabelMicBlocked();
+          } else {
+            state.langChangedMidTake = false;
+            renderExerciseInPlace();
+          }
         }
         if ($("#step-done") && !$("#step-done").hidden) renderStepDone();
         // Plan and history build their copy at render time, so a language
@@ -9634,6 +9813,7 @@
         if ($("#pricing-modal") && !$("#pricing-modal").hidden) renderPricingModal();
       };
     }
+    updateOctaveUI();
     syncGuideLinks();
     const settings = VTStorage.getSettings();
     state.tab = settings.lastTab || "vocal";

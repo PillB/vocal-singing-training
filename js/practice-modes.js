@@ -29,8 +29,61 @@
     if (global.VTI18n && global.VTI18n.lang) return global.VTI18n.lang === "es";
     return (document.documentElement.lang || "es").startsWith("es");
   }
+  /**
+   * The (es, en) pairs a mounted mode has written, kept while it is mounting,
+   * starting and stopping (never per frame), so relabel() can put its panel
+   * into the other language after a switch without rebuilding it.
+   */
+  let rec = null;
   function L(es, en) {
+    if (rec && es !== en) recordPair(rec, es, en);
     return isEs() ? es : en;
+  }
+  const ENTITIES = { "&lt;": "<", "&gt;": ">", "&amp;": "&", "&nbsp;": " ", "&quot;": '"' };
+  function plainText(t) {
+    return t.replace(/&(lt|gt|amp|nbsp|quot);/g, (m) => ENTITIES[m]).trim();
+  }
+  /** A pair as written, and, when it holds markup, the text pieces around its elements. */
+  function recordPair(map, es, en) {
+    map.set(es, en);
+    if (!/[<&]/.test(es + en)) return;
+    const pieces = (t) => t.split(/<(\w+)[^>]*>.*?<\/\1>|<[^>]*>/g).filter((x, i) => i % 2 === 0);
+    const a = pieces(es);
+    const b = pieces(en);
+    if (a.length !== b.length) return;
+    a.forEach((x, i) => {
+      const from = plainText(x);
+      const to = plainText(b[i]);
+      if (from && from !== to) map.set(from, to);
+    });
+  }
+  /** Every text a profile carries in both languages (label/labelEs, cue/cueEs, ...). */
+  function profilePairs(map, node, depth = 0) {
+    if (!node || typeof node !== "object" || depth > 5) return;
+    if (Array.isArray(node)) return node.forEach((x) => profilePairs(map, x, depth + 1));
+    Object.keys(node).forEach((k) => {
+      const v = node[k];
+      const es = node[k + "Es"];
+      if (typeof v === "string") {
+        if (typeof es === "string" && es && es !== v) recordPair(map, es, v);
+      } else if (Array.isArray(v) && Array.isArray(es) && v.length === es.length && v.every((x) => typeof x === "string")) {
+        v.forEach((x, i) => es[i] && es[i] !== x && recordPair(map, es[i], x));
+      } else profilePairs(map, v, depth + 1);
+    });
+  }
+  /** The picture kit's own L() reports its pairs here while a mode is mounting, starting or stopping. */
+  global.VTModeRecord = function (es, en) {
+    if (rec && es !== en) recordPair(rec, es, en);
+  };
+  /** Run fn with `mode`'s pairs being recorded. */
+  function recording(mode, fn) {
+    const prev = rec;
+    rec = mode._lpairs || (mode._lpairs = new Map());
+    try {
+      return fn();
+    } finally {
+      rec = prev;
+    }
   }
 
   /**
@@ -135,12 +188,15 @@
       hud: null,
       mount(container, profile) {
         this._destroyViz();
+        this._rawProfile = profile;
+        this._lpairs = new Map();
+        profilePairs(this._lpairs, profile);
         this.profile = localizeProfile(profile);
         this.state = { startedAt: performance.now(), patches: {}, extras: {} };
         container.innerHTML = "";
         this.hud = el(`<div class="mode-panel mode-${spec.id}"></div>`);
         container.appendChild(this.hud);
-        if (spec.render) spec.render.call(this);
+        if (spec.render) recording(this, () => spec.render.call(this));
         // #mode-hud is not a live region (its numbers change many times a
         // second): a panel without its own announcer has its step read out
         if (this.hud && !this.hud.querySelector("[aria-live]")) {
@@ -178,14 +234,86 @@
         this._ownsOverlay = false;
       },
       onStart() {
-        if (spec.onStart) spec.onStart.call(this);
+        if (spec.onStart) recording(this, () => spec.onStart.call(this));
       },
       onFrame(frame) {
         if (spec.onFrame) spec.onFrame.call(this, frame);
       },
       onStop(ctx) {
-        if (spec.onStop) return spec.onStop.call(this, ctx) || { patches: this.state.patches };
+        if (spec.onStop) return recording(this, () => spec.onStop.call(this, ctx)) || { patches: this.state.patches };
         return { patches: this.state.patches || {}, summary: "" };
+      },
+      /**
+       * The panel in the language the page is in now, after a switch made
+       * while a take was running. Nothing is rebuilt (a rebuild would lose the
+       * take): every text, aria-label and title that is exactly a string this
+       * mode wrote with L() in the other language, or a phase label, becomes
+       * its pair, and a longer text that holds one is swapped in place.
+       */
+      relabel() {
+        if (!this.hud) return;
+        const es = isEs();
+        const swap = new Map();
+        (this._lpairs || new Map()).forEach((en, esText) => {
+          if (esText !== en) swap.set(es ? en : esText, es ? esText : en);
+        });
+        // Phase labels were localised once, when the mode mounted
+        const raw = this._rawProfile;
+        if (raw && Array.isArray(raw.phases) && this.profile && Array.isArray(this.profile.phases)) {
+          this.profile.phases.forEach((p, i) => {
+            const next = phaseLabelFor(raw.phases[i]);
+            if (p.label !== next) {
+              swap.set(p.label, next);
+              p.label = next;
+            }
+          });
+        }
+        // Texts a mode took from the interface table (t("week.cta")) are matched whole
+        const exact = new Map();
+        const table = global.VTI18n && global.VTI18n.strings;
+        if (table && table.es && table.en) {
+          const from = table[es ? "en" : "es"];
+          const to = table[es ? "es" : "en"];
+          const clash = new Set();
+          Object.keys(from).forEach((k) => {
+            const a = from[k];
+            const b = to[k];
+            if (typeof a !== "string" || typeof b !== "string" || a === b || a.length < 4) return;
+            if (exact.has(a) && exact.get(a) !== b) clash.add(a);
+            exact.set(a, b);
+          });
+          clash.forEach((a) => exact.delete(a));
+        }
+        if (!swap.size && !exact.size) return;
+        // A text built from several pieces ("/ 60 · Tiempo") holds a recorded string as whole words
+        const parts = [...swap.keys()]
+          .filter((k) => k.length >= 4)
+          .sort((a, b) => b.length - a.length)
+          .map((k) => [new RegExp("(^|[^\\p{L}\\p{N}])" + k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?![\\p{L}\\p{N}])", "gu"), swap.get(k)]);
+        const text = (v) => {
+          const t = v.trim();
+          if (!t) return v;
+          if (swap.has(t)) return v.replace(t, () => swap.get(t));
+          if (exact.has(t)) return v.replace(t, () => exact.get(t));
+          let out = v;
+          for (const [re, to] of parts) out = out.replace(re, (m, before) => before + to);
+          return out;
+        };
+        const w = document.createTreeWalker(this.hud, NodeFilter.SHOW_TEXT);
+        const nodes = [];
+        while (w.nextNode()) nodes.push(w.currentNode);
+        nodes.forEach((n) => {
+          const v = text(n.nodeValue);
+          if (v !== n.nodeValue) n.nodeValue = v;
+        });
+        [this.hud, ...this.hud.querySelectorAll("[aria-label],[title]")].forEach((e) => {
+          ["aria-label", "title"].forEach((a) => {
+            const cur = e.getAttribute(a);
+            if (cur == null) return;
+            const v = text(cur);
+            if (v !== cur) e.setAttribute(a, v);
+          });
+        });
       },
       $(sel) {
         return this.hud ? this.hud.querySelector(sel) : null;
@@ -5639,8 +5767,9 @@
         <div class="pz-row">
           <button type="button" class="btn btn-sm" data-feel>${L("Canción A +1", "Song A +1")}</button>
           <button type="button" class="btn btn-sm" data-better>${L("Canción B +1", "Song B +1")}</button>
+          <span class="pz-lab" aria-live="polite">A <strong data-f>0</strong>/5 · B <strong data-b>0</strong>/5</span>
         </div>
-        <p class="mode-meta">A <strong data-f>0</strong>/5 · B <strong data-b>0</strong>/5 · ${L("frases a la meta", "phrases at goal")} <strong data-p>0</strong></p>
+        <p class="mode-meta">${L("frases a la meta", "phrases at goal")} <strong data-p>0</strong></p>
         <p class="mode-meta muted">${L("Marca +1 al terminar una estrofa. La línea mide cada frase: su largo, las pausas y si el volumen cae al final.", "Tap +1 when you finish a stanza. The line measures each phrase: its length, the pauses, and whether the level falls at the end.")}</p>
       `;
       this.hud.querySelectorAll("[data-goal]").forEach((b) =>

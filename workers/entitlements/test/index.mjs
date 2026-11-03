@@ -20,6 +20,7 @@ import "./site-client.test.mjs";
 import "./accounts.test.mjs";
 import "./grants.test.mjs";
 import "./trial-arm.test.mjs";
+import "./trial-killers.test.mjs";
 import "./progress.test.mjs";
 import "./google.test.mjs";
 import "./email.test.mjs";
@@ -27,6 +28,7 @@ import "./api.test.mjs";
 import "./stats.test.mjs";
 import "./events.test.mjs";
 import "./reports.test.mjs";
+import "./scrub-killers.test.mjs";
 import "./refunds.test.mjs";
 import "./price-table.test.mjs";
 // QA round 4's five tests for mutants this suite let survive. Each one was

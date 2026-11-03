@@ -326,6 +326,16 @@ export function redactLongDigitRuns(text) {
   // character class match, and it only ever covered the one script somebody had
   // thought of. The class covers every script instead, so what is stored is
   // what they typed, minus the cards.
+  //
+  // The `[...run].length < 13` below is a CHEAP GUARD, not a decision: it skips
+  // `runHasCard` for a run too short to hold a card. Measured with a mutation,
+  // changing it on its own alters no outcome, because `runHasCard` counts code
+  // points too and reaches the same verdict either way. It is counted in code
+  // points for consistency with that function rather than because anything
+  // depends on it, and it is said here so a future reader does not take a
+  // surviving mutant of this line as a hole in the tests. The counting that IS
+  // load-bearing is the `[...group].length` inside `runHasCard`, and mutating
+  // that turns two tests red.
   return String(text).replace(DIGIT_RUN, (run) => ([...run].length < 13 || !runHasCard(run) ? run : HIDDEN));
 }
 

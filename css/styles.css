@@ -3704,8 +3704,9 @@ body.tour-spot-on .tour-highlight {
   outline: none;
 }
 /* Last stop on a phone: the button that starts practice takes the full width,
-   with Atrás and Ahora no under it, instead of three buttons wrapping. */
-@media (max-width: 520px) {
+   with Atrás and Ahora no under it, instead of three buttons wrapping. The
+   sheet is also what a phone on its side gets (see the next block). */
+@media (max-width: 520px), (max-height: 500px) {
   .tour-card.tour-handoff .tour-nav {
     display: contents;
   }
@@ -3823,8 +3824,10 @@ body.tour-active .app-footer * {
 /* Phone: a bottom sheet. Both anchors are pinned, so the card spans the width
    instead of shrink-wrapping — `width: auto` with only `left` set used to
    collapse the centred card to ~209px, which is what a first-time mobile
-   visitor met on the welcome step. JS leaves position alone at this width. */
-@media (max-width: 520px) {
+   visitor met on the welcome step. JS leaves position alone at this width.
+   A short screen (a phone on its side, 844x390) gets the sheet too: a floating
+   card 280-300px tall in 390px has no band beside or above the target. */
+@media (max-width: 520px), (max-height: 500px) {
   .tour-card,
   .tour-card-center {
     left: 12px !important;
@@ -3841,6 +3844,36 @@ body.tour-active .app-footer * {
   .tour-card.tour-sheet-top {
     top: 12px !important;
     bottom: auto !important;
+  }
+}
+/* On a short, wide screen the sheet is one compact band (about 160px): the
+   guide link beside the buttons, tighter spacing, so the page keeps a band
+   free for the ring. */
+@media (max-height: 500px) and (min-width: 521px) {
+  .tour-card {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    column-gap: 1rem;
+    padding: 0.55rem 1rem 0.5rem;
+  }
+  .tour-card > .tour-progress,
+  .tour-card > h3,
+  .tour-card > .tour-body {
+    grid-column: 1 / -1;
+  }
+  .tour-card > .tour-guide-link {
+    grid-column: 1;
+    margin: 0;
+  }
+  .tour-card > .tour-actions {
+    grid-column: 2;
+  }
+  .tour-card h3 {
+    margin-bottom: 0.2rem;
+  }
+  .tour-body {
+    margin-bottom: 0.3rem;
+    line-height: 1.4;
   }
 }
 

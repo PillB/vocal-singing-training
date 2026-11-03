@@ -384,3 +384,211 @@ test("a payment intent is not a second way into /v1/claim", async () => {
   assert.notEqual(byPayment.status, 200);
   assert.equal(byPayment.body.reason, "pending");
 });
+
+/* ---------------------------------------------------------------------------
+ * Which payment bought the period (QA round 5 re-attack, 2026-11-03)
+ *
+ * The three tests below were all failing. Each is a different way the old rule
+ * went wrong, and they share one cause: it worked out which payment had bought
+ * the period from arithmetic — one plan interval past the reversed charge, plus
+ * a week of slack — when the provider had already said, by naming a payment
+ * intent on both the payment and the reversal.
+ *
+ * The record now remembers which payment moved the period end out, so a
+ * refund or a dispute that names that same payment ends the period and one
+ * that names a different payment leaves it alone. The arithmetic is kept for
+ * the cases that still have no id to compare: Mercado Pago, a dispute on a
+ * license that only ever heard of a period, and records written before the
+ * field existed. The last two tests in this block pin both halves of that
+ * split.
+ * ------------------------------------------------------------------------ */
+
+/** A subscription-mode checkout: it names no payment intent of its own. */
+const subCheckout = (sessionId, subscriptionId) => ({
+  id: sessionId,
+  mode: "subscription",
+  customer: "cus_r",
+  subscription: subscriptionId,
+  payment_intent: null,
+  payment_status: "paid"
+});
+
+/**
+ * A paid invoice for one billing period.
+ * @param {string} id Invoice id.
+ * @param {string|null} paymentIntent Its payment intent, or null for the
+ *   current API versions, which do not carry one.
+ * @param {number} startDays Period start, days after T.
+ * @param {number} endDays Period end, days after T.
+ * @returns {Object} The invoice object.
+ */
+const invoice = (id, paymentIntent, startDays, endDays) => ({
+  id,
+  customer: "cus_r",
+  subscription: "sub_r",
+  payment_intent: paymentIntent,
+  lines: { data: [{ period: { start: T + startDays * DAY, end: T + endDays * DAY } }] }
+});
+
+/** A charge refunded in full. */
+const refunded = (id, paymentIntent, createdDays) => ({
+  id,
+  created: T + createdDays * DAY,
+  customer: "cus_r",
+  payment_intent: paymentIntent,
+  refunded: true,
+  amount: 1900,
+  amount_refunded: 1900
+});
+
+test("a dispute of the LATEST renewal's charge ends access", async () => {
+  // Was leaving a charged-back subscriber Pro for the rest of the month.
+  //
+  // A dispute does not say when the payment it is about was taken, so it asks
+  // the record for its latest charge instead — and `chargedAt` is only set by
+  // a charge that carried its own interval, which a paid invoice does not. So
+  // the sum was done against the FIRST charge, day 0: one month from there is
+  // day 31, the period ran to day 62, and 62 is well past 31 plus a week, so
+  // the rule concluded a later charge must have paid for it and left access
+  // on. There was no later charge. The renewal's own payment intent was the
+  // thing in front of it the whole time.
+  const env = freshEnv();
+  await deliver(env, "e1", "checkout.session.completed", 0, subCheckout("cs_d1", "sub_r"));
+  await deliver(env, "e2", "invoice.paid", 0, invoice("in_1", "pi_m1", 0, 31));
+  await deliver(env, "e3", "invoice.paid", 31, invoice("in_2", "pi_m2", 31, 62));
+  assert.equal((await claim(env, "cs_d1", 40)).status, 200, "control: month two is paid");
+
+  await deliver(env, "e4", "charge.dispute.created", 40, {
+    id: "du_d1",
+    charge: "ch_d1",
+    payment_intent: "pi_m2",
+    amount: 1900,
+    status: "needs_response",
+    created: T + 40 * DAY
+  });
+  assert.equal((await claim(env, "cs_d1", 41)).status, 403, "the money for the month they are in went back");
+});
+
+test("a refund of month one does not cost a month two whose invoice arrives after it", async () => {
+  // The mirror of the late-older-invoice fix, and it was failing the other
+  // way. Month two's invoice is emitted on day 31 and delivered after the
+  // refund of month one, which is emitted on day 32. By event time the refund
+  // really is the newest thing we have heard, so the ordering guard judged the
+  // renewal an older world and dropped it — and with it the month the customer
+  // had paid for. They were left at 403 inside a paid month.
+  //
+  // A paid invoice reports a period that WAS paid for, so it can only lengthen
+  // access. That is what makes it safe out of order, and it is now applied
+  // even when the guard calls the event stale.
+  const env = freshEnv();
+  await deliver(env, "e1", "checkout.session.completed", 0, subCheckout("cs_d2", "sub_r"));
+  await deliver(env, "e2", "invoice.paid", 0, invoice("in_1", "pi_m1", 0, 31));
+  await deliver(env, "e3", "charge.refunded", 32, refunded("ch_m1", "pi_m1", 0));
+  assert.equal((await claim(env, "cs_d2", 33)).status, 403, "month one went back and month two is not in yet");
+
+  await deliver(env, "e4", "invoice.paid", 31, invoice("in_2", "pi_m2", 31, 62));
+  assert.equal((await claim(env, "cs_d2", 40)).status, 200, "month two was paid and was not refunded");
+  // And the refund still stands against the month it was for: the reversal
+  // names pi_m1, the period now held was bought by pi_m2, so they do not match.
+  const reversal = JSON.parse(await env.ENTITLEMENTS.get("reversed:" + (await env.ENTITLEMENTS.get("pay:stripe:pi_m1"))));
+  assert.equal(reversal.reversedPaymentId, "pi_m1");
+});
+
+test("a delayed payment that settled eight days late is still ended by its refund", async () => {
+  // A bank debit or an OXXO voucher settles days after the checkout, and the
+  // period is counted from the money arriving rather than from the session —
+  // correctly. But the refund's sum started from the charge's `created`, which
+  // is when the charge was raised, not when it settled. A year from day 0 is
+  // day 365; the period ran to day 373; the week of slack reached day 372. One
+  // day short, and a fully refunded year stayed Pro.
+  //
+  // No slack value fixes that. The refund names the payment, and the payment
+  // is the one that bought the period.
+  const env = freshEnv();
+  await deliver(env, "e1", "checkout.session.completed", 0, {
+    ...pass("cs_d4", "pi_d4"),
+    payment_status: "unpaid"
+  });
+  await deliver(env, "e2", "checkout.session.async_payment_succeeded", 8, pass("cs_d4", "pi_d4"));
+  assert.equal((await claim(env, "cs_d4", 9)).status, 200, "control: the money arrived, so Pro");
+
+  await deliver(env, "e3", "charge.refunded", 10, refunded("ch_d4", "pi_d4", 0));
+  assert.equal((await claim(env, "cs_d4", 11)).status, 403, "the whole year went back");
+});
+
+test("a refund of an earlier month still leaves a later paid month alone", async () => {
+  // The invariant the arithmetic existed to protect, now held by identity
+  // instead. It must not have been traded away for the three fixes above.
+  const env = freshEnv();
+  await deliver(env, "e1", "checkout.session.completed", 0, subCheckout("cs_d5", "sub_r"));
+  await deliver(env, "e2", "invoice.paid", 0, invoice("in_1", "pi_e1", 0, 31));
+  await deliver(env, "e3", "invoice.paid", 31, invoice("in_2", "pi_e2", 31, 62));
+  await deliver(env, "e4", "charge.refunded", 33, refunded("ch_e1", "pi_e1", 0));
+  assert.equal((await claim(env, "cs_d5", 40)).status, 200, "only the first month went back");
+  // And the later month's own refund does end it.
+  await deliver(env, "e5", "charge.refunded", 41, refunded("ch_e2", "pi_e2", 31));
+  assert.equal((await claim(env, "cs_d5", 42)).status, 403, "now nothing is paid for");
+});
+
+test("with no payment to compare, the interval and its week of slack still decide", async () => {
+  // The fallback is not a leftover, and it is worth knowing exactly where it
+  // still runs, because it is narrower than it looks: a Stripe reversal can
+  // only find a license through the payment index, so a record that never
+  // recorded a payment id cannot be reached by one at all. The arithmetic's
+  // real home is Mercado Pago, which indexes no payment intents (its own
+  // suite covers that), and on Stripe it is this shape — a payment that
+  // confirmed money without lengthening anything, so it is indexed but is not
+  // what bought the period held.
+  //
+  // Both sides of the boundary, because a one-sided test would also pass
+  // against a rule that never ends anything.
+  for (const [endDays, endsAccess] of [[38, true], [39, false]]) {
+    const env = freshEnv();
+    await deliver(env, "e1", "checkout.session.completed", 0, subCheckout("cs_f", "sub_r"));
+    // The subscription's own answer sets the period; it names no payment.
+    await deliver(env, "e2", "customer.subscription.created", 0, {
+      id: "sub_r",
+      customer: "cus_r",
+      status: "active",
+      current_period_end: T + endDays * DAY
+    });
+    // A paid invoice for a period already covered: indexed, so a refund can
+    // find the license, but it lengthened nothing, so it is not recorded as
+    // the payment behind the period.
+    await deliver(env, "e3", "invoice.paid", 1, invoice("in_f", "pi_f", 0, 10));
+    assert.equal((await claim(env, "cs_f", 2)).status, 200, "control: paid and inside the period");
+
+    await deliver(env, "e4", "charge.refunded", 11, refunded("ch_f", "pi_f", 0));
+    assert.equal(
+      (await claim(env, "cs_f", 12)).status,
+      endsAccess ? 403 : 200,
+      `a period ending on day ${endDays}`
+    );
+  }
+});
+
+test("a short prorated month is not ended by the refund of the month before it", async () => {
+  // The case that makes the identity check a decision and not a shortcut, and
+  // the one a mutation check found untested: here identity and the old
+  // arithmetic disagree in the direction that costs a paying customer their
+  // access.
+  //
+  // A plan change mid-cycle leaves a short period. Month one runs to day 20,
+  // month two to day 35. Refunding month one's payment, the arithmetic asks
+  // whether the period held — day 35 — is more than one monthly interval plus
+  // a week past that charge, and day 35 is inside day 38, so it concludes the
+  // refunded charge is what paid for it and ends access. It is not: month two
+  // was bought by its own payment, and the customer is thirteen days into it.
+  //
+  // Identity answers without the sum: the reversal names month one's payment,
+  // the period was bought by month two's, so the refund is not this period's.
+  const env = freshEnv();
+  await deliver(env, "e1", "checkout.session.completed", 0, subCheckout("cs_p", "sub_r"));
+  await deliver(env, "e2", "invoice.paid", 0, invoice("in_p1", "pi_s1", 0, 20));
+  await deliver(env, "e3", "invoice.paid", 20, invoice("in_p2", "pi_s2", 20, 35));
+  await deliver(env, "e4", "charge.refunded", 25, refunded("ch_p1", "pi_s1", 0));
+  assert.equal((await claim(env, "cs_p", 30)).status, 200, "month two is paid and was not refunded");
+  // Its own refund does end it, so this is not simply a rule that never ends.
+  await deliver(env, "e5", "charge.refunded", 31, refunded("ch_p2", "pi_s2", 20));
+  assert.equal((await claim(env, "cs_p", 32)).status, 403);
+});

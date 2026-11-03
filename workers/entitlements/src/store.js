@@ -411,6 +411,9 @@ async function readReversal(kv, licenseId) {
   }
   try {
     const reversal = JSON.parse(raw);
+    // `reversedPaymentId` is newer than this key and absent from reversals
+    // stored before it, which is why `endReversedPeriod` still has its
+    // arithmetic fallback.
     return reversal && Number.isFinite(reversal.reversedChargeAt) && Number.isFinite(reversal.reversedAt)
       ? reversal
       : null;
@@ -622,6 +625,17 @@ function noteReversal(record, update, now) {
     || (chargedAt === record.reversedChargeAt && at < record.reversedAt)) {
     record.reversedChargeAt = chargedAt;
     record.reversedAt = at;
+    // WHICH payment went back, when the provider names one. A refunded charge
+    // and a dispute both name their payment intent, and that is a far better
+    // answer than any arithmetic about when the charge was taken: see
+    // `endReversedPeriod`. Overwritten together with the instant above, so the
+    // pair always describes the same reversal.
+    const paymentId = typeof update.paymentId === "string" && update.paymentId ? update.paymentId : null;
+    if (paymentId) {
+      record.reversedPaymentId = paymentId;
+    } else {
+      delete record.reversedPaymentId;
+    }
   }
 }
 
@@ -711,11 +725,41 @@ function isKnownPlanSource(planSource) {
 }
 
 /**
- * End the period when the money went back, if the reversed charge is what
- * paid for it. A period running well past that charge's interval was paid for
- * by a later charge, so the refund of an earlier month leaves it alone. The
- * interval is counted on the plan the record holds now, which a subscription's
- * own notification may only have taught it after the refund arrived.
+ * End the period when the money went back, if the reversed payment is what
+ * paid for it.
+ *
+ * **Identity first.** When the provider named the payment that went back and
+ * the record knows which payment bought the period it is in, the two ids
+ * answer the question outright and nothing has to be computed. That is the
+ * whole of it for a refund or a dispute on either rail that names a payment
+ * intent: the same id means the money for *this* period went back, and a
+ * different id means an earlier month's did and this period stands.
+ *
+ * The arithmetic below is the fallback, for a reversal or a record that names
+ * no payment — a Mercado Pago charge, a dispute on a license that only ever
+ * heard of a period, a record written before `periodPaymentId` existed. It
+ * asks whether the period runs further than one plan interval past the
+ * reversed charge, plus a week, and leaves it alone if it does, on the
+ * reasoning that a later charge must have paid for it.
+ *
+ * Three findings came out of trusting that arithmetic when an id was available
+ * (QA round 5 re-attack):
+ *
+ *   - a dispute of the LATEST renewal's charge left access on, because
+ *     `reverseLatestCharge` reads `chargedAt`, which a paid invoice does not
+ *     set — so the sum was done against the first charge's interval and the
+ *     renewal's period looked like somebody else's;
+ *   - a yearly pass whose delayed payment settled eight days after the charge
+ *     was created survived a full refund, because the period is counted from
+ *     the money arriving and eight days is one day past the week of slack;
+ *   - and the refund of a subscription RENEWAL was documented as not covered
+ *     at all, which identity closes wherever the invoice carries a payment
+ *     intent.
+ *
+ * None of those is a slack value that wanted tuning. They are all the same
+ * mistake: inferring which payment bought the period when the provider had
+ * already said.
+ *
  * @param {Object} record Record being built.
  * @returns {void}
  */
@@ -723,11 +767,47 @@ function endReversedPeriod(record) {
   if (!Number.isFinite(record.reversedChargeAt) || !Number.isFinite(record.reversedAt)) {
     return;
   }
+  const reversedId = typeof record.reversedPaymentId === "string" ? record.reversedPaymentId : "";
+  const periodId = typeof record.periodPaymentId === "string" ? record.periodPaymentId : "";
+  if (reversedId && periodId) {
+    if (reversedId === periodId) {
+      capPeriodEnd(record, record.reversedAt);
+    }
+    return;
+  }
   const paidThrough = periodEndForPlan(record.plan, record.reversedChargeAt);
   if (paidThrough === null || !Number.isFinite(record.periodEnd)
     || record.periodEnd <= paidThrough + REVERSAL_SLACK_SECONDS) {
     capPeriodEnd(record, record.reversedAt);
   }
+}
+
+/**
+ * Remember which payment bought the period the license is in.
+ *
+ * Recorded when an update both confirms money arrived and moved the period end
+ * out: that is what "this payment bought the period" means, and it is the one
+ * fact a refund later needs. A payment that confirms money without lengthening
+ * anything (a renewal of a period already known, a retry) leaves it alone, so
+ * the id always names the payment behind the period actually held.
+ *
+ * @param {Object} record Record being built.
+ * @param {Object} update Entitlement update descriptor.
+ * @param {number|null} before The period end before this update was applied.
+ * @returns {void}
+ */
+function notePeriodPayment(record, update, before) {
+  if (update.paid !== true || !Number.isFinite(record.periodEnd)) {
+    return;
+  }
+  const paymentId = typeof update.paymentId === "string" && update.paymentId ? update.paymentId : null;
+  if (!paymentId) {
+    return;
+  }
+  if (Number.isFinite(before) && record.periodEnd <= before) {
+    return;
+  }
+  record.periodPaymentId = paymentId;
 }
 
 /**
@@ -876,6 +956,11 @@ export async function upsertEntitlement(kv, update, options) {
       updatedAt: now
     };
 
+  // What the period was before this update touched anything, so
+  // `notePeriodPayment` below can tell a payment that bought the period from
+  // one that merely confirmed money for a period already held.
+  const periodEndBefore = Number.isFinite(record.periodEnd) ? record.periodEnd : null;
+
   // Identity is order-independent: a late event may still teach us which
   // customer or subscription a license belongs to.
   applyIfPresent(record, "provider", update.provider);
@@ -1001,6 +1086,29 @@ export async function upsertEntitlement(kv, update, options) {
     // period it paid for. Not after a deletion, which stays as it left the
     // license; a refund of the charge still ends it, below.
     extendForCharge(record, update.periodEndFromCharge);
+    // And so is a paid invoice's own period. `periodEndIsFloor` means the
+    // event reports a period that WAS paid for rather than the subscription's
+    // current state, so it can only ever lengthen access — which is exactly
+    // what makes it safe to apply out of order.
+    //
+    // Dropping it as stale lost a month somebody had paid for (QA round 5
+    // re-attack). A refund of month one, delivered while month two's renewal
+    // invoice was still in flight, ended access; the renewal that should have
+    // carried it past the refund then arrived stamped a day earlier than the
+    // refund, was judged an older world, and was discarded. The customer was
+    // left at 403 on a month they had paid for, which is the opposite of the
+    // fault the floor rule was introduced to fix.
+    //
+    // Never on an ended record: a deleted subscription must not be resurrected
+    // by a late invoice, and the restore path below is what decides whether a
+    // payment made before a deletion gives its period back.
+    if (update.periodEndIsFloor === true && update.paid === true && Number.isFinite(update.periodEnd)) {
+      const end = Math.floor(update.periodEnd);
+      if (!Number.isFinite(record.periodEnd) || end > record.periodEnd) {
+        record.periodEnd = end;
+        record.updatedAt = now;
+      }
+    }
   }
   // A Stripe subscription deleted while no payment had been seen (or while in
   // dunning) kept none of its period. A payment confirmed afterwards but made
@@ -1028,6 +1136,9 @@ export async function upsertEntitlement(kv, update, options) {
   if (!ended && record.provider === "mercadopago" && record.status === "canceled") {
     endDeclinedPeriod(record, record.occurredAt);
   }
+  // Which payment bought the period now held, judged against what the period
+  // was before this update. Before the reversal below, which reads it.
+  notePeriodPayment(record, update, periodEndBefore);
   // After everything else, so neither a late refund nor a later update (a
   // subscription's next charge date) leaves open a period whose money went
   // back.
@@ -1050,7 +1161,10 @@ export async function upsertEntitlement(kv, update, options) {
   if (Number.isFinite(update.reversedChargeAt) || update.reverseLatestCharge === true) {
     await kv.put(reversedKey(licenseId), JSON.stringify({
       reversedChargeAt: record.reversedChargeAt,
-      reversedAt: record.reversedAt
+      reversedAt: record.reversedAt,
+      ...(typeof record.reversedPaymentId === "string" && record.reversedPaymentId
+        ? { reversedPaymentId: record.reversedPaymentId }
+        : {})
     }));
   }
   if ((update.terminal && !stale) || restored) {

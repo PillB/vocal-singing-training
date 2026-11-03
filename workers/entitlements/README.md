@@ -769,9 +769,24 @@ webhook → claim → token flow through the router with a fake `fetch`.
   version carries no payment intent on an invoice webhook at all — the field
   was removed, and the `payments` that replaced it is only sent when it is
   expanded, which a webhook never does. So a renewal's payment is never seen
-  before its refund and cannot be matched to a license. (An account on an
-  older API version does send `invoice.payment_intent`, and that is read, so
-  there the renewal is covered too.) The remedy is the one that always worked:
+  before its refund and cannot be matched to a license.
+
+  An account on an **older** API version does send `invoice.payment_intent`,
+  and there the renewal is covered, including a dispute of the latest
+  renewal's own charge. That claim used to be in this README and was not true:
+  the index was written, but the reversal then worked out which payment had
+  bought the period by arithmetic — one plan interval past the reversed charge
+  plus a week of slack — and a renewal's period is two intervals past the
+  first charge, so it read as somebody else's and access stayed on. The record
+  now remembers which payment moved the period end out, so a reversal naming
+  that payment ends the period and one naming a different payment leaves it
+  alone, with no sum to get wrong. The same change fixed a fully refunded
+  yearly pass whose delayed payment had settled eight days after the charge
+  was raised — one day past that week of slack — which had also stayed Pro.
+  The arithmetic remains for Mercado Pago, which indexes no payment intents,
+  and for a Stripe payment that confirmed money without lengthening anything.
+
+  The remedy for a current-API renewal is the one that always worked:
   cancel the subscription in Stripe, which ends renewals, and revoke the grant
   from the admin page if the current period should go too.
 

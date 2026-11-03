@@ -164,11 +164,39 @@ export function isReferenceShape(value) {
  * (QA round 5, then its re-attack, which found the thin and zero-width spaces
  * still walking through). Tab, carriage return and newline are controls rather
  * than separators, so they stay explicit.
+ *
+ * The dashes have to be a list, because no class holds the ones a person
+ * actually types: U+002D off the keyboard, the en and em dashes a text field
+ * substitutes, the full-width hyphen U+FF0D off a CJK keyboard, and U+2212, the
+ * real minus sign, which is what a paste out of a formatted document or a
+ * spreadsheet carries (QA round 6). `\p{Pd}` would cover the dashes but not
+ * U+2212, which is maths rather than punctuation, so it would be a class plus a
+ * list and no shorter than the list.
  */
-const DIGIT_SEPARATORS = "\\t\\r\\n\\p{Zs}\\p{Cf}.\\u2013\\u2014\\-";
+const DIGIT_SEPARATORS =
+  "\\t\\r\\n\\p{Zs}\\p{Cf}.\\u2013\\u2014\\-\\uff0d\\u2212";
+
+/**
+ * What counts as a digit: any decimal digit, not only the ASCII ones.
+ *
+ * It used to be `[0-9]`, with full-width digits folded to ASCII before the
+ * match. That folded one script and left every other one through: the same
+ * card in Arabic-Indic digits (U+0660…), in Devanagari, or in the mathematical
+ * bold digits a copy out of styled text produces, was stored as typed (QA
+ * round 6). `\p{Nd}` is the whole category, so there is nothing left to
+ * enumerate and nothing to fold — the length rules below never need a digit's
+ * VALUE, only to know it is one, which is why widening the class does the whole
+ * job that mapping every script to ASCII would have done.
+ *
+ * `\p{No}` is deliberately not here. Superscripts, circled and parenthesised
+ * digits are not how anybody writes a card, and they appear in ordinary text
+ * (footnote markers, "①") where hiding the number around them would cost a
+ * report its meaning.
+ */
+const DIGIT = "\\p{Nd}";
 
 /** A run of digits and nothing but those separators between them. */
-const DIGIT_RUN = new RegExp(`[0-9](?:[0-9${DIGIT_SEPARATORS}]*[0-9])?`, "gu");
+const DIGIT_RUN = new RegExp(`${DIGIT}(?:[${DIGIT}${DIGIT_SEPARATORS}]*${DIGIT})?`, "gu");
 
 /** The marker a hidden number leaves behind. */
 const HIDDEN = "[número oculto]";
@@ -195,7 +223,13 @@ const HIDDEN = "[número oculto]";
  * @returns {boolean} True when the run must not be stored as typed.
  */
 function runHasCard(run) {
-  const groups = run.split(/[^0-9]+/u).filter(Boolean).map((group) => group.length);
+  // Code points, not string length: a mathematical bold digit is a surrogate
+  // pair, so `.length` counts each one twice and four of them would look like a
+  // group of eight — hiding runs well short of a card.
+  const groups = run
+    .split(new RegExp(`[^${DIGIT}]+`, "u"))
+    .filter(Boolean)
+    .map((group) => [...group].length);
   if (groups.some((length) => length >= 13)) {
     return true;
   }
@@ -223,16 +257,34 @@ function runHasCard(run) {
  * Long digit runs replaced with a marker.
  *
  * Somebody who hit a problem on the checkout page may well paste the card they
- * were paying with into "what happened". Nothing else in a report about
- * singing is a thirteen-to-nineteen digit number, so the trade is one-sided:
- * we never store a card number, and no legitimate report loses anything.
+ * were paying with into "what happened". Nothing else in a report about singing
+ * is a thirteen-to-nineteen digit number, so the trade is one-sided and a
+ * legitimate report loses nothing.
+ *
+ * **What this does and does not catch, stated exactly, because a comment here
+ * used to say "we never store a card number" and that was not true.** It
+ * catches a card written in groups of three digits or more, in any decimal
+ * script, separated by any space, any invisible format character, a dot, or any
+ * of the four dashes people type — which is every way a card is pasted or typed
+ * out in practice. It does NOT catch a card whose digits are written one or two
+ * at a time: "4 1 1 1 …" and "41 11 11 …" are stored as typed (QA round 6).
+ *
+ * That gap is deliberate and it is the price of the group-of-three rule, which
+ * is what keeps four clock times in a row, a list of three-digit numbers and a
+ * phone number readable. The alternative on the table was to accept short
+ * groups when the run passes a Luhn check and starts with a card brand's digit.
+ * It was declined: one run in ten passes Luhn by chance — it passed on the clock
+ * times pinned in the tests, which is why a brand-prefix filter had to be added
+ * on top — and the measured cost was about one in twenty short-group runs hidden
+ * without being a card. In a form whose entire purpose is for somebody to tell
+ * us what went wrong, hiding their text costs a report, and the shapes it buys
+ * are the least likely way a card ever reaches this field.
  *
  * The first version of this accepted one space or hyphen between digits, which
  * a paste very often is not: a line break, two spaces, a no-break space from a
  * web page, dots, " - ", or full-width digits from a CJK keyboard all walked
- * straight through it (QA round 5, QA-41). Full-width digits are folded to
- * ASCII first — it is a fair normalization of typed text in its own right —
- * and the separators are the named Unicode classes rather than a list.
+ * straight through it (QA round 5, QA-41). The separators are named Unicode
+ * classes rather than a list, and a digit is `\p{Nd}` rather than `[0-9]`.
  *
  * **The whole run goes, not the card-shaped part of it.** Hiding only the
  * matching window left the rest of the run readable, and a number typed in
@@ -246,10 +298,12 @@ function runHasCard(run) {
  * @returns {string} The same text with card-shaped runs removed.
  */
 export function redactLongDigitRuns(text) {
-  const folded = String(text).replace(/[\uff10-\uff19]/gu, (d) =>
-    String.fromCharCode(d.charCodeAt(0) - 0xff10 + 48)
-  );
-  return folded.replace(DIGIT_RUN, (run) => (run.length < 13 || !runHasCard(run) ? run : HIDDEN));
+  // No folding step any more. Folding rewrote the reporter's own text — a
+  // full-width number in a sentence came back as ASCII — to make a narrower
+  // character class match, and it only ever covered the one script somebody had
+  // thought of. The class covers every script instead, so what is stored is
+  // what they typed, minus the cards.
+  return String(text).replace(DIGIT_RUN, (run) => ([...run].length < 13 || !runHasCard(run) ? run : HIDDEN));
 }
 
 /**

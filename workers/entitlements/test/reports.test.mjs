@@ -776,3 +776,110 @@ test("housekeeping drops reports we closed long ago and keeps the open ones", as
     "an open report outlives the retention window; a closed one does not"
   );
 });
+
+/**
+ * Build a number in a non-ASCII decimal script.
+ * @param {number} zero Code point of that script's digit zero.
+ * @param {string} ascii The number in ASCII digits.
+ * @returns {string} The same number in that script.
+ */
+function inScript(zero, ascii) {
+  return [...ascii].map((d) => String.fromCodePoint(zero + Number(d))).join("");
+}
+
+const ARABIC_INDIC = 0x0660;
+const DEVANAGARI = 0x0966;
+const MATH_BOLD = 0x1d7ce;
+const THAI = 0x0e50;
+
+test("a card is a card in every decimal script, not only in ASCII", () => {
+  // The scrub matched `[0-9]` with full-width digits folded to ASCII first.
+  // That covered exactly one script and let every other one through: the same
+  // card in Arabic-Indic digits, in Devanagari, in Thai, or in the
+  // mathematical bold digits a copy out of styled text produces, was stored as
+  // typed (QA round 6). `\p{Nd}` is the whole category, which is why there is
+  // nothing left to enumerate.
+  for (const [name, zero] of [
+    ["Arabic-Indic", ARABIC_INDIC],
+    ["Devanagari", DEVANAGARI],
+    ["Thai", THAI],
+    ["mathematical bold", MATH_BOLD]
+  ]) {
+    assert.equal(redactLongDigitRuns(inScript(zero, "4111111111111111")), HIDDEN, `${name}, unbroken`);
+    const grouped = ["4111", "1111", "1111", "1111"].map((g) => inScript(zero, g)).join(" ");
+    assert.equal(redactLongDigitRuns(grouped), HIDDEN, `${name}, in groups of four`);
+  }
+  // Mixed scripts in one run, which is what a half-finished paste looks like.
+  assert.equal(redactLongDigitRuns(`4111 ${inScript(ARABIC_INDIC, "1111")} 1111 1111`), HIDDEN, "mixed");
+});
+
+test("a digit outside the plane is counted once, not twice", () => {
+  // A mathematical bold digit is a surrogate pair, so a group of three of them
+  // has a string LENGTH of six. Counting length instead of code points turns a
+  // twelve-digit number into an eighteen-digit one and hides it.
+  //
+  // The obvious case does not test this. Eight bold digits with no separators
+  // never reach the group counting at all: the cheap early-out in
+  // `redactLongDigitRuns` already measures the run in code points and lets
+  // anything under thirteen through. The run has to be long enough in code
+  // points to get past that, while still holding fewer than thirteen digits —
+  // which is what separators do. A first version of this test used the
+  // no-separator form, passed, and the length-counting mutant survived it.
+  const grouped = ["411", "111", "111", "111"].map((g) => inScript(MATH_BOLD, g)).join(" ");
+  assert.equal([...grouped].length >= 13, true, "the run must be long enough to pass the early-out");
+  assert.equal(redactLongDigitRuns(grouped), grouped, "twelve bold digits in groups of three are not a card");
+
+  // And the early-out itself, which is the same count by a shorter road.
+  assert.equal(
+    redactLongDigitRuns(inScript(MATH_BOLD, "41111111")),
+    inScript(MATH_BOLD, "41111111"),
+    "eight bold digits are eight digits"
+  );
+  assert.equal(redactLongDigitRuns(inScript(MATH_BOLD, "4111111111111")), HIDDEN, "thirteen of them are a card");
+});
+
+test("the full-width hyphen and the real minus sign separate digits too", () => {
+  // U+FF0D off a CJK keyboard and U+2212 out of a spreadsheet or a formatted
+  // document. Neither was in the list, so either one leaked the whole card.
+  assert.equal(redactLongDigitRuns("4111－1111－1111－1111"), HIDDEN, "full-width hyphen");
+  assert.equal(redactLongDigitRuns("4111−1111−1111−1111"), HIDDEN, "minus sign");
+});
+
+test("the scrub no longer rewrites text it is not hiding", () => {
+  // Folding full-width digits to ASCII made a narrower character class match,
+  // and the cost was the reporter's own text coming back altered. The class
+  // covers every script now, so there is nothing to fold and nothing to alter.
+  const typed = "la pista １２ falla en el compas 3";
+  assert.equal(redactLongDigitRuns(typed), typed);
+  assert.equal(redactLongDigitRuns(inScript(DEVANAGARI, "12")), inScript(DEVANAGARI, "12"));
+});
+
+test("one and two digits at a time are stored as typed, and that is the trade", () => {
+  // Known and deliberate (QA round 6). The group-of-three rule is what keeps
+  // the decoys below readable, and the proposed alternative — accept short
+  // groups when the run passes Luhn and starts with a card brand's digit — was
+  // declined: one run in ten passes Luhn by chance (it passes on the clock
+  // times below, which is why a brand filter had to be bolted on), and the
+  // measured cost was about one short-group run in twenty hidden without being
+  // a card. In a form for telling us what broke, hiding the text costs a
+  // report. This test is here so the gap stays a decision somebody made rather
+  // than a hole nobody noticed; if it ever starts failing, the rule changed.
+  assert.equal(
+    redactLongDigitRuns("4 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1"),
+    "4 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1",
+    "one digit at a time"
+  );
+  assert.equal(redactLongDigitRuns("41 11 11 11 11 11 11 11"), "41 11 11 11 11 11 11 11", "in pairs");
+
+  // What that rule buys, which is the other half of the trade.
+  assert.equal(redactLongDigitRuns("10.30 11.45 12.00 13.15"), "10.30 11.45 12.00 13.15", "four clock times");
+  assert.equal(redactLongDigitRuns("987 654 321 y 987 654 322"), "987 654 321 y 987 654 322", "two mobiles");
+});
+
+test("superscripts and circled digits are left alone", () => {
+  // `\p{No}` is not a digit here. A footnote marker and "①" appear in ordinary
+  // text, and hiding the numbers around them would cost a report its meaning.
+  // Nobody writes a card this way.
+  const typed = "el error ⁴ pasa 3 veces y ① no abre";
+  assert.equal(redactLongDigitRuns(typed), typed);
+});

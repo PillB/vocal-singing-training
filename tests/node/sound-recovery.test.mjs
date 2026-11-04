@@ -273,6 +273,32 @@ test("a reference note asked for before a Stop is not sounded after it", async (
   assert.equal(piano.playing.length > 0, true);
 });
 
+test("inhale ticks asked for before a Stop do not tick after it", async () => {
+  const { clock, piano } = hungPiano();
+  let ticked = "pending";
+  piano.playInhaleTicks(3).then((ok) => { ticked = ok; });
+  await clock.advance(1000);
+  piano.stopAll();
+  await clock.advance(12_000);
+  assert.equal(ticked, false, "the button then has nothing to announce");
+  assert.equal(piano.playing.length, 0);
+});
+
+for (const oneNote of [false, true]) {
+  test(`a progression stopped mid-pass announces no further ${oneNote ? "note" : "chord"} (the next take's targets stay its own)`, async () => {
+    const { clock, piano } = hungPiano({ resume: (ctx) => { ctx.state = "running"; return Promise.resolve(); } });
+    const heard = [];
+    piano.onChordChange = (ch) => heard.push(ch.name);
+    await piano.playProgression("prog1", { loop: true, sustain: true, sustainSec: 4, oneNote });
+    await clock.advance(100);
+    const before = heard.length;
+    assert.ok(before >= 1, "the first chord is announced");
+    piano.stopAll();
+    await clock.advance(60_000);
+    assert.equal(heard.length, before, "nothing after the Stop");
+  });
+}
+
 test("a session that came back and is held again gets its full 8 s again", async () => {
   let calls = 0;
   const { clock, piano, setState } = hungPiano({

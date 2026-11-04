@@ -25,8 +25,6 @@
     practiceLive: false,
     /** Bumped on Stop/leave/open to abort in-flight Start after awaits */
     practiceGen: 0,
-    // The practiceGen of the newest Start that reached its piano step (abandonReplacedStart)
-    soundGen: 0,
     practiceStarting: false,
     pendingLeave: null,
     selectedProg: "prog1",
@@ -3282,6 +3280,25 @@
    * Always updates range lock; restarts loop when Auto piano is on.
    * Returns a Promise (also stored on VTApp._hotApplyPromise) so tests can await settle.
    */
+  /** "Applied: one note at a time": the name of what the learner just changed. */
+  function hotAppliedLabel(what) {
+    if (typeof what === "string" && what.startsWith("prog:")) return what.slice(5);
+    const modes = { oneNote: "piano.modeOneNote", arpeggio: "piano.modeArpeggio", chords: "piano.modeChords" };
+    return Object.hasOwn(modes, what) ? tt(modes[what]) : String(what);
+  }
+
+  /**
+   * Highway range + ghost lanes follow the selected progression immediately.
+   * Not for a mode that owns its target: it plays no progression, and the
+   * default one's lanes and chord would replace the mode's own, so the
+   * readout would score the learner against that chord's notes.
+   */
+  function relockHighwayForOptions(ex, profile) {
+    if ((profile?.showPitch || ex.audio?.pitchViz) && !profile?.noProgression && !profile?.ownsTarget) {
+      if (state.selectedProg) lockHighwayForProgression(state.selectedProg);
+    }
+  }
+
   function applyPianoOptionsHot(what) {
     const run = async () => {
       const ex = state.exercise;
@@ -3289,36 +3306,19 @@
       const profile = getProfile(ex);
       syncSustainSecLabel();
       syncPlayModeSelect();
-
-      // Highway range + ghost lanes follow the selected progression immediately.
-      // Not for a mode that owns its target: it plays no progression, and the
-      // default one's lanes and chord would replace the mode's own, so the
-      // readout would score the learner against that chord's notes.
-      if ((profile?.showPitch || ex.audio?.pitchViz) && !profile?.noProgression && !profile?.ownsTarget) {
-        if (state.selectedProg) lockHighwayForProgression(state.selectedProg);
-      }
+      relockHighwayForOptions(ex, profile);
 
       if (!state.practiceLive) return false;
       if (!autoPianoChecked()) return false;
       if (!exerciseWantsSound(ex, profile)) return false;
 
+      // This live take: a Stop while a held session resumes leaves the stopped page silent
+      const current = soundTicket(ex);
       try {
         await VTPiano.resume?.();
         await VTPiano.ensure?.();
-        const ok = await startExerciseSound(ex, profile);
-        if (ok && what) {
-          const label =
-            typeof what === "string" && what.startsWith("prog:")
-              ? what.slice(5)
-              : what === "oneNote"
-                ? tt("piano.modeOneNote")
-                : what === "arpeggio"
-                  ? tt("piano.modeArpeggio")
-                  : what === "chords"
-                    ? tt("piano.modeChords")
-                    : String(what);
-          toast(tt("piano.hotApplied", { what: label }), { debounceMs: 450 });
-        }
+        const ok = await startExerciseSound(ex, profile, current);
+        if (ok && what) toast(tt("piano.hotApplied", { what: hotAppliedLabel(what) }), { debounceMs: 450 });
         return !!ok;
       } catch (e) {
         console.warn("Hot-apply piano options failed", e);
@@ -3442,49 +3442,102 @@
     return noteName || "";
   }
 
-  async function playSelectedProgression(loop) {
+  /**
+   * Who a sound request is for: the take (or the Start) live when it was made. A
+   * request whose take has since been stopped or replaced (a held iPhone session
+   * can make one piano call wait for seconds) asks the piano for nothing more,
+   * and its answer changes nothing on the page.
+   */
+  function soundTicket(ex = state.exercise) {
+    const gen = state.practiceGen;
+    return () => gen === state.practiceGen && state.exercise === ex;
+  }
+
+  /** One-note mode: the chord line, the highway and the engine follow the piano's chord, or its single note. */
+  function followChords(opts) {
+    return (ch, idx, prog, meta) => {
+      const one = !!(meta?.oneNote || opts.oneNote || ch?.oneNote);
+      const noteName = meta?.noteName || ch?.notes?.[0];
+      showChordNow(ch, one, noteName);
+      if (state.exercise?.audio?.pitchViz || state.exercise?.practice?.showPitch) aimAtChord(ch, one, noteName);
+    };
+  }
+
+  function showChordNow(ch, one, noteName) {
+    if (one && noteName) {
+      $("#chord-now").textContent = `${ch.name || ""} · ${dualNoteLabel(noteName)}`.replace(
+        /^ · /,
+        ""
+      );
+    } else {
+      $("#chord-now").textContent = ch.name || "—";
+    }
+  }
+
+  function aimAtChord(ch, one, noteName) {
+    if (state.pitchViz) {
+      state.pitchViz.setTargetFromChord(ch, {
+        oneNote: one,
+        noteName: one ? noteName : undefined
+      });
+    }
+    const map = VT_NOTE_FREQ || {};
+    const pick = one ? noteName || ch.notes?.[1] || ch.notes?.[0] : singableChordNote(ch, noteName, map);
+    if (map[pick]) state.practice.setTargetFreq(map[pick]);
+  }
+
+  /** The engine's target in a chord: its first note in the comfortable 120–280 Hz band, else its 2nd (or 1st) note. */
+  function singableChordNote(ch, noteName, map) {
+    for (const n of ch.notes || []) {
+      const f = map[n];
+      if (f && f >= 120 && f <= 280) return n;
+    }
+    return noteName || ch.notes?.[1] || ch.notes?.[0];
+  }
+
+  /** "· one note at a time · 4s per note": how the progression plays, after its description. */
+  function progressionHint(opts) {
+    const es = isEsLang();
+    const modeHint = opts.oneNote
+      ? es
+        ? " · 1 nota a la vez"
+        : " · one note at a time"
+      : opts.arpeggio
+        ? es
+          ? " · arpegio"
+          : " · arpeggio"
+        : es
+          ? " · acordes"
+          : " · chords";
+    const holdHint = opts.oneNote
+      ? es
+        ? ` · ${opts.sustainSec}s por nota`
+        : ` · ${opts.sustainSec}s per note`
+      : opts.sustain
+        ? ` · sustain ${opts.sustainSec}s`
+        : "";
+    return modeHint + holdHint;
+  }
+
+  function progressionToast(loop, opts) {
+    const sec = String(opts.sustainSec);
+    if (opts.oneNote) return tt(loop ? "toast.loopOneNote" : "toast.playOneNote", { sec });
+    if (opts.sustain) return tt(loop ? "toast.loopSustain" : "toast.playSustain", { sec });
+    return tt(loop ? "toast.loopProg" : "toast.playOnce");
+  }
+
+  async function playSelectedProgression(loop, current = soundTicket()) {
     try {
       await VTPiano.ensure();
       await VTPiano.resume?.();
+      if (!current()) return;
       if (!state.selectedProg || !VT_PROGRESSIONS?.[state.selectedProg]) {
         state.selectedProg = "prog1";
       }
       const opts = pianoOptions();
       // Sustain default ON for practice loops (helps newbies home in)
       if (opts.sustain == null) opts.sustain = true;
-      // One-note mode: highway + target follow a single pitch at a time
-      VTPiano.onChordChange = (ch, idx, prog, meta) => {
-        const one = !!(meta?.oneNote || opts.oneNote || ch?.oneNote);
-        const noteName = meta?.noteName || ch?.notes?.[0];
-        if (one && noteName) {
-          $("#chord-now").textContent = `${ch.name || ""} · ${dualNoteLabel(noteName)}`.replace(
-            /^ · /,
-            ""
-          );
-        } else {
-          $("#chord-now").textContent = ch.name || "—";
-        }
-        if (state.exercise?.audio?.pitchViz || state.exercise?.practice?.showPitch) {
-          if (state.pitchViz) {
-            state.pitchViz.setTargetFromChord(ch, {
-              oneNote: one,
-              noteName: one ? noteName : undefined
-            });
-          }
-          const map = VT_NOTE_FREQ || {};
-          let pick = noteName || ch.notes?.[1] || ch.notes?.[0];
-          if (!one) {
-            for (const n of ch.notes || []) {
-              const f = map[n];
-              if (f && f >= 120 && f <= 280) {
-                pick = n;
-                break;
-              }
-            }
-          }
-          if (map[pick]) state.practice.setTargetFreq(map[pick]);
-        }
-      };
+      VTPiano.onChordChange = followChords(opts);
       // Full progression max range — locked for this option (chords must not re-scale)
       lockHighwayForProgression(state.selectedProg);
       const prog = await VTPiano.playProgression(state.selectedProg, {
@@ -3496,44 +3549,13 @@
         sustainSec: opts.sustainSec,
         octaveShift: state.octaveShift || 0
       });
-      if (prog) {
-        // Re-apply same lock (same option) — never shrink to current chord
-        // prog is already transposed by playProgression
-        if (state.pitchViz) state.pitchViz.setProgressionRange(prog);
-        const modeHint = opts.oneNote
-          ? isEsLang()
-            ? " · 1 nota a la vez"
-            : " · one note at a time"
-          : opts.arpeggio
-            ? isEsLang()
-              ? " · arpegio"
-              : " · arpeggio"
-            : isEsLang()
-              ? " · acordes"
-              : " · chords";
-        const holdHint = opts.oneNote
-          ? isEsLang()
-            ? ` · ${opts.sustainSec}s por nota`
-            : ` · ${opts.sustainSec}s per note`
-          : opts.sustain
-            ? ` · sustain ${opts.sustainSec}s`
-            : "";
-        $("#chord-desc").textContent = prog.description + modeHint + holdHint;
-        const sec = String(opts.sustainSec);
-        toast(
-          loop
-            ? opts.oneNote
-              ? tt("toast.loopOneNote", { sec })
-              : opts.sustain
-                ? tt("toast.loopSustain", { sec })
-                : tt("toast.loopProg")
-            : opts.oneNote
-              ? tt("toast.playOneNote", { sec })
-              : opts.sustain
-                ? tt("toast.playSustain", { sec })
-                : tt("toast.playOnce")
-        );
-      }
+      // null: a Stop, or a newer progression, came while the piano waited for its context
+      if (!prog) return;
+      // Re-apply same lock (same option) — never shrink to current chord
+      // prog is already transposed by playProgression
+      if (state.pitchViz) state.pitchViz.setProgressionRange(prog);
+      $("#chord-desc").textContent = prog.description + progressionHint(opts);
+      toast(progressionToast(loop, opts));
     } catch (e) {
       toast(tt("toast.audioStartFail"));
       console.error(e);
@@ -3761,116 +3783,152 @@
     return exerciseWantsSound(ex, profile) && profile?.mode !== "openSpace";
   }
 
-  async function startExerciseSound(ex, profile) {
-    if (!ex || !window.VTPiano) return false;
-    if (!autoPianoChecked()) return false;
-    if (!soundsOnStart(ex, profile)) return false;
+  /** Seconds each reference or chord is held: the sustain box, or 2.5 s with sustain off (a learner's "off" is kept). */
+  function soundSeconds() {
+    const sustainOn = $("#chk-sustain")?.checked !== false; // sustain default ON
+    return sustainOn ? Number($("#sustain-sec")?.value || 4) : 2.5;
+  }
 
-    // Unlock Web Audio (recreates if context was closed by a prior mic stop)
-    await VTPiano.ensure();
-    await VTPiano.resume?.();
-    if (VTPiano.ctx?.state !== "running") {
-      await VTPiano.unlock?.();
-    }
+  /** profile.noProgression: the mode walks its own notes; no chord loop under it. */
+  function exerciseHasProgression(ex, profile) {
+    return !profile.noProgression && !!(ex.progressions?.length || ex.songs?.length || ex.audio?.progressions);
+  }
 
+  /** A progression is selected before looping. */
+  function selectDefaultProgression(ex) {
+    if (state.selectedProg) return;
+    if (ex.progressions?.length) state.selectedProg = ex.progressions[0];
+    else if (ex.songs?.length) state.selectedProg = ex.songs[0].prog || "prog1";
+    else state.selectedProg = "prog1";
+  }
+
+  /** What startExerciseSound plays: the hold length, and whether it is a challenge note, a loop or a reference. */
+  function soundPlan(ex, profile) {
     if (profile.autoArpeggio && $("#chk-arpeggio")) {
       $("#chk-arpeggio").checked = true;
     }
-
-    const sustainOn = $("#chk-sustain")?.checked !== false; // sustain default ON
-    if ($("#chk-sustain") && $("#chk-sustain").checked === false && profile.autoPiano) {
-      // keep user choice if they turned it off; otherwise leave as-is
-    }
-    const sec = sustainOn ? Number($("#sustain-sec")?.value || 4) : 2.5;
+    const sec = soundSeconds();
     const inChallenge = !!(profile.pitchChallenge && state.pitchGame?.challengeMode);
-    // profile.noProgression: the mode walks its own notes; no chord loop under it
-    const hasProg =
-      !profile.noProgression &&
-      !!(ex.progressions?.length || ex.songs?.length || ex.audio?.progressions);
-
-    // Ensure a progression is selected before looping
-    if (hasProg && !state.selectedProg) {
-      if (ex.progressions?.length) state.selectedProg = ex.progressions[0];
-      else if (ex.songs?.length) state.selectedProg = ex.songs[0].prog || "prog1";
-      else state.selectedProg = "prog1";
-    }
-
+    const hasProg = exerciseHasProgression(ex, profile);
+    if (hasProg) selectDefaultProgression(ex);
     // A mode that owns its targets (profile.ownsTarget) already chose the first
     // note in onStart(). Sound that one, not the generic refPitch: otherwise the
     // reference the user hears — and the target this sets — is a different note
     // from the one the mode is waiting for, so no hold can ever be credited.
     const owned = profile.ownsTarget ? state.modeInstance?.state?.wantName : null;
-    let started = false;
+    // An owning mode sounds each target itself (about 1.5 s): a 4 s replay
+    // on top kept the piano ringing, and a hold waits for the piano to stop
+    return { sec, inChallenge, hasProg, owned, refSec: owned ? Math.min(sec, 1.5) : sec };
+  }
 
-    if (inChallenge) {
-      const note = effectiveNoteName(
-        state.pitchGame?.currentChallengeNote?.() || profile.refPitch || ex.audio?.refPitch
-      );
-      if (note) {
-        await VTPiano.playRefPitch(note, sec, true);
-        started = true;
-      }
-    } else if (hasProg && ex.audio?.piano !== false) {
-      await playSelectedProgression(true);
-      started = !!(VTPiano.loopActive || (VTPiano.playing && VTPiano.playing.length));
-    } else {
-      const note = effectiveNoteName(owned || profile.refPitch || ex.audio?.refPitch);
-      if (note) {
-        // An owning mode sounds each target itself (about 1.5 s): a 4 s replay
-        // on top kept the piano ringing, and a hold waits for the piano to stop
-        const f = await VTPiano.playRefPitch(note, owned ? Math.min(sec, 1.5) : sec, true);
-        if (f) {
-          state.practice.setTargetFreq(f);
-          if (state.pitchViz) state.pitchViz.setTargetFreq(f);
-        }
-        started = true;
-      } else if (ex.audio?.piano) {
-        // Piano flagged without specific ref — still play default mid progression
-        if (!state.selectedProg) state.selectedProg = "prog1";
-        await playSelectedProgression(true);
-        started = !!(VTPiano.loopActive || (VTPiano.playing && VTPiano.playing.length));
-      }
+  /** The loop, and whether it is now sounding. */
+  async function playLoopAndSee(current) {
+    await playSelectedProgression(true, current);
+    return !!(VTPiano.loopActive || (VTPiano.playing && VTPiano.playing.length));
+  }
+
+  /** The pitch challenge's current note: true once it was asked for. */
+  async function playChallengeNote(ex, profile, plan) {
+    const note = effectiveNoteName(
+      state.pitchGame?.currentChallengeNote?.() || profile.refPitch || ex.audio?.refPitch
+    );
+    if (note) await VTPiano.playRefPitch(note, plan.sec, true);
+    return !!note;
+  }
+
+  /** The exercise's reference note, which is also the take's target. */
+  async function playExerciseRef(note, plan) {
+    const f = await VTPiano.playRefPitch(note, plan.refSec, true);
+    if (f) {
+      state.practice.setTargetFreq(f);
+      if (state.pitchViz) state.pitchViz.setTargetFreq(f);
     }
+    return true;
+  }
 
-    // Safety net: profile said sound wanted but nothing scheduled (misconfigured exercise)
-    if (!started && exerciseWantsSound(ex, profile)) {
-      try {
-        const fallback = effectiveNoteName(profile.refPitch || ex.audio?.refPitch || "C3");
-        await VTPiano.playRefPitch(fallback, sec, true);
-        started = !!(VTPiano.playing && VTPiano.playing.length);
-        if (started) {
-          console.warn("[VT] startExerciseSound fallback ref", fallback, ex.id);
-        }
-      } catch (e) {
-        console.warn("Piano fallback failed", e);
+  /** The exercise's own sound: true once it was asked for. */
+  async function playPlannedSound(ex, profile, plan, current) {
+    if (plan.inChallenge) return playChallengeNote(ex, profile, plan);
+    if (plan.hasProg && ex.audio?.piano !== false) return playLoopAndSee(current);
+    const note = effectiveNoteName(plan.owned || profile.refPitch || ex.audio?.refPitch);
+    if (note) return playExerciseRef(note, plan);
+    if (!ex.audio?.piano) return false;
+    // Piano flagged without specific ref — still play default mid progression
+    if (!state.selectedProg) state.selectedProg = "prog1";
+    return playLoopAndSee(current);
+  }
+
+  /** Safety net: the profile wants sound but nothing was scheduled (a misconfigured exercise). */
+  async function playFallbackRef(ex, profile, plan) {
+    try {
+      const fallback = effectiveNoteName(profile.refPitch || ex.audio?.refPitch || "C3");
+      await VTPiano.playRefPitch(fallback, plan.sec, true);
+      const started = !!(VTPiano.playing && VTPiano.playing.length);
+      if (started) {
+        console.warn("[VT] startExerciseSound fallback ref", fallback, ex.id);
       }
+      return started;
+    } catch (e) {
+      console.warn("Piano fallback failed", e);
+      return false;
     }
+  }
 
-    // If still silent/suspended, hard-recover: recreate graph + replay once
-    if (started && VTPiano.ctx && VTPiano.ctx.state !== "running") {
-      try {
-        await VTPiano.unlock?.();
-        await VTPiano.resume?.();
-        if (hasProg) await playSelectedProgression(true);
-        else if (owned || profile.refPitch || ex.audio?.refPitch) {
-          // The same note, and length, as the first try above
-          await VTPiano.playRefPitch(
-            effectiveNoteName(owned || profile.refPitch || ex.audio.refPitch),
-            owned ? Math.min(sec, 1.5) : sec,
-            true
-          );
-        }
-      } catch (e) {
-        console.warn("Piano recover failed", e);
+  /** Still silent or suspended: recreate the graph and play the same sound once more. */
+  async function recoverPlannedSound(ex, profile, plan, current) {
+    try {
+      await VTPiano.unlock?.();
+      await VTPiano.resume?.();
+      if (!current()) return;
+      if (plan.hasProg) await playSelectedProgression(true, current);
+      else if (plan.owned || profile.refPitch || ex.audio?.refPitch) {
+        // The same note, and length, as the first try
+        await VTPiano.playRefPitch(effectiveNoteName(plan.owned || profile.refPitch || ex.audio.refPitch), plan.refSec, true);
       }
+    } catch (e) {
+      console.warn("Piano recover failed", e);
     }
+  }
 
+  function pianoSounding(started) {
     return !!(
       started &&
       VTPiano.ctx &&
       VTPiano.ctx.state !== "closed" &&
       (VTPiano.isLive?.() || (VTPiano.playing && VTPiano.playing.length > 0) || VTPiano.loopActive)
     );
+  }
+
+  /**
+   * The exercise's piano, or its reference note, with one recovery if it came up
+   * silent. `current` is the take that asked (soundTicket): once Stop or a newer
+   * Start replaced it, no further sound is asked for, and a request the piano
+   * dropped at the Stop is not taken for silence to retry.
+   */
+  async function startExerciseSound(ex, profile, current = soundTicket(ex)) {
+    if (!ex || !window.VTPiano) return false;
+    if (!autoPianoChecked() || !soundsOnStart(ex, profile)) return false;
+    await readyPianoForSound();
+    if (!current()) return false;
+
+    const plan = soundPlan(ex, profile);
+    let started = await playPlannedSound(ex, profile, plan, current);
+    // A loop the piano dropped at a Stop is not silence: no fallback note for a replaced take
+    if (!current()) return false;
+    if (!started && exerciseWantsSound(ex, profile)) started = await playFallbackRef(ex, profile, plan);
+    if (started && pianoNotRunning()) await recoverPlannedSound(ex, profile, plan, current);
+    return pianoSounding(started);
+  }
+
+  /** Unlock Web Audio (recreates the context if a prior mic stop closed it). */
+  async function readyPianoForSound() {
+    await VTPiano.ensure();
+    await VTPiano.resume?.();
+    if (VTPiano.ctx?.state !== "running") await VTPiano.unlock?.();
+  }
+
+  function pianoNotRunning() {
+    return !!VTPiano.ctx && VTPiano.ctx.state !== "running";
   }
 
   async function startPractice() {
@@ -3904,11 +3962,11 @@
       // already started — then solfege/ref sound goes silent for the whole session.
       // No await when the take needs no microphone: such a Start goes live in the same task, as before the split
       const micOk = plan.needsMic || plan.wantRecord ? await startMicForTake(plan) : true;
-      if (!stillThisStart()) return abandonReplacedStart(gen);
+      if (!stillThisStart()) return abandonReplacedStart();
 
       // Resume + start piano AFTER mic so context is running again
-      const soundOk = plan.wantPiano ? await startSoundForTake(ex, profile, { gen, current: stillThisStart }) : false;
-      if (!stillThisStart()) return abandonReplacedStart(gen);
+      const soundOk = plan.wantPiano ? await startSoundForTake(ex, profile, stillThisStart) : false;
+      if (!stillThisStart()) return abandonReplacedStart();
 
       goLive(ex, profile, plan, { micOk, soundOk });
     } catch (e) {
@@ -4223,20 +4281,20 @@
   }
 
   /**
-   * The exercise's piano or reference sound, recovered and replayed once if it came up silent.
-   * `take.gen` marks the newest Start to reach its piano step (state.soundGen); a Start that
-   * Stop or a newer Start replaced while a held context resumed asks for no sound at all.
+   * The exercise's piano or reference sound, recovered and replayed once if it
+   * came up silent. `current` is this Start (stillThisStart): a Start that Stop
+   * or a newer Start replaced while a held iPhone session resumed asks for no
+   * sound from then on (startExerciseSound and playSelectedProgression check it
+   * after their waits).
    */
-  async function startSoundForTake(ex, profile, take) {
-    state.soundGen = take.gen;
+  async function startSoundForTake(ex, profile, current) {
     try {
       await VTPiano.resume?.();
       await VTPiano.ensure();
       if (VTPiano.ctx?.state !== "running") await VTPiano.unlock?.();
-      if (!take.current()) return false;
-      const soundOk = await startExerciseSound(ex, profile);
+      const soundOk = await startExerciseSound(ex, profile, current);
       // If still silent (suspended/closed/no voices), recover + replay
-      return soundStillSilent(soundOk) ? await replaySound(ex, profile) : soundOk;
+      return soundStillSilent(soundOk) ? await replaySound(ex, profile, current) : soundOk;
     } catch (e) {
       console.error("Piano start failed", e);
       return false;
@@ -4251,7 +4309,7 @@
     );
   }
 
-  async function replaySound(ex, profile) {
+  async function replaySound(ex, profile, current) {
     await VTPiano.resume?.();
     if (VTPiano.ctx?.state === "closed" || !VTPiano.ctx) {
       // Force new graph
@@ -4259,27 +4317,24 @@
     }
     await VTPiano.ensure();
     await VTPiano.unlock?.();
-    return startExerciseSound(ex, profile);
+    return startExerciseSound(ex, profile, current);
   }
 
   /**
    * A Start that Stop, a leave or a newer Start replaced while it waited on
    * the microphone or the piano. With nothing newer under way it leaves no
    * microphone or piano on behind a stopped page. A newer Start that is
-   * still starting, or live, owns the engine and the buttons, and this one
-   * touches neither: an older permission prompt answered after the newer
-   * take went live used to end that take with no word, and one answered
-   * while the newer prompt was up brought Start back under it (QA round 6,
-   * F2). The engine already released this Start's microphone (Stop bumped
-   * its start number). A sound this Start began after the Stop, while a held
-   * iPhone session resumed, is its own until the newer Start reaches its
-   * piano step, so it stops here; after that the piano is the newer take's.
+   * still starting, or live, owns the engine, the piano and the buttons, and
+   * this one touches none of them: an older permission prompt answered after
+   * the newer take went live used to end that take with no word, and one
+   * answered while the newer prompt was up brought Start back under it (QA
+   * round 6, F2). Nothing of this Start's is left to stop: Stop bumped the
+   * engine's start number, so its microphone was released, and the piano
+   * dropped what it asked for before the Stop; after the Stop it asked for
+   * nothing (soundTicket).
    */
-  function abandonReplacedStart(gen) {
-    if (state.practiceStarting || state.practiceLive) {
-      if (state.soundGen === gen) VTPiano.stopAll();
-      return;
-    }
+  function abandonReplacedStart() {
+    if (state.practiceStarting || state.practiceLive) return;
     // Aborted mid-start — ensure we don't leave mic running without UI
     try {
       if (state.practice.running) state.practice.stop();
@@ -4331,10 +4386,11 @@
     state._pianoKeepAlive = setInterval(() => {
       if (!state.practiceLive) return;
       if (window.VTPiano?.ctx?.state === "suspended") {
+        const current = soundTicket(ex);
         VTPiano.resume?.()
           .then(() => {
             if (!VTPiano.loopActive && exerciseWantsSound(ex, profile)) {
-              startExerciseSound(ex, profile).catch((err) =>
+              startExerciseSound(ex, profile, current).catch((err) =>
                 console.warn("[VT] keepAlive sound", err)
               );
             }
@@ -6799,30 +6855,36 @@
     });
   }
 
+  /**
+   * The reference button's note. While a mode that owns its targets runs, the
+   * reference is the note it is waiting for, not the exercise's generic
+   * refPitch, and the target stays the mode's. Kept short like the mode's own
+   * cue (see soundPlan): a long note at the right pitch would be heard by the
+   * mic as the singer.
+   */
+  function refCue() {
+    const owns = state.practiceLive && !!state.exercise && getProfile(state.exercise).ownsTarget;
+    const owned = owns ? state.modeInstance?.state?.wantName : null;
+    const note = effectiveNoteName(owned || state.exercise?.audio?.refPitch || "A2");
+    const sustain = $("#chk-sustain")?.checked;
+    const full = sustain ? Number($("#sustain-sec")?.value || 4) : 2.5;
+    return { owns, note, sec: owned ? Math.min(full, 1.5) : full };
+  }
+
   /** Reference pitch, inhale ticks and the legacy start/stop stubs. */
   function bindReferenceCues() {
     $("#btn-ref-pitch")?.addEventListener("click", async () => {
-      // While a mode that owns its targets runs, the reference is the note it
-      // is waiting for, not the exercise's generic refPitch, and the target
-      // stays the mode's. Kept short like the mode's own cue (see
-      // startExerciseSound): a long note at the right pitch would be heard
-      // by the mic as the singer.
-      const owns = state.practiceLive && !!state.exercise && getProfile(state.exercise).ownsTarget;
-      const owned = owns ? state.modeInstance?.state?.wantName : null;
-      const note = effectiveNoteName(owned || state.exercise?.audio?.refPitch || "A2");
-      const sustain = $("#chk-sustain")?.checked;
-      const full = sustain ? Number($("#sustain-sec")?.value || 4) : 2.5;
-      const sec = owned ? Math.min(full, 1.5) : full;
+      const { owns, note, sec } = refCue();
       const f = await VTPiano.playRefPitch(note, sec, true);
-      if (f && !owns) {
+      if (!f) return; // a Stop while a held session resumed: nothing sounded, so nothing to announce
+      if (!owns) {
         state.practice.setTargetFreq(f);
         if (state.pitchViz) state.pitchViz.setTargetFreq(f);
       }
       toast(tt("toast.refPitch", { note, sec: String(sec) }));
     });
     $("#btn-inhale-ticks")?.addEventListener("click", async () => {
-      await VTPiano.playInhaleTicks(3);
-      toast(tt("toast.inhaleTicks"));
+      if (await VTPiano.playInhaleTicks(3)) toast(tt("toast.inhaleTicks"));
     });
     // Legacy stub buttons (if present in DOM) — only unified practice path
     $("#btn-pitch-start")?.addEventListener("click", startPractice);

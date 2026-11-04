@@ -226,93 +226,234 @@ test("an older prompt answered while the newer one is still up brings no Start b
 });
 
 /**
- * Hold the piano the way iOS holds a session through a call: the nth resume a Start asks for in its piano
- * step waits for window.__releasePiano(). Every progression asked for is logged (window.__asked).
+ * Hold the piano the way iOS holds a session through a call, and keep score of what it plays.
+ * - `holdAt`: the nth resume a Start asks for in its piano step (its microphone up, the take not live yet) waits for
+ *   window.__releasePiano(). window.__holdNext = "resume" or "ensure" holds the next such call made at any time.
+ * - Once window.__stopped is set, each sound that actually starts is logged in __played, each chord or note the
+ *   piano announces counts in __chords, and each toast is logged in __toasts (a toast that came and went still counts).
+ * - window.__suspendOnce: after the next reference note, the context's state reads "suspended" once, as on an iPhone
+ *   whose session was taken right after the note was scheduled (Start then runs its recovery).
  */
-async function holdPianoInSoundStep(page, nth) {
+async function watchPiano(page, holdAt = 0) {
   await page.evaluate((n) => {
     const P = window.VTPiano;
     const st = () => window.VTApp.getState();
-    const resume = P.resume.bind(P);
-    const play = P.playProgression.bind(P);
+    const real = { resume: P.resume.bind(P), ensure: P.ensure.bind(P), prog: P.playProgression.bind(P), ref: P.playRefPitch.bind(P), ticks: P.playInhaleTicks.bind(P) };
     let seen = 0;
-    window.__asked = [];
-    P.playProgression = (...args) => {
-      window.__asked.push(args[0]);
-      return play(...args);
-    };
-    P.resume = () => {
-      const s = st();
-      // Microphone up and the Start not live yet: its piano step (the chord drill uses the microphone)
-      if (!(s.practiceStarting && s.practice.running) || ++seen !== n) return resume();
-      return new Promise((done) => {
-        window.__releasePiano = () => done(resume());
+    let chordFn = P.onChordChange;
+    Object.assign(window, { __played: [], __chords: 0, __toasts: [], __stopped: false, __suspendOnce: false, __holdNext: "" });
+    const toastEl = document.querySelector("#toast");
+    new MutationObserver(() => {
+      if (window.__stopped && toastEl.textContent.trim()) window.__toasts.push(toastEl.textContent.trim());
+    }).observe(toastEl, { childList: true, characterData: true, subtree: true });
+    const held = (call) => new Promise((done) => {
+      window.__releasePiano = () => done(call());
+    });
+    const suspendOnce = () => {
+      window.__suspendOnce = false;
+      const ctx = P.ctx;
+      let proto = ctx;
+      while (proto && !Object.getOwnPropertyDescriptor(proto, "state")) proto = Object.getPrototypeOf(proto);
+      const realState = Object.getOwnPropertyDescriptor(proto, "state").get;
+      let once = true;
+      Object.defineProperty(ctx, "state", {
+        configurable: true,
+        get() {
+          if (!once) return realState.call(ctx);
+          once = false;
+          return "suspended";
+        }
       });
     };
-  }, nth);
+    const log = (what) => (r) => {
+      if (r && window.__stopped) window.__played.push(what);
+      return r;
+    };
+    P.playProgression = (...a) => real.prog(...a).then(log(`chords ${a[0]}`));
+    P.playRefPitch = (...a) => real.ref(...a).then(log(`note ${a[0]}`)).then((r) => {
+      if (r && window.__suspendOnce) suspendOnce();
+      return r;
+    });
+    P.playInhaleTicks = (...a) => real.ticks(...a).then(log("ticks"));
+    Object.defineProperty(P, "onChordChange", {
+      configurable: true,
+      get: () => chordFn && ((...a) => {
+        if (window.__stopped) window.__chords++;
+        return chordFn(...a);
+      }),
+      set: (fn) => {
+        chordFn = fn;
+      }
+    });
+    P.ensure = () => {
+      if (window.__holdNext !== "ensure") return real.ensure();
+      window.__holdNext = "";
+      return held(real.ensure);
+    };
+    P.resume = () => {
+      if (window.__holdNext === "resume") {
+        window.__holdNext = "";
+        return held(real.resume);
+      }
+      const s = st();
+      if (!(s.practiceStarting && s.practice.running) || ++seen !== n) return real.resume();
+      return held(real.resume);
+    };
+  }, holdAt);
 }
 
-/** Start the chord drill until its piano step is held, leave it for the breathing pacer (no microphone, no piano), Start that, then let the session go. */
-async function replaceHeldStart(page, nth) {
+/** The app's toasts are quiet under e2e; these tests read them. */
+async function bootWithToasts(page) {
+  await page.addInitScript(() => sessionStorage.setItem("vt_debug", "1"));
   await boot(page, { lang: "en", tourDone: true, mic: "silent" });
-  await openExercise(page, "s2-solfege-chords");
-  await holdPianoInSoundStep(page, nth);
+}
+
+const pianoScore = (page) => page.evaluate(() => ({
+  played: window.__played,
+  chords: window.__chords,
+  loop: !!window.VTPiano.loopActive,
+  voices: window.VTPiano.playing.length,
+  live: window.VTApp.getState().practiceLive,
+  exercise: window.VTApp.getState().exercise?.id
+}));
+
+/**
+ * Start `first` until its piano step is held at its nth resume, leave it for the breathing pacer (no microphone,
+ * no piano), Start that, then let the session go: what plays after the Stop.
+ */
+async function replaceHeldStart(page, first, nth, { suspendOnce = false } = {}) {
+  await bootWithToasts(page);
+  await openExercise(page, first);
+  await watchPiano(page, nth);
+  if (suspendOnce) await page.evaluate(() => { window.__suspendOnce = true; });
   await page.locator("#btn-practice-start").click();
   await expect.poll(() => page.evaluate(() => typeof window.__releasePiano), { timeout: 15000 }).toBe("function");
+  await page.evaluate(() => { window.__stopped = true; });
   await openExercise(page, "s18-costal-breath"); // leaving the exercise runs Stop
   await page.locator("#btn-practice-start").click();
   await expect.poll(() => page.evaluate(() => window.VTApp.getState().practiceLive)).toBe(true);
   await page.evaluate(() => window.__releasePiano());
   await settleAWhile(page);
-  return page.evaluate(() => ({
-    asked: window.__asked,
-    loop: !!window.VTPiano.loopActive,
-    voices: window.VTPiano.playing.length,
-    live: window.VTApp.getState().practiceLive,
-    exercise: window.VTApp.getState().exercise?.id
-  }));
+  return pianoScore(page);
 }
 
-// Review of the startPractice split: a Start replaced while iOS held its piano went on to start its
-// chord loop, which then played (and set the targets) under the next exercise's take.
-test("a Start replaced while its piano step was held asks for no chord loop; the next Start plays its own", async ({ page }) => {
+const SILENT_AFTER_STOP = { played: [], chords: 0, loop: false, voices: 0, live: true, exercise: "s18-costal-breath" };
+
+// Reviews of the startPractice split: a Start replaced while iOS held its piano went on asking for sound for the
+// rest of its piano step (about 10 s on a held session), so its chord loop, or a fallback note, played under the
+// next take and set that take's targets. The chord drill's piano step waits four times: its own resume, the
+// sound's, the progression's and the piano's before it plays (dropped at the Stop).
+for (const nth of [1, 2, 3, 4]) {
+  test(`a chord drill's Start replaced at wait ${nth} of its piano step plays nothing after the Stop`, async ({ page }) => {
+    test.setTimeout(60000);
+    expect(await replaceHeldStart(page, "s2-solfege-chords", nth), "the breathing take runs on with no chords under it").toEqual(SILENT_AFTER_STOP);
+    const toasts = await page.evaluate(() => window.__toasts.join(" | "));
+    expect(toasts, "a dropped loop is not an audio failure, and no loop is announced").not.toMatch(/Could not start audio|Looping/);
+  });
+}
+
+test("a reference-note Start replaced while its piano step waited sounds no note after the Stop", async ({ page }) => {
   test.setTimeout(60000);
-  await boot(page, { lang: "en", tourDone: true, mic: "silent" });
+  expect(await replaceHeldStart(page, "s1-vocal-fry", 2)).toEqual(SILENT_AFTER_STOP);
+});
+
+test("a reference-note Start replaced while its recovery waited does not replay the note after the Stop", async ({ page }) => {
+  test.setTimeout(60000);
+  // Its note scheduled, the session reads suspended, so Start recovers: unlock, resume (held here), play again
+  expect(await replaceHeldStart(page, "s1-vocal-fry", 3, { suspendOnce: true })).toEqual(SILENT_AFTER_STOP);
+});
+
+test("the next take's own chords keep playing when the Start it replaced lets go of the piano", async ({ page }) => {
+  test.setTimeout(60000);
+  await bootWithToasts(page);
   await openExercise(page, "s2-solfege-chords");
-  await holdPianoInSoundStep(page, 1);
+  await watchPiano(page, 2);
   await page.locator("#btn-practice-start").click();
   await expect.poll(() => page.evaluate(() => typeof window.__releasePiano), { timeout: 15000 }).toBe("function");
-  await promptsAnsweredByTest(page);
-  await openExercise(page, "s4-lip-trills"); // leaving the exercise runs Stop
+  await page.evaluate(() => { window.__stopped = true; });
+  await openExercise(page, "s4-lip-trills");
   await page.locator("#btn-practice-start").click();
-  await expect.poll(() => page.evaluate(() => window.__prompts.length)).toBe(1);
+  await expect.poll(() => page.evaluate(() => window.VTApp.getState().practiceLive), { timeout: 15000 }).toBe(true);
+  await expect.poll(() => page.evaluate(() => window.__played.length), { message: "the lip trills play their own chords" }).toBe(1);
   await page.evaluate(() => window.__releasePiano());
   await settleAWhile(page);
-  const held = await page.evaluate(() => ({
-    asked: window.__asked,
-    loop: !!window.VTPiano.loopActive,
-    starting: window.VTApp.getState().practiceStarting
-  }));
-  expect(held, "while the next Start's prompt is up, the replaced one plays nothing").toEqual({ asked: [], loop: false, starting: true });
-  await page.evaluate(() => window.__prompts[0].grant());
-  await expect.poll(() => page.evaluate(() => window.VTApp.getState().practiceLive), { timeout: 15000 }).toBe(true);
-  await expect.poll(() => page.evaluate(() => !!window.VTPiano.loopActive), { message: "the next take plays its own chords" }).toBe(true);
-  expect(await page.evaluate(() => window.__asked.length)).toBe(1);
+  const after = await pianoScore(page);
+  expect({ ...after, played: after.played.length, chords: undefined }, "the replaced Start stops nothing of the live take's and adds nothing").toEqual({
+    played: 1, chords: undefined, loop: true, voices: after.voices, live: true, exercise: "s4-lip-trills"
+  });
+  expect(after.voices).toBeGreaterThan(0);
   await page.locator("#btn-practice-stop").click();
 });
 
-test("a chord loop a replaced Start began after the Stop is stopped before the next take hears it", async ({ page }) => {
+test("a Start replaced by a new Start of the same exercise asks for nothing once the session lets go", async ({ page }) => {
   test.setTimeout(60000);
-  const after = await replaceHeldStart(page, 2);
-  expect(after.asked.length, "held inside its sound step, the replaced Start did ask for its loop").toBeGreaterThan(0);
-  expect({ ...after, asked: undefined }, "and that loop is stopped; the breathing take runs on").toEqual({
-    asked: undefined, loop: false, voices: 0, live: true, exercise: "s18-costal-breath"
+  await bootWithToasts(page);
+  await openExercise(page, "s2-solfege-chords");
+  await watchPiano(page, 1);
+  await page.locator("#btn-practice-start").click();
+  await expect.poll(() => page.evaluate(() => typeof window.__releasePiano), { timeout: 15000 }).toBe("function");
+  await page.evaluate(() => {
+    window.__stopped = true;
+    window.VTApp.stopPractice(true); // Retry, or Stop and Start again on the same exercise
   });
+  await page.locator("#btn-practice-start").click();
+  await expect.poll(() => page.evaluate(() => window.VTApp.getState().practiceLive), { timeout: 15000 }).toBe(true);
+  await expect.poll(() => page.evaluate(() => window.__played.length), { message: "the new take plays its chords" }).toBe(1);
+  await page.evaluate(() => window.__releasePiano());
+  await settleAWhile(page);
+  const after = await pianoScore(page);
+  expect({ played: after.played.length, loop: after.loop, live: after.live }, "the old Start neither replays nor replaces them").toEqual({ played: 1, loop: true, live: true });
+  await page.locator("#btn-practice-stop").click();
 });
+
+test("a piano option changed just before Stop, while the session was held, leaves the stopped page silent", async ({ page }) => {
+  test.setTimeout(60000);
+  await bootWithToasts(page);
+  await openExercise(page, "s2-solfege-chords");
+  await page.locator("#btn-practice-start").click();
+  await expect.poll(() => page.evaluate(() => window.VTApp.getState().practiceLive), { timeout: 15000 }).toBe(true);
+  await watchPiano(page);
+  await page.evaluate(() => { window.__holdNext = "resume"; });
+  await page.evaluate(() => {
+    window.VTApp.applyPianoOptionsHot("oneNote"); // its promise waits on the held session
+  });
+  await expect.poll(() => page.evaluate(() => typeof window.__releasePiano)).toBe("function");
+  await page.evaluate(() => { window.__stopped = true; });
+  await page.locator("#btn-practice-stop").click();
+  await page.evaluate(() => window.__releasePiano());
+  await settleAWhile(page);
+  const after = await pianoScore(page);
+  expect({ played: after.played, chords: after.chords, loop: after.loop, voices: after.voices, live: after.live }).toEqual({
+    played: [], chords: 0, loop: false, voices: 0, live: false
+  });
+  expect(await page.evaluate(() => window.__toasts.join(" | "))).not.toContain("Options applied");
+});
+
+for (const [button, said] of [["#btn-ref-pitch", "Reference"], ["#btn-inhale-ticks", "inhale ticks"]]) {
+  test(`${button} tapped on a held session and stopped before it sounded announces nothing`, async ({ page }) => {
+    test.setTimeout(60000);
+    await bootWithToasts(page);
+    await openExercise(page, "s1-vocal-fry");
+    await watchPiano(page);
+    await page.evaluate(() => { window.__holdNext = "ensure"; });
+    await page.evaluate((sel) => document.querySelector(sel).click(), button);
+    await expect.poll(() => page.evaluate(() => typeof window.__releasePiano)).toBe("function");
+    await page.evaluate(() => {
+      window.__stopped = true;
+      document.querySelector("#btn-stop-piano").click();
+    });
+    await page.evaluate(() => window.__releasePiano());
+    await settleAWhile(page);
+    expect(await page.evaluate(() => ({ played: window.__played, voices: window.VTPiano.playing.length }))).toEqual({ played: [], voices: 0 });
+    const toasts = await page.evaluate(() => window.__toasts.join(" | "));
+    expect(toasts, "the Stop's word is the last").toContain("Piano stopped");
+    expect(toasts).not.toContain(said);
+  });
+}
 
 test("Stop while the permission prompt is up cancels that Start; the microphone granted later is released", async ({ page }) => {
   test.setTimeout(60000);
-  await boot(page, { lang: "en", tourDone: true, mic: "silent" });
+  await bootWithToasts(page);
   await openExercise(page, "v1-diction");
   await page.evaluate(() => {
     const md = navigator.mediaDevices;

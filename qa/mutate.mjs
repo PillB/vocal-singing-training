@@ -66,7 +66,7 @@ const CONTROL_SPECS = {
   mic: ["tests/safari-mobile-recovery.spec.js", "-g", "permission prompt is up"],
   micmsg: ["tests/safari-mobile-recovery.spec.js", "-g", "each get their own message"],
   race: ["tests/safari-mobile-recovery.spec.js", "-g", "older prompt answered"],
-  orphan: ["tests/safari-mobile-recovery.spec.js", "-g", "replaced Start|Start replaced"],
+  orphan: ["tests/safari-mobile-recovery.spec.js", "-g", "Start replaced|lets go of the piano|piano option changed|held session and stopped"],
   focus: ["tests/exercise-viz-guided.spec.js", "-g", "Enter on Next past the last step|ends while Next has keyboard focus"],
   banner: ["tests/safari-mobile-recovery.spec.js", "-g", "sound-paused banner"]
 };
@@ -205,6 +205,9 @@ export const MUTANTS = {
     ["M106 an older progression that settles last plays over the newer one", "js/piano.js", "if (asked.stop !== this._stopGen || asked.prog !== this._progGen) return null;", "if (asked.stop !== this._stopGen) return null;"],
     ["M107 a reference note asked for before a Stop sounds after it", "js/piano.js", "      if (asked !== this._stopGen) return null; // stopped while the context resumed\n", ""],
     ["M108 a Stop forgets the sounds still waiting for the context", "js/piano.js", "      this._stopGen += 1;\n", ""],
+    ["M109 inhale ticks asked for before a Stop tick after it", "js/piano.js", "      if (asked !== this._stopGen) return false;\n", ""],
+    ["M110 a stopped one-note pass still announces its notes (the next take's targets jump)", "js/piano.js", "                if (pass !== this._passGen) return;\n", ""],
+    ["M111 a stopped pass still announces its chords", "js/piano.js", "if (pass === this._passGen && this.onChordChange) this.onChordChange", "if (this.onChordChange) this.onChordChange"],
     ["SB8 the banner with no free band covers Stop like any other control", "js/audio-recovery.js", "weight: KEEP_CLEAR.includes(c.id) ? 100 : 1", "weight: 1"],
     ["SB9 the banner with no free band overflows the largest band again", "js/audio-recovery.js", "const y = band ? band.top + (band.h - h) / 2 : leastCovered(room, h);", "const y = band ? band.top + (band.h - h) / 2 : room.bands.reduce((a, b) => (b.h > a.h ? b : a)).top;"]
   ].map(([name, file, from, to]) => ({ name, file, from, to, cmd: node(AUDIO_TESTS) })),
@@ -287,12 +290,19 @@ export const MUTANTS = {
     ["CP3 one saved session read as \"1 sessions\"", "js/i18n.js", "\"pricing.personalHave\": \"Saved sessions: {sessions} ·", "\"pricing.personalHave\": \"So far: {sessions} sessions ·", "copy"],
     ["MC1 leaving a take while the mic prompt is up leaves its Start pending", "js/app.js", "if (state.practiceLive || state.practice.running || state.practice.starting) {", "if (state.practiceLive || state.practice.running) {", "mic"],
     // QA round 6 (F2, app_race declaredOpen)
-    ["MC2 an older Start answered late ends the newer, live take with no word", "js/app.js", "    if (state.practiceStarting || state.practiceLive) {\n      if (state.soundGen === gen) VTPiano.stopAll();\n      return;\n    }\n    // Aborted mid-start", "    // Aborted mid-start", "race"],
-    ["MC3 an older Start answered late brings Start back under the newer prompt", "js/app.js", "if (state.practiceStarting || state.practiceLive) {\n      if (state.soundGen", "if (state.practiceLive) {\n      if (state.soundGen", "race"],
-    ["MC4 an older Start answered late stops the newer take's engine", "js/app.js", "if (state.practiceStarting || state.practiceLive) {\n      if (state.soundGen", "if (state.practiceStarting) {\n      if (state.soundGen", "race"],
-    ["MC5 a Start replaced while a held session resumed still asks for its chord loop", "js/app.js", "      if (!take.current()) return false;\n", "", "orphan"],
-    ["MC6 a chord loop a replaced Start began after the Stop plays on under the next take", "js/app.js", "      if (state.soundGen === gen) VTPiano.stopAll();\n", "", "orphan"],
-    ["MC7 no Start is marked as the one that reached its piano step", "js/app.js", "    state.soundGen = take.gen;\n", "", "orphan"],
+    ["MC2 an older Start answered late ends the newer, live take with no word", "js/app.js", "    if (state.practiceStarting || state.practiceLive) return;\n    // Aborted mid-start", "    // Aborted mid-start", "race"],
+    ["MC3 an older Start answered late brings Start back under the newer prompt", "js/app.js", "    if (state.practiceStarting || state.practiceLive) return;\n    // Aborted mid-start", "    if (state.practiceLive) return;\n    // Aborted mid-start", "race"],
+    ["MC4 an older Start answered late stops the newer take's engine", "js/app.js", "    if (state.practiceStarting || state.practiceLive) return;\n    // Aborted mid-start", "    if (state.practiceStarting) return;\n    // Aborted mid-start", "race"],
+    ["MC5 a Start replaced while its piano waited goes on to sound its note", "js/app.js", "    await readyPianoForSound();\n    if (!current()) return false;\n", "    await readyPianoForSound();\n", "orphan"],
+    ["MC6 a loop the piano dropped at a Stop is taken for silence: the replaced Start sounds its fallback note", "js/app.js", "    // A loop the piano dropped at a Stop is not silence: no fallback note for a replaced take\n    if (!current()) return false;\n", "", "orphan"],
+    ["MC7 a replaced Start asks for its progression after the Stop", "js/app.js", "      await VTPiano.resume?.();\n      if (!current()) return;\n      if (!state.selectedProg", "      await VTPiano.resume?.();\n      if (!state.selectedProg", "orphan"],
+    ["MC8 the recovery replays a replaced Start\'s note after the Stop", "js/app.js", "      await VTPiano.resume?.();\n      if (!current()) return;\n      if (plan.hasProg)", "      await VTPiano.resume?.();\n      if (plan.hasProg)", "orphan"],
+    ["MC9 a replaced Start stops the newer take's piano", "js/app.js", "    if (state.practiceStarting || state.practiceLive) return;\n    // Aborted mid-start", "    if (state.practiceStarting || state.practiceLive) return void VTPiano.stopAll();\n    // Aborted mid-start", "orphan"],
+    ["MC10 a piano option applied after the Stop plays on the stopped page", "js/app.js", "        const ok = await startExerciseSound(ex, profile, current);", "        const ok = await startExerciseSound(ex, profile);", "orphan"],
+    ["MC11 the reference button announces a note a Stop dropped", "js/app.js", "      if (!f) return; // a Stop while a held session resumed: nothing sounded, so nothing to announce\n", "", "orphan"],
+    ["MC12 the inhale-ticks button announces ticks a Stop dropped", "js/app.js", "      if (await VTPiano.playInhaleTicks(3)) toast(tt(\"toast.inhaleTicks\"));", "      await VTPiano.playInhaleTicks(3);\n      toast(tt(\"toast.inhaleTicks\"));", "orphan"],
+    ["MC13 the piano step does not hand its Start to the sound (a new Start of the same exercise is taken for it)", "js/app.js", "      const soundOk = await startExerciseSound(ex, profile, current);", "      const soundOk = await startExerciseSound(ex, profile);", "orphan"],
+    ["MC14 the replay does not hand its Start to the sound", "js/app.js", "    return startExerciseSound(ex, profile, current);", "    return startExerciseSound(ex, profile);", "orphan"],
     ["MB1 a resume that timed out tells the learner a permission prompt is still open", "js/app.js", "if ([\"interrupted\", \"AudioResumeTimeout\"].includes(failureName))", "if (failureName === \"interrupted\")", "micmsg"],
     ["MB2 a microphone that ended during Start is called blocked, not disconnected", "js/app.js", "|MediaStreamSource|ended while Start built/i", "|MediaStreamSource/i", "micmsg"]
   ].map(([name, file, from, to, area]) => ({

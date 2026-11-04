@@ -63,26 +63,8 @@
     },
     {
       "file": "js/app.js",
-      "sha": "336449d837e31cffe5dc140529dd3cf4f30b30578ad9b97d92eb8ed6eea7210b",
-      "complexity": 33,
-      "name": "Arrow function"
-    },
-    {
-      "file": "js/app.js",
-      "sha": "075ecbfc358ffda2dbfd69262befbf841150d0d5fe83df7bd36a925c529e45a4",
-      "complexity": 18,
-      "name": "Async arrow function"
-    },
-    {
-      "file": "js/app.js",
       "sha": "428a7963c4c834a3ce8f326d65dfd9fe6648c7c45d9d2c3ac1bbade951a67ac5",
       "complexity": 16,
-      "name": "Async arrow function"
-    },
-    {
-      "file": "js/app.js",
-      "sha": "c88b43983f5f78078cdaf0b315fb09d615a01d2d3ab26ed863c694e8ef8eb3cb",
-      "complexity": 24,
       "name": "Async arrow function"
     },
     {
@@ -96,12 +78,6 @@
       "sha": "2993131a41db15d49d2633f9d1e95c3b6c847e25a0f22622ac330bf4cacaa579",
       "complexity": 35,
       "name": "Async function 'onRoute'"
-    },
-    {
-      "file": "js/app.js",
-      "sha": "6fcc09a0816fd2833c5d098e9e88f3bb9b10152f7a789e4606ad3244b0059561",
-      "complexity": 23,
-      "name": "Async function 'playSelectedProgression'"
     },
     {
       "file": "js/app.js",
@@ -120,12 +96,6 @@
       "sha": "a6f96270b04696d944fe5e080e061e073111d306c1666e459a75c60c598faae1",
       "complexity": 17,
       "name": "Async function 'renderHistory'"
-    },
-    {
-      "file": "js/app.js",
-      "sha": "0b084e03ece731eee82117d6803cb6a1fe7889d9c14cbd4da7896e204881183e",
-      "complexity": 89,
-      "name": "Async function 'startExerciseSound'"
     },
     {
       "file": "js/app.js",

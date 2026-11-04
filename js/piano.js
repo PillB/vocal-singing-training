@@ -343,6 +343,8 @@
       this._stopGen = 0;
       // Every progression asked for bumps this: the newest plays, an older one still waiting is dropped
       this._progGen = 0;
+      // Every silence bumps this: a pass's chord and note timers that fire after it announce nothing
+      this._passGen = 0;
     }
 
     _wireGraph(ctx) {
@@ -710,11 +712,12 @@
     async playInhaleTicks(seconds = 3) {
       const asked = this._stopGen;
       await this.ensure();
-      if (asked !== this._stopGen) return;
+      if (asked !== this._stopGen) return false;
       const t0 = this.ctx.currentTime + 0.05;
       for (let i = 0; i < seconds; i++) {
         this.playNote(NOTE_FREQ.C3, t0 + i, 0.12, 0.25);
       }
+      return true;
     }
 
     /** The learner's Stop: silence now, and drop every sound still waiting for its context. */
@@ -725,6 +728,7 @@
 
     /** Every voice and the loop off, now. Pending sounds keep their turn (a progression silences before it plays). */
     _silence() {
+      this._passGen += 1;
       this.loopActive = false;
       if (this.loopTimer) {
         clearTimeout(this.loopTimer);
@@ -859,6 +863,8 @@
       const playOnce = () => {
         if (!this.loopActive && loop) return;
         const t0 = this.ctx.currentTime + 0.05;
+        // A silence (Stop, or the next progression) ends this pass: its timers then tell no one of a chord
+        const pass = this._passGen;
 
         if (melodic) {
           // Strict one-note-at-a-time: combobox duration applies to EACH note
@@ -881,6 +887,7 @@
             if (this.onChordChange || this.onNoteChange) {
               const delay = Math.max(0, (when - this.ctx.currentTime) * 1000);
               setTimeout(() => {
+                if (pass !== this._passGen) return;
                 const mini = { name: ev.chord.name, notes: [ev.note], oneNote: true };
                 if (this.onNoteChange) this.onNoteChange(ev.note, ev.chord, ei, prog);
                 if (this.onChordChange) this.onChordChange(mini, ev.cidx, prog, { oneNote: true, noteName: ev.note });
@@ -915,7 +922,7 @@
           if (this.onChordChange) {
             const delay = Math.max(0, (when - this.ctx.currentTime) * 1000);
             setTimeout(() => {
-              if (this.onChordChange) this.onChordChange(ch, idx, prog, { oneNote: false });
+              if (pass === this._passGen && this.onChordChange) this.onChordChange(ch, idx, prog, { oneNote: false });
             }, delay);
           }
         });

@@ -585,7 +585,7 @@ VG-60. `docs/43-WHEN-IT-BREAKS.md` is the whole of it.
 
 ## 25. The ads nobody has switched on yet
 
-Commit `TBD`. The cheapest moment to attack a feature is before anybody has seen
+Commit `b2da402`. The cheapest moment to attack a feature is before anybody has seen
 it, and this one has never been switched on. Four findings, each reproduced
 against the configuration that actually ships before a line was changed.
 

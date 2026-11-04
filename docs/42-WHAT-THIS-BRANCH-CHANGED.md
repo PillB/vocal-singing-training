@@ -580,3 +580,101 @@ fourth decision, and it is the only one of the four with a deadline: it is worth
 answering before either checkout opens.
 
 VG-60. `docs/43-WHEN-IT-BREAKS.md` is the whole of it.
+
+---
+
+## 25. The ads nobody has switched on yet
+
+Commit `TBD`. The cheapest moment to attack a feature is before anybody has seen
+it, and this one has never been switched on. Four findings, each reproduced
+against the configuration that actually ships before a line was changed.
+
+### Turning it on showed a button that did nothing
+
+`pickNativeCard` filtered for cards with somewhere to go and then undid its own
+filter: `usable.length ? usable : cards`. Both cards that name the home slot ship
+with `href: ""`, because the partner links do not exist yet, so the fallback
+always fired exactly there.
+
+Changing one value — `adsEnabled`, the single switch step 9 of the gate used to
+name — rendered "Micrófono USB de estudio" in the home slot with a "Ver opciones"
+button that called `window.open` **zero** times and opened no pricing panel, and
+recorded an `ad_click` for the press. A dead button in the most prominent slot of
+the free tier is worse than an empty slot, so an empty slot is what it renders
+now.
+
+The part worth keeping is not the fix. `tests/ads.spec.js` already patched a
+destination onto a card before asserting anything, with the comment *"ensure at
+least one card with open-pricing so CTA works without affiliate URL"*. The test
+knew. It worked around it and said nothing, which is the same failure as section
+15's un-imported suite and section 22's untested guard, in a third costume.
+
+### The slot that really is an advertisement was the only one that did not say so
+
+The AdSense path set `aria-label="Advertisement"` — hard-coded English, in a
+Spanish-first product — with no `role`, no visible label and no disclosure, while
+the native card beside it carried a translated label, a `role` and a disclosure
+line. Measured, not inferred: `aria-label` "Advertisement", `role` null, no
+`.ad-native-label`, no `.ad-native-disc`.
+
+It now uses the configured label in the page's language, sets
+`role="complementary"`, and renders the same disclosure the card does. A label
+above the unit and a disclosure below it are not among the modifications AdSense
+prohibits — that list is hiding units, covering them, overlapping content on
+mobile, hidden-keyword targeting, distribution in email or software, and anything
+that "artificially inflates ad performance" — and nothing here covers the unit.
+
+### An impression was counted before there was an ad
+
+`ad_impression` fired when the unit was *requested*, so it counted an ad that came
+back empty and an ad an extension blocked before Google's script ran. Google
+documents the right signal: it "adds a parameter to the `<ins>` element called
+`data-ad-status`" once a unit "has finished requesting an ad", with the values
+`filled` ("An ad was returned to the ad unit and is now showing"), `unfilled`
+and `unfill-optimized`.
+
+So the impression now fires on `filled` only, a new `ad_unfilled` event records
+the rest — without it, a slot that rendered and filled nothing is
+indistinguishable from a slot that never rendered — and an unfilled unit hides
+itself using the CSS Google itself recommends for that case. The new event name
+is added to the worker's closed set, because a name it does not know is refused.
+
+### You could not look at any of this without going live
+
+The real reason none of the above had been found: the only way to see what ads do
+to this product was an approved AdSense account and real ad requests from the live
+site. `mode: "preview"` answers the question locally instead. Every slot renders
+as it would, chipped **Vista previa**, with the card's button deliberately dead
+and labelled *(sin destino todavía)*, and a dashed box the exact minimum height of
+an AdSense unit underneath so the layout shift is visible. No third-party script,
+no network request, no account, and nothing tracked, because a preview is not an
+impression. It is also the only mode that will show a card whose partner link is
+still empty — the legitimate use of the fallback the first finding deleted.
+
+Rendered at 420 px it is 380×313 with no sideways scroll. Step 9a of
+`docs/40-GO-LIVE-GATE.md` is the two-minute version, and step 9c is the AdSense
+account, written out, because that account is the only part of this nobody else
+can do.
+
+### One that stays open, because it cannot be closed
+
+When a learner buys Pro mid-session the ad unit is correctly **removed** from the
+page rather than hidden — which is what AdSense requires — but `adsbygoogle.js`
+and its global stay for the life of the page, since removing a `<script>` tag does
+not unload a script. Somebody who has just paid for "no ads" keeps Google's script
+until they navigate.
+
+Every remedy is worse than the fault at this stage: a reload on the entitlement
+change interrupts whatever they were doing, and a consent gate is a bigger product
+decision. The one that costs nothing is the default the gate already recommends,
+`mode: "native"`, which never loads it. So it is VG-64, open, and the suite
+asserts **both** halves — the unit goes, the script does not — so it is a
+measurement rather than a worry, and a future fix has a test to flip.
+
+Seven cases in `tests/ads-redteam.spec.js`, six mutants run against the fixes,
+five dead. The survivor is an empty-pool guard whose only caller already writes
+`if (card)`, so deleting it changes nothing observable; it is kept because the
+documented return type would otherwise be a lie, and the source says exactly that
+rather than leaving somebody to hunt for a missing test.
+
+VG-61, VG-62, VG-63, VG-64.

@@ -86,6 +86,11 @@ export const EVENT_NAMES = new Set([
   "ad_impression",
   "ad_suppressed_practice",
   "ad_suppressed_pro",
+  // An AdSense unit that finished its request and came back empty. Separate from
+  // `ad_impression` because that event now fires only on `data-ad-status`
+  // "filled"; without this one, a slot that rendered and filled nothing would be
+  // indistinguishable from a slot that never rendered.
+  "ad_unfilled",
   "app_open",
   "audio_compare",
   "basics_complete",

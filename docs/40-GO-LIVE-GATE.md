@@ -36,7 +36,7 @@ every step is safe to stop after.
 | Checkout — Stripe | **Closed, and staying closed.** A Peru-registered seller cannot hold a Stripe merchant account | kept in code for a company abroad |
 | The trial-length A/B test | **Off** | `TRIAL_LEN_EXPERIMENT` |
 | The other six A/B tests | **Off** | `js/experiments-config.js` |
-| Ads / affiliate cards | **Off**, and every partner link is empty | `js/ads-config.js` `adsEnabled` |
+| Ads / affiliate cards | **Off**, and every partner link is empty. There is now a free `preview` mode for deciding, step 9a | `js/ads-config.js` `adsEnabled` + `mode` |
 | Demo unlock | **Off**, and must stay off in anything public | `js/billing-config.js` `demoUnlockEnabled` |
 | Health probe | **On**, and public: `/v1/health?probe=1` reads D1 and KV and answers 503 if either refuses | nothing to switch |
 | The alarm that tells you it failed | **Off.** Two repository variables arm it | `.github/workflows/health-ping.yml`, `docs/43-WHEN-IT-BREAKS.md` §4.1 |
@@ -262,12 +262,94 @@ are selling.** Ads on a free tier make the paid tier's "no ads" line true,
 which is worth something, but they also make the free tier worse at the moment
 you most need people to stay in it.
 
-If you do switch it on, `mode: "native"` with real affiliate URLs is the one to
-use — first-party tip cards, no third-party script, nothing loaded during
-practice (enforced in `js/ads.js`, not just intended). AdSense needs an
-approved account and units, and that is the only part of this that needs you.
+#### 9a. Look at it first, for free, with no account — two minutes
 
-**Undo:** `adsEnabled: false` and push.
+There is now a mode whose whole purpose is this decision. Locally, not pushed:
+
+```js
+// js/ads-config.js
+adsEnabled: true,
+mode: "preview",
+```
+
+```bash
+python3 -m http.server 8765   # then open http://127.0.0.1:8765
+```
+
+Every slot renders as it would, marked **Vista previa**, with the card's button
+deliberately dead and a dashed box showing the footprint an AdSense unit would
+take. **No third-party script is loaded, no request is made to anybody, no
+AdSense account is needed, and nothing is recorded as an impression** — a
+preview is not an advertisement. It is the only mode that will show you a card
+whose partner link is still empty, and it says so on the card.
+
+Look at the home screen and the post-session screen in particular. If the answer
+is "this makes the free tier worse", you have it for free and you stop here. Put
+both values back before pushing.
+
+#### 9b. If you want the first-party cards (the recommended live mode)
+
+`mode: "native"` renders your own tip cards: no third-party script, nothing from
+Google, nothing loaded during practice (enforced in `js/ads.js`, not merely
+intended), and a dismiss button on every card.
+
+What only you can do: join whatever partner or affiliate programme you want to
+earn from, and paste **its own tracking link** into the matching card's `href`
+in `js/ads-config.js`. The `rel="sponsored noopener noreferrer"` and the
+disclosure line are applied for you. Three cards ship; `pro-nudge` already works,
+because its destination is your own pricing panel.
+
+**A card with no destination is now skipped rather than shown.** So with every
+`href` still empty, `mode: "native"` shows nothing at all. That is deliberate and
+it is a bug fix: before 4 November 2026, turning `adsEnabled` on — the one switch
+this step used to name — rendered a card in the home slot whose button called
+nothing and recorded a click for the press. If you want to see those cards before
+you have links, that is what 9a is for.
+
+#### 9c. If you want AdSense — the account is the whole of the work
+
+This is the only part of this step that needs an account, and the account is
+yours alone:
+
+1. **Open an AdSense account** at `adsense.google.com` and add this site to it.
+2. **Let Google review the site.** It decides whether to approve, on criteria
+   that are theirs and that change; read AdSense's own getting-started pages
+   rather than this one. Nothing in this repository can speed that up.
+3. **Create the ad units** once approved — one for the home slot, one for
+   history — and note each unit's slot id and your publisher id (`ca-pub-…`).
+4. **Paste them in** `js/ads-config.js`:
+   ```js
+   mode: "adsense",            // or "hybrid": your cards first, AdSense as fill
+   adsense: {
+     client: "ca-pub-XXXXXXXXXXXXXXXX",
+     slots: { home: "1234567890", history: "0987654321" }
+   }
+   ```
+   The publisher id and the slot ids are **public by design** — they ship inside
+   the page to every visitor — so they are safe in this repository. There is no
+   AdSense secret to keep, which is why this step has no `wrangler secret put`.
+
+Three things to know before you choose this mode, each measured rather than
+assumed:
+
+- **Google's script outlives the ads.** A learner who buys Pro part-way through a
+  session has the ad unit removed from the page immediately, but
+  `adsbygoogle.js` and its globals stay until they navigate or reload. Removing a
+  `<script>` tag does not unload a script, so there is no fix for this short of a
+  reload the product does not do. `mode: "native"` never loads it at all. The
+  test `tests/ads-redteam.spec.js` asserts both halves so the limit stays a
+  measurement rather than a surprise.
+- **An unfilled unit hides itself**, using the CSS Google itself recommends for
+  that case, and our own funnel counts an impression only when Google says the
+  unit was `filled` — so `ad_impression` means an ad was actually returned, and
+  `ad_unfilled` tells you the difference between "no ad" and "no slot".
+- **What AdSense forbids, in its own words**, because two of these are easy to do
+  by accident later: hiding ad units (except an unfilled one), letting content
+  cover them, overlapping content on mobile, and any change that "artificially
+  inflates ad performance".
+
+**Undo:** `adsEnabled: false` and push. On a page already open, that takes effect
+on the next reload; nothing persists.
 
 ---
 

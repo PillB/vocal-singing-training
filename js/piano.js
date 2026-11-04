@@ -802,15 +802,19 @@
     /**
      * The context running, the graph wired and the master up, before a
      * progression plays. Every resume here is bounded (_awaitResume), so a
-     * session iOS holds cannot hold Start with it.
+     * session iOS holds cannot hold Start with it. False, having touched
+     * nothing, when `stale()` says the call was dropped while it waited.
      */
-    async _readyToPlay() {
+    async _readyToPlay(stale) {
       await this.ensure();
       await this.resume();
       // If still not running (autoplay policy), try unlock path once
       if (this.ctx && this.ctx.state !== "running") {
         await this.unlock();
       }
+      // A Stop, or a newer progression, came while the context was held: the silence below
+      // would end the voices and the chord loop of whatever plays now
+      if (stale()) return false;
       this._silence();
       // Ensure context is running after the silence
       if (this.ctx.state === "suspended") {
@@ -824,6 +828,7 @@
         await this.ensure();
       }
       if (this.master) this.master.gain.setValueAtTime(0.7, this.ctx.currentTime);
+      return true;
     }
 
     async playProgression(
@@ -841,9 +846,9 @@
       } = {}
     ) {
       const asked = { stop: this._stopGen, prog: ++this._progGen };
-      await this._readyToPlay();
+      const stale = () => asked.stop !== this._stopGen || asked.prog !== this._progGen;
       // A Stop, or a newer progression, while this one waited for a held context
-      if (asked.stop !== this._stopGen || asked.prog !== this._progGen) return null;
+      if (!(await this._readyToPlay(stale)) || stale()) return null;
       const baseProg = PROGRESSIONS[progId];
       if (!baseProg) {
         console.warn("Unknown progression", progId);

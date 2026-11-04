@@ -117,7 +117,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npx playwright install --with-deps webkit
       - name: WebKit desktop and iPhone Safari audio recovery contracts
-        run: xvfb-run -a npx playwright test tests/cross-browser-audio.spec.js tests/safari-mobile-recovery.spec.js tests/exercise-start-visibility.spec.js --project=webkit --project=mobile-safari --workers=2 --global-timeout=1200000
+        run: xvfb-run -a npx playwright test tests/cross-browser-audio.spec.js tests/safari-mobile-recovery.spec.js tests/exercise-start-visibility.spec.js tests/piano-dropped-call.spec.js --project=webkit --project=mobile-safari --workers=2 --global-timeout=1200000
       - name: Preserve WebKit interruption and permission diagnostics
         if: failure()
         uses: actions/upload-artifact@v4

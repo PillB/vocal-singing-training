@@ -299,6 +299,70 @@ for (const oneNote of [false, true]) {
   });
 }
 
+// QA round 10 on PR #27: a progression dropped while it waited still ran its silence once its wait
+// ended, so the progression playing by then lost its voices, its chord loop and its chord announcements.
+function heldFirstResume() {
+  let release = null;
+  const resume = (ctx) => {
+    if (!release) return new Promise((done) => { release = () => { ctx.state = "running"; done(); }; });
+    ctx.state = "running";
+    return Promise.resolve();
+  };
+  return { resume, release: () => release() };
+}
+
+for (const [by, replace] of [["a Stop", (piano) => piano.stopAll()], ["a newer progression", () => {}]]) {
+  for (const settles of ["is released", "runs out of time"]) {
+    test(`a progression dropped by ${by} leaves the one playing alone when its held resume ${settles}`, async () => {
+      const held = heldFirstResume();
+      const { clock, piano } = hungPiano({ resume: held.resume });
+      const heard = [];
+      piano.onChordChange = (ch) => heard.push(ch.name);
+      let older = "pending";
+      piano.playProgression("prog1", { loop: true }).then((p) => { older = p; });
+      await clock.advance(1000);
+      replace(piano);
+      const newer = await piano.playProgression("prog2", { loop: true });
+      assert.equal(newer?.chords?.length > 0, true, "control: the newer progression plays");
+      await clock.advance(100);
+      const voices = piano.playing.length;
+      const announced = heard.length;
+      assert.ok(voices > 0 && announced > 0, "control: its first chord sounds and is announced");
+      if (settles === "is released") held.release();
+      await clock.advance(12_000);
+      assert.equal(older, null, "the older request is dropped");
+      assert.equal(piano.loopActive, true, "the newer chord loop still runs");
+      assert.ok(piano.playing.length >= voices, `its voices still sound (${piano.playing.length} of ${voices})`);
+      assert.ok(heard.length > announced, "its next chords are still announced, so the take's targets move");
+    });
+  }
+}
+
+test("a Stop while a progression waits after its own silence still drops it", async () => {
+  let piano = null;
+  let silenced = false;
+  let stopped = false;
+  // A context that resumes but stays suspended (WebKit), so the progression waits once more after its silence
+  const resume = () => {
+    if (silenced && !stopped) {
+      stopped = true;
+      piano.stopAll(); // the learner's Stop lands in that last wait
+    }
+    return Promise.resolve();
+  };
+  const made = hungPiano({ resume });
+  piano = made.piano;
+  const silence = piano._silence.bind(piano);
+  piano._silence = () => { silenced = true; silence(); };
+  let prog = "pending";
+  piano.playProgression("prog1", { loop: true }).then((p) => { prog = p; });
+  await made.clock.advance(12_000);
+  assert.equal(stopped, true, "control: the Stop came after the progression's silence");
+  assert.equal(prog, null, "the progression is dropped");
+  assert.equal(piano.loopActive, false);
+  assert.equal(piano.playing.length, 0, "no voice sounds after the Stop");
+});
+
 test("a session that came back and is held again gets its full 8 s again", async () => {
   let calls = 0;
   const { clock, piano, setState } = hungPiano({

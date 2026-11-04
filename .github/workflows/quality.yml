@@ -30,7 +30,8 @@ concurrency:
 jobs:
   contracts:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # test:core, then about 150 node mutants at ~4 s each (about 12 minutes in all on 2026-11-04)
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with:

@@ -988,10 +988,21 @@ like the whole answer. Giving them a display settled it the other way. Under
 expects, they run — and five of them fail. Four exceed their own test budgets
 (six minutes, fifteen, fifteen and a full hour) inside
 `tests/helpers/layout-probe.js`, which is the file whose two defects #23
-diagnosed and fixed; the fifth, `click-ui-formats.spec.js`, reports three
-`mic_drag` mismatches where the slider's value does not move. So the display was
-real but it was not the cause, and saying so had been a guess dressed as a
-finding.
+diagnosed and fixed. So the display was real but it was not the cause, and
+saying so had been a guess dressed as a finding.
+
+The fifth needed its own answer, and got the opposite one. `click-ui-formats`
+reported three `mic_drag` failures where the gain slider's value did not move
+(`before 2, after 2`). Run the way the repository documents it — `npm run
+test:click-ui-formats`, which is `HEADED=1 SLOWMO=70 … --workers=1` — it passes
+330 of 330 in 4.7 minutes, and the same drag reads `mic hit=true 2→9 ui=9`. So
+that one is not a defect in the product and not the helper either: it is a human
+mouse path losing its timing when four workers share four CPUs with no slowMo.
+Which is the same conclusion #23 reached from the other end by moving these
+specs out of the gate, and it is why the number below is stated as narrowly as
+it is: a sweep spec run under conditions it was not written for produces a red
+that means nothing, and that red is indistinguishable from a real one until
+somebody runs it properly.
 
 The same run turned up nine more that the masked one never reached: the default
 `playwright test` runs `cross-browser-audio.spec.js` under Firefox, WebKit and

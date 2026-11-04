@@ -115,6 +115,8 @@ jobs:
       - name: Open or close the alert issue
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # No checkout in this job, so gh has no git remote to learn the repository from
+          GH_REPO: ${{ github.repository }}
           OK: ${{ steps.probe.outputs.ok }}
           DETAIL: ${{ steps.probe.outputs.detail }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -122,8 +124,9 @@ jobs:
           set -uo pipefail
           TITLE="Health probe failing: the entitlements worker"
 
+          # A list that fails is not "no alert open": stop, so the run is red and the failure is visible
           existing=$(gh issue list --state open --limit 50 --json number,title \
-            --jq "map(select(.title == \"$TITLE\")) | .[0].number // empty" 2>/dev/null || true)
+            --jq "map(select(.title == \"$TITLE\")) | .[0].number // empty") || { echo "could not list issues"; exit 1; }
 
           if [ "$OK" = "true" ]; then
             if [ -n "$existing" ]; then
@@ -134,8 +137,8 @@ jobs:
                 echo
                 echo "[This run]($RUN_URL)"
               } > recovered.md
-              gh issue comment "$existing" --body-file recovered.md
-              gh issue close "$existing"
+              gh issue comment "$existing" --body-file recovered.md || exit 1
+              gh issue close "$existing" || exit 1
               echo "Recovered; closed #$existing."
             else
               echo "Healthy."
@@ -172,5 +175,5 @@ jobs:
             echo
             echo "[This run]($RUN_URL) · opened automatically by \`.github/workflows/health-ping.yml\`"
           } > alert.md
-          gh issue create --title "$TITLE" --body-file alert.md
+          gh issue create --title "$TITLE" --body-file alert.md || { echo "could not open the alert issue"; exit 1; }
           echo "Opened a new alert issue."

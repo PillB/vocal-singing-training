@@ -35,7 +35,7 @@ Measured from the code on this branch, not from memory.
 | Admin page → *Lo que nos cuenta la gente* | `admin.html` | What users typed into the problem-report form (`/v1/admin/reports`) | Nothing, until somebody bothers to report. **This is currently the only path by which a failure reaches you at all**, and it only carries failures a user noticed and chose to describe |
 | Admin page → *Quién tiene Pro* | `admin.html` | Who holds Pro, by what kind of grant, and until when | Whether anybody was *refused* Pro they had paid for |
 | Workers Logs | Cloudflare dashboard | The 13 log lines the worker writes (below) | Anything older than **3 days** on the free plan, and anything past **200,000 log events in a day**, after which "a 1% head-based sample will be applied for the remainder of the day" |
-| The cron, 09:17 UTC | `wrangler.toml` `[triggers]` | — | Whether it ran. It deletes expired codes, sessions, rate-limit rows and data past the 180-day retention the privacy page promises, and reports nothing either way |
+| The cron, 09:17 UTC | `wrangler.toml` `[triggers]` | — | Whether it ran. It deletes expired codes, sessions, rate-limit rows and data past the 180-day retention the privacy page promises, and reports nothing either way. It is a Cloudflare trigger, armed by `wrangler deploy` — so unlike the pinger in 4.1 it is not waiting on any branch |
 | Cloudflare dashboard graphs | Cloudflare | Requests, errors, CPU time, KV and D1 operations | Anything, unless you open it |
 
 Every row in that table is a **pull**. Nothing in this product pushes.
@@ -101,6 +101,17 @@ lost. That schedule came from a page that now 404s; `docs.creem.io/code/webhooks
 gives the one above, and the real window is six times longer with a hard
 twenty-four-hour stop. QA raised it, and the quoted schedule was re-read from
 Creem's live page before this was changed.
+
+**Pressing resend is safe, and that is now tested rather than argued.** A manual
+resend carries a new event id, which is exactly what the idempotency marker
+cannot catch, so the instruction above rests on the entitlement write being
+idempotent on its own key. It is, because no period in this worker is ever
+counted from `now` — every date comes out of the payload — but that is a property
+of today's code, and one `Date.now()` in a period calculation would break it
+silently. `test/resend-idempotent.test.mjs` resends a Creem renewal an hour
+later under a new id, resends a Stripe invoice, and resends an old renewal after
+a newer one, and asserts that everything stored is byte-identical afterwards
+apart from `updatedAt`.
 
 So the same ceiling is a delay on two rails, and on the third it is a delay for
 most of the day and a sale parked behind a button nobody knows to press for the
@@ -334,6 +345,18 @@ accepted events per day rather than an operator judgement, and `ingest_daily`
 already counts what the cap would read. And the $5/month plan in 4.3 moves this
 ceiling too, by a factor of 500. Section 4 says which of those is switched on.
 
+**How you see that it happened.** The cap counts every shed event as
+`daily_capped`, and that is a row of its own in the admin page's arrivals list
+and a named sentence in the account panel's, in the colour of a fault in both. It
+is deliberately **not** summed into "descartados por mal formados" with the
+events the worker could not read: a shed event is one it read and chose not to
+store, the remedy is yours rather than a bug in the browser, and a number filed
+under "malformed" sends a reader after the wrong thing. For a day this was in the
+worker and in neither readout, so a shed day read as a quiet one; the two tests
+that hold the worker's list of reasons against each page's are what caught it.
+A shed day is the signal to raise `EVENTS_DAILY_CAP` on the paid plan, or to send
+fewer events.
+
 **Worker requests** at 100,000 a day are not a constraint for a static site whose
 browser work is a cached licence check, an occasional progress push and one
 batched events call per session.
@@ -397,7 +420,10 @@ Variables** on GitHub, with no code change:
 
 The URL goes in a repository variable rather than in the file because **this
 repository is public**, and a variable is the cheapest way to keep it out of git
-history. Nothing else is needed: `/v1/health` takes no key.
+history. `/v1/health` takes no key, so no secret is involved — but one more
+thing is needed, and it is not a setting: this branch has to be merged. GitHub
+never schedules a workflow that is not on the default branch, which is the first
+bullet at the end of this section.
 
 What it is honestly worth: it catches the worker being down, D1 refusing, KV
 *reads* refusing, a deploy that broke the routing, a deploy that lost a binding
@@ -448,8 +474,38 @@ no server listening at all, a base URL with a trailing slash,
 `writes` field at all). Two say healthy — `ok` and `unknown` — and the rest open
 the issue. An alarm nobody has tried to make lie is not an alarm.
 
+**And a second correction of the same kind: the step that opens the issue had
+never been run at all.** Eleven responses had been put through the *probe* step.
+The step after it — the one that opens, comments on and closes the issue — calls
+`gh`, and this job has no `actions/checkout`, so there is no git remote for `gh`
+to learn the repository from. Confirmed against the tool rather than reasoned
+about: gh 2.89.0, in a directory with no `.git`, answers `gh issue list` with
+"failed to run git: fatal: not a git repository", and `GITHUB_REPOSITORY`, which
+Actions always sets, does not help, because gh reads only `GH_REPO` or `--repo`.
+The script swallowed that stderr with `2>/dev/null || true` and ended on an
+`echo`, so the run would have been **green**, would have printed "Opened a new
+alert issue.", and would have opened nothing. The alarm was a step that could not
+run, reporting success.
+
+It now passes `GH_REPO: ${{ github.repository }}` and fails the run on any `gh`
+call that fails, so an alert that could not be sent is at least red in the run
+history. `qa/health-ping.test.mjs` runs that step as written against a `gh` that
+fails exactly the way the real one does: five cases, four of them red before this
+fix, one a control that passes either way so the fake cannot be rigged. It is in
+`npm test`. QA found it.
+
+It has still never run on a real runner. The first scheduled run after the merge
+is the only thing that proves it, and the way to check is to look for the issue
+after deliberately pointing `ENTITLEMENTS_BASE` at a URL that answers nothing.
+
 What to know before relying on it, from GitHub's own documentation:
 
+- "Scheduled workflows will only run on the default branch." And: "This event
+  will only trigger a workflow run if the workflow file exists on the default
+  branch." **So the pinger does nothing at all while it lives on this branch**,
+  whatever the two variables above say. It starts on the first merge to `main`,
+  and nothing warns you in the meantime: a workflow file on a branch is simply
+  never scheduled. QA raised it.
 - "The shortest interval you can run scheduled workflows is once every 5 minutes."
 - "The `schedule` event can be delayed during periods of high loads of GitHub
   Actions workflow runs", "High load times include the start of every hour", and
@@ -501,7 +557,9 @@ that is why 4.1 is an external pinger rather than a Cloudflare setting.
 | `?probe=1` on `/v1/health` | `workers/entitlements/src/index.js` | A health route that can actually fail. Two D1 row reads and one KV read, 503 if either refuses or if a webhook failed within the hour, no error text published because the route is public |
 | `test/cost.test.mjs`, 15 cases | `workers/entitlements/test/` | Every number in section 3.1, asserted. Four KV-write budgets, a statement budget for sign-in, progress and events, a proof that a claim spends no writes and progress spends no KV at all, and — since the correction in 4.1 — a webhook whose writes are refused while its reads still work, which must turn the probe red |
 | A query-plan guard | the last cases of `cost.test.mjs` | Asks SQLite for the plan of every statement a hot path runs, and fails on a `SCAN` of a table that grows with use. The admin funnel's known scan is asserted *as* the known exception, with its threshold, so it cannot quietly spread |
-| `.github/workflows/health-ping.yml` | repository root | Section 4.1. Off until two repository variables are set |
+| `.github/workflows/health-ping.yml` | repository root | Section 4.1. Off until two repository variables are set **and this branch is merged**, because a schedule only runs on the default branch |
+| `qa/health-ping.test.mjs`, 5 cases | `qa/` | The alert step of that workflow, run as written against a fake `gh` that fails the way the real one does outside a checkout. Four of the five were red before 4.1's second correction |
+| `test/resend-idempotent.test.mjs`, 3 cases | `workers/entitlements/test/` | The one recovery step §2.1 tells the operator to take: a webhook resent by hand under a new event id must leave everything stored identical |
 
 The probe reads and never writes, deliberately: a probe once a minute would be
 1,440 KV operations a day, which is 1.4% of the free read allowance and **144% of

@@ -466,6 +466,12 @@ test.describe("Rating: one tap after a take", () => {
       context.waitForEvent("page", { timeout: 5000 }),
       page.locator("#link-guide").click()
     ]);
+    // The `page` event fires when the tab exists, which is before it has
+    // navigated: `guide.url()` is "" for the first few milliseconds and this
+    // assertion read that empty string. It failed at ad36bd6 too, so the race
+    // is the test's own and predates this branch. Wait for the navigation the
+    // click starts, then assert on where it landed.
+    await guide.waitForURL(/\/guide\.html/, { timeout: 5000 });
     expect(guide.url()).toContain("/guide.html");
     await guide.close();
     // The exercise did not ask to be left, because it was not.

@@ -973,6 +973,43 @@ test.describe("Admin page", () => {
     await adminCtx.close();
   });
 
+  test("statistics: a shed day is its own row, in the colour of a fault, and is not called malformed", async ({
+    browser
+  }) => {
+    // The cap added on 2026-11-04 keeps counting from stopping sign-in, which
+    // only helps if somebody can tell it happened. For a day it was in the
+    // worker's reasons and in neither readout, so a shed day read as a quiet
+    // one, and the arithmetic of the two "every counter" tests is what caught
+    // it. This asserts the part arithmetic cannot: that it is not filed under
+    // "mal formados", because that would send the reader after a client bug.
+    const { worker, admin } = await startWorker();
+    const adminCtx = await browser.newContext();
+    const page = await openAdmin(adminCtx, worker, admin);
+    await page.route(`${API}/v1/admin/experiments**`, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        headers: { "access-control-allow-origin": "*" },
+        body: JSON.stringify({
+          ok: true,
+          experiments: [],
+          ingest: { since: "2026-10-29", totals: { accepted: 400, unknown_event: 7, daily_capped: 1200 }, lastAcceptedAt: 1790000000 }
+        })
+      })
+    );
+    await page.click("#stats-load");
+    const result = page.locator("#stats-result");
+    const shed = result.locator("li", { hasText: "topados por el límite diario del servidor" });
+    await expect(shed).toHaveAttribute("data-tone", "error");
+    await expect(shed.locator("strong")).toHaveText("1,200");
+    // The malformed row keeps its own seven and gains nothing.
+    const malformed = result.locator("li", { hasText: "descartados por mal formados" });
+    await expect(malformed.locator("strong")).toHaveText("7");
+    await page.click("#admin-lang");
+    await expect(result).toContainText("shed by the server's daily cap");
+    await adminCtx.close();
+  });
+
   test("statistics: every counter the worker keeps is shown once, grouped as the worker groups it", async ({
     browser
   }) => {
@@ -992,8 +1029,15 @@ test.describe("Admin page", () => {
       .forEach((key, i) => {
         totals[key] = 11 + i;
       });
-    const dropped = INGEST_REASONS.event.filter((k) => k !== "accepted").reduce((n, k) => n + totals[k], 0);
-    const own = ["accepted", ...INGEST_REASONS.request, ...INGEST_REASONS.exposure];
+    // `daily_capped` has a row of its own rather than joining the summed one,
+    // for the reason in js/admin.js: those three are events the worker could not
+    // read, and a capped one is an event it read and shed to keep the day's
+    // write allowance for signing in. The A/B panel splits them the same way,
+    // and tests/accounts.spec.js holds it to that.
+    const dropped = INGEST_REASONS.event
+      .filter((k) => k !== "accepted" && k !== "daily_capped")
+      .reduce((n, k) => n + totals[k], 0);
+    const own = ["accepted", "daily_capped", ...INGEST_REASONS.request, ...INGEST_REASONS.exposure];
 
     const { worker, admin } = await startWorker();
     const adminCtx = await browser.newContext();

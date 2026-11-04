@@ -39,7 +39,7 @@ every step is safe to stop after.
 | Ads / affiliate cards | **Off**, and every partner link is empty. There is now a free `preview` mode for deciding, step 9a | `js/ads-config.js` `adsEnabled` + `mode` |
 | Demo unlock | **Off**, and must stay off in anything public | `js/billing-config.js` `demoUnlockEnabled` |
 | Health probe | **On**, and public: `/v1/health?probe=1` reads D1 and KV and answers 503 if either refuses | nothing to switch |
-| The alarm that tells you it failed | **Off.** Two repository variables arm it | `.github/workflows/health-ping.yml`, `docs/43-WHEN-IT-BREAKS.md` §4.1 |
+| The alarm that tells you it failed | **Off.** Two repository variables arm it, and it cannot run at all until this branch is on `main`: GitHub schedules nothing off the default branch | `.github/workflows/health-ping.yml`, `docs/43-WHEN-IT-BREAKS.md` §4.1 |
 | Terms page | Live, with three placeholders in it | `terms.html` |
 
 Two of those rows are the whole of why this page exists: **checkout is closed

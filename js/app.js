@@ -8704,6 +8704,14 @@
       const t = ingest.totals || {};
       const sum = (keys) => keys.reduce((n, k) => n + (Number(t[k]) || 0), 0);
       const dropped = sum(["unknown_event", "bad_cid", "not_an_object"]);
+      // `daily_capped` is an event-level reason too, and it is deliberately NOT
+      // in that sum: those three are events this worker could not read, and a
+      // capped one is an event it could read and chose not to store because the
+      // day's D1 write allowance was nearly gone. Summing them would put the
+      // one condition an operator has to act on inside a number labelled "mal
+      // formados", which sends them hunting a client bug. It is counted and
+      // named on its own below, and it colours the line.
+      const capped = Number(t.daily_capped) || 0;
       // Every request-level reason the worker counts (INGEST_REASONS.request in
       // workers/entitlements/src/events.js) except "forget", which is a deletion
       // asked for rather than a batch turned away. eu_no_consent was missing
@@ -8721,7 +8729,7 @@
         "eu_no_consent"
       ];
       const refused = sum(refusedKeys);
-      if (!t.accepted && !dropped && !refused) return `<p class="muted ab-ingest">${esc(tt("ab.ingestNone"))}</p>`;
+      if (!t.accepted && !dropped && !refused && !capped) return `<p class="muted ab-ingest">${esc(tt("ab.ingestNone"))}</p>`;
       let line = tt("ab.ingest", { accepted: count(t.accepted), dropped: count(dropped), refused: count(refused) });
       const reasons = refusedKeys.filter((k) => t[k]).map((k) => `${k} ${count(t[k])}`);
       if (reasons.length) line += ` ${tt("ab.ingestReasons", { list: reasons.join(", ") })}`;
@@ -8732,6 +8740,7 @@
         .filter((k) => t[k])
         .map((k) => `${k} ${count(t[k])}`);
       if (exposures.length) line += ` ${tt("ab.ingestExposures", { list: exposures.join(", ") })}`;
+      if (capped) line += ` ${tt("ab.ingestCapped", { n: count(capped) })}`;
       if (ingest.lastAcceptedAt) line += ` ${tt("ab.ingestLast", { when: date(ingest.lastAcceptedAt) })}`;
       // A wrong origin or a stuck limit is a broken pipeline; opted-out,
       // automated and eu_no_consent refusals are the system working, so they are
@@ -8741,8 +8750,11 @@
       // only recorded if that browser comes back another day, so it can skew
       // who is counted. An unregistered one is forged traffic or a site and
       // worker deployed out of step, the registry doing its job, so it is named
-      // but not coloured.
-      const broken = sum(["origin_not_allowed", "rate_limited", "exposure_capped"]) > 0;
+      // but not coloured. A capped *event* does colour it: unlike the others it
+      // is data already lost, and the remedy is Pablo's (raise EVENTS_DAILY_CAP
+      // on the paid plan, or send fewer events), so a quiet readout would be a
+      // decision taken by silence.
+      const broken = sum(["origin_not_allowed", "rate_limited", "exposure_capped"]) > 0 || capped > 0;
       return `<p class="${broken ? "ab-warn" : "muted"} ab-ingest">${esc(line)}</p>`;
     }
 

@@ -39,3 +39,8 @@ import "./price-table.test.mjs";
 // checked to fail against the mutant it targets before being adopted.
 import "./qa-round4-worker.test.mjs";
 import "./qa-round4-defects.test.mjs";
+// The claim docs/43 2.1 asks the operator to act on: a webhook resent by hand
+// carries a new event id, so the marker cannot dedupe it and the write has to be
+// idempotent on its own key. Adding this file without this line is what the
+// guard in config.test.mjs caught, which is the whole reason that guard exists.
+import "./resend-idempotent.test.mjs";

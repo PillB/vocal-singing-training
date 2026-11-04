@@ -11,6 +11,16 @@
  * the same branch had done the bump by hand and the habit then lapsed, which is
  * what a habit does.
  *
+ * The first version of this file read `readdirSync(ROOT)`, which is the top
+ * level and nothing else, so `qa/index.html` was invisible to it — and that is
+ * the one page that loads its scripts through `../`, which is to say the one
+ * page a top-level scan cannot see. It was two stamps behind the app at the
+ * moment this check was written and reported a pass. `tests/reports.spec.js`
+ * caught it; a node gate that needs a browser run to cover its own blind spot
+ * is not a gate. Pages are now found recursively and every reference is
+ * resolved against the directory of the page that makes it, so one file loaded
+ * as `js/app.js` from the root and `../js/app.js` from a folder is one key.
+ *
  * So: three things are asserted, in rising strength.
  *   1. Every local js/css reference carries a `?v=` stamp at all.
  *   2. All references to one file, across every page, carry the same stamp.
@@ -28,9 +38,21 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const REF = /(?:src|href)="((?:js|css)\/[A-Za-z0-9_.-]+)(\?v=([0-9]{8})([a-z]*))?"/g;
+const REF = /(?:src|href)="((?:\.{0,2}\/)*(?:js|css)\/[A-Za-z0-9_.-]+)(\?v=([0-9]{8})([a-z]*))?"/g;
+const IGNORED = new Set(["node_modules", "test-results", "playwright-report", ".git"]);
 
-const pages = fs.readdirSync(ROOT).filter((f) => f.endsWith(".html")).sort();
+/** Every page in the repository, as a repo-relative path with forward slashes. */
+const findPages = (dir = ROOT) =>
+  fs
+    .readdirSync(dir, { withFileTypes: true })
+    .flatMap((e) => {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) return IGNORED.has(e.name) ? [] : findPages(full);
+      return e.isFile() && e.name.endsWith(".html") ? [path.relative(ROOT, full).split(path.sep).join("/")] : [];
+    })
+    .sort();
+
+const pages = findPages();
 const failures = [];
 const expectNone = (what, offenders) => {
   if (offenders.length) failures.push(`${what}: ${offenders.join(", ")}`);
@@ -58,9 +80,15 @@ const unstamped = [];
 for (const page of pages) {
   const html = fs.readFileSync(path.join(ROOT, page), "utf8");
   for (const m of html.matchAll(REF)) {
-    const [, rel, stamped, date] = m;
+    const [, link, stamped, date] = m;
+    // `../js/app.js` on qa/index.html and `js/app.js` on index.html are the
+    // same file; keyed by the link they would be two, and agree trivially.
+    const rel = path
+      .relative(ROOT, path.resolve(path.dirname(path.join(ROOT, page)), link))
+      .split(path.sep)
+      .join("/");
     if (!stamped) {
-      unstamped.push(`${rel} in ${page}`);
+      unstamped.push(`${link} in ${page}`);
       continue;
     }
     if (!seen.has(rel)) seen.set(rel, new Map());

@@ -897,8 +897,14 @@ environment, which is what a deploy on the $5 plan wants since the same ceiling
 is 500 times higher there. A batch that would cross the cap is refused whole
 rather than stored in part, because half a session in the funnel reads as a
 drop-off that never happened. A refusal writes nothing but its own tally, so the
-ceiling cannot spend the budget it protects, and `ingest_daily` shows the
-operator it is biting.
+ceiling cannot spend the budget it protects, and `ingest_daily` counts every shed
+event.
+
+That last clause said "`ingest_daily` shows the operator it is biting", and it
+did not. The counter existed; neither of the two places that display those
+counters knew the reason existed, so a day that shed twelve hundred events read
+as a quiet one. Section 28 is that correction, and the eighth this record has
+had to make of its own earlier claims.
 
 ### The monitor could not see the thing the page says to watch
 
@@ -952,3 +958,176 @@ stop rather than overshoot it, so a decision §6 had recorded as a mismatch was
 never one.
 
 VG-71, VG-72, VG-73, VG-74.
+
+## 28. The alarm that could not raise one, and a gate that could not see one page
+
+Commit: PENDING.
+
+Section 26 built a check so that stale cache stamps could not reach a returning
+visitor again. Section 27 built an alarm so that a payment the worker could not
+record would not pass unnoticed. This section is what happened when both were
+attacked: the check could not see the one page that needed it most, and the alarm
+could not raise one. Five findings, and the fifth is why the first four sat
+unnoticed for a round.
+
+### The run that said it was green
+
+The full browser suite is thirty-five minutes, so it runs in the background, and
+the command that ran it ended in `| tail -14`. A shell pipeline exits with the
+status of its **last** command, which is `tail`, which always succeeds. The
+harness reported exit code 0. The fourteen lines it showed were the end of a
+failure list, not a summary, and reading them as "10 skipped, 1 did not run, 951
+passed" was reading the bottom of a page and assuming the top.
+
+Re-run without the pipe, there were eleven failures. Eight were this container
+rather than the product: eight specs carry `test.use({ headless: false })`,
+because they are by-hand headed diagnostics, and a headless container has no
+display for them. They run here now under `xvfb-run`, with the image's Chromium
+aliased to the build the pinned Playwright expects, which is a container fix and
+not a repository one. Two of the remaining three are the next two headings. The
+third is `all-flows-robust.spec.js`, a serial fifteen-minute walk of the whole
+catalogue with real mouse clicks, which has not been reproduced on its own and
+may have been the contention of running it beside the headed specs; it is in the
+sweep this section's own commit was validated against, and if it is real it is
+the next thing after this.
+
+A suite whose verdict is read off `tail` has no verdict. That is the finding, and
+it is worth more than either bug it hid.
+
+### The page testers use was a month behind
+
+`qa/index.html` served `../css/styles.css?v=20261005p` and
+`../js/reports.js?v=20261102a` while every other page had moved to `20261104a`.
+Anybody who had opened the QA site before was testing a build nobody else was
+running — which, of all the audiences for whom a stale cache is bad, is the worst
+one.
+
+Section 26's `qa/check-cache-stamps.mjs` exists to prevent exactly this, and it
+read `fs.readdirSync(ROOT)`: the top level and nothing else. `qa/index.html` is
+the only page in a folder, which makes it the only page that loads its files
+through `../`, which makes it the only page a top-level scan cannot see. It was
+already two stamps behind at the moment that check was written, and the check
+reported a pass. What caught it was `tests/reports.spec.js`, a browser test — so
+the node gate needed a thirty-five-minute browser run to cover its own blind
+spot, which is not what a node gate is for.
+
+Pages are now found recursively, and every reference is resolved against the
+directory of the page that makes it, so `js/app.js` from the root and
+`../js/app.js` from a folder are one key rather than two that agree trivially.
+Mutation-tested by putting the stale stamp back: it fails, naming both stamps.
+
+### The alarm's last step had never been run
+
+Section 27 put eleven responses through the health pinger's **probe** step —
+healthy, 503, a 200 claiming health with a binding in error, a 404, nothing
+listening, and so on. The step after it, the one that actually opens the issue
+that emails Pablo, had been run zero times.
+
+It calls `gh`, and the job has no `actions/checkout`, so there is no git remote
+for `gh` to learn the repository from. Confirmed against the tool rather than
+reasoned about: gh 2.89.0, in a directory with no `.git`, answers `gh issue list`
+with "failed to run git: fatal: not a git repository", and `GITHUB_REPOSITORY`,
+which Actions always sets, does not help, because gh reads only `GH_REPO` or
+`--repo`. The script swallowed that stderr with `2>/dev/null || true`, has no
+`set -e`, and ends on an `echo`. So the run would have been green, would have
+printed "Opened a new alert issue.", and would have opened nothing.
+
+Which is the same shape as the fault section 27 is about. There, a probe that
+could only read reported health through a failure to write. Here, a notifier that
+could not reach GitHub reported that it had notified. Both were built to be
+watched and neither was watched.
+
+It now passes `GH_REPO: ${{ github.repository }}` and fails the run on any `gh`
+call that fails, so an alert that could not be sent is at least red in the run
+history rather than silent. `qa/health-ping.test.mjs` runs that step as written,
+against a `gh` that fails the way the real one does outside a checkout: five
+cases, four red before the fix, one a control that passes either way so the fake
+cannot be rigged. It is in `npm test`.
+
+It has still never run on a real runner, and the document says so. The first
+scheduled run after the merge is the only thing that proves it.
+
+### A schedule ignores a branch
+
+GitHub: "Scheduled workflows will only run on the default branch", and "This
+event will only trigger a workflow run if the workflow file exists on the default
+branch." §4.1 listed two repository variables as everything the alarm needs, so a
+reader who set both would have believed the worker was being watched while
+nothing was scheduled at all. Nothing warns you: a workflow file on a branch is
+simply never scheduled.
+
+Said now where the variables are listed, and again in §5's table. Recorded with
+it, because the two were conflated once already: the 09:17 sweep is **not**
+affected. That is a Cloudflare `[triggers]` cron armed by `wrangler deploy`, not a
+GitHub schedule, and §1's row now says which kind it is.
+
+### A resend under a new id
+
+§2.1 tells the operator that a Creem sale stranded by a day past the KV write
+ceiling can be recovered by pressing resend in Creem's dashboard. A resend by
+hand carries a **new** event id, which is precisely what `event:<provider>:<id>`
+cannot dedupe, so that instruction rests on the entitlement write being
+idempotent on its own key.
+
+It is, and the reason is structural: no period in this worker is ever counted
+from `now` — every date comes out of the payload. But that is a property of the
+code as it stands today, and the edit that would break it is one `Date.now()` in
+a period calculation, which nothing would have caught. Now three cases do: a
+Creem renewal resent an hour later under a new id, a resent Stripe invoice, and
+an old renewal resent after a newer one, each asserting that everything stored is
+byte-identical afterwards apart from `updatedAt`, with a control asserting that
+the new id really did miss the marker — otherwise the test would pass by being
+deduped, which proves nothing.
+
+### A test that had never passed
+
+`tests/finish-rating.spec.js`'s "the header's guide on an exercise opens beside
+it" asserted `guide.url()` immediately after `context.waitForEvent("page")`. That
+event fires when the tab exists, which is before it has navigated, so the URL is
+`""` for the first few milliseconds and the assertion read the empty string.
+Reproduced at `ad36bd6`, this branch's own base, in a throwaway worktree: it is
+inherited, not caused here, and it had never passed anywhere. It waits for the
+navigation now.
+
+This is the third kind of bad test this branch has had to name. Section 23's was
+flaky. Section 26's was machine-dependent, which is worse, because it fails
+consistently everywhere but one machine. This one is neither: it fails everywhere,
+always, and was counted as passing because nobody read past `tail -14`.
+
+### The cap nobody could see
+
+Section 27 capped stored events so that counting cannot stop sign-in, and added
+`daily_capped` to the worker's list of ingest reasons. It went into neither
+readout. The account panel's arrivals line sums the event-level reasons into
+"descartados"; the admin page's statistics list does the same into "descartados
+por mal formados". Both lists were written before `daily_capped` existed, so a
+day on which the product shed twelve hundred events to protect sign-in would have
+read as a quiet day with nothing to explain.
+
+Which would have been the cap's whole value gone. Shedding is not self-healing:
+it means the day's write allowance is nearly spent, the remedy is Pablo's — raise
+`EVENTS_DAILY_CAP` on the paid plan, or send fewer events — and an operator who
+cannot see it cannot take it.
+
+Two tests caught it, and neither was looking for it. `tests/accounts.spec.js` and
+`tests/admin.spec.js` each import `INGEST_REASONS` from the worker and assert
+that every counter in it is shown exactly once, either as its own row or inside
+one named sum. Adding a reason to the worker and to nothing else breaks their
+arithmetic — expected 54, received 39 — which is what a guard against drift
+between a worker and two readouts is for. They were written after
+`eu_no_consent` had drifted the same way.
+
+The grouping changed rather than the sum: `daily_capped` has a row of its own on
+the admin page and a sentence of its own in the arrivals line, both in the colour
+of a fault, and both pages split it the same way so the two readouts still agree
+for the same week. Putting it inside "mal formados" would have added up correctly
+and sent the reader hunting a client bug. Six mutants — the name dropped, the
+colour dropped, the admin row dropped, the admin colour dropped, and the grouping
+"corrected" back into the malformed sum on each page — all six dead.
+
+The shape is section 27's again, a third time. A probe that could only read
+reported health through a failure to write. A notifier that could not reach
+GitHub reported that it had notified. And a cap built to make a ceiling visible
+was invisible. Each one was the monitoring, not the thing monitored.
+
+VG-75, VG-76, VG-77, VG-78, VG-79, VG-80.

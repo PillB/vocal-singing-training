@@ -583,6 +583,7 @@
       ingest: {
         accepted: "guardados",
         dropped: "descartados por mal formados",
+        daily_capped: "topados por el límite diario del servidor",
         forget: "borrados a petición",
         eu_no_consent: "sin permiso (Europa)",
         opted_out: "navegador que pide no ser rastreado",
@@ -630,6 +631,7 @@
       ingest: {
         accepted: "stored",
         dropped: "dropped as malformed",
+        daily_capped: "shed by the server's daily cap",
         forget: "deleted on request",
         eu_no_consent: "no consent (Europe)",
         opted_out: "browser asks not to be tracked",
@@ -1616,6 +1618,12 @@
     // bad_request used to be summed in with the events, which mixed requests
     // with events and made this "dropped" disagree with the A/B panel's.
     // tests/admin.spec.js holds the two lists to each other.
+    // `daily_capped` is an event reason as well and is deliberately not in that
+    // sum: those three are events the worker could not read, and a capped one is
+    // an event it read and chose not to store, because the day's D1 write
+    // allowance was nearly gone. It is the one line here that asks Pablo for a
+    // decision, so it gets its own row and the colour of a fault rather than
+    // being hidden inside a number labelled "mal formados".
     const dropped = ["unknown_event", "bad_cid", "not_an_object"].reduce((sum, key) => sum + n(key), 0);
     nodes.push(
       el("p", {
@@ -1634,6 +1642,7 @@
       ["body_too_large", n("body_too_large")],
       ["bad_request", n("bad_request")],
       ["dropped", dropped],
+      ["daily_capped", n("daily_capped")],
       // What became of the exposures among the events stored, which the worker
       // counts and this list used to leave out.
       ["exposure_new", n("exposure_new")],
@@ -1649,7 +1658,7 @@
     // only if that browser comes back another day, so it can skew who is
     // counted. An unknown arm is forged traffic or a site and worker deployed out
     // of step, the registry doing its job, so it is listed but not coloured.
-    const faults = ["origin_not_allowed", "rate_limited", "exposure_capped"];
+    const faults = ["origin_not_allowed", "rate_limited", "exposure_capped", "daily_capped"];
     nodes.push(
       el(
         "ul",

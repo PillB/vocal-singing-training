@@ -691,7 +691,12 @@ test.describe("Accounts, gifted months and saved progress", () => {
         totals[key] = 11 + i;
       });
     const sum = (keys) => keys.reduce((n, k) => n + totals[k], 0);
-    const droppedKeys = INGEST_REASONS.event.filter((k) => k !== "accepted");
+    // An event the worker could not read, and an event it read and shed because
+    // the day's write allowance was nearly gone, are different facts. The second
+    // is `daily_capped`: it is named on its own and colours the line, because it
+    // is the one reason here that asks Pablo to do something. Both pages group
+    // it the same way, which is what this pair of tests is really holding.
+    const droppedKeys = INGEST_REASONS.event.filter((k) => k !== "accepted" && k !== "daily_capped");
     // A deletion somebody asked for is not a batch turned away.
     const refusedKeys = INGEST_REASONS.request.filter((k) => k !== "forget");
 
@@ -706,6 +711,38 @@ test.describe("Accounts, gifted months and saved progress", () => {
       `${totals.accepted} eventos guardados, ${sum(droppedKeys)} descartados, ${sum(refusedKeys)} envíos rechazados`
     );
     for (const key of [...refusedKeys, ...INGEST_REASONS.exposure]) await expect(line).toContainText(`${key} ${totals[key]}`);
+    // Shedding is data already lost and the remedy is the operator's, so it is
+    // named in words rather than as a bare key, and it marks the line.
+    await expect(line).toContainText(`límite diario del servidor: ${totals.daily_capped}`);
+    await expect(line).toHaveClass(/ab-warn/);
+  });
+
+  test("a day that shed statistics says so, and a day that did not says nothing about it", async ({ page }) => {
+    // The cap exists so that counting cannot stop sign-in. It can only be acted
+    // on if somebody can see it happened, and it was invisible here for a day:
+    // added to the worker's reasons and to neither readout, so a shed day read
+    // as a quiet one.
+    const license = await mintLicense({ origin: BASE });
+    const stub = createWorkerStub({
+      role: "admin",
+      ingest: { since: "2026-09-17", totals: { accepted: 400, daily_capped: 1200 }, lastAcceptedAt: 1790000000 }
+    });
+    await installWorker(page, stub, license);
+    await boot(page);
+    await signIn(page);
+    await page.click("#ab-results-load");
+    const line = page.locator("#ab-results .ab-ingest");
+    // The count formatter groups with a comma in both languages; that is this
+    // page's existing convention and not something this change touches.
+    await expect(line).toContainText("1,200");
+    await expect(line).toContainText(/entrar siga funcionando/);
+    await expect(line).toHaveClass(/ab-warn/);
+
+    // A cap nothing hit must not leave a scare on the line.
+    stub.ingest = { since: "2026-09-17", totals: { accepted: 400 }, lastAcceptedAt: 1790000000 };
+    await page.click("#ab-results-load");
+    await expect(line).not.toContainText(/límite diario del servidor/);
+    await expect(line).not.toHaveClass(/ab-warn/);
   });
 
   test("before its plan is met a test shows counts and the date, never a comparison", async ({ page }) => {

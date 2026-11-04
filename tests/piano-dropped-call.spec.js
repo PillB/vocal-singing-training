@@ -95,6 +95,38 @@ test("an older progression still waiting for a held context does not silence the
   expect(r.after.playing).toBeGreaterThan(0);
 });
 
+// The two tests above ask for a newer progression, which drops the older one by itself: here a Stop alone does.
+test("a progression a Stop dropped does not cut the reference note played after the Stop", async ({ page }) => {
+  await boot(page, { lang: "en" });
+  await holdResumes(page);
+  const r = await page.evaluate(async (stateSrc) => {
+    const snap = new Function(`return (${stateSrc})()`);
+    const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
+    const P = window.VTPiano;
+    await P.ensure();
+    await P.ctx.suspend();
+    window.__hold = 99;
+    const A = P.playProgression("prog1", { loop: true, chordSec: 2 });
+    const asked = P._progGen;
+    await sleep(300);
+    P.stopAll();
+    window.__hold = 0;
+    const f = await P.playRefPitch("A2", 20, true);
+    await sleep(200);
+    const noteSounding = snap();
+    const released = window.__releaseResumes();
+    const aResult = await Promise.race([A.then((v) => (v ? "played" : "dropped")), sleep(3000).then(() => "still waiting")]);
+    await sleep(500);
+    return { f, noteSounding, newer: P._progGen !== asked, released, aResult, after: snap() };
+  }, state.toString());
+  expect(typeof r.f, "control: the reference note sounded").toBe("number");
+  expect(r.newer, "control: no newer progression was asked for").toBe(false);
+  expect(r.noteSounding.playing, "control: its voices are up").toBeGreaterThan(0);
+  expect(r.released, "control: A really was waiting on a held resume").toBeGreaterThan(0);
+  expect(r.aResult, "A is dropped").toBe("dropped");
+  expect(r.after.playing, `the reference note still sounds ${JSON.stringify(r.after)}`).toBeGreaterThanOrEqual(r.noteSounding.playing);
+});
+
 test("CONTROL: with nothing stale, the progression that was asked for plays after a held context settles", async ({ page }) => {
   await boot(page, { lang: "en" });
   await holdResumes(page);

@@ -122,7 +122,7 @@ test("with no free band to hold it, the banner covers a row of two controls befo
 function hungPiano({ resume } = {}) {
   const clock = vclock(0);
   const param = () => ({ value: 1, setValueAtTime() {}, linearRampToValueAtTime() {}, exponentialRampToValueAtTime() {}, cancelScheduledValues() {}, setTargetAtTime() {} });
-  const node = () => ({ connect() {}, disconnect() {}, start() {}, stop() {}, gain: param(), frequency: param(), Q: param(), detune: param(), threshold: param(), knee: param(), ratio: param(), attack: param(), release: param(), getFloatTimeDomainData() {}, getByteTimeDomainData() {} });
+  const node = () => ({ connect() {}, disconnect() {}, start(t) { this.startedAt = t; }, stop(t) { (this.stops ||= []).push(t); }, gain: param(), frequency: param(), Q: param(), detune: param(), threshold: param(), knee: param(), ratio: param(), attack: param(), release: param(), getFloatTimeDomainData() {}, getByteTimeDomainData() {} });
   class HungContext {
     state = "suspended";
     sampleRate = 48000;
@@ -134,10 +134,17 @@ function hungPiano({ resume } = {}) {
     createBuffer(ch, n) { return { getChannelData: () => new Float32Array(n) }; }
   }
   const listeners = [];
+  const made = []; // every node the piano made, with the create* that made it
   const ctx = new Proxy(new HungContext(), {
     get(target, key) {
       if (key in target) return target[key];
-      return typeof key === "string" && key.startsWith("create") ? () => node() : undefined;
+      if (typeof key !== "string" || !key.startsWith("create")) return undefined;
+      return () => {
+        const n = node();
+        n.kind = key;
+        made.push(n);
+        return n;
+      };
     }
   });
   const win = { AudioContext: function AudioContext() { return ctx; }, addEventListener() {}, document: { addEventListener() {} } };
@@ -146,7 +153,7 @@ function hungPiano({ resume } = {}) {
     setTimeout: clock.setTimeout, clearTimeout: clock.clearTimeout
   });
   const setState = (state) => { ctx.state = state; listeners.forEach((fn) => fn()); };
-  return { clock, piano: win.VTPiano, setState };
+  return { clock, piano: win.VTPiano, setState, made };
 }
 
 test("the piano's unlock gives up on a resume that never settles after 8 s, so Start can go on", async () => {
@@ -338,6 +345,63 @@ for (const [by, replace] of [["a Stop", (piano) => piano.stopAll()], ["a newer p
   }
 }
 
+// Review of the QA round 10 fix: the tests above always ask for a newer progression, which drops the older
+// one by itself. A Stop alone must drop it too, and the check must hold in every wait before the silence.
+for (const settles of ["is released", "runs out of time"]) {
+  test(`a progression dropped by a Stop alone leaves the next reference note sounding when its held resume ${settles}`, async () => {
+    const held = heldFirstResume();
+    const { clock, piano } = hungPiano({ resume: held.resume });
+    let older = "pending";
+    piano.playProgression("prog1", { loop: true }).then((p) => { older = p; });
+    const asked = piano._progGen;
+    await clock.advance(1000);
+    piano.stopAll();
+    const f = await piano.playRefPitch("A2", 20, true);
+    assert.equal(typeof f, "number", "control: the reference note sounds");
+    const voices = piano.playing.length;
+    assert.ok(voices > 0);
+    assert.equal(piano._progGen, asked, "control: no newer progression was asked for");
+    if (settles === "is released") held.release();
+    await clock.advance(12_000);
+    assert.equal(older, null, "the progression asked for before the Stop is dropped");
+    assert.ok(piano.playing.length >= voices, `the reference note still sounds (${piano.playing.length} of ${voices})`);
+  });
+}
+
+// ensure's resume settles but the context stays suspended (WebKit), so the older call waits again in
+// resume() (call 2) or in unlock's gesture resume (call 3); the Stop and the next take land there.
+for (const [where, heldCall] of [["resume()", 2], ["unlock", 3]]) {
+  test(`a progression dropped while it waits in ${where} leaves the newer one alone`, async () => {
+    let calls = 0;
+    let release = null;
+    let newerAsked = false;
+    const resume = (ctx) => {
+      calls += 1;
+      if (newerAsked) { ctx.state = "running"; return Promise.resolve(); }
+      if (calls === heldCall) return new Promise((done) => { release = done; });
+      return Promise.resolve();
+    };
+    const { clock, piano } = hungPiano({ resume });
+    let older = "pending";
+    piano.playProgression("prog1", { loop: true }).then((p) => { older = p; });
+    await clock.advance(1000);
+    assert.equal(calls, heldCall, `control: the older call waits on resume call ${heldCall}`);
+    assert.equal(typeof release, "function");
+    piano.stopAll();
+    newerAsked = true;
+    const newer = await piano.playProgression("prog2", { loop: true });
+    assert.equal(newer?.chords?.length > 0, true, "control: the newer progression plays");
+    await clock.advance(100);
+    const voices = piano.playing.length;
+    assert.ok(voices > 0 && piano.loopActive);
+    release();
+    await clock.advance(12_000);
+    assert.equal(older, null, "the older request is dropped");
+    assert.equal(piano.loopActive, true, "the newer chord loop still runs");
+    assert.ok(piano.playing.length >= voices, "its voices still sound");
+  });
+}
+
 test("a Stop while a progression waits after its own silence still drops it", async () => {
   let piano = null;
   let silenced = false;
@@ -362,6 +426,22 @@ test("a Stop while a progression waits after its own silence still drops it", as
   assert.equal(piano.loopActive, false);
   assert.equal(piano.playing.length, 0, "no voice sounds after the Stop");
 });
+
+// Review of QA round 10's fix: a pass schedules every chord up front, and each note's hammer noise was not
+// tracked with its strings, so a Stop left the later chords' noise to tick (in one-note mode, for up to a minute).
+for (const oneNote of [false, true]) {
+  test(`a Stop silences the hammer noise of the ${oneNote ? "notes" : "chords"} still to come, not only their strings`, async () => {
+    const { clock, piano, made } = hungPiano({ resume: (ctx) => { ctx.state = "running"; return Promise.resolve(); } });
+    await piano.playProgression("prog1", { loop: true, sustain: true, sustainSec: 4, oneNote });
+    await clock.advance(500);
+    const later = made.filter((n) => n.kind === "createBufferSource" && n.startedAt > 0.1);
+    assert.ok(later.length > 0, "control: the later chords' hammer noise is scheduled");
+    piano.stopAll();
+    const now = piano.ctx.currentTime;
+    const ticking = later.filter((n) => !(n.stops?.at(-1) <= now));
+    assert.equal(ticking.length, 0, `${ticking.length} of ${later.length} hammer noises still due after the Stop`);
+  });
+}
 
 test("a session that came back and is held again gets its full 8 s again", async () => {
   let calls = 0;

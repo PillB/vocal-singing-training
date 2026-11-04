@@ -3446,11 +3446,14 @@
    * Who a sound request is for: the take (or the Start) live when it was made. A
    * request whose take has since been stopped or replaced (a held iPhone session
    * can make one piano call wait for seconds) asks the piano for nothing more,
-   * and its answer changes nothing on the page.
+   * and its answer changes nothing on the page. So does one made before the
+   * learner stopped the piano ("Stop piano", Auto piano off): Play once, Loop and
+   * an option changed during a take used to play after that Stop.
    */
   function soundTicket(ex = state.exercise) {
     const gen = state.practiceGen;
-    return () => gen === state.practiceGen && state.exercise === ex;
+    const pianoStop = window.VTPiano?._stopGen;
+    return () => gen === state.practiceGen && state.exercise === ex && pianoStop === window.VTPiano?._stopGen;
   }
 
   /** One-note mode: the chord line, the highway and the engine follow the piano's chord, or its single note. */
@@ -3917,6 +3920,8 @@
     if (!current()) return false;
     if (!started && exerciseWantsSound(ex, profile)) started = await playFallbackRef(ex, profile, plan);
     if (started && pianoNotRunning()) await recoverPlannedSound(ex, profile, plan, current);
+    // Replaced while the fallback or the recovery waited: the piano sounding now is the next take's
+    if (!current()) return false;
     return pianoSounding(started);
   }
 
@@ -3940,6 +3945,7 @@
     // Generation token: Stop / leave / exercise switch aborts in-flight Start
     const gen = ++state.practiceGen;
     const stillThisStart = () => gen === state.practiceGen && state.exercise === ex;
+    const pianoStop = VTPiano._stopGen;
 
     try {
       if (startsElsewhere(ex, profile)) return;
@@ -3962,11 +3968,11 @@
       // already started — then solfege/ref sound goes silent for the whole session.
       // No await when the take needs no microphone: such a Start goes live in the same task, as before the split
       const micOk = plan.needsMic || plan.wantRecord ? await startMicForTake(plan) : true;
-      if (!stillThisStart()) return abandonReplacedStart();
+      if (!stillThisStart()) return abandonReplacedStart(pianoStop);
 
       // Resume + start piano AFTER mic so context is running again
       const soundOk = plan.wantPiano ? await startSoundForTake(ex, profile, stillThisStart) : false;
-      if (!stillThisStart()) return abandonReplacedStart();
+      if (!stillThisStart()) return abandonReplacedStart(pianoStop);
 
       goLive(ex, profile, plan, { micOk, soundOk });
     } catch (e) {
@@ -4331,9 +4337,12 @@
    * round 6, F2). Nothing of this Start's is left to stop: Stop bumped the
    * engine's start number, so its microphone was released, and the piano
    * dropped what it asked for before the Stop; after the Stop it asked for
-   * nothing (soundTicket).
+   * nothing (soundTicket). So the piano is stopped here only when no Stop came
+   * since this Start began (`pianoStop`): after one, what plays is what the
+   * learner asked for on the next page (a Loop, a reference note), and this
+   * late answer used to cut it.
    */
-  function abandonReplacedStart() {
+  function abandonReplacedStart(pianoStop) {
     if (state.practiceStarting || state.practiceLive) return;
     // Aborted mid-start — ensure we don't leave mic running without UI
     try {
@@ -4341,7 +4350,7 @@
     } catch {
       /* ignore */
     }
-    VTPiano.stopAll();
+    if (pianoStop === VTPiano._stopGen) VTPiano.stopAll();
     state.practiceStarting = false;
     setPracticeUI(false);
   }

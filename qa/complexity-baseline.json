@@ -404,12 +404,6 @@
       "name": "Method 'compute'"
     },
     {
-      "file": "js/piano.js",
-      "sha": "49e3180a466feeb4bb61b5243a70a94a0c1b25d18b3fb32dcf435040f2efe6f7",
-      "complexity": 16,
-      "name": "Method 'playNote'"
-    },
-    {
       "file": "js/pitch-game.js",
       "sha": "e67b8cb6d8a2a3ddeef649ad1e704e394e4c635184c68a80cc285acf0dfd51a6",
       "complexity": 29,

@@ -451,6 +451,149 @@ for (const [button, said] of [["#btn-ref-pitch", "Reference"], ["#btn-inhale-tic
   });
 }
 
+// Review of QA round 10's fix (sibling hunt). Play once and Loop waited on a held session without the piano's
+// Stop number, so they played after "Stop piano" (the reference and ticks buttons above did not).
+for (const button of ["#btn-loop-prog", "#btn-play-prog"]) {
+  test(`${button} tapped on a held session and stopped before it sounded plays nothing`, async ({ page }) => {
+    test.setTimeout(60000);
+    await bootWithToasts(page);
+    await openExercise(page, "s2-solfege-chords");
+    await watchPiano(page);
+    await page.evaluate(() => { window.__holdNext = "ensure"; });
+    await page.evaluate((sel) => document.querySelector(sel).click(), button);
+    await expect.poll(() => page.evaluate(() => typeof window.__releasePiano)).toBe("function");
+    await page.evaluate(() => {
+      window.__stopped = true;
+      document.querySelector("#btn-stop-piano").click();
+    });
+    await page.evaluate(() => window.__releasePiano());
+    await settleAWhile(page);
+    const after = await pianoScore(page);
+    expect({ played: after.played, loop: after.loop, voices: after.voices }).toEqual({ played: [], loop: false, voices: 0 });
+    const toasts = await page.evaluate(() => window.__toasts.join(" | "));
+    expect(toasts, "the Stop's word is the last").toContain("Piano stopped");
+    expect(toasts).not.toMatch(/Looping|Playing/);
+  });
+}
+
+// A piano option changed during a take, with the session held, then "Stop piano": the option's restart used to
+// play the loop again (Stop in its resume) or take the loop the piano dropped for silence and sound the fallback
+// note (Stop in the progression's own wait), and to say "Options applied" after "Piano stopped".
+for (const [where, holdIn] of [["its resume", "runner"], ["the progression's own wait", "progression"]]) {
+  test(`a piano option changed on a held session, then Stop piano in ${where}, leaves the piano stopped`, async ({ page }) => {
+    test.setTimeout(60000);
+    await bootWithToasts(page);
+    await openExercise(page, "s2-solfege-chords");
+    await page.locator("#btn-practice-start").click();
+    await expect.poll(() => page.evaluate(() => window.VTApp.getState().practiceLive), { timeout: 15000 }).toBe(true);
+    await watchPiano(page);
+    await page.evaluate((hold) => {
+      const P = window.VTPiano;
+      if (hold === "runner") window.__holdNext = "resume";
+      else {
+        const prog = P.playProgression;
+        let armed = true;
+        P.playProgression = (...a) => {
+          if (armed) { armed = false; window.__holdNext = "ensure"; }
+          return prog(...a);
+        };
+      }
+      window.VTApp.applyPianoOptionsHot("sustain"); // its promise waits on the held session
+    }, holdIn);
+    await expect.poll(() => page.evaluate(() => typeof window.__releasePiano)).toBe("function");
+    await page.evaluate(() => {
+      window.__stopped = true;
+      document.querySelector("#btn-stop-piano").click();
+    });
+    await page.evaluate(() => window.__releasePiano());
+    const ok = await page.evaluate(() => window.VTApp._hotApplyPromise);
+    await settleAWhile(page);
+    const after = await pianoScore(page);
+    expect({ ok, played: after.played, loop: after.loop, voices: after.voices, live: after.live }).toEqual({
+      ok: false, played: [], loop: false, voices: 0, live: true
+    });
+    expect(await page.evaluate(() => window.__toasts.join(" | "))).not.toContain("Options applied");
+    await page.locator("#btn-practice-stop").click();
+  });
+}
+
+// The option's restart replaced (Stop, Start) while its recovery waited: it read the next take's piano as its own
+// sound, so it answered true and said "Options applied" over the next take.
+test("a piano option changed, then a Start replaced while its recovery waited, says nothing on the next take", async ({ page }) => {
+  test.setTimeout(60000);
+  await bootWithToasts(page);
+  await openExercise(page, "s2-solfege-chords");
+  await page.locator("#btn-practice-start").click();
+  await expect.poll(() => page.evaluate(() => window.VTApp.getState().practiceLive), { timeout: 15000 }).toBe(true);
+  await watchPiano(page);
+  await page.evaluate(() => {
+    const P = window.VTPiano;
+    const prog = P.playProgression;
+    let armed = true;
+    P.playProgression = (...a) => prog(...a).then((r) => {
+      if (r && armed) {
+        // The loop is scheduled, then the context reads suspended once: the restart runs its recovery, held
+        armed = false;
+        window.__holdNext = "resume";
+        const ctx = P.ctx;
+        let proto = ctx;
+        while (proto && !Object.getOwnPropertyDescriptor(proto, "state")) proto = Object.getPrototypeOf(proto);
+        const realState = Object.getOwnPropertyDescriptor(proto, "state").get;
+        let once = true;
+        Object.defineProperty(ctx, "state", { configurable: true, get() { if (!once) return realState.call(ctx); once = false; return "suspended"; } });
+      }
+      return r;
+    });
+    window.VTApp.applyPianoOptionsHot("sustain");
+  });
+  await expect.poll(() => page.evaluate(() => typeof window.__releasePiano)).toBe("function");
+  await page.locator("#btn-practice-stop").click();
+  await page.locator("#btn-practice-start").click();
+  await expect.poll(() => page.evaluate(() => window.VTApp.getState().practiceLive), { timeout: 15000 }).toBe(true);
+  await expect.poll(() => page.evaluate(() => !!window.VTPiano.loopActive), { timeout: 15000 }).toBe(true);
+  await page.evaluate(() => { window.__stopped = true; });
+  const ok = await page.evaluate(() => { const p = window.VTApp._hotApplyPromise; window.__releasePiano(); return p; });
+  await settleAWhile(page);
+  expect(ok, "the replaced take's option restart reports nothing").toBe(false);
+  expect(await page.evaluate(() => window.__toasts.join(" | "))).not.toContain("Options applied");
+  expect((await pianoScore(page)).loop, "control: the next take's own loop plays").toBe(true);
+  await page.locator("#btn-practice-stop").click();
+});
+
+// A Start replaced by leaving its page (a Stop), answered late, stopped the piano: what the learner had asked for
+// on the next page since (a Loop) was cut off, right after its "Looping" toast.
+for (const waits of ["its permission prompt", "piano wait 1", "piano wait 3"]) {
+  test(`a Loop on the next page keeps playing when a Start replaced at ${waits} lets go of the piano`, async ({ page }) => {
+    test.setTimeout(60000);
+    await bootWithToasts(page);
+    await openExercise(page, "s2-solfege-chords");
+    const nth = waits === "its permission prompt" ? 0 : Number(waits.slice(-1));
+    if (!nth) {
+      await page.evaluate(() => {
+        const md = navigator.mediaDevices;
+        const goodMic = md.getUserMedia.bind(md);
+        window.__grants = [];
+        const ask = (c) => new Promise((resolve, reject) => { window.__grants.push(() => goodMic(c).then(resolve, reject)); });
+        md.getUserMedia = ask;
+        if (typeof MediaDevices !== "undefined") MediaDevices.prototype.getUserMedia = ask;
+      });
+    } else await watchPiano(page, nth);
+    await page.locator("#btn-practice-start").click();
+    if (!nth) await expect.poll(() => page.evaluate(() => window.__grants.length), { timeout: 15000 }).toBe(1);
+    else await expect.poll(() => page.evaluate(() => typeof window.__releasePiano), { timeout: 15000 }).toBe("function");
+    await openExercise(page, "s4-lip-trills"); // leaving runs Stop
+    if (!nth) await watchPiano(page);
+    await page.evaluate(() => { window.__stopped = true; document.querySelector("#btn-loop-prog").click(); });
+    await expect.poll(() => page.evaluate(() => !!window.VTPiano.loopActive), { timeout: 15000 }).toBe(true);
+    await page.evaluate(() => (window.__grants ? window.__grants[0]() : window.__releasePiano()));
+    await settleAWhile(page);
+    await page.waitForTimeout(1500); // the late Start has answered and given up
+    const after = await pianoScore(page);
+    expect({ loop: after.loop, live: after.live }, "the loop the learner asked for on the new page still runs").toEqual({ loop: true, live: false });
+    expect(after.voices).toBeGreaterThan(0);
+  });
+}
+
 test("Stop while the permission prompt is up cancels that Start; the microphone granted later is released", async ({ page }) => {
   test.setTimeout(60000);
   await bootWithToasts(page);

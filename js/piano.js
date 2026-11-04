@@ -325,6 +325,59 @@
     };
   }
 
+  /**
+   * A note's loudness over time. Cross-browser: never ramps to 0 (Safari throws
+   * or mutes). A sustained note holds near full level so students can home in
+   * for 3–5 s, then releases gently.
+   */
+  function noteEnvelope(gain, t0, duration, velocity, sustain) {
+    try {
+      gain.setValueAtTime(GAIN_EPS, t0);
+    } catch {
+      gain.value = GAIN_EPS;
+    }
+    const vel = Math.max(GAIN_EPS, velocity || 0.4);
+    safeExpRamp(gain, vel, t0 + 0.012);
+    if (sustain && duration >= 2.5) {
+      const holdEnd = t0 + Math.max(0.2, duration - 0.45);
+      safeExpRamp(gain, vel * 0.72, t0 + 0.06);
+      try {
+        gain.setValueAtTime(Math.max(GAIN_EPS, vel * 0.68), holdEnd);
+      } catch {
+        /* ignore */
+      }
+      safeExpRamp(gain, GAIN_EPS, t0 + duration);
+    } else {
+      safeExpRamp(gain, vel * 0.55, t0 + 0.08);
+      safeExpRamp(gain, GAIN_EPS, t0 + duration);
+    }
+  }
+
+  /** The soft hammer noise at a note's start: its source, which the caller stops with the strings. */
+  function hammerNoise(ctx, freq, t0, velocity, out) {
+    const noiseDur = 0.03;
+    const bufferSize = Math.floor(ctx.sampleRate * noiseDur);
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufferSize, 3);
+    }
+    const noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+    const ng = ctx.createGain();
+    const filter = ctx.createBiquadFilter();
+    filter.type = "bandpass";
+    filter.frequency.value = Math.min(freq * 4, 4000);
+    filter.Q.value = 1.2;
+    ng.gain.value = velocity * 0.15;
+    noise.connect(filter);
+    filter.connect(ng);
+    ng.connect(out);
+    noise.start(t0);
+    noise.stop(t0 + noiseDur);
+    return noise;
+  }
+
   class PianoEngine {
     constructor() {
       this.ctx = null;
@@ -619,28 +672,7 @@
 
       const noteGain = ctx.createGain();
       noteGain.connect(this.master);
-      // Cross-browser envelope: never ramp to 0 (Safari throws / mutes)
-      try {
-        noteGain.gain.setValueAtTime(GAIN_EPS, t0);
-      } catch {
-        noteGain.gain.value = GAIN_EPS;
-      }
-      const vel = Math.max(GAIN_EPS, velocity || 0.4);
-      safeExpRamp(noteGain.gain, vel, t0 + 0.012);
-      if (sustain && duration >= 2.5) {
-        // Hold near full level so students can home in for 3–5s, then gentle release
-        const holdEnd = t0 + Math.max(0.2, duration - 0.45);
-        safeExpRamp(noteGain.gain, vel * 0.72, t0 + 0.06);
-        try {
-          noteGain.gain.setValueAtTime(Math.max(GAIN_EPS, vel * 0.68), holdEnd);
-        } catch {
-          /* ignore */
-        }
-        safeExpRamp(noteGain.gain, GAIN_EPS, t0 + duration);
-      } else {
-        safeExpRamp(noteGain.gain, vel * 0.55, t0 + 0.08);
-        safeExpRamp(noteGain.gain, GAIN_EPS, t0 + duration);
-      }
+      noteEnvelope(noteGain.gain, t0, duration, velocity, sustain);
 
       const nodes = [];
       for (const p of partials) {
@@ -660,29 +692,10 @@
       // When the last scheduled voice ends, in context time (see isSounding)
       this.soundingUntil = Math.max(this.soundingUntil || 0, t0 + duration + 0.05);
 
-      // soft hammer noise
-      const noiseDur = 0.03;
-      const bufferSize = Math.floor(ctx.sampleRate * noiseDur);
-      const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-      const data = buffer.getChannelData(0);
-      for (let i = 0; i < bufferSize; i++) {
-        data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufferSize, 3);
-      }
-      const noise = ctx.createBufferSource();
-      noise.buffer = buffer;
-      const ng = ctx.createGain();
-      const filter = ctx.createBiquadFilter();
-      filter.type = "bandpass";
-      filter.frequency.value = Math.min(freq * 4, 4000);
-      filter.Q.value = 1.2;
-      ng.gain.value = velocity * 0.15;
-      noise.connect(filter);
-      filter.connect(ng);
-      ng.connect(noteGain);
-      noise.start(t0);
-      noise.stop(t0 + noiseDur);
+      const noise = hammerNoise(ctx, freq, t0, velocity, noteGain);
 
-      this.playing.push(...nodes);
+      // The hammer noise too: a pass schedules every chord up front, and a Stop must silence them all
+      this.playing.push(...nodes, noise);
       return noteGain;
     }
 
@@ -802,8 +815,8 @@
     /**
      * The context running, the graph wired and the master up, before a
      * progression plays. Every resume here is bounded (_awaitResume), so a
-     * session iOS holds cannot hold Start with it. False, having touched
-     * nothing, when `stale()` says the call was dropped while it waited.
+     * session iOS holds cannot hold Start with it. False, before its silence,
+     * when `stale()` says the call was dropped while it waited.
      */
     async _readyToPlay(stale) {
       await this.ensure();

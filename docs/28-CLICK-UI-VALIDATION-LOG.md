@@ -1,6 +1,6 @@
 # 28 — Click vs UI validation log (headed, mouse-only)
 
-**Updated:** 2026-07-18T01:41:08.438Z
+**Updated:** 2026-11-04T05:00:48.624Z
 **Mode:** headed-click-ui-live
 **Rules:** headed Chromium · human `mouse.move` paths · no programmatic control clicks · offset grid ±6–10px
 
@@ -9,44 +9,26 @@
 | Metric | Value |
 |--------|------:|
 | controls | 180 |
-| centerHitOk | 180 |
-| centerHitFail | 0 |
-| effectOk | 180 |
-| effectFail | 0 |
-| logOk | 180 |
-| logFail | 0 |
+| centerHitOk | 179 |
+| centerHitFail | 1 |
+| effectOk | 172 |
+| effectFail | 8 |
+| logOk | 179 |
+| logFail | 1 |
 | offsetOnlyHits | 0 |
 
-## Dual-agent reviews (Elon + Zuckerberg)
+## Issues
 
-### all / final-gate — 2026-07-18T01:41:02.103Z
-
-**Elon (product):**
-
-**Product verdict: PASS (ship)** after full headed matrix.
-
-- Living log: **180/180** centerHit + effect + press-log PASS; **offsetOnlyHits=0** (mm-offset claim resolved at center).
-- Formats: desktop, desktop-short, mobile, mobile-land, tablet, fullscreen × 5 exercises × Start/mic/guide/metrics/Stop/Back.
-- Screenshots under `qa/screenshots/click-ui-live/{format}/{exercise}/` with before / hover / click-moment / after.
-- Residual: dense mobile-land rail is tight but center paint still receives hits; capture timing can show chrome in "before" frames — not a hit bug.
-- **Ship recommendation:** deploy.
-
-**Zuckerberg (architecture / hit geometry):**
-
-**Architecture verdict: PASS (ship)**.
-
-Root causes addressed:
-1. Sticky stage over Back → `.exercise-header-compact` sticky z-30 / `#btn-back-home` z-32; stage top includes `--ex-chrome-h`; `syncHeaderHeightVar` measures both.
-2. Leave modal blocked by inline display:none → clear style on open; tests no longer force permanent display:none.
-3. Start under mic (short landscape) → rail wrap + `.hud-bl`/Start z-index above mic; Start reflow retries in suite.
-
-Residual risk: short-viewport media must keep stage top under both headers (patched). Full matrix 180/180, format-hits green.
-**Ship: YES.**
-
-**Follow-ups:**
-- Full click-ui-live green (180/180, 0 issues)
-- format-hit-clicks green
-- Deploy main → GitHub Pages
+| ID | Sev | Format | Exercise | Control | Code | Message |
+|----|-----|--------|----------|---------|------|---------|
+| ISS-001 | P0 | desktop | v1-diction | #mic-sensitivity | effect_fail | expected mic value rises on track drag; UI label matches; actual val 7→2 ui=2 |
+| ISS-002 | P0 | desktop | s15-sh-air-ladder | #mic-sensitivity | effect_fail | expected mic value rises on track drag; UI label matches; actual val 2→2 ui=2 |
+| ISS-003 | P0 | desktop | s9-pitch-match | #mic-sensitivity | effect_fail | expected mic value rises on track drag; UI label matches; actual val 2→2 ui=2 |
+| ISS-004 | P0 | desktop | s2-solfege-chords | #mic-sensitivity | effect_fail | expected mic value rises on track drag; UI label matches; actual val 2→2 ui=2 |
+| ISS-005 | P0 | desktop | v10-power-pause | #mic-sensitivity | effect_fail | expected mic value rises on track drag; UI label matches; actual val 2→2 ui=2 |
+| ISS-006 | P0 | desktop-short | v1-diction | #mic-sensitivity | effect_fail | expected mic value rises on track drag; UI label matches; actual val 2→2 ui=2 |
+| ISS-007 | P1 | mobile | s15-sh-air-ladder | #btn-practice-stop | not_visible | control missing or zero size |
+| ISS-008 | P0 | fullscreen | v1-diction | #mic-sensitivity | effect_fail | expected mic value rises on track drag; UI label matches; actual val 9→2 ui=2 |
 
 ## Per-control log
 
@@ -58,9 +40,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-start`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338295950,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":178,"y":683,"fs":false}
+- **Press log:** PASS — {"t":1793768004563,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":170,"y":689,"fs":false}
 - **Effect:** PASS — expected: practice goes live; Stop visible · actual: live=true status="En vivo"
-- **Click point:** (178, 683)
+- **Click point:** (171, 690)
 
 | Stage | Path |
 |-------|------|
@@ -74,9 +56,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`INPUT#mic-sensitivity`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338298269,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":1066,"y":683,"fs":false}
-- **Effect:** PASS — expected: mic value rises on track drag; UI label matches · actual: val 7→9 ui=9
-- **Click point:** (771, 683)
+- **Press log:** PASS — {"t":1793768007003,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":1066,"y":689,"fs":false}
+- **Effect:** FAIL — expected: mic value rises on track drag; UI label matches · actual: val 7→2 ui=2
+- **Click point:** (806, 690)
 
 | Stage | Path |
 |-------|------|
@@ -85,14 +67,15 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 | click-moment | `qa/screenshots/click-ui-live/desktop/v1-diction/mic-sensitivity_02_down.png` |
 | after | `qa/screenshots/click-ui-live/desktop/v1-diction/mic-sensitivity_03_after.png` |
 
+- **Issues:** ISS-001
 
 #### `#btn-toggle-guide`
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-guide`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338300016,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":1063,"y":764,"fs":false}
+- **Press log:** PASS — {"t":1793768008845,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":1108,"y":772,"fs":false}
 - **Effect:** PASS — expected: guide panel toggles collapsed state · actual: open false→true
-- **Click point:** (1064, 764)
+- **Click point:** (1108, 773)
 
 | Stage | Path |
 |-------|------|
@@ -106,9 +89,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-metrics`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338301912,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":1090,"y":731,"fs":false}
+- **Press log:** PASS — {"t":1793768010814,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":1083,"y":731,"fs":false}
 - **Effect:** PASS — expected: metrics panel toggles collapsed state · actual: open false→true
-- **Click point:** (1090, 732)
+- **Click point:** (1083, 732)
 
 | Stage | Path |
 |-------|------|
@@ -122,9 +105,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-stop`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338303768,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":180,"y":396,"fs":false}
+- **Press log:** PASS — {"t":1793768012743,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":172,"y":400,"fs":false}
 - **Effect:** PASS — expected: practice stops; Start visible again · actual: live=false startVisible=true
-- **Click point:** (180, 397)
+- **Click point:** (173, 400)
 
 | Stage | Path |
 |-------|------|
@@ -138,9 +121,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-back-home`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338305705,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":1132,"y":79,"fs":false}
+- **Press log:** PASS — {"t":1793768014801,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":155,"y":84,"fs":false}
 - **Effect:** PASS — expected: return to home view · actual: home=true
-- **Click point:** (1132, 79)
+- **Click point:** (155, 84)
 
 | Stage | Path |
 |-------|------|
@@ -156,9 +139,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-start`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338310423,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":178,"y":683,"fs":false}
+- **Press log:** PASS — {"t":1793768019616,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":170,"y":689,"fs":false}
 - **Effect:** PASS — expected: practice goes live; Stop visible · actual: live=true status="En vivo"
-- **Click point:** (178, 683)
+- **Click point:** (171, 690)
 
 | Stage | Path |
 |-------|------|
@@ -172,9 +155,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`INPUT#mic-sensitivity`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338312442,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":1066,"y":683,"fs":false}
-- **Effect:** PASS — expected: mic value rises on track drag; UI label matches · actual: val 9→9 ui=9
-- **Click point:** (771, 683)
+- **Press log:** PASS — {"t":1793768021729,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":1066,"y":689,"fs":false}
+- **Effect:** FAIL — expected: mic value rises on track drag; UI label matches · actual: val 2→2 ui=2
+- **Click point:** (806, 690)
 
 | Stage | Path |
 |-------|------|
@@ -183,14 +166,15 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 | click-moment | `qa/screenshots/click-ui-live/desktop/s15-sh-air-ladder/mic-sensitivity_02_down.png` |
 | after | `qa/screenshots/click-ui-live/desktop/s15-sh-air-ladder/mic-sensitivity_03_after.png` |
 
+- **Issues:** ISS-002
 
 #### `#btn-toggle-guide`
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-guide`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338314158,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":1063,"y":764,"fs":false}
+- **Press log:** PASS — {"t":1793768023581,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":1108,"y":772,"fs":false}
 - **Effect:** PASS — expected: guide panel toggles collapsed state · actual: open false→true
-- **Click point:** (1064, 764)
+- **Click point:** (1108, 773)
 
 | Stage | Path |
 |-------|------|
@@ -204,9 +188,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-metrics`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338316015,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":1090,"y":731,"fs":false}
+- **Press log:** PASS — {"t":1793768025469,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":1083,"y":731,"fs":false}
 - **Effect:** PASS — expected: metrics panel toggles collapsed state · actual: open false→true
-- **Click point:** (1090, 731)
+- **Click point:** (1083, 731)
 
 | Stage | Path |
 |-------|------|
@@ -220,9 +204,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-stop`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338318649,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":180,"y":399,"fs":false}
+- **Press log:** PASS — {"t":1793768028199,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":172,"y":400,"fs":false}
 - **Effect:** PASS — expected: practice stops; Start visible again · actual: live=false startVisible=true
-- **Click point:** (180, 400)
+- **Click point:** (173, 400)
 
 | Stage | Path |
 |-------|------|
@@ -236,9 +220,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-back-home`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338320628,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":1132,"y":79,"fs":false}
+- **Press log:** PASS — {"t":1793768030178,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":155,"y":84,"fs":false}
 - **Effect:** PASS — expected: return to home view · actual: home=true
-- **Click point:** (1132, 79)
+- **Click point:** (155, 84)
 
 | Stage | Path |
 |-------|------|
@@ -254,9 +238,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-start`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338325359,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":178,"y":683,"fs":false}
+- **Press log:** PASS — {"t":1793768035214,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":170,"y":689,"fs":false}
 - **Effect:** PASS — expected: practice goes live; Stop visible · actual: live=true status="En vivo"
-- **Click point:** (178, 683)
+- **Click point:** (171, 690)
 
 | Stage | Path |
 |-------|------|
@@ -270,9 +254,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`INPUT#mic-sensitivity`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338327461,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":865,"y":683,"fs":false}
-- **Effect:** PASS — expected: mic value rises on track drag; UI label matches · actual: val 9→9 ui=9
-- **Click point:** (661, 683)
+- **Press log:** PASS — {"t":1793768037433,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":795,"y":689,"fs":false}
+- **Effect:** FAIL — expected: mic value rises on track drag; UI label matches · actual: val 2→2 ui=2
+- **Click point:** (659, 690)
 
 | Stage | Path |
 |-------|------|
@@ -281,14 +265,15 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 | click-moment | `qa/screenshots/click-ui-live/desktop/s9-pitch-match/mic-sensitivity_02_down.png` |
 | after | `qa/screenshots/click-ui-live/desktop/s9-pitch-match/mic-sensitivity_03_after.png` |
 
+- **Issues:** ISS-003
 
 #### `#btn-toggle-guide`
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-guide`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338329303,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":1063,"y":652,"fs":false}
+- **Press log:** PASS — {"t":1793768039380,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":1108,"y":653,"fs":false}
 - **Effect:** PASS — expected: guide panel toggles collapsed state · actual: open false→true
-- **Click point:** (1064, 652)
+- **Click point:** (1108, 653)
 
 | Stage | Path |
 |-------|------|
@@ -302,9 +287,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-metrics`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338331212,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":1090,"y":731,"fs":false}
+- **Press log:** PASS — {"t":1793768041391,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":1083,"y":731,"fs":false}
 - **Effect:** PASS — expected: metrics panel toggles collapsed state · actual: open false→true
-- **Click point:** (1090, 732)
+- **Click point:** (1083, 732)
 
 | Stage | Path |
 |-------|------|
@@ -318,9 +303,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-stop`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338333253,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":180,"y":397,"fs":false}
+- **Press log:** PASS — {"t":1793768043341,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":172,"y":400,"fs":false}
 - **Effect:** PASS — expected: practice stops; Start visible again · actual: live=false startVisible=true
-- **Click point:** (180, 397)
+- **Click point:** (173, 400)
 
 | Stage | Path |
 |-------|------|
@@ -334,9 +319,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-back-home`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338335189,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":1132,"y":79,"fs":false}
+- **Press log:** PASS — {"t":1793768045354,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":155,"y":80,"fs":false}
 - **Effect:** PASS — expected: return to home view · actual: home=true
-- **Click point:** (1132, 79)
+- **Click point:** (155, 81)
 
 | Stage | Path |
 |-------|------|
@@ -352,9 +337,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-start`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338339962,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":178,"y":683,"fs":false}
+- **Press log:** PASS — {"t":1793768050115,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":170,"y":689,"fs":false}
 - **Effect:** PASS — expected: practice goes live; Stop visible · actual: live=true status="En vivo"
-- **Click point:** (178, 683)
+- **Click point:** (171, 690)
 
 | Stage | Path |
 |-------|------|
@@ -368,9 +353,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`INPUT#mic-sensitivity`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338342078,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":865,"y":683,"fs":false}
-- **Effect:** PASS — expected: mic value rises on track drag; UI label matches · actual: val 9→9 ui=9
-- **Click point:** (661, 683)
+- **Press log:** PASS — {"t":1793768052431,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":795,"y":689,"fs":false}
+- **Effect:** FAIL — expected: mic value rises on track drag; UI label matches · actual: val 2→2 ui=2
+- **Click point:** (659, 690)
 
 | Stage | Path |
 |-------|------|
@@ -379,14 +364,15 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 | click-moment | `qa/screenshots/click-ui-live/desktop/s2-solfege-chords/mic-sensitivity_02_down.png` |
 | after | `qa/screenshots/click-ui-live/desktop/s2-solfege-chords/mic-sensitivity_03_after.png` |
 
+- **Issues:** ISS-004
 
 #### `#btn-toggle-guide`
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-guide`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338343900,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":1063,"y":652,"fs":false}
+- **Press log:** PASS — {"t":1793768054313,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":1108,"y":653,"fs":false}
 - **Effect:** PASS — expected: guide panel toggles collapsed state · actual: open false→true
-- **Click point:** (1064, 652)
+- **Click point:** (1108, 653)
 
 | Stage | Path |
 |-------|------|
@@ -400,9 +386,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-metrics`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338345847,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":1090,"y":731,"fs":false}
+- **Press log:** PASS — {"t":1793768056244,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":1083,"y":731,"fs":false}
 - **Effect:** PASS — expected: metrics panel toggles collapsed state · actual: open false→true
-- **Click point:** (1090, 731)
+- **Click point:** (1083, 731)
 
 | Stage | Path |
 |-------|------|
@@ -416,9 +402,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-stop`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338347839,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":180,"y":398,"fs":false}
+- **Press log:** PASS — {"t":1793768058176,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":172,"y":400,"fs":false}
 - **Effect:** PASS — expected: practice stops; Start visible again · actual: live=false startVisible=true
-- **Click point:** (180, 398)
+- **Click point:** (173, 400)
 
 | Stage | Path |
 |-------|------|
@@ -432,9 +418,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-back-home`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338349779,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":1132,"y":79,"fs":false}
+- **Press log:** PASS — {"t":1793768060202,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":155,"y":80,"fs":false}
 - **Effect:** PASS — expected: return to home view · actual: home=true
-- **Click point:** (1132, 79)
+- **Click point:** (155, 81)
 
 | Stage | Path |
 |-------|------|
@@ -450,9 +436,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-start`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338354579,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":178,"y":683,"fs":false}
+- **Press log:** PASS — {"t":1793768065153,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":170,"y":689,"fs":false}
 - **Effect:** PASS — expected: practice goes live; Stop visible · actual: live=true status="En vivo"
-- **Click point:** (178, 683)
+- **Click point:** (171, 690)
 
 | Stage | Path |
 |-------|------|
@@ -466,9 +452,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`INPUT#mic-sensitivity`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338356584,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":1066,"y":683,"fs":false}
-- **Effect:** PASS — expected: mic value rises on track drag; UI label matches · actual: val 9→9 ui=9
-- **Click point:** (771, 683)
+- **Press log:** PASS — {"t":1793768067229,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":1066,"y":689,"fs":false}
+- **Effect:** FAIL — expected: mic value rises on track drag; UI label matches · actual: val 2→2 ui=2
+- **Click point:** (806, 690)
 
 | Stage | Path |
 |-------|------|
@@ -477,14 +463,15 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 | click-moment | `qa/screenshots/click-ui-live/desktop/v10-power-pause/mic-sensitivity_02_down.png` |
 | after | `qa/screenshots/click-ui-live/desktop/v10-power-pause/mic-sensitivity_03_after.png` |
 
+- **Issues:** ISS-005
 
 #### `#btn-toggle-guide`
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-guide`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338358287,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":1063,"y":764,"fs":false}
+- **Press log:** PASS — {"t":1793768069042,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":1108,"y":772,"fs":false}
 - **Effect:** PASS — expected: guide panel toggles collapsed state · actual: open false→true
-- **Click point:** (1064, 764)
+- **Click point:** (1108, 773)
 
 | Stage | Path |
 |-------|------|
@@ -498,9 +485,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-metrics`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338360143,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":1090,"y":731,"fs":false}
+- **Press log:** PASS — {"t":1793768070973,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":1083,"y":731,"fs":false}
 - **Effect:** PASS — expected: metrics panel toggles collapsed state · actual: open false→true
-- **Click point:** (1090, 731)
+- **Click point:** (1083, 732)
 
 | Stage | Path |
 |-------|------|
@@ -514,9 +501,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-stop`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338361977,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":180,"y":396,"fs":false}
+- **Press log:** PASS — {"t":1793768072874,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":172,"y":400,"fs":false}
 - **Effect:** PASS — expected: practice stops; Start visible again · actual: live=false startVisible=true
-- **Click point:** (180, 396)
+- **Click point:** (173, 400)
 
 | Stage | Path |
 |-------|------|
@@ -530,9 +517,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-back-home`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338363965,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":1132,"y":79,"fs":false}
+- **Press log:** PASS — {"t":1793768074977,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":155,"y":84,"fs":false}
 - **Effect:** PASS — expected: return to home view · actual: home=true
-- **Click point:** (1132, 79)
+- **Click point:** (155, 84)
 
 | Stage | Path |
 |-------|------|
@@ -550,9 +537,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-start`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338368939,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":178,"y":523,"fs":false}
+- **Press log:** PASS — {"t":1793768080169,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":170,"y":521,"fs":false}
 - **Effect:** PASS — expected: practice goes live; Stop visible · actual: live=true status="En vivo"
-- **Click point:** (178, 523)
+- **Click point:** (171, 522)
 
 | Stage | Path |
 |-------|------|
@@ -566,9 +553,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`INPUT#mic-sensitivity`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338370895,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":1066,"y":523,"fs":false}
-- **Effect:** PASS — expected: mic value rises on track drag; UI label matches · actual: val 9→9 ui=9
-- **Click point:** (771, 523)
+- **Press log:** PASS — {"t":1793768082282,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":1066,"y":521,"fs":false}
+- **Effect:** FAIL — expected: mic value rises on track drag; UI label matches · actual: val 2→2 ui=2
+- **Click point:** (806, 522)
 
 | Stage | Path |
 |-------|------|
@@ -577,14 +564,15 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 | click-moment | `qa/screenshots/click-ui-live/desktop-short/v1-diction/mic-sensitivity_02_down.png` |
 | after | `qa/screenshots/click-ui-live/desktop-short/v1-diction/mic-sensitivity_03_after.png` |
 
+- **Issues:** ISS-006
 
 #### `#btn-toggle-guide`
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-guide`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338372590,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":1063,"y":412,"fs":false}
+- **Press log:** PASS — {"t":1793768084109,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":1108,"y":412,"fs":false}
 - **Effect:** PASS — expected: guide panel toggles collapsed state · actual: open false→true
-- **Click point:** (1064, 413)
+- **Click point:** (1108, 413)
 
 | Stage | Path |
 |-------|------|
@@ -598,9 +586,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-metrics`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338374357,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":1090,"y":491,"fs":false}
+- **Press log:** PASS — {"t":1793768085966,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":1083,"y":491,"fs":false}
 - **Effect:** PASS — expected: metrics panel toggles collapsed state · actual: open false→true
-- **Click point:** (1090, 492)
+- **Click point:** (1083, 492)
 
 | Stage | Path |
 |-------|------|
@@ -614,9 +602,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-stop`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338376151,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":180,"y":278,"fs":false}
+- **Press log:** PASS — {"t":1793768087821,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":172,"y":280,"fs":false}
 - **Effect:** PASS — expected: practice stops; Start visible again · actual: live=false startVisible=true
-- **Click point:** (180, 279)
+- **Click point:** (173, 280)
 
 | Stage | Path |
 |-------|------|
@@ -630,9 +618,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-back-home`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338378077,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":1132,"y":79,"fs":false}
+- **Press log:** PASS — {"t":1793768089814,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":155,"y":84,"fs":false}
 - **Effect:** PASS — expected: return to home view · actual: home=true
-- **Click point:** (1132, 79)
+- **Click point:** (155, 84)
 
 | Stage | Path |
 |-------|------|
@@ -648,9 +636,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-start`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338382716,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":178,"y":523,"fs":false}
+- **Press log:** PASS — {"t":1793768094665,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":170,"y":521,"fs":false}
 - **Effect:** PASS — expected: practice goes live; Stop visible · actual: live=true status="En vivo"
-- **Click point:** (178, 523)
+- **Click point:** (171, 522)
 
 | Stage | Path |
 |-------|------|
@@ -664,9 +652,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`INPUT#mic-sensitivity`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338384684,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":1066,"y":523,"fs":false}
-- **Effect:** PASS — expected: mic value rises on track drag; UI label matches · actual: val 9→9 ui=9
-- **Click point:** (771, 523)
+- **Press log:** PASS — {"t":1793768096865,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":1066,"y":521,"fs":false}
+- **Effect:** PASS — expected: mic value rises on track drag; UI label matches · actual: val 2→9 ui=9
+- **Click point:** (806, 522)
 
 | Stage | Path |
 |-------|------|
@@ -680,9 +668,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-guide`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338386365,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":1063,"y":412,"fs":false}
+- **Press log:** PASS — {"t":1793768098683,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":1108,"y":412,"fs":false}
 - **Effect:** PASS — expected: guide panel toggles collapsed state · actual: open false→true
-- **Click point:** (1064, 413)
+- **Click point:** (1108, 413)
 
 | Stage | Path |
 |-------|------|
@@ -696,9 +684,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-metrics`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338388170,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":1090,"y":491,"fs":false}
+- **Press log:** PASS — {"t":1793768100583,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":1083,"y":491,"fs":false}
 - **Effect:** PASS — expected: metrics panel toggles collapsed state · actual: open false→true
-- **Click point:** (1090, 491)
+- **Click point:** (1083, 492)
 
 | Stage | Path |
 |-------|------|
@@ -712,9 +700,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-stop`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338390766,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":180,"y":279,"fs":false}
+- **Press log:** PASS — {"t":1793768103330,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":172,"y":280,"fs":false}
 - **Effect:** PASS — expected: practice stops; Start visible again · actual: live=false startVisible=true
-- **Click point:** (180, 280)
+- **Click point:** (173, 280)
 
 | Stage | Path |
 |-------|------|
@@ -728,9 +716,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-back-home`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338392741,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":1132,"y":79,"fs":false}
+- **Press log:** PASS — {"t":1793768105325,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":155,"y":84,"fs":false}
 - **Effect:** PASS — expected: return to home view · actual: home=true
-- **Click point:** (1132, 79)
+- **Click point:** (155, 84)
 
 | Stage | Path |
 |-------|------|
@@ -746,9 +734,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-start`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338397436,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":178,"y":523,"fs":false}
+- **Press log:** PASS — {"t":1793768110204,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":170,"y":521,"fs":false}
 - **Effect:** PASS — expected: practice goes live; Stop visible · actual: live=true status="En vivo"
-- **Click point:** (178, 523)
+- **Click point:** (171, 522)
 
 | Stage | Path |
 |-------|------|
@@ -762,9 +750,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`INPUT#mic-sensitivity`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338399536,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":865,"y":523,"fs":false}
+- **Press log:** PASS — {"t":1793768112389,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":795,"y":521,"fs":false}
 - **Effect:** PASS — expected: mic value rises on track drag; UI label matches · actual: val 9→9 ui=9
-- **Click point:** (661, 523)
+- **Click point:** (659, 522)
 
 | Stage | Path |
 |-------|------|
@@ -778,9 +766,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-guide`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338401309,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":1063,"y":412,"fs":false}
+- **Press log:** PASS — {"t":1793768114325,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":1108,"y":413,"fs":false}
 - **Effect:** PASS — expected: guide panel toggles collapsed state · actual: open false→true
-- **Click point:** (1064, 412)
+- **Click point:** (1108, 413)
 
 | Stage | Path |
 |-------|------|
@@ -794,9 +782,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-metrics`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338403135,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":1090,"y":491,"fs":false}
+- **Press log:** PASS — {"t":1793768116206,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":1083,"y":491,"fs":false}
 - **Effect:** PASS — expected: metrics panel toggles collapsed state · actual: open false→true
-- **Click point:** (1090, 492)
+- **Click point:** (1083, 492)
 
 | Stage | Path |
 |-------|------|
@@ -810,9 +798,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-stop`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338405086,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":180,"y":279,"fs":false}
+- **Press log:** PASS — {"t":1793768118140,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":172,"y":280,"fs":false}
 - **Effect:** PASS — expected: practice stops; Start visible again · actual: live=false startVisible=true
-- **Click point:** (180, 280)
+- **Click point:** (173, 280)
 
 | Stage | Path |
 |-------|------|
@@ -826,9 +814,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-back-home`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338407013,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":1132,"y":79,"fs":false}
+- **Press log:** PASS — {"t":1793768120125,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":155,"y":80,"fs":false}
 - **Effect:** PASS — expected: return to home view · actual: home=true
-- **Click point:** (1132, 79)
+- **Click point:** (155, 81)
 
 | Stage | Path |
 |-------|------|
@@ -844,9 +832,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-start`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338411723,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":178,"y":523,"fs":false}
+- **Press log:** PASS — {"t":1793768124960,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":170,"y":521,"fs":false}
 - **Effect:** PASS — expected: practice goes live; Stop visible · actual: live=true status="En vivo"
-- **Click point:** (178, 523)
+- **Click point:** (171, 522)
 
 | Stage | Path |
 |-------|------|
@@ -860,9 +848,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`INPUT#mic-sensitivity`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338413848,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":865,"y":523,"fs":false}
+- **Press log:** PASS — {"t":1793768127244,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":795,"y":521,"fs":false}
 - **Effect:** PASS — expected: mic value rises on track drag; UI label matches · actual: val 9→9 ui=9
-- **Click point:** (661, 523)
+- **Click point:** (659, 522)
 
 | Stage | Path |
 |-------|------|
@@ -876,9 +864,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-guide`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338415660,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":1063,"y":412,"fs":false}
+- **Press log:** PASS — {"t":1793768129210,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":1108,"y":413,"fs":false}
 - **Effect:** PASS — expected: guide panel toggles collapsed state · actual: open false→true
-- **Click point:** (1064, 412)
+- **Click point:** (1108, 413)
 
 | Stage | Path |
 |-------|------|
@@ -892,9 +880,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-metrics`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338417528,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":1090,"y":491,"fs":false}
+- **Press log:** PASS — {"t":1793768131171,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":1083,"y":491,"fs":false}
 - **Effect:** PASS — expected: metrics panel toggles collapsed state · actual: open false→true
-- **Click point:** (1090, 491)
+- **Click point:** (1083, 491)
 
 | Stage | Path |
 |-------|------|
@@ -908,9 +896,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-stop`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338419471,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":180,"y":279,"fs":false}
+- **Press log:** PASS — {"t":1793768133107,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":172,"y":280,"fs":false}
 - **Effect:** PASS — expected: practice stops; Start visible again · actual: live=false startVisible=true
-- **Click point:** (180, 279)
+- **Click point:** (173, 280)
 
 | Stage | Path |
 |-------|------|
@@ -924,9 +912,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-back-home`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338421402,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":1132,"y":79,"fs":false}
+- **Press log:** PASS — {"t":1793768135145,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":155,"y":80,"fs":false}
 - **Effect:** PASS — expected: return to home view · actual: home=true
-- **Click point:** (1132, 79)
+- **Click point:** (155, 81)
 
 | Stage | Path |
 |-------|------|
@@ -942,9 +930,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-start`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338426064,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":178,"y":523,"fs":false}
+- **Press log:** PASS — {"t":1793768140089,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":170,"y":521,"fs":false}
 - **Effect:** PASS — expected: practice goes live; Stop visible · actual: live=true status="En vivo"
-- **Click point:** (178, 523)
+- **Click point:** (171, 522)
 
 | Stage | Path |
 |-------|------|
@@ -958,9 +946,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`INPUT#mic-sensitivity`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338428029,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":1066,"y":523,"fs":false}
+- **Press log:** PASS — {"t":1793768142329,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":1066,"y":521,"fs":false}
 - **Effect:** PASS — expected: mic value rises on track drag; UI label matches · actual: val 9→9 ui=9
-- **Click point:** (771, 523)
+- **Click point:** (806, 522)
 
 | Stage | Path |
 |-------|------|
@@ -974,9 +962,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-guide`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338429737,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":1063,"y":412,"fs":false}
+- **Press log:** PASS — {"t":1793768144150,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":1108,"y":412,"fs":false}
 - **Effect:** PASS — expected: guide panel toggles collapsed state · actual: open false→true
-- **Click point:** (1064, 413)
+- **Click point:** (1108, 413)
 
 | Stage | Path |
 |-------|------|
@@ -990,9 +978,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-metrics`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338431565,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":1090,"y":491,"fs":false}
+- **Press log:** PASS — {"t":1793768146040,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":1083,"y":491,"fs":false}
 - **Effect:** PASS — expected: metrics panel toggles collapsed state · actual: open false→true
-- **Click point:** (1090, 491)
+- **Click point:** (1083, 492)
 
 | Stage | Path |
 |-------|------|
@@ -1006,9 +994,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-stop`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338433383,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":180,"y":279,"fs":false}
+- **Press log:** PASS — {"t":1793768147898,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":172,"y":280,"fs":false}
 - **Effect:** PASS — expected: practice stops; Start visible again · actual: live=false startVisible=true
-- **Click point:** (180, 279)
+- **Click point:** (173, 280)
 
 | Stage | Path |
 |-------|------|
@@ -1022,9 +1010,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-back-home`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338435353,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":1132,"y":79,"fs":false}
+- **Press log:** PASS — {"t":1793768149903,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":155,"y":84,"fs":false}
 - **Effect:** PASS — expected: return to home view · actual: home=true
-- **Click point:** (1132, 79)
+- **Click point:** (155, 84)
 
 | Stage | Path |
 |-------|------|
@@ -1042,9 +1030,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-start`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338440228,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":85,"y":745,"fs":false}
+- **Press log:** PASS — {"t":1793768154987,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":120,"y":736,"fs":false}
 - **Effect:** PASS — expected: practice goes live; Stop visible · actual: live=true status="En vivo"
-- **Click point:** (86, 745)
+- **Click point:** (120, 736)
 
 | Stage | Path |
 |-------|------|
@@ -1058,9 +1046,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`INPUT#mic-sensitivity`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338442139,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":263,"y":698,"fs":false}
+- **Press log:** PASS — {"t":1793768157026,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":298,"y":680,"fs":false}
 - **Effect:** PASS — expected: mic value rises on track drag; UI label matches · actual: val 9→10 ui=10
-- **Click point:** (195, 698)
+- **Click point:** (239, 680)
 
 | Stage | Path |
 |-------|------|
@@ -1074,9 +1062,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-guide`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338443798,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":268,"y":679,"fs":false}
+- **Press log:** PASS — {"t":1793768158747,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":300,"y":819,"fs":false}
 - **Effect:** PASS — expected: guide panel toggles collapsed state · actual: open false→true
-- **Click point:** (268, 680)
+- **Click point:** (301, 820)
 
 | Stage | Path |
 |-------|------|
@@ -1090,9 +1078,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-metrics`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338445529,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":294,"y":769,"fs":false}
+- **Press log:** PASS — {"t":1793768160543,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":282,"y":769,"fs":false}
 - **Effect:** PASS — expected: metrics panel toggles collapsed state · actual: open false→true
-- **Click point:** (295, 770)
+- **Click point:** (282, 770)
 
 | Stage | Path |
 |-------|------|
@@ -1106,9 +1094,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-stop`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338447235,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":87,"y":417,"fs":false}
+- **Press log:** PASS — {"t":1793768162327,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":120,"y":422,"fs":false}
 - **Effect:** PASS — expected: practice stops; Start visible again · actual: live=false startVisible=true
-- **Click point:** (88, 418)
+- **Click point:** (120, 422)
 
 | Stage | Path |
 |-------|------|
@@ -1121,10 +1109,10 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 #### `#btn-back-home`
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-back-home`
-- **Offset grid:** C:✓ N:✗ S:✓ E:✓ W:✓ NE:✗ SW:✓ 
-- **Press log:** PASS — {"t":1784338449981,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":334,"y":100,"fs":false}
+- **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
+- **Press log:** PASS — {"t":1793768164308,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":68,"y":92,"fs":false}
 - **Effect:** PASS — expected: return to home view · actual: home=true
-- **Click point:** (335, 79)
+- **Click point:** (68, 93)
 
 | Stage | Path |
 |-------|------|
@@ -1140,9 +1128,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-start`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338454508,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":85,"y":774,"fs":false}
+- **Press log:** PASS — {"t":1793768169089,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":120,"y":736,"fs":false}
 - **Effect:** PASS — expected: practice goes live; Stop visible · actual: live=true status="En vivo"
-- **Click point:** (86, 775)
+- **Click point:** (120, 736)
 
 | Stage | Path |
 |-------|------|
@@ -1156,9 +1144,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`INPUT#mic-sensitivity`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338456448,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":263,"y":727,"fs":false}
+- **Press log:** PASS — {"t":1793768171094,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":298,"y":680,"fs":false}
 - **Effect:** PASS — expected: mic value rises on track drag; UI label matches · actual: val 10→10 ui=10
-- **Click point:** (195, 728)
+- **Click point:** (239, 680)
 
 | Stage | Path |
 |-------|------|
@@ -1172,9 +1160,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-guide`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338458079,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":268,"y":680,"fs":false}
+- **Press log:** PASS — {"t":1793768172786,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":300,"y":819,"fs":false}
 - **Effect:** PASS — expected: guide panel toggles collapsed state · actual: open false→true
-- **Click point:** (268, 681)
+- **Click point:** (301, 820)
 
 | Stage | Path |
 |-------|------|
@@ -1188,9 +1176,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-metrics`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338459824,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":294,"y":769,"fs":false}
+- **Press log:** PASS — {"t":1793768174550,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":282,"y":770,"fs":false}
 - **Effect:** PASS — expected: metrics panel toggles collapsed state · actual: open false→true
-- **Click point:** (295, 770)
+- **Click point:** (282, 771)
 
 | Stage | Path |
 |-------|------|
@@ -1202,27 +1190,28 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 #### `#btn-practice-stop`
 
-- **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-stop`
-- **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338462345,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":87,"y":421,"fs":false}
-- **Effect:** PASS — expected: practice stops; Start visible again · actual: live=false startVisible=true
-- **Click point:** (88, 422)
+- **Center hit (mouse over paint):** FAIL — top=`missing`
+- **Offset grid:**  
+- **Press log:** FAIL — {}
+- **Effect:** FAIL — expected: practice stops; Start visible again · actual: control not visible
+- **Click point:** (?, ?)
 
 | Stage | Path |
 |-------|------|
 | before | `qa/screenshots/click-ui-live/mobile/s15-sh-air-ladder/btn-practice-stop_00_before.png` |
-| hover | `qa/screenshots/click-ui-live/mobile/s15-sh-air-ladder/btn-practice-stop_01_hover.png` |
-| click-moment | `qa/screenshots/click-ui-live/mobile/s15-sh-air-ladder/btn-practice-stop_02_down.png` |
-| after | `qa/screenshots/click-ui-live/mobile/s15-sh-air-ladder/btn-practice-stop_03_after.png` |
+| hover | `` |
+| click-moment | `` |
+| after | `` |
 
+- **Issues:** ISS-007
 
 #### `#btn-back-home`
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-back-home`
-- **Offset grid:** C:✓ N:✗ S:✓ E:✓ W:✓ NE:✗ SW:✓ 
-- **Press log:** PASS — {"t":1784338465152,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":334,"y":129,"fs":false}
+- **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
+- **Press log:** PASS — {"t":1793768177530,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":68,"y":91,"fs":false}
 - **Effect:** PASS — expected: return to home view · actual: home=true
-- **Click point:** (335, 109)
+- **Click point:** (68, 92)
 
 | Stage | Path |
 |-------|------|
@@ -1238,9 +1227,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-start`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338469753,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":85,"y":702,"fs":false}
+- **Press log:** PASS — {"t":1793768182383,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":120,"y":736,"fs":false}
 - **Effect:** PASS — expected: practice goes live; Stop visible · actual: live=true status="En vivo"
-- **Click point:** (86, 702)
+- **Click point:** (120, 736)
 
 | Stage | Path |
 |-------|------|
@@ -1254,9 +1243,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`INPUT#mic-sensitivity`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338471703,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":263,"y":655,"fs":false}
+- **Press log:** PASS — {"t":1793768184510,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":298,"y":622,"fs":false}
 - **Effect:** PASS — expected: mic value rises on track drag; UI label matches · actual: val 10→10 ui=10
-- **Click point:** (195, 655)
+- **Click point:** (239, 623)
 
 | Stage | Path |
 |-------|------|
@@ -1270,9 +1259,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-guide`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338473441,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":268,"y":679,"fs":false}
+- **Press log:** PASS — {"t":1793768186287,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":300,"y":686,"fs":false}
 - **Effect:** PASS — expected: guide panel toggles collapsed state · actual: open false→true
-- **Click point:** (268, 680)
+- **Click point:** (301, 686)
 
 | Stage | Path |
 |-------|------|
@@ -1286,9 +1275,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-metrics`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338475208,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":294,"y":770,"fs":false}
+- **Press log:** PASS — {"t":1793768188144,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":282,"y":770,"fs":false}
 - **Effect:** PASS — expected: metrics panel toggles collapsed state · actual: open false→true
-- **Click point:** (295, 770)
+- **Click point:** (282, 771)
 
 | Stage | Path |
 |-------|------|
@@ -1302,9 +1291,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-stop`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338476962,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":87,"y":417,"fs":false}
+- **Press log:** PASS — {"t":1793768189986,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":120,"y":421,"fs":false}
 - **Effect:** PASS — expected: practice stops; Start visible again · actual: live=false startVisible=true
-- **Click point:** (88, 418)
+- **Click point:** (120, 422)
 
 | Stage | Path |
 |-------|------|
@@ -1317,10 +1306,10 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 #### `#btn-back-home`
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-back-home`
-- **Offset grid:** C:✓ N:✗ S:✓ E:✓ W:✓ NE:✗ SW:✓ 
-- **Press log:** PASS — {"t":1784338479747,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":334,"y":100,"fs":false}
+- **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
+- **Press log:** PASS — {"t":1793768191945,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":68,"y":88,"fs":false}
 - **Effect:** PASS — expected: return to home view · actual: home=true
-- **Click point:** (335, 79)
+- **Click point:** (68, 88)
 
 | Stage | Path |
 |-------|------|
@@ -1336,9 +1325,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-start`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338484371,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":85,"y":731,"fs":false}
+- **Press log:** PASS — {"t":1793768196771,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":120,"y":736,"fs":false}
 - **Effect:** PASS — expected: practice goes live; Stop visible · actual: live=true status="En vivo"
-- **Click point:** (86, 732)
+- **Click point:** (120, 736)
 
 | Stage | Path |
 |-------|------|
@@ -1352,9 +1341,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`INPUT#mic-sensitivity`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338486338,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":263,"y":684,"fs":false}
+- **Press log:** PASS — {"t":1793768198897,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":298,"y":622,"fs":false}
 - **Effect:** PASS — expected: mic value rises on track drag; UI label matches · actual: val 10→10 ui=10
-- **Click point:** (195, 685)
+- **Click point:** (239, 623)
 
 | Stage | Path |
 |-------|------|
@@ -1368,9 +1357,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-guide`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338488029,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":268,"y":679,"fs":false}
+- **Press log:** PASS — {"t":1793768200743,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":300,"y":686,"fs":false}
 - **Effect:** PASS — expected: guide panel toggles collapsed state · actual: open false→true
-- **Click point:** (268, 680)
+- **Click point:** (301, 686)
 
 | Stage | Path |
 |-------|------|
@@ -1384,9 +1373,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-metrics`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338489804,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":294,"y":770,"fs":false}
+- **Press log:** PASS — {"t":1793768202551,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":282,"y":769,"fs":false}
 - **Effect:** PASS — expected: metrics panel toggles collapsed state · actual: open false→true
-- **Click point:** (295, 770)
+- **Click point:** (282, 770)
 
 | Stage | Path |
 |-------|------|
@@ -1400,9 +1389,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-stop`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338491562,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":87,"y":417,"fs":false}
+- **Press log:** PASS — {"t":1793768204402,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":120,"y":421,"fs":false}
 - **Effect:** PASS — expected: practice stops; Start visible again · actual: live=false startVisible=true
-- **Click point:** (88, 418)
+- **Click point:** (120, 422)
 
 | Stage | Path |
 |-------|------|
@@ -1415,10 +1404,10 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 #### `#btn-back-home`
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-back-home`
-- **Offset grid:** C:✓ N:✗ S:✓ E:✓ W:✓ NE:✗ SW:✓ 
-- **Press log:** PASS — {"t":1784338494342,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":334,"y":129,"fs":false}
+- **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
+- **Press log:** PASS — {"t":1793768206362,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":68,"y":88,"fs":false}
 - **Effect:** PASS — expected: return to home view · actual: home=true
-- **Click point:** (335, 109)
+- **Click point:** (68, 88)
 
 | Stage | Path |
 |-------|------|
@@ -1434,9 +1423,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-start`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338498957,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":85,"y":774,"fs":false}
+- **Press log:** PASS — {"t":1793768211123,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":120,"y":736,"fs":false}
 - **Effect:** PASS — expected: practice goes live; Stop visible · actual: live=true status="En vivo"
-- **Click point:** (86, 775)
+- **Click point:** (120, 736)
 
 | Stage | Path |
 |-------|------|
@@ -1450,9 +1439,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`INPUT#mic-sensitivity`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338500888,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":263,"y":727,"fs":false}
+- **Press log:** PASS — {"t":1793768213241,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":298,"y":680,"fs":false}
 - **Effect:** PASS — expected: mic value rises on track drag; UI label matches · actual: val 10→10 ui=10
-- **Click point:** (195, 728)
+- **Click point:** (239, 680)
 
 | Stage | Path |
 |-------|------|
@@ -1466,9 +1455,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-guide`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338502547,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":268,"y":680,"fs":false}
+- **Press log:** PASS — {"t":1793768215054,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":300,"y":819,"fs":false}
 - **Effect:** PASS — expected: guide panel toggles collapsed state · actual: open false→true
-- **Click point:** (268, 681)
+- **Click point:** (301, 820)
 
 | Stage | Path |
 |-------|------|
@@ -1482,9 +1471,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-metrics`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338504285,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":294,"y":769,"fs":false}
+- **Press log:** PASS — {"t":1793768216909,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":282,"y":769,"fs":false}
 - **Effect:** PASS — expected: metrics panel toggles collapsed state · actual: open false→true
-- **Click point:** (295, 770)
+- **Click point:** (282, 770)
 
 | Stage | Path |
 |-------|------|
@@ -1498,9 +1487,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-stop`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338506020,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":87,"y":417,"fs":false}
+- **Press log:** PASS — {"t":1793768218759,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":120,"y":422,"fs":false}
 - **Effect:** PASS — expected: practice stops; Start visible again · actual: live=false startVisible=true
-- **Click point:** (88, 418)
+- **Click point:** (120, 422)
 
 | Stage | Path |
 |-------|------|
@@ -1513,10 +1502,10 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 #### `#btn-back-home`
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-back-home`
-- **Offset grid:** C:✓ N:✗ S:✓ E:✓ W:✓ NE:✗ SW:✓ 
-- **Press log:** PASS — {"t":1784338508807,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":334,"y":129,"fs":false}
+- **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
+- **Press log:** PASS — {"t":1793768220720,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":68,"y":92,"fs":false}
 - **Effect:** PASS — expected: return to home view · actual: home=true
-- **Click point:** (335, 109)
+- **Click point:** (68, 93)
 
 | Stage | Path |
 |-------|------|
@@ -1534,9 +1523,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-start`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338513800,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":84,"y":360,"fs":false}
+- **Press log:** PASS — {"t":1793768225886,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":84,"y":347,"fs":false}
 - **Effect:** PASS — expected: practice goes live; Stop visible · actual: live=true status="En vivo"
-- **Click point:** (84, 361)
+- **Click point:** (84, 347)
 
 | Stage | Path |
 |-------|------|
@@ -1550,9 +1539,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`INPUT#mic-sensitivity`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338515727,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":726,"y":300,"fs":false}
+- **Press log:** PASS — {"t":1793768228072,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":731,"y":347,"fs":false}
 - **Effect:** PASS — expected: mic value rises on track drag; UI label matches · actual: val 10→9 ui=9
-- **Click point:** (449, 301)
+- **Click point:** (561, 347)
 
 | Stage | Path |
 |-------|------|
@@ -1566,9 +1555,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-guide`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338517388,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":717,"y":242,"fs":false}
+- **Press log:** PASS — {"t":1793768229901,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":754,"y":242,"fs":false}
 - **Effect:** PASS — expected: guide panel toggles collapsed state · actual: open false→true
-- **Click point:** (718, 243)
+- **Click point:** (755, 243)
 
 | Stage | Path |
 |-------|------|
@@ -1582,9 +1571,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-metrics`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338519105,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":744,"y":321,"fs":false}
+- **Press log:** PASS — {"t":1793768231801,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":729,"y":321,"fs":false}
 - **Effect:** PASS — expected: metrics panel toggles collapsed state · actual: open false→true
-- **Click point:** (744, 321)
+- **Click point:** (730, 321)
 
 | Stage | Path |
 |-------|------|
@@ -1598,7 +1587,7 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-stop`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338520821,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":86,"y":194,"fs":false}
+- **Press log:** PASS — {"t":1793768233718,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":86,"y":195,"fs":false}
 - **Effect:** PASS — expected: practice stops; Start visible again · actual: live=false startVisible=true
 - **Click point:** (86, 195)
 
@@ -1614,9 +1603,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-back-home`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338522729,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":786,"y":79,"fs":false}
+- **Press log:** PASS — {"t":1793768235674,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":72,"y":26,"fs":false}
 - **Effect:** PASS — expected: return to home view · actual: home=true
-- **Click point:** (786, 79)
+- **Click point:** (73, 27)
 
 | Stage | Path |
 |-------|------|
@@ -1632,9 +1621,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-start`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338527271,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":84,"y":361,"fs":false}
+- **Press log:** PASS — {"t":1793768240466,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":84,"y":347,"fs":false}
 - **Effect:** PASS — expected: practice goes live; Stop visible · actual: live=true status="En vivo"
-- **Click point:** (84, 362)
+- **Click point:** (84, 347)
 
 | Stage | Path |
 |-------|------|
@@ -1648,9 +1637,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`INPUT#mic-sensitivity`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338529227,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":726,"y":300,"fs":false}
+- **Press log:** PASS — {"t":1793768242454,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":731,"y":347,"fs":false}
 - **Effect:** PASS — expected: mic value rises on track drag; UI label matches · actual: val 9→9 ui=9
-- **Click point:** (449, 301)
+- **Click point:** (561, 347)
 
 | Stage | Path |
 |-------|------|
@@ -1664,9 +1653,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-guide`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338530862,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":717,"y":242,"fs":false}
+- **Press log:** PASS — {"t":1793768244176,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":754,"y":242,"fs":false}
 - **Effect:** PASS — expected: guide panel toggles collapsed state · actual: open false→true
-- **Click point:** (718, 243)
+- **Click point:** (755, 243)
 
 | Stage | Path |
 |-------|------|
@@ -1680,9 +1669,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-metrics`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338532571,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":744,"y":321,"fs":false}
+- **Press log:** PASS — {"t":1793768245988,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":729,"y":321,"fs":false}
 - **Effect:** PASS — expected: metrics panel toggles collapsed state · actual: open false→true
-- **Click point:** (744, 321)
+- **Click point:** (730, 321)
 
 | Stage | Path |
 |-------|------|
@@ -1696,7 +1685,7 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-stop`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338535145,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":86,"y":194,"fs":false}
+- **Press log:** PASS — {"t":1793768248617,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":86,"y":195,"fs":false}
 - **Effect:** PASS — expected: practice stops; Start visible again · actual: live=false startVisible=true
 - **Click point:** (86, 195)
 
@@ -1712,9 +1701,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-back-home`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338537032,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":786,"y":79,"fs":false}
+- **Press log:** PASS — {"t":1793768250516,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":72,"y":26,"fs":false}
 - **Effect:** PASS — expected: return to home view · actual: home=true
-- **Click point:** (786, 79)
+- **Click point:** (73, 27)
 
 | Stage | Path |
 |-------|------|
@@ -1728,11 +1717,11 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 #### `#btn-practice-start`
 
-- **Center hit (mouse over paint):** PASS — top=`DIV#mic-sens-hud`
+- **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-start`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338541855,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":84,"y":348,"fs":false}
+- **Press log:** PASS — {"t":1793768255403,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":84,"y":345,"fs":false}
 - **Effect:** PASS — expected: practice goes live; Stop visible · actual: live=true status="En vivo"
-- **Click point:** (84, 349)
+- **Click point:** (84, 346)
 
 | Stage | Path |
 |-------|------|
@@ -1746,9 +1735,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`INPUT#mic-sensitivity`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338543837,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":726,"y":300,"fs":false}
-- **Effect:** PASS — expected: mic value rises on track drag; UI label matches · actual: val 9→9 ui=9
-- **Click point:** (449, 301)
+- **Press log:** PASS — {"t":1793768257510,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":416,"y":345,"fs":false}
+- **Effect:** PASS — expected: mic value rises on track drag; UI label matches · actual: val 9→10 ui=10
+- **Click point:** (389, 346)
 
 | Stage | Path |
 |-------|------|
@@ -1762,9 +1751,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-guide`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338545541,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":717,"y":242,"fs":false}
+- **Press log:** PASS — {"t":1793768259353,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":754,"y":242,"fs":false}
 - **Effect:** PASS — expected: guide panel toggles collapsed state · actual: open false→true
-- **Click point:** (718, 243)
+- **Click point:** (755, 243)
 
 | Stage | Path |
 |-------|------|
@@ -1778,9 +1767,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-metrics`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338547302,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":744,"y":321,"fs":false}
+- **Press log:** PASS — {"t":1793768261316,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":729,"y":321,"fs":false}
 - **Effect:** PASS — expected: metrics panel toggles collapsed state · actual: open false→true
-- **Click point:** (744, 321)
+- **Click point:** (730, 322)
 
 | Stage | Path |
 |-------|------|
@@ -1794,7 +1783,7 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-stop`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338549044,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":86,"y":194,"fs":false}
+- **Press log:** PASS — {"t":1793768263265,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":86,"y":195,"fs":false}
 - **Effect:** PASS — expected: practice stops; Start visible again · actual: live=false startVisible=true
 - **Click point:** (86, 195)
 
@@ -1810,9 +1799,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-back-home`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338550916,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":786,"y":79,"fs":false}
+- **Press log:** PASS — {"t":1793768265287,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":72,"y":22,"fs":false}
 - **Effect:** PASS — expected: return to home view · actual: home=true
-- **Click point:** (786, 79)
+- **Click point:** (73, 22)
 
 | Stage | Path |
 |-------|------|
@@ -1826,11 +1815,11 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 #### `#btn-practice-start`
 
-- **Center hit (mouse over paint):** PASS — top=`DIV#mic-sens-hud`
+- **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-start`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338555731,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":84,"y":348,"fs":false}
+- **Press log:** PASS — {"t":1793768270169,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":84,"y":345,"fs":false}
 - **Effect:** PASS — expected: practice goes live; Stop visible · actual: live=true status="En vivo"
-- **Click point:** (84, 349)
+- **Click point:** (84, 346)
 
 | Stage | Path |
 |-------|------|
@@ -1844,9 +1833,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`INPUT#mic-sensitivity`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338557752,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":726,"y":300,"fs":false}
-- **Effect:** PASS — expected: mic value rises on track drag; UI label matches · actual: val 9→9 ui=9
-- **Click point:** (449, 301)
+- **Press log:** PASS — {"t":1793768272342,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":416,"y":345,"fs":false}
+- **Effect:** PASS — expected: mic value rises on track drag; UI label matches · actual: val 10→10 ui=10
+- **Click point:** (389, 346)
 
 | Stage | Path |
 |-------|------|
@@ -1860,9 +1849,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-guide`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338559445,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":717,"y":242,"fs":false}
+- **Press log:** PASS — {"t":1793768274155,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":754,"y":242,"fs":false}
 - **Effect:** PASS — expected: guide panel toggles collapsed state · actual: open false→true
-- **Click point:** (718, 243)
+- **Click point:** (755, 243)
 
 | Stage | Path |
 |-------|------|
@@ -1876,9 +1865,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-metrics`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338561151,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":744,"y":321,"fs":false}
+- **Press log:** PASS — {"t":1793768276084,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":729,"y":321,"fs":false}
 - **Effect:** PASS — expected: metrics panel toggles collapsed state · actual: open false→true
-- **Click point:** (744, 322)
+- **Click point:** (730, 322)
 
 | Stage | Path |
 |-------|------|
@@ -1892,7 +1881,7 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-stop`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338562905,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":86,"y":194,"fs":false}
+- **Press log:** PASS — {"t":1793768277896,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":86,"y":195,"fs":false}
 - **Effect:** PASS — expected: practice stops; Start visible again · actual: live=false startVisible=true
 - **Click point:** (86, 195)
 
@@ -1908,9 +1897,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-back-home`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338564779,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":786,"y":79,"fs":false}
+- **Press log:** PASS — {"t":1793768279853,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":72,"y":22,"fs":false}
 - **Effect:** PASS — expected: return to home view · actual: home=true
-- **Click point:** (786, 79)
+- **Click point:** (73, 22)
 
 | Stage | Path |
 |-------|------|
@@ -1926,9 +1915,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-start`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338569350,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":84,"y":361,"fs":false}
+- **Press log:** PASS — {"t":1793768284662,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":84,"y":347,"fs":false}
 - **Effect:** PASS — expected: practice goes live; Stop visible · actual: live=true status="En vivo"
-- **Click point:** (84, 362)
+- **Click point:** (84, 347)
 
 | Stage | Path |
 |-------|------|
@@ -1942,9 +1931,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`INPUT#mic-sensitivity`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338571275,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":726,"y":300,"fs":false}
-- **Effect:** PASS — expected: mic value rises on track drag; UI label matches · actual: val 9→9 ui=9
-- **Click point:** (449, 301)
+- **Press log:** PASS — {"t":1793768286686,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":731,"y":347,"fs":false}
+- **Effect:** PASS — expected: mic value rises on track drag; UI label matches · actual: val 10→9 ui=9
+- **Click point:** (561, 347)
 
 | Stage | Path |
 |-------|------|
@@ -1958,9 +1947,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-guide`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338572897,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":717,"y":242,"fs":false}
+- **Press log:** PASS — {"t":1793768288404,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":754,"y":242,"fs":false}
 - **Effect:** PASS — expected: guide panel toggles collapsed state · actual: open false→true
-- **Click point:** (718, 243)
+- **Click point:** (755, 243)
 
 | Stage | Path |
 |-------|------|
@@ -1974,9 +1963,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-metrics`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338574652,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":744,"y":321,"fs":false}
+- **Press log:** PASS — {"t":1793768290150,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":729,"y":321,"fs":false}
 - **Effect:** PASS — expected: metrics panel toggles collapsed state · actual: open false→true
-- **Click point:** (744, 322)
+- **Click point:** (730, 322)
 
 | Stage | Path |
 |-------|------|
@@ -1990,7 +1979,7 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-stop`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338576385,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":86,"y":194,"fs":false}
+- **Press log:** PASS — {"t":1793768291915,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":86,"y":195,"fs":false}
 - **Effect:** PASS — expected: practice stops; Start visible again · actual: live=false startVisible=true
 - **Click point:** (86, 195)
 
@@ -2006,9 +1995,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-back-home`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338578236,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":786,"y":79,"fs":false}
+- **Press log:** PASS — {"t":1793768293836,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":72,"y":26,"fs":false}
 - **Effect:** PASS — expected: return to home view · actual: home=true
-- **Click point:** (786, 79)
+- **Click point:** (73, 27)
 
 | Stage | Path |
 |-------|------|
@@ -2026,9 +2015,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-start`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338583281,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":86,"y":795,"fs":false}
+- **Press log:** PASS — {"t":1793768298980,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":86,"y":857,"fs":false}
 - **Effect:** PASS — expected: practice goes live; Stop visible · actual: live=true status="En vivo"
-- **Click point:** (87, 795)
+- **Click point:** (87, 858)
 
 | Stage | Path |
 |-------|------|
@@ -2042,9 +2031,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`INPUT#mic-sensitivity`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338585313,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":654,"y":746,"fs":false}
+- **Press log:** PASS — {"t":1793768301140,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":640,"y":806,"fs":false}
 - **Effect:** PASS — expected: mic value rises on track drag; UI label matches · actual: val 9→9 ui=9
-- **Click point:** (411, 746)
+- **Click point:** (403, 807)
 
 | Stage | Path |
 |-------|------|
@@ -2058,9 +2047,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-guide`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338587067,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":641,"y":876,"fs":false}
+- **Press log:** PASS — {"t":1793768302962,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":678,"y":940,"fs":false}
 - **Effect:** PASS — expected: guide panel toggles collapsed state · actual: open false→true
-- **Click point:** (642, 876)
+- **Click point:** (679, 940)
 
 | Stage | Path |
 |-------|------|
@@ -2074,9 +2063,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-metrics`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338588904,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":668,"y":955,"fs":false}
+- **Press log:** PASS — {"t":1793768304927,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":653,"y":954,"fs":false}
 - **Effect:** PASS — expected: metrics panel toggles collapsed state · actual: open false→true
-- **Click point:** (668, 955)
+- **Click point:** (654, 954)
 
 | Stage | Path |
 |-------|------|
@@ -2090,9 +2079,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-stop`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338590730,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":88,"y":506,"fs":false}
+- **Press log:** PASS — {"t":1793768306873,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":88,"y":510,"fs":false}
 - **Effect:** PASS — expected: practice stops; Start visible again · actual: live=false startVisible=true
-- **Click point:** (89, 506)
+- **Click point:** (89, 511)
 
 | Stage | Path |
 |-------|------|
@@ -2106,9 +2095,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-back-home`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338592677,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":710,"y":79,"fs":false}
+- **Press log:** PASS — {"t":1793768308877,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":72,"y":140,"fs":false}
 - **Effect:** PASS — expected: return to home view · actual: home=true
-- **Click point:** (710, 79)
+- **Click point:** (73, 140)
 
 | Stage | Path |
 |-------|------|
@@ -2124,9 +2113,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-start`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338597419,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":86,"y":795,"fs":false}
+- **Press log:** PASS — {"t":1793768313752,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":86,"y":857,"fs":false}
 - **Effect:** PASS — expected: practice goes live; Stop visible · actual: live=true status="En vivo"
-- **Click point:** (87, 795)
+- **Click point:** (87, 858)
 
 | Stage | Path |
 |-------|------|
@@ -2140,9 +2129,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`INPUT#mic-sensitivity`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338599438,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":654,"y":746,"fs":false}
+- **Press log:** PASS — {"t":1793768315817,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":640,"y":806,"fs":false}
 - **Effect:** PASS — expected: mic value rises on track drag; UI label matches · actual: val 9→9 ui=9
-- **Click point:** (411, 746)
+- **Click point:** (403, 807)
 
 | Stage | Path |
 |-------|------|
@@ -2156,9 +2145,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-guide`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338601173,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":641,"y":876,"fs":false}
+- **Press log:** PASS — {"t":1793768317613,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":678,"y":940,"fs":false}
 - **Effect:** PASS — expected: guide panel toggles collapsed state · actual: open false→true
-- **Click point:** (642, 876)
+- **Click point:** (679, 940)
 
 | Stage | Path |
 |-------|------|
@@ -2172,9 +2161,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-metrics`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338602980,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":668,"y":955,"fs":false}
+- **Press log:** PASS — {"t":1793768319491,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":653,"y":954,"fs":false}
 - **Effect:** PASS — expected: metrics panel toggles collapsed state · actual: open false→true
-- **Click point:** (668, 955)
+- **Click point:** (654, 954)
 
 | Stage | Path |
 |-------|------|
@@ -2188,7 +2177,7 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-stop`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338605619,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":88,"y":511,"fs":false}
+- **Press log:** PASS — {"t":1793768322298,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":88,"y":511,"fs":false}
 - **Effect:** PASS — expected: practice stops; Start visible again · actual: live=false startVisible=true
 - **Click point:** (89, 512)
 
@@ -2204,9 +2193,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-back-home`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338607623,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":710,"y":79,"fs":false}
+- **Press log:** PASS — {"t":1793768324253,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":72,"y":140,"fs":false}
 - **Effect:** PASS — expected: return to home view · actual: home=true
-- **Click point:** (710, 79)
+- **Click point:** (73, 140)
 
 | Stage | Path |
 |-------|------|
@@ -2222,9 +2211,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-start`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338612354,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":86,"y":795,"fs":false}
+- **Press log:** PASS — {"t":1793768329166,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":86,"y":857,"fs":false}
 - **Effect:** PASS — expected: practice goes live; Stop visible · actual: live=true status="En vivo"
-- **Click point:** (87, 795)
+- **Click point:** (87, 858)
 
 | Stage | Path |
 |-------|------|
@@ -2238,9 +2227,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`INPUT#mic-sensitivity`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338614459,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":654,"y":746,"fs":false}
+- **Press log:** PASS — {"t":1793768331437,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":640,"y":806,"fs":false}
 - **Effect:** PASS — expected: mic value rises on track drag; UI label matches · actual: val 9→9 ui=9
-- **Click point:** (411, 746)
+- **Click point:** (403, 807)
 
 | Stage | Path |
 |-------|------|
@@ -2254,9 +2243,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-guide`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338616333,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":641,"y":876,"fs":false}
+- **Press log:** PASS — {"t":1793768333305,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":678,"y":976,"fs":false}
 - **Effect:** PASS — expected: guide panel toggles collapsed state · actual: open false→true
-- **Click point:** (642, 876)
+- **Click point:** (679, 977)
 
 | Stage | Path |
 |-------|------|
@@ -2270,9 +2259,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-metrics`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338618264,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":668,"y":955,"fs":false}
+- **Press log:** PASS — {"t":1793768335335,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":653,"y":954,"fs":false}
 - **Effect:** PASS — expected: metrics panel toggles collapsed state · actual: open false→true
-- **Click point:** (668, 956)
+- **Click point:** (654, 955)
 
 | Stage | Path |
 |-------|------|
@@ -2286,9 +2275,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-stop`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338620310,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":88,"y":506,"fs":false}
+- **Press log:** PASS — {"t":1793768337313,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":88,"y":512,"fs":false}
 - **Effect:** PASS — expected: practice stops; Start visible again · actual: live=false startVisible=true
-- **Click point:** (89, 507)
+- **Click point:** (89, 512)
 
 | Stage | Path |
 |-------|------|
@@ -2302,9 +2291,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-back-home`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338622305,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":710,"y":79,"fs":false}
+- **Press log:** PASS — {"t":1793768339330,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":72,"y":135,"fs":false}
 - **Effect:** PASS — expected: return to home view · actual: home=true
-- **Click point:** (710, 79)
+- **Click point:** (73, 136)
 
 | Stage | Path |
 |-------|------|
@@ -2320,9 +2309,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-start`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338627019,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":86,"y":795,"fs":false}
+- **Press log:** PASS — {"t":1793768344168,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":86,"y":857,"fs":false}
 - **Effect:** PASS — expected: practice goes live; Stop visible · actual: live=true status="En vivo"
-- **Click point:** (87, 795)
+- **Click point:** (87, 858)
 
 | Stage | Path |
 |-------|------|
@@ -2336,9 +2325,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`INPUT#mic-sensitivity`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338629192,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":654,"y":746,"fs":false}
+- **Press log:** PASS — {"t":1793768346371,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":640,"y":806,"fs":false}
 - **Effect:** PASS — expected: mic value rises on track drag; UI label matches · actual: val 9→9 ui=9
-- **Click point:** (411, 746)
+- **Click point:** (403, 807)
 
 | Stage | Path |
 |-------|------|
@@ -2352,9 +2341,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-guide`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338631023,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":641,"y":876,"fs":false}
+- **Press log:** PASS — {"t":1793768348247,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":678,"y":876,"fs":false}
 - **Effect:** PASS — expected: guide panel toggles collapsed state · actual: open false→true
-- **Click point:** (642, 876)
+- **Click point:** (679, 877)
 
 | Stage | Path |
 |-------|------|
@@ -2368,9 +2357,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-metrics`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338632930,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":668,"y":955,"fs":false}
+- **Press log:** PASS — {"t":1793768350212,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":653,"y":955,"fs":false}
 - **Effect:** PASS — expected: metrics panel toggles collapsed state · actual: open false→true
-- **Click point:** (668, 955)
+- **Click point:** (654, 955)
 
 | Stage | Path |
 |-------|------|
@@ -2384,9 +2373,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-stop`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338634940,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":88,"y":507,"fs":false}
+- **Press log:** PASS — {"t":1793768352116,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":88,"y":512,"fs":false}
 - **Effect:** PASS — expected: practice stops; Start visible again · actual: live=false startVisible=true
-- **Click point:** (89, 508)
+- **Click point:** (89, 512)
 
 | Stage | Path |
 |-------|------|
@@ -2400,9 +2389,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-back-home`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338636920,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":710,"y":79,"fs":false}
+- **Press log:** PASS — {"t":1793768354113,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":72,"y":135,"fs":false}
 - **Effect:** PASS — expected: return to home view · actual: home=true
-- **Click point:** (710, 79)
+- **Click point:** (73, 136)
 
 | Stage | Path |
 |-------|------|
@@ -2418,9 +2407,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-start`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338641681,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":86,"y":795,"fs":false}
+- **Press log:** PASS — {"t":1793768359033,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":86,"y":857,"fs":false}
 - **Effect:** PASS — expected: practice goes live; Stop visible · actual: live=true status="En vivo"
-- **Click point:** (87, 795)
+- **Click point:** (87, 858)
 
 | Stage | Path |
 |-------|------|
@@ -2434,9 +2423,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`INPUT#mic-sensitivity`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338643720,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":654,"y":746,"fs":false}
+- **Press log:** PASS — {"t":1793768361206,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":640,"y":806,"fs":false}
 - **Effect:** PASS — expected: mic value rises on track drag; UI label matches · actual: val 9→9 ui=9
-- **Click point:** (411, 746)
+- **Click point:** (403, 807)
 
 | Stage | Path |
 |-------|------|
@@ -2450,9 +2439,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-guide`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338645416,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":641,"y":876,"fs":false}
+- **Press log:** PASS — {"t":1793768363027,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":678,"y":940,"fs":false}
 - **Effect:** PASS — expected: guide panel toggles collapsed state · actual: open false→true
-- **Click point:** (642, 876)
+- **Click point:** (679, 940)
 
 | Stage | Path |
 |-------|------|
@@ -2466,9 +2455,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-metrics`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338647224,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":668,"y":955,"fs":false}
+- **Press log:** PASS — {"t":1793768364946,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":653,"y":953,"fs":false}
 - **Effect:** PASS — expected: metrics panel toggles collapsed state · actual: open false→true
-- **Click point:** (668, 955)
+- **Click point:** (654, 954)
 
 | Stage | Path |
 |-------|------|
@@ -2482,9 +2471,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-stop`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338649053,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":88,"y":506,"fs":false}
+- **Press log:** PASS — {"t":1793768366837,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":88,"y":510,"fs":false}
 - **Effect:** PASS — expected: practice stops; Start visible again · actual: live=false startVisible=true
-- **Click point:** (89, 506)
+- **Click point:** (89, 511)
 
 | Stage | Path |
 |-------|------|
@@ -2498,9 +2487,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-back-home`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338651042,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":710,"y":79,"fs":false}
+- **Press log:** PASS — {"t":1793768368864,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":72,"y":140,"fs":false}
 - **Effect:** PASS — expected: return to home view · actual: home=true
-- **Click point:** (710, 79)
+- **Click point:** (73, 140)
 
 | Stage | Path |
 |-------|------|
@@ -2518,9 +2507,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-start`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338656542,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":258,"y":759,"fs":true}
+- **Press log:** PASS — {"t":1793768374402,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":250,"y":765,"fs":true}
 - **Effect:** PASS — expected: practice goes live; Stop visible · actual: live=true status="En vivo"
-- **Click point:** (258, 759)
+- **Click point:** (251, 766)
 
 | Stage | Path |
 |-------|------|
@@ -2534,9 +2523,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`INPUT#mic-sensitivity`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338658611,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":1146,"y":759,"fs":true}
-- **Effect:** PASS — expected: mic value rises on track drag; UI label matches · actual: val 9→9 ui=9
-- **Click point:** (851, 759)
+- **Press log:** PASS — {"t":1793768376766,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":1146,"y":765,"fs":true}
+- **Effect:** FAIL — expected: mic value rises on track drag; UI label matches · actual: val 9→2 ui=2
+- **Click point:** (886, 766)
 
 | Stage | Path |
 |-------|------|
@@ -2545,14 +2534,15 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 | click-moment | `qa/screenshots/click-ui-live/fullscreen/v1-diction/mic-sensitivity_02_down.png` |
 | after | `qa/screenshots/click-ui-live/fullscreen/v1-diction/mic-sensitivity_03_after.png` |
 
+- **Issues:** ISS-008
 
 #### `#btn-toggle-guide`
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-guide`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338660409,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":1143,"y":840,"fs":true}
+- **Press log:** PASS — {"t":1793768378781,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":1188,"y":848,"fs":true}
 - **Effect:** PASS — expected: guide panel toggles collapsed state · actual: open false→true
-- **Click point:** (1144, 840)
+- **Click point:** (1188, 849)
 
 | Stage | Path |
 |-------|------|
@@ -2566,9 +2556,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-metrics`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338662378,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":1170,"y":830,"fs":true}
+- **Press log:** PASS — {"t":1793768380913,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":1163,"y":830,"fs":true}
 - **Effect:** PASS — expected: metrics panel toggles collapsed state · actual: open false→true
-- **Click point:** (1170, 831)
+- **Click point:** (1163, 831)
 
 | Stage | Path |
 |-------|------|
@@ -2582,9 +2572,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-stop`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338664305,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":260,"y":445,"fs":true}
+- **Press log:** PASS — {"t":1793768382977,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":252,"y":450,"fs":true}
 - **Effect:** PASS — expected: practice stops; Start visible again · actual: live=false startVisible=true
-- **Click point:** (260, 446)
+- **Click point:** (253, 450)
 
 | Stage | Path |
 |-------|------|
@@ -2598,9 +2588,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-back-home`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338666408,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":1212,"y":79,"fs":true}
+- **Press log:** PASS — {"t":1793768385038,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":235,"y":84,"fs":true}
 - **Effect:** PASS — expected: return to home view · actual: home=true
-- **Click point:** (1212, 79)
+- **Click point:** (235, 84)
 
 | Stage | Path |
 |-------|------|
@@ -2616,9 +2606,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-start`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338671353,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":258,"y":759,"fs":true}
+- **Press log:** PASS — {"t":1793768389975,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":250,"y":765,"fs":true}
 - **Effect:** PASS — expected: practice goes live; Stop visible · actual: live=true status="En vivo"
-- **Click point:** (258, 759)
+- **Click point:** (251, 766)
 
 | Stage | Path |
 |-------|------|
@@ -2632,9 +2622,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`INPUT#mic-sensitivity`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338673428,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":1146,"y":759,"fs":true}
-- **Effect:** PASS — expected: mic value rises on track drag; UI label matches · actual: val 9→9 ui=9
-- **Click point:** (851, 759)
+- **Press log:** PASS — {"t":1793768392133,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":1146,"y":765,"fs":true}
+- **Effect:** PASS — expected: mic value rises on track drag; UI label matches · actual: val 2→9 ui=9
+- **Click point:** (886, 766)
 
 | Stage | Path |
 |-------|------|
@@ -2648,9 +2638,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-guide`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338675258,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":1143,"y":840,"fs":true}
+- **Press log:** PASS — {"t":1793768394013,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":1188,"y":848,"fs":true}
 - **Effect:** PASS — expected: guide panel toggles collapsed state · actual: open false→true
-- **Click point:** (1144, 840)
+- **Click point:** (1188, 849)
 
 | Stage | Path |
 |-------|------|
@@ -2664,9 +2654,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-metrics`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338677210,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":1170,"y":830,"fs":true}
+- **Press log:** PASS — {"t":1793768396017,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":1163,"y":830,"fs":true}
 - **Effect:** PASS — expected: metrics panel toggles collapsed state · actual: open false→true
-- **Click point:** (1170, 830)
+- **Click point:** (1163, 830)
 
 | Stage | Path |
 |-------|------|
@@ -2680,9 +2670,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-stop`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338679940,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":260,"y":449,"fs":true}
+- **Press log:** PASS — {"t":1793768398809,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":252,"y":450,"fs":true}
 - **Effect:** PASS — expected: practice stops; Start visible again · actual: live=false startVisible=true
-- **Click point:** (260, 450)
+- **Click point:** (253, 450)
 
 | Stage | Path |
 |-------|------|
@@ -2696,9 +2686,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-back-home`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338682034,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":1212,"y":79,"fs":true}
+- **Press log:** PASS — {"t":1793768400888,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":235,"y":84,"fs":true}
 - **Effect:** PASS — expected: return to home view · actual: home=true
-- **Click point:** (1212, 79)
+- **Click point:** (235, 84)
 
 | Stage | Path |
 |-------|------|
@@ -2714,9 +2704,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-start`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338686960,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":258,"y":759,"fs":true}
+- **Press log:** PASS — {"t":1793768405955,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":250,"y":765,"fs":true}
 - **Effect:** PASS — expected: practice goes live; Stop visible · actual: live=true status="En vivo"
-- **Click point:** (258, 759)
+- **Click point:** (251, 766)
 
 | Stage | Path |
 |-------|------|
@@ -2730,9 +2720,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`INPUT#mic-sensitivity`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338689260,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":944,"y":759,"fs":true}
+- **Press log:** PASS — {"t":1793768408317,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":874,"y":765,"fs":true}
 - **Effect:** PASS — expected: mic value rises on track drag; UI label matches · actual: val 9→9 ui=9
-- **Click point:** (741, 759)
+- **Click point:** (739, 766)
 
 | Stage | Path |
 |-------|------|
@@ -2746,9 +2736,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-guide`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338691241,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":1143,"y":752,"fs":true}
+- **Press log:** PASS — {"t":1793768410383,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":1188,"y":753,"fs":true}
 - **Effect:** PASS — expected: guide panel toggles collapsed state · actual: open false→true
-- **Click point:** (1144, 752)
+- **Click point:** (1188, 753)
 
 | Stage | Path |
 |-------|------|
@@ -2762,9 +2752,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-metrics`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338693266,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":1170,"y":831,"fs":true}
+- **Press log:** PASS — {"t":1793768412566,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":1163,"y":831,"fs":true}
 - **Effect:** PASS — expected: metrics panel toggles collapsed state · actual: open false→true
-- **Click point:** (1170, 832)
+- **Click point:** (1163, 832)
 
 | Stage | Path |
 |-------|------|
@@ -2778,9 +2768,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-stop`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338695449,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":260,"y":447,"fs":true}
+- **Press log:** PASS — {"t":1793768414661,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":252,"y":450,"fs":true}
 - **Effect:** PASS — expected: practice stops; Start visible again · actual: live=false startVisible=true
-- **Click point:** (260, 448)
+- **Click point:** (253, 450)
 
 | Stage | Path |
 |-------|------|
@@ -2794,9 +2784,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-back-home`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338697531,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":1212,"y":79,"fs":true}
+- **Press log:** PASS — {"t":1793768416781,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":235,"y":80,"fs":true}
 - **Effect:** PASS — expected: return to home view · actual: home=true
-- **Click point:** (1212, 79)
+- **Click point:** (235, 81)
 
 | Stage | Path |
 |-------|------|
@@ -2812,9 +2802,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-start`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338702539,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":258,"y":759,"fs":true}
+- **Press log:** PASS — {"t":1793768421815,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":250,"y":765,"fs":true}
 - **Effect:** PASS — expected: practice goes live; Stop visible · actual: live=true status="En vivo"
-- **Click point:** (258, 759)
+- **Click point:** (251, 766)
 
 | Stage | Path |
 |-------|------|
@@ -2828,9 +2818,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`INPUT#mic-sensitivity`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338704908,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":944,"y":759,"fs":true}
+- **Press log:** PASS — {"t":1793768424152,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":874,"y":765,"fs":true}
 - **Effect:** PASS — expected: mic value rises on track drag; UI label matches · actual: val 9→9 ui=9
-- **Click point:** (741, 759)
+- **Click point:** (739, 766)
 
 | Stage | Path |
 |-------|------|
@@ -2844,9 +2834,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-guide`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338706983,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":1143,"y":752,"fs":true}
+- **Press log:** PASS — {"t":1793768426179,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":1188,"y":753,"fs":true}
 - **Effect:** PASS — expected: guide panel toggles collapsed state · actual: open false→true
-- **Click point:** (1144, 752)
+- **Click point:** (1188, 753)
 
 | Stage | Path |
 |-------|------|
@@ -2860,9 +2850,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-metrics`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338709085,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":1170,"y":831,"fs":true}
+- **Press log:** PASS — {"t":1793768428278,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":1163,"y":831,"fs":true}
 - **Effect:** PASS — expected: metrics panel toggles collapsed state · actual: open false→true
-- **Click point:** (1170, 831)
+- **Click point:** (1163, 831)
 
 | Stage | Path |
 |-------|------|
@@ -2876,9 +2866,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-stop`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338711473,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":260,"y":447,"fs":true}
+- **Press log:** PASS — {"t":1793768430310,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":252,"y":450,"fs":true}
 - **Effect:** PASS — expected: practice stops; Start visible again · actual: live=false startVisible=true
-- **Click point:** (260, 448)
+- **Click point:** (253, 450)
 
 | Stage | Path |
 |-------|------|
@@ -2892,9 +2882,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-back-home`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338714208,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":1212,"y":79,"fs":true}
+- **Press log:** PASS — {"t":1793768432405,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":235,"y":80,"fs":true}
 - **Effect:** PASS — expected: return to home view · actual: home=true
-- **Click point:** (1212, 79)
+- **Click point:** (235, 81)
 
 | Stage | Path |
 |-------|------|
@@ -2910,9 +2900,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-start`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338719074,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":258,"y":759,"fs":true}
+- **Press log:** PASS — {"t":1793768437414,"id":"btn-practice-start","tag":"BUTTON","cls":"btn btn-practice btn-sm","rawId":"btn-practice-start","x":250,"y":765,"fs":true}
 - **Effect:** PASS — expected: practice goes live; Stop visible · actual: live=true status="En vivo"
-- **Click point:** (258, 759)
+- **Click point:** (251, 766)
 
 | Stage | Path |
 |-------|------|
@@ -2926,9 +2916,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`INPUT#mic-sensitivity`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338721152,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":1146,"y":759,"fs":true}
+- **Press log:** PASS — {"t":1793768439682,"id":"mic-sensitivity","tag":"INPUT","cls":"","rawId":"mic-sensitivity","x":1146,"y":765,"fs":true}
 - **Effect:** PASS — expected: mic value rises on track drag; UI label matches · actual: val 9→9 ui=9
-- **Click point:** (851, 759)
+- **Click point:** (886, 766)
 
 | Stage | Path |
 |-------|------|
@@ -2942,9 +2932,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-guide`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338723020,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":1143,"y":840,"fs":true}
+- **Press log:** PASS — {"t":1793768441676,"id":"btn-toggle-guide","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-guide","x":1188,"y":848,"fs":true}
 - **Effect:** PASS — expected: guide panel toggles collapsed state · actual: open false→true
-- **Click point:** (1144, 840)
+- **Click point:** (1188, 849)
 
 | Stage | Path |
 |-------|------|
@@ -2958,9 +2948,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-toggle-metrics`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338724991,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":1170,"y":830,"fs":true}
+- **Press log:** PASS — {"t":1793768443695,"id":"btn-toggle-metrics","tag":"BUTTON","cls":"btn btn-ghost btn-sm","rawId":"btn-toggle-metrics","x":1163,"y":830,"fs":true}
 - **Effect:** PASS — expected: metrics panel toggles collapsed state · actual: open false→true
-- **Click point:** (1170, 830)
+- **Click point:** (1163, 831)
 
 | Stage | Path |
 |-------|------|
@@ -2974,9 +2964,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-practice-stop`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338726956,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":260,"y":446,"fs":true}
+- **Press log:** PASS — {"t":1793768445738,"id":"btn-practice-stop","tag":"BUTTON","cls":"btn btn-danger btn-sm","rawId":"btn-practice-stop","x":252,"y":450,"fs":true}
 - **Effect:** PASS — expected: practice stops; Start visible again · actual: live=false startVisible=true
-- **Click point:** (260, 447)
+- **Click point:** (253, 450)
 
 | Stage | Path |
 |-------|------|
@@ -2990,9 +2980,9 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 
 - **Center hit (mouse over paint):** PASS — top=`BUTTON#btn-back-home`
 - **Offset grid:** C:✓ N:✓ S:✓ E:✓ W:✓ NE:✓ SW:✓ 
-- **Press log:** PASS — {"t":1784338729083,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":1212,"y":79,"fs":true}
+- **Press log:** PASS — {"t":1793768447938,"id":"btn-back-home","tag":"BUTTON","cls":"btn btn-ghost btn-sm btn-back-compact","rawId":"btn-back-home","x":235,"y":84,"fs":true}
 - **Effect:** PASS — expected: return to home view · actual: home=true
-- **Click point:** (1212, 79)
+- **Click point:** (235, 84)
 
 | Stage | Path |
 |-------|------|
@@ -3007,15 +2997,3 @@ Residual risk: short-viewport media must keep stage top under both headers (patc
 Screenshots root: `qa/screenshots/click-ui-live`
 JSON: `qa/geometry/click-ui-live-report.json`
 Issues: `qa/geometry/click-ui-issues.json`
-
-## Deploy
-
-{
-  "at": "2026-07-18T01:41:08.437Z",
-  "validation": {
-    "clickUiLive": "180/180 center+effect+log PASS, offsetOnly=0",
-    "formatHits": "passed",
-    "dualReview": "Elon PASS ship · Zuck PASS ship"
-  },
-  "note": "Sticky Back chrome, leave-modal fix, Start z-index short landscape, mic-help beep helper"
-}

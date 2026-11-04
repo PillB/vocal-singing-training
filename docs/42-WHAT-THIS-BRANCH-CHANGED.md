@@ -979,12 +979,28 @@ harness reported exit code 0. The fourteen lines it showed were the end of a
 failure list, not a summary, and reading them as "10 skipped, 1 did not run, 951
 passed" was reading the bottom of a page and assuming the top.
 
-Re-run without the pipe, there were eleven failures. Eight were this container
-rather than the product: eight specs carry `test.use({ headless: false })`,
-because they are by-hand headed diagnostics, and a headless container has no
-display for them. They run here now under `xvfb-run`, with the image's Chromium
-aliased to the build the pinned Playwright expects, which is a container fix and
-not a repository one. Two of the remaining three are the next two headings.
+Re-run without the pipe, there were eleven failures, and the first explanation
+for eight of them was wrong too. Eight specs carry
+`test.use({ headless: false })`, because they are by-hand headed diagnostics, and
+a headless container has no display, so "this container, not the product" looked
+like the whole answer. Giving them a display settled it the other way. Under
+`xvfb-run`, with the image's Chromium aliased to the build the pinned Playwright
+expects, they run — and five of them fail. Four exceed their own test budgets
+(six minutes, fifteen, fifteen and a full hour) inside
+`tests/helpers/layout-probe.js`, which is the file whose two defects #23
+diagnosed and fixed; the fifth, `click-ui-formats.spec.js`, reports three
+`mic_drag` mismatches where the slider's value does not move. So the display was
+real but it was not the cause, and saying so had been a guess dressed as a
+finding.
+
+The same run turned up nine more that the masked one never reached: the default
+`playwright test` runs `cross-browser-audio.spec.js` under Firefox, WebKit and
+mobile Safari as well, and this container has Chromium and nothing else, so each
+one fails on a missing binary. Not a defect, but it means a bare
+`npx playwright test` cannot be green here whatever the code does, which is worth
+writing down once rather than rediscovering.
+
+Two of the remaining three chromium failures are the next two headings.
 
 The third, `all-flows-robust.spec.js`, is real, inherited, and not this branch's
 to fix. It spends its own fifteen-minute budget and times out; QA reproduced that
@@ -999,15 +1015,23 @@ Playwright default is no timeout at all, hung until the test's own budget ran
 out. That commit rewrites the spec as one short test per exercise — 64 tests,
 1.2 minutes, where one test used to time out — and fixes both helpers.
 
+And it is not one spec. The four that time out all do so inside the same helper,
+so they are one defect wearing five names, and `b251e9e` moves all eight headed
+specs out of the PR gate into a `sweep` project of their own, with a test that
+fails if one lands back in it. Which is the real answer to the `xvfb-run`
+experiment above: these specs are not gate specs, they are a nightly sweep, and
+making them run was informative rather than useful.
+
 So `npm test`'s browser half cannot be green on this branch or on `main` until
 #23 lands, and nothing this branch could do would change that: the fix touches
 `tests/helpers/e2e.js`, `tests/helpers/layout-probe.js`, `playwright.config.js`
-and `package.json`, all of which #23 already changes, so doing it here would be
-a conflict rather than a contribution. Until then the sweep is run with
-`--grep-invert "all flows: layout"`, and that is a known-red spec rather than a
-clean run. `b251e9e` also moves the eight headed specs into a `sweep` project of
-their own, with a test that fails if one lands back in the gate — which retires
-the `xvfb-run` workaround above as well.
+and `package.json`, all of which #23 already changes, so doing it here would be a
+conflict rather than a contribution. What this branch's work is validated against
+is therefore stated exactly: the chromium project without those five sweep
+specs. All 987 chromium cases were dispatched in the sweep that established
+this, and those five specs hold every chromium failure in it. Anything wider is
+inherited red, and this paragraph is where to look before believing either
+colour.
 
 A suite whose verdict is read off `tail` has no verdict. That is the finding, and
 it is worth more than either bug it hid.

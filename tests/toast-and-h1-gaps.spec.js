@@ -204,6 +204,9 @@ test("D 844x390: with the site header out of the layout the exercise row sticks 
   // twice, and once as an unexplained red baseline of the a11y mutation set). "instant" lands the scroll before it is read.
   await page.evaluate(() => window.scrollTo({ top: 400, left: 0, behavior: "instant" }));
   await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+  // The exercise view fades in over 220 ms (a 6 px lift to 0): read mid-way the row is 1 to 6 px low, which is how this case failed
+  // one run in four with three workers (rowTop 1 for 0). Settle every animation first, as the rest of this file's measurements do.
+  await page.evaluate(() => document.getAnimations().forEach((a) => { try { a.finish(); } catch { /* an endless one has no end */ } }));
   const m = await page.evaluate(() => ({
     scrolled: window.scrollY,
     headerH: getComputedStyle(document.documentElement).getPropertyValue("--header-h").trim(),

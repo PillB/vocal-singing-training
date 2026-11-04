@@ -804,8 +804,19 @@ test("the sound-paused banner never sits under the sticky header when the stage 
   expect(out.inView).toBe(true);
   const hit = await centerHitsSelf(page, "#btn-sound-resume");
   expect(hit.ok, `Restore sound is under ${JSON.stringify(hit.top)}`).toBe(true);
-  // Scrolling further moves the stage under the chrome; the banner follows.
+  // Scrolling further moves the stage under the chrome; the banner follows. The scroll is the
+  // banner's distance from the chrome and 20 px more, so a banner left where it was put goes
+  // 20 px under the chrome. (A fixed 60 px left it, placed low on the stage, clear without moving.)
   await holdSoundBanner(page);
-  await page.evaluate(() => window.scrollBy({ top: 60, behavior: "instant" }));
+  const scroll = Math.ceil(out.top - chrome + 20);
+  const moved = await page.evaluate((by) => {
+    const y = window.scrollY;
+    window.scrollBy({ top: by, behavior: "instant" });
+    return window.scrollY - y;
+  }, scroll);
+  expect(moved, "control: the page scrolled the whole way").toBe(scroll);
   await expect.poll(async () => (await page.evaluate(bannerView)).top, { timeout: 2000 }).toBeGreaterThanOrEqual(chrome - 0.5);
+  const after = await page.evaluate(bannerView);
+  expect(after.covered, `covers ${after.covered}`).not.toContain("btn-practice-stop");
+  expect(after.inView, "Restore sound is still on screen").toBe(true);
 });

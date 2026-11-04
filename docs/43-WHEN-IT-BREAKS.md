@@ -30,7 +30,7 @@ Measured from the code on this branch, not from memory.
 | Signal | Where it is | What it answers | What it cannot answer |
 |--------|-------------|-----------------|-----------------------|
 | `GET /v1/health` | public, no key | Is each rail *configured* — which secrets are set, which auth methods exist | Whether anything *works*. Before this branch this route could not fail at all: every value in it is read out of the configuration, so it answered `ok: true` with `accountsConfigured: true` while D1 was past its daily row limit and every account route was answering 500 |
-| `GET /v1/health?probe=1` | public, no key | **New on this branch.** Also reads one row from D1 and one key from KV, and answers **503** if either refuses. A binding that is not bound at all reports `skipped` | Why it failed. The route is public, so no error text is published. It also says nothing about the payment providers — a probe cannot buy anything |
+| `GET /v1/health?probe=1` | public, no key | **New on this branch.** Reads two rows from D1 and one key from KV, and answers **503** if either refuses, or if a payment webhook failed inside the last hour (`writes: failing`). A binding that is not bound at all reports `skipped`; `writes: unknown` means the probe cannot tell | Why it failed. The route is public, so no error text is published. It still says nothing about whether a provider's payload or secret is right — a probe cannot buy anything |
 | Admin page → *Estadísticas* | `admin.html`, admin address required | The product funnel and A/B exposures over a window of days (`/v1/admin/funnel`, `/v1/admin/experiments`) | Health. These are product numbers. A day with no events looks the same whether nobody practised or the events route was refusing |
 | Admin page → *Lo que nos cuenta la gente* | `admin.html` | What users typed into the problem-report form (`/v1/admin/reports`) | Nothing, until somebody bothers to report. **This is currently the only path by which a failure reaches you at all**, and it only carries failures a user noticed and chose to describe |
 | Admin page → *Quién tiene Pro* | `admin.html` | Who holds Pro, by what kind of grant, and until when | Whether anybody was *refused* Pro they had paid for |
@@ -92,11 +92,20 @@ decides whether the sale survives:
 |------|----------------------------------------------|--------------------------------------------|
 | Mercado Pago | 22-second confirmation timeout, then retries "cada 15 minutos, hasta que reciba la respuesta"; "Después del tercer intento, el plazo será prorrogado, pero los envíos continuarán sucediendo" — no documented maximum | **Recovers.** The allowance resets at 00:00 UTC and a retry lands after it |
 | Stripe | "Stripe attempts to deliver events to your destination for up to three days with an exponential back off in live mode" | **Recovers**, for the same reason, with three days of margin |
-| Creem | "with a progressive backoff period of 30 seconds, 1 minute, 5 minutes and 1 hour" — about 1 h 6 m 30 s in total, no documented maximum beyond those four, and no documented merchant notification | **The sale is lost.** Creem gives up long before midnight UTC, and nothing tells either of you |
+| Creem | "There are 5 attempts in total": the delivery, then 30 seconds, 5 minutes, 30 minutes and 6 hours, each with a 15-second response timeout, and "Events are not retried after 24 hours, even if attempts remain". A merchant can resend by hand from the Developers section of the dashboard, and a manual resend carries a **new** event id while automatic retries keep the same one | **Recovers if the purchase was early enough in the day.** The last automatic attempt is about 6 h 35 m after the sale, so anything bought before roughly 17:25 UTC gets a retry after the allowance resets. Later than that and the sale waits for somebody to press resend — and nothing tells either of you to |
 
-So the same ceiling is a delay on two rails and a silent lost sale on the third,
-and the third is the international one. That asymmetry is the single sharpest
-thing on this page.
+This table was wrong until 2026-11-04 and the correction matters, so it is on the
+page rather than only in a commit. It said Creem backs off "30 seconds, 1 minute,
+5 minutes and 1 hour", about 1 h 6 m in total, and concluded the sale was simply
+lost. That schedule came from a page that now 404s; `docs.creem.io/code/webhooks`
+gives the one above, and the real window is six times longer with a hard
+twenty-four-hour stop. QA raised it, and the quoted schedule was re-read from
+Creem's live page before this was changed.
+
+So the same ceiling is a delay on two rails, and on the third it is a delay for
+most of the day and a sale parked behind a button nobody knows to press for the
+rest of it. That asymmetry is still the sharpest thing on this page, and the part
+that needs no arithmetic is this: **on no rail does anything tell you.**
 
 **The edge case inside the edge case.** Each webhook sets an idempotency marker
 in KV *before* doing the work (`markEventSeen`), and on any failure its `catch`
@@ -220,9 +229,10 @@ build fails.
 | The first saved-progress write of a profile | 0 | **6** |
 | Each later progress push | 0 | **7** |
 | A heavy evening — twelve pushes | 0 | **84** |
-| A batch of 25 usage events | 0 | **1** |
+| A batch of 25 usage events, **accepted** | 0 | **30** prepares in 2 batches, about **80 rows written** |
+| The same batch **refused** (no `User-Agent`) | 0 | **1** |
 | `/v1/health` | 0 | 0 |
-| `/v1/health?probe=1` | 0 | 1, plus one KV read |
+| `/v1/health?probe=1` | 0 | **2**, plus one KV read |
 
 Two things worth reading off that table. A browser checking its licence — the
 single most frequent thing that happens — costs **nothing** that is metered
@@ -230,6 +240,28 @@ tightly, because claims are read-only and licences are cached. And saved progres
 never touches KV at all, so an evening of practice cannot eat into the budget a
 purchase needs. Both of those are properties worth keeping, which is why the test
 asserts them rather than merely measuring them.
+
+**The events row was wrong until 2026-11-04 and it was wrong by a factor of
+thirty, so here is how.** The test behind it sent no `User-Agent` and put `cid`
+on the envelope instead of on each event. Both are refusal conditions
+— `ingestRefusal` answers `automated` for a missing UA, `sanitizeEvent` reads
+`cid` off the event and rejects it as `bad_cid` otherwise — so the request this
+table called "a batch of 25 usage events" stored nothing and spent its one
+statement on the counter that records refusals. Its budget of "≤ 3 statements"
+would have passed for any implementation that exists, including one with no
+batching at all, which was the single thing it claimed to measure. The accepted
+path answers **200**, not the 202 the test asserted. QA found it; the test now
+asserts the accepted path, pins the batch sizes so one batch of 25 is
+distinguishable from 25 batches of one, and keeps the refusal as a case of its
+own that says what it is.
+
+**About "80 rows written", which is the number that matters and no fake can
+report.** D1 bills rows, not statements: "Indexes will add an additional written
+row when writes include the indexed column". `events` carries two indexes
+(`idx_events_cid_name`, `idx_events_received`), so each stored event is three
+rows — 75 for a batch of 25 — plus the ingest counter and the per-browser rate
+limit row. Only real D1 reports the exact figure; the arithmetic is Cloudflare's
+own rule applied to this schema, and section 3.3 now carries what it implies.
 
 ### 3.2 The ceilings, verbatim
 
@@ -276,10 +308,31 @@ free tier's behaviour at the edge is.** You will not grow into this ceiling
 gradually. You will hit it on one unusual day, and on that day the international
 rail loses the sales rather than deferring them.
 
-**D1 writes are roughly an order of magnitude looser.** Only real D1 reports rows,
-so statements are the proxy here: if every statement wrote exactly one row, which
-over-counts, 100,000 rows a day would be about 5,200 email sign-ins or 1,190 heavy
-practice evenings. Nothing a learner does threatens this.
+**D1 writes are the second ceiling, and analytics is what spends them.** This
+paragraph said they were "roughly an order of magnitude looser" and that "nothing
+a learner does threatens this", reasoning from statements and assuming one row
+each. Both halves were wrong, and in opposite directions: a statement can write
+several rows, and events dominate the total. QA worked it through on 2026-11-04;
+redone here with Cloudflare's indexing rule and this schema:
+
+- One accepted batch of 25 events is about **80 rows written** (3 per event for
+  the row and its two indexes, plus the counter and the rate-limit row).
+- The 180-day sweep deletes those same rows later, and "Write operations include
+  `INSERT`, `UPDATE`, and `DELETE`", each contributing to rows written. So in a
+  steady state every learner-day is paid for twice: about **155 rows**, with
+  sign-in's own 19 statements on top of that.
+- 100,000 ÷ 155 ≈ **650 learner-days before the free D1 write ceiling is gone**.
+
+That is a far smaller number than this page used to imply, and what happens at
+the 651st is the part to sit with: D1 refuses *every* query for the rest of the
+UTC day — sign-in, saved progress, the trial, the licence link — because of
+analytics. The product stops for a reason none of its users caused.
+
+Two things follow, and only one of them is a decision. The arithmetic says the
+events pipeline should shed load before the account layer does, which is a cap on
+accepted events per day rather than an operator judgement, and `ingest_daily`
+already counts what the cap would read. And the $5/month plan in 4.3 moves this
+ceiling too, by a factor of 500. Section 4 says which of those is switched on.
 
 **Worker requests** at 100,000 a day are not a constraint for a static site whose
 browser work is a cached licence check, an occasional progress push and one
@@ -347,19 +400,53 @@ repository is public**, and a variable is the cheapest way to keep it out of git
 history. Nothing else is needed: `/v1/health` takes no key.
 
 What it is honestly worth: it catches the worker being down, D1 refusing, KV
-refusing, a deploy that broke the routing, and a deploy that lost a binding —
-`?probe=1` reports `skipped` rather than `error` for a binding that is not bound
-at all, and the worker still answers 200 in that state while every account route
-refuses, so the workflow treats `skipped` as a failure too. It does **not** catch
-a wrong webhook secret, a provider that changed its payload, or a lost sale:
-section 2.3 onwards is not visible from outside. It is the cheap 60% and it is
-free.
+*reads* refusing, a deploy that broke the routing, a deploy that lost a binding
+— `?probe=1` reports `skipped` rather than `error` for a binding that is not
+bound at all, and the worker still answers 200 in that state while every account
+route refuses, so the workflow treats `skipped` as a failure too — and, since
+2026-11-04, **a payment webhook that could not finish**. It does **not** catch a
+wrong webhook secret or a provider that changed its payload: those answer 400,
+look like a rejected request, and section 2.3 onwards is not visible from
+outside.
 
-Eight responses were put through the probe step before it was committed — healthy,
-503, a 200 claiming health with a binding in error, a 200 with both bindings
-unbound, a 404, no server listening at all, a base URL with a trailing slash, and
-`ENTITLEMENTS_BASE` unset. One says healthy; the other seven open the issue. An
-alarm nobody has tried to make lie is not an alarm.
+**That last addition is a correction, and it is the most important one on this
+page.** This paragraph used to say the pinger catches "KV refusing". What it
+caught was KV *reads* refusing. KV meters reads and writes separately — 1,000
+writes a day against 100,000 reads — so past the write ceiling `kv.put` throws
+while `kv.get` answers normally, and the probe, which reads and must only read,
+went on reporting a cheerful 200 through exactly the failure section 2.1 ranks
+first: a purchase that cannot be recorded. The free monitor could not see the
+thing this page says to watch. QA found that.
+
+The fix is to stop asking KV. A webhook that fails now writes one row into
+`health_flags` in **D1** — a different service on a different daily budget — and
+the probe reads it. `?probe=1` gained a third field: `writes` is `ok`,
+`failing` if a webhook failed inside the last hour, or `unknown` when the probe
+cannot tell (no D1 binding, or a schema that has never been created, which is a
+deployment nobody has used rather than a broken one). `failing` makes the route
+answer 503, so the alarm above fires on it with a message naming what happened.
+It costs one more D1 row read per probe: 2,880 a day at a probe a minute,
+against D1's 5,000,000.
+
+It is recorded at the routing layer rather than inside each webhook, because the
+first thing every webhook does is a KV write — `markEventSeen`, the idempotency
+marker — and that one sits *outside* each handler's own try block. Which makes it
+both the likeliest place for the day's thousandth write to throw and the place
+whose failure nothing was catching.
+
+The hour is deliberate. Long enough that a pinger on a few-minute schedule sees
+it and opens its issue; short enough that one transient failure does not hold the
+alarm red until midnight, because a monitor that is always red is a monitor
+nobody reads. The row itself stays, as the operator's record of when this last
+happened.
+
+Eleven responses have been put through the probe step — healthy, 503, a 200
+claiming health with a binding in error, a 200 with both bindings unbound, a 404,
+no server listening at all, a base URL with a trailing slash,
+`ENTITLEMENTS_BASE` unset, and the three answers the write flag added
+(`writes: failing`, `writes: unknown`, and an older worker that sends no
+`writes` field at all). Two say healthy — `ok` and `unknown` — and the rest open
+the issue. An alarm nobody has tried to make lie is not an alarm.
 
 What to know before relying on it, from GitHub's own documentation:
 
@@ -411,15 +498,17 @@ that is why 4.1 is an external pinger rather than a Cloudflare setting.
 
 | Thing | Where | What it is for |
 |-------|-------|----------------|
-| `?probe=1` on `/v1/health` | `workers/entitlements/src/index.js` | A health route that can actually fail. One D1 row read and one KV read, 503 if either refuses, no error text published because the route is public |
-| `test/cost.test.mjs`, 12 cases | `workers/entitlements/test/` | Every number in section 3.1, asserted. Four KV-write budgets, a statement budget for sign-in, progress and events, and a proof that a claim spends no writes and progress spends no KV at all |
+| `?probe=1` on `/v1/health` | `workers/entitlements/src/index.js` | A health route that can actually fail. Two D1 row reads and one KV read, 503 if either refuses or if a webhook failed within the hour, no error text published because the route is public |
+| `test/cost.test.mjs`, 15 cases | `workers/entitlements/test/` | Every number in section 3.1, asserted. Four KV-write budgets, a statement budget for sign-in, progress and events, a proof that a claim spends no writes and progress spends no KV at all, and — since the correction in 4.1 — a webhook whose writes are refused while its reads still work, which must turn the probe red |
 | A query-plan guard | the last cases of `cost.test.mjs` | Asks SQLite for the plan of every statement a hot path runs, and fails on a `SCAN` of a table that grows with use. The admin funnel's known scan is asserted *as* the known exception, with its threshold, so it cannot quietly spread |
 | `.github/workflows/health-ping.yml` | repository root | Section 4.1. Off until two repository variables are set |
 
 The probe reads and never writes, deliberately: a probe once a minute would be
 1,440 KV operations a day, which is 1.4% of the free read allowance and **144% of
 the free write allowance.** A write probe would have been the monitoring eating
-the thing it was monitoring.
+the thing it was monitoring. That constraint is also what made the blind spot in
+4.1: a probe that cannot write cannot discover that writing is refused, so it had
+to be told by something that tried — which is what the `health_flags` row is.
 
 ---
 
@@ -446,18 +535,20 @@ section 4.1 does not.
 purchase, and a real purchase moves real money and real tax. The go-live gate's
 one-purchase-per-rail proof is the human version of this, done once, deliberately.
 
-**The Creem retry-window mismatch — a decision, not an omission.**
+**The Creem retry window — which turned out to agree, not to mismatch.**
 `RETRY_REFUSED_SECONDS` in `src/index.js` is 86,400: when an event names a licence
 this worker has never seen, the worker answers 500 and asks to be retried for a
 day before giving up and acknowledging. That window was chosen for Mercado Pago,
-whose API can lag behind its own notifications. Creem's documented backoff is
-about **1 hour 6 minutes**, so on the Creem rail the last 23 hours of that window
-are addressed to nobody. The worker is not wrong — asking for a retry that will
-not come costs nothing — but the number is advertising a patience the provider does
-not have, and the honest options are to leave it (one constant, three rails, the
-longest wins) or to make it per-rail. **Nothing is broken either way; it is worth
-knowing that on the Creem rail an out-of-order delivery has an hour to sort itself
-out and not a day.**
+whose API can lag behind its own notifications.
+
+This section used to call that a mismatch on the Creem rail, on the figure the
+retry table above has now corrected: it said Creem gives up after about an hour,
+so the last 23 hours of the window were addressed to nobody. Creem's own page
+says "Events are not retried after 24 hours", which is the same number this
+constant already holds. One constant, three rails, and on this one it happens to
+be exactly right. What is true on the Creem rail is narrower and still worth
+knowing: five attempts, the last about 6 h 35 m in, so an out-of-order delivery
+has five chances inside that day rather than a day of continuous retrying.
 
 ---
 

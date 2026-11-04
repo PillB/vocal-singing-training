@@ -18,7 +18,7 @@
  * Bump when a statement is added. Stored in `schema_meta` so `ensureSchema`
  * can skip the whole batch on the overwhelming majority of requests.
  */
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 /**
  * Table and index definitions, in dependency order.
@@ -191,6 +191,29 @@ export const SCHEMA_STATEMENTS = [
      reason TEXT NOT NULL,
      n INTEGER NOT NULL,
      PRIMARY KEY (day, reason)
+   )`,
+
+  // Version 5: the one thing a read-only health probe cannot otherwise see.
+  //
+  // KV's free plan meters writes and reads separately: past 1,000 writes in a
+  // day `kv.put` throws while `kv.get` keeps working. So the probe, which reads
+  // and must only read (a probe a minute would be 144% of the daily write
+  // allowance), answered a cheerful 200 through exactly the failure this whole
+  // page of documentation ranks first: a purchase that cannot be recorded.
+  // Found by QA on 2026-11-04 against `docs/43-WHEN-IT-BREAKS.md` §4.1, which
+  // had claimed the free alarm catches "KV refusing".
+  //
+  // A webhook that fails writes one row here instead, into D1, which is a
+  // different budget and a different service. The probe reads this row with the
+  // same statement it already spends proving D1 answers at all, so the cost of
+  // the fix is nothing. `name` is a fixed string from the code, never from a
+  // request, and `detail` is a rail name and an error message, so it is read
+  // only by the operator and never published — the probe reports that a write
+  // failed and when, not what the error said.
+  `CREATE TABLE IF NOT EXISTS health_flags (
+     name TEXT PRIMARY KEY,
+     at INTEGER NOT NULL,
+     detail TEXT
    )`,
 
   // Version 4: what people tell us is broken or missing (reports.js).

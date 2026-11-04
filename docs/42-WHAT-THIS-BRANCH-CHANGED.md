@@ -524,10 +524,20 @@ What a refused `kv.put` costs depends entirely on how patient the provider is,
 and the three rails differ by three orders of magnitude. Mercado Pago retries
 "cada 15 minutos, hasta que reciba la respuesta" with no documented maximum.
 Stripe "attempts to deliver events to your destination for up to three days".
-Creem's documented backoff is "30 seconds, 1 minute, 5 minutes and 1 hour" —
-about 1 h 6 m in total. The daily allowance resets at 00:00 UTC, so two rails
-come back and **on the international rail the sale is simply lost**, with nothing
-telling either party.
+Creem makes "5 attempts in total" — the delivery, then 30 seconds, 5 minutes,
+30 minutes and 6 hours — and "events are not retried after 24 hours". The daily
+allowance resets at 00:00 UTC, so two rails come back, and on the international
+rail a purchase made before about 17:25 UTC does too while a later one waits for
+somebody to press resend in Creem's dashboard, **with nothing telling either
+party**.
+
+(Corrected 2026-11-04 after QA checked it. This paragraph said Creem backs off
+"30 seconds, 1 minute, 5 minutes and 1 hour", about 1 h 6 m, and concluded the
+sale was simply lost; that schedule came from a Creem page that now 404s. The
+real window is six times longer. The conclusion softens from "lost" to "lost
+until a human notices", which is a different problem with the same remedy — see
+section 27 — and `RETRY_REFUSED_SECONDS = 86400` turns out to agree with Creem's
+own 24-hour stop rather than to overshoot it.)
 
 There is a sharper case inside that one. Each webhook sets an idempotency marker
 in KV before doing the work and deletes it on failure so the retry is not
@@ -681,7 +691,7 @@ VG-61, VG-62, VG-63, VG-64.
 
 ## 26. What the copy promises, and whether the product can keep it
 
-Commit `PENDING`. The list asked for the marketing material and the copy to be
+Commit `f543993`. The list asked for the marketing material and the copy to be
 red-teamed for exhaustiveness. Reading it that way turns out to be mostly a test
 of a different question: for each sentence a buyer is shown, can this software
 actually do the thing the sentence says? Twice it could not, and one of those
@@ -836,3 +846,109 @@ that map is itself asserted against: an exception naming a file that no longer
 exists, or one the suite does run, fails the test.
 
 VG-65, VG-66, VG-67, VG-68, VG-69, VG-70.
+
+## 27. Four numbers that did not survive being checked
+
+Commit `PENDING`. Section 24 was written on 3 November and attacked on the 4th.
+Four of its figures were wrong, one of them by a factor of thirty, and the
+monitor it shipped could not see the failure it ranks first. Every correction is
+on the page beside the claim it replaces, because a number corrected only in a
+commit message is a number the next reader still gets wrong.
+
+### A cost figure that was the cost of being refused
+
+§3.1 said a batch of 25 usage events costs **one** D1 statement. The test behind
+it sent no `User-Agent` and put `cid` on the envelope rather than on each event.
+Both are refusal conditions: `ingestRefusal` answers `automated` for a missing
+UA, and `sanitizeEvent` reads `cid` off the event and rejects it otherwise. So
+the request this table called "a batch of 25 usage events" stored nothing and
+spent its one statement on the counter that records refusals — and it asserted
+`202`, which *is* the refusal status, while the accepted path answers `200`.
+
+The budget was "≤ 3 statements". That would have passed for any implementation
+that exists, including one that wrote a row per event with no batching, which is
+the single thing the case claimed to be about. A test that cannot fail is not a
+test, and this one had a number in a document hanging off it.
+
+Accepted and measured: **30 prepares in 2 batches, about 80 rows written.**
+Thirty times the published figure. The case now asserts the accepted path, pins
+the batch sizes so one batch of 25 is distinguishable from 25 batches of one, and
+keeps the refusal as a labelled case of its own. The query-plan guard three cases
+below it was sending the same refused request, so the one statement it most
+needed a plan for was the one it never saw; it stores a row now.
+
+### What the real number means, which is the opposite of what the page said
+
+§3.3 said D1 writes were "roughly an order of magnitude looser" than KV's and
+that "nothing a learner does threatens this", reasoning from statements and
+assuming one row each. Both halves were wrong and in opposite directions.
+
+D1 bills rows. "Indexes will add an additional written row when writes include
+the indexed column", `events` carries two, and "Write operations include
+`INSERT`, `UPDATE`, and `DELETE`" — so one stored event is three rows now and
+three more when the 180-day sweep takes it. That is about **155 rows per
+learner-day**, so roughly **650 learner-days fills the free 100,000**. Past it
+D1 refuses *every* query for the rest of the UTC day: sign-in, saved progress,
+the trial, the licence link. The product stops because of counting.
+
+So events are capped. `EVENTS_DAILY_CAP` is 10,000 stored events per rolling day
+— about 40,000 rows, leaving the account layer the rest — overridable in the
+environment, which is what a deploy on the $5 plan wants since the same ceiling
+is 500 times higher there. A batch that would cross the cap is refused whole
+rather than stored in part, because half a session in the funnel reads as a
+drop-off that never happened. A refusal writes nothing but its own tally, so the
+ceiling cannot spend the budget it protects, and `ingest_daily` shows the
+operator it is biting.
+
+### The monitor could not see the thing the page says to watch
+
+This is the one worth remembering. KV meters reads and writes separately: 1,000
+writes a day against 100,000 reads. Past the write ceiling `kv.put` throws while
+`kv.get` answers normally.
+
+`/v1/health?probe=1` reads, and must only read — a probe a minute would be 144%
+of the daily write allowance, so a write probe would have been the monitoring
+eating the thing it monitored. Which means it answered a cheerful 200 straight
+through a purchase that could not be recorded, and §4.1 said the pinger catches
+"KV refusing" when what it caught was KV *reads* refusing.
+
+A probe that cannot write cannot discover that writing is refused. It has to be
+told by something that tried. So a failing webhook writes one row into
+`health_flags` in **D1** — a different service on a different daily budget — and
+the probe reads it: `writes` is `ok`, `failing` if a webhook failed inside the
+last hour, or `unknown` when the probe cannot tell. `failing` answers 503, which
+is what the alarm already watches, and the workflow now says what happened
+rather than printing the body.
+
+Two details that are the whole of the engineering. It is recorded at the
+**routing layer**, not inside each handler, because the first thing every webhook
+does is a KV write — `markEventSeen`, the idempotency marker — and that one sits
+*outside* each handler's own try block: both the likeliest place for the
+thousandth write to throw and the place nothing was catching. And the flag is
+read by its own statement rather than by doubling as the liveness check, which
+was the first design: `health_flags` does not exist until `ensureSchema` has run,
+so a freshly deployed worker nobody had signed into yet reported its database
+broken. A monitor whose first answer on a good deploy is a false alarm is worse
+than one that spends a second row read.
+
+### And the schedule the sharpest claim rested on
+
+§2.1 ranks the three rails by how patient they are, and concluded that a day past
+the KV write ceiling **loses** Creem sales while merely delaying the others. That
+rested on a backoff of "30 seconds, 1 minute, 5 minutes and 1 hour" — about
+1 h 6 m. That page now 404s.
+
+`docs.creem.io/code/webhooks`, re-read: "There are 5 attempts in total" — the
+delivery, then 30 s, 5 min, 30 min and 6 h — a 15-second response timeout, and
+"Events are not retried after 24 hours, even if attempts remain", with a manual
+resend from the Developers section that carries a **new** event id. Six times
+longer. A purchase before about 17:25 UTC gets an attempt after the allowance
+resets; a later one waits for somebody to press resend, and nothing asks them to.
+
+The conclusion softens from "the sale is lost" to "lost until a human notices",
+which is a different problem with the same remedy: the alarm above. And
+`RETRY_REFUSED_SECONDS = 86400` turns out to **agree** with Creem's own 24-hour
+stop rather than overshoot it, so a decision §6 had recorded as a mismatch was
+never one.
+
+VG-71, VG-72, VG-73, VG-74.

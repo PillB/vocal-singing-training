@@ -22,11 +22,15 @@
  * the ninety-first is not a slow page: `kv.put` throws, the webhook answers 500,
  * and whether the sale survives depends on how patient the provider is. Mercado
  * Pago retries every fifteen minutes until it gets an answer and Stripe for up
- * to three days, so both come back after midnight UTC. Creem retries at 30 s,
- * 1 min, 5 min and 1 hour — so on the international rail the purchase is simply
- * lost. `docs/43-WHEN-IT-BREAKS.md` has the whole of that reasoning and what to
- * do about it; this file is the half that can be measured, so that it stays
- * measured.
+ * to three days, so both come back after midnight UTC. Creem makes five attempts
+ * — the delivery, then 30 s, 5 min, 30 min and 6 h — and retries nothing after
+ * twenty-four hours, so a purchase made before about 17:25 UTC gets an attempt
+ * after the reset and a later one waits for a manual resend that nothing asks
+ * anybody for. (This comment said 30 s, 1 min, 5 min and 1 hour until
+ * 2026-11-04, from a Creem page that now 404s; re-read from
+ * docs.creem.io/code/webhooks.) `docs/43-WHEN-IT-BREAKS.md` has the whole of
+ * that reasoning and what to do about it; this file is the half that can be
+ * measured, so that it stays measured.
  *
  * The budgets below are the numbers this tree actually spends, each a little
  * above what was measured so that an ordinary change does not fail the build and
@@ -45,11 +49,14 @@ import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import test from "node:test";
 
-import { handleRequest } from "../src/index.js";
+import worker, { handleRequest } from "../src/index.js";
 import { resetSchemaMemo } from "../src/db.js";
 import { createAccountEnv, createFakeKv, createTestEnv } from "./fixtures.mjs";
 
 const DAY = 86400;
+// `ingestRefusal` refuses a request with no user-agent, so every case that is
+// meant to be accepted has to carry one.
+const BROWSER_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Safari/605.1.15";
 const T = Math.floor(Date.now() / 1000);
 const hmacHex = (secret, message) => createHmac("sha256", secret).update(message).digest("hex");
 const iso = (days) => new Date((T + days * DAY) * 1000).toISOString();
@@ -62,18 +69,28 @@ const msAt = (days) => (T + Math.round(days * DAY)) * 1000;
  * blind to the cost that grows: one `SELECT` that scans a million rows is one
  * statement and a million rows read.
  * @param {Object} env Env bindings to instrument in place.
- * @returns {{kvWrites: number, kvReads: number, statements: number, scans: string[], reset: Function}} The meter.
+ * @returns {{kvWrites: number, kvReads: number, statements: number, batches: number,
+ *            scans: string[], reset: Function}} The meter.
  */
 function meter(env) {
   const m = {
     kvWrites: 0,
     kvReads: 0,
     statements: 0,
+    // Counted separately because D1's free plan limits *queries* per invocation
+    // and bills a `batch()` as one of them, while this file's `statements` is a
+    // count of `prepare` calls. Both are true and they are not the same number.
+    batches: 0,
+    // And the size of each, because `countIngest` batches its own counters: a
+    // bare count of two cannot tell one batch of 25 from 25 batches of one.
+    batchSizes: [],
     scans: [],
     reset() {
       this.kvWrites = 0;
       this.kvReads = 0;
       this.statements = 0;
+      this.batches = 0;
+      this.batchSizes = [];
       this.scans = [];
     }
   };
@@ -111,6 +128,12 @@ function meter(env) {
         // DDL and a few pragmas have no plan; nothing to record.
       }
       return prepare(sql);
+    };
+    const batch = db.batch.bind(db);
+    db.batch = async (statements) => {
+      m.batches += 1;
+      m.batchSizes.push(Array.isArray(statements) ? statements.length : 1);
+      return batch(statements);
     };
   }
   return m;
@@ -309,18 +332,86 @@ test("a day of practice syncing is a handful of statements and no KV at all", as
   assert.equal(m.kvWrites, 0, "saved progress lives in D1; it must not touch the KV write budget");
 });
 
-test("a batch of 25 usage events is one statement, which is the whole point of batching", async () => {
+/**
+ * One browser's batch of 25 events, accepted.
+ *
+ * This case used to send no `user-agent` and put `cid` on the body instead of
+ * on each event, and then assert `status === 202`. Every one of those is the
+ * refusal path: `ingestRefusal` answers "automated" for a missing UA, and
+ * `sanitizeEvent` reads `cid` off each event and rejects it as `bad_cid`
+ * otherwise. So it stored nothing, spent one statement on the ingest counter,
+ * and its "<= 3 statements" budget would have passed for any implementation at
+ * all — including one that wrote a row per event with no batching, which is
+ * the single thing it claimed to be about. The accepted path answers **200**.
+ * Found by QA on 2026-11-04 (round 10 ops), reproduced here before this was
+ * rewritten, and `docs/43-WHEN-IT-BREAKS.md` §3.1 and §3.3 were wrong by the
+ * same amount.
+ *
+ * Measured accepted: 30 prepares and a single `batch()`. Rows written is the
+ * number that matters and no fake can report it: `events` carries two indexes
+ * (`idx_events_cid_name`, `idx_events_received`), so D1 counts three rows per
+ * event — 75 for this batch — plus the ingest counter and the rate-limit rows.
+ * Call it about 80 against a ceiling of 100,000 a day.
+ */
+test("a batch of 25 accepted events is one D1 batch, and it is not free", async () => {
   const { env, meter: m } = await signedIn();
   m.reset();
   const sent = await call(req("POST", "/v1/events", {
-    headers: { Origin: "https://example.test" },
+    headers: { Origin: "https://example.test", "user-agent": BROWSER_UA },
     body: {
-      cid: "c".repeat(22),
-      events: Array.from({ length: 25 }, () => ({ name: "app_open", day: "2026-11-03", tz: "America/Lima", props: {} }))
+      events: Array.from({ length: 25 }, () => ({
+        name: "app_open",
+        cid: "c".repeat(22),
+        day: "2026-11-03",
+        tz: -300,
+        props: {}
+      }))
     }
   }), env, { now: NOW + 20 });
-  assert.equal(sent.status, 202, JSON.stringify(sent.body));
-  assert.ok(m.statements <= 3, `25 events ran ${m.statements} statements, budget 3`);
+  assert.equal(sent.status, 200, `the accepted path answers 200: ${JSON.stringify(sent.body)}`);
+  assert.equal(sent.body.accepted, 25, "all 25 were stored, which is what makes this a cost");
+  assert.equal(sent.body.dropped, 0);
+  // Two batches: the 25 inserts, and `countIngest`'s own tally of what it took.
+  assert.equal(m.batches, 2, `batches: ${JSON.stringify(m.batchSizes)}`);
+  assert.ok(
+    m.batchSizes.includes(25),
+    `25 inserts go out as one batch, which is the point of batching; sizes were ${JSON.stringify(m.batchSizes)}`
+  );
+  assert.ok(m.statements <= 40, `25 accepted events ran ${m.statements} prepares, budget 40`);
+  assert.ok(m.statements >= 26, `only ${m.statements} prepares: an insert per event is no longer happening?`);
+  assert.equal(m.kvWrites, 0, "counting must never touch the KV write budget that sells Pro");
+});
+
+test("a refused batch is cheap, which is the only thing the old version of the case above proved", async () => {
+  const { env, meter: m } = await signedIn();
+  m.reset();
+  const refused = await call(req("POST", "/v1/events", {
+    // No user-agent: `ingestRefusal` calls this automated.
+    headers: { Origin: "https://example.test" },
+    body: {
+      events: Array.from({ length: 25 }, () => ({ name: "app_open", cid: "c".repeat(22), day: "2026-11-03", tz: -300, props: {} }))
+    }
+  }), env, { now: NOW + 21 });
+  assert.equal(refused.status, 202, JSON.stringify(refused.body));
+  assert.equal(refused.body.accepted, 0);
+  assert.equal(refused.body.reason, "automated");
+  assert.ok(m.statements <= 3, `a refusal ran ${m.statements} statements, budget 3`);
+  // One batch, and it is `countIngest` writing down that it refused one request:
+  // nothing is stored in `events`, which is what the budget above is about.
+  assert.deepEqual(m.batchSizes, [1], "a refusal stores nothing but its own tally");
+
+  // And the other half of the same mistake: a cid on the body entitles nothing.
+  m.reset();
+  const misplaced = await call(req("POST", "/v1/events", {
+    headers: { Origin: "https://example.test", "user-agent": BROWSER_UA },
+    body: {
+      cid: "c".repeat(22),
+      events: Array.from({ length: 25 }, () => ({ name: "app_open", day: "2026-11-03", tz: -300, props: {} }))
+    }
+  }), env, { now: NOW + 22 });
+  assert.equal(misplaced.body.accepted, 0, "cid belongs to the event, not to the envelope");
+  assert.equal(misplaced.body.dropped, 25);
+  assert.deepEqual(m.batchSizes, [1], "25 rejections store nothing but the tally of them");
 });
 
 test("nothing a learner can do makes the database scan a table that grows with use", async () => {
@@ -330,10 +421,14 @@ test("nothing a learner can do makes the database scan a table that grows with u
   await call(req("POST", "/v1/me/trial", { token }), env, { now: NOW + 3 });
   await call(req("PUT", "/v1/me/progress", { token, body: { profileId: "default", doc: { a: 1 }, baseRev: 0 } }), env, { now: NOW + 4 });
   await call(req("GET", "/v1/me/progress?profileId=default", { token }), env, { now: NOW + 5 });
-  await call(req("POST", "/v1/events", {
-    headers: { Origin: "https://example.test" },
-    body: { cid: "c".repeat(22), events: [{ name: "app_open", day: "2026-11-03", tz: "America/Lima", props: {} }] }
+  // Accepted, not refused: this used to send no user-agent and a `cid` on the
+  // envelope, so the insert never ran and the one statement this guard most
+  // needs to see a plan for was the one it never saw.
+  const counted = await call(req("POST", "/v1/events", {
+    headers: { Origin: "https://example.test", "user-agent": BROWSER_UA },
+    body: { events: [{ name: "app_open", cid: "c".repeat(22), day: "2026-11-03", tz: -300, props: {} }] }
   }), env, { now: NOW + 6 });
+  assert.equal(counted.body.accepted, 1, `the event has to be stored for its plan to be read: ${JSON.stringify(counted.body)}`);
   // D1 charges every row a query scans, not every row it returns, so a scan of
   // `events` or `progress` is a bill that grows with the product's success.
   assert.deepEqual(m.scans, [], `these statements scan a whole table:\n${m.scans.join("\n")}`);
@@ -351,9 +446,92 @@ test("/v1/health answers without touching either binding, and ?probe=1 reads one
   m.reset();
   const probed = await call(req("GET", "/v1/health?probe=1"), env, { now: NOW + 31 });
   assert.equal(probed.status, 200);
-  assert.deepEqual(probed.body.probe, { db: "ok", kv: "ok" });
-  assert.equal(m.statements, 1, "one row read, so a probe a minute is 1,440 a day of D1's 5,000,000");
+  assert.deepEqual(probed.body.probe, { db: "ok", kv: "ok", writes: "ok" });
+  // Two: `SELECT 1` for liveness, which needs no schema, and the write flag.
+  assert.equal(m.statements, 2, "two rows read, so a probe a minute is 2,880 a day of D1's 5,000,000");
   assert.equal(m.kvReads, 1, "and one of KV's 100,000");
+  assert.equal(m.kvWrites, 0, "a probe a minute would be 144% of KV's daily write allowance");
+});
+
+/**
+ * The failure the probe could not see, which is the failure this whole file is
+ * about.
+ *
+ * KV meters writes separately from reads. Past the free plan's 1,000 writes a
+ * day `kv.put` throws while `kv.get` keeps answering, so a purchase that cannot
+ * be recorded left `?probe=1` answering a cheerful 200 — and `docs/43` §4.1
+ * claimed the free pinger catches "KV refusing" when what it caught was KV
+ * *reads* refusing. QA found it on 2026-11-04 and left the case below as a
+ * `todo`; this is it, passing.
+ */
+test("a webhook that cannot write is visible to the read-only probe", async () => {
+  const env = createAccountEnv({ ENTITLEMENTS: createFakeKv() });
+  const m = meter(env);
+  // Reads work, writes do not: exactly what the daily write ceiling looks like.
+  const kv = env.ENTITLEMENTS;
+  kv.put = async () => {
+    throw new Error("KV PUT failed: 429 Too Many Requests");
+  };
+
+  // Deliberately a worker whose schema has never been created, which is the
+  // harder case: `noteHealthFlag` has to build the table on the failure path.
+  const before = await call(req("GET", "/v1/health?probe=1"), env, { now: NOW });
+  assert.equal(before.status, 200, "a deployment nobody has used yet is not broken");
+  assert.equal(before.body.probe.writes, "unknown", "and it does not claim to know about writes");
+
+  // Through `worker.fetch`, which is what Cloudflare calls: the handlers rethrow
+  // on purpose and the entry point is what turns that into the 500 the provider
+  // needs in order to retry. The failure happens in `markEventSeen`, the first
+  // KV write of the request and the one outside the handler's own try block.
+  const raw = JSON.stringify({
+    id: "e1",
+    type: "checkout.session.completed",
+    created: T,
+    data: { object: checkoutSession }
+  });
+  const ts = Math.floor(Date.now() / 1000);
+  const sale = await worker.fetch(new Request("https://w.test/v1/webhooks/stripe", {
+    method: "POST",
+    body: raw,
+    headers: { "Stripe-Signature": `t=${ts},v1=${hmacHex(env.STRIPE_WEBHOOK_SECRET, `${ts}.${raw}`)}` }
+  }), env);
+  assert.equal(sale.status, 500, "the webhook has to fail, or there is nothing to see");
+
+  // No injected clock from here on: `worker.fetch` takes none, so the row was
+  // stamped with the real one and the probe has to be read against the same.
+  m.reset();
+  const after = await call(req("GET", "/v1/health?probe=1"), env);
+  assert.equal(after.status, 503, "and now the probe says so");
+  assert.equal(after.body.ok, false);
+  assert.equal(after.body.probe.writes, "failing");
+  assert.equal(after.body.probe.kv, "ok", "KV reads are fine, which is why this needed its own signal");
+  assert.equal(after.body.probe.db, "ok");
+  assert.equal(m.statements, 2, "liveness plus the flag, and no writes at all");
+  assert.equal(m.kvWrites, 0);
+  assert.ok(
+    !JSON.stringify(after.body).includes("429") && !JSON.stringify(after.body).includes("KV PUT"),
+    "this route is public; the provider's error text is not ours to publish"
+  );
+
+  // It clears itself, so one bad minute does not hold the alarm red for a day.
+  const later = await call(req("GET", "/v1/health?probe=1"), env, {
+    now: Math.floor(Date.now() / 1000) + 3700
+  });
+  assert.equal(later.status, 200);
+  assert.equal(later.body.probe.writes, "ok");
+});
+
+test("a probe that cannot reach the database does not claim writes are fine", async () => {
+  const env = createAccountEnv();
+  await call(req("GET", "/v1/health?probe=1"), env, { now: NOW });
+  const broken = { ...env, DB: { prepare() { throw new Error("D1_ERROR: daily limit exceeded"); } } };
+  const probed = await call(req("GET", "/v1/health?probe=1"), broken, { now: NOW + 1 });
+  assert.equal(probed.status, 503);
+  assert.equal(probed.body.probe.db, "error");
+  // "unknown" and not "ok": the row that would have said so is in the database
+  // that just refused. A probe that reports what it cannot know is worse than
+  // one that reports nothing.
+  assert.equal(probed.body.probe.writes, "unknown");
 });
 
 test("?probe=1 answers 503 when a binding refuses, which is the whole reason it exists", async () => {

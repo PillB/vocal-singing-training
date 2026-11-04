@@ -76,11 +76,19 @@ jobs:
             exit 0
           fi
 
-          # 503 is the probe refusing on purpose (D1 or KV would not answer);
-          # anything else outside 200 is a route or deploy problem.
+          # 503 is the probe refusing on purpose: D1 or KV would not answer, or
+          # a webhook has failed to write inside the last hour. Anything else
+          # outside 200 is a route or deploy problem.
           if [ "$code" != "200" ]; then
             emit ok false
-            emit_detail "HTTP $code from /v1/health?probe=1. Body: $body"
+            # jq and not grep: the worker's JSON has no spaces but a proxy or a
+            # future change could add them, and a pattern that silently stops
+            # matching turns the specific message below back into the generic one.
+            if jq -e '.probe.writes == "failing"' body.json >/dev/null 2>&1; then
+              emit_detail "A payment webhook could not finish inside the last hour, so a purchase may not have been recorded. This is what a day past KV's free 1,000 writes looks like: reads keep working, writes do not. Check the worker's logs for \"unhandled error\", then docs/43-WHEN-IT-BREAKS.md section 2.1. Body: $body"
+            else
+              emit_detail "HTTP $code from /v1/health?probe=1. Body: $body"
+            fi
             exit 0
           fi
 
@@ -96,8 +104,13 @@ jobs:
             exit 0
           fi
 
+          # `writes` is "unknown" on a deployment whose schema has never been
+          # created, which is a worker nobody has used rather than a broken one,
+          # so it is not a failure here. "failing" never reaches this line: the
+          # worker answers 503 for it and the branch above says so.
+          writes=$(jq -r '.probe.writes // "absent"' body.json 2>/dev/null || echo absent)
           emit ok true
-          emit_detail "HTTP 200, db and kv both answered."
+          emit_detail "HTTP 200, db and kv both answered, writes: $writes."
 
       - name: Open or close the alert issue
         env:

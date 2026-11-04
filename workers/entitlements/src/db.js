@@ -356,3 +356,76 @@ export async function sweepExpired(db, now) {
       .bind(at - CLOSED_REPORT_RETENTION_SECONDS)
   ]);
 }
+
+/**
+ * How long a recorded failure is reported as current.
+ *
+ * Long enough that a pinger on a few-minute schedule sees it and opens its
+ * issue, short enough that one transient failure does not hold the probe red
+ * for a day — a probe that is always red teaches people to stop reading it.
+ * The row itself is not deleted when the window passes; it is the operator's
+ * record of when this last happened, and the 180-day sweep clears it.
+ */
+export const HEALTH_FLAG_WINDOW_SECONDS = 3600;
+
+/** The flag a webhook sets when it could not finish. */
+export const WEBHOOK_FAILED_FLAG = "webhook_failed";
+
+/**
+ * Write down that something that must not fail did.
+ *
+ * Never throws. It is called from a catch block on the path that is already
+ * failing, so an error here would replace the real one with a worse one, and
+ * the caller's own `throw` is what makes the provider retry. D1 may itself be
+ * refusing — that is the case where the flag cannot be written and the probe
+ * sees the D1 failure directly instead.
+ *
+ * @param {Object} db D1 database binding.
+ * @param {string} name Flag name, a fixed string from the code.
+ * @param {string} detail Short operator-facing note; never published.
+ * @param {number} [now] Injected clock.
+ * @returns {Promise<void>} Resolves whether or not it was recorded.
+ */
+export async function noteHealthFlag(db, name, detail, now) {
+  if (!db || !name) {
+    return;
+  }
+  const at = Number.isFinite(now) ? Math.floor(now) : Math.floor(Date.now() / 1000);
+  try {
+    // The schema may never have been created: a deployment whose first webhook
+    // is also its first use of D1 is exactly the deployment most likely to have
+    // something misconfigured, so this is the last place to be fussy about the
+    // cost of a CREATE TABLE IF NOT EXISTS batch. It runs only on a failure.
+    await ensureSchema(db);
+    await db
+      .prepare(
+        `INSERT INTO health_flags (name, at, detail) VALUES (?1, ?2, ?3)
+         ON CONFLICT(name) DO UPDATE SET at = ?2, detail = ?3`
+      )
+      .bind(name, at, String(detail || "").slice(0, 200))
+      .run();
+  } catch {
+    // Nothing to do and nothing to say: the caller is mid-failure already.
+  }
+}
+
+/**
+ * Read a flag, and say whether it is recent enough to still mean something.
+ *
+ * This is the statement the health probe already spends proving D1 answers, so
+ * it must behave like one: a missing table or a refusing database throws, and
+ * the probe reports that as the D1 failure it is.
+ *
+ * @param {Object} db D1 database binding.
+ * @param {string} name Flag name.
+ * @param {number} [now] Injected clock.
+ * @param {number} [windowSeconds] Override the window.
+ * @returns {Promise<{current: boolean, at: number|null}>} Decision.
+ */
+export async function readHealthFlag(db, name, now, windowSeconds) {
+  const at = Number.isFinite(now) ? Math.floor(now) : Math.floor(Date.now() / 1000);
+  const window = Number.isFinite(windowSeconds) && windowSeconds > 0 ? windowSeconds : HEALTH_FLAG_WINDOW_SECONDS;
+  const row = await db.prepare("SELECT at FROM health_flags WHERE name = ?1").bind(name).first();
+  const stamp = row && Number.isFinite(Number(row.at)) ? Number(row.at) : null;
+  return { current: stamp !== null && at - stamp < window, at: stamp };
+}

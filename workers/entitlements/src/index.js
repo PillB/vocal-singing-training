@@ -47,7 +47,13 @@
 
 import { readJsonBody, requireSession, routeAccountApi, authMethods, requireAdmin } from "./api.js";
 import { asksFirst, callerCountry, routeEventsApi } from "./events.js";
-import { ensureSchema, sweepExpired } from "./db.js";
+import {
+  ensureSchema,
+  noteHealthFlag,
+  readHealthFlag,
+  sweepExpired,
+  WEBHOOK_FAILED_FLAG
+} from "./db.js";
 import {
   buildJwks,
   createLicenseToken,
@@ -185,6 +191,41 @@ async function respondWithToken(record, env, cors) {
     200,
     cors
   );
+}
+
+/**
+ * The clock these handlers run on: injected in tests, the real one otherwise.
+ * @param {{now?: number}} [options] Router options.
+ * @returns {number} Unix seconds.
+ */
+function clockSeconds(options) {
+  return options && Number.isFinite(options.now) ? Math.floor(options.now) : Math.floor(Date.now() / 1000);
+}
+
+/**
+ * Run a webhook and, if it fails for any reason, leave a row saying so.
+ *
+ * The row is in D1, which is a different service and a different daily budget
+ * from KV, and that is the whole point: KV meters writes separately from reads,
+ * so past the free plan's 1,000 writes a day `kv.put` throws while `kv.get`
+ * keeps answering, and `/v1/health?probe=1` — which reads and must only read —
+ * went on saying 200 through the one failure that costs money. `noteHealthFlag`
+ * never throws, and the error is rethrown unchanged so the provider still
+ * retries.
+ *
+ * @param {Object} env Worker env bindings.
+ * @param {string} rail Provider name, a fixed string from this module.
+ * @param {{now?: number}} [options] Router options.
+ * @param {Function} run The handler.
+ * @returns {Promise<Response>} Whatever the handler returned.
+ */
+async function recordingFailure(env, rail, options, run) {
+  try {
+    return await run();
+  } catch (error) {
+    await noteHealthFlag(env.DB, WEBHOOK_FAILED_FLAG, `${rail}: ${error && error.message}`, clockSeconds(options));
+    throw error;
+  }
 }
 
 /**
@@ -449,7 +490,7 @@ async function handleLicense(request, env, cors) {
  * @param {URL} [url] Parsed request URL, for `?probe=1`.
  * @returns {Promise<Response>} Response with booleans only.
  */
-async function handleHealth(env, cors, url) {
+async function handleHealth(env, cors, url, deps) {
   // `?probe=1` is the only part of this route that can fail, and the reason it
   // exists is that the rest of it cannot. Everything below is read out of the
   // configuration, so this route answered `ok: true` with
@@ -472,16 +513,44 @@ async function handleHealth(env, cors, url) {
   //
   // Nothing about the failure is reported but that it failed. This route is
   // public, and a database error message is not ours to publish.
+  // One more thing the reads above cannot see, and it is the failure this whole
+  // document ranks first. KV meters writes separately from reads: past the free
+  // plan's 1,000 writes a day, `kv.put` throws while `kv.get` keeps answering.
+  // So a purchase that cannot be recorded left this probe entirely green, and
+  // §4.1 of docs/43 claimed the free alarm caught "KV refusing" when it caught
+  // KV *reads* refusing. QA found that on 2026-11-04.
+  //
+  // A failing webhook now writes one row into D1 — a different service and a
+  // different budget — and this reads it. That is a second D1 statement per
+  // probe, so two row reads a call: 2,880 a day at a probe a minute, against
+  // D1's 5,000,000. It was written as one statement first, by having the flag
+  // read double as the liveness check, and that was wrong in a way worth
+  // recording: `health_flags` does not exist until `ensureSchema` has run, so a
+  // freshly deployed worker that nobody had signed into yet reported its
+  // database broken. A probe whose first answer on a good deploy is a false
+  // alarm is worse than a probe that spends one more row read. So liveness is
+  // still `SELECT 1`, which needs no schema, and a flag read that cannot find
+  // its table says `unknown` rather than condemning anything.
   const probe = url && url.searchParams.get("probe") === "1";
   let checks;
   if (probe) {
-    checks = { db: "skipped", kv: "skipped" };
+    checks = { db: "skipped", kv: "skipped", writes: "unknown" };
     if (env.DB) {
       try {
         await env.DB.prepare("SELECT 1 AS ok").first();
         checks.db = "ok";
       } catch {
         checks.db = "error";
+      }
+      if (checks.db === "ok") {
+        try {
+          const flag = await readHealthFlag(env.DB, WEBHOOK_FAILED_FLAG, clockSeconds(deps));
+          checks.writes = flag.current ? "failing" : "ok";
+        } catch {
+          // No schema yet, which is a deployment nobody has used rather than a
+          // deployment that is broken.
+          checks.writes = "unknown";
+        }
       }
     }
     if (env.ENTITLEMENTS) {
@@ -493,7 +562,8 @@ async function handleHealth(env, cors, url) {
       }
     }
   }
-  const working = !probe || (checks.db !== "error" && checks.kv !== "error");
+  const working =
+    !probe || (checks.db !== "error" && checks.kv !== "error" && checks.writes !== "failing");
   return json(
     {
       ok: working,
@@ -563,12 +633,18 @@ export async function handleRequest(request, env, options) {
     if (request.method !== "POST") {
       return json({ ok: false, reason: "method_not_allowed" }, 405, { allow: "POST" });
     }
+    // Wrapped here rather than inside each handler, because the first thing
+    // every one of them does is a KV write — `markEventSeen`, the idempotency
+    // marker — and that one is outside their own try blocks. Which makes it the
+    // single most likely place for the day's 1,000th KV write to throw, and the
+    // place whose failure the read-only health probe could not see at all. At
+    // this level nothing can escape: a refused write, a refused read, a bug.
     if (path === "/v1/webhooks/stripe") {
-      return handleStripeWebhook(request, env, options);
+      return recordingFailure(env, "stripe", options, () => handleStripeWebhook(request, env, options));
     }
     return path === "/v1/webhooks/creem"
-      ? handleCreemWebhook(request, env, options)
-      : handleMercadoPagoWebhook(request, env, url, options);
+      ? recordingFailure(env, "creem", options, () => handleCreemWebhook(request, env, options))
+      : recordingFailure(env, "mercadopago", options, () => handleMercadoPagoWebhook(request, env, url, options));
   }
 
   if (path === "/v1/claim" || path === "/v1/license") {
@@ -635,7 +711,7 @@ export async function handleRequest(request, env, options) {
     if (request.method !== "GET") {
       return json({ ok: false, reason: "method_not_allowed" }, 405, { ...cors, allow: "GET" });
     }
-    return handleHealth(env, cors, url);
+    return handleHealth(env, cors, url, options);
   }
 
   return json({ ok: false, reason: "not_found" }, 404, cors);

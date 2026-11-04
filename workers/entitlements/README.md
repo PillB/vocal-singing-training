@@ -144,7 +144,7 @@ Anonymous usage events and A/B results (`src/events.js`; also need `DB`):
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| POST | `/v1/events` | A batch of up to 25 events from the site's beacon (`text/plain` JSON). `200 {ok, accepted, dropped}`; `202` and nothing stored for GPC (`sec-gpc: 1`), automated user agents, or `EVENTS_ENABLED=false`; `403` from any origin but `SITE_ORIGIN`; `429` past a limit (below). |
+| POST | `/v1/events` | A batch of up to 25 events from the site's beacon (`text/plain` JSON). `200 {ok, accepted, dropped}`; `202` and nothing stored for GPC (`sec-gpc: 1`), automated user agents, `EVENTS_ENABLED=false`, or the day's `EVENTS_DAILY_CAP`; `403` from any origin but `SITE_ORIGIN`; `429` past a limit (below). |
 | POST | `/v1/events/forget` | `{cid}` → deletes every event and exposure for that browser id: `200 {ok, deleted: {events, exposures}}`. Sent by the guide's opt-out switch. Always allowed (GPC and the kill switch do not stop a deletion); origin-checked, 30 per address per hour. |
 | GET | `/v1/admin/experiments` | Every registered experiment with exposures per arm and the sample-ratio check, plus `ingest`: the last 7 days of ingest counters and when the last event arrived. |
 | GET | `/v1/admin/experiments/results?experiment=KEY` | The preset primary metric and guardrails per arm, the sample-ratio check, the instrumentation check (`eventMix`), where the test stands against its plan (`horizon`), and a one-word `readMe`. `event`/`kind`/`from`/`to` ask for one exploratory metric instead; `control` and `weights` override the registry's. `404` for a key not in the registry. |
@@ -231,6 +231,7 @@ Public, committed in `wrangler.toml`:
 | `EMAIL_FROM` / `EMAIL_FROM_NAME` | Sender of the code emails. Must be a verified sender at the provider. |
 | `EVENTS_ENABLED` | `"false"` stops recording anonymous events at once (nothing is stored, not even counters). Deletions still work. |
 | `REPORTS_ENABLED` | Problem reports and ideas from the site. Unlike `EVENTS_ENABLED` this defaults **on** when absent. `"false"` closes the route; the form then shows the reporter their own text to copy, so nothing they typed is lost. |
+| `EVENTS_DAILY_CAP` | Optional. Events stored per deployment per rolling day; `10000` when absent. It exists so analytics cannot spend D1's free 100,000 rows a day and take sign-in, saved progress and the trial down with it: one stored event is three rows now and three more when the 180-day sweep deletes it, so the default leaves about 40,000 rows a day for the account layer. Past it the route answers `202 {accepted: 0, reason: "daily_capped"}` and writes nothing but the counter. On the $5 Workers Paid plan the same ceiling is 500 times higher, so raise it there. |
 
 Secrets — **never** in this repo, only `wrangler secret put`:
 

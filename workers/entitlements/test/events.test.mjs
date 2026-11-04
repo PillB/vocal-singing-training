@@ -13,6 +13,7 @@ import worker, { handleRequest } from "../src/index.js";
 import { ensureSchema, EVENT_RETENTION_SECONDS, hitRateLimit, resetSchemaMemo, sweepExpired } from "../src/db.js";
 import { clearGoogleJwksCache } from "../src/google.js";
 import {
+  EVENTS_DAILY_CAP,
   EVENTS_IP_RATE_LIMIT,
   EVENTS_RATE_LIMIT,
   EXPERIMENT_PRESETS,
@@ -155,6 +156,97 @@ function adminGet(path, token) {
 function cid(i, prefix) {
   return `${prefix || "c"}${String(i).padStart(15, "0")}`;
 }
+
+/**
+ * The day's cap on stored events, which exists so counting cannot take sign-in
+ * down with it.
+ *
+ * D1's free plan refuses every query for the rest of the UTC day past 100,000
+ * rows written, and one stored event is three rows (its own and its two
+ * indexes) and three more when the sweep deletes it. Without a cap, about 650
+ * learner-days of analytics takes the account layer with it: sign-in, saved
+ * progress, the trial, the licence link, all refused, for a reason no learner
+ * caused. QA worked the arithmetic through on 2026-11-04 against the figures in
+ * `docs/43-WHEN-IT-BREAKS.md` §3.3, which had said the opposite.
+ *
+ * These cases run with the cap turned down to a handful so the behaviour, not
+ * the number, is what is asserted.
+ */
+test("past the day's cap, events are shed and the account layer is not", async () => {
+  const env = freshEnv({ EVENTS_DAILY_CAP: "6" });
+  const first = await call(beacon({ events: [ev("app_open", cid(1)), ev("app_open", cid(1)), ev("app_open", cid(1))] }), env, { now: NOW });
+  assert.equal(first.body.accepted, 3);
+  const second = await call(beacon({ events: [ev("app_open", cid(2)), ev("app_open", cid(2)), ev("app_open", cid(2))] }), env, { now: NOW + 1 });
+  assert.equal(second.body.accepted, 3, "six of six is inside the cap");
+
+  const over = await call(beacon({ events: [ev("practice_start", cid(3))] }), env, { now: NOW + 2 });
+  assert.equal(over.status, 202, JSON.stringify(over.body));
+  assert.equal(over.body.accepted, 0);
+  assert.equal(over.body.reason, "daily_capped");
+  assert.equal((await rows(env, "SELECT * FROM events")).length, 6, "nothing was stored past the cap");
+
+  // The whole point: everything else still works while events are being shed.
+  const health = await call(new Request(`${BASE}/v1/health`), env, { now: NOW + 3 });
+  assert.equal(health.status, 200);
+  const start = await call(
+    new Request(`${BASE}/v1/auth/email/start`, {
+      method: "POST",
+      headers: { "content-type": "application/json", Origin: TEST_ORIGIN },
+      body: JSON.stringify({ email: "learner@example.test" })
+    }),
+    env,
+    { now: NOW + 4, fetchImpl: async () => ({ ok: true, status: 200 }) }
+  );
+  assert.equal(start.status, 200, "sign-in is the thing the cap protects");
+});
+
+test("a refused batch is refused whole, and costs no writes to refuse", async () => {
+  const env = freshEnv({ EVENTS_DAILY_CAP: "4" });
+  assert.equal((await call(beacon({ events: [ev("app_open", cid(1)), ev("app_open", cid(1)), ev("app_open", cid(1))] }), env, { now: NOW })).body.accepted, 3);
+  // Three stored, one slot left, and a batch of three arrives: storing part of
+  // a session would make a funnel read as a drop-off that never happened.
+  const partial = await call(beacon({ events: [ev("app_open", cid(2)), ev("practice_start", cid(2)), ev("practice_recorded", cid(2))] }), env, { now: NOW + 1 });
+  assert.equal(partial.body.reason, "daily_capped");
+  assert.equal((await rows(env, "SELECT * FROM events")).length, 3, "no partial batch");
+
+  // And a refusal must not itself write a rate-limit row, or the ceiling would
+  // spend the budget it exists to protect.
+  const before = (await rows(env, "SELECT * FROM rate_limits")).map((r) => `${r.bucket}:${r.count}`).sort();
+  await call(beacon({ events: [ev("app_open", cid(3)), ev("app_open", cid(3)), ev("app_open", cid(3))] }), env, { now: NOW + 2 });
+  const after = (await rows(env, "SELECT * FROM rate_limits")).map((r) => `${r.bucket}:${r.count}`).sort();
+  assert.deepEqual(
+    after.filter((r) => r.startsWith("evday:")),
+    before.filter((r) => r.startsWith("evday:")),
+    "a refused day-cap call leaves the counter where it was"
+  );
+});
+
+test("the operator can see the cap biting, and the cap resets with its window", async () => {
+  const env = freshEnv({ EVENTS_DAILY_CAP: "2" });
+  await call(beacon({ events: [ev("app_open", cid(1)), ev("app_open", cid(1))] }), env, { now: NOW });
+  await call(beacon({ events: [ev("app_open", cid(2)), ev("app_open", cid(2))] }), env, { now: NOW + 1 });
+  const counted = await rows(env, "SELECT reason, n FROM ingest_daily ORDER BY reason");
+  const capped = counted.find((r) => r.reason === "daily_capped");
+  assert.ok(capped, `ingest_daily should record it: ${JSON.stringify(counted)}`);
+  assert.equal(capped.n, 2, "the events it refused, not the requests");
+  assert.ok(INGEST_REASONS.event.includes("daily_capped"), "and the reason is a declared one");
+
+  // A day later the allowance is back.
+  const later = await call(beacon({ events: [ev("app_open", cid(3))] }), env, { now: NOW + DAY + 2 });
+  assert.equal(later.body.accepted, 1);
+});
+
+test("the shipped cap is sized to leave the account layer most of the free day", () => {
+  // Not a behaviour test: a guard on the number, because the arithmetic in
+  // docs/43 §3.3 is what makes it the right one. 6 rows per event in a steady
+  // state (3 written now, 3 when the sweep deletes it) against D1's free
+  // 100,000 rows a day.
+  const [cap, windowSeconds] = EVENTS_DAILY_CAP;
+  assert.equal(windowSeconds, DAY);
+  assert.ok(cap * 6 < 100000, `${cap} events is ${cap * 6} rows a day, which is the whole free allowance`);
+  assert.ok(cap * 6 <= 60000, `${cap} events leaves only ${100000 - cap * 6} rows a day for accounts`);
+  assert.ok(cap >= 5000, `${cap} is too tight: 25 events a session makes that only ${Math.floor(cap / 25)} sessions a day`);
+});
 
 test("a beacon batch is stored with only the fields that were promised", async () => {
   const env = freshEnv();

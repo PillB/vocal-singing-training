@@ -984,12 +984,30 @@ rather than the product: eight specs carry `test.use({ headless: false })`,
 because they are by-hand headed diagnostics, and a headless container has no
 display for them. They run here now under `xvfb-run`, with the image's Chromium
 aliased to the build the pinned Playwright expects, which is a container fix and
-not a repository one. Two of the remaining three are the next two headings. The
-third is `all-flows-robust.spec.js`, a serial fifteen-minute walk of the whole
-catalogue with real mouse clicks, which has not been reproduced on its own and
-may have been the contention of running it beside the headed specs; it is in the
-sweep this section's own commit was validated against, and if it is real it is
-the next thing after this.
+not a repository one. Two of the remaining three are the next two headings.
+
+The third, `all-flows-robust.spec.js`, is real, inherited, and not this branch's
+to fix. It spends its own fifteen-minute budget and times out; QA reproduced that
+alone on an idle machine, and this branch's own sweep hit it too. The cause is
+diagnosed on #23, in commit `b251e9e`: `dismissBlockingOverlays()` in
+`tests/helpers/layout-probe.js` called `VTTour.end()` whether a tour was running
+or not, and `end()` on an idle tour runs `restorePlace()`, which navigates home
+— so every flow test was taken off the exercise it had just opened; and nine
+`waitForFunction` calls passed `{ timeout }` as the page-function argument rather
+than as the third parameter, so those timeouts never applied and the wait, whose
+Playwright default is no timeout at all, hung until the test's own budget ran
+out. That commit rewrites the spec as one short test per exercise — 64 tests,
+1.2 minutes, where one test used to time out — and fixes both helpers.
+
+So `npm test`'s browser half cannot be green on this branch or on `main` until
+#23 lands, and nothing this branch could do would change that: the fix touches
+`tests/helpers/e2e.js`, `tests/helpers/layout-probe.js`, `playwright.config.js`
+and `package.json`, all of which #23 already changes, so doing it here would be
+a conflict rather than a contribution. Until then the sweep is run with
+`--grep-invert "all flows: layout"`, and that is a known-red spec rather than a
+clean run. `b251e9e` also moves the eight headed specs into a `sweep` project of
+their own, with a test that fails if one lands back in the gate — which retires
+the `xvfb-run` workaround above as well.
 
 A suite whose verdict is read off `tail` has no verdict. That is the finding, and
 it is worth more than either bug it hid.
@@ -1046,6 +1064,19 @@ cannot be rigged. It is in `npm test`.
 
 It has still never run on a real runner, and the document says so. The first
 scheduled run after the merge is the only thing that proves it.
+
+And five cases were not enough. QA planted the guards back one at a time: with
+`gh issue list` swallowing its error again, and with `gh issue close` or
+`gh issue comment` unguarded, all five of those cases still pass. Each leaves the
+alarm broken in the way that is hardest to notice — a recovery run that prints
+"Recovered; closed #7." in green with the issue still open, or one that prints
+"Healthy." and never closes the alert at all. Verified here by planting the three
+mutants before adopting the remedy, which is
+`qa/health-ping-failure-paths.test.mjs`: five more cases, one control and one per
+failing `gh` call, each asserting only that the run is red. Three mutants that
+survived the first file, three dead. The lesson is the one section 22 is about in
+a different place: a guard added in the same commit as its test tends to be
+tested by the case that motivated it and by nothing else.
 
 ### A schedule ignores a branch
 
@@ -1130,4 +1161,4 @@ reported health through a failure to write. A notifier that could not reach
 GitHub reported that it had notified. And a cap built to make a ceiling visible
 was invisible. Each one was the monitoring, not the thing monitored.
 
-VG-75, VG-76, VG-77, VG-78, VG-79, VG-80.
+VG-75, VG-76, VG-77, VG-78, VG-79, VG-80, VG-81, VG-82.

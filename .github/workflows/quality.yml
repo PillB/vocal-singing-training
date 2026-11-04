@@ -44,7 +44,10 @@ jobs:
       - run: npm run test:core
       - name: chore(lint) the complexity baseline may only shrink against the base branch
         if: github.event_name == 'pull_request'
-        run: node qa/lint-complexity.mjs --baseline-ref "origin/${{ github.base_ref }}"
+        # A branch name may hold a quote, $( or a backtick: it reaches the shell as a variable, never as text in the line
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: node qa/lint-complexity.mjs --baseline-ref "origin/$BASE_REF"
       - name: Mutation check (every planted audio and lint defect must turn a test red)
         run: node qa/mutate.mjs
 

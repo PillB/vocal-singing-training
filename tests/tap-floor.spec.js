@@ -1,0 +1,82 @@
+/**
+ * The 44-pixel floor, and the measurement noise that was failing it.
+ *
+ * `getBoundingClientRect()` returns float32 geometry after the element's
+ * transform, and the site lifts a button on hover (`.btn:hover { transform:
+ * translateY(-1px) }`, over 0.12 s, with the pointer resting wherever the last
+ * click left it). Stepped through 41 fractional positions of that lift in this
+ * Chromium on 3 November 2026, a box CSS makes exactly 44 px measures
+ * 43.99999237060547 at 14 of them. So `height < 44` called a compliant control
+ * too small about a third of the time, depending on where the pointer was.
+ *
+ * Four tap-floor cases across four suites were comparing that way. They now
+ * compare against `tapFloorLimit(44)`, which is 43.95, and this file is what
+ * keeps that allowance honest in both directions: a 44 px control clears it
+ * everywhere in the lift, and a control that really is 43.5 px or 43 px clears
+ * it nowhere. The allowance is 0.05 px against a measured error of 0.0000076,
+ * so it is noise-sized rather than defect-sized, and the second test is what
+ * would fail if somebody widened it.
+ *
+ * The last test is a control and deliberately asserts nothing about the count:
+ * a Chromium that computes this box exactly would make the allowance
+ * unnecessary, not wrong, and a test that demanded the misreading would then be
+ * the thing that failed.
+ *
+ * Adopted from QA round 10 with its expectations unchanged. VG-59.
+ */
+const { test, expect } = require("@playwright/test");
+const { clearsTapFloor, tapFloorLimit, TAP_FLOOR_EPSILON } = require("./helpers/tap-floor");
+
+const PAGE = (minH) => `<style>
+  .btn{display:inline-flex;align-items:center;box-sizing:border-box;height:${minH}px;border:1px solid #888;padding:0 1rem;font:14px sans-serif}
+</style><div style="height:100.37px"></div><button class="btn" id="a">Pro</button>`;
+
+/**
+ * Measure the button at 41 fractional lifts, as the hover transition passes through them.
+ * @param {import('@playwright/test').Page} page The page.
+ * @param {number} minH The height CSS gives the button.
+ * @returns {Promise<number[]>} The measured heights.
+ */
+async function heightsUnderLift(page, minH) {
+  await page.setContent(PAGE(minH));
+  return page.evaluate(() => {
+    const el = document.getElementById("a");
+    const out = [];
+    for (let i = 0; i <= 40; i++) {
+      el.style.transform = `translateY(${-i * 0.0852769 + 0.013 * (i % 7)}px)`;
+      out.push(el.getBoundingClientRect().height);
+    }
+    return out;
+  });
+}
+
+test("a control CSS makes 44 px clears the 44 px floor at every point of the hover lift", async ({ page }) => {
+  const heights = await heightsUnderLift(page, 44);
+  const tooSmall = heights.filter((h) => !clearsTapFloor(h, 44));
+  expect(tooSmall, `heights the floor called too small: ${tooSmall.join(", ")}`).toEqual([]);
+  // The allowance is only noise: nothing here is more than a hair off 44.
+  expect(Math.min(...heights)).toBeGreaterThan(44 - TAP_FLOOR_EPSILON);
+});
+
+test("a control that really is 43.5 px, or 43 px, does not clear the 44 px floor", async ({ page }) => {
+  for (const minH of [43.5, 43]) {
+    const heights = await heightsUnderLift(page, minH);
+    expect(heights.every((h) => !clearsTapFloor(h, 44)), `${minH} px control: ${Math.max(...heights)}`).toBe(true);
+  }
+});
+
+test("the 24 px floor of WCAG 2.5.8 uses the same allowance", async ({ page }) => {
+  const heights = await heightsUnderLift(page, 24);
+  expect(heights.every((h) => clearsTapFloor(h, 24))).toBe(true);
+  const small = await heightsUnderLift(page, 23);
+  expect(small.every((h) => !clearsTapFloor(h, 24))).toBe(true);
+  expect(tapFloorLimit(24)).toBeCloseTo(24 - TAP_FLOOR_EPSILON, 10);
+});
+
+test("control: the strict comparison does read this browser's 44 px box as too small somewhere in the lift, which is why the allowance exists", async ({ page }) => {
+  const heights = await heightsUnderLift(page, 44);
+  test.info().annotations.push({ type: "strict-misreads", description: `${heights.filter((h) => h < 44).length} of ${heights.length}` });
+  // Not asserted as a number: a Chromium that computes this exactly makes the
+  // allowance unnecessary, not wrong.
+  expect(heights.every((h) => h > 43.9)).toBe(true);
+});

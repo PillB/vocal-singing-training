@@ -106,16 +106,43 @@
      * - mercadopago: Peru + LATAM, in soles, with automatic monthly charging.
      */
     providers: {
-      // The internal id stays "stripe" because the worker's claim route and the
-      // checkout host allowlist are still written around it (VG-20). The label
-      // no longer promises Stripe, because a Peru-registered seller cannot be a
-      // Stripe merchant — the international rail will be a merchant of record.
-      stripe: {
-        id: "stripe",
+      /**
+       * The international rail: Creem, a merchant of record. It sells to the
+       * customer in its own name, handles the tax, and pays us — which is the
+       * whole reason it is here and a direct Stripe account is not. A
+       * Peru-registered seller cannot be a Stripe merchant (Peru is not a
+       * supported country on stripe.com/global), and a merchant of record
+       * needs no company in the customer's country.
+       *
+       * The worker accepts a Creem webhook and /v1/claim takes `creem`, so
+       * nothing here is waiting on the worker any more (VG-20 closed).
+       */
+      creem: {
+        id: "creem",
         label: "International card",
         labelEs: "Tarjeta internacional",
         /** Regions where we recommend this rail first */
         regions: ["US", "EU", "GB", "CA", "AU", "MX", "BR", "WW"],
+        /**
+         * Paste the product's share link from the Creem dashboard (Products →
+         * Share), or a checkout.creem.io URL. Monthly and yearly are two
+         * separate Creem products: Creem has no single link that offers both.
+         */
+        links: {
+          pro_monthly: "", // e.g. https://www.creem.io/payment/prod_xxxx
+          pro_yearly: ""
+        }
+      },
+      /**
+       * Kept, not used. The worker still verifies and maps Stripe webhooks, so
+       * a seller who can hold a Stripe account can switch a market's `rail`
+       * back to "stripe" and paste links here. No market points at it.
+       */
+      stripe: {
+        id: "stripe",
+        label: "International card",
+        labelEs: "Tarjeta internacional",
+        regions: [],
         /**
          * Paste Stripe Payment Link URLs (Dashboard → Payment Links → Create).
          * Use recurring prices for subscriptions.
@@ -222,22 +249,22 @@
      */
     markets: [
       { code: "PE", name: "Perú", currency: "PEN", rail: "mercadopago", priority: 1 },
-      { code: "US", name: "United States", currency: "USD", rail: "stripe", priority: 1 },
-      { code: "MX", name: "México", currency: "MXN", rail: "stripe", priority: 1 },
-      { code: "ES", name: "España", currency: "EUR", rail: "stripe", priority: 1 },
-      { code: "GB", name: "United Kingdom", currency: "GBP", rail: "stripe", priority: 1 },
-      { code: "DE", name: "Germany", currency: "EUR", rail: "stripe", priority: 2 },
-      { code: "FR", name: "France", currency: "EUR", rail: "stripe", priority: 2 },
-      { code: "IT", name: "Italy", currency: "EUR", rail: "stripe", priority: 2 },
-      { code: "BR", name: "Brasil", currency: "BRL", rail: "stripe", priority: 2 },
+      { code: "US", name: "United States", currency: "USD", rail: "creem", priority: 1 },
+      { code: "MX", name: "México", currency: "MXN", rail: "creem", priority: 1 },
+      { code: "ES", name: "España", currency: "EUR", rail: "creem", priority: 1 },
+      { code: "GB", name: "United Kingdom", currency: "GBP", rail: "creem", priority: 1 },
+      { code: "DE", name: "Germany", currency: "EUR", rail: "creem", priority: 2 },
+      { code: "FR", name: "France", currency: "EUR", rail: "creem", priority: 2 },
+      { code: "IT", name: "Italy", currency: "EUR", rail: "creem", priority: 2 },
+      { code: "BR", name: "Brasil", currency: "BRL", rail: "creem", priority: 2 },
       { code: "AR", name: "Argentina", currency: "ARS", rail: "mercadopago", priority: 2 },
       { code: "CL", name: "Chile", currency: "CLP", rail: "mercadopago", priority: 2 },
       { code: "CO", name: "Colombia", currency: "COP", rail: "mercadopago", priority: 2 },
-      { code: "CA", name: "Canada", currency: "CAD", rail: "stripe", priority: 2 },
-      { code: "AU", name: "Australia", currency: "AUD", rail: "stripe", priority: 2 },
-      { code: "PH", name: "Philippines", currency: "PHP", rail: "stripe", priority: 3 },
-      { code: "IN", name: "India", currency: "INR", rail: "stripe", priority: 3 },
-      { code: "WW", name: "Worldwide", currency: "USD", rail: "stripe", priority: 3 }
+      { code: "CA", name: "Canada", currency: "CAD", rail: "creem", priority: 2 },
+      { code: "AU", name: "Australia", currency: "AUD", rail: "creem", priority: 2 },
+      { code: "PH", name: "Philippines", currency: "PHP", rail: "creem", priority: 3 },
+      { code: "IN", name: "India", currency: "INR", rail: "creem", priority: 3 },
+      { code: "WW", name: "Worldwide", currency: "USD", rail: "creem", priority: 3 }
     ]
   };
 

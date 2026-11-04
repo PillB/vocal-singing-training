@@ -96,6 +96,7 @@ export function createTestEnv(overrides) {
     STRIPE_WEBHOOK_SECRET: "whsec_unit_test_secret",
     MP_WEBHOOK_SECRET: "mp_unit_test_secret",
     MP_ACCESS_TOKEN: "mp_unit_test_token",
+    CREEM_WEBHOOK_SECRET: "creem_unit_test_secret",
     ENTITLEMENTS: createFakeKv(),
     ...(overrides || {})
   };

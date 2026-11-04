@@ -951,29 +951,81 @@ test.describe("The menu, read by someone who has never seen it", () => {
     }
   }
 
-  test("1280px: the tour and the guide fold into Ayuda only while the row needs the room", async ({ page }) => {
+  /** How many lines the site title currently occupies. */
+  const titleLines = (page) =>
+    page.evaluate(() => {
+      const range = document.createRange();
+      range.selectNodeContents(document.getElementById("brand-title"));
+      return new Set([...range.getClientRects()].filter((r) => r.width > 0).map((r) => Math.round(r.bottom))).size;
+    });
+
+  test("1280px: the longest row keeps the title short and both help links reachable", async ({ page }) => {
     // "Ver el tour" and "Leer la guía" beside a long name and "Pro · termina
-    // en 10 días" left the title three lines tall (93px header). That row
-    // folds them into "Ayuda ▾"; signed out, both sit in the row.
+    // en 10 días" once left the title three lines tall (93px header), so the
+    // row folds them into "Ayuda ▾" when it has to.
+    //
+    // This case used to assert the fold itself at this width, and that was a
+    // mistake: whether the title wraps past two lines depends on the browser's
+    // own text metrics, so the assertion passed on the author's machine and
+    // failed in CI, where the same row renders two lines and 67px. Worse, it
+    // was testing the remedy instead of the complaint. `.door-name` caps a
+    // display name at 6.5rem with an ellipsis, so no name can widen this row
+    // any further, and the fold is the safety net underneath that cap rather
+    // than this state's expected outcome.
+    //
+    // So this case asserts what a person actually gets: the title never three
+    // lines tall, a header that stays one row deep, and both the tour and the
+    // guide reachable — whichever way the row chose to arrange them. The case
+    // below it drives the fold directly, on the one condition that fires it.
     await page.setViewportSize({ width: 1280, height: 800 });
     const license = await mintLicense({ origin: BASE });
     await install(page, { ...STATES.ending, account: member({ displayName: "Maximiliano Alejandro de la Torre" }) }, license);
     await boot(page);
     await expect(page.locator("#btn-pricing")).not.toHaveAttribute("data-plan", "free");
+    expect(await titleLines(page), "the complaint this row exists to answer").toBeLessThanOrEqual(2);
+    expect(
+      await page.evaluate(() => Math.round(document.querySelector("header.app-header").getBoundingClientRect().height))
+    ).toBeLessThanOrEqual(90);
+
+    // Either arrangement is correct; both links have to be one click away.
     const help = page.locator("#btn-help");
-    await expect(help).toBeVisible();
-    await expect(page.locator("#btn-tour")).toBeHidden();
-    const lines = () =>
-      page.evaluate(() => {
-        const range = document.createRange();
-        range.selectNodeContents(document.getElementById("brand-title"));
-        return new Set([...range.getClientRects()].filter((r) => r.width > 0).map((r) => Math.round(r.bottom))).size;
-      });
-    expect(await lines()).toBeLessThanOrEqual(2);
-    await help.click();
-    await expect(page.locator("#link-guide")).toBeVisible();
+    if (await help.isVisible()) {
+      await expect(page.locator("#btn-tour")).toBeHidden();
+      await help.click();
+      await expect(page.locator("#link-guide")).toBeVisible();
+    } else {
+      await expect(page.locator("#link-guide")).toBeVisible();
+    }
     await page.locator("#btn-tour").click();
     await expect(page.locator(".tour-card")).toBeVisible();
+  });
+
+  test("a title that does wrap past two lines folds the help links away", async ({ page }) => {
+    // The fold's own condition, driven directly instead of hoped for: a title
+    // long enough to wrap. The ResizeObserver on #brand-title is what runs the
+    // measurement, so changing its text is the real trigger, not a stub.
+    await page.setViewportSize({ width: 1280, height: 800 });
+    const license = await mintLicense({ origin: BASE });
+    await install(page, { ...STATES.ending, account: member({ displayName: "Maximiliano Alejandro de la Torre" }) }, license);
+    await boot(page);
+    await expect(page.locator("#btn-tour")).toBeVisible();
+
+    await page.evaluate(() => {
+      document.getElementById("brand-title").textContent =
+        "Entrenamiento vocal y de canto en casa para voces de todos los registros y edades";
+    });
+    await expect(page.locator("#btn-help")).toBeVisible();
+    await expect(page.locator("#btn-tour")).toBeHidden();
+    await page.locator("#btn-help").click();
+    await expect(page.locator("#link-guide")).toBeVisible();
+
+    // And it unfolds again when the row stops needing the room, which is the
+    // half a one-way fold would get wrong.
+    await page.evaluate(() => {
+      document.getElementById("brand-title").textContent = "Entrenamiento vocal y de canto";
+    });
+    await expect(page.locator("#btn-tour")).toBeVisible();
+    await expect(page.locator("#btn-help")).toBeHidden();
   });
 
   test("the account panel names its plan button for what it opens", async ({ page }) => {

@@ -49,7 +49,9 @@ test.describe("Ads scaffold", () => {
       const c = window.VT_ADS_CONFIG;
       c.adsEnabled = true;
       c.mode = "native";
-      // ensure at least one card with open-pricing so CTA works without affiliate URL
+      // A card needs a destination to render at all, since 4 November 2026: see
+      // `pickNativeCard` in js/ads.js and tests/ads-redteam.spec.js. This line
+      // used to be a workaround for the opposite behaviour and is now the rule.
       if (c.nativeCards?.[0]) {
         c.nativeCards[0].href = "#pricing";
         c.nativeCards[0].action = "open-pricing";

@@ -24,7 +24,13 @@
   const LS_KEY = "vt_billing_v1";
   const TRIAL_KEY = "vt_billing_trial_started_v1";
   const PLAN_IDS = new Set(["pro_monthly", "pro_yearly", "trial"]);
-  const PROVIDER_IDS = new Set(["stripe", "mercadopago", "demo", "internal", "auth"]);
+  const PROVIDER_IDS = new Set(["stripe", "mercadopago", "creem", "demo", "internal", "auth"]);
+  /**
+   * The providers money can actually come in on. `PROVIDER_IDS` is wider: it
+   * also holds the QA override sources and the account rail, none of which has
+   * a checkout link, so a market must not be able to name one as its rail.
+   */
+  const CHECKOUT_RAILS = new Set(["stripe", "mercadopago", "creem"]);
   /** Sources that unlock Pro without payment — QA only, gated by demoUnlockEnabled. */
   const OVERRIDE_SOURCES = new Set(["demo", "internal_account"]);
 
@@ -32,6 +38,12 @@
   const DEFAULT_CHECKOUT_HOSTS = [
     "buy.stripe.com",
     "checkout.stripe.com",
+    // Creem, the merchant of record. The API returns checkout.creem.io/<id>;
+    // a product's own share link from the dashboard is on creem.io, so both
+    // are allowed. Anything else needs `allowedCheckoutHosts`.
+    "checkout.creem.io",
+    "www.creem.io",
+    "creem.io",
     "www.mercadopago.com",
     "www.mercadopago.com.pe",
     "www.mercadopago.com.ar",
@@ -100,12 +112,20 @@
 
   function marketFor(code) {
     const m = (cfg().markets || []).find((x) => x.code === code);
-    return m || { code: "WW", name: "Worldwide", currency: "USD", rail: "stripe", priority: 3 };
+    return m || { code: "WW", name: "Worldwide", currency: "USD", rail: "creem", priority: 3 };
   }
 
+  /**
+   * The rail a region buys on. A market naming a rail money cannot arrive on —
+   * a typo, a QA source, a rail removed from the config — falls back to Creem,
+   * the merchant of record, rather than to a Stripe account a Peru-registered
+   * seller cannot hold.
+   * @param {string} region Two-letter region code.
+   * @returns {string} Provider id.
+   */
   function preferredRail(region) {
     const m = marketFor(region);
-    return m.rail === "mercadopago" ? "mercadopago" : "stripe";
+    return CHECKOUT_RAILS.has(m.rail) ? m.rail : "creem";
   }
 
   function nowMs() {
@@ -202,6 +222,35 @@
   }
 
   /** True once the entitlements worker URL and its public key are both configured. */
+  /**
+   * What the account layer says about this browser, defensively.
+   *
+   * Null when this build has no account layer at all, which is not the same as
+   * a signed-out visitor: a deployment without accounts must still be able to
+   * take a payment the old way.
+   * @returns {object|null} Account state, or null.
+   */
+  function accountState() {
+    try {
+      return global.VTAccount?.getState?.() || null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Which payment rails the worker says it can honour, or null when nobody has
+   * asked yet. Read defensively: a build with no account layer has none of this.
+   * @returns {object|null} `{stripe, mercadopago}` or null.
+   */
+  function accountRails() {
+    try {
+      return global.VTAccount?.knownRails?.() || null;
+    } catch {
+      return null;
+    }
+  }
+
   function verificationConfigured() {
     try {
       return !!global.VTLicense?.isConfigured?.();
@@ -575,6 +624,37 @@
         // verifiable entitlement — they would come back to a free account.
         return { ok: false, mode: "verification_unavailable", message: null };
       }
+      // A payment made while signed out is tied to this browser's storage and
+      // to nothing else: the card keeps charging every month while the same
+      // person's next phone shows free, and no operator route exists to move
+      // that licence onto an account afterwards. So where this deployment can
+      // sign somebody in, it has to, before the money moves. The free trial
+      // already works this way (trial_result outcome "needs_account" in
+      // js/app.js); this is the same gate on the paid path.
+      const account = accountState();
+      if (account && account.configured && !account.signedIn) {
+        return { ok: false, mode: "signin_required", plan: planId, provider: providerId || null };
+      }
+      // A rail the worker cannot honour is not a rail. Mercado Pago's webhook
+      // is refused outright until MP_WEBHOOK_SECRET and MP_ACCESS_TOKEN exist,
+      // and nothing is written for a payment whose webhook was refused, so the
+      // claim route — which only ever reads what the webhook wrote — answers
+      // "pending" until the browser gives up after seven days. A payment taken
+      // in that window is money taken for Pro that can never be issued, and
+      // the only remedy left is to gift the buyer a grant by hand.
+      //
+      // "Set the secret before the link goes live" is the operator's order and
+      // stays the first line of defence. This is the net under it, in the one
+      // place that can see both halves.
+      //
+      // Only an explicit no stops a sale. A worker we could not reach, or one
+      // too old to report the field, is not an answer, and refusing without an
+      // answer would turn a flaky network into a lost sale.
+      const rail = providerId || preferredRail(detectRegion());
+      const rails = accountRails();
+      if (rails && rails[rail] === false) {
+        return { ok: false, mode: "provider_unavailable", plan: planId, provider: rail };
+      }
       try {
         sessionStorage.setItem(
           "vt_billing_intent",
@@ -887,8 +967,6 @@
       achievements_export: false,
       extra_reminders: false,
       extra_freezes: false,
-      priority_progressions: false,
-      no_limits: false,
       lesson_anchor: false,
       yearly_savings: false,
       ad_free: false,
@@ -906,8 +984,6 @@
       achievements_export: pro,
       extra_reminders: pro,
       extra_freezes: pro,
-      priority_progressions: pro,
-      no_limits: pro,
       lesson_anchor: pro,
       yearly_savings: pro,
       ad_free: pro

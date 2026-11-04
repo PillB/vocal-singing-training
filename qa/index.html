@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- A page for the handful of people testing the site for us, not for
+         visitors and not for search engines. -->
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="description" content="Qué probar en Estudio Vocal, cómo reportarlo, y qué está apagado a propósito." />
+    <title>Pruebas · Estudio Vocal</title>
+    <link rel="stylesheet" href="../css/styles.css?v=20261104a" />
+    <link rel="stylesheet" href="qa.css?v=20261102a" />
+  </head>
+  <body class="qa-page">
+    <header class="app-header">
+      <div class="header-inner">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">♪</div>
+          <div>
+            <p class="brand-name">Estudio Vocal</p>
+            <p class="qa-brand-sub">Pruebas · Testing</p>
+          </div>
+        </div>
+        <div class="header-actions">
+          <button type="button" class="btn btn-primary btn-sm" data-vt-report="bug" data-vt-report-area="site">
+            Reportar un problema
+          </button>
+          <a class="btn btn-ghost btn-sm" href="../">← Estudio</a>
+        </div>
+      </div>
+    </header>
+
+    <main class="qa-wrap">
+      <h1>Probar Estudio Vocal</h1>
+      <p class="qa-lede">
+        Esta página es para quienes nos ayudan a probar el sitio. Dice qué build está en línea, qué
+        hay que mirar, qué está apagado a propósito, y cómo contarnos lo que encuentres.
+        <strong>No hace falta saber nada técnico</strong>: si algo te resulta raro, eso ya es un
+        hallazgo.
+      </p>
+      <p class="qa-lede qa-en">
+        This page is for the people helping us test. It says which build is live, what to look at,
+        what is deliberately switched off, and how to tell us what you find. You do not need to know
+        anything technical: if something feels wrong, that is already a finding.
+      </p>
+
+      <nav class="qa-jump" aria-label="Secciones">
+        <a href="#estado">1 · Estado</a>
+        <a href="#como">2 · Cómo reportar</a>
+        <a href="#apagado">3 · Qué está apagado</a>
+        <a href="#guiones">4 · Qué probar</a>
+        <a href="#aparatos">5 · En qué aparatos</a>
+        <a href="#nosotros">6 · Para nosotros</a>
+      </nav>
+
+      <!-- 1. What is actually live right now. Read from the site and from the
+           worker, so a tester never has to ask whether a fix is deployed. -->
+      <section class="qa-card" id="estado" aria-labelledby="estado-title">
+        <h2 id="estado-title">1 · Qué estás probando ahora mismo</h2>
+        <p class="muted">
+          Si vas a reportar algo, este es el estado del sitio en el momento en que lo viste. El
+          reporte lo adjunta solo.
+        </p>
+        <dl class="qa-facts" id="qa-facts" aria-live="polite">
+          <div><dt>Build del sitio</dt><dd id="qa-build">…</dd></div>
+          <div><dt>Tu navegador</dt><dd id="qa-ua">…</dd></div>
+          <div><dt>Tu pantalla</dt><dd id="qa-screen">…</dd></div>
+          <div><dt>Servidor de cuentas</dt><dd id="qa-worker">comprobando…</dd></div>
+          <div><dt>Entrar con</dt><dd id="qa-auth">…</dd></div>
+          <div><dt>Prueba gratis</dt><dd id="qa-trial">…</dd></div>
+          <div><dt>Reportes</dt><dd id="qa-reports">…</dd></div>
+          <div><dt>Estadísticas</dt><dd id="qa-events">…</dd></div>
+        </dl>
+        <div class="controls-row">
+          <button type="button" class="btn btn-sm" id="qa-refresh">Comprobar de nuevo</button>
+          <button type="button" class="btn btn-sm" id="qa-copy-state">Copiar este estado</button>
+        </div>
+        <p class="qa-msg" id="qa-state-msg" aria-live="polite"></p>
+      </section>
+
+      <!-- 2. How to report. The button is the same dialog as in the app. -->
+      <section class="qa-card" id="como" aria-labelledby="como-title">
+        <h2 id="como-title">2 · Cómo contarnos lo que encuentres</h2>
+        <ol class="qa-steps">
+          <li>
+            Toca <strong>Reportar un problema</strong> (arriba, o al final de cualquier página del
+            sitio). No hace falta cuenta.
+          </li>
+          <li>
+            Escribe en una línea qué esperabas y qué pasó. Si puedes, los pasos para volver a verlo.
+          </li>
+          <li>
+            Lo que se adjunta solo: la página, el build, tu navegador, el tamaño de pantalla y el
+            idioma. <strong>No</strong> se adjunta tu grabación, tu progreso ni tu nombre.
+          </li>
+          <li>
+            Al enviarlo te damos un <strong>número</strong> (<code>VS-…</code>). Guárdalo si quieres
+            preguntarnos por ese reporte.
+          </li>
+          <li>
+            Si el servidor no está disponible, el mismo diálogo te deja copiar el reporte entero
+            para pegarlo donde quieras. Nunca se pierde lo que escribiste.
+          </li>
+        </ol>
+        <p>
+          Dos cosas valen tanto como un fallo: <strong>algo que te confundió</strong> y
+          <strong>algo que te gustaría que existiera</strong>. Para lo segundo, elige «Una idea para
+          mejorar» en el diálogo.
+        </p>
+        <p class="qa-en">
+          Two things are worth as much as a bug: <strong>something that confused you</strong> and
+          <strong>something you wish existed</strong>. For the second one, pick “An idea to make it
+          better” in the dialog.
+        </p>
+      </section>
+
+      <!-- 3. What is off on purpose, so nobody spends a report on it. -->
+      <section class="qa-card" id="apagado" aria-labelledby="apagado-title">
+        <h2 id="apagado-title">3 · Qué está apagado a propósito</h2>
+        <p class="muted">
+          Esto <strong>no</strong> son fallos. Está así porque todavía no abrimos esa parte, y
+          reportarlo no nos dice nada nuevo.
+        </p>
+        <ul class="qa-list">
+          <li>
+            <strong>No se puede comprar.</strong> El panel de precios se abre y explica el plan,
+            pero no hay botón de pago: no hay enlace de cobro configurado. Si ves un botón que
+            intenta cobrar, <em>eso sí</em> es un fallo y queremos saberlo de inmediato.
+          </li>
+          <li>
+            <strong>No hay publicidad.</strong> Los huecos de anuncios existen en el código pero
+            están apagados; no deberías ver ninguno.
+          </li>
+          <li>
+            <strong>Pro se consigue solo con regalo o prueba.</strong> Si necesitas Pro para probar
+            algo, pídenoslo y te lo damos a tu correo desde el panel de admin.
+          </li>
+          <li>
+            <strong>El correo de entrada puede estar apagado.</strong> Mira «Entrar con» arriba: si
+            solo dice Google, entrar con un código por correo todavía no funciona en este deploy, y
+            eso no es un fallo.
+          </li>
+        </ul>
+      </section>
+
+      <!-- 4. The charters. js/qa.js draws them with a checkbox each. -->
+      <section class="qa-card" id="guiones" aria-labelledby="guiones-title">
+        <h2 id="guiones-title">4 · Qué probar</h2>
+        <p class="muted">
+          Cada bloque es una sesión corta, de cinco a diez minutos. Marca lo que ya miraste: queda
+          guardado en este navegador, así que puedes dejarlo a medias y volver. Cuando termines,
+          «Copiar lo que probé» te da un resumen para enviarnos.
+        </p>
+        <div class="controls-row">
+          <button type="button" class="btn btn-sm" id="qa-copy-run">Copiar lo que probé</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="qa-reset-run">Empezar de nuevo</button>
+        </div>
+        <p class="qa-msg" id="qa-run-msg" aria-live="polite"></p>
+        <div id="qa-charters"></div>
+      </section>
+
+      <!-- 5. Coverage we are missing. -->
+      <section class="qa-card" id="aparatos" aria-labelledby="aparatos-title">
+        <h2 id="aparatos-title">5 · En qué aparatos nos falta probar</h2>
+        <p class="muted">
+          El sitio vive en el navegador y usa el micrófono, así que lo que falla casi siempre falla
+          en un aparato concreto. Si tienes uno de estos, eres justo quien nos falta.
+        </p>
+        <ul class="qa-list">
+          <li><strong>iPhone con Safari</strong> — permisos de micrófono y audio en silencio son distintos aquí.</li>
+          <li><strong>Android con Chrome</strong> — el teclado tapa formularios y cambia el alto de la ventana.</li>
+          <li><strong>Un portátil con pantalla pequeña</strong> (1366×768) — la autopista de afinación se aprieta.</li>
+          <li><strong>Firefox</strong> — su detección de audio se comporta distinto que la de Chrome.</li>
+          <li><strong>Con auriculares con micrófono</strong> y <strong>sin auriculares</strong> — el eco cambia las métricas.</li>
+          <li><strong>Con la pantalla en vertical y en horizontal</strong>, en el mismo aparato.</li>
+        </ul>
+        <p>
+          Cuéntanos el aparato aunque todo funcione: «probé en un iPhone 12 con Safari y no vi nada
+          raro» es información útil.
+        </p>
+      </section>
+
+      <!-- 6. For the two of us. -->
+      <section class="qa-card" id="nosotros" aria-labelledby="nosotros-title">
+        <h2 id="nosotros-title">6 · Para nosotros</h2>
+        <ul class="qa-list">
+          <li>
+            Lo que llega por el diálogo se lee en el
+            <a href="../admin.html#reports">panel de admin, sección «Lo que nos cuenta la gente»</a>.
+            Ahí se cambia el estado y se escribe una nota interna.
+          </li>
+          <li>
+            Los guiones automáticos de esta carpeta (capturas, recorridos, revisión estática) están
+            documentados en
+            <a href="https://github.com/PillB/vocal-singing-training/blob/main/qa/README.md">qa/README.md</a>.
+          </li>
+          <li>
+            Esta página no envía estadísticas: nada de lo que hagas aquí entra en el embudo que el
+            panel de admin lee.
+          </li>
+        </ul>
+      </section>
+
+      <p class="qa-back"><a href="../">← Volver al estudio</a></p>
+    </main>
+
+    <!-- No analytics and no region gate on purpose, exactly as on admin.html:
+         what a tester does here must not enter the funnel. billing-config.js
+         and account.js are here because the worker URL and the signed-in state
+         come from them; reports.js is the dialog itself. -->
+    <script src="../js/billing-config.js?v=20261103c"></script>
+    <script src="../js/account.js?v=20261103c"></script>
+    <script src="../js/reports.js?v=20261104a"></script>
+    <script src="qa.js?v=20261102a"></script>
+  </body>
+</html>

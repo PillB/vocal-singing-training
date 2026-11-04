@@ -7,8 +7,8 @@
          list gets an answer from the routes it calls. Keep it out of search. -->
     <meta name="robots" content="noindex, nofollow" />
     <title>Admin · Estudio Vocal</title>
-    <link rel="stylesheet" href="css/styles.css?v=20261005p" />
-    <link rel="stylesheet" href="css/admin.css?v=20260926a" />
+    <link rel="stylesheet" href="css/styles.css?v=20261104a" />
+    <link rel="stylesheet" href="css/admin.css?v=20261103a" />
   </head>
   <body class="admin-page">
     <header class="app-header">
@@ -73,6 +73,8 @@
           <a href="#lookup" data-t="navLookup">Buscar</a>
           <a href="#give" data-t="navGive">Dar Pro</a>
           <a href="#codes" data-t="navCodes">Códigos</a>
+          <a href="#holders" data-t="navHolders">Quién tiene Pro</a>
+          <a href="#reports" data-t="navReports">Reportes</a>
           <a href="#stats" data-t="navStats">Estadísticas</a>
           <a href="#maintenance" data-t="navMaintenance">Mantenimiento</a>
         </nav>
@@ -110,8 +112,23 @@
                 <button type="button" class="btn btn-sm" data-days="30">30</button>
                 <button type="button" class="btn btn-sm" data-days="90">90</button>
                 <button type="button" class="btn btn-sm" data-days="365">365</button>
+                <!-- The longest grant the worker allows. It is not a null end
+                     date: the row still has one, so taking it back is the same
+                     one tap as any other gift. -->
+                <button type="button" class="btn btn-sm" data-days="3650" data-t="daysOpen">Sin fecha de fin</button>
               </div>
             </div>
+            <fieldset class="admin-kind">
+              <legend data-t="giveKindLegend">Qué le estás dando</legend>
+              <div class="admin-choices">
+                <label><input type="radio" name="give-kind" value="gift" checked /> <span data-t="giveKindGift">Regalo (amigos y familia)</span></label>
+                <label><input type="radio" name="give-kind" value="comp" /> <span data-t="giveKindComp">Cuenta de pruebas (nuestra)</span></label>
+              </div>
+              <p class="muted admin-small" data-t="giveKindHelp">
+                Las dos dan lo mismo. La diferencia es para nosotros: abajo puedes ver por separado quién
+                tiene un regalo y quién es una cuenta de pruebas.
+              </p>
+            </fieldset>
             <label class="field">
               <span data-t="noteLabel">Nota (la persona puede pedir verla)</span>
               <input type="text" id="give-note" name="note" maxlength="200" autocomplete="off" />
@@ -158,7 +175,65 @@
           <div id="code-list" class="admin-table-wrap"></div>
         </section>
 
-        <!-- 4. The account funnel and how statistics are arriving. Read only
+        <!-- 4. Who holds Pro we handed out. The lookup answers "what does this
+             person hold"; this answers "who holds what", which nothing did. -->
+        <section class="admin-card" id="holders" aria-labelledby="holders-title">
+          <h2 id="holders-title" data-t="holdersTitle">Quién tiene Pro</h2>
+          <p class="muted" data-t="holdersHelp">
+            Todo lo que hemos dado a mano: regalos, cuentas de pruebas y pruebas gratis. Para ver todo
+            lo de una persona, toca su correo.
+          </p>
+          <div class="admin-row admin-reports-controls">
+            <div class="admin-chips" role="group" aria-label="Tipo" data-t-aria="holdersKind">
+              <button type="button" class="btn btn-sm" data-grant-kind="" aria-pressed="true">Todo</button>
+              <button type="button" class="btn btn-sm" data-grant-kind="gift" aria-pressed="false">Regalos</button>
+              <button type="button" class="btn btn-sm" data-grant-kind="comp" aria-pressed="false">Pruebas</button>
+              <button type="button" class="btn btn-sm" data-grant-kind="trial" aria-pressed="false">Prueba gratis</button>
+            </div>
+            <div class="admin-chips" role="group" aria-label="Estado" data-t-aria="holdersState">
+              <button type="button" class="btn btn-sm" data-grant-state="active" aria-pressed="true">Vigentes</button>
+              <button type="button" class="btn btn-sm" data-grant-state="expired" aria-pressed="false">Vencidos</button>
+              <button type="button" class="btn btn-sm" data-grant-state="revoked" aria-pressed="false">Quitados</button>
+              <button type="button" class="btn btn-sm" data-grant-state="" aria-pressed="false">Todos</button>
+            </div>
+            <button type="button" class="btn btn-ghost btn-sm" id="holders-refresh" data-t="holdersRefresh">Actualizar</button>
+          </div>
+          <p class="admin-message" id="holders-counts" aria-live="polite"></p>
+          <div id="holders-list" class="admin-table-wrap"></div>
+          <div class="controls-row">
+            <button type="button" class="btn btn-sm" id="holders-more" hidden data-t="holdersMore">Ver más antiguos</button>
+          </div>
+        </section>
+
+        <!-- 5. What people have told us is broken or missing. Loaded on boot,
+             because it is the thing most likely to need doing today. -->
+        <section class="admin-card" id="reports" aria-labelledby="reports-title">
+          <h2 id="reports-title" data-t="reportsTitle">Lo que nos cuenta la gente</h2>
+          <p class="muted" data-t="reportsHelp">
+            Lo que llega por «Reportar un problema», en las palabras de quien lo escribió. Cambiar el
+            estado es solo para nosotros: la persona ve su estado pero nunca tu nota.
+          </p>
+          <div class="admin-row admin-reports-controls">
+            <div class="admin-chips" role="group" aria-label="Estado" data-t-aria="reportsFilter">
+              <button type="button" class="btn btn-sm" data-report-status="open" aria-pressed="true">Sin cerrar</button>
+              <button type="button" class="btn btn-sm" data-report-status="new" aria-pressed="false">Sin leer</button>
+              <button type="button" class="btn btn-sm" data-report-status="" aria-pressed="false">Todos</button>
+            </div>
+            <div class="admin-chips" role="group" aria-label="Tipo" data-t-aria="reportsKind">
+              <button type="button" class="btn btn-sm" data-report-kind="" aria-pressed="true">Todo</button>
+              <button type="button" class="btn btn-sm" data-report-kind="bug" aria-pressed="false">Fallos</button>
+              <button type="button" class="btn btn-sm" data-report-kind="idea" aria-pressed="false">Ideas</button>
+            </div>
+            <button type="button" class="btn btn-ghost btn-sm" id="reports-refresh" data-t="reportsRefresh">Actualizar</button>
+          </div>
+          <p class="admin-message" id="reports-counts" aria-live="polite"></p>
+          <div id="reports-list" class="admin-result"></div>
+          <div class="controls-row">
+            <button type="button" class="btn btn-sm" id="reports-more" hidden data-t="reportsMore">Ver más antiguos</button>
+          </div>
+        </section>
+
+        <!-- 6. The account funnel and how statistics are arriving. Read only
              when asked, and from a page that sends none itself. -->
         <section class="admin-card" id="stats" aria-labelledby="stats-title">
           <h2 id="stats-title" data-t="statsTitle">Estadísticas</h2>
@@ -175,7 +250,7 @@
           <div id="stats-result" class="admin-result" aria-live="polite"></div>
         </section>
 
-        <!-- 5. Health and housekeeping. -->
+        <!-- 7. Health and housekeeping. -->
         <section class="admin-card" id="maintenance" aria-labelledby="maintenance-title">
           <h2 id="maintenance-title" data-t="maintenanceTitle">Mantenimiento</h2>
           <h3 data-t="healthTitle">Estado del servidor</h3>
@@ -197,8 +272,8 @@
     <!-- js/analytics.js and js/region-gate.js are left out on purpose: nothing
          an admin does here should enter the funnel this page reads. Keep the
          ?v= stamps equal to index.html's for the files both load. -->
-    <script src="js/billing-config.js?v=20260924a"></script>
-    <script src="js/account.js?v=20261006b"></script>
-    <script src="js/admin.js?v=20261006b"></script>
+    <script src="js/billing-config.js?v=20261103c"></script>
+    <script src="js/account.js?v=20261103c"></script>
+    <script src="js/admin.js?v=20261104b"></script>
   </body>
 </html>

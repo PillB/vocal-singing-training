@@ -170,6 +170,18 @@ export async function licenseTokenForResolution(resolution, account, env, now) {
   if (!subject) {
     return null;
   }
+  // `resolveEntitlement` reports the access that lasts longest, and a grant row
+  // carries no provider, so gifting two months to a monthly subscriber makes
+  // the grant win and leaves `resolution.provider` null. The person is still
+  // being charged on their own rail every month, though, and the `provider`
+  // claim answers "who is charging you", not "what granted this token": the
+  // browser's only reader of it is the pricing panel, which uses it to tell
+  // them where to go to cancel. So when a grant wins, the rail from the paid
+  // record underneath it is still the honest answer.
+  const chargingRail = (resolution.paid || []).reduce(
+    (found, record) => found || (record && record.provider) || null,
+    null
+  );
   const record = {
     licenseId: subject,
     plan: safePlan(resolution.plan),
@@ -177,7 +189,7 @@ export async function licenseTokenForResolution(resolution, account, env, now) {
     // whatever the provider last said, so "canceled but paid through March"
     // still reads as canceled in the token.
     status: resolution.status === "free" ? "active" : resolution.status,
-    provider: resolution.provider || resolution.source || "grant",
+    provider: resolution.provider || chargingRail || resolution.source || "grant",
     periodEnd: resolution.periodEnd
   };
   // Build the payload, add the two account claims, then sign once — so the

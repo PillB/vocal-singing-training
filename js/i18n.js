@@ -192,7 +192,14 @@
       "auth.toast.cleared": "Progreso local borrado",
       "pricing.title": "Estudio Vocal Pro",
       "pricing.sub": "Practicar es gratis, siempre. Pro suma extras para seguir y compartir tu avance.",
-      "pricing.note": "Pago seguro con tarjeta. En Perú el cobro es en soles vía Mercado Pago. Cancela cuando quieras desde el mismo sitio donde te suscribiste.",
+      "pricing.note": "Pago seguro con tarjeta. En Perú el cobro es en soles vía Mercado Pago. Puedes cancelar cuando quieras, y cómo hacerlo depende de dónde pagaste: te lo decimos aquí mismo.",
+      // Una línea por riel, porque la ruta para cancelar es distinta en cada uno
+      // y solo una de las tres es un botón de esta página. Se muestra la del riel
+      // por el que pagó esta persona; a quien tiene prueba o regalo no se le
+      // muestra ninguna, porque no hay nada que cancelar.
+      "pricing.cancel.stripe": "Pagaste con tarjeta vía Stripe. El botón «Gestionar suscripción» abre el portal donde puedes cambiar la tarjeta o cancelar.",
+      "pricing.cancel.creem": "Pagaste con tarjeta internacional vía Creem. Después de cada pago, Creem te envía por correo un enlace propio para gestionar o cancelar tu suscripción.",
+      "pricing.cancel.mercadopago": "Pagaste con Mercado Pago. La suscripción se cancela desde tu propia cuenta de Mercado Pago, donde están tus pagos recurrentes.",
       "pricing.export": "Exportar progreso (Pro)",
       "pricing.manage": "Gestionar suscripción",
       "pricing.healthPrefix": "Estado de pagos:",
@@ -1249,7 +1256,10 @@
       "auth.toast.cleared": "Local progress cleared",
       "pricing.title": "Vocal Studio Pro",
       "pricing.sub": "Practice is free, always. Pro adds extras to follow and share your progress.",
-      "pricing.note": "Secure card checkout. In Peru you are charged in soles through Mercado Pago. Cancel any time, the same way you subscribed.",
+      "pricing.note": "Secure card checkout. In Peru you are charged in soles through Mercado Pago. You can cancel any time, and how you do it depends on where you paid: we say so right here.",
+      "pricing.cancel.stripe": "You paid by card through Stripe. The “Manage subscription” button opens the portal where you can change the card or cancel.",
+      "pricing.cancel.creem": "You paid by international card through Creem. After every payment, Creem emails you your own link to manage or cancel the subscription.",
+      "pricing.cancel.mercadopago": "You paid with Mercado Pago. The subscription is cancelled from your own Mercado Pago account, where your recurring payments live.",
       "pricing.export": "Export progress (Pro)",
       "pricing.manage": "Manage subscription",
       "pricing.healthPrefix": "Payment status:",

@@ -194,7 +194,7 @@ That required fixing something the page had wrong: the trial button read `/v1/au
 
 Two new event names, because a metric counts an event and cannot read its props: `trial_started` (`trial_result` fires on refusals too, so "started" was indistinguishable from "tried and could not") and `pro_paid_first`, the only thing in the statistics that comes from the account rather than from watching the page. The exposure still carries nothing but the random browser id, so the `exposures` table joins to no account — the privacy promise on `privacy.html` is unchanged.
 
-**And the part you most need to read.** The primary metric is paid conversion, which is the 2%-ish case `docs/38-AB-TESTING.md` already says nothing at this traffic can measure. 432 accounts per arm is sized for conversion *doubling* (5% → 10%); a believable 5% → 7% needs about 2,200 per arm. And the prior is that there is nothing to find: the only large randomised test of trial length — 337,724 users across six markets, the one that decided seven days on 2026-09-24 — found **the fourteen-day arm not significant**. So the comparison this runs is one that a test a thousand times larger already called null.
+**And the part you most need to read.** The primary metric is paid conversion, which is the 2%-ish case `docs/38-AB-TESTING.md` already says nothing at this traffic can measure. 432 accounts per arm is sized for conversion *doubling* (5% → 10%); a believable 5% → 7% needs about 2,200 per arm. And the prior does not favour finding anything: in the only large randomised test of trial length — Yoganarasimhan, Barzegary and Pani, arXiv:2006.13420, 337,724 new users across six markets and the study that decided seven days on 2026-09-24 — each arm was compared with a thirty-day control, and **fourteen days came out no better than thirty** while seven days beat it. That test never compared seven with fourteen, so it did not call this comparison null, and its 7- and 14-day arms hold about 51,000 accounts each: 118 times this experiment's 432 per arm, not a thousand. Its own counts put the seven-versus-fourteen gap near 0.4 points, which needs about 136,000 accounts per arm to see. The conclusion stands either way, and is the stronger for not resting on a claim the paper does not make.
 
 It is built anyway for two reasons, both written down in the doc. The first is the one argument external data cannot settle, which is this product's own: a daily singing habit plausibly needs longer than a week, and the mechanism behind short trials winning is people forgetting, which is worse in a practice product than in most. The second is that the mechanism — a worker-assigned arm, recorded on the row it changed — is what was missing, and it is reusable for any later question about what an account is *given* rather than what it is *shown*. **Do not switch it on at a few hundred users.** If the trial disappoints, the lever the evidence supports is re-entry, not length.
 
@@ -678,3 +678,161 @@ documented return type would otherwise be a lie, and the source says exactly tha
 rather than leaving somebody to hunt for a missing test.
 
 VG-61, VG-62, VG-63, VG-64.
+
+## 26. What the copy promises, and whether the product can keep it
+
+Commit `PENDING`. The list asked for the marketing material and the copy to be
+red-teamed for exhaustiveness. Reading it that way turns out to be mostly a test
+of a different question: for each sentence a buyer is shown, can this software
+actually do the thing the sentence says? Twice it could not, and one of those
+two had a second fault hiding behind it.
+
+### The cancellation route neither live rail can take you to
+
+Both languages ended the payment note with a promise: "Cancela cuando quieras
+desde el mismo sitio donde te suscribiste", "Cancel any time, the same way you
+subscribed". The page cannot do that on either rail that will ever carry money.
+
+The only self-service control on it is the Stripe Customer Portal button, and
+`isPortalUrl` in `js/billing.js` accepts `billing.stripe.com`,
+`*.billing.stripe.com`, `billing.stripe.me` and `stripe.com` paths containing
+"billing" — nothing else. A Creem or Mercado Pago management URL is rejected by
+that validator and the button stays hidden. Which matters because this product's
+own conclusion, VG-19, is that a Peru-registered seller cannot be a Stripe
+merchant at all: the one rail the button serves is the one rail that will not be
+used.
+
+The other two cannot be served by a button even in principle. Creem generates a
+customer portal link **per customer** and emails it after every successful
+payment, so there is no URL to configure. Mercado Pago documents no buyer-facing
+cancellation address at all; a payer cancels from inside their own Mercado Pago
+account, where their recurring payments live.
+
+Three rails, three different routes, and only one of them is a button on this
+page. So the panel names the route instead of implying one. `pricing.note` now
+says cancelling is possible and that how depends on where you paid, and a second
+line underneath says which — `pricing.cancel.stripe`, `.creem` or
+`.mercadopago`, chosen from the licence's own `provider` claim. A trial or a gift
+holder gets no line at all, because there is nothing to cancel, and the element
+is empty in the markup on purpose: without the scripts there is no way to know
+which rail it was, and a guess is the exact thing it exists to prevent.
+
+Four cases. The one worth describing is the one that would not work: a browser
+cannot self-grant Pro, so `VTBilling.activate("pro_monthly", {provider: "creem"})`
+returns `{pro: false, status: "unverified"}` with the rail only inside `.raw`.
+That is correct behaviour, and it means the honest way to test what a paying
+subscriber sees is to mint the token the worker would have signed, with that rail
+in its claims. `mintLicense` takes a `provider` now; it used to hard-code
+`"stripe"`, which is the one rail this seller cannot use, so every test about
+per-rail behaviour was exercising the case that will never happen.
+
+### Then gifting a month erased the rail that was charging them
+
+Found while testing the above, and it is the same mechanism from the other end.
+`resolveEntitlement` reports whichever access lasts longest, and a grant row
+carries no provider. So gift two months to a monthly subscriber whose period ends
+in 40 days and the grant wins — and `licenseTokenForResolution` let the token's
+`provider` claim fall through to the grant's own source, `"gift"`.
+
+The browser has exactly one reader of that claim: the cancellation route above.
+So an apology gift removed the route from the one person who most needs it,
+somebody still being charged every month. The claim now answers "who is charging
+you" rather than "what granted this token", falling back to the paid record
+underneath a winning grant, and `/v1/me` still reports the grant in
+`entitlement.provider` and the subscription in `paid[]`, unchanged.
+
+No admin mistake is needed to reach it. A goodwill month is the obvious way in.
+
+### A price comparison with no source
+
+`pricing.proof3` compares a year of Pro against private singing lessons in Lima.
+Nothing in six weeks of documents said where that came from. It is now sourced
+from Superprof's own Lima listing page, read 2026-11-04: average **S/66 an
+hour**, "desde S/20 la hora", the usual band S/35–S/120, 100 teachers listed,
+the first five at S/59, S/80, S/65, S/80 and S/75. Against `pricePen: 119.9` a
+whole year is under two hours of lessons at the average, so the claim holds with
+room — and `docs/35-PRICING.md` now also says where it does not hold, which is
+against the S/20 floor. `qa/check-tiers.mjs` fails the build if the claim and
+its evidence stop travelling together, in either direction.
+
+### A citation this document got wrong
+
+Raised by QA, confirmed against the paper. Section 14 above, the go-live gate and
+`docs/35` and `docs/38` all said the 7-versus-14 trial comparison had already
+been "called null" by "a test a thousand times larger". Both halves were wrong.
+
+The study is Yoganarasimhan, Barzegary and Pani, *Design and Evaluation of
+Personalized Free Trials*, arXiv:2006.13420 — a SaaS field experiment across six
+markets, which nothing here had ever cited. It compares each arm **with a 30-day
+control** and never tests 7 against 14: the 7-day arm won by 5.59% more
+subscriptions (t = 2.58) and the 14-day arm was not significantly different from
+30 (+3.28%, t = 1.51). Its 7- and 14-day arms hold about 51,000 accounts each —
+118 times this experiment's 432 per arm, not a thousand; 337,724 is the whole
+sample and most of it is the control, which is not in a 7-vs-14 comparison at
+all. Its own arm counts put that gap near 0.4 percentage points, z ≈ 1.7,
+p ≈ 0.09: not significant, and not null either, with the 14-day arm the lower of
+the two. Seeing a gap that size at 80% power needs about 136,000 accounts per
+arm.
+
+The operator's conclusion — do not switch this on at a few hundred users —
+survives every correction and never needed the overstatement. That is the
+uncomfortable part: the decision was never what was at risk, only a reader's
+ability to check it. Four checks in `qa/check-tiers.mjs` now hold the citation
+to the documents that lean on it, and they match on whitespace-collapsed text,
+because the first version of them matched two of the four files and passed the
+other two in silence.
+
+### And one test that could only ever pass on one machine
+
+`account-pro-states.spec.js` asserted that at 1280px a long display name beside
+"Pro · termina en 10 días" folds the tour and the guide into "Ayuda ▾". It fails
+here. It also fails at the commit that introduced it, so it has never passed in
+this container: whether the title wraps past two lines is a property of the
+browser's text metrics. Measured at 1100, 1160, 1280 and 1440 with the longest
+name the door will take, the title is two lines and the header 67px every time.
+
+It was also testing the remedy rather than the complaint. `.door-name` caps a
+display name at 6.5rem with an ellipsis, so no name can widen that row, and the
+fold is the safety net underneath that cap rather than this state's expected
+outcome. It now asserts what a person actually gets — a title never three lines
+tall, a header one row deep, both links one click away whichever way the row
+arranged them — and a second case drives the fold on its real condition by
+lengthening the title, then shortening it again to prove it unfolds. A mutant
+that never folds dies; a mutant that measures while folded survives, and is
+recorded in `js/app.js` beside the line it is about, because pinning it needs a
+title in a band whose width is itself a browser text metric, which is the fault
+that was just removed.
+
+### And the one that would have made all of it moot
+
+Checking that these copy changes would actually reach a browser turned up the
+most expensive finding in the section. Every script and stylesheet is served
+from Pages with a dated `?v=` stamp, and that stamp is the only thing that
+invalidates a long cache. Six were stale: `css/styles.css`, `js/ads.js`,
+`js/ads-config.js`, `js/app.js`, `js/i18n.js`, `js/reports.js`.
+
+Read that list against this document. It is the whole ad red-team of section
+25, the bug-report form of section 21, and the cancellation route above — none
+of which would have reached anybody who had opened the site before. Two earlier
+commits on this branch bumped stamps by hand, in commits whose messages say so,
+and then the habit lapsed, which is what habits do.
+
+So the fix is a check, not another bump. `qa/check-cache-stamps.mjs` asserts
+four things in rising strength: every local reference carries a stamp; one file
+never carries two different stamps across pages; no page names a file that is
+not in the repository; and nothing has changed since the date in its own stamp.
+The last one reads the date out of git and treats an uncommitted change as
+today, so the bump belongs in the commit that changes the file. A shallow clone
+answers nothing and is reported as skipped rather than failed, because a check
+that fails for want of history teaches people to ignore it.
+
+Then the rule that every `qa/` test is named in `package.json` had to be widened
+to cover checkers and not only `*.test.mjs`, or this new one could have been
+committed and run by nothing — the VG-52 lesson, in a directory that had already
+learned it once. Widening it found a second unrun file,
+`check-header-hit-targets.mjs`, which turns out to be a by-hand browser
+diagnostic rather than a gate. It is now in a `BY_HAND` map with its reason, and
+that map is itself asserted against: an exception naming a file that no longer
+exists, or one the suite does run, fails the test.
+
+VG-65, VG-66, VG-67, VG-68, VG-69, VG-70.

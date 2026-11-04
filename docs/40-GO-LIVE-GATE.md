@@ -244,9 +244,12 @@ second of step 1's two deploys. That is all the usage statistics need.
 half of your accounts fourteen free days instead of seven, and
 `docs/38-AB-TESTING.md` says plainly what it can and cannot measure: 432
 accounts per arm would be needed for conversion to *double*, about 2,200 per
-arm for a believable 5% → 7%, and the only large randomised test of trial
-length that exists — 337,724 users — found the fourteen-day arm not
-significant. At a few hundred users this spends Pro and returns noise.
+arm for a believable 5% → 7%, and in the only large randomised test of trial
+length that exists (arXiv:2006.13420, about 51,000 accounts in each of its 7-
+and 14-day arms) fourteen days was no better than thirty. That test never
+compared seven with fourteen; seeing the gap its own counts imply would need
+about 136,000 accounts per arm. At a few hundred users this spends Pro and
+returns noise.
 
 **Undo:** `EVENTS_ENABLED = "false"`, or a one-off
 `wrangler deploy --var EVENTS_ENABLED:false`, which the next plain deploy

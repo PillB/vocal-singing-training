@@ -917,6 +917,13 @@
     const title = $("#brand-title");
     if (!header || !title) return;
     const was = header.classList.contains("help-fold");
+    // Unfolded before measuring, always. Deleting this line survives the suite
+    // on purpose: measuring while folded only disagrees with measuring unfolded
+    // for titles in the narrow band where the room the two links vacate decides
+    // the wrap, and the width of that band is a property of the browser's text
+    // metrics rather than of this code. A case pinned to it would pass on one
+    // machine and fail on another, which is the exact fault that got the test
+    // above rewritten, so the redundancy is left unasserted and recorded here.
     header.classList.remove("help-fold");
     let fold = false;
     if (window.matchMedia?.("(min-width: 1100px)")?.matches) {
@@ -6667,6 +6674,39 @@
       payNote.textContent = tt(key);
       payNote.hidden = prelaunch && (!trialBtn || trialBtn.hidden);
     }
+    // How to cancel, for the rail this person actually paid on.
+    //
+    // `pricing.note` used to end "Cancela cuando quieras desde el mismo sitio
+    // donde te suscribiste", which reads as a promise that this page can take
+    // you there. It cannot, on either rail that will ever be live: the only
+    // self-service control here is the Stripe Customer Portal button, and
+    // `isPortalUrl` accepts Stripe hosts only — on a product whose own
+    // conclusion (VG-19) is that a Peru-registered seller cannot be a Stripe
+    // merchant at all. Creem's portal link is generated per customer and
+    // emailed after each payment, so no single URL could be configured here,
+    // and Mercado Pago's recurring payments are managed inside the payer's own
+    // Mercado Pago account. Three rails, three different routes, and only one
+    // of them a button.
+    //
+    // So the page names the route instead of implying one. A trial or a gift
+    // gets no line at all, because there is nothing to cancel.
+    const cancelNote = $("#pricing-cancel-note");
+    if (cancelNote) {
+      const rail = String(ent.provider || "").toLowerCase();
+      const key = ent.pro && ["stripe", "creem", "mercadopago"].includes(rail)
+        ? "pricing.cancel." + rail
+        : "";
+      if (key) {
+        cancelNote.setAttribute("data-i18n", key);
+        cancelNote.textContent = tt(key);
+        cancelNote.hidden = false;
+      } else {
+        cancelNote.removeAttribute("data-i18n");
+        cancelNote.textContent = "";
+        cancelNote.hidden = true;
+      }
+    }
+
     // Customer Portal: show for Pro/trial when a valid portal URL is configured
     const manage = $("#btn-manage-billing");
     if (manage) {

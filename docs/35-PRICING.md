@@ -146,6 +146,52 @@ does. **Every verified competitor caps free practice. We do not.**
 | Smule | only as the second singer |
 | **Vocal Studio** | **everything, forever** |
 
+### The other comparison the panel makes, and what it rests on
+
+`pricing.proof3` tells every Spanish-speaking visitor: **"Un año de Pro cuesta
+menos que 3 clases particulares en Lima."** Until 4 November 2026 that sentence
+had no source anywhere in this repository — not in this document, not beside the
+string, nowhere. It is a specific, objective, comparative price claim about
+third-party services in a named city, which is exactly the kind an advertiser is
+expected to be able to substantiate. It is now substantiated, and the honest
+limits of it are written down with it.
+
+Read from Superprof Peru's Lima singing-lessons page on **4 November 2026**:
+
+| What the page says | Figure |
+|---|---|
+| Average price of a private singing lesson | **"una clase particular de canto cuesta en promedio S/66 la hora"** |
+| Cheapest advertised | "desde S/20 la hora" |
+| Typical range, per the page's own article | "suelen estar entre S/35 y S/120 por hora" |
+| Teachers listed | "100 profesores de canto disponibles" |
+| The first five, by their own rate | S/59, S/80, S/65, S/80, S/75 |
+
+Our yearly Peru price is **S/ 119.90**. So:
+
+- Against the stated average, three lessons are **S/ 198**. The claim holds with
+  S/ 78 to spare.
+- Against the five teachers actually listed first, three lessons are **S/ 177 to
+  S/ 240**. It holds against every one of them.
+- Against the bottom of the page's own quoted range, three lessons are **S/ 105**,
+  and against the S/ 20 floor, **S/ 60**. **The claim does not hold there**, and
+  that is worth knowing rather than hiding: it is true of the market's centre,
+  not of its cheapest corner.
+
+One number in it is load-bearing and was chosen correctly by accident. **Three**
+is the smallest multiple that survives: two lessons at the average are S/ 132,
+which holds, but two lessons at the first teacher's S/ 59 are **S/ 118** — less
+than our S/ 119.90. Anyone tempted to sharpen the line to "menos que 2 clases"
+should read that number first.
+
+The English string is weaker and safer by accident too: "A year of Pro costs less
+than three private lessons" names no city and sits beside a **$49** price, so it
+is comfortably true in any market where that comparison would be made. It is
+still unsourced for an unstated market, which is why it says "three" and not a
+figure.
+
+`qa/check-tiers.mjs` now fails the build if either the claim or this evidence
+disappears, the same way it guards the free-practice claim above.
+
 So Pro does not sell access. It sells convenience and continuity — no
 interstitials, export, profiles, insights, goals, streak freezes. That tier
 lives lower in the market than the access tiers do:
@@ -281,12 +327,27 @@ agree on length.
 **What changed the decision.** This section used to argue for 30 days from
 Adapty's and RevenueCat's medians (30% for 1–4 day trials, then a plateau
 around 45%; 37.4% at 7 days against 42.5% at 30). Those are **observational**
-— cross-app comparisons confounded by category and price. The only randomised
-experiment on trial length assigned **337,724 users** across six markets to 7,
-14 or 30 days: against the 30-day control's 14.67% subscription rate, the 7-day
-arm produced **5.59% more subscriptions** (t = 2.58, p < 0.05) in the test data,
-and the 14-day arm was not significant. A randomised result beats a
-cross-sectional median, so the observational argument for 30 days is retired.
+— cross-app comparisons confounded by category and price. The only large
+randomised experiment on trial length is Yoganarasimhan, Barzegary and Pani,
+*Design and Evaluation of Personalized Free Trials* (arXiv:2006.13420): a SaaS
+field experiment across six markets that assigned **337,724 new users** to 7,
+14 or 30 days, about 51,000 in each of the 7- and 14-day arms and the rest
+— 235,667 — in the 30-day control. It compared each arm **with that control**:
+the 7-day arm produced **5.59% more subscriptions** (t = 2.58) and the 14-day
+arm was not significantly different from 30 days (+3.28%, t = 1.51). A
+randomised result beats a cross-sectional median, so the observational argument
+for 30 days is retired.
+
+**What it does not say, and this document used to.** It never tested 7 against
+14. Its own arm counts put that gap at about 0.4 percentage points (15.35%
+against 14.97%), which is z ≈ 1.7, p ≈ 0.09 — not significant, but not called
+null either, and the 14-day arm is the lower of the two. Seeing a gap that size
+at 80% power would need about 136,000 accounts per arm. What the experiment
+actually supports is narrower and still enough: of the three lengths tested,
+the only one that beat the control is the one this site ships. It is also a
+decade-old experiment on creative software sold to professionals, converting at
+around 15% against this site's 2%-ish, so it reaches a singing-practice site by
+argument rather than by measurement.
 
 **The counter-argument, which is real and lost anyway.** A daily singing habit
 plausibly needs longer than a week, and the mechanism behind shorter trials
@@ -301,7 +362,7 @@ the call for 7 days on 2026-09-24. If it disappoints, the lever is re-entry
 14 days from its account id, writes the arm on the grant row, and the page
 records the exposure when it shows the offer. It needs 432 accounts per arm to
 see conversion doubling and about 2,200 to see 5% → 7%, against a randomised
-prior that already found 14 days non-significant, so it is not worth switching
+prior in which 14 days was no better than 30, so it is not worth switching
 on at this site's traffic — `docs/38-AB-TESTING.md` has the full reasoning and
 the two switches. The counter-argument above is the only reason it is built.
 

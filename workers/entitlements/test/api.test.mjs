@@ -458,6 +458,56 @@ test("a paid subscription links to an account and follows it to another device",
   assert.equal(verified.valid, true, verified.reason);
 });
 
+test("a gift on top of a paid subscription does not erase the rail that is charging them", async () => {
+  // `resolveEntitlement` takes whichever access lasts longest, and a grant row
+  // carries no provider. So gifting two months to a monthly subscriber whose
+  // period ends in 40 days makes the grant win, and the token's `provider`
+  // claim used to fall through to the grant's source. js/app.js is the only
+  // reader of that claim: it decides which cancellation route the pricing
+  // panel shows. Erasing the rail removes that route from somebody who is
+  // still being charged every month — the worst possible moment to hide it.
+  const env = freshEnv();
+  const record = createEntitlement({ provider: "mercadopago", periodEnd: NOW + 40 * DAY });
+  await putEntitlement(env.ENTITLEMENTS, record);
+
+  const admin = await signInByEmail(env, "admin@example.test", NOW);
+  const buyer = await signInByEmail(env, "buyer@example.test", NOW + 5);
+  assert.equal(
+    (await call(
+      req("POST", "/v1/me/link", { token: buyer.token, body: { licenseId: record.licenseId } }),
+      env,
+      { now: NOW + 10 }
+    )).status,
+    200
+  );
+  assert.equal(
+    (await call(
+      req("POST", "/v1/admin/grants", {
+        token: admin.token,
+        body: { email: "buyer@example.test", days: 60, note: "sorry about the outage" }
+      }),
+      env,
+      { now: NOW + 20 }
+    )).status,
+    200
+  );
+
+  const me = await call(req("GET", "/v1/me", { token: buyer.token }), env, { now: NOW + 30 });
+  assert.equal(me.body.entitlement.pro, true);
+  assert.equal(me.body.entitlement.source, "gift", "the gift is what is granting access now");
+  const verified = await verifyLicenseToken(me.body.token, env, { now: NOW + 31 });
+  assert.equal(verified.valid, true, verified.reason);
+  assert.equal(
+    verified.payload.provider,
+    "mercadopago",
+    "the token still names the rail that is charging them, so the panel can tell them how to cancel"
+  );
+  // And the paid record is still listed in its own right, rail and all, so the
+  // panel is not the only place that knows a subscription is underneath.
+  assert.deepEqual(me.body.paid.map((p) => p.provider), ["mercadopago"]);
+  assert.equal(me.body.entitlement.provider, null, "the resolution itself still reports the grant");
+});
+
 test("linking a checkout whose webhook has not landed answers 202", async () => {
   const env = freshEnv();
   const { token } = await signInByEmail(env, "buyer@example.test", NOW);

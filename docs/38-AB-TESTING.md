@@ -255,12 +255,24 @@ length. Everybody shown an offer belongs to the arm they were shown.
 432 per arm is sized for conversion *doubling* (5% → 10%). A believable 5% → 7%
 needs about 2,200 per arm; a 20% relative lift (5% → 6%) needs about 8,100.
 
-And the prior is that there is nothing to find. The only large randomised test
-of trial length — 337,724 users across six markets, quoted in
-`docs/35-PRICING.md` — found 7 days beat a 30-day control by 5.59% more
-subscriptions, and found **the 14-day arm not significant**. So the comparison
-this experiment runs is one that a test a thousand times larger already called
-null.
+And the prior does not favour finding anything. The only large randomised test
+of trial length is Yoganarasimhan, Barzegary and Pani, *Design and Evaluation
+of Personalized Free Trials* (arXiv:2006.13420), cited in full in
+`docs/35-PRICING.md`: 337,724 new users across six markets, about 51,000 in
+each of the 7- and 14-day arms. It compared each arm **with a 30-day control**
+and found 7 days ahead by 5.59% more subscriptions (t = 2.58) while 14 days was
+not significantly different from 30 (+3.28%, t = 1.51).
+
+Be exact about what that licenses, because this document used to overclaim it.
+That experiment **never tested 7 against 14**, so it did not call this
+comparison null. Its own counts put the 7-vs-14 gap near 0.4 percentage points,
+which is z ≈ 1.7, p ≈ 0.09 — not significant, and not nothing — and seeing a
+gap that size at 80% power needs about 136,000 accounts per arm. Its arms are
+118 times this experiment's 432 per arm, not a thousand. The conclusion below
+survives all of that intact, and does not need the overstatement: the length
+that beat the control is the one already shipping, and the gap being looked for
+here is an order of magnitude smaller than anything a few hundred accounts can
+resolve.
 
 It is built anyway for two reasons. The first is that the same document records
 a real counter-argument that external data cannot settle: a daily singing habit

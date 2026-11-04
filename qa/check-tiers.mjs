@@ -217,6 +217,56 @@ expectNone(
   "docs/35-PRICING.md no longer carries the free-tier comparison the panel's claim rests on",
   /Every verified competitor caps free practice/.test(pricingDoc) ? [] : ["docs/35-PRICING.md"]
 );
+// `pricing.proof3` is a specific comparative price claim about third-party
+// services in a named city, and until 2026-11-04 it had no source anywhere. The
+// evidence is now a dated table in the pricing doc, so the claim and the
+// evidence have to disappear together or not at all.
+const proof3 = [...i18n.matchAll(/"pricing\.proof3":\s*"((?:[^"\\]|\\.)*)"/g)].map((m) => m[1]);
+expectNone(
+  "js/i18n.js does not carry exactly two `pricing.proof3` strings",
+  proof3.length === 2 ? [] : [`${proof3.length} found, expected 2`]
+);
+expectNone(
+  "the Spanish pricing panel still compares a year of Pro with private lessons, but docs/35-PRICING.md no longer carries the Lima prices it rests on",
+  /clases particulares/.test(proof3[0] || "") && !/S\/66 la hora/.test(pricingDoc)
+    ? ["docs/35-PRICING.md"]
+    : []
+);
+
+
+// The trial-length prior is the one external claim four documents lean on, and
+// on 2026-11-04 three of them described it wrongly: they said a test "a
+// thousand times larger" had called the 7-vs-14 comparison null, when the paper
+// compares each arm with a 30-day control, never tests 7 against 14, and holds
+// about 51,000 per arm against this site's 432. A reader cannot check a claim
+// with no reference, so any document that asserts the prior has to be able to
+// point at one, and the arithmetic has to stay with it.
+//
+// These documents are hard-wrapped, so a sentence is routinely split across a
+// newline: matching the raw text found two of the four and silently passed the
+// other two. Every test below runs on whitespace-collapsed text.
+const trialDocs = ["docs/35-PRICING.md", "docs/38-AB-TESTING.md", "docs/40-GO-LIVE-GATE.md", "docs/42-WHAT-THIS-BRANCH-CHANGED.md"];
+const flat = (rel) => read(rel).replace(/\s+/g, " ");
+const asserts = trialDocs.filter((rel) => /randomised (test|experiment) (of|on) trial length/.test(flat(rel)));
+expectNone(
+  "no document asserts the trial-length prior any more, so this check has nothing left to guard and should go",
+  asserts.length ? [] : ["qa/check-tiers.mjs"]
+);
+expectNone(
+  "a document asserts the trial-length prior without naming the study a reader could check it against",
+  asserts.filter((rel) => !/arXiv:2006\.13420/.test(flat(rel)))
+);
+expectNone(
+  "docs/35-PRICING.md asserts the trial-length prior but no longer carries the per-arm size and the effect the paper actually reports",
+  /randomised (test|experiment) (of|on) trial length/.test(flat("docs/35-PRICING.md"))
+    && (!/51,000 in each/.test(flat("docs/35-PRICING.md")) || !/t = 1\.51/.test(flat("docs/35-PRICING.md")))
+    ? ["docs/35-PRICING.md"]
+    : []
+);
+expectNone(
+  "a document still claims the study called the 7-vs-14 comparison null, which it never tested",
+  trialDocs.filter((rel) => /thousand times larger already called/.test(flat(rel)))
+);
 
 if (failures.length) {
   for (const f of failures) {

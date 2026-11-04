@@ -40,7 +40,18 @@ import { fileURLToPath } from "node:url";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(HERE, "..");
-const FILES = ["js/billing.js", "js/billing-config.js", "js/i18n.js", "docs/35-PRICING.md"];
+// The four the check has always read, plus the three documents the
+// trial-length citation guard reads (VG-68). The sandbox has to carry every
+// input or the control case fails for want of a file rather than on its merits.
+const FILES = [
+  "js/billing.js",
+  "js/billing-config.js",
+  "js/i18n.js",
+  "docs/35-PRICING.md",
+  "docs/38-AB-TESTING.md",
+  "docs/40-GO-LIVE-GATE.md",
+  "docs/42-WHAT-THIS-BRANCH-CHANGED.md"
+];
 
 function runOn(mutate) {
   const dir = mkdtempSync(path.join(os.tmpdir(), "tiers-"));
@@ -81,11 +92,40 @@ for (const [name, m] of MUTANTS) {
   });
 }
 
-test("every qa/*.test.mjs is named in package.json's test script, or it is a file nobody runs", () => {
+/**
+ * Checkers that are run by hand on purpose, and why. Anything else in this
+ * directory has to be in the `test` script.
+ *
+ * The rule below used to cover `*.test.mjs` only, which left the gap it exists
+ * to close wide open: `check-cache-stamps.mjs` is a checker, not a node test,
+ * and could have been written, committed and run by nothing. Widening it turned
+ * up one genuine by-hand tool, so the exception is written down with its reason
+ * rather than left as a hole in the pattern.
+ */
+const BY_HAND = {
+  "check-header-hit-targets.mjs":
+    "drives a real browser against a locally served site; a diagnostic that prints boxes, not a pass/fail gate"
+};
+
+test("every qa test and checker is named in package.json's test script, or is a by-hand tool with its reason", () => {
   const pkg = JSON.parse(readFileSync(path.join(ROOT, "package.json"), "utf8"));
   const script = String((pkg.scripts && pkg.scripts.test) || "");
-  const files = readdirSync(HERE).filter((name) => name.endsWith(".test.mjs"));
+  const files = readdirSync(HERE).filter(
+    (name) => name.endsWith(".test.mjs") || (name.startsWith("check-") && name.endsWith(".mjs"))
+  );
   assert.ok(files.length, "this directory holds no test files, which cannot be right");
-  const missing = files.filter((name) => !script.includes(`qa/${name}`));
-  assert.deepEqual(missing, [], "add these to the `test` script in package.json");
+  const missing = files.filter((name) => !script.includes(`qa/${name}`) && !BY_HAND[name]);
+  assert.deepEqual(missing, [], "add these to the `test` script in package.json, or to BY_HAND with a reason");
+  // An exception for a file that is gone is a comment pretending to be a rule.
+  assert.deepEqual(
+    Object.keys(BY_HAND).filter((name) => !files.includes(name)),
+    [],
+    "BY_HAND names a file that is not here any more"
+  );
+  // And a by-hand tool must not also be in the suite, or the reason is stale.
+  assert.deepEqual(
+    Object.keys(BY_HAND).filter((name) => script.includes(`qa/${name}`)),
+    [],
+    "BY_HAND names a file the test script runs"
+  );
 });

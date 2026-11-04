@@ -88,7 +88,8 @@
 
   function normalize(bag) {
     const b = bag && typeof bag === "object" ? bag : emptyBag();
-    if (!b.days || typeof b.days !== "object") b.days = {};
+    // An array is typeof "object" too, and a day stored on it is dropped by JSON.stringify: every practice would be lost
+    if (!b.days || typeof b.days !== "object" || Array.isArray(b.days)) b.days = {};
     if (!b.rest || typeof b.rest !== "object") b.rest = { bank: STARTING_REST, earnedAt: 0, used: [] };
     if (!Array.isArray(b.rest.used)) b.rest.used = [];
     b.rest.bank = Math.max(0, Number(b.rest.bank) || 0);

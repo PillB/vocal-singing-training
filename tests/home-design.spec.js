@@ -12,6 +12,7 @@
  * Fixed clock in Lima: Wednesday 23 September 2026, 10:00; the week starts Monday 21.
  */
 const { test, expect } = require("@playwright/test");
+const { tapFloorLimit } = require("./helpers/tap-floor");
 
 const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";
 const NOW = "2026-09-23T10:00:00-05:00";
@@ -317,7 +318,7 @@ test.describe("Phone: one-row header with Más", () => {
     const door = page.locator("#btn-account");
     await expect(door).toBeVisible();
     await expect(door).toHaveText("Entrar");
-    expect((await door.boundingBox()).height, "the sign-in door is a 44px target").toBeGreaterThanOrEqual(44);
+    expect((await door.boundingBox()).height, "the sign-in door is a 44px target").toBeGreaterThanOrEqual(tapFloorLimit(44));
     const hdr = await page.evaluate(() => ({
       h: document.querySelector(".app-header").getBoundingClientRect().height,
       v: parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--header-h"))
@@ -336,7 +337,7 @@ test.describe("Phone: one-row header with Más", () => {
     for (const id of ["#btn-pricing", "#btn-lang", "#btn-tour"]) {
       const b = page.locator(id);
       await expect(b).toBeVisible();
-      expect((await b.boundingBox()).height, `${id} is a 44px target`).toBeGreaterThanOrEqual(44);
+      expect((await b.boundingBox()).height, `${id} is a 44px target`).toBeGreaterThanOrEqual(tapFloorLimit(44));
     }
     await page.keyboard.press("Tab");
     await expect(page.locator("#btn-pricing")).toBeFocused();
@@ -441,7 +442,7 @@ test.describe("Phone: one-row header with Más", () => {
     const guide = page.locator("#link-guide");
     await expect(guide).toBeVisible();
     await expect(guide).toHaveAttribute("href", /^guide\.html/);
-    expect((await guide.boundingBox()).height).toBeGreaterThanOrEqual(44);
+    expect((await guide.boundingBox()).height).toBeGreaterThanOrEqual(tapFloorLimit(44));
   });
 
   test("at 320 and 360 the row fits and stays pinned", async ({ page }) => {

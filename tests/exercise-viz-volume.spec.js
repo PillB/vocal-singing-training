@@ -4,6 +4,7 @@
  * qa/voices/volume.js. Levels are dB against the learner's own voice.
  */
 const { test, expect } = require("@playwright/test");
+const { tapFloorLimit } = require("./helpers/tap-floor");
 const { useVoice, playVoice, stopVoice, fanInRoom } = require("./helpers/voice");
 
 const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";
@@ -153,7 +154,7 @@ test.describe("volume pictures", () => {
     expect(pic.found && pic.top >= 0 && pic.bottom <= pic.vh, JSON.stringify(pic)).toBe(true);
     const blind = page.locator("#mode-focus [data-blind]");
     const box = await blind.boundingBox();
-    expect(box.height, "tap target").toBeGreaterThanOrEqual(44);
+    expect(box.height, "tap target").toBeGreaterThanOrEqual(tapFloorLimit(44));
     await blind.click();
     await expect(blind).toHaveAttribute("aria-pressed", "true");
     // The breath under way (and the next ones) keep their ribbon hidden until they end

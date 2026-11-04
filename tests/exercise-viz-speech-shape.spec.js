@@ -11,6 +11,7 @@
  */
 const { test, expect } = require("@playwright/test");
 const { useVoice, playVoice, fanInRoom } = require("./helpers/voice");
+const { tapFloorLimit } = require("./helpers/tap-floor");
 
 const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";
 
@@ -348,12 +349,12 @@ test.describe("speech-shape pictures", () => {
         const over = await page.evaluate(() => document.scrollingElement.scrollWidth - innerWidth);
         expect(over, `${id} no sideways scroll`).toBeLessThanOrEqual(1);
         // Every control the picture adds is a 44 px tap
-        const small = await page.evaluate(() =>
+        const small = await page.evaluate((limit) =>
           [...document.querySelectorAll("#mode-focus .viz-head button")]
             .filter((b) => b.offsetParent)
             .map((b) => b.getBoundingClientRect())
-            .filter((r) => r.height < 44 || r.width < 44).length
-        );
+            .filter((r) => r.height < limit || r.width < limit).length
+        , tapFloorLimit(44));
         expect(small, `${id} taps`).toBe(0);
         if (vp.name === "phone") {
           // The claim's line on top and its result under it, not two slivers side by side

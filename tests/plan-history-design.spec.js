@@ -14,6 +14,7 @@
  * Monday 21 and the calendar Monday 24 August.
  */
 const { test, expect } = require("@playwright/test");
+const { tapFloorLimit } = require("./helpers/tap-floor");
 
 const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";
 const NOW = "2026-09-23T10:00:00-05:00";
@@ -155,7 +156,7 @@ test.describe("Plan: one focus, its exercises, days counted", () => {
     const more = page.locator("#plan-focus-more");
     await expect(more).toHaveText("Ver otros 12");
     await expect(more).toHaveAttribute("aria-expanded", "false");
-    expect((await more.boundingBox()).height).toBeGreaterThanOrEqual(44);
+    expect((await more.boundingBox()).height).toBeGreaterThanOrEqual(tapFloorLimit(44));
     await more.click();
     await expect(more).toHaveAttribute("aria-expanded", "true");
     await expect(page.locator("#element-chips .chip:visible")).toHaveCount(17);

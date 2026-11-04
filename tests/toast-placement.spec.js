@@ -37,10 +37,30 @@ async function stopAndMeasure(page) {
 
 /** Where the shown toast sits against ← Back, Help, the header row and the window. */
 function measureToast(page) {
-  return page.evaluate(() => {
+  return page.evaluate(async () => {
     const t = document.getElementById("toast");
-    // CSS transitions run on the wall clock, not the test's: end them
-    document.getAnimations().forEach((a) => a.finish());
+    // CSS transitions run on the wall clock, not the test's: end them. The page re-places a shown
+    // toast on `animationend` (the view's 0,22 s fadeIn moves the row a few px), and the browser
+    // sends that event on its next frame, not inside finish(): read before it and the toast is
+    // still where it was raised, 2 to 3 px off the settled row (QA-70, 2 runs in 10 under load).
+    const finite = (a) => a.effect && a.effect.getComputedTiming().endTime !== Infinity;
+    const heard = document
+      .getAnimations()
+      .filter((a) => a.animationName && a.playState === "running" && finite(a))
+      .map(
+        (a) =>
+          new Promise((done) => {
+            for (const ev of ["animationend", "animationcancel"]) a.effect.target.addEventListener(ev, done, { once: true });
+          })
+      );
+    document.getAnimations().forEach((a) => {
+      try {
+        a.finish();
+      } catch {
+        /* an endless animation has no end to jump to */
+      }
+    });
+    await Promise.all(heard);
     const R = (el) => el.getBoundingClientRect();
     const tr = R(t);
     const hit = (b) => b.width > 0 && tr.left < b.right && tr.right > b.left && tr.top < b.bottom && tr.bottom > b.top;

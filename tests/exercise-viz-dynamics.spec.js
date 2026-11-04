@@ -223,7 +223,13 @@ test.describe("dynamics pictures", () => {
     // Every attack of this voice is a 4 ms slap. Wait for eight that were
     // measured (a frame dropped under load leaves one unmeasured, never "not
     // hammered"), then most must carry ▲: before the rise was measured against
-    // where it ends, a vibrato crest made 2 of 13 and CI saw 1.
+    // where it ends, a vibrato crest made 2 of 13 and CI saw 1. "Most" is a
+    // majority, not three in four: this test checks that the mode wires the
+    // measure to the mark on a live stream, and the measure itself is pinned
+    // exactly, at every phase of chunked audio, by tests/node/attack-rise.test.mjs.
+    // On a machine with every core busy, 32 runs read a 4 ms slap as 9-17 ms
+    // against the 14 ms line: most runs marked 7-8 of 8 and four marked 4-6,
+    // so the old three-in-four line failed about one run in eight.
     const attacks = () =>
       (window.VTApp.getState().modeInstance?.state?.runs || [])
         .filter((r) => r.phaseIdx === 0 && r.t1 != null && r.hammer != null)
@@ -231,13 +237,15 @@ test.describe("dynamics pictures", () => {
     await expect.poll(() => modeState(page, attacks).then((a) => a.length), { timeout: 30000 }).toBeGreaterThanOrEqual(8);
     const measured = await modeState(page, attacks);
     const share = measured.filter(Boolean).length / measured.length;
-    expect(share, `${measured.filter(Boolean).length} of ${measured.length} 4 ms attacks marked ▲`).toBeGreaterThanOrEqual(0.75);
+    expect(share, `${measured.filter(Boolean).length} of ${measured.length} 4 ms attacks marked ▲`).toBeGreaterThanOrEqual(0.5);
     const s0 = await modeState(page, () => window.VTApp.getState().modeInstance.state.stats(0));
-    expect(s0.hammers).toBeGreaterThanOrEqual(6);
+    // The count the HUD shows is the marks on the pills, not a number of its own
+    expect(s0.hammers).toBeGreaterThanOrEqual(measured.filter(Boolean).length);
     expect(s0.medGap).toBeLessThan(0.15);
     await page.locator("#mode-focus [data-next-phase]").click();
-    await page.waitForFunction(() => (window.VTApp.getState().modeInstance?.state?.stats(1)?.breaks || 0) >= 2, null, { timeout: 20000 });
-    await page.waitForFunction(() => (window.VTApp.getState().modeInstance?.state?.stats(1)?.slides || 0) >= 1, null, { timeout: 20000 });
+    // The voice finishes the staccato pattern it is in (up to ~4 s) before it starts the legato one, whose loop is ~4 s
+    await page.waitForFunction(() => (window.VTApp.getState().modeInstance?.state?.stats(1)?.breaks || 0) >= 2, null, { timeout: 30000 });
+    await page.waitForFunction(() => (window.VTApp.getState().modeInstance?.state?.stats(1)?.slides || 0) >= 1, null, { timeout: 30000 });
     await clearDrawn(page);
     await page.waitForTimeout(300);
     const words = await drawn(page);

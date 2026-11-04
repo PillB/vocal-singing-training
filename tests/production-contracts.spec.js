@@ -34,21 +34,26 @@ test("no-start one-tap and detailed Save cannot create a perfect score, achievem
   expect(await page.locator("#first-win-card").count()).toBe(0);
 });
 
-test("a 14-second take is rejected; resumed practice beyond 15 seconds saves and re-rates once", async ({ page }) => {
+test("a take 1 ms short of 15 seconds is rejected; one more millisecond saves, and re-rates once", async ({ page }) => {
   await page.clock.install();
   await boot(page, { mic: "silent" });
   await openExercise(page, "s4-lip-trills");
+  // The clock is the test's from here: install() leaves real time running, and the real seconds between Start and
+  // the fast-forward were added to the take (on a busy machine 2 runs in 10 saved a "14-second" take). Paused, a take
+  // lasts exactly what it is fast-forwarded, so both sides of the 15 s line can be pinned.
+  // (a margin far longer than the round trip: pauseAt refuses a time the page's clock has already passed)
+  await page.clock.pauseAt(new Date((await page.evaluate(() => Date.now())) + 10000));
   await page.locator("#btn-practice-start").click();
   await expect.poll(() => page.evaluate(() => VTApp.getState().practiceLive)).toBe(true);
-  // The app's real practice clock, not a mocked persisted progress row.
-  await page.clock.fastForward(14000);
+  // The app's real practice clock (performance.now), not a mocked persisted progress row.
+  await page.clock.fastForward(14999);
   await page.locator("#btn-practice-stop").click();
   await page.locator('.rate-btn[data-feel="ok"]').click();
   const premature = await progress(page, "s4-lip-trills");
   expect(premature.progress?.completedCount || 0).toBe(0);
   await page.locator("#btn-practice-start").click();
   await expect.poll(() => page.evaluate(() => VTApp.getState().practiceLive)).toBe(true);
-  await page.clock.fastForward(3000);
+  await page.clock.fastForward(1);
   await page.locator("#btn-practice-stop").click();
   await page.locator('.rate-btn[data-feel="ok"]').click();
   const first = await progress(page, "s4-lip-trills");

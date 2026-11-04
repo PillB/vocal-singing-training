@@ -95,7 +95,8 @@ module.exports = {
       testMatch: /(cross-browser-audio|safari-mobile-recovery|exercise-start-visibility)\.spec\.js/
     }
   ],
-  reporter: [["list"]],
+  // The second reporter fails the run on a skipped test nobody reviewed (QA-57): a skip is reported as a success
+  reporter: [["list"], ["./qa/no-skips-reporter.cjs"]],
   webServer: {
     command: testPort === 8765 ? "npm run serve" : `python3 -m http.server ${testPort}`,
     url: `http://127.0.0.1:${testPort}`,

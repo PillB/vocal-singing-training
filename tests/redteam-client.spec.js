@@ -61,17 +61,14 @@ test.describe("Red team client (Zuck)", () => {
     const r = await page.evaluate(() => {
       const B = window.VTBilling;
       const cfg = window.VT_BILLING_CONFIG;
-      if (!B?.openCustomerPortal || !cfg) return { skip: true };
+      if (!B?.openCustomerPortal || !cfg) return { missing: "VTBilling.openCustomerPortal or VT_BILLING_CONFIG" };
       const prev = cfg.customerPortalUrl;
       cfg.customerPortalUrl = "https://evil.example.com/phish";
       const res = B.openCustomerPortal();
       cfg.customerPortalUrl = prev;
-      return { skip: false, ok: res?.ok, mode: res?.mode };
+      return { ok: res?.ok, mode: res?.mode };
     });
-    if (r.skip) {
-      test.skip();
-      return;
-    }
+    expect(r.missing, "the API this test drives is on the page: a test that cannot reach it is a failure, not a skip (QA-57)").toBeUndefined();
     expect(r.ok).toBe(false);
   });
 
@@ -165,10 +162,10 @@ test.describe("Red team client (Zuck)", () => {
     const safe = await page.evaluate(() => {
       window.__xssGuide = false;
       const host = document.querySelector("#ex-steps");
-      if (!host || !window.VTApp) return { skip: true };
+      if (!host || !window.VTApp) return { missing: "#ex-steps or VTApp" };
       // Simulate hostile step rendering path by calling escape path via re-render
       const ex = window.VTApp.getState?.()?.exercise;
-      if (!ex) return { skip: true };
+      if (!ex) return { missing: "VTApp.getState().exercise" };
       const hostile = `<img src=x onerror="window.__xssGuide=true">`;
       // Directly exercise escapeHtml-equivalent DOM path: set via same pattern as app
       const escapeHtml = (s) =>
@@ -179,15 +176,11 @@ test.describe("Red team client (Zuck)", () => {
           .replace(/"/g, "&quot;");
       host.innerHTML = [hostile].map((s) => `<li>${escapeHtml(s)}</li>`).join("");
       return {
-        skip: false,
         xss: window.__xssGuide === true,
         text: host.textContent || ""
       };
     });
-    if (safe.skip) {
-      test.skip();
-      return;
-    }
+    expect(safe.missing, "the page the test drives is open: a test that cannot reach it is a failure, not a skip (QA-57)").toBeUndefined();
     expect(safe.xss).toBe(false);
     expect(safe.text).toContain("<img");
   });

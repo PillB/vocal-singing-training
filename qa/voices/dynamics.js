@@ -155,6 +155,8 @@
     }
   }
   const PATTERN = [0, 2, 4, 2, 0];
+  /** The sloppy legato's slide: clear of the mode's quarter-second line (see legatoPattern). */
+  const SLIDE_SEC = 0.7;
 
   /**
    * A learner who follows the phase: staccato = short notes (~0.18 s) with
@@ -187,15 +189,19 @@
           h.voiceOff(0.1);
           return h.at(700, done);
         }
-        // Sloppy: the third note is reached by a slow slide (0,4 s)
-        h.setPitch(hz * Math.pow(2, PATTERN[k] / 12), sloppy && k === 2 ? 0.4 : 0.05);
+        // Sloppy: the third note is reached by a slow slide. The mode calls a step a slide when the way from the
+        // old pitch to within a third of a semitone of the new takes over 0,25 s; a 0,4 s ramp measures 0,26 s,
+        // a hair over, and the sampling clock decided it (one run in twelve never saw a slide in 20 s). 0,7 s
+        // measures 0,46 s, clear of the threshold, and the next note waits for the slide to arrive.
+        const slide = sloppy && k === 2;
+        h.setPitch(hz * Math.pow(2, PATTERN[k] / 12), slide ? SLIDE_SEC : 0.05);
         if (sloppy && (k === 1 || k === 3)) {
           // A break in the line: the tone stops for ~150 ms between notes
           h.voiceOff(0.02);
           h.at(150, () => h.voiceOn(0.3, 0.02));
         }
         k++;
-        h.at(560, step);
+        h.at(slide ? SLIDE_SEC * 1000 + 200 : 560, step);
       };
       step();
     };

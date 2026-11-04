@@ -59,7 +59,8 @@ for (const lang of ["es", "en"]) {
   ]) {
     test(`A ${lang} ${c.vp.width}px at ${c.pct}% text: the toast leaves Help alone${c.control ? " (control: it is in the row)" : ""}`, async ({ page }) => {
       await openWithToastsOn(page, c.vp, lang, c.pct);
-      await page.evaluate((t) => window.VTToast(t, { durationMs: 20000 }), PAUSED[lang]);
+      // kept: these toasts model the take's summary, the one message the row may cut; any other long message stands under the row
+      await page.evaluate((t) => window.VTToast(t, { durationMs: 20000, kept: true }), PAUSED[lang]);
       await page.waitForTimeout(100);
       const m = await overlap(page);
       expect(m.shown, "the toast showed").toBe(true);
@@ -75,7 +76,7 @@ for (const w of [320, 360]) {
     await boot(page, { lang: "es" });
     await page.evaluate(() => sessionStorage.removeItem("vt_e2e"));
     await page.waitForTimeout(400);
-    await page.evaluate((t) => window.VTToast(t, { durationMs: 20000 }), PAUSED.es);
+    await page.evaluate((t) => window.VTToast(t, { durationMs: 20000, kept: true }), PAUSED.es);
     await page.locator("#exercise-list .card-ex").first().click();
     await page.waitForSelector("#view-exercise.active");
     await page.waitForTimeout(700);
@@ -88,8 +89,11 @@ for (const w of [320, 360]) {
 
 test("C 320px: switching to Spanish while a toast is up does not leave it over Help", async ({ page }) => {
   await openWithToastsOn(page, { width: 320, height: 640 }, "en", 100);
-  await page.evaluate((t) => window.VTToast(t, { durationMs: 20000 }), "⏹ No pace measured yet — read aloud for a few seconds");
+  // kept: it must stand in the row, where the language switch changes how much room it has (Help is wider in Spanish);
+  // an unkept message this long would stand under the row from the start and the switch could not move it onto Help
+  await page.evaluate((t) => window.VTToast(t, { durationMs: 20000, kept: true }), "⏹ No pace measured yet — read aloud for a few seconds");
   await page.waitForTimeout(100);
+  expect(await page.locator("#toast").evaluate((t) => t.classList.contains("in-row")), "control: in the row before the switch").toBe(true);
   expect((await overlap(page)).help, "control: clear of Help before the switch").toBe(false);
   await page.evaluate(() => document.getElementById("btn-lang").click());
   await page.waitForTimeout(400);

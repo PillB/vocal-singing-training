@@ -246,6 +246,12 @@ ends (QA-28); `VTStorage.createProfile` defaults to the Pro cap (QA-30).
   deterministic, one generated test per exercise where a suite walks the
   catalog, so shards balance and a failure names the exercise. No retries
   (a retry hides flakiness); traces are kept on failure.
+  **A skipped test fails the run** (QA-57): Playwright reports a skip as a
+  success, so `qa/no-skips-reporter.cjs` (registered in `playwright.config.js`)
+  fails the run on any skip outside its reviewed list (the live-pages suite,
+  and the two auth tests that need a generated secrets file). Do not write
+  `if (!API) test.skip()` for a page API the test drives: assert it
+  (`expect(api).toBeTruthy()`), so the test fails by name when it goes missing.
 - `npm run test:sweep` (`--project=sweep`) — headed watch sweeps with a real
   pointer, slowMo, screenshots and reports. Nightly and on manual dispatch,
   never on the PR gate. `tests/node/playwright-projects.test.mjs` fails if a

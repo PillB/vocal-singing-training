@@ -269,10 +269,7 @@ test.describe("Full journey: core user flows", () => {
     // With a day sung the guided session sits behind "Otras formas de practicar".
     await page.click("#btn-more-ways");
     const structured = page.locator("#btn-structured");
-    if (!(await structured.isVisible().catch(() => false))) {
-      test.skip();
-      return;
-    }
+    await expect(structured, "the guided session is behind 'Otras formas de practicar' (a missing button is a failure, not a skip: QA-57)").toBeVisible();
     await structured.click();
     await page.waitForTimeout(300);
     const banner = page.locator("#session-banner");
@@ -383,10 +380,7 @@ test.describe("Full journey: core user flows", () => {
     // With a day sung the guided session sits behind "Otras formas de practicar".
     await page.click("#btn-more-ways");
     const structured = page.locator("#btn-structured");
-    if (!(await structured.isVisible().catch(() => false))) {
-      test.skip();
-      return;
-    }
+    await expect(structured, "the guided session is behind 'Otras formas de practicar' (a missing button is a failure, not a skip: QA-57)").toBeVisible();
     await structured.click();
     await page.waitForTimeout(200);
     // Open current structured exercise if any

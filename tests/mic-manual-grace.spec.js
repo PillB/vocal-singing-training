@@ -117,7 +117,7 @@ test.describe("Manual Space grace (a11y)", () => {
     await boot(page);
     const r = await page.evaluate(() => {
       const Modes = window.VTPracticeModes;
-      if (!Modes?.get) return { skip: true };
+      if (!Modes?.get) return { missing: true };
       const mode = Modes.get("shAirLadder");
       const host = document.createElement("div");
       document.body.appendChild(host);
@@ -159,12 +159,9 @@ test.describe("Manual Space grace (a11y)", () => {
       const afterSilent = mode.state.cur;
       mode.unmount?.();
       host.remove();
-      return { mid, afterGrace, afterSilent, skip: false };
+      return { mid, afterGrace, afterSilent };
     });
-    if (r.skip) {
-      test.skip();
-      return;
-    }
+    expect(r.missing, "VTPracticeModes.get is the API this test drives: a test that cannot reach it is a failure, not a skip (QA-57)").toBeFalsy();
     expect(r.mid).toBeGreaterThan(0.2);
     expect(r.afterGrace).toBeGreaterThan(r.mid);
     expect(r.afterSilent).toBe(0);

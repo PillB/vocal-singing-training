@@ -849,7 +849,7 @@ VG-65, VG-66, VG-67, VG-68, VG-69, VG-70.
 
 ## 27. Four numbers that did not survive being checked
 
-Commit `PENDING`. Section 24 was written on 3 November and attacked on the 4th.
+Commit `f7d304d`. Section 24 was written on 3 November and attacked on the 4th.
 Four of its figures were wrong, one of them by a factor of thirty, and the
 monitor it shipped could not see the failure it ranks first. Every correction is
 on the page beside the claim it replaces, because a number corrected only in a

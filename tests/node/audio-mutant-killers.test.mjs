@@ -62,7 +62,8 @@ test("a take that captured no audio publishes no recording", async () => {
   const win = {};
   runInNewContext(read("js/practice-engine.js"), {
     window: win, MediaRecorder: EmptyRecorder, URL: { createObjectURL: () => "blob:x", revokeObjectURL() {} },
-    Float32Array, Uint8Array, Blob, performance, queueMicrotask, cancelAnimationFrame() {}, Math, console
+    Float32Array, Uint8Array, Blob, performance, queueMicrotask, setTimeout, clearTimeout,
+    cancelAnimationFrame() {}, Math, console
   });
   const e = new win.VTPracticeEngine();
   e.stream = { getTracks: () => [{ stop() {} }] };

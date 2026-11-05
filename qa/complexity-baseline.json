@@ -63,32 +63,8 @@
     },
     {
       "file": "js/app.js",
-      "sha": "336449d837e31cffe5dc140529dd3cf4f30b30578ad9b97d92eb8ed6eea7210b",
-      "complexity": 33,
-      "name": "Arrow function"
-    },
-    {
-      "file": "js/app.js",
-      "sha": "3d627888f2b5133b3bd153445fb9280631e8f0ceab3dcad8eb4a682245f07dd6",
-      "complexity": 25,
-      "name": "Arrow function"
-    },
-    {
-      "file": "js/app.js",
-      "sha": "075ecbfc358ffda2dbfd69262befbf841150d0d5fe83df7bd36a925c529e45a4",
-      "complexity": 18,
-      "name": "Async arrow function"
-    },
-    {
-      "file": "js/app.js",
       "sha": "428a7963c4c834a3ce8f326d65dfd9fe6648c7c45d9d2c3ac1bbade951a67ac5",
       "complexity": 16,
-      "name": "Async arrow function"
-    },
-    {
-      "file": "js/app.js",
-      "sha": "c88b43983f5f78078cdaf0b315fb09d615a01d2d3ab26ed863c694e8ef8eb3cb",
-      "complexity": 24,
       "name": "Async arrow function"
     },
     {
@@ -102,12 +78,6 @@
       "sha": "2993131a41db15d49d2633f9d1e95c3b6c847e25a0f22622ac330bf4cacaa579",
       "complexity": 35,
       "name": "Async function 'onRoute'"
-    },
-    {
-      "file": "js/app.js",
-      "sha": "6fcc09a0816fd2833c5d098e9e88f3bb9b10152f7a789e4606ad3244b0059561",
-      "complexity": 23,
-      "name": "Async function 'playSelectedProgression'"
     },
     {
       "file": "js/app.js",
@@ -126,18 +96,6 @@
       "sha": "a6f96270b04696d944fe5e080e061e073111d306c1666e459a75c60c598faae1",
       "complexity": 17,
       "name": "Async function 'renderHistory'"
-    },
-    {
-      "file": "js/app.js",
-      "sha": "0b084e03ece731eee82117d6803cb6a1fe7889d9c14cbd4da7896e204881183e",
-      "complexity": 89,
-      "name": "Async function 'startExerciseSound'"
-    },
-    {
-      "file": "js/app.js",
-      "sha": "026e78d7d8af5507062886db758c927ef59631d7432100e9c3999f7878fe402e",
-      "complexity": 120,
-      "name": "Async function 'startPractice'"
     },
     {
       "file": "js/app.js",
@@ -446,28 +404,10 @@
       "name": "Method 'compute'"
     },
     {
-      "file": "js/piano.js",
-      "sha": "d96cfd70e09be899f7322f617dfa4fce9dfa42d0d2ca19aa92396ba3884ff1a1",
-      "complexity": 23,
-      "name": "Async method 'playProgression'"
-    },
-    {
-      "file": "js/piano.js",
-      "sha": "49e3180a466feeb4bb61b5243a70a94a0c1b25d18b3fb32dcf435040f2efe6f7",
-      "complexity": 16,
-      "name": "Method 'playNote'"
-    },
-    {
       "file": "js/pitch-game.js",
       "sha": "e67b8cb6d8a2a3ddeef649ad1e704e394e4c635184c68a80cc285acf0dfd51a6",
       "complexity": 29,
       "name": "Method 'tick'"
-    },
-    {
-      "file": "js/pitch-visualizer.js",
-      "sha": "2e8cde549e6edf094ff66e228f57c635810b638233f77b42bdc29a0faa24f54e",
-      "complexity": 23,
-      "name": "Function 'detectPitch'"
     },
     {
       "file": "js/pitch-visualizer.js",
@@ -510,12 +450,6 @@
       "sha": "e689a2fb0a9a04c2360ae56f17a315a068485b7dc9ab15da2d93655fd8a96440",
       "complexity": 17,
       "name": "Function 'summary'"
-    },
-    {
-      "file": "js/practice-engine.js",
-      "sha": "df5933092bf1a1d8d849a29a9c9e9b897e3cec2294446c9b6b4bae004e6e2c2e",
-      "complexity": 28,
-      "name": "Async method 'start'"
     },
     {
       "file": "js/practice-engine.js",
@@ -1590,12 +1524,6 @@
       "sha": "0146d859c8076138e2edb6b5b85e67db1408095f0dcf2f72851b1c0d84bbe393",
       "complexity": 16,
       "name": "Function 'beginTour'"
-    },
-    {
-      "file": "js/tour.js",
-      "sha": "8757d1a11ba534e74d947b6e8f350706eff1bef0a92dd9fc1629d6e80cbdbd30",
-      "complexity": 18,
-      "name": "Function 'end'"
     },
     {
       "file": "js/tour.js",

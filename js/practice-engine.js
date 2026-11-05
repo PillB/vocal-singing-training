@@ -29,6 +29,37 @@
   const HOLD_RMS_BASE = 0.008;
   const PITCH_MIN = 52;
   const PITCH_MAX = 1060;
+  // WebKit can say AudioContext.state === "running" while currentTime is
+  // frozen. In that state the analyser can repeat one stale voiced buffer.
+  // These are watchdog engineering thresholds, not acoustic guarantees.
+  // ~three rAFs at 60 Hz; bound potential unobserved audio to 60 ms rather
+  // than counting an entire 300-ms stale note as genuine singing.
+  const AUDIO_CLOCK_SUSPECT_MS = 60;
+  const AUDIO_CLOCK_FAILED_MS = 1400;
+  // The most stall one check can add. A check that follows a long gap (the
+  // page was hidden or frozen, the main thread was blocked, a test jumped its
+  // fake clock) saw nothing in between: it may skip its own frame, but only
+  // checks that keep finding the clock still may add up to a failed input.
+  const AUDIO_CLOCK_MAX_STEP_MS = 250;
+  // How long Start waits for a suspended audio context to resume. iOS keeps
+  // resume() pending through a call or an "interrupted" session, with the
+  // microphone already granted and Start and Stop both hidden; past this the
+  // Start fails with Retry. An iPhone resume after the prompt takes about a
+  // second, so a rare slow one shows Retry instead of leaving the learner stuck.
+  const RESUME_WAIT_MS = 8000;
+
+  /**
+   * `promise`, or a rejection named AudioResumeTimeout once `ms` pass first:
+   * the app says the audio was interrupted, not that a permission prompt is
+   * still open (that is the microphone request's TimeoutError).
+   */
+  function within(promise, ms, what) {
+    let timer;
+    const late = new Promise((_, reject) => {
+      timer = setTimeout(() => reject(Object.assign(new Error(`${what} took over ${ms} ms`), { name: "AudioResumeTimeout" })), ms);
+    });
+    return Promise.race([Promise.resolve(promise), late]).finally(() => clearTimeout(timer));
+  }
   /** Default 7/10 — more sensitive than legacy fixed 0.016 (fewer false cutoffs) */
   const DEFAULT_SENS = 7;
 
@@ -48,6 +79,10 @@
   class PracticeEngine {
     constructor() {
       this.running = false;
+      // Each Start takes a number; stop() moves it on, so a Start that Stop
+      // cancelled while the permission prompt was up never goes live.
+      this._startGen = 0;
+      this._startingGen = 0;
       this.audioCtx = null;
       this._ownsAudioCtx = false;
       this.stream = null;
@@ -58,6 +93,7 @@
       /** Byte frequency data for sibilant band (2–8 kHz) */
       this._freqBytes = null;
       this.raf = null;
+      this._resetAudioClockWatch(0);
 
       this.mediaRecorder = null;
       this.recChunks = [];
@@ -381,85 +417,223 @@
           pending?.then((s) => s.getTracks().forEach((t) => t.stop())).catch(() => {});
           // A refusal is final: asking twice more with looser constraints only
           // repeats it (and, on some browsers, the prompt).
-          if (e && (e.name === "NotAllowedError" || e.name === "SecurityError" || e.name === "TimeoutError")) break;
+          // A busy/disconnected microphone is not a constraint-compatibility
+          // problem. Retrying it can trigger a second Safari capture session.
+          if (!["OverconstrainedError", "TypeError", "NotSupportedError"].includes(e?.name)) break;
         }
       }
-      throw lastErr || new Error("getUserMedia failed");
+      this.lastCaptureError = lastErr || new Error("getUserMedia failed");
+      throw this.lastCaptureError;
+    }
+
+    /** The one audio context for piano and pitch analysis, and whether this engine made it. */
+    _inputContext() {
+      // Creating a second context after an iOS microphone prompt often
+      // leaves it suspended, so the piano's (or the last shared one) is reused.
+      const shared =
+        (global.VTPiano?.ctx?.state !== "closed" ? global.VTPiano?.ctx : null) ||
+        (global.VTSharedAudioCtx?.state !== "closed" ? global.VTSharedAudioCtx : null);
+      if (shared) return { ctx: shared, owns: false };
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) throw new Error("AudioContext not available");
+      const ctx = new AC();
+      global.VTSharedAudioCtx = ctx;
+      return { ctx, owns: true };
+    }
+
+    /**
+     * Build the analysis graph on `stream` for Start number `gen`. The resume
+     * can take a while on an iPhone; if Stop or a newer Start came meanwhile,
+     * nothing is built, so this Start cannot replace or orphan the nodes of
+     * the session that owns the engine now.
+     */
+    async _setupInputGraph(gen = this._startGen, stream = this.stream) {
+      const { ctx, owns } = this._inputContext();
+      if (["suspended", "interrupted"].includes(ctx.state)) {
+        await within(ctx.resume(), RESUME_WAIT_MS, "Resuming the audio context");
+      }
+      await within(global.VTPiano?.resume?.(), RESUME_WAIT_MS, "Resuming the piano");
+      if (gen !== this._startGen) return;
+      this.audioCtx = ctx;
+      this._ownsAudioCtx = owns;
+      this.inputGain = ctx.createGain();
+      this.inputGain.gain.value = this._gainFromSens(this.sensitivity);
+      this.analyser = ctx.createAnalyser();
+      this.analyser.fftSize = frameSize(ctx.sampleRate);
+      this.analyser.smoothingTimeConstant = 0.12;
+      // Never replace a failed microphone node with silence and report a
+      // healthy session. A blank green 'live' state is worse than Retry.
+      this.source = ctx.createMediaStreamSource(stream);
+      this.source.connect(this.inputGain);
+      this.inputGain.connect(this.analyser);
+      this.buf = new Float32Array(this.analyser.fftSize);
+      this._freqBytes = new Uint8Array(this.analyser.frequencyBinCount);
+    }
+
+    _discardFailedInput() {
+      try { this.source?.disconnect(); } catch { /* no connected source */ }
+      try { this.inputGain?.disconnect(); } catch { /* no connected gain */ }
+      this.source = null;
+      this.inputGain = null;
+      this.analyser = null;
+      this.stream?.getTracks?.().forEach((track) => track.stop());
+      this.stream = null;
+      this.audioCtx = null;
+      this._ownsAudioCtx = false;
+      this.running = false;
+    }
+
+    _watchMicTrack(track, stream) {
+      const stillOwned = () => this.running && this.stream === stream;
+      const reportLoss = (kind) => {
+        if (stillOwned()) this._status(kind);
+      };
+      track.addEventListener?.("ended", () => reportLoss("mic-ended"));
+      track.addEventListener?.("mute", () => {
+        // iOS briefly mutes on focus/audio-route switches; don't stop a take
+        // for one transient sample, but never score through a sustained mute.
+        clearTimeout(this._micMuteTimer);
+        this._micMuteTimer = setTimeout(() => {
+          if (stillOwned() && track.muted) reportLoss("mic-muted");
+        }, 1200);
+      });
+      track.addEventListener?.("unmute", () => clearTimeout(this._micMuteTimer));
+      if (track.muted) {
+        this._micMuteTimer = setTimeout(() => {
+          if (stillOwned() && track.muted) reportLoss("mic-muted");
+        }, 1200);
+      }
+    }
+
+    _watchAudioContext(ctx, stream) {
+      if (!ctx?.addEventListener) return;
+      const onState = () => {
+        if (!this.running || this.stream !== stream) return;
+        if (ctx.state === "running") {
+          clearTimeout(this._ctxLossTimer);
+          this._ctxLossTimer = null;
+          if (this._analysisPaused) {
+            this._analysisPaused = false;
+            this._lastFrameAt = performance.now();
+            // A real resume starts a new suspicion window; WebKit can still
+            // say "running" over a frozen clock, and that is caught afresh.
+            this._resetAudioClockWatch(this._lastFrameAt);
+            this._loop();
+          }
+          return;
+        }
+        if (!["suspended", "interrupted"].includes(ctx.state)) return;
+        if (!this._analysisPaused) {
+          this._analysisPaused = true;
+          if (this.raf) cancelAnimationFrame(this.raf);
+          this.raf = null;
+          this._maybeEndHold(true); // Close at last real sample, not at resume.
+        }
+        clearTimeout(this._ctxLossTimer);
+        this._ctxLossTimer = setTimeout(() => {
+          if (this.running && this.stream === stream && this._analysisPaused) {
+            this._status("input-interrupted");
+          }
+        }, 1200);
+      };
+      ctx.addEventListener("statechange", onState);
+      this._contextWatcher = { ctx, onState };
+      onState();
+    }
+
+    async _startOptionalRecorder(record) {
+      if (!record) return;
+      try {
+        await this._startRecorder();
+      } catch (e) {
+        console.warn("MediaRecorder unavailable; practice continues without file recording", e);
+        this.recording = false;
+        this.mediaRecorder = null;
+      }
+    }
+
+    /** True while a Start waits on the microphone or its graph (stop() cancels it). */
+    get starting() {
+      return !this.running && this._startingGen !== 0 && this._startingGen === this._startGen;
     }
 
     async start({ record = false } = {}) {
       if (this.running) return;
-      // Progressive constraints: Safari/Firefox reject some ideal combinations
-      this.stream = await this._acquireMic();
-      // A phone or headset may ignore the request to leave the input alone.
-      // Automatic gain evens out exactly the loudness differences the volume
-      // exercises train, so the pictures say so rather than draw a false flat.
+      const gen = ++this._startGen;
+      this._startingGen = gen;
       try {
-        const st = this.stream.getAudioTracks?.()[0]?.getSettings?.() || {};
+        await this._startSession(gen, record);
+      } finally {
+        if (this._startingGen === gen) this._startingGen = 0;
+      }
+    }
+
+    /**
+     * The microphone for Start number `gen`, or null when Stop (or a newer
+     * Start) came first. A stream granted that late is released here: no
+     * graph, no "listening", no frame for a drill that never started (PR #24).
+     */
+    async _captureFor(gen) {
+      const stream = await this._acquireMic();
+      if (gen === this._startGen) return stream;
+      stream?.getTracks?.().forEach((track) => track.stop());
+      return null;
+    }
+
+    /**
+     * A phone or headset may ignore the request to leave the input alone.
+     * Automatic gain evens out exactly the loudness differences the volume
+     * exercises train, so the pictures say so rather than draw a false flat.
+     */
+    _noteInputProcessing(track) {
+      try {
+        const st = track.getSettings?.() || {};
         this.processedInput = !!(st.autoGainControl || st.noiseSuppression);
       } catch {
         this.processedInput = false;
       }
-      // Prefer the shared piano AudioContext so getUserMedia never orphans
-      // a second suspended context (classic "piano silent after mic" bug).
-      const shared =
-        (global.VTPiano && global.VTPiano.ctx && global.VTPiano.ctx.state !== "closed"
-          ? global.VTPiano.ctx
-          : null) ||
-        (global.VTSharedAudioCtx && global.VTSharedAudioCtx.state !== "closed"
-          ? global.VTSharedAudioCtx
-          : null);
-      if (shared) {
-        this.audioCtx = shared;
-        this._ownsAudioCtx = false;
-      } else {
-        const AC = window.AudioContext || window.webkitAudioContext;
-        this.audioCtx = new AC();
-        this._ownsAudioCtx = true;
-        global.VTSharedAudioCtx = this.audioCtx;
+    }
+
+    /** A cancelled Start's own stream: stop its tracks, and drop it if the engine still points at it. */
+    _releaseStale(stream) {
+      stream.getTracks?.().forEach((track) => {
+        if (track.readyState !== "ended") track.stop();
+      });
+      if (this.stream === stream) this.stream = null;
+    }
+
+    async _startSession(gen, record) {
+      this.lastCaptureError = null;
+      const stream = await this._captureFor(gen);
+      if (!stream) return;
+      this.stream = stream;
+      const audioTrack = this.stream.getAudioTracks?.()[0];
+      if (!audioTrack || audioTrack.readyState === "ended") {
+        this._discardFailedInput();
+        this.lastCaptureError = new Error("Microphone supplied no live audio track");
+        throw this.lastCaptureError;
       }
-      if (this.audioCtx.state === "suspended" || this.audioCtx.state === "interrupted") {
-        try {
-          await this.audioCtx.resume();
-        } catch (e) {
-          console.warn("PracticeEngine resume failed", e);
-        }
-      }
-      // Also nudge piano if it shares this context
+      this._noteInputProcessing(audioTrack);
+      let graphError = null;
       try {
-        await global.VTPiano?.resume?.();
-      } catch {
-        /* ignore */
-      }
-      this.inputGain = this.audioCtx.createGain();
-      this.inputGain.gain.value = this._gainFromSens(this.sensitivity);
-      this.analyser = this.audioCtx.createAnalyser();
-      this.analyser.fftSize = frameSize(this.audioCtx.sampleRate);
-      this.analyser.smoothingTimeConstant = 0.12;
-      // WebKit can throw/hang if stream was produced by a different AudioContext
-      try {
-        this.source = this.audioCtx.createMediaStreamSource(this.stream);
-        this.source.connect(this.inputGain);
-        this.inputGain.connect(this.analyser);
+        await this._setupInputGraph(gen, stream);
       } catch (e) {
-        console.warn("[VT] createMediaStreamSource failed — level/pitch may be flat", e);
-        this.source = null;
-        // Keep analyser graph alive with silence so RMS reads stay defined
-        try {
-          const silent = this.audioCtx.createBufferSource();
-          const buf = this.audioCtx.createBuffer(1, 1, this.audioCtx.sampleRate);
-          silent.buffer = buf;
-          silent.loop = true;
-          silent.connect(this.inputGain);
-          this.inputGain.connect(this.analyser);
-          silent.start();
-          this._silentSource = silent;
-        } catch {
-          /* ignore */
-        }
+        graphError = e;
       }
-      this.buf = new Float32Array(this.analyser.fftSize);
-      this._freqBytes = new Uint8Array(this.analyser.frequencyBinCount);
+      if (gen !== this._startGen) {
+        // Stop or a newer Start came while the graph was built: this Start
+        // ends quietly (no mic failure) and gives its own microphone back.
+        this._releaseStale(stream);
+        return;
+      }
+      // A call or an unplugged headset can end the track while the graph is
+      // built; its "ended" event came before anyone listened for it.
+      if (!graphError && audioTrack.readyState === "ended") graphError = new Error("Microphone ended while Start built the audio graph");
+      if (graphError) {
+        this.lastCaptureError = graphError;
+        this._discardFailedInput();
+        throw graphError;
+      }
 
       this.voiced = false;
       this.holdStart = null;
@@ -470,20 +644,13 @@
       this.startedAt = performance.now();
       this.running = true;
       this._lastFrameAt = performance.now();
-
-      // Recording is optional — never fail the whole practice session if MediaRecorder is unsupported
-      if (record) {
-        try {
-          await this._startRecorder();
-        } catch (e) {
-          console.warn("MediaRecorder unavailable; practice continues without file recording", e);
-          this.recording = false;
-          this.mediaRecorder = null;
-        }
-      }
+      this._resetAudioClockWatch(performance.now());
+      this._watchMicTrack(audioTrack, this.stream);
+      this._watchAudioContext(this.audioCtx, this.stream);
+      await this._startOptionalRecorder(record);
 
       this._status("listening");
-      this._loop();
+      if (!this._analysisPaused) this._loop();
     }
 
     async _startRecorder() {
@@ -550,6 +717,7 @@
     }
 
     stop() {
+      this._startGen++; // a Start still waiting on the mic or its graph is cancelled
       // Finalize open hold if long enough
       this._maybeEndHold(true);
       // End Space assist immediately (no grace after stop)
@@ -560,6 +728,14 @@
       if (this.raf) cancelAnimationFrame(this.raf);
       this.raf = null;
       this.running = false;
+      clearTimeout(this._micMuteTimer);
+      this._micMuteTimer = null;
+      clearTimeout(this._ctxLossTimer);
+      this._ctxLossTimer = null;
+      this._contextWatcher?.ctx?.removeEventListener?.("statechange", this._contextWatcher.onState);
+      this._contextWatcher = null;
+      this._analysisPaused = false;
+      this._resetAudioClockWatch(0);
 
       let recorderStopping = false;
       if (this.mediaRecorder && this.mediaRecorder.state !== "inactive") {
@@ -623,17 +799,79 @@
       if (this.onStatus) this.onStatus(s);
     }
 
+    _resetAudioClockWatch(now) {
+      this._audioClockTime = null;
+      this._audioClockCheckedAt = now;
+      this._audioClockStalledMs = 0;
+      this._audioClockStalled = false;
+    }
+
+    /**
+     * Never score cached samples from an audio render clock that stopped.
+     * The stall is the time the checks themselves kept finding the clock
+     * still, each check adding at most AUDIO_CLOCK_MAX_STEP_MS: one 28-second
+     * gap between two checks is not 28 seconds of evidence.
+     */
+    _audioClockHealthy(now) {
+      const clock = this.audioCtx?.currentTime;
+      if (!Number.isFinite(clock)) return true;
+      const step = Math.min(AUDIO_CLOCK_MAX_STEP_MS, Math.max(0, now - (this._audioClockCheckedAt || now)));
+      this._audioClockCheckedAt = now;
+      if (this._audioClockTime == null || clock > this._audioClockTime + 0.001 || clock < this._audioClockTime) {
+        this._audioClockTime = clock;
+        this._audioClockStalledMs = 0;
+        this._audioClockStalled = false;
+        return true;
+      }
+      this._audioClockStalledMs += step;
+      const stalledFor = this._audioClockStalledMs;
+      if (stalledFor < AUDIO_CLOCK_SUSPECT_MS) return true;
+      if (!this._audioClockStalled) {
+        this._audioClockStalled = true;
+        // A partial note can be credited only through its *last real* sample.
+        // Neither the visual grace clock nor the mode timer may extend it.
+        this._maybeEndHold(true);
+        this.voiceFreq = null;
+        this._lastAirAt = 0;
+      }
+      if (stalledFor >= AUDIO_CLOCK_FAILED_MS) {
+        this._analysisPaused = true;
+        this.raf = null;
+        this._status("input-interrupted");
+      }
+      return false;
+    }
+
     _rms(buf) {
       let sum = 0;
       for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
-      return Math.sqrt(sum / buf.length);
+      const value = Math.sqrt(sum / buf.length);
+      this._latestRms = value;
+      return value;
     }
 
     _detectPitch(buf, sampleRate) {
+      // Fresh evidence for pitch-game scoring. voiceFreq intentionally remains
+      // a short visual/HUD grace value during a single detector dropout.
       if (global.VTPitchUtils && global.VTPitchUtils.detectPitch) {
-        return global.VTPitchUtils.detectPitch(buf, sampleRate);
+        const measured = global.VTPitchUtils.detectPitch(buf, sampleRate);
+        this._latestRawPitch = measured >= PITCH_MIN && measured <= PITCH_MAX ? measured : null;
+        return measured;
       }
+      this._latestRawPitch = null;
       return null;
+    }
+
+    /**
+     * The pitch the latest analysed frame may score: the detector's own fresh
+     * reading with real energy behind it. Never the grace-held display value
+     * (voiceFreq bridges a dropout on screen), never the SH/S air assist.
+     */
+    scoringPitch() {
+      const measured = this._latestRawPitch;
+      if (!measured || this._latestRms < this._holdRms() * 0.55) return null;
+      if (this.isManualEffective() && this._manualKind === "air") return null;
+      return measured;
     }
 
     _clarity(buf, sampleRate) {
@@ -643,13 +881,21 @@
       return null;
     }
 
+    /** How long a silence ends a hold: the base window, longer at high sensitivity (as _loop counts it). */
+    _silenceEndMs() {
+      return SILENCE_END_MS + Math.max(0, this.sensitivity - 5) * 50;
+    }
+
     _maybeEndHold(force) {
       if (!this.holdStart) return;
       const now = performance.now();
       const silenceLong = force || now - this.lastVoiceAt >= SILENCE_END_MS;
       if (!silenceLong && !force) return;
       // Credit through last real voice, not trailing silence window
-      const endAt = this.lastVoiceAt > this.holdStart ? this.lastVoiceAt : now;
+      // A hold opens on a voiced frame, so lastVoiceAt >= holdStart while it
+      // is open; never credit time after the last voice (a one-frame hold
+      // before a hidden minute used to be logged as the minute).
+      const endAt = this.lastVoiceAt >= this.holdStart ? this.lastVoiceAt : now;
       const sec = (endAt - this.holdStart) / 1000;
       if (sec >= HOLD_MIN_SEC) {
         const entry = {
@@ -833,6 +1079,54 @@
       this.raf = requestAnimationFrame(() => this._loop());
     }
   }
+
+  // Protect the legacy analysis loop at its entry boundary. This small
+  // decorator keeps the CC>15 legacy DSP method unchanged while the global
+  // lint gate continues to prohibit new/modified overly complex functions.
+  // Its own rAF reschedule is only for clock verification; no stale frame
+  // reaches _loop(), a mode, a hold, or the pitch game.
+  const analyseFrame = PracticeEngine.prototype._loop;
+  /**
+   * The frame's `dtMs` is capped at 50 ms for the signal features (a hold, a
+   * pause, a pitch game must not jump after a stall). A timeline beside the
+   * app's step timer, which runs on wall time, needs the real time as well
+   * (a guided drill's steps: at 10 fps the capped time is half the wall
+   * time, so the step ended with the guide half-way): `wallDtMs`, the
+   * uncapped time since the frame before, from the same `_lastFrameAt` as
+   * the cap, so dtMs is always min(50, wallDtMs). _loop() builds the frame;
+   * its onFrame is relayed for that one call, and kept if the frame replaced it.
+   */
+  function analyseWithWallTime(engine) {
+    const deliver = engine.onFrame;
+    if (typeof deliver !== "function") return analyseFrame.call(engine);
+    const since = engine._lastFrameAt;
+    const relay = function relayFrame(frame) {
+      const now = engine._lastFrameAt;
+      if (frame) frame.wallDtMs = Math.max(0, now - (since || now));
+      return deliver.call(this, frame);
+    };
+    engine.onFrame = relay;
+    try {
+      return analyseFrame.call(engine);
+    } finally {
+      if (engine.onFrame === relay) engine.onFrame = deliver;
+    }
+  }
+  PracticeEngine.prototype._loop = function guardedAnalysisFrame() {
+    if (!this.running || !this.analyser) return;
+    // No voice for longer than the silence window, heard or not (a hidden
+    // tab stops rAF while the mic stays open; a stall can fall inside a
+    // silence the loop was bridging): close an open hold at its last real
+    // sample instead of crediting the time nobody heard (PR #24).
+    if (this.holdStart && performance.now() - this.lastVoiceAt > this._silenceEndMs()) this._maybeEndHold(true);
+    if (!this._audioClockHealthy(performance.now())) {
+      if (this.running && !this._analysisPaused) {
+        this.raf = requestAnimationFrame(() => this._loop());
+      }
+      return;
+    }
+    return analyseWithWallTime(this);
+  };
 
   PracticeEngine.frameSize = frameSize;
   global.VTPracticeEngine = PracticeEngine;

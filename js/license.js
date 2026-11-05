@@ -22,6 +22,15 @@
   "use strict";
 
   const LS_KEY = "vt_license_v1";
+  // Captured at load: a console line that later swaps SubtleCrypto.prototype.verify cannot reach these,
+  // and neither can one that swaps Function.prototype.call/apply (they are invoked through APPLY, not as methods).
+  // The prototype's methods where the browser has them (a swap on the instance cannot reach those);
+  // the instance's own where a runtime offers only that (the test harness's stand-in, an older engine).
+  const SUBTLE = global.crypto && global.crypto.subtle;
+  const SUBTLE_PROTO = global.SubtleCrypto && global.SubtleCrypto.prototype;
+  const VERIFY = (SUBTLE_PROTO && SUBTLE_PROTO.verify) || (SUBTLE && SUBTLE.verify);
+  const IMPORT_KEY = (SUBTLE_PROTO && SUBTLE_PROTO.importKey) || (SUBTLE && SUBTLE.importKey);
+  const APPLY = Reflect.apply;
   const ISSUER = "vocal-studio-entitlements";
   const CLOCK_SKEW_S = 300;
   const DEFAULT_REVALIDATE_HOURS = 24;
@@ -129,13 +138,13 @@
     publicKeyJwkSource = fingerprint;
     publicKeyPromise = (async () => {
       try {
-        return await crypto.subtle.importKey(
+        return await APPLY(IMPORT_KEY, SUBTLE, [
           "jwk",
           jwk,
           { name: "ECDSA", namedCurve: "P-256" },
           false,
           ["verify"]
-        );
+        ]);
       } catch (err) {
         console.warn("[VTLicense] public key rejected:", err?.message || err);
         return null;
@@ -155,52 +164,60 @@
     }
   }
 
+  /** The header, claims and signature bytes of a compact token, or null when it is not an ES256 token with an object payload. */
+  function decodeToken(parts) {
+    try {
+      const header = base64UrlToJson(parts[0]);
+      const claims = base64UrlToJson(parts[1]);
+      const signature = base64UrlToBytes(parts[2]);
+      if (!header || header.alg !== "ES256") return null;
+      if (!claims || typeof claims !== "object") return null;
+      return { claims, signature };
+    } catch {
+      return null;
+    }
+  }
+
+  /** Whether `signature` is the issuer's over `header.payload`. Uses the intrinsics captured at load. */
+  async function signatureHolds(key, parts, signature) {
+    try {
+      return !!(await APPLY(VERIFY, SUBTLE, [
+        { name: "ECDSA", hash: "SHA-256" },
+        key,
+        signature,
+        new TextEncoder().encode(parts[0] + "." + parts[1])
+      ]));
+    } catch {
+      return false;
+    }
+  }
+
+  /** Issuer, audience, validity window, status and plan of a signed payload. */
+  function claimsAcceptable(claims) {
+    const now = Math.floor(Date.now() / 1000);
+    if (claims.iss !== ISSUER) return false;
+    const aud = expectedAudience();
+    if (aud && claims.aud && claims.aud !== aud) return false;
+    if (typeof claims.exp !== "number" || claims.exp + CLOCK_SKEW_S < now) return false;
+    if (typeof claims.iat === "number" && claims.iat - CLOCK_SKEW_S > now) return false;
+    if (!ENTITLED_STATUSES.has(claims.status)) return false;
+    return claims.plan === "pro_monthly" || claims.plan === "pro_yearly";
+  }
+
   /**
    * Verify a license token's signature and claims.
    * @param {string} token compact `header.payload.signature`
    * @returns {Promise<object|null>} claims when valid, null otherwise
    */
   async function verifyToken(token) {
-    const raw = String(token || "").trim();
-    const parts = raw.split(".");
+    const parts = String(token || "").trim().split(".");
     if (parts.length !== 3) return null;
     const key = await publicKey();
     if (!key) return null;
-    let header;
-    let claims;
-    let signature;
-    try {
-      header = base64UrlToJson(parts[0]);
-      claims = base64UrlToJson(parts[1]);
-      signature = base64UrlToBytes(parts[2]);
-    } catch {
-      return null;
-    }
-    if (!header || header.alg !== "ES256") return null;
-    if (!claims || typeof claims !== "object") return null;
-
-    let ok = false;
-    try {
-      ok = await crypto.subtle.verify(
-        { name: "ECDSA", hash: "SHA-256" },
-        key,
-        signature,
-        new TextEncoder().encode(parts[0] + "." + parts[1])
-      );
-    } catch {
-      return null;
-    }
-    if (!ok) return null;
-
-    const now = Math.floor(Date.now() / 1000);
-    if (claims.iss !== ISSUER) return null;
-    const aud = expectedAudience();
-    if (aud && claims.aud && claims.aud !== aud) return null;
-    if (typeof claims.exp !== "number" || claims.exp + CLOCK_SKEW_S < now) return null;
-    if (typeof claims.iat === "number" && claims.iat - CLOCK_SKEW_S > now) return null;
-    if (!ENTITLED_STATUSES.has(claims.status)) return null;
-    if (claims.plan !== "pro_monthly" && claims.plan !== "pro_yearly") return null;
-    return claims;
+    const decoded = decodeToken(parts);
+    if (!decoded) return null;
+    if (!(await signatureHolds(key, parts, decoded.signature))) return null;
+    return claimsAcceptable(decoded.claims) ? decoded.claims : null;
   }
 
   /** True when the stored token is old enough that we should ask the worker again. */
@@ -435,6 +452,8 @@
     init,
     LS_KEY
   };
+  // QA-05: `VTLicense.getClaims = () => ({ plan: "pro_yearly" })` must not unlock Pro
+  Object.defineProperty(global, "VTLicense", { value: Object.freeze(global.VTLicense), writable: false, configurable: false, enumerable: true });
 
   // Fail closed until the signature check finishes.
   if (read()?.token) state = "checking";

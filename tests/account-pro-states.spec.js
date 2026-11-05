@@ -16,6 +16,13 @@
  * decides Pro is the real one.
  */
 const { test, expect } = require("@playwright/test");
+const { tapFloorLimit } = require("./helpers/tap-floor");
+// These tests stand in for the account worker at fake hosts
+// (https://entitlements.test, .invalid), which the page's Content Security
+// Policy rightly refuses. The policy itself is tested in tests/csp.spec.js
+// against the real worker host; here it is bypassed so account logic is
+// what is under test.
+test.use({ bypassCSP: true });
 const { mintLicense, patchBillingConfig } = require("./helpers/billing");
 
 const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";
@@ -460,7 +467,7 @@ test.describe("Phone: the door is on the row, not in the menu", () => {
     await expect(page.locator("#btn-more")).toBeVisible();
     const door = page.locator("#btn-account");
     await expect(door).toBeVisible();
-    expect((await door.boundingBox()).height).toBeGreaterThanOrEqual(44);
+    expect((await door.boundingBox()).height).toBeGreaterThanOrEqual(tapFloorLimit(44));
     await door.click();
     await expect(page.locator("#account-modal")).toBeVisible();
   });
@@ -505,8 +512,8 @@ test.describe("Phone: the door is on the row, not in the menu", () => {
     expect(nameWidth).toBeLessThanOrEqual(1);
     expect(await door.getAttribute("aria-label")).toMatch(/^pablo\.illescas\.buendia/);
     const box = await door.boundingBox();
-    expect(box.width).toBeGreaterThanOrEqual(44);
-    expect(box.height).toBeGreaterThanOrEqual(44);
+    expect(box.width).toBeGreaterThanOrEqual(tapFloorLimit(44));
+    expect(box.height).toBeGreaterThanOrEqual(tapFloorLimit(44));
   });
 });
 
@@ -836,8 +843,8 @@ test.describe("The menu, read by someone who has never seen it", () => {
         for (const h of seen.hits) {
           // ...and a finger on each control lands on that control.
           expect(h, h.id).toMatchObject({ whole: true, hit: true });
-          expect(h.h, h.id).toBeGreaterThanOrEqual(44);
-          expect(h.w, h.id).toBeGreaterThanOrEqual(44);
+          expect(h.h, h.id).toBeGreaterThanOrEqual(tapFloorLimit(44));
+          expect(h.w, h.id).toBeGreaterThanOrEqual(tapFloorLimit(44));
         }
         await ctx.close();
       });
@@ -873,8 +880,8 @@ test.describe("The menu, read by someone who has never seen it", () => {
         // Nothing below that row: the header ends with it.
         expect(headerBottom - row[0].bottom).toBeLessThanOrEqual(10);
         for (const c of row) {
-          expect(c.h, c.id).toBeGreaterThanOrEqual(44);
-          expect(c.w, c.id).toBeGreaterThanOrEqual(44);
+          expect(c.h, c.id).toBeGreaterThanOrEqual(tapFloorLimit(44));
+          expect(c.w, c.id).toBeGreaterThanOrEqual(tapFloorLimit(44));
           expect(c.hit, c.id).toBe(true);
         }
         await expect(page.locator("#btn-pricing")).toBeHidden();

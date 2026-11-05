@@ -1,4 +1,5 @@
 const { test, expect } = require("@playwright/test");
+const { boot } = require("./helpers/e2e");
 
 const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";
 
@@ -216,13 +217,24 @@ test.describe("Exercise-specific practice modes", () => {
     expect(counts.singingBasic + counts.singingAdvanced).toBe(counts.singingAll);
   });
 
-  test("save metrics still works", async ({ page }) => {
-    await forceEs(page);
+  test("save metrics works after a real take, and not before one", async ({ page }) => {
+    await page.clock.install();
+    await boot(page, { lang: "es", mic: "silent" });
     await page.click('.tier-chip[data-tier="basic"]');
     await page.locator("#exercise-list .card-ex").first().click();
     // Metrics folded by default (less scroll) — expand then save
     await page.click("#btn-toggle-metrics");
     await page.fill('#metrics-form [name="duration"]', "5");
+    // Wrong behaviour (PR #22, VT-001): Save on a screen that was only opened
+    // used to write a score, a completed session and a streak day.
+    await page.click("#btn-complete");
+    await expect(page.locator("#score-result .score-big")).toHaveCount(0);
+    await expect(page.locator("#rate-note")).toContainText(/practica|practice/i);
+    // Correct behaviour: after 16 s of a started take, the same Save scores it.
+    await page.locator("#btn-practice-start").click();
+    await expect(page.locator("#btn-practice-stop")).toBeVisible();
+    await page.clock.fastForward(16000);
+    await page.locator("#btn-practice-stop").click();
     await page.click("#btn-complete");
     await expect(page.locator("#score-result .score-big")).toContainText("/ 10");
   });
@@ -262,6 +274,10 @@ test.describe("Exercise-specific practice modes", () => {
     await page.click('.tab[data-tab="singing"]');
     await page.click('.tier-chip[data-tier="basic"]');
     await page.locator("#exercise-list .card-ex[data-id='s2-solfege-chords']").click();
+    // Progressive disclosure: the piano's secondary options stay folded in the
+    // corner until the learner opens the piano, then all three are there.
+    await expect(page.locator("#chk-sustain")).toBeHidden();
+    await page.locator("#btn-toggle-piano").click();
     await expect(page.locator("#chk-sustain")).toBeVisible();
     await expect(page.locator("#chk-arpeggio")).toBeVisible();
     await expect(page.locator("#chk-one-note")).toBeVisible();

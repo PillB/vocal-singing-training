@@ -1,0 +1,183 @@
+name: Quality and production regressions
+
+# PR gate: lint + catalog + Node/Worker + mutation check, the browser mutation sets
+# (one job each), then the headless Chromium suite in 4 balanced shards (one generated
+# test per exercise).
+# Nightly / manual: the headed "watch" sweeps (Playwright project `sweep`)
+# and the live GitHub Pages check. Those take ~40 min, write screenshots and
+# reports, and were never meant to gate a pull request.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+    inputs:
+      sweeps:
+        description: "Also run the headed sweeps and live Pages check"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run test:core
+      - name: chore(lint) the complexity baseline may only shrink against the base branch
+        if: github.event_name == 'pull_request'
+        run: node qa/lint-complexity.mjs --baseline-ref "origin/${{ github.base_ref }}"
+      - name: Mutation check (every planted audio and lint defect must turn a test red)
+        run: node qa/mutate.mjs
+
+  browser-contracts:
+    needs: contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CI: '1'
+      MIC_HELP: '0'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npx playwright install --with-deps chromium
+      - name: Chromium production regression contracts (headed-safe)
+        run: xvfb-run -a npx playwright test tests/production-contracts.spec.js --project=chromium --workers=2 --global-timeout=900000
+      - name: Preserve production-contract failures
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-contract-failures
+          path: |
+            test-results/
+            playwright-report/
+          if-no-files-found: ignore
+
+  # The browser mutation sets, one job each. They ran as one step of browser-contracts and, once a11y grew
+  # to 26 mutants, outlived that job's 30 minute limit (cancelled, not red: QA-45). Each mutant is judged by
+  # the spec written to catch it; the nightly job below runs the a11y group wide as well.
+  mutation:
+    needs: contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        set: [stage, a11y, flows, regress, billing, audit, toast]
+    env:
+      CI: '1'
+      MIC_HELP: '0'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npx playwright install --with-deps chromium
+      - name: "Mutation check (${{ matrix.set }}): every planted defect must turn its test red"
+        run: node qa/mutate.mjs ${{ matrix.set }}
+
+  browser:
+    needs: browser-contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    env:
+      CI: '1'
+      MIC_HELP: '0'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npx playwright install --with-deps chromium
+      - name: Chromium PR gate (shard ${{ matrix.shard }} of 4)
+        run: xvfb-run -a npx playwright test --project=chromium --workers=2 --shard=${{ matrix.shard }}/4 --global-timeout=2100000
+      - name: Preserve browser failures for forensic review
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-failures-${{ matrix.shard }}
+          path: |
+            test-results/
+            playwright-report/
+          if-no-files-found: ignore
+
+  # Nightly: the a11y mutants against all six browser specs at once (MUTATE_WIDE). The PR job judges each by its
+  # own spec; this catches a mutant that one spec stopped killing while another still does.
+  mutation-wide:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      CI: '1'
+      MIC_HELP: '0'
+      MUTATE_WIDE: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npx playwright install --with-deps chromium
+      - name: Mutation check, a11y group against every browser spec
+        run: node qa/mutate.mjs a11y
+
+  sweeps:
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.sweeps)
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      CI: '1'
+      MIC_HELP: '0'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npx playwright install --with-deps chromium
+      - name: Headed watch sweeps (every exercise, every control, real pointer)
+        run: xvfb-run -a npx playwright test --project=sweep --workers=1 --global-timeout=6600000
+      - name: Live GitHub Pages smoke
+        if: always()
+        run: LIVE_PAGES=1 npx playwright test tests/live-pages.spec.js --project=chromium
+      - name: Preserve sweep reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sweep-reports
+          path: |
+            test-results/
+            qa/geometry/
+            qa/screenshots/
+          if-no-files-found: ignore

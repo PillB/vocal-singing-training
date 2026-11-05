@@ -102,14 +102,14 @@ window.VT_EXERCISES = {
       title: "Improve Articulation (Pen)",
       durationMin: 3,
       original: "Count to 60 with pen in mouth focusing on achieving clarity.",
-      research: "Resistance articulation drills strengthen speech muscles for clearer delivery.",
+      research: "Articulation contrast can make consonant movements easier to notice. A pen is optional; this is not proven speech-muscle strengthening.",
       steps: [
-        "Place a clean pen or chopstick gently between your teeth (do not bite hard).",
+        "Safest option: count with exaggerated consonants and no object. If you choose the original pen variation, use a clean, blunt object held still without biting.",
         "Count 1 to 60 aiming for intelligible consonants.",
-        "Remove the pen and count 1 to 20 — notice the ease and clarity boost."
+        "Count 1 to 20 normally (remove the object first if you used one); compare clarity and comfort without assuming an automatic boost."
       ],
       tips: [
-        "This is resistance training for speech muscles.",
+        "Use the contrast to notice your articulation, not to force the jaw or claim strength gains.",
         "Over-work tongue tip and lips for crisp consonants.",
         "Use only safe, clean objects."
       ],
@@ -410,10 +410,11 @@ window.VT_EXERCISES = {
       research:
         "Volume shows confidence and authority when controlled. Laddering builds flexible dynamics for different rooms and moments.",
       steps: [
-        "Pick one sentence (8–12 words).",
-        "Say it at level 1 (almost whisper) → 2 soft → 3 conversational → 4 projected → 5 full room (not shout).",
-        "Return 5 → 3 → 1 with the same sentence.",
-        "Then deliver a 60s story using at least 3 different volume levels on purpose."
+        "Pick one short sentence you use often (8–12 words).",
+        "Say it at 5 levels: 1 almost a whisper → 2 soft → 3 conversational → 4 projected → 5 full room (no shouting).",
+        "Come back down 5 → 3 → 1 with the same sentence; repeat the ladder 3 times.",
+        "Then tell a 60 s story using at least 3 levels, on purpose.",
+        "Keep the same clarity and diction at every level."
       ],
       tips: [
         "Projection comes from support + intention, not throat squeeze.",
@@ -440,10 +441,11 @@ window.VT_EXERCISES = {
       research:
         "Varying pace keeps audiences engaged. Slow on key ideas; allow processing time; avoid one-speed delivery.",
       steps: [
-        "Write 3 key points for a short talk.",
-        "Deliver with deliberate slow-down on each key point (+ pause after).",
-        "Use slightly faster pace on transitions/setup.",
-        "Record 90 seconds and mark where pace served meaning."
+        "Pick a message of about 90 s with 3 key ideas.",
+        "First pass: an even pace.",
+        "Second pass: slow down only on the key ideas (about half speed) and speed up the rest a little.",
+        "Third pass: put a “brake” (a pause) before each key idea, then slow down on it.",
+        "Record it and pick the clearest version."
       ],
       tips: [
         "Slow ≠ boring when intention is clear.",
@@ -902,19 +904,19 @@ window.VT_EXERCISES = {
       original:
         "Costo-abdominal breathing: inhale low through the nose, hold briefly, then spend the air slowly and evenly on a controlled exhale.",
       research:
-        "Of the three breathing patterns, only the costo-abdominal one lets the diaphragm descend fully (roughly 60% of capacity vs about 25% for clavicular). The diaphragm is not under direct voluntary control — the ribs and abdominal wall are, and that is what apoyo trains.",
+        "Breathing strategies vary between singers. Notice comfortable lower-rib and abdominal movement and practise a steady exhale; no single expansion pattern or capacity percentage is proven best for everyone.",
       steps: [
         "Stand, or sit on the edge of the chair with the legs open — nothing tight at the waist.",
-        "One hand on the lowest ribs, one on the belly. Shoulders must NOT rise.",
+        "One hand on the lowest ribs, one on the belly. Let the shoulders and neck stay comfortable.",
         "Inhale through the nose for 4 counts — the hands move out, the collarbones stay still.",
-        "Hold 2 counts to set the fold closure, ready to sing.",
+        "Pause gently for up to 2 counts only if comfortable; do not close or press the throat.",
         "Exhale for 8 counts, evenly, keeping the ribs wide as long as you can — that resistance is the apoyo.",
         "Repeat the cycle; do not fill to bursting and do not empty to the vacuum feeling."
       ],
       tips: [
         "Chi sa ben respirare, sa ben cantare — air control is the base of every other technique here.",
-        "High notes and loud passages cost more air, so build the reserve before you need it.",
-        "The initial impulse is a light abdominal push, like a small cough, then you hold that pressure.",
+        "Different notes and dynamics require coordination, not simply more air or pressure.",
+        "Start the exhale softly, without a cough-like push or sustained abdominal bracing.",
         "Lying down or half asleep you already breathe this way — you are recovering it, not learning it."
       ],
       mistakes: [
@@ -941,7 +943,7 @@ window.VT_EXERCISES = {
       original:
         "Find the soft palate with a surprised face and the instant before a yawn, then sing from that inner space.",
       research:
-        "The soft palate is the first placement handle a beginner can actually feel: raising it adds width and resonance and stops the tone going flat — the class image is the difference between speaking outdoors and speaking inside a chapel.",
+        "Soft-palate position changes nasal versus oral resonance. The pre-yawn image may help you explore tone colour, but it does not by itself correct pitch or guarantee a wider sound.",
       steps: [
         "Imagine you just heard surprising news — the jaw drops on its own, the space grows.",
         "Find the instant just before a yawn and stop there; that is the position, not the yawn itself.",
@@ -1067,7 +1069,7 @@ window.VT_EXERCISES = {
         "Singing should progress towards the ease of talking — this zone is where you feel that.",
         "If the middle feels heavy, you are carrying low-zone weight up into it.",
         "Middle is the bridge: recognising it is what stops you singing everything from one place.",
-        "Keep the soft palate up even here, or the tone goes flat."
+        "Explore an easy oral resonance; soft-palate position changes nasality, not pitch accuracy by itself."
       ],
       mistakes: [
         "Over-colouring a zone that should sound ordinary",
@@ -1096,10 +1098,10 @@ window.VT_EXERCISES = {
         "An exaggerated nasal sound is the quickest way to locate the upper resonance area. The exaggeration is the finder, not the final tone — once the place is found the sound is balanced back.",
       steps: [
         "Exaggerate on purpose: 'YA, YA, YA' as nasal and bright as you can make it.",
-        "Notice where it buzzes — nose, cheekbones, forehead. That is the place you are learning.",
+        "Notice buzzing sensations around the face. Treat them as a cue for tone colour, not where sound literally travels.",
         "Repeat it on rising targets keeping that same buzzing address.",
-        "Once the place is clear, take some of the brightness out while staying in the same spot.",
-        "End with a couple of 'YA' rounds at a normal colour, still in the mask."
+        "Once you recognise the sensation, reduce the brightness without squeezing or trying to move the sound physically.",
+        "End with a couple of 'YA' rounds in a natural tone colour; compare comfort and ease."
       ],
       tips: [
         "It is supposed to sound ugly at this stage — the exercise is a finder, not the sound you will perform with.",
@@ -1245,7 +1247,7 @@ window.VT_EXERCISES = {
       original:
         "The same lip trill, now carrying a scale: 1-2-3-4-5-4-3-2-1 on the bubble, then the whole pattern moves up a semitone and you do it again.",
       research:
-        "Narrowing the tract at the lips sends back pressure down to the folds, which lowers the pressure needed to start a note and softens how hard the folds collide — so a scale costs warm-up effort instead of singing effort, and the measured gain is largest in untrained voices. You cannot pronounce do-re-mi with the lips buzzing, so the solfège lives in the ear and in the pitch, and it transfers to the open vowel straight afterwards.",
+        "Lip trills are a semi-occluded vocal-tract exercise: acoustic interaction may make phonation feel easier. Benefits and range changes vary by singer; stop if strained. Solfège is heard in the notes while the lips trill, then explored on /A/.",
       steps: [
         "Bubble first with no pitch at all: loose lips, steady air, jaw hanging.",
         "Add the first note underneath the bubble without letting the lips stop.",
@@ -1258,7 +1260,7 @@ window.VT_EXERCISES = {
         "If the lips stall, send more air rather than pressing harder — or rest two fingers on the cheeks.",
         "The buzz rate should stay the same as you climb. If it speeds up or stops, you are pushing.",
         "Keep the volume level across the pattern — getting louder on the way up is the habit this removes.",
-        "The trill honestly reaches two or three semitones above your open-vowel range. That headroom is the point of it, not your new top note."
+        "A trill may feel easier near your upper comfortable range, but no fixed semitone gain is guaranteed. Stay within an easy range."
       ],
       mistakes: [
         "Letting the trill stop between notes",

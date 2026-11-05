@@ -101,6 +101,7 @@ describeLive("Live Pages validation", () => {
     await page.locator("#btn-practice-start").click();
     await page.waitForFunction(
       () => !document.querySelector("#btn-practice-stop")?.hidden,
+      null,
       { timeout: 20000 }
     );
     await page.waitForTimeout(900);

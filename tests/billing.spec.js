@@ -6,6 +6,12 @@
  * switches on the QA unlock explicitly (tests/helpers/billing.js).
  */
 const { test, expect } = require("@playwright/test");
+// These tests stand in for the account worker at fake hosts
+// (https://entitlements.test, .invalid), which the page's Content Security
+// Policy rightly refuses. The policy itself is tested in tests/csp.spec.js
+// against the real worker host; here it is bypassed so account logic is
+// what is under test.
+test.use({ bypassCSP: true });
 const {
   mintLicense,
   tamperToken,
@@ -653,15 +659,9 @@ test.describe("Billing & subscriptions", () => {
 
   test("ad_free feature maps to Pro only", async ({ page }) => {
     await enableQaPro(page);
+    await patchBillingConfig(page, { freeTrialDays: 0 });
     await boot(page);
     const free = await page.evaluate(() => {
-      try {
-        localStorage.removeItem("vt_billing_v1");
-        localStorage.removeItem("vt_billing_trial_started_v1");
-        window.VT_BILLING_CONFIG.freeTrialDays = 0;
-      } catch {
-        /* ignore */
-      }
       return {
         adFree: VTBilling.can("ad_free"),
         export: VTBilling.can("export_progress"),
@@ -707,13 +707,13 @@ test.describe("Billing & subscriptions", () => {
     // Health note visible when not production-ok
     await expect(page.locator("#pricing-health-note")).toBeVisible();
 
-    // Configure portal + activate Pro → manage button appears
-    await page.evaluate(() => {
-      window.VT_BILLING_CONFIG.customerPortalUrl =
-        "https://billing.stripe.com/p/login/test_abc";
-      VTBilling.activateDemo("pro_monthly");
-    });
-    await page.click("#pricing-close");
+    // Configure portal + activate Pro → manage button appears. The page
+    // freezes its config once it has it (QA-05), so the portal URL arrives
+    // the way a deploy would set it: in the config the page loads with.
+    await patchBillingConfig(page, { customerPortalUrl: "https://billing.stripe.com/p/login/test_abc" });
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => !!window.VTBilling && !!window.VTApp);
+    await page.evaluate(() => VTBilling.activateDemo("pro_monthly"));
     await page.click("#btn-pricing");
     await expect(page.locator("#btn-manage-billing")).toBeVisible();
 

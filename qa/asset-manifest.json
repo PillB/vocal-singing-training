@@ -1,0 +1,230 @@
+{
+  "css/admin.css": {
+    "v": "20260926a",
+    "sha": "49bf31d5b3159754"
+  },
+  "css/exercise-viz.css": {
+    "v": "20261002a",
+    "sha": "8a118da5afb38589"
+  },
+  "css/scenes/breath.css": {
+    "v": "20261002a",
+    "sha": "78e90230c5c5f665"
+  },
+  "css/scenes/dynamics.css": {
+    "v": "20261002a",
+    "sha": "63e8ab5a97d802fc"
+  },
+  "css/scenes/guided.css": {
+    "v": "20261002a",
+    "sha": "d2f429e0ea5040a8"
+  },
+  "css/scenes/pitch.css": {
+    "v": "20261002a",
+    "sha": "4d2cc24671844eb6"
+  },
+  "css/scenes/resonance.css": {
+    "v": "20261002a",
+    "sha": "41f7e30fe93b0f67"
+  },
+  "css/scenes/speech-shape.css": {
+    "v": "20261002a",
+    "sha": "64d5c6e726837514"
+  },
+  "css/scenes/speech.css": {
+    "v": "20261002a",
+    "sha": "180a75ec5f9359a2"
+  },
+  "css/scenes/volume.css": {
+    "v": "20261002a",
+    "sha": "93d225ed63fd919a"
+  },
+  "css/styles.css": {
+    "v": "20261103c",
+    "sha": "c7cd14f1776cfb9d"
+  },
+  "js/account.js": {
+    "v": "20261006b",
+    "sha": "248c7cd91592e50d"
+  },
+  "js/admin.js": {
+    "v": "20261006b",
+    "sha": "7ab7cf2a87a3e37e"
+  },
+  "js/ads-config.js": {
+    "v": "20261006a",
+    "sha": "64f8c87aa99f4511"
+  },
+  "js/ads.js": {
+    "v": "20261006a",
+    "sha": "a21095f2971b6300"
+  },
+  "js/analytics.js": {
+    "v": "20261103a",
+    "sha": "319fd17f4fbb6fd1"
+  },
+  "js/app.js": {
+    "v": "20261103h",
+    "sha": "b674db9fef3f0c55"
+  },
+  "js/auth-users.generated.js": {
+    "v": "20261006a",
+    "sha": "a2eb6d98526b98a2"
+  },
+  "js/auth.js": {
+    "v": "20261006a",
+    "sha": "dfe04ab98bbedd4b"
+  },
+  "js/billing-config.js": {
+    "v": "20261102a",
+    "sha": "b61963af1a8c5294"
+  },
+  "js/billing.js": {
+    "v": "20261103a",
+    "sha": "4b1faa1108a4b2c9"
+  },
+  "js/daily-loop.js": {
+    "v": "20261006b",
+    "sha": "0e963342c5ca6801"
+  },
+  "js/exercise-viz.js": {
+    "v": "20261002a",
+    "sha": "012bb5f186b7dfdd"
+  },
+  "js/exercises-data.js": {
+    "v": "20261103b",
+    "sha": "b43c8eaa6c7b59ba"
+  },
+  "js/exercises-locale-es.js": {
+    "v": "20261103a",
+    "sha": "2e248d169a7c6443"
+  },
+  "js/experiments-config.js": {
+    "v": "20260924e",
+    "sha": "68df1f865a4670c6"
+  },
+  "js/experiments.js": {
+    "v": "20260925a",
+    "sha": "6d5e9f2b2a82249e"
+  },
+  "js/focus-trap.js": {
+    "v": "20260924c",
+    "sha": "178ba56877e20400"
+  },
+  "js/i18n.js": {
+    "v": "20261103b",
+    "sha": "e60e1d7e9d2cff80"
+  },
+  "js/license.js": {
+    "v": "20261103d",
+    "sha": "d667f789ec86cbd9"
+  },
+  "js/metrics.js": {
+    "v": "20260924c",
+    "sha": "8e4162c28ab1f554"
+  },
+  "js/piano.js": {
+    "v": "20261002a",
+    "sha": "f8531113607c80df"
+  },
+  "js/pitch-game.js": {
+    "v": "20261002a",
+    "sha": "6c28a1d0204d4cc1"
+  },
+  "js/pitch-visualizer.js": {
+    "v": "20261101a",
+    "sha": "03b08ae48814313a"
+  },
+  "js/practice-days.js": {
+    "v": "20261103a",
+    "sha": "78be66ee0c2f6bc0"
+  },
+  "js/practice-engine.js": {
+    "v": "20261101a",
+    "sha": "a0e0e06dc4bcd25e"
+  },
+  "js/practice-modes.js": {
+    "v": "20261103a",
+    "sha": "c967e70077be5d32"
+  },
+  "js/practice-profiles.js": {
+    "v": "20261002a",
+    "sha": "50970b7a0db2aefb"
+  },
+  "js/privacy-switch.js": {
+    "v": "20261006b",
+    "sha": "8f828ad4179cbf52"
+  },
+  "js/range-adapter.js": {
+    "v": "20261006a",
+    "sha": "3bfb14fca499de76"
+  },
+  "js/recorder.js": {
+    "v": "20261002a",
+    "sha": "d92914eab4ecad7d"
+  },
+  "js/region-gate.js": {
+    "v": "20261103b",
+    "sha": "4e7e6793cda6c436"
+  },
+  "js/reminders.js": {
+    "v": "20260924c",
+    "sha": "ee0f23adcbe0cd3f"
+  },
+  "js/scenes/breath.js": {
+    "v": "20261002a",
+    "sha": "7e48f57ef7398d75"
+  },
+  "js/scenes/dynamics.js": {
+    "v": "20261102a",
+    "sha": "b625414e32c1539e"
+  },
+  "js/scenes/guided.js": {
+    "v": "20261007a",
+    "sha": "1d218daa933e5250"
+  },
+  "js/scenes/pitch.js": {
+    "v": "20261002a",
+    "sha": "272bd50e55f4c194"
+  },
+  "js/scenes/resonance.js": {
+    "v": "20261007a",
+    "sha": "e736b990674c69fc"
+  },
+  "js/scenes/speech-shape.js": {
+    "v": "20261007a",
+    "sha": "cd41419772862466"
+  },
+  "js/scenes/speech.js": {
+    "v": "20261005g",
+    "sha": "bc645ea3fdd61e0a"
+  },
+  "js/scenes/volume.js": {
+    "v": "20261002a",
+    "sha": "5f2c4f4ee948f2a5"
+  },
+  "js/session.js": {
+    "v": "20261103a",
+    "sha": "9caee4c0ff168c46"
+  },
+  "js/storage.js": {
+    "v": "20261103b",
+    "sha": "f453142870b23007"
+  },
+  "js/sync.js": {
+    "v": "20261102a",
+    "sha": "319c1ae39b89c93d"
+  },
+  "js/tour.js": {
+    "v": "20261006b",
+    "sha": "8902ab4fd0c60593"
+  },
+  "js/value-pulse.js": {
+    "v": "20260924c",
+    "sha": "6a70c4249ad8e832"
+  },
+  "js/voice-features.js": {
+    "v": "20261102d",
+    "sha": "8412b26127f49cf1"
+  }
+}

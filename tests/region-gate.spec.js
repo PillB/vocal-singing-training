@@ -15,6 +15,12 @@
 const path = require("path");
 const { pathToFileURL } = require("url");
 const { test, expect } = require("@playwright/test");
+// These tests stand in for the worker's event and geo routes at a fake host
+// (https://events.test and friends), which the page's Content Security
+// Policy rightly refuses. The policy is tested in tests/csp.spec.js and
+// tests/node/csp.test.mjs against the real worker; it is bypassed here so
+// consent and sending logic is what is under test.
+test.use({ bypassCSP: true });
 
 const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";
 const WORKER_SRC = path.join(__dirname, "..", "workers", "entitlements", "src");
@@ -93,6 +99,14 @@ async function open(browser, opts) {
     human: opts.human !== false,
     storage: opts.storage || {}
   });
+  if (opts.slowAnalyticsMs) {
+    // js/analytics.js arriving after the worker's answer (a slow network, a
+    // cold cache) is the order the bar must survive.
+    await page.route(/\/js\/analytics\.js/, async (route) => {
+      await new Promise((r) => setTimeout(r, opts.slowAnalyticsMs));
+      await route.continue();
+    });
+  }
   await page.goto(BASE + "/", { waitUntil: "domcontentloaded" });
   await page.waitForFunction(() => !!window.VTAnalytics && !!window.VTRegion);
   return { ctx, page, sent };
@@ -318,6 +332,29 @@ test.describe("EU rules only in the EU", () => {
     await expect.poll(() => sent.batches.length).toBeGreaterThan(0);
     await expect(page.locator(bar)).toHaveCount(0);
     await ctx.close();
+  });
+
+  test("a visitor who switched sending off is not asked again, even when the worker answers before analytics.js runs", async ({ browser }) => {
+    // Wrong behaviour rejected: the bar decided as soon as the worker said
+    // "eu"; if analytics.js had not run yet it could not see the opt-out, and
+    // a visitor who had already said no was asked again. The control below
+    // is the same order without an opt-out: there the bar is shown.
+    const lapsed = Math.floor(Date.now() / 1000) - 200 * 86400;
+    const refused = await open(browser, {
+      timezoneId: "Europe/Madrid",
+      locale: "es-ES",
+      slowAnalyticsMs: 700,
+      storage: { vt_eu_consent_v1: JSON.stringify({ v: 1, a: "n", t: lapsed }), vt_analytics_optout_v1: "1" }
+    });
+    await refused.page.waitForFunction(() => window.VTRegion.verdict() !== "pending");
+    expect(refused.sent.geo).toBe(1);
+    await refused.page.waitForTimeout(300);
+    await expect(refused.page.locator(bar)).toHaveCount(0);
+    await refused.ctx.close();
+    const fresh = await open(browser, { timezoneId: "Europe/Madrid", locale: "es-ES", slowAnalyticsMs: 700 });
+    await fresh.page.waitForFunction(() => window.VTRegion.verdict() !== "pending");
+    await expect(fresh.page.locator(bar)).toHaveCount(1);
+    await fresh.ctx.close();
   });
 
   test("the privacy page says the browser asks where it is, in both languages", async ({ browser }) => {

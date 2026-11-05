@@ -700,6 +700,10 @@
       if (state.signedIn) schedule();
       else confirmed.clear();
     });
+    // The account may have answered while this file was still downloading
+    // (its check starts as account.js runs): that sign-in was announced
+    // before anyone here listened, and the sync it asks for never ran.
+    if (global.VTAccount.getState?.().signedIn) schedule();
     // A failed sync need not wait out its retry once the connection is back.
     global.addEventListener?.("online", () => {
       if (lastError) schedule();

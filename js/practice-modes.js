@@ -524,7 +524,9 @@
       const phases = this.profile.phases || [];
       const n = phases.length || 5;
       const deck = METAPHOR_TOPICS;
-      const day = Math.floor(Date.now() / 86400000);
+      // The learner's calendar day, not the UTC one (which turned over at 19:00 in Lima; QA-36)
+      const dayKey = global.VTDays?.dayKey?.() || new Date().toISOString().slice(0, 10);
+      const day = Math.floor(Date.parse(`${dayKey}T00:00:00Z`) / 86400000);
       st.deckNext = (day * n) % deck.length;
       const draw = () => {
         const pair = deck[st.deckNext % deck.length];
@@ -7754,12 +7756,16 @@
     },
     /**
      * The attack of a run from the fast envelope: where it really started and
-     * how fast it rose. A rise under ~14 ms is a hammer (a glottal "slap"),
-     * unless frames were dropped and the attack was not seen.
+     * how fast it rose to where its fast rise ends (VTFeatures.attackLevel,
+     * cut by VTFeatures.riseTime as s12 is). A rise under ~14 ms is a hammer
+     * (a glottal "slap"), unless audio was lost inside it and the attack was
+     * not seen. The 12,5 ms smoothing alone reads an instant step as ~10 ms; a
+     * 30 ms attack reads ~25 ms.
      */
     _attack(run) {
       const st = this.state;
       const E = st.env;
+      const F = global.VTFeatures;
       run.attackDone = true;
       if (!E || !E.total) return;
       const rate = E.rate;
@@ -7768,26 +7774,20 @@
       const seg = E.window(since / rate);
       if (seg.length < since || seg.length < back + 8) return;
       const n = Math.min(seg.length, back + Math.round(0.12 * rate));
-      const head = seg.slice(0, back);
-      const noise = global.VTFeatures.percentile(head, 0.2) || 0;
+      const noise = F.percentile(seg.slice(0, back), 0.2) || 0;
       let peak = 0;
       for (let i = 0; i < n; i++) peak = Math.max(peak, seg[i]);
       if (peak <= noise * 1.5) return;
-      const lo = noise + (peak - noise) * 0.1;
-      const hi = noise + (peak - noise) * 0.9;
-      let i10 = -1;
-      let i90 = -1;
-      for (let i = 0; i < n; i++) {
-        if (i10 < 0 && seg[i] >= lo) i10 = i;
-        if (i10 >= 0 && seg[i] >= hi) {
-          i90 = i;
-          break;
-        }
-      }
-      if (i10 < 0 || i90 < 0) return;
-      run.t0 = Math.min(run.t0, this._tOfIdx(run.startTotal - back + i10));
-      run.riseMs = ((i90 - i10) * 1000) / rate;
-      run.hammer = run.maxDt > st.bufMs + 6 ? null : run.riseMs <= 14;
+      // Where it starts, against its loudest; how it rises, against where the rise ends
+      const start = F.riseTime(seg, noise, peak, rate, n);
+      const top = start ? F.attackLevel(seg, start.i10, n) : null;
+      const rise = top != null && top > noise * 1.5 ? F.riseTime(seg, noise, top, rate, n) : null;
+      if (!rise || rise.ms == null) return;
+      run.t0 = Math.min(run.t0, this._tOfIdx(run.startTotal - back + rise.i10));
+      run.riseMs = rise.ms;
+      // Audio lost inside the attack (a stalled tab) leaves it unmeasured
+      const lost = E.lostSince ? E.lostSince(run.startTotal - back) : run.maxDt > st.bufMs + 6;
+      run.hammer = lost ? null : run.riseMs <= 14;
     },
     /** Where the sound really ended: the last moment within 15 dB of its peak. */
     _release(run, lastSnd) {
@@ -8386,14 +8386,21 @@
       if (r.riseMs <= 22 && (r.overshoot >= 1.35 || r.riseMs <= 14)) return "abrupt";
       return "balanced";
     },
+    /**
+     * Audio that never reached the analyser in the rise (a stalled tab). The
+     * envelope knows exactly; a frame late enough to lose samples (the engine
+     * caps dt at 50 ms) is only the guess for a capture that cannot tell.
+     */
+    _lostRise(res) {
+      const st = this.state;
+      return res.lost != null ? res.lost : st.maxDt > (st.bufMs || 43) + 6;
+    },
     _onOnset(res) {
       const st = this.state;
       // The take's first sound (or one that followed noise) had no silence before it
       if (!st.startArmed || st.review) return;
-      const span = st.bufMs || 43;
       res.t = st.soundStart;
-      // A frame late enough to lose samples of the rise (the engine caps dt at 50 ms)
-      const unmeasured = st.maxDt > span + 6;
+      const unmeasured = this._lostRise(res);
       if (st.phase === "contrast") {
         const ask = st.asks[st.step];
         if (unmeasured) {
@@ -10183,17 +10190,27 @@
       if (q("[data-cue]")) q("[data-cue]").textContent = phaseCueFor(st.phases[cueIdx]);
       if (q("[data-facts]")) q("[data-facts]").textContent = this._factsText();
     },
-    /** "Take done": ends the take being sung; with nothing recorded it still marks one. */
+    /** "Take done" only completes actual captured audio, never an empty take. */
     _markTake() {
       const st = this.state;
       if (st.review || (st.stage !== "A" && st.stage !== "B")) return;
-      if (st.recording && st.cur && st.cur.sound >= 0.3) {
+      // Match the automatic completion threshold; 300 ms can be a cough,
+      // click, or incidental voiced fragment, not a comparable sung phrase.
+      if (st.recording && st.cur && st.cur.sound >= 1.2) {
         this._endTake();
         return;
       }
       if (st.recording) this._dropTake();
-      st[st.stage] = { name: st.stage, noAudio: true, pts: [], dur: 0 };
-      this._advance();
+      // Previously two clicks before Start produced a gold 2/2 and "Listen
+      // to both", although neither take existed. There is no comparison to
+      // perform without audio. Show a real recovery cue and stay on this take.
+      const message = L(
+        "Todavía no hay audio. Pulsa Empezar y canta la frase antes de cerrar la toma.",
+        "No audio yet. Press Start and sing the phrase before finishing this take."
+      );
+      if (this.$("[data-status]")) this.$("[data-status]").textContent = message;
+      this.viz?.caption?.(message, 0);
+      this.viz?.draw();
     },
     _advance() {
       const st = this.state;
@@ -10474,26 +10491,23 @@
    * s27 lip-trill solfège — a scale carried on the bubble, root walking up and
    * back down. This is deliberately NOT `scaleSteps` with a different cue.
    *
-   * Two things make a trill different from a vowel scale, and both were measured
-   * against the shipped detector rather than guessed:
+   * Two things make a trill different from a vowel scale:
    *
-   * 1. `detectPitch` reads a lip trill SHARP. The lips flutter at 25–30 Hz, which
-   *    is below the 65 Hz search floor in js/pitch-visualizer.js, so the flap
-   *    lands inside the analysis window instead of being resolved, and the
-   *    autocorrelation peak drifts up — of the order of +30…+60 cents at C3–D3,
-   *    less as pitch rises. A symmetric ±40¢ band (what `scaleSteps` uses) sits
-   *    below a correctly sung trill and never advances. So the acceptance window
-   *    here is ASYMMETRIC: tolerant sharp, tight flat. Tight on the flat side
-   *    matters — a wide-open flat side would lock on the note before it at the
-   *    two half steps in the pattern.
+   * 1. A lip trill's flutter can perturb F0. An older detector had an observed
+   *    sharp-side bias and this mode once accepted pitches up to +120 cents;
+   *    that would *also* accept the adjacent semitone as a correct note.
+   *    The current YIN estimator has different error characteristics, so the
+   *    old detector-specific allowance is invalid. Use a bounded −40..+50
+   *    cent gate while a real-voice trill corpus is collected. Frames outside
+   *    the gate are uncertain/wrong for this step, not evidence of a failing
+   *    singing technique.
    * 2. A trill scatters frame to frame, so a hard `else acc = 0` reset (again
    *    what `scaleSteps` does) throws away the whole accumulator on one stray
    *    frame. The accumulator bleeds at half fill rate instead, which needs
    *    about 1.2s of continuously bad frames to undo a full 600ms lock.
    *
-   * The sharp-side figure comes from simulating trills through the real
-   * `detectPitch`, not from recordings of actual students, so every constant is
-   * overridable from the profile.
+   * The tolerance is a practical guard against false neighboring-note credit,
+   * not a validated human-trill accuracy estimate. Profile overrides remain.
    */
   Modes.trillSolfege = baseMode({
     id: "trillSolfege",
@@ -10877,21 +10891,34 @@
         else this.viz?.draw();
       }
     },
+    /** The legacy voiced flag has silence grace; verify a fresh powered frame. */
+    _isFreshTrillPitch(frame, f) {
+      const floor = Math.max(0.02, (frame.airRmsThreshold || 0.006) * 3);
+      return !!frame.voiced && (frame.rms || 0) >= floor && f > 0 && f !== this.state.lastFreq;
+    },
+    /** Keep numerical acceptance separate from audio-frame validity. */
+    _creditTrillPitch(med, dt) {
+      const cents = 100 * (global.VTPitchUtils.freqToMidi(med) -
+        global.VTPitchUtils.freqToMidi(this.state.wantFreq));
+      const lo = this.profile.centsLo == null ? -40 : this.profile.centsLo;
+      const hi = this.profile.centsHi == null ? 50 : this.profile.centsHi;
+      if (cents >= lo && cents <= hi) {
+        this.state.acc += dt;
+        if (this.state.acc >= (this.profile.holdMs || 600)) this._advance();
+      } else {
+        this.state.acc = Math.max(0, this.state.acc - dt * 0.5);
+      }
+    },
     /** The pitch gate that walks the scale (see the note above the mode). */
     _frameGate(frame) {
       const dt = frame.dtMs || 16;
-      const rms = frame.rms || 0;
       if (!this.state.wantFreq || !global.VTPitchUtils) return;
       // The clock-only fallback frame carries voiceFreq 0, not null.
       const f = frame.voiceFreq || 0;
-      // `voiced` stays true through a grace window after the sound stops, and
-      // `voiceFreq` repeats its last value bit for bit while it does. Require
-      // real energy, and ignore a pitch that has not changed at all.
-      const floor = Math.max(0.02, (frame.airRmsThreshold || 0.006) * 3);
-      const live = !!frame.voiced && rms >= floor && f > 0 && f !== this.state.lastFreq;
+      // Reference piano notes must not score the next note through the mic.
       const blanked = this.state.refBlank > 0;
       if (blanked) this.state.refBlank -= dt;
-      if (!live || blanked) {
+      if (!this._isFreshTrillPitch(frame, f) || blanked) {
         if (!blanked && f <= 0) this.state.acc = Math.max(0, this.state.acc - dt * 0.5);
         return;
       }
@@ -10900,19 +10927,7 @@
       this.state.hist.push(f);
       if (this.state.hist.length > n) this.state.hist.shift();
       const med = this._median();
-      if (med == null) return;
-      const cents =
-        (global.VTPitchUtils.freqToMidi(med) -
-          global.VTPitchUtils.freqToMidi(this.state.wantFreq)) *
-        100;
-      const lo = this.profile.centsLo == null ? -40 : this.profile.centsLo;
-      const hi = this.profile.centsHi == null ? 120 : this.profile.centsHi;
-      if (cents >= lo && cents <= hi) {
-        this.state.acc += dt;
-        if (this.state.acc >= (this.profile.holdMs || 600)) this._advance();
-      } else {
-        this.state.acc = Math.max(0, this.state.acc - dt * 0.5);
-      }
+      if (med != null) this._creditTrillPitch(med, dt);
     },
     onStop() {
       const st = this.state;

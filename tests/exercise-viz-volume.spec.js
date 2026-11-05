@@ -4,12 +4,24 @@
  * qa/voices/volume.js. Levels are dB against the learner's own voice.
  */
 const { test, expect } = require("@playwright/test");
+const { tapFloorLimit } = require("./helpers/tap-floor");
 const { useVoice, playVoice, stopVoice, fanInRoom } = require("./helpers/voice");
 
 const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";
 
 async function boot(page, lang = "es", room) {
   const warnings = [];
+  // The real account worker is out of scope for offline picture tests. Supply
+  // a valid, deterministic methods response so external CORS/network status
+  // cannot mask a real rendering error or generate a false positive warning.
+  await page.route("**/v1/auth/methods", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: { "access-control-allow-origin": "*" },
+      body: JSON.stringify({ email: false, google: false, trialDays: 7 })
+    })
+  );
   page.on("console", (m) => {
     const t = m.text();
     // A network refusal (the sign-in probe to the worker, unreachable from a
@@ -125,7 +137,7 @@ test.describe("volume pictures", () => {
     expect(pic.found && pic.top >= 0 && pic.bottom <= pic.vh, JSON.stringify(pic)).toBe(true);
     const blind = page.locator("#mode-focus [data-blind]");
     const box = await blind.boundingBox();
-    expect(box.height, "tap target").toBeGreaterThanOrEqual(44);
+    expect(box.height, "tap target").toBeGreaterThanOrEqual(tapFloorLimit(44));
     await blind.click();
     await expect(blind).toHaveAttribute("aria-pressed", "true");
     // The breath under way (and the next ones) keep their ribbon hidden until they end

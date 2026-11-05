@@ -12,6 +12,7 @@
  * Fixed clock in Lima: Wednesday 23 September 2026, 10:00; the week starts Monday 21.
  */
 const { test, expect } = require("@playwright/test");
+const { tapFloorLimit } = require("./helpers/tap-floor");
 
 const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";
 const NOW = "2026-09-23T10:00:00-05:00";
@@ -317,7 +318,7 @@ test.describe("Phone: one-row header with Más", () => {
     const door = page.locator("#btn-account");
     await expect(door).toBeVisible();
     await expect(door).toHaveText("Entrar");
-    expect((await door.boundingBox()).height, "the sign-in door is a 44px target").toBeGreaterThanOrEqual(44);
+    expect((await door.boundingBox()).height, "the sign-in door is a 44px target").toBeGreaterThanOrEqual(tapFloorLimit(44));
     const hdr = await page.evaluate(() => ({
       h: document.querySelector(".app-header").getBoundingClientRect().height,
       v: parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--header-h"))
@@ -336,7 +337,7 @@ test.describe("Phone: one-row header with Más", () => {
     for (const id of ["#btn-pricing", "#btn-lang", "#btn-tour"]) {
       const b = page.locator(id);
       await expect(b).toBeVisible();
-      expect((await b.boundingBox()).height, `${id} is a 44px target`).toBeGreaterThanOrEqual(44);
+      expect((await b.boundingBox()).height, `${id} is a 44px target`).toBeGreaterThanOrEqual(tapFloorLimit(44));
     }
     await page.keyboard.press("Tab");
     await expect(page.locator("#btn-pricing")).toBeFocused();
@@ -441,7 +442,7 @@ test.describe("Phone: one-row header with Más", () => {
     const guide = page.locator("#link-guide");
     await expect(guide).toBeVisible();
     await expect(guide).toHaveAttribute("href", /^guide\.html/);
-    expect((await guide.boundingBox()).height).toBeGreaterThanOrEqual(44);
+    expect((await guide.boundingBox()).height).toBeGreaterThanOrEqual(tapFloorLimit(44));
   });
 
   test("at 320 and 360 the row fits and stays pinned", async ({ page }) => {
@@ -468,4 +469,27 @@ test.describe("Phone: one-row header with Más", () => {
       await page.evaluate(() => window.scrollTo(0, 0));
     }
   });
+});
+
+test.describe("The page keeps its one h1 for screen readers at every width (QA-04)", () => {
+  // Wrong behaviour this rejects: below 375px the header hid the brand with
+  // display: none, which took the page's only level-1 heading out of the
+  // accessibility tree. 375px is the control: the brand shows there.
+  for (const width of [320, 360, 375]) {
+    test(`${width}px: one level-1 heading, named, and the row keeps every section`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 740 });
+      await boot(page);
+      const h1 = page.getByRole("heading", { level: 1 });
+      await expect(h1).toHaveCount(1);
+      await expect(h1).toHaveAccessibleName("Entrenamiento vocal y de canto");
+      // The name is read once: the mark that repeats it is gone where the title is hidden.
+      const marks = await page.getByRole("img", { name: "Entrenamiento vocal y de canto" }).count();
+      const shown = await page.locator(".app-header .brand").evaluate((b) => b.getBoundingClientRect().width > 2);
+      expect(marks, "the mark shows only beside a visible title").toBe(shown ? 1 : 0);
+      expect(shown, "the brand is visible from 375px").toBe(width >= 375);
+      // The reason the brand gives way: the nav keeps "Historial" whole.
+      const nav = await page.locator("#btn-history").evaluate((b) => b.scrollWidth <= b.clientWidth + 1 && b.getBoundingClientRect().right <= innerWidth);
+      expect(nav, "Historial whole and on screen").toBe(true);
+    });
+  }
 });

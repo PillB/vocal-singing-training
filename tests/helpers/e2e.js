@@ -144,18 +144,22 @@ async function openExercise(page, exerciseId) {
   }, exerciseId);
   if (!ok) throw new Error("openExercise failed: " + exerciseId);
   await page.waitForSelector("#view-exercise.active", { timeout: 8000 });
-  // Wait until Start has real layout (not 0×0) — critical after format/fullscreen reflow
-  await page
-    .waitForFunction(
-      () => {
-        const b = document.getElementById("btn-practice-start");
-        if (!b) return false;
-        const r = b.getBoundingClientRect();
-        return r.width >= 8 && r.height >= 8;
-      },
-      { timeout: 10000 }
-    )
-    .catch(() => {});
+  // Wait until Start has real layout (not 0×0) — critical after format/fullscreen
+  // reflow. The 12-week plan is the one exercise with no Start. This used to be
+  // swallowed with .catch(() => {}), so a test carried on against a Start that
+  // never got a layout and failed later somewhere unrelated, or not at all.
+  await page.waitForFunction(
+    () => {
+      const st = window.VTApp?.getState?.();
+      if (st?.exercise && window.VTApp.getProfile?.(st.exercise)?.mode === "weekPlan") return true;
+      const b = document.getElementById("btn-practice-start");
+      if (!b) return false;
+      const r = b.getBoundingClientRect();
+      return r.width >= 8 && r.height >= 8;
+    },
+    null,
+    { timeout: 10000 }
+  );
   await page.evaluate(() => {
     window.VTApp?.syncHeaderHeightVar?.();
     window.VTApp?.fitHighwayToViewport?.();
@@ -173,6 +177,7 @@ async function startPractice(page) {
       const st = document.querySelector("#practice-status")?.textContent || "";
       return /vivo|live|listening|escuch/i.test(st) || !document.querySelector("#btn-practice-stop")?.hidden;
     },
+    null,
     { timeout: 12000 }
   );
 }

@@ -177,6 +177,7 @@
     if (!started) return false;
     const t0 = Date.parse(started);
     if (!Number.isFinite(t0)) return false;
+    if (t0 > nowMs() + 300000) return false; // a start date in the future is not a start
     return nowMs() < t0 + days * 86400000;
   }
 
@@ -1021,4 +1022,6 @@
     openCustomerPortal,
     isPortalUrl
   };
+  // QA-05: `VTBilling.isPro = () => true` from the console must not unlock Pro
+  Object.defineProperty(global, "VTBilling", { value: Object.freeze(global.VTBilling), writable: false, configurable: false, enumerable: true });
 })(window);

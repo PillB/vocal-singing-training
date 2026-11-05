@@ -242,4 +242,17 @@
   };
 
   global.VT_BILLING_CONFIG = CONFIG;
+
+  // QA-05: once the page has its config, a console line cannot turn on the QA
+  // unlock, loosen the license check or swap the object for another. Frozen
+  // after the assignment, so a harness that patches the config as it is
+  // assigned (tests/helpers/billing.js) still can. So can any script that runs
+  // before this one, or an edited copy of the files: no static site can stop
+  // that, which is why paid access rests on the server-signed license.
+  const held = global.VT_BILLING_CONFIG;
+  (function freeze(o) {
+    Object.values(o).forEach((v) => v && typeof v === "object" && freeze(v));
+    return Object.freeze(o);
+  })(held);
+  Object.defineProperty(global, "VT_BILLING_CONFIG", { value: held, writable: false, configurable: false, enumerable: true });
 })(window);

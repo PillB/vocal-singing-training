@@ -16,6 +16,7 @@
  * vt_e2e so other specs keep their form; these tests opt in with vt_rate_e2e.
  */
 const { test, expect } = require("@playwright/test");
+const { tapFloorLimit } = require("./helpers/tap-floor");
 
 const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";
 const NOW = "2026-09-23T10:00:00-05:00";
@@ -208,7 +209,7 @@ test.describe("Rating: one tap after a take", () => {
     expect(geo.qBelowChrome).toBe(true);
     geo.btns.forEach((b) => {
       expect(b.onTop).toBe(true);
-      expect(b.h).toBeGreaterThanOrEqual(44);
+      expect(b.h).toBeGreaterThanOrEqual(tapFloorLimit(44));
     });
 
     await page.locator('.rate-btn[data-feel="ok"]').click();
@@ -466,6 +467,9 @@ test.describe("Rating: one tap after a take", () => {
       context.waitForEvent("page", { timeout: 5000 }),
       page.locator("#link-guide").click()
     ]);
+    // A new tab's url() is "" (then about:blank) until its first navigation
+    // commits, so read it after the navigation rather than at the event.
+    await guide.waitForURL(/\/guide\.html/, { timeout: 10000 });
     expect(guide.url()).toContain("/guide.html");
     await guide.close();
     // The exercise did not ask to be left, because it was not.
@@ -486,6 +490,14 @@ test.describe("Rating: one tap after a take", () => {
     // Pace variation: two self-ratings and a count of key slowdowns.
     await openSingle(page, "v14-pace-variation");
     await page.locator("#btn-toggle-metrics").click();
+    // Before this integrity fix, a no-Start click fabricated a 10/10 and a
+    // streak day. Preserve that concrete negative test before the valid take.
+    await page.locator('.rate-btn[data-feel="easy"]').click();
+    await expect(page.locator("#score-result")).toBeHidden();
+    expect((await records(page, "v14-pace-variation")).takes).toBe(0);
+    await start(page);
+    await page.clock.fastForward(16000);
+    await page.locator("#btn-practice-stop").click();
     await page.locator('.rate-btn[data-feel="easy"]').click();
     await expect(page.locator("#score-result .score-big")).toHaveText("10.0 / 10");
     await expect(page.locator("#score-result")).toContainText("Cómo te fue: Fácil");

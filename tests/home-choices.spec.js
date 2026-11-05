@@ -14,6 +14,7 @@
  * Fixed clock in Lima: Wednesday 23 September 2026, 10:00.
  */
 const { test, expect } = require("@playwright/test");
+const { tapFloorLimit } = require("./helpers/tap-floor");
 
 const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";
 const NOW = "2026-09-23T10:00:00-05:00";
@@ -121,7 +122,7 @@ test.describe("Naming: one button, sizes that choose, other ways folded", () => 
     await expect(more).toContainText("Otras formas de practicar");
     await expect(more).toHaveAttribute("aria-expanded", "false");
     await expect(more).toHaveAttribute("aria-controls", "start-alt");
-    expect((await more.boundingBox()).height).toBeGreaterThanOrEqual(44);
+    expect((await more.boundingBox()).height).toBeGreaterThanOrEqual(tapFloorLimit(44));
     for (const id of ["#btn-pick-exercise", "#btn-continue", "#btn-structured", "#session-path"]) await expect(page.locator(id)).toBeHidden();
 
     // Keyboard opens it; the controls it reveals are real and reachable.
@@ -290,7 +291,7 @@ test.describe("Selected style: tint, bar and tick", () => {
           );
           for (let i = 0; i < g.length; i += 1) {
             expect(Math.abs(g[i].top - g[0].top), `${lang} ${tier}: one row`).toBeLessThan(1);
-            expect(g[i].h, "a 44px target").toBeGreaterThanOrEqual(44);
+            expect(g[i].h, "a 44px target").toBeGreaterThanOrEqual(tapFloorLimit(44));
             expect(g[i].font, "12px floor").toBeGreaterThanOrEqual(12);
             expect(g[i].nl, `${lang} ${tier}: name inside its segment`).toBeGreaterThanOrEqual(g[i].left);
             expect(g[i].nr, `${lang} ${tier}: name inside its segment`).toBeLessThanOrEqual(g[i].right);
@@ -373,7 +374,7 @@ test.describe("Finishing card: buttons pinned, two columns when short", () => {
       const g = await openDone(page, vp);
       expect(onScreen(g.close, g), JSON.stringify(g)).toBe(true);
       expect(onScreen(g.remind, g), JSON.stringify(g)).toBe(true);
-      expect(g.close.height).toBeGreaterThanOrEqual(44);
+      expect(g.close.height).toBeGreaterThanOrEqual(tapFloorLimit(44));
     });
   }
 });

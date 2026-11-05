@@ -1,0 +1,2093 @@
+{
+  "ceiling": 15,
+  "entries": [
+    {
+      "file": "js/account.js",
+      "sha": "9b909e4304295fb6d1d2af48fea4bbf401f9d663128e6ea659edd672a9066ecb",
+      "complexity": 21,
+      "name": "Async function 'request'"
+    },
+    {
+      "file": "js/admin.js",
+      "sha": "7b66ba3d42222f0172f76eba82add87f8ec6435372e2a031643e861d6749ae67",
+      "complexity": 18,
+      "name": "Async function 'createCode'"
+    },
+    {
+      "file": "js/admin.js",
+      "sha": "9928b935363c2ea92e59ab3b26ca218a4300feb9ad3eb6db6bfc179c1cd16dce",
+      "complexity": 25,
+      "name": "Async function 'give'"
+    },
+    {
+      "file": "js/admin.js",
+      "sha": "058ab5be1ced3ee8fdf443f7ceb09195779749f19696f797c66af179dc055e83",
+      "complexity": 17,
+      "name": "Function 'renderAccount'"
+    },
+    {
+      "file": "js/ads.js",
+      "sha": "6208f27fdba0726d3c57031523d70c615b089695fbd739317cc7b8511982ce6f",
+      "complexity": 28,
+      "name": "Function 'isPracticeActive'"
+    },
+    {
+      "file": "js/ads.js",
+      "sha": "671b47e7493e025fff812d1e5b2a5f8a432d400290d459f644b104ed72b5b83c",
+      "complexity": 23,
+      "name": "Function 'renderNativeCard'"
+    },
+    {
+      "file": "js/ads.js",
+      "sha": "2c3b26208db80f6134c669f5348e2915dca8026f1d1e9ebd233e4cdad6c0f623",
+      "complexity": 25,
+      "name": "Function 'renderSlot'"
+    },
+    {
+      "file": "js/app.js",
+      "sha": "01bd593544595b77e5dce1ae912d43f3f52f9b96607876fd0366d50d25c23f16",
+      "complexity": 22,
+      "name": "Arrow function"
+    },
+    {
+      "file": "js/app.js",
+      "sha": "032893ceec6a0a6241a81176c8e39cd83b2fcc03e309bd4f38c0a5ceb90c1e40",
+      "complexity": 29,
+      "name": "Arrow function"
+    },
+    {
+      "file": "js/app.js",
+      "sha": "0f5d1758f58f917a6edc23a78c1ca64d20ab9af35fa8a178de0d457a96aed292",
+      "complexity": 18,
+      "name": "Arrow function"
+    },
+    {
+      "file": "js/app.js",
+      "sha": "336449d837e31cffe5dc140529dd3cf4f30b30578ad9b97d92eb8ed6eea7210b",
+      "complexity": 33,
+      "name": "Arrow function"
+    },
+    {
+      "file": "js/app.js",
+      "sha": "3d627888f2b5133b3bd153445fb9280631e8f0ceab3dcad8eb4a682245f07dd6",
+      "complexity": 25,
+      "name": "Arrow function"
+    },
+    {
+      "file": "js/app.js",
+      "sha": "075ecbfc358ffda2dbfd69262befbf841150d0d5fe83df7bd36a925c529e45a4",
+      "complexity": 18,
+      "name": "Async arrow function"
+    },
+    {
+      "file": "js/app.js",
+      "sha": "428a7963c4c834a3ce8f326d65dfd9fe6648c7c45d9d2c3ac1bbade951a67ac5",
+      "complexity": 16,
+      "name": "Async arrow function"
+    },
+    {
+      "file": "js/app.js",
+      "sha": "c88b43983f5f78078cdaf0b315fb09d615a01d2d3ab26ed863c694e8ef8eb3cb",
+      "complexity": 24,
+      "name": "Async arrow function"
+    },
+    {
+      "file": "js/app.js",
+      "sha": "5a0ed532040d91687fe17a831ed7e8318d7b667848187c2c23abeb00632ce394",
+      "complexity": 18,
+      "name": "Async function 'onChallengeNoteLocked'"
+    },
+    {
+      "file": "js/app.js",
+      "sha": "2993131a41db15d49d2633f9d1e95c3b6c847e25a0f22622ac330bf4cacaa579",
+      "complexity": 35,
+      "name": "Async function 'onRoute'"
+    },
+    {
+      "file": "js/app.js",
+      "sha": "6fcc09a0816fd2833c5d098e9e88f3bb9b10152f7a789e4606ad3244b0059561",
+      "complexity": 23,
+      "name": "Async function 'playSelectedProgression'"
+    },
+    {
+      "file": "js/app.js",
+      "sha": "bf50749a2909998ed32e92fe49d07586a2ef24aa689ead139d0f184fc5fde8c5",
+      "complexity": 45,
+      "name": "Async function 'renderAbResults'"
+    },
+    {
+      "file": "js/app.js",
+      "sha": "aa116698feb36565c1691a658d2362ecceb36ed52386c4634d5161be264a2893",
+      "complexity": 19,
+      "name": "Async function 'renderFunnel'"
+    },
+    {
+      "file": "js/app.js",
+      "sha": "a6f96270b04696d944fe5e080e061e073111d306c1666e459a75c60c598faae1",
+      "complexity": 17,
+      "name": "Async function 'renderHistory'"
+    },
+    {
+      "file": "js/app.js",
+      "sha": "0b084e03ece731eee82117d6803cb6a1fe7889d9c14cbd4da7896e204881183e",
+      "complexity": 89,
+      "name": "Async function 'startExerciseSound'"
+    },
+    {
+      "file": "js/app.js",
+      "sha": "026e78d7d8af5507062886db758c927ef59631d7432100e9c3999f7878fe402e",
+      "complexity": 120,
+      "name": "Async function 'startPractice'"
+    },
+    {
+      "file": "js/app.js",
+      "sha": "c22a3e541c8662f18a34f1826a2020578f5a2072ad8fc5289c49505b5dbd01fc",
+      "complexity": 19,
+      "name": "Function 'accountSignIn'"
+    },
+    {
+      "file": "js/app.js",
+      "sha": "d487ab00497c2ca93ac01cba000903639e283baf9e4e8504eb9aed8b92b9cf8c",
+      "complexity": 51,
+      "name": "Function 'applyOctaveShift'"
+    },
+    {
+      "file": "js/app.js",
+      "sha": "42d729c956e6e6511e5cc34bae2eb5f25dfceb4cf87b86ca8708ebeaaf898272",
+      "complexity": 17,
+      "name": "Function 'bindAccount'"
+    },
+    {
+      "file": "js/app.js",
+      "sha": "d2d03cf0b93c8d1382f81f390124901c8cb478ff828052e3421c2e495cc3ac9c",
+      "complexity": 73,
+      "name": "Function 'completeExercise'"
+    },
+    {
+      "file": "js/app.js",
+      "sha": "884d50512b7850b177eff8f8300d4344243fe43b22c2380820d4cbd7df161b98",
+      "complexity": 17,
+      "name": "Function 'exerciseSummary'"
+    },
+    {
+      "file": "js/app.js",
+      "sha": "59f96e1f5a763986d19e0af1f7ad74d6e84f38b0134cca21a140df5a80d2047f",
+      "complexity": 18,
+      "name": "Function 'fitStageGuide'"
+    },
+    {
+      "file": "js/app.js",
+      "sha": "0ec785315e7edce81fe56d8cb4576ecde6b09dc7bf3bc093a0d06302f4049215",
+      "complexity": 22,
+      "name": "Function 'historyDaysHtml'"
+    },
+    {
+      "file": "js/app.js",
+      "sha": "feffd9dc51580b6fab054d1cc681614fc1b4a72f15d0942e5c70af6f52a75454",
+      "complexity": 28,
+      "name": "Function 'modeDisplayName'"
+    },
+    {
+      "file": "js/app.js",
+      "sha": "fd51c793293c338bb53e96ab8f2169b8e6816ecae60c3c6c7b93893afa17ebaa",
+      "complexity": 28,
+      "name": "Function 'paintScore'"
+    },
+    {
+      "file": "js/app.js",
+      "sha": "b72a035149d92f5f369249304286355cbb27ebb1ef94d62787d1e100e471926d",
+      "complexity": 18,
+      "name": "Function 'progressionKeysFor'"
+    },
+    {
+      "file": "js/app.js",
+      "sha": "363bf07bd72ef112f983071d50a3eeeb310fce6bec5d53ad43eb9c5255dafba2",
+      "complexity": 20,
+      "name": "Function 'recordPracticeIfDue'"
+    },
+    {
+      "file": "js/app.js",
+      "sha": "2ca4665cfed876be7caaecc8dff63a14a22d65299f97b9682f44799ced1ef881",
+      "complexity": 100,
+      "name": "Function 'refreshAccountUI'"
+    },
+    {
+      "file": "js/app.js",
+      "sha": "fbb8ec646f08ff6216065e4617a3577ef3611798d937498d15fdb01ea8973e48",
+      "complexity": 27,
+      "name": "Function 'relabelExercise'"
+    },
+    {
+      "file": "js/app.js",
+      "sha": "6ffd1890d0e5d94416500a0179e939770ad43e57e62323dcc61ff8c4271f4a8f",
+      "complexity": 117,
+      "name": "Function 'renderExercise'"
+    },
+    {
+      "file": "js/app.js",
+      "sha": "2c0edc96d377e7db8e662c601b571f395993f98f155bc4b7fdb98c1f4742de81",
+      "complexity": 26,
+      "name": "Function 'renderExerciseText'"
+    },
+    {
+      "file": "js/app.js",
+      "sha": "0636d3a9e22d47c3b6413275baa1e5b99e78c2d6ad54683b8b72ff0bd98a74ea",
+      "complexity": 16,
+      "name": "Function 'renderNextStepCard'"
+    },
+    {
+      "file": "js/app.js",
+      "sha": "537b4038077ec7aaa77ad9dba10af71cca800286d1c5c587c25a94e50a3f51b5",
+      "complexity": 52,
+      "name": "Function 'renderPricingModal'"
+    },
+    {
+      "file": "js/app.js",
+      "sha": "00181949ded3ed4abb47f419d3d81be27d82f0b40edb16d08c71d8e01b831e31",
+      "complexity": 51,
+      "name": "Function 'renderProStudio'"
+    },
+    {
+      "file": "js/app.js",
+      "sha": "db08d27893c7b595d87eba8ae7568023e53cde2d270d4af0dd383fcb411a156c",
+      "complexity": 41,
+      "name": "Function 'renderRetentionChrome'"
+    },
+    {
+      "file": "js/app.js",
+      "sha": "7e87591028ef2e1e8d5d0f39a6f8e08dbcc0472ae3db4ccd01cdc051605e4034",
+      "complexity": 34,
+      "name": "Function 'renderStartPanel'"
+    },
+    {
+      "file": "js/app.js",
+      "sha": "9d556165ebcf239cdcb1a493d0655a8f87f67bd549b0a29cf962225590f5d7bc",
+      "complexity": 33,
+      "name": "Function 'renderValuePulse'"
+    },
+    {
+      "file": "js/app.js",
+      "sha": "1f5d24f85496f3e8e15dd49fd8ffc92ce153de08cee498b0e7d86e8c17b7d2f3",
+      "complexity": 23,
+      "name": "Function 'selectProgression'"
+    },
+    {
+      "file": "js/app.js",
+      "sha": "ea4780388a7a96dff24d09b75e986031b0499301908b3a887421df77d9804a33",
+      "complexity": 23,
+      "name": "Function 'setView'"
+    },
+    {
+      "file": "js/app.js",
+      "sha": "97bbc26d25cb40d660d43781caec2336c54e59f09fc5e2c0114a05ed67cf9672",
+      "complexity": 25,
+      "name": "Function 'showValueMoment'"
+    },
+    {
+      "file": "js/app.js",
+      "sha": "9623c1473d78f9486843c309eef081920298b3cf5bff1209558b1236962ce9ba",
+      "complexity": 19,
+      "name": "Function 'stopPitchViz'"
+    },
+    {
+      "file": "js/app.js",
+      "sha": "3ccf2294cd34e344a142fb1b544e3830f33bcdab66ef01ddfb63021d98f0d85b",
+      "complexity": 22,
+      "name": "Function 'suggestNextExercise'"
+    },
+    {
+      "file": "js/app.js",
+      "sha": "4ad27f949f2c41623d311ef84bcf152dbd1bfd1d5cfe9fc977892f3551a0ab0c",
+      "complexity": 21,
+      "name": "Function 'tourExerciseId'"
+    },
+    {
+      "file": "js/app.js",
+      "sha": "837df8f538d25821da2c6020611afe2a59ceeb50bcd253a49b1516186f1b1e0a",
+      "complexity": 74,
+      "name": "Function 'updateBillingChrome'"
+    },
+    {
+      "file": "js/app.js",
+      "sha": "4ca0bfd69bbf8652a2cbae02af14b91e4b2ab4d289814af809bde67d72b263b6",
+      "complexity": 102,
+      "name": "Function 'updatePitchStatsLabel'"
+    },
+    {
+      "file": "js/app.js",
+      "sha": "e37a54b84427af49d778e9bf6057372effadf90486f81d70ea7b57bfb58570d7",
+      "complexity": 19,
+      "name": "Function 'writeRoute'"
+    },
+    {
+      "file": "js/auth.js",
+      "sha": "f44b2ab1ed50db76d3bb47b31fa692547bc273279af1e75343c0343838998505",
+      "complexity": 21,
+      "name": "Async function 'login'"
+    },
+    {
+      "file": "js/billing.js",
+      "sha": "6ce5613dc5b22ea8e528c679ed9113df5ba5c1220da5b9fb71e86bd7389c0a92",
+      "complexity": 22,
+      "name": "Function 'activate'"
+    },
+    {
+      "file": "js/billing.js",
+      "sha": "7e1a763f0c091be6ffeddbb73014f6f4175ff0a561b010d9aa6bf8a003b2e54e",
+      "complexity": 43,
+      "name": "Function 'detectRegion'"
+    },
+    {
+      "file": "js/billing.js",
+      "sha": "ca0a3deacf87dca47010deaf725c309bee7a2bb55e63866e91d8b8e65adce9fb",
+      "complexity": 38,
+      "name": "Function 'exportProgressJson'"
+    },
+    {
+      "file": "js/billing.js",
+      "sha": "d65d4da2255af3214bb31938fd4d7aa1d54cfda34290739b87e14f8b293d899e",
+      "complexity": 32,
+      "name": "Function 'getBillingHealth'"
+    },
+    {
+      "file": "js/billing.js",
+      "sha": "37f0a9aaa920f5e11863722f4c44f1ef5b4a21e28ddde3b90e51cb16e1a5d086",
+      "complexity": 53,
+      "name": "Function 'getEntitlement'"
+    },
+    {
+      "file": "js/billing.js",
+      "sha": "7b0557c1b8f890cf0082994ba8eeb562a05edadcd3e25a1338d4a6eb09950c9d",
+      "complexity": 27,
+      "name": "Function 'handleReturnFromCheckout'"
+    },
+    {
+      "file": "js/daily-loop.js",
+      "sha": "d7f29fd3694896e8950c3e95982498f2b06eb2fbe2ccf85477c47e5e37c8b3b9",
+      "complexity": 17,
+      "name": "Function 'drawSurprise'"
+    },
+    {
+      "file": "js/daily-loop.js",
+      "sha": "04491a8f63514f83c385cda8ba695eb18cfafb2b5373f0cbdb7f9d091264afbc",
+      "complexity": 22,
+      "name": "Function 'onRoutineComplete'"
+    },
+    {
+      "file": "js/daily-loop.js",
+      "sha": "ccbc9f1e1628d9f93bf1e6e6fd9c41e3d247346763d723f87bbe60171c4dd339",
+      "complexity": 17,
+      "name": "Function 'renderAside'"
+    },
+    {
+      "file": "js/daily-loop.js",
+      "sha": "43dd324b0cece44346037f782bf03fcf944a788a40f0df67eefbcffce98a8fb1",
+      "complexity": 46,
+      "name": "Function 'renderHome'"
+    },
+    {
+      "file": "js/daily-loop.js",
+      "sha": "8b854353ab52658be180195504af1f91b2e22f5f8f018752ec43150f7af2faa8",
+      "complexity": 25,
+      "name": "Function 'showDone'"
+    },
+    {
+      "file": "js/exercise-viz.js",
+      "sha": "45c91b16755ff4ad5050d21596f5d62febffd8275935b5d28010f01fba25defd",
+      "complexity": 27,
+      "name": "Arrow function"
+    },
+    {
+      "file": "js/exercise-viz.js",
+      "sha": "56853a03299a60494c9b4a4f4f296450bf3f9e0fa7e38db16e841dc50781f579",
+      "complexity": 18,
+      "name": "Arrow function"
+    },
+    {
+      "file": "js/exercise-viz.js",
+      "sha": "68353bd57adb2b3a5890d0495722d166c352e43110941310094b17c767315289",
+      "complexity": 16,
+      "name": "Function 'drawWhole'"
+    },
+    {
+      "file": "js/exercise-viz.js",
+      "sha": "1804dbfeacbf095703d436407b1290786ee959732e9f084f6c738714320798c3",
+      "complexity": 21,
+      "name": "Method '_paint'"
+    },
+    {
+      "file": "js/exercise-viz.js",
+      "sha": "60c4072477fcf84bd4962126d3b886fe1ef5f2a8d70b79a7ffdb0092f3257e3e",
+      "complexity": 32,
+      "name": "Method '_paint'"
+    },
+    {
+      "file": "js/i18n.js",
+      "sha": "026b1b7506115dfdb56be5c0e83c2e23d7de5592503d1a8b4d304a9967b024cc",
+      "complexity": 16,
+      "name": "Method 'exField'"
+    },
+    {
+      "file": "js/license.js",
+      "sha": "c99e58d4b02bfe643aad53003b35c3cb514ac304e81958b58b3611ac167a8056",
+      "complexity": 18,
+      "name": "Async function 'claim'"
+    },
+    {
+      "file": "js/license.js",
+      "sha": "14b996c539fe19739f3e460e5be53f82e54d819e2dd0e4887b7c41bac17ce9b6",
+      "complexity": 19,
+      "name": "Async function 'refresh'"
+    },
+    {
+      "file": "js/metrics.js",
+      "sha": "d82e29109b17a032d95817c9fc44f3480b69ce6684687c3172fbd0eec12af83a",
+      "complexity": 36,
+      "name": "Method 'compute'"
+    },
+    {
+      "file": "js/piano.js",
+      "sha": "d96cfd70e09be899f7322f617dfa4fce9dfa42d0d2ca19aa92396ba3884ff1a1",
+      "complexity": 23,
+      "name": "Async method 'playProgression'"
+    },
+    {
+      "file": "js/piano.js",
+      "sha": "49e3180a466feeb4bb61b5243a70a94a0c1b25d18b3fb32dcf435040f2efe6f7",
+      "complexity": 16,
+      "name": "Method 'playNote'"
+    },
+    {
+      "file": "js/pitch-game.js",
+      "sha": "e67b8cb6d8a2a3ddeef649ad1e704e394e4c635184c68a80cc285acf0dfd51a6",
+      "complexity": 29,
+      "name": "Method 'tick'"
+    },
+    {
+      "file": "js/pitch-visualizer.js",
+      "sha": "2e8cde549e6edf094ff66e228f57c635810b638233f77b42bdc29a0faa24f54e",
+      "complexity": 23,
+      "name": "Function 'detectPitch'"
+    },
+    {
+      "file": "js/pitch-visualizer.js",
+      "sha": "73abbcc606d2dee206c135768d73cbabe18025eef6807c6c162fdc0dc59b603b",
+      "complexity": 84,
+      "name": "Method '_draw'"
+    },
+    {
+      "file": "js/pitch-visualizer.js",
+      "sha": "c77ecd408a4334bab038d411e58a111e41eae4b741aeda69d2988f6554dcc71f",
+      "complexity": 27,
+      "name": "Method '_drawIdle'"
+    },
+    {
+      "file": "js/pitch-visualizer.js",
+      "sha": "651d617b3fa8c4a60db3a902c77487a0dd4c938aa76685ba2fabf4d7d9f72807",
+      "complexity": 19,
+      "name": "Method '_drawQueue'"
+    },
+    {
+      "file": "js/pitch-visualizer.js",
+      "sha": "b02ae27de92f71c95411eaa4c3f4e0ccb3c1784a8d53bac029a3932216546318",
+      "complexity": 35,
+      "name": "Method '_ingest'"
+    },
+    {
+      "file": "js/pitch-visualizer.js",
+      "sha": "7ef121aa73eb9bb7aed290c7539ded0a9b3879b0c7de869603600563d2c6fc7e",
+      "complexity": 26,
+      "name": "Method 'setTargetFromChord'"
+    },
+    {
+      "file": "js/practice-days.js",
+      "sha": "d776a5833e56243d6cb3c4178554348622a1fb8184217fed20180bc2a88b2490",
+      "complexity": 20,
+      "name": "Arrow function"
+    },
+    {
+      "file": "js/practice-days.js",
+      "sha": "e689a2fb0a9a04c2360ae56f17a315a068485b7dc9ab15da2d93655fd8a96440",
+      "complexity": 17,
+      "name": "Function 'summary'"
+    },
+    {
+      "file": "js/practice-engine.js",
+      "sha": "df5933092bf1a1d8d849a29a9c9e9b897e3cec2294446c9b6b4bae004e6e2c2e",
+      "complexity": 28,
+      "name": "Async method 'start'"
+    },
+    {
+      "file": "js/practice-engine.js",
+      "sha": "d01d1e14381838fa02a7bfe2e8e5969764c675bff9ec130cf61bfba98133a3c8",
+      "complexity": 17,
+      "name": "Method '_airRaw'"
+    },
+    {
+      "file": "js/practice-engine.js",
+      "sha": "16475ae4d9ac6a2b4a418b8adf4351ce222c69f1c7fa974db947e1437f759b69",
+      "complexity": 72,
+      "name": "Method '_loop'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "fc7e537bdfaba09d5e62316d00c175179014777e0e97c99df9dfd86f70e898c1",
+      "complexity": 18,
+      "name": "Method '_abCard'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "4d082f82347c06e396afb0a212eaa80cd0ec15563a7164f90553ff55fc58f557",
+      "complexity": 17,
+      "name": "Method '_abFrame'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "402ba83c37079cde1072124cb385fae7219ff7c6b3afa5db7b4bb19c45ed8251",
+      "complexity": 17,
+      "name": "Method '_brightFrame'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "84cd56391ff2fc17192b89f4378c19f940d4fec1387ab4ebfb23f9caf8289eb5",
+      "complexity": 17,
+      "name": "Method '_closeRun'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "2950f9aad01cc24c228a8fd04a9a57b2503788871c9f6ee4683ed1501ce54ce8",
+      "complexity": 24,
+      "name": "Method '_closeTake'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "e0cf58530d16d564a961483f9debc10a8fbb074052aa15da8236220311d82283",
+      "complexity": 17,
+      "name": "Method '_commit'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "716fe7f5a7475de13d359fdd0dd50f353a818f25fcadb9e91eaec83640a53299",
+      "complexity": 22,
+      "name": "Method '_compare'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "1613abdb5b984b4fbd7445959a28e20d911a133b59852fbe66a0881643114082",
+      "complexity": 20,
+      "name": "Method '_credit'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "0799d780b7f95f10579c49d3f153ba88ef09f3dcc8377039474e2bb304097704",
+      "complexity": 17,
+      "name": "Method '_derive'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "9a457d6aa44e544171be854341f18b95750de2f8c2e30c4fb78507c181e1bdd3",
+      "complexity": 34,
+      "name": "Method '_endSwell'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "16176428c96cab4d0c8db629e870c5bdb80e5a19d2f2a8c9ac830535481cf112",
+      "complexity": 16,
+      "name": "Method '_endTurn'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "757392d4ddaed95875004a23b2276f1345a6ce5949810d290cfa45368257792e",
+      "complexity": 24,
+      "name": "Method '_facts'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "c6273e89ea05aa7dfeb0296779ba445a1365ccbeb88efc8514b41172933a18d5",
+      "complexity": 22,
+      "name": "Method '_feedTrack'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "f79b740950a930070c8a3dc5ffdac7df7fdb4ab09ecb6960b44adf37d65b3dc8",
+      "complexity": 16,
+      "name": "Method '_judge'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "b55548a2bc09d386c1e7f01ebfc8324d1bc9545bab71e3fc9773f994c8c6184c",
+      "complexity": 18,
+      "name": "Method '_nextScenario'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "5f79643b5e47609286ca28e12d7c5ff61ada65b63fb6cc53603f5ade3173703b",
+      "complexity": 16,
+      "name": "Method '_nextTopic'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "8bf53e353de9308152bfa1dea7ce4f77a04e4d2290e07aa6e96fd720e7c64b95",
+      "complexity": 21,
+      "name": "Method '_pianoNote'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "cacd88b5a56ed8f23cd26857d57bcaa3ca7aa5bc8514dc186e308b94013a6e82",
+      "complexity": 18,
+      "name": "Method '_play'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "3d4fc90433e1e3a1d5fb3449be386e2023edf939bbf46ca1240125d88551166a",
+      "complexity": 17,
+      "name": "Method '_pushTarget'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "ebb7839c71a4df08f89c5699b315050c6a01eb32183b963570a12fb0848a582b",
+      "complexity": 16,
+      "name": "Method '_pushTarget'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "138f24adc2c86d0b9fd0e8968b103fce85b3ee456164e2a4e43f418a1a403da2",
+      "complexity": 30,
+      "name": "Method '_segment'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "e20d74ea978dadd594b6d1a72a42831dafb4426679d8279b1f58ca40f009e423",
+      "complexity": 20,
+      "name": "Method '_setTread'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "e17e1aa6a1b2899bcd17664d048702110adb2a300d32962c0bda33de3be08b8a",
+      "complexity": 23,
+      "name": "Method '_spaceFrame'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "ebe9791b9cbf6af6a62f7790008caaf7ee0ef832041c7617bdad3d2ac01d2383",
+      "complexity": 17,
+      "name": "Method '_syncButtons'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "8f6d63830603a9c4eb9d7cac026c5ee7cf656aa2d7cf50ab159f9a303476cd7d",
+      "complexity": 59,
+      "name": "Method '_weekModel'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "28b5055c0f5c34db911ba4309bbb07f84e2383991da419f9ba81080b7c8bc0e7",
+      "complexity": 24,
+      "name": "Method '_words'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "771c65b66e4c43a3b1d8c0105591160f1ff01e4071e0d260f35c7d4a0759a43b",
+      "complexity": 24,
+      "name": "Method 'frame'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "a58f4dba052bdd60fa2c5a4318a966164483e92a56f213bbb4c42a90a390c5a2",
+      "complexity": 35,
+      "name": "Method 'frame'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "947c52e2df7695d14647706d99f88a06dbb8dee368ec3a93f1ba13a47e5ebb47",
+      "complexity": 21,
+      "name": "Method 'observe'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "00fdddc6eaaf81ee0f6b580055c55819e97a09dfa88fe0a6e84fff06894845c7",
+      "complexity": 30,
+      "name": "Method 'onFrame'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "018b953f20555c48de7efa4cf67ebcdbea7fdd09dab57dd0acee513286815214",
+      "complexity": 54,
+      "name": "Method 'onFrame'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "0a923781be6d7dadfc49b9bee442e0d011b27f9bcecab23f7e1d2a2d1eb4e4a8",
+      "complexity": 83,
+      "name": "Method 'onFrame'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "2216695d8aeee1cb9f93d4bb453d00abf3cc8d7dc05caa8daf52f955cc84ebaf",
+      "complexity": 37,
+      "name": "Method 'onFrame'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "27cc36a18782fb2c40506b176622074eb1157c5f509de6e8e7c4daf1ceb7f1c3",
+      "complexity": 42,
+      "name": "Method 'onFrame'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "41fadc685ec554abf4ae0d93f6ba9f9b0e561c01fe556e1ce4da95e336688dc4",
+      "complexity": 37,
+      "name": "Method 'onFrame'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "48b7b7d96220fff2a7ed9108cfcc106c980b6af6ba8c97d8625172d0afa8dd7b",
+      "complexity": 16,
+      "name": "Method 'onFrame'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "6548b5f595ba50c834c4b1d7a954caf6220b59f847d876f983be1898b5c8035a",
+      "complexity": 38,
+      "name": "Method 'onFrame'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "6ea8f34257a0c344b8a5d58682665bcc2ed6fd52d88756ce83717d289f7e8960",
+      "complexity": 22,
+      "name": "Method 'onFrame'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "80b78492853b751362cfc445084e924e449ddcbf64f02043419fdbffdab30e79",
+      "complexity": 49,
+      "name": "Method 'onFrame'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "824bc0e1dd40db680049158c392ce78d10ed0c21830f82cdcbfd0c1ee45cfacf",
+      "complexity": 41,
+      "name": "Method 'onFrame'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "9387b062a46a064ecbbfd8386ab87ebba87e824ede84290c46257f071fb41805",
+      "complexity": 28,
+      "name": "Method 'onFrame'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "a91f2bfd8c2e705aa36362b626f2d1056c3e62f0551b9c478f41eb5cd2485440",
+      "complexity": 20,
+      "name": "Method 'onFrame'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "c1f42df3d46895b4ba70c54655715ea0698dbaea783ae05992c7a3128795b85e",
+      "complexity": 25,
+      "name": "Method 'onFrame'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "c3244d2a880f302df248ef333894057cc7e1222db9e0f3c95474e7e4d711da70",
+      "complexity": 38,
+      "name": "Method 'onFrame'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "c457020a159e4c619d9e3fac0589e2274ffb4305578fc9d85202a1001afea3e0",
+      "complexity": 47,
+      "name": "Method 'onFrame'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "de89fb2750160c4c77c7b2daab2cef0a68a1c715b6eb91da55a4a7b14a369b7f",
+      "complexity": 26,
+      "name": "Method 'onFrame'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "e197bb56be394d60d848383f11bc1dce31288dbd447fab3ab373d76e7a381bf1",
+      "complexity": 22,
+      "name": "Method 'onFrame'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "f9a75d66f97f5a85f09306491221f5156a6b4c2fc513e94f035123c014400d95",
+      "complexity": 45,
+      "name": "Method 'onFrame'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "042339a91c04597308f5eaf4340422134a188492668d8d05d9b229cba4298584",
+      "complexity": 36,
+      "name": "Method 'onStop'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "100c9198aa3ad4101b40ac512044c87c59824cd18f191c1fe0e2e6e07e70a58d",
+      "complexity": 18,
+      "name": "Method 'onStop'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "32f3706646855fce2af256da006a8aa9a2a94d67aacba24817b0c1248860775b",
+      "complexity": 17,
+      "name": "Method 'onStop'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "424fd1e697b1460d47d8fe9e47c6949fa5bde43b5ea00a8e511a2d327fee685d",
+      "complexity": 19,
+      "name": "Method 'onStop'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "75ae7329fc0bdef11486c3ce72f574d7fefa446d18d33e5fbe4f2eb3d2634df7",
+      "complexity": 23,
+      "name": "Method 'onStop'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "e5454ec0f1885d9601ac5d431c766ea72c3971bbb834fb3c8547b075b521dbdc",
+      "complexity": 24,
+      "name": "Method 'onStop'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "efd30a6a710a16e82c8cb11a4e56fedec344062553bc68cf37d4a21348c09530",
+      "complexity": 20,
+      "name": "Method 'onStop'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "669f2541d88be13f9bd3dfcca6db60cd8d4afcaed5a7df24fce0b837f2708cb6",
+      "complexity": 22,
+      "name": "Method 'picture'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "f889b6d4039cebbb574f09dfb8b5c4f24113e63e27a7a6d0ba2e027f2972b917",
+      "complexity": 16,
+      "name": "Method 'sched'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "83890f975e5ba80e176d39ba092c47d4e519441ab46f67ca6cbf2d48d5155a94",
+      "complexity": 17,
+      "name": "Method 'stop'"
+    },
+    {
+      "file": "js/practice-modes.js",
+      "sha": "aa6ef5a127017bb57ade8b39d479dc1a9140d9176e17f965fac2088d2ab4f3d6",
+      "complexity": 26,
+      "name": "Method 'stop'"
+    },
+    {
+      "file": "js/privacy-switch.js",
+      "sha": "15f68bb0a58c3adb189992c9764fdd3bfc095f142ac005dfa943b61367cfd4d8",
+      "complexity": 22,
+      "name": "Arrow function"
+    },
+    {
+      "file": "js/range-adapter.js",
+      "sha": "9850139ad91efa10d5d0190261e8f654a7ef5f9caa0c83af9c6fce3e58a80357",
+      "complexity": 39,
+      "name": "Method 'feed'"
+    },
+    {
+      "file": "js/region-gate.js",
+      "sha": "14959800be9fc18a8a5e2ea892d4b5e6b5ecf240188954ae20b753cb33c47b96",
+      "complexity": 19,
+      "name": "Async function 'askWorker'"
+    },
+    {
+      "file": "js/scenes/breath.js",
+      "sha": "3442e600c7f4d1299bcc59da0d1f9ed9837ccf3d3e2e2fdd357c99e6f5cc60e9",
+      "complexity": 19,
+      "name": "Arrow function"
+    },
+    {
+      "file": "js/scenes/breath.js",
+      "sha": "c62f9e5623e78498d6b563f91200b933c4e89b431767aa20e41af39901ed9bbc",
+      "complexity": 20,
+      "name": "Arrow function"
+    },
+    {
+      "file": "js/scenes/breath.js",
+      "sha": "c93f0dc9ea1fa6aa7bdf42223362b3b6bae6003001a44fff092ce77d7644df0f",
+      "complexity": 41,
+      "name": "Arrow function"
+    },
+    {
+      "file": "js/scenes/breath.js",
+      "sha": "de8ce7ecddcddd2ef9e7f613fb18374b4577af827b16ce64cff76a8ed20ac219",
+      "complexity": 22,
+      "name": "Arrow function"
+    },
+    {
+      "file": "js/scenes/breath.js",
+      "sha": "0e3c3812f55ab8131cd4b5f5d19d191e1c220ad006b923c97530ae7d3f6e860f",
+      "complexity": 35,
+      "name": "Function 'breathLanes'"
+    },
+    {
+      "file": "js/scenes/breath.js",
+      "sha": "7f583ed4216ab0b64c12f5d9c6df9728c037007157ed9839db22b4b5cbc6b00d",
+      "complexity": 20,
+      "name": "Function 'fitLines'"
+    },
+    {
+      "file": "js/scenes/breath.js",
+      "sha": "10fa225914f1b5c9c8eb4a85ea18571ccac0b52f8abc32adbf222c364e25be17",
+      "complexity": 17,
+      "name": "Function 'holdBar'"
+    },
+    {
+      "file": "js/scenes/breath.js",
+      "sha": "2e4e3c23c6541fce9260bab64fba45eba3ce9aaaa2b3f9cbe33a5b738e17391d",
+      "complexity": 46,
+      "name": "Function 'ladder'"
+    },
+    {
+      "file": "js/scenes/breath.js",
+      "sha": "c52ca391d174348e35f132e9aad99577f26c0ad1e547475bacf55c7c0f0d83c5",
+      "complexity": 35,
+      "name": "Function 'sovt'"
+    },
+    {
+      "file": "js/scenes/breath.js",
+      "sha": "d742c2f60402101009fb26bf4e40213465f96dd582b4d2f47c9cbc0c2a3c7ddf",
+      "complexity": 37,
+      "name": "Function 'sovtRibbon'"
+    },
+    {
+      "file": "js/scenes/breath.js",
+      "sha": "1ccb9b67ef5fd16961483589806ae69bc9d79433426a899aa1c380d253a8baf5",
+      "complexity": 45,
+      "name": "Function 'sovtWords'"
+    },
+    {
+      "file": "js/scenes/breath.js",
+      "sha": "37668a487a4dee87f7f924a9f1520bd15fc3ce8c01a19eb92611f7a69af9d095",
+      "complexity": 18,
+      "name": "Function 'trillStrip'"
+    },
+    {
+      "file": "js/scenes/breath.js",
+      "sha": "bfd81729b99b67755d1486f0c537977ac4f02640ffd713ac28b592564f6b142e",
+      "complexity": 29,
+      "name": "Method 'feed'"
+    },
+    {
+      "file": "js/scenes/breath.js",
+      "sha": "f4803e35bfce04a755bbdee2748092db71763c2795315727b03eb23f8362dd09",
+      "complexity": 39,
+      "name": "Method 'feed'"
+    },
+    {
+      "file": "js/scenes/dynamics.js",
+      "sha": "9cad1fdcfab4f2695f2249c8c551c70d4736a7c73492a1f4508ed5cc735ca2ae",
+      "complexity": 18,
+      "name": "Arrow function"
+    },
+    {
+      "file": "js/scenes/dynamics.js",
+      "sha": "ba552d022944500340fe4f01b021429c23616691fd14743ef7feba8dba176a10",
+      "complexity": 17,
+      "name": "Arrow function"
+    },
+    {
+      "file": "js/scenes/dynamics.js",
+      "sha": "e15d87c9866119c89b68a49f66b2c7378de0b40b638a0c63a06d521a3631afe4",
+      "complexity": 29,
+      "name": "Function 'articulation'"
+    },
+    {
+      "file": "js/scenes/dynamics.js",
+      "sha": "b03064d9777f918b58f4ab90ee9a9fb861920844a77cbebf592dd83e22dfc89f",
+      "complexity": 16,
+      "name": "Function 'artRoll'"
+    },
+    {
+      "file": "js/scenes/dynamics.js",
+      "sha": "ad8e147e368baa1b5f2e417d1b7511907c28582c57d6ae75b2afc89d26a9583a",
+      "complexity": 27,
+      "name": "Function 'artStatsLine'"
+    },
+    {
+      "file": "js/scenes/dynamics.js",
+      "sha": "85d9ede0a764b82236b6a60065a405177ed54d0d751e120328e90d3722a1c112",
+      "complexity": 20,
+      "name": "Function 'drawRun'"
+    },
+    {
+      "file": "js/scenes/dynamics.js",
+      "sha": "2f5cdced3bc2b8827d87e22b4c5e118bd2ba4e962f730a9169dcfde5949df753",
+      "complexity": 19,
+      "name": "Function 'fitPlan'"
+    },
+    {
+      "file": "js/scenes/dynamics.js",
+      "sha": "477f4f9b16f8288d009e6bdb18d37640ac954f416af5e052d768a4a1c85d6346",
+      "complexity": 16,
+      "name": "Function 'onset'"
+    },
+    {
+      "file": "js/scenes/dynamics.js",
+      "sha": "df132fbf46af5115f131cbe9cd703095b003a08cdebbe62548bcbfea6d8b32a7",
+      "complexity": 31,
+      "name": "Function 'onsetPlot'"
+    },
+    {
+      "file": "js/scenes/dynamics.js",
+      "sha": "9cf0eff052f5680405b970055c87a43473299c798f5dba58daa72a19bca01a18",
+      "complexity": 19,
+      "name": "Function 'onsetReview'"
+    },
+    {
+      "file": "js/scenes/dynamics.js",
+      "sha": "3a437a7c00132fca7f93aaef2c285a3701b31beff8d93a79d60dd975a0b42e88",
+      "complexity": 18,
+      "name": "Function 'swellCard'"
+    },
+    {
+      "file": "js/scenes/dynamics.js",
+      "sha": "aff428782328d9a5a0cdc6f51a03208cacb111f364b8ac4395750ff2e39c12c6",
+      "complexity": 17,
+      "name": "Function 'swellReview'"
+    },
+    {
+      "file": "js/scenes/guided.js",
+      "sha": "829b41344d6f9771a3d4e6a719c2e8c02bdf32cb301e2de658d5ace470e2bd31",
+      "complexity": 28,
+      "name": "Arrow function"
+    },
+    {
+      "file": "js/scenes/guided.js",
+      "sha": "c8749253f7e1739a9253589d7a7ee59735797fbbc44962c780c98fc5888466d5",
+      "complexity": 27,
+      "name": "Function 'artAndWords'"
+    },
+    {
+      "file": "js/scenes/guided.js",
+      "sha": "87a8f3791ebe84b6a651c9ea053effa4dc4d18b09f3aec4bb5d0c76ef97c4a60",
+      "complexity": 22,
+      "name": "Function 'artGesture'"
+    },
+    {
+      "file": "js/scenes/guided.js",
+      "sha": "38a659a5ab7edb92fec9f8317ec9a8f186d4e0caa6fcaf516138c25cea22db88",
+      "complexity": 43,
+      "name": "Function 'artNumbers'"
+    },
+    {
+      "file": "js/scenes/guided.js",
+      "sha": "7961b03b0d4df6eb52f63308f893508ef89ab025ff217bad54121b80897a0e31",
+      "complexity": 24,
+      "name": "Function 'artYawns'"
+    },
+    {
+      "file": "js/scenes/guided.js",
+      "sha": "f6c42aed8f30a02209a2ec2f31bec409ad05e7e98663816ed9dbaece89254334",
+      "complexity": 100,
+      "name": "Function 'chapterReview'"
+    },
+    {
+      "file": "js/scenes/guided.js",
+      "sha": "528827947876c570396a22ac74db1de1eeb6fb162cca9610936dd15e9ffd2a80",
+      "complexity": 63,
+      "name": "Function 'guided'"
+    },
+    {
+      "file": "js/scenes/guided.js",
+      "sha": "ed3d531dd9be116d6a8d791ca04794874a22918189a8c532a2a81bae3b606ec9",
+      "complexity": 16,
+      "name": "Function 'stepLabels'"
+    },
+    {
+      "file": "js/scenes/guided.js",
+      "sha": "c0fb3fdc1eeda9bc4dbd242f4310901d20229166a21eb98feeded86ff3e9a49c",
+      "complexity": 68,
+      "name": "Function 'take'"
+    },
+    {
+      "file": "js/scenes/guided.js",
+      "sha": "53068f44fdf787e4d49f27c3b9a0cd134ee7976cf7162133844b7c8f7c0eea11",
+      "complexity": 33,
+      "name": "Function 'takeRibbon'"
+    },
+    {
+      "file": "js/scenes/guided.js",
+      "sha": "a43ad661f4b8be311a195f11a6da49c31c279ea8c1c8560508575bce9a863cc4",
+      "complexity": 39,
+      "name": "Function 'weekPaint'"
+    },
+    {
+      "file": "js/scenes/guided.js",
+      "sha": "3d7dadf173dd13c7c5e52ba97fa63243c6348b6021de45dcd6d0525a9029a1e1",
+      "complexity": 33,
+      "name": "Function 'weeks'"
+    },
+    {
+      "file": "js/scenes/guided.js",
+      "sha": "50e0d155b4a8d50b99f4baad87d96ad2ff2979f2aeec63285cf8a5e2fbdc0abf",
+      "complexity": 22,
+      "name": "Function 'words'"
+    },
+    {
+      "file": "js/scenes/guided.js",
+      "sha": "6815a0949c656b6cd1b3b7ea9ae71521658af50818b1d6e7e37e90ad5a6f2950",
+      "complexity": 17,
+      "name": "Method 'frame'"
+    },
+    {
+      "file": "js/scenes/pitch.js",
+      "sha": "919971ec9629bab8ec3a945273c284b43a6e652372ff54d464611d27c2301cbb",
+      "complexity": 40,
+      "name": "Arrow function"
+    },
+    {
+      "file": "js/scenes/pitch.js",
+      "sha": "5e4492b55cd2e288f7cd3839fa7ee54ec00b3cebb007cd45985c36331733e7b4",
+      "complexity": 16,
+      "name": "Function 'chipPlan'"
+    },
+    {
+      "file": "js/scenes/pitch.js",
+      "sha": "38c4c426bf69c829a01075de8da1bf627d03e702fca4d6ffb8a182e5ff43a398",
+      "complexity": 31,
+      "name": "Function 'drawTrace'"
+    },
+    {
+      "file": "js/scenes/pitch.js",
+      "sha": "042933037c766fb075b34cd7d637698454939fbec709558571e723a8d24cc186",
+      "complexity": 22,
+      "name": "Function 'header'"
+    },
+    {
+      "file": "js/scenes/pitch.js",
+      "sha": "ab1b1c6488816cc1c0c972b8c1dd9eee5e7a2a2b6aa354a2ab60b2d6dd8a717f",
+      "complexity": 20,
+      "name": "Function 'pitchChord'"
+    },
+    {
+      "file": "js/scenes/pitch.js",
+      "sha": "4d45f03fee905312734c61e8f2836a9595a23041b676a08f0cd49ea38edeaec5",
+      "complexity": 26,
+      "name": "Function 'pitchHold'"
+    },
+    {
+      "file": "js/scenes/pitch.js",
+      "sha": "a35e0c08958a6658a14d1651011de28f172bdf7376f0f404958c20876c8bfd52",
+      "complexity": 20,
+      "name": "Function 'pitchMatch'"
+    },
+    {
+      "file": "js/scenes/pitch.js",
+      "sha": "2b8ea6f60b5acd9034db96d10ac6774e1f7753dcf811075c6090e2acdfe13412",
+      "complexity": 21,
+      "name": "Function 'pitchSiren'"
+    },
+    {
+      "file": "js/scenes/pitch.js",
+      "sha": "f5583f168b53819866db07615af174881441207d7d519ac6a809102271c2856d",
+      "complexity": 19,
+      "name": "Function 'pitchSong'"
+    },
+    {
+      "file": "js/scenes/pitch.js",
+      "sha": "f613433134686770bf65b795f51ddd78a9ce47d516e45f51184651985055d9ab",
+      "complexity": 16,
+      "name": "Method 'feed'"
+    },
+    {
+      "file": "js/scenes/resonance.js",
+      "sha": "a7cbc1936172c969ae76f422d5c50a8b10d2d82c93b90a3cab11b7c8d8ab3a44",
+      "complexity": 16,
+      "name": "Arrow function"
+    },
+    {
+      "file": "js/scenes/resonance.js",
+      "sha": "6f26cb94920ee3c795ce674a8716fc913f5a9df19d782287c880f75c8a154122",
+      "complexity": 42,
+      "name": "Function 'abFacts'"
+    },
+    {
+      "file": "js/scenes/resonance.js",
+      "sha": "01f5d0076a345d858dd078efe9a1ef772cc2e9f1ca7eda501e5416da6ca7988e",
+      "complexity": 26,
+      "name": "Function 'abTakes'"
+    },
+    {
+      "file": "js/scenes/resonance.js",
+      "sha": "e1c5caa69ea28466c3fa5595904006db0609078da19a964372d53a49990825e7",
+      "complexity": 31,
+      "name": "Function 'formants'"
+    },
+    {
+      "file": "js/scenes/resonance.js",
+      "sha": "c70f1ef6029305c1d989921d394e406e0ed17262f2e7d9329bc701ec978eb278",
+      "complexity": 68,
+      "name": "Function 'roundPage'"
+    },
+    {
+      "file": "js/scenes/resonance.js",
+      "sha": "91b7fd55198507910308d6b4818ef1a1ddbb4ad561c25b8cf12905cc3d4e37ec",
+      "complexity": 27,
+      "name": "Function 'seamsReview'"
+    },
+    {
+      "file": "js/scenes/resonance.js",
+      "sha": "572a88655e59e61f886ac791d6a848125e42c2b2462f622adee023dc03546ed6",
+      "complexity": 18,
+      "name": "Function 'sideBody'"
+    },
+    {
+      "file": "js/scenes/resonance.js",
+      "sha": "b31673dda2b643aa5696b0d0bbe186aa14a1eb715aa79e66305f3be1017c0abc",
+      "complexity": 25,
+      "name": "Function 'sideBright'"
+    },
+    {
+      "file": "js/scenes/resonance.js",
+      "sha": "e1ad2dbcdddf115b6173450936cd231b5cc27ece577c342f0f0367620ecea042",
+      "complexity": 22,
+      "name": "Function 'sideSoft'"
+    },
+    {
+      "file": "js/scenes/resonance.js",
+      "sha": "d63e17177b664f1a6adb4e715232282c35a2397176289029b276d5100d504ae4",
+      "complexity": 23,
+      "name": "Function 'sideSpeech'"
+    },
+    {
+      "file": "js/scenes/resonance.js",
+      "sha": "2e0fff99ef35470ee3608aa0903baded7c46c6507dc750d5402eb5f0681a2108",
+      "complexity": 42,
+      "name": "Function 'takeLane'"
+    },
+    {
+      "file": "js/scenes/resonance.js",
+      "sha": "72853500dcc17aab058a5486861a1587c49da4982275d5a654fcb3dd9a1060a2",
+      "complexity": 17,
+      "name": "Function 'textBlock'"
+    },
+    {
+      "file": "js/scenes/resonance.js",
+      "sha": "7d751c4fabf239bb1076994b5e0d75fd08f83e12cbfc8f5429fffb65fba98e2b",
+      "complexity": 23,
+      "name": "Function 'vowels'"
+    },
+    {
+      "file": "js/scenes/resonance.js",
+      "sha": "62e20038d2681f5ec2c8b5e50d659c93d8f4f0b9b2c4580b69b783f3d4045332",
+      "complexity": 78,
+      "name": "Function 'zoneLane'"
+    },
+    {
+      "file": "js/scenes/resonance.js",
+      "sha": "9eaf0610fd966e3794520c2d50607bfd3d6b55b45dc137b4ac90c7f098de0f74",
+      "complexity": 23,
+      "name": "Function 'zones'"
+    },
+    {
+      "file": "js/scenes/resonance.js",
+      "sha": "c3e5a37746962e40c500a1cd2e296309034e9dcc3c725975ca466bc9d3fa9de8",
+      "complexity": 17,
+      "name": "Method '_fresh'"
+    },
+    {
+      "file": "js/scenes/speech-shape.js",
+      "sha": "0bede5856d88a6cfd9182235960cbec36bb631e2c6789fae7c5f373e8c76eb92",
+      "complexity": 28,
+      "name": "Arrow function"
+    },
+    {
+      "file": "js/scenes/speech-shape.js",
+      "sha": "1a1d7290a39aa1f94c6ad1e3416e9cad43d2289520537a86c8fe643c6af89247",
+      "complexity": 16,
+      "name": "Arrow function"
+    },
+    {
+      "file": "js/scenes/speech-shape.js",
+      "sha": "3ad3f4cf485e9b170d36ba2bb5b57e407822171b5a8a042f4b3c58dba7480a87",
+      "complexity": 21,
+      "name": "Arrow function"
+    },
+    {
+      "file": "js/scenes/speech-shape.js",
+      "sha": "4145f75e7a3daa73d633d3e5d6824b1035903d361af389aaeac49721bada02d7",
+      "complexity": 19,
+      "name": "Arrow function"
+    },
+    {
+      "file": "js/scenes/speech-shape.js",
+      "sha": "78978e38a6a8e6c099a1b9ef255b62768bfe36236f60682067608ca9e157667b",
+      "complexity": 21,
+      "name": "Arrow function"
+    },
+    {
+      "file": "js/scenes/speech-shape.js",
+      "sha": "6c5ff087401fe1b0174fe8f5b0bf8da686fd9aa68aa9979bba15e6f22a422656",
+      "complexity": 16,
+      "name": "Function 'answerStrip'"
+    },
+    {
+      "file": "js/scenes/speech-shape.js",
+      "sha": "1aca03af446738f8fa25d632109c8a2f1ec99aa284f9abeb32227b667e77041a",
+      "complexity": 30,
+      "name": "Function 'claimCard'"
+    },
+    {
+      "file": "js/scenes/speech-shape.js",
+      "sha": "d2d968136d0cfb277b71c2b15bf550518949023a919cbd15738e68ef48fd8cc2",
+      "complexity": 16,
+      "name": "Function 'comparePlan'"
+    },
+    {
+      "file": "js/scenes/speech-shape.js",
+      "sha": "837f17395314d9cabf228e407554410f701b76e187c938eb0f35875b8a0723a3",
+      "complexity": 60,
+      "name": "Function 'concisionGate'"
+    },
+    {
+      "file": "js/scenes/speech-shape.js",
+      "sha": "9f633039a93c8727bb6fc12e4c9f68a9fdaa048f6bc67e2d7bd3616ead2af498",
+      "complexity": 20,
+      "name": "Function 'headRow'"
+    },
+    {
+      "file": "js/scenes/speech-shape.js",
+      "sha": "6654ed5dd308f1b748abcdabf8419267e80f2e571eaeaefa732782ad833694d8",
+      "complexity": 30,
+      "name": "Function 'landingResult'"
+    },
+    {
+      "file": "js/scenes/speech-shape.js",
+      "sha": "187a8633aeed90cea7ff6bbae6d9f4b3e350a34c338395c90096f6c5aa5ac7b5",
+      "complexity": 32,
+      "name": "Function 'landingStrip'"
+    },
+    {
+      "file": "js/scenes/speech-shape.js",
+      "sha": "97fe6ef48ca4e2d89884bce817f210b376b7bbaa89bb9252e6103fb0af32de3a",
+      "complexity": 34,
+      "name": "Function 'melodyRibbon'"
+    },
+    {
+      "file": "js/scenes/speech-shape.js",
+      "sha": "27f3263eb5e779c30d89760a30e615130172d7cb037dc921f2ba770647422eb2",
+      "complexity": 28,
+      "name": "Function 'slotRow'"
+    },
+    {
+      "file": "js/scenes/speech-shape.js",
+      "sha": "c8e639495869aea2587a2bcedaeb7703d7ec6ecafac8948c186ea6b5bcf54525",
+      "complexity": 48,
+      "name": "Function 'storyArc'"
+    },
+    {
+      "file": "js/scenes/speech.js",
+      "sha": "572c41ab7f2059da5aee72300bc0b2b1103aa267c6ded36151f13a6fec249eaf",
+      "complexity": 17,
+      "name": "Arrow function"
+    },
+    {
+      "file": "js/scenes/speech.js",
+      "sha": "2a585335d29e2f2b426bfe052d3eca4798cbc24f54ef49ec872a36dbcf1c0203",
+      "complexity": 22,
+      "name": "Function 'beadGrid'"
+    },
+    {
+      "file": "js/scenes/speech.js",
+      "sha": "f0d65081dde66657ecedb950ee64497274f55ce2b00c81ec97e532548d38f1a0",
+      "complexity": 21,
+      "name": "Function 'beads'"
+    },
+    {
+      "file": "js/scenes/speech.js",
+      "sha": "3a43bf4715f249ba09601f7786948ce30d08b0086dcf01d15a64ff2c5c0681d1",
+      "complexity": 21,
+      "name": "Function 'fillerReview'"
+    },
+    {
+      "file": "js/scenes/speech.js",
+      "sha": "6c342e0218705c99f5704861f41264a31c79bbd950f9baf27fb9f37e161b943f",
+      "complexity": 55,
+      "name": "Function 'fillerRounds'"
+    },
+    {
+      "file": "js/scenes/speech.js",
+      "sha": "24645796d532e23886cf53fb2b94d93c60eb89b5658cb9c20e016cd5cc77b546",
+      "complexity": 21,
+      "name": "Function 'paceRiver'"
+    },
+    {
+      "file": "js/scenes/speech.js",
+      "sha": "ec6c8169166c22832a1c3aff7ddf3ac6b0b295b73077554745ffcef29f1cde6b",
+      "complexity": 41,
+      "name": "Function 'pause'"
+    },
+    {
+      "file": "js/scenes/speech.js",
+      "sha": "1c2810177af78afd755cd8976b7cb454ebe8c008336618fc67e27e34f25b022c",
+      "complexity": 35,
+      "name": "Function 'rateLadder'"
+    },
+    {
+      "file": "js/scenes/speech.js",
+      "sha": "27f174518c72489aca3fd5815503f68d441e5a8e106b9b16425126176ae971bf",
+      "complexity": 26,
+      "name": "Function 'reviewTakes'"
+    },
+    {
+      "file": "js/scenes/speech.js",
+      "sha": "65e739fac1479aa56021afbac96e33ca04024c8dba6472556c30fb34d3922701",
+      "complexity": 21,
+      "name": "Function 'riverPlot'"
+    },
+    {
+      "file": "js/scenes/speech.js",
+      "sha": "54caf665dacb1b17f7550148613e3c3a8f3880d65636585957024995cf8f1d34",
+      "complexity": 18,
+      "name": "Function 'riverReview'"
+    },
+    {
+      "file": "js/scenes/speech.js",
+      "sha": "fbfe67434676771a0f524dad3a3e03b1ef40c502750bff1db94e16ee7a8a8776",
+      "complexity": 16,
+      "name": "Function 'riverSlots'"
+    },
+    {
+      "file": "js/scenes/speech.js",
+      "sha": "befc359096c5506bd3ed78e0cc57950aaa21430a946b1ad6f4ff5f825fdca82c",
+      "complexity": 29,
+      "name": "Function 'stairs'"
+    },
+    {
+      "file": "js/scenes/speech.js",
+      "sha": "36200d004e3c716d4439cc18c8260be64219e7320f407f5cb0b03404054ed1b7",
+      "complexity": 36,
+      "name": "Function 'topicCard'"
+    },
+    {
+      "file": "js/scenes/speech.js",
+      "sha": "d8cf6c48a339c687435baaf58e929ef13a6f90b1ad82d8c974a8b10b6655bd54",
+      "complexity": 19,
+      "name": "Function 'topicReview'"
+    },
+    {
+      "file": "js/scenes/speech.js",
+      "sha": "aac4032643ad3ed0565c01d020405aa3ff928ab51b08283f85ce22dade4db8ac",
+      "complexity": 25,
+      "name": "Function 'topicRibbon'"
+    },
+    {
+      "file": "js/scenes/speech.js",
+      "sha": "58a78d4a9be6638ed3d9c68099c37290723f5045848c0cc255fe142679638236",
+      "complexity": 38,
+      "name": "Function 'turns'"
+    },
+    {
+      "file": "js/scenes/speech.js",
+      "sha": "5bd9dec0421d7da8a2ccc90911492795ea53ef2083847403647f72fe107052aa",
+      "complexity": 16,
+      "name": "Method 'feed'"
+    },
+    {
+      "file": "js/scenes/volume.js",
+      "sha": "94d26caeca797fa110f51ef1f4149940002eb3b29b81af33296801b806048017",
+      "complexity": 16,
+      "name": "Arrow function"
+    },
+    {
+      "file": "js/scenes/volume.js",
+      "sha": "a27c875421defd9e06d5bcab6cf63f70d559eed8093078303b01d9451654219d",
+      "complexity": 31,
+      "name": "Function 'channelChart'"
+    },
+    {
+      "file": "js/scenes/volume.js",
+      "sha": "f894507d6b8e14ec7ea5c3a96a74c919c1c11ecec814ea5f075bc4db6f811a7e",
+      "complexity": 21,
+      "name": "Function 'countLive'"
+    },
+    {
+      "file": "js/scenes/volume.js",
+      "sha": "e7de4b9ee084bc2f483375b12ab5be02a8c8fd9cbaa08aa20abd2b7fe9977560",
+      "complexity": 19,
+      "name": "Function 'drawTread'"
+    },
+    {
+      "file": "js/scenes/volume.js",
+      "sha": "5d73e4debdcf1e0f1eca41a3e3a27b717d15cca439919323f436958863276653",
+      "complexity": 25,
+      "name": "Function 'energyTriad'"
+    },
+    {
+      "file": "js/scenes/volume.js",
+      "sha": "c49906795afefbebc584f1c0b2ad580f0b42a00217a4c524bab6f8f019fe2a53",
+      "complexity": 24,
+      "name": "Function 'ladderHeader'"
+    },
+    {
+      "file": "js/scenes/volume.js",
+      "sha": "7b0ffe31cf38fcc73a5841ab10e4a5939bae28044e92369a67317c262d77ca99",
+      "complexity": 63,
+      "name": "Function 'stairsBody'"
+    },
+    {
+      "file": "js/scenes/volume.js",
+      "sha": "8c82d17d94bc58397552f61a1b5ccb9abf13ea8614c23d6145797c37917a908d",
+      "complexity": 25,
+      "name": "Function 'storyBody'"
+    },
+    {
+      "file": "js/scenes/volume.js",
+      "sha": "8f3a300954ce3a23dc1f8b8296f0accc1589a293715244ce94dba13be5f35c40",
+      "complexity": 38,
+      "name": "Function 'volumeCount'"
+    },
+    {
+      "file": "js/scenes/volume.js",
+      "sha": "7e27c2c8470a789cdbd8c613d55ded51387e391c3ae912fbfb4c09643101f81a",
+      "complexity": 26,
+      "name": "Method 'feed'"
+    },
+    {
+      "file": "js/storage.js",
+      "sha": "121a35cfb5f2c81a47c0f07729ac468e2b754c37b3f2eede452185d6db8071d2",
+      "complexity": 17,
+      "name": "Method 'saveExerciseResult'"
+    },
+    {
+      "file": "js/storage.js",
+      "sha": "d5206da3097bcf5553b5ded129b37b267d7745e14f52d4163cfead1ab1fdb429",
+      "complexity": 17,
+      "name": "Method 'writeSyncBag'"
+    },
+    {
+      "file": "js/sync.js",
+      "sha": "003ff5d291920e9948d2c5a2df2a50b05a3c364148e5c6ab7a74541650c816e1",
+      "complexity": 24,
+      "name": "Async arrow function"
+    },
+    {
+      "file": "js/sync.js",
+      "sha": "655dd47f73170540c6d2b441517551e7fa44ab9b3a9aff769ea5e4fa626c70d5",
+      "complexity": 24,
+      "name": "Function 'mergeProgress'"
+    },
+    {
+      "file": "js/tour.js",
+      "sha": "f1815244d419a679423089b7427ec505e0ffb1b7cf47e2ca54045a1a6a38e9ab",
+      "complexity": 16,
+      "name": "Arrow function"
+    },
+    {
+      "file": "js/tour.js",
+      "sha": "0146d859c8076138e2edb6b5b85e67db1408095f0dcf2f72851b1c0d84bbe393",
+      "complexity": 16,
+      "name": "Function 'beginTour'"
+    },
+    {
+      "file": "js/tour.js",
+      "sha": "8757d1a11ba534e74d947b6e8f350706eff1bef0a92dd9fc1629d6e80cbdbd30",
+      "complexity": 18,
+      "name": "Function 'end'"
+    },
+    {
+      "file": "js/tour.js",
+      "sha": "c3fe8848271351da6b199063bc2d581d8d0d0abb093ed481634fb9fafcc51b60",
+      "complexity": 16,
+      "name": "Function 'packSteps'"
+    },
+    {
+      "file": "js/tour.js",
+      "sha": "2dd2e0ceb14bbb9bbbbea00591119d0b917efb0855d07528f4791c15801de455",
+      "complexity": 26,
+      "name": "Function 'placeStep'"
+    },
+    {
+      "file": "js/tour.js",
+      "sha": "ba26783dc62cf42deb69d8333fd514ae1809521fbe73d2e586fa050b41f98795",
+      "complexity": 19,
+      "name": "Function 'targetRect'"
+    },
+    {
+      "file": "js/value-pulse.js",
+      "sha": "94bab66b624e9289a905d2337132fed92dc5f6934800eb863909a6c5bdc560fa",
+      "complexity": 33,
+      "name": "Function 'compute'"
+    },
+    {
+      "file": "js/value-pulse.js",
+      "sha": "214dbef69f213a565cac1070f275f52527f397e3ce73d4fa74a981b392f9c8b4",
+      "complexity": 24,
+      "name": "Function 'narrative'"
+    },
+    {
+      "file": "js/value-pulse.js",
+      "sha": "f722f11ddcc8a59d6c1d9eeb96db9ac1b7e2bf7a6643381b8964279aa21fb2fa",
+      "complexity": 16,
+      "name": "Function 'suggestUpgradeMoment'"
+    },
+    {
+      "file": "js/voice-features.js",
+      "sha": "927a7ea7e4b9dd786eeb69bfb8557e3a1bcf7f53de456658647bf6b53c8c8322",
+      "complexity": 19,
+      "name": "Method '_cameBack'"
+    },
+    {
+      "file": "js/voice-features.js",
+      "sha": "066097821350a6e2422b5a5bfaad729b974d1d058bd35f48ee2eb8b05b462aba",
+      "complexity": 29,
+      "name": "Method '_learnFloor'"
+    },
+    {
+      "file": "js/voice-features.js",
+      "sha": "9c80d001310b379672670d0139e3eaea45ca65e471ed05c5f6d059499d84635e",
+      "complexity": 17,
+      "name": "Method '_measure'"
+    },
+    {
+      "file": "js/voice-features.js",
+      "sha": "470f24dc9429d7ccef18023f1c07074a28087211bb2006034b4e2c62b0128e06",
+      "complexity": 16,
+      "name": "Method '_steadyRoom'"
+    },
+    {
+      "file": "js/voice-features.js",
+      "sha": "9205f1fe9032f9a889d91b7ca1f1f5f224a7e690d31761a1446661a917dc072e",
+      "complexity": 17,
+      "name": "Method '_still'"
+    },
+    {
+      "file": "js/voice-features.js",
+      "sha": "0620b30beffacd8112739256f93ffdf35cee111fbf4bf9ddbb3ea3ed375b80b7",
+      "complexity": 29,
+      "name": "Method 'feed'"
+    },
+    {
+      "file": "js/voice-features.js",
+      "sha": "4f7a50545438ae138246dfea5c66eb8122531286ad17f0d70a4a7458ae95a488",
+      "complexity": 16,
+      "name": "Method 'feed'"
+    },
+    {
+      "file": "js/voice-features.js",
+      "sha": "c64780d373cb1d68678ba2fb91099515770cb97eae2e85a338d70b1e73bc88db",
+      "complexity": 21,
+      "name": "Method 'feed'"
+    },
+    {
+      "file": "js/voice-features.js",
+      "sha": "dca52fa7a006a59da6b6d636d1ecb1be33489066f325e3502fe50a808fe81de4",
+      "complexity": 18,
+      "name": "Method 'feed'"
+    },
+    {
+      "file": "qa/admin/sandbox.mjs",
+      "sha": "f1b34b2fe01d096e13924469c4c455d882b9f62148f61e1da37e65e603bf0146",
+      "complexity": 19,
+      "name": "Async arrow function"
+    },
+    {
+      "file": "qa/capture-geometry.mjs",
+      "sha": "a98f5d80b54ba3d427de6eddae1b83a3031158a2f4f1d5b9b466882893c4d7d3",
+      "complexity": 16,
+      "name": "Function 'pushEl'"
+    },
+    {
+      "file": "qa/capture-mobile.mjs",
+      "sha": "c57dd75c97f8328ca3287151f0284e59bb1d41c30b0e35e0b5707e4130a443ad",
+      "complexity": 36,
+      "name": "Function 'audit'"
+    },
+    {
+      "file": "qa/capture-viewports.mjs",
+      "sha": "332d478063de301e947902541e430738b48d67854df6bd35d506111915b614ac",
+      "complexity": 29,
+      "name": "Arrow function"
+    },
+    {
+      "file": "qa/capture-viewports.mjs",
+      "sha": "a040dfdb7edf582fb24f86be06bd892bf22eca37281166724a16bebe305a412c",
+      "complexity": 16,
+      "name": "Async function 'main'"
+    },
+    {
+      "file": "qa/check-catalog.mjs",
+      "sha": "34ef08bddcb6ee23415bf5a097decafd457d64f471741027a86408749efd4fa8",
+      "complexity": 75,
+      "name": "Function 'main'"
+    },
+    {
+      "file": "qa/design-test/firstclick.mjs",
+      "sha": "d8f942c8bf58a11225aec3982abd6abe5c79fe937eec43472d554f8b202f29ba",
+      "complexity": 24,
+      "name": "Async function 'render'"
+    },
+    {
+      "file": "qa/design-test/firstclick.mjs",
+      "sha": "0fe9d7f20b16c9c96391b99ff2bc32c80ff646aa9bc0cba79a5ee38059e7efac",
+      "complexity": 28,
+      "name": "Function 'score'"
+    },
+    {
+      "file": "qa/design-test/harness.mjs",
+      "sha": "3b04ec22a9bf120bbcce193c95b0ae0bbee6e479c3cec844f3d7c239b0a9fee2",
+      "complexity": 25,
+      "name": "Async function 'renderOne'"
+    },
+    {
+      "file": "qa/design-test/harness.mjs",
+      "sha": "1e4f279619ac73c2dd0a56d4a582d63593c6387b227473dc8c91a3b0df52513b",
+      "complexity": 22,
+      "name": "Function 'measure'"
+    },
+    {
+      "file": "qa/drive-exercises.mjs",
+      "sha": "e1bb7c909f38813218c03a5ea9fdcaf5443dba2abc37edddffcb66c3122ee4d5",
+      "complexity": 21,
+      "name": "Arrow function"
+    },
+    {
+      "file": "qa/voices/resonance.js",
+      "sha": "7ff5b5bf63eff59ca8d89f792090c2fcb66a8fd71848767b84a146304f4ed06e",
+      "complexity": 16,
+      "name": "Arrow function"
+    },
+    {
+      "file": "tests/accounts.spec.js",
+      "sha": "cf765f83ad94d4535af01eece0daafe581fb71ab16999c2334f2c74195c14a7d",
+      "complexity": 46,
+      "name": "Async arrow function"
+    },
+    {
+      "file": "tests/audio-regression.spec.js",
+      "sha": "16ae075350a96369a8f766b60fd26a92feeb0fe998d78e2cf8dd6514c8a4b3ac",
+      "complexity": 26,
+      "name": "Async arrow function"
+    },
+    {
+      "file": "tests/audio-regression.spec.js",
+      "sha": "ba1d77d9424e64ee8a7d52bebc35b2479fdcba948c52aef899f19d8334fd8e7b",
+      "complexity": 16,
+      "name": "Async arrow function"
+    },
+    {
+      "file": "tests/audio-regression.spec.js",
+      "sha": "ce48615f29edadddecdfbdfd108cdb81608243c4acc392a9ffc0acf259edeb84",
+      "complexity": 20,
+      "name": "Async function 'applyCombo'"
+    },
+    {
+      "file": "tests/catalog-regression.spec.js",
+      "sha": "54777e0ffda15ac75a79c025d1e3765fce385e96b609f9ce961e82ff11244bb3",
+      "complexity": 27,
+      "name": "Arrow function"
+    },
+    {
+      "file": "tests/click-ui-formats.spec.js",
+      "sha": "a5bb13962648a7cc85a680d66ce86176e21eb38755714cb5c588650cc767fa7f",
+      "complexity": 20,
+      "name": "Async arrow function"
+    },
+    {
+      "file": "tests/click-ui-live-log.spec.js",
+      "sha": "17ecb385f92a0f66ce0827365793e205b4482d75712dccbf8bca7338d0b22ea5",
+      "complexity": 18,
+      "name": "Arrow function"
+    },
+    {
+      "file": "tests/click-ui-live-log.spec.js",
+      "sha": "d3a3496fed57ebdf4e2179a1eb316708469135d94315c02ff64bce7c808421fb",
+      "complexity": 67,
+      "name": "Async function 'probeControl'"
+    },
+    {
+      "file": "tests/daily-loop.spec.js",
+      "sha": "a1c9b2727bd35c820a5cf6ccf3b9c3198bc92bab159b5526b4a114402f98cf7e",
+      "complexity": 17,
+      "name": "Arrow function"
+    },
+    {
+      "file": "tests/exercise-features.spec.js",
+      "sha": "1ca5e554b586ea4f5c49e65640556744e6c75749d394c85f39ba5d96986a3a94",
+      "complexity": 89,
+      "name": "Async arrow function"
+    },
+    {
+      "file": "tests/exercise-live-forensics.spec.js",
+      "sha": "eed4ebdd00b627a3649089ce3f14d03a61a8e8e7c76cdbe151d20f76576e8471",
+      "complexity": 91,
+      "name": "Async arrow function"
+    },
+    {
+      "file": "tests/exercise-ui-forensics.spec.js",
+      "sha": "3903aa4bed5db272b407c67faa2889b2090b645fbee5d71c8726ac788798dc0f",
+      "complexity": 83,
+      "name": "Async arrow function"
+    },
+    {
+      "file": "tests/exercise-ui-forensics.spec.js",
+      "sha": "cb7a8f154a637ae4366776d512d72448fb2bbbac98da7c7a80cf362a67b4ffc9",
+      "complexity": 30,
+      "name": "Async function 'exerciseControl'"
+    },
+    {
+      "file": "tests/exercise-viz-pitch.spec.js",
+      "sha": "6a7c8a352d2527ddacc19000b07db755d3e84279d8f3104570aac4184683c145",
+      "complexity": 22,
+      "name": "Arrow function"
+    },
+    {
+      "file": "tests/format-hit-clicks.spec.js",
+      "sha": "9092a8348bf711aa12066355800c548fc36498f932eba17bdb734a95bf4f0e43",
+      "complexity": 16,
+      "name": "Arrow function"
+    },
+    {
+      "file": "tests/format-hit-clicks.spec.js",
+      "sha": "90c596867973c7179183ec1260a65b3a03eb8a1258aeacf36782b85188e28f81",
+      "complexity": 24,
+      "name": "Async arrow function"
+    },
+    {
+      "file": "tests/fullscreen-all-clicks.spec.js",
+      "sha": "5a296878d323d3df77c571e923d1399ae21bda4d3ef6e3fccb9b488aab252643",
+      "complexity": 29,
+      "name": "Async arrow function"
+    },
+    {
+      "file": "tests/headed-exercise-forensics.spec.js",
+      "sha": "6909a4bfef102072c51b9a0f34d5ef1c216ad7a3a9ce59b34c990267158a150c",
+      "complexity": 74,
+      "name": "Async arrow function"
+    },
+    {
+      "file": "tests/headed-exercise-forensics.spec.js",
+      "sha": "581d7d5033e71bc3ae6e166fa02ed8b3975d91eb79c367f7483314ff1c009a3c",
+      "complexity": 25,
+      "name": "Function 'writeMarkdown'"
+    },
+    {
+      "file": "tests/headed-formats-clicks.spec.js",
+      "sha": "60bf52a4b5a75884207063d0652241f420ee0e22541dde6fba7f16c1776a834e",
+      "complexity": 38,
+      "name": "Async arrow function"
+    },
+    {
+      "file": "tests/helpers/click-ui-live-report.js",
+      "sha": "c993b72f367179cb64b2e45efe3f9c3988e238dfdb403c601fd5fbc8639c025b",
+      "complexity": 54,
+      "name": "Function 'writeMarkdown'"
+    },
+    {
+      "file": "tests/helpers/layout-probe.js",
+      "sha": "ebd9183ab9be935b8c3d6547d5893db272222795cc167af573fdb4b0548dfe3c",
+      "complexity": 41,
+      "name": "Arrow function"
+    },
+    {
+      "file": "tests/helpers/ui-forensics.js",
+      "sha": "1f44335f8c1ec01f3dc1fb042213aef9213ecd0c46bcee35091357c530b561b1",
+      "complexity": 23,
+      "name": "Arrow function"
+    },
+    {
+      "file": "tests/helpers/ui-forensics.js",
+      "sha": "f2c68a379b4fe6dc41203f5ec7b400ffc072160cd2cff6c33f6e71c46d5d6f2a",
+      "complexity": 50,
+      "name": "Arrow function"
+    },
+    {
+      "file": "tests/helpers/ui-forensics.js",
+      "sha": "ffd7fd2b5959786e0d7c3e1aea8b6f519b9b577b525fad64bb3b463facee0ad8",
+      "complexity": 41,
+      "name": "Function 'writeMarkdownReport'"
+    },
+    {
+      "file": "tests/helpers/vad-sim.js",
+      "sha": "bec0d42ffb800e8f96a27d51e08616b3061b7a8c07aa5f1896635a444045040e",
+      "complexity": 26,
+      "name": "Arrow function"
+    },
+    {
+      "file": "tests/helpers/vad-sim.js",
+      "sha": "e11baeb0785deadbaa7070bc999c0468a824cd08b9c9aacaceb6c3b0220781b1",
+      "complexity": 18,
+      "name": "Function 'frames'"
+    },
+    {
+      "file": "tests/hit-targets.spec.js",
+      "sha": "544e7d2aa5573138bdb0ae78fbaa7ff40ae9a502e5f06e936124ce8922bdedd6",
+      "complexity": 16,
+      "name": "Arrow function"
+    },
+    {
+      "file": "tests/i18n-copy.spec.js",
+      "sha": "2b89f0449528d4779cda518a3dda7aec0d58bb18fc8eb7ca62c32d1de23845a4",
+      "complexity": 19,
+      "name": "Arrow function"
+    },
+    {
+      "file": "tests/sound-all-exercises.spec.js",
+      "sha": "7f229646b5036c545d811622461f0715d0e30ed2b878d3aca08308340456801c",
+      "complexity": 39,
+      "name": "Async arrow function"
+    },
+    {
+      "file": "tests/sound-all-exercises.spec.js",
+      "sha": "e6e174af13dce52d9dc544591812d02fdb2eb6ba88308e417afa8889be35f558",
+      "complexity": 39,
+      "name": "Async arrow function"
+    },
+    {
+      "file": "tests/sync.spec.js",
+      "sha": "cf82ac2767d70b68c56013d3069d87fe35804ed0488e2120f3db847a6f75fd26",
+      "complexity": 19,
+      "name": "Async arrow function"
+    },
+    {
+      "file": "tests/validation.spec.js",
+      "sha": "698bc02937120bafc499a5605c2991e9a9be0759b7c7eea88552bef0a28dada5",
+      "complexity": 16,
+      "name": "Arrow function"
+    },
+    {
+      "file": "workers/entitlements/src/api.js",
+      "sha": "af11785b7b3085e9ac13eb88d5db70bf9fffb5db683a802940c9d29bc2192aa4",
+      "complexity": 43,
+      "name": "Async function 'routeAccountApi'"
+    },
+    {
+      "file": "workers/entitlements/src/email.js",
+      "sha": "f73a861675119d69a84a4ebce79a0fe5eb3e7c6bbe0e2bc54ef4e4b5e98c57b7",
+      "complexity": 17,
+      "name": "Function 'resolveEmailConfig'"
+    },
+    {
+      "file": "workers/entitlements/src/events.js",
+      "sha": "8a5c4857bcd25ce7d58c427d2a0c8ee36eefc5a67da91a68d10e3f2c6a445f90",
+      "complexity": 17,
+      "name": "Async function 'computeHorizon'"
+    },
+    {
+      "file": "workers/entitlements/src/events.js",
+      "sha": "3e2b4ab966d9cab12116537a1c284a54f8cff8bdf3b6b3f8429129ce23ea366f",
+      "complexity": 19,
+      "name": "Async function 'handleExperimentResults'"
+    },
+    {
+      "file": "workers/entitlements/src/events.js",
+      "sha": "95e3244be09be5e9855fd6c73c06bf8712732541370550b8357cb2544788989e",
+      "complexity": 27,
+      "name": "Async function 'handleIngest'"
+    },
+    {
+      "file": "workers/entitlements/src/events.js",
+      "sha": "c5cbc93c7aec15290dff685b9cb2dce90953a4fa56195881a3189626bac9ff4a",
+      "complexity": 16,
+      "name": "Function 'presetProblems'"
+    },
+    {
+      "file": "workers/entitlements/src/events.js",
+      "sha": "5b59becf4bd89d6d63c1ccacc96a11c940b231d1fd4b197bd78015a2e0e8c8cc",
+      "complexity": 23,
+      "name": "Function 'sanitizeEvent'"
+    },
+    {
+      "file": "workers/entitlements/src/google.js",
+      "sha": "d95a3c2cf6d44e0c54ca09ef94d0e310dcbd838d18d8a700b1ea3a6e14ad5a61",
+      "complexity": 30,
+      "name": "Async function 'verifyGoogleIdToken'"
+    },
+    {
+      "file": "workers/entitlements/src/index.js",
+      "sha": "dbc20b029d7f4dd86272736eb51e0f5816da17604a695b3e09d29069165005eb",
+      "complexity": 18,
+      "name": "Async function 'handleMercadoPagoWebhook'"
+    },
+    {
+      "file": "workers/entitlements/src/index.js",
+      "sha": "20ec875999e4fad117053c57d9b27ae09fd3698bf0a7b7f23a72d7e6b3645353",
+      "complexity": 23,
+      "name": "Async function 'handleRequest'"
+    },
+    {
+      "file": "workers/entitlements/src/license.js",
+      "sha": "0535baf4b9af5687adc86ca051cf03875e0c8c604dbb5fde28966cd26f5a8b42",
+      "complexity": 23,
+      "name": "Async function 'verifyLicenseToken'"
+    },
+    {
+      "file": "workers/entitlements/src/mercadopago.js",
+      "sha": "1214b0c1bd5464fa96ad51a3bedc29015bdb2b403f0562d9b41d41a90d8a4732",
+      "complexity": 31,
+      "name": "Function 'mapAuthorizedPaymentResource'"
+    },
+    {
+      "file": "workers/entitlements/src/mercadopago.js",
+      "sha": "f042f25583e645e532905d272959bd34297272df3c1f2b0de2a3b0a6e58fef37",
+      "complexity": 39,
+      "name": "Function 'mapPaymentResource'"
+    },
+    {
+      "file": "workers/entitlements/src/mercadopago.js",
+      "sha": "094565eb51a23a4b0692e479984860dbf432793c2a53f1f4c174f740530d6ef8",
+      "complexity": 20,
+      "name": "Function 'planForPreapproval'"
+    },
+    {
+      "file": "workers/entitlements/src/mercadopago.js",
+      "sha": "522dfe9f13f3894baa07a4ba9acb371be9bf5554bc7ad46bbd8da4b975372c93",
+      "complexity": 28,
+      "name": "Function 'resolveNotificationTarget'"
+    },
+    {
+      "file": "workers/entitlements/src/progress.js",
+      "sha": "c61ecfbe0cfe18f85d3f9c55f1a05c19c8f74441c836974f2cff4f2a0e1e754d",
+      "complexity": 18,
+      "name": "Async function 'putProgress'"
+    },
+    {
+      "file": "workers/entitlements/src/store.js",
+      "sha": "fb27ec81eb80757593ad551c33e981b4dd9d37494f5b0ec2007c767a8ef74625",
+      "complexity": 28,
+      "name": "Async function 'getEntitlement'"
+    },
+    {
+      "file": "workers/entitlements/src/store.js",
+      "sha": "5b4c1256427451131879e5ecc2338037d72e5cbe002f3698c8b48f88704a1b34",
+      "complexity": 68,
+      "name": "Async function 'upsertEntitlement'"
+    },
+    {
+      "file": "workers/entitlements/src/stripe.js",
+      "sha": "8670f1af64e3b4d532d14f387019311c2fa0f6f307ca7665093b6967f0bf9b96",
+      "complexity": 23,
+      "name": "Function 'mapCheckoutSession'"
+    },
+    {
+      "file": "workers/entitlements/src/stripe.js",
+      "sha": "bd70abe906e022a06a5f50a52e6cc31592912acac9a6f36dad88991067136674",
+      "complexity": 23,
+      "name": "Function 'mapInvoice'"
+    },
+    {
+      "file": "workers/entitlements/src/stripe.js",
+      "sha": "249f9e25b5cef80b12921feaa78338e2f81e51d263aeadfcaf8d9ea169855aa3",
+      "complexity": 16,
+      "name": "Function 'mapStripeEvent'"
+    },
+    {
+      "file": "workers/entitlements/test/d1-fake.mjs",
+      "sha": "435dcee10759efb20ca088e49445a61dd8a3381f65da97677d10db441aa8ea60",
+      "complexity": 24,
+      "name": "Function 'expandNumberedParameters'"
+    }
+  ]
+}

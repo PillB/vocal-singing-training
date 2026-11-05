@@ -211,7 +211,7 @@ test.describe("Copy & i18n (learner-facing)", () => {
     await bootEs(page);
     const r = await page.evaluate(() => {
       const Modes = window.VTPracticeModes;
-      if (!Modes?.get) return { skip: true };
+      if (!Modes?.get) return { missing: true };
       const mode = Modes.get("breathS");
       const host = document.createElement("div");
       document.body.appendChild(host);
@@ -220,12 +220,9 @@ test.describe("Copy & i18n (learner-facing)", () => {
       const btn = host.querySelector("[data-sw]")?.textContent || "";
       mode.unmount?.();
       host.remove();
-      return { phase, btn, skip: false };
+      return { phase, btn };
     });
-    if (r.skip) {
-      test.skip();
-      return;
-    }
+    expect(r.missing, "VTPracticeModes.get is the API this test drives: a test that cannot reach it is a failure, not a skip (QA-57)").toBeFalsy();
     expect(r.phase).toMatch(/Paso 1|Step 1/i);
     expect(r.phase).not.toMatch(/^Phase 1/i);
     expect(r.btn).toMatch(/Pasar|Switch|\/A\//i);

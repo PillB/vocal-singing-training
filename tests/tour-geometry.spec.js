@@ -126,7 +126,8 @@ async function measure(page) {
         getComputedStyle(document.querySelector(".tour-backdrop")).backgroundColor ===
           "rgba(0, 0, 0, 0)",
       minFontPx: Math.min(...leaves.map((el) => parseFloat(getComputedStyle(el).fontSize))),
-      smallTaps: taps.filter((t) => t.w < 44 || t.h < 44),
+      // 43.95, not 44: a box CSS makes 44 px measures 43.99999 mid hover lift (tests/helpers/tap-floor.js)
+      smallTaps: taps.filter((t) => t.w < 43.95 || t.h < 43.95),
       isLast: (() => {
         const m = document.querySelector("[data-tour-progress]").textContent.match(/(\d+)\D+(\d+)/);
         return !!m && m[1] === m[2];

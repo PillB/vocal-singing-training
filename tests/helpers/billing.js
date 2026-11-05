@@ -81,17 +81,21 @@ function tamperToken(token, patch) {
 
 /**
  * Patch VT_BILLING_CONFIG as it is defined by billing-config.js, before any
- * other script reads it. Survives reloads because it is an init script.
+ * other script reads it. Survives reloads because it is an init script. The
+ * page freezes its config once assigned (QA-05), so this is the only way a
+ * test changes it; patches compose (enableQaPro plus a trial patch both hold).
  * @param {import('@playwright/test').Page} page
  * @param {object} patch shallow merge, `verification` merged one level deeper
  */
 async function patchBillingConfig(page, patch) {
   await page.addInitScript((p) => {
     let held;
+    const earlier = Object.getOwnPropertyDescriptor(window, "VT_BILLING_CONFIG");
     Object.defineProperty(window, "VT_BILLING_CONFIG", {
       configurable: true,
       get: () => held,
       set: (value) => {
+        if (earlier && earlier.set) earlier.set(value);
         held = value;
         if (!value) return;
         const { verification, ...rest } = p || {};

@@ -223,7 +223,7 @@ test.describe("SH air auto-detect", () => {
     await boot(page);
     const r = await page.evaluate(() => {
       const Modes = window.VTPracticeModes;
-      if (!Modes?.get) return { skip: true };
+      if (!Modes?.get) return { missing: true };
       const mode = Modes.get("shAirLadder");
       const host = document.createElement("div");
       document.body.appendChild(host);
@@ -242,12 +242,9 @@ test.describe("SH air auto-detect", () => {
       const cur = mode.state.cur;
       mode.unmount?.();
       host.remove();
-      return { cur, skip: false };
+      return { cur };
     });
-    if (r.skip) {
-      test.skip();
-      return;
-    }
+    expect(r.missing, "VTPracticeModes.get is the API this test drives: a test that cannot reach it is a failure, not a skip (QA-57)").toBeFalsy();
     expect(r.cur).toBeGreaterThan(0.35);
   });
 
@@ -366,7 +363,7 @@ test.describe("SH air auto-detect", () => {
     await boot(page);
     const r = await page.evaluate(() => {
       const Modes = window.VTPracticeModes;
-      if (!Modes?.get) return { skip: true };
+      if (!Modes?.get) return { missing: true };
       const mode = Modes.get("shAirLadder");
       const host = document.createElement("div");
       document.body.appendChild(host);
@@ -395,12 +392,9 @@ test.describe("SH air auto-detect", () => {
       const after = mode.state.cur;
       mode.unmount?.();
       host.remove();
-      return { mid, after, skip: false };
+      return { mid, after };
     });
-    if (r.skip) {
-      test.skip();
-      return;
-    }
+    expect(r.missing, "VTPracticeModes.get is the API this test drives: a test that cannot reach it is a failure, not a skip (QA-57)").toBeFalsy();
     expect(r.mid).toBeGreaterThan(0.15);
     expect(r.after).toBeGreaterThan(r.mid);
   });

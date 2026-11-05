@@ -41,6 +41,18 @@
 html {
   scroll-behavior: smooth;
 }
+/* In an exercise the sticky header (js keeps --header-h true) and the ← Back
+   row (--ex-chrome-h) cover the top of the window. Declared as scroll
+   padding, the browser keeps a focused control below them when Tab scrolls
+   it into view; without it Tab left "Siguiente →" and the chord menus under
+   them (WCAG 2.4.11). Exercises only: a 120-stop Tab walk of the home page
+   finds nothing covered, and the same padding there moved the tour's own
+   scrolling (tests/tour-behaviour.spec.js "puts the page back"). The guide
+   and privacy pages have no script to measure their header and set their
+   own margins. */
+html:has(body.view-exercise) {
+  scroll-padding-top: calc(var(--header-h, 58px) + var(--ex-chrome-h, 0px) + 0.5rem);
+}
 
 body {
   margin: 0;
@@ -816,6 +828,17 @@ body.home-zero #pro-insights-panel {
   margin: 0 0 0.45rem;
 }
 
+/* "Paso listo": the checkbox was 13 px and its label 22,8 px, under the 24 px
+   target of WCAG 2.5.8; the label is the target (QA FAL-01). */
+.review-step label {
+  min-height: 24px;
+}
+.review-step input[type="checkbox"] {
+  width: 1.15rem;
+  height: 1.15rem;
+  margin: 0;
+}
+
 .review-step ul {
   margin: 0;
   padding-left: 1.1rem;
@@ -1385,6 +1408,17 @@ body.home-zero #pro-insights-panel {
   --hud-safe-r: 15%; /* dual letter+solfège labels — slightly wider for large type */
 }
 
+/* An expanded piano is ordinary content after the stage. Where the screen
+   has room, fitHighwayToViewport() shrinks the stage so stage and piano fit
+   together and the stage stays sticky (VG-30). Where it does not (landscape
+   phones, long song lists on small phones) it sets .piano-unstick and the
+   stage scrolls away, so its high z-index never paints over the buttons the
+   learner has just opened (WCAG 2.2 SC 2.4.11). */
+.game-stage.piano-unstick .highway-stage {
+  position: relative;
+  top: auto;
+}
+
 /* Short viewports (landscape phones, small laptops): fill remaining height exactly */
 @media (max-height: 500px) {
   :root {
@@ -1702,6 +1736,9 @@ body.home-zero #pro-insights-panel {
   display: flex;
   align-items: center;
   gap: 0.2rem;
+  /* The whole label is the switch's target: 24 px at least (WCAG 2.5.8);
+     the 13 px box with 11 px text alone was a 13 × 17 target */
+  min-height: 24px;
   font-size: 0.68rem;
   font-weight: 700;
   color: var(--text);
@@ -1813,10 +1850,14 @@ body.view-exercise.practice-live #pitch-game-hud {
   z-index: 40;
   display: flex;
   flex-direction: row;
-  flex-wrap: nowrap;
+  /* One row while Start, the mic and the piano options fit; a second row
+     when they do not. Kept to one row, the mic box shrank under its own
+     slider at 1280–1440 px (v12's seven piano options) and the slider lay on
+     the octave buttons. The stage reads the rail's height (--rail-h), so the
+     lanes end above a second row. */
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.45rem;
-  /* One control row tall enough for Start + compact mic (no wrap) */
   max-height: none;
   min-height: 2.75rem;
   pointer-events: none; /* children re-enable */
@@ -2530,6 +2571,12 @@ body.view-exercise .metrics-card-collapsible.collapsed .metrics-sub-compact {
   color: var(--text);
   font-variant-numeric: tabular-nums;
 }
+/* What the exercise measured in the take, kept after the toast has gone */
+.rate-sum {
+  margin: 0.15rem 0 0;
+  font-size: 0.95rem;
+  color: var(--text-muted);
+}
 /* The answers are the card's main action: equal weight, none looks chosen
    until it is, and then it wears the shared selected look (Design:
    selected-style: tint, bar, border, a check mark and aria-pressed). */
@@ -2657,6 +2704,14 @@ body.view-exercise .metrics-card-collapsible.collapsed .metrics-sub-compact {
   margin-top: 0.45rem !important;
   padding-top: 0.45rem !important;
   border-top: 1px solid var(--border) !important;
+}
+
+/* Opened, the cap was only there to animate: a song list longer than it put
+   "Detener piano" inside a scroll box of its own on a 360px phone, a scroll
+   inside the page scroll that a thumb has to find. The page scrolls instead. */
+.piano-inline.is-open.is-settled {
+  max-height: none;
+  overflow: visible;
 }
 
 .piano-toggle-row {
@@ -4313,7 +4368,8 @@ body.account-open {
   border: 1px solid var(--border);
   color: var(--text);
   padding: 0.75rem 1.15rem;
-  border-radius: 999px;
+  /* A pill for one line; a message that wraps keeps corners the text does not run out of */
+  border-radius: 1.4rem;
   box-shadow: var(--shadow);
   /* Above every overlay: the dialogs (.modal-overlay 100, pricing 120,
      account 125) and the tour (10000–10002). At 100 the pricing toasts drew
@@ -4340,6 +4396,38 @@ body.account-open {
 /* Under the sticky header, never on top of Practicar / Plan / Historial */
 .toast.show {
   top: max(calc(var(--header-h, 58px) + 0.35rem), var(--safe-top, 0px));
+}
+
+/* In an exercise: in the title's place, between ← Back and Help (js
+   placeToast sets left, top and max-width from the row), two lines at most,
+   so it never reaches the stage's strip. The take's summary, which can be
+   longer, also stays whole in the rating card (#rate-sum), and screen
+   readers hear the whole toast (role="status"). */
+.toast.in-row {
+  transform: translate(0, calc(-50% - 6px));
+  width: 100%;
+  box-sizing: border-box;
+  /* Two lines of 0.8rem at 1.2 plus this padding and the border are 37.5 px:
+     the desktop row is 39 px, so a summary that wraps (a wider font than the
+     one this was drawn in) still stands inside it. */
+  padding: 0.15rem 0.75rem;
+  border-radius: 14px;
+  font-size: 0.8rem;
+  line-height: 1.2;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+.toast.in-row.show {
+  transform: translate(0, -50%);
+}
+.exercise-header-compact .ex-title-row {
+  transition: opacity 0.2s ease;
+}
+.exercise-header-compact.toast-over .ex-title-row {
+  opacity: 0;
 }
 
 .muted {
@@ -7242,8 +7330,29 @@ body.view-exercise .stage-coach .mode-hud,
    session banner stays (one line), so Pausar and Terminar are on screen.
    The rails go back to one row each, MIC keeps its label. */
 @media (max-height: 500px) {
+  /* Out of the layout, the tab order and the accessibility tree, except the
+     site's h1: display: none took the page's only level-1 heading with it
+     (axe page-has-heading-one). js syncHeaderHeightVar reads position:
+     absolute as "takes no room". */
   body.view-exercise .app-header {
-    display: none;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    border: 0;
+    overflow: hidden;
+    visibility: hidden;
+  }
+  body.view-exercise .app-header .brand h1 {
+    visibility: visible;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
   body.view-exercise .exercise-header-compact {
     top: 0;
@@ -7340,6 +7449,16 @@ body.view-exercise .stage-coach .mode-hud,
   }
   .mode-focus.mode-focus-live .btn {
     margin-block: 0.1rem;
+  }
+}
+/* A phone on its side narrower than 800 px cannot hold Empezar, MIC and the
+   piano settings in one row: the mic box shrank under its own slider and the
+   slider lay on the octave "-" (568x320, 640x360, 667x375, 740x360). Two rows
+   there, as on a desktop at 1180-1440 px; the lanes end above them (--rail-h).
+   Costs about 42 px of a stage that is 280-330 px tall. */
+@media (max-height: 500px) and (max-width: 799.98px) {
+  .hud-bottom-rail {
+    flex-wrap: wrap;
   }
 }
 /* —— Design: sticky-bars ——
@@ -7519,10 +7638,20 @@ body.view-exercise .highway-stage {
   /* Below 375px the row cannot hold the mark, the three sections whole, the
      door and "Más": something had to give, and until now it was "Historial",
      scrolled out of sight inside the nav pill ("Histo" at 320, gone entirely
-     beside a plan pill). The mark is decoration here — it is not a link, and
-     the title it stands for is already read to screen readers — so it goes,
-     and every section stays whole. */
+     beside a plan pill). The mark is decoration here (it is not a link), so
+     it goes, and every section stays whole. The title stays for screen
+     readers: display: none took the page's only h1 out of the accessibility
+     tree too (QA-04), so the brand is hidden visually, not removed, and only
+     the mark, which would read the same name twice, is dropped. */
   body .app-header:has(#btn-more) .brand {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  body .app-header:has(#btn-more) .brand-mark {
     display: none;
   }
 }

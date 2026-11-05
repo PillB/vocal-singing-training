@@ -11,10 +11,17 @@
  * Each procedure in docs/ADMIN-GUIDE.md has a test here with the same name.
  */
 const { test, expect } = require("@playwright/test");
+// These tests stand in for the account worker at fake hosts
+// (https://entitlements.test, .invalid), which the page's Content Security
+// Policy rightly refuses. The policy itself is tested in tests/csp.spec.js
+// against the real worker host; here it is bypassed so account logic is
+// what is under test.
+test.use({ bypassCSP: true });
 const fs = require("fs");
 const path = require("path");
 const { pathToFileURL } = require("url");
 const { patchBillingConfig } = require("./helpers/billing");
+const { tapFloorLimit } = require("./helpers/tap-floor");
 
 const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";
 const API = "https://entitlements.test";
@@ -916,12 +923,12 @@ test.describe("Admin page", () => {
     await expect(page.locator("#stats-result .admin-funnel")).toBeVisible();
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     expect(overflow).toBeLessThanOrEqual(0);
-    const small = await page.evaluate(() =>
+    const small = await page.evaluate((limit) =>
       [...document.querySelectorAll("#admin-main button, #admin-main input, .admin-jump a")]
         .filter((node) => node.offsetParent !== null)
         .map((node) => ({ id: node.id || node.textContent.trim(), h: node.getBoundingClientRect().height }))
-        .filter((r) => r.h < 44)
-    );
+        .filter((r) => r.h < limit)
+    , tapFloorLimit(44));
     expect(small).toEqual([]);
     const tiny = await page.evaluate(() =>
       [...document.querySelectorAll("#admin-main *")]

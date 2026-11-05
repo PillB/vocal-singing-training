@@ -20,6 +20,7 @@
  *    nearest chord lane.
  */
 const { test, expect } = require("@playwright/test");
+const { tapFloorLimit } = require("./helpers/tap-floor");
 
 const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";
 const NOW = "2026-09-23T10:00:00-05:00";
@@ -144,13 +145,16 @@ function lineCount(id) {
 /**
  * Scroll so the stage is stuck under the exercise header and still inside its
  * card: the card holds the stage and the short rows under it, so past that
- * the stage leaves with the card, as it should. The piano panel under the
- * stage gives it room to stay.
+ * the stage leaves with the card, as it should. With the piano closed that
+ * is the ~15px the card's bottom rows leave, enough to prove the sticky
+ * offsets. On a phone the stage gives way to an open piano (it would cover
+ * its buttons or lose its lanes), so the piano stays closed here; the open
+ * piano has its own contract in production-contracts.spec.js.
  */
 async function scrollIntoStuck(page) {
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
-  if (await page.locator("#piano-block").isHidden()) await page.locator("#btn-toggle-piano").click();
-  await page.waitForTimeout(150);
+  if (await page.locator("#piano-block").isVisible()) await page.locator("#btn-toggle-piano").click();
+  await expect(page.locator("#piano-block")).toBeHidden();
   return page.evaluate(() => {
     const ex = document.querySelector(".exercise-header-compact").getBoundingClientRect();
     const st = document.getElementById("highway-stage").getBoundingClientRect();
@@ -245,9 +249,9 @@ test.describe("Start floor: the stage's controls on a phone", () => {
       const rail = document.getElementById("hud-bottom-rail").getBoundingClientRect();
       return { w: b.width, h: b.height, railW: rail.width, recH: r.height, recLeft: r.left, startRight: b.right, recTop: r.top, startTop: b.top };
     });
-    expect(s.h).toBeGreaterThanOrEqual(48);
+    expect(s.h).toBeGreaterThanOrEqual(tapFloorLimit(48));
     expect(s.w).toBeGreaterThan(s.railW * 0.5);
-    expect(s.recH).toBeGreaterThanOrEqual(44);
+    expect(s.recH).toBeGreaterThanOrEqual(tapFloorLimit(44));
     expect(s.recLeft).toBeGreaterThanOrEqual(s.startRight);
     expect(Math.abs(s.recTop + s.recH / 2 - (s.startTop + s.h / 2))).toBeLessThan(4);
     await expect(page.locator("#opt-auto-record")).toContainText("Grabarme");
@@ -477,7 +481,7 @@ test.describe("Session chrome: one line, Pausar and Terminar in words", () => {
       expect(b.pos).toBe("Ejercicio 1 de 2");
       expect(b.posWhole, "the step count is never cut").toBe(true);
       for (const x of b.btns) {
-        expect(x.h, x.id).toBeGreaterThanOrEqual(44);
+        expect(x.h, x.id).toBeGreaterThanOrEqual(tapFloorLimit(44));
         expect(x.top, x.id).toBeGreaterThanOrEqual(b.top);
         expect(x.bottom, x.id).toBeLessThanOrEqual(b.bottom);
         expect(x.right, x.id).toBeLessThanOrEqual(b.vw);
@@ -594,7 +598,7 @@ test.describe("Landscape: a phone on its side", () => {
       // and the routine's line, and stay there scrolled
       expect(r.exHeader.height, `${phase}: one header row`).toBeLessThanOrEqual(52);
       for (const b of [r.pause, r.end]) {
-        expect(b.height, `${phase}: 44px`).toBeGreaterThanOrEqual(44);
+        expect(b.height, `${phase}: 44px`).toBeGreaterThanOrEqual(tapFloorLimit(44));
         expect(b.top, `${phase}: in the header row`).toBeGreaterThanOrEqual(r.exHeader.top - 1);
         expect(b.bottom, `${phase}: in the header row`).toBeLessThanOrEqual(r.exHeader.bottom + 1);
         expect(b.right).toBeLessThanOrEqual(r.vw);
@@ -643,7 +647,7 @@ test.describe("Landscape: a phone on its side", () => {
       expect(r.ex).toBeGreaterThanOrEqual(0);
       // Scrolled, it sticks right under the exercise header
       const stuck = await scrollIntoStuck(page);
-      expect(stuck.room, `${id}: room to stay stuck`).toBeGreaterThan(20);
+      expect(stuck.room, `${id}: room to stay stuck`).toBeGreaterThan(6);
       await page.waitForTimeout(100);
       r = await page.evaluate(() => ({
         stageTop: document.getElementById("highway-stage").getBoundingClientRect().top,

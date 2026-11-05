@@ -4,6 +4,18 @@
 (function (global) {
   "use strict";
 
+  /**
+   * A stored session the callers can dereference: an object with an `order` array and a finite `index`
+   * (they read s.order.length, s.order[s.index]). Anything else (an import, another build's schema, a
+   * half-written value) is no session. `completedIds` is filled in when it is missing, because
+   * markCurrentComplete pushes to it. Checking only that the value is an object is not enough: `{}` is one.
+   */
+  function usable(s) {
+    if (!s || typeof s !== "object" || !Array.isArray(s.order) || !Number.isFinite(s.index)) return null;
+    if (!Array.isArray(s.completedIds)) s.completedIds = [];
+    return s;
+  }
+
   const Session = {
     /**
      * @param {string} track vocal | singing
@@ -38,7 +50,7 @@
     },
 
     get() {
-      return global.VTStorage.getSession();
+      return usable(global.VTStorage.getSession());
     },
 
     pause() {

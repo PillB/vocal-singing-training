@@ -2,13 +2,15 @@
  * Ad / native monetization scaffold — off by default, Pro suppresses, never mid-practice rules.
  */
 const { test, expect } = require("@playwright/test");
-const { enableQaPro } = require("./helpers/billing");
+const { enableQaPro, patchBillingConfig } = require("./helpers/billing");
 
 const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";
 
 async function boot(page) {
   // Ad suppression is checked against Pro; use the QA unlock to get there.
+  // No trial clock either: a free visitor here is purely free.
   await enableQaPro(page);
+  await patchBillingConfig(page, { freeTrialDays: 0 });
   await page.addInitScript(() => {
     try {
       localStorage.setItem("vt_tour_v1", "1");
@@ -59,7 +61,6 @@ test.describe("Ads scaffold", () => {
       try {
         localStorage.removeItem("vt_billing_v1");
         localStorage.removeItem("vt_billing_trial_started_v1");
-        window.VT_BILLING_CONFIG.freeTrialDays = 0;
       } catch {
         /* ignore */
       }
@@ -107,7 +108,6 @@ test.describe("Ads scaffold", () => {
     await boot(page);
     const r = await page.evaluate(() => {
       window.VT_ADS_CONFIG.adsEnabled = true;
-      window.VT_BILLING_CONFIG.freeTrialDays = 0;
       localStorage.removeItem("vt_billing_v1");
       localStorage.removeItem("vt_billing_trial_started_v1");
       localStorage.removeItem("vt_ads_last_home_v1");

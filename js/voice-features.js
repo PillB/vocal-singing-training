@@ -73,6 +73,10 @@
 
   /* —— Fast envelope —— */
 
+  // Samples of the last frame looked for in the next one (0,7 ms at 48 kHz):
+  // floats copied from the same audio match exactly, a wrong place never does
+  const TAIL_N = 32;
+
   /**
    * Loudness at 400 values a second, from the samples of each frame.
    *
@@ -96,6 +100,9 @@
       this._accN = 0;
       this._blockN = 0;
       this._primed = false;
+      this._tail = null;
+      this._tailOf = 0;
+      this._gaps = new Ring(16);
       /** Total blocks ever pushed: a clock in envelope samples */
       this.total = 0;
     }
@@ -104,10 +111,17 @@
       if (!buf || !buf.length) return 0;
       const sr = frame.sampleRate || 48000;
       this._blockN = Math.max(16, Math.round((sr * this.blockMs) / 1000));
-      let n = this._primed
-        ? Math.round(((frame.dtMs || 16) / 1000) * sr)
-        : Math.round(0.02 * sr);
+      let n = Math.round(0.02 * sr);
+      if (this._primed) {
+        const est = Math.round(((frame.dtMs || 16) / 1000) * sr);
+        const k = this._newSince(buf, est);
+        n = k != null ? k : est;
+        // More new audio than the buffer holds: some never reached us
+        if (n >= buf.length) this._gaps.push(this.total);
+      }
       this._primed = true;
+      this._tail = buf.length > TAIL_N ? buf.slice(buf.length - TAIL_N) : null;
+      this._tailOf = buf.length;
       n = clamp(n, 0, buf.length);
       let pushed = 0;
       for (let i = buf.length - n; i < buf.length; i++) {
@@ -128,6 +142,36 @@
       }
       return pushed;
     }
+    /**
+     * How many of this frame's samples are new: where the last frame's final
+     * samples sit in this one. The engine hands over its latest ~43 ms each
+     * frame, but audio arrives in the device's chunks on its own clock, so a
+     * frame can hold no new audio or a chunk more than its own time (in
+     * Chromium three frames in four did): counting the frame's time re-read
+     * old audio and skipped new, a step or a dip inside a slow rise. Where
+     * the tail repeats (a periodic test tone), the match nearest `est` wins.
+     * The whole buffer when the tail is not in it (more new audio than it
+     * holds); null when the tail cannot tell (flat, as digital silence is),
+     * and the frame's time is used, as before.
+     */
+    _newSince(buf, est) {
+      const tail = this._tail;
+      const N = buf.length;
+      if (!tail || this._tailOf !== N || !tail.some((v) => v !== tail[0])) return null;
+      const K = tail.length;
+      let best = null;
+      for (let k = 0; k <= N - K; k++) {
+        const at = N - k - K;
+        let j = 0;
+        while (j < K && buf[at + j] === tail[j]) j++;
+        if (j === K && (best == null || Math.abs(k - est) < Math.abs(best - est))) best = k;
+      }
+      return best == null ? N : best;
+    }
+    /** True when audio was lost from envelope sample `idx` on (before `to`): a stalled tab. */
+    lostSince(idx, to = Infinity) {
+      return this._gaps.last(this._gaps.count).some((at) => at >= idx && at < to);
+    }
     /** The last `sec` seconds of envelope, oldest first. */
     window(sec) {
       return this.ring.last(Math.round(sec * this.rate));
@@ -138,6 +182,8 @@
       this._acc = 0;
       this._accN = 0;
       this._primed = false;
+      this._tail = null;
+      this._gaps.clear();
       this.total = 0;
     }
   }
@@ -1061,6 +1107,64 @@
   /* —— Onsets —— */
 
   /**
+   * How long an onset takes to rise: from where it first crosses 10 % of the
+   * way from the noise floor to `steady`, to where it first crosses 90 %.
+   * Both onset pictures (s12, s14) cut their rise this one way; what they
+   * measure it against is theirs (OnsetCapture: the level the note settles
+   * at; s14: `attackLevel`). Never the loudest moment that follows: vibrato
+   * through the vowel's formants swings the level ±1–2 dB, and a crest a
+   * tenth of a second later pushes the 90 % mark past the attack (a 4 ms
+   * attack read as 25–65 ms). { i10, i90, ms }; i90 is -1 and ms null when it
+   * never reaches 90 %, and null when it never starts.
+   */
+  function riseTime(seg, noise, steady, rate, end = seg.length) {
+    const lo = noise + (steady - noise) * 0.1;
+    const hi = noise + (steady - noise) * 0.9;
+    // Where between two samples the level crossed: a 2,5 ms sample would
+    // otherwise round a 13 ms rise to 12,5 or 15 ms, either side of a threshold
+    const at = (i, lvl) => (i > 0 && seg[i] > seg[i - 1] ? i - (seg[i] - lvl) / (seg[i] - seg[i - 1]) : i);
+    let i10 = -1;
+    for (let i = 0; i < end; i++) {
+      if (i10 < 0 && seg[i] >= lo) i10 = i;
+      if (i10 >= 0 && seg[i] >= hi) return { i10, i90: i, ms: ((at(i, hi) - at(i10, lo)) * 1000) / rate };
+    }
+    return i10 < 0 ? null : { i10, i90: -1, ms: null };
+  }
+
+  /**
+   * The level an attack rises to: where its fast rise ends, the first two
+   * steps after the steepest one that each climb under a fifth of its
+   * slope, if the fast rise does not then resume within `holdN` samples
+   * (30 ms). A level swing (vibrato climbs ~0,005 of the level per ms, a 4 ms
+   * attack ~0,07) does not move it, and neither does breath before the
+   * voice: the steepest step is the voice's own, so the end is after it. A
+   * frame that repeats audio it already gave, or skips some (rAF and the
+   * audio callback run on their own clocks), puts a pause or a dip inside a
+   * slow rise; the rise goes on after it, so that pause is not its end.
+   * Null when the rise has not ended by `end`.
+   */
+  function attackLevel(seg, from, end = seg.length, holdN = 12) {
+    let steep = -1;
+    let dmax = 0;
+    for (let i = Math.max(1, from); i < end; i++) {
+      const d = seg[i] - seg[i - 1];
+      if (d > dmax) {
+        dmax = d;
+        steep = i;
+      }
+    }
+    if (steep < 0) return null;
+    const resumes = (i) => {
+      for (let j = i + 1; j < Math.min(end, i + holdN); j++) if (seg[j] - seg[j - 1] >= dmax * 0.4) return true;
+      return false;
+    };
+    for (let i = steep + 1; i + 1 < end; i++) {
+      if (seg[i] - seg[i - 1] < dmax * 0.2 && seg[i + 1] - seg[i] < dmax * 0.2 && !resumes(i)) return seg[i - 1];
+    }
+    return null;
+  }
+
+  /**
    * The first 300 ms of each sound after at least `minGapMs` of quiet, cut
    * from the fast envelope, with the numbers that tell a breathy, a balanced
    * and an abrupt onset apart:
@@ -1127,18 +1231,9 @@
       const settle = seg.slice(Math.min(settleFrom, seg.length - 10));
       const steady = median(settle) || 1e-6;
       const noise = percentile(seg.slice(0, back), 0.2) || 0;
-      const lo = noise + (steady - noise) * 0.1;
-      const hi = noise + (steady - noise) * 0.9;
-      let i10 = -1;
-      let i90 = -1;
-      for (let i = 0; i < seg.length; i++) {
-        if (i10 < 0 && seg[i] >= lo) i10 = i;
-        if (i10 >= 0 && seg[i] >= hi) {
-          i90 = i;
-          break;
-        }
-      }
-      const riseMs = i10 >= 0 && i90 >= 0 ? ((i90 - i10) * 1000) / rate : 300;
+      const rise = riseTime(seg, noise, steady, rate);
+      const riseMs = rise && rise.ms != null ? rise.ms : 300;
+      const i10 = rise ? rise.i10 : -1;
       let peak = 0;
       const first = seg.slice(Math.max(0, i10), Math.max(0, i10) + Math.round(0.1 * rate));
       for (let i = 0; i < first.length; i++) peak = Math.max(peak, first[i]);
@@ -1150,7 +1245,10 @@
       else if (riseMs <= t.abruptRiseMs && overshoot >= t.abruptOvershoot) kind = "abrupt";
       // Normalised shape for drawing: 0..1 against the settled level
       const shape = Array.from(seg, (v) => clamp((v - noise) / Math.max(1e-6, (steady - noise) * 1.6), 0, 1));
-      return { kind, riseMs, overshoot, leadMs, shape, pitched: p.pitchAt != null, onsetIndex: back };
+      // Audio lost in the rise or before the note settled: the shape is not the voice's
+      const from = p.startTotal - back;
+      const lost = this.env.lostSince(from, from + settleFrom);
+      return { kind, riseMs, overshoot, leadMs, shape, pitched: p.pitchAt != null, onsetIndex: back, lost };
     }
     /**
      * Set thresholds from the learner's own examples of each kind, halfway
@@ -1220,6 +1318,8 @@
     RelativeLevel,
     SyllableRate,
     OnsetCapture,
+    riseTime,
+    attackLevel,
     StablePitch,
     dbfs,
     percentile,

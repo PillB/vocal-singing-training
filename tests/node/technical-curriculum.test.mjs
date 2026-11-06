@@ -11,7 +11,7 @@ const window = {};
 runInNewContext(read("js/exercises-data.js"), { window, console });
 const existingIds = new Set([...window.VT_EXERCISES.vocal, ...window.VT_EXERCISES.singing].map((ex) => ex.id));
 
-function validate(protocol) {
+function headerFaults(protocol) {
   const errors = [];
   if (!protocol.stopRule?.es || !protocol.stopRule?.en || !protocol.stopRule?.medical) {
     errors.push("missing bilingual safety/clinical escalation guidance");
@@ -19,43 +19,71 @@ function validate(protocol) {
   if (!/not clinical therapy|not a diagnosis|not clinical/i.test(protocol.purpose || "")) {
     errors.push("missing non-clinical scope");
   }
-  const seen = new Set();
-  for (const [i, ex] of (protocol.exercises || []).entries()) {
-    const context = ex.id || "exercise " + i;
-    if (!ex.id || seen.has(ex.id)) errors.push(context + ": duplicate/missing id");
-    seen.add(ex.id);
-    if (!existingIds.has(ex.catalogId)) errors.push(context + ": missing catalog reference");
-    if (!["in-app", "manual-pilot"].includes(ex.delivery)) errors.push(context + ": delivery status unclear");
-    if (!ex.titleEs || !ex.titleEn || !ex.goal) errors.push(context + ": missing learning goal or titles");
-    if (!Array.isArray(ex.stepsEs) || !Array.isArray(ex.stepsEn) ||
-        ex.stepsEs.length < 2 || ex.stepsEs.length !== ex.stepsEn.length) {
-      errors.push(context + ": incomplete bilingual instructions");
-    }
-    if (!ex.transferEs || !ex.assessment || !ex.fallback) {
-      errors.push(context + ": no transfer/assessment/mic fallback");
-    }
-    const dose = ex.dose || {};
-    for (const key of ["repetitions", "phonationSeconds", "maxTrialSeconds", "restSeconds"]) {
-      if (!Number.isFinite(dose[key]) || dose[key] < 0) errors.push(context + ": invalid dose " + key);
-    }
-    if (dose.repetitions < 1 || dose.maxTrialSeconds < dose.phonationSeconds ||
-        dose.maxTrialSeconds > 30 || dose.repetitions > 10) {
-      errors.push(context + ": overload/inconsistent dose needs teacher review");
-    }
-    if (!Array.isArray(ex.evidence) || !ex.evidence.length ||
-        ex.evidence.some((id) => !protocol.references?.[id])) {
-      errors.push(context + ": untraceable evidence");
-    }
-    if (/diagnos(?:e|is) healthy|diagnostica.*sana|measure.*subglottal pressure/i.test(ex.assessment || "")) {
-      errors.push(context + ": diagnostic claim");
-    }
+  return errors;
+}
+
+function identityFaults(ex, seen, context) {
+  const errors = [];
+  if (!ex.id || seen.has(ex.id)) errors.push(context + ": duplicate/missing id");
+  seen.add(ex.id);
+  if (!existingIds.has(ex.catalogId)) errors.push(context + ": missing catalog reference");
+  if (!["in-app", "manual-pilot"].includes(ex.delivery)) errors.push(context + ": delivery status unclear");
+  return errors;
+}
+
+function instructionFaults(ex, context) {
+  const errors = [];
+  if (!ex.titleEs || !ex.titleEn || !ex.goal) errors.push(context + ": missing learning goal or titles");
+  const spanish = Array.isArray(ex.stepsEs) ? ex.stepsEs : [];
+  const english = Array.isArray(ex.stepsEn) ? ex.stepsEn : [];
+  if (spanish.length < 2 || spanish.length !== english.length) errors.push(context + ": incomplete bilingual instructions");
+  if (!ex.transferEs || !ex.assessment || !ex.fallback) errors.push(context + ": no transfer/assessment/mic fallback");
+  if (/diagnos(?:e|is) healthy|diagnostica.*sana|measure.*subglottal pressure/i.test(ex.assessment || "")) {
+    errors.push(context + ": diagnostic claim");
   }
-  for (const [id, source] of Object.entries(protocol.references || {})) {
+  return errors;
+}
+
+function doseFaults(ex, context) {
+  const errors = [];
+  const dose = ex.dose || {};
+  for (const key of ["repetitions", "phonationSeconds", "maxTrialSeconds", "restSeconds"]) {
+    if (!Number.isFinite(dose[key]) || dose[key] < 0) errors.push(context + ": invalid dose " + key);
+  }
+  if (dose.repetitions < 1 || dose.maxTrialSeconds < dose.phonationSeconds ||
+      dose.maxTrialSeconds > 30 || dose.repetitions > 10) {
+    errors.push(context + ": overload/inconsistent dose needs teacher review");
+  }
+  return errors;
+}
+
+function evidenceFaults(ex, refs, context) {
+  if (!Array.isArray(ex.evidence) || !ex.evidence.length ||
+      ex.evidence.some((id) => !refs?.[id])) return [context + ": untraceable evidence"];
+  return [];
+}
+
+function referenceFaults(references) {
+  const errors = [];
+  for (const [id, source] of Object.entries(references || {})) {
     if (!/^https:\/\//.test(source.url || "") || !source.type || !source.population) {
       errors.push(id + ": insufficient source and generalizability metadata");
     }
   }
   return errors;
+}
+
+function validate(protocol) {
+  const errors = headerFaults(protocol);
+  const seen = new Set();
+  for (const [i, ex] of (protocol.exercises || []).entries()) {
+    const context = ex.id || "exercise " + i;
+    errors.push(...identityFaults(ex, seen, context));
+    errors.push(...instructionFaults(ex, context));
+    errors.push(...doseFaults(ex, context));
+    errors.push(...evidenceFaults(ex, protocol.references, context));
+  }
+  return errors.concat(referenceFaults(protocol.references));
 }
 
 test("eight bilingual curriculum cards are traceable, bounded and linked to live catalog IDs", () => {

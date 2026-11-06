@@ -6,7 +6,7 @@
  * suite that stays green on a mutant is not testing that behaviour, however
  * high its coverage. Ported from the QA thread's mutate.py (2026-11-01).
  *
- *   node qa/mutate.mjs            # the Node sets (audio, lint)
+ *   node qa/mutate.mjs            # the Node sets (audio, lint, coaching)
  *   node qa/mutate.mjs audio      # one set
  *   node qa/mutate.mjs stage a11y flows regress billing audit  # browser sets: need Playwright's Chromium
  *
@@ -76,6 +76,13 @@ function a11yKillers(name) {
 }
 
 export const MUTANTS = {
+  coaching: [
+    ["C1 the breath mode silently adds 2s when hold is omitted", "js/practice-modes.js", "this.state.holdSec = p.hold != null ? p.hold : 0;", "this.state.holdSec = p.hold != null ? p.hold : 2;"],
+    ["C2 the exercise prescribes a 2s breath hold", "js/practice-profiles.js", "pattern: { in: 4, hold: 0, out: 6 },", "pattern: { in: 4, hold: 2, out: 6 },"],
+    ["C3 an entire SH ladder is required for passing", "js/exercises-data.js", 'labelEs: "Peldaños cómodos (1 basta)", type: "number", target: 1, unit: ""', 'labelEs: "Peldaños cómodos (1 basta)", type: "number", target: 5, unit: ""'],
+    ["C4 the first straw exercise asks for nasal humming", "js/exercises-data.js", "Phonate a soft /u/-like tone with lips gently sealed around the straw; let air exit through it, not through the nose.", "Hum through the straw and keep your lips sealed."],
+    ["C5 starter straw dose is raised from 2 to 5 minutes", "js/exercises-data.js", 'labelEs: "Fonación cómoda con cañita (minutos)", type: "number", target: 2, unit: "min"', 'labelEs: "Fonación cómoda con cañita (minutos)", type: "number", target: 5, unit: "min"']
+  ].map(([name, file, from, to]) => ({ name, file, from, to, cmd: node(["tests/node/technical-coaching.test.mjs"]) })),
   audio: [
     ["M1 YIN voicing threshold 0.18 -> 0.60 (noise accepted as pitch)", "js/pitch-visualizer.js", "if (cmnd[lag] < 0.18) {", "if (cmnd[lag] < 0.60) {"],
     ["M2 above-band alias guard dropped (1500 Hz read as 750)", "js/pitch-visualizer.js", "for (let shortLag = 2; shortLag < minLag; shortLag++) {", "for (let shortLag = 2; shortLag < 2; shortLag++) {"],
@@ -491,7 +498,7 @@ export const MUTANTS = {
   }))
 };
 
-export const DEFAULT_SETS = ["audio", "lint"];
+export const DEFAULT_SETS = ["audio", "lint", "coaching"];
 
 /** What the last failing command printed, so a red baseline in CI says which test failed. */
 let lastFailure = "";

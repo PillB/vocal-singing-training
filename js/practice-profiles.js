@@ -631,8 +631,8 @@
       allowManualSound: true,
       manualSoundKind: "air",
       rungs: [5, 10, 20, 25, 30],
-      cue: "Nose inhale → even SH, no voice. Climb 5→10→20→25→30 s, resting between tries. Raise Mic or hold Space if the timer doesn’t move.",
-      cueEs: "Inhala por la nariz → SH pareja, sin voz. Sube 5→10→20→25→30 s, descansando entre intentos. Si el contador no se mueve, sube Mic o mantén Espacio.",
+      cue: "Try 5 easy seconds of unvoiced SH; longer rungs (10–30s) are optional. Rest and transfer to a soft sung /A/. Mic/Space only times sound.",
+      cueEs: "Prueba 5 s de SH suave, sin voz; los peldaños de 10–30 s son opcionales. Descansa y pasa a /A/ cantada. Mic/Espacio solo cronometra sonido.",
       metricHints: { rungs: "cleared", maxSH: "best" }
     },
     "s16-major-scale-coord": {
@@ -729,8 +729,8 @@
       /** Space / air assist for unvoiced S phase (a11y) — allowed even with pitch canvas */
       manualSoundKind: "air",
       allowManualSound: true,
-      cue: "Step 1: a long, even S with no voice. Step 2: the same easy length on a sung /A/. We time both; how it feels is yours to rate.",
-      cueEs: "Paso 1: una S larga y pareja, sin voz. Paso 2: la misma duración tranquila en una /A/ cantada. Medimos ambas; cómo se siente lo valoras tú.",
+      cue: "Step 1: an easy S for ~4–6 seconds. Step 2: a comfortable /A/ for ~4–6 seconds. The mic/Space times sound, not breath support; rate how it feels.",
+      cueEs: "Paso 1: una S cómoda de ~4–6 s. Paso 2: una /A/ cómoda de ~4–6 s. El micrófono/Espacio cronometra sonido, no mide el apoyo; valora cómo te sientes.",
       metricHints: { maxS: "bestS" }
     },
     "s9-pitch-match": {
@@ -922,9 +922,9 @@
       pitchChallenge: false,
       autoPiano: false,
       autoRecord: false,
-      pattern: { in: 4, hold: 2, out: 8 },
-      cue: "Inhale 4 · hold 2 · even exhale 8. Low ribs and belly move, shoulders do not.",
-      cueEs: "Inhala 4 · retén 2 · espira pareja 8. Costillas bajas y abdomen se mueven, los hombros no.",
+      pattern: { in: 4, hold: 0, out: 6 },
+      cue: "Optional fixed visual pace: inhale 4 · no hold · exhale 6. If too long, ignore the screen and breathe naturally or stop. Not a measurement.",
+      cueEs: "Ritmo visual fijo y opcional: inhala 4 · sin retener · espira 6. Si incomoda, ignora la pantalla y respira natural o para. No es una medición.",
       metricHints: {}
     },
     "s19-soft-palate-surprise": {

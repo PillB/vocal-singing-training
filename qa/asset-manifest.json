@@ -92,12 +92,12 @@
     "sha": "012bb5f186b7dfdd"
   },
   "js/exercises-data.js": {
-    "v": "20261103b",
-    "sha": "b43c8eaa6c7b59ba"
+    "v": "20261106c",
+    "sha": "d63a575987ce3d87"
   },
   "js/exercises-locale-es.js": {
-    "v": "20261103a",
-    "sha": "2e248d169a7c6443"
+    "v": "20261106c",
+    "sha": "e4d37a63c03354f1"
   },
   "js/experiments-config.js": {
     "v": "20260924e",
@@ -144,12 +144,12 @@
     "sha": "a0e0e06dc4bcd25e"
   },
   "js/practice-modes.js": {
-    "v": "20261103a",
-    "sha": "c967e70077be5d32"
+    "v": "20261106c",
+    "sha": "61d2c8a2dd8b1a7e"
   },
   "js/practice-profiles.js": {
-    "v": "20261002a",
-    "sha": "50970b7a0db2aefb"
+    "v": "20261106c",
+    "sha": "1feaf3f73c2fa516"
   },
   "js/privacy-switch.js": {
     "v": "20261006b",

@@ -134,7 +134,7 @@ it. Drawings that guide rather than measure say so ("Dibujo guía, no una medida
 | s27 Trino con solfeo | On the highway, a bubble strip and the scale's notes ahead (DO RE MI FA SOL); below, a map of stones, one per syllable: zigzag = trilled, notch = stalled. | Trill state, pitch | The scale | patterns |
 | s15 Escalera de SH | A violet bar that grows with the SH towards a flag, a level line with a ±3 dB band (aprox.), breaks cut out as "hueco", an 8 s rest countdown. | Air-noise duration and steadiness | Rungs | rungs, longest SH |
 | s8 Apoyo respiratorio | Two lanes of seconds, S (violet) then /A/ (light blue), with your best S marked in the /A/ lane. No red, no warning. | Durations of S and /A/ | The switch | longest S |
-| s18 Respiración costal | A 4–2–8 breathing wave with a dashed "ribs" line and the phases ahead. A pacer: the mic stays closed and the picture says the mic cannot see the ribs. | Nothing | The whole drill | nothing |
+| s18 Respiración costal | A 4–0–6 optional breathing wave (no hold) with a dashed illustrative "ribs" line returning gradually on exhale. A pacer: the mic stays closed and the picture says the mic cannot see the ribs. | Nothing | The whole drill | nothing |
 
 ### Pitch
 

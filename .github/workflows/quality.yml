@@ -151,13 +151,28 @@ jobs:
       - name: Mutation check, a11y group against every browser spec
         run: node qa/mutate.mjs a11y
 
+  # Nightly sweeps are deliberately partitioned: the old serial job exhausted
+  # 110 minutes and silently left three forensic specs unexecuted.
   sweeps:
     if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.sweeps)
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - group: geometry
+            specs: "tests/exercise-ui-forensics.spec.js"
+          - group: voice-and-live
+            specs: "tests/exercise-live-forensics.spec.js tests/headed-exercise-forensics.spec.js"
+          - group: click
+            specs: "tests/click-ui-formats.spec.js tests/click-ui-live-log.spec.js tests/headed-formats-clicks.spec.js"
+          - group: fullscreen
+            specs: "tests/fullscreen-all-clicks.spec.js tests/live-mouse-demo.spec.js"
     env:
       CI: '1'
       MIC_HELP: '0'
+      SLOWMO: '5'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -166,16 +181,51 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts
       - run: npx playwright install --with-deps chromium
-      - name: Headed watch sweeps (every exercise, every control, real pointer)
-        run: xvfb-run -a npx playwright test --project=sweep --workers=1 --global-timeout=6600000
+      - name: Headed watch sweeps (${{ matrix.group }})
+        run: xvfb-run -a npx playwright test ${{ matrix.specs }} --project=sweep --workers=1 --global-timeout=4800000
       - name: Live GitHub Pages smoke
-        if: always()
-        run: LIVE_PAGES=1 npx playwright test tests/live-pages.spec.js --project=chromium
+        if: always() && matrix.group == 'fullscreen'
+        run: LIVE_PAGES=1 xvfb-run -a npx playwright test tests/live-pages.spec.js --project=chromium --workers=1
       - name: Preserve sweep reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: sweep-reports
+          name: sweep-reports-${{ matrix.group }}
+          path: |
+            test-results/
+            qa/geometry/
+            qa/screenshots/
+          if-no-files-found: ignore
+
+  # Exercise the nightly-only report path and fullscreen controls on PRs,
+  # rather than letting another two scheduled runs fail before investigation.
+  sweep-smoke:
+    if: github.event_name == 'pull_request'
+    needs: contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CI: '1'
+      MIC_HELP: '0'
+      SLOWMO: '5'
+      CLICK_UI_IDS: 'v1-diction'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npx playwright install --with-deps chromium
+      - name: Six-format real-mouse report smoke
+        run: xvfb-run -a npx playwright test tests/click-ui-formats.spec.js --project=sweep --workers=1 --global-timeout=600000
+      - name: Fullscreen mouse and control smoke
+        run: xvfb-run -a npx playwright test tests/fullscreen-all-clicks.spec.js --project=sweep --workers=1 --global-timeout=600000
+      - name: Preserve headed smoke failures
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sweep-smoke-failures
           path: |
             test-results/
             qa/geometry/

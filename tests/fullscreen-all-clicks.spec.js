@@ -7,12 +7,21 @@ const { test, expect } = require("@playwright/test");
 const { boot, openExercise } = require("./helpers/e2e");
 const { practiceProbe, listExerciseControls } = require("./helpers/ui-forensics");
 
-const EXERCISES = [
+const ALL_EXERCISES = [
   "v1-diction",
   "s15-sh-air-ladder",
   "s9-pitch-match",
   "s2-solfege-chords"
 ];
+
+// Each scheduled run must test one exercise within the existing 360s cap.
+// No filter means all four, useful for a local, deliberately long inspection.
+const EXERCISES = process.env.FULLSCREEN_IDS
+  ? process.env.FULLSCREEN_IDS.split(",").map((id) => id.trim()).filter(Boolean)
+  : ALL_EXERCISES;
+if (EXERCISES.length === 0 || EXERCISES.some((id) => !ALL_EXERCISES.includes(id))) {
+  throw new Error("FULLSCREEN_IDS must contain known nonempty exercise IDs");
+}
 
 const SKIP = new Set([
   "btn-back-home",
@@ -54,6 +63,10 @@ async function dismissOverlays(page) {
       /* ignore */
     }
     document.getElementById("toast")?.classList.remove("show");
+    // This is not a cosmetic overlay: VTTour marks the exercise <section>
+    // inert, so hiding its root by hand leaves every button unclickable.
+    // End via the real controller to clear inert, focus trap and highlight.
+    if (window.VTTour?.isActive?.()) window.VTTour.end(null);
     const tour = document.getElementById("tour-root");
     if (tour) {
       tour.hidden = true;
@@ -335,7 +348,11 @@ test("fullscreen: mouse-click all visible buttons per exercise", async ({ page }
     if (await page.locator("#btn-back-home").isVisible().catch(() => false)) {
       const rb = await clickControl(page, "#btn-back-home");
       if (!rb.ok) {
-        await page.locator("#btn-back-home").click().catch(() => {});
+        // A real hit-target failure is evidence, not a reason to click forever
+        // (Playwright's locator timeout 0 consumed the full six-minute test).
+        entry.failed.push({ id: "btn-back-home", code: "hit_miss", hit: rb });
+        log.exercises.push(entry);
+        throw new Error("Back button center blocked: " + JSON.stringify(rb));
       }
       await page.waitForTimeout(100);
       await dismissOverlays(page);

@@ -13,6 +13,9 @@ const { boot } = require("./helpers/e2e");
 const SLOWMO = Number(process.env.SLOWMO || 70) || 70;
 const REPORT = path.join(__dirname, "..", "qa", "geometry", "click-ui-formats-report.json");
 const SHOT = path.join(__dirname, "..", "qa", "screenshots", "click-ui-formats");
+// CI starts with a clean checkout; screenshots create their own directories,
+// but the incremental JSON report previously failed ENOENT on its first write.
+fs.mkdirSync(path.dirname(REPORT), { recursive: true });
 
 const FORMATS = [
   { name: "desktop", width: 1280, height: 800, fs: false },

@@ -81,6 +81,7 @@ Vanilla HTML / CSS / JS — no build step. Web Audio API (piano), MediaRecorder 
 - [The daily loop: basics every day, rest days and surprises](docs/37-DAILY-LOOP.md)
 - [2026 production audit, issue ledger and release gates](docs/40-PRODUCTION-AUDIT-2026-11-01.md)
 - [Evidence-based technical vocal protocol: breath, steady pitch, and song transfer (2026-11-06)](docs/44-PROTOCOLO-TECNICO-VOCAL-EVIDENCIA-2026-11-06.md)
+- [Bilingual eight-drill vocal pilot: evidence mapping, test oracle and root-cause ledger](docs/45-EVIDENCE-TO-EXERCISE-VALIDATION.md)
 
 ## Privacy
 

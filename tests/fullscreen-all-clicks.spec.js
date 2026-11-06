@@ -63,6 +63,10 @@ async function dismissOverlays(page) {
       /* ignore */
     }
     document.getElementById("toast")?.classList.remove("show");
+    // This is not a cosmetic overlay: VTTour marks the exercise <section>
+    // inert, so hiding its root by hand leaves every button unclickable.
+    // End via the real controller to clear inert, focus trap and highlight.
+    if (window.VTTour?.isActive?.()) window.VTTour.end(null);
     const tour = document.getElementById("tour-root");
     if (tour) {
       tour.hidden = true;
@@ -344,7 +348,11 @@ test("fullscreen: mouse-click all visible buttons per exercise", async ({ page }
     if (await page.locator("#btn-back-home").isVisible().catch(() => false)) {
       const rb = await clickControl(page, "#btn-back-home");
       if (!rb.ok) {
-        await page.locator("#btn-back-home").click().catch(() => {});
+        // A real hit-target failure is evidence, not a reason to click forever
+        // (Playwright's locator timeout 0 consumed the full six-minute test).
+        entry.failed.push({ id: "btn-back-home", code: "hit_miss", hit: rb });
+        log.exercises.push(entry);
+        throw new Error("Back button center blocked: " + JSON.stringify(rb));
       }
       await page.waitForTimeout(100);
       await dismissOverlays(page);

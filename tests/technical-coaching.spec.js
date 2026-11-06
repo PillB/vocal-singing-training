@@ -55,8 +55,8 @@ test("390px learner: s18 runs inhale → exhale without a hold, and never asks f
   const counts = await page.locator("#mode-focus .mode-meta").innerText();
   expect(counts).toMatch(/4–0–6/);
   await page.locator("#btn-practice-start").click();
-  await page.waitForTimeout(4700);
-  await expect(page.locator("#mode-focus [data-stage]")).toContainText("Exhala");
+  // Observe the actual transition instead of assuming the browser draws within 4.7s.
+  await expect(page.locator("#mode-focus [data-stage]")).toContainText("Exhala", { timeout: 10000 });
   expect(await page.evaluate(() => window.__techGumCalls)).toBe(0);
   const stage = page.locator("#mode-focus [data-stage]");
   const box = await stage.boundingBox();

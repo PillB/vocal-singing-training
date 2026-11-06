@@ -182,7 +182,15 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npx playwright install --with-deps chromium
       - name: Headed watch sweeps (${{ matrix.group }})
+        if: matrix.group != 'fullscreen'
         run: xvfb-run -a npx playwright test ${{ matrix.specs }} --project=sweep --workers=1 --global-timeout=4800000
+      - name: Fullscreen mouse controls isolated per exercise
+        if: matrix.group == 'fullscreen'
+        run: |
+          for id in v1-diction s15-sh-air-ladder s9-pitch-match s2-solfege-chords; do
+            FULLSCREEN_IDS="$id" xvfb-run -a npx playwright test tests/fullscreen-all-clicks.spec.js --project=sweep --workers=1 --global-timeout=450000 --output="test-results/fullscreen-$id"
+          done
+          xvfb-run -a npx playwright test tests/live-mouse-demo.spec.js --project=sweep --workers=1 --global-timeout=1200000 --output="test-results/live-mouse"
       - name: Live GitHub Pages smoke
         if: always() && matrix.group == 'fullscreen'
         run: LIVE_PAGES=1 xvfb-run -a npx playwright test tests/live-pages.spec.js --project=chromium --workers=1
@@ -209,6 +217,7 @@ jobs:
       MIC_HELP: '0'
       SLOWMO: '5'
       CLICK_UI_IDS: 'v1-diction'
+      FULLSCREEN_IDS: 'v1-diction'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

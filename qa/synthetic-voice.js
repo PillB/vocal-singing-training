@@ -28,8 +28,26 @@
   };
 
   function build() {
-    if (V.ctx) return V.nodes.dest.stream;
-    const ctx = new AC();
+    if (V.ctx) {
+      // Practice intentionally stops the microphone track at the end of a
+      // take. Returning the cached destination on Retry gives the engine an
+      // already-ended audio track and makes every later scene silently fail.
+      const track = V.nodes.dest.stream.getAudioTracks()[0];
+      if (track?.readyState === "live") return V.nodes.dest.stream;
+      stop();
+      for (const source of V.nodes.sources) {
+        try { source.stop(); } catch { /* one-shot source already stopped */ }
+      }
+      // Never close this context: Piano owns the shared audio device graph.
+      V.ctx = null;
+      V.nodes = null;
+      V._brrr = null; // breath-scene graph was connected to the retired track
+    }
+    // Exercise audio and the synthetic microphone must share a context.
+    // A second active context can hit WebKit/iOS audio-session limits and
+    // create false "mic blocked" results in visual regression tests.
+    const ctx = window.VTPiano?.ctx || window.VTSharedAudioCtx || new AC();
+    window.VTSharedAudioCtx = ctx;
     const dest = ctx.createMediaStreamDestination();
     const osc = ctx.createOscillator();
     osc.type = "sawtooth";
@@ -76,11 +94,16 @@
     trill.start();
     noise.start();
     V.ctx = ctx;
-    V.nodes = { dest, osc, voice, vibDepth, trillDepth, air, flutter, tone };
+    V.nodes = { dest, osc, voice, vibDepth, trillDepth, air, flutter, tone,
+      sources: [osc, vib, trill, noise] };
     return dest.stream;
   }
 
-  navigator.mediaDevices.getUserMedia = async () => build();
+  const syntheticGetUserMedia = async () => build();
+  navigator.mediaDevices.getUserMedia = syntheticGetUserMedia;
+  if (typeof MediaDevices !== "undefined") {
+    MediaDevices.prototype.getUserMedia = syntheticGetUserMedia;
+  }
 
   const now = () => V.ctx.currentTime;
   function ramp(param, value, sec) {

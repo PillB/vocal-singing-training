@@ -300,7 +300,7 @@
       auto: savedAuto,
       octaveShift: savedShift,
       onShift: (dec) => {
-        applyOctaveShift(dec.shift, { source: "auto", decision: dec });
+        shiftOctave(dec.shift, { source: "auto", decision: dec });
       }
     });
     return state.rangeAdapter;
@@ -324,9 +324,14 @@
   function updateOctaveUI() {
     const lab = $("#oct-label");
     if (lab) {
+      // Octave −2 stays marked (and explained) however it was reached: a
+      // range restored from the last visit shows no toast.
+      const low = state.octaveShift === -2;
       lab.textContent = formatOctLabel(state.octaveShift);
-      lab.title =
-        state.octaveShift === 0
+      lab.classList.toggle("oct-caution", low);
+      lab.title = low
+        ? tt("range.lowOctaveHint")
+        : state.octaveShift === 0
           ? tt("range.octZero")
           : tt("range.octValue", { n: formatOctLabel(state.octaveShift) });
     }
@@ -423,7 +428,32 @@
   }
 
   function nudgeOctave(delta) {
-    applyOctaveShift(state.octaveShift + delta, { source: "manual" });
+    shiftOctave(state.octaveShift + delta, { source: "manual" });
+  }
+
+  /**
+   * Every octave move (buttons, auto range, test hook) goes through here.
+   * Octave −2 puts the bass at 16–31 Hz: below what phone speakers play and
+   * below the pitch detector's floor, so it says so instead of the usual
+   * shift toast (PR #24's P0-02 follow-up).
+   */
+  function shiftOctave(next, opts = {}) {
+    const moved = applyOctaveShift(next, opts);
+    if (moved && !opts.silent && state.octaveShift === -2) cautionLowOctave();
+    return moved;
+  }
+
+  /**
+   * During a take the move restarts the piano, and its "applied" toast comes
+   * when the restart settles: the caution waits for it, or it would be
+   * replaced within milliseconds. The label keeps the full explanation.
+   */
+  function cautionLowOctave() {
+    const say = () => {
+      if (state.octaveShift === -2) toast(tt("range.lowOctaveCaution"));
+    };
+    if (state.practiceLive && state._hotApplyPromise) state._hotApplyPromise.then(say, say);
+    else say();
   }
 
   function setRangeAuto(on) {
@@ -482,7 +512,8 @@
 
   window.VTLockHighwayNotes = lockHighwayForNotes;
   window.VTLockHighwayProg = lockHighwayForProgression;
-  window.VTApplyOctaveShift = applyOctaveShift;
+  window.VTApplyOctaveShift = shiftOctave;
+  window.VTGetRangeAdapter = () => ensureRangeAdapter();
   window.VTGetOctaveShift = () => state.octaveShift;
 
   /** Note name after current octave shift (for ref/challenge/target). */
@@ -3249,6 +3280,25 @@
    * Always updates range lock; restarts loop when Auto piano is on.
    * Returns a Promise (also stored on VTApp._hotApplyPromise) so tests can await settle.
    */
+  /** "Applied: one note at a time": the name of what the learner just changed. */
+  function hotAppliedLabel(what) {
+    if (typeof what === "string" && what.startsWith("prog:")) return what.slice(5);
+    const modes = { oneNote: "piano.modeOneNote", arpeggio: "piano.modeArpeggio", chords: "piano.modeChords" };
+    return Object.hasOwn(modes, what) ? tt(modes[what]) : String(what);
+  }
+
+  /**
+   * Highway range + ghost lanes follow the selected progression immediately.
+   * Not for a mode that owns its target: it plays no progression, and the
+   * default one's lanes and chord would replace the mode's own, so the
+   * readout would score the learner against that chord's notes.
+   */
+  function relockHighwayForOptions(ex, profile) {
+    if ((profile?.showPitch || ex.audio?.pitchViz) && !profile?.noProgression && !profile?.ownsTarget) {
+      if (state.selectedProg) lockHighwayForProgression(state.selectedProg);
+    }
+  }
+
   function applyPianoOptionsHot(what) {
     const run = async () => {
       const ex = state.exercise;
@@ -3256,36 +3306,19 @@
       const profile = getProfile(ex);
       syncSustainSecLabel();
       syncPlayModeSelect();
-
-      // Highway range + ghost lanes follow the selected progression immediately.
-      // Not for a mode that owns its target: it plays no progression, and the
-      // default one's lanes and chord would replace the mode's own, so the
-      // readout would score the learner against that chord's notes.
-      if ((profile?.showPitch || ex.audio?.pitchViz) && !profile?.noProgression && !profile?.ownsTarget) {
-        if (state.selectedProg) lockHighwayForProgression(state.selectedProg);
-      }
+      relockHighwayForOptions(ex, profile);
 
       if (!state.practiceLive) return false;
       if (!autoPianoChecked()) return false;
       if (!exerciseWantsSound(ex, profile)) return false;
 
+      // This live take: a Stop while a held session resumes leaves the stopped page silent
+      const current = soundTicket(ex);
       try {
         await VTPiano.resume?.();
         await VTPiano.ensure?.();
-        const ok = await startExerciseSound(ex, profile);
-        if (ok && what) {
-          const label =
-            typeof what === "string" && what.startsWith("prog:")
-              ? what.slice(5)
-              : what === "oneNote"
-                ? tt("piano.modeOneNote")
-                : what === "arpeggio"
-                  ? tt("piano.modeArpeggio")
-                  : what === "chords"
-                    ? tt("piano.modeChords")
-                    : String(what);
-          toast(tt("piano.hotApplied", { what: label }), { debounceMs: 450 });
-        }
+        const ok = await startExerciseSound(ex, profile, current);
+        if (ok && what) toast(tt("piano.hotApplied", { what: hotAppliedLabel(what) }), { debounceMs: 450 });
         return !!ok;
       } catch (e) {
         console.warn("Hot-apply piano options failed", e);
@@ -3409,49 +3442,105 @@
     return noteName || "";
   }
 
-  async function playSelectedProgression(loop) {
+  /**
+   * Who a sound request is for: the take (or the Start) live when it was made. A
+   * request whose take has since been stopped or replaced (a held iPhone session
+   * can make one piano call wait for seconds) asks the piano for nothing more,
+   * and its answer changes nothing on the page. So does one made before the
+   * learner stopped the piano ("Stop piano", Auto piano off): Play once, Loop and
+   * an option changed during a take used to play after that Stop.
+   */
+  function soundTicket(ex = state.exercise) {
+    const gen = state.practiceGen;
+    const pianoStop = window.VTPiano?._stopGen;
+    return () => gen === state.practiceGen && state.exercise === ex && pianoStop === window.VTPiano?._stopGen;
+  }
+
+  /** One-note mode: the chord line, the highway and the engine follow the piano's chord, or its single note. */
+  function followChords(opts) {
+    return (ch, idx, prog, meta) => {
+      const one = !!(meta?.oneNote || opts.oneNote || ch?.oneNote);
+      const noteName = meta?.noteName || ch?.notes?.[0];
+      showChordNow(ch, one, noteName);
+      if (state.exercise?.audio?.pitchViz || state.exercise?.practice?.showPitch) aimAtChord(ch, one, noteName);
+    };
+  }
+
+  function showChordNow(ch, one, noteName) {
+    if (one && noteName) {
+      $("#chord-now").textContent = `${ch.name || ""} · ${dualNoteLabel(noteName)}`.replace(
+        /^ · /,
+        ""
+      );
+    } else {
+      $("#chord-now").textContent = ch.name || "—";
+    }
+  }
+
+  function aimAtChord(ch, one, noteName) {
+    if (state.pitchViz) {
+      state.pitchViz.setTargetFromChord(ch, {
+        oneNote: one,
+        noteName: one ? noteName : undefined
+      });
+    }
+    const map = VT_NOTE_FREQ || {};
+    const pick = one ? noteName || ch.notes?.[1] || ch.notes?.[0] : singableChordNote(ch, noteName, map);
+    if (map[pick]) state.practice.setTargetFreq(map[pick]);
+  }
+
+  /** The engine's target in a chord: its first note in the comfortable 120–280 Hz band, else its 2nd (or 1st) note. */
+  function singableChordNote(ch, noteName, map) {
+    for (const n of ch.notes || []) {
+      const f = map[n];
+      if (f && f >= 120 && f <= 280) return n;
+    }
+    return noteName || ch.notes?.[1] || ch.notes?.[0];
+  }
+
+  /** "· one note at a time · 4s per note": how the progression plays, after its description. */
+  function progressionHint(opts) {
+    const es = isEsLang();
+    const modeHint = opts.oneNote
+      ? es
+        ? " · 1 nota a la vez"
+        : " · one note at a time"
+      : opts.arpeggio
+        ? es
+          ? " · arpegio"
+          : " · arpeggio"
+        : es
+          ? " · acordes"
+          : " · chords";
+    const holdHint = opts.oneNote
+      ? es
+        ? ` · ${opts.sustainSec}s por nota`
+        : ` · ${opts.sustainSec}s per note`
+      : opts.sustain
+        ? ` · sustain ${opts.sustainSec}s`
+        : "";
+    return modeHint + holdHint;
+  }
+
+  function progressionToast(loop, opts) {
+    const sec = String(opts.sustainSec);
+    if (opts.oneNote) return tt(loop ? "toast.loopOneNote" : "toast.playOneNote", { sec });
+    if (opts.sustain) return tt(loop ? "toast.loopSustain" : "toast.playSustain", { sec });
+    return tt(loop ? "toast.loopProg" : "toast.playOnce");
+  }
+
+  async function playSelectedProgression(loop, current = soundTicket()) {
     try {
       await VTPiano.ensure();
       await VTPiano.resume?.();
+      if (!current()) return;
       if (!state.selectedProg || !VT_PROGRESSIONS?.[state.selectedProg]) {
         state.selectedProg = "prog1";
       }
       const opts = pianoOptions();
       // Sustain default ON for practice loops (helps newbies home in)
       if (opts.sustain == null) opts.sustain = true;
-      // One-note mode: highway + target follow a single pitch at a time
-      VTPiano.onChordChange = (ch, idx, prog, meta) => {
-        const one = !!(meta?.oneNote || opts.oneNote || ch?.oneNote);
-        const noteName = meta?.noteName || ch?.notes?.[0];
-        if (one && noteName) {
-          $("#chord-now").textContent = `${ch.name || ""} · ${dualNoteLabel(noteName)}`.replace(
-            /^ · /,
-            ""
-          );
-        } else {
-          $("#chord-now").textContent = ch.name || "—";
-        }
-        if (state.exercise?.audio?.pitchViz || state.exercise?.practice?.showPitch) {
-          if (state.pitchViz) {
-            state.pitchViz.setTargetFromChord(ch, {
-              oneNote: one,
-              noteName: one ? noteName : undefined
-            });
-          }
-          const map = VT_NOTE_FREQ || {};
-          let pick = noteName || ch.notes?.[1] || ch.notes?.[0];
-          if (!one) {
-            for (const n of ch.notes || []) {
-              const f = map[n];
-              if (f && f >= 120 && f <= 280) {
-                pick = n;
-                break;
-              }
-            }
-          }
-          if (map[pick]) state.practice.setTargetFreq(map[pick]);
-        }
-      };
+      VTPiano.onChordChange = followChords(opts);
       // Full progression max range — locked for this option (chords must not re-scale)
       lockHighwayForProgression(state.selectedProg);
       const prog = await VTPiano.playProgression(state.selectedProg, {
@@ -3463,44 +3552,13 @@
         sustainSec: opts.sustainSec,
         octaveShift: state.octaveShift || 0
       });
-      if (prog) {
-        // Re-apply same lock (same option) — never shrink to current chord
-        // prog is already transposed by playProgression
-        if (state.pitchViz) state.pitchViz.setProgressionRange(prog);
-        const modeHint = opts.oneNote
-          ? isEsLang()
-            ? " · 1 nota a la vez"
-            : " · one note at a time"
-          : opts.arpeggio
-            ? isEsLang()
-              ? " · arpegio"
-              : " · arpeggio"
-            : isEsLang()
-              ? " · acordes"
-              : " · chords";
-        const holdHint = opts.oneNote
-          ? isEsLang()
-            ? ` · ${opts.sustainSec}s por nota`
-            : ` · ${opts.sustainSec}s per note`
-          : opts.sustain
-            ? ` · sustain ${opts.sustainSec}s`
-            : "";
-        $("#chord-desc").textContent = prog.description + modeHint + holdHint;
-        const sec = String(opts.sustainSec);
-        toast(
-          loop
-            ? opts.oneNote
-              ? tt("toast.loopOneNote", { sec })
-              : opts.sustain
-                ? tt("toast.loopSustain", { sec })
-                : tt("toast.loopProg")
-            : opts.oneNote
-              ? tt("toast.playOneNote", { sec })
-              : opts.sustain
-                ? tt("toast.playSustain", { sec })
-                : tt("toast.playOnce")
-        );
-      }
+      // null: a Stop, or a newer progression, came while the piano waited for its context
+      if (!prog) return;
+      // Re-apply same lock (same option) — never shrink to current chord
+      // prog is already transposed by playProgression
+      if (state.pitchViz) state.pitchViz.setProgressionRange(prog);
+      $("#chord-desc").textContent = prog.description + progressionHint(opts);
+      toast(progressionToast(loop, opts));
     } catch (e) {
       toast(tt("toast.audioStartFail"));
       console.error(e);
@@ -3728,116 +3786,154 @@
     return exerciseWantsSound(ex, profile) && profile?.mode !== "openSpace";
   }
 
-  async function startExerciseSound(ex, profile) {
-    if (!ex || !window.VTPiano) return false;
-    if (!autoPianoChecked()) return false;
-    if (!soundsOnStart(ex, profile)) return false;
+  /** Seconds each reference or chord is held: the sustain box, or 2.5 s with sustain off (a learner's "off" is kept). */
+  function soundSeconds() {
+    const sustainOn = $("#chk-sustain")?.checked !== false; // sustain default ON
+    return sustainOn ? Number($("#sustain-sec")?.value || 4) : 2.5;
+  }
 
-    // Unlock Web Audio (recreates if context was closed by a prior mic stop)
-    await VTPiano.ensure();
-    await VTPiano.resume?.();
-    if (VTPiano.ctx?.state !== "running") {
-      await VTPiano.unlock?.();
-    }
+  /** profile.noProgression: the mode walks its own notes; no chord loop under it. */
+  function exerciseHasProgression(ex, profile) {
+    return !profile.noProgression && !!(ex.progressions?.length || ex.songs?.length || ex.audio?.progressions);
+  }
 
+  /** A progression is selected before looping. */
+  function selectDefaultProgression(ex) {
+    if (state.selectedProg) return;
+    if (ex.progressions?.length) state.selectedProg = ex.progressions[0];
+    else if (ex.songs?.length) state.selectedProg = ex.songs[0].prog || "prog1";
+    else state.selectedProg = "prog1";
+  }
+
+  /** What startExerciseSound plays: the hold length, and whether it is a challenge note, a loop or a reference. */
+  function soundPlan(ex, profile) {
     if (profile.autoArpeggio && $("#chk-arpeggio")) {
       $("#chk-arpeggio").checked = true;
     }
-
-    const sustainOn = $("#chk-sustain")?.checked !== false; // sustain default ON
-    if ($("#chk-sustain") && $("#chk-sustain").checked === false && profile.autoPiano) {
-      // keep user choice if they turned it off; otherwise leave as-is
-    }
-    const sec = sustainOn ? Number($("#sustain-sec")?.value || 4) : 2.5;
+    const sec = soundSeconds();
     const inChallenge = !!(profile.pitchChallenge && state.pitchGame?.challengeMode);
-    // profile.noProgression: the mode walks its own notes; no chord loop under it
-    const hasProg =
-      !profile.noProgression &&
-      !!(ex.progressions?.length || ex.songs?.length || ex.audio?.progressions);
-
-    // Ensure a progression is selected before looping
-    if (hasProg && !state.selectedProg) {
-      if (ex.progressions?.length) state.selectedProg = ex.progressions[0];
-      else if (ex.songs?.length) state.selectedProg = ex.songs[0].prog || "prog1";
-      else state.selectedProg = "prog1";
-    }
-
+    const hasProg = exerciseHasProgression(ex, profile);
+    if (hasProg) selectDefaultProgression(ex);
     // A mode that owns its targets (profile.ownsTarget) already chose the first
     // note in onStart(). Sound that one, not the generic refPitch: otherwise the
     // reference the user hears — and the target this sets — is a different note
     // from the one the mode is waiting for, so no hold can ever be credited.
     const owned = profile.ownsTarget ? state.modeInstance?.state?.wantName : null;
-    let started = false;
+    // An owning mode sounds each target itself (about 1.5 s): a 4 s replay
+    // on top kept the piano ringing, and a hold waits for the piano to stop
+    return { sec, inChallenge, hasProg, owned, refSec: owned ? Math.min(sec, 1.5) : sec };
+  }
 
-    if (inChallenge) {
-      const note = effectiveNoteName(
-        state.pitchGame?.currentChallengeNote?.() || profile.refPitch || ex.audio?.refPitch
-      );
-      if (note) {
-        await VTPiano.playRefPitch(note, sec, true);
-        started = true;
-      }
-    } else if (hasProg && ex.audio?.piano !== false) {
-      await playSelectedProgression(true);
-      started = !!(VTPiano.loopActive || (VTPiano.playing && VTPiano.playing.length));
-    } else {
-      const note = effectiveNoteName(owned || profile.refPitch || ex.audio?.refPitch);
-      if (note) {
-        // An owning mode sounds each target itself (about 1.5 s): a 4 s replay
-        // on top kept the piano ringing, and a hold waits for the piano to stop
-        const f = await VTPiano.playRefPitch(note, owned ? Math.min(sec, 1.5) : sec, true);
-        if (f) {
-          state.practice.setTargetFreq(f);
-          if (state.pitchViz) state.pitchViz.setTargetFreq(f);
-        }
-        started = true;
-      } else if (ex.audio?.piano) {
-        // Piano flagged without specific ref — still play default mid progression
-        if (!state.selectedProg) state.selectedProg = "prog1";
-        await playSelectedProgression(true);
-        started = !!(VTPiano.loopActive || (VTPiano.playing && VTPiano.playing.length));
-      }
+  /** The loop, and whether it is now sounding. */
+  async function playLoopAndSee(current) {
+    await playSelectedProgression(true, current);
+    return !!(VTPiano.loopActive || (VTPiano.playing && VTPiano.playing.length));
+  }
+
+  /** The pitch challenge's current note: true once it was asked for. */
+  async function playChallengeNote(ex, profile, plan) {
+    const note = effectiveNoteName(
+      state.pitchGame?.currentChallengeNote?.() || profile.refPitch || ex.audio?.refPitch
+    );
+    if (note) await VTPiano.playRefPitch(note, plan.sec, true);
+    return !!note;
+  }
+
+  /** The exercise's reference note, which is also the take's target. */
+  async function playExerciseRef(note, plan) {
+    const f = await VTPiano.playRefPitch(note, plan.refSec, true);
+    if (f) {
+      state.practice.setTargetFreq(f);
+      if (state.pitchViz) state.pitchViz.setTargetFreq(f);
     }
+    return true;
+  }
 
-    // Safety net: profile said sound wanted but nothing scheduled (misconfigured exercise)
-    if (!started && exerciseWantsSound(ex, profile)) {
-      try {
-        const fallback = effectiveNoteName(profile.refPitch || ex.audio?.refPitch || "C3");
-        await VTPiano.playRefPitch(fallback, sec, true);
-        started = !!(VTPiano.playing && VTPiano.playing.length);
-        if (started) {
-          console.warn("[VT] startExerciseSound fallback ref", fallback, ex.id);
-        }
-      } catch (e) {
-        console.warn("Piano fallback failed", e);
+  /** The exercise's own sound: true once it was asked for. */
+  async function playPlannedSound(ex, profile, plan, current) {
+    if (plan.inChallenge) return playChallengeNote(ex, profile, plan);
+    if (plan.hasProg && ex.audio?.piano !== false) return playLoopAndSee(current);
+    const note = effectiveNoteName(plan.owned || profile.refPitch || ex.audio?.refPitch);
+    if (note) return playExerciseRef(note, plan);
+    if (!ex.audio?.piano) return false;
+    // Piano flagged without specific ref — still play default mid progression
+    if (!state.selectedProg) state.selectedProg = "prog1";
+    return playLoopAndSee(current);
+  }
+
+  /** Safety net: the profile wants sound but nothing was scheduled (a misconfigured exercise). */
+  async function playFallbackRef(ex, profile, plan) {
+    try {
+      const fallback = effectiveNoteName(profile.refPitch || ex.audio?.refPitch || "C3");
+      await VTPiano.playRefPitch(fallback, plan.sec, true);
+      const started = !!(VTPiano.playing && VTPiano.playing.length);
+      if (started) {
+        console.warn("[VT] startExerciseSound fallback ref", fallback, ex.id);
       }
+      return started;
+    } catch (e) {
+      console.warn("Piano fallback failed", e);
+      return false;
     }
+  }
 
-    // If still silent/suspended, hard-recover: recreate graph + replay once
-    if (started && VTPiano.ctx && VTPiano.ctx.state !== "running") {
-      try {
-        await VTPiano.unlock?.();
-        await VTPiano.resume?.();
-        if (hasProg) await playSelectedProgression(true);
-        else if (owned || profile.refPitch || ex.audio?.refPitch) {
-          // The same note, and length, as the first try above
-          await VTPiano.playRefPitch(
-            effectiveNoteName(owned || profile.refPitch || ex.audio.refPitch),
-            owned ? Math.min(sec, 1.5) : sec,
-            true
-          );
-        }
-      } catch (e) {
-        console.warn("Piano recover failed", e);
+  /** Still silent or suspended: recreate the graph and play the same sound once more. */
+  async function recoverPlannedSound(ex, profile, plan, current) {
+    try {
+      await VTPiano.unlock?.();
+      await VTPiano.resume?.();
+      if (!current()) return;
+      if (plan.hasProg) await playSelectedProgression(true, current);
+      else if (plan.owned || profile.refPitch || ex.audio?.refPitch) {
+        // The same note, and length, as the first try
+        await VTPiano.playRefPitch(effectiveNoteName(plan.owned || profile.refPitch || ex.audio.refPitch), plan.refSec, true);
       }
+    } catch (e) {
+      console.warn("Piano recover failed", e);
     }
+  }
 
+  function pianoSounding(started) {
     return !!(
       started &&
       VTPiano.ctx &&
       VTPiano.ctx.state !== "closed" &&
       (VTPiano.isLive?.() || (VTPiano.playing && VTPiano.playing.length > 0) || VTPiano.loopActive)
     );
+  }
+
+  /**
+   * The exercise's piano, or its reference note, with one recovery if it came up
+   * silent. `current` is the take that asked (soundTicket): once Stop or a newer
+   * Start replaced it, no further sound is asked for, and a request the piano
+   * dropped at the Stop is not taken for silence to retry.
+   */
+  async function startExerciseSound(ex, profile, current = soundTicket(ex)) {
+    if (!ex || !window.VTPiano) return false;
+    if (!autoPianoChecked() || !soundsOnStart(ex, profile)) return false;
+    await readyPianoForSound();
+    if (!current()) return false;
+
+    const plan = soundPlan(ex, profile);
+    let started = await playPlannedSound(ex, profile, plan, current);
+    // A loop the piano dropped at a Stop is not silence: no fallback note for a replaced take
+    if (!current()) return false;
+    if (!started && exerciseWantsSound(ex, profile)) started = await playFallbackRef(ex, profile, plan);
+    if (started && pianoNotRunning()) await recoverPlannedSound(ex, profile, plan, current);
+    // Replaced while the fallback or the recovery waited: the piano sounding now is the next take's
+    if (!current()) return false;
+    return pianoSounding(started);
+  }
+
+  /** Unlock Web Audio (recreates the context if a prior mic stop closed it). */
+  async function readyPianoForSound() {
+    await VTPiano.ensure();
+    await VTPiano.resume?.();
+    if (VTPiano.ctx?.state !== "running") await VTPiano.unlock?.();
+  }
+
+  function pianoNotRunning() {
+    return !!VTPiano.ctx && VTPiano.ctx.state !== "running";
   }
 
   async function startPractice() {
@@ -3849,391 +3945,476 @@
     // Generation token: Stop / leave / exercise switch aborts in-flight Start
     const gen = ++state.practiceGen;
     const stillThisStart = () => gen === state.practiceGen && state.exercise === ex;
+    const pianoStop = VTPiano._stopGen;
 
     try {
-      // weekPlan: open dashboard instead of forcing mic
-      if (profile.mode === "weekPlan") {
-        state.modeInstance?.onStart?.();
-        document.getElementById("btn-plan")?.click();
-        toast(tt("toast.planOpened"));
-        return;
-      }
-
-      // Say what the browser is about to ask, once per browser, before it
-      // asks. A denial is only undoable in browser settings, and on a pitch
-      // exercise it currently reads as success — the piano plays and the
-      // highway moves with only the voice line missing. This sits before
-      // setPracticeUI(false) so #btn-practice-start is still focusable for
-      // the focus trap to return to.
-      const wantsMic = profile.showPitch || profile.showLevel || profile.showHold;
-      if (wantsMic && window.VTTour?.needsMicPrimer?.()) {
-        // The primer used to say the same thing on every exercise — that the
-        // piano keeps playing and only the pitch readout is lost. Roughly half
-        // the exercises that show it have no piano and no pitch readout at all,
-        // including the one the home page's own first-practice button opens.
-        window.VTTour.showMicPrimer(() => {
-          // Only for the exercise it was asked on, still on screen: a late
-          // answer must not open the mic behind another page.
-          if (state.view === "exercise" && state.exercise === ex) startPractice();
-        }, {
-          piano: exerciseWantsSound(ex, profile),
-          // A paced exercise runs on its clock with the microphone refused
-          pacer: !!profile.timeDriven,
-          onDecline: () => toast(tt("tour.mic.declined"))
-        });
-        return;
-      }
+      if (startsElsewhere(ex, profile)) return;
 
       state.practiceStarting = true;
       setPracticeUI(false); // hides/disables Start while bootstrapping
-      try {
-        window.VTAnalytics?.track?.("practice_start", {
-          exerciseId: ex.id,
-          mode: profile.mode,
-          micro: !!state.microSession
-        });
-        // The last step of the funnel, and the only one that says the trial was
-        // worth giving: somebody who holds one and then actually practises. Once
-        // per browser, marked in storage rather than in memory so pressing the
-        // trial button and practising straight away counts once, and so does
-        // coming back the next day. The mark is never cleared, so a second trial
-        // does not re-fire it and clearing site data does; both are acceptable
-        // for a step whose question is "did the trial lead to any practice at
-        // all", and neither can inflate the count for one browser.
-        const held = headerPlanState().kind;
-        if (held === "trialAccount" || held === "trialLocal") {
-          try {
-            // The mark goes down only once the event is actually kept, which is
-            // what track() now reports. Writing it first was wrong twice over:
-            // in a country that asks before anything is stored it put the mark
-            // on the device before the visitor had answered — the very thing
-            // being asked about — and on a refusal the event was dropped while
-            // the mark stayed, silencing this step for that browser for good,
-            // because the mark is never cleared.
-            // "held" gets no mark either: the answer may never come. If it does
-            // come the held event is sent, and this fires once more on a later
-            // visit, which costs one beacon and cannot double-count — the funnel
-            // groups by browser (GROUP BY cid in handleFunnel), not by event.
-            if (!state.trialFirstPracticeTried && localStorage.getItem("vt_trial_first_practice_v1") !== "1") {
-              // Once per page load whatever the answer is, so two exercises
-              // started before the bar is answered do not hold two copies.
-              state.trialFirstPracticeTried = true;
-              const kept = window.VTAnalytics?.track?.("trial_first_practice", {
-                kind: held === "trialAccount" ? "account" : "local"
-              });
-              if (kept === "recorded") localStorage.setItem("vt_trial_first_practice_v1", "1");
-            }
-          } catch {
-            /* private mode: the event is simply not sent */
-          }
-        }
-      } catch {
-        /* ignore */
-      }
+      trackPracticeStart(ex, profile);
 
-      const wantRecord = !!(
-        profile.autoRecord ||
-        (ex.audio.record && $("#chk-auto-record")?.checked)
-      );
-      // Sound on by default for any piano/ref exercise (checkbox defaults checked)
-      const wantPiano = exerciseWantsSound(ex, profile) && autoPianoChecked();
-      const showHold = !!profile.showHold;
-
+      const plan = startPlan(ex, profile);
       // Unlock audio on the Start click (user gesture) — required by browsers.
       // Must happen before any await that yields (getUserMedia breaks the gesture).
-      if (wantPiano) {
-        try {
-          await VTPiano.unlock?.();
-          await VTPiano.ensure();
-        } catch (e) {
-          console.warn("Piano unlock failed", e);
-        }
-      }
+      if (plan.wantPiano) await unlockPianoForStart();
       if (!stillThisStart()) return;
 
-      // Fresh mode instance every Start (reviews: restart must reset phases/reps)
-      if (state.modeInstance) {
-        try {
-          state.modeInstance.unmount();
-        } catch {
-          /* ignore */
-        }
-      }
-      const mountTarget = modeMountTarget(profile);
-      if (mountTarget && window.VTPracticeModes) {
-        state.modeInstance = VTPracticeModes.get(profile.mode);
-        state.modeInstance.mount(mountTarget, profile);
-        state.modeInstance.onStart();
-      }
-
-      state.practice.onFrame = (frame) => {
-        if (profile.showLevel !== false) {
-          // Scale meter with sensitivity so soft voices still fill the bar
-          // (retuned with ~3× max sens — slightly lower boost at top to avoid always-full bar)
-          const sens = state.practice.getSensitivity?.() || 7;
-          const boost = 2.4 + (sens - 5) * 0.22;
-          $("#level-fill").style.width = `${Math.round(Math.min(1, frame.rms * boost) * 100)}%`;
-        }
-        // Manual assist (+ grace): border on mic chip; grace = softer ring
-        const micChip = $("#mic-sens-hud");
-        if (micChip) {
-          micChip.classList.toggle("is-manual", !!frame.manualSound && !frame.manualGrace);
-          micChip.classList.toggle("is-manual-grace", !!frame.manualGrace);
-        }
-        if (showHold) {
-          const holdEl = $("#hold-display");
-          if (holdEl) {
-            holdEl.textContent = tt("practice.hold", {
-              s: frame.holdSec.toFixed(1)
-            });
-            holdEl.classList.toggle("is-grace", !!frame.holdGrace && !frame.holdSolid);
-            // Solid green when energy/pitch solid; amber during grace bridge
-            if (frame.holdSec >= 0.3 && (frame.holdSolid || frame.voiced || frame.holdGrace)) {
-              holdEl.style.color = frame.holdGrace && !frame.holdSolid ? "#e0a84a" : "#8ee0b5";
-            } else {
-              holdEl.style.color = "";
-            }
-          }
-        }
-        if (profile.showPitch && state.pitchViz) {
-          state.pitchViz.pushFrame(frame.voiceFreq, frame.targetFreq);
-        }
-        // Adaptive range: detect plateau short of target while trying (not silence)
-        if (profile.showPitch && state.rangeAuto && !profile.freeRange) {
-          const adapter = ensureRangeAdapter();
-          if (adapter) {
-            try {
-              adapter.feed(frame);
-            } catch (err) {
-              console.warn("[range]", err);
-            }
-          }
-        }
-        try {
-          state.modeInstance?.onFrame?.(frame);
-        } catch (err) {
-          console.warn(err);
-        }
-      };
-      state.practice.onHoldLogged = (sec) => {
-        if (window.VTStorage) VTStorage.addHoldLog(sec);
-        renderHoldHistory();
-        const input = $('#metrics-form [name="maxHold"]');
-        if (input) {
-          const prev = Number(input.value) || 0;
-          if (sec > prev) input.value = sec;
-        }
-        toast(tt("toast.hold", { s: sec }));
-        if (sec >= 8) {
-          renderValuePulse();
-          setTimeout(() => showValueMoment("hold_pr"), 500);
-        }
-      };
-      // The final MediaRecorder chunk arrives asynchronously after Stop.
-      // If the learner has already opened another exercise, never attach the
-      // old take to that exercise's player (and release the stale object URL).
-      const recordingExerciseId = ex.id;
-      const recordingTake = state.sessionPractice;
-      state.practice.onRecordingReady = (result) => {
-        if (!result) return;
-        if (state.view !== "exercise" ||
-            state.exercise?.id !== recordingExerciseId ||
-            state.sessionPractice !== recordingTake) {
-          URL.revokeObjectURL(result.url);
-          return;
-        }
-        showPlayback(result);
-      };
-
-      if (profile.showPitch) {
-        ensurePitchViz();
-        ensureRangeAdapter()?.resetSession();
-        updateOctaveUI();
-        state.pitchGame.reset();
-        updateGameHud(state.pitchGame.snapshot());
-        const wantChallenge =
-          profile.pitchChallenge && $("#chk-pitch-challenge")?.checked !== false;
-        let challengeNote = null;
-        if (wantChallenge) challengeNote = state.pitchGame.startChallenge(8);
-        state.pitchViz.startExternal();
-        state.pitchRunning = true;
-        state.pitchHeard = false;
-        const ref = profile.refPitch || ex.audio.refPitch;
-        const shiftNote = (nm) =>
-          nm && state.octaveShift && typeof VTShiftNoteName === "function"
-            ? VTShiftNoteName(nm, state.octaveShift)
-            : nm;
-        if (wantChallenge && state.pitchGame.challengeNotes?.length) {
-          // Lock once to full challenge set so notes don't jump the Y-axis
-          lockHighwayForNotes(state.pitchGame.challengeNotes);
-        } else if (
-          !profile.noProgression &&
-          (ex.progressions?.length ||
-            ex.songs?.length ||
-            ex.audio?.progressions ||
-            profile.mode === "pitchChord" ||
-            profile.mode === "pitchSong")
-        ) {
-          lockHighwayForProgression(state.selectedProg);
-        } else if (ref && !profile.ownsTarget) {
-          const refS = shiftNote(ref);
-          if (refS && VT_NOTE_FREQ[refS]) {
-            state.pitchViz.lockWindowAroundFreq(VT_NOTE_FREQ[refS], 6);
-          }
-        }
-        if (challengeNote) {
-          const chS = shiftNote(challengeNote);
-          if (chS && VT_NOTE_FREQ[chS]) {
-            state.practice.setTargetFreq(VT_NOTE_FREQ[chS]);
-            state.pitchViz.setTargetFreq(VT_NOTE_FREQ[chS]);
-          }
-        } else if (ref && !profile.ownsTarget) {
-          // profile.ownsTarget: the mode walks its own note list and has already
-          // set the first one in onStart(). The generic refPitch bootstrap runs
-          // after that, so without this guard it would point the highway and the
-          // engine at a different note than the one the mode is waiting for.
-          const refS = shiftNote(ref);
-          if (refS && VT_NOTE_FREQ[refS]) {
-            state.practice.setTargetFreq(VT_NOTE_FREQ[refS]);
-            state.pitchViz.setTargetFreq(VT_NOTE_FREQ[refS]);
-          }
-        }
-      }
-
-      // Needs mic?
-      const needsMic =
-        profile.showLevel !== false ||
-        profile.showPitch ||
-        profile.showHold ||
-        wantRecord ||
-        ["pauseDetect", "volumeSteady", "volumeLadder", "speechEnergy", "breathS", "shAirLadder", "sovtFlow", "sirenRange", "onsetReps", "concisionGate", "authorityLand", "pitchContour"].includes(
-          profile.mode
-        );
+      mountModeForStart(profile);
+      wireEngineForTake(ex, profile);
+      if (profile.showPitch) preparePitchForTake(ex, profile);
 
       // Mic first: getUserMedia dialog often suspends AudioContext if piano
       // already started — then solfege/ref sound goes silent for the whole session.
-      let micOk = !needsMic && !wantRecord;
-      if (needsMic || wantRecord) {
-        try {
-          await state.practice.start({ record: wantRecord });
-          micOk = true;
-        } catch (e) {
-          console.error(e);
-          micOk = false;
-        }
-      }
-      if (!stillThisStart()) {
-        // Aborted mid-start — ensure we don't leave mic running without UI
-        try {
-          if (state.practice.running) state.practice.stop();
-        } catch {
-          /* ignore */
-        }
-        VTPiano.stopAll();
-        state.practiceStarting = false;
-        setPracticeUI(false);
-        return;
-      }
+      // No await when the take needs no microphone: such a Start goes live in the same task, as before the split
+      const micOk = plan.needsMic || plan.wantRecord ? await startMicForTake(plan) : true;
+      if (!stillThisStart()) return abandonReplacedStart(pianoStop);
 
       // Resume + start piano AFTER mic so context is running again
-      let soundOk = false;
-      if (wantPiano) {
-        try {
-          await VTPiano.resume?.();
-          await VTPiano.ensure();
-          if (VTPiano.ctx?.state !== "running") await VTPiano.unlock?.();
-          soundOk = await startExerciseSound(ex, profile);
-          // If still silent (suspended/closed/no voices), recover + replay
-          if (
-            !soundOk ||
-            (VTPiano.ctx && VTPiano.ctx.state !== "running") ||
-            (VTPiano.playing && VTPiano.playing.length === 0 && !VTPiano.loopActive)
-          ) {
-            await VTPiano.resume?.();
-            if (VTPiano.ctx?.state === "closed" || !VTPiano.ctx) {
-              // Force new graph
-              VTPiano.ctx = null;
-            }
-            await VTPiano.ensure();
-            await VTPiano.unlock?.();
-            soundOk = await startExerciseSound(ex, profile);
-          }
-        } catch (e) {
-          console.error("Piano start failed", e);
-          soundOk = false;
-        }
-      }
-      if (!stillThisStart()) {
-        try {
-          if (state.practice.running) state.practice.stop();
-        } catch {
-          /* ignore */
-        }
-        VTPiano.stopAll();
-        state.practiceStarting = false;
-        setPracticeUI(false);
-        return;
-      }
+      const soundOk = plan.wantPiano ? await startSoundForTake(ex, profile, stillThisStart) : false;
+      if (!stillThisStart()) return abandonReplacedStart(pianoStop);
 
-      // A time-driven mode (paced breathing, guided release) advances on the
-      // clock alone, so a refused mic must not make the exercise unusable.
-      if (!micOk && !soundOk && !profile.timeDriven) {
-        state.practiceStarting = false;
-        setPracticeUI(false);
-        showMicBlocked(false);
-        return;
-      }
-
-      setPracticeUI(true);
-
-      // Frames come from the practice engine, which only runs when the mic or the
-      // recorder was wanted AND actually started. Whenever it did not, drive a
-      // time-driven mode ourselves so its phases and timer still advance.
-      const engineLive = (needsMic || wantRecord) && micOk;
-      if (!engineLive && (profile.timeDriven || (!needsMic && !wantRecord))) startModeTicker();
-
-      // The step clock runs whenever the step is live. It used to wait for the
-      // mic, so with the mic refused and the piano playing the timer sat still
-      // and a guided step could never end (VG-40).
-      if (ex.audio.timer && state.timer.total > 0) startTimer();
-      if ((needsMic || wantRecord) && !micOk) showMicBlocked(true);
-      else hideMicBlocked();
-
-      // Keep piano awake while practicing (tab blur / OS audio policies)
-      if (wantPiano && soundOk) {
-        state._pianoKeepAlive = setInterval(() => {
-          if (!state.practiceLive) return;
-          if (window.VTPiano?.ctx?.state === "suspended") {
-            VTPiano.resume?.()
-              .then(() => {
-                if (!VTPiano.loopActive && exerciseWantsSound(ex, profile)) {
-                  startExerciseSound(ex, profile).catch((err) =>
-                    console.warn("[VT] keepAlive sound", err)
-                  );
-                }
-              })
-              .catch((err) => console.warn("[VT] keepAlive resume", err));
-          }
-        }, 2000);
-      }
-
-      if (!micOk && soundOk) {
-        toast(tt("toast.pianoOnly"));
-      } else if (wantPiano && !soundOk) {
-        toast(tt("toast.pianoFail"));
-      } else {
-        toast(
-          wantRecord
-            ? tt("toast.liveRec", { mode: modeDisplayName(profile.mode) })
-            : tt("toast.live", { mode: modeDisplayName(profile.mode) })
-        );
-      }
+      goLive(ex, profile, plan, { micOk, soundOk });
     } catch (e) {
       console.error(e);
       state.practiceStarting = false;
       setPracticeUI(false);
       toast(tt("toast.mic"));
     }
+  }
+
+  /**
+   * A Start that leads somewhere else: the week plan opens its dashboard, and
+   * a first microphone exercise first says what the browser is about to ask.
+   * True when this Start ends here.
+   */
+  function startsElsewhere(ex, profile) {
+    // weekPlan: open dashboard instead of forcing mic
+    if (profile.mode === "weekPlan") {
+      state.modeInstance?.onStart?.();
+      document.getElementById("btn-plan")?.click();
+      toast(tt("toast.planOpened"));
+      return true;
+    }
+
+    // Say what the browser is about to ask, once per browser, before it
+    // asks. A denial is only undoable in browser settings, and on a pitch
+    // exercise it currently reads as success — the piano plays and the
+    // highway moves with only the voice line missing. This sits before
+    // setPracticeUI(false) so #btn-practice-start is still focusable for
+    // the focus trap to return to.
+    const wantsMic = profile.showPitch || profile.showLevel || profile.showHold;
+    if (!wantsMic || !window.VTTour?.needsMicPrimer?.()) return false;
+    // The primer used to say the same thing on every exercise — that the
+    // piano keeps playing and only the pitch readout is lost. Roughly half
+    // the exercises that show it have no piano and no pitch readout at all,
+    // including the one the home page's own first-practice button opens.
+    window.VTTour.showMicPrimer(() => {
+      // Only for the exercise it was asked on, still on screen: a late
+      // answer must not open the mic behind another page.
+      if (state.view === "exercise" && state.exercise === ex) startPractice();
+    }, {
+      piano: exerciseWantsSound(ex, profile),
+      // A paced exercise runs on its clock with the microphone refused
+      pacer: !!profile.timeDriven,
+      onDecline: () => toast(tt("tour.mic.declined"))
+    });
+    return true;
+  }
+
+  /** The practice_start event, and the trial's first practice once per browser. */
+  function trackPracticeStart(ex, profile) {
+    try {
+      window.VTAnalytics?.track?.("practice_start", {
+        exerciseId: ex.id,
+        mode: profile.mode,
+        micro: !!state.microSession
+      });
+      trackTrialFirstPractice();
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function trackTrialFirstPractice() {
+    // The last step of the funnel, and the only one that says the trial was
+    // worth giving: somebody who holds one and then actually practises. Once
+    // per browser, marked in storage rather than in memory so pressing the
+    // trial button and practising straight away counts once, and so does
+    // coming back the next day. The mark is never cleared, so a second trial
+    // does not re-fire it and clearing site data does; both are acceptable
+    // for a step whose question is "did the trial lead to any practice at
+    // all", and neither can inflate the count for one browser.
+    const held = headerPlanState().kind;
+    if (held !== "trialAccount" && held !== "trialLocal") return;
+    try {
+      // The mark goes down only once the event is actually kept, which is
+      // what track() now reports. Writing it first was wrong twice over:
+      // in a country that asks before anything is stored it put the mark
+      // on the device before the visitor had answered — the very thing
+      // being asked about — and on a refusal the event was dropped while
+      // the mark stayed, silencing this step for that browser for good,
+      // because the mark is never cleared.
+      // "held" gets no mark either: the answer may never come. If it does
+      // come the held event is sent, and this fires once more on a later
+      // visit, which costs one beacon and cannot double-count — the funnel
+      // groups by browser (GROUP BY cid in handleFunnel), not by event.
+      if (state.trialFirstPracticeTried || localStorage.getItem("vt_trial_first_practice_v1") === "1") return;
+      // Once per page load whatever the answer is, so two exercises
+      // started before the bar is answered do not hold two copies.
+      state.trialFirstPracticeTried = true;
+      const kept = window.VTAnalytics?.track?.("trial_first_practice", {
+        kind: held === "trialAccount" ? "account" : "local"
+      });
+      if (kept === "recorded") localStorage.setItem("vt_trial_first_practice_v1", "1");
+    } catch {
+      /* private mode: the event is simply not sent */
+    }
+  }
+
+  /** What this Start asks for: a recording, the piano, the microphone. */
+  function startPlan(ex, profile) {
+    const wantRecord = !!(
+      profile.autoRecord ||
+      (ex.audio.record && $("#chk-auto-record")?.checked)
+    );
+    // Sound on by default for any piano/ref exercise (checkbox defaults checked)
+    const wantPiano = exerciseWantsSound(ex, profile) && autoPianoChecked();
+    // Needs mic?
+    const needsMic =
+      profile.showLevel !== false ||
+      profile.showPitch ||
+      profile.showHold ||
+      wantRecord ||
+      ["pauseDetect", "volumeSteady", "volumeLadder", "speechEnergy", "breathS", "shAirLadder", "sovtFlow", "sirenRange", "onsetReps", "concisionGate", "authorityLand", "pitchContour"].includes(
+        profile.mode
+      );
+    return { wantRecord, wantPiano, needsMic };
+  }
+
+  async function unlockPianoForStart() {
+    try {
+      await VTPiano.unlock?.();
+      await VTPiano.ensure();
+    } catch (e) {
+      console.warn("Piano unlock failed", e);
+    }
+  }
+
+  /** Fresh mode instance every Start (reviews: restart must reset phases/reps) */
+  function mountModeForStart(profile) {
+    if (state.modeInstance) {
+      try {
+        state.modeInstance.unmount();
+      } catch {
+        /* ignore */
+      }
+    }
+    const mountTarget = modeMountTarget(profile);
+    if (mountTarget && window.VTPracticeModes) {
+      state.modeInstance = VTPracticeModes.get(profile.mode);
+      state.modeInstance.mount(mountTarget, profile);
+      state.modeInstance.onStart();
+    }
+  }
+
+  /** What the engine's frames, logged holds and finished recording do in this take. */
+  function wireEngineForTake(ex, profile) {
+    const showHold = !!profile.showHold;
+    state.practice.onFrame = (frame) => {
+      paintLevelAndChip(frame, profile);
+      if (showHold) paintHoldReadout(frame);
+      feedPitchFrame(frame, profile);
+      try {
+        state.modeInstance?.onFrame?.(frame);
+      } catch (err) {
+        console.warn(err);
+      }
+    };
+    state.practice.onHoldLogged = (sec) => {
+      if (window.VTStorage) VTStorage.addHoldLog(sec);
+      renderHoldHistory();
+      const input = $('#metrics-form [name="maxHold"]');
+      if (input) {
+        const prev = Number(input.value) || 0;
+        if (sec > prev) input.value = sec;
+      }
+      toast(tt("toast.hold", { s: sec }));
+      if (sec >= 8) {
+        renderValuePulse();
+        setTimeout(() => showValueMoment("hold_pr"), 500);
+      }
+    };
+    // The final MediaRecorder chunk arrives asynchronously after Stop.
+    // If the learner has already opened another exercise, never attach the
+    // old take to that exercise's player (and release the stale object URL).
+    const recordingExerciseId = ex.id;
+    const recordingTake = state.sessionPractice;
+    state.practice.onRecordingReady = (result) => {
+      if (!result) return;
+      if (state.view !== "exercise" ||
+          state.exercise?.id !== recordingExerciseId ||
+          state.sessionPractice !== recordingTake) {
+        URL.revokeObjectURL(result.url);
+        return;
+      }
+      showPlayback(result);
+    };
+  }
+
+  function paintLevelAndChip(frame, profile) {
+    if (profile.showLevel !== false) {
+      // Scale meter with sensitivity so soft voices still fill the bar
+      // (retuned with ~3× max sens — slightly lower boost at top to avoid always-full bar)
+      const sens = state.practice.getSensitivity?.() || 7;
+      const boost = 2.4 + (sens - 5) * 0.22;
+      $("#level-fill").style.width = `${Math.round(Math.min(1, frame.rms * boost) * 100)}%`;
+    }
+    // Manual assist (+ grace): border on mic chip; grace = softer ring
+    const micChip = $("#mic-sens-hud");
+    if (micChip) {
+      micChip.classList.toggle("is-manual", !!frame.manualSound && !frame.manualGrace);
+      micChip.classList.toggle("is-manual-grace", !!frame.manualGrace);
+    }
+  }
+
+  function paintHoldReadout(frame) {
+    const holdEl = $("#hold-display");
+    if (!holdEl) return;
+    holdEl.textContent = tt("practice.hold", {
+      s: frame.holdSec.toFixed(1)
+    });
+    holdEl.classList.toggle("is-grace", !!frame.holdGrace && !frame.holdSolid);
+    // Solid green when energy/pitch solid; amber during grace bridge
+    if (frame.holdSec >= 0.3 && (frame.holdSolid || frame.voiced || frame.holdGrace)) {
+      holdEl.style.color = frame.holdGrace && !frame.holdSolid ? "#e0a84a" : "#8ee0b5";
+    } else {
+      holdEl.style.color = "";
+    }
+  }
+
+  function feedPitchFrame(frame, profile) {
+    if (profile.showPitch && state.pitchViz) {
+      state.pitchViz.pushFrame(frame.voiceFreq, frame.targetFreq);
+    }
+    // Adaptive range: detect plateau short of target while trying (not silence)
+    if (profile.showPitch && state.rangeAuto && !profile.freeRange) {
+      const adapter = ensureRangeAdapter();
+      if (adapter) {
+        try {
+          adapter.feed(frame);
+        } catch (err) {
+          console.warn("[range]", err);
+        }
+      }
+    }
+  }
+
+  /** The highway, the game and the first target, before the first frame. */
+  function preparePitchForTake(ex, profile) {
+    ensurePitchViz();
+    ensureRangeAdapter()?.resetSession();
+    updateOctaveUI();
+    state.pitchGame.reset();
+    updateGameHud(state.pitchGame.snapshot());
+    const wantChallenge =
+      profile.pitchChallenge && $("#chk-pitch-challenge")?.checked !== false;
+    let challengeNote = null;
+    if (wantChallenge) challengeNote = state.pitchGame.startChallenge(8);
+    state.pitchViz.startExternal();
+    state.pitchRunning = true;
+    state.pitchHeard = false;
+    lockHighwayForTake(ex, profile, wantChallenge);
+    aimFirstTarget(ex, profile, challengeNote);
+  }
+
+  /** `nm` in the octave the learner chose. */
+  function shiftedNote(nm) {
+    return nm && state.octaveShift && typeof VTShiftNoteName === "function"
+      ? VTShiftNoteName(nm, state.octaveShift)
+      : nm;
+  }
+
+  function lockHighwayForTake(ex, profile, wantChallenge) {
+    const ref = profile.refPitch || ex.audio.refPitch;
+    if (wantChallenge && state.pitchGame.challengeNotes?.length) {
+      // Lock once to full challenge set so notes don't jump the Y-axis
+      lockHighwayForNotes(state.pitchGame.challengeNotes);
+    } else if (followsProgression(ex, profile)) {
+      lockHighwayForProgression(state.selectedProg);
+    } else if (ref && !profile.ownsTarget) {
+      const refS = shiftedNote(ref);
+      if (refS && VT_NOTE_FREQ[refS]) {
+        state.pitchViz.lockWindowAroundFreq(VT_NOTE_FREQ[refS], 6);
+      }
+    }
+  }
+
+  /** A take whose highway spans the selected progression (or song). */
+  function followsProgression(ex, profile) {
+    return (
+      !profile.noProgression &&
+      !!(ex.progressions?.length ||
+        ex.songs?.length ||
+        ex.audio?.progressions ||
+        profile.mode === "pitchChord" ||
+        profile.mode === "pitchSong")
+    );
+  }
+
+  function aimFirstTarget(ex, profile, challengeNote) {
+    const ref = profile.refPitch || ex.audio.refPitch;
+    // profile.ownsTarget: the mode walks its own note list and has already
+    // set the first one in onStart(). The generic refPitch bootstrap runs
+    // after that, so without this guard it would point the highway and the
+    // engine at a different note than the one the mode is waiting for.
+    const note = challengeNote ? shiftedNote(challengeNote) : ref && !profile.ownsTarget ? shiftedNote(ref) : null;
+    if (note && VT_NOTE_FREQ[note]) {
+      state.practice.setTargetFreq(VT_NOTE_FREQ[note]);
+      state.pitchViz.setTargetFreq(VT_NOTE_FREQ[note]);
+    }
+  }
+
+  /** The microphone (and recorder) for a take that wants them; true when they started. */
+  async function startMicForTake({ wantRecord }) {
+    try {
+      await state.practice.start({ record: wantRecord });
+      return true;
+    } catch (e) {
+      console.error(e);
+      return false;
+    }
+  }
+
+  /**
+   * The exercise's piano or reference sound, recovered and replayed once if it
+   * came up silent. `current` is this Start (stillThisStart): a Start that Stop
+   * or a newer Start replaced while a held iPhone session resumed asks for no
+   * sound from then on (startExerciseSound and playSelectedProgression check it
+   * after their waits).
+   */
+  async function startSoundForTake(ex, profile, current) {
+    try {
+      await VTPiano.resume?.();
+      await VTPiano.ensure();
+      if (VTPiano.ctx?.state !== "running") await VTPiano.unlock?.();
+      const soundOk = await startExerciseSound(ex, profile, current);
+      // If still silent (suspended/closed/no voices), recover + replay
+      return soundStillSilent(soundOk) ? await replaySound(ex, profile, current) : soundOk;
+    } catch (e) {
+      console.error("Piano start failed", e);
+      return false;
+    }
+  }
+
+  function soundStillSilent(soundOk) {
+    return (
+      !soundOk ||
+      (VTPiano.ctx && VTPiano.ctx.state !== "running") ||
+      (VTPiano.playing && VTPiano.playing.length === 0 && !VTPiano.loopActive)
+    );
+  }
+
+  async function replaySound(ex, profile, current) {
+    await VTPiano.resume?.();
+    if (VTPiano.ctx?.state === "closed" || !VTPiano.ctx) {
+      // Force new graph
+      VTPiano.ctx = null;
+    }
+    await VTPiano.ensure();
+    await VTPiano.unlock?.();
+    return startExerciseSound(ex, profile, current);
+  }
+
+  /**
+   * A Start that Stop, a leave or a newer Start replaced while it waited on
+   * the microphone or the piano. With nothing newer under way it leaves no
+   * microphone or piano on behind a stopped page. A newer Start that is
+   * still starting, or live, owns the engine, the piano and the buttons, and
+   * this one touches none of them: an older permission prompt answered after
+   * the newer take went live used to end that take with no word, and one
+   * answered while the newer prompt was up brought Start back under it (QA
+   * round 6, F2). Nothing of this Start's is left to stop: Stop bumped the
+   * engine's start number, so its microphone was released, and the piano
+   * dropped what it asked for before the Stop; after the Stop it asked for
+   * nothing (soundTicket). So the piano is stopped here only when no Stop came
+   * since this Start began (`pianoStop`): after one, what plays is what the
+   * learner asked for on the next page (a Loop, a reference note), and this
+   * late answer used to cut it.
+   */
+  function abandonReplacedStart(pianoStop) {
+    if (state.practiceStarting || state.practiceLive) return;
+    // Aborted mid-start — ensure we don't leave mic running without UI
+    try {
+      if (state.practice.running) state.practice.stop();
+    } catch {
+      /* ignore */
+    }
+    if (pianoStop === VTPiano._stopGen) VTPiano.stopAll();
+    state.practiceStarting = false;
+    setPracticeUI(false);
+  }
+
+  /** The take is live: or, with neither microphone nor sound, it says why not. */
+  function goLive(ex, profile, plan, { micOk, soundOk }) {
+    // A time-driven mode (paced breathing, guided release) advances on the
+    // clock alone, so a refused mic must not make the exercise unusable.
+    if (!micOk && !soundOk && !profile.timeDriven) {
+      state.practiceStarting = false;
+      setPracticeUI(false);
+      showMicBlocked(false);
+      return;
+    }
+
+    setPracticeUI(true);
+    runLiveTake(ex, profile, plan, { micOk, soundOk });
+  }
+
+  /** The clocks, the microphone notice, the piano's keep-alive and the first toast of a live take. */
+  function runLiveTake(ex, profile, plan, { micOk, soundOk }) {
+    const { needsMic, wantRecord, wantPiano } = plan;
+    // Frames come from the practice engine, which only runs when the mic or the
+    // recorder was wanted AND actually started. Whenever it did not, drive a
+    // time-driven mode ourselves so its phases and timer still advance.
+    const engineLive = (needsMic || wantRecord) && micOk;
+    if (!engineLive && (profile.timeDriven || (!needsMic && !wantRecord))) startModeTicker();
+
+    // The step clock runs whenever the step is live. It used to wait for the
+    // mic, so with the mic refused and the piano playing the timer sat still
+    // and a guided step could never end (VG-40).
+    if (ex.audio.timer && state.timer.total > 0) startTimer();
+    if ((needsMic || wantRecord) && !micOk) showMicBlocked(true);
+    else hideMicBlocked();
+
+    // Keep piano awake while practicing (tab blur / OS audio policies)
+    if (wantPiano && soundOk) keepPianoAwake(ex, profile);
+    toast(liveToast(profile, { micOk, soundOk, wantPiano, wantRecord }));
+  }
+
+  function keepPianoAwake(ex, profile) {
+    state._pianoKeepAlive = setInterval(() => {
+      if (!state.practiceLive) return;
+      if (window.VTPiano?.ctx?.state === "suspended") {
+        const current = soundTicket(ex);
+        VTPiano.resume?.()
+          .then(() => {
+            if (!VTPiano.loopActive && exerciseWantsSound(ex, profile)) {
+              startExerciseSound(ex, profile, current).catch((err) =>
+                console.warn("[VT] keepAlive sound", err)
+              );
+            }
+          })
+          .catch((err) => console.warn("[VT] keepAlive resume", err));
+      }
+    }, 2000);
+  }
+
+  function liveToast(profile, { micOk, soundOk, wantPiano, wantRecord }) {
+    if (!micOk && soundOk) return tt("toast.pianoOnly");
+    if (wantPiano && !soundOk) return tt("toast.pianoFail");
+    return wantRecord
+      ? tt("toast.liveRec", { mode: modeDisplayName(profile.mode) })
+      : tt("toast.live", { mode: modeDisplayName(profile.mode) });
   }
 
   /**
@@ -4268,13 +4449,28 @@
    * how to allow it, a retry, and — inside a guided routine — a way on.
    * @param {boolean} canRun true when the piano or the clock still runs
    */
-  function showMicBlocked(canRun) {
+  function micBlockMessageKey(canRun, reason) {
+    const failure = reason || state.practice.lastCaptureError;
+    const failureName = typeof failure === "string" ? failure : failure?.name;
+    const failureMessage = typeof failure === "object" ? failure?.message : "";
+    let messageKey = canRun ? "mic.blocked.partial" : "mic.blocked.none";
+    if (["interrupted", "AudioResumeTimeout"].includes(failureName)) messageKey = "mic.blocked.interrupted";
+    else if (["NotReadableError", "AbortError"].includes(failureName)) messageKey = "mic.blocked.busy";
+    else if (failureName === "NotFoundError") messageKey = "mic.blocked.missing";
+    else if (failureName === "TimeoutError") messageKey = "mic.blocked.pending";
+    else if (/no live audio track|AudioContext|MediaStreamSource|ended while Start built/i.test(failureMessage || "")) {
+      messageKey = "mic.blocked.disconnected";
+    }
+    return messageKey;
+  }
+
+  function showMicBlocked(canRun, reason) {
     const box = $("#mic-blocked");
     if (!box) {
       toast(tt("toast.mic"));
       return;
     }
-    $("#mic-blocked-text").textContent = tt(canRun ? "mic.blocked.partial" : "mic.blocked.none");
+    $("#mic-blocked-text").textContent = tt(micBlockMessageKey(canRun, reason));
     const retry = $("#btn-mic-retry");
     const skip = $("#btn-mic-skip");
     if (retry) {
@@ -4297,6 +4493,7 @@
       /* ignore */
     }
   }
+
 
   function hideMicBlocked() {
     const box = $("#mic-blocked");
@@ -4348,7 +4545,9 @@
 
   /** Stop the engine, the clock, the piano and the pitch picture. */
   function haltTake() {
-    if (state.practiceLive || state.practice.running) {
+    // A Start still waiting on the permission prompt is stopped too, so the
+    // microphone it gets later is released instead of going live (PR #24).
+    if (state.practiceLive || state.practice.running || state.practice.starting) {
       try {
         state.practice.setManualSound?.(false, null, { forceClear: true });
         state._spaceDown = false;
@@ -5535,7 +5734,11 @@
       state.recorder.onLevel = (lvl) => {
         $("#level-fill").style.width = `${Math.round(lvl * 100)}%`;
       };
-      await state.recorder.start();
+      // Reuse an active practice stream. A second getUserMedia on iOS may
+      // interrupt playback or mute the first stream, and is not needed.
+      await state.recorder.start({
+        stream: state.practice.running ? state.practice.stream : null
+      });
       $("#btn-rec-start").disabled = true;
       $("#btn-rec-stop").disabled = false;
       toast(tt("toast.recording"));
@@ -5975,7 +6178,7 @@
     const startBtn = $("#btn-plan-start");
     startBtn.textContent = plan.element
       ? tt("plan.startWith", { n: plan.weekNumber, element: weekElementLabel(plan.element) })
-      : tt("plan.start");
+      : tt("plan.chooseFocus");
     $("#plan-start-hint").hidden = !!plan.element;
 
     const exs = plan.element ? planExercisesFor(plan.element, track) : [];
@@ -6661,30 +6864,36 @@
     });
   }
 
+  /**
+   * The reference button's note. While a mode that owns its targets runs, the
+   * reference is the note it is waiting for, not the exercise's generic
+   * refPitch, and the target stays the mode's. Kept short like the mode's own
+   * cue (see soundPlan): a long note at the right pitch would be heard by the
+   * mic as the singer.
+   */
+  function refCue() {
+    const owns = state.practiceLive && !!state.exercise && getProfile(state.exercise).ownsTarget;
+    const owned = owns ? state.modeInstance?.state?.wantName : null;
+    const note = effectiveNoteName(owned || state.exercise?.audio?.refPitch || "A2");
+    const sustain = $("#chk-sustain")?.checked;
+    const full = sustain ? Number($("#sustain-sec")?.value || 4) : 2.5;
+    return { owns, note, sec: owned ? Math.min(full, 1.5) : full };
+  }
+
   /** Reference pitch, inhale ticks and the legacy start/stop stubs. */
   function bindReferenceCues() {
     $("#btn-ref-pitch")?.addEventListener("click", async () => {
-      // While a mode that owns its targets runs, the reference is the note it
-      // is waiting for, not the exercise's generic refPitch, and the target
-      // stays the mode's. Kept short like the mode's own cue (see
-      // startExerciseSound): a long note at the right pitch would be heard
-      // by the mic as the singer.
-      const owns = state.practiceLive && !!state.exercise && getProfile(state.exercise).ownsTarget;
-      const owned = owns ? state.modeInstance?.state?.wantName : null;
-      const note = effectiveNoteName(owned || state.exercise?.audio?.refPitch || "A2");
-      const sustain = $("#chk-sustain")?.checked;
-      const full = sustain ? Number($("#sustain-sec")?.value || 4) : 2.5;
-      const sec = owned ? Math.min(full, 1.5) : full;
+      const { owns, note, sec } = refCue();
       const f = await VTPiano.playRefPitch(note, sec, true);
-      if (f && !owns) {
+      if (!f) return; // a Stop while a held session resumed: nothing sounded, so nothing to announce
+      if (!owns) {
         state.practice.setTargetFreq(f);
         if (state.pitchViz) state.pitchViz.setTargetFreq(f);
       }
       toast(tt("toast.refPitch", { note, sec: String(sec) }));
     });
     $("#btn-inhale-ticks")?.addEventListener("click", async () => {
-      await VTPiano.playInhaleTicks(3);
-      toast(tt("toast.inhaleTicks"));
+      if (await VTPiano.playInhaleTicks(3)) toast(tt("toast.inhaleTicks"));
     });
     // Legacy stub buttons (if present in DOM) — only unified practice path
     $("#btn-pitch-start")?.addEventListener("click", startPractice);
@@ -9288,6 +9497,11 @@
       return state._hotApplyPromise;
     },
     getState: () => state,
+    // Small integration surface for platform audio interruption recovery.
+    // Status listeners may end an interrupted take without fabricating credit.
+    stopPractice,
+    showMicBlocked,
+    startExerciseSound,
     /** True if current (or given) exercise should start piano/ref on Empezar when Auto is on. */
     wantsSound: (ex) => {
       const e = ex || state.exercise;

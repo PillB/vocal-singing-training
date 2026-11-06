@@ -777,12 +777,27 @@ test.describe("Pitch match challenge scores the note it asks for", () => {
       pv.setTargetFreq(wantF);
       // Past the listen window: the game scores what is sung
       pv.setDisplay({ gameHold: false });
-      for (let i = 0; i < 30; i++) pv.pushFrame(lane.freq, wantF);
+      // During live practice the game scores what the engine last measured
+      // (its scoringPitch), not the label on screen: each frame is first
+      // heard by the engine as a tone (or a breath), then drawn.
+      const p = st.practice;
+      const rate = p.audioCtx.sampleRate;
+      const hear = (f) => {
+        const buf = new Float32Array(2048);
+        if (f) for (let i = 0; i < buf.length; i++) buf[i] = 0.3 * Math.sin((2 * Math.PI * f * i) / rate);
+        p._rms(buf);
+        p._detectPitch(buf, rate);
+      };
+      const sing = (f) => {
+        hear(f);
+        pv.pushFrame(f, wantF);
+      };
+      for (let i = 0; i < 30; i++) sing(lane.freq);
       const snap = game.snapshot();
       // …and on the asked note, after a breath, it is in tune (these frames
       // arrive with ~0 ms between them, so the breath empties the window)
-      pv.pushFrame(null, wantF);
-      for (let i = 0; i < 30; i++) pv.pushFrame(wantF, wantF);
+      sing(null);
+      for (let i = 0; i < 30; i++) sing(wantF);
       const onNote = game.snapshot();
       return {
         want,
@@ -791,12 +806,15 @@ test.describe("Pitch match challenge scores the note it asks for", () => {
         quality: snap.quality,
         cleared: snap.challengeCleared,
         onNote: onNote.quality,
+        heard: [p.scoringPitch(), wantF],
         hud: document.getElementById("hud-quality").textContent.trim()
       };
     });
     expect(r.challenge).toBe(true);
     expect(["perfect", "good"], `voice on ${r.lane} while ${r.want} is asked`).not.toContain(r.quality);
     expect(r.cleared).toBe(0);
+    expect(r.heard[0], "the engine measured the asked note").toBeGreaterThan(r.heard[1] * 0.98);
+    expect(r.heard[0]).toBeLessThan(r.heard[1] * 1.02);
     expect(r.onNote).toBe("perfect");
   });
 });

@@ -115,7 +115,9 @@ test.describe("Plan: one focus, its exercises, days counted", () => {
     await expect(page.locator("#plan-pick")).toHaveText("¿Qué quieres mejorar esta semana?");
     await expect(page.locator("#plan-start-hint")).toBeVisible();
     await expect(page.locator("#plan-el-desc")).toBeHidden();
-    // Pressing it first goes straight to the choice it is waiting on.
+    // It says what it does with nothing picked: it takes you to the choice,
+    // it does not begin a week (PR #24; it used to say "Empezar esta semana").
+    await expect(page.locator("#btn-plan-start")).toHaveText("Elegir qué mejorar");
     await page.locator("#btn-plan-start").click();
     await expect(page.locator("#element-chips .chip").first()).toBeFocused();
     expect(await page.evaluate(() => VTStorage.getWeekPlan().status)).toBe("idle");
@@ -288,7 +290,7 @@ test.describe("Plan: one focus, its exercises, days counted", () => {
     expect((await stored()).element).toBe("Pitch accuracy");
   });
 
-  test("EN, Vocal: speaking elements first, Start this week, days in English", async ({ page }) => {
+  test("EN, Vocal: speaking elements first, Choose what to improve, days in English", async ({ page }) => {
     await boot(page, { lang: "en", tab: "vocal", days: ledger(["2026-09-23"]) });
     await openPlan(page);
     await expect(page.locator("#element-chips .chip:visible")).toHaveText([
@@ -300,6 +302,7 @@ test.describe("Plan: one focus, its exercises, days counted", () => {
       "Tonality"
     ]);
     await expect(page.locator("#plan-focus-more")).toHaveText("Show 11 more");
+    await expect(page.locator("#btn-plan-start")).toHaveText("Choose what to improve");
     await page.locator("#element-chips .chip", { hasText: "Volume" }).click();
     await expect(page.locator("#plan-exercise-list .open-row")).toHaveCount(2);
     await expect(page.locator("#plan-exercise-list .open-row").nth(0)).toContainText("Maintain Volume");

@@ -88,11 +88,29 @@
 
   /* —— The clock of a guided drill —— */
 
+  /** The most one frame moves the steps on (the frame after a hidden tab). */
+  const STEP_MAX_SEC = 1;
+  /**
+   * Seconds of wall time a frame stands for, up to STEP_MAX_SEC: the
+   * engine's uncapped `wallDtMs`, or `dtMs` from a caller without it (the
+   * silent modes' ticker); nothing for a zero, negative or non-finite one.
+   */
+  function frameSec(frame) {
+    const ms = frame ? (frame.wallDtMs != null ? frame.wallDtMs : frame.dtMs) : 0;
+    return Number.isFinite(ms) && ms > 0 ? Math.min(ms / 1000, STEP_MAX_SEC) : 0;
+  }
+
   /**
    * Steps on a clock. Time comes from the frames: `clock` is practice time
-   * (capped per frame, like VTFeatures.Vad.t, so a hidden tab pauses the
-   * guide instead of skipping steps), `rec` is time into the recording (the
-   * engine's own elapsed time) so a step can be found again in the take.
+   * on the wall clock (frameSec), as the app's step timer is. The engine
+   * caps its `dtMs` at 50 ms for the signal features, and steps paced on
+   * that fell behind under 20 fps (at 10 fps, 30 s of wall time was 15 s of
+   * guide) while the step timer ended the step on time. One frame moves the
+   * clock at most STEP_MAX_SEC, so the frame after a hidden tab cannot skip
+   * steps. A drill's Vad keeps its clock on the same time (its `maxDt`), so
+   * a step's talking share compares like with like. `rec` is time into the
+   * recording (the engine's own elapsed time) so a step can be found again
+   * in the take.
    */
   class Run {
     constructor(phases) {
@@ -133,7 +151,7 @@
       return this.done ? this.count : this.index;
     }
     tick(frame) {
-      const dt = clamp(((frame && frame.dtMs) || 16) / 1000, 0, 0.1);
+      const dt = frameSec(frame);
       this.clock += dt;
       this.rec = frame && frame.elapsedMs != null ? frame.elapsedMs / 1000 : this.rec + dt;
       if (this.done) return false;
@@ -2261,6 +2279,19 @@
    *   chapterHint(phase, drill) (a chapter's "what to listen for"; default:
    *   the step's intent or cue), partialNote (say how far a short take got).
    */
+  /** Where focus goes when a HUD button it sat on disables: the visible Stop, else Start. */
+  function nextFocus() {
+    return ["btn-practice-stop", "btn-practice-start"]
+      .map((id) => document.getElementById(id))
+      .find((el) => el && !el.hidden && !el.disabled && el.getClientRects().length > 0);
+  }
+
+  /** Focus that fell to the page (its button hidden or disabled) goes to the take's button. */
+  function refocusIfLost() {
+    const a = document.activeElement;
+    if (!a || a === document.body || a.disabled || !a.getClientRects().length) nextFocus()?.focus();
+  }
+
   class Drill extends Panel {
     constructor(mode, cfg) {
       const buttons = (cfg.buttons || []).slice();
@@ -2268,9 +2299,15 @@
       const words = `<span data-phase></span> <strong class="mode-big" data-remain></strong> <span data-next></span> <span data-cue></span>${cfg.words || ""}`;
       super(mode, Object.assign({}, cfg, { buttons, words }), (ctx, w, h) => guided(ctx, w, h, this));
       this.run = new Run(cfg.phases || []);
-      this.vad = cfg.mic && global.VTFeatures ? new global.VTFeatures.Vad({}) : null;
+      // On the steps' clock (wall time, up to STEP_MAX_SEC a frame), or a
+      // step's chapter compares its span with speech dated on another time
+      this.vad = cfg.mic && global.VTFeatures ? new global.VTFeatures.Vad({ maxDt: STEP_MAX_SEC }) : null;
       this.preCue = cfg.preCue || 4;
-      this.mode.hud.querySelector("[data-next-step]")?.addEventListener("click", () => this.skip());
+      const nextStep = this.mode.hud.querySelector("[data-next-step]");
+      if (nextStep) {
+        nextStep.disabled = true; // before Start it would be a click that does nothing (PR #24)
+        nextStep.addEventListener("click", () => this.skip());
+      }
       this._words(true);
       this.draw();
     }
@@ -2317,6 +2354,7 @@
     start() {
       this.begin();
       this.run.reset();
+      this._nextStepDisabled(this.run.done);
       this.vad?.reset();
       if (this.cfg.onStart) this.cfg.onStart(this);
       this._words(true);
@@ -2345,8 +2383,7 @@
       this.caption(r.done ? this.doneText() : r.cur.label, 0);
       if (this.cfg.chime) V.chime(r.done ? "done" : "phase");
       if (this.cfg.onStep) this.cfg.onStep(r.index, this);
-      const b = this.mode.hud?.querySelector("[data-next-step]");
-      if (b) b.disabled = r.done;
+      this._nextStepDisabled(r.done);
     }
     /** The words the picture draws, kept in the page for screen readers and tests. */
     _words(full) {
@@ -2405,8 +2442,22 @@
       const pct = Math.round((talk / Math.max(0.1, len)) * 100);
       return `${dur} · ${L(`hablando el ${pct} %`, `talking ${pct}% of it`)}`;
     }
+    _nextStepDisabled(off) {
+      const b = this.mode.hud?.querySelector("[data-next-step]");
+      if (!b) return;
+      // A disabled button drops keyboard focus to the top of the page: hand
+      // it to the take's own button first (Stop while live, else Start)
+      const held = off && !b.disabled && document.activeElement === b;
+      b.disabled = off;
+      if (!held) return;
+      nextFocus()?.focus();
+      // A take that ends (its clock, or Stop) disables Next before the app
+      // swaps Stop for Start in the same task: look again once it has
+      setTimeout(refocusIfLost, 0);
+    }
     stop() {
       this.live = false;
+      this._nextStepDisabled(true);
       if (this.cfg.recorded) {
         const chs = this.cfg.chapters ? this.cfg.chapters(this) : this.stepChapters();
         if (!chs.length && this.run.clock >= 1) {

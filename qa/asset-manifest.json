@@ -40,8 +40,8 @@
     "sha": "93d225ed63fd919a"
   },
   "css/styles.css": {
-    "v": "20261103c",
-    "sha": "c7cd14f1776cfb9d"
+    "v": "20261103e",
+    "sha": "f8fb32a414fe163a"
   },
   "js/account.js": {
     "v": "20261006b",
@@ -64,8 +64,12 @@
     "sha": "319fd17f4fbb6fd1"
   },
   "js/app.js": {
-    "v": "20261103h",
-    "sha": "b674db9fef3f0c55"
+    "v": "20261104d",
+    "sha": "946471cd38b7666e"
+  },
+  "js/audio-recovery.js": {
+    "v": "20261103c",
+    "sha": "c9f318ec453073bd"
   },
   "js/auth-users.generated.js": {
     "v": "20261006a",
@@ -112,8 +116,8 @@
     "sha": "178ba56877e20400"
   },
   "js/i18n.js": {
-    "v": "20261103b",
-    "sha": "e60e1d7e9d2cff80"
+    "v": "20261103d",
+    "sha": "ecbc436846850003"
   },
   "js/license.js": {
     "v": "20261103d",
@@ -124,24 +128,24 @@
     "sha": "8e4162c28ab1f554"
   },
   "js/piano.js": {
-    "v": "20261002a",
-    "sha": "f8531113607c80df"
+    "v": "20261104d",
+    "sha": "32aa962300eaa6dd"
   },
   "js/pitch-game.js": {
     "v": "20261002a",
     "sha": "6c28a1d0204d4cc1"
   },
   "js/pitch-visualizer.js": {
-    "v": "20261101a",
-    "sha": "03b08ae48814313a"
+    "v": "20261103d",
+    "sha": "98ad9707fc41329b"
   },
   "js/practice-days.js": {
     "v": "20261103a",
     "sha": "78be66ee0c2f6bc0"
   },
   "js/practice-engine.js": {
-    "v": "20261101a",
-    "sha": "a0e0e06dc4bcd25e"
+    "v": "20261103e",
+    "sha": "ca17b173b4d24ef5"
   },
   "js/practice-modes.js": {
     "v": "20261106c",
@@ -160,8 +164,8 @@
     "sha": "3bfb14fca499de76"
   },
   "js/recorder.js": {
-    "v": "20261002a",
-    "sha": "d92914eab4ecad7d"
+    "v": "20261102a",
+    "sha": "9303675d4862baf5"
   },
   "js/region-gate.js": {
     "v": "20261103b",
@@ -180,8 +184,8 @@
     "sha": "b625414e32c1539e"
   },
   "js/scenes/guided.js": {
-    "v": "20261007a",
-    "sha": "1d218daa933e5250"
+    "v": "20261103c",
+    "sha": "b31a15eaaf1883af"
   },
   "js/scenes/pitch.js": {
     "v": "20261002a",
@@ -204,11 +208,11 @@
     "sha": "5f2c4f4ee948f2a5"
   },
   "js/session.js": {
-    "v": "20261103a",
+    "v": "20261103b",
     "sha": "9caee4c0ff168c46"
   },
   "js/storage.js": {
-    "v": "20261103b",
+    "v": "20261103c",
     "sha": "f453142870b23007"
   },
   "js/sync.js": {
@@ -216,15 +220,15 @@
     "sha": "319c1ae39b89c93d"
   },
   "js/tour.js": {
-    "v": "20261006b",
-    "sha": "8902ab4fd0c60593"
+    "v": "20261102a",
+    "sha": "683cca014e04a362"
   },
   "js/value-pulse.js": {
     "v": "20260924c",
     "sha": "6a70c4249ad8e832"
   },
   "js/voice-features.js": {
-    "v": "20261102d",
-    "sha": "8412b26127f49cf1"
+    "v": "20261103a",
+    "sha": "98cb3c44762e9b48"
   }
 }

@@ -71,6 +71,23 @@ async function openAndStart(page, id, voice) {
   await page.evaluate((x) => window.VTApp.openExercise(x), id);
   await expect(page.locator("#view-exercise")).toHaveClass(/active/);
   await page.locator("#btn-practice-start").click();
+  await page.waitForFunction(() => window.VTApp.getState().practiceLive ||
+    document.getElementById("mic-blocked")?.hidden === false, null, { timeout: 10000 });
+  const capture = await page.evaluate(() => {
+    const s = window.VTApp.getState();
+    const voice = window.__VTVoice;
+    const voiceTrack = voice.nodes?.dest?.stream.getAudioTracks()[0];
+    return {
+      live: s.practiceLive,
+      micBlocked: document.getElementById("mic-blocked").hidden === false,
+      status: document.getElementById("mic-blocked-text").textContent,
+      track: s.practice.stream?.getAudioTracks()[0]?.readyState,
+      voiceTrack: voiceTrack?.readyState,
+      context: window.VTPiano.ctx?.state,
+      sameAudioContext: voice.ctx === window.VTPiano.ctx
+    };
+  });
+  expect(capture.live, `${id} synthetic mic failed: ${JSON.stringify(capture)}`).toBe(true);
   await page.waitForTimeout(250);
   if (voice) await playVoice(page, voice);
 }
@@ -273,20 +290,21 @@ test.describe("volume pictures", () => {
   test("processed input: the picture says the browser evens out volume", async ({ page }) => {
     const warnings = await boot(page);
     await page.evaluate(() => {
-      const md = navigator.mediaDevices;
-      const orig = md.getUserMedia.bind(md);
-      md.getUserMedia = async (c) => {
-        const s = await orig(c);
-        const t = s.getAudioTracks()[0];
-        if (t) {
-          const g = t.getSettings ? t.getSettings.bind(t) : () => ({});
-          t.getSettings = () => Object.assign({}, g(), { autoGainControl: true });
-        }
-        return s;
-      };
+      // WebKit sometimes resolves getUserMedia on MediaDevices.prototype,
+      // bypassing an instance-only replacement. Intercept the precise browser
+      // signal being tested: the *track's reported* AGC setting. This fails if
+      // the engine no longer exposes processed input to the user.
+      const proto = MediaStreamTrack.prototype;
+      const original = proto.getSettings;
+      Object.defineProperty(proto, "getSettings", {
+        configurable: true,
+        value() { return { ...(original?.call(this) || {}), autoGainControl: true }; }
+      });
     });
     await openAndStart(page, "v13-volume-ladder", "ladderSteps");
     await page.waitForTimeout(1500);
+    const reported = await modeState(page, () => window.VTApp.getState().practice.stream.getAudioTracks()[0].getSettings());
+    expect(reported.autoGainControl, "fixture reports enabled AGC on the actual captured track").toBe(true);
     expect(await modeState(page, () => window.VTApp.getState().modeInstance.state.processed)).toBe(true);
     await expect(page.locator("#mode-focus .vz-cap")).toContainText(/iguala el volumen/);
     expect(warnings).toEqual([]);

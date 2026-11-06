@@ -110,7 +110,9 @@ test.describe("Catalog rows", () => {
     const byId = Object.fromEntries(rows.map((r) => [r.id, r.text]));
     // "Trinos de labios (SOVT): …", "Respiración costo-abdominal: …", "Sirenas / deslizamientos de tono: …"
     expect(byId["s4-lip-trills"]).toMatch(/^Equilibra aire y vibración/);
-    expect(byId["s18-costal-breath"]).toMatch(/^Inhala bajo por la nariz/);
+    // Test the breathing safety cue rather than the superseded nasal-only prose.
+    expect(byId["s18-costal-breath"]).toMatch(/^Inhala bajo/);
+    expect(byId["s18-costal-breath"]).toMatch(/sin retener el aire/);
     expect(byId["s5-sirens"]).toMatch(/^Conectan registros/);
     // A lead-in that says something new stays.
     expect(byId["s1-vocal-fry"]).toMatch(/^De un fry suave/);

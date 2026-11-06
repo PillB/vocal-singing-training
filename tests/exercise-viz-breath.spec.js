@@ -260,7 +260,7 @@ test.describe("breath and SOVT pictures", () => {
       words: document.querySelector("#mode-focus .viz-words").textContent
     }));
     expect(s15.label).toMatch(/^SH ladder/);
-    expect(s15.words).toMatch(/Target/);
+    expect(s15.words).toMatch(/Starter/);
     expect(s15.words).toMatch(/Rungs/);
     await page.evaluate(() => window.VTApp.openExercise("s8-breath-support"));
     await page.waitForTimeout(300);

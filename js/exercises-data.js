@@ -781,31 +781,31 @@ window.VT_EXERCISES = {
       title: "SH Air-Dosing Ladder",
       durationMin: 8,
       original:
-        "Inhale through the nose; exhale on a steady SH for 5→10→20→25→30 seconds with even airflow.",
+        "Try an easy, even SH for 5 seconds; longer ladder rungs are optional, never a breath-holding contest.",
       research:
-        "Holding a smooth SH (no pitch) trains how you dose air — the raw material of singing — before you add tone and pitch.",
+        "A voiceless SH provides a simple airflow pacing task, but longer hiss times do not by themselves prove better singing support. Transfer the easy sensation to a sung phrase.",
       steps: [
-        "Inhale calmly through the nose (not a huge gasp).",
-        "Exhale on a steady SH — smooth, even, no pulses.",
-        "Hold even SH for 5s, then rest; then 10s, 20s, 25s, 30s (ladder).",
-        "If the end collapses, start slightly softer next time.",
-        "Optional: after the ladder, transfer the same support idea to a soft /A/ (see Breath Support exercise)."
+        "Inhale comfortably, without a large gasp; sit if you feel unsteady.",
+        "Exhale on a gentle, even SH, without pulsing or squeezing the throat.",
+        "Try 5 seconds, then rest. Explore 10→20→25→30 seconds only if still easy; it is fine to leave longer rungs unfinished.",
+        "Stop the hiss while the neck and jaw are relaxed, even if the timer has not reached a rung.",
+        "Transfer: after resting, sing a soft /A/ for 3–5 comfortable seconds; compare ease, not maximum duration."
       ],
       tips: [
-        "Air is the raw material of the voice — learn to dose it for a whole phrase.",
-        "Uniform flow matters more than maximum seconds on day one.",
-        "Practice the ladder daily as a short warm-up.",
-        "Stop if dizzy; sit; never force the last seconds."
+        "The display is a sound/Space-timing aid, not a measurement of lung function or breath support.",
+        "Even, easy sound and transfer to a sung phrase matter more than your highest rung.",
+        "Rest between attempts; two or three comfortable tries can be enough.",
+        "If dizzy, breathless, hoarse, or sore: stop; do not push the last seconds."
       ],
       mistakes: [
-        "Big gasp inhale",
+        "Chasing the 30-second target while uncomfortable",
         "Pulsing or chopping the SH",
         "Neck/jaw push at the end",
-        "Skipping rests between rungs"
+        "Skipping rests or treating a Space-assisted timer as airflow measurement"
       ],
       metrics: [
-        { id: "rungs", label: "Ladder rungs cleared (5–30s)", type: "number", target: 5, unit: "" },
-        { id: "maxSH", label: "Longest even SH (sec)", type: "number", target: 30, unit: "s" },
+        { id: "rungs", label: "Comfortable ladder rungs (1 is enough)", labelEs: "Peldaños cómodos (1 basta)", type: "number", target: 1, unit: "" },
+        { id: "maxSH", label: "Comfortable SH length (5s baseline)", labelEs: "Duración cómoda del SH (base de 5 s)", type: "number", target: 5, unit: "s" },
         { id: "evenness", label: "Air evenness", type: "scale", min: 1, max: 5 }
       ],
       audio: { timer: true, record: true, piano: false, pitchViz: false },
@@ -902,28 +902,28 @@ window.VT_EXERCISES = {
       title: "Low Rib & Belly Breath (Apoyo)",
       durationMin: 4,
       original:
-        "Costo-abdominal breathing: inhale low through the nose, hold briefly, then spend the air slowly and evenly on a controlled exhale.",
+        "Low-rib breathing: inhale comfortably, without a deliberate breath-hold, then exhale softly and evenly.",
       research:
-        "Breathing strategies vary between singers. Notice comfortable lower-rib and abdominal movement and practise a steady exhale; no single expansion pattern or capacity percentage is proven best for everyone.",
+        "Breathing strategies vary across singers. This 4-in/6-out visual is an optional pacing cue, not a lung-function test or a uniquely proven optimal support pattern.",
       steps: [
-        "Stand, or sit on the edge of the chair with the legs open — nothing tight at the waist.",
-        "One hand on the lowest ribs, one on the belly. Let the shoulders and neck stay comfortable.",
-        "Inhale through the nose for 4 counts — the hands move out, the collarbones stay still.",
-        "Pause gently for up to 2 counts only if comfortable; do not close or press the throat.",
-        "Exhale for 8 counts, evenly, keeping the ribs wide as long as you can — that resistance is the apoyo.",
-        "Repeat the cycle; do not fill to bursting and do not empty to the vacuum feeling."
+        "Stand or sit with an easy posture and nothing tight around the waist.",
+        "Put a hand on the low ribs and another on the belly; observe movement instead of pushing them outward.",
+        "Inhale gently for up to 4 counts; small natural upper-chest movement is fine.",
+        "Change directly to exhaling; do not hold your breath or lock your throat.",
+        "Exhale softly for up to 6 counts; let the ribs return naturally instead of bracing them open.",
+        "Repeat only while comfortable. If the fixed screen rhythm feels too long, ignore it and breathe naturally or stop; it cannot measure your ribs."
       ],
       tips: [
-        "Chi sa ben respirare, sa ben cantare — air control is the base of every other technique here.",
-        "Different notes and dynamics require coordination, not simply more air or pressure.",
-        "Start the exhale softly, without a cough-like push or sustained abdominal bracing.",
-        "Lying down or half asleep you already breathe this way — you are recovering it, not learning it."
+        "A quiet, comfortable breath is sufficient for this exercise; do not aim for maximum lung filling.",
+        "Notes and dynamics require breath-voice coordination, not just stronger respiratory muscles.",
+        "The moving rib line is an illustration, not a reading from your body.",
+        "Transfer afterwards to a short, comfortable sung phrase; that is the relevant skill."
       ],
       mistakes: [
-        "Lifting the shoulders and collarbones (clavicular breathing)",
-        "Only widening the chest and ribs (intercostal breathing)",
+        "Forcing all movement into the belly and freezing the upper chest",
+        "Holding the breath or pressing the throat between phases",
         "Overfilling until the neck tightens",
-        "Collapsing the ribs on the first count of the exhale"
+        "Rigidly keeping the ribs wide or forcing the full count when uncomfortable"
       ],
       metrics: [
         { id: "cycles", label: "Complete breath cycles", labelEs: "Ciclos de respiración completos", type: "number", target: 8, unit: "" },
@@ -1349,24 +1349,24 @@ window.VT_EXERCISES = {
       number: 6,
       title: "Straw Phonation (SOVT)",
       durationMin: 6,
-      original: "Phonate through a narrow straw for efficient fold vibration and easy onset.",
+      original: "Make a gentle sound through a regular drinking straw, then transfer the easy tone to a vowel.",
       research:
-        "Straw phonation is a core SOVT tool used in voice therapy and singing pedagogy to reduce phonatory effort and improve resonance balance.",
+        "Semi-occluded vocal tract exercises can improve ease and selected voice measures, but the effect and useful resistance vary by singer; they are not a diagnosis or guaranteed range gain.",
       steps: [
-        "Use a drinking straw (or coffee stirrer for more resistance).",
-        "Sustain a comfortable pitch into the straw — air only through straw, cheeks soft.",
-        "Glide gently up and down through the straw.",
-        "Optional: straw in water for bubble feedback (steady bubbles = steady air).",
-        "Transfer: remove straw, sing same pitch on /u/ then /A/ with same easy feel."
+        "Use a regular clean drinking straw; do not start with a very narrow coffee stirrer.",
+        "Phonate a soft /u/-like tone with lips gently sealed around the straw; let air exit through it, not through the nose.",
+        "Try two or three small pitch glides, staying well within an easy range.",
+        "Optional water: keep the tip only about 1 cm below the surface and make gentle bubbles; stop if you feel pressure.",
+        "Transfer immediately: remove the straw, sing the same pitch on /u/ then /A/ for 3–5 easy seconds."
       ],
       tips: [
-        "No cheek puffing battles — soften and reduce pressure.",
-        "If blocked, widen straw or ease volume.",
-        "Great reset mid-practice if voice feels pressed."
+        "Use a clean straw and fresh water if using bubbles; never inhale water through the straw.",
+        "If airflow feels blocked or cheeks balloon, ease volume or choose a wider straw.",
+        "Compare a brief sung phrase before and after; benefits are individual, not guaranteed."
       ],
       mistakes: ["Blowing only air with no voice", "Throat squeeze", "Skipping transfer to open vowels"],
       metrics: [
-        { id: "minutes", label: "Minutes through straw", type: "number", target: 5, unit: "min" },
+        { id: "minutes", label: "Comfortable straw phonation (minutes)", labelEs: "Fonación cómoda con cañita (minutos)", type: "number", target: 2, unit: "min" },
         { id: "ease", label: "Ease after transfer", type: "scale", min: 1, max: 5 },
         { id: "steadiness", label: "Air steadiness", type: "scale", min: 1, max: 5 }
       ],
@@ -1415,22 +1415,22 @@ window.VT_EXERCISES = {
       original:
         "Steady support air on unvoiced S (or SH), then the same feel on voiced /A/ — great after the SH ladder warm-up.",
       research:
-        "Steady airflow underpins free, non-breathy tone. Unvoiced S/SH drills isolate support before you add voice.",
+        "S then /A/ is a task-specific coordination drill, not a direct measure of respiratory support. Reviews find respiratory-exercise benefits depend on individual voice needs and transfer to singing.",
       steps: [
-        "Warm-up option: complete the SH air-dosing ladder first.",
-        "Inhale 3 counts (low, quiet expansion through the nose).",
-        "Exhale on a steady ‘ssss’ (or SH) as long as even — not blasts.",
-        "Log seconds of even S. Rest. Repeat aiming +1–2s.",
-        "Then: same inhale → sustained /A/ with the same support feel."
+        "Optional: warm up with a few easy SH sounds, not a maximum-duration challenge.",
+        "Inhale quietly and comfortably; do not overfill or hold your breath.",
+        "Exhale on a gentle 'ssss' (or SH) for about 4–6 easy seconds, then stop and rest.",
+        "Repeat twice with steady comfort; the timer reports detected sound or Space input, not actual airflow.",
+        "After each S, sing /A/ on a comfortable note for 4–6 seconds; compare ease and steadiness without chasing a longer hold."
       ],
       tips: [
-        "Ribs stay buoyant; don’t collapse chest at the end.",
-        "Start softer to finish even.",
-        "Air dosing for whole phrases starts here — not only loud singing."
+        "Allow the ribs to move naturally; do not brace the chest or squeeze the abdomen.",
+        "Start softly and end before the neck or throat begins to work hard.",
+        "Transfer to one short song phrase; a longer S alone is not evidence of better singing."
       ],
-      mistakes: ["Big gasp inhale", "Pushing last air with neck", "Breathy dump on /A/"],
+      mistakes: ["Big gasp or deliberate breath-hold", "Pushing for more seconds with the neck", "Breathy or pressed /A/"],
       metrics: [
-        { id: "maxS", label: "Longest even S (sec)", type: "number", target: 20, unit: "s" },
+        { id: "maxS", label: "Longest comfortable S (sec; timer proxy)", labelEs: "S cómoda más larga (s; cronómetro estimado)", type: "number", target: 6, unit: "s" },
         { id: "evenness", label: "Air evenness", type: "scale", min: 1, max: 5 },
         { id: "transferA", label: "Transfer to /A/", type: "scale", min: 1, max: 5 }
       ],
@@ -1448,19 +1448,20 @@ window.VT_EXERCISES = {
       original:
         "The piano plays a note; you match it on /A/ — listen fully first, then sing.",
       research:
-        "Matching pitch trains both your ear and your production. Difficulties often improve when you slow down and listen before you phonate.",
+        "Matching a pitch trains auditory-motor coordination. The app's pitch trace is an approximate microphone estimate: natural vibrato, accompaniment and noise can alter its 'stability' reading.",
       steps: [
         "Turn on Sustain (3–5s) and the pitch highway.",
         "Play a single reference; listen fully before you sing.",
-        "Reproduce the note on /A/; watch the voice dot vs the target lane.",
-        "Aim: near center (accuracy) and stable band (precision).",
-        "Lock 8 solid matches across mid-low notes."
+        "Sing a soft, comfortable /A/ for about 3–4 seconds; listen first, then glance at the voice dot and target lane.",
+        "For this drill, aim for a calm pitch center without holding your throat rigid; vibrato is not automatically a flaw.",
+        "Try up to 8 mid-low notes with rests; stop early if the tone becomes pressed or tiring."
       ],
       tips: [
         "The ear can be trained — listen carefully before you phonate.",
-        "Accuracy = average near target; precision = low wobble.",
-        "If sharp/flat, small mental lift/drop — not throat shove.",
-        "Don’t fix pitch by singing louder."
+        "The pitch center is different from the periodic motion of intentional vibrato; the display cannot diagnose either.",
+        "Use headphones for the reference if speaker bleed distorts tracking, but keep monitoring your voice comfortably.",
+        "If sharp or flat, listen again; avoid changing pitch through throat pressure.",
+        "Do not fix pitch by singing louder; compare recordings at a similar distance and volume."
       ],
       mistakes: [
         "Singing before finishing listening",

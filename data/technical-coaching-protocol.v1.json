@@ -1,0 +1,309 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Educational guided singing practice; not clinical therapy, diagnosis or proof of efficacy.",
+  "status": "PILOT_NOT_CLINICALLY_VALIDATED",
+  "reviewDate": "2026-11-06",
+  "stopRule": {
+    "es": "Detente ante dolor, mareo, dificultad para respirar, empeoramiento de ronquera o esfuerzo creciente. No persigas récords de duración ni volumen.",
+    "en": "Stop for pain, dizziness, breathing difficulty, worsening hoarseness or increasing effort. Never chase maximum duration or volume.",
+    "medical": "If dysphonia persists or red flags appear, consult an ENT/voice specialist; urgent breathing symptoms require urgent care."
+  },
+  "references": {
+    "TITZE06": {
+      "url": "https://pubmed.ncbi.nlm.nih.gov/16671856/",
+      "type": "mechanism",
+      "population": "theoretical/physiological"
+    },
+    "SOVT26": {
+      "url": "https://pubmed.ncbi.nlm.nih.gov/41896048/",
+      "type": "randomized-trial",
+      "population": "45 amateur choir singers (39 women, 6 men)"
+    },
+    "SOVT24": {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11567055/",
+      "type": "randomized-clinical-trial",
+      "population": "people with voice disorders"
+    },
+    "BREATH19": {
+      "url": "https://pubmed.ncbi.nlm.nih.gov/30819608/",
+      "type": "systematic-review",
+      "population": "mixed voice-disorder populations; not universal for healthy singers"
+    },
+    "VIBRATO24": {
+      "url": "https://pubmed.ncbi.nlm.nih.gov/39127534/",
+      "type": "physiological-comparison",
+      "population": "professionally trained singers"
+    },
+    "LEARNING23": {
+      "url": "https://pubmed.ncbi.nlm.nih.gov/37210322/",
+      "type": "motor-learning-study",
+      "population": "older adults; indirect for singers"
+    },
+    "ASSESS18": {
+      "url": "https://pubs.asha.org/doi/10.1044/2018_AJSLP-17-0009",
+      "type": "expert-protocol",
+      "population": "voice assessment"
+    },
+    "CLINIC18": {
+      "url": "https://pubmed.ncbi.nlm.nih.gov/29494316/",
+      "type": "clinical-guideline",
+      "population": "dysphonia evaluation"
+    },
+    "ASHA": {
+      "url": "https://www.asha.org/practice-portal/clinical-topics/voice-disorders/",
+      "type": "practice-portal",
+      "population": "clinical voice care"
+    }
+  },
+  "exercises": [
+    {
+      "id": "BREATH-OBSERVE",
+      "catalogId": "s18-costal-breath",
+      "delivery": "in-app",
+      "titleEs": "Respiración cómoda sin pausa",
+      "titleEn": "Comfortable breath without hold",
+      "goal": "Observe natural inhalation and exhalation without forcing an app pace.",
+      "dose": {
+        "repetitions": 3,
+        "phonationSeconds": 0,
+        "maxTrialSeconds": 10,
+        "restSeconds": 5
+      },
+      "stepsEs": [
+        "Observa el movimiento de las costillas bajas, sin empujar el abdomen.",
+        "Inspira y espira con comodidad. El ritmo visual 4–0–6 es opcional.",
+        "Interrumpe el ritmo visual si resulta incómodo."
+      ],
+      "stepsEn": [
+        "Observe low-rib motion without pushing the abdomen.",
+        "Breathe in and out comfortably; the 4–0–6 visual is optional.",
+        "Disregard the visual rhythm if uncomfortable."
+      ],
+      "transferEs": "Tras descansar, canta una frase corta sin forzar.",
+      "assessment": "Self-rated comfort only; the screen does not sense rib motion.",
+      "fallback": "No microphone needed.",
+      "evidence": [
+        "BREATH19",
+        "ASHA"
+      ]
+    },
+    {
+      "id": "SOVT-STRAW",
+      "catalogId": "s6-straw",
+      "delivery": "in-app",
+      "titleEs": "Cañita suave y transferencia",
+      "titleEn": "Gentle straw and transfer",
+      "goal": "Explore ease of phonation then immediately test an open vowel.",
+      "dose": {
+        "repetitions": 3,
+        "phonationSeconds": 5,
+        "maxTrialSeconds": 8,
+        "restSeconds": 8
+      },
+      "stepsEs": [
+        "Fonación suave y cómoda a través de una cañita común y limpia.",
+        "Haz un deslizamiento pequeño sin aumentar presión.",
+        "Retírala y canta /u/ y /a/ a la misma altura, cómodamente."
+      ],
+      "stepsEn": [
+        "Phonate softly through a regular clean drinking straw.",
+        "Try a small glide without increasing pressure.",
+        "Remove it and sing /u/ and /a/ at the same comfortable pitch."
+      ],
+      "transferEs": "Compara una frase de la canción antes y después, sin prometer mejora.",
+      "assessment": "Ease rating and teacher listening; mic pitch is not pressure.",
+      "fallback": "Use lip trills only if comfortable; recording optional.",
+      "evidence": [
+        "TITZE06",
+        "SOVT26",
+        "SOVT24"
+      ]
+    },
+    {
+      "id": "SOVT-HUM-TRANSFER",
+      "catalogId": "s7-humming",
+      "delivery": "manual-pilot",
+      "titleEs": "De /m/ a vocal y palabra",
+      "titleEn": "From /m/ to vowel and word",
+      "goal": "Transfer comfortable humming into intelligible sung text.",
+      "dose": {
+        "repetitions": 4,
+        "phonationSeconds": 4,
+        "maxTrialSeconds": 6,
+        "restSeconds": 6
+      },
+      "stepsEs": [
+        "Tararea /m/ muy suave en nota cómoda.",
+        "Abre de /m/ a /a/ sin intentar retener vibración nasal a la fuerza.",
+        "Canta una palabra y luego una frase al mismo volumen cómodo."
+      ],
+      "stepsEn": [
+        "Hum /m/ softly at a comfortable pitch.",
+        "Open from /m/ into /a/ without forcing nasal vibration.",
+        "Sing a word and then a phrase at the same comfortable loudness."
+      ],
+      "transferEs": "Evalúa inteligibilidad y esfuerzo con tu profesor.",
+      "assessment": "Subjective ease and intelligibility; no anatomical placement diagnosis.",
+      "fallback": "Listen and rate without microphone.",
+      "evidence": [
+        "SOVT26",
+        "TITZE06"
+      ]
+    },
+    {
+      "id": "FLOW-S-TO-A",
+      "catalogId": "s8-breath-support",
+      "delivery": "in-app",
+      "titleEs": "S suave seguida de /a/",
+      "titleEn": "Easy /s/ then /a/",
+      "goal": "Coordinate sound onset, comfortable exhalation and vocal phrasing.",
+      "dose": {
+        "repetitions": 2,
+        "phonationSeconds": 5,
+        "maxTrialSeconds": 6,
+        "restSeconds": 8
+      },
+      "stepsEs": [
+        "Suelta /s/ suave durante unos 4–6 s, sin perseguir máximos.",
+        "Descansa y canta /a/ en una altura cómoda durante 4–6 s.",
+        "Habla y canta una frase corta comparando comodidad."
+      ],
+      "stepsEn": [
+        "Produce an easy /s/ for roughly 4–6 seconds without chasing a maximum.",
+        "Rest and sing /a/ at a comfortable pitch for 4–6 seconds.",
+        "Speak and sing a short phrase, comparing ease."
+      ],
+      "transferEs": "Compara una frase, no la duración máxima de S.",
+      "assessment": "Timer is sound/keyboard proxy, not respiratory pressure or support.",
+      "fallback": "Space key measures button timing only; manual timing is acceptable.",
+      "evidence": [
+        "BREATH19",
+        "ASHA"
+      ]
+    },
+    {
+      "id": "PITCH-CENTER",
+      "catalogId": "s9-pitch-match",
+      "delivery": "in-app",
+      "titleEs": "Centro tonal sin tensión",
+      "titleEn": "Pitch center without tension",
+      "goal": "Match a reference pitch while permitting natural microvariation.",
+      "dose": {
+        "repetitions": 3,
+        "phonationSeconds": 4,
+        "maxTrialSeconds": 5,
+        "restSeconds": 8
+      },
+      "stepsEs": [
+        "Escucha la nota completa, dentro de tu tesitura cómoda.",
+        "Canta /a/ suave durante 3–4 s, sin fijar la mandíbula ni la garganta.",
+        "Compara oído y gráfica, ignorando picos aislados del detector."
+      ],
+      "stepsEn": [
+        "Listen to the whole note within your comfortable range.",
+        "Sing a soft /a/ for 3–4 seconds without fixing jaw or throat.",
+        "Compare listening with the trace; ignore isolated detector spikes."
+      ],
+      "transferEs": "Canta la nota dentro de una frase real.",
+      "assessment": "Pitch confidence and listening; not a vibrato diagnosis.",
+      "fallback": "Use a reference instrument and recording with teacher if mic fails.",
+      "evidence": [
+        "VIBRATO24",
+        "ASSESS18"
+      ]
+    },
+    {
+      "id": "VIBRATO-CHOICE",
+      "catalogId": "s9-pitch-match",
+      "delivery": "manual-pilot",
+      "titleEs": "Tres tomas: centro, vibrato libre, libre elección",
+      "titleEn": "Three takes: centered, natural vibrato, unconstrained",
+      "goal": "Differentiate intentional stylistic choices without forcing a straight tone.",
+      "dose": {
+        "repetitions": 3,
+        "phonationSeconds": 3,
+        "maxTrialSeconds": 5,
+        "restSeconds": 10
+      },
+      "stepsEs": [
+        "Toma 1: mantén un centro cómodo durante 2–3 s, sin bloquear la garganta.",
+        "Toma 2: permite el vibrato que salga naturalmente; no pulses abdomen ni mandíbula.",
+        "Toma 3: repite sin consigna; escucha las tres a ciegas con tu profesor."
+      ],
+      "stepsEn": [
+        "Take 1: sustain a comfortable pitch center 2–3 seconds without throat locking.",
+        "Take 2: allow natural vibrato; do not pump jaw or abdomen.",
+        "Take 3: sing without a constraint and compare blinded with your teacher."
+      ],
+      "transferEs": "Repite el contraste en el final de una frase de la canción.",
+      "assessment": "Teacher-audited choice/effort; never automatically grade vibrato as pathology.",
+      "fallback": "Recordings optional; listen live when microphone is unavailable.",
+      "evidence": [
+        "VIBRATO24",
+        "LEARNING23"
+      ]
+    },
+    {
+      "id": "REPERTOIRE-TRANSFER",
+      "catalogId": "s3-song-stanzas",
+      "delivery": "manual-pilot",
+      "titleEs": "Hablar → entonar → cantar",
+      "titleEn": "Speak → intone → sing",
+      "goal": "Transfer ease to musical phrasing and intelligible text.",
+      "dose": {
+        "repetitions": 3,
+        "phonationSeconds": 0,
+        "maxTrialSeconds": 20,
+        "restSeconds": 10
+      },
+      "stepsEs": [
+        "Marca una respiración natural al inicio de una frase breve.",
+        "Pronuncia la frase con intención y claridad.",
+        "Entónala y después cántala, sin subir la fuerza para compensar el volumen de pista."
+      ],
+      "stepsEn": [
+        "Mark a natural breath in a short phrase.",
+        "Speak the phrase clearly with intention.",
+        "Intone, then sing it; do not push to compete with backing-track loudness."
+      ],
+      "transferEs": "Pide evaluación A/B de claridad, esfuerzo e intención.",
+      "assessment": "Blind perceptual comparison; not a clinical voice score.",
+      "fallback": "Use teacher listening without automated pitch.",
+      "evidence": [
+        "LEARNING23",
+        "ASSESS18"
+      ]
+    },
+    {
+      "id": "STAGE-DUAL-TASK",
+      "catalogId": "s3-song-stanzas",
+      "delivery": "manual-pilot",
+      "titleEs": "Frase con gesto y mirada",
+      "titleEn": "Phrase with gesture and gaze",
+      "goal": "Retain vocal ease under gentle stage movement.",
+      "dose": {
+        "repetitions": 3,
+        "phonationSeconds": 0,
+        "maxTrialSeconds": 20,
+        "restSeconds": 15
+      },
+      "stepsEs": [
+        "Primera toma: frase cantada quieto, a volumen cómodo.",
+        "Segunda: añade un gesto sencillo y mirada al público sin contener el aire.",
+        "Tercera: compara ambas tomas, retirando movimientos si elevan el esfuerzo."
+      ],
+      "stepsEn": [
+        "Take 1: sing a short phrase standing comfortably.",
+        "Take 2: add one small gesture and audience gaze without breath holding.",
+        "Take 3: compare and remove movement that increases effort."
+      ],
+      "transferEs": "Usa una frase de tu actuación sin cubrirla con instrumental alto.",
+      "assessment": "Teacher perceptual rating and self-rated effort.",
+      "fallback": "Video optional; no microphone is needed.",
+      "evidence": [
+        "LEARNING23",
+        "ASSESS18"
+      ]
+    }
+  ]
+}

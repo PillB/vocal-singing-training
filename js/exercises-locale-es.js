@@ -480,26 +480,26 @@
     ]
   },
   "s15-sh-air-ladder": {
-    "original": "Inhala por la nariz y exhala SH pareja en peldaños 5→10→20→25→30 s.",
-    "research": "Sostener un SH suave (sin voz) entrena cómo dosificas el aire — la materia prima del canto — antes de añadir tono.",
+    "original": "Prueba un SH suave y parejo durante 5 s; los peldaños más largos son opcionales, no una competencia.",
+    "research": "Un SH sin voz sirve para practicar el ritmo de salida del aire; acumular segundos no demuestra mejor apoyo al cantar. Hay que transferir la sensación a una frase cantada.",
     "steps": [
-      "Inhala suave por la nariz (expansión baja, sin jadeo).",
-      "Exhala en un SH constante: liso, parejo, sin pulsos.",
-      "Mantén SH pareja 5 s, descansa; luego 10, 20, 25 y 30 s (escalera).",
-      "Si el final se derrumba, la próxima vez empieza un poco más suave.",
-      "Opcional: después, misma sensación de apoyo en una /A/ suave."
+      "Inhala con comodidad, sin un gran jadeo; si te sientes inestable, siéntate.",
+      "Exhala con un SH suave y parejo, sin pulsos ni apretar la garganta.",
+      "Prueba 5 s y descansa. Explora 10→20→25→30 s solo si te sigue resultando fácil; puedes saltarte los peldaños más largos.",
+      "Termina el SH mientras el cuello y la mandíbula sigan relajados, aunque no completes el tiempo del peldaño.",
+      "Transfiere: tras descansar, canta una /A/ suave durante 3–5 s cómodos y compara facilidad, no duración máxima."
     ],
     "tips": [
-      "El aire es la materia prima de la voz: aprende a dosificarlo para toda la frase.",
-      "El flujo uniforme importa más que el récord de segundos el primer día.",
-      "Practica la escalera a diario como calentamiento corto.",
-      "Para si hay mareo; siéntate; no fuerces los últimos segundos."
+      "La pantalla cronometra sonido o pulsaciones de Espacio; no mide función pulmonar ni apoyo fisiológico.",
+      "Importan más la comodidad, la uniformidad y el paso a una frase cantada que el último peldaño.",
+      "Descansa entre intentos; dos o tres repeticiones cómodas pueden bastar.",
+      "Si hay mareo, falta de aire, ronquera o dolor: detente; no fuerces los últimos segundos."
     ],
     "mistakes": [
-      "Inhalación de jadeo grande",
+      "Perseguir los 30 s aunque resulte incómodo",
       "SH a pulsos o a trozos",
       "Empujar cuello/mandíbula al final",
-      "Saltar el descanso entre peldaños"
+      "Saltarse descansos o confundir la tecla Espacio con una medición del aire"
     ]
   },
   "s16-major-scale-coord": {
@@ -568,18 +568,18 @@
   },
   "s6-straw": {
     "original": "Fonación con pajilla (SOVT): vibración eficiente e inicio fácil.",
-    "research": "La pajilla es una herramienta SOVT clásica de terapia y pedagogía vocal para menos esfuerzo y mejor balance.",
+    "research": "Los ejercicios semiocluidos pueden favorecer la comodidad y algunas medidas vocales, pero su efecto y la resistencia útil varían entre cantantes: no diagnostican ni garantizan ampliar el rango.",
     "steps": [
-      "Usa una pajilla (o agitador de café para más resistencia).",
-      "Sostén un tono cómodo en la pajilla — aire solo por la pajilla, mejillas suaves.",
-      "Desliza suave arriba y abajo por la pajilla.",
-      "Opcional: pajilla en agua (burbujas constantes = aire constante).",
-      "Transfiere: quita la pajilla, canta el mismo tono en /u/ y luego /A/ con la misma facilidad."
+      "Usa una cañita o sorbete común y limpio; no empieces con un agitador de café muy angosto.",
+      "Emite un tono cómodo y suave a través de la cañita; el aire sale por ella y las mejillas quedan relajadas.",
+      "Haz dos o tres deslizamientos cortos, dentro de un rango fácil.",
+      "Agua opcional: introduce la punta apenas 1 cm bajo la superficie y haz burbujas suaves; para si sientes presión.",
+      "Transfiere de inmediato: quita la cañita, canta el mismo tono en /u/ y luego /A/ durante 3–5 s cómodos."
     ],
     "tips": [
-      "Sin pelear con las mejillas hinchadas — suaviza y reduce presión.",
-      "Si se bloquea, usa pajilla más ancha o menos volumen.",
-      "Excelente reinicio si la voz se siente apretada."
+      "Usa una cañita limpia y agua fresca; nunca inhales agua por la cañita.",
+      "Si se bloquea la salida o se hinchan las mejillas, baja la intensidad o usa una cañita más ancha.",
+      "Compara una frase cantada corta antes y después; el beneficio es individual, no está garantizado."
     ],
     "mistakes": [
       "Solo soplar sin voz",
@@ -610,40 +610,41 @@
   },
   "s8-breath-support": {
     "original": "Apoyo de aire con S (o SH) sostenida y luego /A/ — ideal tras la escalera de SH.",
-    "research": "El flujo constante sostiene un tono no soplado. S/SH sin voz aísla el apoyo antes de añadir fonación.",
+    "research": "S seguida de /A/ es una tarea de coordinación, no una medición directa del apoyo respiratorio. Las revisiones encuentran beneficios variables según la necesidad de cada voz y su transferencia al canto.",
     "steps": [
-      "Opcional: completa primero la escalera de aire SH.",
-      "Inhala en 3 tiempos (expansión baja y quieta por la nariz).",
-      "Exhala en una “ssss” (o SH) pareja el mayor tiempo posible — sin ráfagas.",
-      "Anota segundos de S pareja. Descansa. Repite buscando +1–2 s.",
-      "Luego: misma inhalación → /A/ sostenida con la misma sensación de apoyo."
+      "Opcional: calienta con algunos SH suaves, sin buscar duración máxima.",
+      "Inhala tranquilo y con comodidad; no te llenes de más ni retengas el aire.",
+      "Exhala con una “ssss” (o SH) suave durante unos 4–6 s cómodos; termina y descansa.",
+      "Repite dos veces con facilidad. El reloj estima sonido o pulsaciones de Espacio, no flujo real de aire.",
+      "Después de cada S, canta una /A/ en una nota cómoda durante 4–6 s; compara facilidad y estabilidad sin alargar a la fuerza."
     ],
     "tips": [
-      "Costillas boyantes; no colapses el pecho al final.",
-      "Empieza más suave para terminar parejo.",
-      "Dosificar aire para frases enteras empieza aquí."
+      "Deja que las costillas se muevan con naturalidad; no bloquees el pecho ni aprietes el abdomen.",
+      "Empieza suave y termina antes de que el cuello o la garganta tengan que esforzarse.",
+      "Aplica después la sensación a una frase corta de una canción: una S larga no demuestra mejor canto."
     ],
     "mistakes": [
-      "Inhalación de jadeo grande",
-      "Empujar el último aire con el cuello",
-      "Descarga soplada en el /A/"
+      "Jadear o retener el aire a propósito",
+      "Empujar más segundos con el cuello",
+      "/A/ soplada o apretada"
     ]
   },
   "s9-pitch-match": {
     "original": "El piano da una nota; tú la igualas en /A/ — primero escucha, luego canta.",
-    "research": "Igualar el tono entrena oído y producción. Suele mejorar si bajas la prisa y escuchas antes de fonar.",
+    "research": "Igualar una nota entrena la coordinación entre oído y voz. La curva del micrófono es aproximada: el vibrato natural, la pista y el ruido pueden alterar su lectura de «estabilidad».",
     "steps": [
       "Activa Sostener (3–5 s) y la autopista de pitch.",
       "Toca una referencia; escucha completa antes de cantar.",
-      "Reproduce la nota en /A/; mira el punto de voz vs el carril objetivo.",
-      "Meta: cerca del centro (exactitud) y banda estable (precisión).",
-      "Logra 8 emparejamientos sólidos en notas medio-bajas."
+      "Canta una /A/ suave y cómoda unos 3–4 s; primero escucha y luego mira un momento el punto de voz y el carril.",
+      "En este ejercicio busca un centro de afinación tranquilo, sin poner rígida la garganta; el vibrato no es un defecto automático.",
+      "Prueba hasta 8 notas medio-graves con descansos; para antes si aparece presión o cansancio."
     ],
     "tips": [
       "El oído se entrena: escucha bien antes de fonar.",
-      "Exactitud = media cerca del objetivo; precisión = poco temblor.",
-      "Si vas agudo/grave, ajusta mentalmente — no empujes la garganta.",
-      "No “arregles” la afinación cantando más fuerte."
+      "El centro de afinación es distinto de la oscilación periódica del vibrato intencional; la pantalla no diagnostica ninguno.",
+      "Usa audífonos para escuchar la referencia si el parlante contamina el detector, pero escucha tu propia voz con comodidad.",
+      "Si vas agudo o grave, vuelve a escuchar; evita ajustar apretando la garganta.",
+      "No «arregles» la afinación cantando más fuerte; compara grabaciones a distancia y volumen similares."
     ],
     "mistakes": [
       "Cantar antes de terminar de oír",
@@ -781,27 +782,27 @@
     ]
   },
   "s18-costal-breath": {
-    "original": "Respiración costo-abdominal: inhala bajo por la nariz, retén un momento y gasta el aire despacio y parejo en la espiración.",
-    "research": "Los patrones de respiración varían entre cantantes. Explora el movimiento cómodo de las costillas bajas y el abdomen, y una espiración pareja; no existe un porcentaje de capacidad ni una técnica única demostrada como óptima para todos.",
+    "original": "Respiración costo-abdominal: inhala bajo con comodidad, sin retener el aire, y luego exhala suave y parejo.",
+    "research": "Los patrones respiratorios varían entre cantantes. La guía visual 4-in/6-out es una opción de ritmo, no una prueba pulmonar ni una técnica óptima demostrada para todos.",
     "steps": [
-      "De pie, o en el borde de la silla con las piernas abiertas — nada apretado en la cintura.",
-      "Una mano en las costillas bajas y otra en el abdomen. Mantén cómodos el cuello y los hombros.",
-      "Inhala por la nariz en 4 tiempos: las manos se abren, las clavículas se quedan quietas.",
-      "Haz una pausa suave de hasta 2 tiempos solo si resulta cómoda; no cierres ni aprietes la garganta.",
-      "Espira en 8 tiempos, parejo, manteniendo las costillas anchas todo lo que puedas — esa resistencia es el apoyo.",
-      "Repite el ciclo; ni hinchar hasta reventar ni vaciar hasta la sensación de vacío."
+      "De pie o sentado, adopta una postura cómoda y deja libre la cintura.",
+      "Pon una mano en las costillas bajas y otra en el abdomen: observa el movimiento, sin forzar las manos hacia fuera.",
+      "Inhala suavemente durante hasta 4 tiempos; es normal que el tórax superior se mueva un poco.",
+      "Pasa directamente a espirar; no retengas el aire ni bloquees la garganta.",
+      "Exhala suave durante hasta 6 tiempos; deja que las costillas regresen naturalmente, sin mantenerlas rígidas.",
+      "Repite solo mientras sea cómodo. Si el ritmo fijo de la pantalla es muy largo, ignóralo y respira natural o detente: no mide tus costillas."
     ],
     "tips": [
-      "Chi sa ben respirare, sa ben cantare: el control del aire es la base de toda la técnica vocal.",
-      "Las notas y dinámicas requieren coordinación, no simplemente más aire o presión.",
-      "Inicia la espiración suavemente, sin empujar como en una tos ni tensar el abdomen de forma sostenida.",
-      "Tumbado o dormido ya respiras así: lo estás recuperando, no aprendiéndolo de cero."
+      "Basta una respiración tranquila y cómoda: no busques llenar los pulmones al máximo.",
+      "Las notas y dinámicas requieren coordinación entre aire y voz, no solo músculos respiratorios más fuertes.",
+      "La línea de costillas es una ilustración, no una lectura de tu cuerpo.",
+      "Transfiere después a una frase cantada breve: esa es la habilidad relevante."
     ],
     "mistakes": [
-      "Levantar hombros y clavículas (respiración clavicular)",
-      "Ensanchar solo el tórax y las costillas (respiración intercostal)",
+      "Forzar todo el movimiento al abdomen e inmovilizar el tórax superior",
+      "Retener el aire o apretar la garganta entre fases",
       "Llenar de más hasta que se tensa el cuello",
-      "Dejar caer las costillas en el primer tiempo de la espiración"
+      "Mantener rígidas las costillas o completar la cuenta aun con incomodidad"
     ]
   },
   "s19-soft-palate-surprise": {

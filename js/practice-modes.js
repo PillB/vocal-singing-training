@@ -6803,8 +6803,8 @@
           <span data-say></span>
         </div>
         <p class="mode-meta muted">${L(
-          "Una S sin voz, larga y pareja; respira; luego la misma duración tranquila en una /A/ cantada. Medimos cuánto dura cada una y lo pareja que suena.",
-          "A long, even S with no voice; breathe; then the same easy length on a sung /A/. We time each and show how even it sounds."
+          "S suave ~4–6 s; descansa; /A/ tranquila ~4–6 s. Cronometramos sonido detectado o Espacio, no el apoyo ni el flujo real de aire.",
+          "Easy S ~4–6 s; rest; easy /A/ ~4–6 s. We time detected sound or Space, not breath support or actual airflow."
         )}</p>
       `;
       this.$("[data-sw]")?.addEventListener("click", () => this._switch());
@@ -6949,7 +6949,7 @@
       if (st.bestS >= 1) patches.maxS = Math.round(st.bestS);
       const summary =
         st.bestS < 0.5 && st.bestA < 0.5
-          ? L("Sin S ni /A/ todavía — una S larga y sin voz para empezar", "No S or /A/ yet — start with a long S, no voice")
+          ? L("Sin S ni /A/ todavía — empieza con una S cómoda y suave", "No S or /A/ yet — start with an easy, gentle S")
           : L(`S ${V.fmtSec(st.bestS, 1)} · /A/ ${V.fmtSec(st.bestA, 1)}`, `S ${V.fmtSec(st.bestS, 1)} · /A/ ${V.fmtSec(st.bestA, 1)}`);
       const say = this.$("[data-say]");
       if (say) say.textContent = summary;
@@ -6988,14 +6988,14 @@
           <div class="mode-title">${L("Escalera de aire SH", "SH air-dosing ladder")}</div>
         </div>
         <div class="viz-words">
-          <span class="mode-phase" data-ph>${L("Meta", "Target")}: <strong data-t>${target}</strong>s · ${L("SH pareja", "even SH")}</span>
+          <span class="mode-phase" data-ph><span data-goal>${L("Inicio", "Starter")}</span>: <strong data-t>${target}</strong>s · ${L("SH pareja", "even SH")}</span>
           <span class="mode-big" data-h>0.0s</span>
           <span>${L("Peldaños", "Rungs")} <strong data-c>0</strong>/${this.state.rungs.length} · ${L("Mejor", "Best")} <strong data-b>0</strong>s</span>
           <span data-say></span>
         </div>
         <p class="mode-meta muted" data-airhint>${L(
-          "Inhala por la nariz · exhala SH constante · sin pulsos. Si no cuenta, sube Mic o mantén Espacio.",
-          "Nose inhale · steady SH · no pulses. If it won’t count, raise Mic or hold Space."
+          "5 s cómodos bastan; más tiempo es opcional. Si no detecta el SH, ajusta Mic o usa Espacio (solo cronometra, no mide aire).",
+          "5 comfortable seconds are enough; more is optional. If SH is undetected, adjust Mic or use Space (a timer, not airflow measurement)."
         )}</p>
       `;
       this._mountViz();
@@ -7105,6 +7105,7 @@
       set("[data-b]", st.best.toFixed(1));
       set("[data-c]", String(st.cleared));
       set("[data-t]", String(st.rungs[st.i]));
+      set("[data-goal]", st.i > 0 ? L("Opcional", "Optional") : L("Inicio", "Starter"));
     },
     onStop() {
       const st = this.state;
@@ -7128,7 +7129,7 @@
       const summary =
         st.best < 0.5
           ? L("Sin SH todavía — inhala por la nariz y una SH pareja", "No SH yet — breathe in through the nose, then an even SH")
-          : L(`Escalera SH ${st.cleared}/${n} · mejor ${V.fmtSec(st.best, 1)}`, `SH ladder ${st.cleared}/${n} · best ${V.fmtSec(st.best, 1)}`);
+          : L(`Escalera SH ${st.cleared}/${n} (largos opcionales) · mejor ${V.fmtSec(st.best, 1)}`, `SH ladder ${st.cleared}/${n} (longer optional) · best ${V.fmtSec(st.best, 1)}`);
       const say = this.$("[data-say]");
       if (say) say.textContent = summary;
       return { patches, summary };
@@ -8638,17 +8639,16 @@
   });
 
   /**
-   * s18 costo-abdominal breath — paced inhale / retention / exhale. The belt bar
-   * is the low expansion: it fills on the inhale, holds, then empties slowly so
-   * the ribs have something to resist against (apoyo).
+   * s18 easy paced inhale / exhale. The rib trace is an illustration, never
+   * a sensor reading or a mandate to brace the chest open.
    */
   Modes.breathCycle = baseMode({
     id: "breathCycle",
     render() {
       const p = this.profile.pattern || {};
       this.state.inSec = p.in || 4;
-      this.state.holdSec = p.hold != null ? p.hold : 2;
-      this.state.outSec = p.out || 8;
+      this.state.holdSec = p.hold != null ? p.hold : 0;
+      this.state.outSec = p.out || 6;
       this.state.stage = 0; // 0 in · 1 hold · 2 out
       this.state.t = 0;
       this.state.clock = 0;
@@ -8662,8 +8662,8 @@
         </div>
         <p class="mode-meta"><span data-cy-k>${L("Ciclo", "Cycle")}</span> <strong data-cy>1</strong> · ${this.state
           .inSec}–${this.state.holdSec}–${this.state.outSec} · ${L(
-          "manos en costillas bajas y abdomen; los hombros no suben",
-          "hands on the low ribs and belly; the shoulders stay down"
+          "manos en costillas bajas y abdomen; hombros cómodos",
+          "hands on the low ribs and belly; shoulders comfortable"
         )}</p>
       `;
       // A scrolling breath wave with "now" fixed and the next breath visible
@@ -8675,12 +8675,12 @@
       return [this.state.inSec, this.state.holdSec, this.state.outSec];
     },
     _labels() {
-      // The hold is a suspension with the throat open, not a locked breath:
-      // a held glottis primes the hard onset the next exercises undo.
+      // No hold is scheduled in the standard exercise. A deliberate custom
+      // profile may supply a nonzero hold, but the default never imposes one.
       return [
         L("Inhala por la nariz", "Inhale through the nose"),
         L("Suspende · garganta abierta", "Suspend · throat open"),
-        L("Exhala parejo · costillas anchas", "Even exhale · ribs wide")
+        L("Exhala suave · costillas regresan", "Exhale gently · ribs return")
       ];
     },
     _mountViz() {
@@ -8704,25 +8704,24 @@
         const y = st === 0 ? lo + (hi - lo) * ease(f) : st === 1 ? hi : hi - (hi - lo) * f;
         return { y, lo: y - 0.045, hi: y + 0.045 };
       };
-      // The ribs: they open with the air, then stay wide while the air leaves
-      // and only let go at the end — the apoyo this drill is for. A model of
-      // what to do, drawn as a guide; nothing measures it.
+      // The ribs: gradual return, not a forceful lock at maximum expansion.
+      // This sketch is not individualized physiology or a measurement.
       const ribs = (t) => {
         const [st, f] = phaseAt(t);
         if (st === 0) return lo + 0.05 + (hi - lo - 0.05) * ease(f);
         if (st === 1) return hi;
-        return f < 0.7 ? hi - 0.06 * (f / 0.7) : hi - 0.06 - (hi - lo - 0.06) * ease((f - 0.7) / 0.3) * 0.85;
+        return hi - (hi - lo) * ease(f) * 0.85;
       };
       this.viz?.destroy?.();
       this.viz = new V.Timeline(this.hud, {
         seconds: Math.max(10, Math.min(18, cyc * 1.15)),
         minPxPerSec: 26,
         nowAt: 0.4,
-        top: L("lleno · anchas", "full · wide"),
-        bottom: L("vacío", "empty"),
+        top: L("inspira", "inhale"),
+        bottom: L("espira", "exhale"),
         label: L(
-          "Guía de respiración: la banda verde es el aire, sube al inhalar y baja parejo al exhalar; la línea discontinua son las costillas, que se quedan anchas casi hasta el final",
-          "Breath guide: the green band is the air, rising on the inhale and falling evenly on the exhale; the dashed line is the ribs, which stay wide almost to the end"
+          "Guía ilustrativa: la banda verde marca el ritmo de inspiración y espiración; la línea discontinua sugiere un regreso gradual de las costillas. No es una medición.",
+          "Illustrated guide: the green band paces inhale and exhale; the dashed line suggests gradual rib return. This is not a measurement."
         ),
         tagColors: { 0: V.C.target },
         captionHidden: true,

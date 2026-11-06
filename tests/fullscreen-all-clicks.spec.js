@@ -7,12 +7,21 @@ const { test, expect } = require("@playwright/test");
 const { boot, openExercise } = require("./helpers/e2e");
 const { practiceProbe, listExerciseControls } = require("./helpers/ui-forensics");
 
-const EXERCISES = [
+const ALL_EXERCISES = [
   "v1-diction",
   "s15-sh-air-ladder",
   "s9-pitch-match",
   "s2-solfege-chords"
 ];
+
+// Each scheduled run must test one exercise within the existing 360s cap.
+// No filter means all four, useful for a local, deliberately long inspection.
+const EXERCISES = process.env.FULLSCREEN_IDS
+  ? process.env.FULLSCREEN_IDS.split(",").map((id) => id.trim()).filter(Boolean)
+  : ALL_EXERCISES;
+if (EXERCISES.length === 0 || EXERCISES.some((id) => !ALL_EXERCISES.includes(id))) {
+  throw new Error("FULLSCREEN_IDS must contain known nonempty exercise IDs");
+}
 
 const SKIP = new Set([
   "btn-back-home",

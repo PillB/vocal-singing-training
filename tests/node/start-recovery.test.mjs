@@ -127,6 +127,56 @@ test("a mute on the last take's microphone never ends the new take", async () =>
   env.engine.stop();
 });
 
+// Codex review on PR #32. The last take's track keeps its listeners, and while its recorder flushes it is not even
+// stopped, so an iOS route switch mutes and unmutes it beside the new one. Its listeners shared the engine's one
+// mute timer: an unmute (or a later mute) of the old track cancelled the new take's check, and a sustained mute
+// on the new microphone was never reported, so the app never offered recovery.
+async function secondTake() {
+  const env = await liveEngine();
+  const old = env.prompts[0].track;
+  env.engine.stop();
+  const s = env.engine.start();
+  await settle();
+  env.prompts[1].grant();
+  await s;
+  env.statuses.length = 0;
+  return { env, old, track: env.prompts[1].track };
+}
+
+test("an unmute on the last take's microphone does not cancel the new take's mute check", async () => {
+  const { env, old, track } = await secondTake();
+  track.mute();
+  old.muted = false;
+  old.fire("unmute");
+  await env.clock.advance(1190);
+  assert.deepEqual(env.statuses, [], "still the 1.2 s grace for a route switch");
+  await env.clock.advance(20);
+  assert.deepEqual(env.statuses, ["mic-muted"], "the new microphone's sustained mute is reported");
+  env.engine.stop();
+});
+
+test("a mute on the last take's microphone after the new one's does not replace the new take's check", async () => {
+  const { env, old, track } = await secondTake();
+  track.mute();
+  await env.clock.advance(600);
+  old.mute(); // the same route switch reaches the old track a moment later
+  await env.clock.advance(610);
+  assert.deepEqual(env.statuses, ["mic-muted"], "reported 1.2 s after the new track muted, not pushed back by the old one");
+  env.engine.stop();
+});
+
+test("the new microphone's own unmute still cancels its mute check", async () => {
+  const { env, track } = await secondTake();
+  track.mute();
+  await env.clock.advance(600);
+  track.muted = false;
+  track.fire("unmute");
+  await env.clock.advance(2000);
+  assert.deepEqual(env.statuses, [], "a brief route-switch mute is not a lost microphone");
+  assert.equal(env.engine.running, true);
+  env.engine.stop();
+});
+
 test("Start on a running engine asks for no second microphone", async () => {
   const env = await liveEngine();
   await env.engine.start().catch(() => {});

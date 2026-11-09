@@ -489,7 +489,11 @@
         if (stillOwned()) this._status(kind);
       };
       track.addEventListener?.("ended", () => reportLoss("mic-ended"));
+      // The engine has one mute timer, and it is the live take's. A retired take's track keeps these listeners
+      // (and is not even stopped while its recorder flushes), so a route switch that mutes or unmutes it beside
+      // the new microphone must leave the new take's check alone, or a sustained mute is never reported.
       track.addEventListener?.("mute", () => {
+        if (!stillOwned()) return;
         // iOS briefly mutes on focus/audio-route switches; don't stop a take
         // for one transient sample, but never score through a sustained mute.
         clearTimeout(this._micMuteTimer);
@@ -497,7 +501,9 @@
           if (stillOwned() && track.muted) reportLoss("mic-muted");
         }, 1200);
       });
-      track.addEventListener?.("unmute", () => clearTimeout(this._micMuteTimer));
+      track.addEventListener?.("unmute", () => {
+        if (stillOwned()) clearTimeout(this._micMuteTimer);
+      });
       if (track.muted) {
         this._micMuteTimer = setTimeout(() => {
           if (stillOwned() && track.muted) reportLoss("mic-muted");

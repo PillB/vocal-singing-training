@@ -33,10 +33,43 @@ test("negative control: dropping or duplicating a sweep becomes a test failure",
   assert.notDeepEqual(matrixFiles(doubled), expected);
 });
 
+// qa/geometry is gitignored, so CI starts without it, and a report written before its folder is made fails ENOENT
+// (click-ui-formats did, nightly; headed-exercise-forensics did once the split left it without a spec that made
+// the folder first). Every sweep spec must make a report's folder, earlier in the file, than it first writes it.
+// The control used to delete the mkdir and check that the same regex no longer matched, which cannot fail; it now
+// moves, removes and comments out the mkdir and expects the detector to flag each.
+const code = (source) => source.split("\n").filter((l) => !/^\s*(\/\/|\/\*|\*)/.test(l)).join("\n");
+
+/** Each file variable written with fs.writeFileSync before an mkdirSync/ensureDir of its folder appears above it. */
+export function writtenBeforeItsFolder(source) {
+  const src = code(source);
+  const bad = new Set();
+  for (const w of src.matchAll(/fs\.writeFileSync\(([A-Za-z_$][\w$]*),/g)) {
+    const made = new RegExp(`(?:fs\\.mkdirSync|ensureDir)\\(path\\.dirname\\(${w[1].replace(/\$/g, "\\$")}\\)`).exec(src);
+    if (!made || made.index > w.index) bad.add(w[1]);
+  }
+  return [...bad];
+}
+
 test("headed sweep output directory exists before the first JSON write", () => {
-  assert.match(reportSpec, /fs\.mkdirSync\(path\.dirname\(REPORT\),\s*\{\s*recursive:\s*true\s*\}\)/);
-  const mutant = reportSpec.replace(/fs\.mkdirSync\(path\.dirname\(REPORT\),\s*\{\s*recursive:\s*true\s*\}\);/, "");
-  assert.doesNotMatch(mutant, /fs\.mkdirSync\(path\.dirname\(REPORT\),\s*\{\s*recursive:\s*true\s*\}\)/);
+  for (const file of expected) assert.deepEqual(writtenBeforeItsFolder(read(file)), [], file);
+  // The detector is not looking at nothing: these specs do write reports
+  assert.ok(expected.filter((file) => /fs\.writeFileSync\(/.test(read(file))).length >= 3);
+});
+
+test("negative control: a report folder made after the first write, or not at all, is caught", () => {
+  const mkdir = "fs.mkdirSync(path.dirname(REPORT), { recursive: true });\n";
+  assert.equal(reportSpec.split(mkdir).length, 2);
+  const firstWrite = reportSpec.indexOf("fs.writeFileSync(REPORT,");
+  const moved = reportSpec.replace(mkdir, "");
+  const at = moved.indexOf("fs.writeFileSync(REPORT,") + 1;
+  const after = moved.slice(0, moved.indexOf("\n", at) + 1) + mkdir + moved.slice(moved.indexOf("\n", at) + 1);
+  assert.ok(firstWrite > 0);
+  assert.deepEqual(writtenBeforeItsFolder(after), ["REPORT"]);
+  assert.deepEqual(writtenBeforeItsFolder(moved), ["REPORT"]);
+  assert.deepEqual(writtenBeforeItsFolder(reportSpec.replace(mkdir, "// " + mkdir)), ["REPORT"]);
+  const forensics = read("tests/headed-exercise-forensics.spec.js");
+  assert.deepEqual(writtenBeforeItsFolder(forensics.replace("ensureDir(path.dirname(REPORT_JSON));\n", "")), ["REPORT_JSON"]);
 });
 
 test("PR smoke watches the report writer and fullscreen without running all 47 routes", () => {

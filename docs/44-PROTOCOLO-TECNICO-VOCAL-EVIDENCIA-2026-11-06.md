@@ -107,7 +107,7 @@ Los criterios 2/3 son **umbrales operativos de esta práctica**, no puntos de co
 ### Resultado de controles locales (2026-11-06)
 
 - `npm run test:core`: **534 tests aprobados**, sin fallos ni tests omitidos; incluye paridad de las 47 fichas y el límite de complejidad.
-- `node qa/mutate.mjs coaching`: **C1–C5 eliminados** por las nuevas pruebas al plantar fallas intencionales en código de producción.
+- `node qa/mutate.mjs coaching`: **VC1–VC5 eliminados** por las nuevas pruebas al plantar fallas intencionales en código de producción.
 - `tests/technical-coaching.spec.js`: tres pruebas de interfaz declaradas para las guías ES/EN y el cambio `4 → 0 → 6` en 390 px, **aún no ejecutadas**: faltó el ejecutable Chromium en este entorno y falló su descarga. El éxito de Node no reemplaza el navegador.
 - Pendientes fuera de CI: grabaciones reales, iPhone Safari, VoiceOver, zoom 200 %, accesibilidad de pantalla pequeña, evaluación ciega por profesor y verificación de la versión desplegada.
 

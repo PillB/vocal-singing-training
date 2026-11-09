@@ -215,11 +215,15 @@ jobs:
         run: xvfb-run -a npx playwright test ${{ matrix.specs }} --project=sweep --workers=1 --global-timeout=4800000
       - name: Fullscreen mouse controls isolated per exercise
         if: matrix.group == 'fullscreen'
+        # The step shell is bash -e: without "|| rc=1" the first red exercise ended the step, and the
+        # exercises after it and the live mouse demo never ran. Each runs; the step is red if any was.
         run: |
+          rc=0
           for id in v1-diction s15-sh-air-ladder s9-pitch-match s2-solfege-chords; do
-            FULLSCREEN_IDS="$id" xvfb-run -a npx playwright test tests/fullscreen-all-clicks.spec.js --project=sweep --workers=1 --global-timeout=450000 --output="test-results/fullscreen-$id"
+            FULLSCREEN_IDS="$id" xvfb-run -a npx playwright test tests/fullscreen-all-clicks.spec.js --project=sweep --workers=1 --global-timeout=450000 --output="test-results/fullscreen-$id" || rc=1
           done
-          xvfb-run -a npx playwright test tests/live-mouse-demo.spec.js --project=sweep --workers=1 --global-timeout=1200000 --output="test-results/live-mouse"
+          xvfb-run -a npx playwright test tests/live-mouse-demo.spec.js --project=sweep --workers=1 --global-timeout=1200000 --output="test-results/live-mouse" || rc=1
+          exit $rc
       - name: Live GitHub Pages smoke
         if: always() && matrix.group == 'fullscreen'
         run: LIVE_PAGES=1 xvfb-run -a npx playwright test tests/live-pages.spec.js --project=chromium --workers=1

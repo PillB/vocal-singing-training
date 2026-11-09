@@ -46,3 +46,31 @@ test("PR smoke watches the report writer and fullscreen without running all 47 r
   assert.match(workflow, /Six-format real-mouse report smoke/);
   assert.match(workflow, /Fullscreen mouse and control smoke/);
 });
+
+// The fullscreen group runs one exercise per process, in a shell loop under bash -e. A loop line without
+// "|| rc=1" ends the step at the first red exercise and the rest never run; a list that differs from the
+// spec's ALL_EXERCISES leaves an exercise out of every nightly run.
+function fullscreenStep(yaml) {
+  const at = yaml.indexOf("name: Fullscreen mouse controls isolated per exercise");
+  return yaml.slice(at, yaml.indexOf("- name:", at + 1));
+}
+const fullscreenSpec = read("tests/fullscreen-all-clicks.spec.js");
+const specIds = [...fullscreenSpec.match(/const ALL_EXERCISES = \[([^\]]+)\]/)[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+
+export function loopRunsEverything(step, ids) {
+  const loop = step.match(/for id in ([^;]+); do/);
+  const runs = step.split("\n").filter((l) => /npx playwright test/.test(l));
+  return !!loop && loop[1].trim().split(/\s+/).join() === ids.join() && runs.length === 2 && runs.every((l) => /\|\| rc=1\s*$/.test(l)) && /exit \$rc/.test(step);
+}
+
+test("the nightly fullscreen loop runs every exercise of the spec, and a red one does not stop the rest", () => {
+  assert.equal(specIds.length, 4);
+  assert.ok(loopRunsEverything(fullscreenStep(workflow), specIds));
+});
+
+test("negative control: a loop that stops at the first failure, or skips an exercise, is caught", () => {
+  const step = fullscreenStep(workflow);
+  assert.equal(loopRunsEverything(step.replace(' --output="test-results/fullscreen-$id" || rc=1', ' --output="test-results/fullscreen-$id"'), specIds), false);
+  assert.equal(loopRunsEverything(step.replace("exit $rc", ""), specIds), false);
+  assert.equal(loopRunsEverything(step.replace(" s9-pitch-match", ""), specIds), false);
+});

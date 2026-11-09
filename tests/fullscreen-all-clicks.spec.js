@@ -153,27 +153,24 @@ async function clickControl(page, sel) {
   return { ok: true, hit };
 }
 
-test("fullscreen: mouse-click all visible buttons per exercise", async ({ page }) => {
-  test.setTimeout(360000);
-  await boot(page, { lang: "es", tourDone: true, mic: "silent" });
-  await dismissOverlays(page);
+const FS_STYLE = `
+  #vt-fs-cursor {
+    position: fixed; z-index: 2147483647; width: 16px; height: 16px;
+    margin: -8px 0 0 -8px; border-radius: 50%;
+    background: #ff2d55; box-shadow: 0 0 0 2px #fff;
+    pointer-events: none !important;
+  }
+  #tour-root, .tour-backdrop {
+    display: none !important;
+    pointer-events: none !important;
+    visibility: hidden !important;
+  }
+  body.tour-active { overflow: auto !important; }
+`;
 
-  await page.addStyleTag({
-    content: `
-      #vt-fs-cursor {
-        position: fixed; z-index: 2147483647; width: 16px; height: 16px;
-        margin: -8px 0 0 -8px; border-radius: 50%;
-        background: #ff2d55; box-shadow: 0 0 0 2px #fff;
-        pointer-events: none !important;
-      }
-      #tour-root, .tour-backdrop {
-        display: none !important;
-        pointer-events: none !important;
-        visibility: hidden !important;
-      }
-      body.tour-active { overflow: auto !important; }
-    `
-  });
+/** A visible cursor dot, then a user gesture into the Fullscreen API. True when the page went fullscreen. */
+async function enterFullscreen(page) {
+  await page.addStyleTag({ content: FS_STYLE });
   await page.evaluate(() => {
     const d = document.createElement("div");
     d.id = "vt-fs-cursor";
@@ -202,8 +199,174 @@ test("fullscreen: mouse-click all visible buttons per exercise", async ({ page }
   await page.waitForTimeout(250);
   await dismissOverlays(page);
   await fit(page);
+  return page.evaluate(() => !!document.fullscreenElement);
+}
 
-  const isFs = await page.evaluate(() => !!document.fullscreenElement);
+const stopVisible = (page) => page.evaluate(() => !document.querySelector("#btn-practice-stop")?.hidden);
+
+/** --- 1) Start / Stop first (before any page scroll) --- */
+async function startThenStop(page, exId, entry, issues) {
+  if (!(await page.locator("#btn-practice-start").isVisible().catch(() => false))) return;
+  const r = await clickControl(page, "#btn-practice-start");
+  entry.clicked.push({ id: "btn-practice-start", ok: r.ok });
+  if (!r.ok) {
+    issues.push({
+      ex: exId,
+      id: "btn-practice-start",
+      code: "hit_miss",
+      top: r.hit?.top,
+      r: r.hit?.r
+    });
+    entry.failed.push({ id: "btn-practice-start", code: "hit_miss" });
+  }
+  await page.waitForTimeout(750);
+  entry.live = await stopVisible(page);
+  if (!entry.live) {
+    // Retry Start with locator click
+    await fit(page);
+    await page.locator("#btn-practice-start").click({ timeout: 5000 }).catch(() => {});
+    await page.waitForTimeout(800);
+    entry.live = await stopVisible(page);
+  }
+  if (!entry.live) {
+    issues.push({ ex: exId, id: "btn-practice-start", code: "no_live" });
+    return;
+  }
+  await fit(page);
+  const rs = await clickControl(page, "#btn-practice-stop");
+  entry.clicked.push({ id: "btn-practice-stop", ok: rs.ok });
+  if (!rs.ok) {
+    issues.push({
+      ex: exId,
+      id: "btn-practice-stop",
+      code: "hit_miss",
+      top: rs.hit?.top
+    });
+  }
+  await page.waitForTimeout(300);
+  await dismissOverlays(page);
+  // collapse metrics so stage stays clear
+  await page.evaluate(() => {
+    document.querySelector("#metrics-card")?.classList.add("collapsed");
+  });
+}
+
+/** Put back what a click opened: an expanded guide or metrics card closes again, and the piano stays closed. */
+async function restoreAfterClick(page, c, sel) {
+  if (c.id === "btn-toggle-guide" || c.id === "btn-toggle-metrics") {
+    await page.waitForTimeout(100);
+    const open = await page.evaluate((id) => {
+      const card =
+        id === "btn-toggle-guide"
+          ? document.querySelector(".guide-card")
+          : document.querySelector("#metrics-card");
+      return card && !card.classList.contains("collapsed");
+    }, c.id);
+    if (open) await clickControl(page, sel);
+  }
+  if (c.id === "btn-toggle-piano") {
+    // leave closed
+    await page.evaluate(() => {
+      if (window.VTApp?.getState?.()?.pianoOpen) {
+        document.getElementById("btn-toggle-piano")?.click();
+      }
+    });
+  }
+}
+
+/** One listed control: skipped, unnamed and hidden ones are left alone; a button whose center is covered is an issue. */
+async function clickListedControl(page, c, exId, entry, issues) {
+  if (SKIP.has(c.id)) return;
+  if (!c.hasDomId || c.id.startsWith("anon-")) return;
+  const sel = `#${c.id}`;
+  const visible = await page.locator(sel).isVisible().catch(() => false);
+  if (!visible) return;
+
+  try {
+    const r = await clickControl(page, sel);
+    entry.clicked.push({ id: c.id, ok: r.ok });
+    // Soft: range inputs can report miss on track padding — only hard-fail buttons
+    if (!r.ok && (c.kind === "button" || c.tag === "BUTTON")) {
+      issues.push({
+        ex: exId,
+        id: c.id,
+        code: "hit_miss",
+        top: r.hit?.top
+      });
+      entry.failed.push({ id: c.id, code: "hit_miss" });
+    }
+    await restoreAfterClick(page, c, sel);
+    await page.waitForTimeout(40);
+  } catch (e) {
+    entry.failed.push({
+      id: c.id,
+      code: "error",
+      msg: String(e.message || e).slice(0, 80)
+    });
+  }
+}
+
+/** Mode buttons */
+async function clickModes(page, entry) {
+  const modes = page.locator("#mode-focus button:visible, #mode-hud button:visible");
+  const modeN = await modes.count();
+  for (let i = 0; i < Math.min(modeN, 6); i++) {
+    const btn = modes.nth(i);
+    await btn.scrollIntoViewIfNeeded().catch(() => {});
+    const box = await btn.boundingBox();
+    if (!box) continue;
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2, {
+      delay: 25
+    });
+    entry.clicked.push({ id: `mode-${i}`, ok: true });
+  }
+}
+
+/** Back */
+async function clickBack(page, entry, log) {
+  await fit(page);
+  await dismissOverlays(page);
+  if (!(await page.locator("#btn-back-home").isVisible().catch(() => false))) return;
+  const rb = await clickControl(page, "#btn-back-home");
+  if (!rb.ok) {
+    // A real hit-target failure is evidence, not a reason to click forever
+    // (Playwright's locator timeout 0 consumed the full six-minute test).
+    entry.failed.push({ id: "btn-back-home", code: "hit_miss", hit: rb });
+    log.exercises.push(entry);
+    throw new Error("Back button center blocked: " + JSON.stringify(rb));
+  }
+  await page.waitForTimeout(100);
+  await dismissOverlays(page);
+  await page.evaluate(() => window.VTApp?.setView?.("home"));
+}
+
+async function clickExercise(page, exId, issues, log) {
+  const entry = { id: exId, clicked: [], failed: [] };
+  await dismissOverlays(page);
+  await openExercise(page, exId);
+  await dismissOverlays(page);
+  await fit(page);
+  await page.waitForTimeout(150);
+
+  await startThenStop(page, exId, entry, issues);
+
+  // --- 2) All other visible controls ---
+  await fit(page);
+  const controls = await listExerciseControls(page);
+  entry.inventory = controls.map((c) => c.id);
+  for (const c of controls) await clickListedControl(page, c, exId, entry, issues);
+
+  await clickModes(page, entry);
+  await clickBack(page, entry, log);
+  log.exercises.push(entry);
+}
+
+test("fullscreen: mouse-click all visible buttons per exercise", async ({ page }) => {
+  test.setTimeout(360000);
+  await boot(page, { lang: "es", tourDone: true, mic: "silent" });
+  await dismissOverlays(page);
+
+  const isFs = await enterFullscreen(page);
   const issues = [];
   const log = {
     fullscreen: isFs,
@@ -211,156 +374,7 @@ test("fullscreen: mouse-click all visible buttons per exercise", async ({ page }
     exercises: []
   };
 
-  for (const exId of EXERCISES) {
-    const entry = { id: exId, clicked: [], failed: [] };
-    await dismissOverlays(page);
-    await openExercise(page, exId);
-    await dismissOverlays(page);
-    await fit(page);
-    await page.waitForTimeout(150);
-
-    // --- 1) Start / Stop first (before any page scroll) ---
-    if (await page.locator("#btn-practice-start").isVisible().catch(() => false)) {
-      const r = await clickControl(page, "#btn-practice-start");
-      entry.clicked.push({ id: "btn-practice-start", ok: r.ok });
-      if (!r.ok) {
-        issues.push({
-          ex: exId,
-          id: "btn-practice-start",
-          code: "hit_miss",
-          top: r.hit?.top,
-          r: r.hit?.r
-        });
-        entry.failed.push({ id: "btn-practice-start", code: "hit_miss" });
-      }
-      await page.waitForTimeout(750);
-      const live = await page.evaluate(
-        () => !document.querySelector("#btn-practice-stop")?.hidden
-      );
-      entry.live = live;
-      if (!live) {
-        // Retry Start with locator click
-        await fit(page);
-        await page.locator("#btn-practice-start").click({ timeout: 5000 }).catch(() => {});
-        await page.waitForTimeout(800);
-        entry.live = await page.evaluate(
-          () => !document.querySelector("#btn-practice-stop")?.hidden
-        );
-      }
-      if (!entry.live) {
-        issues.push({ ex: exId, id: "btn-practice-start", code: "no_live" });
-      } else {
-        await fit(page);
-        const rs = await clickControl(page, "#btn-practice-stop");
-        entry.clicked.push({ id: "btn-practice-stop", ok: rs.ok });
-        if (!rs.ok) {
-          issues.push({
-            ex: exId,
-            id: "btn-practice-stop",
-            code: "hit_miss",
-            top: rs.hit?.top
-          });
-        }
-        await page.waitForTimeout(300);
-        await dismissOverlays(page);
-        // collapse metrics so stage stays clear
-        await page.evaluate(() => {
-          document.querySelector("#metrics-card")?.classList.add("collapsed");
-        });
-      }
-    }
-
-    // --- 2) All other visible controls ---
-    await fit(page);
-    const controls = await listExerciseControls(page);
-    entry.inventory = controls.map((c) => c.id);
-
-    for (const c of controls) {
-      if (SKIP.has(c.id)) continue;
-      if (!c.hasDomId || c.id.startsWith("anon-")) continue;
-      const sel = `#${c.id}`;
-      const visible = await page.locator(sel).isVisible().catch(() => false);
-      if (!visible) continue;
-
-      try {
-        const r = await clickControl(page, sel);
-        entry.clicked.push({ id: c.id, ok: r.ok });
-        if (!r.ok) {
-          // Soft: range inputs can report miss on track padding — only hard-fail buttons
-          if (c.kind === "button" || c.tag === "BUTTON") {
-            issues.push({
-              ex: exId,
-              id: c.id,
-              code: "hit_miss",
-              top: r.hit?.top
-            });
-            entry.failed.push({ id: c.id, code: "hit_miss" });
-          }
-        }
-        // Restore expand toggles
-        if (c.id === "btn-toggle-guide" || c.id === "btn-toggle-metrics") {
-          await page.waitForTimeout(100);
-          const open = await page.evaluate((id) => {
-            const card =
-              id === "btn-toggle-guide"
-                ? document.querySelector(".guide-card")
-                : document.querySelector("#metrics-card");
-            return card && !card.classList.contains("collapsed");
-          }, c.id);
-          if (open) await clickControl(page, sel);
-        }
-        if (c.id === "btn-toggle-piano") {
-          // leave closed
-          await page.evaluate(() => {
-            if (window.VTApp?.getState?.()?.pianoOpen) {
-              document.getElementById("btn-toggle-piano")?.click();
-            }
-          });
-        }
-        await page.waitForTimeout(40);
-      } catch (e) {
-        entry.failed.push({
-          id: c.id,
-          code: "error",
-          msg: String(e.message || e).slice(0, 80)
-        });
-      }
-    }
-
-    // Mode buttons
-    const modeN = await page
-      .locator("#mode-focus button:visible, #mode-hud button:visible")
-      .count();
-    for (let i = 0; i < Math.min(modeN, 6); i++) {
-      const btn = page.locator("#mode-focus button:visible, #mode-hud button:visible").nth(i);
-      await btn.scrollIntoViewIfNeeded().catch(() => {});
-      const box = await btn.boundingBox();
-      if (!box) continue;
-      await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2, {
-        delay: 25
-      });
-      entry.clicked.push({ id: `mode-${i}`, ok: true });
-    }
-
-    // Back
-    await fit(page);
-    await dismissOverlays(page);
-    if (await page.locator("#btn-back-home").isVisible().catch(() => false)) {
-      const rb = await clickControl(page, "#btn-back-home");
-      if (!rb.ok) {
-        // A real hit-target failure is evidence, not a reason to click forever
-        // (Playwright's locator timeout 0 consumed the full six-minute test).
-        entry.failed.push({ id: "btn-back-home", code: "hit_miss", hit: rb });
-        log.exercises.push(entry);
-        throw new Error("Back button center blocked: " + JSON.stringify(rb));
-      }
-      await page.waitForTimeout(100);
-      await dismissOverlays(page);
-      await page.evaluate(() => window.VTApp?.setView?.("home"));
-    }
-
-    log.exercises.push(entry);
-  }
+  for (const exId of EXERCISES) await clickExercise(page, exId, issues, log);
 
   await page
     .evaluate(async () => {

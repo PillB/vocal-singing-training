@@ -1784,12 +1784,6 @@
       "name": "Async arrow function"
     },
     {
-      "file": "tests/fullscreen-all-clicks.spec.js",
-      "sha": "5a296878d323d3df77c571e923d1399ae21bda4d3ef6e3fccb9b488aab252643",
-      "complexity": 29,
-      "name": "Async arrow function"
-    },
-    {
       "file": "tests/headed-exercise-forensics.spec.js",
       "sha": "6909a4bfef102072c51b9a0f34d5ef1c216ad7a3a9ce59b34c990267158a150c",
       "complexity": 74,

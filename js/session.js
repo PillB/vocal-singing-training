@@ -16,14 +16,19 @@
     return s;
   }
 
+  /** Paths whose routine the banner names itself, so the step count carries no route suffix. */
+  const NAMED_ON_BANNER = ["daily", "basics", "set"];
+
   const Session = {
     /**
      * @param {string} track vocal | singing
-     * @param {string} path basic | advanced | full | daily | basics
-     * @param {{ order?: string[], sec?: Object<string, number>, tier?: string }} [routine]
+     * @param {string} path basic | advanced | full | daily | basics | set
+     * @param {{ order?: string[], sec?: Object<string, number>, tier?: string, set?: string }} [routine]
      *   A prepared sequence instead of a catalog route: today's basics are
      *   built per day (js/daily-loop.js), so they are handed in rather than
-     *   looked up. `sec` gives each step its own timer.
+     *   looked up. `sec` gives each step its own timer. `set` is the id of a
+     *   goal set (js/session-sets.js): the banner and the finishing card name
+     *   the set from it, so it has to survive a reload with the session.
      */
     start(track, path = "basic", routine = null) {
       const key = `${track}_${path}`;
@@ -45,6 +50,7 @@
       };
       if (routine?.sec) session.sec = { ...routine.sec };
       if (routine?.tier) session.tier = routine.tier;
+      if (routine?.set) session.set = String(routine.set);
       global.VTStorage.setSession(session);
       return session;
     },
@@ -102,9 +108,10 @@
       const s = this.get();
       if (!s) return "";
       const t = (k, vars) => global.VTI18n?.t?.(k, vars) ?? k;
-      // The banner already names these two ("Sesión diaria de clase", "Básicos
-      // de hoy · Mínimo"); a path suffix only repeated it.
-      if (s.path === "daily" || s.path === "basics") {
+      // The banner already names these ("Sesión diaria de clase", "Básicos de
+      // hoy · Mínimo", a goal set's own name); a path suffix only repeated it,
+      // and for a set it was the stored word "set".
+      if (NAMED_ON_BANNER.includes(s.path)) {
         return t("session.progress", { n: Math.min(s.index + 1, s.order.length), total: s.order.length });
       }
       // Route names follow the track (the picker's names, js/app.js pathName).

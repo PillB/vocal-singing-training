@@ -6,7 +6,7 @@
  * suite that stays green on a mutant is not testing that behaviour, however
  * high its coverage. Ported from the QA thread's mutate.py (2026-11-01).
  *
- *   node qa/mutate.mjs            # the Node sets (audio, lint, coaching)
+ *   node qa/mutate.mjs            # the Node sets (audio, lint, coaching, sets)
  *   node qa/mutate.mjs audio      # one set
  *   node qa/mutate.mjs stage a11y flows regress billing audit  # browser sets: need Playwright's Chromium
  *
@@ -83,6 +83,22 @@ export const MUTANTS = {
     ["C4 the first straw exercise asks for nasal humming", "js/exercises-data.js", "Phonate a soft /u/-like tone with lips gently sealed around the straw; let air exit through it, not through the nose.", "Hum through the straw and keep your lips sealed."],
     ["C5 starter straw dose is raised from 2 to 5 minutes", "js/exercises-data.js", 'labelEs: "Fonación cómoda con cañita (minutos)", type: "number", target: 2, unit: "min"', 'labelEs: "Fonación cómoda con cañita (minutos)", type: "number", target: 5, unit: "min"']
   ].map(([name, file, from, to]) => ({ name, file, from, to, cmd: node(["tests/node/technical-coaching.test.mjs"]) })),
+  // Goal sets (js/session-sets.js, docs/46): the data rules and the parts of the engine that need no browser.
+  sets: [
+    ["GS1 the engine forgets which set is running (a reload shows a nameless routine)", "js/session.js", "      if (routine?.set) session.set = String(routine.set);\n", ""],
+    ["GS2 the step count of a set carries the stored word \"set\"", "js/session.js", 'const NAMED_ON_BANNER = ["daily", "basics", "set"];', 'const NAMED_ON_BANNER = ["daily", "basics"];'],
+    ["GS3 a set starts without its own timers (every step runs the exercise's full default)", "js/session-sets.js", "        sec: set.sec,\n        set: set.id,", "        set: set.id,"],
+    ["GS4 a step whose exercise is missing is kept (the routine opens nothing on that step)", "js/session-sets.js", "if (!exists(exId) || order.includes(exId)) return;", "if (order.includes(exId)) return;"],
+    ["GS5 a one-step leftover is offered as a set", "js/session-sets.js", "if (order.length < 2) return null;", "if (order.length < 1) return null;"],
+    ["GS6 a set is started on whatever tab is open (a singing set stored as a speaking session)", "js/session-sets.js", "if (hooks.getTab?.() !== set.track) hooks.setTab?.(set.track);", ""],
+    ["GS7 moderate support is drawn as the maximum", "js/session-sets.js", "const GRADE_MARKS = { mod: 2, lim: 1, trad: 0 };", "const GRADE_MARKS = { mod: 3, lim: 2, trad: 1 };"],
+    ["GS8 a set's step runs longer than the exercise's own timer", "js/session-sets.js", '["s17-jaw-neck-release", 90],\n        ["s6-straw", 240]', '["s17-jaw-neck-release", 190],\n        ["s6-straw", 240]'],
+    ["GS9 a set names an exercise the catalogue does not have", "js/session-sets.js", '["v11-kill-fillers", 240],', '["v11-kill-filers", 240],'],
+    ["GS10 a card promises prevention", "js/session-sets.js", "Es breve y no hay señal de que haga daño.", "Es breve y previene lesiones."],
+    ["GS11 the sets claim the ending of today's basics (no completion card, no day marked)", "js/session-sets.js", 'if (!session || session.path !== "set") return false;\n    const set = resolve(session.set);', "if (!session) return false;\n    const set = resolve(session.set || \"v-pretalk\");"],
+    ["GS12 every routine's banner takes a set's name", "js/session-sets.js", 'if (!session || session.path !== "set") return null;', "if (!session) return null;"],
+    ["GS13 the English name of a set is its Spanish one", "js/session-sets.js", 'name: "After a lot of talking",', 'name: "Después de hablar mucho",']
+  ].map(([name, file, from, to]) => ({ name, file, from, to, cmd: node(["tests/node/session-sets.test.mjs"]) })),
   audio: [
     ["M1 YIN voicing threshold 0.18 -> 0.60 (noise accepted as pitch)", "js/pitch-visualizer.js", "if (cmnd[lag] < 0.18) {", "if (cmnd[lag] < 0.60) {"],
     ["M2 above-band alias guard dropped (1500 Hz read as 750)", "js/pitch-visualizer.js", "for (let shortLag = 2; shortLag < minLag; shortLag++) {", "for (let shortLag = 2; shortLag < 2; shortLag++) {"],
@@ -340,7 +356,31 @@ export const MUTANTS = {
     ["FM3 Stop does nothing", "js/app.js", '$("#btn-practice-stop")?.addEventListener("click", () => stopPractice(false));', '$("#btn-practice-stop")?.addEventListener("click", () => {});'],
     ["FM4 an uncaught exception on every Start", "js/app.js", "async function startPractice() {\n    const ex = state.exercise;", 'async function startPractice() {\n    setTimeout(() => { throw new Error("planted"); }, 0);\n    const ex = state.exercise;'],
     ["FM5 the mic slider is disconnected", "js/app.js", "const applyMicSens = (raw) => {\n", "const applyMicSens = (raw) => {\n      if (micRange?.dataset.ready) return;\n      if (micRange) micRange.dataset.ready = '1';\n"]
-  ].map(([name, file, from, to]) => ({ name, file, from, to, cmd: FLOW_SPEC })),
+  ]
+    .map(([name, file, from, to]) => ({ name, file, from, to, cmd: FLOW_SPEC }))
+    .concat(
+      // Goal sets in the browser (tests/session-sets.spec.js): what the node tests cannot see.
+      [
+        ["SS1 a set is started as today's basics (it picks a size and marks the day's basics)", "js/app.js", 'startSet: (r) => startStructured("set", r),', 'startSet: (r) => startStructured("basics", r),'],
+        ["SS2 the banner never asks the sets for a name (a set reads as \"Sesión guiada\")", "js/app.js", "    const set = window.VTSets?.bannerName(s);\n    if (set) return set;\n", ""],
+        ["SS3 the trail is never drawn", "js/app.js", "    window.VTSets?.syncTrail(s);\n", ""],
+        ["SS4 a borrowed step in a set carries the other track's label", "js/app.js", 'const BORROWING_PATHS = ["basics", "set"];', 'const BORROWING_PATHS = ["basics"];'],
+        ["SS5 a finished set falls through to the plain toast (no card)", "js/app.js", "    if (window.VTSets?.onComplete(done)) return;\n", ""],
+        ["SS6 the set's start line is replaced by the basics' (\"Básicos de hoy: , 2 ejercicios\")", "js/app.js", 'toast(routine.toast || tt("loop.startToast"', 'toast(tt("loop.startToast"'],
+        ["SS7 the trail takes a row of its own in the banner", "css/session-sets.css", ".session-trail {\n  position: absolute;", ".session-trail {\n  position: static;\n  width: 100%;"],
+        ["SS8 on a phone the picker is a centred card again, cut by the screen edge", "css/session-sets.css", "    place-items: end stretch;\n    padding: 0;", "    place-items: center;"],
+        ["SS9 the picker stays open over another page", "js/session-sets.js", 'if (!home.classList.contains("active")) closeDialogs();', "void closeDialogs;"],
+        ["SS10 a short drag closes the sheet", "js/session-sets.js", "const far = e.clientY - startY > 72;", "const far = e.clientY - startY > 2;"],
+        ["SS11 the trail marks every step as the current one", "js/session-sets.js", 'i < session.index ? "is-done" : i === now ? "is-now" : ""', 'i < session.index ? "is-now" : i === now ? "is-now" : ""'],
+        ["SS12 a set counts steps practised on any day as practised today", "js/session-sets.js", "const row = D.read().days[D.summary().today];", "const row = Object.values(D.read().days)[0];"]
+      ].map(([name, file, from, to]) => ({
+        name,
+        file,
+        from,
+        to,
+        cmd: [...PIANO_SPEC.slice(0, 3), "tests/session-sets.spec.js", "--project=chromium", "--workers=4", "--reporter=dot"]
+      }))
+    ),
   // Round 4 in the browser: storage of the wrong kind, a full or refused storage, the learner's day, the rail on a
   // phone on its side, the consent bar. A set of its own so that no CI job outgrows its 30 minutes (QA-45).
   regress: [].concat(
@@ -498,7 +538,7 @@ export const MUTANTS = {
   }))
 };
 
-export const DEFAULT_SETS = ["audio", "lint", "coaching"];
+export const DEFAULT_SETS = ["audio", "lint", "coaching", "sets"];
 
 /** What the last failing command printed, so a red baseline in CI says which test failed. */
 let lastFailure = "";

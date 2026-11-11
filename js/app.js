@@ -1694,9 +1694,20 @@
   /** The step "¿Terminar la rutina?" was asked on; another step drops the question. */
   let endAsking = null;
 
+  /** The routine's name on the banner: a goal set's own, the class, today's basics, or the catalog route. */
+  function sessionName(s) {
+    const set = window.VTSets?.bannerName(s);
+    if (set) return set;
+    if (s.path === "daily") return tt("daily.banner");
+    if (s.path === "basics") return tt("loop.banner", { tier: tt("loop.tier." + (s.tier || "min")) });
+    return tt("session.bannerTitle", { track: tt(s.track === "vocal" ? "tab.vocalShort" : "tab.singingShort") });
+  }
+
   function updateSessionBanner() {
     const banner = $("#session-banner");
     const s = VTSession.get();
+    // The step trail under the line (js/session-sets.js) follows every routine.
+    window.VTSets?.syncTrail(s);
     if (!s || s.status === "completed") {
       endAsking = null;
       banner.classList.remove("visible");
@@ -1706,14 +1717,8 @@
     }
     if (endAsking != null && endAsking !== s.index) endAsking = null;
     banner.classList.add("visible");
-    const trackLabel = tt(s.track === "vocal" ? "tab.vocalShort" : "tab.singingShort");
     const status = tt(s.status === "paused" ? "session.statusPaused" : "session.statusActive");
-    const name =
-      s.path === "daily"
-        ? tt("daily.banner")
-        : s.path === "basics"
-          ? tt("loop.banner", { tier: tt("loop.tier." + (s.tier || "min")) })
-          : tt("session.bannerTitle", { track: trackLabel });
+    const name = sessionName(s);
     // One line (design: session-chrome): where you are first and never cut,
     // then "En pausa" only when it is and the routine's name, which a narrow
     // phone cuts with "…". The title keeps the whole line for a pointer.
@@ -2182,10 +2187,14 @@
    * their warm-up was advanced singing.
    */
   function basicsRoutineTrack(ex) {
+    // A goal set (js/session-sets.js) borrows across tracks the same way.
     if (!state.structured || !ex) return null;
     const s = VTSession.get();
-    return s && s.path === "basics" && s.order?.includes(ex.id) ? s.track || null : null;
+    return s && BORROWING_PATHS.includes(s.path) && s.order?.includes(ex.id) ? s.track || null : null;
   }
+
+  /** Routines built from both tracks' exercises: today's basics and the goal sets. */
+  const BORROWING_PATHS = ["basics", "set"];
 
   /** Set by a catalog card's click, read by the open that follows it. */
   let openingFromCatalog = false;
@@ -6184,9 +6193,10 @@
 
   /* —— Structured session —— */
   /**
-   * @param {string} [path] basic | advanced | full | daily | basics
-   * @param {{ order?: string[], sec?: Object<string, number>, tier?: string, label?: string }} [routine]
-   *   a prepared sequence (today's basics) instead of a catalog route
+   * @param {string} [path] basic | advanced | full | daily | basics | set
+   * @param {{ order?: string[], sec?: Object<string, number>, tier?: string, label?: string, set?: string, toast?: string }} [routine]
+   *   a prepared sequence (today's basics, a goal set) instead of a catalog
+   *   route; `toast` replaces the basics' start line
    */
   function startStructured(path, routine) {
     const p = path || $("#session-path")?.value || "basic";
@@ -6195,7 +6205,7 @@
     const id = VTSession.currentExerciseId();
     if (id) openExercise(id, true);
     if (routine?.order) {
-      toast(tt("loop.startToast", { tier: routine.label || "", n: String(session.order.length) }));
+      toast(routine.toast || tt("loop.startToast", { tier: routine.label || "", n: String(session.order.length) }));
       return session;
     }
     toast(
@@ -6264,6 +6274,8 @@
     const done = VTSession.get();
     setView("home");
     renderExerciseList();
+    // A goal set ends on its own card; basics and the class on the loop's.
+    if (window.VTSets?.onComplete(done)) return;
     if (window.VTLoop?.onRoutineComplete?.(done)) return;
     toast(tt("toast.structuredDone"));
   }
@@ -9374,6 +9386,18 @@
         renderTodayBasics();
       },
       focusReminders: () => openReminders()
+    });
+    // Goal sets (js/session-sets.js) start through the same guided engine.
+    window.VTSets?.bind({
+      getTab: () => state.tab,
+      setTab,
+      findExercise,
+      startSet: (r) => startStructured("set", r),
+      hideToast,
+      refresh: () => {
+        renderNextStepCard();
+        renderTodayBasics();
+      }
     });
     bind();
     bindHeaderMenu();

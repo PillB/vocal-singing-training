@@ -681,3 +681,25 @@ test.describe("Design B by keyboard", () => {
     });
   }
 });
+
+test.describe("Design B in high-contrast mode", () => {
+  test("the current Progreso tab keeps a border when the system drops backgrounds and shadows", async ({ page }) => {
+    // Wrong: "which tab am I on" carried only by a background and a shadow,
+    // both of which forced colours remove.
+    await boot(page, { stored: { ver: "b", src: "chosen" } });
+    await page.emulateMedia({ forcedColors: "active" });
+    await page.click("#btn-nav-progress");
+    const outline = (name) =>
+      page.locator(`[data-progress="${name}"]`).evaluate((el) => {
+        const cs = getComputedStyle(el);
+        return { style: cs.outlineStyle, width: parseFloat(cs.outlineWidth) || 0 };
+      });
+    // Move focus off the strip, so a focus ring is not mistaken for the mark.
+    await page.evaluate(() => document.activeElement && document.activeElement.blur());
+    expect(await outline("history")).toEqual({ style: "solid", width: 2 });
+    expect((await outline("plan")).style).toBe("none");
+    // And outside high-contrast mode the outline is not there to double the highlight.
+    await page.emulateMedia({ forcedColors: "none" });
+    expect((await outline("history")).style).toBe("none");
+  });
+});

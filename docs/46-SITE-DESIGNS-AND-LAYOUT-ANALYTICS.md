@@ -64,7 +64,10 @@ experiment"); the admin procedure is `docs/ADMIN-GUIDE.md` 8.13b.
 | SD-6 | Low | Site, experiment off after being on | The remembered random default would flash before settling | Default read before the experiment was consulted | Fixed: `rememberDefault` |
 | SD-7 | Test | `layouts.test.mjs` | The time-cap test read the cap from the code, so any cap passed | Tautology; found because mutant DS11 survived | Fixed: literal 3600; DS11 killed |
 | SD-8 | Test | `site-version.spec.js` | "a short or diagonal flick does not" never sent a diagonal one | Found because mutant DS6 survived | Fixed: diagonal case added; DS6 killed |
-| SD-9 | Pre-existing | `account-pro-states.spec.js:961` (1280px, Ayuda fold) | Fails here on this branch **and** on the untouched base commit f258ba3 | Not investigated; the fold depends on how the title wraps, so installed fonts are a suspect | **Unverified**, not caused by this round |
+| SD-9 | Test | `account-pro-states.spec.js:961` (1280px, Ayuda fold) | Failed in a container with Inter installed, passed in CI | The fold is right (it folds only when the title needs a third line); the test assumed a wide font. With Inter the title fits and nothing folds | Fixed in the test: with a narrow font the title is widened until the row needs the room, so the fold is exercised on any machine. Red with the fold disabled |
+| SD-10 | Low | Phones and tablets, every button | A tapped button stayed lifted with the accent border until something else was tapped | `:hover` sticks on touch screens; 13 hover rules applied to every pointer | Fixed: hover looks only under `@media (hover: hover)`; `tests/touch-hover.spec.js`; mutants DS18, DS19 |
+| SD-11 | Test | CI, `site-version.spec.js` | "40 seconds" read as 41 on a loaded runner | The fake clock was installed but left running | Fixed: the clock is paused and moves only when a test moves it; 192 of 192 repeats under load |
+| SD-12 | Low | B, Progreso tabs, 320px, CI's font | The strip overflowed by 11px | The fit depended on one font's metrics | Fixed: under 360px the tabs shrink evenly at the 12px floor |
 
 ## Red-team passes (five)
 
@@ -80,8 +83,8 @@ experiment"); the admin procedure is `docs/ADMIN-GUIDE.md` 8.13b.
 3. **Accessibility and occlusion.** Tab walk through all four Progreso tabs
    at 1280 and 390; tap sizes on 30 device shapes in both designs and both
    languages; a labelled native `<select>` for the control. Found SD-3, SD-4,
-   SD-5. High-contrast rules were added for the current tab and the chart
-   colours but **not tested** (unverified).
+   SD-5. The high-contrast rule for the current tab is tested with emulated
+   forced colours (mutant DS17); the chart's colour rule is not.
 4. **Numbers.** Window by receipt time; shares that are null, not 0, when
    nothing is known; Wilson interval for "came back"; seed counted a second,
    independent way in `tests/admin-layouts.spec.js`. Found SD-8.
@@ -108,7 +111,7 @@ experiment"); the admin procedure is `docs/ADMIN-GUIDE.md` 8.13b.
 - Chromium (Playwright 1.61.1, headless, Linux): `site-version.spec.js` 35,
   `site-version-devices.spec.js` 60, `admin-layouts.spec.js` 8; worker
   `layouts.test.mjs` 11.
-- `node qa/mutate.mjs designs`: 16 planted defects, all killed (two survived
+- `node qa/mutate.mjs designs`: 19 planted defects, all killed (two survived
   the first run and exposed SD-7 and SD-8).
 - **Not run:** WebKit and Firefox; real phones (the matrix is emulated
   viewports with touch); screen readers.

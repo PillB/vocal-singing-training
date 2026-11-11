@@ -63,9 +63,11 @@ html[data-site-version="b"] #btn-history {
   font-weight: 650;
   white-space: nowrap;
 }
-.header-nav .nav-link-b:hover {
-  color: var(--text);
-  background: rgba(140, 170, 210, 0.14);
+@media (hover: hover) {
+  .header-nav .nav-link-b:hover {
+    color: var(--text);
+    background: rgba(140, 170, 210, 0.14);
+  }
 }
 .header-nav .nav-link-b.active {
   color: var(--text);
@@ -113,9 +115,11 @@ html[data-site-version="b"] #btn-history {
   white-space: nowrap;
   cursor: pointer;
 }
-.progress-tab:hover {
-  color: var(--text);
-  background: rgba(140, 170, 210, 0.14);
+@media (hover: hover) {
+  .progress-tab:hover {
+    color: var(--text);
+    background: rgba(140, 170, 210, 0.14);
+  }
 }
 .progress-tab.active {
   color: var(--text);

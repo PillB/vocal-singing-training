@@ -18,7 +18,7 @@
       content="Guía de uso de Estudio Vocal: cómo practicar, cómo leer la autopista de afinación, qué significan los números y cómo guardar tu progreso."
     />
     <title>Guía de uso · Estudio Vocal</title>
-    <link rel="stylesheet" href="css/styles.css?v=20261103e" />
+    <link rel="stylesheet" href="css/styles.css?v=20261111c" />
     <style>
       .guide-wrap {
         max-width: 46rem;
@@ -171,6 +171,10 @@
         }
       }
     </style>
+    <link rel="stylesheet" href="css/site-version.css?v=20261111c" />
+    <!-- Paints the visitor's design of the site before the first frame
+         (js/site-version.js); a file because the policy allows no inline script. -->
+    <script src="js/site-version.js?v=20261111a"></script>
   </head>
   <body>
     <header class="app-header">
@@ -776,7 +780,8 @@
       <p>
         Para saber qué cambios ayudan de verdad, el sitio envía
         <strong>estadísticas anónimas</strong> a nuestro servidor: qué partes usas (por ejemplo
-        «empezó el Mínimo» o «terminó la clase»), qué versión de una prueba te tocó, tu día
+        «empezó el Mínimo» o «terminó la clase»), qué versión de una prueba te tocó, qué diseño
+        del sitio usas (A o B), cuántos segundos lo tienes abierto y cuántas visitas llevas, tu día
         local, tu zona horaria y un número al azar que identifica a este navegador, no a ti. El
         servidor anota la hora en que llegan.
       </p>
@@ -1380,7 +1385,9 @@
       <p>
         To learn which changes really help, the site sends <strong>anonymous
         statistics</strong> to our server: which parts you use (for example "started the
-        Minimum" or "finished the class"), which version of a test you got, your local day,
+        Minimum" or "finished the class"), which version of a test you got, which design of the
+        site you use (A or B), how many seconds you keep it open and how many visits you have
+        made, your local day,
         your time zone, and a random number that identifies this browser, not you. The server
         notes the time they arrive.
       </p>
@@ -1420,7 +1427,7 @@
          this page would say nothing is being sent while the app sends, and the
          delete button would have nowhere to send the deletion. -->
     <script src="js/billing-config.js?v=20261102a"></script>
-    <script src="js/experiments-config.js?v=20260924e"></script>
+    <script src="js/experiments-config.js?v=20261111a"></script>
     <!-- The page declares that the region gate belongs on it, so that if
          js/region-gate.js ever 404s or fails to parse, js/analytics.js and
          js/experiments.js keep nothing and send nothing rather than reading an
@@ -1429,6 +1436,7 @@
     <script src="js/region-gate.js?v=20261103b"></script>
     <script src="js/analytics.js?v=20261103a"></script>
     <script src="js/experiments.js?v=20260925a"></script>
-    <script src="js/privacy-switch.js?v=20261006b"></script>
+    <script src="js/site-layout.js?v=20261111a"></script>
+    <script src="js/privacy-switch.js?v=20261111a"></script>
   </body>
 </html>

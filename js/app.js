@@ -2252,6 +2252,8 @@
    */
   function returnToCatalog(o) {
     if (o.track && o.track !== state.tab) setTab(o.track);
+    // Design "b" folds catalogue groups: open the one this card is in.
+    window.VTSiteLayout?.reveal?.(o.id);
     const card = $(`#exercise-list .card-ex[data-id="${o.id}"]`);
     window.scrollTo({ top: o.y || 0, behavior: "instant" });
     if (!card) return;

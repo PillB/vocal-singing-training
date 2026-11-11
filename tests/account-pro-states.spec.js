@@ -968,14 +968,25 @@ test.describe("The menu, read by someone who has never seen it", () => {
     await boot(page);
     await expect(page.locator("#btn-pricing")).not.toHaveAttribute("data-plan", "free");
     const help = page.locator("#btn-help");
-    await expect(help).toBeVisible();
-    await expect(page.locator("#btn-tour")).toBeHidden();
     const lines = () =>
       page.evaluate(() => {
         const range = document.createRange();
         range.selectNodeContents(document.getElementById("brand-title"));
         return new Set([...range.getClientRects()].filter((r) => r.width > 0).map((r) => Math.round(r.bottom))).size;
       });
+    // Whether this row needs the room depends on the machine's font: a wide
+    // one (CI's) wraps the title to three lines here, a narrow one (Inter)
+    // fits it in two and nothing folds. With a narrow font the title is
+    // widened until the row does need the room, so the fold itself is tested
+    // on every machine instead of failing where the font is narrow (SD-9).
+    await page.waitForTimeout(150); // the fit runs a frame after the title is measured
+    if (!(await help.isVisible())) {
+      expect(await lines()).toBeLessThanOrEqual(2);
+      await expect(page.locator("#btn-tour")).toBeVisible();
+      await page.addStyleTag({ content: "#brand-title { letter-spacing: 0.3em !important; }" });
+    }
+    await expect(help).toBeVisible();
+    await expect(page.locator("#btn-tour")).toBeHidden();
     expect(await lines()).toBeLessThanOrEqual(2);
     await help.click();
     await expect(page.locator("#link-guide")).toBeVisible();

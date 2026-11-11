@@ -818,12 +818,6 @@
       "name": "Method 'stop'"
     },
     {
-      "file": "js/privacy-switch.js",
-      "sha": "15f68bb0a58c3adb189992c9764fdd3bfc095f142ac005dfa943b61367cfd4d8",
-      "complexity": 22,
-      "name": "Arrow function"
-    },
-    {
       "file": "js/range-adapter.js",
       "sha": "9850139ad91efa10d5d0190261e8f654a7ef5f9caa0c83af9c6fce3e58a80357",
       "complexity": 39,

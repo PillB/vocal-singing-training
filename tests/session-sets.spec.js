@@ -168,7 +168,7 @@ test.describe("Goal sets: the picker", () => {
     const why = card.locator(".set-why");
     await expect(why.locator("p").first()).toBeHidden();
     await why.locator("summary").click();
-    await expect(why.locator("p").first()).toContainText("114 docentes");
+    await expect(why.locator("p").first()).toContainText("114 adultos sanos");
     await expect(why.locator("p").first()).toContainText("un solo estudio");
     await expect(why.locator(".set-src")).toHaveText("Fuente: Peng et al. 2026, ensayo aleatorizado");
     await expect(card.locator(".set-grade")).toHaveText("Respaldo moderado");

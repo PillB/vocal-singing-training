@@ -49,7 +49,8 @@ const vocalIds = () => plain(SETS.filter((s) => s.track === "vocal").map((s) => 
 
 const SLUG = /^(v|s)-[a-z]+(?:-[a-z]+)*$/;
 // Words that promise what no study of healthy voices shows (docs/46): prevention, cure, guarantees, diagnosis.
-const PROMISES = /\b(previene|prevenir|evita (?:la|las|el|los) (?:lesi|nódul|disfon)|cura|curar|garantiza|sana(?:r)?|diagn[oó]s|prevents?|cures?|guarantee[sd]?|heals?|diagnos)/i;
+// Whole words where a stem would catch an innocent one ("heal" in "healthy adults", "sana" in "voz sana").
+const PROMISES = /\b(?:previene|prevenir|evita (?:la|las|el|los) (?:lesi|nódul|disfon)|garantiza|diagn[oó]s|guarantee|diagnos|(?:cura|curar|sanar|prevents?|cures?|heals?)\b)/i;
 
 /** What is wrong with a list of sets against a catalogue, as readable lines. Empty when nothing is. */
 export function problems(sets, catalogue) {
@@ -148,6 +149,10 @@ test("control: each rule fails on its own planted defect", () => {
   assert.match(plant((s) => (s.es.name = "Un nombre demasiado largo para caber")), /characters/);
   assert.match(plant((s) => (s.es.why = "Este calentamiento previene lesiones.")), /promises/);
   assert.match(plant((s) => (s.en.why = "This warm-up prevents injury.")), /promises/);
+  assert.match(plant((s) => (s.en.why = "It heals a tired voice.")), /promises/);
+  // …and the study's own words are not a promise
+  assert.doesNotMatch(plant((s) => (s.en.why = "Tested in healthy adults.")), /promises/);
+  assert.doesNotMatch(plant((s) => (s.es.why = "Probado en personas con la voz sana.")), /promises/);
   assert.match(problems([good, good], byId).join(" | "), /id used twice/);
 });
 

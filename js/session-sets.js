@@ -87,14 +87,14 @@
       es: {
         name: "Después de hablar mucho",
         goal: "Para soltar la voz tras dar clase o una jornada de llamadas.",
-        why: "En un ensayo con 114 docentes, cinco minutos de silencio y cinco de sonido suave por un pajita recuperaron la voz mejor que diez de silencio. Es un resultado a corto plazo, de un solo estudio grande.",
+        why: "En un ensayo con 114 adultos sanos, tras una hora de forzar la voz, cinco minutos de silencio y cinco de sonido suave por una pajita la recuperaron mejor que diez de silencio. Es un resultado a corto plazo, de un solo estudio.",
         tip: "Antes de esta rutina, cinco minutos sin hablar y un vaso de agua.",
         src: "Peng et al. 2026, ensayo aleatorizado"
       },
       en: {
         name: "After a lot of talking",
         goal: "To ease the voice after teaching or a day of calls.",
-        why: "In a trial with 114 teachers, five minutes of silence and five of soft sound through a straw recovered the voice better than ten of silence. It is a short-term result from one large study.",
+        why: "In a trial with 114 healthy adults, after an hour of loading the voice, five minutes of silence and five of soft sound through a straw recovered it better than ten of silence. It is a short-term result from one study.",
         tip: "Before this routine, five minutes without talking and a glass of water.",
         src: "Peng et al. 2026, randomised trial"
       }
@@ -239,7 +239,7 @@
       es: {
         name: "Técnica en 13 minutos",
         goal: "Aire, arranque suave, volumen y articulación de las notas.",
-        why: "El pajita es lo mejor estudiado de la lista. El resto son ejercicios de coordinación que se enseñan en casi toda clase de canto, con pocos estudios propios.",
+        why: "La pajita es lo mejor estudiado de la lista. El resto son ejercicios de coordinación que se enseñan en casi toda clase de canto, con pocos estudios propios.",
         tip: "",
         src: "Apfelbach y Guzmán 2024 (revisión)"
       },

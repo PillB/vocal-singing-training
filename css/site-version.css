@@ -246,3 +246,15 @@ html:not([data-site-version="b"]) .guide-fold {
     outline-offset: -2px;
   }
 }
+
+@media (max-width: 359px) {
+  /* 320px: a wider system font overflowed the strip by 11px on another
+     machine. The tabs hold the 12px text floor and give up padding, and may
+     shrink evenly before anything is pushed out of sight. */
+  .progress-tab {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding-inline: 0.2rem;
+    font-size: 0.75rem;
+  }
+}

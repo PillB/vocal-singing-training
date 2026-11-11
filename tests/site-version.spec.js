@@ -40,7 +40,9 @@ async function boot(page, opts = {}) {
   // loading the page and the test's first step turned "40 seconds" into 41.
   if (!opts.realClock) {
     await page.clock.install({ time: new Date(NOW) });
-    await page.clock.pauseAt(new Date(NOW));
+    // A minute on, not NOW itself: the installed clock has already run a
+    // few milliseconds, and pauseAt refuses to go back.
+    await page.clock.pauseAt(new Date(Date.parse(NOW) + 60 * 1000));
   }
   await page.addInitScript(
     (o) => {

@@ -617,6 +617,34 @@ async function coveredFocus() {
 }
 
 test.describe("Design B by keyboard", () => {
+  test("the design control, focused while scrolled behind the sticky header, comes out from under it", async ({ page }) => {
+    // Wrong: the browser counts a control behind the header as in view and
+    // does not scroll, so it is focused where nobody can see it. Set up
+    // directly, because whether a Tab walk lands there depends on the page's
+    // height on the machine running it.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await boot(page, { realClock: true });
+    const before = await page.evaluate(() => {
+      const select = document.getElementById("site-version");
+      window.scrollTo({ top: window.scrollY + select.getBoundingClientRect().top - 3, behavior: "instant" });
+      const header = document.querySelector(".app-header").getBoundingClientRect();
+      return { top: select.getBoundingClientRect().top, headerBottom: header.bottom };
+    });
+    // The control really is behind the header before it takes focus.
+    expect(before.top).toBeLessThan(before.headerBottom);
+    await page.evaluate(() => document.getElementById("site-version").focus({ preventScroll: true }));
+    // The page scrolls smoothly, so the control arrives a moment later.
+    const state = () =>
+      page.evaluate(() => {
+        const select = document.getElementById("site-version").getBoundingClientRect();
+        const top = document.elementFromPoint(select.left + select.width / 2, select.top + select.height / 2);
+        return { clear: select.top >= document.querySelector(".app-header").getBoundingClientRect().bottom, hit: top && top.id };
+      });
+    await expect.poll(async () => (await state()).clear, { timeout: 5000 }).toBe(true);
+    const after = await state();
+    expect(after.hit).toBe("site-version");
+  });
+
   for (const vp of [
     { width: 1280, height: 800 },
     { width: 390, height: 844 }

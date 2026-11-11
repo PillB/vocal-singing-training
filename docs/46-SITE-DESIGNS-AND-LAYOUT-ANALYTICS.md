@@ -105,7 +105,7 @@ experiment"); the admin procedure is `docs/ADMIN-GUIDE.md` 8.13b.
 ## Evidence
 
 - `npm run lint`, `npm run test:core`: green.
-- Chromium (Playwright 1.61.1, headless, Linux): `site-version.spec.js` 34,
+- Chromium (Playwright 1.61.1, headless, Linux): `site-version.spec.js` 35,
   `site-version-devices.spec.js` 60, `admin-layouts.spec.js` 8; worker
   `layouts.test.mjs` 11.
 - `node qa/mutate.mjs designs`: 16 planted defects, all killed (two survived

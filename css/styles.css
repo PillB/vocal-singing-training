@@ -7661,6 +7661,7 @@ body.view-exercise .highway-stage {
      the drawn button into the header's own padding. Text holds the 12px floor. */
   .header-actions .btn-sm {
     position: relative;
+    min-width: 44px;
     font-size: 0.75rem;
   }
   .header-actions .btn-sm::after {
@@ -7682,6 +7683,19 @@ body.view-exercise .highway-stage {
     overflow: hidden;
     clip-path: inset(50%);
     white-space: nowrap;
+  }
+}
+@media (pointer: coarse) and (min-height: 501px) and (min-width: 641px) {
+  /* A tablet or a touch laptop draws the 36px header buttons a mouse gets, but
+     a finger needs 44px: the hit area reaches 4px past the drawn button into
+     the header's own padding, as it does on a rotated phone. Nothing moves. */
+  .header-actions .btn-sm {
+    position: relative;
+  }
+  .header-actions .btn-sm::after {
+    content: "";
+    position: absolute;
+    inset: -4px 0;
   }
 }
 @media (min-width: 1000px), (max-height: 500px) and (min-width: 800px) {

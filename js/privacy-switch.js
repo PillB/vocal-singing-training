@@ -127,6 +127,43 @@
     global.VTExperiments?.reset?.();
   }
 
+  /**
+   * The switch itself: stop sending (and forget what was sent), or allow it again.
+   * @param {Object} A VTAnalytics.
+   * @param {Object} [R] VTRegion, where the page has one.
+   */
+  function toggleOptOut(A, R) {
+    const out = !A.remoteState().optedOut;
+    if (out) forgetSent(A);
+    A.setOptOut(out);
+    // The visit counter js/site-version.js keeps exists only for the
+    // statistics just switched off; the design the visitor chose stays.
+    if (out) global.VTSiteVersion?.forgetCounts?.();
+    else allowAgain(R);
+  }
+
+  /** Ask the worker to delete what this browser sent, and drop its id. */
+  function forgetSent(A) {
+    const E = global.VTExperiments;
+    try {
+      A.forget?.(E?.clientId?.());
+      E?.reset?.();
+    } catch {
+      /* the opt-out that follows still holds */
+    }
+    takeBackYes();
+  }
+
+  /**
+   * "Volver a permitir" is a yes. Where a no to the bar stands, or the bar
+   * was never answered, it has to be the bar's answer too, or the button
+   * would allow nothing and only lead to "Permitir estadísticas".
+   */
+  function allowAgain(R) {
+    if (!R?.setConsent || R.consent?.() === "granted") return;
+    if (R.consent?.() === "denied" || R.verdict?.() === "eu") R.setConsent(true);
+  }
+
   function init() {
     document.querySelectorAll("[data-privacy-toggle]").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -138,24 +175,7 @@
           return;
         }
         if (!A?.setOptOut) return;
-        const out = !A.remoteState().optedOut;
-        if (out) {
-          const E = global.VTExperiments;
-          try {
-            A.forget?.(E?.clientId?.());
-            E?.reset?.();
-          } catch {
-            /* the opt-out below still holds */
-          }
-          takeBackYes();
-        }
-        A.setOptOut(out);
-        // "Volver a permitir" is a yes. Where a no to the bar stands, or the bar
-        // was never answered, it has to be the bar's answer too, or the button
-        // would allow nothing and only lead to "Permitir estadísticas".
-        if (!out && R?.setConsent && R.consent?.() !== "granted") {
-          if (R.consent?.() === "denied" || R.verdict?.() === "eu") R.setConsent(true);
-        }
+        toggleOptOut(A, R);
         render();
       });
     });

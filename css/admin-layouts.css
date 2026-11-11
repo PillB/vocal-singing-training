@@ -1,0 +1,230 @@
+/* Admin page: the site-designs dashboard, the at-a-glance strip and the
+   section bar (js/admin-layouts.js). Loaded only by admin.html. Same floors
+   as the rest: 44px tap targets, nothing under 12px, no sideways scroll. */
+
+/* —— Section bar: stays in reach on a long page, and says where you are —— */
+.admin-page .admin-jump {
+  position: sticky;
+  top: calc(var(--header-h, 64px) + 4px);
+  z-index: 4;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: 0.35rem;
+  margin-left: -0.35rem;
+  margin-right: -0.35rem;
+  border-radius: 999px;
+  background: rgba(12, 17, 24, 0.94);
+}
+.admin-page .admin-jump::-webkit-scrollbar {
+  display: none;
+}
+.admin-page .admin-jump a {
+  flex: none;
+  white-space: nowrap;
+}
+.admin-page .admin-jump a[aria-current="true"] {
+  border-color: var(--accent);
+  background: rgba(110, 180, 232, 0.2);
+  box-shadow: inset 0 -3px 0 var(--accent);
+}
+
+/* —— At a glance —— */
+.admin-glance {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.2rem 1rem;
+  margin: 0 0 1rem;
+  padding: 0.6rem 1.2rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.admin-glance-title {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.admin-glance-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 1.2rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* —— Designs dashboard —— */
+.lay-swatch {
+  display: inline-block;
+  width: 0.8rem;
+  height: 0.8rem;
+  margin-right: 0.45rem;
+  border-radius: 3px;
+  vertical-align: -1px;
+}
+.lay-swatch[data-ver="a"],
+.lay-share-part[data-ver="a"] {
+  background: #3987e5;
+}
+.lay-swatch[data-ver="b"],
+.lay-share-part[data-ver="b"] {
+  background: #d95926;
+}
+.lay-bar[data-ver="a"] {
+  fill: #3987e5;
+}
+.lay-bar[data-ver="b"] {
+  fill: #d95926;
+}
+.lay-read-at {
+  font-size: 0.85rem;
+}
+.lay-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 0.75rem;
+  margin: 0.75rem 0 0.5rem;
+}
+.lay-tile {
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 10px);
+  background: rgba(255, 255, 255, 0.02);
+}
+.lay-tile h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+}
+.lay-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem 1rem;
+  margin: 0;
+}
+.lay-stat dt {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+.lay-stat dd {
+  margin: 0;
+}
+.lay-stat strong {
+  display: block;
+  font-size: 1.35rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.25;
+}
+.lay-sub {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+.lay-share {
+  margin: 0.5rem 0 0.8rem;
+}
+.lay-share-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.2rem 1rem;
+  font-size: 0.88rem;
+  margin-bottom: 0.3rem;
+}
+.lay-share-bar {
+  display: flex;
+  gap: 2px;
+  height: 14px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: rgba(140, 170, 210, 0.14);
+}
+.lay-share-part {
+  flex: 0 0 0;
+  min-width: 2px;
+}
+.lay-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 1.2rem;
+  margin: 0.2rem 0 0.4rem;
+  padding: 0;
+  list-style: none;
+  font-size: 0.88rem;
+}
+.lay-chart-wrap {
+  margin: 0 0 0.4rem;
+}
+.lay-chart {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.lay-grid {
+  stroke: rgba(140, 170, 210, 0.18);
+  stroke-width: 1;
+}
+.lay-axis {
+  fill: var(--text-muted);
+  font-size: 12px;
+}
+.lay-bar:hover,
+.lay-bar:focus-visible {
+  filter: brightness(1.25);
+  outline: 2px solid var(--text);
+  outline-offset: 1px;
+}
+.lay-tip {
+  min-height: 1.4em;
+  margin: 0.2rem 0 0;
+  font-size: 0.85rem;
+}
+.lay-details summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--min-tap);
+  cursor: pointer;
+  color: var(--accent);
+  font-weight: 600;
+}
+.lay-caveat {
+  margin: 0.6rem 0 0.9rem;
+  padding: 0.7rem 1rem;
+  border-left: 3px solid #e0b252;
+  border-radius: 0 var(--radius-sm, 10px) var(--radius-sm, 10px) 0;
+  background: rgba(224, 178, 82, 0.08);
+}
+.lay-caveat h3 {
+  margin: 0 0 0.3rem;
+  font-size: 0.95rem;
+}
+.lay-caveat ul {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.88rem;
+  color: var(--text-muted);
+}
+.lay-caveat li + li {
+  margin-top: 0.25rem;
+}
+#layouts-csv {
+  margin-top: 0.75rem;
+}
+
+/* A jump lands the section's title under the header and the sticky bar, not behind them. */
+.admin-page .admin-card {
+  scroll-margin-top: calc(var(--header-h, 64px) + 78px);
+}
+
+@media (forced-colors: active) {
+  /* The two designs are told apart by colour in the chart: keep the colours
+     in high-contrast mode (the table and the labels carry the same numbers). */
+  .lay-swatch,
+  .lay-share-part,
+  .lay-bar {
+    forced-color-adjust: none;
+  }
+}

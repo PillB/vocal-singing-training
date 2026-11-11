@@ -35,7 +35,13 @@ async function boot(page, opts = {}) {
     await route.fulfill({ status: 200, contentType: "application/json", body: '{"ok":true}' });
   });
   // The tour moves by animation frames, which a paused clock never delivers.
-  if (!opts.realClock) await page.clock.install({ time: new Date(NOW) });
+  // The clock is installed and then held still: it moves only when a test
+  // moves it. Left running, the real half-second a busy machine takes between
+  // loading the page and the test's first step turned "40 seconds" into 41.
+  if (!opts.realClock) {
+    await page.clock.install({ time: new Date(NOW) });
+    await page.clock.pauseAt(new Date(NOW));
+  }
   await page.addInitScript(
     (o) => {
       window.VT_ANALYTICS_ENDPOINT = o.endpoint;

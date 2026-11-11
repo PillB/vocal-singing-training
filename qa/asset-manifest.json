@@ -1,4 +1,8 @@
 {
+  "css/admin-layouts.css": {
+    "v": "20261111a",
+    "sha": "18027e516f4057ab"
+  },
   "css/admin.css": {
     "v": "20260926a",
     "sha": "49bf31d5b3159754"
@@ -39,13 +43,21 @@
     "v": "20261002a",
     "sha": "93d225ed63fd919a"
   },
+  "css/site-version.css": {
+    "v": "20261111a",
+    "sha": "13bc533cb089fa9c"
+  },
   "css/styles.css": {
-    "v": "20261103c",
-    "sha": "c7cd14f1776cfb9d"
+    "v": "20261111a",
+    "sha": "fb43394a6eac224e"
   },
   "js/account.js": {
     "v": "20261006b",
     "sha": "248c7cd91592e50d"
+  },
+  "js/admin-layouts.js": {
+    "v": "20261111a",
+    "sha": "d1a309907c0e8b86"
   },
   "js/admin.js": {
     "v": "20261006b",
@@ -64,8 +76,8 @@
     "sha": "319fd17f4fbb6fd1"
   },
   "js/app.js": {
-    "v": "20261103h",
-    "sha": "b674db9fef3f0c55"
+    "v": "20261111a",
+    "sha": "4ec127fad3f4ff69"
   },
   "js/auth-users.generated.js": {
     "v": "20261006a",
@@ -100,8 +112,8 @@
     "sha": "e4d37a63c03354f1"
   },
   "js/experiments-config.js": {
-    "v": "20260924e",
-    "sha": "68df1f865a4670c6"
+    "v": "20261111a",
+    "sha": "0d80b825ea3a66ae"
   },
   "js/experiments.js": {
     "v": "20260925a",
@@ -112,8 +124,8 @@
     "sha": "178ba56877e20400"
   },
   "js/i18n.js": {
-    "v": "20261103b",
-    "sha": "e60e1d7e9d2cff80"
+    "v": "20261111a",
+    "sha": "9b4f7ba85425fc49"
   },
   "js/license.js": {
     "v": "20261103d",
@@ -152,8 +164,8 @@
     "sha": "1feaf3f73c2fa516"
   },
   "js/privacy-switch.js": {
-    "v": "20261006b",
-    "sha": "8f828ad4179cbf52"
+    "v": "20261111a",
+    "sha": "1146d984f6906c68"
   },
   "js/range-adapter.js": {
     "v": "20261006a",
@@ -206,6 +218,14 @@
   "js/session.js": {
     "v": "20261103a",
     "sha": "9caee4c0ff168c46"
+  },
+  "js/site-layout.js": {
+    "v": "20261111a",
+    "sha": "385bb1fc5acfa2d9"
+  },
+  "js/site-version.js": {
+    "v": "20261111a",
+    "sha": "1a8ed737edf3c143"
   },
   "js/storage.js": {
     "v": "20261103b",

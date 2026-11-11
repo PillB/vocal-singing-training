@@ -84,7 +84,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        set: [stage, a11y, flows, regress, billing, audit, toast]
+        set: [stage, a11y, flows, regress, billing, audit, toast, designs]
     env:
       CI: '1'
       MIC_HELP: '0'

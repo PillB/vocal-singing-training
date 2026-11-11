@@ -165,6 +165,32 @@
         { id: "three", weight: 1 },
         { id: "five", weight: 1 }
       ]
+    },
+
+    /**
+     * Which arrangement of the site keeps people practising?
+     *
+     * control "a" — Clásico: Practicar, Plan, Historial.
+     * treatment "b" — Enfocado: Practicar and Progreso, a folding catalogue.
+     *
+     * The control at the top of the page lets anybody change design at any
+     * time (js/site-version.js). What people choose is read separately, as a
+     * preference (the admin page, "Diseños del sitio"), and is never evidence
+     * that one design works better: choosers are not like non-choosers. This
+     * experiment is the evidence. While it is on, a visitor who has not chosen
+     * is given a design at random, and the result is read by the design they
+     * were first given, whatever they switched to later.
+     *
+     * Primary: share with a `practice_day` in their second week (days 7-13).
+     * Guardrails: practice days in the first 14, and a `first_win` in the
+     * first 7. Plan: 355 per arm (30% -> 40%), at least 21 days.
+     */
+    site_layout_2026_11: {
+      enabled: false,
+      variants: [
+        { id: "a", weight: 1 },
+        { id: "b", weight: 1 }
+      ]
     }
   };
 })(window);

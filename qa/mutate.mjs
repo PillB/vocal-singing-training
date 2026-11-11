@@ -8,7 +8,7 @@
  *
  *   node qa/mutate.mjs            # the Node sets (audio, lint, coaching)
  *   node qa/mutate.mjs audio      # one set
- *   node qa/mutate.mjs stage a11y flows regress billing audit  # browser sets: need Playwright's Chromium
+ *   node qa/mutate.mjs stage a11y flows regress billing audit toast designs  # browser sets: need Playwright's Chromium
  *
  * Exit code 1 when any mutant survives or an anchor no longer matches (so a
  * refactor that moves the code cannot silently retire its mutant).
@@ -495,6 +495,35 @@ export const MUTANTS = {
     from,
     to,
     cmd: [...PIANO_SPEC.slice(0, 3), spec, "--project=chromium", "--workers=4", "--reporter=dot"]
+  })),
+  // The two site designs (A · Clásico, B · Enfocado): the control, what it reports, design B's own
+  // behaviour, the worker's reading and the admin card. Each mutant names the spec written to catch it;
+  // a path under workers/ is a Node test, anything else a browser spec, with an optional title filter.
+  designs: [
+    ["DS1 a visit lasts 30 seconds, not 30 quiet minutes: every reload is a new visit", "js/site-version.js", "const SESSION_GAP_MS = 30 * 60 * 1000;", "const SESSION_GAP_MS = 30 * 1000;", "tests/site-version.spec.js", "visit"],
+    ["DS2 a page left open keeps counting: the five-minute idle cap is gone", "js/site-version.js", "const end = practising() ? now : Math.min(now, clock.lastInput + IDLE_MS);", "const end = now;", "tests/site-version.spec.js", "nobody at it"],
+    ["DS3 a visit is reported on every page load, not once", "js/site-version.js", "if (first) track(\"layout_session\"", "track(\"layout_session\"", "tests/site-version.spec.js", "reported once"],
+    ["DS4 a switch reports the new design as where it came from", "js/site-version.js", "      from,\n      to: ver,", "      from: ver,\n      to: ver,", "tests/site-version.spec.js", "a switch reports"],
+    ["DS5 the old design's time is not closed on a switch, so it is credited to the new one", "js/site-version.js", "    const from = live.ver;\n    closeStretch(now);", "    const from = live.ver;", "tests/site-version.spec.js", "a switch reports"],
+    ["DS6 a diagonal drag counts as a flick: scrolling the page changes the tab", "js/site-layout.js", "Math.abs(dx) < Math.abs(dy) * 2 || ", "", "tests/site-version.spec.js", "sideways flick"],
+    ["DS7 folding a catalogue group shows its exercises and opening it hides them", "js/site-layout.js", "card.classList.toggle(\"sv-folded\", !open)", "card.classList.toggle(\"sv-folded\", open)", "tests/site-version.spec.js", "catalogue groups fold"],
+    ["DS8 a tablet's header buttons lose the 44px hit area", "css/styles.css", "    inset: -4px 0;", "    inset: 0;", "tests/site-version-devices.spec.js", "iPad Air \\(820x1180\\)"],
+    ["DS9 a phone's Progreso tabs keep the wide padding: the last tab hides behind a swipe", "css/site-version.css", "    padding-inline: 0.45rem;\n    font-size: 0.82rem;", "    padding-inline: 1.3rem;", "tests/site-version-devices.spec.js", "iPhone SE 2nd-3rd gen"],
+    ["DS10 the worker counts a switch from a design to itself", "workers/entitlements/src/layouts.js", " || row.src === row.dst) continue;", ") continue;", "workers/entitlements/test/layouts.test.mjs"],
+    ["DS11 the worker's cap on one time report is a hundred hours", "workers/entitlements/src/layouts.js", "export const MAX_REPORT_SECONDS = 3600;", "export const MAX_REPORT_SECONDS = 360000;", "workers/entitlements/test/layouts.test.mjs"],
+    ["DS12 the worker drops the design events as unknown names", "workers/entitlements/src/events.js", "  ...LAYOUT_EVENTS\n", "\n", "workers/entitlements/test/layouts.test.mjs"],
+    ["DS13 an old server's 404 reads as a generic error, with no word about redeploying", "js/admin-layouts.js", "    if (res.status === 404) return t(\"missing\");\n", "", "tests/admin-layouts.spec.js", "before this change"],
+    ["DS14 the CSV gives design B the visits of design A", "js/admin-layouts.js", "d[ver].sessions, d[ver].seconds].join", "d.a.sessions, d[ver].seconds].join", "tests/admin-layouts.spec.js", "CSV"],
+    ["DS15 the tiles show design A's visits in both", "js/admin-layouts.js", "VERSIONS.map((ver) => tile(versionOf(data, ver)))", "VERSIONS.map((ver) => tile({ ...versionOf(data, \"a\"), ver }))", "tests/admin-layouts.spec.js", "CSV"],
+    ["DS16 the design control takes focus behind the sticky header and stays there", "js/site-version.js", "    select.addEventListener(\"focus\", () => revealBelowHeader(select));\n", "", "tests/site-version.spec.js", "390x844: no focused control"]
+  ].map(([name, file, from, to, spec, grep]) => ({
+    name,
+    file,
+    from,
+    to,
+    cmd: spec.startsWith("workers/")
+      ? node([spec])
+      : [...PIANO_SPEC.slice(0, 3), spec, "--project=chromium", "--workers=4", "--reporter=dot", ...(grep ? ["-g", grep] : [])]
   }))
 };
 

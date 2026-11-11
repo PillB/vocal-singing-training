@@ -200,6 +200,7 @@ All are sized for two-sided alpha 0.05 and 80% power, with arms weighted 1:1.
 | `loop_home_2026_10` | loop / classic | 355 | 28 | 30% → 40% | share with a practice day, days 21–28 | practice days 0–28; microphone refused 0–28 |
 | `loop_surprise_2026_10` | surprises / none | 250 | 28 | +1.5 days | practice days, 0–28 | finished routines 0–28 |
 | `loop_minimo_len_2026_10` | three / five | 565 | 28 | +1 day | practice days, 0–28 | unfinished Mínimo share 0–28 |
+| `site_layout_2026_11` | a / b | 355 | 21 | 30% → 40% | share with a practice day, days 7–14 | practice days 0–14; first-win share 0–7 |
 
 At the traffic a friends-and-family beta brings, only large effects can be
 seen. Report "no detectable difference", never "no difference". Colours and
@@ -214,6 +215,41 @@ Wilson interval (`wilson()` in `workers/entitlements/src/stats.js`): 0 of 20
 people passing a step bounds its rate below about 16%, which finds a broken
 step without an A/B test. It cannot show a 20% improvement; nothing at this
 traffic can.
+
+### The two site designs are a preference, not an experiment (2026-11-11)
+
+The control at the top of the site ("Diseño del sitio": A · Clásico or
+B · Enfocado) lets every visitor pick the arrangement they like. Both hold the
+same things; B puts Plan, Historial, the statistics and the profiles behind
+one "Progreso" destination with tabs, and folds the catalogue's groups and the
+guide's sections. The site reports three events for it, under the same
+consent, opt-out and region rules as every other event:
+
+| Event | When | Props |
+|---|---|---|
+| `layout_session` | once per visit and design (a visit ends after 30 quiet minutes, shared by every tab) | `ver`, `src` (default / chosen / link), `n` (visit number in this browser) |
+| `layout_switch` | the control changes the design | `from`, `to`, `via`, `sec` into the visit |
+| `layout_time` | a stretch of use ends (page hidden, design changed, every five minutes) | `ver`, `sec` |
+
+Time is seconds with the page in view and somebody there: five minutes after
+the last input the clock stops, unless a practice is running. A browser killed
+without notice loses its last stretch, so every total is a lower bound.
+
+The admin page's **Diseños del sitio** card (`GET /v1/admin/layouts`) reads
+them. It is not an A/B result and the card says so before any number:
+
+- **Self-selection.** People who choose B differ from people who do not, before
+  they ever see B. More time on B says who chose it, not what it did.
+- **The default effect.** Almost nobody touches a setting, so the split mostly
+  measures which design is the default.
+- **Novelty.** A new arrangement gets looked at because it is new.
+
+The fair comparison is `site_layout_2026_11` above: it randomises which design
+a new browser gets *by default*, is read by the arm first assigned whatever
+the visitor later chooses (intention to treat), and is off like the rest. With
+it off everybody starts on A. Trade-off: the control stays visible in both
+arms, so the test measures "default A" against "default B" with switching
+allowed, which is the decision the owner actually has to make.
 
 ### Running the first test
 

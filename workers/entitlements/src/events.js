@@ -42,6 +42,7 @@
 
 import { callerIp, ensureSchema, hitRateLimit, hmacSha256Hex, nowSec } from "./db.js";
 import { compareMeans, compareRates, homogeneity, meanFromSums, sampleRatioMismatch, wilson } from "./stats.js";
+import { handleLayouts, LAYOUT_EVENTS } from "./layouts.js";
 
 const DAY = 86400;
 
@@ -136,7 +137,11 @@ export const EVENT_NAMES = new Set([
   "trial_click",
   "trial_cta_view",
   "trial_first_practice",
-  "trial_result"
+  "trial_result",
+  // Which design of the site a visit used, how long, and the control being
+  // used (src/layouts.js). Sent by js/site-version.js through the same code
+  // whatever the design, so none of them is an arm event.
+  ...LAYOUT_EVENTS
 ]);
 
 /**
@@ -246,6 +251,24 @@ export const EXPERIMENT_PRESETS = {
     plan: { nPerArm: 565, minDays: 28, mde: 1 },
     primary: { event: "practice_day", kind: "days", from: 0, to: 28 },
     guardrails: [{ event: "basics_incomplete", kind: "share", from: 0, to: 28 }]
+  },
+  site_layout_2026_11: {
+    arms: ["a", "b"],
+    weights: [1, 1],
+    control: "a",
+    // The arms differ in how the same screens are arranged, not in which
+    // events exist: layout_session, layout_time and layout_switch come from
+    // js/site-version.js in both. A visitor may still change design with the
+    // control at the top of the page; they stay in the arm they were first
+    // given (intention to treat), which is what makes the comparison fair.
+    armEvents: { a: [], b: [] },
+    // 30% -> 40% with a practice day in the second week.
+    plan: { nPerArm: 355, minDays: 21, mde: 0.1 },
+    primary: { event: "practice_day", kind: "share", from: 7, to: 14 },
+    guardrails: [
+      { event: "practice_day", kind: "days", from: 0, to: 14 },
+      { event: "first_win", kind: "share", from: 0, to: 7 }
+    ]
   }
 };
 
@@ -1572,7 +1595,8 @@ export async function routeEventsApi(request, env, url, path, deps) {
   if (
     path !== "/v1/admin/experiments" &&
     path !== "/v1/admin/experiments/results" &&
-    path !== "/v1/admin/funnel"
+    path !== "/v1/admin/funnel" &&
+    path !== "/v1/admin/layouts"
   ) {
     return null;
   }
@@ -1588,6 +1612,7 @@ export async function routeEventsApi(request, env, url, path, deps) {
     return json({ ok: false, reason: admin.reason }, admin.status, cors);
   }
   if (path === "/v1/admin/funnel") return handleFunnel(env, url, deps);
+  if (path === "/v1/admin/layouts") return handleLayouts(env, url, deps, nowSec(deps.now));
   return path === "/v1/admin/experiments"
     ? handleListExperiments(env, deps)
     : handleExperimentResults(env, url, deps);

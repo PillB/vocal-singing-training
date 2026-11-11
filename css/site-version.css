@@ -1,0 +1,248 @@
+/* ══════════════════════════════════════════════════════════════════════
+   Site designs (js/site-version.js, js/site-layout.js)
+
+   html[data-site-version="a"] is the site as it was: every rule for design
+   "b" is scoped to its attribute, so "a" is untouched by this file apart
+   from the one control that chooses between them.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* —— The control: one quiet line above the page, never in an exercise —— */
+.site-version-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.6rem;
+  margin: 0 0 0.6rem;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+.site-version-label {
+  font-weight: 650;
+}
+.site-version-select {
+  min-height: var(--min-tap, 44px);
+  max-width: 100%;
+  font-weight: 650;
+}
+.site-version-hint {
+  flex: 0 1 auto;
+  order: -1;
+  margin-right: auto;
+  font-size: 0.8rem;
+}
+body.view-exercise .site-version-bar,
+body.view-exercise .progress-tabs {
+  display: none;
+}
+@media (max-width: 640px) {
+  /* A phone gets the label and the choice; the sentence is one line too many. */
+  .site-version-hint {
+    display: none;
+  }
+  .site-version-bar {
+    justify-content: space-between;
+    margin-bottom: 0.45rem;
+  }
+}
+
+/* —— Header: "a" shows Plan and Historial, "b" shows Progreso —— */
+#btn-nav-progress {
+  display: none;
+}
+html[data-site-version="b"] #btn-nav-progress {
+  display: inline-flex;
+}
+html[data-site-version="b"] #btn-plan,
+html[data-site-version="b"] #btn-history {
+  display: none;
+}
+.header-nav .nav-link-b {
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-weight: 650;
+  white-space: nowrap;
+}
+.header-nav .nav-link-b:hover {
+  color: var(--text);
+  background: rgba(140, 170, 210, 0.14);
+}
+.header-nav .nav-link-b.active {
+  color: var(--text);
+  background: rgba(110, 180, 232, 0.26);
+  box-shadow:
+    inset 0 0 0 1px rgba(110, 180, 232, 0.7),
+    inset 0 -3px 0 var(--accent);
+}
+
+/* —— Progreso: four tabs over Plan and Historial ——
+   One row that scrolls sideways on the narrowest phones instead of wrapping
+   into two; it sticks under the header so the way to the other three parts
+   is always in reach of a thumb. */
+.progress-tabs {
+  position: sticky;
+  top: calc(var(--header-h, 60px) + 6px);
+  z-index: 5;
+  display: flex;
+  gap: 0.3rem;
+  margin: 0 0 0.8rem;
+  padding: 0.25rem;
+  border-radius: 999px;
+  border: 1px solid rgba(140, 170, 210, 0.22);
+  background: rgba(16, 23, 34, 0.96);
+  overflow-x: auto;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+}
+.progress-tabs[hidden] {
+  display: none;
+}
+.progress-tabs::-webkit-scrollbar {
+  display: none;
+}
+.progress-tab {
+  flex: 1 0 auto;
+  min-height: var(--min-tap, 44px);
+  padding: 0.3rem 0.9rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  font-weight: 650;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.progress-tab:hover {
+  color: var(--text);
+  background: rgba(140, 170, 210, 0.14);
+}
+.progress-tab.active {
+  color: var(--text);
+  background: rgba(110, 180, 232, 0.26);
+  box-shadow:
+    inset 0 0 0 1px rgba(110, 180, 232, 0.7),
+    inset 0 -3px 0 var(--accent);
+}
+.progress-tab:focus-visible,
+.group-fold:focus-visible,
+.site-version-select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Historial, split in three. Each tab shows its own part and nothing else. */
+html[data-site-version="b"] #view-history[data-progress-tab="history"] > #value-pulse,
+html[data-site-version="b"] #view-history[data-progress-tab="history"] > #history-profiles,
+html[data-site-version="b"] #view-history[data-progress-tab="stats"] > #history-list,
+html[data-site-version="b"] #view-history[data-progress-tab="stats"] > #history-profiles,
+html[data-site-version="b"] #view-history[data-progress-tab="profiles"] > #history-list,
+html[data-site-version="b"] #view-history[data-progress-tab="profiles"] > #value-pulse,
+html[data-site-version="b"] #view-history[data-progress-tab="profiles"] > .value-banner,
+html[data-site-version="b"] #view-history[data-progress-tab="profiles"] > .ad-slot {
+  display: none;
+}
+/* The tabs name the section; the page title under them would say it twice. */
+html[data-site-version="b"] #view-history > .panel-header,
+html[data-site-version="b"] #view-plan > .panel-header {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* —— Catalogue: groups that fold —— */
+.group-fold {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  width: 100%;
+  min-height: var(--min-tap, 44px);
+  padding: 0.2rem 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.group-fold-caret {
+  margin-left: auto;
+  font-size: 1rem;
+  letter-spacing: 0;
+  transition: transform 0.15s ease;
+}
+.group-fold[aria-expanded="false"] .group-fold-caret {
+  transform: rotate(-90deg);
+}
+html[data-site-version="b"] #exercise-list .card-ex.sv-folded {
+  display: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .group-fold-caret {
+    transition: none;
+  }
+}
+
+/* —— The guide: sections that fold (js/site-layout.js builds the buttons) —— */
+.guide-fold {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  min-height: var(--min-tap, 44px);
+  padding: 0.2rem 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+html[data-site-version="b"] .guide-fold::after {
+  content: "▾";
+  flex: none;
+  font-size: 0.9em;
+  color: var(--text-muted, #c5d2e4);
+}
+html[data-site-version="b"] .guide-fold[aria-expanded="false"]::after {
+  transform: rotate(-90deg);
+}
+html:not([data-site-version="b"]) .guide-fold {
+  cursor: default;
+}
+.guide-fold:focus-visible {
+  outline: 2px solid var(--accent, #6eb4e8);
+  outline-offset: 2px;
+}
+@media print {
+  .guide-fold-body[hidden] {
+    display: block !important;
+  }
+}
+
+@media (max-width: 480px) {
+  /* A phone shows all four tabs at once, so none is found only by a swipe.
+     Below 345px the strip scrolls again and keeps the current tab in view. */
+  .progress-tabs {
+    gap: 0.1rem;
+  }
+  .progress-tab {
+    padding-inline: 0.45rem;
+    font-size: 0.82rem;
+  }
+}
+
+@media (forced-colors: active) {
+  /* High-contrast mode drops backgrounds and shadows: the current tab keeps a
+     border, so "which one am I on" does not rest on colour alone. */
+  .progress-tab.active {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+}

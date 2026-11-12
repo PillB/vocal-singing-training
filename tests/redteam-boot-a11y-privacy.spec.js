@@ -747,7 +747,11 @@ test.describe("cross-06: text zoom on a phone", () => {
       fs.writeFileSync(path.join(dir, "Default", "Preferences"), JSON.stringify({ webkit: { webprefs: { default_font_size: 24 } } }));
       let ctx;
       try {
-        ctx = await chromium.launchPersistentContext(dir, { executablePath: browserPath(testInfo), viewport: PHONE, locale: lang === "en" ? "en-US" : "es-PE" });
+        // The headless shell Playwright runs by default never reads a profile's
+        // Preferences (it renders 16 px whatever default_font_size says); the full
+        // Chromium in its new headless mode does, so this case asks for it
+        const exe = browserPath(testInfo);
+        ctx = await chromium.launchPersistentContext(dir, { channel: exe ? undefined : "chromium", executablePath: exe, viewport: PHONE, locale: lang === "en" ? "en-US" : "es-PE" });
         const page = ctx.pages()[0] || (await ctx.newPage());
         await page.route((url) => !LOCAL.test(url.href), (route) => route.abort("blockedbyclient"));
         await page.addInitScript(seedScript, { lang, e2e: true, days: [-3, -2, -1], progress: true });

@@ -27,6 +27,11 @@
 const path = require("path");
 const { pathToFileURL } = require("url");
 const { test, expect } = require("@playwright/test");
+// The local worker stands in at a fake host (https://entitlements.test), which
+// the page's Content Security Policy rightly refuses. The policy itself is
+// tested in tests/csp.spec.js against the real worker host; here it is
+// bypassed, as in tests/accounts.spec.js, so the account logic is under test.
+test.use({ bypassCSP: true });
 const { mintLicense, patchBillingConfig } = require("./helpers/billing");
 
 const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";

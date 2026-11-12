@@ -71,7 +71,7 @@ function coachingFaults(id, ex, lang, profile) {
 const IDS = ["s18-costal-breath", "s15-sh-air-ladder", "s8-breath-support", "s6-straw", "s9-pitch-match"];
 
 test("five technical exercises: both language packs and profiles preserve the coaching safety contract", () => {
-  assert.equal(catalog.length, 47, "no exercise was silently removed");
+  assert.equal(catalog.length, 52, "no exercise was silently removed");
   for (const id of IDS) {
     const exercise = get(id);
     assert.ok(exercise, `${id} exists`);

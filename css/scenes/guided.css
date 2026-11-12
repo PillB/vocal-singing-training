@@ -40,6 +40,15 @@
     padding-left: 0.45rem;
     padding-right: 0.45rem;
   }
+  /* A voice drill with two live controls ("Hear the note", "Next") leaves the
+     title no room on a phone and would push it onto a line of its own. The
+     page header already names the exercise: that line goes to the picture. */
+  .mode-focus.mode-focus-live .mode-panel.has-viz.gd-voice .viz-head:has(.gd-live > .btn + .btn) {
+    justify-content: flex-end;
+  }
+  .mode-focus.mode-focus-live .mode-panel.has-viz.gd-voice .viz-head:has(.gd-live > .btn + .btn) .mode-title {
+    display: none;
+  }
 }
 
 /* Rotated phone: the controls stack beside the picture; four listen-back

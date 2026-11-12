@@ -260,8 +260,8 @@ export function planFromBillingPeriod(period) {
 }
 
 /**
- * Derive the plan for a Creem product: product id, then metadata, then the
- * product's own billing period.
+ * Derive the plan for a Creem product: product id, then (for a product the
+ * allow-list does not refuse) metadata, then the product's own billing period.
  * @param {Object} product Creem product object (or its id).
  * @param {Object} metadata The subscription's or checkout's metadata.
  * @param {Object} env Worker env bindings.
@@ -273,17 +273,23 @@ export function planForProduct(product, metadata, env) {
   if (byProduct) {
     return { plan: byProduct, planSource: "product_id" };
   }
-  const byMetadata = normalizePlanId(metadata && metadata.plan);
-  if (byMetadata) {
-    // Metadata outranks the allow-list below for the same reason it does on
-    // Stripe: it is set by the account's owner and nobody else, and it is the
-    // one remedy that needs no redeploy.
-    return { plan: byMetadata, planSource: "metadata" };
-  }
   if (productVerdict(productId, env) === "unlisted") {
     // Not ours. The plan stays unnamed and the caller suspends the record,
     // rather than turning somebody else's purchase into Pro.
+    //
+    // This comes before metadata, unlike on Stripe, because on Creem the buyer
+    // can write metadata: a payment link passes `?metadata[key]=value` into the
+    // checkout and "Metadata is included in webhook events" (Creem docs,
+    // Checkout Links, read 12 November 2026). Read first, `metadata[plan]`
+    // added to the link of a donation turned the donation into Pro. The remedy
+    // for a product of ours missing from the table is to add its id.
     return { plan: undefined, planSource: "unlisted_product", unlisted: true };
+  }
+  const byMetadata = normalizePlanId(metadata && metadata.plan);
+  if (byMetadata) {
+    // With no table to check against, metadata is the best name there is for
+    // the plan, and a deployment that sells only Pro has nothing else to sell.
+    return { plan: byMetadata, planSource: "metadata" };
   }
   const byPeriod = planFromBillingPeriod(product && product.billing_period);
   if (byPeriod) {

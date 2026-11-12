@@ -222,7 +222,7 @@ Public, committed in `wrangler.toml`:
 | `LICENSE_TTL_SECONDS` | Token lifetime (clamped to 60…2592000). |
 | `STRIPE_PRICE_PRO_MONTHLY` / `STRIPE_PRICE_PRO_YEARLY` | Optional price → plan mapping. Filling either one in also makes it an **allow-list** — see below. |
 | `MP_PLAN_PRO_MONTHLY` / `MP_PLAN_PRO_YEARLY` | Optional `preapproval_plan_id` → plan mapping. |
-| `CREEM_PRODUCT_PRO_MONTHLY` / `CREEM_PRODUCT_PRO_YEARLY` | Optional Creem product id → plan mapping. Filling either one in makes it an **allow-list** too, exactly as the Stripe prices do. |
+| `CREEM_PRODUCT_PRO_MONTHLY` / `CREEM_PRODUCT_PRO_YEARLY` | Optional Creem product id → plan mapping. Filling either one in makes it an **allow-list** too, as the Stripe prices do, and one that `metadata.plan` cannot get past (a buyer can write Creem metadata). |
 | `CREEM_ALLOW_TEST_MODE` | `"true"` lets a Creem event whose `mode` is `test`, `sandbox` or `local` entitle. Defaults off: a test purchase moves no money, so honouring one hands out the paid tier for nothing. Switch it on to prove the rail end to end, and off again before the first real sale. An unrecognised mode entitles either way, so a live value Creem renames cannot silently stop every sale. |
 | `TRIAL_DAYS` | Length of the free trial, in days. One per account, ever. Default 7. |
 | `TRIAL_LEN_EXPERIMENT` | `"on"` runs the trial-length A/B test (`trial_len_2026_11`): each account's trial is 7 or 14 days, assigned from its account id. **It overrides `TRIAL_DAYS`** — with the test on, that setting is ignored. Off (the default) everybody gets `TRIAL_DAYS`. It also needs `LICENSE_ID_KEY` or `LICENSE_PRIVATE_KEY_PKCS8_B64` to key the assignment with; without one the test stays off, because an arm anyone can predict is an arm anyone can pick. The browser cannot switch this on: the `enabled` flag in `js/experiments-config.js` governs only what the statistics record. |
@@ -621,8 +621,12 @@ Then create **two products** — monthly and yearly — because Creem has no sin
 link that offers both, and put their ids in `CREEM_PRODUCT_PRO_MONTHLY` and
 `CREEM_PRODUCT_PRO_YEARLY`. Filling either one in makes it an allow-list as
 well as a label, so a donation or a one-off lesson sold from the same Creem
-account cannot become Pro. Paste each product's share link into
-`js/billing-config.js` under `providers.creem.links`.
+account cannot become Pro. Unlike Stripe, `metadata.plan` is no way past that
+list: a Creem payment link takes `?metadata[plan]=…` from whoever opens it and
+passes it to the webhook, so it is only read for a product the list does not
+refuse. A product of ours missing from the list is fixed by adding its id.
+Paste each product's share link into `js/billing-config.js` under
+`providers.creem.links`.
 
 Five things about this rail are not like Stripe's, and each one is a way to
 get it wrong:

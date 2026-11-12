@@ -293,8 +293,13 @@ test("a product id names the plan, then metadata, then the billing period", () =
   assert.deepEqual(planForProduct({ id: "prod_y" }, null, env), { plan: "pro_yearly", planSource: "product_id" });
   assert.deepEqual(
     planForProduct({ id: "prod_other" }, { plan: "pro_yearly" }, env),
+    { plan: undefined, planSource: "unlisted_product", unlisted: true },
+    "the allow-list outranks metadata: a buyer can write metadata into a Creem payment link"
+  );
+  assert.deepEqual(
+    planForProduct({ id: "prod_other" }, { plan: "pro_yearly" }, {}),
     { plan: "pro_yearly", planSource: "metadata" },
-    "metadata outranks the allow-list: it is the one remedy that needs no redeploy"
+    "control: with no table to check against, metadata names the plan"
   );
   assert.deepEqual(
     planForProduct({ id: "prod_other" }, null, env),
@@ -662,14 +667,23 @@ test("a product that is not ours is suspended rather than made Pro", async () =>
     product: { id: "prod_donation", billing_period: "every-month" }
   });
   assert.equal(await claim(env, "ch_12", 1), 402, "suspended: adding the id and redeploying entitles it");
-  // And naming the plan in the checkout's metadata is the remedy that needs no
-  // redeploy.
+  // Naming the plan in the checkout's metadata does not make it ours: a buyer
+  // writes that by adding `?metadata[plan]=pro_yearly` to the donation's
+  // payment link, and Creem passes it to this webhook (Creem docs, Checkout
+  // Links). Wrong: metadata read before the allow-list makes the donation Pro.
   await deliver(env, "evt_2", "checkout.completed", 1, {
     ...checkout("ch_13", "sub_13"),
     product: { id: "prod_donation", billing_period: "every-month" },
-    metadata: { plan: "pro_monthly" }
+    metadata: { plan: "pro_yearly" }
   });
-  assert.equal(await claim(env, "ch_13", 2), 200);
+  assert.equal(await claim(env, "ch_13", 2), 402, "a buyer's metadata is no way past the allow-list");
+  // Control: the same metadata on a product that is ours entitles it.
+  await deliver(env, "evt_3", "checkout.completed", 2, {
+    ...checkout("ch_14", "sub_14"),
+    product: { id: "prod_mine", billing_period: "every-month" },
+    metadata: { plan: "pro_yearly" }
+  });
+  assert.equal(await claim(env, "ch_14", 3), 200);
 });
 
 /* -------------------------------------------------------------- the mapping */

@@ -55,3 +55,4 @@ import "./resend-idempotent.test.mjs";
 import "./split-store.test.mjs";
 import "./split-stripe-mp.test.mjs";
 import "./split-creem.test.mjs";
+import "./split-routes.test.mjs";

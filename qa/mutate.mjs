@@ -6,7 +6,7 @@
  * suite that stays green on a mutant is not testing that behaviour, however
  * high its coverage. Ported from the QA thread's mutate.py (2026-11-01).
  *
- *   node qa/mutate.mjs            # the Node sets (audio, lint, coaching)
+ *   node qa/mutate.mjs            # the Node sets (audio, pitch, lint, coaching)
  *   node qa/mutate.mjs audio      # one set
  *   node qa/mutate.mjs stage a11y flows regress billing scoring controls audit toast designs  # browser sets: need Playwright's Chromium
  *
@@ -32,6 +32,8 @@ const AUDIO_TESTS = [
   "tests/node/start-recovery.test.mjs",
   "tests/node/sound-recovery.test.mjs"
 ];
+// The pitch set's tests: the detector on synthetic voices, its band contracts, and the engine's level gate
+const PITCH_TESTS = ["tests/node/pitch-voices.test.mjs", "tests/node/audio-contract.test.mjs", "tests/node/audio-mutant-killers.test.mjs"];
 const LINT_TESTS = ["qa/lint-gate.test.mjs", "tests/node/asset-versions.test.mjs", "tests/node/csp.test.mjs", "tests/node/env-noise.test.mjs", "tests/node/env-noise-killers.test.mjs", "tests/node/inline-script-pin.test.mjs", "tests/node/csp-pins.test.mjs", "tests/node/i18n-duplicate-keys.test.mjs", "tests/node/exercise-parity.test.mjs", "tests/node/playwright-projects.test.mjs"];
 const PAGES = ["index.html", "guide.html", "privacy.html", "admin.html"];
 // A mutant can leave a promise that never settles. Node 22 cancels such a test once the event loop
@@ -106,10 +108,6 @@ export const MUTANTS = {
     ["VC5 starter straw dose is raised from 2 to 5 minutes", "js/exercises-data.js", 'labelEs: "Fonación cómoda con cañita (minutos)", type: "number", target: 2, unit: "min"', 'labelEs: "Fonación cómoda con cañita (minutos)", type: "number", target: 5, unit: "min"']
   ].map(([name, file, from, to]) => ({ name, file, from, to, cmd: node(["tests/node/technical-coaching.test.mjs"]) })),
   audio: [
-    ["M1 YIN voicing threshold 0.18 -> 0.60 (noise accepted as pitch)", "js/pitch-visualizer.js", "if (cmnd[lag] >= 0.18) continue;", "if (cmnd[lag] >= 0.60) continue;"],
-    ["M2 above-band alias guard dropped (1500 Hz read as 750)", "js/pitch-visualizer.js", "for (let shortLag = 2; shortLag < minLag; shortLag++) {", "for (let shortLag = 2; shortLag < 2; shortLag++) {"],
-    ["M4 parabolic interpolation removed", "js/pitch-visualizer.js", "return lag + (denom ? Math.max(-0.5, Math.min(0.5, 0.5 * (before - after) / denom)) : 0);", "return lag;"],
-    ["M5 silence gate removed", "js/pitch-visualizer.js", "if (Math.sqrt(power / n) < 0.01) return null;", ""],
     ["M6 +150c (adjacent semitone) accepted as in tune", "js/practice-modes.js", "const hi = this.profile.centsHi == null ? 50 : this.profile.centsHi;", "const hi = this.profile.centsHi == null ? 150 : this.profile.centsHi;"],
     ["M7 -140c accepted as in tune", "js/practice-modes.js", "const lo = this.profile.centsLo == null ? -40 : this.profile.centsLo;", "const lo = this.profile.centsLo == null ? -140 : this.profile.centsLo;"],
     ["M8 stale take may publish after a newer take", "js/practice-engine.js", "if (epoch !== this._recordingEpoch) return;", ""],
@@ -165,19 +163,6 @@ export const MUTANTS = {
     ["M64 the Vad ignores the wall time it was asked to keep", "js/voice-features.js", "    if (this.maxDt > 0) this.t += Math.max(0, wallDt(frame, this.maxDt) - frameDt(frame));\n", ""],
     ["M65 a Vad on wall time takes a hidden minute in one frame", "js/voice-features.js", "Math.min(ms / 1000, maxSec) : 0;", "ms / 1000 : 0;"],
     ["M66 every Vad moves to wall time", "js/voice-features.js", "this.maxDt = opts.maxDt > 0 ? opts.maxDt : 0;", "this.maxDt = opts.maxDt > 0 ? opts.maxDt : 1;"],
-    // The weak-fundamental promotion (PR #24's 110 Hz with a loud 3rd partial read as 330 Hz).
-    ["M49 a weak fundamental's loud 3rd partial scored as the note again", "js/pitch-visualizer.js", "      lag = promoteLag(cmnd, lag, maxLag, buf, decimate);\n", ""],
-    ["M50 only the octave below is tried, not the 3rd or 4th multiple", "js/pitch-visualizer.js", "for (let k = 2; k <= 4 && k * at + 1 <= maxLag; k++) {", "for (let k = 2; k <= 2 && k * at + 1 <= maxLag; k++) {"],
-    ["M51 a weak fundamental whose 3rd partial is above the band is withheld again", "js/pitch-visualizer.js", "return promoted < minLag ? -1 : promoted;", "return -1;"],
-    ["M52 hasDeeperMultiple bar 0.35 -> 0.1 (the 3rd partial's multiple no longer far deeper)", "js/pitch-visualizer.js", "if (cmnd[m] < 0.35 * cmnd[at]) return true;", "if (cmnd[m] < 0.1 * cmnd[at]) return true;"],
-    ["M53 promotion without the full-rate confirmation", "js/pitch-visualizer.js", "    if (!(best < 0.35 * here)) return null;\n", ""],
-    ["M54 a period periodic at full rate still promoted (beeps named as notes)", "js/pitch-visualizer.js", "    if (here <= 0.06) return at;\n", ""],
-    ["M55 full-rate confirmation 0.35 -> 1 (noisy 880 Hz read as 440)", "js/pitch-visualizer.js", "if (!(best < 0.35 * here)) return null;", "if (!(best < 1 * here)) return null;"],
-    ["M67 the deepest multiple wins again, not the shortest as periodic (a weak 116.5 Hz under its 2nd partial read as 58.3)", "js/pitch-visualizer.js", "    const bar = best + 0.15 * (here - best);\n", "    const bar = best;\n"],
-    ["M68 a 3x pick that is two periods is kept (a weak 493.9 Hz under its loud 3rd partial read as 246.9)", "js/pitch-visualizer.js", "    return pick.k === 3 ? halfOfTriple(cmnd, pick, buf, decimate, width) : pick.lag;\n", "    return pick.lag;\n"],
-    ["M69 a confirmed above-band period is held to the 0.18 threshold again (C6 under its loud 3rd partial read as C5)", "js/pitch-visualizer.js", "const lag = start > minLag ? refinedLag(cmnd, start) : firstPeriod(cmnd, start, maxLag, buf, decimate);", "const lag = firstPeriod(cmnd, start, maxLag, buf, decimate);"],
-    ["M70 the half of a 3x pick need not be a dip (8 kHz 261.6 Hz under its loud 3rd partial read an octave high)", "js/pitch-visualizer.js", "    if (cmnd[lag - 1] < cmnd[lag] || cmnd[lag + 1] < cmnd[lag]) return pick.lag;\n", ""],
-    ["M71 the half of a 3x pick need only be nearly as periodic (a weak 146.8 Hz under its loud 6th partial read an octave high)", "js/pitch-visualizer.js", "<= 1.25 * pick.depth + 0.002 ? lag : pick.lag;", "<= 1.25 * pick.depth + 0.2 ? lag : pick.lag;"],
     ["M72 lostSince: a gap exactly at the start no longer counts (QA-37 E2)", "js/voice-features.js", "some((at) => at >= idx && at < to)", "some((at) => at > idx && at < to)"],
     ["M73 lostSince: a gap exactly at the end now counts (QA-37 E3)", "js/voice-features.js", "some((at) => at >= idx && at < to)", "some((at) => at >= idx && at <= to)"],
     ["M74 a frame whose tail is nowhere in the buffer counts the frame time, not the whole buffer (QA-37 E6)", "js/voice-features.js", "return best == null ? N : best;", "return best == null ? 0 : best;"],
@@ -230,6 +215,39 @@ export const MUTANTS = {
     ["SB8 the banner with no free band covers Stop like any other control", "js/audio-recovery.js", "weight: KEEP_CLEAR.includes(c.id) ? 100 : 1", "weight: 1"],
     ["SB9 the banner with no free band overflows the largest band again", "js/audio-recovery.js", "const y = band ? band.top + (band.h - h) / 2 : leastCovered(room, h);", "const y = band ? band.top + (band.h - h) / 2 : room.bands.reduce((a, b) => (b.h > a.h ? b : a)).top;"]
   ].map(([name, file, from, to]) => ({ name, file, from, to, cmd: node(AUDIO_TESTS) })),
+  // The NSDF pitch detector (McLeod & Wyvill 2005; PR #21), one stage at a time. Each mutant runs only the test
+  // written to catch it (its title pattern), so the set costs seconds a mutant, not the whole audio suite. The
+  // YIN detector's mutants (M1, M2, M4, M5, M49-M55, M67-M71) left with the code they planted defects in.
+  pitch: [
+    ["PD1 the clarity floor 0.55 -> 0.3 (a fan or a hiss gets a pitch)", "js/pitch-visualizer.js", "const MIN_CLARITY = 0.55;", "const MIN_CLARITY = 0.3;", "give no pitch"],
+    ["PD2 MPM's K 0.9 -> 0.6 (a harmonic on a formant passes for the period: a fifth up)", "js/pitch-visualizer.js", "const MPM_K = 0.9;", "const MPM_K = 0.6;", "harmonic on her second formant"],
+    ["PD3 MPM's K 0.9 -> 1 (only the most periodic lag: octaves low)", "js/pitch-visualizer.js", "const MPM_K = 0.9;", "const MPM_K = 1;", "C5 to C6|resolves fundamentals"],
+    ["PD4 no mains tolerance (a 60 Hz buzz named as B1)", "js/pitch-visualizer.js", "const MAINS_TOL = 0.01;", "const MAINS_TOL = 0;", "give no pitch|mains hum is not named"],
+    ["PD5 mains tolerance 1 % -> 3 % (a bass's A#1 and B1 either side of 60 Hz read nothing)", "js/pitch-visualizer.js", "const MAINS_TOL = 0.01;", "const MAINS_TOL = 0.03;", "mains hum is not named"],
+    ["PD6 the odd-harmonic test never takes the octave down under 320 Hz (a low-cut baritone with vibrato an octave up)", "js/pitch-visualizer.js", "const OCT_ODD = 0.6;", "const OCT_ODD = 2;", "cuts his fundamental"],
+    ["PD7 the odd-harmonic test never takes the octave down from 320 Hz (a pressed /a/ with vibrato an octave up)", "js/pitch-visualizer.js", "const OCT_ODD_HI = 0.45;", "const OCT_ODD_HI = 2;", "pressed /a/ at C5"],
+    ["PD8 the octave down from 320 Hz needs a line no voice has (a pressed /a/ an octave up)", "js/pitch-visualizer.js", "const LINE_H1 = 30;", "const LINE_H1 = 1e9;", "pressed /a/ at C5"],
+    ["PD9 the octave down from 320 Hz without the spectrum's say (breath in F1 read an octave down)", "js/pitch-visualizer.js", "const LINE_H1 = 30;", "const LINE_H1 = 0;", "breathy high voice"],
+    ["PD10 2L may be 1x as aperiodic as L from 320 Hz, not 1.8x (a pressed /a/ with vibrato an octave up)", "js/pitch-visualizer.js", "const OCT_ODD_A2_HI = 1.8;", "const OCT_ODD_A2_HI = 1;", "pressed /a/ at C5"],
+    ["PD11 a lag under the search is the frame's own period whatever lies under it (a woman's /i/ at 940 Hz reads nothing)", "js/pitch-visualizer.js", "const SHORT_LOW = 0.005;", "const SHORT_LOW = 1;", "harmonic on her second formant"],
+    ["PD12 a lag under the search must be perfectly periodic (a whistle with vibrato read an octave low)", "js/pitch-visualizer.js", "const SHORT_C = 1.5;", "const SHORT_C = 0;", "whistle over the top"],
+    ["PD13 a lag under the search is never the frame's period (every whistle read an octave low)", "js/pitch-visualizer.js", "if (1 - q.n > SHORT_C * (1 - best) + 1e-4) return false;", "return false;", "whistle over the top"],
+    ["PD14 a candidate's line need not stand near the period's (a woman's /i/ a fifth up)", "js/pitch-visualizer.js", "const FUND_REL = 0.063;", "const FUND_REL = 0;", "harmonic on her second formant"],
+    ["PD15 aperiodicity test 3x -> 100x (a part of the period passes for it)", "js/pitch-visualizer.js", "const APER_C = 3;", "const APER_C = 100;", "harmonic on her second formant"],
+    ["PD16 the aperiodicity test spans one period, not three (a part of the period passes for it)", "js/pitch-visualizer.js", "const APER_SPAN = 3.06;", "const APER_SPAN = 1.01;", "harmonic on her second formant"],
+    ["PD17 no clarity floor for a pitch from 400 Hz (speech reads its first formant)", "js/pitch-visualizer.js", "const HI_MIN_BEST = 0.7;", "const HI_MIN_BEST = 0;", "speech gliding"],
+    ["PD18 no aperiodicity cap (speech reads its first formant)", "js/pitch-visualizer.js", "const APER_CAP = 0.25;", "const APER_CAP = 1;", "speech gliding"],
+    ["PD19 a hum-pulled period never handed back to the voice (A2 over 60 Hz read as 55 Hz)", "js/pitch-visualizer.js", "const LOW_K = 0.85;", "const LOW_K = 1.1;", "sine 12 dB under him"],
+    ["PD20 the hum rule only under 40 Hz, not 80 Hz", "js/pitch-visualizer.js", "const LOW_HZ = 80;", "const LOW_HZ = 40;", "sine 12 dB under him"],
+    ["PD21 no fractional lag at the top of the band (a bright tone at 1175-1480 Hz an octave low)", "js/pitch-visualizer.js", "const REFINE_MINLAGS = 4;", "const REFINE_MINLAGS = 0;", "whistle over the top"],
+    ["PD22 the silence gate removed (a hum under -40 dBFS scored as a note)", "js/pitch-visualizer.js", "    if (Math.sqrt(energy / N) < 0.01) return null; // silence\n", "", "below the level gate"],
+    ["PD23 the lag rounded to the sample (up to 7 cents off at 300-380 Hz)", "js/pitch-visualizer.js", "const sh = den < 0 ? Math.max(-0.5, Math.min(0.5, (0.5 * (a - c)) / den)) : 0;", "const sh = 0;", "within 3 cents"],
+    ["PD24 a voice over a hum is named at the hum", "js/pitch-visualizer.js", "      if (!alt) return null;\n      freq = sampleRate / alt.lag;", "      if (!alt) return null;", "three or four times the mains"],
+    ["PD25 a hum alone is named as a note", "js/pitch-visualizer.js", "      if (!alt) return null;", "      if (!alt) return freq;", "give no pitch|mains hum is not named"],
+    ["PD26 the band floor 50 -> 40 Hz (a rumble named as a note)", "js/pitch-visualizer.js", "const PITCH_LO_HZ = 50;", "const PITCH_LO_HZ = 40;", "uncertain pitch is withheld"],
+    ["PD27 the band top 1500 -> 1000 Hz (a soprano's C6 an octave low)", "js/pitch-visualizer.js", "const PITCH_HI_HZ = 1500;", "const PITCH_HI_HZ = 1000;", "C5 to C6"],
+    ["PD28 the engine drops every pitch over 1000 Hz", "js/practice-engine.js", "  const PITCH_MAX = 1600;", "  const PITCH_MAX = 1000;", "C5 to C6"]
+  ].map(([name, file, from, to, only]) => ({ name, file, from, to, cmd: node([`--test-name-pattern=${only}`, ...PITCH_TESTS]) })),
   lint: [
     ["L1 folders skipped by name again", "qa/lint-complexity.mjs", "if (!EXCLUDED_PATHS.has(name)) visit(name);", "if (!EXCLUDED_PATHS.has(name) && !/^(?:fixtures|geometry)$/.test(item.name)) visit(name);"],
     ["L2 .cjs not scanned", "qa/lint-complexity.mjs", "export const SCANNED = /\\.(?:js|mjs|cjs)$/;", "export const SCANNED = /\\.(?:js|mjs)$/;"],
@@ -337,7 +355,7 @@ export const MUTANTS = {
     ["MC15 a sound request outlives Stop piano: Loop, Play once and an option changed during a take play after it", "js/app.js", "return () => gen === state.practiceGen && state.exercise === ex && pianoStop === window.VTPiano?._stopGen;", "return () => gen === state.practiceGen && state.exercise === ex;", "orphan"],
     ["MC16 a take replaced while its fallback or recovery waited reads the next take's piano as its own sound", "js/app.js", "    // Replaced while the fallback or the recovery waited: the piano sounding now is the next take's\n    if (!current()) return false;\n", "", "orphan"],
     ["MC17 a Start answered after a Stop stops the piano again, cutting what the learner played since", "js/app.js", "if (pianoStop === VTPiano._stopGen) VTPiano.stopAll();", "VTPiano.stopAll();", "orphan"],
-    ["MB1 a resume that timed out tells the learner a permission prompt is still open", "js/app.js", "if ([\"interrupted\", \"AudioResumeTimeout\"].includes(failureName))", "if (failureName === \"interrupted\")", "micmsg"],
+    ["MB1 a resume that timed out tells the learner a permission prompt is still open", "js/app.js", "if ([\"interrupted\", \"AudioResumeTimeout\"].includes(name))", "if (name === \"interrupted\")", "micmsg"],
     ["MB2 a microphone that ended during Start is called blocked, not disconnected", "js/app.js", "|MediaStreamSource|ended while Start built/i", "|MediaStreamSource/i", "micmsg"]
   ].map(([name, file, from, to, area]) => ({
     name,
@@ -600,7 +618,7 @@ export const MUTANTS = {
       ["D2 the 'Paso listo' target is 13 px again, below the fold (FAL-01)", "css/styles.css", ".review-step label {\n  min-height: 24px;", ".review-step label {\n  min-height: 0;", "tests/target-size-below-fold.spec.js"],
       ["D3 focus keeps no room above the consent bar (UIB-01)", "js/region-gate.js", '    root.style.setProperty("scroll-padding-bottom", room);\n', "", "tests/focus-consent-bar.spec.js"],
       ["D4 the page cannot scroll its last controls clear of the consent bar (UIB-01)", "js/region-gate.js", '    root.style.setProperty("padding-bottom", room);\n', "", "tests/focus-consent-bar.spec.js"],
-      ["D5 the room for the consent bar stays after it is answered (UIB-01)", "js/region-gate.js", "    barShown = false;\n    reserveBarRoom();\n  }", "    barShown = false;\n  }", "tests/focus-consent-bar.spec.js"],
+      ["D5 the room for the consent bar stays after it is answered (UIB-01)", "js/region-gate.js", "    barWatch = null;\n    reserveBarRoom();\n  }", "    barWatch = null;\n  }", "tests/focus-consent-bar.spec.js"],
       ["D6 scroll padding forgets the exercise's Back row: Shift+Tab leaves a control under it (UIB-04)", "css/styles.css", "scroll-padding-top: calc(var(--header-h, 58px) + var(--ex-chrome-h, 0px) + 0.5rem);", "scroll-padding-top: calc(var(--header-h, 58px) + 0.5rem);", "tests/focus-reverse.spec.js"],
       ["D7 phones 742 to 799 px wide get one rail row again: the landscape bound moved to 741 px (C1)","css/styles.css","@media (max-height: 500px) and (max-width: 799.98px)","@media (max-height: 500px) and (max-width: 741px)","tests/rail-landscape-bounds.spec.js"],
       ["D8 phones 381 to 500 px tall get one rail row again: the height bound moved to 380 px (C2)","css/styles.css","@media (max-height: 500px) and (max-width: 799.98px)","@media (max-height: 380px) and (max-width: 799.98px)","tests/rail-landscape-bounds.spec.js"]
@@ -716,7 +734,7 @@ export const MUTANTS = {
   }))
 };
 
-export const DEFAULT_SETS = ["audio", "lint", "coaching"];
+export const DEFAULT_SETS = ["audio", "pitch", "lint", "coaching"];
 
 /** What the last failing command printed, so a red baseline in CI says which test failed. */
 let lastFailure = "";

@@ -231,6 +231,27 @@ test.describe("a rail the worker cannot honour", () => {
     }
   });
 
+  test("C10 what was bought is remembered across the trip to the checkout, whatever the return link says", async ({ page }) => {
+    // startCheckout was split under the complexity ceiling (merging #26 into
+    // main); with the intent no longer written, this mutant lived. The return
+    // link from a hosted checkout carries no plan or rail of ours, so the
+    // remembered intent is what says a yearly Mercado Pago purchase was one.
+    const { navigations } = await boot(page, {
+      health: healthBody({ mercadopagoConfigured: true, stripeConfigured: true, creemConfigured: true }),
+      links: { mercadopago: { pro_yearly: MP_LINK } }
+    });
+    await askTheWorker(page);
+    const res = await page.evaluate(() => window.VTBilling.startCheckout("pro_yearly", "mercadopago"));
+    expect(res.mode).toBe("redirect");
+    await expect.poll(() => navigations.join(" ")).toContain("mercadopago.com.pe");
+    const back = await page.evaluate(() => {
+      history.replaceState(null, "", "/index.html?billing=success&preapproval_id=pre_test");
+      const ret = window.VTBilling.handleReturnFromCheckout();
+      return { event: ret && ret.event, plan: ret && ret.plan, provider: ret && ret.provider };
+    });
+    expect(back).toEqual({ event: "success", plan: "pro_yearly", provider: "mercadopago" });
+  });
+
   // ----- the other direction: no answer is not a no
 
   test("a sale is not lost while the answer is still in the air", async ({ page }) => {

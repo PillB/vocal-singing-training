@@ -474,6 +474,18 @@ test.describe("Admin page", () => {
     const page = await openAdmin(adminCtx, worker, admin);
     await expect(page.locator("#code-list")).toContainText("Todavía no hay códigos");
 
+    // The form is novalidate, so the page's own check is the only one: a code
+    // nobody can redeem, or one for a thousand and one people, is refused
+    // before it reaches the worker (C20, a mutant of the createCode split).
+    for (const uses of ["0", "1001"]) {
+      await page.fill("#code-days", "14");
+      await page.fill("#code-uses", uses);
+      await page.click("#code-submit");
+      await expect(page.locator("#code-result")).toHaveText("Escribe cuántas veces se puede usar, entre 1 y 1000.");
+      await expect(page.locator("#code-new")).toBeHidden();
+    }
+    expect((await worker.env.DB.prepare("SELECT COUNT(*) AS n FROM gift_codes").first()).n).toBe(0);
+
     await page.fill("#code-days", "14");
     await page.fill("#code-uses", "1");
     await page.fill("#code-note", "Para Ana");
@@ -693,6 +705,8 @@ test.describe("Admin page", () => {
     await expect(bug).toContainText("ni con auriculares");
     await expect(bug).toContainText("tocar Empezar");
     await expect(bug).toContainText("/index.html#practice");
+    // Which build they were on (C24, a mutant of the reportCard split).
+    await expect(bug).toContainText("20261102a");
     await expect(bug).toContainText("iPhone");
     await expect(bug).toContainText("390x844");
     await expect(bug).toContainText(blocking);

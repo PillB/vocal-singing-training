@@ -25,7 +25,8 @@ const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";
  * answers at all (an aborted request, which is what no network looks like).
  *
  * @param {import('@playwright/test').Page} page Page.
- * @param {{url?: string, lang?: string, reports?: string, configured?: boolean}} [options] Options.
+ * @param {{url?: string, lang?: string, reports?: string, configured?: boolean, health?: Object}} [options]
+ *   Options; `health` replaces the /v1/health body.
  * @returns {Promise<{posted: Object[]}>} The bodies the page posted.
  */
 async function boot(page, options) {
@@ -58,7 +59,7 @@ async function boot(page, options) {
     route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({
+      body: JSON.stringify(opts.health || {
         ok: true,
         accountsConfigured: true,
         eventsEnabled: false,
@@ -258,6 +259,47 @@ test.describe("reporting a problem", () => {
     await expect(page.locator("#vt-report-summary")).toHaveValue("no se guarda");
   });
 
+  // js/reports.js drawForm was split under the complexity ceiling (merging #26
+  // into main); these three mutants lived until these tests.
+  test("C29 a drafted idea comes back as an idea when the dialog is opened without a kind", async ({ page }) => {
+    // The footer entry is labelled "report a problem" and asks for a bug, so
+    // it is the programmatic open (and the QA page's) that shows the restore.
+    await boot(page);
+    await page.locator(".app-footer [data-vt-report]").click();
+    await page.locator('input[name="vt-report-kind"][value="idea"]').check();
+    await fill(page, { summary: "más escalas menores" });
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#vt-report-overlay")).toBeHidden();
+    await page.evaluate(() => window.VTReports.open());
+    await expect(page.locator('input[name="vt-report-kind"][value="idea"]')).toBeChecked();
+    await expect(page.locator("#vt-report-steps")).toBeHidden();
+    await expect(page.locator("#vt-report-summary")).toHaveValue("más escalas menores");
+  });
+
+  test("C30 a signed-in reporter's address is offered as the contact, and a typed one wins", async ({ page }) => {
+    await boot(page);
+    await page.evaluate(() => {
+      window.VTAccount = { ...window.VTAccount, getState: () => ({ configured: true, signedIn: true, account: { email: "cantante@example.test" } }) };
+    });
+    await page.locator(".app-footer [data-vt-report]").click();
+    await expect(page.locator("#vt-report-contact")).toHaveValue("cantante@example.test");
+    // A draft is only kept once something is typed in the report itself.
+    await fill(page, { summary: "el metrónomo se adelanta", contact: "otra@example.test" });
+    await page.keyboard.press("Escape");
+    await page.locator(".app-footer [data-vt-report]").click();
+    await expect(page.locator("#vt-report-contact")).toHaveValue("otra@example.test");
+  });
+
+  test("C31 back from the copy panel, the cursor is in the summary again, not lost on the page", async ({ page }) => {
+    await boot(page, { reports: "off" });
+    await page.locator(".app-footer [data-vt-report]").click();
+    await fill(page, { summary: "no se guarda" });
+    await page.locator("#vt-report-form button[type=submit]").click();
+    await expect(page.locator("#vt-report-title")).toHaveText(/No pudimos guardarlo/);
+    await page.locator("#vt-report-overlay .btn-ghost").first().click();
+    await expect(page.locator("#vt-report-summary")).toBeFocused();
+  });
+
   test("with no worker at all the dialog still works, and says so", async ({ page }) => {
     const { posted } = await boot(page, { configured: false });
     await page.locator(".app-footer [data-vt-report]").click();
@@ -393,6 +435,32 @@ test.describe("the QA site", () => {
     // funnel the admin panel reads.
     expect(scripts.some((src) => /analytics|experiments|region-gate/.test(src))).toBe(false);
     expect(await page.evaluate(() => !!window.VTAnalytics)).toBe(false);
+  });
+
+  // qa/qa.js loadHealth and stateText were split under the complexity ceiling
+  // (merging #26 into main); these three mutants lived until these tests.
+  test("C12 + C15 an older worker is called older, not 'off', and both ways in are named", async ({ page }) => {
+    await boot(page, {
+      url: "/qa/index.html",
+      health: { ok: true, accountsConfigured: true, authMethods: { email: true, google: true, googleClientId: "x", trialDays: 14 } }
+    });
+    await expect(page.locator("#qa-worker")).toHaveText("responde");
+    await expect(page.locator("#qa-auth")).toHaveText("Google y código por correo");
+    await expect(page.locator("#qa-trial")).toHaveText("14 días");
+    await expect(page.locator("#qa-reports")).toHaveText("este servidor es anterior a los reportes");
+    await expect(page.locator("#qa-events")).toHaveText("este servidor es anterior a las estadísticas");
+  });
+
+  test("C14 the pasted state carries what the worker said", async ({ page }) => {
+    await boot(page, { url: "/qa/index.html" });
+    await expect(page.locator("#qa-worker")).toHaveText("responde");
+    const state = await page.evaluate(() => window.VTQa.stateText());
+    expect(state).toContain("Servidor: responde");
+    expect(state).toContain("Cuentas: sí");
+    expect(state).toContain("Entrar: google=sí email=no");
+    expect(state).toContain("Días de prueba: 7");
+    expect(state).toContain("Reportes: sí");
+    expect(state).toContain("Estadísticas: no");
   });
 
   test("the QA page loads shared files at the same version the app does", async () => {

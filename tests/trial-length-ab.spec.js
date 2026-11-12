@@ -21,6 +21,13 @@
 const { test, expect } = require("@playwright/test");
 const { mintLicense, patchBillingConfig } = require("./helpers/billing");
 
+// The worker is stood in for at a fake host (https://entitlements.test), which
+// the page's Content Security Policy rightly refuses: every request to it
+// failed, and sign-in read as "could not check access". The policy is tested
+// in tests/csp.spec.js against the real worker host; here it is bypassed so
+// the trial-length logic is what is under test, as in accounts.spec.js.
+test.use({ bypassCSP: true });
+
 const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";
 const API = "https://entitlements.test";
 const DAY = 86400;

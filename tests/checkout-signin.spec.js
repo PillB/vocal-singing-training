@@ -9,10 +9,14 @@
  *
  * The gate sits inside startCheckout, after the link lookup, so a build with no
  * checkout link behaves exactly as before. These tests therefore inject a link
- * at runtime — the committed config deliberately has none — and drive the real
- * client code, with the checkout host stubbed so nothing leaves the machine.
+ * — the committed config deliberately has none — and drive the real client
+ * code, with the checkout host stubbed so nothing leaves the machine. The link
+ * goes in as the config is assigned (patchBillingConfig), because the page
+ * freezes its config straight after (QA-05): an edit made once the page has
+ * loaded is silently ignored, and these tests used to make exactly that edit.
  */
 const { test, expect } = require("@playwright/test");
+const { patchBillingConfig } = require("./helpers/billing");
 
 const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";
 const LINK = "https://buy.stripe.com/test_gate";
@@ -42,15 +46,18 @@ async function boot(page, account) {
       route.fulfill({ status: 200, contentType: "text/html", body: "<p>checkout</p>" })
     );
   }
+  await patchBillingConfig(page, {
+    links: {
+      stripe: { pro_monthly: LINK },
+      // The international markets buy on Creem, so the panel press goes through
+      // that rail: without a link on it the press would be refused for having
+      // no link at all, before it ever reached the sign-in gate under test.
+      creem: { pro_monthly: "https://checkout.creem.io/ch_test_gate" }
+    }
+  });
   await page.goto(BASE + "/index.html", { waitUntil: "domcontentloaded" });
   await page.waitForFunction(() => !!window.VTBilling?.startCheckout);
   await page.evaluate((state) => {
-    const cfg = window.VT_BILLING_CONFIG;
-    cfg.providers.stripe.links.pro_monthly = "https://buy.stripe.com/test_gate";
-    // The international markets buy on Creem, so the panel press goes through
-    // that rail: without a link on it the press would be refused for having
-    // no link at all, before it ever reached the sign-in gate under test.
-    cfg.providers.creem.links.pro_monthly = "https://checkout.creem.io/ch_test_gate";
     // The pricing panel reads the account layer through getState(); replacing it
     // is the smallest way to stand in each of the three cases.
     if (state === null) {

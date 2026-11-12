@@ -21,9 +21,13 @@
  * Half of these tests are about the second half of that.
  *
  * The committed config has no checkout link, so each test injects one and
- * stubs the checkout host; nothing leaves the machine.
+ * stubs the checkout host; nothing leaves the machine. Links and markets go in
+ * as the config is assigned (patchBillingConfig): the page freezes its config
+ * straight after (QA-05), so an edit made once it has loaded is silently
+ * ignored, and the attacker-link test below passed while editing nothing.
  */
 const { test, expect } = require("@playwright/test");
+const { patchBillingConfig } = require("./helpers/billing");
 
 const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";
 const STRIPE_LINK = "https://buy.stripe.com/test_rail";
@@ -46,8 +50,9 @@ function healthBody(extra) {
  * Open the app with both rails linked, somebody signed in, and /v1/health
  * answering however this test needs.
  * @param {import('@playwright/test').Page} page Page.
- * @param {{health?: string|null, status?: number}} options `health` is the body
- *   to answer with, or null to make the worker unreachable.
+ * @param {{health?: string|null, status?: number, links?: object, extraMarkets?: object[]}} options
+ *   `health` is the body to answer with, or null to make the worker
+ *   unreachable; `links` overrides the per-rail links, `extraMarkets` adds markets.
  * @returns {Promise<{navigations: string[]}>} Where the page tried to go.
  */
 async function boot(page, options) {
@@ -94,23 +99,25 @@ async function boot(page, options) {
       body: JSON.stringify({ ok: true, email: false, google: true, googleClientId: null, trialDays: 7 })
     })
   );
+  await patchBillingConfig(page, {
+    links: {
+      stripe: { pro_monthly: STRIPE_LINK },
+      creem: { pro_monthly: CREEM_LINK },
+      mercadopago: { pro_monthly: MP_LINK },
+      ...(opts.links || {})
+    },
+    ...(opts.extraMarkets ? { extraMarkets: opts.extraMarkets } : {})
+  });
   await page.goto(`${BASE}/index.html`, { waitUntil: "domcontentloaded" });
   await page.waitForFunction(() => !!window.VTBilling?.startCheckout && !!window.VTAccount?.ensureRails);
-  await page.evaluate(
-    ({ stripe, creem, mp }) => {
-      const cfg = window.VT_BILLING_CONFIG;
-      cfg.providers.stripe.links.pro_monthly = stripe;
-      cfg.providers.creem.links.pro_monthly = creem;
-      cfg.providers.mercadopago.links.pro_monthly = mp;
-      // Signed in, so the sign-in gate cannot be what refuses.
-      const real = window.VTAccount;
-      window.VTAccount = {
-        ...real,
-        getState: () => ({ configured: true, signedIn: true, account: { email: "a@example.com" } })
-      };
-    },
-    { stripe: STRIPE_LINK, creem: CREEM_LINK, mp: MP_LINK }
-  );
+  await page.evaluate(() => {
+    // Signed in, so the sign-in gate cannot be what refuses.
+    const real = window.VTAccount;
+    window.VTAccount = {
+      ...real,
+      getState: () => ({ configured: true, signedIn: true, account: { email: "a@example.com" } })
+    };
+  });
   return { navigations };
 }
 
@@ -171,10 +178,11 @@ test.describe("a rail the worker cannot honour", () => {
     // Every international market names "creem", and the fallback for a market
     // naming a rail money cannot arrive on is Creem too. It used to be Stripe,
     // which a Peru-registered seller cannot hold an account with.
-    await boot(page, { health: healthBody({ mercadopagoConfigured: true, creemConfigured: true }) });
+    await boot(page, {
+      health: healthBody({ mercadopagoConfigured: true, creemConfigured: true }),
+      extraMarkets: [{ code: "ZZ", name: "Nowhere", currency: "USD", rail: "typo", priority: 3 }]
+    });
     const rails = await page.evaluate(() => {
-      const cfg = window.VT_BILLING_CONFIG;
-      cfg.markets.push({ code: "ZZ", name: "Nowhere", currency: "USD", rail: "typo", priority: 3 });
       return {
         us: window.VTBilling.preferredRail("US"),
         pe: window.VTBilling.preferredRail("PE"),
@@ -200,14 +208,16 @@ test.describe("a rail the worker cannot honour", () => {
   });
 
   test("somewhere else is still refused, however the config was edited", async ({ page }) => {
+    // An edited copy of the files is the case the freeze cannot stop, so the
+    // bad link goes in as the config is assigned, where an edit really lands.
     const { navigations } = await boot(page, {
-      health: healthBody({ mercadopagoConfigured: true, creemConfigured: true })
+      health: healthBody({ mercadopagoConfigured: true, creemConfigured: true }),
+      links: { creem: { pro_monthly: "https://creem.io.attacker.test/pay" } }
     });
     await askTheWorker(page);
-    const res = await page.evaluate(() => {
-      window.VT_BILLING_CONFIG.providers.creem.links.pro_monthly = "https://creem.io.attacker.test/pay";
-      return window.VTBilling.startCheckout("pro_monthly", "creem");
-    });
+    const link = await page.evaluate(() => window.VT_BILLING_CONFIG.providers.creem.links.pro_monthly);
+    expect(link, "the edit must really be in the config, or this test checks nothing").toBe("https://creem.io.attacker.test/pay");
+    const res = await page.evaluate(() => window.VTBilling.startCheckout("pro_monthly", "creem"));
     expect(res.mode).not.toBe("redirect");
     expect(navigations).toEqual([]);
   });

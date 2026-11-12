@@ -92,8 +92,15 @@ function tamperToken(token, patch) {
  * other script reads it. Survives reloads because it is an init script. The
  * page freezes its config once assigned (QA-05), so this is the only way a
  * test changes it; patches compose (enableQaPro plus a trial patch both hold).
+ *
+ * Two keys reach inside without replacing what they do not name, because
+ * replacing `providers` or `markets` wholesale drops the rails and markets a
+ * test did not mean to touch (Creem, most of all):
+ * - `links: { rail: { plan: url } }` sets checkout links on rails that exist;
+ * - `extraMarkets: [market]` appends markets to the shipped list.
  * @param {import('@playwright/test').Page} page
- * @param {object} patch shallow merge, `verification` merged one level deeper
+ * @param {object} patch shallow merge, `verification` merged one level deeper,
+ *   `links` and `extraMarkets` as above
  */
 async function patchBillingConfig(page, patch) {
   await page.addInitScript((p) => {
@@ -106,11 +113,16 @@ async function patchBillingConfig(page, patch) {
         if (earlier && earlier.set) earlier.set(value);
         held = value;
         if (!value) return;
-        const { verification, ...rest } = p || {};
+        const { verification, links, extraMarkets, ...rest } = p || {};
         Object.assign(value, rest);
         if (verification) {
           value.verification = Object.assign({}, value.verification, verification);
         }
+        for (const [rail, byPlan] of Object.entries(links || {})) {
+          const provider = value.providers && value.providers[rail];
+          if (provider) provider.links = Object.assign({}, provider.links, byPlan);
+        }
+        if (extraMarkets) value.markets = (value.markets || []).concat(extraMarkets);
       }
     });
   }, patch);

@@ -652,7 +652,10 @@ export const MUTANTS = {
     // QA round 9 (trust): what no test observed, each judged by the spec written for it
     ["B15 the invoking primitive is looked up per call again: a console `Reflect.apply = ...` reaches the signature check and the key import (A1)","js/license.js","const APPLY = Reflect.apply;","const APPLY = (f, t, a) => Reflect.apply(f, t, a);",["tests/trust-reflect-apply.spec.js"]],
     ["B16 an exception in the signature check is read as 'valid' (fail open) (A2)","js/license.js","    } catch {\n      return false;\n    }\n  }\n\n  /** Issuer, audience, validity window","    } catch {\n      return true;\n    }\n  }\n\n  /** Issuer, audience, validity window",["tests/trust-fail-closed.spec.js"]],
-    ["B17 a token verified at boot grants Pro for ever in an open tab: the in-session expiry test is gone (A3)","js/license.js","if (typeof verified.exp === \"number\" && verified.exp + CLOCK_SKEW_S < now) {","if (false) {",["tests/trust-claims-expire.spec.js"]]
+    ["B17 a token verified at boot grants Pro for ever in an open tab: the in-session expiry test is gone (A3)","js/license.js","if (typeof verified.exp === \"number\" && verified.exp + CLOCK_SKEW_S < now) {","if (false) {",["tests/trust-claims-expire.spec.js"]],
+    // Merging #26 into main: its attacker-link test edited the config after main's freeze (QA-05), so the edit never
+    // landed and the test passed with the allow-list matching by prefix. It now edits the config as it is assigned.
+    ["B18 a checkout host is allowed by prefix, so creem.io.attacker.test passes as creem.io (#26 merge)","js/billing.js","      (h) => host === h || host.endsWith(\".\" + h)","      (h) => host === h || host.startsWith(h)",["tests/checkout-rail.spec.js"]]
   ].map(([name, file, from, to, only]) => ({
     name,
     file,

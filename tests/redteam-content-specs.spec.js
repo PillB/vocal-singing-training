@@ -91,8 +91,14 @@ test.describe("s18: breathing without a held glottis, and an honest diaphragm li
       expect(all, "no pressure to hold").not.toMatch(
         lang === "es" ? /se mantiene esa presión|empujón abdominal/i : /hold that pressure|abdominal push/i
       );
-      expect(withoutNegatedHold(all), "no hold, however short").not.toMatch(
+      // What it tells the learner to do holds nothing; the mistakes list may
+      // (and should) name holding the breath, as the thing not to do
+      const told = [t.original, t.research, ...t.steps, ...t.tips].join("\n");
+      expect(withoutNegatedHold(told), "no hold, however short").not.toMatch(
         lang === "es" ? /ret[eé]n|retener|pausa \d/i : /\bhold\b|pause \d/i
+      );
+      expect(t.mistakes.join("\n"), "holding the breath is named as a mistake").toMatch(
+        lang === "es" ? /retener el aire/i : /holding the breath/i
       );
       expect(t.steps[3], "step 4 goes straight from inhale to exhale with the throat free").toMatch(
         lang === "es" ? /^Pasa directamente a espirar; no retengas el aire ni bloquees la garganta\.$/ : /^Change directly to exhaling; do not hold your breath or lock your throat\.$/
@@ -384,8 +390,13 @@ test.describe("The three stale specs", () => {
     const body = spec.slice(at, spec.indexOf("\n  });", at));
     const open = body.indexOf("#btn-toggle-piano");
     expect(open, "the test opens Piano ▾").toBeGreaterThan(0);
+    // Main's version also checks, before the click, that the option is hidden
+    // (the progressive disclosure itself); what must follow the click is every
+    // check that an option is there
     for (const id of ["#chk-sustain", "#chk-arpeggio", "#chk-one-note"]) {
-      expect(body.indexOf(id), `${id} is checked after Piano is opened`).toBeGreaterThan(open);
+      const shown = body.indexOf(`page.locator("${id}")).toBeVisible()`);
+      expect(shown, `${id} is looked for`).toBeGreaterThan(0);
+      expect(shown, `${id} is looked for after Piano is opened`).toBeGreaterThan(open);
     }
   });
 

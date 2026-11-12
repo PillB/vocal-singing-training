@@ -789,37 +789,15 @@ export async function handleIngest(request, env, deps) {
   const { json, cors } = deps;
   const presets = deps.presets || EXPERIMENT_PRESETS;
   const at = nowSec(deps.now);
-  const refusal = ingestRefusal(request, env);
-  if (refusal) {
-    if (refusal !== "events_disabled") {
-      await countIngest(env.DB, at, { [refusal]: 1 });
-    }
-    return json({ ok: true, accepted: 0, reason: refusal }, 202, cors);
+  const early = await refuseBeforeReading(request, env, at, json, cors);
+  if (early) {
+    return early;
   }
-  if (!fromSite(request, env)) {
-    await countIngest(env.DB, at, { origin_not_allowed: 1 });
-    return json({ ok: false, reason: "origin_not_allowed" }, 403, cors);
+  const batch = await readIngestBatch(request, env, at, json, cors);
+  if (batch.response) {
+    return batch.response;
   }
-  if (!env.DB || !ipSecret(env)) {
-    return json({ ok: false, reason: "events_not_configured" }, 503, cors);
-  }
-  const parsed = await readEventsBody(request);
-  if (!parsed.ok) {
-    await countIngest(env.DB, at, { [parsed.reason]: 1 });
-    return json({ ok: false, reason: parsed.reason }, parsed.reason === "body_too_large" ? 413 : 400, cors);
-  }
-  const body = parsed.body;
-  // Before anything is read out of the batch: where the law wants the visitor
-  // asked first, a batch that does not say they were asked is not ours to keep.
-  if (asksFirst(request) && !(body && typeof body === "object" && body.consent === "granted")) {
-    await countIngest(env.DB, at, { eu_no_consent: 1 });
-    return json({ ok: true, accepted: 0, reason: "eu_no_consent" }, 202, cors);
-  }
-  const list = Array.isArray(body && body.events) ? body.events : body && typeof body === "object" ? [body] : [];
-  if (!list.length || list.length > MAX_EVENTS_PER_REQUEST) {
-    await countIngest(env.DB, at, { bad_request: 1 });
-    return json({ ok: false, reason: "bad_request" }, 400, cors);
-  }
+  const list = batch.list;
 
   await ensureSchema(env.DB);
   const ipKey = await ipBucketKey(env, request, at);
@@ -835,6 +813,79 @@ export async function handleIngest(request, env, deps) {
     return limited(ipGate);
   }
 
+  const { counts, clean } = sanitizeBatch(list, presets);
+  const refused = await gateCleanBatch(env, clean, at, limited, json, cors);
+  if (refused) {
+    return refused;
+  }
+  const fresh = await admitExposures(env, clean, ipKey, at, counts);
+  await storeBatch(env, clean, fresh, at);
+  counts.accepted = clean.length;
+  counts.exposure_new = fresh.length;
+  counts.exposure_recovered = fresh.filter((x) => x.via === "app_open").length;
+  await countIngest(env.DB, at, counts);
+  return json({ ok: true, accepted: clean.length, dropped: list.length - clean.length }, 200, cors);
+}
+
+/**
+ * The answer to a batch refused before its body is read: the visitor's choice
+ * or ours not to count (202, nothing stored), a foreign origin (403), or no
+ * database to keep it in (503). Null when the body may be read.
+ */
+async function refuseBeforeReading(request, env, at, json, cors) {
+  const refusal = ingestRefusal(request, env);
+  if (refusal) {
+    if (refusal !== "events_disabled") {
+      await countIngest(env.DB, at, { [refusal]: 1 });
+    }
+    return json({ ok: true, accepted: 0, reason: refusal }, 202, cors);
+  }
+  if (!fromSite(request, env)) {
+    await countIngest(env.DB, at, { origin_not_allowed: 1 });
+    return json({ ok: false, reason: "origin_not_allowed" }, 403, cors);
+  }
+  if (!env.DB || !ipSecret(env)) {
+    return json({ ok: false, reason: "events_not_configured" }, 503, cors);
+  }
+  return null;
+}
+
+/** A batch's events: its `events` array, or the body itself as one event, or none. */
+function batchEvents(body) {
+  if (Array.isArray(body && body.events)) {
+    return body.events;
+  }
+  return body && typeof body === "object" ? [body] : [];
+}
+
+/**
+ * Read the body: `{ list }` of the batch's events, or `{ response }` refusing a
+ * body that is unreadable, not consented where asking comes first, or empty or
+ * too long.
+ */
+async function readIngestBatch(request, env, at, json, cors) {
+  const parsed = await readEventsBody(request);
+  if (!parsed.ok) {
+    await countIngest(env.DB, at, { [parsed.reason]: 1 });
+    return { response: json({ ok: false, reason: parsed.reason }, parsed.reason === "body_too_large" ? 413 : 400, cors) };
+  }
+  const body = parsed.body;
+  // Before anything is read out of the batch: where the law wants the visitor
+  // asked first, a batch that does not say they were asked is not ours to keep.
+  if (asksFirst(request) && !(body && typeof body === "object" && body.consent === "granted")) {
+    await countIngest(env.DB, at, { eu_no_consent: 1 });
+    return { response: json({ ok: true, accepted: 0, reason: "eu_no_consent" }, 202, cors) };
+  }
+  const list = batchEvents(body);
+  if (!list.length || list.length > MAX_EVENTS_PER_REQUEST) {
+    await countIngest(env.DB, at, { bad_request: 1 });
+    return { response: json({ ok: false, reason: "bad_request" }, 400, cors) };
+  }
+  return { list };
+}
+
+/** Sanitize a batch: the events that are fit to keep, and a count of each reason the rest were dropped. */
+function sanitizeBatch(list, presets) {
   const counts = { accepted: 0, unknown_event: 0, bad_cid: 0, not_an_object: 0, exposure_unregistered: 0 };
   const clean = [];
   for (const raw of list) {
@@ -846,14 +897,20 @@ export async function handleIngest(request, env, deps) {
     clean.push(result.event);
     counts.exposure_unregistered += result.event.unregistered;
   }
+  return { counts, clean };
+}
+
+/** The per-browser limit, then the day's cap on stored events: the answer refusing the batch, or null. */
+async function gateCleanBatch(env, clean, at, limited, json, cors) {
+  if (!clean.length) {
+    return null;
+  }
   // Per browser, so one browser stuck in a loop cannot spend a classroom's
   // shared address. The site sends one browser's events per request.
-  if (clean.length) {
-    const gate = await hitRateLimit(env.DB, `evc:${clean[0].cid}`, EVENTS_RATE_LIMIT[0], EVENTS_RATE_LIMIT[1], at);
-    if (!gate.ok) {
-      await countIngest(env.DB, at, { rate_limited: 1 });
-      return limited(gate);
-    }
+  const gate = await hitRateLimit(env.DB, `evc:${clean[0].cid}`, EVENTS_RATE_LIMIT[0], EVENTS_RATE_LIMIT[1], at);
+  if (!gate.ok) {
+    await countIngest(env.DB, at, { rate_limited: 1 });
+    return limited(gate);
   }
 
   // The day's cap on stored events. Checked after the per-browser gate so a
@@ -861,32 +918,39 @@ export async function handleIngest(request, env, deps) {
   // anything is written, because the whole point is to not write. Costs the
   // batch's own size: a batch that would cross the cap is refused whole rather
   // than stored in part, so a learner's session is never half-counted.
-  if (clean.length) {
-    const day = await hitRateLimit(
-      env.DB,
-      "evday",
-      eventsDailyCap(env),
-      EVENTS_DAILY_CAP[1],
-      at,
-      clean.length
-    );
-    if (!day.ok) {
-      await countIngest(env.DB, at, { daily_capped: clean.length });
-      // 202 and not 429: the browser posts no-cors and can neither read this
-      // nor usefully retry, and a retry is the last thing this wants.
-      return json({ ok: true, accepted: 0, reason: "daily_capped" }, 202, cors);
-    }
+  const day = await hitRateLimit(
+    env.DB,
+    "evday",
+    eventsDailyCap(env),
+    EVENTS_DAILY_CAP[1],
+    at,
+    clean.length
+  );
+  if (!day.ok) {
+    await countIngest(env.DB, at, { daily_capped: clean.length });
+    // 202 and not 429: the browser posts no-cors and can neither read this
+    // nor usefully retry, and a retry is the last thing this wants.
+    return json({ ok: true, accepted: 0, reason: "daily_capped" }, 202, cors);
   }
+  return null;
+}
 
-  let fresh = await newExposures(env.DB, clean);
-  if (fresh.length) {
-    const cap = await hitRateLimit(env.DB, `exn:${ipKey}`, EXPOSURE_IP_CAP[0], EXPOSURE_IP_CAP[1], at, fresh.length);
-    if (!cap.ok) {
-      counts.exposure_capped = fresh.length;
-      fresh = [];
-    }
+/** The exposures this batch may add; none, and `counts.exposure_capped` set, once the address's daily cap is spent. */
+async function admitExposures(env, clean, ipKey, at, counts) {
+  const fresh = await newExposures(env.DB, clean);
+  if (!fresh.length) {
+    return fresh;
   }
+  const cap = await hitRateLimit(env.DB, `exn:${ipKey}`, EXPOSURE_IP_CAP[0], EXPOSURE_IP_CAP[1], at, fresh.length);
+  if (!cap.ok) {
+    counts.exposure_capped = fresh.length;
+    return [];
+  }
+  return fresh;
+}
 
+/** Write the batch's events and its new exposures in one D1 batch (none at all when both are empty). */
+async function storeBatch(env, clean, fresh, at) {
   const statements = clean.map((e) =>
     env.DB
       .prepare(
@@ -908,11 +972,6 @@ export async function handleIngest(request, env, deps) {
   if (statements.length) {
     await env.DB.batch(statements);
   }
-  counts.accepted = clean.length;
-  counts.exposure_new = fresh.length;
-  counts.exposure_recovered = fresh.filter((x) => x.via === "app_open").length;
-  await countIngest(env.DB, at, counts);
-  return json({ ok: true, accepted: clean.length, dropped: list.length - clean.length }, 200, cors);
 }
 
 /**

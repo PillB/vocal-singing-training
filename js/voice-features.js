@@ -654,6 +654,24 @@
     }
     return s / act.length;
   }
+  /**
+   * How far a still stretch stayed over the voice that came over it (dB):
+   * over the bands it fills (its median `smed` within BAND_OCC_DB of its
+   * strongest and, where the quiet room's `bed` is known, BAND_BED_DB over
+   * it), the most its 10th percentile `s10` sat over the voice's `v10`
+   * (−Infinity: no such band). See PERSIST_DB.
+   */
+  function persistOver(smed, s10, v10, bed) {
+    let top = -Infinity;
+    smed.forEach((x) => x > top && (top = x));
+    let persist = -Infinity;
+    for (let k = 0; k < smed.length; k++) {
+      if (!(smed[k] >= top - BAND_OCC_DB)) continue;
+      if (bed && !(smed[k] >= bed[k] + BAND_BED_DB)) continue;
+      persist = Math.max(persist, s10[k] - v10[k]);
+    }
+    return persist;
+  }
 
   /**
    * Speech/silence with the room's own floor, a short hangover, and pauses
@@ -893,6 +911,16 @@
       this.t += dt;
       const db = dbfs(frame.rms || 0);
       this.levelDb = db;
+      this._watchGate(frame, dt, db);
+      this._learnOnTime(frame, dt, db);
+      const loud = !!frame.sounding && db > this.floorDb + this.marginDb;
+      if (loud) this._loudFrame(dt, db);
+      else this._quietFrame(dt);
+      if (this.segments.length > 600) this.segments.splice(0, this.segments.length - 600);
+      return this.state;
+    }
+    /** Since when the engine's gate (`frame.sounding`) has been shut, and the quietest level heard while it was. */
+    _watchGate(frame, dt, db) {
       if (frame.sounding) this._closedSince = null;
       else if (this._closedSince == null) this._closedSince = this.t - dt;
       // A room that holds the gate open never lets it close: a stop
@@ -900,6 +928,9 @@
       if (this._closedSince != null && this.t >= OPEN_SETTLE_SEC && (this.t - this._closedSince) * 1000 >= this.onsetMs) {
         this._shutDb = Math.min(this._shutDb, db);
       }
+    }
+    /** A learning step, when one falls in this frame (`dt` long, at `db`). */
+    _learnOnTime(frame, dt, db) {
       // The floor learns 30 times a second at any frame rate: the remainder is
       // kept (dropping it learned ~24 times a second at 60 fps and ~20 at 30),
       // capped so a stalled tab does not learn a burst of copies of one frame
@@ -909,67 +940,101 @@
         if (frame.manualSound) {
           // The Space assist fakes a flat level: never the room, and not part
           // of any steady stretch either
-          this._recentRing.clear();
-          this._recentT.clear();
-          this._recentClarity.clear();
-          this._recentHf.clear();
-          this._recentHfDb.clear();
-          this._recentSpec.length = 0;
-          this._lineHist.length = 0;
+          this._forgetSteps();
         } else {
           this._learnFloor(frame, db);
         }
       }
-      const loud = !!frame.sounding && db > this.floorDb + this.marginDb;
-      if (loud) {
-        this._quietSince = null;
-        if (this._loudSince == null) this._loudSince = this.t - dt;
-        if (this.state === "speech") this._peakDb = Math.max(this._peakDb, db);
-        else this._runPeakDb = Math.max(this._runPeakDb, db);
-        if (this.state !== "speech" && (this.t - this._loudSince) * 1000 >= this.onsetMs) {
-          const start = this._loudSince;
-          if (this.state === "pause" && this.pauseStart != null) {
-            const len = start - this.pauseStart;
-            const seg = this.segments[this.segments.length - 1];
-            if (seg && seg.kind === "pause") seg.end = start;
-            if (this.cb.onPauseEnd && !this._pauseTold) this.cb.onPauseEnd(this.pauseStart, len);
-          }
-          this._pauseTold = false;
-          this.state = "speech";
-          this.speechStart = start;
-          this.pauseStart = null;
-          this._peakDb = this._runPeakDb;
-          this.segments.push({ kind: "speech", start, end: null });
-          if (this.cb.onSpeech) this.cb.onSpeech(start);
-        }
-      } else {
-        this._loudSince = null;
-        this._runPeakDb = -140;
-        if (this._quietSince == null) this._quietSince = this.t - dt;
-        if (
-          this.state === "speech" &&
-          (this.t - this._quietSince) * 1000 >= this.hangMs
-        ) {
-          const start = this._quietSince;
-          const seg = this.segments[this.segments.length - 1];
-          if (seg && seg.kind === "speech") seg.end = start;
-          this.state = "pause";
-          this.pauseStart = start;
-          this.segments.push({ kind: "pause", start, end: null });
-          if (this.cb.onPause) this.cb.onPause(start);
-        }
+    }
+    /** The last learning steps forgotten: their levels, times, clarity, high parts, spectra and lines. */
+    _forgetSteps() {
+      this._recentRing.clear();
+      this._recentT.clear();
+      this._recentClarity.clear();
+      this._recentHf.clear();
+      this._recentHfDb.clear();
+      this._recentSpec.length = 0;
+      this._lineHist.length = 0;
+    }
+    /** A frame over the floor's margin with the gate open: speech once it has lasted `onsetMs`. */
+    _loudFrame(dt, db) {
+      this._quietSince = null;
+      if (this._loudSince == null) this._loudSince = this.t - dt;
+      if (this.state === "speech") this._peakDb = Math.max(this._peakDb, db);
+      else this._runPeakDb = Math.max(this._runPeakDb, db);
+      if (this.state !== "speech" && (this.t - this._loudSince) * 1000 >= this.onsetMs) this._speechStarts();
+    }
+    /** Speech starts where the loud run began, and ends the pause it interrupts. */
+    _speechStarts() {
+      const start = this._loudSince;
+      if (this.state === "pause" && this.pauseStart != null) {
+        const len = start - this.pauseStart;
+        const seg = this.segments[this.segments.length - 1];
+        if (seg && seg.kind === "pause") seg.end = start;
+        if (this.cb.onPauseEnd && !this._pauseTold) this.cb.onPauseEnd(this.pauseStart, len);
       }
-      if (this.segments.length > 600) this.segments.splice(0, this.segments.length - 600);
-      return this.state;
+      this._pauseTold = false;
+      this.state = "speech";
+      this.speechStart = start;
+      this.pauseStart = null;
+      this._peakDb = this._runPeakDb;
+      this.segments.push({ kind: "speech", start, end: null });
+      if (this.cb.onSpeech) this.cb.onSpeech(start);
+    }
+    /** A quiet frame: speech becomes a pause once it has been quiet for `hangMs`, dated from the first quiet frame. */
+    _quietFrame(dt) {
+      this._loudSince = null;
+      this._runPeakDb = -140;
+      if (this._quietSince == null) this._quietSince = this.t - dt;
+      if (
+        this.state === "speech" &&
+        (this.t - this._quietSince) * 1000 >= this.hangMs
+      ) {
+        const start = this._quietSince;
+        const seg = this.segments[this.segments.length - 1];
+        if (seg && seg.kind === "speech") seg.end = start;
+        this.state = "pause";
+        this.pauseStart = start;
+        this.segments.push({ kind: "pause", start, end: null });
+        if (this.cb.onPause) this.cb.onPause(start);
+      }
     }
     /** One learning step: does this frame's level belong to the room? */
     _learnFloor(frame, db) {
+      const hfDb = this._keepStep(frame, db);
+      const sp = this._keepSpectrum(frame);
+      if (this.t >= OPEN_SETTLE_SEC) this._settledStep(db);
+      this._endHum(db);
+      this._endStretch(frame, db, hfDb, sp);
+      // A consonant closes the gate for 40–100 ms inside a word: a soft
+      // speaker's dips would become the floor and their weaker syllables
+      // read as pauses. Only a gate still closed after the hangover is quiet.
+      const closed = this._closedSince != null && (this.t - this._closedSince) * 1000 >= this.hangMs;
+      if (closed || db <= this.floorDb + this.marginDb) {
+        this._quietStep(db, sp);
+        return;
+      }
+      if (frame.clarity >= NOISY) this._voiced = true;
+      const steps = this._steadyRoom();
+      if (!steps) return;
+      this._startOver(steps);
+    }
+    /**
+     * The learning step's level `db`, time, clarity, how high the sound sits
+     * and the level of its high part, kept with the last steps'. Returns
+     * the level of its high part (dB).
+     */
+    _keepStep(frame, db) {
       this._recentRing.push(db);
       this._recentT.push(this.t);
       this._recentClarity.push(frame.clarity != null ? frame.clarity : -1);
       this._recentHf.push(frame.hfRms != null && frame.rms > 0 ? (frame.hfRms / frame.rms) * ((frame.sampleRate || 48000) / 48000) : -1);
       const hfDb = frame.hfRms > 0 ? dbfs(frame.hfRms) : -140;
       this._recentHfDb.push(hfDb);
+      return hfDb;
+    }
+    /** The learning step's spectrum (null: the frame brought no samples), kept with the last steps'. */
+    _keepSpectrum(frame) {
       // The frame's samples are valid only now: take their spectrum. The
       // bins of the step that leaves the last 5 s are written over (each
       // step's bands are kept as they are: the quiet room's, a stretch's and
@@ -986,63 +1051,68 @@
         line.bands = sp.bands;
         this._lineHist.push(line);
       } else this._lineHist.length = 0;
-      if (this.t >= OPEN_SETTLE_SEC) {
-        this._lowDb = Math.min(this._lowDb, db);
-        if (this._openSteps >= 0) {
-          const lo = Math.min(this._openLoDb, db);
-          const hi = Math.max(this._openHiDb, db);
-          if (hi - lo < OPEN_FLAT_DB) {
-            this._openLoDb = lo;
-            this._openHiDb = hi;
-            this._openSteps++;
-          } else {
-            // What the take opened with before the first word: a pause back
-            // at its level is the same room (its steps are the ones before
-            // this one)
-            if (this._openSteps >= OPEN_MIN_STEPS) {
-              const sib = this._sibilant(Math.min(this._openSteps, NEW_ROOM_STEPS - 1), 1);
-              this._hums.push({ lvl: (this._openLoDb + this._openHiDb) / 2, start: null, end: this.t, sib });
-            }
-            this._openSteps = -1;
+      return sp;
+    }
+    /** A learning step at `db` once the mic has settled: the quietest yet, and how long the take has held still since. */
+    _settledStep(db) {
+      this._lowDb = Math.min(this._lowDb, db);
+      if (this._openSteps >= 0) {
+        const lo = Math.min(this._openLoDb, db);
+        const hi = Math.max(this._openHiDb, db);
+        if (hi - lo < OPEN_FLAT_DB) {
+          this._openLoDb = lo;
+          this._openHiDb = hi;
+          this._openSteps++;
+        } else {
+          // What the take opened with before the first word: a pause back
+          // at its level is the same room (its steps are the ones before
+          // this one)
+          if (this._openSteps >= OPEN_MIN_STEPS) {
+            const sib = this._sibilant(Math.min(this._openSteps, NEW_ROOM_STEPS - 1), 1);
+            this._hums.push({ lvl: (this._openLoDb + this._openHiDb) / 2, start: null, end: this.t, sib });
           }
+          this._openSteps = -1;
         }
       }
+    }
+    /** The learning step at `db` against the last steady stretch heard while no quiet room had been (_pauseRoom's). */
+    _endHum(db) {
       // A stretch ends when a voice comes back over it (3 dB short of the
       // margin: a voice that clears a stretch a little quieter than this one)
       const h = this._hums[this._hums.length - 1];
       if (h && h.end == null && db > h.lvl + this.marginDb - PAUSE_FLAT_DB) h.end = this.t - 1 / 60;
+    }
+    /** The learning step (level `db`, its high part's `hfDb`, spectrum `sp`) against the last still stretch (_cameBack's). */
+    _endStretch(frame, db, hfDb, sp) {
       // A still stretch ends when a voice (a sound with a period) clears it,
       // and is gone once a step, or its high part, falls under the quietest
       // it held: the voice came instead of it (an "sss" between words), not
       // over it (a fan)
       const st = this._stretch;
-      if (st && st.end == null && db > st.lvl + this.marginDb && frame.clarity >= NOISY) {
+      if (!st) return;
+      if (st.end == null && db > st.lvl + this.marginDb && frame.clarity >= NOISY) {
         st.end = this.t - 1 / 60;
         this._freeze(st);
       }
       // The voice that came over it, band by band
-      if (st && st.end != null && st.vb && st.vb.length < PERSIST_STEPS) st.vb.push({ t: this.t, b: sp ? sp.bands : null });
-      if (st && st.end != null && (db < st.lo - PAUSE_FLAT_DB || hfDb < st.hfLo - PAUSE_FLAT_DB)) this._stretch = null;
-      // A consonant closes the gate for 40–100 ms inside a word: a soft
-      // speaker's dips would become the floor and their weaker syllables
-      // read as pauses. Only a gate still closed after the hangover is quiet.
-      const closed = this._closedSince != null && (this.t - this._closedSince) * 1000 >= this.hangMs;
-      if (closed || db <= this.floorDb + this.marginDb) {
-        this._stretch = null;
-        this._stillRun = 0;
-        this._floorRing.push(db);
-        if (sp) {
-          this._quietBands.push(sp.bands);
-          if (this._quietBands.length > this._floorRing.n) this._quietBands.shift();
-        }
-        if (this._floorRing.count >= 15) {
-          this.floorDb = Math.max(-90, percentile(this._floorRing.last(), 0.1));
-        }
-        return;
+      if (st.end != null && st.vb && st.vb.length < PERSIST_STEPS) st.vb.push({ t: this.t, b: sp ? sp.bands : null });
+      if (st.end != null && (db < st.lo - PAUSE_FLAT_DB || hfDb < st.hfLo - PAUSE_FLAT_DB)) this._stretch = null;
+    }
+    /** A quiet learning step (level `db`, spectrum `sp`): the room, which the floor learns. */
+    _quietStep(db, sp) {
+      this._stretch = null;
+      this._stillRun = 0;
+      this._floorRing.push(db);
+      if (sp) {
+        this._quietBands.push(sp.bands);
+        if (this._quietBands.length > this._floorRing.n) this._quietBands.shift();
       }
-      if (frame.clarity >= NOISY) this._voiced = true;
-      const steps = this._steadyRoom();
-      if (!steps) return;
+      if (this._floorRing.count >= 15) {
+        this.floorDb = Math.max(-90, percentile(this._floorRing.last(), 0.1));
+      }
+    }
+    /** The last `steps` learning steps are a new room (_steadyRoom): the floor starts over from them. */
+    _startOver(steps) {
       // Steady sound above the floor is a new room: a fan heard before the
       // floor knew it, or one switched on. The floor starts over from it, so
       // it stops reading as speech now rather than after 6 s of it.
@@ -1069,9 +1139,7 @@
     _steadyRoom() {
       // Until the floor holds a room, it starts from the first one heard
       const known = this._floorRing.count >= 15;
-      if (!known && this._openSteps >= OPEN_STEPS) return this._sibilant(OPEN_STEPS) ? 0 : OPEN_STEPS;
-      if (!known && this._pauseRoom()) return PAUSE_STEPS;
-      if (!known) return this._still(ROOM_STEPS) && !this._sibilant(ROOM_STEPS) ? ROOM_STEPS : 0;
+      if (!known) return this._firstRoom();
       const b = this._still(BACK_STEPS);
       if (!b || b.lvl <= this.floorDb + this.marginDb || this._voiceIn(BACK_STEPS, b.lvl)) {
         this._stillRun = 0;
@@ -1083,6 +1151,24 @@
       // hiss switched on in the lead-in (a held /f/ is as flat: see WHITE_DB)
       const w = !this._voiced && this._stillRun >= ROOM_STEPS - BACK_STEPS ? this._still(ROOM_STEPS) : null;
       if (w && !this._voiceIn(ROOM_STEPS, w.lvl) && this._white(ROOM_STEPS)) return ROOM_STEPS;
+      return this._heldRoom();
+    }
+    /**
+     * _steadyRoom until the floor holds a room: what the take opened with
+     * (not an "sss"), a hum in a pause (_pauseRoom), or the first still
+     * sound that is not an "sss".
+     */
+    _firstRoom() {
+      if (this._openSteps >= OPEN_STEPS) return this._sibilant(OPEN_STEPS) ? 0 : OPEN_STEPS;
+      if (this._pauseRoom()) return PAUSE_STEPS;
+      return this._still(ROOM_STEPS) && !this._sibilant(ROOM_STEPS) ? ROOM_STEPS : 0;
+    }
+    /**
+     * _steadyRoom once the floor holds a room, for a still sound over it that
+     * neither came back nor is white: a new room once it has held 1.2 s, or
+     * 5 s if it sits high, and never if it is an "sss".
+     */
+    _heldRoom() {
       // 1.2 s still, but for the last step or two of the voice before it (a
       // pause of just 1.2 s), and how high the sound sits judged after them
       if (!this._still(NEW_ROOM_STEPS)) return 0;
@@ -1189,36 +1275,45 @@
       const own = (ring) => ring.last(BACK_STEPS).filter((_, i) => cl[i] < NOISY);
       const lo = percentile(own(this._recentRing), 0.1);
       const hfLo = percentile(own(this._recentHfDb), 0.1);
-      if (!h || h.end != null || lvl > h.lvl + this.marginDb - PAUSE_FLAT_DB) {
-        // From the last voice step over it, as a pause (none in reach: null)
-        const lv = this._recentRing.last();
-        const ts = this._recentT.last();
-        let i = lv.length - BACK_STEPS;
-        while (i > 0 && lv[i - 1] <= lvl + this.marginDb) i--;
-        this._stretch = { lvl, held: 1, lo, hfLo, hfMove: 0, high: b.high, start: i > 0 ? ts[i - 1] : h && h.end == null ? h.start : null, end: null, sb: this._ownBands(BACK_STEPS) };
-      } else {
-        // The same stretch, still holding: for how many steps, the quietest
-        // it has held, whether it sat high, and how far its high part moved
-        // over 0.8 s (once it has held that long)
-        h.held++;
-        const sp = this._recentSpec[this._recentSpec.length - 1];
-        const cnow = this._recentClarity.latest;
-        if (h.sb) {
-          if (!sp) h.sb = null;
-          else if (cnow < NOISY) {
-            h.sb.push(sp.bands);
-            if (h.sb.length > PERSIST_STEPS) h.sb.shift();
-          }
-        }
-        h.lo = Math.min(h.lo, lo);
-        h.hfLo = Math.min(h.hfLo, hfLo);
-        h.high = h.high || b.high;
-        if (h.held > BACK_HELD_STEPS - BACK_STEPS) {
-          const hd = this._recentHfDb.last(BACK_HELD_STEPS);
-          h.hfMove = Math.max(h.hfMove, percentile(hd, 0.9) - percentile(hd, 0.1));
+      if (!h || h.end != null || lvl > h.lvl + this.marginDb - PAUSE_FLAT_DB) this._newStretch(b, h, lo, hfLo);
+      else this._holdStretch(h, b, lo, hfLo);
+      return false;
+    }
+    /**
+     * A new still stretch at `b` (_still's), whose own steps held at `lo` and
+     * their high part at `hfLo`, in place of `h` (the last one, or null).
+     */
+    _newStretch(b, h, lo, hfLo) {
+      const lvl = b.lvl;
+      // From the last voice step over it, as a pause (none in reach: null)
+      const lv = this._recentRing.last();
+      const ts = this._recentT.last();
+      let i = lv.length - BACK_STEPS;
+      while (i > 0 && lv[i - 1] <= lvl + this.marginDb) i--;
+      this._stretch = { lvl, held: 1, lo, hfLo, hfMove: 0, high: b.high, start: i > 0 ? ts[i - 1] : h && h.end == null ? h.start : null, end: null, sb: this._ownBands(BACK_STEPS) };
+    }
+    /** Still stretch `h` holds on at `b`, whose own steps held at `lo` and their high part at `hfLo`. */
+    _holdStretch(h, b, lo, hfLo) {
+      // The same stretch, still holding: for how many steps, the quietest
+      // it has held, whether it sat high, and how far its high part moved
+      // over 0.8 s (once it has held that long)
+      h.held++;
+      const sp = this._recentSpec[this._recentSpec.length - 1];
+      const cnow = this._recentClarity.latest;
+      if (h.sb) {
+        if (!sp) h.sb = null;
+        else if (cnow < NOISY) {
+          h.sb.push(sp.bands);
+          if (h.sb.length > PERSIST_STEPS) h.sb.shift();
         }
       }
-      return false;
+      h.lo = Math.min(h.lo, lo);
+      h.hfLo = Math.min(h.hfLo, hfLo);
+      h.high = h.high || b.high;
+      if (h.held > BACK_HELD_STEPS - BACK_STEPS) {
+        const hd = this._recentHfDb.last(BACK_HELD_STEPS);
+        h.hfMove = Math.max(h.hfMove, percentile(hd, 0.9) - percentile(hd, 0.1));
+      }
     }
     /** The bands of the last `steps` learning steps with no period (null: a step without samples). */
     _ownBands(steps) {
@@ -1262,14 +1357,7 @@
       if (v.length < PERSIST_MIN_STEPS || v.some((x) => !x.b)) return old;
       const v10 = bandPct(v.map((x) => x.b), 0.1);
       const bed = this._quietBands.length >= 15 ? bandPct(this._quietBands, 0.1) : null;
-      let top = -Infinity;
-      h.smed.forEach((x) => x > top && (top = x));
-      let persist = -Infinity;
-      for (let k = 0; k < h.smed.length; k++) {
-        if (!(h.smed[k] >= top - BAND_OCC_DB)) continue;
-        if (bed && !(h.smed[k] >= bed[k] + BAND_BED_DB)) continue;
-        persist = Math.max(persist, h.s10[k] - v10[k]);
-      }
+      const persist = persistOver(h.smed, h.s10, v10, bed);
       if (h.shape == null) h.shape = shapeSpread(h.own, bed);
       // ... and either its high part held still (the test without
       // samples), or it is white (a white fan whose level wobbles moves its
@@ -1381,15 +1469,7 @@
       if (i === 0) return false;
       const voice = ts[i - 1];
       const same = this._hums.filter((x) => Math.abs(x.lvl - lvl) < PAUSE_FLAT_DB && x.end != null && x.end <= voice);
-      const opened = same.some((x) => x.start == null);
-      // Three stretches at one level, but their lines stopped under the talk
-      // between the last two: "mmm"s, not a hum
-      const lines = !opened && same.length >= 2 ? this._linesGoOn(Math.max(...same.map((x) => x.end)), voice) : null;
-      let room = (same.length >= 2 && lines !== false) || opened;
-      // One with nothing under 1.6 kHz must have gone on under the talk
-      // since: a hiss through a steep low cut does, an "sss" does not
-      if (room && this._sibilant(PAUSE_STEPS)) room = this._bandsGoOn(Math.max(...same.map((x) => x.end)), voice) === true;
-      if (room) {
+      if (this._humRoom(same, voice)) {
         // Pauses heard at this level before were the room too, and so was
         // the take's start if it opened with a hiss like this one
         this._late = same.filter((x) => x.start != null || x.sib);
@@ -1398,6 +1478,24 @@
       this._hums.push({ lvl, start: voice, end: null });
       if (this._hums.length > 8) this._hums.shift();
       return false;
+    }
+    /**
+     * Is the stretch now ending the take's last PAUSE_STEPS a hum, given the
+     * stretches heard at its level before (`same`, each ended by `voice`, the
+     * last voice step before it)? Two of them whose lines did not stop under
+     * the talk, or the one the take opened with; and, if it has nothing
+     * under 1.6 kHz, it went on under the talk since.
+     */
+    _humRoom(same, voice) {
+      const opened = same.some((x) => x.start == null);
+      // Three stretches at one level, but their lines stopped under the talk
+      // between the last two: "mmm"s, not a hum
+      const lines = !opened && same.length >= 2 ? this._linesGoOn(Math.max(...same.map((x) => x.end)), voice) : null;
+      let room = (same.length >= 2 && lines !== false) || opened;
+      // One with nothing under 1.6 kHz must have gone on under the talk
+      // since: a hiss through a steep low cut does, an "sss" does not
+      if (room && this._sibilant(PAUSE_STEPS)) room = this._bandsGoOn(Math.max(...same.map((x) => x.end)), voice) === true;
+      return room;
     }
     /**
      * Earlier pauses the floor could not hear at the time (it learned the

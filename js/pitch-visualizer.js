@@ -397,12 +397,12 @@
   }
 
   /**
-   * Pitch of one frame (Hz), or null when the frame has none.
+   * The frame, and its sample rate, as the search reads them. Over 48 kHz
+   * the engine's 43 ms frame holds more samples (4096 at 96 kHz): averaged
+   * down to 44.1–48 kHz, the search costs and finds what it does there (on
+   * all 4096 it took three times as long)
    */
-  function detectPitch(buf, sampleRate) {
-    // Over 48 kHz the engine's 43 ms frame holds more samples (4096 at
-    // 96 kHz): averaged down to 44.1–48 kHz, the search costs and finds what
-    // it does there (on all 4096 it took three times as long)
+  function searchedFrame(buf, sampleRate) {
     const D = Math.round(sampleRate / 48000);
     if (D > 1) {
       const x = new Float32Array(Math.floor(buf.length / D));
@@ -411,27 +411,44 @@
         for (let k = 0; k < D; k++) s += buf[i * D + k];
         x[i] = s / D;
       }
-      buf = x;
-      sampleRate /= D;
+      return { buf: x, sr: sampleRate / D };
     }
-    const N = buf.length;
+    return { buf, sr: sampleRate };
+  }
+
+  /**
+   * The frame's search state: its samples, rate, mean, energy about the
+   * mean and the lags searched; null when it is silent or too short to
+   * search.
+   */
+  function pitchFrame(buf, sampleRate) {
+    const fr = searchedFrame(buf, sampleRate);
+    const N = fr.buf.length;
     let mean = 0;
-    for (let i = 0; i < N; i++) mean += buf[i];
+    for (let i = 0; i < N; i++) mean += fr.buf[i];
     mean /= N;
     let energy = 0;
     for (let i = 0; i < N; i++) {
-      const v = buf[i] - mean;
+      const v = fr.buf[i] - mean;
       energy += v * v;
     }
     if (Math.sqrt(energy / N) < 0.01) return null; // silence
-    const minLag = Math.max(2, Math.floor(sampleRate / PITCH_HI_HZ));
-    const maxLag = Math.min(Math.ceil(sampleRate / PITCH_LO_HZ), N - 64);
+    const minLag = Math.max(2, Math.floor(fr.sr / PITCH_HI_HZ));
+    const maxLag = Math.min(Math.ceil(fr.sr / PITCH_LO_HZ), N - 64);
     if (maxLag <= minLag + 2) return null;
+    return Object.assign(fr, { N, mean, energy, minLag, maxLag });
+  }
 
-    // r(τ) for every lag at once: |FFT|² of the frame, zero-padded past
-    // N + maxLag so the circular product equals the linear one
+  /**
+   * r(τ) for every lag at once: |FFT|² of the frame, zero-padded past
+   * N + maxLag so the circular product equals the linear one. Leaves M·r(τ)
+   * in plan.re, the power spectrum (bins 0..M/2) in fr.pow, and in fr.kMax
+   * the bins that hold all but 1e-6 of the power, for lagSum.
+   */
+  function autocorrelate(fr) {
+    const { buf, N, mean } = fr;
     let M = 1;
-    while (M < N + maxLag + 2) M <<= 1;
+    while (M < N + fr.maxLag + 2) M <<= 1;
     const plan = fftPlan(M);
     const re = plan.re;
     const im = plan.im;
@@ -455,10 +472,17 @@
     let kMax = M >> 1;
     for (let acc = 0; kMax > 1 && acc + pow[kMax] < 1e-6 * pAll; kMax--) acc += pow[kMax];
     fftInPlace(re, im, plan, 1);
-    const L = maxLag + 2;
-    const nsdf = plan.nsdf;
-    const mm = plan.m;
-    let m = 2 * energy;
+    Object.assign(fr, { M, plan, pow, kMax });
+  }
+
+  /** n(τ) = 2 r(τ) / m(τ) for lags 0..L−1 (fr.nsdf), with m(τ) (fr.mm). */
+  function nsdfCurve(fr) {
+    const { buf, N, mean, M } = fr;
+    const re = fr.plan.re;
+    const L = fr.maxLag + 2;
+    const nsdf = fr.plan.nsdf;
+    const mm = fr.plan.m;
+    let m = 2 * fr.energy;
     for (let t = 0; t < L; t++) {
       if (t > 0) {
         const a = buf[t - 1] - mean;
@@ -468,158 +492,248 @@
       mm[t] = m;
       nsdf[t] = m > 0 ? (2 * re[t]) / M / m : 0;
     }
+    Object.assign(fr, { L, nsdf, mm });
+  }
 
-    // Key maxima: the top of each positive lobe after the first
-    // negative-going zero crossing, refined by a parabola through its three
-    // samples. A lobe whose top is under sr / 1500 is kept, marked short: if
-    // it is the one picked, the period is shorter than the search allows (a
-    // whistle, a soprano's G6) and the frame reads nothing, not an octave of
-    // it.
+  /** m(τ) at a fractional lag, linear between its whole lags. */
+  function mAt(fr, x) {
+    const mm = fr.mm;
+    const i = Math.min(fr.L - 2, Math.floor(x));
+    return mm[i] + (mm[i + 1] - mm[i]) * (x - i);
+  }
+
+  /**
+   * r(τ) itself near the top: Newton on the cosine sum from `x`, kept only
+   * where it reads higher than the sample at the top (`n`).
+   */
+  function newtonKey(fr, top, x, n) {
+    let lag = top;
+    for (let it = 0; it < 3; it++) {
+      const g = lagSum(fr.pow, fr.kMax, fr.M, x);
+      const v = (2 * g[0]) / mAt(fr, x);
+      if (v > n) {
+        n = v;
+        lag = x;
+      }
+      if (!(g[2] < 0)) break;
+      const dx = Math.max(-0.5, Math.min(0.5, -g[1] / g[2]));
+      if (Math.abs(dx) < 1e-3) break;
+      x = Math.max(top - 1, Math.min(top + 1, x + dx));
+    }
+    return { lag, n: Math.min(1, n) };
+  }
+
+  /**
+   * The key maximum of the lobe whose highest sample is `top`, refined by a
+   * parabola through its three samples, or under REFINE_MINLAGS × the
+   * shortest lag by Newton on r(τ) itself.
+   */
+  function lobeKey(fr, top) {
+    const nsdf = fr.nsdf;
+    const a = nsdf[top - 1];
+    const b = nsdf[top];
+    const c = nsdf[top + 1];
+    const den = a - 2 * b + c;
+    const sh = den < 0 ? Math.max(-0.5, Math.min(0.5, (0.5 * (a - c)) / den)) : 0;
+    const lag = top + sh;
+    if (top < REFINE_MINLAGS * fr.minLag) return newtonKey(fr, top, lag, b);
+    return { lag, n: Math.min(1, b - 0.25 * (a - c) * sh) };
+  }
+
+  /**
+   * Key maxima: the top of each positive lobe after the first
+   * negative-going zero crossing, refined by a parabola through its three
+   * samples. A lobe whose top is under sr / 1500 is kept, marked short: if
+   * it is the one picked, the period is shorter than the search allows (a
+   * whistle, a soprano's G6) and the frame reads nothing, not an octave of
+   * it.
+   */
+  function keyMaxima(fr) {
+    const { nsdf, L } = fr;
     const keys = [];
     let t = 1;
     while (t < L && nsdf[t] > 0) t++;
     let top = -1;
-    const refineBelow = REFINE_MINLAGS * minLag;
-    const close = () => {
-      const a = nsdf[top - 1];
-      const b = nsdf[top];
-      const c = nsdf[top + 1];
-      const den = a - 2 * b + c;
-      const sh = den < 0 ? Math.max(-0.5, Math.min(0.5, (0.5 * (a - c)) / den)) : 0;
-      let lag = top + sh;
-      let n = b - 0.25 * (a - c) * sh;
-      if (top < refineBelow) {
-        // r(τ) itself near the top: Newton on the cosine sum, kept only
-        // where it reads higher than the sample at the top
-        const mAt = (x) => {
-          const i = Math.min(L - 2, Math.floor(x));
-          return mm[i] + (mm[i + 1] - mm[i]) * (x - i);
-        };
-        let x = lag;
-        n = b;
-        lag = top;
-        for (let it = 0; it < 3; it++) {
-          const g = lagSum(pow, kMax, M, x);
-          const v = (2 * g[0]) / mAt(x);
-          if (v > n) {
-            n = v;
-            lag = x;
-          }
-          if (!(g[2] < 0)) break;
-          const dx = Math.max(-0.5, Math.min(0.5, -g[1] / g[2]));
-          if (Math.abs(dx) < 1e-3) break;
-          x = Math.max(top - 1, Math.min(top + 1, x + dx));
-        }
-      }
-      keys.push({ lag, n: Math.min(1, n) });
-      top = -1;
-    };
     for (; t < L - 1; t++) {
       if (nsdf[t] > 0) {
         if (nsdf[t] >= nsdf[t - 1] && nsdf[t] >= nsdf[t + 1] && (top < 0 || nsdf[t] > nsdf[top])) top = t;
-      } else if (top >= 0) close();
+      } else if (top >= 0) {
+        keys.push(lobeKey(fr, top));
+        top = -1;
+      }
     }
-    if (top >= 0) close();
-    if (!keys.length) return null;
+    if (top >= 0) keys.push(lobeKey(fr, top));
+    return keys;
+  }
+
+  /** The highest key maximum at or over the shortest lag searched. */
+  function bestKey(keys, minLag) {
     let best = 0;
     for (const q of keys) if (q.lag >= minLag && q.n > best) best = q.n;
-    if (best < MIN_CLARITY) return null;
+    return best;
+  }
 
-    const kMin = MPM_K * best;
-    let hann = null;
-    const near = (lag) => {
-      let w = null;
-      for (const q of keys) if (Math.abs(q.lag - lag) <= Math.max(2, 0.03 * lag) && (!w || q.n > w.n)) w = q;
-      return w;
-    };
-    const ok = (q, k) => {
-      if (q.n < k) return false;
-      // Shorter than the search allows (SHORT_C, SHORT_LOW): only as the
-      // frame's own period, as periodic as the best key maximum and with
-      // nothing under it in the spectrum
-      if (q.lag < minLag) {
-        if (1 - q.n > SHORT_C * (1 - best) + 1e-4) return false;
-        if (!hann) hann = hannPower(buf, mean, plan);
-        const bin = sampleRate / M;
-        let low = 0;
-        let peak = 0;
-        for (let b = Math.round(80 / bin); b < hann.length; b++) {
-          if (hann[b] > peak) peak = hann[b];
-          if (b * bin <= (0.8 * sampleRate) / q.lag && hann[b] > low) low = hann[b];
-        }
-        return low < SHORT_LOW * peak;
-      }
-      if (sampleRate / q.lag < APER_FROM_HZ || q.n >= best) return true;
-      if (1 - q.n > APER_CAP) return false;
-      // The best key maximum up to APER_SPAN times the lag: the period, if
-      // the candidate is a part of it
-      let nk = null;
-      for (const o of keys) if (o.lag > q.lag && o.lag <= APER_SPAN * q.lag && (!nk || o.n > nk.n)) nk = o;
-      const nb = nk ? nk.n : 0;
-      if (q.n >= nb) return true;
-      if (1 - q.n > APER_C * (1 - nb) + APER_EPS) return false;
-      // Close enough: a part of that period or a pitch of its own? Its line
-      // in the spectrum must not stand far under the period's (FUND_REL)
-      if (!hann) hann = hannPower(buf, mean, plan);
-      return peakNear(hann, M, sampleRate, sampleRate / q.lag) >= FUND_REL * peakNear(hann, M, sampleRate, sampleRate / nk.lag);
-    };
-    let pick = null;
-    for (const q of keys) {
-      if (!ok(q, kMin)) continue;
-      pick = q;
-      break;
+  /** The most periodic key maximum within 3 % (and 2 lags) of `lag`, or null. */
+  function keyNear(keys, lag) {
+    let w = null;
+    for (const q of keys) if (Math.abs(q.lag - lag) <= Math.max(2, 0.03 * lag) && (!w || q.n > w.n)) w = q;
+    return w;
+  }
+
+  /** The frame's Hann power spectrum, computed on first use. */
+  function hannOf(fr) {
+    if (!fr.hann) fr.hann = hannPower(fr.buf, fr.mean, fr.plan);
+    return fr.hann;
+  }
+
+  /**
+   * Shorter than the search allows (SHORT_C, SHORT_LOW): only as the
+   * frame's own period, as periodic as the best key maximum and with
+   * nothing under it in the spectrum
+   */
+  function shortOk(fr, q) {
+    if (1 - q.n > SHORT_C * (1 - fr.best) + 1e-4) return false;
+    const hann = hannOf(fr);
+    const bin = fr.sr / fr.M;
+    let low = 0;
+    let peak = 0;
+    for (let b = Math.round(80 / bin); b < hann.length; b++) {
+      if (hann[b] > peak) peak = hann[b];
+      if (b * bin <= (0.8 * fr.sr) / q.lag && hann[b] > low) low = hann[b];
     }
+    return low < SHORT_LOW * peak;
+  }
+
+  /**
+   * From APER_FROM_HZ, a candidate that is not the best key maximum: a
+   * pitch of its own, or a part of a longer period (APER_CAP, APER_C,
+   * APER_EPS, FUND_REL)?
+   */
+  function ownPeriodOk(fr, q) {
+    if (fr.sr / q.lag < APER_FROM_HZ || q.n >= fr.best) return true;
+    if (1 - q.n > APER_CAP) return false;
+    // The best key maximum up to APER_SPAN times the lag: the period, if
+    // the candidate is a part of it
+    let nk = null;
+    for (const o of fr.keys) if (o.lag > q.lag && o.lag <= APER_SPAN * q.lag && (!nk || o.n > nk.n)) nk = o;
+    const nb = nk ? nk.n : 0;
+    if (q.n >= nb) return true;
+    if (1 - q.n > APER_C * (1 - nb) + APER_EPS) return false;
+    // Close enough: a part of that period or a pitch of its own? Its line
+    // in the spectrum must not stand far under the period's (FUND_REL)
+    const hann = hannOf(fr);
+    return peakNear(hann, fr.M, fr.sr, fr.sr / q.lag) >= FUND_REL * peakNear(hann, fr.M, fr.sr, fr.sr / nk.lag);
+  }
+
+  /** Whether key maximum `q` may be the frame's period at clarity bar `k`. */
+  function candidateOk(fr, q, k) {
+    if (q.n < k) return false;
+    if (q.lag < fr.minLag) return shortOk(fr, q);
+    return ownPeriodOk(fr, q);
+  }
+
+  /** The first key maximum that may be the period at clarity bar `k`, or null. */
+  function firstCandidate(fr, k) {
+    for (const q of fr.keys) if (candidateOk(fr, q, k)) return q;
+    return null;
+  }
+
+  /**
+   * Odd harmonics at the pick (OCT_ODD, OCT_ODD_HI, OCT_ODD_A2_HI)? From
+   * the aperiodicities at L, 2L and 3L; false when 3L has no key maximum.
+   */
+  function oddHarmonics(fr, pick, a1, a2, hi) {
+    if (!(a2 <= (hi ? OCT_ODD_A2_HI : 1) * a1)) return false;
+    const w3 = keyNear(fr.keys, 3 * pick.lag);
+    if (!w3) return false;
+    return (5 * a1 + 3 * (1 - w3.n) - 8 * a2) / (8 * a1) >= (hi ? OCT_ODD_HI : OCT_ODD);
+  }
+
+  /**
+   * The key maximum at twice the pick's lag when the frame's period is that
+   * one, an octave down (OCT_RATIO, oddHarmonics, OCT_FLOOR_HZ,
+   * OCT_MIN_APER, LINE_FROM_HZ); null when it is not.
+   */
+  function octaveBelow(fr, pick) {
+    const lag2 = 2 * pick.lag;
+    if (lag2 > fr.L - 2 || fr.sr / lag2 < OCT_FLOOR_HZ) return null;
+    const w = keyNear(fr.keys, lag2);
+    const a1 = 1 - pick.n;
+    if (!w || a1 < OCT_MIN_APER) return null;
+    const a2 = 1 - w.n;
+    const fp = fr.sr / pick.lag;
+    const hi = fp >= LINE_FROM_HZ;
+    const down = a2 <= OCT_RATIO * a1 || oddHarmonics(fr, pick, a1, a2, hi);
+    if (!down) return null;
+    if (!hi) return w;
+    // From LINE_FROM_HZ, only if the lower pitch's first and third
+    // harmonics are lines in the spectrum, not a formant's band of noise
+    const hann = hannOf(fr);
+    return lineOver(hann, fr.M, fr.sr, fp / 2) >= LINE_H1 && lineOver(hann, fr.M, fr.sr, 1.5 * fp) >= LINE_H3 ? w : null;
+  }
+
+  /** Under LOW_HZ: a voice a loud hum pulled to a period both share? */
+  function unhummed(fr, pick) {
+    if (fr.sr / pick.lag < LOW_HZ) {
+      for (const d of [2, 3]) {
+        const h = keyNear(fr.keys, pick.lag / d);
+        if (h && h.lag >= fr.minLag && h.n >= LOW_K * fr.best && candidateOk(fr, h, 0)) return h;
+      }
+    }
+    return pick;
+  }
+
+  /** The period picked: the first candidate, an octave down or two, freed of a hum. */
+  function pickedKey(fr) {
+    let pick = firstCandidate(fr, MPM_K * fr.best);
     if (!pick) return null;
     for (let i = 0; i < 2; i++) {
-      const lag2 = 2 * pick.lag;
-      if (lag2 > L - 2 || sampleRate / lag2 < OCT_FLOOR_HZ) break;
-      const w = near(lag2);
-      const a1 = 1 - pick.n;
-      if (!w || a1 < OCT_MIN_APER) break;
-      const a2 = 1 - w.n;
-      const fp = sampleRate / pick.lag;
-      const hi = fp >= LINE_FROM_HZ;
-      let down = a2 <= OCT_RATIO * a1;
-      if (!down && a2 <= (hi ? OCT_ODD_A2_HI : 1) * a1) {
-        const w3 = near(3 * pick.lag);
-        if (w3) down = (5 * a1 + 3 * (1 - w3.n) - 8 * a2) / (8 * a1) >= (hi ? OCT_ODD_HI : OCT_ODD);
-      }
-      // From LINE_FROM_HZ, only if the lower pitch's first and third
-      // harmonics are lines in the spectrum, not a formant's band of noise
-      if (down && hi) {
-        if (!hann) hann = hannPower(buf, mean, plan);
-        down = lineOver(hann, M, sampleRate, fp / 2) >= LINE_H1 && lineOver(hann, M, sampleRate, 1.5 * fp) >= LINE_H3;
-      }
-      if (!down) break;
+      const w = octaveBelow(fr, pick);
+      if (!w) break;
       pick = w;
     }
-    // Under LOW_HZ: a voice a loud hum pulled to a period both share?
-    if (sampleRate / pick.lag < LOW_HZ) {
-      for (const d of [2, 3]) {
-        const h = near(pick.lag / d);
-        if (h && h.lag >= minLag && h.n >= LOW_K * best && ok(h, 0)) {
-          pick = h;
-          break;
-        }
-      }
-    }
-    if (pick.n < MIN_CLARITY || pick.lag < minLag) return null;
-    if (sampleRate / pick.lag >= HI_FROM_HZ && best < HI_MIN_BEST) return null;
-    let freq = sampleRate / pick.lag;
+    return unhummed(fr, pick);
+  }
+
+  /**
+   * The picked key maximum's pitch within the band, or null: on the mains
+   * (MAINS_HZ, MAINS_TOL) only a voice's own period counts (MAINS_K).
+   */
+  function pitchOf(fr, pick) {
+    let freq = fr.sr / pick.lag;
     if (MAINS_HZ.some((h) => Math.abs(freq - h) <= MAINS_TOL * h)) {
       // A hum, or a voice over one: the voice's own period, if there is one
       let alt = null;
-      for (const q of keys) {
+      for (const q of fr.keys) {
         if (q.lag >= pick.lag) break;
-        if (q.lag >= minLag && ok(q, MAINS_K * best)) {
+        if (q.lag >= fr.minLag && candidateOk(fr, q, MAINS_K * fr.best)) {
           alt = q;
           break;
         }
       }
       if (!alt) return null;
-      freq = sampleRate / alt.lag;
+      freq = fr.sr / alt.lag;
     }
     return freq >= PITCH_LO_HZ && freq <= PITCH_HI_HZ * 1.06 ? freq : null;
+  }
+
+  /**
+   * Pitch of one frame (Hz), or null when the frame has none.
+   */
+  function detectPitch(buf, sampleRate) {
+    const fr = pitchFrame(buf, sampleRate);
+    if (!fr) return null;
+    autocorrelate(fr);
+    nsdfCurve(fr);
+    fr.keys = keyMaxima(fr);
+    if (!fr.keys.length) return null;
+    fr.best = bestKey(fr.keys, fr.minLag);
+    if (fr.best < MIN_CLARITY) return null;
+    const pick = pickedKey(fr);
+    if (!pick) return null;
+    if (pick.n < MIN_CLARITY || pick.lag < fr.minLag) return null;
+    if (fr.sr / pick.lag >= HI_FROM_HZ && fr.best < HI_MIN_BEST) return null;
+    return pitchOf(fr, pick);
   }
 
   /**
@@ -1019,16 +1133,13 @@
       if (!chord || !chord.notes || !chord.notes.length) return;
       const map = global.VT_NOTE_FREQ || {};
       const oneNote = !!opts.oneNote;
-      // The singing register, 120–280 Hz, moved with the material by the
-      // octave control (the chord's notes arrive already shifted)
-      const reg = Math.pow(2, global.VTGetOctaveShift ? global.VTGetOctaveShift() : 0);
       let noteList = chord.notes.slice();
       if (oneNote) {
         let pick = opts.noteName || chord.notes[0];
         if (!opts.noteName) {
           for (const n of chord.notes) {
             const f = map[n];
-            if (f && f >= 120 * reg && f <= 280 * reg) {
+            if (f && f >= 120 && f <= 280) {
               pick = n;
               break;
             }
@@ -1068,7 +1179,7 @@
         pick = chord.notes[1] || chord.notes[0];
         for (const n of chord.notes) {
           const f = map[n];
-          if (f && f >= 120 * reg && f <= 280 * reg) {
+          if (f && f >= 120 && f <= 280) {
             pick = n;
             break;
           }
@@ -2159,6 +2270,48 @@
       };
     }
   }
+
+  /**
+   * The first of `notes` in the singing register, 120–280 Hz times `reg`,
+   * or `fallback` when none is. At `reg` 1 it is the legacy builder's own
+   * pick.
+   */
+  function registerNote(notes, map, reg, fallback) {
+    for (const n of notes) {
+      const f = map[n];
+      if (f && f >= 120 * reg && f <= 280 * reg) return n;
+    }
+    return fallback;
+  }
+
+  // The singing register, 120–280 Hz, moves with the material by the octave
+  // control (the chord's notes arrive already shifted). The legacy builder
+  // picks in 120–280 Hz itself and is kept byte-for-byte, so the move is
+  // made around it: in one-note mode it is handed the one note picked in the
+  // moved register (unless the caller named one); with a whole chord, the
+  // target it aimed at is aimed again where the moved register says, or
+  // left as it was before the call when that note has no frequency, as the
+  // builder leaves it.
+  const registerTarget = PitchVisualizer.prototype.setTargetFromChord;
+  PitchVisualizer.prototype.setTargetFromChord = function setRegisterChordTarget(chord, opts) {
+    if (!chord?.notes?.length) return registerTarget.call(this, chord, opts);
+    const map = global.VT_NOTE_FREQ || {};
+    const reg = Math.pow(2, global.VTGetOctaveShift ? global.VTGetOctaveShift() : 0);
+    const notes = chord.notes;
+    if (opts?.oneNote) {
+      if (opts.noteName) return registerTarget.call(this, chord, opts);
+      return registerTarget.call(this, { ...chord, notes: [registerNote(notes, map, reg, notes[0])] }, opts);
+    }
+    const before = this.targetFreq;
+    const out = registerTarget.call(this, chord, opts);
+    const first = notes[1] || notes[0];
+    const aim = registerNote(notes, map, reg, first);
+    if (aim !== registerNote(notes, map, 1, first)) {
+      this.targetFreq = before;
+      if (map[aim]) this.setTargetFreq(map[aim]);
+    }
+    return out;
+  };
 
   /** `name` moved up whole octaves until it is at or above the lane floor. */
   function liftToFloor(name, map) {

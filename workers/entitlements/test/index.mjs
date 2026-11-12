@@ -31,6 +31,11 @@ import "./email.test.mjs";
 import "./api.test.mjs";
 import "./stats.test.mjs";
 import "./events.test.mjs";
+// The two site designs' events and the admin route that reads them (#33). On
+// main it ran only under the glob in test:core, so `npm run test:worker` and
+// `node --test workers/entitlements/test` skipped it; the guard in
+// config.test.mjs (from #26) caught that on the merge.
+import "./layouts.test.mjs";
 import "./reports.test.mjs";
 import "./scrub-killers.test.mjs";
 import "./refunds.test.mjs";

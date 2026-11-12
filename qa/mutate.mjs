@@ -8,7 +8,7 @@
  *
  *   node qa/mutate.mjs            # the Node sets (audio, lint, coaching)
  *   node qa/mutate.mjs audio      # one set
- *   node qa/mutate.mjs stage a11y flows regress billing audit toast designs  # browser sets: need Playwright's Chromium
+ *   node qa/mutate.mjs stage a11y flows regress billing scoring controls audit toast designs  # browser sets: need Playwright's Chromium
  *
  * Exit code 1 when any mutant survives or an anchor no longer matches (so a
  * refactor that moves the code cannot silently retire its mutant).
@@ -23,11 +23,21 @@ const AUDIO_TESTS = [
   "tests/node/hold-duration.test.mjs",
   "tests/node/attack-rise.test.mjs",
   "tests/node/sync-late-signin.test.mjs",
-  "tests/node/envelope-killers.test.mjs"
+  "tests/node/safari-audio-contract.test.mjs",
+  "tests/node/piano-range.test.mjs",
+  "tests/node/microphone-race.test.mjs",
+  "tests/node/engine-scoring.test.mjs",
+  "tests/node/guided-clock.test.mjs",
+  "tests/node/envelope-killers.test.mjs",
+  "tests/node/start-recovery.test.mjs",
+  "tests/node/sound-recovery.test.mjs"
 ];
 const LINT_TESTS = ["qa/lint-gate.test.mjs", "tests/node/asset-versions.test.mjs", "tests/node/csp.test.mjs", "tests/node/env-noise.test.mjs", "tests/node/env-noise-killers.test.mjs", "tests/node/inline-script-pin.test.mjs", "tests/node/csp-pins.test.mjs", "tests/node/i18n-duplicate-keys.test.mjs", "tests/node/exercise-parity.test.mjs", "tests/node/playwright-projects.test.mjs"];
 const PAGES = ["index.html", "guide.html", "privacy.html", "admin.html"];
-const node = (tests) => [process.execPath, "--test", ...tests];
+// A mutant can leave a promise that never settles. Node 22 cancels such a test once the event loop
+// is empty; Node 24 (CI) waits on it until runTests' 5-minute timeout, so two of those ran the
+// contracts job out of time. Each test gets 30 s, ten times the slowest unmutated one.
+const node = (tests) => [process.execPath, "--test", "--test-timeout=30000", ...tests];
 const PIANO_SPEC = [
   process.execPath,
   "node_modules/@playwright/test/cli.js",
@@ -53,6 +63,18 @@ const FLOW_SPEC = [
   "^.*(v1-diction|s9-pitch-match|s15-sh-air-ladder|s4-lip-trills): layout"
 ];
 
+const CONTROL_SPECS = {
+  range: ["tests/range-adapter.spec.js", "-g", "octave −2"],
+  guided: ["tests/exercise-viz-guided.spec.js", "-g", "s17 release paces"],
+  copy: ["tests/plan-history-design.spec.js", "tests/billing.spec.js", "-g", "the start button waits on a choice|Choose what to improve|value pulse board"],
+  mic: ["tests/safari-mobile-recovery.spec.js", "-g", "permission prompt is up"],
+  micmsg: ["tests/safari-mobile-recovery.spec.js", "-g", "each get their own message"],
+  race: ["tests/safari-mobile-recovery.spec.js", "-g", "older prompt answered"],
+  orphan: ["tests/safari-mobile-recovery.spec.js", "-g", "Start replaced|lets go of the piano|piano option changed|held session and stopped"],
+  focus: ["tests/exercise-viz-guided.spec.js", "-g", "Enter on Next past the last step|ends while Next has keyboard focus"],
+  banner: ["tests/safari-mobile-recovery.spec.js", "-g", "sound-paused banner"]
+};
+
 // QA-45. Every a11y mutant (A6 on) used to be judged by all six browser specs together, ~70 s each; 21 of them
 // pushed the CI job past its 30 min limit. A mutant is now judged by the spec written to catch it, which is what
 // AGENTS.md asks for anyway ("a test for every contract, a mutant for every test"). MUTATE_WIDE=1 (or --wide) puts
@@ -77,16 +99,16 @@ function a11yKillers(name) {
 
 export const MUTANTS = {
   coaching: [
-    ["C1 the breath mode silently adds 2s when hold is omitted", "js/practice-modes.js", "this.state.holdSec = p.hold != null ? p.hold : 0;", "this.state.holdSec = p.hold != null ? p.hold : 2;"],
-    ["C2 the exercise prescribes a 2s breath hold", "js/practice-profiles.js", "pattern: { in: 4, hold: 0, out: 6 },", "pattern: { in: 4, hold: 2, out: 6 },"],
-    ["C3 an entire SH ladder is required for passing", "js/exercises-data.js", 'labelEs: "Peldaños cómodos (1 basta)", type: "number", target: 1, unit: ""', 'labelEs: "Peldaños cómodos (1 basta)", type: "number", target: 5, unit: ""'],
-    ["C4 the first straw exercise asks for nasal humming", "js/exercises-data.js", "Phonate a soft /u/-like tone with lips gently sealed around the straw; let air exit through it, not through the nose.", "Hum through the straw and keep your lips sealed."],
-    ["C5 starter straw dose is raised from 2 to 5 minutes", "js/exercises-data.js", 'labelEs: "Fonación cómoda con cañita (minutos)", type: "number", target: 2, unit: "min"', 'labelEs: "Fonación cómoda con cañita (minutos)", type: "number", target: 5, unit: "min"']
+    ["VC1 the breath mode silently adds 2s when hold is omitted", "js/practice-modes.js", "this.state.holdSec = p.hold != null ? p.hold : 0;", "this.state.holdSec = p.hold != null ? p.hold : 2;"],
+    ["VC2 the exercise prescribes a 2s breath hold", "js/practice-profiles.js", "pattern: { in: 4, hold: 0, out: 6 },", "pattern: { in: 4, hold: 2, out: 6 },"],
+    ["VC3 an entire SH ladder is required for passing", "js/exercises-data.js", 'labelEs: "Peldaños cómodos (1 basta)", type: "number", target: 1, unit: ""', 'labelEs: "Peldaños cómodos (1 basta)", type: "number", target: 5, unit: ""'],
+    ["VC4 the first straw exercise asks for nasal humming", "js/exercises-data.js", "Phonate a soft /u/-like tone with lips gently sealed around the straw; let air exit through it, not through the nose.", "Hum through the straw and keep your lips sealed."],
+    ["VC5 starter straw dose is raised from 2 to 5 minutes", "js/exercises-data.js", 'labelEs: "Fonación cómoda con cañita (minutos)", type: "number", target: 2, unit: "min"', 'labelEs: "Fonación cómoda con cañita (minutos)", type: "number", target: 5, unit: "min"']
   ].map(([name, file, from, to]) => ({ name, file, from, to, cmd: node(["tests/node/technical-coaching.test.mjs"]) })),
   audio: [
-    ["M1 YIN voicing threshold 0.18 -> 0.60 (noise accepted as pitch)", "js/pitch-visualizer.js", "if (cmnd[lag] < 0.18) {", "if (cmnd[lag] < 0.60) {"],
+    ["M1 YIN voicing threshold 0.18 -> 0.60 (noise accepted as pitch)", "js/pitch-visualizer.js", "if (cmnd[lag] >= 0.18) continue;", "if (cmnd[lag] >= 0.60) continue;"],
     ["M2 above-band alias guard dropped (1500 Hz read as 750)", "js/pitch-visualizer.js", "for (let shortLag = 2; shortLag < minLag; shortLag++) {", "for (let shortLag = 2; shortLag < 2; shortLag++) {"],
-    ["M4 parabolic interpolation removed", "js/pitch-visualizer.js", "const freq = rate / (lag + offset);", "const freq = rate / lag;"],
+    ["M4 parabolic interpolation removed", "js/pitch-visualizer.js", "return lag + (denom ? Math.max(-0.5, Math.min(0.5, 0.5 * (before - after) / denom)) : 0);", "return lag;"],
     ["M5 silence gate removed", "js/pitch-visualizer.js", "if (Math.sqrt(power / n) < 0.01) return null;", ""],
     ["M6 +150c (adjacent semitone) accepted as in tune", "js/practice-modes.js", "const hi = this.profile.centsHi == null ? 50 : this.profile.centsHi;", "const hi = this.profile.centsHi == null ? 150 : this.profile.centsHi;"],
     ["M7 -140c accepted as in tune", "js/practice-modes.js", "const lo = this.profile.centsLo == null ? -40 : this.profile.centsLo;", "const lo = this.profile.centsLo == null ? -140 : this.profile.centsLo;"],
@@ -108,11 +130,105 @@ export const MUTANTS = {
     ["M22 the first match in a periodic tail, not the nearest", "js/voice-features.js", "if (j === K && (best == null || Math.abs(k - est) < Math.abs(best - est))) best = k;", "if (j === K && best == null) best = k;"],
     ["M24 s12 ignores audio lost in the rise", "js/practice-modes.js", "return res.lost != null ? res.lost : st.maxDt > (st.bufMs || 43) + 6;", "return st.maxDt > (st.bufMs || 43) + 6;"],
     ["M25 lost audio after the note settled spoils the onset", "js/voice-features.js", "some((at) => at >= idx && at < to)", "some((at) => at >= idx)"],
-    ["M26 lostSince: a gap exactly at the start no longer counts (QA-37 E2)", "js/voice-features.js", "some((at) => at >= idx && at < to)", "some((at) => at > idx && at < to)"],
-    ["M27 lostSince: a gap exactly at the end now counts (QA-37 E3)", "js/voice-features.js", "some((at) => at >= idx && at < to)", "some((at) => at >= idx && at <= to)"],
-    ["M28 a frame whose tail is nowhere in the buffer counts the frame time, not the whole buffer (QA-37 E6)", "js/voice-features.js", "return best == null ? N : best;", "return best == null ? 0 : best;"],
-    ["M29 only the latest lost stretch is remembered (QA-37 E10)", "js/voice-features.js", "this._gaps = new Ring(16);", "this._gaps = new Ring(1);"],
-    ["M30 a new take inherits the last take's lost audio (QA-37 E11)", "js/voice-features.js", "      this._gaps.clear();\n      this.total = 0;", "      this.total = 0;"]
+    ["M26 one long gap between clock checks counts in full (PR #25 CI red)", "js/practice-engine.js", "const step = Math.min(AUDIO_CLOCK_MAX_STEP_MS, Math.max(0, now - (this._audioClockCheckedAt || now)));", "const step = Math.max(0, now - (this._audioClockCheckedAt || now));"],
+    ["M27 a frozen clock never adds up to Retry", "js/practice-engine.js", "      this._audioClockStalledMs += step;\n", ""],
+    ["M28 a resume keeps the stall from before the interruption", "js/practice-engine.js", "            this._resetAudioClockWatch(this._lastFrameAt);\n", ""],
+    ["M29 the note table stops at C1 again (octave -2 plays chords without their bass, PR #24)", "js/piano.js", "for (let oct = 0; oct <= 8; oct++) {", "for (let oct = 1; oct <= 6; oct++) {"],
+    ["M30 Stop no longer cancels a Start waiting on the permission prompt", "js/practice-engine.js", "      this._startGen++; // a Start still waiting on the mic or its graph is cancelled\n", ""],
+    ["M31 a microphone granted after Stop goes live", "js/practice-engine.js", "      if (gen === this._startGen) return stream;", "      if (gen === gen) return stream;"],
+    ["M32 a Stop during the graph's resume reported as a microphone failure", "js/practice-engine.js", "      if (gen !== this._startGen) {\n        // Stop or a newer Start came while the graph was built", "      if (false) {\n        // Stop or a newer Start came while the graph was built"],
+    ["M33 a hold bridges the minute a hidden tab drew no frames", "js/practice-engine.js", "    if (this.holdStart && performance.now() - this.lastVoiceAt > this._silenceEndMs()) this._maybeEndHold(true);\n", ""],
+    ["M34 a cancelled Start's late grant clears the newer Start's pending flag", "js/practice-engine.js", "        if (this._startingGen === gen) this._startingGen = 0;", "        this._startingGen = 0;"],
+    ["M35 a cancelled Start keeps its microphone open", "js/practice-engine.js", "        this._releaseStale(stream);\n        return;", "        return;"],
+    ["M36 a cancelled Start releases whatever microphone is current", "js/practice-engine.js", "      stream.getTracks?.().forEach((track) => {\n        if (track.readyState", "      (this.stream || stream).getTracks?.().forEach((track) => {\n        if (track.readyState"],
+    ["M37 a cancelled Start still builds its graph over the live session's", "js/practice-engine.js", "      if (gen !== this._startGen) return;\n      this.audioCtx = ctx;", "      this.audioCtx = ctx;"],
+    ["M38 the frame-gap guard waits 10x the silence window", "js/practice-engine.js", "> this._silenceEndMs()) this._maybeEndHold(true);", "> this._silenceEndMs() * 10) this._maybeEndHold(true);"],
+    ["M39 the frame-gap guard only after a 30 s gap", "js/practice-engine.js", "> this._silenceEndMs()) this._maybeEndHold(true);", "> 30000) this._maybeEndHold(true);"],
+    ["M40 the frame-gap guard ignores sensitivity (a short stall splits a note)", "js/practice-engine.js", "> this._silenceEndMs()) this._maybeEndHold(true);", "> SILENCE_END_MS) this._maybeEndHold(true);"],
+    ["M41 a one-frame hold is credited up to now (the hidden minute)", "js/practice-engine.js", "const endAt = this.lastVoiceAt >= this.holdStart ? this.lastVoiceAt : now;", "const endAt = this.lastVoiceAt > this.holdStart ? this.lastVoiceAt : now;"],
+    ["M42 a frozen audio clock does not close the open hold", "js/practice-engine.js", "        this._audioClockStalled = true;\n        // A partial note can be credited only through its *last real* sample.\n        // Neither the visual grace clock nor the mode timer may extend it.\n        this._maybeEndHold(true);", "        this._audioClockStalled = true;"],
+    ["M43 the SH/S air assist scores a pitch", "js/practice-engine.js", "      if (this.isManualEffective() && this._manualKind === \"air\") return null;\n      return measured;", "      return measured;"],
+    ["M44 the engine scores its grace-held display value", "js/practice-engine.js", "      const measured = this._latestRawPitch;\n      if (!measured", "      const measured = this.voiceFreq;\n      if (!measured"],
+    ["M45 the voice assist also hides the pitch", "js/practice-engine.js", "if (this.isManualEffective() && this._manualKind === \"air\") return null;", "if (this.isManualEffective()) return null;"],
+    ["M46 a pitch with no energy behind it scores", "js/practice-engine.js", "      if (!measured || this._latestRms < this._holdRms() * 0.55) return null;", "      if (!measured) return null;"],
+    ["M47 octave -2 shows ghost lanes at 16-31 Hz and squashes the highway", "js/pitch-visualizer.js", "global.VTProgressionRange(prog, laneFreqs(global.VT_NOTE_FREQ));", "global.VTProgressionRange(prog, global.VT_NOTE_FREQ);"],
+    ["M48 octave -2 shows chord lanes at 16-31 Hz", "js/pitch-visualizer.js", "    const kept = chord.notes.filter((n) => !(map[n] < LANE_FLOOR_HZ));", "    const kept = chord.notes;"],
+    // Guided steps on wall time (PR #24's "guided phases use real elapsed time")
+    ["M56 the engine's frame carries no wall time", "js/practice-engine.js", "      if (frame) frame.wallDtMs = Math.max(0, now - (since || now));\n", ""],
+    ["M57 the engine keeps its relay as the app's onFrame", "js/practice-engine.js", "      if (engine.onFrame === relay) engine.onFrame = deliver;", "      if (false) engine.onFrame = deliver;"],
+    ["M58 the engine puts back an onFrame the frame replaced", "js/practice-engine.js", "      if (engine.onFrame === relay) engine.onFrame = deliver;", "      engine.onFrame = deliver;"],
+    ["M59 guided steps paced on the capped dtMs again", "js/scenes/guided.js", "    const ms = frame ? (frame.wallDtMs != null ? frame.wallDtMs : frame.dtMs) : 0;", "    const ms = frame ? frame.dtMs : 0;"],
+    ["M60 a frame after a hidden tab skips steps (no per-frame cap)", "js/scenes/guided.js", "Math.min(ms / 1000, STEP_MAX_SEC) : 0;", "ms / 1000 : 0;"],
+    ["M61 guided steps capped at 100 ms a frame again", "js/scenes/guided.js", "  const STEP_MAX_SEC = 1;", "  const STEP_MAX_SEC = 0.1;"],
+    ["M62 a negative frame delta winds the guide back", "js/scenes/guided.js", "    return Number.isFinite(ms) && ms > 0 ? Math.min", "    return Number.isFinite(ms) ? Math.min"],
+    ["M63 the drill's Vad left on the capped frame time", "js/scenes/guided.js", "new global.VTFeatures.Vad({ maxDt: STEP_MAX_SEC })", "new global.VTFeatures.Vad({})"],
+    ["M64 the Vad ignores the wall time it was asked to keep", "js/voice-features.js", "    if (this.maxDt > 0) this.t += Math.max(0, wallDt(frame, this.maxDt) - frameDt(frame));\n", ""],
+    ["M65 a Vad on wall time takes a hidden minute in one frame", "js/voice-features.js", "Math.min(ms / 1000, maxSec) : 0;", "ms / 1000 : 0;"],
+    ["M66 every Vad moves to wall time", "js/voice-features.js", "this.maxDt = opts.maxDt > 0 ? opts.maxDt : 0;", "this.maxDt = opts.maxDt > 0 ? opts.maxDt : 1;"],
+    // The weak-fundamental promotion (PR #24's 110 Hz with a loud 3rd partial read as 330 Hz).
+    ["M49 a weak fundamental's loud 3rd partial scored as the note again", "js/pitch-visualizer.js", "      lag = promoteLag(cmnd, lag, maxLag, buf, decimate);\n", ""],
+    ["M50 only the octave below is tried, not the 3rd or 4th multiple", "js/pitch-visualizer.js", "for (let k = 2; k <= 4 && k * at + 1 <= maxLag; k++) {", "for (let k = 2; k <= 2 && k * at + 1 <= maxLag; k++) {"],
+    ["M51 a weak fundamental whose 3rd partial is above the band is withheld again", "js/pitch-visualizer.js", "return promoted < minLag ? -1 : promoted;", "return -1;"],
+    ["M52 hasDeeperMultiple bar 0.35 -> 0.1 (the 3rd partial's multiple no longer far deeper)", "js/pitch-visualizer.js", "if (cmnd[m] < 0.35 * cmnd[at]) return true;", "if (cmnd[m] < 0.1 * cmnd[at]) return true;"],
+    ["M53 promotion without the full-rate confirmation", "js/pitch-visualizer.js", "    if (!(best < 0.35 * here)) return null;\n", ""],
+    ["M54 a period periodic at full rate still promoted (beeps named as notes)", "js/pitch-visualizer.js", "    if (here <= 0.06) return at;\n", ""],
+    ["M55 full-rate confirmation 0.35 -> 1 (noisy 880 Hz read as 440)", "js/pitch-visualizer.js", "if (!(best < 0.35 * here)) return null;", "if (!(best < 1 * here)) return null;"],
+    ["M67 the deepest multiple wins again, not the shortest as periodic (a weak 116.5 Hz under its 2nd partial read as 58.3)", "js/pitch-visualizer.js", "    const bar = best + 0.15 * (here - best);\n", "    const bar = best;\n"],
+    ["M68 a 3x pick that is two periods is kept (a weak 493.9 Hz under its loud 3rd partial read as 246.9)", "js/pitch-visualizer.js", "    return pick.k === 3 ? halfOfTriple(cmnd, pick, buf, decimate, width) : pick.lag;\n", "    return pick.lag;\n"],
+    ["M69 a confirmed above-band period is held to the 0.18 threshold again (C6 under its loud 3rd partial read as C5)", "js/pitch-visualizer.js", "const lag = start > minLag ? refinedLag(cmnd, start) : firstPeriod(cmnd, start, maxLag, buf, decimate);", "const lag = firstPeriod(cmnd, start, maxLag, buf, decimate);"],
+    ["M70 the half of a 3x pick need not be a dip (8 kHz 261.6 Hz under its loud 3rd partial read an octave high)", "js/pitch-visualizer.js", "    if (cmnd[lag - 1] < cmnd[lag] || cmnd[lag + 1] < cmnd[lag]) return pick.lag;\n", ""],
+    ["M71 the half of a 3x pick need only be nearly as periodic (a weak 146.8 Hz under its loud 6th partial read an octave high)", "js/pitch-visualizer.js", "<= 1.25 * pick.depth + 0.002 ? lag : pick.lag;", "<= 1.25 * pick.depth + 0.2 ? lag : pick.lag;"],
+    ["M72 lostSince: a gap exactly at the start no longer counts (QA-37 E2)", "js/voice-features.js", "some((at) => at >= idx && at < to)", "some((at) => at > idx && at < to)"],
+    ["M73 lostSince: a gap exactly at the end now counts (QA-37 E3)", "js/voice-features.js", "some((at) => at >= idx && at < to)", "some((at) => at >= idx && at <= to)"],
+    ["M74 a frame whose tail is nowhere in the buffer counts the frame time, not the whole buffer (QA-37 E6)", "js/voice-features.js", "return best == null ? N : best;", "return best == null ? 0 : best;"],
+    ["M75 only the latest lost stretch is remembered (QA-37 E10)", "js/voice-features.js", "this._gaps = new Ring(16);", "this._gaps = new Ring(1);"],
+    ["M76 a new take inherits the last take's lost audio (QA-37 E11)", "js/voice-features.js", "      this._gaps.clear();\n      this.total = 0;", "      this.total = 0;"],
+    // QA round 5 on PR #27 (qa/round4/pr27/micrace): Start and a live take when the phone takes the audio away.
+    ["M77 a microphone that ended while Start built the graph is reported as listening", "js/practice-engine.js", "      if (!graphError && audioTrack.readyState === \"ended\") graphError = new Error(\"Microphone ended while Start built the audio graph\");\n", ""],
+    ["M78 a context resume that never settles holds Start forever", "js/practice-engine.js", "await within(ctx.resume(), RESUME_WAIT_MS, \"Resuming the audio context\");", "await ctx.resume();"],
+    ["M79 the piano's resume inside Start is unbounded", "js/practice-engine.js", "await within(global.VTPiano?.resume?.(), RESUME_WAIT_MS, \"Resuming the piano\");", "await global.VTPiano?.resume?.();"],
+    ["M80 Start waits 80 s on a stuck resume", "js/practice-engine.js", "  const RESUME_WAIT_MS = 8000;", "  const RESUME_WAIT_MS = 80000;"],
+    ["M81 Start gives a slow iPhone resume under a second", "js/practice-engine.js", "  const RESUME_WAIT_MS = 8000;", "  const RESUME_WAIT_MS = 800;"],
+    ["M82 the piano waits 80 s on a stuck resume", "js/piano.js", "  const RESUME_WAIT_MS = 8000;", "  const RESUME_WAIT_MS = 80000;"],
+    ["M83 the piano gives a slow iPhone resume under a second", "js/piano.js", "  const RESUME_WAIT_MS = 8000;", "  const RESUME_WAIT_MS = 800;"],
+    ["M84 the piano's unlock waits on a resume that never settles", "js/piano.js", "if (resumed && !(await this._awaitResume(resumed, \"Piano gesture resume rejected\"))) return false;", "if (resumed) await resumed;"],
+    ["M85 the piano's resume waits on a resume that never settles", "js/piano.js", "await this._awaitResume(this.ctx.resume(), \"Piano resume failed\");", "await this.ctx.resume();"],
+    ["M86 a stall inside a bridged silence is measured from the last frame again (two notes, one hold)", "js/practice-engine.js", "    if (this.holdStart && performance.now() - this.lastVoiceAt > this._silenceEndMs()) this._maybeEndHold(true);", "    if (this._lastFrameAt && performance.now() - this._lastFrameAt > this._silenceEndMs()) this._maybeEndHold(true);"],
+    ["M87 a sustained mute ends the take two minutes later (E13)", "js/practice-engine.js", "        }, 1200);\n      });\n      track.addEventListener?.(\"unmute\"", "        }, 120000);\n      });\n      track.addEventListener?.(\"unmute\""],
+    ["M88 a context that stays suspended ends the take two minutes later (E16)", "js/practice-engine.js", "            this._status(\"input-interrupted\");\n          }\n        }, 1200);", "            this._status(\"input-interrupted\");\n          }\n        }, 120000);"],
+    ["M89 the last take's microphone can end the new take (E15)", "js/practice-engine.js", "const stillOwned = () => this.running && this.stream === stream;", "const stillOwned = () => true;"],
+    ["M90 Start on a running engine asks for a second microphone (E20)", "js/practice-engine.js", "    async start({ record = false } = {}) {\n      if (this.running) return;\n", "    async start({ record = false } = {}) {\n"],
+    ["M91 a half-second audio-session interruption leaves the banner up", "js/audio-recovery.js", "          if (session.state === \"interrupted\") showSound();", "          showSound();"],
+    ["M92 the audio-session banner shows at once (R18)", "js/audio-recovery.js", "if (session.state === \"interrupted\") showSound();\n        }, 1200);", "if (session.state === \"interrupted\") showSound();\n        }, 12);"],
+    ["M93 the piano's banner shows at once (R14)", "js/audio-recovery.js", "piano.ctx?.state !== \"running\") showSound();\n      }, 1200);", "piano.ctx?.state !== \"running\") showSound();\n      }, 12);"],
+    ["M94 a take that ended while the banner waited still shows it (R26)", "js/audio-recovery.js", "if (state().view !== \"exercise\" || !state().practiceLive) return;", "if (state().view !== \"exercise\") return;"],
+    ["M95 a chord whose every tone is under C1 gets lanes at 16-31 Hz again, not an octave up", "js/pitch-visualizer.js", "const notes = kept.length ? kept : chord.notes.map(lift);", "const notes = kept.length ? kept : chord.notes;"],
+    ["M96 a one-note target at octave -2 is drawn under C1", "js/pitch-visualizer.js", "noteName: lift(opts.noteName)", "noteName: opts.noteName"],
+    ["M97 the piano's ensure waits on a resume that never settles", "js/piano.js", "await this._awaitResume(this.ctx.resume(), \"Piano ensure resume failed\");", "await this.ctx.resume();"],
+    ["M98 each piano step waits its own 8 s on a held session (unlock then ensure: 16 s)", "js/piano.js", "const left = held ? Math.max(RESUME_RETRY_MS, held.until - now) : RESUME_WAIT_MS;", "const left = RESUME_WAIT_MS;"],
+    ["M99 a resume asked for after the shared 8 s gets no time at all", "js/piano.js", "Math.max(RESUME_RETRY_MS, held.until - now)", "(held.until - now)"],
+    ["M100 a progression on a held session waits forever on its last resume", "js/piano.js", "await this._awaitResume(this.ctx.resume(), \"Piano resume before playing failed\");", "await this.ctx.resume();"],
+    ["M101 a session that ran again and is held again gets 250 ms, not 8 s", "js/piano.js", "if (ctx.state === \"running\") this._resumeWait = null;", "if (false) this._resumeWait = null;"],
+    ["M102 a resume that timed out is named like a permission prompt left open", "js/practice-engine.js", "{ name: \"AudioResumeTimeout\" })), ms);", "{ name: \"TimeoutError\" })), ms);"],
+    ["M103 a lifted lane is named for the octave drawn, so one-note mode at -2 never matches the piano's note", "js/pitch-visualizer.js", "      lane.name = played.get(lane.name);\n", ""],
+    ["M104 feedback names a lifted lane for the note under C1 it is not drawn at", "js/pitch-visualizer.js", "best = { name: L.shown || L.name, freq: L.freq", "best = { name: L.name, freq: L.freq"],
+    ["M105 a Stop no longer drops a progression still waiting for a held session (a replaced Start's chords play under the next take)", "js/piano.js", "const stale = () => asked.stop !== this._stopGen || asked.prog !== this._progGen;", "const stale = () => asked.prog !== this._progGen;"],
+    ["M106 an older progression that settles last plays over the newer one", "js/piano.js", "const stale = () => asked.stop !== this._stopGen || asked.prog !== this._progGen;", "const stale = () => asked.stop !== this._stopGen;"],
+    ["M107 a reference note asked for before a Stop sounds after it", "js/piano.js", "      if (asked !== this._stopGen) return null; // stopped while the context resumed\n", ""],
+    ["M108 a Stop forgets the sounds still waiting for the context", "js/piano.js", "      this._stopGen += 1;\n", ""],
+    ["M109 inhale ticks asked for before a Stop tick after it", "js/piano.js", "      if (asked !== this._stopGen) return false;\n", ""],
+    ["M110 a stopped one-note pass still announces its notes (the next take's targets jump)", "js/piano.js", "                if (pass !== this._passGen) return;\n", ""],
+    ["M111 a stopped pass still announces its chords", "js/piano.js", "if (pass === this._passGen && this.onChordChange) this.onChordChange", "if (this.onChordChange) this.onChordChange"],
+    ["M112 a progression dropped while it waited still silences the one playing by then (QA round 10: the next take loses its chords and targets)", "js/piano.js", "      if (stale()) return false;\n      this._silence();", "      this._silence();"],
+    ["M113 a Stop during a progression's last wait, after its silence, no longer drops it", "js/piano.js", "if (!(await this._readyToPlay(stale)) || stale()) return null;", "if (!(await this._readyToPlay(stale))) return null;"],
+    ["M114 the check before the silence forgets a Stop: a progression a Stop dropped cuts the next reference note", "js/piano.js", "if (!(await this._readyToPlay(stale)) || stale()) return null;", "if (!(await this._readyToPlay(() => asked.prog !== this._progGen)) || stale()) return null;"],
+    ["M115 the check before the silence runs right after ensure: a progression dropped in resume()'s wait silences the newer one", "js/piano.js", "      await this.ensure();\n      await this.resume();\n      // If still not running (autoplay policy), try unlock path once\n      if (this.ctx && this.ctx.state !== \"running\") {\n        await this.unlock();\n      }\n      // A Stop, or a newer progression, came while the context was held: the silence below\n      // would end the voices and the chord loop of whatever plays now\n      if (stale()) return false;\n", "      await this.ensure();\n      if (stale()) return false;\n      await this.resume();\n      // If still not running (autoplay policy), try unlock path once\n      if (this.ctx && this.ctx.state !== \"running\") {\n        await this.unlock();\n      }\n"],
+    ["M116 the check before the silence runs before unlock: a progression dropped in unlock's wait silences the newer one", "js/piano.js", "      if (this.ctx && this.ctx.state !== \"running\") {\n        await this.unlock();\n      }\n      // A Stop, or a newer progression, came while the context was held: the silence below\n      // would end the voices and the chord loop of whatever plays now\n      if (stale()) return false;\n", "      if (stale()) return false;\n      if (this.ctx && this.ctx.state !== \"running\") {\n        await this.unlock();\n      }\n"],
+    ["M117 a Stop leaves the hammer noise of the chords still to come ticking", "js/piano.js", "this.playing.push(...nodes, noise);", "this.playing.push(...nodes);"],
+    ["M118 a retired take's microphone mutes beside the new one and replaces the new take's mute check (Codex on PR #32)", "js/practice-engine.js", "        if (!stillOwned()) return;\n        // iOS briefly mutes", "        // iOS briefly mutes"],
+    ["M119 a retired take's microphone unmutes and cancels the new take's mute check (Codex on PR #32)", "js/practice-engine.js", "if (stillOwned()) clearTimeout(this._micMuteTimer);", "clearTimeout(this._micMuteTimer);"],
+    ["SB8 the banner with no free band covers Stop like any other control", "js/audio-recovery.js", "weight: KEEP_CLEAR.includes(c.id) ? 100 : 1", "weight: 1"],
+    ["SB9 the banner with no free band overflows the largest band again", "js/audio-recovery.js", "const y = band ? band.top + (band.h - h) / 2 : leastCovered(room, h);", "const y = band ? band.top + (band.h - h) / 2 : room.bands.reduce((a, b) => (b.h > a.h ? b : a)).top;"]
   ].map(([name, file, from, to]) => ({ name, file, from, to, cmd: node(AUDIO_TESTS) })),
   lint: [
     ["L1 folders skipped by name again", "qa/lint-complexity.mjs", "if (!EXCLUDED_PATHS.has(name)) visit(name);", "if (!EXCLUDED_PATHS.has(name) && !/^(?:fixtures|geometry)$/.test(item.name)) visit(name);"],
@@ -155,11 +271,81 @@ export const MUTANTS = {
     ["L40 the slide line is lowered so that an easy change of note counts as a slide", "js/practice-modes.js", "arrive - leave > 0.25", "arrive - leave > 0.03", ["tests/node/slide-detect.test.mjs"]],
     ["L41 a step that took long enough is never recorded as a slide", "js/practice-modes.js", "steps.push({ A, B, leave, arrive })", "void 0", ["tests/node/slide-detect.test.mjs"]],
     ["L42 a wider connect-src written first: the browser enforces it, both CSP gates read the later, narrower one (QA-68)","index.html","connect-src ","connect-src *; connect-src ",["tests/node/csp-effective-policy.test.mjs"]],
+    ["L43 the base branch's name is pasted into the complexity step's shell line again (QA round 11, CI-1)", ".github/workflows/quality.yml", "        env:\n          BASE_REF: ${{ github.base_ref }}\n        run: node qa/lint-complexity.mjs --baseline-ref \"origin/$BASE_REF\"", "        run: node qa/lint-complexity.mjs --baseline-ref \"origin/${{ github.base_ref }}\"", ["tests/node/workflow-injection.test.mjs"]],
     ["L26 an English drill loses its fifth step: two languages, two drills (QA-34)", "js/exercises-data.js", '        "Then tell a 60 s story using at least 3 levels, on purpose.",\n        "Keep the same clarity and diction at every level."\n      ],', '        "Then tell a 60 s story using at least 3 levels, on purpose."\n      ],', ["tests/node/exercise-parity.test.mjs"]],
     ["L7 empty wait-may-fail reason accepted", "qa/lint-playwright-waits.mjs", "/wait-may-fail:\\s*\\S/", "/wait-may-fail:/"]
   // A mutant that edits a hashed asset (js/css) turns "every versioned asset matches its recorded content" red whatever
   // else is wrong, so it names the one test it is meant to be judged by (red-team: L25 and L26 were killed by the manifest).
   ].map(([name, file, from, to, only]) => ({ name, file, from, to, cmd: node(only || LINT_TESTS) })),
+  // What a pitch frame may score (PR #25's grace-held label, the s9 challenge).
+  scoring: [
+    ["P1 a grace-held label earns points again", "js/pitch-visualizer.js", "      return practice.scoringPitch();\n", "      return displayFreq || null;\n"],
+    ["P2 the engine scores its grace-held display value", "js/practice-engine.js", "      const measured = this._latestRawPitch;\n      if (!measured", "      const measured = this.voiceFreq;\n      if (!measured"],
+    ["P3 a challenge scored against the nearest chord lane", "js/pitch-visualizer.js", "} else if (f && !challenge && d.chordLanes !== false && this.chordLanes", "} else if (f && this.chordLanes"]
+  ].map(([name, file, from, to]) => ({
+    name,
+    file,
+    from,
+    to,
+    cmd: [...PIANO_SPEC.slice(0, 3), "tests/safari-mobile-recovery.spec.js", "tests/stage-design.spec.js", "--project=chromium", "--workers=2", "--reporter=dot", "-g", "held pitch stays visible|Pitch match challenge"]
+  })),
+  // Controls ported from PR #24: each says what it does, or is off when it cannot act.
+  controls: [
+    ["R12 octave -2 shown without its caution", "js/app.js", "if (moved && !opts.silent && state.octaveShift === -2) cautionLowOctave();", "if (moved && !opts.silent && state.octaveShift === -9) cautionLowOctave();", "range"],
+    ["R4 in a take the piano's restart toast replaces the caution at once", "js/app.js", "    if (state.practiceLive && state._hotApplyPromise) state._hotApplyPromise.then(say, say);\n    else say();", "    say();", "range"],
+    ["R5 the label forgets octave -2 once the toast is gone", "js/app.js", "      lab.classList.toggle(\"oct-caution\", low);\n", "", "range"],
+    ["R6 the label's title does not explain octave -2", "js/app.js", "      lab.title = low\n        ? tt(\"range.lowOctaveHint\")", "      lab.title = false\n        ? tt(\"range.lowOctaveHint\")", "range"],
+    ["R2 the auto range reaches -2 without the caution", "js/app.js", "        shiftOctave(dec.shift, { source: \"auto\", decision: dec });", "        applyOctaveShift(dec.shift, { source: \"auto\", decision: dec });", "range"],
+    ["R3 the - button reaches -2 without the caution", "js/app.js", "    shiftOctave(state.octaveShift + delta, { source: \"manual\" });", "    applyOctaveShift(state.octaveShift + delta, { source: \"manual\" });", "range"],
+    // QA round 5 on PR #27 (PNO-04, -05, -07, -08; QA's N8, N9, N11, N19, N20)
+    ["R7 a caution due for -2 still shows once the learner is back at -1", "js/app.js", "      if (state.octaveShift === -2) toast(tt(\"range.lowOctaveCaution\"));", "      toast(tt(\"range.lowOctaveCaution\"));", "range"],
+    ["R8 the caution toast regrows to the long hint (over Back and Help on a phone)", "js/app.js", "toast(tt(\"range.lowOctaveCaution\"));", "toast(tt(\"range.lowOctaveHint\"));", "range"],
+    ["R9 a silent octave move still toasts the caution", "js/app.js", "if (moved && !opts.silent && state.octaveShift === -2) cautionLowOctave();", "if (moved && state.octaveShift === -2) cautionLowOctave();", "range"],
+    ["R10 a stored octave below -2 is restored as it is", "js/app.js", "savedShift = Math.max(-2, Math.min(2, parseInt(s, 10) || 0));", "savedShift = Math.max(-3, Math.min(2, parseInt(s, 10) || 0));", "range"],
+    ["R11 the auto range may go a third octave down", "js/range-adapter.js", "  const MAX_SHIFT = 2;", "  const MAX_SHIFT = 3;", "range"],
+    ["G1 guided Next offered before Start", "js/scenes/guided.js", "        nextStep.disabled = true; //", "        nextStep.disabled = false; //", "guided"],
+    ["G2 guided Next still offered after Stop", "js/scenes/guided.js", "      this.live = false;\n      this._nextStepDisabled(true);\n", "      this.live = false;\n", "guided"],
+    // QA round 5 on PR #27 (PNO-01, PNO-02)
+    ["G3 keyboard focus falls to the page top when Next disables", "js/scenes/guided.js", "      const held = off && !b.disabled && document.activeElement === b;", "      const held = false;", "focus"],
+    ["G5 a take that ends with Next focused leaves focus on the Stop it hides", "js/scenes/guided.js", "      setTimeout(refocusIfLost, 0);\n", "", "focus"],
+    ["G4 focus handed to a hidden Start while the take is live", "js/scenes/guided.js", "    return [\"btn-practice-stop\", \"btn-practice-start\"]", "    return [\"btn-practice-start\"]", "focus"],
+    ["SB1 the sound-paused banner stays centred over a phone's rails", "js/audio-recovery.js", "      el.hidden = false;\n      placeSound(el);\n", "      el.hidden = false;\n", "banner"],
+    ["SB2 the banner never takes its one-line form", "js/audio-recovery.js", "      el.classList.add(\"is-compact\");\n", "", "banner"],
+    ["SB3 the banner's free bands ignore selects and labels", "js/audio-recovery.js", "const CONTROLS = \"button, input, select, textarea, label, a[href], [role='button']\";", "const CONTROLS = \"button, input, textarea, a[href], [role='button']\";", "banner"],
+    ["SB4 the one-line form drops the sentence for screen readers", "css/styles.css", ".sound-blocked.is-compact #sound-blocked-text {\n  position: absolute;", ".sound-blocked.is-compact #sound-blocked-text {\n  display: none;\n  position: absolute;", "banner"],
+    ["SB5 the banner may sit under the sticky header", "js/audio-recovery.js", "const top = Math.max(s.top, 0, stickyChromeHeight());", "const top = Math.max(s.top, 0);", "banner"],
+    ["SB6 a rail that changes under the banner leaves it where it was", "js/audio-recovery.js", "if (stage && typeof global.ResizeObserver === \"function\") {", "if (false) {", "banner"],
+    ["SB7 a scroll leaves the banner where the stage took it", "js/audio-recovery.js", "    global.addEventListener?.(\"scroll\", nextFrame, { passive: true });\n", "", "banner"],
+    ["CP1 the Plan button says it starts a week it cannot start", "js/app.js", "      : tt(\"plan.chooseFocus\");", "      : tt(\"plan.startWith\", { n: plan.weekNumber, element: \"\" });", "copy"],
+    ["CP2 one saved session read as \"1 sesiones\"", "js/i18n.js", "\"pricing.personalHave\": \"Sesiones guardadas: {sessions} ·", "\"pricing.personalHave\": \"Hasta hoy: {sessions} sesiones ·", "copy"],
+    ["CP3 one saved session read as \"1 sessions\"", "js/i18n.js", "\"pricing.personalHave\": \"Saved sessions: {sessions} ·", "\"pricing.personalHave\": \"So far: {sessions} sessions ·", "copy"],
+    ["MC1 leaving a take while the mic prompt is up leaves its Start pending", "js/app.js", "if (state.practiceLive || state.practice.running || state.practice.starting) {", "if (state.practiceLive || state.practice.running) {", "mic"],
+    // QA round 6 (F2, app_race declaredOpen)
+    ["MC2 an older Start answered late ends the newer, live take with no word", "js/app.js", "    if (state.practiceStarting || state.practiceLive) return;\n    // Aborted mid-start", "    // Aborted mid-start", "race"],
+    ["MC3 an older Start answered late brings Start back under the newer prompt", "js/app.js", "    if (state.practiceStarting || state.practiceLive) return;\n    // Aborted mid-start", "    if (state.practiceLive) return;\n    // Aborted mid-start", "race"],
+    ["MC4 an older Start answered late stops the newer take's engine", "js/app.js", "    if (state.practiceStarting || state.practiceLive) return;\n    // Aborted mid-start", "    if (state.practiceStarting) return;\n    // Aborted mid-start", "race"],
+    ["MC5 a Start replaced while its piano waited goes on to sound its note", "js/app.js", "    await readyPianoForSound();\n    if (!current()) return false;\n", "    await readyPianoForSound();\n", "orphan"],
+    ["MC6 a loop the piano dropped at a Stop is taken for silence: the replaced Start sounds its fallback note", "js/app.js", "    // A loop the piano dropped at a Stop is not silence: no fallback note for a replaced take\n    if (!current()) return false;\n", "", "orphan"],
+    ["MC7 a replaced Start asks for its progression after the Stop", "js/app.js", "      await VTPiano.resume?.();\n      if (!current()) return;\n      if (!state.selectedProg", "      await VTPiano.resume?.();\n      if (!state.selectedProg", "orphan"],
+    ["MC8 the recovery replays a replaced Start\'s note after the Stop", "js/app.js", "      await VTPiano.resume?.();\n      if (!current()) return;\n      if (plan.hasProg)", "      await VTPiano.resume?.();\n      if (plan.hasProg)", "orphan"],
+    ["MC9 a replaced Start stops the newer take's piano", "js/app.js", "    if (state.practiceStarting || state.practiceLive) return;\n    // Aborted mid-start", "    if (state.practiceStarting || state.practiceLive) return void VTPiano.stopAll();\n    // Aborted mid-start", "orphan"],
+    ["MC10 a piano option applied after the Stop plays on the stopped page", "js/app.js", "        const ok = await startExerciseSound(ex, profile, current);", "        const ok = await startExerciseSound(ex, profile);", "orphan"],
+    ["MC11 the reference button announces a note a Stop dropped", "js/app.js", "      if (!f) return; // a Stop while a held session resumed: nothing sounded, so nothing to announce\n", "", "orphan"],
+    ["MC12 the inhale-ticks button announces ticks a Stop dropped", "js/app.js", "      if (await VTPiano.playInhaleTicks(3)) toast(tt(\"toast.inhaleTicks\"));", "      await VTPiano.playInhaleTicks(3);\n      toast(tt(\"toast.inhaleTicks\"));", "orphan"],
+    ["MC13 the piano step does not hand its Start to the sound (a new Start of the same exercise is taken for it)", "js/app.js", "      const soundOk = await startExerciseSound(ex, profile, current);", "      const soundOk = await startExerciseSound(ex, profile);", "orphan"],
+    ["MC14 the replay does not hand its Start to the sound", "js/app.js", "    return startExerciseSound(ex, profile, current);", "    return startExerciseSound(ex, profile);", "orphan"],
+    ["MC15 a sound request outlives Stop piano: Loop, Play once and an option changed during a take play after it", "js/app.js", "return () => gen === state.practiceGen && state.exercise === ex && pianoStop === window.VTPiano?._stopGen;", "return () => gen === state.practiceGen && state.exercise === ex;", "orphan"],
+    ["MC16 a take replaced while its fallback or recovery waited reads the next take's piano as its own sound", "js/app.js", "    // Replaced while the fallback or the recovery waited: the piano sounding now is the next take's\n    if (!current()) return false;\n", "", "orphan"],
+    ["MC17 a Start answered after a Stop stops the piano again, cutting what the learner played since", "js/app.js", "if (pianoStop === VTPiano._stopGen) VTPiano.stopAll();", "VTPiano.stopAll();", "orphan"],
+    ["MB1 a resume that timed out tells the learner a permission prompt is still open", "js/app.js", "if ([\"interrupted\", \"AudioResumeTimeout\"].includes(failureName))", "if (failureName === \"interrupted\")", "micmsg"],
+    ["MB2 a microphone that ended during Start is called blocked, not disconnected", "js/app.js", "|MediaStreamSource|ended while Start built/i", "|MediaStreamSource/i", "micmsg"]
+  ].map(([name, file, from, to, area]) => ({
+    name,
+    file,
+    from,
+    to,
+    cmd: [...PIANO_SPEC.slice(0, 3), ...CONTROL_SPECS[area], "--project=chromium", "--workers=2", "--reporter=dot"]
+  })),
   // The open piano and the sticky stage (production-contracts "expanded piano").
   stage: [
     ["S1 opened panel never scrolled into view", "js/app.js", "revealBelowStickyRows(block, scrollBehavior());", ""],

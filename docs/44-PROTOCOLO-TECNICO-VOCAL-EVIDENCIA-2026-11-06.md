@@ -85,9 +85,9 @@ Los criterios 2/3 son **umbrales operativos de esta práctica**, no puntos de co
 
 | ID | Ataque | Oráculo y evidencia | Estado inicial |
 |---|---|---|---|
-| VT-01 | Reactivar fase de retención en `breathCycle` | `hold:0` y `hold` ausente deben tener transición directa a espiración; el mutante con `hold:2` debe morir | **Node y mutantes C1/C2 aprobados; secuencia visual Playwright pendiente** |
-| VT-02 | Volver a mostrar instrucciones de soplar al máximo | La app bilingüe presenta dosis cómodas y transferencia a /a/, no récord clínico; el control negativo antiguo debe fallar | **Contrato Node y mutante C3 aprobados; UI pendiente** |
-| VT-03 | Cambiar cañita normal por agitador estrecho | La guía indica resistencia inicial moderada y parada por presión, en ambos idiomas | **Contrato Node y mutantes C4/C5 aprobados; UI pendiente** |
+| VT-01 | Reactivar fase de retención en `breathCycle` | `hold:0` y `hold` ausente deben tener transición directa a espiración; el mutante con `hold:2` debe morir | **Node y mutantes VC1/VC2 aprobados; secuencia visual Playwright pendiente** |
+| VT-02 | Volver a mostrar instrucciones de soplar al máximo | La app bilingüe presenta dosis cómodas y transferencia a /a/, no récord clínico; el control negativo antiguo debe fallar | **Contrato Node y mutante VC3 aprobados; UI pendiente** |
+| VT-03 | Cambiar cañita normal por agitador estrecho | La guía indica resistencia inicial moderada y parada por presión, en ambos idiomas | **Contrato Node y mutantes VC4/VC5 aprobados; UI pendiente** |
 | VT-04 | Presentar el micrófono como medidor de apoyo | Texto del modo `breathS` identifica sonido o tecla y explicita sus límites | **Contrato Node aprobado; micrófono real pendiente** |
 | VT-05 | Vibrato voluntario clasificado «mala voz» | Lenguaje de `s9` diferencia centro, vibrato y artefactos; la nota técnica debe ser autoevaluación | **Contrato Node aprobado; escucha humana pendiente** |
 | VT-06 | Negar micro, pulsar Espacio, ruido, interrupción iOS | No atribuir sonido falso a flujo de aire; pruebas de navegador sintéticas + micro físico necesarias | **Abierto: hardware real** |
@@ -107,7 +107,7 @@ Los criterios 2/3 son **umbrales operativos de esta práctica**, no puntos de co
 ### Resultado de controles locales (2026-11-06)
 
 - `npm run test:core`: **534 tests aprobados**, sin fallos ni tests omitidos; incluye paridad de las 47 fichas y el límite de complejidad.
-- `node qa/mutate.mjs coaching`: **C1–C5 eliminados** por las nuevas pruebas al plantar fallas intencionales en código de producción.
+- `node qa/mutate.mjs coaching`: **VC1–VC5 eliminados** por las nuevas pruebas al plantar fallas intencionales en código de producción.
 - `tests/technical-coaching.spec.js`: tres pruebas de interfaz declaradas para las guías ES/EN y el cambio `4 → 0 → 6` en 390 px, **aún no ejecutadas**: faltó el ejecutable Chromium en este entorno y falló su descarga. El éxito de Node no reemplaza el navegador.
 - Pendientes fuera de CI: grabaciones reales, iPhone Safari, VoiceOver, zoom 200 %, accesibilidad de pantalla pequeña, evaluación ciega por profesor y verificación de la versión desplegada.
 

@@ -358,6 +358,28 @@ async function handleCreemWebhook(request, env, options) {
   return json({ ok: true }, 200);
 }
 
+/** Answer a Mercado Pago notification that was not applied: 500 and the marker dropped while it is worth retrying, 200 once it is not. */
+async function answerUnappliedNotification(env, target, mapped, options) {
+  console.warn("mercadopago notification not applied", target.kind, mapped.reason, mapped.status || "");
+  // 500 so Mercado Pago retries when the API itself failed; 200 when we
+  // simply do not care about this notification kind. A resource the API
+  // refuses (not found, forbidden) is retried for a day from the first
+  // refusal, which covers a read that lags the notification and gives an
+  // operator time to fix an access token, and then acknowledged: Mercado
+  // Pago otherwise retries a simulated or foreign notification forever.
+  let retry = RETRY_ALWAYS.has(mapped.reason);
+  if (!retry && (mapped.reason === "not_found" || mapped.reason === "api_refused")) {
+    const now = options && Number.isFinite(options.now) ? Math.floor(options.now) : Math.floor(Date.now() / 1000);
+    const refusedFor = await noteRefusal(env.ENTITLEMENTS, "mercadopago", target.eventId, now);
+    retry = refusedFor < RETRY_REFUSED_SECONDS;
+  }
+  if (retry) {
+    await clearEventSeen(env.ENTITLEMENTS, "mercadopago", target.eventId);
+    return json({ ok: false, reason: mapped.reason }, 500);
+  }
+  return json({ ok: true, reason: mapped.reason }, 200);
+}
+
 /**
  * Handle POST /v1/webhooks/mercadopago.
  * @param {Request} request Incoming request.
@@ -393,24 +415,9 @@ async function handleMercadoPagoWebhook(request, env, url, options) {
   try {
     const mapped = await confirmAndMapNotification(target, env, options || {});
     if (!mapped.handled) {
-      console.warn("mercadopago notification not applied", target.kind, mapped.reason, mapped.status || "");
-      // 500 so Mercado Pago retries when the API itself failed; 200 when we
-      // simply do not care about this notification kind. A resource the API
-      // refuses (not found, forbidden) is retried for a day from the first
-      // refusal, which covers a read that lags the notification and gives an
-      // operator time to fix an access token, and then acknowledged: Mercado
-      // Pago otherwise retries a simulated or foreign notification forever.
-      let retry = RETRY_ALWAYS.has(mapped.reason);
-      if (!retry && (mapped.reason === "not_found" || mapped.reason === "api_refused")) {
-        const now = options && Number.isFinite(options.now) ? Math.floor(options.now) : Math.floor(Date.now() / 1000);
-        const refusedFor = await noteRefusal(env.ENTITLEMENTS, "mercadopago", target.eventId, now);
-        retry = refusedFor < RETRY_REFUSED_SECONDS;
-      }
-      if (retry) {
-        await clearEventSeen(env.ENTITLEMENTS, "mercadopago", target.eventId);
-        return json({ ok: false, reason: mapped.reason }, 500);
-      }
-      return json({ ok: true, reason: mapped.reason }, 200);
+      // Awaited here, not returned bare: a KV call that throws in there must
+      // still reach the catch below and drop the marker.
+      return await answerUnappliedNotification(env, target, mapped, options);
     }
     const { record } = await upsertEntitlement(env.ENTITLEMENTS, mapped.update, { idSecret: licenseIdSecret(env) });
     console.log("mercadopago entitlement updated", target.kind, record.status, record.plan);
@@ -478,6 +485,66 @@ async function handleLicense(request, env, cors) {
   return respondWithToken(record, env, cors);
 }
 
+/** D1 liveness (`SELECT 1`, which needs no schema) and, once that answers, the webhook-failure flag. */
+async function probeDatabase(env, deps, checks) {
+  try {
+    await env.DB.prepare("SELECT 1 AS ok").first();
+    checks.db = "ok";
+  } catch {
+    checks.db = "error";
+  }
+  if (checks.db === "ok") {
+    try {
+      const flag = await readHealthFlag(env.DB, WEBHOOK_FAILED_FLAG, clockSeconds(deps));
+      checks.writes = flag.current ? "failing" : "ok";
+    } catch {
+      // No schema yet, which is a deployment nobody has used rather than a
+      // deployment that is broken.
+      checks.writes = "unknown";
+    }
+  }
+}
+
+/** One KV read, recorded in `checks.kv` as "ok" or "error". */
+async function probeKv(env, checks) {
+  try {
+    await env.ENTITLEMENTS.get("health:probe");
+    checks.kv = "ok";
+  } catch {
+    checks.kv = "error";
+  }
+}
+
+/** What `?probe=1` reports: one read of each bound binding, "skipped" for one that is not bound. */
+async function runHealthProbe(env, deps) {
+  const checks = { db: "skipped", kv: "skipped", writes: "unknown" };
+  if (env.DB) {
+    await probeDatabase(env, deps, checks);
+  }
+  if (env.ENTITLEMENTS) {
+    await probeKv(env, checks);
+  }
+  return checks;
+}
+
+/** The health route's configuration booleans, read out of `env` and never out of a binding. */
+function healthConfiguration(env) {
+  return {
+    stripeConfigured: Boolean(env.STRIPE_WEBHOOK_SECRET),
+    mercadopagoConfigured: Boolean(env.MP_WEBHOOK_SECRET && env.MP_ACCESS_TOKEN),
+    // The merchant-of-record rail. One secret, because Creem needs no
+    // server-side read to decide an entitlement: its webhook carries the
+    // whole of what the store needs, unlike Mercado Pago.
+    creemConfigured: Boolean(env.CREEM_WEBHOOK_SECRET),
+    signingKeyConfigured: Boolean(env.LICENSE_PRIVATE_KEY_PKCS8_B64),
+    accountsConfigured: Boolean(env.DB),
+    eventsEnabled: Boolean(env.DB) && String(env.EVENTS_ENABLED || "").trim().toLowerCase() !== "false",
+    reportsEnabled: reportsEnabled(env),
+    authMethods: authMethods(env),
+    siteOrigin: env.SITE_ORIGIN || ""
+  };
+}
+
 /**
  * Handle GET /v1/health.
  *
@@ -532,54 +599,14 @@ async function handleHealth(env, cors, url, deps) {
   // still `SELECT 1`, which needs no schema, and a flag read that cannot find
   // its table says `unknown` rather than condemning anything.
   const probe = url && url.searchParams.get("probe") === "1";
-  let checks;
-  if (probe) {
-    checks = { db: "skipped", kv: "skipped", writes: "unknown" };
-    if (env.DB) {
-      try {
-        await env.DB.prepare("SELECT 1 AS ok").first();
-        checks.db = "ok";
-      } catch {
-        checks.db = "error";
-      }
-      if (checks.db === "ok") {
-        try {
-          const flag = await readHealthFlag(env.DB, WEBHOOK_FAILED_FLAG, clockSeconds(deps));
-          checks.writes = flag.current ? "failing" : "ok";
-        } catch {
-          // No schema yet, which is a deployment nobody has used rather than a
-          // deployment that is broken.
-          checks.writes = "unknown";
-        }
-      }
-    }
-    if (env.ENTITLEMENTS) {
-      try {
-        await env.ENTITLEMENTS.get("health:probe");
-        checks.kv = "ok";
-      } catch {
-        checks.kv = "error";
-      }
-    }
-  }
+  const checks = probe ? await runHealthProbe(env, deps) : undefined;
   const working =
     !probe || (checks.db !== "error" && checks.kv !== "error" && checks.writes !== "failing");
   return json(
     {
       ok: working,
       ...(probe ? { probe: checks } : {}),
-      stripeConfigured: Boolean(env.STRIPE_WEBHOOK_SECRET),
-      mercadopagoConfigured: Boolean(env.MP_WEBHOOK_SECRET && env.MP_ACCESS_TOKEN),
-      // The merchant-of-record rail. One secret, because Creem needs no
-      // server-side read to decide an entitlement: its webhook carries the
-      // whole of what the store needs, unlike Mercado Pago.
-      creemConfigured: Boolean(env.CREEM_WEBHOOK_SECRET),
-      signingKeyConfigured: Boolean(env.LICENSE_PRIVATE_KEY_PKCS8_B64),
-      accountsConfigured: Boolean(env.DB),
-      eventsEnabled: Boolean(env.DB) && String(env.EVENTS_ENABLED || "").trim().toLowerCase() !== "false",
-      reportsEnabled: reportsEnabled(env),
-      authMethods: authMethods(env),
-      siteOrigin: env.SITE_ORIGIN || ""
+      ...healthConfiguration(env)
     },
     working ? 200 : 503,
     cors
@@ -610,41 +637,41 @@ function handleGeo(request, cors) {
   return json({ ok: true, country: country || null, placed: !!country, askFirst: asksFirst(request) }, 200, cors);
 }
 
-/**
- * Route one request. Exported so tests can drive the router directly.
- * @param {Request} request Incoming request.
- * @param {Object} env Worker env bindings.
- * @param {{fetchImpl?: function, now?: number, presets?: Object}} [options]
- *   Injectables for tests: fetch, the clock, and the experiment registry.
- * @returns {Promise<Response>} Response.
- */
-export async function handleRequest(request, env, options) {
-  const url = new URL(request.url);
-  const path = url.pathname.replace(/\/+$/, "") || "/";
-  const cors = corsHeaders(request, env);
-
-  if (request.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: cors });
+/** POST /v1/webhooks/*: refuse any other method, then run the rail's handler inside `recordingFailure`. */
+function routeWebhook(request, env, url, path, options) {
+  if (request.method !== "POST") {
+    return json({ ok: false, reason: "method_not_allowed" }, 405, { allow: "POST" });
   }
+  // Wrapped here rather than inside each handler, because the first thing
+  // every one of them does is a KV write — `markEventSeen`, the idempotency
+  // marker — and that one is outside their own try blocks. Which makes it the
+  // single most likely place for the day's 1,000th KV write to throw, and the
+  // place whose failure the read-only health probe could not see at all. At
+  // this level nothing can escape: a refused write, a refused read, a bug.
+  if (path === "/v1/webhooks/stripe") {
+    return recordingFailure(env, "stripe", options, () => handleStripeWebhook(request, env, options));
+  }
+  return path === "/v1/webhooks/creem"
+    ? recordingFailure(env, "creem", options, () => handleCreemWebhook(request, env, options))
+    : recordingFailure(env, "mercadopago", options, () => handleMercadoPagoWebhook(request, env, url, options));
+}
 
+/** GET /v1/jwks: the published signing key, cacheable because it is public. */
+async function handleJwks(request, env, cors) {
+  if (request.method !== "GET") {
+    return json({ ok: false, reason: "method_not_allowed" }, 405, { ...cors, allow: "GET" });
+  }
+  const jwks = await buildJwks(env);
+  // The public key is public: let browsers and CDNs cache it.
+  return json(jwks, 200, { ...cors, "cache-control": "public, max-age=600" });
+}
+
+/** The paths this module answers itself, ahead of the sub-routers (webhooks, claim, license, JWKS, geo); null for any other. */
+function routeOwnPaths(request, env, url, path, cors, options) {
   if (path === "/v1/webhooks/stripe"
     || path === "/v1/webhooks/mercadopago"
     || path === "/v1/webhooks/creem") {
-    if (request.method !== "POST") {
-      return json({ ok: false, reason: "method_not_allowed" }, 405, { allow: "POST" });
-    }
-    // Wrapped here rather than inside each handler, because the first thing
-    // every one of them does is a KV write — `markEventSeen`, the idempotency
-    // marker — and that one is outside their own try blocks. Which makes it the
-    // single most likely place for the day's 1,000th KV write to throw, and the
-    // place whose failure the read-only health probe could not see at all. At
-    // this level nothing can escape: a refused write, a refused read, a bug.
-    if (path === "/v1/webhooks/stripe") {
-      return recordingFailure(env, "stripe", options, () => handleStripeWebhook(request, env, options));
-    }
-    return path === "/v1/webhooks/creem"
-      ? recordingFailure(env, "creem", options, () => handleCreemWebhook(request, env, options))
-      : recordingFailure(env, "mercadopago", options, () => handleMercadoPagoWebhook(request, env, url, options));
+    return routeWebhook(request, env, url, path, options);
   }
 
   if (path === "/v1/claim" || path === "/v1/license") {
@@ -655,12 +682,7 @@ export async function handleRequest(request, env, options) {
   }
 
   if (path === "/v1/jwks") {
-    if (request.method !== "GET") {
-      return json({ ok: false, reason: "method_not_allowed" }, 405, { ...cors, allow: "GET" });
-    }
-    const jwks = await buildJwks(env);
-    // The public key is public: let browsers and CDNs cache it.
-    return json(jwks, 200, { ...cors, "cache-control": "public, max-age=600" });
+    return handleJwks(request, env, cors);
   }
 
   if (path === "/v1/geo") {
@@ -669,7 +691,11 @@ export async function handleRequest(request, env, options) {
     }
     return handleGeo(request, cors);
   }
+  return null;
+}
 
+/** The events, reports and account routers, tried in that order; the first answer wins, null if none claims the path. */
+async function routeSubRouters(request, env, url, path, cors, options) {
   // Before the account router: it claims every /v1/admin/ path and would
   // answer the experiment routes with a 404.
   const eventsResponse = await routeEventsApi(request, env, url, path, {
@@ -697,14 +723,39 @@ export async function handleRequest(request, env, options) {
     return reportsResponse;
   }
 
-  const accountResponse = await routeAccountApi(request, env, url, path, {
+  return routeAccountApi(request, env, url, path, {
     json,
     cors,
     now: options && options.now,
     fetchImpl: options && options.fetchImpl
   });
-  if (accountResponse) {
-    return accountResponse;
+}
+
+/**
+ * Route one request. Exported so tests can drive the router directly.
+ * @param {Request} request Incoming request.
+ * @param {Object} env Worker env bindings.
+ * @param {{fetchImpl?: function, now?: number, presets?: Object}} [options]
+ *   Injectables for tests: fetch, the clock, and the experiment registry.
+ * @returns {Promise<Response>} Response.
+ */
+export async function handleRequest(request, env, options) {
+  const url = new URL(request.url);
+  const path = url.pathname.replace(/\/+$/, "") || "/";
+  const cors = corsHeaders(request, env);
+
+  if (request.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: cors });
+  }
+
+  const ownResponse = routeOwnPaths(request, env, url, path, cors, options);
+  if (ownResponse) {
+    return ownResponse;
+  }
+
+  const routedResponse = await routeSubRouters(request, env, url, path, cors, options);
+  if (routedResponse) {
+    return routedResponse;
   }
 
   if (path === "/v1/health") {

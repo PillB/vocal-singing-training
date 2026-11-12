@@ -91,3 +91,32 @@ test("G2 an account with the cap minus one profile opens two new profiles at onc
   const listed = await listProgress(env.DB, account.id);
   assert.ok(listed.length <= MAX_PROFILES, `listProgress shows ${listed.length}`);
 });
+
+// G3 guards the update path the way G1 guards the first write. Both devices
+// read revision 1 before either writes, so the early revision check in
+// `updateProgress` passes for both and only the `rev = ?5` guard on the UPDATE
+// stands between them and a lost update: without it both writes report
+// success at revision 2 and the phone's copy is silently overwritten. Run
+// against a copy with that guard removed, this test fails on the second
+// assertion; the sequential stale-write test in progress.test.mjs cannot see
+// the loss because the early check catches it first.
+//
+// The reverse probe, removing the early check and keeping the guard, is an
+// equivalent mutant: the guarded UPDATE then changes no row and the caller gets
+// the same conflict with the same server copy, one round trip later. That
+// early check is kept for the round trip it saves, not for correctness, so no
+// test here claims to pin it.
+test("G3 two devices update the same profile from the same revision at once: one wins, the other gets the winner's copy", async () => {
+  const { env, account } = await withAccount();
+  assert.equal((await putProgress(env.DB, account.id, "default", { by: "start" }, 0, 5000)).ok, true);
+  const [a, b] = await Promise.all([putProgress(env.DB, account.id, "default", { by: "phone" }, 1, 5001), putProgress(env.DB, account.id, "default", { by: "laptop" }, 1, 5001)].map(settle));
+  assert.equal(a.error || b.error, undefined, JSON.stringify([a, b]));
+  const oks = [a, b].filter((r) => r.value.ok);
+  const conflicts = [a, b].filter((r) => !r.value.ok && r.value.reason === "conflict");
+  assert.equal(oks.length, 1, `exactly one write may win: ${JSON.stringify([a, b])}`);
+  assert.equal(conflicts.length, 1, JSON.stringify([a, b]));
+  assert.equal(oks[0].value.rev, 2);
+  const stored = await env.DB.prepare("SELECT rev, doc FROM progress WHERE account_id = ?1 AND profile_id = 'default'").bind(account.id).first();
+  assert.equal(Number(stored.rev), 2);
+  assert.deepEqual(conflicts[0].value.server.doc, JSON.parse(stored.doc), "the loser must be handed the copy that is actually stored");
+});

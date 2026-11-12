@@ -1089,23 +1089,64 @@
     facts.appendChild(el("li", { text: t("created", { date: fmtDate(account.createdAt) }) }));
     facts.appendChild(el("li", { text: account.trialUsed ? t("trialUsed") : t("trialFree") }));
     // Present only once the worker reports it; an older deploy just omits the line.
-    if (data.signIns) {
-      const s = data.signIns;
-      if (!s.methods || !s.methods.length) {
-        facts.appendChild(el("li", { className: "admin-warn", "data-testid": "never-signed-in", text: t("neverSignedIn") }));
-      } else {
-        const methods = s.methods.map((m) => (m === "google" ? "Google" : m === "email" ? (lang === "es" ? "código por correo" : "emailed code") : m)).join(", ");
-        facts.appendChild(
-          el("li", {
-            text: Number.isFinite(s.lastSeenAt)
-              ? t("signedInWith", { methods, date: fmtDateTime(s.lastSeenAt) })
-              : t("signedInWithNoDate", { methods })
+    if (data.signIns) appendSignIns(facts, data.signIns);
+
+    const grantsBlock = grantsSection(data, account);
+
+    const paid = Array.isArray(data.paid) ? data.paid : [];
+    let paidBlock = null;
+    if (paid.length) {
+      paidBlock = el("div", { className: "admin-paid" }, [el("h3", { text: t("paidTitle") })]);
+      paid.forEach((p) => {
+        const provider = providerLabel(p.provider);
+        paidBlock.appendChild(
+          el("p", {
+            text: `${t("paidLine", { plan: planLabel(p.plan), provider, status: paidStatusLabel(p.status) })} · ${Number.isFinite(p.periodEnd) ? fmtDate(p.periodEnd) : t("notSet")}`
           })
         );
-        facts.appendChild(el("li", { text: t("activeSessions", { n: Number(s.activeSessions) || 0 }) }));
-      }
+        paidBlock.appendChild(el("p", { className: "muted admin-small", text: t("paidHint", { provider }) }));
+      });
     }
 
+    const noticeNode = notice
+      ? el("p", { className: "admin-message", "data-tone": notice.tone || "ok", role: "status", tabindex: "-1", text: notice.text })
+      : null;
+
+    out.replaceChildren(
+      ...[noticeNode, head, facts, grantsBlock, paidBlock, el("div", { className: "controls-row" }, [giveMoreButton(account.email)])].filter(Boolean)
+    );
+  }
+
+  /**
+   * The sign-in lines of an account's facts: how and when they last signed
+   * in and how many sessions are open, or a warning that they never have.
+   * @param {HTMLElement} facts The facts list to add to.
+   * @param {Object} s The worker's `signIns` block.
+   */
+  function appendSignIns(facts, s) {
+    if (!s.methods || !s.methods.length) {
+      facts.appendChild(el("li", { className: "admin-warn", "data-testid": "never-signed-in", text: t("neverSignedIn") }));
+    } else {
+      const methods = s.methods.map((m) => (m === "google" ? "Google" : m === "email" ? (lang === "es" ? "código por correo" : "emailed code") : m)).join(", ");
+      facts.appendChild(
+        el("li", {
+          text: Number.isFinite(s.lastSeenAt)
+            ? t("signedInWith", { methods, date: fmtDateTime(s.lastSeenAt) })
+            : t("signedInWithNoDate", { methods })
+        })
+      );
+      facts.appendChild(el("li", { text: t("activeSessions", { n: Number(s.activeSessions) || 0 }) }));
+    }
+  }
+
+  /**
+   * An account's grants as a table, each with a revoke button while it still
+   * counts, or a line saying there are none.
+   * @param {Object} data The lookup being drawn.
+   * @param {Object} account Its account.
+   * @returns {HTMLElement} The grants block.
+   */
+  function grantsSection(data, account) {
     // Newest first, and the same order every time for grants made in the
     // same second.
     const grants = (Array.isArray(data.grants) ? data.grants.slice() : []).sort(
@@ -1153,29 +1194,7 @@
       table.appendChild(body);
       grantsBlock.appendChild(el("div", { className: "admin-table-wrap" }, [table]));
     }
-
-    const paid = Array.isArray(data.paid) ? data.paid : [];
-    let paidBlock = null;
-    if (paid.length) {
-      paidBlock = el("div", { className: "admin-paid" }, [el("h3", { text: t("paidTitle") })]);
-      paid.forEach((p) => {
-        const provider = providerLabel(p.provider);
-        paidBlock.appendChild(
-          el("p", {
-            text: `${t("paidLine", { plan: planLabel(p.plan), provider, status: paidStatusLabel(p.status) })} · ${Number.isFinite(p.periodEnd) ? fmtDate(p.periodEnd) : t("notSet")}`
-          })
-        );
-        paidBlock.appendChild(el("p", { className: "muted admin-small", text: t("paidHint", { provider }) }));
-      });
-    }
-
-    const noticeNode = notice
-      ? el("p", { className: "admin-message", "data-tone": notice.tone || "ok", role: "status", tabindex: "-1", text: notice.text })
-      : null;
-
-    out.replaceChildren(
-      ...[noticeNode, head, facts, grantsBlock, paidBlock, el("div", { className: "controls-row" }, [giveMoreButton(account.email)])].filter(Boolean)
-    );
+    return grantsBlock;
   }
 
   /**
@@ -1229,18 +1248,67 @@
 
   // ---------------------------------------------------------------- give
 
-  async function give(event) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const result = $("#give-result");
+  /**
+   * Read the give form as typed: who, for how long, why, and which kind.
+   * @param {HTMLFormElement} form The give form.
+   * @returns {{email: string, days: number, note: string, kind: string}} Values, not yet checked.
+   */
+  function readGiveForm(form) {
     const email = ($("#give-email")?.value || "").trim();
     const days = Number($("#give-days")?.value);
     const note = ($("#give-note")?.value || "").trim();
     // Both kinds entitle identically; the label is so the list below can tell
     // our own test accounts apart from gifts to real people.
     const kind = form.querySelector('input[name="give-kind"]:checked')?.value === "comp" ? "comp" : "gift";
-    if (!isEmail(email)) return setMessage(result, t("badEmail"), "error");
-    if (!Number.isInteger(days) || days < 1 || days > 3650) return setMessage(result, t("badDays"), "error");
+    return { email, days, note, kind };
+  }
+
+  /**
+   * Why a gift cannot be sent as typed, checked address first.
+   * @param {string} email Address as typed, trimmed.
+   * @param {number} days Day count as typed.
+   * @returns {string} String key of the refusal, or "" when it can be sent.
+   */
+  function giveFormError(email, days) {
+    if (!isEmail(email)) return "badEmail";
+    if (!Number.isInteger(days) || days < 1 || days > 3650) return "badDays";
+    return "";
+  }
+
+  /**
+   * After a gift the worker confirmed: show the account as it now stands, say
+   * when Pro really ends, and redraw the holders list.
+   * @param {HTMLElement} result Where the give form reports.
+   * @param {Object} grant The grant the worker stored.
+   * @param {{email: string}} account The account it went to.
+   * @returns {Promise<void>} Resolves when said.
+   */
+  async function showGiven(result, grant, account) {
+    // Show the account as it now stands, so the admin sees the real end date
+    // rather than this one gift's.
+    const lookupInput = $("#lookup-email");
+    if (lookupInput) lookupInput.value = account.email;
+    const fresh = await lookup(account.email);
+    const end = fresh && fresh.entitlement && fresh.entitlement.periodEnd;
+    const noChange = Number.isFinite(end) && end > grant.endsAt;
+    const text = noChange
+      ? t("givenNoChange", { email: account.email, date: fmtDate(end) })
+      : t("given", { email: account.email, date: fmtDate(grant.endsAt) });
+    setMessage(result, text, noChange ? "info" : "ok");
+    if (fresh) renderAccount(fresh, { text, tone: noChange ? "info" : "ok" });
+    // The list below now has a row it did not have.
+    loadHolders();
+    const noteInput = $("#give-note");
+    if (noteInput) noteInput.value = "";
+  }
+
+  async function give(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const result = $("#give-result");
+    const { email, days, note, kind } = readGiveForm(form);
+    const refusal = giveFormError(email, days);
+    if (refusal) return setMessage(result, t(refusal), "error");
     setBusy(form, true);
     setMessage(result, t("working"), "");
     const res = await api("POST", "/v1/admin/grants", { email, days, note, kind }, { timeoutMs: 8000 });
@@ -1260,22 +1328,7 @@
     }
     const grant = res.data.grant;
     const account = res.data.account || { email };
-    // Show the account as it now stands, so the admin sees the real end date
-    // rather than this one gift's.
-    const lookupInput = $("#lookup-email");
-    if (lookupInput) lookupInput.value = account.email;
-    const fresh = await lookup(account.email);
-    const end = fresh && fresh.entitlement && fresh.entitlement.periodEnd;
-    const noChange = Number.isFinite(end) && end > grant.endsAt;
-    const text = noChange
-      ? t("givenNoChange", { email: account.email, date: fmtDate(end) })
-      : t("given", { email: account.email, date: fmtDate(grant.endsAt) });
-    setMessage(result, text, noChange ? "info" : "ok");
-    if (fresh) renderAccount(fresh, { text, tone: noChange ? "info" : "ok" });
-    // The list below now has a row it did not have.
-    loadHolders();
-    const noteInput = $("#give-note");
-    if (noteInput) noteInput.value = "";
+    await showGiven(result, grant, account);
   }
 
   // --------------------------------------------------------------- codes
@@ -1352,6 +1405,38 @@
     return res;
   }
 
+  /**
+   * Why a gift code cannot be made as typed, checked days first.
+   * @param {number} days Days each redemption gives.
+   * @param {number} uses How many people may redeem it.
+   * @returns {string} String key of the refusal, or "" when it can be made.
+   */
+  function codeFormError(days, uses) {
+    if (!Number.isInteger(days) || days < 1 || days > 3650) return "badDays";
+    if (!Number.isInteger(uses) || uses < 1 || uses > 1000) return "badUses";
+    return "";
+  }
+
+  /**
+   * Show the code just made with its copy buttons, say what it gives, and
+   * clear the note for the next one.
+   * @param {HTMLElement} result Where the codes form reports.
+   * @param {Object} code The code the worker stored.
+   * @returns {string} The sentence said, to keep in front of a failed reload.
+   */
+  function showNewCode(result, code) {
+    const box = $("#code-new");
+    if (box) box.hidden = false;
+    const value = $("#code-new-value");
+    if (value) value.textContent = code.code;
+    setMessage($("#code-copy-status"), "", "");
+    const created = t("codeCreated", { days: code.days, uses: code.maxRedemptions });
+    setMessage(result, created, "ok");
+    const noteInput = $("#code-note");
+    if (noteInput) noteInput.value = "";
+    return created;
+  }
+
   async function createCode(event) {
     event.preventDefault();
     const form = event.currentTarget;
@@ -1359,8 +1444,8 @@
     const days = Number($("#code-days")?.value);
     const uses = Number($("#code-uses")?.value);
     const note = ($("#code-note")?.value || "").trim();
-    if (!Number.isInteger(days) || days < 1 || days > 3650) return setMessage(result, t("badDays"), "error");
-    if (!Number.isInteger(uses) || uses < 1 || uses > 1000) return setMessage(result, t("badUses"), "error");
+    const refusal = codeFormError(days, uses);
+    if (refusal) return setMessage(result, t(refusal), "error");
     setBusy(form, true);
     const res = await api("POST", "/v1/admin/gift-codes", { days, maxRedemptions: uses, note }, { timeoutMs: 8000 });
     setBusy(form, false);
@@ -1374,15 +1459,7 @@
       return;
     }
     newestCode = res.data.giftCode;
-    const box = $("#code-new");
-    if (box) box.hidden = false;
-    const value = $("#code-new-value");
-    if (value) value.textContent = newestCode.code;
-    setMessage($("#code-copy-status"), "", "");
-    const created = t("codeCreated", { days: newestCode.days, uses: newestCode.maxRedemptions });
-    setMessage(result, created, "ok");
-    const noteInput = $("#code-note");
-    if (noteInput) noteInput.value = "";
+    const created = showNewCode(result, newestCode);
     await reloadCodes(created);
   }
 
@@ -1910,29 +1987,25 @@
   }
 
   /**
-   * One report as a card: their words, then what we know about where they
-   * were, then the two controls that move it along.
+   * A report's pills: its kind, its severity when it has one, its status.
    * @param {Object} report Report from the worker.
-   * @returns {HTMLElement} Card.
+   * @returns {HTMLElement[]} Pills, in that order.
    */
-  function reportCard(report) {
-    const env = report.environment || {};
-    const card = el("div", {
-      className: "admin-report",
-      "data-status": report.status,
-      "data-severity": report.severity || "",
-      "data-testid": "report-card"
-    });
-
+  function reportPills(report) {
     const pills = [el("span", { className: "admin-pill", text: reportLabel("rKind", report.kind) })];
     if (report.severity) {
       pills.push(el("span", { className: "admin-pill", text: reportLabel("rSev", report.severity) }));
     }
     pills.push(el("span", { className: `admin-pill st-${report.status}`, text: reportLabel("rs", report.status) }));
-    card.appendChild(
-      el("div", { className: "admin-report-head" }, [el("h4", { text: report.summary }), ...pills])
-    );
+    return pills;
+  }
 
+  /**
+   * When a report came, about what, its reference, and who sent it.
+   * @param {Object} report Report from the worker.
+   * @returns {HTMLElement[]} Meta line parts.
+   */
+  function reportMeta(report) {
     const meta = [
       el("span", { text: fmtDateTime(report.createdAt) }),
       el("span", { text: reportLabel("rArea", report.area) }),
@@ -1943,15 +2016,16 @@
     } else {
       meta.push(el("span", { text: t("rAnon") }));
     }
-    card.appendChild(el("p", { className: "admin-report-meta" }, meta));
+    return meta;
+  }
 
-    card.appendChild(el("span", { className: "admin-report-label", text: t("rDetail") }));
-    card.appendChild(el("p", { className: "admin-report-text", text: report.detail || t("rNoDetail") }));
-    if (report.steps) {
-      card.appendChild(el("span", { className: "admin-report-label", text: t("rSteps") }));
-      card.appendChild(el("p", { className: "admin-report-text", text: report.steps }));
-    }
-
+  /**
+   * Where the reporter was: page, build, browser, screen, and how to answer.
+   * @param {Object} report Report from the worker.
+   * @returns {HTMLElement[]} One part per thing the report carries; none when it carries none.
+   */
+  function reportWhere(report) {
+    const env = report.environment || {};
     const where = [];
     if (report.page) where.push(el("span", { text: `${t("rWhere")}: ${report.page}` }));
     if (report.build) where.push(el("span", { text: `${t("rBuild")}: ${report.build}` }));
@@ -1969,6 +2043,38 @@
         ])
       );
     }
+    return where;
+  }
+
+  /**
+   * One report as a card: their words, then what we know about where they
+   * were, then the two controls that move it along.
+   * @param {Object} report Report from the worker.
+   * @returns {HTMLElement} Card.
+   */
+  function reportCard(report) {
+    const card = el("div", {
+      className: "admin-report",
+      "data-status": report.status,
+      "data-severity": report.severity || "",
+      "data-testid": "report-card"
+    });
+
+    const pills = reportPills(report);
+    card.appendChild(
+      el("div", { className: "admin-report-head" }, [el("h4", { text: report.summary }), ...pills])
+    );
+
+    card.appendChild(el("p", { className: "admin-report-meta" }, reportMeta(report)));
+
+    card.appendChild(el("span", { className: "admin-report-label", text: t("rDetail") }));
+    card.appendChild(el("p", { className: "admin-report-text", text: report.detail || t("rNoDetail") }));
+    if (report.steps) {
+      card.appendChild(el("span", { className: "admin-report-label", text: t("rSteps") }));
+      card.appendChild(el("p", { className: "admin-report-text", text: report.steps }));
+    }
+
+    const where = reportWhere(report);
     if (where.length) {
       card.appendChild(el("p", { className: "admin-report-meta" }, where));
     }
@@ -2117,7 +2223,8 @@
 
   // ---------------------------------------------------------------- wire
 
-  function bind() {
+  /** The language switch: redraw everything built from data in the old language. */
+  function bindLanguage() {
     $("#admin-lang")?.addEventListener("click", () => {
       lang = lang === "es" ? "en" : "es";
       try {
@@ -2141,20 +2248,21 @@
         showGate(gate, gate === "notAdmin" ? adminEmail : undefined);
       }
     });
+  }
+
+  /** Sign out, and try again from the gate. */
+  function bindSession() {
     $("#admin-signout")?.addEventListener("click", () => {
       // signOut() drops the session before it tells the worker, so the page
       // can move on without waiting for that call.
       window.VTAccount.signOut();
       showGate("signedOut");
     });
-    $("#codes-refresh")?.addEventListener("click", async (event) => {
-      const button = event.currentTarget;
-      button.disabled = true;
-      setMessage($("#code-result"), "", "");
-      await reloadCodes();
-      button.disabled = false;
-    });
     $("#gate-retry")?.addEventListener("click", () => boot());
+  }
+
+  /** Look an account up, and give Pro (with the day-count chips). */
+  function bindAccounts() {
     $("#lookup-form")?.addEventListener("submit", (event) => {
       event.preventDefault();
       lookup($("#lookup-email")?.value);
@@ -2166,12 +2274,27 @@
         if (input) input.value = chip.getAttribute("data-days");
       });
     });
+  }
+
+  /** Gift codes: refresh the list, make one, copy it or the message around it. */
+  function bindCodes() {
+    $("#codes-refresh")?.addEventListener("click", async (event) => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      setMessage($("#code-result"), "", "");
+      await reloadCodes();
+      button.disabled = false;
+    });
     $("#code-form")?.addEventListener("submit", createCode);
     $("#code-copy")?.addEventListener("click", () => newestCode && copyText(newestCode.code));
     $("#code-copy-message")?.addEventListener("click", () => {
       if (!newestCode) return;
       copyText(t("codeMessage", { days: newestCode.days, url: siteUrl(), code: newestCode.code }));
     });
+  }
+
+  /** Health, the sweep, and the stats window chips. */
+  function bindMaintenance() {
     $("#health-refresh")?.addEventListener("click", loadHealth);
     $("#sweep-run")?.addEventListener("click", sweep);
     document.querySelectorAll("#stats [data-window]").forEach((chip) => {
@@ -2183,6 +2306,10 @@
     });
     markStatsWindow();
     $("#stats-load")?.addEventListener("click", loadStats);
+  }
+
+  /** The reports filter chips, refresh and "more". */
+  function bindReports() {
     document.querySelectorAll("#reports [data-report-status]").forEach((chip) => {
       chip.addEventListener("click", () => {
         reportStatus = chip.getAttribute("data-report-status");
@@ -2209,6 +2336,10 @@
       await loadReports({ append: true });
       button.disabled = false;
     });
+  }
+
+  /** The holders filter chips, refresh and "more". */
+  function bindHolders() {
     document.querySelectorAll("#holders [data-grant-kind]").forEach((chip) => {
       chip.addEventListener("click", () => {
         grantKind = chip.getAttribute("data-grant-kind");
@@ -2235,6 +2366,20 @@
       await loadHolders({ append: true });
       button.disabled = false;
     });
+  }
+
+  /**
+   * Wire every control once, then name the filter chips. Each control has its
+   * own element, so the order of the sections below changes nothing.
+   */
+  function bind() {
+    bindLanguage();
+    bindSession();
+    bindAccounts();
+    bindCodes();
+    bindMaintenance();
+    bindReports();
+    bindHolders();
     markReportFilters();
     markHolderFilters();
   }

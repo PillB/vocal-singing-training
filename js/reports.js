@@ -536,15 +536,37 @@
     return t("failGeneric", { reason: reason || res.status });
   }
 
-  /** Draw the form, from the draft when there is one. */
-  function drawForm(notice) {
+  /** Take kind, area and severity from the draft (defaults for anything unknown); returns the draft, or {}. */
+  function restoreChoices() {
     const draft = readDraft() || {};
     ui.kind = draft.kind === "idea" ? "idea" : "bug";
     ui.area = AREAS.includes(draft.area) ? draft.area : "practice";
     ui.severity = ["blocks", "annoying", "cosmetic"].includes(draft.severity) ? draft.severity : "annoying";
+    return draft;
+  }
 
+  /** The signed-in reporter's address, to prefill the contact field, or "". */
+  function signedInEmail() {
     const account = global.VTAccount && global.VTAccount.getState ? global.VTAccount.getState() : null;
-    const myEmail = (account && account.account && account.account.email) || "";
+    return (account && account.account && account.account.email) || "";
+  }
+
+  /** Put the cursor in the summary, but only while the dialog is showing. */
+  function focusSummary() {
+    const first = ui.card.querySelector("#vt-report-summary");
+    if (first && !ui.overlay.hidden) {
+      try {
+        first.focus();
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  /** Draw the form, from the draft when there is one. */
+  function drawForm(notice) {
+    const draft = restoreChoices();
+    const myEmail = signedInEmail();
 
     const form = el("form", { novalidate: true, id: "vt-report-form" });
     const title = el("h2", { id: "vt-report-title", text: t("title") });
@@ -670,14 +692,7 @@
       message.textContent = notice;
       message.dataset.tone = "error";
     }
-    const first = ui.card.querySelector("#vt-report-summary");
-    if (first && !ui.overlay.hidden) {
-      try {
-        first.focus();
-      } catch {
-        /* ignore */
-      }
-    }
+    focusSummary();
   }
 
   /**

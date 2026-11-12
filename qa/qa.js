@@ -370,88 +370,104 @@
     set("#qa-screen", `${env.viewport || "?"}${env.screen ? ` (${EN() ? "screen" : "pantalla"} ${env.screen})` : ""}`);
   }
 
+  /** The same words in the language being drawn: English, else Spanish. */
+  const inLang = (en, es) => (EN() ? en : es);
+
+  /** Set one fact's text, when the page has that fact. */
+  function setFact(id, text) {
+    const node = $(id);
+    if (node) node.textContent = text;
+  }
+
+  /** The facts that come from the worker, blanked together when it has nothing to say. */
+  const WORKER_FACTS = ["#qa-auth", "#qa-trial", "#qa-reports", "#qa-events"];
+
   /** Read `/v1/health` and say, in words, what this deploy has switched on. */
   async function loadHealth() {
-    const set = (id, text) => {
-      const node = $(id);
-      if (node) node.textContent = text;
-    };
     const A = global.VTAccount;
     if (!A || !A.isConfigured()) {
-      health = null;
-      set("#qa-worker", EN() ? "not configured on this site" : "no configurado en este sitio");
-      ["#qa-auth", "#qa-trial", "#qa-reports", "#qa-events"].forEach((id) => set(id, "—"));
+      showNoHealth(inLang("not configured on this site", "no configurado en este sitio"));
       return;
     }
-    set("#qa-worker", EN() ? "checking…" : "comprobando…");
+    setFact("#qa-worker", inLang("checking…", "comprobando…"));
     const res = await A.request("GET", "/v1/health", null, { auth: false, timeoutMs: 8000 });
     if (!res || !res.ok || !res.data) {
-      health = null;
-      set("#qa-worker", EN() ? "could not be reached" : "no se pudo contactar");
-      ["#qa-auth", "#qa-trial", "#qa-reports", "#qa-events"].forEach((id) => set(id, "—"));
+      showNoHealth(inLang("could not be reached", "no se pudo contactar"));
       return;
     }
     health = res.data;
-    const methods = health.authMethods || {};
-    const ways = [];
-    if (methods.google) ways.push("Google");
-    if (methods.email) ways.push(EN() ? "a code by email" : "código por correo");
-    set("#qa-worker", EN() ? "answering" : "responde");
-    set("#qa-auth", ways.length ? ways.join(EN() ? " and " : " y ") : EN() ? "nothing switched on" : "nada encendido");
-    const days = Number(methods.trialDays);
-    set(
-      "#qa-trial",
-      Number.isFinite(days) && days > 0
-        ? EN()
-          ? `${days} days`
-          : `${days} días`
-        : EN()
-          ? "unknown"
-          : "no se sabe"
-    );
+    showHealth(health);
+  }
+
+  /** No answer to show: say why on the worker line, and blank the rest. */
+  function showNoHealth(why) {
+    health = null;
+    setFact("#qa-worker", why);
+    WORKER_FACTS.forEach((id) => setFact(id, "—"));
+  }
+
+  /** What a `/v1/health` answer says is switched on, one fact per line. */
+  function showHealth(h) {
+    const methods = h.authMethods || {};
+    setFact("#qa-worker", inLang("answering", "responde"));
+    setFact("#qa-auth", signInWays(methods));
+    setFact("#qa-trial", trialLength(methods.trialDays));
     // `reportsEnabled` is absent on a worker deployed before reports existed,
     // and saying "no" there would be a lie: the route is missing, not off.
-    set(
+    setFact(
       "#qa-reports",
-      health.reportsEnabled === undefined
-        ? EN()
-          ? "this worker is older than the report route"
-          : "este servidor es anterior a los reportes"
-        : yesNo(health.reportsEnabled)
+      h.reportsEnabled === undefined
+        ? inLang("this worker is older than the report route", "este servidor es anterior a los reportes")
+        : yesNo(h.reportsEnabled)
     );
-    set(
+    setFact(
       "#qa-events",
-      health.eventsEnabled === undefined
-        ? EN()
-          ? "this worker is older than the statistics"
-          : "este servidor es anterior a las estadísticas"
-        : yesNo(health.eventsEnabled)
+      h.eventsEnabled === undefined
+        ? inLang("this worker is older than the statistics", "este servidor es anterior a las estadísticas")
+        : yesNo(h.eventsEnabled)
     );
+  }
+
+  /** The ways in this deploy offers, in words, or that it offers none. */
+  function signInWays(methods) {
+    const ways = [];
+    if (methods.google) ways.push("Google");
+    if (methods.email) ways.push(inLang("a code by email", "código por correo"));
+    return ways.length ? ways.join(inLang(" and ", " y ")) : inLang("nothing switched on", "nada encendido");
+  }
+
+  /** The trial length the worker reports, or that it is not known. */
+  function trialLength(value) {
+    const days = Number(value);
+    if (Number.isFinite(days) && days > 0) return inLang(`${days} days`, `${days} días`);
+    return inLang("unknown", "no se sabe");
   }
 
   /** The state above as plain text, for pasting into a report or a message. */
   function stateText() {
     const env = (global.VTReports && global.VTReports.environment && global.VTReports.environment()) || {};
     const lines = [
-      `${EN() ? "Build" : "Build"}: ${$("#qa-build") ? $("#qa-build").textContent : "?"}`,
-      `${EN() ? "Browser" : "Navegador"}: ${env.ua || "?"}`,
-      `${EN() ? "Screen" : "Pantalla"}: ${env.viewport || "?"}${env.screen ? ` (${env.screen})` : ""}`,
-      `${EN() ? "Language" : "Idioma"}: ${lang()}`
+      `Build: ${$("#qa-build") ? $("#qa-build").textContent : "?"}`,
+      `${inLang("Browser", "Navegador")}: ${env.ua || "?"}`,
+      `${inLang("Screen", "Pantalla")}: ${env.viewport || "?"}${env.screen ? ` (${env.screen})` : ""}`,
+      `${inLang("Language", "Idioma")}: ${lang()}`
     ];
-    if (health) {
-      const methods = health.authMethods || {};
-      lines.push(
-        `${EN() ? "Worker" : "Servidor"}: ${EN() ? "answering" : "responde"}`,
-        `${EN() ? "Accounts" : "Cuentas"}: ${yesNo(health.accountsConfigured)}`,
-        `${EN() ? "Sign-in" : "Entrar"}: google=${yesNo(methods.google)} email=${yesNo(methods.email)}`,
-        `${EN() ? "Trial days" : "Días de prueba"}: ${methods.trialDays === undefined ? "?" : methods.trialDays}`,
-        `${EN() ? "Reports" : "Reportes"}: ${health.reportsEnabled === undefined ? "n/a" : yesNo(health.reportsEnabled)}`,
-        `${EN() ? "Statistics" : "Estadísticas"}: ${health.eventsEnabled === undefined ? "n/a" : yesNo(health.eventsEnabled)}`
-      );
-    } else {
-      lines.push(`${EN() ? "Worker" : "Servidor"}: ${EN() ? "no answer" : "sin respuesta"}`);
-    }
-    return lines.join("\n");
+    return lines.concat(healthLines(health)).join("\n");
+  }
+
+  /** The worker's half of the pasted state, or one line saying it did not answer. */
+  function healthLines(h) {
+    if (!h) return [`${inLang("Worker", "Servidor")}: ${inLang("no answer", "sin respuesta")}`];
+    const methods = h.authMethods || {};
+    const orNa = (value) => (value === undefined ? "n/a" : yesNo(value));
+    return [
+      `${inLang("Worker", "Servidor")}: ${inLang("answering", "responde")}`,
+      `${inLang("Accounts", "Cuentas")}: ${yesNo(h.accountsConfigured)}`,
+      `${inLang("Sign-in", "Entrar")}: google=${yesNo(methods.google)} email=${yesNo(methods.email)}`,
+      `${inLang("Trial days", "Días de prueba")}: ${methods.trialDays === undefined ? "?" : methods.trialDays}`,
+      `${inLang("Reports", "Reportes")}: ${orNa(h.reportsEnabled)}`,
+      `${inLang("Statistics", "Estadísticas")}: ${orNa(h.eventsEnabled)}`
+    ];
   }
 
   // ----------------------------------------------------------- the charters

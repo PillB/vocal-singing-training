@@ -35,6 +35,124 @@ const KEY = "trial_len_2026_11";
 
 test.use({ timezoneId: "America/Lima", locale: "es-PE" });
 
+/** The JSON a request posted, or {} when it posted none or not JSON. */
+function postedJson(request) {
+  try {
+    return request.postDataJSON() || {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * What the stand-in worker answers, as `[status, body]`: the routes anybody
+ * may call first, then the session's own.
+ * @param {Object} ctx `{ request, path, method, body, state, opts, license, bodies }`.
+ * @returns {Promise<[number, Object]>} Answer.
+ */
+async function stubAnswer(ctx) {
+  const open = await stubOpenAnswer(ctx);
+  if (open) return open;
+  const authorized = (ctx.request.headers().authorization || "").includes("sess-token-1");
+  if (ctx.path.startsWith("/v1/me") && !authorized) return [401, { ok: false, reason: "no_session" }];
+  return stubSessionAnswer(ctx);
+}
+
+/** The routes that need no session: events, sign-in methods, the emailed code. Null for any other. */
+async function stubOpenAnswer({ request, path, body, state, opts, license, bodies }) {
+  if (path === "/v1/events") {
+    try {
+      bodies.push(JSON.parse(request.postData() || "null"));
+    } catch {
+      bodies.push(null);
+    }
+    return [200, { ok: true }];
+  }
+  if (path === "/v1/auth/methods") {
+    return [200, {
+      ok: true,
+      email: true,
+      google: false,
+      googleClientId: null,
+      // Deliberately not the account's own length: this route answers before
+      // anybody has signed in, so it can only ever report the default.
+      trialDays: opts.methodsTrialDays === undefined ? 7 : opts.methodsTrialDays
+    }];
+  }
+  if (path === "/v1/auth/email/start") return [200, { ok: true, sent: true, expiresInSeconds: 900 }];
+  if (path === "/v1/auth/email/verify") {
+    if (body.code !== "424242") return [401, { ok: false, reason: "bad_code" }];
+    return [200, { ok: true, sessionToken: "sess-token-1", expiresAt: 4102444800, ...(await stubMe(state, opts, license)) }];
+  }
+  return null;
+}
+
+/** The signed-in routes: the account, starting its trial, progress and health. */
+async function stubSessionAnswer({ path, method, state, opts, license }) {
+  if (path === "/v1/me" && method === "GET") return [200, await stubMe(state, opts, license)];
+  if (path === "/v1/me/trial") {
+    if (state.trialUsed) return [409, { ok: false, reason: "trial_used" }];
+    state.trialUsed = true;
+    const days = opts.trialDays || 7;
+    const periodEnd = Math.floor(Date.now() / 1000) + days * DAY;
+    state.entitlement = {
+      pro: true,
+      plan: "pro_monthly",
+      status: "active",
+      source: "trial",
+      periodEnd,
+      provider: null
+    };
+    return [200, await stubMe(state, opts, license)];
+  }
+  if (path === "/v1/me/progress") return [200, { ok: true, profiles: [], rev: 0, doc: null, updatedAt: 1 }];
+  if (path === "/v1/health") return [200, { ok: true }];
+  return [404, { ok: false, reason: "not_found" }];
+}
+
+/** The `/v1/me` body for the stand-in account as it now stands, with a signed licence while it holds Pro. */
+async function stubMe(state, opts, license) {
+  let token = null;
+  if (state.entitlement.pro) {
+    const now = Math.floor(Date.now() / 1000);
+    token = await license.sign({
+      iss: "vocal-studio-entitlements",
+      sub: "grant_test_0001",
+      aud: BASE,
+      plan: state.entitlement.plan,
+      status: state.entitlement.status,
+      provider: state.entitlement.provider || "grant",
+      iat: now,
+      exp: state.entitlement.periodEnd,
+      periodEnd: state.entitlement.periodEnd,
+      accountId: "acct_test",
+      source: state.entitlement.source
+    });
+  }
+  const payload = {
+    ok: true,
+    account: {
+      id: "acct_test",
+      email: "pablo@example.test",
+      displayName: null,
+      locale: null,
+      role: "member",
+      trialUsed: state.trialUsed,
+      createdAt: 1
+    },
+    entitlement: state.entitlement,
+    grants: [],
+    paid: [],
+    licenseId: state.entitlement.pro ? "grant_test_0001" : null,
+    token
+  };
+  // Absent on purpose when the caller passes undefined: an older worker
+  // sends neither field, and the page has to cope with that.
+  if (opts.trialDays !== undefined) payload.trialDays = opts.trialDays;
+  if (opts.trialArm !== undefined) payload.trialArm = opts.trialArm;
+  return payload;
+}
+
 /**
  * Install a worker stub and capture what the page sends.
  *
@@ -64,122 +182,20 @@ async function installWorker(page, opts = {}) {
 
   await page.route(`${API}/**`, async (route) => {
     const request = route.request();
-    const url = new URL(request.url());
-    const path = url.pathname;
+    const path = new URL(request.url()).pathname;
     const method = request.method();
-    let body = {};
-    try {
-      body = request.postDataJSON() || {};
-    } catch {
-      body = {};
-    }
+    const body = postedJson(request);
     calls.push({ method, path, body });
-
-    const json = (status, data) =>
-      route.fulfill({
-        status,
-        contentType: "application/json",
-        headers: { "access-control-allow-origin": "*" },
-        body: JSON.stringify(data)
-      });
-
     if (method === "OPTIONS") {
       return route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } });
     }
-
-    if (path === "/v1/events") {
-      try {
-        bodies.push(JSON.parse(request.postData() || "null"));
-      } catch {
-        bodies.push(null);
-      }
-      return json(200, { ok: true });
-    }
-
-    if (path === "/v1/auth/methods") {
-      return json(200, {
-        ok: true,
-        email: true,
-        google: false,
-        googleClientId: null,
-        // Deliberately not the account's own length: this route answers before
-        // anybody has signed in, so it can only ever report the default.
-        trialDays: opts.methodsTrialDays === undefined ? 7 : opts.methodsTrialDays
-      });
-    }
-    if (path === "/v1/auth/email/start") return json(200, { ok: true, sent: true, expiresInSeconds: 900 });
-
-    const me = async () => {
-      let token = null;
-      if (state.entitlement.pro) {
-        const now = Math.floor(Date.now() / 1000);
-        token = await license.sign({
-          iss: "vocal-studio-entitlements",
-          sub: "grant_test_0001",
-          aud: BASE,
-          plan: state.entitlement.plan,
-          status: state.entitlement.status,
-          provider: state.entitlement.provider || "grant",
-          iat: now,
-          exp: state.entitlement.periodEnd,
-          periodEnd: state.entitlement.periodEnd,
-          accountId: "acct_test",
-          source: state.entitlement.source
-        });
-      }
-      const payload = {
-        ok: true,
-        account: {
-          id: "acct_test",
-          email: "pablo@example.test",
-          displayName: null,
-          locale: null,
-          role: "member",
-          trialUsed: state.trialUsed,
-          createdAt: 1
-        },
-        entitlement: state.entitlement,
-        grants: [],
-        paid: [],
-        licenseId: state.entitlement.pro ? "grant_test_0001" : null,
-        token
-      };
-      // Absent on purpose when the caller passes undefined: an older worker
-      // sends neither field, and the page has to cope with that.
-      if (opts.trialDays !== undefined) payload.trialDays = opts.trialDays;
-      if (opts.trialArm !== undefined) payload.trialArm = opts.trialArm;
-      return payload;
-    };
-
-    if (path === "/v1/auth/email/verify") {
-      if (body.code !== "424242") return json(401, { ok: false, reason: "bad_code" });
-      return json(200, { ok: true, sessionToken: "sess-token-1", expiresAt: 4102444800, ...(await me()) });
-    }
-
-    const authorized = (request.headers().authorization || "").includes("sess-token-1");
-    if (path.startsWith("/v1/me") && !authorized) return json(401, { ok: false, reason: "no_session" });
-
-    if (path === "/v1/me" && method === "GET") return json(200, await me());
-
-    if (path === "/v1/me/trial") {
-      if (state.trialUsed) return json(409, { ok: false, reason: "trial_used" });
-      state.trialUsed = true;
-      const days = opts.trialDays || 7;
-      const periodEnd = Math.floor(Date.now() / 1000) + days * DAY;
-      state.entitlement = {
-        pro: true,
-        plan: "pro_monthly",
-        status: "active",
-        source: "trial",
-        periodEnd,
-        provider: null
-      };
-      return json(200, await me());
-    }
-
-    if (path === "/v1/me/progress") return json(200, { ok: true, profiles: [], rev: 0, doc: null, updatedAt: 1 });
-    if (path === "/v1/health") return json(200, { ok: true });
-    return json(404, { ok: false, reason: "not_found" });
+    const [status, data] = await stubAnswer({ request, path, method, body, state, opts, license, bodies });
+    return route.fulfill({
+      status,
+      contentType: "application/json",
+      headers: { "access-control-allow-origin": "*" },
+      body: JSON.stringify(data)
+    });
   });
 
   return {

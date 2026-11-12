@@ -705,11 +705,7 @@
        * gives each account 7 or 14 days. Falls back to the public answer until
        * the first `/v1/me` lands, and to nothing when neither has.
        */
-      trialDays: Number(snapshot?.trialDays) > 0
-        ? Number(snapshot.trialDays)
-        : Number(methods?.trialDays) > 0
-          ? Number(methods.trialDays)
-          : null,
+      trialDays: accountTrialDays(),
       /**
        * Which arm of the trial-length test this account is in, as the worker
        * assigned it. Null when the test is off, and null for an account that
@@ -719,6 +715,13 @@
       // Pro is whatever the signature check says, never what this JSON claims.
       pro: !!global.VTLicense?.getClaims?.()
     };
+  }
+
+  /** This account's trial length from `/v1/me`, else the public default from `/v1/auth/methods`, else null. */
+  function accountTrialDays() {
+    if (Number(snapshot?.trialDays) > 0) return Number(snapshot.trialDays);
+    if (Number(methods?.trialDays) > 0) return Number(methods.trialDays);
+    return null;
   }
 
   /** The session token, for modules that call the worker themselves (sync). */

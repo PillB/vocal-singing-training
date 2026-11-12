@@ -214,18 +214,36 @@
     el.classList.remove("ad-slot--native", "ad-slot--adsense", "ad-slot--preview");
   }
 
+  const SLOT_ELEMENT_IDS = {
+    home: "ad-slot-home",
+    history: "ad-slot-history",
+    "post-session": "ad-slot-post-session"
+  };
+
   /**
    * @param {"home"|"history"|"post-session"} slotId
    */
   function renderSlot(slotId) {
-    const map = {
-      home: "ad-slot-home",
-      history: "ad-slot-history",
-      "post-session": "ad-slot-post-session"
-    };
-    const el = document.getElementById(map[slotId] || "");
+    const el = document.getElementById(SLOT_ELEMENT_IDS[slotId] || "");
     if (!el) return { ok: false, reason: "no_element" };
+    const blocked = slotBlocked(el, slotId);
+    if (blocked) return blocked;
+    const c = cfg();
+    if (slotThrottled(slotId, c.frequency || {})) return { ok: false, reason: "throttled" };
+    const filled = fillSlot(el, slotId, c);
+    if (filled) return filled;
+    clearSlot(el);
+    return { ok: false, reason: "no_fill" };
+  }
 
+  /**
+   * Why a slot stays empty whatever is configured: practice under way, or a
+   * visitor who sees no ads. Clears the slot and says why, or returns null.
+   * @param {Element} el Slot element.
+   * @param {string} slotId Slot name.
+   * @returns {{ok: false, reason: string}|null} Refusal.
+   */
+  function slotBlocked(el, slotId) {
     // Post-session is only allowed after completeExercise (practice already stopped).
     // Home/history still fully blocked when practice is live.
     const practiceLive = isPracticeActive();
@@ -240,20 +258,35 @@
       if (isProUser()) track("ad_suppressed_pro", { slot: slotId });
       return { ok: false, reason: "suppressed" };
     }
+    return null;
+  }
 
-    const c = cfg();
-    const freq = c.frequency || {};
+  /**
+   * Whether this slot showed something too recently to show again. Only home
+   * and post-session are rate-limited; history is not.
+   * @param {string} slotId Slot name.
+   * @param {Object} freq The config's `frequency` block.
+   * @returns {boolean} True when it must wait.
+   */
+  function slotThrottled(slotId, freq) {
     if (slotId === "home") {
-      if (!throttleOk(LAST_HOME_KEY, Number(freq.homeMinIntervalMs || 60000))) {
-        return { ok: false, reason: "throttled" };
-      }
+      return !throttleOk(LAST_HOME_KEY, Number(freq.homeMinIntervalMs || 60000));
     }
     if (slotId === "post-session") {
-      if (!throttleOk(LAST_POST_KEY, Number(freq.postSessionMinIntervalMs || 120000))) {
-        return { ok: false, reason: "throttled" };
-      }
+      return !throttleOk(LAST_POST_KEY, Number(freq.postSessionMinIntervalMs || 120000));
     }
+    return false;
+  }
 
+  /**
+   * Fill the slot the way the configured mode says: the preview, a native
+   * card, or an AdSense unit. Returns what was drawn, or null for no fill.
+   * @param {Element} el Slot element.
+   * @param {string} slotId Slot name.
+   * @param {Object} c Ads config.
+   * @returns {Object|null} Result.
+   */
+  function fillSlot(el, slotId, c) {
     const mode = c.mode || "native";
 
     // Preview: what the slots look like, with no third-party script, no network
@@ -281,9 +314,7 @@
         return { ok: true, mode: "adsense" };
       }
     }
-
-    clearSlot(el);
-    return { ok: false, reason: "no_fill" };
+    return null;
   }
 
   /**
@@ -424,14 +455,9 @@
     const label = (es ? c.labelEs : c.labelEn) || "";
     const disc = (es ? c.disclosureEs : c.disclosureEn) || "";
     const chip = es ? "Vista previa" : "Preview";
-    const inert = es ? "sin destino todavía" : "no destination yet";
     const unitNote = es
       ? "Aquí iría un bloque de AdSense (90 px mínimo)"
       : "An AdSense block would sit here (90 px minimum)";
-    const title = card ? (es ? card.titleEs || card.titleEn : card.titleEn || card.titleEs) : "";
-    const body = card ? (es ? card.bodyEs || card.bodyEn : card.bodyEn || card.bodyEs) : "";
-    const cta = card ? (es ? card.ctaEs || card.ctaEn : card.ctaEn || card.ctaEs) : "";
-    const hasHref = !!(card && (card.action === "open-pricing" || String(card.href || "").trim()));
 
     el.hidden = false;
     el.classList.add("ad-slot", "ad-slot--preview");
@@ -441,21 +467,47 @@
       <div class="ad-native-card ad-preview-card">
         <span class="ad-preview-chip">${escapeHtml(chip)}</span>
         <span class="ad-native-label">${escapeHtml(label)}</span>
-        ${card
-          ? `<strong class="ad-native-title">${escapeHtml(title || "")}</strong>
-             <p class="ad-native-body">${escapeHtml(body || "")}</p>
-             <div class="ad-native-actions">
-               <button type="button" class="btn btn-sm btn-ghost" disabled data-ad-preview-cta="1">
-                 ${escapeHtml(cta || (es ? "Más" : "More"))}${hasHref ? "" : ` (${escapeHtml(inert)})`}
-               </button>
-             </div>`
-          : `<p class="ad-native-body">${escapeHtml(
-              es ? "Ninguna tarjeta nombra este espacio." : "No card names this slot."
-            )}</p>`}
+        ${previewCardHtml(card, es)}
         <p class="ad-native-disc muted">${escapeHtml(disc)}</p>
       </div>
       <div class="ad-preview-unit" aria-hidden="true">${escapeHtml(unitNote)}</div>
     `;
+  }
+
+  /**
+   * A card's own text in the page's language, else in the other one.
+   * @param {Object} card Native card.
+   * @param {"title"|"body"|"cta"} field Field name without its language.
+   * @param {boolean} es Spanish page.
+   * @returns {string|undefined} Text.
+   */
+  function cardText(card, field, es) {
+    return card[field + (es ? "Es" : "En")] || card[field + (es ? "En" : "Es")];
+  }
+
+  /**
+   * The preview's card: its words and an inert call to action that says when
+   * it has no destination yet, or a line saying no card names this slot.
+   * @param {Object|null} card Native card, unusable ones included.
+   * @param {boolean} es Spanish page.
+   * @returns {string} HTML.
+   */
+  function previewCardHtml(card, es) {
+    if (!card) {
+      return `<p class="ad-native-body">${escapeHtml(
+        es ? "Ninguna tarjeta nombra este espacio." : "No card names this slot."
+      )}</p>`;
+    }
+    const inert = es ? "sin destino todavía" : "no destination yet";
+    const cta = cardText(card, "cta", es);
+    const hasHref = card.action === "open-pricing" || !!String(card.href || "").trim();
+    return `<strong class="ad-native-title">${escapeHtml(cardText(card, "title", es) || "")}</strong>
+             <p class="ad-native-body">${escapeHtml(cardText(card, "body", es) || "")}</p>
+             <div class="ad-native-actions">
+               <button type="button" class="btn btn-sm btn-ghost" disabled data-ad-preview-cta="1">
+                 ${escapeHtml(cta || (es ? "Más" : "More"))}${hasHref ? "" : ` (${escapeHtml(inert)})`}
+               </button>
+             </div>`;
   }
 
   function refreshAllSafe() {

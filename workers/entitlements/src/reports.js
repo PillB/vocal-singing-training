@@ -38,7 +38,8 @@
 
 "use strict";
 
-import { callerIp, ensureSchema, hitRateLimit, mintId, normalizeEmail, nowSec, peekRateLimit } from "./db.js";
+import { ensureSchema, hitRateLimit, mintId, normalizeEmail, nowSec, peekRateLimit } from "./db.js";
+import { ipBucketKey, ipKeyConfigured } from "./events.js";
 
 /** What a reporter can be telling us. */
 export const REPORT_KINDS = new Set(["bug", "idea"]);
@@ -114,15 +115,19 @@ const REF_ALPHABET = "23456789ABCDEFGHJKMNPQRSTVWXYZ";
 const REF_LENGTH = 10;
 
 /**
- * Whether this deployment takes reports: it needs the database, and the var
- * can switch the route off without a code change. Unset means on, matching
+ * Whether this deployment takes reports: it needs the database and a key to
+ * pseudonymise the reporter's address under (see ipKeyConfigured; the privacy
+ * page promises the address is never written down), and the var can switch
+ * the route off without a code change. Unset means on, matching
  * EVENTS_ENABLED, because a deployment with a database and no opinion should
  * be able to hear from its users.
  * @param {Object} env Worker env bindings.
  * @returns {boolean} True when POST /v1/reports will store anything.
  */
 export function reportsEnabled(env) {
-  return Boolean(env && env.DB) && String((env && env.REPORTS_ENABLED) || "").trim().toLowerCase() !== "false";
+  return Boolean(env && env.DB) &&
+    ipKeyConfigured(env) &&
+    String(env.REPORTS_ENABLED || "").trim().toLowerCase() !== "false";
 }
 
 /**
@@ -713,7 +718,10 @@ export async function handleSubmitReport(request, env, deps) {
     return json({ ok: false, reason: parsed.reason }, 400, cors);
   }
 
-  const gate = await spendReportLimits(env.DB, callerIp(request), accountId, at);
+  // The address is only ever written as this keyed, day-scoped pseudonym: the
+  // privacy page promises a report stores no IP address, and a rate-limit row
+  // is a row in the database like any other.
+  const gate = await spendReportLimits(env.DB, await ipBucketKey(env, request, at, "reports"), accountId, at);
   if (gate) {
     return json({ ok: false, reason: gate.reason, retryAfter: gate.retryAfter }, 429, {
       ...cors,
@@ -788,12 +796,15 @@ async function reporterAccountId(request, env, deps, at) {
  * `{ reason, retryAfter }` for the gate that refused, or null when every gate
  * let the report through and one of the day's reports has been spent.
  * @param {Object} db D1 binding.
- * @param {string} ip Caller address (rate limiting only, never stored).
+ * @param {string} ipKey The caller's address as ipBucketKey pseudonymises it,
+ *   never the address itself. Keyed per UTC day, which costs the limits
+ *   nothing: their hourly and daily windows are aligned to the epoch, so none
+ *   of them spans a midnight.
  * @param {string|null} accountId Signed-in reporter, if any.
  * @param {number} at Unix seconds.
  * @returns {Promise<{reason: string, retryAfter: number}|null>} Refusal.
  */
-async function spendReportLimits(db, ip, accountId, at) {
+async function spendReportLimits(db, ipKey, accountId, at) {
   const refused = (gate, reason) => ({ reason: reason || "rate_limited", retryAfter: gate.retryAfter });
   // The deployment ceiling first, read WITHOUT writing. This order is the whole
   // protection: the per-address buckets below each write a row, so checking
@@ -814,13 +825,13 @@ async function spendReportLimits(db, ip, accountId, at) {
     return refused(room, "too_busy");
   }
 
-  const hourly = await hitRateLimit(db, `rep:ip:${ip}`, REPORT_LIMITS.perIp[0], REPORT_LIMITS.perIp[1], at);
+  const hourly = await hitRateLimit(db, `rep:ip:${ipKey}`, REPORT_LIMITS.perIp[0], REPORT_LIMITS.perIp[1], at);
   if (!hourly.ok) {
     return refused(hourly);
   }
   const daily = await hitRateLimit(
     db,
-    `rep:ipd:${ip}`,
+    `rep:ipd:${ipKey}`,
     REPORT_LIMITS.perIpDaily[0],
     REPORT_LIMITS.perIpDaily[1],
     at

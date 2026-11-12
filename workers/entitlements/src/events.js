@@ -676,16 +676,31 @@ function ipSecret(env) {
 }
 
 /**
+ * Whether this deployment has a key to pseudonymise addresses under. A route
+ * that limits by address and has none must refuse rather than fall back to the
+ * address itself, or to an unkeyed hash of it: there are only 2^32 IPv4
+ * addresses, so a plain hash is reversed by trying them all.
+ * @param {Object} env Worker env bindings.
+ * @returns {boolean} True when ipBucketKey has a secret to work with.
+ */
+export function ipKeyConfigured(env) {
+  return Boolean(ipSecret(env));
+}
+
+/**
  * The rate-limit bucket for the caller's address: an HMAC with the UTC day in
  * the message, so two days' buckets cannot be joined, cut to 96 bits because it
- * only has to spread load, not identify anybody.
+ * only has to spread load, not identify anybody. `scope` keeps one route's
+ * buckets from being joined to another's; the events route's default scope is
+ * the one its stored buckets were always written under.
  * @param {Object} env Worker env bindings.
  * @param {Request} request Incoming request.
  * @param {number} at Unix seconds.
+ * @param {string} [scope] The route the bucket belongs to.
  * @returns {Promise<string>} 24 hex characters.
  */
-export async function ipBucketKey(env, request, at) {
-  return (await hmacSha256Hex(ipSecret(env), `events:${callerIp(request)}:${Math.floor(at / DAY)}`)).slice(0, 24);
+export async function ipBucketKey(env, request, at, scope = "events") {
+  return (await hmacSha256Hex(ipSecret(env), `${scope}:${callerIp(request)}:${Math.floor(at / DAY)}`)).slice(0, 24);
 }
 
 /**

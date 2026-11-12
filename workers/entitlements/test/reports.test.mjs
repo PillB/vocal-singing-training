@@ -21,6 +21,7 @@ import {
   sanitizeEnvironment,
   sanitizeReport
 } from "../src/reports.js";
+import { ipBucketKey } from "../src/events.js";
 import { createAccountEnv, TEST_ORIGIN } from "./fixtures.mjs";
 
 const BASE = "https://entitlements.test";
@@ -485,6 +486,52 @@ test("REPORTS_ENABLED=false closes the route and says so in health", async () =>
   assert.equal((await call(req("GET", "/v1/health"), on, { now: NOW })).body.reportsEnabled, true);
 });
 
+test("a report writes the reporter's address nowhere, not even in its rate limits", async () => {
+  // The privacy page promises the address is not written to the database. The
+  // per-address limits used to keep it in the bucket name, `rep:ip:<address>`,
+  // in a table that is swept daily but is the database all the same.
+  const env = freshEnv();
+  for (const ip of ["198.51.100.23", "2001:db8:85a3::8a2e:370:7334"]) {
+    const answer = await submit(env, { kind: "bug", summary: "no carga el micrófono" }, { ip });
+    assert.equal(answer.status, 200, JSON.stringify(answer.body));
+    const rows = await env.DB.prepare("SELECT bucket FROM rate_limits").all();
+    const buckets = rows.results.map((row) => row.bucket);
+    assert.equal(buckets.some((bucket) => bucket.includes(ip)), false, `${ip} is in ${buckets.join(", ")}`);
+    const stored = await env.DB.prepare("SELECT * FROM reports").all();
+    assert.equal(JSON.stringify(stored.results).includes(ip), false, `${ip} is in a report row`);
+  }
+  // Control: the limits did run, per address: two hourly and two daily buckets.
+  const rows = await env.DB.prepare("SELECT bucket FROM rate_limits WHERE bucket LIKE 'rep:ip%'").all();
+  assert.equal(rows.results.length, 4);
+  // And the pseudonym is still per address: a second report from the first
+  // address counts against the same bucket, not a new one.
+  await submit(env, { kind: "bug", summary: "otra vez" }, { ip: "198.51.100.23" });
+  const again = await env.DB.prepare("SELECT bucket FROM rate_limits WHERE bucket LIKE 'rep:ip%'").all();
+  assert.equal(again.results.length, 4);
+  // And it is not the statistics route's pseudonym for the same address and
+  // day, so a report's bucket cannot be joined to that address's event buckets.
+  const asCaller = req("POST", "/v1/reports", { headers: { "cf-connecting-ip": "198.51.100.23" } });
+  const eventsKey = await ipBucketKey(env, asCaller, NOW);
+  const reportsKey = await ipBucketKey(env, asCaller, NOW, "reports");
+  assert.equal(again.results.some((row) => row.bucket.endsWith(eventsKey)), false);
+  assert.equal(again.results.some((row) => row.bucket.endsWith(reportsKey)), true, "control: it is the reports pseudonym");
+});
+
+test("a deployment with no key to pseudonymise addresses under takes no reports", async () => {
+  // Wrong: limiting by the raw address, or by an unkeyed hash of it, which is
+  // reversed by trying all 2^32 IPv4 addresses.
+  const env = freshEnv({ EVENTS_IP_KEY: "", LICENSE_PRIVATE_KEY_PKCS8_B64: "" });
+  const refused = await submit(env, { kind: "bug", summary: "x" });
+  assert.equal(refused.status, 503);
+  assert.equal(refused.body.reason, "reports_disabled");
+  assert.equal((await call(req("GET", "/v1/health"), env, { now: NOW })).body.reportsEnabled, false);
+  // Control: either key on its own is enough.
+  const own = freshEnv({ EVENTS_IP_KEY: "reports-test-key", LICENSE_PRIVATE_KEY_PKCS8_B64: "" });
+  assert.equal((await submit(own, { kind: "bug", summary: "x" })).status, 200);
+  const derived = freshEnv({ EVENTS_IP_KEY: "" });
+  assert.equal((await submit(derived, { kind: "bug", summary: "x" })).status, 200);
+});
+
 test("without a D1 binding the report route refuses instead of pretending", async () => {
   const env = freshEnv({ DB: undefined });
   const refused = await submit(env, { kind: "bug", summary: "x" });
@@ -558,7 +605,9 @@ test("reports arriving at the same moment cannot all pass one address's share", 
   const accepted = answers.filter((a) => a.status === 200).length;
   assert.equal(accepted, REPORT_LIMITS.perIp[0], `${accepted} of ${burst} got through a limit of ${REPORT_LIMITS.perIp[0]}`);
   assert.equal(await storedReports(env), REPORT_LIMITS.perIp[0], "and that is what the database holds");
-  const bucket = await env.DB.prepare("SELECT count FROM rate_limits WHERE bucket = ?1").bind(`rep:ip:${ip}`).first();
+  const asCaller = req("POST", "/v1/reports", { headers: { "cf-connecting-ip": ip } });
+  const ipKey = await ipBucketKey(env, asCaller, NOW, "reports");
+  const bucket = await env.DB.prepare("SELECT count FROM rate_limits WHERE bucket = ?1").bind(`rep:ip:${ipKey}`).first();
   assert.equal(Number(bucket.count), REPORT_LIMITS.perIp[0], "the stored count never ran past the limit");
   for (const answer of answers.filter((a) => a.status !== 200)) {
     assert.equal(answer.status, 429, JSON.stringify(answer.body));

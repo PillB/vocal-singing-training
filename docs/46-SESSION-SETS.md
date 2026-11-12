@@ -1,0 +1,158 @@
+# 46 · Goal sets and guided voice drills (2026-11-11 / 12)
+
+What this round added, why, on what evidence, and what stays open. The code is
+`js/session-sets.js`, `css/session-sets.css`, `Modes.voiceDrill` in
+`js/practice-modes.js`, `js/scenes/voice-drill.js`, and five exercises in the
+catalogue (v21 to v24, s28).
+
+## 1. The request
+
+The singing side had prepared sessions; the speaking side had none. The ask
+was a matching set of sessions for speaking, the missing techniques on both
+sides chosen by weight of evidence (reviews before single papers), better
+pictures for each exercise and set, and a layout that works by touch on
+phones, tablets and laptops.
+
+## 2. What was built
+
+### Goal sets ("Rutinas por objetivo")
+
+A set is a short ordered list of existing exercises with its own step times.
+It runs on the session engine (`VTSession`, path `set`), so the banner, the
+timers, a reload and "next" behave as in any guided session. It does not mark
+today's basics and it stores nothing new: "practised today" is read from the
+practice days already kept.
+
+| Set | Steps | Minutes | Grade |
+|---|---|---|---|
+| v-pretalk · Antes de hablar | s18, v21, v2 | 8 | limited |
+| v-aftertalk · Después de hablar mucho | s17, v22 | 12 | moderate |
+| v-clarity · Que se te entienda | v23, v1, v10 | 9 | limited |
+| v-expression · Voz con expresión | v12, v13, v19, v20 | 10 | limited |
+| v-fillers · Pausas en vez de muletillas | v11, v10, v17 | 10 | limited |
+| v-voice · Voz en forma | v21, v24 | 12 | moderate |
+| s-warmup · Calentar para cantar | s17, s18, s4, s5, s7, s10 | 8 | limited |
+| s-pitch · Afinación | s9, s10, s13, s16 | 11 | limited |
+| s-technique · Técnica en 13 minutos | s18, s6, s8, s12, s11, s14 | 13 | limited |
+| s-function · Función vocal | s28, s6 | 10 | moderate |
+| s-range · Graves, medios y agudos | s4, s5, s24, s25 | 9 | class tradition |
+| s-cooldown · Enfriar la voz | s5, s6, s7 | 6 | limited |
+
+Each card says what the set is for, why (in plain words, with the study's
+limits), the source, and a grade written out. No grade is drawn as the
+maximum: nothing here has strong long-term evidence in healthy voices.
+
+Set-level pictures: a step trail on the session banner (one mark per step,
+done, now, to come, with the position also in words) and a finishing card
+(a tick per practised step, no score).
+
+### Guided voice drills
+
+One mode, `voiceDrill`, runs a drill written as data: a list of timed steps,
+each silent, sounded, spoken, or one half of a pair to compare.
+
+| Exercise | What you do | What the phone counts | Self-rated |
+|---|---|---|---|
+| v21 De la pajita a la frase | Soft straw sounds, glides, loudness waves, a sentence through the straw, the same sentence without it | Soft sounds of 1.5 s or more | Ease after; carry-over |
+| v22 Recuperar la voz | Five quiet minutes with water, then five of soft straw sounds | Whole quiet minutes; soft sounds | Comfort after |
+| v23 Habla clara | The sentence your usual way (A), then as if to someone who hears poorly (B), then with pauses marked, then normal pace | Nothing is filled in. After Stop: B against A by speech rate, share of the take in pauses, level | Clarity on listening back; naturalness |
+| v24 Funciones vocales | Long soft "ee", glide up, glide down, five soft notes twice | Sounds of 3 s or more; the longest, rounded down | Easy voice |
+| s28 Función vocal con notas | The same on the piano's notes (F, then C to G, at the singer's octave) | As v24 | Easy voice |
+
+## 3. Evidence
+
+Grades: **moderate** = controlled trials or a review support the short-term
+or trained-task effect in healthy voices; **limited** = one small trial,
+patient studies, or indirect support; **tradition** = taught, not measured.
+
+| Claim made in the app | Source | Grade | What the app does not claim |
+|---|---|---|---|
+| Straw and other half-closed sounds lower, for a while, the pressure needed to start the voice and the effort felt | Apfelbach & Guzmán 2024, integrative review of 53 studies (PMID 34774370) | moderate, short-term | That warming up improves how you speak or sing afterwards |
+| Straw into a sentence | Kapsner-Smith et al. 2015 (flow-resistant tube protocol, people with voice problems) | limited | That the carry-over step is tested in healthy speakers |
+| After heavy use, 5 min quiet then 5 min straw recovered the voice better than 10 min quiet | Peng et al. 2026, RCT, 114 healthy adults after 1 h of loading (PMID 42156834) | moderate, one study | Prevention of voice problems |
+| Recovery takes hours | Hunter & Titze 2009 | limited | A safe daily dose |
+| Clear speech is understood better | Picheny et al. 1985 (+17 points, listeners with hearing loss); Smiljanić & Bradlow 2009 (review) | moderate for the listener's benefit | That a short daily drill carries into everyday talk |
+| Vocal function exercises lengthen how long a sound can be sustained | Stemple et al. 1994 (35 women, controlled); Sabol et al. 1995 (20 singers); Bane et al. 2019 (dose); Angadi et al. 2019 (review of 21 studies, no adverse effects) | moderate for the trained task | Better-sounding speech or singing; range; prevention |
+| Pitch varied more is heard as more charismatic; a visual signal increased variation | Rosenberg & Hirschberg 2005; Hincks & Edlund 2009 (n = 14) | limited | A norm for "expressive" |
+| Noticing fillers and pausing instead reduced them | Mancuso & Miltenberger 2016 (n = 6); Spieler & Miltenberger 2017 (n = 4) | limited | Long-term change |
+| Singers rated themselves better after a warm-up; listeners barely heard it | Moorcroft & Kenny 2013 (n = 12) | limited | An audible improvement |
+| Practice with pitch in view improved accuracy more than by ear | Berglin, Pfordresher & Demorest 2022 (one 20-minute session) | limited | Lasting improvement |
+| Singers who cooled down said the voice felt better | Ragan 2016 | limited | Any measured change |
+| Resonance "zones" | Class tradition | tradition | That the phone hears where a voice resonates |
+
+No study shows that any routine here prevents voice disorders (Ruotsalainen
+et al. 2007; Ramos et al. 2025). The copy checker
+(`tests/node/session-sets.test.mjs`) rejects prevention, cure, guarantee and
+diagnosis words on every card.
+
+## 4. Decisions an expert could challenge, and the answer
+
+| Decision | The challenge | Why it stands, or what it costs |
+|---|---|---|
+| "As long as it stays easy" instead of a maximal hold in v24 and s28 | Bane et al. 2025 found a time goal and maximal sustain are active ingredients | Unsupervised maximal holds invite squeezing, and the clinical goal needs a lung-volume measure a phone lacks. Cost: probably a smaller gain than the clinic protocol. A self-referenced goal (first week's median plus a fifth) is the next step and needs per-exercise history |
+| Each exercise twice per run | The studied dose is twice per session, twice a day | The drill does two repetitions; the card says twice a day. Once per session was not enough in Bane et al. 2019 |
+| B against A by rate and pause share | Clear speech is defined for the listener | The phone cannot hear intelligibility. It reports two things that do not grow when a take merely runs longer, labels them approximate, and leaves clarity self-rated. The syllable counter undercounts fast speech, which makes "slower" harder to earn, not easier |
+| A louder B is not flagged when it is also slower | The instruction says not to push the volume | Clear speech tends to come out somewhat louder as well, and loudness alone does not make speech clearer. Only "louder and no slower" is pointed out |
+| Resonant voice therapy was not added as an exercise | It is a standard bridge from hum to speech | In healthy speakers the trials found no group effect (Meerschman et al. 2017; Nanjundeswaran et al. 2012). Adding it would contradict the brief |
+| No singer cool-down exercise; the cool-down stays a set | A guided cool-down is a common ask | The evidence is one small study of self-report. The set already does it with three existing exercises |
+| The guided routes "Expresión" and "Técnica" keep their 11 exercises | New exercises are missing from them | A ten-minute recovery drill does not belong in an expression session. Sets carry the new drills |
+| The speaking group is renamed "Voz y expresión" | A rename moves a label people know | A straw exercise under "Expresión" is the wrong shelf. The stored tier is unchanged |
+| The sets sit behind "Otras formas de practicar" | A first-time visitor will not see them | One primary action on the start panel is a standing rule (docs/32). Cost: discovery |
+| Nothing new is stored | There is no per-set history or streak | No migration, nothing to lose. Cost: the finishing card cannot say "third time this week" |
+| The piano's note is muted to the counter for 1.8 s | A learner who starts at once loses the first second | Otherwise the note itself is counted as a hold through the speakers |
+| At 360 × 640 the s28 picture gives way to the step, cue and count | The bars are the measured part | The count stays in words. A phone that small cannot hold the piano row, two controls, the cue and a picture in one screen |
+
+## 5. Verification
+
+Run on 2026-11-12, Chromium, local server:
+
+- `npm run lint`: pass (complexity, waits, asset versions). One legacy
+  complexity exemption removed (`modeDisplayName` is now a table).
+- `npm run test:core`: 548 pass.
+- `tests/session-sets.spec.js`: 31 pass. `tests/exercise-viz-voice-drill.spec.js`: 16 pass.
+- Mutants: `node qa/mutate.mjs sets` GS1 to GS13 killed; SS1 to SS12 and
+  VD1 to VD14 (flows set) killed.
+
+Red-team passes this round, each of which changed something:
+
+1. Citations on every card re-read against the source records. Four were
+   wrong (an author pair that does not exist, two years, a population) and
+   were corrected before or just after the first commit.
+2. Promise words. The checker read "heal" inside "healthy"; whole words are
+   now matched as whole words, with controls both ways.
+3. Dose. "Once a day was not enough" misread Bane et al. 2019 (the variable
+   was repetitions per session). Text corrected; the drills now do two.
+4. Measurement validity. The first B-against-A compared seconds of voice,
+   which grows with a longer step. Replaced; mutant VD5 keeps it out.
+5. Sound the learner did not make. The reference note and the step chime
+   are not counted (VD3); a note drill is silent on Start (VD9).
+
+Visual passes (screenshots read at 390 × 844, 360 × 640 and 844 × 390): the
+hold bars now scale with the sound instead of sitting at the floor of a 20 s
+axis; a sentence to say is no longer labelled as a drawing; two controls on a
+phone give the title's line to the picture; long titles were shortened to fit
+the header.
+
+**Not verified (blocked, so open, not passed):**
+
+- An independent parallel review (five reviewers, four fact-checkers, four
+  researchers) was started twice and stopped both times by a usage limit
+  before any agent finished. The citations above were checked by the author
+  of this change only.
+- Real devices. Everything above ran in desktop Chromium at phone sizes. No
+  iPhone, Android or iPad was touched; Safari was not run.
+- A real voice. Counts were exercised with a synthetic voice and scripted
+  frames, not a person with a straw.
+- The six-iteration deep dive of docs/40 for the five new exercises.
+
+## 6. Open items
+
+| Date | Item | Status |
+|---|---|---|
+| 2026-11-12 | Independent fact-check and adversarial review of this change | open, blocked twice |
+| 2026-11-12 | Screen stays awake during a drill (v22 has five minutes with no touch); no pull-to-refresh while live; safe-area padding | open |
+| 2026-11-12 | Research write-ups on gamification, visualization and mobile patterns for the sets | open, blocked with the review |
+| 2026-11-12 | Self-referenced hold goal for v24 and s28; per-set history | open, needs storage |
+| 2026-11-12 | Four-note melody echo, interval singing, a pitch-discrimination game, a tube-in-water programme | open, the best-supported singing additions not yet built |
+| 2026-11-12 | The new analytics names (`sets_open`, `set_start`, `set_complete`) need the worker redeployed | open |
+| 2026-11-12 | Android Back does not close the picker (as with the other dialogs) | accepted |

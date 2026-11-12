@@ -227,3 +227,17 @@ papers before being cited elsewhere.
 - Švec & Granqvist 2018, sound level measurement guidelines.
 - Repp 2005 and Hove et al. 2013 on timing to sounds versus flashes.
 - WCAG 2.2 success criteria 1.3.3, 1.4.1, 1.4.11, 2.2.2, 2.3.1 and 2.5.8.
+
+## Guided voice drills (2026-11-12, docs/46)
+
+One mode (`voiceDrill`) and one scene file (`js/scenes/voice-drill.js`). The
+rules above hold: a drawing moves on the clock, never on the voice; only what
+the microphone hears is drawn as data.
+
+| Exercise | Picture | Measured | Guided | Fills in |
+|---|---|---|---|---|
+| v21 De la pajita a la frase | A face with a straw, hold bars against a 1.5 s line, the shape of a small glide, the sentence to say | Soft sounds of 1.5 s or more | Six timed steps | `strawHolds` |
+| v22 Recuperar la voz | A slow ring and a glass of water for the quiet minutes, then hold bars and a glide going down | Quiet seconds on the rest step; soft sounds | Four timed steps, a soft tone at each | `quietMin`, `strawHolds` |
+| v23 Habla clara | Two slots, A and B, then the sentence with its pauses marked. After Stop: "B frente a A (aprox.)" with pace, share in pauses and level | Speech rate, pause share and level of each take, B against A only | Five timed steps | nothing |
+| v24 Funciones vocales | Posture, hold bars against a 3 s line, a glide up, a glide down | Sounds of 3 s or more; the longest | Five timed steps | `longHolds`, `longestHold` |
+| s28 Función vocal con notas | As v24, each note step starting from the piano's note, which is not counted as the singer | As v24 | Nine timed steps; "Oír la nota" | `longHolds`, `longestHold` |

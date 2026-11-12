@@ -56,3 +56,4 @@ import "./split-store.test.mjs";
 import "./split-stripe-mp.test.mjs";
 import "./split-creem.test.mjs";
 import "./split-routes.test.mjs";
+import "./split-reports.test.mjs";

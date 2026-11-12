@@ -418,34 +418,46 @@ export function sanitizeReport(body, context) {
   }
   const summary = clampText(body.summary, FIELD_LIMITS.summary);
   const detail = clampText(body.detail, FIELD_LIMITS.detail);
-  const steps = clampText(body.steps, FIELD_LIMITS.steps);
   if (!summary && !detail) {
     return { ok: false, reason: "empty" };
   }
-  // A reporter who typed only the long field still gets a list that reads
-  // well: the first line of what they wrote becomes the summary.
-  const title = summary || detail.split("\n")[0].slice(0, FIELD_LIMITS.summary);
-  const contact = normalizeEmail(body.contact) || null;
   return {
     ok: true,
     report: {
       id: mintReference(),
       kind,
-      area: REPORT_AREAS.has(body.area) ? body.area : "other",
-      severity: kind === "bug" && REPORT_SEVERITIES.has(body.severity) ? body.severity : null,
-      summary: title,
-      detail,
-      steps,
-      page: clampText(body.page, FIELD_LIMITS.page) || null,
-      build: clampText(body.build, FIELD_LIMITS.build) || null,
-      locale: clampText(body.locale, FIELD_LIMITS.locale) || null,
-      environment: sanitizeEnvironment(body.environment),
-      contact,
+      ...reportText(body, summary, detail),
+      ...reportContext(body, kind),
       accountId: (context && context.accountId) || null,
       status: "new",
       createdAt: context.at,
       updatedAt: context.at
     }
+  };
+}
+
+/** The typed fields of a report, already clamped; `summary` or `detail` is non-empty. */
+function reportText(body, summary, detail) {
+  // A reporter who typed only the long field still gets a list that reads
+  // well: the first line of what they wrote becomes the summary.
+  const title = summary || detail.split("\n")[0].slice(0, FIELD_LIMITS.summary);
+  return {
+    summary: title,
+    detail,
+    steps: clampText(body.steps, FIELD_LIMITS.steps),
+    contact: normalizeEmail(body.contact) || null
+  };
+}
+
+/** Where the report comes from: closed-list area and severity, page, build, locale, environment. */
+function reportContext(body, kind) {
+  return {
+    area: REPORT_AREAS.has(body.area) ? body.area : "other",
+    severity: kind === "bug" && REPORT_SEVERITIES.has(body.severity) ? body.severity : null,
+    page: clampText(body.page, FIELD_LIMITS.page) || null,
+    build: clampText(body.build, FIELD_LIMITS.build) || null,
+    locale: clampText(body.locale, FIELD_LIMITS.locale) || null,
+    environment: sanitizeEnvironment(body.environment)
   };
 }
 
@@ -645,30 +657,24 @@ export async function updateReport(db, id, change, at) {
   if (!row) {
     return { ok: false, reason: "not_found" };
   }
-  const status = change && REPORT_STATUSES.has(change.status) ? change.status : row.status;
-  const note =
-    change && change.note !== undefined && change.note !== null
-      ? clampText(change.note, FIELD_LIMITS.note) || null
-      : row.admin_note || null;
-  const handledAt = status === "new" ? row.handled_at || null : row.handled_at || at;
+  const next = nextReportState(row, change || {}, at);
   await db
     .prepare(
       `UPDATE reports SET status = ?2, admin_note = ?3, handled_by = ?4, handled_at = ?5, updated_at = ?6
        WHERE id = ?1`
     )
-    .bind(id, status, note, (change && change.by) || row.handled_by || null, handledAt, at)
+    .bind(id, next.status, next.admin_note, next.handled_by, next.handled_at, at)
     .run();
-  return {
-    ok: true,
-    report: toAdminReport({
-      ...row,
-      status,
-      admin_note: note,
-      handled_by: (change && change.by) || row.handled_by || null,
-      handled_at: handledAt,
-      updated_at: at
-    })
-  };
+  return { ok: true, report: toAdminReport({ ...row, ...next, updated_at: at }) };
+}
+
+/** The triage columns after `change`: unknown statuses and an absent note leave the stored ones alone. */
+function nextReportState(row, change, at) {
+  const status = REPORT_STATUSES.has(change.status) ? change.status : row.status;
+  const noteGiven = change.note !== undefined && change.note !== null;
+  const note = noteGiven ? clampText(change.note, FIELD_LIMITS.note) || null : row.admin_note || null;
+  const handledAt = status === "new" ? row.handled_at || null : row.handled_at || at;
+  return { status, admin_note: note, handled_by: change.by || row.handled_by || null, handled_at: handledAt };
 }
 
 /**
@@ -687,67 +693,116 @@ export async function updateReport(db, id, change, at) {
 export async function handleSubmitReport(request, env, deps) {
   const { json, cors } = deps;
   const at = nowSec(deps.now);
+  const refusal = refuseReportRequest(request, env);
+  if (refusal) {
+    return json({ ok: false, reason: refusal.reason }, refusal.status, cors);
+  }
+  const read = await readReportBody(request);
+  if (!read.ok) {
+    return json({ ok: false, reason: read.reason }, read.status, cors);
+  }
+
+  await ensureSchema(env.DB);
+  const accountId = await reporterAccountId(request, env, deps, at);
+
+  // Validation first, because it writes nothing. A body this route would refuse
+  // anyway must not spend one of the reporter's ten hourly slots, and must not
+  // cost the database a row either (QA round 5, QA-43).
+  const parsed = sanitizeReport(read.body, { accountId, at });
+  if (!parsed.ok) {
+    return json({ ok: false, reason: parsed.reason }, 400, cors);
+  }
+
+  const gate = await spendReportLimits(env.DB, callerIp(request), accountId, at);
+  if (gate) {
+    return json({ ok: false, reason: gate.reason, retryAfter: gate.retryAfter }, 429, {
+      ...cors,
+      "retry-after": String(gate.retryAfter)
+    });
+  }
+
+  await insertReport(env.DB, parsed.report);
+  console.log("report stored", parsed.report.kind, parsed.report.area, parsed.report.id);
+  return json({ ok: true, reference: parsed.report.id, report: toPublicReport(rowShape(parsed.report)) }, 200, cors);
+}
+
+/**
+ * The refusals a report gets before its body is read: `{ status, reason }`,
+ * or null when the request may go on.
+ * @param {Request} request Incoming request.
+ * @param {Object} env Worker env bindings.
+ * @returns {{status: number, reason: string}|null} Refusal.
+ */
+function refuseReportRequest(request, env) {
   if (!env.DB) {
-    return json({ ok: false, reason: "accounts_not_configured" }, 503, cors);
+    return { status: 503, reason: "accounts_not_configured" };
   }
   if (!reportsEnabled(env)) {
-    return json({ ok: false, reason: "reports_disabled" }, 503, cors);
+    return { status: 503, reason: "reports_disabled" };
   }
   // Browsers always send Origin on a cross-site POST, so this keeps other
   // sites' pages from writing here. It is not a defence against a script, and
   // the limits below are what actually bound the damage.
   const allowed = typeof env.SITE_ORIGIN === "string" ? env.SITE_ORIGIN.trim() : "";
   if (allowed && request.headers.get("Origin") !== allowed) {
-    return json({ ok: false, reason: "origin_not_allowed" }, 403, cors);
+    return { status: 403, reason: "origin_not_allowed" };
   }
   const declared = Number.parseInt(request.headers.get("content-length") || "", 10);
   if (Number.isFinite(declared) && declared > MAX_REPORT_BODY_BYTES) {
-    return json({ ok: false, reason: "body_too_large" }, 413, cors);
+    return { status: 413, reason: "body_too_large" };
   }
-  let body = null;
+  return null;
+}
+
+/**
+ * The parsed JSON body, refused when it is over the cap whatever the
+ * Content-Length header said, or when it does not parse.
+ * @param {Request} request Incoming request.
+ * @returns {Promise<{ok: true, body: *}|{ok: false, status: number, reason: string}>} Body.
+ */
+async function readReportBody(request) {
   try {
     const buffer = await request.arrayBuffer();
     if (buffer.byteLength > MAX_REPORT_BODY_BYTES) {
-      return json({ ok: false, reason: "body_too_large" }, 413, cors);
+      return { ok: false, status: 413, reason: "body_too_large" };
     }
-    body = JSON.parse(new TextDecoder().decode(buffer));
+    return { ok: true, body: JSON.parse(new TextDecoder().decode(buffer)) };
   } catch {
-    return json({ ok: false, reason: "bad_request" }, 400, cors);
+    return { ok: false, status: 400, reason: "bad_request" };
   }
+}
 
-  await ensureSchema(env.DB);
-  // A session is welcome but never required: the commonest moment to report a
-  // bug is the moment it stopped you, and that is rarely while signed in.
-  let accountId = null;
-  if (deps.requireSession) {
-    const auth = await deps.requireSession(env, request, at);
-    if (auth && auth.ok && auth.account) {
-      accountId = auth.account.id;
-    }
+/** The signed-in reporter's account id, or null: a session is welcome but never required. */
+async function reporterAccountId(request, env, deps, at) {
+  // The commonest moment to report a bug is the moment it stopped you, and
+  // that is rarely while signed in.
+  if (!deps.requireSession) {
+    return null;
   }
+  const auth = await deps.requireSession(env, request, at);
+  return auth && auth.ok && auth.account ? auth.account.id : null;
+}
 
-  const limited = (gate, reason) =>
-    json({ ok: false, reason: reason || "rate_limited", retryAfter: gate.retryAfter }, 429, {
-      ...cors,
-      "retry-after": String(gate.retryAfter)
-    });
-
-  // Validation first, because it writes nothing. A body this route would refuse
-  // anyway must not spend one of the reporter's ten hourly slots, and must not
-  // cost the database a row either (QA round 5, QA-43).
-  const parsed = sanitizeReport(body, { accountId, at });
-  if (!parsed.ok) {
-    return json({ ok: false, reason: parsed.reason }, 400, cors);
-  }
-
-  // Then the deployment ceiling, read WITHOUT writing. This order is the whole
+/**
+ * Spend the report limits in the one order that keeps a refusal free:
+ * `{ reason, retryAfter }` for the gate that refused, or null when every gate
+ * let the report through and one of the day's reports has been spent.
+ * @param {Object} db D1 binding.
+ * @param {string} ip Caller address (rate limiting only, never stored).
+ * @param {string|null} accountId Signed-in reporter, if any.
+ * @param {number} at Unix seconds.
+ * @returns {Promise<{reason: string, retryAfter: number}|null>} Refusal.
+ */
+async function spendReportLimits(db, ip, accountId, at) {
+  const refused = (gate, reason) => ({ reason: reason || "rate_limited", retryAfter: gate.retryAfter });
+  // The deployment ceiling first, read WITHOUT writing. This order is the whole
   // protection: the per-address buckets below each write a row, so checking
   // them first meant a flood from rotating addresses — an IPv6 /64 hands out
   // more than anyone can use — spent two writes per refusal even after the
   // ceiling was reached, which is exactly what the ceiling exists to prevent
   // (QA round 5, QA-40). Refused here, a request costs reads and nothing else.
   const room = await peekRateLimit(
-    env.DB,
+    db,
     "rep:all",
     REPORT_LIMITS.perDeploymentDaily[0],
     REPORT_LIMITS.perDeploymentDaily[1],
@@ -756,52 +811,49 @@ export async function handleSubmitReport(request, env, deps) {
   if (!room.ok) {
     // Deliberately its own reason: this is our ceiling, not the reporter's
     // fault, and the page says so and offers the copy-it-yourself way out.
-    return limited(room, "too_busy");
+    return refused(room, "too_busy");
   }
 
-  const ip = callerIp(request);
-  const hourly = await hitRateLimit(env.DB, `rep:ip:${ip}`, REPORT_LIMITS.perIp[0], REPORT_LIMITS.perIp[1], at);
+  const hourly = await hitRateLimit(db, `rep:ip:${ip}`, REPORT_LIMITS.perIp[0], REPORT_LIMITS.perIp[1], at);
   if (!hourly.ok) {
-    return limited(hourly);
+    return refused(hourly);
   }
   const daily = await hitRateLimit(
-    env.DB,
+    db,
     `rep:ipd:${ip}`,
     REPORT_LIMITS.perIpDaily[0],
     REPORT_LIMITS.perIpDaily[1],
     at
   );
   if (!daily.ok) {
-    return limited(daily);
+    return refused(daily);
   }
   if (accountId) {
     const perAccount = await hitRateLimit(
-      env.DB,
+      db,
       `rep:acct:${accountId}`,
       REPORT_LIMITS.perAccount[0],
       REPORT_LIMITS.perAccount[1],
       at
     );
     if (!perAccount.ok) {
-      return limited(perAccount);
+      return refused(perAccount);
     }
   }
   // The ceiling is spent last, so a request the limits above turned away does
   // not consume one of the day's five hundred.
   const ceiling = await hitRateLimit(
-    env.DB,
+    db,
     "rep:all",
     REPORT_LIMITS.perDeploymentDaily[0],
     REPORT_LIMITS.perDeploymentDaily[1],
     at
   );
   if (!ceiling.ok) {
-    return limited(ceiling, "too_busy");
+    return refused(ceiling, "too_busy");
   }
 
-  await insertReport(env.DB, parsed.report);
-  console.log("report stored", parsed.report.kind, parsed.report.area, parsed.report.id);
-  return json({ ok: true, reference: parsed.report.id, report: toPublicReport(rowShape(parsed.report)) }, 200, cors);
+  return null;
 }
 
 /**

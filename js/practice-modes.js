@@ -11041,6 +11041,13 @@
   }
 
   /** How much slower B has to be than A to say so: a tenth off the rate, or 8 points more of the take in pauses. */
+  /**
+   * The frame that carries a step over its end belongs to the next step, so a
+   * step kept silent from its first frame to its last adds up to its length
+   * less that one frame (0.1 s at most on the step clock). Without this, five
+   * silent minutes read as four.
+   */
+  const QUIET_SLACK_SEC = 0.25;
   const PAIR_SLOWER = { rate: -0.1, share: 0.08 };
 
   /**
@@ -11146,7 +11153,9 @@
         quietSec: 0,
         noiseAt: -1,
         deafUntil: -1,
-        lastEl: null
+        lastEl: null,
+        lastClock: null,
+        mic: true
       });
       this._syncDrill();
     },
@@ -11185,16 +11194,32 @@
       }
       return dt;
     },
+    /**
+     * Seconds the step clock moved since the last frame. Quiet time is counted
+     * on this clock, the one the learner watches: a silent step of 300 s is
+     * 300 s of quiet however the device stuttered (the real-time gap between
+     * two frames can be several times what the step clock was given).
+     */
+    _clockTick(run) {
+      const st = this.state;
+      const tick = st.lastClock == null ? 0 : Math.max(0, run.clock - st.lastClock);
+      st.lastClock = run.clock;
+      return tick;
+    },
     _drillFrame(frame, d) {
       const st = this.state;
       const run = d.run;
       const dt = this._drillDt(frame);
-      const on = frame.sounding != null ? !!frame.sounding : !!frame.voiced;
+      const tick = this._clockTick(run);
+      // With the microphone refused the app sends clock-only frames (noMic): nothing was heard,
+      // which is not the same as silence heard.
+      st.mic = !frame.noMic;
+      const on = st.mic && (frame.sounding != null ? !!frame.sounding : !!frame.voiced);
       // The reference note and the step chime are not the learner
       const heard = on && run.clock >= st.deafUntil;
       const phase = run.done ? null : run.cur;
       if (phase && phase.sound) this._soundFrame(frame, heard, dt, d);
-      else this._quietFrame(heard, dt, run, phase);
+      else this._quietFrame(heard, tick, run, phase);
       this._syncDrill();
     },
     _soundFrame(frame, heard, dt, d) {
@@ -11243,13 +11268,13 @@
       st.hold = null;
       st.gap = 0;
     },
-    _quietFrame(heard, dt, run, phase) {
+    _quietFrame(heard, tick, run, phase) {
       const st = this.state;
       if (st.hold) this._endHold();
       if (!phase) return;
       // The tail of the last step's sound is not noise
       if (heard && run.t > 1.5) st.noiseAt = run.clock;
-      if (phase.rest && !heard) st.quietSec += dt;
+      if (phase.rest && !heard && st.mic) st.quietSec += tick;
     },
     /** The first sound of a compare step opens its take. */
     _openTake(run) {
@@ -11295,6 +11320,8 @@
       const d = this.viz;
       const C = global.VTViz.C;
       if (!d || !d.live || info.done || !info.phase) return null;
+      // Nothing is listening: say so instead of "Quiet ✓" or a count stuck at 0
+      if (!st.mic) return { text: L("Sin micrófono · aquí no se mide nada", "No microphone · nothing is measured here"), color: C.warn };
       if (!info.phase.sound) {
         return st.noiseAt >= 0 && d.run.clock - st.noiseAt < 1.2
           ? { text: L("Se oye sonido · este paso va en silencio", "Sound heard · this step is silent"), color: C.warn }
@@ -11429,7 +11456,8 @@
       // Whole seconds, rounded down: never more than was held
       if (p.longestMetric && st.longest >= 1) patches[p.longestMetric] = Math.floor(st.longest);
       // Whole minutes, rounded down (the field takes whole numbers)
-      if (p.restMetric && st.quietSec >= 60) patches[p.restMetric] = Math.floor(st.quietSec / 60);
+      const quietMin = Math.floor((st.quietSec + QUIET_SLACK_SEC) / 60);
+      if (p.restMetric && quietMin >= 1) patches[p.restMetric] = quietMin;
       const done = d ? d.run.completed : 0;
       const total = d ? d.run.count : (p.phases || []).length;
       return { patches, summary: this._drillSummary(done, total) };

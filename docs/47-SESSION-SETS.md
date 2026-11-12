@@ -100,6 +100,7 @@ diagnosis words on every card.
 | The sets sit behind "Otras formas de practicar" | A first-time visitor will not see them | One primary action on the start panel is a standing rule (docs/32). Cost: discovery |
 | Nothing new is stored | There is no per-set history or streak | No migration, nothing to lose. Cost: the finishing card cannot say "third time this week" |
 | The piano's note is muted to the counter for 1.8 s | A learner who starts at once loses the first second | Otherwise the note itself is counted as a hold through the speakers |
+| Quiet minutes are strict: two seconds of sound cost the minute they fall in | A sip of water, a door or a cough is not talking | Voice rest means no voicing, and a cough is not rest either. The phone cannot tell a door from a voice, so a noisy room can cost a minute the learner did keep. The field is labelled as what was heard, and an allowance (say 3 s a minute) is a number to set from real recordings, not a guess |
 | At 360 × 640 the s28 picture gives way to the step, cue and count | The bars are the measured part | The count stays in words. A phone that small cannot hold the piano row, two controls, the cue and a picture in one screen |
 
 ## 5. Verification
@@ -111,13 +112,13 @@ audio recovery work):
 - `npm run lint`: pass (complexity, waits, asset versions). One legacy
   complexity exemption removed (`modeDisplayName` is now a table).
 - `npm run test:core`: 661 pass.
-- `tests/session-sets.spec.js`: 32 pass. `tests/exercise-viz-voice-drill.spec.js`: 16 pass.
+- `tests/session-sets.spec.js`: 32 pass. `tests/exercise-viz-voice-drill.spec.js`: 18 pass.
 - Fifteen wider browser specs (site designs on every device size, touch
   hover, start visibility, guided scenes, catalogue regression, validation,
   copy, home choices, all flows, daily session, plan and history, stage,
   viewport overflow, hit targets): 384 pass.
 - Mutants: `node qa/mutate.mjs sets` GS1 to GS13 killed; SS1 to SS13,
-  VD1 to VD14 and WL1 to WL9 (flows set) killed. Each SS and VD mutant is now judged by the
+  VD1 to VD19 and WL1 to WL9 (flows set) killed. Each SS and VD mutant is now judged by the
   test written to catch it instead of its whole spec: 27 whole-spec runs on
   top of the flows job's own would outlive its 30 minutes on the build
   server (the QA-45 failure, which ends as "cancelled", not red).
@@ -155,6 +156,26 @@ Red-team passes this round, each of which changed something:
    which grows with a longer step. Replaced; mutant VD5 keeps it out.
 5. Sound the learner did not make. The reference note and the step chime
    are not counted (VD3); a note drill is silent on Start (VD9).
+
+Two more, found by the automatic review on the pull request (2026-11-12),
+both reproduced as a red test before the fix:
+
+6. Five silent minutes were written down as four. The frame that carries a
+   step over its end belongs to the next step, and sums of 16 ms fall a hair
+   short, so a fully silent 300 s step added up to 299.98 s and was floored
+   to 4. Quiet time is now counted on the step's own clock, with a quarter
+   of a second of slack for that one frame (VD15). The same change closes a
+   second fault found while fixing the first: on a stuttering device the
+   real-time gap between frames could be eight times what the step clock
+   was given, so a five-minute step could have been written down as forty
+   quiet minutes (VD16).
+7. A refused microphone was counted as silence. With no microphone the app
+   drives the drill with clock-only frames, and "no sound in the frame" was
+   read as "silence heard": v22 would fill in quiet minutes for a learner
+   who talked throughout. Those frames now say they carry no microphone
+   (`noMic`), nothing is measured from them, and the step says "Sin
+   micrófono · aquí no se mide nada" instead of "En silencio ✓" (VD17 to
+   VD19).
 
 Visual passes (screenshots read at 390 × 844, 360 × 640 and 844 × 390): the
 hold bars now scale with the sound instead of sitting at the floor of a 20 s

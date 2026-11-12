@@ -80,8 +80,8 @@
     "sha": "319fd17f4fbb6fd1"
   },
   "js/app.js": {
-    "v": "20261112a",
-    "sha": "44f2738fdf16ccda"
+    "v": "20261112b",
+    "sha": "1442427ccc75a258"
   },
   "js/audio-recovery.js": {
     "v": "20261103c",
@@ -164,8 +164,8 @@
     "sha": "c16b023d36fe544f"
   },
   "js/practice-modes.js": {
-    "v": "20261112b",
-    "sha": "953f52ead154f625"
+    "v": "20261112c",
+    "sha": "05647fbb3b08ecdd"
   },
   "js/practice-profiles.js": {
     "v": "20261111b",

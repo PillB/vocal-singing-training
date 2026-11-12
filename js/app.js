@@ -4458,7 +4458,9 @@
       const dtMs = now - last;
       last = now;
       try {
-        state.modeInstance.onFrame({ dtMs, rms: 0, voiced: false, voiceFreq: 0, holdSec: 0 });
+        // noMic: these frames carry the clock and nothing else. A mode that measures silence
+        // must not read "no sound in the frame" as "silence heard".
+        state.modeInstance.onFrame({ dtMs, rms: 0, voiced: false, voiceFreq: 0, holdSec: 0, noMic: true });
       } catch (err) {
         console.warn(err);
       }

@@ -6,7 +6,8 @@
  * What is checked, each against the behaviour that would be wrong:
  * - a sound counts once it passes the line; a blip, speech and the piano's
  *   own note never do;
- * - quiet minutes are counted only while it is quiet;
+ * - quiet minutes are counted only while it is quiet, on the step's own
+ *   clock, and never when the microphone was refused;
  * - B against A is said from speech rate and the share of the take in
  *   pauses, never from how long the take ran, and a clear take that is also
  *   louder is not told off;
@@ -23,7 +24,7 @@ const { tapFloorLimit } = require("./helpers/tap-floor");
 const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";
 const IDS = ["v21-straw-to-speech", "v22-voice-recovery", "v23-clear-speech", "v24-vocal-function", "s28-vocal-function"];
 
-async function boot(page, lang = "es") {
+async function boot(page, lang = "es", opts = {}) {
   await page.context().grantPermissions(["microphone"]).catch(() => {});
   await page.addInitScript((l) => {
     try {
@@ -34,7 +35,18 @@ async function boot(page, lang = "es") {
       /* ignore */
     }
   }, lang);
-  await useVoice(page);
+  if (opts.denyMic) {
+    await page.addInitScript(() => {
+      if (!navigator.mediaDevices) return;
+      navigator.mediaDevices.getUserMedia = async () => {
+        const err = new Error("Permission denied");
+        err.name = "NotAllowedError";
+        throw err;
+      };
+    });
+  } else {
+    await useVoice(page);
+  }
   // Scripted takes for the logic tests: [seconds, rms, syllables per second] pieces fed as engine frames.
   await page.addInitScript(() => {
     window.__drill = {
@@ -162,6 +174,46 @@ test.describe("Voice drills: what the microphone counts", () => {
     expect(out.quiet.patches, "130 quiet seconds are 2 whole minutes").toEqual({ quietMin: 2 });
     expect(out.talked.patches, "talking through the rest fills nothing in").toEqual({});
     expect(out.talked.quiet).toBeLessThan(3);
+  });
+
+  // Wrong would be: five silent minutes written down as four (the frame that crosses into the next step is
+  // lost, and sixteen-millisecond sums fall a hair short); a stuttering phone stretching a five-minute step
+  // into forty quiet minutes; and, with the microphone refused, the clock's own frames read as silence heard.
+  test("a silent step is its whole minutes on the step clock; a refused microphone measures nothing", async ({ page }) => {
+    await boot(page);
+    const out = await drill(page, () => {
+      const D = window.__drill;
+      const REST = {
+        phases: [{ label: "R", labelEs: "R", sec: 300, rest: true }, { label: "S", labelEs: "S", sec: 30, sound: true }],
+        restMetric: "quietMin",
+        holdsMetric: "strawHolds"
+      };
+      const r = {};
+      // Five silent minutes and a little of the next step, at a browser's usual 16 ms.
+      let m = D.mount(REST);
+      D.feed(m, [[303, 0]]);
+      r.full = D.done(m);
+      // Two seconds of talk inside the five minutes: the minute they fall in is no longer whole.
+      m = D.mount(REST);
+      D.feed(m, [[150, 0], [2, 0.1], [151, 0]]);
+      r.talked = D.done(m);
+      // A stuttering device: frames 400 ms apart, the step clock given 50 ms for each.
+      m = D.mount(REST);
+      D.feed(m, [[2500, 0]], 400);
+      r.slow = D.done(m);
+      // The microphone was refused: 130 s of the app's clock-only frames.
+      m = D.mount(REST);
+      for (let i = 0; i < 130 * 60; i++) m.onFrame({ dtMs: 1000 / 60, rms: 0, voiced: false, voiceFreq: 0, holdSec: 0, noMic: true });
+      r.status = m._drillStatus({ done: false, phase: m.viz.run.cur, index: 0 });
+      r.micless = D.done(m);
+      return r;
+    });
+    expect(out.full.patches, "five silent minutes are five").toEqual({ quietMin: 5 });
+    expect(out.talked.patches, "two seconds of talk cost the minute they fall in").toEqual({ quietMin: 4 });
+    expect(out.slow.patches, "the step lasted five minutes on its clock, whatever the device did").toEqual({ quietMin: 5 });
+    expect(out.micless.patches, "nothing was heard, so nothing is filled in").toEqual({});
+    expect(out.micless.quiet).toBe(0);
+    expect(out.status && out.status.text, "the step does not say Quiet ✓ to a microphone that is off").toBe("Sin micrófono · aquí no se mide nada");
   });
 
   test("B against A: slower by rate or pauses, never by a longer take; louder alone is pointed out", async ({ page }) => {
@@ -338,6 +390,23 @@ test.describe("Voice drills: the five exercises", () => {
     // Two controls on a phone: the title's line goes to the picture
     await expect(page.locator("#mode-focus .viz-head .mode-title")).toBeHidden();
     await page.evaluate(() => document.getElementById("btn-practice-stop").click());
+  });
+
+  test("with the microphone refused the recovery drill runs on its clock and claims no quiet", async ({ page }) => {
+    await boot(page, "es", { denyMic: true });
+    await open(page, "v22-voice-recovery", [30, 30, 30, 30]);
+    await start(page);
+    await expect.poll(() => drill(page, () => window.VTApp.getState().modeInstance.viz.run.clock), { timeout: 10000 }).toBeGreaterThan(1.5);
+    const st = await drill(page, () => {
+      const m = window.VTApp.getState().modeInstance;
+      return { quiet: m.state.quietSec, mic: m.state.mic, status: m._drillStatus({ done: false, phase: m.viz.run.cur, index: 0 }) };
+    });
+    expect(st.mic, "the app's clock-only frames say they carry no microphone").toBe(false);
+    expect(st.quiet, "a clock tick is not silence heard").toBe(0);
+    expect(st.status && st.status.text).toBe("Sin micrófono · aquí no se mide nada");
+    await page.evaluate(() => document.getElementById("btn-practice-stop").click());
+    await expect(page.locator("#mode-focus .mode-panel")).toHaveClass(/gd-review/);
+    expect(await drill(page, () => document.querySelector('#metrics-form [name="quietMin"]').value), "no quiet minutes are written for the learner").toBe("");
   });
 
   test("the steps read in English", async ({ page }) => {

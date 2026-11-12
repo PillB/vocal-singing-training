@@ -579,14 +579,19 @@ export const MUTANTS = {
         ["VD4 a clear take that is also louder is told off", "js/practice-modes.js", 'if (f.slower) return { text: profileText(p, "pairYes")', 'if (f.slower && !f.louder) return { text: profileText(p, "pairYes")', "B against A"],
         ["VD5 a take that only ran longer reads as slower", "js/practice-modes.js", "slower: (dRate != null && dRate <= PAIR_SLOWER.rate) || dShare >= PAIR_SLOWER.share,", "slower: b.voiced > a.voiced * 1.15,", "B against A"],
         ["VD6 the longest sound is rounded up to more than was held", "js/practice-modes.js", "patches[p.longestMetric] = Math.floor(st.longest);", "patches[p.longestMetric] = Math.round(st.longest);", "what the microphone counts"],
-        ["VD7 quiet minutes are counted while the learner talks", "js/practice-modes.js", "if (phase.rest && !heard) st.quietSec += dt;", "if (phase.rest) st.quietSec += dt;", "the piano's own note"],
+        ["VD7 quiet minutes are counted while the learner talks", "js/practice-modes.js", "if (phase.rest && !heard && st.mic) st.quietSec += tick;", "if (phase.rest && st.mic) st.quietSec += tick;", "the piano's own note"],
         ["VD8 Stop rates the learner's ease for them", "js/practice-modes.js", "      const patches = {};\n      // Only what was heard is written", "      const patches = { easeAfter: 5, comfortAfter: 5, clarityBack: 5, easyVoice: 5 };\n      // Only what was heard is written", "Stop never fills a self-rating"],
         ["VD9 the note drill plays the piano on Start, over its silent first step", "js/app.js", 'const OWN_REFERENCE_MODES = ["openSpace", "voiceDrill"];', 'const OWN_REFERENCE_MODES = ["openSpace"];', "s28 is silent on Start"],
         ["VD10 a take that was skipped is shown as still to come", "js/scenes/voice-drill.js", 'return key === "a" && asked === "b" ? "none" : "later";', 'return "later";', "the pictures' own rules"],
         ["VD11 a spoken step shows hold bars", "js/practice-modes.js", "    if (ph && ph.speech) return { draw: A.speak, aspect: DRILL_ASPECT.speak, plain: true };\n", "", "what the microphone counts|the five exercises"],
         ["VD12 a drill's steps run past its timer", "js/practice-profiles.js", "          sec: 230,", "          sec: 330,", "steps add up to the timer"],
         ["VD13 the note is not sounded when its step begins", "js/practice-modes.js", "      if (p && p.ref) this._playRef(p, run);\n", "", "s28 is silent on Start"],
-        ["VD14 a glide down is drawn going up", "js/scenes/voice-drill.js", 'if (kind === "down") return 1 - ease(u);', 'if (kind === "down") return ease(u);', "the pictures' own rules"]
+        ["VD14 a glide down is drawn going up", "js/scenes/voice-drill.js", 'if (kind === "down") return 1 - ease(u);', 'if (kind === "down") return ease(u);', "the pictures' own rules"],
+        ["VD15 five silent minutes are written down as four", "js/practice-modes.js", "const quietMin = Math.floor((st.quietSec + QUIET_SLACK_SEC) / 60);", "const quietMin = Math.floor(st.quietSec / 60);", "a silent step is its whole minutes"],
+        ["VD16 a stuttering phone stretches a five-minute step into forty quiet minutes", "js/practice-modes.js", "else this._quietFrame(heard, tick, run, phase);", "else this._quietFrame(heard, dt, run, phase);", "a silent step is its whole minutes"],
+        ["VD17 with the microphone refused the clock's frames count as silence heard", "js/practice-modes.js", "if (phase.rest && !heard && st.mic) st.quietSec += tick;", "if (phase.rest && !heard) st.quietSec += tick;", "a silent step is its whole minutes"],
+        ["VD18 the app's clock-only frames do not say they carry no microphone", "js/app.js", "holdSec: 0, noMic: true });", "holdSec: 0 });", "with the microphone refused"],
+        ["VD19 a step says Quiet to a microphone that is off", "js/practice-modes.js", "      if (!st.mic) return { text: L(\"Sin micrófono · aquí no se mide nada\", \"No microphone · nothing is measured here\"), color: C.warn };\n", "", "a silent step is its whole minutes"]
       ].map(([name, file, from, to, grep]) => ({
         name,
         file,

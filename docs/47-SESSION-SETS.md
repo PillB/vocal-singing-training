@@ -78,17 +78,17 @@ say only what its records say (`tests/node/evidence-ledger.test.mjs`).
 | A sentence's melody through the straw | Kapsner-Smith et al. 2015, tube programme, 20 people with voice problems (PMID 25675335) | limited, patients | **The sentence said aloud straight after is this app's own step.** In that programme every exercise stayed inside the straw |
 | After heavy use, 5 min quiet then 5 min straw recovered the voice better than 10 min quiet | Peng et al. 2026, RCT, 114 healthy adults after 1 h of loading (PMID 42156834) | moderate, one study, measured once | Anything about the next day; prevention |
 | Recovery takes hours | Hunter & Titze 2009, 86 adults (PMID 19663377) | limited | A safe daily dose |
-| Clear speech is understood better | Picheny et al. 1985 (+17 points, 5 listeners with hearing loss); Smiljanić & Bradlow 2009 (review) | moderate for the listener's benefit | That a short daily drill carries into everyday talk (those studies did not measure it) |
-| Vocal function exercises lengthen how long a sound can be sustained | Stemple et al. 1994 (35 women, placebo and control groups, 4 weeks); Sabol et al. 1995 (10 of 20 singers, 4 weeks); Bane et al. 2019 (28 women, three doses, 6 weeks, **no untreated group**); Angadi et al. 2019 (review, none of 21 studies reported adverse voice outcomes) | moderate for the trained task | Better-sounding speech or singing in healthy voices; prevention |
+| Clear speech is understood better; the talkers slowed down, paused between words and released final consonants | Picheny et al. 1985 (+17 points, 5 listeners with hearing loss); Picheny et al. 1986 (what the talkers did); Smiljanić & Bradlow 2009 (review, "various listener populations") | moderate for the listener's benefit | That a short daily drill carries into everyday talk (those studies did not measure it) |
+| Vocal function exercises lengthen how long a sound can be sustained | Stemple et al. 1994 (35 women, placebo and control groups, 4 weeks); Sabol et al. 1995 (10 of 20 singers, 4 weeks); Bane et al. 2019 (28 women, three doses, 6 weeks, **no untreated group**); Angadi et al. 2019 (review, none of 21 studies reported adverse voice outcomes) | moderate for voice tasks (how long a sound is held, airflow, pitch range) | Better-sounding speech or singing in healthy voices; prevention |
 | Clips with higher and more varied pitch were rated more charismatic; a visual signal increased variation more than audio feedback | Rosenberg & Hirschberg 2005 (8 raters, 45 clips of 9 politicians); Hincks & Edlund 2009 (14 Chinese learners of English, two groups) | limited | A norm for "expressive"; that listeners prefer the trained result |
-| Learning to notice fillers reduced them; the taught pause was little used | Luiselli 2022 (review of 7 single-case studies); Mancuso & Miltenberger 2016 (n = 6); Pawlik & Perrin 2020 (n = 4, silent pause) | limited | Long-term change; that fewer fillers makes a talk rate better (in Laske et al. 2024, n = 2, expert ratings did not improve) |
-| Singers rated themselves better after a warm-up; listeners heard it in only some | Moorcroft & Kenny 2013 (12 singers, 6 listeners, no control condition) | limited | An audible improvement |
+| Learning to notice fillers reduced them; the taught pause was little used | Luiselli 2022 (review of 7 single-case studies); Mancuso & Miltenberger 2016 (n = 6); Pawlik & Perrin 2020 (n = 4, silent pause, used at a moderate level by 1); Perrin et al. 2021 (n = 9, silent pause, stayed high for 1) | limited | Long-term change; that fewer fillers makes a talk rate better (in Laske et al. 2024, n = 2, expert ratings did not improve) |
+| Singers perceived changes in their own voice after a warm-up; listeners heard it in only some | Moorcroft & Kenny 2013 (12 singers, 6 listeners, no control condition) | limited | An audible improvement |
 | Seeing pitch as well as hearing it improved accuracy more than hearing alone in one 20-minute session; over 10 weeks it gave no advantage | Berglin, Pfordresher & Demorest 2022; Paney & Tharp 2021 | limited, mixed | Lasting improvement from the picture itself |
 | Most singers said the voice felt better after a cool-down; not statistically significant; listeners could not tell | Ragan 2016 (20 singers, 4 listeners, nothing measured by instrument) | limited | Any measured change |
 | Resonance "zones" | Class tradition | tradition | That the phone hears where a voice resonates |
 
-Reviews of trials in teachers found no reliable evidence that voice training
-prevents voice disorders (Ruotsalainen et al. 2007: two small, poor-quality
+Reviews of prevention trials, mostly in teachers, found no reliable evidence
+that voice training prevents voice disorders (Ruotsalainen et al. 2007: two small, poor-quality
 trials; Ramos et al. 2025: 26 studies, none at low risk of bias, no pooled
 effect). A third review is mixed: 10 of 23 studies linked voice training or
 hygiene education to better voice outcomes (Vermeulen et al. 2022). None
@@ -131,6 +131,83 @@ What the correction rests on, and what stays unverified:
   none.
 - The review of the code by independent reviewers is still not done (see
   section 5).
+
+### Second independent reading, 2026-11-12 (after PR #36 was opened)
+
+The first fact-check compared each record with its paper. It did not read
+each sentence on a card against the abstract. A fresh checker did that the
+same afternoon: 46 sentences that name a study or state a number, in both
+languages, against abstracts it fetched itself. 26 stood. It flagged 15. I
+read each flagged sentence against the abstract again (19 abstracts fetched)
+and reworded 13:
+
+| Kind of fault | What the app said | What the abstract says | Now |
+|---|---|---|---|
+| A ranking of the evidence | "The straw is the best studied item on the list, mostly in voices without training" | The review covers adults without voice training by its own inclusion rule. It ranks nothing | "A family of exercises with a review of 53 studies behind it; that review covered adults without voice training, not singers" |
+| A result pinned on two items | "Trills and humming lowered the pressure it takes to start the voice" | The review reports it for half-closed sounds as a group | "In a review of studies of adults without voice training, sounds made with the mouth half closed (the family that trills and humming belong to) tended to lower the pressure" |
+| A detail cited to the wrong record | The dose (twice, twice a day) beside Stemple 1994; how clear talkers speak beside Picheny 1985; "morning and evening" | The dose is in Bane 2019. What the talkers did is in a second paper, Picheny 1986. "Morning and evening" is in no abstract | The dose is in the tip, as "the usual dose" of "the study that compared doses". Picheny 1986 is read, recorded and named. "Morning and evening" is gone |
+| A sample credited whole to one arm | The tube programme "tested in 20 people" | 20 people were randomised between two programmes | "The trial that compared a tube programme against other exercises in 20 people" |
+| An outcome narrowed | "What was measured is the trained task" | Stemple 1994 and Sabol 1995 report airflow, phonation volume and pitch range as well | "Those gains were in voice tasks, which is not the same as everyday speaking" (or "as singing better") |
+| "Little used", with no count | "The pause was little used" | 1 of 4 used it at a moderate level (Pawlik 2020); it stayed high for 1 of 9 (Perrin 2021) | "After training, only 1 person in each kept using it at a moderate or high level". Perrin 2021 is recorded and named |
+| A condition the abstract does not name | Clear speech helps "above all in noise" | The review's abstract says "various listener populations" | "Other groups of listeners" |
+| A population widened | "Reviews in teachers" | The Cochrane review covers adults: two trials, teachers and student teachers | "Reviews of prevention trials, mostly in teachers" |
+| Spanish and English apart | "se oyeron mejor a sí mismas" against "rated themselves better"; "forzar la voz" against "loading the voice" | "All singers perceived significant changes"; "vocal loading task" | "Noticed changes in their own voice" in both; "uso intenso de la voz" and "heavy voice use" |
+| The scored unit | "17 percentage points more words" | 17 percentage points of intelligibility, nonsense sentences | "About 17 percentage points more" |
+
+Two flags were not changed, with the reason. "Reduced them in 7 studies,
+most with university students" is not in the review's abstract; it rests on
+the seven study abstracts, which I read again (all seven report fewer
+fillers; four name students). The 8 raters of Rosenberg & Hirschberg 2005
+are in the full text only, which is already an open item.
+
+Two of these kinds are now rules in the test: nothing ranks the evidence
+("best studied", "mejor estudiada", "the most evidence"), and a number stated
+in one language is stated in the other. The other kinds have no mechanical
+test. A person or a second reader has to read the sentence.
+
+### Third reading of the reworded sentences, 2026-11-12
+
+Two more fresh readers took the new wording: one against the abstracts (128
+sentences in 24 texts), one Spanish against English as a plain-language
+editor (110 sentences in 28 texts). Neither had seen the earlier passes.
+
+The fact reader found the cards for clear speech, the voice and singing
+versions of the vocal function exercises, the warm-up and the technique set
+clean, and flagged eight sentences in the rest. All eight were changed:
+
+| What the app said | What the abstract says | Now |
+|---|---|---|
+| Straw before speaking: "what it changes is short-lived" (a tip, older than this round) | "Few studies examined the duration of these changes" | "How long the change lasts was rarely measured" |
+| "In the dose study each was done twice"; "four exercises" | Only the "traditional" group of three did each twice. No abstract counts the exercises | The research text says "a set of voice exercises". The tip says "the usual dose was each exercise twice" |
+| The pause was used by "only 1 person in each with any regularity" | In one study its use rose for everyone and "only remained high for 1 participant following training" | "After training, only 1 person in each kept using it at a moderate or high level" |
+| "7 small studies", "few people in each study" | One of the seven abstracts gives no count | "7 studies"; "the six that give a number had 4 to 9 people each" |
+| Five minutes of "soft" sound through a straw | The abstract describes a sustained vowel through a straw and does not say soft | "Sound through a straw". The drill's own steps still ask for a soft sound: that is the app's instruction, not the trial's |
+| "The clinic's time goal needs a lung measure a phone lacks" | No abstract says how the goal is set | "Comfort sets the limit, not the clock" |
+
+The language reader found one difference in meaning (the 12 singers of the
+warm-up study were women in Spanish and unmarked in English: now "12 female
+singers") and 26 points of plain wording. The ones taken: a review named
+before "that review" points to it; "estudios pequeños"
+where "ensayos" reads as rehearsals to a singer; "speakers" for "talkers";
+"heavy voice use" for "loading the voice"; one sentence of 448 characters
+split in three; the hours of recovery stated as the study measured them (90%
+within 4 to 6 hours, all by 12 to 18) where the text told the learner what
+to expect by morning; and "could have been chance" where the tip said "not
+statistically significant". Two points of vocabulary were left for a pass
+over the whole app (section 6): a straw is "pajita", "pajilla" and "cañita"
+in different places, and the warm-up card says "hum" where the exercise
+itself is titled "Zumbido".
+
+Shortening: the vocal function text for speakers had grown to 953
+characters in Spanish (612 px tall at 320 wide). The schedule moved to the
+tip, which already stated it. It is now 798 characters and 523 px (785
+characters when merged); the singing version is 671. The cards measured at
+320 wide are between 372 and 554 px tall with "Por qué" open, none wider
+than the sheet.
+
+Still resting on one reader: the tube protocol detail (Kapsner-Smith 2015)
+and the 8 raters (Rosenberg 2005) are from full texts read through a
+summariser.
 
 ## 4. Decisions an expert could challenge, and the answer
 
@@ -220,6 +297,47 @@ Trade-offs of this change:
 | "No sign it does harm" was removed from the cool-down card | It reassures | No record supports it. The card now says it is brief and gentle |
 | The records live in `qa/`, not in the page | The app could show a study's details on tap | Nothing in the page reads them yet. Showing them is a later step |
 | Two records rest on a summariser's reading of the full text | A summariser can misread | Marked in the record and in section 6 for a person to confirm |
+
+### Second and third readings (2026-11-12, on PR #36)
+
+What changed and why is in section 3. What was run on the final wording,
+Chromium on a local server:
+
+- `npm run lint`: pass. `npm run test:core`: 666 pass.
+- `node qa/mutate.mjs sets`: GS1 to GS24 killed. GS23 (a card ranks the
+  evidence) and GS24 (a number stays in one language) are new.
+- The evidence test run against the wording this PR had before: red, on
+  "best studied" and "mejor estudiado".
+- Seven browser specs (goal sets, guided drills, catalogue regression,
+  catalogue design, copy, validation, viewport overflow): 182 pass.
+
+Five red-team passes on the two new rules:
+
+| # | Attack | Result |
+|---|---|---|
+| 1 | Rank it another way: "the most widely studied", "la técnica mejor estudiada", "it has the most evidence" | The first pattern caught only "lo mejor estudiado". Widened, with a control for each |
+| 2 | Compare without a superlative: "better studied than the rest" | Caught. "It has more studies behind it than the rest" **escapes, and stays open**: a list of phrasings is never complete |
+| 3 | Write the number as a word in one language and in digits in the other | Caught: the two must be written the same way |
+| 4 | Drop the number from both languages | Passes, by design: nothing disagrees and nothing false is said |
+| 5 | Same numbers, opposite meaning ("solo en algunas" against "in all of them") | **Escapes both rules.** No rule about names and numbers can see it. Only a reader can, which is what the reading lock in section 6 is for |
+
+Four aesthetic passes: the eleven changed card texts with "Por qué" open at
+320 wide in both languages (372 to 554 px tall, none wider than the sheet);
+two of them read by eye at 320 × 568 in Spanish, which showed the warm-up
+text saying "zumbido" under a step chip that says "hum", so the text keeps
+the chip's word; the three changed drill texts at 320, 390 and 1366 wide in
+both languages; the viewport specs at 320 × 640, 360 × 740, 390 × 844 and
+844 × 390.
+
+Trade-offs of this round:
+
+| Decision | The challenge | Why it stands, or what it costs |
+|---|---|---|
+| "Could have been chance" for "not statistically significant" | A statistician would say that is not what a p-value means | It is the plain reading a learner can use, and the exact term stays in the ledger. Cost: precision |
+| The schedule left the research text of the vocal function drills | The reader of that text no longer sees the dose | The tip directly under it states it. Cost: one more place to look |
+| "A set of voice exercises", no longer "four" | The programme does have four | No abstract in the ledger counts them. The drill's own steps still show four |
+| "Soft" removed from what the recovery trial did | The app asks for a soft sound | The abstract does not say soft. The instruction stays in the steps, as the app's own |
+| Plain-wording changes taken from a reader who is a model, not a person from Peru | It can be wrong about what sounds natural | Each change was kept only where it removed a second reading or an ambiguity. Two vocabulary questions are left for a person (section 6) |
 
 ### The site's two designs
 
@@ -328,6 +446,10 @@ one red.
 | Date | Item | Status |
 |---|---|---|
 | 2026-11-12 | Independent fact-check of the citations | done 2026-11-12: ten sentences corrected, a ledger and a test added (section 3) |
+| 2026-11-12 | Second independent reading, each sentence against its abstract | done 2026-11-12: 13 sentences reworded, two studies added to the ledger, two rules added to the test (section 3) |
+| 2026-11-12 | Third reading of the reworded sentences, by a fact reader and a bilingual plain-language reader | done 2026-11-12: eight more sentences changed on the facts, one difference between the languages closed, wording made plainer (section 3) |
+| 2026-11-12 | One word for a straw across the app ("pajita", "pajilla" and "cañita" are all in use), and "hum" or "zumbido" | open |
+| 2026-11-12 | Faults a rule cannot see (an outcome narrowed, a sample credited to one arm, a detail beside the wrong study) | open: only a second reader catches them. A lock that fails when wording changes after its last reading is the next step |
 | 2026-11-12 | Independent adversarial review of the code | open, blocked three times by a usage limit |
 | 2026-11-12 | Two full texts read through a summariser (Rosenberg & Hirschberg 2005; Kapsner-Smith et al. 2015) confirmed by a person with the PDFs | open |
 | 2026-11-12 | Resonant voice as a guided drill (hum into words) | open, a candidate: no trial in healthy speakers separates it from straw sounds |

@@ -91,14 +91,14 @@
       es: {
         name: "Después de hablar mucho",
         goal: "Para soltar la voz tras dar clase o una jornada de llamadas.",
-        why: "En un ensayo con 114 adultos sanos, tras una hora de forzar la voz, cinco minutos de silencio y cinco de sonido suave por una pajita la recuperaron mejor que diez de silencio. Es un resultado a corto plazo, de un solo estudio.",
-        tip: "Ten a mano un vaso de agua y tu pajita. Los cinco minutos de silencio van dentro de la rutina: un tono te avisa cuando terminan.",
+        why: "En un ensayo con 114 adultos sanos, tras una hora de uso intenso de la voz, cinco minutos de silencio y cinco de sonido por una pajita recuperaron la voz mejor que diez de silencio. Es un resultado a corto plazo, de un solo estudio.",
+        tip: "Ten a mano un vaso de agua y tu pajita. Los cinco minutos de silencio van dentro de la rutina: un tono suave te avisa cuando terminan.",
         src: "Peng et al. 2026, ensayo aleatorizado"
       },
       en: {
         name: "After a lot of talking",
         goal: "To ease the voice after teaching or a day of calls.",
-        why: "In a trial with 114 healthy adults, after an hour of loading the voice, five minutes of silence and five of soft sound through a straw recovered it better than ten of silence. It is a short-term result from one study.",
+        why: "In a trial with 114 healthy adults, after an hour of heavy voice use, five minutes of silence and five of sound through a straw brought the voice back better than ten of silence. It is a short-term result from one study.",
         tip: "Have a glass of water and your straw at hand. The five quiet minutes are inside the routine: a soft tone tells you when they end.",
         src: "Peng et al. 2026, randomised trial"
       }
@@ -115,16 +115,16 @@
       es: {
         name: "Que se te entienda",
         goal: "Para hablar claro ante un grupo o por videollamada.",
-        why: "Hablar claro a propósito (más despacio, con pausas donde la frase se corta) se entiende mejor: está bien medido en quien escucha, sobre todo con ruido o con mala audición. Esos estudios no midieron cuánto se aprende practicándolo en casa.",
+        why: "A quien habla claro a propósito se le entiende mejor: en el estudio clásico, 5 oyentes con pérdida auditiva entendieron unos 17 puntos porcentuales más, y una revisión describe la mejora en otros grupos de oyentes. Quienes hablaban iban más despacio, hacían más pausas y terminaban las consonantes finales. Esos estudios no midieron cuánto se aprende practicándolo en casa.",
         tip: "",
-        src: "Picheny et al. 1985; Smiljanić y Bradlow 2009 (revisión)"
+        src: "Picheny et al. 1985; Picheny et al. 1986; Smiljanić y Bradlow 2009 (revisión)"
       },
       en: {
         name: "Be understood",
         goal: "To speak clearly to a group or on a video call.",
-        why: "Speaking clearly on purpose (slower, with pauses where the sentence breaks) is easier to understand: that is well measured in listeners, above all in noise or with hearing loss. Those studies did not measure how much home practice teaches it.",
+        why: "People who speak clearly on purpose are easier to understand: in the classic study, 5 listeners with hearing loss understood about 17 percentage points more, and a review describes the gain for other groups of listeners. The speakers spoke more slowly, paused more and finished their final consonants. Those studies did not measure how much of it you learn by practising at home.",
         tip: "",
-        src: "Picheny et al. 1985; Smiljanić & Bradlow 2009 (review)"
+        src: "Picheny et al. 1985; Picheny et al. 1986; Smiljanić & Bradlow 2009 (review)"
       }
     },
     {
@@ -164,16 +164,16 @@
       es: {
         name: "Pausas en vez de muletillas",
         goal: "Para cambiar el «eh…» por un silencio breve.",
-        why: "Aprender a notar las propias muletillas las redujo en 7 estudios pequeños, la mayoría con universitarios. En algunos se enseñó además a poner una pausa en su lugar: la pausa se usó poco y las muletillas bajaron igual. Son pocas personas en cada estudio.",
+        why: "Aprender a notar las propias muletillas las redujo en 7 estudios, la mayoría con universitarios. Dos de ellos enseñaron además una pausa en silencio y midieron su uso: tras el entrenamiento, solo 1 persona en cada uno la siguió usando a un nivel moderado o alto, y las muletillas bajaron de todos modos. Los seis que dan la cifra tuvieron entre 4 y 9 personas cada uno.",
         tip: "",
-        src: "Luiselli 2022 (revisión de 7 estudios); Mancuso y Miltenberger 2016; Pawlik y Perrin 2020"
+        src: "Luiselli 2022 (revisión de 7 estudios); Mancuso y Miltenberger 2016; Pawlik y Perrin 2020; Perrin et al. 2021"
       },
       en: {
         name: "Pauses instead of fillers",
         goal: "To swap the “um…” for a short silence.",
-        why: "Learning to notice your own fillers reduced them in 7 small studies, most with university students. Some also taught putting a pause in their place: the pause was little used and the fillers fell all the same. Few people in each study.",
+        why: "Learning to notice your own fillers reduced them in 7 studies, most with university students. Two of them also taught a silent pause and tracked its use: after training, only 1 person in each kept using it at a moderate or high level, and the fillers fell all the same. The six that give a number had 4 to 9 people each.",
         tip: "",
-        src: "Luiselli 2022 (review of 7 studies); Mancuso & Miltenberger 2016; Pawlik & Perrin 2020"
+        src: "Luiselli 2022 (review of 7 studies); Mancuso & Miltenberger 2016; Pawlik & Perrin 2020; Perrin et al. 2021"
       }
     },
     {
@@ -187,15 +187,15 @@
       es: {
         name: "Voz en forma",
         goal: "Un plan de seis semanas que entrena la voz con sonidos suaves.",
-        why: "Los Ejercicios de Función Vocal alargaron el tiempo que personas con la voz sana podían sostener un sonido en ensayos pequeños; uno, con 35 mujeres, los comparó con un placebo y con no hacer nada. En voces sanas se midió la tarea que se entrena, no cómo suena la voz al hablar.",
-        tip: "La dosis de los estudios es dos veces al día, mañana y noche. Todo suave: nunca aguantes un sonido más allá de lo cómodo.",
+        why: "En estudios pequeños, los Ejercicios de Función Vocal alargaron el tiempo que personas con la voz sana podían sostener un sonido; uno, con 35 mujeres, los comparó con un placebo y con no hacer nada. Esas mejoras fueron en tareas de voz (cuánto se sostiene un sonido, flujo de aire, rango de tono), que no es lo mismo que cómo suena la voz al hablar en el día a día.",
+        tip: "En el estudio que comparó dosis, los ejercicios se hicieron dos veces al día. Todo suave: nunca aguantes un sonido más allá de lo cómodo.",
         src: "Stemple et al. 1994; Bane et al. 2019; Angadi et al. 2019 (revisión)"
       },
       en: {
         name: "A voice in shape",
         goal: "A six-week plan that trains the voice with soft sounds.",
-        why: "The Vocal Function Exercises lengthened how long people with healthy voices could sustain a sound in small trials; one, with 35 women, compared them with a placebo and with doing nothing. In healthy voices what was measured is the trained task, not how the voice sounds in speech.",
-        tip: "The dose in the studies is twice a day, morning and evening. All of it soft: never hold a sound past easy.",
+        why: "In small trials, the Vocal Function Exercises lengthened how long people with healthy voices could sustain a sound; one, with 35 women, compared them with a placebo and with doing nothing. Those gains were in voice tasks (how long a sound is held, airflow, pitch range), which is not the same as how the voice sounds in everyday speech.",
+        tip: "In the study that compared doses, the exercises were done twice a day. Keep it all soft: never hold a sound longer than is comfortable.",
         src: "Stemple et al. 1994; Bane et al. 2019; Angadi et al. 2019 (review)"
       }
     },
@@ -214,14 +214,14 @@
       es: {
         name: "Calentar para cantar",
         goal: "Antes de un ensayo, una clase o tus canciones.",
-        why: "En adultos sin formación vocal, los trinos y el hum bajaron la presión que hace falta para que la voz arranque; esa revisión no incluyó cantantes. Tras calentar, las 12 cantantes de un estudio se oyeron mejor a sí mismas; quienes escuchaban notaron la diferencia solo en algunas.",
+        why: "En una revisión de estudios con adultos sin formación vocal, los sonidos con la boca medio cerrada, la familia de los trinos y el hum, tendieron a bajar la presión que hace falta para que la voz arranque; la revisión no incluyó cantantes. Tras calentar, las 12 cantantes de un estudio notaron cambios en su propia voz; quienes escuchaban notaron la diferencia solo en algunas.",
         tip: "",
         src: "Apfelbach y Guzmán 2024 (revisión); Moorcroft y Kenny 2013"
       },
       en: {
         name: "Warm up to sing",
         goal: "Before a rehearsal, a lesson or your songs.",
-        why: "In adults without voice training, trills and humming lowered the pressure it takes to start the voice; that review did not include singers. After warming up, the 12 singers in one study rated themselves better; listeners heard the difference in only some of them.",
+        why: "In a review of studies of adults without voice training, sounds made with the mouth half closed (the family that trills and humming belong to) tended to lower the pressure it takes to start the voice; the review did not include singers. After warming up, the 12 female singers in one study noticed changes in their own voice; listeners heard the difference in only some of them.",
         tip: "",
         src: "Apfelbach & Guzmán 2024 (review); Moorcroft & Kenny 2013"
       }
@@ -266,14 +266,14 @@
       es: {
         name: "Técnica en 13 minutos",
         goal: "Aire, arranque suave, volumen y articulación de las notas.",
-        why: "La pajita es lo mejor estudiado de la lista, sobre todo en voces sin formación vocal y no en cantantes. El resto son ejercicios de coordinación que se enseñan en casi toda clase de canto, con pocos estudios propios.",
+        why: "La pajita pertenece a una familia de ejercicios que cuenta con una revisión de 53 estudios; esa revisión incluyó adultos sin formación vocal, no cantantes. El resto son ejercicios de coordinación que se enseñan en casi todas las clases de canto, con pocos estudios propios.",
         tip: "",
         src: "Apfelbach y Guzmán 2024 (revisión)"
       },
       en: {
         name: "Technique in 13 minutes",
         goal: "Air, a soft start, loudness and how notes are joined.",
-        why: "The straw is the best studied item on the list, mostly in voices without training and not in singers. The rest are coordination exercises taught in nearly every singing class, with few studies of their own.",
+        why: "The straw belongs to a family of exercises with a review of 53 studies behind it; that review covered adults without voice training, not singers. The rest are coordination exercises taught in nearly every singing class, with few studies of their own.",
         tip: "",
         src: "Apfelbach & Guzmán 2024 (review)"
       }
@@ -289,15 +289,15 @@
       es: {
         name: "Función vocal",
         goal: "Un plan de seis semanas: notas largas y suaves, y la pajita.",
-        why: "Los Ejercicios de Función Vocal alargaron el tiempo que personas con la voz sana podían sostener un sonido en ensayos pequeños; en uno, 10 cantantes los hicieron cuatro semanas y otros 10 no. Esos estudios midieron la tarea que se entrena, no cómo suena el canto.",
-        tip: "La dosis de los estudios es dos veces al día, mañana y noche. Si las notas te quedan incómodas, cambia la octava antes de empezar.",
+        why: "En estudios pequeños, los Ejercicios de Función Vocal alargaron el tiempo que personas con la voz sana podían sostener un sonido; en uno, 10 cantantes los hicieron cuatro semanas y otros 10 no. Esas mejoras fueron en el flujo de aire y en cuánto se sostiene un sonido, que no es lo mismo que cantar mejor.",
+        tip: "En el estudio que comparó dosis, los ejercicios se hicieron dos veces al día. Si las notas te quedan incómodas, cambia la octava antes de empezar.",
         src: "Stemple et al. 1994; Sabol et al. 1995; Bane et al. 2019"
       },
       en: {
         name: "Vocal function",
         goal: "A six-week plan: long, soft notes, and the straw.",
-        why: "The Vocal Function Exercises lengthened how long people with healthy voices could sustain a sound in small trials; in one, 10 singers did them for four weeks and another 10 did not. Those studies measured the trained task, not how the singing sounds.",
-        tip: "The dose in the studies is twice a day, morning and evening. If the notes sit uncomfortably, move the octave before you start.",
+        why: "In small trials, the Vocal Function Exercises lengthened how long people with healthy voices could sustain a sound; in one, 10 singers did them for four weeks and another 10 did not. Those gains were in airflow and in how long a sound is held, which is not the same as singing better.",
+        tip: "In the study that compared doses, the exercises were done twice a day. If the notes sit uncomfortably, move the octave before you start.",
         src: "Stemple et al. 1994; Sabol et al. 1995; Bane et al. 2019"
       }
     },

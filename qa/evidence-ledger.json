@@ -133,6 +133,21 @@
       "used": "app"
     },
     {
+      "key": "Picheny 1986",
+      "cite": "Picheny MA, Durlach NI, Braida LD. Speaking clearly for the hard of hearing II: Acoustic characteristics of clear and conversational speech. J Speech Hear Res 1986;29(4):434-446.",
+      "pmid": "3795886",
+      "doi": "10.1044/jshr.2904.434",
+      "level": "experiment",
+      "population": "The clear and conversational recordings of the first paper (Picheny 1985)",
+      "numbers": [],
+      "finding": "In clear speech the speaking rate fell substantially, by pauses inserted between words and by longer speech sounds; vowels were less reduced and word-final consonants were released.",
+      "limits": "It describes what the talkers did, in nonsense sentences spoken for hearing-impaired listeners. Not a training study.",
+      "checked": "abstract",
+      "by": "author",
+      "date": "2026-11-12",
+      "used": "app"
+    },
+    {
       "key": "Smiljanić 2009",
       "cite": "Smiljanić R, Bradlow AR. Speaking and Hearing Clearly: Talker and Listener Factors in Speaking Style Changes. Lang Linguist Compass 2009;3(1):236-264.",
       "pmid": "20046964",
@@ -140,8 +155,8 @@
       "level": "review",
       "population": "Review of clear-speech production and perception",
       "numbers": [],
-      "finding": "The clear-speech benefit holds for several listener groups and in noise.",
-      "limits": "A narrative review. It does not measure what home practice teaches.",
+      "finding": "An overview of research on clear speech and its effect on intelligibility for various listener populations.",
+      "limits": "A narrative review. Its abstract names no listener group and no condition such as noise. It does not measure what home practice teaches.",
       "checked": "abstract",
       "by": "independent checker and author",
       "date": "2026-11-12",
@@ -230,7 +245,26 @@
         1
       ],
       "finding": "Awareness training plus an instructed silent pause: all 4 reduced disfluencies; 1 used the pause at moderate levels.",
-      "limits": "No comparison group. The pause itself was little used. Perrin et al. 2021 (PMID 34289092, 9 students) found the same: the pause stayed high for 1 participant.",
+      "limits": "No comparison group. The pause itself was little used. Perrin 2021 found the same.",
+      "checked": "abstract",
+      "by": "author",
+      "date": "2026-11-12",
+      "used": "app"
+    },
+    {
+      "key": "Perrin 2021",
+      "cite": "Perrin CJ, Hensel SA, Lynch DL, Gallegos LR, Bell K, Carpenter K. Using brief habit reversal and an interdependent group contingency to reduce public-speaking speech disfluencies. J Appl Behav Anal 2021;54(4):1553-1565.",
+      "pmid": "34289092",
+      "doi": "10.1002/jaba.867",
+      "level": "single-case",
+      "population": "9 university students in 3 groups",
+      "numbers": [
+        9,
+        3,
+        1
+      ],
+      "finding": "Awareness training plus a silent pause, with a group reward: disfluencies fell meaningfully. The pause rose for all participants and stayed high for 1.",
+      "limits": "No comparison group. The training came with a group reward, so the two are not separated.",
       "checked": "abstract",
       "by": "author",
       "date": "2026-11-12",
@@ -268,7 +302,7 @@
         4
       ],
       "finding": "After 4 weeks, flow rate, phonation volume and maximum phonation time improved in the exercise group.",
-      "limits": "The abstract says 'divided' and does not state random allocation. No rating of how the singing sounds.",
+      "limits": "The abstract says 'divided' and does not state random allocation. The gains it reports are aerodynamic; it gives no result for the acoustic measures, the videostroboscopic ratings or the subjective evaluations.",
       "checked": "abstract",
       "by": "independent checker and author",
       "date": "2026-11-12",

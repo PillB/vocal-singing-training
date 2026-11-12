@@ -10,6 +10,11 @@
 // - "randomised" needs a randomised trial among the studies named, and "controlled trials" needs two;
 // - nothing is said about all research ("no study shows", "nadie ha mostrado"): only about the studies named.
 //
+// A second independent reading the same day, of each sentence against its abstract, found faults of other kinds,
+// and two of them are rules here:
+// - nothing ranks the evidence ("the best studied"): one record cannot say what is best studied;
+// - a number stated in one language is stated in the other.
+//
 // Every rule is a function over text, and has a control: the same rule on a planted defect, which must fail.
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -41,12 +46,22 @@ const LEDGER = JSON.parse(read("qa/evidence-ledger.json"));
 const RECORDS = new Map(LEDGER.sources.map((s) => [s.key, s]));
 
 const YEAR = /\b(?:19|20)\d\d\b/;
+const YEARS = /\b(?:19|20)\d\d\b/g;
 const SURNAME = /\p{Lu}[\p{L}'’-]+/u;
 // A review, or a trial with a comparison group. A dose comparison with no untreated group is neither.
 const CONTROLLED = ["review", "rct", "controlled"];
 // Sentences about all research, which no reading of a few studies can support.
 const ABSOLUTE =
   /ning[uú]n estudio|nadie ha |sin estudios|no existen? estudios?|no se ha (?:probado|mostrado|medido|demostrado)|no está (?:probado|mostrado|demostrado)|falta medir|\bno stud(?:y|ies)\b|\bnobody has\b|\bno one has\b|\b(?:has|have) not been (?:shown|tested|measured|proven)\b|\bis not (?:shown|proven)\b|\bnot yet (?:measured|tested)\b|\bnever been\b|\bthere is no evidence\b|no hay (?:evidencia|pruebas|estudios)/i;
+
+// A ranking of the evidence, which the record of one study cannot support.
+const RANKING =
+  /(?:mejor|m[aá]s) (?:estudiad|investigad|respaldad|comprobad|documentad)|la mejor evidencia|m[aá]s evidencia|mayor (?:respaldo|evidencia)|\b(?:best|most|better|more)[- ](?:widely[- ])?(?:studied|researched|supported|proven|documented)\b|\b(?:strongest|best|most) (?:evidence|support)\b/i;
+// What no card or drill may say, each as [the pattern, what is wrong with it].
+const BANNED = [
+  [ABSOLUTE, "speaks for all research"],
+  [RANKING, "ranks the evidence"]
+];
 
 /** "Stemple 1994" from "Stemple et al., 1994, 35 women": the first surname and the first year. */
 function keyOf(part) {
@@ -86,6 +101,12 @@ export function numbersIn(text) {
   return (String(text || "").match(/\d+(?:[.,]\d+)?/g) || []).filter((n) => !/^(?:19|20)\d\d$/.test(n)).map((n) => Number(n.replace(",", ".")));
 }
 
+/** The numbers one language states and the other does not, as one readable line or none. */
+export function parityProblems(a, b) {
+  const stated = (t) => numbersIn(t).sort((x, y) => x - y).join(" ") || "no number";
+  return stated(a) === stated(b) ? [] : [`states ${stated(a)} in one language and ${stated(b)} in the other`];
+}
+
 /** What a text claims beyond the records of the studies it names, as readable lines. */
 export function claimProblems(text, keys, records) {
   const out = [];
@@ -96,8 +117,10 @@ export function claimProblems(text, keys, records) {
     else rec.numbers.forEach((n) => allowed.add(n));
   }
   for (const n of numbersIn(text)) if (!allowed.has(n)) out.push(`says ${n}, which is in no record of ${keys.join(", ") || "any study named"}`);
-  const absolute = String(text || "").match(ABSOLUTE);
-  if (absolute) out.push(`speaks for all research: "${absolute[0].trim()}"`);
+  for (const [pattern, wrong] of BANNED) {
+    const hit = String(text || "").match(pattern);
+    if (hit) out.push(`${wrong}: "${hit[0].trim()}"`);
+  }
   out.push(...designProblems(text, keys, records));
   return out;
 }
@@ -113,11 +136,14 @@ function designProblems(text, keys, records) {
   return out;
 }
 
+/** Everything a card says in one language, with the years of its source line left out. */
+const cardText = (w) => [w.goal, w.why, w.tip, String(w.src || "").replace(/\b(?:19|20)\d\d\b/g, " ")].join(" ");
+
 /** A set's card in one language against the ledger. */
 export function cardProblems(set, lang, records) {
   const w = set[lang] || {};
   const keys = citedInSource(w.src);
-  const out = claimProblems([w.goal, w.why, w.tip, String(w.src || "").replace(/\b(?:19|20)\d\d\b/g, " ")].join(" "), keys, records);
+  const out = claimProblems(cardText(w), keys, records);
   const levels = keys.map((k) => records.get(k)?.level).filter(Boolean);
   if (set.grade === "mod" && !levels.some((l) => CONTROLLED.includes(l))) out.push("graded moderate without a review or a controlled trial");
   if (set.grade === "trad" && keys.length) out.push("graded tradition and names a study");
@@ -177,8 +203,13 @@ test("every card says only what the studies it names say", () => {
   );
 });
 
-test("a card names the same studies in both languages", () => {
+test("a card names the same studies, and states the same numbers, in both languages", () => {
   for (const s of SETS) assert.deepEqual(citedInSource(s.es.src), citedInSource(s.en.src), s.id);
+  assert.ok(SETS.some((s) => numbersIn(cardText(s.en)).length), "control: some card states a number");
+  assert.deepEqual(
+    SETS.flatMap((s) => parityProblems(cardText(s.es), cardText(s.en)).map((p) => `${s.id}: ${p}`)),
+    []
+  );
 });
 
 test("every drill that names a study says only what its record says, in both languages", () => {
@@ -193,6 +224,7 @@ test("every drill that names a study says only what its record says, in both lan
   assert.deepEqual(out, []);
   for (let i = 0; i < texts.length; i += 2) {
     assert.deepEqual(new Set(citedInText(texts[i + 1].text)), new Set(citedInText(texts[i].text)), `${texts[i].id} names the same studies in both languages`);
+    assert.deepEqual(parityProblems(texts[i + 1].text.replace(YEARS, " "), texts[i].text.replace(YEARS, " ")), [], `${texts[i].id} states the same numbers in both languages`);
   }
 });
 
@@ -239,6 +271,17 @@ test("control: each rule fails on its own planted defect", () => {
   assert.deepEqual(plain(looseYears("Smith showed in 2020 what (Stemple et al., 1994) did not.")), ["2020"]);
   assert.match(plant((s) => (s.en.why += " There is no evidence against it.")), /speaks for all research/);
   assert.match(plant((s) => (s.es.why += " No hay evidencia en contra.")), /speaks for all research/);
+  // a ranking of the evidence
+  assert.match(plant((s) => (s.en.why += " The straw is the best studied item here.")), /ranks the evidence: "best studied"/);
+  assert.match(plant((s) => (s.es.why += " La pajita es lo mejor estudiado de la lista.")), /ranks the evidence/);
+  assert.match(plant((s) => (s.es.why += " Es la técnica mejor estudiada.")), /ranks the evidence/);
+  assert.match(plant((s) => (s.en.why += " It has the most evidence behind it.")), /ranks the evidence: "most evidence"/);
+  assert.match(plant((s) => (s.en.why += " It is more widely studied than the rest.")), /ranks the evidence/);
+  assert.doesNotMatch(plant((s) => (s.en.why += " It was studied in adults, who understood it better.")), /ranks the evidence/);
+  assert.doesNotMatch(plant((s) => (s.es.why += " Se entiende mejor y se estudió en adultos.")), /ranks the evidence/);
+  // a number in one language only
+  assert.match(parityProblems("Las 12 cantantes de un estudio", "The singers in one study").join(" | "), /states 12 in one language and no number in the other/);
+  assert.deepEqual(parityProblems("12 cantantes y 6 oyentes", "6 listeners and 12 singers"), []);
   // the ledger's own rules
   const rec = (change) => {
     const copy = plain(RECORDS.get("Peng 2026"));

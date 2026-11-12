@@ -125,12 +125,14 @@ export const MUTANTS = {
     ["GS14 a card gives a trial another size", "js/session-sets.js", "En un ensayo con 114 adultos sanos", "En un ensayo con 141 adultos sanos", EVIDENCE],
     ["GS15 a card names a paper nobody read (the year of another)", "js/session-sets.js", 'src: "Peng et al. 2026, ensayo aleatorizado"', 'src: "Peng et al. 2024, ensayo aleatorizado"', EVIDENCE],
     ["GS16 a card speaks for all research", "js/session-sets.js", "Esos estudios no midieron cuánto se aprende practicándolo en casa.", "Ningún estudio ha medido cuánto se aprende practicándolo en casa.", EVIDENCE],
-    ["GS17 a dose comparison is counted among controlled trials", "js/session-sets.js", "podían sostener un sonido en ensayos pequeños; uno, con 35 mujeres", "podían sostener un sonido en ensayos controlados pequeños; uno, con 35 mujeres", EVIDENCE],
+    ["GS17 a dose comparison is counted among controlled trials", "js/session-sets.js", "En estudios pequeños, los Ejercicios de Función Vocal alargaron el tiempo que personas con la voz sana podían sostener un sonido; uno, con 35 mujeres", "En ensayos controlados pequeños, los Ejercicios de Función Vocal alargaron el tiempo que personas con la voz sana podían sostener un sonido; uno, con 35 mujeres", EVIDENCE],
     ["GS18 a self-report study is graded moderate", "js/session-sets.js", 'id: "s-cooldown",\n      track: "singing",\n      grade: "lim",', 'id: "s-cooldown",\n      track: "singing",\n      grade: "mod",', EVIDENCE],
     ["GS19 a drill's text gives the review another count", "js/exercises-data.js", "A review of 53 studies of adults", "A review of 63 studies of adults", EVIDENCE],
     ["GS20 the Spanish text of a drill drops a study the English names", "js/exercises-locale-es.js", "(Ruotsalainen y otros, 2007; Ramos y otros, 2025)", "(Ruotsalainen y otros, 2007)", EVIDENCE],
     ["GS21 a record loses where it was read", "qa/evidence-ledger.json", '"pmid": "42156834",\n      "doi": "10.1038/s41598-026-53079-1",', '"pmid": "",\n      "doi": "",', EVIDENCE],
-    ["GS22 a universal claim returns to a drill (no study shows)", "js/exercises-data.js", "it did not test whether a cool-down prevents voice problems.", "no study shows that a cool-down prevents voice problems.", EVIDENCE]
+    ["GS22 a universal claim returns to a drill (no study shows)", "js/exercises-data.js", "it did not test whether a cool-down prevents voice problems.", "no study shows that a cool-down prevents voice problems.", EVIDENCE],
+    ["GS23 a card ranks the evidence (the best studied)", "js/session-sets.js", "The straw belongs to a family of exercises with a review of 53 studies behind it;", "The straw is the best studied item here, with a review of 53 studies behind it;", EVIDENCE],
+    ["GS24 a number stays in one language only", "js/session-sets.js", "After warming up, the 12 female singers in one study noticed", "After warming up, the female singers in one study noticed", EVIDENCE]
   ].map(([name, file, from, to, test = "tests/node/session-sets.test.mjs"]) => ({ name, file, from, to, cmd: node([test]) })),
   audio: [
     ["M1 YIN voicing threshold 0.18 -> 0.60 (noise accepted as pitch)", "js/pitch-visualizer.js", "if (cmnd[lag] >= 0.18) continue;", "if (cmnd[lag] >= 0.60) continue;"],

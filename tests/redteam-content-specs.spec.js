@@ -66,11 +66,23 @@ async function exText(page, lang, id) {
 const flat = (t) => [t.original, t.research, ...t.steps, ...t.tips, ...t.mistakes].join("\n");
 
 /** What a negated mention ("no susurro", "not a whisper") leaves out of a whisper check. */
-const withoutNegatedWhisper = (s) => s.replace(/\(no susurro\)|, not a whisper/gi, "");
+const withoutNegatedWhisper = (s) => s.replace(/\(no susurro\)|\(not a whisper\)|, not a whisper/gi, "");
+
+/**
+ * s18 as main's evidence-based coaching rewrite (PR #28's curriculum) has it:
+ * no breath-hold at all (the profile's pattern is 4 in, 0 hold, 6 out, pinned
+ * by tests/node/technical-coaching.test.mjs), where PR #21 had turned the
+ * held breath into a 2-count pause with the throat open. These cases keep
+ * #21's findings, which both rewrites fix: no closed folds, no cough-like
+ * push, no unsourced diaphragm figures, and a cue that never says hold.
+ */
+/** `text` without the phrases that say NOT to hold ("do not hold", "sin retener"). */
+const withoutNegatedHold = (s) =>
+  s.replace(/do not hold your breath|without a deliberate breath-hold|no hold|no retengas el aire|sin retener( el aire)?/gi, "");
 
 test.describe("s18: breathing without a held glottis, and an honest diaphragm line", () => {
   for (const lang of ["es", "en"]) {
-    test(`${lang}: the pause keeps the throat open, no closed folds and no cough`, async ({ page }) => {
+    test(`${lang}: no breath-hold, no closed folds and no cough`, async ({ page }) => {
       await boot(page, lang);
       const t = await exText(page, lang, "s18-costal-breath");
       const all = flat(t);
@@ -79,27 +91,25 @@ test.describe("s18: breathing without a held glottis, and an honest diaphragm li
       expect(all, "no pressure to hold").not.toMatch(
         lang === "es" ? /se mantiene esa presión|empujón abdominal/i : /hold that pressure|abdominal push/i
       );
-      expect(t.steps[3], "step 4 is a pause with the throat open").toMatch(
-        lang === "es"
-          ? /^Pausa 2 tiempos con la garganta abierta, sin cerrar: el aire queda en suspenso, no atrapado\.$/
-          : /^Pause 2 counts with the throat open, not closed: the air waits, it is not trapped\.$/
+      expect(withoutNegatedHold(all), "no hold, however short").not.toMatch(
+        lang === "es" ? /ret[eé]n|retener|pausa \d/i : /\bhold\b|pause \d/i
       );
-      expect(t.tips[2], "the exhale starts gently with no push; the wide ribs slow the air").toMatch(
-        lang === "es" ? /sin empujar[\s\S]*costillas anchas/i : /no push[\s\S]*ribs wide/i
+      expect(t.steps[3], "step 4 goes straight from inhale to exhale with the throat free").toMatch(
+        lang === "es" ? /^Pasa directamente a espirar; no retengas el aire ni bloquees la garganta\.$/ : /^Change directly to exhaling; do not hold your breath or lock your throat\.$/
       );
     });
 
-    test(`${lang}: the cue says pause, not hold`, async ({ page }) => {
+    test(`${lang}: the cue says no hold, and keeps the 4-in, 6-out pace`, async ({ page }) => {
       await boot(page, lang);
       await page.evaluate(() => window.VTApp.openExercise("s18-costal-breath"));
       await expect(page.locator("#view-exercise")).toHaveClass(/active/);
       const cue = (await page.locator("#mode-cue").textContent()) || "";
-      expect(cue).toMatch(lang === "es" ? /pausa 2/i : /pause 2/i);
-      expect(cue).not.toMatch(lang === "es" ? /ret[eé]n/i : /hold 2/i);
-      expect(cue, "the 4-2-8 timing stays").toMatch(/4[\s\S]*2[\s\S]*8/);
+      expect(cue).toMatch(lang === "es" ? /sin retener/i : /no hold/i);
+      expect(cue).not.toMatch(lang === "es" ? /ret[eé]n\s*2|pausa\s*2/i : /hold\s*2|pause\s*2/i);
+      expect(cue, "the 4-6 timing").toMatch(/4[\s\S]*6/);
     });
 
-    test(`${lang}: the diaphragm line is true and carries no unsourced figures`, async ({ page }) => {
+    test(`${lang}: the research line carries no unsourced figures and claims no measurement`, async ({ page }) => {
       await boot(page, lang);
       const t = await exText(page, lang, "s18-costal-breath");
       expect(t.research).not.toMatch(
@@ -107,21 +117,17 @@ test.describe("s18: breathing without a held glottis, and an honest diaphragm li
           ? /no se controla de forma voluntaria|60\s?%|25\s?%/i
           : /not under direct voluntary control|60\s?%|25\s?%/i
       );
-      expect(t.research).toMatch(
-        lang === "es"
-          ? /No puedes sentir el diafragma directamente \(tiene pocos receptores\) y solo trabaja al inhalar; lo que sí sientes y entrenas son las costillas y la pared abdominal, y eso es el apoyo\./
-          : /You cannot feel the diaphragm directly \(it has few sensory receptors\) and it only works on the in-breath; what you can feel and train is the ribs and the abdominal wall, and that is the apoyo\./
-      );
+      expect(t.research).toMatch(lang === "es" ? /no una prueba pulmonar/ : /not a lung-function test/);
     });
   }
 
   test("the catalog still opens s18's summary the way catalog-design expects", async ({ page }) => {
     await boot(page, "es");
     const t = await exText(page, "es", "s18-costal-breath");
-    expect(t.original).toMatch(/^Respiración costo-abdominal: inhala bajo por la nariz/);
-    expect(t.original, "the summary does not ask for a hold either").not.toMatch(/ret[eé]n/i);
+    expect(t.original).toMatch(/^Respiración costo-abdominal: inhala bajo/);
+    expect(withoutNegatedHold(t.original), "the summary does not ask for a hold either").not.toMatch(/ret[eé]n|retener/i);
     const en = await exText(page, "en", "s18-costal-breath");
-    expect(en.original).not.toMatch(/\bhold\b/i);
+    expect(withoutNegatedHold(en.original)).not.toMatch(/\bhold\b/i);
   });
 });
 
@@ -210,7 +216,7 @@ test.describe("Imagery that claimed more than the evidence", () => {
       await boot(page, lang);
       const t = await exText(page, lang, "v13-volume-ladder");
       expect(withoutNegatedWhisper(flat(t)), "the exercise text").not.toMatch(/susurro|whisper/i);
-      expect(t.steps[1]).toMatch(lang === "es" ? /1 voz muy suave \(no susurro\)/ : /level 1 \(very soft voice, not a whisper\)/);
+      expect(t.steps[1]).toMatch(lang === "es" ? /1 voz muy suave \(no susurro\)/ : /1 very soft voice \(not a whisper\)/);
       await page.evaluate(() => window.VTApp.openExercise("v13-volume-ladder"));
       await expect(page.locator("#view-exercise")).toHaveClass(/active/);
       await expect(page.locator("#mode-focus [data-phase]")).toHaveText(lang === "es" ? /^1 Muy suave$/ : /^1 Very soft$/);
@@ -232,7 +238,10 @@ test.describe("Imagery that claimed more than the evidence", () => {
       await boot(page, lang);
       const t = await exText(page, lang, "v4-articulation-pen");
       expect(flat(t)).not.toMatch(/resistance training|strengthen speech muscles|entrenamiento de resistencia|La resistencia entrena/i);
-      expect(t.research).toMatch(lang === "es" ? /no es entrenamiento de fuerza/i : /not strength training/i);
+      // Main's wording (PR #28): not proven strengthening; #21 had "not strength training"
+      expect(t.research).toMatch(
+        lang === "es" ? /no está demostrado que este ejercicio fortalezca/i : /not proven speech-muscle strengthening/i
+      );
       expect(t.tips.join(" | ")).toMatch(lang === "es" ? /Si te duele la mandíbula, para\./ : /Stop if the jaw hurts\./);
     });
   }
@@ -246,12 +255,13 @@ test.describe("Imagery that claimed more than the evidence", () => {
     }
   });
 
-  test("s19 and s22: English says dull, not flat (a flat note is an under-pitch one); Spanish keeps plano", async ({ page }) => {
+  test("s19 and s22: the soft palate is not said to fix pitch (no 'goes flat': a flat note is an under-pitch one)", async ({ page }) => {
     await boot(page, "en");
     for (const id of ["s19-soft-palate-surprise", "s22-mid-voice-hola"]) {
       expect(flat(await exText(page, "en", id)), id).not.toMatch(/\bflat\b/i);
-      expect(flat(await exText(page, "en", id)), id).toMatch(/going dull|goes dull/);
-      expect(flat(await exText(page, "es", id)), id).toMatch(/plano/);
+      expect(flat(await exText(page, "es", id)), id).not.toMatch(/se (va|queda) plan[oa]|desafin/i);
+      // Main's evidence-based line (PR #28): it changes nasality, not pitch accuracy
+      expect(flat(await exText(page, "en", id)), id).toMatch(/not pitch accuracy|does not by itself correct pitch/);
     }
   });
 
@@ -261,7 +271,9 @@ test.describe("Imagery that claimed more than the evidence", () => {
       const t = await exText(page, lang, "s23-mask-ya");
       expect(t.original).toMatch(lang === "es" ? /puedes sentir/ : /you may feel/);
       expect(t.original).not.toMatch(lang === "es" ? /para localizar la máscara superior: nariz/ : /to locate the upper mask: nose/);
-      expect(t.steps[1]).toMatch(lang === "es" ? /dónde sientes/ : /where you feel/);
+      // A sensation, not where the sound is made (main's wording, PR #28)
+      expect(t.steps[1]).toMatch(lang === "es" ? /sensaciones de vibración/ : /buzzing sensations/);
+      expect(t.steps[1]).not.toMatch(lang === "es" ? /Ese es el lugar/ : /That is the place/);
     }
   });
 });

@@ -219,6 +219,45 @@ test("a refused batch is refused whole, and costs no writes to refuse", async ()
     before.filter((r) => r.startsWith("evday:")),
     "a refused day-cap call leaves the counter where it was"
   );
+  // And no other bucket either: the cap is read for the batch's own size
+  // before a gate writes, so a batch it has no room for costs no rows even
+  // while one slot is still free.
+  assert.deepEqual(after, before, "a batch too big for what is left writes no rate-limit row");
+});
+
+test("once the day's cap is full, a batch from a new browser at a new address writes no rate-limit row", async () => {
+  // Wrong: the per-address and per-browser gates ran before the cap, so on a
+  // full day every request still wrote its two buckets (and a new browser or a
+  // rotating address a new row each), spending the budget the cap protects.
+  // The report route had the same fault and the same fix (QA round 5, QA-40).
+  const env = freshEnv({ EVENTS_DAILY_CAP: "2" });
+  const full = await call(beacon({ events: [ev("app_open", cid(1)), ev("app_open", cid(1))] }), env, { now: NOW });
+  assert.equal(full.body.accepted, 2);
+  const before = (await rows(env, "SELECT * FROM rate_limits")).map((r) => `${r.bucket}:${r.count}:${r.window_start}`).sort();
+  const shed = await call(
+    beacon({ events: [ev("app_open", cid(9))] }, { headers: { "cf-connecting-ip": "198.51.100.200" } }),
+    env,
+    { now: NOW + 1 }
+  );
+  assert.equal(shed.status, 202);
+  assert.equal(shed.body.reason, "daily_capped");
+  const after = (await rows(env, "SELECT * FROM rate_limits")).map((r) => `${r.bucket}:${r.count}:${r.window_start}`).sort();
+  assert.deepEqual(after, before, "no bucket was created or moved");
+  // Control: the refusal is still counted, so the operator sees the cap bite.
+  const capped = (await rows(env, "SELECT reason, n FROM ingest_daily")).find((r) => r.reason === "daily_capped");
+  assert.equal(capped && capped.n, 1);
+  // Control: with room in the day, the same request passes the gates and
+  // writes its buckets as before.
+  const roomy = freshEnv({ EVENTS_DAILY_CAP: "3" });
+  await call(beacon({ events: [ev("app_open", cid(1)), ev("app_open", cid(1))] }), roomy, { now: NOW });
+  const ok = await call(
+    beacon({ events: [ev("app_open", cid(9))] }, { headers: { "cf-connecting-ip": "198.51.100.200" } }),
+    roomy,
+    { now: NOW + 1 }
+  );
+  assert.equal(ok.body.accepted, 1);
+  const buckets = (await rows(roomy, "SELECT bucket FROM rate_limits")).map((r) => r.bucket);
+  assert.ok(buckets.some((b) => b.startsWith("evc:")) && buckets.filter((b) => b.startsWith("ev:")).length === 2);
 });
 
 test("the operator can see the cap biting, and the cap resets with its window", async () => {

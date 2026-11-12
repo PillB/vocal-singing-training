@@ -748,13 +748,25 @@ export const MUTANTS = {
     ["B17 a token verified at boot grants Pro for ever in an open tab: the in-session expiry test is gone (A3)","js/license.js","if (typeof verified.exp === \"number\" && verified.exp + CLOCK_SKEW_S < now) {","if (false) {",["tests/trust-claims-expire.spec.js"]],
     // Merging #26 into main: its attacker-link test edited the config after main's freeze (QA-05), so the edit never
     // landed and the test passed with the allow-list matching by prefix. It now edits the config as it is assigned.
-    ["B18 a checkout host is allowed by prefix, so creem.io.attacker.test passes as creem.io (#26 merge)","js/billing.js","      (h) => host === h || host.endsWith(\".\" + h)","      (h) => host === h || host.startsWith(h)",["tests/checkout-rail.spec.js"]]
+    ["B18 a checkout host is allowed by prefix, so creem.io.attacker.test passes as creem.io (#26 merge)","js/billing.js","      (h) => host === h || host.endsWith(\".\" + h)","      (h) => host === h || host.startsWith(h)",["tests/checkout-rail.spec.js"]],
+    // The #26 merge review: three seams between the branch and main, each pinned by the test written for it.
+    // A path under workers/ is a Node test.
+    ["B19 Creem's return checkout_id is not read: every Creem buyer coming back is told the session is missing","js/billing.js","      params.get(\"checkout_id\") ||\n","",["tests/checkout-rail.spec.js"]],
+    ["B20 a Creem return with no remembered intent is claimed on the region's rail","js/billing.js","(params.get(\"checkout_id\") ? \"creem\" : \"\")","\"\"",["tests/checkout-rail.spec.js"]],
+    ["B21 Creem's return signature is left in the address bar","js/billing.js","        \"request_id\",\n        \"signature\"\n","        \"request_id\"\n",["tests/checkout-rail.spec.js"]],
+    ["B22 a buyer's metadata[plan] on a Creem payment link gets a product that is not ours past the allow-list","workers/entitlements/src/creem.js","  if (productVerdict(productId, env) === \"unlisted\") {","  if (productVerdict(productId, env) === \"unlisted\" && !normalizePlanId(metadata && metadata.plan)) {",["workers/entitlements/test/creem.test.mjs"]],
+    ["B23 the report limits name their buckets by the reporter's raw address, which the privacy page says is never stored","workers/entitlements/src/reports.js","await ipBucketKey(env, request, at, \"reports\")","request.headers.get(\"cf-connecting-ip\")",["workers/entitlements/test/reports.test.mjs"]],
+    ["B24 a deployment with no key to pseudonymise addresses under still takes reports","workers/entitlements/src/reports.js","    ipKeyConfigured(env) &&\n","",["workers/entitlements/test/reports.test.mjs"]],
+    ["B25 a full day of events still costs every request its per-address and per-browser writes","workers/entitlements/src/events.js","  if (shed) {\n    return shed;\n  }\n","",["workers/entitlements/test/events.test.mjs"]],
+    ["B26 the events cap is read for one event, so a batch too big for what is left still writes its buckets","workers/entitlements/src/events.js","EVENTS_DAILY_CAP[1], at, clean.length);\n  if (room.ok) {","EVENTS_DAILY_CAP[1], at, 1);\n  if (room.ok) {",["workers/entitlements/test/events.test.mjs"]]
   ].map(([name, file, from, to, only]) => ({
     name,
     file,
     from,
     to,
-    cmd: [...PIANO_SPEC.slice(0, 3), ...(only || ["tests/console-unlock.spec.js", "tests/trust-console-gaps.spec.js"]), "--project=chromium", "--workers=4", "--reporter=dot"]
+    cmd: only && only[0].startsWith("workers/")
+      ? node(only)
+      : [...PIANO_SPEC.slice(0, 3), ...(only || ["tests/console-unlock.spec.js", "tests/trust-console-gaps.spec.js"]), "--project=chromium", "--workers=4", "--reporter=dot"]
   })),
   // QA round 9 (toast): twelve behaviours of the message that appears over the page, each pinned by the one spec written for it.
   // Its own set so that the longer sets (a11y, regress) do not grow: CI runs it as a seventh job.

@@ -40,7 +40,7 @@
 
 "use strict";
 
-import { callerIp, ensureSchema, hitRateLimit, hmacSha256Hex, nowSec } from "./db.js";
+import { callerIp, ensureSchema, hitRateLimit, hmacSha256Hex, nowSec, peekRateLimit } from "./db.js";
 import { compareMeans, compareRates, homogeneity, meanFromSums, sampleRatioMismatch, wilson } from "./stats.js";
 import { handleLayouts, LAYOUT_EVENTS } from "./layouts.js";
 
@@ -820,6 +820,13 @@ export async function handleIngest(request, env, deps) {
   const list = batch.list;
 
   await ensureSchema(env.DB);
+  // Sanitising writes nothing, so it comes first: the day's cap can then be
+  // read for this batch's real size before any gate below writes a row.
+  const { counts, clean } = sanitizeBatch(list, presets);
+  const shed = await shedPastDailyCap(env, clean, at, json, cors);
+  if (shed) {
+    return shed;
+  }
   const ipKey = await ipBucketKey(env, request, at);
   const limited = (gate) => {
     return json({ ok: false, reason: "rate_limited", retryAfter: gate.retryAfter }, 429, {
@@ -833,7 +840,6 @@ export async function handleIngest(request, env, deps) {
     return limited(ipGate);
   }
 
-  const { counts, clean } = sanitizeBatch(list, presets);
   const refused = await gateCleanBatch(env, clean, at, limited, json, cors);
   if (refused) {
     return refused;
@@ -920,6 +926,34 @@ function sanitizeBatch(list, presets) {
   return { counts, clean };
 }
 
+/**
+ * The 202 for a batch the day's cap has no room for, read WITHOUT writing, or
+ * null. The per-address and per-browser gates each write a row, so with the
+ * cap checked only after them a day that was already full still cost every
+ * request two rate-limit writes plus its count, the exact pattern the report
+ * route fixed in QA round 5 (QA-40). Refused here, a batch costs its one
+ * `daily_capped` count. gateCleanBatch still spends the cap with a write,
+ * because two batches can both see room here and only one may take it.
+ */
+async function shedPastDailyCap(env, clean, at, json, cors) {
+  if (!clean.length) {
+    return null;
+  }
+  const room = await peekRateLimit(env.DB, "evday", eventsDailyCap(env), EVENTS_DAILY_CAP[1], at, clean.length);
+  if (room.ok) {
+    return null;
+  }
+  return refuseDailyCapped(env, clean, at, json, cors);
+}
+
+/** Count a batch the day's cap refused and answer it: 202, because the beacon is no-cors and must not retry. */
+async function refuseDailyCapped(env, clean, at, json, cors) {
+  await countIngest(env.DB, at, { daily_capped: clean.length });
+  // 202 and not 429: the browser posts no-cors and can neither read this
+  // nor usefully retry, and a retry is the last thing this wants.
+  return json({ ok: true, accepted: 0, reason: "daily_capped" }, 202, cors);
+}
+
 /** The per-browser limit, then the day's cap on stored events: the answer refusing the batch, or null. */
 async function gateCleanBatch(env, clean, at, limited, json, cors) {
   if (!clean.length) {
@@ -947,10 +981,7 @@ async function gateCleanBatch(env, clean, at, limited, json, cors) {
     clean.length
   );
   if (!day.ok) {
-    await countIngest(env.DB, at, { daily_capped: clean.length });
-    // 202 and not 429: the browser posts no-cors and can neither read this
-    // nor usefully retry, and a retry is the last thing this wants.
-    return json({ ok: true, accepted: 0, reason: "daily_capped" }, 202, cors);
+    return refuseDailyCapped(env, clean, at, json, cors);
   }
   return null;
 }

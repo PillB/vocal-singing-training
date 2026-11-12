@@ -259,9 +259,13 @@ test("[L] ↻ Otra vez after a rated take starts an unanswered take that is save
       pressed: [...document.querySelectorAll(".rate-btn[aria-pressed=true]")].map((b) => b.textContent.trim())
     }));
 
-  // Take 1: to the end of its time, then "Normal"
+  // Take 1: 20 s on its clock (a rating needs 15 s of practice), to the end of its time, then "Normal"
   await page.click("#btn-practice-start");
   await waitLive(page);
+  await page.evaluate(() => {
+    const sp = window.VTApp.getState().sessionPractice;
+    if (sp.liveSince != null) sp.liveSince -= 20000;
+  });
   await page.waitForTimeout(2000);
   await timeUpIn(page, 500);
   await page.locator('.rate-btn[data-feel="ok"]').waitFor({ state: "visible", timeout: 8000 });
@@ -504,7 +508,13 @@ test.describe("bottom rail on a short landscape screen", () => {
               const sel = "#btn-oct-down, #btn-oct-up, #chk-range-auto, .piano-opt input, .piano-opt select, #btn-toggle-piano";
               const el = [...host.querySelectorAll(sel)].find((e) => (e.id || e.closest("label")?.textContent.trim() || e.tagName) === name);
               if (!el) return "gone";
-              el.scrollIntoView({ block: "nearest", inline: "nearest" });
+              // As a learner would: by scrolling the page, at once. Where the open
+              // piano unsticks the stage (VG-30) the options scroll away with it.
+              // scrollIntoView() also scrolls the stage's own clipped box, which
+              // no finger can, and so hid an option cut at its edge; and with
+              // the page's smooth scrolling it had not moved when this measured.
+              const b0 = el.getBoundingClientRect();
+              window.scrollBy({ top: b0.top + b0.height / 2 - innerHeight / 2, behavior: "instant" });
               const b = el.getBoundingClientRect();
               const stage = document.getElementById("highway-stage").getBoundingClientRect();
               if (b.width < 2 || b.height < 2) return "no size";

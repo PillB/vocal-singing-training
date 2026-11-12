@@ -799,81 +799,109 @@
       return null;
     }
     const billing = params.get("billing");
-    if (!billing) return null;
-
     if (billing === "cancel") {
       cleanUrlParams();
       return { event: "cancel" };
     }
-    if (billing === "success") {
-      let plan = params.get("plan") || "pro_monthly";
-      if (!PLAN_IDS.has(plan) || plan === "trial") plan = "pro_monthly";
-      let provider = params.get("provider") || preferredRail(detectRegion());
-      if (!PROVIDER_IDS.has(provider)) provider = preferredRail(detectRegion());
-      const sessionId =
-        params.get("session_id") ||
-        params.get("payment_id") ||
-        params.get("preapproval_id") ||
-        null;
+    if (billing !== "success") return null;
 
-      try {
-        const intent = JSON.parse(sessionStorage.getItem("vt_billing_intent") || "null");
-        if (intent?.plan && PLAN_IDS.has(intent.plan)) plan = intent.plan;
-        if (intent?.provider && PROVIDER_IDS.has(intent.provider)) provider = intent.provider;
-        sessionStorage.removeItem("vt_billing_intent");
-      } catch {
-        /* ignore */
-      }
+    const { plan, provider } = returnedPlanAndProvider(params);
+    const sessionId = returnedSessionId(params);
 
-      // Production-ish guard: without demo mode, require a provider session id
-      const strict = cfg().demoUnlockEnabled === false;
-      const requireSession = cfg().requireCheckoutSessionId !== false && strict;
-      if (requireSession && !sessionId) {
-        cleanUrlParams();
-        return {
-          event: "error",
-          reason: "missing_session",
-          message: null // app maps → i18n pricing.toast.checkoutError
-        };
-      }
-
-      if (!verificationRequired()) {
-        // Operator opted out of server checks: legacy soft (forgeable) activation.
-        activate(plan, { provider, source: "checkout_return", sessionId, verified: false });
-        cleanUrlParams();
-        return { event: "success", plan, provider, sessionId, soft: true, verified: false };
-      }
-
-      // The return URL proves nothing. Record the intent, then ask the worker for
-      // a signed license — Pro turns on only when that signature verifies.
-      write({
-        status: "pending",
-        plan,
-        provider,
-        region: detectRegion(),
-        source: "checkout_return",
-        activatedAt: new Date().toISOString(),
-        expiresAt: null,
-        sessionId: sessionId ? String(sessionId).slice(0, 128) : null,
-        verified: false
-      });
-      const claiming = verificationConfigured()
-        ? claimLicense({ plan, provider, sessionId })
-        : null;
-      emit();
+    // Production-ish guard: without demo mode, require a provider session id
+    const strict = cfg().demoUnlockEnabled === false;
+    const requireSession = cfg().requireCheckoutSessionId !== false && strict;
+    if (requireSession && !sessionId) {
       cleanUrlParams();
       return {
-        event: "success",
-        plan,
-        provider,
-        sessionId,
-        soft: false,
-        verified: false,
-        pendingVerification: true,
-        claiming
+        event: "error",
+        reason: "missing_session",
+        message: null // app maps → i18n pricing.toast.checkoutError
       };
     }
-    return null;
+
+    if (!verificationRequired()) {
+      // Operator opted out of server checks: legacy soft (forgeable) activation.
+      activate(plan, { provider, source: "checkout_return", sessionId, verified: false });
+      cleanUrlParams();
+      return { event: "success", plan, provider, sessionId, soft: true, verified: false };
+    }
+    return startReturnClaim(plan, provider, sessionId);
+  }
+
+  /**
+   * The provider's id for the payment the customer is coming back from, or
+   * null: Stripe's `session_id` (the success URL's {CHECKOUT_SESSION_ID}),
+   * Creem's `checkout_id` (appended to its return URL; the worker files the
+   * claim under it), or Mercado Pago's `payment_id` / `preapproval_id`.
+   * @param {URLSearchParams} params The return URL's query.
+   * @returns {string|null}
+   */
+  function returnedSessionId(params) {
+    return (
+      params.get("session_id") ||
+      params.get("checkout_id") ||
+      params.get("payment_id") ||
+      params.get("preapproval_id") ||
+      null
+    );
+  }
+
+  /**
+   * The plan and rail being returned from. The intent saved as the checkout
+   * opened outranks the URL, which anybody can edit; with neither, a
+   * `checkout_id` is Creem's return (no other rail sends one) and anything
+   * else is the region's own rail.
+   * @param {URLSearchParams} params The return URL's query.
+   * @returns {{plan: string, provider: string}}
+   */
+  function returnedPlanAndProvider(params) {
+    let plan = params.get("plan") || "pro_monthly";
+    if (!PLAN_IDS.has(plan) || plan === "trial") plan = "pro_monthly";
+    let provider = params.get("provider") || (params.get("checkout_id") ? "creem" : "");
+    if (!PROVIDER_IDS.has(provider)) provider = preferredRail(detectRegion());
+    try {
+      const intent = JSON.parse(sessionStorage.getItem("vt_billing_intent") || "null");
+      if (intent?.plan && PLAN_IDS.has(intent.plan)) plan = intent.plan;
+      if (intent?.provider && PROVIDER_IDS.has(intent.provider)) provider = intent.provider;
+      sessionStorage.removeItem("vt_billing_intent");
+    } catch {
+      /* ignore */
+    }
+    return { plan, provider };
+  }
+
+  /**
+   * The return URL proves nothing. Record the intent, then ask the worker for
+   * a signed license — Pro turns on only when that signature verifies.
+   */
+  function startReturnClaim(plan, provider, sessionId) {
+    write({
+      status: "pending",
+      plan,
+      provider,
+      region: detectRegion(),
+      source: "checkout_return",
+      activatedAt: new Date().toISOString(),
+      expiresAt: null,
+      sessionId: sessionId ? String(sessionId).slice(0, 128) : null,
+      verified: false
+    });
+    const claiming = verificationConfigured()
+      ? claimLicense({ plan, provider, sessionId })
+      : null;
+    emit();
+    cleanUrlParams();
+    return {
+      event: "success",
+      plan,
+      provider,
+      sessionId,
+      soft: false,
+      verified: false,
+      pendingVerification: true,
+      claiming
+    };
   }
 
   function cleanUrlParams() {
@@ -896,7 +924,17 @@
         "external_reference",
         "site_id",
         "processing_mode",
-        "merchant_account_id"
+        "merchant_account_id",
+        // Creem's return URL (docs.creem.io, Return URL): its ids and the
+        // signature over them, none of which should be left to be copied,
+        // shared or bookmarked with the page.
+        "checkout_id",
+        "order_id",
+        "customer_id",
+        "subscription_id",
+        "product_id",
+        "request_id",
+        "signature"
       ].forEach((k) => u.searchParams.delete(k));
       window.history.replaceState({}, "", u.pathname + u.search + u.hash);
     } catch {

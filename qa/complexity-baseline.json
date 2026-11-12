@@ -260,12 +260,6 @@
       "name": "Function 'getEntitlement'"
     },
     {
-      "file": "js/billing.js",
-      "sha": "7b0557c1b8f890cf0082994ba8eeb562a05edadcd3e25a1338d4a6eb09950c9d",
-      "complexity": 27,
-      "name": "Function 'handleReturnFromCheckout'"
-    },
-    {
       "file": "js/daily-loop.js",
       "sha": "d7f29fd3694896e8950c3e95982498f2b06eb2fbe2ccf85477c47e5e37c8b3b9",
       "complexity": 17,

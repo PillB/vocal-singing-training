@@ -352,3 +352,56 @@ test.describe("a rail the worker cannot honour", () => {
     expect(asked.length).toBe(1);
   });
 });
+
+// ----- coming back from Creem
+
+test.describe("coming back from a Creem checkout", () => {
+  // A Peruvian browser, whose own rail is Mercado Pago: so a Creem return read
+  // as "the region's rail" is visibly wrong, not right by coincidence.
+  test.use({ locale: "es-PE", timezoneId: "America/Lima" });
+
+  /**
+   * Arrive at `query` with no remembered intent (the return opened in a new
+   * tab, or the tab was closed and the receipt's link followed) and report
+   * what the return made of it.
+   */
+  async function arrive(page, query) {
+    await boot(page, { health: healthBody({ mercadopagoConfigured: true, stripeConfigured: true, creemConfigured: true }) });
+    const claims = [];
+    await page.route("**/v1/claim", (route) => {
+      claims.push(JSON.parse(route.request().postData() || "{}"));
+      // Pending: the webhook has not landed yet, which is the usual order.
+      return route.fulfill({ status: 202, contentType: "application/json", body: "{}" });
+    });
+    const back = await page.evaluate((q) => {
+      sessionStorage.removeItem("vt_billing_intent");
+      history.replaceState(null, "", `/index.html?${q}`);
+      const ret = window.VTBilling.handleReturnFromCheckout();
+      return { event: ret && ret.event, provider: ret && ret.provider, sessionId: ret && ret.sessionId, left: location.search };
+    }, query);
+    await expect.poll(() => claims.length).toBeGreaterThan(0);
+    return { back, claim: claims[0] };
+  }
+
+  test("Creem's checkout_id is the claim, on the Creem rail, and none of its return parameters is left in the address", async ({ page }) => {
+    // Creem appends checkout_id, order_id, customer_id, subscription_id,
+    // product_id and a signature to the return URL (docs.creem.io, Return
+    // URL), and the worker files the purchase under the checkout id. Wrong:
+    // reading only Stripe's and Mercado Pago's names, the strict config
+    // answered "missing_session" to every Creem buyer coming back, and the
+    // signature stayed in the address to be shared or bookmarked.
+    const { back, claim } = await arrive(
+      page,
+      "billing=success&checkout_id=ch_test_return&order_id=ord_test&customer_id=cust_test" +
+        "&subscription_id=sub_test&product_id=prod_test&request_id=req_test&signature=sig_test"
+    );
+    expect(back).toEqual({ event: "success", provider: "creem", sessionId: "ch_test_return", left: "" });
+    expect(claim).toEqual({ provider: "creem", sessionId: "ch_test_return" });
+  });
+
+  test("control: a Mercado Pago return in the same browser stays on Mercado Pago", async ({ page }) => {
+    const { back, claim } = await arrive(page, "billing=success&preapproval_id=pre_test_return");
+    expect(back).toEqual({ event: "success", provider: "mercadopago", sessionId: "pre_test_return", left: "" });
+    expect(claim).toEqual({ provider: "mercadopago", sessionId: "pre_test_return" });
+  });
+});

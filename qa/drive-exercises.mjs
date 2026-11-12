@@ -84,7 +84,8 @@ export const SCENARIO_BY_MODE = {
   pitchMatch: "matchListen",
   dynamicSwell: "swellCoach",
   onsetReps: "onsetContrast",
-  staccatoLegato: "articulation"
+  staccatoLegato: "articulation",
+  voiceDrill: "straw"
 };
 const SLOPPY_OK = new Set(["follow", "trill"]);
 

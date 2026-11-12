@@ -10972,6 +10972,469 @@
     }
   });
 
+  /* —— Voice drills written as data —— */
+
+  /** A profile's own text in the interface language (`key` / `keyEs`). */
+  function profileText(p, key) {
+    if (!p) return "";
+    return (isEs() ? p[key + "Es"] || p[key] : p[key]) || "";
+  }
+
+  const DRILL_ASPECT = { straw: 1.6, rest: 1.5, glide: 2.4, speak: 2.6, stand: 1, jaw: 1.75, neck: 1.2, chew: 1.5 };
+
+  /**
+   * The picture of a voice-drill step: the two takes on a compare step, the
+   * drawing the step names, the words to say on a spoken step, the bars of
+   * what was heard on any other sounded step, and the quiet ring otherwise.
+   */
+  function drillArt(G, ph) {
+    const A = G.art;
+    if (ph && ph.compare) return { draw: A.pair, aspect: 2.6, stackAspect: 2, measured: true };
+    // Words to say are neither a measure nor a drawing: no label under them
+    if (ph && ph.art && A[ph.art]) return { draw: A[ph.art], aspect: DRILL_ASPECT[ph.art] || 1.6, plain: ph.art === "speak" };
+    // Speech is not a held sound: its step shows what to say, not bars
+    if (ph && ph.speech) return { draw: A.speak, aspect: DRILL_ASPECT.speak, plain: true };
+    if (ph && ph.sound) return { draw: A.holdBars, aspect: 2.4, stackAspect: 1.6, measured: true };
+    return { draw: A.rest, aspect: 1.5 };
+  }
+
+  /** What one frame adds to a step's level samples (capped: a long step stays cheap). */
+  function feedDrillStat(stat, frame) {
+    const rms = frame.rms || 0;
+    if (rms > 0 && stat.dbs.length < 6000) stat.dbs.push(20 * Math.log10(rms));
+  }
+
+  /**
+   * A compare step's speech rate: syllables per second of talking, pauses
+   * left out (VTFeatures.SyllableRate). It undercounts fast speech, so it is
+   * only ever shown as B against the learner's own A.
+   */
+  function feedDrillRate(stat, frame, heard, dt) {
+    const F = global.VTFeatures;
+    if (!F || !F.SyllableRate) return;
+    if (!stat.syl) stat.syl = new F.SyllableRate({ windowSec: 5 });
+    stat.syl.feed({ dtMs: dt * 1000, rms: frame.rms || 0, sounding: heard });
+  }
+
+  /** The value a share `q` of the way up a list (0.5 is the median), or null for an empty one. */
+  function quantile(list, q) {
+    if (!list.length) return null;
+    const s = list.slice().sort((a, b) => a - b);
+    return s[Math.min(s.length - 1, Math.floor(q * s.length))];
+  }
+
+  /**
+   * One take of a pair as numbers: seconds with voice, the share of the take
+   * spent in pauses (from its first sound to its last), the speech rate and
+   * the median level. None of them grows just because a take ran longer or
+   * the sentence was said more times. All relative to the same microphone in
+   * the same room a moment earlier, which is the only thing they are good for.
+   */
+  function drillTake(stat) {
+    const span = stat.first != null && stat.last != null ? stat.last - stat.first : 0;
+    return {
+      voiced: stat.voiced,
+      share: span > 0.5 ? Math.min(1, stat.pauseSec / span) : 0,
+      rate: stat.syl ? stat.syl.overall : null,
+      db: quantile(stat.dbs, 0.5)
+    };
+  }
+
+  /** How much slower B has to be than A to say so: a tenth off the rate, or 8 points more of the take in pauses. */
+  const PAIR_SLOWER = { rate: -0.1, share: 0.08 };
+
+  /**
+   * B against the learner's own A: what changed, said as a fact. "Slower" is
+   * a lower speech rate or more of the take spent in pauses; "louder" is 6 dB
+   * or more (twice the sound pressure).
+   */
+  function drillPairFacts(a, b) {
+    const dDb = a.db != null && b.db != null ? b.db - a.db : null;
+    const dRate = a.rate && b.rate ? b.rate / a.rate - 1 : null;
+    const dShare = b.share - a.share;
+    return {
+      a,
+      b,
+      dDb,
+      dRate,
+      dShare,
+      slower: (dRate != null && dRate <= PAIR_SLOWER.rate) || dShare >= PAIR_SLOWER.share,
+      louder: dDb != null && dDb >= 6
+    };
+  }
+
+  /**
+   * Guided voice drills written as data (js/practice-profiles.js): v21 straw
+   * to speech, v22 recovery after a lot of talking, v23 clear speech, v24 and
+   * s28 the vocal function exercises (s28 on the piano's notes). A drill is a
+   * list of timed steps; a step is silent, sounded, or one half of a pair to
+   * compare.
+   *
+   * What the microphone hears, and only that:
+   * - on a sounded step, each sound of `minHoldMs` or more (a bar against the
+   *   line) and the longest one of the take;
+   * - on a silent step, whether there is sound, and on a `rest` step how many
+   *   seconds were quiet;
+   * - on the two steps of a pair (`compare: "a"`, then `"b"`), the speech
+   *   rate, the share of the take spent in pauses and the level of each,
+   *   shown after Stop as B against the learner's own A (approximate).
+   * Ease, comfort and clarity are never scored: they stay self-rated.
+   * Pictures: js/scenes/voice-drill.js.
+   */
+  Modes.voiceDrill = baseMode({
+    id: "voiceDrill",
+    render() {
+      const G = global.VTViz?.guided;
+      const p = this.profile;
+      const phases = p.phases || [];
+      this.state.minHoldMs = p.minHoldMs || 1500;
+      this._resetDrill();
+      const title = profileText(p, "title") || L("Práctica guiada", "Guided practice");
+      const count = `<strong class="mode-big" data-h>0</strong> <span>${L("sonidos sostenidos", "held sounds")}</span>`;
+      if (!G || !G.art.holdBars) {
+        this.hud.innerHTML = `<div class="mode-title">${title}</div><div class="mode-phase" data-phase>${phases[0]?.label || ""}</div>${count}<p class="mode-meta" data-cue>${phaseCueFor(phases[0])}</p>`;
+        return;
+      }
+      const hasRef = phases.some((ph) => ph.ref);
+      this.viz = new G.Drill(this, {
+        kind: "voice",
+        title,
+        phases,
+        mic: true,
+        recorded: true,
+        buttons: hasRef ? [{ attr: "data-ref-again", label: L("Oír la nota", "Hear the note") }] : [],
+        skip: true,
+        chime: !!p.chime,
+        preCue: 3,
+        words: " " + count,
+        label: L(
+          "El paso actual, el tiempo que queda y el siguiente. En los pasos con sonido, cada sonido es una barra frente a la línea de la meta; en los pasos en silencio, un dibujo guía.",
+          "The current step, the time left and the next one. On sounded steps each sound is a bar against the goal line; on silent steps, a guide drawing."
+        ),
+        artFor: (ph) => drillArt(G, ph),
+        status: (info) => this._drillStatus(info),
+        onStart: () => this._resetDrill(),
+        onFrame: (frame, d) => this._drillFrame(frame, d),
+        onStep: (i, d) => this._drillStep(d),
+        chapters: (d) => d.stepChapters((ph) => !!ph.sound),
+        doneText: profileText(p, "doneText") || L("Listo", "Done"),
+        doneCue: profileText(p, "doneCue"),
+        reviewExtraH: (w) => (this._pairFacts() ? (w < 420 ? 80 : 46) : 0),
+        reviewExtra: (ctx, box) => this._pairCard(ctx, box),
+        reviewNote:
+          profileText(p, "reviewNote") ||
+          L("Lo que el micrófono no oye lo valoras tú en Métricas.", "What the microphone can't hear, you rate in Metrics.")
+      });
+      this.$("[data-ref-again]")?.addEventListener("click", () => this._refAgain());
+      this._syncDrill();
+    },
+    /** The current step's note once more, on request (only on a step that has one, while live). */
+    _refAgain() {
+      const d = this.viz;
+      const p = d && d.live && !d.run.done ? d.run.cur : null;
+      if (p && p.ref) this._playRef(p, d.run, true);
+    },
+    _resetDrill() {
+      Object.assign(this.state, {
+        holds: 0,
+        holdList: [],
+        hold: null,
+        gap: 0,
+        longest: 0,
+        stats: {},
+        pair: [],
+        quietSec: 0,
+        noiseAt: -1,
+        deafUntil: -1,
+        lastEl: null
+      });
+      this._syncDrill();
+    },
+    /** What the pictures read (the Drill is `info.m` in js/scenes/voice-drill.js). */
+    _syncDrill() {
+      const st = this.state;
+      const d = this.viz;
+      const p = this.profile || {};
+      if (d) {
+        d.holds = st.holdList;
+        d.holdLive = st.hold && !st.hold.speech ? st.hold.len : null;
+        d.minHoldMs = st.minHoldMs;
+        d.holdHint = profileText(p, "holdHint");
+        d.pair = st.pair;
+        d.pairLabels = [profileText(p, "pairA") || "A", profileText(p, "pairB") || "B"];
+      }
+      const el = this.$("[data-h]");
+      if (el && el.textContent !== String(st.holds)) el.textContent = String(st.holds);
+    },
+    _stat(i) {
+      const st = this.state;
+      if (!st.stats[i]) st.stats[i] = { voiced: 0, runs: 0, pauseSec: 0, first: null, last: null, dbs: [], syl: null };
+      return st.stats[i];
+    },
+    /**
+     * Time between frames: the recording clock when there is one (frames come
+     * further apart on a busy device and dtMs is capped), so a breath between
+     * two sounds is never read as one long sound.
+     */
+    _drillDt(frame) {
+      const st = this.state;
+      let dt = Math.min(0.1, Math.max(0, (frame.dtMs || 16) / 1000));
+      if (frame.elapsedMs != null) {
+        if (st.lastEl != null && frame.elapsedMs >= st.lastEl) dt = Math.min(0.5, (frame.elapsedMs - st.lastEl) / 1000);
+        st.lastEl = frame.elapsedMs;
+      }
+      return dt;
+    },
+    _drillFrame(frame, d) {
+      const st = this.state;
+      const run = d.run;
+      const dt = this._drillDt(frame);
+      const on = frame.sounding != null ? !!frame.sounding : !!frame.voiced;
+      // The reference note and the step chime are not the learner
+      const heard = on && run.clock >= st.deafUntil;
+      const phase = run.done ? null : run.cur;
+      if (phase && phase.sound) this._soundFrame(frame, heard, dt, d);
+      else this._quietFrame(heard, dt, run, phase);
+      this._syncDrill();
+    },
+    _soundFrame(frame, heard, dt, d) {
+      const st = this.state;
+      const run = d.run;
+      const stat = this._stat(run.index);
+      if (run.cur.compare) feedDrillRate(stat, frame, heard, dt);
+      if (heard) {
+        st.gap = 0;
+        if (!st.hold) this._openHold(run, stat);
+        st.hold.len += dt;
+        stat.voiced += dt;
+        stat.last = run.clock;
+        feedDrillStat(stat, frame);
+        this._countHold(d);
+      } else if (st.hold) {
+        st.gap += dt;
+        // Speech has stops inside its words: only a longer gap is a pause
+        if (st.gap > (st.hold.speech ? 0.4 : 0.25)) this._endHold();
+      }
+    },
+    /** A new stretch of voice: the silence since the step's last one was a pause. */
+    _openHold(run, stat) {
+      this.state.hold = { len: 0, step: run.index, counted: false, speech: !!run.cur.speech };
+      stat.runs += 1;
+      if (stat.last != null) stat.pauseSec += run.clock - stat.last;
+      else stat.first = run.clock;
+      this._openTake(run);
+    },
+    /** A held sound counts once, when it reaches the line. Speech is not a hold. */
+    _countHold(d) {
+      const st = this.state;
+      const h = st.hold;
+      if (h.speech) return;
+      if (h.len > st.longest) st.longest = h.len;
+      if (h.counted || h.len * 1000 < st.minHoldMs) return;
+      h.counted = true;
+      st.holds += 1;
+      d.caption(L(`Sostenido ${st.holds} ✓`, `Held ${st.holds} ✓`), 1200);
+    },
+    _endHold() {
+      const st = this.state;
+      const h = st.hold;
+      if (h && !h.speech && h.len >= 0.3) st.holdList.push({ len: h.len, step: h.step });
+      if (st.holdList.length > 60) st.holdList.splice(0, st.holdList.length - 60);
+      st.hold = null;
+      st.gap = 0;
+    },
+    _quietFrame(heard, dt, run, phase) {
+      const st = this.state;
+      if (st.hold) this._endHold();
+      if (!phase) return;
+      // The tail of the last step's sound is not noise
+      if (heard && run.t > 1.5) st.noiseAt = run.clock;
+      else if (!heard && phase.rest) st.quietSec += dt;
+    },
+    /** The first sound of a compare step opens its take. */
+    _openTake(run) {
+      const st = this.state;
+      const key = run.cur.compare;
+      if (!key || st.pair.some((t) => t.step === run.index)) return;
+      st.pair.push({ step: run.index, key, start: run.clock, end: null, len: null });
+    },
+    /** A take closes when its step is over (or at Stop): its length is the time with voice. */
+    _closeTakes(run, all) {
+      this.state.pair.forEach((t) => {
+        if (t.end != null || (!all && !run.done && t.step === run.index)) return;
+        t.end = run.clock;
+        t.len = this._stat(t.step).voiced;
+      });
+    },
+    _drillStep(d) {
+      const st = this.state;
+      const run = d.run;
+      if (st.hold) this._endHold();
+      this._closeTakes(run, false);
+      if (this.profile.chime) st.deafUntil = Math.max(st.deafUntil, run.clock + 0.7);
+      const p = run.done ? null : run.cur;
+      if (p && p.ref) this._playRef(p, run);
+      this._syncDrill();
+    },
+    /** A sounded step may start from a reference note (once, short): the profile's, or the step's own. */
+    _playRef(p, run, asked) {
+      if (!global.VTPiano?.playRefPitch) return;
+      // "Auto piano" off silences the note at a step change, never the button that asks for it
+      if (!asked && document.getElementById("chk-auto-piano")?.checked === false) return;
+      try {
+        const note = typeof p.ref === "string" ? p.ref : this.profile.refPitch || "C3";
+        const played = global.VTPiano.playRefPitch(shiftedNote(note), 1.2, false);
+        if (played && played.catch) played.catch(() => {});
+        this.state.deafUntil = Math.max(this.state.deafUntil, run.clock + 1.8);
+      } catch {
+        /* no reference is fine */
+      }
+    },
+    _drillStatus(info) {
+      const st = this.state;
+      const d = this.viz;
+      const C = global.VTViz.C;
+      if (!d || !d.live || info.done || !info.phase) return null;
+      if (!info.phase.sound) {
+        return st.noiseAt >= 0 && d.run.clock - st.noiseAt < 1.2
+          ? { text: L("Se oye sonido · este paso va en silencio", "Sound heard · this step is silent"), color: C.warn }
+          : { text: L("En silencio ✓", "Quiet ✓"), color: C.muted };
+      }
+      if (d.run.clock < st.deafUntil) return { text: L("Escucha…", "Listen…"), color: C.muted };
+      if (info.phase.speech) {
+        const sec = Math.round(this._stat(info.index).voiced);
+        return { text: L(`Con voz en este paso: ${sec} s`, `With voice this step: ${sec} s`), color: C.muted };
+      }
+      const min = global.VTViz.fmtNum(st.minHoldMs / 1000, 1);
+      return { text: L(`Sonidos de ${min} s o más: ${st.holds}`, `Sounds of ${min} s or more: ${st.holds}`), color: C.muted };
+    },
+    /** Both takes of the pair as numbers, or null until A and B are both in. */
+    _pairFacts() {
+      const done = (this.state.pair || []).filter((t) => t.end != null);
+      const a = done.find((t) => t.key === "a");
+      const b = done.find((t) => t.key === "b");
+      if (!a || !b) return null;
+      const ta = drillTake(this._stat(a.step));
+      const tb = drillTake(this._stat(b.step));
+      // A take with no voice to speak of compares nothing
+      if (ta.voiced < 1 || tb.voiced < 1) return null;
+      return drillPairFacts(ta, tb);
+    },
+    /** The numbers of B against A: speech rate and share of the take in pauses, then the level. */
+    _pairLines(f) {
+      const V = global.VTViz;
+      const one = (x) => V.fmtNum(Number(x.toFixed(1)), 1);
+      const pct = (x) => Math.round(x * 100);
+      const pace = [];
+      if (f.a.rate != null && f.b.rate != null) {
+        pace.push(L(`ritmo ${one(f.a.rate)} → ${one(f.b.rate)} síl/s`, `pace ${one(f.a.rate)} → ${one(f.b.rate)} syll/s`));
+      }
+      pace.push(L(`en pausa ${pct(f.a.share)} % → ${pct(f.b.share)} %`, `paused ${pct(f.a.share)}% → ${pct(f.b.share)}%`));
+      let level = "";
+      if (f.dDb != null) {
+        const r = Number(Math.abs(f.dDb).toFixed(1));
+        const sign = r === 0 ? "±" : f.dDb >= 0 ? "+" : "−";
+        level = L(`nivel ${sign}${V.fmtNum(r, 1)} dB`, `level ${sign}${V.fmtNum(r, 1)} dB`);
+      }
+      return { pace: pace.join(" · "), level };
+    },
+    _pairLine(f) {
+      const l = this._pairLines(f);
+      return l.level ? `${l.pace} · ${l.level}` : l.pace;
+    },
+    /** What the numbers mean, in the profile's own words; never a grade. */
+    _pairVerdict(f) {
+      const p = this.profile;
+      const C = global.VTViz.C;
+      // Slower first: a clear take is often a little louder too, and that is fine
+      if (f.slower) return { text: profileText(p, "pairYes") || L("B fue más despacio o con más pausas ✓", "B was slower or had more pauses ✓"), color: C.target };
+      if (f.louder) return { text: profileText(p, "pairLoud") || L("B sonó más fuerte pero no más despacio", "B was louder but no slower"), color: C.warn };
+      return { text: profileText(p, "pairNo") || L("B se parece mucho a A", "B is much like A"), color: C.muted };
+    },
+    /** After Stop: B against A (estimates, relative to the learner's own first take). */
+    _pairCard(ctx, box) {
+      const f = this._pairFacts();
+      if (!f) return;
+      const V = global.VTViz;
+      const { C } = V;
+      const fit = V.guided?.fitLine || V.fitText;
+      const { x, y, w, h } = box;
+      const title = L("B frente a A (aprox.)", "B against A (approx.)");
+      const lines = this._pairLines(f);
+      const verdict = this._pairVerdict(f);
+      ctx.fillStyle = "rgba(170, 195, 230, 0.06)";
+      V.roundRect(ctx, x, y, w, h, 8);
+      ctx.fill();
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      // Narrow: the title, the pace, the level, then what they mean, a line each
+      const rows =
+        h >= 70
+          ? [
+              [title, C.muted, 11, 700],
+              [lines.pace, C.text, 12.5, 800],
+              [lines.level, C.text, 12.5, 800],
+              [verdict.text, verdict.color, 12, 800]
+            ]
+          : [
+              [`${title}: ${this._pairLine(f)}`, C.text, 13, 800],
+              [verdict.text, verdict.color, 12, 800]
+            ];
+      const used = rows.filter((r) => r[0]);
+      const rowH = (h - 8) / used.length;
+      used.forEach(([text, color, px, weight], i) => {
+        ctx.fillStyle = color;
+        fit(ctx, text, x + 10, y + 4 + rowH * (i + 0.5), w - 20, px, weight, 9);
+      });
+    },
+    /** What the take measured, as one line of facts. */
+    _drillSummary(done, total) {
+      const st = this.state;
+      const V = global.VTViz;
+      const num = (x) => (V ? V.fmtNum(x, 1) : x.toFixed(1));
+      const parts = [];
+      if (st.holds > 0) {
+        const min = num(st.minHoldMs / 1000);
+        parts.push(L(`${st.holds} ${st.holds === 1 ? "sonido" : "sonidos"} de ${min} s o más`, `${st.holds} ${st.holds === 1 ? "sound" : "sounds"} of ${min} s or more`));
+        parts.push(L(`el más largo, ${num(Number(st.longest.toFixed(1)))} s`, `the longest, ${num(Number(st.longest.toFixed(1)))} s`));
+      }
+      if (st.quietSec >= 30) {
+        const m = num(Math.round(st.quietSec / 6) / 10);
+        parts.push(L(`${m} min de silencio`, `${m} min of quiet`));
+      }
+      const f = this._pairFacts();
+      if (f) parts.push(this._pairLine(f));
+      if (!parts.length) parts.push(L(`${done} de ${total} pasos`, `${done} of ${total} steps`));
+      return parts.join(" · ");
+    },
+    onStart() {
+      this.viz?.start?.();
+    },
+    onFrame(frame) {
+      if (this.viz) this.viz.frame(frame);
+    },
+    onStop() {
+      const d = this.viz;
+      const st = this.state;
+      const p = this.profile || {};
+      if (d) {
+        if (st.hold) this._endHold();
+        this._closeTakes(d.run, true);
+        this._syncDrill();
+        d.stop();
+      }
+      const patches = {};
+      // Only what was heard is written; ease and clarity stay the learner's to rate
+      if (p.holdsMetric && st.holds > 0) patches[p.holdsMetric] = st.holds;
+      // Whole seconds, rounded down: never more than was held
+      if (p.longestMetric && st.longest >= 1) patches[p.longestMetric] = Math.floor(st.longest);
+      if (p.restMetric && st.quietSec >= 30) patches[p.restMetric] = Math.round(st.quietSec / 6) / 10;
+      const done = d ? d.run.completed : 0;
+      const total = d ? d.run.count : (p.phases || []).length;
+      return { patches, summary: this._drillSummary(done, total) };
+    }
+  });
+
   // API
   const Registry = {
     get(modeId) {

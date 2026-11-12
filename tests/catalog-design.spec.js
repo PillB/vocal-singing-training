@@ -7,7 +7,7 @@
  *   never just the title again, at most two lines on a phone), minutes and
  *   tools. The group badge only once filtered; the sessions badge only once
  *   there is a session.
- * - Canto groups are "Clase" and "Técnica" (Vocal: "Clase" and "Expresión"),
+ * - Canto groups are "Clase" and "Técnica" (Vocal: "Clase" and "Voz y expresión"),
  *   in both languages, with an intro line that uses the same words. The stored
  *   tiers stay "basic" / "advanced".
  * - From the first day sung, a line above the list names today's basics as
@@ -166,7 +166,7 @@ test.describe("Catalog rows", () => {
 
     await page.click('.tier-chip[data-tier="advanced"]');
     const badges = page.locator("#exercise-list .card-ex .badge.tier-advanced");
-    await expect(badges).toHaveCount(11);
+    await expect(badges).toHaveCount(12);
     await expect(badges.first()).toHaveText("Técnica");
     // One line: the badge never wraps.
     const h = await badges.evaluateAll((els) => els.map((b) => b.getBoundingClientRect().height));
@@ -197,13 +197,13 @@ test.describe("Singing groups named for what they hold", () => {
       // Cantar reads warm-ups first (site review round 2).
       heads: ["Calentamientos y técnica", "Ejercicios de la clase"],
       chips: ["Todos", "Técnica", "Clase"],
-      vocal: ["Todos", "Clase", "Expresión"],
+      vocal: ["Todos", "Clase", "Voz y expresión"],
       old: /Básico|Avanzado/
     },
     en: {
       heads: ["Warm-ups & technique", "Class exercises"],
       chips: ["All", "Technique", "Class"],
-      vocal: ["All", "Class", "Expression"],
+      vocal: ["All", "Class", "Voice & expression"],
       old: /\bBasic\b|\bAdvanced\b/
     }
   };
@@ -247,7 +247,7 @@ test.describe("Singing groups named for what they hold", () => {
       const count = (t, k) => VT_EXERCISES[t].filter((e) => e.tier === k).length;
       return [count("singing", "basic"), count("singing", "advanced"), count("vocal", "basic"), count("vocal", "advanced")];
     });
-    expect(tiers).toEqual([16, 11, 9, 11]);
+    expect(tiers).toEqual([16, 12, 9, 15]);
   });
 });
 
@@ -321,7 +321,7 @@ test.describe("Reading order", () => {
     expect(await page.evaluate(() => VT_EXERCISES.singing[0].id)).toBe("s1-vocal-fry");
   });
 
-  test("Hablar keeps its order: Clase, then Expresión", async ({ page }) => {
+  test("Hablar keeps its order: Clase, then Voz y expresión", async ({ page }) => {
     await boot(page, { lang: "es", tab: "vocal" });
     const r = await page.evaluate(() => ({
       first: document.querySelector("#exercise-list .card-ex").dataset.id,

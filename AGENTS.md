@@ -106,7 +106,7 @@ default, alternative controls, boundary values, interruptions, responsive /
 keyboard, and return/reset/replay. Capture a left-to-right Z reading-order
 inventory of visible and folded content plus bounding boxes, stacking context,
 hit-test element, clipping/overlap, focus path, state transitions and timed
-animation frames. All 47 current exercises must appear in the coverage matrix;
+animation frames. All 52 current exercises must appear in the coverage matrix;
 avoid claiming 36-exercise reports cover later additions.
 
 ## Automated gates

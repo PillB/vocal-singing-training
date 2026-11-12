@@ -3595,35 +3595,42 @@
   }
 
   /** Human label for practice mode ids (toasts / chips — never show camelCase). */
+  /**
+   * Mode names for the "live" toast, [es, en]. A mode not listed reads as its
+   * id split into words.
+   */
+  const MODE_NAMES = {
+    rateLadder: ["Escalera de ritmo", "Rate ladder"],
+    volumeSteady: ["Volumen estable", "Steady volume"],
+    volumeLadder: ["Escalera de volumen", "Volume ladder"],
+    shAirLadder: ["Escalera de aire SH", "SH air ladder"],
+    breathS: ["Soporte de aire", "Breath support"],
+    pitchHold: ["Sostén de tono", "Pitch hold"],
+    pitchMatch: ["Afinar nota", "Pitch match"],
+    pitchChord: ["Acordes / solfeo", "Chords / solfege"],
+    pitchSong: ["Canción", "Song stanzas"],
+    scaleSteps: ["Escala", "Scale steps"],
+    sirenRange: ["Sirenas", "Sirens"],
+    sovtFlow: ["Flujo SOVT", "SOVT flow"],
+    humTargets: ["Tarareo", "Hum targets"],
+    onsetReps: ["Ataques suaves", "Easy onset"],
+    staccatoLegato: ["Staccato / legato", "Staccato / legato"],
+    dynamicSwell: ["Dinámica", "Dynamics"],
+    pitchContour: ["Contorno", "Pitch contour"],
+    weekPlan: ["Plan 12 semanas", "12-week plan"],
+    recordOnly: ["Grabar y revisar", "Record & review"],
+    pauseDetect: ["Pausas", "Pauses"],
+    fillerDetect: ["Muletillas", "Fillers"],
+    voiceDrill: ["Práctica guiada", "Guided practice"]
+  };
+
   function modeDisplayName(modeId) {
     const es =
       (window.VTI18n && VTI18n.lang === "es") ||
       (document.documentElement.lang || "").startsWith("es");
-    const map = {
-      rateLadder: es ? "Escalera de ritmo" : "Rate ladder",
-      volumeSteady: es ? "Volumen estable" : "Steady volume",
-      volumeLadder: es ? "Escalera de volumen" : "Volume ladder",
-      shAirLadder: es ? "Escalera de aire SH" : "SH air ladder",
-      breathS: es ? "Soporte de aire" : "Breath support",
-      pitchHold: es ? "Sostén de tono" : "Pitch hold",
-      pitchMatch: es ? "Afinar nota" : "Pitch match",
-      pitchChord: es ? "Acordes / solfeo" : "Chords / solfege",
-      pitchSong: es ? "Canción" : "Song stanzas",
-      scaleSteps: es ? "Escala" : "Scale steps",
-      sirenRange: es ? "Sirenas" : "Sirens",
-      sovtFlow: es ? "Flujo SOVT" : "SOVT flow",
-      humTargets: es ? "Tarareo" : "Hum targets",
-      onsetReps: es ? "Ataques suaves" : "Easy onset",
-      staccatoLegato: es ? "Staccato / legato" : "Staccato / legato",
-      dynamicSwell: es ? "Dinámica" : "Dynamics",
-      pitchContour: es ? "Contorno" : "Pitch contour",
-      weekPlan: es ? "Plan 12 semanas" : "12-week plan",
-      recordOnly: es ? "Grabar y revisar" : "Record & review",
-      pauseDetect: es ? "Pausas" : "Pauses",
-      fillerDetect: es ? "Muletillas" : "Fillers"
-    };
     if (!modeId) return es ? "práctica" : "practice";
-    return map[modeId] || String(modeId).replace(/([A-Z])/g, " $1").trim();
+    const names = MODE_NAMES[modeId];
+    return names ? names[es ? 0 : 1] : String(modeId).replace(/([A-Z])/g, " $1").trim();
   }
 
   function setPracticeUI(live) {
@@ -3729,12 +3736,17 @@
   }
 
   /**
+   * Modes that open on silent steps and sound their own reference note at the
+   * first step that needs one: s19 (openSpace) and the guided voice drills.
+   */
+  const OWN_REFERENCE_MODES = ["openSpace", "voiceDrill"];
+
+  /**
    * Whether Empezar itself starts the piano: an exercise that wants sound,
-   * except s19, which opens on silent steps (its mode plays its own reference
-   * at the first sung step).
+   * unless its mode sounds its own reference when a step asks for it.
    */
   function soundsOnStart(ex, profile) {
-    return exerciseWantsSound(ex, profile) && profile?.mode !== "openSpace";
+    return exerciseWantsSound(ex, profile) && !OWN_REFERENCE_MODES.includes(profile?.mode);
   }
 
   async function startExerciseSound(ex, profile) {

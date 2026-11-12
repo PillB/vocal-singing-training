@@ -44,7 +44,12 @@
     "s14-staccato-legato": ["staccato y legato", "staccato and legato"],
     "v11-kill-fillers": ["muletillas", "fillers"],
     "v17-strategic-concision": ["ir al grano", "getting to the point"],
-    "v20-energy-match": ["energía", "energy"]
+    "v20-energy-match": ["energía", "energy"],
+    "v21-straw-to-speech": ["pajita y frase", "straw to speech"],
+    "v22-voice-recovery": ["silencio y pajita", "quiet, then straw"],
+    "v23-clear-speech": ["habla clara", "clear speech"],
+    "v24-vocal-function": ["función vocal", "vocal function"],
+    "s28-vocal-function": ["función vocal", "vocal function"]
   };
 
   /* A step is [exerciseId, seconds]. Seconds never exceed the exercise's own
@@ -57,21 +62,20 @@
       grade: "lim",
       steps: [
         ["s18-costal-breath", 60],
-        ["s4-lip-trills", 75],
-        ["s7-humming", 60],
+        ["v21-straw-to-speech", 300],
         ["v2-volume", 90]
       ],
       es: {
         name: "Antes de hablar",
         goal: "Para una clase, una reunión o una llamada larga.",
-        why: "Los sonidos con la boca medio cerrada (trinos, pajita, hum) bajan por un rato la presión que hace falta para que la voz arranque y el esfuerzo que se siente. Que calentar mejore cómo hablas después está poco probado.",
+        why: "Los sonidos con la boca medio cerrada (una pajita, trinos, hum) bajan por un rato la presión que hace falta para que la voz arranque y el esfuerzo que se siente. Que calentar mejore cómo hablas después está poco probado.",
         tip: "Termina unos minutos antes de empezar: en un estudio, justo después de calentar la voz se sintió más esforzada, y a los cinco minutos de calma ya no.",
         src: "Apfelbach y Guzmán 2024 (revisión de 53 estudios); Whitling et al. 2023"
       },
       en: {
         name: "Before you speak",
         goal: "For a class, a meeting or a long call.",
-        why: "Sounds made with the mouth half closed (trills, a straw, humming) lower, for a while, the pressure it takes to start the voice and the effort you feel. That warming up improves how you speak afterwards is barely tested.",
+        why: "Sounds made with the mouth half closed (a straw, trills, humming) lower, for a while, the pressure it takes to start the voice and the effort you feel. That warming up improves how you speak afterwards is barely tested.",
         tip: "Finish a few minutes before you start: in one study the voice felt more effortful right after warming up, and no longer did after five quiet minutes.",
         src: "Apfelbach & Guzmán 2024 (review of 53 studies); Whitling et al. 2023"
       }
@@ -81,21 +85,21 @@
       track: "vocal",
       grade: "mod",
       steps: [
-        ["s17-jaw-neck-release", 90],
-        ["s6-straw", 240]
+        ["s17-jaw-neck-release", 105],
+        ["v22-voice-recovery", 600]
       ],
       es: {
         name: "Después de hablar mucho",
         goal: "Para soltar la voz tras dar clase o una jornada de llamadas.",
         why: "En un ensayo con 114 adultos sanos, tras una hora de forzar la voz, cinco minutos de silencio y cinco de sonido suave por una pajita la recuperaron mejor que diez de silencio. Es un resultado a corto plazo, de un solo estudio.",
-        tip: "Antes de esta rutina, cinco minutos sin hablar y un vaso de agua.",
+        tip: "Ten a mano un vaso de agua y tu pajita. Los cinco minutos de silencio van dentro de la rutina: un tono te avisa cuando terminan.",
         src: "Peng et al. 2026, ensayo aleatorizado"
       },
       en: {
         name: "After a lot of talking",
         goal: "To ease the voice after teaching or a day of calls.",
         why: "In a trial with 114 healthy adults, after an hour of loading the voice, five minutes of silence and five of soft sound through a straw recovered it better than ten of silence. It is a short-term result from one study.",
-        tip: "Before this routine, five minutes without talking and a glass of water.",
+        tip: "Have a glass of water and your straw at hand. The five quiet minutes are inside the routine: a soft tone tells you when they end.",
         src: "Peng et al. 2026, randomised trial"
       }
     },
@@ -104,9 +108,9 @@
       track: "vocal",
       grade: "lim",
       steps: [
+        ["v23-clear-speech", 240],
         ["v1-diction", 150],
-        ["v10-power-pause", 150],
-        ["v14-pace-variation", 150]
+        ["v10-power-pause", 150]
       ],
       es: {
         name: "Que se te entienda",
@@ -170,6 +174,29 @@
         why: "Learning to notice your own fillers and put a pause in their place reduced them in two studies with students, of six and of four people. That is little, and short term.",
         tip: "",
         src: "Mancuso & Miltenberger 2016; Spieler & Miltenberger 2017"
+      }
+    },
+    {
+      id: "v-voice",
+      track: "vocal",
+      grade: "mod",
+      steps: [
+        ["v21-straw-to-speech", 300],
+        ["v24-vocal-function", 420]
+      ],
+      es: {
+        name: "Voz en forma",
+        goal: "Un plan de seis semanas que entrena la voz con sonidos suaves.",
+        why: "Los Ejercicios de Función Vocal alargaron el tiempo que personas con la voz sana podían sostener un sonido, en ensayos controlados pequeños. Mejora la tarea que se entrena: no está probado que cambie cómo suena tu voz al hablar.",
+        tip: "La dosis de los estudios es dos veces al día, mañana y noche. Todo suave: nunca aguantes un sonido más allá de lo cómodo.",
+        src: "Stemple et al. 1994; Bane et al. 2019; Angadi et al. 2019 (revisión)"
+      },
+      en: {
+        name: "A voice in shape",
+        goal: "A six-week plan that trains the voice with soft sounds.",
+        why: "The Vocal Function Exercises lengthened how long people with healthy voices could sustain a sound, in small controlled trials. What improves is the trained task: it is not shown to change how your voice sounds when you speak.",
+        tip: "The dose in the studies is twice a day, morning and evening. All of it soft: never hold a sound past easy.",
+        src: "Stemple et al. 1994; Bane et al. 2019; Angadi et al. 2019 (review)"
       }
     },
     {
@@ -249,6 +276,29 @@
         why: "The straw is the best studied item on the list. The rest are coordination exercises taught in nearly every singing class, with few studies of their own.",
         tip: "",
         src: "Apfelbach & Guzmán 2024 (review)"
+      }
+    },
+    {
+      id: "s-function",
+      track: "singing",
+      grade: "mod",
+      steps: [
+        ["s28-vocal-function", 420],
+        ["s6-straw", 180]
+      ],
+      es: {
+        name: "Función vocal",
+        goal: "Un plan de seis semanas: notas largas y suaves, y la pajita.",
+        why: "Los Ejercicios de Función Vocal alargaron el tiempo que cantantes y no cantantes con la voz sana podían sostener un sonido, en ensayos controlados pequeños. Mejora la tarea que se entrena: nadie ha mostrado que el canto suene mejor por ello.",
+        tip: "La dosis de los estudios es dos veces al día, mañana y noche. Si las notas te quedan incómodas, cambia la octava antes de empezar.",
+        src: "Stemple et al. 1994; Sabol et al. 1995; Bane et al. 2019"
+      },
+      en: {
+        name: "Vocal function",
+        goal: "A six-week plan: long, soft notes, and the straw.",
+        why: "The Vocal Function Exercises lengthened how long singers and non-singers with healthy voices could sustain a sound, in small controlled trials. What improves is the trained task: nobody has shown that singing sounds better for it.",
+        tip: "The dose in the studies is twice a day, morning and evening. If the notes sit uncomfortably, move the octave before you start.",
+        src: "Stemple et al. 1994; Sabol et al. 1995; Bane et al. 2019"
       }
     },
     {

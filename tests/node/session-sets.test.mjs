@@ -166,10 +166,10 @@ test("no grade is drawn as the maximum: no technique here has strong long-term e
 test("a set is resolved in the page's language, with a timer for every step", () => {
   const es = win.VTSets.resolve("v-aftertalk");
   assert.equal(es.name, "Después de hablar mucho");
-  assert.deepEqual(plain(es.order), ["s17-jaw-neck-release", "s6-straw"]);
-  assert.deepEqual({ ...es.sec }, { "s17-jaw-neck-release": 90, "s6-straw": 240 });
-  assert.equal(es.totalSec, 330);
-  assert.equal(es.minutes, 6);
+  assert.deepEqual(plain(es.order), ["s17-jaw-neck-release", "v22-voice-recovery"]);
+  assert.deepEqual({ ...es.sec }, { "s17-jaw-neck-release": 105, "v22-voice-recovery": 600 });
+  assert.equal(es.totalSec, 705);
+  assert.equal(es.minutes, 12);
   const en = page({ lang: "en" }).win.VTSets.resolve("v-aftertalk");
   assert.equal(en.name, "After a lot of talking");
   assert.equal(win.VTSets.resolve("v-nothing"), null);
@@ -178,13 +178,13 @@ test("a set is resolved in the page's language, with a timer for every step", ()
 
 test("a step this build does not have is left out, and a set left with one step is no set", () => {
   const without = (ids) => page({ exercises: all.filter((e) => !ids.includes(e.id)) }).win.VTSets;
-  const one = without(["s7-humming"]).resolve("v-pretalk");
-  assert.deepEqual(plain(one.order), ["s18-costal-breath", "s4-lip-trills", "v2-volume"]);
-  assert.equal(one.sec["s7-humming"], undefined);
-  assert.equal(one.totalSec, 225);
-  assert.equal(without(["s6-straw"]).resolve("v-aftertalk"), null);
+  const one = without(["v21-straw-to-speech"]).resolve("v-pretalk");
+  assert.deepEqual(plain(one.order), ["s18-costal-breath", "v2-volume"]);
+  assert.equal(one.sec["v21-straw-to-speech"], undefined);
+  assert.equal(one.totalSec, 150);
+  assert.equal(without(["v22-voice-recovery"]).resolve("v-aftertalk"), null);
   assert.deepEqual(
-    plain(without(["s6-straw"]).list("vocal").map((s) => s.id)),
+    plain(without(["v22-voice-recovery"]).list("vocal").map((s) => s.id)),
     vocalIds().filter((id) => id !== "v-aftertalk")
   );
 });

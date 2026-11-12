@@ -16,8 +16,8 @@
     "sha": "63e8ab5a97d802fc"
   },
   "css/scenes/guided.css": {
-    "v": "20261002a",
-    "sha": "d2f429e0ea5040a8"
+    "v": "20261111a",
+    "sha": "d26ddf830b27b162"
   },
   "css/scenes/pitch.css": {
     "v": "20261002a",
@@ -68,8 +68,8 @@
     "sha": "319fd17f4fbb6fd1"
   },
   "js/app.js": {
-    "v": "20261111b",
-    "sha": "afe986f18e3ff448"
+    "v": "20261111c",
+    "sha": "7007743a4fca9a92"
   },
   "js/auth-users.generated.js": {
     "v": "20261006a",
@@ -96,12 +96,12 @@
     "sha": "012bb5f186b7dfdd"
   },
   "js/exercises-data.js": {
-    "v": "20261106c",
-    "sha": "d63a575987ce3d87"
+    "v": "20261111b",
+    "sha": "fa00b20ec34142ec"
   },
   "js/exercises-locale-es.js": {
-    "v": "20261106c",
-    "sha": "e4d37a63c03354f1"
+    "v": "20261111b",
+    "sha": "2cefb15eaaa7f016"
   },
   "js/experiments-config.js": {
     "v": "20260924e",
@@ -116,8 +116,8 @@
     "sha": "178ba56877e20400"
   },
   "js/i18n.js": {
-    "v": "20261111a",
-    "sha": "c99e7918bebfbe08"
+    "v": "20261111c",
+    "sha": "a6b9ecf9d70e7750"
   },
   "js/license.js": {
     "v": "20261103d",
@@ -148,12 +148,12 @@
     "sha": "a0e0e06dc4bcd25e"
   },
   "js/practice-modes.js": {
-    "v": "20261106c",
-    "sha": "61d2c8a2dd8b1a7e"
+    "v": "20261112a",
+    "sha": "a0e90e29f3e0d97b"
   },
   "js/practice-profiles.js": {
-    "v": "20261106c",
-    "sha": "1feaf3f73c2fa516"
+    "v": "20261111b",
+    "sha": "8bdcc17855fdd992"
   },
   "js/privacy-switch.js": {
     "v": "20261006b",
@@ -203,13 +203,17 @@
     "v": "20261005g",
     "sha": "bc645ea3fdd61e0a"
   },
+  "js/scenes/voice-drill.js": {
+    "v": "20261111b",
+    "sha": "59607a48e62f6131"
+  },
   "js/scenes/volume.js": {
     "v": "20261002a",
     "sha": "5f2c4f4ee948f2a5"
   },
   "js/session-sets.js": {
-    "v": "20261111d",
-    "sha": "04a83bd7fa362b7f"
+    "v": "20261111e",
+    "sha": "6a3f1cdae2ed84c4"
   },
   "js/session.js": {
     "v": "20261111a",

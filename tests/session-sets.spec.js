@@ -125,7 +125,7 @@ test.describe("Goal sets: the picker", () => {
     await expect(page.locator("#sets-title")).toHaveText("Rutinas por objetivo");
     await expect(page.locator("#sets-sub")).toContainText("al hablar");
     const names = await page.locator(".set-card h4").allTextContents();
-    expect(names).toEqual(["Antes de hablar", "Después de hablar mucho", "Que se te entienda", "Voz con expresión", "Pausas en vez de muletillas"]);
+    expect(names).toEqual(["Antes de hablar", "Después de hablar mucho", "Que se te entienda", "Voz con expresión", "Pausas en vez de muletillas", "Voz en forma"]);
     // Opening the picker starts nothing.
     await expect(page.locator("#view-home")).toHaveClass(/active/);
     expect(await session(page)).toBeNull();
@@ -146,7 +146,7 @@ test.describe("Goal sets: the picker", () => {
         start: c.querySelector(".set-start").textContent.trim()
       }))
     );
-    expect(cards.map((c) => c.id)).toEqual(["s-warmup", "s-pitch", "s-technique", "s-range", "s-cooldown"]);
+    expect(cards.map((c) => c.id)).toEqual(["s-warmup", "s-pitch", "s-technique", "s-function", "s-range", "s-cooldown"]);
     expect(cards[0].meta).toBe("8 min · 6 pasos");
     expect(cards[0].steps).toEqual(["soltar mandíbula", "respiración", "trinos", "sirenas", "hum", "escala de cinco notas"]);
     for (const c of cards) {
@@ -212,13 +212,13 @@ test.describe("Goal sets: the picker", () => {
     await expect(page.locator("#btn-sets")).toHaveText("Routines by goal");
     await page.locator("#btn-sets").click();
     await expect(page.locator(".set-card h4").first()).toHaveText("Before you speak");
-    await expect(page.locator(".set-meta").first()).toHaveText("5 min · 4 steps");
+    await expect(page.locator(".set-meta").first()).toHaveText("8 min · 3 steps");
     await expect(page.locator(".set-grade").first()).toHaveText("Limited support");
     await expect(page.locator(".set-start").first()).toHaveText("▶ Start");
   });
 
   test("a set whose steps were all practised today says so, in words and with a tick per step", async ({ page }) => {
-    await boot(page, { tab: "vocal", todayEx: ["s17-jaw-neck-release", "s6-straw", "v1-diction"] });
+    await boot(page, { tab: "vocal", todayEx: ["s17-jaw-neck-release", "v22-voice-recovery", "v1-diction"] });
     await openSheet(page);
     const done = page.locator('.set-card[data-set="v-aftertalk"]');
     await expect(done.locator(".set-today")).toHaveText("✓ Hoy ya practicaste todos sus pasos");
@@ -240,13 +240,13 @@ test.describe("Goal sets: running one", () => {
     expect(s.path).toBe("set");
     expect(s.set).toBe("v-aftertalk");
     expect(s.track).toBe("vocal");
-    expect(s.order).toEqual(["s17-jaw-neck-release", "s6-straw"]);
+    expect(s.order).toEqual(["s17-jaw-neck-release", "v22-voice-recovery"]);
     // One short line, said once: the set and its size.
     await expect(page.locator("#toast")).toHaveText("Después de hablar mucho: 2 pasos");
 
     await expect(page.locator("#session-banner-text")).toHaveText("Ejercicio 1 de 2 · Después de hablar mucho");
-    // The set's 1:30, not the exercise's own 2:00.
-    await expect(page.locator("#timer-display")).toHaveText("01:30");
+    // The set's 1:45, not the exercise's own 2:00.
+    await expect(page.locator("#timer-display")).toHaveText("01:45");
     expect(await trail(page)).toBe("n.");
     // A singing warm-up borrowed by a speaking set is a step of that set, not "Canto".
     await expect(page.locator("#ex-track-badge")).toHaveText("Básicos · calentamiento");
@@ -254,8 +254,8 @@ test.describe("Goal sets: running one", () => {
 
     await next(page);
     await expect(page.locator("#session-banner-text")).toHaveText("Ejercicio 2 de 2 · Después de hablar mucho");
-    // 4:00 of the straw's own 6:00.
-    await expect(page.locator("#timer-display")).toHaveText("04:00");
+    // The recovery drill keeps its whole 10:00: its steps run on their own clock.
+    await expect(page.locator("#timer-display")).toHaveText("10:00");
     expect(await trail(page)).toBe("dn");
     await expect(page.locator("#ex-track-badge")).toHaveAttribute("data-track", "vocal");
   });
@@ -314,7 +314,7 @@ test.describe("Goal sets: running one", () => {
     await page.clock.runFor(500);
     await expect(page.locator("#session-banner-text")).toHaveText("Ejercicio 2 de 3 · Que se te entienda");
     expect(await trail(page)).toBe("dn.");
-    expect((await session(page)).sec).toEqual({ "v1-diction": 150, "v10-power-pause": 150, "v14-pace-variation": 150 });
+    expect((await session(page)).sec).toEqual({ "v23-clear-speech": 240, "v1-diction": 150, "v10-power-pause": 150 });
   });
 
   test("a stored set this build does not know keeps a name and ends as a plain routine", async ({ page }) => {
@@ -356,9 +356,9 @@ test.describe("Goal sets: the ending", () => {
     await expect(page.locator("#set-done-steps li")).toHaveCount(2);
     await expect(page.locator("#set-done-steps li.is-done")).toHaveCount(1);
     await expect(page.locator("#set-done-steps li").nth(0)).toHaveText(/✓\s*soltar mandíbula\s*\(practicado hoy\)/);
-    await expect(page.locator("#set-done-steps li").nth(1)).toHaveText(/·\s*pajita\s*\(sin practicar\)/);
+    await expect(page.locator("#set-done-steps li").nth(1)).toHaveText(/·\s*silencio y pajita\s*\(sin practicar\)/);
     await expect(page.locator("#set-done-line")).toHaveText("Practicaste 1 de 2 pasos. Lo practicado ya cuenta en tu día.");
-    await expect(page.locator("#set-done-tip")).toHaveText(/cinco minutos sin hablar/);
+    await expect(page.locator("#set-done-tip")).toHaveText(/cinco minutos de silencio/);
     await expect(page.locator("#set-done-close")).toBeFocused();
     for (const id of ["#set-done-close", "#set-done-more"]) {
       expect((await page.locator(id).boundingBox()).height, id).toBeGreaterThanOrEqual(tapFloorLimit(44));

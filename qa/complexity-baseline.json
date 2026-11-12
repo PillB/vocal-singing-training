@@ -183,12 +183,6 @@
     },
     {
       "file": "js/app.js",
-      "sha": "feffd9dc51580b6fab054d1cc681614fc1b4a72f15d0942e5c70af6f52a75454",
-      "complexity": 28,
-      "name": "Function 'modeDisplayName'"
-    },
-    {
-      "file": "js/app.js",
       "sha": "fd51c793293c338bb53e96ab8f2169b8e6816ecae60c3c6c7b93893afa17ebaa",
       "complexity": 28,
       "name": "Function 'paintScore'"

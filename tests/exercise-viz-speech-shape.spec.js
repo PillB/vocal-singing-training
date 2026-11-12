@@ -17,6 +17,16 @@ const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";
 
 async function boot(page, lang = "es", opts = {}) {
   const errors = [];
+  // Exercise pictures must not depend on the live account worker's CORS or
+  // availability. Account authentication itself has separate integration tests.
+  await page.route("**/v1/auth/methods", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: { "access-control-allow-origin": "*" },
+      body: JSON.stringify({ email: false, google: false, trialDays: 7 })
+    })
+  );
   page.on("pageerror", (e) => errors.push(String(e.message || e)));
   await page.addInitScript((l) => {
     try {

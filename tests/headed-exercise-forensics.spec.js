@@ -32,6 +32,10 @@ const ROOT = path.join(__dirname, "..");
 const SHOT_ROOT = path.join(ROOT, "qa", "screenshots", "exercise-ui-formats");
 const REPORT_JSON = path.join(ROOT, "qa", "geometry", "headed-exercise-forensics-report.json");
 const REPORT_MD = path.join(ROOT, "docs", "27-HEADED-EXERCISE-FORENSICS.md");
+// qa/geometry is gitignored, so a clean checkout has no such folder. The nightly split runs this spec with only
+// exercise-live-forensics before it, which makes the folder at its very end; if that one times out, the first
+// exercise's report write here threw ENOENT and every exercise after it went unchecked.
+ensureDir(path.dirname(REPORT_JSON));
 
 const SLOWMO = Number(process.env.SLOWMO || 90) || 90;
 const LIVE_SECS = Number(process.env.LIVE_SECS || 3) || 3;

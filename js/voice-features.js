@@ -40,6 +40,15 @@
   function frameDt(frame) {
     return clamp(((frame && frame.dtMs) || 16) / 1000, 0, 0.1);
   }
+  /**
+   * Seconds of wall time since the frame before, up to `maxSec`: the
+   * engine's uncapped `wallDtMs` (or `dtMs` from a caller without it); 0
+   * for a zero, negative or non-finite one.
+   */
+  function wallDt(frame, maxSec) {
+    const ms = frame ? (frame.wallDtMs != null ? frame.wallDtMs : frame.dtMs) : 0;
+    return Number.isFinite(ms) && ms > 0 ? Math.min(ms / 1000, maxSec) : 0;
+  }
 
   /** A fixed-size ring of numbers, oldest first when read. */
   class Ring {
@@ -487,6 +496,9 @@
       this.hangMs = opts.hangMs != null ? opts.hangMs : 220;
       this.onsetMs = opts.onsetMs != null ? opts.onsetMs : 40;
       this.minPauseSec = opts.minPauseSec != null ? opts.minPauseSec : 0.25;
+      // Up to how many seconds of wall time one frame moves `t` on (see
+      // feedOnWallTime); 0, the default, keeps `t` on the capped frame time
+      this.maxDt = opts.maxDt > 0 ? opts.maxDt : 0;
       this.cb = opts;
       this._floorRing = new Ring(Math.round(6 * 30));
       // The last 1.2 s of learning steps: level, time, clarity, how high
@@ -948,6 +960,22 @@
     }
   }
 
+  /**
+   * A Vad made with { maxDt } keeps `t` on the frames' wall time, up to
+   * maxDt seconds a frame, for a caller whose own clock runs on it (a
+   * guided drill's steps: at 10 fps the capped frame time is half the wall
+   * time, and a step's talking share compared spans on two clocks). The
+   * frame's own samples are dated with the capped time, as ever; the rest
+   * of a longer gap comes first, as time the Vad stayed as it was (the
+   * samples are the last ~43 ms before the frame). feed() itself is
+   * unchanged, so every other Vad keeps the capped time.
+   */
+  const feedFrame = Vad.prototype.feed;
+  Vad.prototype.feed = function feedOnWallTime(frame) {
+    if (this.maxDt > 0) this.t += Math.max(0, wallDt(frame, this.maxDt) - frameDt(frame));
+    return feedFrame.call(this, frame);
+  };
+
   /* —— Level relative to you —— */
 
   /**
@@ -1325,6 +1353,7 @@
     percentile,
     median,
     clamp,
-    frameDt
+    frameDt,
+    wallDt
   };
 })(typeof window !== "undefined" ? window : globalThis);

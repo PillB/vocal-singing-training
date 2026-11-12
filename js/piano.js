@@ -6,7 +6,7 @@
 (function (global) {
   "use strict";
 
-  /** Build chromatic map C1–C6 so octave-shifted progressions always resolve. */
+  /** Build chromatic map C0–B8 so every octave-shifted progression (±2) resolves. */
   function buildNoteFreqMap() {
     const sharp = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
     const flatPrefer = {
@@ -17,7 +17,7 @@
       "A#": "Bb"
     };
     const map = {};
-    for (let oct = 1; oct <= 6; oct++) {
+    for (let oct = 0; oct <= 8; oct++) {
       for (let i = 0; i < 12; i++) {
         // MIDI: C4 = 60 → 12*(oct+1)+i with C=0
         const midi = 12 * (oct + 1) + i;
@@ -269,6 +269,32 @@
 
   /** Safari rejects exponentialRamp if value ≤ 0; keep a tiny floor. */
   const GAIN_EPS = 0.0001;
+  // iOS can keep resume() pending through a call or an "interrupted"
+  // session. A Start that awaits it would wait forever with the microphone
+  // granted; past this the piano reports "not running" and Start goes on
+  // (the engine's own resume wait then offers Retry).
+  const RESUME_WAIT_MS = 8000;
+  // A resume asked for while an earlier one is still pending past its 8 s
+  // still gets this long: the interruption may just have ended.
+  const RESUME_RETRY_MS = 250;
+  const clockNow = () => (typeof performance !== "undefined" ? performance.now() : Date.now());
+
+  /** Wait for `promise` at most `ms`; true if it settled in time. */
+  function settledWithin(promise, ms) {
+    let timer;
+    const late = new Promise((resolve) => {
+      timer = setTimeout(() => resolve(false), ms);
+    });
+    return Promise.race([Promise.resolve(promise).then(() => true, () => true), late]).finally(() => clearTimeout(timer));
+  }
+  /**
+   * How long each chord (or each note, one at a time) sounds: the 3/4/5 s
+   * control when held or one note at a time, else chordSec.
+   */
+  function stepSeconds(chordSec, held, sustainSec) {
+    if (!held) return Number(chordSec) || 2.2;
+    return Math.max(1.5, Math.min(5.5, Number(sustainSec) || Number(chordSec) || 4));
+  }
   function safeExpRamp(param, value, time) {
     const v = Math.max(GAIN_EPS, Number(value) || GAIN_EPS);
     try {
@@ -299,6 +325,59 @@
     };
   }
 
+  /**
+   * A note's loudness over time. Cross-browser: never ramps to 0 (Safari throws
+   * or mutes). A sustained note holds near full level so students can home in
+   * for 3–5 s, then releases gently.
+   */
+  function noteEnvelope(gain, t0, duration, velocity, sustain) {
+    try {
+      gain.setValueAtTime(GAIN_EPS, t0);
+    } catch {
+      gain.value = GAIN_EPS;
+    }
+    const vel = Math.max(GAIN_EPS, velocity || 0.4);
+    safeExpRamp(gain, vel, t0 + 0.012);
+    if (sustain && duration >= 2.5) {
+      const holdEnd = t0 + Math.max(0.2, duration - 0.45);
+      safeExpRamp(gain, vel * 0.72, t0 + 0.06);
+      try {
+        gain.setValueAtTime(Math.max(GAIN_EPS, vel * 0.68), holdEnd);
+      } catch {
+        /* ignore */
+      }
+      safeExpRamp(gain, GAIN_EPS, t0 + duration);
+    } else {
+      safeExpRamp(gain, vel * 0.55, t0 + 0.08);
+      safeExpRamp(gain, GAIN_EPS, t0 + duration);
+    }
+  }
+
+  /** The soft hammer noise at a note's start: its source, which the caller stops with the strings. */
+  function hammerNoise(ctx, freq, t0, velocity, out) {
+    const noiseDur = 0.03;
+    const bufferSize = Math.floor(ctx.sampleRate * noiseDur);
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufferSize, 3);
+    }
+    const noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+    const ng = ctx.createGain();
+    const filter = ctx.createBiquadFilter();
+    filter.type = "bandpass";
+    filter.frequency.value = Math.min(freq * 4, 4000);
+    filter.Q.value = 1.2;
+    ng.gain.value = velocity * 0.15;
+    noise.connect(filter);
+    filter.connect(ng);
+    ng.connect(out);
+    noise.start(t0);
+    noise.stop(t0 + noiseDur);
+    return noise;
+  }
+
   class PianoEngine {
     constructor() {
       this.ctx = null;
@@ -310,6 +389,15 @@
       this.onChordChange = null;
       this._monitor = null; // AnalyserNode on master for audibility checks
       this._visibilityBound = false;
+      this._observedContexts = new WeakSet();
+      this.onStateChange = null;
+      // Every Stop (stopAll) bumps this: a sound still waiting for a held context when the
+      // learner stopped is dropped, not played after the Stop under the next exercise
+      this._stopGen = 0;
+      // Every progression asked for bumps this: the newest plays, an older one still waiting is dropped
+      this._progGen = 0;
+      // Every silence bumps this: a pass's chord and note timers that fire after it announce nothing
+      this._passGen = 0;
     }
 
     _wireGraph(ctx) {
@@ -327,6 +415,16 @@
       this.comp.connect(ctx.destination);
       this._monitor = ctx.createAnalyser();
       this._monitor.fftSize = 1024;
+      if (!this._observedContexts.has(ctx)) {
+        this._observedContexts.add(ctx);
+        ctx.addEventListener?.("statechange", () => {
+          // A retired iOS context can close *after* its replacement starts.
+          // Do not let that stale event override the new graph's UI state.
+          if (this.ctx !== ctx) return;
+          if (ctx.state === "running") this._resumeWait = null;
+          this.onStateChange?.(ctx.state);
+        });
+      }
       try {
         this.master.connect(this._monitor);
       } catch {
@@ -355,7 +453,7 @@
       document.addEventListener("pointerdown", () => {
         // Opportunistic unlock on any user gesture (Safari policy)
         if (this.ctx && (this.ctx.state === "suspended" || this.ctx.state === "interrupted")) {
-          this.resume().catch(() => {});
+          this.unlock().catch(() => {});
         }
       }, { passive: true });
     }
@@ -373,7 +471,7 @@
       // Safari iOS: "suspended" | "interrupted"; both need resume()
       if (this.ctx.state === "suspended" || this.ctx.state === "interrupted") {
         try {
-          await this.ctx.resume();
+          await this._awaitResume(this.ctx.resume(), "Piano ensure resume failed");
         } catch (e) {
           console.warn("Piano ensure resume failed", e);
         }
@@ -393,21 +491,46 @@
       return this.ctx;
     }
 
+    /** User-tap recovery for WebKit's running-but-frozen render clock. */
+    rebuildStalledContext() {
+      const AC = getAudioContextCtor();
+      if (!AC) return false;
+      let fresh;
+      try { fresh = new AC({ latencyHint: "interactive" }); }
+      catch {
+        try { fresh = new AC(); } catch { return false; }
+      }
+      const retired = this.ctx;
+      this._silence();
+      this._wireGraph(fresh);
+      try { retired?.close?.()?.catch?.(() => {}); } catch { /* old Safari device may be stuck */ }
+      // Both playback sources are scheduled synchronously in the tap, before
+      // a resume promise can yield and lose Safari's transient activation.
+      this._primeSoundSync();
+      if (fresh.state !== "running") fresh.resume().catch(() => {});
+      return true;
+    }
+
     /**
      * Call inside a user-gesture handler to unlock Web Audio
      * (Safari, Chrome, Firefox, Edge, Opera, mobile WebViews).
      * Buffer-source blip is more reliable than oscillator-only on some WebKit builds.
      */
-    async unlock() {
-      await this.ensure();
-      try {
-        if (this.ctx.state === "suspended" || this.ctx.state === "interrupted") {
-          await this.ctx.resume();
-        }
-      } catch {
-        /* ignore */
+    _unlockGraphSync() {
+      if (!this.ctx || this.ctx.state === "closed") {
+        this.playing = [];
+        this.master = null;
+        this.comp = null;
+        this._monitor = null;
+        this._wireGraph(getSharedAudioContext());
+      } else if (!this.master || !this.comp) {
+        this._wireGraph(this.ctx);
       }
-      // Dual prime: silent buffer + tiny oscillator (covers WebKit + Gecko quirks)
+    }
+
+    _primeSoundSync() {
+      // Both sources MUST start before the first await: iOS can revoke the
+      // transient user activation when an AudioContext.resume promise yields.
       try {
         const t = this.ctx.currentTime;
         const frames = Math.max(1, Math.floor(this.ctx.sampleRate * 0.02));
@@ -438,13 +561,52 @@
       } catch (e) {
         console.warn("Piano unlock osc blip failed", e);
       }
+    }
+
+    /**
+     * Wait for `resuming` (this.ctx.resume()) at most RESUME_WAIT_MS; true if
+     * it settled. iOS can hold every resume through a call or Siri, and Start
+     * asks for one at each piano step (unlock, ensure, resume, the
+     * progression's own): every resume of this context shares the first
+     * one's 8 s, so a held session costs Start one wait, not one per step.
+     */
+    _awaitResume(resuming, what) {
+      const ctx = this.ctx;
+      const now = clockNow();
+      const held = this._resumeWait?.ctx === ctx ? this._resumeWait : null;
+      if (!held) this._resumeWait = { ctx, until: now + RESUME_WAIT_MS };
+      const done = () => {
+        if (this._resumeWait?.ctx === ctx) this._resumeWait = null;
+      };
+      Promise.resolve(resuming).then(done, (e) => {
+        console.warn(what, e);
+        done();
+      });
+      const left = held ? Math.max(RESUME_RETRY_MS, held.until - now) : RESUME_WAIT_MS;
+      return settledWithin(resuming, left);
+    }
+
+    async unlock() {
+      this._unlockGraphSync();
+      // Invoke resume during the tap too; awaiting it comes only after both
+      // sound sources are scheduled under the original user activation.
+      let resumed;
+      try {
+        if (["suspended", "interrupted"].includes(this.ctx.state)) {
+          resumed = this.ctx.resume();
+        }
+      } catch (e) {
+        console.warn("Piano gesture resume failed", e);
+      }
+      this._primeSoundSync();
+      if (resumed && !(await this._awaitResume(resumed, "Piano gesture resume rejected"))) return false;
       // Second resume after scheduling (Safari sometimes needs it)
       try {
-        if (this.ctx.state !== "running") await this.ctx.resume();
+        if (this.ctx.state !== "running") await this._awaitResume(this.ctx.resume(), "Piano second resume failed");
       } catch {
         /* ignore */
       }
-      return this.ctx?.state === "running" || this.ctx?.state === "suspended";
+      return this.ctx?.state === "running";
     }
 
     /** Peak absolute sample on master bus (0 if silent / not ready). */
@@ -510,28 +672,7 @@
 
       const noteGain = ctx.createGain();
       noteGain.connect(this.master);
-      // Cross-browser envelope: never ramp to 0 (Safari throws / mutes)
-      try {
-        noteGain.gain.setValueAtTime(GAIN_EPS, t0);
-      } catch {
-        noteGain.gain.value = GAIN_EPS;
-      }
-      const vel = Math.max(GAIN_EPS, velocity || 0.4);
-      safeExpRamp(noteGain.gain, vel, t0 + 0.012);
-      if (sustain && duration >= 2.5) {
-        // Hold near full level so students can home in for 3–5s, then gentle release
-        const holdEnd = t0 + Math.max(0.2, duration - 0.45);
-        safeExpRamp(noteGain.gain, vel * 0.72, t0 + 0.06);
-        try {
-          noteGain.gain.setValueAtTime(Math.max(GAIN_EPS, vel * 0.68), holdEnd);
-        } catch {
-          /* ignore */
-        }
-        safeExpRamp(noteGain.gain, GAIN_EPS, t0 + duration);
-      } else {
-        safeExpRamp(noteGain.gain, vel * 0.55, t0 + 0.08);
-        safeExpRamp(noteGain.gain, GAIN_EPS, t0 + duration);
-      }
+      noteEnvelope(noteGain.gain, t0, duration, velocity, sustain);
 
       const nodes = [];
       for (const p of partials) {
@@ -551,29 +692,10 @@
       // When the last scheduled voice ends, in context time (see isSounding)
       this.soundingUntil = Math.max(this.soundingUntil || 0, t0 + duration + 0.05);
 
-      // soft hammer noise
-      const noiseDur = 0.03;
-      const bufferSize = Math.floor(ctx.sampleRate * noiseDur);
-      const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-      const data = buffer.getChannelData(0);
-      for (let i = 0; i < bufferSize; i++) {
-        data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufferSize, 3);
-      }
-      const noise = ctx.createBufferSource();
-      noise.buffer = buffer;
-      const ng = ctx.createGain();
-      const filter = ctx.createBiquadFilter();
-      filter.type = "bandpass";
-      filter.frequency.value = Math.min(freq * 4, 4000);
-      filter.Q.value = 1.2;
-      ng.gain.value = velocity * 0.15;
-      noise.connect(filter);
-      filter.connect(ng);
-      ng.connect(noteGain);
-      noise.start(t0);
-      noise.stop(t0 + noiseDur);
+      const noise = hammerNoise(ctx, freq, t0, velocity, noteGain);
 
-      this.playing.push(...nodes);
+      // The hammer noise too: a pass schedules every chord up front, and a Stop must silence them all
+      this.playing.push(...nodes, noise);
       return noteGain;
     }
 
@@ -588,7 +710,9 @@
     }
 
     async playRefPitch(noteName = "A2", duration = 2.0, sustain = true) {
+      const asked = this._stopGen;
       await this.ensure();
+      if (asked !== this._stopGen) return null; // stopped while the context resumed
       const f = NOTE_FREQ[noteName] || NOTE_FREQ.A2;
       this.playNote(f, this.ctx.currentTime + 0.02, duration, 0.5, sustain);
       return f;
@@ -599,14 +723,25 @@
     }
 
     async playInhaleTicks(seconds = 3) {
+      const asked = this._stopGen;
       await this.ensure();
+      if (asked !== this._stopGen) return false;
       const t0 = this.ctx.currentTime + 0.05;
       for (let i = 0; i < seconds; i++) {
         this.playNote(NOTE_FREQ.C3, t0 + i, 0.12, 0.25);
       }
+      return true;
     }
 
+    /** The learner's Stop: silence now, and drop every sound still waiting for its context. */
     stopAll() {
+      this._stopGen += 1;
+      this._silence();
+    }
+
+    /** Every voice and the loop off, now. Pending sounds keep their turn (a progression silences before it plays). */
+    _silence() {
+      this._passGen += 1;
       this.loopActive = false;
       if (this.loopTimer) {
         clearTimeout(this.loopTimer);
@@ -639,7 +774,7 @@
       if (!this.ctx) return this.ensure();
       if (this.ctx.state === "suspended" || this.ctx.state === "interrupted") {
         try {
-          await this.ctx.resume();
+          await this._awaitResume(this.ctx.resume(), "Piano resume failed");
         } catch (e) {
           console.warn("Piano resume failed", e);
         }
@@ -677,6 +812,38 @@
       return PROGRESSIONS;
     }
 
+    /**
+     * The context running, the graph wired and the master up, before a
+     * progression plays. Every resume here is bounded (_awaitResume), so a
+     * session iOS holds cannot hold Start with it. False, before its silence,
+     * when `stale()` says the call was dropped while it waited.
+     */
+    async _readyToPlay(stale) {
+      await this.ensure();
+      await this.resume();
+      // If still not running (autoplay policy), try unlock path once
+      if (this.ctx && this.ctx.state !== "running") {
+        await this.unlock();
+      }
+      // A Stop, or a newer progression, came while the context was held: the silence below
+      // would end the voices and the chord loop of whatever plays now
+      if (stale()) return false;
+      this._silence();
+      // Ensure context is running after the silence
+      if (this.ctx.state === "suspended") {
+        try {
+          await this._awaitResume(this.ctx.resume(), "Piano resume before playing failed");
+        } catch {
+          /* ignore */
+        }
+      }
+      if (this.ctx.state === "closed") {
+        await this.ensure();
+      }
+      if (this.master) this.master.gain.setValueAtTime(0.7, this.ctx.currentTime);
+      return true;
+    }
+
     async playProgression(
       progId,
       {
@@ -691,25 +858,10 @@
         octaveShift = 0
       } = {}
     ) {
-      await this.ensure();
-      await this.resume();
-      // If still not running (autoplay policy), try unlock path once
-      if (this.ctx && this.ctx.state !== "running") {
-        await this.unlock();
-      }
-      this.stopAll();
-      // Ensure context is running after stopAll
-      if (this.ctx.state === "suspended") {
-        try {
-          await this.ctx.resume();
-        } catch {
-          /* ignore */
-        }
-      }
-      if (this.ctx.state === "closed") {
-        await this.ensure();
-      }
-      if (this.master) this.master.gain.setValueAtTime(0.7, this.ctx.currentTime);
+      const asked = { stop: this._stopGen, prog: ++this._progGen };
+      const stale = () => asked.stop !== this._stopGen || asked.prog !== this._progGen;
+      // A Stop, or a newer progression, while this one waited for a held context
+      if (!(await this._readyToPlay(stale)) || stale()) return null;
       const baseProg = PROGRESSIONS[progId];
       if (!baseProg) {
         console.warn("Unknown progression", progId);
@@ -720,12 +872,7 @@
       // Play + callbacks use transposed copy so highway targets match audio
       const prog = transposeProgression(baseProg, oct);
 
-      // Hold duration from combobox (3–5s) or chordSec when sustain is off
-      let stepSec = Number(chordSec) || 2.2;
-      if (sustain || oneNote) {
-        // one-note mode always uses the 3s/4s/5s control (per note, not per chord)
-        stepSec = Math.max(1.5, Math.min(5.5, Number(sustainSec) || Number(chordSec) || 4));
-      }
+      const stepSec = stepSeconds(chordSec, sustain || oneNote, sustainSec);
 
       // Flatten to sequential note events when oneNote (or arpeggio for audio + single targets)
       const melodic = !!oneNote;
@@ -734,6 +881,8 @@
       const playOnce = () => {
         if (!this.loopActive && loop) return;
         const t0 = this.ctx.currentTime + 0.05;
+        // A silence (Stop, or the next progression) ends this pass: its timers then tell no one of a chord
+        const pass = this._passGen;
 
         if (melodic) {
           // Strict one-note-at-a-time: combobox duration applies to EACH note
@@ -756,6 +905,7 @@
             if (this.onChordChange || this.onNoteChange) {
               const delay = Math.max(0, (when - this.ctx.currentTime) * 1000);
               setTimeout(() => {
+                if (pass !== this._passGen) return;
                 const mini = { name: ev.chord.name, notes: [ev.note], oneNote: true };
                 if (this.onNoteChange) this.onNoteChange(ev.note, ev.chord, ei, prog);
                 if (this.onChordChange) this.onChordChange(mini, ev.cidx, prog, { oneNote: true, noteName: ev.note });
@@ -790,7 +940,7 @@
           if (this.onChordChange) {
             const delay = Math.max(0, (when - this.ctx.currentTime) * 1000);
             setTimeout(() => {
-              if (this.onChordChange) this.onChordChange(ch, idx, prog, { oneNote: false });
+              if (pass === this._passGen && this.onChordChange) this.onChordChange(ch, idx, prog, { oneNote: false });
             }, delay);
           }
         });

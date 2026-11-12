@@ -620,6 +620,15 @@ test.describe("Billing & subscriptions", () => {
     await expect(page.locator("#pricing-modal")).toBeVisible();
     await expect(page.locator("#pricing-value-stack")).toBeVisible();
     await expect(page.locator("#pricing-personal")).toBeVisible();
+    // One saved session reads right in both languages: it used to say
+    // "1 sesiones" / "1 sessions" (PR #24).
+    await expect(page.locator("#pricing-personal")).toContainText("Sesiones guardadas: 1 ·");
+    await expect(page.locator("#pricing-personal")).not.toContainText("1 sesiones");
+    await page.locator("#pricing-close").click();
+    await page.locator("#btn-lang").click();
+    await page.locator("#btn-pricing").click();
+    await expect(page.locator("#pricing-personal")).toContainText("Saved sessions: 1 ·");
+    await expect(page.locator("#pricing-personal")).not.toContainText("1 sessions");
     const pulse = await page.evaluate(() => window.VTValuePulse?.compute?.());
     expect(pulse).toBeTruthy();
     expect(typeof pulse.sessions).toBe("number");

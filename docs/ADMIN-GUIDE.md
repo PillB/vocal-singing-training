@@ -1025,6 +1025,37 @@ redeploy (8.7).
 sign-in. With so few visitors, matching times can point to a person, which is
 exactly what keeping them apart is meant to prevent.
 
+### 8.13b Read the site designs
+
+**Diseños del sitio** (Site designs) on the admin page shows which arrangement
+of the site visitors use: **A · Clásico** or **B · Enfocado**, chosen with the
+control at the top of the practice site. Choose a period and press **Leer
+diseños** (Read designs). For each design it shows visits, browsers, time in
+use, time per visit, how many browsers came back for another visit, and how
+many came back on another day; below, the split, visits per day (the same
+numbers as a table under **Ver como tabla**), who used the control and in
+which direction, how each visit started, and **Descargar CSV**.
+
+How to read it:
+
+- **It is a preference, not a test.** The card's first block says why: people
+  who pick a design differ from those who do not, and most people never touch
+  the control. Do not conclude "B is better" from more time on B.
+- **Time is a lower bound.** Hidden tabs and pages nobody has touched for five
+  minutes do not count (singing does); a browser closed without notice loses
+  its last stretch.
+- **The period is by when the server received the visit.**
+- **To compare fairly**, switch on `site_layout_2026_11` in
+  `js/experiments-config.js` and read it under Statistics like any other
+  experiment (docs/38-AB-TESTING.md).
+
+The strip under the page title (**De un vistazo**) says without a press
+whether the server answers, whether statistics are on, and whether the server
+is new enough for this reading. **"servidor antiguo"** there, or "hay que
+volver a desplegarlo" in the card, means the site is ahead of the worker:
+redeploy it (8.7). Until then the site works and the design events are
+dropped by the old worker, so the count starts at the redeploy.
+
 ### 8.14 Send someone the data we hold
 
 The privacy page promises people access to what we keep about them. This

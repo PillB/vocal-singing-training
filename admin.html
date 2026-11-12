@@ -17,8 +17,9 @@
          list gets an answer from the routes it calls. Keep it out of search. -->
     <meta name="robots" content="noindex, nofollow" />
     <title>Admin · Estudio Vocal</title>
-    <link rel="stylesheet" href="css/styles.css?v=20261103c" />
+    <link rel="stylesheet" href="css/styles.css?v=20261111c" />
     <link rel="stylesheet" href="css/admin.css?v=20260926a" />
+    <link rel="stylesheet" href="css/admin-layouts.css?v=20261111a" />
   </head>
   <body class="admin-page">
     <header class="app-header">
@@ -84,8 +85,16 @@
           <a href="#give" data-t="navGive">Dar Pro</a>
           <a href="#codes" data-t="navCodes">Códigos</a>
           <a href="#stats" data-t="navStats">Estadísticas</a>
+          <a href="#layouts" data-lt="navLayouts">Diseños</a>
           <a href="#maintenance" data-t="navMaintenance">Mantenimiento</a>
         </nav>
+
+        <!-- At a glance: is the server answering, are statistics arriving, and is
+             the server new enough for the designs readout (js/admin-layouts.js). -->
+        <section class="admin-glance" aria-labelledby="glance-title">
+          <h2 id="glance-title" class="admin-glance-title" data-lt="glanceTitle">De un vistazo</h2>
+          <ul class="admin-health admin-glance-list" id="glance-list" aria-live="polite"></ul>
+        </section>
 
         <!-- 1. Look somebody up: what they hold, and take it back. -->
         <section class="admin-card" id="lookup" aria-labelledby="lookup-title">
@@ -185,6 +194,23 @@
           <div id="stats-result" class="admin-result" aria-live="polite"></div>
         </section>
 
+        <!-- Which design of the site visitors chose and used (js/admin-layouts.js,
+             GET /v1/admin/layouts). A preference, not an experiment's result. -->
+        <section class="admin-card" id="layouts" aria-labelledby="layouts-title">
+          <h2 id="layouts-title" data-lt="title">Diseños del sitio</h2>
+          <p class="muted" data-lt="lead">Qué diseño usa la gente (A · Clásico o B · Enfocado), cuánto tiempo y si vuelve. Cada visitante elige con el control de arriba del sitio, así que esto es una preferencia, no una prueba A/B: quien cambia de diseño no se parece a quien nunca toca el control. Cuenta navegadores, nunca personas.</p>
+          <div class="admin-row admin-stats-controls">
+            <div class="admin-chips" role="group" aria-label="Periodo en días" data-lt-aria="window">
+              <button type="button" class="btn btn-sm" data-lwindow="7" aria-pressed="false">7</button>
+              <button type="button" class="btn btn-sm" data-lwindow="28" aria-pressed="true">28</button>
+              <button type="button" class="btn btn-sm" data-lwindow="90" aria-pressed="false">90</button>
+              <button type="button" class="btn btn-sm" data-lwindow="180" aria-pressed="false">180</button>
+            </div>
+            <button type="button" class="btn btn-primary" id="layouts-load" data-lt="load">Leer diseños</button>
+          </div>
+          <div id="layouts-result" class="admin-result" aria-live="polite"></div>
+        </section>
+
         <!-- 5. Health and housekeeping. -->
         <section class="admin-card" id="maintenance" aria-labelledby="maintenance-title">
           <h2 id="maintenance-title" data-t="maintenanceTitle">Mantenimiento</h2>
@@ -210,5 +236,6 @@
     <script src="js/billing-config.js?v=20261102a"></script>
     <script src="js/account.js?v=20261006b"></script>
     <script src="js/admin.js?v=20261006b"></script>
+    <script src="js/admin-layouts.js?v=20261111a"></script>
   </body>
 </html>

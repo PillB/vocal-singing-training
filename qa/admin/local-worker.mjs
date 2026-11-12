@@ -230,6 +230,39 @@ export async function seedBeta(worker) {
 }
 
 /**
+ * Two weeks of site-design use for the first 30 made-up browsers, so the
+ * "Diseños del sitio" card has something to draw: most stay on the default
+ * (a), some choose b and stay, a few go back. Same browser ids as the funnel,
+ * so the funnel's count of browsers is unchanged.
+ * @param {Function} post The seeding POST helper.
+ * @param {number} now Unix seconds.
+ * @returns {Promise<number>} Events the worker kept.
+ */
+async function seedLayouts(post, now) {
+  let accepted = 0;
+  const dayOf = (back) => new Date((now - back * 86400) * 1000).toISOString().slice(0, 10);
+  for (let i = 0; i < 30; i++) {
+    const cid = `sbx${String(i).padStart(5, "0")}`;
+    const events = [];
+    const choosesB = i % 3 === 0;
+    const goesBack = i % 9 === 0;
+    const visits = 1 + (i % 4);
+    for (let v = 0; v < visits; v++) {
+      const day = dayOf(13 - ((i + v * 3) % 14));
+      const onB = choosesB && v > 0 && !(goesBack && v > 1);
+      const ver = onB ? "b" : "a";
+      events.push({ name: "layout_session", cid, day, tz: 300, props: { ver, src: onB ? "chosen" : "default", n: v + 1 } });
+      events.push({ name: "layout_time", cid, day, tz: 300, props: { ver, sec: 90 + ((i * 37 + v * 53) % 600) } });
+      if (choosesB && v === 1) events.push({ name: "layout_switch", cid, day, tz: 300, props: { from: "a", to: "b", via: "menu", sec: 40 + i } });
+      if (goesBack && v === 2) events.push({ name: "layout_switch", cid, day, tz: 300, props: { from: "b", to: "a", via: "menu", sec: 25 } });
+    }
+    const res = await post("/v1/events", { events });
+    accepted += (res && res.accepted) || 0;
+  }
+  return accepted;
+}
+
+/**
  * Made-up browsers walking the account funnel, sent through the worker's own
  * event route the way the site sends them, so the admin page's Statistics
  * section has something to show. Forty browsers open the site and fewer get
@@ -286,6 +319,7 @@ export async function seedStats(worker) {
     const res = await post("/v1/events", { events });
     accepted += (res && res.accepted) || 0;
   }
+  accepted += await seedLayouts(post, worker.now());
   // One browser that later asked for its statistics to be deleted.
   const gone = "sbxforget1";
   await post("/v1/events", { events: [{ name: "app_open", cid: gone, day, tz: 300, props: {} }] });

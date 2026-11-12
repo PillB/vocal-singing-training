@@ -6,6 +6,18 @@ const headed =
   process.env.HEADED === "true" ||
   process.argv.includes("--headed");
 const slowMo = Number(process.env.SLOWMO || (headed ? 80 : 0)) || 0;
+const requestedPort = Number(process.env.VT_TEST_PORT);
+const testPort = Number.isInteger(requestedPort) && requestedPort >= 1024 && requestedPort <= 65535
+  ? requestedPort : 8765;
+// Specs and helpers build absolute URLs from BASE_URL or VT_BASE (both fall
+// back to :8765), so a custom port must reach them too, not only `baseURL` and
+// the server; and a base given under one name is the base under the other
+// (else half the specs test the app at :8765). The config is evaluated in the
+// runner and in every worker.
+const givenBase = process.env.BASE_URL || process.env.VT_BASE || (testPort !== 8765 ? `http://127.0.0.1:${testPort}` : "");
+for (const key of ["BASE_URL", "VT_BASE"]) {
+  if (!process.env[key] && givenBase) process.env[key] = givenBase;
+}
 
 // Headed "watch" sweeps: real windows, slowMo pointer paths, screenshots and
 // report files written into qa/ and docs/. They are forensic tools for a human
@@ -33,7 +45,7 @@ module.exports = {
   retries: 0,
   use: {
     headless: !headed,
-    baseURL: process.env.BASE_URL || "http://127.0.0.1:8765",
+    baseURL: process.env.BASE_URL || `http://127.0.0.1:${testPort}`,
     launchOptions: {
       slowMo,
       // Keep window on top of other apps so pointer path is visible
@@ -43,7 +55,8 @@ module.exports = {
     trace: process.env.CI ? "retain-on-failure" : "off"
   },
   // Default suite = Chromium (covers Chrome/Edge/Opera).
-  // Firefox + WebKit (+ mobile) only run cross-browser-audio for CI speed.
+  // Firefox + WebKit (+ mobile) run focused audio and interruption contracts;
+  // the full UI matrix remains Chromium-only for CI resource control.
   projects: [
     {
       name: "chromium",
@@ -58,12 +71,12 @@ module.exports = {
     {
       name: "firefox",
       use: { browserName: "firefox" },
-      testMatch: /cross-browser-audio\.spec\.js/
+      testMatch: /(cross-browser-audio|safari-mobile-recovery|exercise-start-visibility|piano-dropped-call)\.spec\.js/
     },
     {
       name: "webkit",
       use: { browserName: "webkit" },
-      testMatch: /cross-browser-audio\.spec\.js/
+      testMatch: /(cross-browser-audio|safari-mobile-recovery|exercise-start-visibility|piano-dropped-call)\.spec\.js/
     },
     {
       name: "mobile-chrome",
@@ -71,7 +84,7 @@ module.exports = {
         browserName: "chromium",
         ...devices["Pixel 7"]
       },
-      testMatch: /cross-browser-audio\.spec\.js/
+      testMatch: /(cross-browser-audio|safari-mobile-recovery|exercise-start-visibility|piano-dropped-call)\.spec\.js/
     },
     {
       name: "mobile-safari",
@@ -79,14 +92,14 @@ module.exports = {
         browserName: "webkit",
         ...devices["iPhone 14"]
       },
-      testMatch: /cross-browser-audio\.spec\.js/
+      testMatch: /(cross-browser-audio|safari-mobile-recovery|exercise-start-visibility|piano-dropped-call)\.spec\.js/
     }
   ],
   // The second reporter fails the run on a skipped test nobody reviewed (QA-57): a skip is reported as a success
   reporter: [["list"], ["./qa/no-skips-reporter.cjs"]],
   webServer: {
-    command: "npm run serve",
-    url: "http://127.0.0.1:8765",
+    command: testPort === 8765 ? "npm run serve" : `python3 -m http.server ${testPort}`,
+    url: `http://127.0.0.1:${testPort}`,
     reuseExistingServer: !process.env.CI,
     timeout: 30000
   }

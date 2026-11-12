@@ -262,5 +262,9 @@
   "js/voice-features.js": {
     "v": "20261103a",
     "sha": "98cb3c44762e9b48"
+  },
+  "js/wake-lock.js": {
+    "v": "20261112b",
+    "sha": "244f30921d52685d"
   }
 }

@@ -116,8 +116,8 @@ audio recovery work):
   hover, start visibility, guided scenes, catalogue regression, validation,
   copy, home choices, all flows, daily session, plan and history, stage,
   viewport overflow, hit targets): 384 pass.
-- Mutants: `node qa/mutate.mjs sets` GS1 to GS13 killed; SS1 to SS13 and
-  VD1 to VD14 (flows set) killed. Each SS and VD mutant is now judged by the
+- Mutants: `node qa/mutate.mjs sets` GS1 to GS13 killed; SS1 to SS13,
+  VD1 to VD14 and WL1 to WL9 (flows set) killed. Each SS and VD mutant is now judged by the
   test written to catch it instead of its whole spec: 27 whole-spec runs on
   top of the flows job's own would outlive its 30 minutes on the build
   server (the QA-45 failure, which ends as "cancelled", not red).
@@ -162,7 +162,37 @@ axis; a sentence to say is no longer labelled as a drawing; two controls on a
 phone give the title's line to the picture; long titles were shortened to fit
 the header.
 
+### The screen stays on during a practice
+
+A phone locks after a short while without a touch, and a locked phone stops
+the microphone and the clock. v22 opens with five quiet minutes, so on a real
+phone the drill would have died in its first step. `js/wake-lock.js` holds a
+screen wake lock (W3C Screen Wake Lock API) while `body.practice-live` is
+set, for every exercise, and gives it back on Stop.
+
+| Decision | The challenge | Why it stands, or what it costs |
+|---|---|---|
+| The standard API, with no fallback | Older phones get nothing | Chrome and Edge 84 (2020), Safari 16.4 (2023), Firefox 126 (2024) have it, which covers phones of the last six years on a current system. The older trick, a hidden looping video, takes part in the iPhone's audio session and can disturb the microphone. Cost: on Safari before 16.4, and on a site added to the home screen before iOS 18.4 (WebKit bug 254545), the screen follows the phone's timer as before |
+| Held only while live | A learner reading the result wants the screen on too | Reading is done with the phone in hand. Holding the lock outside a practice spends battery for nothing |
+| A refusal is not retried until the next Start or return | The battery saver may be switched off mid-practice | A browser that says no is asked once, not on every change of the page. Cost: that practice runs on the phone's timer |
+| It watches the body class from outside `js/app.js` | A direct call on Start and Stop is simpler to follow | No legacy function is edited, and every path that ends a practice (Stop, leaving, an error that clears the class) releases the lock |
+| No line on screen says the screen will stay on | The learner cannot know they may put the phone down | Where the browser refuses, the line would be false. Open: say it only while the lock is held |
+
+`tests/wake-lock.spec.js` (5 tests) replaces the browser's lock with one the
+test owns: Start asks once and Stop releases; nothing is asked before Start
+or on a hidden page; a return to a live practice asks again; a lock that
+arrives after Stop is given back; a refusal is asked once per Start; a
+browser without the API practises as before. Mutants WL1 to WL9 each turn
+one red.
+
 **Not verified (blocked, so open, not passed):**
+
+- A real wake lock. Headless Chromium refuses every request
+  (`NotAllowedError`, also with the permission granted over the debugging
+  protocol), so the granted path ran only against the test's stand-in. The
+  refused path ran for real: the practice went on and nothing was thrown.
+  Whether an iPhone or an Android phone stays awake through v22's five quiet
+  minutes has to be seen on the device.
 
 - An independent parallel review (five reviewers, four fact-checkers, four
   researchers) was started twice and stopped both times by a usage limit
@@ -179,7 +209,10 @@ the header.
 | Date | Item | Status |
 |---|---|---|
 | 2026-11-12 | Independent fact-check and adversarial review of this change | open, blocked twice |
-| 2026-11-12 | Screen stays awake during a drill (v22 has five minutes with no touch); no pull-to-refresh while live; safe-area padding | open |
+| 2026-11-12 | Screen stays awake during a practice (v22 has five minutes with no touch) | done in code, 2026-11-12; open on a real phone |
+| 2026-11-12 | Say "the screen will stay on" in a long quiet step, only while the lock is held | open |
+| 2026-11-12 | No pull-to-refresh while live. A reload mid-practice already asks first (`beforeunload`) and the take is kept on `pagehide`; `overscroll-behavior` on the page would stop the gesture on Android but cannot be tested without a device | open |
+| 2026-11-12 | Safe-area padding for the new sheet and cards on phones with a notch, checked on a device | open |
 | 2026-11-12 | Research write-ups on gamification, visualization and mobile patterns for the sets | open, blocked with the review |
 | 2026-11-12 | Self-referenced hold goal for v24 and s28; per-set history | open, needs storage |
 | 2026-11-12 | Four-note melody echo, interval singing, a pitch-discrimination game, a tube-in-water programme | open, the best-supported singing additions not yet built |

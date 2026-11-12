@@ -594,6 +594,26 @@ export const MUTANTS = {
         to,
         cmd: [...PIANO_SPEC.slice(0, 3), "tests/exercise-viz-voice-drill.spec.js", "--project=chromium", "--workers=4", "--reporter=dot", "-g", grep]
       }))
+    )
+    .concat(
+      // The screen stays on while a practice is live (js/wake-lock.js, tests/wake-lock.spec.js).
+      [
+        ["WL1 Stop leaves the phone awake for the rest of the visit", "js/wake-lock.js", "    state.refused = false;\n    release();\n", "    state.refused = false;\n", "Start asks for a screen lock once"],
+        ["WL2 the screen is kept on before Start", "js/wake-lock.js", 'doc.body.classList.contains("practice-live") && doc.visibilityState === "visible"', 'doc.visibilityState === "visible"', "Start asks for a screen lock once"],
+        ["WL3 back from another app the screen is no longer kept on", "js/wake-lock.js", '    doc.addEventListener("visibilitychange", sync);\n', "", "back from the background"],
+        ["WL4 a hidden page asks for the screen", "js/wake-lock.js", 'doc.body.classList.contains("practice-live") && doc.visibilityState === "visible"', 'doc.body.classList.contains("practice-live")', "back from the background"],
+        ["WL5 a lock that arrives after Stop is kept", "js/wake-lock.js", "    if (!wanted()) {\n      drop(lock);\n      return;\n    }\n", "", "arrives after Stop"],
+        ["WL6 a browser that refuses is asked again on every restyle", "js/wake-lock.js", "      state.refused = true;\n      return;", "      return;", "a refusal is asked once"],
+        ["WL7 a refusal is never asked again, even on the next Start", "js/wake-lock.js", "    state.refused = false;\n    release();\n", "    release();\n", "a refusal is asked once"],
+        ["WL8 a second lock is asked for while one is held", "js/wake-lock.js", "if (state.lock || state.asking || !supported()) return;", "if (state.asking || !supported()) return;", "Start asks for a screen lock once"],
+        ["WL9 a browser with no wake lock throws on Start", "js/wake-lock.js", "if (state.lock || state.asking || !supported()) return;", "if (state.lock || state.asking) return;", "no wake lock practises as before"]
+      ].map(([name, file, from, to, grep]) => ({
+        name,
+        file,
+        from,
+        to,
+        cmd: [...PIANO_SPEC.slice(0, 3), "tests/wake-lock.spec.js", "--project=chromium", "--workers=2", "--reporter=dot", "-g", grep]
+      }))
     ),
   // Round 4 in the browser: storage of the wrong kind, a full or refused storage, the learner's day, the rail on a
   // phone on its side, the consent bar. A set of its own so that no CI job outgrows its 30 minutes (QA-45).

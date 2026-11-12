@@ -1035,6 +1035,89 @@ export async function handleAdminLookupAccount(request, env, url, deps) {
 }
 
 /**
+ * Refuse a method mismatch with the same shape everywhere.
+ * @param {Object} deps Injectables `{json, cors}`.
+ * @param {string} allow Allowed methods.
+ * @returns {Response} 405.
+ */
+function notAllowed(deps, allow) {
+  const { json, cors } = deps;
+  return json({ ok: false, reason: "method_not_allowed" }, 405, { ...cors, allow });
+}
+
+/** GET /v1/auth/methods: the sign-in methods this deployment can offer. */
+function handleAuthMethods(request, env, deps) {
+  const { json, cors } = deps;
+  return json({ ok: true, ...authMethods(env) }, 200, cors);
+}
+
+/** POST /v1/admin/sweep: an admin runs the expiry sweep now rather than waiting for the cron. */
+async function handleAdminSweep(request, env, deps) {
+  const { json, cors } = deps;
+  const admin = await requireAdmin(env, request, nowSec(deps.now));
+  if (!admin.ok) {
+    return json({ ok: false, reason: admin.reason }, admin.status, cors);
+  }
+  await sweepExpired(env.DB, nowSec(deps.now));
+  return json({ ok: true }, 200, cors);
+}
+
+/** Adapt a `(request, env, deps)` handler to the route table's `(request, env, url, deps)`. */
+function withoutUrl(handler) {
+  return (request, env, url, deps) => handler(request, env, deps);
+}
+
+/** One account route: its handlers by method, and the `allow` header a mismatch answers with. */
+function accountRoute(allow, handlers) {
+  return { allow, handlers: new Map(Object.entries(handlers)) };
+}
+
+/**
+ * Every account-layer path, in the order the router has always listed them.
+ * Paths are matched exactly, so at most one entry can answer a request and the
+ * order only keeps the table readable next to its history. Maps rather than
+ * object lookups, so a method or a path spelled like an `Object.prototype`
+ * member ("constructor", "toString") finds no handler and gets the same 405 or
+ * 404 as any other unknown one, instead of calling a builtin.
+ */
+const ACCOUNT_ROUTES = new Map([
+  ["/v1/auth/methods", accountRoute("GET", { GET: withoutUrl(handleAuthMethods) })],
+  ["/v1/auth/email/start", accountRoute("POST", { POST: withoutUrl(handleEmailStart) })],
+  ["/v1/auth/email/verify", accountRoute("POST", { POST: withoutUrl(handleEmailVerify) })],
+  ["/v1/auth/google", accountRoute("POST", { POST: withoutUrl(handleGoogleSignIn) })],
+  ["/v1/auth/logout", accountRoute("POST", { POST: withoutUrl(handleLogout) })],
+  ["/v1/me", accountRoute("GET, POST", { GET: withoutUrl(handleMe), POST: withoutUrl(handleMe) })],
+  ["/v1/me/link", accountRoute("POST", { POST: withoutUrl(handleLink) })],
+  ["/v1/me/trial", accountRoute("POST", { POST: withoutUrl(handleStartTrial) })],
+  ["/v1/me/redeem", accountRoute("POST", { POST: withoutUrl(handleRedeem) })],
+  // POST is accepted as a write too, but the 405 has only ever advertised PUT.
+  [
+    "/v1/me/progress",
+    accountRoute("GET, PUT, DELETE", {
+      GET: handleGetProgress,
+      PUT: withoutUrl(handlePutProgress),
+      POST: withoutUrl(handlePutProgress),
+      DELETE: handleDeleteProgress
+    })
+  ],
+  [
+    "/v1/admin/gift-codes",
+    accountRoute("GET, POST", {
+      POST: withoutUrl(handleAdminCreateGiftCode),
+      GET: withoutUrl(handleAdminListGiftCodes)
+    })
+  ],
+  ["/v1/admin/gift-codes/revoke", accountRoute("POST", { POST: withoutUrl(handleAdminRevokeGiftCode) })],
+  [
+    "/v1/admin/grants",
+    accountRoute("GET, POST", { POST: withoutUrl(handleAdminCreateGrant), GET: handleAdminListGrants })
+  ],
+  ["/v1/admin/grants/revoke", accountRoute("POST", { POST: withoutUrl(handleAdminRevokeGrant) })],
+  ["/v1/admin/account", accountRoute("GET", { GET: handleAdminLookupAccount })],
+  ["/v1/admin/sweep", accountRoute("POST", { POST: withoutUrl(handleAdminSweep) })]
+]);
+
+/**
  * Route one account-layer request, or return null so the caller's own router
  * keeps handling the webhook and license paths untouched.
  *
@@ -1055,94 +1138,13 @@ export async function routeAccountApi(request, env, url, path, deps) {
   }
   await ensureSchema(env.DB);
 
-  const method = request.method;
-  /**
-   * Refuse a method mismatch with the same shape everywhere.
-   * @param {string} allow Allowed methods.
-   * @returns {Response} 405.
-   */
-  const notAllowed = (allow) => json({ ok: false, reason: "method_not_allowed" }, 405, { ...cors, allow });
-
-  if (path === "/v1/auth/methods") {
-    return method === "GET" ? json({ ok: true, ...authMethods(env) }, 200, cors) : notAllowed("GET");
+  const route = ACCOUNT_ROUTES.get(path);
+  if (!route) {
+    return json({ ok: false, reason: "not_found" }, 404, cors);
   }
-  if (path === "/v1/auth/email/start") {
-    return method === "POST" ? handleEmailStart(request, env, deps) : notAllowed("POST");
+  const handler = route.handlers.get(request.method);
+  if (!handler) {
+    return notAllowed(deps, route.allow);
   }
-  if (path === "/v1/auth/email/verify") {
-    return method === "POST" ? handleEmailVerify(request, env, deps) : notAllowed("POST");
-  }
-  if (path === "/v1/auth/google") {
-    return method === "POST" ? handleGoogleSignIn(request, env, deps) : notAllowed("POST");
-  }
-  if (path === "/v1/auth/logout") {
-    return method === "POST" ? handleLogout(request, env, deps) : notAllowed("POST");
-  }
-  if (path === "/v1/me") {
-    if (method !== "GET" && method !== "POST") {
-      return notAllowed("GET, POST");
-    }
-    return handleMe(request, env, deps);
-  }
-  if (path === "/v1/me/link") {
-    return method === "POST" ? handleLink(request, env, deps) : notAllowed("POST");
-  }
-  if (path === "/v1/me/trial") {
-    return method === "POST" ? handleStartTrial(request, env, deps) : notAllowed("POST");
-  }
-  if (path === "/v1/me/redeem") {
-    return method === "POST" ? handleRedeem(request, env, deps) : notAllowed("POST");
-  }
-  if (path === "/v1/me/progress") {
-    if (method === "GET") {
-      return handleGetProgress(request, env, url, deps);
-    }
-    if (method === "PUT" || method === "POST") {
-      return handlePutProgress(request, env, deps);
-    }
-    if (method === "DELETE") {
-      return handleDeleteProgress(request, env, url, deps);
-    }
-    return notAllowed("GET, PUT, DELETE");
-  }
-  if (path === "/v1/admin/gift-codes") {
-    if (method === "POST") {
-      return handleAdminCreateGiftCode(request, env, deps);
-    }
-    if (method === "GET") {
-      return handleAdminListGiftCodes(request, env, deps);
-    }
-    return notAllowed("GET, POST");
-  }
-  if (path === "/v1/admin/gift-codes/revoke") {
-    return method === "POST" ? handleAdminRevokeGiftCode(request, env, deps) : notAllowed("POST");
-  }
-  if (path === "/v1/admin/grants") {
-    if (method === "POST") {
-      return handleAdminCreateGrant(request, env, deps);
-    }
-    if (method === "GET") {
-      return handleAdminListGrants(request, env, url, deps);
-    }
-    return notAllowed("GET, POST");
-  }
-  if (path === "/v1/admin/grants/revoke") {
-    return method === "POST" ? handleAdminRevokeGrant(request, env, deps) : notAllowed("POST");
-  }
-  if (path === "/v1/admin/account") {
-    return method === "GET" ? handleAdminLookupAccount(request, env, url, deps) : notAllowed("GET");
-  }
-  if (path === "/v1/admin/sweep") {
-    if (method !== "POST") {
-      return notAllowed("POST");
-    }
-    const admin = await requireAdmin(env, request, nowSec(deps.now));
-    if (!admin.ok) {
-      return json({ ok: false, reason: admin.reason }, admin.status, cors);
-    }
-    await sweepExpired(env.DB, nowSec(deps.now));
-    return json({ ok: true }, 200, cors);
-  }
-
-  return json({ ok: false, reason: "not_found" }, 404, cors);
+  return handler(request, env, url, deps);
 }

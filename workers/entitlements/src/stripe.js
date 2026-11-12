@@ -354,26 +354,11 @@ export function isCheckoutSessionPaid(session) {
  * @returns {Object} Entitlement update descriptor.
  */
 function mapCheckoutSession(session, env, statusOverride) {
-  const lineItem = session && session.line_items && Array.isArray(session.line_items.data)
-    ? session.line_items.data[0]
-    : null;
-  const byPrice = planFromPriceId(lineItem && lineItem.price && lineItem.price.id, env);
+  const byPrice = planFromPriceId(checkoutPriceId(session), env);
   const byMetadata = normalizePlanId(session && session.metadata && session.metadata.plan);
   const subscriptionId = idOf(session && session.subscription);
-  // A subscription's checkout that names no plan says nothing about it: the
-  // subscription's own events carry its price and interval, and a default
-  // here, applied after them, would turn a yearly subscriber monthly. Only a
-  // one-time payment, with nothing else to go by, falls back to a month.
-  const named = byPrice || byMetadata;
-  const plan = named || (subscriptionId ? undefined : "pro_monthly");
-  const planSource = byPrice ? "price_id" : (byMetadata ? "metadata" : (subscriptionId ? undefined : "default"));
-  let status = statusOverride || (isCheckoutSessionPaid(session) ? "active" : "pending");
-  // Only a subscription or a one-time payment is a purchase. A setup session
-  // saves a card for later and charges nothing, though Stripe reports it as
-  // needing no payment, so it entitles to nothing.
-  if (status === "active" && !subscriptionId && !(session && session.mode === "payment")) {
-    status = "canceled";
-  }
+  const { plan, planSource } = checkoutPlan(byPrice, byMetadata, subscriptionId);
+  const status = checkoutStatus(session, subscriptionId, statusOverride);
   return {
     provider: "stripe",
     claimId: idOf(session && session.id),
@@ -396,6 +381,38 @@ function mapCheckoutSession(session, env, statusOverride) {
     // subscription events recorded untouched.
     periodEnd: undefined
   };
+}
+
+/** The price id of a checkout session's first line item, when the session carries its line items. */
+function checkoutPriceId(session) {
+  const lineItem = session && session.line_items && Array.isArray(session.line_items.data)
+    ? session.line_items.data[0]
+    : null;
+  return lineItem && lineItem.price && lineItem.price.id;
+}
+
+/** The plan a checkout names and how: its price, then its metadata, then a month for a one-time payment only. */
+function checkoutPlan(byPrice, byMetadata, subscriptionId) {
+  // A subscription's checkout that names no plan says nothing about it: the
+  // subscription's own events carry its price and interval, and a default
+  // here, applied after them, would turn a yearly subscriber monthly. Only a
+  // one-time payment, with nothing else to go by, falls back to a month.
+  const named = byPrice || byMetadata;
+  const plan = named || (subscriptionId ? undefined : "pro_monthly");
+  const planSource = byPrice ? "price_id" : (byMetadata ? "metadata" : (subscriptionId ? undefined : "default"));
+  return { plan, planSource };
+}
+
+/** A checkout's status: the async outcome if given, else whether its money arrived; a setup session never entitles. */
+function checkoutStatus(session, subscriptionId, statusOverride) {
+  const status = statusOverride || (isCheckoutSessionPaid(session) ? "active" : "pending");
+  // Only a subscription or a one-time payment is a purchase. A setup session
+  // saves a card for later and charges nothing, though Stripe reports it as
+  // needing no payment, so it entitles to nothing.
+  if (status === "active" && !subscriptionId && !(session && session.mode === "payment")) {
+    return "canceled";
+  }
+  return status;
 }
 
 /**
@@ -550,13 +567,6 @@ function mapSubscription(subscription, env, deleted) {
 }
 
 /**
- * Map an invoice.paid / invoice.payment_failed event to an entitlement update.
- * @param {Object} invoice Stripe invoice.
- * @param {Object} env Worker env bindings.
- * @param {boolean} paid Whether the invoice was paid.
- * @returns {Object} Entitlement update descriptor.
- */
-/**
  * Whether an invoice line is something other than the subscription's own
  * charge: a proration, or an invoice item (an add-on billed on the same
  * invoice). Both API shapes are read, because which one arrives follows the
@@ -641,26 +651,22 @@ function periodLineOf(invoice) {
   return latest(lines.filter((line) => !isSideLine(line))) || latest(lines) || lines[0] || null;
 }
 
+/**
+ * Map an invoice.paid / invoice.payment_failed event to an entitlement update.
+ * @param {Object} invoice Stripe invoice.
+ * @param {Object} env Worker env bindings.
+ * @param {boolean} paid Whether the invoice was paid.
+ * @returns {Object} Entitlement update descriptor.
+ */
 function mapInvoice(invoice, env, paid) {
   const line = periodLineOf(invoice);
-  const priceId = idOf(line && line.price)
-    || idOf(line && line.pricing && line.pricing.price_details && line.pricing.price_details.price);
-  // A proration line's price is the plan the customer is leaving as often as the
-  // one they are joining (Stripe lists the credit for unused time, then the
-  // debit for the new plan), so it says nothing about the plan the subscription
-  // is on. The subscription's own event does. Only the subscription's own line
-  // may name a plan.
-  const byPrice = line && !isSideLine(line) ? planFromPriceId(priceId, env) : null;
+  const priceId = invoiceLinePriceId(line);
+  const byPrice = planOfOwnLine(line, priceId, env);
   // The same gate as a subscription's own event, or a renewal of something
   // that is not ours would lift the suspension it just received — and `paid`
   // is one-way, so it must not be recorded for a price we do not sell.
   const unlisted = !byPrice && priceVerdict(priceId, env) === "unlisted";
-  const subscriptionId = idOf(invoice && invoice.subscription)
-    || idOf(line && line.subscription)
-    || idOf(
-      invoice && invoice.parent && invoice.parent.subscription_details
-        && invoice.parent.subscription_details.subscription
-    );
+  const subscriptionId = invoiceSubscriptionId(invoice, line);
   return {
     provider: "stripe",
     claimId: null,
@@ -686,6 +692,32 @@ function mapInvoice(invoice, env, paid) {
   };
 }
 
+/** The price id of an invoice line, in the pre-2025 `price` shape or the newer `pricing.price_details` one. */
+function invoiceLinePriceId(line) {
+  return idOf(line && line.price)
+    || idOf(line && line.pricing && line.pricing.price_details && line.pricing.price_details.price);
+}
+
+/** The plan an invoice line's price names, read only from the subscription's own line. */
+function planOfOwnLine(line, priceId, env) {
+  // A proration line's price is the plan the customer is leaving as often as the
+  // one they are joining (Stripe lists the credit for unused time, then the
+  // debit for the new plan), so it says nothing about the plan the subscription
+  // is on. The subscription's own event does. Only the subscription's own line
+  // may name a plan.
+  return line && !isSideLine(line) ? planFromPriceId(priceId, env) : null;
+}
+
+/** The subscription an invoice bills: on the invoice, on its line, or under `parent.subscription_details`. */
+function invoiceSubscriptionId(invoice, line) {
+  return idOf(invoice && invoice.subscription)
+    || idOf(line && line.subscription)
+    || idOf(
+      invoice && invoice.parent && invoice.parent.subscription_details
+        && invoice.parent.subscription_details.subscription
+    );
+}
+
 /**
  * Map a verified Stripe event onto an entitlement update descriptor.
  *
@@ -708,6 +740,20 @@ export function mapStripeEvent(event, env) {
   if (!object) {
     return { handled: false, reason: "missing_object" };
   }
+  const mapped = updateForEvent(event, object, env);
+  if (!mapped.update) {
+    return mapped;
+  }
+  const { update } = mapped;
+  if (!update.subscriptionId && !update.claimId && !update.paymentId) {
+    return { handled: false, reason: "no_license_identity" };
+  }
+  stampEventTimes(update, event, object);
+  return { handled: true, update };
+}
+
+/** The update an event's object maps to by the event's type, or the not-handled result that says why there is none. */
+function updateForEvent(event, object, env) {
   let update = null;
   switch (event.type) {
     case "checkout.session.completed":
@@ -759,9 +805,11 @@ export function mapStripeEvent(event, env) {
     default:
       return { handled: false, reason: "unhandled_event_type" };
   }
-  if (!update.subscriptionId && !update.claimId && !update.paymentId) {
-    return { handled: false, reason: "no_license_identity" };
-  }
+  return { update };
+}
+
+/** Date an update by its event: when it happened, when money went back or a cancellation took effect, a paid checkout's start. */
+function stampEventTimes(update, event, object) {
   // When the event was emitted, so a delayed or retried delivery cannot undo a
   // newer one. Stripe guarantees neither ordering nor exactly-once delivery.
   update.occurredAt = unixOrNull(event.created);
@@ -807,5 +855,4 @@ export function mapStripeEvent(event, env) {
   if (event.type.startsWith("checkout.session.") && update.status === "active") {
     update.periodEndFromCharge = update.occurredAt ?? unixOrNull(object.created);
   }
-  return { handled: true, update };
 }

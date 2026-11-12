@@ -1011,11 +1011,22 @@ test.describe("The menu, read by someone who has never seen it", () => {
     // The fold's own condition, driven directly instead of hoped for: a title
     // long enough to wrap. The ResizeObserver on #brand-title is what runs the
     // measurement, so changing its text is the real trigger, not a stub.
+    //
+    // The starting point is a short name and a short title, so the row is
+    // unfolded whatever the fonts. It used to start from the longest row (the
+    // long name beside "Pro · termina en 10 días") and assert it unfolded,
+    // which is the case above's mistake again: once main's header gained its
+    // own controls, CI's fonts wrapped that row's title to three lines at boot
+    // and folded it, correctly, before this case had changed anything.
     await page.setViewportSize({ width: 1280, height: 800 });
     const license = await mintLicense({ origin: BASE });
-    await install(page, { ...STATES.ending, account: member({ displayName: "Maximiliano Alejandro de la Torre" }) }, license);
+    await install(page, { ...STATES.ending, account: member({ displayName: "Ana" }) }, license);
     await boot(page);
+    await page.evaluate(() => {
+      document.getElementById("brand-title").textContent = "Canto";
+    });
     await expect(page.locator("#btn-tour")).toBeVisible();
+    await expect(page.locator("#btn-help")).toBeHidden();
 
     await page.evaluate(() => {
       document.getElementById("brand-title").textContent =
@@ -1029,7 +1040,7 @@ test.describe("The menu, read by someone who has never seen it", () => {
     // And it unfolds again when the row stops needing the room, which is the
     // half a one-way fold would get wrong.
     await page.evaluate(() => {
-      document.getElementById("brand-title").textContent = "Entrenamiento vocal y de canto";
+      document.getElementById("brand-title").textContent = "Canto";
     });
     await expect(page.locator("#btn-tour")).toBeVisible();
     await expect(page.locator("#btn-help")).toBeHidden();

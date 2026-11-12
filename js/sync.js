@@ -84,9 +84,40 @@
   // Kept in memory only, so it can never be a number left behind by another
   // account or another tab.
   const confirmed = new Map();
+  // Profiles whose last write the worker turned down (a fourth profile), with
+  // the version current when that cycle began and the worker's reason. The
+  // same write would be turned down again, so no automatic sync (a save's
+  // timer still pending, the connection coming back, the tab shown again)
+  // sends it until the profile changes here; "Sincronizar ahora" still asks.
+  // Kept in memory: the next visit tries once, in case the account has room.
+  const refusals = new Map();
 
   function unpushed(profileId) {
     return (changedAt.get(profileId) || 0) > (pushedAt.get(profileId) || 0);
+  }
+
+  /**
+   * A profile's refusal while it still stands: nothing written to the profile
+   * since its cycle began. A change made while that cycle was out may not be
+   * in what was turned down, so it ends the refusal and is sent.
+   * @param {string} profileId Profile.
+   * @returns {{before: number, reason: string|null}|null} The refusal, or null.
+   */
+  function standingRefusal(profileId) {
+    const refusal = refusals.get(profileId);
+    return refusal && (changedAt.get(profileId) || 0) <= refusal.before ? refusal : null;
+  }
+
+  /**
+   * Remember a cycle that was turned down, or forget the refusal once the
+   * profile went up.
+   * @param {string} profileId Profile the cycle was for.
+   * @param {{ok: boolean, reason?: string}|null} result The cycle's result.
+   * @param {number} before The version current when the cycle began.
+   */
+  function noteRefusal(profileId, result, before) {
+    if (result && result.ok) refusals.delete(profileId);
+    else if (result && result.reason === "refused") refusals.set(profileId, { before, reason: refusedReason });
   }
 
   /** Whether a profile is no longer on this browser (deleted). */
@@ -584,6 +615,9 @@
     // written back would leave keys behind that no profile owns.
     if (deleted(profileId)) return { ok: false, reason: "deleted" };
 
+    // Every change up to here can be in what this cycle sends; one made while
+    // it is out may not be (see standingRefusal).
+    const before = version;
     runningFor = profileId;
     running = (async () => {
       // Whose practice this is comes first: nothing of another account's is
@@ -678,6 +712,7 @@
     } finally {
       running = null;
       runningFor = null;
+      noteRefusal(profileId, result, before);
       retryIfFailed(result);
       // The emits above run while `running` is still set, so every listener
       // was last told "syncing" and the account panel said "Guardando…" after
@@ -728,6 +763,9 @@
    * large) does not keep the others back; only one every profile would meet
    * alike, offline or signed out, ends the round. A profile that did go up
    * after one that failed does not make the panel say all is saved.
+   * A profile whose write was turned down and has not changed since is not
+   * sent again: it would be turned down again. It still counts as not saved,
+   * and the panel goes on saying why.
    * @returns {Promise<void>}
    */
   async function syncScheduled() {
@@ -736,15 +774,17 @@
     for (const id of [active, ...otherUnpushed(active)]) {
       // Deleted while an earlier profile synced.
       if (deleted(id)) continue;
-      const res = await syncNow(id);
+      const res = standingRefusal(id) ? { ok: false, reason: "refused" } : await syncNow(id);
       if (res.ok || res.reason === "deleted") continue;
       if (STOPS_ALL.has(res.reason)) return;
       // Waiting for the owner question is not a failed save: the panel asks it.
       if (res.reason === "other_owner") continue;
-      failed = failed || res.reason;
+      failed = failed || { reason: res.reason, id };
     }
     if (failed && !lastError) {
-      lastError = failed;
+      lastError = failed.reason;
+      // A profile that went up later in the round cleared why; it still holds.
+      refusedReason = failed.reason === "refused" ? refusals.get(failed.id)?.reason || null : null;
       emit();
     }
   }
@@ -965,6 +1005,8 @@
         // "Guardado en tu cuenta" was about the account that just left.
         lastError = null;
         refusedReason = null;
+        // What that account turned down says nothing about the next one's.
+        refusals.clear();
         lastSyncedAt = null;
         failures = 0;
       }

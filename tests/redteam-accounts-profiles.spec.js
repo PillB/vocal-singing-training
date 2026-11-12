@@ -184,6 +184,23 @@ async function saveTake(page, marker, exerciseId) {
   );
 }
 
+/**
+ * Let `ms` of the page's faked clock pass, in steps far shorter than a sync
+ * request's own 45 s limit (js/sync.js), waiting after each until no sync is
+ * out. One long runFor fires a request's time-out before the network can
+ * answer, so a request that should never have been sent dies as a "dropped
+ * connection" instead of reaching the worker: the test then passes on the very
+ * defect it is for (on PR #21's own tree it passed 20 runs out of 20).
+ * @param {import('@playwright/test').Page} page Page with page.clock installed.
+ * @param {number} ms How much page time passes.
+ */
+async function letTimePass(page, ms) {
+  for (let left = ms; left > 0; left -= 10000) {
+    await page.clock.runFor(Math.min(10000, left));
+    await expect.poll(() => page.evaluate(() => window.VTSync.getStatus().syncing)).toBe(false);
+  }
+}
+
 /** Whether this browser's stored record mentions `marker`, in any profile. */
 async function deviceHas(page, marker) {
   return page.evaluate((m) => Object.keys(localStorage).some((k) => (localStorage.getItem(k) || "").includes(m) && k !== "vt_sync_aside_v1"), marker);
@@ -934,10 +951,16 @@ test.describe("Copy that says only what is true", () => {
     await openPanel(page);
     await expect(page.locator("#account-sync")).toHaveText("No se guardó: tu cuenta ya tiene sus 3 perfiles.");
     await expect(page.locator("#account-sync")).not.toContainText("intentaremos");
+    // The save above left its own sync timer pending (8 s), and 130 s covers
+    // the first two waits of the retry ladder (30 s, 120 s). Nothing may send
+    // the refused write again, nor read the account's copy only to send it.
     const puts = log.filter((r) => r.method === "PUT").length;
-    await page.clock.runFor(130000);
-    await page.waitForTimeout(300);
+    const progressCalls = () => log.filter((r) => r.path === "/v1/me/progress").length;
+    const before = progressCalls();
+    await letTimePass(page, 130000);
     expect(log.filter((r) => r.method === "PUT").length).toBe(puts);
+    expect(progressCalls()).toBe(before);
+    await expect(page.locator("#account-sync")).toHaveText("No se guardó: tu cuenta ya tiene sus 3 perfiles.");
   });
 
   for (const lang of ["es", "en"]) {

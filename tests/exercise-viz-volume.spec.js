@@ -356,7 +356,7 @@ test.describe("volume pictures", () => {
     await page.locator("#btn-practice-stop").click();
     await openAndStart(page, "v13-volume-ladder");
     await expect(page.locator("#mode-focus [data-phase-btn]")).toHaveText(/Story/);
-    await expect(page.locator("#mode-focus [data-phase]")).toHaveText(/Whisper/);
+    await expect(page.locator("#mode-focus [data-phase]")).toHaveText(/Very soft/);
     await page.locator("#btn-practice-stop").click();
     await openAndStart(page, "v20-energy-match");
     await expect(page.locator("#mode-focus [data-next-take]")).toHaveText(/Next take/);

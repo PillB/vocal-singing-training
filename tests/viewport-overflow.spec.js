@@ -128,18 +128,21 @@ for (const vp of VIEWPORTS) {
       await expect(page.locator("#view-exercise")).toHaveClass(/active/);
       const m = await measure(page);
       expect(m.stage?.visible).toBe(true);
-      // Explicit geometry: stage bottom ≤ viewport bottom
-      expect(m.stage.y2).toBeLessThanOrEqual(m.vh + 2);
+      // Explicit geometry: stage bottom ≤ viewport bottom, except on a ~320px phone
+      // where its two rails and 60px of lanes need more than the screen: the stage
+      // then takes that height and the page scrolls (cross-01).
+      const grown = vp.width <= 340;
+      if (!grown) expect(m.stage.y2).toBeLessThanOrEqual(m.vh + 2);
       expect(m.stage.x).toBeGreaterThanOrEqual(-2);
       expect(m.stage.x2).toBeLessThanOrEqual(m.vw + 2);
       // Stage has usable height
       expect(m.stage.h).toBeGreaterThanOrEqual(vp.height < 500 ? 140 : 200);
       if (m.canvas?.visible) {
-        expect(m.canvas.y2).toBeLessThanOrEqual(m.vh + 2);
+        if (!grown) expect(m.canvas.y2).toBeLessThanOrEqual(m.vh + 2);
         expect(m.canvas.y).toBeGreaterThanOrEqual(m.stage.y - 2);
         expect(m.canvas.y2).toBeLessThanOrEqual(m.stage.y2 + 2);
       }
-      if (m.start?.visible) {
+      if (m.start?.visible && !grown) {
         expect(m.start.y2).toBeLessThanOrEqual(m.vh + 3);
       }
     });

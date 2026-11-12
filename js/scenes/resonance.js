@@ -2490,7 +2490,10 @@
       ctx.lineTo(px + pw, py + ph / 2);
       ctx.stroke();
       ctx.setLineDash([]);
-      if (!o.tiny && k === "B" && o.ref != null) text(ctx, L("altura de A", "A's pitch"), px + pw - 2, py + ph / 2 - 7, { px: 9, color: C.faint, align: "right" });
+      if (!o.tiny && k === "B" && o.ref != null) {
+        // With no take yet the centred instruction fills this lane's middle: the label rides the lane's top
+        text(ctx, L("altura de A", "A's pitch"), px + pw - 2, tk ? py + ph / 2 - 7 : py + 8, { px: 9, color: C.faint, align: "right" });
+      }
     }
     if (!tk) {
       const waiting = !m.review && m.stage === k;

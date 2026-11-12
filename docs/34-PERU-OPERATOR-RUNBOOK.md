@@ -79,7 +79,10 @@ into it.
    ```bash
    wrangler secret put LICENSE_PRIVATE_KEY_PKCS8_B64
    ```
-7. **Set `ADMIN_EMAILS`** in `wrangler.toml` to your own email. This is what
+7. **Set `ADMIN_EMAILS`** to your own email with
+   `wrangler secret put ADMIN_EMAILS`, not in `wrangler.toml`: this repository
+   is public, and `wrangler.toml` itself says a value there is published in git
+   history for good. The worker reads it the same way either way. This is what
    makes the gifting panel appear for you and nobody else.
 8. **Deploy**:
    ```bash
@@ -88,8 +91,10 @@ into it.
    ```
    The health response should say `accountsConfigured: true`. It prints
    booleans only, never key material.
-9. **Set a billing alert**, in the Cloudflare dashboard under Billing →
-   Notifications, at a number that would alarm you — $20 is plenty. This takes
+9. **Set a budget alert**, in the Cloudflare dashboard under Manage Account →
+   Billing → Billable Usage → Create budget alert (Cloudflare's billing docs,
+   checked 2026-10-28), at a number that would alarm you — $20 is plenty. It
+   only notifies; it does not cap usage. This takes
    two minutes and it is the only protection against a loop in a deploy running
    up a bill on a per-operation-priced database. See [what operators
    report](#what-peruvian-operators-actually-report) for the $30,356-in-72-hours
@@ -132,6 +137,9 @@ Two things follow from that:
    were built to make several sequential D1 calls, so do not build it that way.
 
 Also: the daily free counters reset at **00:00 UTC, which is 7pm in Peru**.
+Since 1 September 2026 the D1 daily row limits are enforced on the free plan:
+past them, D1 queries fail until that reset (Cloudflare changelog,
+2026-09-01).
 
 Cloudflare says plainly that `workers.dev` is "intended for personal or hobby
 projects that aren't business-critical" and recommends a custom domain for
@@ -207,13 +215,18 @@ is reported as unavailable rather than silently dropping codes.
 7. Re-run `workers/entitlements/scripts/setup.sh` to deploy. It reuses every
    resource and keeps the signing key.
 
-**Publishing status decides who can sign in.** A new client starts in
-**Testing**, which means only the accounts listed as test users on the consent
-screen can sign in at all — up to 100 of them. That is enough for the whole
-friends-and-family beta, and it is a reasonable way to run it: add each tester's
-Google address under Audience → Test users. Before charging anyone outside that
-list, switch the app to **Production**. For the basic scopes here (email,
-profile, openid) that switch does not require Google's verification review.
+**Publishing status matters less than it looks for this flow.** A new client
+starts in **Testing**, which normally limits it to up to 100 test users listed
+on the consent screen, with authorizations expiring after seven days. Google's
+"Manage App Audience" help (checked 2026-10-28) makes an exception for apps that
+request only the basic identity scopes, Sign in with Google included: those
+users do not need to be on the test-user list and their authorizations do not
+expire after seven days. This worker asks for nothing else (email, profile,
+openid), so a tester who is not on the list should still get in; confirm it
+once with an account that is not listed. Switch the app to **Production**
+before launch anyway, and keep it in mind the day any other scope is added,
+because then the exception stops applying. For the basic scopes that switch
+does not require Google's verification review.
 
 **What this unblocks**: people can now sign in, and their practice follows them
 between devices. You can gift months. Still nobody can pay.
@@ -331,11 +344,16 @@ question, so "helpfully" mis-picking one is a misdeclaration, not a shortcut.
   no IGV. Exports of services escape IGV under Article 33 of the Ley del IGV,
   but only when four things hold at once: provided for consideration from Peru
   to abroad and evidenced by the comprobante, the exporter domiciled in Peru,
-  the user non-domiciled, and the service used abroad. **You must be inscribed
-  in the Registro de Exportadores de Servicios first** — SUNAT lists the
-  no-registration exceptions as hotels and ship repair, not software. It is done
-  in SUNAT Operaciones en Línea (Mis trámites y consultas → Empresas → Mi RUC y
-  otros Registros → Exportadores de Servicios) and ends in a constancia de
+  the user non-domiciled, and the service used abroad. ⚠ **The Registro de
+  Exportadores de Servicios is narrower than an earlier draft said.** SUNAT's
+  own orientation page on exports (orientacion.sunat.gob.pe, "Exportación de
+  bienes y servicios", read 2026-10-28) requires prior inscription only for a
+  service performed *partly abroad* by a third-category taxpayer, and says that
+  for the other export cases in article 33 "no se exige la inscripción". A
+  subscription delivered online from Peru looks like the second kind, but ask
+  the contador; inscription is free, so registering anyway costs nothing. It is
+  done in SUNAT Operaciones en Línea (Mis trámites y consultas → Empresas → Mi
+  RUC y otros Registros → Exportadores de Servicios) and ends in a constancia de
   aprobación.
 - **Issue it free.** SEE-SOL (the SUNAT portal) and the **APP Emprender** both
   issue facturas and boletas at no cost, with no digital certificate and no OSE
@@ -349,12 +367,13 @@ question, so "helpfully" mis-picking one is a misdeclaration, not a shortcut.
   the contador. As an exporter that input IGV becomes your Saldo a Favor del
   Exportador and offsets other taxes instead of being lost.
 
-**When does electronic issuing become compulsory?** You get a grace period:
-the obligation starts on the **first calendar day of the third month** after the
-month you registered — roughly two months to get invoicing running, not zero.
-Set it up early anyway; arriving at the deadline without a system is a classic
-way to get stuck. (SEE-SOL and the APP Emprender need nothing bought, so there
-is no reason to leave it late.)
+**When does electronic issuing become compulsory?** From the day you register.
+Resolución de Superintendencia 000075-2026/SUNAT (29 April 2026, in force since
+1 June 2026) designates anyone newly inscribed in the RUC under the RMT, the RER
+or the Régimen General as an electronic issuer "desde el día de la inscripción",
+and makes the SIRE registers apply from the same moment. The old grace period,
+up to the third month after registering, is gone. So have SEE-SOL or the APP
+Emprender ready before you register, not after; they need nothing bought.
 
 ### Monthly, forever
 
@@ -374,7 +393,7 @@ is no reason to leave it late.)
 - If you ever pause, **suspensión temporal de actividades** is 100% online and
   lasts up to twelve months. Better than going quiet and becoming *no habido*.
 
-### Two questions to put to the contador, in these words
+### Three questions to put to the contador, in these words
 
 1. When a merchant of record resells my subscription to somebody **in Peru**, is
    that slice still an exportación de servicios? Article 33 requires the service
@@ -383,9 +402,10 @@ is no reason to leave it late.)
 2. Do I invoice the merchant of record for the **gross** subscription value or
    the **net** payout after its fees? Neither SUNAT nor the providers address it.
 
-(The third question from an earlier draft — whether the Registro de Exportadores
-de Servicios is mandatory — is now answered: for software it is required, so it
-is a step above, not a question.)
+3. Is inscription in the Registro de Exportadores de Servicios required for my
+   case? SUNAT's orientation page ties prior inscription only to services
+   performed partly abroad (see above), which an earlier draft of this runbook
+   had the wrong way round.
 
 ---
 
@@ -459,6 +479,16 @@ adding or swapping one is a webhook handler and a config entry.
 This is the one to set up first, because it is the market you know and the one
 you can be paid in soles from.
 
+⚠ "LATAM" here means buyers who pay a Peruvian account. A Mercado Pago account
+belongs to one country and charges in that country's currency (the Peru
+`preapproval_plan` reference above uses `PEN`). Charging Argentines, Chileans or
+Colombians in their own currency takes either an account in each country or
+Mercado Pago's Cross Border model, where the account "deberá ser creada por
+Mercado Pago" through its commercial team and funds settle only in USD for now
+([Cross Border integration](https://www.mercadopago.com.pe/developers/es/docs/resources/localization/crossborder-integration),
+read 2026-10-28). `js/billing-config.js` maps AR, CL and CO to the Mercado Pago
+rail in ARS, CLP and COP, which one Peru account cannot do.
+
 What is confirmed from Mercado Pago's own documentation:
 
 - **Suscripciones is available in Peru.** The developer docs list Peru in the
@@ -468,7 +498,10 @@ What is confirmed from Mercado Pago's own documentation:
 - **Charging really is automatic.** Mercado Pago's Peru page says it outright:
   *"Nos encargamos de los cobros y si algún pago es rechazado, hacemos nuevos
   intentos."* A rejected instalment is retried up to four times over ten days,
-  and three consecutive failures cancel the subscription and email you.
+  and three consecutive failures cancel the subscription and email you. ⚠ Those
+  three numbers are unverified: the Peru Suscripciones page and the
+  subscriptions overview, re-read 2026-10-28, say only that rejected charges
+  are retried automatically, with no count, interval or cancellation rule.
 - **The buyer needs no Mercado Pago account and you need no website** for the
   hosted flow.
 - **Peru accepts DNI, CE and RUC** as payer document types.
@@ -479,8 +512,9 @@ What is confirmed from Mercado Pago's own documentation:
   integration mistake. Any flow that saves a card must tokenize it with
   CardForm or the Card Payment Brick; never collect raw card numbers.
 
-Its fee in Peru is **3.29% + S/ 1 + IGV** with the money released after 14
-business days, or **3.49% + S/ 1 + IGV** released instantly. No affiliation fee,
+Its fee in Peru is **3.29% + S/ 1 + IGV** with the money released "en 14 días",
+or **3.49% + S/ 1 + IGV** released instantly (Mercado Pago's Peru Suscripciones
+page, re-read 2026-10-28; it does not say business days). No affiliation fee,
 no monthly fee. On a S/ 25 subscription at the instant tier that is about
 S/ 2.21 all-in, an effective take of roughly 8.8%; on a S/ 20 one it is S/ 2.00,
 or 10.0%. That is the fixed S/ 1 making itself felt, and it is the reason the
@@ -526,7 +560,7 @@ decided by **fixed fees, not percentages**.
 
 | Gateway | Cost | Recurring? | Gets a RUC 10? | Note |
 |---|---|---|---|---|
-| **Mercado Pago** | 3.29% + S/ 1 + IGV at 14 business days, or 3.49% + S/ 1 + IGV instant. No affiliation or monthly fee. | Yes, `preapproval` | Peru accepts DNI/CE/RUC; RUC-10 not confirmed | Cheapest per charge below about S/ 60. |
+| **Mercado Pago** | 3.29% + S/ 1 + IGV at 14 days, or 3.49% + S/ 1 + IGV instant. No affiliation or monthly fee. | Yes, `preapproval` | Peru accepts DNI/CE/RUC; RUC-10 not confirmed | Cheapest per charge below about S/ 60. |
 | **Culqi** | 3.44% + USD 0.20, IGV-exempt — **but a minimum of S/ 3.50 on anything under S/ 87.72**. S/ 0 affiliation, T+2. | Yes, Plans + Suscripciones, charged on Culqi's own daily batch | Yes — its price list has separate RUC 10 rows, and its contract names *persona natural* | That S/ 3.50 floor is **11.7% on S/ 29.90 and 17.6% on S/ 19.90**. Only worth it above S/ 88, or billed annually. |
 | **Openpay (BBVA)** | Max 3.44% + IGV, S/ 0 affiliation and maintenance, daily deposits including weekends | Yes, Plans + Subscriptions | Yes — BBVA says outright "con tu RUC y DNI" | The best fallback. Worth getting approved before you need it. |
 | **Izipay** | 3.44% + IGV, S/ 0 to start, next business day | Tokenized recurring exists but **support has to enable it on your account** | Reported yes | Not self-serve for recurring, so not a day-one choice. |
@@ -552,7 +586,15 @@ This is the fact most likely to break a plan built on how Peruvians actually
 pay. **None of Yape, Plin or PagoEfectivo can be tokenized and re-charged**:
 
 - Yape through Culqi is single-use, the approval code lives two minutes, and it
-  caps at S/ 2,000 per operation. There is no direct public Yape merchant API.
+  caps at S/ 2,000 per operation. Mercado Pago's own Checkout API also takes
+  Yape (phone number plus the 6-digit code from the Yape app), but its docs say
+  the token "is single-use per purchase", with a limit of S/ 500, S/ 900 or
+  S/ 2,000 set in the Yape app (Mercado Pago Developers, read 2026-10-28).
+- ⚠ One thing to test before believing the heading: Mercado Pago's Peru
+  Suscripciones overview now lists "Dinero en cuenta, tarjeta de crédito o
+  débito, Yape" as payment methods (read 2026-10-28), without saying whether a
+  subscription started with Yape is then charged automatically. Run one
+  through with a test account before deciding either way.
 - Plin has no merchant API at all — it is a feature inside each bank's app, not
   a service with merchant infrastructure.
 - PagoEfectivo issues a one-time CIP code the customer pays manually, and its
@@ -840,7 +882,7 @@ and each is one look away for somebody in Peru:
 | MP access token | Mercado Pago developer panel | `wrangler secret put MP_ACCESS_TOKEN` | **Yes** |
 | MP webhook secret | Mercado Pago webhook config | `wrangler secret put MP_WEBHOOK_SECRET` | **Yes** |
 | MP checkout URL | Mercado Pago plan | `js/billing-config.js` | No |
-| Admin emails | you | `ADMIN_EMAILS` in `wrangler.toml` | No |
+| Admin emails | you | `wrangler secret put ADMIN_EMAILS` (not `wrangler.toml`: the repo is public) | Not a key, but keep it out of the repo |
 
 Nothing marked **Yes** ever goes in the repository, in a message, or in a
 screenshot. If one leaks, rotate it: for the license key, generate a new pair,

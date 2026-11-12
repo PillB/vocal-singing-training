@@ -22,7 +22,7 @@ new numbers.
 | World, monthly | $9.99 | **$7.99** | Modest cut; the monthly was the least wrong number. |
 | World, yearly | $79 | **$49** | The category's median annual is $38–45. $79 was double. |
 | Euro | €9.99 / €79 | **€7.99 / €49** | Same numerals as USD, which is the norm. ⚠ See the tax warning. |
-| Trial | 7 local / 30 account | **unchanged** | They are two different trials and both lengths are right. |
+| Trial | 7 local / 30 account | **7 local / 7 account** | The account trial went from 30 to 7 days on 2026-09-24; see [the trial section](#the-trial-is-seven-days-decided-2026-09-24-was-30). |
 
 The yearly discount now reads 50% in soles and 49% in dollars — the same offer
 in both currencies, and both computed from the prices rather than written down.
@@ -42,7 +42,12 @@ This is the finding that decided everything else.
 
 Yousician sells a far larger product — multiple instruments, a song catalogue,
 a company behind it — for less than we were asking, in our own market. Duolingo
-likewise. Both were read from the Peru App Store on 22 September 2026.
+likewise. Both were read from the Peru App Store on 22 September 2026. (Both
+Peru prices were unchanged on 2026-10-28. Yousician's singing course is in
+English only — "Singing is available in English", per its
+[support page](https://support.yousician.com/hc/en-us/articles/202871661-Supported-languages) —
+so for a Spanish-speaking singer it is a price anchor, not a like-for-like
+substitute.)
 
 The cause is visible in the old config: `pricePen: 35` is roughly `priceUsd`
 converted at the spot rate. That is not how anyone else prices Peru.
@@ -65,15 +70,25 @@ Median **69.7%**. The distribution is bimodal rather than tight: apps that
 actually sell into Latin America cluster at 59–65%, and apps that do not bother
 sit at 95–131%. We were in the second group without having chosen to be.
 
+That benchmark is cross-category. Singing apps on the Peru App Store, same SKU
+against the US store and read on 2026-10-28, mostly sit in the second group:
+Sing Sharp 113–130%, VocalGYM 133%, StarMaker 95–103%, Erol about 99%. Yousician
+goes much deeper, to about 30%, and Singing Coach AI sits at 58% (raw ratios,
+IGV not removed).
+
 One correction to that figure, which matters because it is the one that sets our
 number: Peru App Store prices are shown IGV-inclusive and US prices are shown
 before sales tax, so the tax does not cancel out of the ratio. Deflating by the
 18% IGV gives a tax-neutral **59%**, which is almost exactly the factor Simply
-Piano applies deliberately. At 59%, a $7.99 monthly implies **S/ 15.93** and a
-$9.99 monthly implies **S/ 19.92**.
+Piano applies deliberately. At 59%, a $7.99 monthly implies **S/ 15.93 before
+IGV, about S/ 18.80 as displayed**, and a $9.99 monthly implies S/ 19.92 before
+IGV, about S/ 23.50 as displayed. (An earlier version compared S/ 19.90, which
+includes IGV, with the before-IGV S/ 15.93, which deflates by IGV twice.)
 
-We landed at S/ 19.90 rather than S/ 15.93, which puts us at 62.5% rather than
-59%. That is a deliberate three-point premium and the reasons are below.
+We landed at S/ 19.90 (S/ 16.86 before IGV) rather than about S/ 18.80, which
+puts us at 62.5% rather than 59%. That is a deliberate three-point premium and
+the reasons are below. At the BCRP bank selling rate of 26 October 2026,
+1 USD = 3.446 PEN, the same S/ 19.90 is 61.2%.
 
 ---
 
@@ -89,15 +104,19 @@ S/ 19.90 wins on four counts:
 
 1. **ELSA Speak charges exactly S/ 19.90 in Peru.** It is the closest analogue
    in the set — speaking practice, microphone, feedback — and that is the price
-   it has settled on for this market.
+   it has settled on for this market. (Still S/ 19.90 a month on 2026-10-28;
+   ELSA also sells a one-year tier from S/ 74.90. Two more products sit at
+   S/ 19.90 in the Peru App Store: Vocal Image, a Spanish "Coach de Oratoria",
+   as a one-month item, and ChatGPT Go.)
 2. **It clears the anchor that matters.** Spotify Individual is S/ 20.90 and has
    been since 2023. S/ 19.90 is under it. The anchors above S/ 25 —
    Netflix Básico S/ 28.90, Yousician S/ 30.90, Duolingo S/ 32.90 — are all
    comfortably above.
 3. **The fee is not linear.** Mercado Pago charges 3.49% **plus a fixed S/ 1**
-   plus IGV. That fixed sol is 10.0% of a S/ 19.90 charge and 12.0% of a
-   S/ 14.90 one. Dropping the price by a quarter costs two points of margin on
-   top.
+   plus IGV. The whole fee, most of it that fixed sol, is 10.0% of a S/ 19.90
+   charge and 12.0% of a S/ 14.90 one (the fixed sol with its IGV alone is
+   5.9% and 7.9%). Dropping the price by a quarter costs two points of margin
+   on top.
 4. **S/ 14.90 had the weaker evidence.** It comes from requiring a visible gap
    under Spotify, which is a judgement, not from the measured ratio.
 
@@ -134,15 +153,22 @@ against apps that gate the practice itself.
 ## What Pro actually competes with
 
 Worth stating plainly, because it constrains the price more than any benchmark
-does. **Every verified competitor caps free practice. We do not.**
+does. **Every competitor in this table caps free practice. We do not.** Not every
+app does: Nail the Pitch keeps its real-time pitch monitor free and sells
+recording, saving and export as a one-time Pro at S/ 34.90 (Peru App Store,
+read 2026-10-28), which is close to our own split. Others free, read the same
+day: Vocal Pitch Monitor (Android, ads, 1M+ installs), "Clases Canto: Técnica
+Vocal" (Android, Spanish, ads, 100k+), Ella – Canto (iOS, Spanish, no in-app
+purchases listed), and Spanish YouTube. So the claim holds for the course and
+subscription apps below, not for the market.
 
 | Product | What the free tier allows |
 |---|---|
 | Riyaz | 8 minutes a day |
-| Vanido | 3 exercises a day |
-| Erol Singer's Studio | Beginner 1 and 2 only |
-| Sing Sharp | ad-supported, most songs members-only |
-| VocalGYM | 2 of 4 routine levels |
+| Vanido | 3 exercises a day (a 2017-era listing; no current App Store listing found on 2026-10-28) |
+| Erol Singer's Studio | Beginner 1 and 2, plus some exercises |
+| Sing Sharp | ad-supported (confirmed 2026-10-28); "most songs members-only" rests on 2016–17 reviews |
+| VocalGYM | 2 of 4 routine levels (unverified: no store page says what is free, 2026-10-28) |
 | Smule | only as the second singer |
 | **Vocal Studio** | **everything, forever** |
 
@@ -151,14 +177,19 @@ interstitials, export, profiles, insights, goals, streak freezes, cross-device
 sync. That tier lives lower in the market than the access tiers do:
 
 - **VocalGYM**, the Spanish-language direct competitor with a free-forever tier
-  and a virtual piano: **$4.99/month**.
-- **Vocalify**, the closest analogue by business model: **$5/month**.
-- **Vanido**, the closest analogue by function: **$3.99/month**.
+  (what it includes is not stated on its store pages; unverified on 2026-10-28)
+  and a virtual piano: **$4.99/month** in the US. On the Peru App Store it is
+  **S/ 22.90 a month and S/ 229.90 a year** (read 2026-10-28), so in soles we
+  sit below it, not above it.
+- **Vocalify**, the closest analogue by business model: **$5/month**
+  (unverified: no store listing or pricing page was found on 2026-10-28).
+- **Vanido**, the closest analogue by function: **$3.99/month** (unverified:
+  Vanido is iOS-only and no current App Store listing was found on 2026-10-28).
 - The category median, made of products that gate practice: **$14.99/month**.
 
 $7.99 sits between the convenience band and the access band. It is above the
-Spanish-language competitor, which the cross-device sync and the coach export
-have to justify. If they do not, this is the next number to revisit.
+Spanish-language competitor in dollars, which the cross-device sync and the
+coach export have to justify. If they do not, this is the next number to revisit.
 
 One warning from the same evidence: **Sing Sharp sells ad-removal alone as a
 $2.99 one-time purchase.** "No study-tip interstitials" is worth far less than
@@ -189,35 +220,48 @@ Given that 72% of annual subscribers cancel within the first year across the
 industry — and monthly churn is far worse than that — the annual plan is the
 better deal for us at this discount, not a concession.
 
-⚠ **One unresolved number.** No readable Mercado Pago document says whether the
-plan amount is IGV-inclusive. Netflix, HBO Max and Disney+ all publish
-IGV-inclusive prices in Peru, and Peruvian consumer law requires the displayed
-price to be the total, so the table above assumes inclusive. If it turns out to
-be exclusive, Peru net revenue is overstated by roughly 15%.
+**The soles rows are before IGV.** Peruvian consumer law requires the displayed
+price to be the total, taxes included (Código, art. 4.1), so the plan amount is
+what the buyer pays and Mercado Pago adds nothing to it. The 18% IGV the seller
+owes SUNAT therefore comes out of that amount: 18/118, about 15.3% of every
+Peru charge, is not in the "Net" column above. The dollar rows are exports
+through a merchant of record and carry no Peruvian IGV, so the two sets of rows
+are not comparable until that 15.3% is taken off the soles ones. One offset:
+the "Fee" column already includes the IGV on Mercado Pago's commission
+(S/ 0.31 of the S/ 2.00), which is input IGV the seller can credit against what
+it owes, provided Mercado Pago's comprobante for the fee is a factura to the
+seller's RUC (not checked). On S/ 19.90 that leaves about S/ 15.17 after fee and
+tax, not S/ 17.90 − S/ 3.04.
 
 ---
 
 ## What the law requires of the price itself
 
-Peruvian consumer law constrains the *display*, not just the amount. All of the
-following is ⚠ — the statute itself is on `gob.pe`, which is blocked from this
-environment, so these come from press and law-firm summaries that quote it.
+Peruvian consumer law constrains the *display*, not just the amount. The
+article numbers below were checked on 2026-10-28 against a consolidated copy of
+Ley 29571 and, for Decreto Legislativo 1729, against El Peruano; the rest is
+still ⚠, from press and law-firm summaries.
 
 - **The displayed price must be the total**, IGV and all charges included, and
   the customer cannot be charged more than what was shown (Código de Protección
-  y Defensa del Consumidor, art. 5).
+  y Defensa del Consumidor, art. 4, "Información sobre la integridad del
+  precio"; art. 5 is about how prices are exhibited).
 - **A price may not be shown to Peruvians in dollars alone.** A foreign-currency
   price has to carry the sol equivalent in equal characters with the exchange
   rate stated (art. 6). The site already shows soles to the PE market, which
   satisfies this, and it is why the soles price is set on its own merits rather
   than converted.
 - **Cancellation must use the same means as signup.** If subscribing is two taps
-  in the app, cancelling has to be too.
+  in the app, cancelling has to be too (art. 47.c, and art. 56.1.e, which makes
+  limiting it a coercive practice).
 - **Dark patterns are prohibited** since Decreto Legislativo 1729, published
   12 February 2026, which added art. 56.1.h covering interfaces that distort or
-  manipulate the consumer's freedom of choice, and art. 24.5 requiring a working
-  support contact. This touches the free tier's study-tip interstitials
-  directly: keep them one-tap dismissible, never pre-tick an upgrade.
+  manipulate the consumer's freedom of choice, and art. 24.4 requiring
+  providers that sell through digital channels to keep accessible, permanently
+  working complaint mechanisms (art. 24.5 is the email-address minimum for
+  providers not domiciled in Peru). This touches the free tier's study-tip
+  interstitials directly: keep them one-tap dismissible, never pre-tick an
+  upgrade.
 
 Confirmed from a strong source rather than a summary: Peru has charged **18% IGV
 on digital services from non-domiciled providers since 1 October 2024** under
@@ -334,10 +378,10 @@ Each is one look away for somebody who is not behind this proxy.
 | Whether Polar can present PEN | [polar.sh/docs](https://polar.sh/docs/) — absent from both currency lists |
 | The consumer-code articles in their own words | [gob.pe](https://www.gob.pe/) — blocked at the gateway; everything legal above is from summaries |
 | Whether Indecopi's DL 1729 reglamento has been issued | [indecopi.gob.pe](https://www.indecopi.gob.pe/) — blocked; the 180-day deadline fell around 11 August 2026 |
-| Yousician's own web prices, and whether they localize PEN | [account.yousician.com/plans](https://account.yousician.com/plans) |
-| Singing Carrots' real prices | [singingcarrots.com/pro](https://singingcarrots.com/pro) — deliberately hidden behind a quiz |
-| VocalGYM's Google Play price in soles | [play.google.com](https://play.google.com/store/apps/details?id=com.imlautaro.vocalgym) |
-| 30 Day Singer's true monthly, where two sources disagree | [30daysinger.com/pricing](https://www.30daysinger.com/pricing) |
+| Yousician's own web prices, and whether they localize PEN (the US web offer, read 2026-10-28, is $29.99 a month or $139.99 a year; PEN on the web is still unread) | [account.yousician.com/plans](https://account.yousician.com/plans), [US offer](https://yousician.com/lp/singing-us) |
+| Singing Carrots' real prices | [singingcarrots.com/pro](https://singingcarrots.com/pro) — deliberately hidden behind a quiz (still on 2026-10-28; its own blog says "from $19.99" a month, a biased source) |
+| VocalGYM's Google Play price in soles (the Play page lists in-app purchases without prices; the Peru App Store price, S/ 22.90 / S/ 229.90, is above) | [play.google.com](https://play.google.com/store/apps/details?id=com.imlautaro.vocalgym&gl=PE&hl=es) |
+| 30 Day Singer's true monthly, where two sources disagree (read 2026-10-28: the help page gives $29 a month after a 14-day trial, the pricing page $10.75 a month billed annually, $129 a year; they are two plans, not a disagreement) | [30daysinger.com/pricing](https://www.30daysinger.com/pricing), [trial help](https://help.30daysinger.com/help/do-you-have-a-trial) |
 
 ---
 

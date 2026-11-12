@@ -16,6 +16,18 @@
   "use strict";
 
   const LS_REV = "vt_sync_rev_v1";
+  /**
+   * Which account this browser's practice was last synced with. A browser is
+   * often shared, so the next account to sign in here must not be handed the
+   * last one's practice, nor push it to itself, without being asked.
+   */
+  const LS_OWNER = "vt_sync_owner_v1";
+  /**
+   * Practice put aside on this browser when somebody chose to use only their
+   * own account's copy: [{owner, at, bags: {profileId: bag}}]. It stays on this
+   * browser and is merged back when its account signs in here again.
+   */
+  const LS_ASIDE = "vt_sync_aside_v1";
   /** Most entries kept per exercise, matching the browser's own history cap. */
   const HISTORY_CAP = 50;
   /** Attempts at the read-merge-write cycle before giving up until next time. */
@@ -55,6 +67,9 @@
   let running = null;
   let runningFor = null;
   let lastError = null;
+  // The worker's own word for a refused write ("profile_limit"), so the panel
+  // can say why instead of promising a retry that will not come.
+  let refusedReason = null;
   let lastSyncedAt = null;
   let failures = 0;
 
@@ -192,6 +207,136 @@
     } catch {
       return false;
     }
+  }
+
+  /** The signed-in account's id, once /v1/me has said; null before. */
+  function accountId() {
+    try {
+      return global.VTAccount?.getState?.().account?.id || null;
+    } catch {
+      return null;
+    }
+  }
+
+  function readOwner() {
+    try {
+      return localStorage.getItem(LS_OWNER) || null;
+    } catch {
+      return null;
+    }
+  }
+
+  function writeOwner(id) {
+    if (!id) return;
+    try {
+      localStorage.setItem(LS_OWNER, id);
+    } catch {
+      /* private mode: every sync then asks again, which is the safe side */
+    }
+  }
+
+  /** The put-aside list, dropping anything malformed. */
+  function readAside() {
+    try {
+      const raw = localStorage.getItem(LS_ASIDE);
+      const list = raw ? JSON.parse(raw) : [];
+      return Array.isArray(list)
+        ? list.filter((e) => e && typeof e.owner === "string" && e.bags && typeof e.bags === "object")
+        : [];
+    } catch {
+      return [];
+    }
+  }
+
+  /** @returns {boolean} Whether the list was stored. */
+  function writeAside(list) {
+    try {
+      if (!list.length) localStorage.removeItem(LS_ASIDE);
+      else localStorage.setItem(LS_ASIDE, JSON.stringify(list));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Every profile on this browser. */
+  function localProfileIds() {
+    const list = global.VTStorage.getProfiles?.().list;
+    return Array.isArray(list) && list.length ? list.map((p) => p.id) : [global.VTStorage.getActiveProfileId()];
+  }
+
+  /**
+   * Whether a bag holds anything somebody did: a take, a day practised, a
+   * plan, a goal, a review. A first visit writes an empty day ledger, which
+   * is nobody's practice.
+   */
+  function bagHasPractice(bag) {
+    if (!bag) return false;
+    const rows = Object.values(bag.progress || {});
+    if (rows.some((r) => r && ((r.history || []).length || Number(r.completedCount) > 0))) return true;
+    if ((bag.reviews || []).length || (bag.holdLogs || []).length) return true;
+    if (bag.weekPlan || bag.goals || bag.loop) return true;
+    if (bag.achievements && Object.values(bag.achievements).some(Boolean)) return true;
+    return !!(bag.days && bag.days.days && Object.keys(bag.days.days).length);
+  }
+
+  function deviceHasPractice() {
+    return localProfileIds().some((id) => bagHasPractice(global.VTStorage.readSyncBag(id)));
+  }
+
+  /**
+   * Whose this browser's practice is, as far as a sync may act on it.
+   *   mine     the signed-in account synced it last; or nobody has (practice
+   *            from before any sign-in, which merges on the first sign-in as
+   *            it always has); or there is no practice here at all.
+   *   other    another account synced it last and it holds practice. Nothing
+   *            is merged or sent until the person signed in chooses.
+   *   unknown  an owner is on file and the account has not said who it is.
+   * @returns {{state: "mine"|"other"|"unknown", owner: string|null, me: string|null}} Answer.
+   */
+  function ownerState() {
+    const owner = readOwner();
+    const me = accountId();
+    if (!owner) return { state: "mine", owner, me };
+    if (!me) return { state: "unknown", owner, me };
+    if (owner === me || !deviceHasPractice()) return { state: "mine", owner, me };
+    return { state: "other", owner, me };
+  }
+
+  /** True while the signed-in account has to choose before anything syncs. */
+  function otherOwner() {
+    try {
+      return isAvailable() && ownerState().state === "other";
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Merge back whatever was put aside for this account on this browser, and
+   * mark it to be pushed: it is that account's own practice.
+   * @param {string} me Signed-in account id.
+   */
+  function restoreAside(me) {
+    const list = readAside();
+    const entry = list.find((e) => e.owner === me);
+    if (!entry) return;
+    const left = {};
+    for (const [profileId, bag] of Object.entries(entry.bags)) {
+      // A profile no longer on this browser keeps its copy aside.
+      if (deleted(profileId)) {
+        left[profileId] = bag;
+        continue;
+      }
+      const merged = mergeBag(global.VTStorage.readSyncBag(profileId), bag);
+      global.VTStorage.writeSyncBag(merged, profileId);
+      version += 1;
+      changedAt.set(profileId, version);
+      dataChanged(profileId);
+    }
+    const rest = list.filter((e) => e !== entry);
+    if (Object.keys(left).length) rest.push({ ...entry, bags: left });
+    writeAside(rest);
   }
 
   /**
@@ -387,6 +532,26 @@
   }
 
   /**
+   * Record the signed-in account as this browser's owner after a write it
+   * accepted. If /v1/me has not answered yet, ask it, and record the answer
+   * only if the same session is still the one signed in.
+   */
+  function noteOwner() {
+    const me = accountId();
+    if (me) {
+      writeOwner(me);
+      return;
+    }
+    const token = global.VTAccount?.getSessionToken?.();
+    Promise.resolve(global.VTAccount?.refresh?.())
+      .then(() => {
+        const id = accountId();
+        if (id && !readOwner() && global.VTAccount?.getSessionToken?.() === token) writeOwner(id);
+      })
+      .catch(() => {});
+  }
+
+  /**
    * Run one read-merge-write cycle for one profile.
    *
    * The server's `409` is the whole concurrency story: it means the stored
@@ -421,6 +586,23 @@
 
     runningFor = profileId;
     running = (async () => {
+      // Whose practice this is comes first: nothing of another account's is
+      // read into, merged with or sent to this one until somebody chooses.
+      let who = ownerState();
+      if (who.state === "unknown") {
+        const me = await global.VTAccount.refresh();
+        if (!isAvailable()) return { ok: false, reason: "signed_out" };
+        who = ownerState();
+        if (who.state === "unknown") {
+          lastError = me && me.reason === "offline" ? "offline" : "error";
+          return { ok: false, reason: lastError };
+        }
+      }
+      if (who.state === "other") return { ok: false, reason: "other_owner" };
+      if (who.me) {
+        writeOwner(who.me);
+        restoreAside(who.me);
+      }
       for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
         const pulled = await global.VTAccount.request(
           "GET",
@@ -455,10 +637,12 @@
           { timeoutMs: REQUEST_TIMEOUT_MS }
         );
         if (pushed.ok) {
+          noteOwner();
           writeRev(profileId, Number(pushed.data?.rev) || serverRev + 1);
           confirmed.set(profileId, { rev: Number(pushed.data?.rev) || serverRev + 1, doc: merged });
           pushedAt.set(profileId, Math.max(pushedAt.get(profileId) || 0, seen));
           lastError = null;
+          refusedReason = null;
           lastSyncedAt = new Date().toISOString();
           emit();
           return { ok: true, rev: Number(pushed.data?.rev) || null };
@@ -474,6 +658,7 @@
           // Turned down for what it is (a fourth profile on the account), not
           // for when it was sent: the same write would be turned down again.
           lastError = "refused";
+          refusedReason = pushed.data?.reason || null;
           emit();
           return { ok: false, reason: "refused" };
         }
@@ -554,6 +739,8 @@
       const res = await syncNow(id);
       if (res.ok || res.reason === "deleted") continue;
       if (STOPS_ALL.has(res.reason)) return;
+      // Waiting for the owner question is not a failed save: the panel asks it.
+      if (res.reason === "other_owner") continue;
       failed = failed || res.reason;
     }
     if (failed && !lastError) {
@@ -577,18 +764,20 @@
    * lost: the changes are still here, and the next visit's sync merges them.
    *
    * @param {{unloading?: boolean}} [opts] Whether the page is going away.
-   * @returns {void}
+   * @returns {Promise<void>|void} When not unloading, settles once what was
+   *   waiting has been tried.
    */
   function flush(opts) {
-    if (!isAvailable()) return;
+    if (!isAvailable()) return Promise.resolve();
     if (!(opts && opts.unloading)) {
-      if (!timer) return;
+      // Signing out waits on this, so the last changes reach the account that
+      // made them before the session is gone.
+      if (!timer) return running ? running.then(() => {}, () => {}) : Promise.resolve();
       clearTimeout(timer);
       timer = null;
-      syncScheduled().catch(() => {
+      return syncScheduled().catch(() => {
         /* reported through getStatus */
       });
-      return;
     }
     const active = global.VTStorage.getActiveProfileId();
     for (const profileId of [active, ...otherUnpushed(active)]) {
@@ -622,12 +811,16 @@
   /**
    * Current sync status, synchronously.
    * @returns {{available: boolean, syncing: boolean, lastSyncedAt: string|null,
-   *            lastError: string|null, rev: number}} Status.
+   *            lastError: string|null, refusedReason: string|null, rev: number,
+   *            otherOwner: boolean}} Status. `otherOwner`: this browser holds
+   *            another account's practice and the one signed in has to choose.
    */
   function getStatus() {
     let rev = 0;
     try {
-      rev = revFor(global.VTStorage.getActiveProfileId());
+      // A revision on file is only this account's if this account synced here.
+      const owner = readOwner();
+      if (!owner || owner === accountId()) rev = revFor(global.VTStorage.getActiveProfileId());
     } catch {
       rev = 0;
     }
@@ -636,7 +829,9 @@
       syncing: !!running,
       lastSyncedAt,
       lastError,
-      rev
+      refusedReason,
+      rev,
+      otherOwner: otherOwner()
     };
   }
 
@@ -644,11 +839,12 @@
    * Pull the account's copy over this browser's, discarding local state.
    * Used deliberately from the account panel ("use my saved progress"), never
    * automatically — losing local work should always be somebody's choice.
+   * @param {string} [id] Profile to pull; the active one when omitted.
    * @returns {Promise<{ok: boolean, reason?: string}>} Result.
    */
-  async function pullOverwrite() {
+  async function pullOverwrite(id) {
     if (!isAvailable()) return { ok: false, reason: "signed_out" };
-    const profileId = global.VTStorage.getActiveProfileId();
+    const profileId = id || global.VTStorage.getActiveProfileId();
     const pulled = await global.VTAccount.request(
       "GET",
       `/v1/me/progress?profileId=${encodeURIComponent(profileId)}`,
@@ -670,11 +866,77 @@
     return { ok: true };
   }
 
+  /**
+   * "Añadir la práctica de este dispositivo a esta cuenta": the account signed
+   * in takes this browser's practice as its own, and it syncs as any other.
+   * @returns {Promise<{ok: boolean, reason?: string}>} The active profile's sync.
+   */
+  async function addDeviceToAccount() {
+    const me = accountId();
+    if (!isAvailable() || !me) return { ok: false, reason: "signed_out" };
+    writeOwner(me);
+    if (lastError === "other_owner") lastError = null;
+    emit();
+    const active = global.VTStorage.getActiveProfileId();
+    const ids = localProfileIds().filter((id) => id === active || bagHasPractice(global.VTStorage.readSyncBag(id)));
+    let first = null;
+    for (const id of [active, ...ids.filter((x) => x !== active)]) {
+      const res = await syncNow(id);
+      if (!first) first = res;
+    }
+    return first || { ok: true };
+  }
+
+  /**
+   * "Usar solo la de mi cuenta": this browser's practice is put aside, on this
+   * browser, under the account that last synced it, and the signed-in
+   * account's own copy is brought down in its place. Nothing is cleared unless
+   * the copy put aside was stored first.
+   * @returns {Promise<{ok: boolean, reason?: string}>} Result.
+   */
+  async function useAccountOnly() {
+    const me = accountId();
+    if (!isAvailable() || !me) return { ok: false, reason: "signed_out" };
+    const owner = readOwner();
+    const ids = localProfileIds();
+    if (owner && owner !== me) {
+      const bags = {};
+      ids.forEach((id) => {
+        const bag = global.VTStorage.readSyncBag(id);
+        if (bagHasPractice(bag)) bags[id] = bag;
+      });
+      const list = readAside();
+      const prev = list.find((e) => e.owner === owner);
+      if (prev) {
+        for (const [id, bag] of Object.entries(prev.bags)) bags[id] = bags[id] ? mergeBag(bags[id], bag) : bag;
+      }
+      const next = list.filter((e) => e.owner !== owner).concat([{ owner, at: new Date().toISOString(), bags }]);
+      if (!writeAside(next)) return { ok: false, reason: "storage" };
+      ids.forEach((id) => {
+        global.VTStorage.clearProfileData(id);
+        pushedAt.set(id, version);
+      });
+    }
+    writeOwner(me);
+    if (lastError === "other_owner") lastError = null;
+    restoreAside(me);
+    let result = { ok: true };
+    for (const id of ids) {
+      const res = await pullOverwrite(id);
+      if (!res.ok && res.reason !== "empty" && result.ok) result = res;
+    }
+    dataChanged(global.VTStorage.getActiveProfileId());
+    emit();
+    return result;
+  }
+
   global.VTSync = {
     syncNow,
     schedule,
     flush,
     pullOverwrite,
+    addDeviceToAccount,
+    useAccountOnly,
     getStatus,
     onChange,
     onDataChange,
@@ -698,7 +960,14 @@
     // Signing in on a fresh device is the moment a sync is most wanted.
     global.VTAccount.onChange((state) => {
       if (state.signedIn) schedule();
-      else confirmed.clear();
+      else {
+        confirmed.clear();
+        // "Guardado en tu cuenta" was about the account that just left.
+        lastError = null;
+        refusedReason = null;
+        lastSyncedAt = null;
+        failures = 0;
+      }
     });
     // The account may have answered while this file was still downloading
     // (its check starts as account.js runs): that sign-in was announced

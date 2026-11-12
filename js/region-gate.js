@@ -284,6 +284,10 @@
   let source = "guess";
   const listeners = [];
   let barShown = false;
+  /** Watches the bar's height while it is up, so the page keeps room for it. */
+  let barWatch = null;
+  /** The bar height the page last kept room for, px (0: no bar). */
+  let roomFor = 0;
   let styled = false;
 
   function timeZone() {
@@ -576,7 +580,8 @@
 .region-consent a{color:var(--accent,#6eb4e8);text-decoration:underline}
 @media (max-width:480px){.region-consent-inner{justify-content:stretch}
   .region-consent-actions{width:100%}
-  .region-consent button{flex:1 1 8rem}}`;
+  .region-consent button{flex:1 1 8rem}
+  .region-consent a{display:inline-flex;align-items:center;min-height:var(--min-tap,44px)}}`;
     const el = global.document.createElement("style");
     el.setAttribute("data-region-consent-style", "1");
     el.textContent = css;
@@ -589,6 +594,8 @@
     if (!bar) return;
     const t = T[lang()];
     bar.setAttribute("lang", lang());
+    // The region's name follows the language, like the words inside it.
+    bar.setAttribute("aria-label", t.title);
     const text = bar.querySelector("[data-region-consent-text]");
     if (text) text.innerHTML = "";
     if (text) {
@@ -603,7 +610,11 @@
     const more = bar.querySelector("[data-region-more]");
     if (yes) yes.textContent = t.accept;
     if (no) no.textContent = t.reject;
-    if (more) more.textContent = t.more;
+    if (more) {
+      more.textContent = t.more;
+      // privacy.html holds both languages; an English reader opens the English half.
+      more.setAttribute("href", lang() === "en" ? "privacy.html#en" : "privacy.html");
+    }
     reserveBarRoom();
   }
 
@@ -611,6 +622,8 @@
     const bar = global.document?.querySelector("[data-region-consent]");
     if (bar) bar.remove();
     barShown = false;
+    barWatch?.disconnect();
+    barWatch = null;
     reserveBarRoom();
   }
 
@@ -623,20 +636,40 @@
    * language, so this is read again on both.
    */
   function reserveBarRoom() {
-    const root = global.document?.documentElement;
+    const doc = global.document;
+    const root = doc?.documentElement;
     if (!root) return;
-    const bar = global.document.querySelector("[data-region-consent]");
-    if (!bar) {
-      root.style.removeProperty("scroll-padding-bottom");
-      root.style.removeProperty("padding-bottom");
+    const bar = doc.querySelector("[data-region-consent]");
+    const height = bar ? Math.ceil(bar.getBoundingClientRect().height) : 0;
+    keepRoom(root, doc.body, height);
+    if (height === roomFor) return;
+    // The app sizes the exercise stage to what is left above the bar
+    // (--region-consent-h), on a resize; the nested call finds the same
+    // height and stops here.
+    roomFor = height;
+    try {
+      global.dispatchEvent(new Event("resize"));
+    } catch {
+      /* no Event constructor: the next resize catches up */
+    }
+  }
+
+  /** Room at the end of the page and for focus scrolls, `height` px (0: none). */
+  function keepRoom(root, body, height) {
+    if (!height) {
+      for (const name of ["scroll-padding-bottom", "padding-bottom", "--region-consent-h"]) root.style.removeProperty(name);
+      body?.classList.remove("region-consent-open");
       return;
     }
-    const room = `${Math.ceil(bar.getBoundingClientRect().height) + 8}px`;
+    const room = `${height + 8}px`;
     root.style.setProperty("scroll-padding-bottom", room);
     // The last controls of a page (the toggles under an exercise) sit where the
     // document ends: with nothing below them the window cannot scroll them clear
     root.style.setProperty("padding-bottom", room);
+    root.style.setProperty("--region-consent-h", `${height}px`);
+    body?.classList.add("region-consent-open");
   }
+
 
   /**
    * Is there a real question to ask? A country that requires asking, no
@@ -685,6 +718,13 @@
     doc.body.appendChild(bar);
     barShown = true;
     renderBar();
+    // The bar's height changes with the language and when its buttons wrap.
+    try {
+      barWatch = new ResizeObserver(reserveBarRoom);
+      barWatch.observe(bar);
+    } catch {
+      /* no ResizeObserver: the height it had when it opened stands */
+    }
     bar.querySelector("[data-region-accept]")?.addEventListener("click", () => setConsent(true));
     bar.querySelector("[data-region-reject]")?.addEventListener("click", () => setConsent(false));
     global.addEventListener("resize", reserveBarRoom);

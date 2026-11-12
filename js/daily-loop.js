@@ -619,6 +619,26 @@
     return L.tier || "min";
   }
 
+  /** True when the size was picked today (a pick records when, in the browser's own day). */
+  function pickedToday() {
+    const D = days();
+    const at = readLoop().tierAt;
+    if (!D || !at) return false;
+    const t = new Date(at);
+    return !Number.isNaN(t.getTime()) && D.dayKey(t) === D.dayKey();
+  }
+
+  /**
+   * The size the start panel offers right now. A comeback is offered the
+   * Mínimo, the smallest step back in, unless the learner has picked a size
+   * today: then the pick stands. It used to be forced, so the chips pressed on
+   * a comeback panel changed nothing.
+   */
+  function offeredTier(sum) {
+    if (!sum.todayDone && sum.comeback && !pickedToday()) return "min";
+    return preferredTier();
+  }
+
   /**
    * Today's basics for a track, for the catalog to mark: the routine the start
    * panel offers right now (a comeback is offered the Mínimo). Null while the
@@ -631,7 +651,7 @@
     if (!D || !loopEnabled()) return null;
     const sum = D.summary();
     if (!(sum.practiceDays > 0)) return null;
-    const tier = !sum.todayDone && sum.comeback ? "min" : preferredTier();
+    const tier = offeredTier(sum);
     const r = routine(track, tier);
     return r ? { tier, order: r.order } : null;
   }
@@ -639,7 +659,15 @@
   function setTier(tier) {
     if (!TIERS.includes(tier)) return;
     const L = readLoop();
-    if (L.tier === tier) return;
+    if (L.tier === tier) {
+      // The same size picked on another day is still a pick today: the
+      // comeback panel offers the Mínimo to anyone who has not chosen today.
+      if (!pickedToday()) {
+        L.tierAt = new Date().toISOString();
+        writeLoop(L);
+      }
+      return;
+    }
     L.tier = tier;
     L.tierAt = new Date().toISOString();
     writeLoop(L);
@@ -797,7 +825,8 @@
     const ms = milestoneToday(sum.practiceDays);
     if (ms) {
       markMilestone(ms);
-      hooks.toast?.(tl("loop.msToast", { n: ms }, trackId), { durationMs: 3200 });
+      // "¡1 días cantados!" was the first celebration anybody ever saw.
+      hooks.toast?.(ms === 1 ? tl("loop.msToastFirst", null, trackId) : tl("loop.msToast", { n: ms }, trackId), { durationMs: 3200 });
     } else {
       hooks.toast?.(tl("loop.dayToast", { n: sum.practiceDays }, trackId), { durationMs: 2600 });
     }
@@ -889,7 +918,9 @@
     const names = tt("loop.weekdayFull").split(",");
     return sum.week
       .map((d, i) => {
-        const label = `${(names[i] || "").trim()} ${Number(d.key.slice(8))}: ${tl("loop.dayState." + d.state, null, trackId)}`;
+        // A day before the first one was not missed: it only gets its date.
+        const dayName = `${(names[i] || "").trim()} ${Number(d.key.slice(8))}`;
+        const label = d.state === "before" ? dayName : `${dayName}: ${tl("loop.dayState." + d.state, null, trackId)}`;
         return `<li class="loop-day is-${d.state}${d.isToday ? " is-today" : ""}${d.basics ? " has-basics" : ""}" aria-label="${esc(label)}" title="${esc(label)}"><span class="loop-day-l" aria-hidden="true">${esc((letters[i] || "").trim())}</span><span class="loop-day-dot" aria-hidden="true"></span></li>`;
       })
       .join("");
@@ -1133,8 +1164,8 @@
     }
     const trackId = hooks.getTab?.() === "vocal" ? "vocal" : "singing";
     const comeback = !sum.todayDone && sum.comeback;
-    // A comeback is always offered the smallest step back in.
-    const tier = comeback ? "min" : preferredTier();
+    // A comeback is offered the smallest step back in, unless a size was picked today.
+    const tier = offeredTier(sum);
     const r = routine(trackId, tier);
     if (!r) return false;
     renderTiers(tier, trackId);
@@ -1180,7 +1211,12 @@
         trackId
       ).trim();
       if (label) label.textContent = tt("loop.labelDone");
-      if (cardTitle) cardTitle.textContent = tt("loop.tierChip", { name: tierName, min });
+      // What was done, not what the chips offer for another round.
+      const doneLen = D.read().days[sum.today]?.len;
+      const doneTier = TIERS.includes(doneLen) ? doneLen : tier;
+      const doneR = doneTier === tier ? r : routine(trackId, doneTier);
+      const doneMin = doneR ? Math.max(1, Math.round(doneR.totalSec / 60)) : min;
+      if (cardTitle) cardTitle.textContent = tt("loop.tierChip", { name: tt("loop.tier." + doneTier), min: doneMin });
       if (why) why.textContent = tt("loop.whyDone");
       cta.textContent = tt("loop.ctaAgain", { tier: tierName });
     } else {
@@ -1315,7 +1351,13 @@
     hooks.hideToast?.();
     modal.hidden = false;
     modal.style.display = "";
-    global.VTFocusTrap?.activate?.(modal, { initialFocus: close });
+    // The card opens over the exercise screen, whose button is gone by the time
+    // it closes: focus goes back to home's next step, or its heading.
+    global.VTFocusTrap?.activate?.(modal, {
+      initialFocus: close,
+      returnFocus: () => $("#btn-next-step") || $("#start-title"),
+      fallbackFocus: () => $("#start-title")
+    });
     const finish = (then) => {
       closeOpen.done = null;
       modal.hidden = true;

@@ -33,6 +33,12 @@
    * what the signature check says.
    */
   const LS_PLAN_KEY = "vt_account_plan_v1";
+  /**
+   * Longest /v1/me may take. Without a limit a host that accepts the request and
+   * never answers holds every later refresh (the account panel's, the sync's)
+   * on the same promise for as long as the browser waits.
+   */
+  const ME_TIMEOUT_MS = 15000;
   /** Google Identity Services, loaded on demand so a signed-out visitor pays nothing for it. */
   const GIS_SRC = "https://accounts.google.com/gsi/client";
 
@@ -58,6 +64,13 @@
   /** In-flight probe, so two callers on the same open share one request. */
   let methodsPending = null;
   /**
+   * Which probe is the newest. A probe that was superseded (somebody pressed
+   * "try again" while it was still out) must not write its late answer over
+   * the newer one: a stale failure landing last put the admin page back on
+   * "server did not answer" after the server had answered.
+   */
+  let methodsGen = 0;
+  /**
    * Whether Google's script could actually be loaded in this browser: null
    * until we have tried, then true or false. The worker naming Google as a
    * method and a browser being able to run it are different facts — an
@@ -67,6 +80,8 @@
    */
   let googleReady = null;
   let refreshing = null;
+  /** The session token `refreshing` was asked for. */
+  let refreshingFor = null;
   let gisPromise = null;
 
   const listeners = new Set();
@@ -288,9 +303,10 @@
   async function getMethods() {
     if (methods) return methods;
     if (methodsPending) return methodsPending;
+    const gen = (methodsGen += 1);
     methodsPending = (async () => {
       const res = await request("GET", "/v1/auth/methods", null, { auth: false, timeoutMs: 6000 });
-      methods = res.ok && res.data
+      const answer = res.ok && res.data
         ? {
           email: !!res.data.email,
           google: !!res.data.google,
@@ -302,6 +318,10 @@
         // something terminal to draw, and ensureMethods() throws it away so
         // the next open asks again.
         : { email: false, google: false, googleClientId: null, trialDays: 7, ok: false };
+      // Only the newest probe writes. A superseded one hands its own caller
+      // the newer answer when there is one, and leaves the state alone.
+      if (gen !== methodsGen) return methods || answer;
+      methods = answer;
       methodsPending = null;
       return methods;
     })();
@@ -326,6 +346,7 @@
    * @returns {Promise<object|null>} The methods, or null with no worker.
    */
   function refreshMethods() {
+    methodsGen += 1;
     methods = null;
     methodsPending = null;
     googleReady = null;
@@ -425,7 +446,16 @@
    * @returns {Promise<{ok: boolean, reason?: string}>} Whether the button drew.
    */
   async function renderGoogleButton(container, options) {
+    // A failed probe is cached only so the panel has something to draw. It is
+    // not a reason to say Google is not set up: ask again. If the worker still
+    // does not answer, say that, so the caller can show "server did not answer"
+    // instead of blaming an extension.
+    if (methods && methods.ok === false) methods = null;
     const available = await getMethods();
+    if (available.ok === false && isConfigured()) {
+      container.innerHTML = "";
+      return { ok: false, reason: "unreachable" };
+    }
     if (!available.google || !available.googleClientId) {
       // Clear on the way out too: what a deploy offers can change between one
       // open and the next, and a button drawn earlier must not outlive it.
@@ -499,10 +529,14 @@
    * @returns {Promise<{ok: boolean, reason?: string}>} Result.
    */
   function refresh() {
-    if (refreshing) return refreshing;
     if (!session?.token) return Promise.resolve({ ok: false, reason: "no_session" });
-    refreshing = (async () => {
-      const res = await request("GET", "/v1/me", null);
+    const token = session.token;
+    // One ask at a time, but only for the same sign-in: an answer about
+    // somebody who has since signed out is not an answer about whoever is here.
+    if (refreshing && refreshingFor === token) return refreshing;
+    const mine = (async () => {
+      const res = await request("GET", "/v1/me", null, { timeoutMs: ME_TIMEOUT_MS });
+      if (session?.token !== token) return { ok: false, reason: "signed_out" };
       if (res.ok && res.data) {
         await adopt(res.data);
         return { ok: true, claims: global.VTLicense?.getClaims?.() || null };
@@ -515,13 +549,14 @@
       if (res.status === 0) return { ok: false, reason: "offline" };
       return { ok: false, reason: res.data?.reason || "error" };
     })();
-    try {
-      return refreshing;
-    } finally {
-      refreshing.finally(() => {
-        refreshing = null;
-      });
-    }
+    refreshing = mine;
+    refreshingFor = token;
+    mine
+      .finally(() => {
+        if (refreshing === mine) refreshing = null;
+      })
+      .catch(() => {});
+    return mine;
   }
 
   /**

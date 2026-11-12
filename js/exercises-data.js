@@ -111,7 +111,8 @@ window.VT_EXERCISES = {
       tips: [
         "Use the contrast to notice your articulation, not to force the jaw or claim strength gains.",
         "Over-work tongue tip and lips for crisp consonants.",
-        "Use only safe, clean objects."
+        "Use only safe, clean objects.",
+        "Stop if the jaw hurts."
       ],
       mistakes: ["Clenching the jaw", "Skipping the pen-off contrast", "Unsafe objects"],
       metrics: [
@@ -411,7 +412,7 @@ window.VT_EXERCISES = {
         "Volume shows confidence and authority when controlled. Laddering builds flexible dynamics for different rooms and moments.",
       steps: [
         "Pick one short sentence you use often (8–12 words).",
-        "Say it at 5 levels: 1 almost a whisper → 2 soft → 3 conversational → 4 projected → 5 full room (no shouting).",
+        "Say it at 5 levels: 1 very soft voice (not a whisper) → 2 soft → 3 conversational → 4 projected → 5 full room (no shouting).",
         "Come back down 5 → 3 → 1 with the same sentence; repeat the ladder 3 times.",
         "Then tell a 60 s story using at least 3 levels, on purpose.",
         "Keep the same clarity and diction at every level."
@@ -852,7 +853,7 @@ window.VT_EXERCISES = {
       progressions: ["prog1", "prog3"]
     },
 
-    /* ─── CLASS TIER (Bruno Gotelli basic course, months 1–2) ───
+    /* ─── CLASS TIER (a teacher's basic course, months 1–2) ───
        Placement, resonance zones and the pre-warm-up work the class notes drill
        but the homework spine never covered. These are the spine of the prepared
        daily session (VT_STRUCTURED.singing_daily). */
@@ -866,7 +867,7 @@ window.VT_EXERCISES = {
       original:
         "Before vocalising, release the jaw and neck so they cannot interfere with placement.",
       research:
-        "Muscular relaxation lowers resistance to muscle lengthening and improves the response to motor commands, so it is the standard opener before breath and placement work.",
+        "Loosening the jaw and neck can make tension easier to notice and let go of, so it comes before the breath and placement work.",
       steps: [
         "Stand tall, shoulders down, nothing tight at the waist or the collar.",
         "Let the jaw hang: place two fingers on the hinge and let the mouth fall open with no push.",
@@ -1093,7 +1094,7 @@ window.VT_EXERCISES = {
       title: "Mask Finder (\"YA\")",
       durationMin: 3,
       original:
-        "Deliberately nasal and bright 'YA, YA, YA' to locate the upper mask: nose, front of the face, sinuses, forehead.",
+        "Deliberately nasal and bright 'YA, YA, YA' to find the upper mask, the buzz you may feel in the nose, the front of the face, the sinuses and the forehead.",
       research:
         "An exaggerated nasal sound is the quickest way to locate the upper resonance area. The exaggeration is the finder, not the final tone — once the place is found the sound is balanced back.",
       steps: [

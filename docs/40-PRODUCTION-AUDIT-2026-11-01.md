@@ -129,6 +129,11 @@ identifies the shared implementation to retest if a root cause changes.
 | s25-zone-tour | resonanceZone · sequence, return/undo | ✓ | pending |
 | s26-placement-compare | placementAB · A/B audio, manual done, retake | ✓ | pending |
 | s27-lip-trill-solfege | trillSolfege · voiced trill/harmonic ambiguity | ✓ | pending |
+| v21-straw-to-speech | voiceDrill · soft holds vs blips, speech steps not counted | ✓ | pending |
+| v22-voice-recovery | voiceDrill · five quiet minutes, chime not counted, screen sleep | ✓ | pending |
+| v23-clear-speech | voiceDrill · A/B takes, a skipped take, rate and pause share | ✓ | pending |
+| v24-vocal-function | voiceDrill · 3 s line, longest hold rounded down | ✓ | pending |
+| s28-vocal-function | voiceDrill · reference note per step, octave shift, replay | ✓ | pending |
 
 For each register entry, the **six iteration oracles** are: (1) default open,
 Start→Stop→rate; (2) each option and alternative/mode toggle; (3) minimum,

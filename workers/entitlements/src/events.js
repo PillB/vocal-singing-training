@@ -157,6 +157,11 @@ export const EVENT_NAMES = new Set([
   "reminder_enable",
   "rest_used",
   "session_save",
+  // Goal sets (js/session-sets.js), added 2026-11-11. Sent from the same code in
+  // every arm, so none of them is an arm event.
+  "set_complete",
+  "set_start",
+  "sets_open",
   "signin_fail",
   "signin_start",
   "signin_success",

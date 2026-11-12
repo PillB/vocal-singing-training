@@ -20,8 +20,8 @@
     "sha": "63e8ab5a97d802fc"
   },
   "css/scenes/guided.css": {
-    "v": "20261002a",
-    "sha": "d2f429e0ea5040a8"
+    "v": "20261111a",
+    "sha": "d26ddf830b27b162"
   },
   "css/scenes/pitch.css": {
     "v": "20261002a",
@@ -42,6 +42,10 @@
   "css/scenes/volume.css": {
     "v": "20261002a",
     "sha": "93d225ed63fd919a"
+  },
+  "css/session-sets.css": {
+    "v": "20261112a",
+    "sha": "977e5ed0d3e4e59b"
   },
   "css/site-version.css": {
     "v": "20261111c",
@@ -76,8 +80,8 @@
     "sha": "319fd17f4fbb6fd1"
   },
   "js/app.js": {
-    "v": "20261112a",
-    "sha": "87c952fe1c76e340"
+    "v": "20261112c",
+    "sha": "8f8998a89f4e43f8"
   },
   "js/audio-recovery.js": {
     "v": "20261103c",
@@ -108,12 +112,12 @@
     "sha": "012bb5f186b7dfdd"
   },
   "js/exercises-data.js": {
-    "v": "20261106c",
-    "sha": "d63a575987ce3d87"
+    "v": "20261111b",
+    "sha": "fa00b20ec34142ec"
   },
   "js/exercises-locale-es.js": {
-    "v": "20261106c",
-    "sha": "e4d37a63c03354f1"
+    "v": "20261111b",
+    "sha": "2cefb15eaaa7f016"
   },
   "js/experiments-config.js": {
     "v": "20261112a",
@@ -128,8 +132,8 @@
     "sha": "178ba56877e20400"
   },
   "js/i18n.js": {
-    "v": "20261112a",
-    "sha": "7ec22ff3f78f4c45"
+    "v": "20261112b",
+    "sha": "ed777daaea8b4b04"
   },
   "js/license.js": {
     "v": "20261103d",
@@ -160,12 +164,12 @@
     "sha": "c16b023d36fe544f"
   },
   "js/practice-modes.js": {
-    "v": "20261106c",
-    "sha": "61d2c8a2dd8b1a7e"
+    "v": "20261112c",
+    "sha": "05647fbb3b08ecdd"
   },
   "js/practice-profiles.js": {
-    "v": "20261106c",
-    "sha": "1feaf3f73c2fa516"
+    "v": "20261111b",
+    "sha": "8bdcc17855fdd992"
   },
   "js/privacy-switch.js": {
     "v": "20261111a",
@@ -219,13 +223,21 @@
     "v": "20261005g",
     "sha": "bc645ea3fdd61e0a"
   },
+  "js/scenes/voice-drill.js": {
+    "v": "20261111b",
+    "sha": "59607a48e62f6131"
+  },
   "js/scenes/volume.js": {
     "v": "20261002a",
     "sha": "5f2c4f4ee948f2a5"
   },
+  "js/session-sets.js": {
+    "v": "20261112a",
+    "sha": "7ffb97202769e02b"
+  },
   "js/session.js": {
-    "v": "20261103b",
-    "sha": "9caee4c0ff168c46"
+    "v": "20261112a",
+    "sha": "285a2464685da80d"
   },
   "js/site-layout.js": {
     "v": "20261111a",
@@ -254,6 +266,10 @@
   "js/voice-features.js": {
     "v": "20261103a",
     "sha": "98cb3c44762e9b48"
+  },
+  "js/wake-lock.js": {
+    "v": "20261112b",
+    "sha": "244f30921d52685d"
   },
   "qa/qa.css": {
     "v": "20261102a",

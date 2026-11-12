@@ -641,6 +641,129 @@ window.VT_EXERCISES = {
       audio: { timer: true, record: true, piano: false },
       timerDefaultSec: 480
     },
+    {
+      id: "v21-straw-to-speech",
+      track: "vocal",
+      tier: "advanced",
+      number: 21,
+      title: "Straw to Speech",
+      durationMin: 5,
+      original: "A soft sound through a straw, then a sentence just as easy.",
+      research:
+        "Phonating through a straw is a semi-occluded vocal tract exercise. An integrative review of 53 studies (Apfelbach & Guzmán, 2024) found that it tends to lower the effort needed to start the voice right afterwards; the effect is short-term and varies by person. Going straight from the straw into a sentence follows the flow-resistant tube protocol tested in people with voice problems (Kapsner-Smith et al., 2015); in healthy speakers that carry-over step is expert practice, not a tested result. It is practice, not treatment.",
+      steps: [
+        "Use your own clean drinking straw. Seal your lips around it so all the air leaves through the straw; cheeks loose.",
+        "Make a soft “oo” through the straw at a comfortable speaking pitch. Hold 3 to 5 seconds, breathe, repeat.",
+        "Slide a little up and back down, like a small siren, still through the straw.",
+        "Make waves of loudness on one breath (oo-OO-oo-OO): the push comes from the belly, the throat stays loose.",
+        "“Say” your first sentence through the straw: only its melody and rhythm come out.",
+        "Take the straw away and say the same sentence with the same ease. Say it twice, then keep talking."
+      ],
+      tips: [
+        "Soft is the point: if your cheeks puff or the sound stops, use less air or a wider straw.",
+        "Do it shortly before you speak: what it changes is short-lived.",
+        "Stop if you feel dizzy, sore or hoarse. Never share a straw."
+      ],
+      mistakes: ["Blowing air with no voice", "Pushing for volume", "Skipping the sentence without the straw"],
+      metrics: [
+        { id: "strawHolds", label: "Soft sounds of 1.5 s or more (heard)", labelEs: "Sonidos suaves de 1,5 s o más (oídos)", type: "number", target: 4, unit: "" },
+        { id: "easeAfter", label: "Ease of speaking afterwards", labelEs: "Facilidad al hablar después", type: "scale", min: 1, max: 5 },
+        { id: "carryOver", label: "The sentence kept the easy feeling", labelEs: "La frase conservó la facilidad", type: "scale", min: 1, max: 5 }
+      ],
+      audio: { timer: true, record: true, piano: false },
+      timerDefaultSec: 300
+    },
+    {
+      id: "v22-voice-recovery",
+      track: "vocal",
+      tier: "advanced",
+      number: 22,
+      title: "Voice Recovery",
+      durationMin: 10,
+      original: "After heavy talking: 5 quiet minutes, then 5 of soft straw.",
+      research:
+        "In a randomised trial of 114 healthy adults who had loaded their voices for an hour, five minutes of quiet followed by five of gentle straw phonation recovered the voice better than ten minutes of quiet alone (Peng et al., 2026). It is one study with short-term measures, and no study shows that a cool-down prevents voice problems. Recovery after heavy use takes hours (Hunter & Titze, 2009): expect most of it by the next morning. It is practice, not treatment.",
+      steps: [
+        "Five minutes without talking or whispering. Sip water and breathe through your nose.",
+        "With your own clean straw, make a soft “oo” at a comfortable pitch. Hold 3 to 5 seconds, breathe, repeat, unhurried.",
+        "Slide slowly from a middle pitch down to a low one, through the straw. Soft, never pushed.",
+        "Finish with a few soft, low “oo”s. Then say one easy sentence without the straw."
+      ],
+      tips: [
+        "Quiet means no talking and no whispering: a chime tells you when the five minutes are over.",
+        "Use it after 45 to 60 minutes or more of heavy talking: a class, a shift on the phone, a long meeting.",
+        "If hoarseness lasts more than four weeks (sooner if you work with your voice), or there is pain or trouble breathing, see an ear, nose and throat doctor."
+      ],
+      mistakes: ["Talking through the quiet minutes", "Pushing the straw sound loud", "Using it in place of a doctor when hoarseness lasts"],
+      metrics: [
+        { id: "quietMin", label: "Quiet minutes (heard)", labelEs: "Minutos en silencio (oídos)", type: "number", target: 5, unit: "" },
+        { id: "strawHolds", label: "Soft sounds of 1.5 s or more (heard)", labelEs: "Sonidos suaves de 1,5 s o más (oídos)", type: "number", target: 6, unit: "" },
+        { id: "comfortAfter", label: "Voice comfort afterwards", labelEs: "Comodidad de la voz después", type: "scale", min: 1, max: 5 }
+      ],
+      audio: { timer: true, record: true, piano: false },
+      timerDefaultSec: 600
+    },
+    {
+      id: "v23-clear-speech",
+      track: "vocal",
+      tier: "advanced",
+      number: 23,
+      title: "Clear Speech",
+      durationMin: 4,
+      original: "Say it your usual way, then as if to someone who hears poorly.",
+      research:
+        "Asked to speak as if to a listener who hears poorly, talkers slow down, pause more and finish their sounds, and listeners understand more: about 17 percentage points more words for listeners with hearing loss in the classic study (Picheny et al., 1985), a benefit that a later review also found for other listeners and in noise (Smiljanić & Bradlow, 2009). The benefit is the listener's and was measured in the lab; how far a short daily drill carries into everyday talk has not been tested. The phone compares your two takes with each other: it cannot hear how clear you were.",
+      steps: [
+        "Choose one sentence you will really say this week, with a name, a number or a day in it.",
+        "Take A: say it the way you usually do.",
+        "Take B: say it as if to someone who hears poorly, across a table: a little slower, every ending finished, a short pause between ideas. Not louder.",
+        "Clear again with the sentence on screen: give the day, the time and the place their full shape.",
+        "Now talk for a minute at your normal pace and keep only the finished endings and the pauses."
+      ],
+      tips: [
+        "Slow down by pausing, not by stretching every word.",
+        "After Stop, listen to A and B back to back: the difference you hear matters more than the numbers.",
+        "Use it where it counts: names, numbers, instructions, the first sentence of a call."
+      ],
+      mistakes: ["Getting louder instead of clearer", "Spelling out every syllable like a robot", "Dropping the ends of sentences"],
+      metrics: [
+        { id: "clarityBack", label: "Clarity when you listen back", labelEs: "Claridad al escucharte", type: "scale", min: 1, max: 5 },
+        { id: "naturalClear", label: "Clear but still natural", labelEs: "Clara y aun así natural", type: "scale", min: 1, max: 5 }
+      ],
+      audio: { timer: true, record: true, piano: false },
+      timerDefaultSec: 240
+    },
+    {
+      id: "v24-vocal-function",
+      track: "vocal",
+      tier: "advanced",
+      number: 24,
+      title: "Vocal Function",
+      durationMin: 7,
+      original: "One long sound, two glides and five notes, all of it soft.",
+      research:
+        "The Vocal Function Exercises (Stemple et al., 1994) are four soft exercises done twice each, twice a day, for about six weeks. In healthy voices they lengthened how long people could sustain a sound in small controlled trials (Stemple et al., 1994, 35 women; Bane et al., 2019), and a systematic review of 21 studies reported no adverse effects (Angadi et al., 2019). What improves is the trained task itself; a benefit for everyday speaking has not been shown, and prevention has not been tested. The clinic sets a personal time goal from lung volume; this app cannot, so the rule here is “as long as it stays easy”.",
+      steps: [
+        "Stand or sit tall. Everything here is as soft as you can make it with the voice still clear.",
+        "Long sound: a soft, bright “ee” on one comfortable note, for as long as it stays easy. Stop before you squeeze. Twice.",
+        "Glide up: lips rounded and almost closed on “oh”, slide slowly from your lowest easy note to your highest easy note. Twice.",
+        "Glide down: the same shape, from high to low. Twice.",
+        "Five notes: the same soft “oh” on five comfortable notes from low to high, each for as long as it stays easy. Then the five again."
+      ],
+      tips: [
+        "The dose the studies used: each exercise twice, twice a day, for six weeks. Doing each only once per session was not enough in one of them.",
+        "If the voice breaks in a glide, stay soft and keep going: never push through.",
+        "Stop if you feel pain or burning, or end up hoarser than you started."
+      ],
+      mistakes: ["Holding on until the throat squeezes", "Loud instead of soft", "Rushing the glides"],
+      metrics: [
+        { id: "longHolds", label: "Sounds of 3 s or more (heard)", labelEs: "Sonidos de 3 s o más (oídos)", type: "number", target: 10, unit: "" },
+        { id: "longestHold", label: "Longest easy sound, in seconds (heard)", labelEs: "Sonido cómodo más largo, en segundos (oído)", type: "number", target: 10, unit: "s" },
+        { id: "easyVoice", label: "Easy voice, no squeeze", labelEs: "Voz cómoda, sin apretar", type: "scale", min: 1, max: 5 }
+      ],
+      audio: { timer: true, record: true, piano: false },
+      timerDefaultSec: 420
+    },
 
     /* ─── SINGING track continues below in singing array ─── */
   ],
@@ -1646,6 +1769,37 @@ window.VT_EXERCISES = {
       audio: { timer: true, record: true, piano: true, pitchViz: true, progressions: true },
       timerDefaultSec: 420,
       progressions: ["prog1", "prog3"]
+    },
+    {
+      id: "s28-vocal-function",
+      track: "singing",
+      tier: "advanced",
+      number: 28,
+      title: "Vocal Function on Notes",
+      durationMin: 7,
+      original: "One long note, two glides and five held notes, all of it soft.",
+      research:
+        "The Vocal Function Exercises (Stemple et al., 1994) are four soft exercises done twice each, twice a day, for about six weeks. In healthy voices, singers included, they lengthened how long people could sustain a sound in small controlled trials (Stemple et al., 1994; Sabol et al., 1995, 20 singers; Bane et al., 2019), and a systematic review of 21 studies reported no adverse effects (Angadi et al., 2019). What improves is the trained task itself: nobody has shown that it makes singing sound better, and it does not promise range. The clinic sets a personal time goal from lung volume; this app cannot, so the rule here is “as long as it stays easy”.",
+      steps: [
+        "Stand tall. Everything here is as soft as you can sing with the tone still clear.",
+        "Long note: the piano gives a note; sing a soft, bright “ee” on it for as long as it stays easy. Stop before you squeeze. Twice.",
+        "Glide up: lips rounded and almost closed on “oh”, slide slowly from your lowest easy note to your highest easy note. Twice.",
+        "Glide down: the same shape, from high to low. Twice.",
+        "Five notes: the piano gives five notes going up, one at a time. Hold a soft “oh” on each for as long as it stays easy, twice."
+      ],
+      tips: [
+        "If the notes sit too high or too low, move the octave before you start: the exercise should feel comfortable, not textbook.",
+        "The dose the studies used: each exercise twice, twice a day, for six weeks. Doing each only once per session was not enough in one of them.",
+        "Stop if you feel pain or burning, or end up hoarser than you started."
+      ],
+      mistakes: ["Holding on until the throat squeezes", "Loud instead of soft", "Opening the lips wide on “oh”"],
+      metrics: [
+        { id: "longHolds", label: "Notes of 3 s or more (heard)", labelEs: "Notas de 3 s o más (oídas)", type: "number", target: 10, unit: "" },
+        { id: "longestHold", label: "Longest easy note, in seconds (heard)", labelEs: "Nota cómoda más larga, en segundos (oída)", type: "number", target: 10, unit: "s" },
+        { id: "easyVoice", label: "Easy voice, no squeeze", labelEs: "Voz cómoda, sin apretar", type: "scale", min: 1, max: 5 }
+      ],
+      audio: { timer: true, record: true, piano: true, pitchViz: false, refPitch: "F3" },
+      timerDefaultSec: 420
     }
   ]
 };

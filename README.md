@@ -90,6 +90,7 @@ Vanilla HTML / CSS / JS — no build step. Web Audio API (piano), MediaRecorder 
 - [Peru operator runbook: trámites, accounts and keys, in order](docs/34-PERU-OPERATOR-RUNBOOK.md)
 - [Admin guide](docs/ADMIN-GUIDE.md)
 - [Value gap registry: what is open, and why each open thing was left](docs/VALUE-GAP-REGISTRY.md)
+- [Goal sets and guided voice drills: what was built, the evidence, the trade-offs and what is not yet verified](docs/47-SESSION-SETS.md)
 
 ## Privacy
 

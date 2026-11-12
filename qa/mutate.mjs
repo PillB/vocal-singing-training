@@ -71,6 +71,7 @@ const CONTROL_SPECS = {
   copy: ["tests/plan-history-design.spec.js", "tests/billing.spec.js", "-g", "the start button waits on a choice|Choose what to improve|value pulse board"],
   mic: ["tests/safari-mobile-recovery.spec.js", "-g", "permission prompt is up"],
   micmsg: ["tests/safari-mobile-recovery.spec.js", "-g", "each get their own message"],
+  micguide: ["tests/safari-mobile-recovery.spec.js", "-g", "show distinct guidance"],
   race: ["tests/safari-mobile-recovery.spec.js", "-g", "older prompt answered"],
   orphan: ["tests/safari-mobile-recovery.spec.js", "-g", "Start replaced|lets go of the piano|piano option changed|held session and stopped"],
   focus: ["tests/exercise-viz-guided.spec.js", "-g", "Enter on Next past the last step|ends while Next has keyboard focus"],
@@ -372,7 +373,9 @@ export const MUTANTS = {
     ["MC16 a take replaced while its fallback or recovery waited reads the next take's piano as its own sound", "js/app.js", "    // Replaced while the fallback or the recovery waited: the piano sounding now is the next take's\n    if (!current()) return false;\n", "", "orphan"],
     ["MC17 a Start answered after a Stop stops the piano again, cutting what the learner played since", "js/app.js", "if (pianoStop === VTPiano._stopGen) VTPiano.stopAll();", "VTPiano.stopAll();", "orphan"],
     ["MB1 a resume that timed out tells the learner a permission prompt is still open", "js/app.js", "if ([\"interrupted\", \"AudioResumeTimeout\"].includes(name))", "if (name === \"interrupted\")", "micmsg"],
-    ["MB2 a microphone that ended during Start is called blocked, not disconnected", "js/app.js", "|MediaStreamSource|ended while Start built/i", "|MediaStreamSource/i", "micmsg"]
+    ["MB2 a microphone that ended during Start is called blocked, not disconnected", "js/app.js", "|MediaStreamSource|ended while Start built/i", "|MediaStreamSource/i", "micmsg"],
+    ["MB3 an error handed to the notice is read as what keeps running (a resume that timed out reads as blocked)", "js/app.js", "return typeof why === \"string\" || (!!why && typeof why === \"object\" && (\"name\" in why || \"message\" in why));", "return typeof why === \"string\";", "micmsg"],
+    ["MB4 no device reads as a refused microphone again", "js/app.js", "    if (isMicMissing(name)) return `mic.missing.${generic}`;\n", "", "micguide"]
   ].map(([name, file, from, to, area]) => ({
     name,
     file,

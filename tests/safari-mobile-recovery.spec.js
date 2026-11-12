@@ -107,7 +107,10 @@ test("busy, denied, missing, and delayed microphones show distinct guidance befo
   expect(await page.evaluate(() => window.__captureAttempts)).toBe(2);
   await page.evaluate(() => { window.__captureFailure = "NotFoundError"; });
   await page.locator("#btn-mic-retry").click();
-  await expect(page.locator("#mic-blocked-text")).toContainText("No microphone is available");
+  // PR #21's wording for no device ("found", with what still runs when the
+  // exercise goes on without it), and main's remedy: another input
+  await expect(page.locator("#mic-blocked-text")).toContainText("No microphone found");
+  await expect(page.locator("#mic-blocked-text")).toContainText("choose another audio input");
   expect(await page.evaluate(() => window.__captureAttempts)).toBe(3);
   await page.evaluate(() => { window.__captureFailure = "TimeoutError"; });
   await page.locator("#btn-mic-retry").click();

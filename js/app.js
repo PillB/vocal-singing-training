@@ -4866,6 +4866,15 @@
     return `mic.blocked.${generic}`;
   }
 
+  /**
+   * The failure itself rather than what keeps running: a name ("interrupted",
+   * from audio-recovery.js) or an error ({ name, message }, as main's callers
+   * and tests/safari-mobile-recovery.spec.js pass it).
+   */
+  function isMicFailure(why) {
+    return typeof why === "string" || (!!why && typeof why === "object" && ("name" in why || "message" in why));
+  }
+
   /** What still runs without the microphone, for the notice's {runs}. */
   function micRunsKey(why) {
     if (why.piano && why.clock) return "mic.runs.both";
@@ -4880,12 +4889,12 @@
    * the mic the notice can be put away (✕ or Escape) for this visit, since it
    * sits over the stage's controls (VG-40 keeps it where it is).
    * @param {boolean} canRun true when the piano or the clock still runs
-   * @param {string|{reason?: string|null, piano?: boolean, clock?: boolean}} [why]
-   *   the failure's name (audio-recovery.js passes "interrupted"), or that and
-   *   what keeps going
+   * @param {string|{name?: string, message?: string}|{reason?: string|Object|null, piano?: boolean, clock?: boolean}} [why]
+   *   the failure (its name, as audio-recovery.js passes "interrupted", or the
+   *   error), or that failure as `reason` and what keeps going
    */
   function showMicBlocked(canRun, why = {}) {
-    const w = typeof why === "string" ? { reason: why } : why || {};
+    const w = isMicFailure(why) ? { reason: why } : why || {};
     const box = $("#mic-blocked");
     if (!box) {
       toast(tt("toast.mic"));

@@ -1097,3 +1097,102 @@ test.describe("One way in, and the panel says true things about saving", () => {
     await expect(page.locator("#start-step3-sub")).toContainText("Con Entrar lo llevas");
   });
 });
+
+// The account panel and the Pro dialog were split into small functions to get
+// under the complexity ceiling (merging #26 into main). Thirteen mutants were
+// planted in the split; seven lived. Three of those are equivalent and are not
+// pinned here: the offer line and the studio's gifting tools sit inside
+// containers that are already hidden in the states those mutants touch, and the
+// "Probar" span is split out for a stylesheet rule that no stylesheet has (so
+// the visible words are the same either way). These four are the real ones.
+test.describe("What the split of the account panel and the Pro dialog must keep", () => {
+  const account = (over) => ({
+    id: "acct_split",
+    email: "pablo@example.test",
+    displayName: null,
+    locale: null,
+    role: "member",
+    trialUsed: false,
+    createdAt: 1,
+    ...(over || {})
+  });
+  /** Every rail linked, so checkout is live and the dialog is past pre-launch. */
+  const LIVE_LINKS = {
+    links: {
+      stripe: { pro_monthly: "https://buy.stripe.com/test_m", pro_yearly: "https://buy.stripe.com/test_y" },
+      creem: { pro_monthly: "https://checkout.creem.io/ch_m", pro_yearly: "https://checkout.creem.io/ch_y" },
+      mercadopago: { pro_monthly: "https://www.mercadopago.com.pe/subscriptions/checkout?preapproval_plan_id=m" }
+    }
+  };
+
+  test("A5 once checkout is live, an account whose trial is spent is told it ended, not that it is on a plain free plan", async ({ page }) => {
+    const license = await mintLicense({ origin: BASE });
+    await patchBillingConfig(page, LIVE_LINKS);
+    await install(page, {
+      signedIn: true,
+      account: account({ trialUsed: true }),
+      entitlement: { pro: false, plan: null, status: "free", source: null, periodEnd: null }
+    }, license);
+    await boot(page);
+    await page.click("#btn-pricing");
+    await expect(page.locator("#pricing-modal")).toBeVisible();
+    await expect(page.locator("#pricing-rails")).toBeVisible();
+    await expect(page.locator("#pricing-status")).toHaveText("Tu prueba terminó · estás en el plan gratis");
+  });
+
+  test("A5 control: an account that never trialled is on the free plan", async ({ page }) => {
+    const license = await mintLicense({ origin: BASE });
+    await patchBillingConfig(page, LIVE_LINKS);
+    await install(page, {
+      signedIn: true,
+      account: account({ trialUsed: false }),
+      entitlement: { pro: false, plan: null, status: "free", source: null, periodEnd: null }
+    }, license);
+    await boot(page);
+    await page.click("#btn-pricing");
+    await expect(page.locator("#pricing-status")).toHaveText("Plan gratis");
+  });
+
+  test("A12 the payment rails are named in the page's language, from the config's own wording", async ({ page }) => {
+    const license = await mintLicense({ origin: BASE });
+    await patchBillingConfig(page, LIVE_LINKS);
+    await install(page, {}, license);
+    await boot(page);
+    await page.click("#btn-pricing");
+    const stripe = page.locator('#pricing-rails [data-rail="stripe"]');
+    const mp = page.locator('#pricing-rails [data-rail="mercadopago"]');
+    await expect(stripe).toHaveText("Tarjeta internacional");
+    await expect(mp).toHaveText("Mercado Pago (Perú / LATAM)");
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#pricing-modal")).toBeHidden();
+    await page.click("#btn-lang");
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
+    await page.click("#btn-pricing");
+    await expect(stripe).toHaveText("International card");
+    await expect(mp).toHaveText("Mercado Pago");
+  });
+
+  test("A7 the header door shows the given name of a full Google name, and is named by it", async ({ page }) => {
+    const license = await mintLicense({ origin: BASE });
+    await install(page, {
+      signedIn: true,
+      account: { ...account({}), displayName: "Maria Fernanda de la Torre" },
+      entitlement: { pro: false, plan: null, status: "free", source: null, periodEnd: null }
+    }, license);
+    await boot(page);
+    const door = page.locator("#btn-account");
+    await expect(door.locator(".door-name")).toHaveText("Maria");
+    await expect(door.locator(".door-avatar")).toHaveText("M");
+    expect(await door.getAttribute("aria-label")).toMatch(/^Maria\b/);
+    expect(await door.getAttribute("aria-label")).not.toContain("Fernanda");
+  });
+
+  test("A9 a working sign-in has no retry row beside it; an unreachable worker does", async ({ page }) => {
+    const license = await mintLicense({ origin: BASE });
+    await install(page, {}, license);
+    await boot(page);
+    await openPanel(page);
+    await expect(page.locator("#account-signin")).toBeVisible();
+    await expect(page.locator("#account-retry-row")).toBeHidden();
+  });
+});
